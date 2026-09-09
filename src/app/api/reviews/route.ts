@@ -4,6 +4,7 @@ import { readDB, updateDB } from '@/lib/db';
 import { userFromRequest } from '@/lib/auth';
 import { customerFromRequest } from '@/lib/customer-auth';
 import { onlyDigits } from '@/lib/utils';
+import { todayISO } from '@/lib/tz';
 
 // GET ?businessId=&manage=1 — todas (dono) | ?businessId=&mine=1 — já avaliados (consumidor)
 export async function GET(req: NextRequest) {
@@ -78,7 +79,7 @@ export async function POST(req: NextRequest) {
       if (!booking) return NextResponse.json({ error: 'Agendamento não encontrado.' }, { status: 404 });
       const mine = booking.customerId === customer.id || (phone && onlyDigits(booking.customerPhone) === phone);
       if (!mine) return NextResponse.json({ error: 'Não autorizado.' }, { status: 401 });
-      const today = new Date().toISOString().slice(0, 10);
+      const today = todayISO();
       const done = booking.status === 'completed' || booking.date < today;
       if (!done) {
         return NextResponse.json({ error: 'Você poderá avaliar após o atendimento.' }, { status: 400 });
@@ -114,6 +115,8 @@ export async function PATCH(req: NextRequest) {
     if (!db.businesses.some((b) => b.id === businessId && b.ownerId === user.id)) {
       return NextResponse.json({ error: 'Não autorizado.' }, { status: 401 });
     }
+    const found = db.reviews.find((x) => x.id === id && x.businessId === businessId);
+    if (!found) return NextResponse.json({ error: 'Avaliação não encontrada.' }, { status: 404 });
     await updateDB((d) => {
       const r = d.reviews.find((x) => x.id === id && x.businessId === businessId);
       if (r) r.status = status;
@@ -135,6 +138,8 @@ export async function DELETE(req: NextRequest) {
   if (!db.businesses.some((b) => b.id === businessId && b.ownerId === user.id)) {
     return NextResponse.json({ error: 'Não autorizado.' }, { status: 401 });
   }
+  const found = db.reviews.find((x) => x.id === id && x.businessId === businessId);
+  if (!found) return NextResponse.json({ error: 'Avaliação não encontrada.' }, { status: 404 });
   await updateDB((d) => {
     d.reviews = d.reviews.filter((x) => !(x.id === id && x.businessId === businessId));
   });

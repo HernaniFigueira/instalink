@@ -41,14 +41,49 @@ export interface CustomerSession {
   expiresAt: string;
 }
 
+// ── Recuperação de senha (lojista e consumidor) ──
+export interface PasswordReset {
+  id: ID;
+  kind: 'user' | 'customer';
+  accountId: ID;
+  tokenHash: string; // sha256 do token (nunca o token puro)
+  expiresAt: string;
+  usedAt: string; // '' = ainda válido
+  createdAt: string;
+}
+
 export type Niche =
   | 'alimentacao' | 'loja' | 'beleza' | 'saude' | 'servicos'
   | 'profissional' | 'educacao' | 'pet' | 'outro';
 
+export const VALID_NICHES: Niche[] = [
+  'alimentacao', 'loja', 'beleza', 'saude', 'servicos',
+  'profissional', 'educacao', 'pet', 'outro',
+];
+
 export type BusinessMode =
   | 'products' | 'services' | 'bookings' | 'orders' | 'quote';
 
+export const VALID_MODES: BusinessMode[] = [
+  'products', 'services', 'bookings', 'orders', 'quote',
+];
+
 export interface DayHours { open: string; close: string }
+
+// ── Configuração universal de agenda do negócio ──
+export type TeamMode = 'solo' | 'choosable' | 'auto';
+
+export interface BookingConfig {
+  teamMode: TeamMode;
+  leadMin: number; // antecedência mínima p/ reservar (minutos)
+  cancelUntilMin: number; // consumidor pode cancelar até X min antes
+  horizonDays: number; // janela máxima de agendamento (dias)
+  bufferMin: number; // intervalo entre atendimentos (minutos)
+}
+
+export function defaultBookingConfig(): BookingConfig {
+  return { teamMode: 'solo', leadMin: 30, cancelUntilMin: 120, horizonDays: 60, bufferMin: 0 };
+}
 
 export interface Business {
   id: ID;
@@ -70,12 +105,42 @@ export interface Business {
   hours: Record<string, DayHours | null>; // 0=dom .. 6=sab
   paymentMethods: string[]; // pix | card | cash | on_delivery
   pixKey: string;
+  deliveryFee: number; // centavos (0 = sem taxa / a combinar)
+  minOrder: number; // centavos (0 = sem mínimo)
   googleUrl: string; // link "avaliar no Google" (place compartilhado)
   googlePlaceId: string; // para importar avaliações (opcional)
-  googleApiKey: string; // Places API key do lojista (opcional)
+  googleApiKey: string; // Places API key do lojista (opcional, SECRETO)
+  booking: BookingConfig;
   published: boolean;
   createdAt: string;
   updatedAt: string;
+}
+
+// ── DTO público: whitelist explícita do que o visitante pode ver ──
+// NUNCA incluir: ownerId, pixKey, googleApiKey, dados internos.
+export interface PublicBusiness {
+  id: ID;
+  name: string;
+  slug: string;
+  description: string;
+  logo: string;
+  cover: string;
+  niche: Niche;
+  modes: BusinessMode[];
+  phone: string;
+  whatsapp: string;
+  email: string;
+  instagram: string;
+  tiktok: string;
+  address: string;
+  mapsUrl: string;
+  hours: Record<string, DayHours | null>;
+  paymentMethods: string[];
+  deliveryFee: number; // centavos (preço público)
+  minOrder: number; // centavos (regra pública)
+  booking: BookingConfig; // regras operacionais públicas (modo equipe, prazos)
+  googleUrl: string;
+  published: boolean;
 }
 
 export interface Theme {
@@ -164,6 +229,7 @@ export interface Service {
   image: string;
   price: number; // centavos
   durationMin: number;
+  professionalIds: string[]; // [] = todos os profissionais
   active: boolean;
   featured: boolean;
   bookable: boolean;
@@ -182,6 +248,7 @@ export interface Availability {
   id: ID;
   businessId: ID;
   professionalId: string; // '' = todos
+  serviceId: string; // '' = todos os serviços
   weekday: number; // 0..6
   start: string; // HH:MM
   end: string; // HH:MM
@@ -193,6 +260,17 @@ export interface AvailabilityException {
   businessId: ID;
   date: string; // YYYY-MM-DD
   closed: boolean;
+  start: string; // horário especial ('' = dia todo / segue regras)
+  end: string;
+  note: string; // ex: "Natal", "Folga", "Inventário"
+}
+
+// ── Histórico de mudanças de status (auditoria) ──
+export interface StatusChange {
+  at: string;
+  from: string;
+  to: string;
+  by: 'owner' | 'customer' | 'system';
 }
 
 export type OrderStatus = 'new' | 'accepted' | 'preparing' | 'ready' | 'completed' | 'cancelled';
@@ -210,7 +288,7 @@ export interface OrderItem {
 export interface Order {
   id: ID;
   businessId: ID;
-  customerId: string; // '' = sem conta (legado)
+  customerId: string; // '' = guest/legado
   code: string; // ex: #0012
   customerName: string;
   customerPhone: string;
@@ -223,6 +301,8 @@ export interface Order {
   status: OrderStatus;
   note: string;
   createdAt: string;
+  updatedAt: string;
+  history: StatusChange[];
 }
 
 export type BookingStatus = 'pending' | 'confirmed' | 'cancelled' | 'completed' | 'no_show';
@@ -230,7 +310,7 @@ export type BookingStatus = 'pending' | 'confirmed' | 'cancelled' | 'completed' 
 export interface Booking {
   id: ID;
   businessId: ID;
-  customerId: string; // '' = sem conta (legado)
+  customerId: string; // '' = guest/legado
   serviceId: ID;
   professionalId: string;
   date: string; // YYYY-MM-DD
@@ -240,6 +320,8 @@ export interface Booking {
   status: BookingStatus;
   note: string;
   createdAt: string;
+  updatedAt: string;
+  history: StatusChange[];
 }
 
 export type ReviewSource = 'site' | 'google';
@@ -265,6 +347,7 @@ export type LeadStatus = 'new' | 'contacted' | 'qualified' | 'converted' | 'lost
 export interface Lead {
   id: ID;
   businessId: ID;
+  customerId: string; // '' = guest / ainda sem conta vinculada
   name: string;
   phone: string;
   email: string;
@@ -297,6 +380,7 @@ export interface DB {
   sessions: Session[];
   customers: Customer[];
   customerSessions: CustomerSession[];
+  passwordResets: PasswordReset[];
   businesses: Business[];
   pages: Page[];
   categories: Category[];

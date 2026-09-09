@@ -1,6 +1,6 @@
 'use client';
 import { useEffect, useState } from 'react';
-import type { Business, Category, Product, ProductOption, ProductOptionValue, Professional, Service } from '@/lib/types';
+import type { Business, PublicBusiness, Category, Product, ProductOption, ProductOptionValue, Professional, Service } from '@/lib/types';
 import { saveCustomerToken, clearCustomerToken } from '@/lib/client-auth';
 import { openSheet, closeSheet, onSheetChange, notifyAuthOk, gcalLink, type SheetState } from './sheet-bus';
 import { Icon } from '@/components/icons';
@@ -28,7 +28,7 @@ export function SheetShell({ title, onClose, zIndex, children }: { title: string
 
 // ── Host único: escuta openSheet e renderiza o conteúdo ──────
 export function SheetHost({ business, products, categories, options, values, services, professionals }: {
-  business: Business;
+  business: PublicBusiness;
   products: Product[];
   categories: Category[];
   options: ProductOption[];
@@ -88,7 +88,7 @@ export function SheetHost({ business, products, categories, options, values, ser
   );
 }
 
-export function CustomerAuthSheet({ business }: { business: Business }) {
+export function CustomerAuthSheet({ business }: { business: PublicBusiness }) {
   const [tab, setTab] = useState<'login' | 'register'>('login');
   const [name, setName] = useState('');
   const [login, setLogin] = useState('');
@@ -230,7 +230,7 @@ export function CustomerAuthSheet({ business }: { business: Business }) {
 const ORDER_STATUS: Record<string, string> = { new: 'Recebido', accepted: 'Aceito', preparing: 'Em preparo', ready: 'Pronto', completed: 'Entregue', cancelled: 'Cancelado' };
 const BOOKING_STATUS: Record<string, string> = { pending: 'Aguardando', confirmed: 'Confirmado', completed: 'Concluído', cancelled: 'Cancelado', no_show: 'Não compareceu' };
 
-export function CustomerAccountSheet({ business }: { business: Business }) {
+export function CustomerAccountSheet({ business }: { business: PublicBusiness }) {
   const [tab, setTab] = useState<'orders' | 'bookings'>(
     business.modes.includes('orders') || business.modes.includes('products') ? 'orders' : 'bookings',
   );
@@ -453,7 +453,7 @@ export function CustomerAccountSheet({ business }: { business: Business }) {
 }
 
 // ── CTA principal: abre o fluxo em sheet ─────────────────────
-export function CtaButton({ business, label }: { business: Business; label: string }) {
+export function CtaButton({ business, label }: { business: PublicBusiness; label: string }) {
   const m = business.modes;
   const hasProducts = m.includes('orders') || m.includes('products');
   const hasBooking = m.includes('bookings');

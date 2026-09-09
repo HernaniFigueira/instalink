@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from 'next/server';
 import { customerFromRequest } from '@/lib/customer-auth';
 import { readDB, updateDB } from '@/lib/db';
 import { onlyDigits } from '@/lib/utils';
+import { todayISO, nowHM } from '@/lib/tz';
+import { timeToMin } from '@/lib/utils';
 
 // GET ?businessId= — agendamentos do consumidor naquele negócio.
 export async function GET(req: NextRequest) {
@@ -27,10 +29,10 @@ export async function GET(req: NextRequest) {
         professional: db.professionals.find((p) => p.id === b.professionalId)?.name || '',
       };
     });
-  return NextResponse.json({ bookings });
+  return NextResponse.json({ bookings, cancelUntilMin: business.booking?.cancelUntilMin ?? 120 });
 }
 
-// PATCH { id } — consumidor cancela o próprio agendamento futuro.
+// PATCH { id } — consumidor cancela o próprio agendamento (dentro da política).
 export async function PATCH(req: NextRequest) {
   try {
     const customer = await customerFromRequest(req);
@@ -45,13 +47,27 @@ export async function PATCH(req: NextRequest) {
     if (!['pending', 'confirmed'].includes(booking.status)) {
       return NextResponse.json({ error: 'Este agendamento não pode mais ser cancelado.' }, { status: 400 });
     }
-    const today = new Date().toISOString().slice(0, 10);
+    const business = db.businesses.find((b) => b.id === booking.businessId);
+    const today = todayISO();
     if (booking.date < today) {
       return NextResponse.json({ error: 'Este horário já passou.' }, { status: 400 });
     }
+    // Política: só cancela até cancelUntilMin antes do horário (fuso SP).
+    if (booking.date === today && business) {
+      const until = business.booking?.cancelUntilMin ?? 120;
+      const diff = timeToMin(booking.time) - timeToMin(nowHM());
+      if (diff < until) {
+        return NextResponse.json({ error: `Cancelamento permitido até ${until} min antes do horário. Fale com o negócio.` }, { status: 400 });
+      }
+    }
     await updateDB((d) => {
       const b = d.bookings.find((x) => x.id === id);
-      if (b) b.status = 'cancelled';
+      if (b) {
+        const now = new Date().toISOString();
+        b.history.push({ at: now, from: b.status, to: 'cancelled', by: 'customer' });
+        b.status = 'cancelled';
+        b.updatedAt = now;
+      }
     });
     return NextResponse.json({ ok: true });
   } catch {

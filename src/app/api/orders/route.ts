@@ -3,10 +3,19 @@ import { randomUUID } from 'node:crypto';
 import { readDB, updateDB } from '@/lib/db';
 import { userFromRequest } from '@/lib/auth';
 import { customerFromRequest } from '@/lib/customer-auth';
-import type { OrderItem } from '@/lib/types';
+import { onlyDigits, money } from '@/lib/utils';
+import { ORDER_FLOW, canTransition } from '@/lib/status';
+import { rateLimit, ipFrom } from '@/lib/rate-limit';
+import type { DB, OrderItem, OrderStatus } from '@/lib/types';
+
+function err(message: string, status: number): Error {
+  return Object.assign(new Error(message), { status });
+}
 
 // POST público: cria pedido. Preços SEMPRE recalculados no servidor.
 export async function POST(req: NextRequest) {
+  const rl = rateLimit(`order:${ipFrom(req)}`, 30, 60000);
+  if (!rl.ok) return NextResponse.json({ error: 'Muitas tentativas. Aguarde um instante.' }, { status: 429 });
   try {
     const body = await req.json();
     const { businessId } = body;
@@ -16,10 +25,10 @@ export async function POST(req: NextRequest) {
     const customer = await customerFromRequest(req);
     if (!customer) return NextResponse.json({ error: 'Entre para fazer seu pedido.', code: 'login_required' }, { status: 401 });
 
-    const name = (body.customerName || '').trim();
-    const phone = (body.customerPhone || '').trim();
+    const name = (body.customerName || customer.name || '').trim();
+    const phone = (body.customerPhone || customer.phone || '').trim();
     if (!name) return NextResponse.json({ error: 'Informe seu nome.' }, { status: 400 });
-    if (phone.replace(/\D/g, '').length < 10) return NextResponse.json({ error: 'Informe um WhatsApp válido.' }, { status: 400 });
+    if (onlyDigits(phone).length < 10) return NextResponse.json({ error: 'Informe um WhatsApp válido.' }, { status: 400 });
     const items = Array.isArray(body.items) ? body.items : [];
     if (items.length === 0) return NextResponse.json({ error: 'Seu carrinho está vazio.' }, { status: 400 });
 
@@ -65,30 +74,51 @@ export async function POST(req: NextRequest) {
     if (type === 'delivery' && !(body.customerAddress || '').trim()) {
       return NextResponse.json({ error: 'Informe o endereço de entrega.' }, { status: 400 });
     }
-    const count = db.orders.filter((o) => o.businessId === businessId).length + 1;
-    const now = new Date().toISOString();
-    const orderId = randomUUID();
+    if (business.minOrder > 0 && subtotal < business.minOrder) {
+      return NextResponse.json({ error: `Pedido mínimo de ${money(business.minOrder)}.` }, { status: 400 });
+    }
+    const fee = type === 'delivery' ? business.deliveryFee || 0 : 0;
+    const total = subtotal + fee;
 
-    await updateDB((d) => {
+    // Código único gerado DENTRO da escrita (anti-duplicado em concorrência).
+    const result = await updateDB((d: DB) => {
+      const existing = new Set(d.orders.filter((o) => o.businessId === businessId).map((o) => o.code));
+      let n = existing.size + 1;
+      let code = '#' + String(n).padStart(4, '0');
+      while (existing.has(code)) { n++; code = '#' + String(n).padStart(4, '0'); }
+      const now = new Date().toISOString();
+      const orderId = randomUUID();
       d.orders.push({
-        id: orderId, businessId, customerId: customer.id, code: '#' + String(count).padStart(4, '0'),
+        id: orderId, businessId, customerId: customer.id, code,
         customerName: name, customerPhone: phone, customerAddress: String(body.customerAddress || ''),
         type, payment: String(body.payment || 'pix'), items: orderItems,
-        subtotal, total: subtotal, status: 'new', note: String(body.note || '').slice(0, 500), createdAt: now,
+        subtotal, total, status: 'new', note: String(body.note || '').slice(0, 500),
+        createdAt: now, updatedAt: now, history: [{ at: now, from: '', to: 'new', by: 'customer' }],
       });
-      d.events.push({ id: randomUUID(), businessId, type: 'order_created', path: '', meta: { total: subtotal }, createdAt: now });
+      d.events.push({ id: randomUUID(), businessId, type: 'order_created', path: '', meta: { total }, createdAt: now });
       d.events.push({ id: randomUUID(), businessId, type: 'conversion', path: '', meta: { kind: 'order' }, createdAt: now });
-      const lead = d.leads.find((l) => l.businessId === businessId && l.phone === phone);
-      if (lead) { lead.name = name; lead.lastInteraction = now; lead.action = 'pedido'; if (lead.status === 'new') lead.status = 'converted'; }
-      else d.leads.push({ id: randomUUID(), businessId, name, phone, email: '', instagram: '', origin: 'pedido', interest: orderItems.map((i) => i.name).join(', ').slice(0, 200), action: 'pedido', status: 'converted', createdAt: now, lastInteraction: now });
+      const digits = onlyDigits(phone);
+      const lead = d.leads.find((l) =>
+        l.businessId === businessId &&
+        ((l.customerId && l.customerId === customer.id) || (digits && onlyDigits(l.phone) === digits)),
+      );
+      if (lead) {
+        lead.name = name; lead.customerId = customer.id; lead.lastInteraction = now;
+        lead.action = 'pedido'; if (lead.status === 'new') lead.status = 'converted';
+      } else {
+        d.leads.push({ id: randomUUID(), businessId, customerId: customer.id, name, phone, email: '', instagram: '', origin: 'pedido', interest: orderItems.map((i) => i.name).join(', ').slice(0, 200), action: 'pedido', status: 'converted', createdAt: now, lastInteraction: now });
+      }
+      return { orderId, code };
     });
-    return NextResponse.json({ ok: true, orderId, code: '#' + String(count).padStart(4, '0') });
-  } catch {
-    return NextResponse.json({ error: 'Não foi possível enviar seu pedido. Tente novamente.' }, { status: 500 });
+    return NextResponse.json({ ok: true, ...result, total });
+  } catch (e: any) {
+    const status = e?.status || 500;
+    if (status === 500) console.error('[orders] POST falhou:', e);
+    return NextResponse.json({ error: status === 500 ? 'Não foi possível enviar seu pedido. Tente novamente.' : e.message }, { status });
   }
 }
 
-// GET/PATCH autenticados (dono): listar e atualizar status
+// GET autenticado (dono): lista paginada
 export async function GET(req: NextRequest) {
   const businessId = req.nextUrl.searchParams.get('businessId') || '';
   const user = await userFromRequest(req);
@@ -97,7 +127,10 @@ export async function GET(req: NextRequest) {
   if (!db.businesses.some((b) => b.id === businessId && b.ownerId === user.id)) {
     return NextResponse.json({ error: 'Não autorizado.' }, { status: 401 });
   }
-  return NextResponse.json({ orders: db.orders.filter((o) => o.businessId === businessId).reverse() });
+  const page = Math.max(1, Number(req.nextUrl.searchParams.get('page')) || 1);
+  const limit = Math.min(200, Math.max(1, Number(req.nextUrl.searchParams.get('limit')) || 50));
+  const all = db.orders.filter((o) => o.businessId === businessId).reverse();
+  return NextResponse.json({ orders: all.slice((page - 1) * limit, page * limit), total: all.length, page, limit });
 }
 
 export async function PATCH(req: NextRequest) {
@@ -105,18 +138,27 @@ export async function PATCH(req: NextRequest) {
     const { businessId, id, status } = await req.json();
     const user = await userFromRequest(req);
     if (!user) return NextResponse.json({ error: 'Não autenticado.' }, { status: 401 });
-    const valid = ['new', 'accepted', 'preparing', 'ready', 'completed', 'cancelled'];
-    if (!valid.includes(status)) return NextResponse.json({ error: 'Status inválido.' }, { status: 400 });
     const db = await readDB();
     if (!db.businesses.some((b) => b.id === businessId && b.ownerId === user.id)) {
       return NextResponse.json({ error: 'Não autorizado.' }, { status: 401 });
     }
+    const current = db.orders.find((x) => x.id === id && x.businessId === businessId);
+    if (!current) return NextResponse.json({ error: 'Pedido não encontrado.' }, { status: 404 });
+    const to = status as OrderStatus;
+    if (!ORDER_FLOW[current.status] || !canTransition(ORDER_FLOW, current.status, to)) {
+      return NextResponse.json({ error: `Não é possível mudar de "${current.status}" para "${status}".` }, { status: 422 });
+    }
     await updateDB((d) => {
       const o = d.orders.find((x) => x.id === id && x.businessId === businessId);
-      if (o) o.status = status;
+      if (!o) throw err('Pedido não encontrado.', 404);
+      const now = new Date().toISOString();
+      o.history.push({ at: now, from: o.status, to, by: 'owner' });
+      o.status = to;
+      o.updatedAt = now;
     });
     return NextResponse.json({ ok: true });
-  } catch {
-    return NextResponse.json({ error: 'Não foi possível atualizar.' }, { status: 500 });
+  } catch (e: any) {
+    const status = e?.status || 500;
+    return NextResponse.json({ error: status === 500 ? 'Não foi possível atualizar.' : e.message }, { status });
   }
 }

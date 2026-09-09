@@ -2,8 +2,11 @@ import { NextRequest, NextResponse } from 'next/server';
 import { randomUUID } from 'node:crypto';
 import { readDB, updateDB } from '@/lib/db';
 import { hashPassword, createSession, setSessionOn } from '@/lib/auth';
+import { rateLimit, ipFrom } from '@/lib/rate-limit';
 
 export async function POST(req: NextRequest) {
+  const rl = rateLimit(`register:${ipFrom(req)}`, 10, 300000);
+  if (!rl.ok) return NextResponse.json({ error: 'Muitas contas criadas. Aguarde alguns minutos.' }, { status: 429 });
   try {
     const { name, email, password } = await req.json();
     if (!name?.trim()) return NextResponse.json({ error: 'Informe seu nome.' }, { status: 400 });

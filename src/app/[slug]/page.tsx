@@ -8,7 +8,7 @@ import { Icon } from '@/components/icons';
 import { ConciergeIsland, WaFloat } from '@/components/public/widgets2';
 import { BookingTrigger, CtaButton, ProductsTrigger, QuoteTrigger, ServiceAgendarButton, SheetHost, Stars } from '@/components/public/customer';
 import { PageMenu, type MenuItem } from '@/components/public/menu';
-import type { Block, Business, Review } from '@/lib/types';
+import type { Block, Business, PublicBusiness, Review } from '@/lib/types';
 
 export async function generateMetadata({ params }: { params: { slug: string } }): Promise<Metadata> {
   const data = await getPublicData(params.slug);
@@ -120,7 +120,7 @@ function mapsEmbedSrc(mapsUrl: string, address: string): string {
 
 function BlockView({ block, business, catalog, hasBooking }: {
   block: Block;
-  business: Business;
+  business: PublicBusiness;
   hasBooking: boolean;
   catalog: {
     categories: any[]; products: any[]; options: any[]; optionValues: any[];

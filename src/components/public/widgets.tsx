@@ -2,7 +2,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { closeSheet, ensureCustomer, onAuthOk, openSheet, useCustomerPrefill } from './sheet-bus';
 import { Icon } from '@/components/icons';
-import type { Business, Category, Product, ProductOption, ProductOptionValue, Professional, Service } from '@/lib/types';
+import type { Business, PublicBusiness, Category, Product, ProductOption, ProductOptionValue, Professional, Service } from '@/lib/types';
 import { money, waLink } from '@/lib/utils';
 
 // Re-exportados para os demais widgets do cliente.
@@ -49,7 +49,7 @@ interface CartItem {
 }
 
 export function CatalogIsland({ business, products, categories, options, values, bare }: {
-  business: Business;
+  business: PublicBusiness;
   products: Product[];
   categories: Category[];
   options: ProductOption[];
@@ -172,7 +172,7 @@ export function CatalogIsland({ business, products, categories, options, values,
 }
 
 function ProductModal({ business, product, options, values, onClose, onAdd }: {
-  business: Business;
+  business: PublicBusiness;
   product: Product;
   options: ProductOption[];
   values: ProductOptionValue[];
@@ -274,7 +274,7 @@ function ProductModal({ business, product, options, values, onClose, onAdd }: {
 }
 
 function CartDrawer({ business, cart, products, values, unitFor, total, checkout, setCheckout, onClose, onQty, onRemove, onDone }: {
-  business: Business;
+  business: PublicBusiness;
   cart: CartItem[];
   products: Product[];
   values: ProductOptionValue[];

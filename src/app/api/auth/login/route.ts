@@ -1,8 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { readDB } from '@/lib/db';
 import { verifyPassword, createSession, setSessionOn } from '@/lib/auth';
+import { rateLimit, ipFrom } from '@/lib/rate-limit';
 
 export async function POST(req: NextRequest) {
+  const rl = rateLimit(`login:${ipFrom(req)}`, 15, 60000);
+  if (!rl.ok) return NextResponse.json({ error: 'Muitas tentativas de login. Aguarde um minuto.' }, { status: 429 });
   try {
     const { email, password } = await req.json();
     const db = await readDB();

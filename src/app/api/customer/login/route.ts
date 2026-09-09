@@ -3,9 +3,12 @@ import { readDB } from '@/lib/db';
 import { verifyPassword } from '@/lib/auth';
 import { createCustomerSession, setCustomerSessionOn, publicCustomer } from '@/lib/customer-auth';
 import { onlyDigits } from '@/lib/utils';
+import { rateLimit, ipFrom } from '@/lib/rate-limit';
 
 // POST público: login do consumidor (WhatsApp ou e-mail + senha).
 export async function POST(req: NextRequest) {
+  const rl = rateLimit(`clogin:${ipFrom(req)}`, 20, 60000);
+  if (!rl.ok) return NextResponse.json({ error: 'Muitas tentativas. Aguarde um minuto.' }, { status: 429 });
   try {
     const { login, password } = await req.json();
     const digits = onlyDigits(login || '');

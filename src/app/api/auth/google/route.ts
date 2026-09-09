@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { popupHtml } from '@/lib/google-auth';
+import { popupHtml, signState } from '@/lib/google-auth';
 
 // GET ?slug= — inicia o login com Google (conta do consumidor).
 //
@@ -18,7 +18,7 @@ export async function GET(req: NextRequest) {
     );
   }
   const origin = req.nextUrl.origin;
-  const state = Buffer.from(JSON.stringify({ slug })).toString('base64url');
+  const state = signState(slug);
   const params = new URLSearchParams({
     client_id: clientId,
     redirect_uri: `${origin}/api/auth/google/callback`,

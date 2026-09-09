@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { randomUUID } from 'node:crypto';
 import { readDB, updateDB } from '@/lib/db';
 import { userFromRequest } from '@/lib/auth';
+import { clampCents } from '@/lib/utils';
 
 // API unificada de catálogo (produtos, opções, serviços, equipe, agenda).
 // Toda mutação exige sessão + posse do business (multi-tenant).
@@ -39,8 +40,8 @@ export async function POST(req: NextRequest) {
         // ── Produtos ──
         case 'product.save': {
           if (!body.name?.trim()) throw new Error('Dê um nome ao produto.');
-          const price = Math.max(0, Math.round(Number(body.price) || 0));
-          const promo = Math.max(0, Math.round(Number(body.promoPrice) || 0));
+          const price = clampCents(Number(body.price) || 0);
+          const promo = clampCents(Number(body.promoPrice) || 0);
           const existing = db.products.find((p) => p.id === body.id && p.businessId === businessId);
           const data = { name: body.name.trim(), description: body.description || '', image: body.image || '', price: price, promoPrice: promo > 0 && promo < price ? promo : 0, categoryId: body.categoryId || '', active: body.active !== false, featured: !!body.featured };
           if (existing) Object.assign(existing, data);
@@ -58,21 +59,31 @@ export async function POST(req: NextRequest) {
         case 'option.save': {
           if (!body.productId) throw new Error('Produto inválido.');
           if (!body.name?.trim()) throw new Error('Dê um nome à opção (ex: Tamanho).');
-          const values: Array<{ name: string; priceDelta: number }> = Array.isArray(body.values) ? body.values : [];
+          const values: Array<{ id?: string; name: string; priceDelta: number }> = Array.isArray(body.values) ? body.values : [];
           const optId = body.id || randomUUID();
           const existing = db.options.find((o) => o.id === body.id && o.businessId === businessId);
           const data = { name: body.name.trim(), required: !!body.required, multiple: !!body.multiple, min: Number(body.min) || 0, max: Number(body.max) || 0 };
           if (existing) {
             Object.assign(existing, data);
-            db.optionValues = db.optionValues.filter((v) => v.optionId !== existing.id);
           } else {
             db.options.push({ id: optId, businessId, productId: body.productId, order: 0, ...data });
           }
           const targetId = existing?.id || optId;
+          const seen = new Set<string>();
           for (const v of values) {
             if (!v.name?.trim()) continue;
-            db.optionValues.push({ id: randomUUID(), optionId: targetId, name: v.name.trim(), priceDelta: Math.max(0, Math.round(Number(v.priceDelta) || 0)), active: true });
+            const delta = clampCents(Number(v.priceDelta) || 0);
+            const prev = v.id ? db.optionValues.find((x) => x.id === v.id && x.optionId === targetId) : undefined;
+            if (prev) {
+              prev.name = v.name.trim(); prev.priceDelta = delta; prev.active = true;
+              seen.add(prev.id);
+            } else {
+              const nid = randomUUID();
+              db.optionValues.push({ id: nid, optionId: targetId, name: v.name.trim(), priceDelta: delta, active: true });
+              seen.add(nid);
+            }
           }
+          db.optionValues = db.optionValues.filter((x) => x.optionId !== targetId || seen.has(x.id));
           return { ok: true };
         }
         case 'option.delete': {
@@ -84,7 +95,10 @@ export async function POST(req: NextRequest) {
         case 'service.save': {
           if (!body.name?.trim()) throw new Error('Dê um nome ao serviço.');
           const existing = db.services.find((s) => s.id === body.id && s.businessId === businessId);
-          const data = { name: body.name.trim(), description: body.description || '', image: body.image || '', price: Math.max(0, Math.round(Number(body.price) || 0)), durationMin: Math.max(5, Number(body.durationMin) || 30), categoryId: body.categoryId || '', active: body.active !== false, featured: !!body.featured, bookable: body.bookable !== false };
+          const proIds = Array.isArray(body.professionalIds)
+            ? body.professionalIds.map((x: any) => String(x)).filter((x: string) => db.professionals.some((pr) => pr.id === x && pr.businessId === businessId))
+            : (existing?.professionalIds || []);
+          const data = { name: body.name.trim(), description: body.description || '', image: body.image || '', price: clampCents(Number(body.price) || 0), durationMin: Math.max(5, Number(body.durationMin) || 30), professionalIds: proIds, categoryId: body.categoryId || '', active: body.active !== false, featured: !!body.featured, bookable: body.bookable !== false };
           if (existing) Object.assign(existing, data);
           else db.services.push({ id, businessId, ...data });
           return { ok: true };
@@ -106,14 +120,52 @@ export async function POST(req: NextRequest) {
           db.professionals = db.professionals.filter((p) => !(p.id === body.id && p.businessId === businessId));
           return { ok: true };
         }
-        // ── Disponibilidade (substitui regras do negócio) ──
+        // ── Disponibilidade (substitui SOMENTE o escopo editado) ──
         case 'availability.save': {
           const rules = Array.isArray(body.rules) ? body.rules : [];
-          db.availability = db.availability.filter((a) => a.businessId !== businessId);
+          const scope = body.scope && typeof body.scope === 'object' ? body.scope : {};
+          const scopePro = typeof scope.professionalId === 'string' ? scope.professionalId : undefined;
+          const scopeSvc = typeof scope.serviceId === 'string' ? scope.serviceId : undefined;
+          const rx = /^\d{2}:\d{2}$/;
+          const toMin = (t: string) => { const parts = t.split(':').map(Number); return parts[0] * 60 + parts[1]; };
+          db.availability = db.availability.filter((a) =>
+            a.businessId !== businessId ||
+            (scopePro !== undefined && a.professionalId !== scopePro) ||
+            (scopeSvc !== undefined && a.serviceId !== scopeSvc),
+          );
           for (const r of rules) {
-            if (r.weekday === undefined || !r.start || !r.end) continue;
-            db.availability.push({ id: randomUUID(), businessId, professionalId: r.professionalId || '', weekday: Number(r.weekday), start: r.start, end: r.end, slotMin: Number(r.slotMin) || 30 });
+            const wd = Number(r.weekday);
+            if (!Number.isInteger(wd) || wd < 0 || wd > 6) continue;
+            if (!rx.test(r.start || '') || !rx.test(r.end || '')) continue;
+            if (toMin(r.end) <= toMin(r.start)) continue;
+            db.availability.push({
+              id: randomUUID(), businessId,
+              professionalId: scopePro !== undefined ? scopePro : (r.professionalId || ''),
+              serviceId: scopeSvc !== undefined ? scopeSvc : (r.serviceId || ''),
+              weekday: wd, start: r.start, end: r.end, slotMin: Number(r.slotMin) || 30,
+            });
           }
+          return { ok: true };
+        }
+        // ── Exceções (dia fechado / horário especial) ──
+        case 'exception.save': {
+          const date = String(body.date || '');
+          if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) throw new Error('Data inválida.');
+          const rx = /^\d{2}:\d{2}$/;
+          const start = rx.test(body.start || '') ? body.start : '';
+          const end = rx.test(body.end || '') ? body.end : '';
+          const closed = body.closed !== false && !(start && end);
+          const found = db.exceptions.find((e) => e.businessId === businessId && e.date === date);
+          if (found) {
+            found.closed = closed; found.start = start; found.end = end;
+            found.note = String(body.note || '').slice(0, 80);
+          } else {
+            db.exceptions.push({ id: randomUUID(), businessId, date, closed, start, end, note: String(body.note || '').slice(0, 80) });
+          }
+          return { ok: true };
+        }
+        case 'exception.delete': {
+          db.exceptions = db.exceptions.filter((e) => !(e.businessId === businessId && (e.id === body.id || e.date === body.date)));
           return { ok: true };
         }
         default:

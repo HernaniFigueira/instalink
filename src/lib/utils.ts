@@ -6,6 +6,45 @@ export function money(cents: number): string {
   return new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format((cents || 0) / 100);
 }
 
+// ── Moeda: implementação ÚNICA de parse/format ──
+// Todos os módulos (painel, público, API) devem usar estas funções.
+// Aceita "45,00" · "45.00" · "1.234,56" · "R$ 45,00" · 45 (número = reais).
+// Quando há ambiguidade de separador, o ÚLTIMO separador é o decimal.
+export const MAX_MONEY_CENTS = 100000000; // R$ 1.000.000,00
+
+export function parseMoneyToCents(input: string | number): number {
+  if (typeof input === 'number') {
+    if (!Number.isFinite(input)) return 0;
+    return clampCents(Math.round(input * 100));
+  }
+  let s = String(input || '').replace(/[R$\s]/g, '');
+  if (!s) return 0;
+  const hasComma = s.includes(',');
+  const hasDot = s.includes('.');
+  if (hasComma && hasDot) {
+    // último separador vence como decimal
+    if (s.lastIndexOf(',') > s.lastIndexOf('.')) s = s.replace(/\./g, '').replace(',', '.');
+    else s = s.replace(/,/g, '');
+  } else if (hasComma) {
+    s = s.replace('.', '').replace(',', '.');
+  }
+  // só ponto (ou nenhum): ponto já é decimal
+  if (!/^\d+(\.\d{1,2})?$/.test(s)) return 0;
+  const n = Number(s);
+  if (!Number.isFinite(n)) return 0;
+  return clampCents(Math.round(n * 100));
+}
+
+export function clampCents(cents: number): number {
+  if (!Number.isFinite(cents)) return 0;
+  return Math.max(0, Math.min(MAX_MONEY_CENTS, Math.round(cents)));
+}
+
+// Exibição em inputs (ex: 4500 -> "45,00").
+export function centsToBR(cents: number): string {
+  return ((cents || 0) / 100).toFixed(2).replace('.', ',');
+}
+
 export function slugify(input: string): string {
   return (input || '')
     .normalize('NFD')

@@ -2,11 +2,14 @@ import { NextRequest, NextResponse } from 'next/server';
 import { randomUUID } from 'node:crypto';
 import { readDB, updateDB } from '@/lib/db';
 import type { EventType } from '@/lib/types';
+import { rateLimit, ipFrom } from '@/lib/rate-limit';
 
 const VALID: EventType[] = ['page_view', 'button_click', 'product_view', 'product_add', 'cart_created', 'checkout_started', 'order_created', 'booking_started', 'booking_created', 'whatsapp_click', 'lead_created', 'ai_started', 'ai_recommendation', 'conversion'];
 
 // POST público: registra evento de analytics do negócio
 export async function POST(req: NextRequest) {
+  const rl = rateLimit(`ev:${ipFrom(req)}`, 120, 60000);
+  if (!rl.ok) return NextResponse.json({ ok: true });
   try {
     const body = await req.json();
     if (!VALID.includes(body.type)) return NextResponse.json({ ok: true });

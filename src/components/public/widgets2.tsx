@@ -2,14 +2,14 @@
 import { useEffect, useRef, useState } from 'react';
 import { ensureCustomer, onAuthOk, openSheet, useCustomerPrefill, gcalLink } from './sheet-bus';
 import { Icon } from '@/components/icons';
-import type { Business, Professional, Service } from '@/lib/types';
+import type { Business, PublicBusiness, Professional, Service } from '@/lib/types';
 import { money, trackEvent, waLink } from './widgets';
 
 const WEEK = ['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb'];
 
 // ── AGENDAMENTO ──────────────────────────────────────────
 export function BookingIsland({ business, services, professionals, title, initialServiceId, bare }: {
-  business: Business;
+  business: PublicBusiness;
   services: Service[];
   professionals: Professional[];
   title: string;
@@ -347,7 +347,7 @@ export function QuoteIsland({ businessId, title, bare }: { businessId: string; t
 // ── CONCIERGE IA ─────────────────────────────────────────
 interface Msg { from: 'bot' | 'user'; text: string; actions?: Array<{ label: string; target: string }> }
 
-export function ConciergeIsland({ business, title }: { business: Business; title: string }) {
+export function ConciergeIsland({ business, title }: { business: PublicBusiness; title: string }) {
   const [open, setOpen] = useState(false);
   const [msgs, setMsgs] = useState<Msg[]>([]);
   const [input, setInput] = useState('');
@@ -464,7 +464,7 @@ export function ConciergeIsland({ business, title }: { business: Business; title
 }
 
 // ── BOTÃO WHATSAPP FLUTUANTE ─────────────────────────────
-export function WaFloat({ business, label }: { business: Business; label: string }) {
+export function WaFloat({ business, label }: { business: PublicBusiness; label: string }) {
   if (!business.whatsapp) return null;
   return (
     <a

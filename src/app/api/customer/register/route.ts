@@ -4,9 +4,12 @@ import { readDB, updateDB } from '@/lib/db';
 import { hashPassword } from '@/lib/auth';
 import { createCustomerSession, setCustomerSessionOn, publicCustomer } from '@/lib/customer-auth';
 import { onlyDigits } from '@/lib/utils';
+import { rateLimit, ipFrom } from '@/lib/rate-limit';
 
 // POST público: cria conta do consumidor (nome + whatsapp ou e-mail + senha).
 export async function POST(req: NextRequest) {
+  const rl = rateLimit(`creg:${ipFrom(req)}`, 10, 300000);
+  if (!rl.ok) return NextResponse.json({ error: 'Muitas contas criadas. Aguarde alguns minutos.' }, { status: 429 });
   try {
     const { name, phone, email, password } = await req.json();
     const cleanName = (name || '').trim();

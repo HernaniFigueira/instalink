@@ -2,8 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { randomUUID } from 'node:crypto';
 import { readDB, updateDB } from '@/lib/db';
 import { createCustomerSession } from '@/lib/customer-auth';
-import { onlyDigits } from '@/lib/utils';
-import { popupHtml } from '@/lib/google-auth';
+import { popupHtml, verifyState } from '@/lib/google-auth';
 
 // GET ?code=&state= — callback do Google. Localiza/cria o consumidor,
 // abre sessão e devolve o token ao popup via postMessage.
@@ -17,6 +16,9 @@ export async function GET(req: NextRequest) {
     const code = req.nextUrl.searchParams.get('code') || '';
     const err = req.nextUrl.searchParams.get('error') || '';
     if (err) return html('Login cancelado', 'Você fechou a janela do Google. Tente de novo.');
+    if (!verifyState(req.nextUrl.searchParams.get('state') || '').ok) {
+      return html('Falha no login com Google', 'Sessão inválida ou expirada. Tente novamente.');
+    }
     if (!clientId || !clientSecret || !code) {
       return html('Falha no login com Google', 'Configuração incompleta. Entre com e-mail e senha.');
     }
@@ -64,7 +66,6 @@ export async function GET(req: NextRequest) {
     // 4. Sessão + entrega ao popup (a página-mãe salva o token)
     const sessionId = await createCustomerSession(customer.id);
     const payload = JSON.stringify({ type: 'il-google', token: sessionId, name: customer.name });
-    void onlyDigits;
     return new NextResponse(
       `<!DOCTYPE html><html><head><meta charset="utf-8"><title>Entrando…</title></head><body>
 <script>
