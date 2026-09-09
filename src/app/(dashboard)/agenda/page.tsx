@@ -148,6 +148,12 @@ export default function AgendaPage() {
                       <p className="text-xs text-zinc-500 mt-1.5">
                         {svc}{pro && ` · com ${pro}`}
                       </p>
+                      {b.note && <p className="text-xs text-zinc-500 mt-1">“{b.note}”</p>}
+                      {(b.answers || []).map((a: string, i: number) => a && (
+                        <p key={i} className="text-xs text-zinc-500 mt-0.5">
+                          <span className="font-semibold">{((services.find((sv) => sv.id === b.serviceId) as any)?.questions || [])[i] || `Resposta ${i + 1}`}:</span> {a}
+                        </p>
+                      ))}
                     </div>
                     <span className={`text-xs font-bold px-2.5 py-1 rounded-full ${toneCls(def.tone)}`}>
                       {def.panel}

@@ -233,6 +233,7 @@ export interface Service {
   active: boolean;
   featured: boolean;
   bookable: boolean;
+  questions: string[]; // até 3, respondidas na reserva (estilo Cal.com)
 }
 
 export interface Professional {
@@ -319,6 +320,7 @@ export interface Booking {
   customerPhone: string;
   status: BookingStatus;
   note: string;
+  answers: string[]; // respostas às questions do serviço
   createdAt: string;
   updatedAt: string;
   history: StatusChange[];

@@ -466,7 +466,7 @@ export function CustomerAccountSheet({ business }: { business: PublicBusiness })
 // são destino de um CTA de agendamento (ver lib/cta.ts).
 export function CtaButton({ business, label, target }: { business: PublicBusiness; label: string; target?: string }) {
   const t = resolveCtaTarget(business.modes, label, target);
-  const cls = 'il-btn block w-full text-center font-extrabold text-lg py-4 shadow-xl active:scale-[0.99] transition-transform uppercase tracking-wide';
+  const cls = 'il-btn block w-full text-center font-bold text-[17px] py-3.5 active:scale-[0.99] transition-transform';
 
   if (t === 'products') {
     return <button onClick={() => openSheet('products', {})} className={cls}>{label}</button>;

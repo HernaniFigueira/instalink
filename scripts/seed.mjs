@@ -138,7 +138,7 @@ const db = {
     { id: 'svc-corte', businessId: B2, categoryId: 'cat-cabelo', name: 'Corte', description: 'Corte moderno com acabamento.', image: '', price: 4500, durationMin: 45, professionalIds: ['pro-joao', 'pro-pedro'], active: true, featured: true, bookable: true },
     { id: 'svc-barba', businessId: B2, categoryId: 'cat-cabelo', name: 'Barba', description: 'Barba com toalha quente.', image: '', price: 3000, durationMin: 30, professionalIds: ['pro-pedro'], active: true, featured: false, bookable: true },
     { id: 'svc-combo', businessId: B2, categoryId: 'cat-cabelo', name: 'Corte + Barba', description: 'O combo completo.', image: '', price: 6500, durationMin: 60, professionalIds: ['pro-joao'], active: true, featured: true, bookable: true },
-    { id: 'svc-odonto', businessId: B3, categoryId: 'cat-consulta', name: 'Consulta Odontológica', description: 'Avaliação completa com dentista.', image: '', price: 20000, durationMin: 60, professionalIds: ['pro-orlando'], active: true, featured: true, bookable: true },
+    { id: 'svc-odonto', businessId: B3, categoryId: 'cat-consulta', name: 'Consulta Odontológica', description: 'Avaliação completa com dentista.', image: '', price: 20000, durationMin: 60, professionalIds: ['pro-orlando'], active: true, featured: true, bookable: true, questions: ['Possui convênio odontológico? Qual?'] },
     { id: 'svc-cardio', businessId: B3, categoryId: 'cat-consulta', name: 'Consulta Cardiológica', description: 'Check-up do coração.', image: '', price: 25000, durationMin: 45, professionalIds: ['pro-joao-cardio'], active: true, featured: true, bookable: true },
   ],
   professionals: [

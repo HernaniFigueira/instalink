@@ -33,6 +33,7 @@ export function BookingIsland({ business, services, professionals, title, initia
   const [loadingSlots, setLoadingSlots] = useState(false);
   const [time, setTime] = useState('');
   const [note, setNote] = useState('');
+  const [answers, setAnswers] = useState<string[]>([]);
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
   const [done, setDone] = useState<{ proName: string } | null>(null);
@@ -49,6 +50,7 @@ export function BookingIsland({ business, services, professionals, title, initia
   const showProStep = teamMode === 'choosable' && eligiblePros.length > 1;
 
   function selectService(id: string) {
+    setAnswers([]);
     setServiceId(id);
     setProId('');
     setDate('');
@@ -145,8 +147,8 @@ export function BookingIsland({ business, services, professionals, title, initia
         method: rescheduleId ? 'PATCH' : 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(rescheduleId
-          ? { id: rescheduleId, date, time, serviceId, professionalId: proId, note }
-          : { businessId: business.id, serviceId, professionalId: proId, date, time, customerName: form.name, customerPhone: form.phone, note }),
+          ? { id: rescheduleId, date, time, serviceId, professionalId: proId, note, answers }
+          : { businessId: business.id, serviceId, professionalId: proId, date, time, customerName: form.name, customerPhone: form.phone, note, answers }),
       });
       const data = await res.json();
       if (!res.ok) {
@@ -318,11 +320,16 @@ export function BookingIsland({ business, services, professionals, title, initia
             )}
             <label className="block"><span className="text-xs font-bold il-muted">OBSERVAÇÃO (OPCIONAL)</span>
               <input value={note} onChange={(e) => setNote(e.target.value)} placeholder="Alguma preferência?" maxLength={300} className="il-card w-full text-sm px-4 py-3 outline-none mt-1" /></label>
+            {(service?.questions || []).map((q: string, i: number) => (
+              <label key={i} className="block"><span className="text-xs font-bold il-muted">{q.toUpperCase().slice(0, 60)}</span>
+                <input value={answers[i] || ''} onChange={(e) => setAnswers((v) => { const n = [...v]; n[i] = e.target.value; return n; })}
+                  placeholder="Sua resposta" maxLength={300} className="il-card w-full text-sm px-4 py-3 outline-none mt-1" /></label>
+            ))}
           </div>
         )}
 
         {error && <p className="text-sm font-semibold text-red-600">{error}</p>}
-        <div className="sticky bottom-0 -mx-1 px-1 pt-2 pb-1" style={{ background: 'linear-gradient(transparent, color-mix(in srgb, var(--il-surface) 94%, transparent) 35%)' }}>
+        <div className="sticky bottom-0 -mx-1 px-1 pt-2 pb-1" style={{ background: 'linear-gradient(transparent, color-mix(in srgb, var(--il-bg) 94%, transparent) 35%)' }}>
           <button onClick={submit} disabled={loading || !time || !serviceId} className="il-btn w-full font-extrabold py-3.5 disabled:opacity-50">
             {loading ? 'Confirmando…' : time ? `${rescheduleId ? 'Remarcar' : 'Confirmar'} · ${time}` : serviceId ? 'Escolha um horário' : 'Escolha um serviço'}
           </button>

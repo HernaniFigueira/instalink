@@ -138,16 +138,16 @@ function BlockView({ block, business, catalog }: {
             <img src={business.cover} alt="" className="w-full h-32 object-cover mb-[-2.5rem]" style={{ borderRadius: 'var(--il-radius)' }} />
           ) : null}
           <div className="relative inline-block">
-            <div className="w-24 h-24 mx-auto rounded-full overflow-hidden flex items-center justify-center text-3xl font-black"
+            <div className="w-24 h-24 mx-auto rounded-full overflow-hidden flex items-center justify-center text-3xl font-extrabold tracking-tight"
               style={{
-                background: 'linear-gradient(135deg, var(--il-primary), var(--il-secondary))',
-                color: 'var(--il-btn-text, #fff)',
-                boxShadow: '0 0 0 4px var(--il-bg), 0 0 0 6px color-mix(in srgb, var(--il-primary) 55%, transparent)',
+                background: 'color-mix(in srgb, var(--il-primary) 14%, var(--il-surface))',
+                color: 'var(--il-primary)',
+                boxShadow: '0 0 0 3px var(--il-bg), 0 0 0 4px color-mix(in srgb, var(--il-primary) 35%, transparent)',
               }}>
               {business.logo ? <img src={business.logo} alt={business.name} className="w-full h-full object-cover" /> : initials(business.name)}
             </div>
           </div>
-          <h1 className="mt-3 text-2xl font-black tracking-tight">{business.name}</h1>
+          <h1 className="mt-3 text-[26px] leading-tight font-extrabold tracking-tight">{business.name}</h1>
           {business.description && <p className="il-muted text-sm mt-1 max-w-xs mx-auto">{business.description}</p>}
           {business.address && (
             <p className="il-muted text-xs mt-2 flex items-center justify-center gap-1">

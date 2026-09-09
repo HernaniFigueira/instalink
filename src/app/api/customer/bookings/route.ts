@@ -48,7 +48,7 @@ export async function PATCH(req: NextRequest) {
   try {
     const customer = await customerFromRequest(req);
     if (!customer) return NextResponse.json({ error: 'Entre para gerenciar.' }, { status: 401 });
-    const { id, date, time, serviceId, professionalId, note } = await req.json();
+    const { id, date, time, serviceId, professionalId, note, answers } = await req.json();
     const db = await readDB();
     const booking = db.bookings.find((b) => b.id === id);
     if (!booking) return NextResponse.json({ error: 'Agendamento não encontrado.' }, { status: 404 });
@@ -111,6 +111,7 @@ export async function PATCH(req: NextRequest) {
         target.date = date;
         target.time = time;
         if (note !== undefined) target.note = String(note || '').slice(0, 300);
+        if (answers !== undefined) target.answers = (Array.isArray(answers) ? answers : []).map((x: any) => String(x || '').trim().slice(0, 300)).slice(0, 3);
         target.updatedAt = now;
         target.history.push({ at: now, from: target.status, to: target.status, by: 'customer' });
         const proName = finalPro ? d.professionals.find((p) => p.id === finalPro)?.name || '' : '';

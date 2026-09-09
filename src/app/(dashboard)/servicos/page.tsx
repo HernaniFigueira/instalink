@@ -261,6 +261,7 @@ function ServiceForm({ service, cats, pros, onClose, onSave }: {
   const [active, setActive] = useState(service?.active !== false);
   const [featured, setFeatured] = useState(!!service?.featured);
   const [bookable, setBookable] = useState(service?.bookable !== false);
+  const [questions, setQuestions] = useState<string[]>(service?.questions || []);
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
   const input = 'w-full rounded-xl border border-zinc-300 px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500';
@@ -272,7 +273,7 @@ function ServiceForm({ service, cats, pros, onClose, onSave }: {
   return (
     <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4" role="dialog" aria-modal="true" aria-label={service ? 'Editar serviço' : 'Novo serviço'}>
       <div className="absolute inset-0 bg-black/50" onClick={onClose} />
-      <form onSubmit={(e) => { e.preventDefault(); setError(''); setLoading(true); onSave({ id: service?.id, name, description, image, price: parseMoneyToCents(price), durationMin, professionalIds: proIds, categoryId, active, featured, bookable }).catch((err) => setError(err.message)).finally(() => setLoading(false)); }}
+      <form onSubmit={(e) => { e.preventDefault(); setError(''); setLoading(true); onSave({ id: service?.id, name, description, image, price: parseMoneyToCents(price), durationMin, professionalIds: proIds, categoryId, active, featured, bookable, questions }).catch((err) => setError(err.message)).finally(() => setLoading(false)); }}
         className="relative w-full sm:max-w-lg bg-white rounded-t-3xl sm:rounded-3xl p-6 max-h-[92vh] overflow-y-auto space-y-3.5">
         <div className="flex items-center justify-between">
           <h3 className="font-bold text-lg">{service ? 'Editar serviço' : 'Novo serviço'}</h3>
@@ -292,6 +293,13 @@ function ServiceForm({ service, cats, pros, onClose, onSave }: {
             <option value="">Sem categoria</option>
             {cats.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
           </select></label>
+        <div>
+          <span className="text-xs font-bold text-zinc-500">PERGUNTAS NA RESERVA (OPCIONAL, ATÉ 3)</span>
+          {[0, 1, 2].map((i) => (
+            <input key={i} value={questions[i] || ''} onChange={(e) => setQuestions((v) => { const n = [...v]; n[i] = e.target.value; return n; })}
+              className={input + ' mt-1.5'} placeholder={i === 0 ? 'Ex: Possui convênio? Qual?' : `Pergunta ${i + 1}`} maxLength={120} />
+          ))}
+        </div>
         {pros.length > 0 && (
           <div>
             <span className="text-xs font-bold text-zinc-500">QUEM FAZ? (vazio = toda a equipe)</span>

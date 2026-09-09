@@ -98,7 +98,7 @@ export async function POST(req: NextRequest) {
           const proIds = Array.isArray(body.professionalIds)
             ? body.professionalIds.map((x: any) => String(x)).filter((x: string) => db.professionals.some((pr) => pr.id === x && pr.businessId === businessId))
             : (existing?.professionalIds || []);
-          const data = { name: body.name.trim(), description: body.description || '', image: body.image || '', price: clampCents(Number(body.price) || 0), durationMin: Math.max(5, Number(body.durationMin) || 30), professionalIds: proIds, categoryId: body.categoryId || '', active: body.active !== false, featured: !!body.featured, bookable: body.bookable !== false };
+          const data = { name: body.name.trim(), description: body.description || '', image: body.image || '', price: clampCents(Number(body.price) || 0), durationMin: Math.max(5, Number(body.durationMin) || 30), professionalIds: proIds, categoryId: body.categoryId || '', active: body.active !== false, featured: !!body.featured, bookable: body.bookable !== false, questions: (Array.isArray(body.questions) ? body.questions : (existing?.questions || [])).map((x: any) => String(x || '').trim().slice(0, 120)).filter(Boolean).slice(0, 3) };;
           if (existing) Object.assign(existing, data);
           else db.services.push({ id, businessId, ...data });
           return { ok: true };

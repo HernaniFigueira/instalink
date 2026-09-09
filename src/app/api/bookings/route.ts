@@ -163,6 +163,7 @@ export async function POST(req: NextRequest) {
         professionalId: finalPro, date, time,
         customerName: name, customerPhone: phone, status: 'pending',
         note: String(body.note || '').slice(0, 300), createdAt: now,
+        answers: (Array.isArray(body.answers) ? body.answers : []).map((x: any) => String(x || '').trim().slice(0, 300)).slice(0, 3),
         updatedAt: now, history: [{ at: now, from: '', to: 'pending', by: 'customer' }],
       });
       d.events.push({ id: randomUUID(), businessId: business.id, type: 'booking_created', path: '', meta: { serviceId: service.id }, createdAt: now });
