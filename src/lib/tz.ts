@@ -45,6 +45,17 @@ export function addDaysISO(dateISO: string, n: number): string {
   return iso(dt.getFullYear(), dt.getMonth() + 1, dt.getDate());
 }
 
+export function parseISODate(s: string): Date | null {
+  if (!isValidDateISO(s)) return null;
+  const [y, m, d] = s.split('-').map(Number);
+  return new Date(y, m - 1, d);
+}
+
+export function isPastDate(dateISO: string, today = todayISO()): boolean {
+  if (!isValidDateISO(dateISO)) return false;
+  return dateISO < today;
+}
+
 export function isValidDateISO(s: string): boolean {
   if (!/^\d{4}-\d{2}-\d{2}$/.test(s)) return false;
   const [y, m, d] = s.split('-').map(Number);
