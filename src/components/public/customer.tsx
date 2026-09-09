@@ -206,6 +206,7 @@ export function CustomerAuthSheet({ business }: { business: PublicBusiness }) {
           <button onClick={submitLogin} disabled={loading} className="il-btn w-full font-extrabold py-3.5 disabled:opacity-50">
             {loading ? 'Entrando…' : 'Entrar'}
           </button>
+          <a href="/recuperar?kind=customer" className="block text-center text-sm font-bold il-muted hover:underline pt-1">Esqueci minha senha</a>
         </div>
       ) : (
         <div className="space-y-2.5">

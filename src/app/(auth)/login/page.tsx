@@ -77,7 +77,10 @@ function LoginForm() {
           {loading ? 'Entrando…' : 'Entrar'}
         </button>
       </form>
-      <p className="text-sm text-zinc-400 mt-6 text-center">
+      <p className="text-sm text-zinc-400 mt-4 text-center">
+        <Link href="/recuperar?kind=user" className="font-semibold text-emerald-400 hover:text-emerald-300">Esqueci minha senha</Link>
+      </p>
+      <p className="text-sm text-zinc-400 mt-3 text-center">
         Ainda não tem conta? <Link href="/register" className="font-semibold text-emerald-400 hover:text-emerald-300">Criar grátis</Link>
       </p>
     </>
