@@ -395,7 +395,7 @@ function periodsFromRules(rules: Availability[], scopePro: string): Period[][] {
       if (r.professionalId) continue;
     } else if (r.professionalId !== scopePro) continue;
     if (r.weekday >= 0 && r.weekday <= 6) {
-      days[r.weekday].push({ start: r.start, end: r.end, slotMin: r.slotMin || 30 });
+      days[r.weekday].push({ start: r.start, end: r.end, slotMin: r.slotMin ?? 0 });
     }
   }
   return days;
@@ -413,7 +413,7 @@ function HoursScopeEditor({ scopePro, rules, onSave }: {
   function addPeriod(i: number) {
     setDays((d) => d.map((list, idx) => {
       if (idx !== i || list.length >= 3) return list;
-      return [...list, { start: '09:00', end: '18:00', slotMin: 30 }];
+      return [...list, { start: '09:00', end: '18:00', slotMin: 0 }];
     }));
   }
 
@@ -460,6 +460,7 @@ function HoursScopeEditor({ scopePro, rules, onSave }: {
                     <span className="text-zinc-400">até</span>
                     <input type="time" value={p.end} onChange={(e) => setPeriod(i, j, { end: e.target.value })} className="rounded-lg border border-zinc-300 px-2 py-1.5 text-sm" aria-label="Fim" />
                     <select value={p.slotMin} onChange={(e) => setPeriod(i, j, { slotMin: Number(e.target.value) })} className="rounded-lg border border-zinc-300 px-2 py-1.5 text-sm" aria-label="Intervalo">
+                      <option value={0}>Duração do serviço</option>
                       <option value={15}>15min</option>
                       <option value={30}>30min</option>
                       <option value={45}>45min</option>

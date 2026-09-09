@@ -8,14 +8,14 @@ import type { Booking, BookingStatus } from '@/lib/types';
 import { ListSkeleton } from '@/components/ui';
 import { Icon } from '@/components/icons';
 
-type View = 'today' | 'tomorrow' | 'next' | 'past' | 'all';
+type View = 'today' | 'tomorrow' | 'next' | 'past';
 
+// Primeiro a DATA — a pergunta é sempre "quem tenho hoje?".
 const VIEWS: Array<{ id: View; label: string }> = [
   { id: 'today', label: 'Hoje' },
   { id: 'tomorrow', label: 'Amanhã' },
   { id: 'next', label: 'Próximos' },
-  { id: 'past', label: 'Passado' },
-  { id: 'all', label: 'Todos' },
+  { id: 'past', label: 'Passados' },
 ];
 
 const STATUS_IDS: BookingStatus[] = ['pending', 'confirmed', 'completed', 'cancelled', 'no_show'];
@@ -26,7 +26,7 @@ export default function AgendaPage() {
   const businessId = params.get('b') || '';
   const [bookings, setBookings] = useState<Booking[]>([]);
   const [services, setServices] = useState<Array<{ id: string; name: string }>>([]);
-  const [pros, setPros] = useState<Array<{ id: string; name: string }>>([]);
+  const [pros, setPros] = useState<Array<{ id: string; name: string; active?: boolean }>>([]);
   const [loaded, setLoaded] = useState(false);
   const [view, setView] = useState<View>('today');
   const [statusFilter, setStatusFilter] = useState('');
@@ -69,50 +69,52 @@ export default function AgendaPage() {
     if (view === 'today') return b.date === today;
     if (view === 'tomorrow') return b.date === tomorrow;
     if (view === 'next') return b.date > today && b.status !== 'cancelled';
-    if (view === 'past') return b.date < today;
-    return true;
+    return b.date < today;
   };
 
   const list = bookings
     .filter(inView)
     .filter((b) => !statusFilter || b.status === statusFilter)
     .filter((b) => !proFilter || b.professionalId === proFilter)
-    .sort((a, b) => (view === 'past' || view === 'all')
+    .sort((a, b) => (view === 'past'
       ? (a.date + a.time < b.date + b.time ? 1 : -1)
-      : (a.date + a.time < b.date + b.time ? -1 : 1));
+      : (a.date + a.time < b.date + b.time ? -1 : 1)));
 
+  // Filtro de equipe só com 2+ profissionais ATIVOS (inativo não opera).
+  const activePros = pros.filter((p) => p.active !== false);
   const pages = Math.max(1, Math.ceil(total / LIMIT));
   let lastDay = '';
 
   return (
     <>
       <h1 className="text-2xl font-bold tracking-tight">Agenda</h1>
-      <p className="text-sm text-zinc-500 mt-1 mb-5">Agendamentos recebidos pela sua página, ordenados pela data do atendimento.</p>
+      <p className="text-sm text-zinc-500 mt-1 mb-5">Quem vem, quando e com quem — ordenado pelo horário do atendimento.</p>
 
       {error && <p className="mb-4 text-sm font-medium bg-red-600 text-white rounded-xl px-4 py-3">{error}</p>}
 
-      <div className="flex gap-2 mb-3 overflow-x-auto pb-1">
-        {VIEWS.map((v) => (
-          <button key={v.id} onClick={() => setView(v.id)}
-            className={`shrink-0 text-xs font-bold px-3.5 py-2 rounded-full ${view === v.id ? 'bg-zinc-900 text-white' : 'bg-white border border-zinc-200'}`}>
-            {v.label}
-          </button>
-        ))}
-      </div>
-
-      <div className="flex flex-wrap gap-2 mb-4">
-        <select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)}
-          className="text-xs font-bold bg-white border border-zinc-200 rounded-full px-3 py-2">
-          <option value="">Todos os status</option>
-          {STATUS_IDS.map((s) => <option key={s} value={s}>{BOOKING_STATUS[s].panel}</option>)}
-        </select>
-        {pros.length > 0 && (
-          <select value={proFilter} onChange={(e) => setProFilter(e.target.value)}
-            className="text-xs font-bold bg-white border border-zinc-200 rounded-full px-3 py-2">
-            <option value="">Toda a equipe</option>
-            {pros.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
+      <div className="bg-white border border-zinc-200 rounded-2xl p-2 mb-4">
+        <div className="grid grid-cols-4 gap-1" role="tablist" aria-label="Período">
+          {VIEWS.map((v) => (
+            <button key={v.id} role="tab" aria-selected={view === v.id} onClick={() => setView(v.id)}
+              className={`text-xs font-bold px-2 py-2.5 rounded-xl ${view === v.id ? 'bg-zinc-900 text-white' : 'text-zinc-500 hover:bg-zinc-50'}`}>
+              {v.label}
+            </button>
+          ))}
+        </div>
+        <div className="flex flex-wrap gap-2 mt-2">
+          <select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)} aria-label="Filtrar por status"
+            className="text-xs font-bold bg-zinc-50 border border-zinc-200 rounded-xl px-3 py-2">
+            <option value="">Todos os status</option>
+            {STATUS_IDS.map((s) => <option key={s} value={s}>{BOOKING_STATUS[s].panel}</option>)}
           </select>
-        )}
+          {activePros.length > 1 && (
+            <select value={proFilter} onChange={(e) => setProFilter(e.target.value)} aria-label="Filtrar por profissional"
+              className="text-xs font-bold bg-zinc-50 border border-zinc-200 rounded-xl px-3 py-2">
+              <option value="">Toda a equipe</option>
+              {activePros.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
+            </select>
+          )}
+        </div>
       </div>
 
       {!loaded ? <ListSkeleton rows={4} /> : list.length === 0 ? (
@@ -139,9 +141,12 @@ export default function AgendaPage() {
                 <div className="bg-white border border-zinc-200 rounded-2xl p-4">
                   <div className="flex flex-wrap items-center gap-2 justify-between">
                     <div>
-                      <p className="font-bold text-sm">{b.customerName} <span className="font-normal text-zinc-500">· {b.customerPhone}</span></p>
-                      <p className="text-xs text-zinc-500 mt-0.5">
-                        {svc}{pro && ` · ${pro}`} · {b.time}
+                      <p className="font-bold text-sm">
+                        <span className="inline-block bg-zinc-900 text-white text-xs font-extrabold px-2 py-0.5 rounded-lg mr-1.5">{b.time}</span>
+                        {b.customerName} <span className="font-normal text-zinc-500">· {b.customerPhone}</span>
+                      </p>
+                      <p className="text-xs text-zinc-500 mt-1.5">
+                        {svc}{pro && ` · com ${pro}`}
                       </p>
                     </div>
                     <span className={`text-xs font-bold px-2.5 py-1 rounded-full ${toneCls(def.tone)}`}>

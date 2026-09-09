@@ -2,6 +2,7 @@
 import type { Block, BlockType, BusinessMode, Niche, Theme } from './types';
 import { NICHE_PRESET, presetById } from './themes';
 import { uid } from './utils';
+import { defaultCtaTarget } from './cta';
 
 export const NICHES: Array<{ id: Niche; label: string; hint: string }> = [
   { id: 'alimentacao', label: 'Alimentação', hint: 'Restaurantes, hamburguerias, pizzarias, delivery' },
@@ -53,7 +54,7 @@ export function defaultBlocks(niche: Niche, modes: BusinessMode[]): Block[] {
   let order = 1;
   const wants = (m: BusinessMode) => modes.includes(m);
 
-  blocks.push(block('cta', order++, { label: ctaFor(modes, niche) }));
+  blocks.push(block('cta', order++, { label: ctaFor(modes, niche), target: defaultCtaTarget(modes) }));
 
   if (wants('products') || wants('orders')) blocks.push(block('products', order++, { title: niche === 'alimentacao' ? 'Cardápio' : 'Produtos' }));
   if (wants('services') || wants('bookings')) blocks.push(block('services', order++, { title: 'Serviços' }));

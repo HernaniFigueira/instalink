@@ -74,7 +74,7 @@ export async function GET(req: NextRequest) {
         });
         days[iso] = { closed: r.slots.length === 0, free: r.slots.length };
       }
-      return NextResponse.json({ days });
+      return NextResponse.json({ days, today });
     }
 
     const date = q.get('date') || '';
@@ -86,7 +86,7 @@ export async function GET(req: NextRequest) {
       nowHM: date === today ? nowHM() : '',
     });
     const pros = Object.fromEntries(base.professionals.map((p) => [p.id, p.name]));
-    return NextResponse.json({ slots: r.slots, closed: r.closed, assign: r.assign, pros });
+    return NextResponse.json({ slots: r.slots, occupied: r.occupied, closed: r.closed, assign: r.assign, pros, today });
   } catch {
     return NextResponse.json({ error: 'Não foi possível carregar os horários.' }, { status: 500 });
   }

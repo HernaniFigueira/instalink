@@ -7,6 +7,7 @@ import { BOOKING_STATUS, ORDER_STATUS } from '@/lib/status';
 import { todayISO, humanDateTime } from '@/lib/tz';
 import type { BookingStatus, OrderStatus } from '@/lib/types';
 import { Icon } from '@/components/icons';
+import { resolveCtaTarget } from '@/lib/cta';
 import { CatalogIsland, money, waLink } from './widgets';
 import { BookingIsland, QuoteIsland } from './widgets2';
 
@@ -460,41 +461,25 @@ export function CustomerAccountSheet({ business }: { business: PublicBusiness })
   );
 }
 
-// ── CTA principal: abre o fluxo em sheet ─────────────────────
-export function CtaButton({ business, label }: { business: PublicBusiness; label: string }) {
-  const m = business.modes;
-  const hasProducts = m.includes('orders') || m.includes('products');
-  const hasBooking = m.includes('bookings');
-  const hasQuote = m.includes('quote');
+// ── CTA principal: abre o fluxo do DESTINO do bloco ───────────
+// Serviço → agendar → agenda. Produtos têm área própria e nunca
+// são destino de um CTA de agendamento (ver lib/cta.ts).
+export function CtaButton({ business, label, target }: { business: PublicBusiness; label: string; target?: string }) {
+  const t = resolveCtaTarget(business.modes, label, target);
+  const cls = 'il-btn block w-full text-center font-extrabold text-lg py-4 shadow-xl active:scale-[0.99] transition-transform uppercase tracking-wide';
 
-  if (hasProducts) {
-    return (
-      <button onClick={() => openSheet('products', {})}
-        className="il-btn block w-full text-center font-extrabold text-lg py-4 shadow-xl active:scale-[0.99] transition-transform uppercase tracking-wide">
-        {label}
-      </button>
-    );
+  if (t === 'products') {
+    return <button onClick={() => openSheet('products', {})} className={cls}>{label}</button>;
   }
-  if (hasBooking) {
-    return (
-      <button onClick={() => openSheet('booking', {})}
-        className="il-btn block w-full text-center font-extrabold text-lg py-4 shadow-xl active:scale-[0.99] transition-transform uppercase tracking-wide">
-        {label}
-      </button>
-    );
+  if (t === 'booking') {
+    return <button onClick={() => openSheet('booking', {})} className={cls}>{label}</button>;
   }
-  if (hasQuote) {
-    return (
-      <button onClick={() => openSheet('quote', {})}
-        className="il-btn block w-full text-center font-extrabold text-lg py-4 shadow-xl active:scale-[0.99] transition-transform uppercase tracking-wide">
-        {label}
-      </button>
-    );
+  if (t === 'quote') {
+    return <button onClick={() => openSheet('quote', {})} className={cls}>{label}</button>;
   }
   if (business.whatsapp) {
     return (
-      <a href={waLink(business.whatsapp, `Olá! Vim pelo site da ${business.name}.`)} target="_blank" rel="noreferrer"
-        className="il-btn block text-center font-extrabold text-lg py-4 shadow-xl active:scale-[0.99] transition-transform uppercase tracking-wide">
+      <a href={waLink(business.whatsapp, `Olá! Vim pelo site da ${business.name}.`)} target="_blank" rel="noreferrer" className={cls}>
         {label}
       </a>
     );

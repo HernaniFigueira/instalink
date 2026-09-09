@@ -25,6 +25,8 @@ export function BookingIsland({ business, services, professionals, title, initia
   const [date, setDate] = useState('');
   const [dayInfo, setDayInfo] = useState<Record<string, { closed: boolean; free: number }>>({});
   const [slots, setSlots] = useState<string[]>([]);
+  const [occupied, setOccupied] = useState<string[]>([]);
+  const [serverToday, setServerToday] = useState('');
   const [assign, setAssign] = useState<Record<string, string>>({});
   const [proNames, setProNames] = useState<Record<string, string>>({});
   const [closed, setClosed] = useState(false);
@@ -37,29 +39,47 @@ export function BookingIsland({ business, services, professionals, title, initia
   const form = useCustomerForm();
 
   const service = bookable.find((s) => s.id === serviceId);
-  // Vínculo serviço↔profissional: vazio = todos.
+  // Somente profissionais ATIVOS participam; vínculo do serviço restringe.
+  const activePros = professionals.filter((p) => p.active !== false);
   const eligiblePros = service?.professionalIds?.length
-    ? professionals.filter((p) => service.professionalIds.includes(p.id))
-    : professionals;
-  const teamMode = professionals.length === 0 ? 'solo' : (business.booking?.teamMode || 'solo');
-  const showProStep = teamMode === 'choosable' && eligiblePros.length > 0;
+    ? activePros.filter((p) => service.professionalIds.includes(p.id))
+    : activePros;
+  const teamMode = activePros.length === 0 ? 'solo' : (business.booking?.teamMode || 'solo');
+  // Escolha só aparece quando faz sentido: modo escolha + 2+ elegíveis.
+  const showProStep = teamMode === 'choosable' && eligiblePros.length > 1;
+
+  function selectService(id: string) {
+    setServiceId(id);
+    setProId('');
+    setDate('');
+    setTime('');
+    setSlots([]);
+    setOccupied([]);
+    setDayInfo({});
+  }
 
   const horizon = Math.max(1, Math.min(90, business.booking?.horizonDays || 60));
-  const days: Array<{ iso: string; label: string; dow: string }> = [];
+  const allDays: Array<{ iso: string; label: string; dow: string }> = [];
   for (let i = 0; i < horizon; i++) {
     const d = new Date(Date.now() + i * 86400000);
     const iso = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
-    days.push({ iso, label: `${String(d.getDate()).padStart(2, '0')}/${String(d.getMonth() + 1).padStart(2, '0')}`, dow: WEEK[d.getDay()] });
+    allDays.push({ iso, label: `${String(d.getDate()).padStart(2, '0')}/${String(d.getMonth() + 1).padStart(2, '0')}`, dow: WEEK[d.getDay()] });
   }
+  // Nunca exibe dia anterior ao hoje do servidor (fuso do negócio).
+  const days = serverToday ? allDays.filter((x) => x.iso >= serverToday) : allDays;
 
   useEffect(() => {
     if (!serviceId) { setDayInfo({}); return; }
+    if (days.length === 0) return;
     fetch(`/api/bookings?businessId=${business.id}&serviceId=${serviceId}&professionalId=${showProStep ? proId : ''}&from=${days[0].iso}&to=${days[days.length - 1].iso}`)
       .then((r) => r.json())
-      .then((d) => setDayInfo(d.days || {}))
+      .then((d) => {
+        setDayInfo(d.days || {});
+        if (d.today) setServerToday(d.today);
+      })
       .catch(() => setDayInfo({}));
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [serviceId, proId, business.id, showProStep]);
+  }, [serviceId, proId, business.id, showProStep, serverToday]);
 
   useEffect(() => {
     if (!serviceId || Object.keys(dayInfo).length === 0) return;
@@ -78,9 +98,11 @@ export function BookingIsland({ business, services, professionals, title, initia
       .then((r) => r.json())
       .then((d) => {
         setSlots(d.slots || []);
+        setOccupied(d.occupied || []);
         setAssign(d.assign || {});
         setProNames(d.pros || {});
         setClosed(!!d.closed);
+        if (d.today) setServerToday(d.today);
       })
       .catch(() => setSlots([]))
       .finally(() => setLoadingSlots(false));
@@ -92,16 +114,18 @@ export function BookingIsland({ business, services, professionals, title, initia
     return `${String(Math.floor(e / 60) % 24).padStart(2, '0')}:${String(e % 60).padStart(2, '0')}`;
   }
 
+  // Grade unificada: livres primeiro, ocupados visíveis e desabilitados.
+  const grid = [...slots.map((t) => ({ t, busy: false })), ...occupied.map((t) => ({ t, busy: true }))].sort((a, b) => (a.t < b.t ? -1 : 1));
   const groups = [
-    { id: 'manha', label: 'Manhã', slots: slots.filter((t) => t < '12:00') },
-    { id: 'tarde', label: 'Tarde', slots: slots.filter((t) => t >= '12:00' && t < '18:00') },
-    { id: 'noite', label: 'Noite', slots: slots.filter((t) => t >= '18:00') },
-  ].filter((g) => g.slots.length > 0);
+    { id: 'manha', label: 'Manhã', items: grid.filter((g) => g.t < '12:00') },
+    { id: 'tarde', label: 'Tarde', items: grid.filter((g) => g.t >= '12:00' && g.t < '18:00') },
+    { id: 'noite', label: 'Noite', items: grid.filter((g) => g.t >= '18:00') },
+  ].filter((g) => g.items.length > 0);
 
   // Profissional exibido ANTES da confirmação (nunca confirmação cega).
   const assignedId = proId || (time ? assign[time] || '' : '');
   const assignedName = assignedId
-    ? (proNames[assignedId] || professionals.find((p) => p.id === assignedId)?.name || '')
+    ? (proNames[assignedId] || activePros.find((p) => p.id === assignedId)?.name || '')
     : '';
 
   async function submit() {
@@ -182,12 +206,12 @@ export function BookingIsland({ business, services, professionals, title, initia
             <div className="il-chip-active px-4 py-3 flex justify-between items-center gap-2" style={{ borderRadius: 'var(--il-radius)' }}>
               <span><span className="font-bold text-sm block">{service.name}</span>
                 <span className="text-xs opacity-80">{service.durationMin} min · {money(service.price)}</span></span>
-              <button onClick={() => setServiceId('')} className="text-xs font-bold underline shrink-0">trocar</button>
+              <button onClick={() => selectService('')} className="text-xs font-bold underline shrink-0">trocar</button>
             </div>
           ) : (
           <div className="space-y-2">
             {bookable.map((s) => (
-              <button key={s.id} onClick={() => setServiceId(s.id)}
+              <button key={s.id} onClick={() => selectService(s.id)}
                 className={`w-full text-left px-4 py-3 border flex justify-between items-center gap-2 ${serviceId === s.id ? 'il-chip-active border-transparent' : 'il-card'}`}
                 style={{ borderRadius: 'var(--il-radius)' }}>
                 <span><span className="font-bold text-sm block">{s.name}</span>
@@ -245,16 +269,17 @@ export function BookingIsland({ business, services, professionals, title, initia
           <div>
             <p className="text-xs font-bold il-muted mb-1.5">HORÁRIO{slots.length > 0 && ` · ${slots.length} LIVRE(S)`}</p>
             {loadingSlots ? <p className="il-muted text-sm">Buscando horários…</p>
-              : closed || slots.length === 0 ? <p className="il-muted text-sm">Sem horários livres neste dia. Tente outro dia.</p>
+              : closed || grid.length === 0 ? <p className="il-muted text-sm">Sem horários livres neste dia. Tente outro dia.</p>
               : (
                 <div className="space-y-3">
                   {groups.map((g) => (
                     <div key={g.id}>
                       <p className="text-[11px] font-extrabold uppercase tracking-wider il-muted mb-1.5">{g.label}</p>
                       <div className="flex flex-wrap gap-2">
-                        {g.slots.map((t) => (
-                          <button key={t} onClick={() => setTime(t)}
-                            className={`text-sm font-bold px-4 py-2.5 border ${time === t ? 'il-chip-active border-transparent' : 'il-card'}`}
+                        {g.items.map(({ t, busy }) => (
+                          <button key={t} onClick={() => !busy && setTime(t)} disabled={busy}
+                            title={busy ? 'Horário ocupado' : `${t} disponível`}
+                            className={`text-sm font-bold px-4 py-2.5 border ${time === t ? 'il-chip-active border-transparent' : 'il-card'} ${busy ? 'opacity-40 line-through cursor-not-allowed' : ''}`}
                             style={{ borderRadius: 'var(--il-radius)' }}>{t}</button>
                         ))}
                       </div>

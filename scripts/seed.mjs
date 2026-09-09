@@ -14,13 +14,14 @@ function hash(password) {
 const now = new Date().toISOString();
 const B1 = 'biz-burgerhouse';
 const B2 = 'biz-barbeariajoao';
+const B3 = 'biz-clinicavitta';
 
-function blocksFor(cta, extra) {
+function blocksFor(cta, extra, target) {
   const b = [];
   let o = 0;
   const add = (type, settings = {}) => b.push({ id: `${cta}-${type}-${o}`, type, order: o++, enabled: true, settings });
   add('profile');
-  add('cta', { label: cta });
+  add('cta', { label: cta, target });
   for (const e of extra) add(e[0], e[1] || {});
   add('testimonials', {
     title: 'O que dizem por aí',
@@ -68,7 +69,19 @@ const db = {
       hours: {}, paymentMethods: ['pix', 'card', 'cash'], pixKey: '',
       deliveryFee: 0, minOrder: 0,
       googleUrl: '', googlePlaceId: '', googleApiKey: '',
-      booking: { teamMode: 'choosable', leadMin: 60, cancelUntilMin: 180, horizonDays: 30, bufferMin: 10 },
+      booking: { teamMode: 'auto', leadMin: 60, cancelUntilMin: 180, horizonDays: 30, bufferMin: 10 },
+      published: true, createdAt: now, updatedAt: now,
+    },
+    {
+      id: B3, ownerId: 'user-demo', name: 'Clínica Vitta', slug: 'clinicavitta',
+      description: 'Odonto e cardio com hora marcada. Escolha a especialidade.',
+      logo: '', cover: '', niche: 'saude', modes: ['services', 'bookings'],
+      phone: '', whatsapp: '11977778888', email: '', instagram: 'clinicavitta', tiktok: '',
+      address: 'Rua Saúde, 789 — Moema, São Paulo/SP', mapsUrl: 'https://maps.google.com/?q=Moema+SP',
+      hours: {}, paymentMethods: ['pix', 'card'], pixKey: '',
+      deliveryFee: 0, minOrder: 0,
+      googleUrl: '', googlePlaceId: '', googleApiKey: '',
+      booking: { teamMode: 'choosable', leadMin: 60, cancelUntilMin: 180, horizonDays: 30, bufferMin: 0 },
       published: true, createdAt: now, updatedAt: now,
     },
   ],
@@ -76,13 +89,19 @@ const db = {
     {
       id: 'page-burger', businessId: B1,
       theme: { primary: '#ea580c', secondary: '#fbbf24', background: '#fafaf9', surface: '#ffffff', text: '#1c1917', muted: '#78716c', radius: 16, font: 'inter', buttonStyle: 'solid' },
-      blocks: blocksFor('Pedir agora', [['products', { title: 'Cardápio' }]]),
+      blocks: blocksFor('Pedir agora', [['products', { title: 'Cardápio' }]], 'products'),
       updatedAt: now,
     },
     {
       id: 'page-barbearia', businessId: B2,
       theme: { primary: '#111827', secondary: '#6b7280', background: '#fafaf9', surface: '#ffffff', text: '#1c1917', muted: '#78716c', radius: 14, font: 'inter', buttonStyle: 'solid' },
-      blocks: blocksFor('Agendar horário', [['services', { title: 'Serviços' }], ['booking', { title: 'Agende seu horário' }]]),
+      blocks: blocksFor('Agendar horário', [['services', { title: 'Serviços' }], ['booking', { title: 'Agende seu horário' }]], 'booking'),
+      updatedAt: now,
+    },
+    {
+      id: 'page-clinica', businessId: B3,
+      theme: { primary: '#0d9488', secondary: '#99f6e4', background: '#fafaf9', surface: '#ffffff', text: '#1c1917', muted: '#78716c', radius: 14, font: 'inter', buttonStyle: 'solid' },
+      blocks: blocksFor('Agendar atendimento', [['services', { title: 'Especialidades' }], ['booking', { title: 'Agende sua consulta' }]], 'booking'),
       updatedAt: now,
     },
   ],
@@ -91,6 +110,7 @@ const db = {
     { id: 'cat-combos', businessId: B1, kind: 'product', name: 'Combos', order: 1, active: true },
     { id: 'cat-bebidas', businessId: B1, kind: 'product', name: 'Bebidas', order: 2, active: true },
     { id: 'cat-cabelo', businessId: B2, kind: 'service', name: 'Cabelo & Barba', order: 0, active: true },
+    { id: 'cat-consulta', businessId: B3, kind: 'service', name: 'Consultas', order: 0, active: true },
   ],
   products: [
     { id: 'prod-xbacon', businessId: B1, categoryId: 'cat-burgers', name: 'X-Bacon', description: 'Pão, burger 180g, queijo, bacon crocante e molho da casa.', image: '', price: 2990, promoPrice: 0, active: true, featured: true, order: 0 },
@@ -118,12 +138,23 @@ const db = {
     { id: 'svc-corte', businessId: B2, categoryId: 'cat-cabelo', name: 'Corte', description: 'Corte moderno com acabamento.', image: '', price: 4500, durationMin: 45, professionalIds: ['pro-joao', 'pro-pedro'], active: true, featured: true, bookable: true },
     { id: 'svc-barba', businessId: B2, categoryId: 'cat-cabelo', name: 'Barba', description: 'Barba com toalha quente.', image: '', price: 3000, durationMin: 30, professionalIds: ['pro-pedro'], active: true, featured: false, bookable: true },
     { id: 'svc-combo', businessId: B2, categoryId: 'cat-cabelo', name: 'Corte + Barba', description: 'O combo completo.', image: '', price: 6500, durationMin: 60, professionalIds: ['pro-joao'], active: true, featured: true, bookable: true },
+    { id: 'svc-odonto', businessId: B3, categoryId: 'cat-consulta', name: 'Consulta Odontológica', description: 'Avaliação completa com dentista.', image: '', price: 20000, durationMin: 60, professionalIds: ['pro-orlando'], active: true, featured: true, bookable: true },
+    { id: 'svc-cardio', businessId: B3, categoryId: 'cat-consulta', name: 'Consulta Cardiológica', description: 'Check-up do coração.', image: '', price: 25000, durationMin: 45, professionalIds: ['pro-joao-cardio'], active: true, featured: true, bookable: true },
   ],
   professionals: [
+    { id: 'pro-orlando', businessId: B3, name: 'Dr. Orlando', role: 'Dentista', photo: '', active: true },
+    { id: 'pro-joao-cardio', businessId: B3, name: 'Dr. João', role: 'Cardiologista', photo: '', active: true },
+    { id: 'pro-ana', businessId: B3, name: 'Dra. Ana', role: 'Fisioterapeuta', photo: '', active: false },
     { id: 'pro-joao', businessId: B2, name: 'João', role: 'Barbeiro master', photo: '', active: true },
     { id: 'pro-pedro', businessId: B2, name: 'Pedro', role: 'Barbeiro', photo: '', active: true },
   ],
-  availability: [1, 2, 3, 4, 5, 6].map((weekday) => ({ id: `av-${weekday}`, businessId: B2, professionalId: '', serviceId: '', weekday, start: '09:00', end: '18:00', slotMin: 30 })),
+  availability: [
+    ...[1, 2, 3, 4, 5, 6].map((weekday) => ({ id: `av-${weekday}`, businessId: B2, professionalId: '', serviceId: '', weekday, start: '09:00', end: '18:00', slotMin: 0 })),
+    ...[1, 2, 3, 4, 5].flatMap((weekday) => [
+      { id: `avc-o-${weekday}`, businessId: B3, professionalId: 'pro-orlando', serviceId: '', weekday, start: '09:00', end: '18:00', slotMin: 0 },
+      { id: `avc-j-${weekday}`, businessId: B3, professionalId: 'pro-joao-cardio', serviceId: '', weekday, start: '09:00', end: '18:00', slotMin: 0 },
+    ]),
+  ],
   exceptions: [],
   orders: [
     {
@@ -135,6 +166,7 @@ const db = {
   ],
   bookings: [
     { id: 'book-sample', businessId: B2, customerId: '', serviceId: 'svc-corte', professionalId: 'pro-joao', date: new Date(Date.now() + 86400000).toISOString().slice(0, 10), time: '10:00', customerName: 'Rafael T.', customerPhone: '11966666666', status: 'pending', note: '', createdAt: now, updatedAt: now, history: [] },
+    { id: 'book-orlando', businessId: B3, customerId: '', serviceId: 'svc-odonto', professionalId: 'pro-orlando', date: new Date(Date.now() + 86400000).toISOString().slice(0, 10), time: '10:00', customerName: 'Marlene S.', customerPhone: '11955554444', status: 'confirmed', note: '', createdAt: now, updatedAt: now, history: [] },
   ],
   leads: [
     { id: 'lead-1', businessId: B1, customerId: '', name: 'Carlos M.', phone: '11977777777', email: '', instagram: '', origin: 'pedido', interest: 'X-Bacon', action: 'pedido', status: 'converted', createdAt: now, lastInteraction: now },
@@ -193,4 +225,4 @@ if (process.env.DATABASE_URL) {
   fs.writeFileSync(FILE, JSON.stringify(db));
   console.log('Seed OK — demo@instalink.app / demo1234');
 }
-console.log('   /burgerhouse · /barbeariadojoao');
+console.log('   /burgerhouse · /barbeariadojoao · /clinicavitta');

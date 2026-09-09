@@ -142,7 +142,7 @@ export async function POST(req: NextRequest) {
               id: randomUUID(), businessId,
               professionalId: scopePro !== undefined ? scopePro : (r.professionalId || ''),
               serviceId: scopeSvc !== undefined ? scopeSvc : (r.serviceId || ''),
-              weekday: wd, start: r.start, end: r.end, slotMin: Number(r.slotMin) || 30,
+              weekday: wd, start: r.start, end: r.end, slotMin: Math.max(0, Number(r.slotMin) || 0),
             });
           }
           return { ok: true };

@@ -25,6 +25,8 @@ export interface SlotQuery {
 
 export interface SlotResult {
   slots: string[];
+  // grade completa − livres: exibidos desabilitados (ocupado visível, não some)
+  occupied: string[];
   closed: boolean;
   // auto mode: melhor profissional por horário (menor carga no dia)
   assign: Record<string, string>;
@@ -33,10 +35,10 @@ export interface SlotResult {
 interface Window { proId: string; start: number; end: number; step: number }
 
 export function computeSlots(q: SlotQuery): SlotResult {
-  const empty: SlotResult = { slots: [], closed: false, assign: {} };
+  const empty: SlotResult = { slots: [], occupied: [], closed: false, assign: {} };
 
   const exc = q.exceptions.find((e) => e.date === q.dateISO);
-  if (exc?.closed) return { slots: [], closed: true, assign: {} };
+  if (exc?.closed) return { slots: [], occupied: [], closed: true, assign: {} };
 
   const activePros = q.professionals.filter((p) => p.active !== false);
   const eligible = new Set(
@@ -56,7 +58,9 @@ export function computeSlots(q: SlotQuery): SlotResult {
     const start = timeToMin(r.start);
     const end = timeToMin(r.end);
     if (!(end > start)) continue;
-    const step = Math.max(10, r.slotMin || 30);
+    // Passo da grade: configurado no período ou, por padrão, a duração
+    // do próprio serviço (45min → 09:00, 09:45, 10:30…).
+    const step = Math.max(10, r.slotMin || q.durationMin || 30);
     if (q.professionalId) {
       if (r.professionalId && r.professionalId !== q.professionalId) continue;
       windows.push({ proId: q.professionalId, start, end, step });
@@ -118,12 +122,14 @@ export function computeSlots(q: SlotQuery): SlotResult {
   }
 
   const freeByPro = new Map<string, Set<string>>();
+  const candidates = new Set<string>();
   for (const w of windows) {
     if (w.end <= w.start) continue;
     const occ = busy.get(w.proId) || [];
     const set = freeByPro.get(w.proId) || new Set<string>();
     for (let t = w.start; t + q.durationMin <= w.end; t += w.step) {
       if (t < minStart) continue;
+      candidates.add(minToTime(t));
       const endT = t + q.durationMin + Math.max(0, q.bufferMin);
       const clash = occ.some((o) => t < o.end && endT > o.start);
       if (!clash) set.add(minToTime(t));
@@ -134,6 +140,8 @@ export function computeSlots(q: SlotQuery): SlotResult {
   const union = new Set<string>();
   for (const set of freeByPro.values()) for (const t of set) union.add(t);
   const slots = [...union].sort();
+  // Ocupado = passou da grade mas sem profissional livre (visível, desabilitado).
+  const occupied = [...candidates].filter((t) => !union.has(t)).sort();
 
   // Auto: para cada horário, o elegível livre com menor carga no dia.
   const assign: Record<string, string> = {};
@@ -151,5 +159,5 @@ export function computeSlots(q: SlotQuery): SlotResult {
     }
   }
 
-  return { slots, closed: slots.length === 0, assign };
+  return { slots, occupied, closed: slots.length === 0, assign };
 }

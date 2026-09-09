@@ -198,6 +198,19 @@ function BlockSettings({ block, businessId, onChange, onSave }: { block: Block; 
             className={input + ' mt-1'} placeholder={block.type === 'cta' ? 'Ex: Pedir agora' : 'Título da seção'} />
         </label>
       )}
+      {block.type === 'cta' && (
+        <label className="block">
+          <span className="text-xs font-bold text-zinc-500">DESTINO DO BOTÃO</span>
+          <select value={s.target || 'auto'} onChange={(e) => set('target', e.target.value === 'auto' ? '' : e.target.value)}
+            className={input + ' mt-1'}>
+            <option value="auto">Automático (pelo texto)</option>
+            <option value="booking">Agendamento</option>
+            <option value="products">Pedidos / produtos</option>
+            <option value="quote">Orçamento</option>
+            <option value="whatsapp">WhatsApp</option>
+          </select>
+        </label>
+      )}
       {block.type === 'text' && (
         <>
           <input value={s.title || ''} onChange={(e) => set('title', e.target.value)} className={input} placeholder="Título" />

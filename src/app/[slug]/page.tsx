@@ -53,11 +53,10 @@ export default async function PublicPage({ params }: { params: { slug: string } 
   const hasWhatsappBlock = blocks.some((b) => b.type === 'whatsapp');
   const food = business.niche === 'alimentacao';
   const menuItems: MenuItem[] = [
-    { id: 'home', label: 'Início' },
-    ...(((business.modes.includes('products') || business.modes.includes('orders')) && products.length > 0 && blocks.some((b) => b.type === 'products'))
-      ? [{ id: 'products' as const, label: food ? 'Cardápio' : 'Loja' }] : []),
     ...(blocks.some((b) => b.type === 'services') && services.length > 0 ? [{ id: 'services' as const, label: 'Serviços' }] : []),
     ...(business.modes.includes('bookings') && services.some((sv: any) => sv.bookable) ? [{ id: 'booking' as const, label: 'Agendar' }] : []),
+    ...(((business.modes.includes('products') || business.modes.includes('orders')) && products.length > 0 && blocks.some((b) => b.type === 'products'))
+      ? [{ id: 'products' as const, label: food ? 'Cardápio' : 'Loja' }] : []),
     ...(business.modes.includes('quote') && blocks.some((b) => b.type === 'quote') ? [{ id: 'quote' as const, label: 'Orçamento' }] : []),
     ...(blocks.some((b) => b.type === 'testimonials') ? [{ id: 'reviews' as const, label: 'Avaliações' }] : []),
     ...(business.mapsUrl && blocks.some((b) => b.type === 'location') ? [{ id: 'contact' as const, label: 'Contato' }] : []),
@@ -184,7 +183,7 @@ function BlockView({ block, business, catalog }: {
       );
     }
     case 'cta': {
-      return <CtaButton business={business} label={s.label || 'Começar'} />;
+      return <CtaButton business={business} label={s.label || 'Começar'} target={s.target || ''} />;
     }
     case 'buttons': {
       const btns: Array<{ label: string; url: string }> = Array.isArray(s.buttons) ? s.buttons : [];
