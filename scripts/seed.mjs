@@ -156,12 +156,32 @@ if (process.env.DATABASE_URL) {
     ssl: process.env.PGSSLMODE === 'disable' ? false : { rejectUnauthorized: false },
   });
   await pool.query('CREATE TABLE IF NOT EXISTS instalink_doc (id SMALLINT PRIMARY KEY, data JSONB NOT NULL)');
+  let finalDb = db;
+  let merged = false;
+  // SEED_MERGE=1: adiciona os demos SEM apagar o que já existe
+  // (contas, negócios e sessões atuais são preservados).
+  if (process.env.SEED_MERGE === '1') {
+    const res = await pool.query('SELECT data FROM instalink_doc WHERE id = 1');
+    const cur = res.rows[0]?.data;
+    if (cur && typeof cur === 'object') {
+      const hadDemos = (cur.businesses || []).some((b) => b.slug === 'burgerhouse' || b.slug === 'barbeariadojoao');
+      finalDb = { ...cur };
+      for (const key of Object.keys(db)) {
+        if (!Array.isArray(db[key])) continue;
+        if (key === 'sessions' || key === 'customerSessions') { finalDb[key] = cur[key] || []; continue; }
+        if (key === 'events' && hadDemos) { finalDb[key] = cur[key] || []; continue; }
+        const have = new Set((cur[key] || []).map((r) => r.id));
+        finalDb[key] = [...(cur[key] || []), ...db[key].filter((r) => !have.has(r.id))];
+      }
+      merged = true;
+    }
+  }
   await pool.query(
     'INSERT INTO instalink_doc (id, data) VALUES (1, $1) ON CONFLICT (id) DO UPDATE SET data = EXCLUDED.data',
-    [JSON.stringify(db)],
+    [JSON.stringify(finalDb)],
   );
   await pool.end();
-  console.log('Seed OK (Postgres) — demo@instalink.app / demo1234');
+  console.log(merged ? 'Seed MERGE OK (Postgres) — demos adicionados, existente preservado.' : 'Seed OK (Postgres) — demo@instalink.app / demo1234');
 } else {
   fs.mkdirSync(path.dirname(FILE), { recursive: true });
   fs.writeFileSync(FILE, JSON.stringify(db));
