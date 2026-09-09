@@ -1,0 +1,129 @@
+'use client';
+import { useCallback, useEffect, useState } from 'react';
+import { useRouter, useSearchParams } from 'next/navigation';
+import Link from 'next/link';
+import {Card, Stat, Badge, PageSkeleton} from '@/components/ui';
+import { Icon } from '@/components/icons';
+
+interface Overview {
+  user: { name: string };
+  business: { id: string; name: string; slug: string; published: boolean };
+  totals: { visitors: number; clicks: number; leads: number; orders: number; bookings: number; conversions: number; newOrders: number; pendingBookings: number };
+  checklist: Array<{ done: boolean; label: string; href: string }>;
+  pct: number;
+  recent: {
+    orders: Array<{ id: string; code: string; customerName: string; status: string }>;
+    bookings: Array<{ id: string; customerName: string; date: string; time: string; status: string }>;
+    leads: Array<{ id: string; name: string; phone: string; origin: string; status: string }>;
+  };
+}
+
+export default function DashboardPage() {
+  const params = useSearchParams();
+  const router = useRouter();
+  const businessId = params.get('b') || '';
+  const welcome = params.get('welcome') === '1';
+  const [data, setData] = useState<Overview | null>(null);
+
+  const load = useCallback(() => {
+    if (!businessId) return;
+    fetch(`/api/overview?businessId=${businessId}`)
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d) => {
+        if (!d) { router.replace('/login?session=expired'); return; }
+        setData(d);
+      })
+      .catch(() => {});
+  }, [businessId]);
+
+  useEffect(() => { load(); }, [load]);
+
+  if (!data) return <PageSkeleton />;
+
+  const { user, business, totals, checklist, pct, recent } = data;
+  const q = `?b=${business.id}`;
+  const next = checklist.find((c) => !c.done);
+  const hasActivity = recent.orders.length + recent.bookings.length + recent.leads.length > 0;
+
+  return (
+    <>
+      {welcome && (
+        <div className="mb-6 rounded-2xl bg-emerald-600 text-white p-5">
+          <p className="font-bold text-lg flex items-center gap-2"><Icon n="checkCircle" size={22} /> Sua estrutura está pronta, {user.name.split(' ')[0]}!</p>
+          <p className="text-sm text-emerald-100 mt-1">Complete a configuração abaixo e publique sua página.</p>
+        </div>
+      )}
+
+      <div className="flex flex-wrap items-start justify-between gap-3 mb-6">
+        <div>
+          <h1 className="text-2xl font-bold tracking-tight">Olá, {user.name.split(' ')[0]}</h1>
+          <p className="text-sm text-zinc-500 mt-1 flex items-center gap-2">
+            {business.published ? <Badge tone="green"><span className="inline-flex items-center gap-1.5"><span className="w-2 h-2 rounded-full bg-emerald-600" /> Página publicada</span></Badge> : <Badge tone="amber"><span className="inline-flex items-center gap-1.5"><span className="w-2 h-2 rounded-full border-2 border-amber-500" /> Rascunho</span></Badge>}
+            <a href={`/${business.slug}`} target="_blank" className="text-emerald-700 font-semibold hover:underline inline-flex items-center gap-1">instalink.app/{business.slug} <Icon n="external" size={12} /></a>
+          </p>
+        </div>
+        <Link href={`/pagina${q}`} className="text-sm font-bold bg-zinc-900 text-white px-4 py-2.5 rounded-xl hover:bg-zinc-700">Ver página</Link>
+      </div>
+
+      {next && (
+        <Card className="mb-6 p-5 border-emerald-200 bg-emerald-50/50">
+          <p className="text-sm font-semibold text-zinc-900">Próxima ação importante: <strong>{next.label}</strong></p>
+          <Link href={next.href} className="inline-block mt-2 text-sm font-bold text-white bg-emerald-600 px-4 py-2 rounded-xl hover:bg-emerald-500">Fazer agora</Link>
+        </Card>
+      )}
+
+      <h2 className="text-sm font-bold uppercase tracking-wider text-zinc-500 mb-3">Visão geral</h2>
+      <div className="grid grid-cols-2 lg:grid-cols-5 gap-3 mb-6">
+        <Stat label="Visitantes" value={String(totals.visitors)} />
+        <Stat label="Cliques" value={String(totals.clicks)} />
+        <Stat label="Leads" value={String(totals.leads)} />
+        <Stat label="Pedidos" value={String(totals.orders)} hint={totals.newOrders ? `${totals.newOrders} novo(s)` : undefined} />
+        <Stat label="Agendamentos" value={String(totals.bookings)} hint={totals.pendingBookings ? `${totals.pendingBookings} pendente(s)` : undefined} />
+      </div>
+
+      <div className="grid lg:grid-cols-2 gap-4 mb-6">
+        <Card className="p-5">
+          <div className="flex items-center justify-between mb-2">
+            <h3 className="font-bold">Configuração</h3>
+            <span className="text-sm font-bold text-emerald-700">{pct}% pronta</span>
+          </div>
+          <div className="h-2 bg-zinc-100 rounded-full overflow-hidden mb-4">
+            <div className="h-full bg-emerald-500 rounded-full transition-all" style={{ width: `${pct}%` }} />
+          </div>
+          <ul className="space-y-2">
+            {checklist.map((c) => (
+              <li key={c.label}>
+                <Link href={c.href} className="flex items-center gap-2.5 text-sm hover:bg-zinc-50 rounded-lg px-2 py-1.5 -mx-2">
+                  <span className={`w-5 h-5 rounded-full flex items-center justify-center text-xs font-bold ${c.done ? 'bg-emerald-500 text-white' : 'bg-zinc-200 text-zinc-500'}`}>
+                    {c.done ? <Icon n="check" size={12} /> : <span className="w-2 h-2 rounded-full bg-zinc-400" />}
+                  </span>
+                  <span className={c.done ? 'text-zinc-500 line-through' : 'font-medium text-zinc-900'}>{c.label}</span>
+                </Link>
+              </li>
+            ))}
+          </ul>
+        </Card>
+
+        <Card className="p-5">
+          <h3 className="font-bold mb-3">Atividade recente</h3>
+          {!hasActivity ? (
+            <p className="text-sm text-zinc-500">Nenhuma atividade ainda. Publique sua página e compartilhe o link!</p>
+          ) : (
+            <ul className="space-y-2.5 text-sm">
+              {recent.orders.map((o) => (
+                <li key={o.id} className="flex justify-between gap-2"><span className="flex items-center gap-1.5"><Icon n="receipt" size={15} className="text-zinc-400 shrink-0" /> <span>Pedido <strong>{o.code}</strong> — {o.customerName}</span></span><span className="text-zinc-400">{o.status}</span></li>
+              ))}
+              {recent.bookings.map((b) => (
+                <li key={b.id} className="flex justify-between gap-2"><span className="flex items-center gap-1.5"><Icon n="calendar" size={15} className="text-zinc-400 shrink-0" /> <span>Agendamento — {b.customerName} ({b.date} {b.time})</span></span><span className="text-zinc-400">{b.status}</span></li>
+              ))}
+              {recent.leads.map((l) => (
+                <li key={l.id} className="flex justify-between gap-2"><span className="flex items-center gap-1.5"><Icon n="user" size={15} className="text-zinc-400 shrink-0" /> <span>Lead {l.name || l.phone || 'novo'}</span> <span className="text-zinc-400">via {l.origin}</span></span><span className="text-zinc-400">{l.status}</span></li>
+              ))}
+            </ul>
+          )}
+          <p className="mt-4 text-xs text-zinc-400">Conversões registradas: <strong>{totals.conversions}</strong></p>
+        </Card>
+      </div>
+    </>
+  );
+}

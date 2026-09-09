@@ -1,0 +1,10 @@
+node_modules/
+.next/
+out/
+dist/
+.env*.local
+.env
+data/*.json
+data/*.bak
+*.log
+.DS_Store

@@ -1,0 +1,69 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root { color-scheme: light; }
+html { scroll-behavior: smooth; }
+body {
+  @apply bg-zinc-50 text-zinc-900 antialiased;
+  font-family: Inter, system-ui, -apple-system, sans-serif;
+}
+.font-display { font-family: 'Sora', Inter, system-ui, sans-serif; }
+::selection { background: #a3e635; color: #120a0b; }
+
+/* Página pública usa tokens do negócio via CSS vars */
+.il-page {
+  background: var(--il-bg);
+  color: var(--il-text);
+  font-family: var(--il-font, inherit);
+}
+.il-page h1, .il-page h2 {
+  font-family: var(--il-display, var(--il-font, inherit));
+  letter-spacing: -0.015em;
+  text-wrap: balance;
+}
+.il-surface { background: var(--il-surface); }
+.il-muted { color: var(--il-muted); }
+.il-btn {
+  background: var(--il-primary);
+  color: var(--il-btn-text, #fff);
+  border-radius: var(--il-radius);
+  box-shadow: 0 10px 24px -12px color-mix(in srgb, var(--il-primary) 70%, transparent);
+  transition: filter 0.15s ease, transform 0.1s ease, box-shadow 0.15s ease;
+}
+button.il-btn:hover, a.il-btn:hover { filter: brightness(1.06); }
+button.il-btn:active, a.il-btn:active { transform: scale(0.99); }
+/* Variações de botão do design system */
+.il-style-soft .il-btn {
+  background: color-mix(in srgb, var(--il-primary) 13%, var(--il-surface));
+  color: var(--il-primary);
+  box-shadow: none;
+  border: 1px solid color-mix(in srgb, var(--il-primary) 28%, transparent);
+}
+.il-style-outline .il-btn {
+  background: transparent;
+  color: var(--il-primary);
+  box-shadow: none;
+  border: 2px solid var(--il-primary);
+}
+.il-card {
+  background: var(--il-surface);
+  border: 1px solid color-mix(in srgb, var(--il-muted) 20%, transparent);
+  border-radius: var(--il-radius);
+  box-shadow: 0 1px 2px rgba(15, 10, 15, 0.05);
+}
+button.il-card, a.il-card { transition: transform 0.1s ease, box-shadow 0.15s ease; }
+button.il-card:hover, a.il-card:hover {
+  box-shadow: 0 8px 20px -12px color-mix(in srgb, var(--il-primary) 45%, transparent);
+}
+button.il-card:active, a.il-card:active { transform: scale(0.99); }
+.il-chip-active {
+  background: var(--il-primary);
+  color: var(--il-btn-text, #fff);
+}
+.il-accent { color: var(--il-primary); }
+
+input[type='color'] { @apply cursor-pointer; }
+
+.no-scrollbar { scrollbar-width: none; -ms-overflow-style: none; }
+.no-scrollbar::-webkit-scrollbar { display: none; }
