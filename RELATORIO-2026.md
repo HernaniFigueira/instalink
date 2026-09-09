@@ -108,3 +108,13 @@ git push origin main                  # deploy automático na Vercel
 
 Sem variáveis novas obrigatórias; tudo funciona sem provedores externos
 (e-mail vira log, mapas/embed por negócio). Rollback: reverter o commit do bloco.
+
+## Smoke tests de runtime (pós-deploy)
+
+`npm run smoke` (scripts/smoke.mjs) — **24/24 verdes, 2 runs seguidos** contra
+servidor local com seed fresco + banco poluído. Cobertura: páginas públicas,
+passado sem slots, 409 em slot duplicado, registro/perfil/recuperação do
+consumidor sem enumeração, orçamento guest, remarcação atômica (+409 em corrida),
+preço do pedido recalculado no servidor, login demo, 401 sem token, overview com
+receita/upcoming, people360, analytics com funis, transições válida/inválida.
+Deploy em produção verificado: `/recuperar` e `/burgerhouse` respondendo 200.
