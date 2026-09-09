@@ -84,5 +84,5 @@ export const BLOCK_DEFS: Partial<Record<BlockType, { label: string; hint: string
   location: { label: 'Localização', hint: 'Mapa — só aparece com link do Google Maps' },
   whatsapp: { label: 'WhatsApp', hint: 'Botão flutuante de conversa' },
   quote: { label: 'Orçamento', hint: 'Formulário de orçamento' },
-  concierge: { label: 'Concierge IA', hint: 'Ajuda o visitante a decidir' },
+  concierge: { label: 'Assistente virtual', hint: 'Ajuda o visitante a decidir' },
 };

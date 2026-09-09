@@ -99,7 +99,7 @@ export default function ProdutosPage() {
               <div key={p.id} className={cn('bg-white border border-zinc-200 rounded-2xl p-4', !p.active && 'opacity-60')}>
                 <div className="flex items-center gap-3">
                   <div className="w-12 h-12 rounded-xl bg-zinc-100 flex items-center justify-center font-extrabold text-zinc-500 overflow-hidden shrink-0">
-                    {p.image ? <img src={p.image} alt="" className="w-full h-full object-cover" /> : p.name.slice(0, 1)}
+                    {p.image ? <img src={p.image} alt={p.name} className="w-full h-full object-cover" /> : p.name.slice(0, 1)}
                   </div>
                   <div className="flex-1 min-w-0">
                     <p className="font-bold text-sm truncate">{p.name} {p.featured && <Icon n="star" size={13} className="inline -mt-1 text-amber-500" />} {!p.active && <span className="text-xs text-zinc-400">(inativo)</span>}</p>

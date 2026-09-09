@@ -149,7 +149,7 @@ export default function ServicosPage() {
                 return (
                   <div key={sv.id} className={cn('bg-white border border-zinc-200 rounded-2xl p-4 flex items-center gap-3', !sv.active && 'opacity-60')}>
                     {sv.image ? (
-                      <img src={sv.image} alt="" className="w-11 h-11 rounded-xl object-cover shrink-0" />
+                      <img src={sv.image} alt={sv.name} className="w-11 h-11 rounded-xl object-cover shrink-0" />
                     ) : (
                       <div className="w-11 h-11 rounded-xl bg-zinc-100 flex items-center justify-center font-extrabold text-zinc-400 shrink-0">{sv.name.slice(0, 1)}</div>
                     )}
@@ -369,7 +369,7 @@ function TeamEditor({ pros, onSave, onAskDelete }: {
           {pros.map((p) => (
             <div key={p.id} className={cn('bg-white border border-zinc-200 rounded-2xl p-4 flex items-center gap-3', !p.active && 'opacity-60')}>
               {p.photo ? (
-                <img src={p.photo} alt="" className="w-10 h-10 rounded-full object-cover shrink-0" />
+                <img src={p.photo} alt={p.name} className="w-10 h-10 rounded-full object-cover shrink-0" />
               ) : (
                 <div className="w-10 h-10 rounded-full bg-zinc-900 text-white flex items-center justify-center font-bold shrink-0">{p.name.slice(0, 1)}</div>
               )}

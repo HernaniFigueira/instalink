@@ -27,7 +27,7 @@ const FEATURES = [
   { icon: 'cart', title: 'Pedidos organizados', text: 'Carrinho, entrega ou retirada, pagamento e painel de pedidos.' },
   { icon: 'calendar', title: 'Agenda sem planilha', text: 'Serviços, profissionais e horários. O cliente agenda sozinho.' },
   { icon: 'chat', title: 'WhatsApp no fluxo', text: 'Botão flutuante e mensagens prontas em cada pedido e agendamento.' },
-  { icon: 'spark', title: 'Concierge IA', text: 'Guia o visitante até comprar, agendar ou pedir orçamento.' },
+  { icon: 'spark', title: 'Assistente virtual', text: 'Guia o visitante até comprar, agendar ou pedir orçamento.' },
   { icon: 'qr', title: 'QR + resultados', text: 'QR da página para o balcão e painel simples de visitas e vendas.' },
 ];
 

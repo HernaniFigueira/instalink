@@ -21,6 +21,9 @@ export async function generateMetadata({ params }: { params: { slug: string } })
       title: business.name,
       description: business.description || undefined,
       type: 'website',
+      locale: 'pt_BR',
+      siteName: 'InstaLink.app',
+      ...(business.logo && business.logo.startsWith('http') ? { images: [business.logo] } : {}),
     },
   };
 }
@@ -208,7 +211,7 @@ function BlockView({ block, business, catalog }: {
     }
     case 'image': {
       if (!s.url) return null;
-      const img = <img src={s.url} alt={s.alt || ''} loading="lazy" className="w-full object-cover" style={{ borderRadius: 'var(--il-radius)' }} />;
+      const img = <img src={s.url} alt={s.alt || business.name} loading="lazy" className="w-full object-cover" style={{ borderRadius: 'var(--il-radius)' }} />;
       return s.link ? <a href={s.link} target="_blank" rel="noreferrer" className="block">{img}</a> : <div>{img}</div>;
     }
     case 'gallery': {
@@ -219,7 +222,7 @@ function BlockView({ block, business, catalog }: {
           {s.title && <h2 className="text-xl font-extrabold tracking-tight mb-3">{s.title}</h2>}
           <div className="grid grid-cols-2 gap-2.5">
             {imgs.slice(0, 6).map((url, i) => (
-              <img key={i} src={url} alt="" loading="lazy" className="w-full h-36 object-cover" style={{ borderRadius: 'var(--il-radius)' }} />
+              <img key={i} src={url} alt={business.name} loading="lazy" className="w-full h-36 object-cover" style={{ borderRadius: 'var(--il-radius)' }} />
             ))}
           </div>
         </section>
@@ -244,7 +247,7 @@ function BlockView({ block, business, catalog }: {
       const canBook = business.modes.includes('bookings');
       const card = (sv: any, wide: boolean) => (
         <div key={sv.id} className={wide ? 'il-card p-4 w-60 shrink-0 snap-start flex flex-col gap-2.5' : 'il-card p-4 flex justify-between items-center gap-3'}>
-          {sv.image ? <img src={sv.image} alt="" loading="lazy" className={wide ? 'w-full h-28 object-cover' : 'w-16 h-16 rounded-xl object-cover shrink-0'} style={{ borderRadius: 'var(--il-radius)' }} /> : null}
+          {sv.image ? <img src={sv.image} alt={sv.name} loading="lazy" className={wide ? 'w-full h-28 object-cover' : 'w-16 h-16 rounded-xl object-cover shrink-0'} style={{ borderRadius: 'var(--il-radius)' }} /> : null}
           <div className="min-w-0 flex-1">
             <p className="font-bold flex items-center gap-1.5">{sv.name} {sv.featured && <Icon n="star" size={13} className="shrink-0 text-amber-500" />}</p>
             {sv.description && <p className="il-muted text-xs truncate">{sv.description}</p>}
