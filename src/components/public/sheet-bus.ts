@@ -5,13 +5,14 @@ import { useEffect, useState } from 'react';
 // Pilha de sheets: o login pode abrir SOBRE o carrinho/agendamento
 // sem destruir o formulário de baixo. Sem imports de outros
 // componentes (evita ciclo: widgets ↔ customer).
-export type SheetType = 'products' | 'booking' | 'quote' | 'auth' | 'account' | 'review';
+export type SheetType = 'products' | 'booking' | 'quote' | 'auth' | 'account' | 'review' | 'phone';
 
 export interface SheetState {
   type: SheetType;
   props: {
     title?: string;
     serviceId?: string;
+    rescheduleId?: string;
     businessId?: string;
     businessName?: string;
     googleUrl?: string;

@@ -1,19 +1,21 @@
 'use client';
-import { useEffect, useRef, useState } from 'react';
-import { ensureCustomer, onAuthOk, openSheet, useCustomerPrefill, gcalLink } from './sheet-bus';
+import { useEffect, useState } from 'react';
+import { openSheet, gcalLink } from './sheet-bus';
+import { useCustomerForm } from './use-customer-form';
 import { Icon } from '@/components/icons';
-import type { Business, PublicBusiness, Professional, Service } from '@/lib/types';
+import type { Business, Professional, PublicBusiness, Service } from '@/lib/types';
 import { money, trackEvent, waLink } from './widgets';
 
 const WEEK = ['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb'];
 
 // ── AGENDAMENTO ──────────────────────────────────────────
-export function BookingIsland({ business, services, professionals, title, initialServiceId, bare }: {
+export function BookingIsland({ business, services, professionals, title, initialServiceId, rescheduleId, bare }: {
   business: PublicBusiness;
   services: Service[];
   professionals: Professional[];
   title: string;
   initialServiceId?: string;
+  rescheduleId?: string;
   bare?: boolean;
 }) {
   const bookable = services.filter((s) => s.bookable);
@@ -23,49 +25,42 @@ export function BookingIsland({ business, services, professionals, title, initia
   const [date, setDate] = useState('');
   const [dayInfo, setDayInfo] = useState<Record<string, { closed: boolean; free: number }>>({});
   const [slots, setSlots] = useState<string[]>([]);
+  const [assign, setAssign] = useState<Record<string, string>>({});
+  const [proNames, setProNames] = useState<Record<string, string>>({});
   const [closed, setClosed] = useState(false);
   const [loadingSlots, setLoadingSlots] = useState(false);
   const [time, setTime] = useState('');
-  const [name, setName] = useState('');
-  const [phone, setPhone] = useState('');
+  const [note, setNote] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
-  const [done, setDone] = useState(false);
-  const prefill = useCustomerPrefill();
-  const autoSent = useRef(false);
-
-  useEffect(() => {
-    if (prefill.name) setName((v) => v || prefill.name);
-    if (prefill.phone) setPhone((v) => v || prefill.phone);
-  }, [prefill.name, prefill.phone]);
-
-  function afterLogin(fn: () => void) {
-    if (autoSent.current) return;
-    autoSent.current = true;
-    const off = onAuthOk(() => { off(); autoSent.current = false; fn(); });
-  }
+  const [done, setDone] = useState<{ proName: string } | null>(null);
+  const form = useCustomerForm();
 
   const service = bookable.find((s) => s.id === serviceId);
+  // Vínculo serviço↔profissional: vazio = todos.
+  const eligiblePros = service?.professionalIds?.length
+    ? professionals.filter((p) => service.professionalIds.includes(p.id))
+    : professionals;
+  const teamMode = professionals.length === 0 ? 'solo' : (business.booking?.teamMode || 'solo');
+  const showProStep = teamMode === 'choosable' && eligiblePros.length > 0;
 
+  const horizon = Math.max(1, Math.min(90, business.booking?.horizonDays || 60));
   const days: Array<{ iso: string; label: string; dow: string }> = [];
-  for (let i = 0; i < 14; i++) {
+  for (let i = 0; i < horizon; i++) {
     const d = new Date(Date.now() + i * 86400000);
     const iso = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
     days.push({ iso, label: `${String(d.getDate()).padStart(2, '0')}/${String(d.getMonth() + 1).padStart(2, '0')}`, dow: WEEK[d.getDay()] });
   }
 
-  // Mapa de dias com vaga (serve para desabilitar fechado/lotado e
-  // pré-selecionar o próximo dia livre — padrão Booksy/Calendly).
   useEffect(() => {
     if (!serviceId) { setDayInfo({}); return; }
-    fetch(`/api/bookings?businessId=${business.id}&serviceId=${serviceId}&professionalId=${proId}&from=${days[0].iso}&to=${days[days.length - 1].iso}`)
+    fetch(`/api/bookings?businessId=${business.id}&serviceId=${serviceId}&professionalId=${showProStep ? proId : ''}&from=${days[0].iso}&to=${days[days.length - 1].iso}`)
       .then((r) => r.json())
       .then((d) => setDayInfo(d.days || {}))
       .catch(() => setDayInfo({}));
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [serviceId, proId, business.id]);
+  }, [serviceId, proId, business.id, showProStep]);
 
-  // Default inteligente: próximo dia com vaga.
   useEffect(() => {
     if (!serviceId || Object.keys(dayInfo).length === 0) return;
     if (!date || dayInfo[date]?.closed) {
@@ -79,12 +74,17 @@ export function BookingIsland({ business, services, professionals, title, initia
     if (!serviceId || !date) { setSlots([]); return; }
     setLoadingSlots(true);
     setTime('');
-    fetch(`/api/bookings?businessId=${business.id}&serviceId=${serviceId}&professionalId=${proId}&date=${date}`)
+    fetch(`/api/bookings?businessId=${business.id}&serviceId=${serviceId}&professionalId=${showProStep ? proId : ''}&date=${date}`)
       .then((r) => r.json())
-      .then((d) => { setSlots(d.slots || []); setClosed(!!d.closed); })
+      .then((d) => {
+        setSlots(d.slots || []);
+        setAssign(d.assign || {});
+        setProNames(d.pros || {});
+        setClosed(!!d.closed);
+      })
       .catch(() => setSlots([]))
       .finally(() => setLoadingSlots(false));
-  }, [serviceId, date, proId, business.id]);
+  }, [serviceId, date, proId, business.id, showProStep]);
 
   function endTime(t: string, dur: number): string {
     const [h, m] = t.split(':').map(Number);
@@ -98,27 +98,38 @@ export function BookingIsland({ business, services, professionals, title, initia
     { id: 'noite', label: 'Noite', slots: slots.filter((t) => t >= '18:00') },
   ].filter((g) => g.slots.length > 0);
 
-  const proName = proId ? professionals.find((p) => p.id === proId)?.name || '' : 'Quem estiver livre';
+  // Profissional exibido ANTES da confirmação (nunca confirmação cega).
+  const assignedId = proId || (time ? assign[time] || '' : '');
+  const assignedName = assignedId
+    ? (proNames[assignedId] || professionals.find((p) => p.id === assignedId)?.name || '')
+    : '';
 
   async function submit() {
     setError('');
     if (!serviceId) { setError('Escolha um serviço.'); return; }
     if (!date || !time) { setError('Escolha data e horário.'); return; }
-    if (!(await ensureCustomer())) { afterLogin(() => submit()); return; }
+    if (!form.logged) {
+      if (!form.name.trim()) { setError('Informe seu nome.'); return; }
+      if (form.phone.replace(/\D/g, '').length < 10) { setError('Informe um WhatsApp válido.'); return; }
+    }
+    if (!(await form.ensure({ phone: true }))) { form.afterAuth(() => submit()); return; }
     setLoading(true);
     try {
-      trackEvent(business.id, 'booking_started');
-      const res = await fetch('/api/bookings', {
-        method: 'POST',
+      if (!rescheduleId) trackEvent(business.id, 'booking_started');
+      const url = rescheduleId ? '/api/customer/bookings' : '/api/bookings';
+      const res = await fetch(url, {
+        method: rescheduleId ? 'PATCH' : 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ businessId: business.id, serviceId, professionalId: proId, date, time, customerName: name, customerPhone: phone }),
+        body: JSON.stringify(rescheduleId
+          ? { id: rescheduleId, date, time, serviceId, professionalId: proId, note }
+          : { businessId: business.id, serviceId, professionalId: proId, date, time, customerName: form.name, customerPhone: form.phone, note }),
       });
       const data = await res.json();
       if (!res.ok) {
-        if (data.code === 'login_required') { openSheet('auth', {}); afterLogin(() => submit()); return; }
+        if (data.code === 'login_required') { openSheet('auth', {}); form.afterAuth(() => submit()); return; }
         throw new Error(data.error);
       }
-      setDone(true);
+      setDone({ proName: data.professionalName || assignedName });
     } catch (err: any) {
       setError(err.message);
     } finally {
@@ -133,19 +144,19 @@ export function BookingIsland({ business, services, professionals, title, initia
     return (
       <div id="agendar" className={bare ? 'text-center py-2' : 'il-card p-6 text-center scroll-mt-20'}>
         <span className="inline-flex w-16 h-16 rounded-full items-center justify-center" style={{ background: 'color-mix(in srgb, var(--il-primary) 12%, transparent)', color: 'var(--il-primary)' }}><Icon n="calendar" size={30} /></span>
-        <h3 className="text-xl font-extrabold mt-3">Agendamento recebido!</h3>
+        <h3 className="text-xl font-extrabold mt-3">{rescheduleId ? 'Horário remarcado!' : 'Agendamento recebido!'}</h3>
         <p className="il-muted text-sm mt-1">{service.name} · {d}/{m} às {time}–{endTime(time, service.durationMin)}</p>
-        <p className="il-muted text-sm">{proName} · vamos confirmar pelo seu WhatsApp.</p>
+        <p className="il-muted text-sm">{done.proName ? `${done.proName} · ` : ''}vamos confirmar pelo seu WhatsApp.</p>
         <div className="mt-4 space-y-2">
-          {business.whatsapp && (
+          {business.whatsapp && !rescheduleId && (
             <a className="il-btn block font-extrabold py-3.5" target="_blank" rel="noreferrer"
-              href={waLink(business.whatsapp, `Olá! Agendei ${service.name} para ${d}/${m} às ${time} (${name}).`)}
+              href={waLink(business.whatsapp, `Olá! Agendei ${service.name} para ${d}/${m} às ${time} (${form.name}).`)}
               onClick={() => trackEvent(business.id, 'whatsapp_click', { from: 'booking_success' })}>
               Confirmar no WhatsApp
             </a>
           )}
           <a target="_blank" rel="noreferrer"
-            href={gcalLink({ title: `${service.name} — ${business.name}`, date, time, durationMin: service.durationMin, details: proName, location: business.address || undefined })}
+            href={gcalLink({ title: `${service.name} — ${business.name}`, date, time, durationMin: service.durationMin, details: done.proName, location: business.address || undefined })}
             className="il-card block font-bold py-3 text-sm">
             Adicionar ao Google Agenda
           </a>
@@ -155,10 +166,16 @@ export function BookingIsland({ business, services, professionals, title, initia
     );
   }
 
+  const stepNum = (n: number) => n;
   return (
     <div id="agendar" className="scroll-mt-20">
       {!bare && <h2 className="text-xl font-extrabold tracking-tight mb-3">{title || 'Agende seu horário'}</h2>}
       <div className="il-card p-4 space-y-4">
+        {rescheduleId && (
+          <p className="text-xs font-bold px-3 py-2 rounded-xl" style={{ background: 'color-mix(in srgb, var(--il-primary) 10%, transparent)' }}>
+            Escolha o novo horário — seu agendamento atual só muda quando você confirmar.
+          </p>
+        )}
         <div>
           <p className="text-xs font-bold il-muted mb-1.5">1 · SERVIÇO</p>
           {service ? (
@@ -182,14 +199,14 @@ export function BookingIsland({ business, services, professionals, title, initia
           )}
         </div>
 
-        {serviceId && professionals.length > 0 && (
+        {serviceId && showProStep && (
           <div>
             <p className="text-xs font-bold il-muted mb-1.5">2 · PROFISSIONAL</p>
             <div className="flex flex-wrap gap-2">
               <button onClick={() => setProId('')}
                 className={`text-sm font-bold px-4 py-2 border ${proId === '' ? 'il-chip-active border-transparent' : 'il-card'}`}
                 style={{ borderRadius: 'var(--il-radius)' }}>Quem estiver livre</button>
-              {professionals.map((p) => (
+              {eligiblePros.map((p) => (
                 <button key={p.id} onClick={() => setProId(p.id)}
                   className={`text-sm font-bold px-4 py-2 border ${proId === p.id ? 'il-chip-active border-transparent' : 'il-card'}`}
                   style={{ borderRadius: 'var(--il-radius)' }}>{p.name}</button>
@@ -200,7 +217,7 @@ export function BookingIsland({ business, services, professionals, title, initia
 
         {serviceId && (
           <div>
-            <p className="text-xs font-bold il-muted mb-1.5">{professionals.length ? '3' : '2'} · DIA</p>
+            <p className="text-xs font-bold il-muted mb-1.5">{showProStep ? '3' : '2'} · DIA</p>
             <div className="flex gap-2 overflow-x-auto pb-1">
               {days.map((d) => {
                 const info = dayInfo[d.iso];
@@ -253,7 +270,7 @@ export function BookingIsland({ business, services, professionals, title, initia
             <p className="font-extrabold text-sm">Resumo</p>
             <p className="text-sm mt-1 font-bold">{service.name}</p>
             <p className="il-muted text-xs mt-0.5">
-              {date.split('-').reverse().join('/')} · {time}–{endTime(time, service.durationMin)} · {proName}
+              {date.split('-').reverse().join('/')} · {time}–{endTime(time, service.durationMin)}{assignedName ? ` · ${assignedName}` : ''}
             </p>
             <p className="font-extrabold il-accent text-sm mt-1">{money(service.price)} · {service.durationMin} min</p>
           </div>
@@ -261,60 +278,63 @@ export function BookingIsland({ business, services, professionals, title, initia
 
         {time && (
           <div className="space-y-2.5">
-            <input value={name} onChange={(e) => setName(e.target.value)} placeholder="Seu nome *" className="il-card w-full text-sm px-4 py-3 outline-none" />
-            <input value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="WhatsApp (11) 99999-9999 *" inputMode="tel" className="il-card w-full text-sm px-4 py-3 outline-none" />
+            {form.logged ? (
+              <div className="il-card px-4 py-3 flex items-center gap-2.5">
+                <Icon n="userCircle" size={20} className="shrink-0 il-muted" />
+                <p className="text-sm"><span className="font-bold">{form.customer?.name}</span> <span className="il-muted">· {form.customer?.phone}</span></p>
+              </div>
+            ) : (
+              <>
+                <label className="block"><span className="text-xs font-bold il-muted">SEU NOME *</span>
+                  <input value={form.name} onChange={(e) => form.setName(e.target.value)} placeholder="Como podemos te chamar?" autoComplete="name" className="il-card w-full text-sm px-4 py-3 outline-none mt-1" /></label>
+                <label className="block"><span className="text-xs font-bold il-muted">WHATSAPP *</span>
+                  <input value={form.phone} onChange={(e) => form.setPhone(e.target.value)} placeholder="(11) 99999-9999" inputMode="tel" autoComplete="tel" className="il-card w-full text-sm px-4 py-3 outline-none mt-1" /></label>
+              </>
+            )}
+            <label className="block"><span className="text-xs font-bold il-muted">OBSERVAÇÃO (OPCIONAL)</span>
+              <input value={note} onChange={(e) => setNote(e.target.value)} placeholder="Alguma preferência?" maxLength={300} className="il-card w-full text-sm px-4 py-3 outline-none mt-1" /></label>
           </div>
         )}
 
         {error && <p className="text-sm font-semibold text-red-600">{error}</p>}
         <div className="sticky bottom-0 -mx-1 px-1 pt-2 pb-1" style={{ background: 'linear-gradient(transparent, color-mix(in srgb, var(--il-surface) 94%, transparent) 35%)' }}>
           <button onClick={submit} disabled={loading || !time || !serviceId} className="il-btn w-full font-extrabold py-3.5 disabled:opacity-50">
-            {loading ? 'Confirmando…' : time ? `Confirmar · ${time}` : serviceId ? 'Escolha um horário' : 'Escolha um serviço'}
+            {loading ? 'Confirmando…' : time ? `${rescheduleId ? 'Remarcar' : 'Confirmar'} · ${time}` : serviceId ? 'Escolha um horário' : 'Escolha um serviço'}
           </button>
         </div>
       </div>
     </div>
   );
+  void stepNum;
 }
 
-// ── FORMULÁRIO DE ORÇAMENTO ──────────────────────────────
+// ── FORMULÁRIO DE ORÇAMENTO (guest permitido) ─────────────
 export function QuoteIsland({ businessId, title, bare }: { businessId: string; title: string; bare?: boolean }) {
-  const [name, setName] = useState('');
-  const [phone, setPhone] = useState('');
   const [interest, setInterest] = useState('');
-  const [done, setDone] = useState(false);
+  const [done, setDone] = useState<{ guest: boolean } | null>(null);
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
-  const prefill = useCustomerPrefill();
-  const autoSent = useRef(false);
-
-  useEffect(() => {
-    if (prefill.name) setName((v) => v || prefill.name);
-    if (prefill.phone) setPhone((v) => v || prefill.phone);
-  }, [prefill.name, prefill.phone]);
-
-  function afterLogin(fn: () => void) {
-    if (autoSent.current) return;
-    autoSent.current = true;
-    const off = onAuthOk(() => { off(); autoSent.current = false; fn(); });
-  }
+  const form = useCustomerForm();
 
   async function submit() {
     setError('');
-    if (!(await ensureCustomer())) { afterLogin(() => submit()); return; }
+    if (!form.logged) {
+      if (!form.name.trim()) { setError('Informe seu nome.'); return; }
+      if (form.phone.replace(/\D/g, '').length < 10) { setError('Informe um WhatsApp válido.'); return; }
+    }
     setLoading(true);
     try {
       const res = await fetch('/api/leads', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ businessId, name, phone, interest, origin: 'orcamento', action: 'orcamento' }),
+        body: JSON.stringify({ businessId, name: form.name, phone: form.phone, interest, origin: 'orcamento', action: 'orcamento' }),
       });
       const data = await res.json();
       if (!res.ok) {
-        if (data.code === 'login_required') { openSheet('auth', {}); afterLogin(() => submit()); return; }
+        if (data.code === 'login_required') { openSheet('auth', {}); form.afterAuth(() => submit()); return; }
         throw new Error(data.error);
       }
-      setDone(true);
+      setDone({ guest: !!data.guest });
     } catch (err: any) {
       setError(err.message);
     } finally {
@@ -327,12 +347,32 @@ export function QuoteIsland({ businessId, title, bare }: { businessId: string; t
       {!bare && <h2 className="text-xl font-extrabold tracking-tight mb-3">{title || 'Solicite um orçamento'}</h2>}
       <div className="il-card p-4">
         {done ? (
-          <p className="text-sm font-semibold text-center py-4">Pedido enviado! Retornamos rapidinho.</p>
+          <div className="text-center py-2">
+            <span className="inline-flex w-14 h-14 rounded-full items-center justify-center" style={{ background: 'color-mix(in srgb, var(--il-primary) 12%, transparent)', color: 'var(--il-primary)' }}><Icon n="checkCircle" size={28} /></span>
+            <p className="text-sm font-bold mt-2">Pedido enviado! Retornamos rapidinho.</p>
+            {done.guest && (
+              <button onClick={() => openSheet('auth', {})} className="il-btn w-full font-extrabold py-3 mt-3 text-sm">
+                Criar conta grátis para acompanhar
+              </button>
+            )}
+          </div>
         ) : (
           <div className="space-y-2.5">
-            <input value={name} onChange={(e) => setName(e.target.value)} placeholder="Seu nome *" className="il-card w-full text-sm px-4 py-3 outline-none" />
-            <input value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="WhatsApp *" inputMode="tel" className="il-card w-full text-sm px-4 py-3 outline-none" />
-            <textarea value={interest} onChange={(e) => setInterest(e.target.value)} placeholder="Descreva o que você precisa…" rows={3} className="il-card w-full text-sm px-4 py-3 outline-none resize-none" />
+            {form.logged ? (
+              <div className="il-card px-4 py-3 flex items-center gap-2.5">
+                <Icon n="userCircle" size={20} className="shrink-0 il-muted" />
+                <p className="text-sm"><span className="font-bold">{form.customer?.name}</span> <span className="il-muted">· {form.customer?.phone}</span></p>
+              </div>
+            ) : (
+              <>
+                <label className="block"><span className="text-xs font-bold il-muted">SEU NOME *</span>
+                  <input value={form.name} onChange={(e) => form.setName(e.target.value)} placeholder="Como podemos te chamar?" autoComplete="name" className="il-card w-full text-sm px-4 py-3 outline-none mt-1" /></label>
+                <label className="block"><span className="text-xs font-bold il-muted">WHATSAPP *</span>
+                  <input value={form.phone} onChange={(e) => form.setPhone(e.target.value)} placeholder="(11) 99999-9999" inputMode="tel" autoComplete="tel" className="il-card w-full text-sm px-4 py-3 outline-none mt-1" /></label>
+              </>
+            )}
+            <label className="block"><span className="text-xs font-bold il-muted">O QUE VOCÊ PRECISA?</span>
+              <textarea value={interest} onChange={(e) => setInterest(e.target.value)} placeholder="Descreva o que você precisa…" rows={3} className="il-card w-full text-sm px-4 py-3 outline-none resize-none mt-1" /></label>
             {error && <p className="text-sm font-semibold text-red-600">{error}</p>}
             <button onClick={submit} disabled={loading} className="il-btn w-full font-extrabold py-3 disabled:opacity-50">
               {loading ? 'Enviando…' : 'Solicitar orçamento'}
@@ -453,7 +493,7 @@ export function ConciergeIsland({ business, title }: { business: PublicBusiness;
             </div>
             <form onSubmit={(e) => { e.preventDefault(); send(input); }} className="p-3 flex gap-2" style={{ background: 'var(--il-surface)' }}>
               <input value={input} onChange={(e) => setInput(e.target.value)} placeholder="Digite sua dúvida…"
-                className="il-card flex-1 text-sm px-4 py-3 outline-none" />
+                className="il-card flex-1 text-sm px-4 py-3 outline-none" aria-label="Digite sua dúvida" />
               <button type="submit" className="il-btn font-extrabold px-5 flex items-center" aria-label="Enviar"><Icon n="send" size={18} /></button>
             </form>
           </div>

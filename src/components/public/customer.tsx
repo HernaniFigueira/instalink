@@ -1,16 +1,26 @@
 'use client';
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import type { Business, PublicBusiness, Category, Product, ProductOption, ProductOptionValue, Professional, Service } from '@/lib/types';
 import { saveCustomerToken, clearCustomerToken } from '@/lib/client-auth';
 import { openSheet, closeSheet, onSheetChange, notifyAuthOk, gcalLink, type SheetState } from './sheet-bus';
+import { BOOKING_STATUS, ORDER_STATUS } from '@/lib/status';
+import { todayISO, humanDateTime } from '@/lib/tz';
+import type { BookingStatus, OrderStatus } from '@/lib/types';
 import { Icon } from '@/components/icons';
 import { CatalogIsland, money, waLink } from './widgets';
 import { BookingIsland, QuoteIsland } from './widgets2';
 
 // ── Sheet genérico (bottom sheet mobile-first) ───────────────
 export function SheetShell({ title, onClose, zIndex, children }: { title: string; onClose: () => void; zIndex?: number; children: React.ReactNode }) {
+  const ref = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose(); };
+    window.addEventListener('keydown', onKey);
+    ref.current?.focus();
+    return () => window.removeEventListener('keydown', onKey);
+  }, [onClose]);
   return (
-    <div className="fixed inset-0 flex items-end sm:items-center justify-center" style={{ zIndex: zIndex || 50 }} role="dialog" aria-modal="true" aria-label={title}>
+    <div ref={ref} tabIndex={-1} className="fixed inset-0 flex items-end sm:items-center justify-center outline-none" style={{ zIndex: zIndex || 50 }} role="dialog" aria-modal="true" aria-label={title}>
       <div className="absolute inset-0 bg-black/60" onClick={onClose} />
       <div className="il-page relative w-full sm:max-w-md max-h-[92vh] flex flex-col rounded-t-3xl sm:rounded-3xl overflow-hidden" style={{ background: 'var(--il-bg)' }}>
         <div className="pt-2.5 pb-1 flex justify-center shrink-0" aria-hidden="true">
@@ -57,6 +67,7 @@ export function SheetHost({ business, products, categories, options, values, ser
           auth: 'Entrar',
           account: 'Minha conta',
           review: 'Avaliar experiência',
+          phone: 'Seu WhatsApp',
         };
         return (
           <SheetShell key={`${i}-${sheet.type}-${sheet.props.serviceId || ''}`} title={titles[sheet.type]} onClose={closeSheet} zIndex={50 + i}>
@@ -66,12 +77,13 @@ export function SheetHost({ business, products, categories, options, values, ser
             {sheet.type === 'booking' && (
               <BookingIsland
                 business={business} services={services} professionals={professionals}
-                title="" initialServiceId={sheet.props.serviceId || ''} bare
+                title="" initialServiceId={sheet.props.serviceId || ''} rescheduleId={sheet.props.rescheduleId} bare
               />
             )}
             {sheet.type === 'quote' && <QuoteIsland businessId={business.id} title="" bare />}
             {sheet.type === 'auth' && <CustomerAuthSheet business={business} />}
             {sheet.type === 'account' && <CustomerAccountSheet business={business} />}
+            {sheet.type === 'phone' && <PhoneSheet />}
             {sheet.type === 'review' && sheet.props.businessId && sheet.props.kind && sheet.props.refId && (
               <ReviewSheet
                 businessId={sheet.props.businessId}
@@ -227,8 +239,7 @@ export function CustomerAuthSheet({ business }: { business: PublicBusiness }) {
 }
 
 // ── Minha conta: pedidos + agendamentos ──────────────────────
-const ORDER_STATUS: Record<string, string> = { new: 'Recebido', accepted: 'Aceito', preparing: 'Em preparo', ready: 'Pronto', completed: 'Entregue', cancelled: 'Cancelado' };
-const BOOKING_STATUS: Record<string, string> = { pending: 'Aguardando', confirmed: 'Confirmado', completed: 'Concluído', cancelled: 'Cancelado', no_show: 'Não compareceu' };
+
 
 export function CustomerAccountSheet({ business }: { business: PublicBusiness }) {
   const [tab, setTab] = useState<'orders' | 'bookings'>(
@@ -239,6 +250,9 @@ export function CustomerAccountSheet({ business }: { business: PublicBusiness })
   const [reviewed, setReviewed] = useState<{ orderIds: string[]; bookingIds: string[] }>({ orderIds: [], bookingIds: [] });
   const [loading, setLoading] = useState(true);
   const [acting, setActing] = useState('');
+  const [cancelMin, setCancelMin] = useState(120);
+  const [confirmCancel, setConfirmCancel] = useState('');
+  const [actionError, setActionError] = useState('');
 
   function load() {
     setLoading(true);
@@ -250,6 +264,7 @@ export function CustomerAccountSheet({ business }: { business: PublicBusiness })
       .then(([o, b, r]) => {
         setOrders(o.orders || []);
         setBookings(b.bookings || []);
+        setCancelMin(typeof b.cancelUntilMin === 'number' ? b.cancelUntilMin : 120);
         setReviewed({ orderIds: r.orderIds || [], bookingIds: r.bookingIds || [] });
         try {
           const key = `il-rv-${business.id}`;
@@ -283,7 +298,7 @@ export function CustomerAccountSheet({ business }: { business: PublicBusiness })
   }, [business.id]);
 
   async function cancelBooking(id: string) {
-    if (!confirm('Cancelar este agendamento?')) return;
+    setActionError('');
     setActing(id);
     try {
       const res = await fetch('/api/customer/bookings', {
@@ -293,31 +308,17 @@ export function CustomerAccountSheet({ business }: { business: PublicBusiness })
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error);
+      setConfirmCancel('');
       load();
     } catch (err: any) {
-      alert(err.message);
+      setActionError(err.message);
     } finally {
       setActing('');
     }
   }
 
-  async function reschedule(b: any) {
-    if (!confirm(`Remarcar "${b.service}"? Cancelamos este horário e abrimos a agenda.`)) return;
-    setActing(b.id);
-    try {
-      const res = await fetch('/api/customer/bookings', {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ id: b.id }),
-      });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error);
-      openSheet('booking', { serviceId: b.serviceId });
-    } catch (err: any) {
-      alert(err.message);
-    } finally {
-      setActing('');
-    }
+  function reschedule(b: any) {
+    openSheet('booking', { serviceId: b.serviceId, rescheduleId: b.id });
   }
 
   async function logout() {
@@ -333,11 +334,13 @@ export function CustomerAccountSheet({ business }: { business: PublicBusiness })
 
   const showOrders = business.modes.includes('orders') || business.modes.includes('products');
   const showBookings = business.modes.includes('bookings');
-  const today = new Date().toISOString().slice(0, 10);
+  const today = todayISO();
   const canReviewBooking = (b: any) =>
     b.status !== 'cancelled' && (b.status === 'completed' || b.date < today) && !reviewed.bookingIds.includes(b.id);
+  const nowMin = new Date().getHours() * 60 + new Date().getMinutes();
   const canCancel = (b: any) =>
-    ['pending', 'confirmed'].includes(b.status) && b.date >= today;
+    ['pending', 'confirmed'].includes(b.status) && b.date >= today &&
+    (b.date !== today || (Number(b.time.slice(0, 2)) * 60 + Number(b.time.slice(3, 5)) - nowMin) >= cancelMin);
 
   return (
     <div>
@@ -356,6 +359,7 @@ export function CustomerAccountSheet({ business }: { business: PublicBusiness })
         </div>
       )}
 
+      {actionError && <p className="text-sm font-semibold text-red-600 mb-3">{actionError}</p>}
       {loading ? (
         <div className="space-y-2.5" aria-label="Carregando">
           {[0, 1, 2].map((i) => (
@@ -377,7 +381,7 @@ export function CustomerAccountSheet({ business }: { business: PublicBusiness })
               <div key={o.id} className="il-card p-4">
                 <div className="flex justify-between items-center gap-2">
                   <p className="font-extrabold">{o.code}</p>
-                  <span className="text-xs font-bold px-2.5 py-1 rounded-full il-chip-active">{ORDER_STATUS[o.status] || o.status}</span>
+                  <span className="text-xs font-bold px-2.5 py-1 rounded-full il-chip-active">{ORDER_STATUS[o.status as OrderStatus]?.consumer || o.status}</span>
                 </div>
                 <p className="il-muted text-xs mt-1">
                   {o.items.map((i: any) => `${i.qty}× ${i.name}`).join(' · ')}
@@ -408,22 +412,25 @@ export function CustomerAccountSheet({ business }: { business: PublicBusiness })
             <div key={b.id} className="il-card p-4">
               <div className="flex justify-between items-center gap-2">
                 <p className="font-extrabold text-sm">{b.service}</p>
-                <span className="text-xs font-bold px-2.5 py-1 rounded-full il-chip-active">{BOOKING_STATUS[b.status] || b.status}</span>
+                <span className="text-xs font-bold px-2.5 py-1 rounded-full il-chip-active">{BOOKING_STATUS[b.status as BookingStatus]?.consumer || b.status}</span>
               </div>
               <p className="il-muted text-xs mt-1 flex items-center gap-1.5">
                 <Icon n="calendar" size={14} className="shrink-0" />
-                <span>{b.date.split('-').reverse().join('/')} às {b.time}{b.professional ? ` · ${b.professional}` : ''}</span>
+                <span>{humanDateTime(b.date, b.time, today)}{b.professional ? ` · ${b.professional}` : ''}</span>
               </p>
               <div className="flex flex-wrap gap-2 mt-3">
                 {canCancel(b) && (
                   <>
-                    <button onClick={() => reschedule(b)} disabled={acting === b.id}
-                      className="il-btn text-xs font-bold px-3.5 py-2 disabled:opacity-50">
-                      {acting === b.id ? 'Aguarde…' : 'Remarcar'}
+                    <button onClick={() => reschedule(b)}
+                      className="il-btn text-xs font-bold px-3.5 py-2">
+                      Remarcar
                     </button>
-                    <button onClick={() => cancelBooking(b.id)} disabled={acting === b.id}
+                    <button onClick={() => {
+                      if (confirmCancel === b.id) cancelBooking(b.id);
+                      else { setConfirmCancel(b.id); setTimeout(() => setConfirmCancel((c) => (c === b.id ? '' : c)), 4000); }
+                    }} disabled={acting === b.id}
                       className="il-card text-xs font-bold px-3.5 py-2 disabled:opacity-50">
-                      Cancelar
+                      {acting === b.id ? 'Aguarde…' : confirmCancel === b.id ? 'Toque para confirmar' : 'Cancelar'}
                     </button>
                     <a target="_blank" rel="noreferrer"
                       href={gcalLink({ title: `${b.service} — ${business.name}`, date: b.date, time: b.time, durationMin: b.durationMin || 30, location: business.address || undefined })}
@@ -492,18 +499,6 @@ export function CtaButton({ business, label }: { business: PublicBusiness; label
     );
   }
   return null;
-}
-
-// ── Gatilhos da agenda (service-first, sempre em sheet) ──────
-export function BookingTrigger({ title, subtitle }: { title: string; subtitle?: string }) {
-  return (
-    <button onClick={() => openSheet('booking', { title })} className="il-card w-full p-5 text-center active:scale-[0.99] transition-transform">
-      <span className="inline-flex w-14 h-14 rounded-2xl items-center justify-center" style={{ background: 'color-mix(in srgb, var(--il-primary) 12%, transparent)', color: 'var(--il-primary)' }}><Icon n="calendar" size={28} /></span>
-      <span className="block font-extrabold text-lg mt-2">{title || 'Agende seu horário'}</span>
-      {subtitle !== '' && <span className="il-muted text-sm block mt-0.5">{subtitle || 'Escolha o serviço e reserve em segundos'}</span>}
-      <span className="il-btn block font-extrabold py-3 mt-3">Ver horários</span>
-    </button>
-  );
 }
 
 export function ServiceAgendarButton({ serviceId, serviceName }: { serviceId: string; serviceName: string }) {
@@ -642,6 +637,48 @@ export function ReviewSheet({ businessId, businessName, googleUrl, kind, refId }
       {error && <p className="text-sm font-semibold text-red-600 mt-2">{error}</p>}
       <button onClick={submit} disabled={loading} className="il-btn w-full font-extrabold py-3.5 mt-3 disabled:opacity-50">
         {loading ? 'Enviando…' : 'Enviar avaliação'}
+      </button>
+    </div>
+  );
+}
+
+// ── Sheet de telefone (onboarding Google / completar conta) ────
+export function PhoneSheet() {
+  const [phone, setPhone] = useState('');
+  const [error, setError] = useState('');
+  const [loading, setLoading] = useState(false);
+
+  async function submit() {
+    setError('');
+    if (phone.replace(/\D/g, '').length < 10) { setError('Informe um WhatsApp válido.'); return; }
+    setLoading(true);
+    try {
+      const res = await fetch('/api/customer/me', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ phone }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error);
+      notifyAuthOk();
+      closeSheet();
+    } catch (err: any) {
+      setError(err.message);
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  return (
+    <div>
+      <p className="il-muted text-sm -mt-1 mb-4 flex items-center gap-2"><Icon n="phone" size={18} /> Para continuar, precisamos do seu WhatsApp. Pedimos uma única vez.</p>
+      <label className="block"><span className="text-xs font-bold il-muted">WHATSAPP *</span>
+        <input value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="(11) 99999-9999" inputMode="tel" autoComplete="tel"
+          onKeyDown={(e) => { if (e.key === 'Enter') submit(); }}
+          className="il-card w-full text-sm px-4 py-3 outline-none mt-1" /></label>
+      {error && <p className="text-sm font-semibold text-red-600 mt-2">{error}</p>}
+      <button onClick={submit} disabled={loading} className="il-btn w-full font-extrabold py-3.5 mt-3 disabled:opacity-50">
+        {loading ? 'Salvando…' : 'Continuar'}
       </button>
     </div>
   );

@@ -3,7 +3,9 @@ import { useCallback, useEffect, useState } from 'react';
 import { Icon } from '@/components/icons';
 import { onAuthOk, openSheet } from './sheet-bus';
 
-export type MenuTab = 'home' | 'products' | 'services' | 'booking' | 'quote';
+// Menu público enxuto: Início · Cardápio/Serviços · Agendar · Avaliações · Contato.
+// Agendar abre o MESMO sheet do CTA (destino único, sem fluxos paralelos).
+export type MenuTab = 'home' | 'products' | 'services' | 'booking' | 'quote' | 'reviews' | 'contact';
 export interface MenuItem {
   id: MenuTab;
   label: string;
@@ -69,8 +71,6 @@ function AccountButton() {
   );
 }
 
-// Menu em pílula (fixo no topo ao rolar): abas conforme o que o
-// negócio tem — loja, serviços, agenda, orçamento — mais a conta.
 export function PageMenu({ items }: { items: MenuItem[] }) {
   const [active, setActive] = useState<MenuTab>('home');
 
@@ -80,6 +80,10 @@ export function PageMenu({ items }: { items: MenuItem[] }) {
       window.scrollTo({ top: 0, behavior: 'smooth' });
     } else if (id === 'services') {
       document.querySelector('#servicos')?.scrollIntoView({ behavior: 'smooth' });
+    } else if (id === 'reviews') {
+      document.querySelector('#avaliacoes')?.scrollIntoView({ behavior: 'smooth' });
+    } else if (id === 'contact') {
+      document.querySelector('#contato')?.scrollIntoView({ behavior: 'smooth' });
     } else {
       openSheet(id, {});
     }

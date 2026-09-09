@@ -1,18 +1,25 @@
 'use client';
 import { useCallback, useEffect, useState } from 'react';
 import { useSearchParams } from 'next/navigation';
-import { formatDate } from '@/lib/utils';
-import type { Booking } from '@/lib/types';
+import { waLink } from '@/lib/utils';
+import { todayISO, addDaysISO, humanDay } from '@/lib/tz';
+import { BOOKING_STATUS, toneCls } from '@/lib/status';
+import type { Booking, BookingStatus } from '@/lib/types';
 import { ListSkeleton } from '@/components/ui';
 import { Icon } from '@/components/icons';
 
-const STATUS: Array<{ id: Booking['status']; label: string; cls: string }> = [
-  { id: 'pending', label: 'Pendente', cls: 'bg-amber-100 text-amber-800' },
-  { id: 'confirmed', label: 'Confirmado', cls: 'bg-emerald-100 text-emerald-800' },
-  { id: 'completed', label: 'Concluído', cls: 'bg-blue-100 text-blue-800' },
-  { id: 'cancelled', label: 'Cancelado', cls: 'bg-zinc-100 text-zinc-500' },
-  { id: 'no_show', label: 'Faltou', cls: 'bg-red-100 text-red-700' },
+type View = 'today' | 'tomorrow' | 'next' | 'past' | 'all';
+
+const VIEWS: Array<{ id: View; label: string }> = [
+  { id: 'today', label: 'Hoje' },
+  { id: 'tomorrow', label: 'Amanhã' },
+  { id: 'next', label: 'Próximos' },
+  { id: 'past', label: 'Passado' },
+  { id: 'all', label: 'Todos' },
 ];
+
+const STATUS_IDS: BookingStatus[] = ['pending', 'confirmed', 'completed', 'cancelled', 'no_show'];
+const LIMIT = 50;
 
 export default function AgendaPage() {
   const params = useSearchParams();
@@ -21,82 +28,155 @@ export default function AgendaPage() {
   const [services, setServices] = useState<Array<{ id: string; name: string }>>([]);
   const [pros, setPros] = useState<Array<{ id: string; name: string }>>([]);
   const [loaded, setLoaded] = useState(false);
-  const [filter, setFilter] = useState('');
+  const [view, setView] = useState<View>('today');
+  const [statusFilter, setStatusFilter] = useState('');
+  const [proFilter, setProFilter] = useState('');
+  const [page, setPage] = useState(1);
+  const [total, setTotal] = useState(0);
+  const [error, setError] = useState('');
 
   const load = useCallback(() => {
     if (!businessId) return;
-    fetch(`/api/bookings?businessId=${businessId}&mode=manage`)
-      .then((r) => r.json()).then((d) => { setBookings(d.bookings || []); setLoaded(true); });
+    fetch(`/api/bookings?businessId=${businessId}&mode=manage&page=${page}&limit=${LIMIT}`)
+      .then((r) => r.json()).then((d) => {
+        setBookings(d.bookings || []);
+        setTotal(d.total || 0);
+        setLoaded(true);
+      });
     fetch(`/api/catalog/get?businessId=${businessId}`)
       .then((r) => r.json()).then((d) => { setServices(d.services || []); setPros(d.professionals || []); });
-  }, [businessId]);
+  }, [businessId, page]);
 
   useEffect(() => { load(); }, [load]);
+  useEffect(() => { setPage(1); }, [view, statusFilter, proFilter]);
 
   async function setStatus(id: string, status: string) {
-    await fetch('/api/bookings', {
+    setError('');
+    const res = await fetch('/api/bookings', {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ businessId, id, status }),
     });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) { setError(data.error || 'Não foi possível atualizar.'); return; }
     load();
   }
 
-  const list = filter ? bookings.filter((b) => b.status === filter) : bookings;
+  const today = todayISO();
+  const tomorrow = addDaysISO(today, 1);
+
+  const inView = (b: Booking): boolean => {
+    if (view === 'today') return b.date === today;
+    if (view === 'tomorrow') return b.date === tomorrow;
+    if (view === 'next') return b.date > today && b.status !== 'cancelled';
+    if (view === 'past') return b.date < today;
+    return true;
+  };
+
+  const list = bookings
+    .filter(inView)
+    .filter((b) => !statusFilter || b.status === statusFilter)
+    .filter((b) => !proFilter || b.professionalId === proFilter)
+    .sort((a, b) => (view === 'past' || view === 'all')
+      ? (a.date + a.time < b.date + b.time ? 1 : -1)
+      : (a.date + a.time < b.date + b.time ? -1 : 1));
+
+  const pages = Math.max(1, Math.ceil(total / LIMIT));
+  let lastDay = '';
 
   return (
     <>
       <h1 className="text-2xl font-bold tracking-tight">Agenda</h1>
-      <p className="text-sm text-zinc-500 mt-1 mb-5">Agendamentos recebidos pela sua página.</p>
+      <p className="text-sm text-zinc-500 mt-1 mb-5">Agendamentos recebidos pela sua página, ordenados pela data do atendimento.</p>
 
-      <div className="flex gap-2 mb-4 overflow-x-auto pb-1">
-        <button onClick={() => setFilter('')} className={`shrink-0 text-xs font-bold px-3.5 py-2 rounded-full ${filter === '' ? 'bg-zinc-900 text-white' : 'bg-white border border-zinc-200'}`}>Todos</button>
-        {STATUS.map((s) => (
-          <button key={s.id} onClick={() => setFilter(s.id)} className={`shrink-0 text-xs font-bold px-3.5 py-2 rounded-full ${filter === s.id ? 'bg-zinc-900 text-white' : 'bg-white border border-zinc-200'}`}>{s.label}</button>
+      {error && <p className="mb-4 text-sm font-medium bg-red-600 text-white rounded-xl px-4 py-3">{error}</p>}
+
+      <div className="flex gap-2 mb-3 overflow-x-auto pb-1">
+        {VIEWS.map((v) => (
+          <button key={v.id} onClick={() => setView(v.id)}
+            className={`shrink-0 text-xs font-bold px-3.5 py-2 rounded-full ${view === v.id ? 'bg-zinc-900 text-white' : 'bg-white border border-zinc-200'}`}>
+            {v.label}
+          </button>
         ))}
+      </div>
+
+      <div className="flex flex-wrap gap-2 mb-4">
+        <select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)}
+          className="text-xs font-bold bg-white border border-zinc-200 rounded-full px-3 py-2">
+          <option value="">Todos os status</option>
+          {STATUS_IDS.map((s) => <option key={s} value={s}>{BOOKING_STATUS[s].panel}</option>)}
+        </select>
+        {pros.length > 0 && (
+          <select value={proFilter} onChange={(e) => setProFilter(e.target.value)}
+            className="text-xs font-bold bg-white border border-zinc-200 rounded-full px-3 py-2">
+            <option value="">Toda a equipe</option>
+            {pros.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
+          </select>
+        )}
       </div>
 
       {!loaded ? <ListSkeleton rows={4} /> : list.length === 0 ? (
         <div className="bg-white border border-zinc-200 rounded-2xl text-center py-14 px-6">
           <div className="mx-auto w-12 h-12 rounded-2xl bg-zinc-100 flex items-center justify-center text-zinc-400"><Icon n="calendar" size={24} /></div>
-          <h3 className="font-bold mt-3">Nenhum agendamento {filter ? 'neste status' : 'ainda'}</h3>
-          <p className="text-sm text-zinc-500 mt-1">Quando um cliente reservar um horário, ele aparece aqui.</p>
+          <h3 className="font-bold mt-3">Nada por aqui</h3>
+          <p className="text-sm text-zinc-500 mt-1">Nenhum agendamento nesta visão.</p>
         </div>
       ) : (
         <div className="space-y-2.5">
-          {list.map((b) => (
-            <div key={b.id} className="bg-white border border-zinc-200 rounded-2xl p-4">
-              <div className="flex flex-wrap items-center gap-2 justify-between">
-                <div>
-                  <p className="font-bold text-sm">{b.customerName} <span className="font-normal text-zinc-500">· {b.customerPhone}</span></p>
-                  <p className="text-xs text-zinc-500 mt-0.5">
-                    {services.find((s) => s.id === b.serviceId)?.name || 'Serviço'}
-                    {b.professionalId && ` · ${pros.find((p) => p.id === b.professionalId)?.name || ''}`}
-                    {' '}· {formatDate(b.date)} às {b.time}
+          {list.map((b) => {
+            const dayHeader = b.date !== lastDay ? b.date : '';
+            lastDay = b.date;
+            const def = BOOKING_STATUS[b.status];
+            const svc = services.find((s) => s.id === b.serviceId)?.name || 'Serviço';
+            const pro = b.professionalId ? pros.find((p) => p.id === b.professionalId)?.name || '' : '';
+            return (
+              <div key={b.id}>
+                {dayHeader && (
+                  <p className="text-xs font-extrabold uppercase tracking-wider text-zinc-400 pt-2 pb-1">
+                    {humanDay(b.date, today)} · {b.date.split('-').reverse().slice(0, 2).join('/')}
                   </p>
+                )}
+                <div className="bg-white border border-zinc-200 rounded-2xl p-4">
+                  <div className="flex flex-wrap items-center gap-2 justify-between">
+                    <div>
+                      <p className="font-bold text-sm">{b.customerName} <span className="font-normal text-zinc-500">· {b.customerPhone}</span></p>
+                      <p className="text-xs text-zinc-500 mt-0.5">
+                        {svc}{pro && ` · ${pro}`} · {b.time}
+                      </p>
+                    </div>
+                    <span className={`text-xs font-bold px-2.5 py-1 rounded-full ${toneCls(def.tone)}`}>
+                      {def.panel}
+                    </span>
+                  </div>
+                  <div className="flex flex-wrap gap-2 mt-3">
+                    {b.status === 'pending' && (
+                      <>
+                        <button onClick={() => setStatus(b.id, 'confirmed')} className="text-xs font-bold bg-emerald-600 text-white px-3.5 py-2 rounded-lg">Confirmar</button>
+                        <button onClick={() => setStatus(b.id, 'cancelled')} className="text-xs font-bold bg-zinc-100 px-3.5 py-2 rounded-lg">Cancelar</button>
+                      </>
+                    )}
+                    {b.status === 'confirmed' && (
+                      <>
+                        <button onClick={() => setStatus(b.id, 'completed')} className="text-xs font-bold bg-blue-600 text-white px-3.5 py-2 rounded-lg">Concluir</button>
+                        <button onClick={() => setStatus(b.id, 'no_show')} className="text-xs font-bold bg-zinc-100 px-3.5 py-2 rounded-lg">Faltou</button>
+                      </>
+                    )}
+                    <a href={waLink(b.customerPhone, `Olá, ${b.customerName.split(' ')[0]}! Sobre seu agendamento de ${svc} (${b.date.split('-').reverse().slice(0, 2).join('/')} às ${b.time}):`)} target="_blank" rel="noreferrer"
+                      className="text-xs font-bold bg-[#22c55e]/10 text-green-700 px-3.5 py-2 rounded-lg">WhatsApp</a>
+                  </div>
                 </div>
-                <span className={`text-xs font-bold px-2.5 py-1 rounded-full ${STATUS.find((s) => s.id === b.status)?.cls}`}>
-                  {STATUS.find((s) => s.id === b.status)?.label}
-                </span>
               </div>
-              <div className="flex flex-wrap gap-2 mt-3">
-                {b.status === 'pending' && (
-                  <>
-                    <button onClick={() => setStatus(b.id, 'confirmed')} className="text-xs font-bold bg-emerald-600 text-white px-3.5 py-2 rounded-lg">Confirmar</button>
-                    <button onClick={() => setStatus(b.id, 'cancelled')} className="text-xs font-bold bg-zinc-100 px-3.5 py-2 rounded-lg">Cancelar</button>
-                  </>
-                )}
-                {b.status === 'confirmed' && (
-                  <>
-                    <button onClick={() => setStatus(b.id, 'completed')} className="text-xs font-bold bg-blue-600 text-white px-3.5 py-2 rounded-lg">Concluir</button>
-                    <button onClick={() => setStatus(b.id, 'no_show')} className="text-xs font-bold bg-zinc-100 px-3.5 py-2 rounded-lg">Faltou</button>
-                  </>
-                )}
-                <a href={`https://wa.me/${b.customerPhone.replace(/\D/g, '')}`} target="_blank" rel="noreferrer"
-                  className="text-xs font-bold bg-[#22c55e]/10 text-green-700 px-3.5 py-2 rounded-lg">WhatsApp</a>
-              </div>
+            );
+          })}
+          {pages > 1 && (
+            <div className="flex items-center justify-center gap-2 pt-3">
+              <button onClick={() => setPage((p) => Math.max(1, p - 1))} disabled={page <= 1}
+                className="text-xs font-bold bg-white border border-zinc-200 px-4 py-2 rounded-xl disabled:opacity-40">Anterior</button>
+              <span className="text-xs text-zinc-500 font-bold">{page} de {pages}</span>
+              <button onClick={() => setPage((p) => Math.min(pages, p + 1))} disabled={page >= pages}
+                className="text-xs font-bold bg-white border border-zinc-200 px-4 py-2 rounded-xl disabled:opacity-40">Próxima</button>
             </div>
-          ))}
+          )}
         </div>
       )}
     </>

@@ -6,7 +6,7 @@ import { Track } from '@/components/public/widgets';
 import { money, waLink } from '@/lib/utils';
 import { Icon } from '@/components/icons';
 import { ConciergeIsland, WaFloat } from '@/components/public/widgets2';
-import { BookingTrigger, CtaButton, ProductsTrigger, QuoteTrigger, ServiceAgendarButton, SheetHost, Stars } from '@/components/public/customer';
+import { CtaButton, ProductsTrigger, QuoteTrigger, ServiceAgendarButton, SheetHost, Stars } from '@/components/public/customer';
 import { PageMenu, type MenuItem } from '@/components/public/menu';
 import type { Block, Business, PublicBusiness, Review } from '@/lib/types';
 
@@ -54,12 +54,13 @@ export default async function PublicPage({ params }: { params: { slug: string } 
     ...(((business.modes.includes('products') || business.modes.includes('orders')) && products.length > 0 && blocks.some((b) => b.type === 'products'))
       ? [{ id: 'products' as const, label: food ? 'Cardápio' : 'Loja' }] : []),
     ...(blocks.some((b) => b.type === 'services') && services.length > 0 ? [{ id: 'services' as const, label: 'Serviços' }] : []),
-    ...(business.modes.includes('bookings') && services.some((sv: any) => sv.bookable) ? [{ id: 'booking' as const, label: 'Agenda' }] : []),
-    ...(blocks.some((b) => b.type === 'quote') ? [{ id: 'quote' as const, label: 'Orçamento' }] : []),
+    ...(business.modes.includes('bookings') && services.some((sv: any) => sv.bookable) ? [{ id: 'booking' as const, label: 'Agendar' }] : []),
+    ...(business.modes.includes('quote') && blocks.some((b) => b.type === 'quote') ? [{ id: 'quote' as const, label: 'Orçamento' }] : []),
+    ...(blocks.some((b) => b.type === 'testimonials') ? [{ id: 'reviews' as const, label: 'Avaliações' }] : []),
+    ...(business.mapsUrl && blocks.some((b) => b.type === 'location') ? [{ id: 'contact' as const, label: 'Contato' }] : []),
   ];
 
   const btnStyle = business && page.theme.buttonStyle !== 'solid' ? ` il-style-${page.theme.buttonStyle}` : '';
-  const hasBookingBlock = blocks.some((b) => b.type === 'booking');
   return (
     <main className={`il-page min-h-screen${btnStyle}`}>
       <ThemeStyle theme={page.theme} />
@@ -80,7 +81,6 @@ export default async function PublicPage({ params }: { params: { slug: string } 
             key={block.id}
             block={block}
             business={business}
-            hasBooking={hasBookingBlock}
             catalog={{ categories, products, options, optionValues, services, serviceCategories, professionals, reviews }}
           />
         ))}
@@ -118,10 +118,9 @@ function mapsEmbedSrc(mapsUrl: string, address: string): string {
   return `https://www.google.com/maps?q=${encodeURIComponent(fallback)}&output=embed`;
 }
 
-function BlockView({ block, business, catalog, hasBooking }: {
+function BlockView({ block, business, catalog }: {
   block: Block;
   business: PublicBusiness;
-  hasBooking: boolean;
   catalog: {
     categories: any[]; products: any[]; options: any[]; optionValues: any[];
     services: any[]; serviceCategories: any[]; professionals: any[]; reviews: Review[];
@@ -242,70 +241,62 @@ function BlockView({ block, business, catalog, hasBooking }: {
       const list = catalog.services;
       if (list.length === 0) return null;
       const grouped = catalog.serviceCategories.length > 0;
+      const canBook = business.modes.includes('bookings');
+      const card = (sv: any, wide: boolean) => (
+        <div key={sv.id} className={wide ? 'il-card p-4 w-60 shrink-0 snap-start flex flex-col gap-2.5' : 'il-card p-4 flex justify-between items-center gap-3'}>
+          {sv.image ? <img src={sv.image} alt="" loading="lazy" className={wide ? 'w-full h-28 object-cover' : 'w-16 h-16 rounded-xl object-cover shrink-0'} style={{ borderRadius: 'var(--il-radius)' }} /> : null}
+          <div className="min-w-0 flex-1">
+            <p className="font-bold flex items-center gap-1.5">{sv.name} {sv.featured && <Icon n="star" size={13} className="shrink-0 text-amber-500" />}</p>
+            {sv.description && <p className="il-muted text-xs truncate">{sv.description}</p>}
+            <p className="il-muted text-xs mt-0.5 flex items-center gap-1"><Icon n="clock" size={13} /> {sv.durationMin} min</p>
+          </div>
+          <div className={wide ? 'flex items-center justify-between gap-2 w-full' : 'shrink-0 flex flex-col items-end gap-1.5'}>
+            <p className="font-extrabold il-accent">{money(sv.price)}</p>
+            {canBook && sv.bookable !== false && (
+              <ServiceAgendarButton serviceId={sv.id} serviceName={sv.name} />
+            )}
+          </div>
+        </div>
+      );
+      const carousel = !grouped && list.length >= 5;
       return (
         <section id="servicos" className="scroll-mt-20">
           <h2 className="text-xl font-extrabold tracking-tight mb-3">{s.title || 'Serviços'}</h2>
-          <div className="space-y-2.5">
-            {(grouped ? catalog.serviceCategories : [{ id: '', name: '' }]).map((cat: any) => {
-              const items = grouped ? list.filter((x: any) => x.categoryId === cat.id) : list;
-              const loose = !grouped ? [] : cat.id === '' ? [] : [];
-              void loose;
-              if (grouped && items.length === 0) return null;
-              return (
-                <div key={cat.id || 'all'} className="space-y-2.5">
-                  {grouped && <p className="text-xs font-extrabold uppercase tracking-wider il-muted pt-1">{cat.name}</p>}
-                  {items.map((sv: any) => (
-                    <div key={sv.id} className="il-card p-4 flex justify-between items-center gap-3">
-                      <div className="min-w-0">
-                        <p className="font-bold flex items-center gap-1.5">{sv.name} {sv.featured && <Icon n="star" size={13} className="shrink-0 text-amber-500" />}</p>
-                        {sv.description && <p className="il-muted text-xs truncate">{sv.description}</p>}
-                        <p className="il-muted text-xs mt-0.5 flex items-center gap-1"><Icon n="clock" size={13} /> {sv.durationMin} min</p>
-                      </div>
-                      <div className="shrink-0 flex flex-col items-end gap-1.5">
-                        <p className="font-extrabold il-accent">{money(sv.price)}</p>
-                        {business.modes.includes('bookings') && (sv as any).bookable !== false && (
-                          <ServiceAgendarButton serviceId={sv.id} serviceName={sv.name} />
-                        )}
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              );
-            })}
-            {grouped && list.filter((x: any) => !x.categoryId).map((sv: any) => (
-              <div key={sv.id} className="il-card p-4 flex justify-between items-center gap-3">
-                <div className="min-w-0">
-                  <p className="font-bold">{sv.name}</p>
-                  {sv.description && <p className="il-muted text-xs truncate">{sv.description}</p>}
-                  <p className="il-muted text-xs mt-0.5 flex items-center gap-1"><Icon n="clock" size={13} /> {sv.durationMin} min</p>
-                </div>
-                <div className="shrink-0 flex flex-col items-end gap-1.5">
-                  <p className="font-extrabold il-accent">{money(sv.price)}</p>
-                  {business.modes.includes('bookings') && (sv as any).bookable !== false && (
-                    <ServiceAgendarButton serviceId={sv.id} serviceName={sv.name} />
-                  )}
-                </div>
-              </div>
-            ))}
-          </div>
-          {business.modes.includes('bookings') && !hasBooking && list.some((x: any) => x.bookable) && (
-            <div className="mt-3">
-              <BookingTrigger title="Agendar horário" />
+          {carousel ? (
+            <div className="flex gap-2.5 overflow-x-auto pb-1 snap-x -mx-1 px-1">
+              {list.map((sv: any) => card(sv, true))}
+            </div>
+          ) : grouped ? (
+            <div className="space-y-2.5">
+              {catalog.serviceCategories.map((cat: any) => {
+                const items = list.filter((x: any) => x.categoryId === cat.id);
+                if (items.length === 0) return null;
+                return (
+                  <div key={cat.id} className="space-y-2.5">
+                    <p className="text-xs font-extrabold uppercase tracking-wider il-muted pt-1">{cat.name}</p>
+                    {items.map((sv: any) => card(sv, false))}
+                  </div>
+                );
+              })}
+              {list.filter((x: any) => !x.categoryId).map((sv: any) => card(sv, false))}
+            </div>
+          ) : (
+            <div className="space-y-2.5">
+              {list.map((sv: any) => card(sv, false))}
             </div>
           )}
         </section>
       );
     }
     case 'booking': {
-      if (!catalog.services.some((x: any) => x.bookable)) return null;
-      return <BookingTrigger title={s.title || 'Agende seu horário'} subtitle={s.subtitle} />;
+      return null; // aposentado — CTA + menu Agendar + botão por serviço abrem o mesmo fluxo
     }
     case 'testimonials': {
       const items: Array<{ name: string; text: string }> = Array.isArray(s.items) ? s.items : [];
       const dyn = catalog.reviews || [];
       if (dyn.length === 0 && items.filter((t) => t.text).length === 0) return null;
       return (
-        <section>
+        <section id="avaliacoes" className="scroll-mt-20">
           <h2 className="text-xl font-extrabold tracking-tight mb-3">{s.title || 'O que dizem por aí'}</h2>
           {dyn.length > 0 ? (
             <div className="space-y-2.5">
@@ -362,7 +353,7 @@ function BlockView({ block, business, catalog, hasBooking }: {
       if (!business.mapsUrl) return null;
       const embedSrc = mapsEmbedSrc(business.mapsUrl, business.address);
       return (
-        <section id="localizacao" className="scroll-mt-20">
+        <section id="contato" className="scroll-mt-20">
           <h2 className="text-xl font-extrabold tracking-tight mb-3 flex items-center gap-2"><Icon n="pin" size={19} /> Onde estamos</h2>
           <div className="il-card overflow-hidden">
             <iframe

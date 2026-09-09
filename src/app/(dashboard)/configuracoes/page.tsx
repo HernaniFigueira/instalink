@@ -2,7 +2,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { useSearchParams } from 'next/navigation';
 import { MODES } from '@/lib/templates';
-import { cn } from '@/lib/utils';
+import { cn, parseMoneyToCents, centsToBR } from '@/lib/utils';
 import type { Business, BusinessMode } from '@/lib/types';
 import { PageSkeleton } from '@/components/ui';
 import { Icon } from '@/components/icons';
@@ -41,6 +41,7 @@ export default function ConfigPage() {
           modes: biz.modes, phone: biz.phone, whatsapp: biz.whatsapp, email: biz.email,
           instagram: biz.instagram, tiktok: biz.tiktok, address: biz.address,
           mapsUrl: biz.mapsUrl, paymentMethods: biz.paymentMethods, pixKey: biz.pixKey,
+          deliveryFee: biz.deliveryFee, minOrder: biz.minOrder,
         }),
       });
       const data = await res.json();
@@ -141,6 +142,14 @@ export default function ConfigPage() {
           </div>
           <label className="block"><span className="text-xs font-bold text-zinc-500">CHAVE PIX</span>
             <input value={biz.pixKey} onChange={(e) => set('pixKey', e.target.value)} className={input + ' mt-1'} placeholder="CPF, e-mail, telefone ou aleatória" /></label>
+          <div className="grid sm:grid-cols-2 gap-3.5">
+            <label className="block"><span className="text-xs font-bold text-zinc-500">TAXA DE ENTREGA (R$)</span>
+              <input value={centsToBR(biz.deliveryFee || 0)} onChange={(e) => set('deliveryFee', parseMoneyToCents(e.target.value))} className={input + ' mt-1'} placeholder="0,00" inputMode="decimal" />
+              <span className="text-[11px] text-zinc-500">0 = a combinar no WhatsApp.</span></label>
+            <label className="block"><span className="text-xs font-bold text-zinc-500">PEDIDO MÍNIMO (R$)</span>
+              <input value={centsToBR(biz.minOrder || 0)} onChange={(e) => set('minOrder', parseMoneyToCents(e.target.value))} className={input + ' mt-1'} placeholder="0,00" inputMode="decimal" />
+              <span className="text-[11px] text-zinc-500">0 = sem mínimo.</span></label>
+          </div>
         </section>
 
         <button onClick={save} disabled={saving} className="text-sm font-bold bg-zinc-900 text-white px-6 py-3 rounded-xl disabled:opacity-50">

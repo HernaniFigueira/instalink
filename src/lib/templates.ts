@@ -57,7 +57,8 @@ export function defaultBlocks(niche: Niche, modes: BusinessMode[]): Block[] {
 
   if (wants('products') || wants('orders')) blocks.push(block('products', order++, { title: niche === 'alimentacao' ? 'Cardápio' : 'Produtos' }));
   if (wants('services') || wants('bookings')) blocks.push(block('services', order++, { title: 'Serviços' }));
-  if (wants('bookings')) blocks.push(block('booking', order++, { title: 'Agende seu horário' }));
+  // Sem bloco 'booking' separado: CTA + menu Agendar + botão por serviço
+  // abrem o mesmo fluxo (destino único, sem duplicação visual).
   if (wants('quote')) blocks.push(block('quote', order++, { title: 'Solicite um orçamento' }));
 
   blocks.push(block('testimonials', order++, {}));

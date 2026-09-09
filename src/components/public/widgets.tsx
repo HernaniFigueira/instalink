@@ -1,6 +1,7 @@
 'use client';
-import { useEffect, useMemo, useRef, useState } from 'react';
-import { closeSheet, ensureCustomer, onAuthOk, openSheet, useCustomerPrefill } from './sheet-bus';
+import { useEffect, useMemo, useState } from 'react';
+import { closeSheet, openSheet } from './sheet-bus';
+import { useCustomerForm } from './use-customer-form';
 import { Icon } from '@/components/icons';
 import type { Business, PublicBusiness, Category, Product, ProductOption, ProductOptionValue, Professional, Service } from '@/lib/types';
 import { money, waLink } from '@/lib/utils';
@@ -12,12 +13,26 @@ export { money, waLink };
 
 // ── helpers ────────────────────────────────────────────────
 
+function visitorId(): string {
+  try {
+    let v = localStorage.getItem('il-vid');
+    if (!v) {
+      v = 'v-' + Date.now().toString(36) + '-' + Math.random().toString(36).slice(2, 10);
+      localStorage.setItem('il-vid', v);
+    }
+    return v;
+  } catch {
+    return '';
+  }
+}
+
 export function trackEvent(businessId: string, type: string, meta: Record<string, any> = {}) {
   try {
+    const vid = visitorId();
     fetch('/api/events', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ businessId, type, path: window.location.pathname, meta }),
+      body: JSON.stringify({ businessId, type, path: window.location.pathname, meta: { ...meta, vid } }),
       keepalive: true,
     }).catch(() => {});
   } catch { /* noop */ }
@@ -25,6 +40,12 @@ export function trackEvent(businessId: string, type: string, meta: Record<string
 
 export function Track({ businessId }: { businessId: string }) {
   useEffect(() => {
+    // 1 page_view por sessão (evita 1 escrita por visita).
+    try {
+      const key = `il-pv-${businessId}`;
+      if (sessionStorage.getItem(key)) return;
+      sessionStorage.setItem(key, '1');
+    } catch { /* sem storage: registra mesmo assim */ }
     trackEvent(businessId, 'page_view');
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [businessId]);
@@ -287,8 +308,6 @@ function CartDrawer({ business, cart, products, values, unitFor, total, checkout
   onRemove: (key: string) => void;
   onDone: () => void;
 }) {
-  const [name, setName] = useState('');
-  const [phone, setPhone] = useState('');
   const [type, setType] = useState<'delivery' | 'pickup'>('pickup');
   const [address, setAddress] = useState('');
   const [payment, setPayment] = useState(business.paymentMethods?.[0] || 'pix');
@@ -296,19 +315,23 @@ function CartDrawer({ business, cart, products, values, unitFor, total, checkout
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
   const [done, setDone] = useState<{ code: string } | null>(null);
-  const prefill = useCustomerPrefill();
-  const autoSent = useRef(false);
+  const [pixKey, setPixKey] = useState<string | null>(null);
+  const [copied, setCopied] = useState(false);
+  const form = useCustomerForm();
+
+  const fee = type === 'delivery' ? (business.deliveryFee || 0) : 0;
+  const grand = total + fee;
+  const minOrder = business.minOrder || 0;
+  const belowMin = minOrder > 0 && total < minOrder;
 
   useEffect(() => {
-    if (prefill.name) setName((v) => v || prefill.name);
-    if (prefill.phone) setPhone((v) => v || prefill.phone);
-  }, [prefill.name, prefill.phone]);
-
-  function afterLogin(fn: () => void) {
-    if (autoSent.current) return;
-    autoSent.current = true;
-    const off = onAuthOk(() => { off(); autoSent.current = false; fn(); });
-  }
+    if (checkout && payment === 'pix' && pixKey === null) {
+      fetch(`/api/checkout-info?businessId=${business.id}`)
+        .then((r) => (r.ok ? r.json() : null))
+        .then((d) => setPixKey(d?.pixKey || ''))
+        .catch(() => setPixKey(''));
+    }
+  }, [checkout, payment, business.id, pixKey]);
 
   const payLabels: Record<string, string> = { pix: 'PIX', card: 'Cartão', cash: 'Dinheiro', on_delivery: 'Na entrega' };
 
@@ -323,12 +346,23 @@ function CartDrawer({ business, cart, products, values, unitFor, total, checkout
     return names.join(', ');
   }
 
+  function copyPix() {
+    if (!pixKey) return;
+    try {
+      navigator.clipboard.writeText(pixKey).then(() => {
+        setCopied(true);
+        setTimeout(() => setCopied(false), 2000);
+      }).catch(() => {});
+    } catch { /* noop */ }
+  }
+
   async function submit() {
     setError('');
-    if (!(await ensureCustomer())) {
-      afterLogin(() => submit());
-      return;
+    if (!form.logged) {
+      if (!form.name.trim()) { setError('Informe seu nome.'); return; }
+      if (form.phone.replace(/\D/g, '').length < 10) { setError('Informe um WhatsApp válido.'); return; }
     }
+    if (!(await form.ensure({ phone: true }))) { form.afterAuth(() => submit()); return; }
     setLoading(true);
     try {
       trackEvent(business.id, 'checkout_started');
@@ -336,7 +370,7 @@ function CartDrawer({ business, cart, products, values, unitFor, total, checkout
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          businessId: business.id, customerName: name, customerPhone: phone,
+          businessId: business.id, customerName: form.name, customerPhone: form.phone,
           type, customerAddress: address, payment, note, items: cart,
         }),
       });
@@ -344,7 +378,7 @@ function CartDrawer({ business, cart, products, values, unitFor, total, checkout
       if (!res.ok) {
         if (data.code === 'login_required') {
           openSheet('auth', {});
-          afterLogin(() => submit());
+          form.afterAuth(() => submit());
           return;
         }
         throw new Error(data.error);
@@ -365,11 +399,11 @@ function CartDrawer({ business, cart, products, values, unitFor, total, checkout
           <div className="text-center py-8">
             <span className="inline-flex w-16 h-16 rounded-full items-center justify-center" style={{ background: 'color-mix(in srgb, var(--il-primary) 12%, transparent)', color: 'var(--il-primary)' }}><Icon n="checkCircle" size={32} /></span>
             <h3 className="text-xl font-extrabold mt-3">Pedido {done.code} recebido!</h3>
-            <p className="il-muted text-sm mt-1">Obrigado, {name.split(' ')[0]}! Acompanhe pelo WhatsApp.</p>
+            <p className="il-muted text-sm mt-1">Obrigado, {form.name.split(' ')[0]}! Acompanhe pelo WhatsApp.</p>
             <div className="mt-5 space-y-2">
               {business.whatsapp && (
                 <a className="il-btn block font-extrabold py-3.5" target="_blank" rel="noreferrer"
-                  href={waLink(business.whatsapp, `Olá! Fiz o pedido ${done.code} no site (${name}).`)}
+                  href={waLink(business.whatsapp, `Olá! Fiz o pedido ${done.code} no site (${form.name}).`)}
                   onClick={() => trackEvent(business.id, 'whatsapp_click', { from: 'order_success' })}>
                   Enviar no WhatsApp
                 </a>
@@ -423,10 +457,22 @@ function CartDrawer({ business, cart, products, values, unitFor, total, checkout
                 <button onClick={() => setType('pickup')} className={`font-bold text-sm py-2.5 border ${type === 'pickup' ? 'il-chip-active border-transparent' : 'il-card'} inline-flex items-center justify-center gap-2`} style={{ borderRadius: 'var(--il-radius)' }}><Icon n="bag" size={16} /> Retirada</button>
                 <button onClick={() => setType('delivery')} className={`font-bold text-sm py-2.5 border ${type === 'delivery' ? 'il-chip-active border-transparent' : 'il-card'} inline-flex items-center justify-center gap-2`} style={{ borderRadius: 'var(--il-radius)' }}><Icon n="truck" size={16} /> Entrega</button>
               </div>
-              <input value={name} onChange={(e) => setName(e.target.value)} placeholder="Seu nome *" className="il-card w-full text-sm px-4 py-3 outline-none" />
-              <input value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="WhatsApp (11) 99999-9999 *" inputMode="tel" className="il-card w-full text-sm px-4 py-3 outline-none" />
+              {form.logged ? (
+                <div className="il-card px-4 py-3 flex items-center gap-2.5">
+                  <Icon n="userCircle" size={20} className="shrink-0 il-muted" />
+                  <p className="text-sm"><span className="font-bold">{form.customer?.name}</span> <span className="il-muted">· {form.customer?.phone}</span></p>
+                </div>
+              ) : (
+                <>
+                  <label className="block"><span className="text-xs font-bold il-muted">SEU NOME *</span>
+                    <input value={form.name} onChange={(e) => form.setName(e.target.value)} placeholder="Como podemos te chamar?" autoComplete="name" className="il-card w-full text-sm px-4 py-3 outline-none mt-1" /></label>
+                  <label className="block"><span className="text-xs font-bold il-muted">WHATSAPP *</span>
+                    <input value={form.phone} onChange={(e) => form.setPhone(e.target.value)} placeholder="(11) 99999-9999" inputMode="tel" autoComplete="tel" className="il-card w-full text-sm px-4 py-3 outline-none mt-1" /></label>
+                </>
+              )}
               {type === 'delivery' && (
-                <input value={address} onChange={(e) => setAddress(e.target.value)} placeholder="Endereço de entrega *" className="il-card w-full text-sm px-4 py-3 outline-none" />
+                <label className="block"><span className="text-xs font-bold il-muted">ENDEREÇO DE ENTREGA *</span>
+                  <input value={address} onChange={(e) => setAddress(e.target.value)} placeholder="Rua, número, complemento" autoComplete="street-address" className="il-card w-full text-sm px-4 py-3 outline-none mt-1" /></label>
               )}
               <div>
                 <p className="text-xs font-bold il-muted mb-1.5">PAGAMENTO</p>
@@ -439,11 +485,33 @@ function CartDrawer({ business, cart, products, values, unitFor, total, checkout
                     </button>
                   ))}
                 </div>
+                {payment === 'pix' && pixKey !== null && (
+                  <div className="mt-2">
+                    {pixKey ? (
+                      <button onClick={copyPix} className="il-card w-full text-left px-4 py-3 flex items-center justify-between gap-2">
+                        <span className="min-w-0"><span className="block text-[11px] font-bold il-muted">CHAVE PIX · TOQUE PARA COPIAR</span>
+                          <span className="block text-sm font-bold truncate">{pixKey}</span></span>
+                        <span className="text-xs font-extrabold il-accent shrink-0">{copied ? 'Copiado!' : 'Copiar'}</span>
+                      </button>
+                    ) : (
+                      <p className="il-muted text-xs">O pagamento via PIX é combinado no WhatsApp após o pedido.</p>
+                    )}
+                  </div>
+                )}
               </div>
-              <input value={note} onChange={(e) => setNote(e.target.value)} placeholder="Observação (opcional)" className="il-card w-full text-sm px-4 py-3 outline-none" />
+              <div className="il-card px-4 py-3 space-y-1 text-sm">
+                <p className="flex justify-between"><span className="il-muted">Subtotal</span><span className="font-bold">{money(total)}</span></p>
+                {type === 'delivery' && (
+                  <p className="flex justify-between"><span className="il-muted">Entrega</span><span className="font-bold">{fee > 0 ? money(fee) : 'a combinar'}</span></p>
+                )}
+                <p className="flex justify-between font-extrabold text-base pt-1"><span>Total</span><span className="il-accent">{money(grand)}</span></p>
+              </div>
+              {belowMin && <p className="text-sm font-semibold text-amber-600">Pedido mínimo de {money(minOrder)} — adicione mais itens.</p>}
+              <label className="block"><span className="text-xs font-bold il-muted">OBSERVAÇÃO (OPCIONAL)</span>
+                <input value={note} onChange={(e) => setNote(e.target.value)} placeholder="Ex: sem cebola" className="il-card w-full text-sm px-4 py-3 outline-none mt-1" /></label>
               {error && <p className="text-sm font-semibold text-red-600">{error}</p>}
-              <button onClick={submit} disabled={loading} className="il-btn w-full font-extrabold py-3.5 disabled:opacity-50">
-                {loading ? 'Enviando…' : `Confirmar pedido · ${money(total)}`}
+              <button onClick={submit} disabled={loading || belowMin} className="il-btn w-full font-extrabold py-3.5 disabled:opacity-50">
+                {loading ? 'Enviando…' : `Confirmar pedido · ${money(grand)}`}
               </button>
               <button onClick={() => setCheckout(false)} className="w-full text-sm font-semibold il-muted inline-flex items-center justify-center gap-1"><Icon n="chevL" size={15} /> Voltar ao carrinho</button>
             </div>
