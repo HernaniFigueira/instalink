@@ -107,6 +107,23 @@ export function installFetchWrapper(): void {
       if (!headers.has('Authorization')) headers.set('Authorization', `Bearer ${token}`);
       init = { ...init, headers };
     }
-    return original(input as RequestInfo, init);
+    const res = await original(input as RequestInfo, init);
+    // Sessão de lojista expirada dentro do painel: redireciona UMA vez
+    // ao login em vez de deixar cada tela quebrar com 401.
+    try {
+      if ((res.status === 401 || res.status === 403) && url && isSameOriginApi(url)) {
+        const path = url.startsWith('/') ? url : (() => { try { return new URL(url).pathname; } catch { return ''; } })();
+        const here = window.location.pathname;
+        const inPanel = /^\/(dashboard|pagina|produtos|servicos|agenda|pedidos|clientes|resultados|configuracoes|onboarding)/.test(here);
+        const isAuthCall = path.startsWith('/api/auth/login') || path.startsWith('/api/auth/register') || path.startsWith('/api/customer/');
+        if (inPanel && !isAuthCall && !w.__il_session_redirect) {
+          w.__il_session_redirect = true;
+          window.location.assign('/login?session=expired');
+        }
+      }
+    } catch {
+      /* noop */
+    }
+    return res;
   }) as typeof window.fetch;
 }

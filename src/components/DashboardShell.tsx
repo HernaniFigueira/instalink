@@ -90,6 +90,19 @@ export function DashboardShell({ children }: { children: React.ReactNode }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  // ?b= ausente ou de outro dono → normaliza para um negócio próprio.
+  useEffect(() => {
+    if (!ready || businesses.length === 0) return;
+    const b = params.get('b');
+    if (!businesses.some((x) => x.id === b)) {
+      router.replace(`${pathname}?b=${businesses[0].id}`);
+    }
+  }, [ready, businesses, params, pathname, router]);
+
+  function switchBiz(id: string) {
+    router.push(`${pathname}?b=${id}`);
+  }
+
   function toggle() {
     setCollapsed((c) => {
       try {
@@ -201,10 +214,17 @@ export function DashboardShell({ children }: { children: React.ReactNode }) {
       {/* Mobile topbar */}
       <div className="lg:hidden sticky top-0 z-40 bg-zinc-950 text-white">
         <div className="flex items-center justify-between px-4 py-3">
-          <Link href={`/dashboard${q}`} className="flex items-center gap-2">
-            <div className="w-8 h-8 rounded-lg bg-emerald-500 flex items-center justify-center font-black text-zinc-950 text-sm">IL</div>
-            <span className="font-bold text-sm">{business?.name || 'InstaLink'}</span>
-          </Link>
+          <span className="flex items-center gap-2 min-w-0">
+            <Link href={`/dashboard${q}`} className="w-8 h-8 rounded-lg bg-emerald-500 flex items-center justify-center font-black text-zinc-950 text-sm shrink-0">IL</Link>
+            {businesses.length > 1 ? (
+              <select value={business?.id || ''} onChange={(e) => switchBiz(e.target.value)} aria-label="Trocar de negócio"
+                className="bg-zinc-900 border border-zinc-800 text-xs font-bold rounded-lg px-2 py-1.5 max-w-[150px]">
+                {businesses.map((x) => <option key={x.id} value={x.id}>{x.name}</option>)}
+              </select>
+            ) : (
+              <span className="font-bold text-sm truncate">{business?.name || 'InstaLink'}</span>
+            )}
+          </span>
           <span className="flex items-center gap-2">
             {business && (
               <a href={`/${business.slug}`} target="_blank" className="text-xs font-bold bg-emerald-500 text-zinc-950 px-3 py-1.5 rounded-lg">Ver página</a>
