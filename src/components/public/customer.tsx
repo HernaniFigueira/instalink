@@ -7,7 +7,7 @@ import { BOOKING_STATUS, ORDER_STATUS } from '@/lib/status';
 import { todayISO, humanDateTime } from '@/lib/tz';
 import type { BookingStatus, OrderStatus } from '@/lib/types';
 import { Icon } from '@/components/icons';
-import { resolveCtaTarget } from '@/lib/cta';
+import { requestedCtaTarget, resolveCtaTarget } from '@/lib/cta';
 import { allowedCtaTargets } from '@/lib/features';
 import { CatalogIsland, money, waLink } from './widgets';
 import { BookingIsland, QuoteIsland } from './widgets2';
@@ -465,28 +465,41 @@ export function CustomerAccountSheet({ business }: { business: PublicBusiness })
 // ── CTA principal: abre o fluxo do DESTINO do bloco ───────────
 // Serviço → agendar → agenda. Produtos têm área própria e nunca
 // são destino de um CTA de agendamento (ver lib/cta.ts).
+// Rótulo de emergência quando o recurso pedido está DESLIGADO: o botão nunca
+// pode anunciar algo que não existe (ex.: "Agendar" sem módulo de agendamento).
+const CTA_FALLBACK_LABEL: Record<string, string> = {
+  products: 'Ver produtos',
+  booking: 'Agendar horário',
+  quote: 'Pedir orçamento',
+  whatsapp: 'Falar no WhatsApp',
+};
+
 export function CtaButton({ business, label, target }: { business: PublicBusiness; label: string; target?: string }) {
   const cls = 'il-btn block w-full text-center font-bold text-[17px] py-3.5 active:scale-[0.99] transition-transform';
   // MÓDULO MANDA: o destino pedido pela página só vale se o módulo estiver
-  // ligado; caso contrário cai para o próximo recurso realmente disponível.
+  // ligado; caso contrário cai para o próximo recurso realmente disponível —
+  // e o texto acompanha o destino real.
   const allowed = allowedCtaTargets(business);
   if (allowed.length === 0) return null;
   const wanted = resolveCtaTarget(business.modes, label, target);
   const t = allowed.includes(wanted) ? wanted : allowed[0];
+  // Compara com o que o BOTÃO anuncia: se o módulo pedido está desligado,
+  // o texto acompanha o destino real em vez de prometer o recurso ausente.
+  const text = t === requestedCtaTarget(label, target) ? label : CTA_FALLBACK_LABEL[t] || label;
 
   if (t === 'products') {
-    return <button onClick={() => openSheet('products', {})} className={cls}>{label}</button>;
+    return <button onClick={() => openSheet('products', {})} className={cls}>{text}</button>;
   }
   if (t === 'booking') {
-    return <button onClick={() => openSheet('booking', {})} className={cls}>{label}</button>;
+    return <button onClick={() => openSheet('booking', {})} className={cls}>{text}</button>;
   }
   if (t === 'quote') {
-    return <button onClick={() => openSheet('quote', {})} className={cls}>{label}</button>;
+    return <button onClick={() => openSheet('quote', {})} className={cls}>{text}</button>;
   }
   if (business.whatsapp) {
     return (
       <a href={waLink(business.whatsapp, `Olá! Vim pelo site da ${business.name}.`)} target="_blank" rel="noreferrer" className={cls}>
-        {label}
+        {text}
       </a>
     );
   }

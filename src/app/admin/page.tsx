@@ -91,7 +91,7 @@ export default function AdminPage() {
                     )}
                   </p>
                   <p className="text-xs text-zinc-500 mt-1">
-                    /{b.slug} · criada em {b.createdAt.slice(0, 10)} · proprietário <strong>{b.owner?.name || '—'}</strong> ({b.owner?.email || 'sem e-mail'})
+                    /{b.slug} · criada em {(b.createdAt || '').slice(0, 10)} · proprietário <strong>{b.owner?.name || '—'}</strong> ({b.owner?.email || 'sem e-mail'})
                     {b.owner?.lastLoginAt ? ` · último acesso ${b.owner.lastLoginAt.slice(0, 10)}` : ' · nunca acessou'}
                   </p>
                   <div className="flex flex-wrap gap-3 mt-2 text-[11px] font-bold text-zinc-600">

@@ -21,7 +21,7 @@ interface Detail {
   modules: Array<{ id: string; label: string; enabled: boolean }>;
   totals: Record<string, number>;
   agent: { name: string; enabled: boolean; tone: string; updatedAt: string } | null;
-  recentAudit: Array<{ id: string; action: string; actorEmail: string; createdAt: string; meta: any }>;
+  recentAudit: Array<{ id: string; action: string; actorEmail: string; actorRole: string; supportSessionId: string; at: string; meta: any }>;
 }
 
 const TOTALS: Array<[string, string]> = [
@@ -89,7 +89,7 @@ export default function AdminBusinessPage() {
             </span>
           </h1>
           <p className="text-xs text-zinc-500 mt-1">
-            /{business.slug} · criada em {business.createdAt.slice(0, 10)} · atualizada {business.updatedAt.slice(0, 10)} · assinatura: {business.subscription}
+            /{business.slug} · criada em {(business.createdAt || '').slice(0, 10)} · atualizada {(business.updatedAt || '').slice(0, 10)} · assinatura: {business.subscription}
           </p>
         </div>
         <div className="flex flex-col gap-2 items-end">
@@ -158,7 +158,7 @@ export default function AdminBusinessPage() {
             <>
               <p className="font-bold">{owner.name}</p>
               <p className="text-xs text-zinc-500">{owner.email}</p>
-              <p className="text-xs text-zinc-500 mt-1">conta criada em {owner.createdAt.slice(0, 10)}</p>
+              <p className="text-xs text-zinc-500 mt-1">conta criada em {(owner.createdAt || '').slice(0, 10)}</p>
               <p className="text-xs text-zinc-500">último acesso: {owner.lastLoginAt ? owner.lastLoginAt.slice(0, 16).replace('T', ' ') : 'nunca'}</p>
             </>
           ) : <p className="text-sm text-zinc-500">Sem proprietário.</p>}
@@ -199,7 +199,7 @@ export default function AdminBusinessPage() {
           <ul className="space-y-1.5 text-xs">
             {recentAudit.map((a) => (
               <li key={a.id} className="text-zinc-600">
-                <span className="font-bold text-zinc-800">{a.action}</span> · {a.actorEmail} · {a.createdAt.slice(0, 16).replace('T', ' ')}
+                <span className="font-bold text-zinc-800">{a.action}</span> · {a.actorEmail} · {(a.at || '').slice(0, 16).replace('T', ' ')}
                 {a.meta && Object.keys(a.meta).length > 0 && <span className="text-zinc-400"> · {JSON.stringify(a.meta)}</span>}
               </li>
             ))}

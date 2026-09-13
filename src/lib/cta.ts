@@ -35,6 +35,23 @@ export function resolveCtaTarget(
   return 'whatsapp';
 }
 
+/**
+ * O que o BOTÃO pedido anuncia (alvo explícito ou implícito no rótulo),
+ * independente de módulo estar ligado. Serve para comparar com o destino
+ * realmente permitido: se forem diferentes, o texto não pode continuar
+ * anunciando o recurso desligado (ex.: "Agendar" com agendamento off).
+ */
+export function requestedCtaTarget(label: string, explicit?: string): CtaTarget {
+  if (explicit === 'products' || explicit === 'booking' || explicit === 'quote' || explicit === 'whatsapp') {
+    return explicit;
+  }
+  const text = label || '';
+  if (/agend|reserv|hor[aá]rio|marc/i.test(text)) return 'booking';
+  if (/or[çc]amento/i.test(text)) return 'quote';
+  if (/pedir|card[aá]pio|\bloja\b|ver produtos|comprar|delivery/i.test(text)) return 'products';
+  return 'whatsapp';
+}
+
 // Destino padrão na criação da página (espelha a prioridade do rótulo).
 export function defaultCtaTarget(modes: BusinessMode[]): CtaTarget {
   if (modes.includes('orders')) return 'products';

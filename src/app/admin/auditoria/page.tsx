@@ -6,7 +6,7 @@ import { ListSkeleton } from '@/components/ui';
 
 interface Entry {
   id: string; action: string; actorEmail: string; actorRole: string; businessId: string;
-  businessName: string; supportSessionId: string; createdAt: string; meta: any;
+  businessName: string; supportSessionId: string; at: string; meta: any;
 }
 
 const LABEL: Record<string, string> = {
@@ -64,7 +64,7 @@ export default function AuditoriaPage() {
                 <Link href={`/admin/empresas/${e.businessId}`} className="text-xs font-bold text-emerald-700 hover:underline">{e.businessName}</Link>
               )}
               <span className="text-xs text-zinc-500">{e.actorEmail}{e.actorRole === 'master' ? ' (master)' : ''}</span>
-              <span className="text-xs text-zinc-400 ml-auto">{e.createdAt.slice(0, 16).replace('T', ' ')}</span>
+              <span className="text-xs text-zinc-400 ml-auto">{(e.at || '').slice(0, 16).replace('T', ' ')}</span>
               {e.supportSessionId && <span className="text-[10px] font-bold bg-amber-100 text-amber-800 px-2 py-0.5 rounded-full">via suporte</span>}
               {e.meta && Object.keys(e.meta).length > 0 && (
                 <span className="w-full text-[11px] text-zinc-400 font-mono">{JSON.stringify(e.meta)}</span>
