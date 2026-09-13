@@ -4,7 +4,7 @@ import { readDB, updateDB } from '@/lib/db';
 import { userFromRequest } from '@/lib/auth';
 import { customerFromRequest } from '@/lib/customer-auth';
 import { computeSlots } from '@/lib/slots';
-import { resolveProfessional } from '@/lib/booking';
+import { resolveProfessional, bookingMode } from '@/lib/booking';
 import { upsertContact } from '@/lib/contacts';
 import { todayISO, nowHM, weekdayOf, addDaysISO, isValidDateISO } from '@/lib/tz';
 import { onlyDigits } from '@/lib/utils';
@@ -111,10 +111,18 @@ export async function POST(req: NextRequest) {
     if (!business) return NextResponse.json({ error: 'Negócio não encontrado.' }, { status: 404 });
 
     const owner = await userFromRequest(req);
-    const isOwner = !!owner && business.ownerId === owner.id;
+    // CRÍTICO: modo proprietário só com intenção explícita (asOwner === true)
+    // + sessão de dono do próprio negócio. Sessão de dono logado NUNCA
+    // transforma sozinha uma requisição pública em operação interna.
+    const actor = bookingMode({
+      asOwner: body.asOwner,
+      ownerLogged: !!owner,
+      ownerMatches: !!owner && business.ownerId === owner.id,
+    });
+    const isOwner = actor === 'owner';
 
     let customer = null as Awaited<ReturnType<typeof customerFromRequest>>;
-    if (!isOwner || body.asOwner !== true) {
+    if (!isOwner) {
       customer = await customerFromRequest(req);
       if (!customer) return NextResponse.json({ error: 'Entre para agendar.', code: 'login_required' }, { status: 401 });
     }

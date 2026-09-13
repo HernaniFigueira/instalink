@@ -1,15 +1,18 @@
 import type { Metadata } from 'next';
+import { Fragment } from 'react';
 import { notFound } from 'next/navigation';
 import { getPublicData } from '@/lib/public';
 import { ThemeStyle } from '@/components/ThemeStyle';
 import { Track } from '@/components/public/widgets';
 import { money, waLink } from '@/lib/utils';
 import { Icon } from '@/components/icons';
-import { ConciergeIsland, WaFloat } from '@/components/public/widgets2';
+import { ConciergeIsland } from '@/components/public/widgets2';
+import { BottomBar } from '@/components/public/BottomBar';
+import type { NavActionItem } from '@/components/public/menu';
 import { CtaButton, ProductsTrigger, QuoteTrigger, ServiceAgendarButton, SheetHost, Stars } from '@/components/public/customer';
-import { PageMenu, type MenuItem } from '@/components/public/menu';
 import { FaqAccordion } from '@/components/public/FaqAccordion';
 import { visibleFaqItems } from '@/lib/faq';
+import { NAV_ORDER, aboutVisible } from '@/lib/nav';
 import type { Block, Business, PublicBusiness, Review } from '@/lib/types';
 
 export async function generateMetadata({ params }: { params: { slug: string } }): Promise<Metadata> {
@@ -52,17 +55,35 @@ export default async function PublicPage({ params }: { params: { slug: string } 
   }
 
   const blocks = [...page.blocks].sort((a, b) => a.order - b.order).filter((b) => b.enabled);
-  const hasWhatsappBlock = blocks.some((b) => b.type === 'whatsapp');
+  const profileIdx = blocks.findIndex((b) => b.type === 'profile');
   const food = business.niche === 'alimentacao';
-  const menuItems: MenuItem[] = [
-    ...(blocks.some((b) => b.type === 'services') && services.length > 0 ? [{ id: 'services' as const, label: 'Serviços' }] : []),
-    ...(business.modes.includes('bookings') && services.some((sv: any) => sv.bookable) ? [{ id: 'booking' as const, label: 'Agendar' }] : []),
-    ...(((business.modes.includes('products') || business.modes.includes('orders')) && products.length > 0 && blocks.some((b) => b.type === 'products'))
-      ? [{ id: 'products' as const, label: food ? 'Cardápio' : 'Loja' }] : []),
-    ...(business.modes.includes('quote') && blocks.some((b) => b.type === 'quote') ? [{ id: 'quote' as const, label: 'Orçamento' }] : []),
-    ...(blocks.some((b) => b.type === 'testimonials') ? [{ id: 'reviews' as const, label: 'Avaliações' }] : []),
-    ...(business.mapsUrl && blocks.some((b) => b.type === 'location') ? [{ id: 'contact' as const, label: 'Contato' }] : []),
-  ];
+
+  // ── Navegação (menu configurável) + seção Sobre ──
+  const aboutOk = aboutVisible(business.about);
+  const canBook = business.modes.includes('bookings') && services.some((sv: any) => sv.bookable);
+  const faqBlock = blocks.find((b) => b.type === 'faq');
+  const hasFaq = !!faqBlock && visibleFaqItems(faqBlock.settings?.items).length > 0;
+  const testiBlock = blocks.find((b) => b.type === 'testimonials');
+  const testiItems: Array<{ name?: string; text?: string }> = Array.isArray(testiBlock?.settings?.items) ? testiBlock!.settings.items : [];
+  const hasReviews = reviews.length > 0 || testiItems.some((t) => t?.text);
+  const instaUrl = business.instagram ? `https://instagram.com/${business.instagram.replace('@', '')}` : '';
+  const tiktokUrl = business.tiktok ? `https://tiktok.com/@${business.tiktok.replace('@', '')}` : '';
+
+  const available: Record<string, NavActionItem> = {};
+  if (aboutOk) available.about = { id: 'about', label: 'Sobre a empresa', icon: 'store', action: { kind: 'scroll', target: '#sobre' } };
+  if (blocks.some((b) => b.type === 'services') && services.length > 0) available.services = { id: 'services', label: 'Serviços', icon: 'scissors', action: { kind: 'scroll', target: '#servicos' } };
+  if (hasReviews) available.reviews = { id: 'reviews', label: 'Avaliações', icon: 'star', action: { kind: 'scroll', target: '#avaliacoes' } };
+  if (hasFaq) available.faq = { id: 'faq', label: 'Dúvidas frequentes', icon: 'chat', action: { kind: 'scroll', target: '#faq' } };
+  if (business.mapsUrl) available.directions = { id: 'directions', label: 'Como chegar', icon: 'pin', action: { kind: 'link', url: business.mapsUrl } };
+  if (business.mapsUrl && blocks.some((b) => b.type === 'location')) available.contact = { id: 'contact', label: 'Contato', icon: 'pin', action: { kind: 'scroll', target: '#contato' } };
+  if (instaUrl) available.instagram = { id: 'instagram', label: 'Instagram', icon: 'instagram', action: { kind: 'link', url: instaUrl } };
+  if (tiktokUrl) available.tiktok = { id: 'tiktok', label: 'TikTok', icon: 'music', action: { kind: 'link', url: tiktokUrl } };
+
+  // Explícito (dono configurou) ou detecção automática (legado).
+  const navIds = business.navCustom
+    ? (business.nav || [])
+    : NAV_ORDER.map((n) => n.id).filter((id) => available[id]);
+  const navItems = NAV_ORDER.filter((n) => navIds.includes(n.id) && available[n.id]).map((n) => available[n.id]);
 
   const btnStyle = business && page.theme.buttonStyle !== 'solid' ? ` il-style-${page.theme.buttonStyle}` : '';
   return (
@@ -76,27 +97,27 @@ export default async function PublicPage({ params }: { params: { slug: string } 
         </div>
       )}
 
-      <div className="mx-auto w-full max-w-md px-4 pb-28 pt-4 space-y-5">
-        <div className="sticky top-3 z-30">
-          <PageMenu items={menuItems} />
-        </div>
-        {blocks.map((block) => (
-          <BlockView
-            key={block.id}
-            block={block}
-            business={business}
-            catalog={{ categories, products, options, optionValues, services, serviceCategories, professionals, reviews }}
-          />
+      <div className="mx-auto w-full max-w-md px-4 pb-36 pt-4 space-y-5">
+        {blocks.map((block, i) => (
+          <Fragment key={block.id}>
+            <BlockView
+              block={block}
+              business={business}
+              catalog={{ categories, products, options, optionValues, services, serviceCategories, professionals, reviews }}
+            />
+            {i === profileIdx && aboutOk && <AboutView about={business.about} />}
+          </Fragment>
         ))}
+        {profileIdx < 0 && aboutOk && <AboutView about={business.about} />}
 
-        <footer className="text-center pt-4">
+        <footer className="text-center pt-2">
           <a href="/" className="il-muted text-xs font-semibold hover:underline">
             Feito com InstaLink.app
           </a>
         </footer>
       </div>
 
-      {hasWhatsappBlock && business.whatsapp && <WaFloat business={business} label="Falar no WhatsApp" />}
+      <BottomBar business={business} navItems={navItems} canBook={canBook} />
       <SheetHost
         business={business}
         products={products}
@@ -107,6 +128,23 @@ export default async function PublicPage({ params }: { params: { slug: string } 
         professionals={professionals}
       />
     </main>
+  );
+}
+
+// Seção "Sobre a empresa" (título, texto e imagem opcional — configurável no painel).
+function AboutView({ about }: { about: { title: string; text: string; image: string } }) {
+  return (
+    <section id="sobre" className="scroll-mt-20">
+      <div className="il-card overflow-hidden">
+        {about.image ? (
+          <img src={about.image} alt={about.title || 'Sobre'} loading="lazy" className="w-full h-40 object-cover" />
+        ) : null}
+        <div className="p-5">
+          {about.title && <h2 className="text-xl font-extrabold tracking-tight">{about.title}</h2>}
+          {about.text && <p className="il-muted text-sm mt-1.5 whitespace-pre-line">{about.text}</p>}
+        </div>
+      </div>
+    </section>
   );
 }
 
@@ -299,34 +337,34 @@ function BlockView({ block, business, catalog }: {
       const items: Array<{ name: string; text: string }> = Array.isArray(s.items) ? s.items : [];
       const dyn = catalog.reviews || [];
       if (dyn.length === 0 && items.filter((t) => t.text).length === 0) return null;
+      // Carrossel horizontal (desktop e mobile): reduz a rolagem vertical.
+      const card = 'il-card w-[82%] xs:w-72 sm:w-72 shrink-0 snap-start p-4 flex flex-col';
       return (
         <section id="avaliacoes" className="scroll-mt-20">
           <h2 className="text-xl font-extrabold tracking-tight mb-3">{s.title || 'O que dizem por aí'}</h2>
-          {dyn.length > 0 ? (
-            <div className="space-y-2.5">
-              {dyn.slice(0, 4).map((r) => (
-                <figure key={r.id} className="il-card p-4">
+          <div className="flex gap-2.5 overflow-x-auto pb-1 -mx-1 px-1 snap-x snap-mandatory" role="list" aria-label="Avaliações">
+            {dyn.length > 0 ? (
+              dyn.map((r) => (
+                <figure key={r.id} role="listitem" className={card}>
                   <Stars value={r.rating} />
-                  {r.text ? <blockquote className="text-sm mt-1.5">“{r.text}”</blockquote> : null}
-                  <figcaption className="flex items-center gap-1.5 mt-1.5">
-                    <span className="il-muted text-xs font-bold">— {r.customerName}</span>
+                  {r.text ? <blockquote className="text-sm mt-1.5 line-clamp-4">“{r.text}”</blockquote> : null}
+                  <figcaption className="flex items-center gap-1.5 mt-auto pt-2">
+                    <span className="il-muted text-xs font-bold truncate">— {r.customerName}</span>
                     {r.source === 'google' && (
-                      <span className="text-[10px] font-extrabold px-2 py-0.5 rounded-full il-chip">Google</span>
+                      <span className="text-[10px] font-extrabold px-2 py-0.5 rounded-full il-chip shrink-0">Google</span>
                     )}
                   </figcaption>
                 </figure>
-              ))}
-            </div>
-          ) : (
-            <div className="space-y-2.5">
-              {items.filter((t) => t.text).map((t, i) => (
-                <figure key={i} className="il-card p-4">
-                  <blockquote className="text-sm">“{t.text}”</blockquote>
-                  {t.name && <figcaption className="il-muted text-xs font-bold mt-1.5">— {t.name}</figcaption>}
+              ))
+            ) : (
+              items.filter((t) => t.text).map((t, i) => (
+                <figure key={i} role="listitem" className={card}>
+                  <blockquote className="text-sm line-clamp-4">“{t.text}”</blockquote>
+                  {t.name && <figcaption className="il-muted text-xs font-bold mt-auto pt-2 truncate">— {t.name}</figcaption>}
                 </figure>
-              ))}
-            </div>
-          )}
+              ))
+            )}
+          </div>
           {business.googleUrl && (
             <a href={business.googleUrl} target="_blank" rel="noreferrer" className="il-card block text-center font-bold py-3 mt-2.5 text-sm">
               Avaliar no Google
@@ -339,7 +377,7 @@ function BlockView({ block, business, catalog }: {
       const items = visibleFaqItems(s.items);
       if (items.length === 0) return null;
       return (
-        <section>
+        <section id="faq" className="scroll-mt-20">
           <h2 className="text-xl font-extrabold tracking-tight mb-3">{s.title || 'Dúvidas frequentes'}</h2>
           <FaqAccordion items={items} />
         </section>

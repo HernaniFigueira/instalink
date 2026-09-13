@@ -11,6 +11,7 @@ function seededDB(): DB {
     instagram: '', tiktok: '', address: '', mapsUrl: '', hours: {}, paymentMethods: [],
     pixKey: '', deliveryFee: 0, minOrder: 0, googleUrl: '', googlePlaceId: '', googleApiKey: '',
     booking: { teamMode: 'auto', leadMin: 60, cancelUntilMin: 180, horizonDays: 30, bufferMin: 0 },
+    nav: [], navCustom: false, about: { title: '', text: '', image: '', enabled: false },
     published: true, createdAt: '2026-09-01T00:00:00.000Z', updatedAt: '2026-09-01T00:00:00.000Z',
   });
   return db;

@@ -54,6 +54,18 @@ function normalize(raw: unknown): DB {
     if (typeof b.deliveryFee !== 'number') b.deliveryFee = 0;
     if (typeof b.minOrder !== 'number') b.minOrder = 0;
     if (!Array.isArray(b.modes)) b.modes = [];
+    if (!Array.isArray(b.nav)) b.nav = [];
+    if (typeof b.navCustom !== 'boolean') b.navCustom = false;
+    if (!b.about || typeof b.about !== 'object') {
+      b.about = { title: '', text: '', image: '', enabled: false };
+    } else {
+      b.about = {
+        title: typeof b.about.title === 'string' ? b.about.title : '',
+        text: typeof b.about.text === 'string' ? b.about.text : '',
+        image: typeof b.about.image === 'string' ? b.about.image : '',
+        enabled: !!b.about.enabled,
+      };
+    }
   }
   for (const s of base.services) {
     if (!Array.isArray((s as any).professionalIds)) (s as any).professionalIds = [];

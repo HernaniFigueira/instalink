@@ -11,6 +11,26 @@ export function eligibleProfessionalIds(service: Service, professionals: Profess
   return active.filter((p) => (service.professionalIds || []).includes(p.id)).map((p) => p.id);
 }
 
+export type BookingActor = 'owner' | 'customer';
+
+/**
+ * Decide se uma requisição de agendamento opera como DONO ou como CLIENTE.
+ *
+ * Regra absoluta: o modo proprietário SÓ existe com intenção explícita
+ * (`asOwner === true`) E sessão válida de dono do próprio negócio. A mera
+ * existência de uma sessão de lojista NUNCA transforma uma requisição
+ * pública em operação interna — um dono logado visitando a própria página
+ * pública continua no fluxo de CLIENTE.
+ */
+export function bookingMode(opts: {
+  asOwner?: unknown;
+  ownerLogged: boolean;
+  ownerMatches: boolean;
+}): BookingActor {
+  if (opts.asOwner === true && opts.ownerLogged && opts.ownerMatches) return 'owner';
+  return 'customer';
+}
+
 /**
  * Resolve o profissional de um horário.
  * - `requested` (do payload) é SEMPRE ignorado para cliente; só o dono pode

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { eligibleProfessionalIds, resolveProfessional } from '../booking';
+import { eligibleProfessionalIds, resolveProfessional, bookingMode } from '../booking';
 import type { Professional, Service } from '../types';
 
 const pros: Professional[] = [
@@ -14,6 +14,32 @@ function svc(professionalIds: string[]): Service {
     price: 0, durationMin: 60, professionalIds, active: true, featured: false, bookable: true, questions: [],
   };
 }
+
+describe('bookingMode (cliente × dono)', () => {
+  it('cliente logado (sem asOwner) → cliente, mesmo sem sessão de dono', () => {
+    expect(bookingMode({ ownerLogged: false, ownerMatches: false })).toBe('customer');
+  });
+
+  it('BUG: dono logado visitando a própria página pública NÃO vira owner', () => {
+    expect(bookingMode({ ownerLogged: true, ownerMatches: true })).toBe('customer');
+  });
+
+  it('asOwner=true + sessão de dono do negócio → owner', () => {
+    expect(bookingMode({ asOwner: true, ownerLogged: true, ownerMatches: true })).toBe('owner');
+  });
+
+  it('asOwner=true sem sessão de dono → cliente (cai no customerFromRequest)', () => {
+    expect(bookingMode({ asOwner: true, ownerLogged: false, ownerMatches: false })).toBe('customer');
+  });
+
+  it('asOwner=true mas sessão de dono de OUTRO negócio → cliente', () => {
+    expect(bookingMode({ asOwner: true, ownerLogged: true, ownerMatches: false })).toBe('customer');
+  });
+
+  it('asOwner como string "true" não conta (strict === true)', () => {
+    expect(bookingMode({ asOwner: 'true', ownerLogged: true, ownerMatches: true })).toBe('customer');
+  });
+});
 
 describe('eligibleProfessionalIds', () => {
   it('[] = todos os ativos (inativos ficam de fora)', () => {

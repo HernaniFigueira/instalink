@@ -85,6 +85,14 @@ export function defaultBookingConfig(): BookingConfig {
   return { teamMode: 'solo', leadMin: 30, cancelUntilMin: 120, horizonDays: 60, bufferMin: 0 };
 }
 
+// Seção "Sobre a empresa" da página pública (conteúdo configurável).
+export interface AboutSection {
+  title: string;
+  text: string;
+  image: string;
+  enabled: boolean;
+}
+
 export interface Business {
   id: ID;
   ownerId: ID;
@@ -111,6 +119,9 @@ export interface Business {
   googlePlaceId: string; // para importar avaliações (opcional)
   googleApiKey: string; // Places API key do lojista (opcional, SECRETO)
   booking: BookingConfig;
+  nav: string[]; // ids habilitados no menu (ordem canônica); usado quando navCustom
+  navCustom: boolean; // false = detecção automática (negócios legados)
+  about: AboutSection; // seção "Sobre a empresa" (título/texto/imagem)
   published: boolean;
   createdAt: string;
   updatedAt: string;
@@ -139,6 +150,9 @@ export interface PublicBusiness {
   deliveryFee: number; // centavos (preço público)
   minOrder: number; // centavos (regra pública)
   booking: BookingConfig; // regras operacionais públicas (modo equipe, prazos)
+  nav: string[]; // ids habilitados no menu (ordem canônica)
+  navCustom: boolean; // false = detecção automática
+  about: AboutSection;
   googleUrl: string;
   published: boolean;
 }

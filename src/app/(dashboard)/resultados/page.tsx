@@ -97,8 +97,8 @@ export default function ResultadosPage() {
         <Funnel title="Funil de agendamentos" steps={funnelBookings} />
       </div>
 
-      <div className="grid lg:grid-cols-2 gap-4">
-        <div className="bg-white border border-zinc-200 rounded-2xl p-5">
+      <div className="grid xl:grid-cols-5 gap-4">
+        <div className="xl:col-span-3 bg-white border border-zinc-200 rounded-2xl p-5">
           <h3 className="font-bold text-sm mb-3">Últimos {period} dias</h3>
           <div className="flex items-end gap-1 h-28">
             {days.map((d) => (
@@ -118,7 +118,7 @@ export default function ResultadosPage() {
           </div>
         </div>
 
-        <div className="space-y-4">
+        <div className="xl:col-span-2 space-y-4">
           <div className="bg-white border border-zinc-200 rounded-2xl p-5">
             <h3 className="font-bold text-sm mb-3">Produtos em destaque</h3>
             {topProducts.length === 0 ? <p className="text-xs text-zinc-500">Ainda sem movimento no período.</p> : (

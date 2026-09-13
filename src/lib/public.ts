@@ -41,6 +41,9 @@ export function toPublicBusiness(b: Business): PublicBusiness {
     deliveryFee: b.deliveryFee || 0,
     minOrder: b.minOrder || 0,
     booking: b.booking,
+    nav: b.nav || [],
+    navCustom: !!b.navCustom,
+    about: b.about || { title: '', text: '', image: '', enabled: false },
     googleUrl: b.googleUrl,
     published: b.published,
   };
