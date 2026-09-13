@@ -7,6 +7,7 @@ import { cn } from '@/lib/utils';
 import type { Block, BlockType, Business, Page, Theme } from '@/lib/types';
 import { PageSkeleton } from '@/components/ui';
 import { Icon } from '@/components/icons';
+import { readFaqItems, visibleFaqItems, type FaqItem } from '@/lib/faq';
 
 export default function PaginaPage() {
   const params = useSearchParams();
@@ -175,7 +176,7 @@ function blockIsEmpty(b: Block, rvCounts: { pending: number; published: number }
     case 'image': return !s.url;
     case 'gallery': return !Array.isArray(s.images) || s.images.length === 0;
     case 'buttons': return !Array.isArray(s.buttons) || s.buttons.length === 0;
-    case 'faq': return !Array.isArray(s.items) || s.items.length === 0;
+    case 'faq': return visibleFaqItems(s.items).length === 0;
     case 'testimonials': {
       const staticEmpty = !Array.isArray(s.items) || s.items.filter((t: any) => t.text).length === 0;
       return staticEmpty && rvCounts.published === 0;
@@ -247,16 +248,84 @@ function BlockSettings({ block, businessId, onChange, onSave }: { block: Block; 
       )}
       {block.type === 'faq' && (
         <>
-          <input value={s.title || ''} onChange={(e) => set('title', e.target.value)} className={input} placeholder="Título (opcional)" />
-          <textarea value={(s.items || []).map((f: any) => `${f.q || ''} | ${f.a || ''}`).join('\n')}
-            onChange={(e) => set('items', e.target.value.split('\n').map((line) => { const [q, a] = line.split('|').map((x) => (x || '').trim()); return { q, a }; }).filter((f) => f.q))}
-            className={input} rows={4} placeholder={'Vocês entregam? | Sim, em toda a região central.\nAceitam PIX? | Sim!'} />
+          <label className="block">
+            <span className="text-xs font-bold text-zinc-500">TÍTULO DA SEÇÃO (OPCIONAL)</span>
+            <input value={s.title || ''} onChange={(e) => set('title', e.target.value)} className={input + ' mt-1'} placeholder="Ex: Dúvidas frequentes" />
+          </label>
+          <FaqEditor items={s.items} onChange={(items) => set('items', items)} inputClass={input} />
         </>
       )}
       {['profile', 'location', 'whatsapp'].includes(block.type) && (
         <p className="text-xs text-zinc-500">Este bloco usa os dados do negócio automaticamente (nome, logo, endereço, WhatsApp). Ajuste em <strong>Configurações</strong>.</p>
       )}
       <button onClick={onSave} className="text-sm font-bold bg-zinc-900 text-white px-4 py-2 rounded-xl hover:bg-zinc-700">Salvar bloco</button>
+    </div>
+  );
+}
+
+function FaqEditor({ items: rawItems, onChange, inputClass }: {
+  items: unknown;
+  onChange: (items: FaqItem[]) => void;
+  inputClass: string;
+}) {
+  const savedItems = readFaqItems(rawItems);
+  const items = savedItems.length > 0 ? savedItems : [{ q: '', a: '' }];
+
+  function updateItem(index: number, field: keyof FaqItem, value: string) {
+    onChange(items.map((item, itemIndex) => (
+      itemIndex === index ? { ...item, [field]: value } : item
+    )));
+  }
+
+  function removeItem(index: number) {
+    onChange(items.filter((_, itemIndex) => itemIndex !== index));
+  }
+
+  return (
+    <div className="space-y-3">
+      {items.map((item, index) => (
+        <div key={index} className="rounded-xl border border-zinc-200 bg-zinc-50/60 p-3 sm:p-4 space-y-3">
+          <div className="flex items-center justify-between gap-3">
+            <p className="text-sm font-bold text-zinc-700">Pergunta {index + 1}</p>
+            {savedItems.length > 0 && (
+              <button
+                type="button"
+                onClick={() => removeItem(index)}
+                className="text-xs font-bold text-red-600 px-2 py-1 rounded-lg hover:bg-red-50"
+                aria-label={`Remover pergunta ${index + 1}`}
+              >
+                Remover
+              </button>
+            )}
+          </div>
+          <label className="block">
+            <span className="text-xs font-bold text-zinc-500">PERGUNTA</span>
+            <input
+              value={item.q}
+              onChange={(event) => updateItem(index, 'q', event.target.value)}
+              className={inputClass + ' mt-1'}
+              placeholder="Ex: Qual o horário de atendimento?"
+            />
+          </label>
+          <label className="block">
+            <span className="text-xs font-bold text-zinc-500">RESPOSTA</span>
+            <textarea
+              value={item.a}
+              onChange={(event) => updateItem(index, 'a', event.target.value)}
+              className={inputClass + ' mt-1'}
+              rows={3}
+              placeholder="Ex: Atendemos de segunda a sábado, das 8h às 18h."
+            />
+          </label>
+        </div>
+      ))}
+      <button
+        type="button"
+        onClick={() => onChange([...items, { q: '', a: '' }])}
+        className="text-sm font-bold bg-zinc-100 text-zinc-700 px-4 py-2 rounded-xl hover:bg-zinc-200"
+      >
+        + Adicionar pergunta
+      </button>
     </div>
   );
 }

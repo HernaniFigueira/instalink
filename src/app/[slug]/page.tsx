@@ -8,6 +8,8 @@ import { Icon } from '@/components/icons';
 import { ConciergeIsland, WaFloat } from '@/components/public/widgets2';
 import { CtaButton, ProductsTrigger, QuoteTrigger, ServiceAgendarButton, SheetHost, Stars } from '@/components/public/customer';
 import { PageMenu, type MenuItem } from '@/components/public/menu';
+import { FaqAccordion } from '@/components/public/FaqAccordion';
+import { visibleFaqItems } from '@/lib/faq';
 import type { Block, Business, PublicBusiness, Review } from '@/lib/types';
 
 export async function generateMetadata({ params }: { params: { slug: string } }): Promise<Metadata> {
@@ -334,19 +336,12 @@ function BlockView({ block, business, catalog }: {
       );
     }
     case 'faq': {
-      const items: Array<{ q: string; a: string }> = Array.isArray(s.items) ? s.items : [];
+      const items = visibleFaqItems(s.items);
       if (items.length === 0) return null;
       return (
         <section>
           <h2 className="text-xl font-extrabold tracking-tight mb-3">{s.title || 'Dúvidas frequentes'}</h2>
-          <div className="space-y-2">
-            {items.filter((f) => f.q).map((f, i) => (
-              <details key={i} className="il-card p-4">
-                <summary className="font-bold text-sm cursor-pointer">{f.q}</summary>
-                <p className="il-muted text-sm mt-1.5">{f.a}</p>
-              </details>
-            ))}
-          </div>
+          <FaqAccordion items={items} />
         </section>
       );
     }
