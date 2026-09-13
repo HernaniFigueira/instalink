@@ -124,7 +124,7 @@ export function CustomerAuthSheet({ business }: { business: PublicBusiness }) {
       const res = await fetch('/api/customer/login', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ login, password }),
+        body: JSON.stringify({ login, password, businessId: business.id }),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error);
@@ -143,7 +143,7 @@ export function CustomerAuthSheet({ business }: { business: PublicBusiness }) {
       const res = await fetch('/api/customer/register', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name, phone, email, password }),
+        body: JSON.stringify({ name, phone, email, password, businessId: business.id }),
       });
       const data = await res.json();
       if (!res.ok) {

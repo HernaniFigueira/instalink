@@ -21,14 +21,11 @@ export function BookingIsland({ business, services, professionals, title, initia
   const bookable = services.filter((s) => s.bookable);
   const [serviceId, setServiceId] = useState(() =>
     initialServiceId && bookable.some((s) => s.id === initialServiceId) ? initialServiceId : '');
-  const [proId, setProId] = useState('');
   const [date, setDate] = useState('');
   const [dayInfo, setDayInfo] = useState<Record<string, { closed: boolean; free: number }>>({});
   const [slots, setSlots] = useState<string[]>([]);
   const [occupied, setOccupied] = useState<string[]>([]);
   const [serverToday, setServerToday] = useState('');
-  const [assign, setAssign] = useState<Record<string, string>>({});
-  const [proNames, setProNames] = useState<Record<string, string>>({});
   const [closed, setClosed] = useState(false);
   const [loadingSlots, setLoadingSlots] = useState(false);
   const [time, setTime] = useState('');
@@ -36,23 +33,14 @@ export function BookingIsland({ business, services, professionals, title, initia
   const [answers, setAnswers] = useState<string[]>([]);
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
-  const [done, setDone] = useState<{ proName: string } | null>(null);
+  const [done, setDone] = useState(false);
   const form = useCustomerForm();
 
   const service = bookable.find((s) => s.id === serviceId);
-  // Somente profissionais ATIVOS participam; vínculo do serviço restringe.
-  const activePros = professionals.filter((p) => p.active !== false);
-  const eligiblePros = service?.professionalIds?.length
-    ? activePros.filter((p) => service.professionalIds.includes(p.id))
-    : activePros;
-  const teamMode = activePros.length === 0 ? 'solo' : (business.booking?.teamMode || 'solo');
-  // Escolha só aparece quando faz sentido: modo escolha + 2+ elegíveis.
-  const showProStep = teamMode === 'choosable' && eligiblePros.length > 1;
 
   function selectService(id: string) {
     setAnswers([]);
     setServiceId(id);
-    setProId('');
     setDate('');
     setTime('');
     setSlots([]);
@@ -73,7 +61,7 @@ export function BookingIsland({ business, services, professionals, title, initia
   useEffect(() => {
     if (!serviceId) { setDayInfo({}); return; }
     if (days.length === 0) return;
-    fetch(`/api/bookings?businessId=${business.id}&serviceId=${serviceId}&professionalId=${showProStep ? proId : ''}&from=${days[0].iso}&to=${days[days.length - 1].iso}`)
+    fetch(`/api/bookings?businessId=${business.id}&serviceId=${serviceId}&from=${days[0].iso}&to=${days[days.length - 1].iso}`)
       .then((r) => r.json())
       .then((d) => {
         setDayInfo(d.days || {});
@@ -81,7 +69,7 @@ export function BookingIsland({ business, services, professionals, title, initia
       })
       .catch(() => setDayInfo({}));
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [serviceId, proId, business.id, showProStep, serverToday]);
+  }, [serviceId, business.id, serverToday]);
 
   useEffect(() => {
     if (!serviceId || Object.keys(dayInfo).length === 0) return;
@@ -96,19 +84,17 @@ export function BookingIsland({ business, services, professionals, title, initia
     if (!serviceId || !date) { setSlots([]); return; }
     setLoadingSlots(true);
     setTime('');
-    fetch(`/api/bookings?businessId=${business.id}&serviceId=${serviceId}&professionalId=${showProStep ? proId : ''}&date=${date}`)
+    fetch(`/api/bookings?businessId=${business.id}&serviceId=${serviceId}&date=${date}`)
       .then((r) => r.json())
       .then((d) => {
         setSlots(d.slots || []);
         setOccupied(d.occupied || []);
-        setAssign(d.assign || {});
-        setProNames(d.pros || {});
         setClosed(!!d.closed);
         if (d.today) setServerToday(d.today);
       })
       .catch(() => setSlots([]))
       .finally(() => setLoadingSlots(false));
-  }, [serviceId, date, proId, business.id, showProStep]);
+  }, [serviceId, date, business.id]);
 
   function endTime(t: string, dur: number): string {
     const [h, m] = t.split(':').map(Number);
@@ -124,20 +110,12 @@ export function BookingIsland({ business, services, professionals, title, initia
     { id: 'noite', label: 'Noite', items: grid.filter((g) => g.t >= '18:00') },
   ].filter((g) => g.items.length > 0);
 
-  // Profissional exibido ANTES da confirmação (nunca confirmação cega).
-  const assignedId = proId || (time ? assign[time] || '' : '');
-  const assignedName = assignedId
-    ? (proNames[assignedId] || activePros.find((p) => p.id === assignedId)?.name || '')
-    : '';
-
+  // O cliente NUNCA escolhe profissional: o servidor resolve e devolve o
+  // nome apenas para uso interno (painel) — nunca é exibido aqui.
   async function submit() {
     setError('');
     if (!serviceId) { setError('Escolha um serviço.'); return; }
     if (!date || !time) { setError('Escolha data e horário.'); return; }
-    if (!form.logged) {
-      if (!form.name.trim()) { setError('Informe seu nome.'); return; }
-      if (form.phone.replace(/\D/g, '').length < 10) { setError('Informe um WhatsApp válido.'); return; }
-    }
     if (!(await form.ensure({ phone: true }))) { form.afterAuth(() => submit()); return; }
     setLoading(true);
     try {
@@ -147,15 +125,16 @@ export function BookingIsland({ business, services, professionals, title, initia
         method: rescheduleId ? 'PATCH' : 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(rescheduleId
-          ? { id: rescheduleId, date, time, serviceId, professionalId: proId, note, answers }
-          : { businessId: business.id, serviceId, professionalId: proId, date, time, customerName: form.name, customerPhone: form.phone, note, answers }),
+          ? { id: rescheduleId, date, time, serviceId, note, answers }
+          : { businessId: business.id, serviceId, date, time, note, answers }),
       });
       const data = await res.json();
       if (!res.ok) {
         if (data.code === 'login_required') { openSheet('auth', {}); form.afterAuth(() => submit()); return; }
+        if (data.code === 'phone_required') { openSheet('phone', {}); form.afterAuth(() => submit()); return; }
         throw new Error(data.error);
       }
-      setDone({ proName: data.professionalName || assignedName });
+      setDone(true);
     } catch (err: any) {
       setError(err.message);
     } finally {
@@ -172,7 +151,7 @@ export function BookingIsland({ business, services, professionals, title, initia
         <span className="inline-flex w-16 h-16 rounded-full items-center justify-center" style={{ background: 'color-mix(in srgb, var(--il-primary) 12%, transparent)', color: 'var(--il-primary)' }}><Icon n="calendar" size={30} /></span>
         <h3 className="text-xl font-extrabold mt-3">{rescheduleId ? 'Horário remarcado!' : 'Agendamento recebido!'}</h3>
         <p className="il-muted text-sm mt-1">{service.name} · {d}/{m} às {time}–{endTime(time, service.durationMin)}</p>
-        <p className="il-muted text-sm">{done.proName ? `${done.proName} · ` : ''}vamos confirmar pelo seu WhatsApp.</p>
+        <p className="il-muted text-sm">vamos confirmar pelo seu WhatsApp.</p>
         <div className="mt-4 space-y-2">
           {business.whatsapp && !rescheduleId && (
             <a className="il-btn block font-extrabold py-3.5" target="_blank" rel="noreferrer"
@@ -182,7 +161,7 @@ export function BookingIsland({ business, services, professionals, title, initia
             </a>
           )}
           <a target="_blank" rel="noreferrer"
-            href={gcalLink({ title: `${service.name} — ${business.name}`, date, time, durationMin: service.durationMin, details: done.proName, location: business.address || undefined })}
+            href={gcalLink({ title: `${service.name} — ${business.name}`, date, time, durationMin: service.durationMin, location: business.address || undefined })}
             className="il-card block font-bold py-3 text-sm">
             Adicionar ao Google Agenda
           </a>
@@ -192,7 +171,6 @@ export function BookingIsland({ business, services, professionals, title, initia
     );
   }
 
-  const stepNum = (n: number) => n;
   return (
     <div id="agendar" className="scroll-mt-20">
       {!bare && <h2 className="text-xl font-extrabold tracking-tight mb-3">{title || 'Agende seu horário'}</h2>}
@@ -225,25 +203,9 @@ export function BookingIsland({ business, services, professionals, title, initia
           )}
         </div>
 
-        {serviceId && showProStep && (
-          <div>
-            <p className="text-xs font-bold il-muted mb-1.5">2 · PROFISSIONAL</p>
-            <div className="flex flex-wrap gap-2">
-              <button onClick={() => setProId('')}
-                className={`text-sm font-bold px-4 py-2 border ${proId === '' ? 'il-chip-active border-transparent' : 'il-card'}`}
-                style={{ borderRadius: 'var(--il-radius)' }}>Quem estiver livre</button>
-              {eligiblePros.map((p) => (
-                <button key={p.id} onClick={() => setProId(p.id)}
-                  className={`text-sm font-bold px-4 py-2 border ${proId === p.id ? 'il-chip-active border-transparent' : 'il-card'}`}
-                  style={{ borderRadius: 'var(--il-radius)' }}>{p.name}</button>
-              ))}
-            </div>
-          </div>
-        )}
-
         {serviceId && (
           <div>
-            <p className="text-xs font-bold il-muted mb-1.5">{showProStep ? '3' : '2'} · DIA</p>
+            <p className="text-xs font-bold il-muted mb-1.5">2 · DIA</p>
             <div className="flex gap-2 overflow-x-auto pb-1">
               {days.map((d) => {
                 const info = dayInfo[d.iso];
@@ -297,7 +259,7 @@ export function BookingIsland({ business, services, professionals, title, initia
             <p className="font-extrabold text-sm">Resumo</p>
             <p className="text-sm mt-1 font-bold">{service.name}</p>
             <p className="il-muted text-xs mt-0.5">
-              {date.split('-').reverse().join('/')} · {time}–{endTime(time, service.durationMin)}{assignedName ? ` · ${assignedName}` : ''}
+              {date.split('-').reverse().join('/')} · {time}–{endTime(time, service.durationMin)}
             </p>
             <p className="font-extrabold il-accent text-sm mt-1">{money(service.price)} · {service.durationMin} min</p>
           </div>
@@ -311,20 +273,26 @@ export function BookingIsland({ business, services, professionals, title, initia
                 <p className="text-sm"><span className="font-bold">{form.customer?.name}</span> <span className="il-muted">· {form.customer?.phone}</span></p>
               </div>
             ) : (
+              <div className="rounded-2xl p-4 text-center" style={{ background: 'color-mix(in srgb, var(--il-primary) 8%, transparent)', border: '1px dashed color-mix(in srgb, var(--il-primary) 30%, transparent)' }}>
+                <span className="inline-flex w-11 h-11 rounded-full items-center justify-center mb-2" style={{ background: 'color-mix(in srgb, var(--il-primary) 12%, transparent)', color: 'var(--il-primary)' }}><Icon n="shield" size={22} /></span>
+                <p className="text-sm font-bold">Para confirmar seu agendamento, entre na sua conta.</p>
+                <p className="il-muted text-xs mt-0.5">Uma conta para agendar e acompanhar tudo.</p>
+                <button onClick={() => submit()} className="il-btn w-full font-extrabold py-3 mt-3">
+                  Efetuar login
+                </button>
+              </div>
+            )}
+            {form.logged && (
               <>
-                <label className="block"><span className="text-xs font-bold il-muted">SEU NOME *</span>
-                  <input value={form.name} onChange={(e) => form.setName(e.target.value)} placeholder="Como podemos te chamar?" autoComplete="name" className="il-card w-full text-sm px-4 py-3 outline-none mt-1" /></label>
-                <label className="block"><span className="text-xs font-bold il-muted">WHATSAPP *</span>
-                  <input value={form.phone} onChange={(e) => form.setPhone(e.target.value)} placeholder="(11) 99999-9999" inputMode="tel" autoComplete="tel" className="il-card w-full text-sm px-4 py-3 outline-none mt-1" /></label>
+                <label className="block"><span className="text-xs font-bold il-muted">OBSERVAÇÃO (OPCIONAL)</span>
+                  <input value={note} onChange={(e) => setNote(e.target.value)} placeholder="Alguma preferência?" maxLength={300} className="il-card w-full text-sm px-4 py-3 outline-none mt-1" /></label>
+                {(service?.questions || []).map((q: string, i: number) => (
+                  <label key={i} className="block"><span className="text-xs font-bold il-muted">{q.toUpperCase().slice(0, 60)}</span>
+                    <input value={answers[i] || ''} onChange={(e) => setAnswers((v) => { const n = [...v]; n[i] = e.target.value; return n; })}
+                      placeholder="Sua resposta" maxLength={300} className="il-card w-full text-sm px-4 py-3 outline-none mt-1" /></label>
+                ))}
               </>
             )}
-            <label className="block"><span className="text-xs font-bold il-muted">OBSERVAÇÃO (OPCIONAL)</span>
-              <input value={note} onChange={(e) => setNote(e.target.value)} placeholder="Alguma preferência?" maxLength={300} className="il-card w-full text-sm px-4 py-3 outline-none mt-1" /></label>
-            {(service?.questions || []).map((q: string, i: number) => (
-              <label key={i} className="block"><span className="text-xs font-bold il-muted">{q.toUpperCase().slice(0, 60)}</span>
-                <input value={answers[i] || ''} onChange={(e) => setAnswers((v) => { const n = [...v]; n[i] = e.target.value; return n; })}
-                  placeholder="Sua resposta" maxLength={300} className="il-card w-full text-sm px-4 py-3 outline-none mt-1" /></label>
-            ))}
           </div>
         )}
 
@@ -337,7 +305,6 @@ export function BookingIsland({ business, services, professionals, title, initia
       </div>
     </div>
   );
-  void stepNum;
 }
 
 // ── FORMULÁRIO DE ORÇAMENTO (guest permitido) ─────────────

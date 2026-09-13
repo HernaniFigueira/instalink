@@ -344,6 +344,25 @@ export interface Review {
   createdAt: string;
 }
 
+// ── Contato (relação Customer × Business) ───────────────────
+// Um Customer é GLOBAL (uma conta vale para todos os negócios).
+// BusinessCustomer/Contact representa "esta pessoa faz parte da base
+// deste negócio". Nunca duplicar Customer; upsert por customerId/telefone.
+// customerId '' = pessoa conhecida por telefone (legado/guest), sem conta.
+export interface BusinessCustomer {
+  id: ID;
+  businessId: ID;
+  customerId: ID; // '' = sem conta vinculada (contato legado)
+  name: string;
+  phone: string; // só dígitos
+  email: string;
+  createdAt: string; // quando entrou na base do negócio
+  updatedAt: string;
+  source: string; // signup | login | google | agendamento | pedido | lead | ...
+  lastInteraction: string;
+  marketingOptIn: boolean; // base p/ campanhas futuras — NUNCA presumido
+}
+
 export type LeadStatus = 'new' | 'contacted' | 'qualified' | 'converted' | 'lost';
 
 export interface Lead {
@@ -396,6 +415,7 @@ export interface DB {
   orders: Order[];
   bookings: Booking[];
   leads: Lead[];
+  contacts: BusinessCustomer[];
   reviews: Review[];
   events: AnalyticsEvent[];
 }

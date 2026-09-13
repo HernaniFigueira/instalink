@@ -48,7 +48,7 @@ export async function PATCH(req: NextRequest) {
   try {
     const customer = await customerFromRequest(req);
     if (!customer) return NextResponse.json({ error: 'Entre para gerenciar.' }, { status: 401 });
-    const { id, date, time, serviceId, professionalId, note, answers } = await req.json();
+    const { id, date, time, serviceId, note, answers } = await req.json();
     const db = await readDB();
     const booking = db.bookings.find((b) => b.id === id);
     if (!booking) return NextResponse.json({ error: 'Agendamento não encontrado.' }, { status: 404 });
@@ -88,6 +88,7 @@ export async function PATCH(req: NextRequest) {
           throw err('Este agendamento não pode mais ser alterado.', 400);
         }
         // Valida o novo slot IGNORANDO a própria reserva (troca, não soma).
+        // O servidor re-atribui o profissional (cliente nunca escolhe).
         const others = d.bookings.filter((b) => b.businessId === business.id && b.id !== id);
         const r = computeSlots({
           rules: d.availability.filter((a) => a.businessId === business.id),
@@ -97,14 +98,14 @@ export async function PATCH(req: NextRequest) {
           professionals: d.professionals.filter((p) => p.businessId === business.id),
           dateISO: date, weekday: weekdayOf(date),
           serviceId: service.id, durationMin: service.durationMin,
-          professionalId: professionalId || target.professionalId || '',
+          professionalId: '',
           eligibleProIds: service.professionalIds || [],
           nowHM: date === todayISO() ? nowHM() : '',
           leadMin: cfg?.leadMin || 0,
           bufferMin: cfg?.bufferMin || 0,
         });
         if (!r.slots.includes(time)) throw err('Este horário acabou de ser ocupado. Escolha outro.', 409);
-        const finalPro = professionalId || target.professionalId || r.assign[time] || '';
+        const finalPro = r.assign[time] || '';
         const now = new Date().toISOString();
         target.serviceId = service.id;
         target.professionalId = finalPro;

@@ -6,6 +6,7 @@ import { cn, parseMoneyToCents, centsToBR } from '@/lib/utils';
 import type { Business, BusinessMode } from '@/lib/types';
 import { PageSkeleton } from '@/components/ui';
 import { Icon } from '@/components/icons';
+import { ImageUpload } from '@/components/dashboard/ImageUpload';
 
 const PAYMENTS = [
   { id: 'pix', label: 'PIX' },
@@ -86,11 +87,9 @@ export default function ConfigPage() {
           <label className="block"><span className="text-xs font-bold text-zinc-500">DESCRIÇÃO</span>
             <textarea value={biz.description} onChange={(e) => set('description', e.target.value)} className={input + ' mt-1'} rows={2}
               placeholder="Ex: Os melhores hambúrgueres artesanais da região." /></label>
-          <div className="grid sm:grid-cols-2 gap-3.5">
-            <label className="block"><span className="text-xs font-bold text-zinc-500">LOGO (URL)</span>
-              <input value={biz.logo} onChange={(e) => set('logo', e.target.value)} className={input + ' mt-1'} placeholder="https://…" /></label>
-            <label className="block"><span className="text-xs font-bold text-zinc-500">CAPA (URL)</span>
-              <input value={biz.cover} onChange={(e) => set('cover', e.target.value)} className={input + ' mt-1'} placeholder="https://…" /></label>
+          <div className="grid sm:grid-cols-2 gap-5">
+            <ImageUpload label="LOGO" value={biz.logo} onChange={(url) => set('logo', url)} businessId={businessId} circle />
+            <ImageUpload label="CAPA / BANNER" value={biz.cover} onChange={(url) => set('cover', url)} businessId={businessId} />
           </div>
         </section>
 

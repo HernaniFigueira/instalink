@@ -24,6 +24,7 @@ import path from 'node:path';
 import { Pool } from 'pg';
 import type { DB } from './types';
 import { defaultBookingConfig } from './types';
+import { backfillContacts } from './contacts';
 
 const FILE = path.join(process.cwd(), 'data', 'instalink.db.json');
 
@@ -34,7 +35,7 @@ export function emptyDB(): DB {
     businesses: [], pages: [], categories: [],
     products: [], options: [], optionValues: [], services: [],
     professionals: [], availability: [], exceptions: [], orders: [],
-    bookings: [], leads: [], reviews: [], events: [],
+    bookings: [], leads: [], contacts: [], reviews: [], events: [],
   };
 }
 
@@ -42,6 +43,11 @@ export function emptyDB(): DB {
 // Reversível (só adiciona defaults) e idempotente.
 function normalize(raw: unknown): DB {
   const base = { ...emptyDB(), ...((raw && typeof raw === 'object' ? raw : {}) as Partial<DB>) };
+  // Contatos: migração defensiva UMA única vez (quando o doc antigo não
+  // tinha o campo). Idempotente; nada existente é apagado ou duplicado.
+  const hadContacts = Array.isArray((raw as any)?.contacts);
+  if (!Array.isArray(base.contacts)) base.contacts = [];
+  if (!hadContacts) backfillContacts(base);
   for (const b of base.businesses) {
     if (!b.booking) b.booking = defaultBookingConfig();
     else b.booking = { ...defaultBookingConfig(), ...b.booking };

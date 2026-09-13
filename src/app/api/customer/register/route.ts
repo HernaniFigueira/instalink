@@ -3,15 +3,18 @@ import { randomUUID } from 'node:crypto';
 import { readDB, updateDB } from '@/lib/db';
 import { hashPassword } from '@/lib/auth';
 import { createCustomerSession, setCustomerSessionOn, publicCustomer } from '@/lib/customer-auth';
+import { upsertContact } from '@/lib/contacts';
 import { onlyDigits } from '@/lib/utils';
 import { rateLimit, ipFrom } from '@/lib/rate-limit';
 
 // POST público: cria conta do consumidor (nome + whatsapp ou e-mail + senha).
+// businessId (opcional): ao criar a conta A PARTIR da página de um negócio,
+// o cliente já entra na base de contatos daquele negócio (BusinessCustomer).
 export async function POST(req: NextRequest) {
   const rl = rateLimit(`creg:${ipFrom(req)}`, 10, 300000);
   if (!rl.ok) return NextResponse.json({ error: 'Muitas contas criadas. Aguarde alguns minutos.' }, { status: 429 });
   try {
-    const { name, phone, email, password } = await req.json();
+    const { name, phone, email, password, businessId } = await req.json();
     const cleanName = (name || '').trim();
     const digits = onlyDigits(phone || '');
     const cleanEmail = (email || '').trim().toLowerCase();
@@ -34,7 +37,13 @@ export async function POST(req: NextRequest) {
       passwordHash: hashPassword(password), googleId: '', avatar: '',
       createdAt: new Date().toISOString(),
     };
-    await updateDB((d) => { d.customers.push(customer); });
+    await updateDB((d) => {
+      d.customers.push(customer);
+      // Contexto do negócio: associação imediata, sem duplicar Customer.
+      if (businessId && d.businesses.some((b) => b.id === businessId)) {
+        upsertContact(d, { businessId, customerId: customer.id, name: cleanName, phone: digits, email: cleanEmail, source: 'signup' });
+      }
+    });
     const sessionId = await createCustomerSession(customer.id);
     const res = NextResponse.json({ ok: true, token: sessionId, customer: publicCustomer(customer) });
     setCustomerSessionOn(res, sessionId);

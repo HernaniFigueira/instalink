@@ -5,6 +5,7 @@ import { cn, parseMoneyToCents, centsToBR } from '@/lib/utils';
 import type { Availability, AvailabilityException, BookingConfig, Category, Professional, Service } from '@/lib/types';
 import { ListSkeleton } from '@/components/ui';
 import { Icon } from '@/components/icons';
+import { ImageUpload } from '@/components/dashboard/ImageUpload';
 
 const DAYS = ['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb'];
 
@@ -156,7 +157,7 @@ export default function ServicosPage() {
                     <div className="flex-1 min-w-0">
                       <p className="font-bold text-sm">{sv.name} {sv.featured && <Icon n="star" size={13} className="inline -mt-1 text-amber-500" />}</p>
                       <p className="text-xs text-zinc-500">R$ {centsToBR(sv.price)} · {sv.durationMin} min · {sv.bookable ? 'agendável' : 'somente exibição'}</p>
-                      {pros.length > 0 && <p className="text-xs text-zinc-400">Quem faz: {who}</p>}
+                      {pros.length > 0 && <p className="text-xs text-zinc-400">Realizado por: {who}</p>}
                     </div>
                     <button onClick={() => { setEditing(sv); setShowForm(true); }} className="text-xs font-bold bg-zinc-100 px-3 py-2 rounded-lg">Editar</button>
                     <button onClick={() => ask('service', sv)}
@@ -171,7 +172,7 @@ export default function ServicosPage() {
       )}
 
       {loaded && tab === 'team' && (
-        <TeamEditor pros={pros} onSave={call} onAskDelete={(p) => ask('professional', p)} />
+        <TeamEditor businessId={businessId} pros={pros} onSave={call} onAskDelete={(p) => ask('professional', p)} />
       )}
 
       {loaded && tab === 'hours' && (
@@ -195,7 +196,7 @@ export default function ServicosPage() {
       )}
 
       {showForm && (
-        <ServiceForm service={editing} cats={cats} pros={pros}
+        <ServiceForm businessId={businessId} service={editing} cats={cats} pros={pros}
           onClose={() => { setShowForm(false); setEditing(null); }}
           onSave={async (payload) => { await call('service.save', payload); setShowForm(false); setEditing(null); }} />
       )}
@@ -244,7 +245,8 @@ function DeleteSheet({ name, kindLabel, blocked, onDeactivate, onConfirm, onClos
   );
 }
 
-function ServiceForm({ service, cats, pros, onClose, onSave }: {
+function ServiceForm({ businessId, service, cats, pros, onClose, onSave }: {
+  businessId: string;
   service: Service | null;
   cats: Category[];
   pros: Professional[];
@@ -281,7 +283,7 @@ function ServiceForm({ service, cats, pros, onClose, onSave }: {
         </div>
         <input value={name} onChange={(e) => setName(e.target.value)} className={input} placeholder="Nome * (ex: Corte)" autoFocus />
         <textarea value={description} onChange={(e) => setDescription(e.target.value)} className={input} rows={2} placeholder="Descrição (opcional)" />
-        <input value={image} onChange={(e) => setImage(e.target.value)} className={input} placeholder="Foto (URL, opcional)" />
+        <ImageUpload label="FOTO DO SERVIÇO" value={image} onChange={setImage} businessId={businessId} />
         <div className="grid grid-cols-2 gap-3">
           <label className="block"><span className="text-xs font-bold text-zinc-500">PREÇO (R$) *</span>
             <input value={price} onChange={(e) => setPrice(e.target.value)} className={input + ' mt-1'} placeholder="45,00" inputMode="decimal" /></label>
@@ -302,7 +304,7 @@ function ServiceForm({ service, cats, pros, onClose, onSave }: {
         </div>
         {pros.length > 0 && (
           <div>
-            <span className="text-xs font-bold text-zinc-500">QUEM FAZ? (vazio = toda a equipe)</span>
+            <span className="text-xs font-bold text-zinc-500">QUEM REALIZA? (vazio = toda a equipe)</span>
             <div className="flex flex-wrap gap-2 mt-1.5">
               {pros.map((p) => (
                 <button type="button" key={p.id} onClick={() => togglePro(p.id)}
@@ -326,7 +328,8 @@ function ServiceForm({ service, cats, pros, onClose, onSave }: {
 }
 
 // ── Equipe ──
-function TeamEditor({ pros, onSave, onAskDelete }: {
+function TeamEditor({ businessId, pros, onSave, onAskDelete }: {
+  businessId: string;
   pros: Professional[];
   onSave: (action: string, payload: Record<string, any>) => Promise<void>;
   onAskDelete: (p: Professional) => void;
@@ -358,7 +361,7 @@ function TeamEditor({ pros, onSave, onAskDelete }: {
           <p className="font-bold text-sm">{editing ? 'Editar profissional' : 'Novo profissional'}</p>
           <input value={name} onChange={(e) => setName(e.target.value)} placeholder="Nome * (ex: João)" className="w-full rounded-xl border border-zinc-300 px-3 py-2.5 text-sm" autoFocus />
           <input value={role} onChange={(e) => setRole(e.target.value)} placeholder="Função (ex: Barbeiro)" className="w-full rounded-xl border border-zinc-300 px-3 py-2.5 text-sm" />
-          <input value={photo} onChange={(e) => setPhoto(e.target.value)} placeholder="Foto (URL, opcional)" className="w-full rounded-xl border border-zinc-300 px-3 py-2.5 text-sm" />
+          <ImageUpload label="FOTO DO PROFISSIONAL" value={photo} onChange={setPhoto} businessId={businessId} circle />
           <label className="flex items-center gap-2 text-sm font-medium"><input type="checkbox" checked={active} onChange={(e) => setActive(e.target.checked)} className="w-4 h-4 accent-emerald-600" /> Ativo (aparece na agenda)</label>
           {error && <p className="text-sm font-medium text-red-600">{error}</p>}
           <div className="flex gap-2">
@@ -632,12 +635,14 @@ function BookingSettings({ businessId, initial, hasTeam, onSaved }: {
       <p className="text-xs text-zinc-500 mb-4">Regras simples que valem para todos os agendamentos.</p>
       <div className="grid sm:grid-cols-2 gap-3.5">
         {hasTeam && (
-          <label className="block sm:col-span-2"><span className="text-xs font-bold text-zinc-500">QUEM ATENDE?</span>
-            <select value={cfg.teamMode} onChange={(e) => setCfg({ ...cfg, teamMode: e.target.value as BookingConfig['teamMode'] })} className={num}>
-              <option value="solo">Automático (sistema escolhe quem está livre)</option>
-              <option value="choosable">Cliente escolhe o profissional</option>
-              <option value="auto">Automático por carga (distribui igualmente)</option>
-            </select></label>
+          <div className="sm:col-span-2">
+            <span className="text-xs font-bold text-zinc-500">DISTRIBUIÇÃO DOS AGENDAMENTOS</span>
+            <select value="balanced" className={num}>
+              <option value="balanced">Equilibrar equipe — quem tem menos atendimentos no dia</option>
+              <option value="soon" disabled>Em breve: outros modos de distribuição</option>
+            </select>
+            <span className="text-[11px] text-zinc-500">O cliente nunca escolhe o profissional — a regra é interna do negócio. Quem atende é resolvido automaticamente, respeitando profissionais ativos, vínculo serviço → profissional, horários, buffers e exceções.</span>
+          </div>
         )}
         <label className="block"><span className="text-xs font-bold text-zinc-500">ANTECEDÊNCIA MÍNIMA (MIN)</span>
           <input type="number" min={0} max={1440} value={cfg.leadMin} onChange={(e) => setCfg({ ...cfg, leadMin: Number(e.target.value) })} className={num} />
