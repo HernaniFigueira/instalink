@@ -75,17 +75,17 @@ export default function PaginaPage() {
             <a href={`/${business.slug}`} target="_blank" className="text-emerald-700 font-semibold hover:underline inline-flex items-center gap-1">instalink.app/{business.slug} <Icon n="external" size={12} /></a>
           </p>
         </div>
-        <a href={`/${business.slug}`} target="_blank" className="text-sm font-bold bg-zinc-900 text-white px-4 py-2.5 rounded-xl hover:bg-zinc-700 inline-flex items-center gap-2">
+        <a href={`/${business.slug}`} target="_blank" className="text-sm font-bold bg-zinc-900 text-white px-4 py-2.5 rounded-md hover:bg-zinc-700 inline-flex items-center gap-2">
           <Icon n="eye" size={16} /> Ver como o cliente vê
         </a>
       </div>
 
-      {msg && <p className="mb-4 text-sm font-medium bg-zinc-900 text-white rounded-xl px-4 py-3">{msg}</p>}
+      {msg && <p className="mb-4 text-sm font-medium bg-zinc-900 text-white rounded-md px-4 py-3">{msg}</p>}
 
       <div className="flex gap-2 mb-5">
         {([['blocks', 'Blocos'], ['theme', 'Visual'], ['publish', 'Publicar']] as const).map(([id, label]) => (
           <button key={id} onClick={() => setTab(id)}
-            className={cn('text-sm font-bold px-4 py-2.5 rounded-xl', tab === id ? 'bg-zinc-900 text-white' : 'bg-white border border-zinc-200 text-zinc-600')}>
+            className={cn('text-sm font-bold px-4 py-2.5 rounded-md', tab === id ? 'bg-zinc-900 text-white' : 'bg-white border border-zinc-200 text-zinc-600')}>
             {label}
           </button>
         ))}
@@ -95,7 +95,7 @@ export default function PaginaPage() {
         <div className="grid lg:grid-cols-[1fr_280px] gap-4 items-start">
           <div className="space-y-2.5">
             {blocks.map((b, i) => (
-              <div key={b.id} className={cn('bg-white border rounded-2xl p-4', !b.enabled && 'opacity-60')}>
+              <div key={b.id} className={cn('bg-white border rounded-lg p-4', !b.enabled && 'opacity-60')}>
                 <div className="flex items-center gap-2">
                   <div className="flex flex-col gap-1">
                     <button disabled={i === 0} onClick={() => { const n = [...blocks]; [n[i - 1], n[i]] = [n[i], n[i - 1]]; updateBlocks(n); }}
@@ -145,7 +145,7 @@ export default function PaginaPage() {
               </div>
             ))}
           </div>
-          <div className="bg-white border border-zinc-200 rounded-2xl p-4 lg:sticky lg:top-4">
+          <div className="bg-white border border-zinc-200 rounded-lg p-4 lg:sticky lg:top-4">
             <p className="font-bold text-sm mb-1">Adicionar bloco</p>
             <p className="text-xs text-zinc-500 mb-3">Liberdade controlada: só o que converte.</p>
             <div className="flex flex-wrap gap-2">
@@ -189,7 +189,7 @@ function blockIsEmpty(b: Block, rvCounts: { pending: number; published: number }
 function BlockSettings({ block, businessId, onChange, onSave }: { block: Block; businessId: string; onChange: (s: Record<string, any>) => void; onSave: () => void }) {
   const s = block.settings || {};
   const set = (k: string, v: any) => onChange({ ...s, [k]: v });
-  const input = 'w-full rounded-xl border border-zinc-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500';
+  const input = 'w-full rounded-md border border-zinc-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500';
 
   return (
     <div className="space-y-3">
@@ -261,7 +261,7 @@ function BlockSettings({ block, businessId, onChange, onSave }: { block: Block; 
       {['profile', 'location', 'whatsapp'].includes(block.type) && (
         <p className="text-xs text-zinc-500">Este bloco usa os dados do negócio automaticamente (nome, logo, endereço, WhatsApp). Ajuste em <strong>Configurações</strong>.</p>
       )}
-      <button onClick={onSave} className="text-sm font-bold bg-zinc-900 text-white px-4 py-2 rounded-xl hover:bg-zinc-700">Salvar bloco</button>
+      <button onClick={onSave} className="text-sm font-bold bg-zinc-900 text-white px-4 py-2 rounded-md hover:bg-zinc-700">Salvar bloco</button>
     </div>
   );
 }
@@ -287,7 +287,7 @@ function FaqEditor({ items: rawItems, onChange, inputClass }: {
   return (
     <div className="space-y-3">
       {items.map((item, index) => (
-        <div key={index} className="rounded-xl border border-zinc-200 bg-zinc-50/60 p-3 sm:p-4 space-y-3">
+        <div key={index} className="rounded-md border border-zinc-200 bg-zinc-50/60 p-3 sm:p-4 space-y-3">
           <div className="flex items-center justify-between gap-3">
             <p className="text-sm font-bold text-zinc-700">Pergunta {index + 1}</p>
             {savedItems.length > 0 && (
@@ -325,7 +325,7 @@ function FaqEditor({ items: rawItems, onChange, inputClass }: {
       <button
         type="button"
         onClick={() => onChange([...items, { q: '', a: '' }])}
-        className="text-sm font-bold bg-zinc-100 text-zinc-700 px-4 py-2 rounded-xl hover:bg-zinc-200"
+        className="text-sm font-bold bg-zinc-100 text-zinc-700 px-4 py-2 rounded-md hover:bg-zinc-200"
       >
         + Adicionar pergunta
       </button>
@@ -342,7 +342,7 @@ function ReviewsEditor({ businessId }: { businessId: string }) {
   const [msg, setMsg] = useState('');
   const [loading, setLoading] = useState(true);
   const [acting, setActing] = useState('');
-  const input = 'w-full rounded-xl border border-zinc-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500';
+  const input = 'w-full rounded-md border border-zinc-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500';
 
   function load() {
     fetch(`/api/reviews?businessId=${businessId}&manage=1`)
@@ -407,7 +407,7 @@ function ReviewsEditor({ businessId }: { businessId: string }) {
 
   function row(r: any) {
     return (
-      <div key={r.id} className="border border-zinc-200 rounded-xl p-3">
+      <div key={r.id} className="border border-zinc-200 rounded-md p-3">
         <div className="flex items-center gap-1.5 flex-wrap">
           <span className="inline-flex items-center gap-1 text-xs font-extrabold text-amber-600">
             <Icon n="star" size={13} /> {r.rating}/5
@@ -447,7 +447,7 @@ function ReviewsEditor({ businessId }: { businessId: string }) {
   }
 
   return (
-    <div className="rounded-2xl border border-zinc-200 bg-zinc-50 p-3 space-y-3">
+    <div className="rounded-lg border border-zinc-200 bg-zinc-50 p-3 space-y-3">
       <p className="text-xs font-bold text-zinc-500">AVALIAÇÕES DOS CLIENTES (vão para a página ao publicar — máx. 4 no ar)</p>
       {loading ? (
         <p className="text-sm text-zinc-500">Carregando…</p>
@@ -523,7 +523,7 @@ function ThemeEditor({ theme, presetId, onChange, onSave, saving }: {
   ];
   return (
     <div className="space-y-4">
-      <div className="bg-white border border-zinc-200 rounded-2xl p-5">
+      <div className="bg-white border border-zinc-200 rounded-lg p-5">
         <div className="flex flex-wrap items-center justify-between gap-2 mb-1">
           <p className="font-bold text-sm">Modelos prontos</p>
           {match ? (
@@ -540,7 +540,7 @@ function ThemeEditor({ theme, presetId, onChange, onSave, saving }: {
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
           {THEME_PRESETS.map((p) => (
             <button key={p.id} onClick={() => onChange({ ...p.theme }, p.id)}
-              className={cn('text-left rounded-xl border-2 p-1.5 transition-all hover:-translate-y-0.5', match === p.id ? 'border-zinc-900' : 'border-transparent hover:border-zinc-200')}
+              className={cn('text-left rounded-md border-2 p-1.5 transition-all hover:-translate-y-0.5', match === p.id ? 'border-zinc-900' : 'border-transparent hover:border-zinc-200')}
               aria-label={`Aplicar modelo ${p.name}`}>
               <span className="block rounded-lg overflow-hidden border border-black/10" style={{ background: p.theme.background }}>
                 <span className="block p-2">
@@ -562,7 +562,7 @@ function ThemeEditor({ theme, presetId, onChange, onSave, saving }: {
       </div>
 
       <div className="grid lg:grid-cols-2 gap-4 items-start">
-        <details className="bg-white border border-zinc-200 rounded-2xl p-5" open={!match}>
+        <details className="bg-white border border-zinc-200 rounded-lg p-5" open={!match}>
           <summary className="font-bold text-sm cursor-pointer">Ajustar cores e detalhes</summary>
           <div className="grid grid-cols-2 gap-4 mt-4">
             {colors.map(([key, label]) => (
@@ -570,7 +570,7 @@ function ThemeEditor({ theme, presetId, onChange, onSave, saving }: {
                 <span className="text-xs font-bold text-zinc-500">{label.toUpperCase()}</span>
                 <span className="mt-1 flex items-center gap-2">
                   <input type="color" value={theme[key] as string} onChange={(e) => set(key, e.target.value)} className="w-10 h-10 rounded-lg border border-zinc-200 bg-white p-1 shrink-0" />
-                  <input value={theme[key] as string} onChange={(e) => set(key, e.target.value)} className="w-full min-w-0 rounded-xl border border-zinc-300 px-2.5 py-1.5 text-xs font-mono" />
+                  <input value={theme[key] as string} onChange={(e) => set(key, e.target.value)} className="w-full min-w-0 rounded-md border border-zinc-300 px-2.5 py-1.5 text-xs font-mono" />
                 </span>
               </label>
             ))}
@@ -583,24 +583,24 @@ function ThemeEditor({ theme, presetId, onChange, onSave, saving }: {
             </label>
             <label className="block">
               <span className="text-xs font-bold text-zinc-500">TIPOGRAFIA</span>
-              <select value={theme.font} onChange={(e) => set('font', e.target.value)} className="mt-1 w-full rounded-xl border border-zinc-300 px-2 py-2 text-sm">
+              <select value={theme.font} onChange={(e) => set('font', e.target.value)} className="mt-1 w-full rounded-md border border-zinc-300 px-2 py-2 text-sm">
                 {fonts.map(([v, l]) => <option key={v} value={v}>{l}</option>)}
               </select>
             </label>
             <label className="block">
               <span className="text-xs font-bold text-zinc-500">BOTÕES</span>
-              <select value={theme.buttonStyle} onChange={(e) => set('buttonStyle', e.target.value)} className="mt-1 w-full rounded-xl border border-zinc-300 px-2 py-2 text-sm">
+              <select value={theme.buttonStyle} onChange={(e) => set('buttonStyle', e.target.value)} className="mt-1 w-full rounded-md border border-zinc-300 px-2 py-2 text-sm">
                 <option value="solid">Cheio</option>
                 <option value="soft">Suave</option>
                 <option value="outline">Contorno</option>
               </select>
             </label>
           </div>
-          <button onClick={onSave} disabled={saving} className="mt-4 text-sm font-bold bg-zinc-900 text-white px-5 py-2.5 rounded-xl hover:bg-zinc-700 disabled:opacity-50">
+          <button onClick={onSave} disabled={saving} className="mt-4 text-sm font-bold bg-zinc-900 text-white px-5 py-2.5 rounded-md hover:bg-zinc-700 disabled:opacity-50">
             {saving ? 'Salvando…' : 'Salvar visual'}
           </button>
         </details>
-        <div className="rounded-2xl p-5" style={{ background: theme.background, color: theme.text }}>
+        <div className="rounded-lg p-5" style={{ background: theme.background, color: theme.text }}>
           <p className="text-xs font-bold opacity-60 mb-3">PRÉVIA AO VIVO</p>
           <div className="text-center mb-3">
             <div className="w-14 h-14 mx-auto rounded-full flex items-center justify-center font-black"
@@ -624,12 +624,12 @@ function PublishTab({ business, onSlug, onPublish }: { business: Business; busin
   const origin = typeof window !== 'undefined' ? window.location.origin : '';
   return (
     <div className="grid lg:grid-cols-2 gap-4 items-start">
-      <div className="bg-white border border-zinc-200 rounded-2xl p-5 space-y-4">
+      <div className="bg-white border border-zinc-200 rounded-lg p-5 space-y-4">
         <div>
           <p className="font-bold text-sm">Status</p>
           <p className="text-sm text-zinc-500 mt-0.5">{business.published ? <><span className="inline-block w-2.5 h-2.5 rounded-full bg-emerald-500 align-middle" /> Sua página está no ar.</> : <><span className="inline-block w-2.5 h-2.5 rounded-full bg-amber-400 align-middle" /> Sua página está como rascunho (só você vê).</>}</p>
           <button onClick={() => onPublish(!business.published)}
-            className={cn('mt-3 text-sm font-bold px-5 py-2.5 rounded-xl', business.published ? 'bg-zinc-100 hover:bg-zinc-200' : 'bg-emerald-600 text-white hover:bg-emerald-500')}>
+            className={cn('mt-3 text-sm font-bold px-5 py-2.5 rounded-md', business.published ? 'bg-zinc-100 hover:bg-zinc-200' : 'bg-emerald-600 text-white hover:bg-emerald-500')}>
             {business.published ? 'Despublicar' : 'Publicar página'}
           </button>
         </div>
@@ -637,19 +637,19 @@ function PublishTab({ business, onSlug, onPublish }: { business: Business; busin
           <p className="font-bold text-sm">Endereço</p>
           <div className="mt-1.5 flex gap-2">
             <input value={slug} onChange={(e) => setSlug(e.target.value.toLowerCase().replace(/[^a-z0-9]/g, ''))}
-              className="flex-1 rounded-xl border border-zinc-300 px-3 py-2.5 text-sm font-mono" />
-            <button onClick={() => onSlug(slug)} className="text-sm font-bold bg-zinc-900 text-white px-4 py-2.5 rounded-xl">Salvar</button>
+              className="flex-1 rounded-md border border-zinc-300 px-3 py-2.5 text-sm font-mono" />
+            <button onClick={() => onSlug(slug)} className="text-sm font-bold bg-zinc-900 text-white px-4 py-2.5 rounded-md">Salvar</button>
           </div>
           <p className="text-xs text-zinc-500 mt-1">instalink.app/{slug}</p>
         </div>
       </div>
-      <div className="bg-white border border-zinc-200 rounded-2xl p-5 text-center">
+      <div className="bg-white border border-zinc-200 rounded-lg p-5 text-center">
         <p className="font-bold text-sm">QR Code da sua página</p>
         <p className="text-xs text-zinc-500 mb-3">Imprima e cole no balcão, cardápio ou vitrine.</p>
         <img src={`/api/qr?text=${encodeURIComponent(`${origin}/${business.slug}`)}`} alt="QR Code da página"
-          className="mx-auto w-48 h-48 rounded-2xl border border-zinc-200" />
+          className="mx-auto w-48 h-48 rounded-lg border border-zinc-200" />
         <a href={`/api/qr?text=${encodeURIComponent(`${origin}/${business.slug}`)}`} download={`qr-${business.slug}.png`}
-          className="inline-block mt-3 text-sm font-bold bg-zinc-100 px-4 py-2 rounded-xl hover:bg-zinc-200">Baixar QR</a>
+          className="inline-block mt-3 text-sm font-bold bg-zinc-100 px-4 py-2 rounded-md hover:bg-zinc-200">Baixar QR</a>
       </div>
     </div>
   );

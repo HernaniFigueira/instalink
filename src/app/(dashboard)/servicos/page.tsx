@@ -111,35 +111,35 @@ export default function ServicosPage() {
       <div className="flex gap-2 mb-5">
         {([['services', 'Serviços'], ['team', 'Equipe'], ['hours', 'Horários']] as const).map(([id, label]) => (
           <button key={id} onClick={() => setTab(id)}
-            className={cn('text-sm font-bold px-4 py-2.5 rounded-xl', tab === id ? 'bg-zinc-900 text-white' : 'bg-white border border-zinc-200 text-zinc-600')}>
+            className={cn('text-sm font-bold px-4 py-2.5 rounded-md', tab === id ? 'bg-zinc-900 text-white' : 'bg-white border border-zinc-200 text-zinc-600')}>
             {label}
           </button>
         ))}
       </div>
 
-      {msg && <p className="mb-4 text-sm font-medium bg-zinc-900 text-white rounded-xl px-4 py-3">{msg}</p>}
+      {msg && <p className="mb-4 text-sm font-medium bg-zinc-900 text-white rounded-md px-4 py-3">{msg}</p>}
       {!loaded && <ListSkeleton rows={3} />}
 
       {loaded && tab === 'services' && (
         <>
           <div className="flex gap-2 mb-4">
-            <button onClick={() => setShowCat(!showCat)} className="text-sm font-bold bg-white border border-zinc-200 px-4 py-2.5 rounded-xl">+ Categoria</button>
-            <button onClick={() => { setEditing(null); setShowForm(true); }} className="text-sm font-bold bg-zinc-900 text-white px-4 py-2.5 rounded-xl">+ Serviço</button>
+            <button onClick={() => setShowCat(!showCat)} className="text-sm font-bold bg-white border border-zinc-200 px-4 py-2.5 rounded-md">+ Categoria</button>
+            <button onClick={() => { setEditing(null); setShowForm(true); }} className="text-sm font-bold bg-zinc-900 text-white px-4 py-2.5 rounded-md">+ Serviço</button>
           </div>
           {showCat && (
             <form onSubmit={(e) => { e.preventDefault(); call('category.save', { name: catName, kind: 'service' }).then(() => { setCatName(''); setShowCat(false); }).catch((err) => setMsg(err.message)); }}
-              className="mb-4 bg-white border border-zinc-200 rounded-2xl p-4 flex gap-2">
+              className="mb-4 bg-white border border-zinc-200 rounded-lg p-4 flex gap-2">
               <input value={catName} onChange={(e) => setCatName(e.target.value)} placeholder="Nome da categoria (ex: Cabelo)"
-                className="flex-1 rounded-xl border border-zinc-300 px-3 py-2.5 text-sm" autoFocus />
-              <button className="text-sm font-bold bg-zinc-900 text-white px-4 py-2.5 rounded-xl">Salvar</button>
+                className="flex-1 rounded-md border border-zinc-300 px-3 py-2.5 text-sm" autoFocus />
+              <button className="text-sm font-bold bg-zinc-900 text-white px-4 py-2.5 rounded-md">Salvar</button>
             </form>
           )}
           {services.length === 0 ? (
-            <div className="bg-white border border-zinc-200 rounded-2xl text-center py-14 px-6">
-              <div className="mx-auto w-12 h-12 rounded-2xl bg-zinc-100 flex items-center justify-center text-zinc-400"><Icon n="scissors" size={24} /></div>
+            <div className="bg-white border border-zinc-200 rounded-lg text-center py-14 px-6">
+              <div className="mx-auto w-12 h-12 rounded-lg bg-zinc-100 flex items-center justify-center text-zinc-400"><Icon n="scissors" size={24} /></div>
               <h3 className="font-bold mt-3">Nenhum serviço ainda</h3>
               <p className="text-sm text-zinc-500 mt-1">Cadastre o primeiro para exibir na página e receber agendamentos.</p>
-              <button onClick={() => { setEditing(null); setShowForm(true); }} className="mt-4 text-sm font-bold bg-zinc-900 text-white px-5 py-2.5 rounded-xl">Adicionar serviço</button>
+              <button onClick={() => { setEditing(null); setShowForm(true); }} className="mt-4 text-sm font-bold bg-zinc-900 text-white px-5 py-2.5 rounded-md">Adicionar serviço</button>
             </div>
           ) : (
             <div className="space-y-2.5">
@@ -148,11 +148,11 @@ export default function ServicosPage() {
                   ? 'toda a equipe'
                   : (sv.professionalIds || []).map((id) => pros.find((p) => p.id === id)?.name || '?').join(', ');
                 return (
-                  <div key={sv.id} className={cn('bg-white border border-zinc-200 rounded-2xl p-4 flex items-center gap-3', !sv.active && 'opacity-60')}>
+                  <div key={sv.id} className={cn('bg-white border border-zinc-200 rounded-lg p-4 flex items-center gap-3', !sv.active && 'opacity-60')}>
                     {sv.image ? (
-                      <img src={sv.image} alt={sv.name} className="w-11 h-11 rounded-xl object-cover shrink-0" />
+                      <img src={sv.image} alt={sv.name} className="w-11 h-11 rounded-md object-cover shrink-0" />
                     ) : (
-                      <div className="w-11 h-11 rounded-xl bg-zinc-100 flex items-center justify-center font-extrabold text-zinc-400 shrink-0">{sv.name.slice(0, 1)}</div>
+                      <div className="w-11 h-11 rounded-md bg-zinc-100 flex items-center justify-center font-extrabold text-zinc-400 shrink-0">{sv.name.slice(0, 1)}</div>
                     )}
                     <div className="flex-1 min-w-0">
                       <p className="font-bold text-sm">{sv.name} {sv.featured && <Icon n="star" size={13} className="inline -mt-1 text-amber-500" />}</p>
@@ -226,7 +226,7 @@ function DeleteSheet({ name, kindLabel, blocked, onDeactivate, onConfirm, onClos
       <div className="relative w-full sm:max-w-md bg-white rounded-t-3xl sm:rounded-3xl p-6 space-y-3">
         <h3 className="font-bold text-lg">Excluir {kindLabel} “{name}”?</h3>
         {blocked ? (
-          <p className="text-sm text-amber-800 bg-amber-50 border border-amber-200 rounded-xl px-4 py-3">
+          <p className="text-sm text-amber-800 bg-amber-50 border border-amber-200 rounded-md px-4 py-3">
             Existem agendamentos futuros vinculados. Excluir vai deixá-los sem {kindLabel === 'serviço' ? 'serviço' : 'profissional'}.
             Recomendamos <strong>desativar</strong>: some da página, mas o histórico continua íntegro.
           </p>
@@ -235,10 +235,10 @@ function DeleteSheet({ name, kindLabel, blocked, onDeactivate, onConfirm, onClos
         )}
         <div className="space-y-2 pt-1">
           {blocked && (
-            <button onClick={onDeactivate} className="w-full font-bold bg-zinc-900 text-white py-3 rounded-xl">Desativar (recomendado)</button>
+            <button onClick={onDeactivate} className="w-full font-bold bg-zinc-900 text-white py-3 rounded-md">Desativar (recomendado)</button>
           )}
-          <button onClick={onConfirm} className="w-full font-bold bg-red-50 text-red-600 py-3 rounded-xl">Excluir mesmo assim</button>
-          <button onClick={onClose} className="w-full font-bold bg-zinc-100 py-3 rounded-xl">Voltar</button>
+          <button onClick={onConfirm} className="w-full font-bold bg-red-50 text-red-600 py-3 rounded-md">Excluir mesmo assim</button>
+          <button onClick={onClose} className="w-full font-bold bg-zinc-100 py-3 rounded-md">Voltar</button>
         </div>
       </div>
     </div>
@@ -266,7 +266,7 @@ function ServiceForm({ businessId, service, cats, pros, onClose, onSave }: {
   const [questions, setQuestions] = useState<string[]>(service?.questions || []);
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
-  const input = 'w-full rounded-xl border border-zinc-300 px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500';
+  const input = 'w-full rounded-md border border-zinc-300 px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500';
 
   function togglePro(id: string) {
     setProIds((v) => (v.includes(id) ? v.filter((x) => x !== id) : [...v, id]));
@@ -308,7 +308,7 @@ function ServiceForm({ businessId, service, cats, pros, onClose, onSave }: {
             <div className="flex flex-wrap gap-2 mt-1.5">
               {pros.map((p) => (
                 <button type="button" key={p.id} onClick={() => togglePro(p.id)}
-                  className={cn('text-sm font-bold px-4 py-2 rounded-xl border-2', proIds.includes(p.id) ? 'border-emerald-500 bg-emerald-50 text-emerald-800' : 'border-zinc-200 text-zinc-500')}>
+                  className={cn('text-sm font-bold px-4 py-2 rounded-md border-2', proIds.includes(p.id) ? 'border-emerald-500 bg-emerald-50 text-emerald-800' : 'border-zinc-200 text-zinc-500')}>
                   {p.name}
                 </button>
               ))}
@@ -321,7 +321,7 @@ function ServiceForm({ businessId, service, cats, pros, onClose, onSave }: {
           <label className="flex items-center gap-2 text-sm font-medium"><input type="checkbox" checked={bookable} onChange={(e) => setBookable(e.target.checked)} className="w-4 h-4 accent-emerald-600" /> Aceita agendamento</label>
         </div>
         {error && <p className="text-sm font-medium text-red-600">{error}</p>}
-        <button disabled={loading} className="w-full font-bold bg-zinc-900 text-white py-3 rounded-xl disabled:opacity-50">{loading ? 'Salvando…' : 'Salvar serviço'}</button>
+        <button disabled={loading} className="w-full font-bold bg-zinc-900 text-white py-3 rounded-md disabled:opacity-50">{loading ? 'Salvando…' : 'Salvar serviço'}</button>
       </form>
     </div>
   );
@@ -354,31 +354,31 @@ function TeamEditor({ businessId, pros, onSave, onAskDelete }: {
 
   return (
     <>
-      <button onClick={() => open(null)} className="text-sm font-bold bg-zinc-900 text-white px-4 py-2.5 rounded-xl mb-4">+ Profissional</button>
+      <button onClick={() => open(null)} className="text-sm font-bold bg-zinc-900 text-white px-4 py-2.5 rounded-md mb-4">+ Profissional</button>
       {show && (
         <form onSubmit={(e) => { e.preventDefault(); setError(''); onSave('professional.save', { id: editing?.id, name, role, photo, active }).then(() => setShow(false)).catch((err) => setError(err.message)); }}
-          className="mb-4 bg-white border border-zinc-200 rounded-2xl p-4 space-y-2.5">
+          className="mb-4 bg-white border border-zinc-200 rounded-lg p-4 space-y-2.5">
           <p className="font-bold text-sm">{editing ? 'Editar profissional' : 'Novo profissional'}</p>
-          <input value={name} onChange={(e) => setName(e.target.value)} placeholder="Nome * (ex: João)" className="w-full rounded-xl border border-zinc-300 px-3 py-2.5 text-sm" autoFocus />
-          <input value={role} onChange={(e) => setRole(e.target.value)} placeholder="Função (ex: Barbeiro)" className="w-full rounded-xl border border-zinc-300 px-3 py-2.5 text-sm" />
+          <input value={name} onChange={(e) => setName(e.target.value)} placeholder="Nome * (ex: João)" className="w-full rounded-md border border-zinc-300 px-3 py-2.5 text-sm" autoFocus />
+          <input value={role} onChange={(e) => setRole(e.target.value)} placeholder="Função (ex: Barbeiro)" className="w-full rounded-md border border-zinc-300 px-3 py-2.5 text-sm" />
           <ImageUpload label="FOTO DO PROFISSIONAL" value={photo} onChange={setPhoto} businessId={businessId} circle />
           <label className="flex items-center gap-2 text-sm font-medium"><input type="checkbox" checked={active} onChange={(e) => setActive(e.target.checked)} className="w-4 h-4 accent-emerald-600" /> Ativo (aparece na agenda)</label>
           {error && <p className="text-sm font-medium text-red-600">{error}</p>}
           <div className="flex gap-2">
-            <button className="text-sm font-bold bg-zinc-900 text-white px-4 py-2.5 rounded-xl">Salvar</button>
-            <button type="button" onClick={() => setShow(false)} className="text-sm font-bold bg-zinc-100 px-4 py-2.5 rounded-xl">Voltar</button>
+            <button className="text-sm font-bold bg-zinc-900 text-white px-4 py-2.5 rounded-md">Salvar</button>
+            <button type="button" onClick={() => setShow(false)} className="text-sm font-bold bg-zinc-100 px-4 py-2.5 rounded-md">Voltar</button>
           </div>
         </form>
       )}
       {pros.length === 0 ? (
-        <div className="bg-white border border-zinc-200 rounded-2xl text-center py-12 px-6">
+        <div className="bg-white border border-zinc-200 rounded-lg text-center py-12 px-6">
           <p className="font-bold">Só você por aqui? Sem problema.</p>
           <p className="text-sm text-zinc-500 mt-1">A agenda funciona sem equipe. Adicione profissionais se precisar.</p>
         </div>
       ) : (
         <div className="space-y-2.5">
           {pros.map((p) => (
-            <div key={p.id} className={cn('bg-white border border-zinc-200 rounded-2xl p-4 flex items-center gap-3', !p.active && 'opacity-60')}>
+            <div key={p.id} className={cn('bg-white border border-zinc-200 rounded-lg p-4 flex items-center gap-3', !p.active && 'opacity-60')}>
               {p.photo ? (
                 <img src={p.photo} alt={p.name} className="w-10 h-10 rounded-full object-cover shrink-0" />
               ) : (
@@ -491,7 +491,7 @@ function HoursScopeEditor({ scopePro, rules, onSave }: {
         ))}
       </div>
       {msg && <p className="mt-3 text-sm font-medium">{msg}</p>}
-      <button onClick={submit} disabled={saving} className="mt-4 text-sm font-bold bg-zinc-900 text-white px-5 py-2.5 rounded-xl disabled:opacity-50">
+      <button onClick={submit} disabled={saving} className="mt-4 text-sm font-bold bg-zinc-900 text-white px-5 py-2.5 rounded-md disabled:opacity-50">
         {saving ? 'Salvando…' : 'Salvar horários'}
       </button>
     </div>
@@ -505,7 +505,7 @@ function HoursEditor({ rules, pros, onSave }: {
 }) {
   const [scope, setScope] = useState('');
   return (
-    <div className="bg-white border border-zinc-200 rounded-2xl p-5">
+    <div className="bg-white border border-zinc-200 rounded-lg p-5">
       <p className="font-bold text-sm">Quando você atende?</p>
       <p className="text-xs text-zinc-500 mb-4">O cliente só vê horários dentro destes períodos. Salvar aqui nunca apaga horários de outra pessoa.</p>
       {pros.length > 0 && (
@@ -557,13 +557,13 @@ function ExceptionsManager({ exceptions, onSave, onDelete }: {
   }
 
   return (
-    <div className="bg-white border border-zinc-200 rounded-2xl p-5">
+    <div className="bg-white border border-zinc-200 rounded-lg p-5">
       <p className="font-bold text-sm">Dias especiais</p>
       <p className="text-xs text-zinc-500 mb-4">Feriados, folgas e horários excepcionais — sem editar nada técnico.</p>
       {exceptions.length > 0 && (
         <div className="space-y-2 mb-4">
           {exceptions.map((x) => (
-            <div key={x.id} className="flex items-center gap-3 bg-zinc-50 border border-zinc-200 rounded-xl px-3.5 py-2.5">
+            <div key={x.id} className="flex items-center gap-3 bg-zinc-50 border border-zinc-200 rounded-md px-3.5 py-2.5">
               <div className="flex-1 min-w-0">
                 <p className="font-bold text-sm">{x.date.split('-').reverse().join('/')} · {x.closed ? 'Fechado' : `${x.start}–${x.end}`}</p>
                 {x.note && <p className="text-xs text-zinc-500">{x.note}</p>}
@@ -575,23 +575,23 @@ function ExceptionsManager({ exceptions, onSave, onDelete }: {
       )}
       <form onSubmit={submit} className="flex flex-wrap items-end gap-2.5">
         <label className="block"><span className="text-xs font-bold text-zinc-500">DATA</span>
-          <input type="date" value={date} onChange={(e) => setDate(e.target.value)} required className="block rounded-xl border border-zinc-300 px-3 py-2 text-sm mt-1" /></label>
+          <input type="date" value={date} onChange={(e) => setDate(e.target.value)} required className="block rounded-md border border-zinc-300 px-3 py-2 text-sm mt-1" /></label>
         <label className="block"><span className="text-xs font-bold text-zinc-500">TIPO</span>
-          <select value={closed ? 'closed' : 'special'} onChange={(e) => setClosed(e.target.value === 'closed')} className="block rounded-xl border border-zinc-300 px-3 py-2 text-sm mt-1">
+          <select value={closed ? 'closed' : 'special'} onChange={(e) => setClosed(e.target.value === 'closed')} className="block rounded-md border border-zinc-300 px-3 py-2 text-sm mt-1">
             <option value="closed">Fechado o dia todo</option>
             <option value="special">Horário especial</option>
           </select></label>
         {!closed && (
           <>
             <label className="block"><span className="text-xs font-bold text-zinc-500">DAS</span>
-              <input type="time" value={start} onChange={(e) => setStart(e.target.value)} className="block rounded-xl border border-zinc-300 px-3 py-2 text-sm mt-1" /></label>
+              <input type="time" value={start} onChange={(e) => setStart(e.target.value)} className="block rounded-md border border-zinc-300 px-3 py-2 text-sm mt-1" /></label>
             <label className="block"><span className="text-xs font-bold text-zinc-500">ATÉ</span>
-              <input type="time" value={end} onChange={(e) => setEnd(e.target.value)} className="block rounded-xl border border-zinc-300 px-3 py-2 text-sm mt-1" /></label>
+              <input type="time" value={end} onChange={(e) => setEnd(e.target.value)} className="block rounded-md border border-zinc-300 px-3 py-2 text-sm mt-1" /></label>
           </>
         )}
         <label className="block flex-1 min-w-[140px]"><span className="text-xs font-bold text-zinc-500">MOTIVO (OPCIONAL)</span>
-          <input value={note} onChange={(e) => setNote(e.target.value)} placeholder="Ex: Natal" className="block w-full rounded-xl border border-zinc-300 px-3 py-2 text-sm mt-1" /></label>
-        <button className="text-sm font-bold bg-zinc-900 text-white px-4 py-2.5 rounded-xl">Adicionar</button>
+          <input value={note} onChange={(e) => setNote(e.target.value)} placeholder="Ex: Natal" className="block w-full rounded-md border border-zinc-300 px-3 py-2 text-sm mt-1" /></label>
+        <button className="text-sm font-bold bg-zinc-900 text-white px-4 py-2.5 rounded-md">Adicionar</button>
       </form>
       {msg && <p className="mt-2 text-sm font-medium text-red-600">{msg}</p>}
     </div>
@@ -628,9 +628,9 @@ function BookingSettings({ businessId, initial, hasTeam, onSaved }: {
     }
   }
 
-  const num = 'w-full rounded-xl border border-zinc-300 px-3 py-2 text-sm mt-1';
+  const num = 'w-full rounded-md border border-zinc-300 px-3 py-2 text-sm mt-1';
   return (
-    <div className="bg-white border border-zinc-200 rounded-2xl p-5">
+    <div className="bg-white border border-zinc-200 rounded-lg p-5">
       <p className="font-bold text-sm">Como a agenda funciona</p>
       <p className="text-xs text-zinc-500 mb-4">Regras simples que valem para todos os agendamentos.</p>
       <div className="grid sm:grid-cols-2 gap-3.5">
@@ -656,7 +656,7 @@ function BookingSettings({ businessId, initial, hasTeam, onSaved }: {
           <input type="number" min={0} max={240} value={cfg.bufferMin} onChange={(e) => setCfg({ ...cfg, bufferMin: Number(e.target.value) })} className={num} /></label>
       </div>
       {error && <p className="mt-2 text-sm font-medium text-red-600">{error}</p>}
-      <button onClick={save} disabled={saving} className="mt-4 text-sm font-bold bg-zinc-900 text-white px-5 py-2.5 rounded-xl disabled:opacity-50">
+      <button onClick={save} disabled={saving} className="mt-4 text-sm font-bold bg-zinc-900 text-white px-5 py-2.5 rounded-md disabled:opacity-50">
         {saving ? 'Salvando…' : 'Salvar regras'}
       </button>
     </div>

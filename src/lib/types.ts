@@ -510,7 +510,7 @@ export const VALID_MEMBER_ROLES: MemberRole[] = [
 ];
 
 export type PermissionId =
-  | 'agenda' | 'clientes' | 'leads' | 'pedidos' | 'catalogo'
+  | 'dashboard' | 'agenda' | 'clientes' | 'leads' | 'pedidos' | 'catalogo'
   | 'pagina' | 'agente' | 'whatsapp' | 'campanhas'
   | 'equipe' | 'config' | 'financeiro' | 'admin';
 

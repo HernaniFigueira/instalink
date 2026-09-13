@@ -45,9 +45,11 @@ export function NewBookingSheet({ businessId, services, pros, horizonDays, initi
   const [note, setNote] = useState('');
   const [slots, setSlots] = useState<string[]>([]);
   const [loadingSlots, setLoadingSlots] = useState(false);
+  const [slotsError, setSlotsError] = useState('');
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
   const seq = useRef(0);
+  const slotSeq = useRef(0);
 
   const today = todayISO();
   const maxDate = addDaysISO(today, Math.max(1, horizonDays || 60));
@@ -56,17 +58,31 @@ export function NewBookingSheet({ businessId, services, pros, horizonDays, initi
     ? pros.filter((p) => p.active !== false && service.professionalIds.includes(p.id))
     : pros.filter((p) => p.active !== false);
 
-  useEffect(() => { setProId(''); setTime(''); setSlots([]); }, [serviceId]);
+  useEffect(() => { setProId(''); setTime(''); setSlots([]); setSlotsError(''); }, [serviceId]);
 
   useEffect(() => {
-    if (!serviceId || !date) { setSlots([]); return; }
+    if (!serviceId || !date) { setSlots([]); setSlotsError(''); setLoadingSlots(false); return; }
+    const mySeq = ++slotSeq.current;
     setLoadingSlots(true);
+    setSlotsError('');
     setTime('');
     fetch(`/api/bookings?businessId=${businessId}&serviceId=${serviceId}&date=${date}`)
-      .then((r) => r.json())
-      .then((d) => setSlots(d.slots || []))
-      .catch(() => setSlots([]))
-      .finally(() => setLoadingSlots(false));
+      .then(async (r) => {
+        const d = await r.json();
+        if (mySeq !== slotSeq.current) return;
+        if (!r.ok) throw new Error(d.error || 'Não foi possível carregar os horários.');
+        setSlots(d.slots || []);
+        if ((d.slots || []).length === 0 && d.closed) setSlotsError('');
+      })
+      .catch((e: any) => {
+        if (mySeq !== slotSeq.current) return;
+        setSlots([]);
+        setSlotsError(e.message || 'Não foi possível carregar os horários.');
+      })
+      .finally(() => {
+        if (mySeq !== slotSeq.current) return;
+        setLoadingSlots(false);
+      });
   }, [businessId, serviceId, date]);
 
   // Busca no CRM (nome OU WhatsApp) com debounce.
@@ -139,16 +155,16 @@ export function NewBookingSheet({ businessId, services, pros, horizonDays, initi
     }
   }
 
-  const input = 'w-full rounded-xl border border-zinc-300 px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500';
-  const label = 'text-xs font-bold text-zinc-500';
+  const input = 'w-full rounded-md border border-zinc-300 px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-zinc-900 focus:border-zinc-900';
+  const label = 'text-xs font-semibold tracking-wide uppercase text-zinc-500';
 
   return (
     <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4" role="dialog" aria-modal="true" aria-label="Novo agendamento">
-      <div className="absolute inset-0 bg-black/50" onClick={onClose} />
-      <div className="relative w-full sm:max-w-md bg-white rounded-t-3xl sm:rounded-3xl max-h-[92vh] overflow-y-auto">
-        <div className="sticky top-0 bg-white/95 backdrop-blur px-5 py-4 flex items-center justify-between border-b border-zinc-100">
-          <p className="font-bold text-lg">Novo agendamento</p>
-          <button onClick={onClose} className="font-bold text-zinc-400 p-2 inline-flex" aria-label="Fechar"><Icon n="x" size={16} /></button>
+      <div className="absolute inset-0 bg-black/40" onClick={onClose} />
+      <div className="relative w-full sm:max-w-md bg-white rounded-lg border border-zinc-200 max-h-[92vh] overflow-y-auto shadow-lg">
+        <div className="sticky top-0 bg-white px-5 py-3 flex items-center justify-between border-b border-zinc-200">
+          <p className="font-semibold">Novo agendamento</p>
+          <button onClick={onClose} className="text-zinc-400 hover:text-zinc-600 p-1.5" aria-label="Fechar"><Icon n="x" size={16} /></button>
         </div>
         <div className="px-5 py-4 space-y-3">
           {/* 1. Cliente */}
@@ -231,13 +247,17 @@ export function NewBookingSheet({ businessId, services, pros, horizonDays, initi
           {date && serviceId && (
             <div>
               <span className={label}>HORÁRIO *</span>
-              {loadingSlots ? <p className="text-xs text-zinc-500 mt-1">Buscando horários livres…</p> : slots.length === 0 ? (
-                <p className="text-xs text-amber-700 mt-1">Nenhum horário livre nesta data para este serviço.</p>
+              {loadingSlots ? (
+                <p className="text-xs text-zinc-500 mt-1.5 flex items-center gap-1.5"><span className="w-3 h-3 border-2 border-zinc-300 border-t-zinc-600 rounded-full animate-spin" /> Carregando horários…</p>
+              ) : slotsError ? (
+                <p className="text-xs font-medium text-red-600 mt-1.5">{slotsError}</p>
+              ) : slots.length === 0 ? (
+                <p className="text-xs text-amber-700 mt-1.5 bg-amber-50 border border-amber-200 rounded-md px-3 py-2">Nenhum horário disponível.</p>
               ) : (
-                <div className="flex flex-wrap gap-2 mt-1.5">
+                <div className="flex flex-wrap gap-1.5 mt-1.5">
                   {slots.map((t) => (
                     <button key={t} onClick={() => setTime(t)}
-                      className={`text-xs font-bold px-3 py-2 rounded-lg border ${time === t ? 'bg-zinc-900 text-white border-zinc-900' : 'bg-white border-zinc-200'}`}>
+                      className={`text-xs font-medium px-3 py-1.5 rounded-md border ${time === t ? 'bg-zinc-900 text-white border-zinc-900' : 'bg-white border-zinc-200 hover:border-zinc-300'}`}>
                       {t}
                     </button>
                   ))}

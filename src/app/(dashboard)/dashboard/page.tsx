@@ -2,7 +2,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
-import { Card, Stat, Badge, PageSkeleton } from '@/components/ui';
+import { Badge, PageSkeleton } from '@/components/ui';
 import { Icon } from '@/components/icons';
 import { money } from '@/lib/utils';
 import { humanDay } from '@/lib/tz';
@@ -10,7 +10,7 @@ import { ORDER_STATUS, BOOKING_STATUS, LEAD_STATUS, toneCls, type StatusDef } fr
 
 interface Overview {
   user: { name: string };
-  business: { id: string; name: string; slug: string; published: boolean };
+  business: { id: string; name: string; slug: string; logo?: string; description?: string; published: boolean };
   totals: {
     visitors: number; uniqueVisitors: number; clicks: number; leads: number; leadsNew: number;
     orders: number; bookings: number; conversions: number; newOrders: number; pendingBookings: number;
@@ -56,18 +56,15 @@ export default function DashboardPage() {
         setShowChecklist(d.pct < 100);
       })
       .catch(() => {});
-  }, [businessId, period]);
+  }, [businessId, period, router]);
 
   useEffect(() => { load(); }, [load]);
 
   if (!data) return <PageSkeleton />;
 
-  const {
-    user, business, totals, revenue, upcoming, checklist, pct, recent,
-    today, needsClosure = [], crm, pageStats, whatsapp, hasBookingsModule,
-  } = data;
+  const { user, business, totals, revenue, upcoming, checklist, pct, recent, today, needsClosure = [], crm, pageStats, whatsapp, hasBookingsModule } = data;
   const showMoney = data.showMoney !== false;
-  const pendencies = (needsClosure || []).filter((b) => true);
+  const pendencies = needsClosure;
   const q = `?b=${business.id}`;
   const next = checklist.find((c) => !c.done);
   const hasActivity = recent.orders.length + recent.bookings.length + recent.leads.length > 0;
@@ -79,258 +76,238 @@ export default function DashboardPage() {
   return (
     <>
       {welcome && (
-        <div className="mb-6 rounded-2xl bg-emerald-600 text-white p-5">
-          <p className="font-bold text-lg flex items-center gap-2"><Icon n="checkCircle" size={22} /> Sua estrutura está pronta, {user.name.split(' ')[0]}!</p>
-          <p className="text-sm text-emerald-100 mt-1">Complete a configuração abaixo e publique sua página.</p>
+        <div className="mb-4 border border-zinc-900 bg-zinc-900 text-white px-4 py-3 flex items-start gap-3">
+          <div className="w-8 h-8 rounded-md bg-white text-zinc-900 flex items-center justify-center font-bold shrink-0">✓</div>
+          <div>
+            <p className="text-sm font-semibold">Sua estrutura está pronta, {user.name.split(' ')[0]}!</p>
+            <p className="text-xs text-zinc-400 mt-0.5">Complete a configuração abaixo e publique sua página.</p>
+          </div>
         </div>
       )}
 
-      {/* ── TOPO: cabeçalho operacional ── */}
-      <div className="flex flex-wrap items-start justify-between gap-3 mb-6">
-        <div>
-          <h1 className="text-2xl font-bold tracking-tight">Dashboard</h1>
-          <p className="text-sm text-zinc-500 mt-1 flex flex-wrap items-center gap-2">
-            <span className="font-semibold text-zinc-700">{business.name}</span>
-            {business.published ? <Badge tone="green"><span className="inline-flex items-center gap-1.5"><span className="w-2 h-2 rounded-full bg-emerald-600" /> Publicada</span></Badge> : <Badge tone="amber"><span className="inline-flex items-center gap-1.5"><span className="w-2 h-2 rounded-full border-2 border-amber-500" /> Rascunho</span></Badge>}
-            <a href={`/${business.slug}`} target="_blank" className="text-emerald-700 font-semibold hover:underline inline-flex items-center gap-1">instalink.app/{business.slug} <Icon n="external" size={12} /></a>
-          </p>
+      {/* Identidade da empresa — workspace header (assume marca do cliente) */}
+      <div className="flex items-center gap-3 mb-5 pb-4 border-b border-zinc-200">
+        <div className="w-10 h-10 rounded-md overflow-hidden bg-zinc-900 text-white flex items-center justify-center font-bold shrink-0 border border-zinc-200">
+          {business.logo ? (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img src={business.logo} alt={business.name} className="w-full h-full object-cover" />
+          ) : business.name.slice(0, 1).toUpperCase()}
         </div>
-        <div className="flex items-center gap-2">
-          <div className="flex gap-1 bg-white border border-zinc-200 rounded-full p-1">
+        <div className="min-w-0 flex-1">
+          <h1 className="text-base font-semibold leading-none text-zinc-900 truncate">{business.name}</h1>
+          <div className="flex items-center gap-2 mt-1">
+            {business.published ? <span className="text-[11px] font-medium text-emerald-700 bg-emerald-50 border border-emerald-200 rounded-full px-2 py-0.5 inline-flex items-center gap-1"><span className="w-1.5 h-1.5 rounded-full bg-emerald-600" /> Publicada</span> : <span className="text-[11px] font-medium text-amber-800 bg-amber-50 border border-amber-200 rounded-full px-2 py-0.5">Rascunho</span>}
+            <a href={`/${business.slug}`} target="_blank" className="text-xs text-zinc-500 hover:text-zinc-700 inline-flex items-center gap-1">Ver site <Icon n="external" size={10} /></a>
+          </div>
+        </div>
+        <div className="hidden sm:flex items-center gap-2 ml-auto">
+          <div className="flex bg-white border border-zinc-200 rounded-md p-0.5">
             {[7, 30].map((p) => (
-              <button key={p} onClick={() => setPeriod(p)}
-                className={`text-xs font-bold px-3 py-1.5 rounded-full ${period === p ? 'bg-zinc-900 text-white' : 'text-zinc-500'}`}>
-                {p === 7 ? '7 dias' : '30 dias'}
-              </button>
+              <button key={p} onClick={() => setPeriod(p)} className={`text-xs font-medium px-3 py-1 rounded ${period === p ? 'bg-zinc-900 text-white' : 'text-zinc-500'}`}>{p}d</button>
             ))}
           </div>
-          <Link href={`/pagina${q}`} className="text-sm font-bold bg-zinc-900 text-white px-4 py-2.5 rounded-xl hover:bg-zinc-700">Editar página</Link>
+          <Link href={`/pagina${q}`} className="text-xs font-semibold bg-zinc-900 text-white px-3 py-1.5 rounded-md hover:bg-zinc-800">Editar página</Link>
         </div>
       </div>
+      <div className="sm:hidden flex items-center gap-2 mb-4">
+        <div className="flex bg-white border border-zinc-200 rounded-md p-0.5">
+          {[7, 30].map((p) => (
+            <button key={p} onClick={() => setPeriod(p)} className={`text-xs font-medium px-3 py-1 rounded ${period === p ? 'bg-zinc-900 text-white' : 'text-zinc-500'}`}>{p === 7 ? '7 dias' : '30 dias'}</button>
+          ))}
+        </div>
+        <Link href={`/pagina${q}`} className="text-xs font-semibold bg-zinc-900 text-white px-3 py-1.5 rounded-md ml-auto">Editar página</Link>
+      </div>
+
+      <h2 className="text-sm font-semibold text-zinc-900 mb-3">Dashboard</h2>
 
       {pendencies.length > 0 && (
-        <Card className="mb-4 p-4 border-amber-300 bg-amber-50">
-          <p className="text-sm font-extrabold text-amber-900 flex items-center gap-2">
-            <Icon n="alert" size={16} />
-            {pendencies.length === 1 ? '1 atendimento precisa de fechamento' : `${pendencies.length} atendimentos precisam de fechamento`}
-          </p>
-          <p className="text-xs text-amber-900 mt-1">
-            O horário passou e o status continua em aberto — conclua, registre falta, cancele ou reagende. Nada é fechado sozinho.
-          </p>
-          <div className="flex flex-wrap gap-2 mt-2.5">
-            {pendencies.slice(0, 4).map((b) => (
-              <Link key={b.id} href={`/agenda${q}`}
-                className="text-xs font-bold bg-white border border-amber-300 text-amber-900 px-3 py-2 rounded-lg">
+        <div className="mb-3 border border-amber-200 bg-amber-50 px-3 py-2.5 flex flex-wrap items-center gap-2">
+          <span className="text-xs font-semibold text-amber-900 inline-flex items-center gap-1.5"><Icon n="calendar" size={14} /> {pendencies.length} precisam de fechamento</span>
+          <span className="text-xs text-amber-800 hidden sm:inline">· horário passou e continua em aberto</span>
+          <span className="flex flex-wrap gap-1.5 ml-auto">
+            {pendencies.slice(0, 3).map((b) => (
+              <Link key={b.id} href={`/agenda${q}`} className="text-xs font-medium bg-white border border-amber-200 text-amber-900 px-2.5 py-1 rounded-md hover:bg-amber-50">
                 {b.date.slice(8, 10)}/{b.date.slice(5, 7)} {b.time} · {b.customerName}
               </Link>
             ))}
-            <Link href={`/agenda${q}`} className="text-xs font-bold text-amber-900 underline self-center">Resolver na agenda →</Link>
-          </div>
-        </Card>
+            {pendencies.length > 3 && <Link href={`/agenda${q}`} className="text-xs font-medium text-amber-900 underline self-center">+{pendencies.length - 3}</Link>}
+          </span>
+        </div>
       )}
 
       {next && (
-        <Card className="mb-6 p-5 border-emerald-200 bg-emerald-50/50">
-          <p className="text-sm font-semibold text-zinc-900">Próxima ação importante: <strong>{next.label}</strong></p>
-          <Link href={next.href} className="inline-block mt-2 text-sm font-bold text-white bg-emerald-600 px-4 py-2 rounded-xl hover:bg-emerald-500">Fazer agora</Link>
-        </Card>
+        <div className="mb-4 bg-white border border-zinc-200 px-3 py-2.5 flex items-center justify-between gap-3">
+          <p className="text-sm text-zinc-700">Próxima ação: <strong className="text-zinc-900">{next.label}</strong></p>
+          <Link href={next.href} className="text-xs font-semibold bg-zinc-900 text-white px-3 py-1.5 rounded-md shrink-0">Fazer agora</Link>
+        </div>
       )}
 
-      {/* ── MEIO: resumo principal ── */}
-      <div className="grid xl:grid-cols-12 gap-4 mb-6">
-        <Card className="xl:col-span-4 p-5">
-          <p className="text-xs font-bold uppercase tracking-wider text-zinc-400">Receita</p>
-          {!showMoney ? (
-            <p className="text-sm text-zinc-500 mt-3">Seu acesso não inclui o financeiro.</p>
-          ) : (
-          <>
-          <p className="text-3xl font-extrabold tracking-tight mt-1">{money(revenue.total)}</p>
-          <p className={`text-xs font-bold mt-1 ${delta >= 0 ? 'text-emerald-600' : 'text-red-600'}`}>
-            {delta >= 0 ? '▲' : '▼'} {money(Math.abs(delta))} vs. {revenue.period} dias anteriores
-          </p>
-          <div className="grid grid-cols-2 gap-2 mt-4 pt-4 border-t border-zinc-100">
-            <div><p className="text-sm font-extrabold">{revenue.orders}</p><p className="text-[11px] text-zinc-500">pedidos</p></div>
-            <div><p className="text-sm font-extrabold">{money(revenue.ticket)}</p><p className="text-[11px] text-zinc-500">tíquete médio</p></div>
+      {/* Linha superior: Hoje + Próximos + Movimento — em painéis compactos sem cards gigantes */}
+      {hasBookingsModule && today && (
+        <div className="bg-white border border-zinc-200 mb-3">
+          <div className="px-4 py-2.5 border-b border-zinc-100 flex items-center justify-between">
+            <h3 className="text-xs font-semibold tracking-wide uppercase text-zinc-500">Hoje</h3>
+            <Link href={`/agenda${q}`} className="text-xs font-medium text-zinc-600 hover:text-zinc-900">Abrir agenda →</Link>
           </div>
-          </>
-          )}
-        </Card>
+          <div className="grid grid-cols-3 sm:grid-cols-6 divide-x divide-zinc-100 divide-y sm:divide-y-0">
+            <div className="px-4 py-3"><p className="text-lg font-semibold leading-none">{today.total}</p><p className="text-xs text-zinc-500 mt-1">atendimentos</p></div>
+            <div className="px-4 py-3"><p className="text-lg font-semibold leading-none text-emerald-700">{today.confirmed}</p><p className="text-xs text-zinc-500 mt-1">confirmados</p></div>
+            <div className="px-4 py-3"><p className="text-lg font-semibold leading-none text-amber-600">{today.pending}</p><p className="text-xs text-zinc-500 mt-1">aguardando</p></div>
+            <div className="px-4 py-3"><p className="text-lg font-semibold leading-none">{today.completed}</p><p className="text-xs text-zinc-500 mt-1">concluídos</p></div>
+            <div className="px-4 py-3"><p className="text-lg font-semibold leading-none text-zinc-500">{today.noShow}</p><p className="text-xs text-zinc-500 mt-1">faltas</p></div>
+            <div className="px-4 py-3 bg-amber-50/50"><p className={`text-lg font-semibold leading-none ${today.needsClosure ? 'text-amber-700' : ''}`}>{today.needsClosure}</p><p className="text-xs text-zinc-500 mt-1">p/ fechar</p></div>
+          </div>
+        </div>
+      )}
 
-        <Card className="xl:col-span-5 p-5">
-          <div className="flex items-center justify-between mb-3">
-            <p className="text-xs font-bold uppercase tracking-wider text-zinc-400">Próximos atendimentos</p>
-            <Link href={`/agenda${q}`} className="text-xs font-bold text-emerald-700 hover:underline">Ver agenda →</Link>
+      <div className="grid lg:grid-cols-12 gap-3 mb-3">
+        {/* Receita - compacta */}
+        <div className="lg:col-span-4 bg-white border border-zinc-200">
+          <div className="px-4 py-2.5 border-b border-zinc-100 flex items-center justify-between">
+            <h3 className="text-xs font-semibold tracking-wide uppercase text-zinc-500">Receita</h3>
+            <span className="text-xs text-zinc-400">{period}d</span>
           </div>
-          {upcoming.length === 0 ? (
-            <p className="text-sm text-zinc-500">Nenhum atendimento futuro.</p>
-          ) : (
-            <ul className="space-y-2 text-sm">
-              {upcoming.slice(0, 5).map((b) => (
-                <li key={b.id} className="flex items-center justify-between gap-3 py-1.5 border-b border-zinc-50 last:border-0">
-                  <span className="truncate"><strong>{b.customerName}</strong> <span className="text-zinc-500">· {b.service}{b.professional ? ` · ${b.professional}` : ''}</span></span>
-                  <span className="text-xs font-bold text-zinc-500 shrink-0">{humanDay(b.date)} {b.time}</span>
-                </li>
-              ))}
-            </ul>
-          )}
-        </Card>
+          <div className="px-4 py-4">
+            {!showMoney ? <p className="text-sm text-zinc-500">Sem acesso financeiro.</p> : (
+              <>
+                <p className="text-2xl font-semibold tracking-tight">{money(revenue.total)}</p>
+                <p className={`text-xs font-medium mt-1 ${delta >= 0 ? 'text-emerald-700' : 'text-red-600'}`}>{delta >= 0 ? '▲' : '▼'} {money(Math.abs(delta))} vs. {period}d anteriores</p>
+                <div className="grid grid-cols-2 gap-0 mt-3 pt-3 border-t border-zinc-100 text-xs">
+                  <div><p className="font-semibold text-zinc-900">{revenue.orders} pedidos</p><p className="text-zinc-500">no período</p></div>
+                  <div><p className="font-semibold text-zinc-900">{money(revenue.ticket)}</p><p className="text-zinc-500">tíquete médio</p></div>
+                </div>
+              </>
+            )}
+          </div>
+        </div>
 
-        <Card className="xl:col-span-3 p-5">
-          <p className="text-xs font-bold uppercase tracking-wider text-zinc-400 mb-3">Movimento</p>
-          <div className="grid grid-cols-2 gap-4">
-            <div><p className="text-xl font-extrabold">{totals.uniqueVisitors}</p><p className="text-xs text-zinc-500">visitantes únicos</p></div>
-            <div><p className="text-xl font-extrabold">{totals.clicks}</p><p className="text-xs text-zinc-500">cliques</p></div>
-            <div><p className="text-xl font-extrabold">{totals.leads}</p><p className="text-xs text-zinc-500">leads{totals.leadsNew > 0 && <span className="font-bold text-amber-600"> · {totals.leadsNew} novo(s)</span>}</p></div>
-            <div><p className="text-xl font-extrabold">{totals.conversions}</p><p className="text-xs text-zinc-500">conversões</p></div>
+        {/* Próximos — lista densa, sem cards */}
+        <div className="lg:col-span-5 bg-white border border-zinc-200 flex flex-col">
+          <div className="px-4 py-2.5 border-b border-zinc-100 flex items-center justify-between">
+            <h3 className="text-xs font-semibold tracking-wide uppercase text-zinc-500">Próximos atendimentos</h3>
+            <Link href={`/agenda${q}`} className="text-xs font-medium text-zinc-600 hover:text-zinc-900">Ver agenda →</Link>
           </div>
-          <Link href={`/resultados${q}`} className="inline-block mt-4 text-xs font-bold text-emerald-700 hover:underline">Ver resultados →</Link>
-        </Card>
+          <div className="flex-1">
+            {upcoming.length === 0 ? <p className="text-sm text-zinc-500 px-4 py-6 text-center">Nenhum futuro.</p> : (
+              <div className="divide-y divide-zinc-100">
+                {upcoming.slice(0, 5).map((b) => (
+                  <div key={b.id} className="flex items-center gap-3 px-4 py-2.5 text-sm hover:bg-zinc-50">
+                    <span className="text-xs font-medium text-zinc-500 w-14 shrink-0">{humanDay(b.date)} {b.time}</span>
+                    <span className="flex-1 min-w-0 truncate"><strong className="font-medium">{b.customerName}</strong> <span className="text-zinc-500">· {b.service}{b.professional ? ` · ${b.professional}` : ''}</span></span>
+                    <span className={`text-xs px-1.5 py-0.5 rounded font-medium border ${b.status === 'confirmed' ? 'bg-emerald-50 text-emerald-700 border-emerald-200' : 'bg-amber-50 text-amber-800 border-amber-200'}`}>{b.status === 'confirmed' ? 'conf' : 'pend'}</span>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
+
+        {/* Movimento — denso */}
+        <div className="lg:col-span-3 bg-white border border-zinc-200">
+          <div className="px-4 py-2.5 border-b border-zinc-100"><h3 className="text-xs font-semibold tracking-wide uppercase text-zinc-500">Movimento</h3></div>
+          <div className="grid grid-cols-2 divide-x divide-y divide-zinc-100">
+            <div className="px-4 py-3"><p className="text-lg font-semibold leading-none">{totals.uniqueVisitors}</p><p className="text-xs text-zinc-500">visitantes únicos</p></div>
+            <div className="px-4 py-3"><p className="text-lg font-semibold leading-none">{totals.clicks}</p><p className="text-xs text-zinc-500">cliques</p></div>
+            <div className="px-4 py-3"><p className="text-lg font-semibold leading-none">{totals.leads}{totals.leadsNew > 0 && <span className="text-amber-600 text-xs"> +{totals.leadsNew}</span>}</p><p className="text-xs text-zinc-500">leads</p></div>
+            <div className="px-4 py-3"><p className="text-lg font-semibold leading-none">{totals.conversions}</p><p className="text-xs text-zinc-500">conversões</p></div>
+          </div>
+          <div className="px-4 py-2.5 border-t border-zinc-100"><Link href={`/resultados${q}`} className="text-xs font-medium text-zinc-600 hover:text-zinc-900">Ver resultados →</Link></div>
+        </div>
       </div>
 
-      {hasBookingsModule && today && (
-        <Card className="mb-6 p-5">
-          <div className="flex items-center justify-between mb-3">
-            <p className="text-xs font-bold uppercase tracking-wider text-zinc-400">Hoje</p>
-            <Link href={`/agenda${q}`} className="text-xs font-bold text-emerald-700 hover:underline">Abrir agenda →</Link>
-          </div>
-          <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-6 gap-3">
-            <div><p className="text-xl font-extrabold">{today.total}</p><p className="text-[11px] text-zinc-500">atendimentos</p></div>
-            <div><p className="text-xl font-extrabold text-emerald-700">{today.confirmed}</p><p className="text-[11px] text-zinc-500">confirmados</p></div>
-            <div><p className="text-xl font-extrabold text-amber-600">{today.pending}</p><p className="text-[11px] text-zinc-500">aguardando</p></div>
-            <div><p className="text-xl font-extrabold text-blue-600">{today.completed}</p><p className="text-[11px] text-zinc-500">concluídos</p></div>
-            <div><p className="text-xl font-extrabold text-red-600">{today.noShow}</p><p className="text-[11px] text-zinc-500">faltas</p></div>
-            <div>
-              <p className={`text-xl font-extrabold ${today.needsClosure ? 'text-amber-700' : 'text-zinc-900'}`}>{today.needsClosure}</p>
-              <p className="text-[11px] text-zinc-500">precisam fechar</p>
+      {/* Linha CRM / Página / WhatsApp — painel único com divisórias, não 3 cards */}
+      <div className="bg-white border border-zinc-200 mb-3">
+        <div className="grid sm:grid-cols-3 divide-y sm:divide-y-0 sm:divide-x divide-zinc-100">
+          <div className="px-4 py-3">
+            <div className="flex items-center justify-between mb-2"><p className="text-xs font-semibold tracking-wide uppercase text-zinc-500">CRM</p><Link href={`/clientes${q}`} className="text-xs font-medium text-zinc-600 hover:underline">Ver →</Link></div>
+            <p className="text-xl font-semibold leading-none">{crm?.contacts ?? 0} <span className="text-xs font-normal text-zinc-500">contatos</span></p>
+            <div className="grid grid-cols-2 gap-2 mt-2 text-xs leading-tight">
+              <span className="text-zinc-600"><strong className="text-zinc-900">{crm?.customers ?? 0}</strong> cadastrados</span>
+              <span className="text-zinc-600"><strong className="text-zinc-900">{crm?.withConsent ?? 0}</strong> c/ consentimento</span>
             </div>
           </div>
-        </Card>
-      )}
-
-      <div className="grid sm:grid-cols-3 gap-4 mb-6">
-        <Card className="p-5">
-          <div className="flex items-center justify-between mb-2">
-            <p className="text-xs font-bold uppercase tracking-wider text-zinc-400">CRM</p>
-            <Link href={`/clientes${q}`} className="text-xs font-bold text-emerald-700 hover:underline">Ver →</Link>
+          <div className="px-4 py-3">
+            <div className="flex items-center justify-between mb-2"><p className="text-xs font-semibold tracking-wide uppercase text-zinc-500">Página</p><Link href={`/pagina${q}`} className="text-xs font-medium text-zinc-600 hover:underline">Editar →</Link></div>
+            <p className="text-xl font-semibold leading-none">{pageStats?.views ?? totals.visitors} <span className="text-xs font-normal text-zinc-500">views</span></p>
+            <div className="grid grid-cols-3 gap-2 mt-2 text-xs">
+              <span><strong>{pageStats?.clicks ?? 0}</strong> cliques</span>
+              <span><strong>{pageStats?.bookings ?? 0}</strong> agends</span>
+              <span><strong>{pageStats?.conversions ?? 0}</strong> convs</span>
+            </div>
           </div>
-          <p className="text-2xl font-extrabold">{crm?.contacts ?? 0}</p>
-          <p className="text-xs text-zinc-500">contatos na base</p>
-          <div className="grid grid-cols-2 gap-2 mt-3 pt-3 border-t border-zinc-100 text-xs">
-            <div><strong className="block text-sm">{crm?.customers ?? 0}</strong><span className="text-zinc-500">clientes cadastrados</span></div>
-            <div><strong className="block text-sm">{crm?.withConsent ?? 0}</strong><span className="text-zinc-500">autorizaram marketing</span></div>
-            <div><strong className="block text-sm">{crm?.leads ?? 0}</strong><span className="text-zinc-500">leads</span></div>
-            <div><strong className="block text-sm">{crm?.newContacts ?? 0}</strong><span className="text-zinc-500">novos no período</span></div>
+          <div className="px-4 py-3">
+            <div className="flex items-center justify-between mb-2"><p className="text-xs font-semibold tracking-wide uppercase text-zinc-500">WhatsApp</p><Link href={`/whatsapp${q}`} className="text-xs font-medium text-zinc-600 hover:underline">Abrir →</Link></div>
+            <p className={`text-sm font-semibold ${whatsapp?.status === 'connected' ? 'text-emerald-700' : 'text-zinc-600'}`}>{whatsapp?.status === 'connected' ? 'Conectado' : 'Não conectado'}</p>
+            <div className="grid grid-cols-3 gap-2 mt-2 text-xs">
+              <span><strong>{whatsapp?.open ?? 0}</strong> abertas</span>
+              <span><strong>{whatsapp?.unread ?? 0}</strong> não lidas</span>
+              <span><strong>{whatsapp?.pendingMessages ?? 0}</strong> fila</span>
+            </div>
           </div>
-        </Card>
-
-        <Card className="p-5">
-          <div className="flex items-center justify-between mb-2">
-            <p className="text-xs font-bold uppercase tracking-wider text-zinc-400">Página</p>
-            <Link href={`/pagina${q}`} className="text-xs font-bold text-emerald-700 hover:underline">Editar →</Link>
-          </div>
-          <p className="text-2xl font-extrabold">{pageStats?.views ?? totals.visitors}</p>
-          <p className="text-xs text-zinc-500">visualizações no período</p>
-          <div className="grid grid-cols-3 gap-2 mt-3 pt-3 border-t border-zinc-100 text-xs">
-            <div><strong className="block text-sm">{pageStats?.clicks ?? totals.clicks}</strong><span className="text-zinc-500">cliques</span></div>
-            <div><strong className="block text-sm">{pageStats?.bookings ?? 0}</strong><span className="text-zinc-500">agendamentos</span></div>
-            <div><strong className="block text-sm">{pageStats?.conversions ?? totals.conversions}</strong><span className="text-zinc-500">conversões</span></div>
-          </div>
-        </Card>
-
-        <Card className={`p-5 ${whatsapp?.status === 'connected' ? 'border-emerald-200' : ''}`}>
-          <div className="flex items-center justify-between mb-2">
-            <p className="text-xs font-bold uppercase tracking-wider text-zinc-400">WhatsApp</p>
-            <Link href={`/whatsapp${q}`} className="text-xs font-bold text-emerald-700 hover:underline">Abrir →</Link>
-          </div>
-          <p className={`text-base font-extrabold mt-0.5 ${whatsapp?.status === 'connected' ? 'text-emerald-700' : 'text-zinc-700'}`}>
-            {whatsapp?.status === 'connected' ? 'Conectado' : 'Não conectado'}
-          </p>
-          <p className="text-xs text-zinc-500 mt-1">
-            {whatsapp?.status === 'connected' ? 'Mensagens entram no CRM.' : 'O link externo continua funcionando.'}
-          </p>
-          <div className="grid grid-cols-3 gap-2 mt-3 pt-3 border-t border-zinc-100 text-xs">
-            <div><strong className="block text-sm">{whatsapp?.open ?? 0}</strong><span className="text-zinc-500">abertas</span></div>
-            <div><strong className="block text-sm">{whatsapp?.unread ?? 0}</strong><span className="text-zinc-500">não lidas</span></div>
-            <div><strong className="block text-sm">{whatsapp?.pendingMessages ?? 0}</strong><span className="text-zinc-500">na fila</span></div>
-          </div>
-        </Card>
+        </div>
       </div>
 
-      {/* ── BAIXO: operação + atividade ── */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
-        <Link href={`/pedidos${q}`}><Stat label="Pedidos" value={String(totals.orders)} hint={totals.newOrders ? `${totals.newOrders} novo(s)` : undefined} /></Link>
-        <Link href={`/agenda${q}`}><Stat label="Agendamentos" value={String(totals.bookings)} hint={totals.pendingBookings ? `${totals.pendingBookings} pendente(s)` : undefined} /></Link>
-        <Link href={`/clientes${q}`}><Stat label="Leads" value={String(totals.leads)} hint={totals.leadsNew ? `${totals.leadsNew} novo(s)` : undefined} /></Link>
-        <Link href={`/pagina${q}`}><Stat label="Configuração" value={`${pct}%`} /></Link>
-      </div>
-
-      <div className="grid lg:grid-cols-2 gap-4">
-        <Card className="p-5">
-          {pct >= 100 && !showChecklist ? (
-            <button onClick={() => setShowChecklist(true)} className="flex items-center gap-2 text-sm font-bold text-emerald-700">
-              <Icon n="checkCircle" size={18} /> Tudo configurado — revisar checklist
-            </button>
-          ) : (
-            <>
-              <div className="flex items-center justify-between mb-2">
-                <h3 className="font-bold">Configuração</h3>
-                <span className="text-sm font-bold text-emerald-700">{pct}% pronta</span>
-              </div>
-              <div className="h-2 bg-zinc-100 rounded-full overflow-hidden mb-4">
-                <div className="h-full bg-emerald-500 rounded-full transition-all" style={{ width: `${pct}%` }} />
-              </div>
-              <ul className="space-y-2">
+      {/* Atividade + checklist — workspace 2-col, linhas não cards */}
+      <div className="grid lg:grid-cols-2 gap-3">
+        <div className="bg-white border border-zinc-200">
+          <div className="px-4 py-2.5 border-b border-zinc-100 flex items-center justify-between">
+            <h3 className="text-sm font-semibold">Configuração</h3>
+            <span className="text-xs font-medium text-zinc-500">{pct}%</span>
+          </div>
+          <div className="px-4 py-3">
+            <div className="h-1.5 bg-zinc-100 rounded-full overflow-hidden mb-3"><div className="h-full bg-zinc-900 rounded-full" style={{ width: `${pct}%` }} /></div>
+            {pct >= 100 && !showChecklist ? (
+              <button onClick={() => setShowChecklist(true)} className="text-xs font-medium text-zinc-600 hover:text-zinc-900 inline-flex items-center gap-1.5"><Icon n="check" size={12} /> Tudo configurado — revisar</button>
+            ) : (
+              <ul className="divide-y divide-zinc-100 -mx-4">
                 {checklist.map((c) => (
-                  <li key={c.label}>
-                    <Link href={c.href} className="flex items-center gap-2.5 text-sm hover:bg-zinc-50 rounded-lg px-2 py-1.5 -mx-2">
-                      <span className={`w-5 h-5 rounded-full flex items-center justify-center text-xs font-bold ${c.done ? 'bg-emerald-500 text-white' : 'bg-zinc-200 text-zinc-500'}`}>
-                        {c.done ? <Icon n="check" size={12} /> : <span className="w-2 h-2 rounded-full bg-zinc-400" />}
-                      </span>
-                      <span className={c.done ? 'text-zinc-500 line-through' : 'font-medium text-zinc-900'}>{c.label}</span>
-                    </Link>
+                  <li key={c.label} className="px-4 py-2 flex items-center gap-2.5 text-sm hover:bg-zinc-50">
+                    <span className={`w-4 h-4 rounded-full flex items-center justify-center shrink-0 ${c.done ? 'bg-zinc-900 text-white' : 'border border-zinc-300'}`}>{c.done ? <Icon n="check" size={10} /> : null}</span>
+                    <Link href={c.href} className={c.done ? 'text-zinc-400 line-through' : 'text-zinc-700 font-medium'}>{c.label}</Link>
+                    {!c.done && <Link href={c.href} className="ml-auto text-xs font-medium text-zinc-900 underline">Fazer</Link>}
                   </li>
                 ))}
               </ul>
-            </>
-          )}
-        </Card>
+            )}
+          </div>
+        </div>
 
-        <Card className="p-5">
-          <h3 className="font-bold mb-3">Atividade recente</h3>
-          {!hasActivity ? (
-            <p className="text-sm text-zinc-500">Nenhuma atividade ainda. Publique sua página e compartilhe o link!</p>
-          ) : (
-            <ul className="space-y-2.5 text-sm">
-              {recent.orders.map((o) => {
-                const d = orderDef(o.status);
-                return (
-                  <li key={o.id} className="flex justify-between items-center gap-2">
-                    <span className="flex items-center gap-1.5"><Icon n="receipt" size={15} className="text-zinc-400 shrink-0" /> <span>Pedido <strong>{o.code}</strong> — {o.customerName}</span></span>
-                    <Link href={`/pedidos${q}`} className={`text-xs font-bold px-2 py-0.5 rounded-full ${toneCls(d.tone)}`}>{d.panel}</Link>
-                  </li>
-                );
-              })}
-              {recent.bookings.map((b) => {
-                const d = bookDef(b.status);
-                return (
-                  <li key={b.id} className="flex justify-between items-center gap-2">
-                    <span className="flex items-center gap-1.5"><Icon n="calendar" size={15} className="text-zinc-400 shrink-0" /> <span>Agendamento — {b.customerName} ({humanDay(b.date)} {b.time})</span></span>
-                    <Link href={`/agenda${q}`} className={`text-xs font-bold px-2 py-0.5 rounded-full ${toneCls(d.tone)}`}>{d.panel}</Link>
-                  </li>
-                );
-              })}
-              {recent.leads.map((l) => {
-                const d = leadDef(l.status);
-                return (
-                  <li key={l.id} className="flex justify-between items-center gap-2">
-                    <span className="flex items-center gap-1.5"><Icon n="user" size={15} className="text-zinc-400 shrink-0" /> <span>Lead {l.name || l.phone || 'novo'}</span> <span className="text-zinc-400">via {l.origin}</span></span>
-                    <Link href={`/clientes${q}`} className={`text-xs font-bold px-2 py-0.5 rounded-full ${toneCls(d.tone)}`}>{d.panel}</Link>
-                  </li>
-                );
-              })}
-            </ul>
-          )}
-        </Card>
+        <div className="bg-white border border-zinc-200">
+          <div className="px-4 py-2.5 border-b border-zinc-100"><h3 className="text-sm font-semibold">Atividade recente</h3></div>
+          <div className="px-2 py-2">
+            {!hasActivity ? <p className="text-sm text-zinc-500 px-2 py-4">Nenhuma atividade ainda.</p> : (
+              <ul className="divide-y divide-zinc-100">
+                {recent.orders.map((o) => {
+                  const d = orderDef(o.status);
+                  return (
+                    <li key={o.id} className="flex items-center justify-between gap-2 px-2 py-2 text-sm">
+                      <span className="flex items-center gap-2 min-w-0 truncate"><Icon n="receipt" size={14} className="text-zinc-400 shrink-0" /> Pedido <strong>{o.code}</strong> — {o.customerName}</span>
+                      <span className={`text-xs font-medium px-1.5 py-0.5 rounded border ${toneCls(d.tone)}`}>{d.panel}</span>
+                    </li>
+                  );
+                })}
+                {recent.bookings.map((b) => {
+                  const d = bookDef(b.status);
+                  return (
+                    <li key={b.id} className="flex items-center justify-between gap-2 px-2 py-2 text-sm">
+                      <span className="flex items-center gap-2 truncate"><Icon n="calendar" size={14} className="text-zinc-400 shrink-0" /> {b.customerName} · {humanDay(b.date)} {b.time}</span>
+                      <span className={`text-xs font-medium px-1.5 py-0.5 rounded border ${toneCls(d.tone)}`}>{d.panel}</span>
+                    </li>
+                  );
+                })}
+                {recent.leads.map((l) => {
+                  const d = leadDef(l.status);
+                  return (
+                    <li key={l.id} className="flex items-center justify-between gap-2 px-2 py-2 text-sm">
+                      <span className="flex items-center gap-2 truncate"><Icon n="user" size={14} className="text-zinc-400 shrink-0" /> {l.name || l.phone || 'novo'} <span className="text-zinc-400 text-xs">via {l.origin}</span></span>
+                      <span className={`text-xs font-medium px-1.5 py-0.5 rounded border ${toneCls(d.tone)}`}>{d.panel}</span>
+                    </li>
+                  );
+                })}
+              </ul>
+            )}
+          </div>
+        </div>
       </div>
     </>
   );
