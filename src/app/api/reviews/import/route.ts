@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { randomUUID } from 'node:crypto';
-import { readDB, updateDB } from '@/lib/db';
-import { userFromRequest } from '@/lib/auth';
+import { updateDB } from '@/lib/db';
+import { requireBusiness } from '@/lib/access';
 
 // POST { businessId } — importa as avaliações do Google (Places API).
 // Requer googlePlaceId + googleApiKey salvos no negócio. Novas entram
@@ -9,11 +9,9 @@ import { userFromRequest } from '@/lib/auth';
 export async function POST(req: NextRequest) {
   try {
     const { businessId } = await req.json();
-    const user = await userFromRequest(req);
-    if (!user) return NextResponse.json({ error: 'Não autenticado.' }, { status: 401 });
-    const db = await readDB();
-    const business = db.businesses.find((b) => b.id === businessId && b.ownerId === user.id);
-    if (!business) return NextResponse.json({ error: 'Negócio não encontrado.' }, { status: 404 });
+    const guard = await requireBusiness(req, businessId, 'pagina');
+    if (!guard.ok) return guard.res;
+    const business = guard.ctx.business;
     const placeId = (business.googlePlaceId || '').trim();
     const key = (business.googleApiKey || '').trim();
     if (!placeId || !key) {

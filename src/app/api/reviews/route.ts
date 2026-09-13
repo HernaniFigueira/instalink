@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { randomUUID } from 'node:crypto';
 import { readDB, updateDB } from '@/lib/db';
-import { userFromRequest } from '@/lib/auth';
+import { requireBusiness } from '@/lib/access';
+import { isFeatureEnabled } from '@/lib/features';
 import { customerFromRequest } from '@/lib/customer-auth';
 import { onlyDigits } from '@/lib/utils';
 import { todayISO } from '@/lib/tz';
@@ -15,8 +16,8 @@ export async function GET(req: NextRequest) {
   if (!business) return NextResponse.json({ error: 'Negócio não encontrado.' }, { status: 404 });
 
   if (q.get('manage') === '1') {
-    const user = await userFromRequest(req);
-    if (!user || business.ownerId !== user.id) return NextResponse.json({ error: 'Não autorizado.' }, { status: 401 });
+    const guard = await requireBusiness(req, businessId, 'pagina');
+    if (!guard.ok) return guard.res;
     const reviews = (db.reviews || [])
       .filter((r) => r.businessId === businessId)
       .sort((a, b) => (a.createdAt < b.createdAt ? 1 : -1));
@@ -52,6 +53,10 @@ export async function POST(req: NextRequest) {
     const db = await readDB();
     const business = db.businesses.find((b) => b.id === body.businessId);
     if (!business) return NextResponse.json({ error: 'Negócio não encontrado.' }, { status: 404 });
+    // Módulo de avaliações desativado não recebe avaliação nova.
+    if (!isFeatureEnabled(business, 'reviews')) {
+      return NextResponse.json({ error: 'Este negócio não está coletando avaliações no momento.' }, { status: 403 });
+    }
     const rating = Number(body.rating);
     const text = String(body.text || '').trim().slice(0, 500);
     if (!Number.isInteger(rating) || rating < 1 || rating > 5) {
@@ -106,15 +111,12 @@ export async function POST(req: NextRequest) {
 export async function PATCH(req: NextRequest) {
   try {
     const { businessId, id, status } = await req.json();
-    const user = await userFromRequest(req);
-    if (!user) return NextResponse.json({ error: 'Não autenticado.' }, { status: 401 });
     if (!['pending', 'published', 'hidden'].includes(status)) {
       return NextResponse.json({ error: 'Status inválido.' }, { status: 400 });
     }
-    const db = await readDB();
-    if (!db.businesses.some((b) => b.id === businessId && b.ownerId === user.id)) {
-      return NextResponse.json({ error: 'Não autorizado.' }, { status: 401 });
-    }
+    const guard = await requireBusiness(req, businessId, 'pagina');
+    if (!guard.ok) return guard.res;
+    const db = guard.db;
     const found = db.reviews.find((x) => x.id === id && x.businessId === businessId);
     if (!found) return NextResponse.json({ error: 'Avaliação não encontrada.' }, { status: 404 });
     await updateDB((d) => {
@@ -132,12 +134,9 @@ export async function DELETE(req: NextRequest) {
   const q = req.nextUrl.searchParams;
   const businessId = q.get('businessId') || '';
   const id = q.get('id') || '';
-  const user = await userFromRequest(req);
-  if (!user) return NextResponse.json({ error: 'Não autenticado.' }, { status: 401 });
-  const db = await readDB();
-  if (!db.businesses.some((b) => b.id === businessId && b.ownerId === user.id)) {
-    return NextResponse.json({ error: 'Não autorizado.' }, { status: 401 });
-  }
+  const guard = await requireBusiness(req, businessId, 'pagina');
+  if (!guard.ok) return guard.res;
+  const db = guard.db;
   const found = db.reviews.find((x) => x.id === id && x.businessId === businessId);
   if (!found) return NextResponse.json({ error: 'Avaliação não encontrada.' }, { status: 404 });
   await updateDB((d) => {

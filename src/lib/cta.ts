@@ -6,6 +6,8 @@ import type { BusinessMode } from './types';
 
 export type CtaTarget = 'products' | 'booking' | 'quote' | 'whatsapp';
 
+// NOTA: este resolvedor trabalha sobre os MÓDULOS já efetivos (Business.modes).
+// O filtro por módulo acontece antes, em lib/features.ts (allowedCtaTargets).
 export function resolveCtaTarget(
   modes: BusinessMode[],
   label: string,
@@ -30,6 +32,23 @@ export function resolveCtaTarget(
   if (hasBooking) return 'booking';
   if (hasProducts) return 'products';
   if (hasQuote) return 'quote';
+  return 'whatsapp';
+}
+
+/**
+ * O que o BOTÃO pedido anuncia (alvo explícito ou implícito no rótulo),
+ * independente de módulo estar ligado. Serve para comparar com o destino
+ * realmente permitido: se forem diferentes, o texto não pode continuar
+ * anunciando o recurso desligado (ex.: "Agendar" com agendamento off).
+ */
+export function requestedCtaTarget(label: string, explicit?: string): CtaTarget {
+  if (explicit === 'products' || explicit === 'booking' || explicit === 'quote' || explicit === 'whatsapp') {
+    return explicit;
+  }
+  const text = label || '';
+  if (/agend|reserv|hor[aá]rio|marc/i.test(text)) return 'booking';
+  if (/or[çc]amento/i.test(text)) return 'quote';
+  if (/pedir|card[aá]pio|\bloja\b|ver produtos|comprar|delivery/i.test(text)) return 'products';
   return 'whatsapp';
 }
 

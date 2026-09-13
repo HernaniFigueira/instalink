@@ -1,18 +1,16 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { randomUUID } from 'node:crypto';
 import { readDB, updateDB } from '@/lib/db';
-import { userFromRequest } from '@/lib/auth';
+import { requireBusiness } from '@/lib/access';
 import { clampCents } from '@/lib/utils';
 
 // API unificada de catálogo (produtos, opções, serviços, equipe, agenda).
-// Toda mutação exige sessão + posse do business (multi-tenant).
+// Toda mutação passa pela camada central de autorização (identidade →
+// empresa → permissão), nunca por posse "na mão".
 async function auth(req: NextRequest, businessId: string) {
-  const user = await userFromRequest(req);
-  if (!user) return null;
-  const db = await readDB();
-  const business = db.businesses.find((b) => b.id === businessId && b.ownerId === user.id);
-  if (!business) return null;
-  return { user, business };
+  const guard = await requireBusiness(req, businessId, 'catalogo');
+  if (!guard.ok) return null;
+  return { user: guard.ctx.user, business: guard.ctx.business };
 }
 
 export async function POST(req: NextRequest) {

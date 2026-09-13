@@ -1,7 +1,9 @@
 import { cookies } from 'next/headers';
 import { readDB } from './db';
 import { COOKIE_NAME, getUserBySession } from './auth';
-import type { Business, Category, DB, Page, Product, ProductOption, ProductOptionValue, Professional, PublicBusiness, Review, Service } from './types';
+import type { Business, BusinessAgent, Category, DB, Page, Product, ProductOption, ProductOptionValue, Professional, PublicBusiness, Review, Service } from './types';
+import { agentFor, defaultAgent } from './agent';
+import { normalizeFeatures } from './features';
 
 export interface PublicData {
   business: PublicBusiness;
@@ -15,6 +17,7 @@ export interface PublicData {
   professionals: Professional[];
   reviews: Review[];
   isOwnerPreview: boolean;
+  agent: BusinessAgent; // configuração do agente da empresa (módulo/permissão já resolvidos na página)
 }
 
 // Whitelist explícita: segredos (ownerId, pixKey, googleApiKey) NUNCA
@@ -46,6 +49,16 @@ export function toPublicBusiness(b: Business): PublicBusiness {
     about: b.about || { title: '', text: '', image: '', enabled: false },
     googleUrl: b.googleUrl,
     published: b.published,
+    features: normalizeFeatures(b),
+    whatsappStatus: b.whatsappIntegration?.status || 'not_connected',
+  };
+}
+
+/** Dados públicos enxutos quando a página ainda não foi publicada. */
+function emptyPublicBusiness(b: Business): PublicBusiness {
+  return {
+    ...toPublicBusiness(b),
+    nav: [], // rascunho não expõe navegação/configuração ao público
   };
 }
 
@@ -59,7 +72,7 @@ export async function getPublicData(slug: string): Promise<(PublicData & { notFo
   const user = await getUserBySession(cookies().get(COOKIE_NAME)?.value);
   const isOwner = !!user && business.ownerId === user.id;
   if (!business.published && !isOwner) {
-    return { business: toPublicBusiness(business), page, categories: [], products: [], options: [], optionValues: [], services: [], serviceCategories: [], professionals: [], reviews: [], isOwnerPreview: false, notPublished: true };
+    return { business: emptyPublicBusiness(business), page, categories: [], products: [], options: [], optionValues: [], services: [], serviceCategories: [], professionals: [], reviews: [], isOwnerPreview: false, notPublished: true, agent: defaultAgent(business.id, business.name) };
   }
   return {
     business: toPublicBusiness(business), page,
@@ -72,5 +85,6 @@ export async function getPublicData(slug: string): Promise<(PublicData & { notFo
     professionals: db.professionals.filter((p) => p.businessId === business.id && p.active),
     reviews: (db.reviews || []).filter((r) => r.businessId === business.id && r.status === 'published').sort((a, b) => (a.createdAt < b.createdAt ? 1 : -1)).slice(0, 4),
     isOwnerPreview: isOwner && !business.published,
+    agent: agentFor(db, business),
   };
 }

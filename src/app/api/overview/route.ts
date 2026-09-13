@@ -1,17 +1,23 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { userFromRequest } from '@/lib/auth';
+import { requireBusiness } from '@/lib/access';
 import { readDB } from '@/lib/db';
+import { can } from '@/lib/access';
+import { summarizeDay, pendingClosures, bookingDuration } from '@/lib/booking-ops';
+import { integrationStatus } from '@/lib/whatsapp';
+import { enabledFeatureIds, isFeatureEnabled } from '@/lib/features';
+import { nowHM } from '@/lib/tz';
 import { todayISO, addDaysISO } from '@/lib/tz';
 
 // GET ?businessId=&period=7|30 — dados da tela Início (dono).
 export async function GET(req: NextRequest) {
   const businessId = req.nextUrl.searchParams.get('businessId') || '';
   const period = req.nextUrl.searchParams.get('period') === '7' ? 7 : 30;
-  const user = await userFromRequest(req);
-  if (!user) return NextResponse.json({ error: 'Não autenticado.' }, { status: 401 });
-  const db = await readDB();
-  const business = db.businesses.find((b) => b.id === businessId && b.ownerId === user.id);
-  if (!business) return NextResponse.json({ error: 'Negócio não encontrado.' }, { status: 404 });
+  const guard = await requireBusiness(req, businessId);
+  if (!guard.ok) return guard.res;
+  const db = guard.db;
+  const business = guard.ctx.business;
+  // Financeiro só aparece para quem tem a permissão (e some do payload).
+  const showMoney = can(guard.ctx, 'financeiro');
 
   const bId = business.id;
   const q = `?b=${bId}`;
@@ -53,6 +59,47 @@ export async function GET(req: NextRequest) {
 
   const vids = new Set(events.filter((e) => e.type === 'page_view' && e.meta?.vid).map((e) => String(e.meta.vid)));
 
+  // ── Operação de HOJE + pendências de fechamento ──
+  const servicesById = Object.fromEntries(db.services.filter((s) => s.businessId === bId).map((s) => [s.id, s]));
+  const todaySummary = summarizeDay(bookings, today, servicesById, today, nowHM());
+  const closures = pendingClosures(bookings, servicesById, today, nowHM()).map((b) => ({
+    id: b.id, customerName: b.customerName, date: b.date, time: b.time, status: b.status,
+    service: services.get(b.serviceId) || 'Serviço',
+  }));
+
+  // ── CRM: o que entrou de gente nova ──
+  const contacts = db.contacts.filter((c) => c.businessId === bId);
+  const crm = {
+    contacts: contacts.length,
+    newContacts: contacts.filter((c) => (c.createdAt || '').slice(0, 10) >= start).length,
+    registered: contacts.filter((c) => !!c.customerId).length,
+    withConsent: contacts.filter((c) => c.marketingOptIn === true).length,
+    leads: leads.length,
+    leadsNew: leads.filter((l) => l.status === 'new').length,
+    // Converteu = cliente com histórico de agenda/pedido.
+    customers: contacts.filter((c) => !!c.customerId).length,
+  };
+
+  // ── Página: o que ela produziu no período ──
+  const pageStats = {
+    views: events.filter((e) => e.type === 'page_view' && e.createdAt.slice(0, 10) >= start).length,
+    clicks: events.filter((e) => (e.type === 'button_click' || e.type === 'whatsapp_click') && e.createdAt.slice(0, 10) >= start).length,
+    bookings: bookings.filter((b) => b.createdAt.slice(0, 10) >= start).length,
+    conversions: events.filter((e) => e.type === 'conversion' && e.createdAt.slice(0, 10) >= start).length,
+    published: !!business.published,
+    slug: business.slug,
+  };
+
+  // ── WhatsApp: estado honesto (nunca "conectado" de mentira) ──
+  const conversations = db.conversations.filter((c) => c.businessId === bId);
+  const whatsapp = {
+    status: integrationStatus(business, true).status,
+    open: conversations.filter((c) => c.status === 'open').length,
+    unread: conversations.reduce((s, c) => s + (c.unread || 0), 0),
+    pendingMessages: db.messages.filter((m) => m.businessId === bId && m.status === 'pending').length,
+    link: business.whatsapp || '',
+  };
+
   const checklist: Array<{ done: boolean; label: string; href: string }> = [
     { done: true, label: 'Página criada', href: `/pagina${q}` },
     { done: !!business.whatsapp, label: 'WhatsApp configurado', href: `/configuracoes${q}` },
@@ -70,7 +117,7 @@ export async function GET(req: NextRequest) {
   const doneCount = checklist.filter((c) => c.done).length;
 
   return NextResponse.json({
-    user: { name: user.name },
+    user: { name: guard.ctx.user.name },
     business: { id: business.id, name: business.name, slug: business.slug, published: business.published },
     totals: {
       visitors: events.filter((e) => e.type === 'page_view').length,
@@ -84,7 +131,15 @@ export async function GET(req: NextRequest) {
       newOrders: orders.filter((o) => o.status === 'new').length,
       pendingBookings: bookings.filter((b) => b.status === 'pending').length,
     },
-    revenue,
+    revenue: showMoney ? revenue : { total: 0, prev: 0, orders: 0, ticket: 0, period, hidden: true },
+    showMoney,
+    today: todaySummary,
+    needsClosure: closures,
+    crm,
+    pageStats,
+    whatsapp,
+    modules: enabledFeatureIds(business),
+    hasBookingsModule: isFeatureEnabled(business, 'bookings'),
     upcoming,
     checklist,
     pct: Math.round((doneCount / checklist.length) * 100),

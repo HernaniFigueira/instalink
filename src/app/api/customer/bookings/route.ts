@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { customerFromRequest } from '@/lib/customer-auth';
 import { readDB, updateDB } from '@/lib/db';
+import { isFeatureEnabled } from '@/lib/features';
 import { onlyDigits, timeToMin } from '@/lib/utils';
 import { todayISO, nowHM, weekdayOf, addDaysISO, isValidDateISO } from '@/lib/tz';
 import { computeSlots } from '@/lib/slots';
@@ -18,6 +19,10 @@ export async function GET(req: NextRequest) {
   const db = await readDB();
   const business = db.businesses.find((b) => b.id === businessId);
   if (!business) return NextResponse.json({ error: 'Negócio não encontrado.' }, { status: 404 });
+  // Módulo de agendamentos desligado: nada de agenda para o cliente.
+  if (!isFeatureEnabled(business, 'bookings')) {
+    return NextResponse.json({ bookings: [], cancelUntilMin: 0, moduleOff: true });
+  }
   const myPhone = onlyDigits(customer.phone);
   const bookings = db.bookings
     .filter((b) =>
@@ -58,6 +63,13 @@ export async function PATCH(req: NextRequest) {
     }
     const business = db.businesses.find((b) => b.id === booking.businessId);
     if (!business) return NextResponse.json({ error: 'Negócio não encontrado.' }, { status: 404 });
+    if (!isFeatureEnabled(business, 'bookings')) {
+      return NextResponse.json({ error: 'Este negócio não está com a agenda aberta no momento.' }, { status: 403 });
+    }
+  // Módulo de agendamentos desligado: nada de agenda para o cliente.
+  if (!isFeatureEnabled(business, 'bookings')) {
+    return NextResponse.json({ bookings: [], cancelUntilMin: 0, moduleOff: true });
+  }
     const cfg = business.booking;
     const today = todayISO();
     if (booking.date < today) {

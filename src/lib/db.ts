@@ -25,6 +25,8 @@ import { Pool } from 'pg';
 import type { DB } from './types';
 import { defaultBookingConfig } from './types';
 import { backfillContacts } from './contacts';
+import { normalizeFeatures } from './features';
+import { defaultWhatsappIntegration } from './whatsapp';
 
 const FILE = path.join(process.cwd(), 'data', 'instalink.db.json');
 
@@ -36,6 +38,9 @@ export function emptyDB(): DB {
     products: [], options: [], optionValues: [], services: [],
     professionals: [], availability: [], exceptions: [], orders: [],
     bookings: [], leads: [], contacts: [], reviews: [], events: [],
+    // Estruturas novas (aditivas — documentos antigos ganham arrays vazios).
+    members: [], agents: [], conversations: [], messages: [],
+    campaigns: [], campaignRecipients: [], audit: [], supportSessions: [],
   };
 }
 
@@ -43,12 +48,26 @@ export function emptyDB(): DB {
 // Reversível (só adiciona defaults) e idempotente.
 function normalize(raw: unknown): DB {
   const base = { ...emptyDB(), ...((raw && typeof raw === 'object' ? raw : {}) as Partial<DB>) };
+  // Arrays novos (members/agents/campaigns/audit/...): documento antigo pode
+  // ter chaves ausentes ou inválidas — garantimos array em todos os casos.
+  for (const key of ['members', 'agents', 'conversations', 'messages', 'campaigns', 'campaignRecipients', 'audit', 'supportSessions'] as const) {
+    if (!Array.isArray((base as any)[key])) (base as any)[key] = [];
+  }
   // Contatos: migração defensiva UMA única vez (quando o doc antigo não
   // tinha o campo). Idempotente; nada existente é apagado ou duplicado.
   const hadContacts = Array.isArray((raw as any)?.contacts);
   if (!Array.isArray(base.contacts)) base.contacts = [];
   if (!hadContacts) backfillContacts(base);
   for (const b of base.businesses) {
+    // Módulos opcionais: derivados dos blocos apenas quando ausentes
+    // (idempotente; valor explícito do lojista nunca é sobrescrito).
+    const page = base.pages.find((p) => p.businessId === b.id);
+    b.features = normalizeFeatures(b, page?.blocks || []);
+    if (!b.whatsappIntegration || typeof b.whatsappIntegration !== 'object') {
+      b.whatsappIntegration = defaultWhatsappIntegration();
+    } else {
+      b.whatsappIntegration = { ...defaultWhatsappIntegration(), ...b.whatsappIntegration };
+    }
     if (!b.booking) b.booking = defaultBookingConfig();
     else b.booking = { ...defaultBookingConfig(), ...b.booking };
     if (typeof b.deliveryFee !== 'number') b.deliveryFee = 0;
@@ -88,6 +107,23 @@ function normalize(raw: unknown): DB {
   for (const bk of base.bookings) {
     if (typeof (bk as any).updatedAt !== 'string' || !(bk as any).updatedAt) (bk as any).updatedAt = bk.createdAt || '';
     if (!Array.isArray((bk as any).history)) (bk as any).history = [];
+    if (typeof (bk as any).previousId !== 'string') (bk as any).previousId = '';
+    if (typeof (bk as any).rescheduleCount !== 'number') (bk as any).rescheduleCount = 0;
+  }
+  for (const c of base.contacts) {
+    if (typeof (c as any).note !== 'string') (c as any).note = '';
+    if (typeof (c as any).marketingOptIn !== 'boolean') (c as any).marketingOptIn = false;
+  }
+  for (const m of base.members) {
+    if (!m.permissions || typeof m.permissions !== 'object') (m as any).permissions = {};
+    if (typeof (m as any).active !== 'boolean') (m as any).active = true;
+    if (typeof (m as any).note !== 'string') (m as any).note = '';
+    if (typeof (m as any).createdAt !== 'string') (m as any).createdAt = new Date().toISOString();
+    if (typeof (m as any).updatedAt !== 'string') (m as any).updatedAt = (m as any).createdAt;
+  }
+  for (const u of base.users) {
+    if (u.role !== 'owner' && u.role !== 'admin' && u.role !== 'master') (u as any).role = 'owner';
+    if (typeof (u as any).lastLoginAt !== 'string') (u as any).lastLoginAt = '';
   }
   return base;
 }
@@ -164,9 +200,19 @@ const MAX_EVENTS_PER_BUSINESS = 3000;
 const VOLATILE_EVENT_MAX_AGE_MS = 90 * 86400000; // page_view/ai_started
 const VOLATILE_TYPES = new Set(['page_view', 'ai_started', 'ai_recommendation']);
 
+const MAX_AUDIT_ENTRIES = 5000;
+
 function prune(db: DB): void {
   const now = Date.now();
   db.sessions = db.sessions.filter((s) => new Date(s.expiresAt).getTime() > now);
+  // Sessões de suporte: encerradas/vencidas saem (auditoria permanece).
+  db.supportSessions = db.supportSessions.filter(
+    (s) => !s.endedAt && new Date(s.expiresAt).getTime() > now,
+  );
+  // Auditoria administrativa: teto simples (mais recentes primeiro).
+  if (db.audit.length > MAX_AUDIT_ENTRIES) {
+    db.audit = db.audit.slice(db.audit.length - MAX_AUDIT_ENTRIES);
+  }
   db.customerSessions = db.customerSessions.filter((s) => new Date(s.expiresAt).getTime() > now);
   db.passwordResets = db.passwordResets.filter(
     (r) => !r.usedAt && new Date(r.expiresAt).getTime() > now,

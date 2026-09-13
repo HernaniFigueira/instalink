@@ -1,8 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { randomUUID } from 'node:crypto';
 import { readDB, updateDB } from '@/lib/db';
-import { userFromRequest } from '@/lib/auth';
+import { requireBusiness } from '@/lib/access';
 import { customerFromRequest } from '@/lib/customer-auth';
+import { isFeatureEnabled, canBook as canBookModule } from '@/lib/features';
+import {
+  bookingDuration, needsClosure, rescheduleDecision, rescheduleForwardNote, rescheduleNote,
+} from '@/lib/booking-ops';
 import { computeSlots } from '@/lib/slots';
 import { resolveProfessional, bookingMode } from '@/lib/booking';
 import { upsertContact } from '@/lib/contacts';
@@ -29,25 +33,40 @@ export async function GET(req: NextRequest) {
     if (!business) return NextResponse.json({ error: 'Negócio não encontrado.' }, { status: 404 });
 
     if (mode === 'manage') {
-      const user = await userFromRequest(req);
-      if (!user || business.ownerId !== user.id) return NextResponse.json({ error: 'Não autorizado.' }, { status: 401 });
+      const guard = await requireBusiness(req, businessId, 'agenda');
+      if (!guard.ok) return guard.res;
       const from = q.get('from') || '';
       const to = q.get('to') || '';
-      let all = db.bookings.filter((x) => x.businessId === businessId);
+      let all = guard.db.bookings.filter((x) => x.businessId === businessId);
       if (isValidDateISO(from) && isValidDateISO(to)) {
         all = all.filter((x) => x.date >= from && x.date <= to);
       }
       all = all.sort((a, b) => (a.date + a.time < b.date + b.time ? 1 : -1));
       const page = Math.max(1, Number(q.get('page')) || 1);
       const limit = Math.min(500, Math.max(1, Number(q.get('limit')) || 200));
+      // Pendências operacionais (horário já passou e ninguém fechou o
+      // atendimento) — a agenda destaca, nunca altera status sozinha.
+      const servicesById = Object.fromEntries(
+        guard.db.services.filter((s) => s.businessId === businessId).map((s) => [s.id, s]),
+      );
+      const today = todayISO();
+      const now = nowHM();
+      const slice = all.slice((page - 1) * limit, page * limit);
       return NextResponse.json({
-        bookings: all.slice((page - 1) * limit, page * limit),
+        bookings: slice,
         total: all.length, page, limit,
+        today,
+        needsClosure: slice.filter((b) => needsClosure(b, bookingDuration(servicesById[b.serviceId]), today, now)).map((b) => b.id),
+        modules: { bookings: isFeatureEnabled(guard.ctx.business, 'bookings') },
       });
     }
 
     const service = db.services.find((s) => s.id === q.get('serviceId') && s.businessId === businessId);
     if (!service) return NextResponse.json({ slots: [] });
+    // Módulo de agendamentos desativado ⇒ nenhum horário é oferecido.
+    if (!isFeatureEnabled(business, 'bookings')) {
+      return NextResponse.json({ slots: [], closed: true, moduleOff: true });
+    }
     const cfg = business.booking;
     const today = todayISO();
     const maxDate = addDaysISO(today, Math.max(1, cfg.horizonDays || 60));
@@ -110,14 +129,20 @@ export async function POST(req: NextRequest) {
     const business = db.businesses.find((b) => b.id === body.businessId);
     if (!business) return NextResponse.json({ error: 'Negócio não encontrado.' }, { status: 404 });
 
-    const owner = await userFromRequest(req);
+    // MÓDULO: agendamento desativado não aceita reserva pública nenhuma.
+    if (!isFeatureEnabled(business, 'bookings')) {
+      return NextResponse.json({ error: 'Este negócio não está aceitando agendamentos no momento.' }, { status: 403 });
+    }
+
     // CRÍTICO: modo proprietário só com intenção explícita (asOwner === true)
-    // + sessão de dono do próprio negócio. Sessão de dono logado NUNCA
-    // transforma sozinha uma requisição pública em operação interna.
+    // + autorização real (dono OU membro com permissão de agenda). Sessão de
+    // lojista logado NUNCA transforma sozinha uma requisição pública em
+    // operação interna.
+    const guard = body.asOwner === true ? await requireBusiness(req, business.id, 'agenda') : null;
     const actor = bookingMode({
       asOwner: body.asOwner,
-      ownerLogged: !!owner,
-      ownerMatches: !!owner && business.ownerId === owner.id,
+      ownerLogged: !!guard?.ok,
+      ownerMatches: !!guard?.ok,
     });
     const isOwner = actor === 'owner';
 
@@ -129,6 +154,9 @@ export async function POST(req: NextRequest) {
 
     const service = db.services.find((s) => s.id === body.serviceId && s.businessId === business.id && s.active);
     if (!service) return NextResponse.json({ error: 'Serviço indisponível.' }, { status: 400 });
+    if (isOwner && !canBookModule(business, [service])) {
+      return NextResponse.json({ error: 'Serviço sem agendamento disponível.' }, { status: 400 });
+    }
     if (!isOwner && !service.bookable) return NextResponse.json({ error: 'Este serviço não aceita agendamento.' }, { status: 400 });
 
     const date = body.date || '';
@@ -142,13 +170,20 @@ export async function POST(req: NextRequest) {
     if (date < today) return NextResponse.json({ error: 'Não é possível agendar no passado.' }, { status: 400 });
     if (date > maxDate) return NextResponse.json({ error: 'Data fora da agenda disponível.' }, { status: 400 });
 
+    // CRM primeiro: o painel escolhe um CONTATO existente (ou cria um novo).
+    // Quando um contato é vinculado, nome/telefone/e-mail vêm dele — nada de
+    // digitar duas vezes nem duplicar pessoa.
+    const linkedContact = isOwner && body.contactId
+      ? db.contacts.find((c) => c.id === String(body.contactId) && c.businessId === business.id)
+      : undefined;
+
     // Identidade: cliente logado usa os dados da CONTA (nunca re-pergunta);
-    // dono digita os dados do cliente ao agendar manualmente.
+    // dono digita os dados do cliente (ou usa o contato selecionado).
     const name = isOwner
-      ? String(body.customerName || '').trim().slice(0, 80)
+      ? String(body.customerName || linkedContact?.name || '').trim().slice(0, 80)
       : (customer!.name || '').trim().slice(0, 80);
     const phone = isOwner
-      ? String(body.customerPhone || '').trim()
+      ? String(body.customerPhone || linkedContact?.phone || '').trim()
       : (customer!.phone || '').trim();
     if (!name) return NextResponse.json({ error: 'Informe o nome do cliente.' }, { status: 400 });
     const digits = onlyDigits(phone);
@@ -205,7 +240,8 @@ export async function POST(req: NextRequest) {
       const now = new Date().toISOString();
       const bookingId = randomUUID();
       d.bookings.push({
-        id: bookingId, businessId: business.id, customerId: customer?.id || '',
+        id: bookingId, businessId: business.id,
+        customerId: customer?.id || linkedContact?.customerId || '',
         serviceId: service.id, professionalId: finalPro, date, time,
         customerName: name, customerPhone: digits,
         status: isOwner ? 'confirmed' : 'pending',
@@ -217,9 +253,13 @@ export async function POST(req: NextRequest) {
       d.events.push({ id: randomUUID(), businessId: business.id, type: 'conversion', path: '', meta: { kind: 'booking' }, createdAt: now });
 
       // Contato (relação Customer × Business) — UPSERT, nunca duplica.
+      // O atendimento SEMPRE alimenta o CRM, venha de onde vier.
       upsertContact(d, {
-        businessId: business.id, customerId: customer?.id || '', name, phone: digits,
-        email: customer?.email || '', source: 'agendamento', now,
+        businessId: business.id,
+        customerId: customer?.id || linkedContact?.customerId || '',
+        name, phone: digits,
+        email: customer?.email || linkedContact?.email || '',
+        source: 'agendamento', now,
       });
 
       // Lead associado ao contato/agendamento (origem = agendamento).
@@ -254,11 +294,10 @@ export async function POST(req: NextRequest) {
 export async function PATCH(req: NextRequest) {
   try {
     const body = await req.json();
-    const user = await userFromRequest(req);
-    if (!user) return NextResponse.json({ error: 'Não autenticado.' }, { status: 401 });
-    const db = await readDB();
-    const business = db.businesses.find((b) => b.id === body.businessId && b.ownerId === user.id);
-    if (!business) return NextResponse.json({ error: 'Não autorizado.' }, { status: 401 });
+    const guard = await requireBusiness(req, String(body.businessId || ''), 'agenda');
+    if (!guard.ok) return guard.res;
+    const db = guard.db;
+    const business = guard.ctx.business;
     const current = db.bookings.find((x) => x.id === body.id && x.businessId === business.id);
     if (!current) return NextResponse.json({ error: 'Agendamento não encontrado.' }, { status: 404 });
 
@@ -283,9 +322,12 @@ export async function PATCH(req: NextRequest) {
       if (proId && activePros.length > 0 && !eligible.some((p) => p.id === proId)) {
         return NextResponse.json({ error: 'Profissional indisponível para este serviço.' }, { status: 400 });
       }
-      await updateDB((d: DB) => {
+      const decision = rescheduleDecision(current.status);
+      const result = await updateDB((d: DB) => {
         const target = d.bookings.find((x) => x.id === body.id && x.businessId === business.id);
         if (!target) throw err('Agendamento não encontrado.', 404);
+        // O próprio atendimento não bloqueia o novo horário; atendimentos
+        // terminais recriados também não (ficam no histórico, não na grade).
         const others = d.bookings.filter((b) => b.businessId === business.id && b.id !== body.id);
         const r = computeSlots({
           rules: d.availability.filter((a) => a.businessId === business.id),
@@ -303,16 +345,46 @@ export async function PATCH(req: NextRequest) {
         });
         if (!r.slots.includes(time)) throw err('Este horário está ocupado. Escolha outro.', 409);
         const now = new Date().toISOString();
+        const note = rescheduleNote({ date: target.date, time: target.time }, { date, time });
+
+        if (decision.kind === 'recreate') {
+          // Estado terminal (concluído/faltou/cancelado): o registro antigo
+          // PERMANECE como está e um NOVO atendimento futuro é criado.
+          const newId = randomUUID();
+          d.bookings.push({
+            id: newId, businessId: business.id, customerId: target.customerId || '',
+            serviceId: target.serviceId,
+            professionalId: proId || r.assign[time] || target.professionalId || '',
+            date, time,
+            customerName: target.customerName, customerPhone: target.customerPhone,
+            status: decision.nextStatus, note: target.note || '', answers: target.answers || [],
+            createdAt: now, updatedAt: now,
+            previousId: target.id,
+            rescheduleCount: (target.rescheduleCount || 0) + 1,
+            history: [{ at: now, from: '', to: decision.nextStatus, by: 'owner', note }],
+          });
+          target.history.push({ at: now, from: target.status, to: target.status, by: 'owner', note: rescheduleForwardNote({ date, time }) });
+          target.updatedAt = now;
+          upsertContact(d, {
+            businessId: business.id, customerId: target.customerId || '',
+            name: target.customerName, phone: target.customerPhone, source: 'reagendamento', now,
+          });
+          return { created: true, newId };
+        }
+
+        // pending/confirmed: move o MESMO atendimento, mantendo o status.
         target.date = date;
         target.time = time;
         if (proId || !r.assign[time]) target.professionalId = proId || r.assign[time] || '';
         target.updatedAt = now;
-        target.history.push({ at: now, from: target.status, to: target.status, by: 'owner' });
+        target.history.push({ at: now, from: target.status, to: decision.nextStatus, by: 'owner', note });
+        if (target.status !== decision.nextStatus) target.status = decision.nextStatus;
+        return { created: false, newId: target.id };
       });
-      return NextResponse.json({ ok: true });
+      return NextResponse.json({ ok: true, ...result, moved: decision.kind === 'move', reason: decision.reason });
     }
 
-    // ── Transição de status ──
+    // ── Transição de status (fechamento operacional ou mudança normal) ──
     const to = body.status as BookingStatus;
     if (!BOOKING_FLOW[current.status] || !canTransition(BOOKING_FLOW, current.status, to)) {
       return NextResponse.json({ error: `Não é possível mudar de "${current.status}" para "${body.status}".` }, { status: 422 });

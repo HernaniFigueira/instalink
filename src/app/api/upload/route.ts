@@ -1,8 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { randomUUID } from 'node:crypto';
 import { put } from '@vercel/blob';
-import { readDB } from '@/lib/db';
-import { userFromRequest } from '@/lib/auth';
+import { requireBusiness } from '@/lib/access';
 import { rateLimit, ipFrom } from '@/lib/rate-limit';
 
 // POST multipart (campo "file" + "businessId") — upload de imagem para o
@@ -20,15 +19,16 @@ export async function POST(req: NextRequest) {
   const rl = rateLimit(`upload:${ipFrom(req)}`, 40, 60000);
   if (!rl.ok) return NextResponse.json({ error: 'Muitos uploads. Aguarde um instante.' }, { status: 429 });
   try {
-    const user = await userFromRequest(req);
-    if (!user) return NextResponse.json({ error: 'Não autenticado.' }, { status: 401 });
     const form = await req.formData();
     const businessId = String(form.get('businessId') || '');
     const file = form.get('file');
     if (!(file instanceof File)) return NextResponse.json({ error: 'Envie uma imagem.' }, { status: 400 });
-    const db = await readDB();
-    if (!db.businesses.some((b) => b.id === businessId && b.ownerId === user.id)) {
-      return NextResponse.json({ error: 'Não autorizado.' }, { status: 401 });
+    // Upload é usado por página, catálogo e configuração: basta ter um deles.
+    const guard = await requireBusiness(req, businessId);
+    if (!guard.ok) return guard.res;
+    const canUpload = ['pagina', 'catalogo', 'config'] as const;
+    if (!canUpload.some((perm) => guard.ctx.permissions[perm])) {
+      return NextResponse.json({ error: 'Seu perfil não tem permissão para enviar imagens.' }, { status: 403 });
     }
     const type = file.type || 'image/jpeg';
     if (!ALLOWED.has(type)) {

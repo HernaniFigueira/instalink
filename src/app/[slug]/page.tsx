@@ -12,7 +12,12 @@ import type { NavActionItem } from '@/components/public/menu';
 import { CtaButton, ProductsTrigger, QuoteTrigger, ServiceAgendarButton, SheetHost, Stars } from '@/components/public/customer';
 import { FaqAccordion } from '@/components/public/FaqAccordion';
 import { visibleFaqItems } from '@/lib/faq';
-import { NAV_ORDER, aboutVisible } from '@/lib/nav';
+import { NAV_ORDER, aboutVisible, publicNavIds } from '@/lib/nav';
+import { agentActive, renderGreeting } from '@/lib/agent';
+import {
+  canBook as canBookPublic, isFeatureEnabled, productsVisible, servicesVisible, visibleBlocks,
+  whatsappVisible,
+} from '@/lib/features';
 import type { Block, Business, PublicBusiness, Review } from '@/lib/types';
 
 export async function generateMetadata({ params }: { params: { slug: string } }): Promise<Metadata> {
@@ -54,36 +59,49 @@ export default async function PublicPage({ params }: { params: { slug: string } 
     );
   }
 
-  const blocks = [...page.blocks].sort((a, b) => a.order - b.order).filter((b) => b.enabled);
+  // ── MÓDULOS MANDAM (fonte única: lib/features.ts) ──
+  // A configuração da página só decide aparência/ordem/conteúdo: um bloco de
+  // módulo desativado é descartado aqui, nunca no componente.
+  const allBlocks = [...page.blocks].sort((a, b) => a.order - b.order);
+  const blocks = visibleBlocks(business, allBlocks);
   const profileIdx = blocks.findIndex((b) => b.type === 'profile');
-  const food = business.niche === 'alimentacao';
 
   // ── Navegação (menu configurável) + seção Sobre ──
-  const aboutOk = aboutVisible(business.about);
-  const canBook = business.modes.includes('bookings') && services.some((sv: any) => sv.bookable);
+  const aboutOk = isFeatureEnabled(business, 'about') && aboutVisible(business.about);
+  const canBook = canBookPublic(business, services);
   const faqBlock = blocks.find((b) => b.type === 'faq');
   const hasFaq = !!faqBlock && visibleFaqItems(faqBlock.settings?.items).length > 0;
   const testiBlock = blocks.find((b) => b.type === 'testimonials');
   const testiItems: Array<{ name?: string; text?: string }> = Array.isArray(testiBlock?.settings?.items) ? testiBlock!.settings.items : [];
   const hasReviews = reviews.length > 0 || testiItems.some((t) => t?.text);
+  const showWhatsapp = whatsappVisible(business);
   const instaUrl = business.instagram ? `https://instagram.com/${business.instagram.replace('@', '')}` : '';
   const tiktokUrl = business.tiktok ? `https://tiktok.com/@${business.tiktok.replace('@', '')}` : '';
 
   const available: Record<string, NavActionItem> = {};
   if (aboutOk) available.about = { id: 'about', label: 'Sobre a empresa', icon: 'store', action: { kind: 'scroll', target: '#sobre' } };
-  if (blocks.some((b) => b.type === 'services') && services.length > 0) available.services = { id: 'services', label: 'Serviços', icon: 'scissors', action: { kind: 'scroll', target: '#servicos' } };
+  if (blocks.some((b) => b.type === 'services') && servicesVisible(business, services)) available.services = { id: 'services', label: 'Serviços', icon: 'scissors', action: { kind: 'scroll', target: '#servicos' } };
   if (hasReviews) available.reviews = { id: 'reviews', label: 'Avaliações', icon: 'star', action: { kind: 'scroll', target: '#avaliacoes' } };
   if (hasFaq) available.faq = { id: 'faq', label: 'Dúvidas frequentes', icon: 'chat', action: { kind: 'scroll', target: '#faq' } };
-  if (business.mapsUrl) available.directions = { id: 'directions', label: 'Como chegar', icon: 'pin', action: { kind: 'link', url: business.mapsUrl } };
-  if (business.mapsUrl && blocks.some((b) => b.type === 'location')) available.contact = { id: 'contact', label: 'Contato', icon: 'pin', action: { kind: 'scroll', target: '#contato' } };
+  if (isFeatureEnabled(business, 'location') && business.mapsUrl) {
+    available.directions = { id: 'directions', label: 'Como chegar', icon: 'pin', action: { kind: 'link', url: business.mapsUrl } };
+    if (blocks.some((b) => b.type === 'location')) {
+      available.contact = { id: 'contact', label: 'Contato', icon: 'pin', action: { kind: 'scroll', target: '#contato' } };
+    }
+  }
   if (instaUrl) available.instagram = { id: 'instagram', label: 'Instagram', icon: 'instagram', action: { kind: 'link', url: instaUrl } };
   if (tiktokUrl) available.tiktok = { id: 'tiktok', label: 'TikTok', icon: 'music', action: { kind: 'link', url: tiktokUrl } };
 
-  // Explícito (dono configurou) ou detecção automática (legado).
-  const navIds = business.navCustom
-    ? (business.nav || [])
-    : NAV_ORDER.map((n) => n.id).filter((id) => available[id]);
+  // Explicito (dono configurou) ∩ disponível — ordem canônica preservada.
+  const navIds = publicNavIds({
+    business, blocks: allBlocks, services, products,
+    reviews, hasFaq, hasTestimonialItems: testiItems.some((t) => t?.text),
+  });
   const navItems = NAV_ORDER.filter((n) => navIds.includes(n.id) && available[n.id]).map((n) => available[n.id]);
+
+  // ── Agente de atendimento (configuração persistida da empresa) ──
+  const agent = data.agent;
+  const agentOn = agentActive(business as unknown as Business, agent);
 
   const btnStyle = business && page.theme.buttonStyle !== 'solid' ? ` il-style-${page.theme.buttonStyle}` : '';
   return (
@@ -103,6 +121,7 @@ export default async function PublicPage({ params }: { params: { slug: string } 
             <BlockView
               block={block}
               business={business}
+              agent={agentOn ? { name: agent.name, greeting: renderGreeting(agent, business.name), enabled: agent.enabled } : null}
               catalog={{ categories, products, options, optionValues, services, serviceCategories, professionals, reviews }}
             />
             {i === profileIdx && aboutOk && <AboutView about={business.about} />}
@@ -160,9 +179,10 @@ function mapsEmbedSrc(mapsUrl: string, address: string): string {
   return `https://www.google.com/maps?q=${encodeURIComponent(fallback)}&output=embed`;
 }
 
-function BlockView({ block, business, catalog }: {
+function BlockView({ block, business, agent, catalog }: {
   block: Block;
   business: PublicBusiness;
+  agent: { name: string; greeting: string; enabled: boolean } | null;
   catalog: {
     categories: any[]; products: any[]; options: any[]; optionValues: any[];
     services: any[]; serviceCategories: any[]; professionals: any[]; reviews: Review[];
@@ -210,7 +230,7 @@ function BlockView({ block, business, catalog }: {
                   <Icon n="music" size={18} />
                 </a>
               )}
-              {business.whatsapp && (
+              {whatsappVisible(business) && (
                 <a href={waLink(business.whatsapp, `Olá! Vim pelo site da ${business.name}.`)} target="_blank" rel="noreferrer"
                   aria-label="WhatsApp" title="WhatsApp"
                   className="il-card w-10 h-10 flex items-center justify-center il-muted">
@@ -268,8 +288,8 @@ function BlockView({ block, business, catalog }: {
       );
     }
     case 'products': {
-      if (!business.modes.includes('products') && !business.modes.includes('orders')) return null;
-      if (catalog.products.length === 0) return null;
+      // Módulo desativado nunca renderiza (mesmo com bloco legado habilitado).
+      if (!productsVisible(business, catalog.products)) return null;
       const f2 = business.niche === 'alimentacao';
       return (
         <ProductsTrigger
@@ -283,7 +303,8 @@ function BlockView({ block, business, catalog }: {
       const list = catalog.services;
       if (list.length === 0) return null;
       const grouped = catalog.serviceCategories.length > 0;
-      const canBook = business.modes.includes('bookings');
+      // Agenda ligada ⇒ botão Agendar por serviço (módulo, não apresentação).
+      const canBook = canBookPublic(business, list);
       const card = (sv: any, wide: boolean) => (
         <div key={sv.id} className={wide ? 'il-card p-4 w-60 shrink-0 snap-start flex flex-col gap-2.5' : 'il-card p-4 flex justify-between items-center gap-3'}>
           {sv.image ? <img src={sv.image} alt={sv.name} loading="lazy" className={wide ? 'w-full h-28 object-cover' : 'w-16 h-16 rounded-xl object-cover shrink-0'} style={{ borderRadius: 'var(--il-radius)' }} /> : null}
@@ -410,10 +431,13 @@ function BlockView({ block, business, catalog }: {
     }
     case 'whatsapp': return null; // renderizado como flutuante
     case 'quote': {
+      if (!isFeatureEnabled(business, 'quote')) return null;
       return <QuoteTrigger title={s.title || 'Solicite um orçamento'} />;
     }
     case 'concierge': {
-      return <ConciergeIsland business={business} title={s.title || 'Precisa de ajuda?'} />;
+      // O assistente só aparece com módulo ligado E agente configurado/ativo.
+      if (!agent) return null;
+      return <ConciergeIsland business={business} agent={agent} title={s.title || 'Precisa de ajuda?'} />;
     }
     default:
       // ('contact' aposentado: linhas legadas caem aqui e não renderizam)

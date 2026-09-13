@@ -1,8 +1,10 @@
 // Concierge IA (MVD): motor de intenção baseado em REGRAS sobre dados
 // estruturados reais do negócio. Não inventa nada: só responde o que
 // existe no banco. Quando não sabe, conduz a ação segura (WhatsApp).
-import type { Business, DB } from './types';
+import type { Business, BusinessAgent, DB } from './types';
 import { money } from './utils';
+import { parseKnowledgeOverride } from './agent';
+import { isFeatureEnabled, whatsappVisible } from './features';
 
 export interface ConciergeAction { label: string; target: string }
 // target: '#produtos' | '#servicos' | '#agendar' | '#orcamento' | '#contato' | 'whatsapp'
@@ -13,7 +15,17 @@ function norm(s: string): string {
   return (s || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
 }
 
-export function conciergeAnswer(db: DB, business: Business, message: string): ConciergeReply {
+export interface ConciergeOptions {
+  agent?: BusinessAgent; // configuração da empresa (tom/objetivos/handoff)
+  faq?: Array<{ q: string; a: string }>; // conhecimento do FAQ (bloco ativo)
+}
+
+export function conciergeAnswer(
+  db: DB,
+  business: Business,
+  message: string,
+  options: ConciergeOptions = {},
+): ConciergeReply {
   const bId = business.id;
   const q = norm(message);
   const wa: ConciergeAction = { label: 'Falar no WhatsApp', target: 'whatsapp' };
@@ -29,15 +41,15 @@ export function conciergeAnswer(db: DB, business: Business, message: string): Co
     const opts: string[] = [];
     if (products.length) opts.push('ver produtos');
     if (services.length) opts.push('ver serviços');
-    if (business.modes.includes('bookings')) opts.push('agendar horário');
-    if (business.modes.includes('quote')) opts.push('pedir orçamento');
+    if (isFeatureEnabled(business, 'bookings')) opts.push('agendar horário');
+    if (isFeatureEnabled(business, 'quote')) opts.push('pedir orçamento');
     return {
       intent: 'greeting',
       reply: `Olá! Bem-vindo(a) à ${business.name}. Posso ajudar você a ${opts.slice(0, 3).join(', ').replace(/, ([^,]*)$/, ' ou $1')}. O que você procura?`,
       actions: [
         ...(products.length ? [{ label: 'Ver produtos', target: '#produtos' } as ConciergeAction] : []),
         ...(services.length ? [{ label: 'Ver serviços', target: '#servicos' } as ConciergeAction] : []),
-        ...(business.modes.includes('bookings') ? [{ label: 'Agendar', target: '#agendar' } as ConciergeAction] : []),
+        ...(isFeatureEnabled(business, 'bookings') ? [{ label: 'Agendar', target: '#agendar' } as ConciergeAction] : []),
       ].slice(0, 3),
     };
   }
@@ -56,8 +68,10 @@ export function conciergeAnswer(db: DB, business: Business, message: string): Co
       intent: 'price',
       reply: `O ${mentioned.kind} "${mentioned.name}" custa ${money(mentioned.price)}. Quer continuar?`,
       actions: mentioned.kind === 'produto'
-        ? [{ label: 'Ver no catálogo', target: '#produtos' }, wa]
-        : business.modes.includes('bookings')
+        ? isFeatureEnabled(business, 'products') || isFeatureEnabled(business, 'orders')
+          ? [{ label: 'Ver no catálogo', target: '#produtos' }, wa]
+          : [wa]
+        : isFeatureEnabled(business, 'bookings')
           ? [{ label: 'Agendar', target: '#agendar' }, wa] : [wa],
     };
   }
@@ -66,39 +80,19 @@ export function conciergeAnswer(db: DB, business: Business, message: string): Co
       intent: 'item_found',
       reply: `Temos "${mentioned.name}" por ${money(mentioned.price)}.`,
       actions: mentioned.kind === 'produto'
-        ? [{ label: 'Ver no catálogo', target: '#produtos' }]
-        : [{ label: 'Ver serviços', target: '#servicos' }],
+        ? isFeatureEnabled(business, 'products') || isFeatureEnabled(business, 'orders')
+          ? [{ label: 'Ver no catálogo', target: '#produtos' }]
+          : [wa]
+        : isFeatureEnabled(business, 'services') || isFeatureEnabled(business, 'bookings')
+          ? [{ label: 'Ver serviços', target: '#servicos' }]
+          : [wa],
     };
   }
 
   // ── Intenções diretas ─────────────────────────────────────
-  if (has('agendar', 'agenda', 'horario', 'hora', 'marcar', 'reserva')) {
-    if (!business.modes.includes('bookings') || services.length === 0) {
-      return { intent: 'booking_unavailable', reply: 'Aqui o atendimento é direto pelo WhatsApp. Chama a gente que respondemos rapidinho!', actions: [wa] };
-    }
-    const names = services.slice(0, 4).map((s) => `${s.name} (${money(s.price)})`).join(' • ');
-    return { intent: 'booking', reply: `Bora agendar! Nossos serviços: ${names}. Escolha abaixo e reserve seu horário:`, actions: [{ label: 'Agendar horário', target: '#agendar' }] };
-  }
-  if (has('pedir', 'pedido', 'delivery', 'entrega', 'comprar', 'quero', 'cardapio', 'menu')) {
-    if (!products.length) {
-      return { intent: 'order_unavailable', reply: 'Por aqui atendemos pelo WhatsApp. Me chama lá que te ajudo!', actions: [wa] };
-    }
-    const featured = products.filter((p) => p.featured).slice(0, 3);
-    const names = (featured.length ? featured : products.slice(0, 3)).map((p) => p.name).join(', ');
-    return { intent: 'order', reply: `Perfeito! Monte seu pedido no catálogo — destaques: ${names}.`, actions: [{ label: 'Ver catálogo', target: '#produtos' }] };
-  }
-  if (has('orcamento', 'orçamento', 'proposta', 'servico', 'reforma', 'quanto fica')) {
-    return { intent: 'quote', reply: 'Claro! Preencha rapidinho que retornamos com o orçamento.', actions: business.modes.includes('quote') ? [{ label: 'Pedir orçamento', target: '#orcamento' }] : [wa] };
-  }
-  if (has('endereco', 'onde', 'local', 'localizacao', 'como chego', 'mapa')) {
-    const addr = business.address || '';
-    return {
-      intent: 'location',
-      reply: addr ? `Estamos em: ${addr}` : 'Nosso atendimento é pelo WhatsApp — chama a gente!',
-      actions: addr ? [{ label: 'Ver localização', target: '#localizacao' }] : [wa],
-    };
-  }
-  if (has('horario de funcionamento', 'aberto', 'funcionamento', 'abre', 'fecha', 'que horas abre')) {
+  // Horário de FUNCIONAMENTO é pergunta sobre a empresa (vem antes de
+  // "agendar", que também fala em horário). Fonte: business.hours.
+  if (has('funcionamento', 'que horas abre', 'abre', 'fecha', 'aberto', 'horario de atendimento')) {
     const days = ['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb'];
     const parts: string[] = [];
     for (let d = 1; d <= 6; d++) {
@@ -110,8 +104,34 @@ export function conciergeAnswer(db: DB, business: Business, message: string): Co
     const txt = parts.length ? `${parts.join(' • ')} • ${sun}` : '';
     return { intent: 'hours', reply: txt ? `Nosso horário: ${txt}` : 'Fale com a gente no WhatsApp para saber os horários!', actions: txt ? [] : [wa] };
   }
+  if (has('agendar', 'agenda', 'marcar', 'reserva', 'horario', 'hora', 'vaga')) {
+    if (!isFeatureEnabled(business, 'bookings') || services.length === 0) {
+      return { intent: 'booking_unavailable', reply: 'Aqui o atendimento é direto pelo WhatsApp. Chama a gente que respondemos rapidinho!', actions: [wa] };
+    }
+    const names = services.slice(0, 4).map((s) => `${s.name} (${money(s.price)})`).join(' • ');
+    return { intent: 'booking', reply: `Bora agendar! Nossos serviços: ${names}. Escolha abaixo e reserve seu horário:`, actions: [{ label: 'Agendar horário', target: '#agendar' }] };
+  }
+  if (has('pedir', 'pedido', 'delivery', 'entrega', 'comprar', 'quero', 'cardapio', 'menu')) {
+    if (!products.length || !(isFeatureEnabled(business, 'products') || isFeatureEnabled(business, 'orders'))) {
+      return { intent: 'order_unavailable', reply: 'Por aqui atendemos pelo WhatsApp. Me chama lá que te ajudo!', actions: [wa] };
+    }
+    const featured = products.filter((p) => p.featured).slice(0, 3);
+    const names = (featured.length ? featured : products.slice(0, 3)).map((p) => p.name).join(', ');
+    return { intent: 'order', reply: `Perfeito! Monte seu pedido no catálogo — destaques: ${names}.`, actions: [{ label: 'Ver catálogo', target: '#produtos' }] };
+  }
+  if (has('orcamento', 'orçamento', 'proposta', 'servico', 'reforma', 'quanto fica')) {
+    return { intent: 'quote', reply: 'Claro! Preencha rapidinho que retornamos com o orçamento.', actions: isFeatureEnabled(business, 'quote') ? [{ label: 'Pedir orçamento', target: '#orcamento' }] : [wa] };
+  }
+  if (has('endereco', 'onde', 'local', 'localizacao', 'como chego', 'mapa')) {
+    const addr = business.address || '';
+    return {
+      intent: 'location',
+      reply: addr ? `Estamos em: ${addr}` : 'Nosso atendimento é pelo WhatsApp — chama a gente!',
+      actions: addr ? [{ label: 'Ver localização', target: '#localizacao' }] : [wa],
+    };
+  }
   if (has('entrega', 'delivery', 'taxa')) {
-    return { intent: 'delivery', reply: 'Trabalhamos com entrega e retirada. Você escolhe na hora de finalizar o pedido!', actions: products.length ? [{ label: 'Ver catálogo', target: '#produtos' }] : [wa] };
+    return { intent: 'delivery', reply: 'Trabalhamos com entrega e retirada. Você escolhe na hora de finalizar o pedido!', actions: products.length && (isFeatureEnabled(business, 'products') || isFeatureEnabled(business, 'orders')) ? [{ label: 'Ver catálogo', target: '#produtos' }] : [wa] };
   }
   if (has('pagamento', 'pagar', 'pix', 'cartao', 'dinheiro')) {
     const map: Record<string, string> = { pix: 'PIX', card: 'cartão', cash: 'dinheiro', on_delivery: 'pagamento na entrega' };
@@ -133,14 +153,48 @@ export function conciergeAnswer(db: DB, business: Business, message: string): Co
     return {
       intent: 'search_hit',
       reply: `Encontrei "${matchItem.name}" por ${money(matchItem.price)}.`,
-      actions: matchItem.kind === 'produto' ? [{ label: 'Ver no catálogo', target: '#produtos' }] : [{ label: 'Ver serviços', target: '#servicos' }],
+      actions: matchItem.kind === 'produto'
+        ? (isFeatureEnabled(business, 'products') || isFeatureEnabled(business, 'orders')
+          ? [{ label: 'Ver no catálogo', target: '#produtos' }]
+          : [wa])
+        : (isFeatureEnabled(business, 'services') || isFeatureEnabled(business, 'bookings')
+          ? [{ label: 'Ver serviços', target: '#servicos' }]
+          : [wa]),
     };
   }
 
-  // ── Fallback seguro: nunca inventar ───────────────────────
+  // ── Conhecimento do negócio: FAQ publicado ───────────────
+  const words = q.split(/\s+/).filter((w) => w.length > 3);
+  const faqHit = (options.faq || []).find((item) => {
+    const qWords = norm(item.q).split(/\s+/).filter((w) => w.length > 3);
+    const hits = qWords.filter((w) => words.some((x) => x.startsWith(w.slice(0, 5)) || w.startsWith(x.slice(0, 5))));
+    return qWords.length > 0 && hits.length >= Math.min(2, qWords.length);
+  });
+  if (faqHit?.a) {
+    return {
+      intent: 'faq',
+      reply: faqHit.a,
+      actions: whatsappVisible(business) ? [wa] : [],
+    };
+  }
+
+  // ── Orientações do negócio (campo "Orientações do agente") ──
+  const extra = parseKnowledgeOverride(options.agent?.knowledgeOverride || '');
+  const extraHit = extra.find((item) => {
+    const t = norm(item.topic).split(/\s+/).filter((w) => w.length > 3);
+    return t.length > 0 && t.some((w) => words.some((x) => x.startsWith(w.slice(0, 5))));
+  });
+  if (extraHit && extraHit.answer && extraHit.answer !== extraHit.topic) {
+    const txt = extraHit.answer.trim();
+    const reply = txt.charAt(0).toUpperCase() + txt.slice(1);
+    return { intent: 'knowledge', reply, actions: whatsappVisible(business) ? [wa] : [] };
+  }
+
+  // ── Fallback seguro: nunca inventar (handoff configurado) ──
+  const handoff = (options.agent?.handoffMessage || '').trim();
   return {
     intent: 'fallback',
-    reply: 'Não encontrei essa informação por aqui. Fale com a gente que ajudamos rapidinho!',
+    reply: handoff || 'Não encontrei essa informação por aqui. Fale com a gente que ajudamos rapidinho!',
     actions: [wa],
   };
 }
