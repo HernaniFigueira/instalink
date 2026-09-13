@@ -1,7 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { readDB, updateDB } from '@/lib/db';
-import { userFromRequest } from '@/lib/auth';
+import { updateDB } from '@/lib/db';
 import { clampCents } from '@/lib/utils';
+import { requireBusiness } from '@/lib/access';
+import { pushAudit } from '@/lib/audit';
+import { normalizeFeatures } from '@/lib/features';
 import type { BusinessMode, TeamMode } from '@/lib/types';
 import { VALID_MODES, defaultBookingConfig } from '@/lib/types';
 import { VALID_NAV } from '@/lib/nav';
@@ -16,12 +18,10 @@ const str = (v: unknown, max: number): string => String((v as string) || '').sli
 
 export async function PATCH(req: NextRequest, { params }: { params: { id: string } }) {
   try {
-    const user = await userFromRequest(req);
-    if (!user) return NextResponse.json({ error: 'Não autenticado.' }, { status: 401 });
+    const guard = await requireBusiness(req, params.id, 'config');
+    if (!guard.ok) return guard.res;
+    const { ctx } = guard;
     const body = await req.json();
-    const db = await readDB();
-    const business = db.businesses.find((b) => b.id === params.id && b.ownerId === user.id);
-    if (!business) return NextResponse.json({ error: 'Negócio não encontrado.' }, { status: 404 });
 
     await updateDB((d) => {
       const b = d.businesses.find((x) => x.id === params.id)!;
@@ -29,7 +29,10 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
         if (body[key] === undefined) continue;
         if (key === 'modes') {
           const modes = (Array.isArray(body.modes) ? body.modes : []).filter((m: string) => VALID_MODES.includes(m as BusinessMode));
-          if (modes.length > 0) b.modes = modes;
+          // CORREÇÃO CRÍTICA: lista vazia é uma escolha VÁLIDA (empresa sem
+          // módulo comercial ligado). Antes a API ignorava o vazio e o painel
+          // ficava dessincronizado com a página.
+          b.modes = modes;
         } else if (key === 'paymentMethods') {
           const pm = (Array.isArray(body.paymentMethods) ? body.paymentMethods : []).filter((m: string) => PAY_METHODS.includes(m));
           b.paymentMethods = pm;
@@ -70,7 +73,26 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
         if (Number.isFinite(Number(nb.bufferMin))) cur.bufferMin = Math.max(0, Math.min(240, Math.round(Number(nb.bufferMin))));
         b.booking = cur;
       }
+      // Módulos opcionais: aceita toggles explícitos (mesma verdade da área
+      // "Recursos") sem apagar os demais.
+      if (body.features !== undefined && body.features && typeof body.features === 'object') {
+        const features = normalizeFeatures(b, d.pages.find((p) => p.businessId === b.id)?.blocks || []);
+        for (const key of Object.keys(body.features)) {
+          if (!(key in features)) continue;
+          features[key as keyof typeof features] = body.features[key] === true;
+        }
+        b.features = features;
+      }
       b.updatedAt = new Date().toISOString();
+      if (ctx.readOnly === false && (ctx.role === 'MASTER' || ctx.role === 'OWNER')) {
+        pushAudit(d, {
+          action: 'business.updated_by_master',
+          actor: { ...ctx.user, role: ctx.role },
+          businessId: b.id,
+          supportSessionId: ctx.support?.id,
+          meta: { keys: Object.keys(body).slice(0, 20) },
+        });
+      }
     });
     return NextResponse.json({ ok: true });
   } catch {

@@ -5,6 +5,7 @@ import { useCustomerForm } from './use-customer-form';
 import { Icon } from '@/components/icons';
 import type { Business, Professional, PublicBusiness, Service } from '@/lib/types';
 import { money, trackEvent, waLink } from './widgets';
+import { whatsappVisible } from '@/lib/features';
 
 const WEEK = ['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb'];
 
@@ -386,7 +387,14 @@ export function QuoteIsland({ businessId, title, bare }: { businessId: string; t
 // ── CONCIERGE IA ─────────────────────────────────────────
 interface Msg { from: 'bot' | 'user'; text: string; actions?: Array<{ label: string; target: string }> }
 
-export function ConciergeIsland({ business, title }: { business: PublicBusiness; title: string }) {
+// A configuração vem da EMPRESA (BusinessAgent): nome, saudação, tom,
+// objetivos e handoff — o assistente não é mais um botão vazio.
+export function ConciergeIsland({ business, agent, title }: {
+  business: PublicBusiness;
+  agent: { name: string; greeting: string; enabled: boolean };
+  title: string;
+}) {
+  const agentName = agent?.name || `Assistente ${business.name}`;
   const [open, setOpen] = useState(false);
   const [msgs, setMsgs] = useState<Msg[]>([]);
   const [input, setInput] = useState('');
@@ -403,7 +411,7 @@ export function ConciergeIsland({ business, title }: { business: PublicBusiness;
       })
         .then((r) => r.json())
         .then((d) => setMsgs([{ from: 'bot', text: d.reply, actions: d.actions }]))
-        .catch(() => setMsgs([{ from: 'bot', text: 'Olá! Como posso ajudar?' }]))
+        .catch(() => setMsgs([{ from: 'bot', text: agent?.greeting || 'Olá! Como posso ajudar?' }]))
         .finally(() => setLoading(false));
     }
   }
@@ -451,7 +459,7 @@ export function ConciergeIsland({ business, title }: { business: PublicBusiness;
         <span className="w-12 h-12 rounded-2xl flex items-center justify-center shrink-0" style={{ background: 'color-mix(in srgb, var(--il-primary) 12%, transparent)', color: 'var(--il-primary)' }}><Icon n="spark" size={24} /></span>
         <span>
           <span className="font-extrabold block">{title || 'Precisa de ajuda?'}</span>
-          <span className="il-muted text-sm">Nosso assistente te guia rapidinho</span>
+          <span className="il-muted text-sm">{agentName} responde na hora</span>
         </span>
       </button>
 
@@ -463,7 +471,7 @@ export function ConciergeIsland({ business, title }: { business: PublicBusiness;
               <div className="flex items-center gap-2.5 text-white">
                 <span className="w-10 h-10 rounded-2xl flex items-center justify-center shrink-0 bg-white/20"><Icon n="spark" size={20} /></span>
                 <div>
-                  <p className="font-extrabold text-sm">Assistente {business.name}</p>
+                  <p className="font-extrabold text-sm">{agentName}</p>
                   <p className="text-xs opacity-80 flex items-center gap-1.5"><span className="w-1.5 h-1.5 rounded-full bg-emerald-300" /> online agora</p>
                 </div>
               </div>
@@ -504,7 +512,7 @@ export function ConciergeIsland({ business, title }: { business: PublicBusiness;
 
 // ── BOTÃO WHATSAPP FLUTUANTE ─────────────────────────────
 export function WaFloat({ business, label }: { business: PublicBusiness; label: string }) {
-  if (!business.whatsapp) return null;
+  if (!whatsappVisible(business)) return null; // módulo manda
   return (
     <a
       href={waLink(business.whatsapp, `Olá! Vim pelo site da ${business.name}.`)}

@@ -1,12 +1,13 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { randomUUID } from 'node:crypto';
 import { readDB, updateDB } from '@/lib/db';
-import { userFromRequest } from '@/lib/auth';
+import { requireBusiness } from '@/lib/access';
 import { customerFromRequest } from '@/lib/customer-auth';
 import { onlyDigits, money } from '@/lib/utils';
 import { ORDER_FLOW, canTransition } from '@/lib/status';
 import { rateLimit, ipFrom } from '@/lib/rate-limit';
 import type { DB, OrderItem, OrderStatus } from '@/lib/types';
+import { isFeatureEnabled } from '@/lib/features';
 
 function err(message: string, status: number): Error {
   return Object.assign(new Error(message), { status });
@@ -22,6 +23,10 @@ export async function POST(req: NextRequest) {
     const db = await readDB();
     const business = db.businesses.find((b) => b.id === businessId);
     if (!business) return NextResponse.json({ error: 'Negócio não encontrado.' }, { status: 404 });
+    // Módulo desativado não aceita pedido novo (nem por rota direta).
+    if (!isFeatureEnabled(business, 'orders') && !isFeatureEnabled(business, 'products')) {
+      return NextResponse.json({ error: 'Este negócio não está recebendo pedidos no momento.' }, { status: 403 });
+    }
     const customer = await customerFromRequest(req);
     if (!customer) return NextResponse.json({ error: 'Entre para fazer seu pedido.', code: 'login_required' }, { status: 401 });
 
@@ -118,15 +123,12 @@ export async function POST(req: NextRequest) {
   }
 }
 
-// GET autenticado (dono): lista paginada
+// GET autenticado (equipe): lista paginada
 export async function GET(req: NextRequest) {
   const businessId = req.nextUrl.searchParams.get('businessId') || '';
-  const user = await userFromRequest(req);
-  if (!user) return NextResponse.json({ error: 'Não autenticado.' }, { status: 401 });
-  const db = await readDB();
-  if (!db.businesses.some((b) => b.id === businessId && b.ownerId === user.id)) {
-    return NextResponse.json({ error: 'Não autorizado.' }, { status: 401 });
-  }
+  const guard = await requireBusiness(req, businessId, 'pedidos');
+  if (!guard.ok) return guard.res;
+  const { db } = guard;
   const page = Math.max(1, Number(req.nextUrl.searchParams.get('page')) || 1);
   const limit = Math.min(200, Math.max(1, Number(req.nextUrl.searchParams.get('limit')) || 50));
   const all = db.orders.filter((o) => o.businessId === businessId).reverse();
@@ -136,12 +138,9 @@ export async function GET(req: NextRequest) {
 export async function PATCH(req: NextRequest) {
   try {
     const { businessId, id, status } = await req.json();
-    const user = await userFromRequest(req);
-    if (!user) return NextResponse.json({ error: 'Não autenticado.' }, { status: 401 });
-    const db = await readDB();
-    if (!db.businesses.some((b) => b.id === businessId && b.ownerId === user.id)) {
-      return NextResponse.json({ error: 'Não autorizado.' }, { status: 401 });
-    }
+    const guard = await requireBusiness(req, businessId, 'pedidos');
+    if (!guard.ok) return guard.res;
+    const { db } = guard;
     const current = db.orders.find((x) => x.id === id && x.businessId === businessId);
     if (!current) return NextResponse.json({ error: 'Pedido não encontrado.' }, { status: 404 });
     const to = status as OrderStatus;

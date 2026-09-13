@@ -8,6 +8,7 @@ import { todayISO, humanDateTime } from '@/lib/tz';
 import type { BookingStatus, OrderStatus } from '@/lib/types';
 import { Icon } from '@/components/icons';
 import { resolveCtaTarget } from '@/lib/cta';
+import { allowedCtaTargets } from '@/lib/features';
 import { CatalogIsland, money, waLink } from './widgets';
 import { BookingIsland, QuoteIsland } from './widgets2';
 
@@ -465,8 +466,13 @@ export function CustomerAccountSheet({ business }: { business: PublicBusiness })
 // Serviço → agendar → agenda. Produtos têm área própria e nunca
 // são destino de um CTA de agendamento (ver lib/cta.ts).
 export function CtaButton({ business, label, target }: { business: PublicBusiness; label: string; target?: string }) {
-  const t = resolveCtaTarget(business.modes, label, target);
   const cls = 'il-btn block w-full text-center font-bold text-[17px] py-3.5 active:scale-[0.99] transition-transform';
+  // MÓDULO MANDA: o destino pedido pela página só vale se o módulo estiver
+  // ligado; caso contrário cai para o próximo recurso realmente disponível.
+  const allowed = allowedCtaTargets(business);
+  if (allowed.length === 0) return null;
+  const wanted = resolveCtaTarget(business.modes, label, target);
+  const t = allowed.includes(wanted) ? wanted : allowed[0];
 
   if (t === 'products') {
     return <button onClick={() => openSheet('products', {})} className={cls}>{label}</button>;

@@ -4,6 +4,8 @@ import { readDB, updateDB } from '@/lib/db';
 import { userFromRequest } from '@/lib/auth';
 import { slugify, isValidSlug } from '@/lib/utils';
 import { defaultPresetId, defaultTheme, defaultBlocks } from '@/lib/templates';
+import { normalizeFeatures } from '@/lib/features';
+import { defaultWhatsappIntegration } from '@/lib/whatsapp';
 import { rateLimit, ipFrom } from '@/lib/rate-limit';
 import type { BusinessMode, Niche } from '@/lib/types';
 import { VALID_MODES, VALID_NICHES, defaultBookingConfig } from '@/lib/types';
@@ -22,7 +24,8 @@ export async function POST(req: NextRequest) {
     const modes = (Array.isArray(body.modes) ? body.modes : []).filter((m: string) => VALID_MODES.includes(m as BusinessMode)) as BusinessMode[];
     let slug = slugify(body.slug || name);
     if (!name) return NextResponse.json({ error: 'Dê um nome ao seu negócio.' }, { status: 400 });
-    if (modes.length === 0) return NextResponse.json({ error: 'Escolha ao menos uma forma de vender.' }, { status: 400 });
+    // Lista vazia é permitida de propósito: o InstaLink também serve como
+    // página de perfil (link na bio). O painel guia a ativação dos recursos.
     if (!isValidSlug(slug)) return NextResponse.json({ error: 'Esse endereço não é válido. Use ao menos 3 letras/números.' }, { status: 400 });
 
     const db = await readDB();
@@ -43,9 +46,18 @@ export async function POST(req: NextRequest) {
         booking: defaultBookingConfig(),
         nav: [], navCustom: false,
         about: { title: '', text: '', image: '', enabled: false },
+        whatsappIntegration: defaultWhatsappIntegration(),
+        features: normalizeFeatures(
+          { about: { title: '', text: '', image: '', enabled: false }, nav: [], modes, features: undefined } as any,
+          [],
+        ),
         published: false, createdAt: now, updatedAt: now,
       });
-      d.pages.push({ id: randomUUID(), businessId, presetId: defaultPresetId(niche), theme: defaultTheme(niche), blocks: defaultBlocks(niche, modes), updatedAt: now });
+      const created = d.businesses[d.businesses.length - 1];
+      const blocks = defaultBlocks(niche, modes);
+      // Módulos opcionais nascem coerentes com os blocos criados.
+      created.features = normalizeFeatures(created, blocks);
+      d.pages.push({ id: randomUUID(), businessId, presetId: defaultPresetId(niche), theme: defaultTheme(niche), blocks, updatedAt: now });
     });
     return NextResponse.json({ ok: true, businessId, slug });
   } catch {

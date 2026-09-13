@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { randomUUID } from 'node:crypto';
 import { readDB, updateDB } from '@/lib/db';
-import { userFromRequest } from '@/lib/auth';
+import { requireBusiness } from '@/lib/access';
+import { isFeatureEnabled } from '@/lib/features';
 import { customerFromRequest } from '@/lib/customer-auth';
 import { onlyDigits } from '@/lib/utils';
 import { LEAD_FLOW, canTransition } from '@/lib/status';
@@ -23,6 +24,10 @@ export async function POST(req: NextRequest) {
     const db = await readDB();
     const business = db.businesses.find((b) => b.id === body.businessId);
     if (!business) return NextResponse.json({ error: 'Negócio não encontrado.' }, { status: 404 });
+    // Orçamento desativado não vira lead (a captação inteira é o módulo).
+    if (!isFeatureEnabled(business, 'quote')) {
+      return NextResponse.json({ error: 'Este negócio não está recebendo orçamentos no momento.' }, { status: 403 });
+    }
     const customer = await customerFromRequest(req);
     const guest = String(body.origin || '') === 'orcamento' || String(body.action || '') === 'orcamento' || String(body.origin || '') === 'formulario';
     if (!customer && !guest) {
@@ -67,12 +72,9 @@ export async function POST(req: NextRequest) {
 
 export async function GET(req: NextRequest) {
   const businessId = req.nextUrl.searchParams.get('businessId') || '';
-  const user = await userFromRequest(req);
-  if (!user) return NextResponse.json({ error: 'Não autenticado.' }, { status: 401 });
-  const db = await readDB();
-  if (!db.businesses.some((b) => b.id === businessId && b.ownerId === user.id)) {
-    return NextResponse.json({ error: 'Não autorizado.' }, { status: 401 });
-  }
+  const guard = await requireBusiness(req, businessId, 'leads');
+  if (!guard.ok) return guard.res;
+  const db = guard.db;
   const page = Math.max(1, Number(req.nextUrl.searchParams.get('page')) || 1);
   const limit = Math.min(200, Math.max(1, Number(req.nextUrl.searchParams.get('limit')) || 50));
   const all = db.leads.filter((l) => l.businessId === businessId).reverse();
@@ -82,12 +84,9 @@ export async function GET(req: NextRequest) {
 export async function PATCH(req: NextRequest) {
   try {
     const { businessId, id, status } = await req.json();
-    const user = await userFromRequest(req);
-    if (!user) return NextResponse.json({ error: 'Não autenticado.' }, { status: 401 });
-    const db = await readDB();
-    if (!db.businesses.some((b) => b.id === businessId && b.ownerId === user.id)) {
-      return NextResponse.json({ error: 'Não autorizado.' }, { status: 401 });
-    }
+    const guard = await requireBusiness(req, businessId, 'leads');
+    if (!guard.ok) return guard.res;
+    const db = guard.db;
     const current = db.leads.find((x) => x.id === id && x.businessId === businessId);
     if (!current) return NextResponse.json({ error: 'Cliente não encontrado.' }, { status: 404 });
     const to = status as LeadStatus;

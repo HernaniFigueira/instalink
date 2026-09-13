@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { readDB } from '@/lib/db';
+import { readDB, updateDB } from '@/lib/db';
 import { verifyPassword, createSession, setSessionOn } from '@/lib/auth';
 import { rateLimit, ipFrom } from '@/lib/rate-limit';
 
@@ -14,6 +14,11 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'E-mail ou senha incorretos.' }, { status: 401 });
     }
     const sessionId = await createSession(user.id);
+    // Último acesso (visível para o próprio usuário e para o suporte master).
+    await updateDB((d) => {
+      const u = d.users.find((x) => x.id === user.id);
+      if (u) u.lastLoginAt = new Date().toISOString();
+    });
     const res = NextResponse.json({ ok: true, token: sessionId });
     setSessionOn(res, sessionId);
     return res;

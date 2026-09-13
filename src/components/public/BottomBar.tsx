@@ -6,6 +6,7 @@ import { trackEvent } from './widgets';
 import { waLink } from '@/lib/utils';
 import type { PublicBusiness } from '@/lib/types';
 import { useCustomer, PublicMenuSheet, type NavActionItem } from './menu';
+import { whatsappVisible } from '@/lib/features';
 
 // Barra de navegação flutuante (bottom) da página pública.
 // Substitui o antigo header flutuante: [Usuário · WhatsApp · Agendar · Menu].
@@ -54,8 +55,8 @@ export function BottomBar({ business, navItems, canBook }: {
             <span className={lbl} style={{ color: 'var(--il-text)' }}>{customer ? first : 'Entrar'}</span>
           </button>
 
-          {/* WhatsApp */}
-          {business.whatsapp && (
+          {/* WhatsApp — obedece ao MÓDULO da empresa (não só ao número) */}
+          {whatsappVisible(business) && (
             <button type="button" className={btn} onClick={wa} aria-label="WhatsApp">
               <span className={chip} style={{ background: 'rgba(34,197,94,0.14)', color: '#16a34a' }}>
                 <Icon n="whatsapp" size={20} />

@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { readDB } from '@/lib/db';
-import { userFromRequest } from '@/lib/auth';
+import { requireBusiness } from '@/lib/access';
 import { todayISO, addDaysISO, formatDateShort } from '@/lib/tz';
 import { convRate, seriesByDay, topN, funnelRates } from '@/lib/analytics';
 
@@ -13,12 +13,9 @@ const ORIGIN_LABEL: Record<string, string> = {
 export async function GET(req: NextRequest) {
   const businessId = req.nextUrl.searchParams.get('businessId') || '';
   const period = req.nextUrl.searchParams.get('period') === '7' ? 7 : 30;
-  const user = await userFromRequest(req);
-  if (!user) return NextResponse.json({ error: 'Não autenticado.' }, { status: 401 });
-  const db = await readDB();
-  if (!db.businesses.some((b) => b.id === businessId && b.ownerId === user.id)) {
-    return NextResponse.json({ error: 'Não autorizado.' }, { status: 401 });
-  }
+  const guard = await requireBusiness(req, businessId, 'financeiro');
+  if (!guard.ok) return guard.res;
+  const db = guard.db;
 
   const today = todayISO();
   const start = addDaysISO(today, -(period - 1));

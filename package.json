@@ -11,7 +11,8 @@
     "test": "vitest run",
     "typecheck": "tsc --noEmit",
     "retention": "node scripts/retention.mjs",
-    "smoke": "node scripts/smoke.mjs"
+    "smoke": "node scripts/smoke.mjs",
+    "master": "node scripts/master.mjs"
   },
   "dependencies": {
     "@vercel/blob": "^2.8.0",

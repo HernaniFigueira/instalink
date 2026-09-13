@@ -1,10 +1,10 @@
 'use client';
 import { useCallback, useEffect, useState } from 'react';
 import { useSearchParams } from 'next/navigation';
-import { MODES } from '@/lib/templates';
+import Link from 'next/link';
 import { cn, parseMoneyToCents, centsToBR } from '@/lib/utils';
 import { NAV_ORDER } from '@/lib/nav';
-import type { Business, BusinessMode } from '@/lib/types';
+import type { Business } from '@/lib/types';
 import { PageSkeleton } from '@/components/ui';
 import { Icon } from '@/components/icons';
 import { ImageUpload } from '@/components/dashboard/ImageUpload';
@@ -22,6 +22,9 @@ export default function ConfigPage() {
   const [biz, setBiz] = useState<Business | null>(null);
   const [msg, setMsg] = useState('');
   const [saving, setSaving] = useState(false);
+  // Grupos: NEGÓCIO · PÁGINA · AGENDA · CRM · CANAIS (agente/WhatsApp/equipe)
+  const [tab, setTab] = useState<'negocio' | 'pagina' | 'agenda' | 'crm' | 'canais'>('negocio');
+  const [activeModules, setActiveModules] = useState<number | null>(null);
 
   const load = useCallback(() => {
     if (!businessId) return;
@@ -29,6 +32,16 @@ export default function ConfigPage() {
   }, [businessId]);
 
   useEffect(() => { load(); }, [load]);
+
+  // Contagem de módulos ativos (o "ligar/desligar" vive em /recursos, com
+  // salvamento imediato; aqui só mostramos o atalho e o estado).
+  useEffect(() => {
+    if (!businessId) return;
+    fetch(`/api/businesses/${businessId}/features`)
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d) => setActiveModules((d?.features || []).filter((f: any) => f.enabled).length))
+      .catch(() => {});
+  }, [businessId]);
 
   async function save() {
     if (!biz) return;
@@ -62,10 +75,6 @@ export default function ConfigPage() {
   const set = (k: keyof Business, v: any) => setBiz({ ...biz, [k]: v });
   const input = 'w-full rounded-xl border border-zinc-300 px-3.5 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500';
 
-  function toggleMode(m: BusinessMode) {
-    const has = biz!.modes.includes(m);
-    set('modes', has ? biz!.modes.filter((x) => x !== m) : [...biz!.modes, m]);
-  }
   function togglePay(id: string) {
     const has = (biz!.paymentMethods || []).includes(id);
     set('paymentMethods', has ? biz!.paymentMethods.filter((x) => x !== id) : [...(biz!.paymentMethods || []), id]);
@@ -83,11 +92,20 @@ export default function ConfigPage() {
   return (
     <>
       <h1 className="text-2xl font-bold tracking-tight">Configurações</h1>
-      <p className="text-sm text-zinc-500 mt-1 mb-5">Dados do negócio, contato e formas de vender.</p>
+      <p className="text-sm text-zinc-500 mt-1 mb-4">Organizado por área: negócio, página, agenda, CRM e canais.</p>
       {msg && <p className="mb-4 text-sm font-medium bg-zinc-900 text-white rounded-xl px-4 py-3">{msg}</p>}
 
+      <div className="flex flex-wrap gap-1 p-1 bg-zinc-100 rounded-xl mb-5 w-fit" role="tablist">
+        {([['negocio', 'Negócio'], ['pagina', 'Página'], ['agenda', 'Agenda'], ['crm', 'CRM'], ['canais', 'Canais']] as const).map(([id, label]) => (
+          <button key={id} role="tab" aria-selected={tab === id} onClick={() => setTab(id)}
+            className={cn('text-xs font-bold px-4 py-2 rounded-lg', tab === id ? 'bg-white shadow-sm text-zinc-900' : 'text-zinc-500')}>
+            {label}
+          </button>
+        ))}
+      </div>
+
       <div className="space-y-4">
-        <section className="bg-white border border-zinc-200 rounded-2xl p-5 space-y-3.5">
+        <section className={cn('bg-white border border-zinc-200 rounded-2xl p-5 space-y-3.5', tab !== 'negocio' && 'hidden')}>
           <h3 className="font-bold text-sm flex items-center gap-2"><Icon n="store" size={16} className="text-zinc-400" /> Perfil</h3>
           <div className="grid sm:grid-cols-2 gap-3.5">
             <label className="block"><span className="text-xs font-bold text-zinc-500">NOME *</span>
@@ -104,7 +122,7 @@ export default function ConfigPage() {
           </div>
         </section>
 
-        <section className="bg-white border border-zinc-200 rounded-2xl p-5 space-y-3.5">
+        <section className={cn('bg-white border border-zinc-200 rounded-2xl p-5 space-y-3.5', tab !== 'negocio' && 'hidden')}>
           <h3 className="font-bold text-sm flex items-center gap-2"><Icon n="chat" size={16} className="text-zinc-400" /> Contato e redes</h3>
           <div className="grid sm:grid-cols-2 gap-3.5">
             <label className="block"><span className="text-xs font-bold text-zinc-500">WHATSAPP *</span>
@@ -118,7 +136,7 @@ export default function ConfigPage() {
           </div>
         </section>
 
-        <section className="bg-white border border-zinc-200 rounded-2xl p-5 space-y-3.5">
+        <section className={cn('bg-white border border-zinc-200 rounded-2xl p-5 space-y-3.5', tab !== 'negocio' && 'hidden')}>
           <h3 className="font-bold text-sm flex items-center gap-2"><Icon n="pin" size={16} className="text-zinc-400" /> Endereço</h3>
           <label className="block"><span className="text-xs font-bold text-zinc-500">ENDEREÇO</span>
             <input value={biz.address} onChange={(e) => set('address', e.target.value)} className={input + ' mt-1'} placeholder="Rua, número, bairro, cidade" /></label>
@@ -127,20 +145,7 @@ export default function ConfigPage() {
               <span className="text-[11px] text-zinc-500">Com o link salvo, a página mostra o mapa. Sem link, o bloco nem aparece.</span></label>
         </section>
 
-        <section className="bg-white border border-zinc-200 rounded-2xl p-5">
-          <h3 className="font-bold text-sm mb-1 flex items-center gap-2"><Icon n="bag" size={16} className="text-zinc-400" /> Como você vende</h3>
-          <p className="text-xs text-zinc-500 mb-3">Ativar um módulo mostra o menu correspondente no painel.</p>
-          <div className="flex flex-wrap gap-2">
-            {MODES.map((m) => (
-              <button key={m.id} onClick={() => toggleMode(m.id)}
-                className={cn('text-sm font-bold px-4 py-2.5 rounded-xl border-2', biz.modes.includes(m.id) ? 'border-emerald-500 bg-emerald-50 text-emerald-800' : 'border-zinc-200 text-zinc-500')}>
-                {biz.modes.includes(m.id) && <Icon n="check" size={14} className="inline -mt-0.5" />} {m.label}
-              </button>
-            ))}
-          </div>
-        </section>
-
-        <section className="bg-white border border-zinc-200 rounded-2xl p-5">
+        <section className={cn('bg-white border border-zinc-200 rounded-2xl p-5', tab !== 'pagina' && 'hidden')}>
           <h3 className="font-bold text-sm flex items-center gap-2"><Icon n="menu" size={16} className="text-zinc-400" /> Navegação da página</h3>
           <p className="text-xs text-zinc-500 mt-1 mb-3">Escolha os itens que aparecem no menu da sua página (botão “Menu” na barra inferior).</p>
           <div className="flex flex-wrap gap-2">
@@ -156,7 +161,7 @@ export default function ConfigPage() {
           </div>
         </section>
 
-        <section className="bg-white border border-zinc-200 rounded-2xl p-5 space-y-3.5">
+        <section className={cn('bg-white border border-zinc-200 rounded-2xl p-5 space-y-3.5', tab !== 'pagina' && 'hidden')}>
           <div className="flex items-center justify-between">
             <h3 className="font-bold text-sm flex items-center gap-2"><Icon n="store" size={16} className="text-zinc-400" /> Sobre a empresa</h3>
             <button onClick={() => setAbout('enabled', !about.enabled)}
@@ -173,7 +178,7 @@ export default function ConfigPage() {
           <ImageUpload label="IMAGEM (OPCIONAL)" value={about.image} onChange={(url) => setAbout('image', url)} businessId={businessId} />
         </section>
 
-        <section className="bg-white border border-zinc-200 rounded-2xl p-5 space-y-3.5">
+        <section className={cn('bg-white border border-zinc-200 rounded-2xl p-5 space-y-3.5', tab !== 'negocio' && 'hidden')}>
           <h3 className="font-bold text-sm flex items-center gap-2"><Icon n="card" size={16} className="text-zinc-400" /> Pagamento</h3>
           <div className="flex flex-wrap gap-2">
             {PAYMENTS.map((p) => (
@@ -195,9 +200,57 @@ export default function ConfigPage() {
           </div>
         </section>
 
-        <button onClick={save} disabled={saving} className="text-sm font-bold bg-zinc-900 text-white px-6 py-3 rounded-xl disabled:opacity-50">
-          {saving ? 'Salvando…' : 'Salvar tudo'}
-        </button>
+        {tab === 'agenda' && (
+          <section className="bg-white border border-zinc-200 rounded-2xl p-5">
+            <h3 className="font-bold text-sm flex items-center gap-2"><Icon n="calendar" size={16} className="text-zinc-400" /> Agenda e disponibilidade</h3>
+            <p className="text-xs text-zinc-500 mt-1">
+              Horários de funcionamento, profissionais vinculados aos serviços, duração, intervalos, exceções,
+              horizonte de agendamento, antecedência mínima e taxa de cancelamento ficam em <strong>Serviços &amp; Agenda</strong>.
+            </p>
+            <Link href={`/servicos?b=${businessId}`} className="inline-block mt-3 text-sm font-bold bg-zinc-900 text-white px-4 py-2.5 rounded-xl">Abrir serviços e agenda</Link>
+          </section>
+        )}
+
+        {tab === 'crm' && (
+          <section className="bg-white border border-zinc-200 rounded-2xl p-5 space-y-3">
+            <h3 className="font-bold text-sm flex items-center gap-2"><Icon n="users" size={16} className="text-zinc-400" /> CRM e consentimento</h3>
+            <p className="text-xs text-zinc-500">
+              A base de contatos cresce sozinha com cadastro, agendamento, pedido e conversa. Cada pessoa tem histórico 360,
+              observações da equipe e o interruptor <strong>“autoriza receber promoções”</strong>.
+            </p>
+            <ul className="text-xs text-zinc-600 space-y-1.5">
+              <li>• <strong>Nunca presumimos consentimento:</strong> sem o interruptor ligado, o contato não entra em campanha.</li>
+              <li>• Desligar o consentimento não apaga o histórico — só impede envio de marketing.</li>
+              <li>• Agendamentos criados pelo painel vinculam o cliente existente em vez de duplicar cadastro.</li>
+            </ul>
+            <div className="flex flex-wrap gap-2 pt-1">
+              <Link href={`/clientes?b=${businessId}`} className="text-sm font-bold bg-zinc-900 text-white px-4 py-2.5 rounded-xl">Abrir clientes</Link>
+              <Link href={`/campanhas?b=${businessId}`} className="text-sm font-bold bg-zinc-100 px-4 py-2.5 rounded-xl">Campanhas</Link>
+            </div>
+          </section>
+        )}
+
+        {tab === 'canais' && (
+          <section className="bg-white border border-zinc-200 rounded-2xl p-5 space-y-3">
+            <h3 className="font-bold text-sm flex items-center gap-2"><Icon n="toggle" size={16} className="text-zinc-400" /> Recursos, agente, WhatsApp e equipe</h3>
+            <p className="text-xs text-zinc-500">
+              O que existe no negócio é definido pelos <strong>módulos da empresa</strong> ({activeModules ?? '—'} ativos agora).
+              Ligar/desligar salva na hora e reflete na página pública.
+            </p>
+            <div className="grid sm:grid-cols-2 gap-2 pt-1">
+              <Link href={`/recursos?b=${businessId}`} className="text-sm font-bold bg-zinc-900 text-white px-4 py-2.5 rounded-xl text-center">Recursos da empresa</Link>
+              <Link href={`/agente?b=${businessId}`} className="text-sm font-bold bg-zinc-100 px-4 py-2.5 rounded-xl text-center">Agente de atendimento</Link>
+              <Link href={`/whatsapp?b=${businessId}`} className="text-sm font-bold bg-zinc-100 px-4 py-2.5 rounded-xl text-center">WhatsApp</Link>
+              <Link href={`/equipe?b=${businessId}`} className="text-sm font-bold bg-zinc-100 px-4 py-2.5 rounded-xl text-center">Equipe e permissões</Link>
+            </div>
+          </section>
+        )}
+
+        {tab === 'negocio' && (
+          <button onClick={save} disabled={saving} className="text-sm font-bold bg-zinc-900 text-white px-6 py-3 rounded-xl disabled:opacity-50">
+            {saving ? 'Salvando…' : 'Salvar tudo'}
+          </button>
+        )}
       </div>
     </>
   );

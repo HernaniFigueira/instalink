@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { userFromRequest } from '@/lib/auth';
-import { readDB } from '@/lib/db';
+import { requireBusiness } from '@/lib/access';
 import { onlyDigits } from '@/lib/utils';
 
 // GET ?businessId=&q=&page= — cliente 360 (contato-centric).
@@ -13,14 +12,14 @@ export async function GET(req: NextRequest) {
   const q = (req.nextUrl.searchParams.get('q') || '').trim().toLowerCase();
   const page = Math.max(1, parseInt(req.nextUrl.searchParams.get('page') || '1', 10) || 1);
   const limit = 30;
-  const user = await userFromRequest(req);
-  if (!user) return NextResponse.json({ error: 'Não autenticado.' }, { status: 401 });
-  const db = await readDB();
-  const business = db.businesses.find((b) => b.id === businessId && b.ownerId === user.id);
-  if (!business) return NextResponse.json({ error: 'Negócio não encontrado.' }, { status: 404 });
+  const guard = await requireBusiness(req, businessId, 'clientes');
+  if (!guard.ok) return guard.res;
+  const db = guard.db;
 
   interface P {
     key: string;
+    contactId: string;
+    note: string;
     customerId: string;
     name: string;
     phone: string;
@@ -52,7 +51,7 @@ export async function GET(req: NextRequest) {
     let p = map.get(key);
     if (!p) {
       p = {
-        key, customerId, name, phone: digits, email: '', registered: false, customerSince: '',
+        key, contactId: '', note: '', customerId, name, phone: digits, email: '', registered: false, customerSince: '',
         source: '', marketingOptIn: false,
         orders: 0, spent: 0, lastOrderAt: '', bookings: [], leads: [], lastSeen: '',
       };
@@ -70,9 +69,11 @@ export async function GET(req: NextRequest) {
     if (!p) continue;
     p.registered = !!c.customerId;
     p.customerSince = c.createdAt;
+    p.contactId = c.id;
+    p.note = c.note || '';
     p.source = c.source;
     p.email = c.email || p.email;
-    p.marketingOptIn = c.marketingOptIn;
+    p.marketingOptIn = c.marketingOptIn === true;
     if (!p.lastSeen || c.lastInteraction > p.lastSeen) p.lastSeen = c.lastInteraction;
   }
 

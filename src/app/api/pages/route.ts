@@ -1,30 +1,25 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { readDB, updateDB } from '@/lib/db';
-import { userFromRequest } from '@/lib/auth';
+import { requireBusiness } from '@/lib/access';
 import { slugify, isValidSlug } from '@/lib/utils';
 
 // GET ?businessId= — página + tema + blocos (dono)
 // PUT — salvar blocos/tema/publicação/slug (dono)
 export async function GET(req: NextRequest) {
   const businessId = req.nextUrl.searchParams.get('businessId') || '';
-  const user = await userFromRequest(req);
-  if (!user) return NextResponse.json({ error: 'Não autenticado.' }, { status: 401 });
-  const db = await readDB();
-  const business = db.businesses.find((b) => b.id === businessId && b.ownerId === user.id);
-  if (!business) return NextResponse.json({ error: 'Negócio não encontrado.' }, { status: 404 });
-  const page = db.pages.find((p) => p.businessId === businessId);
-  return NextResponse.json({ business, page });
+  const guard = await requireBusiness(req, businessId);
+  if (!guard.ok) return guard.res;
+  const page = guard.db.pages.find((p) => p.businessId === businessId);
+  return NextResponse.json({ business: guard.ctx.business, page });
 }
 
 export async function PUT(req: NextRequest) {
   try {
     const body = await req.json();
     const { businessId } = body;
-    const user = await userFromRequest(req);
-    if (!user) return NextResponse.json({ error: 'Não autenticado.' }, { status: 401 });
-    const db = await readDB();
-    const business = db.businesses.find((b) => b.id === businessId && b.ownerId === user.id);
-    if (!business) return NextResponse.json({ error: 'Negócio não encontrado.' }, { status: 404 });
+    const guard = await requireBusiness(req, businessId, 'pagina');
+    if (!guard.ok) return guard.res;
+    const db = guard.db;
 
     if (body.slug !== undefined) {
       const slug = slugify(body.slug);
@@ -50,6 +45,8 @@ export async function PUT(req: NextRequest) {
         if (Array.isArray(body.blocks)) {
           page.blocks = body.blocks.map((bl: any, i: number) => ({
             id: String(bl.id), type: bl.type, order: i,
+            // `enabled` é APRESENTAÇÃO: o módulo da empresa (lib/features)
+            // continua sendo quem decide se o recurso existe no ar.
             enabled: bl.enabled !== false,
             settings: (bl.settings && typeof bl.settings === 'object') ? bl.settings : {},
           }));

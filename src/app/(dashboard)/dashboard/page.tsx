@@ -15,7 +15,18 @@ interface Overview {
     visitors: number; uniqueVisitors: number; clicks: number; leads: number; leadsNew: number;
     orders: number; bookings: number; conversions: number; newOrders: number; pendingBookings: number;
   };
-  revenue: { total: number; prev: number; orders: number; ticket: number; period: number };
+  revenue: { total: number; prev: number; orders: number; ticket: number; period: number; hidden?: boolean };
+  showMoney?: boolean;
+  today?: {
+    date: string; total: number; confirmed: number; pending: number; completed: number;
+    cancelled: number; noShow: number; upcoming: number; needsClosure: number;
+  };
+  needsClosure?: Array<{ id: string; customerName: string; date: string; time: string; status: string; service: string }>;
+  crm?: { contacts: number; newContacts: number; registered: number; withConsent: number; leads: number; leadsNew: number; customers: number };
+  pageStats?: { views: number; clicks: number; bookings: number; conversions: number; published: boolean; slug: string };
+  whatsapp?: { status: string; open: number; unread: number; pendingMessages: number; link: string };
+  modules?: string[];
+  hasBookingsModule?: boolean;
   upcoming: Array<{ id: string; customerName: string; date: string; time: string; status: string; service: string; professional: string }>;
   checklist: Array<{ done: boolean; label: string; href: string }>;
   pct: number;
@@ -51,7 +62,12 @@ export default function DashboardPage() {
 
   if (!data) return <PageSkeleton />;
 
-  const { user, business, totals, revenue, upcoming, checklist, pct, recent } = data;
+  const {
+    user, business, totals, revenue, upcoming, checklist, pct, recent,
+    today, needsClosure = [], crm, pageStats, whatsapp, hasBookingsModule,
+  } = data;
+  const showMoney = data.showMoney !== false;
+  const pendencies = (needsClosure || []).filter((b) => true);
   const q = `?b=${business.id}`;
   const next = checklist.find((c) => !c.done);
   const hasActivity = recent.orders.length + recent.bookings.length + recent.leads.length > 0;
@@ -92,6 +108,27 @@ export default function DashboardPage() {
         </div>
       </div>
 
+      {pendencies.length > 0 && (
+        <Card className="mb-4 p-4 border-amber-300 bg-amber-50">
+          <p className="text-sm font-extrabold text-amber-900 flex items-center gap-2">
+            <Icon n="alert" size={16} />
+            {pendencies.length === 1 ? '1 atendimento precisa de fechamento' : `${pendencies.length} atendimentos precisam de fechamento`}
+          </p>
+          <p className="text-xs text-amber-900 mt-1">
+            O horário passou e o status continua em aberto — conclua, registre falta, cancele ou reagende. Nada é fechado sozinho.
+          </p>
+          <div className="flex flex-wrap gap-2 mt-2.5">
+            {pendencies.slice(0, 4).map((b) => (
+              <Link key={b.id} href={`/agenda${q}`}
+                className="text-xs font-bold bg-white border border-amber-300 text-amber-900 px-3 py-2 rounded-lg">
+                {b.date.slice(8, 10)}/{b.date.slice(5, 7)} {b.time} · {b.customerName}
+              </Link>
+            ))}
+            <Link href={`/agenda${q}`} className="text-xs font-bold text-amber-900 underline self-center">Resolver na agenda →</Link>
+          </div>
+        </Card>
+      )}
+
       {next && (
         <Card className="mb-6 p-5 border-emerald-200 bg-emerald-50/50">
           <p className="text-sm font-semibold text-zinc-900">Próxima ação importante: <strong>{next.label}</strong></p>
@@ -103,6 +140,10 @@ export default function DashboardPage() {
       <div className="grid xl:grid-cols-12 gap-4 mb-6">
         <Card className="xl:col-span-4 p-5">
           <p className="text-xs font-bold uppercase tracking-wider text-zinc-400">Receita</p>
+          {!showMoney ? (
+            <p className="text-sm text-zinc-500 mt-3">Seu acesso não inclui o financeiro.</p>
+          ) : (
+          <>
           <p className="text-3xl font-extrabold tracking-tight mt-1">{money(revenue.total)}</p>
           <p className={`text-xs font-bold mt-1 ${delta >= 0 ? 'text-emerald-600' : 'text-red-600'}`}>
             {delta >= 0 ? '▲' : '▼'} {money(Math.abs(delta))} vs. {revenue.period} dias anteriores
@@ -111,6 +152,8 @@ export default function DashboardPage() {
             <div><p className="text-sm font-extrabold">{revenue.orders}</p><p className="text-[11px] text-zinc-500">pedidos</p></div>
             <div><p className="text-sm font-extrabold">{money(revenue.ticket)}</p><p className="text-[11px] text-zinc-500">tíquete médio</p></div>
           </div>
+          </>
+          )}
         </Card>
 
         <Card className="xl:col-span-5 p-5">
@@ -141,6 +184,75 @@ export default function DashboardPage() {
             <div><p className="text-xl font-extrabold">{totals.conversions}</p><p className="text-xs text-zinc-500">conversões</p></div>
           </div>
           <Link href={`/resultados${q}`} className="inline-block mt-4 text-xs font-bold text-emerald-700 hover:underline">Ver resultados →</Link>
+        </Card>
+      </div>
+
+      {hasBookingsModule && today && (
+        <Card className="mb-6 p-5">
+          <div className="flex items-center justify-between mb-3">
+            <p className="text-xs font-bold uppercase tracking-wider text-zinc-400">Hoje</p>
+            <Link href={`/agenda${q}`} className="text-xs font-bold text-emerald-700 hover:underline">Abrir agenda →</Link>
+          </div>
+          <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-6 gap-3">
+            <div><p className="text-xl font-extrabold">{today.total}</p><p className="text-[11px] text-zinc-500">atendimentos</p></div>
+            <div><p className="text-xl font-extrabold text-emerald-700">{today.confirmed}</p><p className="text-[11px] text-zinc-500">confirmados</p></div>
+            <div><p className="text-xl font-extrabold text-amber-600">{today.pending}</p><p className="text-[11px] text-zinc-500">aguardando</p></div>
+            <div><p className="text-xl font-extrabold text-blue-600">{today.completed}</p><p className="text-[11px] text-zinc-500">concluídos</p></div>
+            <div><p className="text-xl font-extrabold text-red-600">{today.noShow}</p><p className="text-[11px] text-zinc-500">faltas</p></div>
+            <div>
+              <p className={`text-xl font-extrabold ${today.needsClosure ? 'text-amber-700' : 'text-zinc-900'}`}>{today.needsClosure}</p>
+              <p className="text-[11px] text-zinc-500">precisam fechar</p>
+            </div>
+          </div>
+        </Card>
+      )}
+
+      <div className="grid sm:grid-cols-3 gap-4 mb-6">
+        <Card className="p-5">
+          <div className="flex items-center justify-between mb-2">
+            <p className="text-xs font-bold uppercase tracking-wider text-zinc-400">CRM</p>
+            <Link href={`/clientes${q}`} className="text-xs font-bold text-emerald-700 hover:underline">Ver →</Link>
+          </div>
+          <p className="text-2xl font-extrabold">{crm?.contacts ?? 0}</p>
+          <p className="text-xs text-zinc-500">contatos na base</p>
+          <div className="grid grid-cols-2 gap-2 mt-3 pt-3 border-t border-zinc-100 text-xs">
+            <div><strong className="block text-sm">{crm?.customers ?? 0}</strong><span className="text-zinc-500">clientes cadastrados</span></div>
+            <div><strong className="block text-sm">{crm?.withConsent ?? 0}</strong><span className="text-zinc-500">autorizaram marketing</span></div>
+            <div><strong className="block text-sm">{crm?.leads ?? 0}</strong><span className="text-zinc-500">leads</span></div>
+            <div><strong className="block text-sm">{crm?.newContacts ?? 0}</strong><span className="text-zinc-500">novos no período</span></div>
+          </div>
+        </Card>
+
+        <Card className="p-5">
+          <div className="flex items-center justify-between mb-2">
+            <p className="text-xs font-bold uppercase tracking-wider text-zinc-400">Página</p>
+            <Link href={`/pagina${q}`} className="text-xs font-bold text-emerald-700 hover:underline">Editar →</Link>
+          </div>
+          <p className="text-2xl font-extrabold">{pageStats?.views ?? totals.visitors}</p>
+          <p className="text-xs text-zinc-500">visualizações no período</p>
+          <div className="grid grid-cols-3 gap-2 mt-3 pt-3 border-t border-zinc-100 text-xs">
+            <div><strong className="block text-sm">{pageStats?.clicks ?? totals.clicks}</strong><span className="text-zinc-500">cliques</span></div>
+            <div><strong className="block text-sm">{pageStats?.bookings ?? 0}</strong><span className="text-zinc-500">agendamentos</span></div>
+            <div><strong className="block text-sm">{pageStats?.conversions ?? totals.conversions}</strong><span className="text-zinc-500">conversões</span></div>
+          </div>
+        </Card>
+
+        <Card className={`p-5 ${whatsapp?.status === 'connected' ? 'border-emerald-200' : ''}`}>
+          <div className="flex items-center justify-between mb-2">
+            <p className="text-xs font-bold uppercase tracking-wider text-zinc-400">WhatsApp</p>
+            <Link href={`/whatsapp${q}`} className="text-xs font-bold text-emerald-700 hover:underline">Abrir →</Link>
+          </div>
+          <p className={`text-base font-extrabold mt-0.5 ${whatsapp?.status === 'connected' ? 'text-emerald-700' : 'text-zinc-700'}`}>
+            {whatsapp?.status === 'connected' ? 'Conectado' : 'Não conectado'}
+          </p>
+          <p className="text-xs text-zinc-500 mt-1">
+            {whatsapp?.status === 'connected' ? 'Mensagens entram no CRM.' : 'O link externo continua funcionando.'}
+          </p>
+          <div className="grid grid-cols-3 gap-2 mt-3 pt-3 border-t border-zinc-100 text-xs">
+            <div><strong className="block text-sm">{whatsapp?.open ?? 0}</strong><span className="text-zinc-500">abertas</span></div>
+            <div><strong className="block text-sm">{whatsapp?.unread ?? 0}</strong><span className="text-zinc-500">não lidas</span></div>
+            <div><strong className="block text-sm">{whatsapp?.pendingMessages ?? 0}</strong><span className="text-zinc-500">na fila</span></div>
+          </div>
         </Card>
       </div>
 

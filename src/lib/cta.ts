@@ -6,6 +6,8 @@ import type { BusinessMode } from './types';
 
 export type CtaTarget = 'products' | 'booking' | 'quote' | 'whatsapp';
 
+// NOTA: este resolvedor trabalha sobre os MÓDULOS já efetivos (Business.modes).
+// O filtro por módulo acontece antes, em lib/features.ts (allowedCtaTargets).
 export function resolveCtaTarget(
   modes: BusinessMode[],
   label: string,

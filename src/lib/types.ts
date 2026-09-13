@@ -6,12 +6,19 @@
 
 export type ID = string;
 
+// Papel de PLATAFORMA (InstaLink). 'master' = superadmin da plataforma,
+// separado de qualquer empresa. Promovido por env MASTER_EMAILS ou script
+// (nunca senha secreta no código).
+export type UserRole = 'owner' | 'admin' | 'master';
+
 export interface User {
   id: ID;
   name: string;
   email: string;
   passwordHash: string;
   createdAt: string;
+  role?: UserRole; // ausente = 'owner' (compatível com dados legados)
+  lastLoginAt?: string;
 }
 
 export interface Session {
@@ -68,6 +75,22 @@ export const VALID_MODES: BusinessMode[] = [
   'products', 'services', 'bookings', 'orders', 'quote',
 ];
 
+// ── Módulos da empresa (FONTE ÚNICA DE VERDADE) ─────────────
+// Regra do produto:
+//   MÓDULO DA EMPRESA  → define se o recurso EXISTE/está habilitado
+//   CONFIGURAÇÃO DA PÁGINA → define aparência, ordem e conteúdo
+// Os 5 modos comerciais (BusinessMode) continuam sendo o armazenamento dos
+// módulos comerciais — `featureEnabled()` em lib/features.ts é a única
+// função que decide. Módulos opcionais novos ficam em `Business.features`.
+export type OptionalFeatureId =
+  | 'reviews' | 'faq' | 'gallery' | 'location' | 'whatsapp' | 'about' | 'agent';
+
+export type FeatureId = BusinessMode | OptionalFeatureId;
+
+export const VALID_OPTIONAL_FEATURES: OptionalFeatureId[] = [
+  'reviews', 'faq', 'gallery', 'location', 'whatsapp', 'about', 'agent',
+];
+
 export interface DayHours { open: string; close: string }
 
 // ── Configuração universal de agenda do negócio ──
@@ -103,6 +126,13 @@ export interface Business {
   cover: string;
   niche: Niche;
   modes: BusinessMode[];
+  // Módulos opcionais (avaliações, FAQ, galeria, localização, WhatsApp,
+  // Sobre, agente). Preenchido de forma defensiva na leitura (migração
+  // idempotente derivada de blocos/página em dados legados).
+  features?: Record<OptionalFeatureId, boolean>;
+  // Integração oficial de WhatsApp (nunca guarda tokens — só identificadores
+  // públicos e status; credenciais vivem em variáveis de ambiente).
+  whatsappIntegration?: WhatsappIntegration;
   phone: string;
   whatsapp: string;
   email: string;
@@ -114,7 +144,7 @@ export interface Business {
   paymentMethods: string[]; // pix | card | cash | on_delivery
   pixKey: string;
   deliveryFee: number; // centavos (0 = sem taxa / a combinar)
-  minOrder: number; // centavos (0 = sem mínimo)
+  minOrder: number; // centavos (0 = mínimo)
   googleUrl: string; // link "avaliar no Google" (place compartilhado)
   googlePlaceId: string; // para importar avaliações (opcional)
   googleApiKey: string; // Places API key do lojista (opcional, SECRETO)
@@ -125,6 +155,21 @@ export interface Business {
   published: boolean;
   createdAt: string;
   updatedAt: string;
+  // Placeholders de evolução (assinatura) — nunca inferidos no cliente.
+  subscription?: { status: 'trial' | 'active' | 'past_due' | 'cancelled'; plan: string; since: string };
+}
+
+// ── Integração de WhatsApp (estrutura; sem credenciais no banco) ──
+export type WhatsappStatus = 'not_connected' | 'pending' | 'connected';
+
+export interface WhatsappIntegration {
+  status: WhatsappStatus;
+  displayPhone: string; // número público exibido ("+55 11 ...")
+  phoneNumberId: string; // identificador da conta (público, não secreto)
+  wabaId: string;
+  connectedAt: string; // '' quando não conectado
+  lastWebhookAt: string; // '' quando nunca recebeu evento
+  requestedAt: string; // quando o lojista pediu a conexão
 }
 
 // ── DTO público: whitelist explícita do que o visitante pode ver ──
@@ -155,6 +200,10 @@ export interface PublicBusiness {
   about: AboutSection;
   googleUrl: string;
   published: boolean;
+  // Módulos efetivos (derivados; nunca incluem recurso desativado).
+  features: Record<OptionalFeatureId, boolean>;
+  // Aparência/integração — sem segredos (tokens nunca saem do servidor).
+  whatsappStatus?: WhatsappStatus;
 }
 
 export interface Theme {
@@ -285,7 +334,8 @@ export interface StatusChange {
   at: string;
   from: string;
   to: string;
-  by: 'owner' | 'customer' | 'system';
+  by: 'owner' | 'customer' | 'system' | 'master';
+  note?: string; // ex: "Reagendado de 09/09 14:00 para 16/09 15:30"
 }
 
 export type OrderStatus = 'new' | 'accepted' | 'preparing' | 'ready' | 'completed' | 'cancelled';
@@ -338,6 +388,11 @@ export interface Booking {
   createdAt: string;
   updatedAt: string;
   history: StatusChange[];
+  // Cadeia de reagendamentos: quando um atendimento em estado terminal
+  // (concluído/faltou/cancelado) é reagendado, um NOVO agendamento é criado
+  // e aponta para o anterior — o histórico antigo nunca é sobrescrito.
+  previousId?: string; // id do agendamento de origem
+  rescheduleCount?: number; // quantas vezes este atendimento já foi movido
 }
 
 export type ReviewSource = 'site' | 'google';
@@ -375,6 +430,7 @@ export interface BusinessCustomer {
   source: string; // signup | login | google | agendamento | pedido | lead | ...
   lastInteraction: string;
   marketingOptIn: boolean; // base p/ campanhas futuras — NUNCA presumido
+  note?: string; // observação interna do CRM (visão 360)
 }
 
 export type LeadStatus = 'new' | 'contacted' | 'qualified' | 'converted' | 'lost';
@@ -395,8 +451,7 @@ export interface Lead {
   lastInteraction: string;
 }
 
-export type EventType =
-  | 'page_view' | 'button_click' | 'product_view' | 'product_add'
+export type EventType =  | 'page_view' | 'button_click' | 'product_view' | 'product_add'
   | 'cart_created' | 'checkout_started' | 'order_created'
   | 'booking_started' | 'booking_created' | 'whatsapp_click'
   | 'lead_created' | 'ai_started' | 'ai_recommendation' | 'conversion';
@@ -432,4 +487,199 @@ export interface DB {
   contacts: BusinessCustomer[];
   reviews: Review[];
   events: AnalyticsEvent[];
+  // ── Estruturas novas (aditivas; migração defensiva em db.ts) ──
+  members: BusinessMember[]; // logins internos da empresa
+  agents: BusinessAgent[]; // agente de atendimento por empresa
+  conversations: Conversation[]; // inbox (WhatsApp/agente)
+  messages: Message[]; // mensagens das conversas
+  campaigns: Campaign[]; // campanhas de marketing (consentimento)
+  campaignRecipients: CampaignRecipient[];
+  audit: AuditEntry[]; // auditoria administrativa
+  supportSessions: SupportSession[]; // modo suporte do master
+}
+
+// ═══════════════════════════════════════════════════════════════
+// EQUIPE — usuários internos da empresa (multi-tenant real)
+// Um User pode ser membro de várias empresas com papéis diferentes.
+// ═══════════════════════════════════════════════════════════════
+export type MemberRole =
+  | 'OWNER' | 'ADMIN' | 'SECRETARIA' | 'ATENDENTE' | 'VENDEDOR' | 'VIEWER';
+
+export const VALID_MEMBER_ROLES: MemberRole[] = [
+  'OWNER', 'ADMIN', 'SECRETARIA', 'ATENDENTE', 'VENDEDOR', 'VIEWER',
+];
+
+export type PermissionId =
+  | 'agenda' | 'clientes' | 'leads' | 'pedidos' | 'catalogo'
+  | 'pagina' | 'agente' | 'whatsapp' | 'campanhas'
+  | 'equipe' | 'config' | 'financeiro' | 'admin';
+
+export interface BusinessMember {
+  id: ID;
+  businessId: ID;
+  userId: ID;
+  role: MemberRole;
+  permissions: Partial<Record<PermissionId, boolean>>; // ausente = padrão do papel
+  active: boolean;
+  note: string; // ex: "Secretária — recepção"
+  invitedBy: ID;
+  createdAt: string;
+  updatedAt: string;
+}
+
+// ═══════════════════════════════════════════════════════════════
+// AGENTE DE ATENDIMENTO (por empresa; universal, sem nicho)
+// ═══════════════════════════════════════════════════════════════
+export type AgentTone = 'profissional' | 'acolhedor' | 'objetivo' | 'comercial';
+export const VALID_AGENT_TONES: AgentTone[] = ['profissional', 'acolhedor', 'objetivo', 'comercial'];
+export type AgentObjective =
+  | 'duvidas' | 'servicos' | 'escolher_servico' | 'orientar_agendamento'
+  | 'whatsapp' | 'interesse';
+export const VALID_AGENT_OBJECTIVES: AgentObjective[] = [
+  'duvidas', 'servicos', 'escolher_servico', 'orientar_agendamento', 'whatsapp', 'interesse',
+];
+
+export interface BusinessAgent {
+  id: ID;
+  businessId: ID;
+  name: string;
+  enabled: boolean;
+  greeting: string;
+  tone: AgentTone;
+  objectives: AgentObjective[];
+  instructions: string; // "Orientações do agente"
+  restrictions: string; // "Regras / limitações"
+  handoffMessage: string; // escalada para humano
+  knowledgeOverride: string; // conhecimento extra do negócio (linhas "Pergunta: Resposta")
+  channels: { site: boolean; whatsapp: boolean };
+  createdAt: string;
+  updatedAt: string;
+}
+
+// ═══════════════════════════════════════════════════════════════
+// CONVERSAS / MENSAGENS (inbox do CRM — preparado p/ WhatsApp oficial)
+// ═══════════════════════════════════════════════════════════════
+export type ConversationChannel = 'whatsapp' | 'agent';
+export type ConversationStatus = 'open' | 'closed';
+export type MessageStatus = 'pending' | 'sent' | 'delivered' | 'read' | 'failed';
+
+export interface Conversation {
+  id: ID;
+  businessId: ID;
+  channel: ConversationChannel;
+  contactId: string; // contato do CRM ('' quando ainda não resolvido)
+  customerId: string;
+  name: string;
+  phone: string; // só dígitos
+  status: ConversationStatus;
+  unread: number;
+  lastMessageAt: string;
+  lastMessagePreview: string;
+  createdAt: string;
+}
+
+export interface Message {
+  id: ID;
+  businessId: ID;
+  conversationId: ID;
+  direction: 'in' | 'out';
+  body: string;
+  status: MessageStatus;
+  externalId: string; // id do provedor (webhook)
+  by: string; // userId do membro (envio interno) ou 'contact' (recebida)
+  at: string;
+}
+
+// ═══════════════════════════════════════════════════════════════
+// CAMPANHAS (marketing) — SOMENTE contatos com marketingOptIn
+// ═══════════════════════════════════════════════════════════════
+export type CampaignStatus = 'draft' | 'ready' | 'sent' | 'partial' | 'failed';
+export const VALID_CAMPAIGN_STATUSES: CampaignStatus[] = ['draft', 'ready', 'sent', 'partial', 'failed'];
+
+export type CampaignSegment =
+  | 'all_optin' | 'new' | 'old' | 'booked' | 'never_booked'
+  | 'by_service' | 'inactive' | 'leads';
+
+export const CAMPAIGN_SEGMENTS: Array<{ id: CampaignSegment; label: string; hint: string }> = [
+  { id: 'all_optin', label: 'Todos com consentimento', hint: 'Toda a base que autorizou marketing' },
+  { id: 'new', label: 'Clientes novos', hint: 'Entraram na base nos últimos 30 dias' },
+  { id: 'old', label: 'Clientes antigos', hint: 'Na base há mais de 180 dias' },
+  { id: 'booked', label: 'Já agendaram', hint: 'Têm pelo menos um agendamento' },
+  { id: 'never_booked', label: 'Nunca agendaram', hint: 'Sem nenhum agendamento' },
+  { id: 'inactive', label: 'Sem atendimento recente', hint: 'Último contato há mais de 90 dias' },
+  { id: 'by_service', label: 'Por serviço', hint: 'Já agendaram um serviço específico' },
+  { id: 'leads', label: 'Leads', hint: 'Contatos com interesse registrado (com consentimento)' },
+];
+
+export interface CampaignCounts {
+  eligible: number; // público com consentimento
+  sent: number;
+  delivered: number;
+  failed: number;
+}
+
+export interface Campaign {
+  id: ID;
+  businessId: ID;
+  name: string;
+  message: string;
+  segment: CampaignSegment;
+  segmentRef: string; // serviceId quando segment = 'by_service'
+  status: CampaignStatus;
+  counts: CampaignCounts;
+  channel: 'whatsapp';
+  createdBy: ID;
+  createdAt: string;
+  updatedAt: string;
+  sentAt: string;
+}
+
+export interface CampaignRecipient {
+  id: ID;
+  businessId: ID;
+  campaignId: ID;
+  contactId: ID;
+  name: string;
+  phone: string;
+  status: 'pending' | 'sent' | 'delivered' | 'failed';
+  error: string;
+  at: string;
+}
+
+// ═══════════════════════════════════════════════════════════════
+// MASTER / SUPORTE / AUDITORIA (área da plataforma)
+// ═══════════════════════════════════════════════════════════════
+export type SupportMode = 'view' | 'admin';
+
+export interface SupportSession {
+  id: ID;
+  masterUserId: ID;
+  masterEmail: string;
+  businessId: ID;
+  mode: SupportMode;
+  reason: string;
+  createdAt: string;
+  expiresAt: string;
+  endedAt: string; // '' = em andamento
+}
+
+export type AuditAction =
+  | 'support.view_started' | 'support.admin_started' | 'support.ended'
+  | 'business.viewed' | 'business.updated_by_master'
+  | 'member.created' | 'member.updated' | 'member.removed'
+  | 'feature.updated' | 'module.updated'
+  | 'campaign.created' | 'campaign.ready' | 'campaign.sent'
+  | 'whatsapp.connect_requested' | 'whatsapp.webhook_received'
+  | 'agent.updated';
+
+export interface AuditEntry {
+  id: ID;
+  at: string;
+  action: AuditAction;
+  actorUserId: ID;
+  actorEmail: string;
+  actorRole: string;
+  businessId: string;
+  supportSessionId: string;
+  meta: Record<string, any>;
 }

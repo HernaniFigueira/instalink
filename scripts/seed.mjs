@@ -45,7 +45,15 @@ function blocksFor(cta, extra, target) {
 }
 
 const db = {
-  users: [{ id: 'user-demo', name: 'Demo InstaLink', email: 'demo@instalink.app', passwordHash: hash('demo1234'), createdAt: now }],
+  users: [
+    { id: 'user-demo', name: 'Demo InstaLink', email: 'demo@instalink.app', passwordHash: hash('demo1234'), createdAt: now, role: 'owner', lastLoginAt: '' },
+    // Logins de EQUIPE (FASE 3): testam papéis/permissões de verdade.
+    { id: 'user-secretaria', name: 'Sofia (secretária)', email: 'secretaria@instalink.app', passwordHash: hash('demo1234'), createdAt: now, role: 'owner', lastLoginAt: '' },
+    { id: 'user-vendedor', name: 'Vitor (vendedor)', email: 'vendedor@instalink.app', passwordHash: hash('demo1234'), createdAt: now, role: 'owner', lastLoginAt: '' },
+    // MASTER da PLATAFORMA: papel no banco (não é dono de nada; entra em
+    // empresa só por sessão de suporte explícita e auditada).
+    { id: 'user-master', name: 'Suporte InstaLink', email: 'master@instalink.app', passwordHash: hash('master1234'), createdAt: now, role: 'master', lastLoginAt: '' },
+  ],
   sessions: [],
   businesses: [
     {
@@ -167,6 +175,33 @@ const db = {
   bookings: [
     { id: 'book-sample', businessId: B2, customerId: '', serviceId: 'svc-corte', professionalId: 'pro-joao', date: new Date(Date.now() + 86400000).toISOString().slice(0, 10), time: '10:00', customerName: 'Rafael T.', customerPhone: '11966666666', status: 'pending', note: '', createdAt: now, updatedAt: now, history: [] },
     { id: 'book-orlando', businessId: B3, customerId: '', serviceId: 'svc-odonto', professionalId: 'pro-orlando', date: new Date(Date.now() + 86400000).toISOString().slice(0, 10), time: '10:00', customerName: 'Marlene S.', customerPhone: '11955554444', status: 'confirmed', note: '', createdAt: now, updatedAt: now, history: [] },
+  ],
+  members: [
+    { id: 'mem-secretaria', businessId: B3, userId: 'user-secretaria', role: 'SECRETARIA', permissions: {}, active: true, note: 'Recepção da clínica', createdAt: now, updatedAt: now },
+    { id: 'mem-vendedor', businessId: B1, userId: 'user-vendedor', role: 'VENDEDOR', permissions: { agenda: false }, active: true, note: 'Balcão', createdAt: now, updatedAt: now },
+  ],
+  agents: [
+    {
+      id: `agent-${B3}`, businessId: B3, name: 'Assistente Vita', enabled: true,
+      greeting: 'Olá! Sou o assistente virtual{empresa}. Posso ajudar com horários, serviços e valores.',
+      tone: 'acolhedor', objectives: ['duvidas', 'servicos', 'orientar_agendamento', 'whatsapp'],
+      instructions: 'Explique os tratamentos de forma simples, sem prometer resultados.',
+      restrictions: 'Nunca criar, cancelar ou remarcar agendamento. Nunca citar valores que não estejam no cadastro.',
+      handoffMessage: 'Vou te encaminhar para a nossa equipe no WhatsApp — eles ajudam você agora mesmo.',
+      knowledgeOverride: 'Estacionamento: temos convênio com o estacionamento ao lado.\nFormas de pagamento: PIX, cartão e dinheiro.',
+      channels: { site: true, whatsapp: false }, createdAt: now, updatedAt: now,
+    },
+  ],
+  conversations: [],
+  messages: [],
+  campaigns: [],
+  campaignRecipients: [],
+  audit: [],
+  supportSessions: [],
+  contacts: [
+    { id: 'ct-carlos', businessId: B1, customerId: '', name: 'Carlos M.', phone: '11977777777', email: '', createdAt: now, updatedAt: now, source: 'pedido', lastInteraction: now, marketingOptIn: true, note: 'Prefere retirada no balcão.' },
+    { id: 'ct-rafael', businessId: B2, customerId: '', name: 'Rafael T.', phone: '11966666666', email: '', createdAt: now, updatedAt: now, source: 'agendamento', lastInteraction: now, marketingOptIn: true, note: '' },
+    { id: 'ct-marlene', businessId: B3, customerId: '', name: 'Marlene S.', phone: '11955554444', email: 'marlene@exemplo.com', createdAt: now, updatedAt: now, source: 'agendamento', lastInteraction: now, marketingOptIn: false, note: 'Cliente do Dr. Orlando — prefere manhã.' },
   ],
   leads: [
     { id: 'lead-1', businessId: B1, customerId: '', name: 'Carlos M.', phone: '11977777777', email: '', instagram: '', origin: 'pedido', interest: 'X-Bacon', action: 'pedido', status: 'converted', createdAt: now, lastInteraction: now },
