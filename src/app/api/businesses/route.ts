@@ -41,6 +41,8 @@ export async function POST(req: NextRequest) {
         deliveryFee: 0, minOrder: 0,
         googleUrl: '', googlePlaceId: '', googleApiKey: '',
         booking: defaultBookingConfig(),
+        nav: [], navCustom: false,
+        about: { title: '', text: '', image: '', enabled: false },
         published: false, createdAt: now, updatedAt: now,
       });
       d.pages.push({ id: randomUUID(), businessId, presetId: defaultPresetId(niche), theme: defaultTheme(niche), blocks: defaultBlocks(niche, modes), updatedAt: now });

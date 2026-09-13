@@ -1,16 +1,18 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { readDB } from '@/lib/db';
+import { readDB, updateDB } from '@/lib/db';
 import { verifyPassword } from '@/lib/auth';
 import { createCustomerSession, setCustomerSessionOn, publicCustomer } from '@/lib/customer-auth';
+import { upsertContact } from '@/lib/contacts';
 import { onlyDigits } from '@/lib/utils';
 import { rateLimit, ipFrom } from '@/lib/rate-limit';
 
 // POST público: login do consumidor (WhatsApp ou e-mail + senha).
+// businessId (opcional): associa/atualiza o contato no negócio de origem.
 export async function POST(req: NextRequest) {
   const rl = rateLimit(`clogin:${ipFrom(req)}`, 20, 60000);
   if (!rl.ok) return NextResponse.json({ error: 'Muitas tentativas. Aguarde um minuto.' }, { status: 429 });
   try {
-    const { login, password } = await req.json();
+    const { login, password, businessId } = await req.json();
     const digits = onlyDigits(login || '');
     const email = (login || '').trim().toLowerCase();
     const db = await readDB();
@@ -25,6 +27,13 @@ export async function POST(req: NextRequest) {
     }
     if (!verifyPassword(password || '', customer.passwordHash)) {
       return NextResponse.json({ error: 'Senha incorreta.' }, { status: 401 });
+    }
+    if (businessId && db.businesses.some((b) => b.id === businessId)) {
+      await updateDB((d) => {
+        const c = d.customers.find((x) => x.id === customer.id);
+        if (!c) return;
+        upsertContact(d, { businessId, customerId: c.id, name: c.name, phone: c.phone, email: c.email, source: 'login' });
+      });
     }
     const sessionId = await createCustomerSession(customer.id);
     const res = NextResponse.json({ ok: true, token: sessionId, customer: publicCustomer(customer) });

@@ -46,7 +46,7 @@ function I({ n, size = 20 }: { n: string; size?: number }) {
 }
 
 const ALL_ITEMS: Array<{ href: string; label: string; icon: string; modes?: BusinessMode[] }> = [
-  { href: '/dashboard', label: 'Início', icon: 'home' },
+  { href: '/dashboard', label: 'Dashboard', icon: 'home' },
   { href: '/pagina', label: 'Minha página', icon: 'link' },
   { href: '/produtos', label: 'Produtos', icon: 'cart', modes: ['products', 'orders'] },
   { href: '/servicos', label: 'Serviços', icon: 'scissors', modes: ['services', 'bookings'] },
@@ -56,6 +56,10 @@ const ALL_ITEMS: Array<{ href: string; label: string; icon: string; modes?: Busi
   { href: '/resultados', label: 'Resultados', icon: 'chart' },
   { href: '/configuracoes', label: 'Configurações', icon: 'settings' },
 ];
+
+// Telas que ocupam toda a largura útil (mini CRM); as demais mantêm
+// largura confortável de leitura/formulário.
+const FULL_WIDTH_PATHS = ['/dashboard', '/agenda', '/resultados'];
 
 // Shell do painel 100% no cliente: a sessão é validada via /api/auth/me
 // (cookie OU Bearer), então funciona mesmo com cookies bloqueados.
@@ -134,7 +138,7 @@ export function DashboardShell({ children }: { children: React.ReactNode }) {
           ))}
         </div>
         <div className="flex-1 min-w-0">
-          <div className="max-w-5xl mx-auto px-4 sm:px-6 py-6 sm:py-8">
+          <div className="px-4 sm:px-6 lg:px-8 py-6 sm:py-8">
             <PageSkeleton />
           </div>
         </div>
@@ -246,7 +250,12 @@ export function DashboardShell({ children }: { children: React.ReactNode }) {
       </div>
 
       <main className="flex-1 min-w-0">
-        <div className="max-w-5xl mx-auto px-4 sm:px-6 py-6 sm:py-8">{children}</div>
+        {/* Dashboard/Agenda/Resultados usam toda a largura útil; telas de
+            formulário/lista mantêm largura confortável (max-w-5xl). */}
+        <div className={cn(
+          'px-4 sm:px-6 lg:px-8 xl:px-10 py-6 sm:py-8',
+          !FULL_WIDTH_PATHS.includes(pathname) && 'max-w-5xl mx-auto',
+        )}>{children}</div>
       </main>
     </div>
   );

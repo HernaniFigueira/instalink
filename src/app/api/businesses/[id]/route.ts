@@ -4,6 +4,7 @@ import { userFromRequest } from '@/lib/auth';
 import { clampCents } from '@/lib/utils';
 import type { BusinessMode, TeamMode } from '@/lib/types';
 import { VALID_MODES, defaultBookingConfig } from '@/lib/types';
+import { VALID_NAV } from '@/lib/nav';
 
 // PATCH — atualiza perfil do negócio (dono). Campos permitidos explícitos,
 // com whitelist e sanitização por tipo.
@@ -39,6 +40,24 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
         } else {
           (b as any)[key] = str(body[key], key === 'description' ? 500 : 200);
         }
+      }
+      // Navegação pública (menu configurável)
+      if (body.nav !== undefined) {
+        const nav = Array.isArray(body.nav) ? body.nav.filter((n: unknown) => VALID_NAV.includes(n as string)) : [];
+        b.nav = [...new Set(nav as string[])]; // ordem canônica aplicada no render
+      }
+      if (body.navCustom !== undefined) {
+        b.navCustom = !!body.navCustom;
+      }
+      // Seção "Sobre a empresa"
+      if (body.about !== undefined && body.about && typeof body.about === 'object') {
+        const a = body.about as Record<string, any>;
+        b.about = {
+          title: str(a.title, 80),
+          text: str(a.text, 1200),
+          image: str(a.image, 500),
+          enabled: a.enabled !== false && !!a.enabled,
+        };
       }
       // Config de agenda (validada campo a campo)
       if (body.booking && typeof body.booking === 'object') {

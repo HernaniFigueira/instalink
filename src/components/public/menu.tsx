@@ -1,28 +1,11 @@
 'use client';
 import { useCallback, useEffect, useState } from 'react';
 import { Icon } from '@/components/icons';
-import { onAuthOk, openSheet } from './sheet-bus';
+import { onAuthOk } from './sheet-bus';
 
-// Navegação pública: [conta] + [☰ menu] no topo; drawer da direita com
-// as áreas que REALMENTE existem (sem "Início" — a página já é o início).
-// Agendar abre o MESMO sheet do CTA (destino único, sem fluxos paralelos).
-export type MenuTab = 'products' | 'services' | 'booking' | 'quote' | 'reviews' | 'contact';
-export interface MenuItem {
-  id: MenuTab;
-  label: string;
-}
-
-const TAB_ICON: Record<MenuTab, string> = {
-  services: 'scissors',
-  booking: 'calendar',
-  products: 'bag',
-  quote: 'chat',
-  reviews: 'star',
-  contact: 'pin',
-};
-
-export function useCustomer(): { customer: { name: string } | null; loading: boolean } {
-  const [customer, setCustomer] = useState<{ name: string } | null>(null);
+// ── Identidade do consumidor (compartilhada com a BottomBar) ──
+export function useCustomer(): { customer: { name: string; avatar?: string } | null; loading: boolean } {
+  const [customer, setCustomer] = useState<{ name: string; avatar?: string } | null>(null);
   const [loading, setLoading] = useState(true);
 
   const refresh = useCallback(() => {
@@ -47,111 +30,80 @@ export function useCustomer(): { customer: { name: string } | null; loading: boo
   return { customer, loading };
 }
 
-// Conta do consumidor: só ícone quando deslogado, avatar + nome quando logado.
-function AccountButton() {
-  const { customer, loading } = useCustomer();
-
-  if (loading) {
-    return (
-      <span className="w-9 h-9 rounded-full animate-pulse shrink-0" aria-hidden="true"
-        style={{ background: 'color-mix(in srgb, var(--il-muted) 25%, transparent)' }} />
-    );
-  }
-  if (!customer) {
-    return (
-      <button onClick={() => openSheet('auth', {})} aria-label="Entrar" title="Entrar"
-        className="w-9 h-9 rounded-full flex items-center justify-center shrink-0 transition-transform active:scale-95"
-        style={{ color: 'var(--il-muted)' }}>
-        <Icon n="userCircle" size={24} />
-      </button>
-    );
-  }
-  const first = customer.name.split(' ')[0] || customer.name;
-  return (
-    <button onClick={() => openSheet('account', {})} aria-label={`Minha conta — ${first}`} title="Minha conta"
-      className="flex items-center gap-1.5 rounded-full pl-1 pr-3 py-1 shrink-0 transition-transform active:scale-95"
-      style={{ background: 'color-mix(in srgb, var(--il-primary) 12%, transparent)' }}>
-      <span className="w-7 h-7 rounded-full flex items-center justify-center text-xs font-extrabold"
-        style={{ background: 'var(--il-primary)', color: 'var(--il-btn-text, #fff)' }}>
-        {first.slice(0, 1).toUpperCase()}
-      </span>
-      <span className="text-sm font-bold max-w-[76px] truncate">{first}</span>
-    </button>
-  );
+// ── Item de navegação resolvido (ação concreta de clique) ──
+export interface NavActionItem {
+  id: string;
+  label: string;
+  icon: string;
+  action: { kind: 'scroll'; target: string } | { kind: 'link'; url: string };
 }
 
-export function PageMenu({ items }: { items: MenuItem[] }) {
-  const [open, setOpen] = useState(false);
+const NAV_ICON: Record<string, string> = {
+  about: 'store',
+  services: 'scissors',
+  reviews: 'star',
+  faq: 'chat',
+  directions: 'pin',
+  contact: 'pin',
+  instagram: 'instagram',
+  tiktok: 'music',
+};
 
+// Menu público: bottom sheet elegante com os itens de navegação
+// configuráveis da empresa (não é mais um simples hambúrguer).
+export function PublicMenuSheet({ items, onClose }: { items: NavActionItem[]; onClose: () => void }) {
   useEffect(() => {
-    if (!open) return;
-    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') setOpen(false); };
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose(); };
     document.addEventListener('keydown', onKey);
     document.body.style.overflow = 'hidden';
     return () => {
       document.removeEventListener('keydown', onKey);
       document.body.style.overflow = '';
     };
-  }, [open ]);
+  }, [onClose]);
 
-  function go(id: MenuTab) {
-    setOpen(false);
-    if (id === 'services') {
-      document.querySelector('#servicos')?.scrollIntoView({ behavior: 'smooth' });
-    } else if (id === 'reviews') {
-      document.querySelector('#avaliacoes')?.scrollIntoView({ behavior: 'smooth' });
-    } else if (id === 'contact') {
-      document.querySelector('#contato')?.scrollIntoView({ behavior: 'smooth' });
+  function go(item: NavActionItem) {
+    onClose();
+    if (item.action.kind === 'scroll') {
+      document.querySelector(item.action.target)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
     } else {
-      openSheet(id, {});
+      window.open(item.action.url, '_blank', 'noopener,noreferrer');
     }
   }
 
   return (
-    <>
-      <div className="flex items-center justify-between gap-2">
-        <AccountButton />
-        <button onClick={() => setOpen(true)} aria-label="Menu" aria-expanded={open} title="Menu"
-          className="flex items-center gap-2 rounded-full pl-3 pr-4 py-2 text-sm font-bold shadow-xl transition-transform active:scale-95"
-          style={{
-            background: 'color-mix(in srgb, var(--il-surface) 88%, transparent)',
-            backdropFilter: 'blur(12px)',
-            WebkitBackdropFilter: 'blur(12px)',
-            border: '1px solid color-mix(in srgb, var(--il-muted) 22%, transparent)',
-            color: 'var(--il-text)',
-          }}>
-          <Icon n="menu" size={18} /> Menu
-        </button>
-      </div>
-
-      {open && (
-        <div className="fixed inset-0 z-50" role="dialog" aria-label="Menu">
-          <div className="absolute inset-0 bg-black/60" onClick={() => setOpen(false)} aria-hidden="true" />
-          <aside
-            className="absolute top-0 right-0 h-full w-72 max-w-[85vw] p-5 flex flex-col gap-1 overflow-y-auto"
-            style={{ background: 'var(--il-surface)', borderLeft: '1px solid color-mix(in srgb, var(--il-muted) 18%, transparent)' }}>
-            <div className="flex items-center justify-between mb-3">
-              <p className="font-extrabold">Menu</p>
-              <button onClick={() => setOpen(false)} aria-label="Fechar menu"
-                className="w-9 h-9 rounded-full flex items-center justify-center transition-transform active:scale-95"
-                style={{ background: 'color-mix(in srgb, var(--il-muted) 14%, transparent)', color: 'var(--il-text)' }}>
-                <Icon n="x" size={18} />
-              </button>
-            </div>
-            {items.map((item) => (
-              <button key={item.id} onClick={() => go(item.id)}
-                className="flex items-center gap-3 rounded-2xl px-4 py-3.5 text-left font-bold transition-transform active:scale-[0.99]"
-                style={{ color: 'var(--il-text)' }}>
-                <span className="w-9 h-9 rounded-xl flex items-center justify-center shrink-0"
-                  style={{ background: 'color-mix(in srgb, var(--il-primary) 12%, transparent)', color: 'var(--il-primary)' }}>
-                  <Icon n={TAB_ICON[item.id]} size={18} />
-                </span>
-                {item.label}
-              </button>
-            ))}
-          </aside>
+    <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center" role="dialog" aria-modal="true" aria-label="Navegação">
+      <div className="absolute inset-0 bg-black/60" onClick={onClose} aria-hidden="true" />
+      <div className="il-page relative w-full sm:max-w-md max-h-[85vh] rounded-t-3xl sm:rounded-3xl overflow-hidden flex flex-col"
+        style={{ background: 'var(--il-bg)' }}>
+        <div className="pt-2.5 pb-1 flex justify-center shrink-0" aria-hidden="true">
+          <span className="w-10 h-1.5 rounded-full" style={{ background: 'color-mix(in srgb, var(--il-muted) 35%, transparent)' }} />
         </div>
-      )}
-    </>
+        <div className="flex items-center justify-between px-5 pb-2 shrink-0">
+          <h3 className="text-lg font-extrabold">Navegação</h3>
+          <button onClick={onClose} aria-label="Fechar menu"
+            className="il-card w-9 h-9 font-bold shrink-0 flex items-center justify-center"><Icon n="x" size={16} /></button>
+        </div>
+        <div className="overflow-y-auto px-5 pb-8">
+          {items.length === 0 ? (
+            <p className="il-muted text-sm text-center py-8">Nada por aqui ainda. Configure o menu no painel.</p>
+          ) : (
+            <div className="grid grid-cols-2 gap-2.5">
+              {items.map((item) => (
+                <button key={item.id} onClick={() => go(item)}
+                  className="il-card p-4 flex flex-col items-center gap-2.5 text-center transition-transform active:scale-[0.97]"
+                  style={{ borderRadius: 'var(--il-radius)' }}>
+                  <span className="w-11 h-11 rounded-2xl flex items-center justify-center"
+                    style={{ background: 'color-mix(in srgb, var(--il-primary) 12%, transparent)', color: 'var(--il-primary)' }}>
+                    <Icon n={NAV_ICON[item.id] || 'pin'} size={20} />
+                  </span>
+                  <span className="text-sm font-bold leading-tight">{item.label}</span>
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
   );
 }

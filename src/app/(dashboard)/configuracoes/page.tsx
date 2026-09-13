@@ -3,9 +3,11 @@ import { useCallback, useEffect, useState } from 'react';
 import { useSearchParams } from 'next/navigation';
 import { MODES } from '@/lib/templates';
 import { cn, parseMoneyToCents, centsToBR } from '@/lib/utils';
+import { NAV_ORDER } from '@/lib/nav';
 import type { Business, BusinessMode } from '@/lib/types';
 import { PageSkeleton } from '@/components/ui';
 import { Icon } from '@/components/icons';
+import { ImageUpload } from '@/components/dashboard/ImageUpload';
 
 const PAYMENTS = [
   { id: 'pix', label: 'PIX' },
@@ -42,6 +44,7 @@ export default function ConfigPage() {
           instagram: biz.instagram, tiktok: biz.tiktok, address: biz.address,
           mapsUrl: biz.mapsUrl, paymentMethods: biz.paymentMethods, pixKey: biz.pixKey,
           deliveryFee: biz.deliveryFee, minOrder: biz.minOrder,
+          nav: biz.nav, navCustom: biz.navCustom, about: biz.about,
         }),
       });
       const data = await res.json();
@@ -67,6 +70,15 @@ export default function ConfigPage() {
     const has = (biz!.paymentMethods || []).includes(id);
     set('paymentMethods', has ? biz!.paymentMethods.filter((x) => x !== id) : [...(biz!.paymentMethods || []), id]);
   }
+  function toggleNav(id: string) {
+    const cur = biz!.nav || [];
+    set('nav', cur.includes(id) ? cur.filter((x) => x !== id) : [...cur, id]);
+    set('navCustom', true);
+  }
+  const about = biz!.about || { title: '', text: '', image: '', enabled: false };
+  function setAbout(k: 'title' | 'text' | 'image' | 'enabled', v: any) {
+    set('about', { ...about, [k]: v });
+  }
 
   return (
     <>
@@ -86,11 +98,9 @@ export default function ConfigPage() {
           <label className="block"><span className="text-xs font-bold text-zinc-500">DESCRIÇÃO</span>
             <textarea value={biz.description} onChange={(e) => set('description', e.target.value)} className={input + ' mt-1'} rows={2}
               placeholder="Ex: Os melhores hambúrgueres artesanais da região." /></label>
-          <div className="grid sm:grid-cols-2 gap-3.5">
-            <label className="block"><span className="text-xs font-bold text-zinc-500">LOGO (URL)</span>
-              <input value={biz.logo} onChange={(e) => set('logo', e.target.value)} className={input + ' mt-1'} placeholder="https://…" /></label>
-            <label className="block"><span className="text-xs font-bold text-zinc-500">CAPA (URL)</span>
-              <input value={biz.cover} onChange={(e) => set('cover', e.target.value)} className={input + ' mt-1'} placeholder="https://…" /></label>
+          <div className="grid sm:grid-cols-2 gap-5">
+            <ImageUpload label="LOGO" value={biz.logo} onChange={(url) => set('logo', url)} businessId={businessId} circle />
+            <ImageUpload label="CAPA / BANNER" value={biz.cover} onChange={(url) => set('cover', url)} businessId={businessId} />
           </div>
         </section>
 
@@ -128,6 +138,39 @@ export default function ConfigPage() {
               </button>
             ))}
           </div>
+        </section>
+
+        <section className="bg-white border border-zinc-200 rounded-2xl p-5">
+          <h3 className="font-bold text-sm flex items-center gap-2"><Icon n="menu" size={16} className="text-zinc-400" /> Navegação da página</h3>
+          <p className="text-xs text-zinc-500 mt-1 mb-3">Escolha os itens que aparecem no menu da sua página (botão “Menu” na barra inferior).</p>
+          <div className="flex flex-wrap gap-2">
+            {NAV_ORDER.map((n) => {
+              const on = (biz.nav || []).includes(n.id);
+              return (
+                <button key={n.id} onClick={() => toggleNav(n.id)}
+                  className={cn('text-sm font-bold px-4 py-2.5 rounded-xl border-2', on ? 'border-emerald-500 bg-emerald-50 text-emerald-800' : 'border-zinc-200 text-zinc-500')}>
+                  {on && <Icon n="check" size={14} className="inline -mt-0.5" />} {n.label}
+                </button>
+              );
+            })}
+          </div>
+        </section>
+
+        <section className="bg-white border border-zinc-200 rounded-2xl p-5 space-y-3.5">
+          <div className="flex items-center justify-between">
+            <h3 className="font-bold text-sm flex items-center gap-2"><Icon n="store" size={16} className="text-zinc-400" /> Sobre a empresa</h3>
+            <button onClick={() => setAbout('enabled', !about.enabled)}
+              className={cn('text-xs font-bold px-3 py-1.5 rounded-full border-2', about.enabled ? 'border-emerald-500 bg-emerald-50 text-emerald-800' : 'border-zinc-200 text-zinc-500')}>
+              {about.enabled ? 'Visível' : 'Oculto'}
+            </button>
+          </div>
+          <p className="text-xs text-zinc-500 -mt-2">Aparece na página como uma seção “Sobre nós”. Se estiver vazio ou oculto, não é exibido.</p>
+          <label className="block"><span className="text-xs font-bold text-zinc-500">TÍTULO</span>
+            <input value={about.title} onChange={(e) => setAbout('title', e.target.value)} className={input + ' mt-1'} placeholder="Ex: Sobre nós" /></label>
+          <label className="block"><span className="text-xs font-bold text-zinc-500">TEXTO</span>
+            <textarea value={about.text} onChange={(e) => setAbout('text', e.target.value)} className={input + ' mt-1'} rows={3}
+              placeholder="Ex: Somos uma clínica especializada em…" /></label>
+          <ImageUpload label="IMAGEM (OPCIONAL)" value={about.image} onChange={(url) => setAbout('image', url)} businessId={businessId} />
         </section>
 
         <section className="bg-white border border-zinc-200 rounded-2xl p-5 space-y-3.5">

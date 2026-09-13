@@ -7,6 +7,7 @@ import { cn } from '@/lib/utils';
 import type { Block, BlockType, Business, Page, Theme } from '@/lib/types';
 import { PageSkeleton } from '@/components/ui';
 import { Icon } from '@/components/icons';
+import { ImageUpload } from '@/components/dashboard/ImageUpload';
 import { readFaqItems, visibleFaqItems, type FaqItem } from '@/lib/faq';
 
 export default function PaginaPage() {
@@ -220,15 +221,17 @@ function BlockSettings({ block, businessId, onChange, onSave }: { block: Block; 
       )}
       {block.type === 'image' && (
         <>
-          <input value={s.url || ''} onChange={(e) => set('url', e.target.value)} className={input} placeholder="URL da imagem (https://…)" />
+          <ImageUpload label="IMAGEM" value={s.url || ''} onChange={(url) => set('url', url)} businessId={businessId} />
           <input value={s.link || ''} onChange={(e) => set('link', e.target.value)} className={input} placeholder="Link ao clicar (opcional)" />
         </>
       )}
       {block.type === 'gallery' && (
         <>
           <input value={s.title || ''} onChange={(e) => set('title', e.target.value)} className={input} placeholder="Título (opcional)" />
+          <ImageUpload label="ADICIONAR IMAGEM À GALERIA" value="" businessId={businessId}
+            onChange={(url) => set('images', [...(Array.isArray(s.images) ? s.images : []), url])} />
           <textarea value={(s.images || []).join('\n')} onChange={(e) => set('images', e.target.value.split('\n').map((x) => x.trim()).filter(Boolean))}
-            className={input} rows={4} placeholder="Uma URL de imagem por linha" />
+            className={input} rows={4} placeholder="Ou cole as URLs (uma por linha)" />
         </>
       )}
       {block.type === 'buttons' && (

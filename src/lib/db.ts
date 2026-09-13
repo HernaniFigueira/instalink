@@ -24,6 +24,7 @@ import path from 'node:path';
 import { Pool } from 'pg';
 import type { DB } from './types';
 import { defaultBookingConfig } from './types';
+import { backfillContacts } from './contacts';
 
 const FILE = path.join(process.cwd(), 'data', 'instalink.db.json');
 
@@ -34,7 +35,7 @@ export function emptyDB(): DB {
     businesses: [], pages: [], categories: [],
     products: [], options: [], optionValues: [], services: [],
     professionals: [], availability: [], exceptions: [], orders: [],
-    bookings: [], leads: [], reviews: [], events: [],
+    bookings: [], leads: [], contacts: [], reviews: [], events: [],
   };
 }
 
@@ -42,12 +43,29 @@ export function emptyDB(): DB {
 // Reversível (só adiciona defaults) e idempotente.
 function normalize(raw: unknown): DB {
   const base = { ...emptyDB(), ...((raw && typeof raw === 'object' ? raw : {}) as Partial<DB>) };
+  // Contatos: migração defensiva UMA única vez (quando o doc antigo não
+  // tinha o campo). Idempotente; nada existente é apagado ou duplicado.
+  const hadContacts = Array.isArray((raw as any)?.contacts);
+  if (!Array.isArray(base.contacts)) base.contacts = [];
+  if (!hadContacts) backfillContacts(base);
   for (const b of base.businesses) {
     if (!b.booking) b.booking = defaultBookingConfig();
     else b.booking = { ...defaultBookingConfig(), ...b.booking };
     if (typeof b.deliveryFee !== 'number') b.deliveryFee = 0;
     if (typeof b.minOrder !== 'number') b.minOrder = 0;
     if (!Array.isArray(b.modes)) b.modes = [];
+    if (!Array.isArray(b.nav)) b.nav = [];
+    if (typeof b.navCustom !== 'boolean') b.navCustom = false;
+    if (!b.about || typeof b.about !== 'object') {
+      b.about = { title: '', text: '', image: '', enabled: false };
+    } else {
+      b.about = {
+        title: typeof b.about.title === 'string' ? b.about.title : '',
+        text: typeof b.about.text === 'string' ? b.about.text : '',
+        image: typeof b.about.image === 'string' ? b.about.image : '',
+        enabled: !!b.about.enabled,
+      };
+    }
   }
   for (const s of base.services) {
     if (!Array.isArray((s as any).professionalIds)) (s as any).professionalIds = [];

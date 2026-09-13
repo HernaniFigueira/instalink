@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { randomUUID } from 'node:crypto';
 import { readDB, updateDB } from '@/lib/db';
 import { createCustomerSession } from '@/lib/customer-auth';
+import { upsertContact } from '@/lib/contacts';
 import { popupHtml, verifyState } from '@/lib/google-auth';
 
 // GET ?code=&state= — callback do Google. Localiza/cria o consumidor,
@@ -16,7 +17,8 @@ export async function GET(req: NextRequest) {
     const code = req.nextUrl.searchParams.get('code') || '';
     const err = req.nextUrl.searchParams.get('error') || '';
     if (err) return html('Login cancelado', 'Você fechou a janela do Google. Tente de novo.');
-    if (!verifyState(req.nextUrl.searchParams.get('state') || '').ok) {
+    const state = verifyState(req.nextUrl.searchParams.get('state') || '');
+    if (!state.ok) {
       return html('Falha no login com Google', 'Sessão inválida ou expirada. Tente novamente.');
     }
     if (!clientId || !clientSecret || !code) {
@@ -45,13 +47,15 @@ export async function GET(req: NextRequest) {
     const info = await infoRes.json();
     if (!info.sub || !info.email) return html('Falha no login com Google', 'Tente novamente em instantes.');
 
-    // 3. Localiza ou cria o consumidor
+    // 3. Localiza ou cria o consumidor + associa ao negócio de origem (state.slug)
     const email = String(info.email).toLowerCase();
     const customer = await updateDB((db) => {
       const found = db.customers.find((c) => c.googleId === info.sub || (email && c.email === email));
+      const business = state.slug ? db.businesses.find((b) => b.slug === state.slug) : undefined;
       if (found) {
         if (!found.googleId) found.googleId = info.sub;
         if (!found.avatar && info.picture) found.avatar = String(info.picture);
+        if (business) upsertContact(db, { businessId: business.id, customerId: found.id, name: found.name, phone: found.phone, email: found.email, source: 'google' });
         return found;
       }
       const created = {
@@ -60,6 +64,7 @@ export async function GET(req: NextRequest) {
         avatar: String(info.picture || ''), createdAt: new Date().toISOString(),
       };
       db.customers.push(created);
+      if (business) upsertContact(db, { businessId: business.id, customerId: created.id, name: created.name, phone: '', email, source: 'google' });
       return created;
     });
 

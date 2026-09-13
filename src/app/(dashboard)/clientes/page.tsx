@@ -9,7 +9,8 @@ import { ListSkeleton } from '@/components/ui';
 import { Icon } from '@/components/icons';
 
 interface Person {
-  key: string; name: string; phone: string;
+  key: string; customerId: string; name: string; phone: string; email: string;
+  registered: boolean; customerSince: string; source: string;
   orders: number; spent: number; lastOrderAt: string;
   bookings: Array<{ id: string; customerName: string; date: string; time: string; status: string; service: string }>;
   leads: Array<{ id: string; origin: string; status: string; interest: string; action: string; createdAt: string }>;
@@ -69,7 +70,7 @@ export default function ClientesPage() {
   return (
     <>
       <h1 className="text-2xl font-bold tracking-tight">Clientes</h1>
-      <p className="text-sm text-zinc-500 mt-1 mb-5">Cada pessoa reúne pedidos, agendamentos e conversas.</p>
+      <p className="text-sm text-zinc-500 mt-1 mb-5">Sua base de contatos — quem cria conta ou interage com a página aparece aqui, com pedidos, agendamentos e conversas.</p>
       {error && <p className="mb-4 text-sm font-medium bg-red-600 text-white rounded-xl px-4 py-3">{error}</p>}
 
       <div className="relative mb-4">
@@ -97,8 +98,16 @@ export default function ClientesPage() {
                       {(p.name || '?').slice(0, 1).toUpperCase()}
                     </span>
                     <span className="min-w-0">
-                      <span className="block font-bold truncate">{p.name || 'Sem nome'}</span>
-                      <span className="block text-xs text-zinc-500">{p.phone || 'sem telefone'}</span>
+                      <span className="flex items-center gap-1.5">
+                        <span className="block font-bold truncate">{p.name || 'Sem nome'}</span>
+                        {p.registered && (
+                          <span className="shrink-0 text-[9px] font-extrabold bg-emerald-100 text-emerald-800 px-1.5 py-0.5 rounded-full">CADASTRADO</span>
+                        )}
+                      </span>
+                      <span className="block text-xs text-zinc-500">
+                        {p.phone || 'sem telefone'}
+                        {p.registered && p.customerSince && ` · cliente desde ${humanDay(p.customerSince.slice(0, 10))}`}
+                      </span>
                     </span>
                   </span>
                   <span className="text-right shrink-0">
