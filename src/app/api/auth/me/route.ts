@@ -26,6 +26,8 @@ export async function GET(req: NextRequest) {
       id: b.id,
       slug: b.slug,
       name: b.name,
+      logo: b.logo || '',
+      cover: b.cover || '',
       modes: b.modes,
       features: normalizeFeatures(b, db.pages.find((p) => p.businessId === b.id)?.blocks || []),
       published: b.published,

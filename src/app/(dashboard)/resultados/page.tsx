@@ -22,7 +22,7 @@ interface Analytics {
 function Funnel({ title, steps }: { title: string; steps: Analytics['funnelOrders'] }) {
   const max = Math.max(1, steps[0]?.value || 1);
   return (
-    <div className="bg-white border border-zinc-200 rounded-2xl p-5">
+    <div className="bg-white border border-zinc-200 rounded-lg p-5">
       <h3 className="font-bold text-sm mb-4">{title}</h3>
       <div className="space-y-2.5">
         {steps.map((s) => (
@@ -84,7 +84,7 @@ export default function ResultadosPage() {
           ['Taxa de conversão', `${totals.rate}%`, `${totals.conversions} conversão(ões)`],
           ['Leads', String(totals.leads), totals.leadsNew ? `${totals.leadsNew} novo(s)` : 'no período'],
         ] as const).map(([label, value, hint]) => (
-          <div key={label} className="bg-white border border-zinc-200 rounded-2xl p-4">
+          <div key={label} className="bg-white border border-zinc-200 rounded-lg p-4">
             <p className="text-xs text-zinc-500">{label}</p>
             <p className="text-2xl font-extrabold tracking-tight">{value}</p>
             <p className="text-[11px] text-zinc-400 mt-0.5">{hint}</p>
@@ -98,7 +98,7 @@ export default function ResultadosPage() {
       </div>
 
       <div className="grid xl:grid-cols-5 gap-4">
-        <div className="xl:col-span-3 bg-white border border-zinc-200 rounded-2xl p-5">
+        <div className="xl:col-span-3 bg-white border border-zinc-200 rounded-lg p-5">
           <h3 className="font-bold text-sm mb-3">Últimos {period} dias</h3>
           <div className="flex items-end gap-1 h-28">
             {days.map((d) => (
@@ -119,7 +119,7 @@ export default function ResultadosPage() {
         </div>
 
         <div className="xl:col-span-2 space-y-4">
-          <div className="bg-white border border-zinc-200 rounded-2xl p-5">
+          <div className="bg-white border border-zinc-200 rounded-lg p-5">
             <h3 className="font-bold text-sm mb-3">Produtos em destaque</h3>
             {topProducts.length === 0 ? <p className="text-xs text-zinc-500">Ainda sem movimento no período.</p> : (
               <ul className="space-y-1.5">
@@ -133,7 +133,7 @@ export default function ResultadosPage() {
             )}
           </div>
 
-          <div className="bg-white border border-zinc-200 rounded-2xl p-5">
+          <div className="bg-white border border-zinc-200 rounded-lg p-5">
             <h3 className="font-bold text-sm mb-3">Botões mais clicados</h3>
             {topCtas.length === 0 ? <p className="text-xs text-zinc-500">Ainda sem cliques no período.</p> : (
               <ul className="space-y-1.5">
@@ -144,7 +144,7 @@ export default function ResultadosPage() {
             )}
           </div>
 
-          <div className="bg-white border border-zinc-200 rounded-2xl p-5">
+          <div className="bg-white border border-zinc-200 rounded-lg p-5">
             <h3 className="font-bold text-sm mb-3">De onde vêm os leads</h3>
             {origins.length === 0 ? <p className="text-xs text-zinc-500">Ainda sem leads no período.</p> : (
               <ul className="space-y-1.5">

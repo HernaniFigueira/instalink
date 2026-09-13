@@ -31,7 +31,7 @@ const STATUS_STYLE: Record<string, string> = {
 const STATUS_LABEL: Record<string, string> = {
   draft: 'Rascunho', ready: 'Pronta', sent: 'Enviada', partial: 'Parcial', failed: 'Falhou',
 };
-const input = 'w-full rounded-xl border border-zinc-300 px-3.5 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500';
+const input = 'w-full rounded-md border border-zinc-300 px-3.5 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500';
 
 export default function CampanhasPage() {
   const params = useSearchParams();
@@ -88,14 +88,14 @@ export default function CampanhasPage() {
         <div className="flex items-center gap-2">
           <Link2 href={`/clientes${q}`} label="Clientes" />
           <button onClick={() => setCreating(true)}
-            className="text-sm font-bold bg-zinc-900 text-white px-4 py-2.5 rounded-xl hover:bg-zinc-700 inline-flex items-center gap-2">
+            className="text-sm font-bold bg-zinc-900 text-white px-4 py-2.5 rounded-md hover:bg-zinc-700 inline-flex items-center gap-2">
             <Icon n="megaphone" size={16} /> Nova campanha
           </button>
         </div>
       </div>
 
-      {msg && <p className="mb-4 text-sm font-semibold bg-emerald-600 text-white rounded-xl px-4 py-3">{msg}</p>}
-      {error && <p className="mb-4 text-sm font-semibold bg-amber-600 text-white rounded-xl px-4 py-3">{error}</p>}
+      {msg && <p className="mb-4 text-sm font-semibold bg-emerald-600 text-white rounded-md px-4 py-3">{msg}</p>}
+      {error && <p className="mb-4 text-sm font-semibold bg-amber-600 text-white rounded-md px-4 py-3">{error}</p>}
 
       <div className="grid sm:grid-cols-4 gap-3 mb-6">
         <Card label="Autorizaram (opt-in)" value={data.consent.optedIn} tone="ok" hint="podem receber campanha" />
@@ -104,12 +104,12 @@ export default function CampanhasPage() {
         <Card label="WhatsApp" value={connected ? 'conectado' : 'não conectado'} tone={connected ? 'ok' : 'warn'} hint={connected ? 'envio disponível' : 'campanhas ficam salvas'} />
       </div>
 
-      <p className="text-xs text-zinc-500 mb-5 bg-white border border-zinc-200 rounded-2xl px-4 py-3">
+      <p className="text-xs text-zinc-500 mb-5 bg-white border border-zinc-200 rounded-lg px-4 py-3">
         <strong>Regra de consentimento:</strong> {data.consent.rule} O sistema nunca presume autorização — promoções por
         WhatsApp/E-mail só vão para quem marcou a autorização no cadastro do cliente.
       </p>
 
-      <section className="bg-white border border-zinc-200 rounded-2xl divide-y divide-zinc-100">
+      <section className="bg-white border border-zinc-200 rounded-lg divide-y divide-zinc-100">
         {data.campaigns.length === 0 && (
           <p className="text-sm text-zinc-500 px-4 py-8 text-center">Nenhuma campanha ainda. Crie a primeira — ela nasce como rascunho.</p>
         )}
@@ -126,7 +126,7 @@ export default function CampanhasPage() {
                   {c.sentAt ? ` · enviada em ${c.sentAt.slice(0, 16).replace('T', ' ')}` : ''}
                   {c.createdBy ? ` · por ${c.createdBy}` : ''}
                 </p>
-                <p className="text-sm text-zinc-700 mt-2 bg-zinc-50 border border-zinc-100 rounded-xl px-3 py-2 whitespace-pre-wrap">{c.message}</p>
+                <p className="text-sm text-zinc-700 mt-2 bg-zinc-50 border border-zinc-100 rounded-md px-3 py-2 whitespace-pre-wrap">{c.message}</p>
                 <div className="flex flex-wrap gap-3 mt-2 text-[11px] font-bold text-zinc-500">
                   <span>elegíveis {c.counts.eligible}</span>
                   <span>enviadas {c.counts.sent}</span>
@@ -191,13 +191,13 @@ export default function CampanhasPage() {
                   placeholder="Ex: Olá {nome}! Setembro chegou com 20% de desconto no corte. Responda AGENDAR para marcar ✂️" />
                 <span className="text-[11px] text-zinc-500">Use <code>{'{nome}'}</code> para o primeiro nome do cliente.</span></label>
               {!connected && (
-                <p className="text-xs bg-amber-50 border border-amber-200 text-amber-900 rounded-xl px-3 py-2">
+                <p className="text-xs bg-amber-50 border border-amber-200 text-amber-900 rounded-md px-3 py-2">
                   WhatsApp ainda não conectado — a campanha pode ser criada e preparada, mas o envio fica bloqueado até a
                   integração oficial existir. Nada é enviado por canais falsos.
                 </p>
               )}
               <button onClick={() => call('POST', form)} disabled={busy === 'save' || !form.name || !form.message}
-                className="w-full font-bold bg-zinc-900 text-white py-3 rounded-xl disabled:opacity-50">
+                className="w-full font-bold bg-zinc-900 text-white py-3 rounded-md disabled:opacity-50">
                 {busy === 'save' ? 'Salvando…' : 'Salvar rascunho'}
               </button>
             </div>
@@ -210,7 +210,7 @@ export default function CampanhasPage() {
 
 function Card({ label, value, hint, tone }: { label: string; value: number | string; hint?: string; tone?: 'ok' | 'warn' }) {
   return (
-    <div className={cn('rounded-2xl border p-4', tone === 'ok' ? 'bg-emerald-50 border-emerald-200' : tone === 'warn' ? 'bg-amber-50 border-amber-200' : 'bg-white border-zinc-200')}>
+    <div className={cn('rounded-lg border p-4', tone === 'ok' ? 'bg-emerald-50 border-emerald-200' : tone === 'warn' ? 'bg-amber-50 border-amber-200' : 'bg-white border-zinc-200')}>
       <p className="text-xs font-bold text-zinc-500">{label}</p>
       <p className="text-xl font-extrabold mt-0.5">{value}</p>
       {hint && <p className="text-[11px] text-zinc-500">{hint}</p>}
@@ -219,5 +219,5 @@ function Card({ label, value, hint, tone }: { label: string; value: number | str
 }
 
 function Link2({ href, label }: { href: string; label: string }) {
-  return <a href={href} className="text-xs font-bold bg-white border border-zinc-200 rounded-xl px-3.5 py-2 hover:bg-zinc-50">{label}</a>;
+  return <a href={href} className="text-xs font-bold bg-white border border-zinc-200 rounded-md px-3.5 py-2 hover:bg-zinc-50">{label}</a>;
 }

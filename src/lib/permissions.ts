@@ -14,6 +14,7 @@ export interface PermissionDef {
 }
 
 export const PERMISSIONS: PermissionDef[] = [
+  { id: 'dashboard', label: 'Dashboard', hint: 'Visão geral do negócio e indicadores do dia' },
   { id: 'agenda', label: 'Agenda', hint: 'Ver e operar a agenda (confirmar, concluir, remarcar)' },
   { id: 'clientes', label: 'Clientes', hint: 'CRM de clientes e histórico 360' },
   { id: 'leads', label: 'Leads', hint: 'Interesses e conversas captadas na página' },
@@ -51,15 +52,15 @@ export const ROLES: RoleDef[] = [
   },
   {
     id: 'SECRETARIA', label: 'Secretária', hint: 'Agenda, clientes, leads e WhatsApp',
-    permissions: ['agenda', 'clientes', 'leads', 'pedidos', 'whatsapp', 'agente'],
+    permissions: ['dashboard', 'agenda', 'clientes', 'leads', 'pedidos', 'whatsapp', 'agente'],
   },
   {
     id: 'ATENDENTE', label: 'Atendente', hint: 'Agenda, clientes e WhatsApp',
-    permissions: ['agenda', 'clientes', 'whatsapp', 'agente'],
+    permissions: ['dashboard', 'agenda', 'clientes', 'whatsapp', 'agente'],
   },
   {
     id: 'VENDEDOR', label: 'Vendedor', hint: 'Clientes, leads e campanhas',
-    permissions: ['clientes', 'leads', 'whatsapp', 'campanhas'],
+    permissions: ['dashboard', 'clientes', 'leads', 'whatsapp', 'campanhas'],
   },
   {
     id: 'VIEWER', label: 'Visualizador', hint: 'Somente leitura do resumo',

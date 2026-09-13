@@ -23,7 +23,7 @@ interface Preview {
   moduleEnabled: boolean; canBook: boolean; whatsapp: boolean; whatsappStatus: string;
 }
 
-const input = 'w-full rounded-xl border border-zinc-300 px-3.5 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500';
+const input = 'w-full rounded-md border border-zinc-300 px-3.5 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500';
 const money = (c: number) => (c / 100).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
 
 export default function AgentePage() {
@@ -102,20 +102,20 @@ export default function AgentePage() {
             <span className={cn('w-2 h-2 rounded-full', preview?.moduleEnabled ? 'bg-emerald-600' : 'bg-zinc-400')} />
             {preview?.moduleEnabled ? 'Módulo ativo na página' : 'Módulo desativado'}
           </span>
-          <Link href={`/recursos${q}`} className="text-xs font-bold bg-white border border-zinc-200 rounded-xl px-3.5 py-2 hover:bg-zinc-50">
+          <Link href={`/recursos${q}`} className="text-xs font-bold bg-white border border-zinc-200 rounded-md px-3.5 py-2 hover:bg-zinc-50">
             Recursos
           </Link>
         </div>
       </div>
 
       {!preview?.moduleEnabled && (
-        <p className="mb-4 text-sm bg-amber-50 border border-amber-200 text-amber-900 rounded-xl px-4 py-3">
+        <p className="mb-4 text-sm bg-amber-50 border border-amber-200 text-amber-900 rounded-md px-4 py-3">
           O recurso <strong>Assistente</strong> está desativado na empresa. Configure aqui e ligue em{' '}
           <Link href={`/recursos${q}`} className="underline font-bold">Recursos</Link> para ele aparecer na página.
         </p>
       )}
 
-      <div className="flex gap-1 p-1 bg-zinc-100 rounded-xl mb-4 w-fit" role="tablist">
+      <div className="flex gap-1 p-1 bg-zinc-100 rounded-md mb-4 w-fit" role="tablist">
         {(['config', 'conhecimento'] as const).map((t) => (
           <button key={t} role="tab" aria-selected={tab === t} onClick={() => setTab(t)}
             className={cn('text-xs font-bold px-4 py-2 rounded-lg', tab === t ? 'bg-white shadow-sm text-zinc-900' : 'text-zinc-500')}>
@@ -124,12 +124,12 @@ export default function AgentePage() {
         ))}
       </div>
 
-      {msg && <p className="mb-4 text-sm font-semibold bg-emerald-600 text-white rounded-xl px-4 py-3">{msg}</p>}
-      {error && <p className="mb-4 text-sm font-semibold bg-red-600 text-white rounded-xl px-4 py-3">{error}</p>}
+      {msg && <p className="mb-4 text-sm font-semibold bg-emerald-600 text-white rounded-md px-4 py-3">{msg}</p>}
+      {error && <p className="mb-4 text-sm font-semibold bg-red-600 text-white rounded-md px-4 py-3">{error}</p>}
 
       {tab === 'config' ? (
         <div className="space-y-4">
-          <section className="bg-white border border-zinc-200 rounded-2xl p-5 space-y-4">
+          <section className="bg-white border border-zinc-200 rounded-lg p-5 space-y-4">
             <div className="flex items-center justify-between gap-3">
               <div>
                 <h3 className="font-bold text-sm flex items-center gap-2"><Icon n="spark" size={16} className="text-zinc-400" /> Identidade</h3>
@@ -151,7 +151,7 @@ export default function AgentePage() {
               <div className="flex flex-wrap gap-2 mt-1.5">
                 {options.tones.map((t) => (
                   <button key={t.id} onClick={() => set('tone', t.id)} title={t.hint}
-                    className={cn('text-sm font-bold px-3.5 py-2 rounded-xl border-2', agent.tone === t.id ? 'border-emerald-500 bg-emerald-50 text-emerald-800' : 'border-zinc-200 text-zinc-500')}>
+                    className={cn('text-sm font-bold px-3.5 py-2 rounded-md border-2', agent.tone === t.id ? 'border-emerald-500 bg-emerald-50 text-emerald-800' : 'border-zinc-200 text-zinc-500')}>
                     {t.label}
                   </button>
                 ))}
@@ -164,7 +164,7 @@ export default function AgentePage() {
                   const on = agent.objectives.includes(o.id);
                   return (
                     <button key={o.id} onClick={() => toggleObjective(o.id)}
-                      className={cn('text-sm font-bold px-3.5 py-2 rounded-xl border-2', on ? 'border-emerald-500 bg-emerald-50 text-emerald-800' : 'border-zinc-200 text-zinc-500')}>
+                      className={cn('text-sm font-bold px-3.5 py-2 rounded-md border-2', on ? 'border-emerald-500 bg-emerald-50 text-emerald-800' : 'border-zinc-200 text-zinc-500')}>
                       {on && <Icon n="check" size={13} className="inline -mt-0.5 mr-1" />}{o.label}
                     </button>
                   );
@@ -173,7 +173,7 @@ export default function AgentePage() {
             </div>
           </section>
 
-          <section className="bg-white border border-zinc-200 rounded-2xl p-5 space-y-3.5">
+          <section className="bg-white border border-zinc-200 rounded-lg p-5 space-y-3.5">
             <h3 className="font-bold text-sm flex items-center gap-2"><Icon n="shield" size={16} className="text-zinc-400" /> Regras e limites</h3>
             <label className="block"><span className="text-xs font-bold text-zinc-500">ORIENTAÇÕES DO AGENTE</span>
               <textarea value={agent.instructions} onChange={(e) => set('instructions', e.target.value)} rows={4} className={input + ' mt-1'}
@@ -184,7 +184,7 @@ export default function AgentePage() {
             <label className="block"><span className="text-xs font-bold text-zinc-500">ESCALADA PARA HUMANO</span>
               <textarea value={agent.handoffMessage} onChange={(e) => set('handoffMessage', e.target.value)} rows={2} className={input + ' mt-1'}
                 placeholder="Quando não souber responder, encaminhar para o WhatsApp." /></label>
-            <div className="rounded-xl bg-zinc-50 border border-zinc-200 p-3.5">
+            <div className="rounded-md bg-zinc-50 border border-zinc-200 p-3.5">
               <p className="text-xs font-bold text-zinc-600 mb-2">CANAIS</p>
               <div className="flex flex-wrap gap-2">
                 <button onClick={() => set('channels', { ...agent.channels, site: !agent.channels.site })}
@@ -200,7 +200,7 @@ export default function AgentePage() {
             </div>
           </section>
 
-          <section className="bg-white border border-zinc-200 rounded-2xl p-5 space-y-3">
+          <section className="bg-white border border-zinc-200 rounded-lg p-5 space-y-3">
             <h3 className="font-bold text-sm flex items-center gap-2"><Icon n="chat" size={16} className="text-zinc-400" /> Conhecimento adicional</h3>
             <p className="text-xs text-zinc-500">Uma linha por assunto, no formato <strong>Tema: resposta</strong>. Ex: <em>Estacionamento: temos convênio ao lado.</em></p>
             <textarea value={agent.knowledgeOverride} onChange={(e) => set('knowledgeOverride', e.target.value)} rows={5} className={input}
@@ -210,18 +210,18 @@ export default function AgentePage() {
 
           <div className="sticky bottom-4">
             <button onClick={save} disabled={saving}
-              className="w-full sm:w-auto font-bold bg-zinc-900 text-white px-6 py-3.5 rounded-xl disabled:opacity-50 shadow-lg">
+              className="w-full sm:w-auto font-bold bg-zinc-900 text-white px-6 py-3.5 rounded-md disabled:opacity-50 shadow-lg">
               {saving ? 'Salvando…' : 'Salvar agente'}
             </button>
           </div>
         </div>
       ) : (
         <div className="space-y-4">
-          <section className="bg-white border border-zinc-200 rounded-2xl p-5">
+          <section className="bg-white border border-zinc-200 rounded-lg p-5">
             <h3 className="font-bold text-sm mb-2">Prévia da saudação</h3>
-            <p className="text-sm bg-zinc-50 border border-zinc-200 rounded-xl p-3.5">{pv?.greeting}</p>
+            <p className="text-sm bg-zinc-50 border border-zinc-200 rounded-md p-3.5">{pv?.greeting}</p>
           </section>
-          <section className="bg-white border border-zinc-200 rounded-2xl p-5">
+          <section className="bg-white border border-zinc-200 rounded-lg p-5">
             <h3 className="font-bold text-sm mb-3">O que o agente pode usar agora</h3>
             <dl className="text-sm space-y-2">
               <div className="flex justify-between gap-3"><dt className="text-zinc-500 font-semibold">Empresa</dt><dd className="font-bold text-right">{pv?.knowledge.businessName}</dd></div>
@@ -233,7 +233,7 @@ export default function AgentePage() {
             </dl>
           </section>
           {(pv?.knowledge.services.length || 0) > 0 && (
-            <section className="bg-white border border-zinc-200 rounded-2xl p-5">
+            <section className="bg-white border border-zinc-200 rounded-lg p-5">
               <h3 className="font-bold text-sm mb-2">Serviços que ele conhece</h3>
               <ul className="text-sm space-y-1.5">
                 {pv!.knowledge.services.map((s) => (

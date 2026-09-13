@@ -84,7 +84,7 @@ export default function RecursosPage() {
           <span className="text-xs font-bold text-zinc-500 bg-white border border-zinc-200 rounded-full px-3 py-1.5">
             {activeCount} de {rows.length} ativos
           </span>
-          <Link href={`/pagina${q}`} className="text-xs font-bold bg-white border border-zinc-200 rounded-xl px-3.5 py-2 hover:bg-zinc-50">
+          <Link href={`/pagina${q}`} className="text-xs font-bold bg-white border border-zinc-200 rounded-md px-3.5 py-2 hover:bg-zinc-50">
             Página
           </Link>
         </div>
@@ -92,7 +92,7 @@ export default function RecursosPage() {
 
       {toast && (
         <p className={cn(
-          'mb-4 text-sm font-semibold rounded-xl px-4 py-3 border',
+          'mb-4 text-sm font-semibold rounded-md px-4 py-3 border',
           toast.kind === 'ok' ? 'bg-emerald-50 border-emerald-200 text-emerald-900' : 'bg-amber-50 border-amber-200 text-amber-900',
         )}>{toast.text}</p>
       )}
@@ -108,12 +108,12 @@ export default function RecursosPage() {
               {rows.filter((r) => r.group === group).map((row) => (
                 <div key={row.id}
                   className={cn(
-                    'bg-white rounded-2xl border p-4 flex flex-col gap-3 transition-colors',
+                    'bg-white rounded-lg border p-4 flex flex-col gap-3 transition-colors',
                     row.enabled ? 'border-emerald-200' : 'border-zinc-200',
                   )}>
                   <div className="flex items-start justify-between gap-3">
                     <span className={cn(
-                      'w-10 h-10 rounded-xl flex items-center justify-center shrink-0',
+                      'w-10 h-10 rounded-md flex items-center justify-center shrink-0',
                       row.enabled ? 'bg-emerald-50 text-emerald-700' : 'bg-zinc-100 text-zinc-400',
                     )}>
                       <Icon n={row.icon} size={20} />
@@ -158,7 +158,7 @@ export default function RecursosPage() {
         ))}
       </div>
 
-      <div className="mt-8 bg-zinc-900 text-white rounded-2xl p-5">
+      <div className="mt-8 bg-zinc-900 text-white rounded-lg p-5">
         <p className="font-bold flex items-center gap-2"><Icon n="shield" size={16} /> Como funciona</p>
         <ul className="mt-2 text-sm text-zinc-300 space-y-1.5">
           <li>• <strong>Módulo da empresa</strong> decide se o recurso existe (é o que você liga aqui).</li>

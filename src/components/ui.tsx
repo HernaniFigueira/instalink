@@ -1,19 +1,19 @@
 import { cn } from '@/lib/utils';
 import { Icon } from '@/components/icons';
 
-// ── Design System InstaLink (painel) ─────────────────────────
+// ── Design System InstaLink — workspace first, card quando fizer sentido ──
 export function Button(props: React.ButtonHTMLAttributes<HTMLButtonElement> & { variant?: 'primary' | 'secondary' | 'ghost' | 'danger'; size?: 'sm' | 'md' | 'lg' }) {
   const { variant = 'primary', size = 'md', className, ...rest } = props;
   return (
     <button
       className={cn(
-        'inline-flex items-center justify-center gap-2 font-semibold transition-all focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 disabled:opacity-50 disabled:pointer-events-none rounded-xl',
-        size === 'sm' && 'text-sm px-3 py-1.5',
-        size === 'md' && 'text-sm px-4 py-2.5',
-        size === 'lg' && 'text-base px-6 py-3.5',
-        variant === 'primary' && 'bg-zinc-900 text-white hover:bg-zinc-700 shadow-sm',
-        variant === 'secondary' && 'bg-zinc-100 text-zinc-900 hover:bg-zinc-200',
-        variant === 'ghost' && 'text-zinc-600 hover:bg-zinc-100 hover:text-zinc-900',
+        'inline-flex items-center justify-center gap-1.5 font-semibold transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-zinc-900 disabled:opacity-50 disabled:pointer-events-none rounded-md',
+        size === 'sm' && 'text-xs px-2.5 py-1.5',
+        size === 'md' && 'text-sm px-3.5 py-2',
+        size === 'lg' && 'text-sm px-5 py-2.5',
+        variant === 'primary' && 'bg-zinc-900 text-white hover:bg-zinc-800',
+        variant === 'secondary' && 'bg-white text-zinc-900 border border-zinc-200 hover:bg-zinc-50',
+        variant === 'ghost' && 'text-zinc-600 hover:bg-zinc-100 hover:text-zinc-900 border border-transparent',
         variant === 'danger' && 'bg-red-600 text-white hover:bg-red-700',
         className,
       )}
@@ -27,12 +27,12 @@ export function A(props: React.AnchorHTMLAttributes<HTMLAnchorElement> & { varia
   return (
     <a
       className={cn(
-        'inline-flex items-center justify-center gap-2 font-semibold transition-all rounded-xl',
-        size === 'sm' && 'text-sm px-3 py-1.5',
-        size === 'md' && 'text-sm px-4 py-2.5',
-        size === 'lg' && 'text-base px-6 py-3.5',
-        variant === 'primary' && 'bg-zinc-900 text-white hover:bg-zinc-700 shadow-sm',
-        variant === 'secondary' && 'bg-zinc-100 text-zinc-900 hover:bg-zinc-200',
+        'inline-flex items-center justify-center gap-1.5 font-semibold transition-colors rounded-md',
+        size === 'sm' && 'text-xs px-2.5 py-1.5',
+        size === 'md' && 'text-sm px-3.5 py-2',
+        size === 'lg' && 'text-sm px-5 py-2.5',
+        variant === 'primary' && 'bg-zinc-900 text-white hover:bg-zinc-800',
+        variant === 'secondary' && 'bg-white text-zinc-900 border border-zinc-200 hover:bg-zinc-50',
         variant === 'ghost' && 'text-zinc-600 hover:bg-zinc-100 hover:text-zinc-900',
         className,
       )}
@@ -43,14 +43,35 @@ export function A(props: React.AnchorHTMLAttributes<HTMLAnchorElement> & { varia
 
 export function Card(props: React.HTMLAttributes<HTMLDivElement>) {
   const { className, ...rest } = props;
-  return <div className={cn('bg-white border border-zinc-200 rounded-2xl shadow-[0_1px_2px_rgba(0,0,0,0.04)]', className)} {...rest} />;
+  return <div className={cn('bg-white border border-zinc-200 rounded-lg', className)} {...rest} />;
+}
+
+// Painel workspace — sem sombra exagerada, densidade adequada
+export function Panel({ className, ...rest }: React.HTMLAttributes<HTMLDivElement>) {
+  return <div className={cn('bg-white border border-zinc-200 rounded-lg', className)} {...rest} />;
+}
+
+export function Toolbar({ className, ...rest }: React.HTMLAttributes<HTMLDivElement>) {
+  return <div className={cn('flex items-center justify-between gap-3 px-4 py-3 border-b border-zinc-200 bg-white', className)} {...rest} />;
+}
+
+export function SectionHeader({ title, hint, action }: { title: string; hint?: string; action?: React.ReactNode }) {
+  return (
+    <div className="flex items-center justify-between gap-3 px-4 py-3 border-b border-zinc-100">
+      <div className="min-w-0">
+        <h3 className="text-sm font-semibold text-zinc-900">{title}</h3>
+        {hint && <p className="text-xs text-zinc-500 mt-0.5">{hint}</p>}
+      </div>
+      {action}
+    </div>
+  );
 }
 
 export function Input(props: React.InputHTMLAttributes<HTMLInputElement>) {
   const { className, ...rest } = props;
   return (
     <input
-      className={cn('w-full rounded-xl border border-zinc-300 bg-white px-3.5 py-2.5 text-sm text-zinc-900 placeholder:text-zinc-400 focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500', className)}
+      className={cn('w-full rounded-md border border-zinc-300 bg-white px-3 py-2 text-sm text-zinc-900 placeholder:text-zinc-400 focus:outline-none focus:ring-1 focus:ring-zinc-900 focus:border-zinc-900', className)}
       {...rest}
     />
   );
@@ -60,7 +81,7 @@ export function Textarea(props: React.TextareaHTMLAttributes<HTMLTextAreaElement
   const { className, ...rest } = props;
   return (
     <textarea
-      className={cn('w-full rounded-xl border border-zinc-300 bg-white px-3.5 py-2.5 text-sm text-zinc-900 placeholder:text-zinc-400 focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500', className)}
+      className={cn('w-full rounded-md border border-zinc-300 bg-white px-3 py-2 text-sm text-zinc-900 placeholder:text-zinc-400 focus:outline-none focus:ring-1 focus:ring-zinc-900 focus:border-zinc-900', className)}
       {...rest}
     />
   );
@@ -70,7 +91,7 @@ export function Select(props: React.SelectHTMLAttributes<HTMLSelectElement>) {
   const { className, children, ...rest } = props;
   return (
     <select
-      className={cn('w-full rounded-xl border border-zinc-300 bg-white px-3.5 py-2.5 text-sm text-zinc-900 focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500', className)}
+      className={cn('w-full rounded-md border border-zinc-300 bg-white px-3 py-2 text-sm text-zinc-900 focus:outline-none focus:ring-1 focus:ring-zinc-900 focus:border-zinc-900', className)}
       {...rest}
     >
       {children}
@@ -81,8 +102,8 @@ export function Select(props: React.SelectHTMLAttributes<HTMLSelectElement>) {
 export function Field({ label, hint, children, required }: { label: string; hint?: string; children: React.ReactNode; required?: boolean }) {
   return (
     <label className="block">
-      <span className="block text-sm font-medium text-zinc-700 mb-1.5">
-        {label} {required && <span className="text-red-500">*</span>}
+      <span className="block text-xs font-semibold tracking-wide text-zinc-600 mb-1">
+        {label} {required && <span className="text-red-600">*</span>}
       </span>
       {children}
       {hint && <span className="block text-xs text-zinc-500 mt-1">{hint}</span>}
@@ -92,21 +113,21 @@ export function Field({ label, hint, children, required }: { label: string; hint
 
 export function Badge({ tone = 'zinc', children }: { tone?: 'zinc' | 'green' | 'amber' | 'red' | 'blue' | 'pink'; children: React.ReactNode }) {
   const tones: Record<string, string> = {
-    zinc: 'bg-zinc-100 text-zinc-700',
-    green: 'bg-emerald-100 text-emerald-800',
-    amber: 'bg-amber-100 text-amber-800',
-    red: 'bg-red-100 text-red-700',
-    blue: 'bg-blue-100 text-blue-800',
-    pink: 'bg-pink-100 text-pink-800',
+    zinc: 'bg-zinc-100 text-zinc-700 border border-zinc-200',
+    green: 'bg-emerald-50 text-emerald-800 border border-emerald-200',
+    amber: 'bg-amber-50 text-amber-800 border border-amber-200',
+    red: 'bg-red-50 text-red-700 border border-red-200',
+    blue: 'bg-blue-50 text-blue-800 border border-blue-200',
+    pink: 'bg-pink-50 text-pink-800 border border-pink-200',
   };
-  return <span className={cn('inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-semibold', tones[tone])}>{children}</span>;
+  return <span className={cn('inline-flex items-center rounded-full px-2 py-0.5 text-xs font-semibold', tones[tone])}>{children}</span>;
 }
 
 export function EmptyState({ title, hint, action }: { title: string; hint: string; action?: React.ReactNode }) {
   return (
     <div className="text-center py-12 px-6">
-      <div className="mx-auto w-12 h-12 rounded-2xl bg-zinc-100 flex items-center justify-center text-zinc-400 mb-4"><Icon n="spark" size={24} /></div>
-      <h3 className="font-semibold text-zinc-900">{title}</h3>
+      <div className="mx-auto w-10 h-10 rounded-lg bg-zinc-100 flex items-center justify-center text-zinc-400 mb-3"><Icon n="spark" size={20} /></div>
+      <h3 className="font-semibold text-zinc-900 text-sm">{title}</h3>
       <p className="text-sm text-zinc-500 mt-1 max-w-sm mx-auto">{hint}</p>
       {action && <div className="mt-4">{action}</div>}
     </div>
@@ -115,9 +136,9 @@ export function EmptyState({ title, hint, action }: { title: string; hint: strin
 
 export function PageHeader({ title, hint, action }: { title: string; hint?: string; action?: React.ReactNode }) {
   return (
-    <div className="flex flex-wrap items-start justify-between gap-3 mb-6">
+    <div className="flex flex-wrap items-start justify-between gap-3 mb-5">
       <div>
-        <h1 className="text-2xl font-bold text-zinc-900 tracking-tight">{title}</h1>
+        <h1 className="text-xl font-semibold tracking-tight text-zinc-900">{title}</h1>
         {hint && <p className="text-sm text-zinc-500 mt-1">{hint}</p>}
       </div>
       {action}
@@ -125,23 +146,34 @@ export function PageHeader({ title, hint, action }: { title: string; hint?: stri
   );
 }
 
+// KPI compacto — não é card gigante
+export function Kpi({ label, value, hint, tone }: { label: string; value: string; hint?: string; tone?: 'default' | 'success' | 'warning' | 'danger' }) {
+  return (
+    <div className="px-4 py-3">
+      <p className="text-[11px] font-semibold tracking-wider uppercase text-zinc-500">{label}</p>
+      <p className={cn('text-xl font-semibold mt-1 leading-none', tone === 'success' && 'text-emerald-700', tone === 'warning' && 'text-amber-700', tone === 'danger' && 'text-red-600')}>{value}</p>
+      {hint && <p className="text-xs text-zinc-500 mt-1">{hint}</p>}
+    </div>
+  );
+}
+
 export function Stat({ label, value, hint }: { label: string; value: string; hint?: string }) {
   return (
-    <Card className="p-5">
-      <p className="text-sm text-zinc-500">{label}</p>
-      <p className="text-3xl font-bold text-zinc-900 mt-1 tracking-tight">{value}</p>
-      {hint && <p className="text-xs text-zinc-400 mt-1">{hint}</p>}
-    </Card>
+    <div className="bg-white border border-zinc-200 rounded-lg p-4">
+      <p className="text-xs font-semibold tracking-wide uppercase text-zinc-500">{label}</p>
+      <p className="text-2xl font-semibold text-zinc-900 mt-1 tracking-tight">{value}</p>
+      {hint && <p className="text-xs text-zinc-500 mt-1">{hint}</p>}
+    </div>
   );
 }
 
 export function Notice({ tone = 'info', children }: { tone?: 'info' | 'success' | 'error'; children: React.ReactNode }) {
   return (
     <div className={cn(
-      'rounded-xl px-4 py-3 text-sm font-medium',
-      tone === 'info' && 'bg-blue-50 text-blue-800 border border-blue-200',
-      tone === 'success' && 'bg-emerald-50 text-emerald-800 border border-emerald-200',
-      tone === 'error' && 'bg-red-50 text-red-700 border border-red-200',
+      'rounded-md px-3 py-2.5 text-sm font-medium border',
+      tone === 'info' && 'bg-blue-50 text-blue-800 border-blue-200',
+      tone === 'success' && 'bg-emerald-50 text-emerald-800 border-emerald-200',
+      tone === 'error' && 'bg-red-50 text-red-700 border-red-200',
     )}>
       {children}
     </div>
@@ -150,18 +182,18 @@ export function Notice({ tone = 'info', children }: { tone?: 'info' | 'success' 
 
 // ── Skeletons ───────────────────────────────────────────────
 export function Skeleton({ className }: { className?: string }) {
-  return <div aria-hidden="true" className={cn('animate-pulse rounded-xl bg-zinc-200/90', className)} />;
+  return <div aria-hidden="true" className={cn('animate-pulse rounded-md bg-zinc-200/70', className)} />;
 }
 
 export function PageSkeleton() {
   return (
     <div className="space-y-4" aria-label="Carregando">
-      <Skeleton className="h-8 w-56" />
+      <Skeleton className="h-6 w-48" />
       <Skeleton className="h-4 w-72" />
-      <div className="grid sm:grid-cols-3 gap-4">
-        <Skeleton className="h-28" />
-        <Skeleton className="h-28" />
-        <Skeleton className="h-28" />
+      <div className="grid sm:grid-cols-3 gap-3">
+        <Skeleton className="h-24" />
+        <Skeleton className="h-24" />
+        <Skeleton className="h-24" />
       </div>
       <Skeleton className="h-64" />
     </div>
@@ -170,9 +202,9 @@ export function PageSkeleton() {
 
 export function ListSkeleton({ rows = 4 }: { rows?: number }) {
   return (
-    <div className="space-y-3" aria-label="Carregando">
+    <div className="space-y-2" aria-label="Carregando">
       {Array.from({ length: rows }).map((_, i) => (
-        <Skeleton key={i} className="h-20" />
+        <Skeleton key={i} className="h-16" />
       ))}
     </div>
   );
