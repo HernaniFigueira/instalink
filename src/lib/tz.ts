@@ -56,6 +56,17 @@ export function isPastDate(dateISO: string, today = todayISO()): boolean {
   return dateISO < today;
 }
 
+/**
+ * Hora válida no formato HH:MM (00:00 a 23:59).
+ * Só checar /^\d{2}:\d{2}$/ deixaria passar "99:99" — que depois seria
+ * recusado como "horário ocupado", com mensagem enganosa.
+ */
+export function isValidClockTime(t: string): boolean {
+  if (!/^\d{2}:\d{2}$/.test(t || '')) return false;
+  const [h, m] = t.split(':').map(Number);
+  return h >= 0 && h <= 23 && m >= 0 && m <= 59;
+}
+
 export function isValidDateISO(s: string): boolean {
   if (!/^\d{4}-\d{2}-\d{2}$/.test(s)) return false;
   const [y, m, d] = s.split('-').map(Number);

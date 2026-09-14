@@ -311,7 +311,7 @@ function BlockView({ block, business, agent, catalog }: {
           <div className="min-w-0 flex-1">
             <p className="font-bold flex items-center gap-1.5">{sv.name} {sv.featured && <Icon n="star" size={13} className="shrink-0 text-amber-500" />}</p>
             {sv.description && <p className="il-muted text-xs truncate">{sv.description}</p>}
-            <p className="il-muted text-xs mt-0.5 flex items-center gap-1"><Icon n="clock" size={13} /> {sv.durationMin} min</p>
+            {/* Duração não é pública: o card mostra nome, descrição e preço. */}
           </div>
           <div className={wide ? 'flex items-center justify-between gap-2 w-full' : 'shrink-0 flex flex-col items-end gap-1.5'}>
             <p className="font-extrabold il-accent">{money(sv.price)}</p>

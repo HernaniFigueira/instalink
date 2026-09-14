@@ -4,6 +4,8 @@ import { useSearchParams } from 'next/navigation';
 import { cn } from '@/lib/utils';
 import type { Category, Product, ProductOption, ProductOptionValue } from '@/lib/types';
 import { ListSkeleton } from '@/components/ui';
+import { AccessDenied, useAreaLoad } from '@/components/dashboard/AccessNotice';
+import { apiGet, apiSend } from '@/lib/api-client';
 import { Icon } from '@/components/icons';
 
 function cents(v: string): number {
@@ -29,30 +31,28 @@ export default function ProdutosPage() {
   const [showForm, setShowForm] = useState(false);
   const [optFor, setOptFor] = useState<Product | null>(null);
 
-  const load = useCallback(() => {
+  // 403 → aviso amigável (sessão preservada), nunca lista "carregando" para sempre.
+  const { denied, report } = useAreaLoad('Produtos');
+
+  const load = useCallback(async () => {
     if (!businessId) return;
-    fetch(`/api/catalog/get?businessId=${businessId}`)
-      .then((r) => r.json())
-      .then((d) => {
-        setCats((d.categories || []).filter((c: Category) => c.kind === 'product'));
-        setProducts(d.products || []);
-        setOptions(d.options || []);
-        setValues(d.optionValues || []);
-        setLoaded(true);
-      });
-  }, [businessId]);
+    const res = await apiGet<any>(`/api/catalog/get?businessId=${businessId}`, { scope: 'area', area: 'Produtos' });
+    if (!report(res)) { setLoaded(true); return; }
+    const d = res.data || {};
+    setCats((d.categories || []).filter((c: Category) => c.kind === 'product'));
+    setProducts(d.products || []);
+    setOptions(d.options || []);
+    setValues(d.optionValues || []);
+    setLoaded(true);
+  }, [businessId, report]);
 
   useEffect(() => { load(); }, [load]);
 
   async function call(action: string, payload: Record<string, any>) {
     setMsg('');
-    const res = await fetch('/api/catalog', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ businessId, action, ...payload }),
-    });
-    const data = await res.json();
-    if (!res.ok) throw new Error(data.error);
+    const res = await apiSend<any>('/api/catalog', 'POST', { businessId, action, ...payload }, { scope: 'action', area: 'Produtos' });
+    const data = res.data;
+    if (!res.ok) throw new Error(res.message);
     load();
     setMsg('Salvo.');
     setTimeout(() => setMsg(''), 2500);
@@ -83,7 +83,7 @@ export default function ProdutosPage() {
         </form>
       )}
 
-      {!loaded ? <ListSkeleton rows={4} /> : products.length === 0 ? (
+      {denied ? <AccessDenied area="Produtos" /> : !loaded ? <ListSkeleton rows={4} /> : products.length === 0 ? (
         <div className="bg-white border border-zinc-200 rounded-2xl text-center py-14 px-6">
           <div className="mx-auto w-12 h-12 rounded-2xl bg-zinc-100 flex items-center justify-center text-zinc-400"><Icon n="bag" size={24} /></div>
           <h3 className="font-bold mt-3">Você ainda não possui produtos</h3>

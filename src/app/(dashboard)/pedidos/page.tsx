@@ -6,6 +6,8 @@ import { money, waLink } from '@/lib/utils';
 import { humanDay } from '@/lib/tz';
 import { ORDER_STATUS, toneCls } from '@/lib/status';
 import { ListSkeleton } from '@/components/ui';
+import { AccessDenied, useAreaLoad } from '@/components/dashboard/AccessNotice';
+import { apiGet, apiSend } from '@/lib/api-client';
 import { Icon } from '@/components/icons';
 
 const STATUS_IDS: OrderStatus[] = ['new', 'accepted', 'preparing', 'ready', 'completed', 'cancelled'];
@@ -25,11 +27,19 @@ export default function PedidosPage() {
   const [armCancel, setArmCancel] = useState('');
   const [error, setError] = useState('');
 
-  const load = useCallback(() => {
+  // 403 → aviso amigável (sessão preservada), nunca lista "carregando" para sempre.
+  const { denied, report } = useAreaLoad('Pedidos');
+
+  const load = useCallback(async () => {
     if (!businessId) return;
-    fetch(`/api/orders?businessId=${businessId}&page=${page}&limit=${LIMIT}`)
-      .then((r) => r.json()).then((d) => { setOrders(d.orders || []); setTotal(d.total || 0); setLoaded(true); });
-  }, [businessId, page]);
+    const res = await apiGet<{ orders?: Order[]; total?: number }>(
+      `/api/orders?businessId=${businessId}&page=${page}&limit=${LIMIT}`, { scope: 'area', area: 'Pedidos' },
+    );
+    if (!report(res)) { setLoaded(true); return; }
+    setOrders(res.data?.orders || []);
+    setTotal(res.data?.total || 0);
+    setLoaded(true);
+  }, [businessId, page, report]);
 
   useEffect(() => { load(); }, [load]);
   useEffect(() => { setPage(1); }, [filter]);
@@ -37,13 +47,8 @@ export default function PedidosPage() {
   async function setStatus(id: string, status: string) {
     setError('');
     setArmCancel('');
-    const res = await fetch('/api/orders', {
-      method: 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ businessId, id, status }),
-    });
-    const data = await res.json().catch(() => ({}));
-    if (!res.ok) { setError(data.error || 'Não foi possível atualizar.'); return; }
+    const res = await apiSend('/api/orders', 'PATCH', { businessId, id, status }, { scope: 'action', area: 'Pedidos' });
+    if (!res.ok) { setError(res.message || 'Não foi possível atualizar.'); return; }
     load();
   }
 
@@ -64,7 +69,7 @@ export default function PedidosPage() {
         ))}
       </div>
 
-      {!loaded ? <ListSkeleton rows={4} /> : list.length === 0 ? (
+      {denied ? <AccessDenied area="Pedidos" /> : !loaded ? <ListSkeleton rows={4} /> : list.length === 0 ? (
         <div className="bg-white border border-zinc-200 rounded-2xl text-center py-14 px-6">
           <div className="mx-auto w-12 h-12 rounded-2xl bg-zinc-100 flex items-center justify-center text-zinc-400"><Icon n="receipt" size={24} /></div>
           <h3 className="font-bold mt-3">Nenhum pedido {filter ? 'neste status' : 'ainda'}</h3>

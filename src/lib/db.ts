@@ -89,8 +89,21 @@ function normalize(raw: unknown): DB {
   for (const s of base.services) {
     if (!Array.isArray((s as any).professionalIds)) (s as any).professionalIds = [];
   }
+  // Profissionais: vínculo com o horário geral da clínica (lib/schedule.ts).
+  // Migração DEFENSIVA e idempotente: quando o campo não existe (dado legado),
+  // derivamos do que já estava gravado — quem tinha horário próprio continua
+  // personalizado, quem não tinha passa a herdar. NENHUM registro é apagado e
+  // nenhum horário existente muda de dono.
+  for (const p of base.professionals) {
+    if (typeof (p as any).followBusinessHours !== 'boolean') {
+      (p as any).followBusinessHours = !base.availability.some(
+        (a) => a.professionalId === (p as any).id,
+      );
+    }
+  }
   for (const a of base.availability) {
     if (typeof (a as any).serviceId !== 'string') (a as any).serviceId = '';
+    if (typeof (a as any).professionalId !== 'string') (a as any).professionalId = '';
   }
   for (const e of base.exceptions) {
     if (typeof (e as any).start !== 'string') (e as any).start = '';

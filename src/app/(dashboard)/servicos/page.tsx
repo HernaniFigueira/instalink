@@ -6,6 +6,10 @@ import type { Availability, AvailabilityException, BookingConfig, Category, Prof
 import { ListSkeleton } from '@/components/ui';
 import { Icon } from '@/components/icons';
 import { ImageUpload } from '@/components/dashboard/ImageUpload';
+import { BusinessHoursPanel } from '@/components/dashboard/BusinessHours';
+import { AccessDenied } from '@/components/dashboard/AccessNotice';
+import { apiGet, apiSend } from '@/lib/api-client';
+import { followsBusinessHours } from '@/lib/schedule';
 
 const DAYS = ['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb'];
 
@@ -35,35 +39,39 @@ export default function ServicosPage() {
   const [showCat, setShowCat] = useState(false);
   const [catName, setCatName] = useState('');
   const [askDelete, setAskDelete] = useState<DeleteAsk | null>(null);
+  // 403 nesta tela → aviso amigável (o usuário continua logado).
+  const [denied, setDenied] = useState(false);
 
-  const load = useCallback(() => {
+  const load = useCallback(async () => {
     if (!businessId) return;
-    fetch(`/api/catalog/get?businessId=${businessId}`)
-      .then((r) => r.json())
-      .then((d) => {
-        setCats((d.categories || []).filter((c: Category) => c.kind === 'service'));
-        setServices(d.services || []);
-        setPros(d.professionals || []);
-        setRules(d.availability || []);
-        setExceptions(d.exceptions || []);
-        setRefs(d.bookingRefs || { services: [], professionals: [] });
-        setBookingCfg(d.business?.booking || null);
-        setLoaded(true);
-      });
+    const res = await apiGet<any>(`/api/catalog/get?businessId=${businessId}`, { scope: 'area', area: 'Serviços' });
+    if (!res.ok) {
+      // Sem permissão: mostra o aviso e NÃO tenta desenhar a tela vazia.
+      setDenied(res.status === 403);
+      setLoaded(true);
+      return;
+    }
+    const d = res.data || {};
+    setCats((d.categories || []).filter((c: Category) => c.kind === 'service'));
+    setServices(d.services || []);
+    setPros(d.professionals || []);
+    setRules(d.availability || []);
+    setExceptions(d.exceptions || []);
+    setRefs(d.bookingRefs || { services: [], professionals: [] });
+    setBookingCfg(d.business?.booking || null);
+    setDenied(false);
+    setLoaded(true);
   }, [businessId]);
 
   useEffect(() => { load(); }, [load]);
 
   async function call(action: string, payload: Record<string, any>) {
     setMsg('');
-    const res = await fetch('/api/catalog', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ businessId, action, ...payload }),
-    });
-    const data = await res.json();
-    if (!res.ok) throw new Error(data.error);
-    load();
+    // apiSend nunca lança por status: em 403 a mensagem é amigável e a sessão
+    // continua intacta (o toast global também aparece).
+    const res = await apiSend('/api/catalog', 'POST', { businessId, action, ...payload }, { scope: 'action', area: 'Serviços' });
+    if (!res.ok) throw new Error(res.message || 'Não foi possível salvar.');
+    await load();
     setMsg('Salvo.');
     setTimeout(() => setMsg(''), 2500);
   }
@@ -101,6 +109,16 @@ export default function ServicosPage() {
     } finally {
       setAskDelete(null);
     }
+  }
+
+  if (denied) {
+    return (
+      <>
+        <h1 className="text-2xl font-bold tracking-tight">Serviços</h1>
+        <p className="text-sm text-zinc-500 mt-1 mb-5">Serviços, equipe, horários e políticas de agendamento.</p>
+        <AccessDenied area="Serviços" />
+      </>
+    );
   }
 
   return (
@@ -172,14 +190,17 @@ export default function ServicosPage() {
       )}
 
       {loaded && tab === 'team' && (
-        <TeamEditor businessId={businessId} pros={pros} onSave={call} onAskDelete={(p) => ask('professional', p)} />
+        <TeamEditor businessId={businessId} pros={pros} rules={rules} onSave={call} onAskDelete={(p) => ask('professional', p)} />
       )}
 
       {loaded && tab === 'hours' && (
         <div className="space-y-4">
-          <HoursEditor
-            rules={rules} pros={pros}
-            onSave={async (scope, r) => { await call('availability.save', { scope, rules: r }); }}
+          {/* Horário da empresa + herança/personalização por profissional. */}
+          <BusinessHoursPanel
+            businessId={businessId}
+            professionals={pros.filter((p) => p.active !== false)}
+            rules={rules}
+            onChanged={() => { load(); }}
           />
           <ExceptionsManager
             exceptions={exceptions}
@@ -328,9 +349,11 @@ function ServiceForm({ businessId, service, cats, pros, onClose, onSave }: {
 }
 
 // ── Equipe ──
-function TeamEditor({ businessId, pros, onSave, onAskDelete }: {
+function TeamEditor({ businessId, pros, rules, onSave, onAskDelete }: {
   businessId: string;
   pros: Professional[];
+  /** Regras de disponibilidade — para saber quem herda o horário da empresa. */
+  rules: Availability[];
   onSave: (action: string, payload: Record<string, any>) => Promise<void>;
   onAskDelete: (p: Professional) => void;
 }) {
@@ -340,6 +363,8 @@ function TeamEditor({ businessId, pros, onSave, onAskDelete }: {
   const [role, setRole] = useState('');
   const [photo, setPhoto] = useState('');
   const [active, setActive] = useState(true);
+  // Padrão do produto: profissional novo SEGUE o horário da empresa.
+  const [follow, setFollow] = useState(true);
   const [error, setError] = useState('');
 
   function open(p: Professional | null) {
@@ -348,6 +373,7 @@ function TeamEditor({ businessId, pros, onSave, onAskDelete }: {
     setRole(p?.role || '');
     setPhoto(p?.photo || '');
     setActive(p?.active !== false);
+    setFollow(p ? followsBusinessHours(p, rules) : true);
     setError('');
     setShow(true);
   }
@@ -356,13 +382,24 @@ function TeamEditor({ businessId, pros, onSave, onAskDelete }: {
     <>
       <button onClick={() => open(null)} className="text-sm font-bold bg-zinc-900 text-white px-4 py-2.5 rounded-md mb-4">+ Profissional</button>
       {show && (
-        <form onSubmit={(e) => { e.preventDefault(); setError(''); onSave('professional.save', { id: editing?.id, name, role, photo, active }).then(() => setShow(false)).catch((err) => setError(err.message)); }}
+        <form onSubmit={(e) => { e.preventDefault(); setError(''); onSave('professional.save', { id: editing?.id, name, role, photo, active, followBusinessHours: follow }).then(() => setShow(false)).catch((err) => setError(err.message)); }}
           className="mb-4 bg-white border border-zinc-200 rounded-lg p-4 space-y-2.5">
           <p className="font-bold text-sm">{editing ? 'Editar profissional' : 'Novo profissional'}</p>
           <input value={name} onChange={(e) => setName(e.target.value)} placeholder="Nome * (ex: João)" className="w-full rounded-md border border-zinc-300 px-3 py-2.5 text-sm" autoFocus />
           <input value={role} onChange={(e) => setRole(e.target.value)} placeholder="Função (ex: Barbeiro)" className="w-full rounded-md border border-zinc-300 px-3 py-2.5 text-sm" />
           <ImageUpload label="FOTO DO PROFISSIONAL" value={photo} onChange={setPhoto} businessId={businessId} circle />
           <label className="flex items-center gap-2 text-sm font-medium"><input type="checkbox" checked={active} onChange={(e) => setActive(e.target.checked)} className="w-4 h-4 accent-emerald-600" /> Ativo (aparece na agenda)</label>
+          <label className="flex items-start gap-2 text-sm font-medium">
+            <input type="checkbox" checked={follow} onChange={(e) => setFollow(e.target.checked)} className="w-4 h-4 accent-emerald-600 mt-0.5" />
+            <span>
+              Seguir horário da empresa
+              <span className="block text-xs font-normal text-zinc-500">
+                {follow
+                  ? 'Atende nos horários gerais — mudanças lá valem automaticamente aqui.'
+                  : 'Horário personalizado: edite em Serviços → Horários.'}
+              </span>
+            </span>
+          </label>
           {error && <p className="text-sm font-medium text-red-600">{error}</p>}
           <div className="flex gap-2">
             <button className="text-sm font-bold bg-zinc-900 text-white px-4 py-2.5 rounded-md">Salvar</button>
@@ -384,7 +421,15 @@ function TeamEditor({ businessId, pros, onSave, onAskDelete }: {
               ) : (
                 <div className="w-10 h-10 rounded-full bg-zinc-900 text-white flex items-center justify-center font-bold shrink-0">{p.name.slice(0, 1)}</div>
               )}
-              <div className="flex-1"><p className="font-bold text-sm">{p.name}</p><p className="text-xs text-zinc-500">{p.role || '—'}{!p.active && ' · inativo'}</p></div>
+              <div className="flex-1">
+                <p className="font-bold text-sm flex flex-wrap items-center gap-2">
+                  {p.name}
+                  <span className={cn('text-[11px] font-semibold px-2 py-0.5 rounded-full border', followsBusinessHours(p, rules) ? 'border-zinc-200 bg-zinc-50 text-zinc-600' : 'border-blue-200 bg-blue-50 text-blue-700')}>
+                    {followsBusinessHours(p, rules) ? 'Segue a empresa' : 'Horário próprio'}
+                  </span>
+                </p>
+                <p className="text-xs text-zinc-500">{p.role || '—'}{!p.active && ' · inativo'}</p>
+              </div>
               <button onClick={() => open(p)} className="text-xs font-bold bg-zinc-100 px-3 py-2 rounded-lg">Editar</button>
               <button onClick={() => onAskDelete(p)} aria-label={`Excluir ${p.name}`}
                 className="text-xs font-bold text-red-500 px-2 py-2 hover:bg-red-50 rounded-lg inline-flex"><Icon n="x" size={13} /></button>
@@ -393,142 +438,6 @@ function TeamEditor({ businessId, pros, onSave, onAskDelete }: {
         </div>
       )}
     </>
-  );
-}
-
-// ── Horários: escopo por profissional + múltiplos períodos/dia ──
-interface Period { start: string; end: string; slotMin: number }
-
-function periodsFromRules(rules: Availability[], scopePro: string): Period[][] {
-  const days: Period[][] = Array.from({ length: 7 }, () => []);
-  for (const r of rules) {
-    if (scopePro === '') {
-      if (r.professionalId) continue;
-    } else if (r.professionalId !== scopePro) continue;
-    if (r.weekday >= 0 && r.weekday <= 6) {
-      days[r.weekday].push({ start: r.start, end: r.end, slotMin: r.slotMin ?? 0 });
-    }
-  }
-  return days;
-}
-
-function HoursScopeEditor({ scopePro, rules, onSave }: {
-  scopePro: string;
-  rules: Availability[];
-  onSave: (rules: any[]) => Promise<void>;
-}) {
-  const [days, setDays] = useState<Period[][]>(() => periodsFromRules(rules, scopePro));
-  const [saving, setSaving] = useState(false);
-  const [msg, setMsg] = useState('');
-
-  function addPeriod(i: number) {
-    setDays((d) => d.map((list, idx) => {
-      if (idx !== i || list.length >= 3) return list;
-      return [...list, { start: '09:00', end: '18:00', slotMin: 0 }];
-    }));
-  }
-
-  function setPeriod(i: number, j: number, patch: Partial<Period>) {
-    setDays((d) => d.map((list, idx) => (idx === i ? list.map((p, k) => (k === j ? { ...p, ...patch } : p)) : list)));
-  }
-
-  function removePeriod(i: number, j: number) {
-    setDays((d) => d.map((list, idx) => (idx === i ? list.filter((_, k) => k !== j) : list)));
-  }
-
-  async function submit() {
-    setSaving(true);
-    setMsg('');
-    try {
-      const payload = days.flatMap((list, weekday) =>
-        list.map((p) => ({ weekday, start: p.start, end: p.end, slotMin: p.slotMin })),
-      );
-      await onSave(payload);
-      setMsg('Horários salvos.');
-    } catch (err: any) {
-      setMsg(err.message);
-    } finally {
-      setSaving(false);
-    }
-  }
-
-  return (
-    <div>
-      <div className="space-y-2.5">
-        {DAYS.map((label, i) => (
-          <div key={i} className="flex items-start gap-3">
-            <button onClick={() => (days[i].length ? setDays((d) => d.map((l, idx) => (idx === i ? [] : l))) : addPeriod(i))}
-              className={cn('w-14 shrink-0 text-xs font-bold py-2 rounded-lg', days[i].length ? 'bg-emerald-600 text-white' : 'bg-zinc-100 text-zinc-400')}>
-              {label}
-            </button>
-            {days[i].length === 0 ? (
-              <span className="text-xs text-zinc-400 py-2">Fechado</span>
-            ) : (
-              <div className="space-y-2 flex-1">
-                {days[i].map((p, j) => (
-                  <span key={j} className="flex flex-wrap items-center gap-2 text-sm">
-                    <input type="time" value={p.start} onChange={(e) => setPeriod(i, j, { start: e.target.value })} className="rounded-lg border border-zinc-300 px-2 py-1.5 text-sm" aria-label="Início" />
-                    <span className="text-zinc-400">até</span>
-                    <input type="time" value={p.end} onChange={(e) => setPeriod(i, j, { end: e.target.value })} className="rounded-lg border border-zinc-300 px-2 py-1.5 text-sm" aria-label="Fim" />
-                    <select value={p.slotMin} onChange={(e) => setPeriod(i, j, { slotMin: Number(e.target.value) })} className="rounded-lg border border-zinc-300 px-2 py-1.5 text-sm" aria-label="Intervalo">
-                      <option value={0}>Duração do serviço</option>
-                      <option value={15}>15min</option>
-                      <option value={30}>30min</option>
-                      <option value={45}>45min</option>
-                      <option value={60}>60min</option>
-                    </select>
-                    {days[i].length > 1 && (
-                      <button onClick={() => removePeriod(i, j)} className="text-zinc-400 hover:text-red-500 px-1" aria-label="Remover período"><Icon n="x" size={14} /></button>
-                    )}
-                  </span>
-                ))}
-                {days[i].length < 3 && days[i].length >= 1 && (
-                  <button onClick={() => addPeriod(i)} className="text-xs font-bold text-emerald-700">+ período (ex: almoço separado)</button>
-                )}
-              </div>
-            )}
-          </div>
-        ))}
-      </div>
-      {msg && <p className="mt-3 text-sm font-medium">{msg}</p>}
-      <button onClick={submit} disabled={saving} className="mt-4 text-sm font-bold bg-zinc-900 text-white px-5 py-2.5 rounded-md disabled:opacity-50">
-        {saving ? 'Salvando…' : 'Salvar horários'}
-      </button>
-    </div>
-  );
-}
-
-function HoursEditor({ rules, pros, onSave }: {
-  rules: Availability[];
-  pros: Professional[];
-  onSave: (scope: { professionalId: string }, rules: any[]) => Promise<void>;
-}) {
-  const [scope, setScope] = useState('');
-  return (
-    <div className="bg-white border border-zinc-200 rounded-lg p-5">
-      <p className="font-bold text-sm">Quando você atende?</p>
-      <p className="text-xs text-zinc-500 mb-4">O cliente só vê horários dentro destes períodos. Salvar aqui nunca apaga horários de outra pessoa.</p>
-      {pros.length > 0 && (
-        <div className="flex gap-2 mb-4 overflow-x-auto pb-1">
-          <button onClick={() => setScope('')}
-            className={cn('shrink-0 text-xs font-bold px-3.5 py-2 rounded-full', scope === '' ? 'bg-zinc-900 text-white' : 'bg-zinc-100 text-zinc-600')}>
-            Horário geral
-          </button>
-          {pros.map((p) => (
-            <button key={p.id} onClick={() => setScope(p.id)}
-              className={cn('shrink-0 text-xs font-bold px-3.5 py-2 rounded-full', scope === p.id ? 'bg-zinc-900 text-white' : 'bg-zinc-100 text-zinc-600')}>
-              {p.name}
-            </button>
-          ))}
-        </div>
-      )}
-      <HoursScopeEditor
-        key={scope}
-        scopePro={scope}
-        rules={rules}
-        onSave={(r) => onSave({ professionalId: scope }, r)}
-      />
-    </div>
   );
 }
 

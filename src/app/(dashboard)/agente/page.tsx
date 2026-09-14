@@ -10,6 +10,8 @@ import { Icon } from '@/components/icons';
 import { PageSkeleton } from '@/components/ui';
 import { cn } from '@/lib/utils';
 import type { AgentObjective, AgentTone, BusinessAgent } from '@/lib/types';
+import { AccessDenied, useAreaLoad } from '@/components/dashboard/AccessNotice';
+import { apiGet, apiSend } from '@/lib/api-client';
 
 interface Options { tones: Array<{ id: AgentTone; label: string; hint: string }>; objectives: Array<{ id: AgentObjective; label: string }> }
 interface Preview {
@@ -37,18 +39,19 @@ export default function AgentePage() {
   const [msg, setMsg] = useState('');
   const [error, setError] = useState('');
 
-  const load = useCallback(() => {
+  // 403 → aviso amigável na tela (o usuário continua logado).
+  const { denied, report } = useAreaLoad('Agente');
+
+  const load = useCallback(async () => {
     if (!businessId) return;
-    fetch(`/api/agent?businessId=${businessId}`)
-      .then((r) => (r.ok ? r.json() : null))
-      .then((d) => {
-        if (!d) return;
-        setAgent(d.agent);
-        setOptions(d.options);
-        setPreview(d.preview);
-      })
-      .catch(() => {});
-  }, [businessId]);
+    const res = await apiGet<{ agent: BusinessAgent; options: any; preview: any }>(
+      `/api/agent?businessId=${businessId}`, { scope: 'area', area: 'Agente' },
+    );
+    if (!report(res) || !res.data) return;
+    setAgent(res.data.agent);
+    setOptions(res.data.options);
+    setPreview(res.data.preview);
+  }, [businessId, report]);
 
   useEffect(() => { load(); }, [load]);
 
@@ -59,13 +62,8 @@ export default function AgentePage() {
     if (!agent) return;
     setSaving(true); setMsg(''); setError('');
     try {
-      const res = await fetch('/api/agent', {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ ...agent, businessId }),
-      });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error);
+      const res = await apiSend('/api/agent', 'PUT', { ...agent, businessId }, { scope: 'action', area: 'Agente' });
+      if (!res.ok) throw new Error(res.message);
       setMsg('Agente salvo. A página pública já usa esta configuração.');
       load();
     } catch (e: any) {
@@ -76,6 +74,7 @@ export default function AgentePage() {
     }
   }
 
+  if (denied) return <AccessDenied area="Agente" />;
   if (!agent || !options) return <PageSkeleton />;
   const pv = preview as Preview | null;
   const q = `?b=${businessId}`;

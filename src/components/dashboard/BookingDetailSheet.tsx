@@ -13,6 +13,7 @@ import { BOOKING_STATUS, toneCls } from '@/lib/status';
 import { todayISO, nowHM, formatDateBR, humanDay } from '@/lib/tz';
 import { waLink } from '@/lib/utils';
 import { bookingActions, bookingDuration, needsClosure, rescheduleDecision } from '@/lib/booking-ops';
+import { SLOT_STATE_MESSAGE } from '@/lib/slot-states';
 import type { Booking, BookingStatus } from '@/lib/types';
 
 interface ServiceRef { id: string; name: string; durationMin: number; questions?: string[] }
@@ -42,6 +43,8 @@ export function BookingDetailSheet({ booking, service, pro, businessId, onClose,
   const [slots, setSlots] = useState<string[]>([]);
   const [time, setTime] = useState('');
   const [loadingSlots, setLoadingSlots] = useState(false);
+  // Falha de rede/erro ≠ "nenhum horário livre": os estados não se misturam.
+  const [slotsError, setSlotsError] = useState('');
   const [historyOpen, setHistoryOpen] = useState(false);
 
   const def = BOOKING_STATUS[booking.status];
@@ -57,11 +60,18 @@ export function BookingDetailSheet({ booking, service, pro, businessId, onClose,
   useEffect(() => {
     if (!rescheduling) return;
     setLoadingSlots(true);
+    setSlotsError('');
     setTime('');
     fetch(`/api/bookings?businessId=${businessId}&serviceId=${booking.serviceId}&date=${date}`)
-      .then((r) => r.json())
-      .then((d) => setSlots(d.slots || []))
-      .catch(() => setSlots([]))
+      .then(async (r) => {
+        const d = await r.json().catch(() => ({}));
+        if (!r.ok) throw new Error(d.error || SLOT_STATE_MESSAGE.error);
+        setSlots(d.slots || []);
+      })
+      .catch((e: any) => {
+        setSlots([]);
+        setSlotsError(e?.message || SLOT_STATE_MESSAGE.error);
+      })
       .finally(() => setLoadingSlots(false));
   }, [rescheduling, date, businessId, booking.serviceId]);
 
@@ -213,6 +223,8 @@ export function BookingDetailSheet({ booking, service, pro, businessId, onClose,
               </label>
               {loadingSlots ? (
                 <p className="text-xs text-zinc-500">Buscando horários livres…</p>
+              ) : slotsError ? (
+                <p className="text-xs font-semibold text-red-600">{slotsError}</p>
               ) : (
                 <div>
                   <span className="text-xs font-bold text-zinc-500">HORÁRIOS LIVRES</span>

@@ -8,6 +8,8 @@ import { useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { Icon } from '@/components/icons';
 import { PageSkeleton } from '@/components/ui';
+import { AccessDenied, useAreaLoad } from '@/components/dashboard/AccessNotice';
+import { apiGet, apiSend } from '@/lib/api-client';
 import { cn } from '@/lib/utils';
 
 interface FeatureRow {
@@ -34,12 +36,15 @@ export default function RecursosPage() {
   const [busy, setBusy] = useState('');
   const [toast, setToast] = useState<{ kind: 'ok' | 'warn'; text: string } | null>(null);
 
-  const load = useCallback(() => {
+  // 403 → aviso amigável (sessão preservada), nunca skeleton infinito.
+  const { denied, report } = useAreaLoad('Recursos');
+
+  const load = useCallback(async () => {
     if (!businessId) return;
-    fetch(`/api/businesses/${businessId}/features`)
-      .then((r) => r.json())
-      .then((d) => setRows(d.features || []));
-  }, [businessId]);
+    const res = await apiGet<{ features?: FeatureRow[] }>(`/api/businesses/${businessId}/features`, { scope: 'area', area: 'Recursos' });
+    if (!report(res)) return;
+    setRows(res.data?.features || []);
+  }, [businessId, report]);
 
   useEffect(() => { load(); }, [load]);
 
@@ -66,6 +71,7 @@ export default function RecursosPage() {
     }
   }
 
+  if (denied) return <AccessDenied area="Recursos" />;
   if (!rows) return <PageSkeleton />;
   const q = `?b=${businessId}`;
   const groups = [...new Set(rows.map((r) => r.group))];

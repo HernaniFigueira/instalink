@@ -8,6 +8,8 @@ import { BOOKING_STATUS, LEAD_STATUS, toneCls, type StatusDef } from '@/lib/stat
 import { ListSkeleton } from '@/components/ui';
 import { Icon } from '@/components/icons';
 import { NewBookingSheet } from '@/components/dashboard/NewBookingSheet';
+import { AccessDenied, useAreaLoad } from '@/components/dashboard/AccessNotice';
+import { apiGet, apiSend } from '@/lib/api-client';
 
 interface Person {
   key: string; contactId: string; note: string; customerId: string; name: string; phone: string; email: string;
@@ -42,32 +44,40 @@ export default function ClientesPage() {
   const [services, setServices] = useState<any[]>([]);
   const [pros, setPros] = useState<any[]>([]);
 
-  const load = useCallback(() => {
+  // 403 → aviso amigável (sessão preservada), nunca lista "carregando" para sempre.
+  const { denied, report } = useAreaLoad('Clientes');
+
+  const load = useCallback(async () => {
     if (!businessId) return;
-    fetch(`/api/people360?businessId=${businessId}&q=${encodeURIComponent(search)}&page=${page}`)
-      .then((r) => r.json())
-      .then((d) => { setPeople(d.people || []); setTotal(d.total || 0); setPages(d.pages || 1); setLoaded(true); });
-  }, [businessId, search, page]);
+    const res = await apiGet<{ people?: Person[]; total?: number; pages?: number }>(
+      `/api/people360?businessId=${businessId}&q=${encodeURIComponent(search)}&page=${page}`,
+      { scope: 'area', area: 'Clientes' },
+    );
+    if (!report(res)) { setLoaded(true); return; }
+    const d = res.data || {};
+    setPeople(d.people || []);
+    setTotal(d.total || 0);
+    setPages(d.pages || 1);
+    setLoaded(true);
+  }, [businessId, search, page, report]);
 
   useEffect(() => { load(); }, [load]);
 
   function openBooking(p: Person) {
     setBookingFor(p);
-    fetch(`/api/catalog/get?businessId=${businessId}`)
-      .then((r) => r.json())
-      .then((d) => { setServices(d.services || []); setPros(d.professionals || []); })
-      .catch(() => {});
+    apiGet<{ services?: any[]; professionals?: any[] }>(`/api/catalog/get?businessId=${businessId}`, { scope: 'action', area: 'Clientes' })
+      .then((res) => {
+        if (!res.ok) { setError(res.message); return; }
+        setServices(res.data?.services || []);
+        setPros(res.data?.professionals || []);
+      });
   }
 
   async function setConsent(p: Person, value: boolean) {
     if (!p.contactId) { setError('Este contato ainda não tem cadastro no CRM.'); return; }
     setError('');
-    const res = await fetch('/api/contacts', {
-      method: 'PATCH', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ businessId, id: p.contactId, marketingOptIn: value }),
-    });
-    const data = await res.json().catch(() => ({}));
-    if (!res.ok) { setError(data.error || 'Não foi possível atualizar.'); return; }
+    const res = await apiSend('/api/contacts', 'PATCH', { businessId, id: p.contactId, marketingOptIn: value }, { scope: 'action', area: 'Clientes' });
+    if (!res.ok) { setError(res.message || 'Não foi possível atualizar.'); return; }
     load();
   }
 
@@ -75,12 +85,8 @@ export default function ClientesPage() {
     if (!p.contactId) return;
     setError('');
     const note = noteDraft[p.contactId] ?? p.note;
-    const res = await fetch('/api/contacts', {
-      method: 'PATCH', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ businessId, id: p.contactId, note }),
-    });
-    const data = await res.json().catch(() => ({}));
-    if (!res.ok) { setError(data.error || 'Não foi possível salvar.'); return; }
+    const res = await apiSend('/api/contacts', 'PATCH', { businessId, id: p.contactId, note }, { scope: 'action', area: 'Clientes' });
+    if (!res.ok) { setError(res.message || 'Não foi possível salvar.'); return; }
     load();
   }
 
@@ -91,13 +97,8 @@ export default function ClientesPage() {
 
   async function setLead(id: string, status: string) {
     setError('');
-    const res = await fetch('/api/leads', {
-      method: 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ businessId, id, status }),
-    });
-    const data = await res.json().catch(() => ({}));
-    if (!res.ok) { setError(data.error || 'Não foi possível atualizar.'); return; }
+    const res = await apiSend('/api/leads', 'PATCH', { businessId, id, status }, { scope: 'action', area: 'Clientes' });
+    if (!res.ok) { setError(res.message || 'Não foi possível atualizar.'); return; }
     load();
   }
 
@@ -125,7 +126,7 @@ export default function ClientesPage() {
         <span className="text-xs text-zinc-500 hidden sm:inline">{total} · pág {page}/{pages}</span>
       </div>
 
-      {!loaded ? <ListSkeleton rows={4} /> : people.length === 0 ? (
+      {denied ? <AccessDenied area="Clientes" /> : !loaded ? <ListSkeleton rows={4} /> : people.length === 0 ? (
         <div className="bg-white border border-zinc-200 text-center py-12 px-6">
           <div className="mx-auto w-10 h-10 rounded-md bg-zinc-100 flex items-center justify-center text-zinc-400"><Icon n="users" size={20} /></div>
           <h3 className="font-semibold text-sm mt-3">{search ? 'Ninguém encontrado' : 'Nenhum cliente ainda'}</h3>
