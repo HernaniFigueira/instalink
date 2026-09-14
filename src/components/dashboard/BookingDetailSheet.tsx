@@ -7,24 +7,34 @@
 //    agendamento — o registro antigo permanece no histórico;
 //  • a remarcação sempre pede confirmação e é validada no servidor
 //    (disponibilidade, conflito, duração, buffer, horizonte).
-import { useEffect, useState } from 'react';
+//
+// APRESENTAÇÃO (padrão do workspace): drawer lateral INTEGRADO à agenda — a
+// grade continua visível ao fundo. Borda fina, raio moderado, pouca sombra,
+// densidade igual ao resto do painel; nada de "card flutuante gigante".
+// Somente a casca visual mudou; a lógica de ações é exatamente a mesma.
+import { useEffect, useRef, useState } from 'react';
 import { Icon } from '@/components/icons';
 import { BOOKING_STATUS, toneCls } from '@/lib/status';
 import { todayISO, nowHM, formatDateBR, humanDay } from '@/lib/tz';
-import { waLink } from '@/lib/utils';
+import { waLink, cn, money } from '@/lib/utils';
 import { bookingActions, bookingDuration, needsClosure, rescheduleDecision } from '@/lib/booking-ops';
 import { SLOT_STATE_MESSAGE } from '@/lib/slot-states';
 import type { Booking, BookingStatus } from '@/lib/types';
 
-interface ServiceRef { id: string; name: string; durationMin: number; questions?: string[] }
+interface ServiceRef { id: string; name: string; durationMin: number; price?: number; questions?: string[] }
 interface ProRef { id: string; name: string }
 
+// Botões discretos, coerentes com o workspace (sem botões saturados gigantes).
 const TONE_BTN: Record<string, string> = {
-  ok: 'bg-blue-600 text-white',
-  warn: 'bg-red-600 text-white',
-  danger: 'bg-zinc-100 text-zinc-700',
-  neutral: 'bg-zinc-100 text-zinc-700',
+  ok: 'bg-zinc-900 text-white border-zinc-900 hover:bg-zinc-700',
+  warn: 'bg-white text-zinc-700 border-zinc-200 hover:bg-zinc-50',
+  danger: 'bg-white text-red-700 border-red-200 hover:bg-red-50',
+  neutral: 'bg-white text-zinc-700 border-zinc-200 hover:bg-zinc-50',
 };
+
+const ROW = 'flex items-baseline justify-between gap-3 py-2';
+const ROW_DT = 'text-xs font-medium text-zinc-500 shrink-0';
+const ROW_DD = 'text-sm text-zinc-900 text-right font-medium';
 
 export function BookingDetailSheet({ booking, service, pro, businessId, onClose, onChanged }: {
   booking: Booking;
@@ -124,117 +134,132 @@ export function BookingDetailSheet({ booking, service, pro, businessId, onClose,
 
   const waMsg = `Olá, ${(booking.customerName || '').split(' ')[0]}! Sobre seu agendamento de ${service?.name || 'atendimento'} (${formatDateBR(booking.date)} às ${booking.time}):`;
 
+  // Drawer recebe o foco e fecha em ESC (como qualquer painel do workspace).
+  const panelRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    panelRef.current?.focus();
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose(); };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [onClose]);
+
+  const actionBtn = 'text-xs font-semibold px-3 py-2 rounded-md border transition-colors disabled:opacity-50';
+
   return (
-    <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4" role="dialog" aria-modal="true" aria-label="Detalhe do agendamento">
-      <div className="absolute inset-0 bg-black/50" onClick={onClose} />
-      <div className="relative w-full sm:max-w-md bg-white rounded-t-3xl sm:rounded-3xl max-h-[92vh] overflow-y-auto">
-        <div className="sticky top-0 bg-white/95 backdrop-blur px-5 py-4 flex items-center justify-between border-b border-zinc-100">
-          <div className="flex items-center gap-2.5">
-            <span className="w-10 h-10 rounded-xl bg-zinc-900 text-white flex items-center justify-center font-extrabold text-sm">{booking.time}</span>
-            <div>
-              <p className="font-bold text-sm leading-tight">{service?.name || 'Serviço'}</p>
-              <p className="text-xs text-zinc-500">{humanDay(booking.date, today)}, {formatDateBR(booking.date)} · {booking.time}–{endHM}</p>
+    <div className="fixed inset-0 z-50" role="dialog" aria-modal="false" aria-label="Detalhe do agendamento">
+      {/* Fundo: a agenda continua visível e legível atrás do painel. */}
+      <div className="absolute inset-0 bg-black/20" onClick={onClose} />
+
+      <aside ref={panelRef} tabIndex={-1}
+        className="absolute inset-y-0 right-0 w-full max-w-[420px] bg-white border-l border-zinc-200 shadow-sm flex flex-col outline-none">
+        {/* ── Cabeçalho denso ── */}
+        <header className="shrink-0 px-4 py-3 flex items-start justify-between gap-3 border-b border-zinc-200">
+          <div className="min-w-0">
+            <div className="flex items-center gap-2 flex-wrap">
+              <span className="text-xs font-semibold text-zinc-600 tabular-nums">{formatDateBR(booking.date)} · {booking.time}–{endHM}</span>
+              <span className={`text-[11px] font-medium px-1.5 py-0.5 rounded border ${toneCls(def.tone)}`}>{def.panel}</span>
             </div>
+            <p className="font-semibold text-sm mt-1 leading-snug truncate">{service?.name || 'Serviço'}</p>
+            <p className="text-xs text-zinc-500 mt-0.5">{humanDay(booking.date, today)} · {dur} min</p>
           </div>
-          <button onClick={onClose} className="font-bold text-zinc-400 p-2 inline-flex" aria-label="Fechar"><Icon n="x" size={16} /></button>
-        </div>
+          <button onClick={onClose} aria-label="Fechar"
+            className="text-zinc-400 hover:text-zinc-900 hover:bg-zinc-50 rounded-md p-1.5 -m-1 inline-flex shrink-0"><Icon n="x" size={16} /></button>
+        </header>
 
-        <div className="px-5 py-4 space-y-3">
-          <div className="flex items-center justify-between gap-2">
-            <span className={`text-xs font-bold px-2.5 py-1 rounded-full ${toneCls(def.tone)}`}>{def.panel}</span>
-            <span className="text-xs text-zinc-400 font-semibold">{dur} min</span>
-          </div>
-
-          {/* ── Pendência: passado e ainda aberto ── */}
+        <div className="flex-1 min-h-0 overflow-y-auto">
+          {/* ── Pendência: passado e ainda aberto (aviso discreto, não card) ── */}
           {late && (
-            <div className="rounded-2xl border-2 border-amber-300 bg-amber-50 p-4">
-              <p className="text-sm font-extrabold text-amber-900 flex items-center gap-2">
-                <Icon n="alert" size={16} /> Este atendimento precisa de fechamento
-              </p>
-              <p className="text-xs text-amber-900 mt-1">
+            <div className="px-4 py-3 bg-amber-50/60 border-b border-amber-200/60">
+              <p className="text-xs font-semibold text-amber-900 flex items-center gap-1.5"><Icon n="alert" size={13} /> Este atendimento precisa de fechamento</p>
+              <p className="text-[11px] text-amber-800/80 mt-1 leading-snug">
                 O horário já passou e o status continua “{def.panel}”. O InstaLink não conclui atendimento sozinho — escolha o que aconteceu:
               </p>
-              <div className="grid grid-cols-2 gap-2 mt-3">
+              <div className="grid grid-cols-2 gap-1.5 mt-2.5">
                 {actions.map((a) => (
                   <button key={a.status} onClick={() => act(a.status)} disabled={!!acting}
-                    className={`text-xs font-bold px-3 py-2.5 rounded-lg disabled:opacity-50 ${TONE_BTN[a.tone] || 'bg-zinc-100'}`}>
+                    className={cn(actionBtn, TONE_BTN[a.tone] || 'bg-white text-zinc-700 border-zinc-200')}>
                     {acting === a.status ? 'Salvando…' : a.label}
                   </button>
                 ))}
                 <button onClick={() => { setRescheduling(true); setError(''); }} disabled={!!acting}
-                  className="text-xs font-bold px-3 py-2.5 rounded-lg bg-white border-2 border-amber-300 text-amber-900 disabled:opacity-50">
+                  className={cn(actionBtn, 'bg-white text-zinc-700 border-zinc-200 hover:bg-zinc-50')}>
                   Reagendar
                 </button>
               </div>
             </div>
           )}
 
-          <dl className="space-y-2 text-sm">
-            <div className="flex justify-between gap-3">
-              <dt className="text-zinc-500 font-semibold shrink-0">Cliente</dt>
-              <dd className="text-right">
-                <span className="font-bold">{booking.customerName}</span>
-                {booking.customerPhone && <span className="block text-xs text-zinc-500">{booking.customerPhone}</span>}
+          {/* ── Dados do atendimento (linhas com separadores discretos) ── */}
+          <dl className="px-4 py-1 divide-y divide-zinc-100">
+            <div className={ROW}>
+              <dt className={ROW_DT}>Cliente</dt>
+              <dd className={ROW_DD}>
+                {booking.customerName}
+                {booking.customerPhone && <span className="block text-xs text-zinc-500 font-normal">{booking.customerPhone}</span>}
               </dd>
             </div>
-            <div className="flex justify-between gap-3">
-              <dt className="text-zinc-500 font-semibold shrink-0">Profissional</dt>
-              <dd className="font-bold text-right">{pro?.name || 'Automático'}</dd>
+            <div className={ROW}>
+              <dt className={ROW_DT}>Profissional</dt>
+              <dd className={ROW_DD}>{pro?.name || 'Automático'}</dd>
+            </div>
+            <div className={ROW}>
+              <dt className={ROW_DT}>Valor</dt>
+              <dd className={ROW_DD}>{service?.price !== undefined ? money(service.price) : '—'}</dd>
             </div>
             {booking.note && (
-              <div className="flex justify-between gap-3">
-                <dt className="text-zinc-500 font-semibold shrink-0">Observação</dt>
-                <dd className="text-right text-zinc-700">“{booking.note}”</dd>
+              <div className={ROW}>
+                <dt className={ROW_DT}>Observação</dt>
+                <dd className={`${ROW_DD} font-normal text-zinc-700`}>“{booking.note}”</dd>
               </div>
             )}
             {(booking.rescheduleCount || 0) > 0 && (
-              <div className="flex justify-between gap-3">
-                <dt className="text-zinc-500 font-semibold shrink-0">Reagendamentos</dt>
-                <dd className="font-bold text-right">{booking.rescheduleCount}×</dd>
+              <div className={ROW}>
+                <dt className={ROW_DT}>Reagendamentos</dt>
+                <dd className={ROW_DD}>{booking.rescheduleCount}×</dd>
               </div>
             )}
             {(booking.answers || []).some(Boolean) && (
-              <div>
-                <dt className="text-zinc-500 font-semibold mb-1">Respostas do cliente</dt>
+              <div className="py-2">
+                <dt className={`${ROW_DT} mb-1`}>Respostas do cliente</dt>
                 {(booking.answers || []).map((a, i) => a && (
-                  <dd key={i} className="text-zinc-700 mb-1">
-                    <span className="text-zinc-400 text-xs font-semibold">{(service?.questions || [])[i] || `Pergunta ${i + 1}`}: </span>{a}
+                  <dd key={i} className="text-xs text-zinc-700 mb-1">
+                    <span className="text-zinc-400 font-medium">{(service?.questions || [])[i] || `Pergunta ${i + 1}`}: </span>{a}
                   </dd>
                 ))}
               </div>
             )}
           </dl>
 
-          {error && <p className="text-sm font-semibold text-red-600">{error}</p>}
-          {notice && <p className="text-sm font-semibold text-emerald-700 bg-emerald-50 border border-emerald-200 rounded-xl px-3 py-2">{notice}</p>}
+          {error && <p className="px-4 py-2 text-sm font-medium text-red-600 border-t border-zinc-100">{error}</p>}
+          {notice && <p className="px-4 py-2 text-xs font-medium text-emerald-800 bg-emerald-50 border-t border-emerald-100">{notice}</p>}
 
           {rescheduling ? (
-            <div className="rounded-2xl border border-zinc-200 bg-zinc-50 p-4 space-y-3">
-              <p className="font-bold text-sm">Reagendar atendimento</p>
+            <div className="px-4 py-3 border-t border-zinc-200 space-y-2.5">
+              <p className="text-sm font-semibold">Reagendar atendimento</p>
               {decision.kind === 'recreate' && (
-                <p className="text-xs bg-white border border-amber-200 text-amber-900 rounded-xl px-3 py-2">
+                <p className="text-[11px] bg-amber-50 border border-amber-200/70 text-amber-900 rounded-md px-3 py-2 leading-snug">
                   Este atendimento está <strong>{def.panel.toLowerCase()}</strong>. {decision.reason}
                 </p>
               )}
               <label className="block">
-                <span className="text-xs font-bold text-zinc-500">NOVA DATA</span>
+                <span className="text-[11px] font-semibold text-zinc-500 uppercase tracking-wide">Nova data</span>
                 <input type="date" value={date} min={today} onChange={(e) => setDate(e.target.value)}
-                  className="block w-full rounded-xl border border-zinc-300 px-3 py-2 text-sm mt-1" />
+                  className="block w-full mt-1 rounded-md border border-zinc-300 px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-zinc-900" />
               </label>
               {loadingSlots ? (
                 <p className="text-xs text-zinc-500">Buscando horários livres…</p>
               ) : slotsError ? (
-                <p className="text-xs font-semibold text-red-600">{slotsError}</p>
+                <p className="text-xs font-medium text-red-600">{slotsError}</p>
               ) : (
                 <div>
-                  <span className="text-xs font-bold text-zinc-500">HORÁRIOS LIVRES</span>
+                  <span className="text-[11px] font-semibold text-zinc-500 uppercase tracking-wide">Horários livres</span>
                   {slots.length === 0 ? (
                     <p className="text-xs text-amber-700 mt-1">Nenhum horário livre nesta data.</p>
                   ) : (
-                    <div className="flex flex-wrap gap-2 mt-1.5">
+                    <div className="flex flex-wrap gap-1.5 mt-1.5">
                       {slots.map((t) => (
                         <button key={t} onClick={() => setTime(t)}
-                          className={`text-xs font-bold px-3 py-2 rounded-lg border ${time === t ? 'bg-zinc-900 text-white border-zinc-900' : 'bg-white border-zinc-200'}`}>
+                          className={cn('text-xs font-semibold px-2.5 py-1.5 rounded-md border', time === t ? 'bg-zinc-900 text-white border-zinc-900' : 'bg-white border-zinc-200 text-zinc-700 hover:bg-zinc-50')}>
                           {t}
                         </button>
                       ))}
@@ -245,66 +270,66 @@ export function BookingDetailSheet({ booking, service, pro, businessId, onClose,
 
               {/* Confirmação explícita: nunca remarcamos em silêncio. */}
               {confirming ? (
-                <div className="rounded-xl border-2 border-emerald-300 bg-white p-3">
-                  <p className="text-xs font-bold text-zinc-800">Confirmar reagendamento?</p>
-                  <p className="text-xs text-zinc-600 mt-1">
+                <div className="rounded-md border border-zinc-300 bg-zinc-50 p-3">
+                  <p className="text-xs font-semibold text-zinc-800">Confirmar reagendamento?</p>
+                  <p className="text-[11px] text-zinc-600 mt-1 leading-snug">
                     {decision.kind === 'recreate' ? 'Cria um novo atendimento para' : 'Move este atendimento para'}{' '}
                     <strong>{formatDateBR(date)} às {time}</strong>. O cliente não é avisado automaticamente.
                   </p>
                   <div className="flex gap-2 mt-2.5">
                     <button onClick={reschedule} disabled={!!acting}
-                      className="flex-1 text-sm font-bold bg-zinc-900 text-white py-2.5 rounded-xl disabled:opacity-50">
+                      className="flex-1 text-xs font-semibold bg-zinc-900 text-white py-2 rounded-md disabled:opacity-50 hover:bg-zinc-700">
                       {acting === 'reschedule' ? 'Salvando…' : 'Confirmar'}
                     </button>
-                    <button onClick={() => setConfirming(false)} className="text-sm font-bold bg-zinc-100 px-4 py-2.5 rounded-xl">Voltar</button>
+                    <button onClick={() => setConfirming(false)} className="text-xs font-semibold bg-white border border-zinc-200 px-3.5 py-2 rounded-md hover:bg-zinc-50">Voltar</button>
                   </div>
                 </div>
               ) : (
                 <div className="flex gap-2">
                   <button onClick={() => setConfirming(true)} disabled={!date || !time || !!acting}
-                    className="flex-1 text-sm font-bold bg-zinc-900 text-white py-2.5 rounded-xl disabled:opacity-50">
+                    className="flex-1 text-xs font-semibold bg-zinc-900 text-white py-2 rounded-md disabled:opacity-50 hover:bg-zinc-700">
                     Revisar e confirmar
                   </button>
-                  <button onClick={() => { setRescheduling(false); setError(''); }} className="text-sm font-bold bg-zinc-100 px-4 py-2.5 rounded-xl">Cancelar</button>
+                  <button onClick={() => { setRescheduling(false); setError(''); }} className="text-xs font-semibold bg-white border border-zinc-200 px-3.5 py-2 rounded-md hover:bg-zinc-50">Cancelar</button>
                 </div>
               )}
             </div>
           ) : (
-            <>
+            <div className="px-4 py-3 border-t border-zinc-200 space-y-2.5">
               {!late && actions.length > 0 && (
-                <div className="flex flex-wrap gap-2">
+                <div className="flex flex-wrap gap-1.5">
                   {actions.map((a) => (
                     <button key={a.status} onClick={() => act(a.status)} disabled={!!acting}
-                      className={`text-xs font-bold px-3.5 py-2 rounded-lg disabled:opacity-50 ${TONE_BTN[a.tone] || 'bg-zinc-100'}`}>
+                      className={cn(actionBtn, TONE_BTN[a.tone] || 'bg-white text-zinc-700 border-zinc-200')}>
                       {acting === a.status ? 'Aguarde…' : a.label}
                     </button>
                   ))}
                 </div>
               )}
-              <div className="flex flex-wrap gap-2">
+              <div className="flex flex-wrap gap-1.5">
                 <button onClick={() => { setRescheduling(true); setError(''); }}
-                  className="text-xs font-bold bg-zinc-900 text-white px-3.5 py-2 rounded-lg inline-flex items-center gap-1.5">
-                  <Icon n="calendar" size={14} /> Reagendar
+                  className={cn(actionBtn, 'bg-zinc-900 text-white border-zinc-900 hover:bg-zinc-700 inline-flex items-center gap-1.5')}>
+                  <Icon n="calendar" size={13} /> Reagendar
                 </button>
                 {booking.customerPhone && (
                   <a href={waLink(booking.customerPhone, waMsg)} target="_blank" rel="noreferrer"
-                    className="text-xs font-bold bg-[#22c55e]/10 text-green-700 px-3.5 py-2 rounded-lg inline-flex items-center gap-1.5">
-                    <Icon n="whatsapp" size={14} /> Avisar no WhatsApp
+                    className={cn(actionBtn, 'bg-white text-green-700 border-zinc-200 hover:bg-emerald-50/60 inline-flex items-center gap-1.5')}>
+                    <Icon n="whatsapp" size={13} /> Avisar no WhatsApp
                   </a>
                 )}
               </div>
-            </>
+            </div>
           )}
 
           {(booking.history || []).length > 0 && (
-            <div className="pt-2 border-t border-zinc-100">
-              <button onClick={() => setHistoryOpen((v) => !v)} className="text-[11px] font-extrabold uppercase tracking-wider text-zinc-400">
+            <div className="px-4 py-3 border-t border-zinc-100">
+              <button onClick={() => setHistoryOpen((v) => !v)} className="text-[11px] font-semibold uppercase tracking-wider text-zinc-400 hover:text-zinc-700">
                 Histórico ({booking.history.length}) {historyOpen ? '▲' : '▼'}
               </button>
               {historyOpen && (
-                <ul className="mt-2 space-y-1">
+                <ul className="mt-2 divide-y divide-zinc-100">
                   {[...booking.history].reverse().map((h, i) => (
-                    <li key={i} className="text-xs text-zinc-500">
+                    <li key={i} className="text-xs text-zinc-500 py-1.5">
                       {formatDateBR((h.at || '').slice(0, 10))} {(h.at || '').slice(11, 16)} · {h.from || 'criado'} → {h.to}
                       {h.note ? ` · ${h.note}` : ''}
                       {' · '}{h.by === 'customer' ? 'cliente' : h.by === 'owner' ? 'equipe' : h.by === 'master' ? 'suporte' : 'sistema'}
@@ -315,7 +340,7 @@ export function BookingDetailSheet({ booking, service, pro, businessId, onClose,
             </div>
           )}
         </div>
-      </div>
+      </aside>
     </div>
   );
 }

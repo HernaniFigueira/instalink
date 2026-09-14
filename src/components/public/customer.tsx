@@ -1,6 +1,6 @@
 'use client';
 import { useEffect, useRef, useState } from 'react';
-import type { Business, PublicBusiness, Category, Product, ProductOption, ProductOptionValue, Professional, Service } from '@/lib/types';
+import type { Business, PublicBusiness, Professional, Service } from '@/lib/types';
 import { saveCustomerToken, clearCustomerToken } from '@/lib/client-auth';
 import { openSheet, closeSheet, onSheetChange, notifyAuthOk, gcalLink, type SheetState } from './sheet-bus';
 import { BOOKING_STATUS, ORDER_STATUS } from '@/lib/status';
@@ -9,7 +9,7 @@ import type { BookingStatus, OrderStatus } from '@/lib/types';
 import { Icon } from '@/components/icons';
 import { requestedCtaTarget, resolveCtaTarget } from '@/lib/cta';
 import { allowedCtaTargets } from '@/lib/features';
-import { CatalogIsland, money, waLink } from './widgets';
+import { money, waLink } from './widgets';
 import { BookingIsland, QuoteIsland } from './widgets2';
 
 // ── Sheet genérico (bottom sheet mobile-first) ───────────────
@@ -39,12 +39,13 @@ export function SheetShell({ title, onClose, zIndex, children }: { title: string
 }
 
 // ── Host único: escuta openSheet e renderiza o conteúdo ──────
-export function SheetHost({ business, products, categories, options, values, services, professionals }: {
+// CATÁLOGO/CARRINHO SAÍRAM DA EXPERIÊNCIA: o sheet 'products' legado agora
+// apenas fecha e rola até a VITRINE inline (#produtos). Produtos convertem
+// pelo WhatsApp do negócio (CTA "Tenho interesse") — nenhum pedido interno
+// é criado a partir da vitrine. Componentes antigos de carrinho permanecem
+// no código apenas como legado isolado (dados/páginas antigas não quebram).
+export function SheetHost({ business, services, professionals }: {
   business: PublicBusiness;
-  products: Product[];
-  categories: Category[];
-  options: ProductOption[];
-  values: ProductOptionValue[];
   services: Service[];
   professionals: Professional[];
 }) {
@@ -57,13 +58,23 @@ export function SheetHost({ business, products, categories, options, values, ser
     return () => { document.body.style.overflow = ''; };
   }, [stack.length]);
 
+  useEffect(() => {
+    // 'products' legado → vitrine na própria página (sem sheet de carrinho).
+    for (const s of stack) {
+      if (s.type === 'products') {
+        closeSheet();
+        document.getElementById('produtos')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      }
+    }
+  }, [stack]);
+
   if (stack.length === 0) return null;
 
   return (
     <>
       {stack.map((sheet, i) => {
         const titles: Record<SheetState['type'], string> = {
-          products: business.niche === 'alimentacao' ? 'Cardápio' : 'Produtos',
+          products: 'Vitrine',
           booking: sheet.props.title || 'Agendar',
           quote: sheet.props.title || 'Orçamento',
           auth: 'Entrar',
@@ -73,9 +84,6 @@ export function SheetHost({ business, products, categories, options, values, ser
         };
         return (
           <SheetShell key={`${i}-${sheet.type}-${sheet.props.serviceId || ''}`} title={titles[sheet.type]} onClose={closeSheet} zIndex={50 + i}>
-            {sheet.type === 'products' && (
-              <CatalogIsland business={business} products={products} categories={categories} options={options} values={values} bare />
-            )}
             {sheet.type === 'booking' && (
               <BookingIsland
                 business={business} services={services} professionals={professionals}
@@ -245,8 +253,11 @@ export function CustomerAuthSheet({ business }: { business: PublicBusiness }) {
 
 
 export function CustomerAccountSheet({ business }: { business: PublicBusiness }) {
+  // "Pedidos" só existe como LEGADO: empresas que ainda recebem pedidos pelo
+  // módulo antigo. A vitrine de produtos nunca gera pedido — logo, produtos
+  // sozinhos não abrem a aba de pedidos.
   const [tab, setTab] = useState<'orders' | 'bookings'>(
-    business.modes.includes('orders') || business.modes.includes('products') ? 'orders' : 'bookings',
+    business.modes.includes('orders') ? 'orders' : 'bookings',
   );
   const [orders, setOrders] = useState<any[]>([]);
   const [bookings, setBookings] = useState<any[]>([]);
@@ -335,7 +346,7 @@ export function CustomerAccountSheet({ business }: { business: PublicBusiness })
     closeSheet();
   }
 
-  const showOrders = business.modes.includes('orders') || business.modes.includes('products');
+  const showOrders = business.modes.includes('orders');
   const showBookings = business.modes.includes('bookings');
   const today = todayISO();
   const canReviewBooking = (b: any) =>

@@ -9,8 +9,14 @@ import { defaultWhatsappIntegration } from '@/lib/whatsapp';
 import { rateLimit, ipFrom } from '@/lib/rate-limit';
 import type { BusinessMode, Niche } from '@/lib/types';
 import { VALID_MODES, VALID_NICHES, defaultBookingConfig } from '@/lib/types';
+import { NEW_BUSINESS_DEFAULTS } from '@/lib/templates';
 
-// POST = onboarding: cria negócio + página inicial a partir do template
+// POST = cria negócio + página inicial a partir do template.
+// NOVO FLUXO: o cadastro não pergunta mais "tipo de negócio" nem "forma de
+// vender" — sem nicho/modes no corpo, o negócio nasce com o padrão de
+// atendimento (Serviços + Agendamentos; vitrine desligada; sem pedidos).
+// Os campos antigos continuam ACEITOS (e-2e, admin e integrações existentes),
+// preservando compatibilidade — nada é quebrado para quem já chamava assim.
 export async function POST(req: NextRequest) {
   const rl = rateLimit(`biz:${ipFrom(req)}`, 10, 3600000);
   if (!rl.ok) return NextResponse.json({ error: 'Muitos negócios criados. Aguarde um pouco.' }, { status: 429 });
@@ -20,8 +26,9 @@ export async function POST(req: NextRequest) {
 
     const body = await req.json();
     const name = (body.name || '').trim().slice(0, 80);
-    const niche: Niche = VALID_NICHES.includes(body.niche) ? body.niche : 'outro';
-    const modes = (Array.isArray(body.modes) ? body.modes : []).filter((m: string) => VALID_MODES.includes(m as BusinessMode)) as BusinessMode[];
+    const niche: Niche = VALID_NICHES.includes(body.niche) ? body.niche : NEW_BUSINESS_DEFAULTS.niche;
+    const modes = (Array.isArray(body.modes) ? body.modes : NEW_BUSINESS_DEFAULTS.modes)
+      .filter((m: string) => VALID_MODES.includes(m as BusinessMode)) as BusinessMode[];
     let slug = slugify(body.slug || name);
     if (!name) return NextResponse.json({ error: 'Dê um nome ao seu negócio.' }, { status: 400 });
     // Lista vazia é permitida de propósito: o InstaLink também serve como

@@ -4,7 +4,7 @@ import { can } from '@/lib/access';
 import { summarizeDay, pendingClosures } from '@/lib/booking-ops';
 import { integrationStatus } from '@/lib/whatsapp';
 import { enabledFeatureIds } from '@/lib/features';
-import { dashboardContext, recentActivityLists } from '@/lib/dashboard';
+import { dashboardContext, recentActivityLists, setupChecklist, setupProgress } from '@/lib/dashboard';
 import {
   REVENUE_HINTS, REVENUE_LABELS, REVENUE_UNIT_LABELS, bookingRevenue, orderRevenue,
 } from '@/lib/revenue';
@@ -198,21 +198,22 @@ export async function GET(req: NextRequest) {
     }
     : null;
 
-  const checklist: Array<{ done: boolean; label: string; href: string }> = [
-    { done: true, label: 'Página criada', href: `/pagina${q}` },
-    { done: !!business.whatsapp, label: 'WhatsApp configurado', href: `/configuracoes${q}` },
-    ...(m.products || m.orders
-      ? [{ done: db.products.some((p) => p.businessId === bId && p.active), label: 'Adicionar produtos', href: `/produtos${q}` }]
-      : []),
-    ...(m.services || m.bookings
-      ? [{ done: db.services.some((s) => s.businessId === bId && s.active), label: 'Adicionar serviços', href: `/servicos${q}` }]
-      : []),
-    ...(m.bookings
-      ? [{ done: db.availability.some((a) => a.businessId === bId), label: 'Configurar horários', href: `/servicos${q}` }]
-      : []),
-    { done: business.published, label: 'Publicar página', href: `/pagina${q}` },
-  ];
-  const doneCount = checklist.filter((c) => c.done).length;
+  // ── "Comece por aqui": progresso REAL (nunca inventado) ──
+  // Itens calculados a partir de dados existentes (lib/dashboard.ts);
+  // nada é pré-marcado como concluído. A área é opcional e some quando
+  // não há pendência.
+  const setupItems = setupChecklist({
+    business,
+    modules: m,
+    counts: {
+      services: db.services.filter((s) => s.businessId === bId && s.active).length,
+      availability: db.availability.filter((a) => a.businessId === bId).length,
+      professionals: db.professionals.filter((p) => p.businessId === bId && p.active).length,
+      products: db.products.filter((p) => p.businessId === bId && p.active).length,
+    },
+  });
+  const checklist = setupItems.map((c) => ({ done: c.done, label: c.label, href: `${c.href}${q}` }));
+  const pendingSetup = checklist.filter((c) => !c.done).length;
 
   return NextResponse.json({
     user: { name: guard.ctx.user.name },
@@ -258,7 +259,8 @@ export async function GET(req: NextRequest) {
     whatsapp,
     upcoming,
     checklist,
-    pct: Math.round((doneCount / checklist.length) * 100),
+    pct: setupProgress(setupItems),
+    pendingSetup,
     period,
     window: periodWindow,
     recent: {

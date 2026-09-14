@@ -31,8 +31,12 @@ export async function GET(req: NextRequest) {
     orders: number;
     spent: number;
     lastOrderAt: string;
-    bookings: Array<{ id: string; customerName: string; date: string; time: string; status: string; serviceId: string }>;
+    bookings: Array<{
+      id: string; customerName: string; date: string; time: string; status: string; serviceId: string;
+      professionalId: string; rescheduleCount: number; previousId: string;
+    }>;
     leads: Array<{ id: string; origin: string; status: string; interest: string; action: string; createdAt: string }>;
+    conversations: Array<{ id: string; channel: string; status: string; at: string; preview: string; unread: number }>;
     lastSeen: string;
   }
 
@@ -53,7 +57,7 @@ export async function GET(req: NextRequest) {
       p = {
         key, contactId: '', note: '', customerId, name, phone: digits, email: '', registered: false, customerSince: '',
         source: '', marketingOptIn: false,
-        orders: 0, spent: 0, lastOrderAt: '', bookings: [], leads: [], lastSeen: '',
+        orders: 0, spent: 0, lastOrderAt: '', bookings: [], leads: [], conversations: [], lastSeen: '',
       };
       map.set(key, p);
     }
@@ -90,7 +94,13 @@ export async function GET(req: NextRequest) {
   for (const b of db.bookings.filter((x) => x.businessId === businessId)) {
     const p = get(b.customerId, b.customerPhone, b.customerName);
     if (!p) continue;
-    p.bookings.push({ id: b.id, customerName: b.customerName, date: b.date, time: b.time, status: b.status, serviceId: b.serviceId });
+    // Histórico unificado (§16): status, serviço, profissional e a cadeia de
+    // reagendamentos — o atendimento concluído continua aqui para sempre,
+    // mesmo quando um novo é criado a partir dele.
+    p.bookings.push({
+      id: b.id, customerName: b.customerName, date: b.date, time: b.time, status: b.status, serviceId: b.serviceId,
+      professionalId: b.professionalId || '', rescheduleCount: b.rescheduleCount || 0, previousId: b.previousId || '',
+    });
     const at = `${b.date}T${b.time}:00`;
     if (!p.lastSeen || at > p.lastSeen) p.lastSeen = at;
   }
@@ -99,6 +109,17 @@ export async function GET(req: NextRequest) {
     if (!p) continue;
     p.leads.push({ id: l.id, origin: l.origin, status: l.status, interest: l.interest || '', action: l.action || '', createdAt: l.createdAt });
     if (!p.lastSeen || l.createdAt > p.lastSeen) p.lastSeen = l.createdAt;
+  }
+  // Conversas (WhatsApp/agente) entram como eventos independentes do histórico.
+  const convById = new Map(db.conversations.filter((c) => c.businessId === businessId).map((c) => [c.id, c]));
+  for (const c of convById.values()) {
+    const p = get(c.customerId, c.phone, c.name);
+    if (!p) continue;
+    p.conversations.push({
+      id: c.id, channel: c.channel, status: c.status, at: c.lastMessageAt || c.createdAt,
+      preview: c.lastMessagePreview || '', unread: c.unread || 0,
+    });
+    if (!p.lastSeen || (c.lastMessageAt || '') > p.lastSeen) p.lastSeen = c.lastMessageAt || p.lastSeen;
   }
 
   let people = [...map.values()];
@@ -112,9 +133,14 @@ export async function GET(req: NextRequest) {
     );
   }
   const total = people.length;
+  const pros = new Map(db.professionals.filter((p) => p.businessId === businessId).map((p) => [p.id, p.name]));
   const slice = people.slice((page - 1) * limit, page * limit).map((p) => ({
     ...p,
-    bookings: p.bookings.map((b) => ({ ...b, service: services.get(b.serviceId) || 'Serviço' })),
+    bookings: p.bookings.map((b) => ({
+      ...b,
+      service: services.get(b.serviceId) || 'Serviço',
+      professional: b.professionalId ? pros.get(b.professionalId) || '' : '',
+    })),
   }));
   return NextResponse.json({ people: slice, total, page, pages: Math.max(1, Math.ceil(total / limit)) });
 }

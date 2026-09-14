@@ -144,7 +144,7 @@ export interface ClosureAction {
 
 export const CLOSURE_ACTIONS: ClosureAction[] = [
   { status: 'completed', label: 'Concluir', tone: 'ok' },
-  { status: 'no_show', label: 'Cliente faltou', tone: 'warn' },
+  { status: 'no_show', label: 'Não compareceu', tone: 'warn' },
   { status: 'cancelled', label: 'Cancelar', tone: 'danger' },
   // Reagendar abre o fluxo de remarcação (não é transição de status).
 ];

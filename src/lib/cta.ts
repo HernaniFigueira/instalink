@@ -52,11 +52,12 @@ export function requestedCtaTarget(label: string, explicit?: string): CtaTarget 
   return 'whatsapp';
 }
 
-// Destino padrão na criação da página (espelha a prioridade do rótulo).
+// Destino padrão na criação da página. AGENDAMENTO É O CENTRO: a reserva vem
+// antes de produtos/pedidos em qualquer negócio novo (os legados com módulo de
+// pedidos já têm destino explícito salvo nos próprios blocos — nada é reescrito).
 export function defaultCtaTarget(modes: BusinessMode[]): CtaTarget {
-  if (modes.includes('orders')) return 'products';
   if (modes.includes('bookings')) return 'booking';
   if (modes.includes('quote')) return 'quote';
-  if (modes.includes('products')) return 'products';
+  if (modes.includes('products') || modes.includes('orders')) return 'products';
   return 'whatsapp';
 }

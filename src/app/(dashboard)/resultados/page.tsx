@@ -8,6 +8,7 @@ import { money } from '@/lib/utils';
 
 interface Analytics {
   period: number;
+  modules: { bookings: boolean; products: boolean; orders: boolean; quote: boolean };
   totals: {
     pageViews: number; uniqueVisitors: number; clicks: number; waClicks: number;
     leads: number; leadsNew: number; orders: number; ordersRevenue: number;
@@ -63,8 +64,17 @@ export default function ResultadosPage() {
 
   if (denied) return <AccessDenied area="Resultados" />;
   if (!data) return <PageSkeleton />;
-  const { totals, funnelOrders, funnelBookings, days, topProducts, topCtas, origins } = data;
+  const { totals, funnelOrders, funnelBookings, days, topProducts, topCtas, origins, modules } = data;
   const maxDay = Math.max(1, ...days.map((d) => d.visitors));
+  // KPIs e funis por MÓDULO: negócio de atendimento não vê "Receita/pedidos".
+  const kpis: Array<[string, string, string]> = [];
+  if (modules.bookings) kpis.push(['Agendamentos', String(totals.bookings), 'reservas criadas no período']);
+  if (modules.orders) kpis.push(['Receita de pedidos', money(totals.ordersRevenue), `${totals.orders} pedido(s)`]);
+  kpis.push(
+    ['Visitas à página', String(totals.pageViews), `${totals.uniqueVisitors} visitante(s) únicos`],
+    ['Taxa de conversão', `${totals.rate}%`, `${totals.conversions} conversão(ões)`],
+    ['Leads', String(totals.leads), totals.leadsNew ? `${totals.leadsNew} novo(s)` : 'no período'],
+  );
 
   return (
     <>
@@ -83,13 +93,8 @@ export default function ResultadosPage() {
         </div>
       </div>
 
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-4">
-        {([
-          ['Receita', money(totals.ordersRevenue), `${totals.orders} pedido(s)`],
-          ['Visitas à página', String(totals.pageViews), `${totals.uniqueVisitors} visitante(s) únicos`],
-          ['Taxa de conversão', `${totals.rate}%`, `${totals.conversions} conversão(ões)`],
-          ['Leads', String(totals.leads), totals.leadsNew ? `${totals.leadsNew} novo(s)` : 'no período'],
-        ] as const).map(([label, value, hint]) => (
+      <div className={`grid gap-3 mb-4 ${kpis.length === 4 ? 'grid-cols-2 lg:grid-cols-4' : 'grid-cols-1 lg:grid-cols-3'}`}>
+        {kpis.map(([label, value, hint]) => (
           <div key={label} className="bg-white border border-zinc-200 rounded-lg p-4">
             <p className="text-xs text-zinc-500">{label}</p>
             <p className="text-2xl font-extrabold tracking-tight">{value}</p>
@@ -98,10 +103,18 @@ export default function ResultadosPage() {
         ))}
       </div>
 
-      <div className="grid lg:grid-cols-2 gap-4 mb-4">
-        <Funnel title="Funil de pedidos" steps={funnelOrders} />
-        <Funnel title="Funil de agendamentos" steps={funnelBookings} />
-      </div>
+      {/* Funil: agendamentos é o centro; o funil de vendas existe só para
+          quem ainda tem o módulo de pedidos (legado). */}
+      {modules.orders ? (
+        <div className="grid lg:grid-cols-2 gap-4 mb-4">
+          <Funnel title="Funil de pedidos" steps={funnelOrders} />
+          <Funnel title="Funil de agendamentos" steps={funnelBookings} />
+        </div>
+      ) : (
+        <div className="mb-4">
+          <Funnel title={modules.bookings ? 'Funil de agendamentos' : 'Visitas e conversões da página'} steps={funnelBookings} />
+        </div>
+      )}
 
       <div className="grid xl:grid-cols-5 gap-4">
         <div className="xl:col-span-3 bg-white border border-zinc-200 rounded-lg p-5">
@@ -118,26 +131,30 @@ export default function ResultadosPage() {
             ))}
           </div>
           <div className="grid grid-cols-3 gap-2 mt-5 pt-4 border-t border-zinc-100 text-center">
-            <div><p className="font-extrabold">{totals.orders}</p><p className="text-[11px] text-zinc-500">Pedidos</p></div>
+            {modules.orders
+              ? <div><p className="font-extrabold">{totals.orders}</p><p className="text-[11px] text-zinc-500">Pedidos</p></div>
+              : <div><p className="font-extrabold">{totals.clicks}</p><p className="text-[11px] text-zinc-500">Cliques na página</p></div>}
             <div><p className="font-extrabold">{totals.bookings}</p><p className="text-[11px] text-zinc-500">Agendamentos</p></div>
             <div><p className="font-extrabold">{totals.waClicks}</p><p className="text-[11px] text-zinc-500">Cliques WhatsApp</p></div>
           </div>
         </div>
 
         <div className="xl:col-span-2 space-y-4">
-          <div className="bg-white border border-zinc-200 rounded-lg p-5">
-            <h3 className="font-bold text-sm mb-3">Produtos em destaque</h3>
-            {topProducts.length === 0 ? <p className="text-xs text-zinc-500">Ainda sem movimento no período.</p> : (
-              <ul className="space-y-1.5">
-                {topProducts.map((p) => (
-                  <li key={p.name} className="flex justify-between text-sm gap-2">
-                    <span className="font-medium truncate">{p.name} <span className="text-zinc-400 font-normal">· {p.views} views · {p.adds} adds</span></span>
-                    <span className="font-bold shrink-0">{money(p.revenue)}</span>
-                  </li>
-                ))}
-              </ul>
-            )}
-          </div>
+          {(modules.products || modules.orders) && (
+            <div className="bg-white border border-zinc-200 rounded-lg p-5">
+              <h3 className="font-bold text-sm mb-3">{modules.orders ? 'Produtos em destaque' : 'Interesse na vitrine'}</h3>
+              {topProducts.length === 0 ? <p className="text-xs text-zinc-500">Ainda sem movimento no período.</p> : (
+                <ul className="space-y-1.5">
+                  {topProducts.map((p) => (
+                    <li key={p.name} className="flex justify-between text-sm gap-2">
+                      <span className="font-medium truncate">{p.name} <span className="text-zinc-400 font-normal">· {p.views} views{p.adds > 0 ? ` · ${p.adds} adds` : ''}</span></span>
+                      {modules.orders && <span className="font-bold shrink-0">{money(p.revenue)}</span>}
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
+          )}
 
           <div className="bg-white border border-zinc-200 rounded-lg p-5">
             <h3 className="font-bold text-sm mb-3">Botões mais clicados</h3>

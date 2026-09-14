@@ -3,6 +3,7 @@ import { readDB } from '@/lib/db';
 import { requireBusiness } from '@/lib/access';
 import { todayISO, addDaysISO, formatDateShort } from '@/lib/tz';
 import { convRate, seriesByDay, topN, funnelRates } from '@/lib/analytics';
+import { isFeatureEnabled } from '@/lib/features';
 
 const ORIGIN_LABEL: Record<string, string> = {
   chat_ai: 'Chat', quote: 'Orçamento', booking_cta: 'Reserva', whatsapp_click: 'WhatsApp',
@@ -102,8 +103,20 @@ export async function GET(req: NextRequest) {
     origins[label] = (origins[label] || 0) + 1;
   }
 
+  // Contexto de módulos: a tela decide o que mostrar (negócios de atendimento
+  // NÃO veem funil/receita de pedidos; só existe receita de pedidos quem tem o
+  // módulo legado ativo). A decisão vem da fonte única (lib/features.ts).
+  const ctx = guard.ctx.business;
+  const modules = {
+    bookings: isFeatureEnabled(ctx, 'bookings'),
+    products: isFeatureEnabled(ctx, 'products'),
+    orders: isFeatureEnabled(ctx, 'orders'),
+    quote: isFeatureEnabled(ctx, 'quote'),
+  };
+
   return NextResponse.json({
     period,
+    modules,
     totals: {
       pageViews, uniqueVisitors,
       clicks: count('button_click'), waClicks: count('whatsapp_click'),

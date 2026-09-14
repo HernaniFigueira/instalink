@@ -117,7 +117,8 @@ export function conciergeAnswer(
     }
     const featured = products.filter((p) => p.featured).slice(0, 3);
     const names = (featured.length ? featured : products.slice(0, 3)).map((p) => p.name).join(', ');
-    return { intent: 'order', reply: `Perfeito! Monte seu pedido no catálogo — destaques: ${names}.`, actions: [{ label: 'Ver catálogo', target: '#produtos' }] };
+    // VITRINE, não carrinho: o interesse é tratado no WhatsApp do negócio.
+    return { intent: 'order', reply: `Confira nossa vitrine — destaques: ${names}. Toque em "Tenho interesse" que a gente combina tudo pelo WhatsApp!`, actions: [{ label: 'Ver vitrine', target: '#produtos' }] };
   }
   if (has('orcamento', 'orçamento', 'proposta', 'servico', 'reforma', 'quanto fica')) {
     return { intent: 'quote', reply: 'Claro! Preencha rapidinho que retornamos com o orçamento.', actions: isFeatureEnabled(business, 'quote') ? [{ label: 'Pedir orçamento', target: '#orcamento' }] : [wa] };
@@ -131,7 +132,12 @@ export function conciergeAnswer(
     };
   }
   if (has('entrega', 'delivery', 'taxa')) {
-    return { intent: 'delivery', reply: 'Trabalhamos com entrega e retirada. Você escolhe na hora de finalizar o pedido!', actions: products.length && (isFeatureEnabled(business, 'products') || isFeatureEnabled(business, 'orders')) ? [{ label: 'Ver catálogo', target: '#produtos' }] : [wa] };
+    // Só prometemos entrega onde o módulo legado de pedidos ainda existe.
+    // Para os demais, o assistente diz a verdade (atendimento/agendamento).
+    if (isFeatureEnabled(business, 'orders')) {
+      return { intent: 'delivery', reply: 'Trabalhamos com entrega e retirada. Você escolhe na hora de finalizar o pedido!', actions: [{ label: 'Ver catálogo', target: '#produtos' }] };
+    }
+    return { intent: 'delivery', reply: 'Por aqui nosso atendimento é com hora marcada (ou pelo WhatsApp). Entrega, só se a loja combinar direto com você!', actions: isFeatureEnabled(business, 'bookings') && services.length ? [{ label: 'Agendar horário', target: '#agendar' }] : [wa] };
   }
   if (has('pagamento', 'pagar', 'pix', 'cartao', 'dinheiro')) {
     const map: Record<string, string> = { pix: 'PIX', card: 'cartão', cash: 'dinheiro', on_delivery: 'pagamento na entrega' };

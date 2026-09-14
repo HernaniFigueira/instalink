@@ -67,6 +67,7 @@ interface Overview {
   upcoming: Array<{ id: string; customerName: string; date: string; time: string; status: string; service: string; professional: string }>;
   checklist: Array<{ done: boolean; label: string; href: string }>;
   pct: number;
+  pendingSetup?: number;
   period: number;
   recent: {
     orders: Array<{ id: string; code: string; customerName: string; status: string; createdAt: string }>;
@@ -82,7 +83,16 @@ export default function DashboardPage() {
   const [period, setPeriod] = useState(30);
   const [data, setData] = useState<Overview | null>(null);
   const [denied, setDenied] = useState(false);
-  const [showChecklist, setShowChecklist] = useState(false);
+  // "Comece por aqui" é descartável: ocultar some com o checklist (por
+  // negócio) e pode voltar a qualquer momento — nada é perdido.
+  const [setupHidden, setSetupHidden] = useState(false);
+  useEffect(() => {
+    try { setSetupHidden(localStorage.getItem(`il-setup-hidden-${businessId}`) === '1'); } catch { /* noop */ }
+  }, [businessId]);
+  function hideSetup() {
+    setSetupHidden(true);
+    try { localStorage.setItem(`il-setup-hidden-${businessId}`, '1'); } catch { /* noop */ }
+  }
   const { notice, dismiss } = useForbiddenNotice('Dashboard');
 
   const load = useCallback(() => {
@@ -97,7 +107,6 @@ export default function DashboardPage() {
         }
         setDenied(false);
         setData(res.data);
-        setShowChecklist((res.data?.pct ?? 100) < 100);
       });
   }, [businessId, period]);
 
@@ -124,6 +133,8 @@ export default function DashboardPage() {
   const pendencies = needsClosure;
   const q = `?b=${business.id}`;
   const next = checklist.find((c) => !c.done);
+  const doneCount = checklist.filter((c) => c.done).length;
+  const hasSetupPending = (data.pendingSetup ?? checklist.filter((c) => !c.done).length) > 0;
   const hasActivity = recent.orders.length + recent.bookings.length + recent.leads.length > 0;
   const orderDef = (s: string): StatusDef => (ORDER_STATUS as Record<string, StatusDef>)[s] || { panel: s, tone: 'zinc' } as StatusDef;
   const bookDef = (s: string): StatusDef => (BOOKING_STATUS as Record<string, StatusDef>)[s] || { panel: s, tone: 'zinc' } as StatusDef;
@@ -145,8 +156,8 @@ export default function DashboardPage() {
         <div className="mb-4 border border-zinc-900 bg-zinc-900 text-white px-4 py-3 flex items-start gap-3">
           <div className="w-8 h-8 rounded-md bg-white text-zinc-900 flex items-center justify-center font-bold shrink-0">✓</div>
           <div>
-            <p className="text-sm font-semibold">Sua estrutura está pronta, {user.name.split(' ')[0]}!</p>
-            <p className="text-xs text-zinc-400 mt-0.5">Complete a configuração abaixo e publique sua página.</p>
+            <p className="text-sm font-semibold">{business.name} está criado, {user.name.split(' ')[0]}!</p>
+            <p className="text-xs text-zinc-400 mt-0.5">Agenda, serviços e página já estão ativos. Siga o “Comece por aqui” abaixo — ou ignore e use o que precisa primeiro.</p>
           </div>
         </div>
       )}
@@ -390,11 +401,11 @@ export default function DashboardPage() {
             {modules.products && productsPanel && (
               <div className="px-4 py-3">
                 <div className="flex items-center justify-between mb-2">
-                  <p className="text-xs font-semibold tracking-wide uppercase text-zinc-500">Produtos</p>
-                  <Link href={`/produtos${q}`} className="text-xs font-medium text-zinc-600 hover:underline">Ver →</Link>
+                  <p className="text-xs font-semibold tracking-wide uppercase text-zinc-500">Vitrine de produtos</p>
+                  <Link href={`/produtos${q}`} className="text-xs font-medium text-zinc-600 hover:underline">Gerenciar →</Link>
                 </div>
-                <p className="text-xl font-semibold leading-none">{productsPanel.active} <span className="text-xs font-normal text-zinc-500">ativos</span></p>
-                <p className="text-xs text-zinc-600 mt-2"><strong className="text-zinc-900">{productsPanel.total}</strong> cadastrados no catálogo</p>
+                <p className="text-xl font-semibold leading-none">{productsPanel.active} <span className="text-xs font-normal text-zinc-500">exibidos na página</span></p>
+                <p className="text-xs text-zinc-600 mt-2">Interesse via WhatsApp — sem carrinho nem checkout</p>
               </div>
             )}
           </div>
@@ -435,18 +446,26 @@ export default function DashboardPage() {
         </div>
       </div>
 
-      {/* ── Configuração + Atividade recente (linhas, não cards) ── */}
-      <div className="grid lg:grid-cols-2 gap-3">
-        <div className="bg-white border border-zinc-200">
-          <div className="px-4 py-2.5 border-b border-zinc-100 flex items-center justify-between">
-            <h3 className="text-sm font-semibold">Configuração</h3>
-            <span className="text-xs font-medium text-zinc-500">{pct}%</span>
-          </div>
-          <div className="px-4 py-3">
-            <div className="h-1.5 bg-zinc-100 rounded-full overflow-hidden mb-3"><div className="h-full bg-zinc-900 rounded-full" style={{ width: `${pct}%` }} /></div>
-            {pct >= 100 && !showChecklist ? (
-              <button onClick={() => setShowChecklist(true)} className="text-xs font-medium text-zinc-600 hover:text-zinc-900 inline-flex items-center gap-1.5"><Icon n="check" size={12} /> Tudo configurado — revisar</button>
-            ) : (
+      {/* ── Comece por aqui (checklist LEVE, não bloqueante) + Atividade recente ──
+          Progresso REAL: os itens vêm de dados existentes (lib/dashboard.ts →
+          setupChecklist). Sem pendências, a área simplesmente some — e pode ser
+          ocultada a qualquer momento sem perder nada. */}
+      <div className={hasSetupPending && !setupHidden ? 'grid lg:grid-cols-2 gap-3' : ''}>
+        {hasSetupPending && !setupHidden && (
+          <div className="bg-white border border-zinc-200">
+            <div className="px-4 py-2.5 border-b border-zinc-100 flex items-center justify-between">
+              <h3 className="text-sm font-semibold">Comece por aqui</h3>
+              <span className="flex items-center gap-2">
+                <span className="text-xs font-medium text-zinc-500">{doneCount}/{checklist.length}</span>
+                <button onClick={hideSetup} className="text-xs font-medium text-zinc-400 hover:text-zinc-700 inline-flex items-center gap-1" title="Ocultar checklist">
+                  <Icon n="x" size={12} /> Ocultar
+                </button>
+              </span>
+            </div>
+            <div className="px-4 py-3">
+              <div className="h-1.5 bg-zinc-100 rounded-full overflow-hidden mb-3">
+                <div className="h-full bg-zinc-900 rounded-full" style={{ width: `${pct}%` }} />
+              </div>
               <ul className="divide-y divide-zinc-100 -mx-4">
                 {checklist.map((c) => (
                   <li key={c.label} className="px-4 py-2 flex items-center gap-2.5 text-sm hover:bg-zinc-50">
@@ -456,9 +475,9 @@ export default function DashboardPage() {
                   </li>
                 ))}
               </ul>
-            )}
+            </div>
           </div>
-        </div>
+        )}
 
         <div className="bg-white border border-zinc-200">
           <div className="px-4 py-2.5 border-b border-zinc-100"><h3 className="text-sm font-semibold">Atividade recente</h3></div>

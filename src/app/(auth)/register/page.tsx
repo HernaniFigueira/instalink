@@ -45,7 +45,7 @@ export default function RegisterPage() {
   return (
     <>
       <h1 className="text-2xl font-bold">Crie sua conta</h1>
-      <p className="text-sm text-zinc-400 mt-1">Grátis para começar. Sem cartão.</p>
+      <p className="text-sm text-zinc-400 mt-1">Grátis para começar. Sem cartão. Depois, criar o negócio leva um minuto.</p>
       <form onSubmit={submit} className="mt-6 space-y-4">
         <div>
           <label className="block text-sm font-medium text-zinc-300 mb-1.5" htmlFor="name">Seu nome</label>

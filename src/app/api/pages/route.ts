@@ -2,6 +2,9 @@ import { NextRequest, NextResponse } from 'next/server';
 import { readDB, updateDB } from '@/lib/db';
 import { requireBusiness } from '@/lib/access';
 import { slugify, isValidSlug } from '@/lib/utils';
+import { VALID_NAV } from '@/lib/nav';
+
+const pageStr = (v: unknown, max: number): string => String((v as string) || '').slice(0, max);
 
 // GET ?businessId= — página + tema + blocos (dono)
 // PUT — salvar blocos/tema/publicação/slug (dono)
@@ -33,6 +36,30 @@ export async function PUT(req: NextRequest) {
       await updateDB((d) => {
         const b = d.businesses.find((x) => x.id === businessId)!;
         b.published = !!body.published;
+        b.updatedAt = new Date().toISOString();
+      });
+    }
+    // ── Navegação pública + seção "Sobre" — vivem no EDITOR DA PÁGINA ──
+    // O estado continua sendo o MESMO (Business.nav/navCustom/about — única
+    // fonte usada pela página pública); apenas o lugar de editar mudou: o
+    // usuário constrói a página em um só lugar, não em Configurações.
+    if (body.nav !== undefined || body.navCustom !== undefined || body.about !== undefined) {
+      await updateDB((d) => {
+        const b = d.businesses.find((x) => x.id === businessId)!;
+        if (body.nav !== undefined) {
+          const nav = Array.isArray(body.nav) ? body.nav.filter((n: unknown) => VALID_NAV.includes(n as string)) : [];
+          b.nav = [...new Set(nav as string[])];
+        }
+        if (body.navCustom !== undefined) b.navCustom = !!body.navCustom;
+        if (body.about !== undefined && body.about && typeof body.about === 'object') {
+          const a = body.about as Record<string, any>;
+          b.about = {
+            title: pageStr(a.title, 80),
+            text: pageStr(a.text, 1200),
+            image: pageStr(a.image, 500),
+            enabled: a.enabled !== false && !!a.enabled,
+          };
+        }
         b.updatedAt = new Date().toISOString();
       });
     }

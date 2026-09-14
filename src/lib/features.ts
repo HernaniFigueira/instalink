@@ -13,12 +13,22 @@
 //   • desativar não apaga configuração; reativar restaura o que já existia;
 //   • nenhum componente público decide sozinho que um recurso está ativo.
 //
+// POSICIONAMENTO (2026): o InstaLink é uma plataforma de página, agendamento
+// e relacionamento para negócios de atendimento. O eixo do produto é
+// Serviços → Agenda → Cliente → Histórico → WhatsApp. Módulos da antiga fase
+// "universal" (pedidos, orçamentos) NÃO fazem mais parte da experiência: eles
+// continuam RESOLVÍVEIS aqui (dados legados não são apagados nem quebrados),
+// mas saem de FEATURES — ou seja, fora do catálogo oferecido no painel
+// (Recursos), no cadastro e na navegação. `LEGACY_FEATURES` é o depósito
+// isolado desses módulos.
+//
 // Este arquivo é PURO (sem I/O) para poder ser usado no cliente (painel) e
 // no servidor (página pública + APIs) sem duplicar regra.
 import type {
   Block, BlockType, Business, BusinessMode, OptionalFeatureId, PublicBusiness,
 } from './types';
 import { VALID_OPTIONAL_FEATURES } from './types';
+import { uid } from './utils';
 
 export type FeatureId =
   | 'products' | 'services' | 'bookings' | 'orders' | 'quote'
@@ -36,8 +46,11 @@ export interface FeatureDef {
   mode?: BusinessMode; // módulo armazenado em Business.modes (comercial)
   blocks: BlockType[]; // tipos de bloco que este módulo apresenta
   extraBlocks?: BlockType[]; // blocos que TAMBÉM aparecem quando ele está ativo
+  /** true = fora da experiência do produto; só resolvido p/ compatibilidade. */
+  legacy?: boolean;
 }
 
+// ── Módulos da experiência atual (o que o painel oferece) ──────
 // Ordem canônica de apresentação (painel e página).
 export const FEATURES: FeatureDef[] = [
   {
@@ -49,26 +62,14 @@ export const FEATURES: FeatureDef[] = [
   {
     id: 'services', label: 'Serviços', group: 'Atendimento', icon: 'scissors', mode: 'services',
     blocks: ['services'],
-    hint: 'Lista de serviços com preço e duração',
+    hint: 'Catálogo de serviços com preço e duração',
     disabledHint: 'A vitrine de serviços sai da página (os serviços continuam salvos).',
-  },
-  {
-    id: 'quote', label: 'Orçamentos', group: 'Atendimento', icon: 'chat', mode: 'quote',
-    blocks: ['quote'],
-    hint: 'Formulário de orçamento que vira lead no CRM',
-    disabledHint: 'Some o formulário, o CTA e o item de menu de orçamento.',
   },
   {
     id: 'products', label: 'Produtos', group: 'Catálogo', icon: 'bag', mode: 'products',
     blocks: ['products'],
-    hint: 'Catálogo com carrinho',
-    disabledHint: 'O catálogo sai da página (produtos continuam salvos).',
-  },
-  {
-    id: 'orders', label: 'Pedidos', group: 'Catálogo', icon: 'truck', mode: 'orders',
-    blocks: ['products'],
-    hint: 'Receber pedidos com entrega ou retirada',
-    disabledHint: 'A página para de aceitar pedidos novos.',
+    hint: 'Vitrine de produtos com CTA direto para o WhatsApp',
+    disabledHint: 'A vitrine sai da página (os produtos continuam salvos).',
   },
   {
     id: 'reviews', label: 'Avaliações', group: 'Conteúdo', icon: 'star',
@@ -103,7 +104,7 @@ export const FEATURES: FeatureDef[] = [
   {
     id: 'agent', label: 'Assistente', group: 'Canais', icon: 'spark',
     blocks: ['concierge'],
-    hint: 'Agente de atendimento que responde com os dados da empresa',
+    hint: 'Assistente de atendimento que responde com os dados da empresa',
     disabledHint: 'O botão do assistente some da página (a configuração fica salva).',
   },
   {
@@ -114,10 +115,42 @@ export const FEATURES: FeatureDef[] = [
   },
 ];
 
-export const FEATURE_IDS: FeatureId[] = FEATURES.map((f) => f.id);
+// ── Módulos legados (fora da experiência; preservados p/ compatibilidade) ──
+// NUNCA entram em Recursos, no cadastro ou na navegação. Empresas que já
+// tinham esses módulos continuam funcionando (dados e renderização legados),
+// mas nada NOVO é criado por aqui: produtos viraram vitrine com CTA de
+// WhatsApp e o fluxo de pedido não faz mais parte do produto.
+export const LEGACY_FEATURES: FeatureDef[] = [
+  {
+    id: 'quote', label: 'Orçamentos', group: 'Atendimento', icon: 'chat', mode: 'quote',
+    blocks: ['quote'],
+    hint: 'Formulário de orçamento que vira lead no CRM (legado)',
+    disabledHint: 'Some o formulário, o CTA e o item de menu de orçamento.',
+    legacy: true,
+  },
+  {
+    id: 'orders', label: 'Pedidos', group: 'Catálogo', icon: 'truck', mode: 'orders',
+    blocks: ['products'],
+    hint: 'Pedidos com entrega ou retirada (legado — fora do produto)',
+    disabledHint: 'A página para de aceitar pedidos novos.',
+    legacy: true,
+  },
+];
+
+/** Todos os módulos conhecidos (experiência + legado resolúvel). */
+export const ALL_FEATURES: FeatureDef[] = [...FEATURES, ...LEGACY_FEATURES];
+
+/** Ids que o painel/Recursos oferece (nunca os legados). */
+export const OFFERED_FEATURE_IDS: FeatureId[] = FEATURES.map((f) => f.id);
+
+export const FEATURE_IDS: FeatureId[] = ALL_FEATURES.map((f) => f.id);
+
+export function isLegacyFeature(id: FeatureId): boolean {
+  return featureDef(id)?.legacy === true;
+}
 
 export function featureDef(id: FeatureId): FeatureDef | undefined {
-  return FEATURES.find((f) => f.id === id);
+  return ALL_FEATURES.find((f) => f.id === id);
 }
 
 /** Um id é um módulo válido? */
@@ -186,6 +219,13 @@ export function isFeatureEnabled(business: Pick<Business, 'modes' | 'features'>,
 
 /** Estado de todos os módulos (para a área "Recursos da empresa"). */
 export function featureState(
+  business: Pick<Business, 'modes' | 'features'>,
+): Array<{ def: FeatureDef; enabled: boolean }> {
+  return ALL_FEATURES.map((def) => ({ def, enabled: isFeatureEnabled(business, def.id) }));
+}
+
+/** Estado APENAS dos módulos oferecidos na experiência (o que Recursos lista). */
+export function offeredFeatureState(
   business: Pick<Business, 'modes' | 'features'>,
 ): Array<{ def: FeatureDef; enabled: boolean }> {
   return FEATURES.map((def) => ({ def, enabled: isFeatureEnabled(business, def.id) }));
@@ -289,11 +329,14 @@ export function servicesVisible(
   return on && services.some((s) => s.active !== false);
 }
 
-/** O catálogo aparece? (produtos OU pedidos ligados) */
+/** O catálogo/vitrine aparece? (módulo produtos; legado: pedidos também) */
 export function productsVisible(
   business: Pick<Business, 'modes' | 'features'>,
   products: Array<{ active?: boolean }>,
 ): boolean {
+  // 'orders' continua contando APENAS para não quebrar páginas antigas que
+  // exibiam catálogo via pedidos; a renderização atual é a vitrine (CTA no
+  // WhatsApp) — carrinho e checkout saíram da experiência.
   const on = isFeatureEnabled(business, 'products') || isFeatureEnabled(business, 'orders');
   return on && products.some((p) => p.active !== false);
 }
@@ -306,16 +349,54 @@ export function whatsappVisible(business: Pick<Business, 'modes' | 'features' | 
 /**
  * Destino do CTA respeitando os módulos: um destino desativado é rebaixado
  * para o próximo disponível (nunca abre recurso desligado).
+ * AGENDAMENTO É O CENTRO: o primeiro destino possível é sempre a agenda —
+ * a vitrine vem depois como espaço próprio (e nunca "compra").
  */
 export function allowedCtaTargets(
   business: Pick<Business, 'modes' | 'features' | 'whatsapp'>,
 ): Array<'products' | 'booking' | 'quote' | 'whatsapp'> {
   const out: Array<'products' | 'booking' | 'quote' | 'whatsapp'> = [];
-  if (isFeatureEnabled(business, 'products') || isFeatureEnabled(business, 'orders')) out.push('products');
   if (isFeatureEnabled(business, 'bookings')) out.push('booking');
+  if (isFeatureEnabled(business, 'products') || isFeatureEnabled(business, 'orders')) out.push('products');
   if (isFeatureEnabled(business, 'quote')) out.push('quote');
   if (whatsappVisible(business)) out.push('whatsapp');
   return out;
+}
+
+// ── Ativação = o recurso aparece na página (regra aditiva) ─────
+// Negócios novos nascem com módulos desligados e SEM o bloco de apresentação
+// correspondente. Ligar o módulo precisa refletir na página pública na hora —
+// então a ativação GARANTE o bloco (aditivo: desativar nunca remove nem
+// apaga; blocos já existentes continuam intocados).
+const ACTIVATION_BLOCK: Partial<Record<FeatureId, { type: BlockType; settings?: Record<string, any> }>> = {
+  products: { type: 'products', settings: { title: 'Vitrine' } },
+  services: { type: 'services', settings: { title: 'Serviços' } },
+  quote: { type: 'quote', settings: { title: 'Solicite um orçamento' } },
+  // 'bookings' NÃO ganha bloco próprio: CTA + "Agendar" por serviço + menu já
+  // abrem o fluxo (destino único — mesmo padrão do cadastro inicial).
+};
+
+/**
+ * Devolve os blocos com o bloco de apresentação do módulo garantido quando
+ * `enabled` é true. Puro e determinístico para o mesmo input (id gerado via
+ * uid). Desativar NUNCA remove bloco — a apresentação fica guardada.
+ */
+export function withActivationBlock(
+  blocks: Block[],
+  id: FeatureId,
+  enabled: boolean,
+): Block[] {
+  if (!enabled) return blocks;
+  const spec = ACTIVATION_BLOCK[id];
+  if (!spec) return blocks;
+  if (blocks.some((b) => b.type === spec.type)) return blocks;
+  const order = blocks.reduce((m, b) => Math.max(m, b.order), -1) + 1;
+  return [...blocks, { id: uid(), type: spec.type, order, enabled: true, settings: spec.settings || {} }];
+}
+
+/** O módulo exige garantir bloco ao ligar? (usado pela API de features) */
+export function needsActivationBlock(id: FeatureId): boolean {
+  return Boolean(ACTIVATION_BLOCK[id]);
 }
 
 /**

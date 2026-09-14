@@ -93,6 +93,7 @@ check('página publicada', pub.data.ok === true || pub.status < 300, `(${pub.sta
 // 7) página pública reflete o cadastro
 const html = await (await fetch(`${BASE}/${slug}`)).text();
 check('pública: nome + serviços + CTA', html.includes('Salão da Marlene') && html.includes('Corte Feminino') && html.includes('Manicure'), `(${(html.match(/Corte Feminino/g) || []).length}x)`);
+check('pública: vitrine com CTA "Tenho interesse" (sem carrinho/checkout)', html.includes('Tenho interesse') && !html.toLowerCase().includes('carrinho'), `(cta=${(html.match(/Tenho interesse/g) || []).length})`);
 check('pública: menu sem Início', html.includes('aria-label="Menu"') && !html.includes('>Início<'));
 check('pública: sem dados de outro negócio', !html.includes('X-Bacon') && !html.includes('Consulta Odontológica'));
 
@@ -117,24 +118,24 @@ check('resposta chega na agenda', (manage.data.bookings || []).some((b) => b.id 
 const conf = await api('PATCH', '/api/bookings', { businessId: B, id: book.data.bookingId, status: 'confirmed' }, token);
 check('reserva confirmada', conf.status === 200, `(${conf.status})`);
 
-// 10) cliente compra o produto
+// 10) produto NÃO gera pedido (vitrine → WhatsApp): a API recusa para o salão
 const order = await api('POST', '/api/orders', {
   businessId: B, customerName: 'Cliente E2E', customerPhone: ph(2),
   type: 'pickup', payment: 'pix', items: [{ productId: `${TAG}-prod1`, qty: 1 }],
 }, cTok);
-check('pedido criado (5990)', order.status < 300 && (order.data.total === 5990 || order.data.order?.total === 5990), `(${order.status}) total=${order.data.total}`);
+check('vitrine não cria pedido (403 sem módulo de pedidos)', order.status === 403, `(${order.status})`);
 const orders = await api('GET', `/api/orders?businessId=${B}`, null, token);
-check('pedidos mostra a venda', (orders.data.orders || []).length > 0, `(total=${orders.data.total})`);
+check('sem pedidos no negócio de atendimento', (orders.data.orders || []).length === 0, `(total=${orders.data.total})`);
 
 // 11) conta do cliente + dashboard
 const myB = await api('GET', `/api/customer/bookings?businessId=${B}`, null, cTok);
 check('cliente vê agendamento', (myB.data.bookings || []).length > 0);
-const myO = await api('GET', `/api/customer/orders?businessId=${B}`, null, cTok);
-check('cliente vê pedido', myO.status === 200 && ((myO.data.orders || []).length > 0), `(${myO.status})`);
 const ov = await api('GET', `/api/overview?businessId=${B}`, null, token);
-check('overview com receita', ov.status === 200 && ov.data.revenue?.total >= 5990, `(receita=${ov.data.revenue?.total})`);
+check('overview: receita PREVISTA dos atendimentos (sem pedido)', ov.status === 200 && (ov.data.revenueDetail?.sources || []).includes('bookings') && ov.data.revenueDetail?.orders === null, `(sources=${JSON.stringify(ov.data.revenueDetail?.sources)})`);
+check('dashboard: sem pedidos no payload', ov.data.totals?.orders === 0 && ov.data.ordersPanel === null);
+check('checklist "Comece por aqui" com progresso real', Array.isArray(ov.data.checklist) && ov.data.checklist.length > 0 && ov.data.checklist.some((c) => c.label === 'Cadastre seus serviços' && c.done === true), JSON.stringify((ov.data.checklist || []).map((c) => [c.label, c.done])));
 const p360 = await api('GET', `/api/people360?businessId=${B}`, null, token);
-check('cliente 360 unificado', (p360.data.people || []).some((p) => p.orders > 0 && p.bookings.length > 0));
+check('cliente 360 unificado', (p360.data.people || []).some((p) => p.bookings.length > 0 && p.bookings.some((b) => b.service === 'Corte Feminino')));
 const an = await api('GET', `/api/analytics?businessId=${B}&period=7`, null, token);
 check('analytics ok', an.status === 200 && an.data.days?.length === 7);
 

@@ -181,3 +181,55 @@ export function recentActivityLists(m: DashboardModules): {
 } {
   return { orders: m.orders, bookings: m.bookings, leads: true };
 }
+
+// ── "Comece por aqui" — checklist LEVE e não bloqueante ───────
+// Regras (obrigatórias):
+//   • progresso REAL: cada item é calculado a partir de dados existentes —
+//     nada é marcado como feito por padrão e nada é "inventado";
+//   • itens irrelevantes para o negócio simplesmente não aparecem (ex.:
+//     horários só com agenda ativa; vitrine só com produtos ativo);
+//   • a área some quando não há pendência; não bloqueia nada;
+//   • nenhum caminho de pedido/checkout aparece aqui.
+export interface SetupCheckInput {
+  business: Pick<Business, 'description' | 'logo' | 'cover' | 'whatsapp' | 'phone' | 'address' | 'published'>;
+  modules: DashboardModules;
+  counts: { services: number; availability: number; professionals: number; products: number };
+}
+
+export interface SetupCheckItem {
+  id: string;
+  done: boolean;
+  label: string;
+  href: string;
+}
+
+export function setupChecklist(input: SetupCheckInput): SetupCheckItem[] {
+  const { business, modules, counts } = input;
+  const items: SetupCheckItem[] = [];
+  const hasContact = !!(String(business.whatsapp || '').trim() || String(business.phone || '').trim());
+  const hasIdentity = !!(String(business.description || '').trim() || business.logo || business.cover);
+  items.push({
+    id: 'profile',
+    done: hasIdentity && hasContact,
+    label: 'Crie o perfil do negócio',
+    href: '/configuracoes',
+  });
+  if (modules.services || modules.bookings) {
+    items.push({ id: 'services', done: counts.services > 0, label: 'Cadastre seus serviços', href: '/servicos' });
+  }
+  if (modules.bookings) {
+    items.push({ id: 'hours', done: counts.availability > 0, label: 'Configure seus horários', href: '/servicos' });
+    items.push({ id: 'team', done: counts.professionals > 0, label: 'Adicione profissionais', href: '/servicos' });
+  }
+  if (modules.products) {
+    items.push({ id: 'products', done: counts.products > 0, label: 'Monte sua vitrine de produtos', href: '/produtos' });
+  }
+  items.push({ id: 'publish', done: !!business.published, label: 'Publique sua página', href: '/pagina' });
+  return items;
+}
+
+/** Progresso real do checklist (0–100; sem checklist → 100, nada a fazer). */
+export function setupProgress(items: SetupCheckItem[]): number {
+  if (items.length === 0) return 100;
+  return Math.round((items.filter((i) => i.done).length / items.length) * 100);
+}
