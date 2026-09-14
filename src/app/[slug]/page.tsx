@@ -9,7 +9,8 @@ import { Icon } from '@/components/icons';
 import { ConciergeIsland } from '@/components/public/widgets2';
 import { BottomBar } from '@/components/public/BottomBar';
 import type { NavActionItem } from '@/components/public/menu';
-import { CtaButton, ProductsTrigger, QuoteTrigger, ServiceAgendarButton, SheetHost, Stars } from '@/components/public/customer';
+import { CtaButton, QuoteTrigger, ServiceAgendarButton, SheetHost, Stars } from '@/components/public/customer';
+import { ProductShowcase } from '@/components/public/showcase';
 import { FaqAccordion } from '@/components/public/FaqAccordion';
 import { visibleFaqItems } from '@/lib/faq';
 import { NAV_ORDER, aboutVisible, publicNavIds } from '@/lib/nav';
@@ -139,10 +140,6 @@ export default async function PublicPage({ params }: { params: { slug: string } 
       <BottomBar business={business} navItems={navItems} canBook={canBook} />
       <SheetHost
         business={business}
-        products={products}
-        categories={categories}
-        options={options}
-        values={optionValues}
         services={services}
         professionals={professionals}
       />
@@ -289,13 +286,16 @@ function BlockView({ block, business, agent, catalog }: {
     }
     case 'products': {
       // Módulo desativado nunca renderiza (mesmo com bloco legado habilitado).
+      // VITRINE (não e-commerce): produtos com CTA "Tenho interesse" → WhatsApp
+      // do negócio. Carrinho/checkout saíram da experiência; o título legado
+      // salvo no bloco continua sendo usado se existir.
       if (!productsVisible(business, catalog.products)) return null;
-      const f2 = business.niche === 'alimentacao';
       return (
-        <ProductsTrigger
-          title={s.title || (f2 ? 'Cardápio' : 'Produtos')}
-          count={catalog.products.length}
-          label={(s.title || (f2 ? 'Cardápio' : 'Produtos')).toLowerCase()}
+        <ProductShowcase
+          business={business}
+          products={catalog.products}
+          categories={catalog.categories}
+          title={s.title || 'Vitrine'}
         />
       );
     }

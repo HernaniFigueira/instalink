@@ -2,7 +2,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { useSearchParams } from 'next/navigation';
 import type { LeadStatus } from '@/lib/types';
-import { money, waLink } from '@/lib/utils';
+import { cn, money, waLink } from '@/lib/utils';
 import { humanDay } from '@/lib/tz';
 import { BOOKING_STATUS, LEAD_STATUS, toneCls, type StatusDef } from '@/lib/status';
 import { ListSkeleton } from '@/components/ui';
@@ -15,9 +15,21 @@ interface Person {
   key: string; contactId: string; note: string; customerId: string; name: string; phone: string; email: string;
   registered: boolean; customerSince: string; source: string; marketingOptIn: boolean;
   orders: number; spent: number; lastOrderAt: string;
-  bookings: Array<{ id: string; customerName: string; date: string; time: string; status: string; service: string }>;
+  bookings: Array<{
+    id: string; customerName: string; date: string; time: string; status: string; service: string;
+    professional?: string; rescheduleCount?: number; previousId?: string;
+  }>;
   leads: Array<{ id: string; origin: string; status: string; interest: string; action: string; createdAt: string }>;
+  conversations?: Array<{ id: string; channel: string; status: string; at: string; preview: string; unread: number }>;
   lastSeen: string;
+}
+
+// Data curta do evento ("14 SET · 10:00") — leitura rápida no histórico.
+function eventDay(iso: string): string {
+  const [, m, d] = (iso || '').slice(0, 10).split('-');
+  if (!d) return '';
+  const MES = ['JAN', 'FEV', 'MAR', 'ABR', 'MAI', 'JUN', 'JUL', 'AGO', 'SET', 'OUT', 'NOV', 'DEZ'];
+  return `${Number(d)} ${MES[Number(m) - 1] || m}`;
 }
 
 const NEXT_LEAD: Record<string, LeadStatus | ''> = { new: 'contacted', contacted: 'qualified', qualified: 'converted' };
@@ -105,12 +117,74 @@ export default function ClientesPage() {
   const bookDef = (s: string): StatusDef => (BOOKING_STATUS as Record<string, StatusDef>)[s] || { panel: s, tone: 'zinc' };
   const leadDef = (s: string): StatusDef => (LEAD_STATUS as Record<string, StatusDef>)[s] || { panel: s, tone: 'zinc' };
 
+  // Monta a linha do tempo unificada (histórico 360): agendamentos,
+  // conversas e leads misturados por data — eventos independentes.
+  type HistoryEvent = {
+    kind: 'booking' | 'conversation' | 'lead';
+    id: string;
+    sortKey: string;
+    icon: string;
+    when: string;
+    title: string;
+    subtitle?: string;
+    badge?: string;
+    badgeCls?: string;
+    tone?: StatusDef['tone'];
+    status?: string;
+    actions?: React.ReactNode;
+  };
+  function historyEvents(p: Person): HistoryEvent[] {
+    const out: HistoryEvent[] = [];
+    for (const b of p.bookings) {
+      const d = bookDef(b.status);
+      out.push({
+        kind: 'booking', id: b.id, sortKey: `${b.date}T${b.time || '00:00'}`, icon: 'calendar',
+        when: `${eventDay(b.date)}${b.time ? ` · ${b.time}` : ''}`,
+        title: b.service,
+        subtitle: [b.professional, (b.rescheduleCount || 0) > 0 ? `reagendado ${b.rescheduleCount}×` : ''].filter(Boolean).join(' · ') || 'Atendimento',
+        badge: d.panel, tone: d.tone, status: b.status,
+      });
+    }
+    for (const c of p.conversations || []) {
+      out.push({
+        kind: 'conversation', id: c.id, sortKey: c.at || '', icon: 'whatsapp',
+        when: `${eventDay((c.at || '').slice(0, 10))}${(c.at || '').length >= 16 ? ` · ${c.at.slice(11, 16)}` : ''}`,
+        title: c.channel === 'whatsapp' ? 'Conversa pelo WhatsApp' : 'Conversa com o assistente',
+        subtitle: c.preview ? `“${c.preview.slice(0, 140)}”` : (c.status === 'open' ? 'Em aberto' : 'Encerrada'),
+        badge: (c.unread || 0) > 0 ? `${c.unread} não lida${c.unread > 1 ? 's' : ''}` : undefined,
+        badgeCls: (c.unread || 0) > 0 ? 'bg-blue-100 text-blue-800 border-blue-200' : undefined,
+        tone: 'blue',
+      });
+    }
+    for (const l of p.leads) {
+      const d = leadDef(l.status);
+      out.push({
+        kind: 'lead', id: l.id, sortKey: l.createdAt, icon: 'spark',
+        when: eventDay(l.createdAt.slice(0, 10)),
+        title: `Lead via ${ORIGIN_LABEL[l.origin] || l.origin}`,
+        subtitle: [l.interest, l.action].filter(Boolean).join(' · ') || undefined,
+        badge: d.panel, tone: d.tone,
+        actions: (
+          <div className="flex gap-1.5 mt-2">
+            {NEXT_LEAD[l.status] && (
+              <button onClick={() => setLead(l.id, NEXT_LEAD[l.status])} className="text-xs font-medium bg-zinc-900 text-white px-2.5 py-1 rounded-md">{NEXT_LEAD_LABEL[l.status]}</button>
+            )}
+            {l.status !== 'lost' && l.status !== 'converted' && (
+              <button onClick={() => setLead(l.id, 'lost')} className="text-xs font-medium bg-white border border-zinc-200 px-2.5 py-1 rounded-md">Perdido</button>
+            )}
+          </div>
+        ),
+      });
+    }
+    return out.sort((a, b) => (a.sortKey < b.sortKey ? 1 : -1));
+  }
+
   return (
     <>
       <div className="flex items-center justify-between gap-3 mb-3">
         <div>
           <h1 className="text-base font-semibold tracking-tight">Clientes</h1>
-          <p className="text-sm text-zinc-500 mt-0.5">Base única — pedidos, agendamentos e conversas no mesmo perfil.</p>
+          <p className="text-sm text-zinc-500 mt-0.5">Base única — agendamentos, histórico, conversas e relacionamento no mesmo perfil (visão 360).</p>
         </div>
         <span className="text-xs font-medium text-zinc-500 bg-white border border-zinc-200 rounded-md px-2.5 py-1 hidden sm:inline">{total} contatos</span>
       </div>
@@ -130,7 +204,7 @@ export default function ClientesPage() {
         <div className="bg-white border border-zinc-200 text-center py-12 px-6">
           <div className="mx-auto w-10 h-10 rounded-md bg-zinc-100 flex items-center justify-center text-zinc-400"><Icon n="users" size={20} /></div>
           <h3 className="font-semibold text-sm mt-3">{search ? 'Ninguém encontrado' : 'Nenhum cliente ainda'}</h3>
-          <p className="text-sm text-zinc-500 mt-1">{search ? 'Tente outro termo.' : 'Pedidos, agendamentos e conversas criam o perfil automaticamente.'}</p>
+          <p className="text-sm text-zinc-500 mt-1">{search ? 'Tente outro termo.' : 'Agendamentos, cadastros na página e conversas criam o perfil automaticamente.'}</p>
         </div>
       ) : (
         <div className="bg-white border border-zinc-200">
@@ -171,50 +245,39 @@ export default function ClientesPage() {
                 </button>
                 {open === p.key && (
                   <div className="border-t border-zinc-200 bg-zinc-50/50 px-4 py-4 space-y-4">
-                    {/* Linha do tempo real, não coleção de cards */}
-                    {p.bookings.length > 0 && (
+                    {/* ── HISTÓRICO (Customer 360) ──
+                        Cada evento é um bloco independente: data·hora, o quê,
+                        quem, status. Alternância claro/branco muito sutil,
+                        borda fina — separação visual + leitura rápida.
+                        Agendamentos, conversas e leads convivem na mesma
+                        linha do tempo; atendimento concluído permanece aqui
+                        mesmo depois de um reagendamento. */}
+                    {p.bookings.length + (p.conversations?.length ?? 0) + p.leads.length > 0 ? (
                       <div>
-                        <p className="text-xs font-semibold tracking-wide uppercase text-zinc-500 mb-2">Agendamentos</p>
-                        <div className="border-l-2 border-zinc-200 ml-1 pl-4 space-y-2">
-                          {p.bookings.map((b) => {
-                            const d = bookDef(b.status);
-                            return (
-                              <div key={b.id} className="relative flex items-center justify-between gap-2 text-sm">
-                                <span className="absolute -left-[18px] w-2 h-2 rounded-full bg-zinc-400" />
-                                <span>{b.service} · {humanDay(b.date)} {b.time}</span>
-                                <span className={`text-xs font-medium px-1.5 py-0.5 rounded border ${toneCls(d.tone)}`}>{d.panel}</span>
+                        <p className="text-[11px] font-semibold tracking-wide uppercase text-zinc-500 mb-2">Histórico</p>
+                        <div className="space-y-1.5">
+                          {historyEvents(p).map((e, i) => (
+                            <div key={`${e.kind}-${e.id}`} className={cn('border border-zinc-200 rounded-md px-3 py-2.5', i % 2 === 0 ? 'bg-zinc-50/70' : 'bg-white')}>
+                              <div className="flex items-start justify-between gap-2">
+                                <p className="text-[11px] font-semibold text-zinc-500 tabular-nums inline-flex items-center gap-1.5">
+                                  <Icon n={e.icon} size={12} className="text-zinc-400" />
+                                  {e.when}
+                                </p>
+                                {e.badge && (
+                                  <span className={`text-[11px] font-medium px-1.5 py-0.5 rounded border shrink-0 ${e.badgeCls || toneCls(e.tone || 'zinc')}`}>
+                                    {e.badge}{e.kind === 'booking' && e.status === 'completed' ? ' · ✓' : ''}
+                                  </span>
+                                )}
                               </div>
-                            );
-                          })}
+                              <p className="text-sm font-medium text-zinc-900 mt-1 leading-snug">{e.title}</p>
+                              {e.subtitle && <p className="text-xs text-zinc-500 mt-0.5 leading-snug">{e.subtitle}</p>}
+                              {e.actions}
+                            </div>
+                          ))}
                         </div>
                       </div>
-                    )}
-                    {p.leads.length > 0 && (
-                      <div>
-                        <p className="text-xs font-semibold tracking-wide uppercase text-zinc-500 mb-2">Conversas</p>
-                        <div className="space-y-2">
-                          {p.leads.map((l) => {
-                            const d = leadDef(l.status);
-                            return (
-                              <div key={l.id} className="bg-white border border-zinc-200 px-3 py-2">
-                                <div className="flex items-center justify-between gap-2 text-sm">
-                                  <span className="text-zinc-600">via {ORIGIN_LABEL[l.origin] || l.origin} · {humanDay(l.createdAt.slice(0, 10))}</span>
-                                  <span className={`text-xs font-medium px-1.5 py-0.5 rounded border ${toneCls(d.tone)}`}>{d.panel}</span>
-                                </div>
-                                {(l.interest || l.action) && <p className="text-xs text-zinc-500 mt-1">“{[l.interest, l.action].filter(Boolean).join(' · ')}”</p>}
-                                <div className="flex gap-1.5 mt-2">
-                                  {NEXT_LEAD[l.status] && (
-                                    <button onClick={() => setLead(l.id, NEXT_LEAD[l.status])} className="text-xs font-medium bg-zinc-900 text-white px-2.5 py-1 rounded-md">{NEXT_LEAD_LABEL[l.status]}</button>
-                                  )}
-                                  {l.status !== 'lost' && l.status !== 'converted' && (
-                                    <button onClick={() => setLead(l.id, 'lost')} className="text-xs font-medium bg-white border border-zinc-200 px-2.5 py-1 rounded-md">Perdido</button>
-                                  )}
-                                </div>
-                              </div>
-                            );
-                          })}
-                        </div>
-                      </div>
+                    ) : (
+                      <p className="text-sm text-zinc-500">Sem eventos ainda — agendamentos, conversas e leads aparecem aqui.</p>
                     )}
                     <div className="flex items-center justify-between gap-3 bg-white border border-zinc-200 px-3 py-2.5">
                       <div>

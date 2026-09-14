@@ -26,29 +26,40 @@ export interface PanelRouteDef {
   features?: FeatureId[];
   /** Chave de área para mensagens de permissão (lib/http). */
   area?: string;
+  /**
+   * true = fora da navegação do produto (legado ainda funcional por URL
+   * direta para empresas que já têm o módulo ativo). Nunca aparece no menu.
+   */
+  hidden?: boolean;
 }
 
-// Ordem canônica da navegação (a mesma do redesign do PR #4).
+// Ordem canônica da navegação — reflete o novo posicionamento:
+//   Operacional → Catálogo → Atendimento → Gestão → Presença → Administração.
+// Pedidos não é mais caminho principal: a rota continua existente (histórico
+// legado acessível por URL para quem tem o módulo), mas fora da navegação.
 export const PANEL_ROUTES: PanelRouteDef[] = [
   { href: '/dashboard', label: 'Dashboard', icon: 'home', permission: 'dashboard', area: 'dashboard' },
-  // Operacional
+  // Operacional — o centro do produto
   { href: '/agenda', label: 'Agenda', icon: 'calendar', section: 'Operacional', modes: ['bookings'], permission: 'agenda', area: 'agenda' },
   { href: '/clientes', label: 'Clientes', icon: 'users', section: 'Operacional', permission: 'clientes', area: 'clientes' },
-  { href: '/pedidos', label: 'Pedidos', icon: 'receipt', section: 'Operacional', modes: ['orders', 'products'], permission: 'pedidos', area: 'pedidos' },
   // Catálogo
-  { href: '/produtos', label: 'Produtos', icon: 'cart', section: 'Catálogo', modes: ['products', 'orders'], permission: 'catalogo', area: 'catalogo' },
   { href: '/servicos', label: 'Serviços', icon: 'scissors', section: 'Catálogo', modes: ['services', 'bookings'], permission: 'catalogo', area: 'servicos' },
+  { href: '/produtos', label: 'Produtos', icon: 'cart', section: 'Catálogo', modes: ['products', 'orders'], permission: 'catalogo', area: 'catalogo' },
   // Atendimento
   { href: '/whatsapp', label: 'WhatsApp', icon: 'whatsapp', section: 'Atendimento', permission: 'whatsapp', area: 'whatsapp' },
-  { href: '/agente', label: 'Agente', icon: 'spark', section: 'Atendimento', permission: 'agente', area: 'agente' },
+  { href: '/agente', label: 'Assistente', icon: 'spark', section: 'Atendimento', permission: 'agente', area: 'agente' },
   // Gestão
   { href: '/resultados', label: 'Resultados', icon: 'chart', section: 'Gestão', permission: 'financeiro', area: 'resultados' },
   { href: '/campanhas', label: 'Campanhas', icon: 'megaphone', section: 'Gestão', permission: 'campanhas', area: 'campanhas' },
-  { href: '/pagina', label: 'Página', icon: 'link', section: 'Gestão', permission: 'pagina', area: 'pagina' },
+  // Presença — a página pública é construída AQUI (editor), não em Configurações
+  { href: '/pagina', label: 'Página', icon: 'link', section: 'Presença', permission: 'pagina', area: 'pagina' },
   // Administração
-  { href: '/recursos', label: 'Recursos', icon: 'toggle', section: 'Administração', permission: 'config', area: 'recursos' },
   { href: '/equipe', label: 'Equipe', icon: 'users', section: 'Administração', permission: 'equipe', area: 'equipe' },
+  { href: '/recursos', label: 'Recursos', icon: 'toggle', section: 'Administração', permission: 'config', area: 'recursos' },
   { href: '/configuracoes', label: 'Configurações', icon: 'settings', section: 'Administração', permission: 'config', area: 'config' },
+  // Legado (fora da navegação; a rota e o histórico continuam preservados
+  // para empresas que já recebiam pedidos)
+  { href: '/pedidos', label: 'Pedidos', icon: 'receipt', modes: ['orders', 'products'], permission: 'pedidos', area: 'pedidos', hidden: true },
 ];
 
 /** Rotas que usam a largura toda (sem container estreito). */
@@ -92,8 +103,13 @@ export function hasPermission(permission: PermissionId, ctx: PanelContext): bool
   return (ctx.permissions || {})[permission] === true;
 }
 
-/** Rota visível na navegação? (permissão ∩ módulos) */
+/**
+ * Rota visível na NAVEGAÇÃO? (permissão ∩ módulos — e nunca `hidden`).
+ * Rotas ocultas continuam acessíveis por URL quando o módulo existe: a
+ * guarda de acesso (panelAccess) não usa este filtro.
+ */
 export function isPanelRouteVisible(route: PanelRouteDef, ctx: PanelContext): boolean {
+  if (route.hidden) return false;
   return hasPermission(route.permission, ctx) && hasMode(route, ctx) && hasFeature(route, ctx);
 }
 

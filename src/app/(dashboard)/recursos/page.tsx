@@ -23,8 +23,8 @@ interface FeatureRow {
 }
 
 const GROUP_HINT: Record<string, string> = {
-  Atendimento: 'Como seus clientes marcam e pedem',
-  Catálogo: 'O que você vende',
+  Atendimento: 'Como o cliente marca e é atendido',
+  Catálogo: 'O que você oferece',
   Conteúdo: 'Prova social e informação',
   Canais: 'Onde a conversa acontece',
 };

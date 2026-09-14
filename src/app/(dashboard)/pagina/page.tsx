@@ -1,7 +1,9 @@
 'use client';
 import { useEffect, useState } from 'react';
 import { useSearchParams } from 'next/navigation';
+import Link from 'next/link';
 import { BLOCK_DEFS } from '@/lib/templates';
+import { NAV_ORDER } from '@/lib/nav';
 import { THEME_PRESETS, matchingPreset, presetById } from '@/lib/themes';
 import { cn } from '@/lib/utils';
 import type { Block, BlockType, Business, Page, Theme } from '@/lib/types';
@@ -17,7 +19,7 @@ export default function PaginaPage() {
   const businessId = params.get('b') || '';
   const [business, setBusiness] = useState<Business | null>(null);
   const [page, setPage] = useState<Page | null>(null);
-  const [tab, setTab] = useState<'blocks' | 'theme' | 'publish'>('blocks');
+  const [tab, setTab] = useState<'blocks' | 'nav' | 'theme' | 'publish'>('blocks');
   const [editing, setEditing] = useState<string | null>(null);
   const [msg, setMsg] = useState('');
   const [rvCounts, setRvCounts] = useState({ pending: 0, published: 0 });
@@ -42,15 +44,29 @@ export default function PaginaPage() {
     })();
   }, [businessId, report]);
 
-  async function save(patch: { blocks?: Block[]; theme?: Theme; presetId?: string; published?: boolean; slug?: string }) {
+  async function save(patch: {
+    blocks?: Block[]; theme?: Theme; presetId?: string; published?: boolean; slug?: string;
+    // Navegação e "Sobre" vivem no editor da página (fonte única do que o
+    // visitante vê). O estado continua sendo o MESMO do negócio (Business.nav/
+    // navCustom/about) — a API de páginas apenas encaminha para lá.
+    nav?: string[]; navCustom?: boolean; about?: Business['about'];
+  }) {
     setSaving(true);
     setMsg('');
     try {
       const res = await apiSend('/api/pages', 'PUT', { businessId, ...patch }, { scope: 'action', area: 'Página' });
       if (!res.ok) throw new Error(res.message);
       setMsg('Alterações salvas.');
-      if (patch.published !== undefined && business) setBusiness({ ...business, published: patch.published });
-      if (patch.slug && business) setBusiness({ ...business, slug: patch.slug });
+      if (business) {
+        setBusiness({
+          ...business,
+          ...(patch.published !== undefined ? { published: patch.published } : {}),
+          ...(patch.slug ? { slug: patch.slug } : {}),
+          ...(patch.nav ? { nav: patch.nav } : {}),
+          ...(patch.navCustom !== undefined ? { navCustom: patch.navCustom } : {}),
+          ...(patch.about ? { about: patch.about } : {}),
+        });
+      }
     } catch (err: any) {
       setMsg(err.message);
     } finally {
@@ -89,13 +105,22 @@ export default function PaginaPage() {
       {msg && <p className="mb-4 text-sm font-medium bg-zinc-900 text-white rounded-md px-4 py-3">{msg}</p>}
 
       <div className="flex gap-2 mb-5">
-        {([['blocks', 'Blocos'], ['theme', 'Visual'], ['publish', 'Publicar']] as const).map(([id, label]) => (
+        {([['blocks', 'Blocos'], ['nav', 'Navegação'], ['theme', 'Visual'], ['publish', 'Publicar']] as const).map(([id, label]) => (
           <button key={id} onClick={() => setTab(id)}
             className={cn('text-sm font-bold px-4 py-2.5 rounded-md', tab === id ? 'bg-zinc-900 text-white' : 'bg-white border border-zinc-200 text-zinc-600')}>
             {label}
           </button>
         ))}
       </div>
+
+      {tab === 'nav' && (
+        <PageNavTab
+          business={business}
+          businessId={businessId}
+          onNav={(nav, navCustom) => save({ nav, navCustom } as any)}
+          onAbout={(about) => save({ about } as any)}
+        />
+      )}
 
       {tab === 'blocks' && (
         <div className="grid lg:grid-cols-[1fr_280px] gap-4 items-start">
@@ -140,6 +165,7 @@ export default function PaginaPage() {
                     <BlockSettings
                       block={b}
                       businessId={businessId}
+                      business={business}
                       onChange={(settings) => {
                         const n = blocks.map((x) => (x.id === b.id ? { ...x, settings } : x));
                         setPage({ ...page, blocks: n });
@@ -153,9 +179,11 @@ export default function PaginaPage() {
           </div>
           <div className="bg-white border border-zinc-200 rounded-lg p-4 lg:sticky lg:top-4">
             <p className="font-bold text-sm mb-1">Adicionar bloco</p>
-            <p className="text-xs text-zinc-500 mb-3">Liberdade controlada: só o que converte.</p>
+            <p className="text-xs text-zinc-500 mb-3">Blocos de conversão seguem os módulos da empresa (Recursos). Agendamento e CTA já existem na página padrão.</p>
             <div className="flex flex-wrap gap-2">
-              {(Object.keys(BLOCK_DEFS) as BlockType[]).filter((t) => t !== 'profile').map((t) => (
+              {(Object.keys(BLOCK_DEFS) as BlockType[])
+                .filter((t) => t !== 'profile' && t !== 'booking' && t !== 'quote')
+                .map((t) => (
                 <button key={t} onClick={() => updateBlocks([...blocks, { id: `b-${Date.now()}-${t}`, type: t, order: blocks.length, enabled: true, settings: {} }])}
                   className="text-xs font-bold bg-zinc-100 hover:bg-zinc-900 hover:text-white px-3 py-2 rounded-lg transition-colors">
                   + {BLOCK_DEFS[t]?.label}
@@ -172,6 +200,83 @@ export default function PaginaPage() {
         <PublishTab business={business} businessId={businessId} onSlug={(slug) => save({ slug })} onPublish={(published) => save({ published })} />
       )}
     </>
+  );
+}
+
+// ═══════════════════════════════════════════════════════════════
+// NAVEGAÇÃO DA PÁGINA — mudou de casa: do "Configurações" para o EDITOR.
+// A página é um só lugar: blocos, ordem, itens do menu e seção "Sobre".
+// O estado continua em Business.nav/navCustom/about (fonte única que a
+// página pública lê); aqui apenas edita pela API de páginas.
+// ═══════════════════════════════════════════════════════════════
+function PageNavTab({ business, businessId, onNav, onAbout }: {
+  business: Business;
+  businessId: string;
+  onNav: (nav: string[], navCustom: boolean) => void | Promise<void>;
+  onAbout: (about: Business['about']) => void | Promise<void>;
+}) {
+  const about = business.about || { title: '', text: '', image: '', enabled: false };
+  const [aboutDraft, setAboutDraft] = useState(about);
+  useEffect(() => { setAboutDraft(about); /* eslint-disable-next-line react-hooks/exhaustive-deps */ }, [business.about]);
+  const auto = !business.navCustom;
+
+  function toggleNav(id: string) {
+    if (auto) {
+      // Primeira interação sai do automático: parte de "todos ligados" e
+      // desmarca o item clicado (comportamento esperado do gesto).
+      onNav(NAV_ORDER.map((n) => n.id).filter((x) => x !== id), true);
+      return;
+    }
+    const cur = business.nav || [];
+    onNav(cur.includes(id) ? cur.filter((x) => x !== id) : [...cur, id], true);
+  }
+  function resetAuto() {
+    onNav(business.nav && business.nav.length ? business.nav : NAV_ORDER.map((n) => n.id), false);
+  }
+
+  return (
+    <div className="grid lg:grid-cols-2 gap-4 items-start">
+      <section className="bg-white border border-zinc-200 rounded-lg p-4">
+        <div className="flex items-center justify-between gap-2 mb-1">
+          <p className="font-bold text-sm">Itens do menu público</p>
+          {auto
+            ? <span className="text-[11px] font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200 rounded-full px-2 py-0.5">Automático</span>
+            : <button onClick={resetAuto} className="text-[11px] font-semibold text-zinc-500 hover:text-zinc-900 underline">Voltar ao automático</button>}
+        </div>
+        <p className="text-xs text-zinc-500 mb-3">
+          {auto
+            ? 'A página escolhe quais itens mostrar conforme os módulos ativos e o conteúdo preenchido. Qualquer ajuste aqui vira escolha manual.'
+            : 'Itens marcados aparecem no menu (a página só oferece o que o módulo permite).'}
+        </p>
+        <div className="flex flex-wrap gap-1.5">
+          {NAV_ORDER.map((n) => {
+            const on = auto ? true : (business.nav || []).includes(n.id);
+            return (
+              <button key={n.id} onClick={() => toggleNav(n.id)}
+                className={cn('text-xs font-medium px-3 py-1.5 rounded-md border transition-colors', on ? 'bg-zinc-900 text-white border-zinc-900' : 'bg-white border-zinc-200 text-zinc-600')}
+                title={auto ? 'No modo automático a página decide sozinha; clicar escolhe manualmente' : undefined}>
+                {n.label}
+              </button>
+            );
+          })}
+        </div>
+      </section>
+
+      <section className="bg-white border border-zinc-200 rounded-lg p-4 space-y-3">
+        <div className="flex items-center justify-between">
+          <p className="font-bold text-sm">Sobre a empresa</p>
+          <button onClick={() => onAbout({ ...aboutDraft, enabled: !about.enabled })}
+            className={cn('text-xs font-medium px-3 py-1 rounded-full border', about.enabled ? 'bg-zinc-900 text-white border-zinc-900' : 'bg-white border-zinc-200 text-zinc-500')}>
+            {about.enabled ? 'Visível' : 'Oculto'}
+          </button>
+        </div>
+        <p className="text-xs text-zinc-500 -mt-1">Aparece na página logo abaixo do Perfil, quando ativado e com conteúdo.</p>
+        <input value={aboutDraft.title} onChange={(e) => setAboutDraft({ ...aboutDraft, title: e.target.value })} className="w-full rounded-md border border-zinc-300 px-3 py-2 text-sm" placeholder="Título (ex: Sobre o estúdio)" />
+        <textarea value={aboutDraft.text} onChange={(e) => setAboutDraft({ ...aboutDraft, text: e.target.value })} className="w-full rounded-md border border-zinc-300 px-3 py-2 text-sm" rows={3} placeholder="Ex: Somos uma clínica especializada em…" />
+        <ImageUpload label="IMAGEM (OPCIONAL)" value={aboutDraft.image} onChange={(url) => setAboutDraft({ ...aboutDraft, image: url })} businessId={businessId} />
+        <button onClick={() => onAbout(aboutDraft)} className="text-sm font-bold bg-zinc-900 text-white px-4 py-2 rounded-md hover:bg-zinc-700">Salvar “Sobre”</button>
+      </section>
+    </div>
   );
 }
 
@@ -192,10 +297,21 @@ function blockIsEmpty(b: Block, rvCounts: { pending: number; published: number }
   }
 }
 
-function BlockSettings({ block, businessId, onChange, onSave }: { block: Block; businessId: string; onChange: (s: Record<string, any>) => void; onSave: () => void }) {
+function BlockSettings({ block, businessId, business, onChange, onSave }: {
+  block: Block;
+  businessId: string;
+  business: Business;
+  onChange: (s: Record<string, any>) => void;
+  onSave: () => void;
+}) {
   const s = block.settings || {};
   const set = (k: string, v: any) => onChange({ ...s, [k]: v });
   const input = 'w-full rounded-md border border-zinc-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500';
+  // Orçamento só aparece como destino se a empresa LEGADA ainda tem o módulo
+  // ligado — novas experiências não oferecem pedidos/orçamentos.
+  const quoteLegacy = (business.modes || []).includes('quote');
+  const productsOn = (business.modes || []).includes('products') || (business.modes || []).includes('orders');
+  const bookingsOn = (business.modes || []).includes('bookings');
 
   return (
     <div className="space-y-3">
@@ -203,7 +319,7 @@ function BlockSettings({ block, businessId, onChange, onSave }: { block: Block; 
         <label className="block">
           <span className="text-xs font-bold text-zinc-500">{block.type === 'cta' ? 'TEXTO DO BOTÃO' : 'TÍTULO'}</span>
           <input value={block.type === 'cta' ? s.label || '' : s.title || ''} onChange={(e) => set(block.type === 'cta' ? 'label' : 'title', e.target.value)}
-            className={input + ' mt-1'} placeholder={block.type === 'cta' ? 'Ex: Pedir agora' : 'Título da seção'} />
+            className={input + ' mt-1'} placeholder={block.type === 'cta' ? 'Ex: Agendar horário' : 'Título da seção'} />
         </label>
       )}
       {block.type === 'cta' && (
@@ -213,11 +329,28 @@ function BlockSettings({ block, businessId, onChange, onSave }: { block: Block; 
             className={input + ' mt-1'}>
             <option value="auto">Automático (pelo texto)</option>
             <option value="booking">Agendamento</option>
-            <option value="products">Pedidos / produtos</option>
-            <option value="quote">Orçamento</option>
+            <option value="products">Vitrine de produtos</option>
+            {quoteLegacy && <option value="quote">Orçamento</option>}
             <option value="whatsapp">WhatsApp</option>
           </select>
+          {!s.target && !bookingsOn && !productsOn && (
+            <span className="block text-[11px] text-zinc-500 mt-1">Com “Automático”, o botão escolhe o melhor destino entre os módulos ativos.</span>
+          )}
         </label>
+      )}
+      {block.type === 'products' && (
+        <div className="text-xs text-zinc-600 bg-zinc-50 border border-zinc-200 rounded-md px-3 py-2.5 space-y-1.5">
+          <p>A vitrine mostra os produtos ativos com foto, nome, preço e o botão <strong>“Tenho interesse”</strong>, que abre o WhatsApp do negócio com mensagem pronta — sem carrinho nem pedido.</p>
+          <p className="flex flex-wrap gap-x-3 gap-y-1">
+            <Link href={`/produtos?b=${businessId}`} className="font-semibold text-zinc-900 underline">Gerenciar produtos →</Link>
+            <span className={productsOn ? 'text-emerald-700 font-semibold' : 'text-amber-700'}>
+              {productsOn ? '● Módulo Produtos ativo' : '○ Módulo Produtos desligado — ativar em Recursos'}
+            </span>
+          </p>
+        </div>
+      )}
+      {block.type === 'booking' && (
+        <p className="text-xs text-zinc-500">O agendamento não precisa de bloco próprio: o CTA, o botão “Agendar” por serviço e o menu público já abrem o mesmo fluxo.</p>
       )}
       {block.type === 'text' && (
         <>
@@ -265,7 +398,16 @@ function BlockSettings({ block, businessId, onChange, onSave }: { block: Block; 
         </>
       )}
       {['profile', 'location', 'whatsapp'].includes(block.type) && (
-        <p className="text-xs text-zinc-500">Este bloco usa os dados do negócio automaticamente (nome, logo, endereço, WhatsApp). Ajuste em <strong>Configurações</strong>.</p>
+        <div className="text-xs text-zinc-600 bg-zinc-50 border border-zinc-200 rounded-md px-3 py-2.5">
+          <p>
+            {block.type === 'profile' && 'O Perfil mostra nome, logo, capa e descrição do negócio.'}
+            {block.type === 'location' && 'O bloco Localização mostra o mapa salvo no endereço do negócio.'}
+            {block.type === 'whatsapp' && 'O botão flutuante usa o número de WhatsApp cadastrado do negócio.'}
+            {' '}Esses dados são do <strong>cadastro do negócio</strong> — você edita tudo em{' '}
+            <Link href={`/configuracoes?b=${businessId}`} className="font-semibold text-zinc-900 underline">Configurações → Negócio</Link>.
+            Aqui você só decide <strong>como e onde eles aparecem</strong> na página.
+          </p>
+        </div>
       )}
       <button onClick={onSave} className="text-sm font-bold bg-zinc-900 text-white px-4 py-2 rounded-md hover:bg-zinc-700">Salvar bloco</button>
     </div>

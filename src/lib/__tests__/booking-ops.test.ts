@@ -113,6 +113,28 @@ describe('agenda — reagendamento com histórico honesto', () => {
       .toBe('Reagendado para 16/09 15:30 (novo atendimento criado)');
   });
 
+  it('reagendar um CONCLUÍDO preserva o registro antigo (histórico nunca é apagado)', () => {
+    // Contrato §16: o atendimento concluído permanece como está; o novo
+    // horário entra como NOVO agendamento pendente apontando para o anterior
+    // (previousId) — nada na decisão reescreve status/histórico do antigo.
+    const concluded = { id: 'b-old', status: 'completed' as const, date: '2026-09-09', time: '10:00' };
+    const decision = rescheduleDecision(concluded.status);
+    expect(decision.kind).toBe('recreate');
+    expect(decision.nextStatus).toBe('pending');
+    // a decisão é pura: o status original continua 'completed' (intocado)
+    expect(concluded.status).toBe('completed');
+    expect(isTerminal('completed')).toBe(true);
+    // e a grade de ações do concluído não oferece edição — só reagendamento
+    expect(bookingActions('completed')).toEqual([]);
+  });
+
+  it('ações do painel usam os rótulos do produto (Concluir / Não compareceu / Cancelar)', () => {
+    const labels = bookingActions('confirmed').map((a) => a.label);
+    expect(labels).toContain('Concluir');
+    expect(labels).toContain('Não compareceu');
+    expect(labels).toContain('Cancelar');
+  });
+
   it('ações rápidas por status (painel e detalhe usam a mesma verdade)', () => {
     expect(bookingActions('pending').map((a) => a.status)).toEqual(['confirmed', 'cancelled']);
     expect(bookingActions('confirmed').map((a) => a.status)).toEqual(['completed', 'no_show', 'cancelled']);

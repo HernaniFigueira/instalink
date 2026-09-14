@@ -40,7 +40,8 @@ src/
   app/
     page.tsx            landing
     (auth)/             login, register
-    onboarding/         3 passos → cria business + page do template
+    onboarding/         criar negócio: 1 tela → business + page no padrão
+                        de atendimento (sem nicho/forma de venda)
     (dashboard)/        layout (menu dinâmico por modos) + 9 telas
     [slug]/             página pública (mobile-first, blocos)
     api/                auth, businesses, pages, catalog(+get), orders,
@@ -73,10 +74,41 @@ a memória — reload integral (F5) nesse cenário extremo volta ao login.
 
 - Senhas: scrypt + salt; sessão httpOnly + Bearer de mesma força (id de sessão aleatório, revogável no logout, expiração de 30 dias).
 - Mutações exigem sessão + posse do `businessId` (verificado no servidor).
-- Pedidos: preços **recalculados no servidor**; checkout nunca confia no cliente.
+- Pedidos (módulo LEGADO, fora da experiência nova): preços **recalculados no
+  servidor**; checkout nunca confia no cliente. A vitrine de produtos não cria
+  pedidos — converte pelo WhatsApp do negócio.
 - Agendamentos: slot revalidado no servidor (409 se ocupado).
 - Slugs validados + palavras reservadas; settings de blocos sanitizados por tipo.
 - Segredos só no servidor (não há `NEXT_PUBLIC_*`).
+
+## Posicionamento (2026): plataforma de atendimento com agenda
+
+O eixo do produto é **Serviços → Agenda → Cliente → Histórico → WhatsApp**.
+Consequências arquiteturais:
+
+- `src/lib/features.ts` continua a fonte única de módulos. `FEATURES` é o que
+  o produto OFERECE (agenda, serviços, vitrine, conteúdo, canais);
+  `LEGACY_FEATURES` (pedidos, orçamentos) ficou **fora da experiência**: não
+  aparece no cadastro, no menu nem em Recursos — mas continua RESOLVÍVEL por
+  `isFeatureEnabled` para não quebrar dados/páginas antigas. Nada foi apagado.
+- Nicho (`Business.niche`) continua ARMAZENADO (temas/páginas antigas), mas não
+  escolhe arquitetura comercial nem cria caminhos por tipo de negócio.
+- Produto = VITRINE (`src/lib/showcase.ts`): cadastro mínimo (foto, nome,
+  descrição, preço, categoria, ativo/oculto, destaque) e CTA "Tenho interesse"
+  que abre o WhatsApp do negócio com mensagem contextualizada. Sem carrinho,
+  checkout, adicionais ou pedido interno. Componentes antigos de catálogo
+  (`CatalogIsland`, carrinho) permanecem apenas como legado isolado.
+- Ativação de módulo reflete na página na hora, de forma ADITIVA
+  (`withActivationBlock`): ligar garante o bloco de apresentação; desativar
+  nunca remove nada (reativar restaura a configuração intacta).
+- Configuração da PÁGINA (blocos, ordem, navegação, "Sobre", tema, publicar)
+  vive só em `/pagina`; `Configurações` é administrativa (Negócio, Agenda, CRM,
+  Canais) e apenas aponta para "Editar página pública".
+- Cadastro de negócio novo nasce com padrão de atendimento
+  (`NEW_BUSINESS_DEFAULTS` em `src/lib/templates.ts`): Serviços + Agenda
+  ativos, vitrine DESLIGADA, nada de pedidos. O Dashboard traz o checklist
+  "Comece por aqui" com progresso REAL (nunca inventado) — opcional e
+  descartável, sem wizard bloqueante.
 
 ## O que NÃO foi construído (evolução futura)
 

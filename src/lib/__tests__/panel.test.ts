@@ -76,6 +76,12 @@ describe('panel — acesso (403 amigável, nunca logout)', () => {
     expect(a.reason).toBe('module');
   });
 
+  it('rota oculta (Pedidos) fora da navegação mas ainda acessível quando o módulo legado existe', () => {
+    expect(panelRouteFor('/pedidos')?.hidden).toBe(true);
+    const a = panelAccess('/pedidos', ctx({ modes: ['products', 'orders'] }));
+    expect(a.state).toBe('allow');
+  });
+
   it('rota fora do catálogo é "unknown" (ex.: /onboarding) — sem guarda aqui', () => {
     expect(panelAccess('/onboarding', ctx()).state).toBe('unknown');
     expect(panelAccess('/', ctx()).state).toBe('unknown');
@@ -95,8 +101,25 @@ describe('panel — navegação contextual', () => {
   it('Dashboard é o item primário e o resto vem agrupado por seção', () => {
     const nav = panelNavigation(ctx());
     expect(nav.primary?.href).toBe('/dashboard');
-    expect(nav.sections.map((s) => s.label)).toEqual(['Operacional', 'Catálogo', 'Atendimento', 'Gestão', 'Administração']);
+    expect(nav.sections.map((s) => s.label)).toEqual(['Operacional', 'Catálogo', 'Atendimento', 'Gestão', 'Presença', 'Administração']);
     expect(nav.all[0].href).toBe('/dashboard');
+  });
+
+  it('o eixo do produto: Agenda/Clientes, Serviços/Produtos, WhatsApp/Assistente, Página', () => {
+    const nav = panelNavigation(ctx({ modes: ['services', 'bookings', 'products'] }));
+    const hrefs = nav.all.map((r) => r.href);
+    expect(hrefs).toEqual([
+      '/dashboard',
+      '/agenda', '/clientes',
+      '/servicos', '/produtos',
+      '/whatsapp', '/agente',
+      '/resultados', '/campanhas',
+      '/pagina',
+      '/equipe', '/recursos', '/configuracoes',
+    ]);
+    const labels = new Map(nav.all.map((r) => [r.href, r.label]));
+    expect(labels.get('/agente')).toBe('Assistente');
+    expect(labels.get('/pagina')).toBe('Página');
   });
 
   it('clínica (services+bookings) não vê Pedidos nem Produtos', () => {
@@ -108,9 +131,12 @@ describe('panel — navegação contextual', () => {
     expect(hrefs).not.toContain('/produtos');
   });
 
-  it('varejo (products+orders) vê Pedidos e Produtos, não vê Agenda', () => {
-    const hrefs = panelNavigation(ctx({ modes: ['products', 'orders'] })).all.map((r) => r.href);
-    expect(hrefs).toContain('/pedidos');
+  it('Pedidos nunca aparece na navegação — nem para quem tem o módulo legado', () => {
+    // O caminho principal foi removido do produto; a rota continua existindo
+    // (histórico preservado) apenas por URL direta para empresas legadas.
+    const nav = panelNavigation(ctx({ modes: ['products', 'orders'] }));
+    const hrefs = nav.all.map((r) => r.href);
+    expect(hrefs).not.toContain('/pedidos');
     expect(hrefs).toContain('/produtos');
     expect(hrefs).not.toContain('/agenda');
   });

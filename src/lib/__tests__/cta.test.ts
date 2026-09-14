@@ -49,9 +49,14 @@ describe('requestedCtaTarget — o que o botão ANUNCIA (sem olhar módulo)', ()
 });
 
 describe('defaultCtaTarget', () => {
-  it('pedidos vencem na criação; agenda antes de orçamento', () => {
-    expect(defaultCtaTarget(['orders', 'bookings'])).toBe('products');
+  it('agendamento é o centro: vence a criação mesmo com pedidos legados ativos', () => {
+    expect(defaultCtaTarget(['orders', 'bookings'])).toBe('booking');
     expect(defaultCtaTarget(['bookings', 'quote'])).toBe('booking');
     expect(defaultCtaTarget(['services'])).toBe('whatsapp');
+  });
+  it('sem agenda, vitrine/pedidos apontam para o catálogo', () => {
+    expect(defaultCtaTarget(['products'])).toBe('products');
+    expect(defaultCtaTarget(['orders'])).toBe('products');
+    expect(defaultCtaTarget(['quote', 'products'])).toBe('quote');
   });
 });

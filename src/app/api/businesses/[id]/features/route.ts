@@ -1,11 +1,15 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { updateDB } from '@/lib/db';
 import { requireBusiness } from '@/lib/access';
-import { featureDef, featureState, isValidFeature, normalizeFeatures } from '@/lib/features';
+import { featureDef, isValidFeature, normalizeFeatures, offeredFeatureState, withActivationBlock } from '@/lib/features';
 import { pushAudit } from '@/lib/audit';
 import type { OptionalFeatureId } from '@/lib/types';
 
-// GET ?businessId= — estado de todos os módulos + catálogo conceitual.
+// GET ?businessId= — estado dos módulos OFERECIDOS na experiência.
+// Módulos legados (pedidos/orçamentos) não entram na lista: continuam
+// resolúveis por isFeatureEnabled (dados e páginas antigas seguem válidos),
+// mas a empresa não é convidada a ligá-los/desligá-los — não fazem mais
+// parte do posicionamento do InstaLink.
 // PATCH { businessId, feature, enabled } — liga/desliga IMEDIATAMENTE
 // (um módulo por chamada: sem "salvar tudo" e sem risco de sobrescrever
 // outras configurações). Desativar nunca apaga dados.
@@ -14,7 +18,7 @@ export async function GET(req: NextRequest) {
   const guard = await requireBusiness(req, businessId);
   if (!guard.ok) return guard.res;
   return NextResponse.json({
-    features: featureState(guard.ctx.business).map(({ def, enabled }) => ({
+    features: offeredFeatureState(guard.ctx.business).map(({ def, enabled }) => ({
       id: def.id, label: def.label, hint: def.hint, icon: def.icon, group: def.group,
       disabledHint: def.disabledHint, enabled,
     })),
@@ -49,6 +53,18 @@ export async function PATCH(req: NextRequest) {
         // "Sobre" espelha o flag legado para compatibilidade de renderização.
         if (def.id === 'about') {
           b.about = { ...(b.about || { title: '', text: '', image: '', enabled: false }), enabled };
+        }
+      }
+      // ATIVAR reflete na página na hora: garante o bloco de apresentação
+      // (aditivo — desativar nunca remove/apaga blocos nem configurações).
+      if (enabled) {
+        const page = db.pages.find((p) => p.businessId === businessId);
+        if (page) {
+          const next = withActivationBlock(page.blocks, def.id, true);
+          if (next !== page.blocks) {
+            page.blocks = next;
+            page.updatedAt = new Date().toISOString();
+          }
         }
       }
       b.updatedAt = new Date().toISOString();

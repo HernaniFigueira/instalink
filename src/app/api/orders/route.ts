@@ -24,7 +24,9 @@ export async function POST(req: NextRequest) {
     const business = db.businesses.find((b) => b.id === businessId);
     if (!business) return NextResponse.json({ error: 'Negócio não encontrado.' }, { status: 404 });
     // Módulo desativado não aceita pedido novo (nem por rota direta).
-    if (!isFeatureEnabled(business, 'orders') && !isFeatureEnabled(business, 'products')) {
+    // A vitrine de produtos NÃO gera pedido: apenas o módulo legado de
+    // pedidos (empresas antigas que já recebiam) continua aceitando.
+    if (!isFeatureEnabled(business, 'orders')) {
       return NextResponse.json({ error: 'Este negócio não está recebendo pedidos no momento.' }, { status: 403 });
     }
     const customer = await customerFromRequest(req);

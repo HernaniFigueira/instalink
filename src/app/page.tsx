@@ -5,6 +5,8 @@ import { Icon } from '@/components/icons';
 const ICONS: Record<string, React.ReactNode> = {
   link: (<><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71" /><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71" /></>),
   cart: (<><circle cx="8" cy="21" r="1" /><circle cx="19" cy="21" r="1" /><path d="M2.05 2.05h2l2.66 12.42a2 2 0 0 0 2 1.58h9.78a2 2 0 0 0 1.95-1.57l1.65-7.43H5.12" /></>),
+  bag: (<><path d="M6 7h12l1 13a1 1 0 0 1-1 1H6a1 1 0 0 1-1-1z" /><path d="M9 10V6a3 3 0 0 1 6 0v4" /></>),
+  users: (<><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2" /><circle cx="9" cy="7" r="4" /><path d="M22 21v-2a4 4 0 0 0-3-3.87" /><path d="M16 3.13a3.4 3.4 0 0 1 0 7.75" /></>),
   calendar: (<><rect x="3" y="4" width="18" height="18" rx="2" /><path d="M16 2v4" /><path d="M8 2v4" /><path d="M3 10h18" /></>),
   chat: (<path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />),
   spark: (<path d="M12 3l1.9 5.1L19 10l-5.1 1.9L12 17l-1.9-5.1L5 10l5.1-1.9zM19 15l.9 2.1L22 18l-2.1.9L19 21l-.9-2.1L16 18l2.1-.9z" />),
@@ -23,20 +25,20 @@ function I({ n, size = 22 }: { n: string; size?: number }) {
 }
 
 const FEATURES = [
-  { icon: 'link', title: 'Página que vende', text: 'Perfil, catálogo, agenda e botões — montada em blocos, sem designer.' },
-  { icon: 'cart', title: 'Pedidos organizados', text: 'Carrinho, entrega ou retirada, pagamento e painel de pedidos.' },
-  { icon: 'calendar', title: 'Agenda sem planilha', text: 'Serviços, profissionais e horários. O cliente agenda sozinho.' },
-  { icon: 'chat', title: 'WhatsApp no fluxo', text: 'Botão flutuante e mensagens prontas em cada pedido e agendamento.' },
-  { icon: 'spark', title: 'Assistente virtual', text: 'Guia o visitante até comprar, agendar ou pedir orçamento.' },
-  { icon: 'qr', title: 'QR + resultados', text: 'QR da página para o balcão e painel simples de visitas e vendas.' },
+  { icon: 'link', title: 'Sua página profissional', text: 'Perfil, serviços, avaliações e contato num link pronto para a bio — montada em blocos, sem designer.' },
+  { icon: 'calendar', title: 'Agenda sem planilha', text: 'Serviços, profissionais, horários e folgas. O cliente escolhe dia e hora e marca sozinho.' },
+  { icon: 'users', title: 'Clientes no mesmo lugar', text: 'Cada agendamento vira histórico: compareceu, remarcou, o que já fez — sem caderninho.' },
+  { icon: 'chat', title: 'WhatsApp no fluxo', text: 'Botão flutuante e mensagens prontas para confirmar, avisar e reengajar.' },
+  { icon: 'spark', title: 'Assistente virtual', text: 'Tira dúvidas e guia o visitante até agendar, na página e no WhatsApp.' },
+  { icon: 'bag', title: 'Vitrine opcional', text: 'Vende produtos no balcão? Mostre na página com um toque “Tenho interesse” direto no seu WhatsApp.' },
 ];
 
 const FAQS = [
-  { q: 'É grátis mesmo?', a: 'Sim. Você cria a página, recebe pedidos e agendamentos sem pagar nada e sem cartão. Recursos avançados (Pro) chegam depois — quem está dentro desde já garante condições especiais.' },
+  { q: 'É grátis mesmo?', a: 'Sim. Você cria a página e recebe agendamentos sem pagar nada e sem cartão. Recursos avançados (Pro) chegam depois — quem está dentro desde já garante condições especiais.' },
   { q: 'Preciso de site ou domínio?', a: 'Não. Sua página vive em instalink.app/seunegocio e já funciona no celular, pronta para o link da bio do Instagram e TikTok.' },
-  { q: 'Meu cliente precisa baixar app?', a: 'Não. Tudo abre no navegador: ele cria a conta em segundos, pede, agenda e acompanha os próprios pedidos na área “Minha conta”.' },
-  { q: 'Serve para o meu tipo de negócio?', a: 'Se você vende produtos, serviços, horários ou orçamentos — sim. Restaurantes, salões, barbearias, lojas, clínicas, pet shops e profissionais autônomos usam os mesmos blocos.' },
-  { q: 'Como recebo os pedidos?', a: 'No painel, na hora — e com mensagem pronta para confirmar no WhatsApp. Pedidos, agenda e clientes ficam organizados num lugar só.' },
+  { q: 'Meu cliente precisa baixar app?', a: 'Não. Tudo abre no navegador: ele escolhe o serviço, vê horários livres, agenda e acompanha os próprios atendimentos na área “Minha conta”.' },
+  { q: 'Para quem é o InstaLink?', a: 'Para negócios que trabalham com atendimento marcado: salões, barbearias, clínicas, estética, fisioterapia, psicologia, nutrição, veterinária e autônomos que vendem tempo. Quem também vende produtos pode ativar a vitrine — sem precisar de loja virtual.' },
+  { q: 'E se eu quiser vender produtos?', a: 'Ative a vitrine em um clique. Cada produto mostra foto, preço e o botão “Tenho interesse”, que abre seu WhatsApp com a mensagem pronta. Sem carrinho, sem checkout, sem taxa sobre venda.' },
 ];
 
 function PhoneMock() {
@@ -49,14 +51,14 @@ function PhoneMock() {
         <div className="mx-auto mt-1.5 h-2.5 w-20 rounded-full bg-zinc-600" />
       </div>
       <div className="mt-3 rounded-2xl bg-lime-300 py-2.5 text-center text-xs font-black uppercase tracking-wide text-[#120a0b]">
-        Pedir agora
+        Agendar horário
       </div>
       <div className="mt-2 space-y-2">
-        {['X-Bacon · R$ 29,90', 'X-Tudo · R$ 34,90'].map((t) => (
+        {['Corte + Barba · R$ 60', 'Consulta · Ter 14:00 livre'].map((t) => (
           <div key={t} className="flex items-center gap-2 rounded-2xl border border-white/10 bg-white/5 p-2.5">
-            <div className="h-8 w-8 shrink-0 rounded-xl bg-gradient-to-br from-orange-400 to-amber-300" />
+            <div className="h-8 w-8 shrink-0 rounded-xl bg-gradient-to-br from-lime-300/70 to-emerald-400/70" />
             <div className="h-2.5 flex-1 rounded-full bg-zinc-600" />
-            <div className="rounded-lg bg-lime-300 px-2 py-1 text-[10px] font-black text-[#120a0b]">Ver</div>
+            <div className="rounded-lg bg-white/10 px-2 py-1 text-[10px] font-black text-lime-200">OK</div>
           </div>
         ))}
       </div>
@@ -94,25 +96,26 @@ export default function Landing() {
             <I n="spark" size={14} /> Novo · Conta do cliente + Agendamento rápido
           </p>
           <h1 className="font-display mt-6 text-4xl font-extrabold leading-[1.05] tracking-tight sm:text-6xl">
-            Seu negócio inteiro<br />em <span className="text-lime-300">um link</span>.
+            Página, agenda e clientes<br />em <span className="text-lime-300">um link</span>.
           </h1>
           <p className="mx-auto mt-5 max-w-xl text-lg text-zinc-400 lg:mx-0">
-            O Instagram e o TikTok mandam o cliente. O InstaLink vende, agenda,
-            organiza e mede — tudo a partir do link da bio.
+            O Instagram manda o cliente. O InstaLink mostra seus serviços, deixa
+            ele agendar sozinho e organiza o relacionamento — tudo a partir do
+            link da bio.
           </p>
           <div className="mt-8 flex flex-col items-center gap-3 sm:flex-row lg:justify-start sm:justify-center">
             <Link href="/register" className="w-full rounded-2xl bg-lime-300 px-8 py-4 text-center text-base font-bold text-[#120a0b] hover:bg-lime-200 sm:w-auto">
               Criar minha página grátis
             </Link>
-            <Link href="/burgerhouse" className="w-full rounded-2xl border border-zinc-700 px-8 py-4 text-center text-base font-semibold hover:bg-zinc-900 sm:w-auto">
+            <Link href="/barbeariadojoao" className="w-full rounded-2xl border border-zinc-700 px-8 py-4 text-center text-base font-semibold hover:bg-zinc-900 sm:w-auto">
               Ver demonstração
             </Link>
           </div>
-          <p className="mt-4 text-xs text-zinc-500">Sem cartão · Pronto em 5 minutos · Cancele quando quiser</p>
+          <p className="mt-4 text-xs text-zinc-500">Sem cartão · Pronto em minutos · Cancele quando quiser</p>
           <div className="mt-5 flex flex-wrap items-center justify-center gap-2 text-xs font-semibold lg:justify-start">
             <span className="text-zinc-500">Experimente ao vivo:</span>
-            <Link href="/burgerhouse" className="rounded-full border border-zinc-800 bg-zinc-900/60 px-3.5 py-1.5 hover:border-lime-300/40 hover:text-lime-200 inline-flex items-center gap-1.5"><Icon n="bag" size={14} /> Hamburgueria</Link>
             <Link href="/barbeariadojoao" className="rounded-full border border-zinc-800 bg-zinc-900/60 px-3.5 py-1.5 hover:border-lime-300/40 hover:text-lime-200 inline-flex items-center gap-1.5"><Icon n="scissors" size={14} /> Barbearia</Link>
+            <Link href="/clinicavitta" className="rounded-full border border-zinc-800 bg-zinc-900/60 px-3.5 py-1.5 hover:border-lime-300/40 hover:text-lime-200 inline-flex items-center gap-1.5"><Icon n="calendar" size={14} /> Clínica</Link>
           </div>
         </div>
         <PhoneMock />
@@ -121,7 +124,7 @@ export default function Landing() {
       {/* ── canais ── */}
       <section className="border-y border-white/5 bg-white/[0.02]">
         <div className="mx-auto flex max-w-6xl flex-wrap items-center justify-center gap-x-8 gap-y-3 px-5 py-5 text-sm font-semibold text-zinc-400">
-          <span className="text-xs uppercase tracking-widest text-zinc-600">Feito para quem vende pelo</span>
+          <span className="text-xs uppercase tracking-widest text-zinc-600">Feito para quem atende pelo</span>
           <span>Instagram</span><span>TikTok</span><span>WhatsApp</span><span>Google</span>
         </div>
       </section>
@@ -130,7 +133,7 @@ export default function Landing() {
       <section id="recursos" className="mx-auto max-w-6xl scroll-mt-20 px-5 py-16">
         <p className="text-center text-xs font-bold uppercase tracking-widest text-lime-300">Tudo num lugar só</p>
         <h2 className="font-display mx-auto mt-3 max-w-2xl text-center text-3xl font-extrabold tracking-tight sm:text-4xl">
-          Do primeiro clique ao pedido pago
+          Do primeiro clique ao horário agendado
         </h2>
         <div className="mt-10 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
           {FEATURES.map((f) => (
@@ -195,9 +198,9 @@ export default function Landing() {
         <h2 className="font-display text-center text-3xl font-extrabold tracking-tight sm:text-4xl">No ar em 3 passos</h2>
         <div className="mt-10 grid gap-4 md:grid-cols-3">
           {[
-            { n: '1', t: 'Conte do seu negócio', d: 'Nome, WhatsApp, o que você vende e se atende com hora marcada. Leva 2 minutos.' },
-            { n: '2', t: 'Aplique um modelo', d: 'Escolha o visual pronto, monte catálogo ou serviços e veja a prévia na hora.' },
-            { n: '3', t: 'Compartilhe e venda', d: 'Publique, coloque o link na bio, imprima o QR — e receba pedido e agendamento.' },
+            { n: '1', t: 'Crie seu negócio', d: 'Nome e WhatsApp. Página, agenda e serviços já nascem prontos para atendimento. Leva um minuto.' },
+            { n: '2', t: 'Monte sua agenda', d: 'Cadastre serviços, horários e profissionais. Aplique um modelo visual e veja a prévia na hora.' },
+            { n: '3', t: 'Compartilhe e agende', d: 'Publique, coloque o link na bio, imprima o QR — e receba agendamentos sozinhos.' },
           ].map((s) => (
             <div key={s.n} className="rounded-3xl border border-white/10 bg-white/[0.03] p-6">
               <div className="font-display text-4xl font-extrabold text-lime-300">{s.n}</div>
@@ -225,7 +228,7 @@ export default function Landing() {
       <section className="mx-auto max-w-6xl px-5 pb-16">
         <div className="rounded-[2rem] bg-lime-300 p-8 text-center text-[#120a0b] sm:p-14">
           <h2 className="font-display text-3xl font-extrabold tracking-tight sm:text-5xl">
-            Entre pelo Instagram.<br />Saia com pedido, agendamento ou lead.
+            Entre pelo Instagram.<br />Saia com o horário agendado.
           </h2>
           <Link href="/register" className="mt-8 inline-block rounded-2xl bg-[#120a0b] px-10 py-4 font-bold text-white hover:bg-zinc-800">
             Começar agora — é grátis
@@ -236,11 +239,11 @@ export default function Landing() {
 
       <footer className="border-t border-white/5">
         <div className="mx-auto flex max-w-6xl flex-col items-center justify-between gap-3 px-5 py-8 text-xs text-zinc-500 sm:flex-row">
-          <span>© 2026 InstaLink.app — Seu negócio inteiro em um link</span>
+          <span>© 2026 InstaLink.app — Página, agenda e clientes em um link</span>
           <span className="flex gap-5 font-semibold">
             <Link href="/login" className="hover:text-white">Entrar</Link>
             <Link href="/register" className="hover:text-white">Criar conta</Link>
-            <Link href="/burgerhouse" className="hover:text-white">Demonstração</Link>
+            <Link href="/barbeariadojoao" className="hover:text-white">Demonstração</Link>
           </span>
         </div>
       </footer>
