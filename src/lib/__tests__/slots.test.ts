@@ -64,3 +64,100 @@ describe('ocupados visíveis', () => {
     expect(r.occupied).not.toContain('10:00');
   });
 });
+
+// ── Herança do horário da empresa (lib/schedule + slots) ──
+// Regra: quem SEGUE o horário da empresa usa as regras gerais; quem
+// PERSONALIZOU usa somente as próprias. Nunca as duas juntas.
+describe('herança do horário da empresa', () => {
+  const svcGeral = { id: 'svc-geral', businessId: 'b', name: 'Avaliação', durationMin: 60, professionalIds: [] } as any;
+  const geral = (start: string, end: string) =>
+    ({ id: `g-${start}`, businessId: 'b', weekday: 3, start, end, slotMin: 0, professionalId: '', serviceId: '' }) as any;
+  const propria = (proId: string, start: string, end: string) =>
+    ({ id: `p-${proId}-${start}`, businessId: 'b', weekday: 3, start, end, slotMin: 0, professionalId: proId, serviceId: '' }) as any;
+  const membro = (id: string, name: string, follow?: boolean) =>
+    ({ id, businessId: 'b', name, role: '', photo: '', active: true, followBusinessHours: follow }) as any;
+
+  function q(rules: any[], professionals: any[], professionalId = ''): SlotQuery {
+    return {
+      rules, exceptions: [], bookings: [], services: [svcGeral], professionals,
+      dateISO: '2026-09-09', weekday: 3, serviceId: 'svc-geral', durationMin: 60,
+      professionalId, eligibleProIds: [], nowHM: '', leadMin: 0, bufferMin: 0,
+    };
+  }
+
+  const GERAL = [geral('14:00', '17:00')];
+  const ORLANDO_OWN = propria('pro-orlando', '09:00', '11:00');
+  const equipe = [membro('pro-orlando', 'Orlando', false), membro('pro-joao', 'João', true)];
+
+  it('quem herda usa o horário geral', () => {
+    const r = computeSlots(q([...GERAL], equipe, 'pro-joao'));
+    expect(r.slots).toEqual(['14:00', '15:00', '16:00']);
+  });
+
+  it('quem personalizou usa somente o próprio horário', () => {
+    const r = computeSlots(q([...GERAL, ORLANDO_OWN], equipe, 'pro-orlando'));
+    expect(r.slots).toEqual(['09:00', '10:00']);
+    expect(r.slots).not.toContain('14:00');
+  });
+
+  it('regras próprias residuais NÃO se somam ao horário geral (XOR)', () => {
+    const segueComResiduo = [membro('pro-joao', 'João', true)];
+    const r = computeSlots(q([...GERAL, propria('pro-joao', '08:00', '09:00')], segueComResiduo, 'pro-joao'));
+    expect(r.slots).toEqual(['14:00', '15:00', '16:00']);
+    expect(r.slots).not.toContain('08:00');
+  });
+
+  it('dado legado: com regras próprias = personalizado; sem = herda', () => {
+    const legado = [membro('pro-orlando', 'Orlando'), membro('pro-joao', 'João')];
+    expect(computeSlots(q([...GERAL, ORLANDO_OWN], legado, 'pro-orlando')).slots).toEqual(['09:00', '10:00']);
+    expect(computeSlots(q([...GERAL, ORLANDO_OWN], legado, 'pro-joao')).slots).toEqual(['14:00', '15:00', '16:00']);
+  });
+
+  it('união da equipe para o cliente (sem escolher profissional)', () => {
+    const r = computeSlots(q([...GERAL, ORLANDO_OWN], equipe));
+    expect(r.slots).toEqual(['09:00', '10:00', '14:00', '15:00', '16:00']);
+  });
+
+  it('byProfessional expõe os livres de cada um (drag-and-drop destaca a coluna certa)', () => {
+    const r = computeSlots(q([...GERAL, ORLANDO_OWN], equipe));
+    expect(r.byProfessional['pro-orlando']).toEqual(['09:00', '10:00']);
+    expect(r.byProfessional['pro-joao']).toEqual(['14:00', '15:00', '16:00']);
+  });
+
+  it('mudar o horário geral afeta só quem herda', () => {
+    const novoGeral = [geral('15:00', '17:00')];
+    const rules = [...novoGeral, ORLANDO_OWN];
+    expect(computeSlots(q(rules, equipe, 'pro-joao')).slots).toEqual(['15:00', '16:00']);
+    expect(computeSlots(q(rules, equipe, 'pro-orlando')).slots).toEqual(['09:00', '10:00']);
+  });
+
+  it('atendimento marcado tira o horário só daquele profissional', () => {
+    const booking = { date: '2026-09-09', time: '09:00', status: 'confirmed', serviceId: 'svc-geral', professionalId: 'pro-orlando' } as any;
+    const r = computeSlots({ ...q([...GERAL, ORLANDO_OWN], equipe), bookings: [booking] });
+    expect(r.byProfessional['pro-orlando']).toEqual(['10:00']);
+    expect(r.byProfessional['pro-joao']).toEqual(['14:00', '15:00', '16:00']);
+    expect(r.slots).toEqual(['10:00', '14:00', '15:00', '16:00']);
+    expect(r.occupied).toContain('09:00');
+  });
+
+  it('quando ninguém está livre naquele horário, ele sai da união e fica ocupado', () => {
+    // Orlando (personalizado) só atende 09:00–11:00; João está ocupado às 15:00.
+    const booking = { date: '2026-09-09', time: '15:00', status: 'confirmed', serviceId: 'svc-geral', professionalId: 'pro-joao' } as any;
+    const r = computeSlots({ ...q([...GERAL, ORLANDO_OWN], equipe), bookings: [booking] });
+    expect(r.slots).not.toContain('15:00');
+    expect(r.occupied).toContain('15:00');
+    expect(r.byProfessional['pro-joao']).toEqual(['14:00', '16:00']);
+    // o auto-assign nunca entrega um horário a quem está ocupado
+    expect(Object.values(r.assign)).not.toContain(undefined);
+    for (const [time, pro] of Object.entries(r.assign)) {
+      expect(r.byProfessional[pro]).toContain(time);
+    }
+  });
+
+  it('sem equipe, vale o horário geral (modo solo, profissional \'\')', () => {
+    const r = computeSlots(q([...GERAL], []));
+    expect(r.slots).toEqual(['14:00', '15:00', '16:00']);
+    expect(r.byProfessional).toEqual({ '': ['14:00', '15:00', '16:00'] });
+    expect(r.assign).toEqual({});
+  });
+});

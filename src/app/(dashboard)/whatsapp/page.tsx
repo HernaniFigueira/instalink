@@ -6,6 +6,8 @@ import { Icon } from '@/components/icons';
 import { PageSkeleton } from '@/components/ui';
 import { cn } from '@/lib/utils';
 import { humanDateTime } from '@/lib/tz';
+import { AccessDenied, useAreaLoad } from '@/components/dashboard/AccessNotice';
+import { apiGet, apiSend } from '@/lib/api-client';
 
 interface Conversation { id: string; name: string; phone: string; status: string; unread: number; lastMessageAt: string; lastMessagePreview: string; registered: boolean; }
 interface Message { id: string; direction: 'in' | 'out'; body: string; status: string; at: string }
@@ -30,34 +32,43 @@ export default function WhatsappPage() {
   const [error, setError] = useState('');
   const [filter, setFilter] = useState<'all' | 'unread' | 'open'>('all');
 
-  const load = useCallback(() => {
+  // 403 → aviso amigável (a sessão continua); nada de skeleton infinito.
+  const { denied, report } = useAreaLoad('WhatsApp');
+
+  const load = useCallback(async () => {
     if (!businessId) return;
-    fetch(`/api/whatsapp?businessId=${businessId}`).then((r) => (r.ok ? r.json() : null)).then(setData).catch(() => {});
-    fetch(`/api/conversations?businessId=${businessId}`).then((r) => (r.ok ? r.json() : null)).then((d) => setConversations(d?.conversations || [])).catch(() => {});
-  }, [businessId]);
+    const res = await apiGet<WaData>(`/api/whatsapp?businessId=${businessId}`, { scope: 'area', area: 'WhatsApp' });
+    if (!report(res)) return;
+    setData(res.data);
+    const conv = await apiGet<{ conversations?: Conversation[] }>(`/api/conversations?businessId=${businessId}`, { scope: 'area', area: 'WhatsApp' });
+    setConversations(conv.ok ? (conv.data?.conversations || []) : []);
+  }, [businessId, report]);
 
   useEffect(() => { load(); }, [load]);
 
   async function openConversation(id: string) {
-    const res = await fetch(`/api/conversations?businessId=${businessId}&id=${id}`);
-    const d = await res.json();
-    if (res.ok) setActive({ conversation: d.conversation, messages: d.messages || [] });
+    const res = await apiGet<{ conversation: Conversation; messages?: Message[] }>(
+      `/api/conversations?businessId=${businessId}&id=${id}`, { scope: 'action', area: 'WhatsApp' },
+    );
+    if (res.ok && res.data) setActive({ conversation: res.data.conversation, messages: res.data.messages || [] });
+    else if (!res.ok) setError(res.message);
   }
 
   async function connect() {
     setBusy(true); setMsg(''); setError('');
     try {
-      const res = await fetch('/api/whatsapp', {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ businessId, action: 'connect', displayPhone: phone }),
-      });
-      const d = await res.json();
-      if (!res.ok) throw new Error(d.error + (d.missingEnv?.length ? ` Faltando: ${d.missingEnv.join(', ')}` : ''));
-      setMsg(d.message);
+      const res = await apiSend<{ message?: string; missingEnv?: string[] }>(
+        '/api/whatsapp', 'POST', { businessId, action: 'connect', displayPhone: phone },
+        { scope: 'action', area: 'WhatsApp' },
+      );
+      const d = res.data || {};
+      if (!res.ok) throw new Error(res.message + (d.missingEnv?.length ? ` Faltando: ${d.missingEnv.join(', ')}` : ''));
+      setMsg(d.message || res.message || '');
       load();
     } catch (e: any) { setError(e.message); } finally { setBusy(false); }
   }
 
+  if (denied) return <AccessDenied area="WhatsApp" />;
   if (!data) return <PageSkeleton />;
   const q = `?b=${businessId}`;
   const connected = data.status === 'connected';

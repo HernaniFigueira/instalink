@@ -10,7 +10,7 @@ import {
 import { computeSlots } from '@/lib/slots';
 import { resolveProfessional, bookingMode } from '@/lib/booking';
 import { upsertContact } from '@/lib/contacts';
-import { todayISO, nowHM, weekdayOf, addDaysISO, isValidDateISO } from '@/lib/tz';
+import { todayISO, nowHM, weekdayOf, addDaysISO, isValidDateISO, isValidClockTime } from '@/lib/tz';
 import { onlyDigits } from '@/lib/utils';
 import { BOOKING_FLOW, canTransition } from '@/lib/status';
 import { rateLimit, ipFrom } from '@/lib/rate-limit';
@@ -111,7 +111,12 @@ export async function GET(req: NextRequest) {
       nowHM: date === today ? nowHM() : '',
     });
     const pros = Object.fromEntries(base.professionals.map((p) => [p.id, p.name]));
-    return NextResponse.json({ slots: r.slots, occupied: r.occupied, closed: r.closed, assign: r.assign, pros, today });
+    // `byPro` permite que a agenda (drag-and-drop) saiba em QUAL coluna o
+    // horário realmente cabe, sem precisar de uma requisição por profissional.
+    return NextResponse.json({
+      slots: r.slots, occupied: r.occupied, closed: r.closed, assign: r.assign,
+      byPro: r.byProfessional, pros, today,
+    });
   } catch {
     return NextResponse.json({ error: 'Não foi possível carregar os horários.' }, { status: 500 });
   }
@@ -161,7 +166,7 @@ export async function POST(req: NextRequest) {
 
     const date = body.date || '';
     const time = body.time || '';
-    if (!isValidDateISO(date) || !/^\d{2}:\d{2}$/.test(time)) {
+    if (!isValidDateISO(date) || !isValidClockTime(time)) {
       return NextResponse.json({ error: 'Escolha data e horário.' }, { status: 400 });
     }
     const cfg = business.booking;
@@ -305,7 +310,7 @@ export async function PATCH(req: NextRequest) {
     if (body.date && body.time) {
       const date = String(body.date);
       const time = String(body.time);
-      if (!isValidDateISO(date) || !/^\d{2}:\d{2}$/.test(time)) {
+      if (!isValidDateISO(date) || !isValidClockTime(time)) {
         return NextResponse.json({ error: 'Escolha data e horário.' }, { status: 400 });
       }
       const today = todayISO();
@@ -375,7 +380,11 @@ export async function PATCH(req: NextRequest) {
         // pending/confirmed: move o MESMO atendimento, mantendo o status.
         target.date = date;
         target.time = time;
-        if (proId || !r.assign[time]) target.professionalId = proId || r.assign[time] || '';
+        // Profissional do destino: o escolhido explicitamente vence. Sem
+        // escolha, usa o profissional LIVRE retornado pela validação (em equipe
+        // o horário pode estar livre só para outra pessoa). Manter o profissional
+        // anterior quando ele está ocupado criaria um conflito silencioso.
+        target.professionalId = proId || r.assign[time] || target.professionalId || '';
         target.updatedAt = now;
         target.history.push({ at: now, from: target.status, to: decision.nextStatus, by: 'owner', note });
         if (target.status !== decision.nextStatus) target.status = decision.nextStatus;

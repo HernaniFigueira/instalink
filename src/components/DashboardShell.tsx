@@ -5,6 +5,11 @@ import Link from 'next/link';
 import { clearToken } from '@/lib/client-auth';
 import { cn } from '@/lib/utils';
 import { PageSkeleton } from '@/components/ui';
+import { AccessDenied, ForbiddenToasts } from '@/components/dashboard/AccessNotice';
+import {
+  FULL_WIDTH_PATHS, firstAllowedPath, panelAccess, panelNavigation, panelRouteFor,
+} from '@/lib/panel';
+import { isSessionExpired } from '@/lib/http';
 import type { BusinessMode, FeatureId, PermissionId } from '@/lib/types';
 
 interface Biz {
@@ -59,40 +64,18 @@ const PATHS: Record<string, React.ReactNode> = {
   inbox: (<><path d="M22 12h-6l-2 3h-4l-2-3H2" /><path d="M5.45 5.11 2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.45-6.89A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11z" /></>),
   toggle: (<><rect x="1" y="7" width="22" height="10" rx="5" /><circle cx="16" cy="12" r="3" /></>),
   shield: (<><path d="M20 13c0 5-3.5 7.5-7.66 8.95a1 1 0 0 1-.67-.01C7.5 20.5 4 18 4 13V6a1 1 0 0 1 1-1c2 0 4.5-1.2 6.24-2.72a1.17 1.17 0 0 1 1.52 0C14.51 3.81 17 5 19 5a1 1 0 0 1 1 1z" /><path d="m9 12 2 2 4-4" /></>),
+  lock: (<><rect x="3" y="11" width="18" height="11" rx="2" /><path d="M7 11V7a5 5 0 0 1 10 0v4" /></>),
 };
 
 function I({ n, size = 18 }: { n: string; size?: number }) {
   return <Svg size={size}>{PATHS[n]}</Svg>;
 }
 
-// Menu = permissão REAL ∩ módulos. API revalida no servidor.
-const ALL_ITEMS: Array<{
-  href: string; label: string; icon: string;
-  section?: string;
-  modes?: BusinessMode[]; features?: FeatureId[]; permission?: PermissionId;
-}> = [
-  { href: '/dashboard', label: 'Dashboard', icon: 'home', permission: 'dashboard' },
-  // Operacional
-  { href: '/agenda', label: 'Agenda', icon: 'calendar', section: 'Operacional', modes: ['bookings'], permission: 'agenda' },
-  { href: '/clientes', label: 'Clientes', icon: 'users', section: 'Operacional', permission: 'clientes' },
-  { href: '/pedidos', label: 'Pedidos', icon: 'receipt', section: 'Operacional', modes: ['orders', 'products'], permission: 'pedidos' },
-  // Catálogo
-  { href: '/produtos', label: 'Produtos', icon: 'cart', section: 'Catálogo', modes: ['products', 'orders'], permission: 'catalogo' },
-  { href: '/servicos', label: 'Serviços', icon: 'scissors', section: 'Catálogo', modes: ['services', 'bookings'], permission: 'catalogo' },
-  // Atendimento
-  { href: '/whatsapp', label: 'WhatsApp', icon: 'whatsapp', section: 'Atendimento', permission: 'whatsapp' },
-  { href: '/agente', label: 'Agente', icon: 'spark', section: 'Atendimento', permission: 'agente' },
-  // Gestão
-  { href: '/resultados', label: 'Resultados', icon: 'chart', section: 'Gestão', permission: 'financeiro' },
-  { href: '/campanhas', label: 'Campanhas', icon: 'megaphone', section: 'Gestão', permission: 'campanhas' },
-  { href: '/pagina', label: 'Página', icon: 'link', section: 'Gestão', permission: 'pagina' },
-  // Administração
-  { href: '/recursos', label: 'Recursos', icon: 'toggle', section: 'Administração', permission: 'config' },
-  { href: '/equipe', label: 'Equipe', icon: 'users', section: 'Administração', permission: 'equipe' },
-  { href: '/configuracoes', label: 'Configurações', icon: 'settings', section: 'Administração', permission: 'config' },
-];
-
-const FULL_WIDTH_PATHS = ['/dashboard', '/agenda', '/resultados', '/clientes', '/whatsapp', '/campanhas', '/servicos', '/pedidos', '/equipe'];
+// Menu = permissão REAL ∩ módulos, e guarda de rota no cliente.
+// A fonte única é lib/panel.ts (mesma lista usada pelos testes de permissão):
+//   • item só aparece com permissão e módulo ativos;
+//   • acessar direto uma rota sem permissão mostra 403 AMIGÁVEL — nunca
+//     logout (somente 401 inicia fluxo de login; ver lib/http.ts).
 
 export function DashboardShell({ children }: { children: React.ReactNode }) {
   const params = useSearchParams();
@@ -108,10 +91,19 @@ export function DashboardShell({ children }: { children: React.ReactNode }) {
   });
 
   useEffect(() => {
+    // SOMENTE 401 (sessão inexistente/expirada/inválida) inicia o fluxo de
+    // login. Qualquer outro status mantém o usuário dentro do painel.
     fetch('/api/auth/me')
-      .then((r) => (r.ok ? r.json() : null))
+      .then(async (r) => {
+        if (!r.ok) {
+          if (isSessionExpired(r.status)) router.replace('/login?session=expired');
+          return null;
+        }
+        return r.json();
+      })
       .then((d) => {
-        if (!d?.user) { router.replace('/login?session=expired'); return; }
+        if (!d) return;
+        if (!d.user) { router.replace('/login?session=expired'); return; }
         setIsMaster(!!d.isMaster);
         setSupport(d.support || null);
         if (!d.businesses?.length) { router.replace('/onboarding'); return; }
@@ -119,7 +111,7 @@ export function DashboardShell({ children }: { children: React.ReactNode }) {
         setBusinesses(d.businesses);
         setReady(true);
       })
-      .catch(() => router.replace('/login?session=expired'));
+      .catch(() => { /* falha de rede não é sessão inválida: não desloga */ });
   }, [router]);
 
   useEffect(() => {
@@ -157,30 +149,23 @@ export function DashboardShell({ children }: { children: React.ReactNode }) {
   const modes = business?.modes || [];
   const features = business?.features || {};
   const permissions: Partial<Record<PermissionId, boolean>> = business?.permissions || {};
-  const items = ALL_ITEMS.filter((i) => {
-    if (i.permission && permissions[i.permission] !== true) return false;
-    if (i.modes && !i.modes.some((m) => modes.includes(m))) return false;
-    if (i.features && !i.features.some((f) => (features as any)[f] === true)) return false;
-    return true;
-  });
+  // Navegação e guarda de rota vêm da fonte única (lib/panel.ts).
+  const panelCtx = { permissions, modes, features: features as Partial<Record<FeatureId, boolean>> };
+  const nav = panelNavigation(panelCtx);
+  const items = nav.all;
+  const access = panelAccess(pathname, panelCtx);
   const q = business ? `?b=${business.id}` : '';
   const ROLE_LABEL: Record<string, string> = {
     OWNER: 'Proprietário', ADMIN: 'Administrador', SECRETARIA: 'Secretária',
     ATENDENTE: 'Atendente', VENDEDOR: 'Vendedor', VIEWER: 'Visualizador', MASTER: 'Suporte InstaLink',
   };
 
-  // Agrupar por seção para renderização com rótulos
-  const sections: Array<{ label: string; items: typeof items }> = [];
-  // Dashboard fica sempre no topo sem seção
-  const dashboardItem = items.find((i) => i.href === '/dashboard');
-  const otherItems = items.filter((i) => i.href !== '/dashboard');
-  const grouped = new Map<string, typeof items>();
-  for (const it of otherItems) {
-    const s = it.section || 'Outros';
-    if (!grouped.has(s)) grouped.set(s, []);
-    grouped.get(s)!.push(it);
-  }
-  for (const [label, list] of grouped) sections.push({ label, items: list });
+  // Dashboard fica sempre no topo, sem seção; demais itens agrupados.
+  const dashboardItem = nav.primary;
+  const sections = nav.sections;
+  // Sem permissão de dashboard (ex.: VIEWER com agenda liberada) o usuário
+  // ainda precisa de um destino válido ao clicar em "Início".
+  const fallbackHref = firstAllowedPath(panelCtx);
 
   return (
     <div className="min-h-screen bg-[#f8f8f8] lg:flex">
@@ -337,12 +322,25 @@ export function DashboardShell({ children }: { children: React.ReactNode }) {
           {business && business.role && business.role !== 'OWNER' && (
             <p className="mb-4 text-xs text-zinc-500">Você está como <strong className="text-zinc-700">{ROLE_LABEL[business.role] || business.role}</strong>{business.readOnly ? ' · somente leitura' : ''}</p>
           )}
-          {children}
+          {access.state === 'denied' ? (
+            // 403 AMIGÁVEL: o usuário continua logado e dentro do painel.
+            // Nada aqui limpa token ou redireciona para /login.
+            <AccessDenied
+              area={access.area || access.route?.label}
+              hint={access.reason === 'module'
+                ? `O módulo “${access.route?.label}” não está ativo nesta empresa. Nada foi perdido: ao reativar em Recursos, a área volta com todo o conteúdo.`
+                : undefined}
+              homeHref={fallbackHref ? `${fallbackHref}${q}` : undefined}
+            />
+          ) : children}
         </div>
         <footer className="px-4 lg:px-8 py-4 border-t border-zinc-200 mt-8">
           <p className="text-[11px] text-zinc-400 text-center">InstaLink.app — plataforma para o seu negócio · <a href={`/${business.slug}`} target="_blank" className="underline">/{business.slug}</a></p>
         </footer>
       </main>
+
+      {/* 403 de qualquer ação do painel → aviso amigável (sessão preservada). */}
+      <ForbiddenToasts context={{ scope: 'action', area: access.area || panelRouteFor(pathname)?.label }} />
     </div>
   );
 }

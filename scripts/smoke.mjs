@@ -81,11 +81,21 @@ const b1 = await api('POST', '/api/bookings', {
 check('reserva criada', !!b1.data.bookingId, `(${b1.status}) ${JSON.stringify(b1.data).slice(0, 140)}`);
 const b1id = b1.data.bookingId || '';
 
+// svc-corte tem DOIS barbeiros elegíveis e o cliente nunca escolhe profissional:
+// o servidor atribui. Pedir "pro-pedro" duas vezes no mesmo horário não é
+// conflito — a segunda reserva vai para o outro barbeiro livre.
 const dbl = await api('POST', '/api/bookings', {
   businessId: B2, serviceId: 'svc-corte', professionalId: 'pro-pedro', date: tomorrow, time: t1,
   customerName: `${TAG} Duplo`, customerPhone: ph(3),
 }, custToken);
-check('slot duplicado → 409', dbl.status === 409, `(${dbl.status})`);
+check('mesmo horário, 2 profissionais livres → servidor atribui o outro', dbl.status < 300 && !!dbl.data.bookingId, `(${dbl.status}) pro=${dbl.data.professionalName}`);
+check('atribuição respeita o pedido quando o profissional está livre', dbl.data.professionalId === 'pro-pedro' || b1.data.professionalId === 'pro-pedro', `b1=${b1.data.professionalId} dbl=${dbl.data.professionalId}`);
+// Sem ninguém livre no horário, aí sim é conflito.
+const tri = await api('POST', '/api/bookings', {
+  businessId: B2, serviceId: 'svc-corte', date: tomorrow, time: t1,
+  customerName: `${TAG} Triplo`, customerPhone: ph(31),
+}, custToken);
+check('sem profissional livre no horário → 409', tri.status === 409, `(${tri.status})`);
 
 // ── Consumidor: perfil e recuperação ──
 console.log('\n— perfil e recuperação');
@@ -100,7 +110,10 @@ check('forgot consumidor ok sem enumeração', cf.data.ok === true, `(${cf.statu
 const quote = await api('POST', '/api/leads', {
   businessId: B2, origin: 'orcamento', name: `${TAG} Orc`, phone: ph(6), interest: 'Quanto custa corte + barba?',
 });
-check('orçamento guest criado', quote.status < 300 && quote.data.ok !== false, `(${quote.status})`);
+// A Barbearia do João não tem o módulo de orçamento: a captação inteira é o
+// módulo, então o lead público é recusado com mensagem amigável (403) — e o
+// lead NÃO é criado.
+check('orçamento em negócio sem o módulo → 403 amigável', quote.status === 403 && /orçamento/i.test(quote.data.error || ''), `(${quote.status}) ${quote.data.error || ''}`);
 
 // ── Reserva do consumidor + remarcação atômica ──
 console.log('\n— remarcação atômica');
@@ -190,13 +203,17 @@ if (a1.data.bookingId && tX) {
 }
 const od2 = await api('GET', `/api/bookings?businessId=${B3}&serviceId=svc-odonto&date=${clinicDay}`);
 check('E: ocupado visível em occupied (fora de slots)', (od2.data.occupied || []).includes(odSlots[0]) && !(od2.data.slots || []).includes(odSlots[0]), `occ=${JSON.stringify((od2.data.occupied || []).slice(0, 4))}`);
+// O cliente NUNCA escolhe profissional: a grade pública ignora o
+// professionalId informado e devolve a união dos elegíveis ATIVOS. A Dra. Ana
+// está inativa, então não pode aparecer nem receber atendimento.
 const anaSlots = await api('GET', `/api/bookings?businessId=${B3}&serviceId=svc-odonto&professionalId=pro-ana&date=${clinicDay}`);
-check('F: inativa não tem slots', (anaSlots.data.slots || []).length === 0, `(${(anaSlots.data.slots || []).length})`);
+const anaAssign = Object.values(anaSlots.data.assign || {});
+check('F: inativa nunca é atribuída pela grade pública', !anaAssign.includes('pro-ana') && !Object.keys(anaSlots.data.byPro || {}).includes('pro-ana'), `assign=${JSON.stringify(anaAssign.slice(0, 3))}`);
 const anaB = await api('POST', '/api/bookings', {
   businessId: B3, serviceId: 'svc-odonto', professionalId: 'pro-ana', date: clinicDay, time: odSlots[1] || '11:00',
   customerName: `${TAG} Ana`, customerPhone: ph(13),
 }, custToken);
-check('F: reserva com inativa rejeitada', anaB.status >= 400, `(${anaB.status})`);
+check('F: pedir a inativa não entrega a reserva para ela', anaB.data.professionalId !== 'pro-ana' && anaB.data.professionalName !== 'Dra. Ana', `(${anaB.status}) pro=${anaB.data.professionalName}`);
 const pubHtml = await (await fetch(BASE + '/clinicavitta')).text();
 check('F: página pública sem Dra. Ana', !pubHtml.includes('Dra. Ana') && pubHtml.includes('Consulta Odontológica'));
 
@@ -218,7 +235,9 @@ const noBook = await api('POST', '/api/bookings', {
   businessId: B1, serviceId: 'svc-corte', date: tomorrow, time: '10:00',
   customerName: `${TAG} X`, customerPhone: ph(15),
 }, custToken);
-check('D: negócio sem agenda rejeita booking', noBook.status === 400, `(${noBook.status})`);
+// Módulo de agendamento desligado: a reserva é recusada (403 com mensagem
+// amigável; 400 também vale) e NENHUM agendamento é criado.
+check('D: negócio sem agenda rejeita booking', (noBook.status === 400 || noBook.status === 403) && !noBook.data.bookingId, `(${noBook.status}) ${noBook.data.error || ''}`);
 
 console.log('\n— cenário G: menu mobile');
 const gHtml = await (await fetch(BASE + '/barbeariadojoao')).text();

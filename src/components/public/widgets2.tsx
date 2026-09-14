@@ -6,6 +6,10 @@ import { Icon } from '@/components/icons';
 import type { Business, Professional, PublicBusiness, Service } from '@/lib/types';
 import { money, trackEvent, waLink } from './widgets';
 import { whatsappVisible } from '@/lib/features';
+// Página pública: preço e descrição são públicos; duração NÃO é exibida
+// (continua existindo internamente para agenda/conflito/buffer).
+import { publicPriceLabel, publicServiceSecondary } from '@/lib/pricing';
+import { SLOT_STATE_MESSAGE, slotStateView } from '@/lib/slot-states';
 
 const WEEK = ['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb'];
 
@@ -29,6 +33,10 @@ export function BookingIsland({ business, services, professionals, title, initia
   const [serverToday, setServerToday] = useState('');
   const [closed, setClosed] = useState(false);
   const [loadingSlots, setLoadingSlots] = useState(false);
+  // Falha na busca NÃO pode aparecer como "sem horários livres" (regra de
+  // lib/slot-states): estado de erro tem texto próprio e botão de nova tentativa.
+  const [slotsError, setSlotsError] = useState('');
+  const [slotsTry, setSlotsTry] = useState(0);
   const [time, setTime] = useState('');
   const [note, setNote] = useState('');
   const [answers, setAnswers] = useState<string[]>([]);
@@ -82,26 +90,27 @@ export function BookingIsland({ business, services, professionals, title, initia
   }, [dayInfo, serviceId]);
 
   useEffect(() => {
-    if (!serviceId || !date) { setSlots([]); return; }
+    if (!serviceId || !date) { setSlots([]); setSlotsError(''); return; }
     setLoadingSlots(true);
+    setSlotsError('');
     setTime('');
     fetch(`/api/bookings?businessId=${business.id}&serviceId=${serviceId}&date=${date}`)
-      .then((r) => r.json())
-      .then((d) => {
+      .then(async (r) => {
+        const d = await r.json().catch(() => ({}));
+        if (!r.ok) throw new Error(d.error || SLOT_STATE_MESSAGE.error);
         setSlots(d.slots || []);
         setOccupied(d.occupied || []);
         setClosed(!!d.closed);
         if (d.today) setServerToday(d.today);
       })
-      .catch(() => setSlots([]))
+      .catch(() => {
+        setSlots([]);
+        setOccupied([]);
+        setSlotsError(SLOT_STATE_MESSAGE.error);
+      })
       .finally(() => setLoadingSlots(false));
-  }, [serviceId, date, business.id]);
-
-  function endTime(t: string, dur: number): string {
-    const [h, m] = t.split(':').map(Number);
-    const e = h * 60 + m + dur;
-    return `${String(Math.floor(e / 60) % 24).padStart(2, '0')}:${String(e % 60).padStart(2, '0')}`;
-  }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [serviceId, date, business.id, slotsTry]);
 
   // Grade unificada: livres primeiro, ocupados visíveis e desabilitados.
   const grid = [...slots.map((t) => ({ t, busy: false })), ...occupied.map((t) => ({ t, busy: true }))].sort((a, b) => (a.t < b.t ? -1 : 1));
@@ -151,7 +160,7 @@ export function BookingIsland({ business, services, professionals, title, initia
       <div id="agendar" className={bare ? 'text-center py-2' : 'il-card p-6 text-center scroll-mt-20'}>
         <span className="inline-flex w-16 h-16 rounded-full items-center justify-center" style={{ background: 'color-mix(in srgb, var(--il-primary) 12%, transparent)', color: 'var(--il-primary)' }}><Icon n="calendar" size={30} /></span>
         <h3 className="text-xl font-extrabold mt-3">{rescheduleId ? 'Horário remarcado!' : 'Agendamento recebido!'}</h3>
-        <p className="il-muted text-sm mt-1">{service.name} · {d}/{m} às {time}–{endTime(time, service.durationMin)}</p>
+        <p className="il-muted text-sm mt-1">{service.name} · {d}/{m} às {time}</p>
         <p className="il-muted text-sm">vamos confirmar pelo seu WhatsApp.</p>
         <div className="mt-4 space-y-2">
           {business.whatsapp && !rescheduleId && (
@@ -161,6 +170,8 @@ export function BookingIsland({ business, services, professionals, title, initia
               Confirmar no WhatsApp
             </a>
           )}
+          {/* O convite de calendário precisa do fim do evento para ser útil;
+              a duração não é exibida como texto em nenhum lugar da página. */}
           <a target="_blank" rel="noreferrer"
             href={gcalLink({ title: `${service.name} — ${business.name}`, date, time, durationMin: service.durationMin, location: business.address || undefined })}
             className="il-card block font-bold py-3 text-sm">
@@ -186,7 +197,8 @@ export function BookingIsland({ business, services, professionals, title, initia
           {service ? (
             <div className="il-chip-active px-4 py-3 flex justify-between items-center gap-2" style={{ borderRadius: 'var(--il-radius)' }}>
               <span><span className="font-bold text-sm block">{service.name}</span>
-                <span className="text-xs opacity-80">{service.durationMin} min · {money(service.price)}</span></span>
+                {/* Sem duração: descrição quando existir, senão só o preço. */}
+                <span className="text-xs opacity-80">{publicServiceSecondary(service) || publicPriceLabel(service.price)}</span></span>
               <button onClick={() => selectService('')} className="text-xs font-bold underline shrink-0">trocar</button>
             </div>
           ) : (
@@ -196,7 +208,10 @@ export function BookingIsland({ business, services, professionals, title, initia
                 className={`w-full text-left px-4 py-3 border flex justify-between items-center gap-2 ${serviceId === s.id ? 'il-chip-active border-transparent' : 'il-card'}`}
                 style={{ borderRadius: 'var(--il-radius)' }}>
                 <span><span className="font-bold text-sm block">{s.name}</span>
-                  <span className={`text-xs ${serviceId === s.id ? 'opacity-80' : 'il-muted'}`}>{s.durationMin} min</span></span>
+                  {/* Descrição no lugar da duração; sem descrição, nada de linha vazia. */}
+                  {publicServiceSecondary(s) && (
+                    <span className={`text-xs ${serviceId === s.id ? 'opacity-80' : 'il-muted'}`}>{publicServiceSecondary(s)}</span>
+                  )}</span>
                 <span className="font-extrabold text-sm">{money(s.price)}</span>
               </button>
             ))}
@@ -233,9 +248,20 @@ export function BookingIsland({ business, services, professionals, title, initia
         {date && serviceId && (
           <div>
             <p className="text-xs font-bold il-muted mb-1.5">HORÁRIO{slots.length > 0 && ` · ${slots.length} LIVRE(S)`}</p>
-            {loadingSlots ? <p className="il-muted text-sm">Buscando horários…</p>
-              : closed || grid.length === 0 ? <p className="il-muted text-sm">Sem horários livres neste dia. Tente outro dia.</p>
-              : (
+            {/* loading → erro → vazio → horários (nesta ordem, sempre) */}
+            {(() => {
+              const sv = slotStateView({ loading: loadingSlots, error: slotsError, slots: closed ? [] : grid });
+              if (sv.isLoading) return <p className="il-muted text-sm">Buscando horários…</p>;
+              if (sv.isError) return (
+                <p className="il-muted text-sm">
+                  {sv.message}{' '}
+                  <button type="button" onClick={() => setSlotsTry((n) => n + 1)} className="font-bold underline">Tentar novamente</button>
+                </p>
+              );
+              if (!sv.showGrid) return <p className="il-muted text-sm">Sem horários livres neste dia. Tente outro dia.</p>;
+              return null;
+            })()}
+            {!loadingSlots && !slotsError && !closed && grid.length > 0 && (
                 <div className="space-y-3">
                   {groups.map((g) => (
                     <div key={g.id}>
@@ -259,10 +285,12 @@ export function BookingIsland({ business, services, professionals, title, initia
           <div className="rounded-2xl p-3.5" style={{ background: 'color-mix(in srgb, var(--il-primary) 10%, transparent)', border: '1px solid color-mix(in srgb, var(--il-primary) 28%, transparent)' }}>
             <p className="font-extrabold text-sm">Resumo</p>
             <p className="text-sm mt-1 font-bold">{service.name}</p>
+            {/* Resumo público: dia e horário de início + preço. Sem duração e
+                sem intervalo "14:00–15:00" (regra de lib/pricing). */}
             <p className="il-muted text-xs mt-0.5">
-              {date.split('-').reverse().join('/')} · {time}–{endTime(time, service.durationMin)}
+              {date.split('-').reverse().join('/')} às {time}
             </p>
-            <p className="font-extrabold il-accent text-sm mt-1">{money(service.price)} · {service.durationMin} min</p>
+            <p className="font-extrabold il-accent text-sm mt-1">{publicPriceLabel(service.price)}</p>
           </div>
         )}
 

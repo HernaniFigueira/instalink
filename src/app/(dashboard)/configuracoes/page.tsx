@@ -8,6 +8,8 @@ import type { Business } from '@/lib/types';
 import { PageSkeleton } from '@/components/ui';
 import { Icon } from '@/components/icons';
 import { ImageUpload } from '@/components/dashboard/ImageUpload';
+import { AccessDenied, useAreaLoad } from '@/components/dashboard/AccessNotice';
+import { apiGet, apiSend } from '@/lib/api-client';
 
 const PAYMENTS = [
   { id: 'pix', label: 'PIX' },
@@ -25,37 +27,40 @@ export default function ConfigPage() {
   const [tab, setTab] = useState<'negocio' | 'pagina' | 'agenda' | 'crm' | 'canais'>('negocio');
   const [activeModules, setActiveModules] = useState<number | null>(null);
 
-  const load = useCallback(() => {
+  // 403 → aviso amigável (sessão preservada), nunca skeleton infinito.
+  const { denied, report } = useAreaLoad('Configurações');
+
+  const load = useCallback(async () => {
     if (!businessId) return;
-    fetch(`/api/pages?businessId=${businessId}`).then((r) => r.json()).then((d) => setBiz(d.business));
-  }, [businessId]);
+    const res = await apiGet<{ business: Business }>(`/api/pages?businessId=${businessId}`, { scope: 'area', area: 'Configurações' });
+    if (!report(res) || !res.data) return;
+    setBiz(res.data.business);
+  }, [businessId, report]);
   useEffect(() => { load(); }, [load]);
   useEffect(() => {
     if (!businessId) return;
-    fetch(`/api/businesses/${businessId}/features`).then((r) => (r.ok ? r.json() : null)).then((d) => setActiveModules((d?.features || []).filter((f: any) => f.enabled).length)).catch(() => {});
+    apiGet<{ features?: any[] }>(`/api/businesses/${businessId}/features`, { scope: 'area', area: 'Configurações' })
+      .then((res) => { if (res.ok) setActiveModules((res.data?.features || []).filter((f: any) => f.enabled).length); });
   }, [businessId]);
 
   async function save() {
     if (!biz) return;
     setSaving(true); setMsg('');
     try {
-      const res = await fetch(`/api/businesses/${businessId}`, {
-        method: 'PATCH', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
+      const res = await apiSend(`/api/businesses/${businessId}`, 'PATCH', {
           name: biz.name, description: biz.description, logo: biz.logo, cover: biz.cover,
           modes: biz.modes, phone: biz.phone, whatsapp: biz.whatsapp, email: biz.email,
           instagram: biz.instagram, tiktok: biz.tiktok, address: biz.address,
           mapsUrl: biz.mapsUrl, paymentMethods: biz.paymentMethods, pixKey: biz.pixKey,
           deliveryFee: biz.deliveryFee, minOrder: biz.minOrder,
           nav: biz.nav, navCustom: biz.navCustom, about: biz.about,
-        }),
-      });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error);
+      }, { scope: 'action', area: 'Configurações' });
+      if (!res.ok) throw new Error(res.message);
       setMsg('Configurações salvas.');
     } catch (err: any) { setMsg(err.message); } finally { setSaving(false); setTimeout(() => setMsg(''), 3000); }
   }
 
+  if (denied) return <AccessDenied area="Configurações" />;
   if (!biz) return <PageSkeleton />;
   const set = (k: keyof Business, v: any) => setBiz({ ...biz, [k]: v });
   const input = 'w-full rounded-md border border-zinc-300 px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-zinc-900';

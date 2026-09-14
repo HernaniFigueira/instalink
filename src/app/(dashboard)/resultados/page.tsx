@@ -2,6 +2,8 @@
 import { useCallback, useEffect, useState } from 'react';
 import { useSearchParams } from 'next/navigation';
 import { PageSkeleton } from '@/components/ui';
+import { AccessDenied, useAreaLoad } from '@/components/dashboard/AccessNotice';
+import { apiGet } from '@/lib/api-client';
 import { money } from '@/lib/utils';
 
 interface Analytics {
@@ -47,15 +49,19 @@ export default function ResultadosPage() {
   const [period, setPeriod] = useState(30);
   const [data, setData] = useState<Analytics | null>(null);
 
-  const load = useCallback(() => {
+  // 403 → aviso amigável (sessão preservada), nunca skeleton infinito.
+  const { denied, report } = useAreaLoad('Resultados');
+
+  const load = useCallback(async () => {
     if (!businessId) return;
-    fetch(`/api/analytics?businessId=${businessId}&period=${period}`)
-      .then((r) => (r.ok ? r.json() : null))
-      .then((d) => { if (d) setData(d); });
-  }, [businessId, period]);
+    const res = await apiGet<Analytics>(`/api/analytics?businessId=${businessId}&period=${period}`, { scope: 'area', area: 'Resultados' });
+    if (!report(res) || !res.data) return;
+    setData(res.data);
+  }, [businessId, period, report]);
 
   useEffect(() => { load(); }, [load]);
 
+  if (denied) return <AccessDenied area="Resultados" />;
   if (!data) return <PageSkeleton />;
   const { totals, funnelOrders, funnelBookings, days, topProducts, topCtas, origins } = data;
   const maxDay = Math.max(1, ...days.map((d) => d.visitors));

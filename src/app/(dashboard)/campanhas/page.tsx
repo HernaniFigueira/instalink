@@ -8,6 +8,8 @@ import { PageSkeleton } from '@/components/ui';
 import { cn } from '@/lib/utils';
 import { CAMPAIGN_SEGMENTS } from '@/lib/types';
 import type { CampaignSegment } from '@/lib/types';
+import { AccessDenied, useAreaLoad } from '@/components/dashboard/AccessNotice';
+import { apiGet, apiSend } from '@/lib/api-client';
 
 interface Campaign {
   id: string; name: string; message: string; segment: CampaignSegment; status: string;
@@ -43,21 +45,23 @@ export default function CampanhasPage() {
   const [error, setError] = useState('');
   const [busy, setBusy] = useState('');
 
-  const load = useCallback(() => {
+  // 403 → aviso amigável (sessão preservada), nunca skeleton infinito.
+  const { denied, report } = useAreaLoad('Campanhas');
+
+  const load = useCallback(async () => {
     if (!businessId) return;
-    fetch(`/api/campaigns?businessId=${businessId}`).then((r) => (r.ok ? r.json() : null)).then(setData).catch(() => {});
-  }, [businessId]);
+    const res = await apiGet<Data>(`/api/campaigns?businessId=${businessId}`, { scope: 'area', area: 'Campanhas' });
+    if (!report(res)) return;
+    setData(res.data);
+  }, [businessId, report]);
   useEffect(() => { load(); }, [load]);
 
   async function call(method: 'POST' | 'PATCH', payload: Record<string, any>) {
     setBusy(payload.action || 'save'); setError(''); setMsg('');
     try {
-      const res = await fetch('/api/campaigns', {
-        method, headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ businessId, ...payload }),
-      });
-      const d = await res.json();
-      if (!res.ok) throw new Error(d.error || 'Não foi possível.');
+      const res = await apiSend<any>('/api/campaigns', method, { businessId, ...payload }, { scope: 'action', area: 'Campanhas' });
+      const d = res.data || {};
+      if (!res.ok) throw new Error(res.message || 'Não foi possível.');
       setMsg(d.message || 'Feito.');
       setCreating(false);
       setForm({ name: '', message: '', segment: 'all_optin' });
@@ -70,6 +74,7 @@ export default function CampanhasPage() {
     }
   }
 
+  if (denied) return <AccessDenied area="Campanhas" />;
   if (!data) return <PageSkeleton />;
   const q = `?b=${businessId}`;
   const segLabel = (id: CampaignSegment) => CAMPAIGN_SEGMENTS.find((s) => s.id === id)?.label || id;

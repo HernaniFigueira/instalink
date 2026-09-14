@@ -3,8 +3,15 @@
 // (dia fechado ou horário especial), duração real do serviço, buffers,
 // bookings existentes (com a duração real de cada um), dia atual (corta o
 // passado + antecedência mínima) e vínculo serviço↔profissional.
+//
+// HORÁRIOS (lib/schedule.ts): cada profissional ou HERDA o horário geral da
+// clínica (regras com professionalId '') ou usa o PRÓPRIO horário (regras com
+// professionalId = id). Nunca os dois — é isso que faz o horário geral valer
+// para toda a equipe sem duplicar configuração, e que garante que um horário
+// personalizado não seja alterado quando o geral muda.
 import type { Availability, AvailabilityException, Booking, Professional, Service } from './types';
 import { timeToMin, minToTime } from './utils';
+import { followsBusinessHours } from './schedule';
 
 export interface SlotQuery {
   rules: Availability[];
@@ -30,15 +37,18 @@ export interface SlotResult {
   closed: boolean;
   // auto mode: melhor profissional por horário (menor carga no dia)
   assign: Record<string, string>;
+  // Livres por profissional ('' em modo solo). Usado pelo drag-and-drop da
+  // agenda para destacar a célula destino correta de cada coluna.
+  byProfessional: Record<string, string[]>;
 }
 
 interface Window { proId: string; start: number; end: number; step: number }
 
 export function computeSlots(q: SlotQuery): SlotResult {
-  const empty: SlotResult = { slots: [], occupied: [], closed: false, assign: {} };
+  const empty: SlotResult = { slots: [], occupied: [], closed: false, assign: {}, byProfessional: {} };
 
   const exc = q.exceptions.find((e) => e.date === q.dateISO);
-  if (exc?.closed) return { slots: [], occupied: [], closed: true, assign: {} };
+  if (exc?.closed) return { slots: [], occupied: [], closed: true, assign: {}, byProfessional: {} };
 
   const activePros = q.professionals.filter((p) => p.active !== false);
   const eligible = new Set(
@@ -49,6 +59,14 @@ export function computeSlots(q: SlotQuery): SlotResult {
   // Negócio sem equipe: opera como "profissional único" (id '').
   const soloMode = activePros.length === 0;
   if (q.professionalId && !soloMode && !eligible.has(q.professionalId)) return empty;
+
+  // Herança de horário: quem segue o horário da clínica usa as regras gerais;
+  // quem personalizou usa SOMENTE as próprias (dados legados sem o flag são
+  // derivados — ver followsBusinessHours em lib/schedule.ts).
+  const follows = (pid: string): boolean => {
+    const pro = activePros.find((p) => p.id === pid);
+    return followsBusinessHours(pro, q.rules);
+  };
 
   // Janelas aplicáveis (regra do dia + serviço + profissional).
   const windows: Window[] = [];
@@ -62,17 +80,27 @@ export function computeSlots(q: SlotQuery): SlotResult {
     // do próprio serviço (45min → 09:00, 09:45, 10:30…).
     const step = Math.max(10, r.slotMin || q.durationMin || 30);
     if (q.professionalId) {
-      if (r.professionalId && r.professionalId !== q.professionalId) continue;
+      // Escopo de UM profissional: herda o geral OU usa o próprio.
+      if (follows(q.professionalId)) {
+        if (r.professionalId) continue;
+      } else if (r.professionalId !== q.professionalId) {
+        continue;
+      }
       windows.push({ proId: q.professionalId, start, end, step });
     } else if (soloMode) {
       if (r.professionalId) continue;
       windows.push({ proId: '', start, end, step });
     } else if (r.professionalId) {
       if (!eligible.has(r.professionalId)) continue;
+      // Regra própria só vale para quem NÃO segue o horário da clínica.
+      if (follows(r.professionalId)) continue;
       windows.push({ proId: r.professionalId, start, end, step });
     } else {
-      // regra genérica vale para cada profissional elegível
-      for (const pid of eligible) windows.push({ proId: pid, start, end, step });
+      // Regra geral vale para cada profissional elegível que herda o horário.
+      for (const pid of eligible) {
+        if (!follows(pid)) continue;
+        windows.push({ proId: pid, start, end, step });
+      }
     }
   }
   if (windows.length === 0) return empty;
@@ -143,6 +171,11 @@ export function computeSlots(q: SlotQuery): SlotResult {
   // Ocupado = passou da grade mas sem profissional livre (visível, desabilitado).
   const occupied = [...candidates].filter((t) => !union.has(t)).sort();
 
+  // Livres por profissional (ordem estável) — o drag-and-drop usa para saber
+  // em QUAL coluna o horário realmente cabe.
+  const byProfessional: Record<string, string[]> = {};
+  for (const [pid, set] of freeByPro) byProfessional[pid] = [...set].sort();
+
   // Auto: para cada horário, o elegível livre com menor carga no dia.
   const assign: Record<string, string> = {};
   if (!q.professionalId && !soloMode && slots.length > 0) {
@@ -159,5 +192,5 @@ export function computeSlots(q: SlotQuery): SlotResult {
     }
   }
 
-  return { slots, occupied, closed: slots.length === 0, assign };
+  return { slots, occupied, closed: slots.length === 0, assign, byProfessional };
 }

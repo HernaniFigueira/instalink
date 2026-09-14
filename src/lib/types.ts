@@ -306,12 +306,23 @@ export interface Professional {
   role: string;
   photo: string;
   active: boolean;
+  // Vínculo com o horário geral da empresa (lib/schedule.ts):
+  //   true  → HERDA o "Horário da clínica" (padrão ao criar um profissional);
+  //   false → usa SOMENTE o próprio horário (personalizado);
+  //   ausente → dado legado: derivado na leitura (quem já tinha regras
+  //             próprias continua personalizado — nada é sobrescrito).
+  followBusinessHours?: boolean;
 }
 
+// Regra de disponibilidade. Escopos:
+//   professionalId '' → HORÁRIO GERAL DA CLÍNICA (herdado por quem tem
+//                       followBusinessHours !== false);
+//   professionalId X  → horário PERSONALIZADO daquele profissional (só vale
+//                       quando ele NÃO segue o horário da clínica).
 export interface Availability {
   id: ID;
   businessId: ID;
-  professionalId: string; // '' = todos
+  professionalId: string; // '' = horário geral da clínica
   serviceId: string; // '' = todos os serviços
   weekday: number; // 0..6
   start: string; // HH:MM

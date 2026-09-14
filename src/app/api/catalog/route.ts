@@ -3,6 +3,12 @@ import { randomUUID } from 'node:crypto';
 import { readDB, updateDB } from '@/lib/db';
 import { requireBusiness } from '@/lib/access';
 import { clampCents } from '@/lib/utils';
+import type { Professional } from '@/lib/types';
+// Herança de horários: a regra vive em lib/schedule (pura e testada) para que
+// API e painel decidam exatamente a mesma coisa.
+import {
+  applyToAllResultMessage, businessRules, followTogglePatch, planApplyBusinessHoursToAll, sanitizeWindows,
+} from '@/lib/schedule';
 
 // API unificada de catálogo (produtos, opções, serviços, equipe, agenda).
 // Toda mutação passa pela camada central de autorização (identidade →
@@ -109,10 +115,47 @@ export async function POST(req: NextRequest) {
         case 'professional.save': {
           if (!body.name?.trim()) throw new Error('Dê um nome ao profissional.');
           const existing = db.professionals.find((p) => p.id === body.id && p.businessId === businessId);
-          const data = { name: body.name.trim(), role: body.role || '', photo: body.photo || '', active: body.active !== false };
+          const data: Record<string, any> = { name: body.name.trim(), role: body.role || '', photo: body.photo || '', active: body.active !== false };
+          // Herança do horário da empresa só muda quando vem explícita no corpo
+          // (editar nome/foto nunca altera a agenda do profissional).
+          if (typeof body.followBusinessHours === 'boolean') data.followBusinessHours = body.followBusinessHours;
           if (existing) Object.assign(existing, data);
-          else db.professionals.push({ id, businessId, ...data });
+          // Profissional novo começa SEGUINDO o horário da empresa.
+          else db.professionals.push({ id, businessId, followBusinessHours: true, ...data } as Professional);
           return { ok: true };
+        }
+        // ── Vínculo do profissional com o horário da empresa ──
+        // follow=true  → herda por referência (regras próprias são removidas);
+        // follow=false → horário personalizado (copia o horário da empresa como
+        //                ponto de partida, ou grava as janelas enviadas).
+        case 'professional.hours': {
+          const pro = db.professionals.find((p) => p.id === body.id && p.businessId === businessId);
+          if (!pro) throw new Error('Profissional não encontrado.');
+          if (typeof body.follow !== 'boolean') throw new Error('Informe se o profissional segue o horário da empresa.');
+          const all = db.availability.filter((a) => a.businessId === businessId);
+          const patch = followTogglePatch({ follow: body.follow, rules: all, professionalId: pro.id });
+          pro.followBusinessHours = patch.followBusinessHours;
+          // Remove o horário próprio anterior em qualquer um dos dois casos.
+          db.availability = db.availability.filter((a) => !(a.businessId === businessId && a.professionalId === pro.id));
+          if (!patch.followBusinessHours) {
+            const raw = Array.isArray(body.rules) ? body.rules : null;
+            const sent = sanitizeWindows(raw ?? []);
+            // Janela inválida (fim antes do início, hora fora do dia) é RECUSADA —
+            // nunca descartada em silêncio, senão o lojista acha que salvou o
+            // horário próprio quando o sistema gravou outra coisa.
+            if (raw && raw.length > 0 && sent.length !== raw.length) {
+              throw new Error('Horário inválido: o fim do atendimento precisa ser depois do início.');
+            }
+            const windows = sent.length > 0 ? sent : patch.rules;
+            if (windows.length === 0) throw new Error('Defina ao menos um dia de atendimento.');
+            for (const w of windows) {
+              db.availability.push({
+                id: randomUUID(), businessId, professionalId: pro.id, serviceId: '',
+                weekday: w.weekday, start: w.start, end: w.end, slotMin: w.slotMin,
+              });
+            }
+          }
+          return { ok: true, followBusinessHours: pro.followBusinessHours };
         }
         case 'professional.delete': {
           db.professionals = db.professionals.filter((p) => !(p.id === body.id && p.businessId === businessId));
@@ -144,6 +187,20 @@ export async function POST(req: NextRequest) {
             });
           }
           return { ok: true };
+        }
+        // ── Aplicar o horário da empresa a todos ──
+        // Toca SOMENTE em quem segue a empresa. Quem tem horário personalizado
+        // é listado como ignorado (nunca sobrescrito em silêncio).
+        case 'availability.applyToAll': {
+          const all = db.availability.filter((a) => a.businessId === businessId);
+          if (businessRules(all).length === 0) throw new Error('Defina o horário da empresa antes de aplicar a todos.');
+          const pros = db.professionals.filter((p) => p.businessId === businessId);
+          const plan = planApplyBusinessHoursToAll(pros, all);
+          const update = new Set(plan.update);
+          // Herança é por referência: basta remover regras próprias residuais.
+          db.availability = db.availability.filter((a) => !(a.businessId === businessId && a.professionalId && update.has(a.professionalId)));
+          for (const p of pros) if (update.has(p.id)) p.followBusinessHours = true;
+          return { ok: true, updated: plan.update.length, skipped: plan.skip.length, message: applyToAllResultMessage(plan) };
         }
         // ── Exceções (dia fechado / horário especial) ──
         case 'exception.save': {

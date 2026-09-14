@@ -6,6 +6,8 @@ import { Icon } from '@/components/icons';
 import { PageSkeleton } from '@/components/ui';
 import { cn } from '@/lib/utils';
 import type { MemberRole, PermissionId } from '@/lib/types';
+import { AccessDenied, useAreaLoad } from '@/components/dashboard/AccessNotice';
+import { apiGet, apiSend } from '@/lib/api-client';
 
 interface RoleDef { id: MemberRole; label: string; hint: string; permissions: PermissionId[] }
 interface PermDef { id: PermissionId; label: string; hint: string }
@@ -24,17 +26,23 @@ export default function EquipePage() {
   const [error, setError] = useState('');
   const [form, setForm] = useState({ name: '', email: '', password: '', role: 'SECRETARIA' as MemberRole, note: '' });
 
-  const load = useCallback(() => {
+  // 403 aqui não pode virar "carregando para sempre": mostramos o aviso e o
+  // usuário continua logado (somente 401 inicia o fluxo de login).
+  const { denied, report } = useAreaLoad('Equipe');
+
+  const load = useCallback(async () => {
     if (!businessId) return;
-    fetch(`/api/team?businessId=${businessId}`).then((r) => (r.ok ? r.json() : null)).then((d) => setData(d)).catch(() => {});
-  }, [businessId]);
+    const res = await apiGet<TeamData>(`/api/team?businessId=${businessId}`, { scope: 'area', area: 'Equipe' });
+    if (!report(res)) return;
+    setData(res.data);
+  }, [businessId, report]);
   useEffect(() => { load(); }, [load]);
 
   async function create() {
     setError(''); setMsg('');
-    const res = await fetch('/api/team', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ businessId, ...form }) });
-    const d = await res.json();
-    if (!res.ok) { setError(d.error); return; }
+    const res = await apiSend<{ linkedExistingUser?: boolean }>('/api/team', 'POST', { businessId, ...form }, { scope: 'action', area: 'Equipe' });
+    const d = res.data || {};
+    if (!res.ok) { setError(res.message); return; }
     setMsg(d.linkedExistingUser ? 'Acesso liberado — pessoa já tinha login e agora faz parte da equipe.' : 'Acesso criado. Envie e-mail e senha para /login.');
     setCreating(false);
     setForm({ name: '', email: '', password: '', role: 'SECRETARIA', note: '' });
@@ -42,21 +50,20 @@ export default function EquipePage() {
   }
   async function saveMember(m: Member, payload: Record<string, any>) {
     setError('');
-    const res = await fetch('/api/team', { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ businessId, id: m.id, ...payload }) });
-    const d = await res.json();
-    if (!res.ok) { setError(d.error); return; }
+    const res = await apiSend('/api/team', 'PATCH', { businessId, id: m.id, ...payload }, { scope: 'action', area: 'Equipe' });
+    if (!res.ok) { setError(res.message); return; }
     if (drawer?.id === m.id) setDrawer({ ...drawer, ...payload, permissions: payload.permissions ? { ...drawer.permissions, ...payload.permissions } : drawer.permissions, role: payload.role || drawer.role, active: payload.active ?? drawer.active });
     load();
   }
   async function remove(m: Member) {
     setError('');
-    const res = await fetch(`/api/team?businessId=${businessId}&id=${m.id}`, { method: 'DELETE' });
-    const d = await res.json();
-    if (!res.ok) { setError(d.error); return; }
+    const res = await apiSend(`/api/team?businessId=${businessId}&id=${m.id}`, 'DELETE', undefined, { scope: 'action', area: 'Equipe' });
+    if (!res.ok) { setError(res.message); return; }
     setDrawer(null);
     load();
   }
 
+  if (denied) return <AccessDenied area="Equipe" />;
   if (!data) return <PageSkeleton />;
   const q = `?b=${businessId}`;
   const roleLabel = (r: string) => data.roles.find((x) => x.id === r)?.label || r;

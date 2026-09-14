@@ -6,6 +6,8 @@ import { THEME_PRESETS, matchingPreset, presetById } from '@/lib/themes';
 import { cn } from '@/lib/utils';
 import type { Block, BlockType, Business, Page, Theme } from '@/lib/types';
 import { PageSkeleton } from '@/components/ui';
+import { AccessDenied, useAreaLoad } from '@/components/dashboard/AccessNotice';
+import { apiGet, apiSend } from '@/lib/api-client';
 import { Icon } from '@/components/icons';
 import { ImageUpload } from '@/components/dashboard/ImageUpload';
 import { readFaqItems, visibleFaqItems, type FaqItem } from '@/lib/faq';
@@ -21,28 +23,31 @@ export default function PaginaPage() {
   const [rvCounts, setRvCounts] = useState({ pending: 0, published: 0 });
   const [saving, setSaving] = useState(false);
 
+  // 403 → aviso amigável (sessão preservada), nunca skeleton infinito.
+  const { denied, report } = useAreaLoad('Página');
+
   useEffect(() => {
     if (!businessId) return;
-    fetch(`/api/reviews?businessId=${businessId}&manage=1`)
-      .then((r) => (r.ok ? r.json() : null))
-      .then((d) => { if (d?.counts) setRvCounts(d.counts); })
-      .catch(() => {});
-    fetch(`/api/pages?businessId=${businessId}`)
-      .then((r) => r.json())
-      .then((d) => { setBusiness(d.business); setPage(d.page); });
-  }, [businessId]);
+    (async () => {
+      const rv = await apiGet<{ counts?: { pending: number; published: number } }>(
+        `/api/reviews?businessId=${businessId}&manage=1`, { scope: 'area', area: 'Página' },
+      );
+      if (rv.ok && rv.data?.counts) setRvCounts(rv.data.counts);
+      const res = await apiGet<{ business: Business; page: Page }>(
+        `/api/pages?businessId=${businessId}`, { scope: 'area', area: 'Página' },
+      );
+      if (!report(res) || !res.data) return;
+      setBusiness(res.data.business);
+      setPage(res.data.page);
+    })();
+  }, [businessId, report]);
 
   async function save(patch: { blocks?: Block[]; theme?: Theme; presetId?: string; published?: boolean; slug?: string }) {
     setSaving(true);
     setMsg('');
     try {
-      const res = await fetch('/api/pages', {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ businessId, ...patch }),
-      });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error);
+      const res = await apiSend('/api/pages', 'PUT', { businessId, ...patch }, { scope: 'action', area: 'Página' });
+      if (!res.ok) throw new Error(res.message);
       setMsg('Alterações salvas.');
       if (patch.published !== undefined && business) setBusiness({ ...business, published: patch.published });
       if (patch.slug && business) setBusiness({ ...business, slug: patch.slug });
@@ -61,6 +66,7 @@ export default function PaginaPage() {
     if (persist) save({ blocks: next.blocks });
   }
 
+  if (denied) return <AccessDenied area="Página" />;
   if (!business || !page) return <PageSkeleton />;
 
   const blocks = [...page.blocks].sort((a, b) => a.order - b.order);
