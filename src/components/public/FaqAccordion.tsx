@@ -7,20 +7,22 @@ export function FaqAccordion({ items }: { items: FaqItem[] }) {
   const [openIndex, setOpenIndex] = useState<number | null>(null);
   const baseId = useId();
 
+  // FAQ como lista com divisores (não cards empilhados): tipografia e
+  // espaço carregam a hierarquia — mais leve e mais editorial.
   return (
-    <div className="space-y-2">
+    <div>
       {items.map((item, index) => {
         const isOpen = openIndex === index;
         const questionId = `${baseId}-question-${index}`;
         const answerId = `${baseId}-answer-${index}`;
 
         return (
-          <div key={index} className="il-card overflow-hidden">
+          <div key={index} className="border-b last:border-b-0" style={{ borderColor: 'color-mix(in srgb, var(--il-muted) 16%, transparent)' }}>
             <h3>
               <button
                 id={questionId}
                 type="button"
-                className="w-full flex items-center justify-between gap-4 p-4 text-left font-bold text-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[var(--il-primary)]"
+                className="w-full flex items-center justify-between gap-4 py-3.5 text-left font-bold text-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--il-primary)] rounded-md"
                 aria-expanded={isOpen}
                 aria-controls={answerId}
                 onClick={() => setOpenIndex(isOpen ? null : index)}
@@ -41,7 +43,7 @@ export function FaqAccordion({ items }: { items: FaqItem[] }) {
                 id={answerId}
                 role="region"
                 aria-labelledby={questionId}
-                className="px-4 pb-4"
+                className="pb-4"
               >
                 <p className="il-muted text-sm whitespace-pre-line">{item.a}</p>
               </div>

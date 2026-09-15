@@ -160,6 +160,13 @@ export interface Business {
   // Sobre, agente). Preenchido de forma defensiva na leitura (migração
   // idempotente derivada de blocos/página em dados legados).
   features?: Record<OptionalFeatureId, boolean>;
+  // Supressão explícita da vitrine (auditoria §4): gravada quando o dono
+  // DESLIGA "Produtos" em Recursos. Sem ela, o fallback legado de Pedidos
+  // (orders) continuaria exibindo a vitrine mesmo com o módulo desligado —
+  // o que quebrava a regra "desativar ⇒ a vitrine some da página". O
+  // fallback de orders continua valendo para negócios legados que NUNCA
+  // gerenciaram Produtos (productsOff ausente): nada legado apaga/quebra.
+  productsOff?: boolean;
   // Integração oficial de WhatsApp (nunca guarda tokens — só identificadores
   // públicos e status; credenciais vivem em variáveis de ambiente).
   whatsappIntegration?: WhatsappIntegration;
@@ -244,6 +251,9 @@ export interface PublicBusiness {
   published: boolean;
   // Módulos efetivos (derivados; nunca incluem recurso desativado).
   features: Record<OptionalFeatureId, boolean>;
+  // Supressão explícita da vitrine (dono desligou Produtos em Recursos) —
+  // vence o fallback legado de pedidos na página pública (ver lib/features).
+  productsOff?: boolean;
   // Aparência/integração — sem segredos (tokens nunca saem do servidor).
   whatsappStatus?: WhatsappStatus;
 }

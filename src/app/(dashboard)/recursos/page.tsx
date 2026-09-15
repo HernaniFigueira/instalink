@@ -4,15 +4,24 @@
 // aparência. Aqui o toggle liga/desliga na hora (um por clique, sem "salvar
 // tudo") e o feedback explica o efeito. Desativar NUNCA apaga configuração.
 //
-// Estados completos (auditoria §12): carregando · sucesso · erro (com
-// tentativa nova) · vazio · "aguardando empresa". NUNCA skeleton infinito —
-// qualquer falha de rede/permissão tem fim e mensagem própria.
+// CONTEXTO DA EMPRESA (causa raiz do antigo "loop de Recursos"):
+//   • ?b= continua valendo (contexto explícito/compatibilidade);
+//   • sem ?b=, a empresa ativa é resolvida pelo /api/auth/me — a mesma
+//     fonte do DashboardShell (useBusinessId);
+//   • a API /api/businesses/[id]/features lê o id do PATH (corrigido).
+//
+// Cada falha tem seu estado próprio — NUNCA "Negócio não encontrado" para
+// tudo e NUNCA "Tentar de novo" mascarando contexto:
+//   sem empresa   → estado de ausência de empresa (CTA criar negócio);
+//   erro de rede  → mensagem de conexão + tentativa que recomeça o ciclo;
+//   permissão     → aviso de acesso (sessão preservada);
+//   404 real      → o único caso chamado "não encontrado".
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { Icon } from '@/components/icons';
 import { PageSkeleton } from '@/components/ui';
 import { AccessDenied, useAreaLoad } from '@/components/dashboard/AccessNotice';
+import { useBusinessId } from '@/components/dashboard/useBusinessId';
 import { apiGet, apiSend } from '@/lib/api-client';
 import { cn } from '@/lib/utils';
 
@@ -34,8 +43,7 @@ const GROUP_HINT: Record<string, string> = {
 };
 
 export default function RecursosPage() {
-  const params = useSearchParams();
-  const businessId = params.get('b') || '';
+  const { businessId, resolving, noBusiness, contextError, retry } = useBusinessId();
   const [rows, setRows] = useState<FeatureRow[] | null>(null);
   const [busy, setBusy] = useState('');
   const [failed, setFailed] = useState('');
@@ -90,14 +98,41 @@ export default function RecursosPage() {
 
   if (denied) return <AccessDenied area="Recursos" />;
 
-  // Sem empresa selecionada (ainda): o shell resolve `?b=` em instantes —
-  // dizemos o que está acontecendo em vez de um skeleton mudo.
-  if (!businessId) {
+  // ── Estados de CONTEXTO (antes de falar de dados) ────────────
+  // Sem empresa na conta: não é erro — é um estado com caminho claro.
+  if (noBusiness) {
+    return (
+      <div className="bg-white border border-zinc-200 rounded-lg text-center py-12 px-6">
+        <span className="mx-auto w-10 h-10 rounded-md bg-zinc-100 flex items-center justify-center text-zinc-400"><Icon n="store" size={20} /></span>
+        <h2 className="font-semibold text-sm mt-3">Nenhuma empresa nesta conta ainda</h2>
+        <p className="text-sm text-zinc-500 mt-1 max-w-sm mx-auto">
+          Os recursos (agendamentos, serviços, produtos…) pertencem a uma empresa. Crie a sua para ativar o que você precisa.
+        </p>
+        <Link href="/onboarding" className="mt-4 inline-flex text-xs font-bold bg-zinc-900 text-white px-4 py-2 rounded-md">Criar meu negócio</Link>
+      </div>
+    );
+  }
+
+  // Falha de rede ao resolver o CONTEXTO: a tentativa recomeça o ciclo
+  // inteiro (contexto → dados), nunca um retry decorativo no mesmo erro.
+  if (contextError) {
+    return (
+      <div className="bg-white border border-red-200 rounded-lg px-4 py-10 text-center" role="alert">
+        <span className="mx-auto w-10 h-10 rounded-md bg-red-50 border border-red-200 text-red-600 flex items-center justify-center"><Icon n="alert" size={18} /></span>
+        <p className="text-sm font-medium text-zinc-700 mt-3">Sem conexão com o servidor. Verifique sua internet.</p>
+        <button onClick={retry} className="mt-4 text-xs font-bold bg-zinc-900 text-white px-4 py-2 rounded-md">Tentar de novo</button>
+      </div>
+    );
+  }
+
+  // Resolvendo a empresa ativa (sem ?b= na URL): dizemos o que está
+  // acontecendo em vez de um skeleton mudo — e isso tem FIM.
+  if (resolving || !businessId) {
     return (
       <div className="bg-white border border-zinc-200 rounded-lg px-4 py-10 text-center">
         <p className="text-sm text-zinc-500 inline-flex items-center gap-2">
           <span className="w-3.5 h-3.5 border-2 border-zinc-300 border-t-zinc-700 rounded-full animate-spin" />
-          Selecionando sua empresa…
+          Carregando sua empresa…
         </p>
       </div>
     );
@@ -206,6 +241,13 @@ export default function RecursosPage() {
                   <p className="text-xs text-zinc-500 mt-1">{row.hint}</p>
                   {!row.enabled && (
                     <p className="text-[11px] text-amber-700 mt-2 leading-snug">{row.disabledHint}</p>
+                  )}
+                  {/* Produtos desligado: o caminho claro para cadastrar nunca
+                      some — a ativação é aqui em Recursos (regra do produto). */}
+                  {!row.enabled && row.id === 'products' && (
+                    <p className="text-[11px] text-zinc-400 mt-2 leading-snug">
+                      Ative para cadastrar e exibir a vitrine. Produtos salvos continuam guardados.
+                    </p>
                   )}
                 </div>
               </div>

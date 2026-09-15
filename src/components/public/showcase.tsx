@@ -34,17 +34,19 @@ export function ProductShowcase({ business, products, categories, title, subtitl
         <h2 className="text-[19px] font-extrabold tracking-tight leading-snug">{title || 'Vitrine'}</h2>
         {st ? <p className="il-muted text-[13px] mt-0.5 leading-snug">{st}</p> : null}
       </div>
-      <div className="grid grid-cols-2 gap-2.5">
+      {/* Grade EDITORIAL (não caixas): a foto é o protagonista — imagem em
+          destaque com proporção constante, texto e preço em fluxo livre. */}
+      <div className="grid grid-cols-2 gap-x-3 gap-y-5">
         {active.map((p) => {
           const price = showcasePriceCents(p);
           const href = business.whatsapp
             ? waLink(business.whatsapp, productInterestMessage(p))
             : '';
           return (
-            <article key={p.id} className="il-card p-3 flex flex-col gap-2">
-              <div className="h-24 -mx-3 -mt-3 mb-0 overflow-hidden" style={{ borderRadius: 'var(--il-radius) var(--il-radius) 0 0' }}>
+            <article key={p.id} className="flex flex-col">
+              <div className="aspect-square overflow-hidden" style={{ borderRadius: 'calc(var(--il-radius) + 2px)' }}>
                 {p.image ? (
-                  <img src={p.image} alt={p.name} loading="lazy" className="w-full h-full object-cover" />
+                  <img src={p.image} alt={p.name} loading="lazy" className="w-full h-full object-cover transition-transform duration-300 hover:scale-[1.04]" />
                 ) : (
                   <div className="w-full h-full flex items-center justify-center text-xl font-extrabold"
                     style={{ background: 'color-mix(in srgb, var(--il-primary) 10%, transparent)', color: 'var(--il-primary)' }}>
@@ -52,12 +54,12 @@ export function ProductShowcase({ business, products, categories, title, subtitl
                   </div>
                 )}
               </div>
-              <div className="flex items-start justify-between gap-1.5">
+              <div className="pt-2.5 flex items-start justify-between gap-1.5">
                 <p className="font-bold text-sm leading-tight line-clamp-2">{p.name}</p>
                 {p.featured && <Icon n="star" size={12} className="text-amber-500 shrink-0 mt-0.5" />}
               </div>
-              {p.description && <p className="il-muted text-xs line-clamp-2">{p.description}</p>}
-              <div className="mt-auto pt-1">
+              {p.description && <p className="il-muted text-xs line-clamp-2 mt-0.5">{p.description}</p>}
+              <div className="mt-auto pt-1.5">
                 {price > 0 ? (
                   <p className="font-extrabold il-accent text-sm">{money(price)}</p>
                 ) : (
@@ -69,12 +71,12 @@ export function ProductShowcase({ business, products, categories, title, subtitl
                 <a
                   href={href} target="_blank" rel="noreferrer"
                   onClick={() => trackEvent(business.id, 'whatsapp_click', { from: 'vitrine', productId: p.id, kind: 'product_interest' })}
-                  className="il-btn block text-center text-xs font-extrabold px-3 py-2.5 mt-1"
+                  className="il-btn block text-center text-xs font-extrabold px-3 py-2.5 mt-2"
                 >
                   Tenho interesse
                 </a>
               ) : (
-                <p className="il-muted text-[10px] mt-1">Fale com o negócio para saber mais.</p>
+                <p className="il-muted text-[10px] mt-2">Fale com o negócio para saber mais.</p>
               )}
             </article>
           );

@@ -2,19 +2,25 @@ import { NextRequest, NextResponse } from 'next/server';
 import { updateDB } from '@/lib/db';
 import { requireBusiness } from '@/lib/access';
 import { featureDef, isValidFeature, normalizeFeatures, offeredFeatureState, withActivationBlock } from '@/lib/features';
+import { businessIdFromRoute } from '@/lib/business-context';
 import { pushAudit } from '@/lib/audit';
 import type { OptionalFeatureId } from '@/lib/types';
 
-// GET ?businessId= — estado dos módulos OFERECIDOS na experiência.
+// GET /api/businesses/[id]/features — estado dos módulos OFERECIDOS.
+// CAUSA RAIZ DO "LOOP DE RECURSOS" (corrigida): antes o GET lia o id SOMENTE
+// de ?businessId=, ignorando o [id] do path — a tela chamava sem query e a
+// API respondia 400 "Negócio não informado.", prendendo o lojista no ciclo
+// erro → "Tentar de novo" → erro. A empresa vem do PATH (a URL já diz qual
+// é); a query ?businessId= fica apenas como fallback de compatibilidade.
 // Módulos legados (pedidos/orçamentos) não entram na lista: continuam
 // resolúveis por isFeatureEnabled (dados e páginas antigas seguem válidos),
 // mas a empresa não é convidada a ligá-los/desligá-los — não fazem mais
 // parte do posicionamento do InstaLink.
-// PATCH { businessId, feature, enabled } — liga/desliga IMEDIATAMENTE
-// (um módulo por chamada: sem "salvar tudo" e sem risco de sobrescrever
-// outras configurações). Desativar nunca apaga dados.
-export async function GET(req: NextRequest) {
-  const businessId = req.nextUrl.searchParams.get('businessId') || '';
+// PATCH { feature, enabled } — liga/desliga IMEDIATAMENTE (um módulo por
+// chamada: sem "salvar tudo" e sem risco de sobrescrever outras
+// configurações). Desativar nunca apaga dados.
+export async function GET(req: NextRequest, { params }: { params: { id: string } }) {
+  const businessId = businessIdFromRoute(params, req);
   const guard = await requireBusiness(req, businessId);
   if (!guard.ok) return guard.res;
   return NextResponse.json({
@@ -25,10 +31,12 @@ export async function GET(req: NextRequest) {
   });
 }
 
-export async function PATCH(req: NextRequest) {
+export async function PATCH(req: NextRequest, { params }: { params: { id: string } }) {
   try {
     const body = await req.json();
-    const businessId = String(body.businessId || '');
+    // O path manda; o body.businessId continua aceito como fallback
+    // (compatibilidade com clientes antigos que só enviavam o corpo).
+    const businessId = String(params?.id || '').trim() || String(body.businessId || '');
     const guard = await requireBusiness(req, businessId, 'config');
     if (!guard.ok) return guard.res;
     const { ctx } = guard;
@@ -46,6 +54,10 @@ export async function PATCH(req: NextRequest) {
         // Sair do papel: remover o módulo é permitido até com a lista vazia
         // (empresa pode ficar sem nenhum módulo opcional ligado).
         b.modes = [...set];
+        // Supressão explícita da vitrine: desligar Produtos precisa VENCER o
+        // fallback legado de pedidos (senão a vitrine continuava no ar para
+        // contas antigas com pedidos — a contradição auditada em §4).
+        if (def.id === 'products') b.productsOff = !enabled;
       } else {
         const features = normalizeFeatures(b, db.pages.find((p) => p.businessId === b.id)?.blocks || []);
         features[def.id as OptionalFeatureId] = enabled;

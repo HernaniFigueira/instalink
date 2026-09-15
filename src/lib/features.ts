@@ -245,12 +245,15 @@ export function featureTogglePatch(
   business: Business,
   id: FeatureId,
   enabled: boolean,
-): { modes?: BusinessMode[]; features?: Record<OptionalFeatureId, boolean>; about?: Business['about'] } {
+): { modes?: BusinessMode[]; features?: Record<OptionalFeatureId, boolean>; about?: Business['about']; productsOff?: boolean } {
   const def = featureDef(id);
   if (!def) return {};
   if (def.mode) {
     const set = new Set(business.modes || []);
     if (enabled) set.add(def.mode); else set.delete(def.mode);
+    // "Produtos" desligado grava a supressão explícita da vitrine (vence o
+    // fallback legado de pedidos — ver ordersShowcaseFallback).
+    if (id === 'products') return { modes: [...set], productsOff: !enabled };
     return { modes: [...set] };
   }
   const features = normalizeFeatures(business);
@@ -288,8 +291,20 @@ export function blockFeature(type: BlockType): FeatureId | null {
  *  3. blocos de vitrine de serviços também aparecem quando o módulo de
  *     agendamentos está ligado (os serviços são a base da agenda).
  */
+/**
+ * FALLBACK LEGADO (Pedidos → catálogo): páginas antigas que exibiam a
+ * vitrine através do módulo de pedidos continuam funcionando — MAS o
+ * fallback respeita a supressão explícita (`productsOff`), gravada quando o
+ * dono desliga Produtos em Recursos. Sem isso, desligar a vitrine não
+ * fazia efeito em contas que também têm o legado de pedidos (contradição
+ * auditada em §4): com o toggle, a vitrine SEMPRE obedece ao Recursos.
+ */
+function ordersShowcaseFallback(business: Pick<Business, 'modes' | 'features' | 'productsOff'>): boolean {
+  return isFeatureEnabled(business, 'orders') && business.productsOff !== true;
+}
+
 export function blockVisible(
-  business: Pick<Business, 'modes' | 'features'>,
+  business: Pick<Business, 'modes' | 'features' | 'productsOff'>,
   block: Block,
 ): boolean {
   if (block.enabled === false) return false;
@@ -297,13 +312,13 @@ export function blockVisible(
   if (!feature) return true;
   if (isFeatureEnabled(business, feature)) return true;
   if (feature === 'services' && isFeatureEnabled(business, 'bookings')) return true;
-  if (feature === 'products' && isFeatureEnabled(business, 'orders')) return true;
+  if (feature === 'products' && ordersShowcaseFallback(business)) return true;
   return false;
 }
 
 /** Blocos que a página pública deve renderizar, em ordem. */
 export function visibleBlocks(
-  business: Pick<Business, 'modes' | 'features'>,
+  business: Pick<Business, 'modes' | 'features' | 'productsOff'>,
   blocks: Block[],
 ): Block[] {
   return [...blocks].sort((a, b) => a.order - b.order).filter((b) => blockVisible(business, b));
@@ -331,13 +346,15 @@ export function servicesVisible(
 
 /** O catálogo/vitrine aparece? (módulo produtos; legado: pedidos também) */
 export function productsVisible(
-  business: Pick<Business, 'modes' | 'features'>,
+  business: Pick<Business, 'modes' | 'features' | 'productsOff'>,
   products: Array<{ active?: boolean }>,
 ): boolean {
   // 'orders' continua contando APENAS para não quebrar páginas antigas que
   // exibiam catálogo via pedidos; a renderização atual é a vitrine (CTA no
-  // WhatsApp) — carrinho e checkout saíram da experiência.
-  const on = isFeatureEnabled(business, 'products') || isFeatureEnabled(business, 'orders');
+  // WhatsApp) — carrinho e checkout saíram da experiência. A supressão
+  // explícita (productsOff) vence o fallback: desligar Produtos SOME a
+  // vitrine mesmo com o legado de pedidos ligado.
+  const on = isFeatureEnabled(business, 'products') || ordersShowcaseFallback(business);
   return on && products.some((p) => p.active !== false);
 }
 
@@ -353,11 +370,11 @@ export function whatsappVisible(business: Pick<Business, 'modes' | 'features' | 
  * a vitrine vem depois como espaço próprio (e nunca "compra").
  */
 export function allowedCtaTargets(
-  business: Pick<Business, 'modes' | 'features' | 'whatsapp'>,
+  business: Pick<Business, 'modes' | 'features' | 'whatsapp' | 'productsOff'>,
 ): Array<'products' | 'booking' | 'quote' | 'whatsapp'> {
   const out: Array<'products' | 'booking' | 'quote' | 'whatsapp'> = [];
   if (isFeatureEnabled(business, 'bookings')) out.push('booking');
-  if (isFeatureEnabled(business, 'products') || isFeatureEnabled(business, 'orders')) out.push('products');
+  if (isFeatureEnabled(business, 'products') || ordersShowcaseFallback(business)) out.push('products');
   if (isFeatureEnabled(business, 'quote')) out.push('quote');
   if (whatsappVisible(business)) out.push('whatsapp');
   return out;
@@ -474,14 +491,14 @@ export function featuresForActivatedBlocks(
  * segura o bloco, ou '' quando o bloco pode aparecer como está.
  */
 export function blockModuleGate(
-  business: Pick<Business, 'modes' | 'features'>,
+  business: Pick<Business, 'modes' | 'features' | 'productsOff'>,
   type: BlockType,
 ): string {
   const feature = blockFeature(type);
   if (!feature) return '';
   if (isFeatureEnabled(business, feature)) return '';
   if (feature === 'services' && isFeatureEnabled(business, 'bookings')) return '';
-  if (feature === 'products' && isFeatureEnabled(business, 'orders')) return '';
+  if (feature === 'products' && ordersShowcaseFallback(business)) return '';
   return featureDef(feature)?.label || feature;
 }
 

@@ -172,19 +172,19 @@ export default async function PublicPage({ params }: { params: { slug: string } 
   );
 }
 
-// Seção "Sobre a empresa" (título, texto e imagem opcional — configurável no painel).
+// Seção "Sobre a empresa" — composição EDITORIAL (não um card): imagem em
+// largura total com respiro, título e texto em fluxo. Quanto menos caixa,
+// mais a seção parece parte de um mini-site (e não de um painel de blocos).
 function AboutView({ about }: { about: { title: string; text: string; image: string } }) {
   return (
     <section id="sobre" className="scroll-mt-20">
-      <div className="il-card overflow-hidden">
-        {about.image ? (
-          <img src={about.image} alt={about.title || 'Sobre'} loading="lazy" className="w-full h-40 object-cover" />
-        ) : null}
-        <div className="p-5">
-          {about.title && <h2 className="text-xl font-extrabold tracking-tight">{about.title}</h2>}
-          {about.text && <p className="il-muted text-sm mt-1.5 whitespace-pre-line">{about.text}</p>}
-        </div>
-      </div>
+      {about.image ? (
+        <img src={about.image} alt={about.title || 'Sobre'} loading="lazy"
+          className="w-full h-44 object-cover mb-4"
+          style={{ borderRadius: 'calc(var(--il-radius) + 4px)' }} />
+      ) : null}
+      {about.title && <h2 className="text-[19px] font-extrabold tracking-tight leading-snug">{about.title}</h2>}
+      {about.text && <p className="il-muted text-[15px] mt-2 whitespace-pre-line leading-relaxed">{about.text}</p>}
     </section>
   );
 }
@@ -257,18 +257,30 @@ function BlockView({ block, business, agent, catalog, extras }: {
     case 'profile': {
       const status = openStatus(business.hours);
       return (
-        <section className="-mx-4">
-          {/* Capa em largura total — sensação de site, não de link na bio. */}
+        <section>
+          {/* CAPA emoldurada (não banner full-bleed): margem lateral do
+              container, cantos bem arredondados, proporção de mini-site e
+              acabamento sutil de borda — composição premium. */}
           {business.cover ? (
-            <img src={business.cover} alt={`Foto de ${business.name}`} className="w-full h-36 object-cover" />
+            <div
+              className="overflow-hidden"
+              style={{
+                borderRadius: 'calc(var(--il-radius) + 8px)',
+                border: '1px solid color-mix(in srgb, var(--il-muted) 16%, transparent)',
+                boxShadow: '0 12px 28px -18px color-mix(in srgb, var(--il-muted) 55%, transparent)',
+              }}
+            >
+              <img src={business.cover} alt={`Foto de ${business.name}`} className="w-full h-44 object-cover" />
+            </div>
           ) : null}
-          <div className={business.cover ? 'px-4 -mt-10' : 'px-4 pt-2'}>
+          <div className={business.cover ? 'px-1 -mt-12' : 'px-1 pt-2'}>
             <div className="flex items-end justify-center">
-              <div className="w-[76px] h-[76px] rounded-full overflow-hidden flex items-center justify-center text-2xl font-extrabold tracking-tight shrink-0"
+              <div className="w-[84px] h-[84px] rounded-full overflow-hidden flex items-center justify-center text-2xl font-extrabold tracking-tight shrink-0"
                 style={{
                   background: 'color-mix(in srgb, var(--il-primary) 14%, var(--il-surface))',
                   color: 'var(--il-primary)',
-                  boxShadow: '0 0 0 4px var(--il-bg)',
+                  // Anel duplo de acabamento: separa da capa e dá o traço fino.
+                  boxShadow: '0 0 0 4px var(--il-bg), 0 0 0 5.5px color-mix(in srgb, var(--il-muted) 22%, transparent)',
                 }}>
                 {business.logo ? <img src={business.logo} alt={business.name} className="w-full h-full object-cover" /> : initials(business.name)}
               </div>
@@ -355,10 +367,11 @@ function BlockView({ block, business, agent, catalog, extras }: {
     }
     case 'text': {
       if (!s.title && !s.body) return null;
+      // Texto livre = seção editorial (tipografia + respiro), não uma caixa.
       return (
-        <section className="il-card p-5">
-          {s.title && <h2 className="font-extrabold text-lg">{s.title}</h2>}
-          {s.body && <p className="il-muted text-sm mt-1 whitespace-pre-line">{s.body}</p>}
+        <section>
+          {s.title && <h2 className="text-[19px] font-extrabold tracking-tight leading-snug">{s.title}</h2>}
+          {s.body && <p className="il-muted text-[15px] mt-2 whitespace-pre-line leading-relaxed">{s.body}</p>}
         </section>
       );
     }
@@ -394,14 +407,20 @@ function BlockView({ block, business, agent, catalog, extras }: {
       // Profissionais ATIVOS do negócio — quem realiza os atendimentos.
       const list = (catalog.professionals || []).filter((p: any) => p.active !== false);
       if (list.length === 0) return null;
+      // Equipe leve: retrato + nome + função, sem card — as pessoas são o
+      // conteúdo, não uma caixa em volta delas.
       return (
         <section id="profissionais" className="scroll-mt-20">
           <SectionHead title={s.title} subtitle={s.subtitle} fallback="Nossa equipe" />
-          <div className="flex gap-2.5 overflow-x-auto pb-1 snap-x -mx-1 px-1">
+          <div className="flex gap-5 overflow-x-auto pb-1 snap-x -mx-1 px-1">
             {list.map((p: any) => (
-              <figure key={p.id} className="il-card w-36 shrink-0 snap-start p-4 flex flex-col items-center text-center gap-2">
+              <figure key={p.id} className="w-32 shrink-0 snap-start flex flex-col items-center text-center gap-2.5">
                 <div className="w-16 h-16 rounded-full overflow-hidden bg-zinc-100 flex items-center justify-center font-extrabold text-lg"
-                  style={{ background: 'color-mix(in srgb, var(--il-primary) 12%, var(--il-surface))', color: 'var(--il-primary)' }}>
+                  style={{
+                    background: 'color-mix(in srgb, var(--il-primary) 12%, var(--il-surface))',
+                    color: 'var(--il-primary)',
+                    boxShadow: '0 0 0 3px var(--il-bg), 0 0 0 4.5px color-mix(in srgb, var(--il-muted) 20%, transparent)',
+                  }}>
                   {p.photo ? <img src={p.photo} alt={p.name} loading="lazy" className="w-full h-full object-cover" /> : p.name.slice(0, 1).toUpperCase()}
                 </div>
                 <figcaption className="min-w-0">
@@ -419,15 +438,17 @@ function BlockView({ block, business, agent, catalog, extras }: {
       const items: Array<{ icon?: string; title?: string; text?: string }> = Array.isArray(s.items) ? s.items : [];
       const filled = items.filter((x) => String(x?.title || '').trim());
       if (filled.length === 0) return null;
+      // Diferenciais como lista editorial (ícone + tipografia + espaço) —
+      // sem caixas em volta de cada item.
       return (
         <section id="diferenciais" className="scroll-mt-20">
           <SectionHead title={s.title} subtitle={s.subtitle} fallback="Por que escolher a gente" />
-          <div className="space-y-2.5">
+          <div className="space-y-4">
             {filled.map((x, i) => (
-              <div key={i} className="il-card p-4 flex items-start gap-3">
-                <span className="w-9 h-9 rounded-xl shrink-0 flex items-center justify-center"
+              <div key={i} className="flex items-start gap-3.5">
+                <span className="w-9 h-9 rounded-full shrink-0 flex items-center justify-center mt-0.5"
                   style={{ background: 'color-mix(in srgb, var(--il-primary) 12%, transparent)', color: 'var(--il-primary)' }}>
-                  <Icon n={x.icon || 'checkCircle'} size={18} />
+                  <Icon n={x.icon || 'checkCircle'} size={17} />
                 </span>
                 <div className="min-w-0">
                   <p className="font-bold text-sm leading-tight">{x.title}</p>
@@ -461,15 +482,33 @@ function BlockView({ block, business, agent, catalog, extras }: {
       const grouped = catalog.serviceCategories.length > 0;
       // Agenda ligada ⇒ botão Agendar por serviço (módulo, não apresentação).
       const canBook = canBookPublic(business, list);
-      const card = (sv: any, wide: boolean) => (
-        <div key={sv.id} className={wide ? 'il-card p-4 w-60 shrink-0 snap-start flex flex-col gap-2.5' : 'il-card p-4 flex justify-between items-center gap-3'}>
-          {sv.image ? <img src={sv.image} alt={sv.name} loading="lazy" className={wide ? 'w-full h-28 object-cover' : 'w-16 h-16 rounded-xl object-cover shrink-0'} style={{ borderRadius: 'var(--il-radius)' }} /> : null}
+      const divider = 'color-mix(in srgb, var(--il-muted) 16%, transparent)';
+      // LISTA EDITORIAL (padrão): linhas com espaço e divisores — nunca uma
+      // pilha de caixas. O modo CARROSSEL (muitos serviços) continua visual:
+      // ali o card ajuda (foto grande), por isso é o único que o mantém.
+      const card = (sv: any, wide: boolean) => wide ? (
+        <div key={sv.id} className="il-card p-4 w-60 shrink-0 snap-start flex flex-col gap-2.5">
+          {sv.image ? <img src={sv.image} alt={sv.name} loading="lazy" className="w-full h-28 object-cover" style={{ borderRadius: 'var(--il-radius)' }} /> : null}
           <div className="min-w-0 flex-1">
             <p className="font-bold flex items-center gap-1.5">{sv.name} {sv.featured && <Icon n="star" size={13} className="shrink-0 text-amber-500" />}</p>
             {sv.description && <p className="il-muted text-xs truncate">{sv.description}</p>}
             {/* Duração não é pública; preço só quando o serviço libera (showPrice). */}
           </div>
-          <div className={wide ? 'flex items-center justify-between gap-2 w-full' : 'shrink-0 flex flex-col items-end gap-1.5'}>
+          <div className="flex items-center justify-between gap-2 w-full">
+            {priceVisible(sv) && <p className="font-extrabold il-accent">{money(sv.price)}</p>}
+            {canBook && sv.bookable !== false && (
+              <ServiceAgendarButton serviceId={sv.id} serviceName={sv.name} />
+            )}
+          </div>
+        </div>
+      ) : (
+        <div key={sv.id} className="flex justify-between items-center gap-3 py-3.5 first:pt-1 last:pb-0 border-b last:border-b-0" style={{ borderColor: divider }}>
+          {sv.image ? <img src={sv.image} alt={sv.name} loading="lazy" className="w-14 h-14 object-cover shrink-0" style={{ borderRadius: 'calc(var(--il-radius) - 2px)' }} /> : null}
+          <div className="min-w-0 flex-1">
+            <p className="font-bold flex items-center gap-1.5">{sv.name} {sv.featured && <Icon n="star" size={13} className="shrink-0 text-amber-500" />}</p>
+            {sv.description && <p className="il-muted text-xs truncate">{sv.description}</p>}
+          </div>
+          <div className="shrink-0 flex flex-col items-end gap-1.5">
             {priceVisible(sv) && <p className="font-extrabold il-accent">{money(sv.price)}</p>}
             {canBook && sv.bookable !== false && (
               <ServiceAgendarButton serviceId={sv.id} serviceName={sv.name} />
@@ -486,13 +525,13 @@ function BlockView({ block, business, agent, catalog, extras }: {
               {list.map((sv: any) => card(sv, true))}
             </div>
           ) : grouped ? (
-            <div className="space-y-2.5">
+            <div>
               {catalog.serviceCategories.map((cat: any) => {
                 const items = list.filter((x: any) => x.categoryId === cat.id);
                 if (items.length === 0) return null;
                 return (
-                  <div key={cat.id} className="space-y-2.5">
-                    <p className="text-xs font-extrabold uppercase tracking-wider il-muted pt-1">{cat.name}</p>
+                  <div key={cat.id} className="mt-5 first:mt-0">
+                    <p className="text-xs font-extrabold uppercase tracking-wider il-muted pb-1">{cat.name}</p>
                     {items.map((sv: any) => card(sv, false))}
                   </div>
                 );
@@ -500,7 +539,7 @@ function BlockView({ block, business, agent, catalog, extras }: {
               {list.filter((x: any) => !x.categoryId).map((sv: any) => card(sv, false))}
             </div>
           ) : (
-            <div className="space-y-2.5">
+            <div>
               {list.map((sv: any) => card(sv, false))}
             </div>
           )}
@@ -515,14 +554,19 @@ function BlockView({ block, business, agent, catalog, extras }: {
       const dyn = catalog.reviews || [];
       if (dyn.length === 0 && items.filter((t) => t.text).length === 0) return null;
       // Carrossel horizontal (desktop e mobile): reduz a rolagem vertical.
-      const card = 'il-card w-[82%] xs:w-72 sm:w-72 shrink-0 snap-start p-4 flex flex-col';
+      // Fundo sutil em vez de card com borda — mais leve, mesma leitura.
+      const card = 'w-[82%] xs:w-72 sm:w-72 shrink-0 snap-start p-4 flex flex-col';
+      const cardStyle = {
+        background: 'color-mix(in srgb, var(--il-muted) 7%, transparent)',
+        borderRadius: 'var(--il-radius)',
+      };
       return (
         <section id="avaliacoes" className="scroll-mt-20">
           <SectionHead title={s.title} subtitle={s.subtitle} fallback="O que dizem por aí" />
           <div className="flex gap-2.5 overflow-x-auto pb-1 -mx-1 px-1 snap-x snap-mandatory" role="list" aria-label="Avaliações">
             {dyn.length > 0 ? (
               dyn.map((r) => (
-                <figure key={r.id} role="listitem" className={card}>
+                <figure key={r.id} role="listitem" className={card} style={cardStyle}>
                   <Stars value={r.rating} />
                   {r.text ? <blockquote className="text-sm mt-1.5 line-clamp-4">“{r.text}”</blockquote> : null}
                   <figcaption className="flex items-center gap-1.5 mt-auto pt-2">
@@ -535,7 +579,7 @@ function BlockView({ block, business, agent, catalog, extras }: {
               ))
             ) : (
               items.filter((t) => t.text).map((t, i) => (
-                <figure key={i} role="listitem" className={card}>
+                <figure key={i} role="listitem" className={card} style={cardStyle}>
                   <blockquote className="text-sm line-clamp-4">“{t.text}”</blockquote>
                   {t.name && <figcaption className="il-muted text-xs font-bold mt-auto pt-2 truncate">— {t.name}</figcaption>}
                 </figure>
@@ -543,7 +587,9 @@ function BlockView({ block, business, agent, catalog, extras }: {
             )}
           </div>
           {business.googleUrl && (
-            <a href={business.googleUrl} target="_blank" rel="noreferrer" className="il-card block text-center font-bold py-3 mt-2.5 text-sm">
+            <a href={business.googleUrl} target="_blank" rel="noreferrer"
+              className="inline-flex items-center justify-center gap-1.5 font-bold text-sm mt-3 px-4 py-2 il-accent"
+              style={{ borderRadius: 'var(--il-radius)', border: '1px solid color-mix(in srgb, var(--il-primary) 30%, transparent)' }}>
               Avaliar no Google
             </a>
           )}
