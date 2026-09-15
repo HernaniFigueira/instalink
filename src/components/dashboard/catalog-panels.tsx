@@ -379,7 +379,7 @@ export function CatalogCrossLinks({ businessId, current }: { businessId: string;
       {items.filter((x) => x.id !== current).map((x) => (
         <Link key={x.id} href={x.href}
           className="text-xs font-semibold bg-white border border-zinc-200 px-3.5 py-2 rounded-md hover:border-zinc-400 inline-flex items-center gap-1.5">
-          <Icon n={x.id === 'servicos' ? 'service' : x.id === 'profissionais' ? 'users' : 'clock'} size={13} />
+          <Icon n={x.id === 'servicos' ? 'service' : x.id === 'profissionais' ? 'userCircle' : 'clock'} size={13} />
           {x.label} <span className="text-zinc-400 font-normal">· {x.hint}</span>
         </Link>
       ))}

@@ -8,9 +8,11 @@ import { dashboardContext, recentActivityLists, setupChecklist, setupProgress } 
 import {
   REVENUE_HINTS, REVENUE_LABELS, REVENUE_UNIT_LABELS, bookingRevenue, orderRevenue,
 } from '@/lib/revenue';
-import { nowHM, todayISO, addDaysISO } from '@/lib/tz';
+import { nowHM, todayISO } from '@/lib/tz';
+import { parsePeriodParam, periodWindows } from '@/lib/periods';
 
-// GET ?businessId=&period=7|30 — dados da Dashboard.
+// GET ?businessId=&period=7|30|90|365|0 — dados da Dashboard.
+// (0 = todo o período; fonte única dos períodos: lib/periods.ts.)
 //
 // PERMISSÃO: `dashboard` é independente (lib/permissions.ts). Quem não a tem
 // recebe 403 — e o painel trata 403 com mensagem amigável SEM deslogar
@@ -30,7 +32,7 @@ import { nowHM, todayISO, addDaysISO } from '@/lib/tz';
 //   orders            → "Receita" = pedidos não cancelados do período.
 export async function GET(req: NextRequest) {
   const businessId = req.nextUrl.searchParams.get('businessId') || '';
-  const period = req.nextUrl.searchParams.get('period') === '7' ? 7 : 30;
+  const period = parsePeriodParam(req.nextUrl.searchParams.get('period'));
   const guard = await requireBusiness(req, businessId, 'dashboard');
   if (!guard.ok) return guard.res;
   const db = guard.db;
@@ -51,11 +53,12 @@ export async function GET(req: NextRequest) {
   const activity = recentActivityLists(m);
 
   const today = todayISO();
-  const from = addDaysISO(today, -(period - 1));
-  const prevFrom = addDaysISO(today, -(period * 2 - 1));
-  const prevTo = addDaysISO(today, -period);
-  const periodWindow = { from, to: today };
-  const prevWindow = { from: prevFrom, to: prevTo };
+  const win = periodWindows(period, today);
+  const from = win.from;
+  const periodWindow = { from: win.from, to: win.to };
+  // Todo o período não tem janela anterior comparável: a variação é
+  // omitida na UI (o delta viria zerado no `prev`, sem significado).
+  const prevWindow = win.hasPrevious ? { from: win.prevFrom, to: win.prevTo } : undefined;
 
   // ── Preço dos serviços (fonte da receita prevista de atendimentos) ──
   const servicesById = Object.fromEntries(

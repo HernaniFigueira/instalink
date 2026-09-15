@@ -26,8 +26,11 @@ import { useSearchParams } from 'next/navigation';
 import { todayISO, addDaysISO, weekdayOf, formatDateBR, nowHM } from '@/lib/tz';
 import { WEEKDAYS, WEEKDAYS_LONG, timeToMin, minToTime } from '@/lib/utils';
 import type { Availability, Booking, BookingStatus, Professional, Service } from '@/lib/types';
-import { ListSkeleton, Button } from '@/components/ui';
+import { ListSkeleton, Button, AttentionStrip } from '@/components/ui';
 import { Icon } from '@/components/icons';
+import {
+  ATTENTION_MARK_CLS, ATTENTION_RING_CLS, BOOKING_BLOCK, BOOKING_DOT, BOOKING_STATUS,
+} from '@/lib/status';
 import { BookingDetailSheet } from '@/components/dashboard/BookingDetailSheet';
 import { NewBookingSheet } from '@/components/dashboard/NewBookingSheet';
 import { AccessDenied, PermissionNotice, useAreaLoad, useForbiddenNotice } from '@/components/dashboard/AccessNotice';
@@ -43,20 +46,8 @@ import {
 
 type View = 'day' | 'week' | 'month';
 
-const STATUS_BLOCK: Record<BookingStatus, string> = {
-  pending: 'border-amber-300 bg-amber-50 text-amber-900',
-  confirmed: 'border-emerald-300 bg-emerald-50 text-emerald-900',
-  completed: 'border-blue-300 bg-blue-50 text-blue-900',
-  cancelled: 'border-zinc-200 bg-zinc-50 text-zinc-400',
-  no_show: 'border-red-300 bg-red-50 text-red-700',
-};
-const STATUS_DOT: Record<BookingStatus, string> = {
-  pending: 'bg-amber-400',
-  confirmed: 'bg-emerald-500',
-  completed: 'bg-blue-500',
-  cancelled: 'bg-zinc-300',
-  no_show: 'bg-red-500',
-};
+// Cores dos estados vêm da fonte única (lib/status.ts): cor sólida = estado.
+// Nada de mapa local de cor por status neste arquivo.
 
 const PX_PER_HOUR = 52;
 const GUTTER_W = 56;
@@ -73,9 +64,14 @@ interface BlockVM {
   leftPct: number;
   widthPct: number;
   time: string;
-  title: string;
-  subtitle: string;
+  /** Linha 1: cliente · Linha 2: serviço · Linha 3: horário + estado. */
+  name: string;
+  service: string;
+  timeRange: string;
+  statusLabel: string;
   cls: string;
+  /** Horário passou e continua em aberto: marcador amarelo de atenção. */
+  attention: boolean;
   dragging: boolean;
   label: string;
 }
@@ -165,9 +161,10 @@ const GridColumn = memo(function GridColumn({ column, variant, highlight, onPres
           onPointerCancel={onPressCancel}
           onClick={() => onBlockClick(b.id)}
           className={
-            'absolute rounded-md border-l-2 px-2 py-1 text-left overflow-hidden touch-none select-none '
+            'absolute rounded-md border border-l-4 px-2 py-1 text-left overflow-hidden touch-none select-none shadow-sm '
             + b.cls
-            + (b.dragging ? ' opacity-40 ring-2 ring-zinc-900 ring-offset-1 cursor-grabbing' : ' hover:opacity-90 cursor-grab active:cursor-grabbing')
+            + (b.attention && !b.dragging ? ` ${ATTENTION_RING_CLS}` : '')
+            + (b.dragging ? ' opacity-40 ring-2 ring-zinc-900 ring-offset-1 cursor-grabbing' : ' hover:brightness-95 cursor-grab active:cursor-grabbing')
           }
           style={{
             top: b.top,
@@ -176,8 +173,22 @@ const GridColumn = memo(function GridColumn({ column, variant, highlight, onPres
             width: `calc(${b.widthPct}% - 4px)`,
           }}
         >
-          <span className="block text-[11px] font-semibold leading-tight truncate">{b.title}</span>
-          {b.height > 30 && <span className="block text-[10px] leading-tight truncate opacity-80">{b.subtitle}</span>}
+          {/* quem + quando + o quê + em que estado — detalhe fica no drawer. */}
+          <span className="block text-[11px] font-bold leading-tight truncate">{b.name}</span>
+          {b.height > 34 && <span className="block text-[10px] font-medium leading-tight truncate opacity-90">{b.service}</span>}
+          {b.height > 54 && (
+            <span className="mt-0.5 flex items-center gap-1 text-[9px] font-bold uppercase tracking-wide leading-tight">
+              <span className="tabular-nums opacity-90 whitespace-nowrap">{b.timeRange}</span>
+              <span aria-hidden="true" className="opacity-60">·</span>
+              <span className="truncate">{b.statusLabel}</span>
+            </span>
+          )}
+          {b.attention && (
+            <span title="Precisa de fechamento" aria-hidden="true"
+              className={`absolute top-1 right-1 w-4 h-4 rounded-full text-[10px] font-black leading-4 text-center ${ATTENTION_MARK_CLS}`}>
+              !
+            </span>
+          )}
         </button>
       ))}
       {variant === 'week' && column.blocks.length === 0 && (
@@ -191,7 +202,20 @@ export default function AgendaPage() {
   const params = useSearchParams();
   const businessId = params.get('b') || '';
   const [view, setView] = useState<View>('day');
-  const [focus, setFocus] = useState(todayISO());
+  // Deep-link operacional: /agenda?b=…&data=2026-09-20 abre focada no dia
+  // (usado pelo "Ver na agenda" do histórico do cliente). Valor inválido
+  // é ignorado e cai para hoje — nunca quebra a tela.
+  const dataParam = params.get('data') || '';
+  const [focus, setFocus] = useState(
+    /^\d{4}-\d{2}-\d{2}$/.test(dataParam) ? dataParam : todayISO(),
+  );
+  useEffect(() => {
+    if (/^\d{4}-\d{2}-\d{2}$/.test(dataParam)) setFocus(dataParam);
+  }, [dataParam]);
+  // Tela cheia do produto (expande sobre a sidebar; ESC sai) + filtros.
+  const [fullscreen, setFullscreen] = useState(false);
+  const [statusFilter, setStatusFilter] = useState<'' | BookingStatus>('');
+  const [proFilter, setProFilter] = useState('');
   const [bookings, setBookings] = useState<Booking[]>([]);
   const [services, setServices] = useState<Service[]>([]);
   const [pros, setPros] = useState<Professional[]>([]);
@@ -298,6 +322,8 @@ export default function AgendaPage() {
   );
 
   // ── Colunas: dia = profissionais; semana = dias ──
+  // Filtros compactos (status + profissional) só escondem blocos/colunas da
+  // grade — dados, drag e ações continuam sobre os mesmos agendamentos.
   const columns = useMemo<ColumnVM[]>(() => {
     const base: Array<{ key: string; label: string; sub: string; date: string; professionalId: string; isProfessional: boolean }> = [];
     if (view === 'week') {
@@ -310,10 +336,14 @@ export default function AgendaPage() {
     } else if (activePros.length === 0) {
       base.push({ key: '__all', label: 'Agenda', sub: '', date: focus, professionalId: '', isProfessional: false });
     } else {
-      for (const p of activePros) {
+      // Filtro por profissional: só a coluna dele. Filtro obsoleto (id que
+      // não existe mais) cai para "tudo" — nunca grade vazia sem motivo.
+      const filtering = proFilter ? activePros.some((x) => x.id === proFilter) : false;
+      const shown = filtering ? activePros.filter((x) => x.id === proFilter) : activePros;
+      for (const p of shown) {
         base.push({ key: p.id, label: p.name, sub: p.role || '', date: focus, professionalId: p.id, isProfessional: true });
       }
-      if (bookings.some((b) => b.date === focus && !b.professionalId)) {
+      if (!filtering && bookings.some((b) => b.date === focus && !b.professionalId)) {
         base.push({ key: '__none', label: 'Sem profissional', sub: '', date: focus, professionalId: '', isProfessional: false });
       }
     }
@@ -322,6 +352,10 @@ export default function AgendaPage() {
       const list = bookings
         .filter((b) => b.date === c.date)
         .filter((b) => (c.isProfessional ? b.professionalId === c.professionalId : c.key === '__none' ? !b.professionalId : true))
+        .filter((b) => !statusFilter || b.status === statusFilter)
+        // Semana: filtra os blocos pelo profissional. Dia: a coluna filtrada
+        // já restringe (só existe a coluna do profissional escolhido).
+        .filter((b) => !proFilter || view !== 'week' || b.professionalId === proFilter)
         .sort((a, b) => (a.time < b.time ? -1 : 1));
       const layout = layoutBlocks(
         list.map((b) => ({ id: b.id, minute: timeToMin(b.time), durationMin: durationOf(b) })),
@@ -331,6 +365,11 @@ export default function AgendaPage() {
       const blocks: BlockVM[] = list.map((b) => {
         const l = byId.get(b.id)!;
         const pro = b.professionalId ? proName(b.professionalId) : '';
+        const dur = durationOf(b);
+        const endMin = timeToMin(b.time) + dur;
+        const endHM = minToTime(endMin % (24 * 60));
+        const attention = needsClosure(b, dur, today, nowHM());
+        const statusLabel = BOOKING_STATUS[b.status]?.panel || b.status;
         return {
           id: b.id,
           top: l.top,
@@ -338,16 +377,19 @@ export default function AgendaPage() {
           leftPct: l.leftPct,
           widthPct: l.widthPct,
           time: b.time,
-          title: `${b.time} · ${b.customerName}`,
-          subtitle: view === 'week' ? `${serviceName(b.serviceId)}${pro ? ` · ${pro}` : ''}` : serviceName(b.serviceId),
-          cls: STATUS_BLOCK[b.status],
+          name: b.customerName,
+          service: view === 'week' && pro ? `${serviceName(b.serviceId)} · ${pro}` : serviceName(b.serviceId),
+          timeRange: `${b.time}–${endHM}`,
+          statusLabel,
+          cls: BOOKING_BLOCK[b.status],
+          attention,
           dragging: dragId === b.id,
-          label: `${b.customerName} · ${serviceName(b.serviceId)} · ${formatDateBR(b.date)} ${b.time}${pro ? ` · ${pro}` : ''} — clique para ver o detalhe ou arraste para reagendar`,
+          label: `${b.customerName} · ${serviceName(b.serviceId)} · ${formatDateBR(b.date)} ${b.time}${pro ? ` · ${pro}` : ''} · ${statusLabel}${attention ? ' — precisa de fechamento' : ''} — clique para ver o detalhe ou arraste para reagendar`,
         };
       });
       return { ...c, isToday: c.date === today, blocks };
     });
-  }, [view, weekDays, activePros, focus, bookings, grid.start, durationOf, proName, serviceName, dragId, today]);
+  }, [view, weekDays, activePros, focus, bookings, grid.start, durationOf, proName, serviceName, dragId, today, statusFilter, proFilter]);
 
   // Colunas usadas pelo cálculo de destino (mesma ordem da renderização).
   useEffect(() => {
@@ -393,7 +435,7 @@ export default function AgendaPage() {
     if (typeof document !== 'undefined' && ro) ro.observe(document.body);
     window.addEventListener('resize', fit);
     return () => { ro?.disconnect(); window.removeEventListener('resize', fit); };
-  }, [loaded, view, pendencies.length, notice?.title]);
+  }, [loaded, view, fullscreen, pendencies.length, notice?.title, statusFilter, proFilter]);
 
   const readGeometry = useCallback((): { g: GridGeometry; minX: number; minY: number } | null => {
     const scroll = scrollRef.current;
@@ -623,13 +665,31 @@ export default function AgendaPage() {
     if (booking) setDetail(booking);
   }, []);
 
-  // ESC cancela o arraste sem salvar nada.
+  // ESC cancela o arraste sem salvar nada; sem arraste, sai da tela cheia.
   useEffect(() => {
-    if (!dragId) return;
-    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') endDrag(); };
+    if (!dragId && !fullscreen) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== 'Escape') return;
+      if (dragId) endDrag();
+      else setFullscreen(false);
+    };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [dragId, endDrag]);
+  }, [dragId, fullscreen, endDrag]);
+
+  function toggleFullscreen() {
+    // Nunca troca de modo no meio de um arraste: cancela primeiro.
+    if (dragId) endDrag();
+    setFullscreen((f) => !f);
+  }
+
+  // Em tela cheia a página de fundo não rola — só a grade, internamente.
+  useEffect(() => {
+    if (!fullscreen) return;
+    const prev = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    return () => { document.body.style.overflow = prev; };
+  }, [fullscreen]);
 
   // Cancela o drag se a view mudar no meio do movimento.
   useEffect(() => { endDrag(); /* eslint-disable-next-line react-hooks/exhaustive-deps */ }, [view, focus]);
@@ -714,14 +774,17 @@ export default function AgendaPage() {
         : 'Sem horário livre aqui';
   const slotsState = slotState({ loading: drag.loading, error: drag.error || null, slots: hover?.time ? [hover.time] : [], idle: !isDragging });
 
+  const statusOptions = (['pending', 'confirmed', 'completed', 'no_show', 'cancelled'] as BookingStatus[]);
+
   return (
-    <>
-      <div className="flex flex-wrap items-end justify-between gap-3 mb-4">
-        <div>
-          <h1 className="text-xl font-semibold tracking-tight">Agenda</h1>
-          <p className="text-sm text-zinc-500 mt-1">Clique para ver o detalhe · clique e arraste para mudar o horário.</p>
+    <div className={fullscreen ? 'fixed inset-0 z-40 overflow-y-auto bg-[#f8f8f8] px-2 py-3 sm:px-4 ws-scroll' : undefined}>
+      {/* Cabeçalho compacto: a grade é o conteúdo — o título não compete. */}
+      <div className="flex flex-wrap items-center justify-between gap-2 mb-2">
+        <div className="flex items-baseline gap-2 min-w-0">
+          <h1 className="text-lg font-semibold tracking-tight">Agenda</h1>
+          <span className="text-xs text-zinc-500 hidden md:inline truncate">Clique para ver o detalhe · arraste para reagendar.</span>
         </div>
-        <Button onClick={() => setCreating(true)} variant="primary" size="md"><Icon n="calendarPlus" size={16} /> Novo agendamento</Button>
+        <Button onClick={() => setCreating(true)} variant="primary" size="sm"><Icon n="calendarPlus" size={15} /> Novo agendamento</Button>
       </div>
 
       <PermissionNotice message={notice?.title} hint={notice?.hint} onDismiss={dismiss} />
@@ -746,34 +809,78 @@ export default function AgendaPage() {
       )}
 
       {pendencies.length > 0 && (
-        <div className="mb-3 border border-amber-200 bg-amber-50 px-3 py-2.5 flex flex-wrap items-center gap-2">
-          <span className="text-xs font-semibold text-amber-900 inline-flex items-center gap-1.5"><Icon n="calendar" size={14} /> {pendencies.length} precisam de fechamento</span>
-          <div className="flex flex-wrap gap-1.5 ml-auto">
-            {pendencies.slice(0, 4).map((b) => (
-              <button key={b.id} onClick={() => setDetail(b)} className="text-xs font-medium bg-white border border-amber-200 text-amber-900 px-2.5 py-1 rounded-md">
-                {formatDateBR(b.date)} {b.time} · {b.customerName}
-              </button>
-            ))}
-            {pendencies.length > 4 && <span className="text-xs font-medium text-amber-900 self-center">+{pendencies.length - 4}</span>}
-          </div>
-        </div>
+        <AttentionStrip
+          title={`${pendencies.length} precisam de fechamento`}
+          hint="horário passou e continua em aberto"
+          action={(
+            <>
+              {pendencies.slice(0, 4).map((b) => (
+                <button key={b.id} onClick={() => setDetail(b)} className="text-xs font-medium bg-white border border-amber-200 text-amber-900 px-2.5 py-1 rounded-md hover:bg-amber-50">
+                  {formatDateBR(b.date)} {b.time} · {b.customerName}
+                </button>
+              ))}
+              {pendencies.length > 4 && <span className="text-xs font-medium text-amber-900 self-center">+{pendencies.length - 4}</span>}
+            </>
+          )}
+        />
       )}
 
-      <div className="bg-white border border-zinc-200 mb-3">
-        <div className="flex flex-wrap items-center justify-between gap-2 px-3 py-2 border-b border-zinc-100">
+      {/* Toolbar operacional: navegação · Dia/Semana/Mês · filtros · tela cheia */}
+      <div className="bg-white border border-zinc-200 mb-2">
+        <div className="flex flex-wrap items-center gap-x-3 gap-y-2 px-3 py-2">
           <div className="flex items-center gap-1.5">
             <button onClick={() => move(-1)} aria-label="Anterior" className="w-8 h-8 rounded-md bg-zinc-50 border border-zinc-200 hover:bg-zinc-100 flex items-center justify-center"><Icon n="chevL" size={14} /></button>
-            <button onClick={() => setFocus(todayISO())} className={`text-xs font-semibold px-3 py-1.5 rounded-md border ${focus === today ? 'bg-zinc-900 text-white border-zinc-900' : 'bg-white border-zinc-200'}`}>Hoje</button>
+            <button onClick={() => setFocus(todayISO())} className={`text-xs font-semibold px-3 py-1.5 rounded-md border ${focus === today ? 'bg-zinc-900 text-white border-zinc-900' : 'bg-white border-zinc-200 hover:bg-zinc-50'}`}>Hoje</button>
             <button onClick={() => move(1)} aria-label="Próximo" className="w-8 h-8 rounded-md bg-zinc-50 border border-zinc-200 hover:bg-zinc-100 flex items-center justify-center"><Icon n="chevR" size={14} /></button>
-            <span className="text-sm font-semibold ml-1 capitalize">{focusLabel}</span>
+            <input type="date" value={focus} max="2100-12-31" onChange={(e) => { if (/^\d{4}-\d{2}-\d{2}$/.test(e.target.value)) setFocus(e.target.value); }}
+              aria-label="Ir para a data" title="Ir para a data"
+              className="text-xs font-medium bg-zinc-50 border border-zinc-200 rounded-md px-2 py-1.5 hover:bg-zinc-100 focus:outline-none focus:ring-1 focus:ring-zinc-900" />
           </div>
-          <div className="flex gap-1 p-0.5 bg-zinc-100 rounded-md" role="tablist">
+          <span className="text-sm font-semibold capitalize min-w-0 truncate" aria-live="polite">{focusLabel}</span>
+          <div className="flex gap-1 p-0.5 bg-zinc-100 rounded-md" role="tablist" aria-label="Visualização">
             {(['day', 'week', 'month'] as View[]).map((v) => (
-              <button key={v} role="tab" aria-selected={view === v} onClick={() => { endDrag(); setView(v); }} className={`text-xs font-semibold px-3 py-1 rounded ${view === v ? 'bg-white shadow-sm border border-zinc-200' : 'text-zinc-500'}`}>
+              <button key={v} role="tab" aria-selected={view === v} onClick={() => { endDrag(); setView(v); }} className={`text-xs font-semibold px-3 py-1 rounded ${view === v ? 'bg-white shadow-sm border border-zinc-200' : 'text-zinc-500 hover:text-zinc-900'}`}>
                 {v === 'day' ? 'Dia' : v === 'week' ? 'Semana' : 'Mês'}
               </button>
             ))}
           </div>
+          <div className="flex items-center gap-1.5 ml-auto">
+            <select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value as '' | BookingStatus)} aria-label="Filtrar por estado"
+              className="text-xs font-medium bg-white border border-zinc-200 rounded-md px-2 py-1.5 max-w-[150px] focus:outline-none focus:ring-1 focus:ring-zinc-900">
+              <option value="">Todos os estados</option>
+              {statusOptions.map((s) => <option key={s} value={s}>{BOOKING_STATUS[s].panel}</option>)}
+            </select>
+            {activePros.length > 0 && (
+              <select value={proFilter} onChange={(e) => setProFilter(e.target.value)} aria-label="Filtrar por profissional"
+                className="text-xs font-medium bg-white border border-zinc-200 rounded-md px-2 py-1.5 max-w-[150px] focus:outline-none focus:ring-1 focus:ring-zinc-900">
+                <option value="">Profissionais</option>
+                {activePros.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
+              </select>
+            )}
+            {(statusFilter || proFilter) && (
+              <button onClick={() => { setStatusFilter(''); setProFilter(''); }} className="text-xs font-medium text-zinc-500 hover:text-zinc-900 underline underline-offset-2" title="Limpar filtros">
+                Limpar
+              </button>
+            )}
+            <button onClick={toggleFullscreen} aria-pressed={fullscreen} title={fullscreen ? 'Sair da tela cheia (ESC)' : 'Tela cheia'}
+              className="inline-flex items-center gap-1.5 text-xs font-semibold bg-zinc-50 border border-zinc-200 rounded-md px-2.5 py-1.5 hover:bg-zinc-100">
+              <Icon n={fullscreen ? 'shrink' : 'expand'} size={14} />
+              <span className="hidden sm:inline">{fullscreen ? 'Sair' : 'Tela cheia'}</span>
+            </button>
+          </div>
+        </div>
+        {/* Legenda: cor = estado (mesma fonte da grade) + marcador de atenção. */}
+        <div className="flex flex-wrap items-center gap-x-3 gap-y-1 px-3 pb-2" aria-label="Legenda dos estados">
+          {statusOptions.map((s) => (
+            <span key={s} className="inline-flex items-center gap-1 text-[11px] font-medium text-zinc-500">
+              <span className={`w-2 h-2 rounded-sm ${BOOKING_DOT[s]}`} aria-hidden="true" />
+              {BOOKING_STATUS[s].panel}
+            </span>
+          ))}
+          <span className="inline-flex items-center gap-1 text-[11px] font-medium text-zinc-500">
+            <span className={`w-3.5 h-3.5 rounded-full text-[9px] font-black leading-[14px] text-center ${ATTENTION_MARK_CLS}`} aria-hidden="true">!</span>
+            precisa de fechamento
+          </span>
         </div>
         {isDragging && view !== 'month' && (
           <div className="px-3 py-2 bg-amber-50 border-b border-amber-200 flex flex-wrap items-center justify-between gap-2 text-xs">
@@ -807,7 +914,10 @@ export default function AgendaPage() {
           </div>
           <div className="grid grid-cols-7 gap-px bg-zinc-200 border border-zinc-200">
             {Array.from({ length: 42 }, (_, i) => addDaysISO(range.from, i)).map((d) => {
-              const list = bookings.filter((b) => b.date === d && b.status !== 'cancelled');
+              const list = bookings
+                .filter((b) => b.date === d && b.status !== 'cancelled')
+                .filter((b) => !statusFilter || b.status === statusFilter)
+                .filter((b) => !proFilter || b.professionalId === proFilter);
               const pend = list.filter((b) => needsClosure(b, bookingDuration(serviceOf(b.serviceId)), today, nowHM())).length;
               const inMonth = d.slice(0, 7) === focus.slice(0, 7);
               return (
@@ -819,7 +929,7 @@ export default function AgendaPage() {
                   {list.length > 0 && (
                     <>
                       <span className="block text-[10px] font-medium text-zinc-600 mt-1">{list.length} · {list.slice(0, 2).map((b) => b.time).join(', ')}</span>
-                      <span className="flex gap-0.5 mt-1">{list.slice(0, 6).map((b) => <span key={b.id} className={`w-1.5 h-1.5 rounded-full ${STATUS_DOT[b.status]}`} />)}</span>
+                      <span className="flex gap-0.5 mt-1">{list.slice(0, 6).map((b) => <span key={b.id} className={`w-1.5 h-1.5 rounded-full ${BOOKING_DOT[b.status]}`} />)}</span>
                     </>
                   )}
                 </button>
@@ -961,6 +1071,6 @@ export default function AgendaPage() {
           onCreated={load}
         />
       )}
-    </>
+    </div>
   );
 }

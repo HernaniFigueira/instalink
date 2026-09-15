@@ -18,13 +18,15 @@
 import { useCallback, useEffect, useState } from 'react';
 import { useSearchParams } from 'next/navigation';
 import Link from 'next/link';
-import { PageSkeleton } from '@/components/ui';
+import { PageSkeleton, StatusBadge, AttentionStrip } from '@/components/ui';
 import { Icon } from '@/components/icons';
 import { AccessDenied, PermissionNotice, useForbiddenNotice } from '@/components/dashboard/AccessNotice';
+import { PeriodSelector } from '@/components/dashboard/PeriodSelector';
 import { apiGet } from '@/lib/api-client';
 import { money } from '@/lib/utils';
 import { humanDay } from '@/lib/tz';
 import { NO_DATA_MESSAGE, type RevenueResult } from '@/lib/revenue';
+import { periodLabel } from '@/lib/periods';
 import { ORDER_STATUS, BOOKING_STATUS, LEAD_STATUS, toneCls, type StatusDef } from '@/lib/status';
 
 interface Modules {
@@ -156,15 +158,8 @@ export default function DashboardPage() {
   const bookDef = (s: string): StatusDef => (BOOKING_STATUS as Record<string, StatusDef>)[s] || { panel: s, tone: 'zinc' } as StatusDef;
   const leadDef = (s: string): StatusDef => (LEAD_STATUS as Record<string, StatusDef>)[s] || { panel: s, tone: 'zinc' } as StatusDef;
 
-  const periodSelector = (compact: boolean) => (
-    <div className="flex bg-white border border-zinc-200 rounded-md p-0.5">
-      {[7, 30].map((p) => (
-        <button key={p} onClick={() => setPeriod(p)} className={`text-xs font-medium px-3 py-1 rounded ${period === p ? 'bg-zinc-900 text-white' : 'text-zinc-500'}`}>
-          {compact ? `${p}d` : p === 7 ? '7 dias' : '30 dias'}
-        </button>
-      ))}
-    </div>
-  );
+  // Períodos (7/30/90 dias, 12 meses, todo o período): seletor
+  // compartilhado com Resultados — fonte única em lib/periods.ts.
 
   return (
     <>
@@ -194,13 +189,13 @@ export default function DashboardPage() {
           </div>
         </div>
         <div className="hidden sm:flex items-center gap-2 ml-auto">
-          {periodSelector(true)}
+          <PeriodSelector value={period} onChange={setPeriod} />
           <Link href={`/pagina${q}`} className="text-xs font-semibold bg-zinc-900 text-white px-3 py-1.5 rounded-md hover:bg-zinc-800">Editar página</Link>
         </div>
       </div>
       <div className="sm:hidden flex items-center gap-2 mb-4">
-        {periodSelector(false)}
-        <Link href={`/pagina${q}`} className="text-xs font-semibold bg-zinc-900 text-white px-3 py-1.5 rounded-md ml-auto">Editar página</Link>
+        <PeriodSelector value={period} onChange={setPeriod} compact />
+        <Link href={`/pagina${q}`} className="text-xs font-semibold bg-zinc-900 text-white px-3 py-1.5 rounded-md ml-auto shrink-0">Editar página</Link>
       </div>
 
       {/* Áreas ativas deste negócio (contexto, não decoração) */}
@@ -209,29 +204,7 @@ export default function DashboardPage() {
 
       <PermissionNotice message={notice?.title} hint={notice?.hint} onDismiss={dismiss} />
 
-      {modules.bookings && pendencies.length > 0 && (
-        <div className="mb-3 border border-amber-200 bg-amber-50 px-3 py-2.5 flex flex-wrap items-center gap-2">
-          <span className="text-xs font-semibold text-amber-900 inline-flex items-center gap-1.5"><Icon n="calendar" size={14} /> {pendencies.length} precisam de fechamento</span>
-          <span className="text-xs text-amber-800 hidden sm:inline">· horário passou e continua em aberto</span>
-          <span className="flex flex-wrap gap-1.5 ml-auto">
-            {pendencies.slice(0, 3).map((b) => (
-              <Link key={b.id} href={`/agenda${q}`} className="text-xs font-medium bg-white border border-amber-200 text-amber-900 px-2.5 py-1 rounded-md hover:bg-amber-50">
-                {b.date.slice(8, 10)}/{b.date.slice(5, 7)} {b.time} · {b.customerName}
-              </Link>
-            ))}
-            {pendencies.length > 3 && <Link href={`/agenda${q}`} className="text-xs font-medium text-amber-900 underline self-center">+{pendencies.length - 3}</Link>}
-          </span>
-        </div>
-      )}
-
-      {next && (
-        <div className="mb-4 bg-white border border-zinc-200 px-3 py-2.5 flex items-center justify-between gap-3">
-          <p className="text-sm text-zinc-700">Próxima ação: <strong className="text-zinc-900">{next.label}</strong></p>
-          <Link href={next.href} className="text-xs font-semibold bg-zinc-900 text-white px-3 py-1.5 rounded-md shrink-0">Fazer agora</Link>
-        </div>
-      )}
-
-      {/* ── HOJE (só para negócio com agenda) ── */}
+      {/* ── HOJE (só para negócio com agenda): primeiro "como está a operação" ── */}
       {modules.bookings && today && (
         <div className="bg-white border border-zinc-200 mb-3">
           <div className="px-4 py-2.5 border-b border-zinc-100 flex items-center justify-between">
@@ -249,6 +222,31 @@ export default function DashboardPage() {
         </div>
       )}
 
+      {/* ── ATENÇÃO: depois dos KPIs, o que precisa de decisão ── */}
+      {modules.bookings && pendencies.length > 0 && (
+        <AttentionStrip
+          title={`${pendencies.length} precisam de fechamento`}
+          hint="horário passou e continua em aberto"
+          action={(
+            <>
+              {pendencies.slice(0, 3).map((b) => (
+                <Link key={b.id} href={`/agenda${q}`} className="text-xs font-medium bg-white border border-amber-200 text-amber-900 px-2.5 py-1 rounded-md hover:bg-amber-50">
+                  {b.date.slice(8, 10)}/{b.date.slice(5, 7)} {b.time} · {b.customerName}
+                </Link>
+              ))}
+              {pendencies.length > 3 && <Link href={`/agenda${q}`} className="text-xs font-medium text-amber-900 underline self-center">+{pendencies.length - 3}</Link>}
+            </>
+          )}
+        />
+      )}
+
+      {next && (
+        <div className="mb-4 bg-white border border-zinc-200 px-3 py-2.5 flex items-center justify-between gap-3">
+          <p className="text-sm text-zinc-700">Próxima ação: <strong className="text-zinc-900">{next.label}</strong></p>
+          <Link href={next.href} className="text-xs font-semibold bg-zinc-900 text-white px-3 py-1.5 rounded-md shrink-0">Fazer agora</Link>
+        </div>
+      )}
+
       {/* ── Linha principal: receita contextual + lista operacional + movimento ── */}
       <div className="grid lg:grid-cols-12 gap-3 mb-3">
         {/* RECEITA — rótulo e regra dependem dos módulos ativos */}
@@ -257,7 +255,7 @@ export default function DashboardPage() {
             <h3 className="text-xs font-semibold tracking-wide uppercase text-zinc-500">
               {modules.orders && !modules.bookings && !modules.services ? 'Receita' : modules.bookings || modules.services ? 'Receita prevista' : 'Receita'}
             </h3>
-            <span className="text-xs text-zinc-400">{period}d</span>
+            <span className="text-xs text-zinc-400">{periodLabel(period)}</span>
           </div>
           {!showMoney ? (
             <div className="px-4 py-4"><p className="text-sm text-zinc-500">Sem acesso financeiro.</p></div>
@@ -274,9 +272,12 @@ export default function DashboardPage() {
                 <div className="px-4 py-4">
                   <div className="flex items-baseline justify-between gap-2">
                     <p className="text-2xl font-semibold tracking-tight">{money(bookingRevenue.total)}</p>
-                    <span className={`text-xs font-medium ${bookingRevenue.delta >= 0 ? 'text-emerald-700' : 'text-red-600'}`}>
-                      {bookingRevenue.delta >= 0 ? '▲' : '▼'} {money(Math.abs(bookingRevenue.delta))}
-                    </span>
+                    {/* Variação só existe com janela anterior comparável. */}
+                    {period !== 0 && (
+                      <span className={`text-xs font-semibold px-1.5 py-0.5 rounded ${bookingRevenue.delta >= 0 ? 'bg-emerald-600 text-white' : 'bg-red-600 text-white'}`}>
+                        {bookingRevenue.delta >= 0 ? '▲' : '▼'} {money(Math.abs(bookingRevenue.delta))}
+                      </span>
+                    )}
                   </div>
                   {bookingRevenue.hasData ? (
                     <p className="text-xs text-zinc-500 mt-1">
@@ -313,9 +314,11 @@ export default function DashboardPage() {
                       <p className="text-[11px] font-semibold tracking-wide uppercase text-zinc-400">Pedidos</p>
                       <p className="text-xl font-semibold tracking-tight mt-0.5">{money(orderRevenue.total)}</p>
                     </div>
-                    <span className={`text-xs font-medium ${orderRevenue.delta >= 0 ? 'text-emerald-700' : 'text-red-600'}`}>
-                      {orderRevenue.delta >= 0 ? '▲' : '▼'} {money(Math.abs(orderRevenue.delta))}
-                    </span>
+                    {period !== 0 && (
+                      <span className={`text-xs font-semibold px-1.5 py-0.5 rounded ${orderRevenue.delta >= 0 ? 'bg-emerald-600 text-white' : 'bg-red-600 text-white'}`}>
+                        {orderRevenue.delta >= 0 ? '▲' : '▼'} {money(Math.abs(orderRevenue.delta))}
+                      </span>
+                    )}
                   </div>
                   <p className="text-xs text-zinc-500 mt-1">
                     {orderRevenue.hasData ? `${orderRevenue.count} pedidos · tíquete ${money(orderRevenue.ticket)}` : NO_DATA_MESSAGE}
@@ -341,7 +344,7 @@ export default function DashboardPage() {
                     <div key={b.id} className="flex items-center gap-3 px-4 py-2.5 text-sm hover:bg-zinc-50">
                       <span className="text-xs font-medium text-zinc-500 w-14 shrink-0">{humanDay(b.date)} {b.time}</span>
                       <span className="flex-1 min-w-0 truncate"><strong className="font-medium">{b.customerName}</strong> <span className="text-zinc-500">· {b.service}{b.professional ? ` · ${b.professional}` : ''}</span></span>
-                      <span className={`text-xs px-1.5 py-0.5 rounded font-medium border ${b.status === 'confirmed' ? 'bg-emerald-50 text-emerald-700 border-emerald-200' : 'bg-amber-50 text-amber-800 border-amber-200'}`}>{b.status === 'confirmed' ? 'conf' : 'pend'}</span>
+                      <StatusBadge tone={b.status === 'confirmed' ? 'emerald' : 'orange'}>{b.status === 'confirmed' ? 'conf' : 'pend'}</StatusBadge>
                     </div>
                   ))}
                 </div>

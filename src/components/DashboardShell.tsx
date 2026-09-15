@@ -63,6 +63,8 @@ const PATHS: Record<string, React.ReactNode> = {
   calendar: (<><rect x="3" y="4" width="18" height="18" rx="2" /><path d="M16 2v4" /><path d="M8 2v4" /><path d="M3 10h18" /></>),
   receipt: (<><path d="M4 2v20l2-1 2 1 2-1 2 1 2-1 2 1 2-1 2 1V2l-2 1-2-1-2 1-2-1-2 1-2-1-2 1Z" /><path d="M8 7h8" /><path d="M8 11h8" /><path d="M8 15h5" /></>),
   users: (<><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2" /><circle cx="9" cy="7" r="4" /><path d="M22 21v-2a4 4 0 0 0-3-3.87" /><path d="M16 3.13a4 4 0 0 1 0 7.75" /></>),
+  // Profissionais (quem atende): crachá — distinto de Clientes (users).
+  idcard: (<><rect x="2" y="5" width="20" height="14" rx="2" /><circle cx="8" cy="11" r="2" /><path d="M5.5 16a2.5 2.5 0 0 1 5 0" /><path d="M14 9h4" /><path d="M14 13h4" /></>),
   chart: (<><path d="M3 3v18h18" /><path d="M8 17V9" /><path d="M13 17V5" /><path d="M18 17v-8" /></>),
   settings: (<><circle cx="12" cy="12" r="3" /><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9c.24.6.86 1 1.51 1H21a2 2 0 1 1 0 4h-.09c-.65 0-1.27.4-1.51 1Z" /></>),
   logout: (<><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" /><path d="m16 17 5-5-5-5" /><path d="M21 12H9" /></>),
@@ -212,6 +214,9 @@ export function DashboardShell({ children }: { children: React.ReactNode }) {
   // Dashboard fica sempre no topo, sem seção; demais itens agrupados.
   const dashboardItem = nav.primary;
   const sections = nav.sections;
+  // A Agenda é o ambiente operacional: chrome mínimo para a grade ocupar a
+  // viewport (menos padding, sem rodapé). As demais telas não mudam.
+  const isAgenda = pathname === '/agenda';
   // Sem permissão de dashboard (ex.: VIEWER com agenda liberada) o usuário
   // ainda precisa de um destino válido ao clicar em "Início".
   const fallbackHref = firstAllowedPath(panelCtx);
@@ -277,29 +282,34 @@ export function DashboardShell({ children }: { children: React.ReactNode }) {
           </div>
         )}
 
-        <nav className={cn('flex-1 overflow-y-auto py-3', collapsed ? 'px-1.5 space-y-0.5' : 'px-2.5')}>
+        <nav className={cn('flex-1 overflow-y-auto py-3 ws-scroll', collapsed ? 'px-1.5 space-y-0.5' : 'px-2.5')} aria-label="Navegação do painel">
           {dashboardItem && (
             <Link href={`${dashboardItem.href}${q}`} title={collapsed ? dashboardItem.label : undefined}
-              className={cn('flex items-center text-[13px] font-medium rounded-md h-8 hover:bg-zinc-50',
+              aria-current={pathname === dashboardItem.href ? 'page' : undefined}
+              className={cn('flex items-center text-[13px] font-medium rounded-md h-9 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-zinc-900 focus-visible:ring-inset',
                 collapsed ? 'justify-center px-0' : 'gap-2.5 px-2.5',
-                pathname === dashboardItem.href ? 'bg-zinc-900 text-white hover:bg-zinc-900' : 'text-zinc-700')}>
+                pathname === dashboardItem.href ? 'bg-zinc-900 text-white shadow-sm' : 'text-zinc-700 hover:bg-zinc-100')}>
               <I n={dashboardItem.icon} size={18} /> {!collapsed && dashboardItem.label}
             </Link>
           )}
-          {!collapsed && dashboardItem && <div className="h-px bg-zinc-200 my-3 mx-1" />}
+          {!collapsed && dashboardItem && <div className="h-px bg-zinc-200 my-3 mx-1" aria-hidden="true" />}
           {sections.map((sec) => (
-            <div key={sec.label} className={cn(collapsed ? 'mt-2' : 'mt-4 first:mt-2')}>
-              {!collapsed && <p className="px-2.5 mb-1.5 text-[10px] font-semibold tracking-wider text-zinc-400 uppercase">{sec.label}</p>}
-              {collapsed && <div className="h-px bg-zinc-100 mx-1 my-2" />}
+            <div key={sec.label} className={cn(collapsed ? 'mt-1' : 'mt-4 first:mt-1')}>
+              {!collapsed && <p className="px-2.5 mb-1 text-[10px] font-bold tracking-[0.08em] text-zinc-400 uppercase">{sec.label}</p>}
+              {collapsed && <div className="h-px bg-zinc-100 mx-1 my-1.5" aria-hidden="true" />}
               <div className="space-y-0.5">
-                {sec.items.map((i) => (
-                  <Link key={i.href} href={`${i.href}${q}`} title={collapsed ? i.label : undefined}
-                    className={cn('flex items-center text-[13px] rounded-md h-8 transition-colors',
-                      collapsed ? 'justify-center px-0' : 'gap-2.5 px-2.5',
-                      pathname === i.href ? 'bg-zinc-900 text-white' : 'text-zinc-600 hover:bg-zinc-50 hover:text-zinc-900')}>
-                    <I n={i.icon} size={18} /> {!collapsed && <span className="truncate">{i.label}</span>}
-                  </Link>
-                ))}
+                {sec.items.map((i) => {
+                  const active = pathname === i.href;
+                  return (
+                    <Link key={i.href} href={`${i.href}${q}`} title={collapsed ? i.label : undefined}
+                      aria-current={active ? 'page' : undefined}
+                      className={cn('flex items-center text-[13px] rounded-md h-9 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-zinc-900 focus-visible:ring-inset',
+                        collapsed ? 'justify-center px-0' : 'gap-2.5 px-2.5',
+                        active ? 'bg-zinc-900 text-white shadow-sm' : 'text-zinc-600 hover:bg-zinc-100 hover:text-zinc-900')}>
+                      <I n={i.icon} size={18} /> {!collapsed && <span className={cn('truncate', active && 'font-medium')}>{i.label}</span>}
+                    </Link>
+                  );
+                })}
               </div>
             </div>
           ))}
@@ -372,7 +382,7 @@ export function DashboardShell({ children }: { children: React.ReactNode }) {
             }} className="ml-auto underline underline-offset-2">Sair do modo suporte</button>
           </div>
         )}
-        <div className={cn('px-4 lg:px-8 py-6', !FULL_WIDTH_PATHS.includes(pathname) && 'max-w-[960px]')}>
+        <div className={cn(isAgenda ? 'px-2 sm:px-3 lg:px-4 py-3' : 'px-4 lg:px-8 py-6', !FULL_WIDTH_PATHS.includes(pathname) && 'max-w-[960px]')}>
           {isMaster && !support && (
             <p className="mb-4 text-xs font-medium text-amber-800 bg-amber-50 border border-amber-200 rounded-md px-3 py-2 inline-flex items-center gap-2">
               <I n="shield" size={14} /> Você é master — <Link href="/master" className="underline font-semibold">/master</Link>
@@ -393,9 +403,11 @@ export function DashboardShell({ children }: { children: React.ReactNode }) {
             />
           ) : children}
         </div>
-        <footer className="px-4 lg:px-8 py-4 border-t border-zinc-200 mt-8">
-          <p className="text-[11px] text-zinc-400 text-center">InstaLink.app — plataforma para o seu negócio · <a href={`/${business.slug}`} target="_blank" className="underline">/{business.slug}</a></p>
-        </footer>
+        {!isAgenda && (
+          <footer className="px-4 lg:px-8 py-4 border-t border-zinc-200 mt-8">
+            <p className="text-[11px] text-zinc-400 text-center">InstaLink.app — plataforma para o seu negócio · <a href={`/${business.slug}`} target="_blank" className="underline">/{business.slug}</a></p>
+          </footer>
+        )}
       </main>
 
       {/* 403 de qualquer ação do painel → aviso amigável (sessão preservada). */}

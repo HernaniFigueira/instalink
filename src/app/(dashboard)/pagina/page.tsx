@@ -154,12 +154,27 @@ export default function PaginaPage() {
   return (
     <>
       <div className="flex flex-wrap items-start justify-between gap-3 mb-6">
-        <div>
+        <div className="min-w-0">
+          {/* Contexto: a página pertence ao negócio — nunca uma ilha isolada. */}
+          <p className="text-[11px] font-semibold tracking-wide uppercase text-zinc-400 mb-1">
+            <Link href={`/dashboard?b=${businessId}`} className="hover:text-zinc-700">{business.name}</Link>
+            <span aria-hidden="true"> · </span> Presença
+          </p>
           <h1 className="text-2xl font-bold tracking-tight">Minha página</h1>
           <p className="text-sm text-zinc-500 mt-1">
             {business.published ? <><span className="inline-block w-2.5 h-2.5 rounded-full bg-emerald-500 align-middle" /> Publicada</> : <><span className="inline-block w-2.5 h-2.5 rounded-full bg-amber-400 align-middle" /> Rascunho</>} ·{' '}
             <a href={`/${business.slug}`} target="_blank" className="text-emerald-700 font-semibold hover:underline inline-flex items-center gap-1">instalink.app/{business.slug} <Icon n="external" size={12} /></a>
           </p>
+        </div>
+        <div className="flex items-center gap-2 shrink-0">
+          <a href={`/${business.slug}`} target="_blank" rel="noreferrer"
+            className="text-xs font-semibold bg-zinc-900 text-white px-3.5 py-2 rounded-md hover:bg-zinc-800 inline-flex items-center gap-1.5">
+            Ver página <Icon n="external" size={12} />
+          </a>
+          <Link href={`/dashboard?b=${businessId}`}
+            className="text-xs font-semibold bg-white border border-zinc-200 px-3.5 py-2 rounded-md hover:bg-zinc-50">
+            Dashboard
+          </Link>
         </div>
       </div>
 

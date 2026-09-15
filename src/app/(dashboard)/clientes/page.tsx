@@ -1,6 +1,7 @@
 'use client';
 import { useCallback, useEffect, useState } from 'react';
 import { useSearchParams } from 'next/navigation';
+import Link from 'next/link';
 import type { LeadStatus } from '@/lib/types';
 import { cn, money, paginate, waLink } from '@/lib/utils';
 import { humanDay } from '@/lib/tz';
@@ -46,8 +47,10 @@ export default function ClientesPage() {
   const [total, setTotal] = useState(0);
   const [pages, setPages] = useState(1);
   const [page, setPage] = useState(1);
-  const [q, setQ] = useState('');
-  const [search, setSearch] = useState('');
+  // Busca profunda: /clientes?b=…&q=telefone abre já filtrada (usado pelo
+  // "Cliente e histórico" do detalhe do agendamento).
+  const [q, setQ] = useState(params.get('q') || '');
+  const [search, setSearch] = useState(params.get('q') || '');
   const [loaded, setLoaded] = useState(false);
   const [open, setOpen] = useState<string | null>(null);
   // Página do HISTÓRICO expandido (auditoria §18): cliente com 20, 30, 50
@@ -148,6 +151,13 @@ export default function ClientesPage() {
         title: b.service,
         subtitle: [b.professional, (b.rescheduleCount || 0) > 0 ? `reagendado ${b.rescheduleCount}×` : ''].filter(Boolean).join(' · ') || 'Atendimento',
         badge: d.panel, tone: d.tone, status: b.status,
+        actions: (
+          <div className="mt-2">
+            <Link href={`/agenda?b=${businessId}&data=${b.date}`} className="text-xs font-medium text-zinc-700 underline underline-offset-2 hover:text-zinc-900">
+              Ver na agenda
+            </Link>
+          </div>
+        ),
       });
     }
     for (const c of p.conversations || []) {
@@ -327,12 +337,13 @@ export default function ClientesPage() {
                         </div>
                       </div>
                     )}
-                    {p.phone && (
-                      <div className="flex flex-wrap gap-2 pt-1">
-                        <button onClick={() => openBooking(p)} className="text-xs font-semibold bg-zinc-900 text-white px-3 py-2 rounded-md inline-flex items-center gap-1.5"><Icon n="calendarPlus" size={14} /> Novo agendamento</button>
+                    <div className="flex flex-wrap gap-2 pt-1">
+                      <button onClick={() => openBooking(p)} className="text-xs font-semibold bg-zinc-900 text-white px-3 py-2 rounded-md inline-flex items-center gap-1.5"><Icon n="calendarPlus" size={14} /> Novo agendamento</button>
+                      <Link href={`/agenda?b=${businessId}`} className="text-xs font-semibold bg-white border border-zinc-200 px-3 py-2 rounded-md inline-flex items-center gap-1.5"><Icon n="calendar" size={14} /> Abrir agenda</Link>
+                      {p.phone && (
                         <a href={waLink(p.phone, `Olá, ${(p.name || '').split(' ')[0]}!`)} target="_blank" rel="noreferrer" className="text-xs font-semibold bg-white border border-zinc-200 px-3 py-2 rounded-md inline-flex items-center gap-1.5"><Icon n="whatsapp" size={14} /> WhatsApp</a>
-                      </div>
-                    )}
+                      )}
+                    </div>
                   </div>
                 )}
               </div>

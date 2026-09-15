@@ -101,7 +101,7 @@ describe('panel — navegação contextual', () => {
   it('Dashboard é o item primário e o resto vem agrupado por seção', () => {
     const nav = panelNavigation(ctx());
     expect(nav.primary?.href).toBe('/dashboard');
-    expect(nav.sections.map((s) => s.label)).toEqual(['Operação', 'Atendimento', 'Gestão', 'Presença', 'Administração']);
+    expect(nav.sections.map((s) => s.label)).toEqual(['Operação', 'Catálogo', 'Comunicação', 'Gestão', 'Presença', 'Administração']);
     expect(nav.all[0].href).toBe('/dashboard');
   });
 
@@ -134,7 +134,12 @@ describe('panel — navegação contextual', () => {
   });
 
   it('Profissionais (quem atende) é rota própria, separada de Equipe (quem tem login)', () => {
-    expect(panelRouteFor('/profissionais')?.section).toBe('Atendimento');
+    expect(panelRouteFor('/profissionais')?.section).toBe('Catálogo');
+    expect(panelRouteFor('/servicos')?.section).toBe('Catálogo');
+    expect(panelRouteFor('/horarios')?.section).toBe('Catálogo');
+    expect(panelRouteFor('/produtos')?.section).toBe('Catálogo');
+    expect(panelRouteFor('/whatsapp')?.section).toBe('Comunicação');
+    expect(panelRouteFor('/agente')?.section).toBe('Comunicação');
     expect(panelRouteFor('/profissionais')?.permission).toBe('catalogo');
     expect(panelRouteFor('/equipe')?.section).toBe('Administração');
     expect(panelRouteFor('/equipe')?.permission).toBe('equipe');
