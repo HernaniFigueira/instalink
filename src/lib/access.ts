@@ -9,9 +9,12 @@
 // Esconder botão é UX, não segurança: as telas do painel usam as MESMAS
 // funções para decidir o que mostrar, e as APIs revalidam tudo no servidor.
 //
-// Master da plataforma (User.role === 'master') NÃO é dono de nada: ele só
-// entra no contexto de uma empresa através de uma SupportSession explícita
-// (auditada), em modo 'view' (somente leitura) ou 'admin' (com escrita).
+// Master da plataforma (User.role === 'master' ou MASTER_EMAILS) NÃO é dono
+// de nada em termos de autorização operacional: MASTER tem precedência sobre
+// qualquer vínculo de tenant. Acesso a unidade = somente SupportSession
+// explícita (auditada), modo 'view' (leitura) ou 'admin' (escrita).
+//
+// Precedência: MASTER > Organization OWNER/ADMIN > Business OWNER/ADMIN/MEMBER
 import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
 import { readDB } from './db';
@@ -44,8 +47,8 @@ export interface AccessContext {
 
 /**
  * E-mails com acesso master definidos por AMBIENTE (MASTER_EMAILS, separados
- * por vírgula). É o caminho operacional para promover alguém sem tocar no
- * banco e SEM senha secreta hardcoded no código.
+ * por vírgula). Fallback de bootstrap/emergência — NÃO é a fonte persistente.
+ * Fonte principal: User.role === 'master'.
  */
 export function masterEmails(): string[] {
   return (process.env.MASTER_EMAILS || '')
@@ -54,11 +57,40 @@ export function masterEmails(): string[] {
     .filter(Boolean);
 }
 
-export function isMasterUser(user: Pick<User, 'role' | 'email'> | null | undefined): boolean {
+/** Fonte persistente de Master no banco. */
+export function hasMasterRole(user: Pick<User, 'role'> | null | undefined): boolean {
+  return !!user && user.role === 'master';
+}
+
+/** E-mail autorizado via MASTER_EMAILS (fallback), independente do role. */
+export function isMasterEmail(user: Pick<User, 'email'> | null | undefined): boolean {
   if (!user) return false;
-  if (user.role === 'master') return true;
   const email = String(user.email || '').toLowerCase();
   return !!email && masterEmails().includes(email);
+}
+
+/**
+ * Identidade Master efetiva para autorização (login, requireMaster, suporte).
+ * role='master' OU e-mail em MASTER_EMAILS.
+ * Em ambos os casos a precedência Master se aplica (sem acesso tenant direto).
+ */
+export function isMasterUser(user: Pick<User, 'role' | 'email'> | null | undefined): boolean {
+  if (!user) return false;
+  return hasMasterRole(user) || isMasterEmail(user);
+}
+
+/** SupportSession vigente, do próprio master, para a unidade (opcional). */
+export function isValidSupportSession(
+  support: SupportSession | null | undefined,
+  masterUserId: string,
+  businessId?: string,
+): support is SupportSession {
+  if (!support) return false;
+  if (support.masterUserId !== masterUserId) return false;
+  if (support.endedAt) return false;
+  if (new Date(support.expiresAt).getTime() <= Date.now()) return false;
+  if (businessId && support.businessId !== businessId) return false;
+  return true;
 }
 
 /** Membros ATIVOS do usuário (para montar a navegação e as APIs). */
@@ -66,8 +98,12 @@ export function membershipsOf(db: DB, userId: string): BusinessMember[] {
   return db.members.filter((m) => m.userId === userId && m.active !== false);
 }
 
-/** Papel administrativo do usuário na organização (vazio = sem acesso org). */
-export function organizationRoleIn(db: DB, userId: string, organizationId: string): 'OWNER' | 'ADMIN' | '' {
+/**
+ * Papel administrativo do usuário na organização (vazio = sem acesso org).
+ * Master NÃO herda papel de org — mesmo sendo ownerId legado.
+ */
+export function organizationRoleIn(db: DB, userId: string, organizationId: string, user?: User): 'OWNER' | 'ADMIN' | '' {
+  if (user && isMasterUser(user)) return '';
   const organization = db.organizations.find((o) => o.id === organizationId);
   if (!organization) return '';
   if (organization.ownerId === userId) return 'OWNER';
@@ -78,21 +114,31 @@ export function organizationRoleIn(db: DB, userId: string, organizationId: strin
 }
 
 /**
- * Unidades acessíveis: ownership direto, administração da Organization ou
- * membership explícito no Business. NUNCA retorna negócio de terceiro — a ÚNICA exceção é a empresa
- * aberta explicitamente numa sessão de suporte do master (auditada e com
- * prazo), que entra no fim da lista.
+ * Unidades acessíveis.
+ *
+ * Precedência Master: se isMasterUser, IGNORA ownership/membership/org-admin.
+ * Só a unidade da SupportSession vigente entra na lista.
+ * Demais usuários: ownership, org admin ou membership explícito.
  */
 export function accessibleBusinesses(
   db: DB,
   user: User,
   support: SupportSession | null = null,
 ): Business[] {
+  // 1. MASTER — identidade de plataforma; sem vínculo tenant operacional.
+  if (isMasterUser(user)) {
+    if (isValidSupportSession(support, user.id)) {
+      const target = db.businesses.find((b) => b.id === support.businessId);
+      return target ? [target] : [];
+    }
+    return [];
+  }
+
   const owned = db.businesses.filter((b) => b.ownerId === user.id);
   const ids = new Set(membershipsOf(db, user.id).map((m) => m.businessId));
   const governedOrganizationIds = new Set(
     db.organizations
-      .filter((o) => organizationRoleIn(db, user.id, o.id) !== '')
+      .filter((o) => organizationRoleIn(db, user.id, o.id, user) !== '')
       .map((o) => o.id),
   );
   const asMember = db.businesses.filter((b) => ids.has(b.id) && b.ownerId !== user.id);
@@ -100,20 +146,19 @@ export function accessibleBusinesses(
     (b) => !!b.organizationId && governedOrganizationIds.has(b.organizationId) &&
       b.ownerId !== user.id && !ids.has(b.id),
   );
-  const list = [...owned, ...asMember, ...asOrganizationAdmin];
-  if (isMasterUser(user) && support && support.masterUserId === user.id && !support.endedAt && new Date(support.expiresAt).getTime() > Date.now()) {
-    const target = db.businesses.find((b) => b.id === support.businessId);
-    if (target && !list.some((b) => b.id === target.id)) list.push(target);
-  }
-  return list;
+  return [...owned, ...asMember, ...asOrganizationAdmin];
 }
 
-/** Papel do usuário neste negócio ('' = sem acesso). */
+/**
+ * Papel de tenant no negócio ('' = sem acesso tenant).
+ * Master nunca retorna OWNER/ADMIN/MEMBER aqui — só '' (use resolveAccess p/ MASTER).
+ */
 export function roleIn(db: DB, user: User, businessId: string): MemberRole | '' {
+  if (isMasterUser(user)) return '';
   const business = db.businesses.find((b) => b.id === businessId);
   if (!business) return '';
   if (business.ownerId === user.id) return 'OWNER';
-  const organizationRole = business.organizationId ? organizationRoleIn(db, user.id, business.organizationId) : '';
+  const organizationRole = business.organizationId ? organizationRoleIn(db, user.id, business.organizationId, user) : '';
   if (organizationRole) return organizationRole;
   const member = db.members.find(
     (m) => m.businessId === businessId && m.userId === user.id && m.active !== false,
@@ -122,8 +167,15 @@ export function roleIn(db: DB, user: User, businessId: string): MemberRole | '' 
 }
 
 /**
- * Resolve o contexto de acesso de um usuário a uma empresa — incluindo o
- * modo suporte do master. Devolve null quando não há autorização alguma.
+ * Resolve o contexto de acesso a uma empresa.
+ *
+ * Ordem fixa:
+ *   1. É Master? → somente SupportSession válida da unidade; senão null.
+ *   2. Organization OWNER/ADMIN.
+ *   3. Business owner / member.
+ *   4. Negar.
+ *
+ * Master + vínculo tenant antigo NÃO contorna SupportSession.
  */
 export function resolveAccess(
   db: DB,
@@ -134,45 +186,49 @@ export function resolveAccess(
   const business = db.businesses.find((b) => b.id === businessId);
   if (!business) return null;
 
-  const isOwner = business.ownerId === user.id;
-  const member = db.members.find(
-    (m) => m.businessId === businessId && m.userId === user.id && m.active !== false,
-  ) || null;
-  const organizationRole = business.organizationId
-    ? organizationRoleIn(db, user.id, business.organizationId)
-    : '';
-
-  if (isOwner) {
-    return {
-      user, business, member: null, role: 'OWNER',
-      permissions: permissionsFor('OWNER'), isOwner: true, isMaster: isMasterUser(user),
-      support: null, readOnly: false,
-    };
+  // 1. MASTER primeiro — precedência absoluta sobre tenant.
+  if (isMasterUser(user)) {
+    if (isValidSupportSession(support, user.id, businessId)) {
+      return {
+        user, business, member: null, role: 'MASTER',
+        permissions: permissionsFor('OWNER'), isOwner: false, isMaster: true,
+        support, readOnly: support.mode === 'view',
+      };
+    }
+    return null;
   }
 
+  // 2. Organization OWNER/ADMIN
+  const organizationRole = business.organizationId
+    ? organizationRoleIn(db, user.id, business.organizationId, user)
+    : '';
   if (organizationRole) {
     return {
       user, business, member: null, role: organizationRole,
       permissions: permissionsFor(organizationRole),
-      isOwner: organizationRole === 'OWNER', isMaster: isMasterUser(user),
+      isOwner: organizationRole === 'OWNER', isMaster: false,
       support: null, readOnly: false,
     };
   }
 
+  // 3. Business owner
+  if (business.ownerId === user.id) {
+    return {
+      user, business, member: null, role: 'OWNER',
+      permissions: permissionsFor('OWNER'), isOwner: true, isMaster: false,
+      support: null, readOnly: false,
+    };
+  }
+
+  // 4. Business member
+  const member = db.members.find(
+    (m) => m.businessId === businessId && m.userId === user.id && m.active !== false,
+  ) || null;
   if (member) {
     return {
       user, business, member, role: member.role,
       permissions: permissionsFor(member.role, member.permissions),
-      isOwner: false, isMaster: isMasterUser(user), support: null, readOnly: member.role === 'VIEWER',
-    };
-  }
-
-  // Master SEM sessão de suporte não tem acesso a conteúdo de empresa.
-  if (isMasterUser(user) && support && support.masterUserId === user.id && support.businessId === businessId && !support.endedAt && new Date(support.expiresAt).getTime() > Date.now()) {
-    return {
-      user, business, member: null, role: 'MASTER',
-      permissions: permissionsFor('OWNER'), isOwner: false, isMaster: true,
-      support, readOnly: support.mode === 'view',
+      isOwner: false, isMaster: false, support: null, readOnly: member.role === 'VIEWER',
     };
   }
 

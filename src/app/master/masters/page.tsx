@@ -4,10 +4,12 @@ import { ListSkeleton } from '@/components/ui';
 
 interface MasterRow {
   id: string; name: string; email: string; createdAt: string; lastLoginAt: string;
+  masterSource?: 'role' | 'env' | null;
 }
 
 export default function MasterMastersPage() {
   const [rows, setRows] = useState<MasterRow[] | null>(null);
+  const [envOnly, setEnvOnly] = useState<MasterRow[]>([]);
   const [error, setError] = useState('');
   const [msg, setMsg] = useState('');
   const [email, setEmail] = useState('');
@@ -18,7 +20,12 @@ export default function MasterMastersPage() {
   const load = useCallback(() => {
     fetch('/api/master/masters')
       .then((r) => (r.ok ? r.json() : null))
-      .then((d) => { if (d) setRows(d.masters); else setError('Falha ao carregar.'); })
+      .then((d) => {
+        if (d) {
+          setRows(d.masters);
+          setEnvOnly(d.envOnlyMasters || []);
+        } else setError('Falha ao carregar.');
+      })
       .catch(() => setError('Falha ao carregar.'));
   }, []);
   useEffect(() => { load(); }, [load]);
@@ -109,7 +116,7 @@ export default function MasterMastersPage() {
 
       {!rows ? <ListSkeleton rows={3} /> : rows.length === 0 ? (
         <p className="bg-white border border-zinc-200 rounded-2xl text-center py-12 text-sm text-zinc-500">
-          Nenhum Master no banco. Use o formulário acima ou o bootstrap CLI.
+          Nenhum Master com <code className="font-mono">role=master</code> no banco. Use o formulário acima ou o bootstrap CLI.
         </p>
       ) : (
         <div className="bg-white border border-zinc-200 rounded-2xl divide-y divide-zinc-100">
@@ -119,7 +126,7 @@ export default function MasterMastersPage() {
                 <p className="font-bold text-sm">{m.name || '—'}</p>
                 <p className="text-xs text-zinc-500">{m.email}</p>
                 <p className="text-xs text-zinc-400 mt-0.5">
-                  criado {(m.createdAt || '').slice(0, 10)}
+                  role=master · criado {(m.createdAt || '').slice(0, 10)}
                   {m.lastLoginAt ? ` · último acesso ${m.lastLoginAt.slice(0, 16).replace('T', ' ')}` : ' · nunca acessou'}
                 </p>
               </div>
@@ -131,6 +138,28 @@ export default function MasterMastersPage() {
             </div>
           ))}
         </div>
+      )}
+
+      {envOnly.length > 0 && (
+        <section className="bg-amber-50 border border-amber-200 rounded-2xl p-5 mt-5">
+          <p className="text-xs font-extrabold uppercase tracking-wider text-amber-800 mb-2">
+            Fallback MASTER_EMAILS (sem role=master)
+          </p>
+          <p className="text-xs text-amber-900 mb-3">
+            Estes usuários autenticam como Master via env, mas <strong>não</strong> contam na proteção do último Master
+            e não têm role persistente. Promova-os (formulário acima) para gravar <code className="font-mono">role=master</code>,
+            ou remova o e-mail de <code className="font-mono">MASTER_EMAILS</code>.
+          </p>
+          <ul className="space-y-2">
+            {envOnly.map((m) => (
+              <li key={m.id} className="text-sm flex flex-wrap gap-2 items-baseline">
+                <span className="font-bold">{m.name || '—'}</span>
+                <span className="text-xs text-amber-900">{m.email}</span>
+                <span className="text-[10px] font-extrabold bg-amber-200 text-amber-950 px-2 py-0.5 rounded-full">ENV ONLY</span>
+              </li>
+            ))}
+          </ul>
+        </section>
       )}
     </>
   );

@@ -30,9 +30,45 @@ Depois do login:
 | Papel | Destino |
 |---|---|
 | usuário normal / Owner / Admin / membro | `/dashboard` |
-| `role === 'master'` (ou e-mail em `MASTER_EMAILS`) | `/master` |
+| Master (`role=master` **ou** e-mail em `MASTER_EMAILS`) | `/master` |
 
-O servidor decide o papel (`requireMaster`). O frontend só navega.
+O servidor decide o papel (`requireMaster` / `isMasterUser`). O frontend só navega.
+
+## Fonte de verdade vs fallback
+
+| Mecanismo | O que faz | Gestão `/master/masters` | Conta no “último Master” |
+|---|---|---|---|
+| **`User.role = 'master'`** | Fonte **persistente** e principal | Sim (lista e revoga) | **Sim** |
+| **`MASTER_EMAILS`** | Fallback de bootstrap/emergência | Aparece em `envOnlyMasters` (diagnóstico); **não** revoga role | **Não** |
+
+### Cenário: usuário no banco + e-mail em `MASTER_EMAILS` + `role ≠ master`
+
+1. **Autentica** com a senha normal → ok  
+2. **`isMasterUser` = true** → tratado como Master (login → `/master`, `requireMaster` ok)  
+3. **Não** entra em `masters` da gestão (só em `envOnlyMasters`)  
+4. **Não** entra em `countMasters()` / proteção do último Master  
+5. **Pode** iniciar SupportSession (é Master efetivo)  
+6. **Não** acessa unidades por ownership/membership antigo — só via SupportSession  
+7. Para torná-lo Master “oficial”: promover (grava `role=master`) ou, para tirar o acesso env, remover o e-mail de `MASTER_EMAILS`
+
+`MASTER_EMAILS` **não** contorna a proteção do último `role=master`.
+
+## Precedência de autorização
+
+```
+MASTER > Organization OWNER/ADMIN > Business OWNER/ADMIN/MEMBER
+```
+
+Quando o usuário é Master (`role` **ou** env):
+
+1. **É Master?**  
+   - Sim → somente contexto Master (`/master`, `/api/master/*`) **ou** SupportSession válida da unidade.  
+   - Vínculos de tenant (owner/admin/member) **são ignorados**.  
+2. Não é Master → Organization OWNER/ADMIN  
+3. Não → Business owner / member  
+4. Não → negar
+
+Objetivo: conta privilegiada da plataforma **não** contorna o modelo de suporte só porque ainda tem vínculo operacional antigo.
 
 ## Como o primeiro Master é provisionado
 
@@ -45,28 +81,17 @@ MASTER_BOOTSTRAP_NAME='Seu Nome' \
 npm run master -- --bootstrap
 ```
 
-Isso:
-
-1. cria o usuário se não existir (ou atualiza a senha se já existir);
-2. grava **somente** o hash scrypt da senha;
-3. define `role = 'master'`;
-4. registra auditoria `master.created` / `master.promoted`.
-
-Em seguida: `/login` com o e-mail e a senha que **você** definiu → `/master`.
+Isso grava hash scrypt + `role = 'master'` (fonte persistente).
 
 ### Opção B — promover usuário já cadastrado
-
-1. Cadastre-se em `/register` com seu e-mail e senha.
-2. Rode:
 
 ```bash
 npm run master -- voce@seudominio.com
 ```
 
-### Opção C — `MASTER_EMAILS` (env)
+### Opção C — `MASTER_EMAILS` (env, fallback)
 
-Lista de e-mails autorizados sem alterar o banco. O usuário ainda precisa
-existir e autenticar com a própria senha.
+O usuário precisa existir e autenticar. Acesso Master imediato, mas **sem** role no banco até promoção explícita. Preferir bootstrap/promoção para operação normal.
 
 ### Remover privilégio
 
@@ -74,49 +99,26 @@ existir e autenticar com a própria senha.
 npm run master -- voce@seudominio.com --revoke
 ```
 
-Bloqueado se for o último Master (`role=master`) da plataforma.
-
-### Listar
-
-```bash
-npm run master -- --list
-```
+Bloqueado se for o último Master com `role=master`.
 
 ## Área `/master`
 
-Menu próprio (não usa o menu do cliente):
+Menu próprio (não usa o menu do cliente): Visão geral · Organizações · Unidades · Usuários · Atividade · Suporte · Masters.
 
-- Visão geral
-- Organizações
-- Unidades
-- Usuários
-- Atividade
-- Suporte
-- Masters
-
-APIs sob `/api/master/*`, todas com `requireMaster`.
-
-`/admin` redireciona para `/master` (legado).
+APIs `/api/master/*` com `requireMaster`. `/admin` → `/master`.
 
 ## Suporte (SupportSession)
 
-Master **não** acessa dados operacionais de unidade sem sessão de suporte:
-
-1. escolhe Organization → unidade;
-2. inicia `view` ou `admin`;
-3. sessão de 60 min, auditada, cookie `il_support`;
-4. escopo **somente** à unidade autorizada;
-5. view = somente leitura; admin = escrita só na unidade;
-6. sessão de outro Master ou expirada = rejeitada.
+Obrigatório para dados operacionais de unidade. 60 min, auditada, escopo único, view=leitura / admin=escrita na unidade.
 
 ## Segurança
 
-- Usuário normal / Owner / Admin / membro **não** acessam `/master` nem listam orgs/usuários globais.
-- Ninguém se auto-promove a Master via register/equipe.
-- Só Master autenticado cria/adiciona outro Master (com `confirm: true`).
-- Último Master não pode ser removido; remoção invalida sessões na hora.
-- Senha/hash/tokens **nunca** vão ao frontend.
-- Receita do InstaLink ≠ receita operacional das Organizations. Sem billing real = R$ 0,00 explícito.
+- Normal / Owner / Admin / membro **não** acessam `/master`
+- Master **não** entra no Dashboard operacional só por vínculo tenant
+- Ninguém se auto-promove a Master via register/equipe
+- Último `role=master` não pode ser removido
+- Senha/hash/tokens nunca no frontend
+- Receita InstaLink ≠ receita operacional (sem billing = R$ 0)
 
 ## Testes
 

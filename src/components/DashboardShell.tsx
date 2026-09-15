@@ -373,7 +373,7 @@ export function DashboardShell({ children }: { children: React.ReactNode }) {
           </div>
         )}
         <div className={cn('px-4 lg:px-8 py-6', !FULL_WIDTH_PATHS.includes(pathname) && 'max-w-[960px]')}>
-          {user?.role === 'master' && !support && (
+          {isMaster && !support && (
             <p className="mb-4 text-xs font-medium text-amber-800 bg-amber-50 border border-amber-200 rounded-md px-3 py-2 inline-flex items-center gap-2">
               <I n="shield" size={14} /> Você é master — <Link href="/master" className="underline font-semibold">/master</Link>
             </p>

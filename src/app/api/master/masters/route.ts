@@ -5,6 +5,7 @@ import { pushAudit } from '@/lib/audit';
 import { hashPassword } from '@/lib/auth';
 import {
   listMastersSafe,
+  listEnvOnlyMastersSafe,
   promoteToMaster,
   revokeMaster,
   upsertMasterUser,
@@ -13,15 +14,20 @@ import {
 } from '@/lib/master';
 
 // Gestão de contas Master — somente quem JÁ é Master.
-// Owner/Admin/membro NUNCA passam por requireMaster.
+// Fonte administrativa: role='master'. MASTER_EMAILS é fallback visível à parte.
 
 export async function GET(req: NextRequest) {
   const guard = await requireMaster(req);
   if (!guard.ok) return guard.res;
   const masters = listMastersSafe(guard.db);
+  const envOnly = listEnvOnlyMastersSafe(guard.db);
   return NextResponse.json({
     total: masters.length,
     masters,
+    // Fallback env (sem role=master): visível, mas NÃO gerenciável por revoke de role
+    // e NÃO conta para a proteção do último Master.
+    envOnlyMasters: envOnly,
+    envOnlyTotal: envOnly.length,
     // Nunca retorna senha/hash.
   });
 }

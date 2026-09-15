@@ -1,15 +1,18 @@
-import { describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it } from 'vitest';
 import {
-  accessibleBusinesses, isMasterUser, resolveAccess, requireMaster,
+  accessibleBusinesses, hasMasterRole, isMasterEmail, isMasterUser, resolveAccess, requireMaster, roleIn,
 } from '../access';
 import { emptyDB } from '../db';
+import { canManageOrganization, organizationsFor } from '../organization';
 import {
   assertCannotSelfPromoteToMaster,
   countMasters,
+  listEnvOnlyMastersSafe,
   listMastersSafe,
   listOrganizationsForMaster,
   listPlatformUsers,
   listUnitsForMaster,
+  masterSourceOf,
   platformOverview,
   platformUserKind,
   promoteToMaster,
@@ -282,5 +285,159 @@ describe('Master — requireMaster (guard de API)', () => {
     expect(typeof requireMaster).toBe('function');
     expect(isMasterUser(user('x', 'master'))).toBe(true);
     expect(isMasterUser(user('x', 'owner'))).toBe(false);
+  });
+});
+
+describe('Master — MASTER_EMAILS fallback coerente (sem Master invisível)', () => {
+  const prev = process.env.MASTER_EMAILS;
+  afterEach(() => {
+    if (prev === undefined) delete process.env.MASTER_EMAILS;
+    else process.env.MASTER_EMAILS = prev;
+  });
+
+  it('usuário no banco + MASTER_EMAILS + role≠master: Master efetivo, fora da gestão/contagem', () => {
+    process.env.MASTER_EMAILS = 'env-master@test.dev';
+    const db = emptyDB();
+    const envUser: User = {
+      ...user('env', 'owner'),
+      email: 'env-master@test.dev',
+    };
+    const roleMaster = user('role-m', 'master');
+    db.users.push(envUser, roleMaster);
+    db.organizations.push(org('org', envUser.id));
+    db.businesses.push(unit('u1', envUser.id, 'org'));
+
+    // 1–2. autenticável como Master efetivo
+    expect(isMasterUser(envUser)).toBe(true);
+    expect(hasMasterRole(envUser)).toBe(false);
+    expect(isMasterEmail(envUser)).toBe(true);
+    expect(masterSourceOf(envUser)).toBe('env');
+
+    // 3. NÃO aparece na lista administrativa de Masters (role)
+    expect(listMastersSafe(db).map((m) => m.id)).toEqual(['role-m']);
+    // mas é VISÍVEL no diagnóstico env-only (não invisível)
+    expect(listEnvOnlyMastersSafe(db).map((m) => m.email)).toEqual(['env-master@test.dev']);
+
+    // 4. NÃO entra em countMasters (só role)
+    expect(countMasters(db)).toBe(1);
+
+    // 5. pode usar SupportSession (é Master efetivo)
+    const ss = support({ masterUserId: envUser.id, businessId: 'u1', mode: 'view' });
+    expect(resolveAccess(db, envUser, 'u1', ss)?.role).toBe('MASTER');
+
+    // 6. last_master NÃO é contornado pelo env: único role=master ainda protegido
+    const blocked = revokeMaster(db, 'role-m');
+    expect(blocked.ok).toBe(false);
+    if (!blocked.ok) expect(blocked.code).toBe('last_master');
+
+    // revogar env-only via role falha com orientação clara
+    const envRevoke = revokeMaster(db, envUser.id);
+    expect(envRevoke.ok).toBe(false);
+  });
+
+  it('promover env-only grava role=master e entra na gestão', () => {
+    process.env.MASTER_EMAILS = 'env-master@test.dev';
+    const db = emptyDB();
+    const envUser: User = { ...user('env', 'owner'), email: 'env-master@test.dev' };
+    db.users.push(envUser, user('other', 'master'));
+    const r = promoteToMaster(db, 'env-master@test.dev');
+    expect(r.ok).toBe(true);
+    expect(hasMasterRole(envUser)).toBe(true);
+    expect(listMastersSafe(db).map((m) => m.email).sort()).toEqual(['env-master@test.dev', 'other@test.dev']);
+    expect(listEnvOnlyMastersSafe(db)).toEqual([]);
+    expect(countMasters(db)).toBe(2);
+  });
+});
+
+describe('Master — precedência sobre vínculos de tenant', () => {
+  const prev = process.env.MASTER_EMAILS;
+  afterEach(() => {
+    if (prev === undefined) delete process.env.MASTER_EMAILS;
+    else process.env.MASTER_EMAILS = prev;
+  });
+
+  it('Master + BusinessOwner: SEM SupportSession não acessa a própria unidade', () => {
+    const db = emptyDB();
+    // Mesmo usuário: role=master E ownerId da business
+    const masterOwner = user('mo', 'master');
+    db.users.push(masterOwner);
+    db.organizations.push(org('org', masterOwner.id));
+    db.businesses.push(unit('clinic', masterOwner.id, 'org'));
+
+    expect(isMasterUser(masterOwner)).toBe(true);
+    expect(resolveAccess(db, masterOwner, 'clinic')).toBeNull();
+    expect(accessibleBusinesses(db, masterOwner)).toEqual([]);
+    expect(roleIn(db, masterOwner, 'clinic')).toBe('');
+    expect(canManageOrganization(db, masterOwner, 'org')).toBe(false);
+    expect(organizationsFor(db, masterOwner)).toEqual([]);
+
+    // COM SupportSession: acesso MASTER (não OWNER)
+    const ss = support({ masterUserId: masterOwner.id, businessId: 'clinic', mode: 'admin' });
+    const ctx = resolveAccess(db, masterOwner, 'clinic', ss);
+    expect(ctx?.role).toBe('MASTER');
+    expect(ctx?.isOwner).toBe(false);
+    expect(ctx?.isMaster).toBe(true);
+    expect(ctx?.readOnly).toBe(false);
+    expect(accessibleBusinesses(db, masterOwner, ss).map((b) => b.id)).toEqual(['clinic']);
+  });
+
+  it('Master + OrganizationAdmin: vínculo org NÃO concede unidades sem suporte', () => {
+    const db = emptyDB();
+    const masterAdmin = user('ma', 'master');
+    const owner = user('owner');
+    db.users.push(masterAdmin, owner);
+    db.organizations.push(org('org-a', owner.id));
+    db.organizationMembers.push({
+      id: 'om', organizationId: 'org-a', userId: masterAdmin.id, role: 'ADMIN',
+      active: true, createdAt: '', updatedAt: '',
+    });
+    db.businesses.push(unit('a1', owner.id, 'org-a'), unit('a2', owner.id, 'org-a'));
+
+    expect(resolveAccess(db, masterAdmin, 'a1')).toBeNull();
+    expect(resolveAccess(db, masterAdmin, 'a2')).toBeNull();
+    expect(accessibleBusinesses(db, masterAdmin)).toEqual([]);
+    expect(canManageOrganization(db, masterAdmin, 'org-a')).toBe(false);
+
+    const ss = support({ masterUserId: masterAdmin.id, businessId: 'a1', mode: 'view' });
+    expect(resolveAccess(db, masterAdmin, 'a1', ss)?.role).toBe('MASTER');
+    expect(resolveAccess(db, masterAdmin, 'a2', ss)).toBeNull();
+  });
+
+  it('Master via MASTER_EMAILS + BusinessMember: mesma precedência, exige SupportSession', () => {
+    process.env.MASTER_EMAILS = 'env-member@test.dev';
+    const db = emptyDB();
+    const envMember: User = { ...user('em', 'owner'), email: 'env-member@test.dev' };
+    const owner = user('owner');
+    db.users.push(envMember, owner);
+    db.organizations.push(org('org', owner.id));
+    db.businesses.push(unit('u1', owner.id, 'org'), unit('u2', owner.id, 'org'));
+    db.members.push({
+      id: 'mem', businessId: 'u1', userId: envMember.id, role: 'ADMIN',
+      permissions: {}, active: true, note: '', invitedBy: owner.id, createdAt: '', updatedAt: '',
+    });
+
+    expect(isMasterUser(envMember)).toBe(true);
+    expect(hasMasterRole(envMember)).toBe(false);
+    // Membership antigo NÃO libera dashboard operacional
+    expect(resolveAccess(db, envMember, 'u1')).toBeNull();
+    expect(accessibleBusinesses(db, envMember)).toEqual([]);
+    expect(roleIn(db, envMember, 'u1')).toBe('');
+
+    const ss = support({ masterUserId: envMember.id, businessId: 'u1', mode: 'view' });
+    expect(resolveAccess(db, envMember, 'u1', ss)?.role).toBe('MASTER');
+    expect(resolveAccess(db, envMember, 'u2', ss)).toBeNull();
+    expect(accessibleBusinesses(db, envMember, ss).map((b) => b.id)).toEqual(['u1']);
+  });
+
+  it('usuário NÃO-master com ownership continua acessando normalmente', () => {
+    const db = emptyDB();
+    const owner = user('owner', 'owner');
+    db.users.push(owner);
+    db.organizations.push(org('org', owner.id));
+    db.businesses.push(unit('u1', owner.id, 'org'));
+    const ctx = resolveAccess(db, owner, 'u1');
+    expect(ctx?.role).toBe('OWNER');
+    expect(ctx?.isMaster).toBe(false);
+    expect(accessibleBusinesses(db, owner).map((b) => b.id)).toEqual(['u1']);
   });
 });

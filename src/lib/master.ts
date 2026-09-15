@@ -5,10 +5,15 @@
 // Ela enxerga a plataforma inteira; dados operacionais de unidade
 // só entram via SupportSession (já em access.ts).
 //
+// Fonte persistente: User.role === 'master'
+// Fallback bootstrap/emergência: MASTER_EMAILS (autoriza isMasterUser,
+// mas NÃO entra na contagem/listagem administrativa de Masters e NÃO
+// contorna a proteção do último Master).
+//
 // Receita do InstaLink ≠ receita operacional das Organizations.
 // Enquanto não houver planos/cobrança reais, platformRevenue = 0.
 import type { DB, User, UserRole, AuditAction } from './types';
-import { isMasterUser, masterEmails } from './access';
+import { hasMasterRole, isMasterEmail, isMasterUser, masterEmails } from './access';
 
 export type PlatformUserKind = 'master' | 'owner' | 'admin' | 'member';
 
@@ -19,6 +24,8 @@ export interface SafeUserView {
   email: string;
   kind: PlatformUserKind;
   platformRole: UserRole | 'owner';
+  /** Como o Master foi reconhecido: role persistente ou só fallback env. */
+  masterSource: 'role' | 'env' | null;
   organizationIds: string[];
   organizationNames: string[];
   unitIds: string[];
@@ -43,12 +50,32 @@ export type MasterManageResult =
     code: 'not_found' | 'last_master' | 'invalid' | 'forbidden' | 'already';
   };
 
+/**
+ * Contagem administrativa de Masters = somente role='master' no banco.
+ * MASTER_EMAILS NÃO entra aqui (evita contornar a proteção do último Master
+ * e evita Masters “fantasma” na gestão).
+ */
 export function countMasters(db: DB): number {
-  return db.users.filter((u) => isMasterUser(u)).length;
+  return db.users.filter((u) => hasMasterRole(u)).length;
 }
 
+/** Masters persistentes (role=master) — fonte da gestão /master/masters. */
 export function mastersOf(db: DB): User[] {
+  return db.users.filter((u) => hasMasterRole(u));
+}
+
+/**
+ * Masters efetivos para autorização (role OU MASTER_EMAILS).
+ * Usado só para visão/diagnóstico — NÃO para last-master nem revogação.
+ */
+export function effectiveMastersOf(db: DB): User[] {
   return db.users.filter((u) => isMasterUser(u));
+}
+
+export function masterSourceOf(user: Pick<User, 'role' | 'email'>): 'role' | 'env' | null {
+  if (hasMasterRole(user)) return 'role';
+  if (isMasterEmail(user)) return 'env';
+  return null;
 }
 
 /** Classifica o papel do usuário na plataforma (visão Master). */
@@ -116,6 +143,7 @@ export function safeUserView(db: DB, user: User): SafeUserView {
     email: user.email,
     kind,
     platformRole: (user.role as UserRole) || 'owner',
+    masterSource: masterSourceOf(user),
     organizationIds: links.organizationIds,
     organizationNames: links.organizationNames,
     unitIds: links.unitIds,
@@ -137,14 +165,31 @@ export function listPlatformUsers(db: DB): SafeUserView[] {
     });
 }
 
+/**
+ * Lista administrativa de Masters = somente role='master'.
+ * Fallback MASTER_EMAILS (sem role) NÃO aparece aqui — evita Master “invisível”
+ * e força promoção explícita (role) para gestão normal.
+ */
 export function listMastersSafe(db: DB): SafeUserView[] {
   return mastersOf(db).map((u) => safeUserView(db, u))
     .sort((a, b) => a.email.localeCompare(b.email));
 }
 
 /**
+ * Fallback env visível para diagnóstico (não gerenciável por revoke de role).
+ * Aparece separado na API para o operador saber quem está só no env.
+ */
+export function listEnvOnlyMastersSafe(db: DB): SafeUserView[] {
+  return db.users
+    .filter((u) => isMasterEmail(u) && !hasMasterRole(u))
+    .map((u) => safeUserView(db, u))
+    .sort((a, b) => a.email.localeCompare(b.email));
+}
+
+/**
  * Promove usuário existente a Master (role = 'master').
  * Não altera senha. Não confunde com OWNER de Organization.
+ * Se o e-mail já estava só em MASTER_EMAILS, grava role persistente.
  */
 export function promoteToMaster(db: DB, email: string): MasterManageResult {
   const normalized = String(email || '').trim().toLowerCase();
@@ -153,7 +198,7 @@ export function promoteToMaster(db: DB, email: string): MasterManageResult {
   }
   const user = db.users.find((u) => u.email.toLowerCase() === normalized);
   if (!user) return { ok: false, error: 'Usuário não encontrado.', code: 'not_found' };
-  if (user.role === 'master') {
+  if (hasMasterRole(user)) {
     return { ok: false, error: 'Este usuário já é Master.', code: 'already' };
   }
   user.role = 'master';
@@ -161,35 +206,32 @@ export function promoteToMaster(db: DB, email: string): MasterManageResult {
 }
 
 /**
- * Remove privilégio Master. Impede remover o último Master da plataforma
- * (contando role=master E e-mails em MASTER_EMAILS presentes no banco).
+ * Remove privilégio Master persistente (role → owner).
+ * Conta SOMENTE role='master'. MASTER_EMAILS NÃO contorna last_master:
+ * se só resta 1 role=master, a remoção é bloqueada mesmo com e-mails no env.
+ * Quem está só no env não tem role para revogar por esta função.
  */
 export function revokeMaster(db: DB, userId: string): MasterManageResult {
   const user = db.users.find((u) => u.id === userId);
   if (!user) return { ok: false, error: 'Usuário não encontrado.', code: 'not_found' };
-  if (!isMasterUser(user)) {
-    return { ok: false, error: 'Este usuário não é Master.', code: 'invalid' };
-  }
-  // Conta masters "efetivos" no banco. E-mails só em MASTER_EMAILS (sem role)
-  // ainda passam isMasterUser, mas revogar role de alguém que só está no env
-  // não remove o acesso via env — ainda assim protegemos o último role=master
-  // quando não há outro master efetivo.
-  const effective = mastersOf(db);
-  if (effective.length <= 1 && user.role === 'master') {
-    // Se o único master efetivo é este, bloquear — mesmo com MASTER_EMAILS,
-    // o env pode ser removido; precisamos de ao menos um role=master.
-    const roleMasters = db.users.filter((u) => u.role === 'master');
-    if (roleMasters.length <= 1) {
+  if (!hasMasterRole(user)) {
+    if (isMasterEmail(user)) {
       return {
         ok: false,
-        error: 'Não é possível remover o último Master da plataforma.',
-        code: 'last_master',
+        error: 'Este acesso Master vem só de MASTER_EMAILS (env). Remova o e-mail da variável de ambiente; não há role=master para revogar no banco.',
+        code: 'invalid',
       };
     }
+    return { ok: false, error: 'Este usuário não é Master.', code: 'invalid' };
   }
-  if (user.role === 'master') {
-    user.role = 'owner';
+  if (countMasters(db) <= 1) {
+    return {
+      ok: false,
+      error: 'Não é possível remover o último Master da plataforma.',
+      code: 'last_master',
+    };
   }
+  user.role = 'owner';
   return { ok: true, userId: user.id, email: user.email, role: 'owner', created: false, action: 'revoked' };
 }
 
@@ -207,7 +249,7 @@ export function upsertMasterUser(
   }
   const existing = db.users.find((u) => u.email.toLowerCase() === email);
   if (existing) {
-    if (existing.role === 'master') {
+    if (hasMasterRole(existing)) {
       return { ok: false, error: 'Este usuário já é Master.', code: 'already' };
     }
     existing.role = 'master';
@@ -282,7 +324,8 @@ export interface PlatformOverview {
 
 export function platformOverview(db: DB, activityLimit = 20): PlatformOverview {
   const users = listPlatformUsers(db);
-  const masters = users.filter((u) => u.kind === 'master').length;
+  // Contagem administrativa = role=master (não MASTER_EMAILS).
+  const masters = countMasters(db);
   const owners = users.filter((u) => u.kind === 'owner').length;
   const admins = users.filter((u) => u.kind === 'admin').length;
   const members = users.filter((u) => u.kind === 'member').length;
@@ -459,4 +502,4 @@ export function assertCannotSelfPromoteToMaster(
   return !isMasterUser(actor);
 }
 
-export { isMasterUser, masterEmails };
+export { hasMasterRole, isMasterEmail, isMasterUser, masterEmails };
