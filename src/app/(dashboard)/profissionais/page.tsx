@@ -107,6 +107,18 @@ export default function ProfissionaisPage() {
 
       {loaded && <CatalogCrossLinks businessId={businessId} current="profissionais" />}
 
+      {/* Acesso do profissional (P2): o vínculo login↔profissional é feito em
+          Equipe. Quem tem vínculo vê SOMENTE a própria agenda (regra do
+          servidor). Aqui só deixamos o caminho visível. */}
+      {loaded && (
+        <div className="bg-white border border-zinc-200 rounded-lg px-5 py-3.5 mb-4 text-xs text-zinc-600 flex flex-wrap items-center gap-x-2 gap-y-1">
+          <strong>Um profissional que atende precisa de login?</strong>
+          <span>Crie o acesso em</span>
+          <a href={`/equipe?b=${businessId}`} className="font-semibold text-zinc-900 underline">Equipe</a>
+          <span>e vincule ao profissional — ele passa a ver somente a própria agenda, com os clientes da unidade.</span>
+        </div>
+      )}
+
       {msg && <p className="mb-4 text-sm font-medium bg-zinc-900 text-white rounded-md px-4 py-3">{msg}</p>}
       {!loaded && <ListSkeleton rows={3} />}
 

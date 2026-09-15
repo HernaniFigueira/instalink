@@ -7,6 +7,7 @@ import { normalizeFeatures } from '@/lib/features';
 import type { BusinessMode, TeamMode } from '@/lib/types';
 import { VALID_MODES, defaultBookingConfig } from '@/lib/types';
 import { VALID_NAV } from '@/lib/nav';
+import { sanitizeAppearance } from '@/lib/appearance';
 
 // PATCH — atualiza perfil do negócio (dono). Campos permitidos explícitos,
 // com whitelist e sanitização por tipo.
@@ -74,6 +75,18 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
           else delete clean[k]; // limpou o campo no editor → rede sai da página
         }
         b.socials = clean;
+      }
+      // Identidade visual do PAINEL (P2): só a cor da navegação, validada.
+      // Não toca na página pública (Page.theme continua independente).
+      if (body.appearance !== undefined) {
+        b.appearance = sanitizeAppearance(body.appearance);
+        pushAudit(d, {
+          action: 'appearance.updated',
+          actor: { ...ctx.user, role: ctx.role },
+          businessId: b.id,
+          supportSessionId: ctx.support?.id,
+          meta: { navColor: b.appearance.navColor || 'padrao' },
+        });
       }
       // Config de agenda (validada campo a campo)
       if (body.booking && typeof body.booking === 'object') {

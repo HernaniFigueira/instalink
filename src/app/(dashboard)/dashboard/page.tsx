@@ -27,6 +27,8 @@ import { money } from '@/lib/utils';
 import { humanDay } from '@/lib/tz';
 import { NO_DATA_MESSAGE, type RevenueResult } from '@/lib/revenue';
 import { periodLabel } from '@/lib/periods';
+import { ComparisonBadge } from '@/components/dashboard/results-view';
+import { useRevalidateOnFocus } from '@/components/dashboard/use-revalidate';
 import { ORDER_STATUS, BOOKING_STATUS, LEAD_STATUS, toneCls, type StatusDef } from '@/lib/status';
 
 interface Modules {
@@ -71,6 +73,23 @@ interface Overview {
   pct: number;
   pendingSetup?: number;
   period: number;
+  /**
+   * Resultados do período (P2): recorte curto dos indicadores REAIS, montado
+   * no servidor pelo mesmo motor da tela Resultados. Ausente para quem não tem
+   * a permissão de resultados — ninguém recebe número que não pode ver.
+   */
+  results?: {
+    periodKey: string;
+    periodLabel: string;
+    from: string;
+    to: string;
+    hasPrevious: boolean;
+    items: Array<{
+      id: string; label: string; value: number; unit: 'count' | 'money' | 'percent';
+      hint: string; hasData: boolean; noDataHint?: string;
+      prev: number | null; deltaPct: number | null;
+    }>;
+  } | null;
   recent: {
     orders: Array<{ id: string; code: string; customerName: string; status: string; createdAt: string }>;
     bookings: Array<{ id: string; customerName: string; date: string; time: string; status: string }>;
@@ -119,6 +138,8 @@ export default function DashboardPage() {
   }, [businessId, period, retry]);
 
   useEffect(() => { load(); }, [load]);
+  // Ao voltar para a tela, o painel se atualiza sozinho (sem polling).
+  useRevalidateOnFocus(load);
 
   if (denied) {
     return (
@@ -144,6 +165,7 @@ export default function DashboardPage() {
 
   const { user, business, totals, upcoming, checklist, pct, recent, today, needsClosure = [], crm, pageStats, whatsapp, ordersPanel, productsPanel, context } = data;
   const modules = context.modules;
+  const results = data.results;
   const showMoney = data.showMoney !== false;
   const revenueDetail = data.revenueDetail;
   const bookingRevenue = revenueDetail?.bookings || null;
@@ -386,6 +408,38 @@ export default function DashboardPage() {
           </div>
         )}
 
+        {/* Resultados do período (P2): a resposta curta para “como está o meu
+            negócio?” — indicadores reais do período, com comparação, apurados
+            no servidor pelo mesmo motor da tela Resultados. */}
+        {results && results.items.length > 0 && (
+          <div className="lg:col-span-3 bg-white border border-zinc-200">
+            <div className="px-4 py-2.5 border-b border-zinc-100 flex flex-wrap items-center justify-between gap-2">
+              <h3 className="text-xs font-semibold tracking-wide uppercase text-zinc-500">Resultados · {results.periodLabel}</h3>
+              <Link href={`/resultados${q}&period=${results.periodKey === 'all' ? '0' : results.periodKey}`} className="text-xs font-medium text-zinc-600 hover:text-zinc-900">
+                Ver resultados completos →
+              </Link>
+            </div>
+            <div className="grid grid-cols-2 sm:grid-cols-4 divide-x divide-y divide-zinc-100">
+              {results.items.map((it) => (
+                <div key={it.id} className="px-4 py-3">
+                  <p className="text-lg font-semibold leading-none">
+                    {it.hasData ? (it.unit === 'money' ? money(it.value) : `${it.value}${it.unit === 'percent' ? '%' : ''}`) : <span className="text-zinc-400 text-sm font-medium">{'—'}</span>}
+                  </p>
+                  <p className="text-xs text-zinc-500 mt-1">{it.label}</p>
+                  {it.hasData && <ComparisonBadge metric={it} hasPrevious={results.hasPrevious} />}
+                  {!it.hasData && <p className="text-[11px] text-zinc-400 mt-1">{it.noDataHint}</p>}
+                </div>
+              ))}
+            </div>
+            <div className="px-4 py-2.5 border-t border-zinc-100">
+              <p className="text-[11px] text-zinc-400">
+                Cada indicador usa a data correta do seu significado (atendimento, cadastro do cliente ou criação do lead).
+                “Receita” aqui é previsão: o InstaLink não registra o pagamento.
+              </p>
+            </div>
+          </div>
+        )}
+
         {/* Movimento — denso */}
         <div className="lg:col-span-3 bg-white border border-zinc-200">
           <div className="px-4 py-2.5 border-b border-zinc-100"><h3 className="text-xs font-semibold tracking-wide uppercase text-zinc-500">Movimento</h3></div>
@@ -395,7 +449,12 @@ export default function DashboardPage() {
             <div className="px-4 py-3"><p className="text-lg font-semibold leading-none">{totals.leads}{totals.leadsNew > 0 && <span className="text-amber-600 text-xs"> +{totals.leadsNew}</span>}</p><p className="text-xs text-zinc-500">leads</p></div>
             <div className="px-4 py-3"><p className="text-lg font-semibold leading-none">{totals.conversions}</p><p className="text-xs text-zinc-500">conversões</p></div>
           </div>
-          <div className="px-4 py-2.5 border-t border-zinc-100"><Link href={`/resultados${q}`} className="text-xs font-medium text-zinc-600 hover:text-zinc-900">Ver resultados →</Link></div>
+          <div className="px-4 py-2.5 border-t border-zinc-100"><Link
+              href={`/resultados${q}&period=${period === 0 ? '0' : period}`}
+              className="text-xs font-medium text-zinc-600 hover:text-zinc-900"
+            >
+              Ver resultados do período →
+            </Link></div>
         </div>
       </div>
 

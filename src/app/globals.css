@@ -52,6 +52,21 @@
   --radius-lg: 10px;
   --shadow-sm: 0 1px 2px rgba(0,0,0,0.04);
   --shadow-md: 0 2px 8px rgba(0,0,0,0.06);
+  /* ── Navegação do painel (P2) ──────────────────────────────────
+   * Identidade visual por BUSINESS: o negócio escolhe UMA cor
+   * (configurações → Aparência) e o DashboardShell injeta estes tokens no
+   * container do painel. Os valores abaixo são o PADRÃO do produto (visual
+   * atual preservado para quem não configurou nada). Texto/hover/ativo são
+   * DERIVADOS da cor principal (lib/appearance.ts) — contraste garantido. */
+  --il-nav: #ffffff;
+  --il-nav-fg: #27272a;
+  --il-nav-muted: #71717a;
+  --il-nav-hover: #f4f4f5;
+  --il-nav-active: #f4f4f5;
+  --il-nav-active-fg: #18181b;
+  --il-nav-border: #e4e4e7;
+  --il-nav-cta: #18181b;
+  --il-nav-cta-fg: #ffffff;
 }
 html { scroll-behavior: smooth; }
 body {

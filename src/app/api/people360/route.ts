@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { requireBusiness } from '@/lib/access';
 import { onlyDigits } from '@/lib/utils';
+import { contactNotes } from '@/lib/contacts';
 
 // GET ?businessId=&q=&page= — cliente 360 (contato-centric).
 // A base nasce da relação BusinessCustomer/Contact (cadastro/login na página
@@ -20,6 +21,7 @@ export async function GET(req: NextRequest) {
     key: string;
     contactId: string;
     note: string;
+    notes: ReturnType<typeof contactNotes>;
     customerId: string;
     name: string;
     phone: string;
@@ -55,7 +57,7 @@ export async function GET(req: NextRequest) {
     let p = map.get(key);
     if (!p) {
       p = {
-        key, contactId: '', note: '', customerId, name, phone: digits, email: '', registered: false, customerSince: '',
+        key, contactId: '', note: '', notes: [], customerId, name, phone: digits, email: '', registered: false, customerSince: '',
         source: '', marketingOptIn: false,
         orders: 0, spent: 0, lastOrderAt: '', bookings: [], leads: [], conversations: [], lastSeen: '',
       };
@@ -74,7 +76,9 @@ export async function GET(req: NextRequest) {
     p.registered = !!c.customerId;
     p.customerSince = c.createdAt;
     p.contactId = c.id;
+    // Observações: histórico append-only (autor/data/contexto) + campo legado.
     p.note = c.note || '';
+    p.notes = contactNotes(c);
     p.source = c.source;
     p.email = c.email || p.email;
     p.marketingOptIn = c.marketingOptIn === true;

@@ -169,6 +169,14 @@ export interface OrganizationMember {
   updatedAt: string;
 }
 
+// ── Identidade visual do DASHBOARD (P2) ─────────────────────
+// Configuração SIMPLES (uma cor principal) por Business. Independe da
+// identidade da página pública (Theme) — nada aqui afeta o público.
+export interface BusinessAppearance {
+  /** Cor principal da navegação/sidebar (hex `#rrggbb`). '' = padrão atual. */
+  navColor: string;
+}
+
 export interface Business {
   id: ID;
   ownerId: ID; // legado: preservado para compatibilidade e ownership da unidade
@@ -223,6 +231,8 @@ export interface Business {
   // retorno). Ausente/true = ativa; false = desligada pelo lojista.
   automations?: Record<string, boolean>;
   about: AboutSection; // seção "Sobre a empresa" (título/texto/imagem)
+  // Identidade visual do painel (P2). Ausente = padrão do produto.
+  appearance?: BusinessAppearance;
   published: boolean;
   createdAt: string;
   updatedAt: string;
@@ -386,6 +396,12 @@ export interface Professional {
   role: string;
   photo: string;
   active: boolean;
+  // ── VÍNCULO User → Professional (P2) ─────────────────────────
+  // Quando um login da equipe REPRESENTA este profissional, guardamos aqui o
+  // id do User. A relação vive no Professional (uma pessoa = um login por
+  // unidade) e é editada em Equipe/Profissionais pelo Admin.
+  // '' ou ausente = sem login vinculado (dado legado permanece válido).
+  userId?: string;
   // Vínculo com o horário geral da empresa (lib/schedule.ts):
   //   true  → HERDA o "Horário da clínica" (padrão ao criar um profissional);
   //   false → usa SOMENTE o próprio horário (personalizado);
@@ -521,7 +537,24 @@ export interface BusinessCustomer {
   source: string; // signup | login | google | agendamento | pedido | lead | ...
   lastInteraction: string;
   marketingOptIn: boolean; // base p/ campanhas futuras — NUNCA presumido
-  note?: string; // observação interna do CRM (visão 360)
+  // Observação interna LEGADA (texto único, preservado sem alteração).
+  // Continua válida e visível; a partir do P2 as novas observações são
+  // registradas em `notes` (append-only, com autor e data).
+  note?: string;
+  // Histórico de observações da equipe (P2) — APPEND-ONLY: nada é
+  // sobrescrito nem apagado. Cada registro guarda quem escreveu, quando e o
+  // contexto (agendamento, quando houver).
+  notes?: ContactNote[];
+}
+
+export interface ContactNote {
+  id: ID;
+  at: string; // ISO
+  by: ID; // userId do autor ('' = legado/sistema)
+  byName: string; // nome do autor no momento da escrita (auditoria legível)
+  text: string;
+  /** Contexto opcional: agendamento relacionado à observação. */
+  bookingId?: string;
 }
 
 export type LeadStatus = 'new' | 'contacted' | 'qualified' | 'converted' | 'lost';
@@ -596,10 +629,15 @@ export interface DB {
 // Um User pode ser membro de várias empresas com papéis diferentes.
 // ═══════════════════════════════════════════════════════════════
 export type MemberRole =
-  | 'OWNER' | 'ADMIN' | 'SECRETARIA' | 'ATENDENTE' | 'VENDEDOR' | 'VIEWER';
+  | 'OWNER' | 'ADMIN' | 'SECRETARIA' | 'ATENDENTE' | 'VENDEDOR' | 'VIEWER'
+  // PROFISSIONAL (P2): login de quem ATENDE. É um papel de tenant como os
+  // demais — nenhuma arquitetura paralela de usuários. O escopo de agenda
+  // (ver/só a própria) vem do VÍNCULO User→Professional (Professional.userId),
+  // não do papel: papéis administrativos preservam o acesso amplo atual.
+  | 'PROFISSIONAL';
 
 export const VALID_MEMBER_ROLES: MemberRole[] = [
-  'OWNER', 'ADMIN', 'SECRETARIA', 'ATENDENTE', 'VENDEDOR', 'VIEWER',
+  'OWNER', 'ADMIN', 'SECRETARIA', 'ATENDENTE', 'VENDEDOR', 'VIEWER', 'PROFISSIONAL',
 ];
 
 export type PermissionId =
@@ -796,7 +834,10 @@ export type AuditAction =
   | 'whatsapp.connect_requested' | 'whatsapp.webhook_received'
   | 'agent.updated' | 'organization.created' | 'unit.created'
   | 'master.created' | 'master.promoted' | 'master.revoked'
-  | 'user.login';
+  | 'user.login'
+  // P2 — vínculo de acesso e identidade do painel
+  | 'member.professional_linked' | 'member.professional_unlinked'
+  | 'appearance.updated' | 'contact.note_added';
 
 export interface AuditEntry {
   id: ID;

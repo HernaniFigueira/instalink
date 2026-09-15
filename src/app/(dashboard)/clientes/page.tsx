@@ -4,16 +4,23 @@ import { useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import type { LeadStatus } from '@/lib/types';
 import { cn, money, paginate, waLink } from '@/lib/utils';
-import { humanDay } from '@/lib/tz';
+import { humanDay, humanDateTime } from '@/lib/tz';
 import { BOOKING_STATUS, LEAD_STATUS, toneCls, type StatusDef } from '@/lib/status';
+import { leadOriginLabel } from '@/lib/leads';
 import { ListSkeleton } from '@/components/ui';
 import { Icon } from '@/components/icons';
 import { NewBookingSheet } from '@/components/dashboard/NewBookingSheet';
 import { AccessDenied, useAreaLoad } from '@/components/dashboard/AccessNotice';
 import { apiGet, apiSend } from '@/lib/api-client';
 
+// Observações do cliente (P2): histórico append-only com autor e data.
+// `legacy: true` marca o registro antigo (campo único), preservado como está.
+interface VisibleNote { id: string; at: string; by: string; byName: string; text: string; bookingId?: string; legacy?: boolean }
+
 interface Person {
-  key: string; contactId: string; note: string; customerId: string; name: string; phone: string; email: string;
+  key: string; contactId: string; note: string;
+  notes?: VisibleNote[];
+  customerId: string; name: string; phone: string; email: string;
   registered: boolean; customerSince: string; source: string; marketingOptIn: boolean;
   orders: number; spent: number; lastOrderAt: string;
   bookings: Array<{
@@ -35,11 +42,6 @@ function eventDay(iso: string): string {
 
 const NEXT_LEAD: Record<string, LeadStatus | ''> = { new: 'contacted', contacted: 'qualified', qualified: 'converted' };
 const NEXT_LEAD_LABEL: Record<string, string> = { new: 'Marcar contato', contacted: 'Qualificar', qualified: 'Marcar conversão' };
-const ORIGIN_LABEL: Record<string, string> = {
-  chat_ai: 'chat', quote: 'orçamento', booking_cta: 'reserva', whatsapp_click: 'WhatsApp',
-  share: 'indicação', cart_abandoned: 'carrinho', manual: 'manual',
-};
-
 export default function ClientesPage() {
   const params = useSearchParams();
   const businessId = params.get('b') || '';
@@ -60,6 +62,8 @@ export default function ClientesPage() {
   useEffect(() => { setHistPage(1); }, [open]);
   const [error, setError] = useState('');
   const [noteDraft, setNoteDraft] = useState<Record<string, string>>({});
+  const [legacyDraft, setLegacyDraft] = useState<Record<string, string>>({});
+  const [editingLegacy, setEditingLegacy] = useState('');
   const [bookingFor, setBookingFor] = useState<Person | null>(null);
   const [services, setServices] = useState<any[]>([]);
   const [pros, setPros] = useState<any[]>([]);
@@ -101,12 +105,28 @@ export default function ClientesPage() {
     load();
   }
 
-  async function saveNote(p: Person) {
+  // ACRESCENTA uma observação (nunca sobrescreve): o histórico inteiro fica
+  // visível, com autor e data — continuidade de atendimento entre profissionais.
+  async function addNote(p: Person) {
+    if (!p.contactId) return;
+    const text = (noteDraft[p.contactId] ?? '').trim();
+    if (!text) return;
+    setError('');
+    const res = await apiSend('/api/contacts', 'PATCH', { businessId, id: p.contactId, addNote: { text } }, { scope: 'action', area: 'Clientes' });
+    if (!res.ok) { setError(res.message || 'Não foi possível salvar a observação.'); return; }
+    setNoteDraft((d) => ({ ...d, [p.contactId]: '' }));
+    load();
+  }
+
+  // Edição do REGISTRO ANTERIOR (campo legado): continua existindo, atrás de
+  // um clique — o fluxo padrão é acrescentar, para não perder histórico.
+  async function saveLegacyNote(p: Person) {
     if (!p.contactId) return;
     setError('');
-    const note = noteDraft[p.contactId] ?? p.note;
+    const note = legacyDraft[p.contactId] ?? p.note;
     const res = await apiSend('/api/contacts', 'PATCH', { businessId, id: p.contactId, note }, { scope: 'action', area: 'Clientes' });
     if (!res.ok) { setError(res.message || 'Não foi possível salvar.'); return; }
+    setEditingLegacy('');
     load();
   }
 
@@ -176,7 +196,7 @@ export default function ClientesPage() {
       out.push({
         kind: 'lead', id: l.id, sortKey: l.createdAt, icon: 'spark',
         when: eventDay(l.createdAt.slice(0, 10)),
-        title: `Lead via ${ORIGIN_LABEL[l.origin] || l.origin}`,
+        title: `Lead via ${leadOriginLabel(l.origin)}`,
         subtitle: [l.interest, l.action].filter(Boolean).join(' · ') || undefined,
         badge: d.panel, tone: d.tone,
         actions: (
@@ -331,10 +351,46 @@ export default function ClientesPage() {
                     {p.contactId && (
                       <div>
                         <p className="text-xs font-semibold tracking-wide uppercase text-zinc-500 mb-2">Observações da equipe</p>
+                        {(p.notes || []).length === 0 ? (
+                          <p className="text-xs text-zinc-500 bg-zinc-50 border border-zinc-200 rounded-md px-3 py-2">
+                            Nenhuma observação ainda. O que você escrever aqui fica no histórico do cliente e ajuda quem atender depois.
+                          </p>
+                        ) : (
+                          <ul className="space-y-1.5 mb-2">
+                            {(p.notes || []).map((n) => (
+                              <li key={n.id} className="bg-white border border-zinc-200 rounded-md px-3 py-2">
+                                <p className="text-sm text-zinc-800 whitespace-pre-wrap break-words">{n.text}</p>
+                                <p className="text-[11px] text-zinc-400 mt-1">
+                                  {n.legacy
+                                    ? 'Registro anterior (sem autor/data)'
+                                    : <>{n.byName || 'Equipe'}{n.at ? ` · ${humanDateTime(n.at.slice(0, 10), n.at.slice(11, 16))}` : ''}{n.bookingId ? ' · sobre um agendamento' : ''}</>}
+                                </p>
+                                {n.legacy && (
+                                  editingLegacy === n.id ? (
+                                    <div className="flex gap-2 mt-2">
+                                      <input defaultValue={p.note} onChange={(e) => setLegacyDraft((d) => ({ ...d, [p.contactId]: e.target.value }))} className="flex-1 rounded-md border border-zinc-300 px-3 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-zinc-900" />
+                                      <button onClick={() => saveLegacyNote(p)} className="text-xs font-semibold bg-zinc-900 text-white px-3 py-1.5 rounded-md">Salvar</button>
+                                      <button onClick={() => setEditingLegacy('')} className="text-xs font-medium text-zinc-500 px-2">Cancelar</button>
+                                    </div>
+                                  ) : (
+                                    <button onClick={() => setEditingLegacy(n.id)} className="text-[11px] font-medium text-zinc-500 underline mt-1">Editar registro anterior</button>
+                                  )
+                                )}
+                              </li>
+                            ))}
+                          </ul>
+                        )}
                         <div className="flex gap-2">
-                          <input defaultValue={p.note} onChange={(e) => setNoteDraft((d) => ({ ...d, [p.contactId]: e.target.value }))} placeholder="Ex: prefere manhã, alergia a X…" className="flex-1 rounded-md border border-zinc-300 px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-zinc-900" />
-                          <button onClick={() => saveNote(p)} className="text-xs font-semibold bg-zinc-900 text-white px-3 py-2 rounded-md">Salvar</button>
+                          <input
+                            value={noteDraft[p.contactId] ?? ''}
+                            onChange={(e) => setNoteDraft((d) => ({ ...d, [p.contactId]: e.target.value }))}
+                            onKeyDown={(e) => { if (e.key === 'Enter') addNote(p); }}
+                            placeholder="Nova observação (ex: prefere manhã, alergia a X…)"
+                            className="flex-1 rounded-md border border-zinc-300 px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-zinc-900"
+                          />
+                          <button onClick={() => addNote(p)} disabled={!(noteDraft[p.contactId] || '').trim()} className="text-xs font-semibold bg-zinc-900 text-white px-3 py-2 rounded-md disabled:opacity-40">Adicionar</button>
                         </div>
+                        <p className="text-[11px] text-zinc-400 mt-1">As observações anteriores nunca são apagadas — o histórico é preservado.</p>
                       </div>
                     )}
                     <div className="flex flex-wrap gap-2 pt-1">

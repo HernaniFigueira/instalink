@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { backfillContacts, contactKey, upsertContact } from '../contacts';
+import { NOTE_MAX_LEN, addContactNote, backfillContacts, contactKey, contactNotes, upsertContact } from '../contacts';
 import { emptyDB } from '../db';
 import type { DB } from '../types';
 
@@ -94,5 +94,63 @@ describe('backfillContacts (migração defensiva)', () => {
     const n = db.contacts.length;
     backfillContacts(db);
     expect(db.contacts.length).toBe(n);
+  });
+});
+
+// ═══════════════════════════════════════════════════════════════
+// OBSERVAÇÕES DO CLIENTE (P2) — histórico append-only
+// ═══════════════════════════════════════════════════════════════
+// O profissional precisa VER o que foi anotado antes (por quem e quando) e
+// ACRESCENTAR sem apagar. Nada é sobrescrito nem migrado de forma destrutiva.
+describe('observações do cliente (append-only)', () => {
+  it('o registro legado aparece primeiro, identificado como anterior', () => {
+    const db = seededDB();
+    const c = upsertContact(db, { businessId: 'biz-1', customerId: 'c1', name: 'Marlene', phone: '11999998888', source: 'agendamento' })!;
+    c.note = 'Prefere manhã.';
+    const list = contactNotes(c);
+    expect(list).toHaveLength(1);
+    expect(list[0]).toMatchObject({ text: 'Prefere manhã.', legacy: true, id: `legacy-${c.id}` });
+  });
+
+  it('acrescentar NUNCA apaga: legado continua visível depois da nova observação', () => {
+    const db = seededDB();
+    const c = upsertContact(db, { businessId: 'biz-1', customerId: 'c1', name: 'Marlene', phone: '11999998888', source: 'agendamento' })!;
+    c.note = 'Prefere manhã.';
+    const added = addContactNote(c, { text: 'Alergia a dipirona.', by: 'u9', byName: 'Dr. João', at: '2026-09-15T10:00:00.000Z' })!;
+    expect(added).toMatchObject({ by: 'u9', byName: 'Dr. João', text: 'Alergia a dipirona.' });
+    expect(c.note).toBe('Prefere manhã.'); // legado intacto
+    const list = contactNotes(c);
+    expect(list.map((n) => n.text)).toEqual(['Prefere manhã.', 'Alergia a dipirona.']);
+    expect(list[1].legacy).toBeUndefined();
+    expect(list[1].at).toBe('2026-09-15T10:00:00.000Z');
+  });
+
+  it('guarda o contexto (agendamento) e a última interação', () => {
+    const db = seededDB();
+    const c = upsertContact(db, { businessId: 'biz-1', customerId: 'c1', name: 'Marlene', phone: '11999998888', source: 'agendamento' })!;
+    const n = addContactNote(c, { text: 'Chegou 10 min antes.', by: 'u9', byName: 'Ana', at: '2026-09-15T09:50:00.000Z', bookingId: 'book-orlando' })!;
+    expect(n.bookingId).toBe('book-orlando');
+    expect(c.lastInteraction).toBe('2026-09-15T09:50:00.000Z');
+    expect(c.updatedAt).toBe('2026-09-15T09:50:00.000Z');
+  });
+
+  it('texto vazio é recusado (não grava registro vazio) e o tamanho é limitado', () => {
+    const db = seededDB();
+    const c = upsertContact(db, { businessId: 'biz-1', customerId: 'c1', name: 'Marlene', phone: '11999998888', source: 'agendamento' })!;
+    expect(addContactNote(c, { text: '   ' })).toBeNull();
+    expect(contactNotes(c)).toHaveLength(0);
+    const long = addContactNote(c, { text: 'x'.repeat(NOTE_MAX_LEN + 500) })!;
+    expect(long.text).toHaveLength(NOTE_MAX_LEN);
+    expect(contactNotes(c)[0].text).toHaveLength(NOTE_MAX_LEN);
+  });
+
+  it('contato legado sem `notes` não quebra e aceita a primeira observação', () => {
+    const db = seededDB();
+    const c = upsertContact(db, { businessId: 'biz-1', customerId: 'c1', name: 'Marlene', phone: '11999998888', source: 'agendamento' })!;
+    delete (c as any).notes;
+    expect(contactNotes(c)).toEqual([]);
+    c.notes = undefined as any; // dado legado possivelmente nulo
+    expect(addContactNote(c, { text: 'Primeira anotação.' })).not.toBeNull();
+    expect(contactNotes(c).map((n) => n.text)).toEqual(['Primeira anotação.']);
   });
 });

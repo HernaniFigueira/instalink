@@ -65,6 +65,22 @@ describe('permissões e papéis', () => {
     expect(isValidPermission('agenda')).toBe(true);
     expect(isValidPermission('root')).toBe(false);
     expect(roleDef('VIEWER')?.label).toBe('Visualizador');
-    expect(ROLES.map((r) => r.id)).toEqual(['OWNER', 'ADMIN', 'SECRETARIA', 'ATENDENTE', 'VENDEDOR', 'VIEWER']);
+    // P2 acrescentou PROFISSIONAL (login de quem atende) SEM remover papéis:
+    // a ordem anterior é preservada e o novo entra no fim.
+    expect(ROLES.map((r) => r.id)).toEqual([
+      'OWNER', 'ADMIN', 'SECRETARIA', 'ATENDENTE', 'VENDEDOR', 'VIEWER', 'PROFISSIONAL',
+    ]);
+    expect(isValidRole('PROFISSIONAL')).toBe(true);
+  });
+
+  it('profissional vê a própria agenda e os clientes da unidade (sem config/financeiro)', () => {
+    const p = permissionsFor('PROFISSIONAL');
+    expect(p.agenda).toBe(true);
+    expect(p.clientes).toBe(true);
+    expect(p.dashboard).toBe(true);
+    expect(p.config).toBe(false);
+    expect(p.equipe).toBe(false);
+    expect(p.financeiro).toBe(false);
+    expect(p.catalogo).toBe(false);
   });
 });

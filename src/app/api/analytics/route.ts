@@ -5,11 +5,9 @@ import { todayISO, addDaysISO, formatDateShort } from '@/lib/tz';
 import { convRate, seriesByDay, topN, funnelRates } from '@/lib/analytics';
 import { isFeatureEnabled } from '@/lib/features';
 import { parsePeriodParam, periodWindows } from '@/lib/periods';
-
-const ORIGIN_LABEL: Record<string, string> = {
-  chat_ai: 'Chat', quote: 'Orçamento', booking_cta: 'Reserva', whatsapp_click: 'WhatsApp',
-  share: 'Indicação', cart_abandoned: 'Carrinho', manual: 'Manual', outro: 'Outro',
-};
+// Rótulo de origem: FONTE ÚNICA em lib/leads.ts (mesma usada em Resultados e
+// Clientes). Origem desconhecida aparece como gravada — nada é inventado.
+import { leadOriginLabel } from '@/lib/leads';
 
 // GET ?businessId=&period=7|30|90|365|0 — métricas agregadas do período (dono).
 // (0 = todo o período; fonte única dos períodos: lib/periods.ts.)
@@ -124,7 +122,7 @@ export async function GET(req: NextRequest) {
 
   const origins: Record<string, number> = {};
   for (const l of leads) {
-    const label = ORIGIN_LABEL[l.origin] || l.origin || 'Outro';
+    const label = l.origin ? leadOriginLabel(l.origin) : 'Outro';
     origins[label] = (origins[label] || 0) + 1;
   }
 

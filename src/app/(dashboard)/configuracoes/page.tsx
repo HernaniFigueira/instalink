@@ -23,14 +23,17 @@ import { PageSkeleton } from '@/components/ui';
 import { ImageUpload } from '@/components/dashboard/ImageUpload';
 import { AccessDenied, useAreaLoad } from '@/components/dashboard/AccessNotice';
 import { apiGet, apiSend } from '@/lib/api-client';
+import { NAV_PRESETS, navTokens, navColorOf } from '@/lib/appearance';
 
 export default function ConfigPage() {
   const params = useSearchParams();
   const businessId = params.get('b') || '';
   const [biz, setBiz] = useState<Business | null>(null);
   const [msg, setMsg] = useState('');
+  const [appearanceMsg, setAppearanceMsg] = useState('');
+  const [savingAppearance, setSavingAppearance] = useState(false);
   const [saving, setSaving] = useState(false);
-  const [tab, setTab] = useState<'negocio' | 'agenda' | 'crm' | 'canais'>('negocio');
+  const [tab, setTab] = useState<'negocio' | 'agenda' | 'crm' | 'canais' | 'aparencia'>('negocio');
   const [activeModules, setActiveModules] = useState<number | null>(null);
 
   // 403 → aviso amigável (sessão preservada), nunca skeleton infinito.
@@ -75,6 +78,26 @@ export default function ConfigPage() {
     } catch (err: any) { setMsg(err.message); } finally { setSaving(false); setTimeout(() => setMsg(''), 3000); }
   }
 
+  // ── Identidade visual do DASHBOARD (P2) ──────────────────────
+  // Salva só a cor da navegação; a página pública não é tocada.
+  async function saveAppearance(navColor: string) {
+    if (!biz) return;
+    const previous = biz.appearance?.navColor || '';
+    setBiz({ ...biz, appearance: { navColor } }); // prévia imediata
+    setSavingAppearance(true); setAppearanceMsg('');
+    const res = await apiSend(`/api/businesses/${businessId}`, 'PATCH', { appearance: { navColor } }, { scope: 'action', area: 'Configurações' });
+    setSavingAppearance(false);
+    if (!res.ok) {
+      setBiz((cur) => (cur ? { ...cur, appearance: { navColor: previous } } : cur));
+      setAppearanceMsg(res.message || 'Não foi possível salvar a cor.');
+      return;
+    }
+    setAppearanceMsg('Cor salva.');
+    // Revalida o contexto (sidebar/topbar releem a identidade da unidade).
+    try { window.dispatchEvent(new Event('il:business-refresh')); } catch { /* noop */ }
+    setTimeout(() => setAppearanceMsg(''), 3000);
+  }
+
   if (denied) return <AccessDenied area="Configurações" />;
   if (!biz) return <PageSkeleton />;
   const set = (k: keyof Business, v: any) => setBiz({ ...biz, [k]: v });
@@ -87,7 +110,7 @@ export default function ConfigPage() {
       {msg && <p className="mb-3 text-sm font-medium bg-zinc-900 text-white rounded-md px-3 py-2">{msg}</p>}
 
       <div className="flex flex-wrap gap-1 p-1 bg-zinc-100 rounded-md mb-4 w-fit" role="tablist">
-        {([['negocio', 'Negócio'], ['agenda', 'Agenda'], ['crm', 'CRM'], ['canais', 'Canais']] as const).map(([id, label]) => (
+        {([['negocio', 'Negócio'], ['agenda', 'Agenda'], ['crm', 'CRM'], ['canais', 'Canais'], ['aparencia', 'Aparência']] as const).map(([id, label]) => (
           <button key={id} role="tab" aria-selected={tab === id} onClick={() => setTab(id)} className={cn('text-xs font-medium px-3 py-1.5 rounded', tab === id ? 'bg-white shadow-sm border border-zinc-200 text-zinc-900' : 'text-zinc-500')}>
             {label}
           </button>
@@ -185,6 +208,85 @@ export default function ConfigPage() {
             </div>
           </section>
         )}
+
+        {tab === 'aparencia' && (() => {
+          // Identidade visual do PAINEL (P2): uma escolha principal — a cor da
+          // navegação. Prévia ao vivo, aplicada por tokens (--il-nav*), com
+          // contraste derivado automaticamente. A página pública é outra
+          // configuração (editor de Página) e NÃO é afetada por esta.
+          const current = navColorOf(biz);
+          const preview = navTokens(current);
+          return (
+            <section className="bg-white border border-zinc-200 p-4 space-y-4">
+              <div>
+                <h3 className="font-semibold text-sm">Identidade do painel</h3>
+                <p className="text-xs text-zinc-500 mt-0.5">
+                  Escolha a cor da navegação deste negócio. Vale só para o painel — a página pública mantém o visual configurado em Página.
+                </p>
+              </div>
+
+              <div className="grid sm:grid-cols-[1fr_auto] gap-5 items-start">
+                <div className="space-y-3">
+                  <div className="flex flex-wrap gap-2" role="radiogroup" aria-label="Cor da navegação">
+                    {NAV_PRESETS.map((preset) => {
+                      const active = current === preset.color;
+                      return (
+                        <button
+                          key={preset.id}
+                          type="button"
+                          role="radio"
+                          aria-checked={active}
+                          aria-label={preset.label}
+                          title={preset.label}
+                          onClick={() => saveAppearance(preset.color)}
+                          disabled={savingAppearance}
+                          className={cn(
+                            'w-10 h-10 rounded-lg border-2 flex items-center justify-center text-white text-xs font-bold transition-transform disabled:opacity-60',
+                            active ? 'border-zinc-900 scale-105' : 'border-transparent hover:scale-105',
+                          )}
+                          style={{ background: preset.color, color: navTokens(preset.color).navFg }}
+                        >
+                          {active ? '✓' : ''}
+                        </button>
+                      );
+                    })}
+                  </div>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() => saveAppearance('')}
+                      disabled={savingAppearance}
+                      className={cn('text-xs font-semibold px-3 py-2 rounded-md border',
+                        current ? 'bg-white border-zinc-200 text-zinc-700' : 'bg-zinc-900 border-zinc-900 text-white')}
+                    >
+                      Padrão do InstaLink
+                    </button>
+                    {appearanceMsg && <span className="text-xs font-medium text-zinc-600" role="status">{appearanceMsg}</span>}
+                    {savingAppearance && <span className="text-xs text-zinc-400">Salvando…</span>}
+                  </div>
+                  <p className="text-[11px] text-zinc-500">
+                    “Padrão do InstaLink” é o menu branco de hoje — escolha uma cor só se quiser destacar a marca.
+                    O texto e os destaques se ajustam automaticamente para a leitura continuar confortável.
+                  </p>
+                </div>
+
+                {/* Prévia pequena: como o menu fica no painel */}
+                <div className="w-[190px] rounded-lg overflow-hidden border border-zinc-200" aria-hidden="true">
+                  <div className="px-3 py-2.5 text-xs font-semibold" style={{ background: preview.nav, color: preview.navFg }}>
+                    {biz.name || 'Sua empresa'}
+                  </div>
+                  <div className="p-2 space-y-1" style={{ background: preview.nav }}>
+                    <span className="block text-[11px] font-medium px-2 py-1.5 rounded" style={{ background: preview.navActive, color: preview.navActiveFg }}>Dashboard</span>
+                    <span className="block text-[11px] px-2 py-1.5 rounded" style={{ color: preview.navFg }}>Agenda</span>
+                    <span className="block text-[11px] px-2 py-1.5 rounded" style={{ color: preview.navFg }}>Clientes</span>
+                    <span className="block text-[11px] px-2 py-1.5 rounded" style={{ color: preview.navMuted }}>Resultados</span>
+                  </div>
+                  <div className="bg-white px-3 py-2 text-[10px] text-zinc-500">Prévia do menu</div>
+                </div>
+              </div>
+            </section>
+          );
+        })()}
 
         {tab === 'canais' && (
           <section className="bg-white border border-zinc-200 p-4 space-y-3">

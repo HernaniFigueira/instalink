@@ -243,5 +243,121 @@ console.log('\n— cenário G: menu mobile');
 const gHtml = await (await fetch(BASE + '/barbeariadojoao')).text();
 check('G: hambúrguer sem Início', gHtml.includes('aria-label="Menu"') && !gHtml.includes('>Início<'));
 
+// ═══════════════════════════════════════════════════════════════
+// P2 — Resultados/Inteligência · Acesso do Profissional · Identidade
+// ═══════════════════════════════════════════════════════════════
+console.log('\n— P2: resultados e inteligência (dados reais)');
+const res30 = await api('GET', `/api/results?businessId=${B3}&period=30`, null, token);
+check('resultados: 200 com indicadores', res30.status === 200 && Array.isArray(res30.data.results?.metrics));
+const metrics = Object.fromEntries((res30.data.results?.metrics || []).map((m) => [m.id, m]));
+check('resultados: período atual × anterior', !!res30.data.period?.from && res30.data.period?.hasPrevious === true,
+  JSON.stringify(res30.data.period));
+check('resultados: funil com estágios REAIS e etapa não rastreada declarada',
+  (res30.data.results?.funnel?.steps || []).some((s) => s.id === 'completed')
+  && (res30.data.results?.funnel?.steps || []).some((s) => s.id === 'arrived' && s.tracked === false));
+check('resultados: receita registrada só com base confiável (explica quando não há)',
+  metrics.registered_revenue === undefined || res30.data.results.revenue.registered.available === true,
+  JSON.stringify(res30.data.results?.revenue?.registered?.reason || '').slice(0, 80));
+const resCustom = await api('GET', `/api/results?businessId=${B3}&period=custom&from=${isoDay(-1)}&to=${isoDay(2)}`, null, token);
+const customBookings = (resCustom.data.results?.metrics || []).find((m) => m.id === 'bookings');
+check('resultados: período personalizado respeita as datas (inclui os agendamentos de amanhã)',
+  resCustom.data.period?.key === 'custom' && (customBookings?.value || 0) >= 1,
+  `key=${resCustom.data.period?.key} bookings=${customBookings?.value}`);
+const resOrg = await api('GET', `/api/results?organizationId=org-${B3}&period=30`, null, token);
+check('resultados: visão consolidada da organização agrega as unidades acessíveis',
+  resOrg.status === 200 && Array.isArray(resOrg.data.units) && !!resOrg.data.consolidated,
+  `(${resOrg.status})`);
+const resOther = await api('GET', `/api/results?organizationId=org-${B1}&period=30`, null, token);
+check('resultados: consolidado de OUTRA organização não mistura unidades',
+  resOther.status === 200 && (resOther.data.units || []).every((u) => u.id === B1),
+  `units=${(resOther.data.units || []).map((u) => u.id).join(',')}`);
+check('resultados: sem token → 401', (await api('GET', `/api/results?businessId=${B3}`)).status === 401);
+
+console.log('\n— P2: identidade visual do painel (cor por unidade)');
+const beforeMe = await api('GET', '/api/auth/me', null, token);
+const beforeColor = beforeMe.data.businesses.find((b) => b.id === B2)?.appearance?.navColor || '';
+const setColor = await api('PATCH', `/api/businesses/${B2}`, { appearance: { navColor: '#155e75' } }, token);
+const afterMe = await api('GET', '/api/auth/me', null, token);
+const savedColor = afterMe.data.businesses.find((b) => b.id === B2)?.appearance?.navColor;
+check('cor da navegação: salva por unidade e volta no contexto do painel', setColor.status === 200 && savedColor === '#155e75',
+  `(${setColor.status}) cor=${savedColor}`);
+const otherUnitColor = afterMe.data.businesses.find((b) => b.id === B3)?.appearance?.navColor || '';
+check('cor da navegação: NÃO vaza para as outras unidades', otherUnitColor !== '#155e75');
+// /api/businesses/:id só aceita PATCH de lojista logado — 405 para leitura,
+// e nunca 200 com token de consumidor.
+const otherTenant = await api('PATCH', `/api/businesses/${B2}`, { appearance: { navColor: '#000000' } }, custToken);
+check('cor da navegação: só quem administra a unidade altera (token de consumidor recusado)',
+  otherTenant.status === 401 || otherTenant.status === 403, `(${otherTenant.status})`);
+const resetColor = await api('PATCH', `/api/businesses/${B2}`, { appearance: { navColor: beforeColor || '' } }, token);
+check('cor da navegação: dá para voltar ao padrão', resetColor.status === 200);
+
+console.log('\n— P2: acesso do profissional (vínculo + isolamento no servidor)');
+const proEmail = `${TAG}-pro@smoke.test`;
+const newMember = await api('POST', '/api/team', {
+  businessId: B3, name: `${TAG} Profissional`, email: proEmail, password: 'smoke1234', role: 'PROFISSIONAL', note: 'smoke',
+}, token);
+const memberId = newMember.data.memberId;
+check('equipe: cria acesso com papel PROFISSIONAL', newMember.status === 200 && !!memberId, `(${newMember.status})`);
+const proLogin = await api('POST', '/api/auth/login', { email: proEmail, password: 'smoke1234' });
+const proToken = proLogin.data.token || '';
+check('profissional: consegue entrar', !!proToken, `(${proLogin.status})`);
+const proTeam = await api('GET', `/api/team?businessId=${B3}`, null, proToken);
+check('profissional: NÃO acessa a equipe (nem o próprio vínculo)', proTeam.status === 403, `(${proTeam.status})`);
+const unlinkedAgenda = await api('GET', `/api/bookings?businessId=${B3}&mode=manage`, null, proToken);
+check('profissional sem vínculo: agenda NÃO mostra a de todo mundo',
+  (unlinkedAgenda.data.bookings || []).length === 0 && unlinkedAgenda.data.scope?.unlinked === true,
+  `total=${unlinkedAgenda.data.total}`);
+const link = await api('PATCH', '/api/team', { businessId: B3, id: memberId, professionalId: 'pro-orlando' }, token);
+check('equipe: vincula o login a um profissional da unidade', link.status === 200, `(${link.status})`);
+const badLink = await api('PATCH', '/api/team', { businessId: B3, id: memberId, professionalId: 'pro-joao' }, token);
+check('equipe: recusa profissional de OUTRA unidade', badLink.status === 404, `(${badLink.status})`);
+const scopedAgenda = await api('GET', `/api/bookings?businessId=${B3}&mode=manage`, null, proToken);
+const allAgenda = await api('GET', `/api/bookings?businessId=${B3}&mode=manage`, null, token);
+check('profissional: vê SÓ a própria agenda (filtro no servidor)',
+  scopedAgenda.status === 200
+  && (scopedAgenda.data.bookings || []).every((b) => b.professionalId === 'pro-orlando')
+  && (scopedAgenda.data.bookings || []).length < (allAgenda.data.bookings || []).length,
+  `pro=${(scopedAgenda.data.bookings || []).length} dono=${(allAgenda.data.bookings || []).length}`);
+const wide = await api('GET', `/api/bookings?businessId=${B3}&mode=manage&limit=500&page=1&from=2000-01-01&to=2999-12-31`, null, proToken);
+check('profissional: params na URL não ampliam o escopo',
+  (wide.data.bookings || []).every((b) => b.professionalId === 'pro-orlando'), `total=${wide.data.total}`);
+const foreign = (allAgenda.data.bookings || []).find((b) => b.professionalId !== 'pro-orlando');
+if (foreign) {
+  const steal = await api('PATCH', '/api/bookings', { businessId: B3, id: foreign.id, status: 'completed' }, proToken);
+  check('profissional: NÃO altera atendimento de outro (403)', steal.status === 403, `(${steal.status})`);
+  const move = await api('PATCH', '/api/bookings', { businessId: B3, id: foreign.id, date: isoDay(3), time: '09:00' }, proToken);
+  check('profissional: NÃO reagenda atendimento de outro (403)', move.status === 403, `(${move.status})`);
+} else {
+  check('profissional: sem atendimento alheio para testar (pulado)', true);
+}
+const crossUnit = await api('GET', `/api/bookings?businessId=${B2}&mode=manage`, null, proToken);
+check('profissional: NÃO alcança outra unidade', crossUnit.status === 403, `(${crossUnit.status})`);
+const proResults = await api('GET', `/api/results?businessId=${B3}&period=30`, null, proToken);
+check('profissional: NÃO vê resultados/financeiro', proResults.status === 403, `(${proResults.status})`);
+const proClients = await api('GET', `/api/contacts?businessId=${B3}`, null, proToken);
+check('profissional: VÊ a lista de clientes da unidade (decisão de produto)',
+  proClients.status === 200 && (proClients.data.contacts || []).length > 0, `(${proClients.status})`);
+// usa um cliente que JÁ tem observação antiga (campo legado) — é o caso que
+// precisa provar histórico preservado junto com o registro novo.
+const contact = (proClients.data.contacts || []).find((c) => (c.note || '').trim())
+  || (proClients.data.contacts || []).find((c) => c.phone === '11955554444')
+  || (proClients.data.contacts || [])[0];
+const noteText = `${TAG}: paciente tolera bem o procedimento.`;
+const addNote = await api('PATCH', '/api/contacts', { businessId: B3, id: contact.id, addNote: { text: noteText } }, proToken);
+check('profissional: acrescenta observação no cliente', addNote.status === 200 && !!addNote.data.note?.id, `(${addNote.status})`);
+const notes360 = await api('GET', `/api/people360?businessId=${B3}&q=${contact.phone}`, null, proToken);
+const person = (notes360.data.people || []).find((p) => p.contactId === contact.id) || (notes360.data.people || [])[0] || {};
+const notes = person.notes || [];
+check('observações: histórico preservado (legado + nova, com autor)',
+  notes.some((n) => n.legacy === true) && notes.some((n) => n.text === noteText && !!n.byName),
+  `notes=${notes.length}`);
+const unlink = await api('PATCH', '/api/team', { businessId: B3, id: memberId, professionalId: '' }, token);
+const afterUnlink = await api('GET', `/api/bookings?businessId=${B3}&mode=manage`, null, proToken);
+check('profissional: desvincular fecha a agenda de novo (sem vínculo, sem agenda alheia)',
+  unlink.status === 200 && (afterUnlink.data.bookings || []).length === 0, `(${afterUnlink.status}) total=${afterUnlink.data.total}`);
+const ownerStill = await api('GET', `/api/bookings?businessId=${B3}&mode=manage`, null, token);
+check('dono/secretária continuam vendo a unidade inteira (sem regressão)',
+  (ownerStill.data.bookings || []).length === (allAgenda.data.bookings || []).length);
+
 console.log(`\nRESULTADO: ${pass} ok, ${fail} falhas${fail ? ' → ' + failures.join(' | ') : ''}\n`);
 process.exit(fail ? 1 : 0);

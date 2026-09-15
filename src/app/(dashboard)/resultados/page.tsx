@@ -1,12 +1,27 @@
 'use client';
-import { useCallback, useEffect, useState } from 'react';
-import { useSearchParams } from 'next/navigation';
+// ═══════════════════════════════════════════════════════════════
+// RESULTADOS — "como está o meu negócio?" (P2, Bloco 1)
+// ═══════════════════════════════════════════════════════════════
+// DUAS camadas, na ordem em que o lojista pensa:
+//   1. RESULTADOS DO NEGÓCIO (`/api/results` + lib/insights.ts): indicadores,
+//      comparação com o período anterior, funil, desempenho por serviço e por
+//      profissional e origem dos leads — tudo com dado REAL persistido;
+//   2. PÁGINA PÚBLICA (`/api/analytics`, preservado): visitas, cliques,
+//      produtos em destaque e os funis de página que já existiam.
+//
+// Período vive na URL (`?period=…`), então o recorte é compartilhável e
+// sobrevive a recarregar a página/favoritos.
+import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { PageSkeleton } from '@/components/ui';
 import { AccessDenied, useAreaLoad } from '@/components/dashboard/AccessNotice';
-import { PeriodSelector } from '@/components/dashboard/PeriodSelector';
+import { PeriodPicker, ResultsView } from '@/components/dashboard/results-view';
+import { useRevalidateOnFocus } from '@/components/dashboard/use-revalidate';
 import { apiGet } from '@/lib/api-client';
 import { money } from '@/lib/utils';
-import { periodLabel } from '@/lib/periods';
+import { resolvePeriodSpec, type PeriodKey } from '@/lib/periods';
+import { todayISO } from '@/lib/tz';
+import type { ResultsPayload } from '@/lib/insights';
 
 interface Analytics {
   period: number;
@@ -22,6 +37,13 @@ interface Analytics {
   topProducts: Array<{ name: string; views: number; adds: number; revenue: number }>;
   topCtas: Array<{ label: string; clicks: number }>;
   origins: Array<{ name: string; value: number }>;
+}
+
+interface ResultsResponse {
+  scope: 'business' | 'organization';
+  business?: { id: string; name: string; slug: string };
+  period: { key: string; label: string; from: string; to: string; prevFrom: string; prevTo: string; hasPrevious: boolean; custom: boolean };
+  results: ResultsPayload;
 }
 
 function Funnel({ title, steps }: { title: string; steps: Analytics['funnelOrders'] }) {
@@ -48,132 +70,169 @@ function Funnel({ title, steps }: { title: string; steps: Analytics['funnelOrder
 
 export default function ResultadosPage() {
   const params = useSearchParams();
+  const router = useRouter();
   const businessId = params.get('b') || '';
-  const [period, setPeriod] = useState(30);
-  const [data, setData] = useState<Analytics | null>(null);
+  const periodParam = params.get('period');
+  const fromParam = params.get('from');
+  const toParam = params.get('to');
+
+  const [data, setData] = useState<ResultsResponse | null>(null);
+  const [page, setPage] = useState<Analytics | null>(null);
+  const [loading, setLoading] = useState(true);
 
   // 403 → aviso amigável (sessão preservada), nunca skeleton infinito.
   const { denied, report } = useAreaLoad('Resultados');
 
+  // Período resolvido pela FONTE ÚNICA (lib/periods.ts) — a mesma que a API usa.
+  const spec = useMemo(
+    () => resolvePeriodSpec({ period: periodParam, from: fromParam, to: toParam, today: todayISO() }),
+    [periodParam, fromParam, toParam],
+  );
+
   const load = useCallback(async () => {
     if (!businessId) return;
-    const res = await apiGet<Analytics>(`/api/analytics?businessId=${businessId}&period=${period}`, { scope: 'area', area: 'Resultados' });
-    if (!report(res) || !res.data) return;
+    setLoading(true);
+    const query = spec.key === 'custom'
+      ? `period=custom&from=${spec.from}&to=${spec.to}`
+      : `period=${spec.key === 'all' ? '0' : spec.key}`;
+    const res = await apiGet<ResultsResponse>(`/api/results?businessId=${businessId}&${query}`, { scope: 'area', area: 'Resultados' });
+    if (!report(res) || !res.data) { setLoading(false); return; }
     setData(res.data);
-  }, [businessId, period, report]);
+    setLoading(false);
+  }, [businessId, spec.key, spec.from, spec.to, report]);
 
   useEffect(() => { load(); }, [load]);
+  // Voltar para a tela recarrega os números do período (sem polling).
+  useRevalidateOnFocus(load);
+
+  // Camada 2 (página pública): endpoint PRESERVADO. O `/api/analytics` entende
+  // apenas os períodos numéricos antigos; para os novos recortes usamos 30
+  // dias como aproximação do "movimento recente" — a matemática das METAS do
+  // negócio nunca vem daqui.
+  const analyticsPeriod = spec.key === 'custom' ? '30'
+    : spec.key === 'today' ? '7'
+      : spec.key === 'month' ? '30'
+        : spec.key === 'all' ? '0'
+          : spec.key;
+  useEffect(() => {
+    if (!businessId) return;
+    apiGet<Analytics>(`/api/analytics?businessId=${businessId}&period=${analyticsPeriod}`, { scope: 'area', area: 'Resultados' })
+      .then((res) => { if (res.ok && res.data) setPage(res.data); });
+  }, [businessId, analyticsPeriod]);
+
+  function changePeriod(next: { key: PeriodKey; from: string; to: string }) {
+    const sp = new URLSearchParams(params.toString());
+    if (next.key === 'custom') {
+      sp.set('period', 'custom');
+      if (next.from) sp.set('from', next.from); else sp.delete('from');
+      if (next.to) sp.set('to', next.to); else sp.delete('to');
+    } else {
+      sp.set('period', next.key === 'all' ? '0' : next.key);
+      sp.delete('from'); sp.delete('to');
+    }
+    router.replace(`/resultados?${sp.toString()}`);
+  }
 
   if (denied) return <AccessDenied area="Resultados" />;
   if (!data) return <PageSkeleton />;
-  const { totals, funnelOrders, funnelBookings, days, topProducts, topCtas, origins, modules } = data;
-  const maxDay = Math.max(1, ...days.map((d) => d.visitors));
-  // KPIs e funis por MÓDULO: negócio de atendimento não vê "Receita/pedidos".
-  const kpis: Array<[string, string, string]> = [];
-  if (modules.bookings) kpis.push(['Agendamentos', String(totals.bookings), 'reservas criadas no período']);
-  if (modules.orders) kpis.push(['Receita de pedidos', money(totals.ordersRevenue), `${totals.orders} pedido(s)`]);
-  kpis.push(
-    ['Visitas à página', String(totals.pageViews), `${totals.uniqueVisitors} visitante(s) únicos`],
-    ['Taxa de conversão', `${totals.rate}%`, `${totals.conversions} conversão(ões)`],
-    ['Leads', String(totals.leads), totals.leadsNew ? `${totals.leadsNew} novo(s)` : 'no período'],
-  );
+
+  const pageTotals = page?.totals;
+  const maxDay = Math.max(1, ...(page?.days || []).map((d) => d.visitors));
 
   return (
     <>
-      <div className="flex flex-wrap items-center justify-between gap-3 mb-5">
+      <div className="flex flex-wrap items-start justify-between gap-3 mb-5">
         <div>
           <h1 className="text-2xl font-bold tracking-tight">Resultados</h1>
-          <p className="text-sm text-zinc-500 mt-1">O que está acontecendo na sua página, em linguagem simples.</p>
+          <p className="text-sm text-zinc-500 mt-1">
+            Como está o negócio no período — números reais dos atendimentos, clientes e leads.
+          </p>
         </div>
-        <PeriodSelector value={period} onChange={setPeriod} label="Período dos resultados" />
+        <PeriodPicker value={spec} onChange={changePeriod} />
       </div>
 
-      <div className={`grid gap-3 mb-4 ${kpis.length === 4 ? 'grid-cols-2 lg:grid-cols-4' : 'grid-cols-1 lg:grid-cols-3'}`}>
-        {kpis.map(([label, value, hint]) => (
-          <div key={label} className="bg-white border border-zinc-200 rounded-lg p-4">
-            <p className="text-xs text-zinc-500">{label}</p>
-            <p className="text-2xl font-extrabold tracking-tight">{value}</p>
-            <p className="text-[11px] text-zinc-400 mt-0.5">{hint}</p>
+      {loading && <p className="text-xs text-zinc-400 mb-2" role="status">Atualizando…</p>}
+
+      <ResultsView payload={data.results} />
+
+      {/* ── Camada 2: o que a PÁGINA PÚBLICA produziu (endpoint preservado) ── */}
+      {pageTotals && (
+        <section className="mt-6 space-y-4">
+          <div className="pt-4 border-t border-zinc-200">
+            <h2 className="text-sm font-semibold text-zinc-900">Página pública</h2>
+            <p className="text-xs text-zinc-500 mt-0.5">Visitas, cliques e produtos em destaque (movimento recente da página).</p>
           </div>
-        ))}
-      </div>
 
-      {/* Funil: agendamentos é o centro; o funil de vendas existe só para
-          quem ainda tem o módulo de pedidos (legado). */}
-      {modules.orders ? (
-        <div className="grid lg:grid-cols-2 gap-4 mb-4">
-          <Funnel title="Funil de pedidos" steps={funnelOrders} />
-          <Funnel title="Funil de agendamentos" steps={funnelBookings} />
-        </div>
-      ) : (
-        <div className="mb-4">
-          <Funnel title={modules.bookings ? 'Funil de agendamentos' : 'Visitas e conversões da página'} steps={funnelBookings} />
-        </div>
-      )}
-
-      <div className="grid xl:grid-cols-5 gap-4">
-        <div className="xl:col-span-3 bg-white border border-zinc-200 rounded-lg p-5">
-          <h3 className="font-bold text-sm mb-3">Movimento · {periodLabel(period)}</h3>
-          <div className="flex items-end gap-1 h-28 overflow-x-auto ws-scroll pb-1">
-            {days.map((d) => (
-              <div key={d.day} className="flex-1 min-w-[4px] flex flex-col items-center gap-1" title={`${d.label}: ${d.visitors} visitas, ${d.conversions} conversões, ${money(d.revenue)}`}>
-                <div className="w-full flex flex-col justify-end gap-0.5 h-20">
-                  <div className="w-full bg-emerald-500/30 rounded-sm" style={{ height: `${Math.round((d.visitors / maxDay) * 100)}%`, minHeight: d.visitors ? 3 : 0 }} />
-                  {d.conversions > 0 && <div className="w-full bg-emerald-600 rounded-sm" style={{ height: 4 }} />}
-                </div>
-                {period === 7 && <span className="text-[9px] text-zinc-400 whitespace-nowrap">{d.label}</span>}
+          <div className="grid grid-cols-2 lg:grid-cols-4 gap-2.5">
+            {[
+              ['Visitas à página', String(pageTotals.pageViews), `${pageTotals.uniqueVisitors} visitante(s) únicos`],
+              ['Cliques', String(pageTotals.clicks), 'botões e WhatsApp'],
+              ['Leads na página', String(pageTotals.leads), pageTotals.leadsNew ? `${pageTotals.leadsNew} novo(s)` : 'no recorte'],
+              ['Conversões', `${pageTotals.rate}%`, `${pageTotals.conversions} conversão(ões)`],
+            ].map(([label, value, hint]) => (
+              <div key={label} className="bg-white border border-zinc-200 rounded-lg p-3.5">
+                <p className="text-xs text-zinc-500">{label}</p>
+                <p className="text-xl font-extrabold tracking-tight mt-0.5">{value}</p>
+                <p className="text-[11px] text-zinc-400 mt-1">{hint}</p>
               </div>
             ))}
           </div>
-          <div className="grid grid-cols-3 gap-2 mt-5 pt-4 border-t border-zinc-100 text-center">
-            {modules.orders
-              ? <div><p className="font-extrabold">{totals.orders}</p><p className="text-[11px] text-zinc-500">Pedidos</p></div>
-              : <div><p className="font-extrabold">{totals.clicks}</p><p className="text-[11px] text-zinc-500">Cliques na página</p></div>}
-            <div><p className="font-extrabold">{totals.bookings}</p><p className="text-[11px] text-zinc-500">Agendamentos</p></div>
-            <div><p className="font-extrabold">{totals.waClicks}</p><p className="text-[11px] text-zinc-500">Cliques WhatsApp</p></div>
-          </div>
-        </div>
 
-        <div className="xl:col-span-2 space-y-4">
-          {(modules.products || modules.orders) && (
+          <div className="grid lg:grid-cols-2 gap-4">
+            {page.modules.orders
+              ? <Funnel title="Funil de pedidos" steps={page.funnelOrders} />
+              : <Funnel title="Funil de agendamentos" steps={page.funnelBookings} />}
             <div className="bg-white border border-zinc-200 rounded-lg p-5">
-              <h3 className="font-bold text-sm mb-3">{modules.orders ? 'Produtos em destaque' : 'Interesse na vitrine'}</h3>
-              {topProducts.length === 0 ? <p className="text-xs text-zinc-500">Ainda sem movimento no período.</p> : (
+              <h3 className="font-bold text-sm mb-3">Movimento recente</h3>
+              <div className="flex items-end gap-1 h-28 overflow-x-auto ws-scroll pb-1">
+                {(page.days || []).map((d) => (
+                  <div key={d.day} className="flex-1 min-w-[4px] flex flex-col items-center gap-1"
+                    title={`${d.label}: ${d.visitors} visitas, ${d.conversions} conversões, ${money(d.revenue)}`}>
+                    <div className="w-full flex flex-col justify-end gap-0.5 h-20">
+                      <div className="w-full bg-emerald-500/30 rounded-sm" style={{ height: `${Math.round((d.visitors / maxDay) * 100)}%`, minHeight: d.visitors ? 3 : 0 }} />
+                      {d.conversions > 0 && <div className="w-full bg-emerald-600 rounded-sm" style={{ height: 4 }} />}
+                    </div>
+                    {spec.key === '7' && <span className="text-[9px] text-zinc-400 whitespace-nowrap">{d.label}</span>}
+                  </div>
+                ))}
+              </div>
+              <div className="grid grid-cols-3 gap-2 mt-5 pt-4 border-t border-zinc-100 text-center">
+                <div><p className="font-extrabold">{pageTotals.clicks}</p><p className="text-[11px] text-zinc-500">Cliques na página</p></div>
+                <div><p className="font-extrabold">{pageTotals.bookings}</p><p className="text-[11px] text-zinc-500">Reservas criadas</p></div>
+                <div><p className="font-extrabold">{pageTotals.waClicks}</p><p className="text-[11px] text-zinc-500">Cliques WhatsApp</p></div>
+              </div>
+            </div>
+          </div>
+
+          <div className="grid lg:grid-cols-2 gap-4">
+            {(page.modules.products || page.modules.orders) && (
+              <div className="bg-white border border-zinc-200 rounded-lg p-5">
+                <h3 className="font-bold text-sm mb-3">{page.modules.orders ? 'Produtos em destaque' : 'Interesse na vitrine'}</h3>
+                {page.topProducts.length === 0 ? <p className="text-xs text-zinc-500">Ainda sem movimento no período.</p> : (
+                  <ul className="space-y-1.5">
+                    {page.topProducts.map((p) => (
+                      <li key={p.name} className="flex justify-between text-sm gap-2">
+                        <span className="font-medium truncate">{p.name} <span className="text-zinc-400 font-normal">· {p.views} views{p.adds > 0 ? ` · ${p.adds} adds` : ''}</span></span>
+                        {page.modules.orders && <span className="font-bold shrink-0">{money(p.revenue)}</span>}
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </div>
+            )}
+            <div className="bg-white border border-zinc-200 rounded-lg p-5">
+              <h3 className="font-bold text-sm mb-3">Botões mais clicados</h3>
+              {page.topCtas.length === 0 ? <p className="text-xs text-zinc-500">Ainda sem cliques no período.</p> : (
                 <ul className="space-y-1.5">
-                  {topProducts.map((p) => (
-                    <li key={p.name} className="flex justify-between text-sm gap-2">
-                      <span className="font-medium truncate">{p.name} <span className="text-zinc-400 font-normal">· {p.views} views{p.adds > 0 ? ` · ${p.adds} adds` : ''}</span></span>
-                      {modules.orders && <span className="font-bold shrink-0">{money(p.revenue)}</span>}
-                    </li>
+                  {page.topCtas.map((c) => (
+                    <li key={c.label} className="flex justify-between text-sm"><span className="font-medium">{c.label}</span><span className="text-zinc-500">{c.clicks}</span></li>
                   ))}
                 </ul>
               )}
             </div>
-          )}
-
-          <div className="bg-white border border-zinc-200 rounded-lg p-5">
-            <h3 className="font-bold text-sm mb-3">Botões mais clicados</h3>
-            {topCtas.length === 0 ? <p className="text-xs text-zinc-500">Ainda sem cliques no período.</p> : (
-              <ul className="space-y-1.5">
-                {topCtas.map((c) => (
-                  <li key={c.label} className="flex justify-between text-sm"><span className="font-medium">{c.label}</span><span className="text-zinc-500">{c.clicks}</span></li>
-                ))}
-              </ul>
-            )}
           </div>
-
-          <div className="bg-white border border-zinc-200 rounded-lg p-5">
-            <h3 className="font-bold text-sm mb-3">De onde vêm os leads</h3>
-            {origins.length === 0 ? <p className="text-xs text-zinc-500">Ainda sem leads no período.</p> : (
-              <ul className="space-y-1.5">
-                {origins.map((o) => (
-                  <li key={o.name} className="flex justify-between text-sm"><span className="font-medium">{o.name}</span><span className="text-zinc-500">{o.value}</span></li>
-                ))}
-              </ul>
-            )}
-          </div>
-        </div>
-      </div>
+        </section>
+      )}
     </>
   );
 }

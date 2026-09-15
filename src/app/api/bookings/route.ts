@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { randomUUID } from 'node:crypto';
 import { readDB, updateDB } from '@/lib/db';
-import { requireBusiness } from '@/lib/access';
+import { canAccessBooking, requireBusiness, scopeBookings, scopeInfo } from '@/lib/access';
 import { customerFromRequest } from '@/lib/customer-auth';
 import { isFeatureEnabled, canBook as canBookModule } from '@/lib/features';
 import {
@@ -37,9 +37,12 @@ export async function GET(req: NextRequest) {
     if (mode === 'manage') {
       const guard = await requireBusiness(req, businessId, 'agenda');
       if (!guard.ok) return guard.res;
+      // ESCOPO DO PROFISSIONAL (P2): quem atende e tem login vinculado vê
+      // SOMENTE a própria agenda — filtro aplicado AQUI (dados), não na tela.
+      const scope = guard.ctx.professionalScope;
       const from = q.get('from') || '';
       const to = q.get('to') || '';
-      let all = guard.db.bookings.filter((x) => x.businessId === businessId);
+      let all = scopeBookings(guard.db.bookings.filter((x) => x.businessId === businessId), scope);
       if (isValidDateISO(from) && isValidDateISO(to)) {
         all = all.filter((x) => x.date >= from && x.date <= to);
       }
@@ -49,9 +52,10 @@ export async function GET(req: NextRequest) {
       try {
         await updateDB((d: DB) => { enqueueDueReminders(d, businessId, todayISO()); });
       } catch { /* lembrete é melhor-esforço: nunca bloqueia a agenda */ }
-      all = (await readDB()).bookings
-        .filter((x) => x.businessId === businessId)
-        .sort((a, b) => (a.date + a.time < b.date + b.time ? 1 : -1));
+      all = scopeBookings(
+        (await readDB()).bookings.filter((x) => x.businessId === businessId),
+        scope,
+      ).sort((a, b) => (a.date + a.time < b.date + b.time ? 1 : -1));
       if (isValidDateISO(from) && isValidDateISO(to)) {
         all = all.filter((x) => x.date >= from && x.date <= to);
       }
@@ -71,6 +75,9 @@ export async function GET(req: NextRequest) {
         today,
         needsClosure: slice.filter((b) => needsClosure(b, bookingDuration(servicesById[b.serviceId]), today, now)).map((b) => b.id),
         modules: { bookings: isFeatureEnabled(guard.ctx.business, 'bookings') },
+        // Informação para a tela avisar (com honestidade) quando a agenda
+        // está recortada. A regra já foi aplicada nos dados acima.
+        scope: scopeInfo(guard.ctx),
       });
     }
 
@@ -238,7 +245,9 @@ export async function POST(req: NextRequest) {
           email: linkedContact.email, customerId: linkedContact.customerId,
         }
         : null,
-      professionalId: String(body.professionalId || ''),
+      // Escopo do profissional: o próprio profissional é o responsável pelo
+      // atendimento que ele cria (nunca é possível criar para outra pessoa).
+      professionalId: guard?.ok ? (guard.ctx.professionalScope || String(body.professionalId || '')) : String(body.professionalId || ''),
       note: body.note,
       answers: body.answers,
       marketingOptIn,
@@ -263,6 +272,11 @@ export async function PATCH(req: NextRequest) {
     const business = guard.ctx.business;
     const current = db.bookings.find((x) => x.id === body.id && x.businessId === business.id);
     if (!current) return NextResponse.json({ error: 'Agendamento não encontrado.' }, { status: 404 });
+    // ESCOPO DO PROFISSIONAL (P2): alterar status/remarcar atendimento de
+    // outra pessoa é recusado no servidor — o id não pode ser manipulado.
+    if (!canAccessBooking(guard.ctx, current)) {
+      return NextResponse.json({ error: 'Você só pode alterar os seus próprios atendimentos.' }, { status: 403 });
+    }
 
     // ── Remarcação pelo dono ──
     if (body.date && body.time) {
@@ -277,7 +291,9 @@ export async function PATCH(req: NextRequest) {
       if (date > maxDate) return NextResponse.json({ error: 'Data fora da agenda disponível.' }, { status: 400 });
       const service = db.services.find((s) => s.id === current.serviceId && s.businessId === business.id);
       if (!service) return NextResponse.json({ error: 'Serviço indisponível.' }, { status: 400 });
-      const proId = String(body.professionalId || '');
+      // Escopo do profissional: remarcação permanece com ele (nunca move o
+      // atendimento para outro profissional sem permissão administrativa).
+      const proId = guard.ctx.professionalScope || String(body.professionalId || '');
       const activePros = db.professionals.filter((p) => p.businessId === business.id && p.active !== false);
       const eligible = (service.professionalIds || []).length > 0
         ? activePros.filter((p) => (service.professionalIds || []).includes(p.id))

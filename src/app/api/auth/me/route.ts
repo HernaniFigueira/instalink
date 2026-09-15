@@ -2,11 +2,12 @@ import { NextRequest, NextResponse } from 'next/server';
 import { userFromRequest } from '@/lib/auth';
 import { readDB } from '@/lib/db';
 import {
-  accessibleBusinesses, isMasterUser, permissionsFor, resolveAccess, supportFromRequest,
-  membershipsOf,
+  accessibleBusinesses, agendaScopeFor, isMasterUser, permissionsFor, resolveAccess,
+  supportFromRequest, membershipsOf,
 } from '@/lib/access';
 import { organizationsFor } from '@/lib/organization';
 import { normalizeFeatures } from '@/lib/features';
+import type { BusinessAppearance } from '@/lib/types';
 
 // GET — quem está logado + negócios acessíveis COM papel e permissões.
 // É a fonte do menu do painel: cada tela só aparece quando há permissão real
@@ -31,6 +32,15 @@ export async function GET(req: NextRequest) {
       logo: b.logo || '',
       cover: b.cover || '',
       modes: b.modes,
+      // Identidade visual do Dashboard (P2): a cor acompanha a UNIDADE ativa.
+      appearance: b.appearance || ({ navColor: '' } satisfies BusinessAppearance),
+      // Acesso do profissional (P2): `agendaScope` diz à interface o que o
+      // BACKEND já está aplicando — 'own' (só a própria agenda), 'none'
+      // (papel de atendimento ainda sem vínculo) ou 'all'.
+      agendaScope: ctx ? agendaScopeFor(ctx) : 'all',
+      professionalId: ctx?.professionalScope && ctx.professionalScope !== '__nenhum__'
+        ? ctx.professionalScope : '',
+      professionalName: ctx?.professional?.name || '',
       features: normalizeFeatures(b, db.pages.find((p) => p.businessId === b.id)?.blocks || []),
       published: b.published,
       role: ctx?.role || (member ? member.role : 'OWNER'),

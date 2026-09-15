@@ -211,6 +211,10 @@ export const API_GUARDS: Array<{ route: string; file: string; permission: Permis
   { route: '/api/agent', file: 'src/app/api/agent/route.ts', permission: 'agente', area: 'agente' },
   { route: '/api/pages', file: 'src/app/api/pages/route.ts', permission: 'pagina', area: 'pagina' },
   { route: '/api/analytics', file: 'src/app/api/analytics/route.ts', permission: 'financeiro', area: 'resultados' },
+  // Resultados/inteligência (P2): indicadores reais por unidade. A visão
+  // consolidada da organização reutiliza a MESMA permissão, unidade por
+  // unidade (nunca agrega unidade sem acesso).
+  { route: '/api/results', file: 'src/app/api/results/route.ts', permission: 'financeiro', area: 'resultados' },
   { route: '/api/orders', file: 'src/app/api/orders/route.ts', permission: 'pedidos', area: 'pedidos' },
   { route: '/api/people360', file: 'src/app/api/people360/route.ts', permission: 'clientes', area: 'clientes' },
   { route: '/api/contacts', file: 'src/app/api/contacts/route.ts', permission: 'clientes', area: 'clientes' },

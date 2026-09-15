@@ -1,15 +1,18 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { requireBusiness } from '@/lib/access';
+import { requireBusiness, scopeInfo } from '@/lib/access';
 import { can } from '@/lib/access';
 import { summarizeDay, pendingClosures } from '@/lib/booking-ops';
 import { integrationStatus } from '@/lib/whatsapp';
 import { enabledFeatureIds } from '@/lib/features';
 import { dashboardContext, recentActivityLists, setupChecklist, setupProgress } from '@/lib/dashboard';
+import { scopeBookings } from '@/lib/access-core';
 import {
   REVENUE_HINTS, REVENUE_LABELS, REVENUE_UNIT_LABELS, bookingRevenue, orderRevenue,
 } from '@/lib/revenue';
 import { nowHM, todayISO } from '@/lib/tz';
-import { parsePeriodParam, periodWindows } from '@/lib/periods';
+import { parsePeriodParam, periodWindows, resolvePeriodSpec } from '@/lib/periods';
+import { collectResults, resultsSummary } from '@/lib/insights';
+import { isFeatureEnabled } from '@/lib/features';
 
 // GET ?businessId=&period=7|30|90|365|0 — dados da Dashboard.
 // (0 = todo o período; fonte única dos períodos: lib/periods.ts.)
@@ -44,8 +47,14 @@ export async function GET(req: NextRequest) {
   const q = `?b=${bId}`;
   const events = db.events.filter((e) => e.businessId === bId);
   const orders = db.orders.filter((o) => o.businessId === bId);
-  const bookings = db.bookings.filter((b) => b.businessId === bId);
   const leads = db.leads.filter((l) => l.businessId === bId);
+  // ESCOPO DO PROFISSIONAL (P2): o login vinculado a um profissional recebe
+  // os painéis de AGENDA recortados para os próprios atendimentos (hoje,
+  // pendências, próximos e atividade recente). CRM/página continuam no nível
+  // da unidade — ele enxerga os clientes da unidade, por regra do produto.
+  const professionalScope = guard.ctx.professionalScope;
+  const allBookings = db.bookings.filter((b) => b.businessId === bId);
+  const bookings = scopeBookings(allBookings, professionalScope);
 
   // ── Contexto: módulos ativos decidem o que a Dashboard mostra ──
   const context = dashboardContext(business);
@@ -166,7 +175,9 @@ export async function GET(req: NextRequest) {
   const pageStats = {
     views: events.filter((e) => e.type === 'page_view' && e.createdAt.slice(0, 10) >= from).length,
     clicks: events.filter((e) => (e.type === 'button_click' || e.type === 'whatsapp_click') && e.createdAt.slice(0, 10) >= from).length,
-    bookings: bookings.filter((b) => b.createdAt.slice(0, 10) >= from).length,
+    // Agendamentos CRIADOS no período (unidade), pela data de criação — é a
+    // leitura correta para "o que a página produziu" (≠ agenda do período).
+    bookings: allBookings.filter((b) => (b.createdAt || '').slice(0, 10) >= from).length,
     conversions: events.filter((e) => e.type === 'conversion' && e.createdAt.slice(0, 10) >= from).length,
     published: !!business.published,
     slug: business.slug,
@@ -218,6 +229,35 @@ export async function GET(req: NextRequest) {
   const checklist = setupItems.map((c) => ({ done: c.done, label: c.label, href: `${c.href}${q}` }));
   const pendingSetup = checklist.filter((c) => !c.done).length;
 
+  // ── Resultados do período (P2, Bloco 1) ──
+  // A Dashboard responde "como está o meu negócio?" com indicadores REAIS do
+  // mesmo motor da tela Resultados (lib/insights.ts) — recorte curto, com
+  // comparação, e link para a tela completa. Só entra no payload para quem tem
+  // a permissão de resultados: ninguém recebe número que não pode ver.
+  const resultsBlock = can(guard.ctx, 'financeiro')
+    ? (() => {
+      const spec = resolvePeriodSpec({ period: String(period), today: todayISO() });
+      const payload = collectResults(
+        db,
+        [{
+          id: bId,
+          hasBookings: isFeatureEnabled(business, 'bookings') || isFeatureEnabled(business, 'services'),
+          hasOrders: isFeatureEnabled(business, 'orders'),
+        }],
+        { from: spec.from, to: spec.to },
+        spec.hasPrevious ? { from: spec.prevFrom, to: spec.prevTo } : null,
+      );
+      return {
+        periodKey: spec.key,
+        periodLabel: spec.label,
+        from: spec.from,
+        to: spec.to,
+        hasPrevious: spec.hasPrevious,
+        items: resultsSummary(payload),
+      };
+    })()
+    : null;
+
   return NextResponse.json({
     user: { name: guard.ctx.user.name },
     business: {
@@ -237,6 +277,7 @@ export async function GET(req: NextRequest) {
     hasBookingsModule: m.bookings,
     hasOrdersModule: m.orders,
     hasProductsModule: m.products,
+    scope: scopeInfo(guard.ctx),
     totals: {
       visitors: events.filter((e) => e.type === 'page_view').length,
       uniqueVisitors: vids.size,
@@ -250,6 +291,7 @@ export async function GET(req: NextRequest) {
       newOrders: m.orders ? orders.filter((o) => o.status === 'new').length : 0,
       pendingBookings: m.bookings ? bookings.filter((b) => b.status === 'pending').length : 0,
     },
+    results: resultsBlock,
     revenue,
     revenueDetail: revenuePayload,
     showMoney,
