@@ -226,7 +226,11 @@ describe('página: uma só fonte de construção', () => {
 
   it('o editor da página carrega a navegação e o Sobre', () => {
     const editor = read('src/app/(dashboard)/pagina/page.tsx');
-    expect(editor).toMatch(/NAV_ORDER/);
+    // v2: o editor resolve a disponibilidade real (módulo/conteúdo) com a
+    // MESMA regra da página pública (lib/nav.ts) e edita NavItemConfig[].
+    expect(editor).toMatch(/availableNavIds/);
+    expect(editor).toMatch(/NAV_ANCHORS/);
+    expect(editor).toMatch(/navItems/);
     expect(editor).toMatch(/PageNavTab/);
     expect(editor).toMatch(/Sobre a empresa/);
   });

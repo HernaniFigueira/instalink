@@ -73,9 +73,17 @@ export default function EquipePage() {
       <div className="flex items-center justify-between gap-3 mb-4">
         <div>
           <h1 className="text-base font-semibold">Equipe</h1>
-          <p className="text-sm text-zinc-500 mt-0.5">Quem pode acessar e o que pode fazer.</p>
+          <p className="text-sm text-zinc-500 mt-0.5">Quem acessa o painel — contas, papéis e permissões.</p>
         </div>
         <button onClick={() => setCreating(true)} className="text-xs font-semibold bg-zinc-900 text-white px-3 py-2 rounded-md inline-flex items-center gap-1.5"><Icon n="plus" size={14} /> Adicionar membro</button>
+      </div>
+
+      {/* Profissionais × Equipe: conceitos separados, nunca confundidos.
+          Aqui é acesso administrativo; quem ATENDE mora em /profissionais. */}
+      <div className="mb-4 text-xs text-zinc-600 bg-white border border-zinc-200 rounded-lg px-4 py-3 flex flex-wrap items-center gap-x-2 gap-y-1">
+        <strong>Sem confusão:</strong>
+        <span>aqui você gerencia <strong>quem tem login</strong> no painel (dono, recepcionista, gerente).</span>
+        <a href={`/profissionais?b=${businessId}`} className="font-semibold text-zinc-900 underline">Quem realiza os atendimentos → Profissionais</a>
       </div>
       {msg && <p className="mb-3 text-sm font-medium bg-zinc-900 text-white rounded-md px-3 py-2">{msg}</p>}
       {error && <p className="mb-3 text-sm font-medium bg-red-600 text-white rounded-md px-3 py-2">{error}</p>}

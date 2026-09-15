@@ -40,13 +40,20 @@ export interface NavActionItem {
 
 const NAV_ICON: Record<string, string> = {
   about: 'store',
-  services: 'scissors',
+  services: 'service',
+  highlights: 'star',
+  professionals: 'users',
+  gallery: 'image',
   reviews: 'star',
   faq: 'chat',
   directions: 'pin',
   contact: 'pin',
   instagram: 'instagram',
   tiktok: 'music',
+  facebook: 'facebook',
+  youtube: 'youtube',
+  linkedin: 'linkedin',
+  site: 'external',
 };
 
 // Menu público: bottom sheet elegante com os itens de navegação

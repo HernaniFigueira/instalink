@@ -101,17 +101,17 @@ describe('panel — navegação contextual', () => {
   it('Dashboard é o item primário e o resto vem agrupado por seção', () => {
     const nav = panelNavigation(ctx());
     expect(nav.primary?.href).toBe('/dashboard');
-    expect(nav.sections.map((s) => s.label)).toEqual(['Operacional', 'Catálogo', 'Atendimento', 'Gestão', 'Presença', 'Administração']);
+    expect(nav.sections.map((s) => s.label)).toEqual(['Operação', 'Atendimento', 'Gestão', 'Presença', 'Administração']);
     expect(nav.all[0].href).toBe('/dashboard');
   });
 
-  it('o eixo do produto: Agenda/Clientes, Serviços/Produtos, WhatsApp/Assistente, Página', () => {
+  it('o eixo do produto: Agenda/Clientes · Serviços/Profissionais/Horários/WhatsApp/Assistente · Página', () => {
     const nav = panelNavigation(ctx({ modes: ['services', 'bookings', 'products'] }));
     const hrefs = nav.all.map((r) => r.href);
     expect(hrefs).toEqual([
       '/dashboard',
       '/agenda', '/clientes',
-      '/servicos', '/produtos',
+      '/servicos', '/profissionais', '/horarios', '/produtos',
       '/whatsapp', '/agente',
       '/resultados', '/campanhas',
       '/pagina',
@@ -120,6 +120,8 @@ describe('panel — navegação contextual', () => {
     const labels = new Map(nav.all.map((r) => [r.href, r.label]));
     expect(labels.get('/agente')).toBe('Assistente');
     expect(labels.get('/pagina')).toBe('Página');
+    expect(labels.get('/profissionais')).toBe('Profissionais');
+    expect(labels.get('/horarios')).toBe('Horários');
   });
 
   it('clínica (services+bookings) não vê Pedidos nem Produtos', () => {
@@ -129,6 +131,16 @@ describe('panel — navegação contextual', () => {
     expect(hrefs).toContain('/servicos');
     expect(hrefs).not.toContain('/pedidos');
     expect(hrefs).not.toContain('/produtos');
+  });
+
+  it('Profissionais (quem atende) é rota própria, separada de Equipe (quem tem login)', () => {
+    expect(panelRouteFor('/profissionais')?.section).toBe('Atendimento');
+    expect(panelRouteFor('/profissionais')?.permission).toBe('catalogo');
+    expect(panelRouteFor('/equipe')?.section).toBe('Administração');
+    expect(panelRouteFor('/equipe')?.permission).toBe('equipe');
+    expect(panelRouteFor('/horarios')?.permission).toBe('catalogo');
+    expect(panelAccess('/profissionais', ctx()).state).toBe('allow');
+    expect(panelAccess('/profissionais', ctx({ modes: ['products'] })).state).toBe('denied');
   });
 
   it('Pedidos nunca aparece na navegação — nem para quem tem o módulo legado', () => {

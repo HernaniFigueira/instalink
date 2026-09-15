@@ -48,7 +48,13 @@ export function defaultBlocks(niche: Niche, modes: BusinessMode[]): Block[] {
 
   // Vitrine de produtos (opcional, desligada por padrão) — nunca carrinho.
   if (wants('products')) blocks.push(block('products', order++, { title: 'Vitrine' }));
-  if (wants('services') || wants('bookings')) blocks.push(block('services', order++, { title: 'Serviços' }));
+  if (wants('services') || wants('bookings')) {
+    blocks.push(block('services', order++, { title: 'Serviços' }));
+    // Profissionais ativos (mostrar/ocultar no editor) — só quem atende.
+    blocks.push(block('professionals', order++, { title: 'Nossa equipe' }));
+    // Diferenciais (bloco editável: título + itens) — vazio, aparece quando preenchido.
+    blocks.push(block('highlights', order++, { title: 'Por que escolher a gente' }));
+  }
   // Sem bloco 'booking' separado: CTA + menu Agendar + botão por serviço
   // abrem o mesmo fluxo (destino único, sem duplicação visual).
   if (wants('quote')) blocks.push(block('quote', order++, { title: 'Solicite um orçamento' }));
@@ -70,6 +76,8 @@ export const BLOCK_DEFS: Partial<Record<BlockType, { label: string; hint: string
   gallery: { label: 'Galeria', hint: 'Fotos do negócio' },
   products: { label: 'Vitrine de produtos', hint: 'Produtos com CTA "Tenho interesse" no WhatsApp' },
   services: { label: 'Serviços', hint: 'Lista de serviços (com Agendar quando a agenda está ativa)' },
+  professionals: { label: 'Profissionais', hint: 'Quem realiza os atendimentos (ativos do negócio)' },
+  highlights: { label: 'Diferenciais', hint: 'Bloco editável com os pontos fortes do negócio' },
   booking: { label: 'Agendamento', hint: 'Fluxo de reserva de horário' },
   testimonials: { label: 'Depoimentos', hint: 'Prova social' },
   faq: { label: 'Perguntas frequentes', hint: 'Dúvidas comuns' },

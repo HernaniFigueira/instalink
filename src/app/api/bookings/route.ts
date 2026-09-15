@@ -8,7 +8,9 @@ import {
   bookingDuration, needsClosure, rescheduleDecision, rescheduleForwardNote, rescheduleNote,
 } from '@/lib/booking-ops';
 import { computeSlots } from '@/lib/slots';
-import { resolveProfessional, bookingMode } from '@/lib/booking';
+import { bookingMode } from '@/lib/booking';
+import { createBookingTx } from '@/lib/booking-create';
+import { enqueueBookingAutomation, enqueueDueReminders, onBookingCompleted } from '@/lib/automations';
 import { upsertContact } from '@/lib/contacts';
 import { todayISO, nowHM, weekdayOf, addDaysISO, isValidDateISO, isValidClockTime } from '@/lib/tz';
 import { onlyDigits } from '@/lib/utils';
@@ -41,7 +43,18 @@ export async function GET(req: NextRequest) {
       if (isValidDateISO(from) && isValidDateISO(to)) {
         all = all.filter((x) => x.date >= from && x.date <= to);
       }
-      all = all.sort((a, b) => (a.date + a.time < b.date + b.time ? 1 : -1));
+      // AUTOMAÇÃO (lembrete antes do atendimento): a operação acabou de abrir
+      // a agenda — enfileira (uma única vez por agendamento) os lembretes de
+      // atendimentos de hoje/amanhã. Idempotente: abrir de novo não duplica.
+      try {
+        await updateDB((d: DB) => { enqueueDueReminders(d, businessId, todayISO()); });
+      } catch { /* lembrete é melhor-esforço: nunca bloqueia a agenda */ }
+      all = (await readDB()).bookings
+        .filter((x) => x.businessId === businessId)
+        .sort((a, b) => (a.date + a.time < b.date + b.time ? 1 : -1));
+      if (isValidDateISO(from) && isValidDateISO(to)) {
+        all = all.filter((x) => x.date >= from && x.date <= to);
+      }
       const page = Math.max(1, Number(q.get('page')) || 1);
       const limit = Math.min(500, Math.max(1, Number(q.get('limit')) || 200));
       // Pendências operacionais (horário já passou e ninguém fechou o
@@ -199,93 +212,38 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Informe um WhatsApp válido.' }, { status: 400 });
     }
 
-    const activePros = db.professionals.filter((p) => p.businessId === business.id && p.active !== false);
-    const eligible = (service.professionalIds || []).length > 0
-      ? activePros.filter((p) => (service.professionalIds || []).includes(p.id))
-      : activePros;
+    // CONSENTIMENTO EXPLÍCITO (nunca presumido): só o PRÓPRIO cliente marca a
+    // caixa no ato da reserva; cadastro/agendamento sozinho NÃO vira opt-in.
+    const marketingOptIn = !isOwner && body.marketingOptIn === true;
 
-    // Cliente NUNCA escolhe profissional — o payload é ignorado.
-    // Dono pode indicar, mas só se elegível para o serviço.
-    let ownerPro = '';
-    if (isOwner) {
-      ownerPro = String(body.professionalId || '');
-      if (ownerPro && activePros.length > 0 && !eligible.some((p) => p.id === ownerPro)) {
-        return NextResponse.json({ error: 'Profissional indisponível para este serviço.' }, { status: 400 });
-      }
-    }
-
-    const result = await updateDB((d: DB) => {
-      const fresh = d.bookings.filter((b) => b.businessId === business.id);
-      const r = computeSlots({
-        rules: d.availability.filter((a) => a.businessId === business.id),
-        exceptions: d.exceptions.filter((e) => e.businessId === business.id),
-        bookings: fresh,
-        services: d.services.filter((s) => s.businessId === business.id),
-        professionals: d.professionals.filter((p) => p.businessId === business.id),
-        dateISO: date, weekday: weekdayOf(date),
-        serviceId: service.id, durationMin: service.durationMin,
-        professionalId: isOwner ? ownerPro : '',
-        eligibleProIds: service.professionalIds || [],
-        nowHM: date === todayISO() ? nowHM() : '',
-        leadMin: cfg.leadMin || 0,
-        bufferMin: cfg.bufferMin || 0,
-      });
-      if (!r.slots.includes(time)) {
-        throw err('Este horário acabou de ser ocupado. Escolha outro.', 409);
-      }
-      // Distribuição automática: menor carga no dia (política "equilibrar equipe").
-      const finalPro = resolveProfessional({
-        service,
-        professionals: d.professionals.filter((p) => p.businessId === business.id),
-        assign: r.assign,
-        time,
-        requested: ownerPro,
-        allowRequested: isOwner,
-      });
-      const now = new Date().toISOString();
-      const bookingId = randomUUID();
-      d.bookings.push({
-        id: bookingId, businessId: business.id,
-        customerId: customer?.id || linkedContact?.customerId || '',
-        serviceId: service.id, professionalId: finalPro, date, time,
-        customerName: name, customerPhone: digits,
-        status: isOwner ? 'confirmed' : 'pending',
-        note: String(body.note || '').slice(0, 300), createdAt: now,
-        answers: (Array.isArray(body.answers) ? body.answers : []).map((x: any) => String(x || '').trim().slice(0, 300)).slice(0, 3),
-        updatedAt: now, history: [{ at: now, from: '', to: isOwner ? 'confirmed' : 'pending', by: isOwner ? 'owner' : 'customer' }],
-      });
-      d.events.push({ id: randomUUID(), businessId: business.id, type: 'booking_created', path: '', meta: { serviceId: service.id }, createdAt: now });
-      d.events.push({ id: randomUUID(), businessId: business.id, type: 'conversion', path: '', meta: { kind: 'booking' }, createdAt: now });
-
-      // Contato (relação Customer × Business) — UPSERT, nunca duplica.
-      // O atendimento SEMPRE alimenta o CRM, venha de onde vier.
-      upsertContact(d, {
-        businessId: business.id,
-        customerId: customer?.id || linkedContact?.customerId || '',
-        name, phone: digits,
+    // ── Criação pelo CAMINHO ÚNICO (lib/booking-create.ts) ──
+    // Mesmo motor da página, do painel e do assistente: slot revalidado na
+    // transação, profissional resolvido pela política interna, CRM alimentado
+    // e automação de confirmação enfileirada.
+    const result = await updateDB((d: DB) => createBookingTx(d, {
+      business,
+      service,
+      date,
+      time,
+      actor: isOwner ? 'owner' : 'customer',
+      customer: {
+        id: customer?.id || linkedContact?.customerId || '',
+        name,
+        phone: digits,
         email: customer?.email || linkedContact?.email || '',
-        source: 'agendamento', now,
-      });
-
-      // Lead associado ao contato/agendamento (origem = agendamento).
-      if (!isOwner) {
-        const lead = d.leads.find((l) =>
-          l.businessId === business.id &&
-          ((l.customerId && l.customerId === customer!.id) || (digits && onlyDigits(l.phone) === digits)),
-        );
-        if (lead) {
-          lead.name = name; lead.customerId = customer!.id; lead.lastInteraction = now;
-          lead.action = 'agendamento'; if (lead.status === 'new') lead.status = 'converted';
-        } else {
-          d.leads.push({ id: randomUUID(), businessId: business.id, customerId: customer!.id, name, phone: digits, email: customer?.email || '', instagram: '', origin: 'agendamento', interest: service.name, action: 'agendamento', status: 'converted', createdAt: now, lastInteraction: now });
+      },
+      linkedContact: isOwner && linkedContact
+        ? {
+          id: linkedContact.id, name: linkedContact.name, phone: linkedContact.phone,
+          email: linkedContact.email, customerId: linkedContact.customerId,
         }
-      }
-
-      const proName = finalPro
-        ? d.professionals.find((p) => p.id === finalPro)?.name || ''
-        : '';
-      return { bookingId, professionalId: finalPro, professionalName: proName };
-    });
+        : null,
+      professionalId: String(body.professionalId || ''),
+      note: body.note,
+      answers: body.answers,
+      marketingOptIn,
+      source: 'agendamento',
+    }));
     return NextResponse.json({ ok: true, ...result });
   } catch (e: any) {
     const status = e?.status || 500;
@@ -405,6 +363,23 @@ export async function PATCH(req: NextRequest) {
       b.history.push({ at: now, from: b.status, to, by: 'owner' });
       b.status = to;
       b.updatedAt = now;
+      // AUTOMAÇÕES (gatilhos reais, mensagens na fila — sem simulação):
+      //   pending → confirmed  ⇒ confirmação;
+      //   * → completed        ⇒ pós-atendimento + convite de avaliação.
+      if (to === 'confirmed') {
+        enqueueBookingAutomation(d, {
+          businessId: business.id,
+          kind: 'booking_confirmation',
+          variant: 'confirmed',
+          booking: {
+            id: b.id,
+            customerName: b.customerName, customerPhone: b.customerPhone,
+            date: b.date, time: b.time,
+            serviceName: d.services.find((s) => s.id === b.serviceId)?.name || 'atendimento',
+          },
+        });
+      }
+      if (to === 'completed') onBookingCompleted(d, business.id, b);
     });
     return NextResponse.json({ ok: true });
   } catch (e: any) {

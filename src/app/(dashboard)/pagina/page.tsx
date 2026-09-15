@@ -3,7 +3,8 @@ import { useEffect, useState } from 'react';
 import { useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { BLOCK_DEFS } from '@/lib/templates';
-import { NAV_ORDER } from '@/lib/nav';
+import { NAV_ANCHORS, availableNavIds } from '@/lib/nav';
+import type { NavItemConfig, Professional, Service, Product } from '@/lib/types';
 import { THEME_PRESETS, matchingPreset, presetById } from '@/lib/themes';
 import { cn } from '@/lib/utils';
 import type { Block, BlockType, Business, Page, Theme } from '@/lib/types';
@@ -23,6 +24,10 @@ export default function PaginaPage() {
   const [editing, setEditing] = useState<string | null>(null);
   const [msg, setMsg] = useState('');
   const [rvCounts, setRvCounts] = useState({ pending: 0, published: 0 });
+  // Catálogo leve (para a aba Navegação calcular o que está disponível).
+  const [services, setServices] = useState<Service[]>([]);
+  const [products, setProducts] = useState<Product[]>([]);
+  const [professionals, setProfessionals] = useState<Professional[]>([]);
   const [saving, setSaving] = useState(false);
 
   // 403 → aviso amigável (sessão preservada), nunca skeleton infinito.
@@ -41,6 +46,14 @@ export default function PaginaPage() {
       if (!report(res) || !res.data) return;
       setBusiness(res.data.business);
       setPage(res.data.page);
+      // Catálogo: alimenta o cálculo de disponibilidade dos itens de menu
+      // (seção vazia/módulo desligado nunca aparece no menu público).
+      const cat = await apiGet<any>(`/api/catalog/get?businessId=${businessId}`, { scope: 'area', area: 'Página' });
+      if (cat.ok && cat.data) {
+        setServices(cat.data.services || []);
+        setProducts(cat.data.products || []);
+        setProfessionals(cat.data.professionals || []);
+      }
     })();
   }, [businessId, report]);
 
@@ -50,6 +63,7 @@ export default function PaginaPage() {
     // visitante vê). O estado continua sendo o MESMO do negócio (Business.nav/
     // navCustom/about) — a API de páginas apenas encaminha para lá.
     nav?: string[]; navCustom?: boolean; about?: Business['about'];
+    navItems?: NavItemConfig[];
   }) {
     setSaving(true);
     setMsg('');
@@ -65,6 +79,7 @@ export default function PaginaPage() {
           ...(patch.nav ? { nav: patch.nav } : {}),
           ...(patch.navCustom !== undefined ? { navCustom: patch.navCustom } : {}),
           ...(patch.about ? { about: patch.about } : {}),
+          ...(patch.navItems ? { navItems: patch.navItems } : {}),
         });
       }
     } catch (err: any) {
@@ -97,15 +112,12 @@ export default function PaginaPage() {
             <a href={`/${business.slug}`} target="_blank" className="text-emerald-700 font-semibold hover:underline inline-flex items-center gap-1">instalink.app/{business.slug} <Icon n="external" size={12} /></a>
           </p>
         </div>
-        <a href={`/${business.slug}`} target="_blank" className="text-sm font-bold bg-zinc-900 text-white px-4 py-2.5 rounded-md hover:bg-zinc-700 inline-flex items-center gap-2">
-          <Icon n="eye" size={16} /> Ver como o cliente vê
-        </a>
       </div>
 
       {msg && <p className="mb-4 text-sm font-medium bg-zinc-900 text-white rounded-md px-4 py-3">{msg}</p>}
 
       <div className="flex gap-2 mb-5">
-        {([['blocks', 'Blocos'], ['nav', 'Navegação'], ['theme', 'Visual'], ['publish', 'Publicar']] as const).map(([id, label]) => (
+        {([['blocks', 'Estrutura'], ['nav', 'Navegação'], ['theme', 'Visual'], ['publish', 'Publicar']] as const).map(([id, label]) => (
           <button key={id} onClick={() => setTab(id)}
             className={cn('text-sm font-bold px-4 py-2.5 rounded-md', tab === id ? 'bg-zinc-900 text-white' : 'bg-white border border-zinc-200 text-zinc-600')}>
             {label}
@@ -117,7 +129,12 @@ export default function PaginaPage() {
         <PageNavTab
           business={business}
           businessId={businessId}
-          onNav={(nav, navCustom) => save({ nav, navCustom } as any)}
+          blocks={blocks}
+          services={services}
+          products={products}
+          professionals={professionals}
+          reviewCount={rvCounts.published}
+          onSaveNav={(navItems) => save({ navItems })}
           onAbout={(about) => save({ about } as any)}
         />
       )}
@@ -179,6 +196,7 @@ export default function PaginaPage() {
           </div>
           <div className="bg-white border border-zinc-200 rounded-lg p-4 lg:sticky lg:top-4">
             <p className="font-bold text-sm mb-1">Adicionar bloco</p>
+            {/* Estrutura = o que existe e em que ordem. Cores/fonte ficam na aba Visual — nunca aqui. */}
             <p className="text-xs text-zinc-500 mb-3">Blocos de conversão seguem os módulos da empresa (Recursos). Agendamento e CTA já existem na página padrão.</p>
             <div className="flex flex-wrap gap-2">
               {(Object.keys(BLOCK_DEFS) as BlockType[])
@@ -194,7 +212,14 @@ export default function PaginaPage() {
         </div>
       )}
 
-      {tab === 'theme' && <ThemeEditor theme={page.theme} presetId={page.presetId || ''} onChange={(theme, presetId) => { setPage({ ...page, theme, presetId }); }} onSave={() => save({ theme: page.theme, presetId: page.presetId || '' })} saving={saving} />}
+      {tab === 'theme' && (
+        <div className="space-y-4">
+          {/* Prévia da PÁGINA REAL mora na aba Visual (§24): o editor de
+              estrutura fica leve; aqui o lojista vê o resultado de verdade. */}
+          <PagePreview slug={business.slug} published={!!business.published} />
+          <ThemeEditor theme={page.theme} presetId={page.presetId || ''} onChange={(theme, presetId) => { setPage({ ...page, theme, presetId }); }} onSave={() => save({ theme: page.theme, presetId: page.presetId || '' })} saving={saving} />
+        </div>
+      )}
 
       {tab === 'publish' && (
         <PublishTab business={business} businessId={businessId} onSlug={(slug) => save({ slug })} onPublish={(published) => save({ published })} />
@@ -204,61 +229,169 @@ export default function PaginaPage() {
 }
 
 // ═══════════════════════════════════════════════════════════════
-// NAVEGAÇÃO DA PÁGINA — mudou de casa: do "Configurações" para o EDITOR.
-// A página é um só lugar: blocos, ordem, itens do menu e seção "Sobre".
-// O estado continua em Business.nav/navCustom/about (fonte única que a
-// página pública lê); aqui apenas edita pela API de páginas.
+// NAVEGAÇÃO DA PÁGINA — v2 (âncoras + links externos).
+// Cada item tem nome, ordem e liga/desliga. A DISPONIBILIDADE vem do
+// módulo/conteúdo real: item de seção vazia ou rede sem URL aparece
+// desabilitado ("indisponível"), nunca some silenciosamente do menu do
+// editor — e nunca vai para o ar apontando para nada.
 // ═══════════════════════════════════════════════════════════════
-function PageNavTab({ business, businessId, onNav, onAbout }: {
+function PageNavTab({ business, businessId, blocks, services, products, professionals, reviewCount, onSaveNav, onAbout }: {
   business: Business;
   businessId: string;
-  onNav: (nav: string[], navCustom: boolean) => void | Promise<void>;
+  blocks: Block[];
+  services: Service[];
+  products: Product[];
+  professionals: Professional[];
+  reviewCount: number;
+  onSaveNav: (navItems: NavItemConfig[]) => void | Promise<void>;
   onAbout: (about: Business['about']) => void | Promise<void>;
 }) {
   const about = business.about || { title: '', text: '', image: '', enabled: false };
   const [aboutDraft, setAboutDraft] = useState(about);
   useEffect(() => { setAboutDraft(about); /* eslint-disable-next-line react-hooks/exhaustive-deps */ }, [business.about]);
-  const auto = !business.navCustom;
 
-  function toggleNav(id: string) {
-    if (auto) {
-      // Primeira interação sai do automático: parte de "todos ligados" e
-      // desmarca o item clicado (comportamento esperado do gesto).
-      onNav(NAV_ORDER.map((n) => n.id).filter((x) => x !== id), true);
-      return;
-    }
-    const cur = business.nav || [];
-    onNav(cur.includes(id) ? cur.filter((x) => x !== id) : [...cur, id], true);
+  const auto = !Array.isArray(business.navItems) || business.navItems.length === 0;
+  // Rascunho local: começa da configuração atual (ou do automático) e só
+  // persiste quando o lojista salva — edição sem sustos.
+  const [draft, setDraft] = useState<NavItemConfig[] | null>(null);
+  useEffect(() => { setDraft(null); /* eslint-disable-next-line react-hooks/exhaustive-deps */ }, [JSON.stringify(business.navItems)]);
+
+  const hasFaq = blocks.some((b) => b.type === 'faq' && b.enabled !== false
+    && Array.isArray(b.settings?.items) && (b.settings.items as any[]).some((x) => String(x?.q || '').trim() && String(x?.a || '').trim()));
+  const hasTestimonialItems = blocks.some((b) => b.type === 'testimonials' && b.enabled !== false
+    && Array.isArray(b.settings?.items) && (b.settings.items as any[]).some((t) => String(t?.text || '').trim()));
+
+  // Disponibilidade REAL (mesma regra da página pública — lib/nav.ts).
+  const available = new Set(availableNavIds({
+    business: business as any,
+    blocks,
+    services,
+    products,
+    reviews: Array.from({ length: reviewCount }, (_, i) => ({ id: `r${i}` })),
+    hasFaq,
+    hasTestimonialItems,
+    professionals,
+  }));
+
+  // Configuração efetiva (o que está salvo ou o automático mostraria).
+  const current: NavItemConfig[] = draft
+    ?? (auto
+      ? ([
+          ...(Object.keys(NAV_ANCHORS) as string[])
+            .filter((id) => available.has(id))
+            .map((id): NavItemConfig => ({ id, label: NAV_ANCHORS[id].label, type: 'anchor', target: NAV_ANCHORS[id].target, active: true })),
+          ...(business.mapsUrl && available.has('directions')
+            ? [{ id: 'directions', label: 'Como chegar', type: 'link', target: business.mapsUrl, active: true } as NavItemConfig]
+            : []),
+          ...(['instagram', 'tiktok', 'facebook', 'youtube', 'linkedin', 'site'] as string[])
+            .filter((id) => available.has(id))
+            .map((id): NavItemConfig => ({ id, label: id === 'site' ? 'Site' : id[0].toUpperCase() + id.slice(1), type: 'link', target: '#', active: true })),
+        ] as NavItemConfig[])
+      : (business.navItems || []));
+
+  // Todos os itens que o editor conhece: salvos + disponíveis não salvos.
+  const knownIds = Array.from(new Set([
+    ...current.map((i) => i.id),
+    ...Object.keys(NAV_ANCHORS),
+    'directions', 'instagram', 'tiktok', 'facebook', 'youtube', 'linkedin', 'site',
+  ]));
+  const labelOf = (id: string) => current.find((i) => i.id === id)?.label || NAV_ANCHORS[id]?.label || (id === 'directions' ? 'Como chegar' : id[0].toUpperCase() + id.slice(1));
+  const unavailableHint = (id: string) => {
+    if (id === 'about') return 'Ative e preencha a seção “Sobre” abaixo';
+    if (id === 'services') return 'Cadastre serviços em Serviços';
+    if (id === 'highlights') return 'Adicione itens ao bloco Diferenciais (aba Estrutura)';
+    if (id === 'professionals') return 'Cadastre profissionais ativos';
+    if (id === 'gallery') return 'Adicione fotos ao bloco Conheça o espaço';
+    if (id === 'reviews') return 'Aguardando avaliações publicadas';
+    if (id === 'faq') return 'Preencha o bloco de dúvidas';
+    if (id === 'contact' || id === 'directions') return 'Cadastre o endereço/mapa em Configurações';
+    return 'Configure a rede em Configurações';
+  };
+
+  function setItems(next: NavItemConfig[]) { setDraft(next); }
+
+  function toggleItem(item: NavItemConfig) {
+    setItems(current.map((i) => (i.id === item.id ? { ...i, active: !(i.active !== false) } : i)));
   }
-  function resetAuto() {
-    onNav(business.nav && business.nav.length ? business.nav : NAV_ORDER.map((n) => n.id), false);
+  function move(index: number, dir: -1 | 1) {
+    const n = [...current];
+    const j = index + dir;
+    if (j < 0 || j >= n.length) return;
+    [n[index], n[j]] = [n[j], n[index]];
+    setItems(n);
   }
+  function rename(item: NavItemConfig, label: string) {
+    setItems(current.map((i) => (i.id === item.id ? { ...i, label: label.slice(0, 40) } : i)));
+  }
+
+  const dirty = !!draft;
 
   return (
-    <div className="grid lg:grid-cols-2 gap-4 items-start">
+    <div className="space-y-4">
       <section className="bg-white border border-zinc-200 rounded-lg p-4">
-        <div className="flex items-center justify-between gap-2 mb-1">
-          <p className="font-bold text-sm">Itens do menu público</p>
+        <div className="flex flex-wrap items-center justify-between gap-2 mb-1">
+          <div>
+            <p className="font-bold text-sm">Itens do menu público</p>
+            <p className="text-xs text-zinc-500 mt-0.5">
+              {auto
+                ? 'Modo automático: a página monta o menu conforme módulos e conteúdo preenchido. Qualquer ajuste abaixo vira configuração sua.'
+                : 'Você escolheu os itens, a ordem e os nomes. Itens de seções vazias ou desligadas ficam desabilitados até voltarem a existir.'}
+            </p>
+          </div>
           {auto
-            ? <span className="text-[11px] font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200 rounded-full px-2 py-0.5">Automático</span>
-            : <button onClick={resetAuto} className="text-[11px] font-semibold text-zinc-500 hover:text-zinc-900 underline">Voltar ao automático</button>}
+            ? <span className="text-[11px] font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200 rounded-full px-2 py-0.5 shrink-0">Automático</span>
+            : <span className="text-[11px] font-semibold bg-zinc-100 text-zinc-600 border border-zinc-200 rounded-full px-2 py-0.5 shrink-0">Personalizado</span>}
         </div>
-        <p className="text-xs text-zinc-500 mb-3">
-          {auto
-            ? 'A página escolhe quais itens mostrar conforme os módulos ativos e o conteúdo preenchido. Qualquer ajuste aqui vira escolha manual.'
-            : 'Itens marcados aparecem no menu (a página só oferece o que o módulo permite).'}
-        </p>
-        <div className="flex flex-wrap gap-1.5">
-          {NAV_ORDER.map((n) => {
-            const on = auto ? true : (business.nav || []).includes(n.id);
+
+        <div className="mt-3 divide-y divide-zinc-100 border border-zinc-200 rounded-lg">
+          {current.filter((i) => knownIds.includes(i.id)).map((item, index) => {
+            const ok = available.has(item.id);
+            const on = item.active !== false;
             return (
-              <button key={n.id} onClick={() => toggleNav(n.id)}
-                className={cn('text-xs font-medium px-3 py-1.5 rounded-md border transition-colors', on ? 'bg-zinc-900 text-white border-zinc-900' : 'bg-white border-zinc-200 text-zinc-600')}
-                title={auto ? 'No modo automático a página decide sozinha; clicar escolhe manualmente' : undefined}>
-                {n.label}
-              </button>
+              <div key={item.id} className={cn('flex flex-wrap items-center gap-2 px-3 py-2.5', !ok && 'bg-zinc-50/70')}>
+                <div className="flex flex-col gap-0.5">
+                  <button disabled={index === 0} onClick={() => move(index, -1)} aria-label={`Subir ${labelOf(item.id)}`}
+                    className="text-zinc-400 hover:text-zinc-900 disabled:opacity-20 px-0.5 inline-flex"><Icon n="chevU" size={11} /></button>
+                  <button disabled={index === current.length - 1} onClick={() => move(index, 1)} aria-label={`Descer ${labelOf(item.id)}`}
+                    className="text-zinc-400 hover:text-zinc-900 disabled:opacity-20 px-0.5 inline-flex"><Icon n="chevD" size={11} /></button>
+                </div>
+                <button onClick={() => ok && toggleItem(item)} disabled={!ok}
+                  className={cn('text-[11px] font-bold px-2.5 py-1 rounded-full border shrink-0 transition-colors',
+                    !ok ? 'bg-zinc-50 text-zinc-400 border-zinc-200 cursor-not-allowed'
+                    : on ? 'bg-zinc-900 text-white border-zinc-900'
+                    : 'bg-white text-zinc-500 border-zinc-300')}
+                  title={ok ? (on ? 'Visível no menu' : 'Oculto do menu') : unavailableHint(item.id)}>
+                  {ok ? (on ? 'No menu' : 'Oculto') : 'Indisponível'}
+                </button>
+                <input value={item.label} onChange={(e) => rename(item, e.target.value)} disabled={!ok}
+                  className="flex-1 min-w-[110px] bg-transparent border-0 focus:border focus:border-zinc-300 rounded-md px-2 py-1 text-sm font-semibold disabled:text-zinc-400"
+                  placeholder={NAV_ANCHORS[item.id]?.label || item.id} maxLength={40} />
+                <span className="text-[10px] font-bold text-zinc-400 uppercase shrink-0 w-14 text-right">
+                  {item.type === 'anchor' ? 'Seção' : 'Link'}
+                </span>
+              </div>
             );
           })}
+        </div>
+        {!ok_all_available(available, current) && (
+          <p className="text-[11px] text-zinc-500 mt-2">
+            Itens “Indisponível” ficam de fora do menu público até existir conteúdo — a página nunca aponta para seção vazia.
+          </p>
+        )}
+
+        <div className="flex flex-wrap gap-2 mt-3">
+          <button disabled={!dirty} onClick={() => { onSaveNav(draft || []); setDraft(null); }}
+            className="text-sm font-bold bg-zinc-900 text-white px-4 py-2.5 rounded-md hover:bg-zinc-700 disabled:opacity-40">
+            Salvar menu
+          </button>
+          {!auto && (
+            <button onClick={() => { setDraft(null); onSaveNav([]); }} className="text-sm font-bold bg-zinc-100 px-4 py-2.5 rounded-md hover:bg-zinc-200">
+              Voltar ao automático
+            </button>
+          )}
+          {dirty && (
+            <button onClick={() => setDraft(null)} className="text-sm font-bold text-zinc-500 px-3 py-2.5 rounded-md hover:text-zinc-900">Descartar</button>
+          )}
         </div>
       </section>
 
@@ -280,6 +413,11 @@ function PageNavTab({ business, businessId, onNav, onAbout }: {
   );
 }
 
+// helper: existe algum item indisponível na lista?
+function ok_all_available(available: Set<string>, items: NavItemConfig[]): boolean {
+  return items.every((i) => available.has(i.id));
+}
+
 // Blocos de conteúdo que aparecem na demo: chip "Falta preencher" quando vazios.
 function blockIsEmpty(b: Block, rvCounts: { pending: number; published: number }): boolean {
   const s = b.settings || {};
@@ -289,6 +427,7 @@ function blockIsEmpty(b: Block, rvCounts: { pending: number; published: number }
     case 'gallery': return !Array.isArray(s.images) || s.images.length === 0;
     case 'buttons': return !Array.isArray(s.buttons) || s.buttons.length === 0;
     case 'faq': return visibleFaqItems(s.items).length === 0;
+    case 'highlights': return !Array.isArray(s.items) || s.items.filter((x: any) => String(x?.title || '').trim()).length === 0;
     case 'testimonials': {
       const staticEmpty = !Array.isArray(s.items) || s.items.filter((t: any) => t.text).length === 0;
       return staticEmpty && rvCounts.published === 0;
@@ -315,7 +454,7 @@ function BlockSettings({ block, businessId, business, onChange, onSave }: {
 
   return (
     <div className="space-y-3">
-      {['cta', 'products', 'services', 'booking', 'contact', 'quote', 'concierge'].includes(block.type) && (
+      {['cta', 'products', 'services', 'booking', 'contact', 'quote', 'concierge', 'highlights', 'professionals'].includes(block.type) && (
         <label className="block">
           <span className="text-xs font-bold text-zinc-500">{block.type === 'cta' ? 'TEXTO DO BOTÃO' : 'TÍTULO'}</span>
           <input value={block.type === 'cta' ? s.label || '' : s.title || ''} onChange={(e) => set(block.type === 'cta' ? 'label' : 'title', e.target.value)}
@@ -396,6 +535,49 @@ function BlockSettings({ block, businessId, business, onChange, onSave }: {
           </label>
           <FaqEditor items={s.items} onChange={(items) => set('items', items)} inputClass={input} />
         </>
+      )}
+      {block.type === 'highlights' && (
+        <div className="space-y-2">
+          <p className="text-xs font-bold text-zinc-500 pt-1">DIFERENCIAIS (UM POR LINHA)</p>
+          <p className="text-[11px] text-zinc-500 -mt-1">Título é obrigatório; texto e ícone são opcionais. Ex.: “Atendimento no dia”, “Primeira avaliação grátis”.</p>
+          {((Array.isArray(s.items) ? s.items : [{ icon: '', title: '', text: '' }]) as any[]).map((it, i, arr) => (
+            <div key={i} className="rounded-md border border-zinc-200 bg-zinc-50/60 p-3 space-y-2">
+              <div className="flex items-center justify-between">
+                <p className="text-xs font-bold text-zinc-600">Item {i + 1}</p>
+                {arr.length > 1 && (
+                  <button type="button" onClick={() => set('items', arr.filter((_, j) => j !== i))}
+                    className="text-[11px] font-bold text-red-600 px-2 py-1 rounded-lg hover:bg-red-50">Remover</button>
+                )}
+              </div>
+              <div className="grid grid-cols-[1fr_auto] gap-2">
+                <input value={it.title || ''} onChange={(e) => set('items', arr.map((x, j) => (j === i ? { ...x, title: e.target.value } : x)))}
+                  className={input} placeholder="Título (ex: Atendimento no mesmo dia)" maxLength={80} />
+                <select value={it.icon || ''} onChange={(e) => set('items', arr.map((x, j) => (j === i ? { ...x, icon: e.target.value } : x)))}
+                  className="rounded-md border border-zinc-300 px-2 py-2 text-sm bg-white" aria-label="Ícone do diferencial">
+                  <option value="">✓</option>
+                  <option value="star">★ Estrela</option>
+                  <option value="heart">♥ Coração</option>
+                  <option value="clock">🕐 Relógio</option>
+                  <option value="check">✓ Certo</option>
+                  <option value="shield">🛡 Escudo</option>
+                  <option value="spark">✨ Brilho</option>
+                </select>
+              </div>
+              <input value={it.text || ''} onChange={(e) => set('items', arr.map((x, j) => (j === i ? { ...x, text: e.target.value } : x)))}
+                className={input} placeholder="Descrição curta (opcional)" maxLength={140} />
+            </div>
+          ))}
+          <button type="button" onClick={() => set('items', [...(Array.isArray(s.items) ? s.items : []), { icon: '', title: '', text: '' }])}
+            className="text-sm font-bold bg-zinc-100 text-zinc-700 px-4 py-2 rounded-md hover:bg-zinc-200">+ Adicionar diferencial</button>
+        </div>
+      )}
+      {block.type === 'professionals' && (
+        <div className="text-xs text-zinc-600 bg-zinc-50 border border-zinc-200 rounded-md px-3 py-2.5 space-y-1.5">
+          <p>Mostra os <strong>profissionais ativos</strong> do negócio com foto, nome e função — é a mesma equipe da agenda e da distribuição automática.</p>
+          <p className="flex flex-wrap gap-x-3 gap-y-1">
+            <Link href={`/profissionais?b=${businessId}`} className="font-semibold text-zinc-900 underline">Gerenciar profissionais →</Link>
+          </p>
+        </div>
       )}
       {['profile', 'location', 'whatsapp'].includes(block.type) && (
         <div className="text-xs text-zinc-600 bg-zinc-50 border border-zinc-200 rounded-md px-3 py-2.5">
@@ -646,6 +828,44 @@ function ReviewsEditor({ businessId }: { businessId: string }) {
           </button>
         </div>
         {msg && <p className="text-xs font-semibold text-zinc-600">{msg}</p>}
+      </div>
+    </div>
+  );
+}
+
+// ── Prévia da página REAL (aba Visual, §24) ──
+// Mesma origem + sessão do dono: o rascunho aparece (isOwnerPreview).
+function PagePreview({ slug, published }: { slug: string; published: boolean }) {
+  const [wide, setWide] = useState(true);
+  const [nonce, setNonce] = useState(0);
+  return (
+    <div className="bg-white border border-zinc-200 rounded-lg p-4">
+      <div className="flex flex-wrap items-center justify-between gap-2 mb-3">
+        <div>
+          <p className="font-bold text-sm">Prévia da página</p>
+          <p className="text-xs text-zinc-500">
+            {published ? 'Como está no ar agora.' : 'Rascunho — só você vê esta versão.'}
+          </p>
+        </div>
+        <div className="flex items-center gap-2">
+          <div className="flex bg-zinc-100 rounded-lg p-0.5">
+            <button onClick={() => setWide(true)} aria-label="Prévia em tela larga"
+              className={cn('text-xs font-bold px-3 py-1.5 rounded-md', wide && 'bg-white shadow-sm')}>Larga</button>
+            <button onClick={() => setWide(false)} aria-label="Prévia em tela de celular"
+              className={cn('text-xs font-bold px-3 py-1.5 rounded-md', !wide && 'bg-white shadow-sm')}>Celular</button>
+          </div>
+          <button onClick={() => setNonce((n) => n + 1)} className="text-xs font-bold bg-zinc-100 hover:bg-zinc-200 px-3 py-2 rounded-md inline-flex items-center gap-1.5">
+            <Icon n="sync" size={13} /> Atualizar
+          </button>
+        </div>
+      </div>
+      <div className="flex justify-center">
+        <div className={cn('transition-all', wide ? 'w-full' : 'w-[390px] max-w-full')}>
+          <div className="rounded-xl border border-zinc-200 overflow-hidden bg-zinc-50" style={{ height: 560 }}>
+            <iframe key={nonce} src={`/${slug}`} title="Prévia da página pública"
+              className="w-full h-full border-0" sandbox="allow-same-origin allow-scripts allow-popups allow-forms" />
+          </div>
+        </div>
       </div>
     </div>
   );

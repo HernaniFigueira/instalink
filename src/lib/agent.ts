@@ -79,7 +79,8 @@ export function agentActive(
 export interface AgentKnowledge {
   businessName: string;
   description: string;
-  services: Array<{ name: string; price: number; durationMin: number; bookable: boolean }>;
+  services: Array<{ name: string; price: number; durationMin: number; bookable: boolean; pricePublic: boolean }>;
+  professionals: Array<{ name: string; role: string }>;
   hours: string;
   address: string;
   faq: Array<{ q: string; a: string }>;
@@ -115,6 +116,9 @@ export function buildKnowledge(
   const sun = business.hours?.['0'];
   if (sun) parts.push(`Dom ${sun.open}–${sun.close}`);
   const agent = db.agents.find((a) => a.businessId === business.id);
+  const professionals = (db.professionals || []).filter(
+    (p) => p.businessId === business.id && p.active !== false,
+  );
   return {
     businessName: business.name,
     description: business.description || '',
@@ -123,7 +127,10 @@ export function buildKnowledge(
       price: s.price,
       durationMin: s.durationMin,
       bookable: s.bookable !== false,
+      // Preço só é informação pública quando o serviço libera (showPrice).
+      pricePublic: s.showPrice !== false,
     })),
+    professionals: professionals.map((p) => ({ name: p.name, role: p.role || '' })),
     hours: parts.join(' • '),
     address: business.address || '',
     faq: (opts.faq || []).filter((f) => (f.q || '').trim()),

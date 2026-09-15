@@ -3,8 +3,38 @@ import { readDB, updateDB } from '@/lib/db';
 import { requireBusiness } from '@/lib/access';
 import { slugify, isValidSlug } from '@/lib/utils';
 import { VALID_NAV } from '@/lib/nav';
+import type { NavItemConfig } from '@/lib/types';
 
 const pageStr = (v: unknown, max: number): string => String((v as string) || '').slice(0, max);
+
+/**
+ * Navegação v2 (âncoras + links externos): saneamento defensivo.
+ * - âncora: id do catálogo (NAV_ANCHORS), sem URL;
+ * - link: rede conhecida (URL resolvida na leitura) OU URL absoluta válida;
+ * - máximo de 16 itens, rótulos curtos, ordem = ordem do array.
+ */
+function sanitizeNavItems(raw: unknown): NavItemConfig[] {
+  if (!Array.isArray(raw)) return [];
+  const out: NavItemConfig[] = [];
+  for (const item of raw.slice(0, 16)) {
+    if (!item || typeof item !== 'object') continue;
+    const it = item as Record<string, any>;
+    const type = it.type === 'link' ? 'link' : 'anchor';
+    const label = String(it.label || '').trim().slice(0, 40);
+    const target = String(it.target || '').trim().slice(0, 500);
+    const id = String(it.id || '').trim().slice(0, 60);
+    if (!id) continue;
+    if (type === 'link' && target && !/^https?:\/\//i.test(target) && !isValidSlug(id)) continue;
+    out.push({
+      id,
+      label: label || id,
+      type,
+      target: type === 'anchor' ? '' : target,
+      active: it.active !== false,
+    });
+  }
+  return out;
+}
 
 // GET ?businessId= — página + tema + blocos (dono)
 // PUT — salvar blocos/tema/publicação/slug (dono)
@@ -40,10 +70,13 @@ export async function PUT(req: NextRequest) {
       });
     }
     // ── Navegação pública + seção "Sobre" — vivem no EDITOR DA PÁGINA ──
-    // O estado continua sendo o MESMO (Business.nav/navCustom/about — única
-    // fonte usada pela página pública); apenas o lugar de editar mudou: o
-    // usuário constrói a página em um só lugar, não em Configurações.
-    if (body.nav !== undefined || body.navCustom !== undefined || body.about !== undefined) {
+    // O estado continua sendo o MESMO (Business.nav/navCustom/navItems/about —
+    // única fonte usada pela página pública); apenas o lugar de editar mudou.
+    //
+    // CORREÇÃO (Sobre não aparecia): salvar "Sobre" COM CONTEÚDO e VISÍVEL
+    // também LIGA o módulo 'about' (features) — o editor é a fonte única;
+    // o lojista nunca precisa caçar o toggle em Recursos para ver a seção no ar.
+    if (body.nav !== undefined || body.navCustom !== undefined || body.about !== undefined || body.navItems !== undefined) {
       await updateDB((d) => {
         const b = d.businesses.find((x) => x.id === businessId)!;
         if (body.nav !== undefined) {
@@ -51,6 +84,9 @@ export async function PUT(req: NextRequest) {
           b.nav = [...new Set(nav as string[])];
         }
         if (body.navCustom !== undefined) b.navCustom = !!body.navCustom;
+        if (body.navItems !== undefined) {
+          b.navItems = sanitizeNavItems(body.navItems);
+        }
         if (body.about !== undefined && body.about && typeof body.about === 'object') {
           const a = body.about as Record<string, any>;
           b.about = {
@@ -59,6 +95,13 @@ export async function PUT(req: NextRequest) {
             image: pageStr(a.image, 500),
             enabled: a.enabled !== false && !!a.enabled,
           };
+          // Sincroniza o módulo: visível + conteúdo ⇒ features.about ligado.
+          const hasContent = !!(b.about.title.trim() || b.about.text.trim() || b.about.image.trim());
+          if (b.about.enabled && hasContent) {
+            const features = { ...(b.features || {}) } as Record<string, boolean>;
+            features.about = true;
+            b.features = features as typeof b.features;
+          }
         }
         b.updatedAt = new Date().toISOString();
       });

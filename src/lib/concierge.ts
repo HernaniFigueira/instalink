@@ -1,15 +1,35 @@
 // Concierge IA (MVD): motor de intenção baseado em REGRAS sobre dados
 // estruturados reais do negócio. Não inventa nada: só responde o que
 // existe no banco. Quando não sabe, conduz a ação segura (WhatsApp).
+//
+// AGENDAMENTO PELO ASSISTENTE: antes das intenções gerais roda o fluxo de
+// agendamento (lib/agent-flow.ts), que consulta a disponibilidade REAL
+// (mesmo motor da Agenda) e cria o Booking pelo caminho único
+// (lib/booking-create.ts). Preços só aparecem quando o serviço libera
+// (Service.showPrice).
 import type { Business, BusinessAgent, DB } from './types';
 import { money } from './utils';
 import { parseKnowledgeOverride } from './agent';
 import { isFeatureEnabled, whatsappVisible } from './features';
+import { priceVisible } from './pricing';
+import { agentFlowStep, type AgentFlowState, type FlowContext } from './agent-flow';
 
-export interface ConciergeAction { label: string; target: string }
-// target: '#produtos' | '#servicos' | '#agendar' | '#orcamento' | '#contato' | 'whatsapp'
+export interface ConciergeAction { label: string; target: string; payload?: Record<string, any> }
+// target: '#produtos' | '#servicos' | '#agendar' | '#orcamento' | '#contato' | 'whatsapp' | 'flow'
 
-export interface ConciergeReply { reply: string; actions: ConciergeAction[]; intent: string }
+export interface ConciergeReply {
+  reply: string;
+  actions: ConciergeAction[];
+  intent: string;
+  /** Estado do fluxo de agendamento (ecoado pelo cliente/conversa). */
+  flow?: AgentFlowState | null;
+  /** Presente quando o fluxo decidiu CRIAR o agendamento (a rota executa). */
+  bookingRequest?: {
+    serviceId: string; date: string; time: string;
+    customer: { id: string; name: string; phone: string; email?: string } | null;
+    name: string; phone: string;
+  };
+}
 
 function norm(s: string): string {
   return (s || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
@@ -18,6 +38,9 @@ function norm(s: string): string {
 export interface ConciergeOptions {
   agent?: BusinessAgent; // configuração da empresa (tom/objetivos/handoff)
   faq?: Array<{ q: string; a: string }>; // conhecimento do FAQ (bloco ativo)
+  flow?: AgentFlowState | null; // estado do fluxo de agendamento
+  action?: Record<string, any> | null; // ação de botão do chat (payload)
+  flowCtx?: FlowContext; // identidade (conta logada / canal WhatsApp)
 }
 
 export function conciergeAnswer(
@@ -26,6 +49,21 @@ export function conciergeAnswer(
   message: string,
   options: ConciergeOptions = {},
 ): ConciergeReply {
+  // ── Fluxo de agendamento (Assistente × Agenda — mesmas regras) ──
+  const flowReply = agentFlowStep(db, business, message, {
+    flow: options.flow || null,
+    action: options.action || null,
+    ctx: options.flowCtx,
+  });
+  if (flowReply.intent) {
+    return {
+      reply: flowReply.reply,
+      actions: flowReply.actions,
+      intent: flowReply.intent,
+      flow: flowReply.flow,
+      ...(flowReply.bookingRequest ? { bookingRequest: flowReply.bookingRequest } : {}),
+    };
+  }
   const bId = business.id;
   const q = norm(message);
   const wa: ConciergeAction = { label: 'Falar no WhatsApp', target: 'whatsapp' };
@@ -55,15 +93,24 @@ export function conciergeAnswer(
   }
 
   // ── Preço de item específico ──────────────────────────────
+  // Preço de SERVIÇO só é revelado quando o serviço libera (showPrice);
+  // sem liberação, o assistente convida a falar com a equipe (nunca inventa).
   const allItems = [
     ...products.map((p) => ({ name: p.name, price: p.promoPrice > 0 ? p.promoPrice : p.price, kind: 'produto' as const })),
-    ...services.map((s) => ({ name: s.name, price: s.price, kind: 'serviço' as const })),
+    ...services.map((s) => ({ name: s.name, price: s.price, kind: 'serviço' as const, service: s })),
   ];
   const mentioned = allItems.find((i) => {
     const words = norm(i.name).split(/\s+/).filter((w) => w.length > 3);
     return words.length > 0 && words.some((w) => q.includes(w));
   });
   if (mentioned && has('preco', 'valor', 'quanto', 'custa')) {
+    if (mentioned.kind === 'serviço' && !priceVisible(mentioned.service as any)) {
+      return {
+        intent: 'price_private',
+        reply: 'O valor desse atendimento a gente passa pessoalmente — fale com a equipe que eles te informam agora mesmo!',
+        actions: [wa],
+      };
+    }
     return {
       intent: 'price',
       reply: `O ${mentioned.kind} "${mentioned.name}" custa ${money(mentioned.price)}. Quer continuar?`,
@@ -76,9 +123,12 @@ export function conciergeAnswer(
     };
   }
   if (mentioned) {
+    const priceTxt = mentioned.kind === 'serviço' && !priceVisible(mentioned.service as any)
+      ? ''
+      : ` por ${money(mentioned.price)}`;
     return {
       intent: 'item_found',
-      reply: `Temos "${mentioned.name}" por ${money(mentioned.price)}.`,
+      reply: `Temos "${mentioned.name}"${priceTxt}.`,
       actions: mentioned.kind === 'produto'
         ? isFeatureEnabled(business, 'products') || isFeatureEnabled(business, 'orders')
           ? [{ label: 'Ver no catálogo', target: '#produtos' }]
@@ -108,7 +158,9 @@ export function conciergeAnswer(
     if (!isFeatureEnabled(business, 'bookings') || services.length === 0) {
       return { intent: 'booking_unavailable', reply: 'Aqui o atendimento é direto pelo WhatsApp. Chama a gente que respondemos rapidinho!', actions: [wa] };
     }
-    const names = services.slice(0, 4).map((s) => `${s.name} (${money(s.price)})`).join(' • ');
+    // Preço só aparece para serviço que libera (showPrice).
+    const names = services.slice(0, 4).map((s) =>
+      `${s.name}${s.showPrice !== false ? ` (${money(s.price)})` : ''}`).join(' • ');
     return { intent: 'booking', reply: `Bora agendar! Nossos serviços: ${names}. Escolha abaixo e reserve seu horário:`, actions: [{ label: 'Agendar horário', target: '#agendar' }] };
   }
   if (has('pedir', 'pedido', 'delivery', 'entrega', 'comprar', 'quero', 'cardapio', 'menu')) {
