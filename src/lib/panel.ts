@@ -33,19 +33,28 @@ export interface PanelRouteDef {
   hidden?: boolean;
 }
 
-// Ordem canônica da navegação — reflete o novo posicionamento:
-//   Operacional → Catálogo → Atendimento → Gestão → Presença → Administração.
-// Pedidos não é mais caminho principal: a rota continua existente (histórico
+// Ordem canônica da navegação — reflete o fluxo mental de quem opera:
+//   Dashboard → Operação (Agenda, Clientes) → Atendimento (o que ofereço,
+//   quem atende, quando atende, canais) → Gestão → Presença → Administração.
+//
+// PROFISSIONAIS × EQUIPE (conceitos separados, nunca misturados):
+//   • /profissionais = quem REALIZA os atendimentos (agenda, serviços,
+//     disponibilidade, capacidade);
+//   • /equipe = usuários administrativos com login/permissões (dono,
+//     recepcionista, gerente…).
+//
+// Pedidos não é caminho principal: a rota continua existente (histórico
 // legado acessível por URL para quem tem o módulo), mas fora da navegação.
 export const PANEL_ROUTES: PanelRouteDef[] = [
   { href: '/dashboard', label: 'Dashboard', icon: 'home', permission: 'dashboard', area: 'dashboard' },
-  // Operacional — o centro do produto
-  { href: '/agenda', label: 'Agenda', icon: 'calendar', section: 'Operacional', modes: ['bookings'], permission: 'agenda', area: 'agenda' },
-  { href: '/clientes', label: 'Clientes', icon: 'users', section: 'Operacional', permission: 'clientes', area: 'clientes' },
-  // Catálogo
-  { href: '/servicos', label: 'Serviços', icon: 'scissors', section: 'Catálogo', modes: ['services', 'bookings'], permission: 'catalogo', area: 'servicos' },
-  { href: '/produtos', label: 'Produtos', icon: 'cart', section: 'Catálogo', modes: ['products', 'orders'], permission: 'catalogo', area: 'catalogo' },
-  // Atendimento
+  // Operação — o dia a dia do negócio
+  { href: '/agenda', label: 'Agenda', icon: 'calendar', section: 'Operação', modes: ['bookings'], permission: 'agenda', area: 'agenda' },
+  { href: '/clientes', label: 'Clientes', icon: 'users', section: 'Operação', permission: 'clientes', area: 'clientes' },
+  // Atendimento — o que eu ofereço · quem atende · quando atende · canais
+  { href: '/servicos', label: 'Serviços', icon: 'service', section: 'Atendimento', modes: ['services', 'bookings'], permission: 'catalogo', area: 'servicos' },
+  { href: '/profissionais', label: 'Profissionais', icon: 'users', section: 'Atendimento', modes: ['services', 'bookings'], permission: 'catalogo', area: 'profissionais' },
+  { href: '/horarios', label: 'Horários', icon: 'clock', section: 'Atendimento', modes: ['services', 'bookings'], permission: 'catalogo', area: 'horarios' },
+  { href: '/produtos', label: 'Produtos', icon: 'bag', section: 'Atendimento', modes: ['products', 'orders'], permission: 'catalogo', area: 'catalogo' },
   { href: '/whatsapp', label: 'WhatsApp', icon: 'whatsapp', section: 'Atendimento', permission: 'whatsapp', area: 'whatsapp' },
   { href: '/agente', label: 'Assistente', icon: 'spark', section: 'Atendimento', permission: 'agente', area: 'agente' },
   // Gestão
@@ -54,7 +63,7 @@ export const PANEL_ROUTES: PanelRouteDef[] = [
   // Presença — a página pública é construída AQUI (editor), não em Configurações
   { href: '/pagina', label: 'Página', icon: 'link', section: 'Presença', permission: 'pagina', area: 'pagina' },
   // Administração
-  { href: '/equipe', label: 'Equipe', icon: 'users', section: 'Administração', permission: 'equipe', area: 'equipe' },
+  { href: '/equipe', label: 'Equipe', icon: 'shield', section: 'Administração', permission: 'equipe', area: 'equipe' },
   { href: '/recursos', label: 'Recursos', icon: 'toggle', section: 'Administração', permission: 'config', area: 'recursos' },
   { href: '/configuracoes', label: 'Configurações', icon: 'settings', section: 'Administração', permission: 'config', area: 'config' },
   // Legado (fora da navegação; a rota e o histórico continuam preservados
@@ -64,7 +73,10 @@ export const PANEL_ROUTES: PanelRouteDef[] = [
 
 /** Rotas que usam a largura toda (sem container estreito). */
 export const FULL_WIDTH_PATHS = PANEL_ROUTES
-  .filter((r) => ['/dashboard', '/agenda', '/resultados', '/clientes', '/whatsapp', '/campanhas', '/servicos', '/pedidos', '/equipe'].includes(r.href))
+  .filter((r) => [
+    '/dashboard', '/agenda', '/resultados', '/clientes', '/whatsapp', '/campanhas',
+    '/servicos', '/profissionais', '/horarios', '/pedidos', '/equipe',
+  ].includes(r.href))
   .map((r) => r.href);
 
 export interface PanelContext {

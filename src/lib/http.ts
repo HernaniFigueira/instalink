@@ -162,6 +162,8 @@ export const AREA_LABELS: Record<string, string> = {
   pedidos: 'Pedidos',
   catalogo: 'Catálogo',
   servicos: 'Serviços',
+  profissionais: 'Profissionais',
+  horarios: 'Horários',
   pagina: 'Página',
   agente: 'Agente',
   whatsapp: 'WhatsApp',

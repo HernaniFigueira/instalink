@@ -88,6 +88,26 @@ function normalize(raw: unknown): DB {
   }
   for (const s of base.services) {
     if (!Array.isArray((s as any).professionalIds)) (s as any).professionalIds = [];
+    // Preço público (showPrice): dado legado não tinha o campo e o preço ERA
+    // exibido — preservamos o comportamento (true). Quem desmarcar no painel
+    // grava false explicitamente.
+    if (typeof (s as any).showPrice !== 'boolean') (s as any).showPrice = true;
+  }
+  for (const b of base.businesses) {
+    if (!b.socials || typeof b.socials !== 'object') b.socials = {};
+    else {
+      // Sanitiza: só redes conhecidas com valor em string.
+      const clean: Record<string, string> = {};
+      for (const [k, v] of Object.entries(b.socials)) {
+        if (typeof v === 'string' && v.trim()) clean[k] = v.trim().slice(0, 300);
+      }
+      b.socials = clean;
+    }
+    if (!Array.isArray((b as any).navItems)) (b as any).navItems = [];
+    if (!b.automations || typeof b.automations !== 'object') (b as any).automations = {};
+  }
+  for (const c of base.conversations) {
+    if (!c.context || typeof c.context !== 'object') (c as any).context = {};
   }
   // Profissionais: vínculo com o horário geral da clínica (lib/schedule.ts).
   // Migração DEFENSIVA e idempotente: quando o campo não existe (dado legado),

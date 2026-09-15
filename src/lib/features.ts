@@ -60,7 +60,7 @@ export const FEATURES: FeatureDef[] = [
     disabledHint: 'Some a agenda, o botão Agendar e o agendamento da página pública.',
   },
   {
-    id: 'services', label: 'Serviços', group: 'Atendimento', icon: 'scissors', mode: 'services',
+    id: 'services', label: 'Serviços', group: 'Atendimento', icon: 'service', mode: 'services',
     blocks: ['services'],
     hint: 'Catálogo de serviços com preço e duração',
     disabledHint: 'A vitrine de serviços sai da página (os serviços continuam salvos).',

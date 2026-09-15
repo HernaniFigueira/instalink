@@ -2,7 +2,9 @@
 // O QUE É PÚBLICO NUM SERVIÇO — nome, preço e descrição
 // ═══════════════════════════════════════════════════════════════
 // REGRA DO PRODUTO:
-//   • preço É público (ajuda na conversão);
+//   • preço É público POR CONFIGURAÇÃO (Service.showPrice, padrão ligado);
+//     desligado, o preço continua salvo e disponível internamente — só sai
+//     da página pública e do assistente;
 //   • descrição É pública (quando existir);
 //   • duração NÃO é pública. Ela continua existindo internamente para agenda,
 //     disponibilidade, conflitos, buffer e cálculo de horários — apenas deixa
@@ -25,6 +27,15 @@ export interface PublicServiceInfo {
   description: string;
   /** `true` quando há descrição para exibir. */
   hasDescription: boolean;
+}
+
+/**
+ * O preço deste serviço pode aparecer publicamente?
+ * `showPrice === false` → NÃO (preço continua salvo/interno).
+ * Ausente (legado) ou true → sim (comportamento histórico preservado).
+ */
+export function priceVisible(service: Pick<Service, 'showPrice'> | null | undefined): boolean {
+  return (service as any)?.showPrice !== false;
 }
 
 /** Recorte público de um serviço — deliberadamente SEM duração. */

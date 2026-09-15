@@ -93,6 +93,36 @@ export const VALID_OPTIONAL_FEATURES: OptionalFeatureId[] = [
 
 export interface DayHours { open: string; close: string }
 
+// ── Redes sociais da página pública ─────────────────────────
+// Instagram/TikTok continuam sendo campos legados (usuário "@perfil" em
+// Business.instagram/tiktok — preservados). `socials` guarda URLs COMPLETOS
+// das demais redes (Facebook, YouTube, LinkedIn, site…). Só a configurada
+// aparece na página.
+export type SocialNetworkId = 'instagram' | 'facebook' | 'youtube' | 'tiktok' | 'linkedin' | 'site';
+
+export const SOCIAL_NETWORKS: Array<{ id: SocialNetworkId; label: string; icon: string; placeholder: string }> = [
+  { id: 'instagram', label: 'Instagram', icon: 'instagram', placeholder: '@seuperfil' },
+  { id: 'tiktok', label: 'TikTok', icon: 'music', placeholder: '@seuperfil' },
+  { id: 'facebook', label: 'Facebook', icon: 'facebook', placeholder: 'https://facebook.com/suapagina' },
+  { id: 'youtube', label: 'YouTube', icon: 'youtube', placeholder: 'https://youtube.com/@seucanal' },
+  { id: 'linkedin', label: 'LinkedIn', icon: 'linkedin', placeholder: 'https://linkedin.com/company/suaempresa' },
+  { id: 'site', label: 'Site / outro link', icon: 'external', placeholder: 'https://seusite.com' },
+];
+
+// ── Navegação da página pública (v2: âncora × link externo) ──
+// Cada item tem nome, tipo, destino, ativo/inativo e ordem (a ordem é a do
+// array). Âncoras rolam para a seção correspondente; links abrem destino
+// externo. Negócios legados continuam resolvidos por nav/navCustom.
+export type NavItemType = 'anchor' | 'link';
+
+export interface NavItemConfig {
+  id: string; // 'services' | 'reviews' | ... âncoras · 'instagram' | 'site' | uid() p/ links
+  label: string; // nome exibido (customizável)
+  type: NavItemType;
+  target: string; // âncora: '#servicos' · link: URL completa
+  active: boolean;
+}
+
 // ── Configuração universal de agenda do negócio ──
 export type TeamMode = 'solo' | 'choosable' | 'auto';
 
@@ -138,6 +168,10 @@ export interface Business {
   email: string;
   instagram: string;
   tiktok: string;
+  // Redes ampliadas (URLs completos: Facebook, YouTube, LinkedIn, site…).
+  // Instagram/TikTok acima continuam como campos legados (@perfil) — a página
+  // resolve os dois e mostra SOMENTE o que está configurado.
+  socials?: Partial<Record<SocialNetworkId, string>>;
   address: string;
   mapsUrl: string;
   hours: Record<string, DayHours | null>; // 0=dom .. 6=sab
@@ -151,6 +185,12 @@ export interface Business {
   booking: BookingConfig;
   nav: string[]; // ids habilitados no menu (ordem canônica); usado quando navCustom
   navCustom: boolean; // false = detecção automática (negócios legados)
+  // Navegação v2 (âncoras + links externos, com nome/ordem/ativo próprios).
+  // Presente ⇒ é a fonte da navegação; ausente ⇒ resolução legada nav/navCustom.
+  navItems?: NavItemConfig[];
+  // Automações operacionais (confirmação, lembrete, pós-atendimento, avaliação,
+  // retorno). Ausente/true = ativa; false = desligada pelo lojista.
+  automations?: Record<string, boolean>;
   about: AboutSection; // seção "Sobre a empresa" (título/texto/imagem)
   published: boolean;
   createdAt: string;
@@ -188,6 +228,7 @@ export interface PublicBusiness {
   email: string;
   instagram: string;
   tiktok: string;
+  socials: Partial<Record<SocialNetworkId, string>>; // redes configuradas (URLs completos)
   address: string;
   mapsUrl: string;
   hours: Record<string, DayHours | null>;
@@ -197,6 +238,7 @@ export interface PublicBusiness {
   booking: BookingConfig; // regras operacionais públicas (modo equipe, prazos)
   nav: string[]; // ids habilitados no menu (ordem canônica)
   navCustom: boolean; // false = detecção automática
+  navItems?: NavItemConfig[]; // navegação v2 (âncoras + links), quando configurada
   about: AboutSection;
   googleUrl: string;
   published: boolean;
@@ -220,8 +262,8 @@ export interface Theme {
 
 export type BlockType =
   | 'profile' | 'cta' | 'buttons' | 'text' | 'image' | 'gallery'
-  | 'products' | 'services' | 'booking' | 'testimonials' | 'faq'
-  | 'location' | 'instagram' | 'whatsapp' | 'quote' | 'concierge';
+  | 'products' | 'services' | 'professionals' | 'highlights' | 'booking'
+  | 'testimonials' | 'faq' | 'location' | 'instagram' | 'whatsapp' | 'quote' | 'concierge';
 
 export interface Block {
   id: ID;
@@ -291,7 +333,11 @@ export interface Service {
   description: string;
   image: string;
   price: number; // centavos
-  durationMin: number;
+  // Visibilidade pública do preço. true (padrão/legado) = a página pública
+  // mostra o preço. false = o preço continua salvo e visível internamente
+  // (painel, agenda, CRM), mas NÃO aparece na página pública nem no assistente.
+  showPrice?: boolean;
+  durationMin: number; // interna: agenda/conflitos/buffer (nunca pública)
   professionalIds: string[]; // [] = todos os profissionais
   active: boolean;
   featured: boolean;
@@ -345,7 +391,7 @@ export interface StatusChange {
   at: string;
   from: string;
   to: string;
-  by: 'owner' | 'customer' | 'system' | 'master';
+  by: 'owner' | 'customer' | 'system' | 'master' | 'agent'; // 'agent' = assistente
   note?: string; // ex: "Reagendado de 09/09 14:00 para 16/09 15:30"
 }
 
@@ -587,6 +633,9 @@ export interface Conversation {
   lastMessageAt: string;
   lastMessagePreview: string;
   createdAt: string;
+  // Contexto do assistente nesta conversa (fluxo de agendamento, dados já
+  // coletados do cliente etc.). Opcional e aditivo — conversas antigas não têm.
+  context?: Record<string, any>;
 }
 
 export interface Message {
@@ -604,8 +653,35 @@ export interface Message {
 // ═══════════════════════════════════════════════════════════════
 // CAMPANHAS (marketing) — SOMENTE contatos com marketingOptIn
 // ═══════════════════════════════════════════════════════════════
-export type CampaignStatus = 'draft' | 'ready' | 'sent' | 'partial' | 'failed';
-export const VALID_CAMPAIGN_STATUSES: CampaignStatus[] = ['draft', 'ready', 'sent', 'partial', 'failed'];
+// Ciclo operacional: draft → ready → sending → sent/partial/failed;
+// draft/ready/sending podem ser CANCELADOS. Enviadas (sent/partial/failed)
+// são HISTÓRICO: nunca editáveis nem apagáveis (auditoria preservada).
+export type CampaignStatus = 'draft' | 'ready' | 'sending' | 'sent' | 'partial' | 'failed' | 'cancelled';
+export const VALID_CAMPAIGN_STATUSES: CampaignStatus[] = [
+  'draft', 'ready', 'sending', 'sent', 'partial', 'failed', 'cancelled',
+];
+
+/** Estados em que a campanha ainda pode ser EDITADA (rascunho vivo). */
+export const CAMPAIGN_EDITABLE: CampaignStatus[] = ['draft', 'ready', 'cancelled'];
+/** Estados em que a campanha pode ser EXCLUÍDA (não destrói auditoria). */
+export const CAMPAIGN_DELETABLE: CampaignStatus[] = ['draft'];
+/** Estados em que a campanha pode ser CANCELADA (ainda não fez disparo real). */
+export const CAMPAIGN_CANCELLABLE: CampaignStatus[] = ['draft', 'ready', 'sending'];
+
+export function campaignStatusDef(s: CampaignStatus): {
+  label: string; editable: boolean; deletable: boolean; cancellable: boolean; tone: string;
+} {
+  const map: Record<CampaignStatus, { label: string; editable: boolean; deletable: boolean; cancellable: boolean; tone: string }> = {
+    draft: { label: 'Rascunho', editable: true, deletable: true, cancellable: true, tone: 'zinc' },
+    ready: { label: 'Pronta', editable: true, deletable: false, cancellable: true, tone: 'amber' },
+    sending: { label: 'Enviando', editable: false, deletable: false, cancellable: true, tone: 'blue' },
+    sent: { label: 'Enviada', editable: false, deletable: false, cancellable: false, tone: 'emerald' },
+    partial: { label: 'Parcial', editable: false, deletable: false, cancellable: false, tone: 'orange' },
+    failed: { label: 'Falhou', editable: false, deletable: false, cancellable: false, tone: 'red' },
+    cancelled: { label: 'Cancelada', editable: true, deletable: false, cancellable: true, tone: 'zinc' },
+  };
+  return map[s] || map.draft;
+}
 
 export type CampaignSegment =
   | 'all_optin' | 'new' | 'old' | 'booked' | 'never_booked'
@@ -680,6 +756,7 @@ export type AuditAction =
   | 'member.created' | 'member.updated' | 'member.removed'
   | 'feature.updated' | 'module.updated'
   | 'campaign.created' | 'campaign.ready' | 'campaign.sent'
+  | 'campaign.cancelled' | 'campaign.deleted'
   | 'whatsapp.connect_requested' | 'whatsapp.webhook_received'
   | 'agent.updated';
 
