@@ -77,3 +77,43 @@ describe('migração e navegação multiunidade', () => {
     expect(requiresActiveBusiness('/agenda')).toBe(true);
   });
 });
+
+import { duplicatedBusiness, duplicateUnitStructure } from '../unit-duplication';
+import { hasMultipleUnits, unitsInSameOrganization } from '../organization';
+
+describe('conceito definitivo Organization → Unit', () => {
+  it('admin com memberships explícitos acessa A1/A2, admin de B não acessa A', () => {
+    const db=emptyDB(), ownerA=user('owner-a'), adminA=user('admin-a'), adminB=user('admin-b');
+    db.users.push(ownerA,adminA,adminB); db.organizations.push(org('oa',ownerA.id),org('ob','owner-b'));
+    db.businesses.push(unit('a1',ownerA.id,'oa'),unit('a2',ownerA.id,'oa'),unit('b1','owner-b','ob'));
+    for (const id of ['a1','a2']) db.members.push({id:`m-${id}`,businessId:id,userId:adminA.id,role:'ADMIN',permissions:{},active:true,note:'',invitedBy:ownerA.id,createdAt:'',updatedAt:''});
+    db.members.push({id:'m-b',businessId:'b1',userId:adminB.id,role:'ADMIN',permissions:{},active:true,note:'',invitedBy:'owner-b',createdAt:'',updatedAt:''});
+    expect(accessibleBusinesses(db,adminA).map(x=>x.id)).toEqual(['a1','a2']);
+    expect(resolveAccess(db,adminB,'a1')).toBeNull();
+    expect(resolveAccess(db,adminB,'a2')).toBeNull();
+  });
+
+  it('distingue experiência de uma unidade e múltiplas unidades na organização atual', () => {
+    const a1=unit('a1','o','oa'), a2=unit('a2','o','oa'), b1=unit('b1','o','ob');
+    expect(hasMultipleUnits(a1,[a1,b1])).toBe(false);
+    expect(hasMultipleUnits(a1,[a1,a2,b1])).toBe(true);
+    expect(unitsInSameOrganization(a1,[a1,a2,b1]).map(x=>x.id)).toEqual(['a1','a2']);
+  });
+
+  it('duplicação recria referências estruturais sem copiar operação', () => {
+    const db=emptyDB(), source=unit('a1','o','oa');
+    Object.assign(source,{description:'Marca',logo:'logo',cover:'cover',niche:'saude',features:{},socials:{},hours:{},paymentMethods:['pix'],booking:{teamMode:'solo',leadMin:30,cancelUntilMin:120,horizonDays:60,bufferMin:0},nav:[],navCustom:false,about:{title:'Sobre',text:'Texto',image:'',enabled:true},phone:'',whatsapp:'',email:'',instagram:'',tiktok:'',mapsUrl:'',pixKey:'',googleUrl:'',googlePlaceId:'',googleApiKey:'',deliveryFee:0,minOrder:0,createdAt:'',updatedAt:''});
+    db.businesses.push(source);
+    db.categories.push({id:'cat-old',businessId:'a1',kind:'service',name:'Clínica',order:0,active:true});
+    db.services.push({id:'svc-old',businessId:'a1',categoryId:'cat-old',name:'Consulta',description:'',image:'',price:100,durationMin:30,professionalIds:['pro-old'],active:true,featured:false,bookable:true,questions:[]});
+    db.pages.push({id:'page-old',businessId:'a1',theme:{} as any,blocks:[{id:'block-old',type:'faq',order:0,enabled:true,settings:{items:['FAQ']}}],updatedAt:''});
+    db.contacts.push({id:'contact',businessId:'a1'} as any); db.bookings.push({id:'booking',businessId:'a1'} as any); db.leads.push({id:'lead',businessId:'a1'} as any);
+    const target=duplicatedBusiness(source,{id:'a2',name:'Unidade 2',slug:'unidade-2',address:'Rua 2',ownerId:'o',now:'now'});
+    db.businesses.push(target); duplicateUnitStructure(db,source,target);
+    expect(target.organizationId).toBe('oa');
+    const copiedService=db.services.find(x=>x.businessId==='a2')!;
+    expect(copiedService.id).not.toBe('svc-old'); expect(copiedService.categoryId).not.toBe('cat-old'); expect(copiedService.professionalIds).toEqual([]);
+    expect(db.pages.find(x=>x.businessId==='a2')?.blocks[0].id).not.toBe('block-old');
+    for (const rows of [db.contacts,db.bookings,db.leads]) expect(rows.filter((x:any)=>x.businessId==='a2')).toEqual([]);
+  });
+});

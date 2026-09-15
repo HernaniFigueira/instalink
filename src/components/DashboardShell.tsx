@@ -12,6 +12,7 @@ import {
 import { isSessionExpired } from '@/lib/http';
 import type { BusinessMode, FeatureId, PermissionId } from '@/lib/types';
 import { requiresActiveBusiness } from '@/lib/business-context';
+import { unitsInSameOrganization } from '@/lib/organization';
 
 interface Biz {
   id: string;
@@ -186,6 +187,8 @@ export function DashboardShell({ children }: { children: React.ReactNode }) {
   }
 
   const business = businesses.find((b) => b.id === params.get('b')) || businesses[0];
+  const organizationUnits = unitsInSameOrganization(business, businesses);
+  const otherBusinesses = businesses.filter((x) => x.organizationId !== business?.organizationId);
   const modes = business?.modes || [];
   const features = business?.features || {};
   const permissions: Partial<Record<PermissionId, boolean>> = business?.permissions || {};
@@ -250,8 +253,9 @@ export function DashboardShell({ children }: { children: React.ReactNode }) {
           <div className="px-3 py-2 border-b border-zinc-100">
             <select value={business?.id || ''} onChange={(e) => switchBiz(e.target.value)} aria-label="Trocar de negócio"
               className="w-full bg-zinc-50 border border-zinc-200 text-xs font-medium rounded-md px-2 py-1.5">
-              <option value="__overview">Visão geral</option>
-              {businesses.map((x) => <option key={x.id} value={x.id}>{x.name}</option>)}
+              <option value="__overview">Visão geral da organização</option>
+              <optgroup label="Unidades desta organização">{organizationUnits.map((x) => <option key={x.id} value={x.id}>{x.name}</option>)}</optgroup>
+              {otherBusinesses.length > 0 && <optgroup label="Outras organizações">{otherBusinesses.map((x) => <option key={x.id} value={x.id}>{x.name}</option>)}</optgroup>}
               <option value="__add">+ Adicionar unidade</option>
             </select>
           </div>
@@ -324,8 +328,9 @@ export function DashboardShell({ children }: { children: React.ReactNode }) {
             {businesses.length > 1 ? (
               <select value={business?.id || ''} onChange={(e) => switchBiz(e.target.value)} aria-label="Trocar de negócio"
                 className="bg-zinc-50 border border-zinc-200 text-xs font-semibold rounded-md px-2 py-1.5 max-w-[160px] truncate">
-                <option value="__overview">Visão geral</option>
-              {businesses.map((x) => <option key={x.id} value={x.id}>{x.name}</option>)}
+                <option value="__overview">Visão geral da organização</option>
+              <optgroup label="Unidades desta organização">{organizationUnits.map((x) => <option key={x.id} value={x.id}>{x.name}</option>)}</optgroup>
+              {otherBusinesses.length > 0 && <optgroup label="Outras organizações">{otherBusinesses.map((x) => <option key={x.id} value={x.id}>{x.name}</option>)}</optgroup>}
               <option value="__add">+ Adicionar unidade</option>
               </select>
             ) : (

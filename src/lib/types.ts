@@ -151,6 +151,9 @@ export interface Organization {
   name: string;
   ownerId: ID;
   metadata: Record<string, unknown>;
+  // Ponte para uma futura presença pública principal da marca. Quando vazio,
+  // cada unidade continua usando sua página atual sem mudança de UX.
+  publicBusinessId?: ID;
   createdAt: string;
   updatedAt: string;
 }

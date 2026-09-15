@@ -45,3 +45,11 @@ Data: 2026-09-15. Escopo auditado: modelos em `src/lib/types.ts`, persistência 
 - `OrganizationMember` estabelece a base OWNER/ADMIN; não foi criada UI ampla de gestão organizacional/RBAC, conforme escopo.
 - A visão consolidada usa receita **prevista** por preço de serviço e exclui cancelamento/no-show; não a apresenta como caixa recebido.
 - P1–P5 não fazem parte desta entrega P0 inicial. A página pública não foi alterada.
+
+## Conceito definitivo Organization → Business
+
+`Organization` representa marca/grupo/operação principal; `Business` é sempre a fronteira operacional de uma unidade. Empresas legadas independentes continuam recebendo organizações independentes. Uma segunda unidade só entra na mesma organização por ação explícita.
+
+A propriedade opcional `Organization.publicBusinessId` funciona como ponte compatível para uma futura presença pública principal: ela poderá apontar para a configuração pública base sem alterar agora as páginas por unidade. O futuro fluxo de seleção deverá escolher um `Business` antes de consultar profissionais, disponibilidade e agenda; nenhum dado operacional passa a pertencer à Organization.
+
+A duplicação estrutural está preparada por `unit-duplication.ts` e `POST /api/businesses/:id/duplicate`. A whitelist copia identidade, tema/blocos, conteúdo institucional e serviços, recriando IDs e referências. Profissionais, disponibilidade, clientes, leads, agenda, histórico, eventos, campanhas, resultados e segredos não são copiados. A UX completa desta ação permanece para etapa posterior.
