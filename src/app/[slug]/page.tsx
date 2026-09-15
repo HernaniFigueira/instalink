@@ -13,8 +13,9 @@ import { CtaButton, QuoteTrigger, ServiceAgendarButton, SheetHost, Stars } from 
 import { ProductShowcase } from '@/components/public/showcase';
 import { FaqAccordion } from '@/components/public/FaqAccordion';
 import { visibleFaqItems } from '@/lib/faq';
-import { NAV_ORDER, aboutVisible, publicNavIds } from '@/lib/nav';
+import { availableSocialLinks, resolvedNavItems } from '@/lib/nav';
 import { agentActive, renderGreeting } from '@/lib/agent';
+import { priceVisible } from '@/lib/pricing';
 import {
   canBook as canBookPublic, isFeatureEnabled, productsVisible, servicesVisible, visibleBlocks,
   whatsappVisible,
@@ -67,38 +68,38 @@ export default async function PublicPage({ params }: { params: { slug: string } 
   const blocks = visibleBlocks(business, allBlocks);
   const profileIdx = blocks.findIndex((b) => b.type === 'profile');
 
-  // ── Navegação (menu configurável) + seção Sobre ──
-  const aboutOk = isFeatureEnabled(business, 'about') && aboutVisible(business.about);
+  // ── Navegação (menu configurável v2: âncoras + links externos) ──
+  const aboutOk = isFeatureEnabled(business, 'about')
+    && !!(business.about?.enabled && (business.about.title || business.about.text || business.about.image));
   const canBook = canBookPublic(business, services);
   const faqBlock = blocks.find((b) => b.type === 'faq');
   const hasFaq = !!faqBlock && visibleFaqItems(faqBlock.settings?.items).length > 0;
   const testiBlock = blocks.find((b) => b.type === 'testimonials');
   const testiItems: Array<{ name?: string; text?: string }> = Array.isArray(testiBlock?.settings?.items) ? testiBlock!.settings.items : [];
-  const hasReviews = reviews.length > 0 || testiItems.some((t) => t?.text);
   const showWhatsapp = whatsappVisible(business);
-  const instaUrl = business.instagram ? `https://instagram.com/${business.instagram.replace('@', '')}` : '';
-  const tiktokUrl = business.tiktok ? `https://tiktok.com/@${business.tiktok.replace('@', '')}` : '';
+  const socialLinks = availableSocialLinks(business);
 
-  const available: Record<string, NavActionItem> = {};
-  if (aboutOk) available.about = { id: 'about', label: 'Sobre a empresa', icon: 'store', action: { kind: 'scroll', target: '#sobre' } };
-  if (blocks.some((b) => b.type === 'services') && servicesVisible(business, services)) available.services = { id: 'services', label: 'Serviços', icon: 'scissors', action: { kind: 'scroll', target: '#servicos' } };
-  if (hasReviews) available.reviews = { id: 'reviews', label: 'Avaliações', icon: 'star', action: { kind: 'scroll', target: '#avaliacoes' } };
-  if (hasFaq) available.faq = { id: 'faq', label: 'Dúvidas frequentes', icon: 'chat', action: { kind: 'scroll', target: '#faq' } };
-  if (isFeatureEnabled(business, 'location') && business.mapsUrl) {
-    available.directions = { id: 'directions', label: 'Como chegar', icon: 'pin', action: { kind: 'link', url: business.mapsUrl } };
-    if (blocks.some((b) => b.type === 'location')) {
-      available.contact = { id: 'contact', label: 'Contato', icon: 'pin', action: { kind: 'scroll', target: '#contato' } };
-    }
-  }
-  if (instaUrl) available.instagram = { id: 'instagram', label: 'Instagram', icon: 'instagram', action: { kind: 'link', url: instaUrl } };
-  if (tiktokUrl) available.tiktok = { id: 'tiktok', label: 'TikTok', icon: 'music', action: { kind: 'link', url: tiktokUrl } };
-
-  // Explicito (dono configurou) ∩ disponível — ordem canônica preservada.
-  const navIds = publicNavIds({
-    business, blocks: allBlocks, services, products,
-    reviews, hasFaq, hasTestimonialItems: testiItems.some((t) => t?.text),
-  });
-  const navItems = NAV_ORDER.filter((n) => navIds.includes(n.id) && available[n.id]).map((n) => available[n.id]);
+  // Resolução ÚNICA (lib/nav.ts): configuração do lojista (nome/tipo/destino/
+  // ordem/ativo) ∩ o que existe de verdade na página — âncora de seção vazia
+  // ou rede não configurada não entra no menu.
+  const NAV_ICON: Record<string, string> = {
+    about: 'store', services: 'service', highlights: 'star', professionals: 'users',
+    gallery: 'image', reviews: 'star', faq: 'chat', contact: 'pin', directions: 'pin',
+    instagram: 'instagram', tiktok: 'music', facebook: 'facebook', youtube: 'youtube',
+    linkedin: 'linkedin', site: 'external',
+  };
+  const navItems: NavActionItem[] = resolvedNavItems({
+    business, blocks: allBlocks, services, products, reviews,
+    hasFaq, hasTestimonialItems: testiItems.some((t) => t?.text),
+    professionals,
+  }).map((item) => ({
+    id: item.id,
+    label: item.label,
+    icon: NAV_ICON[item.id] || 'pin',
+    action: item.type === 'anchor'
+      ? { kind: 'scroll', target: item.target }
+      : { kind: 'link', url: item.target },
+  }));
 
   // ── Agente de atendimento (configuração persistida da empresa) ──
   const agent = data.agent;
@@ -124,15 +125,24 @@ export default async function PublicPage({ params }: { params: { slug: string } 
               business={business}
               agent={agentOn ? { name: agent.name, greeting: renderGreeting(agent, business.name), enabled: agent.enabled } : null}
               catalog={{ categories, products, options, optionValues, services, serviceCategories, professionals, reviews }}
+              extras={{ canBook, socialLinks, showWhatsapp }}
             />
             {i === profileIdx && aboutOk && <AboutView about={business.about} />}
           </Fragment>
         ))}
         {profileIdx < 0 && aboutOk && <AboutView about={business.about} />}
 
-        <footer className="text-center pt-2">
-          <a href="/" className="il-muted text-xs font-semibold hover:underline">
-            Feito com InstaLink.app
+        {/* CTA final — agendar continua a um toque do fim da página. */}
+        {canBook && (
+          <section className="pt-2">
+            <CtaButton business={business} label="Agendar atendimento" target="booking" />
+          </section>
+        )}
+
+        {/* White label: a marca do NEGÓCIO manda; o InstaLink fica discreto. */}
+        <footer className="text-center pt-6 pb-1">
+          <a href="/" className="il-muted text-[10px] font-medium opacity-70 hover:opacity-100 hover:underline">
+            Feito com InstaLink
           </a>
         </footer>
       </div>
@@ -176,13 +186,24 @@ function mapsEmbedSrc(mapsUrl: string, address: string): string {
   return `https://www.google.com/maps?q=${encodeURIComponent(fallback)}&output=embed`;
 }
 
-function BlockView({ block, business, agent, catalog }: {
+// Ícones públicos por rede/seção (hero e menu).
+const NAV_ICON_PUBLIC: Record<string, string> = {
+  instagram: 'instagram', tiktok: 'music', facebook: 'facebook', youtube: 'youtube',
+  linkedin: 'linkedin', site: 'external',
+};
+
+function BlockView({ block, business, agent, catalog, extras }: {
   block: Block;
   business: PublicBusiness;
   agent: { name: string; greeting: string; enabled: boolean } | null;
   catalog: {
     categories: any[]; products: any[]; options: any[]; optionValues: any[];
     services: any[]; serviceCategories: any[]; professionals: any[]; reviews: Review[];
+  };
+  extras: {
+    canBook: boolean;
+    socialLinks: Array<{ id: string; label: string; url: string }>;
+    showWhatsapp: boolean;
   };
 }) {
   const s = block.settings || {};
@@ -211,27 +232,32 @@ function BlockView({ block, business, agent, catalog }: {
               <Icon n="pin" size={13} /> {business.address.split(',')[0]}
             </p>
           )}
-          {(business.instagram || business.tiktok || business.whatsapp) && (
-            <div className="mt-3 flex items-center justify-center gap-2.5">
-              {business.instagram && (
-                <a href={`https://instagram.com/${business.instagram.replace('@', '')}`} target="_blank" rel="noreferrer"
-                  aria-label="Instagram" title="Instagram"
+          {(extras.socialLinks.length > 0 || extras.showWhatsapp) && (
+            <div className="mt-3 flex items-center justify-center flex-wrap gap-2.5">
+              {extras.socialLinks.map((l) => (
+                <a key={l.id} href={l.url} target="_blank" rel="noreferrer"
+                  aria-label={l.label} title={l.label}
                   className="il-card w-10 h-10 flex items-center justify-center il-muted">
-                  <Icon n="instagram" size={18} />
+                  <Icon n={NAV_ICON_PUBLIC[l.id] || 'external'} size={18} />
                 </a>
-              )}
-              {business.tiktok && (
-                <a href={`https://tiktok.com/@${business.tiktok.replace('@', '')}`} target="_blank" rel="noreferrer"
-                  aria-label="TikTok" title="TikTok"
-                  className="il-card w-10 h-10 flex items-center justify-center il-muted">
-                  <Icon n="music" size={18} />
-                </a>
-              )}
-              {whatsappVisible(business) && (
+              ))}
+              {extras.showWhatsapp && (
                 <a href={waLink(business.whatsapp, `Olá! Vim pelo site da ${business.name}.`)} target="_blank" rel="noreferrer"
                   aria-label="WhatsApp" title="WhatsApp"
                   className="il-card w-10 h-10 flex items-center justify-center il-muted">
-                  <Icon n="phone" size={18} />
+                  <Icon n="whatsapp" size={18} />
+                </a>
+              )}
+            </div>
+          )}
+          {/* CTAs do hero: agendar (centro do produto) + WhatsApp — módulo manda. */}
+          {(extras.canBook || extras.showWhatsapp) && (
+            <div className="mt-4 flex items-center gap-2.5">
+              {extras.canBook && <div className="flex-1"><CtaButton business={business} label="Agendar" target="booking" /></div>}
+              {extras.showWhatsapp && (
+                <a href={waLink(business.whatsapp, `Olá! Vim pelo site da ${business.name}.`)} target="_blank" rel="noreferrer"
+                  className="il-card flex-1 text-center font-bold py-3 text-[15px] inline-flex items-center justify-center gap-2">
+                  <Icon n="whatsapp" size={17} /> WhatsApp
                 </a>
               )}
             </div>
@@ -274,11 +300,60 @@ function BlockView({ block, business, agent, catalog }: {
       const imgs: string[] = Array.isArray(s.images) ? s.images.filter(Boolean) : [];
       if (imgs.length === 0) return null;
       return (
-        <section>
+        <section id="espaco" className="scroll-mt-20">
           {s.title && <h2 className="text-xl font-extrabold tracking-tight mb-3">{s.title}</h2>}
           <div className="grid grid-cols-2 gap-2.5">
             {imgs.slice(0, 6).map((url, i) => (
               <img key={i} src={url} alt={business.name} loading="lazy" className="w-full h-36 object-cover" style={{ borderRadius: 'var(--il-radius)' }} />
+            ))}
+          </div>
+        </section>
+      );
+    }
+    case 'professionals': {
+      // Profissionais ATIVOS do negócio — quem realiza os atendimentos.
+      const list = (catalog.professionals || []).filter((p: any) => p.active !== false);
+      if (list.length === 0) return null;
+      return (
+        <section id="profissionais" className="scroll-mt-20">
+          <h2 className="text-xl font-extrabold tracking-tight mb-3">{s.title || 'Nossa equipe'}</h2>
+          <div className="flex gap-2.5 overflow-x-auto pb-1 snap-x -mx-1 px-1">
+            {list.map((p: any) => (
+              <figure key={p.id} className="il-card w-36 shrink-0 snap-start p-4 flex flex-col items-center text-center gap-2">
+                <div className="w-16 h-16 rounded-full overflow-hidden bg-zinc-100 flex items-center justify-center font-extrabold text-lg"
+                  style={{ background: 'color-mix(in srgb, var(--il-primary) 12%, var(--il-surface))', color: 'var(--il-primary)' }}>
+                  {p.photo ? <img src={p.photo} alt={p.name} loading="lazy" className="w-full h-full object-cover" /> : p.name.slice(0, 1).toUpperCase()}
+                </div>
+                <figcaption className="min-w-0">
+                  <p className="font-bold text-sm leading-tight truncate">{p.name}</p>
+                  {p.role && <p className="il-muted text-xs mt-0.5 leading-tight">{p.role}</p>}
+                </figcaption>
+              </figure>
+            ))}
+          </div>
+        </section>
+      );
+    }
+    case 'highlights': {
+      // Diferenciais — bloco EDITÁVEL (título + itens). Vazio não renderiza.
+      const items: Array<{ icon?: string; title?: string; text?: string }> = Array.isArray(s.items) ? s.items : [];
+      const filled = items.filter((x) => String(x?.title || '').trim());
+      if (filled.length === 0) return null;
+      return (
+        <section id="diferenciais" className="scroll-mt-20">
+          <h2 className="text-xl font-extrabold tracking-tight mb-3">{s.title || 'Por que escolher a gente'}</h2>
+          <div className="space-y-2.5">
+            {filled.map((x, i) => (
+              <div key={i} className="il-card p-4 flex items-start gap-3">
+                <span className="w-9 h-9 rounded-xl shrink-0 flex items-center justify-center"
+                  style={{ background: 'color-mix(in srgb, var(--il-primary) 12%, transparent)', color: 'var(--il-primary)' }}>
+                  <Icon n={x.icon || 'checkCircle'} size={18} />
+                </span>
+                <div className="min-w-0">
+                  <p className="font-bold text-sm leading-tight">{x.title}</p>
+                  {x.text && <p className="il-muted text-xs mt-1 leading-snug">{x.text}</p>}
+                </div>
+              </div>
             ))}
           </div>
         </section>
@@ -311,10 +386,10 @@ function BlockView({ block, business, agent, catalog }: {
           <div className="min-w-0 flex-1">
             <p className="font-bold flex items-center gap-1.5">{sv.name} {sv.featured && <Icon n="star" size={13} className="shrink-0 text-amber-500" />}</p>
             {sv.description && <p className="il-muted text-xs truncate">{sv.description}</p>}
-            {/* Duração não é pública: o card mostra nome, descrição e preço. */}
+            {/* Duração não é pública; preço só quando o serviço libera (showPrice). */}
           </div>
           <div className={wide ? 'flex items-center justify-between gap-2 w-full' : 'shrink-0 flex flex-col items-end gap-1.5'}>
-            <p className="font-extrabold il-accent">{money(sv.price)}</p>
+            {priceVisible(sv) && <p className="font-extrabold il-accent">{money(sv.price)}</p>}
             {canBook && sv.bookable !== false && (
               <ServiceAgendarButton serviceId={sv.id} serviceName={sv.name} />
             )}

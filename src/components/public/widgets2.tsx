@@ -1,5 +1,5 @@
 'use client';
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { openSheet, gcalLink } from './sheet-bus';
 import { useCustomerForm } from './use-customer-form';
 import { Icon } from '@/components/icons';
@@ -43,6 +43,9 @@ export function BookingIsland({ business, services, professionals, title, initia
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
   const [done, setDone] = useState(false);
+  // CONSENTIMENTO EXPLÍCITO (nunca presumido): caixa começa DESMARCADA —
+  // agendar/cadastrar/conversar NÃO autoriza marketing por si só.
+  const [marketingOptIn, setMarketingOptIn] = useState(false);
   const form = useCustomerForm();
 
   const service = bookable.find((s) => s.id === serviceId);
@@ -136,7 +139,7 @@ export function BookingIsland({ business, services, professionals, title, initia
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(rescheduleId
           ? { id: rescheduleId, date, time, serviceId, note, answers }
-          : { businessId: business.id, serviceId, date, time, note, answers }),
+          : { businessId: business.id, serviceId, date, time, note, answers, marketingOptIn }),
       });
       const data = await res.json();
       if (!res.ok) {
@@ -320,6 +323,16 @@ export function BookingIsland({ business, services, professionals, title, initia
                     <input value={answers[i] || ''} onChange={(e) => setAnswers((v) => { const n = [...v]; n[i] = e.target.value; return n; })}
                       placeholder="Sua resposta" maxLength={300} className="il-card w-full text-sm px-4 py-3 outline-none mt-1" /></label>
                 ))}
+                {!rescheduleId && (
+                  <label className="il-card px-4 py-3 flex items-start gap-2.5 cursor-pointer select-none">
+                    <input type="checkbox" checked={marketingOptIn} onChange={(e) => setMarketingOptIn(e.target.checked)}
+                      className="mt-0.5 w-4 h-4 accent-[var(--il-primary)] shrink-0" />
+                    <span className="text-xs leading-snug">
+                      <span className="font-bold">Aceito receber informações, novidades e promoções pelo WhatsApp.</span>
+                      <span className="il-muted block mt-0.5">Opcional — pode agendar sem marcar. Você pode mudar quando quiser.</span>
+                    </span>
+                  </label>
+                )}
               </>
             )}
           </div>
@@ -413,7 +426,7 @@ export function QuoteIsland({ businessId, title, bare }: { businessId: string; t
 }
 
 // ── CONCIERGE IA ─────────────────────────────────────────
-interface Msg { from: 'bot' | 'user'; text: string; actions?: Array<{ label: string; target: string }> }
+interface Msg { from: 'bot' | 'user'; text: string; actions?: Array<{ label: string; target: string; payload?: Record<string, any> }> }
 
 // A configuração vem da EMPRESA (BusinessAgent): nome, saudação, tom,
 // objetivos e handoff — o assistente não é mais um botão vazio.
@@ -427,6 +440,8 @@ export function ConciergeIsland({ business, agent, title }: {
   const [msgs, setMsgs] = useState<Msg[]>([]);
   const [input, setInput] = useState('');
   const [loading, setLoading] = useState(false);
+  // Estado do fluxo de agendamento (ecoado pela API — assistente × agenda).
+  const flowRef = useRef<Record<string, any> | null>(null);
 
   function start() {
     setOpen(true);
@@ -444,6 +459,26 @@ export function ConciergeIsland({ business, agent, title }: {
     }
   }
 
+  // Ação de fluxo (payload do botão): a API decide o próximo passo com o
+  // MESMO motor da agenda — nada é criado no cliente.
+  async function ask(payload: Record<string, any>) {
+    setLoading(true);
+    try {
+      const res = await fetch('/api/concierge', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ businessId: business.id, message: '', action: payload, flow: flowRef.current }),
+      });
+      const d = await res.json();
+      flowRef.current = d.flow || null;
+      if (d.reply) setMsgs((m) => [...m, { from: 'bot', text: d.reply, actions: d.actions }]);
+    } catch {
+      setMsgs((m) => [...m, { from: 'bot', text: 'Tive um probleminha. Tente de novo ou fale no WhatsApp!', actions: [{ label: 'Falar no WhatsApp', target: 'whatsapp' }] }]);
+    } finally {
+      setLoading(false);
+    }
+  }
+
   async function send(text: string) {
     const clean = text.trim();
     if (!clean || loading) return;
@@ -454,9 +489,10 @@ export function ConciergeIsland({ business, agent, title }: {
       const res = await fetch('/api/concierge', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ businessId: business.id, message: clean }),
+        body: JSON.stringify({ businessId: business.id, message: clean, flow: flowRef.current }),
       });
       const d = await res.json();
+      flowRef.current = d.flow || null;
       setMsgs((m) => [...m, { from: 'bot', text: d.reply, actions: d.actions }]);
     } catch {
       setMsgs((m) => [...m, { from: 'bot', text: 'Tive um probleminha. Tente de novo ou fale no WhatsApp!', actions: [{ label: 'Falar no WhatsApp', target: 'whatsapp' }] }]);
@@ -465,7 +501,11 @@ export function ConciergeIsland({ business, agent, title }: {
     }
   }
 
-  function go(target: string) {
+  function go(target: string, payload?: Record<string, any>) {
+    if (target === 'flow' && payload) {
+      ask(payload);
+      return;
+    }
     if (target === 'whatsapp') {
       trackEvent(business.id, 'whatsapp_click', { from: 'concierge' });
       window.open(waLink(business.whatsapp, 'Olá! Vim pelo site.'), '_blank');
@@ -514,7 +554,7 @@ export function ConciergeIsland({ business, agent, title }: {
                     {m.actions && m.actions.length > 0 && (
                       <span className="block mt-2 space-y-1.5">
                         {m.actions.map((a) => (
-                          <button key={a.label} onClick={() => go(a.target)}
+                          <button key={a.label} onClick={() => go(a.target, (a as any).payload)}
                             className="il-btn block w-full text-xs font-extrabold px-3 py-2">
                             {a.label}
                           </button>
