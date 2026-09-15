@@ -54,6 +54,45 @@ const PX_PER_HOUR = 52;
 const GUTTER_W = 56;
 const COL_MIN = 148;
 const HEADER_H = 36;
+/** Folga mínima entre o fim da grade e o fim da tela (não é a causa do
+ *  scroll, só respiro visual — a página continua rolando normalmente). */
+const VIEWPORT_BOTTOM_PAD = 16;
+
+// Espessura REAL da barra de rolagem horizontal (0 quando o SO usa barra
+// overlay). A grade usa a classe `.ws-scroll` (6px custom no Chromium); o
+// probe usa a MESMA classe para medir o espaço que a barra realmente consome
+// — assim a reserva abaixo nunca "chuta" um valor.
+let _hbarCache: number | null = null;
+function horizontalScrollbarH(): number {
+  if (_hbarCache !== null) return _hbarCache;
+  if (typeof document === 'undefined') { _hbarCache = 6; return _hbarCache; }
+  const probe = document.createElement('div');
+  probe.className = 'ws-scroll';
+  probe.style.cssText =
+    'position:absolute;left:-9999px;top:-9999px;width:48px;height:48px;overflow:scroll;visibility:hidden;';
+  probe.innerHTML = '<div style="width:96px;height:96px"></div>';
+  document.body.appendChild(probe);
+  _hbarCache = Math.max(0, probe.offsetHeight - probe.clientHeight);
+  document.body.removeChild(probe);
+  return _hbarCache;
+}
+
+// ResizeObserver com fallback silencioso (NoopRO): o gauge da largura é o
+// próprio scroller — recolher da sidebar / redimensionar muda o content-box
+// do scroller e dispara o observer. NUNCA lança.
+type RO = new (cb: () => void) => { observe(el: Element): void; disconnect(): void };
+let ROClass: RO | null | undefined;
+function lightRO(): RO {
+  if (ROClass === undefined) {
+    ROClass = (typeof ResizeObserver !== 'undefined' ? ResizeObserver : null) as unknown as RO | null;
+  }
+  return (ROClass || NoopRO) as RO;
+}
+const NoopRO = (class {
+  observe() { /* noop */ }
+  disconnect() { /* noop */ }
+}) as unknown as RO;
+let scrollerResizeObserver: RO | null = null;
 /** Tolerância para "encaixar" o ponteiro no horário livre mais próximo. */
 const DROP_TOLERANCE_MIN = 75;
 
@@ -105,8 +144,9 @@ interface HoverTarget {
 }
 
 // ── Coluna da grade (memoizada: o drag não re-renderiza a grade inteira) ──
-const GridColumn = memo(function GridColumn({ column, variant, highlight, onPressStart, onPressMove, onPressEnd, onPressCancel, onBlockClick, gridHeight, hours }: {
+const GridColumn = memo(function GridColumn({ column, basisPct, variant, highlight, onPressStart, onPressMove, onPressEnd, onPressCancel, onBlockClick, gridHeight, hours }: {
   column: ColumnVM;
+  basisPct: number;
   variant: 'day' | 'week';
   highlight: HighlightVM | null;
   onPressStart: (id: string, e: React.PointerEvent) => void;
@@ -120,7 +160,11 @@ const GridColumn = memo(function GridColumn({ column, variant, highlight, onPres
   return (
     // border-b = linha final da grade. As linhas internas param em
     // hours-1: NADA ultrapassa gridHeight (zero scroll fantasma).
-    <div className="relative shrink-0 border-r border-b border-zinc-100 last:border-r-0" style={{ minWidth: COL_MIN, flex: 1, height: gridHeight }}>
+    // Largura em % exata (N colunas = 100%/N + min-width) com box-sizing
+    // border-box: larguras inteiras determinísticas — nenhuma divergência
+    // de subpixel contra o minWidth calculado em JS, nenhum resíduo que
+    // fabrique overflow nas bordas.
+    <div className="relative shrink-0 border-r border-b border-zinc-100 last:border-r-0" style={{ minWidth: COL_MIN, width: `${basisPct}%`, height: gridHeight }}>
       {Array.from({ length: Math.max(0, hours - 1) }, (_, idx) => idx + 1).map((i) => (
         <span key={i} className="absolute left-0 right-0 border-t border-zinc-100" style={{ top: i * PX_PER_HOUR }} />
       ))}
@@ -515,21 +559,68 @@ export default function AgendaPage() {
   //   • não cabe      → scroll SOMENTE interno da grade.
   // Nenhum min-height arbitrário força overflow; nada é "escondido".
   const gridContentH = HEADER_H + gridHeight;
+  // Conteúdo horizontal REAL da grade: pode estourar a largura no dia com
+  // muitos profissionais / na semana em tela estreita. Quando estoura, a
+  // barra horizontal entra — e é ELA o gatilho do scroll vertical fantasma
+  // (consome ~6px de altura de um painel que tinha o tamanho EXATO do
+  // conteúdo). Medimos o overflow do próprio scroller e reservamos a
+  // espessura da barra só quando ela aparece.
+  const [hbarReserve, setHbarReserve] = useState(0);
+  useLayoutEffect(() => {
+    const bodyEl = document.body;
+    const docEl = document.documentElement;
+    if (!scrollRef.current || !bodyEl || !docEl || columns.length === 0) { setHbarReserve(0); return; }
+    if (!scrollerResizeObserver) scrollerResizeObserver = lightRO();
+    const captive: Element[] = [bodyEl, docEl].filter((n) => n !== scrollRef.current);
+    const measure = () => {
+      const scroller = scrollRef.current;
+      if (!scroller) return;
+      const overflowX =
+        columns.length > 0 &&
+        scroller.clientWidth > 0 &&
+        scroller.scrollWidth > scroller.clientWidth + 1; // +1: tolera borda
+      setHbarReserve(overflowX ? horizontalScrollbarH() : 0);
+    };
+    measure();
+    const obs = new scrollerResizeObserver(() => {
+      if (!scrollRef.current) return;
+      const overflowX =
+        columns.length > 0 &&
+        scrollRef.current.clientWidth > 0 &&
+        scrollRef.current.scrollWidth > scrollRef.current.clientWidth + 1;
+      setHbarReserve(overflowX ? horizontalScrollbarH() : 0);
+    });
+    // O gauge principal é o próprio scroller: quando a sidebar recolhe (ou a
+    // janela muda), o <main> alarga e o content-box do scroller muda — o RO
+    // dispara e a reserva é recalculada. Body/documentElement cobrem o resto
+    // (refluxo de fonte, faixas que entram/saem acima da grade).
+    obs.observe(scrollRef.current);
+    captive.forEach((n) => obs.observe(n));
+    return () => obs.disconnect();
+  }, [columns.length]);
+
   const [gridMaxH, setGridMaxH] = useState<number | null>(null);
   useLayoutEffect(() => {
     const fit = () => {
       const el = scrollRef.current;
       if (!el) return;
       const top = el.getBoundingClientRect().top;
-      const h = window.innerHeight - top - 16; // padding-baixo da página
+      // Reserva a altura da barra horizontal QUANDO ela está visível: é o
+      // que impede `scrollHeight` de passar de `clientHeight` por causa dela
+      // e fabricar a rolagem vertical fantasma de alguns pixels.
+      const reserve = top >= 0 && window.innerHeight - top < VIEWPORT_BOTTOM_PAD
+        ? window.innerHeight - top
+        : hbarReserve;
+      const h = window.innerHeight - top - VIEWPORT_BOTTOM_PAD - reserve;
       setGridMaxH(Math.max(320, Math.floor(h)));
     };
     fit();
-    const ro = typeof ResizeObserver !== 'undefined' ? new ResizeObserver(fit) : null;
-    if (typeof document !== 'undefined' && ro) ro.observe(document.body);
+    const ro = lightRO();
+    const obs = new ro(fit);
+    if (typeof document !== 'undefined') obs.observe(document.body);
     window.addEventListener('resize', fit);
-    return () => { ro?.disconnect(); window.removeEventListener('resize', fit); };
-  }, [loaded, view, fullscreen, pendencies.length, notice?.title, statusFilter, proFilter, specFilter]);
+    return () => { obs.disconnect(); window.removeEventListener('resize', fit); };
+  }, [loaded, view, fullscreen, pendencies.length, notice?.title, statusFilter, proFilter, specFilter, hbarReserve]);
 
   const readGeometry = useCallback((): { g: GridGeometry; minX: number; minY: number } | null => {
     const scroll = scrollRef.current;
@@ -1130,7 +1221,7 @@ export default function AgendaPage() {
                 {/* Cabeçalho das colunas (fixo na vertical) */}
                 <div className="sticky top-0 z-20 flex bg-white border-b border-zinc-200">
                   {columns.map((c) => (
-                    <div key={c.key} className="shrink-0 px-3 flex items-center gap-2 border-r border-zinc-100 last:border-r-0" style={{ minWidth: COL_MIN, flex: 1, height: HEADER_H }}>
+                    <div key={c.key} className="shrink-0 px-3 flex items-center gap-2 border-r border-zinc-100 last:border-r-0" style={{ minWidth: COL_MIN, width: `${100 / Math.max(1, columns.length)}%`, height: HEADER_H }}>
                       {view === 'day' && (
                         <span className="w-5 h-5 rounded-full bg-zinc-900 text-white text-[10px] font-bold flex items-center justify-center shrink-0">
                           {c.isProfessional ? c.label.slice(0, 1).toUpperCase() : '—'}
@@ -1155,6 +1246,7 @@ export default function AgendaPage() {
                     <GridColumn
                       key={c.key}
                       column={c}
+                      basisPct={100 / Math.max(1, columns.length)}
                       variant={view === 'week' ? 'week' : 'day'}
                       highlight={highlightFor(i)}
                       gridHeight={gridHeight}
