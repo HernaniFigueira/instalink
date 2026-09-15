@@ -17,7 +17,16 @@ export async function POST(req: NextRequest) {
     if (db.users.some((u) => u.email.toLowerCase() === email.toLowerCase())) {
       return NextResponse.json({ error: 'Este e-mail já está cadastrado. Tente entrar.' }, { status: 400 });
     }
-    const user = { id: randomUUID(), name: name.trim(), email: email.trim().toLowerCase(), passwordHash: hashPassword(password), createdAt: new Date().toISOString() };
+    // role de plataforma nunca vem do cliente — cadastro público = owner.
+    // Master só via bootstrap CLI ou /api/master/masters (requireMaster).
+    const user = {
+      id: randomUUID(),
+      name: name.trim(),
+      email: email.trim().toLowerCase(),
+      passwordHash: hashPassword(password),
+      createdAt: new Date().toISOString(),
+      role: 'owner' as const,
+    };
     await updateDB((d) => { d.users.push(user); });
     const sessionId = await createSession(user.id);
     const res = NextResponse.json({ ok: true, token: sessionId });

@@ -1,191 +1,29 @@
 // ═══════════════════════════════════════════════════════════════
 // AUTORIZAÇÃO — camada CENTRAL (empresa + membro + permissão)
 // ═══════════════════════════════════════════════════════════════
-// Toda API sensível valida, nesta ordem:
-//   1. identidade (sessão de lojista);
-//   2. empresa (o usuário realmente pertence a este businessId);
-//   3. papel/permissão (o que ele pode fazer AQUI).
-//
-// Esconder botão é UX, não segurança: as telas do painel usam as MESMAS
-// funções para decidir o que mostrar, e as APIs revalidam tudo no servidor.
-//
-// Master da plataforma (User.role === 'master') NÃO é dono de nada: ele só
-// entra no contexto de uma empresa através de uma SupportSession explícita
-// (auditada), em modo 'view' (somente leitura) ou 'admin' (com escrita).
+// Núcleo puro (isMasterUser, resolveAccess, accessibleBusinesses…): access-core.
+// Este arquivo = core + guards de API + cookies (next/headers, next/server).
+// Client Components NÃO devem importar este módulo — use access-core ou
+// organization (que importa só o core).
 import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
 import { readDB } from './db';
 import { userFromRequest, getBearerToken, COOKIE_NAME } from './auth';
 import { getUserBySession } from './auth';
 import { cookies } from 'next/headers';
-import type {
-  Business, BusinessMember, DB, MemberRole, PermissionId, SupportSession, User,
-} from './types';
-import { PERMISSION_IDS, ROLES, isValidPermission, permissionsFor, roleDef } from './permissions';
+import type { DB, PermissionId, SupportSession, User } from './types';
+import {
+  isMasterUser, resolveAccess, type AccessContext,
+} from './access-core';
 
-// ── Catálogo de permissões/papéis (reexportado do módulo puro) ──
+// Reexporta o núcleo puro + catálogo (API pública estável de @/lib/access).
 export {
   PERMISSIONS, PERMISSION_IDS, ROLES, roleDef, isValidRole, isValidPermission, permissionsFor,
-} from './permissions';
-export type { PermissionDef, RoleDef } from './permissions';
-
-// ── Contexto de acesso ───────────────────────────────────────
-export interface AccessContext {
-  user: User;
-  business: Business;
-  member: BusinessMember | null; // null quando é o proprietário ou master
-  role: MemberRole | 'MASTER';
-  permissions: Record<PermissionId, boolean>;
-  isOwner: boolean;
-  isMaster: boolean;
-  support: SupportSession | null; // preenchido no modo suporte do master
-  readOnly: boolean; // suporte em modo visualização
-}
-
-/**
- * E-mails com acesso master definidos por AMBIENTE (MASTER_EMAILS, separados
- * por vírgula). É o caminho operacional para promover alguém sem tocar no
- * banco e SEM senha secreta hardcoded no código.
- */
-export function masterEmails(): string[] {
-  return (process.env.MASTER_EMAILS || '')
-    .split(',')
-    .map((e) => e.trim().toLowerCase())
-    .filter(Boolean);
-}
-
-export function isMasterUser(user: Pick<User, 'role' | 'email'> | null | undefined): boolean {
-  if (!user) return false;
-  if (user.role === 'master') return true;
-  const email = String(user.email || '').toLowerCase();
-  return !!email && masterEmails().includes(email);
-}
-
-/** Membros ATIVOS do usuário (para montar a navegação e as APIs). */
-export function membershipsOf(db: DB, userId: string): BusinessMember[] {
-  return db.members.filter((m) => m.userId === userId && m.active !== false);
-}
-
-/** Papel administrativo do usuário na organização (vazio = sem acesso org). */
-export function organizationRoleIn(db: DB, userId: string, organizationId: string): 'OWNER' | 'ADMIN' | '' {
-  const organization = db.organizations.find((o) => o.id === organizationId);
-  if (!organization) return '';
-  if (organization.ownerId === userId) return 'OWNER';
-  const membership = db.organizationMembers.find(
-    (m) => m.organizationId === organizationId && m.userId === userId && m.active !== false,
-  );
-  return membership?.role === 'OWNER' || membership?.role === 'ADMIN' ? membership.role : '';
-}
-
-/**
- * Unidades acessíveis: ownership direto, administração da Organization ou
- * membership explícito no Business. NUNCA retorna negócio de terceiro — a ÚNICA exceção é a empresa
- * aberta explicitamente numa sessão de suporte do master (auditada e com
- * prazo), que entra no fim da lista.
- */
-export function accessibleBusinesses(
-  db: DB,
-  user: User,
-  support: SupportSession | null = null,
-): Business[] {
-  const owned = db.businesses.filter((b) => b.ownerId === user.id);
-  const ids = new Set(membershipsOf(db, user.id).map((m) => m.businessId));
-  const governedOrganizationIds = new Set(
-    db.organizations
-      .filter((o) => organizationRoleIn(db, user.id, o.id) !== '')
-      .map((o) => o.id),
-  );
-  const asMember = db.businesses.filter((b) => ids.has(b.id) && b.ownerId !== user.id);
-  const asOrganizationAdmin = db.businesses.filter(
-    (b) => !!b.organizationId && governedOrganizationIds.has(b.organizationId) &&
-      b.ownerId !== user.id && !ids.has(b.id),
-  );
-  const list = [...owned, ...asMember, ...asOrganizationAdmin];
-  if (isMasterUser(user) && support && support.masterUserId === user.id && !support.endedAt && new Date(support.expiresAt).getTime() > Date.now()) {
-    const target = db.businesses.find((b) => b.id === support.businessId);
-    if (target && !list.some((b) => b.id === target.id)) list.push(target);
-  }
-  return list;
-}
-
-/** Papel do usuário neste negócio ('' = sem acesso). */
-export function roleIn(db: DB, user: User, businessId: string): MemberRole | '' {
-  const business = db.businesses.find((b) => b.id === businessId);
-  if (!business) return '';
-  if (business.ownerId === user.id) return 'OWNER';
-  const organizationRole = business.organizationId ? organizationRoleIn(db, user.id, business.organizationId) : '';
-  if (organizationRole) return organizationRole;
-  const member = db.members.find(
-    (m) => m.businessId === businessId && m.userId === user.id && m.active !== false,
-  );
-  return member ? member.role : '';
-}
-
-/**
- * Resolve o contexto de acesso de um usuário a uma empresa — incluindo o
- * modo suporte do master. Devolve null quando não há autorização alguma.
- */
-export function resolveAccess(
-  db: DB,
-  user: User,
-  businessId: string,
-  support: SupportSession | null = null,
-): AccessContext | null {
-  const business = db.businesses.find((b) => b.id === businessId);
-  if (!business) return null;
-
-  const isOwner = business.ownerId === user.id;
-  const member = db.members.find(
-    (m) => m.businessId === businessId && m.userId === user.id && m.active !== false,
-  ) || null;
-  const organizationRole = business.organizationId
-    ? organizationRoleIn(db, user.id, business.organizationId)
-    : '';
-
-  if (isOwner) {
-    return {
-      user, business, member: null, role: 'OWNER',
-      permissions: permissionsFor('OWNER'), isOwner: true, isMaster: isMasterUser(user),
-      support: null, readOnly: false,
-    };
-  }
-
-  if (organizationRole) {
-    return {
-      user, business, member: null, role: organizationRole,
-      permissions: permissionsFor(organizationRole),
-      isOwner: organizationRole === 'OWNER', isMaster: isMasterUser(user),
-      support: null, readOnly: false,
-    };
-  }
-
-  if (member) {
-    return {
-      user, business, member, role: member.role,
-      permissions: permissionsFor(member.role, member.permissions),
-      isOwner: false, isMaster: isMasterUser(user), support: null, readOnly: member.role === 'VIEWER',
-    };
-  }
-
-  // Master SEM sessão de suporte não tem acesso a conteúdo de empresa.
-  if (isMasterUser(user) && support && support.masterUserId === user.id && support.businessId === businessId && !support.endedAt && new Date(support.expiresAt).getTime() > Date.now()) {
-    return {
-      user, business, member: null, role: 'MASTER',
-      permissions: permissionsFor('OWNER'), isOwner: false, isMaster: true,
-      support, readOnly: support.mode === 'view',
-    };
-  }
-
-  return null;
-}
-
-/**
- * O usuário PODE ver/usar este módulo? `readOnly` (suporte em visualização ou
- * visualizador) bloqueia escrita em outra camada — aqui só decidimos escopo.
- */
-export function can(ctx: AccessContext, permission: PermissionId): boolean {
-  return ctx.permissions[permission] === true;
-}
+  masterEmails, hasMasterRole, isMasterEmail, isMasterUser, isValidSupportSession,
+  membershipsOf, organizationRoleIn, accessibleBusinesses, roleIn, resolveAccess, can,
+} from './access-core';
+export type { PermissionDef, RoleDef } from './access-core';
+export type { AccessContext } from './access-core';
 
 // ── Sessão de suporte (master) ───────────────────────────────
 export const SUPPORT_COOKIE = 'il_support';

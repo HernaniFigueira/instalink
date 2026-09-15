@@ -43,7 +43,14 @@ function LoginForm() {
       if (!me.ok) {
         throw new Error('Entramos na sua conta, mas não conseguimos manter a sessão neste navegador. Tente recarregar a página e entrar de novo.');
       }
-      router.push('/dashboard');
+      const meData = await me.json().catch(() => null);
+      // Master da plataforma vai para /master; cliente normal para /dashboard.
+      // O servidor também devolve redirectTo — preferimos a resposta de /me
+      // (papel revalidado) e caímos no login.response como fallback.
+      const dest = meData?.isMaster || data.isMaster || data.redirectTo === '/master'
+        ? '/master'
+        : (data.redirectTo || '/dashboard');
+      router.push(dest);
       router.refresh();
     } catch (err: any) {
       setError(err.message);

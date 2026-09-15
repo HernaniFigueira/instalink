@@ -18,6 +18,22 @@ npm run seed     # cria demo@instalink.app / demo1234 + 2 negócios de exemplo
 npm run dev      # http://localhost:3000
 ```
 
+## Master da plataforma (`/master`)
+
+A conta Master pertence ao InstaLink (não a uma Organization). Usa o login
+normal (e-mail + senha com hash scrypt) — **sem senha universal**.
+
+```bash
+# Defina SEU e-mail e SUA senha (não há credencial fixa no código):
+MASTER_BOOTSTRAP_EMAIL=voce@seudominio.com \
+MASTER_BOOTSTRAP_PASSWORD='sua-senha-forte' \
+npm run master -- --bootstrap
+
+# Depois: /login → redireciona para /master
+```
+
+Documentação completa: [`docs/MASTER.md`](docs/MASTER.md).
+
 ## Fluxos de aceitação
 
 - **Vitrine (opcional):** módulo Produtos ativo em Recursos → `/negocio`

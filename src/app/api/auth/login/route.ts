@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from 'next/server';
 import { readDB, updateDB } from '@/lib/db';
 import { verifyPassword, createSession, setSessionOn } from '@/lib/auth';
 import { rateLimit, ipFrom } from '@/lib/rate-limit';
+import { isMasterUser } from '@/lib/access';
+import { pushAudit } from '@/lib/audit';
 
 export async function POST(req: NextRequest) {
   const rl = rateLimit(`login:${ipFrom(req)}`, 15, 60000);
@@ -18,8 +20,20 @@ export async function POST(req: NextRequest) {
     await updateDB((d) => {
       const u = d.users.find((x) => x.id === user.id);
       if (u) u.lastLoginAt = new Date().toISOString();
+      pushAudit(d, {
+        action: 'user.login',
+        actor: { id: user.id, email: user.email, role: user.role || 'owner' },
+        meta: { via: 'password' },
+      });
     });
-    const res = NextResponse.json({ ok: true, token: sessionId });
+    // Master da plataforma → /master; demais → /dashboard (mesmo endpoint).
+    const redirectTo = isMasterUser(user) ? '/master' : '/dashboard';
+    const res = NextResponse.json({
+      ok: true,
+      token: sessionId,
+      redirectTo,
+      isMaster: isMasterUser(user),
+    });
     setSessionOn(res, sessionId);
     return res;
   } catch {

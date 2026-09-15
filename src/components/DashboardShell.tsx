@@ -119,6 +119,12 @@ export function DashboardShell({ children }: { children: React.ReactNode }) {
         if (!d.user) { router.replace('/login?session=expired'); return; }
         setIsMaster(!!d.isMaster);
         setSupport(d.support || null);
+        // Master da plataforma sem SupportSession ativo vai para /master
+        // (área própria). Com suporte ativo, permanece no painel da unidade.
+        if (d.isMaster && !d.support && !d.businesses?.length) {
+          router.replace('/master');
+          return;
+        }
         if (!d.businesses?.length) { router.replace('/onboarding'); return; }
         setUser(d.user);
         setBusinesses(d.businesses);
@@ -263,10 +269,10 @@ export function DashboardShell({ children }: { children: React.ReactNode }) {
 
         {isMaster && (
           <div className={cn('py-2 border-b border-zinc-100', collapsed ? 'px-2' : 'px-3')}>
-            <Link href="/admin" title="Plataforma"
+            <Link href="/master" title="Master da plataforma"
               className={cn('flex items-center text-xs font-semibold border rounded-md py-1.5 bg-amber-50 border-amber-200 text-amber-800 hover:bg-amber-100',
                 collapsed ? 'justify-center px-0' : 'gap-2 px-2.5')}>
-              <I n="shield" size={16} /> {!collapsed && 'Plataforma'}
+              <I n="shield" size={16} /> {!collapsed && 'Master'}
             </Link>
           </div>
         )}
@@ -359,13 +365,17 @@ export function DashboardShell({ children }: { children: React.ReactNode }) {
             support.mode === 'view' ? 'bg-amber-50 text-amber-900 border-amber-200' : 'bg-red-600 text-white border-red-700')}>
             <span className="inline-flex items-center gap-1.5"><I n="shield" size={14} /> {support.mode === 'view' ? 'Modo suporte — somente leitura' : 'Modo administrativo'}</span>
             <span className="opacity-80">Empresa: {business?.name} · expira {new Date(support.expiresAt).toISOString().slice(11, 16)} UTC</span>
-            <button onClick={async () => { await fetch('/api/admin/support', { method: 'DELETE' }).catch(() => {}); window.location.assign('/admin'); }} className="ml-auto underline underline-offset-2">Sair do modo suporte</button>
+            <button onClick={async () => {
+              await fetch('/api/master/support', { method: 'DELETE' }).catch(() => {});
+              await fetch('/api/admin/support', { method: 'DELETE' }).catch(() => {});
+              window.location.assign('/master');
+            }} className="ml-auto underline underline-offset-2">Sair do modo suporte</button>
           </div>
         )}
         <div className={cn('px-4 lg:px-8 py-6', !FULL_WIDTH_PATHS.includes(pathname) && 'max-w-[960px]')}>
-          {user?.role === 'master' && !support && (
+          {isMaster && !support && (
             <p className="mb-4 text-xs font-medium text-amber-800 bg-amber-50 border border-amber-200 rounded-md px-3 py-2 inline-flex items-center gap-2">
-              <I n="shield" size={14} /> Você é master — <Link href="/admin" className="underline font-semibold">/admin</Link>
+              <I n="shield" size={14} /> Você é master — <Link href="/master" className="underline font-semibold">/master</Link>
             </p>
           )}
           {business && business.role && business.role !== 'OWNER' && (
