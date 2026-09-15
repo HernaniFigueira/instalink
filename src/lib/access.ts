@@ -134,7 +134,7 @@ export function resolveAccess(
   }
 
   // Master SEM sessão de suporte não tem acesso a conteúdo de empresa.
-  if (isMasterUser(user) && support && support.businessId === businessId && !support.endedAt) {
+  if (isMasterUser(user) && support && support.masterUserId === user.id && support.businessId === businessId && !support.endedAt && new Date(support.expiresAt).getTime() > Date.now()) {
     return {
       user, business, member: null, role: 'MASTER',
       permissions: permissionsFor('OWNER'), isOwner: false, isMaster: true,
@@ -157,10 +157,11 @@ export function can(ctx: AccessContext, permission: PermissionId): boolean {
 export const SUPPORT_COOKIE = 'il_support';
 const SUPPORT_MINUTES = 60;
 
-export async function supportFromRequest(req: NextRequest): Promise<SupportSession | null> {
+export async function supportFromRequest(req: NextRequest, masterUserId?: string): Promise<SupportSession | null> {
   const id = req.cookies.get(SUPPORT_COOKIE)?.value;
   if (!id) return null;
-  return supportFromDb(id);
+  const support = await supportFromDb(id);
+  return support && (!masterUserId || support.masterUserId === masterUserId) ? support : null;
 }
 
 export async function supportFromCookies(): Promise<SupportSession | null> {
@@ -216,7 +217,7 @@ export async function requireBusiness(
   const auth = await requireUser(req);
   if (!auth.ok) return auth;
   const db = await readDB();
-  const support = isMasterUser(auth.user) ? await supportFromRequest(req) : null;
+  const support = isMasterUser(auth.user) ? await supportFromRequest(req, auth.user.id) : null;
   const ctx = resolveAccess(db, auth.user, businessId, support);
   if (!ctx) return { ok: false, res: unauthorized('Você não tem acesso a este negócio.') };
   if (ctx.readOnly && req.method !== 'GET' && req.method !== 'HEAD') {

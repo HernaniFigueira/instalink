@@ -154,7 +154,11 @@ export function DashboardShell({ children }: { children: React.ReactNode }) {
     if (!businesses.some((x) => x.id === b)) router.replace(`${pathname}?b=${businesses[0].id}`);
   }, [ready, businesses, params, pathname, router]);
 
-  function switchBiz(id: string) { router.push(`${pathname}?b=${id}`); }
+  function switchBiz(id: string) {
+    if (id === '__overview') { router.push('/organizacao'); return; }
+    if (id === '__add') { router.push('/organizacao?add=1'); return; }
+    router.push(`${pathname === '/organizacao' ? '/dashboard' : pathname}?b=${id}`);
+  }
   function toggle() {
     setCollapsed((c) => {
       try { localStorage.setItem('il-side', c ? 'full' : 'mini'); } catch {}
@@ -244,7 +248,9 @@ export function DashboardShell({ children }: { children: React.ReactNode }) {
           <div className="px-3 py-2 border-b border-zinc-100">
             <select value={business?.id || ''} onChange={(e) => switchBiz(e.target.value)} aria-label="Trocar de negócio"
               className="w-full bg-zinc-50 border border-zinc-200 text-xs font-medium rounded-md px-2 py-1.5">
+              <option value="__overview">Visão geral</option>
               {businesses.map((x) => <option key={x.id} value={x.id}>{x.name}</option>)}
+              <option value="__add">+ Adicionar unidade</option>
             </select>
           </div>
         )}
@@ -316,7 +322,9 @@ export function DashboardShell({ children }: { children: React.ReactNode }) {
             {businesses.length > 1 ? (
               <select value={business?.id || ''} onChange={(e) => switchBiz(e.target.value)} aria-label="Trocar de negócio"
                 className="bg-zinc-50 border border-zinc-200 text-xs font-semibold rounded-md px-2 py-1.5 max-w-[160px] truncate">
-                {businesses.map((x) => <option key={x.id} value={x.id}>{x.name}</option>)}
+                <option value="__overview">Visão geral</option>
+              {businesses.map((x) => <option key={x.id} value={x.id}>{x.name}</option>)}
+              <option value="__add">+ Adicionar unidade</option>
               </select>
             ) : (
               <span className="font-semibold text-sm truncate text-zinc-900">{business?.name || 'InstaLink'}</span>

@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from 'next/server';
 import { randomUUID } from 'node:crypto';
 import { readDB, updateDB } from '@/lib/db';
 import { userFromRequest } from '@/lib/auth';
+import { canManageOrganization, organizationsFor } from '@/lib/organization';
+import { pushAudit } from '@/lib/audit';
 import { slugify, isValidSlug } from '@/lib/utils';
 import { defaultPresetId, defaultTheme, defaultBlocks } from '@/lib/templates';
 import { normalizeFeatures } from '@/lib/features';
@@ -36,18 +38,33 @@ export async function POST(req: NextRequest) {
     if (!isValidSlug(slug)) return NextResponse.json({ error: 'Esse endereço não é válido. Use ao menos 3 letras/números.' }, { status: 400 });
 
     const db = await readDB();
+    // Organização é resolvida e autorizada no servidor. Para contas legadas,
+    // usa a organização normalizada do proprietário; jamais aceita org alheia.
+    let organizationId = String(body.organizationId || '');
+    if (organizationId && !canManageOrganization(db, user, organizationId)) {
+      return NextResponse.json({ error: 'Você não pode adicionar unidades nesta organização.' }, { status: 403 });
+    }
+    if (!organizationId) organizationId = organizationsFor(db, user).find((o) => o.ownerId === user.id)?.id || '';
+    if (!organizationId) {
+      organizationId = randomUUID();
+    }
     if (db.businesses.some((b) => b.slug === slug)) {
       slug = `${slug}${Math.floor(Math.random() * 90 + 10)}`;
     }
 
+    const organization = db.organizations.find((o) => o.id === organizationId);
+    const unitOwnerId = organization?.ownerId || user.id;
     const now = new Date().toISOString();
     const businessId = randomUUID();
     await updateDB((d) => {
+      if (!d.organizations.some((o) => o.id === organizationId)) {
+        d.organizations.push({ id: organizationId, name, ownerId: user.id, metadata: {}, createdAt: now, updatedAt: now });
+      }
       d.businesses.push({
-        id: businessId, ownerId: user.id, name, slug, description: '',
+        id: businessId, ownerId: unitOwnerId, organizationId, name, slug, description: '',
         logo: '', cover: '', niche, modes,
         phone: '', whatsapp: String(body.whatsapp || '').slice(0, 20), email: '', instagram: '', tiktok: '',
-        address: '', mapsUrl: '', hours: {}, paymentMethods: ['pix'], pixKey: '',
+        address: String(body.address || '').trim().slice(0, 240), mapsUrl: '', hours: {}, paymentMethods: ['pix'], pixKey: '',
         deliveryFee: 0, minOrder: 0,
         googleUrl: '', googlePlaceId: '', googleApiKey: '',
         booking: defaultBookingConfig(),
@@ -64,9 +81,13 @@ export async function POST(req: NextRequest) {
       const blocks = defaultBlocks(niche, modes);
       // Módulos opcionais nascem coerentes com os blocos criados.
       created.features = normalizeFeatures(created, blocks);
+      if (unitOwnerId !== user.id) {
+        d.members.push({ id: randomUUID(), businessId, userId: user.id, role: 'ADMIN', permissions: {}, active: true, note: 'Administrador da organização', invitedBy: unitOwnerId, createdAt: now, updatedAt: now });
+      }
       d.pages.push({ id: randomUUID(), businessId, presetId: defaultPresetId(niche), theme: defaultTheme(niche), blocks, updatedAt: now });
+      pushAudit(d, { action: 'unit.created', actor: user, businessId, meta: { organizationId } });
     });
-    return NextResponse.json({ ok: true, businessId, slug });
+    return NextResponse.json({ ok: true, businessId, organizationId, slug });
   } catch {
     return NextResponse.json({ error: 'Não conseguimos criar seu negócio. Tente novamente.' }, { status: 500 });
   }

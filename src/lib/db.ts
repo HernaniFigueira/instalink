@@ -34,6 +34,7 @@ export function emptyDB(): DB {
   return {
     users: [], sessions: [], customers: [], customerSessions: [],
     passwordResets: [],
+    organizations: [], organizationMembers: [],
     businesses: [], pages: [], categories: [],
     products: [], options: [], optionValues: [], services: [],
     professionals: [], availability: [], exceptions: [], orders: [],
@@ -50,7 +51,7 @@ function normalize(raw: unknown): DB {
   const base = { ...emptyDB(), ...((raw && typeof raw === 'object' ? raw : {}) as Partial<DB>) };
   // Arrays novos (members/agents/campaigns/audit/...): documento antigo pode
   // ter chaves ausentes ou inválidas — garantimos array em todos os casos.
-  for (const key of ['members', 'agents', 'conversations', 'messages', 'campaigns', 'campaignRecipients', 'audit', 'supportSessions'] as const) {
+  for (const key of ['organizations', 'organizationMembers', 'members', 'agents', 'conversations', 'messages', 'campaigns', 'campaignRecipients', 'audit', 'supportSessions'] as const) {
     if (!Array.isArray((base as any)[key])) (base as any)[key] = [];
   }
   // Contatos: migração defensiva UMA única vez (quando o doc antigo não
@@ -58,6 +59,22 @@ function normalize(raw: unknown): DB {
   const hadContacts = Array.isArray((raw as any)?.contacts);
   if (!Array.isArray(base.contacts)) base.contacts = [];
   if (!hadContacts) backfillContacts(base);
+  // Organization é uma camada aditiva. Dados legados são agrupados por
+  // proprietário, mantendo cada Business como unidade operacional isolada.
+  const now = new Date().toISOString();
+  for (const b of base.businesses) {
+    if (!(b as any).organizationId) {
+      let org = base.organizations.find((o) => o.ownerId === b.ownerId);
+      if (!org) {
+        org = { id: `org-${b.ownerId}`, name: b.name, ownerId: b.ownerId, metadata: {}, createdAt: b.createdAt || now, updatedAt: b.updatedAt || now };
+        base.organizations.push(org);
+      }
+      (b as any).organizationId = org.id;
+    }
+  }
+  for (const o of base.organizations) {
+    if (!o.metadata || typeof o.metadata !== 'object') o.metadata = {};
+  }
   for (const b of base.businesses) {
     // Módulos opcionais: derivados dos blocos apenas quando ausentes
     // (idempotente; valor explícito do lojista nunca é sobrescrito).

@@ -146,9 +146,30 @@ export interface AboutSection {
   enabled: boolean;
 }
 
+export interface Organization {
+  id: ID;
+  name: string;
+  ownerId: ID;
+  metadata: Record<string, unknown>;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export type OrganizationRole = 'OWNER' | 'ADMIN';
+export interface OrganizationMember {
+  id: ID;
+  organizationId: ID;
+  userId: ID;
+  role: OrganizationRole;
+  active: boolean;
+  createdAt: string;
+  updatedAt: string;
+}
+
 export interface Business {
   id: ID;
-  ownerId: ID;
+  ownerId: ID; // legado: preservado para compatibilidade e ownership da unidade
+  organizationId?: ID; // organização acima da unidade (normalizado para legados)
   name: string;
   slug: string;
   description: string;
@@ -538,6 +559,8 @@ export interface DB {
   customers: Customer[];
   customerSessions: CustomerSession[];
   passwordResets: PasswordReset[];
+  organizations: Organization[];
+  organizationMembers: OrganizationMember[];
   businesses: Business[];
   pages: Page[];
   categories: Category[];
@@ -768,7 +791,7 @@ export type AuditAction =
   | 'campaign.created' | 'campaign.ready' | 'campaign.sent'
   | 'campaign.cancelled' | 'campaign.deleted'
   | 'whatsapp.connect_requested' | 'whatsapp.webhook_received'
-  | 'agent.updated';
+  | 'agent.updated' | 'organization.created' | 'unit.created';
 
 export interface AuditEntry {
   id: ID;
