@@ -57,7 +57,7 @@ export function slugify(input: string): string {
 export const RESERVED_SLUGS = new Set([
   'api', 'app', 'login', 'register', 'dashboard', 'onboarding', 'pagina',
   'produtos', 'servicos', 'agenda', 'pedidos', 'clientes', 'resultados',
-  'configuracoes', 'instalink', 'admin', 'ajuda', 'suporte', 'termos',
+  'configuracoes', 'instalink', 'admin', 'master', 'ajuda', 'suporte', 'termos',
   'privacidade', 'blog', 'www', 'mail', 'static', 'assets',
 ]);
 

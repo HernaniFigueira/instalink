@@ -54,6 +54,10 @@ export async function POST(req: NextRequest) {
     if (!name) return NextResponse.json({ error: 'Informe o nome.' }, { status: 400 });
     if (!email.includes('@')) return NextResponse.json({ error: 'Informe um e-mail válido.' }, { status: 400 });
     if (password.length < 6) return NextResponse.json({ error: 'A senha precisa de ao menos 6 caracteres.' }, { status: 400 });
+    // Nunca aceitar role de plataforma via equipe da Organization.
+    if (String(body.role || '').toLowerCase() === 'master' || body.platformRole === 'master') {
+      return NextResponse.json({ error: 'Não é possível atribuir o papel Master por esta rota.' }, { status: 403 });
+    }
     if (role === 'OWNER') return NextResponse.json({ error: 'O proprietário é único. Use Administrador.' }, { status: 400 });
     if (role === 'ADMIN' && !ctx.isOwner && ctx.role !== 'ADMIN') {
       return NextResponse.json({ error: 'Só o proprietário/administrador pode criar administradores.' }, { status: 403 });
@@ -78,6 +82,7 @@ export async function POST(req: NextRequest) {
       let userId = existingUser?.id || '';
       if (!userId) {
         userId = randomUUID();
+        // role de plataforma SEMPRE 'owner' — Owner/Admin NÃO promovem a master.
         db.users.push({ id: userId, name, email, passwordHash: hashPassword(password), createdAt: now, role: 'owner', lastLoginAt: '' });
       }
       const member: BusinessMember = {

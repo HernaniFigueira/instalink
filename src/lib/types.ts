@@ -794,7 +794,9 @@ export type AuditAction =
   | 'campaign.created' | 'campaign.ready' | 'campaign.sent'
   | 'campaign.cancelled' | 'campaign.deleted'
   | 'whatsapp.connect_requested' | 'whatsapp.webhook_received'
-  | 'agent.updated' | 'organization.created' | 'unit.created';
+  | 'agent.updated' | 'organization.created' | 'unit.created'
+  | 'master.created' | 'master.promoted' | 'master.revoked'
+  | 'user.login';
 
 export interface AuditEntry {
   id: ID;
