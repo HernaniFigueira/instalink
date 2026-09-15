@@ -36,20 +36,18 @@ export function useBusinessId(): ActiveBusiness {
   const params = useSearchParams();
   const requested = params.get('b') || '';
   const [resolved, setResolved] = useState('');
-  const [resolving, setResolving] = useState(!requested);
+  const [resolving, setResolving] = useState(true);
   const [noBusiness, setNoBusiness] = useState(false);
   const [contextError, setContextError] = useState(false);
   const [attempt, setAttempt] = useState(0);
 
   useEffect(() => {
-    // Com ?b= presente a tela pode trabalhar direto — mas se ele não
-    // pertencer à conta, a lista do /me corrige o contexto (empresa ativa
-    // do shell), em vez de prender o usuário num erro de "não informado".
-    if (requested) {
-      setResolved(requested);
-      setResolving(false);
-      return;
-    }
+    // ?b= NUNCA é aceito cegamente: o id precisa constar da lista real de
+    // empresas da conta (/api/auth/me — a MESMA fonte do DashboardShell).
+    // Constando, ele é usado; não constando (ex.: empresa de outra conta na
+    // URL), cai para a empresa ativa válida via resolveActiveBusinessId.
+    // URL estranha NÃO vira "Negócio não encontrado" nem logout — só
+    // resolve o contexto certo; conta sem empresa vira o estado noBusiness.
     setResolving(true);
     setContextError(false);
     setNoBusiness(false);
