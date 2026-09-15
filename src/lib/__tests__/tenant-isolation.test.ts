@@ -117,3 +117,44 @@ describe('conceito definitivo Organization → Unit', () => {
     for (const rows of [db.contacts,db.bookings,db.leads]) expect(rows.filter((x:any)=>x.businessId==='a2')).toEqual([]);
   });
 });
+
+describe('acesso centralizado por papel da Organization', () => {
+  it('OWNER da Organization acessa administrativamente todas as unidades', () => {
+    const db=emptyDB(), orgOwner=user('org-owner'), legacyOwner=user('legacy-owner');
+    db.users.push(orgOwner,legacyOwner); db.organizations.push(org('org-a',orgOwner.id));
+    db.businesses.push(unit('a1',legacyOwner.id,'org-a'),unit('a2',legacyOwner.id,'org-a'));
+    expect(accessibleBusinesses(db,orgOwner).map(x=>x.id)).toEqual(['a1','a2']);
+    for (const id of ['a1','a2']) {
+      const ctx=resolveAccess(db,orgOwner,id);
+      expect(ctx?.role).toBe('OWNER'); expect(ctx?.permissions.admin).toBe(true); expect(ctx?.readOnly).toBe(false);
+    }
+  });
+
+  it('ADMIN da Organization acessa suas unidades, mas nunca unidades de outra Organization', () => {
+    const db=emptyDB(), admin=user('org-admin'), ownerA=user('owner-a'), ownerB=user('owner-b');
+    db.users.push(admin,ownerA,ownerB); db.organizations.push(org('org-a',ownerA.id),org('org-b',ownerB.id));
+    db.organizationMembers.push({id:'om',organizationId:'org-a',userId:admin.id,role:'ADMIN',active:true,createdAt:'',updatedAt:''});
+    db.businesses.push(unit('a1',ownerA.id,'org-a'),unit('a2',ownerA.id,'org-a'),unit('b1',ownerB.id,'org-b'));
+    expect(accessibleBusinesses(db,admin).map(x=>x.id)).toEqual(['a1','a2']);
+    expect(resolveAccess(db,admin,'a1')?.role).toBe('ADMIN');
+    expect(resolveAccess(db,admin,'a2')?.permissions.config).toBe(true);
+    expect(resolveAccess(db,admin,'b1')).toBeNull();
+  });
+
+  it('OrganizationMember inativo e organizationId arbitrário não concedem acesso', () => {
+    const db=emptyDB(), stranger=user('stranger'), owner=user('owner');
+    db.users.push(stranger,owner); db.organizations.push(org('org-a',owner.id));
+    db.organizationMembers.push({id:'inactive',organizationId:'org-a',userId:stranger.id,role:'ADMIN',active:false,createdAt:'',updatedAt:''});
+    db.businesses.push(unit('a1',owner.id,'org-a'));
+    expect(accessibleBusinesses(db,stranger)).toEqual([]); expect(resolveAccess(db,stranger,'a1')).toBeNull();
+  });
+
+  it('suporte view permanece read-only e estritamente escopado à unidade', () => {
+    const db=emptyDB(), master={...user('master-2'),role:'master' as const}, owner=user('owner');
+    db.users.push(master,owner); db.organizations.push(org('org-a',owner.id)); db.businesses.push(unit('a1',owner.id,'org-a'),unit('a2',owner.id,'org-a'));
+    const support={id:'s',masterUserId:master.id,masterEmail:master.email,businessId:'a1',mode:'view' as const,reason:'',createdAt:'',expiresAt:'2999-01-01',endedAt:''};
+    const ctx=resolveAccess(db,master,'a1',support);
+    expect(ctx?.readOnly).toBe(true); expect(resolveAccess(db,master,'a2',support)).toBeNull();
+    expect(resolveAccess(db,master,'a1')).toBeNull();
+  });
+});
