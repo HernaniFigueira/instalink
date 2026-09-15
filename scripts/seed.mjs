@@ -12,6 +12,17 @@ function hash(password) {
 }
 
 const now = new Date().toISOString();
+// Datas do PASSADO para o histórico de demonstração (P2): a tela Resultados
+// precisa de movimento real no período para mostrar comparação, funil e
+// desempenho. Só status FINAIS (concluído/falta/cancelado): nada fica
+// pendente no passado.
+const dayAgo = (n) => new Date(Date.now() - n * 86400000).toISOString().slice(0, 10);
+const tsAgo = (n) => new Date(Date.now() - n * 86400000).toISOString();
+const pastBooking = (id, businessId, serviceId, professionalId, days, time, status, name, phone) => ({
+  id, businessId, customerId: '', serviceId, professionalId, date: dayAgo(days), time,
+  customerName: name, customerPhone: phone, status, note: '',
+  createdAt: tsAgo(days + 5), updatedAt: tsAgo(days), history: [],
+});
 const B1 = 'biz-burgerhouse';
 const B2 = 'biz-barbeariajoao';
 const B3 = 'biz-clinicavitta';
@@ -175,6 +186,17 @@ const db = {
   bookings: [
     { id: 'book-sample', businessId: B2, customerId: '', serviceId: 'svc-corte', professionalId: 'pro-joao', date: new Date(Date.now() + 86400000).toISOString().slice(0, 10), time: '10:00', customerName: 'Rafael T.', customerPhone: '11966666666', status: 'pending', note: '', createdAt: now, updatedAt: now, history: [] },
     { id: 'book-orlando', businessId: B3, customerId: '', serviceId: 'svc-odonto', professionalId: 'pro-orlando', date: new Date(Date.now() + 86400000).toISOString().slice(0, 10), time: '10:00', customerName: 'Marlene S.', customerPhone: '11955554444', status: 'confirmed', note: '', createdAt: now, updatedAt: now, history: [] },
+    // Histórico da clínica (dois profissionais, dois valores de serviço).
+    pastBooking('hist-b3-1', B3, 'svc-odonto', 'pro-orlando', 3, '09:00', 'completed', 'Marlene S.', '11955554444'),
+    pastBooking('hist-b3-2', B3, 'svc-odonto', 'pro-orlando', 10, '14:00', 'completed', 'Tiago P.', '11944445555'),
+    pastBooking('hist-b3-3', B3, 'svc-cardio', 'pro-joao-cardio', 6, '10:00', 'completed', 'Helena R.', '11933334444'),
+    pastBooking('hist-b3-4', B3, 'svc-cardio', 'pro-joao-cardio', 12, '11:00', 'no_show', 'Bruno L.', '11922223333'),
+    pastBooking('hist-b3-5', B3, 'svc-odonto', 'pro-orlando', 18, '15:00', 'cancelled', 'Cláudia M.', '11911112222'),
+    pastBooking('hist-b3-6', B3, 'svc-cardio', 'pro-joao-cardio', 24, '09:30', 'completed', 'Helena R.', '11933334444'),
+    // Histórico da barbearia.
+    pastBooking('hist-b2-1', B2, 'svc-corte', 'pro-joao', 4, '11:00', 'completed', 'Rafael T.', '11966666666'),
+    pastBooking('hist-b2-2', B2, 'svc-barba', 'pro-joao', 9, '16:00', 'completed', 'Diego S.', '11955556666'),
+    pastBooking('hist-b2-3', B2, 'svc-corte', 'pro-joao', 20, '10:00', 'no_show', 'Pedro A.', '11944447777'),
   ],
   members: [
     { id: 'mem-secretaria', businessId: B3, userId: 'user-secretaria', role: 'SECRETARIA', permissions: {}, active: true, note: 'Recepção da clínica', createdAt: now, updatedAt: now },
@@ -202,10 +224,31 @@ const db = {
     { id: 'ct-carlos', businessId: B1, customerId: '', name: 'Carlos M.', phone: '11977777777', email: '', createdAt: now, updatedAt: now, source: 'pedido', lastInteraction: now, marketingOptIn: true, note: 'Prefere retirada no balcão.' },
     { id: 'ct-rafael', businessId: B2, customerId: '', name: 'Rafael T.', phone: '11966666666', email: '', createdAt: now, updatedAt: now, source: 'agendamento', lastInteraction: now, marketingOptIn: true, note: '' },
     { id: 'ct-marlene', businessId: B3, customerId: '', name: 'Marlene S.', phone: '11955554444', email: 'marlene@exemplo.com', createdAt: now, updatedAt: now, source: 'agendamento', lastInteraction: now, marketingOptIn: false, note: 'Cliente do Dr. Orlando — prefere manhã.' },
+    // Base com datas de cadastro no passado (novos clientes por período).
+    ...[
+      ['ct-tiago', 'Tiago P.', '11944445555', 'tiago@exemplo.com', 10],
+      ['ct-helena', 'Helena R.', '11933334444', 'helena@exemplo.com', 6],
+      ['ct-claudia', 'Cláudia M.', '11911112222', '', 18],
+    ].map(([id, name, phone, email, days]) => ({
+      id, businessId: B3, customerId: '', name, phone, email,
+      createdAt: tsAgo(days), updatedAt: tsAgo(days), source: 'agendamento',
+      lastInteraction: tsAgo(days), marketingOptIn: false, note: '',
+    })),
   ],
   leads: [
     { id: 'lead-1', businessId: B1, customerId: '', name: 'Carlos M.', phone: '11977777777', email: '', instagram: '', origin: 'pedido', interest: 'X-Bacon', action: 'pedido', status: 'converted', createdAt: now, lastInteraction: now },
     { id: 'lead-2', businessId: B2, customerId: '', name: 'Rafael T.', phone: '11966666666', email: '', instagram: '', origin: 'agendamento', interest: 'Corte', action: 'agendamento', status: 'converted', createdAt: now, lastInteraction: now },
+    // Origens diferentes no passado (sem inventar origem: são as gravadas
+    // pelo fluxo que gerou cada lead).
+    ...[
+      ['lead-3', B3, 'Helena R.', '11933334444', 'instagram', 'Consulta Cardiológica', 'new', 5],
+      ['lead-4', B3, 'Tiago P.', '11944445555', 'whatsapp', 'Consulta Odontológica', 'converted', 9],
+      ['lead-5', B3, 'Cláudia M.', '11911112222', 'instagram', 'Consulta Odontológica', 'lost', 17],
+      ['lead-6', B2, 'Diego S.', '11955556666', 'whatsapp', 'Corte', 'converted', 8],
+    ].map(([id, businessId, name, phone, origin, interest, status, days]) => ({
+      id, businessId, customerId: '', name, phone, email: '', instagram: '', origin,
+      interest, action: 'agendamento', status, createdAt: tsAgo(days), lastInteraction: tsAgo(days),
+    })),
   ],
   events: [],
 };

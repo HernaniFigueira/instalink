@@ -13,6 +13,7 @@ import { isSessionExpired } from '@/lib/http';
 import type { BusinessMode, FeatureId, PermissionId } from '@/lib/types';
 import { requiresActiveBusiness } from '@/lib/business-context';
 import { unitsInSameOrganization } from '@/lib/organization';
+import { navTokenStyle } from '@/lib/appearance';
 
 interface Biz {
   id: string;
@@ -28,6 +29,14 @@ interface Biz {
   permissions?: Record<PermissionId, boolean>;
   readOnly?: boolean;
   organizationId?: string;
+  /** Identidade visual do Dashboard (P2) — acompanha a unidade selecionada. */
+  appearance?: { navColor?: string };
+  /** Escopo do profissional: preenchido ⇒ este login vê só a própria agenda. */
+  professionalId?: string;
+  professionalName?: string;
+  /** 'own' = agenda recortada pelo vínculo · 'none' = papel de atendimento
+   *  ainda sem vínculo (o backend não devolve agenda de terceiros). */
+  agendaScope?: 'all' | 'own' | 'none';
 }
 
 interface SupportInfo {
@@ -209,6 +218,7 @@ export function DashboardShell({ children }: { children: React.ReactNode }) {
   const ROLE_LABEL: Record<string, string> = {
     OWNER: 'Proprietário', ADMIN: 'Administrador', SECRETARIA: 'Secretária',
     ATENDENTE: 'Atendente', VENDEDOR: 'Vendedor', VIEWER: 'Visualizador', MASTER: 'Suporte InstaLink',
+    PROFISSIONAL: 'Profissional',
   };
 
   // Dashboard fica sempre no topo, sem seção; demais itens agrupados.
@@ -222,14 +232,17 @@ export function DashboardShell({ children }: { children: React.ReactNode }) {
   const fallbackHref = firstAllowedPath(panelCtx);
 
   return (
-    <div className="min-h-screen bg-[#f8f8f8] lg:flex">
+    // A identidade visual vive nos TOKENS (--il-nav*) injetados aqui, uma vez,
+    // a partir da cor do Business ativo. Trocar de unidade troca a identidade;
+    // nenhuma classe condicional por cor é espalhada pelo sistema.
+    <div className="min-h-screen bg-[#f8f8f8] lg:flex" style={navTokenStyle(business?.appearance?.navColor)}>
       {/* Sidebar desktop - workspace navigation */}
       <aside className={cn(
-        'hidden lg:flex shrink-0 flex-col bg-white border-r border-zinc-200 sticky top-0 h-screen transition-all duration-200',
+        'hidden lg:flex shrink-0 flex-col bg-[var(--il-nav)] text-[var(--il-nav-fg)] border-r border-[var(--il-nav-border)] sticky top-0 h-screen transition-all duration-200',
         collapsed ? 'w-[68px]' : 'w-[240px]',
       )}>
         {/* Identidade da empresa - bloco compacto (workspace first) */}
-        <div className={cn('border-b border-zinc-200', collapsed ? 'px-2 py-4 flex justify-center' : 'px-4 py-4')}>
+        <div className={cn('border-b border-[var(--il-nav-border)]', collapsed ? 'px-2 py-4 flex justify-center' : 'px-4 py-4')}>
           {collapsed ? (
             business.logo ? (
               <a href={`/${business.slug}`} target="_blank" title={business.name} className="w-9 h-9 rounded-lg overflow-hidden border border-zinc-200 flex items-center justify-center bg-white">
@@ -238,21 +251,21 @@ export function DashboardShell({ children }: { children: React.ReactNode }) {
               </a>
             ) : (
               <a href={`/${business.slug}`} target="_blank" title={business.name}
-                className="w-9 h-9 rounded-lg bg-zinc-900 text-white flex items-center justify-center text-sm font-bold">
+                className="w-9 h-9 rounded-lg bg-[var(--il-nav-cta)] text-[var(--il-nav-cta-fg)] flex items-center justify-center text-sm font-bold">
                 {business.name.slice(0, 1).toUpperCase()}
               </a>
             )
           ) : (
             <div className="flex items-center gap-3 min-w-0">
-              <div className="w-9 h-9 rounded-lg overflow-hidden bg-zinc-900 text-white flex items-center justify-center font-bold shrink-0 border border-zinc-200">
+              <div className="w-9 h-9 rounded-lg overflow-hidden bg-white text-zinc-900 flex items-center justify-center font-bold shrink-0 border border-[var(--il-nav-border)]">
                 {business.logo ? (
                   // eslint-disable-next-line @next/next/no-img-element
                   <img src={business.logo} alt={business.name} className="w-full h-full object-cover" />
                 ) : business.name.slice(0, 1).toUpperCase()}
               </div>
               <div className="min-w-0 flex-1">
-                <p className="text-sm font-semibold leading-none truncate text-zinc-900">{business.name}</p>
-                <a href={`/${business.slug}`} target="_blank" className="text-[11px] text-zinc-500 hover:text-zinc-700 inline-flex items-center gap-1 leading-none mt-1">
+                <p className="text-sm font-semibold leading-none truncate text-[var(--il-nav-fg)]">{business.name}</p>
+                <a href={`/${business.slug}`} target="_blank" className="text-[11px] text-[var(--il-nav-muted)] hover:text-[var(--il-nav-fg)] inline-flex items-center gap-1 leading-none mt-1">
                   Ver site <I n="external" size={10} />
                 </a>
               </div>
@@ -261,9 +274,9 @@ export function DashboardShell({ children }: { children: React.ReactNode }) {
         </div>
 
         {!collapsed && businesses.length > 1 && (
-          <div className="px-3 py-2 border-b border-zinc-100">
+          <div className="px-3 py-2 border-b border-[var(--il-nav-border)]">
             <select value={business?.id || ''} onChange={(e) => switchBiz(e.target.value)} aria-label="Trocar de negócio"
-              className="w-full bg-zinc-50 border border-zinc-200 text-xs font-medium rounded-md px-2 py-1.5">
+              className="w-full bg-black/10 text-[var(--il-nav-fg)] border border-[var(--il-nav-border)] text-xs font-medium rounded-md px-2 py-1.5 [&>option]:bg-white [&>option]:text-zinc-900">
               <option value="__overview">Visão geral da organização</option>
               <optgroup label="Unidades desta organização">{organizationUnits.map((x) => <option key={x.id} value={x.id}>{x.name}</option>)}</optgroup>
               {otherBusinesses.length > 0 && <optgroup label="Outras organizações">{otherBusinesses.map((x) => <option key={x.id} value={x.id}>{x.name}</option>)}</optgroup>}
@@ -273,7 +286,7 @@ export function DashboardShell({ children }: { children: React.ReactNode }) {
         )}
 
         {isMaster && (
-          <div className={cn('py-2 border-b border-zinc-100', collapsed ? 'px-2' : 'px-3')}>
+          <div className={cn('py-2 border-b border-[var(--il-nav-border)]', collapsed ? 'px-2' : 'px-3')}>
             <Link href="/master" title="Master da plataforma"
               className={cn('flex items-center text-xs font-semibold border rounded-md py-1.5 bg-amber-50 border-amber-200 text-amber-800 hover:bg-amber-100',
                 collapsed ? 'justify-center px-0' : 'gap-2 px-2.5')}>
@@ -286,26 +299,30 @@ export function DashboardShell({ children }: { children: React.ReactNode }) {
           {dashboardItem && (
             <Link href={`${dashboardItem.href}${q}`} title={collapsed ? dashboardItem.label : undefined}
               aria-current={pathname === dashboardItem.href ? 'page' : undefined}
-              className={cn('flex items-center text-[13px] font-medium rounded-md h-9 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-zinc-900 focus-visible:ring-inset',
+              className={cn('flex items-center text-[13px] font-medium rounded-md h-9 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/70 focus-visible:ring-inset',
                 collapsed ? 'justify-center px-0' : 'gap-2.5 px-2.5',
-                pathname === dashboardItem.href ? 'bg-zinc-900 text-white shadow-sm' : 'text-zinc-700 hover:bg-zinc-100')}>
+                pathname === dashboardItem.href
+                  ? 'bg-[var(--il-nav-active)] text-[var(--il-nav-active-fg)] shadow-sm'
+                  : 'text-[var(--il-nav-fg)] hover:bg-[var(--il-nav-hover)]')}>
               <I n={dashboardItem.icon} size={18} /> {!collapsed && dashboardItem.label}
             </Link>
           )}
-          {!collapsed && dashboardItem && <div className="h-px bg-zinc-200 my-3 mx-1" aria-hidden="true" />}
+          {!collapsed && dashboardItem && <div className="h-px bg-[var(--il-nav-border)] my-3 mx-1" aria-hidden="true" />}
           {sections.map((sec) => (
             <div key={sec.label} className={cn(collapsed ? 'mt-1' : 'mt-4 first:mt-1')}>
-              {!collapsed && <p className="px-2.5 mb-1 text-[10px] font-bold tracking-[0.08em] text-zinc-400 uppercase">{sec.label}</p>}
-              {collapsed && <div className="h-px bg-zinc-100 mx-1 my-1.5" aria-hidden="true" />}
+              {!collapsed && <p className="px-2.5 mb-1 text-[10px] font-bold tracking-[0.08em] text-[var(--il-nav-muted)] uppercase">{sec.label}</p>}
+              {collapsed && <div className="h-px bg-[var(--il-nav-border)] mx-1 my-1.5" aria-hidden="true" />}
               <div className="space-y-0.5">
                 {sec.items.map((i) => {
                   const active = pathname === i.href;
                   return (
                     <Link key={i.href} href={`${i.href}${q}`} title={collapsed ? i.label : undefined}
                       aria-current={active ? 'page' : undefined}
-                      className={cn('flex items-center text-[13px] rounded-md h-9 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-zinc-900 focus-visible:ring-inset',
+                      className={cn('flex items-center text-[13px] rounded-md h-9 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/70 focus-visible:ring-inset',
                         collapsed ? 'justify-center px-0' : 'gap-2.5 px-2.5',
-                        active ? 'bg-zinc-900 text-white shadow-sm' : 'text-zinc-600 hover:bg-zinc-100 hover:text-zinc-900')}>
+                        active
+                          ? 'bg-[var(--il-nav-active)] text-[var(--il-nav-active-fg)] shadow-sm'
+                          : 'text-[var(--il-nav-fg)] hover:bg-[var(--il-nav-hover)]')}>
                       <I n={i.icon} size={18} /> {!collapsed && <span className={cn('truncate', active && 'font-medium')}>{i.label}</span>}
                     </Link>
                   );
@@ -315,19 +332,19 @@ export function DashboardShell({ children }: { children: React.ReactNode }) {
           ))}
         </nav>
 
-        <div className={cn('border-t border-zinc-200 mt-auto', collapsed ? 'p-2 space-y-1' : 'p-3')}>
-          {!collapsed && <p className="text-xs text-zinc-500 truncate px-2 mb-2 font-medium">{user.name}</p>}
+        <div className={cn('border-t border-[var(--il-nav-border)] mt-auto', collapsed ? 'p-2 space-y-1' : 'p-3')}>
+          {!collapsed && <p className="text-xs text-[var(--il-nav-muted)] truncate px-2 mb-2 font-medium">{user.name}</p>}
           <button onClick={toggle} title={collapsed ? 'Expandir' : 'Recolher'}
-            className={cn('w-full flex items-center text-xs font-medium text-zinc-500 hover:text-zinc-900 rounded-md h-8 hover:bg-zinc-50',
+            className={cn('w-full flex items-center text-xs font-medium text-[var(--il-nav-muted)] hover:text-[var(--il-nav-fg)] rounded-md h-8 hover:bg-[var(--il-nav-hover)]',
               collapsed ? 'justify-center' : 'gap-2.5 px-2.5')}>
             <I n={collapsed ? 'expand' : 'collapse'} size={16} /> {!collapsed && 'Recolher'}
           </button>
           <button onClick={logout} title={collapsed ? 'Sair' : undefined}
-            className={cn('w-full flex items-center text-xs font-medium text-zinc-500 hover:text-zinc-900 rounded-md h-8 hover:bg-zinc-50',
+            className={cn('w-full flex items-center text-xs font-medium text-[var(--il-nav-muted)] hover:text-[var(--il-nav-fg)] rounded-md h-8 hover:bg-[var(--il-nav-hover)]',
               collapsed ? 'justify-center' : 'gap-2.5 px-2.5')}>
             <I n="logout" size={16} /> {!collapsed && 'Sair'}
           </button>
-          {!collapsed && <p className="text-[10px] text-zinc-400 text-center mt-3 px-2">powered by InstaLink.app</p>}
+          {!collapsed && <p className="text-[10px] text-[var(--il-nav-muted)] text-center mt-3 px-2">powered by InstaLink.app</p>}
         </div>
       </aside>
 
@@ -335,7 +352,7 @@ export function DashboardShell({ children }: { children: React.ReactNode }) {
       <div className="lg:hidden sticky top-0 z-40 bg-white border-b border-zinc-200">
         <div className="flex items-center justify-between px-4 py-3">
           <span className="flex items-center gap-2.5 min-w-0">
-            <span className="w-8 h-8 rounded-md overflow-hidden bg-zinc-900 text-white flex items-center justify-center font-bold text-sm shrink-0 border border-zinc-200">
+            <span className="w-8 h-8 rounded-md overflow-hidden bg-[var(--il-nav-cta)] text-[var(--il-nav-cta-fg)] flex items-center justify-center font-bold text-sm shrink-0 border border-zinc-200">
               {business.logo ? (
                 // eslint-disable-next-line @next/next/no-img-element
                 <img src={business.logo} alt={business.name} className="w-full h-full object-cover" />
@@ -354,7 +371,7 @@ export function DashboardShell({ children }: { children: React.ReactNode }) {
             )}
           </span>
           <span className="flex items-center gap-2">
-            {business && <a href={`/${business.slug}`} target="_blank" className="text-xs font-semibold bg-zinc-900 text-white px-3 py-1.5 rounded-md">Ver site</a>}
+            {business && <a href={`/${business.slug}`} target="_blank" className="text-xs font-semibold bg-[var(--il-nav-cta)] text-[var(--il-nav-cta-fg)] px-3 py-1.5 rounded-md">Ver site</a>}
             <button onClick={logout} className="bg-zinc-50 border border-zinc-200 p-2 rounded-md" aria-label="Sair"><I n="logout" size={14} /></button>
           </span>
         </div>
@@ -362,7 +379,9 @@ export function DashboardShell({ children }: { children: React.ReactNode }) {
           {items.map((i) => (
             <Link key={i.href} href={`${i.href}${q}`}
               className={cn('shrink-0 text-xs font-medium border rounded-full px-3 py-1.5 inline-flex items-center gap-1.5',
-                pathname === i.href ? 'bg-zinc-900 border-zinc-900 text-white' : 'bg-white border-zinc-200 text-zinc-600')}>
+                pathname === i.href
+                  ? 'bg-[var(--il-nav-cta)] border-[var(--il-nav-cta)] text-[var(--il-nav-cta-fg)]'
+                  : 'bg-white border-zinc-200 text-zinc-600')}>
               <I n={i.icon} size={14} /> {i.label}
             </Link>
           ))}
@@ -390,6 +409,23 @@ export function DashboardShell({ children }: { children: React.ReactNode }) {
           )}
           {business && business.role && business.role !== 'OWNER' && (
             <p className="mb-4 text-xs text-zinc-500">Você está como <strong className="text-zinc-700">{ROLE_LABEL[business.role] || business.role}</strong>{business.readOnly ? ' · somente leitura' : ''}</p>
+          )}
+          {business?.agendaScope === 'own' && (
+            // Honestidade com quem atende: a agenda mostrada é SÓ a dele.
+            // (A restrição é do servidor — aqui só avisamos.)
+            <p className="mb-4 text-xs font-medium text-zinc-700 bg-white border border-zinc-200 rounded-md px-3 py-2 inline-flex items-center gap-2">
+              <I n="idcard" size={14} />
+              Você vê <strong>somente a sua agenda</strong>{business.professionalName ? ` (${business.professionalName})` : ''}. Os clientes da unidade continuam disponíveis em Clientes.
+            </p>
+          )}
+          {business?.agendaScope === 'none' && (
+            // Vínculo ainda não configurado: a agenda fica vazia por segurança
+            // (nunca a de todo mundo). O caminho para resolver é o Equipe.
+            <p className="mb-4 text-xs font-medium text-amber-900 bg-amber-50 border border-amber-200 rounded-md px-3 py-2 inline-flex flex-wrap items-center gap-2" role="status">
+              <I n="alert" size={14} />
+              Seu acesso de atendimento ainda <strong>não está vinculado a um profissional</strong>, então a agenda aparece vazia.
+              Peça ao administrador para vincular em Equipe → “Profissional vinculado”.
+            </p>
           )}
           {access.state === 'denied' ? (
             // 403 AMIGÁVEL: o usuário continua logado e dentro do painel.

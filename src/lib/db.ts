@@ -26,6 +26,7 @@ import type { DB } from './types';
 import { defaultBookingConfig } from './types';
 import { backfillContacts } from './contacts';
 import { normalizeFeatures } from './features';
+import { sanitizeAppearance } from './appearance';
 import { defaultWhatsappIntegration } from './whatsapp';
 
 const FILE = path.join(process.cwd(), 'data', 'instalink.db.json');
@@ -130,12 +131,20 @@ export function normalizeDB(raw: unknown): DB {
   for (const c of base.conversations) {
     if (!c.context || typeof c.context !== 'object') (c as any).context = {};
   }
+  // Identidade visual do painel (P2): campo ADITIVO por Business. Quando
+  // ausente, o negócio continua exatamente com o visual atual (sem cor
+  // customizada) — nenhum dado existente é tocado.
+  for (const b of base.businesses) {
+    b.appearance = sanitizeAppearance(b.appearance);
+  }
   // Profissionais: vínculo com o horário geral da clínica (lib/schedule.ts).
   // Migração DEFENSIVA e idempotente: quando o campo não existe (dado legado),
   // derivamos do que já estava gravado — quem tinha horário próprio continua
   // personalizado, quem não tinha passa a herdar. NENHUM registro é apagado e
   // nenhum horário existente muda de dono.
   for (const p of base.professionals) {
+    // Vínculo User → Professional (P2): '' quando o profissional não tem login.
+    if (typeof (p as any).userId !== 'string') (p as any).userId = '';
     if (typeof (p as any).followBusinessHours !== 'boolean') {
       (p as any).followBusinessHours = !base.availability.some(
         (a) => a.professionalId === (p as any).id,
@@ -165,7 +174,10 @@ export function normalizeDB(raw: unknown): DB {
     if (typeof (bk as any).rescheduleCount !== 'number') (bk as any).rescheduleCount = 0;
   }
   for (const c of base.contacts) {
+    // OBSERVAÇÕES: o campo legado `note` é preservado SEM alteração; o array
+    // `notes` (P2) só é criado quando ausente — append-only, nada é apagado.
     if (typeof (c as any).note !== 'string') (c as any).note = '';
+    if (!Array.isArray((c as any).notes)) (c as any).notes = [];
     if (typeof (c as any).marketingOptIn !== 'boolean') (c as any).marketingOptIn = false;
   }
   for (const m of base.members) {

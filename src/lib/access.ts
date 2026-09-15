@@ -21,6 +21,11 @@ export {
   PERMISSIONS, PERMISSION_IDS, ROLES, roleDef, isValidRole, isValidPermission, permissionsFor,
   masterEmails, hasMasterRole, isMasterEmail, isMasterUser, isValidSupportSession,
   membershipsOf, organizationRoleIn, accessibleBusinesses, roleIn, resolveAccess, can,
+  // Escopo do profissional (P2): vínculo User→Professional e filtros puros
+  // reutilizados por agenda, catálogo, CRM e painéis do Dashboard.
+  BROAD_ACCESS_ROLES, professionalForUser, professionalScopeFor,
+  scopeBookings, canAccessBooking, scopeProfessionals,
+  agendaScopeFor, scopeInfo, NO_PROFESSIONAL_SCOPE,
 } from './access-core';
 export type { PermissionDef, RoleDef } from './access-core';
 export type { AccessContext } from './access-core';

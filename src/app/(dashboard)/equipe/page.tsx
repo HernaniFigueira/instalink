@@ -11,8 +11,15 @@ import { apiGet, apiSend } from '@/lib/api-client';
 
 interface RoleDef { id: MemberRole; label: string; hint: string; permissions: PermissionId[] }
 interface PermDef { id: PermissionId; label: string; hint: string }
-interface Member { id: string; userId: string; name: string; email: string; role: MemberRole; permissions: Record<PermissionId, boolean>; active: boolean; note: string; createdAt: string; lastLoginAt: string; }
-interface TeamData { roles: RoleDef[]; permissions: PermDef[]; me: { userId: string; role: MemberRole | 'MASTER'; isOwner: boolean; permissions: Record<PermissionId, boolean> }; owner: { userId: string; name: string; email: string; role: MemberRole } | null; members: Member[]; }
+interface Member { id: string; userId: string; name: string; email: string; role: MemberRole; permissions: Record<PermissionId, boolean>; active: boolean; note: string; createdAt: string; lastLoginAt: string; professionalId?: string; professionalName?: string; }
+interface ProfessionalOption { id: string; name: string; role: string; active: boolean; userId: string; linkedUserName: string }
+interface TeamData {
+  roles: RoleDef[]; permissions: PermDef[];
+  me: { userId: string; role: MemberRole | 'MASTER'; isOwner: boolean; permissions: Record<PermissionId, boolean> };
+  owner: { userId: string; name: string; email: string; role: MemberRole } | null;
+  members: Member[];
+  professionals?: ProfessionalOption[];
+}
 
 const input = 'w-full rounded-md border border-zinc-300 px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-zinc-900';
 
@@ -24,7 +31,11 @@ export default function EquipePage() {
   const [drawer, setDrawer] = useState<Member | null>(null);
   const [msg, setMsg] = useState('');
   const [error, setError] = useState('');
-  const [form, setForm] = useState({ name: '', email: '', password: '', role: 'SECRETARIA' as MemberRole, note: '' });
+  // VÍNCULO User → Professional (P2): o login passa a representar um
+  // profissional da unidade e vê SOMENTE a própria agenda (regra aplicada no
+  // backend). Fica no mesmo lugar em que se criam acessos.
+  const [form, setForm] = useState({ name: '', email: '', password: '', role: 'SECRETARIA' as MemberRole, note: '', professionalId: '' });
+  const [linkMsg, setLinkMsg] = useState('');
 
   // 403 aqui não pode virar "carregando para sempre": mostramos o aviso e o
   // usuário continua logado (somente 401 inicia o fluxo de login).
@@ -45,7 +56,7 @@ export default function EquipePage() {
     if (!res.ok) { setError(res.message); return; }
     setMsg(d.linkedExistingUser ? 'Acesso liberado — pessoa já tinha login e agora faz parte da equipe.' : 'Acesso criado. Envie e-mail e senha para /login.');
     setCreating(false);
-    setForm({ name: '', email: '', password: '', role: 'SECRETARIA', note: '' });
+    setForm({ name: '', email: '', password: '', role: 'SECRETARIA', note: '', professionalId: '' });
     load();
   }
   async function saveMember(m: Member, payload: Record<string, any>) {
@@ -55,6 +66,19 @@ export default function EquipePage() {
     if (drawer?.id === m.id) setDrawer({ ...drawer, ...payload, permissions: payload.permissions ? { ...drawer.permissions, ...payload.permissions } : drawer.permissions, role: payload.role || drawer.role, active: payload.active ?? drawer.active });
     load();
   }
+  async function linkProfessional(m: Member, professionalId: string) {
+    setError(''); setLinkMsg('');
+    const res = await apiSend('/api/team', 'PATCH', { businessId, id: m.id, professionalId }, { scope: 'action', area: 'Equipe' });
+    if (!res.ok) { setError(res.message); return; }
+    const pro = (data?.professionals || []).find((p) => p.id === professionalId);
+    setDrawer((cur) => (cur && cur.id === m.id
+      ? { ...cur, professionalId, professionalName: pro?.name || '' }
+      : cur));
+    setLinkMsg(professionalId ? 'Vínculo salvo: este login vê somente a própria agenda.' : 'Vínculo removido.');
+    setTimeout(() => setLinkMsg(''), 4000);
+    load();
+  }
+
   async function remove(m: Member) {
     setError('');
     const res = await apiSend(`/api/team?businessId=${businessId}&id=${m.id}`, 'DELETE', undefined, { scope: 'action', area: 'Equipe' });
@@ -125,7 +149,10 @@ export default function EquipePage() {
                   </div>
                 </div>
               </div>
-              <span className="hidden sm:block text-sm text-zinc-700">{roleLabel(m.role)}</span>
+              <span className="hidden sm:block text-sm text-zinc-700">
+                {roleLabel(m.role)}
+                {m.professionalId && <span className="block text-[11px] text-zinc-500">Agenda: {m.professionalName || 'própria'}</span>}
+              </span>
               <span className="hidden sm:block">{m.active ? <span className="text-xs font-medium bg-emerald-50 border border-emerald-200 text-emerald-800 px-2 py-0.5 rounded-full">Ativo</span> : <span className="text-xs font-medium bg-zinc-100 border border-zinc-200 text-zinc-500 px-2 py-0.5 rounded-full">Inativo</span>}</span>
               <div className="flex items-center gap-1 justify-end shrink-0">
                 <button onClick={() => setDrawer(m)} className="text-xs font-medium bg-white border border-zinc-200 px-2.5 py-1 rounded-md hover:bg-zinc-50">Gerenciar</button>
@@ -164,6 +191,30 @@ export default function EquipePage() {
                   ))}
                 </div>
               </div>
+              {(data.professionals || []).length > 0 && (
+                <div>
+                  <p className="text-xs font-semibold tracking-wide uppercase text-zinc-500 mb-2">Profissional vinculado</p>
+                  <select
+                    value={drawer.professionalId || ''}
+                    onChange={(e) => linkProfessional(drawer, e.target.value)}
+                    aria-label="Profissional vinculado a este acesso"
+                    className={input}
+                  >
+                    <option value="">Nenhum — acesso administrativo</option>
+                    {(data.professionals || []).map((p) => (
+                      <option key={p.id} value={p.id} disabled={!!p.userId && p.userId !== drawer.userId}>
+                        {p.name}{p.role ? ` · ${p.role}` : ''}{p.userId && p.userId !== drawer.userId ? ` (vinculado a ${p.linkedUserName})` : ''}
+                      </option>
+                    ))}
+                  </select>
+                  <p className="text-xs text-zinc-500 mt-1.5">
+                    Ao vincular, este login passa a ver <strong>somente a própria agenda</strong> — os clientes da unidade continuam acessíveis.
+                    Quem atende é cadastrado em <a href={`/profissionais?b=${businessId}`} className="underline font-medium">Profissionais</a>.
+                  </p>
+                  {linkMsg && <p className="text-xs font-medium text-emerald-700 mt-1" role="status">{linkMsg}</p>}
+                </div>
+              )}
+
               <div>
                 <p className="text-xs font-semibold tracking-wide uppercase text-zinc-500 mb-2">Permissões</p>
                 <div className="space-y-1.5">
@@ -207,6 +258,18 @@ export default function EquipePage() {
                   ))}
                 </div>
               </div>
+              {(data.professionals || []).length > 0 && (
+                <label className="block">
+                  <span className="text-xs font-semibold tracking-wide uppercase text-zinc-500">Profissional vinculado</span>
+                  <select value={form.professionalId} onChange={(e) => setForm({ ...form, professionalId: e.target.value })} className={input + ' mt-1'}>
+                    <option value="">Nenhum — acesso administrativo</option>
+                    {(data.professionals || []).filter((p) => !p.userId).map((p) => (
+                      <option key={p.id} value={p.id}>{p.name}{p.role ? ` · ${p.role}` : ''}</option>
+                    ))}
+                  </select>
+                  <span className="block text-[11px] text-zinc-500 mt-1">Vincule para que este login veja somente a própria agenda.</span>
+                </label>
+              )}
               <label className="block"><span className="text-xs font-semibold tracking-wide uppercase text-zinc-500">Observação</span><input value={form.note} onChange={(e) => setForm({ ...form, note: e.target.value })} className={input + ' mt-1'} placeholder="Opcional" /></label>
               {error && <p className="text-sm font-medium text-red-600">{error}</p>}
               <button onClick={create} className="w-full font-semibold bg-zinc-900 text-white py-2.5 rounded-md">Criar acesso</button>

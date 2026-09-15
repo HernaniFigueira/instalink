@@ -66,6 +66,15 @@ export const ROLES: RoleDef[] = [
     id: 'VIEWER', label: 'Visualizador', hint: 'Somente leitura do resumo',
     permissions: [],
   },
+  {
+    // Quem ATENDE (médico, dentista, barbeiro, veterinário, esteticista…).
+    // Mesmo catálogo de permissões — nenhum sistema paralelo. O recorte de
+    // "somente a própria agenda" vem do vínculo User→Professional
+    // (Professional.userId) e é aplicado no backend (lib/access-core.ts).
+    id: 'PROFISSIONAL', label: 'Profissional',
+    hint: 'Vê a própria agenda e os clientes da unidade (sem configurações)',
+    permissions: ['dashboard', 'agenda', 'clientes'],
+  },
 ];
 
 export function roleDef(role: MemberRole): RoleDef | undefined {

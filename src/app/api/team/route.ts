@@ -5,6 +5,7 @@ import { hashPassword } from '@/lib/auth';
 import { requireBusiness, PERMISSIONS, ROLES, isValidPermission, isValidRole, permissionsFor } from '@/lib/access';
 import { pushAudit } from '@/lib/audit';
 import type { BusinessMember, MemberRole, PermissionId } from '@/lib/types';
+import { professionalForUser } from '@/lib/access';
 
 // EQUIPE — logins internos da empresa (permissões por papel + individuais).
 // Regras de governança:
@@ -12,6 +13,13 @@ import type { BusinessMember, MemberRole, PermissionId } from '@/lib/types';
 //   • apenas OWNER cria/edita ADMIN ou mexe em outro OWNER;
 //   • ninguém remove a si mesmo nem o proprietário;
 //   • o proprietário nunca perde acesso (permissionsFor garante).
+//
+// VÍNCULO User → Professional (P2): o Admin liga um login existente a um
+// profissional da MESMA unidade (`professionalId`). Um profissional só pode
+// ter um login e um login só pode apontar para um profissional por unidade.
+// O vínculo NÃO cria usuário, NÃO cria papel novo e NÃO substitui as
+// permissões do papel — ele só define o escopo de agenda (o profissional vê
+// apenas a própria agenda, aplicado no backend).
 export async function GET(req: NextRequest) {
   const businessId = req.nextUrl.searchParams.get('businessId') || '';
   const guard = await requireBusiness(req, businessId, 'equipe');
@@ -19,9 +27,17 @@ export async function GET(req: NextRequest) {
   const { db, ctx } = guard;
   const members = db.members.filter((m) => m.businessId === businessId);
   const users = new Map(db.users.map((u) => [u.id, u]));
+  const professionals = db.professionals.filter((p) => p.businessId === businessId);
   return NextResponse.json({
     roles: ROLES,
     permissions: PERMISSIONS,
+    // Profissionais da unidade + quem já está vinculado (para a vinculação
+    // simples na tela de Equipe). Nenhum dado de outra unidade entra aqui.
+    professionals: professionals.map((p) => ({
+      id: p.id, name: p.name, role: p.role || '',
+      active: p.active !== false, userId: p.userId || '',
+      linkedUserName: p.userId ? (users.get(p.userId)?.name || 'Usuário removido') : '',
+    })),
     me: { userId: ctx.user.id, role: ctx.role, isOwner: ctx.isOwner, permissions: ctx.permissions },
     owner: (() => {
       const o = db.users.find((u) => u.id === ctx.business.ownerId);
@@ -29,11 +45,14 @@ export async function GET(req: NextRequest) {
     })(),
     members: members.map((m) => {
       const u = users.get(m.userId);
+      const linked = professionalForUser(db, businessId, m.userId);
       return {
         id: m.id, userId: m.userId, name: u?.name || 'Usuário', email: u?.email || '',
         role: m.role, permissions: permissionsFor(m.role, m.permissions),
         active: m.active !== false, note: m.note || '', createdAt: m.createdAt,
         lastLoginAt: u?.lastLoginAt || '',
+        professionalId: linked?.id || '',
+        professionalName: linked?.name || '',
       };
     }),
   });
@@ -62,6 +81,8 @@ export async function POST(req: NextRequest) {
     if (role === 'ADMIN' && !ctx.isOwner && ctx.role !== 'ADMIN') {
       return NextResponse.json({ error: 'Só o proprietário/administrador pode criar administradores.' }, { status: 403 });
     }
+    // Vínculo opcional com um profissional da unidade (validado abaixo).
+    const requestedProfessionalId = String(body.professionalId || '').trim();
     const overrides: Partial<Record<PermissionId, boolean>> = {};
     if (body.permissions && typeof body.permissions === 'object') {
       for (const key of Object.keys(body.permissions)) {
@@ -76,6 +97,13 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Esta pessoa já faz parte da equipe.' }, { status: 400 });
     }
     const existingUser = db0.users.find((u) => u.email === email);
+    if (requestedProfessionalId) {
+      const target = db0.professionals.find((p) => p.id === requestedProfessionalId && p.businessId === businessId);
+      if (!target) return NextResponse.json({ error: 'Profissional não encontrado nesta unidade.' }, { status: 404 });
+      if (target.userId && target.userId !== existingUser?.id) {
+        return NextResponse.json({ error: 'Este profissional já está vinculado a outro login.' }, { status: 400 });
+      }
+    }
 
     const created = await updateDB((db) => {
       const now = new Date().toISOString();
@@ -91,6 +119,16 @@ export async function POST(req: NextRequest) {
         invitedBy: ctx.user.id, createdAt: now, updatedAt: now,
       };
       db.members.push(member);
+      if (requestedProfessionalId) {
+        const pro = db.professionals.find((p) => p.id === requestedProfessionalId && p.businessId === businessId);
+        if (pro) {
+          pro.userId = userId;
+          pushAudit(db, {
+            action: 'member.professional_linked', actor: { ...ctx.user, role: ctx.role }, businessId,
+            supportSessionId: ctx.support?.id, meta: { professionalId: pro.id, userId },
+          });
+        }
+      }
       pushAudit(db, {
         action: 'member.created', actor: { ...ctx.user, role: ctx.role }, businessId,
         supportSessionId: ctx.support?.id, meta: { role, linkedExistingUser: !!existingUser, email },
@@ -121,6 +159,16 @@ export async function PATCH(req: NextRequest) {
       return NextResponse.json({ error: 'Sem permissão para promover a administrador.' }, { status: 403 });
     }
 
+    const linkRequested = body.professionalId !== undefined;
+    const nextProfessionalId = linkRequested ? String(body.professionalId || '').trim() : '';
+    if (linkRequested && nextProfessionalId) {
+      const target = db.professionals.find((p) => p.id === nextProfessionalId && p.businessId === businessId);
+      if (!target) return NextResponse.json({ error: 'Profissional não encontrado nesta unidade.' }, { status: 404 });
+      if (target.userId && target.userId !== member.userId) {
+        return NextResponse.json({ error: 'Este profissional já está vinculado a outro login.' }, { status: 400 });
+      }
+    }
+
     const updated = await updateDB((d) => {
       const m = d.members.find((x) => x.id === member.id)!;
       if (isValidRole(body.role) && body.role !== 'OWNER') m.role = body.role;
@@ -132,6 +180,21 @@ export async function PATCH(req: NextRequest) {
           if (isValidPermission(key)) next[key] = body.permissions[key] === true;
         }
         m.permissions = next;
+      }
+      if (linkRequested) {
+        // Um login aponta para no máximo UM profissional nesta unidade.
+        for (const p of d.professionals) {
+          if (p.businessId === businessId && p.userId === m.userId) p.userId = '';
+        }
+        if (nextProfessionalId) {
+          const pro = d.professionals.find((p) => p.id === nextProfessionalId && p.businessId === businessId);
+          if (pro) pro.userId = m.userId;
+        }
+        pushAudit(d, {
+          action: nextProfessionalId ? 'member.professional_linked' : 'member.professional_unlinked',
+          actor: { ...ctx.user, role: ctx.role }, businessId,
+          supportSessionId: ctx.support?.id, meta: { memberId: m.id, professionalId: nextProfessionalId },
+        });
       }
       m.updatedAt = new Date().toISOString();
       pushAudit(d, {
@@ -161,6 +224,12 @@ export async function DELETE(req: NextRequest) {
     }
     await updateDB((d) => {
       d.members = d.members.filter((x) => x.id !== member.id);
+      // Remove o vínculo de agenda deste login nesta unidade: sem acesso, o
+      // profissional deixa de aparecer como "com login" (a categoria
+      // profissional em si NÃO é apagada — só o vínculo).
+      for (const p of d.professionals) {
+        if (p.businessId === businessId && p.userId === member.userId) p.userId = '';
+      }
       // Sessões do usuário removido caem junto (isolamento imediato).
       const stillMember = d.members.some((x) => x.userId === member.userId && x.active !== false);
       const ownsAnything = d.businesses.some((b) => b.ownerId === member.userId);

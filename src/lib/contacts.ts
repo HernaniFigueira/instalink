@@ -4,7 +4,7 @@
 // nunca cria duplicado. Preserva a lógica histórica de dedupe por telefone.
 import { randomUUID } from 'node:crypto';
 import { onlyDigits } from './utils';
-import type { BusinessCustomer, DB } from './types';
+import type { BusinessCustomer, ContactNote, DB } from './types';
 
 export interface ContactInput {
   businessId: string;
@@ -106,6 +106,61 @@ export function backfillContacts(db: DB): void {
       phone: r.phone, email: r.email, source: r.source, now: r.at,
     });
   }
+}
+
+// ═══════════════════════════════════════════════════════════════
+// OBSERVAÇÕES DO CLIENTE (P2) — APPEND-ONLY
+// ═══════════════════════════════════════════════════════════════
+// Regras:
+//   • observação nova NUNCA sobrescreve nem apaga as anteriores;
+//   • cada registro guarda QUEM escreveu, QUANDO escreveu e o TEXTO;
+//   • o contexto (agendamento) é gravado quando existir;
+//   • o campo legado `Contact.note` (texto único) continua intacto e é
+//     exibido como "registro anterior" — nada é migrado destrutivamente.
+export const NOTE_MAX_LEN = 1000;
+
+export interface VisibleNote extends ContactNote {
+  /** true = veio do campo legado `note` (sem autor/data confiáveis). */
+  legacy?: boolean;
+}
+
+/** Observações visíveis (legado primeiro, depois as novas em ordem de escrita). */
+export function contactNotes(c: Pick<BusinessCustomer, 'id' | 'note' | 'notes' | 'createdAt'>): VisibleNote[] {
+  const out: VisibleNote[] = [];
+  const legacy = String(c.note || '').trim();
+  if (legacy) {
+    out.push({ id: `legacy-${c.id || 'note'}`, at: c.createdAt || '', by: '', byName: '', text: legacy, legacy: true });
+  }
+  for (const n of Array.isArray(c.notes) ? c.notes : []) {
+    if (!n || typeof n.text !== 'string' || !n.text.trim()) continue;
+    out.push({ ...n, text: n.text.slice(0, NOTE_MAX_LEN) });
+  }
+  return out;
+}
+
+/**
+ * Acrescenta uma observação (append-only). Retorna `null` quando o texto é
+ * vazio — nunca gravamos registro vazio nem apagamos nada.
+ */
+export function addContactNote(
+  c: BusinessCustomer,
+  input: { text: string; by?: string; byName?: string; at?: string; bookingId?: string },
+): ContactNote | null {
+  const text = String(input.text || '').trim().slice(0, NOTE_MAX_LEN);
+  if (!text) return null;
+  if (!Array.isArray(c.notes)) c.notes = [];
+  const note: ContactNote = {
+    id: randomUUID(),
+    at: input.at || new Date().toISOString(),
+    by: input.by || '',
+    byName: String(input.byName || '').slice(0, 80),
+    text,
+  };
+  if (input.bookingId) note.bookingId = String(input.bookingId).slice(0, 64);
+  c.notes.push(note);
+  c.updatedAt = note.at;
+  c.lastInteraction = note.at;
+  return note;
 }
 
 export interface PublicContact {

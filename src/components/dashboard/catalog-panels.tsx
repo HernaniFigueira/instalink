@@ -223,7 +223,12 @@ export function TeamEditor({ businessId, pros, rules, onSave, onAskDelete }: {
                     {followsBusinessHours(p, rules) ? 'Segue a empresa' : 'Horário próprio'}
                   </span>
                 </p>
-                <p className="text-xs text-zinc-500">{p.role || '—'}{!p.active && ' · inativo'}</p>
+                <p className="text-xs text-zinc-500">
+                  {p.role || '—'}{!p.active && ' · inativo'}
+                  {/* Vínculo User→Professional (P2): o login é gerenciado em
+                      Equipe; aqui só mostramos o estado real. */}
+                  {p.userId ? ' · com login vinculado' : ''}
+                </p>
               </div>
               <button onClick={() => open(p)} className="text-xs font-bold bg-zinc-100 px-3 py-2 rounded-lg">Editar</button>
               <button onClick={() => onAskDelete(p)} aria-label={`Excluir ${p.name}`}

@@ -139,6 +139,67 @@ Consequências arquiteturais:
   "Comece por aqui" com progresso REAL (nunca inventado) — opcional e
   descartável, sem wizard bloqueante.
 
+## P2 set/2026 — Resultados, Acesso do Profissional e Identidade do painel
+
+Três frentes, um só desenho — nada de sistema paralelo (sem RBAC novo, sem
+tabela nova de status, sem motor de indicadores duplicado).
+
+### 1. Resultados (Bloco 1) — `src/lib/insights.ts` + `/api/results`
+
+`buildResults()` é PURO (dado entra, indicador sai) e cobre indicadores,
+comparação, funil, desempenho por serviço/profissional, origem de leads e
+receita. `collectResults(db, unidades, janela, anterior)` é a única função de
+coleta: a tela Resultados passa UMA unidade; Organização passa **apenas as
+unidades que o usuário acessa**; a Dashboard usa o mesmo payload reduzido
+(`resultsSummary`). Nenhum indicador é decorativo.
+
+Semântica das datas (regra do produto, não misturar):
+
+| Indicador | Data usada |
+| --- | --- |
+| Agendamentos / atendimentos / concluídos / cancelamentos / faltas | data do **atendimento** (`Booking.date`) |
+| Receita prevista / ticket médio | data do **atendimento** do registro elegível |
+| Novos clientes | data de **cadastro** do contato (`Contact.createdAt`) |
+| Clientes (total) | base atual, fora do recorte de período |
+| Leads / conversão / origem | data de **criação** do lead (`Lead.createdAt`) |
+| Receita registrada | data do **registro financeiro** — só existe com módulo de pedidos; sem base confiável o indicador vem com `hasData: false` e explicação |
+
+Funil: `Lead → Agendamento → Confirmado → Chegou → Concluído`. As etapas
+saem dos estados REAIS (`pending/confirmed/cancelled/completed/no_show`); o
+estágio “Chegou” não é registrado pelo modelo e aparece como **não
+rastreado** (nunca um número inventado). Períodos: Hoje · 7 · 30 · Este mês ·
+Personalizado (+90/12 meses/tudo e as URLs numéricas antigas), sempre com
+comparação ao período imediatamente anterior de mesma duração.
+
+### 2. Acesso do Profissional (Bloco 2) — `Professional.userId`
+
+O vínculo **login ↔ profissional** é um campo por unidade (`Professional.userId`),
+configurado em Equipe. A regra vive no BACKEND (`access-core.ts`):
+`professionalScopeFor` define o escopo, `scopeBookings` recorta os dados e
+`canAccessBooking` decide mutações — agenda, catálogo, painéis e PATCH passam
+pela MESMA função. Consequências:
+
+- vinculado ⇒ vê só a própria agenda (URL, `limit`, `from/to` e ids trocados
+  não ampliam nada);
+- papel de atendimento SEM vínculo ⇒ agenda vazia (`agendaScope: 'none'`) —
+  fecha por padrão em vez de abrir a de todo mundo;
+- Owner/Admin/Master nunca são reduzidos pelo vínculo;
+- clientes, histórico e observações continuam no nível da UNIDADE
+  (continuidade de atendimento) — observações são **append-only** com autor,
+  data e contexto;
+- a chegada/confirmação registrada pela recepção aparece ao voltar para a
+  tela (`useRevalidateOnFocus`, sem polling e sem realtime novo).
+
+### 3. Identidade visual do painel (Bloco 3) — `src/lib/appearance.ts`
+
+Uma cor por `Business.appearance.navColor`, escolhida em Configurações →
+Aparência com prévia. Vira tokens CSS (`--il-nav*`) aplicados no container do
+painel: a sidebar usa `var(--il-nav*)` (nada hardcoded, nada de classes
+combinatórias) e o contraste do texto é **derivado** da luminância da cor, então
+não existe combinação ilegível. Trocar de unidade troca a identidade na hora
+(`/api/auth/me` alimenta o shell). A identidade pública (`Page.theme` /
+`ThemeStyle`) é outro sistema e não foi tocada.
+
 ## O que NÃO foi construído (evolução futura)
 
 Billing/planos, domínio próprio, WhatsApp API, pagamentos online, delivery com

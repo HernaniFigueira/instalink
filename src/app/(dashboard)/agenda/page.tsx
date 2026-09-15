@@ -34,6 +34,7 @@ import {
 import { BookingDetailSheet } from '@/components/dashboard/BookingDetailSheet';
 import { NewBookingSheet } from '@/components/dashboard/NewBookingSheet';
 import { AccessDenied, PermissionNotice, useAreaLoad, useForbiddenNotice } from '@/components/dashboard/AccessNotice';
+import { useRevalidateOnFocus } from '@/components/dashboard/use-revalidate';
 import { bookingDuration, needsClosure, rescheduleDecision } from '@/lib/booking-ops';
 import { apiGet, apiSend } from '@/lib/api-client';
 import { SLOT_STATE_MESSAGE, slotState } from '@/lib/slot-states';
@@ -355,6 +356,10 @@ export default function AgendaPage() {
   }, [businessId, range.from, range.to, report]);
 
   useEffect(() => { load(); }, [load]);
+
+  // Estado real da agenda (P2): quem atende vê a confirmação/chegada registrada
+  // pela recepção ao VOLTAR para a tela — sem F5 e sem polling.
+  useRevalidateOnFocus(load);
 
   useEffect(() => { bookingsRef.current = new Map(bookings.map((b) => [b.id, b])); }, [bookings]);
 
