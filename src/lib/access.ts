@@ -66,9 +66,20 @@ export function membershipsOf(db: DB, userId: string): BusinessMember[] {
   return db.members.filter((m) => m.userId === userId && m.active !== false);
 }
 
+/** Papel administrativo do usuário na organização (vazio = sem acesso org). */
+export function organizationRoleIn(db: DB, userId: string, organizationId: string): 'OWNER' | 'ADMIN' | '' {
+  const organization = db.organizations.find((o) => o.id === organizationId);
+  if (!organization) return '';
+  if (organization.ownerId === userId) return 'OWNER';
+  const membership = db.organizationMembers.find(
+    (m) => m.organizationId === organizationId && m.userId === userId && m.active !== false,
+  );
+  return membership?.role === 'OWNER' || membership?.role === 'ADMIN' ? membership.role : '';
+}
+
 /**
- * Negócios que o usuário pode acessar: os que ele possui + os que é membro
- * ativo. NUNCA retorna negócio de terceiro — a ÚNICA exceção é a empresa
+ * Unidades acessíveis: ownership direto, administração da Organization ou
+ * membership explícito no Business. NUNCA retorna negócio de terceiro — a ÚNICA exceção é a empresa
  * aberta explicitamente numa sessão de suporte do master (auditada e com
  * prazo), que entra no fim da lista.
  */
@@ -79,9 +90,18 @@ export function accessibleBusinesses(
 ): Business[] {
   const owned = db.businesses.filter((b) => b.ownerId === user.id);
   const ids = new Set(membershipsOf(db, user.id).map((m) => m.businessId));
+  const governedOrganizationIds = new Set(
+    db.organizations
+      .filter((o) => organizationRoleIn(db, user.id, o.id) !== '')
+      .map((o) => o.id),
+  );
   const asMember = db.businesses.filter((b) => ids.has(b.id) && b.ownerId !== user.id);
-  const list = [...owned, ...asMember];
-  if (support && !support.endedAt && new Date(support.expiresAt).getTime() > Date.now()) {
+  const asOrganizationAdmin = db.businesses.filter(
+    (b) => !!b.organizationId && governedOrganizationIds.has(b.organizationId) &&
+      b.ownerId !== user.id && !ids.has(b.id),
+  );
+  const list = [...owned, ...asMember, ...asOrganizationAdmin];
+  if (isMasterUser(user) && support && support.masterUserId === user.id && !support.endedAt && new Date(support.expiresAt).getTime() > Date.now()) {
     const target = db.businesses.find((b) => b.id === support.businessId);
     if (target && !list.some((b) => b.id === target.id)) list.push(target);
   }
@@ -93,6 +113,8 @@ export function roleIn(db: DB, user: User, businessId: string): MemberRole | '' 
   const business = db.businesses.find((b) => b.id === businessId);
   if (!business) return '';
   if (business.ownerId === user.id) return 'OWNER';
+  const organizationRole = business.organizationId ? organizationRoleIn(db, user.id, business.organizationId) : '';
+  if (organizationRole) return organizationRole;
   const member = db.members.find(
     (m) => m.businessId === businessId && m.userId === user.id && m.active !== false,
   );
@@ -116,11 +138,23 @@ export function resolveAccess(
   const member = db.members.find(
     (m) => m.businessId === businessId && m.userId === user.id && m.active !== false,
   ) || null;
+  const organizationRole = business.organizationId
+    ? organizationRoleIn(db, user.id, business.organizationId)
+    : '';
 
   if (isOwner) {
     return {
       user, business, member: null, role: 'OWNER',
       permissions: permissionsFor('OWNER'), isOwner: true, isMaster: isMasterUser(user),
+      support: null, readOnly: false,
+    };
+  }
+
+  if (organizationRole) {
+    return {
+      user, business, member: null, role: organizationRole,
+      permissions: permissionsFor(organizationRole),
+      isOwner: organizationRole === 'OWNER', isMaster: isMasterUser(user),
       support: null, readOnly: false,
     };
   }
@@ -134,7 +168,7 @@ export function resolveAccess(
   }
 
   // Master SEM sessão de suporte não tem acesso a conteúdo de empresa.
-  if (isMasterUser(user) && support && support.businessId === businessId && !support.endedAt) {
+  if (isMasterUser(user) && support && support.masterUserId === user.id && support.businessId === businessId && !support.endedAt && new Date(support.expiresAt).getTime() > Date.now()) {
     return {
       user, business, member: null, role: 'MASTER',
       permissions: permissionsFor('OWNER'), isOwner: false, isMaster: true,
@@ -157,10 +191,11 @@ export function can(ctx: AccessContext, permission: PermissionId): boolean {
 export const SUPPORT_COOKIE = 'il_support';
 const SUPPORT_MINUTES = 60;
 
-export async function supportFromRequest(req: NextRequest): Promise<SupportSession | null> {
+export async function supportFromRequest(req: NextRequest, masterUserId?: string): Promise<SupportSession | null> {
   const id = req.cookies.get(SUPPORT_COOKIE)?.value;
   if (!id) return null;
-  return supportFromDb(id);
+  const support = await supportFromDb(id);
+  return support && (!masterUserId || support.masterUserId === masterUserId) ? support : null;
 }
 
 export async function supportFromCookies(): Promise<SupportSession | null> {
@@ -216,7 +251,7 @@ export async function requireBusiness(
   const auth = await requireUser(req);
   if (!auth.ok) return auth;
   const db = await readDB();
-  const support = isMasterUser(auth.user) ? await supportFromRequest(req) : null;
+  const support = isMasterUser(auth.user) ? await supportFromRequest(req, auth.user.id) : null;
   const ctx = resolveAccess(db, auth.user, businessId, support);
   if (!ctx) return { ok: false, res: unauthorized('Você não tem acesso a este negócio.') };
   if (ctx.readOnly && req.method !== 'GET' && req.method !== 'HEAD') {

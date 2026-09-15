@@ -11,7 +11,7 @@ import type { SupportMode } from '@/lib/types';
 export async function GET(req: NextRequest) {
   const guard = await requireMaster(req);
   if (!guard.ok) return guard.res;
-  const session = await supportFromRequest(req);
+  const session = await supportFromRequest(req, guard.user.id);
   return NextResponse.json({ support: session });
 }
 
@@ -57,7 +57,7 @@ export async function DELETE(req: NextRequest) {
   const guard = await requireMaster(req);
   if (!guard.ok) return guard.res;
   const { user } = guard;
-  const session = await supportFromRequest(req);
+  const session = await supportFromRequest(req, guard.user.id);
   if (session) {
     await updateDB((d) => {
       const s = d.supportSessions.find((x) => x.id === session.id);

@@ -11,6 +11,8 @@ import {
 } from '@/lib/panel';
 import { isSessionExpired } from '@/lib/http';
 import type { BusinessMode, FeatureId, PermissionId } from '@/lib/types';
+import { requiresActiveBusiness } from '@/lib/business-context';
+import { unitsInSameOrganization } from '@/lib/organization';
 
 interface Biz {
   id: string;
@@ -25,6 +27,7 @@ interface Biz {
   isOwner?: boolean;
   permissions?: Record<PermissionId, boolean>;
   readOnly?: boolean;
+  organizationId?: string;
 }
 
 interface SupportInfo {
@@ -151,10 +154,14 @@ export function DashboardShell({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     if (!ready || businesses.length === 0) return;
     const b = params.get('b');
-    if (!businesses.some((x) => x.id === b)) router.replace(`${pathname}?b=${businesses[0].id}`);
+    if (requiresActiveBusiness(pathname) && !businesses.some((x) => x.id === b)) router.replace(`${pathname}?b=${businesses[0].id}`);
   }, [ready, businesses, params, pathname, router]);
 
-  function switchBiz(id: string) { router.push(`${pathname}?b=${id}`); }
+  function switchBiz(id: string) {
+    if (id === '__overview') { router.push(`/organizacao?organization=${business?.organizationId || ''}`); return; }
+    if (id === '__add') { router.push(`/organizacao?organization=${business?.organizationId || ''}&add=1`); return; }
+    router.push(`${pathname === '/organizacao' ? '/dashboard' : pathname}?b=${id}`);
+  }
   function toggle() {
     setCollapsed((c) => {
       try { localStorage.setItem('il-side', c ? 'full' : 'mini'); } catch {}
@@ -180,6 +187,8 @@ export function DashboardShell({ children }: { children: React.ReactNode }) {
   }
 
   const business = businesses.find((b) => b.id === params.get('b')) || businesses[0];
+  const organizationUnits = unitsInSameOrganization(business, businesses);
+  const otherBusinesses = businesses.filter((x) => x.organizationId !== business?.organizationId);
   const modes = business?.modes || [];
   const features = business?.features || {};
   const permissions: Partial<Record<PermissionId, boolean>> = business?.permissions || {};
@@ -244,7 +253,10 @@ export function DashboardShell({ children }: { children: React.ReactNode }) {
           <div className="px-3 py-2 border-b border-zinc-100">
             <select value={business?.id || ''} onChange={(e) => switchBiz(e.target.value)} aria-label="Trocar de negócio"
               className="w-full bg-zinc-50 border border-zinc-200 text-xs font-medium rounded-md px-2 py-1.5">
-              {businesses.map((x) => <option key={x.id} value={x.id}>{x.name}</option>)}
+              <option value="__overview">Visão geral da organização</option>
+              <optgroup label="Unidades desta organização">{organizationUnits.map((x) => <option key={x.id} value={x.id}>{x.name}</option>)}</optgroup>
+              {otherBusinesses.length > 0 && <optgroup label="Outras organizações">{otherBusinesses.map((x) => <option key={x.id} value={x.id}>{x.name}</option>)}</optgroup>}
+              <option value="__add">+ Adicionar unidade</option>
             </select>
           </div>
         )}
@@ -316,7 +328,10 @@ export function DashboardShell({ children }: { children: React.ReactNode }) {
             {businesses.length > 1 ? (
               <select value={business?.id || ''} onChange={(e) => switchBiz(e.target.value)} aria-label="Trocar de negócio"
                 className="bg-zinc-50 border border-zinc-200 text-xs font-semibold rounded-md px-2 py-1.5 max-w-[160px] truncate">
-                {businesses.map((x) => <option key={x.id} value={x.id}>{x.name}</option>)}
+                <option value="__overview">Visão geral da organização</option>
+              <optgroup label="Unidades desta organização">{organizationUnits.map((x) => <option key={x.id} value={x.id}>{x.name}</option>)}</optgroup>
+              {otherBusinesses.length > 0 && <optgroup label="Outras organizações">{otherBusinesses.map((x) => <option key={x.id} value={x.id}>{x.name}</option>)}</optgroup>}
+              <option value="__add">+ Adicionar unidade</option>
               </select>
             ) : (
               <span className="font-semibold text-sm truncate text-zinc-900">{business?.name || 'InstaLink'}</span>

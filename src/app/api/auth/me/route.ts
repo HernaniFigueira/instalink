@@ -5,6 +5,7 @@ import {
   accessibleBusinesses, isMasterUser, permissionsFor, resolveAccess, supportFromRequest,
   membershipsOf,
 } from '@/lib/access';
+import { organizationsFor } from '@/lib/organization';
 import { normalizeFeatures } from '@/lib/features';
 
 // GET — quem está logado + negócios acessíveis COM papel e permissões.
@@ -16,7 +17,7 @@ export async function GET(req: NextRequest) {
   const db = await readDB();
   // Sessão de suporte é resolvida ANTES da lista: a empresa em suporte
   // precisa aparecer para o painel abrir (e só ela, além das do usuário).
-  const support = isMasterUser(user) ? await supportFromRequest(req) : null;
+  const support = isMasterUser(user) ? await supportFromRequest(req, user.id) : null;
   const businesses = accessibleBusinesses(db, user, support);
 
   const list = businesses.map((b) => {
@@ -24,6 +25,7 @@ export async function GET(req: NextRequest) {
     const member = membershipsOf(db, user.id).find((m) => m.businessId === b.id);
     return {
       id: b.id,
+      organizationId: b.organizationId || '',
       slug: b.slug,
       name: b.name,
       logo: b.logo || '',
@@ -38,10 +40,16 @@ export async function GET(req: NextRequest) {
     };
   });
 
+  const organizations = organizationsFor(db, user).map((o) => ({
+    id: o.id, name: o.name,
+    unitIds: businesses.filter((b) => b.organizationId === o.id).map((b) => b.id),
+    canManage: o.ownerId === user.id || db.organizationMembers.some((m) => m.organizationId === o.id && m.userId === user.id && m.active && m.role === 'ADMIN'),
+  }));
   return NextResponse.json({
     user: { id: user.id, name: user.name, email: user.email, role: user.role || 'owner' },
     isMaster: isMasterUser(user),
     businesses: list,
+    organizations,
     support: support
       ? { id: support.id, businessId: support.businessId, mode: support.mode, reason: support.reason, expiresAt: support.expiresAt }
       : null,

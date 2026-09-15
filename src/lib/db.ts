@@ -34,6 +34,7 @@ export function emptyDB(): DB {
   return {
     users: [], sessions: [], customers: [], customerSessions: [],
     passwordResets: [],
+    organizations: [], organizationMembers: [],
     businesses: [], pages: [], categories: [],
     products: [], options: [], optionValues: [], services: [],
     professionals: [], availability: [], exceptions: [], orders: [],
@@ -46,11 +47,11 @@ export function emptyDB(): DB {
 
 // Migração defensiva: preenche campos novos em documentos antigos.
 // Reversível (só adiciona defaults) e idempotente.
-function normalize(raw: unknown): DB {
+export function normalizeDB(raw: unknown): DB {
   const base = { ...emptyDB(), ...((raw && typeof raw === 'object' ? raw : {}) as Partial<DB>) };
   // Arrays novos (members/agents/campaigns/audit/...): documento antigo pode
   // ter chaves ausentes ou inválidas — garantimos array em todos os casos.
-  for (const key of ['members', 'agents', 'conversations', 'messages', 'campaigns', 'campaignRecipients', 'audit', 'supportSessions'] as const) {
+  for (const key of ['organizations', 'organizationMembers', 'members', 'agents', 'conversations', 'messages', 'campaigns', 'campaignRecipients', 'audit', 'supportSessions'] as const) {
     if (!Array.isArray((base as any)[key])) (base as any)[key] = [];
   }
   // Contatos: migração defensiva UMA única vez (quando o doc antigo não
@@ -58,6 +59,26 @@ function normalize(raw: unknown): DB {
   const hadContacts = Array.isArray((raw as any)?.contacts);
   if (!Array.isArray(base.contacts)) base.contacts = [];
   if (!hadContacts) backfillContacts(base);
+  // Organization é uma camada aditiva. Dados legados são agrupados por
+  // proprietário, mantendo cada Business como unidade operacional isolada.
+  const now = new Date().toISOString();
+  for (const b of base.businesses) {
+    if (!(b as any).organizationId) {
+      // Um Business legado é uma empresa independente até que o usuário
+      // explicitamente crie outra unidade dentro da mesma Organization.
+      // Agrupar por ownerId transformaria empresas sem relação em filiais.
+      const organizationId = `org-${b.id}`;
+      let org = base.organizations.find((o) => o.id === organizationId);
+      if (!org) {
+        org = { id: organizationId, name: b.name, ownerId: b.ownerId, metadata: {}, createdAt: b.createdAt || now, updatedAt: b.updatedAt || now };
+        base.organizations.push(org);
+      }
+      (b as any).organizationId = org.id;
+    }
+  }
+  for (const o of base.organizations) {
+    if (!o.metadata || typeof o.metadata !== 'object') o.metadata = {};
+  }
   for (const b of base.businesses) {
     // Módulos opcionais: derivados dos blocos apenas quando ausentes
     // (idempotente; valor explícito do lojista nunca é sobrescrito).
@@ -195,7 +216,7 @@ async function pgRead(): Promise<DB> {
   await pgInit();
   const res = await getPool().query('SELECT data FROM instalink_doc WHERE id = 1');
   if (res.rows.length === 0) return emptyDB();
-  return normalize(res.rows[0].data);
+  return normalizeDB(res.rows[0].data);
 }
 
 async function pgWrite(db: DB): Promise<void> {
@@ -213,7 +234,7 @@ function fileRead(): DB {
   const raw = fs.readFileSync(FILE, 'utf8');
   if (!raw.trim()) return emptyDB();
   // FAIL-CLOSED também em dev: JSON corrompido lança, não vira vazio.
-  return normalize(JSON.parse(raw));
+  return normalizeDB(JSON.parse(raw));
 }
 
 function fileWrite(db: DB): void {

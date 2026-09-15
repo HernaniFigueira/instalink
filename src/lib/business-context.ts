@@ -49,3 +49,10 @@ export function resolveActiveBusinessId(
   if (req && businessIdInList(req, list)) return req;
   return list[0]?.id || '';
 }
+
+
+/** Rotas organizacionais não exigem uma unidade ativa no query string. */
+export function requiresActiveBusiness(pathname: string): boolean {
+  const clean = String(pathname || '').replace(/\/+$/, '') || '/';
+  return clean !== '/organizacao';
+}
