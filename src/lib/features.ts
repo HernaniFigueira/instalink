@@ -372,6 +372,15 @@ const ACTIVATION_BLOCK: Partial<Record<FeatureId, { type: BlockType; settings?: 
   products: { type: 'products', settings: { title: 'Vitrine' } },
   services: { type: 'services', settings: { title: 'Serviços' } },
   quote: { type: 'quote', settings: { title: 'Solicite um orçamento' } },
+  // Conteúdo editorial: ligar o módulo também garante o bloco de
+  // apresentação (sem isso, "Galeria ON" no Recursos não tinha NADA na
+  // página — o clássico "ativei e não apareceu").
+  gallery: { type: 'gallery', settings: { title: 'Conheça o espaço' } },
+  reviews: { type: 'testimonials', settings: {} },
+  faq: { type: 'faq', settings: {} },
+  location: { type: 'location', settings: {} },
+  whatsapp: { type: 'whatsapp', settings: {} },
+  agent: { type: 'concierge', settings: {} },
   // 'bookings' NÃO ganha bloco próprio: CTA + "Agendar" por serviço + menu já
   // abrem o fluxo (destino único — mesmo padrão do cadastro inicial).
 };
@@ -397,6 +406,83 @@ export function withActivationBlock(
 /** O módulo exige garantir bloco ao ligar? (usado pela API de features) */
 export function needsActivationBlock(id: FeatureId): boolean {
   return Boolean(ACTIVATION_BLOCK[id]);
+}
+
+/**
+ * COERÊNCIA REVERSA (editor → módulo), baseada em INTENÇÃO (diff):
+ * adicionar um bloco de conteúdo OU reativar um bloco oculto no editor liga
+ * o módulo OPCIONAL correspondente (galeria, FAQ, avaliações, localização,
+ * WhatsApp, assistente). Motivo: sem isso, negócios com `features`
+ * materializado (ex.: `gallery: false` derivado ANTES do bloco existir)
+ * guardavam a galeria, aparecia "Alterações salvas" e a página pública
+ * IGNORAVA o bloco — o bug "adicionei imagens e elas não aparecem".
+ *
+ * Só a AÇÃO DO USUÁRIO vale (bloco novo/reativado neste salvamento): um
+ * bloco que já estava ativo não religa módulo desligado de propósito em
+ * Recursos — a regra "o módulo manda" continua inviolável. Módulos
+ * comerciais (produtos/serviços/agenda) NÃO são religados daqui: governam
+ * áreas inteiras do painel e só mudam em Recursos (o editor avisa e
+ * oferece o atalho).
+ */
+const BLOCK_FEATURE_FOR_SYNC: Partial<Record<BlockType, OptionalFeatureId>> = {
+  gallery: 'gallery',
+  faq: 'faq',
+  testimonials: 'reviews',
+  location: 'location',
+  whatsapp: 'whatsapp',
+  concierge: 'agent',
+};
+
+function isContentActivation(block: Block, previous: Block[]): boolean {
+  const prev = previous.find((p) => p.id === block.id || p.type === block.type);
+  if (!prev) return true; // bloco novo
+  return prev.enabled === false && block.enabled !== false; // reativado agora
+}
+
+/**
+ * Compara blocos salvos (`previous`) com os recebidos do editor (`next`) e
+ * devolve o patch de `features` para o conteúdo recém-ativado, ou `null`
+ * quando nada muda.
+ */
+export function featuresForActivatedBlocks(
+  business: Pick<Business, 'features'>,
+  previous: Block[],
+  next: Block[],
+): Record<OptionalFeatureId, boolean> | null {
+  // Base = o que a leitura normalizada já mostraria (dados legados derivados
+  // dos blocos ANTERIORES ao salvamento). Assim, materializar features nunca
+  // desliga nada que o visitante via antes — só liga o recém-ativado.
+  const current = normalizeFeatures(business as Business, previous);
+  let changed = false;
+  const patch = { ...current };
+  for (const b of next) {
+    if (b.enabled === false) continue;
+    const feat = BLOCK_FEATURE_FOR_SYNC[b.type];
+    if (!feat) continue;
+    if (!isContentActivation(b, previous)) continue;
+    if (patch[feat] !== true) {
+      patch[feat] = true;
+      changed = true;
+    }
+  }
+  return changed ? patch : null;
+}
+
+/**
+ * Aviso de coerência para o editor: o bloco depende de um módulo; a página
+ * pública só renderiza com o módulo ligado. Retorna o rótulo do módulo que
+ * segura o bloco, ou '' quando o bloco pode aparecer como está.
+ */
+export function blockModuleGate(
+  business: Pick<Business, 'modes' | 'features'>,
+  type: BlockType,
+): string {
+  const feature = blockFeature(type);
+  if (!feature) return '';
+  if (isFeatureEnabled(business, feature)) return '';
+  if (feature === 'services' && isFeatureEnabled(business, 'bookings')) return '';
+  if (feature === 'products' && isFeatureEnabled(business, 'orders')) return '';
+  return featureDef(feature)?.label || feature;
 }
 
 /**

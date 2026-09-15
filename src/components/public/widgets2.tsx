@@ -5,7 +5,6 @@ import { useCustomerForm } from './use-customer-form';
 import { Icon } from '@/components/icons';
 import type { Business, Professional, PublicBusiness, Service } from '@/lib/types';
 import { money, trackEvent, waLink } from './widgets';
-import { whatsappVisible } from '@/lib/features';
 // Página pública: preço e descrição são públicos; duração NÃO é exibida
 // (continua existindo internamente para agenda/conflito/buffer).
 import { publicPriceLabel, publicServiceSecondary } from '@/lib/pricing';
@@ -579,19 +578,3 @@ export function ConciergeIsland({ business, agent, title }: {
 }
 
 // ── BOTÃO WHATSAPP FLUTUANTE ─────────────────────────────
-export function WaFloat({ business, label }: { business: PublicBusiness; label: string }) {
-  if (!whatsappVisible(business)) return null; // módulo manda
-  return (
-    <a
-      href={waLink(business.whatsapp, `Olá! Vim pelo site da ${business.name}.`)}
-      target="_blank" rel="noreferrer"
-      onClick={() => trackEvent(business.id, 'whatsapp_click', { from: 'float' })}
-      className="fixed bottom-5 right-5 z-40 w-14 h-14 rounded-full shadow-2xl flex items-center justify-center text-2xl text-white"
-      style={{ background: '#22c55e' }}
-      aria-label={label || 'Falar no WhatsApp'}
-      title={label || 'Falar no WhatsApp'}
-    >
-      <Icon n="phone" size={24} className="text-white" />
-    </a>
-  );
-}

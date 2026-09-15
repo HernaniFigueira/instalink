@@ -1,5 +1,5 @@
 'use client';
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { clearToken } from '@/lib/client-auth';
@@ -93,8 +93,9 @@ export function DashboardShell({ children }: { children: React.ReactNode }) {
   const [collapsed, setCollapsed] = useState(() => {
     try { return localStorage.getItem('il-side') === 'mini'; } catch { return false; }
   });
+  const lastContextAt = useRef(0);
 
-  useEffect(() => {
+  const loadContext = useCallback(() => {
     // SOMENTE 401 (sessão inexistente/expirada/inválida) inicia o fluxo de
     // login. Qualquer outro status mantém o usuário dentro do painel.
     fetch('/api/auth/me')
@@ -114,9 +115,33 @@ export function DashboardShell({ children }: { children: React.ReactNode }) {
         setUser(d.user);
         setBusinesses(d.businesses);
         setReady(true);
+        lastContextAt.current = Date.now();
       })
       .catch(() => { /* falha de rede não é sessão inválida: não desloga */ });
   }, [router]);
+
+  useEffect(() => {
+    // 401 (sessão inexistente/expirada/inválida) é o ÚNICO status que inicia
+    // o fluxo de login; qualquer outro mantém o usuário dentro do painel.
+    loadContext();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // REVALIDAÇÃO HONESTA DO CONTEXTO (auditoria §11): módulos e permissões
+  // mudam em Recursos/Equipe sem recarregar a página. O cache antigo fazia a
+  // GUARDA DO CLIENTE negrear acesso a áreas recém-ativadas (ex.: ligar
+  // "Produtos" e /produtos responder "você não tem acesso"). Recarregamos o
+  // contexto ao navegar, quando o cache tem >5s, e quando a tela dispara
+  // `il:business-refresh` (toggle de módulo, mudança de equipe).
+  useEffect(() => {
+    if (!ready) return;
+    if (Date.now() - lastContextAt.current > 5000) loadContext();
+  }, [ready, pathname, loadContext]);
+  useEffect(() => {
+    const fn = () => loadContext();
+    window.addEventListener('il:business-refresh', fn);
+    return () => window.removeEventListener('il:business-refresh', fn);
+  }, [loadContext]);
 
   useEffect(() => {
     if (!ready || businesses.length === 0) return;

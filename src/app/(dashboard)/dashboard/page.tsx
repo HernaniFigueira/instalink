@@ -94,21 +94,27 @@ export default function DashboardPage() {
     try { localStorage.setItem(`il-setup-hidden-${businessId}`, '1'); } catch { /* noop */ }
   }
   const { notice, dismiss } = useForbiddenNotice('Dashboard');
+  // Estados completos (auditoria §12, mesma família do bug do /recursos):
+  // uma falha de rede nunca pode virar skeleton eterno no Início.
+  const [failed, setFailed] = useState('');
+  const [retry, setRetry] = useState(0);
 
   const load = useCallback(() => {
     if (!businessId) return;
+    setFailed('');
     apiGet<Overview>(`/api/overview?businessId=${businessId}&period=${period}`, { scope: 'area', area: 'Dashboard' })
       .then((res) => {
         // 403 → aviso amigável na tela; o usuário NÃO é deslogado.
         // 401 → o wrapper de fetch já iniciou o fluxo de login.
         if (!res.ok) {
           setDenied(res.status === 403);
+          if (res.status !== 403) setFailed(res.message || 'Não foi possível carregar o painel.');
           return;
         }
         setDenied(false);
         setData(res.data);
       });
-  }, [businessId, period]);
+  }, [businessId, period, retry]);
 
   useEffect(() => { load(); }, [load]);
 
@@ -119,6 +125,16 @@ export default function DashboardPage() {
         hint="Seu perfil não possui acesso a esta área. Você continua conectado — para ver a Dashboard, peça ao proprietário para liberar a permissão “Dashboard” em Equipe."
         homeHref="/agenda"
       />
+    );
+  }
+
+  if (failed) {
+    return (
+      <div className="bg-white border border-zinc-200 rounded-lg px-4 py-10 text-center" role="alert">
+        <span className="mx-auto w-10 h-10 rounded-md bg-red-50 border border-red-200 text-red-600 flex items-center justify-center"><Icon n="alert" size={18} /></span>
+        <p className="text-sm font-medium text-zinc-700 mt-3">{failed}</p>
+        <button onClick={() => setRetry((r) => r + 1)} className="mt-4 text-xs font-bold bg-zinc-900 text-white px-4 py-2 rounded-md">Tentar de novo</button>
+      </div>
     );
   }
 

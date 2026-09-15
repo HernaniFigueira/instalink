@@ -374,6 +374,27 @@ export default function AgendaPage() {
     return () => { ro?.disconnect(); window.removeEventListener('resize', measure); };
   }, [columns.length, view, loaded]);
 
+  // ── Altura útil da grade (auditoria §23 — só apresentação) ──
+  // O `calc(100vh - 280px)` fixo criava uma faixa de rolagem pequena demais
+  // em telas grandes e espremida nas pequenas. Medimos a posição REAL do
+  // container e usamos o resto da viewport (com piso confortável). As regras
+  // de agenda não são tocadas: isto é apenas o tamanho da área de desenho.
+  const [gridMaxH, setGridMaxH] = useState<number | null>(null);
+  useLayoutEffect(() => {
+    const fit = () => {
+      const el = scrollRef.current;
+      if (!el) return;
+      const top = el.getBoundingClientRect().top;
+      const h = window.innerHeight - top - (window.innerWidth >= 1024 ? 28 : 16);
+      setGridMaxH(Math.max(320, Math.round(h)));
+    };
+    fit();
+    const ro = typeof ResizeObserver !== 'undefined' ? new ResizeObserver(fit) : null;
+    if (typeof document !== 'undefined' && ro) ro.observe(document.body);
+    window.addEventListener('resize', fit);
+    return () => { ro?.disconnect(); window.removeEventListener('resize', fit); };
+  }, [loaded, view, pendencies.length, notice?.title]);
+
   const readGeometry = useCallback((): { g: GridGeometry; minX: number; minY: number } | null => {
     const scroll = scrollRef.current;
     const cols = colsRef.current;
@@ -808,7 +829,8 @@ export default function AgendaPage() {
         </div>
       ) : (
         <div className="bg-white border border-zinc-200 overflow-hidden">
-          <div ref={scrollRef} className={`overflow-auto ws-scroll ${isDragging ? 'select-none' : ''}`} style={{ maxHeight: 'calc(100vh - 280px)' }}>
+          <div ref={scrollRef} className={`overflow-auto ws-scroll ${isDragging ? 'select-none' : ''}`}
+            style={{ maxHeight: gridMaxH ? `${gridMaxH}px` : 'calc(100dvh - 280px)' }}>
             <div className="flex" style={{ minWidth: dayWidth }}>
               {/* Gutter de horas (fixo na horizontal) */}
               <div className="sticky left-0 z-30 bg-white shrink-0 border-r border-zinc-200" style={{ width: GUTTER_W }}>

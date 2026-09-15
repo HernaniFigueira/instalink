@@ -3,7 +3,11 @@
 // Regra do produto: o MÓDULO decide se o recurso existe; a página só decide
 // aparência. Aqui o toggle liga/desliga na hora (um por clique, sem "salvar
 // tudo") e o feedback explica o efeito. Desativar NUNCA apaga configuração.
-import { useCallback, useEffect, useState } from 'react';
+//
+// Estados completos (auditoria §12): carregando · sucesso · erro (com
+// tentativa nova) · vazio · "aguardando empresa". NUNCA skeleton infinito —
+// qualquer falha de rede/permissão tem fim e mensagem própria.
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { Icon } from '@/components/icons';
@@ -34,45 +38,73 @@ export default function RecursosPage() {
   const businessId = params.get('b') || '';
   const [rows, setRows] = useState<FeatureRow[] | null>(null);
   const [busy, setBusy] = useState('');
+  const [failed, setFailed] = useState('');
+  const [attempt, setAttempt] = useState(0);
   const [toast, setToast] = useState<{ kind: 'ok' | 'warn'; text: string } | null>(null);
+  const toastTimer = useRef<number | null>(null);
 
   // 403 → aviso amigável (sessão preservada), nunca skeleton infinito.
   const { denied, report } = useAreaLoad('Recursos');
 
   const load = useCallback(async () => {
     if (!businessId) return;
+    setFailed('');
     const res = await apiGet<{ features?: FeatureRow[] }>(`/api/businesses/${businessId}/features`, { scope: 'area', area: 'Recursos' });
-    if (!report(res)) return;
+    if (!report(res)) {
+      // Falhou (rede/500/400): mostra erro acionável em vez de carregar para sempre.
+      setRows([]);
+      setFailed(res.message || 'Não foi possível carregar os recursos.');
+      return;
+    }
     setRows(res.data?.features || []);
   }, [businessId, report]);
 
-  useEffect(() => { load(); }, [load]);
+  useEffect(() => { load(); }, [load, attempt]);
+  useEffect(() => () => { if (toastTimer.current) window.clearTimeout(toastTimer.current); }, []);
 
   async function toggle(row: FeatureRow) {
     setBusy(row.id);
     setToast(null);
     try {
-      const res = await fetch(`/api/businesses/${businessId}/features`, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ businessId, feature: row.id, enabled: !row.enabled }),
-      });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || 'Não foi possível atualizar.');
-      // Atualização otimista local + confirmação do servidor.
-      setRows((rs) => (rs || []).map((r) => (r.id === row.id ? { ...r, enabled: !row.enabled } : r)));
-      setToast({ kind: !row.enabled ? 'ok' : 'warn', text: data.effect });
-      // A página pública é renderizada no servidor: recarrega para refletir já.
-      setTimeout(() => setToast(null), 5000);
+      const res = await apiSend<{ effect?: string }>('/api/businesses/' + businessId + '/features', 'PATCH', {
+        businessId, feature: row.id, enabled: !row.enabled,
+      }, { scope: 'action', area: 'Recursos' });
+      if (!res.ok) throw new Error(res.message || 'Não foi possível atualizar.');
+      // Confirmação pelo servidor (releitura), não só pelo estado local:
+      // "salvo" aqui significa relido do banco.
+      await load();
+      // O shell do painel guarda módulos/permissões em memória; sem este
+      // aviso, uma área recém-ativada ainda pareceria "sem acesso" até F5.
+      window.dispatchEvent(new Event('il:business-refresh'));
+      setToast({ kind: !row.enabled ? 'ok' : 'warn', text: res.data?.effect || (row.enabled ? 'Recurso ocultado.' : 'Recurso ativado.') });
+      if (toastTimer.current) window.clearTimeout(toastTimer.current);
+      toastTimer.current = window.setTimeout(() => setToast(null), 6000);
     } catch (e: any) {
       setToast({ kind: 'warn', text: e.message });
+      if (toastTimer.current) window.clearTimeout(toastTimer.current);
+      toastTimer.current = window.setTimeout(() => setToast(null), 8000);
     } finally {
       setBusy('');
     }
   }
 
   if (denied) return <AccessDenied area="Recursos" />;
-  if (!rows) return <PageSkeleton />;
+
+  // Sem empresa selecionada (ainda): o shell resolve `?b=` em instantes —
+  // dizemos o que está acontecendo em vez de um skeleton mudo.
+  if (!businessId) {
+    return (
+      <div className="bg-white border border-zinc-200 rounded-lg px-4 py-10 text-center">
+        <p className="text-sm text-zinc-500 inline-flex items-center gap-2">
+          <span className="w-3.5 h-3.5 border-2 border-zinc-300 border-t-zinc-700 rounded-full animate-spin" />
+          Selecionando sua empresa…
+        </p>
+      </div>
+    );
+  }
+
+  if (rows === null) return <PageSkeleton />;
+
   const q = `?b=${businessId}`;
   const groups = [...new Set(rows.map((r) => r.group))];
   const activeCount = rows.filter((r) => r.enabled).length;
@@ -100,69 +132,87 @@ export default function RecursosPage() {
         <p className={cn(
           'mb-4 text-sm font-semibold rounded-md px-4 py-3 border',
           toast.kind === 'ok' ? 'bg-emerald-50 border-emerald-200 text-emerald-900' : 'bg-amber-50 border-amber-200 text-amber-900',
-        )}>{toast.text}</p>
+        )} role="status" aria-live="polite">{toast.text}</p>
       )}
 
-      <div className="space-y-6">
-        {groups.map((group) => (
-          <section key={group}>
-            <div className="flex items-baseline gap-2 mb-2.5">
-              <h2 className="text-xs font-extrabold uppercase tracking-wider text-zinc-400">{group}</h2>
-              <span className="text-xs text-zinc-400">{GROUP_HINT[group] || ''}</span>
-            </div>
-            <div className="grid sm:grid-cols-2 xl:grid-cols-3 gap-3">
-              {rows.filter((r) => r.group === group).map((row) => (
-                <div key={row.id}
-                  className={cn(
-                    'bg-white rounded-lg border p-4 flex flex-col gap-3 transition-colors',
-                    row.enabled ? 'border-emerald-200' : 'border-zinc-200',
+      {failed && (
+        <div className="mb-4 bg-red-50 border border-red-200 rounded-md px-4 py-3 flex flex-wrap items-center gap-3" role="alert">
+          <p className="text-sm font-medium text-red-800 inline-flex items-center gap-2"><Icon n="alert" size={15} /> {failed}</p>
+          <button onClick={() => { setRows(null); setAttempt((a) => a + 1); }}
+            className="ml-auto text-xs font-bold bg-white border border-red-200 text-red-700 px-3 py-1.5 rounded-md hover:bg-red-100">
+            Tentar de novo
+          </button>
+        </div>
+      )}
+
+      {!failed && rows.length === 0 && (
+        <div className="bg-white border border-zinc-200 rounded-lg text-center py-12 px-6">
+          <span className="mx-auto w-10 h-10 rounded-md bg-zinc-100 flex items-center justify-center text-zinc-400"><Icon n="grid" size={20} /></span>
+          <h2 className="font-semibold text-sm mt-3">Nenhum recurso disponível ainda</h2>
+          <p className="text-sm text-zinc-500 mt-1">Recarregue a página — se o problema continuar, fale com o suporte.</p>
+          <button onClick={() => { setRows(null); setAttempt((a) => a + 1); }}
+            className="mt-4 text-xs font-bold bg-zinc-900 text-white px-4 py-2 rounded-md">Recarregar</button>
+        </div>
+      )}
+
+      {!failed && groups.map((group) => (
+        <section key={group} className="mb-6 last:mb-0">
+          <div className="flex items-baseline gap-2 mb-2.5">
+            <h2 className="text-xs font-extrabold uppercase tracking-wider text-zinc-400">{group}</h2>
+            <span className="text-xs text-zinc-400">{GROUP_HINT[group] || ''}</span>
+          </div>
+          <div className="grid sm:grid-cols-2 xl:grid-cols-3 gap-3">
+            {rows.filter((r) => r.group === group).map((row) => (
+              <div key={row.id}
+                className={cn(
+                  'bg-white rounded-lg border p-4 flex flex-col gap-3 transition-colors',
+                  row.enabled ? 'border-emerald-200' : 'border-zinc-200',
+                )}>
+                <div className="flex items-start justify-between gap-3">
+                  <span className={cn(
+                    'w-10 h-10 rounded-md flex items-center justify-center shrink-0',
+                    row.enabled ? 'bg-emerald-50 text-emerald-700' : 'bg-zinc-100 text-zinc-400',
                   )}>
-                  <div className="flex items-start justify-between gap-3">
-                    <span className={cn(
-                      'w-10 h-10 rounded-md flex items-center justify-center shrink-0',
-                      row.enabled ? 'bg-emerald-50 text-emerald-700' : 'bg-zinc-100 text-zinc-400',
+                    <Icon n={row.icon} size={20} />
+                  </span>
+                  {/* Toggle visual: clique = salva imediatamente */}
+                  <button
+                    onClick={() => toggle(row)}
+                    disabled={busy === row.id}
+                    role="switch"
+                    aria-checked={row.enabled}
+                    aria-label={`${row.label}: ${row.enabled ? 'ativo' : 'desativado'}`}
+                    className={cn(
+                      'relative w-14 h-8 rounded-full transition-colors shrink-0 disabled:opacity-60',
+                      row.enabled ? 'bg-emerald-500' : 'bg-zinc-300',
                     )}>
-                      <Icon n={row.icon} size={20} />
-                    </span>
-                    {/* Toggle visual: clique = salva imediatamente */}
-                    <button
-                      onClick={() => toggle(row)}
-                      disabled={busy === row.id}
-                      role="switch"
-                      aria-checked={row.enabled}
-                      aria-label={`${row.label}: ${row.enabled ? 'ativo' : 'desativado'}`}
-                      className={cn(
-                        'relative w-14 h-8 rounded-full transition-colors shrink-0 disabled:opacity-60',
-                        row.enabled ? 'bg-emerald-500' : 'bg-zinc-300',
-                      )}>
-                      <span className={cn(
-                        'absolute top-1 w-6 h-6 rounded-full bg-white shadow transition-all',
-                        row.enabled ? 'left-7' : 'left-1',
-                        busy === row.id && 'animate-pulse',
-                      )} />
-                    </button>
-                  </div>
-                  <div className="min-w-0">
-                    <p className="font-bold flex items-center gap-2">
-                      {row.label}
-                      <span className={cn(
-                        'text-[10px] font-extrabold uppercase tracking-wide px-2 py-0.5 rounded-full',
-                        row.enabled ? 'bg-emerald-100 text-emerald-800' : 'bg-zinc-100 text-zinc-500',
-                      )}>
-                        {row.enabled ? 'Ativo' : 'Desativado'}
-                      </span>
-                    </p>
-                    <p className="text-xs text-zinc-500 mt-1">{row.hint}</p>
-                    {!row.enabled && (
-                      <p className="text-[11px] text-amber-700 mt-2 leading-snug">{row.disabledHint}</p>
-                    )}
-                  </div>
+                    <span className={cn(
+                      'absolute top-1 w-6 h-6 rounded-full bg-white shadow transition-all',
+                      row.enabled ? 'left-7' : 'left-1',
+                      busy === row.id && 'animate-pulse',
+                    )} />
+                  </button>
                 </div>
-              ))}
-            </div>
-          </section>
-        ))}
-      </div>
+                <div className="min-w-0">
+                  <p className="font-bold flex items-center gap-2">
+                    {row.label}
+                    <span className={cn(
+                      'text-[10px] font-extrabold uppercase tracking-wide px-2 py-0.5 rounded-full',
+                      row.enabled ? 'bg-emerald-100 text-emerald-800' : 'bg-zinc-100 text-zinc-500',
+                    )}>
+                      {row.enabled ? 'Ativo' : 'Desativado'}
+                    </span>
+                  </p>
+                  <p className="text-xs text-zinc-500 mt-1">{row.hint}</p>
+                  {!row.enabled && (
+                    <p className="text-[11px] text-amber-700 mt-2 leading-snug">{row.disabledHint}</p>
+                  )}
+                </div>
+              </div>
+            ))}
+          </div>
+        </section>
+      ))}
 
       <div className="mt-8 bg-zinc-900 text-white rounded-lg p-5">
         <p className="font-bold flex items-center gap-2"><Icon n="shield" size={16} /> Como funciona</p>

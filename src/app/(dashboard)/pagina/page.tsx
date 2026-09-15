@@ -3,6 +3,7 @@ import { useEffect, useState } from 'react';
 import { useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { BLOCK_DEFS } from '@/lib/templates';
+import { blockModuleGate } from '@/lib/features';
 import { NAV_ANCHORS, availableNavIds } from '@/lib/nav';
 import type { NavItemConfig, Professional, Service, Product } from '@/lib/types';
 import { THEME_PRESETS, matchingPreset, presetById } from '@/lib/themes';
@@ -31,7 +32,8 @@ export default function PaginaPage() {
   const [saving, setSaving] = useState(false);
 
   // 403 → aviso amigável (sessão preservada), nunca skeleton infinito.
-  const { denied, report } = useAreaLoad('Página');
+  const { denied, failed, report } = useAreaLoad('Página');
+  const [reloadTick, setReloadTick] = useState(0);
 
   useEffect(() => {
     if (!businessId) return;
@@ -55,7 +57,7 @@ export default function PaginaPage() {
         setProfessionals(cat.data.professionals || []);
       }
     })();
-  }, [businessId, report]);
+  }, [businessId, report, reloadTick]);
 
   async function save(patch: {
     blocks?: Block[]; theme?: Theme; presetId?: string; published?: boolean; slug?: string;
@@ -68,25 +70,19 @@ export default function PaginaPage() {
     setSaving(true);
     setMsg('');
     try {
-      const res = await apiSend('/api/pages', 'PUT', { businessId, ...patch }, { scope: 'action', area: 'Página' });
+      const res = await apiSend<{ business?: Business; page?: Page }>('/api/pages', 'PUT', { businessId, ...patch }, { scope: 'action', area: 'Página' });
       if (!res.ok) throw new Error(res.message);
-      setMsg('Alterações salvas.');
-      if (business) {
-        setBusiness({
-          ...business,
-          ...(patch.published !== undefined ? { published: patch.published } : {}),
-          ...(patch.slug ? { slug: patch.slug } : {}),
-          ...(patch.nav ? { nav: patch.nav } : {}),
-          ...(patch.navCustom !== undefined ? { navCustom: patch.navCustom } : {}),
-          ...(patch.about ? { about: patch.about } : {}),
-          ...(patch.navItems ? { navItems: patch.navItems } : {}),
-        });
-      }
+      // REVALIDAÇÃO HONESTA (auditoria §15): nada de assumir "salvo" pelo
+      // toast. O servidor devolve o estado CANÔNICO recém-lido do banco e é
+      // ELE que atualiza a tela — se não estiver lá, nada aparece salvo.
+      if (res.data?.business) setBusiness(res.data.business);
+      if (res.data?.page) setPage(res.data.page);
+      setMsg(res.data?.page || res.data?.business ? 'Alterações salvas e confirmadas no servidor.' : 'Alterações salvas.');
     } catch (err: any) {
-      setMsg(err.message);
+      setMsg(`Falha ao salvar: ${err.message}`);
     } finally {
       setSaving(false);
-      setTimeout(() => setMsg(''), 3000);
+      setTimeout(() => setMsg(''), 4500);
     }
   }
 
@@ -98,6 +94,17 @@ export default function PaginaPage() {
   }
 
   if (denied) return <AccessDenied area="Página" />;
+  if (failed && !business) {
+    // Nunca skeleton infinito: falhou, diz o que falhou e oferece ação.
+    return (
+      <div className="bg-white border border-zinc-200 rounded-lg px-4 py-10 text-center" role="alert">
+        <span className="mx-auto w-10 h-10 rounded-md bg-red-50 border border-red-200 text-red-600 flex items-center justify-center"><Icon n="alert" size={18} /></span>
+        <p className="text-sm font-medium text-zinc-700 mt-3">{failed}</p>
+        <button onClick={() => { setBusiness(null); setPage(null); setReloadTick((t) => t + 1); }}
+          className="mt-4 text-xs font-bold bg-zinc-900 text-white px-4 py-2 rounded-md">Tentar de novo</button>
+      </div>
+    );
+  }
   if (!business || !page) return <PageSkeleton />;
 
   const blocks = [...page.blocks].sort((a, b) => a.order - b.order);
@@ -140,59 +147,74 @@ export default function PaginaPage() {
       )}
 
       {tab === 'blocks' && (
-        <div className="grid lg:grid-cols-[1fr_280px] gap-4 items-start">
-          <div className="space-y-2.5">
-            {blocks.map((b, i) => (
-              <div key={b.id} className={cn('bg-white border rounded-lg p-4', !b.enabled && 'opacity-60')}>
-                <div className="flex items-center gap-2">
-                  <div className="flex flex-col gap-1">
-                    <button disabled={i === 0} onClick={() => { const n = [...blocks]; [n[i - 1], n[i]] = [n[i], n[i - 1]]; updateBlocks(n); }}
-                      className="text-zinc-400 hover:text-zinc-900 disabled:opacity-20 px-1 inline-flex" aria-label="Subir"><Icon n="chevU" size={12} /></button>
-                    <button disabled={i === blocks.length - 1} onClick={() => { const n = [...blocks]; [n[i + 1], n[i]] = [n[i], n[i + 1]]; updateBlocks(n); }}
-                      className="text-zinc-400 hover:text-zinc-900 disabled:opacity-20 px-1 inline-flex" aria-label="Descer"><Icon n="chevD" size={12} /></button>
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <p className="font-bold text-sm flex items-center gap-1.5 flex-wrap">
-                      {BLOCK_DEFS[b.type]?.label || b.type}
-                      {blockIsEmpty(b, rvCounts) && (
-                        <span className="text-[10px] font-extrabold bg-amber-100 text-amber-800 px-2 py-0.5 rounded-full">Falta preencher</span>
+        <div className="grid lg:grid-cols-[minmax(0,1fr)_280px] gap-4 items-start">
+          <div className="bg-white border border-zinc-200 rounded-lg overflow-hidden">
+            <div className="flex items-center justify-between px-4 py-2.5 border-b border-zinc-100 bg-zinc-50/60">
+              <p className="text-xs font-semibold tracking-wide uppercase text-zinc-500">Ordem na página · {blocks.length} blocos</p>
+              <p className="text-[11px] text-zinc-400 hidden sm:block">as setas definem a ordem de exibição</p>
+            </div>
+            <div className="divide-y divide-zinc-100">
+              {blocks.map((b, i) => {
+                const gate = blockModuleGate(business, b.type);
+                return (
+                  <div key={b.id} className={cn('px-3 py-2.5', !b.enabled && 'bg-zinc-50/60')}>
+                    <div className="flex items-center gap-2.5">
+                      <span className="w-6 text-center text-[11px] font-bold text-zinc-400 tabular-nums shrink-0">{i + 1}</span>
+                      <div className="flex flex-col gap-0.5 shrink-0">
+                        <button disabled={i === 0} onClick={() => { const n = [...blocks]; [n[i - 1], n[i]] = [n[i], n[i - 1]]; updateBlocks(n); }}
+                          className="text-zinc-400 hover:text-zinc-900 hover:bg-zinc-100 rounded p-0.5 disabled:opacity-20 disabled:hover:bg-transparent inline-flex" aria-label={`Mover ${BLOCK_DEFS[b.type]?.label || b.type} para cima`}><Icon n="chevU" size={12} /></button>
+                        <button disabled={i === blocks.length - 1} onClick={() => { const n = [...blocks]; [n[i + 1], n[i]] = [n[i], n[i + 1]]; updateBlocks(n); }}
+                          className="text-zinc-400 hover:text-zinc-900 hover:bg-zinc-100 rounded p-0.5 disabled:opacity-20 disabled:hover:bg-transparent inline-flex" aria-label={`Mover ${BLOCK_DEFS[b.type]?.label || b.type} para baixo`}><Icon n="chevD" size={12} /></button>
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <p className="font-bold text-sm flex items-center gap-1.5 flex-wrap">
+                          <span className={cn(b.enabled ? 'text-zinc-900' : 'text-zinc-400')}>{BLOCK_DEFS[b.type]?.label || b.type}</span>
+                          {blockIsEmpty(b, rvCounts) && (
+                            <span className="text-[10px] font-extrabold bg-amber-100 text-amber-800 px-2 py-0.5 rounded-full">Falta preencher</span>
+                          )}
+                          {gate && (
+                            <span className="text-[10px] font-extrabold bg-zinc-100 text-zinc-500 px-2 py-0.5 rounded-full inline-flex items-center gap-1" title={`O módulo ${gate} está desligado — o bloco fica salvo, mas não aparece na página até o módulo voltar em Recursos.`}>
+                              <Icon n="lock" size={9} /> módulo {gate} desligado
+                            </span>
+                          )}
+                          {b.type === 'testimonials' && rvCounts.pending > 0 && (
+                            <span className="text-[10px] font-extrabold bg-blue-100 text-blue-800 px-2 py-0.5 rounded-full">{rvCounts.pending} para aprovar</span>
+                          )}
+                          {b.type === 'testimonials' && rvCounts.published > 0 && (
+                            <span className="text-[10px] font-extrabold bg-emerald-100 text-emerald-800 px-2 py-0.5 rounded-full">{rvCounts.published} no ar</span>
+                          )}
+                        </p>
+                        <p className="text-xs text-zinc-500 truncate">{BLOCK_DEFS[b.type]?.hint}</p>
+                      </div>
+                      <button onClick={() => setEditing(editing === b.id ? null : b.id)}
+                        className="text-xs font-bold bg-zinc-100 px-3 py-1.5 rounded-lg hover:bg-zinc-200">Editar</button>
+                      <button onClick={() => updateBlocks(blocks.map((x) => (x.id === b.id ? { ...x, enabled: !x.enabled } : x)))}
+                        className={cn('text-xs font-bold px-3 py-1.5 rounded-lg min-w-[64px]', b.enabled ? 'bg-emerald-100 text-emerald-800 hover:bg-emerald-200' : 'bg-zinc-100 text-zinc-500 hover:bg-zinc-200')}>
+                        {b.enabled ? 'Ativo' : 'Oculto'}
+                      </button>
+                      {b.type !== 'profile' && (
+                        <button onClick={() => { if (confirm('Remover este bloco?')) updateBlocks(blocks.filter((x) => (x.id !== b.id))); }}
+                          className="text-xs font-bold text-red-500 px-2 py-1.5 hover:bg-red-50 rounded-lg inline-flex" aria-label="Remover bloco"><Icon n="x" size={12} /></button>
                       )}
-                      {b.type === 'testimonials' && rvCounts.pending > 0 && (
-                        <span className="text-[10px] font-extrabold bg-blue-100 text-blue-800 px-2 py-0.5 rounded-full">{rvCounts.pending} para aprovar</span>
-                      )}
-                      {b.type === 'testimonials' && rvCounts.published > 0 && (
-                        <span className="text-[10px] font-extrabold bg-emerald-100 text-emerald-800 px-2 py-0.5 rounded-full">{rvCounts.published} no ar</span>
-                      )}
-                    </p>
-                    <p className="text-xs text-zinc-500 truncate">{BLOCK_DEFS[b.type]?.hint}</p>
+                    </div>
+                    {editing === b.id && (
+                      <div className="mt-3 pt-3 border-t border-zinc-100">
+                        <BlockSettings
+                          block={b}
+                          businessId={businessId}
+                          business={business}
+                          onChange={(settings) => {
+                            const n = blocks.map((x) => (x.id === b.id ? { ...x, settings } : x));
+                            setPage({ ...page, blocks: n });
+                          }}
+                          onSave={() => { save({ blocks: page.blocks }); setEditing(null); }}
+                        />
+                      </div>
+                    )}
                   </div>
-                  <button onClick={() => setEditing(editing === b.id ? null : b.id)}
-                    className="text-xs font-bold bg-zinc-100 px-3 py-1.5 rounded-lg hover:bg-zinc-200">Editar</button>
-                  <button onClick={() => updateBlocks(blocks.map((x) => (x.id === b.id ? { ...x, enabled: !x.enabled } : x)))}
-                    className={cn('text-xs font-bold px-3 py-1.5 rounded-lg', b.enabled ? 'bg-emerald-100 text-emerald-800' : 'bg-zinc-100 text-zinc-500')}>
-                    {b.enabled ? 'Ativo' : 'Oculto'}
-                  </button>
-                  {b.type !== 'profile' && (
-                    <button onClick={() => { if (confirm('Remover este bloco?')) updateBlocks(blocks.filter((x) => x.id !== b.id)); }}
-                      className="text-xs font-bold text-red-500 px-2 py-1.5 hover:bg-red-50 rounded-lg inline-flex" aria-label="Remover"><Icon n="x" size={12} /></button>
-                  )}
-                </div>
-                {editing === b.id && (
-                  <div className="mt-3 pt-3 border-t border-zinc-100">
-                    <BlockSettings
-                      block={b}
-                      businessId={businessId}
-                      business={business}
-                      onChange={(settings) => {
-                        const n = blocks.map((x) => (x.id === b.id ? { ...x, settings } : x));
-                        setPage({ ...page, blocks: n });
-                      }}
-                      onSave={() => { save({ blocks: page.blocks }); setEditing(null); }}
-                    />
-                  </div>
-                )}
-              </div>
-            ))}
+                );
+              })}
+            </div>
           </div>
           <div className="bg-white border border-zinc-200 rounded-lg p-4 lg:sticky lg:top-4">
             <p className="font-bold text-sm mb-1">Adicionar bloco</p>
@@ -201,23 +223,38 @@ export default function PaginaPage() {
             <div className="flex flex-wrap gap-2">
               {(Object.keys(BLOCK_DEFS) as BlockType[])
                 .filter((t) => t !== 'profile' && t !== 'booking' && t !== 'quote')
-                .map((t) => (
-                <button key={t} onClick={() => updateBlocks([...blocks, { id: `b-${Date.now()}-${t}`, type: t, order: blocks.length, enabled: true, settings: {} }])}
-                  className="text-xs font-bold bg-zinc-100 hover:bg-zinc-900 hover:text-white px-3 py-2 rounded-lg transition-colors">
-                  + {BLOCK_DEFS[t]?.label}
-                </button>
-              ))}
+                .map((t) => {
+                  const gate = blockModuleGate(business, t);
+                  return (
+                    <button key={t} disabled={!!gate}
+                      title={gate ? `Ative o módulo “${gate}” em Recursos para usar este bloco` : undefined}
+                      onClick={() => updateBlocks([...blocks, { id: `b-${Date.now()}-${t}`, type: t, order: blocks.length, enabled: true, settings: {} }])}
+                      className={cn('text-xs font-bold px-3 py-2 rounded-lg transition-colors',
+                        gate ? 'bg-zinc-50 text-zinc-300 cursor-not-allowed' : 'bg-zinc-100 hover:bg-zinc-900 hover:text-white')}>
+                      + {BLOCK_DEFS[t]?.label}
+                    </button>
+                  );
+                })}
             </div>
           </div>
         </div>
       )}
 
       {tab === 'theme' && (
-        <div className="space-y-4">
-          {/* Prévia da PÁGINA REAL mora na aba Visual (§24): o editor de
-              estrutura fica leve; aqui o lojista vê o resultado de verdade. */}
-          <PagePreview slug={business.slug} published={!!business.published} />
-          <ThemeEditor theme={page.theme} presetId={page.presetId || ''} onChange={(theme, presetId) => { setPage({ ...page, theme, presetId }); }} onSave={() => save({ theme: page.theme, presetId: page.presetId || '' })} saving={saving} />
+        // Audito §16: a aba Visual usava só a coluna esquerda e empilhava o
+        // preview embaixo. Agora é workspace: CONTROLES à esquerda, PREVIEW
+        // DA PÁGINA REAL à direita (sticky, alto) — no desktop a área branca
+        // deixa de ser desperdiçada. No mobile, o preview vem primeiro e o
+        // controle acompanha, adaptando naturalmente.
+        <div className="grid lg:grid-cols-[minmax(0,1fr)_minmax(360px,420px)] gap-4 items-start">
+          <div className="order-2 lg:order-1 space-y-4">
+            <ThemeEditor theme={page.theme} presetId={page.presetId || ''} onChange={(theme, presetId) => { setPage({ ...page, theme, presetId }); }} onSave={() => save({ theme: page.theme, presetId: page.presetId || '' })} saving={saving} />
+          </div>
+          <div className="order-1 lg:order-2 lg:sticky lg:top-4 space-y-2">
+            {/* Prévia da PÁGINA REAL mora na aba Visual: o lojista vê o
+                resultado de verdade enquanto ajusta tema e cores. */}
+            <PagePreview slug={business.slug} published={!!business.published} />
+          </div>
         </div>
       )}
 
@@ -454,11 +491,23 @@ function BlockSettings({ block, businessId, business, onChange, onSave }: {
 
   return (
     <div className="space-y-3">
-      {['cta', 'products', 'services', 'booking', 'contact', 'quote', 'concierge', 'highlights', 'professionals'].includes(block.type) && (
+      {['cta', 'products', 'services', 'booking', 'contact', 'quote', 'concierge', 'highlights', 'professionals', 'gallery', 'testimonials', 'faq', 'location'].includes(block.type) && (
         <label className="block">
           <span className="text-xs font-bold text-zinc-500">{block.type === 'cta' ? 'TEXTO DO BOTÃO' : 'TÍTULO'}</span>
           <input value={block.type === 'cta' ? s.label || '' : s.title || ''} onChange={(e) => set(block.type === 'cta' ? 'label' : 'title', e.target.value)}
             className={input + ' mt-1'} placeholder={block.type === 'cta' ? 'Ex: Agendar horário' : 'Título da seção'} />
+        </label>
+      )}
+      {block.type === 'cta' && (
+        <p className="text-[11px] text-zinc-500 bg-zinc-50 border border-zinc-200 rounded-md px-3 py-2 leading-snug">
+          Este é o <strong>botão principal do topo</strong> da página (hero). Ele não se repete em outras seções — a barra inferior cuida do acesso persistente, e cada serviço pode ter o seu atalho “Agendar”.
+        </p>
+      )}
+      {['products', 'services', 'gallery', 'testimonials', 'faq', 'highlights', 'professionals', 'location'].includes(block.type) && (
+        <label className="block">
+          <span className="text-xs font-bold text-zinc-500">SUBTÍTULO (OPCIONAL)</span>
+          <input value={s.subtitle || ''} onChange={(e) => set('subtitle', e.target.value.slice(0, 120))}
+            className={input + ' mt-1'} placeholder="Uma linha que explica a seção (ex: Toque em um serviço para agendar)" />
         </label>
       )}
       {block.type === 'cta' && (
@@ -480,12 +529,21 @@ function BlockSettings({ block, businessId, business, onChange, onSave }: {
       {block.type === 'products' && (
         <div className="text-xs text-zinc-600 bg-zinc-50 border border-zinc-200 rounded-md px-3 py-2.5 space-y-1.5">
           <p>A vitrine mostra os produtos ativos com foto, nome, preço e o botão <strong>“Tenho interesse”</strong>, que abre o WhatsApp do negócio com mensagem pronta — sem carrinho nem pedido.</p>
-          <p className="flex flex-wrap gap-x-3 gap-y-1">
-            <Link href={`/produtos?b=${businessId}`} className="font-semibold text-zinc-900 underline">Gerenciar produtos →</Link>
-            <span className={productsOn ? 'text-emerald-700 font-semibold' : 'text-amber-700'}>
-              {productsOn ? '● Módulo Produtos ativo' : '○ Módulo Produtos desligado — ativar em Recursos'}
-            </span>
-          </p>
+          {/* Destino certo conforme o módulo (auditoria §11): com Produtos
+              ligado, o link é o cadastro; desligado, o único caminho útil é
+              Recursos — apontar para /produtos negrear o acesso é o bug que
+              fazia o lojista achar que “não tinha acesso” à própria área. */}
+          {productsOn ? (
+            <p className="flex flex-wrap gap-x-3 gap-y-1">
+              <Link href={`/produtos?b=${businessId}`} className="font-semibold text-zinc-900 underline">Gerenciar produtos →</Link>
+              <span className="text-emerald-700 font-semibold">● Módulo Produtos ativo</span>
+            </p>
+          ) : (
+            <p className="flex flex-wrap gap-x-3 gap-y-1">
+              <Link href={`/recursos?b=${businessId}`} className="font-semibold text-zinc-900 underline">Ativar Produtos em Recursos →</Link>
+              <span className="text-amber-700">○ Com o módulo desligado, a vitrine não aparece na página (nada foi apagado).</span>
+            </p>
+          )}
         </div>
       )}
       {block.type === 'booking' && (
@@ -505,11 +563,44 @@ function BlockSettings({ block, businessId, business, onChange, onSave }: {
       )}
       {block.type === 'gallery' && (
         <>
-          <input value={s.title || ''} onChange={(e) => set('title', e.target.value)} className={input} placeholder="Título (opcional)" />
-          <ImageUpload label="ADICIONAR IMAGEM À GALERIA" value="" businessId={businessId}
-            onChange={(url) => set('images', [...(Array.isArray(s.images) ? s.images : []), url])} />
-          <textarea value={(s.images || []).join('\n')} onChange={(e) => set('images', e.target.value.split('\n').map((x) => x.trim()).filter(Boolean))}
-            className={input} rows={4} placeholder="Ou cole as URLs (uma por linha)" />
+          {/* Galerias antigas podiam guardar objetos {url}; a leitura é
+              normalizada para strings — salvar nunca "perde" a imagem. */}
+          {(() => {
+            const imgs: string[] = (Array.isArray(s.images) ? s.images : [])
+              .map((x: any) => (typeof x === 'string' ? x : String(x?.url || '')))
+              .filter(Boolean);
+            return (
+              <>
+                {imgs.length > 0 && (
+                  <div className="grid grid-cols-3 gap-2">
+                    {imgs.map((url, i) => (
+                      <div key={`${url}-${i}`} className="relative group">
+                        {/* eslint-disable-next-line @next/next/no-img-element */}
+                        <img src={url} alt={`Foto ${i + 1}`} className="w-full h-20 object-cover rounded-md border border-zinc-200" />
+                        <button type="button" onClick={() => set('images', imgs.filter((_, j) => j !== i))}
+                          aria-label={`Remover foto ${i + 1}`}
+                          className="absolute -top-1.5 -right-1.5 w-6 h-6 rounded-full bg-zinc-900 text-white text-xs font-bold flex items-center justify-center opacity-80 hover:opacity-100 hover:bg-red-600">
+                          ×
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+                <div className="flex flex-wrap items-center gap-3">
+                  <ImageUpload label={imgs.length > 0 ? 'ADICIONAR MAIS UMA' : 'ADICIONAR IMAGEM À GALERIA'} value="" businessId={businessId}
+                    onChange={(url) => set('images', [...imgs, url])} />
+                  <p className="text-[11px] text-zinc-500 leading-snug max-w-[180px]">
+                    Até 6 fotos aparecem na página, em grade. Com o módulo Galeria ativo, a seção entra no ar na hora de salvar.
+                  </p>
+                </div>
+                <details>
+                  <summary className="text-[11px] font-bold text-zinc-500 cursor-pointer">ou colar URLs (uma por linha)</summary>
+                  <textarea value={imgs.join('\n')} onChange={(e) => set('images', e.target.value.split('\n').map((x) => x.trim()).filter(Boolean))}
+                    className={input + ' mt-2'} rows={4} placeholder="https://…" />
+                </details>
+              </>
+            );
+          })()}
         </>
       )}
       {block.type === 'buttons' && (
@@ -860,8 +951,9 @@ function PagePreview({ slug, published }: { slug: string; published: boolean }) 
         </div>
       </div>
       <div className="flex justify-center">
-        <div className={cn('transition-all', wide ? 'w-full' : 'w-[390px] max-w-full')}>
-          <div className="rounded-xl border border-zinc-200 overflow-hidden bg-zinc-50" style={{ height: 560 }}>
+        <div className={cn('transition-all w-full', !wide && 'sm:w-[390px] sm:max-w-full')}>
+          <div className="rounded-xl border border-zinc-200 overflow-hidden bg-zinc-50 w-full"
+            style={{ height: wide ? 'min(76dvh, 720px)' : 620, minHeight: 520 }}>
             <iframe key={nonce} src={`/${slug}`} title="Prévia da página pública"
               className="w-full h-full border-0" sandbox="allow-same-origin allow-scripts allow-popups allow-forms" />
           </div>
@@ -929,10 +1021,10 @@ function ThemeEditor({ theme, presetId, onChange, onSave, saving }: {
         </div>
       </div>
 
-      <div className="grid lg:grid-cols-2 gap-4 items-start">
+      <div className="space-y-4">
         <details className="bg-white border border-zinc-200 rounded-lg p-5" open={!match}>
           <summary className="font-bold text-sm cursor-pointer">Ajustar cores e detalhes</summary>
-          <div className="grid grid-cols-2 gap-4 mt-4">
+          <div className="grid grid-cols-2 sm:grid-cols-3 gap-4 mt-4">
             {colors.map(([key, label]) => (
               <label key={key} className="block">
                 <span className="text-xs font-bold text-zinc-500">{label.toUpperCase()}</span>

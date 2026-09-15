@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { readDB, updateDB } from '@/lib/db';
 import { requireBusiness } from '@/lib/access';
 import { slugify, isValidSlug } from '@/lib/utils';
+import { featuresForActivatedBlocks } from '@/lib/features';
 import { VALID_NAV } from '@/lib/nav';
 import type { NavItemConfig } from '@/lib/types';
 
@@ -110,6 +111,7 @@ export async function PUT(req: NextRequest) {
       await updateDB((d) => {
         const page = d.pages.find((p) => p.businessId === businessId);
         if (!page) return;
+        const previousBlocks = page.blocks;
         if (body.theme) page.theme = { ...page.theme, ...body.theme };
         if (body.presetId !== undefined) page.presetId = String(body.presetId || '');
         if (Array.isArray(body.blocks)) {
@@ -120,11 +122,33 @@ export async function PUT(req: NextRequest) {
             enabled: bl.enabled !== false,
             settings: (bl.settings && typeof bl.settings === 'object') ? bl.settings : {},
           }));
+          // Coerência editor→módulo (correção do "salvei a galeria e nada
+          // apareceu"): adicionar/reativar um bloco de conteúdo aqui liga o
+          // módulo OPCIONAL correspondente. Só a ação do usuário conta —
+          // salvar por cima não reativa módulo desligado de propósito.
+          const b = d.businesses.find((x) => x.id === businessId);
+          if (b) {
+            const patch = featuresForActivatedBlocks(b, previousBlocks, page.blocks);
+            if (patch) {
+              b.features = patch as NonNullable<typeof b.features>;
+              b.updatedAt = new Date().toISOString();
+            }
+          }
         }
         page.updatedAt = new Date().toISOString();
       });
     }
-    return NextResponse.json({ ok: true });
+    // O editor revalida a persistência a partir do ESTADO CANÔNICO do banco
+    // (nunca do eco do que foi enviado): nada de "Alterações salvas" sobre
+    // estado que o servidor não gravou.
+    const fresh = await readDB();
+    const freshBiz = fresh.businesses.find((b) => b.id === businessId);
+    const freshPage = fresh.pages.find((p) => p.businessId === businessId);
+    return NextResponse.json({
+      ok: true,
+      business: freshBiz,
+      page: freshPage,
+    });
   } catch {
     return NextResponse.json({ error: 'Não foi possível salvar.' }, { status: 500 });
   }
