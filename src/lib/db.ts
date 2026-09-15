@@ -47,7 +47,7 @@ export function emptyDB(): DB {
 
 // Migração defensiva: preenche campos novos em documentos antigos.
 // Reversível (só adiciona defaults) e idempotente.
-function normalize(raw: unknown): DB {
+export function normalizeDB(raw: unknown): DB {
   const base = { ...emptyDB(), ...((raw && typeof raw === 'object' ? raw : {}) as Partial<DB>) };
   // Arrays novos (members/agents/campaigns/audit/...): documento antigo pode
   // ter chaves ausentes ou inválidas — garantimos array em todos os casos.
@@ -64,9 +64,13 @@ function normalize(raw: unknown): DB {
   const now = new Date().toISOString();
   for (const b of base.businesses) {
     if (!(b as any).organizationId) {
-      let org = base.organizations.find((o) => o.ownerId === b.ownerId);
+      // Um Business legado é uma empresa independente até que o usuário
+      // explicitamente crie outra unidade dentro da mesma Organization.
+      // Agrupar por ownerId transformaria empresas sem relação em filiais.
+      const organizationId = `org-${b.id}`;
+      let org = base.organizations.find((o) => o.id === organizationId);
       if (!org) {
-        org = { id: `org-${b.ownerId}`, name: b.name, ownerId: b.ownerId, metadata: {}, createdAt: b.createdAt || now, updatedAt: b.updatedAt || now };
+        org = { id: organizationId, name: b.name, ownerId: b.ownerId, metadata: {}, createdAt: b.createdAt || now, updatedAt: b.updatedAt || now };
         base.organizations.push(org);
       }
       (b as any).organizationId = org.id;
@@ -212,7 +216,7 @@ async function pgRead(): Promise<DB> {
   await pgInit();
   const res = await getPool().query('SELECT data FROM instalink_doc WHERE id = 1');
   if (res.rows.length === 0) return emptyDB();
-  return normalize(res.rows[0].data);
+  return normalizeDB(res.rows[0].data);
 }
 
 async function pgWrite(db: DB): Promise<void> {
@@ -230,7 +234,7 @@ function fileRead(): DB {
   const raw = fs.readFileSync(FILE, 'utf8');
   if (!raw.trim()) return emptyDB();
   // FAIL-CLOSED também em dev: JSON corrompido lança, não vira vazio.
-  return normalize(JSON.parse(raw));
+  return normalizeDB(JSON.parse(raw));
 }
 
 function fileWrite(db: DB): void {

@@ -36,3 +36,44 @@ describe('isolamento Organization → Unit', () => {
     expect(ctx?.readOnly).toBe(true); expect(resolveAccess(db,master,'u2',ctx!.support)).toBeNull();
   });
 });
+
+import { normalizeDB } from '../db';
+import { requiresActiveBusiness } from '../business-context';
+
+describe('migração e navegação multiunidade', () => {
+  it('cria uma Organization independente por Business legado do mesmo owner e é idempotente', () => {
+    const raw = emptyDB();
+    const legacyA = unit('clinica', 'owner', '') as any;
+    const legacyB = unit('agencia', 'owner', '') as any;
+    delete legacyA.organizationId; delete legacyB.organizationId;
+    raw.businesses.push(legacyA, legacyB);
+    const once = normalizeDB(raw);
+    expect(once.businesses.map((b) => b.organizationId)).toEqual(['org-clinica', 'org-agencia']);
+    expect(once.organizations.map((o) => o.id)).toEqual(['org-clinica', 'org-agencia']);
+    const twice = normalizeDB(once);
+    expect(twice.organizations).toHaveLength(2);
+    expect(twice.businesses.map((b) => b.organizationId)).toEqual(['org-clinica', 'org-agencia']);
+  });
+
+  it('nova unidade entra somente na Organization explicitamente escolhida e não copia dados operacionais', () => {
+    const db = emptyDB(), owner = user('owner');
+    db.users.push(owner); db.organizations.push(org('org-a', owner.id), org('org-b', owner.id));
+    db.businesses.push(unit('a1', owner.id, 'org-a'), unit('b1', owner.id, 'org-b'));
+    db.contacts.push({ id:'contact-a', businessId:'a1' } as any);
+    db.services.push({ id:'service-a', businessId:'a1' } as any);
+    // Semântica aplicada pelo POST /api/businesses: organizationId explícito,
+    // Business novo; nenhum agregado operacional é clonado.
+    db.businesses.push(unit('a2', owner.id, 'org-a'));
+    expect(db.businesses.filter((b) => b.organizationId === 'org-a').map((b) => b.id)).toEqual(['a1', 'a2']);
+    expect(db.businesses.filter((b) => b.organizationId === 'org-b').map((b) => b.id)).toEqual(['b1']);
+    expect(db.contacts.filter((x) => x.businessId === 'a2')).toEqual([]);
+    expect(db.services.filter((x) => x.businessId === 'a2')).toEqual([]);
+  });
+
+  it('/organizacao e /organizacao?add=1 não exigem unidade, outras rotas continuam protegidas', () => {
+    expect(requiresActiveBusiness('/organizacao')).toBe(false);
+    expect(requiresActiveBusiness('/organizacao/')).toBe(false);
+    expect(requiresActiveBusiness('/dashboard')).toBe(true);
+    expect(requiresActiveBusiness('/agenda')).toBe(true);
+  });
+});

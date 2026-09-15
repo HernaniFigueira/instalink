@@ -11,6 +11,7 @@ import {
 } from '@/lib/panel';
 import { isSessionExpired } from '@/lib/http';
 import type { BusinessMode, FeatureId, PermissionId } from '@/lib/types';
+import { requiresActiveBusiness } from '@/lib/business-context';
 
 interface Biz {
   id: string;
@@ -25,6 +26,7 @@ interface Biz {
   isOwner?: boolean;
   permissions?: Record<PermissionId, boolean>;
   readOnly?: boolean;
+  organizationId?: string;
 }
 
 interface SupportInfo {
@@ -151,12 +153,12 @@ export function DashboardShell({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     if (!ready || businesses.length === 0) return;
     const b = params.get('b');
-    if (!businesses.some((x) => x.id === b)) router.replace(`${pathname}?b=${businesses[0].id}`);
+    if (requiresActiveBusiness(pathname) && !businesses.some((x) => x.id === b)) router.replace(`${pathname}?b=${businesses[0].id}`);
   }, [ready, businesses, params, pathname, router]);
 
   function switchBiz(id: string) {
-    if (id === '__overview') { router.push('/organizacao'); return; }
-    if (id === '__add') { router.push('/organizacao?add=1'); return; }
+    if (id === '__overview') { router.push(`/organizacao?organization=${business?.organizationId || ''}`); return; }
+    if (id === '__add') { router.push(`/organizacao?organization=${business?.organizationId || ''}&add=1`); return; }
     router.push(`${pathname === '/organizacao' ? '/dashboard' : pathname}?b=${id}`);
   }
   function toggle() {

@@ -25,6 +25,7 @@ export async function GET(req: NextRequest) {
     const member = membershipsOf(db, user.id).find((m) => m.businessId === b.id);
     return {
       id: b.id,
+      organizationId: b.organizationId || '',
       slug: b.slug,
       name: b.name,
       logo: b.logo || '',
