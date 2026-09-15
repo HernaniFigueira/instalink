@@ -81,6 +81,35 @@ a memória — reload integral (F5) nesse cenário extremo volta ao login.
 - Slugs validados + palavras reservadas; settings de blocos sanitizados por tipo.
 - Segredos só no servidor (não há `NEXT_PUBLIC_*`).
 
+## Auditoria set/2026 — contexto da empresa, Produtos independente, refinamento visual
+
+- **Contexto da empresa (raiz do "loop de Recursos"):** a API
+  `/api/businesses/[id]/features` lê o id do **path** (`businessIdFromRoute`,
+  `src/lib/business-context.ts`); `?businessId=`/`body.businessId` são só
+  compatibilidade. No painel, `src/components/dashboard/useBusinessId.ts`
+  resolve a empresa ativa pelo `/api/auth/me` quando `?b=` falta — `?b=`
+  continua válido, mas nunca é fonte única. Estados de contexto distintos
+  (sem empresa × rede × permissão × 404 real), nunca "Negócio não
+  encontrado" para tudo.
+- **Produtos é independente de Serviços** (regra central): os dois módulos
+  coexistem e se ativam a qualquer momento em Recursos. Supressão explícita
+  (`Business.productsOff`, gravada no toggle) faz "desligar Produtos ⇒
+  vitrine some" **vencer o fallback legado de pedidos**; negócios legados
+  que nunca gerenciaram Produtos continuam intactos.
+- **Primeira configuração (conta nova):** uma pergunta — "Como sua empresa
+  atende?" (`src/lib/onboarding.ts`): *Serviços e agendamento* →
+  services+bookings; *Produtos* → products; *Serviços + produtos* → os
+  três. É só a base: Recursos muda tudo depois.
+- **Página pública (visual):** capa emoldurada (margem lateral + cantos
+  arredondados ~radius+8, h-44) com avatar de 84px e anel duplo; menu
+  inferior full-width fixo com **ícone em cima / texto embaixo** — itens
+  de `src/lib/bottombar.ts` (Conta · WhatsApp · Menu · Agendar, Agendar é o
+  único preenchido); redução de cards (serviços em lista com divisores,
+  diferenciais/equipe leves, depoimentos em carrossel de fundo sutil, FAQ
+  com divisores, Sobre/texto/vitrine editoriais); glifo do WhatsApp
+  renderizado em **fill** (stroke deformava o ícone — `FILL_ICONS` em
+  `src/components/icons.tsx`).
+
 ## Posicionamento (2026): plataforma de atendimento com agenda
 
 O eixo do produto é **Serviços → Agenda → Cliente → Histórico → WhatsApp**.

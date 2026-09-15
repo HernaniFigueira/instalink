@@ -7,16 +7,20 @@ import { waLink } from '@/lib/utils';
 import type { PublicBusiness } from '@/lib/types';
 import { useCustomer, PublicMenuSheet, type NavActionItem } from './menu';
 import { whatsappVisible } from '@/lib/features';
+import { bottomBarItems } from '@/lib/bottombar';
 
 // ═══════════════════════════════════════════════════════════════
 // MENU INFERIOR DA PÁGINA PÚBLICA — barra fixa, colada nas bordas
 // ═══════════════════════════════════════════════════════════════
-// Diretrizes do produto: NADA de cápsula flutuando sobre o conteúdo.
-// A barra ocupa a largura total da viewport, encosta na borda inferior,
-// tem altura confortável (≥ 56px por item), respeita a safe-area dos
-// celulares e é o acesso PERSISTENTE à conversão (Agendar) — por isso o
-// resto da página não precisa repetir o mesmo CTA em várias seções.
-// Agendar é o item de ação (preenchido); WhatsApp continua complementar.
+// Diretrizes do produto: NADA de cápsula flutuando sobre o conteúdo e
+// NADA de cantos arredondados externos. A barra ocupa a largura total da
+// viewport, encosta na borda inferior, respeita a safe-area dos celulares
+// e é o acesso PERSISTENTE à conversão (Agendar).
+//
+// Cada item é ÍCONE EM CIMA + TEXTO EMBAIXO (padrão mobile premium), com
+// toque confortável. A estrutura dos itens (Conta · WhatsApp · Menu ·
+// Agendar) vem de lib/bottombar.ts — Agendar é a ação principal
+// (preenchida); WhatsApp continua secundário.
 export function BottomBar({ business, navItems, canBook }: {
   business: PublicBusiness;
   navItems: NavActionItem[];
@@ -24,15 +28,21 @@ export function BottomBar({ business, navItems, canBook }: {
 }) {
   const { customer } = useCustomer();
   const [menuOpen, setMenuOpen] = useState(false);
-  const first = customer ? (customer.name.trim().split(' ')[0] || 'Conta') : '';
 
   function wa() {
     trackEvent(business.id, 'whatsapp_click', { from: 'bottombar' });
     window.open(waLink(business.whatsapp, `Olá! Vim pelo site da ${business.name}.`), '_blank', 'noopener,noreferrer');
   }
 
-  const item = 'flex h-14 min-w-0 flex-1 items-center justify-center gap-2 px-2 text-[13px] font-bold transition-transform active:scale-[0.98]';
-  const itemLabel = 'truncate leading-none';
+  const items = bottomBarItems({
+    canBook,
+    whatsapp: whatsappVisible(business),
+    customerName: customer?.name || '',
+  });
+
+  // Ícone em cima, texto embaixo — em qualquer item da barra.
+  const item = 'flex h-[60px] min-w-0 flex-1 flex-col items-center justify-center gap-[3px] px-1 text-[10.5px] font-bold leading-none transition-transform active:scale-[0.97]';
+  const itemLabel = 'truncate leading-none max-w-full';
 
   return (
     <>
@@ -48,37 +58,44 @@ export function BottomBar({ business, navItems, canBook }: {
         aria-label="Navegação"
       >
         <div className="mx-auto flex w-full max-w-2xl items-stretch">
-          {/* Conta do visitante */}
-          <button type="button" className={item} onClick={() => openSheet(customer ? 'account' : 'auth', {})}
-            aria-label={customer ? 'Minha conta' : 'Entrar'} style={{ color: 'var(--il-text)' }}>
-            <Icon n={customer ? 'userCircle' : 'user'} size={19} />
-            <span className={itemLabel}>{customer ? first : 'Entrar'}</span>
-          </button>
-
-          {/* WhatsApp — ação complementar (módulo manda; não só o número) */}
-          {whatsappVisible(business) && (
-            <button type="button" className={item} onClick={wa} aria-label="Abrir conversa no WhatsApp"
-              style={{ color: '#16a34a' }}>
-              <Icon n="whatsapp" size={19} />
-              <span className={itemLabel}>WhatsApp</span>
-            </button>
-          )}
-
-          {/* Menu — navegação configurada pelo lojista */}
-          <button type="button" className={item} onClick={() => setMenuOpen(true)} aria-label="Menu" aria-expanded={menuOpen}
-            style={{ color: 'var(--il-text)' }}>
-            <Icon n="menu" size={19} />
-            <span className={itemLabel}>Menu</span>
-          </button>
-
-          {/* AGENDAR — a conversão persistente da barra (ação principal) */}
-          {canBook && (
-            <button type="button" className={`${item} il-btn !rounded-none !shadow-none`} onClick={() => openSheet('booking', {})}
-              aria-label="Agendar atendimento">
-              <Icon n="calendar" size={19} />
-              <span className={itemLabel}>Agendar</span>
-            </button>
-          )}
+          {items.map((it) => {
+            if (it.id === 'conta') {
+              return (
+                <button key={it.id} type="button" className={item} onClick={() => openSheet(customer ? 'account' : 'auth', {})}
+                  aria-label={customer ? 'Minha conta' : 'Entrar'} style={{ color: 'var(--il-text)' }}>
+                  <Icon n={it.icon} size={20} strokeWidth={1.9} />
+                  <span className={itemLabel}>{it.label}</span>
+                </button>
+              );
+            }
+            if (it.id === 'whatsapp') {
+              return (
+                <button key={it.id} type="button" className={item} onClick={wa} aria-label="Abrir conversa no WhatsApp"
+                  style={{ color: '#16a34a' }}>
+                  <Icon n={it.icon} size={19} />
+                  <span className={itemLabel}>{it.label}</span>
+                </button>
+              );
+            }
+            if (it.id === 'menu') {
+              return (
+                <button key={it.id} type="button" className={item} onClick={() => setMenuOpen(true)} aria-label="Menu" aria-expanded={menuOpen}
+                  style={{ color: 'var(--il-text)' }}>
+                  <Icon n={it.icon} size={20} strokeWidth={1.9} />
+                  <span className={itemLabel}>{it.label}</span>
+                </button>
+              );
+            }
+            // AGENDAR — a conversão persistente da barra (ação principal,
+            // único item preenchido, sem cantos arredondados externos).
+            return (
+              <button key={it.id} type="button" className={`${item} il-btn !rounded-none !shadow-none`} onClick={() => openSheet('booking', {})}
+                aria-label="Agendar atendimento">
+                <Icon n={it.icon} size={20} strokeWidth={1.9} />
+                <span className={itemLabel}>{it.label}</span>
+              </button>
+            );
+          })}
         </div>
       </nav>
 

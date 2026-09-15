@@ -52,6 +52,10 @@ export function toPublicBusiness(b: Business): PublicBusiness {
     googleUrl: b.googleUrl,
     published: b.published,
     features: normalizeFeatures(b),
+    // A supressão da vitrine precisa chegar à página (não é segredo: diz
+    // apenas que o dono desligou Produtos) — sem ela aqui, o fallback
+    // legado de pedidos reativava a vitrine que o dono acabou de desligar.
+    productsOff: b.productsOff === true,
     whatsappStatus: b.whatsappIntegration?.status || 'not_connected',
   };
 }

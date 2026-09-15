@@ -109,6 +109,48 @@ export default function PaginaPage() {
 
   const blocks = [...page.blocks].sort((a, b) => a.order - b.order);
 
+  // SOBRE A EMPRESA — linha sintética da Estrutura: seção pública fixa logo
+  // abaixo do Perfil (mesma convenção do render público, AboutView). Ela
+  // participa da Estrutura (visibilidade e conteúdo) sem virar um bloco
+  // reordenável: posição fixa por decisão de produto e compatibilidade com
+  // os dados existentes (Business.about).
+  const aboutData = business.about || { title: '', text: '', image: '', enabled: false };
+  const aboutFilled = !!(aboutData.title || aboutData.text || aboutData.image);
+  const aboutRow = (
+    <div className={cn('px-3 py-2.5 border-t border-zinc-100', !aboutData.enabled && 'bg-zinc-50/60')}>
+      <div className="flex items-center gap-2.5">
+        <span className="w-6 shrink-0" />
+        <span className="w-[18px] shrink-0 flex justify-center text-zinc-300"><Icon n="pin" size={11} /></span>
+        <div className="flex-1 min-w-0">
+          <p className="font-bold text-sm flex items-center gap-1.5 flex-wrap">
+            <span className={cn(aboutData.enabled ? 'text-zinc-900' : 'text-zinc-400')}>Sobre a empresa</span>
+            <span className="text-[10px] font-extrabold bg-zinc-100 text-zinc-500 px-2 py-0.5 rounded-full">seção fixa abaixo do Perfil</span>
+            {!aboutFilled && (
+              <span className="text-[10px] font-extrabold bg-amber-100 text-amber-800 px-2 py-0.5 rounded-full">Falta preencher</span>
+            )}
+          </p>
+          <p className="text-xs text-zinc-500 truncate">História, diferenciais e imagem do negócio</p>
+        </div>
+        <button onClick={() => setEditing(editing === 'about' ? null : 'about')}
+          className="text-xs font-bold bg-zinc-100 px-3 py-1.5 rounded-lg hover:bg-zinc-200">Editar</button>
+        <button onClick={() => save({ about: { ...aboutData, enabled: !aboutData.enabled } })}
+          className={cn('text-xs font-bold px-3 py-1.5 rounded-lg min-w-[64px]', aboutData.enabled ? 'bg-emerald-100 text-emerald-800 hover:bg-emerald-200' : 'bg-zinc-100 text-zinc-500 hover:bg-zinc-200')}>
+          {aboutData.enabled ? 'Ativo' : 'Oculto'}
+        </button>
+      </div>
+      {editing === 'about' && (
+        <div className="mt-3 pt-3 border-t border-zinc-100">
+          <AboutSectionEditor
+            about={aboutData}
+            businessId={businessId}
+            onSave={(a) => { save({ about: a }); setEditing(null); }}
+          />
+        </div>
+      )}
+    </div>
+  );
+  const hasProfileBlock = blocks.some((b) => b.type === 'profile');
+
   return (
     <>
       <div className="flex flex-wrap items-start justify-between gap-3 mb-6">
@@ -157,7 +199,8 @@ export default function PaginaPage() {
               {blocks.map((b, i) => {
                 const gate = blockModuleGate(business, b.type);
                 return (
-                  <div key={b.id} className={cn('px-3 py-2.5', !b.enabled && 'bg-zinc-50/60')}>
+                  <div key={b.id}>
+                  <div className={cn('px-3 py-2.5', !b.enabled && 'bg-zinc-50/60')}>
                     <div className="flex items-center gap-2.5">
                       <span className="w-6 text-center text-[11px] font-bold text-zinc-400 tabular-nums shrink-0">{i + 1}</span>
                       <div className="flex flex-col gap-0.5 shrink-0">
@@ -208,12 +251,18 @@ export default function PaginaPage() {
                             setPage({ ...page, blocks: n });
                           }}
                           onSave={() => { save({ blocks: page.blocks }); setEditing(null); }}
+                          onRefresh={() => setReloadTick((t) => t + 1)}
                         />
                       </div>
                     )}
                   </div>
+                  {b.type === 'profile' && aboutRow}
+                  </div>
                 );
               })}
+              {/* Página sem bloco de Perfil (raro): o "Sobre" continua visível
+                  na Estrutura — preso ao final, com o aviso de seção fixa. */}
+              {!hasProfileBlock && aboutRow}
             </div>
           </div>
           <div className="bg-white border border-zinc-200 rounded-lg p-4 lg:sticky lg:top-4">
@@ -381,11 +430,21 @@ function PageNavTab({ business, businessId, blocks, services, products, professi
         </div>
 
         <div className="mt-3 divide-y divide-zinc-100 border border-zinc-200 rounded-lg">
-          {current.filter((i) => knownIds.includes(i.id)).map((item, index) => {
+          {current.filter((i) => knownIds.includes(i.id)).map((item, index, arr) => {
             const ok = available.has(item.id);
             const on = item.active !== false;
+            // Agrupamento visual (auditoria da aba): âncoras da própria página
+            // × links externos — conceitos diferentes, headers claros. A
+            // ordem/lógica do menu NÃO muda (índice global preservado).
+            const showGroupHeader = index === 0 || arr[index - 1].type !== item.type;
             return (
-              <div key={item.id} className={cn('flex flex-wrap items-center gap-2 px-3 py-2.5', !ok && 'bg-zinc-50/70')}>
+              <div key={item.id}>
+                {showGroupHeader && (
+                  <p className="px-3 pt-2.5 pb-1 text-[10px] font-extrabold uppercase tracking-wider text-zinc-400 bg-zinc-50/60">
+                    {item.type === 'anchor' ? 'Seções da página' : 'Links externos'}
+                  </p>
+                )}
+                <div className={cn('flex flex-wrap items-center gap-2 px-3 py-2.5', !ok && 'bg-zinc-50/70')}>
                 <div className="flex flex-col gap-0.5">
                   <button disabled={index === 0} onClick={() => move(index, -1)} aria-label={`Subir ${labelOf(item.id)}`}
                     className="text-zinc-400 hover:text-zinc-900 disabled:opacity-20 px-0.5 inline-flex"><Icon n="chevU" size={11} /></button>
@@ -406,6 +465,7 @@ function PageNavTab({ business, businessId, blocks, services, products, professi
                 <span className="text-[10px] font-bold text-zinc-400 uppercase shrink-0 w-14 text-right">
                   {item.type === 'anchor' ? 'Seção' : 'Link'}
                 </span>
+                </div>
               </div>
             );
           })}
@@ -450,6 +510,43 @@ function PageNavTab({ business, businessId, blocks, services, products, professi
   );
 }
 
+// ═══════════════════════════════════════════════════════════════
+// EDITOR DA SEÇÃO "SOBRE" — compartilhado (Estrutura e Navegação).
+// "Sobre a empresa" pertence à página pública: não existe página
+// administrativa "Sobre" — só esta configuração dentro de Página.
+// ═══════════════════════════════════════════════════════════════
+function AboutSectionEditor({ about, businessId, onSave }: {
+  about: Business['about'];
+  businessId: string;
+  onSave: (about: Business['about']) => void;
+}) {
+  const base = about || { title: '', text: '', image: '', enabled: false };
+  const [draft, setDraft] = useState(base);
+  useEffect(() => { setDraft(base); /* eslint-disable-next-line react-hooks/exhaustive-deps */ }, [about?.title, about?.text, about?.image, about?.enabled]);
+  const set = (k: 'title' | 'text' | 'image', v: string) => setDraft((d) => ({ ...d, [k]: v }));
+  return (
+    <div className="space-y-3">
+      <div>
+        <span className="text-xs font-bold text-zinc-500">TÍTULO</span>
+        <input value={draft.title} onChange={(e) => set('title', e.target.value)}
+          className="mt-1 w-full rounded-md border border-zinc-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500"
+          placeholder="Ex: Sobre o estúdio" maxLength={80} />
+      </div>
+      <div>
+        <span className="text-xs font-bold text-zinc-500">TEXTO</span>
+        <textarea value={draft.text} onChange={(e) => set('text', e.target.value)}
+          className="mt-1 w-full rounded-md border border-zinc-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500"
+          rows={4} placeholder="Ex: Somos uma clínica especializada em…" maxLength={1200} />
+      </div>
+      <ImageUpload label="IMAGEM (OPCIONAL)" value={draft.image} onChange={(url) => set('image', url)} businessId={businessId} />
+      <button onClick={() => onSave({ ...draft, enabled: !!draft.enabled })}
+        className="text-sm font-bold bg-zinc-900 text-white px-4 py-2 rounded-md hover:bg-zinc-700">
+        Salvar “Sobre”
+      </button>
+    </div>
+  );
+}
+
 // helper: existe algum item indisponível na lista?
 function ok_all_available(available: Set<string>, items: NavItemConfig[]): boolean {
   return items.every((i) => available.has(i.id));
@@ -473,16 +570,41 @@ function blockIsEmpty(b: Block, rvCounts: { pending: number; published: number }
   }
 }
 
-function BlockSettings({ block, businessId, business, onChange, onSave }: {
+function BlockSettings({ block, businessId, business, onChange, onSave, onRefresh }: {
   block: Block;
   businessId: string;
   business: Business;
   onChange: (s: Record<string, any>) => void;
   onSave: () => void;
+  /** Recarrega negócio+página após uma mudança de módulo (ex.: ativar Produtos). */
+  onRefresh?: () => void;
 }) {
   const s = block.settings || {};
   const set = (k: string, v: any) => onChange({ ...s, [k]: v });
   const input = 'w-full rounded-md border border-zinc-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500';
+  const [activating, setActivating] = useState('');
+  const [activateError, setActivateError] = useState('');
+
+  // VITRINE → ATIVAÇÃO (auditoria §6): o caminho "Página → Vitrine de
+  // produtos → Ativar" funciona ponta a ponta SEM depender de navegador:
+  // ativa aqui mesmo (servidor salva → contexto do painel atualiza → o
+  // bloco deixa de avisar que o módulo está desligado) — ou abre Recursos.
+  async function activateModule(feature: 'products' | 'services' | 'bookings') {
+    setActivating(feature);
+    setActivateError('');
+    try {
+      const res = await apiSend<any>(`/api/businesses/${businessId}/features`, 'PATCH',
+        { businessId, feature, enabled: true }, { scope: 'action', area: 'Página' });
+      if (!res.ok) throw new Error(res.message || 'Não foi possível ativar.');
+      // Atualiza o shell (menu/áreas) na hora e relê negócio+página — sem F5.
+      window.dispatchEvent(new Event('il:business-refresh'));
+      onRefresh?.();
+    } catch (e: any) {
+      setActivateError(e.message || 'Não foi possível ativar o módulo.');
+    } finally {
+      setActivating('');
+    }
+  }
   // Orçamento só aparece como destino se a empresa LEGADA ainda tem o módulo
   // ligado — novas experiências não oferecem pedidos/orçamentos.
   const quoteLegacy = (business.modes || []).includes('quote');
@@ -539,10 +661,21 @@ function BlockSettings({ block, businessId, business, onChange, onSave }: {
               <span className="text-emerald-700 font-semibold">● Módulo Produtos ativo</span>
             </p>
           ) : (
-            <p className="flex flex-wrap gap-x-3 gap-y-1">
-              <Link href={`/recursos?b=${businessId}`} className="font-semibold text-zinc-900 underline">Ativar Produtos em Recursos →</Link>
-              <span className="text-amber-700">○ Com o módulo desligado, a vitrine não aparece na página (nada foi apagado).</span>
-            </p>
+            <div className="space-y-2">
+              <p className="text-amber-700">○ Com o módulo desligado, a vitrine não aparece na página (nada foi apagado).</p>
+              <p className="flex flex-wrap items-center gap-x-3 gap-y-2">
+                <button
+                  type="button"
+                  onClick={() => activateModule('products')}
+                  disabled={!!activating}
+                  className="inline-flex items-center gap-1.5 text-xs font-bold bg-emerald-600 text-white px-3.5 py-2 rounded-md hover:bg-emerald-700 disabled:opacity-60">
+                  {activating === 'products' && <span className="w-3 h-3 border-2 border-white/40 border-t-white rounded-full animate-spin" />}
+                  Ativar Produtos agora
+                </button>
+                <Link href={`/recursos?b=${businessId}`} className="font-semibold text-zinc-900 underline">ou abrir Recursos →</Link>
+              </p>
+              {activateError && <p className="text-red-700 font-semibold">{activateError}</p>}
+            </div>
           )}
         </div>
       )}

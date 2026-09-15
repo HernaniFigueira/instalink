@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   FEATURES, allowedCtaTargets, blockVisible, canBook, featureTogglePatch, isFeatureEnabled,
-  normalizeFeatures, servicesVisible, visibleBlocks, whatsappVisible, enabledFeatureIds,
+  normalizeFeatures, productsVisible, servicesVisible, visibleBlocks, whatsappVisible, enabledFeatureIds,
 } from '../features';
 import type { Block, Business } from '../types';
 
@@ -146,5 +146,76 @@ describe('normalizeFeatures — migração defensiva', () => {
     const ids = FEATURES.map((f) => f.id);
     expect(new Set(ids).size).toBe(ids.length);
     expect(CTA_LABEL.length).toBeGreaterThan(0);
+  });
+});
+
+describe('produtos × serviços — módulos INDEPENDENTES (regra central)', () => {
+  const svcBlocks: Block[] = [
+    { id: 'p', type: 'profile', order: 0, enabled: true, settings: {} },
+    { id: 's', type: 'services', order: 1, enabled: true, settings: {} },
+    { id: 'v', type: 'products', order: 2, enabled: true, settings: {} },
+  ];
+
+  it('Produtos ON sem Serviços: vitrine aparece, serviços não', () => {
+    const b = business({ modes: ['products'] });
+    expect(isFeatureEnabled(b, 'products')).toBe(true);
+    expect(isFeatureEnabled(b, 'services')).toBe(false);
+    expect(isFeatureEnabled(b, 'bookings')).toBe(false);
+    const types = visibleBlocks(b, svcBlocks).map((x) => x.type);
+    expect(types).toContain('products');
+    expect(types).not.toContain('services');
+  });
+
+  it('Serviços OFF não esconde bloco de produtos (e vice-versa)', () => {
+    const full = business({ modes: ['services', 'bookings', 'products'] });
+    expect(visibleBlocks(full, svcBlocks).map((x) => x.type)).toEqual(['profile', 'services', 'products']);
+    // desligar só serviços/agenda: a vitrine continua
+    const off = business({ ...full, modes: ['products'] });
+    expect(visibleBlocks(off, svcBlocks).map((x) => x.type)).toEqual(['profile', 'products']);
+    // desligar só produtos: serviços continuam
+    const off2 = business({ ...full, modes: ['services', 'bookings'] });
+    expect(visibleBlocks(off2, svcBlocks).map((x) => x.type)).toEqual(['profile', 'services']);
+  });
+
+  it('desativar Produtos nunca apaga dados (patch mínimo, preserva o resto)', () => {
+    const b = business({ modes: ['services', 'bookings', 'products'] });
+    const patch = featureTogglePatch(b, 'products', false);
+    expect(patch.modes).toEqual(['services', 'bookings']);
+    // reativar devolve exatamente o conjunto anterior
+    const back = featureTogglePatch({ ...b, modes: patch.modes! }, 'products', true);
+    expect(new Set(back.modes)).toEqual(new Set(['services', 'bookings', 'products']));
+  });
+
+  it('os três modelos de empresa do onboarding resolvem os módulos certos', () => {
+    // espelha lib/onboarding.ts → isFeatureEnabled
+    expect(isFeatureEnabled(business({ modes: ['services', 'bookings'] }), 'services')).toBe(true);
+    expect(isFeatureEnabled(business({ modes: ['products'] }), 'services')).toBe(false);
+    expect(isFeatureEnabled(business({ modes: ['services', 'bookings', 'products'] }), 'products')).toBe(true);
+  });
+});
+
+describe('contradição auditada — vitrine × legado de pedidos (§4)', () => {
+  const productsBlock: Block[] = [{ id: 'v', type: 'products', order: 0, enabled: true, settings: {} }];
+
+  it('fallback legado preservado: orders-only sem gestão de Produtos exibe vitrine', () => {
+    const legacy = business({ modes: ['orders'] }); // nunca tocou em Produtos
+    expect(productsVisible(legacy, [{ active: true }])).toBe(true);
+    expect(visibleBlocks(legacy, productsBlock)).toHaveLength(1);
+  });
+
+  it('desligar Produtos grava supressão e a vitrine SOME mesmo com orders ligado', () => {
+    const legacy = business({ modes: ['orders', 'products'] });
+    const patch = featureTogglePatch(legacy, 'products', false);
+    expect(patch.productsOff).toBe(true);
+    const off = business({ ...legacy, modes: patch.modes!, productsOff: patch.productsOff });
+    expect(productsVisible(off, [{ active: true }])).toBe(false);
+    expect(visibleBlocks(off, productsBlock)).toHaveLength(0);
+    expect(target(off)).not.toContain('products');
+  });
+
+  it('reativar Produtos limpa a supressão e a vitrine volta inteira', () => {
+    const back = featureTogglePatch(business({ modes: ['orders'] }), 'products', true);
+    expect(back.productsOff).toBe(false);
+    expect(back.modes).toEqual(expect.arrayContaining(['orders', 'products']));
   });
 });

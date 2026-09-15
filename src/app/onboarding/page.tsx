@@ -1,16 +1,17 @@
 'use client';
 // ═══════════════════════════════════════════════════════════════
-// CRIAR NEGÓCIO — uma tela só. O antigo onboarding de 3 passos
-// (nicho → forma de vender → produtos/serviços) foi REMOVIDO:
-// o InstaLink é uma plataforma de atendimento com agenda, então o
-// negócio novo já nasce configurado para isso (Serviços + Agenda
-// ativos; vitrine de produtos desligada; nada de pedidos).
-// O usuário pode ajustar tudo depois em Recursos/Configurações.
+// CRIAR NEGÓCIO — primeira configuração CURTA (sem wizard antigo).
+// Duas coisas apenas: o nome do negócio e "Como sua empresa atende?"
+// (Serviços e agendamento · Produtos · Serviços + produtos). A resposta só
+// define a BASE de módulos (lib/onboarding.ts) — depois da criação o
+// usuário liga/desliga tudo livremente em Administração → Recursos.
+// Nada aqui bloqueia o restante do sistema.
 // ═══════════════════════════════════════════════════════════════
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { slugify } from '@/lib/utils';
 import { Icon } from '@/components/icons';
+import { SERVICE_MODEL_OPTIONS, modesForServiceModel, type ServiceModel } from '@/lib/onboarding';
 
 const WHATSAPP_DRAFT_KEY = 'il-biz-draft';
 
@@ -18,6 +19,7 @@ export default function CreateBusinessPage() {
   const router = useRouter();
   const [name, setName] = useState('');
   const [whatsapp, setWhatsapp] = useState('');
+  const [model, setModel] = useState<ServiceModel>('agenda');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
   const [checking, setChecking] = useState(true);
@@ -45,14 +47,15 @@ export default function CreateBusinessPage() {
       const d = JSON.parse(raw);
       if (typeof d.name === 'string') setName(d.name);
       if (typeof d.whatsapp === 'string') setWhatsapp(d.whatsapp);
+      if (d.model === 'agenda' || d.model === 'produtos' || d.model === 'ambos') setModel(d.model);
     } catch { /* sem rascunho */ }
   }, []);
   useEffect(() => {
     try {
-      if (name || whatsapp) localStorage.setItem(WHATSAPP_DRAFT_KEY, JSON.stringify({ name, whatsapp }));
+      if (name || whatsapp || model !== 'agenda') localStorage.setItem(WHATSAPP_DRAFT_KEY, JSON.stringify({ name, whatsapp, model }));
       else localStorage.removeItem(WHATSAPP_DRAFT_KEY);
     } catch { /* storage bloqueado: segue sem rascunho */ }
-  }, [name, whatsapp]);
+  }, [name, whatsapp, model]);
 
   async function finish(e: React.FormEvent) {
     e.preventDefault();
@@ -63,9 +66,9 @@ export default function CreateBusinessPage() {
       const res = await fetch('/api/businesses', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        // SEM niche/modes: a API aplica o padrão de atendimento
-        // (lib/templates.ts → NEW_BUSINESS_DEFAULTS).
-        body: JSON.stringify({ name, whatsapp, slug: slugify(name) }),
+        // A pergunta "Como sua empresa atende?" define a BASE de módulos
+        // (lib/onboarding.ts). Nada definitivo: Recursos liga/desliga depois.
+        body: JSON.stringify({ name, whatsapp, slug: slugify(name), modes: modesForServiceModel(model) }),
       });
       if (res.status === 401) { router.replace('/login?session=expired'); return; }
       const data = await res.json();
@@ -103,8 +106,8 @@ export default function CreateBusinessPage() {
         <form onSubmit={finish} className="bg-white border border-zinc-200 rounded-lg p-6 shadow-sm">
           <h1 className="text-lg font-semibold tracking-tight">Crie o seu negócio</h1>
           <p className="text-sm text-zinc-500 mt-1">
-            Uma pergunta só: como ele se chama? Sua página, agenda, catálogo de serviços e
-            clientes já nascem prontos para atendimento.
+            Nome e como você atende — só isso. Sua página e módulos nascem prontos,
+            e você ajusta tudo depois em Recursos.
           </p>
 
           <div className="mt-5 space-y-4">
@@ -123,15 +126,51 @@ export default function CreateBusinessPage() {
               <input id="wa" value={whatsapp} onChange={(e) => setWhatsapp(e.target.value)} placeholder="(11) 99999-9999" inputMode="tel"
                 className="w-full rounded-md border border-zinc-300 px-3.5 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500" />
             </div>
+
+            {/* A base de módulos — uma pergunta, três respostas (lib/onboarding.ts).
+                Nada definitivo: Recursos liga/desliga qualquer módulo depois. */}
+            <fieldset>
+              <legend className="text-sm font-medium text-zinc-700">Como sua empresa atende?</legend>
+              <div className="mt-1.5 grid gap-2" role="radiogroup" aria-label="Como sua empresa atende?">
+                {SERVICE_MODEL_OPTIONS.map((opt) => (
+                  <label key={opt.id}
+                    className={`flex items-start gap-2.5 rounded-md border px-3.5 py-2.5 cursor-pointer transition-colors ${
+                      model === opt.id ? 'border-emerald-500 bg-emerald-50/60 ring-1 ring-emerald-500' : 'border-zinc-200 hover:border-zinc-300'
+                    }`}>
+                    <input
+                      type="radio" name="service-model" value={opt.id}
+                      checked={model === opt.id} onChange={() => setModel(opt.id)}
+                      className="mt-0.5 w-4 h-4 accent-emerald-600"
+                    />
+                    <span className="min-w-0">
+                      <span className="block text-sm font-semibold text-zinc-900">{opt.label}</span>
+                      <span className="block text-xs text-zinc-500 mt-0.5">{opt.hint}</span>
+                    </span>
+                  </label>
+                ))}
+              </div>
+            </fieldset>
           </div>
 
           <div className="mt-5 rounded-md border border-zinc-200 bg-zinc-50 px-3.5 py-3">
             <p className="text-xs font-semibold text-zinc-700 mb-1.5">Você começa com:</p>
             <ul className="space-y-1 text-xs text-zinc-600">
-              <li className="flex items-center gap-1.5"><Icon n="check" size={12} className="text-emerald-600" /> Agenda de atendimentos ativa</li>
-              <li className="flex items-center gap-1.5"><Icon n="check" size={12} className="text-emerald-600" /> Catálogo de serviços com agendamento</li>
+              {(model === 'agenda' || model === 'ambos') && (
+                <>
+                  <li className="flex items-center gap-1.5"><Icon n="check" size={12} className="text-emerald-600" /> Agenda de atendimentos ativa</li>
+                  <li className="flex items-center gap-1.5"><Icon n="check" size={12} className="text-emerald-600" /> Catálogo de serviços com agendamento</li>
+                </>
+              )}
+              {(model === 'produtos' || model === 'ambos') && (
+                <li className="flex items-center gap-1.5"><Icon n="check" size={12} className="text-emerald-600" /> Vitrine de produtos com CTA no WhatsApp</li>
+              )}
               <li className="flex items-center gap-1.5"><Icon n="check" size={12} className="text-emerald-600" /> Página pública pronta para publicar</li>
-              <li className="flex items-center gap-1.5 text-zinc-400"><Icon n="x" size={12} /> Vitrine de produtos (opcional — ative em Recursos)</li>
+              {model === 'agenda' && (
+                <li className="flex items-center gap-1.5 text-zinc-400"><Icon n="x" size={12} /> Vitrine de produtos (opcional — ative em Recursos)</li>
+              )}
+              {model === 'produtos' && (
+                <li className="flex items-center gap-1.5 text-zinc-400"><Icon n="x" size={12} /> Agenda e serviços (opcionais — ative em Recursos)</li>
+              )}
             </ul>
           </div>
 
