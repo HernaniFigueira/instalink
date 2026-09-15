@@ -90,10 +90,28 @@ describe('agente de atendimento — configuração', () => {
 describe('agente — conhecimento vem do dado real', () => {
   it('monta serviços, preços e duração do cadastro', () => {
     const k = buildKnowledge(db({ services: [service] }), business());
-    expect(k.services).toEqual([{ name: 'Limpeza', price: 20000, durationMin: 40, bookable: true }]);
+    expect(k.services).toEqual([{ name: 'Limpeza', price: 20000, durationMin: 40, bookable: true, pricePublic: true }]);
     expect(k.businessName).toBe('Clínica Vita');
     expect(k.address).toBe('Rua A, 100');
     expect(k.about).toContain('Sobre nós');
+  });
+
+  it('preço só é público no conhecimento quando o serviço libera (showPrice)', () => {
+    const k = buildKnowledge(db({ services: [{ ...service, showPrice: false }] }), business());
+    expect(k.services[0].pricePublic).toBe(false);
+    // O preço continua no domínio (interno) — só a EXIBIÇÃO pública muda.
+    expect(k.services[0].price).toBe(20000);
+  });
+
+  it('conhece os profissionais ativos do negócio', () => {
+    const k = buildKnowledge(db({
+      services: [service],
+      professionals: [
+        { id: 'p1', businessId: 'b1', name: 'Dra. Ana', role: 'Dentista', photo: '', active: true },
+        { id: 'p2', businessId: 'b1', name: 'Inativo', role: '', photo: '', active: false },
+      ] as any,
+    }), business());
+    expect(k.professionals).toEqual([{ name: 'Dra. Ana', role: 'Dentista' }]);
   });
 
   it('ignora serviço inativo e inclui a FAQ publicada', () => {
