@@ -3,24 +3,42 @@ import { Icon } from '@/components/icons';
 import { toneCls, type Tone } from '@/lib/status';
 
 // ── Design System InstaLink — workspace first, card quando fizer sentido ──
-export function Button(props: React.ButtonHTMLAttributes<HTMLButtonElement> & { variant?: 'primary' | 'secondary' | 'ghost' | 'danger'; size?: 'sm' | 'md' | 'lg' }) {
-  const { variant = 'primary', size = 'md', className, ...rest } = props;
-  return (
-    <button
-      className={cn(
-        'inline-flex items-center justify-center gap-1.5 font-semibold transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-zinc-900 disabled:opacity-50 disabled:pointer-events-none rounded-md',
-        size === 'sm' && 'text-xs px-2.5 py-1.5',
-        size === 'md' && 'text-sm px-3.5 py-2',
-        size === 'lg' && 'text-sm px-5 py-2.5',
-        variant === 'primary' && 'bg-zinc-900 text-white hover:bg-zinc-800',
-        variant === 'secondary' && 'bg-white text-zinc-900 border border-zinc-200 hover:bg-zinc-50',
-        variant === 'ghost' && 'text-zinc-600 hover:bg-zinc-100 hover:text-zinc-900 border border-transparent',
-        variant === 'danger' && 'bg-red-600 text-white hover:bg-red-700',
-        className,
-      )}
-      {...rest}
-    />
+// Hierarquia de AÇÃO (P1.1) — status do atendimento ≠ cor de botão:
+//   primary  → ação principal da marca (--action)
+//   success  → conclusão/avanço (verde)
+//   warning  → atenção operacional (amarelo/laranja suave, sem competir)
+//   danger   → ação destrutiva (vermelho)
+//   secondary→ neutro (reagendar, voltar, filtros)
+//   ghost    → discreto (fechar, alternar)
+// As cores vêm dos tokens em globals.css — nada de estilo isolado por tela.
+export type ButtonVariant = 'primary' | 'success' | 'warning' | 'danger' | 'secondary' | 'ghost';
+
+const BTN_VARIANT_CLS: Record<ButtonVariant, string> = {
+  primary: 'bg-[var(--action)] text-[var(--action-contrast)] hover:bg-[var(--action-strong)]',
+  success: 'bg-[var(--success)] text-white hover:bg-[var(--success-strong)]',
+  warning: 'bg-[var(--attention-bg)] text-[var(--attention)] border border-[var(--attention-border)] hover:bg-[var(--attention-bg-hover)]',
+  danger: 'bg-[var(--danger)] text-white hover:bg-[var(--danger-strong)]',
+  secondary: 'bg-white text-zinc-900 border border-zinc-200 hover:bg-zinc-50',
+  ghost: 'text-zinc-600 hover:bg-zinc-100 hover:text-zinc-900 border border-transparent',
+};
+
+export type ButtonSize = 'sm' | 'md' | 'lg';
+
+/** Classes compartilhadas de botão — permite manter a MESMA linguagem em
+ *  elementos de navegação (Link/a) sem duplicar estilo fora do ui.tsx. */
+export function buttonCls(variant: ButtonVariant = 'primary', size: ButtonSize = 'md'): string {
+  return cn(
+    'inline-flex items-center justify-center gap-1.5 font-semibold transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--action)] disabled:opacity-50 disabled:pointer-events-none rounded-md',
+    size === 'sm' && 'text-xs px-2.5 py-1.5',
+    size === 'md' && 'text-sm px-3.5 py-2',
+    size === 'lg' && 'text-sm px-5 py-2.5',
+    BTN_VARIANT_CLS[variant],
   );
+}
+
+export function Button(props: React.ButtonHTMLAttributes<HTMLButtonElement> & { variant?: ButtonVariant; size?: ButtonSize }) {
+  const { variant = 'primary', size = 'md', className, ...rest } = props;
+  return <button className={cn(buttonCls(variant, size), className)} {...rest} />;
 }
 
 export function A(props: React.AnchorHTMLAttributes<HTMLAnchorElement> & { variant?: 'primary' | 'secondary' | 'ghost'; size?: 'sm' | 'md' | 'lg' }) {
@@ -32,9 +50,9 @@ export function A(props: React.AnchorHTMLAttributes<HTMLAnchorElement> & { varia
         size === 'sm' && 'text-xs px-2.5 py-1.5',
         size === 'md' && 'text-sm px-3.5 py-2',
         size === 'lg' && 'text-sm px-5 py-2.5',
-        variant === 'primary' && 'bg-zinc-900 text-white hover:bg-zinc-800',
-        variant === 'secondary' && 'bg-white text-zinc-900 border border-zinc-200 hover:bg-zinc-50',
-        variant === 'ghost' && 'text-zinc-600 hover:bg-zinc-100 hover:text-zinc-900',
+        variant === 'primary' && BTN_VARIANT_CLS.primary,
+        variant === 'secondary' && BTN_VARIANT_CLS.secondary,
+        variant === 'ghost' && BTN_VARIANT_CLS.ghost,
         className,
       )}
       {...rest}

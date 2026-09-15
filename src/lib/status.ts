@@ -2,11 +2,15 @@
 // descrições e transições válidas (máquina de estados).
 // NENHUM outro arquivo deve definir label de status.
 //
-// P1 — COR = ESTADO (apresentação sólida, sem transparência apagada):
-// as classes de cor dos estados vivem SOMENTE aqui (toneCls para selos,
-// BOOKING_BLOCK/BOOKING_DOT para a agenda, ATTENTION_* para pendência de
-// fechamento). Páginas e componentes importam destes exports — nunca
-// redefinem mapas locais de cor por status.
+// COR = ESTADO — apresentação por camada:
+//  • toneCls (selos/StatusBadge e chips da Dashboard) → cor SÓLIDA,
+//    presença forte: o estado precisa ser reconhecido de longe.
+//  • BOOKING_BLOCK (blocos da grade da Agenda) → apresentação SUAVE
+//    (fundo tonalizado + borda/acento na cor do estado): a Semana com
+//    muitos blocos não vira "carnaval", mas o estado continua óbvio
+//    pela tonalidade + rótulo impresso no bloco.
+// As classes de cor dos estados vivem SOMENTE aqui. Páginas e componentes
+// importam destes exports — nunca redefinem mapas locais de cor por status.
 import type { BookingStatus, LeadStatus, OrderStatus } from './types';
 
 export type Tone = 'amber' | 'orange' | 'yellow' | 'emerald' | 'blue' | 'zinc' | 'red' | 'purple';
@@ -102,15 +106,17 @@ export function toneCls(tone: Tone): string {
   }
 }
 
-// ── Agenda: bloco do appointment (preenchimento sólido por estado) ──
-// O texto do bloco é sempre branco semibold sobre o preenchimento; o estado
-// nunca depende SÓ da cor — cada bloco também exibe o rótulo do status.
+// ── Agenda: bloco do appointment (P1.1 — apresentação suave) ──
+// Mesma semântica de cor do resto do produto, sem o peso do preenchimento
+// sólido: fundo tonalizado + borda leve + acento forte na lateral esquerda
+// (a página usa `border-l-4`). O estado nunca depende SÓ da cor — cada
+// bloco também exibe o rótulo do status, agora na própria tonalidade.
 export const BOOKING_BLOCK: Record<BookingStatus, string> = {
-  pending: 'border-orange-800 bg-orange-600 text-white',
-  confirmed: 'border-emerald-800 bg-emerald-600 text-white',
-  completed: 'border-blue-800 bg-blue-600 text-white',
-  cancelled: 'border-red-800 bg-red-600 text-white',
-  no_show: 'border-zinc-700 bg-zinc-500 text-white',
+  pending: 'border-orange-200 border-l-orange-500 bg-orange-50 text-orange-950',
+  confirmed: 'border-emerald-200 border-l-emerald-500 bg-emerald-50 text-emerald-950',
+  completed: 'border-blue-200 border-l-blue-500 bg-blue-50 text-blue-950',
+  cancelled: 'border-red-200 border-l-red-400 bg-red-50 text-red-900',
+  no_show: 'border-zinc-200 border-l-zinc-400 bg-zinc-100 text-zinc-600',
 };
 
 // ── Agenda (visão mês): ponto de cor por estado ──

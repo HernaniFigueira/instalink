@@ -4,7 +4,18 @@
 
 :root {
   color-scheme: light;
-  /* Design tokens - workspace first */
+  /* Design tokens - workspace first
+   * ── Linguagem de cor do painel (P1.1) ─────────────────────────────
+   *  ESTRUTURA  → neutros (zinc/Tailwind): superfícies, bordas, texto.
+   *  AÇÃO       → --action: cor de marca/destaque das ações primárias.
+   *  ESTADO     → --success / --info: cores semânticas de resultado.
+   *  ATENÇÃO    → --attention*: amarelo/laranja operacional.
+   *  DESTRUTIVO → --danger*: vermelho.
+   * Os componentes compartilhados (ui.tsx) consomem estas variáveis —
+   * uma futura identidade de marca por negócio só precisa REATRIBUIR
+   * estas variáveis (como a página pública faz via ThemeStyle/--il-*),
+   * sem reescrever componentes.
+   */
   --bg: #f8f8f8;
   --surface: #ffffff;
   --surface-hover: #fafafa;
@@ -13,13 +24,28 @@
   --text: #18181b;
   --text-muted: #71717a;
   --text-faint: #a1a1aa;
+  /* Ação (marca) — hoje: neutro essencial; futuro: cor do negócio. */
+  --action: #18181b;
+  --action-strong: #27272a;
+  --action-contrast: #ffffff;
   --accent: #18181b;
   --accent-contrast: #ffffff;
+  /* Estado */
   --success: #16a34a;
+  --success-strong: #15803d;
   --success-bg: #f0fdf4;
+  --info: #2563eb;
+  --info-strong: #1d4ed8;
+  /* Atenção (pendências, alertas operacionais) */
   --warning: #eab308;
   --warning-bg: #fefce8;
+  --attention: #b45309;
+  --attention-bg: #fef3c7;
+  --attention-bg-hover: #fde68a;
+  --attention-border: #fcd34d;
+  /* Destrutivo */
   --danger: #dc2626;
+  --danger-strong: #b91c1c;
   --danger-bg: #fef2f2;
   --radius-sm: 6px;
   --radius-md: 8px;
