@@ -15,7 +15,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { useSearchParams } from 'next/navigation';
 import Link from 'next/link';
-import { cn } from '@/lib/utils';
+import { centsToBR, cn, parseMoneyToCents } from '@/lib/utils';
 import type { Category, Product } from '@/lib/types';
 import { ListSkeleton } from '@/components/ui';
 import { AccessDenied, useAreaLoad } from '@/components/dashboard/AccessNotice';
@@ -24,13 +24,10 @@ import { Icon } from '@/components/icons';
 import { ImageUpload } from '@/components/dashboard/ImageUpload';
 import { showcasePriceCents } from '@/lib/showcase';
 
-function cents(v: string): number {
-  const n = Number(String(v).replace(/\./g, '').replace(',', '.'));
-  return Number.isFinite(n) ? Math.round(n * 100) : 0;
-}
-function reais(c: number): string {
-  return (c / 100).toFixed(2).replace('.', ',');
-}
+// Moeda: implementação ÚNICA (lib/utils). A cópia local daqui era o clássico
+// bug "45.00 virou R$ 4.500" — parse próprio nunca mais.
+const cents = parseMoneyToCents;
+const reais = centsToBR;
 
 export default function ProdutosPage() {
   const params = useSearchParams();
@@ -45,19 +42,20 @@ export default function ProdutosPage() {
   const [showForm, setShowForm] = useState(false);
 
   // 403 → aviso amigável (sessão preservada), nunca lista "carregando" para sempre.
-  const { denied, report } = useAreaLoad('Produtos');
+  const { denied, failed, report } = useAreaLoad('Produtos');
+  const [reloadTick, setReloadTick] = useState(0);
 
   const load = useCallback(async () => {
     if (!businessId) return;
     const res = await apiGet<any>(`/api/catalog/get?businessId=${businessId}`, { scope: 'area', area: 'Produtos' });
-    if (!report(res)) { setLoaded(true); return; }
+    if (!report(res)) return; // erro tratado pelo estado `failed` (nunca skeleton infinito)
     const d = res.data || {};
     setCats((d.categories || []).filter((c: Category) => c.kind === 'product'));
     setProducts(d.products || []);
     setLoaded(true);
   }, [businessId, report]);
 
-  useEffect(() => { load(); }, [load]);
+  useEffect(() => { load(); }, [load, reloadTick]);
 
   async function call(action: string, payload: Record<string, any>) {
     setMsg('');
@@ -104,7 +102,13 @@ export default function ProdutosPage() {
         </form>
       )}
 
-      {denied ? <AccessDenied area="Produtos" /> : !loaded ? <ListSkeleton rows={4} /> : products.length === 0 ? (
+      {denied ? <AccessDenied area="Produtos" /> : failed ? (
+        <div className="bg-white border border-zinc-200 rounded-md text-center py-10 px-6" role="alert">
+          <span className="mx-auto w-10 h-10 rounded-md bg-red-50 border border-red-200 text-red-600 flex items-center justify-center"><Icon n="alert" size={18} /></span>
+          <p className="text-sm font-medium text-zinc-700 mt-3">{failed}</p>
+          <button onClick={() => setReloadTick((t) => t + 1)} className="mt-4 text-xs font-bold bg-zinc-900 text-white px-4 py-2 rounded-md">Tentar de novo</button>
+        </div>
+      ) : !loaded ? <ListSkeleton rows={4} /> : products.length === 0 ? (
         <div className="bg-white border border-zinc-200 rounded-md text-center py-12 px-6">
           <div className="mx-auto w-10 h-10 rounded-md bg-zinc-100 flex items-center justify-center text-zinc-400"><Icon n="bag" size={20} /></div>
           <h3 className="font-semibold text-sm mt-3">Sua vitrine está vazia</h3>

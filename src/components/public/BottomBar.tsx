@@ -8,9 +8,15 @@ import type { PublicBusiness } from '@/lib/types';
 import { useCustomer, PublicMenuSheet, type NavActionItem } from './menu';
 import { whatsappVisible } from '@/lib/features';
 
-// Barra de navegação flutuante (bottom) da página pública.
-// Substitui o antigo header flutuante: [Usuário · WhatsApp · Agendar · Menu].
-// Tema-compatível (usa as variáveis il-*) e com safe-area para mobile.
+// ═══════════════════════════════════════════════════════════════
+// MENU INFERIOR DA PÁGINA PÚBLICA — barra fixa, colada nas bordas
+// ═══════════════════════════════════════════════════════════════
+// Diretrizes do produto: NADA de cápsula flutuando sobre o conteúdo.
+// A barra ocupa a largura total da viewport, encosta na borda inferior,
+// tem altura confortável (≥ 56px por item), respeita a safe-area dos
+// celulares e é o acesso PERSISTENTE à conversão (Agendar) — por isso o
+// resto da página não precisa repetir o mesmo CTA em várias seções.
+// Agendar é o item de ação (preenchido); WhatsApp continua complementar.
 export function BottomBar({ business, navItems, canBook }: {
   business: PublicBusiness;
   navItems: NavActionItem[];
@@ -25,63 +31,54 @@ export function BottomBar({ business, navItems, canBook }: {
     window.open(waLink(business.whatsapp, `Olá! Vim pelo site da ${business.name}.`), '_blank', 'noopener,noreferrer');
   }
 
-  const btn = 'flex flex-col items-center justify-center gap-0.5 px-2 py-1 min-w-[54px] transition-transform active:scale-95';
-  const chip = 'w-9 h-9 rounded-full flex items-center justify-center shrink-0';
-  const lbl = 'text-[10px] font-bold truncate max-w-[62px] leading-tight';
+  const item = 'flex h-14 min-w-0 flex-1 items-center justify-center gap-2 px-2 text-[13px] font-bold transition-transform active:scale-[0.98]';
+  const itemLabel = 'truncate leading-none';
 
   return (
     <>
-      <nav className="fixed bottom-0 inset-x-0 z-40 flex justify-center pointer-events-none"
-        style={{ paddingBottom: 'env(safe-area-inset-bottom)' }} aria-label="Navegação">
-        <div className="pointer-events-auto w-full max-w-md mx-3 mb-3 rounded-2xl flex items-stretch justify-around gap-1 px-2 py-1.5 shadow-2xl"
-          style={{
-            background: 'color-mix(in srgb, var(--il-surface) 86%, transparent)',
-            backdropFilter: 'blur(16px)',
-            WebkitBackdropFilter: 'blur(16px)',
-            border: '1px solid color-mix(in srgb, var(--il-muted) 22%, transparent)',
-          }}>
-          {/* Usuário */}
-          <button type="button" className={btn} onClick={() => openSheet(customer ? 'account' : 'auth', {})}
-            aria-label={customer ? 'Minha conta' : 'Entrar'}>
-            <span className={chip} style={customer
-              ? { background: 'var(--il-primary)', color: 'var(--il-btn-text, #fff)' }
-              : { background: 'color-mix(in srgb, var(--il-muted) 14%, transparent)', color: 'var(--il-text)' }}>
-              {customer ? (
-                <span className="text-sm font-extrabold">{first.slice(0, 1).toUpperCase()}</span>
-              ) : (
-                <Icon n="userCircle" size={20} />
-              )}
-            </span>
-            <span className={lbl} style={{ color: 'var(--il-text)' }}>{customer ? first : 'Entrar'}</span>
+      <nav
+        className="fixed inset-x-0 bottom-0 z-40 border-t"
+        style={{
+          background: 'color-mix(in srgb, var(--il-surface) 96%, transparent)',
+          backdropFilter: 'blur(14px)',
+          WebkitBackdropFilter: 'blur(14px)',
+          borderColor: 'color-mix(in srgb, var(--il-muted) 24%, transparent)',
+          paddingBottom: 'env(safe-area-inset-bottom)',
+        }}
+        aria-label="Navegação"
+      >
+        <div className="mx-auto flex w-full max-w-2xl items-stretch">
+          {/* Conta do visitante */}
+          <button type="button" className={item} onClick={() => openSheet(customer ? 'account' : 'auth', {})}
+            aria-label={customer ? 'Minha conta' : 'Entrar'} style={{ color: 'var(--il-text)' }}>
+            <Icon n={customer ? 'userCircle' : 'user'} size={19} />
+            <span className={itemLabel}>{customer ? first : 'Entrar'}</span>
           </button>
 
-          {/* WhatsApp — obedece ao MÓDULO da empresa (não só ao número) */}
+          {/* WhatsApp — ação complementar (módulo manda; não só o número) */}
           {whatsappVisible(business) && (
-            <button type="button" className={btn} onClick={wa} aria-label="WhatsApp">
-              <span className={chip} style={{ background: 'rgba(34,197,94,0.14)', color: '#16a34a' }}>
-                <Icon n="whatsapp" size={20} />
-              </span>
-              <span className={lbl} style={{ color: 'var(--il-text)' }}>WhatsApp</span>
+            <button type="button" className={item} onClick={wa} aria-label="Abrir conversa no WhatsApp"
+              style={{ color: '#16a34a' }}>
+              <Icon n="whatsapp" size={19} />
+              <span className={itemLabel}>WhatsApp</span>
             </button>
           )}
 
-          {/* Agendar */}
-          {canBook && (
-            <button type="button" className={btn} onClick={() => openSheet('booking', {})} aria-label="Agendar">
-              <span className={chip} style={{ background: 'var(--il-primary)', color: 'var(--il-btn-text, #fff)' }}>
-                <Icon n="calendar" size={20} />
-              </span>
-              <span className={lbl} style={{ color: 'var(--il-text)' }}>Agendar</span>
-            </button>
-          )}
-
-          {/* Menu */}
-          <button type="button" className={btn} onClick={() => setMenuOpen(true)} aria-label="Menu" aria-expanded={menuOpen}>
-            <span className={chip} style={{ background: 'color-mix(in srgb, var(--il-muted) 14%, transparent)', color: 'var(--il-text)' }}>
-              <Icon n="menu" size={20} />
-            </span>
-            <span className={lbl} style={{ color: 'var(--il-text)' }}>Menu</span>
+          {/* Menu — navegação configurada pelo lojista */}
+          <button type="button" className={item} onClick={() => setMenuOpen(true)} aria-label="Menu" aria-expanded={menuOpen}
+            style={{ color: 'var(--il-text)' }}>
+            <Icon n="menu" size={19} />
+            <span className={itemLabel}>Menu</span>
           </button>
+
+          {/* AGENDAR — a conversão persistente da barra (ação principal) */}
+          {canBook && (
+            <button type="button" className={`${item} il-btn !rounded-none !shadow-none`} onClick={() => openSheet('booking', {})}
+              aria-label="Agendar atendimento">
+              <Icon n="calendar" size={19} />
+              <span className={itemLabel}>Agendar</span>
+            </button>
+          )}
         </div>
       </nav>
 

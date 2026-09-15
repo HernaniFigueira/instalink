@@ -70,6 +70,19 @@ export function uid(): string {
   return 'id-' + Date.now().toString(36) + '-' + Math.random().toString(36).slice(2, 10);
 }
 
+// ── Paginação local (histórico 360 etc.) ───────────────────────
+// Página 1-based; sempre dentro do intervalo [1, pages]. Vazio (0 itens)
+// rende 1 página vazia para o controle não "explodir" em telas sem dados.
+export function paginate<T>(items: T[], page: number, perPage: number): {
+  slice: T[]; page: number; pages: number; total: number;
+} {
+  const per = Math.max(1, Math.floor(perPage) || 1);
+  const total = items.length;
+  const pages = Math.max(1, Math.ceil(total / per));
+  const p = Math.min(pages, Math.max(1, Math.floor(page) || 1));
+  return { slice: items.slice((p - 1) * per, (p - 1) * per + per), page: p, pages, total };
+}
+
 export const WEEKDAYS = ['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb'];
 export const WEEKDAYS_LONG = ['Domingo', 'Segunda', 'Terça', 'Quarta', 'Quinta', 'Sexta', 'Sábado'];
 

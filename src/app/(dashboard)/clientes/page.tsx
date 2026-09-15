@@ -2,7 +2,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { useSearchParams } from 'next/navigation';
 import type { LeadStatus } from '@/lib/types';
-import { cn, money, waLink } from '@/lib/utils';
+import { cn, money, paginate, waLink } from '@/lib/utils';
 import { humanDay } from '@/lib/tz';
 import { BOOKING_STATUS, LEAD_STATUS, toneCls, type StatusDef } from '@/lib/status';
 import { ListSkeleton } from '@/components/ui';
@@ -50,6 +50,11 @@ export default function ClientesPage() {
   const [search, setSearch] = useState('');
   const [loaded, setLoaded] = useState(false);
   const [open, setOpen] = useState<string | null>(null);
+  // Página do HISTÓRICO expandido (auditoria §18): cliente com 20, 30, 50
+  // eventos não pode transformar a tela numa parede infinita. 5 por página,
+  // sempre com total e controles — a paginação é do histórico, não da lista.
+  const [histPage, setHistPage] = useState(1);
+  useEffect(() => { setHistPage(1); }, [open]);
   const [error, setError] = useState('');
   const [noteDraft, setNoteDraft] = useState<Record<string, string>>({});
   const [bookingFor, setBookingFor] = useState<Person | null>(null);
@@ -253,10 +258,16 @@ export default function ClientesPage() {
                         linha do tempo; atendimento concluído permanece aqui
                         mesmo depois de um reagendamento. */}
                     {p.bookings.length + (p.conversations?.length ?? 0) + p.leads.length > 0 ? (
+                      (() => {
+                        const events = historyEvents(p);
+                        const H = paginate(events, histPage, 5);
+                        return (
                       <div>
-                        <p className="text-[11px] font-semibold tracking-wide uppercase text-zinc-500 mb-2">Histórico</p>
+                        <p className="text-[11px] font-semibold tracking-wide uppercase text-zinc-500 mb-2">
+                          Histórico <span className="font-normal normal-case text-zinc-400">· {H.total} {H.total === 1 ? 'evento' : 'eventos'}</span>
+                        </p>
                         <div className="space-y-1.5">
-                          {historyEvents(p).map((e, i) => (
+                          {H.slice.map((e, i) => (
                             <div key={`${e.kind}-${e.id}`} className={cn('border border-zinc-200 rounded-md px-3 py-2.5', i % 2 === 0 ? 'bg-zinc-50/70' : 'bg-white')}>
                               <div className="flex items-start justify-between gap-2">
                                 <p className="text-[11px] font-semibold text-zinc-500 tabular-nums inline-flex items-center gap-1.5">
@@ -275,7 +286,26 @@ export default function ClientesPage() {
                             </div>
                           ))}
                         </div>
+                        {H.pages > 1 && (
+                          <div className="flex items-center justify-between gap-2 mt-2">
+                            <button onClick={() => setHistPage((x) => Math.max(1, x - 1))} disabled={H.page <= 1}
+                              className="text-xs font-medium bg-white border border-zinc-200 px-2.5 py-1 rounded-md disabled:opacity-40">Anterior</button>
+                            <div className="flex items-center gap-1" role="navigation" aria-label="Páginas do histórico">
+                              {Array.from({ length: H.pages }, (_, i) => i + 1).map((n) => (
+                                <button key={n} onClick={() => setHistPage(n)} aria-current={n === H.page ? 'page' : undefined}
+                                  className={cn('w-7 h-7 text-xs font-semibold rounded-md border',
+                                    n === H.page ? 'bg-zinc-900 text-white border-zinc-900' : 'bg-white border-zinc-200 text-zinc-600 hover:bg-zinc-50')}>
+                                  {n}
+                                </button>
+                              ))}
+                            </div>
+                            <button onClick={() => setHistPage((x) => Math.min(H.pages, x + 1))} disabled={H.page >= H.pages}
+                              className="text-xs font-medium bg-white border border-zinc-200 px-2.5 py-1 rounded-md disabled:opacity-40">Próxima</button>
+                          </div>
+                        )}
                       </div>
+                        );
+                      })()
                     ) : (
                       <p className="text-sm text-zinc-500">Sem eventos ainda — agendamentos, conversas e leads aparecem aqui.</p>
                     )}

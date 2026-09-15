@@ -16,19 +16,24 @@ function initials(name: string): string {
   return name.split(/\s+/).slice(0, 2).map((w) => w[0]).join('').toUpperCase();
 }
 
-export function ProductShowcase({ business, products, categories, title }: {
+export function ProductShowcase({ business, products, categories, title, subtitle }: {
   business: PublicBusiness;
   products: Product[];
   categories: Array<{ id: string; name: string }>;
   title?: string;
+  subtitle?: string;
 }) {
   const active = products.filter((p) => p.active !== false);
   if (active.length === 0) return null;
   const catName = (id: string) => categories.find((c) => c.id === id)?.name || '';
+  const st = String(subtitle || '').trim();
 
   return (
     <section id="produtos" className="scroll-mt-20">
-      <h2 className="text-xl font-extrabold tracking-tight mb-3">{title || 'Vitrine'}</h2>
+      <div className="mb-3">
+        <h2 className="text-[19px] font-extrabold tracking-tight leading-snug">{title || 'Vitrine'}</h2>
+        {st ? <p className="il-muted text-[13px] mt-0.5 leading-snug">{st}</p> : null}
+      </div>
       <div className="grid grid-cols-2 gap-2.5">
         {active.map((p) => {
           const price = showcasePriceCents(p);
