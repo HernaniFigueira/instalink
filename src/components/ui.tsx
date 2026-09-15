@@ -1,5 +1,6 @@
 import { cn } from '@/lib/utils';
 import { Icon } from '@/components/icons';
+import { toneCls, type Tone } from '@/lib/status';
 
 // ── Design System InstaLink — workspace first, card quando fizer sentido ──
 export function Button(props: React.ButtonHTMLAttributes<HTMLButtonElement> & { variant?: 'primary' | 'secondary' | 'ghost' | 'danger'; size?: 'sm' | 'md' | 'lg' }) {
@@ -121,6 +122,31 @@ export function Badge({ tone = 'zinc', children }: { tone?: 'zinc' | 'green' | '
     pink: 'bg-pink-50 text-pink-800 border border-pink-200',
   };
   return <span className={cn('inline-flex items-center rounded-full px-2 py-0.5 text-xs font-semibold', tones[tone])}>{children}</span>;
+}
+
+// Selo de ESTADO (cor = estado): usa a fonte única de cores (lib/status.ts).
+// Para etiquetas neutras, usar Badge. O estado nunca depende só da cor — o
+// texto do selo é sempre o rótulo do status.
+export function StatusBadge({ tone = 'zinc', className, children }: { tone?: Tone; className?: string; children: React.ReactNode }) {
+  return (
+    <span className={cn('inline-flex items-center rounded px-1.5 py-0.5 text-xs font-semibold leading-tight border', toneCls(tone), className)}>
+      {children}
+    </span>
+  );
+}
+
+// Faixa de atenção operacional (pendências que pedem decisão): mesma
+// apresentação na Dashboard e na Agenda — um componente, não dois estilos.
+export function AttentionStrip({ title, hint, action }: { title: string; hint?: string; action?: React.ReactNode }) {
+  return (
+    <div className="mb-3 border border-amber-200 bg-amber-50 px-3 py-2.5 flex flex-wrap items-center gap-2">
+      <span className="text-xs font-semibold text-amber-900 inline-flex items-center gap-1.5">
+        <Icon n="alert" size={14} /> {title}
+      </span>
+      {hint && <span className="text-xs text-amber-800 hidden sm:inline">· {hint}</span>}
+      {action && <span className="flex flex-wrap gap-1.5 ml-auto">{action}</span>}
+    </div>
+  );
 }
 
 export function EmptyState({ title, hint, action }: { title: string; hint: string; action?: React.ReactNode }) {

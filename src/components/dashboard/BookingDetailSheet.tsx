@@ -13,8 +13,10 @@
 // densidade igual ao resto do painel; nada de "card flutuante gigante".
 // Somente a casca visual mudou; a lógica de ações é exatamente a mesma.
 import { useEffect, useRef, useState } from 'react';
+import Link from 'next/link';
 import { Icon } from '@/components/icons';
-import { BOOKING_STATUS, toneCls } from '@/lib/status';
+import { StatusBadge } from '@/components/ui';
+import { BOOKING_STATUS } from '@/lib/status';
 import { todayISO, nowHM, formatDateBR, humanDay } from '@/lib/tz';
 import { waLink, cn, money } from '@/lib/utils';
 import { bookingActions, bookingDuration, needsClosure, rescheduleDecision } from '@/lib/booking-ops';
@@ -157,7 +159,7 @@ export function BookingDetailSheet({ booking, service, pro, businessId, onClose,
           <div className="min-w-0">
             <div className="flex items-center gap-2 flex-wrap">
               <span className="text-xs font-semibold text-zinc-600 tabular-nums">{formatDateBR(booking.date)} · {booking.time}–{endHM}</span>
-              <span className={`text-[11px] font-medium px-1.5 py-0.5 rounded border ${toneCls(def.tone)}`}>{def.panel}</span>
+              <StatusBadge tone={def.tone}>{def.panel}</StatusBadge>
             </div>
             <p className="font-semibold text-sm mt-1 leading-snug truncate">{service?.name || 'Serviço'}</p>
             <p className="text-xs text-zinc-500 mt-0.5">{humanDay(booking.date, today)} · {dur} min</p>
@@ -229,6 +231,29 @@ export function BookingDetailSheet({ booking, service, pro, businessId, onClose,
               </div>
             )}
           </dl>
+
+          {/* ── Continuidade: o que já existe no sistema, sem sair do contexto ── */}
+          <div className="px-4 py-3 border-t border-zinc-100">
+            <p className={`${ROW_DT} uppercase tracking-wide mb-2`}>Ver também</p>
+            <div className="flex flex-wrap gap-1.5">
+              {booking.customerPhone && (
+                <Link href={`/clientes?b=${businessId}&q=${encodeURIComponent(booking.customerPhone)}`}
+                  className={cn(actionBtn, 'bg-white text-zinc-700 border-zinc-200 hover:bg-zinc-50 inline-flex items-center gap-1.5')}>
+                  <Icon n="user" size={13} /> Cliente e histórico
+                </Link>
+              )}
+              <Link href={`/servicos?b=${businessId}`}
+                className={cn(actionBtn, 'bg-white text-zinc-700 border-zinc-200 hover:bg-zinc-50 inline-flex items-center gap-1.5')}>
+                <Icon n="service" size={13} /> Serviço
+              </Link>
+              {pro && (
+                <Link href={`/profissionais?b=${businessId}`}
+                  className={cn(actionBtn, 'bg-white text-zinc-700 border-zinc-200 hover:bg-zinc-50 inline-flex items-center gap-1.5')}>
+                  <Icon n="userCircle" size={13} /> Profissional
+                </Link>
+              )}
+            </div>
+          </div>
 
           {error && <p className="px-4 py-2 text-sm font-medium text-red-600 border-t border-zinc-100">{error}</p>}
           {notice && <p className="px-4 py-2 text-xs font-medium text-emerald-800 bg-emerald-50 border-t border-emerald-100">{notice}</p>}
@@ -326,16 +351,27 @@ export function BookingDetailSheet({ booking, service, pro, businessId, onClose,
               <button onClick={() => setHistoryOpen((v) => !v)} className="text-[11px] font-semibold uppercase tracking-wider text-zinc-400 hover:text-zinc-700">
                 Histórico ({booking.history.length}) {historyOpen ? '▲' : '▼'}
               </button>
+              {/* Timeline operacional: só eventos REAIS gravados (nada de
+                  etapas futuras inventadas). A estrutura já comporta novos
+                  tipos de evento quando existirem no sistema. */}
               {historyOpen && (
-                <ul className="mt-2 divide-y divide-zinc-100">
+                <ol className="mt-2 relative border-l border-zinc-200 ml-1 space-y-3">
                   {[...booking.history].reverse().map((h, i) => (
-                    <li key={i} className="text-xs text-zinc-500 py-1.5">
-                      {formatDateBR((h.at || '').slice(0, 10))} {(h.at || '').slice(11, 16)} · {h.from || 'criado'} → {h.to}
-                      {h.note ? ` · ${h.note}` : ''}
-                      {' · '}{h.by === 'customer' ? 'cliente' : h.by === 'owner' ? 'equipe' : h.by === 'master' ? 'suporte' : 'sistema'}
+                    <li key={i} className="relative pl-4">
+                      <span aria-hidden="true" className={`absolute -left-[5px] top-1 w-2 h-2 rounded-full ${i === 0 ? 'bg-zinc-900' : 'bg-zinc-300'}`} />
+                      <p className="text-[11px] font-semibold text-zinc-500 tabular-nums">
+                        {formatDateBR((h.at || '').slice(0, 10))} {(h.at || '').slice(11, 16)}
+                      </p>
+                      <p className="text-xs text-zinc-700 mt-0.5">
+                        {h.from || 'criado'} → <strong>{h.to}</strong>
+                        {h.note ? ` · ${h.note}` : ''}
+                      </p>
+                      <p className="text-[11px] text-zinc-400 mt-0.5">
+                        {h.by === 'customer' ? 'cliente' : h.by === 'owner' ? 'equipe' : h.by === 'master' ? 'suporte' : 'sistema'}
+                      </p>
                     </li>
                   ))}
-                </ul>
+                </ol>
               )}
             </div>
           )}

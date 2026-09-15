@@ -3,8 +3,10 @@ import { useCallback, useEffect, useState } from 'react';
 import { useSearchParams } from 'next/navigation';
 import { PageSkeleton } from '@/components/ui';
 import { AccessDenied, useAreaLoad } from '@/components/dashboard/AccessNotice';
+import { PeriodSelector } from '@/components/dashboard/PeriodSelector';
 import { apiGet } from '@/lib/api-client';
 import { money } from '@/lib/utils';
+import { periodLabel } from '@/lib/periods';
 
 interface Analytics {
   period: number;
@@ -83,14 +85,7 @@ export default function ResultadosPage() {
           <h1 className="text-2xl font-bold tracking-tight">Resultados</h1>
           <p className="text-sm text-zinc-500 mt-1">O que está acontecendo na sua página, em linguagem simples.</p>
         </div>
-        <div className="flex gap-1 bg-white border border-zinc-200 rounded-full p-1">
-          {[7, 30].map((p) => (
-            <button key={p} onClick={() => setPeriod(p)}
-              className={`text-xs font-bold px-3 py-1.5 rounded-full ${period === p ? 'bg-zinc-900 text-white' : 'text-zinc-500'}`}>
-              {p === 7 ? '7 dias' : '30 dias'}
-            </button>
-          ))}
-        </div>
+        <PeriodSelector value={period} onChange={setPeriod} label="Período dos resultados" />
       </div>
 
       <div className={`grid gap-3 mb-4 ${kpis.length === 4 ? 'grid-cols-2 lg:grid-cols-4' : 'grid-cols-1 lg:grid-cols-3'}`}>
@@ -118,15 +113,15 @@ export default function ResultadosPage() {
 
       <div className="grid xl:grid-cols-5 gap-4">
         <div className="xl:col-span-3 bg-white border border-zinc-200 rounded-lg p-5">
-          <h3 className="font-bold text-sm mb-3">Últimos {period} dias</h3>
-          <div className="flex items-end gap-1 h-28">
+          <h3 className="font-bold text-sm mb-3">Movimento · {periodLabel(period)}</h3>
+          <div className="flex items-end gap-1 h-28 overflow-x-auto ws-scroll pb-1">
             {days.map((d) => (
-              <div key={d.day} className="flex-1 flex flex-col items-center gap-1 min-w-0" title={`${d.label}: ${d.visitors} visitas, ${d.conversions} conversões, ${money(d.revenue)}`}>
+              <div key={d.day} className="flex-1 min-w-[4px] flex flex-col items-center gap-1" title={`${d.label}: ${d.visitors} visitas, ${d.conversions} conversões, ${money(d.revenue)}`}>
                 <div className="w-full flex flex-col justify-end gap-0.5 h-20">
                   <div className="w-full bg-emerald-500/30 rounded-sm" style={{ height: `${Math.round((d.visitors / maxDay) * 100)}%`, minHeight: d.visitors ? 3 : 0 }} />
                   {d.conversions > 0 && <div className="w-full bg-emerald-600 rounded-sm" style={{ height: 4 }} />}
                 </div>
-                {period <= 7 && <span className="text-[9px] text-zinc-400">{d.label}</span>}
+                {period === 7 && <span className="text-[9px] text-zinc-400 whitespace-nowrap">{d.label}</span>}
               </div>
             ))}
           </div>

@@ -33,9 +33,12 @@ export interface PanelRouteDef {
   hidden?: boolean;
 }
 
-// Ordem canônica da navegação — reflete o fluxo mental de quem opera:
-//   Dashboard → Operação (Agenda, Clientes) → Atendimento (o que ofereço,
-//   quem atende, quando atende, canais) → Gestão → Presença → Administração.
+// Ordem canônica da navegação — reflete o fluxo mental de quem opera (P1):
+//   Dashboard → Operação (o dia a dia) → Catálogo (o que oferece e como
+//   está estruturado) → Comunicação (canais e assistente) → Gestão
+//   (acompanhamento) → Presença (página pública) → Administração.
+// Somente AGRUPAMENTO e seção mudam aqui: hrefs, labels, permissões e
+// modos são intocados — nenhuma URL quebra.
 //
 // PROFISSIONAIS × EQUIPE (conceitos separados, nunca misturados):
 //   • /profissionais = quem REALIZA os atendimentos (agenda, serviços,
@@ -50,13 +53,14 @@ export const PANEL_ROUTES: PanelRouteDef[] = [
   // Operação — o dia a dia do negócio
   { href: '/agenda', label: 'Agenda', icon: 'calendar', section: 'Operação', modes: ['bookings'], permission: 'agenda', area: 'agenda' },
   { href: '/clientes', label: 'Clientes', icon: 'users', section: 'Operação', permission: 'clientes', area: 'clientes' },
-  // Atendimento — o que eu ofereço · quem atende · quando atende · canais
-  { href: '/servicos', label: 'Serviços', icon: 'service', section: 'Atendimento', modes: ['services', 'bookings'], permission: 'catalogo', area: 'servicos' },
-  { href: '/profissionais', label: 'Profissionais', icon: 'users', section: 'Atendimento', modes: ['services', 'bookings'], permission: 'catalogo', area: 'profissionais' },
-  { href: '/horarios', label: 'Horários', icon: 'clock', section: 'Atendimento', modes: ['services', 'bookings'], permission: 'catalogo', area: 'horarios' },
-  { href: '/produtos', label: 'Produtos', icon: 'bag', section: 'Atendimento', modes: ['products', 'orders'], permission: 'catalogo', area: 'catalogo' },
-  { href: '/whatsapp', label: 'WhatsApp', icon: 'whatsapp', section: 'Atendimento', permission: 'whatsapp', area: 'whatsapp' },
-  { href: '/agente', label: 'Assistente', icon: 'spark', section: 'Atendimento', permission: 'agente', area: 'agente' },
+  // Catálogo — o que eu ofereço · quem atende · quando atende · vitrine
+  { href: '/servicos', label: 'Serviços', icon: 'service', section: 'Catálogo', modes: ['services', 'bookings'], permission: 'catalogo', area: 'servicos' },
+  { href: '/profissionais', label: 'Profissionais', icon: 'idcard', section: 'Catálogo', modes: ['services', 'bookings'], permission: 'catalogo', area: 'profissionais' },
+  { href: '/horarios', label: 'Horários', icon: 'clock', section: 'Catálogo', modes: ['services', 'bookings'], permission: 'catalogo', area: 'horarios' },
+  { href: '/produtos', label: 'Produtos', icon: 'bag', section: 'Catálogo', modes: ['products', 'orders'], permission: 'catalogo', area: 'catalogo' },
+  // Comunicação — canais e assistente
+  { href: '/whatsapp', label: 'WhatsApp', icon: 'whatsapp', section: 'Comunicação', permission: 'whatsapp', area: 'whatsapp' },
+  { href: '/agente', label: 'Assistente', icon: 'spark', section: 'Comunicação', permission: 'agente', area: 'agente' },
   // Gestão
   { href: '/resultados', label: 'Resultados', icon: 'chart', section: 'Gestão', permission: 'financeiro', area: 'resultados' },
   { href: '/campanhas', label: 'Campanhas', icon: 'megaphone', section: 'Gestão', permission: 'campanhas', area: 'campanhas' },

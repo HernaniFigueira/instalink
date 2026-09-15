@@ -4,26 +4,51 @@ import { requireBusiness } from '@/lib/access';
 import { todayISO, addDaysISO, formatDateShort } from '@/lib/tz';
 import { convRate, seriesByDay, topN, funnelRates } from '@/lib/analytics';
 import { isFeatureEnabled } from '@/lib/features';
+import { parsePeriodParam, periodWindows } from '@/lib/periods';
 
 const ORIGIN_LABEL: Record<string, string> = {
   chat_ai: 'Chat', quote: 'Orçamento', booking_cta: 'Reserva', whatsapp_click: 'WhatsApp',
   share: 'Indicação', cart_abandoned: 'Carrinho', manual: 'Manual', outro: 'Outro',
 };
 
-// GET ?businessId=&period=7|30 — métricas agregadas do período (dono).
+// GET ?businessId=&period=7|30|90|365|0 — métricas agregadas do período (dono).
+// (0 = todo o período; fonte única dos períodos: lib/periods.ts.)
 export async function GET(req: NextRequest) {
   const businessId = req.nextUrl.searchParams.get('businessId') || '';
-  const period = req.nextUrl.searchParams.get('period') === '7' ? 7 : 30;
+  const period = parsePeriodParam(req.nextUrl.searchParams.get('period'));
   const guard = await requireBusiness(req, businessId, 'financeiro');
   if (!guard.ok) return guard.res;
   const db = guard.db;
 
   const today = todayISO();
-  const start = addDaysISO(today, -(period - 1));
-  const daysList: string[] = [];
-  for (let i = period - 1; i >= 0; i--) daysList.push(addDaysISO(today, -i));
+  const allEvents = db.events.filter((e) => e.businessId === businessId);
+  const allOrders = db.orders.filter((o) => o.businessId === businessId);
+  const allBookings = db.bookings.filter((b) => b.businessId === businessId);
+  const allLeads = db.leads.filter((l) => l.businessId === businessId);
 
-  const events = db.events.filter((e) => e.businessId === businessId && e.createdAt.slice(0, 10) >= start);
+  let start: string;
+  const daysList: string[] = [];
+  if (period === 0) {
+    // Todo o período: a série diária vai do primeiro movimento até hoje,
+    // com teto de 732 dias para a resposta não explodir. Totais e funis
+    // usam TUDO (o filtro casa com qualquer data quando start === '').
+    const stamps = [
+      ...allEvents.map((e) => e.createdAt),
+      ...allOrders.map((o) => o.createdAt),
+      ...allBookings.map((b) => b.createdAt || ''),
+      ...allLeads.map((l) => l.createdAt),
+    ].map((s) => (s || '').slice(0, 10)).filter((s) => /^\d{4}-\d{2}-\d{2}$/.test(s)).sort();
+    let d = stamps[0] && stamps[0] <= today ? stamps[0] : today;
+    let steps = 0;
+    while (d <= today && steps < 732) { daysList.push(d); d = addDaysISO(d, 1); steps++; }
+    start = '';
+  } else {
+    const win = periodWindows(period, today);
+    start = win.from;
+    for (let i = period - 1; i >= 0; i--) daysList.push(addDaysISO(today, -i));
+  }
+
+  const events = allEvents.filter((e) => e.createdAt.slice(0, 10) >= start);
   const count = (t: string) => events.filter((e) => e.type === t).length;
   const pageViews = count('page_view');
   const uniqueVisitors = new Set(
@@ -31,11 +56,11 @@ export async function GET(req: NextRequest) {
   ).size;
   const conversions = count('conversion');
 
-  const orders = db.orders.filter((o) => o.businessId === businessId && o.createdAt.slice(0, 10) >= start);
+  const orders = allOrders.filter((o) => o.createdAt.slice(0, 10) >= start);
   const paid = orders.filter((o) => o.status !== 'cancelled');
   const revenue = paid.reduce((s, o) => s + o.total, 0);
-  const bookings = db.bookings.filter((b) => b.businessId === businessId && (b.createdAt || '').slice(0, 10) >= start);
-  const leads = db.leads.filter((l) => l.businessId === businessId && l.createdAt.slice(0, 10) >= start);
+  const bookings = allBookings.filter((b) => (b.createdAt || '').slice(0, 10) >= start);
+  const leads = allLeads.filter((l) => l.createdAt.slice(0, 10) >= start);
 
   // Funis separados por objetivo (valores + taxas etapa-a-etapa).
   const funnelOrdersValues = [pageViews, count('product_view'), count('product_add'), count('checkout_started'), count('order_created')];
