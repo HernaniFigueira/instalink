@@ -24,7 +24,7 @@
 import { memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { useSearchParams } from 'next/navigation';
 import { todayISO, addDaysISO, weekdayOf, formatDateBR, nowHM } from '@/lib/tz';
-import { WEEKDAYS, WEEKDAYS_LONG, timeToMin, minToTime } from '@/lib/utils';
+import { WEEKDAYS, WEEKDAYS_LONG, timeToMin, minToTime, cn } from '@/lib/utils';
 import type { Availability, Booking, BookingStatus, Professional, Service } from '@/lib/types';
 import { ListSkeleton, Button, AttentionStrip } from '@/components/ui';
 import { Icon } from '@/components/icons';
@@ -46,8 +46,9 @@ import {
 
 type View = 'day' | 'week' | 'month';
 
-// Cores dos estados vêm da fonte única (lib/status.ts): cor sólida = estado.
-// Nada de mapa local de cor por status neste arquivo.
+// Cores dos estados vêm da fonte única (lib/status.ts). P1.1: os blocos da
+// grade usam a apresentação SUAVE definida lá (BOOKING_BLOCK) — a semântica
+// permanece, sem o peso da cor sólida na Semana. Nada de mapa local de cor.
 
 const PX_PER_HOUR = 52;
 const GUTTER_W = 56;
@@ -117,8 +118,10 @@ const GridColumn = memo(function GridColumn({ column, variant, highlight, onPres
   hours: number;
 }) {
   return (
-    <div className="relative shrink-0 border-r border-zinc-100 last:border-r-0" style={{ minWidth: COL_MIN, flex: 1, height: gridHeight }}>
-      {Array.from({ length: hours + 1 }, (_, i) => (
+    // border-b = linha final da grade. As linhas internas param em
+    // hours-1: NADA ultrapassa gridHeight (zero scroll fantasma).
+    <div className="relative shrink-0 border-r border-b border-zinc-100 last:border-r-0" style={{ minWidth: COL_MIN, flex: 1, height: gridHeight }}>
+      {Array.from({ length: Math.max(0, hours - 1) }, (_, idx) => idx + 1).map((i) => (
         <span key={i} className="absolute left-0 right-0 border-t border-zinc-100" style={{ top: i * PX_PER_HOUR }} />
       ))}
       {column.isToday && (
@@ -198,6 +201,22 @@ const GridColumn = memo(function GridColumn({ column, variant, highlight, onPres
   );
 });
 
+// Chip de filtro do popover — ativo usa a cor de AÇÃO (tokens), não cor de
+// estado: filtrar não é status.
+function FilterChip({ active, onClick, children }: { active: boolean; onClick: () => void; children: React.ReactNode }) {
+  return (
+    <button type="button" onClick={onClick}
+      className={cn(
+        'text-xs font-medium px-2 py-1 rounded-md border transition-colors',
+        active
+          ? 'bg-[var(--action)] text-[var(--action-contrast)] border-[var(--action)]'
+          : 'bg-white text-zinc-600 border-zinc-200 hover:bg-zinc-50',
+      )}>
+      {children}
+    </button>
+  );
+}
+
 export default function AgendaPage() {
   const params = useSearchParams();
   const businessId = params.get('b') || '';
@@ -216,6 +235,13 @@ export default function AgendaPage() {
   const [fullscreen, setFullscreen] = useState(false);
   const [statusFilter, setStatusFilter] = useState<'' | BookingStatus>('');
   const [proFilter, setProFilter] = useState('');
+  // P1.1 — filtros em escala: UM popover compacto (Status + Especialidade +
+  // Profissional pesquisável). "Especialidade" deriva do campo `role` que JÁ
+  // existe no Professional — nenhum schema novo.
+  const [specFilter, setSpecFilter] = useState('');
+  const [filterOpen, setFilterOpen] = useState(false);
+  const [proSearch, setProSearch] = useState('');
+  const filterWrapRef = useRef<HTMLDivElement>(null);
   const [bookings, setBookings] = useState<Booking[]>([]);
   const [services, setServices] = useState<Service[]>([]);
   const [pros, setPros] = useState<Professional[]>([]);
@@ -291,6 +317,66 @@ export default function AgendaPage() {
   const activePros = useMemo(() => pros.filter((p) => p.active !== false), [pros]);
   const horizonDays = 60;
 
+  // ── Filtros em escala (P1.1) ──
+  // Especialidades = valores únicos do campo `role` já existente (sem novo
+  // cadastro). Papéis vazios ficam fora da lista, mas seguem em "Todas".
+  const specialties = useMemo(() => {
+    const set = new Set<string>();
+    for (const p of activePros) {
+      const r = (p.role || '').trim();
+      if (r) set.add(r);
+    }
+    return Array.from(set).sort((a, b) => a.localeCompare(b, 'pt-BR'));
+  }, [activePros]);
+
+  const proRoleOf = useCallback(
+    (id: string) => (pros.find((p) => p.id === id)?.role || '').trim(),
+    [pros],
+  );
+
+  // Especialidade + profissional combinam: escolher um valor que conflita
+  // com o outro limpa o outro — o resultado nunca é um beco sem saída.
+  function pickSpec(role: string) {
+    setSpecFilter(role);
+    if (role && proFilter) {
+      const p = activePros.find((x) => x.id === proFilter);
+      if (p && (p.role || '').trim() !== role) setProFilter('');
+    }
+  }
+  function pickPro(id: string) {
+    setProFilter(id);
+    if (id && specFilter) {
+      const p = activePros.find((x) => x.id === id);
+      if (p && (p.role || '').trim() !== specFilter) setSpecFilter('');
+    }
+  }
+  function clearFilters() {
+    setStatusFilter('');
+    setSpecFilter('');
+    setProFilter('');
+    setProSearch('');
+  }
+  const activeFilterCount = [statusFilter, specFilter, proFilter].filter(Boolean).length;
+
+  // Lista pesquisável do popover (respeita a especialidade selecionada).
+  const prosInFilter = useMemo(() => {
+    const q = proSearch.trim().toLowerCase();
+    return activePros
+      .filter((p) => !specFilter || (p.role || '').trim() === specFilter)
+      .filter((p) => !q || p.name.toLowerCase().includes(q) || (p.role || '').toLowerCase().includes(q))
+      .sort((a, b) => a.name.localeCompare(b.name, 'pt-BR'));
+  }, [activePros, specFilter, proSearch]);
+
+  // Fecha o popover clicando fora (ESC é tratado junto com drag/tela cheia).
+  useEffect(() => {
+    if (!filterOpen) return;
+    const onDown = (e: MouseEvent) => {
+      if (filterWrapRef.current && !filterWrapRef.current.contains(e.target as Node)) setFilterOpen(false);
+    };
+    document.addEventListener('mousedown', onDown);
+    return () => document.removeEventListener('mousedown', onDown);
+  }, [filterOpen]);
+
   const grid = useMemo(() => {
     let s = 8 * 60, e = 20 * 60;
     for (const r of rules) {
@@ -336,14 +422,17 @@ export default function AgendaPage() {
     } else if (activePros.length === 0) {
       base.push({ key: '__all', label: 'Agenda', sub: '', date: focus, professionalId: '', isProfessional: false });
     } else {
-      // Filtro por profissional: só a coluna dele. Filtro obsoleto (id que
-      // não existe mais) cai para "tudo" — nunca grade vazia sem motivo.
-      const filtering = proFilter ? activePros.some((x) => x.id === proFilter) : false;
-      const shown = filtering ? activePros.filter((x) => x.id === proFilter) : activePros;
+      // Especialidade restringe o conjunto; profissional, a coluna. Filtro
+      // obsoleto (id que não existe mais) cai para "tudo" — nunca grade
+      // vazia sem motivo.
+      const specPros = specFilter ? activePros.filter((x) => (x.role || '').trim() === specFilter) : activePros;
+      const filtering = proFilter ? specPros.some((x) => x.id === proFilter) : false;
+      const shown = filtering ? specPros.filter((x) => x.id === proFilter) : specPros;
       for (const p of shown) {
         base.push({ key: p.id, label: p.name, sub: p.role || '', date: focus, professionalId: p.id, isProfessional: true });
       }
-      if (!filtering && bookings.some((b) => b.date === focus && !b.professionalId)) {
+      // Com especialidade ativa não existe coluna "sem profissional".
+      if (!filtering && !specFilter && bookings.some((b) => b.date === focus && !b.professionalId)) {
         base.push({ key: '__none', label: 'Sem profissional', sub: '', date: focus, professionalId: '', isProfessional: false });
       }
     }
@@ -353,8 +442,9 @@ export default function AgendaPage() {
         .filter((b) => b.date === c.date)
         .filter((b) => (c.isProfessional ? b.professionalId === c.professionalId : c.key === '__none' ? !b.professionalId : true))
         .filter((b) => !statusFilter || b.status === statusFilter)
-        // Semana: filtra os blocos pelo profissional. Dia: a coluna filtrada
-        // já restringe (só existe a coluna do profissional escolhido).
+        // Semana: especialidade/profissional filtram os blocos. Dia: as
+        // colunas já restringem (só existem as colunas escolhidas).
+        .filter((b) => !specFilter || view !== 'week' || proRoleOf(b.professionalId || '') === specFilter)
         .filter((b) => !proFilter || view !== 'week' || b.professionalId === proFilter)
         .sort((a, b) => (a.time < b.time ? -1 : 1));
       const layout = layoutBlocks(
@@ -389,7 +479,7 @@ export default function AgendaPage() {
       });
       return { ...c, isToday: c.date === today, blocks };
     });
-  }, [view, weekDays, activePros, focus, bookings, grid.start, durationOf, proName, serviceName, dragId, today, statusFilter, proFilter]);
+  }, [view, weekDays, activePros, focus, bookings, grid.start, durationOf, proName, serviceName, dragId, today, statusFilter, proFilter, specFilter, proRoleOf]);
 
   // Colunas usadas pelo cálculo de destino (mesma ordem da renderização).
   useEffect(() => {
@@ -416,26 +506,30 @@ export default function AgendaPage() {
     return () => { ro?.disconnect(); window.removeEventListener('resize', measure); };
   }, [columns.length, view, loaded]);
 
-  // ── Altura útil da grade (auditoria §23 — só apresentação) ──
-  // O `calc(100vh - 280px)` fixo criava uma faixa de rolagem pequena demais
-  // em telas grandes e espremida nas pequenas. Medimos a posição REAL do
-  // container e usamos o resto da viewport (com piso confortável). As regras
-  // de agenda não são tocadas: isto é apenas o tamanho da área de desenho.
+  // ── Altura útil da grade (P1.1 — viewport real, sem scroll fantasma) ──
+  // Medimos a posição REAL do container (header + toolbar + margens +
+  // sidebar + tela cheia já estão embutidos no `top` medido) e usamos o
+  // resto da viewport. A altura final é `min(conteúdo, disponível)`:
+  //   • a grade cabe  → o container fica do tamanho exato do conteúdo e a
+  //                     barra de rolagem NÃO aparece (nem por alguns pixels);
+  //   • não cabe      → scroll SOMENTE interno da grade.
+  // Nenhum min-height arbitrário força overflow; nada é "escondido".
+  const gridContentH = HEADER_H + gridHeight;
   const [gridMaxH, setGridMaxH] = useState<number | null>(null);
   useLayoutEffect(() => {
     const fit = () => {
       const el = scrollRef.current;
       if (!el) return;
       const top = el.getBoundingClientRect().top;
-      const h = window.innerHeight - top - (window.innerWidth >= 1024 ? 28 : 16);
-      setGridMaxH(Math.max(320, Math.round(h)));
+      const h = window.innerHeight - top - 16; // padding-baixo da página
+      setGridMaxH(Math.max(320, Math.floor(h)));
     };
     fit();
     const ro = typeof ResizeObserver !== 'undefined' ? new ResizeObserver(fit) : null;
     if (typeof document !== 'undefined' && ro) ro.observe(document.body);
     window.addEventListener('resize', fit);
     return () => { ro?.disconnect(); window.removeEventListener('resize', fit); };
-  }, [loaded, view, fullscreen, pendencies.length, notice?.title, statusFilter, proFilter]);
+  }, [loaded, view, fullscreen, pendencies.length, notice?.title, statusFilter, proFilter, specFilter]);
 
   const readGeometry = useCallback((): { g: GridGeometry; minX: number; minY: number } | null => {
     const scroll = scrollRef.current;
@@ -665,17 +759,19 @@ export default function AgendaPage() {
     if (booking) setDetail(booking);
   }, []);
 
-  // ESC cancela o arraste sem salvar nada; sem arraste, sai da tela cheia.
+  // ESC cancela o arraste sem salvar nada; fecha o popover de filtros;
+  // sem nenhum dos dois, sai da tela cheia. (Ordem: mais interno primeiro.)
   useEffect(() => {
-    if (!dragId && !fullscreen) return;
+    if (!dragId && !fullscreen && !filterOpen) return;
     const onKey = (e: KeyboardEvent) => {
       if (e.key !== 'Escape') return;
       if (dragId) endDrag();
+      else if (filterOpen) setFilterOpen(false);
       else setFullscreen(false);
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [dragId, fullscreen, endDrag]);
+  }, [dragId, fullscreen, filterOpen, endDrag]);
 
   function toggleFullscreen() {
     // Nunca troca de modo no meio de um arraste: cancela primeiro.
@@ -825,8 +921,10 @@ export default function AgendaPage() {
         />
       )}
 
-      {/* Toolbar operacional: navegação · Dia/Semana/Mês · filtros · tela cheia */}
-      <div className="bg-white border border-zinc-200 mb-2">
+      {/* Toolbar operacional: navegação · Dia/Semana/Mês · filtros · tela cheia.
+          relative z-40: o popover de filtros abre sobre a grade e precisa
+          ficar acima dos cabeçalhos sticky (z-20/30) das colunas. */}
+      <div className="relative z-40 bg-white border border-zinc-200 mb-2">
         <div className="flex flex-wrap items-center gap-x-3 gap-y-2 px-3 py-2">
           <div className="flex items-center gap-1.5">
             <button onClick={() => move(-1)} aria-label="Anterior" className="w-8 h-8 rounded-md bg-zinc-50 border border-zinc-200 hover:bg-zinc-100 flex items-center justify-center"><Icon n="chevL" size={14} /></button>
@@ -845,23 +943,92 @@ export default function AgendaPage() {
             ))}
           </div>
           <div className="flex items-center gap-1.5 ml-auto">
-            <select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value as '' | BookingStatus)} aria-label="Filtrar por estado"
-              className="text-xs font-medium bg-white border border-zinc-200 rounded-md px-2 py-1.5 max-w-[150px] focus:outline-none focus:ring-1 focus:ring-zinc-900">
-              <option value="">Todos os estados</option>
-              {statusOptions.map((s) => <option key={s} value={s}>{BOOKING_STATUS[s].panel}</option>)}
-            </select>
-            {activePros.length > 0 && (
-              <select value={proFilter} onChange={(e) => setProFilter(e.target.value)} aria-label="Filtrar por profissional"
-                className="text-xs font-medium bg-white border border-zinc-200 rounded-md px-2 py-1.5 max-w-[150px] focus:outline-none focus:ring-1 focus:ring-zinc-900">
-                <option value="">Profissionais</option>
-                {activePros.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
-              </select>
-            )}
-            {(statusFilter || proFilter) && (
-              <button onClick={() => { setStatusFilter(''); setProFilter(''); }} className="text-xs font-medium text-zinc-500 hover:text-zinc-900 underline underline-offset-2" title="Limpar filtros">
-                Limpar
-              </button>
-            )}
+            {/* P1.1 — UM botão de filtro (contador quando ativo). O popover
+                agrupa Status + Especialidade + Profissional pesquisável:
+                escala para 10/20/50 profissionais sem poluir a toolbar. */}
+            <div className="relative" ref={filterWrapRef}>
+              <Button variant="secondary" size="sm" onClick={() => { setFilterOpen((o) => !o); setProSearch(''); }}
+                aria-expanded={filterOpen} aria-haspopup="dialog" title="Filtros">
+                <Icon n="filter" size={13} />
+                {activeFilterCount > 0 ? `Filtro · ${activeFilterCount}` : 'Filtro'}
+                <Icon n="chevD" size={12} className={`transition-transform ${filterOpen ? 'rotate-180' : ''}`} />
+              </Button>
+
+              {filterOpen && (
+                <div role="dialog" aria-label="Filtros da agenda"
+                  className="absolute right-0 top-full mt-1.5 z-30 w-[300px] max-w-[calc(100vw-1.25rem)] bg-white border border-zinc-200 rounded-lg shadow-lg text-left">
+                  <div className="px-3 pt-2.5 pb-1.5 flex items-center justify-between gap-2">
+                    <p className="text-[11px] font-bold uppercase tracking-wider text-zinc-400">Filtros</p>
+                    {activeFilterCount > 0 && (
+                      <button type="button" onClick={clearFilters}
+                        className="text-xs font-semibold text-[var(--danger)] hover:text-[var(--danger-strong)]">
+                        Limpar filtros
+                      </button>
+                    )}
+                  </div>
+
+                  <div className="px-3 pb-2.5">
+                    <p className="text-[11px] font-semibold text-zinc-500 mb-1.5">Status</p>
+                    <div className="flex flex-wrap gap-1">
+                      <FilterChip active={!statusFilter} onClick={() => setStatusFilter('')}>Todos</FilterChip>
+                      {statusOptions.map((s) => (
+                        <FilterChip key={s} active={statusFilter === s} onClick={() => setStatusFilter(statusFilter === s ? '' : s)}>
+                          {BOOKING_STATUS[s].panel}
+                        </FilterChip>
+                      ))}
+                    </div>
+                  </div>
+
+                  {specialties.length > 0 && (
+                    <div className="px-3 pb-2.5 border-t border-zinc-100 pt-2.5">
+                      <p className="text-[11px] font-semibold text-zinc-500 mb-1.5">Especialidade</p>
+                      <div className="flex flex-wrap gap-1">
+                        <FilterChip active={!specFilter} onClick={() => pickSpec('')}>Todas</FilterChip>
+                        {specialties.map((r) => (
+                          <FilterChip key={r} active={specFilter === r} onClick={() => pickSpec(specFilter === r ? '' : r)}>
+                            {r}
+                          </FilterChip>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {activePros.length > 0 && (
+                    <div className="px-3 pb-3 border-t border-zinc-100 pt-2.5">
+                      <p className="text-[11px] font-semibold text-zinc-500 mb-1.5">Profissional</p>
+                      <div className="relative">
+                        <Icon n="search" size={13} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-zinc-400" />
+                        <input value={proSearch} onChange={(e) => setProSearch(e.target.value)}
+                          placeholder="Pesquisar profissional..." aria-label="Pesquisar profissional"
+                          className="w-full text-xs bg-zinc-50 border border-zinc-200 rounded-md pl-8 pr-2 py-1.5 focus:outline-none focus:ring-1 focus:ring-[var(--action)] focus:bg-white" />
+                      </div>
+                      <div className="mt-1.5 max-h-44 overflow-y-auto ws-scroll space-y-0.5">
+                        <button type="button" onClick={() => pickPro('')}
+                          className={cn('w-full flex items-center gap-2 px-2 py-1.5 rounded-md text-left text-xs font-medium',
+                            !proFilter ? 'bg-zinc-100' : 'hover:bg-zinc-50')}>
+                          <span className="flex-1">Todos</span>
+                          {!proFilter && <Icon n="check" size={13} className="text-emerald-600 shrink-0" />}
+                        </button>
+                        {prosInFilter.map((p) => (
+                          <button key={p.id} type="button" onClick={() => pickPro(proFilter === p.id ? '' : p.id)}
+                            className={cn('w-full flex items-center gap-2 px-2 py-1.5 rounded-md text-left text-xs',
+                              proFilter === p.id ? 'bg-zinc-100' : 'hover:bg-zinc-50')}>
+                            <span className="flex-1 min-w-0 truncate">
+                              <span className="font-semibold text-zinc-800">{p.name}</span>
+                              {p.role && <span className="text-zinc-400"> · {p.role}</span>}
+                            </span>
+                            {proFilter === p.id && <Icon n="check" size={13} className="text-emerald-600 shrink-0" />}
+                          </button>
+                        ))}
+                        {prosInFilter.length === 0 && (
+                          <p className="text-xs text-zinc-400 px-2 py-1.5">Nenhum profissional encontrado.</p>
+                        )}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
             <button onClick={toggleFullscreen} aria-pressed={fullscreen} title={fullscreen ? 'Sair da tela cheia (ESC)' : 'Tela cheia'}
               className="inline-flex items-center gap-1.5 text-xs font-semibold bg-zinc-50 border border-zinc-200 rounded-md px-2.5 py-1.5 hover:bg-zinc-100">
               <Icon n={fullscreen ? 'shrink' : 'expand'} size={14} />
@@ -917,6 +1084,7 @@ export default function AgendaPage() {
               const list = bookings
                 .filter((b) => b.date === d && b.status !== 'cancelled')
                 .filter((b) => !statusFilter || b.status === statusFilter)
+                .filter((b) => !specFilter || proRoleOf(b.professionalId || '') === specFilter)
                 .filter((b) => !proFilter || b.professionalId === proFilter);
               const pend = list.filter((b) => needsClosure(b, bookingDuration(serviceOf(b.serviceId)), today, nowHM())).length;
               const inMonth = d.slice(0, 7) === focus.slice(0, 7);
@@ -939,15 +1107,21 @@ export default function AgendaPage() {
         </div>
       ) : (
         <div className="bg-white border border-zinc-200 overflow-hidden">
+          {/* Altura EXATA = min(conteúdo, viewport disponível). Se a grade
+              cabe, o container tem o tamanho dela e não há barra alguma. */}
           <div ref={scrollRef} className={`overflow-auto ws-scroll ${isDragging ? 'select-none' : ''}`}
-            style={{ maxHeight: gridMaxH ? `${gridMaxH}px` : 'calc(100dvh - 280px)' }}>
+            style={{ height: gridMaxH ? Math.min(gridContentH, gridMaxH) : undefined }}>
             <div className="flex" style={{ minWidth: dayWidth }}>
               {/* Gutter de horas (fixo na horizontal) */}
               <div className="sticky left-0 z-30 bg-white shrink-0 border-r border-zinc-200" style={{ width: GUTTER_W }}>
                 <div style={{ height: HEADER_H }} className="border-b border-zinc-200" />
+                {/* O último rótulo ancora ACIMA da linha: nenhum elemento
+                    ultrapassa gridHeight (zero scroll fantasma). */}
                 <div className="relative" style={{ height: gridHeight }}>
                   {Array.from({ length: grid.hours + 1 }, (_, i) => (
-                    <span key={i} className="absolute -translate-y-1/2 right-2 text-[10px] font-medium text-zinc-400" style={{ top: i * PX_PER_HOUR }}>{minToTime(grid.start + i * 60)}</span>
+                    <span key={i}
+                      className={`absolute right-2 text-[10px] font-medium text-zinc-400 ${i === grid.hours ? '-translate-y-full' : '-translate-y-1/2'}`}
+                      style={{ top: i * PX_PER_HOUR }}>{minToTime(grid.start + i * 60)}</span>
                   ))}
                 </div>
               </div>
@@ -1043,8 +1217,8 @@ export default function AgendaPage() {
             })()}
             {dropError && <p className="text-sm font-medium text-red-600 mt-3" role="alert">{dropError}</p>}
             <div className="flex gap-2 mt-4">
-              <button onClick={confirmDrop} disabled={saving} className="flex-1 text-sm font-semibold bg-zinc-900 text-white py-2.5 rounded-md disabled:opacity-50 hover:bg-zinc-800">{saving ? 'Salvando…' : 'Confirmar'}</button>
-              <button onClick={() => setDropAsk(null)} disabled={saving} className="text-sm font-semibold bg-white border border-zinc-200 px-4 py-2.5 rounded-md hover:bg-zinc-50">Cancelar</button>
+              <Button onClick={confirmDrop} disabled={saving} className="flex-1">{saving ? 'Salvando…' : 'Confirmar'}</Button>
+              <Button variant="secondary" onClick={() => setDropAsk(null)} disabled={saving}>Cancelar</Button>
             </div>
           </div>
         </div>

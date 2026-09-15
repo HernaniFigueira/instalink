@@ -8,30 +8,36 @@
 //  • a remarcação sempre pede confirmação e é validada no servidor
 //    (disponibilidade, conflito, duração, buffer, horizonte).
 //
-// APRESENTAÇÃO (padrão do workspace): drawer lateral INTEGRADO à agenda — a
-// grade continua visível ao fundo. Borda fina, raio moderado, pouca sombra,
-// densidade igual ao resto do painel; nada de "card flutuante gigante".
-// Somente a casca visual mudou; a lógica de ações é exatamente a mesma.
+// P1.1 — DRAWER OPERACIONAL:
+//  • ações principais no topo com HIERARQUIA (Componentes compartilhados
+//    ui.Button): Concluir = sucesso/verde · Não compareceu = atenção ·
+//    Reagendar = neutro · Cancelar = destrutivo/vermelho. Status do
+//    atendimento ≠ cor do botão.
+//  • contexto real, sem navegação genérica: Cliente (ficha filtrada pelo
+//    telefone do agendamento), WhatsApp (só quando há telefone) e o
+//    histórico/timeline real — nada de fileira de links sem contexto.
+// A lógica de ações e transições é exatamente a mesma do P1.
 import { useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
 import { Icon } from '@/components/icons';
-import { StatusBadge } from '@/components/ui';
+import { StatusBadge, Button, buttonCls, type ButtonVariant } from '@/components/ui';
 import { BOOKING_STATUS } from '@/lib/status';
 import { todayISO, nowHM, formatDateBR, humanDay } from '@/lib/tz';
 import { waLink, cn, money } from '@/lib/utils';
-import { bookingActions, bookingDuration, needsClosure, rescheduleDecision } from '@/lib/booking-ops';
+import { bookingActions, bookingDuration, needsClosure, rescheduleDecision, type ClosureAction } from '@/lib/booking-ops';
 import { SLOT_STATE_MESSAGE } from '@/lib/slot-states';
-import type { Booking, BookingStatus } from '@/lib/types';
+import type { Booking } from '@/lib/types';
 
 interface ServiceRef { id: string; name: string; durationMin: number; price?: number; questions?: string[] }
 interface ProRef { id: string; name: string }
 
-// Botões discretos, coerentes com o workspace (sem botões saturados gigantes).
-const TONE_BTN: Record<string, string> = {
-  ok: 'bg-zinc-900 text-white border-zinc-900 hover:bg-zinc-700',
-  warn: 'bg-white text-zinc-700 border-zinc-200 hover:bg-zinc-50',
-  danger: 'bg-white text-red-700 border-red-200 hover:bg-red-50',
-  neutral: 'bg-white text-zinc-700 border-zinc-200 hover:bg-zinc-50',
+// Hierarquia de ação (tone da regra de negócio → variante do componente):
+// ok = sucesso · warn = atenção · danger = destrutivo · neutral = secundário.
+const TONE_TO_VARIANT: Record<ClosureAction['tone'], ButtonVariant> = {
+  ok: 'success',
+  warn: 'warning',
+  danger: 'danger',
+  neutral: 'secondary',
 };
 
 const ROW = 'flex items-baseline justify-between gap-3 py-2';
@@ -57,7 +63,9 @@ export function BookingDetailSheet({ booking, service, pro, businessId, onClose,
   const [loadingSlots, setLoadingSlots] = useState(false);
   // Falha de rede/erro ≠ "nenhum horário livre": os estados não se misturam.
   const [slotsError, setSlotsError] = useState('');
-  const [historyOpen, setHistoryOpen] = useState(false);
+  // Histórico aprovado do P1: timeline REAL aberta por padrão.
+  const [historyOpen, setHistoryOpen] = useState(true);
+  const historyRef = useRef<HTMLDivElement>(null);
 
   const def = BOOKING_STATUS[booking.status];
   const dur = bookingDuration(service as any);
@@ -145,7 +153,12 @@ export function BookingDetailSheet({ booking, service, pro, businessId, onClose,
     return () => window.removeEventListener('keydown', onKey);
   }, [onClose]);
 
-  const actionBtn = 'text-xs font-semibold px-3 py-2 rounded-md border transition-colors disabled:opacity-50';
+  function showHistory() {
+    setHistoryOpen(true);
+    requestAnimationFrame(() => historyRef.current?.scrollIntoView({ behavior: 'smooth', block: 'nearest' }));
+  }
+
+  const hasHistory = (booking.history || []).length > 0;
 
   return (
     <div className="fixed inset-0 z-50" role="dialog" aria-modal="false" aria-label="Detalhe do agendamento">
@@ -168,25 +181,30 @@ export function BookingDetailSheet({ booking, service, pro, businessId, onClose,
             className="text-zinc-400 hover:text-zinc-900 hover:bg-zinc-50 rounded-md p-1.5 -m-1 inline-flex shrink-0"><Icon n="x" size={16} /></button>
         </header>
 
-        <div className="flex-1 min-h-0 overflow-y-auto">
-          {/* ── Pendência: passado e ainda aberto (aviso discreto, não card) ── */}
-          {late && (
-            <div className="px-4 py-3 bg-amber-50/60 border-b border-amber-200/60">
+        <div className="flex-1 min-h-0 overflow-y-auto ws-scroll">
+          {/* ── Pendência: passado e ainda aberto (aviso, decisão fica nas ações) ── */}
+          {late && !rescheduling && (
+            <div className="px-4 py-2.5 bg-amber-50/60 border-b border-amber-200/60">
               <p className="text-xs font-semibold text-amber-900 flex items-center gap-1.5"><Icon n="alert" size={13} /> Este atendimento precisa de fechamento</p>
-              <p className="text-[11px] text-amber-800/80 mt-1 leading-snug">
-                O horário já passou e o status continua “{def.panel}”. O InstaLink não conclui atendimento sozinho — escolha o que aconteceu:
+              <p className="text-[11px] text-amber-800/80 mt-0.5 leading-snug">
+                O horário já passou e o status continua “{def.panel}”. O InstaLink não conclui atendimento sozinho — escolha o que aconteceu.
               </p>
-              <div className="grid grid-cols-2 gap-1.5 mt-2.5">
+            </div>
+          )}
+
+          {/* ── Ações principais do atendimento (hierarquia, não cor de status) ── */}
+          {!rescheduling && (
+            <div className="px-4 py-3 border-b border-zinc-100">
+              <div className="flex flex-wrap gap-1.5">
                 {actions.map((a) => (
-                  <button key={a.status} onClick={() => act(a.status)} disabled={!!acting}
-                    className={cn(actionBtn, TONE_BTN[a.tone] || 'bg-white text-zinc-700 border-zinc-200')}>
+                  <Button key={a.status} size="sm" variant={TONE_TO_VARIANT[a.tone]}
+                    onClick={() => act(a.status)} disabled={!!acting}>
                     {acting === a.status ? 'Salvando…' : a.label}
-                  </button>
+                  </Button>
                 ))}
-                <button onClick={() => { setRescheduling(true); setError(''); }} disabled={!!acting}
-                  className={cn(actionBtn, 'bg-white text-zinc-700 border-zinc-200 hover:bg-zinc-50')}>
-                  Reagendar
-                </button>
+                <Button size="sm" variant="secondary" onClick={() => { setRescheduling(true); setError(''); }} disabled={!!acting}>
+                  <Icon n="calendar" size={13} /> Reagendar
+                </Button>
               </div>
             </div>
           )}
@@ -232,25 +250,29 @@ export function BookingDetailSheet({ booking, service, pro, businessId, onClose,
             )}
           </dl>
 
-          {/* ── Continuidade: o que já existe no sistema, sem sair do contexto ── */}
+          {/* ── Contexto: só o que tem ação real com os dados existentes ── */}
           <div className="px-4 py-3 border-t border-zinc-100">
-            <p className={`${ROW_DT} uppercase tracking-wide mb-2`}>Ver também</p>
+            <p className={`${ROW_DT} uppercase tracking-wide mb-2`}>Contexto</p>
             <div className="flex flex-wrap gap-1.5">
               {booking.customerPhone && (
                 <Link href={`/clientes?b=${businessId}&q=${encodeURIComponent(booking.customerPhone)}`}
-                  className={cn(actionBtn, 'bg-white text-zinc-700 border-zinc-200 hover:bg-zinc-50 inline-flex items-center gap-1.5')}>
-                  <Icon n="user" size={13} /> Cliente e histórico
+                  className={cn(buttonCls('secondary', 'sm'))}>
+                  <Icon n="user" size={13} /> Cliente
                 </Link>
               )}
-              <Link href={`/servicos?b=${businessId}`}
-                className={cn(actionBtn, 'bg-white text-zinc-700 border-zinc-200 hover:bg-zinc-50 inline-flex items-center gap-1.5')}>
-                <Icon n="service" size={13} /> Serviço
-              </Link>
-              {pro && (
-                <Link href={`/profissionais?b=${businessId}`}
-                  className={cn(actionBtn, 'bg-white text-zinc-700 border-zinc-200 hover:bg-zinc-50 inline-flex items-center gap-1.5')}>
-                  <Icon n="userCircle" size={13} /> Profissional
-                </Link>
+              {booking.customerPhone && (
+                <a href={waLink(booking.customerPhone, waMsg)} target="_blank" rel="noreferrer"
+                  className={cn(buttonCls('secondary', 'sm'))}>
+                  <Icon n="whatsapp" size={13} className="text-emerald-600" /> WhatsApp
+                </a>
+              )}
+              {hasHistory && (
+                <Button size="sm" variant="secondary" onClick={showHistory}>
+                  <Icon n="clock" size={13} /> Ver histórico
+                </Button>
+              )}
+              {!booking.customerPhone && !hasHistory && (
+                <span className="text-xs text-zinc-400">Sem telefone nem histórico registrado.</span>
               )}
             </div>
           </div>
@@ -258,7 +280,7 @@ export function BookingDetailSheet({ booking, service, pro, businessId, onClose,
           {error && <p className="px-4 py-2 text-sm font-medium text-red-600 border-t border-zinc-100">{error}</p>}
           {notice && <p className="px-4 py-2 text-xs font-medium text-emerald-800 bg-emerald-50 border-t border-emerald-100">{notice}</p>}
 
-          {rescheduling ? (
+          {rescheduling && (
             <div className="px-4 py-3 border-t border-zinc-200 space-y-2.5">
               <p className="text-sm font-semibold">Reagendar atendimento</p>
               {decision.kind === 'recreate' && (
@@ -269,7 +291,7 @@ export function BookingDetailSheet({ booking, service, pro, businessId, onClose,
               <label className="block">
                 <span className="text-[11px] font-semibold text-zinc-500 uppercase tracking-wide">Nova data</span>
                 <input type="date" value={date} min={today} onChange={(e) => setDate(e.target.value)}
-                  className="block w-full mt-1 rounded-md border border-zinc-300 px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-zinc-900" />
+                  className="block w-full mt-1 rounded-md border border-zinc-300 px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-[var(--action)]" />
               </label>
               {loadingSlots ? (
                 <p className="text-xs text-zinc-500">Buscando horários livres…</p>
@@ -284,7 +306,7 @@ export function BookingDetailSheet({ booking, service, pro, businessId, onClose,
                     <div className="flex flex-wrap gap-1.5 mt-1.5">
                       {slots.map((t) => (
                         <button key={t} onClick={() => setTime(t)}
-                          className={cn('text-xs font-semibold px-2.5 py-1.5 rounded-md border', time === t ? 'bg-zinc-900 text-white border-zinc-900' : 'bg-white border-zinc-200 text-zinc-700 hover:bg-zinc-50')}>
+                          className={cn('text-xs font-semibold px-2.5 py-1.5 rounded-md border', time === t ? 'bg-[var(--action)] text-[var(--action-contrast)] border-[var(--action)]' : 'bg-white border-zinc-200 text-zinc-700 hover:bg-zinc-50')}>
                           {t}
                         </button>
                       ))}
@@ -302,52 +324,25 @@ export function BookingDetailSheet({ booking, service, pro, businessId, onClose,
                     <strong>{formatDateBR(date)} às {time}</strong>. O cliente não é avisado automaticamente.
                   </p>
                   <div className="flex gap-2 mt-2.5">
-                    <button onClick={reschedule} disabled={!!acting}
-                      className="flex-1 text-xs font-semibold bg-zinc-900 text-white py-2 rounded-md disabled:opacity-50 hover:bg-zinc-700">
+                    <Button size="sm" className="flex-1" onClick={reschedule} disabled={!!acting}>
                       {acting === 'reschedule' ? 'Salvando…' : 'Confirmar'}
-                    </button>
-                    <button onClick={() => setConfirming(false)} className="text-xs font-semibold bg-white border border-zinc-200 px-3.5 py-2 rounded-md hover:bg-zinc-50">Voltar</button>
+                    </Button>
+                    <Button size="sm" variant="secondary" onClick={() => setConfirming(false)}>Voltar</Button>
                   </div>
                 </div>
               ) : (
                 <div className="flex gap-2">
-                  <button onClick={() => setConfirming(true)} disabled={!date || !time || !!acting}
-                    className="flex-1 text-xs font-semibold bg-zinc-900 text-white py-2 rounded-md disabled:opacity-50 hover:bg-zinc-700">
+                  <Button size="sm" className="flex-1" onClick={() => setConfirming(true)} disabled={!date || !time || !!acting}>
                     Revisar e confirmar
-                  </button>
-                  <button onClick={() => { setRescheduling(false); setError(''); }} className="text-xs font-semibold bg-white border border-zinc-200 px-3.5 py-2 rounded-md hover:bg-zinc-50">Cancelar</button>
+                  </Button>
+                  <Button size="sm" variant="secondary" onClick={() => { setRescheduling(false); setError(''); }}>Cancelar</Button>
                 </div>
               )}
-            </div>
-          ) : (
-            <div className="px-4 py-3 border-t border-zinc-200 space-y-2.5">
-              {!late && actions.length > 0 && (
-                <div className="flex flex-wrap gap-1.5">
-                  {actions.map((a) => (
-                    <button key={a.status} onClick={() => act(a.status)} disabled={!!acting}
-                      className={cn(actionBtn, TONE_BTN[a.tone] || 'bg-white text-zinc-700 border-zinc-200')}>
-                      {acting === a.status ? 'Aguarde…' : a.label}
-                    </button>
-                  ))}
-                </div>
-              )}
-              <div className="flex flex-wrap gap-1.5">
-                <button onClick={() => { setRescheduling(true); setError(''); }}
-                  className={cn(actionBtn, 'bg-zinc-900 text-white border-zinc-900 hover:bg-zinc-700 inline-flex items-center gap-1.5')}>
-                  <Icon n="calendar" size={13} /> Reagendar
-                </button>
-                {booking.customerPhone && (
-                  <a href={waLink(booking.customerPhone, waMsg)} target="_blank" rel="noreferrer"
-                    className={cn(actionBtn, 'bg-white text-green-700 border-zinc-200 hover:bg-emerald-50/60 inline-flex items-center gap-1.5')}>
-                    <Icon n="whatsapp" size={13} /> Avisar no WhatsApp
-                  </a>
-                )}
-              </div>
             </div>
           )}
 
-          {(booking.history || []).length > 0 && (
-            <div className="px-4 py-3 border-t border-zinc-100">
+          {hasHistory && (
+            <div ref={historyRef} className="px-4 py-3 border-t border-zinc-100">
               <button onClick={() => setHistoryOpen((v) => !v)} className="text-[11px] font-semibold uppercase tracking-wider text-zinc-400 hover:text-zinc-700">
                 Histórico ({booking.history.length}) {historyOpen ? '▲' : '▼'}
               </button>
