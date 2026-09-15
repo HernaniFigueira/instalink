@@ -13,7 +13,8 @@
 // Receita do InstaLink ≠ receita operacional das Organizations.
 // Enquanto não houver planos/cobrança reais, platformRevenue = 0.
 import type { DB, User, UserRole, AuditAction } from './types';
-import { hasMasterRole, isMasterEmail, isMasterUser, masterEmails } from './access';
+// access-core: puro (sem next/headers) — master.ts também é importável em testes/domínio.
+import { hasMasterRole, isMasterEmail, isMasterUser, masterEmails } from './access-core';
 
 export type PlatformUserKind = 'master' | 'owner' | 'admin' | 'member';
 

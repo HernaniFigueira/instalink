@@ -1,5 +1,6 @@
 import type { Business, DB, Organization, User } from './types';
-import { accessibleBusinesses, isMasterUser } from './access';
+// access-core: puro — seguro no Client Component (DashboardShell).
+import { accessibleBusinesses, isMasterUser } from './access-core';
 
 /**
  * Organizations visíveis ao usuário.
