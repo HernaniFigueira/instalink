@@ -21,17 +21,26 @@ interface Data {
   audience: { segment: CampaignSegment; count: number }[];
   consent: { total: number; optedIn: number; optedOut: number; rule: string };
   whatsapp: { status: string; canSend: boolean };
+  opportunities?: {
+    winBack: number;
+    sample: Array<{ name: string; phone: string; lastBooking: string; days: number }>;
+  };
 }
 
+// Ciclo de vida: rascunho → pronta → enviando → enviada/parcial/falhou.
+// Cancelada é um estado terminal amigável (registro permanece).
 const STATUS_STYLE: Record<string, string> = {
   draft: 'bg-zinc-100 text-zinc-600',
   ready: 'bg-amber-100 text-amber-800',
+  sending: 'bg-blue-100 text-blue-800',
   sent: 'bg-emerald-100 text-emerald-800',
   partial: 'bg-orange-100 text-orange-800',
   failed: 'bg-red-100 text-red-700',
+  cancelled: 'bg-zinc-200 text-zinc-500',
 };
 const STATUS_LABEL: Record<string, string> = {
-  draft: 'Rascunho', ready: 'Pronta', sent: 'Enviada', partial: 'Parcial', failed: 'Falhou',
+  draft: 'Rascunho', ready: 'Pronta', sending: 'Enviando', sent: 'Enviada',
+  partial: 'Parcial', failed: 'Falhou', cancelled: 'Cancelada',
 };
 const input = 'w-full rounded-md border border-zinc-300 px-3.5 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500';
 
@@ -56,10 +65,12 @@ export default function CampanhasPage() {
   }, [businessId, report]);
   useEffect(() => { load(); }, [load]);
 
-  async function call(method: 'POST' | 'PATCH', payload: Record<string, any>) {
+  async function call(method: 'POST' | 'PATCH' | 'DELETE', payload: Record<string, any>) {
     setBusy(payload.action || 'save'); setError(''); setMsg('');
     try {
-      const res = await apiSend<any>('/api/campaigns', method, { businessId, ...payload }, { scope: 'action', area: 'Campanhas' });
+      const res = method === 'DELETE'
+        ? await apiSend<any>(`/api/campaigns?businessId=${businessId}&id=${payload.id}`, 'DELETE', undefined, { scope: 'action', area: 'Campanhas' })
+        : await apiSend<any>('/api/campaigns', method, { businessId, ...payload }, { scope: 'action', area: 'Campanhas' });
       const d = res.data || {};
       if (!res.ok) throw new Error(res.message || 'Não foi possível.');
       setMsg(d.message || 'Feito.');
@@ -114,6 +125,43 @@ export default function CampanhasPage() {
         WhatsApp/E-mail só vão para quem marcou a autorização no cadastro do cliente.
       </p>
 
+      {(data.opportunities?.winBack ?? 0) > 0 && (
+        <section className="bg-white border border-zinc-200 rounded-lg p-4 mb-5">
+          <div className="flex flex-wrap items-start justify-between gap-3">
+            <div className="min-w-0">
+              <p className="font-bold text-sm flex items-center gap-2">
+                <Icon n="spark" size={15} className="text-amber-500" />
+                Clientes sem retorno
+                <span className="text-[10px] font-extrabold bg-amber-100 text-amber-800 px-2 py-0.5 rounded-full">
+                  {data.opportunities!.winBack} oportunidade(s)
+                </span>
+              </p>
+              <p className="text-xs text-zinc-500 mt-1 max-w-xl">
+                Clientes que já agendaram antes e passaram muito tempo sem voltar. Ao criar as oportunidades, elas
+                aparecem em <strong>Clientes</strong> como leads “retorno” — você decide se vira conversa (e campanha
+                só para quem autorizou).
+              </p>
+              {data.opportunities!.sample.length > 0 && (
+                <div className="flex flex-wrap gap-1.5 mt-2.5">
+                  {data.opportunities!.sample.map((w, i) => (
+                    <span key={i} className="text-[11px] font-semibold bg-zinc-50 border border-zinc-200 rounded-full px-2.5 py-1">
+                      {w.name} · {w.days}d sem retorno
+                    </span>
+                  ))}
+                  {data.opportunities!.winBack > data.opportunities!.sample.length && (
+                    <span className="text-[11px] font-semibold text-zinc-400 px-1 py-1">+{data.opportunities!.winBack - data.opportunities!.sample.length}…</span>
+                  )}
+                </div>
+              )}
+            </div>
+            <button onClick={() => call('POST', { action: 'winback' })} disabled={busy === 'winback'}
+              className="text-xs font-bold bg-zinc-900 text-white px-4 py-2.5 rounded-lg hover:bg-zinc-700 disabled:opacity-50 shrink-0">
+              {busy === 'winback' ? 'Criando…' : 'Criar oportunidades'}
+            </button>
+          </div>
+        </section>
+      )}
+
       <section className="bg-white border border-zinc-200 rounded-lg divide-y divide-zinc-100">
         {data.campaigns.length === 0 && (
           <p className="text-sm text-zinc-500 px-4 py-8 text-center">Nenhuma campanha ainda. Crie a primeira — ela nasce como rascunho.</p>
@@ -152,9 +200,17 @@ export default function CampanhasPage() {
                     Enviar
                   </button>
                 )}
+                {(c.status === 'draft' || c.status === 'ready') && (
+                  <button onClick={() => call('PATCH', { id: c.id, action: 'cancel' })}
+                    className="text-xs font-bold bg-zinc-100 px-3.5 py-2 rounded-lg hover:bg-zinc-200">Cancelar</button>
+                )}
                 {c.status !== 'sent' && (
                   <button onClick={() => call('PATCH', { id: c.id, action: 'duplicate' })}
                     className="text-xs font-bold bg-zinc-100 px-3.5 py-2 rounded-lg hover:bg-zinc-200">Duplicar</button>
+                )}
+                {c.status === 'draft' && (
+                  <button onClick={() => call('DELETE', { id: c.id })}
+                    className="text-xs font-bold text-red-500 px-3.5 py-2 rounded-lg hover:bg-red-50">Excluir</button>
                 )}
               </div>
             </div>

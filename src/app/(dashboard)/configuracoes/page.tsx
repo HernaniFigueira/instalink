@@ -60,6 +60,15 @@ export default function ConfigPage() {
         name: biz.name, description: biz.description, logo: biz.logo, cover: biz.cover,
         phone: biz.phone, whatsapp: biz.whatsapp, email: biz.email,
         instagram: biz.instagram, tiktok: biz.tiktok, address: biz.address, mapsUrl: biz.mapsUrl,
+        // Redes adicionais (socials v2): URL completa, exibidas no perfil e
+        // disponíveis como itens de menu da página pública.
+        socials: {
+          ...(biz.socials || {}),
+          facebook: (biz.socials || {}).facebook || '',
+          youtube: (biz.socials || {}).youtube || '',
+          linkedin: (biz.socials || {}).linkedin || '',
+          site: (biz.socials || {}).site || '',
+        },
       }, { scope: 'action', area: 'Configurações' });
       if (!res.ok) throw new Error(res.message);
       setMsg('Configurações salvas.');
@@ -112,6 +121,14 @@ export default function ConfigPage() {
                 <label className="block"><span className="text-xs font-semibold tracking-wide uppercase text-zinc-500">Instagram</span><input value={biz.instagram} onChange={(e) => set('instagram', e.target.value)} className={input + ' mt-1'} placeholder="@seuperfil" /></label>
                 <label className="block"><span className="text-xs font-semibold tracking-wide uppercase text-zinc-500">TikTok</span><input value={biz.tiktok} onChange={(e) => set('tiktok', e.target.value)} className={input + ' mt-1'} placeholder="@seuperfil" /></label>
               </div>
+              <p className="text-[11px] text-zinc-500 -mt-1">Instagram e TikTok aceitam @usuário — a página completa o link. As redes abaixo pedem o endereço completo.</p>
+              <div className="grid sm:grid-cols-2 gap-3">
+                {([['facebook', 'Facebook', 'https://facebook.com/suanegocio'], ['youtube', 'YouTube', 'https://youtube.com/@seucanal'], ['linkedin', 'LinkedIn', 'https://linkedin.com/company/suanegocio'], ['site', 'Meu site', 'https://seusite.com.br']] as const).map(([key, label, ph]) => (
+                  <label key={key} className="block"><span className="text-xs font-semibold tracking-wide uppercase text-zinc-500">{label}</span>
+                    <input value={(biz.socials || {})[key] || ''} onChange={(e) => set('socials', { ...(biz.socials || {}), [key]: e.target.value })} className={input + ' mt-1'} placeholder={ph} /></label>
+                ))}
+              </div>
+              <p className="text-[11px] text-zinc-500">Cada rede preenchida aparece no perfil da página pública e pode entrar no menu (editor da Página → Navegação).</p>
             </section>
 
             <section className="bg-white border border-zinc-200 p-4 space-y-3">
@@ -137,7 +154,8 @@ export default function ConfigPage() {
         {tab === 'agenda' && (
           <div className="bg-white border border-zinc-200 divide-y divide-zinc-100">
             {[
-              { title: 'Horários e profissionais', hint: 'Janela da clínica, equipe e regras de reserva (antecedência, buffer, horizonte)', href: `/servicos?b=${businessId}` },
+              { title: 'Horários', hint: 'Janela da empresa, dias especiais e regras de reserva (antecedência, buffer, horizonte)', href: `/horarios?b=${businessId}` },
+              { title: 'Profissionais', hint: 'Quem atende, agenda própria ou horário da empresa', href: `/profissionais?b=${businessId}` },
               { title: 'Agenda do dia', hint: 'Grade Day/Week/Month, drag para remarcar e fechamento de atendimentos', href: `/agenda?b=${businessId}` },
               { title: 'Serviços', hint: 'Catálogo com preço, duração e quem atende', href: `/servicos?b=${businessId}` },
             ].map((r) => (
