@@ -62,6 +62,19 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
           enabled: a.enabled !== false && !!a.enabled,
         };
       }
+      // Redes sociais ampliadas (Facebook, YouTube, LinkedIn, site…): só redes
+      // conhecidas, com valor em texto. Nada é apagado quando o campo não vem.
+      if (body.socials !== undefined && body.socials && typeof body.socials === 'object') {
+        const valid = ['instagram', 'facebook', 'youtube', 'tiktok', 'linkedin', 'site'];
+        const clean: Record<string, string> = { ...(b.socials || {}) };
+        for (const [k, v] of Object.entries(body.socials as Record<string, unknown>)) {
+          if (!valid.includes(k)) continue;
+          const val = String(v || '').trim().slice(0, 300);
+          if (val) clean[k] = val;
+          else delete clean[k]; // limpou o campo no editor → rede sai da página
+        }
+        b.socials = clean;
+      }
       // Config de agenda (validada campo a campo)
       if (body.booking && typeof body.booking === 'object') {
         const cur = { ...defaultBookingConfig(), ...b.booking };
