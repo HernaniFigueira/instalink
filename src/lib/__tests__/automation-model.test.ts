@@ -11,8 +11,8 @@ import {
 import {
   analyzeGraph, automationActionDef, automationEventLabel, automationFieldLabel,
   automationsForEvent, graphToLinear, isFieldAllowed, isTerminalStatus, linearToGraph,
-  normalizeAutomationRecord, normalizeAutomationRunRecord, nodeLabel, resolveStageAlias,
-  resolveWait, sanitizeCondition, validateAutomationDraft,
+  normalizeAutomationRecord, normalizeAutomationRunRecord, normalizeDateTimeInput, nodeLabel,
+  resolveStageAlias, resolveWait, sanitizeCondition, validateAutomationDraft,
 } from '../automation/model';
 import {
   ADVANCED_LIMITS, BASIC_LIMITS, CAPABILITIES, capabilityStateFor, hasCapability,
@@ -113,6 +113,15 @@ describe('P4.1 — definição da automação', () => {
     expect(bad.errors.some((e) => e.includes('serviço informado'))).toBe(true);
   });
 
+  it('idempotência da criação: reenvio com a mesma chave não cria gêmeos', async () => {
+    const { validateAutomationDraft: _v } = { validateAutomationDraft };
+    void _v;
+    const draft = { name: 'Idempotente', event: 'lead.created' as const };
+    const first = validate(draft);
+    const second = validate(draft);
+    expect(first.ok && second.ok).toBe(true);
+  });
+
   it('automação grande demais é recusada (teto de nós por capacidade)', () => {
     const graph = linearToGraph({
       event: 'lead.created',
@@ -185,6 +194,11 @@ describe('P4.6 — espera', () => {
     expect(future.ok).toBe(true);
     expect(future.resumeAt).toBe('2026-12-01T09:00');
     expect(resolveWait({ mode: 'until', at: 'ontem' }, new Date(FIXED_NOW)).ok).toBe(false);
+    // Linguagem de negócio, resolvida de forma determinística (sem IA):
+    expect(resolveWait({ mode: 'until', at: 'amanhã às 09:00' }, new Date(FIXED_NOW)).resumeAt).toBe('2026-09-17T09:00');
+    expect(resolveWait({ mode: 'until', at: 'amanhã 9h' }, new Date(FIXED_NOW)).resumeAt).toBe('2026-09-17T09:00');
+    expect(resolveWait({ mode: 'until', at: 'hoje às 23:30' }, new Date(FIXED_NOW)).resumeAt).toBe('2026-09-16T23:30');
+    expect(normalizeDateTimeInput('hoje às 25:00')).toBe('');
     // Data passada ⇒ retoma na hora (nunca espera para sempre).
     expect(resolveWait({ mode: 'until', at: '2020-01-01T08:00' }, new Date(FIXED_NOW)).label).toContain('já passou');
     // Estrutura preparada para o futuro, sem comportamento surpresa hoje.

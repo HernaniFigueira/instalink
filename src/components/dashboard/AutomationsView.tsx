@@ -748,6 +748,8 @@ function StepList({ label, hint, steps, setSteps, options, event }: {
                 )}
                 <span className="text-[11px] text-zinc-400">ou até</span>
                 <Input className="max-w-[200px]" type="datetime-local" value={s.waitUntil}
+                  title="Aceita data e hora, ou “amanhã às 09:00”"
+                  placeholder="amanhã às 09:00"
                   onChange={(e) => patch(s.id, { waitUntil: e.target.value, waitMinutes: 0 })} />
                 <p className="w-full text-[11px] text-zinc-500">
                   {s.waitUntil

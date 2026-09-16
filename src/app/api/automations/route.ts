@@ -21,6 +21,7 @@ import { randomUUID } from 'node:crypto';
 import { readDB, updateDB } from '@/lib/db';
 import { requireBusiness } from '@/lib/access';
 import { pushAudit } from '@/lib/audit';
+import { checkIdempotency, extractIdempotencyKey, saveIdempotency } from '@/lib/idempotency';
 import { getBusinessPipeline } from '@/lib/pipeline';
 import type { Automation, DB } from '@/lib/types';
 import { automationsOf, validateAutomationDraft } from '@/lib/automation/model';
@@ -226,6 +227,15 @@ export async function POST(req: NextRequest) {
     }
 
     // criar do zero (editor linear ou grafo)
+    // Reenvio acidental (duplo clique/timeout de rede) não cria gêmeos: mesma
+    // chave de idempotência ⇒ MESMA resposta gravada — o mecanismo é o do P3.
+    const idemKey = extractIdempotencyKey(req.headers);
+    if (idemKey) {
+      const cached = checkIdempotency(db, businessId, idemKey, '/api/automations');
+      if (cached) {
+        return NextResponse.json(cached.responseBody, { status: cached.statusCode, headers: { 'X-Idempotent-Replay': 'true' } });
+      }
+    }
     const limits = limitsFor(db.businesses.find((b) => b.id === businessId));
     if (automationsOf(db, businessId).length >= limits.maxAutomations) {
       return fail(`limite de ${limits.maxAutomations} automações por empresa atingido`, 422);
@@ -248,18 +258,20 @@ export async function POST(req: NextRequest) {
         updatedAt: now,
       };
       d.automations.push(automation);
+      const view = automationView(d, automation);
       pushAudit(d, {
         action: 'automation.created',
         actor: guard.ctx.user,
         businessId,
         meta: { automationId: automation.id, name: automation.name, event: automation.trigger.event },
       });
-      return automation;
+      // A resposta gravada é a MESMA devolvida no reenvio (nada de resposta 2/3).
+      if (idemKey) saveIdempotency(d, businessId, idemKey, '/api/automations', 201, { ok: true, automation: view });
+      return view;
     });
-    const fresh = await readDB();
     return NextResponse.json({
       ok: true,
-      automation: automationView(fresh, created!),
+      automation: created,
       warnings: validation.warnings,
     }, { status: 201 });
   } catch (e: any) {

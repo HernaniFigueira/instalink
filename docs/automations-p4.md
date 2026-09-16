@@ -151,7 +151,9 @@ removido. `dispatch_webhook`, `create_booking` e `cancel_booking` exigem
 
 ## 7. Esperas (P4.6) e retomada (P4.7)
 
-`wait_for_duration` (`{{minutes}}`) e `wait_until` (`AAAA-MM-DD HH:MM`):
+`wait_for_duration` (minutos) e `wait_until` (`AAAA-MM-DD HH:MM`, e também
+“amanhã às 09:00” / “hoje 18:00” — dia relativo + hora no fuso do produto,
+resolvidos de forma determinística, sem adivinhar entrada inválida):
 
 ```text
 encontrou espera → status='waiting', waitingUntil=…, currentNodeId=PRÓXIMO nó
@@ -229,7 +231,9 @@ UI é a projeção simples. Um editor visual futuro lê/escreve os mesmos `nodes
 | `GET /api/cron/automations` | `CRON_SECRET` | varredura do motor (retomada), só contadores na resposta |
 
 `businessId` sempre do contexto autenticado (`requireBusiness`) — o id no corpo
-nunca troca de tenant. Erros de validação voltam como `422 { errors: [...] }` com
+nunca troca de tenant. `POST /api/automations` aceita `Idempotency-Key` (o mesmo
+mecanismo do P3): reenvio com a mesma chave devolve a resposta original e não
+cria automação gêmea. Erros de validação voltam como `422 { errors: [...] }` com
 frases em português (o que a UI mostra sem interpretar nada).
 
 ## 12. Preparado para IA (P4.12) sem IA

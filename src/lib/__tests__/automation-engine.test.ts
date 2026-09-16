@@ -380,6 +380,33 @@ describe('P4.4/P4.5 — grafo, ramificação e ações', () => {
     expect(db.leads[0].assignedUserId || '').toBe('');
   });
 
+  it('remover responsável e atualizar cliente (opt-out só por remoção)', async () => {
+    const db = automationFixtures();
+    const lead = addLead(db, { assignedUserId: 'ana' });
+    addContact(db, { customerId: '', phone: lead.phone, marketingOptIn: true });
+    db.automations.push(buildAutomation({
+      steps: [
+        { kind: 'action', action: { type: 'assign_lead', params: { target: 'unassigned' } } },
+        {
+          kind: 'action',
+          action: {
+            type: 'update_customer',
+            params: { name: '{{lead.name}} (novo)', email: 'NAO-DEVE-CHANGE', marketingOptIn: true },
+          },
+        },
+      ],
+    }));
+    await fire(db, { event: 'lead.created', businessId: 'b1', leadId: lead.id });
+    await processAutomationRunsInDb(db, { nowISO: FIXED_NOW });
+
+    expect(db.leads[0].assignedUserId || '').toBe('');
+    const contact = db.contacts[0];
+    expect(contact.name).toBe('Rafael (novo)');
+    // Consentimento de marketing: a automação NUNCA liga; desligar é aceito.
+    expect(contact.marketingOptIn).toBe(true);
+    expect(db.automationRuns[0].status).toBe('completed');
+  });
+
   it('rodízio escolhe quem tem menos trabalho aberto', async () => {
     const db = automationFixtures();
     addLead(db, { id: 'l1', assignedUserId: 'ana' });

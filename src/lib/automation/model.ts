@@ -20,6 +20,7 @@ import { conditionFields } from './conditions';
 import { isConditionGroup } from '../types';
 import { ADVANCED_LIMITS, type CapabilityId, type CapabilityLimits } from './capabilities';
 import { uid } from '../utils';
+import { addDaysISO, todayISO } from '../tz';
 
 // ═══════════════════════════════════════════════════════════════
 // GATILHOS (P4.2) — só eventos que o sistema JÁ produz
@@ -226,6 +227,7 @@ export const AUTOMATION_ACTION_DEFS: AutomationActionDef[] = [
         options: [
           { value: 'member', label: 'Uma pessoa da equipe' },
           { value: 'auto', label: 'Rodízio (menos ocupado agora)' },
+          { value: 'unassigned', label: 'Remover o responsável' },
         ],
       },
       { key: 'userId', label: 'Pessoa', type: 'member', hint: 'Só quem pertence a esta unidade.' },
@@ -372,7 +374,7 @@ export function resolveWait(
   }
   if (mode === 'until') {
     const raw = String(wait?.at || '').trim();
-    const iso = normalizeDateTimeInput(raw);
+    const iso = normalizeDateTimeInput(raw, now);
     if (!iso) return { ok: false, resumeAt: '', label: raw, error: 'data/hora de retomada inválida' };
     const at = Date.parse(iso);
     if (!Number.isFinite(at)) return { ok: false, resumeAt: '', label: raw, error: 'data/hora ilegível' };
@@ -401,8 +403,23 @@ export function resolveWait(
   };
 }
 
-/** `2026-09-17T09:00` (aceita varredura de UI: espaço, segundos opcionais). */
-export function normalizeDateTimeInput(raw: string): string {
+/**
+ * `2026-09-17T09:00` — e também o que uma pessoa de negócio digita:
+ * "amanhã às 09:00", "hoje 18:00", "amanha 9h". Determinístico (sem IA): só
+ * dia relativo + hora no fuso do produto. Qualquer outra coisa volta '' e a
+ * validação reclama, em vez de adivinhar.
+ */
+export function normalizeDateTimeInput(raw: string, now = new Date()): string {
+  const phrase = String(raw || '').trim().toLowerCase().replace(/\s+/g, ' ');
+  const relative = phrase.match(/^(amanhã|amanha|hoje)(?:\s*(?:às|as|à|a))?\s*(\d{1,2})(?::(\d{2}))?\s*(?:h|hs)?$/);
+  if (relative) {
+    const day = addDaysISO(todayISO(now), relative[1].startsWith('am') ? 1 : 0);
+    const hour = Number(relative[2]);
+    const minute = Number(relative[3] || 0);
+    // Hora fora do relógio não é "0": é entrada inválida (a validação avisa).
+    if (hour > 23 || minute > 59) return '';
+    return `${day}T${String(hour).padStart(2, '0')}:${String(minute).padStart(2, '0')}`;
+  }
   const value = String(raw || '').trim().replace(' ', 'T');
   const m = value.match(/^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})(?::(\d{2}))?(?:\.\d+)?(Z|[+-]\d{2}:?\d{2})?$/);
   if (!m) return '';

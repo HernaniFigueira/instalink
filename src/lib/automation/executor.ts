@@ -203,7 +203,6 @@ export async function stepAutomationRun(
   if (!Array.isArray(db.automationRuns)) return { status: 'missing' };
   const run = db.automationRuns.find((r) => r.id === runId);
   if (!run) return { status: 'missing' };
-  // Posse: duas varreduras não processam a mesma execução.
   // Posse perdida (lease vencido e outro ciclo assumiu) ⇒ este ciclo PARA de
   // tocar nela: processar a mesma execução duas vezes duplicaria efeitos.
   if (run.status !== 'running' || run.claimToken !== holder) return { status: 'not_mine' };
@@ -532,6 +531,10 @@ export async function drainAutomations(options: DrainOptions = {}): Promise<Auto
       });
       continue;
     }
+    // `lastAdvanced` marca se paramos no MEIO do fluxo (orçamento da execução):
+    // só nesse caso vale devolver para a fila — caso contrário a gravação extra
+    // seria leitura+escrita no banco sem nenhum trabalho a fazer.
+    let lastAdvanced = false;
     for (let i = 0; i < stepsPerRun; i++) {
       let outcome: StepOutcome = { status: 'missing' };
       try {
@@ -561,8 +564,11 @@ export async function drainAutomations(options: DrainOptions = {}): Promise<Auto
       }
       bump(summary, outcome);
       if (outcome.status !== 'advanced') break;
+      lastAdvanced = true;
     }
-    // Orçamento da execução esgotado dentro do passo: devolve para a fila.
+    if (!lastAdvanced) continue;
+    // Orçamento da execução esgotado no meio do fluxo: devolve para a fila (o
+    // próximo ciclo/agendador continua do ponto já gravado).
     await updateDB((db) => {
       const run = db.automationRuns.find((r) => r.id === runId && r.status === 'running' && r.claimToken === holder);
       if (run) { releaseAutomationRunClaim(run, true); summary.released += 1; }

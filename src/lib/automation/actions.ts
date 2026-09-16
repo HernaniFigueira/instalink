@@ -180,15 +180,17 @@ export async function executeAction(input: ActionInput): Promise<ActionResult> {
       const lead = subjectLead(input);
       if (!lead) return missing('lead');
       const target = text(input, 'target', 20) || 'member';
-      let userId = target === 'auto'
+      const unassign = target === 'unassigned';
+      let userId = unassign ? '' : target === 'auto'
         ? leastLoadedMember(db, business.id)
         : text(input, 'userId', 64);
-      if (target === 'unassigned') userId = '';
-      if (!userId) return { ok: false, summary: '', error: 'nenhuma pessoa disponível para receber o lead' };
+      if (!userId && !unassign) {
+        return { ok: false, summary: '', error: 'nenhuma pessoa disponível para receber o lead' };
+      }
       const check = validateAssignedUser(db, business.id, userId);
       if (!check.valid) return { ok: false, summary: '', error: check.error || 'responsável inválido' };
       if ((lead.assignedUserId || '') === userId) {
-        return { ok: true, skipped: true, summary: 'responsável já é essa pessoa' };
+        return { ok: true, skipped: true, summary: unassign ? 'lead já estava sem responsável' : 'responsável já é essa pessoa' };
       }
       try {
         assignLead(db, {
@@ -203,8 +205,12 @@ export async function executeAction(input: ActionInput): Promise<ActionResult> {
       } catch (e: any) {
         return { ok: false, summary: '', error: e?.message || 'não foi possível atribuir o lead' };
       }
-      const assignedName = db.users.find((u) => u.id === userId)?.name || 'responsável';
-      return { ok: true, summary: `atribuído a ${assignedName}`, contextPatch: { assignedUserId: userId, assignedTo: assignedName } };
+      const assignedName = userId ? (db.users.find((u) => u.id === userId)?.name || 'responsável') : 'ninguém';
+      return {
+        ok: true,
+        summary: userId ? `atribuído a ${assignedName}` : 'responsável removido',
+        contextPatch: { assignedUserId: userId, assignedTo: assignedName },
+      };
     }
 
     case 'add_lead_note': {
