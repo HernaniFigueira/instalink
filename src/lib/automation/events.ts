@@ -15,9 +15,11 @@
 //
 // O que este módulo garante:
 //   • isolamento absoluto por `businessId` (a lista vem só da unidade);
-//   • idempotência: a MESMA `eventKey` não gera segunda execução;
+//   • idempotência: a MESMA `eventKey` não gera segunda execução (por unidade
+//     e por automação — duas automações do mesmo evento não se bloqueiam);
 //   • anti-loop: evento produzido POR uma automação não reabre automações,
-//     salvo `settings.allowReentry` explícito;
+//     salvo `settings.allowReentry` explícito; e, mesmo quando reentra, a
+//     corrente é limitada por profundidade (`MAX_REENTRY_DEPTH`);
 //   • falha segura: qualquer problema aqui é medido e ignorado pelo chamador
 //     (a operação do usuário — criar o lead, agendar — NUNCA falha por causa
 //     de automação);
@@ -32,6 +34,8 @@ import { hasCapability } from './capabilities';
 
 /** Fila por unidade: acima disso o gatilho é adiado (o cron continua depois). */
 export const MAX_QUEUED_RUNS_PER_BUSINESS = 400;
+/** Profundidade máxima de uma cadeia de execuções encadeadas (`allowReentry`). */
+export const MAX_REENTRY_DEPTH = 5;
 /** Tetos de tamanho de contexto (protegem o documento e o histórico). */
 export const MAX_CONTEXT_STRING = 300;
 export const MAX_RUNS_PER_EVENT = 25;
@@ -179,15 +183,22 @@ export function buildEventContext(
 }
 
 /**
- * Chave de dedupe do gatilho. Conteúdo, não timestamp: a MESMA mutação
- * reaplicada (duplo clique, retry de cliente, reenvio de request) produz a
- * mesma chave e therefore no máximo UMA execução; um estado diferente do
- * assunto (nova etapa, novo responsável) produz chave nova e dispara de novo.
+ * Chave de dedupe do gatilho. O escopo efetivo é (unidade, automação, chave).
  *
- *  1. `eventKey` explícito do chamador (API externa/idempotency-key) vence;
+ *  1. `eventKey` explícito do chamador (API externa/idempotency-key) vence — é a
+ *     única forma de dedupar um reenvio que chega em OUTRO instante;
  *  2. `settings.dedupeField` (ex.: `lead.id`) ⇒ UMA execução por lead para essa
- *     automação — o "não repetir nunca" que o lojista espera de follow-up;
- *  3. padrão: `evento:assunto:hash(fotografia+dados)`.
+ *     automação+evento, independentemente do resto do conteúdo — é o “não
+ *     repetir nunca” que o lojista espera de um follow-up;
+ *  3. padrão: `evento:assunto:hash(fotografia+dados)` — deduplica a MESMA
+ *     mutação reaplicada dentro da mesma transação/mesmo instante (duplo clique
+ *     no botão, reenvio do mesmo request). Como a fotografia inclui
+ *     `lastInteraction`, um evento legítimo posterior tem chave nova e dispara
+ *     de novo; o reenvio tardio de um request só é bloqueado se o chamador
+ *     trouxer `eventKey` (1) ou a automação usar `dedupeField` (2).
+ *
+ * Janela do dedupe: as chaves vivem nas execuções, e execuções terminais são
+ * retidas por 30 dias (até 200 por unidade) — não há índice infinito.
  */
 export function deriveEventKey(input: EmitInput, context: Record<string, unknown>, automation?: Automation): string {
   if (input.eventKey) return clip(input.eventKey, 160);
@@ -218,6 +229,25 @@ function fingerprintOf(context: Record<string, unknown>): string {
 
 function isRunLive(run: AutomationRun): boolean {
   return run.status === 'queued' || run.status === 'running' || run.status === 'waiting';
+}
+
+/**
+ * Quantas execuções já vieram desta cadeia (`emittedByRunId`, gravado pelo
+ * próprio gatilho). Caminha no máximo `MAX_REENTRY_DEPTH + 1` saltos e para em
+ * ciclo — a pergunta é “fundo ou não?”, não “qual é o fundo exato?”.
+ */
+export function reentryDepth(db: DB, fromRunId: string): number {
+  let depth = 0;
+  let cursor = fromRunId;
+  const seen = new Set<string>();
+  while (cursor && !seen.has(cursor) && depth <= MAX_REENTRY_DEPTH) {
+    seen.add(cursor);
+    const parent = (db.automationRuns || []).find((r) => r.id === cursor);
+    if (!parent || !parent.emittedByRunId) break;
+    cursor = parent.emittedByRunId;
+    depth += 1;
+  }
+  return depth;
 }
 
 /**
@@ -262,6 +292,15 @@ export function emitAutomationEvent(db: DB, input: EmitInput): EmitResult {
       result.skipped.push({ automationId: automation.id, reason: 'evento gerado por automação (reentrada desativada)' });
       continue;
     }
+    // Reentrada EXPLÍCITA continua tendo fundo: uma corrente A→A→A… é limitada
+    // por profundidade de linhagem, não só pelo teto de fila da unidade.
+    if (input.fromRunId && reentryDepth(db, input.fromRunId) >= MAX_REENTRY_DEPTH) {
+      result.skipped.push({
+        automationId: automation.id,
+        reason: `cadeia de reentrada atingiu o limite de ${MAX_REENTRY_DEPTH} execuções`,
+      });
+      continue;
+    }
 
     const context = buildEventContext(db, {
       businessId: input.businessId,
@@ -273,15 +312,14 @@ export function emitAutomationEvent(db: DB, input: EmitInput): EmitResult {
       bookingId: input.bookingId,
     });
     const eventKey = deriveEventKey(input, context, automation);
+    // O escopo do dedupe é (unidade, automação, chave). É o que permite que duas
+    // automações do MESMO evento cada uma tenha a sua execução, sem que a
+    // unidade B herde a chave gravada pela unidade A.
     const runKey = `${automation.id}:${eventKey}`;
 
     const duplicate = db.automationRuns.find((r) => r.businessId === input.businessId && r.automationId === automation.id && r.eventKey === eventKey);
     if (duplicate) {
       result.skipped.push({ automationId: automation.id, reason: `execução já existe para este evento (${duplicate.status})` });
-      continue;
-    }
-    if (db.automationRuns.some((r) => r.businessId === input.businessId && r.eventKey === runKey)) {
-      result.skipped.push({ automationId: automation.id, reason: 'chave de evento duplicada' });
       continue;
     }
 

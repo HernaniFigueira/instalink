@@ -506,6 +506,20 @@ export interface DrainOptions {
  * (cada passo é UMA transação com a ação dentro) e devolve o que não coube no
  * orçamento. Pode ser chamado por um cron, por um request (gancho do db.ts) ou
  * por script — a decisão de quem processa é sempre do banco.
+ *
+ * Por que a REIVINDICAÇÃO é CAS e o PASSO é `updateDB` (e não CAS):
+ *   • A reivindicação é o único ponto onde duas instâncias poderiam escolher a
+ *     MESMA execução — por isso é escrita condicional (hash do documento): a
+ *     segunda encontra a posse gravada e desiste (`not_mine`).
+ *   • O passo contém I/O (a ação `dispatch_webhook` tenta a entrega na hora).
+ *     Em CAS, cada conflito re-executaria o callback ⇒ efeito repetido para o
+ *     destinatário do webhook. Preferiu-se a propriedade que o projeto já usa
+ *     desde o P0 para `updateDB` (mutex por instância + last-wins entre
+ *     instâncias) e, no lugar da transação atômica, a IDEMPOTÊNCIA por
+ *     execução+nó: se a gravação do passo for perdida, a próxima varredura
+ *     reaplica o nó e os efeitos já aplicados são reconhecidos e pulados
+ *     (nota, tarefa, etapa). Um passo nunca é aplicado duas vezes; no pior
+ *     caso ele é TENTADO de novo e reconhecido como feito.
  */
 export async function drainAutomations(options: DrainOptions = {}): Promise<AutomationDrainSummary> {
   const started = Date.now();
@@ -515,9 +529,13 @@ export async function drainAutomations(options: DrainOptions = {}): Promise<Auto
   const budgetMs = options.budgetMs ?? envPositiveInt('AUTOMATION_BUDGET_MS', AUTOMATION_BUDGET_MS);
   const stepsPerRun = options.stepsPerRun ?? AUTOMATION_STEPS_PER_PASS;
 
+  // A varredura respeita EXATAMENTE o mesmo filtro do guard: pedir "processar a
+  // fila desta unidade" não pode reivindicar (e executar) as execuções de outra
+  // empresa, que consumiriam o lote e o orçamento de tempo alheios.
+  const businessId = options.businessId || '';
   const claim = await updateDBWithCas(
-    (db) => claimDueAutomationRuns(db, { nowISO, holder, limit }),
-    { guard: (db) => countDueAutomationRuns(db, nowISO, options.businessId || '') > 0 },
+    (db) => claimDueAutomationRuns(db, { nowISO, holder, limit, businessId }),
+    { guard: (db) => countDueAutomationRuns(db, nowISO, businessId) > 0 },
   );
   const claimed = claim.result || [];
   const summary = emptySummary();

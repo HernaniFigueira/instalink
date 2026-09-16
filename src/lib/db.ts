@@ -80,10 +80,17 @@ export function normalizeDB(raw: unknown): DB {
     if (!d.updatedAt) d.updatedAt = d.deliveredAt || d.createdAt || new Date().toISOString();
   }
   // P4: Automações e execuções — normalização ADITIVA e defensiva. Campos
-  // novos ganham defaults; nenhuma linha existente é reescrita nem apagada.
-  // Uma entrada ilegível é DESCARTADA da leitura (não do banco): o motor não
-  // pode ser derrubado por um registro corrompido, e o próximo `updateDB`
-  // só grava o que ele próprio tocou.
+  // novos ganham defaults; nada que o produto tenha escrito é reescrito nem
+  // apagado: `normalizeAutomationRecord` conserta o que dá (nó com tipo
+  // desconhecido, aresta sem branch, settings ausentes) e só devolve `null`
+  // para entrada SEM DONO (não é objeto, ou sem id/businessId) — uma linha
+  // assim não pertence a nenhuma unidade e é invisível para todo o resto do
+  // sistema, que sempre filtra por `businessId`.
+  // HONESTIDADE SOBRE O ARMAZENAMENTO: o documento é único, então a próxima
+  // gravação de `updateDB` regrava o documento inteiro — uma entrada descartada
+  // aqui NÃO sobrevive ao próximo write. É por isso que o critério de descarte
+  // é “sem dono identificável”, nunca “definição estranha”, e por isso que
+  // FALHA DE LEITURA (JSON/Postgres) lança em vez de virar banco vazio.
   const seenRunIds = new Set<string>();
   const cleanAutomations: unknown[] = [];
   for (const raw of base.automations as any[]) {
@@ -463,9 +470,10 @@ export async function updateDB<T>(fn: (db: DB) => T): Promise<Awaited<T>> {
     const result: Awaited<T> = await fn(db); // callback lançou? nada é escrito
     prune(db);
     await writeDB(db);
-    // P4 — só há trabalho quando existe execução na fila: checamos o documento
-    // que acabamos de gravar (sem leitura extra) e agendamos o motor.
-    if (hasQueuedAutomations(db)) maybeRunAutomations();
+    // P4 — só há trabalho quando existe execução pronta AGORA (fila, espera
+    // vencida ou posse morta): checamos o documento que acabamos de gravar
+    // (sem leitura extra) e agendamos o motor.
+    if (hasDueAutomationWork(db)) maybeRunAutomations();
     return result;
   };
   return withWriteLock(run);
@@ -480,15 +488,31 @@ export async function updateDB<T>(fn: (db: DB) => T): Promise<Awaited<T>> {
 //   • nenhuma recursão (flag de execução ativa) e nenhum efeito no caminho de
 //     escrita do PRÓPRIO motor (`updateDBWithCas` não agendou nada);
 //   • desligável por AUTOMATION_INLINE=0 (testes determinísticos).
-// A RETOMADA de esperas continua sendo do agendador (/api/cron/automations):
-// o que vence no futuro não pode depender de um request aberto agora.
+// O gatilho é “existe algo PRONTO AGORA”, a mesma pergunta que
+// `isAutomationRunDue` faz no motor: fila `queued`, espera vencida ou execução
+// com posse morta. Isso importa porque o agendador é EXTERNO ao app (no Vercel
+// Hobby não há cron por minuto): checagem só por `queued` deixaria uma espera
+// vencida paradinha até que outro evento criasse fila ou alguém clicasse no
+// painel. Quem decide o que processar continua sendo o banco (CAS + lease).
 let automationDrainActive = false;
 
-/** Alguma execução esperando processamento AGORA? (fila = 'queued') */
-function hasQueuedAutomations(db: DB): boolean {
+/** Existe execução pronta para processar neste documento (agora)? */
+function hasDueAutomationWork(db: DB): boolean {
   if (!Array.isArray(db.automationRuns) || db.automationRuns.length === 0) return false;
+  const now = Date.now();
   for (let i = db.automationRuns.length - 1; i >= 0; i--) {
-    if (db.automationRuns[i].status === 'queued') return true;
+    const r = db.automationRuns[i];
+    if (r.status === 'queued') return true;
+    if (r.status === 'waiting') {
+      const at = Date.parse(r.waitingUntil || '');
+      // Espera ilegível conta como vencida (o motor decide igual: não trava a fila).
+      if (!Number.isFinite(at) || at <= now) return true;
+    }
+    if (r.status === 'running') {
+      // Instância interrompida: posse expirada ⇒ este ciclo pode reassumir.
+      const lease = Date.parse(r.claimExpiresAt || '');
+      if (!Number.isFinite(lease) || lease <= now) return true;
+    }
   }
   return false;
 }
