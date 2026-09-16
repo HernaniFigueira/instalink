@@ -45,6 +45,8 @@ export interface CreateBookingParams {
   /** Origem do contato no CRM (agendamento | agente | …). */
   source?: string;
   now?: string;
+  /** P3: Lead de origem para vínculo direto. */
+  leadId?: string;
 }
 
 /**
@@ -138,6 +140,7 @@ export function createBookingTx(d: DB, p: CreateBookingParams): {
       .map((x: any) => String(x || '').trim().slice(0, 300)).slice(0, 3),
     updatedAt: now,
     history: [{ at: now, from: '', to: status, by: isOwner ? 'owner' : p.actor === 'agent' ? 'agent' : 'customer' }],
+    leadId: p.leadId || undefined,
   });
   d.events.push({ id: randomUUID(), businessId, type: 'booking_created', path: '', meta: { serviceId: service.id, via: p.actor }, createdAt: now });
   d.events.push({ id: randomUUID(), businessId, type: 'conversion', path: '', meta: { kind: 'booking' }, createdAt: now });
@@ -154,27 +157,56 @@ export function createBookingTx(d: DB, p: CreateBookingParams): {
     now,
   });
 
-  // Lead associado (fluxo público e assistente convertem o lead existente).
-  if (!isOwner) {
-    const lead = d.leads.find((l) =>
-      l.businessId === businessId &&
-      ((p.customer?.id && l.customerId === p.customer.id) || (digits && onlyDigits(l.phone) === digits)),
-    );
-    if (lead) {
-      lead.name = name;
-      if (p.customer?.id) lead.customerId = p.customer.id;
-      lead.lastInteraction = now;
-      lead.action = 'agendamento';
-      if (lead.status === 'new') lead.status = 'converted';
-    } else {
-      d.leads.push({
-        id: randomUUID(), businessId, customerId: p.customer?.id || '', name, phone: digits,
-        email: p.customer?.email || '', instagram: '',
-        origin: p.actor === 'agent' ? 'agente' : 'agendamento',
-        interest: service.name, action: 'agendamento', status: 'converted',
-        createdAt: now, lastInteraction: now,
-      });
+  // Lead associado (fluxo público, assistente e vínculo direto).
+  const lead = p.leadId
+    ? d.leads.find((l) => l.id === p.leadId && l.businessId === businessId)
+    : (!isOwner
+        ? d.leads.find((l) =>
+            l.businessId === businessId &&
+            ((p.customer?.id && l.customerId === p.customer.id) || (digits && onlyDigits(l.phone) === digits)),
+          )
+        : undefined);
+
+  if (lead) {
+    const prevStage = lead.stageId || (lead.status === 'new' ? 'new' : 'in_progress');
+    lead.bookingId = bookingId;
+    lead.name = name || lead.name;
+    if (p.customer?.id) lead.customerId = p.customer.id;
+    lead.lastInteraction = now;
+    lead.action = 'agendamento';
+    lead.stageId = 'scheduled';
+    if (lead.status === 'new' || lead.status === 'contacted' || lead.status === 'qualified') {
+      lead.status = 'converted';
     }
+    if (!Array.isArray(lead.stageHistory)) lead.stageHistory = [];
+    lead.stageHistory.push({
+      id: randomUUID(),
+      fromStage: prevStage,
+      toStage: 'scheduled',
+      movedBy: isOwner ? 'owner' : (p.actor === 'agent' ? 'agent' : 'customer'),
+      movedByName: isOwner ? 'Equipe' : 'Agendamento',
+      at: now,
+      note: `Agendado para ${p.date} às ${p.time}`,
+    });
+  } else if (!isOwner) {
+    d.leads.push({
+      id: randomUUID(), businessId, customerId: p.customer?.id || '', name, phone: digits,
+      email: p.customer?.email || '', instagram: '',
+      origin: p.actor === 'agent' ? 'agente' : 'agendamento',
+      interest: service.name, action: 'agendamento', status: 'converted',
+      stageId: 'scheduled',
+      bookingId,
+      createdAt: now, lastInteraction: now,
+      stageHistory: [{
+        id: randomUUID(),
+        fromStage: 'new',
+        toStage: 'scheduled',
+        movedBy: p.actor === 'agent' ? 'agent' : 'customer',
+        movedByName: 'Agendamento',
+        at: now,
+        note: `Agendado para ${p.date} às ${p.time}`,
+      }],
+    });
   }
 
   // Automação: confirmação do agendamento (mensagem na fila do WhatsApp).

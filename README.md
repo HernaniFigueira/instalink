@@ -103,3 +103,24 @@ descartável, por isso a produção exige Postgres.
 
 Troubleshooting: `POSTGRES_URL` (nome da Vercel Storage) não é lida —
 o app espera exatamente `DATABASE_URL`; copie o valor para essa chave.
+
+### Retry de webhooks no Hobby (sem Vercel Cron por minuto)
+
+O projeto está no **Vercel Hobby**, onde o cron nativo roda no máximo **1x por
+dia** (cron por minuto é recurso de plano Pro). Por isso **não há `vercel.json`
+com `crons`**: nenhuma configuração de deploy pressupõe Pro.
+
+A fila de retry de webhooks é **persistida no banco** (`pending` +
+`nextRetryAt`; tentativas 2 e 3 após ~30s e ~120s, teto de 3 tentativas) e o
+agendador é **externo ao app** — basta chamar o endpoint protegido:
+
+```bash
+# cron do servidor (VPS) ou agendador externo — 1x por minuto
+* * * * * curl -fsS -H "Authorization: Bearer $CRON_SECRET" https://SEU-DOMINIO/api/cron/webhooks >/dev/null 2>&1
+```
+
+- Sem `CRON_SECRET` o endpoint responde **503** (falha fechada); com credencial
+  errada/ausente, **401**; com o Bearer correto, **200** com contadores.
+- Nenhuma linha do motor depende da Vercel: ao migrar para VPS, o mesmo `curl`
+  no cron do servidor (ou um worker Node chamando o processador) resolve.
+- Detalhes: [`docs/webhooks-retry.md`](docs/webhooks-retry.md).

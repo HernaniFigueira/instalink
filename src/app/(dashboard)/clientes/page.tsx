@@ -12,6 +12,7 @@ import { Icon } from '@/components/icons';
 import { NewBookingSheet } from '@/components/dashboard/NewBookingSheet';
 import { AccessDenied, useAreaLoad } from '@/components/dashboard/AccessNotice';
 import { apiGet, apiSend } from '@/lib/api-client';
+import { EsteiraView } from '@/components/dashboard/EsteiraView';
 
 // Observações do cliente (P2): histórico append-only com autor e data.
 // `legacy: true` marca o registro antigo (campo único), preservado como está.
@@ -53,6 +54,7 @@ export default function ClientesPage() {
   // "Cliente e histórico" do detalhe do agendamento).
   const [q, setQ] = useState(params.get('q') || '');
   const [search, setSearch] = useState(params.get('q') || '');
+  const [view, setView] = useState<'clientes' | 'esteira'>(params.get('view') === 'esteira' ? 'esteira' : 'clientes');
   const [loaded, setLoaded] = useState(false);
   const [open, setOpen] = useState<string | null>(null);
   // Página do HISTÓRICO expandido (auditoria §18): cliente com 20, 30, 50
@@ -218,46 +220,68 @@ export default function ClientesPage() {
     <>
       <div className="flex items-center justify-between gap-3 mb-3">
         <div>
-          <h1 className="text-base font-semibold tracking-tight">Clientes</h1>
-          <p className="text-sm text-zinc-500 mt-0.5">Base única — agendamentos, histórico, conversas e relacionamento no mesmo perfil (visão 360).</p>
+          <h1 className="text-base font-semibold tracking-tight">Clientes & Esteira</h1>
+          <p className="text-sm text-zinc-500 mt-0.5">Base única — agendamentos, pipeline de oportunidades, histórico e relacionamento (visão 360).</p>
         </div>
         <span className="text-xs font-medium text-zinc-500 bg-white border border-zinc-200 rounded-md px-2.5 py-1 hidden sm:inline">{total} contatos</span>
       </div>
       {error && <p className="mb-3 text-sm font-medium bg-red-600 text-white rounded-md px-3 py-2">{error}</p>}
 
-      {/* Toolbar workspace — filtros + busca em linha, não card */}
-      <div className="bg-white border border-zinc-200 flex items-center gap-2 px-3 py-2 mb-3">
-        <div className="relative flex-1">
-          <Icon n="search" size={14} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-zinc-400" />
-          <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Buscar por nome ou WhatsApp…"
-            className="w-full bg-zinc-50 border border-zinc-200 rounded-md pl-8 pr-3 py-2 text-sm focus:outline-none focus:border-zinc-300 focus:bg-white" />
-        </div>
-        <span className="text-xs text-zinc-500 hidden sm:inline">{total} · pág {page}/{pages}</span>
+      {/* Alternador de Visão: Clientes CRM x Esteira de Leads */}
+      <div className="flex gap-1 p-1 bg-zinc-100 rounded-lg w-fit mb-3">
+        <button
+          type="button"
+          onClick={() => setView('clientes')}
+          className={cn('text-xs font-semibold px-3 py-1.5 rounded-md transition', view === 'clientes' ? 'bg-white shadow-sm border border-zinc-200 text-zinc-900' : 'text-zinc-500 hover:text-zinc-900')}
+        >
+          Lista de Clientes (CRM)
+        </button>
+        <button
+          type="button"
+          onClick={() => setView('esteira')}
+          className={cn('text-xs font-semibold px-3 py-1.5 rounded-md transition', view === 'esteira' ? 'bg-white shadow-sm border border-zinc-200 text-zinc-900' : 'text-zinc-500 hover:text-zinc-900')}
+        >
+          Esteira de Leads (Pipeline)
+        </button>
       </div>
 
-      {denied ? <AccessDenied area="Clientes" /> : !loaded ? <ListSkeleton rows={4} /> : people.length === 0 ? (
-        <div className="bg-white border border-zinc-200 text-center py-12 px-6">
-          <div className="mx-auto w-10 h-10 rounded-md bg-zinc-100 flex items-center justify-center text-zinc-400"><Icon n="users" size={20} /></div>
-          <h3 className="font-semibold text-sm mt-3">{search ? 'Ninguém encontrado' : 'Nenhum cliente ainda'}</h3>
-          <p className="text-sm text-zinc-500 mt-1">{search ? 'Tente outro termo.' : 'Agendamentos, cadastros na página e conversas criam o perfil automaticamente.'}</p>
-        </div>
+      {view === 'esteira' ? (
+        <EsteiraView />
       ) : (
-        <div className="bg-white border border-zinc-200">
-          {/* Header da tabela — denso, divisórias */}
-          <div className="hidden sm:grid grid-cols-[1fr_140px_120px_80px] gap-3 px-4 py-2 border-b border-zinc-200 bg-zinc-50 text-xs font-semibold tracking-wide uppercase text-zinc-500">
-            <span>Nome</span><span>WhatsApp</span><span>Último contato</span><span className="text-right">Ações</span>
+        <>
+          {/* Toolbar workspace — filtros + busca em linha, não card */}
+          <div className="bg-white border border-zinc-200 flex items-center gap-2 px-3 py-2 mb-3">
+            <div className="relative flex-1">
+              <Icon n="search" size={14} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-zinc-400" />
+              <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Buscar por nome ou WhatsApp…"
+                className="w-full bg-zinc-50 border border-zinc-200 rounded-md pl-8 pr-3 py-2 text-sm focus:outline-none focus:border-zinc-300 focus:bg-white" />
+            </div>
+            <span className="text-xs text-zinc-500 hidden sm:inline">{total} · pág {page}/{pages}</span>
           </div>
-          <div className="divide-y divide-zinc-100">
-            {people.map((p) => (
-              <div key={p.key} className="bg-white">
-                <button onClick={() => setOpen(open === p.key ? null : p.key)} className="w-full text-left hover:bg-zinc-50">
-                  <div className="flex sm:grid sm:grid-cols-[1fr_140px_120px_80px] items-center gap-3 px-4 py-3">
-                    <span className="flex items-center gap-3 min-w-0 flex-1">
-                      <span className="w-8 h-8 rounded-full bg-zinc-900 text-white flex items-center justify-center text-xs font-bold shrink-0">
-                        {(p.name || '?').slice(0, 1).toUpperCase()}
-                      </span>
-                      <span className="min-w-0">
-                        <span className="flex items-center gap-1.5">
+
+          {denied ? <AccessDenied area="Clientes" /> : !loaded ? <ListSkeleton rows={4} /> : people.length === 0 ? (
+            <div className="bg-white border border-zinc-200 text-center py-12 px-6">
+              <div className="mx-auto w-10 h-10 rounded-md bg-zinc-100 flex items-center justify-center text-zinc-400"><Icon n="users" size={20} /></div>
+              <h3 className="font-semibold text-sm mt-3">{search ? 'Ninguém encontrado' : 'Nenhum cliente ainda'}</h3>
+              <p className="text-sm text-zinc-500 mt-1">{search ? 'Tente outro termo.' : 'Agendamentos, cadastros na página e conversas criam o perfil automaticamente.'}</p>
+            </div>
+          ) : (
+            <div className="bg-white border border-zinc-200">
+              {/* Header da tabela — denso, divisórias */}
+              <div className="hidden sm:grid grid-cols-[1fr_140px_120px_80px] gap-3 px-4 py-2 border-b border-zinc-200 bg-zinc-50 text-xs font-semibold tracking-wide uppercase text-zinc-500">
+                <span>Nome</span><span>WhatsApp</span><span>Último contato</span><span className="text-right">Ações</span>
+              </div>
+              <div className="divide-y divide-zinc-100">
+                {people.map((p) => (
+                  <div key={p.key} className="bg-white">
+                    <button onClick={() => setOpen(open === p.key ? null : p.key)} className="w-full text-left hover:bg-zinc-50">
+                      <div className="flex sm:grid sm:grid-cols-[1fr_140px_120px_80px] items-center gap-3 px-4 py-3">
+                        <span className="flex items-center gap-3 min-w-0 flex-1">
+                          <span className="w-8 h-8 rounded-full bg-zinc-900 text-white flex items-center justify-center text-xs font-bold shrink-0">
+                            {(p.name || '?').slice(0, 1).toUpperCase()}
+                          </span>
+                          <span className="min-w-0">
+                            <span className="flex items-center gap-1.5">
                           <span className="text-sm font-medium truncate">{p.name || 'Sem nome'}</span>
                           {p.registered && <span className="text-[10px] font-semibold bg-zinc-900 text-white px-1.5 py-0.5 rounded">CAD</span>}
                         </span>
@@ -413,6 +437,8 @@ export default function ClientesPage() {
             </div>
           )}
         </div>
+      )}
+        </>
       )}
 
       {bookingFor && (

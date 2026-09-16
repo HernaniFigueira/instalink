@@ -70,6 +70,9 @@ export const PANEL_ROUTES: PanelRouteDef[] = [
   { href: '/equipe', label: 'Equipe', icon: 'shield', section: 'Administração', permission: 'equipe', area: 'equipe' },
   { href: '/recursos', label: 'Recursos', icon: 'toggle', section: 'Administração', permission: 'config', area: 'recursos' },
   { href: '/configuracoes', label: 'Configurações', icon: 'settings', section: 'Administração', permission: 'config', area: 'config' },
+  // P3 — Esteira Operacional e Integrações (rotas diretas para deep link e painel)
+  { href: '/esteira', label: 'Esteira', icon: 'clipboard', permission: 'leads', area: 'clientes', hidden: true },
+  { href: '/integracoes', label: 'Integrações', icon: 'link', permission: 'config', area: 'config', hidden: true },
   // Legado (fora da navegação; a rota e o histórico continuam preservados
   // para empresas que já recebiam pedidos)
   { href: '/pedidos', label: 'Pedidos', icon: 'receipt', modes: ['orders', 'products'], permission: 'pedidos', area: 'pedidos', hidden: true },
@@ -227,4 +230,9 @@ export const API_GUARDS: Array<{ route: string; file: string; permission: Permis
     permission: ['catalogo', 'agenda', 'clientes', 'pedidos', 'config', 'pagina'],
     area: 'catalogo',
   },
+  // P3 — esteira operacional e integrações
+  { route: '/api/integrations/keys', file: 'src/app/api/integrations/keys/route.ts', permission: 'config', area: 'config' },
+  { route: '/api/integrations/webhooks', file: 'src/app/api/integrations/webhooks/route.ts', permission: 'config', area: 'config' },
+  { route: '/api/pipeline', file: 'src/app/api/pipeline/route.ts', permission: ['leads', 'config'], area: 'clientes' },
+  { route: '/api/leads/:id/book', file: 'src/app/api/leads/[id]/book/route.ts', permission: 'agenda', area: 'agenda' },
 ];

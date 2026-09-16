@@ -24,6 +24,7 @@ import { ImageUpload } from '@/components/dashboard/ImageUpload';
 import { AccessDenied, useAreaLoad } from '@/components/dashboard/AccessNotice';
 import { apiGet, apiSend } from '@/lib/api-client';
 import { NAV_PRESETS, navTokens, navColorOf } from '@/lib/appearance';
+import { IntegracoesView } from '@/components/dashboard/IntegracoesView';
 
 export default function ConfigPage() {
   const params = useSearchParams();
@@ -33,7 +34,10 @@ export default function ConfigPage() {
   const [appearanceMsg, setAppearanceMsg] = useState('');
   const [savingAppearance, setSavingAppearance] = useState(false);
   const [saving, setSaving] = useState(false);
-  const [tab, setTab] = useState<'negocio' | 'agenda' | 'crm' | 'canais' | 'aparencia'>('negocio');
+  const initialTab = params.get('tab') as any;
+  const [tab, setTab] = useState<'negocio' | 'agenda' | 'crm' | 'canais' | 'aparencia' | 'integracoes'>(
+    ['negocio', 'agenda', 'crm', 'canais', 'aparencia', 'integracoes'].includes(initialTab) ? initialTab : 'negocio',
+  );
   const [activeModules, setActiveModules] = useState<number | null>(null);
 
   // 403 → aviso amigável (sessão preservada), nunca skeleton infinito.
@@ -110,7 +114,7 @@ export default function ConfigPage() {
       {msg && <p className="mb-3 text-sm font-medium bg-zinc-900 text-white rounded-md px-3 py-2">{msg}</p>}
 
       <div className="flex flex-wrap gap-1 p-1 bg-zinc-100 rounded-md mb-4 w-fit" role="tablist">
-        {([['negocio', 'Negócio'], ['agenda', 'Agenda'], ['crm', 'CRM'], ['canais', 'Canais'], ['aparencia', 'Aparência']] as const).map(([id, label]) => (
+        {([['negocio', 'Negócio'], ['agenda', 'Agenda'], ['crm', 'CRM'], ['canais', 'Canais'], ['aparencia', 'Aparência'], ['integracoes', 'Integrações']] as const).map(([id, label]) => (
           <button key={id} role="tab" aria-selected={tab === id} onClick={() => setTab(id)} className={cn('text-xs font-medium px-3 py-1.5 rounded', tab === id ? 'bg-white shadow-sm border border-zinc-200 text-zinc-900' : 'text-zinc-500')}>
             {label}
           </button>
@@ -299,6 +303,10 @@ export default function ConfigPage() {
               <Link href={`/equipe?b=${businessId}`} className="text-xs font-semibold bg-white border border-zinc-200 px-3 py-2 rounded-md text-center">Equipe</Link>
             </div>
           </section>
+        )}
+
+        {tab === 'integracoes' && (
+          <IntegracoesView />
         )}
       </div>
     </>

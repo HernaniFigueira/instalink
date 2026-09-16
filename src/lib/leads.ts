@@ -15,6 +15,12 @@ export const LEAD_ORIGIN_LABELS: Record<string, string> = {
   whatsapp_click: 'WhatsApp',
   pagina: 'Página pública',
   site: 'Página pública',
+  public_page: 'Página pública',
+  external_site: 'Site externo',
+  site_externo: 'Site externo',
+  landing_page: 'Landing page',
+  api: 'API',
+  widget: 'Widget',
   agendamento: 'Página pública',
   booking_cta: 'Página pública',
   formulario: 'Formulário',
@@ -32,7 +38,7 @@ export const LEAD_ORIGIN_LABELS: Record<string, string> = {
 
 /** Origens conhecidas na ordem canônica da visão de Resultados. */
 export const LEAD_ORIGIN_ORDER: string[] = [
-  'Instagram', 'WhatsApp', 'Página pública', 'Assistente', 'Formulário',
+  'Instagram', 'WhatsApp', 'Página pública', 'Site externo', 'Landing page', 'API', 'Widget', 'Assistente', 'Formulário',
   'Orçamento', 'Pedido', 'Indicação', 'Carrinho', 'Automação', 'Manual', 'Outro',
 ];
 

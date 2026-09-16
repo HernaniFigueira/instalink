@@ -13,6 +13,7 @@
     "retention": "node scripts/retention.mjs",
     "smoke": "node scripts/smoke.mjs",
     "smoke:ux": "node scripts/smoke-ux.mjs",
+    "smoke:p3": "node scripts/smoke-p3.mjs",
     "master": "node scripts/master.mjs"
   },
   "dependencies": {
