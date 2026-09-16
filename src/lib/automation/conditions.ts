@@ -212,7 +212,7 @@ function evaluateField(
 }
 
 export interface EvaluateOptions {
-  /** "Agora" injetável (testes) — hoje só `today.*`/`now` dependem dele. */
+  /** Reservado para condições relativas ao dia do produto (`today.*` no P5). */
   now?: Date;
 }
 

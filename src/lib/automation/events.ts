@@ -4,7 +4,7 @@
 // Ponto ÚNICO onde um evento do sistema se transforma em execução de
 // automação. Chamado de dentro dos serviços oficiais (ingestLead,
 // moveLeadStage, assignLead, createBookingTx, applyBookingStatusTx) para que
-// TODO caminho que produz o evento dispare a automação — sem que cada rota
+// qualquer caminho que produz o evento dispare a automação — sem que cada rota
 // precise lembrar disso (e sem segundo mecanismo de evento).
 //
 // O que este módulo faz:
