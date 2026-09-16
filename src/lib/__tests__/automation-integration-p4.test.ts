@@ -26,7 +26,7 @@ import { TEMP_DB_FILE } from './helpers/temp-db';
 import { createSession } from '../auth';
 import { createBookingTx } from '../booking-create';
 import { addLeadNote, assignLead, ingestLead, moveLeadStage } from '../pipeline';
-import { applyBookingStatusTx } from '../booking-ops';
+import { applyBookingStatusTx } from '../booking-status';
 import { createTaskTx, openTasks, summarizeTasks } from '../automation/tasks';
 import { limitsFor } from '../automation/capabilities';
 import { stepAutomationRun } from '../automation/executor';

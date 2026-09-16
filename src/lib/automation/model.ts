@@ -43,9 +43,9 @@ export const AUTOMATION_EVENT_DEFS: AutomationEventDef[] = [
   { id: 'customer.created', label: 'Cliente entrou na base', hint: 'Contato novo no CRM da unidade.', entity: 'customer', source: 'lib/pipeline.ts · ingestLead' },
   { id: 'customer.updated', label: 'Cliente atualizado', hint: 'Dados do contato mudaram.', entity: 'customer', source: 'lib/pipeline.ts · ingestLead' },
   { id: 'booking.created', label: 'Agendamento criado', hint: 'Reserva registrada (qualquer caminho).', entity: 'booking', source: 'lib/booking-create.ts · createBookingTx' },
-  { id: 'booking.confirmed', label: 'Agendamento confirmado', hint: 'pending → confirmed.', entity: 'booking', source: 'lib/booking-ops.ts · applyBookingStatusTx' },
-  { id: 'booking.cancelled', label: 'Agendamento cancelado', hint: 'Cancelado pelo negócio ou pelo cliente.', entity: 'booking', source: 'lib/booking-ops.ts · applyBookingStatusTx' },
-  { id: 'booking.completed', label: 'Atendimento concluído', hint: 'Serviço finalizado.', entity: 'booking', source: 'lib/booking-ops.ts · applyBookingStatusTx' },
+  { id: 'booking.confirmed', label: 'Agendamento confirmado', hint: 'pending → confirmed.', entity: 'booking', source: 'lib/booking-status.ts · applyBookingStatusTx' },
+  { id: 'booking.cancelled', label: 'Agendamento cancelado', hint: 'Cancelado pelo negócio ou pelo cliente.', entity: 'booking', source: 'lib/booking-status.ts · applyBookingStatusTx' },
+  { id: 'booking.completed', label: 'Atendimento concluído', hint: 'Serviço finalizado.', entity: 'booking', source: 'lib/booking-status.ts · applyBookingStatusTx' },
 ];
 
 export function automationEventDef(id: unknown): AutomationEventDef | undefined {
@@ -295,7 +295,7 @@ export const AUTOMATION_ACTION_DEFS: AutomationActionDef[] = [
   {
     type: 'cancel_booking', label: 'Cancelar agendamento', short: 'Cancelar agendamento',
     hint: 'Cancela pelo fluxo oficial (histórico + automações de mensagem do P3).',
-    delegate: 'lib/booking-ops.ts · applyBookingStatusTx',
+    delegate: 'lib/booking-status.ts · applyBookingStatusTx',
     requires: 'automation.advanced',
     fields: [{ key: 'reason', label: 'Motivo', type: 'text', template: true, max: 300 }],
     needs: { booking: true },

@@ -316,11 +316,6 @@ export function ingestLead(db: DB, input: IngestLeadInput): {
 
     existing.lastInteraction = now;
 
-    // P4 — gatilho de atualização (a criação é tratada no ramo de novo lead).
-    emitLeadIngestEvents(db, business.id, existing, {
-      isNew: false, contact, contactExistedBefore, origin: input.origin, now,
-    });
-
     // Se veio mensagem ou nota, adiciona ao histórico de observações
     if (input.message) {
       if (!Array.isArray(existing.notes)) existing.notes = [];
@@ -332,6 +327,12 @@ export function ingestLead(db: DB, input: IngestLeadInput): {
         text: input.message.slice(0, 1000),
       });
     }
+
+    // P4 — gatilho de atualização, DEPOIS de aplicar as mudanças (a fotografia
+    // do contexto é o estado real; a criação é tratada no ramo de novo lead).
+    emitLeadIngestEvents(db, business.id, existing, {
+      isNew: false, contact, contactExistedBefore, origin: input.origin, now,
+    });
 
     return { lead: existing, isNew: false, contact };
   }

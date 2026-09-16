@@ -463,20 +463,35 @@ export async function updateDB<T>(fn: (db: DB) => T): Promise<Awaited<T>> {
     const result: Awaited<T> = await fn(db); // callback lançou? nada é escrito
     prune(db);
     await writeDB(db);
-    maybeRunAutomations(); // P4 — melhor esforço, depois da gravação
+    // P4 — só há trabalho quando existe execução na fila: checamos o documento
+    // que acabamos de gravar (sem leitura extra) e agendamos o motor.
+    if (hasQueuedAutomations(db)) maybeRunAutomations();
     return result;
   };
   return withWriteLock(run);
 }
 
 // ── P4: gancho de execução imediata (melhor esforço, nunca bloqueante) ──
-// Toda mutação do sistema passa por aqui; então, se algum evento de automação
-// ficou na fila, o motor processa na hora SEM o usuário esperar um cron. É
-// deliberadamente frágil-por-fora: qualquer erro é ignorado, o gancho nunca
-// adiciona latência ao `await` do chamador e o agendador
-// (/api/cron/automations) refaz o que ficou para trás. Desligável por
-// AUTOMATION_INLINE=0 (testes determinísticos) e não reentrante.
+// Se uma mutação deixou execução na fila, o motor processa na hora — o usuário
+// não espera o cron, e a rota não precisa conhecer automação nenhuma (um ponto
+// de acionamento só). Custos evitados de propósito:
+//   • nenhuma leitura extra quando não há fila (checagem no objeto já gravado);
+//   • nenhum `await` no caminho do pedido (agendado, com erro engolido);
+//   • nenhuma recursão (flag de execução ativa) e nenhum efeito no caminho de
+//     escrita do PRÓPRIO motor (`updateDBWithCas` não agendou nada);
+//   • desligável por AUTOMATION_INLINE=0 (testes determinísticos).
+// A RETOMADA de esperas continua sendo do agendador (/api/cron/automations):
+// o que vence no futuro não pode depender de um request aberto agora.
 let automationDrainActive = false;
+
+/** Alguma execução esperando processamento AGORA? (fila = 'queued') */
+function hasQueuedAutomations(db: DB): boolean {
+  if (!Array.isArray(db.automationRuns) || db.automationRuns.length === 0) return false;
+  for (let i = db.automationRuns.length - 1; i >= 0; i--) {
+    if (db.automationRuns[i].status === 'queued') return true;
+  }
+  return false;
+}
 
 function maybeRunAutomations(): void {
   if (automationDrainActive) return;

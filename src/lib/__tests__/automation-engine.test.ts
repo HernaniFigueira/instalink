@@ -19,7 +19,7 @@ import {
 } from '../automation/executor';
 import { evaluateCondition, renderTemplate, resolveFieldPath } from '../automation/conditions';
 import { limitsFor } from '../automation/capabilities';
-import { applyBookingStatusTx } from '../booking-ops';
+import { applyBookingStatusTx } from '../booking-status';
 import { getBusinessPipeline, moveLeadStage } from '../pipeline';
 import { openTasks } from '../automation/tasks';
 import { todayISO } from '../tz';

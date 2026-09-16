@@ -319,8 +319,3 @@ export function emitAutomationEvent(db: DB, input: EmitInput): EmitResult {
 
   return result;
 }
-
-/** Conveniência para rotas/scripts: existe alguma automação escutando isto? */
-export function hasListenersFor(db: DB, businessId: string, event: AutomationEventId): boolean {
-  return automationsForEvent(db, businessId, event).length > 0;
-}

@@ -5,9 +5,10 @@ import { canAccessBooking, requireBusiness, scopeBookings, scopeInfo } from '@/l
 import { customerFromRequest } from '@/lib/customer-auth';
 import { isFeatureEnabled, canBook as canBookModule } from '@/lib/features';
 import {
-  applyBookingStatusTx, bookingDuration, needsClosure, rescheduleDecision,
+  bookingDuration, needsClosure, rescheduleDecision,
   rescheduleForwardNote, rescheduleNote,
 } from '@/lib/booking-ops';
+import { applyBookingStatusTx } from '@/lib/booking-status';
 import { computeSlots } from '@/lib/slots';
 import { bookingMode } from '@/lib/booking';
 import { createBookingTx } from '@/lib/booking-create';
@@ -369,7 +370,7 @@ export async function PATCH(req: NextRequest) {
     }
 
     // ── Transição de status (fechamento operacional ou mudança normal) ──
-    // P4: a regra está na FUNÇÃO OFICIAL (lib/booking-ops.ts), que a automação
+    // P4: a regra está na FUNÇÃO OFICIAL (lib/booking-status.ts), que a automação
     // também usa — máquina de estados, histórico e mensagens do P3 num só lugar.
     const to = body.status as BookingStatus;
     const applied = await updateDB((d) => applyBookingStatusTx(d, {

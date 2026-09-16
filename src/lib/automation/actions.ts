@@ -11,7 +11,7 @@
 //   atualizar cliente  → lib/contacts.ts · addContactNote / upsertContact
 //   tarefa             → lib/automation/tasks.ts · createTaskTx
 //   agendar            → lib/pipeline.ts · bookLead → createBookingTx (slot!)
-//   cancelar           → lib/booking-ops.ts · applyBookingStatusTx (máquina de estados)
+//   cancelar           → lib/booking-status.ts · applyBookingStatusTx (máquina de estados)
 //   webhook            → lib/webhooks.ts · dispatchWebhook  (HMAC + retry do P3)
 //
 // Consequências:
@@ -21,7 +21,6 @@
 //   • idempotência: ação já aplicada é reconhecida e PULADA (a retomada de
 //     uma execução interrompida não duplica efeito);
 //   • erro em ação não corrompe estado: o executor grava `failed` + mensagem.
-import { randomUUID } from 'node:crypto';
 import type {
   Automation, AutomationActionType, AutomationRun, Business, DB,
 } from '../types';
@@ -31,10 +30,10 @@ import {
   type LeadActor,
 } from '../pipeline';
 import { addContactNote, findContact } from '../contacts';
-import { applyBookingStatusTx } from '../booking-ops';
+import { applyBookingStatusTx } from '../booking-status';
 import { dispatchWebhook } from '../webhooks';
 import { createTaskTx } from './tasks';
-import { renderParams, resolveFieldPath, hasValue } from './conditions';
+import { renderParams } from './conditions';
 import { addDaysISO, todayISO } from '../tz';
 import { automationActionDef } from './model';
 
@@ -135,19 +134,14 @@ function missing(what: string): ActionResult {
 }
 
 /**
- * Executa UMA ação do nó. Sincronamente dentro do `db` recebido (o executor
- * está dentro de uma transação) — exceto o webhook, que é o único I/O e já é
- * tratado pelo P3 como tentativa imediata + fila.
+ * Executa UMA ação do nó. Sincronamente sobre o `db` recebido (o executor está
+ * dentro de uma transação) — exceto o webhook, que é o único I/O e já é
+ * tratado pelo P3 como tentativa imediata + fila persistida.
+ * `params.__type` vem do nó (fora do `params` validado, para nenhum template
+ * poder sobrescrever a ação a ser executada).
  */
 export async function executeAction(input: ActionInput): Promise<ActionResult> {
-  const type = input.params?.__type as AutomationActionType | undefined;
-  void type;
-  return runAction(input);
-}
-
-/** `type` vem do nó; separado para manter o switch legível e testável. */
-export async function runAction(input: ActionInput & { type?: AutomationActionType }): Promise<ActionResult> {
-  const actionType = input.type || (input.params?.__type as AutomationActionType | undefined);
+  const actionType = input.params?.__type as AutomationActionType | undefined;
   const def = automationActionDef(actionType);
   if (!def) return { ok: false, summary: '', error: `ação desconhecida: ${actionType || '(vazia)'}` };
   const { db, business } = input;
@@ -426,14 +420,3 @@ export function prepareActionParams(nodeAction: { type: AutomationActionType; pa
   return { ...rendered, __type: nodeAction.type };
 }
 
-/** Valor de contexto para validações rápidas da UI (ação/condição). */
-export function contextValue(run: AutomationRun, path: string): string {
-  const resolved = resolveFieldPath(run.context, path);
-  if (!hasValue(resolved.value)) return '';
-  return String(resolved.value).slice(0, 120);
-}
-
-/** Id da "entrega" de uma ação (usado em detalhes de diagnóstico). */
-export function newTraceId(): string {
-  return randomUUID().slice(0, 12);
-}

@@ -8,7 +8,7 @@ import { onlyDigits } from '@/lib/utils';
 import { LEAD_FLOW, canTransition } from '@/lib/status';
 import { rateLimit, ipFrom } from '@/lib/rate-limit';
 import type { DB, LeadStatus } from '@/lib/types';
-import { ingestLead, getBusinessPipeline, moveLeadStage, assignLead, addLeadNote } from '@/lib/pipeline';
+import { ingestLead, getBusinessPipeline, moveLeadStage, assignLead, addLeadNote, updateLeadFields } from '@/lib/pipeline';
 import { dispatchWebhook } from '@/lib/webhooks';
 
 function err(message: string, status: number): Error {
@@ -208,10 +208,20 @@ export async function PATCH(req: NextRequest) {
         });
       }
 
-      if (priority) l.priority = priority;
-      if (interest) l.interest = String(interest).slice(0, 500);
+      // Campos livres do lead têm UM atualizador oficial (o mesmo que a
+      // automação chama) — a rota não escreve esses campos por conta própria.
+      if (priority || interest) {
+        updateLeadFields(d, {
+          businessId,
+          leadId: l.id,
+          patch: {
+            ...(priority ? { priority } : {}),
+            ...(interest ? { interest } : {}),
+          },
+          actor: { id: actor.id, name: actor.name, role: actor.role, type: 'user' },
+        });
+      }
 
-      l.lastInteraction = new Date().toISOString();
       updatedLead = l;
     });
 

@@ -8,7 +8,7 @@
 import type { Automation, AutomationRun, DB } from '../types';
 import {
   analyzeGraph, automationActionDef, automationEventLabel, automationFieldLabel,
-  graphToLinear, isTerminalStatus, nodeLabel, type LinearAutomation,
+  graphToLinear, isTerminalStatus, type LinearAutomation,
 } from './model';
 import { describeCondition } from './conditions';
 
@@ -130,11 +130,4 @@ export function automationRunView(run: AutomationRun): AutomationRunView {
     // de webhook, chave de API ou hash de senha existe ali.
     context: run.context || {},
   };
-}
-
-/** Rótulo de um nó no histórico (legível sem precisar do grafo completo). */
-export function runNodeLabel(automation: Automation | undefined, nodeId: string): string {
-  if (!nodeId) return 'execução';
-  const node = automation?.nodes?.find((n) => n.id === nodeId);
-  return node ? nodeLabel(node) : nodeId;
 }

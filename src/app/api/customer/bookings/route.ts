@@ -5,7 +5,7 @@ import { isFeatureEnabled } from '@/lib/features';
 import { onlyDigits, timeToMin } from '@/lib/utils';
 import { todayISO, nowHM, weekdayOf, addDaysISO, isValidDateISO } from '@/lib/tz';
 import { computeSlots } from '@/lib/slots';
-import { applyBookingStatusTx } from '@/lib/booking-ops';
+import { applyBookingStatusTx } from '@/lib/booking-status';
 import type { DB } from '@/lib/types';
 
 function err(message: string, status: number): Error {
