@@ -405,7 +405,7 @@ export async function retryWebhookDelivery(
 }
 
 // ═══════════════════════════════════════════════════════════════
-// CONSUMIDOR AUTOMÁTICO DA FILA DE RETRY (CRON NA VERCEL)
+// CONSUMIDOR AUTOMÁTICO DA FILA DE RETRY (AGNÓSTICO DE SCHEDULER)
 // ═══════════════════════════════════════════════════════════════
 // Até aqui a tentativa 1 acontecia junto do evento e as tentativas 2 e 3
 // ficavam agendadas (`status: 'pending'` + `nextRetryAt`) SEM ninguém para
@@ -413,26 +413,31 @@ export async function retryWebhookDelivery(
 //
 // Este é o elo que faltava (nenhuma regra de retry nova foi criada aqui):
 //
-//   Vercel Cron → GET /api/cron/webhooks (Authorization: Bearer CRON_SECRET)
+//   scheduler (qualquer) → GET /api/cron/webhooks (Authorization: Bearer CRON_SECRET)
 //        ↓
 //   processPendingWebhookDeliveries()
 //        ↓ 1. reivindica (claim CAS) as entregas com nextRetryAt vencido
 //        ↓ 2. executa a tentativa — MESMO eventId, mesma assinatura HMAC
 //        ↓ 3. grava: success | pending (próximo backoff) | failed
 //
+// Nada aqui depende de plataforma: o processador só toca o banco atual. Quem
+// dispara pode ser o Vercel Cron, um cron de VPS, outra função serverless, um
+// agendador externo ou uma chamada manual de operação. O intervalo é escolha
+// do ambiente — o motor não assume frequência nenhuma.
+//
 // Regras preservadas do P3: tentativa 1 imediata no evento, tentativa 2 após
 // ~30s, tentativa 3 após ~120s, teto de 3 tentativas, retryable → reagenda,
 // erro definitivo (4xx) → failed. Nenhum retry infinito.
 //
 // CONCORRÊNCIA (a mesma entrega nunca sai duas vezes na mesma tentativa):
-// como o cron pode sobrepor execuções e a Vercel pode rodar mais de uma
-// instância da função, a reivindicação é gravada com CAS (`updateDBWithCas`)
-// e vale por um lease curto. Uma execução só tenta entregar o que conseguiu
-// reivindicar e só grava o resultado enquanto a posse ainda for dela. Se a
-// função for interrompida no meio, o lease expira e a entrega volta para o
-// próximo ciclo — e, mesmo num reenvio, o receptor idempotente deduplica pelo
-// MESMO eventId. Sem Redis, sem BullMQ, sem serviço externo: o banco atual
-// (documento JSONB / arquivo local) é o árbitro.
+// o agendador pode sobrepor execuções e o ambiente pode rodar mais de uma
+// instância da função. Por isso a reivindicação é gravada com CAS
+// (`updateDBWithCas`) e vale por um lease curto. Uma execução só tenta entregar
+// o que conseguiu reivindicar e só grava o resultado enquanto a posse ainda for
+// dela. Se a função for interrompida no meio, o lease expira e a entrega volta
+// para o próximo ciclo — e, mesmo num reenvio, o receptor idempotente
+// deduplica pelo MESMO eventId. Sem Redis, sem BullMQ, sem serviço externo: o
+// banco atual (documento JSONB / arquivo local) é o árbitro.
 
 /** Validade (lease) da posse de uma entrega por uma execução do consumidor. */
 export const WEBHOOK_RETRY_CLAIM_LEASE_MS = 45_000;

@@ -8,11 +8,14 @@
 // - Pipeline configurável e transições
 // - Entrega para secretária e conversão em agendamento
 // - Widget JS e página /agendar
-// - Consumidor automático da fila de retry (cron) e retry ponta a ponta
+// - Fila de retry com consumidor automático (disparo agnóstico de scheduler)
 //
 // Para validar o CONSUMIDOR AUTOMÁTICO (seções 16–18) defina CRON_SECRET no
 // servidor E aqui (o mesmo valor). Sem CRON_SECRET a seção 16 apenas confirma
 // que o endpoint está protegido (401/503) e as seções 17–18 são puladas.
+//
+// O disparo aqui é feito por HTTP, exatamente como faria o cron da VPS ou um
+// agendador externo — o motor não depende de Vercel Cron.
 
 import assert from 'node:assert/strict';
 import http from 'node:http';
@@ -267,7 +270,7 @@ assert.equal(agendarRes.status, 200);
 console.log('✓ Página de agendamento embeddable (/agendar) respondeu 200 OK');
 
 // ═══════════════════════════════════════════════════════════════
-// 16. Consumidor automático da fila de retry — rota SEMPRE protegida
+// 16. Consumidor automático da fila de retry — endpoint SEMPRE protegido
 // ═══════════════════════════════════════════════════════════════
 const cronAnonymous = await req('/api/cron/webhooks');
 assert.ok(
@@ -282,7 +285,7 @@ const cronDeniedBody = JSON.stringify(cronAnonymous.data) + JSON.stringify(cronW
 assert.ok(!cronDeniedBody.includes('whsec'), 'Resposta negada não pode conter segredo');
 assert.ok(!cronDeniedBody.includes(generatedWhSecret), 'Resposta negada não pode conter o segredo do webhook');
 
-console.log('✓ Consumidor de retry protegido: sem CRON_SECRET válido o endpoint nunca executa a fila');
+console.log('✓ Disparo do consumidor protegido: sem CRON_SECRET válido o endpoint nunca executa a fila');
 
 if (!CRON_SECRET) {
   console.log('⚠ CRON_SECRET não definido neste ambiente — fluxo automático de retry não pôde ser acionado aqui.');
@@ -298,7 +301,7 @@ if (CRON_SECRET) {
   assert.ok(typeof cronOk.data.delivered === 'number');
   assert.ok(!JSON.stringify(cronOk.data).includes('whsec'), 'Resposta do cron não pode conter segredo');
 
-  console.log(`✓ Cron autenticado executou o processador (processed=${cronOk.data.processed}, failed=${cronOk.data.failed})`);
+  console.log(`✓ Disparo autenticado executou o processador (processed=${cronOk.data.processed}, failed=${cronOk.data.failed})`);
 
   // ── Receptor LOCAL de webhooks (prova a entrega real das tentativas) ──
   const hookLog = [];

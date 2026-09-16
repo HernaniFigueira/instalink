@@ -1,19 +1,20 @@
 // ═══════════════════════════════════════════════════════════════
-// AUTENTICAÇÃO DE TAREFAS AGENDADAS (CRON NATIVO DA VERCEL)
+// AUTENTICAÇÃO DAS TAREFAS AGENDADAS (SCHEDULER EXTERNO)
 // ═══════════════════════════════════════════════════════════════
-// Reutiliza o padrão nativo da Vercel, sem inventar segredo novo:
+// Padrão `CRON_SECRET` (o mesmo usado por agendadores hospedados, incluindo o
+// cron nativo da Vercel, sem inventar segredo novo):
 //
-//   1. `vercel.json` registra o cron (`crons[].path`);
-//   2. a variável CRON_SECRET é definida no projeto;
-//   3. em cada disparo a Vercel envia
+//   1. a variável CRON_SECRET é definida no ambiente do projeto;
+//   2. o agendador (cron da VPS, agendador externo, Vercel Cron ou operação
+//      manual) faz GET no endpoint com
 //        Authorization: Bearer <CRON_SECRET>
-//      na requisição GET do agendador;
-//   4. a rota compara o valor recebido em TEMPO CONSTANTE e só executa a
+//   3. a rota compara o valor recebido em TEMPO CONSTANTE e só executa a
 //      fila quando confere.
 //
-// FALHA FECHADA: sem CRON_SECRET no ambiente o consumidor fica DESLIGADO
-// (503). Nunca existe um endpoint de fila aberto — nem "só para testar".
-// O segredo nunca é devolvido, logado ou citado em mensagens de erro.
+// O app não assume QUAL agendador é: só exige a credencial correta. FALHA
+// FECHADA: sem CRON_SECRET no ambiente o consumidor fica DESLIGADO (503).
+// Nunca existe um endpoint de fila aberto — nem "só para testar". O segredo
+// nunca é devolvido, logado ou citado em mensagens de erro.
 
 import { timingSafeEqual } from 'node:crypto';
 

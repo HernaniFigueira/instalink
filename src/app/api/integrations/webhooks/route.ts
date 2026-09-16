@@ -15,7 +15,7 @@ export async function GET(req: NextRequest) {
   const rawWebhooks = (guard.db.webhooks || []).filter((w) => w.businessId === businessId);
   const webhooks = rawWebhooks.map(sanitizeWebhookForDisplay);
 
-  // Entregas: campos internos da fila (posse do consumidor/cron) não saem daqui.
+  // Entregas: campos internos da fila (posse do consumidor automático) não saem daqui.
   const deliveries = (guard.db.webhookDeliveries || [])
     .filter((d) => d.businessId === businessId)
     .slice(-30)

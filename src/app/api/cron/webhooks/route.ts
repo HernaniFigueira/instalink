@@ -3,16 +3,25 @@ import { processPendingWebhookDeliveries, summarizeWebhookRetryRun } from '@/lib
 import { verifyCronAuth } from '@/lib/cron-auth';
 
 // ═══════════════════════════════════════════════════════════════
-// CONSUMIDOR AUTOMÁTICO DA FILA DE RETRY DE WEBHOOKS
+// DISPARO AUTOMÁTICO DA FILA DE RETRY DE WEBHOOKS
 // ═══════════════════════════════════════════════════════════════
-// Acionado pelo CRON NATIVO da Vercel (ver `crons` em vercel.json, a cada
-// minuto), que envia `Authorization: Bearer <CRON_SECRET>`:
+// Este endpoint é APENAS um gatilho HTTP. Ele não conhece (nem depende de)
+// nenhum agendador: quem o chama é o `scheduler` escolhido no ambiente.
 //
-//   Vercel Cron → GET /api/cron/webhooks → processPendingWebhookDeliveries()
+//   scheduler (qualquer um) → GET /api/cron/webhooks → processPendingWebhookDeliveries()
 //
-// Esta rota NÃO contém regra de retry: ela autentica, chama o processador
-// central (src/lib/webhooks.ts) e devolve apenas contadores operacionais.
-// Nenhum segredo, URL, payload ou assinatura sai na resposta.
+//   - Vercel Cron            (`crons` no painel do projeto; plano Pro permite
+//                             a cada minuto — no Hobby o mínimo é diário);
+//   - cron do servidor (VPS) `* * * * * curl -H "Authorization: Bearer …" https://…/api/cron/webhooks`;
+//   - GitHub Actions / qualquer agendador externo com `curl`;
+//   - disparo manual de operação.
+//
+// O motor de retry (src/lib/webhooks.ts) NÃO importa nada específico de
+// plataforma: ele apenas lê o banco, reivindica as entregas vencidas e grava o
+// resultado. Trocar de ambiente muda só QUEM chama esta rota.
+//
+// A rota não contém regra de retry: autentica, delega e devolve contadores
+// operacionais. Nenhum segredo, URL, payload ou assinatura sai na resposta.
 //
 // Sem CRON_SECRET configurado a rota responde 503 (desativada) — nunca fica
 // aberta. Para disparar manualmente (ops), use o mesmo header:
