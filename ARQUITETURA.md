@@ -11,7 +11,8 @@
 | Multi-tenancy | `src/lib/tenant.ts` — toda query escopada por `businessId` + dono | RLS no Supabase |
 | Agenda | Motor universal `src/lib/slots.ts` | — |
 | IA | Concierge por regras sobre dados reais (`src/lib/concierge.ts`) | LLM com grounding nos mesmos dados |
-| Automações | Motor de grafo persistido no mesmo documento (`src/lib/automation/`) — orquestra os serviços oficiais | Editor visual de grafo, geração por IA (P5), canais (P6) |
+| Automações | Motor de grafo persistido no mesmo documento (`src/lib/automation/`) — orquestra os serviços oficiais | Editor visual de grafo, canais (P6) |
+| IA | Camada P5 (`src/lib/ai/`) interpreta intenção → plano → grafo do P4; publicação só após aprovação humana | LLM com o mesmo contrato (hoje o planner é determinístico) |
 | QR | `qrcode` server-side (`/api/qr`) | — |
 
 ## Por que JSON no MVD?
@@ -249,7 +250,8 @@ Detalhes, contratos e a tabela de alterações em P0–P3: [`docs/automations-p4
 
 Billing/planos, domínio próprio, WhatsApp API, pagamentos online, delivery com
 roteirização, estoque, fidelidade, CRM avançado, PWA instalável, app nativo. No P4
-ficam explicitamente de fora: P5 (IA/agente), P6 (canais externos), `wait_for_event`
-por evento de canal e o editor visual de grafo.
+ficam explicitamente de fora: P6 (canais externos), `wait_for_event`
+por evento de canal e o editor visual de grafo. O P5 (IA/agente) vive em
+`src/lib/ai/` **por cima** do P4: a IA não executa, o motor de automações executa.
 Todos têm ponto de extensão documentado no código (`Order` separado de
 pagamento, `modes` por negócio, eventos para analytics).

@@ -251,22 +251,24 @@ describe('P4.10 — projeção linear ⇄ grafo', () => {
 });
 
 describe('P4.13 — capacidades (sem plano no código)', () => {
-  it('padrão: automações ligadas; IA e canais ainda não existem', () => {
+  it('padrão: automações e IA ligadas; canais ainda não existem (P6)', () => {
     const state = capabilityStateFor(null, {} as NodeJS.ProcessEnv);
     expect(state['automation.basic']).toBe(true);
     expect(state['automation.advanced']).toBe(true);
-    expect(state['automation.ai']).toBe(false);
+    expect(state['automation.ai']).toBe(true);
     expect(state['channel.whatsapp']).toBe(false);
     expect(CAPABILITIES.every((c) => c.available || !c.default)).toBe(true);
   });
 
   it('override por unidade vence o ambiente; flag sem motor não libera nada', () => {
-    const env = { AUTOMATION_CAPS: 'automation.advanced=0,automation.ai=1' } as unknown as NodeJS.ProcessEnv;
+    const env = { AUTOMATION_CAPS: 'automation.advanced=0,channel.whatsapp=1' } as unknown as NodeJS.ProcessEnv;
     expect(hasCapability(null, 'automation.advanced', env)).toBe(false);
-    // 'automation.ai' ligada no ambiente continua indisponível (não existe motor).
-    expect(hasCapability(null, 'automation.ai', env)).toBe(false);
+    // P5 existe: automation.ai liga por padrão. P6 ainda não: channel.* não libera.
+    expect(hasCapability(null, 'automation.ai', env)).toBe(true);
+    expect(hasCapability(null, 'channel.whatsapp', env)).toBe(false);
     expect(hasCapability({ capabilityFlags: { 'automation.advanced': true } }, 'automation.advanced', env)).toBe(true);
     expect(hasCapability({ capabilityFlags: { 'automation.basic': false } }, 'automation.basic', {} as NodeJS.ProcessEnv)).toBe(false);
+    expect(hasCapability({ capabilityFlags: { 'automation.ai': false } }, 'automation.ai', {} as NodeJS.ProcessEnv)).toBe(false);
   });
 
   it('tetos vêm da capacidade e a ação avançada é barrada na validação', () => {

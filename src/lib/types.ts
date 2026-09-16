@@ -673,6 +673,8 @@ export interface DB {
   automations: Automation[];
   automationRuns: AutomationRun[];
   tasks: Task[];
+  // ── P5: propostas de automação geradas por IA (nunca executam sozinhas) ──
+  aiProposals: AiProposal[];
 }
 
 // ═══════════════════════════════════════════════════════════════
@@ -1058,6 +1060,54 @@ export interface Task {
 }
 
 // ═══════════════════════════════════════════════════════════════
+// P5 — PROPOSTA DE AUTOMAÇÃO GERADA POR IA
+// ═══════════════════════════════════════════════════════════════
+// A IA NÃO executa. O plano é a projeção LINEAR do P4 (mesmo contrato do
+// editor). Publicar grava uma `Automation` canônica; o executor do P4 é
+// quem roda depois da aprovação humana. Texto livre nunca vira código.
+
+export interface AiPlanStep {
+  kind: 'action' | 'wait' | 'condition';
+  label?: string;
+  action?: { type: AutomationActionType; params: Record<string, any> };
+  wait?: AutomationWaitConfig;
+  condition?: AutomationCondition;
+}
+
+export interface AiPlan {
+  name: string;
+  description: string;
+  prompt: string;
+  event: AutomationEventId;
+  condition: AutomationCondition | null;
+  steps: AiPlanStep[];
+  elseSteps: AiPlanStep[];
+  settings: AutomationSettings;
+  /** 0..1 — diagnóstico; nunca decide publicação. */
+  confidence: number;
+  assumptions: string[];
+  unresolved: string[];
+}
+
+export type AiProposalStatus = 'draft' | 'approved' | 'published' | 'cancelled';
+
+export interface AiProposal {
+  id: ID;
+  businessId: ID;
+  status: AiProposalStatus;
+  prompt: string;
+  plan: AiPlan;
+  nodes: AutomationNode[];
+  edges: AutomationEdge[];
+  validation: { ok: boolean; errors: string[]; warnings: string[] };
+  automationId?: string;
+  createdByUserId?: string;
+  createdAt: string;
+  updatedAt: string;
+  publishedAt?: string;
+}
+
+// ═══════════════════════════════════════════════════════════════
 // EQUIPE — usuários internos da empresa (multi-tenant real)
 // Um User pode ser membro de várias empresas com papéis diferentes.
 // ═══════════════════════════════════════════════════════════════
@@ -1278,7 +1328,10 @@ export type AuditAction =
   // P4 — motor de automações e tarefas
   | 'automation.created' | 'automation.updated' | 'automation.deleted'
   | 'automation.toggled' | 'automation.duplicated'
-  | 'automation.run_cancelled' | 'task.created' | 'task.completed';
+  | 'automation.run_cancelled' | 'task.created' | 'task.completed'
+  // P5 — propostas de IA (a publicação cria automation.created)
+  | 'ai.proposal_created' | 'ai.proposal_updated' | 'ai.proposal_approved'
+  | 'ai.proposal_cancelled' | 'ai.proposal_published' | 'ai.proposal_regenerated';
 
 export interface AuditEntry {
   id: ID;

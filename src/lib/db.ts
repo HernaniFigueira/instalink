@@ -53,6 +53,8 @@ export function emptyDB(): DB {
     idempotencyKeys: [], integrationLogs: [],
     // P4 — motor de automações (definições, execuções e tarefas internas)
     automations: [], automationRuns: [], tasks: [],
+    // P5 — propostas de IA (rascunho/aprovação; nunca executam sozinhas)
+    aiProposals: [],
   };
 }
 
@@ -66,7 +68,7 @@ export function normalizeDB(raw: unknown): DB {
     'organizations', 'organizationMembers', 'members', 'agents', 'conversations',
     'messages', 'campaigns', 'campaignRecipients', 'audit', 'supportSessions',
     'pipelines', 'apiKeys', 'webhooks', 'webhookDeliveries', 'idempotencyKeys', 'integrationLogs',
-    'automations', 'automationRuns', 'tasks',
+    'automations', 'automationRuns', 'tasks', 'aiProposals',
   ] as const) {
     if (!Array.isArray((base as any)[key])) (base as any)[key] = [];
   }
@@ -117,6 +119,42 @@ export function normalizeDB(raw: unknown): DB {
     if (typeof t.updatedAt !== 'string' || !t.updatedAt) t.updatedAt = t.createdAt;
     if (t.source !== 'manual') t.source = 'automation';
   }
+  // P5 — propostas de IA: defaults defensivos. Sem dono (id/businessId) a
+  // linha é invisível para o resto do sistema (sempre filtra por tenant).
+  const cleanProposals: unknown[] = [];
+  for (const raw of base.aiProposals as any[]) {
+    if (!raw || typeof raw !== 'object' || Array.isArray(raw)) continue;
+    const id = String(raw.id || '').trim();
+    const businessId = String(raw.businessId || '').trim();
+    if (!id || !businessId) continue;
+    const statuses = ['draft', 'approved', 'published', 'cancelled'];
+    const status = statuses.includes(raw.status) ? raw.status : 'draft';
+    const plan = (raw.plan && typeof raw.plan === 'object' && !Array.isArray(raw.plan))
+      ? raw.plan
+      : { name: '', description: '', prompt: '', event: 'lead.created', steps: [], confidence: 0, assumptions: [], unresolved: [] };
+    cleanProposals.push({
+      id,
+      businessId,
+      status,
+      prompt: String(raw.prompt || plan.prompt || '').slice(0, 2000),
+      plan,
+      nodes: Array.isArray(raw.nodes) ? raw.nodes : [],
+      edges: Array.isArray(raw.edges) ? raw.edges : [],
+      validation: (raw.validation && typeof raw.validation === 'object')
+        ? {
+          ok: raw.validation.ok === true,
+          errors: Array.isArray(raw.validation.errors) ? raw.validation.errors.map(String).slice(0, 40) : [],
+          warnings: Array.isArray(raw.validation.warnings) ? raw.validation.warnings.map(String).slice(0, 40) : [],
+        }
+        : { ok: false, errors: [], warnings: [] },
+      ...(raw.automationId ? { automationId: String(raw.automationId).slice(0, 64) } : {}),
+      createdByUserId: String(raw.createdByUserId || ''),
+      createdAt: String(raw.createdAt || tasksNow),
+      updatedAt: String(raw.updatedAt || raw.createdAt || tasksNow),
+      ...(raw.publishedAt ? { publishedAt: String(raw.publishedAt) } : {}),
+    });
+  }
+  base.aiProposals = cleanProposals as DB['aiProposals'];
   // Contatos: migração defensiva UMA única vez (quando o doc antigo não
   // tinha o campo). Idempotente; nada existente é apagado ou duplicado.
   const hadContacts = Array.isArray((raw as any)?.contacts);
@@ -375,6 +413,8 @@ const MAX_AUDIT_ENTRIES = 5000;
 const MAX_FINISHED_RUNS_PER_BUSINESS = 200;
 const RUN_RETENTION_MS = 30 * 86400000;
 const TASK_RETENTION_MS = 180 * 86400000;
+const MAX_AI_PROPOSALS_PER_BUSINESS = 80;
+const AI_PROPOSAL_RETENTION_MS = 180 * 86400000;
 
 function prune(db: DB): void {
   const now = Date.now();
@@ -415,6 +455,25 @@ function prune(db: DB): void {
       const at = Date.parse(t.doneAt || t.updatedAt || t.createdAt || '');
       return !Number.isFinite(at) || at > now - TASK_RETENTION_MS;
     });
+  }
+  // P5 — propostas: rascunhos/aprovadas ficam (é trabalho do lojista);
+  // publicadas/canceladas saem depois da janela, com teto por unidade.
+  if (Array.isArray(db.aiProposals) && db.aiProposals.length > 0) {
+    const perBiz = new Map<string, number>();
+    const kept: typeof db.aiProposals = [];
+    for (let i = db.aiProposals.length - 1; i >= 0; i--) {
+      const p = db.aiProposals[i];
+      const live = p.status === 'draft' || p.status === 'approved';
+      if (!live) {
+        const at = Date.parse(p.updatedAt || p.createdAt || '');
+        if (Number.isFinite(at) && at < now - AI_PROPOSAL_RETENTION_MS) continue;
+      }
+      const n = perBiz.get(p.businessId) || 0;
+      if (!live && n >= MAX_AI_PROPOSALS_PER_BUSINESS) continue;
+      perBiz.set(p.businessId, n + 1);
+      kept.push(p);
+    }
+    db.aiProposals = kept.reverse();
   }
   db.customerSessions = db.customerSessions.filter((s) => new Date(s.expiresAt).getTime() > now);
   db.passwordResets = db.passwordResets.filter(
