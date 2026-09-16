@@ -252,6 +252,7 @@ export async function POST(req: NextRequest) {
       answers: body.answers,
       marketingOptIn,
       source: 'agendamento',
+      leadId: body.leadId ? String(body.leadId) : undefined,
     }));
     return NextResponse.json({ ok: true, ...result });
   } catch (e: any) {

@@ -19,6 +19,7 @@ export interface User {
   createdAt: string;
   role?: UserRole; // ausente = 'owner' (compatível com dados legados)
   lastLoginAt?: string;
+  active?: boolean;
 }
 
 export interface Session {
@@ -500,6 +501,8 @@ export interface Booking {
   // e aponta para o anterior — o histórico antigo nunca é sobrescrito.
   previousId?: string; // id do agendamento de origem
   rescheduleCount?: number; // quantas vezes este atendimento já foi movido
+  // P3 — vínculo com o lead que originou o agendamento
+  leadId?: string;
 }
 
 export type ReviewSource = 'site' | 'google';
@@ -559,6 +562,26 @@ export interface ContactNote {
 
 export type LeadStatus = 'new' | 'contacted' | 'qualified' | 'converted' | 'lost';
 
+export type LeadPriority = 'low' | 'medium' | 'high' | 'urgent';
+
+export interface LeadStageHistory {
+  id: ID;
+  fromStage: string;
+  toStage: string;
+  movedBy: string; // userId or 'system' or 'api'
+  movedByName: string; // display name
+  at: string; // ISO
+  note?: string;
+}
+
+export interface LeadNote {
+  id: ID;
+  at: string; // ISO
+  by: string; // userId
+  byName: string;
+  text: string;
+}
+
 export interface Lead {
   id: ID;
   businessId: ID;
@@ -568,11 +591,24 @@ export interface Lead {
   email: string;
   instagram: string;
   origin: string;
+  channel?: string; // canal específico (ex: landing_page, site, embed, api, whatsapp)
   interest: string;
   action: string;
   status: LeadStatus;
   createdAt: string;
   lastInteraction: string;
+  // ── P3: Esteira Operacional & Integrações ──
+  stageId?: string; // id da etapa na esteira (default: 'new')
+  assignedUserId?: string; // id do usuário responsável
+  priority?: LeadPriority; // prioridade do lead
+  nextAction?: string; // próxima ação prevista
+  serviceId?: string; // serviço de interesse vinculado
+  professionalId?: string; // profissional de interesse vinculado
+  sourceUrl?: string; // URL da página de origem
+  metadata?: Record<string, any>; // metadados complementares da entrada
+  bookingId?: string; // vínculo com atendimento agendado
+  notes?: LeadNote[]; // histórico de observações da equipe (append-only)
+  stageHistory?: LeadStageHistory[]; // histórico de movimentação na esteira
 }
 
 export type EventType =  | 'page_view' | 'button_click' | 'product_view' | 'product_add'
@@ -622,6 +658,146 @@ export interface DB {
   campaignRecipients: CampaignRecipient[];
   audit: AuditEntry[]; // auditoria administrativa
   supportSessions: SupportSession[]; // modo suporte do master
+  // ── P3: Motor Operacional & Integrações Externas ──
+  pipelines: BusinessPipeline[];
+  apiKeys: ApiKey[];
+  webhooks: WebhookConfig[];
+  webhookDeliveries: WebhookDelivery[];
+  idempotencyKeys: IdempotencyRecord[];
+  integrationLogs: IntegrationLog[];
+}
+
+// ═══════════════════════════════════════════════════════════════
+// P3 — ESTEIRA OPERACIONAL (PIPELINE)
+// ═══════════════════════════════════════════════════════════════
+export interface PipelineStage {
+  id: string; // 'new' | 'in_progress' | 'qualifying' | 'qualified' | 'waiting_secretary' | 'scheduled' | 'converted' | 'lost' | custom
+  name: string;
+  order: number;
+  color?: string; // badge tone or color
+  isTerminal?: boolean; // converted/lost
+  isSystem?: boolean;
+  mappedStatus?: LeadStatus;
+}
+
+export interface BusinessPipeline {
+  id: ID;
+  businessId: ID;
+  stages: PipelineStage[];
+  updatedAt: string;
+}
+
+// ═══════════════════════════════════════════════════════════════
+// P3 — API KEYS PARA INTEGRAÇÃO EXTERNA
+// ═══════════════════════════════════════════════════════════════
+export interface ApiKey {
+  id: ID;
+  businessId: ID;
+  name: string;
+  keyPrefix: string; // e.g. "ik_live_abc123"
+  keyHash: string; // SHA-256 hash do segredo completo
+  createdAt: string;
+  lastUsedAt?: string;
+  revokedAt?: string;
+  createdByUserId?: string;
+}
+
+// ═══════════════════════════════════════════════════════════════
+// P3 — WEBHOOKS DE SAÍDA
+// ═══════════════════════════════════════════════════════════════
+export type WebhookEvent =
+  | 'lead.created'
+  | 'lead.updated'
+  | 'lead.stage_changed'
+  | 'booking.created'
+  | 'booking.updated'
+  | 'booking.cancelled';
+
+export const VALID_WEBHOOK_EVENTS: WebhookEvent[] = [
+  'lead.created',
+  'lead.updated',
+  'lead.stage_changed',
+  'booking.created',
+  'booking.updated',
+  'booking.cancelled',
+];
+
+export interface WebhookConfig {
+  id: ID;
+  businessId: ID;
+  url: string;
+  secret: string; // whsec_... (armazenado com segurança no banco; nunca exposto em GET/listagem)
+  events: WebhookEvent[];
+  active: boolean;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface SafeWebhookConfig {
+  id: ID;
+  businessId: ID;
+  url: string;
+  secretMasked: string; // ex: whsec_••••••••1234 (representação segura para exibição)
+  events: WebhookEvent[];
+  active: boolean;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface WebhookAttempt {
+  attempt: number;
+  at: string;
+  statusCode?: number;
+  error?: string;
+  durationMs: number;
+}
+
+export interface WebhookDelivery {
+  id: ID;
+  webhookId: ID;
+  businessId: ID;
+  event: WebhookEvent;
+  eventId: string; // ID único do evento, preservado entre retries para idempotência do receptor
+  url: string;
+  payloadSummary: Record<string, any>;
+  status: 'pending' | 'success' | 'failed';
+  statusCode?: number;
+  error?: string;
+  attempts: number;
+  maxAttempts: number;
+  nextRetryAt?: string;
+  deliveredAt?: string;
+  attemptsHistory: WebhookAttempt[];
+  createdAt: string;
+  updatedAt: string;
+}
+
+// ═══════════════════════════════════════════════════════════════
+// P3 — IDEMPOTÊNCIA
+// ═══════════════════════════════════════════════════════════════
+export interface IdempotencyRecord {
+  id: ID;
+  businessId: ID;
+  key: string;
+  endpoint: string;
+  statusCode: number;
+  responseBody: any;
+  createdAt: string;
+}
+
+// ═══════════════════════════════════════════════════════════════
+// P3 — OBSERVABILIDADE DE INTEGRAÇÕES
+// ═══════════════════════════════════════════════════════════════
+export interface IntegrationLog {
+  id: ID;
+  businessId: ID;
+  endpoint: string;
+  method: string;
+  source: string;
+  status: number;
+  operationId: string;
+  errorMessage?: string;
+  at: string;
 }
 
 // ═══════════════════════════════════════════════════════════════
@@ -837,7 +1013,11 @@ export type AuditAction =
   | 'user.login'
   // P2 — vínculo de acesso e identidade do painel
   | 'member.professional_linked' | 'member.professional_unlinked'
-  | 'appearance.updated' | 'contact.note_added';
+  | 'appearance.updated' | 'contact.note_added'
+  // P3 — esteira operacional e integrações
+  | 'pipeline.updated' | 'api_key.created' | 'api_key.revoked'
+  | 'webhook.created' | 'webhook.updated' | 'webhook.deleted'
+  | 'lead.stage_changed' | 'lead.assigned' | 'lead.booked' | 'lead.note_added';
 
 export interface AuditEntry {
   id: ID;

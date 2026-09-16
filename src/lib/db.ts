@@ -43,6 +43,9 @@ export function emptyDB(): DB {
     // Estruturas novas (aditivas — documentos antigos ganham arrays vazios).
     members: [], agents: [], conversations: [], messages: [],
     campaigns: [], campaignRecipients: [], audit: [], supportSessions: [],
+    // P3 — esteira e integrações externas
+    pipelines: [], apiKeys: [], webhooks: [], webhookDeliveries: [],
+    idempotencyKeys: [], integrationLogs: [],
   };
 }
 
@@ -52,8 +55,21 @@ export function normalizeDB(raw: unknown): DB {
   const base = { ...emptyDB(), ...((raw && typeof raw === 'object' ? raw : {}) as Partial<DB>) };
   // Arrays novos (members/agents/campaigns/audit/...): documento antigo pode
   // ter chaves ausentes ou inválidas — garantimos array em todos os casos.
-  for (const key of ['organizations', 'organizationMembers', 'members', 'agents', 'conversations', 'messages', 'campaigns', 'campaignRecipients', 'audit', 'supportSessions'] as const) {
+  for (const key of [
+    'organizations', 'organizationMembers', 'members', 'agents', 'conversations',
+    'messages', 'campaigns', 'campaignRecipients', 'audit', 'supportSessions',
+    'pipelines', 'apiKeys', 'webhooks', 'webhookDeliveries', 'idempotencyKeys', 'integrationLogs',
+  ] as const) {
     if (!Array.isArray((base as any)[key])) (base as any)[key] = [];
+  }
+  // P3: Normalização defensiva de entregas de webhooks
+  for (const d of base.webhookDeliveries as any[]) {
+    if (!d.status) d.status = d.deliveredAt ? 'success' : 'failed';
+    if (!d.attempts) d.attempts = 1;
+    if (!d.maxAttempts) d.maxAttempts = 3;
+    if (!Array.isArray(d.attemptsHistory)) d.attemptsHistory = [];
+    if (!d.eventId) d.eventId = (d.payloadSummary?.id as string) || d.id;
+    if (!d.updatedAt) d.updatedAt = d.deliveredAt || d.createdAt || new Date().toISOString();
   }
   // Contatos: migração defensiva UMA única vez (quando o doc antigo não
   // tinha o campo). Idempotente; nada existente é apagado ou duplicado.

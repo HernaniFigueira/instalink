@@ -1,0 +1,577 @@
+// ═══════════════════════════════════════════════════════════════
+// ESTEIRA OPERACIONAL & ENTRADA UNIVERSAL DE LEADS (P3)
+// ═══════════════════════════════════════════════════════════════
+// Núcleo operacional agnóstico ao nicho:
+//  - Pipeline configurável por Business com estágios internos estáveis;
+//  - Entrada universal normalizada com deduplicação e preservação de origem;
+//  - Atribuição de responsável e histórico append-only de movimentações;
+//  - Ponte direta para agendamento (saída da esteira sem duplicar booking);
+//  - Interfaces claras para consumo direto da interface, APIs externas e
+//    futura inteligência conversacional (P4).
+
+import { randomUUID } from 'node:crypto';
+import type {
+  Booking, Business, BusinessCustomer, BusinessPipeline, DB,
+  Lead, LeadNote, LeadPriority, LeadStageHistory, LeadStatus,
+  PipelineStage, Service, User,
+} from './types';
+import { onlyDigits } from './utils';
+import { upsertContact, addContactNote } from './contacts';
+import { createBookingTx } from './booking-create';
+
+export const DEFAULT_PIPELINE_STAGES: PipelineStage[] = [
+  { id: 'new', name: 'Novo', order: 0, color: 'blue', mappedStatus: 'new', isSystem: true },
+  { id: 'in_progress', name: 'Em atendimento', order: 1, color: 'amber', mappedStatus: 'contacted', isSystem: true },
+  { id: 'qualifying', name: 'Qualificando', order: 2, color: 'purple', mappedStatus: 'contacted', isSystem: true },
+  { id: 'qualified', name: 'Qualificado', order: 3, color: 'emerald', mappedStatus: 'qualified', isSystem: true },
+  { id: 'waiting_secretary', name: 'Aguardando secretaria', order: 4, color: 'orange', mappedStatus: 'contacted', isSystem: true },
+  { id: 'scheduled', name: 'Agendado', order: 5, color: 'emerald', mappedStatus: 'converted', isSystem: true },
+  { id: 'converted', name: 'Concluído', order: 6, color: 'emerald', isTerminal: true, mappedStatus: 'converted', isSystem: true },
+  { id: 'lost', name: 'Perdido', order: 7, color: 'red', isTerminal: true, mappedStatus: 'lost', isSystem: true },
+];
+
+export const STAGE_ALIASES: Record<string, string> = {
+  novo: 'new',
+  new: 'new',
+  em_atendimento: 'in_progress',
+  in_progress: 'in_progress',
+  qualificando: 'qualifying',
+  qualifying: 'qualifying',
+  qualificado: 'qualified',
+  qualified: 'qualified',
+  aguardando_secretaria: 'waiting_secretary',
+  waiting_secretary: 'waiting_secretary',
+  agendado: 'scheduled',
+  scheduled: 'scheduled',
+  concluido: 'converted',
+  converted: 'converted',
+  perdido: 'lost',
+  lost: 'lost',
+};
+
+export const SIMPLE_STAGE_IDS = ['new', 'in_progress', 'scheduled', 'converted'];
+
+/** Obtém a esteira configurada do negócio (ou cria padrão defensivo). */
+export function getBusinessPipeline(db: DB, businessId: string): BusinessPipeline {
+  if (!Array.isArray(db.pipelines)) db.pipelines = [];
+  let p = db.pipelines.find((x) => x.businessId === businessId);
+  if (!p) {
+    p = {
+      id: randomUUID(),
+      businessId,
+      stages: DEFAULT_PIPELINE_STAGES.map((s) => ({ ...s })),
+      updatedAt: new Date().toISOString(),
+    };
+    db.pipelines.push(p);
+  }
+  return p;
+}
+
+/** Atualiza os estágios da esteira do negócio preservando IDs válidos. */
+export function updateBusinessPipeline(
+  db: DB,
+  businessId: string,
+  newStages: Partial<PipelineStage>[],
+): BusinessPipeline {
+  const current = getBusinessPipeline(db, businessId);
+  const now = new Date().toISOString();
+
+  const validated: PipelineStage[] = [];
+  let order = 0;
+  for (const st of newStages) {
+    const id = String(st.id || '').trim().toLowerCase().replace(/[^a-z0-9_-]/g, '_').slice(0, 32);
+    const name = String(st.name || '').trim().slice(0, 60);
+    if (!id || !name) continue;
+    const def = DEFAULT_PIPELINE_STAGES.find((d) => d.id === id);
+    validated.push({
+      id,
+      name,
+      order: typeof st.order === 'number' ? st.order : order++,
+      color: st.color || def?.color || 'zinc',
+      isTerminal: st.isTerminal ?? def?.isTerminal ?? false,
+      isSystem: def?.isSystem ?? false,
+      mappedStatus: st.mappedStatus || def?.mappedStatus || 'contacted',
+    });
+  }
+
+  // Garante ao menos 'new' e 'converted'
+  if (!validated.some((s) => s.id === 'new')) {
+    validated.unshift({ ...DEFAULT_PIPELINE_STAGES[0] });
+  }
+  if (!validated.some((s) => s.id === 'converted')) {
+    validated.push({ ...DEFAULT_PIPELINE_STAGES[6] });
+  }
+
+  current.stages = validated;
+  current.updatedAt = now;
+  return current;
+}
+
+export function mapStageToStatus(pipeline: BusinessPipeline, stageId: string): LeadStatus {
+  const stage = pipeline.stages.find((s) => s.id === stageId);
+  if (stage?.mappedStatus) return stage.mappedStatus;
+  if (stageId === 'new') return 'new';
+  if (stageId === 'scheduled' || stageId === 'converted') return 'converted';
+  if (stageId === 'lost') return 'lost';
+  if (stageId === 'qualified') return 'qualified';
+  return 'contacted';
+}
+
+// ═══════════════════════════════════════════════════════════════
+// ENTRADA NORMALIZADA DE LEADS (UNIVERSAL)
+// ═══════════════════════════════════════════════════════════════
+
+export interface LeadActor {
+  id?: string;
+  name?: string;
+  role?: string;
+  type?: 'system' | 'user' | 'api' | 'agent' | 'customer';
+}
+
+export interface IngestLeadInput {
+  businessId: string;
+  name?: string;
+  phone?: string;
+  email?: string;
+  instagram?: string;
+  message?: string;
+  interest?: string;
+  source?: string; // origin e.g. 'external_site', 'landing_page', 'public_page', 'whatsapp', 'api', 'manual'
+  channel?: string;
+  sourceUrl?: string;
+  serviceId?: string;
+  professionalId?: string;
+  priority?: LeadPriority;
+  assignedUserId?: string;
+  stageId?: string;
+  customerId?: string;
+  metadata?: Record<string, any>;
+  actor?: LeadActor;
+  now?: string;
+}
+
+/**
+ * Validação centralizada de integridade para atribuição de responsável ao lead.
+ * O usuário deve:
+ * 1. Existir no sistema;
+ * 2. Estar ativo (user.active !== false);
+ * 3. Estar associado a esta unidade específica (dono da unidade ou membro com acesso ativo).
+ * Usuário de outra unidade/negócio, outra organização, inexistente ou inativo é rejeitado.
+ * Retorna { valid: true } quando userId for vazio/nulo (desatribuição permitida).
+ */
+export function validateAssignedUser(
+  db: DB,
+  businessId: string,
+  userId?: string | null,
+): { valid: boolean; user?: User; error?: string } {
+  if (!userId || !userId.trim()) {
+    return { valid: true };
+  }
+  const cleanId = userId.trim();
+  const user = (db.users || []).find((u) => u.id === cleanId);
+  if (!user) {
+    return { valid: false, error: 'Usuário informado não existe no sistema.' };
+  }
+  if (user.active === false) {
+    return { valid: false, error: 'Usuário informado está inativo.' };
+  }
+
+  const business = (db.businesses || []).find((b) => b.id === businessId);
+  if (!business) {
+    return { valid: false, error: 'Negócio não encontrado.' };
+  }
+
+  // É o proprietário do negócio?
+  if (business.ownerId === cleanId) {
+    return { valid: true, user };
+  }
+
+  // Ou é membro ativo associado a este negócio específico?
+  const isMember = (db.members || []).some(
+    (m) => m.businessId === businessId && m.userId === cleanId && m.active !== false,
+  );
+
+  if (!isMember) {
+    return { valid: false, error: 'Usuário não pertence à equipe desta unidade.' };
+  }
+
+  return { valid: true, user };
+}
+
+/** Localiza lead existente no negócio por customerId, telefone ou email. */
+export function findLead(
+  db: DB,
+  businessId: string,
+  query: { id?: string; phone?: string; email?: string; customerId?: string },
+): Lead | undefined {
+  if (query.id) {
+    const direct = db.leads.find((l) => l.id === query.id && l.businessId === businessId);
+    if (direct) return direct;
+  }
+  const digits = onlyDigits(query.phone || '');
+  const email = (query.email || '').trim().toLowerCase();
+  const customerId = (query.customerId || '').trim();
+
+  return db.leads.find((l) => {
+    if (l.businessId !== businessId) return false;
+    if (customerId && l.customerId && l.customerId === customerId) return true;
+    if (digits && onlyDigits(l.phone) === digits) return true;
+    if (email && l.email && l.email.toLowerCase() === email) return true;
+    return false;
+  });
+}
+
+/**
+ * Entrada universal de leads (reutilizada por página pública, API externa,
+ * integrações e futura IA).
+ * - Deduplicação automática com contatos/leads existentes;
+ * - Preservação estrita da origem e metadados;
+ * - Inicialização da esteira e histórico append-only.
+ */
+export function ingestLead(db: DB, input: IngestLeadInput): {
+  lead: Lead;
+  isNew: boolean;
+  contact: BusinessCustomer | null;
+} {
+  const business = db.businesses.find((b) => b.id === input.businessId);
+  if (!business) {
+    throw Object.assign(new Error('Negócio não encontrado.'), { status: 404 });
+  }
+
+  const now = input.now || new Date().toISOString();
+  const digits = onlyDigits(input.phone || '');
+  const name = (input.name || '').trim().slice(0, 80);
+  const email = (input.email || '').trim().toLowerCase().slice(0, 120);
+  const instagram = (input.instagram || '').trim().slice(0, 60);
+  const source = (input.source || 'external_site').trim().slice(0, 40);
+  const interest = (input.interest || input.message || '').trim().slice(0, 500);
+
+  if (!name && !digits && !email) {
+    throw Object.assign(new Error('Informe ao menos nome, telefone ou e-mail.'), { status: 400 });
+  }
+
+  // Validação estrita de integridade para atribuição de responsável
+  if (input.assignedUserId && input.assignedUserId.trim()) {
+    const check = validateAssignedUser(db, business.id, input.assignedUserId);
+    if (!check.valid) {
+      throw Object.assign(new Error(check.error || 'Usuário responsável inválido.'), { status: 422 });
+    }
+  }
+
+  const pipeline = getBusinessPipeline(db, business.id);
+
+  // 1. Garante Contato no CRM (upsert idempotente, nunca duplica pessoa)
+  const contact = upsertContact(db, {
+    businessId: business.id,
+    customerId: input.customerId,
+    name,
+    phone: digits,
+    email,
+    source,
+    now,
+  });
+
+  // 2. Busca lead existente
+  const existing = findLead(db, business.id, {
+    customerId: input.customerId || contact?.customerId || '',
+    phone: digits,
+    email,
+  });
+
+  const actorName = input.actor?.name || (input.actor?.type === 'api' ? 'API Externa' : 'Sistema');
+  const actorId = input.actor?.id || 'system';
+
+  if (existing) {
+    // Atualização cumulativa: preserva a origem original e agrega novos dados
+    if (name && !existing.name) existing.name = name;
+    if (digits && !existing.phone) existing.phone = digits;
+    if (email && !existing.email) existing.email = email;
+    if (instagram && !existing.instagram) existing.instagram = instagram;
+    if (interest) existing.interest = interest;
+    if (input.customerId && !existing.customerId) existing.customerId = input.customerId;
+    if (input.sourceUrl) existing.sourceUrl = input.sourceUrl;
+    if (input.serviceId) existing.serviceId = input.serviceId;
+    if (input.professionalId) existing.professionalId = input.professionalId;
+    if (input.assignedUserId && !existing.assignedUserId) existing.assignedUserId = input.assignedUserId;
+    if (input.priority) existing.priority = input.priority;
+    if (input.channel && !(existing as any).channel) (existing as any).channel = input.channel;
+
+    if (input.metadata && typeof input.metadata === 'object') {
+      existing.metadata = { ...(existing.metadata || {}), ...input.metadata };
+    }
+
+    existing.lastInteraction = now;
+
+    // Se veio mensagem ou nota, adiciona ao histórico de observações
+    if (input.message) {
+      if (!Array.isArray(existing.notes)) existing.notes = [];
+      existing.notes.push({
+        id: randomUUID(),
+        at: now,
+        by: actorId,
+        byName: actorName,
+        text: input.message.slice(0, 1000),
+      });
+    }
+
+    return { lead: existing, isNew: false, contact };
+  }
+
+  // 3. Novo Lead
+  const rawStageId = input.stageId || 'new';
+  const initialStageId = STAGE_ALIASES[rawStageId] || rawStageId;
+  const initialStatus = mapStageToStatus(pipeline, initialStageId);
+  const leadId = randomUUID();
+
+  const stageHistory: LeadStageHistory[] = [{
+    id: randomUUID(),
+    fromStage: '',
+    toStage: initialStageId,
+    movedBy: actorId,
+    movedByName: actorName,
+    at: now,
+    note: input.message ? 'Entrada com mensagem' : 'Entrada de lead',
+  }];
+
+  const notes: LeadNote[] = [];
+  if (input.message) {
+    notes.push({
+      id: randomUUID(),
+      at: now,
+      by: actorId,
+      byName: actorName,
+      text: input.message.slice(0, 1000),
+    });
+  }
+
+  const newLead: Lead = {
+    id: leadId,
+    businessId: business.id,
+    customerId: input.customerId || contact?.customerId || '',
+    name,
+    phone: digits,
+    email,
+    instagram,
+    origin: source,
+    channel: input.channel || '',
+    interest,
+    action: 'contato',
+    status: initialStatus,
+    stageId: initialStageId,
+    assignedUserId: input.assignedUserId || '',
+    priority: input.priority || 'medium',
+    nextAction: '',
+    serviceId: input.serviceId || '',
+    professionalId: input.professionalId || '',
+    sourceUrl: input.sourceUrl || '',
+    metadata: input.metadata || {},
+    notes,
+    stageHistory,
+    createdAt: now,
+    lastInteraction: now,
+  };
+
+  db.leads.push(newLead);
+  db.events.push({
+    id: randomUUID(),
+    businessId: business.id,
+    type: 'lead_created',
+    path: '',
+    meta: { origin: source, stageId: initialStageId },
+    createdAt: now,
+  });
+  db.events.push({
+    id: randomUUID(),
+    businessId: business.id,
+    type: 'conversion',
+    path: '',
+    meta: { kind: 'lead' },
+    createdAt: now,
+  });
+
+  return { lead: newLead, isNew: true, contact };
+}
+
+// ═══════════════════════════════════════════════════════════════
+// OPERAÇÕES NA ESTEIRA (MOVIMENTAÇÃO, ATRIBUIÇÃO, OBSERVAÇÕES)
+// ═══════════════════════════════════════════════════════════════
+
+export interface MoveLeadStageParams {
+  businessId: string;
+  leadId: string;
+  toStageId: string;
+  note?: string;
+  actor: { id: string; name: string; role?: string };
+  now?: string;
+}
+
+export function moveLeadStage(db: DB, p: MoveLeadStageParams): Lead {
+  const lead = db.leads.find((l) => l.id === p.leadId && l.businessId === p.businessId);
+  if (!lead) throw Object.assign(new Error('Lead não encontrado.'), { status: 404 });
+
+  const pipeline = getBusinessPipeline(db, p.businessId);
+  const targetId = STAGE_ALIASES[p.toStageId] || p.toStageId;
+  const targetStage = pipeline.stages.find((s) => s.id === p.toStageId || s.id === targetId);
+  if (!targetStage) {
+    throw Object.assign(new Error(`Etapa "${p.toStageId}" não existe na esteira deste negócio.`), { status: 422 });
+  }
+
+  const now = p.now || new Date().toISOString();
+  const fromStage = lead.stageId || (lead.status === 'new' ? 'new' : 'in_progress');
+
+  lead.stageId = targetStage.id;
+  lead.status = mapStageToStatus(pipeline, targetStage.id);
+  lead.lastInteraction = now;
+
+  if (!Array.isArray(lead.stageHistory)) lead.stageHistory = [];
+  lead.stageHistory.push({
+    id: randomUUID(),
+    fromStage,
+    toStage: targetStage.id,
+    movedBy: p.actor.id,
+    movedByName: p.actor.name,
+    at: now,
+    note: p.note ? String(p.note).trim().slice(0, 300) : undefined,
+  });
+
+  return lead;
+}
+
+export interface AssignLeadParams {
+  businessId: string;
+  leadId: string;
+  assignedUserId: string;
+  actor: { id: string; name: string; role?: string };
+  now?: string;
+}
+
+export function assignLead(db: DB, p: AssignLeadParams): Lead {
+  const lead = db.leads.find((l) => l.id === p.leadId && l.businessId === p.businessId);
+  if (!lead) throw Object.assign(new Error('Lead não encontrado.'), { status: 404 });
+
+  const cleanAssignee = String(p.assignedUserId || '').trim();
+  const validation = validateAssignedUser(db, p.businessId, cleanAssignee);
+  if (!validation.valid) {
+    throw Object.assign(new Error(validation.error || 'Usuário responsável inválido.'), { status: 422 });
+  }
+
+  const now = p.now || new Date().toISOString();
+  lead.assignedUserId = cleanAssignee;
+  lead.lastInteraction = now;
+
+  const assignedMember = db.members.find((m) => m.userId === lead.assignedUserId && m.businessId === p.businessId);
+  const assignedUser = validation.user || db.users.find((u) => u.id === lead.assignedUserId);
+  const targetName = assignedUser?.name || assignedMember?.note || (lead.assignedUserId ? 'Usuário' : 'Nenhum');
+
+  if (!Array.isArray(lead.stageHistory)) lead.stageHistory = [];
+  lead.stageHistory.push({
+    id: randomUUID(),
+    fromStage: lead.stageId || 'new',
+    toStage: lead.stageId || 'new',
+    movedBy: p.actor.id,
+    movedByName: p.actor.name,
+    at: now,
+    note: `Responsável definido: ${targetName}`,
+  });
+
+  return lead;
+}
+
+export interface AddLeadNoteParams {
+  businessId: string;
+  leadId: string;
+  text: string;
+  actor: { id: string; name: string };
+  now?: string;
+}
+
+export function addLeadNote(db: DB, p: AddLeadNoteParams): LeadNote {
+  const lead = db.leads.find((l) => l.id === p.leadId && l.businessId === p.businessId);
+  if (!lead) throw Object.assign(new Error('Lead não encontrado.'), { status: 404 });
+
+  const text = String(p.text || '').trim().slice(0, 1000);
+  if (!text) throw Object.assign(new Error('Texto da observação não pode ser vazio.'), { status: 400 });
+
+  const now = p.now || new Date().toISOString();
+  const note: LeadNote = {
+    id: randomUUID(),
+    at: now,
+    by: p.actor.id,
+    byName: p.actor.name,
+    text,
+  };
+
+  if (!Array.isArray(lead.notes)) lead.notes = [];
+  lead.notes.push(note);
+  lead.lastInteraction = now;
+
+  // Se o lead tem contato vinculado no CRM, replica a nota lá também (visão unificada)
+  const contact = db.contacts.find((c) =>
+    c.businessId === p.businessId &&
+    ((lead.customerId && c.customerId === lead.customerId) || (lead.phone && onlyDigits(c.phone) === onlyDigits(lead.phone))),
+  );
+  if (contact) {
+    addContactNote(contact, { text, by: p.actor.id, byName: p.actor.name, at: now });
+  }
+
+  return note;
+}
+
+// ═══════════════════════════════════════════════════════════════
+// SAÍDA DA ESTEIRA PARA AGENDAMENTO
+// ═══════════════════════════════════════════════════════════════
+
+export interface BookLeadParams {
+  business: Business;
+  service: Service;
+  leadId: string;
+  date: string;
+  time: string;
+  professionalId?: string;
+  note?: string;
+  actor: { id: string; name: string; role?: string };
+  now?: string;
+}
+
+export function bookLead(db: DB, p: BookLeadParams): {
+  booking: Booking;
+  lead: Lead;
+} {
+  const lead = db.leads.find((l) => l.id === p.leadId && l.businessId === p.business.id);
+  if (!lead) throw Object.assign(new Error('Lead não encontrado.'), { status: 404 });
+
+  const contact = db.contacts.find((c) =>
+    c.businessId === p.business.id &&
+    ((lead.customerId && c.customerId === lead.customerId) || (lead.phone && onlyDigits(c.phone) === onlyDigits(lead.phone))),
+  );
+
+  // Executa pelo motor único de reservas (revalida slot, concorrência, profissional)
+  const res = createBookingTx(db, {
+    business: p.business,
+    service: p.service,
+    date: p.date,
+    time: p.time,
+    actor: 'owner',
+    customer: {
+      id: lead.customerId || contact?.customerId || '',
+      name: lead.name || contact?.name || 'Cliente',
+      phone: lead.phone || contact?.phone || '',
+      email: lead.email || contact?.email || '',
+    },
+    linkedContact: contact ? {
+      id: contact.id,
+      name: contact.name,
+      phone: contact.phone,
+      email: contact.email,
+      customerId: contact.customerId,
+    } : null,
+    professionalId: p.professionalId,
+    note: p.note || `Agendamento via esteira (Lead #${lead.id.slice(0, 8)})`,
+    source: lead.origin || 'esteira',
+    leadId: lead.id,
+    now: p.now,
+  });
+
+  const booking = db.bookings.find((b) => b.id === res.bookingId)!;
+  return { booking, lead };
+}
