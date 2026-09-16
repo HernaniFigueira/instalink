@@ -11,6 +11,7 @@
 | Multi-tenancy | `src/lib/tenant.ts` — toda query escopada por `businessId` + dono | RLS no Supabase |
 | Agenda | Motor universal `src/lib/slots.ts` | — |
 | IA | Concierge por regras sobre dados reais (`src/lib/concierge.ts`) | LLM com grounding nos mesmos dados |
+| Automações | Motor de grafo persistido no mesmo documento (`src/lib/automation/`) — orquestra os serviços oficiais | Editor visual de grafo, geração por IA (P5), canais (P6) |
 | QR | `qrcode` server-side (`/api/qr`) | — |
 
 ## Por que JSON no MVD?
@@ -200,9 +201,55 @@ não existe combinação ilegível. Trocar de unidade troca a identidade na hora
 (`/api/auth/me` alimenta o shell). A identidade pública (`Page.theme` /
 `ThemeStyle`) é outro sistema e não foi tocada.
 
+## P4 set/2026 — Motor de Automações (orquestração, não segundo sistema)
+
+Automação = grafo pequeno e validável (gatilho → condição → ação → espera →
+ramificação → fim), gravado no **mesmo documento** do banco (`db.automations`,
+`db.automationRuns`, `db.tasks`). Nada de Redis/BullMQ/Kafka e nenhuma segunda
+implementação de leads/esteira/agenda/webhooks:
+
+- **Gatilho no serviço oficial**, não na rota: `ingestLead`, `moveLeadStage`,
+  `assignLead`, `createBookingTx`, `applyBookingStatusTx` emitem o evento dentro da
+  MESMA transação — todo caminho (página, painel, widget, assistente, API externa)
+  dispara as mesmas automações automaticamente.
+- **Ação = delegação**: `change_lead_stage` chama `moveLeadStage`, `create_booking`
+  chama `bookLead → createBookingTx` (slot revalidado, 409 vira erro legível da
+  execução), `cancel_booking` chama a transição oficial, `dispatch_webhook` chama o
+  canal assinado do P3. Para isso duas regras foram EXTRAÍDAS para funções
+  (`updateLeadFields` em `pipeline.ts`; `applyBookingStatusTx` em
+  `booking-status.ts`, novo módulo server — `booking-ops.ts` continua puro para os
+  Client Components) e as rotas passaram a usá-las. Contratos e mensagens preservados.
+- **Execução persistida e retomável**: espera grava `status:'waiting'` +
+  `waitingUntil` + `currentNodeId` = próximo nó e libera a posse; nenhuma requisição
+  fica aberta. O `updateDB` tem um gancho inline (só quando há fila) e
+  `/api/cron/automations` (mesma política `CRON_SECRET` fail-closed do P3) retoma o
+  que venceu. Concorrência entre instâncias = claim/lease com `updateDBWithCas`.
+- **Condições são dados**: 8 operadores + AND/OR/NOT sobre um catálogo fechado de
+  campos (`lead.*`, `customer.*`, `booking.*`, `event.*`, `service.*`), sem avaliar
+  código — `{{lead.name}}` é substituição literal. É também o contrato que o P5 vai
+  gerar: a definição é validada no servidor, o usuário aprova, o motor executa.
+- **Proteções**: teto de passos por execução, 2 visitas por nó (ciclo acidental),
+  ciclo sem espera é recusado na gravação, idade máxima da execução, fila limitada
+  por empresa, orçamento de tempo por varredura, `businessId` da execução revalidado
+  em cada passo (uma automação jamais toca outra empresa), falha registrada sem
+  perder efeito já aplicado, ações idempotentes por execução+nó.
+- **Planos**: nada de `if plan === ...`. `lib/automation/capabilities.ts` é a única
+  fonte (`automation.basic|advanced|ai`, `channel.*`), com tetos derivados e
+  override por unidade — a parte necessária para o P4, nada além.
+- **Interface** (`/automacoes`, menu Gestão, permissão `config`): lista com
+  liga/desliga, criar/editar/duplicar (cópia nasce desligada)/excluir com
+  confirmação, galeria de modelos internos, histórico de execuções passo a passo e
+  a fila de `Task` da unidade. O editor é LINEAR (“Quando/Se/Então/Depois/Senão”) e
+  compila para o grafo — projeção reversível (`graphToLinear`); o grafo continua
+  exposto na API para um editor visual futuro, sem virar clone de Zapier.
+
+Detalhes, contratos e a tabela de alterações em P0–P3: [`docs/automations-p4.md`](docs/automations-p4.md).
+
 ## O que NÃO foi construído (evolução futura)
 
 Billing/planos, domínio próprio, WhatsApp API, pagamentos online, delivery com
-roteirização, estoque, fidelidade, CRM avançado, PWA instalável, app nativo.
+roteirização, estoque, fidelidade, CRM avançado, PWA instalável, app nativo. No P4
+ficam explicitamente de fora: P5 (IA/agente), P6 (canais externos), `wait_for_event`
+por evento de canal e o editor visual de grafo.
 Todos têm ponto de extensão documentado no código (`Order` separado de
 pagamento, `modes` por negócio, eventos para analytics).

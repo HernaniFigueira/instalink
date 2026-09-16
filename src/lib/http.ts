@@ -172,6 +172,7 @@ export const AREA_LABELS: Record<string, string> = {
   config: 'Configurações',
   recursos: 'Recursos',
   resultados: 'Resultados',
+  automations: 'Automações',
   financeiro: 'Financeiro',
   admin: 'Administração',
 };

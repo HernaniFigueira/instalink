@@ -124,3 +124,33 @@ agendador é **externo ao app** — basta chamar o endpoint protegido:
 - Nenhuma linha do motor depende da Vercel: ao migrar para VPS, o mesmo `curl`
   no cron do servidor (ou um worker Node chamando o processador) resolve.
 - Detalhes: [`docs/webhooks-retry.md`](docs/webhooks-retry.md).
+
+## Automações (P4) — agendador do motor
+
+O motor de automações usa exatamente o mesmo desenho: estado no banco, nada de
+fila externa, e um endpoint protegido para retomar o que está em espera:
+
+```bash
+# cron do servidor (VPS) ou agendador externo — 1x por minuto
+* * * * * curl -fsS -H "Authorization: Bearer $CRON_SECRET" https://SEU-DOMINIO/api/cron/automations >/dev/null 2>&1
+```
+
+- Sem `CRON_SECRET`, `/api/cron/automations` responde **503** (falha fechada) e
+  **nada da fila é processado**; com credencial errada, **401** (fila intacta).
+- Uma automação em `waiting` NUNCA depende de requisição HTTP aberta: o estado é
+  o banco, e a retomada acontece por qualquer um destes caminhos — agendador,
+  botão "Processar fila" do painel, ou o gancho inline do `updateDB` (que acorda
+  esperas **vencidas** na escrita seguinte do sistema, com `AUTOMATION_INLINE`
+  ligado por padrão).
+- Assim como no retry de webhooks, **não há `vercel.json` com `crons`** no
+  repositório: no plano Hobby o cron da Vercel roda no máximo 1x/dia, e nenhuma
+  configuração de deploy pressupõe plano Pro. Sem agendador, esperas retomam na
+  próxima atividade do negócio; para um colchão pontual (função parada à noite,
+  espera longa), configure o `curl` acima no cron da VPS/GitHub Actions ou o
+  Vercel Cron (Pro) apontando para `/api/cron/automations`.
+- O painel configura tudo em `/automacoes` (Quando → Se → Então → Depois → Senão).
+- Detalhes: [`docs/automations-p4.md`](docs/automations-p4.md).
+
+```bash
+npm run smoke:p4   # motor de automações de ponta a ponta (servidor + npm run seed)
+```

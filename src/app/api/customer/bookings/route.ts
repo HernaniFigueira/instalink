@@ -5,6 +5,7 @@ import { isFeatureEnabled } from '@/lib/features';
 import { onlyDigits, timeToMin } from '@/lib/utils';
 import { todayISO, nowHM, weekdayOf, addDaysISO, isValidDateISO } from '@/lib/tz';
 import { computeSlots } from '@/lib/slots';
+import { applyBookingStatusTx } from '@/lib/booking-status';
 import type { DB } from '@/lib/types';
 
 function err(message: string, status: number): Error {
@@ -134,16 +135,16 @@ export async function PATCH(req: NextRequest) {
     }
 
     // ── Cancelamento ──
-    await updateDB((d) => {
-      const b = d.bookings.find((x) => x.id === id);
-      if (b) {
-        const now = new Date().toISOString();
-        b.history.push({ at: now, from: b.status, to: 'cancelled', by: 'customer' });
-        b.status = 'cancelled';
-        b.updatedAt = now;
-      }
-    });
-    return NextResponse.json({ ok: true });
+    // P4: mesma função oficial do painel (histórico + máquina de estados +
+    // mensagens do P3 + gatilho de automação) — nenhum caminho paralelo.
+    const applied = await updateDB((d) => applyBookingStatusTx(d, {
+      businessId: business.id,
+      bookingId: String(id || ''),
+      to: 'cancelled',
+      by: 'customer',
+    }));
+    if (!applied.ok) return NextResponse.json({ error: applied.error || 'Não foi possível cancelar.' }, { status: applied.status_code || 400 });
+    return NextResponse.json({ ok: true, status: applied.status });
   } catch (e: any) {
     const status = e?.status || 500;
     return NextResponse.json({ error: status === 500 ? 'Não foi possível concluir.' : e.message }, { status });

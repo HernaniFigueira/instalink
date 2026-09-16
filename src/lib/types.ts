@@ -231,6 +231,10 @@ export interface Business {
   // Automações operacionais (confirmação, lembrete, pós-atendimento, avaliação,
   // retorno). Ausente/true = ativa; false = desligada pelo lojista.
   automations?: Record<string, boolean>;
+  // P4 — bandeiras de CAPACIDADE por unidade (camada única de planos/flags).
+  // Nunca é lida fora de lib/automation/capabilities.ts; ausente = padrão do
+  // produto (nada de `if plan === ...` espalhado pelo código).
+  capabilityFlags?: Record<string, boolean>;
   about: AboutSection; // seção "Sobre a empresa" (título/texto/imagem)
   // Identidade visual do painel (P2). Ausente = padrão do produto.
   appearance?: BusinessAppearance;
@@ -665,6 +669,10 @@ export interface DB {
   webhookDeliveries: WebhookDelivery[];
   idempotencyKeys: IdempotencyRecord[];
   integrationLogs: IntegrationLog[];
+  // ── P4: Motor de Automações (definições + execuções persistidas) ──
+  automations: Automation[];
+  automationRuns: AutomationRun[];
+  tasks: Task[];
 }
 
 // ═══════════════════════════════════════════════════════════════
@@ -805,6 +813,248 @@ export interface IntegrationLog {
   operationId: string;
   errorMessage?: string;
   at: string;
+}
+
+// ═══════════════════════════════════════════════════════════════
+// P4 — MOTOR DE AUTOMAÇÕES
+// ═══════════════════════════════════════════════════════════════
+// Uma automação é um GRAFO simples e validável:
+//
+//   GATILHO → CONDIÇÃO → AÇÃO → ESPERA → RAMIFICAÇÃO → AÇÃO → FIM
+//
+// A definição é DADOS (nunca código): é o que permite (a) validar no servidor,
+// (b) persistir estado de execução retomável sem manter HTTP aberto e
+// (c) no futuro, um agente de IA gerar/editar automações sem conhecer o banco
+// — ele só precisa conhecer este catálogo. Nenhuma expressão é avaliada: o
+// motor interpreta operadores fixos (`equals`, `contains`, …).
+//
+// Multi-tenancy: `businessId` está em TODA entidade e é revalidado em cada
+// passo. Uma execução jamais toca linha de outra empresa.
+
+/** Eventos que LIGAM automações. São os eventos que o sistema já produz. */
+export type AutomationEventId =
+  | 'lead.created'
+  | 'lead.updated'
+  | 'lead.stage_changed'
+  | 'lead.assigned'
+  | 'customer.created'
+  | 'customer.updated'
+  | 'booking.created'
+  | 'booking.confirmed'
+  | 'booking.cancelled'
+  | 'booking.completed';
+
+export const AUTOMATION_EVENTS: AutomationEventId[] = [
+  'lead.created', 'lead.updated', 'lead.stage_changed', 'lead.assigned',
+  'customer.created', 'customer.updated',
+  'booking.created', 'booking.confirmed', 'booking.cancelled', 'booking.completed',
+];
+
+// ── Condições (P4.3) ─────────────────────────────────────────
+export type ConditionOperator =
+  | 'equals' | 'not_equals' | 'contains' | 'not_contains'
+  | 'exists' | 'not_exists' | 'greater_than' | 'less_than';
+
+export const CONDITION_OPERATORS: ConditionOperator[] = [
+  'equals', 'not_equals', 'contains', 'not_contains',
+  'exists', 'not_exists', 'greater_than', 'less_than',
+];
+
+export type LogicOperator = 'and' | 'or' | 'not';
+
+/** Comparação de um CAMPO DO CONTEXTO do evento com um valor fixo. */
+export interface AutomationFieldCondition {
+  field: string;
+  operator: ConditionOperator;
+  value?: string | number | boolean | null;
+}
+
+/** Composição lógica (AND/OR/NOT) de condições — aninhável. */
+export interface AutomationConditionGroup {
+  logic: LogicOperator;
+  conditions: AutomationCondition[];
+}
+
+export type AutomationCondition = AutomationFieldCondition | AutomationConditionGroup;
+
+export function isConditionGroup(c: AutomationCondition | undefined | null): c is AutomationConditionGroup {
+  return !!c && typeof c === 'object' && Array.isArray((c as AutomationConditionGroup).conditions);
+}
+
+// ── Nós do grafo (P4.2 / P4.4 / P4.5 / P4.6) ─────────────────
+export type AutomationNodeType = 'trigger' | 'condition' | 'branch' | 'action' | 'wait' | 'end';
+
+export type AutomationActionType =
+  | 'update_lead'
+  | 'change_lead_stage'
+  | 'assign_lead'
+  | 'add_lead_note'
+  | 'update_customer'
+  | 'create_task'
+  | 'create_booking'
+  | 'cancel_booking'
+  | 'dispatch_webhook';
+
+/** Modo de espera (P4.6). `event` está Preparado, ainda não dispara. */
+export type AutomationWaitMode = 'duration' | 'until' | 'event';
+
+export interface AutomationWaitConfig {
+  mode: AutomationWaitMode;
+  /** duration: minutos a esperar (10 min, 2 h = 120, 1 dia = 1440). */
+  minutes?: number;
+  /** until: ISO `YYYY-MM-DDTHH:mm` (no fuso do produto) para retomar. */
+  at?: string;
+  /** event: (futuro) evento que libera a espera. */
+  waitForEvent?: string;
+}
+
+export interface AutomationBranchConfig {
+  id: string;
+  label: string;
+  condition: AutomationCondition;
+}
+
+export interface AutomationNodeConfig {
+  /** trigger */
+  event?: AutomationEventId;
+  /** condition / branch */
+  condition?: AutomationCondition;
+  branches?: AutomationBranchConfig[];
+  /** action */
+  action?: { type: AutomationActionType; params: Record<string, any> };
+  /** wait */
+  wait?: AutomationWaitConfig;
+}
+
+export interface AutomationNode {
+  id: string;
+  type: AutomationNodeType;
+  label?: string;
+  config: AutomationNodeConfig;
+}
+
+/** `branch` só importa em condition/branch: 'yes' | 'no' | id do ramo. */
+export interface AutomationEdge {
+  from: string;
+  to: string;
+  branch?: string;
+}
+
+export interface AutomationSettings {
+  /** Tetos operacionais (P4.4/P4.9). Ausente = padrão do produto. */
+  maxSteps?: number;
+  maxWaitMinutes?: number;
+  /** true ⇒ ações da própria automação podem disparar novas execuções. */
+  allowReentry?: boolean;
+  /** true ⇒ erro em ação encerra a execução (padrão); false ⇒ segue. */
+  stopOnActionError?: boolean;
+  /** Caminho no contexto que identifica o "assunto" (dedupe por evento). */
+  dedupeField?: string;
+}
+
+export interface Automation {
+  id: ID;
+  businessId: ID;
+  name: string;
+  description: string;
+  active: boolean;
+  /** Gatilho + condição de entrada (atalho do editor linear). */
+  trigger: { event: AutomationEventId; condition?: AutomationCondition };
+  nodes: AutomationNode[];
+  edges: AutomationEdge[];
+  settings: AutomationSettings;
+  /** Origem (template interno) e versão do formato — nunca interpretado. */
+  templateId?: string;
+  version: number;
+  createdByUserId?: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+// ── Execução persistida (P4.1 / P4.7 / P4.8) ────────────────
+export type AutomationRunStatus =
+  | 'queued'    // criado pelo gatilho, ainda não processado
+  | 'running'   // reivindicado por UMA execução do motor
+  | 'waiting'   // pausado em delay — retoma quando `waitingUntil` vencer
+  | 'completed'
+  | 'failed'
+  | 'cancelled';
+
+export const AUTOMATION_RUN_TERMINAL: AutomationRunStatus[] = ['completed', 'failed', 'cancelled'];
+
+/** Um passo do histórico — destinado a DIAGNÓSTICO (nunca guarda segredo). */
+export interface AutomationRunStep {
+  at: string;
+  nodeId: string;
+  nodeType: AutomationNodeType | 'run';
+  /** O que aconteceu (rótulo estável para UI/filtros). */
+  outcome:
+    | 'triggered' | 'true' | 'false' | 'executed' | 'skipped'
+    | 'waiting' | 'resumed' | 'error' | 'finished' | 'cancelled';
+  label: string;
+  detail?: string;
+}
+
+export interface AutomationRun {
+  id: ID;
+  businessId: ID;
+  automationId: ID;
+  /** Nome congelado no disparo (a automação pode mudar/depois ser apagada). */
+  automationName: string;
+  status: AutomationRunStatus;
+  triggerEvent: AutomationEventId;
+  /** Nó a processar (após um wait, é o ponto de retomada). */
+  currentNodeId: string;
+  /** Dados do evento + resultado das ações. Nada sensível. */
+  context: Record<string, any>;
+  /** ISO de retomada quando `status = 'waiting'`. */
+  waitingUntil: string;
+  startedAt: string;
+  updatedAt: string;
+  finishedAt: string;
+  error: string;
+  history: AutomationRunStep[];
+  /** Chave de idempotência do gatilho (mesma chave ⇒ no máximo 1 execução). */
+  eventKey: string;
+  /** Nó/entidade que originou (anti-loop: evento gerado por automação). */
+  emittedByRunId: string;
+  steps: number;
+  resumes: number;
+  lastActionType?: AutomationActionType | '';
+  lastError?: string;
+  // ── Posse temporária do motor (a mesma entrega webhook do P3) ──
+  claimToken?: string;
+  claimExpiresAt?: string;
+}
+
+// ── TAREFAS INTERNAS (criadas por automação ou pela equipe) ──
+// Não existe "task" no P0–P3. O motor precisava de uma e cria UMA estrutura
+// compartilhada (não um campo solto): `Task` é a fila de trabalho da unidade,
+// vinculada a lead/agendamento/cliente quando houver. Espelhar em
+// `Lead.nextAction` mantém a esteira informada (nunca o contrário).
+export type TaskStatus = 'open' | 'done' | 'cancelled';
+
+export interface Task {
+  id: ID;
+  businessId: ID;
+  title: string;
+  note: string;
+  status: TaskStatus;
+  dueAt: string; // '' = sem prazo
+  createdAt: string;
+  updatedAt: string;
+  doneAt: string;
+  assignedUserId: string; // '' = qualquer um da equipe
+  /** Quem criou: userId ou 'automation'. */
+  createdBy: string;
+  automationId?: string;
+  automationRunId?: string;
+  /** Nó que a criou — dedupe quando a execução é retomada. */
+  automationNodeId?: string;
+  leadId?: string;
+  bookingId?: string;
+  customerId?: string;
+  source: 'automation' | 'manual';
 }
 
 // ═══════════════════════════════════════════════════════════════
@@ -1024,7 +1274,11 @@ export type AuditAction =
   // P3 — esteira operacional e integrações
   | 'pipeline.updated' | 'api_key.created' | 'api_key.revoked'
   | 'webhook.created' | 'webhook.updated' | 'webhook.deleted'
-  | 'lead.stage_changed' | 'lead.assigned' | 'lead.booked' | 'lead.note_added';
+  | 'lead.stage_changed' | 'lead.assigned' | 'lead.booked' | 'lead.note_added'
+  // P4 — motor de automações e tarefas
+  | 'automation.created' | 'automation.updated' | 'automation.deleted'
+  | 'automation.toggled' | 'automation.duplicated'
+  | 'automation.run_cancelled' | 'task.created' | 'task.completed';
 
 export interface AuditEntry {
   id: ID;

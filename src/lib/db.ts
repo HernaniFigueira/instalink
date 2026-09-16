@@ -28,6 +28,9 @@ import { backfillContacts } from './contacts';
 import { normalizeFeatures } from './features';
 import { sanitizeAppearance } from './appearance';
 import { defaultWhatsappIntegration } from './whatsapp';
+// P4 — normalizadores puros da automação (sem I/O): importá-los aqui mantém a
+// migração num só lugar. `automation/model.ts` não importa este arquivo.
+import { normalizeAutomationRecord, normalizeAutomationRunRecord } from './automation/model';
 
 // Caminho do banco local (modo arquivo). A variável INSTALINK_DB_FILE permite
 // apontar para um arquivo isolado (testes/dev paralelo) sem mudar o padrão.
@@ -48,6 +51,8 @@ export function emptyDB(): DB {
     // P3 — esteira e integrações externas
     pipelines: [], apiKeys: [], webhooks: [], webhookDeliveries: [],
     idempotencyKeys: [], integrationLogs: [],
+    // P4 — motor de automações (definições, execuções e tarefas internas)
+    automations: [], automationRuns: [], tasks: [],
   };
 }
 
@@ -61,6 +66,7 @@ export function normalizeDB(raw: unknown): DB {
     'organizations', 'organizationMembers', 'members', 'agents', 'conversations',
     'messages', 'campaigns', 'campaignRecipients', 'audit', 'supportSessions',
     'pipelines', 'apiKeys', 'webhooks', 'webhookDeliveries', 'idempotencyKeys', 'integrationLogs',
+    'automations', 'automationRuns', 'tasks',
   ] as const) {
     if (!Array.isArray((base as any)[key])) (base as any)[key] = [];
   }
@@ -72,6 +78,44 @@ export function normalizeDB(raw: unknown): DB {
     if (!Array.isArray(d.attemptsHistory)) d.attemptsHistory = [];
     if (!d.eventId) d.eventId = (d.payloadSummary?.id as string) || d.id;
     if (!d.updatedAt) d.updatedAt = d.deliveredAt || d.createdAt || new Date().toISOString();
+  }
+  // P4: Automações e execuções — normalização ADITIVA e defensiva. Campos
+  // novos ganham defaults; nada que o produto tenha escrito é reescrito nem
+  // apagado: `normalizeAutomationRecord` conserta o que dá (nó com tipo
+  // desconhecido, aresta sem branch, settings ausentes) e só devolve `null`
+  // para entrada SEM DONO (não é objeto, ou sem id/businessId) — uma linha
+  // assim não pertence a nenhuma unidade e é invisível para todo o resto do
+  // sistema, que sempre filtra por `businessId`.
+  // HONESTIDADE SOBRE O ARMAZENAMENTO: o documento é único, então a próxima
+  // gravação de `updateDB` regrava o documento inteiro — uma entrada descartada
+  // aqui NÃO sobrevive ao próximo write. É por isso que o critério de descarte
+  // é “sem dono identificável”, nunca “definição estranha”, e por isso que
+  // FALHA DE LEITURA (JSON/Postgres) lança em vez de virar banco vazio.
+  const seenRunIds = new Set<string>();
+  const cleanAutomations: unknown[] = [];
+  for (const raw of base.automations as any[]) {
+    const a = normalizeAutomationRecord(raw);
+    if (a) cleanAutomations.push(a);
+  }
+  base.automations = cleanAutomations as DB['automations'];
+  const cleanRuns: unknown[] = [];
+  for (const raw of base.automationRuns as any[]) {
+    const run = normalizeAutomationRunRecord(raw);
+    if (!run || seenRunIds.has(run.id)) continue;
+    seenRunIds.add(run.id);
+    cleanRuns.push(run);
+  }
+  base.automationRuns = cleanRuns as DB['automationRuns'];
+  const tasksNow = new Date().toISOString();
+  for (const t of base.tasks as any[]) {
+    if (typeof t.businessId !== 'string') t.businessId = '';
+    if (!t.status) t.status = 'open';
+    if (typeof t.dueAt !== 'string') t.dueAt = '';
+    if (typeof t.doneAt !== 'string') t.doneAt = '';
+    if (typeof t.assignedUserId !== 'string') t.assignedUserId = '';
+    if (typeof t.createdAt !== 'string' || !t.createdAt) t.createdAt = tasksNow;
+    if (typeof t.updatedAt !== 'string' || !t.updatedAt) t.updatedAt = t.createdAt;
+    if (t.source !== 'manual') t.source = 'automation';
   }
   // Contatos: migração defensiva UMA única vez (quando o doc antigo não
   // tinha o campo). Idempotente; nada existente é apagado ou duplicado.
@@ -145,6 +189,8 @@ export function normalizeDB(raw: unknown): DB {
     }
     if (!Array.isArray((b as any).navItems)) (b as any).navItems = [];
     if (!b.automations || typeof b.automations !== 'object') (b as any).automations = {};
+    // P4 — capacidades (planos/flags) são aditivas: ausente = padrão do produto.
+    if (!b.capabilityFlags || typeof b.capabilityFlags !== 'object') (b as any).capabilityFlags = {};
   }
   for (const c of base.conversations) {
     if (!c.context || typeof c.context !== 'object') (c as any).context = {};
@@ -323,6 +369,13 @@ const VOLATILE_TYPES = new Set(['page_view', 'ai_started', 'ai_recommendation'])
 
 const MAX_AUDIT_ENTRIES = 5000;
 
+// P4 — teto das execuções TERMINAIS de automação por unidade (o histórico vivo
+// — queued/running/waiting — nunca é podado: perder estado de espera é perder a
+// automação). Tarefas concluídas/canceladas saem depois de 180 dias.
+const MAX_FINISHED_RUNS_PER_BUSINESS = 200;
+const RUN_RETENTION_MS = 30 * 86400000;
+const TASK_RETENTION_MS = 180 * 86400000;
+
 function prune(db: DB): void {
   const now = Date.now();
   db.sessions = db.sessions.filter((s) => new Date(s.expiresAt).getTime() > now);
@@ -333,6 +386,35 @@ function prune(db: DB): void {
   // Auditoria administrativa: teto simples (mais recentes primeiro).
   if (db.audit.length > MAX_AUDIT_ENTRIES) {
     db.audit = db.audit.slice(db.audit.length - MAX_AUDIT_ENTRIES);
+  }
+  // Execuções de automação: mantém as vivas sempre; das terminais, as mais
+  // recentes de cada unidade dentro da janela de retenção.
+  if (db.automationRuns.length > 0) {
+    const perBiz = new Map<string, number>();
+    const cutoff = now - RUN_RETENTION_MS;
+    const keptRuns: typeof db.automationRuns = [];
+    for (let i = db.automationRuns.length - 1; i >= 0; i--) {
+      const r = db.automationRuns[i];
+      const live = r.status === 'queued' || r.status === 'running' || r.status === 'waiting';
+      if (!live) {
+        const finished = Date.parse(r.finishedAt || r.updatedAt || '');
+        if (Number.isFinite(finished) && finished < cutoff) continue;
+        const n = perBiz.get(r.businessId) || 0;
+        if (n >= MAX_FINISHED_RUNS_PER_BUSINESS) continue;
+        perBiz.set(r.businessId, n + 1);
+      }
+      keptRuns.push(r);
+    }
+    db.automationRuns = keptRuns.reverse();
+  }
+  // Tarefas: as abertas ficam para sempre (é pendência real); as encerradas
+  // saem só depois de meio ano.
+  if (db.tasks.length > 0) {
+    db.tasks = db.tasks.filter((t) => {
+      if (t.status === 'open') return true;
+      const at = Date.parse(t.doneAt || t.updatedAt || t.createdAt || '');
+      return !Number.isFinite(at) || at > now - TASK_RETENTION_MS;
+    });
   }
   db.customerSessions = db.customerSessions.filter((s) => new Date(s.expiresAt).getTime() > now);
   db.passwordResets = db.passwordResets.filter(
@@ -388,10 +470,66 @@ export async function updateDB<T>(fn: (db: DB) => T): Promise<Awaited<T>> {
     const result: Awaited<T> = await fn(db); // callback lançou? nada é escrito
     prune(db);
     await writeDB(db);
+    // P4 — só há trabalho quando existe execução pronta AGORA (fila, espera
+    // vencida ou posse morta): checamos o documento que acabamos de gravar
+    // (sem leitura extra) e agendamos o motor.
+    if (hasDueAutomationWork(db)) maybeRunAutomations();
     return result;
   };
   return withWriteLock(run);
 }
+
+// ── P4: gancho de execução imediata (melhor esforço, nunca bloqueante) ──
+// Se uma mutação deixou execução na fila, o motor processa na hora — o usuário
+// não espera o cron, e a rota não precisa conhecer automação nenhuma (um ponto
+// de acionamento só). Custos evitados de propósito:
+//   • nenhuma leitura extra quando não há fila (checagem no objeto já gravado);
+//   • nenhum `await` no caminho do pedido (agendado, com erro engolido);
+//   • nenhuma recursão (flag de execução ativa) e nenhum efeito no caminho de
+//     escrita do PRÓPRIO motor (`updateDBWithCas` não agendou nada);
+//   • desligável por AUTOMATION_INLINE=0 (testes determinísticos).
+// O gatilho é “existe algo PRONTO AGORA”, a mesma pergunta que
+// `isAutomationRunDue` faz no motor: fila `queued`, espera vencida ou execução
+// com posse morta. Isso importa porque o agendador é EXTERNO ao app (no Vercel
+// Hobby não há cron por minuto): checagem só por `queued` deixaria uma espera
+// vencida paradinha até que outro evento criasse fila ou alguém clicasse no
+// painel. Quem decide o que processar continua sendo o banco (CAS + lease).
+let automationDrainActive = false;
+
+/** Existe execução pronta para processar neste documento (agora)? */
+function hasDueAutomationWork(db: DB): boolean {
+  if (!Array.isArray(db.automationRuns) || db.automationRuns.length === 0) return false;
+  const now = Date.now();
+  for (let i = db.automationRuns.length - 1; i >= 0; i--) {
+    const r = db.automationRuns[i];
+    if (r.status === 'queued') return true;
+    if (r.status === 'waiting') {
+      const at = Date.parse(r.waitingUntil || '');
+      // Espera ilegível conta como vencida (o motor decide igual: não trava a fila).
+      if (!Number.isFinite(at) || at <= now) return true;
+    }
+    if (r.status === 'running') {
+      // Instância interrompida: posse expirada ⇒ este ciclo pode reassumir.
+      const lease = Date.parse(r.claimExpiresAt || '');
+      if (!Number.isFinite(lease) || lease <= now) return true;
+    }
+  }
+  return false;
+}
+
+function maybeRunAutomations(): void {
+  if (automationDrainActive) return;
+  if (process.env.AUTOMATION_INLINE === '0') return;
+  automationDrainActive = true;
+  setTimeout(() => {
+    import('./automation/executor')
+      .then((m) => m.drainAutomations({ limit: AUTOMATION_INLINE_BATCH }))
+      .catch(() => { /* automação não derruba a operação nem o write */ })
+      .finally(() => { automationDrainActive = false; });
+  }, 0);
+}
+
+const AUTOMATION_INLINE_BATCH = 8;
 
 /** Resultado de uma escrita condicional: `applied: false` = nada foi gravado. */
 export interface CasWriteResult<T> {

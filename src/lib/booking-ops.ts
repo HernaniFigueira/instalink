@@ -169,3 +169,12 @@ export function bookingActions(status: BookingStatus): ClosureAction[] {
       return [];
   }
 }
+
+// ═══════════════════════════════════════════════════════════════
+// TRANSIÇÃO DE STATUS — veja lib/booking-status.ts
+// ═══════════════════════════════════════════════════════════════
+// A função OFICIAL que muda o status de um agendamento (máquina de estados +
+// histórico + automações de mensagem do P3 + gatilho de automação do P4) mora
+// em `booking-status.ts`, e NÃO aqui. Motivo: este arquivo é importado por
+// Client Components (agenda, ficha do atendimento) e precisa continuar PURE —
+// sem `node:crypto`, sem banco. A separação é a mesma de access-core × access.
