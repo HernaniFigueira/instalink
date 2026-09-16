@@ -26,7 +26,7 @@ import { getBusinessPipeline } from '@/lib/pipeline';
 import type { Automation, DB } from '@/lib/types';
 import { automationsOf, validateAutomationDraft } from '@/lib/automation/model';
 import { automationView } from '@/lib/automation/serialize';
-import { cancelRunsOfAutomation } from '@/lib/automation/executor';
+import { cancelRunsOfAutomation, sanitizeAutomationRunForDisplay } from '@/lib/automation/executor';
 import { capabilityStateFor, limitsFor } from '@/lib/automation/capabilities';
 import { applyTemplate, templateOffers } from '@/lib/automation/templates';
 
@@ -68,10 +68,13 @@ export async function GET(req: NextRequest) {
     .sort((a, b) => (a.updatedAt < b.updatedAt ? 1 : -1))
     .map((a) => automationView(db, a));
 
+  // Mesma projeção do detalhe: a posse interna do motor
+  // (claimToken/claimExpiresAt) nunca vai para o navegador.
   const recentRuns = (db.automationRuns || [])
     .filter((r) => r.businessId === businessId)
     .slice(-40)
-    .reverse();
+    .reverse()
+    .map(sanitizeAutomationRunForDisplay);
 
   // Opções do editor (mesma fonte das telas de esteira/agenda — nada de lista
   // paralela de etapas/serviços/equipe).
@@ -341,7 +344,14 @@ export async function PATCH(req: NextRequest) {
       return target;
     });
     const fresh = await readDB();
-    return NextResponse.json({ ok: true, automation: automationView(fresh, updated!) });
+    // Os avisos da validação saem também na EDIÇÃO (criar já devolvia): um
+    // `settings.dedupeField` ignorado, por exemplo, precisa ser dito — senão o
+    // cliente (e o agente do P5) acha que gravou o que não gravou.
+    return NextResponse.json({
+      ok: true,
+      automation: automationView(fresh, updated!),
+      warnings: validation.warnings,
+    });
   } catch (e: any) {
     const status = e?.status || 500;
     return fail(status === 500 ? 'Não foi possível atualizar a automação.' : e.message, status);

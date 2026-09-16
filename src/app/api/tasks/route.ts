@@ -13,12 +13,15 @@ import { pushAudit } from '@/lib/audit';
 import {
   createTaskTx, openTasks, setTaskStatusTx, summarizeTasks, taskDueLabel,
 } from '@/lib/automation/tasks';
+import { validateAssignedUser } from '@/lib/pipeline';
 import { todayISO } from '@/lib/tz';
 import type { Task } from '@/lib/types';
 
 function view(db: any, t: Task) {
-  const lead = t.leadId ? (db.leads || []).find((l: any) => l.id === t.leadId) : null;
-  const booking = t.bookingId ? (db.bookings || []).find((b: any) => b.id === t.bookingId) : null;
+  // Toda referência é lida DENTRO da unidade da tarefa: um vínculo que não é
+  // dali nunca vira nome exibido (defesa em profundidade — a criação já recusa).
+  const lead = t.leadId ? (db.leads || []).find((l: any) => l.id === t.leadId && l.businessId === t.businessId) : null;
+  const booking = t.bookingId ? (db.bookings || []).find((b: any) => b.id === t.bookingId && b.businessId === t.businessId) : null;
   const assignee = t.assignedUserId ? (db.users || []).find((u: any) => u.id === t.assignedUserId) : null;
   return {
     ...t,
@@ -56,12 +59,19 @@ export async function POST(req: NextRequest) {
     const guard = await requireBusiness(req, businessId, ['leads', 'agenda', 'clientes', 'config']);
     if (!guard.ok) return guard.res;
     const created = await updateDB((d) => {
+      // O responsável precisa ser da equipe desta unidade (a mesma regra que a
+      // automação já passa — sem caminho paralelo de validação).
+      const assignee = String(body.assignedUserId || '');
+      if (assignee) {
+        const check = validateAssignedUser(d, businessId, assignee);
+        if (!check.valid) throw Object.assign(new Error(check.error || 'responsável inválido'), { status: 422 });
+      }
       const res = createTaskTx(d, {
         businessId,
         title: String(body.title || ''),
         note: String(body.note || ''),
         dueAt: String(body.dueAt || ''),
-        assignedUserId: String(body.assignedUserId || ''),
+        assignedUserId: assignee,
         createdBy: guard.ctx.user.id,
         source: 'manual',
         leadId: body.leadId ? String(body.leadId) : undefined,

@@ -72,6 +72,21 @@ export function createTaskTx(db: DB, input: CreateTaskInput): { task: Task | nul
   const title = String(input.title || '').replace(/[\u0000-\u001f<>]/g, ' ').trim().slice(0, TASK_TITLE_MAX);
   if (!title) return { task: null, created: false, reason: 'tarefa sem título' };
 
+  // Vínculos pertencem à UNIDADE da tarefa. Um id de outra empresa nunca é
+  // aceito (nem gravado, nem lido de volta): é o mesmo critério do resto do
+  // produto — a unidade autenticada decide o alcance de qualquer referência.
+  if (input.leadId && !db.leads.some((l) => l.id === input.leadId && l.businessId === input.businessId)) {
+    return { task: null, created: false, reason: 'lead não pertence a esta unidade' };
+  }
+  if (input.bookingId && !db.bookings.some((b) => b.id === input.bookingId && b.businessId === input.businessId)) {
+    return { task: null, created: false, reason: 'agendamento não pertence a esta unidade' };
+  }
+  if (input.customerId && !db.contacts.some(
+    (c) => (c.id === input.customerId || c.customerId === input.customerId) && c.businessId === input.businessId,
+  )) {
+    return { task: null, created: false, reason: 'cliente não pertence a esta unidade' };
+  }
+
   // Idempotência por execução + nó (o motor pode reaplicar o passo).
   if (input.automationRunId && input.automationNodeId) {
     const dup = db.tasks.find(
