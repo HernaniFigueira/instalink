@@ -16,8 +16,13 @@ import type {
   PipelineStage, Service, User,
 } from './types';
 import { onlyDigits } from './utils';
-import { upsertContact, addContactNote } from './contacts';
+import { upsertContact, addContactNote, findContact } from './contacts';
 import { createBookingTx } from './booking-create';
+// P4 — ônibus de gatilhos. Chamado AQUI (e não em cada rota) para que todo
+// caminho que produz o evento dispare a automação: painel, API externa,
+// assistente e widget usam exatamente estas funções. `emitAutomationEvent` é
+// puro sobre o db recebido e NUNCA lança (a operação do usuário vem primeiro).
+import { emitAutomationEvent } from './automation/events';
 
 export const DEFAULT_PIPELINE_STAGES: PipelineStage[] = [
   { id: 'new', name: 'Novo', order: 0, color: 'blue', mappedStatus: 'new', isSystem: true },
@@ -121,6 +126,12 @@ export function mapStageToStatus(pipeline: BusinessPipeline, stageId: string): L
 // ENTRADA NORMALIZADA DE LEADS (UNIVERSAL)
 // ═══════════════════════════════════════════════════════════════
 
+/** Origem de um evento: a execução de automação que o produziu (anti-loop). */
+export interface AutomationOrigin {
+  runId?: string;
+  automationId?: string;
+}
+
 export interface LeadActor {
   id?: string;
   name?: string;
@@ -148,6 +159,8 @@ export interface IngestLeadInput {
   metadata?: Record<string, any>;
   actor?: LeadActor;
   now?: string;
+  /** P4 — quando o evento vem de uma automação (proteção contra reentrada). */
+  origin?: AutomationOrigin;
 }
 
 /**
@@ -261,6 +274,7 @@ export function ingestLead(db: DB, input: IngestLeadInput): {
   const pipeline = getBusinessPipeline(db, business.id);
 
   // 1. Garante Contato no CRM (upsert idempotente, nunca duplica pessoa)
+  const contactExistedBefore = !!findContact(db, business.id, input.customerId || '', digits, name);
   const contact = upsertContact(db, {
     businessId: business.id,
     customerId: input.customerId,
@@ -301,6 +315,11 @@ export function ingestLead(db: DB, input: IngestLeadInput): {
     }
 
     existing.lastInteraction = now;
+
+    // P4 — gatilho de atualização (a criação é tratada no ramo de novo lead).
+    emitLeadIngestEvents(db, business.id, existing, {
+      isNew: false, contact, contactExistedBefore, origin: input.origin, now,
+    });
 
     // Se veio mensagem ou nota, adiciona ao histórico de observações
     if (input.message) {
@@ -389,7 +408,115 @@ export function ingestLead(db: DB, input: IngestLeadInput): {
     createdAt: now,
   });
 
+  // P4 — gatilhos do ciclo de vida (lead + entrada na base de clientes).
+  emitLeadIngestEvents(db, business.id, newLead, {
+    isNew: true, contact, contactExistedBefore, origin: input.origin, now,
+  });
+
   return { lead: newLead, isNew: true, contact };
+}
+
+// ═══════════════════════════════════════════════════════════════
+// P4 — GATILHOS (o evento nasce no serviço oficial, não na rota)
+// ═══════════════════════════════════════════════════════════════
+// Emissão SEMPRE no fim de uma mutação real, dentro da MESMA transação: ou o
+// lead muda e o gatilho existe, ou nada acontece — não há janela em que o
+// evento se perde. `emitAutomationEvent` nunca lança: automação quebrada não
+// pode estragar a operação de quem está usando o sistema.
+
+function emitLeadIngestEvents(
+  db: DB,
+  businessId: string,
+  lead: Lead,
+  info: {
+    isNew: boolean;
+    contact: BusinessCustomer | null;
+    contactExistedBefore: boolean;
+    origin?: AutomationOrigin;
+    now: string;
+  },
+): void {
+  emitAutomationEvent(db, {
+    event: info.isNew ? 'lead.created' : 'lead.updated',
+    businessId,
+    at: info.now,
+    leadId: lead.id,
+    data: { isNew: info.isNew, stageId: lead.stageId || lead.status || 'new' },
+    fromRunId: info.origin?.runId,
+  });
+  if (!info.contact) return;
+  emitAutomationEvent(db, {
+    event: info.contactExistedBefore ? 'customer.updated' : 'customer.created',
+    businessId,
+    at: info.now,
+    customerId: info.contact.id,
+    leadId: lead.id,
+    data: { source: info.contact.source || '' },
+    fromRunId: info.origin?.runId,
+  });
+}
+
+/**
+ * Atualiza campos de lead (a MESMA função usada pelo painel — a automação não
+ * tem caminho paralelo de escrita). `Lead.lastInteraction` é sempre tocado.
+ */
+export function updateLeadFields(
+  db: DB,
+  input: {
+    businessId: string;
+    leadId: string;
+    patch: Partial<Pick<Lead, 'priority' | 'interest' | 'nextAction' | 'name' | 'email' | 'phone' | 'instagram' | 'serviceId' | 'professionalId' | 'sourceUrl'>> & { metadata?: Record<string, any> };
+    actor?: LeadActor;
+    now?: string;
+    origin?: AutomationOrigin;
+  },
+): Lead {
+  const lead = db.leads.find((l) => l.id === input.leadId && l.businessId === input.businessId);
+  if (!lead) throw Object.assign(new Error('Lead não encontrado.'), { status: 404 });
+
+  const now = input.now || new Date().toISOString();
+  const patch = input.patch || {};
+  const changed: string[] = [];
+
+  if (typeof patch.priority === 'string' && ['low', 'medium', 'high', 'urgent'].includes(patch.priority)) {
+    if (lead.priority !== patch.priority) changed.push('prioridade');
+    lead.priority = patch.priority as LeadPriority;
+  }
+  for (const key of ['name', 'email', 'instagram', 'nextAction', 'serviceId', 'professionalId', 'sourceUrl'] as const) {
+    const raw = patch[key];
+    if (typeof raw !== 'string') continue;
+    const value = raw.trim();
+    if (!value) continue;
+    if ((lead as any)[key] !== value) changed.push(key);
+    (lead as any)[key] = key === 'name' ? value.slice(0, 80)
+      : key === 'email' ? value.toLowerCase().slice(0, 120)
+      : key === 'instagram' ? value.slice(0, 60)
+      : value.slice(0, 300);
+  }
+  if (typeof patch.interest === 'string' && patch.interest.trim()) {
+    const value = patch.interest.trim().slice(0, 500);
+    if (lead.interest !== value) changed.push('interesse');
+    lead.interest = value;
+  }
+  if (typeof patch.phone === 'string') {
+    const digits = onlyDigits(patch.phone);
+    if (digits && lead.phone !== digits) { lead.phone = digits; changed.push('telefone'); }
+  }
+  if (patch.metadata && typeof patch.metadata === 'object') {
+    lead.metadata = { ...(lead.metadata || {}), ...patch.metadata };
+    changed.push('metadata');
+  }
+
+  lead.lastInteraction = now;
+  emitAutomationEvent(db, {
+    event: 'lead.updated',
+    businessId: input.businessId,
+    at: now,
+    leadId: lead.id,
+    data: { changed: changed.join(','), by: input.actor?.id || 'automation' },
+    fromRunId: input.origin?.runId,
+  });
+  return lead;
 }
 
 // ═══════════════════════════════════════════════════════════════
@@ -403,6 +530,8 @@ export interface MoveLeadStageParams {
   note?: string;
   actor: { id: string; name: string; role?: string };
   now?: string;
+  /** P4 — execução que originou o movimento (anti-loop). */
+  origin?: AutomationOrigin;
 }
 
 export function moveLeadStage(db: DB, p: MoveLeadStageParams): Lead {
@@ -434,6 +563,17 @@ export function moveLeadStage(db: DB, p: MoveLeadStageParams): Lead {
     note: p.note ? String(p.note).trim().slice(0, 300) : undefined,
   });
 
+  // P4 — gatilho de movimentação (o painel, a API externa e a automação
+  // produzem o mesmo evento, porque todos passam por esta função).
+  emitAutomationEvent(db, {
+    event: 'lead.stage_changed',
+    businessId: p.businessId,
+    at: now,
+    leadId: lead.id,
+    data: { fromStage, stageId: targetStage.id, note: p.note || '' },
+    fromRunId: p.origin?.runId,
+  });
+
   return lead;
 }
 
@@ -443,6 +583,10 @@ export interface AssignLeadParams {
   assignedUserId: string;
   actor: { id: string; name: string; role?: string };
   now?: string;
+  /** Observação adicional no histórico do movimento (opcional). */
+  note?: string;
+  /** P4 — execução que originou a atribuição (anti-loop). */
+  origin?: AutomationOrigin;
 }
 
 export function assignLead(db: DB, p: AssignLeadParams): Lead {
@@ -471,7 +615,20 @@ export function assignLead(db: DB, p: AssignLeadParams): Lead {
     movedBy: p.actor.id,
     movedByName: p.actor.name,
     at: now,
-    note: `Responsável definido: ${targetName}`,
+    note: [
+      `Responsável definido: ${targetName}`,
+      p.note ? String(p.note).trim().slice(0, 200) : '',
+    ].filter(Boolean).join(' — '),
+  });
+
+  // P4 — gatilho de atribuição (o responsável novo pode ser o próximo passo).
+  emitAutomationEvent(db, {
+    event: 'lead.assigned',
+    businessId: p.businessId,
+    at: now,
+    leadId: lead.id,
+    data: { assignedUserId: lead.assignedUserId || '', assignedTo: targetName },
+    fromRunId: p.origin?.runId,
   });
 
   return lead;
@@ -531,6 +688,8 @@ export interface BookLeadParams {
   note?: string;
   actor: { id: string; name: string; role?: string };
   now?: string;
+  /** P4 — execução que pediu o agendamento (anti-loop do gatilho). */
+  originRunId?: string;
 }
 
 export function bookLead(db: DB, p: BookLeadParams): {
@@ -570,6 +729,7 @@ export function bookLead(db: DB, p: BookLeadParams): {
     source: lead.origin || 'esteira',
     leadId: lead.id,
     now: p.now,
+    originRunId: p.originRunId,
   });
 
   const booking = db.bookings.find((b) => b.id === res.bookingId)!;

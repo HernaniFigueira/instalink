@@ -19,6 +19,10 @@ import { upsertContact } from './contacts';
 import { onlyDigits } from './utils';
 import { addDaysISO, weekdayOf, todayISO, nowHM } from './tz';
 import { enqueueBookingAutomation } from './automations';
+// P4 — o agendamento é UM caminho (este arquivo); o gatilho nasce aqui para
+// que página, painel, assistente, widget, API externa e automação disparem as
+// MESMAS automações. Não existe segunda fonte do evento.
+import { emitAutomationEvent } from './automation/events';
 
 export function txError(message: string, status: number): Error {
   return Object.assign(new Error(message), { status });
@@ -47,6 +51,8 @@ export interface CreateBookingParams {
   now?: string;
   /** P3: Lead de origem para vínculo direto. */
   leadId?: string;
+  /** P4: execução de automação que criou o agendamento (anti-loop). */
+  originRunId?: string;
 }
 
 /**
@@ -146,7 +152,7 @@ export function createBookingTx(d: DB, p: CreateBookingParams): {
   d.events.push({ id: randomUUID(), businessId, type: 'conversion', path: '', meta: { kind: 'booking' }, createdAt: now });
 
   // CRM: o atendimento SEMPRE alimenta a base (upsert, nunca duplica).
-  upsertContact(d, {
+  const crmContact = upsertContact(d, {
     businessId,
     customerId: p.customer?.id || p.linkedContact?.customerId || '',
     name,
@@ -224,5 +230,22 @@ export function createBookingTx(d: DB, p: CreateBookingParams): {
   const professionalName = finalPro
     ? d.professionals.find((x) => x.id === finalPro)?.name || ''
     : '';
+
+  // P4 — gatilho de agendamento criado (depois do vínculo com o lead, para
+  // que a condição enxergue o lead já atualizado).
+  const created = d.bookings.find((b) => b.id === bookingId);
+  if (created) {
+    emitAutomationEvent(d, {
+      event: 'booking.created',
+      businessId,
+      at: now,
+      bookingId,
+      leadId: created.leadId || p.leadId || undefined,
+      customerId: crmContact?.id,
+      data: { status, serviceId: service.id, professionalId: finalPro },
+      fromRunId: p.originRunId,
+    });
+  }
+
   return { bookingId, professionalId: finalPro, professionalName };
 }
