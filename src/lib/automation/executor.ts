@@ -168,7 +168,8 @@ function finish(run: AutomationRun, status: 'completed' | 'failed' | 'cancelled'
   run.error = error || run.error || '';
   if (error) run.lastError = error.slice(0, 300);
   run.updatedAt = nowISO;
-  if (status !== 'cancelled') run.finishedAt = nowISO;
+  // Todo estado terminal tem fim registrado (cancelado também encerrou).
+  run.finishedAt = nowISO;
   run.waitingUntil = '';
   pushHistory(run, {
     at: nowISO,
@@ -304,6 +305,9 @@ export async function stepAutomationRun(
   // ── espera/delay (P4.6) ──
   if (node.type === 'wait') {
     const next = nextNodeId(node.id, edges);
+    // Esperar para não fazer nada é desperdício de fila: sem passo seguinte, o
+    // fluxo termina agora (com o motivo no histórico).
+    if (!next) return finish(run, 'completed', nowISO, 'espera sem passo seguinte — fluxo encerrado');
     const waitMode = node.config.wait?.mode;
     if (waitMode === 'event') {
       // Estrutura preparada; ainda não dispara. Seguir o fluxo é mais honesto
@@ -313,7 +317,6 @@ export async function stepAutomationRun(
         label: 'Espera por evento ainda não disponível',
         detail: 'o passo seguinte foi executado em seguida',
       }, maxHistory);
-      if (!next) return finish(run, 'completed', nowISO, 'espera por evento sem continuidade');
       moveTo(run, next, nowISO);
       return { status: 'advanced', detail: 'wait_for_event não suportado' };
     }
@@ -331,7 +334,6 @@ export async function stepAutomationRun(
         at: nowISO, nodeId: node.id, nodeType: 'wait', outcome: 'resumed',
         label: `Espera vencida (${res.label})`, detail: 'retomada imediata',
       }, maxHistory);
-      if (!next) return finish(run, 'completed', nowISO, 'espera sem continuidade');
       moveTo(run, next, nowISO);
       return { status: 'advanced', detail: res.label };
     }

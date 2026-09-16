@@ -13,6 +13,7 @@ import {
 } from './helpers/automation-fixtures';
 import { emitAutomationEvent } from '../automation/events';
 import {
+  cancelRunsOfAutomation,
   claimDueAutomationRuns, countDueAutomationRuns, dueAutomationRuns, isAutomationRunDue,
   processAutomationRunsInDb, sanitizeAutomationRunForDisplay, stepAutomationRun,
   MAX_NODE_VISITS,
@@ -522,6 +523,43 @@ describe('P4.6/P4.7 — espera, retomada e proteções', () => {
     await processAutomationRunsInDb(db, { nowISO: FIXED_NOW });
     expect(db.automationRuns[0].status).toBe('completed');
     expect(db.automationRuns[0].history.some((h) => h.outcome === 'skipped' && h.label.includes('evento'))).toBe(true);
+  });
+
+  it('espera sem passo seguinte encerra na hora (fila não fica ociosa)', async () => {
+    const db = automationFixtures();
+    addLead(db);
+    db.automations.push({
+      ...buildAutomation({}),
+      trigger: { event: 'lead.created' },
+      nodes: [
+        { id: 'trigger', type: 'trigger', config: { event: 'lead.created' } },
+        { id: 'w', type: 'wait', config: { wait: { mode: 'duration', minutes: 60 } } },
+      ],
+      edges: [{ from: 'trigger', to: 'w' }],
+    });
+    await fire(db, { event: 'lead.created', businessId: 'b1', leadId: 'lead-1' });
+    await processAutomationRunsInDb(db, { nowISO: FIXED_NOW });
+    const run = db.automationRuns[0];
+    expect(run.status).toBe('completed');
+    expect(run.waitingUntil).toBe('');
+    expect(run.finishedAt).toBe(FIXED_NOW);
+    expect(run.history.at(-1)!.detail).toContain('sem passo seguinte');
+  });
+
+  it('execução cancelada também registra o fim (histórico consistente)', async () => {
+    const db = automationFixtures();
+    addLead(db);
+    db.automations.push(buildAutomation({
+      steps: [{ kind: 'wait', wait: { mode: 'duration', minutes: 30 } }, { kind: 'action', action: { type: 'add_lead_note', params: { text: 'x' } } }],
+    }));
+    await fire(db, { event: 'lead.created', businessId: 'b1', leadId: 'lead-1' });
+    await processAutomationRunsInDb(db, { nowISO: FIXED_NOW });
+    const cancelledAt = nowISO(3600000);
+    cancelRunsOfAutomation(db, 'b1', 'auto-1', 'automação excluída', cancelledAt);
+    const run = db.automationRuns[0];
+    expect(run.status).toBe('cancelled');
+    expect(run.finishedAt).toBe(cancelledAt);
+    expect(run.waitingUntil).toBe('');
   });
 
   it('17) ciclo acidental é interrompido pelo teto de visitas por nó', async () => {

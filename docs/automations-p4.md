@@ -277,13 +277,13 @@ vez de reimplementá-la.
 ## 15. Testes
 
 ```bash
-npm test -- --run src/lib/__tests__/automation-model.test.ts        # 32 (definição, grafo, esperas, projeção, capacidades, templates, migração, E2E)
-npm test -- --run src/lib/__tests__/automation-engine.test.ts       # 37 (condições, ações, executor, proteções, histórico)
+npm test -- --run src/lib/__tests__/automation-model.test.ts        # 33 (definição, grafo, esperas, projeção, capacidades, templates, migração, E2E)
+npm test -- --run src/lib/__tests__/automation-engine.test.ts       # 40 (condições, ações, executor, proteções, histórico)
 npm test -- --run src/lib/__tests__/automation-integration-p4.test.ts  # 16 (persistência, P3, HTTP/tenants, cron)
 npm run smoke:p4                                                     # 18 verificações de ponta a ponta
 ```
 
-Suíte completa: `npx tsc --noEmit` limpo, `npm test` (680 testes, 46 arquivos),
+Suíte completa: `npx tsc --noEmit` limpo, `npm test` (684 testes, 46 arquivos),
 `npm run build`, `npm run smoke` (67), `npm run smoke:ux` (87), `npm run smoke:p3` (15 fluxos).
 
 ## 16. Fora do P4 (deliberadamente)

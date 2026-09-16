@@ -200,7 +200,7 @@ Tabela arquivo → motivo → impacto → teste de regressão: §14 de `docs/aut
 
 ## 12. Testes
 
-`npm test` → **682 testes, 46 arquivos, 0 falhas** (594 do P3 + 88 do P4).
+`npm test` → **684 testes, 46 arquivos, 0 falhas** (594 do P3 + 90 do P4: 33 de modelo, 40 de motor, 16 de integração e 1 de navegação).
 
 - `automation-model.test.ts` (33): criação/validação, campos por gatilho, parâmetros
   descartados, etapa contra a esteira real, serviço real, tetos, ciclo sem/comp espera,
@@ -208,7 +208,7 @@ Tabela arquivo → motivo → impacto → teste de regressão: §14 de `docs/aut
   templates, migração defensiva, **E2E 1** (lead.created → condição → etapa → espera →
   tarefa → fim), **E2E 2** (condição falsa → ramificação alternativa), **E2E 3**
   (execução interrompida em `waiting` e retomada com o estado relido do documento).
-- `automation-engine.test.ts` (38): gatilho certo/errado/inativo, ações via serviços
+- `automation-engine.test.ts` (40): gatilho certo/errado/inativo, ações via serviços
   oficiais (esteira, atribuição, webhook), isolamento, 8 operadores, AND/OR/NOT,
   múltiplos nós, ramificação, delay, retomada, expiração, loop, teto de passos,
   duplicidade (chave de conteúdo + posse entre instâncias + dedupe por nó), erro de
@@ -265,7 +265,7 @@ regressão citados.
   publicado. Basta reconectar o GitHub na Arena e rodar:
   `git push origin arena/01a0aaa4-instalink` e
   `gh pr create --base main --head arena/01a0aaa4-instalink --title "feat(p4): motor de automações completo" --body-file RELATORIO-P4.md`
-- Portões na última verificação: `npx tsc --noEmit` limpo · `npm test` 682/682 ·
+- Portões na última verificação: `npx tsc --noEmit` limpo · `npm test` 684/684 ·
   `npm run build` ok · `npm run smoke` 67/67 · `npm run smoke:ux` 87/87 ·
   `npm run smoke:p3` 15 fluxos + consumidor de retry · `npm run smoke:p4` 18 verificações.
 - Fora do escopo (deliberadamente): P5, P6, `wait_for_event` por canal, editor visual,
