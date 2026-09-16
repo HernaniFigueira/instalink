@@ -1,9 +1,12 @@
 # P4 — Motor de Automações (relatório da entrega)
 
 Ramo: `arena/01a0aaa4-instalink` · base: `main` em `972938b` (merge do P3).
-Commits do P4 (7): fundação do motor → ações/tarefas/templates/API/painel/suítes →
-docs+smoke+integração → polimento → comentários → relatório → correção de espera/`finishedAt`
-(mais ajustes de documentação deste próprio relatório ao abrir a PR).
+Commits do P4 na PR: fundação do motor → ações/tarefas/templates/API/painel/suítes →
+docs+smoke+integração → polimento → comentários → relatório → correção de espera/`finishedAt` →
+docs de entrega → **auditoria final** (2 commits de correção: fila/posse/reentrância/retomada e
+superfície da API → 1 de suítes `automation-audit-p4`/`automation-dedupe-p4` → 1 de docs), cada um
+com causa, correção e teste próprios (§15). Contar commits é frágil demais para caber na própria
+mensagem que os lista; o estado verificável é `git log --oneline main..HEAD` na PR.
 Nenhum merge foi feito; PR exclusiva do P4 (ver §14).
 
 ---
