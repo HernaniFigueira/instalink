@@ -244,4 +244,6 @@ export const API_GUARDS: Array<{ route: string; file: string; permission: Permis
   { route: '/api/automations', file: 'src/app/api/automations/route.ts', permission: 'config', area: 'automations' },
   { route: '/api/automations/:id', file: 'src/app/api/automations/[id]/route.ts', permission: 'config', area: 'automations' },
   { route: '/api/tasks', file: 'src/app/api/tasks/route.ts', permission: ['leads', 'agenda', 'clientes', 'config'], area: 'clientes' },
+  // P5 — propostas de IA (mesma permissão do editor: a IA não publica sozinha).
+  { route: '/api/ai/automations', file: 'src/app/api/ai/automations/route.ts', permission: 'config', area: 'automations' },
 ];

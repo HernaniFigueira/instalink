@@ -22,6 +22,7 @@ import {
   fieldsForEvent, humanDuration, type LinearStep,
 } from '@/lib/automation/ui';
 import { useRevalidateOnFocus } from '@/components/dashboard/use-revalidate';
+import { AiAutomations } from '@/components/dashboard/AiAutomations';
 
 interface ConditionRow { field: string; operator: string; value: string }
 interface Group { logic: 'and' | 'or'; invert: boolean; rows: ConditionRow[] }
@@ -166,7 +167,7 @@ function linearToApiSteps(steps: Step[]): any[] {
 
 export function AutomationsView() {
   const { businessId, noBusiness } = useBusinessId();
-  const [tab, setTab] = useState<'list' | 'templates' | 'runs' | 'tasks'>('list');
+  const [tab, setTab] = useState<'list' | 'ai' | 'templates' | 'runs' | 'tasks'>('list');
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
@@ -275,7 +276,8 @@ export function AutomationsView() {
       />
 
       <div className="flex flex-wrap items-center gap-2 text-xs">
-        {([['list', 'Minhas automações', automations.length], ['templates', 'Começar de um modelo', templates.length],
+        {([['list', 'Minhas automações', automations.length], ['ai', 'Criar com IA', ''],
+          ['templates', 'Começar de um modelo', templates.length],
           ['runs', 'Execuções', runs.length], ['tasks', 'Tarefas', taskSummary.open]] as const).map(([key, label, count]) => (
           <button key={key} onClick={() => setTab(key as any)}
             className={cn('px-3 py-1.5 rounded-full border font-semibold transition',
@@ -291,13 +293,25 @@ export function AutomationsView() {
         <Notice tone="info">As automações estão desligadas para esta empresa. Nada será executado até o recurso ser liberado.</Notice>
       )}
 
+      {tab === 'ai' && (
+        <AiAutomations
+          businessId={businessId}
+          onPublished={(message) => { setNotice(message); setTab('list'); void load(); }}
+        />
+      )}
+
       {tab === 'list' && (loading ? <Skeleton className="h-40" /> : (
         <div className="space-y-3">
           {!automations.length && (
             <EmptyState
               title="Nenhuma automação ainda"
-              hint="Comece de um modelo pronto (é o caminho mais rápido) ou crie a sua: um gatilho, uma condição e uma ação já resolvem a maioria dos casos."
-              action={<Button size="sm" onClick={() => setTab('templates')}>Ver modelos</Button>}
+              hint="Descreva o que você quer em uma frase, comece de um modelo pronto, ou crie a sua: um gatilho, uma condição e uma ação já resolvem a maioria dos casos."
+              action={(
+                <div className="flex flex-wrap justify-center gap-2">
+                  <Button size="sm" onClick={() => setTab('ai')}>Criar com IA</Button>
+                  <Button size="sm" variant="secondary" onClick={() => setTab('templates')}>Ver modelos</Button>
+                </div>
+              )}
             />
           )}
           {automations.length > 0 && (

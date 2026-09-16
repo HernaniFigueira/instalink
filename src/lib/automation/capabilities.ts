@@ -12,9 +12,10 @@
 //   3. padrão do produto (`DEFAULT_CAPABILITIES`).
 //
 // Padrão de hoje: nada é cobrado, então as capacidades operacionais do P4
-// vêm LIGADAS; as capacidades que ainda não existem (IA, canais externos) vêm
-// desligadas porque o MOTOR delas não existe — não por cobrança. Quando um
-// plano for criado, muda-se só este arquivo (+ override por unidade).
+// e a geração por IA do P5 vêm LIGADAS; as capacidades que ainda não existem
+// (canais externos / P6) vêm desligadas porque o MOTOR delas não existe — não
+// por cobrança. Quando um plano for criado, muda-se só este arquivo
+// (+ override por unidade).
 import type { Business } from '../types';
 
 export type CapabilityId =
@@ -44,8 +45,8 @@ export const CAPABILITIES: CapabilityDef[] = [
     hint: 'Ramificações, ações sobre a agenda, esperas longas e webhooks de saída.',
   },
   {
-    id: 'automation.ai', label: 'Automação por IA', available: false, default: false,
-    hint: 'Descrever a automação em linguagem natural (P5 — ainda não existe).',
+    id: 'automation.ai', label: 'Automação por IA', available: true, default: true,
+    hint: 'Descrever a automação em linguagem natural. A IA planeja; o P4 executa depois da aprovação.',
   },
   {
     id: 'channel.whatsapp', label: 'Canal WhatsApp', available: false, default: false,

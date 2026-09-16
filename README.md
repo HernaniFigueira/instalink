@@ -149,7 +149,10 @@ fila externa, e um endpoint protegido para retomar o que está em espera:
   espera longa), configure o `curl` acima no cron da VPS/GitHub Actions ou o
   Vercel Cron (Pro) apontando para `/api/cron/automations`.
 - O painel configura tudo em `/automacoes` (Quando → Se → Então → Depois → Senão).
-- Detalhes: [`docs/automations-p4.md`](docs/automations-p4.md).
+- **P5 — criar com IA:** na mesma tela, descreva a automação em português. A IA
+  devolve um plano estruturado (o contrato do P4) para você revisar, editar e
+  só então publicar. Nada é ligado sozinho. Detalhes: [`docs/ai-p5.md`](docs/ai-p5.md).
+- Detalhes do motor: [`docs/automations-p4.md`](docs/automations-p4.md).
 
 ```bash
 npm run smoke:p4   # motor de automações de ponta a ponta (servidor + npm run seed)

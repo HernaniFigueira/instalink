@@ -325,14 +325,14 @@ O que a auditoria da PR #18 travou como contrato (cada um com teste em
   roubado não devolve nome de cliente alheio; o `assignedUserId` passa pela
   MESMA validação de equipe que a automação usa (`validateAssignedUser`).
 
-## 12. Preparado para IA (P4.12) sem IA
+## 12. Preparado para IA (P4.12) — o P5 já usa este contrato
 
-A definição é JSON fechado e validável; um agente do P5 pode gerar exatamente a
-forma linear (`event`, `condition`, `steps`, `elseSteps`) ou o grafo, sem saber que
-existe `Lead`, `stageHistory` ou uma tabela. O servidor valida (catálogo de
-gatilhos, campos, ações, esteira real da unidade, limites de capacidade) e o
-usuário aprova. O tipo `action.type = 'ai'` não existe ainda — quando existir, é
-uma entrada no catálogo com `requires: 'automation.ai'`, e nada mais.
+A definição é JSON fechado e validável. O P5 (`src/lib/ai/`, `docs/ai-p5.md`)
+gera exatamente a forma linear (`event`, `condition`, `steps`, `elseSteps`) e
+compila com `linearToGraph` + `validateAutomationDraft`. Sem saber que existe
+`Lead`, `stageHistory` ou uma tabela. O servidor valida (catálogo de gatilhos,
+campos, ações, esteira real da unidade, limites de capacidade) e o usuário
+aprova. Não existe `action.type = 'ai'`: a IA não é uma ação do motor.
 
 ## 13. Capacidades (P4.13)
 
@@ -341,9 +341,9 @@ código. Precedência: override da unidade (`Business.capabilityFlags`) → ambi
 (`AUTOMATION_CAPS`) → padrão do produto. `limitsFor(business)` deriva os tetos.
 Ações que exigem `automation.advanced` são recusadas **na validação** e
 revalidadas **na execução** (a definição pode ter nascido antes de o recurso ser
-desligado). `automation.ai`, `channel.whatsapp` e `channel.instagram` existem como
-bandeiras com `available: false` — ligar não libera nada enquanto o motor não
-existe (falha segura).
+desligado). `channel.whatsapp` e `channel.instagram` existem como bandeiras com
+`available: false` (P6). `automation.ai` passou a `available: true` no P5 — a
+IA gera o plano; publicar continua sendo ato humano e a execução continua no P4.
 
 ## 14. O que foi alterado em P0–P3 (e por quê)
 
@@ -384,7 +384,7 @@ API, referências de tarefa e fundo da reentrância.
 
 ## 16. Fora do P4 (deliberadamente)
 
-P5 (IA/agente) e P6 (canais: WhatsApp/Instagram/pagamentos/e-mail), `wait_for_event`
+P6 (canais: WhatsApp/Instagram/pagamentos/e-mail), `wait_for_event`
 disparado por evento externo, editor visual de grafo, cobrança/planos (só a camada de
 capacidade), UI do `capabilityFlags` por empresa (definível por ambiente/override), e
 qualquer reestruturação cosmética de P0–P3.
