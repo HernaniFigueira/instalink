@@ -63,6 +63,10 @@ export const PANEL_ROUTES: PanelRouteDef[] = [
   { href: '/agente', label: 'Assistente', icon: 'spark', section: 'Comunicação', permission: 'agente', area: 'agente' },
   // Gestão
   { href: '/resultados', label: 'Resultados', icon: 'chart', section: 'Gestão', permission: 'financeiro', area: 'resultados' },
+  // P4 — Motor de Automações: "quando acontecer X, se Y, faça Z". Fica em
+  // Gestão (é configuração de operação, não o dia a dia) e exige 'config' —
+  // mesmo perfil de Integrações/Recursos, para não inventar nova permissão.
+  { href: '/automacoes', label: 'Automações', icon: 'bolt', section: 'Gestão', permission: 'config', area: 'automations' },
   { href: '/campanhas', label: 'Campanhas', icon: 'megaphone', section: 'Gestão', permission: 'campanhas', area: 'campanhas' },
   // Presença — a página pública é construída AQUI (editor), não em Configurações
   { href: '/pagina', label: 'Página', icon: 'link', section: 'Presença', permission: 'pagina', area: 'pagina' },
@@ -235,4 +239,9 @@ export const API_GUARDS: Array<{ route: string; file: string; permission: Permis
   { route: '/api/integrations/webhooks', file: 'src/app/api/integrations/webhooks/route.ts', permission: 'config', area: 'config' },
   { route: '/api/pipeline', file: 'src/app/api/pipeline/route.ts', permission: ['leads', 'config'], area: 'clientes' },
   { route: '/api/leads/:id/book', file: 'src/app/api/leads/[id]/book/route.ts', permission: 'agenda', area: 'agenda' },
+  // P4 — motor de automações (config = dono/admin da unidade; tarefas são
+  // operacionais e podem ser vistas por quem opera esteira/agenda/clientes).
+  { route: '/api/automations', file: 'src/app/api/automations/route.ts', permission: 'config', area: 'automations' },
+  { route: '/api/automations/:id', file: 'src/app/api/automations/[id]/route.ts', permission: 'config', area: 'automations' },
+  { route: '/api/tasks', file: 'src/app/api/tasks/route.ts', permission: ['leads', 'agenda', 'clientes', 'config'], area: 'clientes' },
 ];

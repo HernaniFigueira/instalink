@@ -33,7 +33,7 @@ import { updateDB, updateDBWithCas } from '../db';
 import { hasCapability, limitsFor, type CapabilityLimits } from './capabilities';
 import { evaluateCondition } from './conditions';
 import { executeAction, prepareActionParams, type ActionResult } from './actions';
-import { NODE_TYPE_DEFS, automationActionDef, nextNodeId, nodeLabel, resolveWait } from './model';
+import { NODE_TYPE_DEFS, automationActionDef, isTerminalStatus, nextNodeId, nodeLabel, resolveWait } from './model';
 
 /** Posse de uma execução pelo motor (lease curto: a função pode ser morta). */
 export const AUTOMATION_CLAIM_LEASE_MS = 30_000;
@@ -54,9 +54,7 @@ function envPositiveInt(name: string, fallback: number): number {
 }
 
 // ── Estado e elegibilidade ───────────────────────────────────
-export function isAutomationTerminal(run: AutomationRun): boolean {
-  return run.status === 'completed' || run.status === 'failed' || run.status === 'cancelled';
-}
+export const isAutomationTerminal = (run: AutomationRun): boolean => isTerminalStatus(run.status);
 
 /** Posse ainda válida? (expirada ⇒ outra varredura pode assumir). */
 export function isAutomationRunClaimLive(run: AutomationRun, nowISO = new Date().toISOString()): boolean {
@@ -247,12 +245,9 @@ export async function stepAutomationRun(
     return finish(run, 'failed', nowISO, `ciclo detectado em "${nodeLabel(node)}"`, 'ciclo detectado');
   }
 
-  // ── gatilho: só registra e segue ──
+  // ── gatilho: a linha "trigger recebido" já existe (criada no disparo);
+  // aqui o motor só atravessa o nó e segue (sem duplicar o registro).
   if (node.type === 'trigger') {
-    pushHistory(run, {
-      at: nowISO, nodeId: node.id, nodeType: 'trigger', outcome: 'triggered',
-      label: `Gatilho ${node.config.event || automation.trigger?.event || ''}`.trim(),
-    }, maxHistory);
     const next = nextNodeId(node.id, edges);
     if (!next) return finish(run, 'completed', nowISO, 'gatilho sem passos depois');
     moveTo(run, next, nowISO);
@@ -356,8 +351,8 @@ export async function stepAutomationRun(
 
   // ── fim explícito ──
   if (node.type === 'end') {
-    pushHistory(run, { at: nowISO, nodeId: node.id, nodeType: 'end', outcome: 'finished', label: 'Fim do fluxo' }, maxHistory);
-    return finish(run, 'completed', nowISO, 'nó final atingido');
+    // `finish` registra a linha final (com o detalhe do nó) — uma só vez.
+    return finish(run, 'completed', nowISO, `fim do fluxo em "${nodeLabel(node)}"`);
   }
 
   // ── ação (P4.5) — sempre delegada ao serviço oficial ──

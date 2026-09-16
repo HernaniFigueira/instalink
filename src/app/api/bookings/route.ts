@@ -5,16 +5,16 @@ import { canAccessBooking, requireBusiness, scopeBookings, scopeInfo } from '@/l
 import { customerFromRequest } from '@/lib/customer-auth';
 import { isFeatureEnabled, canBook as canBookModule } from '@/lib/features';
 import {
-  bookingDuration, needsClosure, rescheduleDecision, rescheduleForwardNote, rescheduleNote,
+  applyBookingStatusTx, bookingDuration, needsClosure, rescheduleDecision,
+  rescheduleForwardNote, rescheduleNote,
 } from '@/lib/booking-ops';
 import { computeSlots } from '@/lib/slots';
 import { bookingMode } from '@/lib/booking';
 import { createBookingTx } from '@/lib/booking-create';
-import { enqueueBookingAutomation, enqueueDueReminders, onBookingCompleted } from '@/lib/automations';
+import { enqueueDueReminders } from '@/lib/automations';
 import { upsertContact } from '@/lib/contacts';
 import { todayISO, nowHM, weekdayOf, addDaysISO, isValidDateISO, isValidClockTime } from '@/lib/tz';
 import { onlyDigits } from '@/lib/utils';
-import { BOOKING_FLOW, canTransition } from '@/lib/status';
 import { rateLimit, ipFrom } from '@/lib/rate-limit';
 import type { BookingStatus, DB } from '@/lib/types';
 
@@ -369,36 +369,20 @@ export async function PATCH(req: NextRequest) {
     }
 
     // ── Transição de status (fechamento operacional ou mudança normal) ──
+    // P4: a regra está na FUNÇÃO OFICIAL (lib/booking-ops.ts), que a automação
+    // também usa — máquina de estados, histórico e mensagens do P3 num só lugar.
     const to = body.status as BookingStatus;
-    if (!BOOKING_FLOW[current.status] || !canTransition(BOOKING_FLOW, current.status, to)) {
-      return NextResponse.json({ error: `Não é possível mudar de "${current.status}" para "${body.status}".` }, { status: 422 });
+    const applied = await updateDB((d) => applyBookingStatusTx(d, {
+      businessId: business.id,
+      bookingId: String(body.id || ''),
+      to,
+      by: 'owner',
+      note: body.note ? String(body.note) : undefined,
+    }));
+    if (!applied.ok) {
+      return NextResponse.json({ error: applied.error || 'Não foi possível atualizar.' }, { status: applied.status_code || 422 });
     }
-    await updateDB((d) => {
-      const b = d.bookings.find((x) => x.id === body.id && x.businessId === business.id);
-      if (!b) throw err('Agendamento não encontrado.', 404);
-      const now = new Date().toISOString();
-      b.history.push({ at: now, from: b.status, to, by: 'owner' });
-      b.status = to;
-      b.updatedAt = now;
-      // AUTOMAÇÕES (gatilhos reais, mensagens na fila — sem simulação):
-      //   pending → confirmed  ⇒ confirmação;
-      //   * → completed        ⇒ pós-atendimento + convite de avaliação.
-      if (to === 'confirmed') {
-        enqueueBookingAutomation(d, {
-          businessId: business.id,
-          kind: 'booking_confirmation',
-          variant: 'confirmed',
-          booking: {
-            id: b.id,
-            customerName: b.customerName, customerPhone: b.customerPhone,
-            date: b.date, time: b.time,
-            serviceName: d.services.find((s) => s.id === b.serviceId)?.name || 'atendimento',
-          },
-        });
-      }
-      if (to === 'completed') onBookingCompleted(d, business.id, b);
-    });
-    return NextResponse.json({ ok: true });
+    return NextResponse.json({ ok: true, status: applied.status });
   } catch (e: any) {
     const status = e?.status || 500;
     if (status === 500) console.error('[bookings] PATCH falhou:', e);

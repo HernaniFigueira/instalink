@@ -113,7 +113,7 @@ describe('panel — navegação contextual', () => {
       '/agenda', '/clientes',
       '/servicos', '/profissionais', '/horarios', '/produtos',
       '/whatsapp', '/agente',
-      '/resultados', '/campanhas',
+      '/resultados', '/automacoes', '/campanhas',
       '/pagina',
       '/equipe', '/recursos', '/configuracoes',
     ]);
@@ -122,6 +122,23 @@ describe('panel — navegação contextual', () => {
     expect(labels.get('/pagina')).toBe('Página');
     expect(labels.get('/profissionais')).toBe('Profissionais');
     expect(labels.get('/horarios')).toBe('Horários');
+  });
+
+  // P4: a tela de automações ENTROU na navegação (Gestão) — o teste acima é a
+  // regressão que obriga qualquer adição de menu a ser explicada, não acidental.
+  it('P4: Automações é rota visível de Gestão com permissão de configuração', () => {
+    const route = panelRouteFor('/automacoes');
+    expect(route?.label).toBe('Automações');
+    expect(route?.section).toBe('Gestão');
+    expect(route?.permission).toBe('config');
+    expect(route?.hidden).toBeFalsy();
+    // Sem 'config' a pessoa não vê nem acessa (403 amigável, nunca logout).
+    const noConfig = ctx({ permissions: { config: false } });
+    expect(panelAccess('/automacoes', noConfig).state).toBe('denied');
+    expect(panelAccess('/automacoes', ctx()).state).toBe('allow');
+    // Deep links do P3 continuam fora do menu (não viraram poluição de navegação).
+    expect(panelRouteFor('/esteira')?.hidden).toBe(true);
+    expect(panelRouteFor('/integracoes')?.hidden).toBe(true);
   });
 
   it('clínica (services+bookings) não vê Pedidos nem Produtos', () => {

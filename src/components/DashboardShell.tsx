@@ -88,6 +88,9 @@ const PATHS: Record<string, React.ReactNode> = {
   toggle: (<><rect x="1" y="7" width="22" height="10" rx="5" /><circle cx="16" cy="12" r="3" /></>),
   shield: (<><path d="M20 13c0 5-3.5 7.5-7.66 8.95a1 1 0 0 1-.67-.01C7.5 20.5 4 18 4 13V6a1 1 0 0 1 1-1c2 0 4.5-1.2 6.24-2.72a1.17 1.17 0 0 1 1.52 0C14.51 3.81 17 5 19 5a1 1 0 0 1 1 1z" /><path d="m9 12 2 2 4-4" /></>),
   lock: (<><rect x="3" y="11" width="18" height="11" rx="2" /><path d="M7 11V7a5 5 0 0 1 10 0v4" /></>),
+  // Automações (P4): raio = "acontece sozinho". traço fino, mesma linguagem do
+  // restante da sidebar (sem glifo novo por tela).
+  bolt: (<path d="M13 2 4 14h6l-1 8 9-12h-6l1-8Z" />),
 };
 
 function I({ n, size = 18 }: { n: string; size?: number }) {

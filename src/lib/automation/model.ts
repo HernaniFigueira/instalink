@@ -157,9 +157,7 @@ export function automationFieldDef(path: string): AutomationFieldDef | undefined
 
 /** Rótulo legível de um caminho (usado no histórico e no editor). */
 export function automationFieldLabel(path: string): string {
-  const def = automationFieldDef(path);
-  if (def) return def.label.replace(/^([^·]+) · /, (m) => m).replace(' · ', ' ');
-  return path;
+  return automationFieldDef(path)?.label || path;
 }
 
 /** Campos oferecidos para um evento (a UI nunca mostra campo inaplicável). */
@@ -597,7 +595,9 @@ export function analyzeGraph(
 // ═══════════════════════════════════════════════════════════════
 export interface ValidateContext {
   limits?: CapabilityLimits;
-  /** Etapas válidas da esteira da unidade (para validar `change_lead_stage`). */
+  /** Etapas válidas da esteira da unidade (id + nome, para validar a ação). */
+  stages?: Array<{ id: string; name: string }>;
+  /** @deprecated use `stages` (mantido para chamadas existentes). */
   stageIds?: string[];
   /** Serviços ativos da unidade (para validar `create_booking`). */
   serviceIds?: string[];
@@ -799,9 +799,9 @@ export function sanitizeNode(input: unknown, event: AutomationEventId | '', ctx:
         if (!Number.isFinite(n)) { delete params[field.key]; errors.push(`"${field.label}" precisa ser um número`); }
         else params[field.key] = n;
       }
-      if (field.type === 'stage' && params[field.key] !== undefined && ctx.stageIds) {
+      if (field.type === 'stage' && params[field.key] !== undefined) {
         const want = String(params[field.key]);
-        const alias = resolveStageAlias(want, ctx.stageIds);
+        const alias = resolveStageAlias(want, stageList(ctx));
         if (!alias) errors.push(`a etapa "${want}" não existe na esteira desta empresa`);
         else params[field.key] = alias;
       }
@@ -822,14 +822,25 @@ export function sanitizeNode(input: unknown, event: AutomationEventId | '', ctx:
   return { node: { id, type, ...(label ? { label } : {}), config }, errors, warnings };
 }
 
-/** Alias de etapa: aceita rótulo/idioma (o motor já tem STAGE_ALIASES no P3). */
-export function resolveStageAlias(input: string, stageIds: string[]): string {
+/** Etapas conhecidas da unidade (fonte: `getBusinessPipeline`). */
+function stageList(ctx: ValidateContext): Array<{ id: string; name: string }> {
+  if (ctx.stages?.length) return ctx.stages;
+  return (ctx.stageIds || []).map((id) => ({ id, name: id }));
+}
+
+/**
+ * Resolve a etapa informada para o id canônico: aceita o id exato ou o nome da
+ * etapa (o editor mostra nomes, quem grava é o id). Devolve '' quando a
+ * unidade não tem aquela etapa — a ação oficial recusaria igual.
+ */
+export function resolveStageAlias(input: string, stages: Array<{ id: string; name: string }>): string {
   const raw = String(input || '').trim().toLowerCase();
   if (!raw) return '';
-  const direct = stageIds.find((s) => s === raw);
-  if (direct) return direct;
-  const byName = stageIds.find((s) => s.replace(/[^a-z0-9]/g, '') === raw.replace(/[^a-z0-9]/g, ''));
-  return byName || '';
+  const norm = (x: string) => x.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-z0-9]/g, '');
+  const byId = stages.find((s) => s.id === raw);
+  if (byId) return byId.id;
+  const byName = stages.find((s) => norm(s.name) === norm(raw));
+  return byName?.id || '';
 }
 
 export interface AutomationDraft {
@@ -837,12 +848,54 @@ export interface AutomationDraft {
   name?: string;
   description?: string;
   active?: boolean;
+  /** Forma linear do editor (Quando / Se / Então / Senão). */
   event?: AutomationEventId;
   condition?: unknown;
+  steps?: unknown[];
+  elseSteps?: unknown[];
+  /** Forma de grafo (editor visual futuro / P5). Se vier, é a fonte. */
   nodes?: unknown[];
   edges?: unknown[];
   settings?: Record<string, unknown>;
   templateId?: string;
+}
+
+/**
+ * Rascunho linear → `LinearStep[]`. Cada passo é sanitizado pelo MESMO caminho
+ * de um nó (a ação/condição não tem versão "mais frouxa" para a UI).
+ */
+function normalizeLinearSteps(raw: unknown, errors: string[], where: string): LinearStep[] {
+  if (!Array.isArray(raw)) return [];
+  const out: LinearStep[] = [];
+  raw.slice(0, 40).forEach((item, index) => {
+    if (!item || typeof item !== 'object') { errors.push(`${where}: passo ${index + 1} inválido`); return; }
+    const step = item as Record<string, unknown>;
+    const kind = String(step.kind || 'action');
+    if (kind === 'wait') {
+      const limits = ADVANCED_LIMITS;
+      const { wait, errors: we } = sanitizeWait(step.wait, limits);
+      if (!wait || we.length) { errors.push(`${where}: ${we[0] || 'espera inválida'}`); return; }
+      out.push({ kind: 'wait', label: String(step.label || '').slice(0, MAX_LABEL), wait });
+      return;
+    }
+    if (kind === 'condition') {
+      const { condition, errors: ce } = sanitizeCondition(step.condition, '');
+      if (!condition) { errors.push(`${where}: ${ce[0] || 'condição inválida'}`); return; }
+      out.push({ kind: 'condition', label: String(step.label || '').slice(0, MAX_LABEL), condition });
+      return;
+    }
+    const action = (step.action || step) as Record<string, unknown>;
+    const type = String(action.type || '') as AutomationActionType;
+    const def = automationActionDef(type);
+    if (!def) { errors.push(`${where}: ação desconhecida (${type || 'vazia'})`); return; }
+    const params = sanitizeParams(action.params);
+    out.push({
+      kind: 'action',
+      label: String(step.label || '').slice(0, MAX_LABEL),
+      action: { type, params: params as Record<string, any> },
+    });
+  });
+  return out;
 }
 
 /** Valida um rascunho (forma do editor linear OU grafo explícito). */
@@ -863,24 +916,32 @@ export function validateAutomationDraft(
   let nodes = Array.isArray(draft.nodes) ? draft.nodes : [];
   let edges = Array.isArray(draft.edges) ? draft.edges : [];
   const event = (draft.event || '') as AutomationEventId;
-  if (nodes.length === 0) {
-    if (!isAutomationEvent(event)) {
-      errors.push('escolha um gatilho (o "quando")');
-    } else {
+  const triggerEvent = isAutomationEvent(event)
+    ? event
+    : (((nodes as any[]).find((n: any) => n?.type === 'trigger')?.config?.event) as AutomationEventId | undefined) || '';
+  if (!isAutomationEvent(triggerEvent) && nodes.length === 0) errors.push('escolha um gatilho (o "quando")');
+
+  // A condição de entrada é sanitizada UMA vez e os erros dela vão para a
+  // resposta (uma condição inválida jamais é "esquecida" virando ausência de
+  // condição — isso ligar/desligar um filtro sem o lojista pedir).
+  const triggerCond = sanitizeCondition(draft.condition, triggerEvent);
+  const builtFromLinear = nodes.length === 0;
+  if (builtFromLinear) {
+    if (!errors.length) {
+      const steps = normalizeLinearSteps(draft.steps, errors, 'Então');
+      const elseSteps = normalizeLinearSteps(draft.elseSteps, errors, 'Senão');
       const built = linearToGraph({
-        event,
-        condition: sanitizeCondition(draft.condition, event).condition,
-        steps: [],
+        event: triggerEvent as AutomationEventId,
+        condition: triggerCond.condition,
+        steps,
+        elseSteps,
       });
       nodes = built.nodes;
       edges = built.edges;
     }
   }
-
-  const triggerEvent = isAutomationEvent(event)
-    ? event
-    : (((nodes as any[]).find((n: any) => n?.type === 'trigger')?.config?.event) as AutomationEventId | undefined) || '';
   if (!isAutomationEvent(triggerEvent)) errors.push('a automação precisa de um gatilho válido');
+  if (draft.condition !== undefined && draft.condition !== null) errors.push(...triggerCond.errors);
 
   const cleanNodes: AutomationNode[] = [];
   for (const rawNode of nodes) {
@@ -937,7 +998,11 @@ export function validateAutomationDraft(
     }
   }
 
-  const triggerCondition = sanitizeCondition(draft.condition, triggerEvent).condition;
+  // `trigger.condition` é a visão linear do nó de condição: quando o grafo é
+  // que é a fonte (editor visual/IA), a projeção vem do próprio nó.
+  const triggerCondition = builtFromLinear
+    ? triggerCond.condition
+    : ((cleanNodes.find((n) => n.type === 'condition')?.config.condition as AutomationCondition | undefined) ?? triggerCond.condition);
 
   const settingsIn = (draft.settings && typeof draft.settings === 'object' ? draft.settings : {}) as Record<string, unknown>;
   const settings: AutomationSettings = {};
@@ -1183,11 +1248,18 @@ export function normalizeAutomationRunRecord(raw: any, now = new Date().toISOStr
     resumes: Number.isFinite(raw.resumes) ? Math.max(0, Math.floor(raw.resumes)) : 0,
     ...(raw.lastActionType ? { lastActionType: raw.lastActionType } : {}),
     ...(raw.lastError ? { lastError: String(raw.lastError).slice(0, 300) } : {}),
-    // Posse: uma execução legada SEM dono não pode ficar presa em 'running'.
-    ...(raw.claimToken && raw.claimExpiresAt && Date.parse(raw.claimExpiresAt) > Date.parse(now)
-      ? { claimToken: String(raw.claimToken), claimExpiresAt: String(raw.claimExpiresAt) }
-      : {}),
+    // Posse: preservada VERBATIM. Quem decide se ela ainda vale é o motor
+    // (`isAutomationRunClaimLive(run, now)`), com o "agora" da varredura —
+    // nunca o relógio da leitura. Uma execução legada sem dono fica em
+    // 'running' sem posse e, por isso, volta a ser reivindicável.
+    ...(raw.claimToken ? { claimToken: String(raw.claimToken).slice(0, 64) } : {}),
+    ...(raw.claimExpiresAt ? { claimExpiresAt: String(raw.claimExpiresAt).slice(0, 40) } : {}),
   };
+}
+
+/** Estados em que a execução já acabou (nunca volta sozinha para a fila). */
+export function isTerminalStatus(status: AutomationRunStatus | string): boolean {
+  return status === 'completed' || status === 'failed' || status === 'cancelled';
 }
 
 /** Automações de uma unidade (nunca de outra — isolamento por construção). */
