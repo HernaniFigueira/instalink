@@ -770,6 +770,13 @@ export interface WebhookDelivery {
   attemptsHistory: WebhookAttempt[];
   createdAt: string;
   updatedAt: string;
+  // ── Posse temporária (lease) do consumidor automático da fila ──
+  // Preenchidos SOMENTE enquanto uma execução (cron) está tentando entregar
+  // esta entrega e limpos ao final do ciclo. Impedem que duas execuções
+  // concorrentes entreguem a MESMA tentativa duas vezes. Nunca expostos ao
+  // painel (ver sanitizeWebhookDeliveryForDisplay).
+  claimToken?: string;
+  claimExpiresAt?: string;
 }
 
 // ═══════════════════════════════════════════════════════════════

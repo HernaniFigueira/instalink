@@ -29,7 +29,9 @@ import { normalizeFeatures } from './features';
 import { sanitizeAppearance } from './appearance';
 import { defaultWhatsappIntegration } from './whatsapp';
 
-const FILE = path.join(process.cwd(), 'data', 'instalink.db.json');
+// Caminho do banco local (modo arquivo). A variável INSTALINK_DB_FILE permite
+// apontar para um arquivo isolado (testes/dev paralelo) sem mudar o padrão.
+const FILE = process.env.INSTALINK_DB_FILE || path.join(process.cwd(), 'data', 'instalink.db.json');
 
 export function emptyDB(): DB {
   return {
@@ -256,6 +258,43 @@ async function pgWrite(db: DB): Promise<void> {
   );
 }
 
+// ── Escrita condicional (CAS) — concorrência ENTRE instâncias ──
+// `updateDB` serializa por instância (mutex em memória) e, entre instâncias
+// serverless distintas, vale last-wins. Para tarefas que NÃO podem ser
+// duplicadas (ex.: consumidor de retry de webhooks), lemos o documento junto
+// com o hash do que está gravado e só escrevemos se ninguém tiver escrito no
+// meio (compare-and-swap atômico no próprio banco):
+//
+//   SELECT data, md5(data::text)          → snapshot + hash
+//   UPDATE ... WHERE md5(data::text) = $1 → só grava se ainda for o snapshot
+//
+// Se o CAS falhar, a operação é reaplicada sobre a leitura mais fresca
+// (poucas tentativas). Nada de Redis/lock externo: o próprio Postgres é o
+// árbitro e o modo arquivo usa o mesmo mutex de `updateDB`.
+async function pgReadCas(): Promise<{ db: DB; hash: string | null }> {
+  await pgInit();
+  const res = await getPool().query('SELECT data, md5(data::text) AS hash FROM instalink_doc WHERE id = 1');
+  if (res.rows.length === 0) return { db: emptyDB(), hash: null };
+  return { db: normalizeDB(res.rows[0].data), hash: res.rows[0].hash as string };
+}
+
+async function pgCasWrite(hash: string | null, db: DB): Promise<boolean> {
+  await pgInit();
+  if (hash === null) {
+    // Primeira gravação: cria a linha apenas se ela ainda não existir.
+    const ins = await getPool().query(
+      'INSERT INTO instalink_doc (id, data) VALUES (1, $1) ON CONFLICT (id) DO NOTHING',
+      [JSON.stringify(db)],
+    );
+    return ins.rowCount === 1;
+  }
+  const upd = await getPool().query(
+    'UPDATE instalink_doc SET data = $2 WHERE id = 1 AND md5(data::text) = $1',
+    [hash, JSON.stringify(db)],
+  );
+  return upd.rowCount === 1;
+}
+
 // ── Arquivo JSON (dev local) ───────────────────────────────
 function fileRead(): DB {
   if (!fs.existsSync(FILE)) return emptyDB();
@@ -329,18 +368,90 @@ export async function writeDB(db: DB): Promise<void> {
 // Mutex por instância: serializa read-modify-write concorrentes.
 let writeChain: Promise<unknown> = Promise.resolve();
 
-export async function updateDB<T>(fn: (db: DB) => T): Promise<T> {
-  const run = async (): Promise<T> => {
-    const db = await readDB(); // falhou? lança — NADA é escrito
-    const result = fn(db); // callback lançou? nada é escrito
-    prune(db);
-    await writeDB(db);
-    return result;
-  };
+/** Enfileira uma operação na mesma fila de escrita (uma por vez, por instância). */
+function withWriteLock<T>(run: () => Promise<T>): Promise<T> {
   const p = writeChain.then(run, run);
   writeChain = p.then(
     () => undefined,
     () => undefined,
   );
   return p;
+}
+
+export async function updateDB<T>(fn: (db: DB) => T): Promise<Awaited<T>> {
+  const run = async (): Promise<Awaited<T>> => {
+    const db = await readDB(); // falhou? lança — NADA é escrito
+    // O callback pode ser assíncrono (ex.: disparo de webhook, que enfileira a
+    // entrega depois da 1ª tentativa HTTP): aguardamos a conclusão para que
+    // TODAS as mutações entrem na MESMA gravação. Sem isso, mutações feitas
+    // depois de um `await` dentro do callback eram perdidas na escrita.
+    const result: Awaited<T> = await fn(db); // callback lançou? nada é escrito
+    prune(db);
+    await writeDB(db);
+    return result;
+  };
+  return withWriteLock(run);
+}
+
+/** Resultado de uma escrita condicional: `applied: false` = nada foi gravado. */
+export interface CasWriteResult<T> {
+  applied: boolean;
+  result: T | null;
+}
+
+export interface CasWriteOptions {
+  /**
+   * Avaliado sobre a leitura mais fresca ANTES de mutar. Se retornar `false`,
+   * nada é gravado (útil para evitar escrita inútil quando não há trabalho).
+   */
+  guard?: (db: DB) => boolean;
+  /** Tentativas em caso de conflito (Postgres). Padrão: 4. */
+  attempts?: number;
+}
+
+/**
+ * Escrita condicional (CAS): `fn` roda sobre a leitura mais fresca possível e
+ * a gravação só acontece se o documento não tiver mudado nesse meio-tempo.
+ *
+ * Uso pensado para tarefas concorrentes que NÃO podem duplicar efeito
+ * (ex.: consumidor de retry de webhooks): a decisão ("reivindicar a entrega X")
+ * e a gravação acontecem de forma indivisível — a segunda execução encontra
+ * a decisão da primeira já gravada e desiste.
+ *
+ * - Postgres: `UPDATE ... WHERE md5(data::text) = <hash lido>`; em conflito,
+ *   relê e reaplica (até `attempts` vezes).
+ * - Arquivo local: mesma fila de escrita de `updateDB` (uma operação por vez).
+ *
+ * `fn` deve ser idempotente em relação ao `db` recebido (pode rodar mais de
+ * uma vez quando houver conflito) e NÃO deve conter I/O longo (HTTP etc.).
+ */
+export async function updateDBWithCas<T>(
+  fn: (db: DB) => T,
+  options: CasWriteOptions = {},
+): Promise<CasWriteResult<Awaited<T>>> {
+  const attempts = Math.max(1, options.attempts ?? 4);
+
+  if (!usePg()) {
+    // Modo arquivo: o mutex já torna leitura+escrita indivisíveis aqui.
+    return withWriteLock(async () => {
+      const db = fileRead(); // falhou? lança — NADA é escrito
+      if (options.guard && !options.guard(db)) return { applied: false, result: null };
+      // Callback assíncrono (quando houver) entra na MESMA gravação.
+      const result: Awaited<T> = await fn(db);
+      prune(db);
+      fileWrite(db);
+      return { applied: true, result };
+    });
+  }
+
+  for (let attempt = 1; attempt <= attempts; attempt++) {
+    const { db, hash } = await pgReadCas();
+    if (options.guard && !options.guard(db)) return { applied: false, result: null };
+    const result: Awaited<T> = await fn(db);
+    prune(db);
+    if (await pgCasWrite(hash, db)) return { applied: true, result };
+  }
+  // Conflito persistente: melhor não gravar (fail-safe) do que sobrescrever
+  // uma decisão alheia — a próxima execução da tarefa tenta de novo.
+  return { applied: false, result: null };
 }

@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { requireBusiness } from '@/lib/access';
-import { upsertWebhook, deleteWebhook, sanitizeWebhookForDisplay } from '@/lib/webhooks';
+import {
+  upsertWebhook, deleteWebhook, sanitizeWebhookForDisplay, sanitizeWebhookDeliveryForDisplay,
+} from '@/lib/webhooks';
 import { updateDB } from '@/lib/db';
 import { pushAudit } from '@/lib/audit';
 
@@ -13,10 +15,12 @@ export async function GET(req: NextRequest) {
   const rawWebhooks = (guard.db.webhooks || []).filter((w) => w.businessId === businessId);
   const webhooks = rawWebhooks.map(sanitizeWebhookForDisplay);
 
+  // Entregas: campos internos da fila (posse do consumidor/cron) não saem daqui.
   const deliveries = (guard.db.webhookDeliveries || [])
     .filter((d) => d.businessId === businessId)
     .slice(-30)
-    .reverse();
+    .reverse()
+    .map(sanitizeWebhookDeliveryForDisplay);
 
   return NextResponse.json({ ok: true, webhooks, deliveries });
 }

@@ -8,10 +8,20 @@
 // - Pipeline configurável e transições
 // - Entrega para secretária e conversão em agendamento
 // - Widget JS e página /agendar
+// - Consumidor automático da fila de retry (cron) e retry ponta a ponta
+//
+// Para validar o CONSUMIDOR AUTOMÁTICO (seções 16–18) defina CRON_SECRET no
+// servidor E aqui (o mesmo valor). Sem CRON_SECRET a seção 16 apenas confirma
+// que o endpoint está protegido (401/503) e as seções 17–18 são puladas.
 
 import assert from 'node:assert/strict';
+import http from 'node:http';
+import { createHmac } from 'node:crypto';
 
 const BASE = process.env.BASE_URL || 'http://localhost:3000';
+const CRON_SECRET = process.env.CRON_SECRET || '';
+const RUN_FULL_RETRY = process.env.SMOKE_P3_RETRY_FULL === '1';
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
 async function req(path, opts = {}) {
   const res = await fetch(`${BASE}${path}`, {
@@ -256,4 +266,232 @@ assert.equal(agendarRes.status, 200);
 
 console.log('✓ Página de agendamento embeddable (/agendar) respondeu 200 OK');
 
-console.log('\nTODOS OS 15 TESTES DE SMOKE P3 PASSARAM COM SUCESSO!\n');
+// ═══════════════════════════════════════════════════════════════
+// 16. Consumidor automático da fila de retry — rota SEMPRE protegida
+// ═══════════════════════════════════════════════════════════════
+const cronAnonymous = await req('/api/cron/webhooks');
+assert.ok(
+  cronAnonymous.status === 401 || cronAnonymous.status === 503,
+  `GET /api/cron/webhooks sem credencial deve ser 401 (configurado) ou 503 (desativado), veio ${cronAnonymous.status}`,
+);
+const cronWrong = await req('/api/cron/webhooks', {
+  headers: { Authorization: 'Bearer credencial-de-cron-invalida' },
+});
+assert.ok([401, 503].includes(cronWrong.status), 'Credencial inválida não pode executar a fila');
+const cronDeniedBody = JSON.stringify(cronAnonymous.data) + JSON.stringify(cronWrong.data);
+assert.ok(!cronDeniedBody.includes('whsec'), 'Resposta negada não pode conter segredo');
+assert.ok(!cronDeniedBody.includes(generatedWhSecret), 'Resposta negada não pode conter o segredo do webhook');
+
+console.log('✓ Consumidor de retry protegido: sem CRON_SECRET válido o endpoint nunca executa a fila');
+
+if (!CRON_SECRET) {
+  console.log('⚠ CRON_SECRET não definido neste ambiente — fluxo automático de retry não pôde ser acionado aqui.');
+}
+
+if (CRON_SECRET) {
+  const cronOk = await req('/api/cron/webhooks', {
+    headers: { Authorization: `Bearer ${CRON_SECRET}` },
+  });
+  assert.equal(cronOk.status, 200, 'Execução válida do cron deve responder 200');
+  assert.equal(cronOk.data.ok, true);
+  assert.ok(typeof cronOk.data.processed === 'number');
+  assert.ok(typeof cronOk.data.delivered === 'number');
+  assert.ok(!JSON.stringify(cronOk.data).includes('whsec'), 'Resposta do cron não pode conter segredo');
+
+  console.log(`✓ Cron autenticado executou o processador (processed=${cronOk.data.processed}, failed=${cronOk.data.failed})`);
+
+  // ── Receptor LOCAL de webhooks (prova a entrega real das tentativas) ──
+  const hookLog = [];
+  const hookModes = new Map();
+  const receiver = http.createServer((request, response) => {
+    let body = '';
+    request.on('data', (chunk) => { body += chunk; });
+    request.on('end', () => {
+      const mode = hookModes.get(request.url) || 'fail';
+      hookLog.push({
+        url: request.url,
+        mode,
+        eventId: request.headers['x-instalink-event-id'],
+        attempt: Number(request.headers['x-instalink-attempt'] || 0),
+        signature: request.headers['x-instalink-signature'],
+        body,
+      });
+      response.writeHead(mode === 'ok' ? 200 : 500, { 'content-type': 'application/json' });
+      response.end(mode === 'ok' ? '{"ok":true}' : '{"error":"indisponivel"}');
+    });
+  });
+  await new Promise((resolve) => receiver.listen(0, '127.0.0.1', resolve));
+  const receiverBase = `http://127.0.0.1:${receiver.address().port}`;
+
+  const isLocal = /^https?:\/\/(localhost|127\.0\.0\.1)/.test(BASE);
+  const attemptsFor = (path, eventId) =>
+    hookLog.filter((h) => h.url === path && (!eventId || h.eventId === eventId)).length;
+  const latestDelivery = async (url) => {
+    const list = await req(`/api/integrations/webhooks?businessId=${businessId}`, { headers: cookieHeader });
+    assert.equal(list.status, 200);
+    return (list.data.deliveries || []).find((d) => d.url === url);
+  };
+  const verifies = (entry, secret) => {
+    if (!entry?.signature) return false;
+    const parts = Object.fromEntries(entry.signature.split(',').map((kv) => kv.split('=')));
+    if (!parts.t || !parts.v1) return false;
+    return createHmac('sha256', secret).update(`${parts.t}.${entry.body}`).digest('hex') === parts.v1;
+  };
+  // O cron é o CONSUMIDOR: chamamos o mesmo endpoint até a entrega sair da fila.
+  const runCron = async (cycles = 4) => {
+    for (let i = 0; i < cycles; i++) {
+      if (i > 0) await sleep(2000); // cada chamada = um ciclo do consumidor
+      const res = await req('/api/cron/webhooks', { headers: { Authorization: `Bearer ${CRON_SECRET}` } });
+      assert.equal(res.status, 200, `Chamada autenticada do cron deve responder 200 (veio ${res.status})`);
+    }
+  };
+
+  if (!isLocal) {
+    console.log('⚠ BASE não é local — o receptor de teste (127.0.0.1) não é alcançável pelo servidor; fluxo ponta a ponta pulado.');
+  } else {
+    // ─────────────────────────────────────────────────────────────
+    // 17. Fluxo real: evento → falha retryable → pending → cron → success
+    // ─────────────────────────────────────────────────────────────
+    const okPath = '/retry-sucesso';
+    const okUrl = `${receiverBase}${okPath}`;
+    hookModes.set(okPath, 'fail'); // a 1ª tentativa (no evento) falha de propósito
+
+    const okHookRes = await req(`/api/integrations/webhooks?businessId=${businessId}`, {
+      method: 'POST',
+      headers: cookieHeader,
+      body: JSON.stringify({ businessId, url: okUrl, events: ['lead.created'], active: true }),
+    });
+    assert.equal(okHookRes.status, 201, 'Webhook do teste de retry deve ser criado');
+    const okSecret = okHookRes.data.secret || okHookRes.data.webhook?.secret;
+    assert.ok(okSecret?.startsWith('whsec_'), 'Criação deve devolver o segredo uma única vez');
+
+    const okLeadRes = await req('/api/external/leads', {
+      method: 'POST',
+      headers: apiKeyHeader,
+      body: JSON.stringify({
+        name: 'Retry Cron P3',
+        phone: `119${Math.floor(10000000 + Math.random() * 90000000)}`,
+        source: 'smoke_retry',
+        channel: 'site',
+      }),
+    });
+    assert.equal(okLeadRes.status, 201, 'Lead de teste do retry deve ser criado');
+
+    await sleep(500); // dá tempo da tentativa 1 (no evento) ser registrada
+    const attempt1 = hookLog.find((h) => h.url === okPath);
+    assert.ok(attempt1, 'A tentativa 1 deve ter sido enviada no evento (falha retryable)');
+    assert.equal(attempt1.attempt, 1);
+    assert.ok(verifies(attempt1, okSecret), 'Tentativa 1 deve ter assinatura HMAC válida');
+
+    const pendingDelivery = await latestDelivery(okUrl);
+    assert.ok(pendingDelivery, 'Entrega deve estar registrada no painel');
+    assert.equal(pendingDelivery.status, 'pending', 'Falha retryable deve deixar a entrega pendente');
+    assert.ok(pendingDelivery.nextRetryAt, 'Entrega pendente deve ter nextRetryAt agendado');
+    assert.equal(pendingDelivery.claimToken, undefined, 'Campos internos da fila não podem ir ao painel');
+    const retryAtMs = new Date(pendingDelivery.nextRetryAt).getTime();
+    const backoffMs = retryAtMs - new Date(pendingDelivery.createdAt).getTime();
+    assert.ok(backoffMs >= 28000 && backoffMs <= 32000, `Backoff da tentativa 2 deve ser ~30s (veio ${backoffMs}ms)`);
+
+    console.log('✓ Falha retryable deixou a entrega pendente com backoff de ~30s e tentativa 1 assinada');
+
+    // Antes da hora o consumidor NÃO deve tentar de novo.
+    const earlyCron = await req('/api/cron/webhooks', { headers: { Authorization: `Bearer ${CRON_SECRET}` } });
+    assert.equal(earlyCron.status, 200);
+    assert.equal(attemptsFor(okPath, attempt1.eventId), 1, 'Entrega futura não pode ser entregue antes do nextRetryAt');
+
+    console.log('✓ Cron executado antes do nextRetryAt não gerou nova requisição externa');
+
+    // Passado o backoff, o cron entrega com o MESMO eventId.
+    hookModes.set(okPath, 'ok'); // receptor volta ao ar
+    while (Date.now() < retryAtMs + 2000) await sleep(2000);
+    await runCron(4);
+
+    const okEvents = hookLog.filter((h) => h.url === okPath);
+    assert.ok(okEvents.length >= 2, `Tentativa 2 deveria ter sido entregue (tentativas: ${okEvents.length})`);
+    const attempt2 = okEvents[okEvents.length - 1];
+    assert.equal(attempt2.attempt, 2, 'O cron deve executar a tentativa 2');
+    assert.equal(attempt2.eventId, attempt1.eventId, 'O MESMO eventId deve ser preservado no retry');
+    assert.ok(verifies(attempt2, okSecret), 'Retry deve manter a assinatura HMAC válida');
+
+    const deliveredDelivery = await latestDelivery(okUrl);
+    assert.equal(deliveredDelivery.status, 'success', 'Sucesso na tentativa 2 deve marcar a entrega como delivered');
+    assert.equal(deliveredDelivery.attempts, 2);
+    assert.equal(deliveredDelivery.eventId, attempt1.eventId);
+
+    console.log('✓ Retry automático entregou com sucesso na tentativa 2, com o MESMO eventId e assinatura válida');
+
+    // ─────────────────────────────────────────────────────────────
+    // 18. Fluxo completo (opcional): tentativas 1→3 e failed definitivo
+    //     SMOKE_P3_RETRY_FULL=1 (leva ~3 minutos por causa do backoff real)
+    // ─────────────────────────────────────────────────────────────
+    if (RUN_FULL_RETRY) {
+      const failPath = '/retry-falha';
+      const failUrl = `${receiverBase}${failPath}`;
+      hookModes.set(failPath, 'fail'); // nunca volta ao ar
+
+      const failHookRes = await req(`/api/integrations/webhooks?businessId=${businessId}`, {
+        method: 'POST',
+        headers: cookieHeader,
+        body: JSON.stringify({ businessId, url: failUrl, events: ['lead.created'], active: true }),
+      });
+      assert.equal(failHookRes.status, 201);
+
+      const failLeadRes = await req('/api/external/leads', {
+        method: 'POST',
+        headers: apiKeyHeader,
+        body: JSON.stringify({
+          name: 'Retry Falha Definitiva P3',
+          phone: `119${Math.floor(10000000 + Math.random() * 90000000)}`,
+          source: 'smoke_retry_full',
+          channel: 'site',
+        }),
+      });
+      assert.equal(failLeadRes.status, 201);
+
+      await sleep(500);
+      const failAttempt1 = hookLog.find((h) => h.url === failPath);
+      assert.ok(failAttempt1, 'Tentativa 1 do fluxo de falha deve ser enviada');
+      const failEventId = failAttempt1.eventId;
+
+      const waitForRetry = async (delivery) => {
+        const at = new Date(delivery.nextRetryAt).getTime();
+        while (Date.now() < at + 2000) await sleep(3000);
+      };
+
+      let delivery = await latestDelivery(failUrl);
+      assert.equal(delivery.status, 'pending');
+      await waitForRetry(delivery);
+      await runCron(4);
+      delivery = await latestDelivery(failUrl);
+      assert.equal(delivery.attempts, 2, 'Tentativa 2 deve ter sido executada pelo cron');
+      assert.equal(delivery.status, 'pending', 'Falha retryable na tentativa 2 mantém a entrega pendente');
+
+      await waitForRetry(delivery);
+      await runCron(4);
+      delivery = await latestDelivery(failUrl);
+      assert.equal(delivery.attempts, 3, 'Tentativa 3 deve ter sido executada pelo cron');
+      assert.equal(delivery.status, 'failed', 'Terceira falha deve encerrar a entrega como failed');
+      assert.equal(delivery.nextRetryAt, undefined, 'Entrega falha definitiva não mantém agendamento');
+
+      const attemptsBefore = attemptsFor(failPath, failEventId);
+      await sleep(2000);
+      await runCron(2);
+      assert.equal(
+        attemptsFor(failPath, failEventId),
+        attemptsBefore,
+        'Entrega failed nunca volta para a fila (sem retry infinito)',
+      );
+      for (const entry of hookLog.filter((h) => h.url === failPath)) {
+        assert.equal(entry.eventId, failEventId, 'Todas as tentativas usam o mesmo eventId');
+      }
+
+      console.log('✓ Fluxo completo: 3 tentativas (30s/120s), failed definitivo e nenhuma 4ª requisição');
+    } else {
+      console.log('• Fluxo completo de falha definitiva não executado (use SMOKE_P3_RETRY_FULL=1 para rodar).');
+    }
+  }
+
+  await new Promise((resolve) => receiver.close(resolve));
+}
+
+console.log('\nTODOS OS 15 FLUXOS DO SMOKE P3 (+ CONSUMIDOR AUTOMÁTICO DE RETRY) PASSARAM COM SUCESSO!\n');
