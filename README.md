@@ -135,9 +135,19 @@ fila externa, e um endpoint protegido para retomar o que está em espera:
 * * * * * curl -fsS -H "Authorization: Bearer $CRON_SECRET" https://SEU-DOMINIO/api/cron/automations >/dev/null 2>&1
 ```
 
-- Sem `CRON_SECRET`, `/api/cron/automations` responde **503** (falha fechada).
-- Uma automação em `waiting` NUNCA depende de requisição HTTP aberta: o retomar
-  é decisão do agendador (ou do botão "Processar fila" do painel).
+- Sem `CRON_SECRET`, `/api/cron/automations` responde **503** (falha fechada) e
+  **nada da fila é processado**; com credencial errada, **401** (fila intacta).
+- Uma automação em `waiting` NUNCA depende de requisição HTTP aberta: o estado é
+  o banco, e a retomada acontece por qualquer um destes caminhos — agendador,
+  botão "Processar fila" do painel, ou o gancho inline do `updateDB` (que acorda
+  esperas **vencidas** na escrita seguinte do sistema, com `AUTOMATION_INLINE`
+  ligado por padrão).
+- Assim como no retry de webhooks, **não há `vercel.json` com `crons`** no
+  repositório: no plano Hobby o cron da Vercel roda no máximo 1x/dia, e nenhuma
+  configuração de deploy pressupõe plano Pro. Sem agendador, esperas retomam na
+  próxima atividade do negócio; para um colchão pontual (função parada à noite,
+  espera longa), configure o `curl` acima no cron da VPS/GitHub Actions ou o
+  Vercel Cron (Pro) apontando para `/api/cron/automations`.
 - O painel configura tudo em `/automacoes` (Quando → Se → Então → Depois → Senão).
 - Detalhes: [`docs/automations-p4.md`](docs/automations-p4.md).
 

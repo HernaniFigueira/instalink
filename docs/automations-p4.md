@@ -98,6 +98,45 @@ evento é apenas uma linha em `AUTOMATION_EVENT_DEFS` + um `emitAutomationEvent`
 no serviço que o produz. WhatsApp/Instagram/pagamentos/e-mail **não** foram
 implementados (P6); `automation.ai` (P5) existe como capacidade, sem motor.
 
+### Dedupe, reentrância e teto de fila
+
+O escopo efetivo do dedupe é **(unidade, automação, chave)**. Isso é o que garante
+as três coisas que parecem iguais mas não são:
+
+| Caso | O que acontece |
+| --- | --- |
+| Duas automações escutando o mesmo evento | cada uma cria a **sua** execução (uma não “queima” a chave da outra) |
+| Unidade B recebe o mesmo conteúdo que a unidade A | chave igual, tenants diferentes ⇒ as duas criam execução (o dedupe de A não consome o de B) |
+| Reenvio do mesmo evento na mesma unidade+automação | bloqueado, com `skipped: 'execução já existe para este evento (<status>)'` |
+
+Como a chave é derivada (`deriveEventKey`):
+
+1. **`eventKey` explícito** do chamador vence — é a única forma de dedupar um
+   reenvio que chega em outro instante (chave de idempotência do P3, id do
+   sistema externo). `POST /api/automations` também aceita `Idempotency-Key`
+   para a *criação* da definição.
+2. **`settings.dedupeField`** (ex.: `lead.id`) ⇒ `evento:field:<valor>`: uma
+   execução por lead para aquela automação+evento, seja lá quando for — o
+   “não repetir nunca” que se espera de um follow-up. O campo é validado contra
+   a lista de campos do evento; inválido ⇒ ignorado **com aviso** na resposta
+   (criar e editar devolvem `warnings`).
+3. **padrão**: `evento:assunto:sha256(fotografia+dados)[:16]` — fotografia do
+   assunto sem campos voláteis de tempo do evento. Deduplica a MESMA mutação
+   reaplicada (o mesmo `at`/mesma transação). Como a fotografia inclui
+   `lastInteraction`/etapa, um evento legítimo seguinte tem chave nova e dispara.
+   Não é “uma vez por sempre”: para isso existe `dedupeField`/`eventKey`.
+
+A janela do dedupe são as execuções retidas no documento (30 dias, até 200
+terminais por unidade — `prune` em `db.ts`): não há índice nem tabela paralela.
+
+**Anti-loop.** Evento produzido POR uma execução (`fromRunId`/`origin.runId`,
+gravado em `emittedByRunId`) não reabre automação nenhuma, a menos que a
+automação declare `settings.allowReentry: true`. E, quando reentra, a corrente
+tem fundo: `MAX_REENTRY_DEPTH = 5` saltos de linhagem (`reentryDepth`), depois
+disso o gatilho registra `skipped: 'cadeia de reentrada atingiu o limite…'`.
+O teto de fila (`MAX_QUEUED_RUNS_PER_BUSINESS = 400` execuções vivas por
+unidade) continua sendo a última barreira contra crescimento do documento.
+
 ## 4. Condições (P4.3)
 
 Operadores: `equals · not_equals · contains · not_contains · exists · not_exists · greater_than · less_than`,
@@ -161,16 +200,41 @@ encontrou espera → status='waiting', waitingUntil=…, currentNodeId=PRÓXIMO 
 varredura depois  → 'waiting' vencido é reivindicado e o fluxo continua dali
 ```
 
-Nada segura HTTP aberto. A varredura acontece em dois lugares, com o mesmo código:
+Nada segura HTTP aberto. A varredura acontece em três lugares, com o MESMO código:
 
-1. **gancho inline** do `updateDB` (`src/lib/db.ts`): se a escrita deixou execução
-   `queued`, o motor processa na hora — sem latência para o usuário e sem ler o
-   banco quando não há fila. Desligável por `AUTOMATION_INLINE=0`; não reentrante.
+1. **gancho inline** do `updateDB` (`src/lib/db.ts`): se a escrita deixou
+   **trabalho pronto agora** — `queued`, `waiting` vencido ou `running` com posse
+   morta — o motor roda em seguida, sem ler o banco quando não há nada pronto.
+   Desligável por `AUTOMATION_INLINE=0`; não reentrante. É o que faz a espera
+   retomar sozinho num ambiente SEM agendador configurado (ver abaixo).
 2. **agendador** (`GET /api/cron/automations`, `Authorization: Bearer $CRON_SECRET`):
    Vercel Cron, cron da VPS, GitHub Actions, `npm run` avulso ou o botão
-   “Processar fila” do painel. `wait_for_event` fica reservado para quando houver
-   canal externo (P6): um nó com `mode: 'event'` registra o “ainda não disponível”
-   e **segue o fluxo** (nunca trava a execução para sempre).
+   “Processar fila” do painel (o botão drena SÓ a unidade do usuário).
+   `wait_for_event` fica reservado para quando houver canal externo (P6): um nó
+   com `mode: 'event'` registra o “ainda não disponível” e **segue o fluxo**
+   (nunca trava a execução para sempre).
+3. **qualquer escrita do sistema** (mesma do item 1): a fila é sempre
+   retomada pelo estado gravado no banco, nunca por memória/instância.
+
+### Situação REAL do agendamento em produção
+
+O projeto roda na **Vercel Hobby**, onde o cron nativo é limitado a 1x/dia — por
+isso o repositório **não tem `vercel.json` com `crons`** (mesma decisão documentada
+do retry de webhooks no P3; `README.md` §“Retry de webhooks no Hobby”). Consequências
+medidas, não presumidas:
+
+| Cenário | Comportamento |
+| --- | --- |
+| Nenhum agendador configurado | o passo imediato acontece (gancho inline); uma espera retoma na **próxima escrita** do sistema (outro lead, outro agendamento, uma edição no painel) ou no botão do painel. Não há perda: o estado é o banco |
+| `CRON_SECRET` ausente | `GET /api/cron/automations` responde **503** e NÃO processa fila nenhuma (fail-closed; nada roda por rota aberta) |
+| Segredo errado/ausente na chamada | **401**, fila intocada |
+| Agendador a cada minuto | esperas retomam no minuto seguinte ao vencimento (`waitingUntil` é comparado no motor, e uma chamada antecipada não adianta nada) |
+
+Para colchão de verdade (negócio parado fora do horário, espera longa), o
+deploy precisa de UM destes: `CRON_SECRET` + Vercel Cron (plano Pro), ou o
+`curl` no cron da VPS/GitHub Actions documentado no `README.md`, ou `AUTOMATION_INLINE`
+ligado (padrão) aceitando o gancho inline. O motor não cria dependência nova
+nenhuma em nenhum dos três casos.
 
 ## 8. Executor (P4.7) — determinístico e seguro contra corrida
 
@@ -179,8 +243,17 @@ Nada segura HTTP aberto. A varredura acontece em dois lugares, com o mesmo códi
 - Cada nó é processado dentro de **um** `updateDB`: a ação e o novo estado da
   execução são gravados juntos — não existe “meio passo” nem estado perdido.
 - A posse (`claimToken` + `claimExpiresAt`, `AUTOMATION_LEASE_MS`) impede que duas
-  instâncias processam a mesma execução; o passo revalida a posse e, se ela não é
+  instâncias processem a mesma execução; o passo revalida a posse e, se ela não é
   mais sua, para (`not_mine`) em vez de duplicar efeito.
+- **Por que o passo não é CAS** (e a reivindicação é): a ação pode ter I/O
+  (`dispatch_webhook` tenta a entrega na hora), e CAS reexecutaria o callback a
+  cada conflito — o destinatário veria o mesmo webhook duas vezes. A segurança
+  vem de outro lugar: **idempotência por execução+nó** (nota, tarefa, etapa,
+  agendamento reconhecem o que já foi aplicado e pulam). Se a gravação do passo
+  for perdida numa corrida, o nó é re*visita*do, não re*fectido*.
+- `drainAutomations({ businessId })` reivindica **só** as execuções daquela
+  unidade — o botão “Processar fila” do painel não drena (nem escreve) na
+  unidade vizinha, e não consome o lote/orçamento de outra empresa.
 - Orçamento por varredura (`AUTOMATION_BUDGET_MS`, `AUTOMATION_BATCH_SIZE`): o que
   não coube volta para `queued` e é pego pelo próximo ciclo.
 - Erro de ação ⇒ `failed` + mensagem curta no histórico (`stopOnActionError: false`
@@ -234,7 +307,23 @@ UI é a projeção simples. Um editor visual futuro lê/escreve os mesmos `nodes
 nunca troca de tenant. `POST /api/automations` aceita `Idempotency-Key` (o mesmo
 mecanismo do P3): reenvio com a mesma chave devolve a resposta original e não
 cria automação gêmea. Erros de validação voltam como `422 { errors: [...] }` com
-frases em português (o que a UI mostra sem interpretar nada).
+frases em português (o que a UI mostra sem interpretar nada). `warnings` da
+validação saem tanto na criação quanto na edição (configuração ignorada é dita).
+
+O que a auditoria da PR #18 travou como contrato (cada um com teste em
+`automation-audit-p4.test.ts`):
+
+- **nada de posse interna na resposta**: `claimToken`/`claimExpiresAt` são
+  removidos por `sanitizeAutomationRunForDisplay` na lista E no detalhe;
+- `GET /api/automations/[id]`, `PATCH`, `POST action`, `DELETE` e `cancel-run`
+  filtram por `businessId` da sessão: id de outra unidade ⇒ `404` (e chamar a
+  rota com o `businessId` alheio ⇒ `403` antes de qualquer dado);
+- automação desativada/excluída ⇒ execuções vivas viram `cancelled` na hora e o
+  próximo evento não cria execução nova;
+- `/api/tasks`: `leadId`/`bookingId`/`customerId` de outra unidade são recusados
+  (`422`) e as leituras de apoio são escopadas pela unidade da tarefa — um id
+  roubado não devolve nome de cliente alheio; o `assignedUserId` passa pela
+  MESMA validação de equipe que a automação usa (`validateAssignedUser`).
 
 ## 12. Preparado para IA (P4.12) sem IA
 
@@ -261,7 +350,7 @@ existe (falha segura).
 | Arquivo | Motivo | Impacto | Teste de regressão |
 | --- | --- | --- | --- |
 | `src/lib/types.ts` | modelo do P4 | **aditivo**: `automations`, `automationRuns`, `tasks`, `Business.capabilityFlags`, novos `AuditAction` | `db-migration.test.ts`, `automation-model.test.ts` (migração defensiva) |
-| `src/lib/db.ts` | persistência/normalização/prune + gancho inline | novos arrays + defaults; nenhuma reescrita destrutiva; gancho só quando há fila | `automation-integration-p4.test.ts` (persistência, retomada, gancho desligável) |
+| `src/lib/db.ts` | persistência/normalização/prune + gancho inline | novos arrays + defaults; normalização conserta e não descarta definição com dono; prune nunca toca em `queued`/`running`/`waiting`; gancho dispara quando há **trabalho pronto** (fila, espera vencida, posse morta) | `automation-integration-p4.test.ts` (persistência, retomada, gancho desligável), `automation-dedupe-p4.test.ts` (normalização/poda), `automation-audit-p4.test.ts` (falha de leitura não sobrescreve; gancho retoma espera sem cron) |
 | `src/lib/pipeline.ts` | gatilhos no ponto oficial + `updateLeadFields` (função nova usada também pelo painel) | `ingestLead`/`moveLeadStage`/`assignLead` ganham parâmetros **opcionais** (`origin`, `note`) e emitem eventos; nenhuma mudança de contrato/retorno | `pipeline.test.ts` (27) + `automation-engine.test.ts`, `automation-integration-p4.test.ts` |
 | `src/lib/booking-create.ts` | `booking.created` para todo caminho de reserva | `originRunId` opcional; evento emitido no fim da transação | `booking.test.ts`, `slot*/schedule/agenda-*`, `smoke`, `smoke:p3` |
 | `src/lib/booking-ops.ts` + **`src/lib/booking-status.ts` (novo)** | a automação precisava transicionar status pela mesma porta ⇒ extração da regra que estava na rota | `booking-ops.ts` continua PURE (Client Components) — a transição mora em módulo server; mensagem de recusa, histórico, máquina de estados e mensagens do P3 preservados | `booking-ops.test.ts`, `smoke:p3` ( PATCH de status ), `automation-integration-p4.test.ts` (‘transição extraída continua idêntica’) |
@@ -280,11 +369,18 @@ vez de reimplementá-la.
 npm test -- --run src/lib/__tests__/automation-model.test.ts        # 33 (definição, grafo, esperas, projeção, capacidades, templates, migração, E2E)
 npm test -- --run src/lib/__tests__/automation-engine.test.ts       # 40 (condições, ações, executor, proteções, histórico)
 npm test -- --run src/lib/__tests__/automation-integration-p4.test.ts  # 16 (persistência, P3, HTTP/tenants, cron)
+npm test -- --run src/lib/__tests__/automation-dedupe-p4.test.ts    # 12 (auditoria: dedupe A–E, reentrância, normalização/poda)
+npm test -- --run src/lib/__tests__/automation-audit-p4.test.ts     # 21 (auditoria: cron/retomada, tenants negativos, E2E, vazamentos)
 npm run smoke:p4                                                     # 18 verificações de ponta a ponta
 ```
 
-Suíte completa: `npx tsc --noEmit` limpo, `npm test` (684 testes, 46 arquivos),
-`npm run build`, `npm run smoke` (67), `npm run smoke:ux` (87), `npm run smoke:p3` (15 fluxos).
+Suíte completa: `npx tsc --noEmit` limpo, `npm test` (717 testes, 48 arquivos),
+`npm run build`, `npm run smoke` (67), `npm run smoke:ux` (87), `npm run smoke:p3` (15 fluxos
++ consumidor de retry real com `CRON_SECRET`).
+
+Cada correção da auditoria tem teste que **falha no código anterior à correção** (foi assim
+que se validou que os testes não são decorativos): gancho inline, fila por unidade, posse na
+API, referências de tarefa e fundo da reentrância.
 
 ## 16. Fora do P4 (deliberadamente)
 

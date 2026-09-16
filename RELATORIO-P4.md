@@ -202,7 +202,7 @@ Tabela arquivo → motivo → impacto → teste de regressão: §14 de `docs/aut
 
 ## 12. Testes
 
-`npm test` → **684 testes, 46 arquivos, 0 falhas** (594 do P3 + 90 do P4: 33 de modelo, 40 de motor, 16 de integração e 1 de navegação).
+`npm test` → **717 testes, 48 arquivos, 0 falhas** (594 do P3 + 123 do P4: 33 de modelo, 40 de motor, 16 de integração, 12 de dedupe/auditoria, 21 de cron/tenants/E2E e 1 de navegação).
 
 - `automation-model.test.ts` (33): criação/validação, campos por gatilho, parâmetros
   descartados, etapa contra a esteira real, serviço real, tetos, ciclo sem/comp espera,
@@ -220,6 +220,18 @@ Tabela arquivo → motivo → impacto → teste de regressão: §14 de `docs/aut
   na fila do WhatsApp, histórico, máquina de estados), API por HTTP com sessão Bearer
   (criar/recusar/editar/excluir, 401/403, tenants), cron fail-closed, anti-loop e
   reentrada, capacidade desligada.
+- `automation-dedupe-p4.test.ts` (12) — **auditoria final**: dedupe A–E (chave explícita,
+  replay, campo por lead, múltiplas automações no mesmo evento, chaves iguais em unidades
+  diferentes), fundo da reentrância (`MAX_REENTRY_DEPTH`), normalização que conserta sem
+  descartar e poda que não toca em execução viva.
+- `automation-audit-p4.test.ts` (21) — **auditoria final** contra o sistema inteiro (banco em
+  arquivo + rotas reais): cron 503/401 sem processar fila, retomada no nó exato sem repetir
+  efeito, posse liberada na espera e retomada com posse vencida, automação desativada,
+  gancho inline sem agendador, fila drenada só da própria unidade, posse interna fora da
+  API, referência de tarefa entre unidades recusada, matriz negativa de tenants (ler, editar,
+  ativar, duplicar, excluir, encerrar execução, tarefas), gravação de `dedupeField` e
+  falha de leitura que não sobrescreve, e o fluxo ponta a ponta (ingestão → condição →
+  etapa → prioridade → espera → tarefa → webhook → conclusão, com agenda e esteira reais).
 - Cobertura item a item dos 21 pontos exigidos: §15 de `docs/automations-p4.md`.
 
 ## 13. Regressões encontradas e corrigidas
@@ -269,8 +281,46 @@ regressão citados.
 - Estado: PR **aberta e sem merge**; nada em `main` foi tocado.
 
 ### 14.1 Portões e escopo
-- Portões na última verificação: `npx tsc --noEmit` limpo · `npm test` 684/684 ·
-  `npm run build` ok · `npm run smoke` 67/67 · `npm run smoke:ux` 87/87 ·
-  `npm run smoke:p3` 15 fluxos + consumidor de retry · `npm run smoke:p4` 18 verificações.
+- Portões depois da auditoria (re-executados no branch atual): `npx tsc --noEmit` limpo ·
+  `npm test` **717/717** (48 arquivos) · `npm run build` ok · `npm run smoke` **67/67** ·
+  `npm run smoke:ux` **87/87** · `npm run smoke:p3` **15 fluxos + retry real com CRON_SECRET** ·
+  `npm run smoke:p4` **18/18** (inclui retomada de espera de 60s pelo caminho do agendador).
+- `npm run master` NÃO é gate: é bootstrap CLI da conta master (promove/cria usuário) e
+  alteraria dados — por isso não foi executado.
 - Fora do escopo (deliberadamente): P5, P6, `wait_for_event` por canal, editor visual,
   cobrança/planos (só a camada de capacidades) e UI do override por empresa.
+
+---
+
+## 15. Auditoria final da PR #18 (antes do merge)
+
+Revisão independente com os portões já verdes. Seis problemas **reais** foram encontrados;
+cada um foi corrigido do modo mais conservador possível (sem mudar semântica de caso que
+não estava errado) e travado por teste que **falha no código anterior à correção**.
+
+| # | Problema | Causa | Correção | Teste |
+| --- | --- | --- | --- | --- |
+| 1 | `drainAutomations({ businessId })` processava a fila de **todas** as unidades | o `guard` da varredura filtrava por unidade, mas o `claimDueAutomationRuns` era chamado sem `businessId` — o botão “Processar fila” do painel A reivindicava e executava automações de B (consumindo lote e orçamento de B) | reivindicar com o MESMO filtro do guard (`businessId` passado ao claim) | `automation-audit-p4.test.ts` → “processar a fila desta unidade não executa nem escreve na unidade vizinha” |
+| 2 | `GET /api/automations` devolvia `claimToken`/`claimExpiresAt` | a lista usava as execuções cruas; só o detalhe passava por `sanitizeAutomationRunForDisplay`, contrariando o contrato “a posse interna nunca sai na API” | lista passa pela mesma sanitização | “a lista nunca devolve a posse interna do motor” |
+| 3 | `/api/tasks` aceitava `leadId`/`bookingId`/`customerId` de outra unidade, e a leitura resolvia esses ids **sem** filtro de tenant → o nome de um lead de B aparecia na tarefa criada por A | `createTaskTx` gravava a referência sem validar pertencimento; o `view()` da rota buscava por id global | validação de pertencimento em `createTaskTx` (única porta de entrada, vale para painel e motor) + leituras de apoio escopadas por `businessId` + `assignedUserId` pela mesma `validateAssignedUser` do painel | “tarefa não aceita referência a lead/agendamento de outra unidade (e não devolve o nome)” |
+| 4 | `allowReentry: true` não tinha fundo: a corrente A→A→A… só parava no teto de fila (400 execuções vivas) | o anti-loop era binário (reentra/não reentra) e não havia profundidade de linhagem | `MAX_REENTRY_DEPTH = 5` sobre `emittedByRunId`, com `skipped: 'cadeia de reentrada…'`; um salto isolado continua permitido | “reentrada explícita tem fundo” + “reentrada não quebra quando o pai saiu do histórico” |
+| 5 | Espera vencida **não** retomava sem agendador: o gancho inline do `updateDB` só olhava `status: 'queued'` | a retomada foi desenhada para o agendador externo, que neste deploy (Vercel Hobby) não existe configurado — de propósito, sem `vercel.json` com `crons` | o gancho agora pergunta “há trabalho pronto agora?” (fila, espera vencida ou posse morta), espelhando `isAutomationRunDue`; o banco continua sendo o árbitro | “sem agendador configurado, o gancho inline retoma a espera vencida” (e a espera futura continua intocada) |
+| 6 | `settings.dedupeField` inválido desaparecia **sem aviso** na edição, e uma checagem de dedupe do `events.ts` era código morto | `PATCH` não devolvia `warnings` (só o `POST` devolvia); a segunda comparação de chave testava `r.eventKey === '<automacaoId>:<chave>'`, que nunca casa porque a linha guarda só a chave | `PATCH` devolve `warnings`; a comparação morta foi removida e o escopo real do dedupe — (unidade, automação, chave) — passou a estar documentado no próprio código | “dedupeField INVÁLIDO não é gravado às cegas” + “múltiplas automações ouvindo o MESMO evento” |
+
+Itens conferidos **sem** necessidade de mudança (validados com teste/prova, não por leitura):
+fail-closed do cron (503/401 sem tocar na fila), retomada exatamente no próximo nó sem
+repetir efeito já aplicado, posse liberada durante a espera, execução abandonada retomada,
+automação desativada sem nova execução, ciclo sem espera recusado na gravação, teto de
+passos/idade/visitas por nó, capacidade revalidada antes de cada ação, `prune` preservando
+`queued`/`running`/`waiting`, normalização que conserta em vez de descartar, e falha de
+leitura do banco que não sobrescreve nada.
+
+**Decisão registrada (não é bug, é contrato):** a *reivindicação* da execução é CAS e o
+*passo* usa `updateDB` — CAS re-executaria o callback, que contém o I/O do
+`dispatch_webhook`, e duplicaria entrega para o destinatário. A garantia contra efeito
+repetido vem da idempotência por execução+nó; está documentada no `executor.ts` e no §8 de
+`docs/automations-p4.md`.
+
+**Veredito:** pronto para merge. `automation.basic`/`advanced` seguem ligadas por padrão,
+nenhum contrato de P0–P3 foi alterado, nada de P5/P6 entrou, e o motor continua sendo o
+mesmo orquestrador persistente sobre o banco.
