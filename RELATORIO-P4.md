@@ -1,7 +1,8 @@
 # P4 — Motor de Automações (relatório da entrega)
 
 Ramo: `arena/01a0aaa4-instalink` · base: `main` em `972938b` (merge do P3).
-Commits (5): fundação do motor → ações/tarefas/templates/API/painel/suítes → docs+smoke+integração → polimento → comentários.
+Commits (7): fundação do motor → ações/tarefas/templates/API/painel/suítes → docs+smoke+integração
+→ polimento → comentários → relatório → correção de espera/`finishedAt`.
 Nenhum merge foi feito; PR exclusiva do P4 (ver §14).
 
 ---
@@ -258,13 +259,15 @@ regressão citados.
 
 ## 14. Situação final da PR
 
-- Branch `arena/01a0aaa4-instalink` com 5 commits locais, **pronto para push**; PR exclusiva
-  do P4, base `main`, **sem merge** (nenhuma PR antiga foi reaberta ou alterada).
-- ⚠️ No momento deste relatório, o sandbox não conseguiu autenticar no GitHub
-  (`gh`: “The github.com token in GH_TOKEN is no longer valid”; `git push`: 401). Nada foi
-  publicado. Basta reconectar o GitHub na Arena e rodar:
-  `git push origin arena/01a0aaa4-instalink` e
-  `gh pr create --base main --head arena/01a0aaa4-instalink --title "feat(p4): motor de automações completo" --body-file RELATORIO-P4.md`
+- Branch `arena/01a0aaa4-instalink` publicado (7 commits), PR exclusiva do P4 com base `main`,
+  **sem merge** — nenhuma PR antiga foi reaberta ou alterada.
+- O push inicial falhou no sandbox (token do `GH_TOKEN` expirado, `git push`: 401); após
+  reconectar o GitHub na Arena o branch foi publicado e a PR aberta com este relatório
+  como corpo: <https://github.com/HernaniFigueira/instalink/pull/18>.
+
+- Estado: PR **aberta e sem merge**; nada em `main` foi tocado.
+
+### 14.1 Portões e escopo
 - Portões na última verificação: `npx tsc --noEmit` limpo · `npm test` 684/684 ·
   `npm run build` ok · `npm run smoke` 67/67 · `npm run smoke:ux` 87/87 ·
   `npm run smoke:p3` 15 fluxos + consumidor de retry · `npm run smoke:p4` 18 verificações.
