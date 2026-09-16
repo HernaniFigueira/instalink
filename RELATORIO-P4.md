@@ -1,8 +1,9 @@
 # P4 — Motor de Automações (relatório da entrega)
 
 Ramo: `arena/01a0aaa4-instalink` · base: `main` em `972938b` (merge do P3).
-Commits (7): fundação do motor → ações/tarefas/templates/API/painel/suítes → docs+smoke+integração
-→ polimento → comentários → relatório → correção de espera/`finishedAt`.
+Commits do P4 (7): fundação do motor → ações/tarefas/templates/API/painel/suítes →
+docs+smoke+integração → polimento → comentários → relatório → correção de espera/`finishedAt`
+(mais ajustes de documentação deste próprio relatório ao abrir a PR).
 Nenhum merge foi feito; PR exclusiva do P4 (ver §14).
 
 ---
@@ -259,7 +260,7 @@ regressão citados.
 
 ## 14. Situação final da PR
 
-- Branch `arena/01a0aaa4-instalink` publicado (7 commits), PR exclusiva do P4 com base `main`,
+- Branch `arena/01a0aaa4-instalink` publicado, PR exclusiva do P4 com base `main`,
   **sem merge** — nenhuma PR antiga foi reaberta ou alterada.
 - O push inicial falhou no sandbox (token do `GH_TOKEN` expirado, `git push`: 401); após
   reconectar o GitHub na Arena o branch foi publicado e a PR aberta com este relatório
