@@ -316,6 +316,25 @@ export function DashboardShell({ children }: { children: React.ReactNode }) {
     try { el.scrollIntoView({ inline: 'center', block: 'nearest' }); } catch { /* navegadores antigos */ }
   }, [activePath, moreOpen]);
 
+  // Mobile: o degradê de "tem mais" só aparece enquanto houver continuação à
+  // direita da fileira de atalhos.
+  //
+  // ESTE HOOK FICA ANTES DO EARLY RETURN DE PROPÓSITO: o shell renderiza o
+  // skeleton enquanto o contexto não chega e o painel completo depois. Se a
+  // quantidade de hooks mudar entre esses dois renders, o React aborta com
+  // "rendered more hooks than during the previous render" — que o Next traduz
+  // para o usuário como "Application error: a client-side exception".
+  const onPillsScroll = useCallback(() => {
+    const el = pillsRef.current;
+    if (!el) return;
+    setPillFade(el.scrollLeft + el.clientWidth < el.scrollWidth - 8);
+  }, []);
+  useEffect(() => {
+    onPillsScroll();
+    window.addEventListener('resize', onPillsScroll);
+    return () => window.removeEventListener('resize', onPillsScroll);
+  }, [onPillsScroll, ready, moreOpen, pathname, businesses.length]);
+
   function switchBiz(id: string) {
     if (id === '__overview') { router.push(`/organizacao?organization=${business?.organizationId || ''}`); return; }
     if (id === '__add') { router.push(`/organizacao?organization=${business?.organizationId || ''}&add=1`); return; }
@@ -383,18 +402,6 @@ export function DashboardShell({ children }: { children: React.ReactNode }) {
   // Mobile: pills = menu; "Mais" = todas as seções + destinos fora do menu.
   const mobilePills = nav.sidebar;
   const mobileSections = [...nav.sections, ...nav.footerSections];
-
-  function onPillsScroll() {
-    const el = pillsRef.current;
-    if (!el) return;
-    setPillFade(el.scrollLeft + el.clientWidth < el.scrollWidth - 8);
-  }
-  useEffect(() => {
-    onPillsScroll();
-    window.addEventListener('resize', onPillsScroll);
-    return () => window.removeEventListener('resize', onPillsScroll);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [mobilePills.length, moreOpen]);
 
   return (
     // A identidade visual vive nos TOKENS (--il-nav*) injetados aqui, uma vez,

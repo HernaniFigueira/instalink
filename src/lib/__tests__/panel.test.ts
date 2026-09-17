@@ -322,6 +322,21 @@ describe('sidebar — projeção (permissão ∩ módulos, ordem do catálogo)',
     expect(shell).toMatch(/nav\.sidebar/);                // pills = projeção, não lista própria
   });
 
+  it('nenhum hook depois do early return do shell (ordem de hooks estável)', () => {
+    // O shell renderiza um skeleton enquanto /api/auth/me não chega e o painel
+    // completo depois. Hook chamado só no segundo render muda a contagem e o
+    // React aborta: "rendered more hooks than during the previous render" —
+    // para o lojista isso aparece como "Application error: a client-side
+    // exception has occurred" logo depois do login. Regressão estática.
+    const shell = read('src/components/DashboardShell.tsx');
+    const cut = shell.indexOf('if (!ready || !user) {');
+    expect(cut).toBeGreaterThan(0);
+    const depois = shell.slice(cut);
+    const hooks = [...depois.matchAll(/\buse(State|Effect|Callback|Memo|Ref|Context|Reducer|LayoutEffect|Router|Pathname|SearchParams|BusinessId|PanelHome|AreaLoad)\s*\(/g)]
+      .map((m) => m[0].trim());
+    expect(hooks, `hooks depois do early return: ${hooks.join(', ')}`).toEqual([]);
+  });
+
   it('seções colapsáveis guardam preferência e abrem sozinhas na tela atual', () => {
     const shell = read('src/components/DashboardShell.tsx');
     expect(shell).toMatch(/il-nav-closed/);
