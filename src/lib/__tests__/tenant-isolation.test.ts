@@ -1,4 +1,6 @@
 import { describe, expect, it } from 'vitest';
+import { readFileSync } from 'node:fs';
+import path from 'node:path';
 import { accessibleBusinesses, resolveAccess } from '../access';
 import { canManageOrganization, organizationsFor, unitsForOrganization } from '../organization';
 import { emptyDB } from '../db';
@@ -156,5 +158,43 @@ describe('acesso centralizado por papel da Organization', () => {
     const ctx=resolveAccess(db,master,'a1',support);
     expect(ctx?.readOnly).toBe(true); expect(resolveAccess(db,master,'a2',support)).toBeNull();
     expect(resolveAccess(db,master,'a1')).toBeNull();
+  });
+});
+
+import { taskAssigneeOptions } from '../automation/tasks';
+
+const root = path.resolve(__dirname, '../../..');
+
+describe('portas novas mantêm o isolamento por unidade', () => {
+  // A1.2 · Bloco 1: /tarefas virou porta própria e passou a receber a lista de
+  // responsáveis possíveis na MESMA resposta (antes vinha de /api/automations,
+  // que exige permissão de configuração). A projeção é única e escopada.
+  it('responsáveis possíveis de uma tarefa são só da própria unidade', () => {
+    const db = emptyDB(), owner = user('owner'), other = user('other'), staff = user('staff');
+    db.users.push(owner, other, staff);
+    db.organizations.push(org('org-a', owner.id));
+    db.businesses.push(unit('a1', owner.id, 'org-a'), unit('a2', other.id, 'org-a'));
+    db.members.push({ id: 'm1', businessId: 'a1', userId: 'staff', role: 'ATENDENTE', permissions: {}, active: true, note: '', invitedBy: 'owner', createdAt: '', updatedAt: '' });
+    db.members.push({ id: 'm2', businessId: 'a2', userId: 'other', role: 'ADMIN', permissions: {}, active: true, note: '', invitedBy: 'other', createdAt: '', updatedAt: '' });
+
+    const a1 = taskAssigneeOptions(db, 'a1').map((m) => m.userId);
+    expect(a1).toEqual(['owner', 'staff']); // dono da unidade + membro ativo
+    expect(a1).not.toContain('other');      // nada da unidade vizinha vaza
+    expect(taskAssigneeOptions(db, 'a2').map((m) => m.userId)).toEqual(['other']);
+
+    // membro inativo sai da lista (e o dono continua, para nunca ficar sem opção)
+    (db.members[0] as { active?: boolean }).active = false;
+    expect(taskAssigneeOptions(db, 'a1').map((m) => m.userId)).toEqual(['owner']);
+  });
+
+  it('as portas de tarefas e execuções exigem a mesma guarda das APIs que as alimentam', () => {
+    // /tarefas e /execucoes não criaram caminho novo de dados: leem /api/tasks
+    // e /api/automations, que continuam com requireBusiness no servidor.
+    const tasks = readFileSync(path.join(root, 'src/app/api/tasks/route.ts'), 'utf8');
+    const autos = readFileSync(path.join(root, 'src/app/api/automations/route.ts'), 'utf8');
+    expect(tasks).toMatch(/requireBusiness\(req, businessId, \['leads', 'agenda', 'clientes', 'config'\]\)/);
+    expect(autos).toMatch(/requireBusiness\(req, businessId, 'config'\)/);
+    expect(tasks).toMatch(/taskAssigneeOptions\(db, businessId\)/);
+    expect(autos).toMatch(/taskAssigneeOptions\(db, businessId\)/); // uma projeção só
   });
 });

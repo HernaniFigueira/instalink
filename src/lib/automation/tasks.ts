@@ -177,3 +177,28 @@ export function taskDueLabel(dueAt: string, todayISO: string): string {
   if (day < todayISO) return `atrasada (${day.split('-').reverse().join('/')})`;
   return `${day.split('-').reverse().join('/')}${hm}`;
 }
+
+/**
+ * Responsáveis possíveis para uma tarefa: membros ATIVOS da unidade, com o
+ * dono sempre presente (mesma projeção usada pelo editor de automações — não
+ * existe segunda lista de equipe).
+ *
+ * Existe aqui (e não dentro de uma rota) porque a tela de Tarefas é porta
+ * própria desde o A1.2/Bloco 1: atribuir responsável faz parte de operar a
+ * fila, e não pode depender de a pessoa ter permissão de outra área.
+ * Isolamento por `businessId` em cada leitura.
+ */
+export function taskAssigneeOptions(db: DB, businessId: string): Array<{ userId: string; name: string }> {
+  const members = (db.members || [])
+    .filter((m) => m.businessId === businessId && m.active !== false)
+    .map((m) => ({
+      userId: m.userId,
+      name: (db.users || []).find((u) => u.id === m.userId)?.name || m.note || 'Membro',
+    }));
+  const business = (db.businesses || []).find((b) => b.id === businessId);
+  if (business && !members.some((m) => m.userId === business.ownerId)) {
+    const owner = (db.users || []).find((u) => u.id === business.ownerId);
+    if (owner) members.unshift({ userId: owner.id, name: owner.name });
+  }
+  return members;
+}

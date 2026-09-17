@@ -190,9 +190,9 @@ export default function AgentePage() {
                   className={cn('text-xs font-bold px-3 py-2 rounded-lg border-2', agent.channels.site ? 'border-emerald-500 bg-emerald-50 text-emerald-800' : 'border-zinc-200 text-zinc-500')}>
                   Site {agent.channels.site ? '✓' : '—'}
                 </button>
-                <Link href={`/whatsapp${q}`}
+                <Link href={`/canais?tab=canais${businessId ? `&b=${businessId}` : ''}`}
                   className="text-xs font-bold px-3 py-2 rounded-lg border-2 border-zinc-200 text-zinc-500"
-                  title="O canal WhatsApp depende da integração oficial">
+                  title="O canal WhatsApp é conectado em Canais & Integrações; as conversas ficam em Conversas">
                   WhatsApp {pv?.whatsappStatus === 'connected' ? '✓' : '— (não conectado)'}
                 </Link>
               </div>

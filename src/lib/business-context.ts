@@ -17,6 +17,11 @@
 //   permission     → 403 (mensagem de permissão, sessão preservada);
 //   not-found      → 404 real (só aqui "não encontrado" faz sentido).
 // Nunca etiquetar tudo como "Negócio não encontrado".
+
+// A decisão "esta rota precisa de unidade ativa?" vem do catálogo único
+// (lib/panel.ts) — nunca de uma lista paralela de caminhos.
+import { routeRequiresBusiness } from './panel';
+
 /**
  * Id da empresa para uma rota /api/businesses/[id]/...
  * Prioridade: path param (a rota já diz QUAL empresa) → ?businessId= (compat).
@@ -51,8 +56,17 @@ export function resolveActiveBusinessId(
 }
 
 
-/** Rotas organizacionais não exigem uma unidade ativa no query string. */
+/**
+ * Rotas organizacionais não exigem uma unidade ativa no query string.
+ *
+ * A regra vem do CATÁLOGO (campo `requiresBusiness` em lib/panel.ts), não de um
+ * caminho escrito à mão aqui: declarar uma nova visão de organização no
+ * catálogo já a torna independente do `?b=` sem tocar neste arquivo — e o
+ * reconhecimento é por ancestralidade, então subrotas herdam a decisão.
+ *
+ * Fora do catálogo (rotas públicas, /master, /onboarding) a resposta continua
+ * `true`: quem não declarou, exige unidade (comportamento conservador).
+ */
 export function requiresActiveBusiness(pathname: string): boolean {
-  const clean = String(pathname || '').replace(/\/+$/, '') || '/';
-  return clean !== '/organizacao';
+  return routeRequiresBusiness(pathname);
 }

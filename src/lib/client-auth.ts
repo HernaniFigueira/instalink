@@ -9,7 +9,7 @@
 // Resultado: o painel funciona mesmo com cookies E localStorage bloqueados
 // (navegação pós-login é SPA para preservar a camada de memória).
 
-import { panelRouteFor } from './panel';
+import { activePanelPath } from './panel';
 
 const KEY = 'il_token'; // lojista (painel)
 const CUST_KEY = 'il_cust'; // consumidor (página pública)
@@ -140,10 +140,15 @@ export function startLoginFlow(reason: 'expired' | 'invalid' = 'expired'): void 
  */
 const PANEL_EXTRA_PATHS = ['/onboarding'];
 
+/**
+ * Dentro do painel quando o caminho É um destino do catálogo ou DESCENDE de um
+ * ('/clientes/123' → '/clientes'), então subrotas futuras já nascem cobertas.
+ * A lista continua única: `lib/panel.ts`.
+ */
 export function inPanelPath(pathname: string): boolean {
   const clean = String(pathname || '').replace(/\/+$/, '') || '/';
   if (PANEL_EXTRA_PATHS.includes(clean)) return true;
-  return !!panelRouteFor(clean);
+  return activePanelPath(clean) !== '';
 }
 
 function isSameOriginApi(input: string): boolean {

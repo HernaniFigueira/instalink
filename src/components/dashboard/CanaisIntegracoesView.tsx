@@ -99,7 +99,13 @@ function when(iso: string): string {
   return `${iso.slice(8, 10)}/${iso.slice(5, 7)} ${iso.slice(11, 16)}`;
 }
 
-export function CanaisIntegracoesView() {
+/**
+ * `only` restringe a renderização a UM dos três blocos (canais · fontes ·
+ * integrações) para que a página /canais possa oferecer abas REAIS e
+ * exclusivas. Sem `only`, os três aparecem em sequência (uso em Configurações
+ * nunca mais acontece: a porta única é /canais).
+ */
+export function CanaisIntegracoesView({ only }: { only?: 'channel' | 'source' | 'technical' } = {}) {
   const { businessId, resolving, noBusiness } = useBusinessId();
   const [data, setData] = useState<ConsoleData | null>(null);
   const [msg, setMsg] = useState('');
@@ -195,7 +201,8 @@ export function CanaisIntegracoesView() {
     { key: 'channel', title: 'Canais', hint: 'Por onde a conversa acontece com o cliente.', items: data?.channels || [] },
     { key: 'source', title: 'Fontes', hint: 'De onde o lead chega até você.', items: data?.sources || [] },
     { key: 'technical', title: 'Integrações', hint: 'Por onde os dados viajam (webhook, n8n, APIs).', items: data?.technical || [] },
-  ];
+  ].filter((g) => !only || g.key === only);
+  const showTechnical = !only || only === 'technical';
 
   return (
     <div className="space-y-4">
@@ -306,6 +313,8 @@ export function CanaisIntegracoesView() {
         </section>
       ))}
 
+      {showTechnical && (
+      <>
       <section className="bg-white border border-zinc-200 p-4">
         <h3 className="font-semibold text-sm">Webhooks de saída</h3>
         <p className="text-xs text-zinc-500 mt-0.5">
@@ -348,6 +357,8 @@ export function CanaisIntegracoesView() {
           </div>
         )}
       </section>
+      </>
+      )}
 
       {createFor && (
         <div className="fixed inset-0 bg-black/40 flex items-center justify-center p-4 z-50" role="dialog" aria-modal="true">

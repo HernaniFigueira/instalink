@@ -11,7 +11,7 @@ import { readDB, updateDB } from '@/lib/db';
 import { requireBusiness } from '@/lib/access';
 import { pushAudit } from '@/lib/audit';
 import {
-  createTaskTx, openTasks, setTaskStatusTx, summarizeTasks, taskDueLabel,
+  createTaskTx, openTasks, setTaskStatusTx, summarizeTasks, taskAssigneeOptions, taskDueLabel,
 } from '@/lib/automation/tasks';
 import { validateAssignedUser } from '@/lib/pipeline';
 import { todayISO } from '@/lib/tz';
@@ -49,6 +49,10 @@ export async function GET(req: NextRequest) {
     ok: true,
     tasks: items,
     summary: summarizeTasks(db, businessId, today, guard.ctx.user.id),
+    // Responsáveis possíveis (mesma projeção do editor de automações). A tela
+    // de Tarefas é porta própria: não pode depender de /api/automations (que
+    // exige permissão de configuração) para conseguir atribuir uma tarefa.
+    members: taskAssigneeOptions(db, businessId),
   });
 }
 

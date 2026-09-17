@@ -9,13 +9,15 @@ import { apiGet, apiSend } from '@/lib/api-client';
 import { ExceptionsManager, BookingSettings, CatalogCrossLinks } from '@/components/dashboard/catalog-panels';
 
 // ═══════════════════════════════════════════════════════════════
-// HORÁRIOS — "quando atende"
-// Horário da empresa (base), personalização por profissional (herança
-// já calculada pelo painel), dias especiais e as políticas da agenda
+// DISPONIBILIDADE — "quando atende"
+// Era /horarios. O nome antigo descrevia O CAMPO (horário); o novo descreve
+// O QUE A TELA ENTREGA: quando a casa e cada profissional podem atender.
+// Janela semanal (base), personalização por profissional (herança já
+// calculada pelo painel), dias especiais e as políticas da agenda
 // (antecedência, buffer, horizonte). Reusa toda a lógica protegida —
-// esta tela só expõe o que já existe.
+// esta tela só expõe o que já existe. Nenhuma fórmula de agenda mudou.
 // ═══════════════════════════════════════════════════════════════
-export default function HorariosPage() {
+export default function DisponibilidadePage() {
   const params = useSearchParams();
   const businessId = params.get('b') || '';
   const [pros, setPros] = useState<Professional[]>([]);
@@ -29,7 +31,7 @@ export default function HorariosPage() {
 
   const load = useCallback(async () => {
     if (!businessId) return;
-    const res = await apiGet<any>(`/api/catalog/get?businessId=${businessId}`, { scope: 'area', area: 'Horários' });
+    const res = await apiGet<any>(`/api/catalog/get?businessId=${businessId}`, { scope: 'area', area: 'Disponibilidade' });
     if (!res.ok) {
       setDenied(res.status === 403);
       setLoaded(true);
@@ -48,7 +50,7 @@ export default function HorariosPage() {
 
   async function call(action: string, payload: Record<string, any>) {
     setMsg('');
-    const res = await apiSend('/api/catalog', 'POST', { businessId, action, ...payload }, { scope: 'action', area: 'Horários' });
+    const res = await apiSend('/api/catalog', 'POST', { businessId, action, ...payload }, { scope: 'action', area: 'Disponibilidade' });
     if (!res.ok) throw new Error(res.message || 'Não foi possível salvar.');
     await load();
     setMsg('Salvo.');
@@ -58,19 +60,19 @@ export default function HorariosPage() {
   if (denied) {
     return (
       <>
-        <h1 className="text-2xl font-bold tracking-tight">Horários</h1>
-        <p className="text-sm text-zinc-500 mt-1 mb-5">Quando o seu negócio atende.</p>
-        <AccessDenied area="Horários" />
+        <h1 className="text-2xl font-bold tracking-tight">Disponibilidade</h1>
+        <p className="text-sm text-zinc-500 mt-1 mb-5">Quando a casa e cada profissional podem atender.</p>
+        <AccessDenied area="Disponibilidade" />
       </>
     );
   }
 
   return (
     <>
-      <h1 className="text-2xl font-bold tracking-tight">Horários</h1>
-      <p className="text-sm text-zinc-500 mt-1 mb-5">Quando o seu negócio atende — a base de tudo. Profissionais podem seguir estes horários ou ter os seus.</p>
+      <h1 className="text-2xl font-bold tracking-tight">Disponibilidade</h1>
+      <p className="text-sm text-zinc-500 mt-1 mb-5">Quando a casa e cada profissional podem atender — a base de tudo. Profissionais podem seguir a janela da casa ou ter a sua.</p>
 
-      {loaded && <CatalogCrossLinks businessId={businessId} current="horarios" />}
+      {loaded && <CatalogCrossLinks businessId={businessId} current="/disponibilidade" />}
 
       {msg && <p className="mb-4 text-sm font-medium bg-zinc-900 text-white rounded-md px-4 py-3">{msg}</p>}
       {!loaded && <ListSkeleton rows={3} />}

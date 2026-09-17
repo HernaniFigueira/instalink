@@ -120,7 +120,7 @@ export default function ServicosPage() {
       <h1 className="text-2xl font-bold tracking-tight">Serviços</h1>
       <p className="text-sm text-zinc-500 mt-1 mb-5">O que o seu negócio oferece — nomes, preços e detalhes.</p>
 
-      {loaded && <CatalogCrossLinks businessId={businessId} current="servicos" />}
+      {loaded && <CatalogCrossLinks businessId={businessId} current="/servicos" />}
 
       {msg && <p className="mb-4 text-sm font-medium bg-zinc-900 text-white rounded-md px-4 py-3">{msg}</p>}
       {!loaded && <ListSkeleton rows={3} />}

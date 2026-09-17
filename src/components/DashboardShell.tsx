@@ -5,9 +5,10 @@ import Link from 'next/link';
 import { clearToken } from '@/lib/client-auth';
 import { cn } from '@/lib/utils';
 import { PageSkeleton } from '@/components/ui';
-import { AccessDenied, ForbiddenToasts } from '@/components/dashboard/AccessNotice';
+import { AccessDenied, ForbiddenToasts, PanelHomeProvider } from '@/components/dashboard/AccessNotice';
 import {
-  FULL_WIDTH_PATHS, firstAllowedPath, panelAccess, panelNavigation, panelRouteFor,
+  activePanelPath, activePanelRoute, firstAllowedPath, panelAccess, panelNavigation,
+  routeRequiresBusiness, type PanelRouteDef, type PanelSection, type PanelSectionId,
 } from '@/lib/panel';
 import { isSessionExpired } from '@/lib/http';
 import type { BusinessMode, FeatureId, PermissionId } from '@/lib/types';
@@ -30,7 +31,7 @@ interface Biz {
   readOnly?: boolean;
   organizationId?: string;
   /** Identidade visual do Dashboard (P2) — acompanha a unidade selecionada. */
-  appearance?: { navColor?: string };
+  appearance?: { navColor?: string }
   /** Escopo do profissional: preenchido ⇒ este login vê só a própria agenda. */
   professionalId?: string;
   professionalName?: string;
@@ -91,17 +92,108 @@ const PATHS: Record<string, React.ReactNode> = {
   // Automações (P4): raio = "acontece sozinho". traço fino, mesma linguagem do
   // restante da sidebar (sem glifo novo por tela).
   bolt: (<path d="M13 2 4 14h6l-1 8 9-12h-6l1-8Z" />),
+  // Funil: o caminho estreita — do contato à oportunidade ganha.
+  funnel: (<path d="M22 3H2l8 9.46V19l4 2v-8.54L22 3z" />),
+  // Tarefas: lista com o que já foi feito.
+  tasks: (<><path d="M11 6h10" /><path d="M11 12h10" /><path d="M11 18h10" /><path d="m3 6 1.5 1.5L7 5" /><path d="m3 12 1.5 1.5L7 11" /><path d="m3 18 1.5 1.5L7 17" /></>),
+  // Canais & Integrações: plugue = "conecta com o que já existe".
+  plugs: (<><path d="M9 2v6" /><path d="M15 2v6" /><path d="M6 8h12v3a6 6 0 0 1-6 6 6 6 0 0 1-6-6z" /><path d="M12 17v5" /></>),
+  // Execuções: histórico (o que já aconteceu).
+  history: (<><path d="M3 3v5h5" /><path d="M3.05 13A9 9 0 1 0 6 5.3L3 8" /><path d="M12 7v5l4 2" /></>),
+  // Organização: as unidades da empresa.
+  buildings: (<><path d="M3 21h18" /><path d="M5 21V7l8-4v18" /><path d="M19 21V11l-6-4" /><path d="M9 9v.01" /><path d="M9 12v.01" /><path d="M9 15v.01" /><path d="M9 18v.01" /></>),
+  chevron: (<path d="m6 9 6 6 6-6" />),
 };
 
 function I({ n, size = 18 }: { n: string; size?: number }) {
   return <Svg size={size} fill={FILL_ICONS.has(n)}>{PATHS[n]}</Svg>;
 }
 
-// Menu = permissão REAL ∩ módulos, e guarda de rota no cliente.
-// A fonte única é lib/panel.ts (mesma lista usada pelos testes de permissão):
+// ═══════════════════════════════════════════════════════════════
+// NAVEGAÇÃO = PROJEÇÃO DO CATÁLOGO (lib/panel.ts)
+// ═══════════════════════════════════════════════════════════════
+// O shell NÃO decide o que existe, em que ordem, com que rótulo ou em qual
+// seção: tudo vem de `panelNavigation(ctx)` = permissão REAL ∩ módulos.
+// Aqui só há apresentação e a guarda de rota no cliente:
 //   • item só aparece com permissão e módulo ativos;
 //   • acessar direto uma rota sem permissão mostra 403 AMIGÁVEL — nunca
-//     logout (somente 401 inicia fluxo de login; ver lib/http.ts).
+//     logout (somente 401 inicia fluxo de login; ver lib/http.ts);
+//   • estado ativo por ANCESTRALIDADE ('/clientes/123' mantém Clientes aceso);
+//   • seções colapsáveis (preferência por navegador) e Administração no
+//     rodapé fixo — nunca abaixo da dobra.
+const CLOSED_SECTIONS_KEY = 'il-nav-closed';
+
+function readClosedSections(): Set<PanelSectionId> {
+  try {
+    const raw = localStorage.getItem(CLOSED_SECTIONS_KEY);
+    if (!raw) return new Set();
+    const list = JSON.parse(raw);
+    return new Set(Array.isArray(list) ? (list as PanelSectionId[]) : []);
+  } catch {
+    return new Set();
+  }
+}
+
+function writeClosedSections(closed: Set<PanelSectionId>) {
+  try { localStorage.setItem(CLOSED_SECTIONS_KEY, JSON.stringify([...closed])); } catch { /* modo privado */ }
+}
+
+/** Href do destino: rotas de organização não carregam unidade no `?b=`. */
+function hrefFor(item: PanelRouteDef, unitQuery: string): string {
+  return item.requiresBusiness === false ? item.href : `${item.href}${unitQuery}`;
+}
+
+function NavItem({ item, active, collapsed, href }: {
+  item: PanelRouteDef; active: boolean; collapsed: boolean; href: string;
+}) {
+  return (
+    <Link href={href} data-nav-item={item.href} data-nav-active={active || undefined}
+      // A descrição do catálogo é o tooltip: responde "para que serve isto?"
+      // sem exigir abrir a tela (e sem inventar uma segunda fonte de texto).
+      title={collapsed ? `${item.label} — ${item.description}` : item.description}
+      aria-current={active ? 'page' : undefined}
+      className={cn('flex items-center text-[13px] rounded-md h-9 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/70 focus-visible:ring-inset',
+        collapsed ? 'justify-center px-0' : 'gap-2.5 px-2.5',
+        active
+          ? 'bg-[var(--il-nav-active)] text-[var(--il-nav-active-fg)] shadow-sm'
+          : 'text-[var(--il-nav-fg)] hover:bg-[var(--il-nav-hover)]')}>
+      <I n={item.icon} size={18} /> {!collapsed && <span className={cn('truncate', active && 'font-medium')}>{item.label}</span>}
+    </Link>
+  );
+}
+
+function NavSection({ sec, activePath, collapsed, closed, onToggle, unitQuery }: {
+  sec: PanelSection; activePath: string; collapsed: boolean; closed: Set<PanelSectionId>;
+  onToggle: (id: PanelSectionId) => void; unitQuery: string;
+}) {
+  const isClosed = !collapsed && closed.has(sec.id);
+  return (
+    <div className={cn(collapsed ? 'mt-1' : 'mt-4 first:mt-1')}>
+      {collapsed ? (
+        <div className="h-px bg-[var(--il-nav-border)] mx-1 my-1.5" aria-hidden="true" />
+      ) : (
+        <button type="button" onClick={() => onToggle(sec.id)}
+          aria-expanded={!isClosed} aria-controls={`nav-section-${sec.id}`}
+          className="w-full flex items-center justify-between gap-2 px-2.5 mb-1 rounded-md group focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/70 focus-visible:ring-inset">
+          <span className="text-[10px] font-bold tracking-[0.08em] text-[var(--il-nav-muted)] uppercase group-hover:text-[var(--il-nav-fg)]">
+            {sec.label}
+          </span>
+          <span className={cn('text-[var(--il-nav-muted)] transition-transform duration-200', !isClosed && 'rotate-180')} aria-hidden="true">
+            <I n="chevron" size={12} />
+          </span>
+        </button>
+      )}
+      {(collapsed || !isClosed) && (
+        <div className="space-y-0.5" id={`nav-section-${sec.id}`} role="group" aria-label={sec.label}>
+          {sec.items.map((item) => (
+            <NavItem key={item.href} item={item} collapsed={collapsed}
+              href={hrefFor(item, unitQuery)} active={activePath === item.href} />
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
 
 export function DashboardShell({ children }: { children: React.ReactNode }) {
   const params = useSearchParams();
@@ -115,7 +207,24 @@ export function DashboardShell({ children }: { children: React.ReactNode }) {
   const [collapsed, setCollapsed] = useState(() => {
     try { return localStorage.getItem('il-side') === 'mini'; } catch { return false; }
   });
+  // Seções FECHADAS (guardamos só as fechadas: uma seção nova nasce aberta).
+  const [closed, setClosed] = useState<Set<PanelSectionId>>(new Set());
+  // Mobile: painel "Mais" (todas as seções + destinos fora do menu).
+  const [moreOpen, setMoreOpen] = useState(false);
+  const [pillFade, setPillFade] = useState(false);
+  const pillsRef = useRef<HTMLDivElement | null>(null);
   const lastContextAt = useRef(0);
+
+  useEffect(() => { setClosed(readClosedSections()); }, []);
+
+  function toggleSection(id: PanelSectionId) {
+    setClosed((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id); else next.add(id);
+      writeClosedSections(next);
+      return next;
+    });
+  }
 
   const loadContext = useCallback(() => {
     // SOMENTE 401 (sessão inexistente/expirada/inválida) inicia o fluxo de
@@ -171,16 +280,48 @@ export function DashboardShell({ children }: { children: React.ReactNode }) {
     return () => window.removeEventListener('il:business-refresh', fn);
   }, [loadContext]);
 
+  // Unidade ativa: só rotas que PRECISAM de unidade (o catálogo diz quais)
+  // recebem o `?b=`. Os demais parâmetros da URL são preservados — trocar de
+  // unidade ou chegar sem `?b=` nunca derruba `?tab=`, `?organization=`, etc.
   useEffect(() => {
     if (!ready || businesses.length === 0) return;
+    if (!requiresActiveBusiness(pathname)) return;
     const b = params.get('b');
-    if (requiresActiveBusiness(pathname) && !businesses.some((x) => x.id === b)) router.replace(`${pathname}?b=${businesses[0].id}`);
+    if (businesses.some((x) => x.id === b)) return;
+    const qs = new URLSearchParams(params.toString());
+    qs.set('b', businesses[0].id);
+    router.replace(`${pathname}?${qs.toString()}`);
   }, [ready, businesses, params, pathname, router]);
+
+  // A seção da tela atual abre sozinha: estar em '/clientes' com a seção
+  // Pessoas fechada deixaria o usuário sem saber onde está.
+  const activePath = activePanelPath(pathname);
+  const activeRoute = activePanelRoute(pathname);
+  useEffect(() => {
+    const sec = activeRoute?.section;
+    if (!sec) return;
+    setClosed((prev) => {
+      if (!prev.has(sec)) return prev;
+      const next = new Set(prev);
+      next.delete(sec);
+      writeClosedSections(next);
+      return next;
+    });
+  }, [activePath, activeRoute]);
+
+  // Mobile: a pílula ativa entra na área visível (a fileira rola na horizontal).
+  useEffect(() => {
+    const el = pillsRef.current?.querySelector<HTMLElement>('[data-nav-active="true"]');
+    if (!el) return;
+    try { el.scrollIntoView({ inline: 'center', block: 'nearest' }); } catch { /* navegadores antigos */ }
+  }, [activePath, moreOpen]);
 
   function switchBiz(id: string) {
     if (id === '__overview') { router.push(`/organizacao?organization=${business?.organizationId || ''}`); return; }
     if (id === '__add') { router.push(`/organizacao?organization=${business?.organizationId || ''}&add=1`); return; }
-    router.push(`${pathname === '/organizacao' ? '/dashboard' : pathname}?b=${id}`);
+    // Em rota que não é de unidade (ex.: /organizacao) a troca leva ao painel.
+    const target = routeRequiresBusiness(pathname) ? pathname : '/dashboard';
+    router.push(`${target}?b=${id}`);
   }
   function toggle() {
     setCollapsed((c) => {
@@ -215,7 +356,6 @@ export function DashboardShell({ children }: { children: React.ReactNode }) {
   // Navegação e guarda de rota vêm da fonte única (lib/panel.ts).
   const panelCtx = { permissions, modes, features: features as Partial<Record<FeatureId, boolean>> };
   const nav = panelNavigation(panelCtx);
-  const items = nav.all;
   const access = panelAccess(pathname, panelCtx);
   const q = business ? `?b=${business.id}` : '';
   const ROLE_LABEL: Record<string, string> = {
@@ -226,18 +366,43 @@ export function DashboardShell({ children }: { children: React.ReactNode }) {
 
   // Dashboard fica sempre no topo, sem seção; demais itens agrupados.
   const dashboardItem = nav.primary;
-  const sections = nav.sections;
   // A Agenda é o ambiente operacional: chrome mínimo para a grade ocupar a
   // viewport (menos padding, sem rodapé). As demais telas não mudam.
-  const isAgenda = pathname === '/agenda';
+  const isAgenda = activePath === '/agenda';
+  // Largura é política do CATÁLOGO (campo `width`), não uma lista à parte:
+  // telas densas (grade, kanban, tabela, colunas) usam a largura toda;
+  // formulários e listas de coluna única ficam em 960px de leitura.
+  const isFullWidth = activeRoute?.width === 'full';
   // Sem permissão de dashboard (ex.: VIEWER com agenda liberada) o usuário
-  // ainda precisa de um destino válido ao clicar em "Início".
+  // ainda precisa de um destino válido ao clicar em "Início" — e TODO 403
+  // precisa de uma porta de volta (fornecida por contexto às telas).
   const fallbackHref = firstAllowedPath(panelCtx);
+  const fallbackRoute = nav.allowed.find((r) => r.href === fallbackHref);
+  const homeHref = fallbackHref ? hrefFor(fallbackRoute || { href: fallbackHref } as PanelRouteDef, q) : '';
+
+  // Mobile: pills = menu; "Mais" = todas as seções + destinos fora do menu.
+  const mobilePills = nav.sidebar;
+  const mobileSections = [...nav.sections, ...nav.footerSections];
+
+  function onPillsScroll() {
+    const el = pillsRef.current;
+    if (!el) return;
+    setPillFade(el.scrollLeft + el.clientWidth < el.scrollWidth - 8);
+  }
+  useEffect(() => {
+    onPillsScroll();
+    window.addEventListener('resize', onPillsScroll);
+    return () => window.removeEventListener('resize', onPillsScroll);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [mobilePills.length, moreOpen]);
 
   return (
     // A identidade visual vive nos TOKENS (--il-nav*) injetados aqui, uma vez,
     // a partir da cor do Business ativo. Trocar de unidade troca a identidade;
     // nenhuma classe condicional por cor é espalhada pelo sistema.
+    // `PanelHomeProvider` entrega o destino de volta a qualquer 403 do painel
+    // sem que cada tela precise calcular (ou chutar) o seu.
+    <PanelHomeProvider home={homeHref}>
     <div className="min-h-screen bg-[#f8f8f8] lg:flex" style={navTokenStyle(business?.appearance?.navColor)}>
       {/* Sidebar desktop - workspace navigation */}
       <aside className={cn(
@@ -300,42 +465,33 @@ export function DashboardShell({ children }: { children: React.ReactNode }) {
 
         <nav className={cn('flex-1 overflow-y-auto py-3 ws-scroll', collapsed ? 'px-1.5 space-y-0.5' : 'px-2.5')} aria-label="Navegação do painel">
           {dashboardItem && (
-            <Link href={`${dashboardItem.href}${q}`} title={collapsed ? dashboardItem.label : undefined}
-              aria-current={pathname === dashboardItem.href ? 'page' : undefined}
-              className={cn('flex items-center text-[13px] font-medium rounded-md h-9 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/70 focus-visible:ring-inset',
-                collapsed ? 'justify-center px-0' : 'gap-2.5 px-2.5',
-                pathname === dashboardItem.href
-                  ? 'bg-[var(--il-nav-active)] text-[var(--il-nav-active-fg)] shadow-sm'
-                  : 'text-[var(--il-nav-fg)] hover:bg-[var(--il-nav-hover)]')}>
-              <I n={dashboardItem.icon} size={18} /> {!collapsed && dashboardItem.label}
-            </Link>
+            <NavItem item={dashboardItem} collapsed={collapsed}
+              href={hrefFor(dashboardItem, q)} active={activePath === dashboardItem.href} />
           )}
           {!collapsed && dashboardItem && <div className="h-px bg-[var(--il-nav-border)] my-3 mx-1" aria-hidden="true" />}
-          {sections.map((sec) => (
-            <div key={sec.label} className={cn(collapsed ? 'mt-1' : 'mt-4 first:mt-1')}>
-              {!collapsed && <p className="px-2.5 mb-1 text-[10px] font-bold tracking-[0.08em] text-[var(--il-nav-muted)] uppercase">{sec.label}</p>}
-              {collapsed && <div className="h-px bg-[var(--il-nav-border)] mx-1 my-1.5" aria-hidden="true" />}
-              <div className="space-y-0.5">
-                {sec.items.map((i) => {
-                  const active = pathname === i.href;
-                  return (
-                    <Link key={i.href} href={`${i.href}${q}`} title={collapsed ? i.label : undefined}
-                      aria-current={active ? 'page' : undefined}
-                      className={cn('flex items-center text-[13px] rounded-md h-9 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/70 focus-visible:ring-inset',
-                        collapsed ? 'justify-center px-0' : 'gap-2.5 px-2.5',
-                        active
-                          ? 'bg-[var(--il-nav-active)] text-[var(--il-nav-active-fg)] shadow-sm'
-                          : 'text-[var(--il-nav-fg)] hover:bg-[var(--il-nav-hover)]')}>
-                      <I n={i.icon} size={18} /> {!collapsed && <span className={cn('truncate', active && 'font-medium')}>{i.label}</span>}
-                    </Link>
-                  );
-                })}
-              </div>
-            </div>
+          {nav.sections.map((sec) => (
+            <NavSection key={sec.id} sec={sec} activePath={activePath} collapsed={collapsed} closed={closed}
+              onToggle={toggleSection} unitQuery={q} />
+          ))}
+          {/* Sidebar recolhida: Administração entra na área rolável (sem rótulos,
+              a ordem continua a do catálogo). */}
+          {collapsed && nav.footerSections.map((sec) => (
+            <NavSection key={sec.id} sec={sec} activePath={activePath} collapsed
+              closed={closed} onToggle={toggleSection} unitQuery={q} />
           ))}
         </nav>
 
-        <div className={cn('border-t border-[var(--il-nav-border)] mt-auto', collapsed ? 'p-2 space-y-1' : 'p-3')}>
+        {/* Administração no RODAPÉ FIXO: fora da área que rola, sempre à vista. */}
+        {!collapsed && nav.footerSections.length > 0 && (
+          <div className="shrink-0 border-t border-[var(--il-nav-border)] px-2.5 pt-2 pb-1">
+            {nav.footerSections.map((sec) => (
+              <NavSection key={sec.id} sec={sec} activePath={activePath} collapsed={false} closed={closed}
+                onToggle={toggleSection} unitQuery={q} />
+            ))}
+          </div>
+        )}
+
+        <div className={cn('border-t border-[var(--il-nav-border)] shrink-0', collapsed ? 'p-2 space-y-1' : 'p-3')}>
           {!collapsed && <p className="text-xs text-[var(--il-nav-muted)] truncate px-2 mb-2 font-medium">{user.name}</p>}
           <button onClick={toggle} title={collapsed ? 'Expandir' : 'Recolher'}
             className={cn('w-full flex items-center text-xs font-medium text-[var(--il-nav-muted)] hover:text-[var(--il-nav-fg)] rounded-md h-8 hover:bg-[var(--il-nav-hover)]',
@@ -378,17 +534,76 @@ export function DashboardShell({ children }: { children: React.ReactNode }) {
             <button onClick={logout} className="bg-zinc-50 border border-zinc-200 p-2 rounded-md" aria-label="Sair"><I n="logout" size={14} /></button>
           </span>
         </div>
-        <nav className="flex gap-1 overflow-x-auto px-3 pb-2.5 no-scrollbar">
-          {items.map((i) => (
-            <Link key={i.href} href={`${i.href}${q}`}
-              className={cn('shrink-0 text-xs font-medium border rounded-full px-3 py-1.5 inline-flex items-center gap-1.5',
-                pathname === i.href
-                  ? 'bg-[var(--il-nav-cta)] border-[var(--il-nav-cta)] text-[var(--il-nav-cta-fg)]'
-                  : 'bg-white border-zinc-200 text-zinc-600')}>
-              <I n={i.icon} size={14} /> {i.label}
-            </Link>
-          ))}
-        </nav>
+
+        {/* Fileira de atalhos + porta "Mais". Em 390px a fileira rola, mas:
+            (1) o degradê avisa que existe continuação, (2) a pílula ativa é
+            trazida para o centro sozinha, (3) "Mais" fica FORA da rolagem e
+            abre tudo agrupado por seção — nada fica inalcançável. */}
+        <div className="flex items-stretch gap-2 px-3 pb-2.5">
+          <div className="relative flex-1 min-w-0">
+            <div ref={pillsRef} onScroll={onPillsScroll}
+              className="flex gap-1 overflow-x-auto no-scrollbar" aria-label="Atalhos do painel">
+              {mobilePills.map((i) => (
+                <Link key={i.href} href={hrefFor(i, q)} title={i.description} data-nav-item={i.href}
+                  data-nav-active={activePath === i.href || undefined}
+                  aria-current={activePath === i.href ? 'page' : undefined}
+                  className={cn('shrink-0 text-xs font-medium border rounded-full px-3 py-1.5 inline-flex items-center gap-1.5',
+                    activePath === i.href
+                      ? 'bg-[var(--il-nav-cta)] border-[var(--il-nav-cta)] text-[var(--il-nav-cta-fg)]'
+                      : 'bg-white border-zinc-200 text-zinc-600')}>
+                  <I n={i.icon} size={14} /> {i.label}
+                </Link>
+              ))}
+            </div>
+            {pillFade && (
+              <div className="pointer-events-none absolute inset-y-0 right-0 w-8 bg-gradient-to-l from-white to-transparent" aria-hidden="true" />
+            )}
+          </div>
+          <button type="button" onClick={() => setMoreOpen((v) => !v)}
+            aria-expanded={moreOpen} aria-controls="mobile-nav-more"
+            className={cn('shrink-0 text-xs font-semibold border rounded-full px-3 inline-flex items-center gap-1',
+              moreOpen ? 'bg-zinc-900 border-zinc-900 text-white' : 'bg-white border-zinc-300 text-zinc-700')}>
+            Mais
+            <span className={cn('transition-transform duration-200', moreOpen && 'rotate-180')} aria-hidden="true"><I n="chevron" size={12} /></span>
+          </button>
+        </div>
+
+        {moreOpen && (
+          <div id="mobile-nav-more" className="px-3 pb-3">
+            <div className="bg-white border border-zinc-200 rounded-lg p-2 max-h-[60vh] overflow-y-auto">
+              {mobileSections.map((sec) => (
+                <div key={sec.id} className="mb-2 last:mb-0">
+                  <p className="text-[10px] font-bold uppercase tracking-[0.08em] text-zinc-400 px-1 mb-1">{sec.label}</p>
+                  <div className="grid grid-cols-2 gap-1">
+                    {sec.items.map((i) => (
+                      <Link key={i.href} href={hrefFor(i, q)} title={i.description} onClick={() => setMoreOpen(false)}
+                        aria-current={activePath === i.href ? 'page' : undefined}
+                        className={cn('text-xs font-medium border rounded-md px-2.5 py-2 inline-flex items-center gap-1.5 min-w-0',
+                          activePath === i.href ? 'bg-zinc-900 border-zinc-900 text-white' : 'bg-white border-zinc-200 text-zinc-700')}>
+                        <I n={i.icon} size={14} /> <span className="truncate">{i.label}</span>
+                      </Link>
+                    ))}
+                  </div>
+                </div>
+              ))}
+              {nav.more.length > 0 && (
+                <div>
+                  <p className="text-[10px] font-bold uppercase tracking-[0.08em] text-zinc-400 px-1 mb-1">Outros destinos</p>
+                  <div className="grid grid-cols-2 gap-1">
+                    {nav.more.map((i) => (
+                      <Link key={i.href} href={hrefFor(i, q)} title={i.description} onClick={() => setMoreOpen(false)}
+                        aria-current={activePath === i.href ? 'page' : undefined}
+                        className={cn('text-xs font-medium border rounded-md px-2.5 py-2 inline-flex items-center gap-1.5 min-w-0',
+                          activePath === i.href ? 'bg-zinc-900 border-zinc-900 text-white' : 'bg-white border-zinc-200 text-zinc-700')}>
+                        <I n={i.icon} size={14} /> <span className="truncate">{i.label}</span>
+                      </Link>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+        )}
       </div>
 
       <main className="flex-1 min-w-0 bg-[#f8f8f8]">
@@ -404,7 +619,7 @@ export function DashboardShell({ children }: { children: React.ReactNode }) {
             }} className="ml-auto underline underline-offset-2">Sair do modo suporte</button>
           </div>
         )}
-        <div className={cn(isAgenda ? 'px-2 sm:px-3 lg:px-4 py-3' : 'px-4 lg:px-8 py-6', !FULL_WIDTH_PATHS.includes(pathname) && 'max-w-[960px]')}>
+        <div className={cn(isAgenda ? 'px-2 sm:px-3 lg:px-4 py-3' : 'px-4 lg:px-8 py-6', !isFullWidth && 'max-w-[960px]')}>
           {isMaster && !support && (
             <p className="mb-4 text-xs font-medium text-amber-800 bg-amber-50 border border-amber-200 rounded-md px-3 py-2 inline-flex items-center gap-2">
               <I n="shield" size={14} /> Você é master — <Link href="/master" className="underline font-semibold">/master</Link>
@@ -438,7 +653,6 @@ export function DashboardShell({ children }: { children: React.ReactNode }) {
               hint={access.reason === 'module'
                 ? `O módulo “${access.route?.label}” não está ativo nesta empresa. Nada foi perdido: ao reativar em Recursos, a área volta com todo o conteúdo.`
                 : undefined}
-              homeHref={fallbackHref ? `${fallbackHref}${q}` : undefined}
             />
           ) : children}
         </div>
@@ -450,7 +664,8 @@ export function DashboardShell({ children }: { children: React.ReactNode }) {
       </main>
 
       {/* 403 de qualquer ação do painel → aviso amigável (sessão preservada). */}
-      <ForbiddenToasts context={{ scope: 'action', area: access.area || panelRouteFor(pathname)?.label }} />
+      <ForbiddenToasts context={{ scope: 'action', area: access.area || activeRoute?.label }} />
     </div>
+    </PanelHomeProvider>
   );
 }

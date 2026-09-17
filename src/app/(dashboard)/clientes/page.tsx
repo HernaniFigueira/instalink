@@ -1,6 +1,6 @@
 'use client';
 import { useCallback, useEffect, useState } from 'react';
-import { useSearchParams } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import type { LeadStatus } from '@/lib/types';
 import { cn, money, paginate, waLink } from '@/lib/utils';
@@ -12,7 +12,6 @@ import { Icon } from '@/components/icons';
 import { NewBookingSheet } from '@/components/dashboard/NewBookingSheet';
 import { AccessDenied, useAreaLoad } from '@/components/dashboard/AccessNotice';
 import { apiGet, apiSend } from '@/lib/api-client';
-import { EsteiraView } from '@/components/dashboard/EsteiraView';
 
 // Observações do cliente (P2): histórico append-only com autor e data.
 // `legacy: true` marca o registro antigo (campo único), preservado como está.
@@ -45,6 +44,7 @@ const NEXT_LEAD: Record<string, LeadStatus | ''> = { new: 'contacted', contacted
 const NEXT_LEAD_LABEL: Record<string, string> = { new: 'Marcar contato', contacted: 'Qualificar', qualified: 'Marcar conversão' };
 export default function ClientesPage() {
   const params = useSearchParams();
+  const router = useRouter();
   const businessId = params.get('b') || '';
   const [people, setPeople] = useState<Person[]>([]);
   const [total, setTotal] = useState(0);
@@ -54,7 +54,14 @@ export default function ClientesPage() {
   // "Cliente e histórico" do detalhe do agendamento).
   const [q, setQ] = useState(params.get('q') || '');
   const [search, setSearch] = useState(params.get('q') || '');
-  const [view, setView] = useState<'clientes' | 'esteira'>(params.get('view') === 'esteira' ? 'esteira' : 'clientes');
+  // A1.2 · Bloco 1: a esteira tinha DUAS portas (a rota /esteira e esta visão
+  // dentro de Clientes). Agora existe UMA: /funil. O link antigo
+  // (/clientes?view=esteira) continua chegando no lugar certo.
+  const legacyEsteira = params.get('view') === 'esteira';
+  useEffect(() => {
+    if (!legacyEsteira) return;
+    router.replace(`/funil${businessId ? `?b=${businessId}` : ''}`);
+  }, [legacyEsteira, businessId, router]);
   const [loaded, setLoaded] = useState(false);
   const [open, setOpen] = useState<string | null>(null);
   // Página do HISTÓRICO expandido (auditoria §18): cliente com 20, 30, 50
@@ -220,34 +227,27 @@ export default function ClientesPage() {
     <>
       <div className="flex items-center justify-between gap-3 mb-3">
         <div>
-          <h1 className="text-base font-semibold tracking-tight">Clientes & Esteira</h1>
-          <p className="text-sm text-zinc-500 mt-0.5">Base única — agendamentos, pipeline de oportunidades, histórico e relacionamento (visão 360).</p>
+          <h1 className="text-base font-semibold tracking-tight">Clientes</h1>
+          <p className="text-sm text-zinc-500 mt-0.5">Base única — agendamentos, histórico e relacionamento (visão 360). As oportunidades por etapa estão no Funil.</p>
         </div>
         <span className="text-xs font-medium text-zinc-500 bg-white border border-zinc-200 rounded-md px-2.5 py-1 hidden sm:inline">{total} contatos</span>
       </div>
       {error && <p className="mb-3 text-sm font-medium bg-red-600 text-white rounded-md px-3 py-2">{error}</p>}
 
-      {/* Alternador de Visão: Clientes CRM x Esteira de Leads */}
-      <div className="flex gap-1 p-1 bg-zinc-100 rounded-lg w-fit mb-3">
-        <button
-          type="button"
-          onClick={() => setView('clientes')}
-          className={cn('text-xs font-semibold px-3 py-1.5 rounded-md transition', view === 'clientes' ? 'bg-white shadow-sm border border-zinc-200 text-zinc-900' : 'text-zinc-500 hover:text-zinc-900')}
-        >
+      {/* Uma porta por conceito: aqui é a lista de clientes (CRM); as
+          oportunidades por etapa vivem em /funil. O atalho contextual
+          permanece — o que saiu foi a SEGUNDA cópia da mesma tela. */}
+      <div className="flex flex-wrap items-center gap-1 p-1 bg-zinc-100 rounded-lg w-fit mb-3 max-w-full">
+        <span className="text-xs font-semibold px-3 py-1.5 rounded-md bg-white shadow-sm border border-zinc-200 text-zinc-900">
           Lista de Clientes (CRM)
-        </button>
-        <button
-          type="button"
-          onClick={() => setView('esteira')}
-          className={cn('text-xs font-semibold px-3 py-1.5 rounded-md transition', view === 'esteira' ? 'bg-white shadow-sm border border-zinc-200 text-zinc-900' : 'text-zinc-500 hover:text-zinc-900')}
-        >
-          Esteira de Leads (Pipeline)
-        </button>
+        </span>
+        <Link href={`/funil?b=${businessId}`}
+          className="text-xs font-semibold px-3 py-1.5 rounded-md text-zinc-500 hover:text-zinc-900 inline-flex items-center gap-1">
+          Funil de oportunidades <Icon n="chevR" size={12} />
+        </Link>
       </div>
 
-      {view === 'esteira' ? (
-        <EsteiraView />
-      ) : (
+      {legacyEsteira ? null : (
         <>
           {/* Toolbar workspace — filtros + busca em linha, não card */}
           <div className="bg-white border border-zinc-200 flex items-center gap-2 px-3 py-2 mb-3">

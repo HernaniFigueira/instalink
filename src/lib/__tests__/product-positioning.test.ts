@@ -122,9 +122,13 @@ describe('pedidos e orçamentos: fora da experiência, preservados por compatibi
 
   it('Pedidos/Orçamento/Delivery não são caminhos principais', () => {
     const panel = read('src/lib/panel.ts');
-    const pedidosRoute = panel.match(/\{ href: '\/pedidos'[^\n]*\n?/)?.[0] || '';
-    expect(pedidosRoute).toContain('hidden: true'); // só oculto/legado
-    expect(pedidosRoute).not.toMatch(/section:/);    // nunca reaparece em seção da sidebar
+    // A1.2 · Bloco 1: o campo `hidden` morreu. O destino continua DECLARADO no
+    // catálogo (rota, rótulo, descrição, permissão) e apenas sai do menu —
+    // `sidebar: false`. O comportamento (nunca aparecer na navegação, mesmo com
+    // o módulo legado ativo) é garantido em panel.test.ts.
+    const pedidosRoute = panel.match(/href: '\/pedidos'[\s\S]*?\n  \},/)?.[0] || '';
+    expect(pedidosRoute).toContain('sidebar: false'); // fora do menu, não escondido
+    expect(pedidosRoute).not.toMatch(/hidden/);       // o campo antigo não volta
     expect(panel).not.toMatch(/label: 'Orçamentos'/);
     expect(panel).not.toMatch(/label: '(Delivery|Restaurante|Loja)'/);
     const landing = read('src/app/page.tsx');

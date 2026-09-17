@@ -218,7 +218,7 @@ export function setupChecklist(input: SetupCheckInput): SetupCheckItem[] {
     items.push({ id: 'services', done: counts.services > 0, label: 'Cadastre seus serviços', href: '/servicos' });
   }
   if (modules.bookings) {
-    items.push({ id: 'hours', done: counts.availability > 0, label: 'Configure seus horários', href: '/horarios' });
+    items.push({ id: 'hours', done: counts.availability > 0, label: 'Defina quando você atende', href: '/disponibilidade' });
     items.push({ id: 'team', done: counts.professionals > 0, label: 'Adicione profissionais', href: '/profissionais' });
   }
   if (modules.products) {

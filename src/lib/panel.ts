@@ -1,93 +1,310 @@
 // ═══════════════════════════════════════════════════════════════
-// PAINEL — rotas, permissões e visibilidade contextual
+// PAINEL — CATÁLOGO ÚNICO DE DESTINOS · permissões · visibilidade
 // ═══════════════════════════════════════════════════════════════
-// Fonte única usada pelo DashboardShell para:
-//   1. montar a navegação (permissão REAL ∩ módulos ativos);
-//   2. proteger a rota no cliente: sem permissão → 403 AMIGÁVEL na tela,
-//      NUNCA logout (ver lib/http.ts — somente 401 inicia fluxo de login);
-//   3. rotular a área na mensagem de permissão.
+// A1.2 · Bloco 1. Este arquivo é a ÚNICA lista de destinos do painel.
+// Sidebar (desktop e mobile), largura do conteúdo, guarda de rota no
+// cliente, rótulos de 403, requisito de unidade ativa e o mapa de rotas
+// legadas são PROJEÇÕES daqui — nenhum deles decide o que existe.
 //
-// Esconder item de menu é UX; a segurança continua no servidor (lib/access.ts).
+// Regras do catálogo:
+//   • UMA porta principal por conceito: cada destino aparece uma única vez.
+//   • `sidebar: false` NÃO é o antigo `hidden`. O destino continua declarado,
+//     acessível, rotulado e alcançável por atalho contextual; apenas não ocupa
+//     linha no menu. A régua é FREQUÊNCIA de uso, não importância.
+//   • Toda rota do painel nasce aqui. Rota fora do catálogo é rota sem porta.
+//   • Esconder item de menu é UX; a segurança continua no servidor
+//     (lib/access.ts) e em API_GUARDS — regressão coberta por teste.
+//
 // Módulo PURE (sem I/O/DOM) para ser testável e reutilizável.
 import type { BusinessMode, FeatureId, PermissionId } from './types';
 import { areaLabel } from './http';
 
+// ── Seções canônicas ───────────────────────────────────────────
+export type PanelSectionId =
+  | 'operacao'
+  | 'pessoas'
+  | 'oferta'
+  | 'crescimento'
+  | 'resultados'
+  | 'presenca'
+  | 'administracao';
+
+export interface PanelSectionDef {
+  id: PanelSectionId;
+  label: string;
+  /**
+   * true = seção renderizada no RODAPÉ FIXO da sidebar, fora da área que rola.
+   * Medido em 1280×768 (notebook comum): com todas as seções na área rolável,
+   * Administração caía fora da dobra — e é justamente o grupo que mais se
+   * procura quando não se acha algo.
+   */
+  footer?: boolean;
+}
+
+/**
+ * Ordem canônica das seções = ordem de uso: o que se abre toda hora primeiro,
+ * o que se ajusta uma vez por mês por último.
+ *
+ * "Oferta" reúne o que eu vendo, quem atende e quando atende — a família que o
+ * lojista já pensa junta. Disponibilidade pertence a ela (decisão A1.2): um
+ * grupo de um destino só custaria duas linhas de menu para entregar uma porta.
+ */
+export const PANEL_SECTIONS: PanelSectionDef[] = [
+  { id: 'operacao', label: 'Operação' },
+  { id: 'pessoas', label: 'Pessoas' },
+  { id: 'oferta', label: 'Oferta' },
+  { id: 'crescimento', label: 'Crescimento' },
+  { id: 'resultados', label: 'Resultados' },
+  { id: 'presenca', label: 'Presença' },
+  { id: 'administracao', label: 'Administração', footer: true },
+];
+
+/** Seção que vive no rodapé fixo da sidebar. */
+export const FOOTER_SECTION: PanelSectionId = 'administracao';
+
+export function panelSection(id: PanelSectionId): PanelSectionDef | undefined {
+  return PANEL_SECTIONS.find((s) => s.id === id);
+}
+
+/** Destinos de uma seção, na ordem do catálogo (independente de contexto). */
+export function panelRoutesIn(section: PanelSectionId): PanelRouteDef[] {
+  return PANEL_ROUTES.filter((r) => r.section === section);
+}
+
+// ── Definição de destino ───────────────────────────────────────
 export interface PanelRouteDef {
   href: string;
   label: string;
+  /**
+   * O que o usuário encontra ali. NUNCA vazia: é o texto do tooltip, do
+   * atalho contextual e (futuramente) da busca. Descrição boa é a que responde
+   * "para que serve isto?" na palavra de quem opera, não na de quem construiu.
+   */
+  description: string;
   icon: string;
-  /** Rótulo da seção da sidebar (Dashboard fica fora de seção). */
-  section?: string;
-  /** Permissão independente exigida (dashboard continua sendo uma delas). */
-  permission: PermissionId;
-  /** Só aparece quando ALGUM destes módulos comerciais estiver ativo. */
+  /** Seção canônica. Ausente apenas no item primário (Dashboard). */
+  section?: PanelSectionId;
+  /**
+   * Permissão exigida. Array = "qualquer uma satisfaz" — a MESMA semântica de
+   * `requireBusiness(...)` no servidor e de API_GUARDS abaixo.
+   */
+  permission: PermissionId | PermissionId[];
+  /** Só existe quando ALGUM destes módulos comerciais estiver ativo. */
   modes?: BusinessMode[];
-  /** Só aparece quando ALGUM destes módulos opcionais estiver ativo. */
+  /** Só existe quando ALGUM destes módulos opcionais estiver ativo. */
   features?: FeatureId[];
   /** Chave de área para mensagens de permissão (lib/http). */
   area?: string;
   /**
-   * true = fora da navegação do produto (legado ainda funcional por URL
-   * direta para empresas que já têm o módulo ativo). Nunca aparece no menu.
+   * false = destino declarado que não ocupa linha no menu (uso esporádico ou
+   * legado). Continua acessível por URL e por atalho contextual.
+   * Default: true.
    */
-  hidden?: boolean;
+  sidebar?: boolean;
+  /**
+   * 'full'     = telas densas (grade, calendário, kanban, tabela, colunas
+   *              múltiplas) — aproveitam a largura disponível;
+   * 'contained'= formulários e listas de coluna única — 960px de leitura.
+   * Default: 'contained'.
+   */
+  width?: 'full' | 'contained';
+  /**
+   * false = a rota não exige unidade ativa no `?b=` (visão de organização).
+   * Default: true.
+   */
+  requiresBusiness?: boolean;
 }
 
-// Ordem canônica da navegação — reflete o fluxo mental de quem opera (P1):
-//   Dashboard → Operação (o dia a dia) → Catálogo (o que oferece e como
-//   está estruturado) → Comunicação (canais e assistente) → Gestão
-//   (acompanhamento) → Presença (página pública) → Administração.
-// Somente AGRUPAMENTO e seção mudam aqui: hrefs, labels, permissões e
-// modos são intocados — nenhuma URL quebra.
+// ── CATÁLOGO ───────────────────────────────────────────────────
+// Ordem do array = ordem da navegação. Nada aqui é decorativo: cada entrada
+// existe porque há uma porta real (rota) e uma pergunta de negócio que ela
+// responde.
 //
 // PROFISSIONAIS × EQUIPE (conceitos separados, nunca misturados):
-//   • /profissionais = quem REALIZA os atendimentos (agenda, serviços,
-//     disponibilidade, capacidade);
-//   • /equipe = usuários administrativos com login/permissões (dono,
-//     recepcionista, gerente…).
+//   • /profissionais = quem REALIZA os atendimentos (serviços, agenda própria);
+//   • /equipe        = quem tem LOGIN e permissões (dono, recepcionista…).
 //
-// Pedidos não é caminho principal: a rota continua existente (histórico
-// legado acessível por URL para quem tem o módulo), mas fora da navegação.
+// DISPONIBILIDADE × REGRAS DE RESERVA:
+//   • /disponibilidade = QUANDO pode atender (janela, dias especiais);
+//   • regras de como o cliente reserva = Configurações (A1.2 · Bloco 2).
+//
+// CONVERSAS × CANAIS:
+//   • /conversas = operação diária (inbox);
+//   • /canais    = conexão do canal, fontes de lead e integrações técnicas.
 export const PANEL_ROUTES: PanelRouteDef[] = [
-  { href: '/dashboard', label: 'Dashboard', icon: 'home', permission: 'dashboard', area: 'dashboard' },
-  // Operação — o dia a dia do negócio
-  { href: '/agenda', label: 'Agenda', icon: 'calendar', section: 'Operação', modes: ['bookings'], permission: 'agenda', area: 'agenda' },
-  { href: '/clientes', label: 'Clientes', icon: 'users', section: 'Operação', permission: 'clientes', area: 'clientes' },
-  // Catálogo — o que eu ofereço · quem atende · quando atende · vitrine
-  { href: '/servicos', label: 'Serviços', icon: 'service', section: 'Catálogo', modes: ['services', 'bookings'], permission: 'catalogo', area: 'servicos' },
-  { href: '/profissionais', label: 'Profissionais', icon: 'idcard', section: 'Catálogo', modes: ['services', 'bookings'], permission: 'catalogo', area: 'profissionais' },
-  { href: '/horarios', label: 'Horários', icon: 'clock', section: 'Catálogo', modes: ['services', 'bookings'], permission: 'catalogo', area: 'horarios' },
-  { href: '/produtos', label: 'Produtos', icon: 'bag', section: 'Catálogo', modes: ['products', 'orders'], permission: 'catalogo', area: 'catalogo' },
-  // Comunicação — canais e assistente
-  { href: '/whatsapp', label: 'WhatsApp', icon: 'whatsapp', section: 'Comunicação', permission: 'whatsapp', area: 'whatsapp' },
-  { href: '/agente', label: 'Assistente', icon: 'spark', section: 'Comunicação', permission: 'agente', area: 'agente' },
-  // Gestão
-  { href: '/resultados', label: 'Resultados', icon: 'chart', section: 'Gestão', permission: 'financeiro', area: 'resultados' },
-  // P4 — Motor de Automações: "quando acontecer X, se Y, faça Z". Fica em
-  // Gestão (é configuração de operação, não o dia a dia) e exige 'config' —
-  // mesmo perfil de Integrações/Recursos, para não inventar nova permissão.
-  { href: '/automacoes', label: 'Automações', icon: 'bolt', section: 'Gestão', permission: 'config', area: 'automations' },
-  { href: '/campanhas', label: 'Campanhas', icon: 'megaphone', section: 'Gestão', permission: 'campanhas', area: 'campanhas' },
-  // Presença — a página pública é construída AQUI (editor), não em Configurações
-  { href: '/pagina', label: 'Página', icon: 'link', section: 'Presença', permission: 'pagina', area: 'pagina' },
-  // Administração
-  { href: '/equipe', label: 'Equipe', icon: 'shield', section: 'Administração', permission: 'equipe', area: 'equipe' },
-  { href: '/recursos', label: 'Recursos', icon: 'toggle', section: 'Administração', permission: 'config', area: 'recursos' },
-  { href: '/configuracoes', label: 'Configurações', icon: 'settings', section: 'Administração', permission: 'config', area: 'config' },
-  // P3 — Esteira Operacional e Integrações (rotas diretas para deep link e painel)
-  { href: '/esteira', label: 'Esteira', icon: 'clipboard', permission: 'leads', area: 'clientes', hidden: true },
-  { href: '/integracoes', label: 'Integrações', icon: 'link', permission: 'config', area: 'config', hidden: true },
-  // Legado (fora da navegação; a rota e o histórico continuam preservados
-  // para empresas que já recebiam pedidos)
-  { href: '/pedidos', label: 'Pedidos', icon: 'receipt', modes: ['orders', 'products'], permission: 'pedidos', area: 'pedidos', hidden: true },
+  {
+    href: '/dashboard', label: 'Dashboard', icon: 'home', permission: 'dashboard', area: 'dashboard',
+    description: 'Visão do dia: o que precisa de atenção, o que está marcado e os números do período.',
+    width: 'full',
+  },
+
+  // ── Operação: onde o dia acontece ──
+  {
+    href: '/agenda', label: 'Agenda', icon: 'calendar', section: 'operacao',
+    modes: ['bookings'], permission: 'agenda', area: 'agenda',
+    description: 'O que está marcado, com quem, e o que ainda precisa ser fechado.',
+    width: 'full',
+  },
+  {
+    // Era "/whatsapp". Renomeado porque a tela é o INBOX (operação diária); a
+    // conexão do canal é outra tarefa e mora em Canais & Integrações.
+    href: '/conversas', label: 'Conversas', icon: 'inbox', section: 'operacao',
+    permission: 'whatsapp', area: 'conversas',
+    description: 'As conversas com os seus clientes em um só lugar, com o histórico de cada um.',
+    width: 'full',
+  },
+  {
+    href: '/agente', label: 'Assistente', icon: 'spark', section: 'operacao',
+    permission: 'agente', area: 'agente',
+    description: 'O assistente que responde por você no site e no WhatsApp, com os dados do negócio.',
+  },
+  {
+    // Era a 5ª aba de /automacoes. Tarefa é fila de trabalho da equipe — uso
+    // diário, portanto Operação. O motor que CRIA tarefas continua em Automações.
+    href: '/tarefas', label: 'Tarefas', icon: 'tasks', section: 'operacao',
+    permission: ['clientes', 'agenda', 'leads', 'config'], area: 'tarefas',
+    description: 'O que ficou combinado, com quem e com qual prazo — inclusive o que já venceu.',
+  },
+
+  // ── Pessoas: quem está do outro lado ──
+  {
+    href: '/clientes', label: 'Clientes', icon: 'users', section: 'pessoas',
+    permission: 'clientes', area: 'clientes',
+    description: 'As pessoas do outro lado: histórico 360, notas, consentimento e novo atendimento.',
+    width: 'full',
+  },
+  {
+    // Era "/esteira" (rota sem porta no menu) e também uma visão dentro de
+    // /clientes. Uma porta só: o funil de oportunidades.
+    href: '/funil', label: 'Funil', icon: 'funnel', section: 'pessoas',
+    permission: 'leads', area: 'funil',
+    description: 'As oportunidades por etapa, do primeiro contato ao atendimento agendado.',
+    width: 'full',
+  },
+
+  // ── Oferta: o que ofereço · quem atende · quando atende · vitrine ──
+  {
+    href: '/servicos', label: 'Serviços', icon: 'service', section: 'oferta',
+    modes: ['services', 'bookings'], permission: 'catalogo', area: 'servicos',
+    description: 'O que você oferece, com preço, duração e quem realiza.',
+    width: 'full',
+  },
+  {
+    href: '/profissionais', label: 'Profissionais', icon: 'idcard', section: 'oferta',
+    modes: ['services', 'bookings'], permission: 'catalogo', area: 'profissionais',
+    description: 'Quem realiza os atendimentos, com quais serviços e agenda própria ou da casa.',
+    width: 'full',
+  },
+  {
+    // Era "/horarios". "Disponibilidade" é o que a tela É: quando a casa e cada
+    // profissional podem atender (janela semanal + dias especiais).
+    href: '/disponibilidade', label: 'Disponibilidade', icon: 'clock', section: 'oferta',
+    modes: ['services', 'bookings'], permission: 'catalogo', area: 'disponibilidade',
+    description: 'Quando a casa e cada profissional podem atender, inclusive dias especiais.',
+    width: 'full',
+  },
+  {
+    href: '/produtos', label: 'Produtos', icon: 'bag', section: 'oferta',
+    modes: ['products', 'orders'], permission: 'catalogo', area: 'catalogo',
+    description: 'A vitrine de produtos exibida na sua página pública, com preço e foto.',
+    width: 'full',
+  },
+  {
+    // Legado: fora do menu (régua de frequência), mas destino declarado — a
+    // rota e o histórico continuam vivos para empresas com o módulo ativo, e o
+    // Dashboard ainda aponta para cá quando existem pedidos.
+    href: '/pedidos', label: 'Pedidos', icon: 'receipt', section: 'oferta',
+    modes: ['orders', 'products'], permission: 'pedidos', area: 'pedidos', sidebar: false,
+    description: 'Histórico de pedidos das empresas que usavam o módulo legado de vendas.',
+    width: 'full',
+  },
+
+  // ── Crescimento: de onde vem gente e o que trabalha sozinho ──
+  {
+    href: '/campanhas', label: 'Campanhas', icon: 'megaphone', section: 'crescimento',
+    permission: 'campanhas', area: 'campanhas',
+    description: 'Mensagens para quem deu consentimento, com público e histórico de envio.',
+    width: 'full',
+  },
+  {
+    href: '/automacoes', label: 'Automações', icon: 'bolt', section: 'crescimento',
+    permission: 'config', area: 'automations',
+    description: 'Quando acontecer X, se Y, o sistema faz Z sozinho — sem ninguém lembrar.',
+  },
+  {
+    // Porta única que substitui três: a rota /integracoes, a aba "Integrações"
+    // e a aba "Canais" de Configurações. Três seções nomeadas e exclusivas:
+    // CANAIS (por onde se fala) · FONTES (de onde o lead chega) ·
+    // INTEGRAÇÕES (por onde os dados viajam, com direção declarada).
+    href: '/canais', label: 'Canais & Integrações', icon: 'plugs', section: 'crescimento',
+    permission: 'config', area: 'canais',
+    description: 'Por onde o cliente fala com você, de onde ele chega e como outros sistemas se conectam.',
+  },
+
+  // ── Resultados: como está indo ──
+  {
+    href: '/resultados', label: 'Resultados', icon: 'chart', section: 'resultados',
+    permission: 'financeiro', area: 'resultados',
+    description: 'Os números do período com comparação, por serviço, profissional e origem.',
+    width: 'full',
+  },
+  {
+    // Antes só existia atrás do seletor de unidade — e o seletor só aparece com
+    // 2+ unidades, o que tornava impossível criar a segunda. Porta real.
+    href: '/organizacao', label: 'Organização', icon: 'buildings', section: 'resultados',
+    permission: 'config', area: 'organizacao', requiresBusiness: false,
+    description: 'As suas unidades juntas: consolidado do período, troca de unidade e criação de nova.',
+    width: 'full',
+  },
+  {
+    // Era a 4ª aba de /automacoes. Observar o sistema funcionando é visita
+    // deliberada (diagnóstico), não passagem diária: destino declarado, fora
+    // do menu, alcançável por atalho contextual dentro de Automações.
+    href: '/execucoes', label: 'Execuções', icon: 'history', section: 'resultados',
+    permission: 'config', area: 'execucoes', sidebar: false,
+    description: 'O que as automações fizeram — e, quando falharam, o que aconteceu e o que fazer.',
+  },
+
+  // ── Presença: a porta pública ──
+  {
+    href: '/pagina', label: 'Página', icon: 'link', section: 'presenca',
+    permission: 'pagina', area: 'pagina',
+    description: 'O editor da sua página pública: blocos, navegação, visual, avaliações e publicação.',
+  },
+
+  // ── Administração: rodapé fixo ──
+  {
+    href: '/equipe', label: 'Equipe', icon: 'shield', section: 'administracao',
+    permission: 'equipe', area: 'equipe',
+    description: 'Quem tem login, com qual papel, o que enxerga e o vínculo com o profissional.',
+    width: 'full',
+  },
+  {
+    href: '/recursos', label: 'Recursos', icon: 'toggle', section: 'administracao',
+    permission: 'config', area: 'recursos',
+    description: 'Quais módulos da empresa estão ligados. Desativar oculta na hora e não apaga nada.',
+  },
+  {
+    href: '/configuracoes', label: 'Configurações', icon: 'settings', section: 'administracao',
+    permission: 'config', area: 'config',
+    description: 'Dados do negócio, contatos, endereço e aparência do painel.',
+  },
 ];
 
-/** Rotas que usam a largura toda (sem container estreito). */
+/** Rotas legadas → canônicas (A1.2 §5). Fonte única dos redirects: o
+ *  `next.config.js` declara exatamente este mapa, e um teste confere as duas
+ *  pontas. Query strings (`?b=`, `?period=`, `?organization=`) são preservadas
+ *  pelo Next automaticamente. */
+export const LEGACY_ROUTES: Array<{ from: string; to: string }> = [
+  { from: '/horarios', to: '/disponibilidade' },
+  { from: '/whatsapp', to: '/conversas' },
+  { from: '/esteira', to: '/funil' },
+  { from: '/integracoes', to: '/canais?tab=integracoes' },
+];
+
+/** Rotas que usam a largura toda — derivado do catálogo (sem lista paralela). */
 export const FULL_WIDTH_PATHS = PANEL_ROUTES
-  .filter((r) => [
-    '/dashboard', '/agenda', '/resultados', '/clientes', '/whatsapp', '/campanhas',
-    '/servicos', '/profissionais', '/horarios', '/pedidos', '/equipe',
-  ].includes(r.href))
+  .filter((r) => r.width === 'full')
   .map((r) => r.href);
 
 export interface PanelContext {
@@ -100,14 +317,52 @@ export function emptyPanelContext(): PanelContext {
   return { permissions: {}, modes: [], features: {} };
 }
 
+// ── Resolução de caminho ───────────────────────────────────────
+export function normalizePanelPath(pathname: string): string {
+  return String(pathname || '').replace(/\/+$/, '') || '/';
+}
+
+/** Destino exato do catálogo ('/agenda/' resolve; '/agenda/123' não). */
 export function panelRouteFor(pathname: string): PanelRouteDef | undefined {
-  const clean = String(pathname || '').replace(/\/+$/, '') || '/';
+  const clean = normalizePanelPath(pathname);
   return PANEL_ROUTES.find((r) => r.href === clean);
 }
 
-/** Permissão exigida por um caminho do painel ('' = rota sem guarda própria). */
+/**
+ * Caminho ativo por ANCESTRALIDADE: '/clientes/123' → '/clientes'.
+ * O prefixo MAIS LONGO vence, então duas portas nunca ficam ativas ao mesmo
+ * tempo. '' quando nada no catálogo corresponde.
+ */
+export function activePanelPath(pathname: string): string {
+  const clean = normalizePanelPath(pathname);
+  if (PANEL_ROUTES.some((r) => r.href === clean)) return clean;
+  let best = '';
+  for (const r of PANEL_ROUTES) {
+    if (clean.startsWith(`${r.href}/`) && r.href.length > best.length) best = r.href;
+  }
+  return best;
+}
+
+/** Destino ativo (exato ou ancestral) — usado por sidebar e guarda de rota. */
+export function activePanelRoute(pathname: string): PanelRouteDef | undefined {
+  const active = activePanelPath(pathname);
+  return active ? PANEL_ROUTES.find((r) => r.href === active) : undefined;
+}
+
+/** Permissões de um destino, sempre como lista. */
+export function permissionsForRoute(route: PanelRouteDef): PermissionId[] {
+  return Array.isArray(route.permission) ? route.permission : [route.permission];
+}
+
+/** Primeira permissão do caminho ('' = rota sem guarda própria). */
 export function permissionForPath(pathname: string): PermissionId | '' {
-  return panelRouteFor(pathname)?.permission || '';
+  const route = activePanelRoute(pathname);
+  return route ? permissionsForRoute(route)[0] : '';
+}
+
+/** A rota exige uma unidade ativa no `?b=`? (visão de organização não exige) */
+export function routeRequiresBusiness(pathname: string): boolean {
+  return activePanelRoute(pathname)?.requiresBusiness !== false;
 }
 
 function hasMode(route: PanelRouteDef, ctx: PanelContext): boolean {
@@ -126,43 +381,85 @@ export function hasPermission(permission: PermissionId, ctx: PanelContext): bool
   return (ctx.permissions || {})[permission] === true;
 }
 
-/**
- * Rota visível na NAVEGAÇÃO? (permissão ∩ módulos — e nunca `hidden`).
- * Rotas ocultas continuam acessíveis por URL quando o módulo existe: a
- * guarda de acesso (panelAccess) não usa este filtro.
- */
-export function isPanelRouteVisible(route: PanelRouteDef, ctx: PanelContext): boolean {
-  if (route.hidden) return false;
-  return hasPermission(route.permission, ctx) && hasMode(route, ctx) && hasFeature(route, ctx);
+/** "Qualquer uma satisfaz" — mesma semântica de `requireBusiness` no servidor. */
+export function hasAnyPermission(permissions: PermissionId[], ctx: PanelContext): boolean {
+  return permissions.some((p) => hasPermission(p, ctx));
 }
 
+/** Destino ACESSÍVEL para este contexto (permissão ∩ módulos). Ignora `sidebar`. */
+export function isPanelRouteAllowed(route: PanelRouteDef, ctx: PanelContext): boolean {
+  return hasAnyPermission(permissionsForRoute(route), ctx) && hasMode(route, ctx) && hasFeature(route, ctx);
+}
+
+/**
+ * Destino VISÍVEL NA NAVEGAÇÃO (acessível e com linha no menu).
+ * Destinos com `sidebar: false` continuam acessíveis por URL e por atalho
+ * contextual — `panelAccess` não usa este filtro.
+ */
+export function isPanelRouteVisible(route: PanelRouteDef, ctx: PanelContext): boolean {
+  return route.sidebar !== false && isPanelRouteAllowed(route, ctx);
+}
+
+/** Todos os destinos acessíveis (menu ou não), na ordem do catálogo. */
+export function allowedPanelRoutes(ctx: PanelContext): PanelRouteDef[] {
+  return PANEL_ROUTES.filter((r) => isPanelRouteAllowed(r, ctx));
+}
+
+/** Destinos que aparecem no menu (desktop e pills do mobile). */
 export function visiblePanelRoutes(ctx: PanelContext): PanelRouteDef[] {
   return PANEL_ROUTES.filter((r) => isPanelRouteVisible(r, ctx));
 }
 
 export interface PanelSection {
+  id: PanelSectionId;
   label: string;
+  /** true = renderizar no rodapé fixo da sidebar. */
+  footer: boolean;
   items: PanelRouteDef[];
 }
 
-/** Itens agrupados para a sidebar: Dashboard primeiro, demais por seção. */
-export function panelNavigation(ctx: PanelContext): {
+export interface PanelNavigation {
+  /** Dashboard (ou null quando o perfil não o tem). */
   primary: PanelRouteDef | null;
+  /** Seções da área que rola, na ordem canônica, sem seções vazias. */
   sections: PanelSection[];
+  /** Seções do rodapé fixo (Administração). */
+  footerSections: PanelSection[];
+  /** Tudo que vai para o menu (primário + seções + rodapé), em ordem. */
+  sidebar: PanelRouteDef[];
+  /** Destinos acessíveis fora do menu (`sidebar: false`) — atalhos/hub. */
+  more: PanelRouteDef[];
+  /** Todos os destinos acessíveis (menu ou não). */
+  allowed: PanelRouteDef[];
+  /** Sinônimo de `allowed` (compatibilidade com consumidores antigos). */
   all: PanelRouteDef[];
-} {
-  const items = visiblePanelRoutes(ctx);
-  const primary = items.find((r) => r.href === '/dashboard') || null;
-  const rest = items.filter((r) => r.href !== '/dashboard');
-  const grouped = new Map<string, PanelRouteDef[]>();
-  for (const it of rest) {
-    const key = it.section || 'Outros';
-    if (!grouped.has(key)) grouped.set(key, []);
-    grouped.get(key)!.push(it);
+}
+
+/** Projeção do catálogo para este contexto. Nenhum componente decide nada. */
+export function panelNavigation(ctx: PanelContext): PanelNavigation {
+  const allowed = allowedPanelRoutes(ctx);
+  const sidebar = allowed.filter((r) => r.sidebar !== false);
+  const more = allowed.filter((r) => r.sidebar === false);
+  const primary = sidebar.find((r) => !r.section) || null;
+
+  const grouped = new Map<PanelSectionId, PanelRouteDef[]>();
+  for (const item of sidebar) {
+    if (!item.section) continue;
+    if (!grouped.has(item.section)) grouped.set(item.section, []);
+    grouped.get(item.section)!.push(item);
   }
+
   const sections: PanelSection[] = [];
-  for (const [label, list] of grouped) sections.push({ label, items: list });
-  return { primary, sections, all: items };
+  const footerSections: PanelSection[] = [];
+  for (const def of PANEL_SECTIONS) {
+    const items = grouped.get(def.id);
+    if (!items || items.length === 0) continue;
+    const section: PanelSection = { id: def.id, label: def.label, footer: !!def.footer, items };
+    if (def.footer) footerSections.push(section);
+    else sections.push(section);
+  }
+
+  return { primary, sections, footerSections, sidebar, more, allowed, all: allowed };
 }
 
 export type PanelAccessState = 'allow' | 'denied' | 'unknown';
@@ -177,15 +474,16 @@ export interface PanelAccess {
 }
 
 /**
- * Acesso do usuário à rota atual do painel.
+ * Acesso do usuário à rota atual do painel — por ancestralidade, então
+ * '/clientes/123' herda a guarda de '/clientes'.
  *  - 'allow'   → renderiza a tela;
  *  - 'denied'  → renderiza o aviso de 403 amigável (usuário continua logado);
  *  - 'unknown' → rota fora do catálogo (ex.: /onboarding) → sem guarda aqui.
  */
 export function panelAccess(pathname: string, ctx: PanelContext): PanelAccess {
-  const route = panelRouteFor(pathname);
+  const route = activePanelRoute(pathname);
   if (!route) return { state: 'unknown', area: '', reason: '' };
-  if (!hasPermission(route.permission, ctx)) {
+  if (!hasAnyPermission(permissionsForRoute(route), ctx)) {
     return { state: 'denied', route, area: areaLabel(route.area), reason: 'permission' };
   }
   if (!hasMode(route, ctx) || !hasFeature(route, ctx)) {
@@ -197,26 +495,39 @@ export function panelAccess(pathname: string, ctx: PanelContext): PanelAccess {
 /**
  * Primeira rota permitida — usada para nunca deixar o usuário sem destino
  * quando ele não tem `dashboard` (ex.: VIEWER com agenda liberada).
+ * Prefere um destino que esteja NO MENU; se o perfil só tiver destinos fora do
+ * menu (ex.: apenas Pedidos legado), usa o primeiro acessível. '' só quando
+ * nada é permitido.
  */
 export function firstAllowedPath(ctx: PanelContext): string {
-  const { all } = panelNavigation(ctx);
-  return all[0]?.href || '';
+  const { sidebar, allowed } = panelNavigation(ctx);
+  return sidebar[0]?.href || allowed[0]?.href || '';
 }
 
 // ── Guardas de servidor esperados por área ────────────────────
 // Mapa declarativo: cada API do painel e a permissão que ela DEVE exigir em
 // `requireBusiness(...)`. Coberto por teste de regressão (panel.test.ts), que
 // lê o código-fonte das rotas — assim ninguém remove a guarda por engano.
+//
+// A1.2 · Bloco 1: catálogo alinhado com os guards que JÁ EXISTEM no código
+// (/api/integrations, /api/integrations/events, /api/conversations,
+// /api/reviews). Nenhum guard real foi removido ou alterado — a lista apenas
+// passou a documentar o que o servidor já faz.
 export const API_GUARDS: Array<{ route: string; file: string; permission: PermissionId | PermissionId[]; area: string }> = [
   { route: '/api/overview', file: 'src/app/api/overview/route.ts', permission: 'dashboard', area: 'dashboard' },
   { route: '/api/team', file: 'src/app/api/team/route.ts', permission: 'equipe', area: 'equipe' },
   { route: '/api/businesses/:id', file: 'src/app/api/businesses/[id]/route.ts', permission: 'config', area: 'config' },
   { route: '/api/bookings', file: 'src/app/api/bookings/route.ts', permission: 'agenda', area: 'agenda' },
-  { route: '/api/whatsapp', file: 'src/app/api/whatsapp/route.ts', permission: 'whatsapp', area: 'whatsapp' },
+  // Conexão do canal: a porta é Canais & Integrações (a operação fica em /conversas).
+  { route: '/api/whatsapp', file: 'src/app/api/whatsapp/route.ts', permission: 'whatsapp', area: 'canais' },
+  // Conversas (inbox): leitura e envio exigem a mesma permissão do canal.
+  { route: '/api/conversations', file: 'src/app/api/conversations/route.ts', permission: 'whatsapp', area: 'conversas' },
   { route: '/api/catalog', file: 'src/app/api/catalog/route.ts', permission: 'catalogo', area: 'catalogo' },
   { route: '/api/campaigns', file: 'src/app/api/campaigns/route.ts', permission: 'campanhas', area: 'campanhas' },
   { route: '/api/agent', file: 'src/app/api/agent/route.ts', permission: 'agente', area: 'agente' },
   { route: '/api/pages', file: 'src/app/api/pages/route.ts', permission: 'pagina', area: 'pagina' },
+  // Avaliações da página pública: mesma permissão do editor.
+  { route: '/api/reviews', file: 'src/app/api/reviews/route.ts', permission: 'pagina', area: 'pagina' },
   { route: '/api/analytics', file: 'src/app/api/analytics/route.ts', permission: 'financeiro', area: 'resultados' },
   // Resultados/inteligência (P2): indicadores reais por unidade. A visão
   // consolidada da organização reutiliza a MESMA permissão, unidade por
@@ -234,16 +545,18 @@ export const API_GUARDS: Array<{ route: string; file: string; permission: Permis
     permission: ['catalogo', 'agenda', 'clientes', 'pedidos', 'config', 'pagina'],
     area: 'catalogo',
   },
-  // P3 — esteira operacional e integrações
-  { route: '/api/integrations/keys', file: 'src/app/api/integrations/keys/route.ts', permission: 'config', area: 'config' },
-  { route: '/api/integrations/webhooks', file: 'src/app/api/integrations/webhooks/route.ts', permission: 'config', area: 'config' },
-  { route: '/api/pipeline', file: 'src/app/api/pipeline/route.ts', permission: ['leads', 'config'], area: 'clientes' },
+  // P3/P6 — funil, canais, fontes e integrações
+  { route: '/api/integrations', file: 'src/app/api/integrations/route.ts', permission: 'config', area: 'canais' },
+  { route: '/api/integrations/events', file: 'src/app/api/integrations/events/route.ts', permission: 'config', area: 'canais' },
+  { route: '/api/integrations/keys', file: 'src/app/api/integrations/keys/route.ts', permission: 'config', area: 'canais' },
+  { route: '/api/integrations/webhooks', file: 'src/app/api/integrations/webhooks/route.ts', permission: 'config', area: 'canais' },
+  { route: '/api/pipeline', file: 'src/app/api/pipeline/route.ts', permission: ['leads', 'config'], area: 'funil' },
   { route: '/api/leads/:id/book', file: 'src/app/api/leads/[id]/book/route.ts', permission: 'agenda', area: 'agenda' },
   // P4 — motor de automações (config = dono/admin da unidade; tarefas são
-  // operacionais e podem ser vistas por quem opera esteira/agenda/clientes).
+  // operacionais e podem ser vistas por quem opera funil/agenda/clientes).
   { route: '/api/automations', file: 'src/app/api/automations/route.ts', permission: 'config', area: 'automations' },
-  { route: '/api/automations/:id', file: 'src/app/api/automations/[id]/route.ts', permission: 'config', area: 'automations' },
-  { route: '/api/tasks', file: 'src/app/api/tasks/route.ts', permission: ['leads', 'agenda', 'clientes', 'config'], area: 'clientes' },
+  { route: '/api/automations/:id', file: 'src/app/api/automations/[id]/route.ts', permission: 'config', area: 'execucoes' },
+  { route: '/api/tasks', file: 'src/app/api/tasks/route.ts', permission: ['leads', 'agenda', 'clientes', 'config'], area: 'tarefas' },
   // P5 — propostas de IA (mesma permissão do editor: a IA não publica sozinha).
   { route: '/api/ai/automations', file: 'src/app/api/ai/automations/route.ts', permission: 'config', area: 'automations' },
 ];
