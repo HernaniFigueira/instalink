@@ -25,6 +25,7 @@ import { AccessDenied, useAreaLoad } from '@/components/dashboard/AccessNotice';
 import { apiGet, apiSend } from '@/lib/api-client';
 import { NAV_PRESETS, navTokens, navColorOf } from '@/lib/appearance';
 import { IntegracoesView } from '@/components/dashboard/IntegracoesView';
+import { CanaisIntegracoesView } from '@/components/dashboard/CanaisIntegracoesView';
 
 export default function ConfigPage() {
   const params = useSearchParams();
@@ -293,7 +294,10 @@ export default function ConfigPage() {
         })()}
 
         {tab === 'canais' && (
-          <section className="bg-white border border-zinc-200 p-4 space-y-3">
+          <>
+            {/* P6 — canais, fontes e integrações externas (fundação de conexão). */}
+            <CanaisIntegracoesView />
+            <section className="bg-white border border-zinc-200 p-4 space-y-3">
             <h3 className="font-semibold text-sm">Recursos, assistente, WhatsApp e equipe</h3>
             <p className="text-xs text-zinc-500">Módulos da empresa ({activeModules ?? '—'} ativos) — ligue e desligue em Recursos.</p>
             <div className="grid sm:grid-cols-2 gap-2">
@@ -303,6 +307,7 @@ export default function ConfigPage() {
               <Link href={`/equipe?b=${businessId}`} className="text-xs font-semibold bg-white border border-zinc-200 px-3 py-2 rounded-md text-center">Equipe</Link>
             </div>
           </section>
+          </>
         )}
 
         {tab === 'integracoes' && (

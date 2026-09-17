@@ -246,12 +246,46 @@ implementação de leads/esteira/agenda/webhooks:
 
 Detalhes, contratos e a tabela de alterações em P0–P3: [`docs/automations-p4.md`](docs/automations-p4.md).
 
+## P6 set/2026 — Canais e integrações externas (conexão, não segundo motor)
+
+Camada que liga o InstaLink ao mundo de fora sem duplicar P3/P4:
+
+```text
+EXTERNO → CONNECTOR → EVENTO NORMALIZADO → emitAutomationEvent() → P4
+P4 (ação) → conector de saída → sistema externo (webhook assinado do P3)
+```
+
+- **Três categorias separadas** (`kind`): CANAL (whatsapp, instagram, messenger,
+  telegram), FONTE DE LEAD (formulário, landing page, tráfego pago, QR, página
+  pública) e INTEGRAÇÃO TÉCNICA (webhook de entrada, n8n, API externa) — um
+  mesmo registro genérico (`db.integrations`), sem achatar os conceitos.
+- **Honestidade**: `catalog.ts` é a fonte única do que existe e do que já
+  funciona. Conector ausente = “Disponível em breve” na tela e **409** na API;
+  canais devolvem `not_implemented` na saída — nunca “enviado”.
+- **Entrada** (`/api/integrations/inbound/<id>`): token da integração
+  (`ilk_live_…`, SHA-256 em repouso), assinatura HMAC opcional (mesma política do
+  P3), payload limitado/sanitizado, idempotência `integração + externalId` e
+  entrega ao serviço OFICIAL (`ingestLead`, `upsertContact` + P4) — o
+  `businessId` do corpo é ignorado: a unidade vem da integração autenticada.
+- **Saída**: `dispatchOutboundEvent` é o único caminho; a ação
+  `dispatch_webhook` do P4 passou a chamá-lo e continua entregando pelo canal
+  assinado do P3 (HMAC + fila + retry). **Nenhum segundo motor de retry.**
+- **SSRF**: URL de saída passa por `lib/outbound-url.ts` (http(s), sem
+  credenciais, host público; privado/loopback bloqueado em produção).
+- **Interface**: Configurações → Canais (catálogo + conexões + log de eventos);
+  webhooks de saída seguem na aba Integrações.
+
+Detalhes e contrato do envelope: [`docs/integracoes-p6.md`](docs/integracoes-p6.md).
+
 ## O que NÃO foi construído (evolução futura)
 
 Billing/planos, domínio próprio, WhatsApp API, pagamentos online, delivery com
-roteirização, estoque, fidelidade, CRM avançado, PWA instalável, app nativo. No P4
-ficam explicitamente de fora: P6 (canais externos), `wait_for_event`
-por evento de canal e o editor visual de grafo. O P5 (IA/agente) vive em
+roteirização, estoque, fidelidade, CRM avançado, PWA instalável, app nativo.
+Ficam para o **P6.1/P6.2**: conector oficial de WhatsApp/Instagram
+(Cloud API/Graph), Messenger, Telegram, conector nativo de Lead Ads,
+`wait_for_event` por evento de canal, editor visual de grafo e a reserva atômica
+(CAS) da idempotência entre instâncias simultâneas. O P5 (IA/agente) vive em
 `src/lib/ai/` **por cima** do P4: a IA não executa, o motor de automações executa.
 Todos têm ponto de extensão documentado no código (`Order` separado de
-pagamento, `modes` por negócio, eventos para analytics).
+pagamento, `modes` por negócio, eventos para analytics,
+`registerChannelConnector` para os canais, `AutomationWaitMode` para o evento).
