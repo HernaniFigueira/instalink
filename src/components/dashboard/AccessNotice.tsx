@@ -10,19 +10,39 @@
 //   useForbiddenNotice() → mensagem inline dentro de uma tela específica.
 //
 // O erro cru da API nunca é exibido: o texto vem das mensagens canônicas.
-import { useCallback, useEffect, useState } from 'react';
+import { createContext, useCallback, useContext, useEffect, useState } from 'react';
 import Link from 'next/link';
 import { Icon } from '@/components/icons';
 import { onForbidden, type ForbiddenDetail } from '@/lib/client-auth';
 import { PERMISSION_MESSAGES, deniedInfo, type DeniedContext } from '@/lib/http';
 
+/**
+ * Destino de volta do 403 — derivado do CATÁLOGO (firstAllowedPath) e injetado
+ * pelo DashboardShell. Nenhuma tela precisa saber (ou chutar) para onde mandar
+ * quem não tem acesso: se o shell existe, existe uma porta de volta; fora do
+ * painel (sem Provider) o botão simplesmente não aparece.
+ */
+const PanelHomeContext = createContext<string>('');
+
+export function PanelHomeProvider({ home, children }: { home: string; children: React.ReactNode }) {
+  return <PanelHomeContext.Provider value={home}>{children}</PanelHomeContext.Provider>;
+}
+
+/** 'Voltar para o início' do 403 (vazio = fora do painel). */
+export function usePanelHome(): string {
+  return useContext(PanelHomeContext);
+}
+
 /** Aviso de 403 para uma ÁREA do painel (acesso direto pela URL). */
 export function AccessDenied({ area, hint, homeHref }: {
   area?: string;
   hint?: string;
+  /** Opcional: fora dele, usa o destino que o shell derivou do catálogo. */
   homeHref?: string;
 }) {
   const info = deniedInfo({ scope: 'area', area });
+  const panelHome = usePanelHome();
+  const backHref = homeHref || panelHome;
   return (
     <div className="bg-white border border-zinc-200 rounded-lg" role="status" aria-live="polite">
       <div className="px-5 py-8 text-center max-w-md mx-auto">
@@ -35,8 +55,8 @@ export function AccessDenied({ area, hint, homeHref }: {
             ? `Seu perfil atual não inclui a área “${area}”. Você continua conectado — se precisar desse acesso, fale com o administrador da empresa.`
             : 'Você continua conectado. Se precisar desse acesso, fale com o administrador da empresa.')}
         </p>
-        {homeHref && (
-          <Link href={homeHref} className="mt-4 inline-flex text-xs font-semibold bg-zinc-900 text-white px-3.5 py-2 rounded-md">
+        {backHref && (
+          <Link href={backHref} className="mt-4 inline-flex text-xs font-semibold bg-zinc-900 text-white px-3.5 py-2 rounded-md">
             Voltar para o início
           </Link>
         )}

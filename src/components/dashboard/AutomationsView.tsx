@@ -11,9 +11,10 @@
 // histórico de execuções passo a passo com o veredito de cada condição e as
 // tarefas que nasceram delas. Nenhum número é decorativo.
 import { useCallback, useEffect, useMemo, useState } from 'react';
+import Link from 'next/link';
 import { apiGet, apiSend } from '@/lib/api-client';
 import { useBusinessId } from '@/components/dashboard/useBusinessId';
-import { Badge, Button, Card, EmptyState, Field, Input, Notice, PageHeader, Select, Skeleton, StatusBadge, Textarea } from '@/components/ui';
+import { Badge, Button, Card, EmptyState, Field, Input, Notice, PageHeader, Select, Skeleton, Textarea } from '@/components/ui';
 import { Icon } from '@/components/icons';
 import { cn } from '@/lib/utils';
 import {
@@ -23,6 +24,10 @@ import {
 } from '@/lib/automation/ui';
 import { useRevalidateOnFocus } from '@/components/dashboard/use-revalidate';
 import { AiAutomations } from '@/components/dashboard/AiAutomations';
+// Execuções e tarefas são componentes próprios (portas /execucoes e /tarefas):
+// a tela de Automações continua mostrando os dois, mas a definição de como se
+// lê uma execução e de como se opera uma tarefa existe em UM lugar só.
+import { RunStatusBadge, formatWhen, type RunView } from '@/components/dashboard/RunsPanel';
 
 interface ConditionRow { field: string; operator: string; value: string }
 interface Group { logic: 'and' | 'or'; invert: boolean; rows: ConditionRow[] }
@@ -58,40 +63,11 @@ interface TemplateOffer {
   preview: { when: string; ifText: string; thens: string[]; elseTexts: string[] };
 }
 
-interface RunView {
-  id: string;
-  automationId: string;
-  automationName: string;
-  status: string;
-  triggerEvent: string;
-  waitingUntil: string;
-  startedAt: string;
-  updatedAt: string;
-  error: string;
-  steps: number;
-  resumes: number;
-  context: Record<string, any>;
-  history: { at: string; nodeId: string; nodeType: string; outcome: string; label: string; detail?: string }[];
-}
-
-interface TaskView {
-  id: string; title: string; note: string; status: string; dueAt: string; dueLabel: string;
-  createdAt: string; assignedUserId: string; assigneeName: string; leadName: string;
-  bookingLabel: string; fromAutomation: boolean; source: string;
-}
-
 interface Options {
   stages: { id: string; name: string }[];
   services: { id: string; name: string }[];
   members: { userId: string; name: string }[];
 }
-
-const RUN_TONE: Record<string, 'emerald' | 'amber' | 'red' | 'zinc' | 'blue'> = {
-  completed: 'emerald', waiting: 'amber', running: 'blue', queued: 'blue', failed: 'red', cancelled: 'zinc',
-};
-const RUN_LABEL: Record<string, string> = {
-  completed: 'concluída', waiting: 'aguardando', running: 'processando', queued: 'na fila', failed: 'com erro', cancelled: 'cancelada',
-};
 
 let stepSeq = 0;
 function nextStepId(): string {
@@ -167,15 +143,15 @@ function linearToApiSteps(steps: Step[]): any[] {
 
 export function AutomationsView() {
   const { businessId, noBusiness } = useBusinessId();
-  const [tab, setTab] = useState<'list' | 'ai' | 'templates' | 'runs' | 'tasks'>('list');
+  // 'runs' e 'tasks' não são mais abas: viraram portas próprias (/execucoes e
+  // /tarefas). Uma porta por conceito — aqui fica só o atalho contextual.
+  const [tab, setTab] = useState<'list' | 'ai' | 'templates'>('list');
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
   const [automations, setAutomations] = useState<AutomationView[]>([]);
   const [templates, setTemplates] = useState<TemplateOffer[]>([]);
   const [runs, setRuns] = useState<RunView[]>([]);
-  const [tasks, setTasks] = useState<TaskView[]>([]);
-  const [taskSummary, setTaskSummary] = useState({ open: 0, overdue: 0, dueToday: 0, mine: 0 });
   const [options, setOptions] = useState<Options>({ stages: [], services: [], members: [] });
   const [limits, setLimits] = useState<any>(null);
   const [capabilities, setCapabilities] = useState<Record<string, boolean>>({});
@@ -198,14 +174,7 @@ export function AutomationsView() {
     setLoading(false);
   }, [businessId]);
 
-  const loadTasks = useCallback(async () => {
-    if (!businessId) return;
-    const res = await apiGet<any>(`/api/tasks?businessId=${businessId}&status=all`, { scope: 'area', area: 'Tarefas' });
-    if (res.ok) { setTasks(res.data?.tasks || []); setTaskSummary(res.data?.summary || taskSummary); }
-  }, [businessId]); // eslint-disable-line react-hooks/exhaustive-deps
-
   useEffect(() => { void load(); }, [load]);
-  useEffect(() => { if (tab === 'tasks') void loadTasks(); }, [tab, loadTasks]);
   useRevalidateOnFocus(() => { void load(); });
 
   async function toggle(a: AutomationView) {
@@ -258,6 +227,8 @@ export function AutomationsView() {
     return <Notice tone="info">Crie sua empresa primeiro para configurar automações.</Notice>;
   }
 
+  const unitQuery = businessId ? `?b=${businessId}` : '';
+
   return (
     <div className="space-y-4">
       <PageHeader
@@ -277,14 +248,25 @@ export function AutomationsView() {
 
       <div className="flex flex-wrap items-center gap-2 text-xs">
         {([['list', 'Minhas automações', automations.length], ['ai', 'Criar com IA', ''],
-          ['templates', 'Começar de um modelo', templates.length],
-          ['runs', 'Execuções', runs.length], ['tasks', 'Tarefas', taskSummary.open]] as const).map(([key, label, count]) => (
-          <button key={key} onClick={() => setTab(key as any)}
+          ['templates', 'Começar de um modelo', templates.length]] as const).map(([key, label, count]) => (
+          <button key={key} onClick={() => setTab(key as 'list' | 'ai' | 'templates')}
             className={cn('px-3 py-1.5 rounded-full border font-semibold transition',
               tab === key ? 'bg-zinc-900 text-white border-zinc-900' : 'bg-white border-zinc-200 text-zinc-600 hover:bg-zinc-50')}>
             {label}{typeof count === 'number' && count > 0 ? ` · ${count}` : ''}
           </button>
         ))}
+
+        {/* Atalhos contextuais para as portas que NASCERAM destas abas. Não são
+            abas: são destinos do catálogo (Execuções fica fora do menu, Tarefas
+            está em Operação). O destino é único — nada de segunda cópia aqui. */}
+        <Link href={`/execucoes${unitQuery}`}
+          className="ml-auto px-3 py-1.5 rounded-full border font-semibold transition bg-white border-zinc-200 text-zinc-600 hover:bg-zinc-50 inline-flex items-center gap-1.5">
+          Execuções{runs.length > 0 ? ` · ${runs.length}` : ''} <Icon n="external" size={11} />
+        </Link>
+        <Link href={`/tarefas${unitQuery}`}
+          className="px-3 py-1.5 rounded-full border font-semibold transition bg-white border-zinc-200 text-zinc-600 hover:bg-zinc-50 inline-flex items-center gap-1.5">
+          Tarefas <Icon n="external" size={11} />
+        </Link>
       </div>
 
       {error && <Notice tone="error">{error}</Notice>}
@@ -360,36 +342,6 @@ export function AutomationsView() {
         </div>
       )}
 
-      {tab === 'runs' && (
-        <Card className="divide-y divide-zinc-100">
-          {!runs.length && <p className="p-4 text-sm text-zinc-500">Nenhuma execução ainda. Ela aparece aqui no momento em que um gatilho acontece.</p>}
-          {runs.map((r) => (
-            <div key={r.id} className="p-3 sm:p-4">
-              <div className="flex flex-wrap items-center gap-2">
-                <RunStatusBadge status={r.status} />
-                <span className="text-sm font-semibold text-zinc-900">{r.automationName}</span>
-                <span className="text-xs text-zinc-500">{automationEventLabel(r.triggerEvent)}</span>
-                <span className="text-xs text-zinc-400 ml-auto">{formatWhen(r.startedAt)}</span>
-              </div>
-              {r.error && <p className="mt-1 text-xs text-red-700">{r.error}</p>}
-              {r.status === 'waiting' && <p className="mt-1 text-xs text-amber-800">Retoma em {formatWhen(r.waitingUntil)}</p>}
-              <ol className="mt-2 space-y-1 border-l border-zinc-200 pl-3">
-                {(r.history || []).slice(-6).map((h, i) => (
-                  <li key={i} className="text-[11px] text-zinc-600">
-                    <span className="text-zinc-400">{h.at.slice(11, 16)}</span> {h.label}
-                    {h.detail ? <span className="text-zinc-400"> · {h.detail}</span> : null}
-                  </li>
-                ))}
-              </ol>
-            </div>
-          ))}
-        </Card>
-      )}
-
-      {tab === 'tasks' && (
-        <TaskPanel tasks={tasks} summary={taskSummary} businessId={businessId} members={options.members} onChanged={loadTasks} />
-      )}
-
       {editing && (
         <AutomationEditor
           businessId={businessId}
@@ -404,20 +356,6 @@ export function AutomationsView() {
       {historyOf && <HistorySheet automation={historyOf} businessId={businessId} onClose={() => setHistoryOf(null)} />}
     </div>
   );
-}
-
-function RunStatusBadge({ status }: { status: string }) {
-  return (
-    <StatusBadge tone={RUN_TONE[status] || 'zinc'}>
-      <span className="text-[10px] uppercase tracking-wide">{RUN_LABEL[status] || status}</span>
-    </StatusBadge>
-  );
-}
-
-function formatWhen(iso: string): string {
-  if (!iso) return '';
-  const d = iso.slice(0, 10).split('-').reverse().join('/');
-  return `${d} ${iso.slice(11, 16)}`;
 }
 
 function AutomationCard({ a, onToggle, onEdit, onDuplicate, onHistory, onDelete }: {
@@ -903,70 +841,6 @@ function RunActions({ businessId, automationId, runId, onDone }: { businessId: s
         onDone();
       }}>Encerrar execução</Button>
       {msg && <span className="text-[11px] text-zinc-500">{msg}</span>}
-    </div>
-  );
-}
-
-// ── tarefas geradas (por automação ou pela equipe) ──────────
-function TaskPanel({ tasks, summary, businessId, members, onChanged }: {
-  tasks: TaskView[]; summary: { open: number; overdue: number; dueToday: number; mine: number };
-  businessId: string; members: { userId: string; name: string }[]; onChanged: () => void;
-}) {
-  const [title, setTitle] = useState('');
-  const [assignee, setAssignee] = useState('');
-  const [busy, setBusy] = useState(false);
-  const open = tasks.filter((t) => t.status === 'open');
-  const done = tasks.filter((t) => t.status !== 'open');
-
-  return (
-    <div className="space-y-3">
-      <Card className="p-3">
-        <div className="flex flex-wrap items-end gap-2">
-          <div className="flex-1 min-w-[200px]">
-            <span className="block text-[11px] font-semibold text-zinc-600 mb-1">Nova tarefa da equipe</span>
-            <Input value={title} onChange={(e) => setTitle(e.target.value)} placeholder="Ex.: Ligar para o lead que respondeu o follow-up" maxLength={140} />
-          </div>
-          <Select className="max-w-[180px]" value={assignee} onChange={(e) => setAssignee(e.target.value)}>
-            <option value="">qualquer um</option>
-            {members.map((m) => <option key={m.userId} value={m.userId}>{m.name}</option>)}
-          </Select>
-          <Button size="sm" disabled={busy || !title.trim()} onClick={async () => {
-            setBusy(true);
-            const res = await apiSend('/api/tasks', 'POST', { businessId, title, assignedUserId: assignee });
-            setBusy(false);
-            if (res.ok) { setTitle(''); onChanged(); }
-          }}>Adicionar</Button>
-        </div>
-        <p className="text-[11px] text-zinc-400 mt-2">
-          {summary.open} abertas · {summary.overdue} atrasadas · {summary.dueToday} para hoje
-          {summary.mine ? ` · ${summary.mine} suas` : ''}
-        </p>
-      </Card>
-
-      <Card className="divide-y divide-zinc-100">
-        {!open.length && !done.length && <p className="p-4 text-sm text-zinc-500">Nenhuma tarefa ainda. Automações que “criam tarefa” enchem esta lista.</p>}
-        {open.map((t) => (
-          <div key={t.id} className="p-3 flex items-start gap-3">
-            <button onClick={async () => { await apiSend('/api/tasks', 'PATCH', { businessId, id: t.id, status: 'done' }); onChanged(); }}
-              className="mt-0.5 w-4 h-4 rounded border border-zinc-300 hover:border-emerald-600 shrink-0" aria-label="Concluir tarefa" />
-            <div className="min-w-0 flex-1">
-              <p className="text-sm text-zinc-900">{t.title}</p>
-              {t.note && <p className="text-[11px] text-zinc-500 mt-0.5">{t.note}</p>}
-              <p className="text-[11px] text-zinc-400 mt-1">
-                {t.dueLabel}{t.assigneeName ? ` · ${t.assigneeName}` : ''}{t.leadName ? ` · lead ${t.leadName}` : ''}{t.bookingLabel ? ` · agendamento ${t.bookingLabel}` : ''}
-              </p>
-            </div>
-            {t.fromAutomation && <Badge tone="blue">automação</Badge>}
-          </div>
-        ))}
-        {done.slice(0, 10).map((t) => (
-          <div key={t.id} className="p-3 flex items-center gap-3 bg-zinc-50/60">
-            <span className="w-4 h-4 rounded bg-emerald-600 shrink-0 inline-flex items-center justify-center text-white"><Icon n="check" size={11} /></span>
-            <p className="text-sm text-zinc-500 line-through truncate">{t.title}</p>
-            <span className="ml-auto text-[11px] text-zinc-400">{t.status === 'done' ? 'concluída' : 'cancelada'}</span>
-          </div>
-        ))}
-      </Card>
     </div>
   );
 }

@@ -512,7 +512,7 @@ export default function DashboardPage() {
           </div>
           {whatsapp && (
             <div className="px-4 py-3">
-              <div className="flex items-center justify-between mb-2"><p className="text-xs font-semibold tracking-wide uppercase text-zinc-500">WhatsApp</p><Link href={`/whatsapp${q}`} className="text-xs font-medium text-zinc-600 hover:underline">Abrir →</Link></div>
+              <div className="flex items-center justify-between mb-2"><p className="text-xs font-semibold tracking-wide uppercase text-zinc-500">Conversas</p><Link href={`/conversas${q}`} className="text-xs font-medium text-zinc-600 hover:underline">Abrir →</Link></div>
               <p className={`text-sm font-semibold ${whatsapp.status === 'connected' ? 'text-emerald-700' : 'text-zinc-600'}`}>{whatsapp.status === 'connected' ? 'Conectado' : 'Não conectado'}</p>
               <div className="grid grid-cols-3 gap-2 mt-2 text-xs">
                 <span><strong>{whatsapp.open ?? 0}</strong> abertas</span>

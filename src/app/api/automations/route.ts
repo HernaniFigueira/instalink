@@ -29,6 +29,7 @@ import { automationView } from '@/lib/automation/serialize';
 import { cancelRunsOfAutomation, sanitizeAutomationRunForDisplay } from '@/lib/automation/executor';
 import { capabilityStateFor, limitsFor } from '@/lib/automation/capabilities';
 import { applyTemplate, templateOffers } from '@/lib/automation/templates';
+import { taskAssigneeOptions } from '@/lib/automation/tasks';
 
 function fail(message: string, status = 400): NextResponse {
   return NextResponse.json({ ok: false, error: message }, { status });
@@ -79,13 +80,8 @@ export async function GET(req: NextRequest) {
   // Opções do editor (mesma fonte das telas de esteira/agenda — nada de lista
   // paralela de etapas/serviços/equipe).
   const pipeline = getBusinessPipeline(db, businessId);
-  const members = db.members
-    .filter((m) => m.businessId === businessId && m.active !== false)
-    .map((m) => ({ userId: m.userId, name: db.users.find((u) => u.id === m.userId)?.name || m.note || 'Membro' }));
-  if (business && !members.some((m) => m.userId === business.ownerId)) {
-    const owner = db.users.find((u) => u.id === business.ownerId);
-    if (owner) members.unshift({ userId: owner.id, name: owner.name });
-  }
+  // Mesma projeção da tela de Tarefas (lib/automation/tasks) — uma fonte só.
+  const members = taskAssigneeOptions(db, businessId);
 
   return NextResponse.json({
     ok: true,

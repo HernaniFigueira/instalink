@@ -13,6 +13,7 @@ import type { Availability, AvailabilityException, BookingConfig, Category, Prof
 import { Icon } from '@/components/icons';
 import { ImageUpload } from '@/components/dashboard/ImageUpload';
 import { followsBusinessHours } from '@/lib/schedule';
+import { panelRoutesIn } from '@/lib/panel';
 
 // ── Confirmação de exclusão (em sheet, nunca confirm() nativo) ──
 export function DeleteSheet({ name, kindLabel, blocked, onDeactivate, onConfirm, onClose }: {
@@ -373,19 +374,37 @@ export function BookingSettings({ businessId, initial, hasTeam, onSaved }: {
 }
 
 // ── Ponteiros entre as três telas (Serviços · Profissionais · Horários) ──
-export function CatalogCrossLinks({ businessId, current }: { businessId: string; current: 'servicos' | 'profissionais' | 'horarios' }) {
-  const items: Array<{ id: 'servicos' | 'profissionais' | 'horarios'; label: string; hint: string; href: string }> = [
-    { id: 'servicos', label: 'Serviços', hint: 'o que eu ofereço', href: `/servicos?b=${businessId}` },
-    { id: 'profissionais', label: 'Profissionais', hint: 'quem atende', href: `/profissionais?b=${businessId}` },
-    { id: 'horarios', label: 'Horários', hint: 'quando atende', href: `/horarios?b=${businessId}` },
-  ];
+/**
+ * Atalhos contextuais entre as telas de Oferta (A1.2 · §"nada é ilha").
+ * A lista é PROJETADA do catálogo: seção 'oferta', destinos de serviço
+ * (`modes` inclui 'services'), com linha no menu. Renomear ou reordenar lá
+ * atualiza aqui sozinho — não existe uma segunda lista de links.
+ *
+ * `current` é o href da tela em que o atalho aparece (nunca linka para si).
+ */
+const CROSS_HINTS: Record<string, string> = {
+  '/servicos': 'o que eu ofereço',
+  '/profissionais': 'quem atende',
+  '/disponibilidade': 'quando atende',
+};
+const CROSS_ICONS: Record<string, string> = {
+  '/servicos': 'service',
+  '/profissionais': 'userCircle',
+  '/disponibilidade': 'clock',
+};
+
+export function CatalogCrossLinks({ businessId, current }: { businessId: string; current: string }) {
+  const items = panelRoutesIn('oferta').filter(
+    (r) => r.sidebar !== false && (r.modes || []).includes('services') && r.href !== current,
+  );
+  if (items.length === 0) return null;
   return (
     <div className="flex flex-wrap gap-2 mb-4">
-      {items.filter((x) => x.id !== current).map((x) => (
-        <Link key={x.id} href={x.href}
+      {items.map((r) => (
+        <Link key={r.href} href={`${r.href}?b=${businessId}`} title={r.description}
           className="text-xs font-semibold bg-white border border-zinc-200 px-3.5 py-2 rounded-md hover:border-zinc-400 inline-flex items-center gap-1.5">
-          <Icon n={x.id === 'servicos' ? 'service' : x.id === 'profissionais' ? 'userCircle' : 'clock'} size={13} />
-          {x.label} <span className="text-zinc-400 font-normal">· {x.hint}</span>
+          <Icon n={CROSS_ICONS[r.href] || r.icon} size={13} />
+          {r.label} <span className="text-zinc-400 font-normal">· {CROSS_HINTS[r.href] || r.description}</span>
         </Link>
       ))}
     </div>

@@ -1,6 +1,6 @@
 'use client';
 // ═══════════════════════════════════════════════════════════════
-// CONFIGURAÇÕES — área administrativa (Negócio · Agenda · CRM · Canais)
+// CONFIGURAÇÕES — área administrativa (Negócio · Agenda · CRM · Aparência)
 // ═══════════════════════════════════════════════════════════════
 // SEPARAÇÃO CLARA DE RESPONSABILIDADES (regra do produto):
 //   • Informações do negócio (nome, logo, contatos, endereço, descrição)
@@ -11,11 +11,17 @@
 // Nada de duplicar: aqui não existe mais aba "Página" com menu/Sobre —
 // só um ponteiro para o editor, para quem procurar em Configurações.
 //
+// A1.2 · Bloco 1 — SEM NAVEGAÇÃO PARALELA: as abas "Canais", "Integrações" e
+// "Agenda" saíram daqui (a terceira só continha links para portas do menu). Canais, fontes e integrações têm porta própria (/canais), e
+// Configurações fica só com o que é configuração desta empresa. Quem chegar por
+// um link antigo (?tab=canais | ?tab=integracoes) é levado para /canais com a
+// unidade preservada — nada de tela duplicada com conteúdo divergente.
+//
 // Campos legados de venda (taxa de entrega, pedido mínimo, formas de
 // pagamento no checkout) saíram da experiência: continuam no banco e em
 // APIs antigas para dados já existentes, mas não são mais oferecidos aqui.
 import { useCallback, useEffect, useState } from 'react';
-import { useSearchParams } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { cn } from '@/lib/utils';
 import type { Business } from '@/lib/types';
@@ -24,10 +30,35 @@ import { ImageUpload } from '@/components/dashboard/ImageUpload';
 import { AccessDenied, useAreaLoad } from '@/components/dashboard/AccessNotice';
 import { apiGet, apiSend } from '@/lib/api-client';
 import { NAV_PRESETS, navTokens, navColorOf } from '@/lib/appearance';
-import { IntegracoesView } from '@/components/dashboard/IntegracoesView';
-import { CanaisIntegracoesView } from '@/components/dashboard/CanaisIntegracoesView';
+
+type ConfigTab = 'negocio' | 'crm' | 'aparencia';
+
+/**
+ * Abas REAIS de configuração desta empresa: cada uma EDITA algo aqui.
+ *
+ * Saiu daqui (A1.2 · Bloco 1):
+ *   • "Canais" e "Integrações" → porta própria /canais (era a mesma tela em
+ *     dois endereços);
+ *   • "Agenda" → só continha links para Agenda, Disponibilidade, Profissionais
+ *     e Serviços, ou seja, um segundo menu dentro de Configurações. As quatro
+ *     portas estão no menu principal; quando as regras de reserva vierem para
+ *     cá (Bloco 2), a aba volta EDITANDO algo, não apontando para fora.
+ */
+const CONFIG_TABS: Array<[ConfigTab, string]> = [
+  ['negocio', 'Negócio'],
+  ['crm', 'CRM'],
+  ['aparencia', 'Aparência'],
+];
+
+/** Aba antiga → porta canônica (links antigos continuam chegando no lugar). */
+const LEGACY_TAB_REDIRECT: Record<string, string> = {
+  canais: '/canais?tab=canais',
+  integracoes: '/canais?tab=integracoes',
+  agenda: '/agenda',
+};
 
 export default function ConfigPage() {
+  const router = useRouter();
   const params = useSearchParams();
   const businessId = params.get('b') || '';
   const [biz, setBiz] = useState<Business | null>(null);
@@ -36,10 +67,16 @@ export default function ConfigPage() {
   const [savingAppearance, setSavingAppearance] = useState(false);
   const [saving, setSaving] = useState(false);
   const initialTab = params.get('tab') as any;
-  const [tab, setTab] = useState<'negocio' | 'agenda' | 'crm' | 'canais' | 'aparencia' | 'integracoes'>(
-    ['negocio', 'agenda', 'crm', 'canais', 'aparencia', 'integracoes'].includes(initialTab) ? initialTab : 'negocio',
-  );
-  const [activeModules, setActiveModules] = useState<number | null>(null);
+  const [tab, setTab] = useState<ConfigTab>(CONFIG_TABS.some(([id]) => id === initialTab) ? initialTab : 'negocio');
+
+  // Abas que viraram porta própria: leva o link antigo até /canais (com ?b=).
+  useEffect(() => {
+    if (!LEGACY_TAB_REDIRECT[initialTab as string]) return;
+    const target = LEGACY_TAB_REDIRECT[initialTab as string];
+    // A unidade ativa segue junto (e o destino pode já trazer a própria aba).
+    const sep = target.includes('?') ? '&' : '?';
+    router.replace(businessId ? `${target}${sep}b=${businessId}` : target);
+  }, [initialTab, businessId, router]);
 
   // 403 → aviso amigável (sessão preservada), nunca skeleton infinito.
   const { denied, report } = useAreaLoad('Configurações');
@@ -51,11 +88,6 @@ export default function ConfigPage() {
     setBiz(res.data.business);
   }, [businessId, report]);
   useEffect(() => { load(); }, [load]);
-  useEffect(() => {
-    if (!businessId) return;
-    apiGet<{ features?: any[] }>(`/api/businesses/${businessId}/features`, { scope: 'area', area: 'Configurações' })
-      .then((res) => { if (res.ok) setActiveModules((res.data?.features || []).filter((f: any) => f.enabled).length); });
-  }, [businessId]);
 
   async function save() {
     if (!biz) return;
@@ -115,7 +147,7 @@ export default function ConfigPage() {
       {msg && <p className="mb-3 text-sm font-medium bg-zinc-900 text-white rounded-md px-3 py-2">{msg}</p>}
 
       <div className="flex flex-wrap gap-1 p-1 bg-zinc-100 rounded-md mb-4 w-fit" role="tablist">
-        {([['negocio', 'Negócio'], ['agenda', 'Agenda'], ['crm', 'CRM'], ['canais', 'Canais'], ['aparencia', 'Aparência'], ['integracoes', 'Integrações']] as const).map(([id, label]) => (
+        {CONFIG_TABS.map(([id, label]) => (
           <button key={id} role="tab" aria-selected={tab === id} onClick={() => setTab(id)} className={cn('text-xs font-medium px-3 py-1.5 rounded', tab === id ? 'bg-white shadow-sm border border-zinc-200 text-zinc-900' : 'text-zinc-500')}>
             {label}
           </button>
@@ -177,25 +209,6 @@ export default function ConfigPage() {
 
             <button onClick={save} disabled={saving} className="text-sm font-semibold bg-zinc-900 text-white px-5 py-2.5 rounded-md disabled:opacity-50">{saving ? 'Salvando…' : 'Salvar informações'}</button>
           </>
-        )}
-
-        {tab === 'agenda' && (
-          <div className="bg-white border border-zinc-200 divide-y divide-zinc-100">
-            {[
-              { title: 'Horários', hint: 'Janela da empresa, dias especiais e regras de reserva (antecedência, buffer, horizonte)', href: `/horarios?b=${businessId}` },
-              { title: 'Profissionais', hint: 'Quem atende, agenda própria ou horário da empresa', href: `/profissionais?b=${businessId}` },
-              { title: 'Agenda do dia', hint: 'Grade Day/Week/Month, drag para remarcar e fechamento de atendimentos', href: `/agenda?b=${businessId}` },
-              { title: 'Serviços', hint: 'Catálogo com preço, duração e quem atende', href: `/servicos?b=${businessId}` },
-            ].map((r) => (
-              <Link key={r.title} href={r.href} className="flex items-center justify-between gap-4 px-4 py-3 hover:bg-zinc-50">
-                <div>
-                  <p className="text-sm font-medium">{r.title}</p>
-                  <p className="text-xs text-zinc-500">{r.hint}</p>
-                </div>
-                <span className="text-xs font-medium bg-white border border-zinc-200 px-3 py-1 rounded-md">Abrir</span>
-              </Link>
-            ))}
-          </div>
         )}
 
         {tab === 'crm' && (
@@ -293,26 +306,6 @@ export default function ConfigPage() {
           );
         })()}
 
-        {tab === 'canais' && (
-          <>
-            {/* P6 — canais, fontes e integrações externas (fundação de conexão). */}
-            <CanaisIntegracoesView />
-            <section className="bg-white border border-zinc-200 p-4 space-y-3">
-            <h3 className="font-semibold text-sm">Recursos, assistente, WhatsApp e equipe</h3>
-            <p className="text-xs text-zinc-500">Módulos da empresa ({activeModules ?? '—'} ativos) — ligue e desligue em Recursos.</p>
-            <div className="grid sm:grid-cols-2 gap-2">
-              <Link href={`/recursos?b=${businessId}`} className="text-xs font-semibold bg-zinc-900 text-white px-3 py-2 rounded-md text-center">Recursos da empresa</Link>
-              <Link href={`/agente?b=${businessId}`} className="text-xs font-semibold bg-white border border-zinc-200 px-3 py-2 rounded-md text-center">Assistente</Link>
-              <Link href={`/whatsapp?b=${businessId}`} className="text-xs font-semibold bg-white border border-zinc-200 px-3 py-2 rounded-md text-center">WhatsApp</Link>
-              <Link href={`/equipe?b=${businessId}`} className="text-xs font-semibold bg-white border border-zinc-200 px-3 py-2 rounded-md text-center">Equipe</Link>
-            </div>
-          </section>
-          </>
-        )}
-
-        {tab === 'integracoes' && (
-          <IntegracoesView />
-        )}
       </div>
     </>
   );

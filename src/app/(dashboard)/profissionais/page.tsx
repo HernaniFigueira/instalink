@@ -105,7 +105,7 @@ export default function ProfissionaisPage() {
       <h1 className="text-2xl font-bold tracking-tight">Profissionais</h1>
       <p className="text-sm text-zinc-500 mt-1 mb-5">Quem atende no seu negócio. Cada um tem agenda própria e aparece na página pública.</p>
 
-      {loaded && <CatalogCrossLinks businessId={businessId} current="profissionais" />}
+      {loaded && <CatalogCrossLinks businessId={businessId} current="/profissionais" />}
 
       {/* Acesso do profissional (P2): o vínculo login↔profissional é feito em
           Equipe. Quem tem vínculo vê SOMENTE a própria agenda (regra do
