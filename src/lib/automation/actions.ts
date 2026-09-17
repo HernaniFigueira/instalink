@@ -12,7 +12,8 @@
 //   tarefa             → lib/automation/tasks.ts · createTaskTx
 //   agendar            → lib/pipeline.ts · bookLead → createBookingTx (slot!)
 //   cancelar           → lib/booking-status.ts · applyBookingStatusTx (máquina de estados)
-//   webhook            → lib/webhooks.ts · dispatchWebhook  (HMAC + retry do P3)
+//   webhook            → lib/integrations/outbound.ts · dispatchOutboundEvent
+//                        (P6 resolve o destino; webhook entrega pelo P3: HMAC + retry)
 //
 // Consequências:
 //   • businessId é sempre o da EXECUÇÃO (o id do payload nunca é aceito cru);
@@ -22,7 +23,7 @@
 //     uma execução interrompida não duplica efeito);
 //   • erro em ação não corrompe estado: o executor grava `failed` + mensagem.
 import type {
-  Automation, AutomationActionType, AutomationRun, Business, DB,
+  Automation, AutomationActionType, AutomationRun, Business, DB, WebhookEvent,
 } from '../types';
 import { VALID_WEBHOOK_EVENTS } from '../types';
 import {
@@ -31,7 +32,8 @@ import {
 } from '../pipeline';
 import { addContactNote, findContact } from '../contacts';
 import { applyBookingStatusTx } from '../booking-status';
-import { dispatchWebhook } from '../webhooks';
+// P6 — conector de saída (a ação não conhece provedor; a camada resolve).
+import { dispatchOutboundEvent } from '../integrations/outbound';
 import { createTaskTx } from './tasks';
 import { renderParams } from './conditions';
 import { addDaysISO, todayISO } from '../tz';
@@ -388,10 +390,6 @@ export async function executeAction(input: ActionInput): Promise<ActionResult> {
       if (!VALID_WEBHOOK_EVENTS.includes(event as any)) {
         return { ok: false, summary: '', error: `evento de webhook inválido: ${event || '(vazio)'}` };
       }
-      const hooks = (db.webhooks || []).filter((w) => w.businessId === business.id && w.active && w.events.includes(event as any));
-      if (hooks.length === 0) {
-        return { ok: true, skipped: true, summary: 'nenhum webhook ativo para este evento' };
-      }
       const data: Record<string, any> = {
         source: 'automation',
         automationId: input.automation.id,
@@ -404,8 +402,20 @@ export async function executeAction(input: ActionInput): Promise<ActionResult> {
       const note = text(input, 'note', 300);
       if (note) data.note = note;
       try {
-        const deliveries = await dispatchWebhook(db, event as any, business.id, data);
-        return { ok: true, summary: `webhook ${event} → ${deliveries.length} destino(s)` };
+        // P6 — a ação NÃO conhece destino nenhum: pede ao conector de saída da
+        // camada de integrações (`lib/integrations/outbound.ts`). Hoje o alvo
+        // 'webhook' entrega pelo canal assinado do P3 (HMAC + fila + retry);
+        // canais entram por este MESMO caminho quando o conector existir.
+        const dispatched = await dispatchOutboundEvent(db, {
+          businessId: business.id,
+          event: event as WebhookEvent,
+          data,
+          targets: ['webhook'],
+        });
+        if (dispatched.webhooks.destinations === 0) {
+          return { ok: true, skipped: true, summary: 'nenhum webhook ativo para este evento' };
+        }
+        return { ok: true, summary: `webhook ${event} → ${dispatched.webhooks.deliveries.length} destino(s)` };
       } catch (e: any) {
         return { ok: false, summary: '', error: e?.message || 'falha ao enfileirar o webhook' };
       }

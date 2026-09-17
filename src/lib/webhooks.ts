@@ -15,6 +15,9 @@ import { VALID_WEBHOOK_EVENTS } from './types';
 // Escrita condicional (CAS) do banco — usada pelo consumidor automático da
 // fila de retry para que duas execuções não entreguem a mesma tentativa.
 import { updateDBWithCas } from './db';
+// Guarda de destino (P6): URL de saída apontando para rede interna é recusada
+// na configuração — o mesmo critério vale para todo conector futuro.
+import { assertOutboundUrlAllowed } from './outbound-url';
 
 export { VALID_WEBHOOK_EVENTS };
 
@@ -116,6 +119,11 @@ export function upsertWebhook(
   if (!/^https?:\/\//i.test(url)) {
     throw Object.assign(new Error('URL de webhook inválida. Deve iniciar com http:// ou https://'), { status: 400 });
   }
+  // SSRF (P6): destino interno/privado é recusado na CONFIGURAÇÃO — em
+  // produção. Em desenvolvimento/teste o alvo privado continua valendo (os
+  // smokes usam receptor em 127.0.0.1); em produção, `ALLOW_PRIVATE_OUTBOUND_URLS=1`
+  // libera explicitamente (on-prem). Ver `lib/outbound-url.ts`.
+  assertOutboundUrlAllowed(url);
 
   const validEvents = (Array.isArray(input.events) ? input.events : [])
     .filter((e) => VALID_WEBHOOK_EVENTS.includes(e));

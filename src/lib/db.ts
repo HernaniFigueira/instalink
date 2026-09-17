@@ -31,6 +31,12 @@ import { defaultWhatsappIntegration } from './whatsapp';
 // P4 — normalizadores puros da automação (sem I/O): importá-los aqui mantém a
 // migração num só lugar. `automation/model.ts` não importa este arquivo.
 import { normalizeAutomationRecord, normalizeAutomationRunRecord } from './automation/model';
+// P6 — tetos do log de integrações (uma fonte só: o prune não inventa número).
+import {
+  MAX_INTEGRATION_EVENTS_PER_BUSINESS,
+  INTEGRATION_EVENT_RETENTION_MS,
+  INTEGRATION_DUPLICATE_RETENTION_MS,
+} from './integrations/logs';
 
 // Caminho do banco local (modo arquivo). A variável INSTALINK_DB_FILE permite
 // apontar para um arquivo isolado (testes/dev paralelo) sem mudar o padrão.
@@ -55,6 +61,8 @@ export function emptyDB(): DB {
     automations: [], automationRuns: [], tasks: [],
     // P5 — propostas de IA (rascunho/aprovação; nunca executam sozinhas)
     aiProposals: [],
+    // P6 — canais e integrações externas (conexões + log de entregas)
+    integrations: [], integrationEvents: [],
   };
 }
 
@@ -69,6 +77,7 @@ export function normalizeDB(raw: unknown): DB {
     'messages', 'campaigns', 'campaignRecipients', 'audit', 'supportSessions',
     'pipelines', 'apiKeys', 'webhooks', 'webhookDeliveries', 'idempotencyKeys', 'integrationLogs',
     'automations', 'automationRuns', 'tasks', 'aiProposals',
+    'integrations', 'integrationEvents',
   ] as const) {
     if (!Array.isArray((base as any)[key])) (base as any)[key] = [];
   }
@@ -155,6 +164,79 @@ export function normalizeDB(raw: unknown): DB {
     });
   }
   base.aiProposals = cleanProposals as DB['aiProposals'];
+  // P6 — integrações externas: normalização ADITIVA e defensiva. Campos novos
+  // ganham default; linha SEM DONO (sem id ou sem businessId) é descartada —
+  // não pertence a nenhuma unidade e seria invisível para o resto do sistema,
+  // que sempre filtra por `businessId`. Nenhum segredo é inventado aqui: o que
+  // existe é preservado (o token já vive só como hash).
+  const cleanIntegrations: unknown[] = [];
+  const seenIntegrationIds = new Set<string>();
+  for (const raw of base.integrations as any[]) {
+    if (!raw || typeof raw !== 'object' || Array.isArray(raw)) continue;
+    const id = String(raw.id || '').trim();
+    const businessId = String(raw.businessId || '').trim();
+    if (!id || !businessId || seenIntegrationIds.has(id)) continue;
+    seenIntegrationIds.add(id);
+    const statuses = ['active', 'paused'];
+    const directions = ['in', 'out', 'both'];
+    const integrationsNow = new Date().toISOString();
+    cleanIntegrations.push({
+      ...raw,
+      id,
+      businessId,
+      kind: ['channel', 'source', 'technical'].includes(raw.kind) ? raw.kind : 'technical',
+      name: String(raw.name || '').slice(0, 60) || 'Integração',
+      direction: directions.includes(raw.direction) ? raw.direction : 'in',
+      status: statuses.includes(raw.status) ? raw.status : 'active',
+      tokenHash: String(raw.tokenHash || ''),
+      tokenPrefix: String(raw.tokenPrefix || ''),
+      signingSecret: String(raw.signingSecret || ''),
+      signingSecretPrefix: String(raw.signingSecretPrefix || ''),
+      requireSignature: raw.requireSignature === true,
+      defaultEvent: typeof raw.defaultEvent === 'string' ? raw.defaultEvent : '',
+      config: raw.config && typeof raw.config === 'object' && !Array.isArray(raw.config) ? raw.config : {},
+      createdAt: String(raw.createdAt || integrationsNow),
+      updatedAt: String(raw.updatedAt || raw.createdAt || integrationsNow),
+      createdByUserId: String(raw.createdByUserId || ''),
+      rotatedAt: String(raw.rotatedAt || ''),
+      lastEventAt: String(raw.lastEventAt || ''),
+      eventCount: Number.isFinite(raw.eventCount) ? Number(raw.eventCount) : 0,
+    });
+  }
+  base.integrations = cleanIntegrations as DB['integrations'];
+  const cleanIntegrationEvents: unknown[] = [];
+  const seenIntegrationEventIds = new Set<string>();
+  for (const raw of base.integrationEvents as any[]) {
+    if (!raw || typeof raw !== 'object' || Array.isArray(raw)) continue;
+    const id = String(raw.id || '').trim();
+    const businessId = String(raw.businessId || '').trim();
+    const integrationId = String(raw.integrationId || '').trim();
+    if (!id || !businessId || !integrationId || seenIntegrationEventIds.has(id)) continue;
+    seenIntegrationEventIds.add(id);
+    const statuses = ['processed', 'duplicate', 'rejected', 'failed'];
+    const eventsNow = new Date().toISOString();
+    cleanIntegrationEvents.push({
+      ...raw,
+      id,
+      businessId,
+      integrationId,
+      provider: String(raw.provider || ''),
+      direction: raw.direction === 'out' ? 'out' : 'in',
+      event: String(raw.event || ''),
+      status: statuses.includes(raw.status) ? raw.status : 'failed',
+      externalEventId: String(raw.externalEventId || '').slice(0, 160),
+      idempotencyKey: String(raw.idempotencyKey || '').slice(0, 220),
+      httpStatus: Number.isFinite(raw.httpStatus) ? Number(raw.httpStatus) : 0,
+      reason: String(raw.reason || '').slice(0, 200),
+      leadId: String(raw.leadId || ''),
+      contactId: String(raw.contactId || ''),
+      automationRunIds: Array.isArray(raw.automationRunIds) ? raw.automationRunIds.map(String).slice(0, 25) : [],
+      payloadSummary: raw.payloadSummary && typeof raw.payloadSummary === 'object' && !Array.isArray(raw.payloadSummary)
+        ? raw.payloadSummary : {},
+      at: String(raw.at || eventsNow),
+    });
+  }
+  base.integrationEvents = cleanIntegrationEvents as DB['integrationEvents'];
   // Contatos: migração defensiva UMA única vez (quando o doc antigo não
   // tinha o campo). Idempotente; nada existente é apagado ou duplicado.
   const hadContacts = Array.isArray((raw as any)?.contacts);
@@ -416,6 +498,7 @@ const TASK_RETENTION_MS = 180 * 86400000;
 const MAX_AI_PROPOSALS_PER_BUSINESS = 80;
 const AI_PROPOSAL_RETENTION_MS = 180 * 86400000;
 
+
 function prune(db: DB): void {
   const now = Date.now();
   db.sessions = db.sessions.filter((s) => new Date(s.expiresAt).getTime() > now);
@@ -455,6 +538,27 @@ function prune(db: DB): void {
       const at = Date.parse(t.doneAt || t.updatedAt || t.createdAt || '');
       return !Number.isFinite(at) || at > now - TASK_RETENTION_MS;
     });
+  }
+  // P6 — log de integrações: teto por unidade (as mais recentes ficam) e
+  // janela de retenção. Linhas terminais antigas saem; duplicatas (ruído de
+  // reentrega) saem antes. Nenhuma conexão é removida por prune — apagar
+  // conexão é decisão do lojista (e o log dela vai junto, por escolha dele).
+  if (Array.isArray(db.integrationEvents) && db.integrationEvents.length > 0) {
+    const perBiz = new Map<string, number>();
+    const kept: typeof db.integrationEvents = [];
+    for (let i = db.integrationEvents.length - 1; i >= 0; i--) {
+      const e = db.integrationEvents[i];
+      const at = Date.parse(e.at || '');
+      const retention = e.status === 'duplicate'
+        ? INTEGRATION_DUPLICATE_RETENTION_MS
+        : INTEGRATION_EVENT_RETENTION_MS;
+      if (Number.isFinite(at) && at < now - retention) continue;
+      const n = perBiz.get(e.businessId) || 0;
+      if (n >= MAX_INTEGRATION_EVENTS_PER_BUSINESS) continue;
+      perBiz.set(e.businessId, n + 1);
+      kept.push(e);
+    }
+    db.integrationEvents = kept.reverse();
   }
   // P5 — propostas: rascunhos/aprovadas ficam (é trabalho do lojista);
   // publicadas/canceladas saem depois da janela, com teto por unidade.

@@ -675,6 +675,9 @@ export interface DB {
   tasks: Task[];
   // ── P5: propostas de automação geradas por IA (nunca executam sozinhas) ──
   aiProposals: AiProposal[];
+  // ── P6: canais e integrações externas (conexões + log de entregas) ──
+  integrations: Integration[];
+  integrationEvents: IntegrationEvent[];
 }
 
 // ═══════════════════════════════════════════════════════════════
@@ -1291,6 +1294,187 @@ export interface CampaignRecipient {
 }
 
 // ═══════════════════════════════════════════════════════════════
+// P6 — CANAIS E INTEGRAÇÕES EXTERNAS
+// ═══════════════════════════════════════════════════════════════
+// TRÊS CONCEITOS DIFERENTES, um REGISTRO genérico (`Integration`) com
+// discriminante explícito `kind` — nenhuma categoria é "achatada":
+//
+//   • CANAL   (`channel`)   → por onde se CONVERSA:
+//                             WhatsApp, Instagram, Facebook/Messenger, Telegram;
+//   • FONTE   (`source`)    → de onde o LEAD veio:
+//                             formulário, landing page, tráfego pago, QR Code,
+//                             página pública, formulário externo;
+//   • TÉCNICA (`technical`) → por onde os DADOS viajam:
+//                             webhook de entrada, n8n, API de sistema externo.
+//
+// O catálogo de provedores (o que existe, o que já funciona e o que ainda não)
+// vive em `src/lib/integrations/catalog.ts` — o registro guarda só o que a
+// UNIDADE conectou. Toda linha pertence a exatamente um Business.
+export type IntegrationKind = 'channel' | 'source' | 'technical';
+
+export const INTEGRATION_KINDS: IntegrationKind[] = ['channel', 'source', 'technical'];
+
+export type IntegrationProviderId =
+  // Canais (conversa)
+  | 'whatsapp' | 'instagram' | 'messenger' | 'telegram'
+  // Fontes (origem do lead)
+  | 'form' | 'landing_page' | 'paid_traffic' | 'qrcode' | 'public_page'
+  // Integrações técnicas (transporte de dados)
+  | 'inbound_webhook' | 'n8n' | 'external_api';
+
+/**
+ * Eventos EXTERNOS normalizados (contrato do P6).
+ *
+ * Menor conjunto capaz de provar a arquitetura: o que já é entregue ao P4 hoje
+ * (`supported: true` no catálogo de eventos) e o que fica declarado para os
+ * conectores seguintes. Nome do evento é o MESMO vocabulário do produto
+ * (`lead.created`), para não existir tradução no meio do caminho.
+ */
+export type ExternalEventName =
+  | 'lead.created'
+  | 'lead.updated'
+  | 'form.submitted'
+  | 'contact.created'
+  | 'contact.updated'
+  | 'message.received'
+  | 'booking.requested';
+
+export const EXTERNAL_EVENTS: ExternalEventName[] = [
+  'lead.created', 'lead.updated', 'form.submitted',
+  'contact.created', 'contact.updated',
+  'message.received', 'booking.requested',
+];
+
+export interface ExternalEventDef {
+  id: ExternalEventName;
+  label: string;
+  hint: string;
+  /** O P6 já ENTREGA este evento ao P4 (verdade do produto, não promessa). */
+  supported: boolean;
+  /** Serviço oficial que recebe o evento quando suportado. */
+  forward: 'lead' | 'contact' | 'message' | 'booking' | 'none';
+}
+
+export const EXTERNAL_EVENT_DEFS: ExternalEventDef[] = [
+  {
+    id: 'lead.created', label: 'Lead criado', supported: true, forward: 'lead',
+    hint: 'Entra pelo serviço oficial de leads (deduplicação + gatilhos do P4).',
+  },
+  {
+    id: 'lead.updated', label: 'Lead atualizado', supported: true, forward: 'lead',
+    hint: 'Atualiza o lead existente e mantém a origem original.',
+  },
+  {
+    id: 'form.submitted', label: 'Formulário enviado', supported: true, forward: 'lead',
+    hint: 'Formulário/landing page: cria ou atualiza o lead da unidade.',
+  },
+  {
+    id: 'contact.created', label: 'Contato criado', supported: true, forward: 'contact',
+    hint: 'Entra na base de clientes e dispara os gatilhos de cliente do P4.',
+  },
+  {
+    id: 'contact.updated', label: 'Contato atualizado', supported: true, forward: 'contact',
+    hint: 'Atualiza o contato existente (nunca sobrescreve com dado vazio).',
+  },
+  {
+    id: 'message.received', label: 'Mensagem recebida', supported: false, forward: 'message',
+    hint: 'Declarado para os canais de conversa (P6.1); depende do conector do canal.',
+  },
+  {
+    id: 'booking.requested', label: 'Agendamento solicitado', supported: false, forward: 'booking',
+    hint: 'Declarado para o P6.2; hoje sistemas externos agendam pela API do P3.',
+  },
+];
+
+export type IntegrationDirection = 'in' | 'out' | 'both';
+export type IntegrationStatus = 'active' | 'paused';
+
+/**
+ * Conexão/integração de uma unidade (registro genérico).
+ *
+ * SEGREDOS: o TOKEN de integração é guardado apenas como SHA-256 (`tokenHash`)
+ * e existe em claro só no momento da criação; o SEGREDO DE ASSINATURA é o único
+ * material reversível (é preciso conferir o HMAC na entrada) e nunca sai da API
+ * depois de criado — a UI vê apenas a máscara. Tokens de canais oficiais
+ * (WhatsApp/Instagram/...) NÃO moram aqui: ficam em variáveis de ambiente, como
+ * já acontece no P3 (`src/lib/whatsapp.ts`).
+ */
+export interface Integration {
+  id: ID;
+  businessId: ID;
+  kind: IntegrationKind;
+  provider: IntegrationProviderId;
+  name: string;
+  direction: IntegrationDirection;
+  status: IntegrationStatus;
+  tokenHash: string; // SHA-256 do token `ilk_live_...`
+  tokenPrefix: string; // ex.: "ilk_live_3f9a…" (visível)
+  signingSecret: string; // `ilsec_...` (HMAC de entrada; nunca devolvido)
+  signingSecretPrefix: string;
+  requireSignature: boolean;
+  /** Evento canônico padrão quando a origem manda payload cru ('' = exige envelope). */
+  defaultEvent: ExternalEventName | '';
+  /** Configuração NÃO sensível do conector (ex.: phoneNumberId, fieldMap). */
+  config: Record<string, any>;
+  createdAt: string;
+  updatedAt: string;
+  createdByUserId: string;
+  rotatedAt: string; // última rotação de credenciais
+  lastEventAt: string;
+  eventCount: number;
+}
+
+/** Versão segura para API/painel: sem hash, sem segredo, com máscaras. */
+export interface SafeIntegration {
+  id: ID;
+  businessId: ID;
+  kind: IntegrationKind;
+  provider: IntegrationProviderId;
+  name: string;
+  direction: IntegrationDirection;
+  status: IntegrationStatus;
+  tokenMasked: string;
+  signingSecretMasked: string;
+  requireSignature: boolean;
+  defaultEvent: ExternalEventName | '';
+  config: Record<string, any>;
+  createdAt: string;
+  updatedAt: string;
+  rotatedAt: string;
+  lastEventAt: string;
+  eventCount: number;
+  /** Caminho do endpoint de entrada ('' quando o provedor não recebe dados). */
+  endpointPath: string;
+}
+
+export type IntegrationEventStatus = 'processed' | 'duplicate' | 'rejected' | 'failed';
+
+/**
+ * Registro de uma entrega externa (append-only). É o LOG do P6:
+ *  - nunca guarda o token nem o segredo (só o prefixo, quando muito);
+ *  - `idempotencyKey` = integração + identificador externo do evento;
+ *  - `automationRunIds` prova o encaminhamento ao P4 (execuções criadas).
+ */
+export interface IntegrationEvent {
+  id: ID;
+  businessId: ID;
+  integrationId: ID;
+  provider: IntegrationProviderId | '';
+  direction: 'in' | 'out';
+  event: ExternalEventName | '';
+  status: IntegrationEventStatus;
+  externalEventId: string;
+  idempotencyKey: string;
+  httpStatus: number;
+  reason: string;
+  leadId: string;
+  contactId: string;
+  automationRunIds: string[];
+  payloadSummary: Record<string, any>;
+  at: string;
+}
+
+// ═══════════════════════════════════════════════════════════════
 // MASTER / SUPORTE / AUDITORIA (área da plataforma)
 // ═══════════════════════════════════════════════════════════════
 export type SupportMode = 'view' | 'admin';
@@ -1331,7 +1515,10 @@ export type AuditAction =
   | 'automation.run_cancelled' | 'task.created' | 'task.completed'
   // P5 — propostas de IA (a publicação cria automation.created)
   | 'ai.proposal_created' | 'ai.proposal_updated' | 'ai.proposal_approved'
-  | 'ai.proposal_cancelled' | 'ai.proposal_published' | 'ai.proposal_regenerated';
+  | 'ai.proposal_cancelled' | 'ai.proposal_published' | 'ai.proposal_regenerated'
+  // P6 — canais e integrações externas
+  | 'integration.created' | 'integration.updated' | 'integration.deleted'
+  | 'integration.token_rotated';
 
 export interface AuditEntry {
   id: ID;
