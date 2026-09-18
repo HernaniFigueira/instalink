@@ -1,5 +1,6 @@
 'use client';
 import { useCallback, useEffect, useState } from 'react';
+import Link from 'next/link';
 import { useSearchParams } from 'next/navigation';
 import type { Availability, Professional } from '@/lib/types';
 import { ListSkeleton } from '@/components/ui';
@@ -114,7 +115,7 @@ export default function ProfissionaisPage() {
         <div className="bg-white border border-zinc-200 rounded-lg px-5 py-3.5 mb-4 text-xs text-zinc-600 flex flex-wrap items-center gap-x-2 gap-y-1">
           <strong>Um profissional que atende precisa de login?</strong>
           <span>Crie o acesso em</span>
-          <a href={`/equipe?b=${businessId}`} className="font-semibold text-zinc-900 underline">Equipe</a>
+          <Link href={`/equipe?b=${businessId}`} className="font-semibold text-zinc-900 underline">Equipe</Link>
           <span>e vincule ao profissional — ele passa a ver somente a própria agenda, com os clientes da unidade.</span>
         </div>
       )}

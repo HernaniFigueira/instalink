@@ -42,6 +42,7 @@ import { cn } from '@/lib/utils';
 import type { BookingConfig, Business } from '@/lib/types';
 import { defaultBookingConfig } from '@/lib/types';
 import { PageSkeleton } from '@/components/ui';
+import { Icon } from '@/components/icons';
 import { ImageUpload } from '@/components/dashboard/ImageUpload';
 import { AccessDenied, useAreaLoad } from '@/components/dashboard/AccessNotice';
 import { apiGet, apiSend } from '@/lib/api-client';
@@ -123,12 +124,22 @@ function BookingRules({ businessId, initial, onSaved }: {
       <div className="grid sm:grid-cols-2 gap-3.5">
         {hasTeam === true && (
           <div className="sm:col-span-2">
-            <span className="text-xs font-bold text-zinc-500">DISTRIBUIÇÃO DOS AGENDAMENTOS</span>
-            <select value="balanced" className={num}>
-              <option value="balanced">Equilibrar equipe — quem tem menos atendimentos no dia</option>
-              <option value="soon" disabled>Em breve: outros modos de distribuição</option>
-            </select>
-            <span className="text-[11px] text-zinc-500">O cliente nunca escolhe o profissional — a regra é interna do negócio. Quem atende é resolvido automaticamente, respeitando profissionais ativos, vínculo serviço → profissional, horários, buffers e exceções.</span>
+            {/* A1.2 · Bloco 3 — SEM CONTROLE FALSO: a distribuição automática
+                é regra do produto (quem atende é resolvido pela engine, com
+                profissionais ativos, vínculo serviço → profissional, horários,
+                buffers e exceções). Não existe configuração alternativa
+                persistida/consumida, então não há <select> aqui — um controle
+                aparentemente editável que não salva nada criava expectativa
+                de funcionamento. A indicação abaixo é explicitamente NÃO
+                interativa. */}
+            <div className="rounded-md border border-zinc-200 bg-zinc-50 px-3 py-2.5" aria-label="Distribuição dos agendamentos: automática (fixa)">
+              <p className="text-xs font-bold text-zinc-500">DISTRIBUIÇÃO DOS AGENDAMENTOS</p>
+              <p className="text-sm font-medium text-zinc-800 mt-1 inline-flex items-center gap-1.5">
+                <Icon n="lock" size={13} className="text-zinc-400" />
+                Automática — equilibra a equipe
+              </p>
+              <span className="block text-[11px] text-zinc-500 mt-0.5">O cliente nunca escolhe o profissional — a regra é interna do negócio. Quem atende é resolvido automaticamente, respeitando profissionais ativos, vínculo serviço → profissional, horários, buffers e exceções.</span>
+            </div>
           </div>
         )}
         <label className="block"><span className="text-xs font-bold text-zinc-500">ANTECEDÊNCIA MÍNIMA (MIN)</span>

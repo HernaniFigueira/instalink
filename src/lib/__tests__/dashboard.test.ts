@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
-  DASHBOARD_PANELS, dashboardAreas, dashboardContext, dashboardModules,
+  DASHBOARD_PANELS, dashboardContext, dashboardModules,
   dashboardPanelVisible, dashboardRevenueSources, recentActivityLists,
   visibleDashboardKpis, visibleDashboardPanels,
 } from '../dashboard';
@@ -139,8 +139,6 @@ describe('dashboard — vocabulário e contexto', () => {
     expect(c.labels.showsBookings).toBe(true);
     expect(c.labels.showsOrders).toBe(false);
     expect(c.labels.showsProducts).toBe(false);
-    expect(c.areas).toContain('Agenda');
-    expect(c.areas).not.toContain('Pedidos');
   });
 
   it('varejo fala "pedidos" e não mostra agenda', () => {
@@ -148,15 +146,18 @@ describe('dashboard — vocabulário e contexto', () => {
     expect(c.labels.activityUnit).toBe('pedidos');
     expect(c.labels.showsOrders).toBe(true);
     expect(c.labels.showsBookings).toBe(false);
-    expect(c.areas).toContain('Pedidos');
-    expect(c.areas).toContain('Produtos');
-    expect(c.areas).not.toContain('Agenda');
   });
 
-  it('híbrido fala "itens" e mostra as duas áreas', () => {
+  it('híbrido fala "itens"', () => {
     const c = dashboardContext(HIBRIDO);
     expect(c.labels.activityUnit).toBe('itens');
-    expect(c.areas).toEqual(expect.arrayContaining(['Agenda', 'Pedidos', 'Produtos', 'Serviços']));
+  });
+
+  // A1.2 · Bloco 4: `areas` saiu do contexto — repetia a navegação que o
+  // shell (catálogo lib/panel.ts) já fornece. O contexto NÃO volta a ter.
+  it('A1.2 B4 — contexto não traz mais "areas" (duplicação da navegação)', () => {
+    const c = dashboardContext(CLINICA);
+    expect(c).not.toHaveProperty('areas');
   });
 
   it('contexto traz painéis, KPIs e receitas já filtrados', () => {
@@ -170,10 +171,5 @@ describe('dashboard — vocabulário e contexto', () => {
     expect(recentActivityLists(dashboardModules(CLINICA))).toEqual({ orders: false, bookings: true, leads: true });
     expect(recentActivityLists(dashboardModules(VAREJO))).toEqual({ orders: true, bookings: false, leads: true });
     expect(recentActivityLists(dashboardModules(HIBRIDO))).toEqual({ orders: true, bookings: true, leads: true });
-  });
-
-  it('atendimento aparece em "Atendimento" quando há canal (whatsapp ou agente)', () => {
-    expect(dashboardAreas(dashboardModules(CLINICA))).toContain('Atendimento');
-    expect(dashboardAreas(dashboardModules({ modes: ['services'], features: feats() }))).not.toContain('Atendimento');
   });
 });

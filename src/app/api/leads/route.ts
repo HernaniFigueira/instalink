@@ -137,6 +137,10 @@ export async function GET(req: NextRequest) {
     // A UI mostra o editor somente com este flag; o servidor continua sendo a
     // autoridade (PATCH /api/pipeline exige 'config').
     canEditPipeline: guard.ctx.permissions.config === true,
+    // A1.2 · Bloco 3: o NOME do negócio vem daqui (mesma unidade do contexto,
+    // já validada pelo guard) — a UI nunca mais usa o `businessId` como se
+    // fosse nome/identificador de contato em mensagens.
+    business: biz ? { id: biz.id, name: biz.name } : null,
   });
 }
 

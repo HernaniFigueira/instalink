@@ -11,7 +11,7 @@
 //
 // Visual: o redesign do PR #4 é preservado — linhas, painéis, divisórias,
 // tabelas e KPIs compactos. Nada vira "parede de cards".
-import type { Business } from './types';
+import type { Business, PermissionId } from './types';
 import { isFeatureEnabled } from './features';
 import { revenueSources, type RevenueKind } from './revenue';
 
@@ -112,27 +112,17 @@ export function dashboardRevenueSources(m: DashboardModules): RevenueKind[] {
 }
 
 /**
- * Áreas do negócio que a Dashboard destaca — usado no subtítulo e para
- * decidir o vocabulário ("atendimentos" × "pedidos").
+ * Áreas do negócio que a Dashboard destaca — REMOVIDA no A1.2 · Bloco 4:
+ * repetia a navegação/contexto que o shell (catálogo lib/panel.ts) já fornece,
+ * virando um subtítulo redundante ("Dashboard · Agenda · Clientes · …").
+ * O vocabulário do negócio continua decidido por `dashboardContext().labels`.
  */
-export function dashboardAreas(m: DashboardModules): string[] {
-  const out: string[] = [];
-  if (m.bookings) out.push('Agenda');
-  out.push('Clientes');
-  if (m.services || m.bookings) out.push('Serviços');
-  if (m.products) out.push('Produtos');
-  if (m.orders) out.push('Pedidos');
-  if (m.whatsapp || m.agent) out.push('Atendimento');
-  out.push('Resultados');
-  return out;
-}
 
 export interface DashboardContext {
   modules: DashboardModules;
   panels: DashboardPanelId[];
   kpis: DashboardKpiId[];
   revenue: RevenueKind[];
-  areas: string[];
   /** Vocabulário do negócio (evita chamar atendimento de pedido). */
   labels: {
     activityUnit: string;   // 'atendimentos' | 'pedidos' | 'itens'
@@ -162,13 +152,104 @@ export function dashboardContext(
     panels: visibleDashboardPanels(modules),
     kpis: visibleDashboardKpis(modules),
     revenue,
-    areas: dashboardAreas(modules),
     labels: {
       activityUnit,
       showsOrders,
       showsBookings,
       showsProducts: modules.products,
     },
+  };
+}
+
+// ── A1.2 · Bloco 4 — ATENÇÃO e "ONDE AGIR" ──────────────────
+// A região de atenção reúne, num único lugar e na ordem de leitura, o que
+// precisa de decisão HOJE. Só entram categorias com DADO CONFIÁVEL já
+// existente no sistema (pendências de fechamento da agenda, leads sem
+// primeiro tratamento, tarefas vencidas) — nada de novo sistema de alertas,
+// notificação ou scheduler. O link só vai junto quando o usuário PODE abrir
+// a rota (permissão do catálogo): ninguém é enviado para porta proibida.
+
+export interface DashboardAttentionItem {
+  id: 'closures' | 'leadsNew' | 'tasksOverdue';
+  count: number;
+  label: string;
+  /** Destino contextual — presente somente com permissão para a rota. */
+  href: string | null;
+}
+
+export interface DashboardAttentionInput {
+  /** Atendimentos com horário já passado e ainda em aberto (agenda). */
+  closures: number;
+  /** Leads com status 'new' (sem primeiro tratamento). */
+  leadsNew: number;
+  /** Tarefas abertas com prazo vencido (lib/automation/tasks). */
+  tasksOverdue: number;
+  permissions: {
+    agenda: boolean;
+    leads: boolean;
+    /** Qualquer uma das permissões da porta /tarefas. */
+    tasks: boolean;
+  };
+}
+
+export function dashboardAttention(input: DashboardAttentionInput): DashboardAttentionItem[] {
+  const out: DashboardAttentionItem[] = [];
+  if (input.closures > 0) {
+    out.push({
+      id: 'closures', count: input.closures, label: 'atendimentos para fechar',
+      href: input.permissions.agenda ? '/agenda' : null,
+    });
+  }
+  if (input.leadsNew > 0) {
+    out.push({
+      id: 'leadsNew', count: input.leadsNew, label: 'leads sem tratamento',
+      href: input.permissions.leads ? '/funil' : null,
+    });
+  }
+  if (input.tasksOverdue > 0) {
+    out.push({
+      id: 'tasksOverdue', count: input.tasksOverdue, label: 'tarefas vencidas',
+      href: input.permissions.tasks ? '/tarefas' : null,
+    });
+  }
+  return out;
+}
+
+/**
+ * Mapa de permissão das PORTAS que a Dashboard menciona. O servidor calcula
+ // uma única vez; a tela não chuta destino: sem permissão, o item vira texto
+ * (informação preservada) ou deixa de ser link — nunca um 403 desnecessário.
+ */
+export interface DashboardLinkFlags {
+  agenda: boolean;
+  funil: boolean;
+  clientes: boolean;
+  pedidos: boolean;
+  produtos: boolean;
+  pagina: boolean;
+  conversas: boolean;
+  resultados: boolean;
+  canais: boolean;
+  configuracoes: boolean;
+}
+
+export function dashboardLinks(
+  permissions: Partial<Record<import('./types').PermissionId, boolean>>,
+): DashboardLinkFlags {
+  const has = (p: import('./types').PermissionId): boolean => permissions[p] === true;
+  return {
+    agenda: has('agenda'),
+    funil: has('leads'),
+    clientes: has('clientes'),
+    pedidos: has('pedidos'),
+    produtos: has('catalogo'),
+    pagina: has('pagina'),
+    conversas: has('whatsapp'),
+    resultados: has('financeiro'),
+    // Canais & Integrações e Configurações vivem atrás da MESMA permissão
+    // (config) — catálogo lib/panel.ts.
+    canais: has('config'),
+    configuracoes: has('config'),
   };
 }
 

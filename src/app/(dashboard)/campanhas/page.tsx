@@ -2,6 +2,7 @@
 // CAMPANHAS — mensagens para quem autorizou receber (LGPD).
 // A base são SOMENTE contatos com consentimento explícito de marketing.
 import { useCallback, useEffect, useState } from 'react';
+import Link from 'next/link';
 import { useSearchParams } from 'next/navigation';
 import { Icon } from '@/components/icons';
 import { PageSkeleton } from '@/components/ui';
@@ -280,5 +281,6 @@ function Card({ label, value, hint, tone }: { label: string; value: number | str
 }
 
 function Link2({ href, label }: { href: string; label: string }) {
-  return <a href={href} className="text-xs font-bold bg-white border border-zinc-200 rounded-md px-3.5 py-2 hover:bg-zinc-50">{label}</a>;
+  // A1.2 · Bloco 3: navegação interna via Link (sem recarregar a aplicação).
+  return <Link href={href} className="text-xs font-bold bg-white border border-zinc-200 rounded-md px-3.5 py-2 hover:bg-zinc-50">{label}</Link>;
 }

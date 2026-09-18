@@ -107,7 +107,7 @@ export default function EquipePage() {
       <div className="mb-4 text-xs text-zinc-600 bg-white border border-zinc-200 rounded-lg px-4 py-3 flex flex-wrap items-center gap-x-2 gap-y-1">
         <strong>Sem confusão:</strong>
         <span>aqui você gerencia <strong>quem tem login</strong> no painel (dono, recepcionista, gerente).</span>
-        <a href={`/profissionais?b=${businessId}`} className="font-semibold text-zinc-900 underline">Quem realiza os atendimentos → Profissionais</a>
+        <Link href={`/profissionais?b=${businessId}`} className="font-semibold text-zinc-900 underline">Quem realiza os atendimentos → Profissionais</Link>
       </div>
       {msg && <p className="mb-3 text-sm font-medium bg-zinc-900 text-white rounded-md px-3 py-2">{msg}</p>}
       {error && <p className="mb-3 text-sm font-medium bg-red-600 text-white rounded-md px-3 py-2">{error}</p>}
@@ -209,7 +209,7 @@ export default function EquipePage() {
                   </select>
                   <p className="text-xs text-zinc-500 mt-1.5">
                     Ao vincular, este login passa a ver <strong>somente a própria agenda</strong> — os clientes da unidade continuam acessíveis.
-                    Quem atende é cadastrado em <a href={`/profissionais?b=${businessId}`} className="underline font-medium">Profissionais</a>.
+                    Quem atende é cadastrado em <Link href={`/profissionais?b=${businessId}`} className="underline font-medium">Profissionais</Link>.
                   </p>
                   {linkMsg && <p className="text-xs font-medium text-emerald-700 mt-1" role="status">{linkMsg}</p>}
                 </div>
