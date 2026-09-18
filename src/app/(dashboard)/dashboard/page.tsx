@@ -146,7 +146,6 @@ export default function DashboardPage() {
       <AccessDenied
         area="Dashboard"
         hint="Seu perfil não possui acesso a esta área. Você continua conectado — para ver a Dashboard, peça ao proprietário para liberar a permissão “Dashboard” em Equipe."
-        homeHref="/agenda"
       />
     );
   }

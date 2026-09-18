@@ -90,7 +90,14 @@ export default function OrganizationPage() {
     e.preventDefault();
     if (!org || !name.trim()) return;
     const res = await apiSend<{ businessId?: string }>('/api/businesses', 'POST', { name, address, organizationId: org.id }, { scope: 'action', area: 'Organização' });
-    if (res.ok && res.data?.businessId) window.location.assign(`/dashboard?b=${res.data.businessId}`);
+    if (res.ok && res.data?.businessId) {
+      // A1.2 · Bloco 3: navegação INTERNA via router (sem recarregar a app).
+      // O contexto do shell é revalidado pelo MESMO canal usado em Recursos
+      // (`il:business-refresh`) — a unidade nova precisa entrar na lista do
+      // /api/auth/me antes do painel abrir em `?b=` dela.
+      window.dispatchEvent(new Event('il:business-refresh'));
+      router.push(`/dashboard?b=${res.data.businessId}`);
+    }
   }
 
   function changePeriod(next: { key: PeriodKey; from: string; to: string }) {
@@ -119,7 +126,9 @@ export default function OrganizationPage() {
             <select
               aria-label="Selecionar organização"
               value={org.id}
-              onChange={(e) => window.location.assign(`/organizacao?organization=${e.target.value}`)}
+              // A1.2 · Bloco 3: troca de organização é navegação interna
+              // (router.replace) — o estado da organização é derivado da URL.
+              onChange={(e) => router.replace(`/organizacao?organization=${e.target.value}`)}
               className="mt-2 border border-zinc-200 rounded-md px-2 py-1 text-xs bg-white"
             >
               {orgs.map((o) => <option key={o.id} value={o.id}>{o.name}</option>)}

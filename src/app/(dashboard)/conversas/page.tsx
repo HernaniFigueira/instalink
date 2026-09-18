@@ -7,7 +7,7 @@ import { PageSkeleton } from '@/components/ui';
 import { cn } from '@/lib/utils';
 import { humanDateTime } from '@/lib/tz';
 import { AccessDenied, useAreaLoad } from '@/components/dashboard/AccessNotice';
-import { apiGet } from '@/lib/api-client';
+import { apiGet, apiSend } from '@/lib/api-client';
 import type { WaChannelData } from '@/components/dashboard/WhatsappChannelPanel';
 
 // ═══════════════════════════════════════════════════════════════
@@ -43,6 +43,41 @@ export default function ConversasPage() {
   const [error, setError] = useState('');
   const [filter, setFilter] = useState<'all' | 'unread' | 'open'>('all');
 
+  // ── COMPOSER (A1.2 · Bloco 3): o envio usa a API EXISTENTE do inbox ──
+  // POST /api/conversations { businessId, conversationId, body } — mesmo
+  // contrato de antes, com tenant/business scoping e permissão 'whatsapp'
+  // mantidos no servidor. Honestidade: enquanto envia, o botão desabilita;
+  // qualquer falha (409 canal não conectado, 404, rede) aparece na tela e o
+  // texto digitado NÃO se perde.
+  const [draft, setDraft] = useState('');
+  const [sending, setSending] = useState(false);
+  const [sendError, setSendError] = useState('');
+
+  async function sendMessage(e?: React.FormEvent) {
+    e?.preventDefault();
+    if (!active || sending) return;
+    const text = draft.trim();
+    if (!text) return;
+    setSending(true);
+    setSendError('');
+    const res = await apiSend<{ message?: Message }>(
+      '/api/conversations', 'POST',
+      { businessId, conversationId: active.conversation.id, body: text },
+      { scope: 'action', area: 'Conversas' },
+    );
+    setSending(false);
+    if (!res.ok || !res.data?.message) {
+      // Erro honesto: a mensagem do servidor (409 canal não conectado, etc.)
+      // ou a mensagem amigável do wrapper — nunca um "enviado" falso.
+      setSendError(res.message || 'Não foi possível enviar a mensagem.');
+      return;
+    }
+    const sent = res.data.message;
+    setActive((prev) => prev ? { conversation: { ...prev.conversation, lastMessagePreview: sent.body.slice(0, 120) }, messages: [...prev.messages, sent] } : prev);
+    setConversations((list) => list.map((c) => c.id === active.conversation.id ? { ...c, lastMessagePreview: sent.body.slice(0, 120), lastMessageAt: sent.at } : c));
+    setDraft('');
+  }
+
   /** Escreve o termo de busca na URL (mantendo ?b= e o restante do estado). */
   function setQuery(next: string) {
     const qs = new URLSearchParams(params.toString());
@@ -71,8 +106,11 @@ export default function ConversasPage() {
     const res = await apiGet<{ conversation: Conversation; messages?: Message[] }>(
       `/api/conversations?businessId=${businessId}&id=${id}`, { scope: 'action', area: 'Conversas' },
     );
-    if (res.ok && res.data) setActive({ conversation: res.data.conversation, messages: res.data.messages || [] });
-    else if (!res.ok) setError(res.message);
+    if (res.ok && res.data) {
+      setActive({ conversation: res.data.conversation, messages: res.data.messages || [] });
+      setDraft('');
+      setSendError('');
+    } else if (!res.ok) setError(res.message);
   }
 
   if (denied) return <AccessDenied area="Conversas" />;
@@ -225,9 +263,23 @@ export default function ConversasPage() {
                     </div>
                   ))}
                 </div>
-                <div className="p-2 border-t border-zinc-200 bg-white flex gap-2">
-                  <input placeholder="Escreva uma mensagem…" aria-label="Mensagem" className="flex-1 rounded-md border border-zinc-300 px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-zinc-900" />
-                  <button className="text-sm font-semibold bg-zinc-900 text-white px-4 py-2 rounded-md">Enviar</button>
+                <div className="p-2 border-t border-zinc-200 bg-white">
+                  {sendError && <p role="alert" className="mb-2 text-xs font-medium bg-amber-600 text-white rounded-md px-2.5 py-1.5">{sendError}</p>}
+                  <form onSubmit={sendMessage} className="flex gap-2">
+                    <input
+                      value={draft}
+                      onChange={(e) => setDraft(e.target.value)}
+                      placeholder="Escreva uma mensagem…"
+                      aria-label="Mensagem"
+                      className="flex-1 rounded-md border border-zinc-300 px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-zinc-900"
+                    />
+                    {/* O botão só parece funcional quando é: desabilitado sem
+                        texto e durante o envio — nunca um "Enviar" de mentira. */}
+                    <button type="submit" disabled={sending || !draft.trim()}
+                      className="text-sm font-semibold bg-zinc-900 text-white px-4 py-2 rounded-md disabled:opacity-50 disabled:cursor-not-allowed">
+                      {sending ? 'Enviando…' : 'Enviar'}
+                    </button>
+                  </form>
                 </div>
               </>
             ) : (

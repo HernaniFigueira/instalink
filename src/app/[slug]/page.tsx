@@ -1,5 +1,6 @@
 import type { Metadata } from 'next';
 import { Fragment } from 'react';
+import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { getPublicData } from '@/lib/public';
 import { ThemeStyle } from '@/components/ThemeStyle';
@@ -123,7 +124,8 @@ export default async function PublicPage({ params }: { params: { slug: string } 
 
       {isOwnerPreview && (
         <div className="bg-amber-400 text-amber-950 text-center text-xs font-bold py-2 px-4">
-          <span className="inline-flex items-center gap-1.5 justify-center"><Icon n="eye" size={14} /> Pré-visualização — sua página ainda não está publicada.</span> <a href="/pagina" className="underline">Publicar agora</a>
+          <span className="inline-flex items-center gap-1.5 justify-center"><Icon n="eye" size={14} /> Pré-visualização — sua página ainda não está publicada.</span> {/* A1.2 · Bloco 3: navegação interna via Link (sem recarregar a aplicação). */}
+          <Link href="/pagina" className="underline">Publicar agora</Link>
         </div>
       )}
 
@@ -156,9 +158,11 @@ export default async function PublicPage({ params }: { params: { slug: string } 
 
         {/* White label: a marca do NEGÓCIO manda; o InstaLink fica discreto. */}
         <footer className="text-center pt-2 pb-1">
-          <a href="/" className="il-muted text-[10px] font-medium opacity-70 hover:opacity-100 hover:underline">
+          {/* A1.2 · Bloco 3: link interno do rodapé via Link (navegação do Next,
+              sem reload) — é interno ao app, não link externo. */}
+          <Link href="/" className="il-muted text-[10px] font-medium opacity-70 hover:opacity-100 hover:underline">
             Feito com InstaLink
-          </a>
+          </Link>
         </footer>
       </div>
 

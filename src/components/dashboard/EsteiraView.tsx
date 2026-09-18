@@ -40,6 +40,10 @@ export function EsteiraView() {
 
   const [leads, setLeads] = useState<Lead[]>([]);
   const [pipeline, setPipeline] = useState<BusinessPipeline | null>(null);
+  // A1.2 · Bloco 3: o nome da empresa vem do SERVIDOR (GET /api/leads →
+  // business.name, resolvido na mesma unidade do contexto). Nada de usar o
+  // `businessId` como se fosse nome — era isso que vazava para a mensagem.
+  const [businessName, setBusinessName] = useState('');
   const [members, setMembers] = useState<TeamMember[]>([]);
   const [services, setServices] = useState<ServiceItem[]>([]);
   const [professionals, setProfessionals] = useState<ProfessionalItem[]>([]);
@@ -92,7 +96,7 @@ export function EsteiraView() {
     if (!businessId) return;
     setLoading(true);
     try {
-      const res = await apiGet<{ leads: Lead[]; pipeline: BusinessPipeline; members: TeamMember[]; canEditPipeline?: boolean }>(
+      const res = await apiGet<{ leads: Lead[]; pipeline: BusinessPipeline; members: TeamMember[]; canEditPipeline?: boolean; business?: { id: string; name: string } | null }>(
         `/api/leads?businessId=${businessId}&limit=200`,
         { scope: 'area', area: 'Funil' },
       );
@@ -101,6 +105,9 @@ export function EsteiraView() {
         setPipeline(res.data.pipeline || null);
         setMembers(res.data.members || []);
         setCanEditPipeline(res.data.canEditPipeline === true);
+        // Só aceita o nome da MESMA unidade pedida (defesa em profundidade —
+        // a resposta já vem escopada pelo guard do servidor).
+        setBusinessName(res.data.business?.id === businessId ? (res.data.business.name || '') : '');
       }
     } finally {
       setLoading(false);
@@ -546,7 +553,7 @@ export function EsteiraView() {
                           >
                             {lead.phone && (
                               <a
-                                href={waLink(lead.phone, `Olá ${lead.name || ''}, tudo bem? Sou da equipe da ${pipeline?.businessId || 'empresa'}.`)}
+                                href={waLink(lead.phone, `Olá ${lead.name || ''}, tudo bem? Sou da equipe da ${businessName || 'empresa'}.`)}
                                 target="_blank"
                                 rel="noopener noreferrer"
                                 className="text-emerald-700 hover:underline font-semibold flex items-center gap-1"

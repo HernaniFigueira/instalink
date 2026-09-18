@@ -1,5 +1,6 @@
 'use client';
 import { useEffect, useRef, useState } from 'react';
+import Link from 'next/link';
 import type { Business, PublicBusiness, Professional, Service } from '@/lib/types';
 import { saveCustomerToken, clearCustomerToken } from '@/lib/client-auth';
 import { openSheet, closeSheet, onSheetChange, notifyAuthOk, gcalLink, type SheetState } from './sheet-bus';
@@ -216,7 +217,8 @@ export function CustomerAuthSheet({ business }: { business: PublicBusiness }) {
           <button onClick={submitLogin} disabled={loading} className="il-btn w-full font-extrabold py-3.5 disabled:opacity-50">
             {loading ? 'Entrando…' : 'Entrar'}
           </button>
-          <a href="/recuperar?kind=customer" className="block text-center text-sm font-bold il-muted hover:underline pt-1">Esqueci minha senha</a>
+          {/* A1.2 · Bloco 3: navegação interna via Link (sem recarregar a app). */}
+          <Link href="/recuperar?kind=customer" className="block text-center text-sm font-bold il-muted hover:underline pt-1">Esqueci minha senha</Link>
         </div>
       ) : (
         <div className="space-y-2.5">
