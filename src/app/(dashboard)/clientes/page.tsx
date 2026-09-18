@@ -2,7 +2,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
-import type { LeadStatus } from '@/lib/types';
+import type { BookingConfig, LeadStatus } from '@/lib/types';
 import { cn, money, paginate, waLink } from '@/lib/utils';
 import { humanDay, humanDateTime } from '@/lib/tz';
 import { BOOKING_STATUS, LEAD_STATUS, toneCls, type StatusDef } from '@/lib/status';
@@ -10,6 +10,7 @@ import { leadOriginLabel } from '@/lib/leads';
 import { ListSkeleton } from '@/components/ui';
 import { Icon } from '@/components/icons';
 import { NewBookingSheet } from '@/components/dashboard/NewBookingSheet';
+import { effectiveHorizonDays } from '@/lib/booking-ops';
 import { AccessDenied, useAreaLoad } from '@/components/dashboard/AccessNotice';
 import { usePanelPermissions } from '@/components/dashboard/usePanelPermissions';
 import { apiGet, apiSend } from '@/lib/api-client';
@@ -102,11 +103,18 @@ export default function ClientesPage() {
 
   useEffect(() => { load(); }, [load]);
 
+  // A2-B3 (F5): horizonte real do negócio para o "+ Novo agendamento".
+  const [bookingCfg, setBookingCfg] = useState<BookingConfig | null>(null);
+  // A2-B5 (F9): fuso do negócio para o sheet de agendamento.
+  const [bizTz, setBizTz] = useState('');
+
   function openBooking(p: Person) {
     setBookingFor(p);
-    apiGet<{ services?: any[]; professionals?: any[] }>(`/api/catalog/get?businessId=${businessId}`, { scope: 'action', area: 'Clientes' })
+    apiGet<{ services?: any[]; professionals?: any[]; business?: { booking?: BookingConfig; businessTimezone?: string } }>(`/api/catalog/get?businessId=${businessId}`, { scope: 'action', area: 'Clientes' })
       .then((res) => {
         if (!res.ok) { setError(res.message); return; }
+        if (res.data?.business?.booking) setBookingCfg(res.data.business.booking);
+        setBizTz(res.data?.business?.businessTimezone || '');
         setServices(res.data?.services || []);
         setPros(res.data?.professionals || []);
       });
@@ -456,7 +464,8 @@ export default function ClientesPage() {
           businessId={businessId}
           services={services}
           pros={pros}
-          horizonDays={60}
+          horizonDays={effectiveHorizonDays(bookingCfg)}
+          timezone={bizTz}
           initial={{ contactId: bookingFor.contactId, name: bookingFor.name, phone: bookingFor.phone, email: bookingFor.email }}
           onClose={() => setBookingFor(null)}
           onCreated={load}

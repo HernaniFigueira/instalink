@@ -7,6 +7,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Icon } from '@/components/icons';
 import { todayISO, addDaysISO } from '@/lib/tz';
+import { effectiveHorizonDays } from '@/lib/booking-ops';
 import { onlyDigits } from '@/lib/utils';
 import type { Professional, Service } from '@/lib/types';
 
@@ -19,11 +20,13 @@ interface Contact {
   lastInteraction: string;
 }
 
-export function NewBookingSheet({ businessId, services, pros, horizonDays, initial, onClose, onCreated }: {
+export function NewBookingSheet({ businessId, services, pros, horizonDays, timezone, initial, onClose, onCreated }: {
   businessId: string;
   services: Service[];
   pros: Professional[];
   horizonDays: number;
+  /** A2-B5 (F9): fuso do negócio — "hoje" da lista de dias (opcional; ''/ausente = default). */
+  timezone?: string;
   /** Cliente já definido (ex.: aberto a partir do CRM) — pula a busca. */
   initial?: { contactId?: string; name: string; phone: string; email?: string };
   onClose: () => void;
@@ -44,6 +47,8 @@ export function NewBookingSheet({ businessId, services, pros, horizonDays, initi
   const [time, setTime] = useState('');
   const [note, setNote] = useState('');
   const [slots, setSlots] = useState<string[]>([]);
+  // A2-B3 (F4): estado honesto do dia (fechado × lotado) para a mensagem.
+  const [dayState, setDayState] = useState<{ state?: string; full?: boolean; reason?: string } | null>(null);
   const [loadingSlots, setLoadingSlots] = useState(false);
   const [slotsError, setSlotsError] = useState('');
   const [saving, setSaving] = useState(false);
@@ -51,8 +56,9 @@ export function NewBookingSheet({ businessId, services, pros, horizonDays, initi
   const seq = useRef(0);
   const slotSeq = useRef(0);
 
-  const today = todayISO();
-  const maxDate = addDaysISO(today, Math.max(1, horizonDays || 60));
+  // A2-B5 (F9): "hoje" no fuso do negócio (o servidor continua validando).
+  const today = todayISO(new Date(), timezone || undefined);
+  const maxDate = addDaysISO(today, effectiveHorizonDays({ horizonDays }));
   const service = bookable.find((s) => s.id === serviceId);
   const eligiblePros = service?.professionalIds?.length
     ? pros.filter((p) => p.active !== false && service.professionalIds.includes(p.id))
@@ -61,7 +67,7 @@ export function NewBookingSheet({ businessId, services, pros, horizonDays, initi
   useEffect(() => { setProId(''); setTime(''); setSlots([]); setSlotsError(''); }, [serviceId]);
 
   useEffect(() => {
-    if (!serviceId || !date) { setSlots([]); setSlotsError(''); setLoadingSlots(false); return; }
+    if (!serviceId || !date) { setSlots([]); setSlotsError(''); setDayState(null); setLoadingSlots(false); return; }
     const mySeq = ++slotSeq.current;
     setLoadingSlots(true);
     setSlotsError('');
@@ -72,6 +78,7 @@ export function NewBookingSheet({ businessId, services, pros, horizonDays, initi
         if (mySeq !== slotSeq.current) return;
         if (!r.ok) throw new Error(d.error || 'Não foi possível carregar os horários.');
         setSlots(d.slots || []);
+        setDayState(d.closed || d.state ? { state: d.state, full: d.full, reason: d.reason } : null);
         if ((d.slots || []).length === 0 && d.closed) setSlotsError('');
       })
       .catch((e: any) => {
@@ -252,7 +259,13 @@ export function NewBookingSheet({ businessId, services, pros, horizonDays, initi
               ) : slotsError ? (
                 <p className="text-xs font-medium text-red-600 mt-1.5">{slotsError}</p>
               ) : slots.length === 0 ? (
-                <p className="text-xs text-amber-700 mt-1.5 bg-amber-50 border border-amber-200 rounded-md px-3 py-2">Nenhum horário disponível.</p>
+                <p className="text-xs text-amber-700 mt-1.5 bg-amber-50 border border-amber-200 rounded-md px-3 py-2">
+                  {dayState?.full
+                    ? 'Todos os horários deste dia estão ocupados. Escolha outro dia.'
+                    : dayState?.state === 'closed'
+                      ? 'Fechado neste dia. Escolha outro dia.'
+                      : 'Nenhum horário disponível.'}
+                </p>
               ) : (
                 <div className="flex flex-wrap gap-1.5 mt-1.5">
                   {slots.map((t) => (

@@ -215,6 +215,10 @@ export interface Business {
   address: string;
   mapsUrl: string;
   hours: Record<string, DayHours | null>; // 0=dom .. 6=sab
+  // A2-B5 (F9): fuso IANA do negócio para TODAS as regras de agenda
+  // (disponibilidade, exceções, horizonte, "hoje"). Ausente/inválido ⇒
+  // America/Sao_Paulo (default do produto). Nunca o fuso do navegador.
+  businessTimezone?: string;
   paymentMethods: string[]; // pix | card | cash | on_delivery
   pixKey: string;
   deliveryFee: number; // centavos (0 = sem taxa / a combinar)
@@ -278,6 +282,9 @@ export interface PublicBusiness {
   address: string;
   mapsUrl: string;
   hours: Record<string, DayHours | null>;
+  // A2-B5 (F9): fuso do negócio para a ilha de booking montar dias (o
+  // servidor segue sendo quem decide as regras).
+  businessTimezone?: string;
   paymentMethods: string[];
   deliveryFee: number; // centavos (preço público)
   minOrder: number; // centavos (regra pública)

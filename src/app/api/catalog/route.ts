@@ -9,6 +9,8 @@ import type { Professional } from '@/lib/types';
 import {
   applyToAllResultMessage, businessRules, followTogglePatch, planApplyBusinessHoursToAll, sanitizeWindows,
 } from '@/lib/schedule';
+import { validateAvailabilityException } from '@/lib/hours';
+import { todayISO, effectiveTimezone } from '@/lib/tz';
 
 // API unificada de catálogo (produtos, opções, serviços, equipe, agenda).
 // Toda mutação passa pela camada central de autorização (identidade →
@@ -208,6 +210,10 @@ export async function POST(req: NextRequest) {
           return { ok: true, updated: plan.update.length, skipped: plan.skip.length, message: applyToAllResultMessage(plan) };
         }
         // ── Exceções (dia fechado / horário especial) ──
+        // A2-B3 (F7.4/F7.5): só grava exceção com EFEITO REAL — data passada,
+        // janela invertida ou horário especial que não intersecta nenhuma
+        // regra do dia são RECUSADOS com mensagem clara (nunca salvos em
+        // silêncio para depois "não funcionar").
         case 'exception.save': {
           const date = String(body.date || '');
           if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) throw new Error('Data inválida.');
@@ -215,6 +221,18 @@ export async function POST(req: NextRequest) {
           const start = rx.test(body.start || '') ? body.start : '';
           const end = rx.test(body.end || '') ? body.end : '';
           const closed = body.closed !== false && !(start && end);
+          const check = validateAvailabilityException(
+            { date, closed, start, end },
+            {
+              // A2-B5 (F9): "hoje" no fuso do negócio da exceção.
+              today: todayISO(
+                new Date(),
+                effectiveTimezone(db.businesses.find((b) => b.id === businessId)?.businessTimezone),
+              ),
+              rules: db.availability.filter((a) => a.businessId === businessId),
+            },
+          );
+          if (!check.ok) throw new Error(check.error);
           const found = db.exceptions.find((e) => e.businessId === businessId && e.date === date);
           if (found) {
             found.closed = closed; found.start = start; found.end = end;

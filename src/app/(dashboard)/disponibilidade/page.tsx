@@ -17,6 +17,15 @@ import { ExceptionsManager, CatalogCrossLinks } from '@/components/dashboard/cat
 // calculada pelo painel) e dias especiais. Reusa toda a lógica protegida —
 // esta tela só expõe o que já existe. Nenhuma fórmula de agenda mudou.
 //
+// Lista curada (IANA): cobre os casos reais; qualquer outro fuso pode ser
+// gravado via API (o servidor valida IANA). Default do produto: São Paulo.
+const TIMEZONE_OPTIONS = [
+  'America/Sao_Paulo', 'America/Manaus', 'America/Belem', 'America/Recife',
+  'America/New_York', 'America/Chicago', 'America/Los_Angeles', 'America/Bogota',
+  'America/Buenos_Aires', 'Europe/Lisbon', 'Europe/London', 'Europe/Madrid',
+  'Europe/Berlin', 'UTC',
+];
+
 // A1.2 · Bloco 2 — separação de responsabilidades:
 //   • QUANDO atende  → aqui (janela semanal + dias especiais);
 //   • COMO o cliente reserva (antecedência, cancelamento, horizonte, buffer)
@@ -29,6 +38,8 @@ export default function DisponibilidadePage() {
   const [pros, setPros] = useState<Professional[]>([]);
   const [rules, setRules] = useState<Availability[]>([]);
   const [exceptions, setExceptions] = useState<AvailabilityException[]>([]);
+  // A2-B5 (F9): fuso do negócio (todas as regras de agenda usam este fuso).
+  const [bizTz, setBizTz] = useState('');
   const [loaded, setLoaded] = useState(false);
   const [msg, setMsg] = useState('');
   // 403 nesta tela → aviso amigável (o usuário continua logado).
@@ -46,6 +57,7 @@ export default function DisponibilidadePage() {
     setPros(d.professionals || []);
     setRules(d.availability || []);
     setExceptions(d.exceptions || []);
+    setBizTz(d.business?.businessTimezone || 'America/Sao_Paulo');
     setDenied(false);
     setLoaded(true);
   }, [businessId]);
@@ -95,6 +107,30 @@ export default function DisponibilidadePage() {
             onSave={async (payload) => { await call('exception.save', payload); }}
             onDelete={async (id) => { await call('exception.delete', { id }); }}
           />
+          {/* A2-B5 (F9): fuso das regras de agenda — "hoje", horizonte,
+              exceções e lembretes seguem este fuso (default São Paulo).
+              Inválido o servidor recusa (400); vazio volta ao default. */}
+          <div className="bg-white border border-zinc-200 rounded-lg p-5 flex flex-wrap items-center justify-between gap-3">
+            <div className="min-w-0">
+              <p className="font-bold text-sm">Fuso horário da agenda</p>
+              <p className="text-xs text-zinc-500 mt-0.5">"Hoje", exceções e prazos seguem este fuso — não o do celular de quem agenda.</p>
+            </div>
+            <select
+              value={bizTz}
+              onChange={async (e) => {
+                const tz = e.target.value;
+                const prev = bizTz;
+                setBizTz(tz); // otimista; erro reverte
+                const res = await apiSend(`/api/businesses/${businessId}`, 'PATCH', { businessTimezone: tz }, { scope: 'action', area: 'Disponibilidade' });
+                if (!res.ok) { setBizTz(prev); setMsg(res.message || 'Não foi possível salvar o fuso.'); setTimeout(() => setMsg(''), 3000); }
+                else { setMsg('Fuso salvo.'); setTimeout(() => setMsg(''), 2500); }
+              }}
+              className="rounded-md border border-zinc-300 px-3 py-2 text-sm font-semibold bg-white shrink-0"
+              aria-label="Fuso horário da agenda"
+            >
+              {TIMEZONE_OPTIONS.map((t) => <option key={t} value={t}>{t}</option>)}
+            </select>
+          </div>
           {/* A1.2 · Bloco 2: "como o cliente reserva" é configuração do
               negócio — mora em Configurações → Agenda. Atalho contextual
               (classe B): ajuda quem está aqui a achar a regra certa. */}

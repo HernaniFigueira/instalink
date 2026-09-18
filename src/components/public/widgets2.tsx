@@ -9,6 +9,9 @@ import { money, trackEvent, waLink } from './widgets';
 // (continua existindo internamente para agenda/conflito/buffer).
 import { publicPriceLabel, publicServiceSecondary } from '@/lib/pricing';
 import { SLOT_STATE_MESSAGE, slotStateView } from '@/lib/slot-states';
+import { effectiveHorizonDays } from '@/lib/booking-ops';
+import { dayAvailabilityMessage, type DayAvailability } from '@/lib/slots';
+import { addDaysISO, effectiveTimezone, todayISO } from '@/lib/tz';
 
 const WEEK = ['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb'];
 
@@ -26,11 +29,13 @@ export function BookingIsland({ business, services, professionals, title, initia
   const [serviceId, setServiceId] = useState(() =>
     initialServiceId && bookable.some((s) => s.id === initialServiceId) ? initialServiceId : '');
   const [date, setDate] = useState('');
-  const [dayInfo, setDayInfo] = useState<Record<string, { closed: boolean; free: number }>>({});
+  const [dayInfo, setDayInfo] = useState<Record<string, DayAvailability>>({});
   const [slots, setSlots] = useState<string[]>([]);
   const [occupied, setOccupied] = useState<string[]>([]);
   const [serverToday, setServerToday] = useState('');
   const [closed, setClosed] = useState(false);
+  // A2-B3 (F4): estado honesto do dia selecionado (fechado × lotado × livre).
+  const [dayState, setDayState] = useState<DayAvailability | null>(null);
   const [loadingSlots, setLoadingSlots] = useState(false);
   // Falha na busca NÃO pode aparecer como "sem horários livres" (regra de
   // lib/slot-states): estado de erro tem texto próprio e botão de nova tentativa.
@@ -59,15 +64,22 @@ export function BookingIsland({ business, services, professionals, title, initia
     setDayInfo({});
   }
 
-  const horizon = Math.max(1, Math.min(90, business.booking?.horizonDays || 60));
+  // A2-B3 (F5): horizonte EFETIVO do negócio (1–365) — sem teto arbitrário.
+  const horizon = effectiveHorizonDays(business.booking);
+  // A2-B5 (F9): a lista de dias nasce no FUSO DO NEGÓCIO (Intl), não no do
+  // navegador — perto da meia-noite os dias divergem. Sem incremento de 24h
+  // (DST): os dias vêm de addDaysISO sobre o "hoje" do fuso do negócio.
+  const bizTz = effectiveTimezone(business.businessTimezone);
+  const todayInBiz = todayISO(new Date(), bizTz);
   const allDays: Array<{ iso: string; label: string; dow: string }> = [];
   for (let i = 0; i < horizon; i++) {
-    const d = new Date(Date.now() + i * 86400000);
-    const iso = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
-    allDays.push({ iso, label: `${String(d.getDate()).padStart(2, '0')}/${String(d.getMonth() + 1).padStart(2, '0')}`, dow: WEEK[d.getDay()] });
+    const iso = addDaysISO(todayInBiz, i);
+    const p = new Intl.DateTimeFormat('pt-BR', { timeZone: bizTz, weekday: 'short', day: '2-digit', month: '2-digit' }).formatToParts(new Date(`${iso}T12:00:00Z`));
+    const g = (t: string) => p.find((x) => x.type === t)?.value || '';
+    allDays.push({ iso, label: g('day') + '/' + g('month'), dow: g('weekday').replace('.', '') });
   }
-  // Nunca exibe dia anterior ao hoje do servidor (fuso do negócio).
-  const days = serverToday ? allDays.filter((x) => x.iso >= serverToday) : allDays;
+  // Nunca exibe dia anterior ao hoje do servidor (fonte da verdade).
+  const days = serverToday ? allDays.filter((x) => x.iso >= serverToday) : allDays.filter((x) => x.iso >= todayInBiz);
 
   useEffect(() => {
     if (!serviceId) { setDayInfo({}); return; }
@@ -84,8 +96,11 @@ export function BookingIsland({ business, services, professionals, title, initia
 
   useEffect(() => {
     if (!serviceId || Object.keys(dayInfo).length === 0) return;
-    if (!date || dayInfo[date]?.closed) {
-      const first = days.find((x) => dayInfo[x.iso] && !dayInfo[x.iso].closed);
+    if (!date || (dayInfo[date]?.closed && !dayInfo[date]?.full)) {
+      // Auto-troca prefere dia ABERTO COM VAGA; aceita dia lotado (a causa é
+      // mostrada com honestidade); nunca pede dia fechado.
+      const first = days.find((x) => dayInfo[x.iso] && !dayInfo[x.iso].closed && !dayInfo[x.iso].full)
+        || days.find((x) => dayInfo[x.iso] && !dayInfo[x.iso].closed);
       if (first && first.iso !== date) { setDate(first.iso); setTime(''); }
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -103,11 +118,19 @@ export function BookingIsland({ business, services, professionals, title, initia
         setSlots(d.slots || []);
         setOccupied(d.occupied || []);
         setClosed(!!d.closed);
+        setDayState({
+          state: d.state || (d.closed ? 'closed' : 'open'),
+          closed: !!d.closed,
+          full: !!d.full,
+          free: (d.slots || []).length,
+          reason: d.reason,
+        });
         if (d.today) setServerToday(d.today);
       })
       .catch(() => {
         setSlots([]);
         setOccupied([]);
+        setDayState(null);
         setSlotsError(SLOT_STATE_MESSAGE.error);
       })
       .finally(() => setLoadingSlots(false));
@@ -226,18 +249,22 @@ export function BookingIsland({ business, services, professionals, title, initia
             <p className="text-xs font-bold il-muted mb-1.5">2 · DIA</p>
             <div className="flex gap-2 overflow-x-auto pb-1">
               {days.map((d) => {
+                // A2-B3 (F4): "fechado" desabilita; "lotado" continua clicável
+                // (o cliente vê a causa e pode abrir para conferir).
                 const info = dayInfo[d.iso];
-                const off = !!info && info.closed;
+                const off = !!info && info.closed && !info.full;
                 return (
                   <button key={d.iso} onClick={() => !off && setDate(d.iso)} disabled={off}
-                    title={off ? 'Sem vaga neste dia' : info ? `${info.free} horário(s) livre(s)` : undefined}
+                    title={off
+                      ? (info.reason === 'exception' ? 'Fechado neste dia (exceção)' : 'Fechado neste dia')
+                      : info?.full ? 'Dia lotado — sem vagas' : info ? `${info.free} horário(s) livre(s)` : undefined}
                     className={`shrink-0 px-3.5 py-2 border text-center ${date === d.iso ? 'il-chip-active border-transparent' : 'il-card'} ${off ? 'opacity-35' : ''}`}
                     style={{ borderRadius: 'var(--il-radius)' }}>
                     <span className="block text-[11px] font-semibold opacity-70">{d.dow}</span>
                     <span className="block text-sm font-extrabold">{d.label}</span>
                     {info && !off && (
                       <span className={`block text-[10px] font-bold mt-0.5 ${date === d.iso ? 'opacity-80' : 'il-accent'}`}>
-                        {info.free} {info.free === 1 ? 'vaga' : 'vagas'}
+                        {info.full ? 'lotado' : `${info.free} ${info.free === 1 ? 'vaga' : 'vagas'}`}
                       </span>
                     )}
                   </button>
@@ -260,7 +287,12 @@ export function BookingIsland({ business, services, professionals, title, initia
                   <button type="button" onClick={() => setSlotsTry((n) => n + 1)} className="font-bold underline">Tentar novamente</button>
                 </p>
               );
-              if (!sv.showGrid) return <p className="il-muted text-sm">Sem horários livres neste dia. Tente outro dia.</p>;
+              if (!sv.showGrid) {
+                // A2-B3 (F4): a causa explica e sugere ação — nunca "fechado"
+                // para um dia que está aberto e lotado.
+                const msg = dayState ? dayAvailabilityMessage(dayState) : SLOT_STATE_MESSAGE.empty;
+                return <p className="il-muted text-sm">{msg}</p>;
+              }
               return null;
             })()}
             {!loadingSlots && !slotsError && !closed && grid.length > 0 && (

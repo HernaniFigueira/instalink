@@ -17,7 +17,7 @@ import { visibleFaqItems } from '@/lib/faq';
 import { availableSocialLinks, resolvedNavItems } from '@/lib/nav';
 import { agentActive, renderGreeting } from '@/lib/agent';
 import { priceVisible } from '@/lib/pricing';
-import { openStatus } from '@/lib/hours';
+import type { OpenStatus } from '@/lib/hours';
 import {
   canBook as canBookPublic, isFeatureEnabled, productsVisible, servicesVisible, visibleBlocks,
   whatsappVisible,
@@ -53,7 +53,7 @@ function initials(name: string): string {
 export default async function PublicPage({ params }: { params: { slug: string } }) {
   const data = await getPublicData(params.slug);
   if (!data || data.notFound) notFound();
-  const { business, page, categories, products, options, optionValues, services, serviceCategories, professionals, reviews, isOwnerPreview } = data;
+  const { business, page, categories, products, options, optionValues, services, serviceCategories, professionals, reviews, isOwnerPreview, openNow } = data;
 
   if ((data as any).notPublished) {
     return (
@@ -142,6 +142,7 @@ export default async function PublicPage({ params }: { params: { slug: string } 
               catalog={{ categories, products, options, optionValues, services, serviceCategories, professionals, reviews }}
               extras={{
                 canBook, socialLinks, showWhatsapp,
+                openNow,
                 primaryCta: primaryCta
                   ? {
                       id: primaryCta.id,
@@ -251,6 +252,8 @@ function BlockView({ block, business, agent, catalog, extras }: {
     canBook: boolean;
     socialLinks: Array<{ id: string; label: string; url: string }>;
     showWhatsapp: boolean;
+    /** A2-B5 (F3): "Aberto agora" calculado no servidor (Availability+exceptions). */
+    openNow?: OpenStatus | null;
     /** O bloco cta absorvido pelo hero (CTA principal único). */
     primaryCta?: { id: string; label: string; target: string } | null;
   };
@@ -259,7 +262,10 @@ function BlockView({ block, business, agent, catalog, extras }: {
 
   switch (block.type) {
     case 'profile': {
-      const status = openStatus(business.hours);
+      // A2-B5 (F3): status vem do servidor pela MESMA fonte da Agenda
+      // (Availability + exceptions, fuso do negócio) — Business.hours não
+      // é mais regra operacional aqui.
+      const status = extras.openNow ?? null;
       return (
         <section>
           {/* CAPA emoldurada (não banner full-bleed): margem lateral do

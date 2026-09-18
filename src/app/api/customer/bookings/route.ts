@@ -3,9 +3,11 @@ import { customerFromRequest } from '@/lib/customer-auth';
 import { readDB, updateDB } from '@/lib/db';
 import { isFeatureEnabled } from '@/lib/features';
 import { onlyDigits, timeToMin } from '@/lib/utils';
-import { todayISO, nowHM, weekdayOf, addDaysISO, isValidDateISO } from '@/lib/tz';
+import { todayISO, nowHM, weekdayOf, addDaysISO, effectiveTimezone, isValidDateISO } from '@/lib/tz';
 import { computeSlots } from '@/lib/slots';
 import { applyBookingStatusTx } from '@/lib/booking-status';
+import { effectiveHorizonDays } from '@/lib/booking-ops';
+import { noteLeadReschedule } from '@/lib/pipeline';
 import type { DB } from '@/lib/types';
 
 function err(message: string, status: number): Error {
@@ -67,18 +69,16 @@ export async function PATCH(req: NextRequest) {
     if (!isFeatureEnabled(business, 'bookings')) {
       return NextResponse.json({ error: 'Este negócio não está com a agenda aberta no momento.' }, { status: 403 });
     }
-  // Módulo de agendamentos desligado: nada de agenda para o cliente.
-  if (!isFeatureEnabled(business, 'bookings')) {
-    return NextResponse.json({ bookings: [], cancelUntilMin: 0, moduleOff: true });
-  }
     const cfg = business.booking;
-    const today = todayISO();
+    // A2-B5 (F9): regras de prazo/cancelamento no FUSO DO NEGÓCIO.
+    const btz = effectiveTimezone(business.businessTimezone);
+    const today = todayISO(new Date(), btz);
     if (booking.date < today) {
       return NextResponse.json({ error: 'Este horário já passou.' }, { status: 400 });
     }
     if (booking.date === today) {
       const until = cfg?.cancelUntilMin ?? 120;
-      const diff = timeToMin(booking.time) - timeToMin(nowHM());
+      const diff = timeToMin(booking.time) - timeToMin(nowHM(new Date(), btz));
       if (diff < until) {
         return NextResponse.json({ error: `Alterações até ${until} min antes do horário. Fale com o negócio.` }, { status: 400 });
       }
@@ -89,7 +89,7 @@ export async function PATCH(req: NextRequest) {
       if (!isValidDateISO(date) || !/^\d{2}:\d{2}$/.test(time)) {
         return NextResponse.json({ error: 'Escolha data e horário.' }, { status: 400 });
       }
-      const maxDate = addDaysISO(today, Math.max(1, cfg?.horizonDays || 60));
+      const maxDate = addDaysISO(today, effectiveHorizonDays(cfg));
       if (date < today) return NextResponse.json({ error: 'Não é possível remarcar para o passado.' }, { status: 400 });
       if (date > maxDate) return NextResponse.json({ error: 'Data fora da agenda disponível.' }, { status: 400 });
       const service = db.services.find((s) => s.id === (serviceId || booking.serviceId) && s.businessId === business.id && s.bookable && s.active);
@@ -113,13 +113,15 @@ export async function PATCH(req: NextRequest) {
           serviceId: service.id, durationMin: service.durationMin,
           professionalId: '',
           eligibleProIds: service.professionalIds || [],
-          nowHM: date === todayISO() ? nowHM() : '',
+          nowHM: date === today ? nowHM(new Date(), btz) : '',
           leadMin: cfg?.leadMin || 0,
           bufferMin: cfg?.bufferMin || 0,
         });
         if (!r.slots.includes(time)) throw err('Este horário acabou de ser ocupado. Escolha outro.', 409);
         const finalPro = r.assign[time] || '';
         const now = new Date().toISOString();
+        const fromDate = target.date;
+        const fromTime = target.time;
         target.serviceId = service.id;
         target.professionalId = finalPro;
         target.date = date;
@@ -127,7 +129,13 @@ export async function PATCH(req: NextRequest) {
         if (note !== undefined) target.note = String(note || '').slice(0, 300);
         if (answers !== undefined) target.answers = (Array.isArray(answers) ? answers : []).map((x: any) => String(x || '').trim().slice(0, 300)).slice(0, 3);
         target.updatedAt = now;
-        target.history.push({ at: now, from: target.status, to: target.status, by: 'customer' });
+        target.history.push({ at: now, from: target.status, to: target.status, by: 'customer', note: `Reagendado de ${fromDate.slice(8, 10)}/${fromDate.slice(5, 7)} ${fromTime} para ${date.slice(8, 10)}/${date.slice(5, 7)} ${time}` });
+        // A2-B3 (F7.2): nota da esteira acompanha a remarcação do cliente.
+        noteLeadReschedule(d, {
+          businessId: business.id, leadId: target.leadId,
+          from: { date: fromDate, time: fromTime }, to: { date, time },
+          by: 'customer', now,
+        });
         const proName = finalPro ? d.professionals.find((p) => p.id === finalPro)?.name || '' : '';
         return { professionalId: finalPro, professionalName: proName };
       });

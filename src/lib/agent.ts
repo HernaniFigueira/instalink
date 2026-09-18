@@ -13,6 +13,7 @@ import type {
   AgentObjective, AgentTone, BusinessAgent, Business, DB, Service,
 } from './types';
 import { VALID_AGENT_OBJECTIVES, VALID_AGENT_TONES } from './types';
+import { scheduleSummary } from './hours';
 
 export const TONE_OPTIONS: Array<{ id: AgentTone; label: string; hint: string }> = [
   { id: 'profissional', label: 'Profissional', hint: 'Formal, direto e confiável' },
@@ -107,14 +108,13 @@ export function buildKnowledge(
   opts: { faq?: Array<{ q: string; a: string }> } = {},
 ): AgentKnowledge {
   const services: Service[] = db.services.filter((s) => s.businessId === business.id && s.active !== false);
-  const days = ['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb'];
-  const parts: string[] = [];
-  for (let d = 1; d <= 6; d++) {
-    const h = business.hours?.[String(d)];
-    if (h) parts.push(`${days[d]} ${h.open}–${h.close}`);
-  }
-  const sun = business.hours?.['0'];
-  if (sun) parts.push(`Dom ${sun.open}–${sun.close}`);
+  // A2-B5 (F3): horário de atendimento pela MESMA fonte da Agenda
+  // (Availability; fallback: horário cadastrado) — nada de Business.hours
+  // como regra paralela.
+  const hoursSummary = scheduleSummary(
+    business,
+    (db.availability || []).filter((a) => a.businessId === business.id),
+  );
   const agent = db.agents.find((a) => a.businessId === business.id);
   const professionals = (db.professionals || []).filter(
     (p) => p.businessId === business.id && p.active !== false,
@@ -131,7 +131,7 @@ export function buildKnowledge(
       pricePublic: s.showPrice !== false,
     })),
     professionals: professionals.map((p) => ({ name: p.name, role: p.role || '' })),
-    hours: parts.join(' • '),
+    hours: hoursSummary,
     address: business.address || '',
     faq: (opts.faq || []).filter((f) => (f.q || '').trim()),
     about: [business.about?.title, business.about?.text].filter(Boolean).join(' — '),

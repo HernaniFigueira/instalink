@@ -1,15 +1,35 @@
-// Timezone oficial do produto: America/Sao_Paulo.
-// TODA comparação de "hoje", elegibilidade, cancelamento, séries e filtros
-// por dia deve usar estes helpers — nunca toISOString().slice(0, 10),
-// que é UTC e erra o dia perto da meia-noite.
+// Timezone do produto: America/Sao_Paulo por padrão, CONFIGURÁVEL POR
+// NEGÓCIO (A2-B5/F9 — Business.businessTimezone). TODA comparação de "hoje",
+// elegibilidade, cancelamento, séries e filtros por dia deve usar estes
+// helpers — nunca toISOString().slice(0, 10), que é UTC e erra o dia perto
+// da meia-noite — e sempre com o fuso EFETIVO do negócio
+// (effectiveTimezone), jamais o do navegador, para regras.
 
 export const TZ = 'America/Sao_Paulo';
+/** Apelido semântico: o default do produto quando o negócio não configura. */
+export const DEFAULT_TIMEZONE = TZ;
+
+/** Fuso IANA é válido? ( Intl valida de graça; inválido ⇒ fallback.) */
+export function isValidTimezone(tz?: string | null): boolean {
+  if (!tz || typeof tz !== 'string') return false;
+  try {
+    new Intl.DateTimeFormat('en-US', { timeZone: tz });
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/** Fuso EFETIVO do negócio: configurado e válido, senão o default do produto. */
+export function effectiveTimezone(tz?: string | null): string {
+  return isValidTimezone(tz) ? (tz as string) : DEFAULT_TIMEZONE;
+}
 
 const DAY = 86400000;
 
-function parts(d: Date): { y: number; m: number; day: number; h: number; min: number } {
+function parts(d: Date, tz: string = DEFAULT_TIMEZONE): { y: number; m: number; day: number; h: number; min: number } {
   const p = new Intl.DateTimeFormat('en-CA', {
-    timeZone: TZ, year: 'numeric', month: '2-digit', day: '2-digit',
+    timeZone: effectiveTimezone(tz), year: 'numeric', month: '2-digit', day: '2-digit',
     hour: '2-digit', minute: '2-digit', hourCycle: 'h23',
   }).formatToParts(d);
   const g = (t: string) => Number(p.find((x) => x.type === t)?.value || 0);
@@ -20,15 +40,15 @@ function iso(y: number, m: number, d: number): string {
   return `${y}-${String(m).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
 }
 
-// Hoje (YYYY-MM-DD) no fuso do produto.
-export function todayISO(now = new Date()): string {
-  const p = parts(now);
+// Hoje (YYYY-MM-DD) no fuso informado (default: fuso do produto).
+export function todayISO(now = new Date(), tz?: string): string {
+  const p = parts(now, tz);
   return iso(p.y, p.m, p.day);
 }
 
-// Hora atual (HH:MM) no fuso do produto.
-export function nowHM(now = new Date()): string {
-  const p = parts(now);
+// Hora atual (HH:MM) no fuso informado (default: fuso do produto).
+export function nowHM(now = new Date(), tz?: string): string {
+  const p = parts(now, tz);
   return `${String(p.h).padStart(2, '0')}:${String(p.min).padStart(2, '0')}`;
 }
 

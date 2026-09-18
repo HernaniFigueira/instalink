@@ -15,7 +15,8 @@
     "smoke:ux": "node scripts/smoke-ux.mjs",
     "smoke:p3": "node scripts/smoke-p3.mjs",
     "master": "node scripts/master.mjs",
-    "smoke:p4": "node scripts/smoke-p4.mjs"
+    "smoke:p4": "node scripts/smoke-p4.mjs",
+    "smoke:agendar": "node scripts/smoke-agendar.mjs"
   },
   "dependencies": {
     "@vercel/blob": "^2.8.0",

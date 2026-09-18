@@ -5,16 +5,17 @@ import { canAccessBooking, requireBusiness, scopeBookings, scopeInfo } from '@/l
 import { customerFromRequest } from '@/lib/customer-auth';
 import { isFeatureEnabled, canBook as canBookModule } from '@/lib/features';
 import {
-  bookingDuration, needsClosure, rescheduleDecision,
+  bookingDuration, effectiveHorizonDays, effectiveManageLimit, needsClosure, rescheduleDecision,
   rescheduleForwardNote, rescheduleNote,
 } from '@/lib/booking-ops';
 import { applyBookingStatusTx } from '@/lib/booking-status';
-import { computeSlots } from '@/lib/slots';
+import { computeSlots, dayAvailability } from '@/lib/slots';
 import { bookingMode } from '@/lib/booking';
-import { createBookingTx } from '@/lib/booking-create';
+import { createBookingTx, resolveBookingIdentity } from '@/lib/booking-create';
+import { noteLeadReschedule } from '@/lib/pipeline';
 import { enqueueDueReminders } from '@/lib/automations';
 import { upsertContact } from '@/lib/contacts';
-import { todayISO, nowHM, weekdayOf, addDaysISO, isValidDateISO, isValidClockTime } from '@/lib/tz';
+import { todayISO, nowHM, weekdayOf, addDaysISO, effectiveTimezone, isValidDateISO, isValidClockTime } from '@/lib/tz';
 import { onlyDigits } from '@/lib/utils';
 import { rateLimit, ipFrom } from '@/lib/rate-limit';
 import type { BookingStatus, DB } from '@/lib/types';
@@ -43,36 +44,34 @@ export async function GET(req: NextRequest) {
       const scope = guard.ctx.professionalScope;
       const from = q.get('from') || '';
       const to = q.get('to') || '';
-      let all = scopeBookings(guard.db.bookings.filter((x) => x.businessId === businessId), scope);
-      if (isValidDateISO(from) && isValidDateISO(to)) {
-        all = all.filter((x) => x.date >= from && x.date <= to);
-      }
-      // AUTOMAÇÃO (lembrete antes do atendimento): a operação acabou de abrir
-      // a agenda — enfileira (uma única vez por agendamento) os lembretes de
-      // atendimentos de hoje/amanhã. Idempotente: abrir de novo não duplica.
-      try {
-        await updateDB((d: DB) => { enqueueDueReminders(d, businessId, todayISO()); });
-      } catch { /* lembrete é melhor-esforço: nunca bloqueia a agenda */ }
-      all = scopeBookings(
-        (await readDB()).bookings.filter((x) => x.businessId === businessId),
-        scope,
-      ).sort((a, b) => (a.date + a.time < b.date + b.time ? 1 : -1));
+      // A2-B3 (F6): UMA leitura só (guard.db já é o documento atual) — o GET
+      // lia o documento DUAS vezes e ainda escrevia lembretes no meio. GET
+      // não tem efeito colateral: lembretes hoje nascem na ESCRITA
+      // (createBookingTx e a mudança de status no PATCH), nunca na leitura.
+      let all = scopeBookings(guard.db.bookings.filter((x) => x.businessId === businessId), scope)
+        .sort((a, b) => (a.date + a.time < b.date + b.time ? 1 : -1));
       if (isValidDateISO(from) && isValidDateISO(to)) {
         all = all.filter((x) => x.date >= from && x.date <= to);
       }
       const page = Math.max(1, Number(q.get('page')) || 1);
-      const limit = Math.min(500, Math.max(1, Number(q.get('limit')) || 200));
+      // Limite EFETIVO explícito (F6): pediu 1000, recebe 500 — e a resposta
+      // diz isso (limitCapped/requestedLimit), sem cap silencioso.
+      const { limit, capped, requested } = effectiveManageLimit(q.get('limit'));
       // Pendências operacionais (horário já passou e ninguém fechou o
       // atendimento) — a agenda destaca, nunca altera status sozinha.
       const servicesById = Object.fromEntries(
         guard.db.services.filter((s) => s.businessId === businessId).map((s) => [s.id, s]),
       );
-      const today = todayISO();
-      const now = nowHM();
+      // A2-B5 (F9): "hoje" e "agora" no FUSO DO NEGÓCIO (nunca o do servidor
+      // nem o do navegador) — as regras operacionais seguem o negócio.
+      const btz = effectiveTimezone(business.businessTimezone);
+      const today = todayISO(new Date(), btz);
+      const now = nowHM(new Date(), btz);
       const slice = all.slice((page - 1) * limit, page * limit);
       return NextResponse.json({
         bookings: slice,
         total: all.length, page, limit,
+        ...(capped ? { limitCapped: true, requestedLimit: requested } : {}),
         today,
         needsClosure: slice.filter((b) => needsClosure(b, bookingDuration(servicesById[b.serviceId]), today, now)).map((b) => b.id),
         modules: { bookings: isFeatureEnabled(guard.ctx.business, 'bookings') },
@@ -89,8 +88,9 @@ export async function GET(req: NextRequest) {
       return NextResponse.json({ slots: [], closed: true, moduleOff: true });
     }
     const cfg = business.booking;
-    const today = todayISO();
-    const maxDate = addDaysISO(today, Math.max(1, cfg.horizonDays || 60));
+    const btz = effectiveTimezone(business.businessTimezone); // A2-B5 (F9)
+    const today = todayISO(new Date(), btz);
+    const maxDate = addDaysISO(today, effectiveHorizonDays(cfg));
 
     // O cliente NUNCA escolhe profissional: a grade é sempre "qualquer
     // profissional elegível livre" (o motor resolve internamente).
@@ -111,14 +111,15 @@ export async function GET(req: NextRequest) {
     const from = q.get('from') || '';
     const to = q.get('to') || '';
     if (isValidDateISO(from) && isValidDateISO(to)) {
-      const days: Record<string, { closed: boolean; free: number }> = {};
+      // A2-B3 (F4): cada dia carrega o ESTADO real (fechado × lotado × livre
+      // × passado) derivado do mesmo motor — a UI deixa de chamar de
+      // "fechado" um dia que está aberto e lotado.
+      const days: Record<string, ReturnType<typeof dayAvailability>> = {};
       for (let iso = from; iso <= to && iso <= maxDate; iso = addDaysISO(iso, 1)) {
-        if (iso < today) { days[iso] = { closed: true, free: 0 }; continue; }
-        const r = computeSlots({
-          ...base, dateISO: iso, weekday: weekdayOf(iso),
-          nowHM: iso === today ? nowHM() : '',
-        });
-        days[iso] = { closed: r.slots.length === 0, free: r.slots.length };
+        days[iso] = dayAvailability(
+          { ...base, dateISO: iso, weekday: weekdayOf(iso), nowHM: iso === today ? nowHM(new Date(), btz) : '' },
+          { today },
+        );
       }
       return NextResponse.json({ days, today });
     }
@@ -129,13 +130,21 @@ export async function GET(req: NextRequest) {
     }
     const r = computeSlots({
       ...base, dateISO: date, weekday: weekdayOf(date),
-      nowHM: date === today ? nowHM() : '',
+      nowHM: date === today ? nowHM(new Date(), btz) : '',
     });
+    const day = dayAvailability(
+      { ...base, dateISO: date, weekday: weekdayOf(date), nowHM: date === today ? nowHM(new Date(), btz) : '' },
+      { today },
+    );
     const pros = Object.fromEntries(base.professionals.map((p) => [p.id, p.name]));
     // `byPro` permite que a agenda (drag-and-drop) saiba em QUAL coluna o
     // horário realmente cabe, sem precisar de uma requisição por profissional.
+    // A2-B3 (F4): `state`/`reason`/`full` explicam HONESTAMENTE um dia sem
+    // horários (fechado por regra/exceção × lotado × hoje encerrou).
     return NextResponse.json({
-      slots: r.slots, occupied: r.occupied, closed: r.closed, assign: r.assign,
+      slots: r.slots, occupied: r.occupied, closed: r.closed, closedReason: r.closedReason,
+      state: day.state, full: day.full, reason: day.reason,
+      assign: r.assign,
       byPro: r.byProfessional, pros, today,
     });
   } catch {
@@ -174,8 +183,11 @@ export async function POST(req: NextRequest) {
 
     let customer = null as Awaited<ReturnType<typeof customerFromRequest>>;
     if (!isOwner) {
+      // A2-B2 (F1): a sessão do consumidor é OPCIONAL — /agendar e o widget
+      // aceitam GUEST (nome/telefone informados no fluxo, validados abaixo
+      // por resolveBookingIdentity). Sem sessão E sem identidade ⇒ 401
+      // login_required: o fluxo autenticado da página pública continua igual.
       customer = await customerFromRequest(req);
-      if (!customer) return NextResponse.json({ error: 'Entre para agendar.', code: 'login_required' }, { status: 401 });
     }
 
     const service = db.services.find((s) => s.id === body.serviceId && s.businessId === business.id && s.active);
@@ -191,8 +203,9 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Escolha data e horário.' }, { status: 400 });
     }
     const cfg = business.booking;
-    const today = todayISO();
-    const maxDate = addDaysISO(today, Math.max(1, cfg.horizonDays || 60));
+    const btz = effectiveTimezone(business.businessTimezone); // A2-B5 (F9)
+    const today = todayISO(new Date(), btz);
+    const maxDate = addDaysISO(today, effectiveHorizonDays(cfg));
     if (date < today) return NextResponse.json({ error: 'Não é possível agendar no passado.' }, { status: 400 });
     if (date > maxDate) return NextResponse.json({ error: 'Data fora da agenda disponível.' }, { status: 400 });
 
@@ -203,22 +216,38 @@ export async function POST(req: NextRequest) {
       ? db.contacts.find((c) => c.id === String(body.contactId) && c.businessId === business.id)
       : undefined;
 
-    // Identidade: cliente logado usa os dados da CONTA (nunca re-pergunta);
-    // dono digita os dados do cliente (ou usa o contato selecionado).
-    const name = isOwner
-      ? String(body.customerName || linkedContact?.name || '').trim().slice(0, 80)
-      : (customer!.name || '').trim().slice(0, 80);
-    const phone = isOwner
-      ? String(body.customerPhone || linkedContact?.phone || '').trim()
-      : (customer!.phone || '').trim();
+    // ── Identidade (A2-B2 · F1): UMA regra no servidor ──
+    // Cliente logado usa os dados da CONTA (nunca re-pergunta); GUEST de
+    // /agendar/widget informa nome+telefone validados aqui; dono digita ou
+    // usa o contato vinculado.
+    const identity = resolveBookingIdentity({
+      isOwner,
+      sessionCustomer: customer
+        ? { id: customer.id, name: customer.name, phone: customer.phone, email: customer.email }
+        : null,
+      body: { customerName: body.customerName, customerPhone: body.customerPhone, customerEmail: body.customerEmail },
+      linked: isOwner && linkedContact
+        ? { name: linkedContact.name, phone: linkedContact.phone, email: linkedContact.email }
+        : null,
+    });
+    if (!identity.ok) {
+      return NextResponse.json(
+        { error: identity.error, ...(identity.code ? { code: identity.code } : {}) },
+        { status: identity.code === 'login_required' ? 401 : 400 },
+      );
+    }
+    const name = identity.name;
+    const digits = identity.phoneDigits;
     if (!name) return NextResponse.json({ error: 'Informe o nome do cliente.' }, { status: 400 });
-    const digits = onlyDigits(phone);
     if (digits.length < 10) {
-      if (!isOwner) {
+      if (identity.source !== 'owner') {
         return NextResponse.json({ error: 'Precisamos do seu WhatsApp para confirmar.', code: 'phone_required' }, { status: 400 });
       }
       return NextResponse.json({ error: 'Informe um WhatsApp válido.' }, { status: 400 });
     }
+    // E-mail informado no fluxo (A2-B2 · F7.3): passa a ser USADO (contato/lead),
+    // complementando a sessão/contato quando eles não têm e-mail.
+    const email = identity.email || linkedContact?.email || customer?.email || '';
 
     // CONSENTIMENTO EXPLÍCITO (nunca presumido): só o PRÓPRIO cliente marca a
     // caixa no ato da reserva; cadastro/agendamento sozinho NÃO vira opt-in.
@@ -238,7 +267,7 @@ export async function POST(req: NextRequest) {
         id: customer?.id || linkedContact?.customerId || '',
         name,
         phone: digits,
-        email: customer?.email || linkedContact?.email || '',
+        email,
       },
       linkedContact: isOwner && linkedContact
         ? {
@@ -287,8 +316,9 @@ export async function PATCH(req: NextRequest) {
       if (!isValidDateISO(date) || !isValidClockTime(time)) {
         return NextResponse.json({ error: 'Escolha data e horário.' }, { status: 400 });
       }
-      const today = todayISO();
-      const maxDate = addDaysISO(today, Math.max(1, business.booking?.horizonDays || 60));
+      const patchTz = effectiveTimezone(business.businessTimezone); // A2-B5 (F9)
+      const today = todayISO(new Date(), patchTz);
+      const maxDate = addDaysISO(today, effectiveHorizonDays(business.booking));
       if (date < today) return NextResponse.json({ error: 'Não é possível remarcar para o passado.' }, { status: 400 });
       if (date > maxDate) return NextResponse.json({ error: 'Data fora da agenda disponível.' }, { status: 400 });
       const service = db.services.find((s) => s.id === current.serviceId && s.businessId === business.id);
@@ -320,7 +350,7 @@ export async function PATCH(req: NextRequest) {
           serviceId: service.id, durationMin: service.durationMin,
           professionalId: proId,
           eligibleProIds: service.professionalIds || [],
-          nowHM: date === todayISO() ? nowHM() : '',
+          nowHM: date === todayISO(new Date(), patchTz) ? nowHM(new Date(), patchTz) : '',
           leadMin: business.booking?.leadMin || 0,
           bufferMin: business.booking?.bufferMin || 0,
         });
@@ -343,9 +373,23 @@ export async function PATCH(req: NextRequest) {
             previousId: target.id,
             rescheduleCount: (target.rescheduleCount || 0) + 1,
             history: [{ at: now, from: '', to: decision.nextStatus, by: 'owner', note }],
+            // A2-B3 (F7.2): a cadeia de reagendamento mantém o vínculo com o
+            // lead — o lead passa a apontar para o atendimento FUTURO, não
+            // para o registro antigo (nota "Agendado para..." nunca fica
+            // apontando para o passado).
+            leadId: target.leadId || undefined,
           });
           target.history.push({ at: now, from: target.status, to: target.status, by: 'owner', note: rescheduleForwardNote({ date, time }) });
           target.updatedAt = now;
+          if (target.leadId) {
+            const lead = d.leads.find((l) => l.id === target.leadId && l.businessId === business.id);
+            if (lead) lead.bookingId = newId;
+          }
+          noteLeadReschedule(d, {
+            businessId: business.id, leadId: target.leadId,
+            from: { date: target.date, time: target.time }, to: { date, time },
+            by: 'owner', now,
+          });
           upsertContact(d, {
             businessId: business.id, customerId: target.customerId || '',
             name: target.customerName, phone: target.customerPhone, source: 'reagendamento', now,
@@ -354,6 +398,8 @@ export async function PATCH(req: NextRequest) {
         }
 
         // pending/confirmed: move o MESMO atendimento, mantendo o status.
+        const fromDate = target.date;
+        const fromTime = target.time;
         target.date = date;
         target.time = time;
         // Profissional do destino: o escolhido explicitamente vence. Sem
@@ -364,6 +410,13 @@ export async function PATCH(req: NextRequest) {
         target.updatedAt = now;
         target.history.push({ at: now, from: target.status, to: decision.nextStatus, by: 'owner', note });
         if (target.status !== decision.nextStatus) target.status = decision.nextStatus;
+        // A2-B3 (F7.2): a nota da esteira ("Agendado para …") acompanha a
+        // remarcação — sem nota stale apontando para o dia antigo.
+        noteLeadReschedule(d, {
+          businessId: business.id, leadId: target.leadId,
+          from: { date: fromDate, time: fromTime }, to: { date, time },
+          by: 'owner', now,
+        });
         return { created: false, newId: target.id };
       });
       return NextResponse.json({ ok: true, ...result, moved: decision.kind === 'move', reason: decision.reason });
@@ -373,13 +426,21 @@ export async function PATCH(req: NextRequest) {
     // P4: a regra está na FUNÇÃO OFICIAL (lib/booking-status.ts), que a automação
     // também usa — máquina de estados, histórico e mensagens do P3 num só lugar.
     const to = body.status as BookingStatus;
-    const applied = await updateDB((d) => applyBookingStatusTx(d, {
-      businessId: business.id,
-      bookingId: String(body.id || ''),
-      to,
-      by: 'owner',
-      note: body.note ? String(body.note) : undefined,
-    }));
+    const applied = await updateDB((d) => {
+      const r = applyBookingStatusTx(d, {
+        businessId: business.id,
+        bookingId: String(body.id || ''),
+        to,
+        by: 'owner',
+        note: body.note ? String(body.note) : undefined,
+      });
+      if (r.ok) {
+        // A2-B3 (F6): lembretes vencidos nascem na ESCRITA (idempotente por
+        // agendamento) — o GET manage parou de ter efeito colateral.
+        try { enqueueDueReminders(d, business.id, todayISO(new Date(), effectiveTimezone(business.businessTimezone))); } catch { /* melhor-esforço */ }
+      }
+      return r;
+    });
     if (!applied.ok) {
       return NextResponse.json({ error: applied.error || 'Não foi possível atualizar.' }, { status: applied.status_code || 422 });
     }

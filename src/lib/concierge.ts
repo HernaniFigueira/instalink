@@ -13,6 +13,7 @@ import { parseKnowledgeOverride } from './agent';
 import { isFeatureEnabled, whatsappVisible } from './features';
 import { priceVisible } from './pricing';
 import { agentFlowStep, type AgentFlowState, type FlowContext } from './agent-flow';
+import { scheduleSummary } from './hours';
 
 export interface ConciergeAction { label: string; target: string; payload?: Record<string, any> }
 // target: '#produtos' | '#servicos' | '#agendar' | '#orcamento' | '#contato' | 'whatsapp' | 'flow'
@@ -70,6 +71,8 @@ export function conciergeAnswer(
 
   const products = db.products.filter((p) => p.businessId === bId && p.active);
   const services = db.services.filter((s) => s.businessId === bId && s.active);
+  // A2-B5 (F3): regras da Agenda para o resumo de horário (fonte única).
+  const rulesForHours = (db.availability || []).filter((a) => a.businessId === bId);
   const cats = db.categories.filter((c) => c.businessId === bId && c.active);
 
   const has = (...words: string[]) => words.some((w) => q.includes(norm(w)));
@@ -141,17 +144,11 @@ export function conciergeAnswer(
 
   // ── Intenções diretas ─────────────────────────────────────
   // Horário de FUNCIONAMENTO é pergunta sobre a empresa (vem antes de
-  // "agendar", que também fala em horário). Fonte: business.hours.
+  // "agendar", que também fala em horário). A2-B5 (F3): a resposta vem da
+  // MESMA fonte da Agenda (Availability; fallback: horário cadastrado) —
+  // o cliente nunca vê dois horários diferentes.
   if (has('funcionamento', 'que horas abre', 'abre', 'fecha', 'aberto', 'horario de atendimento')) {
-    const days = ['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb'];
-    const parts: string[] = [];
-    for (let d = 1; d <= 6; d++) {
-      const h = business.hours?.[String(d)];
-      if (h) parts.push(`${days[d]} ${h.open}–${h.close}`);
-    }
-    const h0 = business.hours?.['0'];
-    const sun = h0 ? `Dom ${h0.open}–${h0.close}` : 'Dom fechado';
-    const txt = parts.length ? `${parts.join(' • ')} • ${sun}` : '';
+    const txt = scheduleSummary(business, rulesForHours);
     return { intent: 'hours', reply: txt ? `Nosso horário: ${txt}` : 'Fale com a gente no WhatsApp para saber os horários!', actions: txt ? [] : [wa] };
   }
   if (has('agendar', 'agenda', 'marcar', 'reserva', 'horario', 'hora', 'vaga')) {
