@@ -9,6 +9,7 @@ import { canBook as canBookModule, isFeatureEnabled, whatsappVisible } from '@/l
 import { visibleFaqItems } from '@/lib/faq';
 import { customerFromRequest } from '@/lib/customer-auth';
 import { onlyDigits } from '@/lib/utils';
+import { ingestLead, getBusinessPipeline, normalizeLeadStageId, stageForLegacyStatus, moveLeadStage } from '@/lib/pipeline';
 import { rateLimit, ipFrom } from '@/lib/rate-limit';
 import type { DB } from '@/lib/types';
 
@@ -141,25 +142,49 @@ export async function POST(req: NextRequest) {
     await updateDB((d) => {
       const now = new Date().toISOString();
       d.events.push({ id: randomUUID(), businessId, type: 'ai_started', path: '', meta: { intent: answer.intent, agent: agent.name }, createdAt: now });
-      // CRM: interesse captado vira/atualiza lead — o AGENDAMENTO em si só
-      // acontece pelo fluxo acima (createBookingTx).
+      // CRM: interesse captado via ingestLead (única porta) — preserva pipeline,
+      // stageHistory e gatilhos P4. O AGENDAMENTO em si só acontece pelo fluxo acima (createBookingTx).
       if (customer && agent.objectives.includes('interesse') && raw.trim().length > 3 && answer.intent !== 'greeting' && !isFlowIntent) {
-        const digits = onlyDigits(customer.phone || '');
-        const existing = d.leads.find((l) =>
-          l.businessId === businessId &&
-          ((l.customerId && l.customerId === customer.id) || (digits && onlyDigits(l.phone) === digits)));
-        if (existing) {
-          existing.lastInteraction = now;
-          if (existing.status === 'new') existing.status = 'contacted';
-          if (answer.intent === 'interest') existing.interest = raw.slice(0, 200);
-        } else {
-          d.leads.push({
-            id: randomUUID(), businessId, customerId: customer.id,
-            name: customer.name || '', phone: digits, email: customer.email || '',
-            instagram: '', origin: 'agente', interest: raw.slice(0, 200),
-            action: 'conversa_agente', status: 'new', createdAt: now, lastInteraction: now,
-          });
-          d.events.push({ id: randomUUID(), businessId, type: 'lead_created', path: '', meta: { origin: 'agente' }, createdAt: now });
+        try {
+          // ingestLead imported statically
+          const digits = onlyDigits(customer.phone || '');
+          const existing = d.leads.find((l) =>
+            l.businessId === businessId &&
+            ((l.customerId && l.customerId === customer.id) || (digits && onlyDigits(l.phone) === digits)));
+          if (existing) {
+            existing.lastInteraction = now;
+            // A3: não escreve status cru; usa máquina oficial para avançar de new para contacted quando aplicável
+            if (answer.intent === 'interest') existing.interest = raw.slice(0, 200);
+            // Se lead ainda em 'new', move para etapa correspondente a 'contacted' via máquina oficial
+            try {
+              // pipeline helpers imported statically
+              const pipeline = getBusinessPipeline(d, businessId);
+              const currentStage = normalizeLeadStageId(pipeline, existing);
+              if (currentStage === 'new') {
+                const target = stageForLegacyStatus(pipeline, 'contacted');
+                if (target) moveLeadStage(d, { businessId, leadId: existing.id, toStageId: target, actor: { id: 'agent', name: agent.name }, now });
+              }
+            } catch {}
+          } else {
+            // ingest imported statically
+            const res = ingestLead(d, {
+              businessId,
+              customerId: customer.id,
+              name: customer.name || '',
+              phone: digits,
+              email: customer.email || '',
+              interest: raw.slice(0, 200),
+              source: 'agente',
+              actor: { id: customer.id, name: customer.name || 'Cliente', type: 'customer' },
+              now,
+            });
+            res.lead.action = 'conversa_agente';
+          }
+        } catch (e) {
+          // CRM auxiliar falhou: não cria lead paralelo, apenas não persiste CRM.
+          // Operação principal do assistente permanece (reply já resolvido).
+          // Em prod, log discreto para observabilidade.
+          void e;
         }
       }
     });

@@ -2,6 +2,9 @@ import { NextRequest, NextResponse } from 'next/server';
 import { requireBusiness } from '@/lib/access';
 import { onlyDigits } from '@/lib/utils';
 import { contactNotes } from '@/lib/contacts';
+import { getBusinessPipeline, normalizeLeadStageId } from '@/lib/pipeline';
+import { taskDueLabel } from '@/lib/automation/tasks';
+import { todayISO } from '@/lib/tz';
 
 // GET ?businessId=&q=&page= — cliente 360 (contato-centric).
 // A base nasce da relação BusinessCustomer/Contact (cadastro/login na página
@@ -37,8 +40,9 @@ export async function GET(req: NextRequest) {
       id: string; customerName: string; date: string; time: string; status: string; serviceId: string;
       professionalId: string; rescheduleCount: number; previousId: string;
     }>;
-    leads: Array<{ id: string; origin: string; status: string; interest: string; action: string; createdAt: string }>;
+    leads: Array<{ id: string; origin: string; status: string; stageId: string; stageName: string; interest: string; action: string; createdAt: string; priority: string; assignedUserId: string; stageHistory: any[]; lastInteraction: string }>;
     conversations: Array<{ id: string; channel: string; status: string; at: string; preview: string; unread: number }>;
+    tasks: Array<{ id: string; title: string; status: string; dueAt: string; dueLabel: string; assignedUserId: string; assigneeName: string; leadId: string; bookingId: string }>;
     lastSeen: string;
   }
 
@@ -59,7 +63,7 @@ export async function GET(req: NextRequest) {
       p = {
         key, contactId: '', note: '', notes: [], customerId, name, phone: digits, email: '', registered: false, customerSince: '',
         source: '', marketingOptIn: false,
-        orders: 0, spent: 0, lastOrderAt: '', bookings: [], leads: [], conversations: [], lastSeen: '',
+        orders: 0, spent: 0, lastOrderAt: '', bookings: [], leads: [], conversations: [], tasks: [], lastSeen: '',
       };
       map.set(key, p);
     }
@@ -108,11 +112,37 @@ export async function GET(req: NextRequest) {
     const at = `${b.date}T${b.time}:00`;
     if (!p.lastSeen || at > p.lastSeen) p.lastSeen = at;
   }
+  const pipeline = getBusinessPipeline(db, businessId);
   for (const l of db.leads.filter((x) => x.businessId === businessId)) {
     const p = get(l.customerId, l.phone, l.name);
     if (!p) continue;
-    p.leads.push({ id: l.id, origin: l.origin, status: l.status, interest: l.interest || '', action: l.action || '', createdAt: l.createdAt });
+    const stageId = normalizeLeadStageId(pipeline, l);
+    const stage = pipeline.stages.find((s) => s.id === stageId);
+    p.leads.push({ id: l.id, origin: l.origin, status: l.status, stageId, stageName: stage?.name || stageId, interest: l.interest || '', action: l.action || '', createdAt: l.createdAt, priority: l.priority || 'medium', assignedUserId: l.assignedUserId || '', stageHistory: l.stageHistory || [], lastInteraction: l.lastInteraction || l.createdAt });
     if (!p.lastSeen || l.createdAt > p.lastSeen) p.lastSeen = l.createdAt;
+    const li = l.lastInteraction || l.createdAt;
+    if (!p.lastSeen || li > p.lastSeen) p.lastSeen = li;
+  }
+  // Tarefas vinculadas à pessoa (por lead/booking/customer)
+  const today = todayISO();
+  for (const task of (db.tasks || []).filter((x) => x.businessId === businessId)) {
+    let p: any = null;
+    if (task.leadId) {
+      const lead = db.leads.find((l) => l.id === task.leadId && l.businessId === businessId);
+      if (lead) p = get(lead.customerId, lead.phone, lead.name);
+    }
+    if (!p && task.bookingId) {
+      const b = db.bookings.find((x) => x.id === task.bookingId && x.businessId === businessId);
+      if (b) p = get(b.customerId, b.customerPhone, b.customerName);
+    }
+    if (!p && task.customerId) {
+      const c = db.contacts.find((x) => (x.id === task.customerId || x.customerId === task.customerId) && x.businessId === businessId);
+      if (c) p = get(c.customerId, c.phone, c.name);
+    }
+    if (!p) continue;
+    const assignee = task.assignedUserId ? db.users.find((u) => u.id === task.assignedUserId) : null;
+    p.tasks.push({ id: task.id, title: task.title, status: task.status, dueAt: task.dueAt || '', dueLabel: taskDueLabel(task.dueAt || '', today), assignedUserId: task.assignedUserId || '', assigneeName: assignee?.name || '', leadId: task.leadId || '', bookingId: task.bookingId || '' });
+    if (!p.lastSeen || task.updatedAt > p.lastSeen) p.lastSeen = task.updatedAt;
   }
   // Conversas (WhatsApp/agente) entram como eventos independentes do histórico.
   const convById = new Map(db.conversations.filter((c) => c.businessId === businessId).map((c) => [c.id, c]));

@@ -168,15 +168,31 @@ export async function PATCH(req: NextRequest) {
       if (!l) throw err('Cliente não encontrado.', 404);
 
       // 1. Mudança de estágio por stageId (máquina oficial — PipelineStage)
-      if (stageId && stageId !== l.stageId) {
-        moveLeadStage(d, {
-          businessId,
-          leadId: l.id,
-          toStageId: stageId,
-          note: body.note,
-          actor,
-        });
-        stageChanged = true;
+      // A3: `scheduled` é estrutural de agenda — nunca via PATCH manual sem booking.
+      if (stageId) {
+        if (stageId === 'scheduled') {
+          throw err('Mover para Agendado requer agendamento real. Use o fluxo de agendamento.', 422);
+        }
+        if (stageId !== l.stageId) {
+          // também bloqueia se o destino normalizado for scheduled (alias)
+          const pipelineTmp = getBusinessPipeline(d, businessId);
+          const resolved = stageForLegacyStatus(pipelineTmp, stageId) || stageId;
+          // resolveStageId pode ser mais preciso, mas guard simples:
+          if (resolved === 'scheduled') {
+            throw err('Mover para Agendado requer agendamento real. Use o fluxo de agendamento.', 422);
+          }
+          moveLeadStage(d, {
+            businessId,
+            leadId: l.id,
+            toStageId: stageId,
+            note: body.note,
+            actor,
+          });
+          stageChanged = true;
+        } else {
+          // no-op mas repara projeção silenciosamente (moveLeadStage já faz, chamamos para reparar)
+          try { moveLeadStage(d, { businessId, leadId: l.id, toStageId: stageId, actor }); } catch {}
+        }
       }
       // 2. Entrada legada em LeadStatus (compatibilidade — A1.2 · Bloco 2 · F1):
       //    NUNCA escreve estado diretamente. O status é convertido

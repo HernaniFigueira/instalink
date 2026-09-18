@@ -544,7 +544,7 @@ describe('A1.2 B2 — PipelineStage é a máquina oficial; LeadStatus é projeç
       ['lost', 'lost'],
     ];
     for (const [stageId, status] of expected) {
-      const moved = moveLeadStage(db, { businessId: 'biz-1', leadId: lead.id, toStageId: stageId, actor });
+      const moved = moveLeadStage(db, { businessId: 'biz-1', leadId: lead.id, toStageId: stageId, actor, ...(stageId==='scheduled' ? { allowScheduledTransition: true } : {}) });
       expect(moved.stageId).toBe(stageId);
       expect(moved.status).toBe(status); // projeção derivada da etapa
     }

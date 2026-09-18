@@ -2,7 +2,8 @@
 import { useCallback, useEffect, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
-import type { BookingConfig, LeadStatus } from '@/lib/types';
+import type { BookingConfig, LeadStatus, BusinessPipeline, PipelineStage } from '@/lib/types';
+import { stagesInOrder } from '@/lib/pipeline-stages';
 import { cn, money, paginate, waLink } from '@/lib/utils';
 import { humanDay, humanDateTime } from '@/lib/tz';
 import { BOOKING_STATUS, LEAD_STATUS, toneCls, type StatusDef } from '@/lib/status';
@@ -29,8 +30,9 @@ interface Person {
     id: string; customerName: string; date: string; time: string; status: string; service: string;
     professional?: string; rescheduleCount?: number; previousId?: string;
   }>;
-  leads: Array<{ id: string; origin: string; status: string; interest: string; action: string; createdAt: string }>;
+  leads: Array<{ id: string; origin: string; status: string; stageId: string; stageName: string; interest: string; action: string; createdAt: string; stageHistory?: any[]; priority?: string; assignedUserId?: string; lastInteraction?: string }>;
   conversations?: Array<{ id: string; channel: string; status: string; at: string; preview: string; unread: number }>;
+  tasks?: Array<{ id: string; title: string; status: string; dueAt: string; dueLabel: string; assignedUserId: string; assigneeName: string; leadId: string; bookingId: string }>;
   lastSeen: string;
 }
 
@@ -42,8 +44,10 @@ function eventDay(iso: string): string {
   return `${Number(d)} ${MES[Number(m) - 1] || m}`;
 }
 
+// A3: etapa é a verdade; LEAD_STATUS é projeção. Navegação sequencial via pipeline quando disponível.
 const NEXT_LEAD: Record<string, LeadStatus | ''> = { new: 'contacted', contacted: 'qualified', qualified: 'converted' };
 const NEXT_LEAD_LABEL: Record<string, string> = { new: 'Marcar contato', contacted: 'Qualificar', qualified: 'Marcar conversão' };
+
 export default function ClientesPage() {
   const params = useSearchParams();
   const router = useRouter();
@@ -86,6 +90,7 @@ export default function ClientesPage() {
   // Nada de oferecer porta que o servidor vai negar em seguida.
   const { permissions, ready: permsReady } = usePanelPermissions();
   const canFunil = permsReady && permissions.leads === true;
+  const [pipeline, setPipeline] = useState<BusinessPipeline | null>(null);
 
   const load = useCallback(async () => {
     if (!businessId) return;
@@ -99,6 +104,11 @@ export default function ClientesPage() {
     setTotal(d.total || 0);
     setPages(d.pages || 1);
     setLoaded(true);
+    // Busca esteira para renderizar etapa real (stageId) e ações contextuais
+    try {
+      const pRes = await apiGet<{ pipeline?: BusinessPipeline }>(`/api/pipeline?businessId=${businessId}`, { scope: 'area', area: 'Clientes' });
+      if (pRes.ok && (pRes.data as any)?.pipeline) setPipeline((pRes.data as any).pipeline);
+    } catch {}
   }, [businessId, search, page, report]);
 
   useEffect(() => { load(); }, [load]);
@@ -158,20 +168,51 @@ export default function ClientesPage() {
     return () => clearTimeout(t);
   }, [q]);
 
-  async function setLead(id: string, status: string) {
+  async function setLead(id: string, statusOrStage: string) {
     setError('');
-    const res = await apiSend('/api/leads', 'PATCH', { businessId, id, status }, { scope: 'action', area: 'Clientes' });
+    if (!pipeline) { setError('Aguarde carregar as etapas do funil.'); return; }
+    // A3 fechamento — mutação sempre via PipelineStage real, nunca via LeadStatus legado
+    if (!pipeline.stages.some((s) => s.id === statusOrStage)) {
+      setError('Etapa inválida para este funil.');
+      return;
+    }
+    const res = await apiSend('/api/leads', 'PATCH', { businessId, id, stageId: statusOrStage }, { scope: 'action', area: 'Clientes' });
     if (!res.ok) { setError(res.message || 'Não foi possível atualizar.'); return; }
     load();
   }
+  function nextStageForLead(lead: { stageId?: string; status: string }): string {
+    if (!pipeline) return '';
+    const curId = lead.stageId || '';
+    // sem stageId ainda não resolvido: não avança sem pipeline real (evita mutação legada)
+    if (!curId) return '';
+    const ordered = [...pipeline.stages].sort((a,b)=>a.order-b.order);
+    const idx = ordered.findIndex((s)=> s.id === curId);
+    if (idx >=0 && idx+1 < ordered.length) return ordered[idx+1].id;
+    // não usa LEAD_STATUS como fallback de mutação — pipeline é a verdade
+    return '';
+  }
+  function nextStageLabelForLead(lead: { stageId?: string; status: string }): string {
+    const nid = nextStageForLead(lead);
+    if (!nid) return '';
+    if (pipeline) { const s = pipeline.stages.find((x)=>x.id===nid); if (s) return `Avançar → ${s.name}`; }
+    return (NEXT_LEAD_LABEL as any)[lead.status] || `Avançar`;
+  }
+  
 
   const bookDef = (s: string): StatusDef => (BOOKING_STATUS as Record<string, StatusDef>)[s] || { panel: s, tone: 'zinc' };
   const leadDef = (s: string): StatusDef => (LEAD_STATUS as Record<string, StatusDef>)[s] || { panel: s, tone: 'zinc' };
+  const stageDef = (lead: { stageId?: string; status: string }): StatusDef => {
+    if (lead.stageId && pipeline) {
+      const st = pipeline.stages.find((x)=>x.id===lead.stageId);
+      if (st) return { panel: st.name, tone: (st.color as any) || 'zinc', consumer: st.name, desc: '' } as unknown as StatusDef;
+    }
+    return leadDef(lead.status);
+  };
 
   // Monta a linha do tempo unificada (histórico 360): agendamentos,
-  // conversas e leads misturados por data — eventos independentes.
+  // conversas, leads e tarefas — eventos independentes ordenados por data.
   type HistoryEvent = {
-    kind: 'booking' | 'conversation' | 'lead';
+    kind: 'booking' | 'conversation' | 'lead' | 'task';
     id: string;
     sortKey: string;
     icon: string;
@@ -184,6 +225,27 @@ export default function ClientesPage() {
     status?: string;
     actions?: React.ReactNode;
   };
+  function handleLeadNext(lead: Person['leads'][number], person: Person) {
+    if (!pipeline || !canFunil) return;
+    const nid = nextStageForLead(lead as any);
+    if (!nid) return;
+    if (nid === 'scheduled') {
+      openBooking(person);
+      return;
+    }
+    if (nid === 'lost' && !pipeline.stages.some(s=> s.id==='lost')) {
+      setError('Etapa Perdido não existe nesta esteira.');
+      return;
+    }
+    setLead(lead.id, nid);
+  }
+  function lostStageId(): string | null {
+    if (!pipeline) return null;
+    const found = pipeline.stages.find(s=> s.id==='lost');
+    if (found) return 'lost';
+    const mapped = pipeline.stages.find(s=> s.mappedStatus==='lost');
+    return mapped ? mapped.id : null;
+  }
   function historyEvents(p: Person): HistoryEvent[] {
     const out: HistoryEvent[] = [];
     for (const b of p.bookings) {
@@ -204,6 +266,7 @@ export default function ClientesPage() {
       });
     }
     for (const c of p.conversations || []) {
+      const phoneQ = p.phone ? encodeURIComponent(p.phone) : '';
       out.push({
         kind: 'conversation', id: c.id, sortKey: c.at || '', icon: 'whatsapp',
         when: `${eventDay((c.at || '').slice(0, 10))}${(c.at || '').length >= 16 ? ` · ${c.at.slice(11, 16)}` : ''}`,
@@ -212,24 +275,52 @@ export default function ClientesPage() {
         badge: (c.unread || 0) > 0 ? `${c.unread} não lida${c.unread > 1 ? 's' : ''}` : undefined,
         badgeCls: (c.unread || 0) > 0 ? 'bg-blue-100 text-blue-800 border-blue-200' : undefined,
         tone: 'blue',
+        actions: p.phone ? (
+          <div className="flex gap-1.5 mt-2">
+            <Link href={`/conversas?b=${businessId}&q=${phoneQ}`} className="text-xs font-medium bg-white border border-zinc-200 px-2.5 py-1 rounded-md">Abrir conversa</Link>
+            <a href={waLink(p.phone, `Olá, ${(p.name || '').split(' ')[0]}!`)} target="_blank" rel="noreferrer" className="text-xs font-medium bg-white border border-zinc-200 px-2.5 py-1 rounded-md">WhatsApp</a>
+          </div>
+        ) : undefined,
       });
     }
     for (const l of p.leads) {
-      const d = leadDef(l.status);
+      const d = stageDef(l as any);
+      const nextId = nextStageForLead(l as any);
+      const nextLabel = nextStageLabelForLead(l as any);
+      const lostId = lostStageId();
+      const canLose = !!lostId && !!canFunil && !!pipeline && l.status !== 'lost' && l.status !== 'converted' && l.stageId !== 'converted' && l.stageId !== 'lost';
       out.push({
         kind: 'lead', id: l.id, sortKey: l.createdAt, icon: 'spark',
         when: eventDay(l.createdAt.slice(0, 10)),
-        title: `Lead via ${leadOriginLabel(l.origin)}`,
+        title: `Lead via ${leadOriginLabel(l.origin)}${(l as any).stageName ? ` · ${(l as any).stageName}` : ''}`,
         subtitle: [l.interest, l.action].filter(Boolean).join(' · ') || undefined,
-        badge: d.panel, tone: d.tone,
+        badge: d.panel, tone: d.tone as any,
         actions: (
           <div className="flex gap-1.5 mt-2">
-            {NEXT_LEAD[l.status] && (
-              <button onClick={() => setLead(l.id, NEXT_LEAD[l.status])} className="text-xs font-medium bg-zinc-900 text-white px-2.5 py-1 rounded-md">{NEXT_LEAD_LABEL[l.status]}</button>
+            {nextId && (canFunil ? (
+              <button onClick={() => handleLeadNext(l as any, p)} className="text-xs font-medium bg-zinc-900 text-white px-2.5 py-1 rounded-md">{nextLabel}</button>
+            ) : null)}
+            {canLose && (
+              <button onClick={() => setLead(l.id, lostId!)} className="text-xs font-medium bg-white border border-zinc-200 px-2.5 py-1 rounded-md">Perdido</button>
             )}
-            {l.status !== 'lost' && l.status !== 'converted' && (
-              <button onClick={() => setLead(l.id, 'lost')} className="text-xs font-medium bg-white border border-zinc-200 px-2.5 py-1 rounded-md">Perdido</button>
-            )}
+            {canFunil && <Link href={`/funil?b=${businessId}#${l.id}`} className="text-xs font-medium bg-white border border-zinc-200 px-2.5 py-1 rounded-md inline-flex items-center gap-1">Ver no funil <Icon n="chevR" size={10} /></Link>}
+          </div>
+        ),
+      });
+    }
+    // Tarefas no histórico unificado
+    for (const tt of p.tasks || []) {
+      out.push({
+        kind: 'task', id: tt.id, sortKey: tt.dueAt || tt.title, icon: 'tasks',
+        when: tt.dueAt ? eventDay(tt.dueAt.slice(0,10)) : '',
+        title: `Tarefa: ${tt.title}`,
+        subtitle: [tt.assigneeName ? `Resp: ${tt.assigneeName}` : '', tt.dueLabel || ''].filter(Boolean).join(' · ') || undefined,
+        badge: tt.status === 'done' ? 'concluída' : tt.status === 'cancelled' ? 'cancelada' : 'aberta',
+        tone: tt.status === 'done' ? 'emerald' as any : tt.status === 'cancelled' ? 'zinc' as any : 'amber' as any,
+        actions: (
+          <div className="flex gap-1.5 mt-2">
+            {tt.leadId && canFunil && <Link href={`/funil?b=${businessId}#${tt.leadId}`} className="text-xs font-medium bg-white border border-zinc-200 px-2 py-1 rounded-md">Ver no funil</Link>}
+            {tt.bookingId && <Link href={`/agenda?b=${businessId}`} className="text-xs font-medium bg-white border border-zinc-200 px-2 py-1 rounded-md">Ver agenda</Link>}
           </div>
         ),
       });
@@ -329,7 +420,7 @@ export default function ClientesPage() {
                         Agendamentos, conversas e leads convivem na mesma
                         linha do tempo; atendimento concluído permanece aqui
                         mesmo depois de um reagendamento. */}
-                    {p.bookings.length + (p.conversations?.length ?? 0) + p.leads.length > 0 ? (
+                    {p.bookings.length + (p.conversations?.length ?? 0) + p.leads.length + (p.tasks?.length ?? 0) > 0 ? (
                       (() => {
                         const events = historyEvents(p);
                         const H = paginate(events, histPage, 5);
@@ -379,7 +470,7 @@ export default function ClientesPage() {
                         );
                       })()
                     ) : (
-                      <p className="text-sm text-zinc-500">Sem eventos ainda — agendamentos, conversas e leads aparecem aqui.</p>
+                      <p className="text-sm text-zinc-500">Sem eventos ainda — agendamentos, conversas, leads e tarefas aparecem aqui.</p>
                     )}
                     <div className="flex items-center justify-between gap-3 bg-white border border-zinc-200 px-3 py-2.5">
                       <div>

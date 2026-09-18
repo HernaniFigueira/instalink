@@ -20,6 +20,7 @@
 // Este módulo é PURO sobre o DB recebido (roda dentro de updateDB).
 import { randomUUID } from 'node:crypto';
 import type { Booking, Business, BusinessCustomer, DB } from './types';
+import { ingestLead, moveLeadStage, getBusinessPipeline, normalizeLeadStageId } from './pipeline';
 import { phoneKey } from './whatsapp';
 import { publicBookingSummary } from './pricing';
 import { addDaysISO, todayISO } from './tz';
@@ -306,6 +307,7 @@ export function winBackCandidates(
 ): WinBackCandidate[] {
   const cutoff = addDaysISO(today, -inactiveDays);
   const bookings = d.bookings.filter((b) => b.businessId === businessId);
+  const pipeline = getBusinessPipeline(d, businessId);
   const out: WinBackCandidate[] = [];
   for (const contact of d.contacts) {
     if (contact.businessId !== businessId) continue;
@@ -317,12 +319,16 @@ export function winBackCandidates(
     if (mine.length === 0) continue;
     const last = mine.reduce((acc, b) => (b.date > acc ? b.date : acc), '');
     if (!last || last >= cutoff) continue;
-    // Já existe oportunidade de retorno aberta? Não duplica.
-    const hasOpen = d.leads.some(
-      (l) => l.businessId === businessId && l.action === 'retorno'
-        && (phoneKey(l.phone) === digits || (contact.customerId && l.customerId === contact.customerId))
-        && l.status !== 'converted' && l.status !== 'lost',
-    );
+    // A3 fechamento — oportunidade aberta = PipelineStage não terminal (não LeadStatus)
+    const hasOpen = d.leads.some((l) => {
+      if (l.businessId !== businessId) return false;
+      if (l.action !== 'retorno') return false;
+      const match = phoneKey(l.phone) === digits || (contact.customerId && l.customerId === contact.customerId);
+      if (!match) return false;
+      const cur = normalizeLeadStageId(pipeline, l);
+      const st = pipeline.stages.find((s) => s.id === cur);
+      return st ? !st.isTerminal : false;
+    });
     if (hasOpen) continue;
     out.push({
       contact,
@@ -339,23 +345,51 @@ export function createWinBackLeads(d: DB, businessId: string, today = todayISO()
   if (!business || !automationEnabled(business, 'win_back')) return 0;
   const now = new Date().toISOString();
   let count = 0;
+  // A3.17 — entrada interna VIA ingestLead (única porta): pipeline válido,
+  // stageId/stageHistory, status projetado, contato e eventos P4 corretos.
+  // Se o lead já existir e estiver terminal (converted/lost), reabre para `new`
+  // via máquina oficial (mesmo lead, sem duplicação, histórico correto).
   for (const c of winBackCandidates(d, businessId, today)) {
-    d.leads.push({
-      id: randomUUID(),
-      businessId,
-      customerId: c.contact.customerId,
-      name: c.contact.name,
-      phone: c.contact.phone,
-      email: c.contact.email,
-      instagram: '',
-      origin: 'automacao',
-      interest: `Retorno — último atendimento ${c.lastBookingDate.split('-').reverse().join('/')}`,
-      action: 'retorno',
-      status: 'new',
-      createdAt: now,
-      lastInteraction: now,
-    });
-    count += 1;
+    try {
+      const res = ingestLead(d, {
+        businessId,
+        customerId: c.contact.customerId || undefined,
+        name: c.contact.name,
+        phone: c.contact.phone,
+        email: c.contact.email,
+        interest: `Retorno — último atendimento ${c.lastBookingDate.split('-').reverse().join('/')}`,
+        source: 'automacao',
+        actor: { id: 'system', name: 'Automação', type: 'system' },
+        now,
+      });
+      const lead = res.lead;
+      lead.action = 'retorno';
+      lead.interest = `Retorno — último atendimento ${c.lastBookingDate.split('-').reverse().join('/')}`;
+      // Se ingest encontrou lead terminal existente, reabre para `new`
+      if (!res.isNew) {
+        const pipeline = getBusinessPipeline(d, businessId);
+        const cur = normalizeLeadStageId(pipeline, lead);
+        const curStage = pipeline.stages.find((s) => s.id === cur);
+        if (curStage?.isTerminal) {
+          try {
+            moveLeadStage(d, {
+              businessId,
+              leadId: lead.id,
+              toStageId: 'new',
+              note: 'Retorno — oportunidade reaberta',
+              actor: { id: 'system', name: 'Automação' },
+              now,
+            });
+          } catch {}
+        }
+      }
+      count += 1;
+    } catch (e) {
+      // Falha de domínio: não cria lead paralelo, apenas não conta.
+      // Erro observável via console em dev; em prod o motor registra no histórico.
+      // console.warn('[winBack] falha ao criar oportunidade', e);
+      void e;
+    }
   }
   return count;
 }

@@ -19,6 +19,7 @@ import type { Booking, BookingStatus, DB } from './types';
 import { BOOKING_FLOW, canTransition } from './status';
 import { enqueueBookingAutomation, onBookingCompleted } from './automations';
 import { emitAutomationEvent } from './automation/events';
+import { markLeadConverted } from './pipeline';
 
 export interface ApplyBookingStatusParams {
   businessId: string;
@@ -106,7 +107,23 @@ export function applyBookingStatusTx(
   if (p.to === 'confirmed' && from !== 'confirmed') {
     enqueueBookingAutomation(d, { businessId: p.businessId, kind: 'booking_confirmation', variant: 'confirmed', booking: info });
   }
-  if (p.to === 'completed' && from !== 'completed') onBookingCompleted(d, p.businessId, booking);
+  if (p.to === 'completed' && from !== 'completed') {
+    onBookingCompleted(d, p.businessId, booking);
+    // A3.16 — atendimento concluído ⇒ lead vinculado vai para CONVERTED (mesma transação)
+    // Idempotente: já em converted não gera novo histórico/evento. Preserva cancel/no_show.
+    // markLeadConverted retorna null quando não há lead — booking conclude normalmente.
+    // Erro inesperado não é mascarado silenciosamente (seria bug de vínculo).
+    const conv = markLeadConverted(d, {
+      businessId: p.businessId,
+      leadId: booking.leadId || undefined,
+      bookingId: booking.id,
+      actor: { id: p.by, name: p.by === 'owner' ? 'Atendimento' : p.by },
+      now,
+      origin: p.originRunId ? { runId: p.originRunId } : undefined,
+    });
+    // conv === null → sem lead vinculado, apenas booking; conv.moved false → idempotente
+    void conv;
+  }
 
   // P4 — gatilho (mesma transação da mudança de estado).
   const event = bookingStatusEvent(p.to);

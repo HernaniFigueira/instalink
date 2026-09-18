@@ -4,6 +4,7 @@ import { readDB, updateDB } from '@/lib/db';
 import { requireBusiness } from '@/lib/access';
 import { customerFromRequest } from '@/lib/customer-auth';
 import { onlyDigits, money } from '@/lib/utils';
+import { ingestLead, getBusinessPipeline, normalizeLeadStageId, stageForLegacyStatus, moveLeadStage } from '@/lib/pipeline';
 import { ORDER_FLOW, canTransition } from '@/lib/status';
 import { rateLimit, ipFrom } from '@/lib/rate-limit';
 import type { DB, OrderItem, OrderStatus } from '@/lib/types';
@@ -105,15 +106,33 @@ export async function POST(req: NextRequest) {
       d.events.push({ id: randomUUID(), businessId, type: 'order_created', path: '', meta: { total }, createdAt: now });
       d.events.push({ id: randomUUID(), businessId, type: 'conversion', path: '', meta: { kind: 'order' }, createdAt: now });
       const digits = onlyDigits(phone);
-      const lead = d.leads.find((l) =>
-        l.businessId === businessId &&
-        ((l.customerId && l.customerId === customer.id) || (digits && onlyDigits(l.phone) === digits)),
-      );
-      if (lead) {
-        lead.name = name; lead.customerId = customer.id; lead.lastInteraction = now;
-        lead.action = 'pedido'; if (lead.status === 'new') lead.status = 'converted';
-      } else {
-        d.leads.push({ id: randomUUID(), businessId, customerId: customer.id, name, phone, email: '', instagram: '', origin: 'pedido', interest: orderItems.map((i) => i.name).join(', ').slice(0, 200), action: 'pedido', status: 'converted', createdAt: now, lastInteraction: now });
+      // A3: entrada de lead via ingestLead (única porta) — preserva pipeline/stageHistory/eventos
+      try {
+        // pipeline imported statically
+        const res = ingestLead(d, {
+          businessId,
+          customerId: customer.id,
+          name,
+          phone: digits,
+          interest: orderItems.map((i) => i.name).join(', ').slice(0, 200),
+          source: 'pedido',
+          actor: { id: customer.id, name, type: 'customer' },
+          now,
+        });
+        res.lead.action = 'pedido';
+        // Pedido converte comercialmente: move para converted via máquina oficial
+        const pipeline = getBusinessPipeline(d, businessId);
+        const cur = normalizeLeadStageId(pipeline, res.lead);
+        if (cur !== 'converted') {
+          const target = stageForLegacyStatus(pipeline, 'converted');
+          if (target && cur !== target) {
+            try { moveLeadStage(d, { businessId, leadId: res.lead.id, toStageId: target, actor: { id: customer.id, name }, now }); } catch {}
+          }
+        }
+      } catch (e) {
+        // CRM secundário: pedido já criado, falha no lead não desfaz pedido.
+        // Não cria lead paralelo fora da porta oficial; apenas loga.
+        void e;
       }
       return { orderId, code };
     });
