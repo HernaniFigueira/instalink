@@ -10,7 +10,11 @@ export async function GET(req: NextRequest) {
   if (!guard.ok) return guard.res;
 
   const pipeline = getBusinessPipeline(guard.db, businessId);
-  return NextResponse.json({ ok: true, pipeline });
+  // A1.2 · Bloco 2: a leitura é liberada para quem opera o funil ('leads'),
+  // mas administrar etapas é ação de configuração — o flag vem da permissão
+  // REAL do usuário nesta unidade (a UI só mostra o editor com ele; a
+  // autoridade continua no PATCH abaixo, que exige 'config').
+  return NextResponse.json({ ok: true, pipeline, canEdit: guard.ctx.permissions.config === true });
 }
 
 export async function PATCH(req: NextRequest) {

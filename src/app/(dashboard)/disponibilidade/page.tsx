@@ -1,21 +1,27 @@
 'use client';
 import { useCallback, useEffect, useState } from 'react';
 import { useSearchParams } from 'next/navigation';
-import type { Availability, AvailabilityException, BookingConfig, Professional } from '@/lib/types';
+import Link from 'next/link';
+import type { Availability, AvailabilityException, Professional } from '@/lib/types';
 import { ListSkeleton } from '@/components/ui';
 import { BusinessHoursPanel } from '@/components/dashboard/BusinessHours';
 import { AccessDenied } from '@/components/dashboard/AccessNotice';
 import { apiGet, apiSend } from '@/lib/api-client';
-import { ExceptionsManager, BookingSettings, CatalogCrossLinks } from '@/components/dashboard/catalog-panels';
+import { ExceptionsManager, CatalogCrossLinks } from '@/components/dashboard/catalog-panels';
 
 // ═══════════════════════════════════════════════════════════════
 // DISPONIBILIDADE — "quando atende"
 // Era /horarios. O nome antigo descrevia O CAMPO (horário); o novo descreve
 // O QUE A TELA ENTREGA: quando a casa e cada profissional podem atender.
 // Janela semanal (base), personalização por profissional (herança já
-// calculada pelo painel), dias especiais e as políticas da agenda
-// (antecedência, buffer, horizonte). Reusa toda a lógica protegida —
+// calculada pelo painel) e dias especiais. Reusa toda a lógica protegida —
 // esta tela só expõe o que já existe. Nenhuma fórmula de agenda mudou.
+//
+// A1.2 · Bloco 2 — separação de responsabilidades:
+//   • QUANDO atende  → aqui (janela semanal + dias especiais);
+//   • COMO o cliente reserva (antecedência, cancelamento, horizonte, buffer)
+//     → CONFIGURAÇÕES → aba Agenda. A tela aponta para lá em vez de editar
+//     regras no lugar errado; a engine de agenda não foi tocada.
 // ═══════════════════════════════════════════════════════════════
 export default function DisponibilidadePage() {
   const params = useSearchParams();
@@ -23,7 +29,6 @@ export default function DisponibilidadePage() {
   const [pros, setPros] = useState<Professional[]>([]);
   const [rules, setRules] = useState<Availability[]>([]);
   const [exceptions, setExceptions] = useState<AvailabilityException[]>([]);
-  const [bookingCfg, setBookingCfg] = useState<BookingConfig | null>(null);
   const [loaded, setLoaded] = useState(false);
   const [msg, setMsg] = useState('');
   // 403 nesta tela → aviso amigável (o usuário continua logado).
@@ -41,7 +46,6 @@ export default function DisponibilidadePage() {
     setPros(d.professionals || []);
     setRules(d.availability || []);
     setExceptions(d.exceptions || []);
-    setBookingCfg(d.business?.booking || null);
     setDenied(false);
     setLoaded(true);
   }, [businessId]);
@@ -91,12 +95,19 @@ export default function DisponibilidadePage() {
             onSave={async (payload) => { await call('exception.save', payload); }}
             onDelete={async (id) => { await call('exception.delete', { id }); }}
           />
-          {bookingCfg && (
-            <BookingSettings
-              businessId={businessId} initial={bookingCfg} hasTeam={pros.length > 0}
-              onSaved={() => { setMsg('Políticas salvas.'); setTimeout(() => setMsg(''), 2500); load(); }}
-            />
-          )}
+          {/* A1.2 · Bloco 2: "como o cliente reserva" é configuração do
+              negócio — mora em Configurações → Agenda. Atalho contextual
+              (classe B): ajuda quem está aqui a achar a regra certa. */}
+          <div className="bg-white border border-zinc-200 rounded-lg p-5 flex flex-wrap items-center justify-between gap-3">
+            <div>
+              <p className="font-bold text-sm">Regras de reserva</p>
+              <p className="text-xs text-zinc-500 mt-0.5">Antecedência mínima, prazo de cancelamento, dias de agenda aberta e intervalo entre atendimentos.</p>
+            </div>
+            <Link href={`/configuracoes?tab=agenda&b=${businessId}`}
+              className="text-xs font-bold bg-zinc-900 text-white px-4 py-2.5 rounded-md shrink-0">
+              Configurar em Configurações → Agenda
+            </Link>
+          </div>
         </div>
       )}
     </>

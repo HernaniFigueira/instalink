@@ -40,7 +40,7 @@ describe('isolamento Organization → Unit', () => {
 });
 
 import { normalizeDB } from '../db';
-import { requiresActiveBusiness } from '../business-context';
+import { businessIdInList, requiresActiveBusiness, resolveActiveBusinessId } from '../business-context';
 
 describe('migração e navegação multiunidade', () => {
   it('cria uma Organization independente por Business legado do mesmo owner e é idempotente', () => {
@@ -196,5 +196,132 @@ describe('portas novas mantêm o isolamento por unidade', () => {
     expect(autos).toMatch(/requireBusiness\(req, businessId, 'config'\)/);
     expect(tasks).toMatch(/taskAssigneeOptions\(db, businessId\)/);
     expect(autos).toMatch(/taskAssigneeOptions\(db, businessId\)/); // uma projeção só
+  });
+});
+
+// ═══════════════════════════════════════════════════════════════
+// A1.2 · BLOCO 2 — isolamento por unidade: funil, configurações,
+// tarefas e execuções
+// ═══════════════════════════════════════════════════════════════
+import {
+  getBusinessPipeline, updateBusinessPipeline, ingestLead, moveLeadStage,
+  stageForLegacyStatus, normalizeLeadStageId,
+} from '../pipeline';
+import { tasksOf, createTaskTx } from '../automation/tasks';
+
+describe('A1.2 B2 — funil isolado por unidade', () => {
+  it('etapas configuradas no Business A não aparecem no Business B', () => {
+    const db = emptyDB();
+    db.businesses.push(unit('a1', 'owner-a', 'org-a'), unit('b1', 'owner-b', 'org-b'));
+    updateBusinessPipeline(db, 'a1', [
+      { id: 'new', name: 'Chegou', order: 0 },
+      { id: 'vip_a1', name: 'VIP da unidade A', order: 1 },
+      { id: 'converted', name: 'Fechado', order: 2 },
+    ]);
+    const b1 = getBusinessPipeline(db, 'b1');
+    expect(b1.stages.map((s) => s.id)).not.toContain('vip_a1');
+    // B mantém o conjunto padrão — a personalização de A não atravessa
+    expect(b1.stages.map((s) => s.id)).toContain('waiting_secretary');
+    expect(getBusinessPipeline(db, 'a1').stages.map((s) => s.id)).toContain('vip_a1');
+  });
+
+  it('lead de A não pode ser movido para etapa que só existe em B', () => {
+    const db = emptyDB();
+    db.businesses.push(unit('a1', 'owner-a', 'org-a'), unit('b1', 'owner-b', 'org-b'));
+    updateBusinessPipeline(db, 'b1', [
+      { id: 'new', name: 'Novo', order: 0 },
+      { id: 'so_em_b', name: 'Exclusiva de B', order: 1 },
+      { id: 'converted', name: 'Fechado', order: 2 },
+    ]);
+    const { lead } = ingestLead(db, { businessId: 'a1', name: 'Lead A', phone: '11900001111' });
+    expect(() => moveLeadStage(db, {
+      businessId: 'a1', leadId: lead.id, toStageId: 'so_em_b', actor: { id: 'u', name: 'U' },
+    })).toThrow(/não existe na esteira/);
+    expect(lead.stageId).toBe('new'); // nada foi escrito
+  });
+
+  it('mover lead informando outra unidade é rejeitado (404) — sem vazamento', () => {
+    const db = emptyDB();
+    db.businesses.push(unit('a1', 'owner-a', 'org-a'), unit('b1', 'owner-b', 'org-b'));
+    const { lead } = ingestLead(db, { businessId: 'a1', name: 'Lead A', phone: '11900002222' });
+    expect(() => moveLeadStage(db, {
+      businessId: 'b1', leadId: lead.id, toStageId: 'in_progress', actor: { id: 'u', name: 'U' },
+    })).toThrow(/não encontrado/);
+    // e o lead continua intocado na unidade A
+    expect(db.leads.find((l) => l.id === lead.id)?.businessId).toBe('a1');
+    expect(db.leads.find((l) => l.id === lead.id)?.stageId).toBe('new');
+  });
+
+  it('conversão legada e normalização usam SEMPRE a esteira da própria unidade', () => {
+    const db = emptyDB();
+    db.businesses.push(unit('a1', 'owner-a', 'org-a'), unit('b1', 'owner-b', 'org-b'));
+    // A remove a etapa 'lost'; B mantém o padrão
+    updateBusinessPipeline(db, 'a1', [
+      { id: 'new', name: 'Novo', order: 0 },
+      { id: 'converted', name: 'Fechado', order: 1 },
+    ]);
+    const pA = getBusinessPipeline(db, 'a1');
+    const pB = getBusinessPipeline(db, 'b1');
+    expect(stageForLegacyStatus(pA, 'lost')).toBe('');           // A: sem correspondente → erro explícito
+    expect(stageForLegacyStatus(pB, 'lost')).toBe('lost');       // B: continua tendo
+    expect(normalizeLeadStageId(pA, { stageId: 'lost', status: 'lost' })).toBe('new');
+    expect(normalizeLeadStageId(pB, { stageId: 'lost', status: 'lost' })).toBe('lost');
+  });
+});
+
+describe('A1.2 B2 — configurações, tarefas e execuções não atravessam tenant', () => {
+  it('regras de reserva são da unidade: mudar A não toca B', () => {
+    const db = emptyDB();
+    const a = unit('a1', 'owner-a', 'org-a') as any;
+    const b = unit('b1', 'owner-b', 'org-b') as any;
+    a.booking = { teamMode: 'solo', leadMin: 30, cancelUntilMin: 120, horizonDays: 60, bufferMin: 0 };
+    b.booking = { teamMode: 'solo', leadMin: 30, cancelUntilMin: 120, horizonDays: 60, bufferMin: 0 };
+    db.businesses.push(a, b);
+    // Mesmo contrato do PATCH /api/businesses/:id — escrita escopada ao id
+    a.booking.leadMin = 90;
+    expect(db.businesses.find((x) => x.id === 'b1')?.booking?.leadMin).toBe(30);
+    // e a rota só alcança o próprio negócio: o id vem do PATH e a escrita é
+    // escopada ao registro daquele id (nada de atualização por body.businessId)
+    const route = readFileSync(path.join(root, 'src/app/api/businesses/[id]/route.ts'), 'utf8');
+    expect(route).toMatch(/requireBusiness\(req, params\.id, 'config'\)/);
+    expect(route).toMatch(/d\.businesses\.find\(\(x\) => x\.id === params\.id\)/);
+    expect(route).not.toMatch(/body\.businessId/);
+  });
+
+  it('tarefas são escopadas por unidade (criação e listagem)', () => {
+    const db = emptyDB();
+    db.businesses.push(unit('a1', 'owner-a', 'org-a'), unit('b1', 'owner-b', 'org-b'));
+    createTaskTx(db, { businessId: 'a1', title: 'Ligar para lead', assignedUserId: '', actor: { id: 'owner-a', name: 'A' } } as any);
+    expect(tasksOf(db, 'a1').length).toBe(1);
+    expect(tasksOf(db, 'b1').length).toBe(0);
+  });
+
+  it('execuções do motor são escopadas por unidade na leitura da API', () => {
+    const db = emptyDB();
+    db.businesses.push(unit('a1', 'owner-a', 'org-a'), unit('b1', 'owner-b', 'org-b'));
+    db.automationRuns.push({ id: 'run-a', businessId: 'a1' } as any, { id: 'run-b', businessId: 'b1' } as any);
+    // O MESMO filtro usado por /api/automations (que alimenta /execucoes)
+    const runsOfA = (db.automationRuns || [])
+      .filter((r) => r.businessId === 'a1')
+      .sort((x, y) => ((x as any).startedAt < (y as any).startedAt ? 1 : -1));
+    expect(runsOfA.map((r) => r.id)).toEqual(['run-a']);
+    // regressão estática: a rota continua filtrando por unidade
+    const autos = readFileSync(path.join(root, 'src/app/api/automations/route.ts'), 'utf8');
+    expect(autos).toMatch(/automationRuns[\s\S]*?businessId === businessId/);
+  });
+
+  it('?b= estranho não troca contexto: só unidade da conta resolve', () => {
+    // A mesma regra usada pelo DashboardShell, useBusinessId e usePanelPermissions
+    const list = [{ id: 'a1' }, { id: 'a2' }];
+    expect(businessIdInList('b1', list)).toBe(false);
+    expect(resolveActiveBusinessId('b1', list)).toBe('a1'); // cai para unidade própria
+    expect(resolveActiveBusinessId('a2', list)).toBe('a2');
+    // e no servidor: acesso a unidade alheia é nulo (sem sessão de suporte)
+    const db = emptyDB();
+    const ownerA: any = { id: 'owner-a', name: 'A', email: 'a@t.dev', passwordHash: '', createdAt: '' };
+    db.users.push(ownerA);
+    db.organizations.push(org('org-a', 'owner-a'));
+    db.businesses.push(unit('a1', 'owner-a', 'org-a'), unit('b1', 'owner-b', 'org-b'));
+    expect(resolveAccess(db, ownerA, 'b1')).toBeNull();
   });
 });

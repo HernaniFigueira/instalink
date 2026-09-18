@@ -1,6 +1,5 @@
 'use client';
 
-import { useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { AccessDenied, useAreaLoad } from '@/components/dashboard/AccessNotice';
 import { CanaisIntegracoesView } from '@/components/dashboard/CanaisIntegracoesView';
@@ -40,17 +39,19 @@ export default function CanaisPage() {
   const router = useRouter();
   const params = useSearchParams();
   const businessId = params.get('b') || '';
-  const [tab, setTab] = useState<CanaisTab>(() => tabFromParam(params.get('tab')));
+  // Aba = URL, derivada a cada render (A1.2 · Bloco 2): refresh preserva a
+  // aba, botão voltar funciona, deep-link abre na aba certa — sem estado
+  // paralelo para dessincronizar.
+  const tab = tabFromParam(params.get('tab'));
   const { denied } = useAreaLoad('Canais & Integrações');
 
   /** Aba = URL (mantém a unidade ativa e o histórico do navegador coerente). */
   function choose(next: CanaisTab) {
     if (next === tab) return;
-    setTab(next);
     const qs = new URLSearchParams();
     qs.set('tab', next);
     if (businessId) qs.set('b', businessId);
-    router.replace(`/canais?${qs.toString()}`, { scroll: false });
+    router.push(`/canais?${qs.toString()}`, { scroll: false });
   }
 
   if (denied) return <AccessDenied area="Canais & Integrações" />;

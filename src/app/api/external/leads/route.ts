@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { requireApiKey } from '@/lib/api-keys';
 import { checkIdempotency, extractIdempotencyKey, saveIdempotency } from '@/lib/idempotency';
-import { ingestLead, getBusinessPipeline } from '@/lib/pipeline';
+import { ingestLead, getBusinessPipeline, resolveStageId, normalizeLeadStageId } from '@/lib/pipeline';
 import { dispatchWebhook } from '@/lib/webhooks';
 import { pushIntegrationLog } from '@/lib/integration-logs';
 import { updateDB } from '@/lib/db';
@@ -18,10 +18,15 @@ export async function GET(req: NextRequest) {
   const page = Math.max(1, Number(q.get('page')) || 1);
   const limit = Math.min(100, Math.max(1, Number(q.get('limit')) || 30));
 
+  const pipeline = getBusinessPipeline(db, business.id);
+
+  // A1.2 · Bloco 2 (F3): filtro pela etapa NORMALIZADA — entrada legada em
+  // LeadStatus ou etapa inválida não quebra nem deixa lead invisível.
   let leads = db.leads.filter((l) => l.businessId === business.id);
 
   if (stageId) {
-    leads = leads.filter((l) => (l.stageId || l.status) === stageId);
+    const target = resolveStageId(pipeline, stageId).stageId;
+    leads = leads.filter((l) => normalizeLeadStageId(pipeline, l) === target);
   }
 
   if (search) {
@@ -38,7 +43,6 @@ export async function GET(req: NextRequest) {
 
   const total = leads.length;
   const items = leads.slice((page - 1) * limit, page * limit);
-  const pipeline = getBusinessPipeline(db, business.id);
 
   await updateDB((d) => {
     pushIntegrationLog(d, {

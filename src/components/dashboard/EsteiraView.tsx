@@ -4,9 +4,12 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useSearchParams } from 'next/navigation';
 import type { Lead, PipelineStage, BusinessPipeline, LeadPriority } from '@/lib/types';
 import { leadOriginLabel } from '@/lib/leads';
+// Módulo PURO (sem node:crypto) — seguro para componente de cliente.
+import { normalizeLeadStageId } from '@/lib/pipeline-stages';
 import { onlyDigits, waLink, cn, money } from '@/lib/utils';
 import { todayISO, addDaysISO } from '@/lib/tz';
 import { apiGet, apiSend } from '@/lib/api-client';
+import { PipelineStagesPanel } from '@/components/dashboard/PipelineStagesPanel';
 
 function formatDateTime(iso: string): string {
   if (!iso) return '';
@@ -46,6 +49,11 @@ export function EsteiraView() {
   // Modo de exibição: simples (empresa pequena) x completa (todas as etapas)
   const [simpleMode, setSimpleMode] = useState(false);
 
+  // A1.2 · Bloco 2: administrar etapas é ação de configuração — o editor só
+  // aparece quando o servidor confirma a permissão (canEditPipeline).
+  const [canEditPipeline, setCanEditPipeline] = useState(false);
+  const [showStagesPanel, setShowStagesPanel] = useState(false);
+
   // Filtros
   const [search, setSearch] = useState('');
   const [filterUser, setFilterUser] = useState('');
@@ -55,7 +63,6 @@ export function EsteiraView() {
   const [selectedLead, setSelectedLead] = useState<Lead | null>(null);
   const [bookingLead, setBookingLead] = useState<Lead | null>(null);
   const [showNewLeadModal, setShowNewLeadModal] = useState(false);
-  const [showConfigModal, setShowConfigModal] = useState(false);
 
   // Form states para agendamento
   const [bookServiceId, setBookServiceId] = useState('');
@@ -85,14 +92,15 @@ export function EsteiraView() {
     if (!businessId) return;
     setLoading(true);
     try {
-      const res = await apiGet<{ leads: Lead[]; pipeline: BusinessPipeline; members: TeamMember[] }>(
+      const res = await apiGet<{ leads: Lead[]; pipeline: BusinessPipeline; members: TeamMember[]; canEditPipeline?: boolean }>(
         `/api/leads?businessId=${businessId}&limit=200`,
-        { scope: 'area', area: 'Clientes' },
+        { scope: 'area', area: 'Funil' },
       );
       if (res.ok && res.data) {
         setLeads(res.data.leads || []);
         setPipeline(res.data.pipeline || null);
         setMembers(res.data.members || []);
+        setCanEditPipeline(res.data.canEditPipeline === true);
       }
     } finally {
       setLoading(false);
@@ -104,7 +112,7 @@ export function EsteiraView() {
     if (!businessId) return;
     const res = await apiGet<{ services: ServiceItem[]; professionals: ProfessionalItem[] }>(
       `/api/catalog/get?businessId=${businessId}`,
-      { scope: 'area', area: 'Clientes' },
+      { scope: 'area', area: 'Funil' },
     );
     if (res.ok && res.data) {
       setServices(res.data.services || []);
@@ -169,14 +177,17 @@ export function EsteiraView() {
     return list;
   }, [leads, search, filterUser, filterPriority]);
 
-  // Agrupa leads por estágio
+  // Agrupa leads por etapa — A1.2 · Bloco 2 (F3): a chave vem da leitura
+  // NORMALIZADA (mesma função do servidor): etapa ausente/inválida nunca
+  // deixa lead invisível; no modo simples, etapa fora do recorte cai na
+  // primeira coluna visível (comportamento anterior, agora com chave válida).
   const leadsByStage = useMemo(() => {
     const map = new Map<string, Lead[]>();
     for (const st of visibleStages) {
       map.set(st.id, []);
     }
     for (const l of filteredLeads) {
-      const stageKey = l.stageId || l.status || 'new';
+      const stageKey = pipeline ? normalizeLeadStageId(pipeline, l) : (l.stageId || l.status || 'new');
       if (map.has(stageKey)) {
         map.get(stageKey)!.push(l);
       } else if (map.has('in_progress')) {
@@ -186,7 +197,7 @@ export function EsteiraView() {
       }
     }
     return map;
-  }, [filteredLeads, visibleStages]);
+  }, [filteredLeads, visibleStages, pipeline]);
 
   // Ação: Mover etapa do Lead
   async function handleMoveStage(leadId: string, toStageId: string, note?: string) {
@@ -195,7 +206,7 @@ export function EsteiraView() {
       id: leadId,
       stageId: toStageId,
       note,
-    }, { scope: 'action', area: 'Clientes' });
+    }, { scope: 'action', area: 'Funil' });
 
     if (res.ok) {
       setLeads((prev) =>
@@ -222,7 +233,7 @@ export function EsteiraView() {
       businessId,
       id: leadId,
       assignedUserId,
-    }, { scope: 'action', area: 'Clientes' });
+    }, { scope: 'action', area: 'Funil' });
 
     if (res.ok) {
       setLeads((prev) =>
@@ -245,7 +256,7 @@ export function EsteiraView() {
       businessId,
       id: leadId,
       priority,
-    }, { scope: 'action', area: 'Clientes' });
+    }, { scope: 'action', area: 'Funil' });
 
     if (res.ok) {
       setLeads((prev) =>
@@ -265,7 +276,7 @@ export function EsteiraView() {
       businessId,
       id: leadId,
       noteText: newNoteText.trim(),
-    }, { scope: 'action', area: 'Clientes' });
+    }, { scope: 'action', area: 'Funil' });
     setSavingNote(false);
 
     if (res.ok) {
@@ -331,7 +342,7 @@ export function EsteiraView() {
         priority: newLeadPriority,
         assignedUserId: newLeadAssignee || undefined,
         message: newLeadMessage.trim() || undefined,
-      }, { scope: 'action', area: 'Clientes' });
+      }, { scope: 'action', area: 'Funil' });
 
       if (res.ok) {
         setShowNewLeadModal(false);
@@ -432,6 +443,19 @@ export function EsteiraView() {
             {simpleMode ? 'Modo Simplificado' : 'Modo Completo'}
           </button>
 
+          {/* A1.2 · Bloco 2: administração das etapas da MESMA máquina usada
+              pelo backend (PATCH /api/pipeline). Só aparece com permissão de
+              configuração confirmada pelo servidor (canEditPipeline). */}
+          {canEditPipeline && (
+            <button
+              type="button"
+              onClick={() => setShowStagesPanel(true)}
+              className="px-3 py-1.5 bg-white text-zinc-700 text-xs font-semibold rounded-lg border border-zinc-200 hover:bg-zinc-50 transition"
+            >
+              Configurar etapas
+            </button>
+          )}
+
           <button
             type="button"
             onClick={() => setShowNewLeadModal(true)}
@@ -442,9 +466,9 @@ export function EsteiraView() {
         </div>
       </div>
 
-      {/* Quadro Kanban da Esteira */}
+      {/* Quadro Kanban do Funil */}
       {loading ? (
-        <div className="p-12 text-center text-zinc-400 text-sm">Carregando esteira operacional…</div>
+        <div className="p-12 text-center text-zinc-400 text-sm">Carregando funil…</div>
       ) : (
         <div className="grid grid-flow-col auto-cols-[280px] sm:auto-cols-[300px] gap-3.5 overflow-x-auto pb-4 scrollbar-none items-start">
           {visibleStages.map((stage) => {
@@ -625,7 +649,7 @@ export function EsteiraView() {
               <div>
                 <label className="block text-xs font-semibold text-zinc-600 mb-1">Etapa Atual</label>
                 <select
-                  value={selectedLead.stageId || selectedLead.status || 'new'}
+                  value={pipeline ? normalizeLeadStageId(pipeline, selectedLead) : (selectedLead.stageId || 'new')}
                   onChange={(e) => handleMoveStage(selectedLead.id, e.target.value)}
                   className="w-full text-xs p-2 rounded-lg border border-zinc-300 font-semibold bg-white"
                 >
@@ -970,6 +994,19 @@ export function EsteiraView() {
             </button>
           </form>
         </div>
+      )}
+
+      {/* ── A1.2 · Bloco 2 — administração das etapas do funil ──
+          A MESMA máquina de estados do backend (PipelineStage): renomear,
+          reordenar, marcar etapa final, criar e remover etapas. Salva via
+          PATCH /api/pipeline (permissão 'config' no servidor). */}
+      {showStagesPanel && pipeline && (
+        <PipelineStagesPanel
+          businessId={businessId}
+          pipeline={pipeline}
+          onClose={() => setShowStagesPanel(false)}
+          onSaved={() => { setShowStagesPanel(false); loadLeads(); }}
+        />
       )}
     </div>
   );
