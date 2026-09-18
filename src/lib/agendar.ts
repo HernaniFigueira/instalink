@@ -24,6 +24,8 @@ export interface PublicBookingTarget {
   address: string;
   description: string;
   booking: { horizonDays: number; leadMin: number; cancelUntilMin: number; bufferMin: number } | null;
+  /** A2-B5 (F9): fuso IANA do negócio ('' = default do produto). */
+  timezone: string;
   published: boolean;
 }
 
@@ -54,6 +56,7 @@ export function resolvePublicBookingTarget(db: DB, param: string): { business: P
           bufferMin: Number(b.booking.bufferMin) || 0,
         }
         : null,
+      timezone: b.businessTimezone || '',
       published: b.published !== false,
     },
     notPublished: b.published === false,

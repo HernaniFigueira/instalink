@@ -105,13 +105,16 @@ export default function ClientesPage() {
 
   // A2-B3 (F5): horizonte real do negócio para o "+ Novo agendamento".
   const [bookingCfg, setBookingCfg] = useState<BookingConfig | null>(null);
+  // A2-B5 (F9): fuso do negócio para o sheet de agendamento.
+  const [bizTz, setBizTz] = useState('');
 
   function openBooking(p: Person) {
     setBookingFor(p);
-    apiGet<{ services?: any[]; professionals?: any[]; business?: { booking?: BookingConfig } }>(`/api/catalog/get?businessId=${businessId}`, { scope: 'action', area: 'Clientes' })
+    apiGet<{ services?: any[]; professionals?: any[]; business?: { booking?: BookingConfig; businessTimezone?: string } }>(`/api/catalog/get?businessId=${businessId}`, { scope: 'action', area: 'Clientes' })
       .then((res) => {
         if (!res.ok) { setError(res.message); return; }
         if (res.data?.business?.booking) setBookingCfg(res.data.business.booking);
+        setBizTz(res.data?.business?.businessTimezone || '');
         setServices(res.data?.services || []);
         setPros(res.data?.professionals || []);
       });
@@ -462,6 +465,7 @@ export default function ClientesPage() {
           services={services}
           pros={pros}
           horizonDays={effectiveHorizonDays(bookingCfg)}
+          timezone={bizTz}
           initial={{ contactId: bookingFor.contactId, name: bookingFor.name, phone: bookingFor.phone, email: bookingFor.email }}
           onClose={() => setBookingFor(null)}
           onCreated={load}

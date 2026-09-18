@@ -322,8 +322,11 @@ export default function AgendaPage() {
   const { notice, dismiss } = useForbiddenNotice('Agenda');
   const { denied, report } = useAreaLoad('Agenda');
 
-  const today = todayISO();
-  const nowMin = timeToMin(nowHM());
+  // A2-B5 (F9): '' enquanto carrega = default do produto (America/Sao_Paulo).
+  const [bizTz, setBizTz] = useState('');
+  // "hoje" e "agora" no FUSO DO NEGÓCIO (nunca o do navegador).
+  const today = todayISO(new Date(), bizTz);
+  const nowMin = timeToMin(nowHM(new Date(), bizTz));
 
   const range = useMemo(() => {
     if (view === 'month') {
@@ -354,6 +357,9 @@ export default function AgendaPage() {
     setPros(d.professionals || []);
     // A2-B3 (F5): horizonte real do negócio (1–365) — nunca 60 hardcoded.
     if (d.business?.booking) setBookingCfg(d.business.booking);
+    // A2-B5 (F9): fuso do negócio para "hoje/agora" locais (needsClosure,
+    // linha do agora, destaque de hoje) — mesma referência do servidor.
+    setBizTz(d.business?.businessTimezone || '');
     setRules(d.availability || []);
     setBookings(bk.ok ? (bk.data?.bookings || []) : []);
     setLoaded(true);
@@ -458,9 +464,9 @@ export default function AgendaPage() {
 
   const pendencies = useMemo(
     () => bookings
-      .filter((b) => needsClosure(b, bookingDuration(serviceOf(b.serviceId)), today, nowHM()))
+      .filter((b) => needsClosure(b, bookingDuration(serviceOf(b.serviceId)), today, nowHM(new Date(), bizTz)))
       .sort((a, b) => (a.date + a.time < b.date + b.time ? -1 : 1)),
-    [bookings, serviceOf, today],
+    [bookings, serviceOf, today, bizTz],
   );
 
   // ── Colunas: dia = profissionais; semana = dias ──
@@ -514,7 +520,7 @@ export default function AgendaPage() {
         const dur = durationOf(b);
         const endMin = timeToMin(b.time) + dur;
         const endHM = minToTime(endMin % (24 * 60));
-        const attention = needsClosure(b, dur, today, nowHM());
+        const attention = needsClosure(b, dur, today, nowHM(new Date(), bizTz));
         const statusLabel = BOOKING_STATUS[b.status]?.panel || b.status;
         return {
           id: b.id,
@@ -535,7 +541,7 @@ export default function AgendaPage() {
       });
       return { ...c, isToday: c.date === today, blocks };
     });
-  }, [view, weekDays, activePros, focus, bookings, grid.start, durationOf, proName, serviceName, dragId, today, statusFilter, proFilter, specFilter, proRoleOf]);
+  }, [view, weekDays, activePros, focus, bookings, grid.start, durationOf, proName, serviceName, dragId, today, statusFilter, proFilter, specFilter, proRoleOf, bizTz]);
 
   // Colunas usadas pelo cálculo de destino (mesma ordem da renderização).
   useEffect(() => {
@@ -1031,7 +1037,7 @@ export default function AgendaPage() {
         <div className="flex flex-wrap items-center gap-x-3 gap-y-2 px-3 py-2">
           <div className="flex items-center gap-1.5">
             <button onClick={() => move(-1)} aria-label="Anterior" className="w-8 h-8 rounded-md bg-zinc-50 border border-zinc-200 hover:bg-zinc-100 flex items-center justify-center"><Icon n="chevL" size={14} /></button>
-            <button onClick={() => setFocus(todayISO())} className={`text-xs font-semibold px-3 py-1.5 rounded-md border ${focus === today ? 'bg-zinc-900 text-white border-zinc-900' : 'bg-white border-zinc-200 hover:bg-zinc-50'}`}>Hoje</button>
+            <button onClick={() => setFocus(today)} className={`text-xs font-semibold px-3 py-1.5 rounded-md border ${focus === today ? 'bg-zinc-900 text-white border-zinc-900' : 'bg-white border-zinc-200 hover:bg-zinc-50'}`}>Hoje</button>
             <button onClick={() => move(1)} aria-label="Próximo" className="w-8 h-8 rounded-md bg-zinc-50 border border-zinc-200 hover:bg-zinc-100 flex items-center justify-center"><Icon n="chevR" size={14} /></button>
             <input type="date" value={focus} max="2100-12-31" onChange={(e) => { if (/^\d{4}-\d{2}-\d{2}$/.test(e.target.value)) setFocus(e.target.value); }}
               aria-label="Ir para a data" title="Ir para a data"
@@ -1189,7 +1195,7 @@ export default function AgendaPage() {
                 .filter((b) => !statusFilter || b.status === statusFilter)
                 .filter((b) => !specFilter || proRoleOf(b.professionalId || '') === specFilter)
                 .filter((b) => !proFilter || b.professionalId === proFilter);
-              const pend = list.filter((b) => needsClosure(b, bookingDuration(serviceOf(b.serviceId)), today, nowHM())).length;
+              const pend = list.filter((b) => needsClosure(b, bookingDuration(serviceOf(b.serviceId)), today, nowHM(new Date(), bizTz))).length;
               const inMonth = d.slice(0, 7) === focus.slice(0, 7);
               return (
                 <button key={d} onClick={() => { setFocus(d); setView('day'); }} className={`bg-white p-1.5 min-h-[72px] text-left hover:bg-zinc-50 ${d === today ? 'ring-1 ring-inset ring-emerald-500 bg-emerald-50/40' : ''} ${!inMonth ? 'bg-zinc-50 text-zinc-400' : ''}`}>
@@ -1345,6 +1351,7 @@ export default function AgendaPage() {
           services={services}
           pros={pros}
           horizonDays={horizonDays}
+            timezone={bizTz}
           onClose={() => setCreating(false)}
           onCreated={load}
         />

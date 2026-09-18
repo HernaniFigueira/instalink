@@ -16,6 +16,7 @@ import {
   updateBusinessPipeline,
 } from '../pipeline';
 import { createBookingTx } from '../booking-create';
+import { applyBookingStatusTx } from '../booking-status';
 import type { Business, DB, Lead, Service } from '../types';
 import { buildAutomation } from './helpers/automation-fixtures';
 
@@ -236,6 +237,84 @@ describe('A2-B1 · markLeadScheduled', () => {
     expect(out?.lead.stageHistory!.length).toBe(1); // sem entrada duplicada
     expect(out?.lead.bookingId).toBe('bk3'); // vínculo atualizado
     expect(stageEvents(d, 'b1').length).toBe(0); // sem evento sem mudança
+  });
+
+  // ── Cancelamento NUNCA toca o lead (revisão final do A2) ─────────
+  // A reabertura de lead terminal acontece EXCLUSIVAMENTE com novo
+  // agendamento (DECISÃO 1). Cancelar um agendamento não é novo
+  // agendamento: o lead permanece como está — sem movimento, sem
+  // histórico, sem evento, sem "reabertura indevida".
+  describe('cancelamento de booking não reabre/toca o lead', () => {
+    function dbWithBooking(lead: Lead): { db: DB } {
+      const d = emptyDB();
+      d.businesses.push(biz('b1'));
+      d.services.push(service('s1', 'b1'));
+      d.leads.push(lead);
+      d.bookings.push({
+        id: 'bk1', businessId: 'b1', customerId: '', serviceId: 's1', professionalId: '',
+        date: FUTURE_DATE, time: FUTURE_TIME, customerName: 'Ana', customerPhone: '11988887777',
+        status: 'confirmed', note: '', answers: [], createdAt: NOW, updatedAt: NOW,
+        history: [{ at: NOW, from: '', to: 'confirmed', by: 'owner' }],
+        leadId: lead.id,
+      });
+      return { db: d };
+    }
+
+    const leadScheduled: Lead = {
+      id: 'l1', businessId: 'b1', customerId: '', name: 'Ana', phone: '11988887777',
+      email: '', instagram: '', origin: 'agendamento', interest: '', action: 'agendamento',
+      status: 'converted', stageId: 'scheduled', assignedUserId: '', priority: 'medium', nextAction: '',
+      serviceId: '', professionalId: '', sourceUrl: '', metadata: {}, notes: [],
+      stageHistory: [{ id: 'h1', fromStage: 'new', toStage: 'scheduled', movedBy: 'customer', movedByName: 'Agendamento', at: NOW }],
+      createdAt: NOW, lastInteraction: NOW, bookingId: 'bk1',
+    };
+
+    it('cancelar booking com lead em `scheduled`: lead permanece idêntico e sem evento', () => {
+      const { db: d } = dbWithBooking({ ...leadScheduled });
+      const res = applyBookingStatusTx(d, { businessId: 'b1', bookingId: 'bk1', to: 'cancelled', by: 'owner', now: NOW });
+      expect(res.ok).toBe(true);
+      const lead = d.leads[0];
+      expect(lead.stageId).toBe('scheduled'); // sem reabertura/movimento
+      expect(lead.status).toBe('converted');
+      expect(lead.stageHistory!.length).toBe(1); // sem entrada nova
+      expect(lead.bookingId).toBe('bk1'); // vínculo preservado (histórico)
+      expect(stageEvents(d, 'b1').length).toBe(0); // cancelamento não emite lead.stage_changed
+    });
+
+    it('cancelar booking com lead TERMINAL (lost): permanece terminal (reabre só com NOVO agendamento)', () => {
+      const { db: d } = dbWithBooking({
+        ...leadScheduled,
+        id: 'l2', status: 'lost', stageId: 'lost', stageHistory: [],
+      });
+      const res = applyBookingStatusTx(d, { businessId: 'b1', bookingId: 'bk1', to: 'cancelled', by: 'owner', now: NOW });
+      expect(res.ok).toBe(true);
+      const lead = d.leads[0];
+      expect(lead.stageId).toBe('lost'); // NÃO reaberto pelo cancelamento
+      expect(lead.status).toBe('lost');
+      expect(lead.stageHistory!.length).toBe(0);
+      expect(stageEvents(d, 'b1').length).toBe(0);
+    });
+
+    it('novo agendamento do MESMO cliente com lead terminal: reabre (DECISÃO 1) — cancelamento não', () => {
+      const { db: d } = dbWithBooking({
+        ...leadScheduled,
+        id: 'l3', status: 'lost', stageId: 'lost', stageHistory: [],
+      });
+      // 1. cancelamento NÃO reabre:
+      applyBookingStatusTx(d, { businessId: 'b1', bookingId: 'bk1', to: 'cancelled', by: 'owner', now: NOW });
+      expect(d.leads[0].stageId).toBe('lost');
+      // 2. novo agendamento (mesmo telefone) REABRE pela máquina oficial:
+      withAvailability(d, 'b1');
+      createBookingTx(d, {
+        business: d.businesses[0], service: d.services[0],
+        date: FUTURE_DATE, time: '11:00',
+        actor: 'customer', customer: { id: '', name: 'Ana', phone: '11988887777' },
+        now: NOW,
+      });
+      expect(d.leads.length).toBe(1); // nunca duplica lead
+      expect(d.leads[0].stageId).toBe('scheduled');
+      expect(d.leads[0].status).not.toBe('lost'); // nunca scheduled+lost
+    });
   });
 
   it('esteira customizada sem `scheduled`: o destino estrutural é garantido (sem fallback para Novo)', () => {

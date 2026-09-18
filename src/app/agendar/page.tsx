@@ -9,7 +9,7 @@
 // Também é a página embutida pelo widget /widget/booking.js (?embed=1).
 import { readDB } from '@/lib/db';
 import { isFeatureEnabled } from '@/lib/features';
-import { todayISO } from '@/lib/tz';
+import { effectiveTimezone, todayISO } from '@/lib/tz';
 import {
   publicBookableServices, publicActiveProfessionals,
   resolvePublicBookingTarget,
@@ -96,7 +96,7 @@ export default async function AgendarPage({ searchParams }: { searchParams: Sear
         business={business}
         services={services}
         professionals={professionals}
-        today={todayISO()}
+        today={todayISO(new Date(), effectiveTimezone(business.timezone))}
         initialServiceId={initialServiceId}
         initialDate={initialDate}
         leadId={leadId}

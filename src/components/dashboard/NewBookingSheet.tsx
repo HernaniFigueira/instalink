@@ -20,11 +20,13 @@ interface Contact {
   lastInteraction: string;
 }
 
-export function NewBookingSheet({ businessId, services, pros, horizonDays, initial, onClose, onCreated }: {
+export function NewBookingSheet({ businessId, services, pros, horizonDays, timezone, initial, onClose, onCreated }: {
   businessId: string;
   services: Service[];
   pros: Professional[];
   horizonDays: number;
+  /** A2-B5 (F9): fuso do negócio — "hoje" da lista de dias (opcional; ''/ausente = default). */
+  timezone?: string;
   /** Cliente já definido (ex.: aberto a partir do CRM) — pula a busca. */
   initial?: { contactId?: string; name: string; phone: string; email?: string };
   onClose: () => void;
@@ -54,7 +56,8 @@ export function NewBookingSheet({ businessId, services, pros, horizonDays, initi
   const seq = useRef(0);
   const slotSeq = useRef(0);
 
-  const today = todayISO();
+  // A2-B5 (F9): "hoje" no fuso do negócio (o servidor continua validando).
+  const today = todayISO(new Date(), timezone || undefined);
   const maxDate = addDaysISO(today, effectiveHorizonDays({ horizonDays }));
   const service = bookable.find((s) => s.id === serviceId);
   const eligiblePros = service?.professionalIds?.length
