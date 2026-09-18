@@ -136,7 +136,9 @@ describe('A2-B1 · ensureScheduledStage', () => {
       { id: 'negociando', name: 'Negociando', order: 1 },
       { id: 'converted', name: 'Concluído', order: 2, isTerminal: true },
     ]);
-    expect(getBusinessPipeline(d, 'b1').stages.some((s) => s.id === 'scheduled')).toBe(false);
+    // A3: updateBusinessPipeline já garante `scheduled` estrutural (idempotente)
+    expect(getBusinessPipeline(d, 'b1').stages.some((s) => s.id === 'scheduled')).toBe(true);
+    expect(getBusinessPipeline(d, 'b1').stages.some((s) => s.id === 'scheduled' && s.isSystem)).toBe(true);
 
     const p = ensureScheduledStage(d, 'b1');
     expect(p.stages.some((s) => s.id === 'scheduled' && s.isSystem)).toBe(true);

@@ -26,34 +26,58 @@ export function TaskPanel({ tasks, summary, businessId, members, onChanged }: {
   businessId: string; members: { userId: string; name: string }[]; onChanged: () => void;
 }) {
   const [title, setTitle] = useState('');
+  const [note, setNote] = useState('');
+  const [dueAt, setDueAt] = useState('');
   const [assignee, setAssignee] = useState('');
+  const [leadId, setLeadId] = useState('');
+  const [bookingId, setBookingId] = useState('');
   const [busy, setBusy] = useState(false);
+  const [error, setError] = useState('');
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [editTitle, setEditTitle] = useState('');
+  const [editDueAt, setEditDueAt] = useState('');
+  const [editAssignee, setEditAssignee] = useState('');
   const open = tasks.filter((t) => t.status === 'open');
   const done = tasks.filter((t) => t.status !== 'open');
+
+  async function createTask(){
+    setError('');
+    if (!title.trim()) { setError('Informe o título da tarefa.'); return; }
+    setBusy(true);
+    const res = await apiSend('/api/tasks', 'POST', { businessId, title: title.trim(), note: note.trim(), dueAt: dueAt.trim(), assignedUserId: assignee, leadId: leadId.trim() || undefined, bookingId: bookingId.trim() || undefined });
+    setBusy(false);
+    if (res.ok) { setTitle(''); setNote(''); setDueAt(''); setLeadId(''); setBookingId(''); setAssignee(''); onChanged(); } else { setError(res.message || 'Não foi possível criar.'); }
+  }
 
   return (
     <div className="space-y-3">
       <Card className="p-3">
-        <div className="flex flex-wrap items-end gap-2">
-          <div className="flex-1 min-w-[200px]">
-            <span className="block text-[11px] font-semibold text-zinc-600 mb-1">Nova tarefa da equipe</span>
-            <Input value={title} onChange={(e) => setTitle(e.target.value)} placeholder="Ex.: Ligar para o lead que respondeu o follow-up" maxLength={140} />
+        <div className="space-y-2">
+          <div className="flex flex-wrap items-end gap-2">
+            <div className="flex-1 min-w-[200px]">
+              <span className="block text-[11px] font-semibold text-zinc-600 mb-1">Nova tarefa da equipe</span>
+              <Input value={title} onChange={(e) => setTitle(e.target.value)} placeholder="Ex.: Ligar para o lead que respondeu o follow-up" maxLength={140} />
+            </div>
+            <Select className="max-w-[180px]" value={assignee} onChange={(e) => setAssignee(e.target.value)} aria-label="Responsável">
+              <option value="">qualquer um</option>
+              {members.map((m) => <option key={m.userId} value={m.userId}>{m.name}</option>)}
+            </Select>
+            <Button size="sm" disabled={busy || !title.trim()} onClick={createTask}>Adicionar</Button>
           </div>
-          <Select className="max-w-[180px]" value={assignee} onChange={(e) => setAssignee(e.target.value)} aria-label="Responsável">
-            <option value="">qualquer um</option>
-            {members.map((m) => <option key={m.userId} value={m.userId}>{m.name}</option>)}
-          </Select>
-          <Button size="sm" disabled={busy || !title.trim()} onClick={async () => {
-            setBusy(true);
-            const res = await apiSend('/api/tasks', 'POST', { businessId, title, assignedUserId: assignee });
-            setBusy(false);
-            if (res.ok) { setTitle(''); onChanged(); }
-          }}>Adicionar</Button>
+          <div className="flex flex-wrap gap-2">
+            <Input value={dueAt} onChange={(e)=> setDueAt(e.target.value)} placeholder="Prazo (YYYY-MM-DD)" className="max-w-[170px]" />
+            <Input value={note} onChange={(e)=> setNote(e.target.value)} placeholder="Nota / detalhes (opcional)" className="flex-1 min-w-[180px]" />
+          </div>
+          <div className="flex flex-wrap gap-2">
+            <Input value={leadId} onChange={(e)=> setLeadId(e.target.value)} placeholder="Vincular leadId (opcional)" className="max-w-[200px]" />
+            <Input value={bookingId} onChange={(e)=> setBookingId(e.target.value)} placeholder="Vincular bookingId (opcional)" className="max-w-[200px]" />
+          </div>
+          {error && <p className="text-xs font-medium text-red-600">{error}</p>}
+          <p className="text-[11px] text-zinc-400">
+            {summary.open} abertas · {summary.overdue} atrasadas · {summary.dueToday} para hoje
+            {summary.mine ? ` · ${summary.mine} suas` : ''}
+          </p>
         </div>
-        <p className="text-[11px] text-zinc-400 mt-2">
-          {summary.open} abertas · {summary.overdue} atrasadas · {summary.dueToday} para hoje
-          {summary.mine ? ` · ${summary.mine} suas` : ''}
-        </p>
       </Card>
 
       <Card className="divide-y divide-zinc-100">
@@ -63,13 +87,35 @@ export function TaskPanel({ tasks, summary, businessId, members, onChanged }: {
             <button onClick={async () => { await apiSend('/api/tasks', 'PATCH', { businessId, id: t.id, status: 'done' }); onChanged(); }}
               className="mt-0.5 w-4 h-4 rounded border border-zinc-300 hover:border-emerald-600 shrink-0" aria-label={`Concluir tarefa: ${t.title}`} />
             <div className="min-w-0 flex-1">
-              <p className="text-sm text-zinc-900">{t.title}</p>
-              {t.note && <p className="text-[11px] text-zinc-500 mt-0.5">{t.note}</p>}
-              <p className="text-[11px] text-zinc-400 mt-1">
-                {t.dueLabel}{t.assigneeName ? ` · ${t.assigneeName}` : ''}{t.leadName ? ` · lead ${t.leadName}` : ''}{t.bookingLabel ? ` · agendamento ${t.bookingLabel}` : ''}
-              </p>
+              {editingId===t.id ? (
+                <div className="space-y-2">
+                  <Input value={editTitle} onChange={(e)=> setEditTitle(e.target.value)} />
+                  <div className="flex gap-2">
+                    <Input value={editDueAt} onChange={(e)=> setEditDueAt(e.target.value)} placeholder="Prazo YYYY-MM-DD" className="max-w-[150px]" />
+                    <Select value={editAssignee} onChange={(e)=> setEditAssignee(e.target.value)} className="max-w-[150px]">
+                      <option value="">qualquer um</option>
+                      {members.map((m)=> <option key={m.userId} value={m.userId}>{m.name}</option>)}
+                    </Select>
+                  </div>
+                  <div className="flex gap-2">
+                    <Button size="sm" onClick={async()=>{ const r=await apiSend('/api/tasks','PATCH',{businessId, id:t.id, title:editTitle, dueAt:editDueAt, assignedUserId:editAssignee}); if(r.ok){ setEditingId(null); onChanged(); }}}>Salvar</Button>
+                    <Button size="sm" variant="ghost" onClick={()=> setEditingId(null)}>Cancelar</Button>
+                  </div>
+                </div>
+              ) : (
+                <>
+                  <p className="text-sm text-zinc-900">{t.title}</p>
+                  {t.note && <p className="text-[11px] text-zinc-500 mt-0.5">{t.note}</p>}
+                  <p className="text-[11px] text-zinc-400 mt-1">
+                    {t.dueLabel}{t.assigneeName ? ` · ${t.assigneeName}` : ''}{t.leadName ? ` · lead ${t.leadName}` : ''}{t.bookingLabel ? ` · agendamento ${t.bookingLabel}` : ''}
+                  </p>
+                </>
+              )}
             </div>
-            {t.fromAutomation && <Badge tone="blue">automação</Badge>}
+            <div className="flex items-center gap-1.5 shrink-0">
+              {t.fromAutomation && <Badge tone="blue">automação</Badge>}
+              {editingId!==t.id && <button onClick={()=>{setEditingId(t.id); setEditTitle(t.title); setEditDueAt(t.dueAt||''); setEditAssignee(t.assignedUserId||'');}} className="text-[11px] text-zinc-500 border border-zinc-200 rounded px-2 py-1 hover:bg-zinc-50">Editar</button>}
+            </div>
           </div>
         ))}
         {done.slice(0, 10).map((t) => (

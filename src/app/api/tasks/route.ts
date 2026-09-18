@@ -105,22 +105,55 @@ export async function PATCH(req: NextRequest) {
     const businessId = String(body.businessId || req.nextUrl.searchParams.get('businessId') || '');
     const guard = await requireBusiness(req, businessId, ['leads', 'agenda', 'clientes', 'config']);
     if (!guard.ok) return guard.res;
-    const status = body.status === 'done' ? 'done' : body.status === 'cancelled' ? 'cancelled' : 'open';
     const updated = await updateDB((d) => {
-      const task = setTaskStatusTx(d, {
-        businessId,
-        taskId: String(body.id || ''),
-        status,
-        by: guard.ctx.user.id,
-      });
+      const taskId = String(body.id || '');
+      const existing = (d.tasks || []).find((x: any) => x.id === taskId && x.businessId === businessId);
+      if (!existing) throw Object.assign(new Error('Tarefa não encontrada.'), { status: 404 });
+      // Edição operacional: título, nota, prazo, responsável, vínculos
+      let touched = false;
+      if (body.title !== undefined) {
+        const title = String(body.title || '').trim().slice(0, 140);
+        if (!title) throw Object.assign(new Error('Título não pode ser vazio.'), { status: 400 });
+        existing.title = title;
+        touched = true;
+      }
+      if (body.note !== undefined) {
+        existing.note = String(body.note || '').trim().slice(0, 1000);
+        touched = true;
+      }
+      if (body.dueAt !== undefined) {
+        existing.dueAt = String(body.dueAt || '').trim().slice(0, 30);
+        touched = true;
+      }
+      if (body.assignedUserId !== undefined) {
+        const assignee = String(body.assignedUserId || '');
+        if (assignee) {
+          const check = validateAssignedUser(d, businessId, assignee);
+          if (!check.valid) throw Object.assign(new Error(check.error || 'responsável inválido'), { status: 422 });
+        }
+        existing.assignedUserId = assignee;
+        touched = true;
+      }
+      // Status
+      if (body.status !== undefined) {
+        const status = body.status === 'done' ? 'done' : body.status === 'cancelled' ? 'cancelled' : 'open';
+        const res = setTaskStatusTx(d, { businessId, taskId, status, by: guard.ctx.user.id });
+        if (!res) throw Object.assign(new Error('Tarefa não encontrada.'), { status: 404 });
+        if (status === 'done') {
+          pushAudit(d, { action: 'task.completed', actor: guard.ctx.user, businessId, meta: { taskId: res.id, title: res.title } });
+        }
+        return res;
+      }
+      if (touched) {
+        existing.updatedAt = new Date().toISOString();
+        return existing;
+      }
+      // fallback to status handler for legacy call with status
+      const status = body.status === 'done' ? 'done' : body.status === 'cancelled' ? 'cancelled' : 'open';
+      const task = setTaskStatusTx(d, { businessId, taskId, status, by: guard.ctx.user.id });
       if (!task) throw Object.assign(new Error('Tarefa não encontrada.'), { status: 404 });
       if (status === 'done') {
-        pushAudit(d, {
-          action: 'task.completed',
-          actor: guard.ctx.user,
-          businessId,
-          meta: { taskId: task.id, title: task.title },
-        });
+        pushAudit(d, { action: 'task.completed', actor: guard.ctx.user, businessId, meta: { taskId: task.id, title: task.title } });
       }
       return task;
     });

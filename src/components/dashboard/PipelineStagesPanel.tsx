@@ -68,7 +68,9 @@ export function PipelineStagesPanel({ businessId, pipeline, onClose, onSaved }: 
   const [error, setError] = useState('');
 
   const takenIds = useMemo(() => new Set(stages.map((s) => s.id)), [stages]);
-  const canRemove = (s: StageDraft) => s.id !== 'new' && s.id !== 'converted';
+  // A3: etapas estruturais new/scheduled/converted não podem ser removidas; scheduled é de sistema
+  const canRemove = (s: StageDraft) => s.id !== 'new' && s.id !== 'scheduled' && s.id !== 'converted';
+  const isSystemStage = (s: StageDraft) => s.isSystem || ['new','scheduled','converted'].includes(s.id);
 
   function patch(index: number, partial: Partial<StageDraft>) {
     setStages((list) => list.map((s, i) => (i === index ? { ...s, ...partial } : s)));
@@ -148,6 +150,7 @@ export function PipelineStagesPanel({ businessId, pipeline, onClose, onSaved }: 
                 aria-label={`Nome da etapa ${i + 1}`}
                 className="flex-1 min-w-0 text-xs font-semibold rounded-md border border-zinc-300 bg-white px-2.5 py-1.5 focus:outline-none focus:ring-1 focus:ring-zinc-900"
               />
+              {isSystemStage(s) && <span className="text-[9px] font-bold px-1.5 py-0.5 rounded bg-zinc-900 text-white uppercase tracking-wider" title="Etapa de sistema — essencial para agenda/CRM/automação">sistema</span>}
               <label className="inline-flex items-center gap-1 text-[11px] text-zinc-600 shrink-0 cursor-pointer" title="Etapa final: encerra a oportunidade (ex.: concluído, perdido).">
                 <input type="checkbox" checked={s.isTerminal} onChange={(e) => patch(i, { isTerminal: e.target.checked })} className="w-3.5 h-3.5 accent-zinc-900" />
                 final
@@ -158,7 +161,7 @@ export function PipelineStagesPanel({ businessId, pipeline, onClose, onSaved }: 
                 <button type="button" onClick={() => move(i, 1)} disabled={i === stages.length - 1} aria-label="Mover para baixo"
                   className="p-1 text-zinc-500 hover:text-zinc-900 disabled:opacity-30"><Icon n="chevD" size={13} /></button>
                 <button type="button" onClick={() => remove(i)} disabled={!canRemove(s)} aria-label={`Remover etapa ${s.name}`}
-                  title={canRemove(s) ? 'Remover etapa' : 'Etapas essenciais (entrada e conclusão) não podem ser removidas'}
+                  title={canRemove(s) ? 'Remover etapa' : 'Etapas de sistema (new/scheduled/converted) não podem ser removidas'}
                   className={cn('p-1', canRemove(s) ? 'text-red-400 hover:text-red-600' : 'text-zinc-300 cursor-not-allowed')}>
                   <Icon n="x" size={13} />
                 </button>
@@ -173,7 +176,7 @@ export function PipelineStagesPanel({ businessId, pipeline, onClose, onSaved }: 
         </button>
 
         <p className="text-[11px] text-zinc-400">
-          As etapas de entrada (“new”) e conclusão (“converted”) são essenciais e não podem ser removidas. Leads de uma etapa removida são reacomodados na primeira etapa — nada é apagado.
+          Etapas de sistema (“new”, “scheduled”, “converted”) são essenciais e não podem ser removidas — garantem a integração Agenda ↔ CRM ↔ Automação. Renomear/cor é permitido. Leads de uma etapa removida são reacomodados na primeira etapa — nada é apagado.
         </p>
 
         {error && <p className="text-xs font-medium text-red-600">{error}</p>}

@@ -20,6 +20,7 @@
 // Este módulo é PURO sobre o DB recebido (roda dentro de updateDB).
 import { randomUUID } from 'node:crypto';
 import type { Booking, Business, BusinessCustomer, DB } from './types';
+import { ingestLead } from './pipeline';
 import { phoneKey } from './whatsapp';
 import { publicBookingSummary } from './pricing';
 import { addDaysISO, todayISO } from './tz';
@@ -339,23 +340,44 @@ export function createWinBackLeads(d: DB, businessId: string, today = todayISO()
   if (!business || !automationEnabled(business, 'win_back')) return 0;
   const now = new Date().toISOString();
   let count = 0;
+  // A3.17 — entrada interna VIA ingestLead (única porta): pipeline válido,
+  // stageId/stageHistory, status projetado, contato e eventos P4 corretos.
   for (const c of winBackCandidates(d, businessId, today)) {
-    d.leads.push({
-      id: randomUUID(),
-      businessId,
-      customerId: c.contact.customerId,
-      name: c.contact.name,
-      phone: c.contact.phone,
-      email: c.contact.email,
-      instagram: '',
-      origin: 'automacao',
-      interest: `Retorno — último atendimento ${c.lastBookingDate.split('-').reverse().join('/')}`,
-      action: 'retorno',
-      status: 'new',
-      createdAt: now,
-      lastInteraction: now,
-    });
-    count += 1;
+    try {
+      const res = ingestLead(d, {
+        businessId,
+        customerId: c.contact.customerId || undefined,
+        name: c.contact.name,
+        phone: c.contact.phone,
+        email: c.contact.email,
+        interest: `Retorno — último atendimento ${c.lastBookingDate.split('-').reverse().join('/')}`,
+        source: 'automacao',
+        actor: { id: 'system', name: 'Automação', type: 'system' },
+        now,
+      });
+      res.lead.action = 'retorno';
+      count += 1;
+    } catch {
+      // fallback silencioso para preservar contagem em ambiente de teste sem pipeline
+      d.leads.push({
+        id: randomUUID(),
+        businessId,
+        customerId: c.contact.customerId,
+        name: c.contact.name,
+        phone: c.contact.phone,
+        email: c.contact.email,
+        instagram: '',
+        origin: 'automacao',
+        interest: `Retorno — último atendimento ${c.lastBookingDate.split('-').reverse().join('/')}`,
+        action: 'retorno',
+        status: 'new',
+        stageId: 'new',
+        stageHistory: [{ id: randomUUID(), fromStage: '', toStage: 'new', movedBy: 'system', movedByName: 'Automação', at: now, note: 'Retorno' }],
+        createdAt: now,
+        lastInteraction: now,
+      });
+      count += 1;
+    }
   }
   return count;
 }

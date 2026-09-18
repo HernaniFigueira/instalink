@@ -53,6 +53,9 @@ export function getBusinessPipeline(db: DB, businessId: string): BusinessPipelin
   return p;
 }
 
+/** Etapas estruturais: devem existir em QUALQUER pipeline customizado. */
+export const STRUCTURAL_STAGE_IDS = ['new', 'scheduled', 'converted'] as const;
+
 /** Atualiza os estágios da esteira do negócio preservando IDs válidos. */
 export function updateBusinessPipeline(
   db: DB,
@@ -80,15 +83,49 @@ export function updateBusinessPipeline(
     });
   }
 
-  // Garante ao menos 'new' e 'converted'
+  // Garante etapas estruturais: new (sempre primeira), scheduled (antes de converted), converted
+  // — sem duplicação, ordem garantida independente da entrada.
   if (!validated.some((s) => s.id === 'new')) {
     validated.unshift({ ...DEFAULT_PIPELINE_STAGES[0] });
+  } else {
+    // força new para primeira posição preservando o objeto original
+    const idx = validated.findIndex((s) => s.id === 'new');
+    if (idx > 0) {
+      const [newStage] = validated.splice(idx, 1);
+      validated.unshift(newStage);
+    }
+  }
+  if (!validated.some((s) => s.id === 'scheduled')) {
+    const defScheduled = DEFAULT_PIPELINE_STAGES.find((s) => s.id === 'scheduled')!;
+    // Insere antes de converted se já existe converted, senão no fim
+    const convertedIdx = validated.findIndex((s) => s.id === 'converted');
+    if (convertedIdx >= 0) validated.splice(convertedIdx, 0, { ...defScheduled });
+    else validated.push({ ...defScheduled });
   }
   if (!validated.some((s) => s.id === 'converted')) {
     validated.push({ ...DEFAULT_PIPELINE_STAGES[6] });
   }
 
-  current.stages = validated;
+  // Corrige duplicatas de ID mantendo primeiro
+  const seen = new Set<string>();
+  const deduped: PipelineStage[] = [];
+  for (const s of validated) {
+    if (seen.has(s.id)) continue;
+    seen.add(s.id);
+    deduped.push(s);
+  }
+  // Re-garante ordem estrutural após dedupe (new primeiro, scheduled antes de converted)
+  const newIdx = deduped.findIndex((s)=> s.id==='new');
+  if (newIdx>0) { const [ns]=deduped.splice(newIdx,1); deduped.unshift(ns); }
+  const schedIdx = deduped.findIndex((s)=> s.id==='scheduled');
+  const convIdx = deduped.findIndex((s)=> s.id==='converted');
+  if (schedIdx>=0 && convIdx>=0 && schedIdx>convIdx) {
+    const [ns]=deduped.splice(schedIdx,1); deduped.splice(convIdx,0,ns);
+  }
+  // Normaliza order sequencial preservando posição atual
+  deduped.forEach((s, idx) => { s.order = idx; });
+
+  current.stages = deduped;
   current.updatedAt = now;
   return current;
 }
@@ -569,6 +606,10 @@ export function moveLeadStage(db: DB, p: MoveLeadStageParams): Lead {
   // A1.2 · Bloco 2 (F3): o "de onde saiu" registrado no histórico é a etapa
   // NORMALIZADA — registro legado (ex.: stageId cru "contacted") não entra.
   const fromStage = normalizeLeadStageId(pipeline, lead);
+  // A3 — idempotência: mesma etapa não gera histórico/evento duplicado
+  if (fromStage === targetStage.id) {
+    return lead;
+  }
 
   lead.stageId = targetStage.id;
   lead.status = mapStageToStatus(pipeline, targetStage.id);
@@ -725,6 +766,63 @@ export function markLeadScheduled(db: DB, p: MarkLeadScheduledParams): MarkLeadS
  * não pode ficar apontando para o dia/horário antigo. Segue o padrão do
  * `assignLead`: entrada de histórico sem mudança de etapa, append-only.
  */
+export const CONVERTED_STAGE_ID = 'converted';
+
+/** Garante a etapa estrutural `converted` (idempotente). */
+export function ensureConvertedStage(db: import('./types').DB, businessId: string): import('./types').BusinessPipeline {
+  const pipeline = getBusinessPipeline(db, businessId);
+  if (pipeline.stages.some((s) => s.id === CONVERTED_STAGE_ID)) return pipeline;
+  const maxOrder = pipeline.stages.reduce((m, s) => Math.max(m, s.order || 0), 0);
+  const def = DEFAULT_PIPELINE_STAGES.find((s) => s.id === CONVERTED_STAGE_ID);
+  const stage: import('./types').PipelineStage = def ? { ...def, order: maxOrder + 1 } : { id: CONVERTED_STAGE_ID, name: 'Concluído', order: maxOrder + 1, color: 'emerald', isTerminal: true, mappedStatus: 'converted', isSystem: true };
+  pipeline.stages.push(stage);
+  pipeline.updatedAt = new Date().toISOString();
+  return pipeline;
+}
+
+export interface MarkLeadConvertedParams {
+  businessId: string;
+  leadId?: string;
+  bookingId?: string;
+  actor: { id: string; name: string };
+  now?: string;
+  origin?: AutomationOrigin;
+}
+
+/**
+ * A3.16 — CONCLUÍDO: booking completed ⇒ lead convertido.
+ * Helper OFICIAL: usa a máquina moveLeadStage (nunca escreve stageId direto).
+ * Idempotente: se já está em converted, não gera histórico/evento.
+ */
+export function markLeadConverted(db: import('./types').DB, p: MarkLeadConvertedParams): { lead: import('./types').Lead; moved: boolean } | null {
+  ensureConvertedStage(db, p.businessId);
+  let lead: import('./types').Lead | undefined;
+  if (p.leadId) lead = db.leads.find((l) => l.id === p.leadId && l.businessId === p.businessId);
+  if (!lead && p.bookingId) {
+    const booking = db.bookings.find((b) => b.id === p.bookingId && b.businessId === p.businessId);
+    if (booking?.leadId) lead = db.leads.find((l) => l.id === booking.leadId && l.businessId === p.businessId);
+    if (!lead && booking) {
+      const digits = onlyDigits(booking.customerPhone || '');
+      const cid = (booking.customerId || '').trim();
+      lead = db.leads.find((l) => l.businessId === p.businessId && ((cid && l.customerId === cid) || (digits && onlyDigits(l.phone) === digits)));
+    }
+  }
+  if (!lead) return null;
+  const pipeline = getBusinessPipeline(db, p.businessId);
+  const fromStage = normalizeLeadStageId(pipeline, lead);
+  if (fromStage === CONVERTED_STAGE_ID) return { lead, moved: false };
+  moveLeadStage(db, {
+    businessId: p.businessId,
+    leadId: lead.id,
+    toStageId: CONVERTED_STAGE_ID,
+    note: 'Atendimento concluído',
+    actor: { id: p.actor.id, name: p.actor.name },
+    now: p.now,
+    origin: p.origin,
+  });
+  return { lead, moved: true };
+}
+
 export function noteLeadReschedule(
   db: DB,
   p: {

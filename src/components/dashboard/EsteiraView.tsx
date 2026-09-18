@@ -90,6 +90,12 @@ export function EsteiraView() {
   // Observação rápida no modal
   const [newNoteText, setNewNoteText] = useState('');
   const [savingNote, setSavingNote] = useState(false);
+  // A3 — 360 extras (bookings/tasks/conversation preview)
+  const [leadBookings, setLeadBookings] = useState<any[]>([]);
+  const [leadTasks, setLeadTasks] = useState<any[]>([]);
+  // A3 drag-and-drop
+  const [dragLeadId, setDragLeadId] = useState<string | null>(null);
+  const [dragOverStage, setDragOverStage] = useState<string | null>(null);
 
   // 1. Carrega leads, esteira e equipe
   const loadLeads = useCallback(async () => {
@@ -132,6 +138,34 @@ export function EsteiraView() {
     loadLeads();
     loadCatalog();
   }, [loadLeads, loadCatalog]);
+
+  // A3 — carrega 360 do lead selecionado (agendamentos e tarefas vinculadas)
+  useEffect(() => {
+    if (!selectedLead || !businessId) { setLeadBookings([]); setLeadTasks([]); return; }
+    const sel = selectedLead;
+    let cancel=false;
+    async function load360(){
+      try {
+        const [bRes, tRes] = await Promise.all([
+          apiGet<any>(`/api/bookings?businessId=${businessId}`, { scope:'area', area:'Funil'}),
+          apiGet<any>(`/api/tasks?businessId=${businessId}&status=all`, { scope:'area', area:'Funil'}),
+        ]);
+        if (cancel) return;
+        if (bRes.ok && bRes.data) {
+          const all = (bRes.data.bookings || bRes.data.items || bRes.data || []);
+          const arr = Array.isArray(all)? all : [];
+          const filtered = arr.filter((b:any)=> b.leadId===sel.id || (b.customerPhone && onlyDigits(b.customerPhone)===onlyDigits(sel.phone)) );
+          setLeadBookings(filtered.slice(0,5));
+        }
+        if (tRes.ok && tRes.data) {
+          const allT = (tRes.data.tasks || []);
+          setLeadTasks(allT.filter((x:any)=> x.leadId===sel.id).slice(0,5));
+        }
+      } catch {}
+    }
+    load360();
+    return ()=> {cancel=true};
+  }, [selectedLead, businessId]);
 
   // Carrega slots livres quando data/serviço mudam no agendamento
   useEffect(() => {
@@ -206,30 +240,29 @@ export function EsteiraView() {
     return map;
   }, [filteredLeads, visibleStages, pipeline]);
 
-  // Ação: Mover etapa do Lead
+  // Ação: Mover etapa do Lead — A3: otimista + rollback, idempotente (mesma etapa não re-request)
   async function handleMoveStage(leadId: string, toStageId: string, note?: string) {
+    const leadBefore = leads.find((l)=>l.id===leadId);
+    const currentStage = leadBefore && pipeline ? normalizeLeadStageId(pipeline, leadBefore) : leadBefore?.stageId;
+    if (currentStage === toStageId) return;
+    // Otimista
+    const prevLeads = leads;
+    setLeads((prev) => prev.map((l)=> l.id===leadId ? { ...l, stageId: toStageId, lastInteraction: new Date().toISOString() } : l));
+    if (selectedLead?.id === leadId) setSelectedLead((prev)=> prev? { ...prev, stageId: toStageId }: null);
     const res = await apiSend('/api/leads', 'PATCH', {
       businessId,
       id: leadId,
       stageId: toStageId,
       note,
     }, { scope: 'action', area: 'Funil' });
-
     if (res.ok) {
-      setLeads((prev) =>
-        prev.map((l) =>
-          l.id === leadId
-            ? { ...l, stageId: toStageId, lastInteraction: new Date().toISOString() }
-            : l,
-        ),
-      );
-      if (selectedLead?.id === leadId) {
-        setSelectedLead((prev) => prev ? { ...prev, stageId: toStageId } : null);
-      }
       setMsg('Etapa atualizada.');
       setTimeout(() => setMsg(''), 2500);
-      loadLeads(); // recarrega histórico completo
+      loadLeads();
     } else {
+      // rollback
+      setLeads(prevLeads);
+      if (selectedLead?.id === leadId && leadBefore) setSelectedLead(leadBefore);
       alert(res.message || 'Não foi possível mover etapa.');
     }
   }
@@ -483,7 +516,10 @@ export function EsteiraView() {
             return (
               <div
                 key={stage.id}
-                className="bg-zinc-100/80 border border-zinc-200 rounded-xl p-3 flex flex-col max-h-[78vh] flex-shrink-0"
+                onDragOver={(e)=>{e.preventDefault(); setDragOverStage(stage.id);}}
+                onDragLeave={()=> setDragOverStage((prev)=> prev===stage.id? null: prev)}
+                onDrop={(e)=>{e.preventDefault(); if (dragLeadId) handleMoveStage(dragLeadId, stage.id); setDragLeadId(null); setDragOverStage(null);}}
+                className={"bg-zinc-100/80 border border-zinc-200 rounded-xl p-3 flex flex-col max-h-[78vh] flex-shrink-0 " + (dragOverStage===stage.id? 'ring-2 ring-zinc-900 border-zinc-900' : '')}
               >
                 {/* Cabeçalho da coluna */}
                 <div className="flex items-center justify-between pb-2.5 mb-2.5 border-b border-zinc-200/80">
@@ -509,7 +545,10 @@ export function EsteiraView() {
                       return (
                         <div
                           key={lead.id}
-                          className="bg-white border border-zinc-200 hover:border-zinc-300 rounded-xl p-3.5 shadow-sm transition hover:shadow cursor-pointer space-y-2.5"
+                          draggable
+                          onDragStart={()=> setDragLeadId(lead.id)}
+                          onDragEnd={()=> {setDragLeadId(null); setDragOverStage(null);}}
+                          className={"bg-white border border-zinc-200 hover:border-zinc-300 rounded-xl p-3.5 shadow-sm transition hover:shadow cursor-grab active:cursor-grabbing space-y-2.5 " + (dragLeadId===lead.id? 'opacity-50' : '')}
                           onClick={() => setSelectedLead(lead)}
                         >
                           <div className="flex items-start justify-between gap-2">
@@ -546,6 +585,13 @@ export function EsteiraView() {
                             )}
                           </div>
 
+                          {/* Mover para (mobile) */}
+                          <div className="sm:hidden" onClick={(e)=>e.stopPropagation()}>
+                            <label className="text-[11px] font-semibold text-zinc-600">Mover para…</label>
+                            <select value={pipeline ? normalizeLeadStageId(pipeline, lead) : lead.stageId} onChange={(e)=> handleMoveStage(lead.id, e.target.value)} className="mt-1 w-full text-xs p-1.5 rounded border border-zinc-300 bg-white">
+                              {(pipeline?.stages||[]).filter((s)=> s.id!=='scheduled').map((s)=> <option key={s.id} value={s.id}>{s.name}</option>)}
+                            </select>
+                          </div>
                           {/* Ações Rápidas no Card */}
                           <div
                             className="pt-1 flex items-center justify-between gap-1 border-t border-zinc-100 text-xs"
@@ -772,6 +818,35 @@ export function EsteiraView() {
                     </div>
                   ))}
                 </div>
+              </div>
+            )}
+            {/* 360 — Agendamentos e tarefas vinculadas */}
+            {(leadBookings.length>0 || leadTasks.length>0) && (
+              <div className="space-y-3 pt-3 border-t border-zinc-200">
+                <h3 className="text-xs font-bold uppercase tracking-wider text-zinc-600">Visão 360 — atendimentos e tarefas</h3>
+                {leadBookings.length>0 && (
+                  <div className="space-y-1.5">
+                    <p className="text-xs font-semibold text-zinc-700">Agendamentos ({leadBookings.length})</p>
+                    {leadBookings.map((b:any)=> (
+                      <div key={b.id} className="text-xs p-2 bg-white border border-zinc-200 rounded-lg flex items-center justify-between">
+                        <span className="font-medium">{b.date} {b.time} · {b.status}</span>
+                        <a href={`/agenda?b=${businessId}&data=${b.date}`} className="text-zinc-600 underline text-[11px]"> Ver agenda</a>
+                      </div>
+                    ))}
+                  </div>
+                )}
+                {leadTasks.length>0 && (
+                  <div className="space-y-1.5">
+                    <p className="text-xs font-semibold text-zinc-700">Tarefas ({leadTasks.length})</p>
+                    {leadTasks.map((tt:any)=> (
+                      <div key={tt.id} className="text-xs p-2 bg-white border border-zinc-200 rounded-lg flex items-center justify-between">
+                        <span className="font-medium">{tt.title} · {tt.status}</span>
+                        <span className="text-zinc-500 text-[11px]">{tt.dueLabel || tt.dueAt || ''}</span>
+                      </div>
+                    ))}
+                  </div>
+                )}
+                <a href={`/clientes?b=${businessId}&q=${encodeURIComponent(selectedLead.phone||selectedLead.name||'')}`} className="text-xs font-semibold text-zinc-700 underline">Ver cliente no CRM 360 →</a>
               </div>
             )}
           </div>

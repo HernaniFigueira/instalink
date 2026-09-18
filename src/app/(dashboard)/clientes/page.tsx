@@ -2,7 +2,8 @@
 import { useCallback, useEffect, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
-import type { BookingConfig, LeadStatus } from '@/lib/types';
+import type { BookingConfig, LeadStatus, BusinessPipeline, PipelineStage } from '@/lib/types';
+import { stagesInOrder } from '@/lib/pipeline-stages';
 import { cn, money, paginate, waLink } from '@/lib/utils';
 import { humanDay, humanDateTime } from '@/lib/tz';
 import { BOOKING_STATUS, LEAD_STATUS, toneCls, type StatusDef } from '@/lib/status';
@@ -29,7 +30,7 @@ interface Person {
     id: string; customerName: string; date: string; time: string; status: string; service: string;
     professional?: string; rescheduleCount?: number; previousId?: string;
   }>;
-  leads: Array<{ id: string; origin: string; status: string; interest: string; action: string; createdAt: string }>;
+  leads: Array<{ id: string; origin: string; status: string; stageId: string; stageName: string; interest: string; action: string; createdAt: string; stageHistory?: any[]; priority?: string; assignedUserId?: string; lastInteraction?: string }>;
   conversations?: Array<{ id: string; channel: string; status: string; at: string; preview: string; unread: number }>;
   lastSeen: string;
 }
@@ -42,8 +43,10 @@ function eventDay(iso: string): string {
   return `${Number(d)} ${MES[Number(m) - 1] || m}`;
 }
 
+// A3: etapa é a verdade; LEAD_STATUS é projeção. Navegação sequencial via pipeline quando disponível.
 const NEXT_LEAD: Record<string, LeadStatus | ''> = { new: 'contacted', contacted: 'qualified', qualified: 'converted' };
 const NEXT_LEAD_LABEL: Record<string, string> = { new: 'Marcar contato', contacted: 'Qualificar', qualified: 'Marcar conversão' };
+
 export default function ClientesPage() {
   const params = useSearchParams();
   const router = useRouter();
@@ -86,6 +89,7 @@ export default function ClientesPage() {
   // Nada de oferecer porta que o servidor vai negar em seguida.
   const { permissions, ready: permsReady } = usePanelPermissions();
   const canFunil = permsReady && permissions.leads === true;
+  const [pipeline, setPipeline] = useState<BusinessPipeline | null>(null);
 
   const load = useCallback(async () => {
     if (!businessId) return;
@@ -99,6 +103,11 @@ export default function ClientesPage() {
     setTotal(d.total || 0);
     setPages(d.pages || 1);
     setLoaded(true);
+    // Busca esteira para renderizar etapa real (stageId) e ações contextuais
+    try {
+      const pRes = await apiGet<{ pipeline?: BusinessPipeline }>(`/api/pipeline?businessId=${businessId}`, { scope: 'area', area: 'Clientes' });
+      if (pRes.ok && (pRes.data as any)?.pipeline) setPipeline((pRes.data as any).pipeline);
+    } catch {}
   }, [businessId, search, page, report]);
 
   useEffect(() => { load(); }, [load]);
@@ -158,15 +167,42 @@ export default function ClientesPage() {
     return () => clearTimeout(t);
   }, [q]);
 
-  async function setLead(id: string, status: string) {
+  async function setLead(id: string, statusOrStage: string) {
     setError('');
-    const res = await apiSend('/api/leads', 'PATCH', { businessId, id, status }, { scope: 'action', area: 'Clientes' });
+    // A3: envia stageId quando corresponde a uma etapa real; fallback status para compatibilidade
+    let payload: any = { businessId, id };
+    if (pipeline && pipeline.stages.some((s) => s.id === statusOrStage)) payload.stageId = statusOrStage;
+    else payload.status = statusOrStage;
+    const res = await apiSend('/api/leads', 'PATCH', payload, { scope: 'action', area: 'Clientes' });
     if (!res.ok) { setError(res.message || 'Não foi possível atualizar.'); return; }
     load();
   }
+  function nextStageForLead(lead: { stageId?: string; status: string }): string {
+    if (!pipeline) return NEXT_LEAD[lead.status] || '';
+    const curId = lead.stageId || (lead.status as string);
+    // tenta encontrar índice atual na ordem
+    const ordered = [...pipeline.stages].sort((a,b)=>a.order-b.order);
+    const idx = ordered.findIndex((s)=> s.id === curId);
+    if (idx >=0 && idx+1 < ordered.length) return ordered[idx+1].id;
+    return NEXT_LEAD[lead.status] || '';
+  }
+  function nextStageLabelForLead(lead: { stageId?: string; status: string }): string {
+    const nid = nextStageForLead(lead);
+    if (!nid) return '';
+    if (pipeline) { const s = pipeline.stages.find((x)=>x.id===nid); if (s) return `Avançar → ${s.name}`; }
+    return (NEXT_LEAD_LABEL as any)[lead.status] || `Avançar`;
+  }
+  
 
   const bookDef = (s: string): StatusDef => (BOOKING_STATUS as Record<string, StatusDef>)[s] || { panel: s, tone: 'zinc' };
   const leadDef = (s: string): StatusDef => (LEAD_STATUS as Record<string, StatusDef>)[s] || { panel: s, tone: 'zinc' };
+  const stageDef = (lead: { stageId?: string; status: string }): StatusDef => {
+    if (lead.stageId && pipeline) {
+      const st = pipeline.stages.find((x)=>x.id===lead.stageId);
+      if (st) return { panel: st.name, tone: (st.color as any) || 'zinc', consumer: st.name, desc: '' } as unknown as StatusDef;
+    }
+    return leadDef(lead.status);
+  };
 
   // Monta a linha do tempo unificada (histórico 360): agendamentos,
   // conversas e leads misturados por data — eventos independentes.
@@ -215,21 +251,24 @@ export default function ClientesPage() {
       });
     }
     for (const l of p.leads) {
-      const d = leadDef(l.status);
+      const d = stageDef(l as any);
+      const nextId = nextStageForLead(l as any);
+      const nextLabel = nextStageLabelForLead(l as any);
       out.push({
         kind: 'lead', id: l.id, sortKey: l.createdAt, icon: 'spark',
         when: eventDay(l.createdAt.slice(0, 10)),
-        title: `Lead via ${leadOriginLabel(l.origin)}`,
+        title: `Lead via ${leadOriginLabel(l.origin)}${(l as any).stageName ? ` · ${(l as any).stageName}` : ''}`,
         subtitle: [l.interest, l.action].filter(Boolean).join(' · ') || undefined,
-        badge: d.panel, tone: d.tone,
+        badge: d.panel, tone: d.tone as any,
         actions: (
           <div className="flex gap-1.5 mt-2">
-            {NEXT_LEAD[l.status] && (
-              <button onClick={() => setLead(l.id, NEXT_LEAD[l.status])} className="text-xs font-medium bg-zinc-900 text-white px-2.5 py-1 rounded-md">{NEXT_LEAD_LABEL[l.status]}</button>
+            {nextId && (
+              <button onClick={() => setLead(l.id, nextId)} className="text-xs font-medium bg-zinc-900 text-white px-2.5 py-1 rounded-md">{nextLabel}</button>
             )}
-            {l.status !== 'lost' && l.status !== 'converted' && (
+            {l.status !== 'lost' && l.status !== 'converted' && l.stageId !== 'converted' && (
               <button onClick={() => setLead(l.id, 'lost')} className="text-xs font-medium bg-white border border-zinc-200 px-2.5 py-1 rounded-md">Perdido</button>
             )}
+            <Link href={`/funil?b=${businessId}#${l.id}`} className="text-xs font-medium bg-white border border-zinc-200 px-2.5 py-1 rounded-md inline-flex items-center gap-1">Ver no funil <Icon n="chevR" size={10} /></Link>
           </div>
         ),
       });
