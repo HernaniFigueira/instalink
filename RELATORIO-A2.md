@@ -5,9 +5,9 @@ Branch única: **`arena/01a0b46c-instalink`** · PR aberto contra `main` (base `
 ---
 
 ## 1. HEADs e branch
-- Branch: `arena/01a0b46c-instalink` (única, conforme sessão). HEAD final: **`3f74022`**.
-- Commits: `9ca81c5` — A2 completo (B1..B5 consolidados) e `3f74022` — ajuste final (último hardcode 60 no payload público).
-- **Nota de histórico:** a retomada da sessão restaurou o `.git` da sandbox ao base `6a77ef1` com os ARQUIVOS intactos (B1–B5 já aplicados). Os commits intermediários `5bf07ea` (B1) e `ab0b96f` (B2) existiram e foram reportados na época, mas o estado restaurado consolidou tudo em `9ca81c5`. Diferencial final contra o base é exatamente o A2 (35 arquivos, +3.336/−728).
+- Branch: `arena/01a0b46c-instalink` (única, conforme sessão). Base: `main` @ `6a77ef13ec2c967acb2a2a237747fc9b8367a768`. PR: **#24** (OPEN, MERGEABLE, sem merge).
+- Commits do PR: `9ca81c5` (A2 completo — B1..B5) · `3f74022` (último hardcode 60 do payload público) · `4ed4436` (relatório final) · `1ab2d67` (**revisão cirúrgica final** — ver seção 23).
+- **Nota de histórico:** retomadas da sessão restauraram o `.git` local ao base com os ARQUIVOS intactos; o estado remoto (que é o head real do PR) sempre preservou a cadeia completa. Diferencial final contra o base: 36 arquivos, +3.525/−738.
 
 ## 2. Arquivos alterados (35)
 Novos: `src/lib/agendar.ts`, `src/components/public/AgendarFlow.tsx`, `src/app/widget/booking.js/route.ts` (reescrito), `scripts/smoke-agendar.mjs`, 5 suítes de teste (`a2-b1-booking-pipeline`, `a2-b2-agendar-guest`, `a2-b3-availability-horizon-f7`, `a2-b4-manage-limit`, `a2-b5-timezone-openstatus`).
@@ -51,8 +51,8 @@ Editados: `api/bookings/route.ts`, `api/customer/bookings/route.ts`, `api/extern
 ## 11. Regressões
 - Baseline A1.2 = 894 testes. Nenhuma quebra não-intencional: suítes antigas todas verdes (2 ajustes defensivos: `db.availability || []` em agent/concierge para DBs parciais de teste).
 
-## 12–16. Validação executada (HEAD `3f74022`)
-- `npm test`: **974 passando** (58 arquivos; baseline 894 → +80 novos). 0 falhas.
+## 12–16. Validação executada no ESTADO FINAL (HEAD `1ab2d67`, re-executada após as correções da revisão)
+- `npm test`: **977 passando** (58 arquivos; baseline 894 → +83 novos). 0 falhas.
 - `tsc --noEmit`: **limpo**.
 - `next build`: **limpo** (produção, sem erros).
 - Smokes (re-seed antes de cada): `smoke:agendar` **25/25** · `smoke` **67/67** · `smoke:ux` **87/87** · `smoke:p3` **15/15** · `smoke:p4` **18/18** · `e2e-merchant` **28/28**.
@@ -81,3 +81,28 @@ Editados: `api/bookings/route.ts`, `api/customer/bookings/route.ts`, `api/extern
 
 ## 22. URL do PR
 - Abrido via `gh` contra `main`; sem merge, sem auto-merge, sem fechamento. (Ver descrição do PR.)
+
+---
+
+## 23. Revisão cirúrgica final (pré-merge do PR #24)
+
+Escopo: conferência ponto a ponto dos Blocos 1–11 do roteiro de finalização. **Nenhuma regressão encontrada; 3 correções mínimas aplicadas** (abaixo). O que já estava correto NÃO foi tocado.
+
+### Correções desta revisão (commit `1ab2d67`)
+1. **Testes de cancelamento × lead** (`a2-b1`): 3 regressões novas provando que cancelar agendamento NUNCA toca o lead — lead em `scheduled` permanece idêntico e sem `lead.stage_changed`; lead terminal (`lost`) NÃO é reaberto pelo cancelamento (reabre só com NOVO agendamento, que por sua vez reabre via `markLeadScheduled` sem duplicar lead). Código já era assim; agora está provado.
+2. **"Hoje/agora" do painel no fuso do negócio** (`agenda/page.tsx`, `clientes/page.tsx`): `needsClosure` local, linha do agora e destaque de hoje passam a usar `businessTimezone` (mesma referência do servidor), não o default/navegador. Botão "Hoje" usa a mesma referência.
+3. **Listas de dias do agendamento no fuso do negócio**: `/agendar` (Server Component) passa `today` no fuso do alvo (`PublicBookingTarget.timezone`); `NewBookingSheet` aceita `timezone` opcional (agenda e clientes passam o do negócio).
+
+### Pontos verificados e JÁ corretos (sem alteração)
+- **B1 — scheduled estrutural:** `ensureScheduledStage` é idempotente, preserva esteiras customizadas (sem renomear/duplicar/reordenar), reinsere como `isSystem` com `order=max+1`; `markLeadScheduled` usa EXCLUSIVAMENTE `moveLeadStage` (único emissor de `lead.stage_changed`), é idempotente quando já está em `scheduled` (sem histórico, sem evento — testado), recalcula status projetado (`scheduled` ⇒ `converted`; proibido `scheduled+lost`). Único `stageId=` direto fora da máquina é reparo legado do A1.2 (`api/leads/route.ts`, fora do diff do A2).
+- **B2 — lead terminal/lost + novo booking:** DECISÃO 1 consistente em todos os caminhos (público guest, autenticado, painel, assistente, API externa): reabre o MESMO lead, nunca duplica, nunca `scheduled+lost` (testes B1 + smoke).
+- **B3 — Agenda→CRM→Automação:** `booking.created` emitido 1× em `createBookingTx`; `lead.stage_changed` só em `moveLeadStage`; no-op de status retorna ANTES de histórico/mensagem P3/evento (testado: sem re-confirmação); cancelamento não reabre; remarcação não cria lead.
+- **B4 — P3/P4:** GET manage sem efeito colateral (sem `updateDB`); lembretes nascem em `createBookingTx`/PATCH de status (idempotentes por chave — testado); `smoke:p3` 15/15 e `smoke:p4` 18/18 no estado final.
+- **B5 — timezone:** todos os 10 itens do Bloco 4 conformes; suíte `a2-b5` (19 testes) prova SP + LA/NY + Sydney: "hoje" por fuso, open/closed por fuso, `createBookingTx` com corte de passado por fuso (mesma data: futuro em LA, passado em SP), exceções com `today` do chamado, DST sem drift (`addDaysISO`).
+- **B6 — guest:** fluxo serviço→dia→horário→nome→telefone→confirmação sem conta; autenticado reusa os dados; servidor valida tudo; 409 → grade recarregada (`slotRetry`); smoke:agendar 25/25.
+- **B7 — tenant:** dupla porta no PATCH (`requireBusiness` + `booking.businessId`), serviço/leadId cross-tenant recusados (testes + smoke), `dueReminderBookings` isola por tenant.
+- **B9 — qualidade:** zero `|| 60`; zero TZ hardcoded fora de `tz.ts` (exceção: lista curada do seletor de fuso na UI); `computeSlots` definido 1×; `createBookingTx` é o único caminho de criação; drift de 24h eliminado; permissões intactas.
+- **B11 — diff:** somente escopo A2 + relatório; `tsconfig.tsbuildinfo` já era rastreado no `main` (padrão do repo, não é lixo novo); working tree limpa.
+
+### Veredito
+**A2 pronto para merge.** Sem problemas funcionais conhecidos abertos.
