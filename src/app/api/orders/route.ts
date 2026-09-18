@@ -129,17 +129,10 @@ export async function POST(req: NextRequest) {
             try { moveLeadStage(d, { businessId, leadId: res.lead.id, toStageId: target, actor: { id: customer.id, name }, now }); } catch {}
           }
         }
-      } catch {
-        const lead = d.leads.find((l) =>
-          l.businessId === businessId &&
-          ((l.customerId && l.customerId === customer.id) || (digits && onlyDigits(l.phone) === digits)),
-        );
-        if (lead) {
-          lead.name = name; lead.customerId = customer.id; lead.lastInteraction = now;
-          lead.action = 'pedido';
-        } else {
-          d.leads.push({ id: randomUUID(), businessId, customerId: customer.id, name, phone, email: '', instagram: '', origin: 'pedido', interest: orderItems.map((i) => i.name).join(', ').slice(0, 200), action: 'pedido', status: 'converted', stageId: 'converted', createdAt: now, lastInteraction: now, stageHistory: [{ id: randomUUID(), fromStage: '', toStage: 'converted', movedBy: customer.id, movedByName: name, at: now, note: 'Pedido' }] });
-        }
+      } catch (e) {
+        // CRM secundário: pedido já criado, falha no lead não desfaz pedido.
+        // Não cria lead paralelo fora da porta oficial; apenas loga.
+        void e;
       }
       return { orderId, code };
     });

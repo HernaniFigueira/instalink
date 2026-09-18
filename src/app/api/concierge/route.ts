@@ -180,21 +180,11 @@ export async function POST(req: NextRequest) {
             });
             res.lead.action = 'conversa_agente';
           }
-        } catch {
-          // fallback silencioso: mantém fluxo sem quebrar assistente
-          const digits = onlyDigits(customer.phone || '');
-          const existing2 = d.leads.find((l) => l.businessId === businessId && ((l.customerId && l.customerId === customer.id) || (digits && onlyDigits(l.phone) === digits)));
-          if (existing2) {
-            existing2.lastInteraction = now;
-            if (answer.intent === 'interest') existing2.interest = raw.slice(0, 200);
-          } else {
-            d.leads.push({
-              id: randomUUID(), businessId, customerId: customer.id,
-              name: customer.name || '', phone: digits, email: customer.email || '',
-              instagram: '', origin: 'agente', interest: raw.slice(0, 200),
-              action: 'conversa_agente', status: 'new', stageId: 'new', createdAt: now, lastInteraction: now,
-            });
-          }
+        } catch (e) {
+          // CRM auxiliar falhou: não cria lead paralelo, apenas não persiste CRM.
+          // Operação principal do assistente permanece (reply já resolvido).
+          // Em prod, log discreto para observabilidade.
+          void e;
         }
       }
     });

@@ -606,8 +606,14 @@ export function moveLeadStage(db: DB, p: MoveLeadStageParams): Lead {
   // A1.2 · Bloco 2 (F3): o "de onde saiu" registrado no histórico é a etapa
   // NORMALIZADA — registro legado (ex.: stageId cru "contacted") não entra.
   const fromStage = normalizeLeadStageId(pipeline, lead);
-  // A3 — idempotência: mesma etapa não gera histórico/evento duplicado
+  // A3 — idempotência: mesma etapa não gera histórico/evento duplicado,
+  // mas repara projeção silenciosamente se stageId/status divergiram (legado).
   if (fromStage === targetStage.id) {
+    const expectedStatus = mapStageToStatus(pipeline, targetStage.id);
+    let repaired = false;
+    if (lead.stageId !== targetStage.id) { lead.stageId = targetStage.id; repaired = true; }
+    if (lead.status !== expectedStatus) { lead.status = expectedStatus; repaired = true; }
+    // não cria histórico, não emite evento, não toca lastInteraction
     return lead;
   }
 
@@ -742,6 +748,10 @@ export function markLeadScheduled(db: DB, p: MarkLeadScheduledParams): MarkLeadS
   // Já agendado: sem movimento real ⇒ sem histórico redundante (mesma
   // semântica do F7.1 na máquina de status do agendamento).
   if (fromStage === SCHEDULED_STAGE_ID) {
+    // repara projeção se necessário (ex.: scheduled + status=lost legado)
+    const expected = mapStageToStatus(pipeline, SCHEDULED_STAGE_ID);
+    if (lead.stageId !== SCHEDULED_STAGE_ID) lead.stageId = SCHEDULED_STAGE_ID;
+    if (lead.status !== expected) lead.status = expected;
     return { lead, fromStage, moved: false, reopened: false };
   }
 

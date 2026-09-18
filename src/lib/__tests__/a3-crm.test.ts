@@ -452,7 +452,7 @@ describe('A3 · ingestLead única porta e projeção LeadStatus', () => {
       phone: '11999990000',
       interest: 'teste',
       source: 'manual',
-      actor: { id: 'owner', name: 'Equipe', type: 'owner' },
+      actor: { id: 'owner', name: 'Equipe', type: 'user' },
       now: NOW,
     });
     expect(lead.stageId).toBe('new');
@@ -477,7 +477,7 @@ describe('A3 · ingestLead única porta e projeção LeadStatus', () => {
       name: 'A',
       phone: '11999990001',
       source: 'manual',
-      actor: { id: 'owner', name: 'Equipe', type: 'owner' },
+      actor: { id: 'owner', name: 'Equipe', type: 'user' },
       now: NOW,
     });
     const before = d.leads.length;
@@ -486,7 +486,7 @@ describe('A3 · ingestLead única porta e projeção LeadStatus', () => {
       name: 'A2',
       phone: '11999990001',
       source: 'instagram',
-      actor: { id: 'owner', name: 'Equipe', type: 'owner' },
+      actor: { id: 'owner', name: 'Equipe', type: 'user' },
       now: NOW,
     });
     expect(d.leads.length).toBe(before);

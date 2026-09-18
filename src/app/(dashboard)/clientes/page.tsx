@@ -32,6 +32,7 @@ interface Person {
   }>;
   leads: Array<{ id: string; origin: string; status: string; stageId: string; stageName: string; interest: string; action: string; createdAt: string; stageHistory?: any[]; priority?: string; assignedUserId?: string; lastInteraction?: string }>;
   conversations?: Array<{ id: string; channel: string; status: string; at: string; preview: string; unread: number }>;
+  tasks?: Array<{ id: string; title: string; status: string; dueAt: string; dueLabel: string; assignedUserId: string; assigneeName: string; leadId: string; bookingId: string }>;
   lastSeen: string;
 }
 
@@ -205,9 +206,9 @@ export default function ClientesPage() {
   };
 
   // Monta a linha do tempo unificada (histórico 360): agendamentos,
-  // conversas e leads misturados por data — eventos independentes.
+  // conversas, leads e tarefas — eventos independentes ordenados por data.
   type HistoryEvent = {
-    kind: 'booking' | 'conversation' | 'lead';
+    kind: 'booking' | 'conversation' | 'lead' | 'task';
     id: string;
     sortKey: string;
     icon: string;
@@ -220,6 +221,30 @@ export default function ClientesPage() {
     status?: string;
     actions?: React.ReactNode;
   };
+  // A3: se next é scheduled, abre agendamento em vez de PATCH manual
+  function handleLeadNext(lead: Person['leads'][number], person: Person) {
+    const nid = nextStageForLead(lead as any);
+    if (!nid) return;
+    if (nid === 'scheduled') {
+      openBooking(person);
+      return;
+    }
+    // perdido deve usar etapa real quando existir
+    if (nid === 'lost' && pipeline && !pipeline.stages.some(s=> s.id==='lost')) {
+      // sem etapa lost na esteira customizada, não tenta mover
+      setError('Etapa Perdido não existe nesta esteira.');
+      return;
+    }
+    setLead(lead.id, nid);
+  }
+  function lostStageId(): string | null {
+    if (!pipeline) return 'lost';
+    const found = pipeline.stages.find(s=> s.id==='lost');
+    if (found) return 'lost';
+    // fallback: procura etapa terminal que mapeia para lost
+    const mapped = pipeline.stages.find(s=> s.mappedStatus==='lost');
+    return mapped ? mapped.id : null;
+  }
   function historyEvents(p: Person): HistoryEvent[] {
     const out: HistoryEvent[] = [];
     for (const b of p.bookings) {
@@ -240,6 +265,7 @@ export default function ClientesPage() {
       });
     }
     for (const c of p.conversations || []) {
+      const phoneQ = p.phone ? encodeURIComponent(p.phone) : '';
       out.push({
         kind: 'conversation', id: c.id, sortKey: c.at || '', icon: 'whatsapp',
         when: `${eventDay((c.at || '').slice(0, 10))}${(c.at || '').length >= 16 ? ` · ${c.at.slice(11, 16)}` : ''}`,
@@ -248,12 +274,20 @@ export default function ClientesPage() {
         badge: (c.unread || 0) > 0 ? `${c.unread} não lida${c.unread > 1 ? 's' : ''}` : undefined,
         badgeCls: (c.unread || 0) > 0 ? 'bg-blue-100 text-blue-800 border-blue-200' : undefined,
         tone: 'blue',
+        actions: p.phone ? (
+          <div className="flex gap-1.5 mt-2">
+            <Link href={`/conversas?b=${businessId}&q=${phoneQ}`} className="text-xs font-medium bg-white border border-zinc-200 px-2.5 py-1 rounded-md">Abrir conversa</Link>
+            <a href={waLink(p.phone, `Olá, ${(p.name || '').split(' ')[0]}!`)} target="_blank" rel="noreferrer" className="text-xs font-medium bg-white border border-zinc-200 px-2.5 py-1 rounded-md">WhatsApp</a>
+          </div>
+        ) : undefined,
       });
     }
     for (const l of p.leads) {
       const d = stageDef(l as any);
       const nextId = nextStageForLead(l as any);
       const nextLabel = nextStageLabelForLead(l as any);
+      const lostId = lostStageId();
+      const canLose = !!lostId && l.status !== 'lost' && l.status !== 'converted' && l.stageId !== 'converted' && l.stageId !== 'lost';
       out.push({
         kind: 'lead', id: l.id, sortKey: l.createdAt, icon: 'spark',
         when: eventDay(l.createdAt.slice(0, 10)),
@@ -262,13 +296,30 @@ export default function ClientesPage() {
         badge: d.panel, tone: d.tone as any,
         actions: (
           <div className="flex gap-1.5 mt-2">
-            {nextId && (
-              <button onClick={() => setLead(l.id, nextId)} className="text-xs font-medium bg-zinc-900 text-white px-2.5 py-1 rounded-md">{nextLabel}</button>
+            {nextId && (canFunil ? (
+              <button onClick={() => handleLeadNext(l as any, p)} className="text-xs font-medium bg-zinc-900 text-white px-2.5 py-1 rounded-md">{nextLabel}</button>
+            ) : null)}
+            {canLose && (
+              <button onClick={() => setLead(l.id, lostId!)} className="text-xs font-medium bg-white border border-zinc-200 px-2.5 py-1 rounded-md">Perdido</button>
             )}
-            {l.status !== 'lost' && l.status !== 'converted' && l.stageId !== 'converted' && (
-              <button onClick={() => setLead(l.id, 'lost')} className="text-xs font-medium bg-white border border-zinc-200 px-2.5 py-1 rounded-md">Perdido</button>
-            )}
-            <Link href={`/funil?b=${businessId}#${l.id}`} className="text-xs font-medium bg-white border border-zinc-200 px-2.5 py-1 rounded-md inline-flex items-center gap-1">Ver no funil <Icon n="chevR" size={10} /></Link>
+            {canFunil && <Link href={`/funil?b=${businessId}#${l.id}`} className="text-xs font-medium bg-white border border-zinc-200 px-2.5 py-1 rounded-md inline-flex items-center gap-1">Ver no funil <Icon n="chevR" size={10} /></Link>}
+          </div>
+        ),
+      });
+    }
+    // Tarefas no histórico unificado
+    for (const tt of p.tasks || []) {
+      out.push({
+        kind: 'task', id: tt.id, sortKey: tt.dueAt || tt.title, icon: 'tasks',
+        when: tt.dueAt ? eventDay(tt.dueAt.slice(0,10)) : '',
+        title: `Tarefa: ${tt.title}`,
+        subtitle: [tt.assigneeName ? `Resp: ${tt.assigneeName}` : '', tt.dueLabel || ''].filter(Boolean).join(' · ') || undefined,
+        badge: tt.status === 'done' ? 'concluída' : tt.status === 'cancelled' ? 'cancelada' : 'aberta',
+        tone: tt.status === 'done' ? 'emerald' as any : tt.status === 'cancelled' ? 'zinc' as any : 'amber' as any,
+        actions: (
+          <div className="flex gap-1.5 mt-2">
+            {tt.leadId && canFunil && <Link href={`/funil?b=${businessId}#${tt.leadId}`} className="text-xs font-medium bg-white border border-zinc-200 px-2 py-1 rounded-md">Ver no funil</Link>}
+            {tt.bookingId && <Link href={`/agenda?b=${businessId}`} className="text-xs font-medium bg-white border border-zinc-200 px-2 py-1 rounded-md">Ver agenda</Link>}
           </div>
         ),
       });
@@ -368,7 +419,7 @@ export default function ClientesPage() {
                         Agendamentos, conversas e leads convivem na mesma
                         linha do tempo; atendimento concluído permanece aqui
                         mesmo depois de um reagendamento. */}
-                    {p.bookings.length + (p.conversations?.length ?? 0) + p.leads.length > 0 ? (
+                    {p.bookings.length + (p.conversations?.length ?? 0) + p.leads.length + (p.tasks?.length ?? 0) > 0 ? (
                       (() => {
                         const events = historyEvents(p);
                         const H = paginate(events, histPage, 5);
@@ -418,7 +469,7 @@ export default function ClientesPage() {
                         );
                       })()
                     ) : (
-                      <p className="text-sm text-zinc-500">Sem eventos ainda — agendamentos, conversas e leads aparecem aqui.</p>
+                      <p className="text-sm text-zinc-500">Sem eventos ainda — agendamentos, conversas, leads e tarefas aparecem aqui.</p>
                     )}
                     <div className="flex items-center justify-between gap-3 bg-white border border-zinc-200 px-3 py-2.5">
                       <div>

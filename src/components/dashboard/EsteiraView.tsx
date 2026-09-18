@@ -9,6 +9,7 @@ import { normalizeLeadStageId } from '@/lib/pipeline-stages';
 import { onlyDigits, waLink, cn, money } from '@/lib/utils';
 import { todayISO, addDaysISO } from '@/lib/tz';
 import { apiGet, apiSend } from '@/lib/api-client';
+import Link from 'next/link';
 import { PipelineStagesPanel } from '@/components/dashboard/PipelineStagesPanel';
 
 function formatDateTime(iso: string): string {
@@ -93,6 +94,11 @@ export function EsteiraView() {
   // A3 — 360 extras (bookings/tasks/conversation preview)
   const [leadBookings, setLeadBookings] = useState<any[]>([]);
   const [leadTasks, setLeadTasks] = useState<any[]>([]);
+  const [ctxTaskTitle, setCtxTaskTitle] = useState('');
+  const [ctxTaskNote, setCtxTaskNote] = useState('');
+  const [ctxTaskDueAt, setCtxTaskDueAt] = useState('');
+  const [ctxTaskAssignee, setCtxTaskAssignee] = useState('');
+  const [ctxTaskBusy, setCtxTaskBusy] = useState(false);
   // A3 drag-and-drop
   const [dragLeadId, setDragLeadId] = useState<string | null>(null);
   const [dragOverStage, setDragOverStage] = useState<string | null>(null);
@@ -140,6 +146,7 @@ export function EsteiraView() {
   }, [loadLeads, loadCatalog]);
 
   // A3 — carrega 360 do lead selecionado (agendamentos e tarefas vinculadas)
+  // Bookings via contrato administrativo correto (mode=manage, tenant-scoped, respeita permissão agenda)
   useEffect(() => {
     if (!selectedLead || !businessId) { setLeadBookings([]); setLeadTasks([]); return; }
     const sel = selectedLead;
@@ -147,15 +154,24 @@ export function EsteiraView() {
     async function load360(){
       try {
         const [bRes, tRes] = await Promise.all([
-          apiGet<any>(`/api/bookings?businessId=${businessId}`, { scope:'area', area:'Funil'}),
+          apiGet<any>(`/api/bookings?businessId=${businessId}&mode=manage&limit=100`, { scope:'area', area:'Funil'}),
           apiGet<any>(`/api/tasks?businessId=${businessId}&status=all`, { scope:'area', area:'Funil'}),
         ]);
         if (cancel) return;
         if (bRes.ok && bRes.data) {
-          const all = (bRes.data.bookings || bRes.data.items || bRes.data || []);
+          const all = (bRes.data.bookings || bRes.data.items || []);
           const arr = Array.isArray(all)? all : [];
-          const filtered = arr.filter((b:any)=> b.leadId===sel.id || (b.customerPhone && onlyDigits(b.customerPhone)===onlyDigits(sel.phone)) );
-          setLeadBookings(filtered.slice(0,5));
+          // nunca usa contrato público (slots); apenas lista administrativa
+          if (arr.length === 0 && (bRes.data as any).slots !== undefined) {
+            // resposta pública inesperada — ignora para não exibir dado errado
+            setLeadBookings([]);
+          } else {
+            const filtered = arr.filter((b:any)=> b.leadId===sel.id || (b.customerPhone && onlyDigits(b.customerPhone)===onlyDigits(sel.phone)) );
+            setLeadBookings(filtered.slice(0,5));
+          }
+        } else {
+          // sem permissão agenda → não exibe bookings (respeita permissão, não amplia)
+          setLeadBookings([]);
         }
         if (tRes.ok && tRes.data) {
           const allT = (tRes.data.tasks || []);
@@ -240,8 +256,22 @@ export function EsteiraView() {
     return map;
   }, [filteredLeads, visibleStages, pipeline]);
 
-  // Ação: Mover etapa do Lead — A3: otimista + rollback, idempotente (mesma etapa não re-request)
+  // Helper: abrir agendamento para lead (único caminho para `scheduled`)
+  function openBookingForLead(lead: Lead | null | undefined) {
+    if (!lead) return;
+    setBookingLead(lead);
+    if (services.length > 0 && !bookServiceId) setBookServiceId(services[0].id);
+  }
+
+  // Ação: Mover etapa do Lead — A3: otimista + rollback, idempotente, `scheduled` nunca manual
   async function handleMoveStage(leadId: string, toStageId: string, note?: string) {
+    // A3.1: scheduled nunca via PATCH manual — abre fluxo de agendamento
+    if (toStageId === 'scheduled') {
+      const targetLead = leads.find((l)=> l.id===leadId) || selectedLead;
+      // Não altera estado, apenas abre booking modal
+      if (targetLead) openBookingForLead(targetLead as Lead);
+      return;
+    }
     const leadBefore = leads.find((l)=>l.id===leadId);
     const currentStage = leadBefore && pipeline ? normalizeLeadStageId(pipeline, leadBefore) : leadBefore?.stageId;
     if (currentStage === toStageId) return;
@@ -265,6 +295,15 @@ export function EsteiraView() {
       if (selectedLead?.id === leadId && leadBefore) setSelectedLead(leadBefore);
       alert(res.message || 'Não foi possível mover etapa.');
     }
+  }
+  // Wrapper para selects que precisam interceptar scheduled
+  function handleStageSelect(leadId: string, newStageId: string) {
+    if (newStageId === 'scheduled') {
+      const l = leads.find((x)=> x.id===leadId) || selectedLead;
+      if (l) openBookingForLead(l as Lead);
+      return;
+    }
+    handleMoveStage(leadId, newStageId);
   }
 
   // Ação: Atribuir responsável
@@ -518,7 +557,7 @@ export function EsteiraView() {
                 key={stage.id}
                 onDragOver={(e)=>{e.preventDefault(); setDragOverStage(stage.id);}}
                 onDragLeave={()=> setDragOverStage((prev)=> prev===stage.id? null: prev)}
-                onDrop={(e)=>{e.preventDefault(); if (dragLeadId) handleMoveStage(dragLeadId, stage.id); setDragLeadId(null); setDragOverStage(null);}}
+                onDrop={(e)=>{e.preventDefault(); if (dragLeadId) { if (stage.id==='scheduled') { const l = leads.find((x)=> x.id===dragLeadId); if (l) openBookingForLead(l); } else handleMoveStage(dragLeadId, stage.id); } setDragLeadId(null); setDragOverStage(null);}}
                 className={"bg-zinc-100/80 border border-zinc-200 rounded-xl p-3 flex flex-col max-h-[78vh] flex-shrink-0 " + (dragOverStage===stage.id? 'ring-2 ring-zinc-900 border-zinc-900' : '')}
               >
                 {/* Cabeçalho da coluna */}
@@ -588,8 +627,8 @@ export function EsteiraView() {
                           {/* Mover para (mobile) */}
                           <div className="sm:hidden" onClick={(e)=>e.stopPropagation()}>
                             <label className="text-[11px] font-semibold text-zinc-600">Mover para…</label>
-                            <select value={pipeline ? normalizeLeadStageId(pipeline, lead) : lead.stageId} onChange={(e)=> handleMoveStage(lead.id, e.target.value)} className="mt-1 w-full text-xs p-1.5 rounded border border-zinc-300 bg-white">
-                              {(pipeline?.stages||[]).filter((s)=> s.id!=='scheduled').map((s)=> <option key={s.id} value={s.id}>{s.name}</option>)}
+                            <select value={pipeline ? normalizeLeadStageId(pipeline, lead) : lead.stageId} onChange={(e)=> handleStageSelect(lead.id, e.target.value)} className="mt-1 w-full text-xs p-1.5 rounded border border-zinc-300 bg-white">
+                              {(pipeline?.stages||[]).map((s)=> <option key={s.id} value={s.id}>{s.name}</option>)}
                             </select>
                           </div>
                           {/* Ações Rápidas no Card */}
@@ -703,7 +742,7 @@ export function EsteiraView() {
                 <label className="block text-xs font-semibold text-zinc-600 mb-1">Etapa Atual</label>
                 <select
                   value={pipeline ? normalizeLeadStageId(pipeline, selectedLead) : (selectedLead.stageId || 'new')}
-                  onChange={(e) => handleMoveStage(selectedLead.id, e.target.value)}
+                  onChange={(e) => handleStageSelect(selectedLead.id, e.target.value)}
                   className="w-full text-xs p-2 rounded-lg border border-zinc-300 font-semibold bg-white"
                 >
                   {pipeline?.stages.map((st) => (
@@ -821,34 +860,53 @@ export function EsteiraView() {
               </div>
             )}
             {/* 360 — Agendamentos e tarefas vinculadas */}
-            {(leadBookings.length>0 || leadTasks.length>0) && (
-              <div className="space-y-3 pt-3 border-t border-zinc-200">
+            <div className="space-y-3 pt-3 border-t border-zinc-200">
                 <h3 className="text-xs font-bold uppercase tracking-wider text-zinc-600">Visão 360 — atendimentos e tarefas</h3>
-                {leadBookings.length>0 && (
+                {leadBookings.length>0 ? (
                   <div className="space-y-1.5">
                     <p className="text-xs font-semibold text-zinc-700">Agendamentos ({leadBookings.length})</p>
                     {leadBookings.map((b:any)=> (
                       <div key={b.id} className="text-xs p-2 bg-white border border-zinc-200 rounded-lg flex items-center justify-between">
                         <span className="font-medium">{b.date} {b.time} · {b.status}</span>
-                        <a href={`/agenda?b=${businessId}&data=${b.date}`} className="text-zinc-600 underline text-[11px]"> Ver agenda</a>
+                        <Link href={`/agenda?b=${businessId}&data=${b.date}`} className="text-zinc-600 underline text-[11px]"> Ver agenda</Link>
                       </div>
                     ))}
                   </div>
+                ) : (
+                  <p className="text-xs text-zinc-500">Nenhum agendamento vinculado.</p>
                 )}
-                {leadTasks.length>0 && (
-                  <div className="space-y-1.5">
+                <div className="space-y-1.5">
                     <p className="text-xs font-semibold text-zinc-700">Tarefas ({leadTasks.length})</p>
-                    {leadTasks.map((tt:any)=> (
+                    {leadTasks.length>0 ? leadTasks.map((tt:any)=> (
                       <div key={tt.id} className="text-xs p-2 bg-white border border-zinc-200 rounded-lg flex items-center justify-between">
                         <span className="font-medium">{tt.title} · {tt.status}</span>
-                        <span className="text-zinc-500 text-[11px]">{tt.dueLabel || tt.dueAt || ''}</span>
+                        <span className="text-zinc-500 text-[11px] flex items-center gap-1.5">{tt.dueLabel || tt.dueAt || ''} {tt.leadId && <Link href={`/funil?b=${businessId}#${tt.leadId}`} className="underline">Funil</Link>} {tt.bookingId && <Link href={`/agenda?b=${businessId}`} className="underline">Agenda</Link>}</span>
                       </div>
-                    ))}
-                  </div>
-                )}
-                <a href={`/clientes?b=${businessId}&q=${encodeURIComponent(selectedLead.phone||selectedLead.name||'')}`} className="text-xs font-semibold text-zinc-700 underline">Ver cliente no CRM 360 →</a>
+                    )) : <p className="text-xs text-zinc-400">Nenhuma tarefa vinculada.</p>}
+                    {/* Nova tarefa contextual (sem digitar leadId) */}
+                    <div className="bg-zinc-50 border border-zinc-200 rounded-lg p-2.5 space-y-2">
+                      <p className="text-xs font-semibold text-zinc-700">Nova tarefa para este lead</p>
+                      <input value={ctxTaskTitle} onChange={(e)=> setCtxTaskTitle(e.target.value)} placeholder="Título (ex: Retornar ligação)" className="w-full text-xs p-2 rounded-lg border border-zinc-300" />
+                      <div className="flex gap-2">
+                        <input value={ctxTaskDueAt} onChange={(e)=> setCtxTaskDueAt(e.target.value)} placeholder="Prazo YYYY-MM-DD" className="flex-1 text-xs p-2 rounded-lg border border-zinc-300" />
+                        <select value={ctxTaskAssignee} onChange={(e)=> setCtxTaskAssignee(e.target.value)} className="flex-1 text-xs p-2 rounded-lg border border-zinc-300 bg-white">
+                          <option value="">Responsável</option>
+                          {members.map((m)=> <option key={m.userId} value={m.userId}>{m.name}</option>)}
+                        </select>
+                      </div>
+                      <input value={ctxTaskNote} onChange={(e)=> setCtxTaskNote(e.target.value)} placeholder="Nota (opcional)" className="w-full text-xs p-2 rounded-lg border border-zinc-300" />
+                      <button disabled={ctxTaskBusy || !ctxTaskTitle.trim()} onClick={async()=>{ if(!ctxTaskTitle.trim()) return; setCtxTaskBusy(true); const res=await apiSend('/api/tasks','POST',{businessId, title: ctxTaskTitle.trim(), note: ctxTaskNote.trim(), dueAt: ctxTaskDueAt.trim(), assignedUserId: ctxTaskAssignee, leadId: selectedLead.id}); setCtxTaskBusy(false); if(res.ok){ setCtxTaskTitle(''); setCtxTaskNote(''); setCtxTaskDueAt(''); setCtxTaskAssignee(''); // recarrega tasks do lead
+                        try { const tRes=await apiGet<any>(`/api/tasks?businessId=${businessId}&status=all`, {scope:'area', area:'Funil'}); if(tRes.ok) setLeadTasks((tRes.data.tasks||[]).filter((x:any)=> x.leadId===selectedLead.id).slice(0,5)); } catch {}
+                      } else alert(res.message||'Erro ao criar tarefa'); }} className="w-full py-1.5 bg-zinc-900 text-white text-xs font-semibold rounded-lg disabled:opacity-50">Criar tarefa</button>
+                    </div>
+                </div>
+                <div className="flex flex-wrap gap-2 pt-1">
+                  <button type="button" onClick={()=> openBookingForLead(selectedLead)} className="text-xs font-semibold bg-zinc-900 text-white px-3 py-1.5 rounded-md">Agendar atendimento</button>
+                  {selectedLead.phone && <Link href={`/conversas?b=${businessId}&q=${encodeURIComponent(selectedLead.phone)}`} className="text-xs font-semibold bg-white border border-zinc-200 px-3 py-1.5 rounded-md">Abrir no inbox</Link>}
+                  {selectedLead.phone && <a href={waLink(selectedLead.phone, `Olá ${selectedLead.name||''}, tudo bem?`)} target="_blank" rel="noopener noreferrer" className="text-xs font-semibold bg-white border border-zinc-200 px-3 py-1.5 rounded-md">WhatsApp</a>}
+                  <Link href={`/clientes?b=${businessId}&q=${encodeURIComponent(selectedLead.phone||selectedLead.name||'')}`} className="text-xs font-semibold text-zinc-700 underline">Ver cliente no CRM 360 →</Link>
+                </div>
               </div>
-            )}
           </div>
         </div>
       )}

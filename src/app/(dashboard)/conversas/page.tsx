@@ -251,7 +251,11 @@ export default function ConversasPage() {
                     <p className="text-sm font-semibold truncate">{active.conversation.name}</p>
                     <p className="text-xs text-zinc-500 truncate">{active.conversation.phone}{active.conversation.registered ? ' · cliente ✓' : ''}</p>
                   </div>
-                  <Link href={`/clientes${clientesQ}`} className="text-xs font-medium text-zinc-600 hover:underline shrink-0">Histórico 360</Link>
+                  <div className="flex items-center gap-1.5 shrink-0">
+                    <Link href={`/clientes?b=${businessId}&q=${encodeURIComponent(active.conversation.phone||'')}`} className="text-xs font-medium text-zinc-600 hover:underline">Ver cliente</Link>
+                    <span className="text-zinc-300">·</span>
+                    <Link href={`/funil?b=${businessId}`} className="text-xs font-medium text-zinc-600 hover:underline">Ver no funil</Link>
+                  </div>
                 </div>
                 <div className="flex-1 overflow-y-auto p-3 space-y-2 bg-zinc-50 max-h-[360px] lg:max-h-[420px]">
                   {active.messages.map((m) => (
@@ -304,7 +308,8 @@ export default function ConversasPage() {
                 <div className="bg-white border border-zinc-200 p-3">
                   <p className="text-xs font-semibold tracking-wide uppercase text-zinc-500 mb-2">Atalhos</p>
                   <div className="space-y-1.5">
-                    <Link href={`/clientes${clientesQ}`} className="block text-xs font-medium bg-white border border-zinc-200 rounded-md px-3 py-2 hover:bg-zinc-50">Ver histórico 360</Link>
+                    <Link href={`/clientes?b=${businessId}&q=${encodeURIComponent(active.conversation.phone||'')}`} className="block text-xs font-medium bg-white border border-zinc-200 rounded-md px-3 py-2 hover:bg-zinc-50">Ver cliente</Link>
+                    <Link href={`/funil?b=${businessId}`} className="block text-xs font-medium bg-white border border-zinc-200 rounded-md px-3 py-2 hover:bg-zinc-50">Ver no funil</Link>
                     <a href={data.linkFallback} target="_blank" rel="noreferrer" className="block text-xs font-medium bg-white border border-zinc-200 rounded-md px-3 py-2 hover:bg-zinc-50 inline-flex items-center gap-1.5">
                       Abrir no WhatsApp <Icon n="external" size={12} />
                     </a>

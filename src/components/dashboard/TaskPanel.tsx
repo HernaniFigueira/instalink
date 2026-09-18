@@ -8,6 +8,7 @@
 // reutilizável pelas duas portas, com os MESMOS dados (/api/tasks) e as
 // MESMAS ações. Quem CRIA tarefa continua sendo a automação; aqui se opera.
 import { useState } from 'react';
+import Link from 'next/link';
 import { Badge, Button, Card, Input, Select } from '@/components/ui';
 import { Icon } from '@/components/icons';
 import { apiSend } from '@/lib/api-client';
@@ -16,6 +17,7 @@ export interface TaskView {
   id: string; title: string; note: string; status: string; dueAt: string; dueLabel: string;
   createdAt: string; assignedUserId: string; assigneeName: string; leadName: string;
   bookingLabel: string; fromAutomation: boolean; source: string;
+  leadId?: string; bookingId?: string;
 }
 
 export interface TaskSummaryView { open: number; overdue: number; dueToday: number; mine: number }
@@ -29,12 +31,11 @@ export function TaskPanel({ tasks, summary, businessId, members, onChanged }: {
   const [note, setNote] = useState('');
   const [dueAt, setDueAt] = useState('');
   const [assignee, setAssignee] = useState('');
-  const [leadId, setLeadId] = useState('');
-  const [bookingId, setBookingId] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editTitle, setEditTitle] = useState('');
+  const [editNote, setEditNote] = useState('');
   const [editDueAt, setEditDueAt] = useState('');
   const [editAssignee, setEditAssignee] = useState('');
   const open = tasks.filter((t) => t.status === 'open');
@@ -44,9 +45,9 @@ export function TaskPanel({ tasks, summary, businessId, members, onChanged }: {
     setError('');
     if (!title.trim()) { setError('Informe o título da tarefa.'); return; }
     setBusy(true);
-    const res = await apiSend('/api/tasks', 'POST', { businessId, title: title.trim(), note: note.trim(), dueAt: dueAt.trim(), assignedUserId: assignee, leadId: leadId.trim() || undefined, bookingId: bookingId.trim() || undefined });
+    const res = await apiSend('/api/tasks', 'POST', { businessId, title: title.trim(), note: note.trim(), dueAt: dueAt.trim(), assignedUserId: assignee });
     setBusy(false);
-    if (res.ok) { setTitle(''); setNote(''); setDueAt(''); setLeadId(''); setBookingId(''); setAssignee(''); onChanged(); } else { setError(res.message || 'Não foi possível criar.'); }
+    if (res.ok) { setTitle(''); setNote(''); setDueAt(''); setAssignee(''); onChanged(); } else { setError(res.message || 'Não foi possível criar.'); }
   }
 
   return (
@@ -68,10 +69,6 @@ export function TaskPanel({ tasks, summary, businessId, members, onChanged }: {
             <Input value={dueAt} onChange={(e)=> setDueAt(e.target.value)} placeholder="Prazo (YYYY-MM-DD)" className="max-w-[170px]" />
             <Input value={note} onChange={(e)=> setNote(e.target.value)} placeholder="Nota / detalhes (opcional)" className="flex-1 min-w-[180px]" />
           </div>
-          <div className="flex flex-wrap gap-2">
-            <Input value={leadId} onChange={(e)=> setLeadId(e.target.value)} placeholder="Vincular leadId (opcional)" className="max-w-[200px]" />
-            <Input value={bookingId} onChange={(e)=> setBookingId(e.target.value)} placeholder="Vincular bookingId (opcional)" className="max-w-[200px]" />
-          </div>
           {error && <p className="text-xs font-medium text-red-600">{error}</p>}
           <p className="text-[11px] text-zinc-400">
             {summary.open} abertas · {summary.overdue} atrasadas · {summary.dueToday} para hoje
@@ -89,7 +86,8 @@ export function TaskPanel({ tasks, summary, businessId, members, onChanged }: {
             <div className="min-w-0 flex-1">
               {editingId===t.id ? (
                 <div className="space-y-2">
-                  <Input value={editTitle} onChange={(e)=> setEditTitle(e.target.value)} />
+                  <Input value={editTitle} onChange={(e)=> setEditTitle(e.target.value)} placeholder="Título" />
+                  <Input value={editNote} onChange={(e)=> setEditNote(e.target.value)} placeholder="Nota" />
                   <div className="flex gap-2">
                     <Input value={editDueAt} onChange={(e)=> setEditDueAt(e.target.value)} placeholder="Prazo YYYY-MM-DD" className="max-w-[150px]" />
                     <Select value={editAssignee} onChange={(e)=> setEditAssignee(e.target.value)} className="max-w-[150px]">
@@ -98,7 +96,7 @@ export function TaskPanel({ tasks, summary, businessId, members, onChanged }: {
                     </Select>
                   </div>
                   <div className="flex gap-2">
-                    <Button size="sm" onClick={async()=>{ const r=await apiSend('/api/tasks','PATCH',{businessId, id:t.id, title:editTitle, dueAt:editDueAt, assignedUserId:editAssignee}); if(r.ok){ setEditingId(null); onChanged(); }}}>Salvar</Button>
+                    <Button size="sm" onClick={async()=>{ const r=await apiSend('/api/tasks','PATCH',{businessId, id:t.id, title:editTitle, note: editNote, dueAt:editDueAt, assignedUserId:editAssignee}); if(r.ok){ setEditingId(null); onChanged(); }}}>Salvar</Button>
                     <Button size="sm" variant="ghost" onClick={()=> setEditingId(null)}>Cancelar</Button>
                   </div>
                 </div>
@@ -106,15 +104,21 @@ export function TaskPanel({ tasks, summary, businessId, members, onChanged }: {
                 <>
                   <p className="text-sm text-zinc-900">{t.title}</p>
                   {t.note && <p className="text-[11px] text-zinc-500 mt-0.5">{t.note}</p>}
-                  <p className="text-[11px] text-zinc-400 mt-1">
-                    {t.dueLabel}{t.assigneeName ? ` · ${t.assigneeName}` : ''}{t.leadName ? ` · lead ${t.leadName}` : ''}{t.bookingLabel ? ` · agendamento ${t.bookingLabel}` : ''}
+                  <p className="text-[11px] text-zinc-400 mt-1 flex flex-wrap gap-1.5 items-center">
+                    <span>{t.dueLabel}</span>
+                    {t.assigneeName ? <span>· {t.assigneeName}</span> : null}
+                    {t.leadName ? <span>· lead {t.leadName}</span> : null}
+                    {t.bookingLabel ? <span>· agendamento {t.bookingLabel}</span> : null}
+                    {t.leadId && <Link href={`/funil?b=${businessId}#${t.leadId}`} className="underline text-zinc-600">Ver no funil</Link>}
+                    {t.bookingId && <Link href={`/agenda?b=${businessId}`} className="underline text-zinc-600">Ver agenda</Link>}
                   </p>
                 </>
               )}
             </div>
             <div className="flex items-center gap-1.5 shrink-0">
               {t.fromAutomation && <Badge tone="blue">automação</Badge>}
-              {editingId!==t.id && <button onClick={()=>{setEditingId(t.id); setEditTitle(t.title); setEditDueAt(t.dueAt||''); setEditAssignee(t.assignedUserId||'');}} className="text-[11px] text-zinc-500 border border-zinc-200 rounded px-2 py-1 hover:bg-zinc-50">Editar</button>}
+              {editingId!==t.id && <button onClick={()=>{setEditingId(t.id); setEditTitle(t.title); setEditNote(t.note||''); setEditDueAt(t.dueAt||''); setEditAssignee(t.assignedUserId||'');}} className="text-[11px] text-zinc-500 border border-zinc-200 rounded px-2 py-1 hover:bg-zinc-50">Editar</button>}
+              {editingId!==t.id && <button onClick={async()=>{ if(confirm('Cancelar esta tarefa?')) { await apiSend('/api/tasks','PATCH',{businessId, id:t.id, status:'cancelled'}); onChanged(); } }} className="text-[11px] text-zinc-500 border border-zinc-200 rounded px-2 py-1 hover:bg-zinc-50">Cancelar</button>}
             </div>
           </div>
         ))}
