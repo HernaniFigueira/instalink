@@ -151,8 +151,8 @@ export function PipelineStagesPanel({ businessId, pipeline, onClose, onSaved }: 
                 className="flex-1 min-w-0 text-xs font-semibold rounded-md border border-zinc-300 bg-white px-2.5 py-1.5 focus:outline-none focus:ring-1 focus:ring-zinc-900"
               />
               {isSystemStage(s) && <span className="text-[9px] font-bold px-1.5 py-0.5 rounded bg-zinc-900 text-white uppercase tracking-wider" title="Etapa de sistema — essencial para agenda/CRM/automação">sistema</span>}
-              <label className="inline-flex items-center gap-1 text-[11px] text-zinc-600 shrink-0 cursor-pointer" title="Etapa final: encerra a oportunidade (ex.: concluído, perdido).">
-                <input type="checkbox" checked={s.isTerminal} onChange={(e) => patch(i, { isTerminal: e.target.checked })} className="w-3.5 h-3.5 accent-zinc-900" />
+              <label className={`inline-flex items-center gap-1 text-[11px] shrink-0 ${['new','scheduled','converted'].includes(s.id) ? 'text-zinc-400 cursor-not-allowed' : 'text-zinc-600 cursor-pointer'}`} title={['new','scheduled','converted'].includes(s.id) ? 'Semântica estrutural preservada pelo servidor (new/scheduled não terminais, converted terminal)' : 'Etapa final: encerra a oportunidade (ex.: concluído, perdido).'}>
+                <input type="checkbox" checked={s.isTerminal} disabled={['new','scheduled','converted'].includes(s.id)} onChange={(e) => patch(i, { isTerminal: e.target.checked })} className="w-3.5 h-3.5 accent-zinc-900 disabled:opacity-50" />
                 final
               </label>
               <div className="flex items-center shrink-0">

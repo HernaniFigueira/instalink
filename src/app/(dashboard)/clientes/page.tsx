@@ -170,22 +170,26 @@ export default function ClientesPage() {
 
   async function setLead(id: string, statusOrStage: string) {
     setError('');
-    // A3: envia stageId quando corresponde a uma etapa real; fallback status para compatibilidade
-    let payload: any = { businessId, id };
-    if (pipeline && pipeline.stages.some((s) => s.id === statusOrStage)) payload.stageId = statusOrStage;
-    else payload.status = statusOrStage;
-    const res = await apiSend('/api/leads', 'PATCH', payload, { scope: 'action', area: 'Clientes' });
+    if (!pipeline) { setError('Aguarde carregar as etapas do funil.'); return; }
+    // A3 fechamento — mutação sempre via PipelineStage real, nunca via LeadStatus legado
+    if (!pipeline.stages.some((s) => s.id === statusOrStage)) {
+      setError('Etapa inválida para este funil.');
+      return;
+    }
+    const res = await apiSend('/api/leads', 'PATCH', { businessId, id, stageId: statusOrStage }, { scope: 'action', area: 'Clientes' });
     if (!res.ok) { setError(res.message || 'Não foi possível atualizar.'); return; }
     load();
   }
   function nextStageForLead(lead: { stageId?: string; status: string }): string {
-    if (!pipeline) return NEXT_LEAD[lead.status] || '';
-    const curId = lead.stageId || (lead.status as string);
-    // tenta encontrar índice atual na ordem
+    if (!pipeline) return '';
+    const curId = lead.stageId || '';
+    // sem stageId ainda não resolvido: não avança sem pipeline real (evita mutação legada)
+    if (!curId) return '';
     const ordered = [...pipeline.stages].sort((a,b)=>a.order-b.order);
     const idx = ordered.findIndex((s)=> s.id === curId);
     if (idx >=0 && idx+1 < ordered.length) return ordered[idx+1].id;
-    return NEXT_LEAD[lead.status] || '';
+    // não usa LEAD_STATUS como fallback de mutação — pipeline é a verdade
+    return '';
   }
   function nextStageLabelForLead(lead: { stageId?: string; status: string }): string {
     const nid = nextStageForLead(lead);
@@ -221,27 +225,24 @@ export default function ClientesPage() {
     status?: string;
     actions?: React.ReactNode;
   };
-  // A3: se next é scheduled, abre agendamento em vez de PATCH manual
   function handleLeadNext(lead: Person['leads'][number], person: Person) {
+    if (!pipeline || !canFunil) return;
     const nid = nextStageForLead(lead as any);
     if (!nid) return;
     if (nid === 'scheduled') {
       openBooking(person);
       return;
     }
-    // perdido deve usar etapa real quando existir
-    if (nid === 'lost' && pipeline && !pipeline.stages.some(s=> s.id==='lost')) {
-      // sem etapa lost na esteira customizada, não tenta mover
+    if (nid === 'lost' && !pipeline.stages.some(s=> s.id==='lost')) {
       setError('Etapa Perdido não existe nesta esteira.');
       return;
     }
     setLead(lead.id, nid);
   }
   function lostStageId(): string | null {
-    if (!pipeline) return 'lost';
+    if (!pipeline) return null;
     const found = pipeline.stages.find(s=> s.id==='lost');
     if (found) return 'lost';
-    // fallback: procura etapa terminal que mapeia para lost
     const mapped = pipeline.stages.find(s=> s.mappedStatus==='lost');
     return mapped ? mapped.id : null;
   }
@@ -287,7 +288,7 @@ export default function ClientesPage() {
       const nextId = nextStageForLead(l as any);
       const nextLabel = nextStageLabelForLead(l as any);
       const lostId = lostStageId();
-      const canLose = !!lostId && l.status !== 'lost' && l.status !== 'converted' && l.stageId !== 'converted' && l.stageId !== 'lost';
+      const canLose = !!lostId && !!canFunil && !!pipeline && l.status !== 'lost' && l.status !== 'converted' && l.stageId !== 'converted' && l.stageId !== 'lost';
       out.push({
         kind: 'lead', id: l.id, sortKey: l.createdAt, icon: 'spark',
         when: eventDay(l.createdAt.slice(0, 10)),

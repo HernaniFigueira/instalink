@@ -307,6 +307,7 @@ export function winBackCandidates(
 ): WinBackCandidate[] {
   const cutoff = addDaysISO(today, -inactiveDays);
   const bookings = d.bookings.filter((b) => b.businessId === businessId);
+  const pipeline = getBusinessPipeline(d, businessId);
   const out: WinBackCandidate[] = [];
   for (const contact of d.contacts) {
     if (contact.businessId !== businessId) continue;
@@ -318,12 +319,16 @@ export function winBackCandidates(
     if (mine.length === 0) continue;
     const last = mine.reduce((acc, b) => (b.date > acc ? b.date : acc), '');
     if (!last || last >= cutoff) continue;
-    // Já existe oportunidade de retorno aberta? Não duplica.
-    const hasOpen = d.leads.some(
-      (l) => l.businessId === businessId && l.action === 'retorno'
-        && (phoneKey(l.phone) === digits || (contact.customerId && l.customerId === contact.customerId))
-        && l.status !== 'converted' && l.status !== 'lost',
-    );
+    // A3 fechamento — oportunidade aberta = PipelineStage não terminal (não LeadStatus)
+    const hasOpen = d.leads.some((l) => {
+      if (l.businessId !== businessId) return false;
+      if (l.action !== 'retorno') return false;
+      const match = phoneKey(l.phone) === digits || (contact.customerId && l.customerId === contact.customerId);
+      if (!match) return false;
+      const cur = normalizeLeadStageId(pipeline, l);
+      const st = pipeline.stages.find((s) => s.id === cur);
+      return st ? !st.isTerminal : false;
+    });
     if (hasOpen) continue;
     out.push({
       contact,

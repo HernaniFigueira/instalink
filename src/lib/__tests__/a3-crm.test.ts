@@ -195,7 +195,7 @@ describe('A3 · Pipeline estrutural e máquina única', () => {
       createdAt: NOW,
       lastInteraction: NOW,
     } as Lead);
-    moveLeadStage(d, { businessId: 'b1', leadId: 'l1', toStageId: 'scheduled', actor: { id: 'owner', name: 'Equipe' }, now: NOW });
+    moveLeadStage(d, { businessId: 'b1', leadId: 'l1', toStageId: 'scheduled', actor: { id: 'owner', name: 'Equipe' }, now: NOW, allowScheduledTransition: true });
     expect(d.leads[0].stageId).toBe('scheduled');
     expect(d.leads[0].stageHistory?.length).toBe(1);
     expect(d.leads[0].stageHistory?.[0].toStage).toBe('scheduled');
@@ -646,7 +646,7 @@ describe('A3 · Tarefas e isolamento', () => {
       lastInteraction: NOW,
     } as Lead);
     const pipeline = getBusinessPipeline(d, 'b1');
-    moveLeadStage(d, { businessId: 'b1', leadId: 'l1', toStageId: 'scheduled', actor: { id: 'owner', name: 'Equipe' }, now: NOW });
+    moveLeadStage(d, { businessId: 'b1', leadId: 'l1', toStageId: 'scheduled', actor: { id: 'owner', name: 'Equipe' }, now: NOW, allowScheduledTransition: true });
     const lead = d.leads[0];
     expect(lead.stageId).toBe('scheduled');
     expect(lead.status).toBe(mapStageToStatus(pipeline, 'scheduled'));

@@ -122,6 +122,22 @@ export function updateBusinessPipeline(
   if (schedIdx>=0 && convIdx>=0 && schedIdx>convIdx) {
     const [ns]=deduped.splice(schedIdx,1); deduped.splice(convIdx,0,ns);
   }
+  // A3 fechamento — semântica estrutural sempre preservada (nome/cor podem mudar)
+  for (const s of deduped) {
+    if (s.id === 'new') {
+      s.isSystem = true;
+      s.isTerminal = false;
+      s.mappedStatus = 'new';
+    } else if (s.id === 'scheduled') {
+      s.isSystem = true;
+      s.isTerminal = false;
+      s.mappedStatus = 'converted';
+    } else if (s.id === 'converted') {
+      s.isSystem = true;
+      s.isTerminal = true;
+      s.mappedStatus = 'converted';
+    }
+  }
   // Normaliza order sequencial preservando posição atual
   deduped.forEach((s, idx) => { s.order = idx; });
 
@@ -396,6 +412,10 @@ export function ingestLead(db: DB, input: IngestLeadInput): {
   // negócio — aliases e LeadStatus legado são convertidos, e entrada
   // desconhecida/inválida nunca é persistida (fallback explícito na 1ª etapa).
   const { stageId: initialStageId } = resolveStageId(pipeline, input.stageId || 'new');
+  // A3 fechamento — scheduled nunca nasce sem agendamento real
+  if (initialStageId === SCHEDULED_STAGE_ID) {
+    throw Object.assign(new Error('Agendado requer um agendamento real. Use o fluxo de agendamento.'), { status: 422 });
+  }
   const initialStatus = mapStageToStatus(pipeline, initialStageId);
   const leadId = randomUUID();
 
@@ -589,6 +609,8 @@ export interface MoveLeadStageParams {
   now?: string;
   /** P4 — execução que originou o movimento (anti-loop). */
   origin?: AutomationOrigin;
+  /** A3 — scheduled só via helper oficial (default false). */
+  allowScheduledTransition?: boolean;
 }
 
 export function moveLeadStage(db: DB, p: MoveLeadStageParams): Lead {
@@ -601,11 +623,16 @@ export function moveLeadStage(db: DB, p: MoveLeadStageParams): Lead {
   if (!targetStage) {
     throw Object.assign(new Error(`Etapa "${p.toStageId}" não existe na esteira deste negócio.`), { status: 422 });
   }
-
+  // A3 fechamento — scheduled é estrutural de agenda: só via markLeadScheduled
   const now = p.now || new Date().toISOString();
   // A1.2 · Bloco 2 (F3): o "de onde saiu" registrado no histórico é a etapa
   // NORMALIZADA — registro legado (ex.: stageId cru "contacted") não entra.
   const fromStage = normalizeLeadStageId(pipeline, lead);
+  // A3 fechamento — scheduled só via markLeadScheduled (autorizado)
+  // No-op (mesma etapa) é reparo silencioso e não é transição — permitido
+  if (targetStage.id === SCHEDULED_STAGE_ID && !p.allowScheduledTransition && fromStage !== targetStage.id) {
+    throw Object.assign(new Error('Agendado requer um agendamento real. Use o fluxo de agendamento.'), { status: 422 });
+  }
   // A3 — idempotência: mesma etapa não gera histórico/evento duplicado,
   // mas repara projeção silenciosamente se stageId/status divergiram (legado).
   if (fromStage === targetStage.id) {
@@ -766,6 +793,7 @@ export function markLeadScheduled(db: DB, p: MarkLeadScheduledParams): MarkLeadS
     actor: { id: p.actor.id, name: p.actor.name },
     now,
     origin: p.origin,
+    allowScheduledTransition: true,
   });
   return { lead, fromStage, moved: true, reopened };
 }
