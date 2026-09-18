@@ -4,8 +4,10 @@ import { can } from '@/lib/access';
 import { summarizeDay, pendingClosures } from '@/lib/booking-ops';
 import { integrationStatus } from '@/lib/whatsapp';
 import { enabledFeatureIds } from '@/lib/features';
-import { dashboardContext, recentActivityLists, setupChecklist, setupProgress } from '@/lib/dashboard';
+import { dashboardAttention, dashboardContext, dashboardLinks, recentActivityLists, setupChecklist, setupProgress } from '@/lib/dashboard';
+import { summarizeTasks } from '@/lib/automation/tasks';
 import { scopeBookings } from '@/lib/access-core';
+import type { PermissionId } from '@/lib/types';
 import {
   REVENUE_HINTS, REVENUE_LABELS, REVENUE_UNIT_LABELS, bookingRevenue, orderRevenue,
 } from '@/lib/revenue';
@@ -171,6 +173,26 @@ export async function GET(req: NextRequest) {
     customers: contacts.filter((c) => !!c.customerId).length,
   };
 
+  // ── A1.2 · Bloco 4 — ATENÇÃO + LINKS POR PERMISSÃO ──
+  // Tarefas: resumo da MESMA engine das automações (lib/automation/tasks) —
+  // nenhum sistema novo. Entra no payload só para quem pode abrir /tarefas.
+  const TASKS_PERMS: PermissionId[] = ['leads', 'agenda', 'clientes', 'config'];
+  const canTasks = TASKS_PERMS.some((p) => can(guard.ctx, p));
+  const tasksSummary = canTasks ? summarizeTasks(db, bId, today) : null;
+
+  // Mapa de permissão das portas que a tela menciona (fonte: catálogo de
+  // permissões do usuário no contexto autenticado — a tela nunca chuta).
+  const links = dashboardLinks(guard.ctx.permissions);
+
+  // Região de atenção: apenas dados já existentes e confiáveis, com link
+  // contextual somente quando o usuário pode abrir a rota.
+  const attention = dashboardAttention({
+    closures: closures.length,
+    leadsNew: crm.leadsNew,
+    tasksOverdue: tasksSummary?.overdue ?? 0,
+    permissions: { agenda: links.agenda, leads: links.funil, tasks: canTasks },
+  });
+
   // ── Página: o que ela produziu no período ──
   const pageStats = {
     views: events.filter((e) => e.type === 'page_view' && e.createdAt.slice(0, 10) >= from).length,
@@ -264,15 +286,20 @@ export async function GET(req: NextRequest) {
       id: business.id, name: business.name, slug: business.slug,
       logo: business.logo || '', published: business.published,
     },
-    // ── Contexto da Dashboard (módulos → painéis/KPIs/áreas) ──
+    // ── Contexto da Dashboard (módulos → painéis/KPIs/vocabulário) ──
+    // A1.2 · Bloco 4: `areas` saiu do payload — repetia a navegação que o
+    // shell já fornece (catálogo lib/panel.ts).
     context: {
       modules: m,
       panels: context.panels,
       kpis: context.kpis,
       revenue: revenueSources,
-      areas: context.areas,
       labels: context.labels,
     },
+    // A1.2 · Bloco 4: atenção consolidada + portas que o usuário PODE abrir.
+    attention,
+    links,
+    tasksSummary,
     modules: enabledFeatureIds(business),
     hasBookingsModule: m.bookings,
     hasOrdersModule: m.orders,
