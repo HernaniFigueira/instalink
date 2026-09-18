@@ -78,6 +78,14 @@ export function applyBookingStatusTx(
   }
 
   const now = p.now || new Date().toISOString();
+
+  // A2-B3 (F7.1): transição SEM mudança real é no-op — nada de histórico
+  // redundante (append-only registra MUDANÇAS, não repetições), nada de
+  // updatedAt falso, nenhuma mensagem/evento re-disparado. Idempotente.
+  if (from === p.to) {
+    return { ok: true, booking, from, status: booking.status };
+  }
+
   const note = String(p.note || '').trim().slice(0, 300);
   if (!Array.isArray(booking.history)) booking.history = [];
   booking.history.push({ at: now, from, to: p.to, by: p.by, ...(note ? { note } : {}) });

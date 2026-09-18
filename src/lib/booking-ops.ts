@@ -25,6 +25,38 @@ export function bookingDuration(service: Service | undefined, fallback = 30): nu
   return Number.isFinite(d) && d > 0 ? d : fallback;
 }
 
+// ═══════════════════════════════════════════════════════════════
+// A2-B3 (F5) — HORIZONTE EFETIVO (uma regra, zero hardcode de 60)
+// ═══════════════════════════════════════════════════════════════
+// O servidor aceita 1–365 (PATCH /api/businesses). Toda a UI e toda a API
+// passam por AQUI — painel, /agendar, página pública e NewBookingSheet não
+// podem assumir 60 como regra universal.
+export const BOOKING_HORIZON_MIN_DAYS = 1;
+export const BOOKING_HORIZON_MAX_DAYS = 365;
+export const BOOKING_HORIZON_DEFAULT_DAYS = 60;
+
+export function effectiveHorizonDays(cfg?: { horizonDays?: number } | null): number {
+  const n = Math.round(Number(cfg?.horizonDays));
+  if (!Number.isFinite(n) || n < BOOKING_HORIZON_MIN_DAYS) return BOOKING_HORIZON_DEFAULT_DAYS;
+  return Math.min(BOOKING_HORIZON_MAX_DAYS, n);
+}
+
+// A2-B3 (F6): limite efetivo do GET manage — EXPLÍCITO no contrato. O cliente
+// pode pedir o que quiser; o servidor devolve o valor aplicado (e sinaliza o
+// corte) em vez de capar em silêncio.
+export const MANAGE_LIST_MAX_LIMIT = 500;
+export const MANAGE_LIST_DEFAULT_LIMIT = 200;
+
+export function effectiveManageLimit(requested?: number | string | null): { limit: number; capped: boolean; requested: number | null } {
+  const raw = Number(requested);
+  const requestedLimit = Number.isFinite(raw) && raw > 0 ? Math.floor(raw) : null;
+  if (requestedLimit === null) return { limit: MANAGE_LIST_DEFAULT_LIMIT, capped: false, requested: null };
+  if (requestedLimit > MANAGE_LIST_MAX_LIMIT) {
+    return { limit: MANAGE_LIST_MAX_LIMIT, capped: true, requested: requestedLimit };
+  }
+  return { limit: requestedLimit, capped: false, requested: requestedLimit };
+}
+
 /** Minutos desde a meia-noite em que o atendimento termina. */
 export function endMinutes(b: Pick<Booking, 'time'>, durationMin: number): number {
   return timeToMin(b.time) + Math.max(0, durationMin);

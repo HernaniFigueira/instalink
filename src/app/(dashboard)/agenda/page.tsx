@@ -25,7 +25,7 @@ import { memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useStat
 import { useSearchParams } from 'next/navigation';
 import { todayISO, addDaysISO, weekdayOf, formatDateBR, nowHM } from '@/lib/tz';
 import { WEEKDAYS, WEEKDAYS_LONG, timeToMin, minToTime, cn } from '@/lib/utils';
-import type { Availability, Booking, BookingStatus, Professional, Service } from '@/lib/types';
+import type { Availability, Booking, BookingConfig, BookingStatus, Professional, Service } from '@/lib/types';
 import { ListSkeleton, Button, AttentionStrip } from '@/components/ui';
 import { Icon } from '@/components/icons';
 import {
@@ -35,7 +35,7 @@ import { BookingDetailSheet } from '@/components/dashboard/BookingDetailSheet';
 import { NewBookingSheet } from '@/components/dashboard/NewBookingSheet';
 import { AccessDenied, PermissionNotice, useAreaLoad, useForbiddenNotice } from '@/components/dashboard/AccessNotice';
 import { useRevalidateOnFocus } from '@/components/dashboard/use-revalidate';
-import { bookingDuration, needsClosure, rescheduleDecision } from '@/lib/booking-ops';
+import { bookingDuration, effectiveHorizonDays, needsClosure, rescheduleDecision } from '@/lib/booking-ops';
 import { apiGet, apiSend } from '@/lib/api-client';
 import { SLOT_STATE_MESSAGE, slotState } from '@/lib/slot-states';
 import {
@@ -339,8 +339,10 @@ export default function AgendaPage() {
     if (!businessId) return;
     const [cat, bk] = await Promise.all([
       apiGet<any>(`/api/catalog/get?businessId=${businessId}`, { scope: 'area', area: 'Agenda' }),
+      // A2-B3 (F6): pede o teto real do servidor (500) — pedir 1000 só
+      // produzia um corte silencioso; o contrato agora é explícito.
       apiGet<{ bookings?: Booking[] }>(
-        `/api/bookings?businessId=${businessId}&mode=manage&from=${range.from}&to=${range.to}&limit=1000`,
+        `/api/bookings?businessId=${businessId}&mode=manage&from=${range.from}&to=${range.to}&limit=500`,
         { scope: 'area', area: 'Agenda' },
       ),
     ]);
@@ -350,6 +352,8 @@ export default function AgendaPage() {
     const d = cat.data || {};
     setServices(d.services || []);
     setPros(d.professionals || []);
+    // A2-B3 (F5): horizonte real do negócio (1–365) — nunca 60 hardcoded.
+    if (d.business?.booking) setBookingCfg(d.business.booking);
     setRules(d.availability || []);
     setBookings(bk.ok ? (bk.data?.bookings || []) : []);
     setLoaded(true);
@@ -364,7 +368,10 @@ export default function AgendaPage() {
   useEffect(() => { bookingsRef.current = new Map(bookings.map((b) => [b.id, b])); }, [bookings]);
 
   const activePros = useMemo(() => pros.filter((p) => p.active !== false), [pros]);
-  const horizonDays = 60;
+  // A2-B3 (F5): enquanto o catálogo chega, o default do produto (60) vale;
+  // depois, a configuração REAL do negócio manda (1–365).
+  const [bookingCfg, setBookingCfg] = useState<BookingConfig | null>(null);
+  const horizonDays = effectiveHorizonDays(bookingCfg);
 
   // ── Filtros em escala (P1.1) ──
   // Especialidades = valores únicos do campo `role` já existente (sem novo

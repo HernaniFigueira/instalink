@@ -17,8 +17,13 @@ import { computeSlots } from './slots';
 import { resolveProfessional } from './booking';
 import { upsertContact } from './contacts';
 import { onlyDigits } from './utils';
-import { addDaysISO, weekdayOf, todayISO, nowHM } from './tz';
-import { enqueueBookingAutomation } from './automations';
+import { addDaysISO, effectiveTimezone, weekdayOf, todayISO, nowHM } from './tz';
+import { enqueueBookingAutomation, enqueueDueReminders } from './automations';
+import { effectiveHorizonDays } from './booking-ops';
+// A2-B1 (F2): o destino do lead passa pela máquina OFICIAL da esteira
+// (pipeline.ts é também importado aqui — dependência circular só de funções,
+// resolvida em runtime; nenhum dos módulos executa o outro no load).
+import { ensureScheduledStage, ingestLead, markLeadScheduled } from './pipeline';
 // P4 — o agendamento é UM caminho (este arquivo); o gatilho nasce aqui para
 // que página, painel, assistente, widget, API externa e automação disparem as
 // MESMAS automações. Não existe segunda fonte do evento.
@@ -30,8 +35,85 @@ export function txError(message: string, status: number): Error {
 
 export type BookingActor = 'owner' | 'customer' | 'agent';
 
+// ═══════════════════════════════════════════════════════════════
+// A2-B2 (F1) — IDENTIDADE DO AGENDAMENTO (sessão · guest · dono)
+// ═══════════════════════════════════════════════════════════════
+// Regra única usada por /api/bookings: cliente logado mantém a identidade da
+// CONTA (nunca re-perguntado); GUEST informado no fluxo (/agendar e widget)
+// conclui SEM cadastro; dono digita/escolhe o contato do CRM.
+// A validação vive AQUI (servidor) — a UI nunca é a autoridade.
+export interface BookingIdentityInput {
+  isOwner: boolean;
+  sessionCustomer: { id: string; name: string; phone: string; email?: string } | null;
+  body: {
+    customerName?: unknown;
+    customerPhone?: unknown;
+    customerEmail?: unknown;
+  };
+  linked?: { name?: string; phone?: string; email?: string } | null;
+}
+
+export type BookingIdentity =
+  | { ok: true; name: string; phoneDigits: string; email: string; source: 'session' | 'guest' | 'owner' }
+  | { ok: false; error: string; code?: 'login_required' | 'phone_required' };
+
+function str(v: unknown): string {
+  return typeof v === 'string' ? v.trim() : '';
+}
+
+export function resolveBookingIdentity(input: BookingIdentityInput): BookingIdentity {
+  const bodyName = str(input.body.customerName);
+  const bodyPhone = str(input.body.customerPhone);
+  const bodyEmail = str(input.body.customerEmail).toLowerCase().slice(0, 120);
+
+  if (input.isOwner) {
+    const name = (bodyName || str(input.linked?.name)).slice(0, 80);
+    const phone = bodyPhone || str(input.linked?.phone);
+    return {
+      ok: true,
+      name,
+      phoneDigits: onlyDigits(phone),
+      email: bodyEmail || str(input.linked?.email),
+      source: 'owner',
+    };
+  }
+
+  // Cliente autenticado: a CONTA vence (evita duplicação de dados) — campos
+  // ausentes na conta (nome/telefone/e-mail) são COMPLEMENTADOS pelo fluxo
+  // em vez de recusar quem já está logado com cadastro incompleto.
+  if (input.sessionCustomer) {
+    const name = (str(input.sessionCustomer.name) || bodyName).slice(0, 80);
+    const phone = str(input.sessionCustomer.phone) || bodyPhone;
+    return {
+      ok: true,
+      name,
+      phoneDigits: onlyDigits(phone),
+      email: str(input.sessionCustomer.email) || bodyEmail,
+      source: 'session',
+    };
+  }
+
+  // Guest (DECISÃO 5): sem conta, identidade informada no fluxo. Sem NENHUMA
+  // identidade ⇒ continua exigindo login (fluxo da página pública que abre o
+  // sheet de conta a partir do 401).
+  if (!bodyName) {
+    return { ok: false, error: 'Entre para agendar.', code: 'login_required' };
+  }
+  const digits = onlyDigits(bodyPhone);
+  if (digits.length < 10) {
+    return { ok: false, error: 'Precisamos do seu WhatsApp para confirmar.', code: 'phone_required' };
+  }
+  return {
+    ok: true,
+    name: bodyName.slice(0, 80),
+    phoneDigits: digits,
+    email: bodyEmail,
+    source: 'guest',
+  };
+}
+
 export interface CreateBookingParams {
-  business: Pick<Business, 'id' | 'booking'>;
+  business: Pick<Business, 'id' | 'booking' | 'businessTimezone'>;
   service: Pick<Service, 'id' | 'durationMin' | 'professionalIds' | 'name' | 'bookable' | 'active'>;
   date: string;
   time: string;
@@ -67,6 +149,8 @@ export function createBookingTx(d: DB, p: CreateBookingParams): {
   bookingId: string;
   professionalId: string;
   professionalName: string;
+  /** Status inicial do agendamento ('confirmed' dono · 'pending' cliente) — A2-B2: resultado honesto. */
+  status: BookingStatus;
 } {
   const businessId = p.business.id;
   const isOwner = p.actor === 'owner';
@@ -79,9 +163,11 @@ export function createBookingTx(d: DB, p: CreateBookingParams): {
   if (!isOwner && service.bookable === false) throw txError('Este serviço não aceita agendamento.', 400);
 
   const cfg = p.business.booking;
-  const today = todayISO();
+  // A2-B5 (F9): horizonte/passado/lead time no FUSO DO NEGÓCIO.
+  const btz = effectiveTimezone(p.business.businessTimezone);
+  const today = todayISO(new Date(), btz);
   if (p.date < today) throw txError('Não é possível agendar no passado.', 400);
-  const horizon = addDaysISO(today, Math.max(1, cfg?.horizonDays || 60));
+  const horizon = addDaysISO(today, effectiveHorizonDays(cfg));
   if (p.date > horizon) throw txError('Data fora da agenda disponível.', 400);
 
   const activePros = d.professionals.filter((x) => x.businessId === businessId && x.active !== false);
@@ -110,7 +196,7 @@ export function createBookingTx(d: DB, p: CreateBookingParams): {
     durationMin: service.durationMin,
     professionalId: isOwner ? ownerPro : '',
     eligibleProIds: service.professionalIds || [],
-    nowHM: p.date === todayISO() ? nowHM() : '',
+    nowHM: p.date === today ? nowHM(new Date(), btz) : '',
     leadMin: cfg?.leadMin || 0,
     bufferMin: cfg?.bufferMin || 0,
   });
@@ -163,7 +249,14 @@ export function createBookingTx(d: DB, p: CreateBookingParams): {
     now,
   });
 
-  // Lead associado (fluxo público, assistente e vínculo direto).
+  // ── Lead associado (A2-B1 · F2) ──
+  // NENHUM caminho escreve `stageId` diretamente: o destino estrutural
+  // `scheduled` é garantido na esteira e toda movimentação passa pela
+  // máquina oficial (markLeadScheduled → moveLeadStage). Leads novos entram
+  // pela porta universal (ingestLead) — mesma entrada da página, API externa
+  // e integrações; o histórico e os gatilhos do P4 ficam coerentes.
+  ensureScheduledStage(d, businessId);
+
   const lead = p.leadId
     ? d.leads.find((l) => l.id === p.leadId && l.businessId === businessId)
     : (!isOwner
@@ -173,46 +266,48 @@ export function createBookingTx(d: DB, p: CreateBookingParams): {
           )
         : undefined);
 
+  const leadActor = {
+    id: isOwner ? 'owner' : p.actor === 'agent' ? 'agent' : 'customer',
+    name: 'Agendamento',
+  };
+  const markParams = {
+    businessId,
+    customerId: p.customer?.id || '',
+    phone: digits,
+    name,
+    bookingId,
+    bookingDate: p.date,
+    bookingTime: p.time,
+    actor: leadActor,
+    now,
+    origin: p.originRunId ? { runId: p.originRunId } : undefined,
+  };
+
   if (lead) {
-    const prevStage = lead.stageId || (lead.status === 'new' ? 'new' : 'in_progress');
-    lead.bookingId = bookingId;
-    lead.name = name || lead.name;
-    if (p.customer?.id) lead.customerId = p.customer.id;
-    lead.lastInteraction = now;
-    lead.action = 'agendamento';
-    lead.stageId = 'scheduled';
-    if (lead.status === 'new' || lead.status === 'contacted' || lead.status === 'qualified') {
-      lead.status = 'converted';
-    }
-    if (!Array.isArray(lead.stageHistory)) lead.stageHistory = [];
-    lead.stageHistory.push({
-      id: randomUUID(),
-      fromStage: prevStage,
-      toStage: 'scheduled',
-      movedBy: isOwner ? 'owner' : (p.actor === 'agent' ? 'agent' : 'customer'),
-      movedByName: isOwner ? 'Equipe' : 'Agendamento',
-      at: now,
-      note: `Agendado para ${p.date} às ${p.time}`,
-    });
+    // Lead existente (inclusive terminal/perdido): REABRE e vai para
+    // `scheduled` com status projetado recalculado — nunca stageId=scheduled
+    // com status=lost, nunca lead duplicado.
+    markLeadScheduled(d, { ...markParams, leadId: lead.id });
   } else if (!isOwner) {
-    d.leads.push({
-      id: randomUUID(), businessId, customerId: p.customer?.id || '', name, phone: digits,
-      email: p.customer?.email || '', instagram: '',
-      origin: p.actor === 'agent' ? 'agente' : 'agendamento',
-      interest: service.name, action: 'agendamento', status: 'converted',
-      stageId: 'scheduled',
-      bookingId,
-      createdAt: now, lastInteraction: now,
-      stageHistory: [{
-        id: randomUUID(),
-        fromStage: 'new',
-        toStage: 'scheduled',
-        movedBy: p.actor === 'agent' ? 'agent' : 'customer',
-        movedByName: 'Agendamento',
-        at: now,
-        note: `Agendado para ${p.date} às ${p.time}`,
-      }],
+    // Cliente sem lead no negócio: entrada universal de leads (única porta de
+    // criação — dedupe, contato, histórico e eventos lead.created/conversion).
+    const ingested = ingestLead(d, {
+      businessId,
+      customerId: p.customer?.id || '',
+      name,
+      phone: digits,
+      email: p.customer?.email || '',
+      interest: service.name,
+      source: p.source || (p.actor === 'agent' ? 'agente' : 'agendamento'),
+      actor: {
+        id: p.customer?.id || 'system',
+        name: name || 'Cliente',
+        type: p.actor === 'agent' ? 'agent' : 'customer',
+      },
+      now,
     });
+    ingested.lead.action = 'agendamento';
+    markLeadScheduled(d, { ...markParams, leadId: ingested.lead.id });
   }
 
   // Automação: confirmação do agendamento (mensagem na fila do WhatsApp).
@@ -226,6 +321,11 @@ export function createBookingTx(d: DB, p: CreateBookingParams): {
     },
     status,
   });
+
+  // A2-B3 (F6): lembretes vencidos nascem na ESCRITA, não na leitura — cada
+  // criação aproveita a transação para enfileirar (idempotente por chave)
+  // os lembretes de hoje/amanhã do negócio. O GET manage parou de escrever.
+  try { enqueueDueReminders(d, businessId, today); } catch { /* melhor-esforço */ }
 
   const professionalName = finalPro
     ? d.professionals.find((x) => x.id === finalPro)?.name || ''
@@ -247,5 +347,5 @@ export function createBookingTx(d: DB, p: CreateBookingParams): {
     });
   }
 
-  return { bookingId, professionalId: finalPro, professionalName };
+  return { bookingId, professionalId: finalPro, professionalName, status };
 }

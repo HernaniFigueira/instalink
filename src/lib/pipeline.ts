@@ -599,6 +599,162 @@ export function moveLeadStage(db: DB, p: MoveLeadStageParams): Lead {
   return lead;
 }
 
+// ═══════════════════════════════════════════════════════════════
+// A2-B1 (F2) — AGENDAMENTO → ESTEIRA (helper OFICIAL de domínio)
+// ═══════════════════════════════════════════════════════════════
+// O caminho de booking NUNCA escreve `stageId` diretamente: todo
+// "cliente agendou" passa por `markLeadScheduled`, que reutiliza a
+// máquina oficial (`moveLeadStage`) — histórico coerente, status
+// projetado recalculado e evento `lead.stage_changed` emitido.
+//
+// DECISÃO 2 — `scheduled` é ESTRUTURAL (Agenda ↔ CRM ↔ Automação):
+// esteiras customizadas podem remover a etapa, então `ensureScheduledStage`
+// reinsere a etapa de sistema padrão (sem tocar nas etapas do lojista).
+// Um agendamento nunca pode desaparecer semanticamente no CRM nem cair
+// em fallback silencioso para "Novo".
+//
+// DECISÃO 1 — lead TERMINAL não ganha gêmeo: o lead existente é REABERTO
+// (movido para `scheduled`); o status projetado é recalculado por
+// `mapStageToStatus` dentro de `moveLeadStage` — nunca fica
+// `stageId=scheduled` com `status=lost`.
+export const SCHEDULED_STAGE_ID = 'scheduled';
+
+/** Garante a etapa estrutural `scheduled` na esteira do negócio (idempotente). */
+export function ensureScheduledStage(db: DB, businessId: string): BusinessPipeline {
+  const pipeline = getBusinessPipeline(db, businessId);
+  if (pipeline.stages.some((s) => s.id === SCHEDULED_STAGE_ID)) return pipeline;
+  const maxOrder = pipeline.stages.reduce((m, s) => Math.max(m, s.order || 0), 0);
+  const def = DEFAULT_PIPELINE_STAGES.find((s) => s.id === SCHEDULED_STAGE_ID);
+  const stage: PipelineStage = def
+    ? { ...def, order: maxOrder + 1 }
+    : { id: SCHEDULED_STAGE_ID, name: 'Agendado', order: maxOrder + 1, color: 'emerald', mappedStatus: 'converted', isSystem: true };
+  pipeline.stages.push(stage);
+  pipeline.updatedAt = new Date().toISOString();
+  return pipeline;
+}
+
+export interface MarkLeadScheduledParams {
+  businessId: string;
+  /** Lead explícito (painel/esteira/API) — tem prioridade sobre a busca. */
+  leadId?: string;
+  /** Identidade para localizar o lead do cliente (fluxo público/assistente). */
+  customerId?: string;
+  phone?: string;
+  /** Nome informado no agendamento (complementa o lead sem apagar o existente). */
+  name?: string;
+  /** Contexto do agendamento (vínculo + nota de histórico). */
+  bookingId?: string;
+  bookingDate?: string;
+  bookingTime?: string;
+  actor: { id: string; name: string };
+  now?: string;
+  /** P4 — execução que originou o agendamento (anti-loop). */
+  origin?: AutomationOrigin;
+}
+
+export interface MarkLeadScheduledResult {
+  lead: Lead;
+  /** Etapa NORMALIZADA de onde o lead saiu. */
+  fromStage: string;
+  /** false = lead já estava em `scheduled` (nenhum movimento/histórico). */
+  moved: boolean;
+  /** true = o lead estava numa etapa terminal (perdido/concluído) e foi reaberto. */
+  reopened: boolean;
+}
+
+/**
+ * Move (ou cria o vínculo de) um lead para a etapa estrutural `scheduled`
+ * pela MÁQUINA OFICIAL. Localiza o lead dentro do tenant, garante o destino
+ * estrutural, reabre lead terminal quando aplicável, recalcula o status
+ * projetado, registra histórico coerente e emite `lead.stage_changed`.
+ * Retorna `null` quando não há lead correspondente (o chamador decide criar).
+ */
+export function markLeadScheduled(db: DB, p: MarkLeadScheduledParams): MarkLeadScheduledResult | null {
+  const pipeline = ensureScheduledStage(db, p.businessId);
+
+  let lead = p.leadId
+    ? db.leads.find((l) => l.id === p.leadId && l.businessId === p.businessId)
+    : undefined;
+  if (!lead && (p.customerId || p.phone)) {
+    const digits = onlyDigits(p.phone || '');
+    const customerId = (p.customerId || '').trim();
+    lead = db.leads.find((l) =>
+      l.businessId === p.businessId &&
+      ((customerId && l.customerId && l.customerId === customerId) ||
+        (digits && onlyDigits(l.phone) === digits)),
+    );
+  }
+  if (!lead) return null;
+
+  const now = p.now || new Date().toISOString();
+  const fromStage = normalizeLeadStageId(pipeline, lead);
+  const reopened = pipeline.stages.find((s) => s.id === fromStage)?.isTerminal === true;
+
+  // Vínculo com o agendamento e contexto do cliente (sempre — mesmo quando
+  // o lead já está em `scheduled`, o agendamento novo vira o atual).
+  if (p.bookingId) lead.bookingId = p.bookingId;
+  if (p.name && !lead.name) lead.name = p.name;
+  if (p.customerId && !lead.customerId) lead.customerId = p.customerId;
+  lead.lastInteraction = now;
+  lead.action = 'agendamento';
+
+  // Já agendado: sem movimento real ⇒ sem histórico redundante (mesma
+  // semântica do F7.1 na máquina de status do agendamento).
+  if (fromStage === SCHEDULED_STAGE_ID) {
+    return { lead, fromStage, moved: false, reopened: false };
+  }
+
+  const note = p.bookingDate && p.bookingTime
+    ? `Agendado para ${p.bookingDate} às ${p.bookingTime}`
+    : 'Agendamento criado';
+  moveLeadStage(db, {
+    businessId: p.businessId,
+    leadId: lead.id,
+    toStageId: SCHEDULED_STAGE_ID,
+    note,
+    actor: { id: p.actor.id, name: p.actor.name },
+    now,
+    origin: p.origin,
+  });
+  return { lead, fromStage, moved: true, reopened };
+}
+
+/**
+ * Nota de acompanhamento no histórico do lead quando o agendamento vinculado
+ * é REMARCADO (A2-B3 · F7.2): a nota "Agendado para …" da etapa `scheduled`
+ * não pode ficar apontando para o dia/horário antigo. Segue o padrão do
+ * `assignLead`: entrada de histórico sem mudança de etapa, append-only.
+ */
+export function noteLeadReschedule(
+  db: DB,
+  p: {
+    businessId: string;
+    leadId?: string;
+    from: { date: string; time: string };
+    to: { date: string; time: string };
+    by: 'owner' | 'customer' | 'agent' | 'system';
+    now?: string;
+  },
+): void {
+  if (!p.leadId) return;
+  const lead = db.leads.find((l) => l.id === p.leadId && l.businessId === p.businessId);
+  if (!lead) return;
+  const now = p.now || new Date().toISOString();
+  const pipeline = getBusinessPipeline(db, p.businessId);
+  const stage = normalizeLeadStageId(pipeline, lead);
+  if (!Array.isArray(lead.stageHistory)) lead.stageHistory = [];
+  lead.stageHistory.push({
+    id: randomUUID(),
+    fromStage: stage,
+    toStage: stage,
+    movedBy: p.by,
+    movedByName: 'Reagendamento',
+    at: now,
+    note: `Reagendado de ${p.from.date.slice(8, 10)}/${p.from.date.slice(5, 7)} ${p.from.time} para ${p.to.date.slice(8, 10)}/${p.to.date.slice(5, 7)} ${p.to.time}`,
+  });
+  lead.lastInteraction = now;
+}
+
 export interface AssignLeadParams {
   businessId: string;
   leadId: string;

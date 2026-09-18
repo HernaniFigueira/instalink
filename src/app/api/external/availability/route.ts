@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { requireApiKey } from '@/lib/api-keys';
 import { computeSlots } from '@/lib/slots';
-import { todayISO, nowHM, weekdayOf, isValidDateISO, addDaysISO } from '@/lib/tz';
+import { todayISO, nowHM, weekdayOf, effectiveTimezone, isValidDateISO, addDaysISO } from '@/lib/tz';
+import { effectiveHorizonDays } from '@/lib/booking-ops';
 import { pushIntegrationLog } from '@/lib/integration-logs';
 import { updateDB } from '@/lib/db';
 
@@ -20,8 +21,9 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ error: 'Serviço inválido ou indisponível.' }, { status: 400 });
   }
 
-  const today = todayISO();
-  const maxDate = addDaysISO(today, Math.max(1, business.booking?.horizonDays || 60));
+  const btz = effectiveTimezone(business.businessTimezone); // A2-B5 (F9)
+  const today = todayISO(new Date(), btz);
+  const maxDate = addDaysISO(today, effectiveHorizonDays(business.booking));
 
   if (!isValidDateISO(date) || date < today || date > maxDate) {
     return NextResponse.json({
@@ -47,7 +49,7 @@ export async function GET(req: NextRequest) {
     durationMin: service.durationMin,
     professionalId,
     eligibleProIds: service.professionalIds || [],
-    nowHM: date === today ? nowHM() : '',
+    nowHM: date === today ? nowHM(new Date(), btz) : '',
     leadMin: business.booking?.leadMin || 0,
     bufferMin: business.booking?.bufferMin || 0,
   });

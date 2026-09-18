@@ -6,12 +6,13 @@ import { pushAudit } from '@/lib/audit';
 import { normalizeFeatures } from '@/lib/features';
 import type { BusinessMode, TeamMode } from '@/lib/types';
 import { VALID_MODES, defaultBookingConfig } from '@/lib/types';
+import { isValidTimezone } from '@/lib/tz';
 import { VALID_NAV } from '@/lib/nav';
 import { sanitizeAppearance } from '@/lib/appearance';
 
 // PATCH — atualiza perfil do negócio (dono). Campos permitidos explícitos,
 // com whitelist e sanitização por tipo.
-const ALLOWED = ['name', 'description', 'logo', 'cover', 'modes', 'phone', 'whatsapp', 'email', 'instagram', 'tiktok', 'address', 'mapsUrl', 'hours', 'paymentMethods', 'pixKey', 'deliveryFee', 'minOrder', 'googleUrl', 'googlePlaceId', 'googleApiKey'] as const;
+const ALLOWED = ['name', 'description', 'logo', 'cover', 'modes', 'phone', 'whatsapp', 'email', 'instagram', 'tiktok', 'address', 'mapsUrl', 'hours', 'paymentMethods', 'pixKey', 'deliveryFee', 'minOrder', 'googleUrl', 'googlePlaceId', 'googleApiKey', 'businessTimezone'] as const;
 const PAY_METHODS = ['pix', 'card', 'cash', 'on_delivery'];
 const TEAM_MODES: TeamMode[] = ['solo', 'choosable', 'auto'];
 
@@ -23,6 +24,15 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
     if (!guard.ok) return guard.res;
     const { ctx } = guard;
     const body = await req.json();
+
+    // A2-B5 (F9): fuso IANA validado ANTES de gravar — inválido volta 400
+    // com mensagem clara (nunca 500 genérico, nunca valor inválido no banco).
+    if (body.businessTimezone !== undefined) {
+      const tz = String(body.businessTimezone || '').trim().slice(0, 64);
+      if (tz && !isValidTimezone(tz)) {
+        return NextResponse.json({ error: 'Fuso horário inválido (use um identificador IANA, ex.: America/Sao_Paulo).' }, { status: 400 });
+      }
+    }
 
     await updateDB((d) => {
       const b = d.businesses.find((x) => x.id === params.id)!;
@@ -41,6 +51,11 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
           b[key] = clampCents(Number(body[key]) || 0);
         } else if (key === 'hours') {
           if (body.hours && typeof body.hours === 'object') b.hours = body.hours;
+        } else if (key === 'businessTimezone') {
+          // A2-B5 (F9): fuso IANA pré-validado acima. Vazio = volta ao default
+          // do produto (America/Sao_Paulo) — fallback seguro, sem migração.
+          const tz = String(body.businessTimezone || '').trim().slice(0, 64);
+          b.businessTimezone = tz || undefined;
         } else {
           (b as any)[key] = str(body[key], key === 'description' ? 500 : 200);
         }

@@ -16,8 +16,9 @@ import type { Business, DB, Service } from './types';
 import { computeSlots } from './slots';
 import { isFeatureEnabled } from './features';
 import { priceVisible } from './pricing';
-import { addDaysISO, isValidDateISO, todayISO, weekdayOf, humanDay } from './tz';
+import { addDaysISO, effectiveTimezone, isValidDateISO, nowHM, todayISO, weekdayOf, humanDay } from './tz';
 import { onlyDigits } from './utils';
+import { effectiveHorizonDays } from './booking-ops';
 
 export type AgentFlowStep = 'idle' | 'pick_service' | 'pick_slot' | 'confirm' | 'identify';
 
@@ -172,7 +173,8 @@ function slotsFor(db: DB, business: Business, service: Service, date: string, to
     durationMin: service.durationMin,
     professionalId: '',
     eligibleProIds: service.professionalIds || [],
-    nowHM: date === today ? new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Sao_Paulo', hour: '2-digit', minute: '2-digit', hourCycle: 'h23' }).format(new Date()) : '',
+    // A2-B5 (F9): fuso do NEGÓCIO (nunca fixo, nunca o do navegador).
+    nowHM: date === today ? nowHM(new Date(), effectiveTimezone(business.businessTimezone)) : '',
     leadMin: cfg?.leadMin || 0,
     bufferMin: cfg?.bufferMin || 0,
   });
@@ -182,7 +184,8 @@ function slotsFor(db: DB, business: Business, service: Service, date: string, to
 /** Próximos dias (até 7) com horário livre para o serviço. */
 function nextOpenDays(db: DB, business: Business, service: Service, from: string, today: string): Array<{ date: string; free: number }> {
   const out: Array<{ date: string; free: number }> = [];
-  const horizon = Math.max(1, Math.min(14, business.booking?.horizonDays || 60));
+  // Recorte do chat: mostra no máx. 14 dias, sempre dentro do horizonte real.
+  const horizon = Math.min(14, effectiveHorizonDays(business.booking));
   for (let i = 0; i < horizon && out.length < 4; i++) {
     const date = addDaysISO(from, i);
     if (date < today) continue;
@@ -252,7 +255,8 @@ export function agentFlowStep(
 ): FlowReply {
   const flow: AgentFlowState = opts.flow && opts.flow.step ? { ...opts.flow } : { step: 'idle' };
   const action = opts.action || null;
-  const today = todayISO();
+  // A2-B5 (F9): "hoje" do agente é no fuso do NEGÓCIO.
+  const today = todayISO(new Date(), effectiveTimezone(business.businessTimezone));
   const bookingsOn = isFeatureEnabled(business, 'bookings');
   const bookableServices = db.services.filter(
     (s) => s.businessId === business.id && s.active !== false && s.bookable !== false,
