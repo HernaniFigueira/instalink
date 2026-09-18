@@ -35,25 +35,6 @@ export const DEFAULT_PIPELINE_STAGES: PipelineStage[] = [
   { id: 'lost', name: 'Perdido', order: 7, color: 'red', isTerminal: true, mappedStatus: 'lost', isSystem: true },
 ];
 
-export const STAGE_ALIASES: Record<string, string> = {
-  novo: 'new',
-  new: 'new',
-  em_atendimento: 'in_progress',
-  in_progress: 'in_progress',
-  qualificando: 'qualifying',
-  qualifying: 'qualifying',
-  qualificado: 'qualified',
-  qualified: 'qualified',
-  aguardando_secretaria: 'waiting_secretary',
-  waiting_secretary: 'waiting_secretary',
-  agendado: 'scheduled',
-  scheduled: 'scheduled',
-  concluido: 'converted',
-  converted: 'converted',
-  perdido: 'lost',
-  lost: 'lost',
-};
-
 export const SIMPLE_STAGE_IDS = ['new', 'in_progress', 'scheduled', 'converted'];
 
 /** Obtém a esteira configurada do negócio (ou cria padrão defensivo). */
@@ -121,6 +102,42 @@ export function mapStageToStatus(pipeline: BusinessPipeline, stageId: string): L
   if (stageId === 'qualified') return 'qualified';
   return 'contacted';
 }
+
+// ═══════════════════════════════════════════════════════════════
+// A1.2 · BLOCO 2 — UMA ÚNICA MÁQUINA DE ESTADOS (F1 · F2 · F3)
+// ═══════════════════════════════════════════════════════════════
+// `PipelineStage` é a ÚNICA máquina de estados oficial do lead. O antigo
+// `LeadStatus` (new/contacted/qualified/converted/lost) permanece somente
+// como PROJEÇÃO derivada e read-only (`mapStageToStatus`) — exigida por
+// compatibilidade (selos, condições do P4, APIs antigas).
+//
+// ESCRITA (F1): nenhuma entrada escreve `stageId` diretamente. Entrada
+// legada em `LeadStatus` é convertida EXPLICITAMENTE para uma etapa válida
+// (`stageForLegacyStatus`) e passa pelo mecanismo oficial (`moveLeadStage`).
+//
+// LEITURA (F3): estágio ausente/inválido/inexistente NUNCA quebra nem vira
+// comportamento silenciosamente incoerente — é normalizado por
+// `normalizeLeadStageId` com fallback EXPLÍCITO (primeira etapa da esteira
+// do negócio). Nenhuma etapa é inventada: só existem as do negócio.
+//
+// F2 — inventário dos usos legados de LeadStatus restantes (classificação):
+//   • leitura/projeção: mapStageToStatus, selos em LEAD_STATUS (lib/status),
+//     clientes/page.tsx (badge do histórico 360);
+//   • compatibilidade: PATCH /api/leads aceita `status` e CONVERTE (não
+//     escreve mais estado por ele);
+//   • filtros: GET /api/leads e /api/external/leads comparam pela etapa
+//     NORMALIZADA (nunca pelo status cru);
+//   • histórico: LeadStageHistory registra apenas etapas reais;
+//   • P4: condições `lead.status` continuam válidas porque o status é sempre
+//     recalculado a partir da etapa (projeção consistente).
+//
+// A resolução/normalização em si vive em `lib/pipeline-stages.ts` (módulo
+// PURO, sem node:crypto) para poder ser usada também pela UI do funil.
+export {
+  STAGE_ALIASES, LEGACY_LEAD_STATUSES, isLegacyLeadStatus, stagesInOrder,
+  stageForLegacyStatus, resolveStageId, normalizeLeadStageId, type ResolvedStage,
+} from './pipeline-stages';
+import { normalizeLeadStageId, resolveStageId, STAGE_ALIASES } from './pipeline-stages';
 
 // ═══════════════════════════════════════════════════════════════
 // ENTRADA NORMALIZADA DE LEADS (UNIVERSAL)
@@ -338,8 +355,10 @@ export function ingestLead(db: DB, input: IngestLeadInput): {
   }
 
   // 3. Novo Lead
-  const rawStageId = input.stageId || 'new';
-  const initialStageId = STAGE_ALIASES[rawStageId] || rawStageId;
+  // A1.2 · Bloco 2 (F1): a etapa inicial é resolvida contra a esteira REAL do
+  // negócio — aliases e LeadStatus legado são convertidos, e entrada
+  // desconhecida/inválida nunca é persistida (fallback explícito na 1ª etapa).
+  const { stageId: initialStageId } = resolveStageId(pipeline, input.stageId || 'new');
   const initialStatus = mapStageToStatus(pipeline, initialStageId);
   const leadId = randomUUID();
 
@@ -547,7 +566,9 @@ export function moveLeadStage(db: DB, p: MoveLeadStageParams): Lead {
   }
 
   const now = p.now || new Date().toISOString();
-  const fromStage = lead.stageId || (lead.status === 'new' ? 'new' : 'in_progress');
+  // A1.2 · Bloco 2 (F3): o "de onde saiu" registrado no histórico é a etapa
+  // NORMALIZADA — registro legado (ex.: stageId cru "contacted") não entra.
+  const fromStage = normalizeLeadStageId(pipeline, lead);
 
   lead.stageId = targetStage.id;
   lead.status = mapStageToStatus(pipeline, targetStage.id);

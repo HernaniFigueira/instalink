@@ -124,9 +124,10 @@ export interface PanelRouteDef {
 //   • /profissionais = quem REALIZA os atendimentos (serviços, agenda própria);
 //   • /equipe        = quem tem LOGIN e permissões (dono, recepcionista…).
 //
-// DISPONIBILIDADE × REGRAS DE RESERVA:
-//   • /disponibilidade = QUANDO pode atender (janela, dias especiais);
-//   • regras de como o cliente reserva = Configurações (A1.2 · Bloco 2).
+// DISPONIBILIDADE × REGRAS DE RESERVA (separadas no Bloco 2):
+//   • /disponibilidade = QUANDO pode atender (janela semanal, dias especiais);
+//   • Configurações → aba Agenda = COMO o cliente pode reservar (antecedência,
+//     cancelamento, horizonte, buffer, distribuição) — edita, não linka.
 //
 // CONVERSAS × CANAIS:
 //   • /conversas = operação diária (inbox);
@@ -287,7 +288,7 @@ export const PANEL_ROUTES: PanelRouteDef[] = [
   {
     href: '/configuracoes', label: 'Configurações', icon: 'settings', section: 'administracao',
     permission: 'config', area: 'config',
-    description: 'Dados do negócio, contatos, endereço e aparência do painel.',
+    description: 'Dados do negócio, regras de reserva e aparência do painel.',
   },
 ];
 

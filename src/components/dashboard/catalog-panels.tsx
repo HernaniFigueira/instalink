@@ -1,15 +1,19 @@
 'use client';
 // ═══════════════════════════════════════════════════════════════
-// PAINÉIS DE CATÁLOGO — compartilhados entre Serviços / Profissionais / Horários
+// PAINÉIS DE CATÁLOGO — compartilhados entre Serviços / Profissionais / Disponibilidade
 // ═══════════════════════════════════════════════════════════════
 // A mesma fonte de dados (/api/catalog) alimenta as três telas do
 // Atendimento: o que eu ofereço (Serviços), quem atende (Profissionais) e
-// quando atende (Horários). Conceitos SEPARADOS na interface — nunca uma
-// tela confusa que esconde os três.
+// quando atende (Disponibilidade). Conceitos SEPARADOS na interface — nunca
+// uma tela confusa que esconde os três.
+//
+// A1.2 · Bloco 2: as REGRAS DE RESERVA (BookingSettings) saíram daqui —
+// "como o cliente reserva" é configuração do negócio e mora em Configurações
+// → aba Agenda. Disponibilidade ficou só com "quando atende".
 import { useState } from 'react';
 import Link from 'next/link';
 import { cn, parseMoneyToCents, centsToBR } from '@/lib/utils';
-import type { Availability, AvailabilityException, BookingConfig, Category, Professional, Service } from '@/lib/types';
+import type { Availability, AvailabilityException, Category, Professional, Service } from '@/lib/types';
 import { Icon } from '@/components/icons';
 import { ImageUpload } from '@/components/dashboard/ImageUpload';
 import { followsBusinessHours } from '@/lib/schedule';
@@ -192,7 +196,7 @@ export function TeamEditor({ businessId, pros, rules, onSave, onAskDelete }: {
               <span className="block text-xs font-normal text-zinc-500">
                 {follow
                   ? 'Atende nos horários gerais — mudanças lá valem automaticamente aqui.'
-                  : 'Horário personalizado: edite em Horários.'}
+                  : 'Horário personalizado: edite em Disponibilidade.'}
               </span>
             </span>
           </label>
@@ -308,72 +312,7 @@ export function ExceptionsManager({ exceptions, onSave, onDelete }: {
   );
 }
 
-// ── Políticas da agenda ──
-export function BookingSettings({ businessId, initial, hasTeam, onSaved }: {
-  businessId: string;
-  initial: BookingConfig;
-  hasTeam: boolean;
-  onSaved: () => void;
-}) {
-  const [cfg, setCfg] = useState<BookingConfig>(initial);
-  const [saving, setSaving] = useState(false);
-  const [error, setError] = useState('');
-
-  async function save() {
-    setSaving(true);
-    setError('');
-    try {
-      const res = await fetch(`/api/businesses/${businessId}`, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ booking: cfg }),
-      });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error);
-      onSaved();
-    } catch (err: any) {
-      setError(err.message);
-    } finally {
-      setSaving(false);
-    }
-  }
-
-  const num = 'w-full rounded-md border border-zinc-300 px-3 py-2 text-sm mt-1';
-  return (
-    <div className="bg-white border border-zinc-200 rounded-lg p-5">
-      <p className="font-bold text-sm">Como a agenda funciona</p>
-      <p className="text-xs text-zinc-500 mb-4">Regras simples que valem para todos os agendamentos.</p>
-      <div className="grid sm:grid-cols-2 gap-3.5">
-        {hasTeam && (
-          <div className="sm:col-span-2">
-            <span className="text-xs font-bold text-zinc-500">DISTRIBUIÇÃO DOS AGENDAMENTOS</span>
-            <select value="balanced" className={num}>
-              <option value="balanced">Equilibrar equipe — quem tem menos atendimentos no dia</option>
-              <option value="soon" disabled>Em breve: outros modos de distribuição</option>
-            </select>
-            <span className="text-[11px] text-zinc-500">O cliente nunca escolhe o profissional — a regra é interna do negócio. Quem atende é resolvido automaticamente, respeitando profissionais ativos, vínculo serviço → profissional, horários, buffers e exceções.</span>
-          </div>
-        )}
-        <label className="block"><span className="text-xs font-bold text-zinc-500">ANTECEDÊNCIA MÍNIMA (MIN)</span>
-          <input type="number" min={0} max={1440} value={cfg.leadMin} onChange={(e) => setCfg({ ...cfg, leadMin: Number(e.target.value) })} className={num} />
-          <span className="text-[11px] text-zinc-500">Ex: 30 = só reserva com 30 min de folga.</span></label>
-        <label className="block"><span className="text-xs font-bold text-zinc-500">CANCELAR ATÉ (MIN ANTES)</span>
-          <input type="number" min={0} max={10080} value={cfg.cancelUntilMin} onChange={(e) => setCfg({ ...cfg, cancelUntilMin: Number(e.target.value) })} className={num} />
-          <span className="text-[11px] text-zinc-500">Depois disso, só falando com você.</span></label>
-        <label className="block"><span className="text-xs font-bold text-zinc-500">AGENDA ABERTA (DIAS)</span>
-          <input type="number" min={1} max={365} value={cfg.horizonDays} onChange={(e) => setCfg({ ...cfg, horizonDays: Number(e.target.value) })} className={num} /></label>
-        <label className="block"><span className="text-xs font-bold text-zinc-500">INTERVALO ENTRE ATENDIMENTOS (MIN)</span>
-          <input type="number" min={0} max={240} value={cfg.bufferMin} onChange={(e) => setCfg({ ...cfg, bufferMin: Number(e.target.value) })} className={num} /></label>
-      </div>
-      {error && <p className="mt-2 text-sm font-medium text-red-600">{error}</p>}
-      <button onClick={save} disabled={saving} className="mt-4 text-sm font-bold bg-zinc-900 text-white px-5 py-2.5 rounded-md disabled:opacity-50">
-        {saving ? 'Salvando…' : 'Salvar regras'}
-      </button>
-    </div>
-  );
-}
-
-// ── Ponteiros entre as três telas (Serviços · Profissionais · Horários) ──
+// ── Ponteiros entre as três telas (Serviços · Profissionais · Disponibilidade) ──
 /**
  * Atalhos contextuais entre as telas de Oferta (A1.2 · §"nada é ilha").
  * A lista é PROJETADA do catálogo: seção 'oferta', destinos de serviço

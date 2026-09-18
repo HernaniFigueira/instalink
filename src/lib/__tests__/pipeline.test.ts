@@ -4,6 +4,9 @@ import {
   DEFAULT_PIPELINE_STAGES, SIMPLE_STAGE_IDS, getBusinessPipeline,
   updateBusinessPipeline, ingestLead, moveLeadStage, assignLead,
   addLeadNote, bookLead, findLead,
+  // A1.2 · Bloco 2 — a máquina de estados única
+  isLegacyLeadStatus, stageForLegacyStatus, resolveStageId, normalizeLeadStageId,
+  mapStageToStatus, stagesInOrder,
 } from '../pipeline';
 import type { Business, DB, Service, User } from '../types';
 
@@ -512,5 +515,190 @@ describe('P3 Saída da Esteira para Agendamento', () => {
     expect(db.contacts.filter((c) => c.businessId === 'biz-1').length).toBe(1);
     // Não duplicou lead
     expect(db.leads.filter((l) => l.businessId === 'biz-1').length).toBe(1);
+  });
+});
+
+// ═══════════════════════════════════════════════════════════════
+// A1.2 · BLOCO 2 — UMA ÚNICA MÁQUINA DE ESTADOS (F1 · F2 · F3)
+// ═══════════════════════════════════════════════════════════════
+// PipelineStage é a máquina oficial; LeadStatus é projeção derivada.
+describe('A1.2 B2 — PipelineStage é a máquina oficial; LeadStatus é projeção', () => {
+  it('todo lead novo nasce com etapa válida e status DERIVADO da etapa', () => {
+    const db = emptyDB();
+    db.businesses.push(mockBiz('biz-1'));
+    const { lead } = ingestLead(db, { businessId: 'biz-1', name: 'Paulo', phone: '11988881111' });
+    const pipeline = getBusinessPipeline(db, 'biz-1');
+    expect(pipeline.stages.some((s) => s.id === lead.stageId)).toBe(true);
+    expect(lead.status).toBe(mapStageToStatus(pipeline, lead.stageId!));
+  });
+
+  it('projeção LeadStatus acompanha cada movimento (status nunca é escrito por fora)', () => {
+    const db = emptyDB();
+    db.businesses.push(mockBiz('biz-1'));
+    const { lead } = ingestLead(db, { businessId: 'biz-1', name: 'Rita', phone: '11988882222' });
+    const actor = { id: 'u-1', name: 'Equipe' };
+    const expected: Array<[string, string]> = [
+      ['in_progress', 'contacted'],
+      ['qualified', 'qualified'],
+      ['scheduled', 'converted'],
+      ['lost', 'lost'],
+    ];
+    for (const [stageId, status] of expected) {
+      const moved = moveLeadStage(db, { businessId: 'biz-1', leadId: lead.id, toStageId: stageId, actor });
+      expect(moved.stageId).toBe(stageId);
+      expect(moved.status).toBe(status); // projeção derivada da etapa
+    }
+  });
+
+  it('isLegacyLeadStatus reconhece exatamente os cinco valores legados', () => {
+    for (const s of ['new', 'contacted', 'qualified', 'converted', 'lost']) {
+      expect(isLegacyLeadStatus(s)).toBe(true);
+    }
+    for (const s of ['in_progress', 'scheduled', '', null, 5, 'CONTACTED']) {
+      expect(isLegacyLeadStatus(s)).toBe(false);
+    }
+  });
+});
+
+describe('A1.2 B2 — F1: escrita legada LeadStatus é convertida para etapa válida', () => {
+  it('cada LeadStatus legado mapeia para uma etapa REAL da esteira do negócio', () => {
+    const db = emptyDB();
+    const pipeline = getBusinessPipeline(db, 'biz-1');
+    expect(stageForLegacyStatus(pipeline, 'new')).toBe('new');
+    // "contacted" não é etapa: cai na primeira etapa (em ordem) que projeta esse status
+    expect(stageForLegacyStatus(pipeline, 'contacted')).toBe('in_progress');
+    expect(stageForLegacyStatus(pipeline, 'qualified')).toBe('qualified');
+    // id igual ao status vence (antes da ordem) — conversão não vira "Agendado"
+    expect(stageForLegacyStatus(pipeline, 'converted')).toBe('converted');
+    expect(stageForLegacyStatus(pipeline, 'lost')).toBe('lost');
+    for (const s of ['new', 'contacted', 'qualified', 'converted', 'lost'] as const) {
+      const stageId = stageForLegacyStatus(pipeline, s);
+      expect(pipeline.stages.some((x) => x.id === stageId)).toBe(true);
+      // e a projeção da etapa escolhida devolve o status pedido (coerência)
+      expect(mapStageToStatus(pipeline, stageId)).toBe(s);
+    }
+  });
+
+  it('esteira customizada sem correspondência devolve "" (erro explícito, nunca etapa inventada)', () => {
+    const db = emptyDB();
+    updateBusinessPipeline(db, 'biz-x', [
+      { id: 'new', name: 'Chegou', order: 0 },
+      { id: 'triagem', name: 'Triagem', order: 1 },
+      { id: 'converted', name: 'Fechado', order: 2 },
+    ]);
+    const pipeline = getBusinessPipeline(db, 'biz-x');
+    expect(stageForLegacyStatus(pipeline, 'lost')).toBe('');
+    expect(stageForLegacyStatus(pipeline, 'qualified')).toBe('');
+    expect(stageForLegacyStatus(pipeline, 'new')).toBe('new');
+    expect(stageForLegacyStatus(pipeline, 'converted')).toBe('converted');
+    // 'contacted' casa com o mappedStatus padrão das etapas novas
+    expect(stageForLegacyStatus(pipeline, 'contacted')).toBe('triagem');
+  });
+
+  it('ingresso com LeadStatus legado é convertido — stageId persistido é sempre etapa real', () => {
+    const db = emptyDB();
+    db.businesses.push(mockBiz('biz-1'));
+    const pipeline = getBusinessPipeline(db, 'biz-1');
+    const { lead } = ingestLead(db, {
+      businessId: 'biz-1', name: 'Lead Legado', phone: '11977771234', stageId: 'contacted',
+    });
+    expect(lead.stageId).toBe('in_progress'); // convertido, nunca "contacted"
+    expect(lead.status).toBe('contacted');
+    expect(pipeline.stages.some((s) => s.id === lead.stageId)).toBe(true);
+  });
+});
+
+describe('A1.2 B2 — F1/F3: nenhum stageId inválido é persistido; leitura é normalizada', () => {
+  it('ingresso com etapa desconhecida usa fallback explícito (primeira etapa), não inventa', () => {
+    const db = emptyDB();
+    db.businesses.push(mockBiz('biz-1'));
+    const { lead } = ingestLead(db, {
+      businessId: 'biz-1', name: 'Etapa Estranha', phone: '11977779876', stageId: 'etapa_marciana',
+    });
+    expect(lead.stageId).toBe(stagesInOrder(getBusinessPipeline(db, 'biz-1'))[0].id);
+    expect(lead.stageId).toBe('new');
+    const resolve = resolveStageId(getBusinessPipeline(db, 'biz-1'), 'etapa_marciana');
+    expect(resolve).toEqual({ stageId: 'new', normalized: true });
+  });
+
+  it('aliases pt/br continuam resolvendo para etapas válidas', () => {
+    const db = emptyDB();
+    db.businesses.push(mockBiz('biz-1'));
+    const pipeline = getBusinessPipeline(db, 'biz-1');
+    // alias ≠ id da etapa → conversão marcada (normalized: true)
+    expect(resolveStageId(pipeline, 'agendado')).toEqual({ stageId: 'scheduled', normalized: true });
+    expect(resolveStageId(pipeline, 'perdido')).toEqual({ stageId: 'lost', normalized: true });
+    expect(resolveStageId(pipeline, 'novo')).toEqual({ stageId: 'new', normalized: true });
+    // id exato não é conversão
+    expect(resolveStageId(pipeline, 'scheduled')).toEqual({ stageId: 'scheduled', normalized: false });
+    // vazio → primeira etapa (fallback explícito)
+    expect(resolveStageId(pipeline, '')).toEqual({ stageId: 'new', normalized: true });
+  });
+
+  it('leitura normalizada: etapa ausente/inválida/inexistente nunca quebra nem vaza', () => {
+    const db = emptyDB();
+    db.businesses.push(mockBiz('biz-1'));
+    const pipeline = getBusinessPipeline(db, 'biz-1');
+
+    // etapa ausente → usa o status legado gravado como pista de conversão
+    expect(normalizeLeadStageId(pipeline, { stageId: '', status: 'contacted' })).toBe('in_progress');
+    // etapa inválida + status válido → converte o status
+    expect(normalizeLeadStageId(pipeline, { stageId: 'contacted', status: 'contacted' })).toBe('in_progress');
+    // etapa inválida + status inválido → primeira etapa (fallback explícito)
+    expect(normalizeLeadStageId(pipeline, { stageId: '???', status: '???' as any })).toBe('new');
+    // etapa válida permanece intacta
+    expect(normalizeLeadStageId(pipeline, { stageId: 'waiting_secretary', status: 'contacted' })).toBe('waiting_secretary');
+
+    // esteira customizada: etapa removida é normalizada para a primeira real
+    updateBusinessPipeline(db, 'biz-2', [
+      { id: 'new', name: 'Topo', order: 0 },
+      { id: 'converted', name: 'Ganho', order: 1 },
+    ]);
+    const p2 = getBusinessPipeline(db, 'biz-2');
+    expect(normalizeLeadStageId(p2, { stageId: 'waiting_secretary', status: 'contacted' })).toBe('new');
+  });
+
+  it('movimentação continua passando pelo mecanismo oficial (etapa inexistente é rejeitada)', () => {
+    const db = emptyDB();
+    db.businesses.push(mockBiz('biz-1'));
+    const { lead } = ingestLead(db, { businessId: 'biz-1', name: 'Nina', phone: '11966661234' });
+    expect(() => moveLeadStage(db, {
+      businessId: 'biz-1', leadId: lead.id, toStageId: 'etapa_fantasma',
+      actor: { id: 'u-1', name: 'Equipe' },
+    })).toThrow(/não existe na esteira/);
+    // o lead não foi tocado pela tentativa inválida
+    expect(lead.stageId).toBe('new');
+    expect(lead.stageHistory?.length).toBe(1);
+  });
+
+  it('histórico registra a etapa de origem NORMALIZADA (registro quebrado não vaza)', () => {
+    const db = emptyDB();
+    db.businesses.push(mockBiz('biz-1'));
+    const { lead } = ingestLead(db, { businessId: 'biz-1', name: 'Quebrado', phone: '11944441234' });
+    // Simula o dado quebrado que o código antigo gravava: stageId = LeadStatus cru
+    lead.stageId = 'contacted';
+    moveLeadStage(db, {
+      businessId: 'biz-1', leadId: lead.id, toStageId: 'qualified',
+      actor: { id: 'u-1', name: 'Equipe' },
+    });
+    const last = lead.stageHistory![lead.stageHistory!.length - 1];
+    expect(last.fromStage).toBe('in_progress'); // normalizado — nunca "contacted"
+    expect(last.toStage).toBe('qualified');
+    expect(lead.stageId).toBe('qualified');
+  });
+
+  it('histórico append-only permanece correto após conversão legada → etapa oficial', () => {
+    const db = emptyDB();
+    db.businesses.push(mockBiz('biz-1'));
+    const { lead } = ingestLead(db, { businessId: 'biz-1', name: 'Otto', phone: '11955551234' });
+    // Simula o caminho do PATCH /api/leads para entrada legada `status: 'contacted'`
+    const pipeline = getBusinessPipeline(db, 'biz-1');
+    const target = stageForLegacyStatus(pipeline, 'contacted');
+    moveLeadStage(db, { businessId: 'biz-1', leadId: lead.id, toStageId: target, actor: { id: 'u-1', name: 'Equipe' } });
+    expect(lead.stageId).toBe('in_progress');
+    expect(lead.status).toBe('contacted');
+    const last = lead.stageHistory![lead.stageHistory!.length - 1];
+    expect(last.fromStage).toBe('new');
+    expect(last.toStage).toBe('in_progress'); // etapa REAL no histórico — nada de "contacted"
   });
 });

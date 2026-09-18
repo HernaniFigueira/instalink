@@ -1,14 +1,15 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { randomUUID } from 'node:crypto';
 import { readDB, updateDB } from '@/lib/db';
 import { requireBusiness } from '@/lib/access';
 import { isFeatureEnabled } from '@/lib/features';
 import { customerFromRequest } from '@/lib/customer-auth';
 import { onlyDigits } from '@/lib/utils';
-import { LEAD_FLOW, canTransition } from '@/lib/status';
 import { rateLimit, ipFrom } from '@/lib/rate-limit';
-import type { DB, LeadStatus } from '@/lib/types';
-import { ingestLead, getBusinessPipeline, moveLeadStage, assignLead, addLeadNote, updateLeadFields } from '@/lib/pipeline';
+import type { DB } from '@/lib/types';
+import {
+  ingestLead, getBusinessPipeline, moveLeadStage, assignLead, addLeadNote, updateLeadFields,
+  isLegacyLeadStatus, stageForLegacyStatus, normalizeLeadStageId, mapStageToStatus, resolveStageId,
+} from '@/lib/pipeline';
 import { dispatchWebhook } from '@/lib/webhooks';
 
 function err(message: string, status: number): Error {
@@ -94,13 +95,17 @@ export async function GET(req: NextRequest) {
   const limit = Math.min(200, Math.max(1, Number(req.nextUrl.searchParams.get('limit')) || 50));
   const stage = req.nextUrl.searchParams.get('stage') || '';
 
+  const pipeline = getBusinessPipeline(db, businessId);
+
+  // A1.2 · Bloco 2 (F3): o filtro compara pela etapa NORMALIZADA do lead —
+  // entrada legada/inválida não deixa lead órfão nem vaza para outra etapa.
   let all = db.leads.filter((l) => l.businessId === businessId);
   if (stage) {
-    all = all.filter((l) => (l.stageId || l.status) === stage);
+    const target = resolveStageId(pipeline, stage).stageId;
+    all = all.filter((l) => normalizeLeadStageId(pipeline, l) === target);
   }
   all.reverse();
 
-  const pipeline = getBusinessPipeline(db, businessId);
   const members = db.members
     .filter((m) => m.businessId === businessId && m.active !== false)
     .map((m) => {
@@ -128,6 +133,10 @@ export async function GET(req: NextRequest) {
     limit,
     pipeline,
     members,
+    // A1.2 · Bloco 2: administrar as etapas do funil é ação de configuração.
+    // A UI mostra o editor somente com este flag; o servidor continua sendo a
+    // autoridade (PATCH /api/pipeline exige 'config').
+    canEditPipeline: guard.ctx.permissions.config === true,
   });
 }
 
@@ -154,7 +163,7 @@ export async function PATCH(req: NextRequest) {
       const l = d.leads.find((x) => x.id === id && x.businessId === businessId);
       if (!l) throw err('Cliente não encontrado.', 404);
 
-      // 1. Mudança de estágio por stageId (novo motor P3)
+      // 1. Mudança de estágio por stageId (máquina oficial — PipelineStage)
       if (stageId && stageId !== l.stageId) {
         moveLeadStage(d, {
           businessId,
@@ -165,27 +174,44 @@ export async function PATCH(req: NextRequest) {
         });
         stageChanged = true;
       }
-      // 2. Mudança de status legado (compatibilidade estrita)
-      else if (status && status !== l.status) {
-        const to = status as LeadStatus;
-        if (!LEAD_FLOW[l.status] || !canTransition(LEAD_FLOW, l.status, to)) {
-          throw err(`Não é possível mudar de "${l.status}" para "${status}".`, 422);
+      // 2. Entrada legada em LeadStatus (compatibilidade — A1.2 · Bloco 2 · F1):
+      //    NUNCA escreve estado diretamente. O status é convertido
+      //    EXPLICITAMENTE para uma etapa válida da esteira do negócio e o
+      //    movimento passa pelo mecanismo oficial (moveLeadStage). Antes, esta
+      //    branch gravava `stageId = "contacted"` — id que não é etapa de
+      //    pipeline nenhum. Se a projeção de status já corresponde ao pedido,
+      //    é no-op (mesma semântica do `status !== l.status` antigo).
+      else if (status) {
+        if (!isLegacyLeadStatus(status)) {
+          throw err(`Status "${status}" não é válido.`, 422);
         }
-        const fromStage = l.stageId || l.status;
-        l.status = to;
-        l.stageId = to;
-        l.lastInteraction = new Date().toISOString();
-        if (!Array.isArray(l.stageHistory)) l.stageHistory = [];
-        l.stageHistory.push({
-          id: randomUUID(),
-          fromStage,
-          toStage: to,
-          movedBy: actor.id,
-          movedByName: actor.name,
-          at: new Date().toISOString(),
-          note: body.note,
-        });
-        stageChanged = true;
+        const pipelineNow = getBusinessPipeline(d, businessId);
+        const currentStageId = normalizeLeadStageId(pipelineNow, l);
+        // Reparo silencioso de registro legado/quebrado (ex.: stageId cru
+        // "contacted" gravado pelo código antigo): sem movimento real, sem
+        // entrada de histórico — só o alinhamento do campo.
+        if (l.stageId !== currentStageId) {
+          l.stageId = currentStageId;
+        }
+        if (mapStageToStatus(pipelineNow, currentStageId) !== status) {
+          const targetStageId = stageForLegacyStatus(pipelineNow, status);
+          if (!targetStageId) {
+            throw err(`Nenhuma etapa desta esteira corresponde ao status "${status}".`, 422);
+          }
+          // F2 — instrumentação leve do uso legado relevante (sem sistema de
+          // observabilidade novo): quem ainda escreve pelo caminho antigo.
+          console.warn('[funil] escrita legada LeadStatus convertida para etapa', {
+            businessId, leadId: l.id, status, targetStageId,
+          });
+          moveLeadStage(d, {
+            businessId,
+            leadId: l.id,
+            toStageId: targetStageId,
+            note: body.note,
+            actor,
+          });
+          stageChanged = true;
+        }
       }
 
       // 3. Atribuição de responsável

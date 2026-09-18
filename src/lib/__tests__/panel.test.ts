@@ -493,10 +493,77 @@ describe('uma porta por conceito', () => {
     expect(cfgPage).not.toMatch(/CanaisIntegracoesView/);
     expect(cfgPage).not.toMatch(/IntegracoesView/);
     expect(cfgPage).toMatch(/\['negocio', 'Negócio'\]/);
-    expect(cfgPage).toMatch(/\['crm', 'CRM'\]/);
+    expect(cfgPage).toMatch(/\['agenda', 'Agenda'\]/);
     expect(cfgPage).toMatch(/\['aparencia', 'Aparência'\]/);
     expect(cfgPage).not.toMatch(/\['canais', 'Canais'\]/);
     expect(cfgPage).not.toMatch(/\['integracoes', 'Integrações'\]/);
+    // A1.2 · Bloco 2: a aba CRM antiga saiu — era texto + links para portas
+    // que já estão no menu (segunda navegação disfarçada de configuração).
+    expect(cfgPage).not.toMatch(/\['crm', 'CRM'\]/);
+  });
+
+  it('A1.2 B2 — Regras de reserva moram em Configurações; Disponibilidade ficou com "quando atende"', () => {
+    const cfgPage = read('src/app/(dashboard)/configuracoes/page.tsx');
+    // A aba Agenda EDITA a BookingConfig (mesma API de antes — nenhuma engine nova).
+    expect(cfgPage).toMatch(/Regras de reserva/);
+    expect(cfgPage).toMatch(/leadMin/);
+    expect(cfgPage).toMatch(/cancelUntilMin/);
+    expect(cfgPage).toMatch(/horizonDays/);
+    expect(cfgPage).toMatch(/bufferMin/);
+    expect(cfgPage).toMatch(/apiSend\(`\/api\/businesses\/\$\{businessId\}`, 'PATCH', \{ booking: cfg \}/);
+
+    // Disponibilidade não edita mais regras de reserva — só aponta para lá.
+    const disp = read('src/app/(dashboard)/disponibilidade/page.tsx');
+    expect(disp).not.toMatch(/BookingSettings/);
+    expect(disp).not.toMatch(/leadMin/);
+    expect(disp).toMatch(/\/configuracoes\?tab=agenda/);
+    // O componente saiu dos painéis de catálogo (não há segunda cópia).
+    const panels = read('src/components/dashboard/catalog-panels.tsx');
+    expect(panels).not.toMatch(/export function BookingSettings/);
+  });
+
+  it('A1.2 B2 — tabs relevantes são deep-linkable (estado na URL, não em useState)', () => {
+    // Canais: aba derivada do ?tab= a cada render (volta/refresh/deep-link).
+    const canais = read('src/app/(dashboard)/canais/page.tsx');
+    expect(canais).toMatch(/const tab = tabFromParam\(params\.get\('tab'\)\)/);
+    expect(canais).not.toMatch(/useState<CanaisTab>/);
+    // Configurações: mesma regra, com redirect legado preservado.
+    const cfgPage = read('src/app/(dashboard)/configuracoes/page.tsx');
+    expect(cfgPage).toMatch(/const tab = tabFromParam\(tabParam\)/);
+    expect(cfgPage).toMatch(/router\.push\(`\/configuracoes\?\$\{qs\.toString\(\)\}`/);
+    expect(cfgPage).not.toMatch(/useState<ConfigTab>/);
+    // Conversas: busca contextual na URL (?q=), filtro client-side seguro.
+    const conversas = read('src/app/(dashboard)/conversas/page.tsx');
+    expect(conversas).toMatch(/params\.get\('q'\)/);
+    expect(conversas).toMatch(/qs\.set\('q'/);
+    expect(conversas).toMatch(/qs\.delete\('q'\)/);
+  });
+
+  it('A1.2 B2 — Funil administra a MESMA máquina de estados do backend (sem configuração paralela)', () => {
+    const esteira = read('src/components/dashboard/EsteiraView.tsx');
+    // A UI conecta no pipeline real: normalização de leitura compartilhada…
+    expect(esteira).toMatch(/normalizeLeadStageId/);
+    // …e o editor de etapas, visível apenas com permissão confirmada pelo servidor.
+    expect(esteira).toMatch(/canEditPipeline/);
+    expect(esteira).toMatch(/PipelineStagesPanel/);
+    const editor = read('src/components/dashboard/PipelineStagesPanel.tsx');
+    expect(editor).toMatch(/apiSend\('\/api\/pipeline', 'PATCH'/); // mesma API oficial
+    expect(editor).toMatch(/stagesInOrder/);                      // mesma ordem do backend
+    expect(editor).not.toMatch(/\/api\/stages/);                  // nenhuma API paralela
+    // O guard de escrita continua no servidor.
+    const pipelineApi = read('src/app/api/pipeline/route.ts');
+    expect(pipelineApi).toMatch(/requireBusiness\(req, businessId, 'config'\)/);
+    expect(pipelineApi).toMatch(/canEdit: guard\.ctx\.permissions\.config === true/);
+  });
+
+  it('A1.2 B2 — a UI concorda com o guard (atalho do Funil em Clientes exige a permissão de Funil)', () => {
+    const clientes = read('src/app/(dashboard)/clientes/page.tsx');
+    expect(clientes).toMatch(/usePanelPermissions/);
+    expect(clientes).toMatch(/permissions\.leads === true/);
+    // O hook resolve a unidade pela MESMA fonte do shell — ?b= estranho não concede nada.
+    const hook = read('src/components/dashboard/usePanelPermissions.ts');
+    expect(hook).toMatch(/resolveActiveBusinessId\(requested, list\)/);
+    expect(hook).toMatch(/\/api\/auth\/me/);
   });
 
   it('/canais é a porta única de canais, fontes e integrações', () => {
@@ -655,5 +722,106 @@ describe('guardas de servidor (regressão)', () => {
       '/pagina',
       '/equipe', '/recursos', '/configuracoes',
     ]);
+  });
+});
+
+// ═══════════════════════════════════════════════════════════════
+// A1.2 · BLOCO 2 — navegação e permissões das portas reorganizadas
+// ═══════════════════════════════════════════════════════════════
+describe('A1.2 B2 — permissões das portas reorganizadas', () => {
+  it('Funil exige leads; Clientes sozinha não abre o funil', () => {
+    expect(panelAccess('/funil', ctx({ permissions: { leads: true } })).state).toBe('allow');
+    expect(panelAccess('/funil', ctx({ permissions: { clientes: true } })).state).toBe('denied');
+    expect(panelAccess('/funil', ctx({ permissions: { clientes: true, leads: false } })).reason).toBe('permission');
+  });
+
+  it('Configurações/Canais/Automações/Execuções exigem config; Conversas exige whatsapp; Tarefas aceita o conjunto operacional', () => {
+    expect(panelAccess('/configuracoes', ctx({ permissions: { config: true } })).state).toBe('allow');
+    expect(panelAccess('/configuracoes', ctx({ permissions: { clientes: true } })).state).toBe('denied');
+    expect(panelAccess('/canais', ctx({ permissions: { config: true } })).state).toBe('allow');
+    expect(panelAccess('/canais', ctx({ permissions: { whatsapp: true } })).state).toBe('denied');
+    expect(panelAccess('/automacoes', ctx({ permissions: { config: true } })).state).toBe('allow');
+    expect(panelAccess('/execucoes', ctx({ permissions: { config: true } })).state).toBe('allow');
+    expect(panelAccess('/execucoes', ctx({ permissions: { leads: true } })).state).toBe('denied');
+    expect(panelAccess('/conversas', ctx({ permissions: { whatsapp: true } })).state).toBe('allow');
+    expect(panelAccess('/conversas', ctx({ permissions: { clientes: true } })).state).toBe('denied');
+    // Tarefas: qualquer permissão operacional satisfaz (array = qualquer uma)
+    expect(panelAccess('/tarefas', ctx({ permissions: { agenda: true } })).state).toBe('allow');
+    expect(panelAccess('/tarefas', ctx({ permissions: { leads: true } })).state).toBe('allow');
+    expect(panelAccess('/tarefas', ctx({ permissions: { pagina: true } })).state).toBe('denied');
+  });
+
+  it('F1 — a rota de leads não escreve mais estado por LeadStatus (só converte e delega)', () => {
+    const leadsApi = read('src/app/api/leads/route.ts');
+    // O padrão antigo (l.status = X; l.stageId = X) não existe mais…
+    expect(leadsApi).not.toMatch(/l\.stageId = to/);
+    expect(leadsApi).not.toMatch(/l\.status = to/);
+    expect(leadsApi).not.toMatch(/LEAD_FLOW/);
+    // …e a entrada legada passa pela conversão explícita + mecanismo oficial
+    expect(leadsApi).toMatch(/isLegacyLeadStatus\(status\)/);
+    expect(leadsApi).toMatch(/stageForLegacyStatus\(pipelineNow, status\)/);
+    expect(leadsApi).toMatch(/moveLeadStage\(d, \{/);
+    expect(leadsApi).toMatch(/normalizeLeadStageId\(pipelineNow, l\)/);
+  });
+
+  it('F3 — filtros de leitura comparam pela etapa normalizada (painel e API externa)', () => {
+    const leadsApi = read('src/app/api/leads/route.ts');
+    expect(leadsApi).toMatch(/normalizeLeadStageId\(pipeline, l\) === target/);
+    const ext = read('src/app/api/external/leads/route.ts');
+    expect(ext).toMatch(/normalizeLeadStageId\(pipeline, l\) === target/);
+    expect(ext).not.toMatch(/\(l\.stageId \|\| l\.status\) === stageId/);
+  });
+
+  it('guards de servidor das APIs do funil/pipeline cobrem a operação e a configuração', () => {
+    const leads = API_GUARDS.find((g) => g.route === '/api/leads');
+    expect(leads?.permission).toBe('leads');
+    const pipeline = API_GUARDS.find((g) => g.route === '/api/pipeline');
+    expect(pipeline?.permission).toEqual(['leads', 'config']);
+    // a escrita do pipeline continua exigindo config no código da rota
+    const pipelineApi = read('src/app/api/pipeline/route.ts');
+    expect(pipelineApi).toMatch(/requireBusiness\(req, businessId, 'config'\)/);
+    // e a escrita de lead continua exigindo leads
+    const leadsApi = read('src/app/api/leads/route.ts');
+    expect(leadsApi).toMatch(/requireBusiness\(req, businessId, 'leads'\)/);
+  });
+});
+
+describe('A1.2 B2 — navegação: portas canônicas, tabs e redirects', () => {
+  it('/funil é a porta única do kanban; ?view=esteira antigo continua redirecionando', () => {
+    // Uma única implementação do kanban — nada de segunda máquina em Clientes
+    const clientes = read('src/app/(dashboard)/clientes/page.tsx');
+    expect(clientes).not.toMatch(/EsteiraView/);
+    expect(clientes).toMatch(/router\.replace\(`\/funil/); // redirect do link antigo
+    const funil = read('src/app/(dashboard)/funil/page.tsx');
+    expect(funil).toMatch(/<EsteiraView \/>/);
+    // o redirecionamento preserva a unidade
+    expect(clientes).toMatch(/router\.replace\(`\/funil\$\{businessId \? `\?b=\$\{businessId\}` : ''\}`\)/);
+  });
+
+  it('Conversas: estado vazio honesto + CTA para Canais (conexão não mora mais aqui)', () => {
+    const conversas = read('src/app/(dashboard)/conversas/page.tsx');
+    expect(conversas).toMatch(/Nenhuma conversa ainda/);
+    expect(conversas).toMatch(/Conectar canal/);
+    expect(conversas).toMatch(/\/canais\?tab=canais/);
+    // conversa não conecta canal: só Canais conecta
+    expect(conversas).not.toMatch(/action: 'connect'/);
+  });
+
+  it('Disponibilidade mantém os atalhos contextuais de Oferta (Serviços e Profissionais)', () => {
+    const disp = read('src/app/(dashboard)/disponibilidade/page.tsx');
+    expect(disp).toMatch(/CatalogCrossLinks businessId=\{businessId\} current="\/disponibilidade"/);
+    // os atalhos vêm do catálogo (seção Oferta) — renomear lá atualiza aqui
+    const panels = read('src/components/dashboard/catalog-panels.tsx');
+    expect(panels).toMatch(/panelRoutesIn\('oferta'\)/);
+    expect(panels).toMatch(/'\/disponibilidade': 'quando atende'/);
+  });
+
+  it('Execuções vive em Análise/Resultados e consome as execuções existentes (sem motor novo)', () => {
+    expect(panelRouteFor('/execucoes')?.section).toBe('resultados');
+    const runs = read('src/components/dashboard/RunsView.tsx');
+    expect(runs).toMatch(/\/api\/automations\?businessId=/); // MESMA leitura de antes
+    expect(runs).not.toMatch(/\/api\/executions/);           // nenhuma API nova de executor
+    // Automações continua na seção Crescimento (configuração/orquestração)
+    expect(panelRouteFor('/automacoes')?.section).toBe('crescimento');
   });
 });

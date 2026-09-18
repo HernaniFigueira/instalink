@@ -1,6 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { requireApiKey } from '@/lib/api-keys';
-import { moveLeadStage, assignLead, addLeadNote } from '@/lib/pipeline';
+import {
+  moveLeadStage, assignLead, addLeadNote, getBusinessPipeline,
+  normalizeLeadStageId, STAGE_ALIASES,
+} from '@/lib/pipeline';
 import { dispatchWebhook } from '@/lib/webhooks';
 import { pushIntegrationLog } from '@/lib/integration-logs';
 import { updateDB } from '@/lib/db';
@@ -52,16 +55,24 @@ export async function PATCH(
 
       const actor = { id: apiKey.id, name: apiKey.name || 'API Externa', role: 'api' };
 
-      // 1. Mudança de etapa na esteira
-      if (body.stageId && body.stageId !== lead.stageId) {
-        moveLeadStage(d, {
-          businessId: business.id,
-          leadId: lead.id,
-          toStageId: body.stageId,
-          note: body.stageNote || body.note,
-          actor,
-        });
-        stageChanged = true;
+      // 1. Mudança de etapa na esteira — sempre pelo mecanismo oficial.
+      // A1.2 · Bloco 2 (F3): compara pela etapa NORMALIZADA do lead — um
+      // registro legado quebrado (ex.: stageId cru "contacted") não gera
+      // movimento ruído, e etapa inexistente continua rejeitada com 422
+      // pela própria moveLeadStage.
+      if (body.stageId) {
+        const pipeline = getBusinessPipeline(d, business.id);
+        const requested = STAGE_ALIASES[body.stageId] || body.stageId;
+        if (requested !== normalizeLeadStageId(pipeline, lead)) {
+          moveLeadStage(d, {
+            businessId: business.id,
+            leadId: lead.id,
+            toStageId: requested,
+            note: body.stageNote || body.note,
+            actor,
+          });
+          stageChanged = true;
+        }
       }
 
       // 2. Atribuição de responsável

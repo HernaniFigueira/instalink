@@ -11,6 +11,7 @@ import { ListSkeleton } from '@/components/ui';
 import { Icon } from '@/components/icons';
 import { NewBookingSheet } from '@/components/dashboard/NewBookingSheet';
 import { AccessDenied, useAreaLoad } from '@/components/dashboard/AccessNotice';
+import { usePanelPermissions } from '@/components/dashboard/usePanelPermissions';
 import { apiGet, apiSend } from '@/lib/api-client';
 
 // Observações do cliente (P2): histórico append-only com autor e data.
@@ -79,6 +80,11 @@ export default function ClientesPage() {
 
   // 403 → aviso amigável (sessão preservada), nunca lista "carregando" para sempre.
   const { denied, report } = useAreaLoad('Clientes');
+  // A1.2 · Bloco 2: a UI concorda com o guard — o atalho para o Funil só
+  // aparece para quem tem a permissão 'leads' (a mesma que /funil exige).
+  // Nada de oferecer porta que o servidor vai negar em seguida.
+  const { permissions, ready: permsReady } = usePanelPermissions();
+  const canFunil = permsReady && permissions.leads === true;
 
   const load = useCallback(async () => {
     if (!businessId) return;
@@ -228,7 +234,7 @@ export default function ClientesPage() {
       <div className="flex items-center justify-between gap-3 mb-3">
         <div>
           <h1 className="text-base font-semibold tracking-tight">Clientes</h1>
-          <p className="text-sm text-zinc-500 mt-0.5">Base única — agendamentos, histórico e relacionamento (visão 360). As oportunidades por etapa estão no Funil.</p>
+          <p className="text-sm text-zinc-500 mt-0.5">Base única — agendamentos, histórico e relacionamento (visão 360){canFunil ? '. As oportunidades por etapa estão no Funil' : ''}.</p>
         </div>
         <span className="text-xs font-medium text-zinc-500 bg-white border border-zinc-200 rounded-md px-2.5 py-1 hidden sm:inline">{total} contatos</span>
       </div>
@@ -236,16 +242,20 @@ export default function ClientesPage() {
 
       {/* Uma porta por conceito: aqui é a lista de clientes (CRM); as
           oportunidades por etapa vivem em /funil. O atalho contextual
-          permanece — o que saiu foi a SEGUNDA cópia da mesma tela. */}
-      <div className="flex flex-wrap items-center gap-1 p-1 bg-zinc-100 rounded-lg w-fit mb-3 max-w-full">
-        <span className="text-xs font-semibold px-3 py-1.5 rounded-md bg-white shadow-sm border border-zinc-200 text-zinc-900">
-          Lista de Clientes (CRM)
-        </span>
-        <Link href={`/funil?b=${businessId}`}
-          className="text-xs font-semibold px-3 py-1.5 rounded-md text-zinc-500 hover:text-zinc-900 inline-flex items-center gap-1">
-          Funil de oportunidades <Icon n="chevR" size={12} />
-        </Link>
-      </div>
+          permanece — o que saiu foi a SEGUNDA cópia da mesma tela. A1.2 ·
+          Bloco 2: o atalho só aparece com a permissão que /funil exige —
+          a UI nunca oferece uma porta que o guard vai negar. */}
+      {canFunil && (
+        <div className="flex flex-wrap items-center gap-1 p-1 bg-zinc-100 rounded-lg w-fit mb-3 max-w-full">
+          <span className="text-xs font-semibold px-3 py-1.5 rounded-md bg-white shadow-sm border border-zinc-200 text-zinc-900">
+            Lista de Clientes (CRM)
+          </span>
+          <Link href={`/funil?b=${businessId}`}
+            className="text-xs font-semibold px-3 py-1.5 rounded-md text-zinc-500 hover:text-zinc-900 inline-flex items-center gap-1">
+            Funil de oportunidades <Icon n="chevR" size={12} />
+          </Link>
+        </div>
+      )}
 
       {legacyEsteira ? null : (
         <>

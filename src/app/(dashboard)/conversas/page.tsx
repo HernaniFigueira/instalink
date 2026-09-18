@@ -1,6 +1,6 @@
 'use client';
 import { useCallback, useEffect, useState } from 'react';
-import { useSearchParams } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { Icon } from '@/components/icons';
 import { PageSkeleton } from '@/components/ui';
@@ -16,18 +16,41 @@ import type { WaChannelData } from '@/components/dashboard/WhatsappChannelPanel'
 // Conectar o canal é configuração e mora em Canais & Integrações
 // (/canais?tab=canais) — daqui sai um único atalho claro, com a unidade
 // preservada, em vez de um formulário de conexão no meio do inbox.
+//
+// A1.2 · Bloco 2:
+//   • A tela fala de CANAL, não de WhatsApp: o estado vazio e os CTAs levam a
+//     Canais & Integrações, e o dia a dia funciona para qualquer canal que a
+//     plataforma conecte (o inbox não está preso conceitualmente a um
+//     provedor).
+//   • Busca contextual pela URL (?q=): /conversas?q=98765 abre já filtrando.
+//     A busca é um filtro CLIENT-SIDE sobre a lista que a API já devolve
+//     guardada (permissão 'whatsapp', escopo da unidade) — nenhum dado novo é
+//     exposto, por isso é segura. `?q=` sobrevive a refresh e deep-link.
 // ═══════════════════════════════════════════════════════════════
 interface Conversation { id: string; name: string; phone: string; status: string; unread: number; lastMessageAt: string; lastMessagePreview: string; registered: boolean; }
 interface Message { id: string; direction: 'in' | 'out'; body: string; status: string; at: string }
 
 export default function ConversasPage() {
   const params = useSearchParams();
+  const router = useRouter();
   const businessId = params.get('b') || '';
+  // Busca = URL: deep-link (/conversas?q=telefone) abre já filtrada e o
+  // refresh preserva o termo.
+  const q = (params.get('q') || '').trim();
   const [data, setData] = useState<WaChannelData | null>(null);
   const [conversations, setConversations] = useState<Conversation[]>([]);
   const [active, setActive] = useState<{ conversation: Conversation; messages: Message[] } | null>(null);
   const [error, setError] = useState('');
   const [filter, setFilter] = useState<'all' | 'unread' | 'open'>('all');
+
+  /** Escreve o termo de busca na URL (mantendo ?b= e o restante do estado). */
+  function setQuery(next: string) {
+    const qs = new URLSearchParams(params.toString());
+    if (next.trim()) qs.set('q', next.trim());
+    else qs.delete('q');
+    if (businessId) qs.set('b', businessId);
+    router.replace(`/conversas?${qs.toString()}`, { scroll: false });
+  }
 
   // 403 → aviso amigável (a sessão continua); nada de skeleton infinito.
   const { denied, report } = useAreaLoad('Conversas');
@@ -54,13 +77,20 @@ export default function ConversasPage() {
 
   if (denied) return <AccessDenied area="Conversas" />;
   if (!data) return <PageSkeleton />;
-  const q = `?b=${businessId}`;
+  const clientesQ = `?b=${businessId}`;
   // Link para o canal: mantém a unidade ativa (?b=) e abre já na aba Canais.
   const channelsHref = `/canais?tab=canais${businessId ? `&b=${businessId}` : ''}`;
   const connected = data.status === 'connected';
+  // Busca (?q=): nome, telefone ou prévia da última mensagem — aplicada sobre
+  // a lista já guardada por permissão/unidade (nenhum dado novo é exposto).
+  const qLower = q.toLowerCase();
   const filtered = conversations.filter((c) => {
-    if (filter === 'unread') return c.unread > 0;
-    if (filter === 'open') return c.status === 'open';
+    if (filter === 'unread' && c.unread <= 0) return false;
+    if (filter === 'open' && c.status !== 'open') return false;
+    if (qLower) {
+      const hay = `${c.name} ${c.phone} ${c.lastMessagePreview || ''}`.toLowerCase();
+      if (!hay.includes(qLower)) return false;
+    }
     return true;
   });
 
@@ -73,7 +103,7 @@ export default function ConversasPage() {
             <h1 className="text-base font-semibold">Conversas</h1>
             <p className="text-sm text-zinc-500 mt-0.5">As conversas com os seus clientes em um só lugar.</p>
           </div>
-          <Link href={`/clientes${q}`} className="text-xs font-medium bg-white border border-zinc-200 rounded-md px-3 py-1.5">Ver clientes</Link>
+          <Link href={`/clientes${clientesQ}`} className="text-xs font-medium bg-white border border-zinc-200 rounded-md px-3 py-1.5">Ver clientes</Link>
         </div>
         {error && <p className="mb-3 text-sm font-medium bg-amber-600 text-white rounded-md px-3 py-2">{error}</p>}
 
@@ -115,15 +145,28 @@ export default function ConversasPage() {
           <Link href={channelsHref} className="hidden sm:inline-flex items-center gap-1.5 text-xs font-medium bg-emerald-50 border border-emerald-200 text-emerald-800 rounded-full px-2.5 py-1">
             <span className="w-1.5 h-1.5 rounded-full bg-emerald-600" /> Conectado
           </Link>
-          <Link href={`/clientes${q}`} className="text-xs font-medium bg-white border border-zinc-200 rounded-md px-3 py-1.5">Clientes</Link>
+          <Link href={`/clientes${clientesQ}`} className="text-xs font-medium bg-white border border-zinc-200 rounded-md px-3 py-1.5">Clientes</Link>
         </div>
       </div>
       {error && <p className="mb-3 text-sm font-medium bg-amber-600 text-white rounded-md px-3 py-2">{error}</p>}
 
       <div className="bg-white border border-zinc-200 overflow-hidden">
         {/* Toolbar compacta */}
-        <div className="flex items-center gap-2 px-3 py-2 border-b border-zinc-200 bg-zinc-50">
+        <div className="flex flex-wrap items-center gap-2 px-3 py-2 border-b border-zinc-200 bg-zinc-50">
           <span className="text-xs font-semibold tracking-wide uppercase text-zinc-500 hidden sm:inline">Inbox</span>
+          {/* Busca contextual (A1.2 · Bloco 2): estado na URL (?q=), filtro
+              client-side sobre a lista já autorizada — deep-link e refresh
+              preservam o termo. */}
+          <div className="relative flex-1 min-w-[160px] max-w-xs">
+            <Icon n="search" size={13} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-zinc-400" />
+            <input
+              value={q}
+              onChange={(e) => setQuery(e.target.value)}
+              placeholder="Buscar por nome ou telefone…"
+              aria-label="Buscar conversas"
+              className="w-full bg-white border border-zinc-200 rounded-md pl-7 pr-3 py-1.5 text-xs focus:outline-none focus:border-zinc-400"
+            />
+          </div>
           <div className="flex gap-1 ml-auto sm:ml-2">
             {(['all', 'unread', 'open'] as const).map((f) => (
               <button key={f} onClick={() => setFilter(f)} aria-pressed={filter === f} className={`text-xs font-medium px-2.5 py-1 rounded-md border ${filter === f ? 'bg-zinc-900 text-white border-zinc-900' : 'bg-white border-zinc-200 text-zinc-600'}`}>
@@ -140,7 +183,11 @@ export default function ConversasPage() {
               <p className="text-xs font-semibold tracking-wide uppercase text-zinc-500">Conversas · {filtered.length}</p>
             </div>
             <div className="flex-1 overflow-y-auto max-h-[320px] lg:max-h-[520px]">
-              {filtered.length === 0 ? <p className="text-sm text-zinc-500 px-3 py-8 text-center">Nenhuma conversa neste filtro.</p> : (
+              {filtered.length === 0 ? (
+                <p className="text-sm text-zinc-500 px-3 py-8 text-center">
+                  {q ? `Nenhuma conversa para “${q}”.` : 'Nenhuma conversa neste filtro.'}
+                </p>
+              ) : (
                 <div className="divide-y divide-zinc-100">
                   {filtered.map((c) => (
                     <button key={c.id} onClick={() => openConversation(c.id)} className={cn('w-full text-left px-3 py-2.5 hover:bg-zinc-50 flex flex-col gap-0.5', active?.conversation.id === c.id && 'bg-zinc-50')} aria-current={active?.conversation.id === c.id}>
@@ -166,7 +213,7 @@ export default function ConversasPage() {
                     <p className="text-sm font-semibold truncate">{active.conversation.name}</p>
                     <p className="text-xs text-zinc-500 truncate">{active.conversation.phone}{active.conversation.registered ? ' · cliente ✓' : ''}</p>
                   </div>
-                  <Link href={`/clientes${q}`} className="text-xs font-medium text-zinc-600 hover:underline shrink-0">Histórico 360</Link>
+                  <Link href={`/clientes${clientesQ}`} className="text-xs font-medium text-zinc-600 hover:underline shrink-0">Histórico 360</Link>
                 </div>
                 <div className="flex-1 overflow-y-auto p-3 space-y-2 bg-zinc-50 max-h-[360px] lg:max-h-[420px]">
                   {active.messages.map((m) => (
@@ -205,7 +252,7 @@ export default function ConversasPage() {
                 <div className="bg-white border border-zinc-200 p-3">
                   <p className="text-xs font-semibold tracking-wide uppercase text-zinc-500 mb-2">Atalhos</p>
                   <div className="space-y-1.5">
-                    <Link href={`/clientes${q}`} className="block text-xs font-medium bg-white border border-zinc-200 rounded-md px-3 py-2 hover:bg-zinc-50">Ver histórico 360</Link>
+                    <Link href={`/clientes${clientesQ}`} className="block text-xs font-medium bg-white border border-zinc-200 rounded-md px-3 py-2 hover:bg-zinc-50">Ver histórico 360</Link>
                     <a href={data.linkFallback} target="_blank" rel="noreferrer" className="block text-xs font-medium bg-white border border-zinc-200 rounded-md px-3 py-2 hover:bg-zinc-50 inline-flex items-center gap-1.5">
                       Abrir no WhatsApp <Icon n="external" size={12} />
                     </a>
