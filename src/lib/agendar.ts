@@ -48,7 +48,7 @@ export function resolvePublicBookingTarget(db: DB, param: string): { business: P
       description: b.description || '',
       booking: b.booking
         ? {
-          horizonDays: Number(b.booking.horizonDays) || 60,
+          horizonDays: effectiveHorizonDays(b.booking), // A2-B3 (F5): regra única
           leadMin: Number(b.booking.leadMin) || 0,
           cancelUntilMin: Number(b.booking.cancelUntilMin) || 0,
           bufferMin: Number(b.booking.bufferMin) || 0,
