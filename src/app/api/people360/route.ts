@@ -65,7 +65,7 @@ export async function GET(req: NextRequest) {
     ...orders.map((o) => ({ customerId: o.customerId, phone: o.customerPhone })),
     ...bookings.map((b) => ({ customerId: b.customerId, phone: b.customerPhone })),
     ...leads.map((l) => ({ customerId: l.customerId, phone: l.phone })),
-    ...conversations.map((c) => ({ customerId: c.customerId, phone: c.phone })),
+    ...conversations.map((c) => ({ customerId: c.customerId, phone: c.phone, contactId: c.contactId })),
   ];
 
   for (const task of tasks) {
@@ -206,7 +206,7 @@ export async function GET(req: NextRequest) {
   }
   // Conversas (WhatsApp/agente) entram como eventos independentes do histórico.
   for (const c of conversations) {
-    const p = get(c.customerId, c.phone, c.name);
+    const p = get(c.customerId, c.phone, c.name, c.contactId);
     if (!p) continue;
     p.conversations.push({
       id: c.id, channel: c.channel, status: c.status, at: c.lastMessageAt || c.createdAt,

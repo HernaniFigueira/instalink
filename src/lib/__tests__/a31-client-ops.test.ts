@@ -180,8 +180,8 @@ describe('A3.1 — identidade canônica do Cliente 360', () => {
         leadId, source: 'manual',
       });
       db.conversations.push({
-        id: 'conversation-legacy-a31', businessId: BUSINESS_ID, channel: 'whatsapp', contactId: '', customerId: '',
-        name: 'Histórico unificado', phone: '5511999999999', status: 'open', unread: 1,
+        id: 'conversation-legacy-a31', businessId: BUSINESS_ID, channel: 'whatsapp', contactId, customerId: '',
+        name: '', phone: '', status: 'open', unread: 1,
         lastMessageAt: NOW, lastMessagePreview: 'Olá', createdAt: NOW,
       });
     });
@@ -195,6 +195,7 @@ describe('A3.1 — identidade canônica do Cliente 360', () => {
     expect(beforeBody.people[0].phone).toBe('11999999999');
     expect(beforeBody.people[0].tasks).toHaveLength(1);
     expect(beforeBody.people[0].conversations).toHaveLength(1);
+    expect(beforeBody.people[0].conversations[0].id).toBe('conversation-legacy-a31');
 
     const access = await contactsPOST(jsonReq('/api/contacts', {
       businessId: BUSINESS_ID, name: 'Histórico unificado', phone: '11999999999', createAccount: true,
@@ -227,6 +228,7 @@ describe('A3.1 — identidade canônica do Cliente 360', () => {
     expect(afterBody.people[0].bookings).toHaveLength(1);
     expect(afterBody.people[0].tasks).toHaveLength(1);
     expect(afterBody.people[0].conversations).toHaveLength(1);
+    expect(afterBody.people[0].conversations[0].id).toBe('conversation-legacy-a31');
     expect(afterBody.people[0].leads[0].id).toBe((await readDB()).leads[0].id);
     expect(afterBody.people[0].bookings[0].id).toBe('booking-legacy-a31');
   });
