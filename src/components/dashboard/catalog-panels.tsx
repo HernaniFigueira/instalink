@@ -15,7 +15,7 @@ import Link from 'next/link';
 import { cn, parseMoneyToCents, centsToBR } from '@/lib/utils';
 import type { Availability, AvailabilityException, Category, Professional, Service } from '@/lib/types';
 import { Icon } from '@/components/icons';
-import { Avatar, Button } from '@/components/ui';
+import { Avatar, Badge, Button } from '@/components/ui';
 import { ImageUpload } from '@/components/dashboard/ImageUpload';
 import { followsBusinessHours } from '@/lib/schedule';
 import { panelRoutesIn } from '@/lib/panel';
@@ -150,13 +150,18 @@ export function ServiceForm({ businessId, service, cats, pros, onClose, onSave }
 }
 
 // ── Profissionais (quem REALIZA os atendimentos) ──
-export function TeamEditor({ businessId, pros, rules, onSave, onAskDelete }: {
+export function TeamEditor({ businessId, pros, rules, onSave, onAskDelete, onCreated, onManageAccess }: {
   businessId: string;
   pros: Professional[];
   /** Regras de disponibilidade — para saber quem herda o horário da empresa. */
   rules: Availability[];
-  onSave: (action: string, payload: Record<string, any>) => Promise<void>;
+  /** Devolve o payload da API (`professionalId` no save) — A3.4. */
+  onSave: (action: string, payload: Record<string, any>) => Promise<any>;
   onAskDelete: (p: Professional) => void;
+  /** A3.4: profissional recém-criado (a tela pergunta "criar acesso agora?"). */
+  onCreated?: (professionalId: string, name: string) => void;
+  /** A3.4: abrir o fluxo de acesso (Criar) ou o membro já vinculado (Gerenciar). */
+  onManageAccess?: (p: Professional) => void;
 }) {
   const [show, setShow] = useState(false);
   const [editing, setEditing] = useState<Professional | null>(null);
@@ -183,7 +188,7 @@ export function TeamEditor({ businessId, pros, rules, onSave, onAskDelete }: {
     <>
       <Button variant="primary" className="mb-4" onClick={() => open(null)}><Icon n="plus" size={14} /> Profissional</Button>
       {show && (
-        <form onSubmit={(e) => { e.preventDefault(); setError(''); onSave('professional.save', { id: editing?.id, name, role, photo, active, followBusinessHours: follow }).then(() => setShow(false)).catch((err) => setError(err.message)); }}
+        <form onSubmit={(e) => { e.preventDefault(); setError(''); onSave('professional.save', { id: editing?.id, name, role, photo, active, followBusinessHours: follow }).then((data: any) => { setShow(false); if (!editing) onCreated?.(String(data?.professionalId || ''), name); }).catch((err) => setError(err.message)); }}
           className="mb-4 bg-white border border-zinc-200 rounded-lg p-4 space-y-2.5">
           <p className="font-bold text-sm">{editing ? 'Editar profissional' : 'Novo profissional'}</p>
           <input value={name} onChange={(e) => setName(e.target.value)} placeholder="Nome * (ex: Dra. Ana)" className="w-full rounded-md border border-zinc-300 px-3 py-2.5 text-sm" autoFocus />
@@ -229,11 +234,23 @@ export function TeamEditor({ businessId, pros, rules, onSave, onAskDelete }: {
                 </p>
                 <p className="text-xs text-zinc-500">
                   {p.role || '—'}{!p.active && ' · inativo'}
-                  {/* Vínculo User→Professional (P2): o login é gerenciado em
-                      Equipe; aqui só mostramos o estado real. */}
-                  {p.userId ? ' · com login vinculado' : ''}
+                </p>
+                {/* A3.4 — ACESSO AO SISTEMA é o outro conceito. Aqui ele aparece
+                    no lugar em que a dúvida nasce: "essa pessoa entra no
+                    painel?". Nunca criamos login em silêncio. */}
+                <p className="mt-1">
+                  {p.userId ? (
+                    <Badge tone="green" icon="shield">Acesso ativo</Badge>
+                  ) : (
+                    <Badge tone="zinc" icon="lock">Sem acesso ao sistema</Badge>
+                  )}
                 </p>
               </div>
+              {onManageAccess && (
+                <button onClick={() => onManageAccess(p)} className="text-xs font-bold bg-white border border-zinc-200 px-3 py-2 rounded-lg hover:bg-zinc-50">
+                  {p.userId ? 'Gerenciar acesso' : 'Criar acesso'}
+                </button>
+              )}
               <button onClick={() => open(p)} className="text-xs font-bold bg-zinc-100 px-3 py-2 rounded-lg">Editar</button>
               <button onClick={() => onAskDelete(p)} aria-label={`Excluir ${p.name}`}
                 className="text-xs font-bold text-red-500 px-2 py-2 hover:bg-red-50 rounded-lg inline-flex"><Icon n="x" size={13} /></button>

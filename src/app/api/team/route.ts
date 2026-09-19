@@ -36,6 +36,9 @@ export async function GET(req: NextRequest) {
     professionals: professionals.map((p) => ({
       id: p.id, name: p.name, role: p.role || '',
       active: p.active !== false, userId: p.userId || '',
+      // A3.4 — foto: a MESMA pessoa não pode aparecer com foto numa tela e com
+      // inicial genérica na outra. A foto é do Professional (fonte única).
+      photo: p.photo || '',
       linkedUserName: p.userId ? (users.get(p.userId)?.name || 'Usuário removido') : '',
     })),
     me: { userId: ctx.user.id, role: ctx.role, isOwner: ctx.isOwner, permissions: ctx.permissions },
@@ -53,6 +56,8 @@ export async function GET(req: NextRequest) {
         lastLoginAt: u?.lastLoginAt || '',
         professionalId: linked?.id || '',
         professionalName: linked?.name || '',
+        // A3.4: a lista de acessos usa a foto do profissional vinculado.
+        professionalPhoto: linked?.photo || '',
       };
     }),
   });

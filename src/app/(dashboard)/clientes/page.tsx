@@ -22,10 +22,11 @@ import {
 import { Icon } from '@/components/icons';
 import { NewBookingSheet } from '@/components/dashboard/NewBookingSheet';
 import { NewClientSheet } from '@/components/dashboard/NewClientSheet';
+import { ImportClientsSheet } from '@/components/dashboard/ImportClientsSheet';
+import { usePanelPermissions } from '@/components/dashboard/usePanelPermissions';
 import { ClientProfileDrawer, type Person360 } from '@/components/dashboard/ClientProfileDrawer';
 import { effectiveHorizonDays } from '@/lib/booking-ops';
 import { AccessDenied, useAreaLoad } from '@/components/dashboard/AccessNotice';
-import { usePanelPermissions } from '@/components/dashboard/usePanelPermissions';
 import { apiGet } from '@/lib/api-client';
 
 type ListFilter = 'all' | 'access' | 'noaccess' | 'marketing' | 'attended';
@@ -63,6 +64,14 @@ export default function ClientesPage() {
   const [error, setError] = useState('');
   const [bookingFor, setBookingFor] = useState<Person360 | null>(null);
   const [newClientOpen, setNewClientOpen] = useState(false);
+  // A3.4 · Bloco 7 — a base entra e sai em arquivo (CSV).
+  const [importOpen, setImportOpen] = useState(false);
+  const [exporting, setExporting] = useState('');
+  const [exportNotice, setExportNotice] = useState('');
+  // A saída COMPLETA (JSON) é de quem administra a unidade — a permissão
+  // genérica de Clientes não despeja a base sensível inteira.
+  const { role } = usePanelPermissions();
+  const canExportFull = ['OWNER', 'ADMIN', 'MASTER'].includes(String(role || '').toUpperCase());
   const [pendingClientOpen, setPendingClientOpen] = useState('');
   const [services, setServices] = useState<any[]>([]);
   const [pros, setPros] = useState<any[]>([]);
@@ -74,6 +83,90 @@ export default function ClientesPage() {
   const { permissions, ready: permsReady } = usePanelPermissions();
   const canFunil = permsReady && permissions.leads === true;
   const [pipeline, setPipeline] = useState<BusinessPipeline | null>(null);
+
+  /**
+   * A3.4 · Bloco 7 — exporta a base em CSV.
+   *
+   * Baixa o arquivo que a própria importação entende (ida e volta). O download
+   * é do NAVEGADOR (blob), e não um link direto para a rota, para que uma
+   * sessão expirada não termine num arquivo JSON de erro salvo como .csv.
+   */
+  function saveFile(blob: Blob, name: string) {
+    const objectUrl = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = objectUrl;
+    a.download = name;
+    a.click();
+    URL.revokeObjectURL(objectUrl);
+  }
+
+  /** Nome do arquivo que o SERVIDOR escolheu (já com a parte, quando há partes). */
+  function fileNameFrom(res: Response, fallback: string): string {
+    const cd = res.headers.get('content-disposition') || '';
+    return (cd.match(/filename="([^"]+)"/) || [])[1] || fallback;
+  }
+
+  /**
+   * A base COMPLETA sai em partes (o servidor pagina e diz `hasMore`): aqui
+   * baixamos TODAS, uma a uma, para o arquivo não chegar pela metade sem aviso.
+   */
+  async function downloadFull() {
+    const stamp = new Date().toISOString().slice(0, 10);
+    let cursor = '';
+    let parts = 0;
+    let total = 0;
+    for (let i = 0; i < 500; i++) {
+      const res = await fetch(`/api/contacts/export-full?businessId=${encodeURIComponent(businessId)}${cursor ? `&cursor=${cursor}` : ''}`);
+      if (!res.ok) {
+        if (parts === 0) {
+          setError(res.status === 403 ? 'A saída completa é de quem administra a unidade.' : 'Não foi possível exportar agora.');
+          return;
+        }
+        setError(`Baixei ${parts} parte(s) e a próxima falhou. Tente de novo para completar o arquivo.`);
+        return;
+      }
+      const text = await res.text();
+      let page: any = null;
+      try { page = JSON.parse(text); } catch { page = null; }
+      if (!page || page.complete === undefined || !page.pagination) {
+        setError('A resposta da exportação veio incompleta — nenhum arquivo parcial foi salvo como se fosse a base inteira.');
+        return;
+      }
+      parts += 1;
+      total = page.pagination.totalContacts || total;
+      saveFile(new Blob([text], { type: 'application/json;charset=utf-8' }), fileNameFrom(res, `base-completa-${stamp}.json`));
+      if (!page.pagination.hasMore) {
+        setExportNotice(total === 0
+          ? 'Nenhum contato para exportar.'
+          : `Base completa: ${total.toLocaleString('pt-BR')} contato(s) em ${parts} arquivo(s).`);
+        return;
+      }
+      cursor = String(page.pagination.nextCursor || '');
+      if (!cursor) { setError('A paginação parou antes do fim — arquivo incompleto, não use como base.'); return; }
+    }
+    setError('A exportação passou do número máximo de partes — fale com o suporte.');
+  }
+
+  async function downloadExport(kind: 'csv' | 'full' = 'csv') {
+    setExporting(kind);
+    setError('');
+    setExportNotice('');
+    try {
+      if (kind === 'full') { await downloadFull(); return; }
+      const res = await fetch(`/api/contacts/export?businessId=${encodeURIComponent(businessId)}`);
+      if (!res.ok) {
+        setError(res.status === 403 ? 'Seu acesso não permite exportar a base.' : 'Não foi possível exportar agora.');
+        return;
+      }
+      const blob = await res.blob();
+      const stamp = new Date().toISOString().slice(0, 10);
+      saveFile(blob, fileNameFrom(res, `clientes-${stamp}.csv`));
+    } catch {
+      setError('Não foi possível exportar agora.');
+    } finally {
+      setExporting('');
+    }
+  }
 
   const load = useCallback(async () => {
     if (!businessId) return;
@@ -157,6 +250,20 @@ export default function ClientesPage() {
                 <Icon n="funnel" size={14} /> Funil de oportunidades
               </Link>
             )}
+            <Button variant="secondary" onClick={() => setImportOpen(true)} title="Trazer a base de outro sistema (CSV)">
+              <Icon n="upload" size={15} /> Importar
+            </Button>
+            <Button variant="secondary" disabled={!!exporting} title="Baixar a base em CSV (reimportável)"
+              onClick={() => { void downloadExport('csv'); }}>
+              <Icon n="download" size={15} /> {exporting === 'csv' ? 'Gerando…' : 'Exportar CSV'}
+            </Button>
+            {canExportFull && (
+              <Button variant="secondary" disabled={!!exporting}
+                title="Histórico completo em JSON (cadastro, perfil, agendamentos, conversas, tarefas)"
+                onClick={() => { void downloadExport('full'); }}>
+                <Icon n="download" size={15} /> {exporting === 'full' ? 'Gerando…' : 'Exportar tudo (JSON)'}
+              </Button>
+            )}
             <Button variant="primary" onClick={() => setNewClientOpen(true)}>
               <Icon n="plus" size={15} strokeWidth={2.6} /> Novo cliente
             </Button>
@@ -166,6 +273,9 @@ export default function ClientesPage() {
 
       {error && (
         <p role="alert" className="mb-3 text-sm font-semibold bg-[var(--danger)] text-white rounded-md px-3 py-2 shadow-sm">{error}</p>
+      )}
+      {exportNotice && (
+        <p role="status" className="mb-3 text-sm font-semibold bg-[var(--success)] text-white rounded-md px-3 py-2 shadow-sm">{exportNotice}</p>
       )}
 
       {legacyEsteira ? null : (
@@ -285,6 +395,14 @@ export default function ClientesPage() {
           onClose={() => setOpenKey(null)}
           onChanged={load}
           onNewBooking={(p) => { setOpenKey(null); openBooking(p); }}
+        />
+      )}
+
+      {importOpen && (
+        <ImportClientsSheet
+          businessId={businessId}
+          onClose={() => setImportOpen(false)}
+          onImported={load}
         />
       )}
 

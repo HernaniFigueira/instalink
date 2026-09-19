@@ -8,6 +8,7 @@ import { cn } from '@/lib/utils';
 import { humanDateTime } from '@/lib/tz';
 import { AccessDenied, useAreaLoad } from '@/components/dashboard/AccessNotice';
 import { apiGet, apiSend } from '@/lib/api-client';
+import { INSTAGRAM_TEXT_MAX_BYTES, instagramTextBytes, instagramTextFits, instagramTextLimitError } from '@/lib/instagram';
 import type { WaChannelData } from '@/components/dashboard/WhatsappChannelPanel';
 
 // ═══════════════════════════════════════════════════════════════
@@ -27,7 +28,10 @@ import type { WaChannelData } from '@/components/dashboard/WhatsappChannelPanel'
 //     guardada (permissão 'whatsapp', escopo da unidade) — nenhum dado novo é
 //     exposto, por isso é segura. `?q=` sobrevive a refresh e deep-link.
 // ═══════════════════════════════════════════════════════════════
-interface Conversation { id: string; name: string; phone: string; status: string; mode?: 'automation' | 'human'; unread: number; lastMessageAt: string; lastMessagePreview: string; registered: boolean; }
+interface Conversation { id: string; name: string; phone: string; status: string; mode?: 'automation' | 'human'; unread: number; lastMessageAt: string; lastMessagePreview: string; registered: boolean; channel?: 'whatsapp' | 'instagram' | 'agent'; channelUsername?: string; }
+interface ChannelsView { whatsapp: boolean; instagram: boolean }
+interface InstagramInbox { connected: boolean; label: string; tone: 'ok' | 'pending' | 'error' | 'off'; username: string }
+interface MessageWindow { phase: 'open' | 'human_agent' | 'closed' | 'unknown'; canReply: boolean; reason: string }
 interface Message { id: string; direction: 'in' | 'out'; body: string; status: string; by?: string; byName?: string; error?: string; at: string }
 
 export default function ConversasPage() {
@@ -42,6 +46,14 @@ export default function ConversasPage() {
   const [active, setActive] = useState<{ conversation: Conversation; messages: Message[] } | null>(null);
   const [error, setError] = useState('');
   const [filter, setFilter] = useState<'all' | 'unread' | 'open'>('all');
+  // BLOCO 9 — o inbox é de CANAIS: o filtro por canal vive na URL (?canal=),
+  // como a busca, para deep-link e refresh preservarem a visão.
+  const [channels, setChannels] = useState<ChannelsView>({ whatsapp: false, instagram: false });
+  const [igInfo, setIgInfo] = useState<InstagramInbox | null>(null);
+  const [window, setWindow] = useState<MessageWindow | null>(null);
+  // Conversa de uma conta do Instagram que não é mais a conectada: histórico
+  // visível, envio bloqueado (o texto abaixo explica o porquê).
+  const [accountMismatch, setAccountMismatch] = useState('');
 
   // ── COMPOSER: envio real pelo conector oficial ──
   const [draft, setDraft] = useState('');
@@ -73,6 +85,12 @@ export default function ConversasPage() {
     if (!active || sending) return;
     const text = draft.trim();
     if (!text) return;
+    // Limite oficial do Instagram medido em BYTES: recusa aqui (e no servidor)
+    // para o histórico nunca mostrar um texto diferente do que saiu.
+    if (active.conversation.channel === 'instagram' && !instagramTextFits(text, INSTAGRAM_TEXT_MAX_BYTES)) {
+      setSendError(instagramTextLimitError(INSTAGRAM_TEXT_MAX_BYTES));
+      return;
+    }
     setSending(true);
     setSendError('');
     const res = await apiSend<{ message?: Message }>(
@@ -108,19 +126,29 @@ export default function ConversasPage() {
     const res = await apiGet<WaChannelData>(`/api/whatsapp?businessId=${businessId}`, { scope: 'area', area: 'Conversas' });
     if (!report(res)) return;
     setData(res.data || null);
-    if (res.data?.status !== 'connected') { setConversations([]); return; }
-    const conv = await apiGet<{ conversations?: Conversation[] }>(`/api/conversations?businessId=${businessId}`, { scope: 'area', area: 'Conversas' });
-    setConversations(conv.ok ? (conv.data?.conversations || []) : []);
+    // A lista é do INBOX (todos os canais). Antes desta entrega o inbox só
+    // existia se o WhatsApp estivesse conectado; agora a pergunta certa é
+    // "existe algum canal conectado?".
+    const conv = await apiGet<{
+      conversations?: Conversation[]; channels?: ChannelsView; instagram?: InstagramInbox;
+    }>(`/api/conversations?businessId=${businessId}`, { scope: 'area', area: 'Conversas' });
+    if (!conv.ok || !conv.data) { setConversations([]); return; }
+    setConversations(conv.data.conversations || []);
+    setChannels(conv.data.channels || { whatsapp: false, instagram: false });
+    setIgInfo(conv.data.instagram || null);
   }, [businessId, report]);
 
   useEffect(() => { load(); }, [load]);
 
   async function openConversation(id: string) {
-    const res = await apiGet<{ conversation: Conversation; messages?: Message[] }>(
-      `/api/conversations?businessId=${businessId}&id=${id}`, { scope: 'action', area: 'Conversas' },
-    );
+    const res = await apiGet<{
+      conversation: Conversation; messages?: Message[]; window?: MessageWindow | null;
+      accountMismatch?: boolean; accountMismatchMessage?: string;
+    }>(`/api/conversations?businessId=${businessId}&id=${id}`, { scope: 'action', area: 'Conversas' });
     if (res.ok && res.data) {
       setActive({ conversation: res.data.conversation, messages: res.data.messages || [] });
+      setWindow(res.data.conversation.channel === 'instagram' ? (res.data.window || null) : null);
+      setAccountMismatch(res.data.accountMismatchMessage || '');
       setDraft('');
       setSendError('');
     } else if (!res.ok) setError(res.message);
@@ -131,11 +159,20 @@ export default function ConversasPage() {
   const clientesQ = `?b=${businessId}`;
   // Link para o canal: mantém a unidade ativa (?b=) e abre já na aba Canais.
   const channelsHref = `/canais?tab=canais${businessId ? `&b=${businessId}` : ''}`;
-  const connected = data.status === 'connected';
+  const channelFilter = (params.get('canal') || 'all') as 'all' | 'whatsapp' | 'instagram';
+  // Contador do limite do Instagram (aviso discreto perto do teto).
+  const igComposer = active?.conversation.channel === 'instagram';
+  const draftBytes = igComposer ? instagramTextBytes(draft) : 0;
+  // Um canal é mostrado quando existe conexão OU conversa dele (histórico
+  // antigo continua visível mesmo se a conta foi desconectada).
+  const hasInstagram = channels.instagram || conversations.some((c) => c.channel === 'instagram');
+  const hasWhatsapp = channels.whatsapp || conversations.some((c) => c.channel === 'whatsapp');
+  const anyChannel = channels.whatsapp || channels.instagram;
   // Busca (?q=): nome, telefone ou prévia da última mensagem — aplicada sobre
   // a lista já guardada por permissão/unidade (nenhum dado novo é exposto).
   const qLower = q.toLowerCase();
   const filtered = conversations.filter((c) => {
+    if (channelFilter !== 'all' && (c.channel || 'whatsapp') !== channelFilter) return false;
     if (filter === 'unread' && c.unread <= 0) return false;
     if (filter === 'open' && c.status !== 'open') return false;
     if (qLower) {
@@ -145,8 +182,17 @@ export default function ConversasPage() {
     return true;
   });
 
-  // ── CANAL NÃO CONECTADO: inbox vazio honesto + a porta certa para conectar ──
-  if (!connected) {
+  /** Escreve o filtro de canal na URL (mesmo padrão da busca). */
+  function setChannelFilter(next: 'all' | 'whatsapp' | 'instagram') {
+    const qs = new URLSearchParams(params.toString());
+    if (next === 'all') qs.delete('canal');
+    else qs.set('canal', next);
+    if (businessId) qs.set('b', businessId);
+    router.replace(`/conversas?${qs.toString()}`, { scroll: false });
+  }
+
+  // ── NENHUM CANAL CONECTADO: inbox vazio honesto + a porta certa ──
+  if (!anyChannel) {
     return (
       <>
         <div className="flex items-center justify-between gap-3 mb-4">
@@ -201,14 +247,27 @@ export default function ConversasPage() {
             <h1 className="text-base font-bold text-[var(--text)] leading-tight">Conversas</h1>
             <p className="text-xs text-[var(--text-muted)]">
               {data.inbox.open} abertas · {data.inbox.unread} não lidas
-              {data.integration.displayPhone && <> · <span className="font-semibold text-[var(--text)]">{data.integration.displayPhone}</span></>}
+              {channels.whatsapp && data.integration.displayPhone && <> · <span className="font-semibold text-[var(--text)]">{data.integration.displayPhone}</span></>}
+              {channels.instagram && igInfo?.username && <> · <span className="font-semibold text-[var(--text)]">@{igInfo.username}</span></>}
             </p>
           </div>
         </div>
         <div className="flex items-center gap-2">
-          <Link href={channelsHref} className="hidden sm:inline-flex items-center gap-1.5 text-xs font-bold bg-[var(--success-bg)] border border-[var(--success-border)] text-[var(--success-fg)] rounded-pill px-2.5 py-1 shadow-xs">
-            <span className="w-1.5 h-1.5 rounded-full bg-[var(--success)]" /> WhatsApp conectado
-          </Link>
+          {channels.whatsapp && (
+            <Link href={channelsHref} className="hidden sm:inline-flex items-center gap-1.5 text-xs font-bold bg-[var(--success-bg)] border border-[var(--success-border)] text-[var(--success-fg)] rounded-pill px-2.5 py-1 shadow-xs">
+              <Icon n="whatsapp" size={12} /> WhatsApp conectado
+            </Link>
+          )}
+          {channels.instagram && (
+            <Link href={channelsHref} className="hidden sm:inline-flex items-center gap-1.5 text-xs font-bold bg-[var(--success-bg)] border border-[var(--success-border)] text-[var(--success-fg)] rounded-pill px-2.5 py-1 shadow-xs">
+              <Icon n="instagram" size={12} /> Instagram conectado
+            </Link>
+          )}
+          {!channels.whatsapp && hasInstagram && (
+            <Link href={channelsHref} className="hidden sm:inline-flex items-center gap-1.5 text-xs font-bold bg-[var(--warning-bg)] border border-[var(--warning-border)] text-[var(--warning-fg)] rounded-pill px-2.5 py-1 shadow-xs">
+              <Icon n="whatsapp" size={12} /> WhatsApp não conectado
+            </Link>
+          )}
           <Link href={`/clientes${clientesQ}`} className="text-xs font-semibold bg-white border border-[var(--border-strong)] text-[var(--text)] rounded-md px-3 py-1.5 shadow-xs hover:bg-[var(--surface-hover)]">
             Ver clientes
           </Link>
@@ -233,6 +292,22 @@ export default function ConversasPage() {
               className="w-full bg-white border border-[var(--border-strong)] rounded-md pl-7 pr-3 py-1.5 text-xs shadow-xs focus:outline-none focus:shadow-focus focus:border-[var(--brand)]"
             />
           </div>
+          {/* Filtro por CANAL (chip): aparece só para quem tem mais de um canal
+              ou tem histórico do segundo — nada de chip vazio. */}
+          {(hasWhatsapp && hasInstagram) && (
+            <div className="flex gap-1" role="group" aria-label="Filtrar por canal">
+              {([
+                { id: 'all', label: 'Todos' },
+                { id: 'whatsapp', label: 'WhatsApp' },
+                { id: 'instagram', label: 'Instagram' },
+              ] as const).map((c) => (
+                <button key={c.id} onClick={() => setChannelFilter(c.id)} aria-pressed={channelFilter === c.id}
+                  className="il-chip">
+                  {c.label}
+                </button>
+              ))}
+            </div>
+          )}
           <div className="flex gap-1 ml-auto sm:ml-2">
             {(['all', 'unread', 'open'] as const).map((f) => (
               <button key={f} onClick={() => setFilter(f)} aria-pressed={filter === f} className="il-chip">
@@ -264,11 +339,18 @@ export default function ConversasPage() {
                       aria-current={isActive}>
                       {isActive && <span aria-hidden="true" className="absolute left-0 top-2 bottom-2 w-[3px] rounded-pill bg-[var(--brand)]" />}
                       <span className="flex items-center justify-between gap-2">
-                        <span className={cn('text-sm truncate', isActive ? 'font-bold text-[var(--brand-fg)]' : 'font-semibold text-[var(--text)]')}>{c.name}</span>
+                        <span className="flex items-center gap-1.5 min-w-0">
+                          <Icon n={c.channel === 'instagram' ? 'instagram' : c.channel === 'whatsapp' ? 'whatsapp' : 'chat'} size={12}
+                            className={c.channel === 'instagram' ? 'shrink-0 text-[var(--lilac-fg)]' : 'shrink-0 text-[var(--success-fg)]'} />
+                          <span className={cn('text-sm truncate', isActive ? 'font-bold text-[var(--brand-fg)]' : 'font-semibold text-[var(--text)]')}>{c.name}</span>
+                        </span>
                         {c.unread > 0 && <span className="text-[11px] font-bold bg-[var(--brand)] text-white min-w-[18px] text-center px-1 py-0.5 rounded-pill shrink-0 tabular-nums">{c.unread}</span>}
                       </span>
-                      <span className="text-xs text-[var(--text-muted)] truncate">{c.lastMessagePreview || c.phone}</span>
-                      <span className="text-[11px] text-[var(--text-faint)]">{c.phone}{c.registered ? ' · cliente' : ''}</span>
+                      <span className="text-xs text-[var(--text-muted)] truncate">{c.lastMessagePreview || c.phone || c.channelUsername || ''}</span>
+                      <span className="text-[11px] text-[var(--text-faint)]">
+                        {c.channel === 'instagram' ? `Instagram${c.channelUsername ? ` · @${c.channelUsername}` : ''}` : (c.phone || 'WhatsApp')}
+                        {c.registered ? ' · cliente' : ''}
+                      </span>
                     </button>
                     );
                   })}
@@ -295,7 +377,12 @@ export default function ConversasPage() {
                         {active.conversation.mode === 'human' ? 'Você está atendendo' : 'Assistente respondendo'}
                       </span>
                     </div>
-                    <p className="text-xs text-[var(--text-muted)] truncate mt-0.5">{active.conversation.phone}{active.conversation.registered ? ' · cliente cadastrado' : ' · ainda sem cadastro'}</p>
+                    <p className="text-xs text-[var(--text-muted)] truncate mt-0.5">
+                      {active.conversation.channel === 'instagram'
+                        ? (active.conversation.channelUsername ? `Instagram · @${active.conversation.channelUsername}` : 'Instagram · Direct')
+                        : active.conversation.phone}
+                      {active.conversation.registered ? ' · cliente cadastrado' : ' · ainda sem cadastro'}
+                    </p>
                   </div>
                   <div className="flex flex-wrap items-center gap-2 shrink-0">
                     <button
@@ -333,21 +420,47 @@ export default function ConversasPage() {
                 </div>
                 <div className="p-2.5 border-t border-[var(--border)] bg-white">
                   {sendError && <p role="alert" className="mb-2 text-xs font-semibold bg-[var(--danger-bg)] border border-[var(--danger-border)] text-[var(--danger-fg)] rounded-md px-2.5 py-1.5">{sendError}</p>}
-                  <form onSubmit={sendMessage} className="flex gap-2">
-                    <input
-                      value={draft}
-                      onChange={(e) => setDraft(e.target.value)}
-                      placeholder="Escreva uma mensagem…"
-                      aria-label="Mensagem"
-                      className="flex-1 rounded-md border border-[var(--border-strong)] px-3 py-2 text-sm shadow-xs focus:outline-none focus:shadow-focus focus:border-[var(--brand)]"
-                    />
-                    {/* O botão só parece funcional quando é: desabilitado sem
-                        texto e durante o envio — nunca um "Enviar" de mentira. */}
-                    <button type="submit" disabled={sending || !draft.trim()}
-                      className="text-sm font-bold bg-[var(--brand)] text-white px-4 py-2 rounded-md border border-[var(--brand-strong)]/40 shadow-brand hover:bg-[var(--brand-strong)] disabled:opacity-50 disabled:cursor-not-allowed disabled:shadow-none inline-flex items-center gap-1.5">
-                      <Icon n="send" size={14} /> {sending ? 'Enviando…' : 'Enviar'}
-                    </button>
-                  </form>
+                  {/* Conta trocada: esta conversa é de uma conta que não está
+                      mais conectada. O histórico fica em leitura. */}
+                  {active.conversation.channel === 'instagram' && accountMismatch ? (
+                    <p role="status" className="text-xs font-semibold bg-[var(--danger-bg)] border border-[var(--danger-border)] text-[var(--danger-fg)] rounded-md px-2.5 py-1.5">
+                      {accountMismatch}
+                    </p>
+                  ) : active.conversation.channel === 'instagram' && window && !window.canReply ? (
+                    /* Política do Instagram: fora da janela de 24 h a Meta recusa
+                       o envio. A tela TROCA o compositor por um aviso — nada de
+                       botão que promete o que a política não permite. */
+                    <p role="status" className="text-xs font-semibold bg-[var(--warning-bg)] border border-[var(--warning-border)] text-[var(--warning-fg)] rounded-md px-2.5 py-1.5">
+                      {window.reason} Você ainda pode responder no Direct do Instagram; aqui o compositor reabre quando a pessoa escrever de novo.
+                    </p>
+                  ) : (
+                    <>
+                    {/* Limite oficial do Instagram (1000 bytes): aviso discreto
+                        antes do teto; acima dele o envio é recusado. */}
+                    {igComposer && draftBytes >= 800 && (
+                      <p className={`mb-2 text-[11px] font-semibold ${draftBytes > INSTAGRAM_TEXT_MAX_BYTES ? 'text-[var(--danger-fg)]' : 'text-[var(--text-muted)]'}`}>
+                        {draftBytes} de {INSTAGRAM_TEXT_MAX_BYTES} bytes do Instagram
+                        {draftBytes > INSTAGRAM_TEXT_MAX_BYTES ? ' — reduza para enviar.' : ''}
+                      </p>
+                    )}
+                    <form onSubmit={sendMessage} className="flex gap-2">
+                      <input
+                        value={draft}
+                        onChange={(e) => setDraft(e.target.value)}
+                        placeholder={active.conversation.channel === 'instagram' ? 'Responder no Instagram…' : 'Escreva uma mensagem…'}
+                        aria-label="Mensagem"
+                        className="flex-1 rounded-md border border-[var(--border-strong)] px-3 py-2 text-sm shadow-xs focus:outline-none focus:shadow-focus focus:border-[var(--brand)]"
+                      />
+                      {/* O botão só parece funcional quando é: desabilitado sem
+                          texto e durante o envio — nunca um "Enviar" de mentira. */}
+                      <button type="submit"
+                        disabled={sending || !draft.trim()}
+                        className="text-sm font-bold bg-[var(--brand)] text-white px-4 py-2 rounded-md border border-[var(--brand-strong)]/40 shadow-brand hover:bg-[var(--brand-strong)] disabled:opacity-50 disabled:cursor-not-allowed disabled:shadow-none inline-flex items-center gap-1.5">
+                        <Icon n="send" size={14} /> {sending ? 'Enviando…' : 'Enviar'}
+                      </button>
+                    </form>
+                    </>
+                  )}
                 </div>
               </>
             ) : (
@@ -370,7 +483,11 @@ export default function ConversasPage() {
                     </span>
                     <div className="min-w-0">
                       <p className="text-sm font-bold text-[var(--text)] truncate">{active.conversation.name}</p>
-                      <p className="text-xs text-[var(--text-muted)] truncate">{active.conversation.phone}</p>
+                      <p className="text-xs text-[var(--text-muted)] truncate">
+                        {active.conversation.channel === 'instagram'
+                          ? (active.conversation.channelUsername ? `@${active.conversation.channelUsername}` : 'Contato do Instagram')
+                          : active.conversation.phone}
+                      </p>
                     </div>
                   </div>
                   <span className={cn('relative inline-flex items-center gap-1 mt-2.5 text-[11px] font-bold px-2 py-0.5 rounded-pill border',
@@ -384,16 +501,26 @@ export default function ConversasPage() {
                 <div className="bg-white border border-[var(--border)] rounded-lg p-3 shadow-xs">
                   <p className="text-[11px] font-bold tracking-[0.08em] uppercase text-[var(--text-faint)] mb-2">Atalhos</p>
                   <div className="space-y-1.5">
-                    <Link href={`/clientes?b=${businessId}&q=${encodeURIComponent(active.conversation.phone||'')}`} className="flex items-center gap-1.5 text-xs font-semibold bg-[var(--surface-3)] border border-[var(--border)] rounded-md px-3 py-2 hover:bg-[var(--brand-soft)] hover:text-[var(--brand-fg)] hover:border-[var(--brand-border)]"><Icon n="wallet" size={13} /> Ver no CRM</Link>
+                    <Link href={`/clientes?b=${businessId}&q=${encodeURIComponent(active.conversation.phone || active.conversation.channelUsername || active.conversation.name || '')}`} className="flex items-center gap-1.5 text-xs font-semibold bg-[var(--surface-3)] border border-[var(--border)] rounded-md px-3 py-2 hover:bg-[var(--brand-soft)] hover:text-[var(--brand-fg)] hover:border-[var(--brand-border)]"><Icon n="wallet" size={13} /> Ver no CRM</Link>
                     <Link href={`/funil?b=${businessId}`} className="flex items-center gap-1.5 text-xs font-semibold bg-[var(--surface-3)] border border-[var(--border)] rounded-md px-3 py-2 hover:bg-[var(--lilac-bg)] hover:text-[var(--lilac-fg)] hover:border-[var(--lilac-border)]"><Icon n="funnel" size={13} /> Ver no funil</Link>
                     <Link href={`/agenda?b=${businessId}`} className="flex items-center gap-1.5 text-xs font-semibold bg-[var(--surface-3)] border border-[var(--border)] rounded-md px-3 py-2 hover:bg-[var(--brand-soft)] hover:text-[var(--brand-fg)] hover:border-[var(--brand-border)]"><Icon n="calendar" size={13} /> Ver agenda</Link>
-                    <a href={data.linkFallback} target="_blank" rel="noreferrer" className="flex items-center gap-1.5 text-xs font-semibold bg-[var(--success-bg)] text-[var(--success-fg)] border border-[var(--success-border)] rounded-md px-3 py-2 hover:bg-[var(--success-bg-hover)]">
-                      <Icon n="whatsapp" size={13} /> Abrir no WhatsApp <Icon n="external" size={11} />
-                    </a>
+                    {active.conversation.channel !== 'instagram' && data.linkFallback && (
+                      <a href={`https://wa.me/${(active.conversation.phone || '').replace(/\D/g, '')}`} target="_blank" rel="noreferrer" className="flex items-center gap-1.5 text-xs font-semibold bg-[var(--success-bg)] text-[var(--success-fg)] border border-[var(--success-border)] rounded-md px-3 py-2 hover:bg-[var(--success-bg-hover)]">
+                        <Icon n="whatsapp" size={13} /> Abrir no WhatsApp <Icon n="external" size={11} />
+                      </a>
+                    )}
+                    {active.conversation.channel === 'instagram' && (
+                      <p className="text-[11px] text-[var(--text-muted)] px-1">
+                        Conversa do Instagram Direct. O Instagram não informa telefone nem e-mail — o vínculo é o perfil.
+                      </p>
+                    )}
                   </div>
                 </div>
                 <div className="text-xs text-[var(--text-muted)] px-1">
                   <p>Última mensagem: {active.conversation.lastMessageAt ? humanDateTime(active.conversation.lastMessageAt.slice(0, 10), active.conversation.lastMessageAt.slice(11, 16)) : '—'}</p>
+                  {active.conversation.channel === 'instagram' && window && (
+                    <p className="mt-1">{window.reason}</p>
+                  )}
                 </div>
               </div>
             ) : (

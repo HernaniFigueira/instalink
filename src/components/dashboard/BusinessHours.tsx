@@ -18,11 +18,13 @@
 import { useMemo, useState } from 'react';
 import { cn } from '@/lib/utils';
 import { Icon } from '@/components/icons';
+import { Avatar, Button, HoursChips, IconButton, Notice, buttonCls } from '@/components/ui';
 import { apiSend } from '@/lib/api-client';
 import { PermissionNotice } from './AccessNotice';
 import {
-  businessHoursChangeImpact, businessRules, customRulesFor, followTogglePatch,
-  hoursTable, planApplyBusinessHoursToAll, professionalHoursSummary, sanitizeWindows,
+  businessHoursChangeImpact, businessHoursTable, businessRules, customRulesFor, followTogglePatch,
+  hoursTable, planApplyBusinessHoursToAll, professionalHoursSummary, professionalHoursTable,
+  sanitizeWindows,
 } from '@/lib/schedule';
 import type { DayWindow } from '@/lib/schedule';
 import type { Availability, Professional } from '@/lib/types';
@@ -38,13 +40,14 @@ const SLOT_OPTIONS = [
 
 interface Period { start: string; end: string; slotMin: number }
 
-interface Notice { tone: 'ok' | 'error' | 'denied'; text: string; hint?: string }
+/** Aviso local da tela (o componente visual é o `Notice` do design system). */
+interface NoticeInfo { tone: 'ok' | 'error' | 'denied'; text: string; hint?: string }
 
-const inputCls = 'rounded-md border border-zinc-300 px-2 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-zinc-900';
-const btnGhost = 'text-xs font-semibold bg-white border border-zinc-300 px-3 py-1.5 rounded-md hover:bg-zinc-50 disabled:opacity-50';
-/* A3.3 (ponto 4): o primário desta tela é o AZUL do design system — preto
-   nunca é CTA. Nome mantido para não tocar em cada chamada. */
-const btnDark = 'text-xs font-semibold bg-[var(--brand)] text-white px-3.5 py-2 rounded-md shadow-brand hover:bg-[var(--brand-strong)] disabled:opacity-50';
+const inputCls = 'rounded-md border border-[var(--border-strong)] bg-[var(--surface)] px-2 py-1.5 text-sm text-[var(--text)] focus:outline-none focus:shadow-focus';
+/* A3.4: os botões desta tela usam a MESMA linguagem do design system. As
+   classes vêm de `buttonCls` (fonte única), não de um estilo paralelo. */
+const btnGhost = buttonCls('secondary', 'sm');
+const btnDark = buttonCls('primary', 'sm');
 
 function periodsFrom(rules: Availability[]): Period[][] {
   const days: Period[][] = Array.from({ length: 7 }, () => []);
@@ -120,39 +123,39 @@ export function DayHoursList({ initial, onSubmit, saving, submitLabel, footer }:
               aria-pressed={days[i].length > 0}
               className={cn(
                 'w-14 shrink-0 text-xs font-bold py-2 rounded-md border',
-                days[i].length ? 'bg-emerald-600 border-emerald-600 text-white' : 'bg-white border-zinc-200 text-zinc-400',
+                days[i].length ? 'bg-[var(--brand)] border-[var(--brand)] text-white' : 'bg-[var(--surface)] border-[var(--border)] text-[var(--text-faint)]',
               )}
             >
               {label}
             </button>
             {days[i].length === 0 ? (
-              <span className="text-xs text-zinc-400 py-2">Fechado</span>
+              <span className="text-xs text-[var(--text-faint)] py-2">Fechado</span>
             ) : (
               <div className="space-y-2 flex-1 min-w-0">
                 {days[i].map((p, j) => (
                   <span key={j} className="flex flex-wrap items-center gap-2 text-sm">
                     <input type="time" value={p.start} onChange={(e) => setPeriod(i, j, { start: e.target.value })} className={inputCls} aria-label={`${label} início`} />
-                    <span className="text-zinc-400 text-xs">até</span>
+                    <span className="text-[var(--text-faint)] text-xs">até</span>
                     <input type="time" value={p.end} onChange={(e) => setPeriod(i, j, { end: e.target.value })} className={inputCls} aria-label={`${label} fim`} />
                     <select value={p.slotMin} onChange={(e) => setPeriod(i, j, { slotMin: Number(e.target.value) })} className={inputCls} aria-label={`${label} intervalo`}>
                       {SLOT_OPTIONS.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
                     </select>
                     {days[i].length > 1 && (
-                      <button type="button" onClick={() => removePeriod(i, j)} className="text-zinc-400 hover:text-red-500 px-1" aria-label={`Remover período de ${label}`}>
+                      <button type="button" onClick={() => removePeriod(i, j)} className="text-[var(--text-faint)] hover:text-[var(--danger)] px-1" aria-label={`Remover período de ${label}`}>
                         <Icon n="x" size={14} />
                       </button>
                     )}
                   </span>
                 ))}
                 {days[i].length < 3 && (
-                  <button type="button" onClick={() => addPeriod(i)} className="text-xs font-semibold text-emerald-700 hover:underline">+ período (ex: almoço separado)</button>
+                  <button type="button" onClick={() => addPeriod(i)} className="text-xs font-semibold text-[var(--brand-fg)] hover:underline">+ período (ex: almoço separado)</button>
                 )}
               </div>
             )}
           </div>
         ))}
       </div>
-      {error && <p className="text-xs font-semibold text-red-600 mt-3">{error}</p>}
+      {error && <Notice tone="error" className="mt-3">{error}</Notice>}
       <div className="flex flex-wrap items-center gap-2 mt-4">
         <button type="button" onClick={submit} disabled={saving} className={btnDark}>{saving ? 'Salvando…' : (submitLabel || 'Salvar horários')}</button>
         {footer}
@@ -169,7 +172,7 @@ export function BusinessHoursPanel({ businessId, professionals, rules, onChanged
   /** Recarrega os dados da tela após qualquer mutação bem-sucedida. */
   onChanged: () => void;
 }) {
-  const [notice, setNotice] = useState<Notice | null>(null);
+  const [notice, setNotice] = useState<NoticeInfo | null>(null);
   const [busy, setBusy] = useState('');
   const [editing, setEditing] = useState(''); // '' | 'business' | professionalId
   const [applyAsk, setApplyAsk] = useState(false);
@@ -237,23 +240,23 @@ export function BusinessHoursPanel({ businessId, professionals, rules, onChanged
         notice.tone === 'denied'
           ? <PermissionNotice message={notice.text} hint={notice.hint} onDismiss={() => setNotice(null)} />
           : (
-            <div className={cn('flex items-start gap-2 rounded-md border px-3 py-2.5', notice.tone === 'ok' ? 'border-emerald-200 bg-emerald-50' : 'border-red-200 bg-red-50')} role="status" aria-live="polite">
-              <Icon n={notice.tone === 'ok' ? 'check' : 'alert'} size={15} className={notice.tone === 'ok' ? 'text-emerald-700 mt-0.5' : 'text-red-600 mt-0.5'} />
-              <div className="min-w-0 flex-1">
-                <p className={cn('text-xs font-semibold', notice.tone === 'ok' ? 'text-emerald-900' : 'text-red-700')}>{notice.text}</p>
-                {notice.hint && <p className="text-[11px] text-zinc-600 mt-0.5">{notice.hint}</p>}
-              </div>
-              <button onClick={() => setNotice(null)} aria-label="Fechar aviso" className="text-zinc-400 hover:text-zinc-700 shrink-0"><Icon n="x" size={13} /></button>
+            /* A3.4: mesmo aviso do design system (nada de caixa paralela). */
+            <div className="flex items-start gap-2" role="status" aria-live="polite">
+              <Notice tone={notice.tone === 'ok' ? 'success' : 'error'} className="flex-1">
+                <span className="font-semibold">{notice.text}</span>
+                {notice.hint && <span className="block text-[11px] font-normal mt-0.5">{notice.hint}</span>}
+              </Notice>
+              <IconButton icon="x" label="Fechar aviso" size="sm" variant="ghost" onClick={() => setNotice(null)} />
             </div>
           )
       )}
 
       {/* ── 1. Horário geral da empresa ── */}
-      <section className="bg-white border border-zinc-200 rounded-lg p-5" aria-labelledby="bh-general">
+      <section className="bg-[var(--surface)] border border-[var(--border)] rounded-lg p-5 shadow-xs" aria-labelledby="bh-general">
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div className="min-w-0">
             <h3 id="bh-general" className="font-semibold text-sm">Horário da empresa</h3>
-            <p className="text-xs text-zinc-500 mt-0.5">
+            <p className="text-xs text-[var(--text-muted)] mt-0.5">
               Estes são os períodos em que vocês atendem. Quem segue o horário da empresa é atualizado automaticamente quando você altera aqui.
             </p>
           </div>
@@ -270,7 +273,7 @@ export function BusinessHoursPanel({ businessId, professionals, rules, onChanged
         </div>
 
         {editing === 'business' ? (
-          <div className="mt-4 border-t border-zinc-100 pt-4">
+          <div className="mt-4 border-t border-[var(--border)] pt-4">
             <DayHoursList
               key={`business-${general.length}`}
               initial={general}
@@ -280,18 +283,23 @@ export function BusinessHoursPanel({ businessId, professionals, rules, onChanged
             />
           </div>
         ) : (
-          <p className="text-sm font-medium text-zinc-800 mt-3">{hoursSummaryLine(general)}</p>
+          /* A3.4: chips por dia — "SEG 08:00 → 20:00" um por vez. A linha
+             corrida ("Seg 08:00 — 20:00 · Ter 08:00 — …") era ilegível de
+             relance e é o que o lojista mais precisa conferir nesta tela. */
+          <div className="mt-3">
+            <HoursChips days={businessHoursTable(rules)} />
+          </div>
         )}
 
         {professionals.length > 0 && (
-          <div className="mt-4 border-t border-zinc-100 pt-3 space-y-1">
-            <p className="text-xs text-zinc-600">
+          <div className="mt-4 border-t border-[var(--border)] pt-3 space-y-1">
+            <p className="text-xs text-[var(--text-muted)]">
               <strong className="font-semibold">{impact.following.length}</strong> {impact.following.length === 1 ? 'profissional segue' : 'profissionais seguem'} este horário
               {impact.followingNames.length > 0 && <> ({impact.followingNames.join(', ')})</>}
               {' '}— alterações aqui valem para eles automaticamente.
             </p>
             {impact.custom.length > 0 && (
-              <p className="text-xs text-zinc-500">
+              <p className="text-xs text-[var(--text-muted)]">
                 <strong className="font-semibold">{impact.custom.length}</strong> com horário personalizado não {impact.custom.length === 1 ? 'é afetado' : 'são afetados'}: {impact.customNames.join(', ')}.
               </p>
             )}
@@ -299,10 +307,10 @@ export function BusinessHoursPanel({ businessId, professionals, rules, onChanged
         )}
 
         {applyAsk && (
-          <div className="mt-4 border border-zinc-300 rounded-md p-4 bg-zinc-50" role="dialog" aria-label="Aplicar horário a todos">
+          <div className="mt-4 border border-[var(--border-strong)] rounded-md p-4 bg-[var(--surface-3)]" role="dialog" aria-label="Aplicar horário a todos">
             <p className="text-sm font-semibold">Aplicar o horário da empresa a todos?</p>
-            <p className="text-xs text-zinc-600 mt-1">{plan.confirmation}</p>
-            <ul className="text-xs text-zinc-600 mt-2 space-y-1">
+            <p className="text-xs text-[var(--text-muted)] mt-1">{plan.confirmation}</p>
+            <ul className="text-xs text-[var(--text-muted)] mt-2 space-y-1">
               <li><strong className="font-semibold">{plan.update.length}</strong> {plan.update.length === 1 ? 'vai seguir' : 'vão seguir'} o horário da empresa{plan.updateNames.length > 0 && <> ({plan.updateNames.join(', ')})</>}.</li>
               {plan.skip.length > 0 && (
                 <li><strong className="font-semibold">{plan.skip.length}</strong> com horário personalizado {plan.skip.length === 1 ? 'não será alterado' : 'não serão alterados'} ({plan.skipNames.join(', ')}).</li>
@@ -318,12 +326,12 @@ export function BusinessHoursPanel({ businessId, professionals, rules, onChanged
 
       {/* ── 2. Horário por profissional (lista simples) ── */}
       {professionals.length > 0 && (
-        <section className="bg-white border border-zinc-200 rounded-lg" aria-labelledby="bh-team">
-          <div className="px-5 py-4 border-b border-zinc-100">
+        <section className="bg-[var(--surface)] border border-[var(--border)] rounded-lg shadow-xs" aria-labelledby="bh-team">
+          <div className="px-5 py-4 border-b border-[var(--border)]">
             <h3 id="bh-team" className="font-semibold text-sm">Horário por profissional</h3>
-            <p className="text-xs text-zinc-500 mt-0.5">Todo profissional começa seguindo o horário da empresa. Personalize apenas quem atende em horários diferentes.</p>
+            <p className="text-xs text-[var(--text-muted)] mt-0.5">Todo profissional começa seguindo o horário da empresa. Personalize apenas quem atende em horários diferentes.</p>
           </div>
-          <ul className="divide-y divide-zinc-100">
+          <ul className="divide-y divide-[var(--border)]">
             {summaries.map((s) => {
               const pro = professionals.find((p) => p.id === s.id);
               if (!pro) return null;
@@ -335,17 +343,21 @@ export function BusinessHoursPanel({ businessId, professionals, rules, onChanged
               return (
                 <li key={s.id} className={cn('px-5 py-3.5', pro.active === false && 'opacity-60')}>
                   <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
+                    <Avatar name={s.name} src={pro.photo || undefined} size={36} />
                     <div className="min-w-0 flex-1">
-                      <p className="text-sm font-semibold text-zinc-900 flex flex-wrap items-center gap-2">
+                      <p className="text-sm font-semibold text-[var(--text)] flex flex-wrap items-center gap-2">
                         {s.name}
-                        <span className={cn('text-[11px] font-semibold px-2 py-0.5 rounded-full border', inherited ? 'border-zinc-200 bg-zinc-50 text-zinc-600' : 'border-blue-200 bg-blue-50 text-blue-700')}>
+                        <span className={cn('text-[11px] font-semibold px-2 py-0.5 rounded-full border', inherited ? 'border-[var(--border)] bg-[var(--surface-3)] text-[var(--text-muted)]' : 'border-[var(--brand-border)] bg-[var(--brand-soft)] text-[var(--brand-fg)]')}>
                           {inherited ? 'Segue a empresa' : 'Personalizado'}
                         </span>
-                        {pro.active === false && <span className="text-[11px] font-medium text-zinc-400">inativo</span>}
+                        {pro.active === false && <span className="text-[11px] font-medium text-[var(--text-faint)]">inativo</span>}
                       </p>
-                      <p className="text-xs text-zinc-500 mt-0.5">{s.summary}</p>
+                      {/* A3.4: o horário efetivo do profissional nos MESMOS chips
+                          usados para a empresa — comparar deixa de exigir leitura
+                          de duas frases diferentes. */}
+                      <HoursChips className="mt-1.5" size="sm" days={professionalHoursTable(pro, rules)} />
                       {s.daysOff.length > 0 && (
-                        <p className="text-[11px] text-zinc-400 mt-0.5">Não atende: {s.daysOff.map((d) => DAYS[d]).join(', ')}</p>
+                        <p className="text-[11px] text-[var(--text-faint)] mt-1">Não atende: {s.daysOff.map((d) => DAYS[d]).join(', ')}</p>
                       )}
                     </div>
                     <div className="flex gap-2 shrink-0">
@@ -361,8 +373,8 @@ export function BusinessHoursPanel({ businessId, professionals, rules, onChanged
                   </div>
 
                   {isOpen && (
-                    <div className="mt-3 border-t border-zinc-100 pt-4">
-                      <p className="text-xs text-zinc-600 mb-3">
+                    <div className="mt-3 border-t border-[var(--border)] pt-4">
+                      <p className="text-xs text-[var(--text-muted)] mb-3">
                         {inherited
                           ? <>Salvar cria um <strong className="font-semibold">horário personalizado</strong> para {s.name} a partir do horário da empresa. Ele deixa de acompanhar as alterações gerais.</>
                           : <>Você está editando o horário personalizado de {s.name}. Para voltar ao horário da empresa, use “Seguir a empresa”.</>}
@@ -387,9 +399,9 @@ export function BusinessHoursPanel({ businessId, professionals, rules, onChanged
       {inheritAsk && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4" role="dialog" aria-modal="true" aria-label="Voltar a seguir o horário da empresa">
           <div className="absolute inset-0 bg-[var(--overlay)]" onClick={() => busy !== `follow-${inheritAsk.id}` && setInheritAsk(null)} />
-          <div className="relative w-full sm:max-w-sm bg-white rounded-lg border border-zinc-200 p-5 shadow-lg">
+          <div className="relative w-full sm:max-w-sm bg-[var(--surface)] rounded-lg border border-[var(--border)] p-5 shadow-xl">
             <p className="font-semibold text-sm">{inheritAsk.name} vai seguir o horário da empresa?</p>
-            <p className="text-xs text-zinc-600 mt-1.5">
+            <p className="text-xs text-[var(--text-muted)] mt-1.5">
               O horário personalizado dele será removido e ele passa a atender no horário geral ({hoursSummaryLine(general)}), incluindo as próximas alterações que você fizer lá.
             </p>
             <div className="flex gap-2 mt-4">

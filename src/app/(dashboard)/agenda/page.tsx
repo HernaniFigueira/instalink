@@ -21,26 +21,32 @@
 //   pending/confirmed            → move o registro existente
 //   completed/no_show/cancelled  → cria NOVO agendamento 'pending'
 //   preservando previousId, rescheduleCount e histórico.
-import { memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import { memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties } from 'react';
 import { useSearchParams } from 'next/navigation';
 import { todayISO, addDaysISO, weekdayOf, formatDateBR, nowHM } from '@/lib/tz';
 import { WEEKDAYS, WEEKDAYS_LONG, timeToMin, minToTime, cn } from '@/lib/utils';
 import type { Availability, Booking, BookingConfig, BookingStatus, Professional, Service } from '@/lib/types';
-import { Avatar, ListSkeleton, Button, AttentionStrip, Tabs } from '@/components/ui';
+import { Avatar, Badge, ListSkeleton, Button, IconButton, AttentionStrip, Tabs } from '@/components/ui';
 import { Icon } from '@/components/icons';
 import {
   ATTENTION_MARK_CLS, ATTENTION_RING_CLS, BOOKING_BLOCK, BOOKING_DOT, BOOKING_STATUS,
+  FIT_IN_MARK_CLS, FIT_IN_STRIPE_CLS,
 } from '@/lib/status';
 import { BookingDetailSheet } from '@/components/dashboard/BookingDetailSheet';
 import { NewBookingSheet } from '@/components/dashboard/NewBookingSheet';
+import { QueuePanel, type QueueRow } from '@/components/dashboard/QueuePanel';
+import { EncounterSheet } from '@/components/dashboard/EncounterSheet';
+import { usePanelPermissions } from '@/components/dashboard/usePanelPermissions';
+import { canReopenEncounter } from '@/lib/encounters';
 import { AccessDenied, PermissionNotice, useAreaLoad, useForbiddenNotice } from '@/components/dashboard/AccessNotice';
 import { useRevalidateOnFocus } from '@/components/dashboard/use-revalidate';
 import { bookingDuration, effectiveHorizonDays, needsClosure, rescheduleDecision } from '@/lib/booking-ops';
+import { queueSummary, waitLabel } from '@/lib/queue';
 import { apiGet, apiSend } from '@/lib/api-client';
 import { SLOT_STATE_MESSAGE, slotState } from '@/lib/slot-states';
 import {
   IDLE_INTERACTION, blockHeight, blockTop, dragPreviewLabel, dragSlotUrls, dropConfirmQuestion,
-  emptyDragSlots, geometryFromRect, layoutBlocks, planDrop, reduceInteraction, withOwnSlot,
+  emptyDragSlots, geometryFromRect, layoutBlocks, minuteFromOffsetY, planDrop, reduceInteraction, withOwnSlot,
   type CellAvailability, type DragSlots, type DropColumn, type GridGeometry, type InteractionState,
   type Point,
 } from '@/lib/agenda-drag';
@@ -55,6 +61,9 @@ const PX_PER_HOUR = 52;
 const GUTTER_W = 56;
 const COL_MIN = 148;
 const HEADER_H = 36;
+// Passo do clique-em-área-vazia (o horário só é aceito se a grade real o
+// confirmar — caso contrário o sheet abre sem horário escolhido).
+const CLICK_SNAP_MIN = 5;
 /** Folga mínima entre o fim da grade e o fim da tela (não é a causa do
  *  scroll, só respiro visual — a página continua rolando normalmente). */
 const VIEWPORT_BOTTOM_PAD = 16;
@@ -113,6 +122,9 @@ interface BlockVM {
   cls: string;
   /** Horário passou e continua em aberto: marcador amarelo de atenção. */
   attention: boolean;
+  /** A3.4 · Bloco 4: encaixe (fora da grade) e check-in do cliente. */
+  fitIn: boolean;
+  checkedInAt: string;
   dragging: boolean;
   label: string;
 }
@@ -144,8 +156,12 @@ interface HoverTarget {
   availability: CellAvailability;
 }
 
+// Momento do último pointerdown sobre um atendimento: o clique que sobra de
+// um arraste/drop nunca deve abrir a criação por engano.
+let lastGridPressAt = 0;
+
 // ── Coluna da grade (memoizada: o drag não re-renderiza a grade inteira) ──
-const GridColumn = memo(function GridColumn({ column, basisPct, variant, highlight, onPressStart, onPressMove, onPressEnd, onPressCancel, onBlockClick, gridHeight, hours }: {
+const GridColumn = memo(function GridColumn({ column, basisPct, variant, highlight, onPressStart, onPressMove, onPressEnd, onPressCancel, onBlockClick, onEmptyPress, gridHeight, hours, startMinute, endMinute }: {
   column: ColumnVM;
   basisPct: number;
   variant: 'day' | 'week';
@@ -155,8 +171,12 @@ const GridColumn = memo(function GridColumn({ column, basisPct, variant, highlig
   onPressEnd: (id: string, e: React.PointerEvent) => void;
   onPressCancel: () => void;
   onBlockClick: (id: string) => void;
+  /** A3.4: clique/toque em área vazia → criar agendamento naquele horário. */
+  onEmptyPress: (columnKey: string, time: string) => void;
   gridHeight: number;
   hours: number;
+  startMinute: number;
+  endMinute: number;
 }) {
   return (
     // border-b = linha final da grade. As linhas internas param em
@@ -165,7 +185,19 @@ const GridColumn = memo(function GridColumn({ column, basisPct, variant, highlig
     // border-box: larguras inteiras determinísticas — nenhuma divergência
     // de subpixel contra o minWidth calculado em JS, nenhum resíduo que
     // fabrique overflow nas bordas.
-    <div className="relative shrink-0 border-r border-b border-zinc-100 last:border-r-0" style={{ minWidth: COL_MIN, width: `${basisPct}%`, height: gridHeight }}>
+    <div className="relative shrink-0 border-r border-b border-zinc-100 last:border-r-0"
+      style={{ minWidth: COL_MIN, width: `${basisPct}%`, height: gridHeight }}
+      onClick={(e) => {
+        // Clique em área VAZIA = criar naquele horário. Cliques em atendimento
+        // (button), no destaque de arraste e o clique que sobra de um drop são
+        // ignorados — criar nunca acontece "sem querer" depois de arrastar.
+        const el = e.target as HTMLElement;
+        if (el.closest('button')) return;
+        if (Date.now() - lastGridPressAt < 500) return;
+        const rect = e.currentTarget.getBoundingClientRect();
+        const minutes = minuteFromOffsetY(e.clientY - rect.top, { startMinute, endMinute, pxPerHour: PX_PER_HOUR }, CLICK_SNAP_MIN);
+        onEmptyPress(column.key, minToTime(minutes));
+      }}>
       {Array.from({ length: Math.max(0, hours - 1) }, (_, idx) => idx + 1).map((i) => (
         <span key={i} className="absolute left-0 right-0 border-t border-zinc-100" style={{ top: i * PX_PER_HOUR }} />
       ))}
@@ -231,6 +263,9 @@ const GridColumn = memo(function GridColumn({ column, basisPct, variant, highlig
             width: `calc(${b.widthPct}% - 4px)`,
           }}
         >
+          {/* Encaixe = acento (faixa fina no topo), não preenchimento: o fundo
+              do bloco continua sendo o do STATUS. Nada de amarelo sobre verde. */}
+          {b.fitIn && <span aria-hidden="true" className={FIT_IN_STRIPE_CLS} />}
           {/* quem + quando + o quê + em que estado — detalhe fica no drawer. */}
           <span className="block text-[11px] font-bold leading-tight truncate">{b.name}</span>
           {b.height > 34 && <span className="block text-[10px] font-medium leading-tight truncate opacity-90">{b.service}</span>}
@@ -239,7 +274,14 @@ const GridColumn = memo(function GridColumn({ column, basisPct, variant, highlig
               <span className="tabular-nums opacity-90 whitespace-nowrap">{b.timeRange}</span>
               <span aria-hidden="true" className="opacity-60">·</span>
               <span className="truncate">{b.statusLabel}</span>
+              {/* A3.4 · Bloco 4: o encaixe é visível no cartão — quem olha a
+                  grade sabe que aquele horário foi uma decisão da equipe. */}
+              {b.fitIn && <span className={`px-1 rounded-sm ${FIT_IN_MARK_CLS}`}>ENCAIXE</span>}
             </span>
+          )}
+          {b.checkedInAt && (
+            <span title="Cliente já fez check-in" aria-hidden="true"
+              className="absolute top-1 right-1 w-4 h-4 rounded-full text-[9px] font-black leading-4 text-center bg-[var(--success)] text-white">✓</span>
           )}
           {b.attention && (
             <span title="Precisa de fechamento" aria-hidden="true"
@@ -297,7 +339,25 @@ export default function AgendaPage() {
   const [rules, setRules] = useState<Availability[]>([]);
   const [loaded, setLoaded] = useState(false);
   const [detail, setDetail] = useState<Booking | null>(null);
-  const [creating, setCreating] = useState(false);
+  const [creating, setCreating] = useState<{
+    date: string; time: string; professionalId: string;
+    /** A3.4 fix (revisão B5): "Encaixar na agenda" vem da FILA já preenchido. */
+    contactId?: string; name?: string; phone?: string; serviceId?: string;
+  } | null>(null);
+  // A3.4 · Bloco 4 — fila do balcão (entidade própria, fora da agenda).
+  const [queueRows, setQueueRows] = useState<QueueRow[]>([]);
+  // A3.4 fix (revisão B5): o registro do atendimento tem permissão PRÓPRIA —
+  // a fila continua operável por quem só faz balcão, sem abrir o conteúdo.
+  const { permissions, role } = usePanelPermissions();
+  const canEncounter = permissions.atendimento === true;
+  // Reabrir é de quem administra — a MESMA régua do servidor (nada de a tela
+  // mostrar um botão que o servidor vai recusar). Ter a permissão de
+  // atendimento não dá poder de reabrir.
+  const canReopen = canReopenEncounter(role);
+  const [queueEncounter, setQueueEncounter] = useState<QueueRow | null>(null);
+  const [queueDone, setQueueDone] = useState<QueueRow[]>([]);
+  const [queueLoading, setQueueLoading] = useState(false);
+  const [showQueue, setShowQueue] = useState(false);
   const [flash, setFlash] = useState<{ tone: 'ok' | 'warn' | 'error'; text: string } | null>(null);
 
   // ── Drag: estado mínimo (o movimento em si vive em refs, sem re-render) ──
@@ -321,6 +381,9 @@ export default function AgendaPage() {
   const lastPointerUpRef = useRef<{ id: string; at: number }>({ id: '', at: 0 });
   const scrollRef = useRef<HTMLDivElement>(null);
   const colsRef = useRef<HTMLDivElement>(null);
+  // A3.4 final UX — o workspace é a linha [Agenda | Fila]. É dele que sai o
+  // topo da rail (mesma região útil da grade), sem medir números na mão.
+  const workspaceRef = useRef<HTMLDivElement>(null);
   const [colWidth, setColWidth] = useState(COL_MIN);
 
   const { notice, dismiss } = useForbiddenNotice('Agenda');
@@ -341,6 +404,19 @@ export default function AgendaPage() {
     }
     return { from: addDaysISO(focus, -21), to: addDaysISO(focus, 28) };
   }, [view, focus]);
+
+  /** A3.4 · Bloco 4 — a fila do balcão é lida junto com a agenda. */
+  const loadQueue = useCallback(async () => {
+    if (!businessId) return;
+    setQueueLoading(true);
+    const res = await apiGet<{ entries?: QueueRow[]; done?: QueueRow[] }>(
+      `/api/queue?businessId=${businessId}`, { scope: 'area', area: 'Agenda' },
+    );
+    setQueueLoading(false);
+    if (!res.ok) return;
+    setQueueRows(res.data?.entries || []);
+    setQueueDone(res.data?.done || []);
+  }, [businessId]);
 
   const load = useCallback(async () => {
     if (!businessId) return;
@@ -367,7 +443,8 @@ export default function AgendaPage() {
     setRules(d.availability || []);
     setBookings(bk.ok ? (bk.data?.bookings || []) : []);
     setLoaded(true);
-  }, [businessId, range.from, range.to, report]);
+    void loadQueue();
+  }, [businessId, range.from, range.to, report, loadQueue]);
 
   useEffect(() => { load(); }, [load]);
 
@@ -473,6 +550,14 @@ export default function AgendaPage() {
     [bookings, serviceOf, today, bizTz],
   );
 
+  // A3.4 · Bloco 4 — o que precisa de atenção AGORA no balcão: atrasados para
+  // fechar (regra já existente) + fila esperando além do confortável. Uma
+  // fonte só para a faixa, nada de alerta duplicado.
+  const queueInfo = useMemo(
+    () => queueSummary(queueRows, businessId, today, new Date()),
+    [queueRows, businessId, today],
+  );
+
   // ── Colunas: dia = profissionais; semana = dias ──
   // Filtros compactos (status + profissional) só escondem blocos/colunas da
   // grade — dados, drag e ações continuam sobre os mesmos agendamentos.
@@ -539,8 +624,10 @@ export default function AgendaPage() {
           statusLabel,
           cls: BOOKING_BLOCK[b.status],
           attention,
+          fitIn: b.bookingKind === 'fit_in',
+          checkedInAt: b.checkedInAt || '',
           dragging: dragId === b.id,
-          label: `${b.customerName} · ${serviceName(b.serviceId)} · ${formatDateBR(b.date)} ${b.time}${pro ? ` · ${pro}` : ''} · ${statusLabel}${attention ? ' — precisa de fechamento' : ''} — clique para ver o detalhe ou arraste para reagendar`,
+          label: `${b.customerName} · ${serviceName(b.serviceId)} · ${formatDateBR(b.date)} ${b.time}${pro ? ` · ${pro}` : ''} · ${statusLabel}${b.bookingKind === 'fit_in' ? ' · encaixe' : ''}${b.checkedInAt ? ' · cliente já chegou' : ''}${attention ? ' — precisa de fechamento' : ''} — clique para ver o detalhe ou arraste para reagendar`,
         };
       });
       return { ...c, isToday: c.date === today, blocks };
@@ -622,6 +709,9 @@ export default function AgendaPage() {
   }, [columns.length]);
 
   const [gridMaxH, setGridMaxH] = useState<number | null>(null);
+  // Altura útil da rail da fila: mesma linha de base da grade. Fechar a
+  // fila não deixa valor velho — o efeito roda de novo quando showQueue muda.
+  const [railMaxH, setRailMaxH] = useState<number | null>(null);
   useLayoutEffect(() => {
     const fit = () => {
       const el = scrollRef.current;
@@ -635,6 +725,10 @@ export default function AgendaPage() {
         : hbarReserve;
       const h = window.innerHeight - top - VIEWPORT_BOTTOM_PAD - reserve;
       setGridMaxH(Math.max(320, Math.floor(h)));
+      // A rail termina na MESMA linha de base da grade (o topo dela é o topo do
+      // workspace, não o do scroller) — e a lista rola por dentro.
+      const wtop = workspaceRef.current?.getBoundingClientRect().top ?? top;
+      setRailMaxH(Math.max(320, Math.floor(window.innerHeight - wtop - VIEWPORT_BOTTOM_PAD)));
     };
     fit();
     const ro = lightRO();
@@ -642,7 +736,7 @@ export default function AgendaPage() {
     if (typeof document !== 'undefined') obs.observe(document.body);
     window.addEventListener('resize', fit);
     return () => { obs.disconnect(); window.removeEventListener('resize', fit); };
-  }, [loaded, view, fullscreen, pendencies.length, notice?.title, statusFilter, proFilter, specFilter, hbarReserve]);
+  }, [loaded, view, fullscreen, pendencies.length, notice?.title, statusFilter, proFilter, specFilter, hbarReserve, showQueue]);
 
   const readGeometry = useCallback((): { g: GridGeometry; minX: number; minY: number } | null => {
     const scroll = scrollRef.current;
@@ -779,7 +873,16 @@ export default function AgendaPage() {
   }, [computeHover]);
 
   // ── Handlers de ponteiro (estáveis: as colunas memoizadas não remontam) ──
+  /** A3.4: clique em horário vago abre o sheet JÁ naquele dia/horário/quem. */
+  const onEmptyPress = useCallback((columnKey: string, time: string) => {
+    const col = columnsRef.current.find((c) => c.key === columnKey);
+    if (!col) return;
+    setDetail(null);
+    setCreating({ date: col.date, time, professionalId: col.professionalId || '' });
+  }, []);
+
   const onPressStart = useCallback((id: string, e: React.PointerEvent) => {
+    lastGridPressAt = Date.now();
     if (e.pointerType === 'mouse' && e.button !== 0) return;
     const booking = bookingsRef.current.get(id);
     if (!booking) return;
@@ -1010,12 +1113,18 @@ export default function AgendaPage() {
           <span className="w-9 h-9 shrink-0 rounded-lg bg-gradient-to-br from-[var(--brand)] to-[var(--lilac)] text-white flex items-center justify-center shadow-brand">
             <Icon n="calendar" size={18} />
           </span>
-          <div className="min-w-0">
+          <div className="min-w-0 flex-1">
             <h1 className="text-lg font-bold tracking-tight text-[var(--text)] leading-tight">Agenda</h1>
-            <span className="text-xs text-[var(--text-muted)] truncate">Clique num atendimento para ver o detalhe · arraste para reagendar.</span>
+            {/* A3.4 (teste humano): em 320–430px este texto era um `span`
+                inline com `truncate` (que não corta inline) — ele esticava a
+                página. Agora é bloco truncável: some por corte, nunca por
+                rolagem horizontal. */}
+            <span className="block max-w-full text-xs text-[var(--text-muted)] truncate">
+              Clique num atendimento para ver o detalhe · arraste para reagendar.
+            </span>
           </div>
         </div>
-        <Button onClick={() => setCreating(true)} variant="primary"><Icon n="calendarPlus" size={15} /> Novo agendamento</Button>
+        <Button onClick={() => setCreating({ date: focus, time: '', professionalId: '' })} variant="primary"><Icon n="calendarPlus" size={15} /> Novo agendamento</Button>
       </div>
 
       <PermissionNotice message={notice?.title} hint={notice?.hint} onDismiss={dismiss} />
@@ -1046,34 +1155,82 @@ export default function AgendaPage() {
           action={(
             <>
               {pendencies.slice(0, 4).map((b) => (
-                <button key={b.id} onClick={() => setDetail(b)} className="text-xs font-medium bg-white border border-amber-200 text-amber-900 px-2.5 py-1 rounded-md hover:bg-amber-50">
+                <button key={b.id} onClick={() => setDetail(b)} className="text-xs font-medium bg-[var(--surface)] border border-[var(--attention-border)] text-[var(--attention-fg)] px-2.5 py-1 rounded-md hover:bg-[var(--attention-bg-hover)]">
                   {formatDateBR(b.date)} {b.time} · {b.customerName}
                 </button>
               ))}
-              {pendencies.length > 4 && <span className="text-xs font-medium text-amber-900 self-center">+{pendencies.length - 4}</span>}
+              {pendencies.length > 4 && <span className="text-xs font-medium text-[var(--attention-fg)] self-center">+{pendencies.length - 4}</span>}
             </>
           )}
         />
       )}
 
+      {/* A3.4 · Bloco 4 — FILA DO BALCÃO. Fica na própria Agenda porque é onde
+          a equipe já está olhando o dia; abrir/fechar é decisão de quem opera
+          (o balcão não precisa dela o tempo todo). A faixa de atenção avisa
+          quando a espera passa do confortável. */}
+      {loaded && (
+        <div className="space-y-2.5 mb-2.5">
+          {queueInfo.longWait && !showQueue && (
+            <AttentionStrip
+              title={`${queueInfo.waiting + queueInfo.called} na fila — maior espera ${waitLabel(queueInfo.longestWaitMin)}`}
+              hint="o balcão está esperando mais do que o normal"
+              action={<Button size="sm" variant="warning" onClick={() => setShowQueue(true)}>Abrir fila</Button>}
+            />
+          )}
+          <button
+            type="button"
+            onClick={() => setShowQueue((v) => !v)}
+            aria-expanded={showQueue}
+            className="w-full flex items-center gap-2 px-3 py-2 rounded-md border border-[var(--border)] bg-[var(--surface)] hover:bg-[var(--surface-hover)] text-left"
+          >
+            <Icon n={showQueue ? 'chevD' : 'chevR'} size={14} className="text-[var(--text-faint)]" />
+            <Icon n="clock" size={14} className="text-[var(--text-muted)]" />
+            <span className="text-sm font-semibold text-[var(--text)]">Fila de hoje</span>
+            {(queueInfo.waiting + queueInfo.called + queueInfo.inService) === 0 ? (
+              <span className="text-xs text-[var(--text-muted)]">ninguém esperando</span>
+            ) : (
+              <span className="flex flex-wrap items-center gap-1.5">
+                {queueInfo.waiting > 0 && <Badge tone="amber">{queueInfo.waiting} aguardando</Badge>}
+                {queueInfo.called > 0 && <Badge tone="blue">{queueInfo.called} chamado{queueInfo.called > 1 ? 's' : ''}</Badge>}
+                {queueInfo.inService > 0 && <Badge tone="green">{queueInfo.inService} em atendimento</Badge>}
+              </span>
+            )}
+            <span className="ml-auto text-xs text-[var(--text-muted)]">{showQueue ? 'fechar' : 'abrir'}</span>
+          </button>
+        </div>
+      )}
+
+      {/* A3.4 final UX — WORKSPACE da agenda: [Agenda (flex-1) | Fila (rail)].
+          A fila NÃO entra mais no fluxo vertical (não empurra a grade para
+          baixo): ela é coluna ao lado no desktop largo e overlay no resto. */}
+      <div ref={workspaceRef} data-agenda-workspace="true" className="flex items-start gap-2.5 min-w-0">
+        <main data-agenda-main="true" className="flex-1 min-w-0">
       {/* Toolbar operacional: navegação · Dia/Semana/Mês · filtros · tela cheia.
           relative z-40: o popover de filtros abre sobre a grade e precisa
           ficar acima dos cabeçalhos sticky (z-20/30) das colunas. */}
       <div className="relative z-40 ws-panel mb-2.5">
         <div className="flex flex-wrap items-center gap-x-3 gap-y-2.5 px-3 py-2.5">
-          {/* Navegação no tempo: [◀ ▶] + data ÚNICA (título clicável) + Hoje.
-              Antes eram seta/Hoje/seta/campo e o rótulo repetido — agora cada
-              elemento tem uma função só e a data aparece UMA vez. */}
+          {/* Navegação no tempo (A3.4): [◀] [Hoje] [▶] + título da data ao lado.
+              O "Hoje" fica SEMPRE no mesmo lugar, entre as setas — antes ele
+              aparecia e desaparecia conforme a data, então o botão se movia
+              justamente quando o usuário mais precisava dele. Estando em hoje,
+              ele continua visível, porém marcado como selecionado. */}
           <div className="flex items-center gap-2 min-w-0">
-            <span className="inline-flex rounded-md border border-[var(--border-strong)] bg-white shadow-xs overflow-hidden">
-              <button onClick={() => move(-1)} aria-label={navLabel(-1)} title={navLabel(-1)}
-                className="w-9 h-9 flex items-center justify-center text-[var(--text-muted)] hover:bg-[var(--surface-hover)] hover:text-[var(--text)] border-r border-[var(--border)]">
-                <Icon n="chevL" size={15} />
+            <span className="inline-flex rounded-md border border-[var(--border-strong)] bg-[var(--surface)] shadow-xs overflow-hidden">
+              <IconButton icon="chevL" label={navLabel(-1)} tip={navLabel(-1)} variant="ghost" onClick={() => move(-1)}
+                className="w-9 h-9 rounded-none text-[var(--text-muted)] border-r border-[var(--border)]" />
+              <button type="button" onClick={() => setFocus(today)}
+                aria-pressed={isToday}
+                title={isToday ? 'Você já está em hoje' : 'Ir para hoje'}
+                className={cn('h-9 px-3 rounded-none text-xs font-bold border-r border-[var(--border)] transition-colors',
+                  isToday
+                    ? 'bg-[var(--brand-soft)] text-[var(--brand-fg)] cursor-default'
+                    : 'text-[var(--text)] hover:bg-[var(--surface-hover)]')}>
+                Hoje
               </button>
-              <button onClick={() => move(1)} aria-label={navLabel(1)} title={navLabel(1)}
-                className="w-9 h-9 flex items-center justify-center text-[var(--text-muted)] hover:bg-[var(--surface-hover)] hover:text-[var(--text)]">
-                <Icon n="chevR" size={15} />
-              </button>
+              <IconButton icon="chevR" label={navLabel(1)} tip={navLabel(1)} variant="ghost" onClick={() => move(1)}
+                className="w-9 h-9 rounded-none text-[var(--text-muted)]" />
             </span>
             <label className="relative inline-flex flex-col min-w-0 max-w-[min(26rem,calc(100vw-12rem))] cursor-pointer rounded-md px-1 -mx-1 py-0.5 hover:bg-[var(--surface-hover)] focus-within:shadow-focus" title="Escolher outra data">
               <span className="text-[15px] font-bold leading-tight text-[var(--text)] capitalize truncate" aria-live="polite">{focusLabel}</span>
@@ -1083,11 +1240,6 @@ export default function AgendaPage() {
               <input type="date" value={focus} max="2100-12-31" onChange={(e) => { if (/^\d{4}-\d{2}-\d{2}$/.test(e.target.value)) setFocus(e.target.value); }}
                 aria-label="Escolher data" className="absolute inset-0 w-full h-full opacity-0 cursor-pointer" />
             </label>
-            {!isToday && (
-              <Button variant="soft" size="sm" onClick={() => setFocus(today)}>
-                <Icon n="calendar" size={13} /> Hoje
-              </Button>
-            )}
           </div>
           <Tabs
             items={[
@@ -1187,11 +1339,11 @@ export default function AgendaPage() {
                 </div>
               )}
             </div>
-            <button onClick={toggleFullscreen} aria-pressed={fullscreen} title={fullscreen ? 'Sair da tela cheia (ESC)' : 'Tela cheia'}
-              className="inline-flex items-center gap-1.5 text-xs font-semibold bg-zinc-50 border border-zinc-200 rounded-md px-2.5 py-1.5 hover:bg-zinc-100">
+            <Button type="button" variant="secondary" size="sm" aria-pressed={fullscreen} onClick={toggleFullscreen}
+              title={fullscreen ? 'Sair da tela cheia (ESC)' : 'Tela cheia'}>
               <Icon n={fullscreen ? 'shrink' : 'expand'} size={14} />
               <span className="hidden sm:inline">{fullscreen ? 'Sair' : 'Tela cheia'}</span>
-            </button>
+            </Button>
           </div>
         </div>
         {/* Legenda: cor = estado (mesma fonte da grade) + marcador de atenção. */}
@@ -1202,9 +1354,15 @@ export default function AgendaPage() {
               {BOOKING_STATUS[s].panel}
             </span>
           ))}
-          <span className="inline-flex items-center gap-1 text-[11px] font-medium text-zinc-500">
+          <span className="text-[11px] font-medium text-zinc-500 inline-flex items-center gap-1">
             <span className={`w-3.5 h-3.5 rounded-full text-[9px] font-black leading-[14px] text-center ${ATTENTION_MARK_CLS}`} aria-hidden="true">!</span>
             precisa de fechamento
+          </span>
+          {/* A3.4: criar pelo clique era um recurso invisível — agora a grade
+              diz que dá. Arrastar continua sendo mover o atendimento. */}
+          <span className="text-[11px] font-medium text-[var(--text-muted)] inline-flex items-center gap-1 sm:ml-auto">
+            <Icon n="calendarPlus" size={12} />
+            clique num horário vago para agendar · arraste um cartão para remarcar
           </span>
         </div>
         {isDragging && view !== 'month' && (
@@ -1346,6 +1504,9 @@ export default function AgendaPage() {
                       onPressEnd={onPressEnd}
                       onPressCancel={onPressCancel}
                       onBlockClick={onBlockClick}
+                      onEmptyPress={onEmptyPress}
+                      startMinute={grid.start}
+                      endMinute={grid.end}
                     />
                   ))}
                 </div>
@@ -1354,6 +1515,60 @@ export default function AgendaPage() {
           </div>
         </div>
       )}
+
+        </main>
+
+        {/* RAIL DA FILA — um só QueuePanel para os dois tamanhos de tela:
+            • xl+ (desktop largo): coluna ao lado, com a MESMA linha de base da
+              grade; a lista rola DENTRO da rail (max-height medida do workspace);
+            • abaixo de xl: overlay deslizante (a agenda nunca é espremida por
+              380px num tablet) — fecha pelo X, pelo botão ou pelo fundo. */}
+        {showQueue && (
+          <>
+            <div
+              className="xl:hidden fixed inset-0 z-40 bg-[var(--overlay)]"
+              aria-hidden="true"
+              onClick={() => setShowQueue(false)}
+            />
+            <aside
+              data-queue-rail="true"
+              aria-label="Fila de hoje"
+              style={{ '--queue-rail-maxh': railMaxH ? `${railMaxH}px` : undefined } as CSSProperties}
+              className="z-50 overflow-y-auto ws-scroll bg-[var(--surface)] border-[var(--border)] fixed inset-y-0 right-0 w-[min(92vw,380px)] border-l shadow-2xl xl:static xl:inset-auto xl:z-auto xl:w-[368px] 2xl:w-[392px] xl:shrink-0 xl:self-start xl:max-h-[var(--queue-rail-maxh)] xl:rounded-xl xl:border xl:shadow-sm"
+            >
+              <QueuePanel
+                businessId={businessId}
+                date={today}
+                rows={queueRows}
+                loading={queueLoading}
+                /* A tela inteira exige permissão de Agenda (a porta barra antes);
+                   o escopo do profissional continua valendo no servidor por
+                   entrada da fila. */
+                canWrite={!denied}
+                canEncounter={!denied && canEncounter}
+                /* A3.4 (teste humano): a fila busca o cliente no CRM — só faz
+                   sentido para quem tem a permissão de Clientes. */
+                canSearchContacts={permissions.clientes === true}
+                done={queueDone}
+                timezone={bizTz}
+                onChanged={loadQueue}
+                professionals={activePros.map((p) => ({ id: p.id, name: p.name }))}
+                /* A regra do serviço (`professionalIds`) vai junto: a fila só
+                   oferece quem ATENDE o serviço escolhido. */
+                services={services.map((x) => ({ id: x.id, name: x.name, professionalIds: x.professionalIds || [] }))}
+                onOpenBooking={(id) => { const b = bookingsRef.current.get(id); if (b) setDetail(b); }}
+                onEncounter={(row) => setQueueEncounter(row)}
+                onOpenClient={(row) => { window.location.href = `/clientes?c=${encodeURIComponent(row.contactId)}`; }}
+                onClose={() => setShowQueue(false)}
+                onFitIn={(row) => setCreating({
+                  date: today, time: nowHM(), professionalId: row.professionalId,
+                  contactId: row.contactId, name: row.customerName, phone: row.customerPhone, serviceId: row.serviceId,
+                })}
+              />
+            </aside>
+          </>
+        )}
+      </div>
 
       {/* Ghost do atendimento sendo arrastado (posição via DOM: zero re-render) */}
       <div
@@ -1413,8 +1628,43 @@ export default function AgendaPage() {
           service={serviceOf(detail.serviceId)}
           pro={detail.professionalId ? pros.find((p) => p.id === detail.professionalId) : undefined}
           businessId={businessId}
+          onScheduleReturn={(info) => {
+            setDetail(null);
+            setCreating({
+              date: today, time: '', professionalId: info.professionalId,
+              contactId: info.contactId, name: info.customerName,
+              phone: info.customerPhone || '', serviceId: info.serviceId,
+            });
+          }}
           onClose={() => setDetail(null)}
           onChanged={() => { setDetail(null); load(); }}
+        />
+      )}
+
+      {queueEncounter && (
+        <EncounterSheet
+          businessId={businessId}
+          queueId={queueEncounter.id}
+          seed={{
+            customerName: queueEncounter.customerName, serviceId: queueEncounter.serviceId,
+            professionalId: queueEncounter.professionalId, date: queueEncounter.date,
+            contactId: queueEncounter.contactId,
+          }}
+          canReopen={canReopen}
+          onScheduleReturn={(info) => {
+            setQueueEncounter(null);
+            setCreating({
+              date: today, time: '', professionalId: info.professionalId,
+              contactId: info.contactId || queueEncounter.contactId,
+              name: info.customerName || queueEncounter.customerName,
+              // Telefone vem resolvido do servidor (contato/agendamento/fila):
+              // o formulário nasce pronto para agendar, sem nova busca.
+              phone: info.customerPhone || queueEncounter.customerPhone || '',
+              serviceId: info.serviceId || queueEncounter.serviceId,
+            });
+          }}
+          onClose={() => { setQueueEncounter(null); void loadQueue(); }}
+          onChanged={loadQueue}
         />
       )}
 
@@ -1424,8 +1674,15 @@ export default function AgendaPage() {
           services={services}
           pros={pros}
           horizonDays={horizonDays}
-            timezone={bizTz}
-          onClose={() => setCreating(false)}
+          timezone={bizTz}
+          initial={{
+            name: creating.name || '', phone: creating.phone || '',
+            contactId: creating.contactId, serviceId: creating.serviceId,
+            date: creating.date || focus,
+            time: creating.time,
+            professionalId: creating.professionalId,
+          }}
+          onClose={() => setCreating(null)}
           onCreated={load}
         />
       )}

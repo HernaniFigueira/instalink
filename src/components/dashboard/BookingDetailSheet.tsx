@@ -21,6 +21,10 @@ import { useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
 import { Icon } from '@/components/icons';
 import { StatusBadge, Button, buttonCls, type ButtonVariant } from '@/components/ui';
+import { EncounterSheet } from '@/components/dashboard/EncounterSheet';
+import { usePanelPermissions } from '@/components/dashboard/usePanelPermissions';
+import { canReopenEncounter } from '@/lib/encounters';
+import type { FollowUpSeed } from '@/components/dashboard/EncounterSheet';
 import { BOOKING_STATUS } from '@/lib/status';
 import { todayISO, nowHM, formatDateBR, humanDay } from '@/lib/tz';
 import { waLink, cn, money } from '@/lib/utils';
@@ -44,16 +48,21 @@ const ROW = 'flex items-baseline justify-between gap-3 py-2';
 const ROW_DT = 'text-xs font-medium text-zinc-500 shrink-0';
 const ROW_DD = 'text-sm text-zinc-900 text-right font-medium';
 
-export function BookingDetailSheet({ booking, service, pro, businessId, timezone, onClose, onChanged }: {
+export function BookingDetailSheet({ booking, service, pro, businessId, timezone, onScheduleReturn, onClose, onChanged }: {
   booking: Booking;
   service: ServiceRef | undefined;
   pro: ProRef | undefined;
   businessId: string;
   timezone?: string;
+  /** "Agendar retorno" do pós-atendimento: quem abre o agendamento é o pai. */
+  onScheduleReturn?: (info: FollowUpSeed) => void;
   onClose: () => void;
   onChanged: () => void;
 }) {
   const [acting, setActing] = useState('');
+  // A3.4 · Bloco 5 — registro do atendimento: permissão própria + quem reabre.
+  const { permissions, role } = usePanelPermissions();
+  const [encounterOpen, setEncounterOpen] = useState(false);
   const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
   const [rescheduling, setRescheduling] = useState(false);
@@ -118,6 +127,26 @@ export function BookingDetailSheet({ booking, service, pro, businessId, timezone
     }
   }
 
+  /** A3.4 · Bloco 4 — check-in do cliente no balcão (não muda o status). */
+  async function checkIn(undo = false) {
+    setError(''); setNotice('');
+    setActing(undo ? 'checkin-undo' : 'checkin');
+    try {
+      const res = await fetch('/api/bookings', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ businessId, id: booking.id, action: undo ? 'check-in-undo' : 'check-in' }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error);
+      onChanged();
+      onClose();
+    } catch (e: any) {
+      setError(e.message);
+      setActing('');
+    }
+  }
+
   async function reschedule() {
     setError(''); setNotice('');
     setActing('reschedule');
@@ -163,6 +192,10 @@ export function BookingDetailSheet({ booking, service, pro, businessId, timezone
   }
 
   const hasHistory = (booking.history || []).length > 0;
+  const checkedInHM = booking.checkedInAt
+    ? new Intl.DateTimeFormat('pt-BR', { hour: '2-digit', minute: '2-digit', timeZone: timezone || undefined })
+      .format(new Date(booking.checkedInAt))
+    : '';
 
   return (
     <div className="fixed inset-0 z-50" role="dialog" aria-modal="false" aria-label="Detalhe do agendamento">
@@ -177,6 +210,8 @@ export function BookingDetailSheet({ booking, service, pro, businessId, timezone
             <div className="flex items-center gap-2 flex-wrap">
               <span className="text-xs font-semibold text-zinc-600 tabular-nums">{formatDateBR(booking.date)} · {booking.time}–{endHM}</span>
               <StatusBadge tone={def.tone}>{def.panel}</StatusBadge>
+              {booking.bookingKind === 'fit_in' && <StatusBadge tone="amber">Encaixe</StatusBadge>}
+              {booking.checkedInAt && <StatusBadge tone="emerald">Chegou</StatusBadge>}
             </div>
             <p className="font-semibold text-sm mt-1 leading-snug truncate">{service?.name || 'Serviço'}</p>
             <p className="text-xs text-zinc-500 mt-0.5">{humanDay(booking.date, today)} · {dur} min</p>
@@ -185,7 +220,26 @@ export function BookingDetailSheet({ booking, service, pro, businessId, timezone
             className="text-zinc-400 hover:text-zinc-900 hover:bg-zinc-50 rounded-md p-1.5 -m-1 inline-flex shrink-0"><Icon n="x" size={16} /></button>
         </header>
 
-        <div className="flex-1 min-h-0 overflow-y-auto ws-scroll">
+        {encounterOpen && (
+        <EncounterSheet
+          businessId={businessId}
+          bookingId={booking.id}
+          seed={{
+            customerName: booking.customerName,
+            serviceId: booking.serviceId,
+            professionalId: booking.professionalId,
+            date: booking.date,
+            time: booking.time,
+            customerId: booking.customerId,
+          }}
+          canReopen={canReopenEncounter(role)}
+          onScheduleReturn={onScheduleReturn ? (info: FollowUpSeed) => onScheduleReturn(info) : undefined}
+          onClose={() => setEncounterOpen(false)}
+          onChanged={onChanged}
+        />
+      )}
+
+      <div className="flex-1 min-h-0 overflow-y-auto ws-scroll">
           {/* ── Pendência: passado e ainda aberto (aviso, decisão fica nas ações) ── */}
           {late && !rescheduling && (
             <div className="px-4 py-2.5 bg-amber-50/60 border-b border-amber-200/60">
@@ -209,7 +263,29 @@ export function BookingDetailSheet({ booking, service, pro, businessId, timezone
                 <Button size="sm" variant="secondary" onClick={() => { setRescheduling(true); setError(''); }} disabled={!!acting}>
                   <Icon n="calendar" size={13} /> Reagendar
                 </Button>
+                {/* A3.4 · Bloco 4 — chegada do cliente. Fica junto das ações
+                    porque é decisão do balcão, e é REVERSÍVEL (engano acontece). */}
+                {permissions.atendimento && (
+                  <Button size="sm" variant="soft" onClick={() => setEncounterOpen(true)} disabled={!!acting}>
+                    <Icon n="fileText" size={13} /> Atendimento
+                  </Button>
+                )}
+                {booking.checkedInAt ? (
+                  <Button size="sm" variant="ghost" onClick={() => checkIn(true)} disabled={!!acting}
+                    title="Desfazer o check-in deste atendimento">
+                    <Icon n="check" size={13} /> Chegou às {checkedInHM}
+                  </Button>
+                ) : (
+                  <Button size="sm" variant="soft" onClick={() => checkIn(false)} disabled={!!acting}>
+                    <Icon n="check" size={13} /> {acting === 'checkin' ? 'Registrando…' : 'Registrar chegada'}
+                  </Button>
+                )}
               </div>
+              {booking.checkedInAt && (
+                <p className="text-[11px] text-[var(--text-muted)] mt-2">
+                  Check-in registrado{booking.checkedInByName ? ` por ${booking.checkedInByName}` : ''} — o status do atendimento continua “{def.panel}”.
+                </p>
+              )}
             </div>
           )}
 

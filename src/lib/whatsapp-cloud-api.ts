@@ -13,7 +13,11 @@ import {
   registerChannelConnector,
 } from './integrations/connectors';
 
-export const DEFAULT_META_GRAPH_VERSION = 'v21.0';
+// Última versão conferida na documentação oficial da Meta (v26.0, liberada em
+// 29/07/2026 — a data do card de release, não a do SDK).
+// A tabela de vigência de cada versão fica em `whatsapp-onboarding.ts`
+// (GRAPH_RELEASES) — há teste garantindo que as duas não divirjam.
+export const DEFAULT_META_GRAPH_VERSION = 'v26.0';
 export const WHATSAPP_CLAIM_LEASE_MS = 60_000; // 60 segundos
 export const WHATSAPP_RETRY_INTERVALS_MS = [30_000, 120_000]; // 1º retry em 30s, 2º retry em 120s
 export const WHATSAPP_MAX_ATTEMPTS = 3;

@@ -199,6 +199,25 @@ export function clampMinuteToGrid(
   return Math.max(g.startMinute, Math.min(max, Math.round(minute)));
 }
 
+/**
+ * A3.4 — minuto do dia a partir do Y de um clique dentro da coluna.
+ * Snap curto (5 min por padrão) para o clique não cair num horário "quebrado"
+ * como 09:37; o resultado nunca sai da grade visível. O horário sugerido é
+ * apenas uma INTENÇÃO: quem confirma se ele existe é a grade real de
+ * disponibilidade (`mode=slots-admin`) — nenhuma disponibilidade é inventada
+ * no cliente.
+ */
+export function minuteFromOffsetY(
+  offsetY: number,
+  g: { startMinute: number; endMinute: number; pxPerHour: number },
+  stepMin = 5,
+): number {
+  const perHour = g.pxPerHour > 0 ? g.pxPerHour : 60;
+  const raw = g.startMinute + (offsetY / perHour) * 60;
+  const snapped = Math.floor(raw / stepMin) * stepMin;
+  return Math.max(g.startMinute, Math.min(g.endMinute, snapped));
+}
+
 export interface GridCell {
   column: number;
   minute: number;

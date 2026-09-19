@@ -63,6 +63,10 @@ export function emptyDB(): DB {
     aiProposals: [],
     // P6 — canais e integrações externas (conexões + log de entregas)
     integrations: [], integrationEvents: [],
+    // A3.4 · Bloco 4 — fila de espera (aditiva; documento antigo ganha [])
+    queue: [],
+    // A3.4 · Bloco 5 — registros de atendimento
+    encounters: [],
   };
 }
 
@@ -77,9 +81,19 @@ export function normalizeDB(raw: unknown): DB {
     'messages', 'campaigns', 'campaignRecipients', 'audit', 'supportSessions',
     'pipelines', 'apiKeys', 'webhooks', 'webhookDeliveries', 'idempotencyKeys', 'integrationLogs',
     'automations', 'automationRuns', 'tasks', 'aiProposals',
-    'integrations', 'integrationEvents',
+    'integrations', 'integrationEvents', 'queue', 'encounters',
   ] as const) {
     if (!Array.isArray((base as any)[key])) (base as any)[key] = [];
+  }
+  // A3.4 fix (revisão B5) — registros de atendimento criados antes do campo
+  // `version` valem 1, nunca `undefined`: sem isso a primeira trava de
+  // concorrência otimista da tela viraria um 409 falso. Idempotente.
+  for (const e of base.encounters as any[]) {
+    if (!e) continue;
+    if (typeof e.version !== 'number') e.version = 1;
+    // Documento criado antes do vínculo com a fila: sem id de entrada, mas
+    // SEMPRE string (o resto do código compara direto, nunca `undefined`).
+    if (typeof e.queueId !== 'string') e.queueId = '';
   }
   // P3: Normalização defensiva de entregas de webhooks
   for (const d of base.webhookDeliveries as any[]) {

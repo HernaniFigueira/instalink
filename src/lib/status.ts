@@ -167,3 +167,13 @@ export const BOOKING_DOT: Record<BookingStatus, string> = {
 // (o ponto com "!"), que continua âmbar quente e com contraste real.
 export const ATTENTION_RING_CLS = 'ring-1 ring-inset ring-[var(--attention-border)]';
 export const ATTENTION_MARK_CLS = 'bg-[var(--attention-mark)] text-[var(--attention-mark-fg)]';
+
+// ── Encaixe (fit-in) — CARACTERÍSTICA, nunca status ──
+// A3.4 (teste humano): o encaixe tinha fundo âmbar POR CIMA do bloco verde do
+// status — dois fundos somados viram uma cor suja que não é nem o status nem o
+// alerta. Agora o encaixe é acento, não preenchimento:
+//   • selo ENCAIXE só com contorno tracejado e texto âmbar (fundo transparente);
+//   • faixa fina no topo do bloco, dentro dos cantos arredondados.
+// O status continua sendo a BASE (fundo e borda esquerdos dele não mudam).
+export const FIT_IN_MARK_CLS = 'border border-dashed border-[var(--attention-mark)] text-[var(--attention-fg)]';
+export const FIT_IN_STRIPE_CLS = 'pointer-events-none absolute inset-x-1 top-0 h-[2px] rounded-pill bg-[var(--attention-mark)] opacity-80';

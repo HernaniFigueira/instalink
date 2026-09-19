@@ -24,7 +24,7 @@
 //   • erro em ação não corrompe estado: o executor grava `failed` + mensagem.
 import { randomUUID } from 'node:crypto';
 import type {
-  Automation, AutomationActionType, AutomationRun, Business, DB, WebhookEvent,
+  Automation, AutomationActionType, AutomationRun, Business, Conversation, DB, WebhookEvent,
 } from '../types';
 import { VALID_WEBHOOK_EVENTS } from '../types';
 import {
@@ -40,6 +40,10 @@ import { renderParams } from './conditions';
 import { addDaysISO, todayISO } from '../tz';
 import { automationActionDef } from './model';
 import { onlyDigits } from '../utils';
+import {
+  INSTAGRAM_ACCOUNT_MISMATCH_MESSAGE, INSTAGRAM_NO_INBOUND_MESSAGE, instagramConversationWindow,
+} from '../instagram-api';
+import { INSTAGRAM_TEXT_MAX_BYTES, instagramTextFits, instagramTextLimitError } from '../instagram';
 
 export const AUTOMATION_ACTOR: LeadActor = { id: 'automation', name: 'Automação', type: 'system' };
 
@@ -424,14 +428,112 @@ export function executeAction(input: ActionInput): ActionResult {
       const lead = subjectLead(input);
       const booking = subjectBooking(input);
       const contact = subjectContact(input);
-      const rawPhone = lead?.phone || booking?.customerPhone || contact?.phone || input.run.context?.contact?.phone || input.params?.to || '';
-      const phone = onlyDigits(String(rawPhone || ''));
-      if (!phone || phone.length < 10) return missing('telefone do destinatário');
 
       const msgText = text(input, 'message', 2000) || text(input, 'body', 2000);
       if (!msgText) return { ok: false, summary: '', error: 'mensagem vazia' };
 
       const templateName = text(input, 'templateName', 120);
+
+      // ── CANAL INSTAGRAM DIRECT (BLOCO 9) ───────────────────────
+      // A Meta só permite responder quem JÁ ESCREVEU. Então a automação NUNCA
+      // inicia conversa: o vínculo do contato (`channelIdentities`) só LOCALIZA
+      // a pessoa — a prova é uma conversa real desta conta com ela, com
+      // mensagem de ENTRADA. Um `to` com IGSID arbitrário não abre nada.
+      if (text(input, 'channel', 20) === 'instagram') {
+        const ig = input.business.instagramIntegration;
+        if (!ig?.igUserId || !ig.encryptedAccessToken) {
+          return {
+            ok: false, summary: '',
+            error: 'Instagram não conectado nesta unidade (conecte a conta em Canais e Integrações).',
+          };
+        }
+        if (ig.status !== 'connected') {
+          return {
+            ok: false, summary: '',
+            error: 'O Instagram desta unidade ainda não está pronto para enviar (autorize a conta e ative o webhook).',
+          };
+        }
+        // Limite oficial (1000 bytes UTF-8): recusa ANTES de gravar — o
+        // histórico precisa mostrar exatamente o que saiu.
+        if (!instagramTextFits(msgText, INSTAGRAM_TEXT_MAX_BYTES)) {
+          return { ok: false, summary: '', error: instagramTextLimitError(INSTAGRAM_TEXT_MAX_BYTES) };
+        }
+
+        const accountId = ig.igUserId;
+        const explicitTo = String(input.params?.to || '').trim();
+        const identityParticipant = (contact?.channelIdentities || [])
+          .find((i) => i.provider === 'instagram' && i.accountId === accountId)?.participantId || '';
+        const conversationFor = (participantId: string) => db.conversations.find(
+          (c) => c.businessId === business.id && c.channel === 'instagram'
+            && c.channelAccountId === accountId && c.channelUserId === participantId,
+        );
+        const conversationWithInbound = (c: Conversation | undefined) =>
+          !!c && db.messages.some((m) => m.conversationId === c.id && m.direction === 'in');
+
+        let conv = identityParticipant ? conversationFor(identityParticipant) : undefined;
+        if (!conv && explicitTo) conv = conversationFor(explicitTo);
+        if (!conv && contact?.id) {
+          conv = db.conversations.find(
+            (c) => c.businessId === business.id && c.channel === 'instagram'
+              && c.channelAccountId === accountId && c.contactId === contact.id,
+          );
+        }
+        // Sem conversa iniciada pelo USUÁRIO não existe DM: nada é criado,
+        // nada é enfileirado e a Meta não é chamada. Se a pessoa tem histórico
+        // numa conta ANTIGA, o motivo é o desencontro de conta (mais útil).
+        if (!conversationWithInbound(conv)) {
+          const fromOtherAccount = (contact?.channelIdentities || [])
+            .some((i) => i.provider === 'instagram' && i.accountId !== accountId);
+          return {
+            ok: false, summary: '',
+            error: fromOtherAccount ? INSTAGRAM_ACCOUNT_MISMATCH_MESSAGE : INSTAGRAM_NO_INBOUND_MESSAGE,
+          };
+        }
+        const participantId = conv!.channelUserId || '';
+
+        // Política da Meta revalidada no momento do enfileiramento: a janela é
+        // DESTA conversa (mensagem de outro cliente não renova esta).
+        const window = instagramConversationWindow(db, conv!, input.now);
+        if (!window.canReply) {
+          return { ok: false, summary: '', error: `Envio pelo Instagram bloqueado: ${window.reason}` };
+        }
+
+        conv!.contactId = conv!.contactId || contact?.id || '';
+        conv!.customerId = conv!.customerId || contact?.customerId || lead?.customerId || '';
+        conv!.lastMessageAt = input.now;
+        conv!.lastMessagePreview = msgText.slice(0, 120);
+        if (lead && !conv!.context?.leadId) conv!.context = { ...(conv!.context || {}), leadId: lead.id };
+
+        const igMsgId = randomUUID();
+        db.messages.push({
+          id: igMsgId,
+          businessId: business.id,
+          conversationId: conv!.id,
+          direction: 'out',
+          body: msgText,
+          status: 'pending',
+          externalId: '',
+          by: 'automation',
+          byName: 'Automação',
+          channel: 'instagram',
+          channelUserId: participantId,
+          at: input.now,
+          meta: {
+            templateName: templateName || undefined,
+            originRunId: input.run.id,
+          },
+        });
+
+        return {
+          ok: true,
+          summary: 'mensagem enfileirada no Instagram Direct',
+          contextPatch: { messageId: igMsgId, channel: 'instagram', participantId },
+        };
+      }
+
+      const rawPhone = lead?.phone || booking?.customerPhone || contact?.phone || input.run.context?.contact?.phone || input.params?.to || '';
+      const phone = onlyDigits(String(rawPhone || ''));
+      if (!phone || phone.length < 10) return missing('telefone do destinatário');
 
       let conv = db.conversations.find((c) => c.businessId === business.id && c.phone === phone);
       if (!conv) {

@@ -14,7 +14,7 @@
 //   • consentimento de marketing nunca é presumido;
 //   • criar acesso continua opcional e a senha temporária aparece UMA vez;
 //   • etapa de lead só muda via PipelineStage real (nunca LeadStatus legado).
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
 import { cn, waLink } from '@/lib/utils';
 import { humanDateTime } from '@/lib/tz';
@@ -27,7 +27,12 @@ import {
 } from '@/lib/contact-profile';
 import { Avatar, Badge, Button, Drawer, IconButton, Input, Notice, Select, StatusBadge, SubCard, Switch, Tabs, Textarea, type TabItem } from '@/components/ui';
 import { Icon } from '@/components/icons';
-import { apiSend } from '@/lib/api-client';
+import { apiGet, apiSend } from '@/lib/api-client';
+import { cepError, contactFieldErrors, emailError, hasFieldErrors, maskCep, maskCpf, phoneError } from '@/lib/field-quality';
+import { PhoneBRInput } from '@/components/dashboard/PhoneBRInput';
+import { canReopenEncounter } from '@/lib/encounters';
+import { EncounterList, EncounterSheet, type EncounterRow } from '@/components/dashboard/EncounterSheet';
+import { usePanelPermissions } from '@/components/dashboard/usePanelPermissions';
 
 // Observações do cliente (P2): histórico append-only com autor e data.
 // `legacy: true` marca o registro antigo (campo único), preservado como está.
@@ -73,7 +78,7 @@ function eventDay(iso: string): string {
 const bookDef = (s: string): StatusDef => (BOOKING_STATUS as Record<string, StatusDef>)[s] || { panel: s, tone: 'zinc', consumer: s, desc: '' };
 const leadDef = (s: string): StatusDef => (LEAD_STATUS as Record<string, StatusDef>)[s] || { panel: s, tone: 'zinc', consumer: s, desc: '' };
 
-type HistoryTab = 'timeline' | 'bookings' | 'conversations' | 'leads' | 'tasks' | 'notes';
+type HistoryTab = 'timeline' | 'bookings' | 'encounters' | 'conversations' | 'leads' | 'tasks' | 'notes';
 
 export function ClientProfileDrawer({ person, businessId, pipeline, canFunil, onClose, onChanged, onNewBooking }: {
   person: Person360;
@@ -85,6 +90,13 @@ export function ClientProfileDrawer({ person, businessId, pipeline, canFunil, on
   onNewBooking: (p: Person360) => void;
 }) {
   const [tab, setTab] = useState<HistoryTab>('timeline');
+  // A3.4 · Bloco 5 — registros de atendimento da pessoa. A permissão é PRÓPRIA
+  // (`atendimento`): sem ela, a aba nem aparece e a rota não é chamada.
+  const { permissions, role } = usePanelPermissions();
+  const canEncounter = permissions.atendimento === true;
+  const [encounters, setEncounters] = useState<EncounterRow[]>([]);
+  const [encounterOpen, setEncounterOpen] = useState<EncounterRow | null>(null);
+  const [encountersLoaded, setEncountersLoaded] = useState(false);
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState<ContactProfile>(() => profileOf(person.profile));
   // Identidade (nome/telefone/e-mail) é editável de verdade (ponto 3). Fica em
@@ -154,6 +166,17 @@ export function ClientProfileDrawer({ person, businessId, pipeline, canFunil, on
     // Ponto 3 — identidade editável. Só envia o que mudou, e a validação de
     // verdade (normalização + conflito com outro contato) é do servidor: o
     // React aqui só evita ida inútil.
+    // Qualidade dos campos (A3.4 · Bloco 6): o telefone vai com máscara na
+    // tela, mas quem grava é dígito; e um erro bobo de digitação é avisado
+    // AQUI, com a mensagem específica, em vez de virar cadastro torto.
+    const errs = contactFieldErrors(
+      { name: identityDraft.name, phone: identityDraft.phone, email: identityDraft.email, cpf: draft.cpf, cep: draft.address.cep },
+      { requireName: true },
+    );
+    if (hasFieldErrors(errs)) {
+      setNotice({ tone: 'error', text: Object.values(errs).find(Boolean) || 'Confira os campos destacados.' });
+      return;
+    }
     const identity: Record<string, string> = {};
     const name = identityDraft.name.trim();
     if (name && name !== (person.name || '')) identity.name = name;
@@ -328,15 +351,43 @@ export function ClientProfileDrawer({ person, businessId, pipeline, canFunil, on
   const tabItems: TabItem<HistoryTab>[] = [
     { id: 'timeline', label: 'Linha do tempo', icon: 'history', count: timeline.length },
     { id: 'bookings', label: 'Agendamentos', icon: 'calendar', count: person.bookings.length },
+    { id: 'encounters', label: 'Atendimentos', icon: 'fileText', count: encounters.length },
     { id: 'conversations', label: 'Conversas', icon: 'chat', count: (person.conversations || []).length },
     { id: 'leads', label: 'Leads', icon: 'spark', count: person.leads.length },
     { id: 'tasks', label: 'Tarefas', icon: 'tasks', count: (person.tasks || []).length },
-    { id: 'notes', label: 'Observações', icon: 'receipt', count: (person.notes || []).length },
+    { id: 'notes', label: 'Observações administrativas', icon: 'receipt', count: (person.notes || []).length },
   ];
 
   const notes = person.notes || [];
 
+  useEffect(() => {
+    if (!canEncounter || encountersLoaded) return;
+    const q = person.contactId
+      ? `contactId=${encodeURIComponent(person.contactId)}`
+      : person.customerId ? `customerId=${encodeURIComponent(person.customerId)}` : '';
+    if (!q) { setEncountersLoaded(true); return; }
+    let cancelled = false;
+    apiGet<{ encounters?: EncounterRow[] }>(`/api/encounters?businessId=${businessId}&${q}`, { scope: 'area', area: 'Atendimento' })
+      .then((res) => {
+        if (cancelled) return;
+        setEncounters(res.ok ? (res.data?.encounters || []) : []);
+        setEncountersLoaded(true);
+      });
+    return () => { cancelled = true; };
+  }, [canEncounter, encountersLoaded, person.contactId, person.customerId, businessId]);
+
   return (
+    <>
+      {encounterOpen && (
+        <EncounterSheet
+          businessId={businessId}
+          existing={encounterOpen}
+          canReopen={canReopenEncounter(role)}
+          onScheduleReturn={() => { setEncounterOpen(null); onNewBooking(person); }}
+          onClose={() => setEncounterOpen(null)}
+          onChanged={() => { setEncountersLoaded(false); onChanged(); }}
+        />
+      )}
     <Drawer
       open
       onClose={onClose}
@@ -539,13 +590,19 @@ export function ClientProfileDrawer({ person, businessId, pipeline, canFunil, on
                 </label>
                 <label className="block">
                   <span className="block text-xs font-semibold text-[var(--text-muted)] mb-1.5">CPF</span>
-                  <Input inputMode="numeric" value={draft.cpf ? formatCpf(draft.cpf) : ''} placeholder="000.000.000-00"
+                  <Input inputMode="numeric" value={maskCpf(draft.cpf)} placeholder="000.000.000-00"
                     onChange={(e) => setDraft((d) => ({ ...d, cpf: e.target.value.replace(/\D/g, '').slice(0, 11) }))} />
+                  {draft.cpf.length === 11 && !isValidCpf(draft.cpf) && (
+                    <span className="block text-xs text-[var(--danger-fg)] mt-1">CPF inválido — confira os dígitos.</span>
+                  )}
                 </label>
                 <label className="block">
                   <span className="block text-xs font-semibold text-[var(--text-muted)] mb-1.5">Telefone / WhatsApp</span>
-                  <Input inputMode="tel" value={identityDraft.phone} placeholder="(11) 91234-5678"
-                    onChange={(e) => setIdentityDraft((d) => ({ ...d, phone: e.target.value }))} />
+                  <PhoneBRInput value={identityDraft.phone}
+                    onChange={(digits) => setIdentityDraft((d) => ({ ...d, phone: digits }))} />
+                  {phoneError(identityDraft.phone) && (
+                    <span className="block text-xs text-[var(--danger-fg)] mt-1">{phoneError(identityDraft.phone)}</span>
+                  )}
                   <span className="block text-xs text-[var(--text-muted)] mt-1">
                     Se já pertencer a outro cliente desta unidade, a troca é recusada — ninguém é fundido por engano.
                   </span>
@@ -554,6 +611,9 @@ export function ClientProfileDrawer({ person, businessId, pipeline, canFunil, on
                   <span className="block text-xs font-semibold text-[var(--text-muted)] mb-1.5">E-mail</span>
                   <Input type="email" value={identityDraft.email} placeholder="nome@exemplo.com"
                     onChange={(e) => setIdentityDraft((d) => ({ ...d, email: e.target.value }))} />
+                  {emailError(identityDraft.email) && (
+                    <span className="block text-xs text-[var(--danger-fg)] mt-1">{emailError(identityDraft.email)}</span>
+                  )}
                 </label>
               </div>
             </fieldset>
@@ -575,8 +635,11 @@ export function ClientProfileDrawer({ person, businessId, pipeline, canFunil, on
               <div className="grid sm:grid-cols-6 gap-3">
                 <label className="block sm:col-span-2">
                   <span className="block text-xs font-semibold text-[var(--text-muted)] mb-1.5">CEP</span>
-                  <Input inputMode="numeric" value={draft.address.cep ? formatCep(draft.address.cep) : ''} placeholder="00000-000"
+                  <Input inputMode="numeric" value={maskCep(draft.address.cep)} placeholder="00000-000"
                     onChange={(e) => setDraft((d) => ({ ...d, address: { ...d.address, cep: e.target.value.replace(/\D/g, '').slice(0, 8) } }))} />
+                  {cepError(draft.address.cep) && (
+                    <span className="block text-xs text-[var(--danger-fg)] mt-1">{cepError(draft.address.cep)}</span>
+                  )}
                 </label>
                 <label className="block sm:col-span-4">
                   <span className="block text-xs font-semibold text-[var(--text-muted)] mb-1.5">Rua</span>
@@ -629,12 +692,12 @@ export function ClientProfileDrawer({ person, businessId, pipeline, canFunil, on
                 </label>
                 <label className="block">
                   <span className="block text-xs font-semibold text-[var(--text-muted)] mb-1.5">Telefone do responsável</span>
-                  <Input inputMode="tel" value={draft.guardian.phone ? formatPhoneBR(draft.guardian.phone) : ''}
-                    onChange={(e) => setDraft((d) => ({ ...d, guardian: { ...d.guardian, phone: e.target.value.replace(/\D/g, '').slice(0, 13) } }))} />
+                  <PhoneBRInput value={draft.guardian.phone}
+                    onChange={(digits) => setDraft((d) => ({ ...d, guardian: { ...d.guardian, phone: digits } }))} />
                 </label>
                 <label className="block">
                   <span className="block text-xs font-semibold text-[var(--text-muted)] mb-1.5">CPF do responsável</span>
-                  <Input inputMode="numeric" value={draft.guardian.cpf ? formatCpf(draft.guardian.cpf) : ''}
+                  <Input inputMode="numeric" value={maskCpf(draft.guardian.cpf)}
                     onChange={(e) => setDraft((d) => ({ ...d, guardian: { ...d.guardian, cpf: e.target.value.replace(/\D/g, '').slice(0, 11) } }))} />
                 </label>
               </div>
@@ -677,7 +740,7 @@ export function ClientProfileDrawer({ person, businessId, pipeline, canFunil, on
 
             <label className="block mt-4">
               <span className="text-[11px] font-bold uppercase tracking-[0.08em] text-[var(--text-faint)] mb-2 block">Observação administrativa</span>
-              <Textarea value={draft.adminNote} rows={3} placeholder="Preferências, convênio, observações de atendimento…"
+              <Textarea value={draft.adminNote} rows={3} placeholder="Prefere horário da manhã, confirmar por telefone, convênio..."
                 onChange={(e) => setDraft((d) => ({ ...d, adminNote: e.target.value }))} />
             </label>
 
@@ -750,6 +813,12 @@ export function ClientProfileDrawer({ person, businessId, pipeline, canFunil, on
                   })}
                 </ul>
               )
+          )}
+
+          {tab === 'encounters' && (
+            encounters.length === 0
+              ? <Empty hint="Nenhum registro de atendimento para esta pessoa ainda. Abra um agendamento e use “Atendimento” para registrar o que foi feito." />
+              : <div className="px-4 py-3"><EncounterList rows={encounters} onOpen={setEncounterOpen} empty="" /></div>
           )}
 
           {tab === 'conversations' && (
@@ -833,7 +902,10 @@ export function ClientProfileDrawer({ person, businessId, pipeline, canFunil, on
             <div className="p-4 space-y-3">
               {notes.length === 0 ? (
                 <p className="text-sm text-[var(--text-muted)] bg-[var(--surface-3)] border border-[var(--border)] rounded-md px-3 py-2.5">
-                  Nenhuma observação ainda. O que você escrever aqui fica no histórico do cliente e ajuda quem atender depois.
+                  Nenhuma observação administrativa ainda. Aqui vai o que ajuda a OPERAR o atendimento —
+                  preferência de horário, quem confirmar, convênio, combinados do dia a dia.
+                  {' '}<strong className="font-semibold text-[var(--text)]">O que aconteceu no atendimento fica em Atendimentos</strong>,
+                  com registro assinado: esta lista não substitui nem copia aquele conteúdo.
                 </p>
               ) : (
                 <ul className="space-y-2">
@@ -875,6 +947,7 @@ export function ClientProfileDrawer({ person, businessId, pipeline, canFunil, on
         </div>
       </div>
     </Drawer>
+    </>
   );
 }
 

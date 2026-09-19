@@ -122,12 +122,15 @@ describe('pedidos e orçamentos: fora da experiência, preservados por compatibi
 
   it('Pedidos/Orçamento/Delivery não são caminhos principais', () => {
     const panel = read('src/lib/panel.ts');
-    // A1.2 · Bloco 1: o campo `hidden` morreu. O destino continua DECLARADO no
-    // catálogo (rota, rótulo, descrição, permissão) e apenas sai do menu —
-    // `sidebar: false`. O comportamento (nunca aparecer na navegação, mesmo com
-    // o módulo legado ativo) é garantido em panel.test.ts.
+    // A1.2 · Bloco 1: o campo `hidden` morreu — o destino continua DECLARADO no
+    // catálogo (rota, rótulo, descrição, permissão).
+    //
+    // A3.4: Pedidos passa a APARECER em Operação, mas SOMENTE quando o módulo
+    // de pedidos estiver ativo (`modes: ['orders']`). Módulo desligado ⇒ porta
+    // inexistente para o usuário: o gate é de MÓDULO, não mais `sidebar:false`.
     const pedidosRoute = panel.match(/href: '\/pedidos'[\s\S]*?\n  \},/)?.[0] || '';
-    expect(pedidosRoute).toContain('sidebar: false'); // fora do menu, não escondido
+    expect(pedidosRoute).toContain("modes: ['orders']");
+    expect(pedidosRoute).not.toContain('sidebar: false');
     expect(pedidosRoute).not.toMatch(/hidden/);       // o campo antigo não volta
     expect(panel).not.toMatch(/label: 'Orçamentos'/);
     expect(panel).not.toMatch(/label: '(Delivery|Restaurante|Loja)'/);

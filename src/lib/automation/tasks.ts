@@ -28,6 +28,8 @@ export interface CreateTaskInput {
   leadId?: string;
   bookingId?: string;
   customerId?: string;
+  /** Atendimento de origem (2ª revisão do B5): retorno pedido na recepção. */
+  encounterId?: string;
   automationId?: string;
   automationRunId?: string;
   /** Nó que criou a tarefa (dedupe em retomada de execução). */
@@ -81,6 +83,9 @@ export function createTaskTx(db: DB, input: CreateTaskInput): { task: Task | nul
   if (input.bookingId && !db.bookings.some((b) => b.id === input.bookingId && b.businessId === input.businessId)) {
     return { task: null, created: false, reason: 'agendamento não pertence a esta unidade' };
   }
+  if (input.encounterId && !(db.encounters || []).some((e) => e.id === input.encounterId && e.businessId === input.businessId)) {
+    return { task: null, created: false, reason: 'atendimento não pertence a esta unidade' };
+  }
   if (input.customerId && !db.contacts.some(
     (c) => (c.id === input.customerId || c.customerId === input.customerId) && c.businessId === input.businessId,
   )) {
@@ -120,6 +125,7 @@ export function createTaskTx(db: DB, input: CreateTaskInput): { task: Task | nul
   if (input.leadId) task.leadId = input.leadId;
   if (input.bookingId) task.bookingId = input.bookingId;
   if (input.customerId) task.customerId = input.customerId;
+  if (input.encounterId) task.encounterId = input.encounterId;
   if (input.automationId) task.automationId = input.automationId;
   if (input.automationRunId) task.automationRunId = input.automationRunId;
   db.tasks.push(task);

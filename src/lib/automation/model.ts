@@ -316,14 +316,25 @@ export const AUTOMATION_ACTION_DEFS: AutomationActionDef[] = [
     ],
   },
   {
-    type: 'send_channel_message', label: 'Enviar mensagem pelo WhatsApp', short: 'Enviar WhatsApp',
-    hint: 'Envia mensagem oficial pelo conector de WhatsApp da unidade.',
+    // A3.4 · BLOCO 9 — a MESMA ação passa a atender os dois canais (nada de nó
+    // novo): `channel` escolhe WhatsApp (padrão, comportamento antigo) ou
+    // Instagram. A entrega continua sendo pós-commit, pelo conector do canal.
+    type: 'send_channel_message', label: 'Enviar mensagem pelo canal', short: 'Enviar mensagem',
+    hint: 'Envia pelo canal escolhido: WhatsApp (telefone) ou Instagram Direct (identidade do Instagram).',
     delegate: 'lib/integrations/outbound.ts · attemptChannelSend (entrega pós-commit)',
     requires: 'automation.advanced',
     fields: [
+      {
+        key: 'channel', label: 'Canal', type: 'select',
+        hint: 'WhatsApp usa o telefone do contato; Instagram usa a identidade da conta no Direct.',
+        options: [
+          { value: 'whatsapp', label: 'WhatsApp' },
+          { value: 'instagram', label: 'Instagram Direct' },
+        ],
+      },
       { key: 'message', label: 'Mensagem', type: 'textarea', required: true, template: true, max: 2000 },
-      { key: 'to', label: 'Destinatário (opcional)', type: 'text', template: true, max: 30, hint: 'Telefone explícito ou template {{lead.phone}}' },
-      { key: 'templateName', label: 'Template (opcional)', type: 'text', hint: 'Nome do template para mensagens ativas fora da janela de 24h.' },
+      { key: 'to', label: 'Destinatário (opcional)', type: 'text', template: true, max: 30, hint: 'WhatsApp: telefone explícito. Instagram: identificador da conta que escreveu (só quando não houver vínculo salvo).' },
+      { key: 'templateName', label: 'Template (opcional)', type: 'text', hint: 'Nome do template para mensagens ativas fora da janela de 24h (WhatsApp).' },
     ],
   },
 ];

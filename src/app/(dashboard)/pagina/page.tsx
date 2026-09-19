@@ -180,7 +180,7 @@ export default function PaginaPage() {
           </a>
           <Link href={`/dashboard?b=${businessId}`}
             className="text-xs font-semibold bg-white border border-[var(--border-strong)] text-[var(--text)] px-3.5 py-2 rounded-md shadow-xs hover:bg-[var(--surface-hover)]">
-            Dashboard
+            Início
           </Link>
         </div>
       </div>

@@ -129,7 +129,7 @@ export default function DashboardPage() {
     setSetupHidden(true);
     try { localStorage.setItem(`il-setup-hidden-${businessId}`, '1'); } catch { /* noop */ }
   }
-  const { notice, dismiss } = useForbiddenNotice('Dashboard');
+  const { notice, dismiss } = useForbiddenNotice('Início');
   // Estados completos (auditoria §12, mesma família do bug do /recursos):
   // uma falha de rede nunca pode virar skeleton eterno no Início.
   const [failed, setFailed] = useState('');
@@ -138,7 +138,7 @@ export default function DashboardPage() {
   const load = useCallback(() => {
     if (!businessId) return;
     setFailed('');
-    apiGet<Overview>(`/api/overview?businessId=${businessId}&period=${period}`, { scope: 'area', area: 'Dashboard' })
+    apiGet<Overview>(`/api/overview?businessId=${businessId}&period=${period}`, { scope: 'area', area: 'Início' })
       .then((res) => {
         // 403 → aviso amigável na tela; o usuário NÃO é deslogado.
         // 401 → o wrapper de fetch já iniciou o fluxo de login.
@@ -162,8 +162,8 @@ export default function DashboardPage() {
     // também tem destino válido.
     return (
       <AccessDenied
-        area="Dashboard"
-        hint="Seu perfil não possui acesso a esta área. Você continua conectado — para ver a Dashboard, peça ao proprietário para liberar a permissão “Dashboard” em Equipe."
+        area="Início"
+        hint="Seu perfil não possui acesso a esta área. Você continua conectado — para ver o Início, peça ao proprietário para liberar a permissão “Início” em Equipe."
       />
     );
   }

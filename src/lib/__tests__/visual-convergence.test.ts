@@ -3,7 +3,7 @@ import { readFileSync, readdirSync } from 'node:fs';
 import path from 'node:path';
 import { PANEL_SECTIONS, PANEL_ROUTES } from '../panel';
 import { ATTENTION_MARK_CLS, ATTENTION_RING_CLS, BOOKING_BLOCK, toneCls, type Tone } from '../status';
-import { sectionAccent, SECTION_ACCENT } from '../panel';
+import { sectionAccent, SECTION_ACCENT, SECTION_THEME, sectionTheme } from '../panel';
 
 const root = path.resolve(__dirname, '../../..');
 const read = (rel: string) => readFileSync(path.join(root, rel), 'utf8');
@@ -374,7 +374,7 @@ describe('A3.3 — seleção não é estado de sucesso', () => {
   });
 });
 
-describe('A3.3 — acento de cor por contexto', () => {
+describe('A3.3/A3.4 — cor por contexto de seção', () => {
   it('toda seção do catálogo tem acento definido e tokenizado', () => {
     for (const sec of PANEL_SECTIONS) {
       const accent = SECTION_ACCENT[sec.id];
@@ -383,16 +383,42 @@ describe('A3.3 — acento de cor por contexto', () => {
     }
   });
 
+  it('A3.4 — o tema da seção governa TAMBÉM o item ativo (nunca azul fixo)', () => {
+    // A regressão que este teste protege: a seleção forçava
+    // `--il-nav-active-fg` (azul) em TODAS as seções, apagando a família de
+    // cor exatamente quando ela orientava o usuário.
+    for (const sec of PANEL_SECTIONS) {
+      const t = SECTION_THEME[sec.id];
+      expect(t, `seção ${sec.id} sem tema`).toBeTruthy();
+      for (const token of [t.accent, t.activeBg, t.activeFg]) {
+        expect(token, sec.id).toMatch(/^var\(--[a-z0-9-]+\)$/);
+      }
+    }
+    // Seções de famílias diferentes NÃO compartilham o mesmo fundo ativo.
+    expect(SECTION_THEME.pessoas.activeBg).not.toBe(SECTION_THEME.oferta.activeBg);
+    expect(SECTION_THEME.crescimento.accent).toBe('var(--warning)');
+    expect(SECTION_THEME.resultados.accent).toBe('var(--success)');
+    expect(sectionTheme(undefined).activeBg).toBe('var(--surface-3)');
+    expect(sectionTheme('nao-existe' as never).activeFg).toBe('var(--text)');
+  });
+
   it('seção desconhecida cai em neutro (nunca quebra a renderização)', () => {
     expect(sectionAccent(undefined)).toBe('var(--text-muted)');
     expect(sectionAccent('nao-existe' as never)).toBe('var(--text-muted)');
   });
 
-  it('o shell aplica o acento só no ícone e mantém BRAND para o item ativo', () => {
+  it('A3.4 — o item ativo usa a cor DA SEÇÃO (ícone, rail e fundo soft)', () => {
     const shell = read('src/components/DashboardShell.tsx');
-    expect(shell).toMatch(/sectionAccent\(/);
-    // A seleção continua brand — o acento é contexto, não seleção.
-    expect(shell).toMatch(/active \? 'var\(--il-nav-active-fg\)' : accent/);
+    expect(shell).toMatch(/sectionTheme\(/);
+    // Fundo e texto ativos vêm do tema da seção…
+    expect(shell).toMatch(/backgroundColor: theme\.activeBg, color: theme\.activeFg/);
+    // …e o ícone continua na cor da seção mesmo ativo.
+    expect(shell).toMatch(/style=\{\{ color: theme\.accent \}\}/);
+    // O rail do item ativo também é da seção.
+    expect(shell).toMatch(/backgroundColor: theme\.accent/);
+    // E o azul fixo de seleção NÃO volta para pintar o item inteiro.
+    expect(shell).not.toMatch(/bg-\[var\(--il-nav-active\)\]/);
+    expect(shell).not.toMatch(/active \? 'var\(--il-nav-active-fg\)'/);
   });
 
   it('as famílias de cor de contexto existem como token', () => {
@@ -406,9 +432,10 @@ describe('A3.3 — acento de cor por contexto', () => {
 describe('A3.3 — item ativo tem rail lateral', () => {
   it('o marcador do item ativo é um rail fino de pontas arredondadas', () => {
     const shell = read('src/components/DashboardShell.tsx');
-    // 2–3px, `rounded-pill` (pontas arredondadas), posicionado à esquerda.
-    expect(shell).toMatch(/rounded-pill bg-\[var\(--il-nav-active-fg\)\]/);
-    expect(shell).toMatch(/w-\[3px\] h-5/);
+    // 2–3px, `rounded-pill` (pontas arredondadas), posicionado à esquerda e na
+    // cor da SEÇÃO (A3.4 — pequena aba, não um traço azul genérico).
+    expect(shell).toMatch(/rounded-pill w-\[3px\]/);
+    expect(shell).toMatch(/w-\[3px\]/);
     // E NÃO é um contorno grosso em volta do card inteiro.
     expect(shell).not.toMatch(/ring-2[^']*ring-\[var\(--il-nav-active/);
   });

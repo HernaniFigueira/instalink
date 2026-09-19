@@ -5,6 +5,7 @@ import { AccessDenied, useAreaLoad } from '@/components/dashboard/AccessNotice';
 import { CanaisIntegracoesView } from '@/components/dashboard/CanaisIntegracoesView';
 import { IntegracoesView } from '@/components/dashboard/IntegracoesView';
 import { WhatsappChannelPanel } from '@/components/dashboard/WhatsappChannelPanel';
+import { InstagramChannelPanel } from '@/components/dashboard/InstagramChannelPanel';
 import { PageHeader, Tabs } from '@/components/ui';
 
 // ═══════════════════════════════════════════════════════════════
@@ -85,7 +86,10 @@ export default function CanaisPage() {
       <div role="tabpanel" id={`canais-panel-${tab}`} aria-labelledby={`canais-tab-${tab}`}>
         {tab === 'canais' && (
           <div className="space-y-4">
+            {/* Um painel por CANAL conectável, na ordem do catálogo: cada um
+                mostra o seu estado real e o que falta (nada de "em breve"). */}
             <WhatsappChannelPanel businessId={businessId} />
+            <InstagramChannelPanel businessId={businessId} />
             <CanaisIntegracoesView only="channel" />
           </div>
         )}
