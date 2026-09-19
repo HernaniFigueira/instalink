@@ -19,6 +19,7 @@ import type { PermissionId } from '@/lib/types';
 interface MePayload {
   businesses?: Array<{
     id: string;
+    role?: string;
     permissions?: Partial<Record<PermissionId, boolean>>;
   }>;
 }
@@ -45,6 +46,13 @@ async function fetchMe(): Promise<MePayload | null> {
 export interface PanelPermissions {
   /** Permissões do usuário na unidade ativa ({} enquanto resolve). */
   permissions: Partial<Record<PermissionId, boolean>>;
+  /**
+   * Papel na unidade ativa ('' enquanto resolve). É o MESMO valor que o
+   * servidor usa para decidir regras de papel (ex.: reabrir registro de
+   * atendimento finalizado) — a tela só evita oferecer o que o servidor
+   * negaria.
+   */
+  role: string;
   /** false enquanto /api/auth/me não chega. */
   ready: boolean;
 }
@@ -57,7 +65,7 @@ export interface PanelPermissions {
 export function usePanelPermissions(): PanelPermissions {
   const params = useSearchParams();
   const requested = params.get('b') || '';
-  const [state, setState] = useState<PanelPermissions>({ permissions: {}, ready: false });
+  const [state, setState] = useState<PanelPermissions>({ permissions: {}, role: '', ready: false });
 
   useEffect(() => {
     let cancelled = false;
@@ -66,7 +74,7 @@ export function usePanelPermissions(): PanelPermissions {
       const list = Array.isArray(d?.businesses) ? d!.businesses! : [];
       const id = resolveActiveBusinessId(requested, list);
       const biz = list.find((b) => b.id === id);
-      setState({ permissions: biz?.permissions || {}, ready: true });
+      setState({ permissions: biz?.permissions || {}, role: biz?.role || '', ready: true });
     });
     return () => { cancelled = true; };
   }, [requested]);

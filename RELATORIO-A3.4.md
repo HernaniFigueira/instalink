@@ -306,3 +306,60 @@ npx vitest run → 79 arquivos · 1321 testes ok
 npx tsc --noEmit → 0 erros
 npm run build → ok
 ```
+
+## BLOCO 5 — ATENDIMENTO (REGISTRO) · HISTÓRICO · IMPRESSÃO
+
+### O diagnóstico
+
+O sistema sabia que o atendimento EXISTIU (agendamento, status, check-in), mas
+não guardava o que ACONTECEU nele. O único lugar possível era `Booking.note` —
+texto solto, sem dono, sem estado, sem histórico e visível para qualquer pessoa
+com acesso à agenda. Nada disso servia para a clínica, o consultório ou o
+salão: não havia documento do que foi feito, nem o que orientar no retorno.
+
+### O que foi criado
+
+| Onde | Mudança |
+|---|---|
+| `lib/types.ts` | **aditivo**: permissão `atendimento`, entidade **`Encounter`** (+ `EncounterStatus`), `DB.encounters` e audit `encounter.created/updated/finalized/reopened/removed`. |
+| `lib/permissions.ts` | `atendimento` com rótulo e explicação próprios. **Não vem com "clientes"**: `SECRETARIA`/`ATENDENTE`/`VENDEDOR` não recebem por padrão (concedível por override); `PROFISSIONAL`/`ADMIN`/`OWNER` têm. |
+| `lib/db.ts` | `encounters: []` no banco vazio + normalização idempotente de documentos antigos. |
+| `lib/encounters.ts` | **novo** — regras puras: limites e higiene por campo (`cleanText`), etiquetas (`cleanTags`), `canFinalize` (documento vazio não vira via do cliente), `canEditEncounter`, `encounterInScope`, `encounterForBooking`, `encountersForCustomer` (por **identidade**, nunca por nome), `encounterPrintBlocks` e `encounterSignature`. |
+| `/api/encounters` | **novo** — GET (por agendamento, por cliente ou por período), POST (1:1 com o agendamento: pedir de novo devolve o existente com `reused:true`), PATCH (conteúdo + `finalize`/`reopen`) e DELETE. Guardas: permissão `atendimento`, escopo do profissional, reabertura só de quem administra, edição de finalizado recusada, auditoria em todas as transições. |
+| `globals.css` | bloco `@media print`: `body.il-printing` esconde a interface e mostra só `.il-print-area` — a via do cliente é o MESMO registro, não um segundo conteúdo. |
+| `components/dashboard/EncounterSheet.tsx` | **novo** — painel do atendimento (rascunho → finalizar e assinar → reabrir), com a via impressa em `.il-print-area`. A anotação interna existe na tela e **não entra** na impressão. |
+| `BookingDetailSheet` | botão **Atendimento** (só com a permissão própria) que abre/cria o registro já vinculado ao agendamento. |
+| `ClientProfileDrawer` | nova aba **Atendimentos** (contagem + lista + abertura do registro completo). Sem a permissão, a aba não aparece e a rota não é chamada. |
+| `icons.tsx` | `fileText` e `printer`. |
+
+### Decisões
+
+- **Registro é documento, não anotação.** Nasce rascunho, é assinado na
+  finalização (nome do profissional que atendeu) e, depois disso, só muda com
+  reabertura explícita — que fica na auditoria. O texto que o cliente levou para
+  casa não muda em silêncio.
+- **Dado sensível com porta própria.** Ler o conteúdo do atendimento não é o
+  mesmo que operar o balcão: por isso a permissão é `atendimento`, e não
+  `clientes` (que a secretária já tem).
+- **Impressão sem rota nova.** Nada de `/imprimir` com HTML paralelo: a tela
+  marca o documento e o CSS esconde o resto — o que sai no papel é exatamente o
+  que está no registro (menos a anotação interna).
+
+### Testes
+
+`src/lib/__tests__/a34-encounter.test.ts` (17 casos): permissão própria (e a
+prova de que secretária/atendente/vendedor NÃO a têm), higiene e limites,
+etiquetas, `canFinalize`, rascunho × finalizado, escopo do profissional, via
+impressa sem anotação interna, 1:1 por unidade — e, nas ROTAS REAIS com banco
+temporário: criação herdando cliente/serviço/profissional sem tocar no
+agendamento, não duplicação, `null` honesto, fluxo salvar → finalizar →
+editar → reabrir com auditoria na ordem, 400 sem conteúdo, profissional
+finalizando o próprio e recusado no do colega, finalizado que só o
+administrador apaga, isolamento entre unidades e lista por identidade.
+
+```
+npx vitest run src/lib/__tests__/a34-encounter.test.ts → 17 ok
+npx vitest run → 80 arquivos · 1338 testes ok
+npx tsc --noEmit → 0 erros
+npm run build → ok (107 páginas)
+```

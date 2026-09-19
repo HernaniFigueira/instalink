@@ -580,6 +580,54 @@ export interface QueueEntry {
   updatedAt: string;
 }
 
+// ═══════════════════════════════════════════════════════════════
+// A3.4 · BLOCO 5 — REGISTRO DO ATENDIMENTO (Encounter)
+// ═══════════════════════════════════════════════════════════════
+// O que foi feito, o que foi orientado e o que fica para a próxima vez. É uma
+// ENTIDADE PRÓPRIA, separada do agendamento:
+//   • um agendamento pode ter UM registro (1:1 opcional) — o histórico do
+//     serviço prestado não pode ser um campo de texto livre no Booking;
+//   • o registro tem dono (o profissional que atendeu) e escopo por unidade;
+//   • nasce rascunho e é FINALIZADO (a partir daí, editar é decisão explícita
+//     e auditada — registro de atendimento não muda sozinho).
+export type EncounterStatus = 'draft' | 'finalized';
+
+export interface Encounter {
+  id: ID;
+  businessId: ID;
+  /** Agendamento de origem ('' quando o registro foi feito sem agendamento). */
+  bookingId: string;
+  serviceId: string;
+  professionalId: string;
+  customerId: string; // conta do cliente ('' = visitante/legado)
+  contactId: string; // contato do CRM (fonte do histórico 360)
+  customerName: string;
+  /** Dia do atendimento (YYYY-MM-DD, fuso da unidade). */
+  date: string;
+  time: string;
+  /** O que o cliente procurou / queixa principal. */
+  complaint: string;
+  /** O que foi feito (evolução do atendimento). */
+  evolution: string;
+  /** Orientações entregues ao cliente (aparecem na impressão). */
+  guidance: string;
+  /** Retorno sugerido (texto curto: "em 30 dias", "se persistir"). */
+  followUp: string;
+  /** Anotações internas — NÃO saem na impressão entregue ao cliente. */
+  internalNote: string;
+  /** Etiquetas livres (procedimentos, materiais, região tratada…). */
+  tags: string[];
+  status: EncounterStatus;
+  createdAt: string;
+  updatedAt: string;
+  createdBy: string;
+  updatedBy: string;
+  finalizedAt: string;
+  finalizedBy: string;
+  /** Quem assina o registro (nome do profissional no momento da finalização). */
+  signedBy: string;
+}
+
 export type ReviewSource = 'site' | 'google';
 export type ReviewStatus = 'pending' | 'published' | 'hidden';
 
@@ -812,6 +860,8 @@ export interface DB {
   integrationEvents: IntegrationEvent[];
   // ── A3.4 · Bloco 4: fila de espera (entidade própria, fora da agenda) ──
   queue: QueueEntry[];
+  // ── A3.4 · Bloco 5: registros de atendimento (dado sensível, com dono) ──
+  encounters: Encounter[];
 }
 
 // ═══════════════════════════════════════════════════════════════
@@ -1264,7 +1314,11 @@ export const VALID_MEMBER_ROLES: MemberRole[] = [
 export type PermissionId =
   | 'dashboard' | 'agenda' | 'clientes' | 'leads' | 'pedidos' | 'catalogo'
   | 'pagina' | 'agente' | 'whatsapp' | 'campanhas'
-  | 'equipe' | 'config' | 'financeiro' | 'admin';
+  | 'equipe' | 'config' | 'financeiro' | 'admin'
+  // A3.4 · Bloco 5 — registro do atendimento (evolução, orientações e
+  // histórico do serviço prestado). Dado próprio: NÃO vem junto com
+  // "clientes" e não é dado por padrão para quem só opera o balcão.
+  | 'atendimento';
 
 export interface BusinessMember {
   id: ID;
@@ -1666,6 +1720,9 @@ export type AuditAction =
   // A3.4 · Bloco 4 — operação do dia (check-in e fila de espera)
   | 'booking.checkin' | 'booking.checkin_undo'
   | 'queue.created' | 'queue.updated' | 'queue.removed' | 'queue.booked'
+  // A3.4 · Bloco 5 — registro do atendimento
+  | 'encounter.created' | 'encounter.updated' | 'encounter.finalized'
+  | 'encounter.reopened' | 'encounter.removed'
   // P3 — esteira operacional e integrações
   | 'pipeline.updated' | 'api_key.created' | 'api_key.revoked'
   | 'webhook.created' | 'webhook.updated' | 'webhook.deleted'

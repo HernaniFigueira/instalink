@@ -21,6 +21,8 @@ import { useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
 import { Icon } from '@/components/icons';
 import { StatusBadge, Button, buttonCls, type ButtonVariant } from '@/components/ui';
+import { EncounterSheet } from '@/components/dashboard/EncounterSheet';
+import { usePanelPermissions } from '@/components/dashboard/usePanelPermissions';
 import { BOOKING_STATUS } from '@/lib/status';
 import { todayISO, nowHM, formatDateBR, humanDay } from '@/lib/tz';
 import { waLink, cn, money } from '@/lib/utils';
@@ -54,6 +56,9 @@ export function BookingDetailSheet({ booking, service, pro, businessId, timezone
   onChanged: () => void;
 }) {
   const [acting, setActing] = useState('');
+  // A3.4 · Bloco 5 — registro do atendimento: permissão própria + quem reabre.
+  const { permissions, role } = usePanelPermissions();
+  const [encounterOpen, setEncounterOpen] = useState(false);
   const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
   const [rescheduling, setRescheduling] = useState(false);
@@ -211,7 +216,25 @@ export function BookingDetailSheet({ booking, service, pro, businessId, timezone
             className="text-zinc-400 hover:text-zinc-900 hover:bg-zinc-50 rounded-md p-1.5 -m-1 inline-flex shrink-0"><Icon n="x" size={16} /></button>
         </header>
 
-        <div className="flex-1 min-h-0 overflow-y-auto ws-scroll">
+        {encounterOpen && (
+        <EncounterSheet
+          businessId={businessId}
+          bookingId={booking.id}
+          seed={{
+            customerName: booking.customerName,
+            serviceId: booking.serviceId,
+            professionalId: booking.professionalId,
+            date: booking.date,
+            time: booking.time,
+            customerId: booking.customerId,
+          }}
+          canReopen={role === 'OWNER' || role === 'ADMIN'}
+          onClose={() => setEncounterOpen(false)}
+          onChanged={onChanged}
+        />
+      )}
+
+      <div className="flex-1 min-h-0 overflow-y-auto ws-scroll">
           {/* ── Pendência: passado e ainda aberto (aviso, decisão fica nas ações) ── */}
           {late && !rescheduling && (
             <div className="px-4 py-2.5 bg-amber-50/60 border-b border-amber-200/60">
@@ -237,6 +260,11 @@ export function BookingDetailSheet({ booking, service, pro, businessId, timezone
                 </Button>
                 {/* A3.4 · Bloco 4 — chegada do cliente. Fica junto das ações
                     porque é decisão do balcão, e é REVERSÍVEL (engano acontece). */}
+                {permissions.atendimento && (
+                  <Button size="sm" variant="soft" onClick={() => setEncounterOpen(true)} disabled={!!acting}>
+                    <Icon n="fileText" size={13} /> Atendimento
+                  </Button>
+                )}
                 {booking.checkedInAt ? (
                   <Button size="sm" variant="ghost" onClick={() => checkIn(true)} disabled={!!acting}
                     title="Desfazer o check-in deste atendimento">

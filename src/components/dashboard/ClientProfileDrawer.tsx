@@ -14,7 +14,7 @@
 //   • consentimento de marketing nunca é presumido;
 //   • criar acesso continua opcional e a senha temporária aparece UMA vez;
 //   • etapa de lead só muda via PipelineStage real (nunca LeadStatus legado).
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
 import { cn, waLink } from '@/lib/utils';
 import { humanDateTime } from '@/lib/tz';
@@ -27,7 +27,9 @@ import {
 } from '@/lib/contact-profile';
 import { Avatar, Badge, Button, Drawer, IconButton, Input, Notice, Select, StatusBadge, SubCard, Switch, Tabs, Textarea, type TabItem } from '@/components/ui';
 import { Icon } from '@/components/icons';
-import { apiSend } from '@/lib/api-client';
+import { apiGet, apiSend } from '@/lib/api-client';
+import { EncounterList, EncounterSheet, type EncounterRow } from '@/components/dashboard/EncounterSheet';
+import { usePanelPermissions } from '@/components/dashboard/usePanelPermissions';
 
 // Observações do cliente (P2): histórico append-only com autor e data.
 // `legacy: true` marca o registro antigo (campo único), preservado como está.
@@ -73,7 +75,7 @@ function eventDay(iso: string): string {
 const bookDef = (s: string): StatusDef => (BOOKING_STATUS as Record<string, StatusDef>)[s] || { panel: s, tone: 'zinc', consumer: s, desc: '' };
 const leadDef = (s: string): StatusDef => (LEAD_STATUS as Record<string, StatusDef>)[s] || { panel: s, tone: 'zinc', consumer: s, desc: '' };
 
-type HistoryTab = 'timeline' | 'bookings' | 'conversations' | 'leads' | 'tasks' | 'notes';
+type HistoryTab = 'timeline' | 'bookings' | 'encounters' | 'conversations' | 'leads' | 'tasks' | 'notes';
 
 export function ClientProfileDrawer({ person, businessId, pipeline, canFunil, onClose, onChanged, onNewBooking }: {
   person: Person360;
@@ -85,6 +87,13 @@ export function ClientProfileDrawer({ person, businessId, pipeline, canFunil, on
   onNewBooking: (p: Person360) => void;
 }) {
   const [tab, setTab] = useState<HistoryTab>('timeline');
+  // A3.4 · Bloco 5 — registros de atendimento da pessoa. A permissão é PRÓPRIA
+  // (`atendimento`): sem ela, a aba nem aparece e a rota não é chamada.
+  const { permissions, role } = usePanelPermissions();
+  const canEncounter = permissions.atendimento === true;
+  const [encounters, setEncounters] = useState<EncounterRow[]>([]);
+  const [encounterOpen, setEncounterOpen] = useState<EncounterRow | null>(null);
+  const [encountersLoaded, setEncountersLoaded] = useState(false);
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState<ContactProfile>(() => profileOf(person.profile));
   // Identidade (nome/telefone/e-mail) é editável de verdade (ponto 3). Fica em
@@ -328,6 +337,7 @@ export function ClientProfileDrawer({ person, businessId, pipeline, canFunil, on
   const tabItems: TabItem<HistoryTab>[] = [
     { id: 'timeline', label: 'Linha do tempo', icon: 'history', count: timeline.length },
     { id: 'bookings', label: 'Agendamentos', icon: 'calendar', count: person.bookings.length },
+    { id: 'encounters', label: 'Atendimentos', icon: 'fileText', count: encounters.length },
     { id: 'conversations', label: 'Conversas', icon: 'chat', count: (person.conversations || []).length },
     { id: 'leads', label: 'Leads', icon: 'spark', count: person.leads.length },
     { id: 'tasks', label: 'Tarefas', icon: 'tasks', count: (person.tasks || []).length },
@@ -336,7 +346,33 @@ export function ClientProfileDrawer({ person, businessId, pipeline, canFunil, on
 
   const notes = person.notes || [];
 
+  useEffect(() => {
+    if (!canEncounter || encountersLoaded) return;
+    const q = person.contactId
+      ? `contactId=${encodeURIComponent(person.contactId)}`
+      : person.customerId ? `customerId=${encodeURIComponent(person.customerId)}` : '';
+    if (!q) { setEncountersLoaded(true); return; }
+    let cancelled = false;
+    apiGet<{ encounters?: EncounterRow[] }>(`/api/encounters?businessId=${businessId}&${q}`, { scope: 'area', area: 'Atendimento' })
+      .then((res) => {
+        if (cancelled) return;
+        setEncounters(res.ok ? (res.data?.encounters || []) : []);
+        setEncountersLoaded(true);
+      });
+    return () => { cancelled = true; };
+  }, [canEncounter, encountersLoaded, person.contactId, person.customerId, businessId]);
+
   return (
+    <>
+      {encounterOpen && (
+        <EncounterSheet
+          businessId={businessId}
+          existing={encounterOpen}
+          canReopen={role === 'OWNER' || role === 'ADMIN'}
+          onClose={() => setEncounterOpen(null)}
+          onChanged={() => { setEncountersLoaded(false); onChanged(); }}
+        />
+      )}
     <Drawer
       open
       onClose={onClose}
@@ -752,6 +788,12 @@ export function ClientProfileDrawer({ person, businessId, pipeline, canFunil, on
               )
           )}
 
+          {tab === 'encounters' && (
+            encounters.length === 0
+              ? <Empty hint="Nenhum registro de atendimento para esta pessoa ainda. Abra um agendamento e use “Atendimento” para registrar o que foi feito." />
+              : <div className="px-4 py-3"><EncounterList rows={encounters} onOpen={setEncounterOpen} empty="" /></div>
+          )}
+
           {tab === 'conversations' && (
             (person.conversations || []).length === 0
               ? <Empty hint="Nenhuma conversa registrada (WhatsApp ou assistente)." />
@@ -875,6 +917,7 @@ export function ClientProfileDrawer({ person, businessId, pipeline, canFunil, on
         </div>
       </div>
     </Drawer>
+    </>
   );
 }
 

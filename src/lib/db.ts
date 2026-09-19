@@ -65,6 +65,8 @@ export function emptyDB(): DB {
     integrations: [], integrationEvents: [],
     // A3.4 · Bloco 4 — fila de espera (aditiva; documento antigo ganha [])
     queue: [],
+    // A3.4 · Bloco 5 — registros de atendimento
+    encounters: [],
   };
 }
 
@@ -79,7 +81,7 @@ export function normalizeDB(raw: unknown): DB {
     'messages', 'campaigns', 'campaignRecipients', 'audit', 'supportSessions',
     'pipelines', 'apiKeys', 'webhooks', 'webhookDeliveries', 'idempotencyKeys', 'integrationLogs',
     'automations', 'automationRuns', 'tasks', 'aiProposals',
-    'integrations', 'integrationEvents', 'queue',
+    'integrations', 'integrationEvents', 'queue', 'encounters',
   ] as const) {
     if (!Array.isArray((base as any)[key])) (base as any)[key] = [];
   }
