@@ -26,7 +26,7 @@ export const ENCOUNTER_STATUS: Record<EncounterStatus, EncounterStatusDef> = {
   },
   finalized: {
     id: 'finalized', label: 'Finalizado', tone: 'green',
-    hint: 'Registro fechado e assinado. Alterações ficam registradas na auditoria.',
+    hint: 'Registro fechado no fim do atendimento. Alterações ficam registradas na auditoria.',
   },
 };
 
@@ -136,6 +136,28 @@ export function encounterPrintBlocks(e: Encounter): EncounterPrintBlock[] {
   push('O que foi feito', e.evolution);
   push('Orientações', e.guidance);
   push('Retorno sugerido', e.followUp);
+  return blocks;
+}
+
+/**
+ * A3.4 (teste humano) — A VIA DO CLIENTE SAI DO QUE ESTÁ NA TELA AGORA.
+ *
+ * A impressão lia o `row` (último payload confirmado pelo servidor), enquanto
+ * a pessoa digita no formulário e o autosave é assíncrono: quem digitava e
+ * clicava em "Imprimir" levava papel em branco. A regra é simples e vale para
+ * sempre: o que sai no papel é o que está VISÍVEL nos campos no instante do
+ * clique — os metadados (cliente, data, profissional, situação) continuam
+ * vindo do registro.
+ *
+ * A anotação interna continua FORA: não é via do cliente.
+ */
+export function encounterFormPrintBlocks(form: EncounterDraftForm): EncounterPrintBlock[] {
+  const blocks: EncounterPrintBlock[] = [];
+  const push = (label: string, value: string) => { if (value && value.trim()) blocks.push({ label, text: value.trim() }); };
+  push('O que o cliente procurou', form.complaint);
+  push('O que foi feito', form.evolution);
+  push('Orientações', form.guidance);
+  push('Retorno sugerido', form.followUp);
   return blocks;
 }
 

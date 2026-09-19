@@ -34,7 +34,7 @@ import { apiGet, apiSend } from '@/lib/api-client';
 import {
   ENCOUNTER_AUTOSAVE_LABELS, ENCOUNTER_AUTOSAVE_MS, ENCOUNTER_LABELS, ENCOUNTER_STATUS,
   ENCOUNTER_VERSION_ERROR, applySaveResult, canEditEncounter, canFinalize, encounterContentPayload,
-  encounterDraftKey, encounterPrintBlocks, encounterSignature, encounterSummary,
+  encounterDraftKey, encounterFormPrintBlocks, encounterSignature, encounterSummary,
   followUpTaskNote, followUpTaskTitle,
 } from '@/lib/encounters';
 import { formatDateBR } from '@/lib/tz';
@@ -268,7 +268,7 @@ export function EncounterSheet({
     apply(res.data!.encounter);
     setConflict(false);
     if (action === 'finalize') {
-      setSaved('Atendimento finalizado e assinado.');
+      setSaved('Atendimento finalizado.');
       // O campo de instrução começa VAZIO: o retorno já anotado aparece como
       // contexto (placeholder) e só entra na nota da tarefa se ninguém
       // escrever nada diferente — nada de repetir o mesmo texto duas vezes.
@@ -333,7 +333,9 @@ export function EncounterSheet({
   }
 
   const statusDef = row ? ENCOUNTER_STATUS[row.status] : null;
-  const printBlocks = row ? encounterPrintBlocks(row) : [];
+  // A3.4 (teste humano): a via do cliente sai do que está VISÍVEL agora — não
+  // do último payload que o autosave confirmou. Metadados seguem do registro.
+  const printBlocks = row ? encounterFormPrintBlocks(form) : [];
 
   return (
     <Drawer
@@ -345,9 +347,9 @@ export function EncounterSheet({
       footer={(
         <>
           {row && (
-            <span className="mr-auto flex items-center gap-2 text-xs text-[var(--text-muted)]">
+            <span className="mr-auto flex w-full min-w-0 flex-wrap items-center gap-2 text-xs text-[var(--text-muted)] sm:w-auto">
               <Badge tone={statusDef!.tone}>{statusDef!.label}</Badge>
-              {row.status === 'finalized' && <span>Assinado por {encounterSignature(row)}</span>}
+              {row.status === 'finalized' && <span>Finalizado por {encounterSignature(row)}</span>}
               {/* Indicador do autosave: discreto, no lugar onde a pessoa olha. */}
               {isDraft && autoState === 'saving' && <span>{ENCOUNTER_AUTOSAVE_LABELS.saving}</span>}
               {isDraft && autoState === 'saved' && !dirty && <span>{ENCOUNTER_AUTOSAVE_LABELS.saved}</span>}
@@ -355,21 +357,21 @@ export function EncounterSheet({
                 && <span className="text-[var(--danger-fg)]">{ENCOUNTER_AUTOSAVE_LABELS.error}</span>}
             </span>
           )}
-          <Button variant="secondary" size="sm" onClick={print} disabled={!row}>
+          <Button variant="secondary" size="sm" onClick={print} disabled={!row} className="w-full sm:w-auto">
             <Icon n="printer" size={13} /> Imprimir via do cliente
           </Button>
           {editable && (
-            <Button variant="secondary" size="sm" onClick={() => { void save(); }} disabled={!!busy || !dirty}>
+            <Button variant="secondary" size="sm" onClick={() => { void save(); }} disabled={!!busy || !dirty} className="w-full sm:w-auto">
               {busy === 'save' ? 'Salvando…' : 'Salvar'}
             </Button>
           )}
           {row && isDraft && (
-            <Button variant="primary" size="sm" onClick={finalize} disabled={!!busy}>
-              {busy === 'finalize' ? 'Finalizando…' : 'Finalizar e assinar'}
+            <Button variant="primary" size="sm" onClick={finalize} disabled={!!busy} className="w-full sm:w-auto">
+              {busy === 'finalize' ? 'Finalizando…' : 'Finalizar atendimento'}
             </Button>
           )}
           {row && !isDraft && canReopen && (
-            <Button variant="warning" size="sm" onClick={() => { void transition('reopen'); }} disabled={!!busy}>
+            <Button variant="warning" size="sm" onClick={() => { void transition('reopen'); }} disabled={!!busy} className="w-full sm:w-auto">
               {busy === 'reopen' ? 'Reabrindo…' : 'Reabrir para editar'}
             </Button>
           )}
@@ -396,7 +398,7 @@ export function EncounterSheet({
 
             {row.status === 'finalized' && (
               <Notice tone="info" title="Registro finalizado">
-                Este documento foi assinado por {encounterSignature(row)}. Alterar exige reabrir — e a
+                Este documento foi finalizado por {encounterSignature(row)}. Alterar exige reabrir — e a
                 reabertura fica registrada na auditoria da unidade.
               </Notice>
             )}
@@ -514,7 +516,7 @@ export function EncounterSheet({
             ))}
             {row.status === 'finalized' && (
               <p style={{ fontSize: 11, marginTop: 28 }}>
-                Assinado por {encounterSignature(row)}
+                Finalizado por {encounterSignature(row)}
                 {row.finalizedAt ? ` em ${new Date(row.finalizedAt).toLocaleString('pt-BR')}` : ''}
               </p>
             )}

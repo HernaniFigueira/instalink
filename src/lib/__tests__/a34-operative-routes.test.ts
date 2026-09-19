@@ -11,7 +11,7 @@
 import './helpers/temp-db';
 
 import fs from 'node:fs';
-import { describe, expect, it, beforeEach } from 'vitest';
+import { describe, expect, it, beforeEach, afterEach, vi } from 'vitest';
 import { NextRequest } from 'next/server';
 import { emptyDB, readDB, writeDB } from '../db';
 import { createSession } from '../auth';
@@ -87,10 +87,17 @@ const json = (res: Response) => res.json() as Promise<any>;
 
 let token = '';
 beforeEach(async () => {
+  // A3.4 (teste humano): HOJE tem relógio. Este arquivo trabalha com o dia de
+  // `TODAY`, então o relógio é FIXO (06:00 no fuso do negócio) — sem isso o
+  // resultado dependeria da hora em que a suíte roda, e o encaixe de 10:30
+  // seria "passado" à tarde.
+  vi.useFakeTimers({ toFake: ['Date'] });
+  vi.setSystemTime(new Date('2026-09-19T09:00:00Z'));
   fs.rmSync(TEMP_DB_FILE, { force: true });
   await seed();
   token = await createSession(OWNER_ID);
 });
+afterEach(() => { vi.useRealTimers(); });
 
 const bookingPayload = (extra: Record<string, unknown> = {}) => ({
   businessId: BUSINESS_ID, asOwner: true, customerName: 'Clara', customerPhone: '11988887777',

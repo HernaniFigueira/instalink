@@ -188,13 +188,13 @@ function NavItem({ item, active, collapsed, href, theme }: {
       )}
       {...(collapsed ? { 'data-tip': item.label } : {})}
     >
-      {/* Marcador do item ativo: pequena ABA de 3px na cor DA SEÇÃO, com
-          extremidades arredondadas — seleção visível sem borda grossa em
-          volta do item e sem depender só do fundo. */}
+      {/* Marcador do item ativo (A3.4 teste humano): o acento acompanha o CARD
+          — uma barra de 3px DENTRO dos cantos arredondados, da altura do item
+          (não uma linha solta no meio). Mesma família de cor da seção, fundo
+          soft: o item ativo parece o mesmo idioma visual dos blocos da agenda. */}
       {active && (
         <span aria-hidden="true" data-nav-rail="true"
-          className={cn('absolute rounded-pill w-[3px]',
-            collapsed ? 'left-0.5 top-1/2 -translate-y-1/2 h-5' : 'left-0.5 top-1/2 -translate-y-1/2 h-6')}
+          className="absolute left-1 top-1.5 bottom-1.5 rounded-pill w-[3px]"
           style={{ backgroundColor: theme.accent }} />
       )}
       {/* O ícone NUNCA troca de família: ativo ou não, usa o acento da seção. */}
@@ -504,14 +504,41 @@ export function DashboardShell({ children }: { children: React.ReactNode }) {
             Clínica": só o nome do negócio.
             O mesmo ícone de painel recolhe e expande — o tooltip diz qual. */}
         <div className={cn('shrink-0 border-b border-[var(--il-nav-border)]', collapsed ? 'px-2 py-3 space-y-2' : 'px-3 py-3 space-y-2.5')}>
+          {/* ── QUEM É A EMPRESA (primeiro) ──
+              A3.4 (teste humano): a identidade vem ANTES da busca. O logo
+              ganhou presença e o nome fica logo abaixo — é a hierarquia que o
+              lojista espera ao abrir o painel. O link "Ver página pública"
+              saiu DESTE bloco (era redundante aqui) e vive no menu da conta,
+              no rodapé, junto das outras ações da conta. */}
+          {collapsed ? (
+            <span title={`${business.name} — workspace atual`}
+              className="flex h-11 w-full items-center justify-center overflow-hidden rounded-xl border border-[var(--il-nav-border)] bg-[var(--il-nav-hover)] text-[13px] font-bold text-[var(--il-nav-fg)]">
+              {business.logo ? (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img src={business.logo} alt="" className="h-full w-full rounded-xl object-cover" />
+              ) : (business.name || '?').trim().slice(0, 1).toUpperCase()}
+            </span>
+          ) : (
+            <div className="min-w-0">
+              <span className="flex h-12 w-12 items-center justify-center overflow-hidden rounded-xl border border-[var(--il-nav-border)] bg-[var(--il-nav-cta)] text-[15px] font-bold text-[var(--il-nav-cta-fg)] shadow-brand">
+                {business.logo ? (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img src={business.logo} alt="" className="h-full w-full object-cover" />
+                ) : (business.name || '?').trim().split(/\s+/).slice(0, 2).map((x) => x[0]?.toUpperCase() || '').join('')}
+              </span>
+              <p className="mt-2 text-[13px] font-bold leading-tight text-[var(--il-nav-fg)] truncate">{business.name}</p>
+            </div>
+          )}
+
+          {/* ── BUSCA + RECOLHER (mesma linha, abaixo da identidade) ── */}
           {collapsed ? (
             <>
-              <NavSearch items={navSearchItems} collapsed activePath={activePath} />
               <button type="button" onClick={toggle} title="Expandir menu" aria-label="Expandir menu"
                 aria-expanded={false}
                 className="flex w-full h-8 items-center justify-center rounded-md text-[var(--il-nav-muted)] hover:text-[var(--il-nav-fg)] hover:bg-[var(--il-nav-hover)] transition-colors">
                 <I n="panel" size={17} />
               </button>
+              <NavSearch items={navSearchItems} collapsed activePath={activePath} />
             </>
           ) : (
             <div className="flex items-center gap-2">
@@ -521,33 +548,6 @@ export function DashboardShell({ children }: { children: React.ReactNode }) {
                 className="shrink-0 w-8 h-8 rounded-md flex items-center justify-center text-[var(--il-nav-muted)] hover:text-[var(--il-nav-fg)] hover:bg-[var(--il-nav-hover)] transition-colors">
                 <I n="panel" size={17} />
               </button>
-            </div>
-          )}
-
-          {/* ── IDENTIDADE DA EMPRESA: logo + nome + página pública ── */}
-          {collapsed ? (
-            <span title={`${business.name} — workspace atual`}
-              className="flex h-9 w-full items-center justify-center overflow-hidden rounded-lg border border-[var(--il-nav-border)] bg-[var(--il-nav-hover)] text-[11px] font-bold text-[var(--il-nav-fg)]">
-              {business.logo ? (
-                // eslint-disable-next-line @next/next/no-img-element
-                <img src={business.logo} alt="" className="h-full w-full rounded-lg object-cover" />
-              ) : (business.name || '?').trim().slice(0, 1).toUpperCase()}
-            </span>
-          ) : (
-            <div className="flex items-start gap-2.5">
-              <span className="flex h-9 w-9 shrink-0 items-center justify-center overflow-hidden rounded-lg border border-[var(--il-nav-border)] bg-[var(--il-nav-cta)] text-[var(--il-nav-cta-fg)] text-[12px] font-bold shadow-brand">
-                {business.logo ? (
-                  // eslint-disable-next-line @next/next/no-img-element
-                  <img src={business.logo} alt="" className="h-full w-full object-cover" />
-                ) : (business.name || '?').trim().split(/\s+/).slice(0, 2).map((x) => x[0]?.toUpperCase() || '').join('')}
-              </span>
-              <div className="min-w-0 flex-1">
-                <p className="text-[12.5px] font-bold leading-tight truncate text-[var(--il-nav-fg)]">{business.name}</p>
-                <a href={`/${business.slug}`} target="_blank" rel="noreferrer"
-                  className="text-[11px] font-semibold text-[var(--il-nav-muted)] hover:text-[var(--il-nav-cta)] inline-flex items-center gap-1 leading-none mt-1.5">
-                  Ver página pública <I n="external" size={10} />
-                </a>
-              </div>
             </div>
           )}
           {!collapsed && businesses.length > 1 && (
@@ -633,6 +633,15 @@ export function DashboardShell({ children }: { children: React.ReactNode }) {
                   {ROLE_LABEL[business?.role || ''] || business?.role || 'Equipe'}
                 </p>
               </div>
+              {/* A porta para a página pública vive AQUI agora: saiu do cabeçalho
+                  da sidebar (era redundante lá), mas continua a um clique —
+                  nada foi removido do sistema. */}
+              {business?.slug && (
+                <a href={`/${business.slug}`} target="_blank" rel="noreferrer" role="menuitem"
+                  className="flex w-full items-center gap-2 rounded-lg px-2 py-2 text-left text-xs font-semibold text-[var(--text)] transition-colors hover:bg-[var(--surface-hover)]">
+                  <I n="external" size={15} /> Ver página pública
+                </a>
+              )}
               {/* Só o que existe de verdade: a conta é administrada em Equipe,
                   e não há preferência de usuário para inventar aqui. */}
               <button type="button" role="menuitem" onClick={logout}

@@ -89,7 +89,12 @@ describe('A3.2 — horizonte e autoridade das rotas reais', () => {
   it.each([true, false])('passado bloqueado para admin=%s (data e hora de hoje)', async (admin) => {
     expect((await (await getSlots('2026-09-17', admin)).json()).slots).toEqual([]);
     expect((await POST(req('POST', body({ asOwner: admin, date: '2026-09-17' })))).status).toBe(400);
-    expect((await POST(req('POST', body({ asOwner: admin, date: '2026-09-18', time: '01:00' })))).status).toBe(409);
+    // A3.4 (teste humano): horário de HOJE que já passou é recusado com a razão
+    // explícita (400), não com o 409 genérico de "ocupado" — a pessoa precisa
+    // saber que o problema é o relógio, não a agenda.
+    const passadoHoje = await POST(req('POST', body({ asOwner: admin, date: '2026-09-18', time: '01:00' })));
+    expect(passadoHoje.status).toBe(400);
+    expect((await passadoHoje.json()).error).toMatch(/passou/i);
   });
   it('usa fuso do Business perto da virada UTC, inclusive no horizonte', async () => {
     vi.setSystemTime(new Date('2026-09-19T01:00:00Z'));

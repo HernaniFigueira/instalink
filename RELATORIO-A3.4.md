@@ -2015,3 +2015,77 @@ Este bloco toca **três arquivos de produto/teste** (`src/components/dashboard/Q
 **dois pontos de design system** (`src/app/globals.css`: token `--queue-rail-maxh`;
 véu do overlay usando `var(--overlay)`). É o **último ajuste do PR #30 antes da revisão
 independente**. **Não mergeado.**
+
+---
+
+# A3.4 — CORREÇÃO FINAL APÓS TESTE HUMANO REAL
+
+Seção do mesmo PR (#30, branch `arena/01a0ba19-instalink`), aberta a partir do que o
+teste humano encontrou em uso. **Sem PR novo, sem merge.** Base do bloco anterior:
+`a028d8f` (A3.4 final UX fix — queue rail and core flow verification).
+
+## A3.4-H.1 — O que o teste humano mostrou
+
+| # | Relato em uso | Causa | Correção |
+|---|---|---|---|
+| 1 | Fila criava um cadastro novo para quem já era cliente | a tela só sabia criar contato mínimo | busca no CRM (nome/WhatsApp, debounce) antes de criar; `contactId` explícito |
+| 2 | Qualquer profissional aparecia para qualquer serviço | o seletor ignorava `service.professionalIds` | dropdown só com elegíveis; 1 elegível → pré-selecionado; 2+ → “Quem estiver livre” |
+| 3 | **Dr. Orlando iniciou “Odonto”** (serviço que não é dele) | a régua vivia só na tela | bloqueio no SERVIDOR em `/api/queue` (assumir/trocar) e `/api/encounters` (registrar) |
+| 4 | Encaixe no passado era aceito | `fit_in` furava o dia atual (só `date < today` era barrado) | `p.date === today && p.time < agora` (fuso do negócio) → recusa; tela avisa antes |
+| 5 | Encaixe pintado de âmbar por cima do status verde | cor de status e marca de encaixe disputavam o fundo | encaixe = acento âmbar (contorno + faixa), SEM fundo; status continua a base |
+| 6 | Atendimento concluído sumia da tela | não havia lugar para o que já foi atendido | seção recolhível **“Atendidos hoje”** na rail, com leitura do registro |
+| 7 | “Finalizar e assinar”/“Assinado por” sugeria assinatura eletrônica | linguagem | “Finalizar atendimento”/“Finalizado por …” (campos internos seguem `signedBy`/`finalizedBy`) |
+| 8 | Via do cliente imprimia vazia logo após digitar | a impressão derivava do último payload, não do que estava visível | impressão monta os blocos do **form atual** (nunca do `row`), `internalNote` continua fora |
+| 9 | Scroll horizontal no celular (agenda, fila e registro) | subtítulo/chips/rodapé esticavam a viewport | `min-w-0`/`truncate`, ações empilhadas, rodapé e inputs em largura total |
+| 10 | Sidebar começava pela busca; “Ver página pública” poluía o topo | hierarquia | identidade da empresa primeiro (logo + nome), busca/recolher depois; link público no menu da conta |
+| 11 | Acento do item ativo era uma linha solta | `border-left` reto | acento acompanha o card (contorno arredondado, fundo soft, cor semântica) |
+
+## A3.4-H.2 — Regras novas (nomes exatos)
+
+- `PROFESSIONAL_NOT_ELIGIBLE_ERROR` (`src/lib/booking.ts`)
+  = **“Este serviço não é atendido por este profissional.”**
+  Usada em `/api/queue` (assumir `in_service` e troca explícita de profissional, 403) e
+  em `/api/encounters` (registro, 403). Serviço **sem** `professionalIds` mantém a
+  política anterior; e quem opera o balcão **sem vínculo** (dono/secretaria) não é
+  bloqueado — não há “vínculo inelegível” a fabricar: o registro segue sem profissional,
+  como sempre foi. O que nunca passa é um profissional CONCRETO que não atende o serviço.
+- `FIT_IN_PAST_ERROR` (`src/lib/fit-in.ts`)
+  = **“Não é possível criar um encaixe em um horário que já passou.”**
+  Fora do encaixe, o passado continua com a mensagem antiga (“Este horário já passou.
+  Escolha um horário a partir de agora.”) — nada de contrato novo em caminho que não
+  seja encaixe.
+- `resolveQueueAssignment` (`src/lib/queue.ts`) e `professionalServesService`/
+  `serviceRequiresProfessional` (`src/lib/booking.ts`) são as réguas puras que a fila e a
+  tela compartilham — mesma pergunta, mesma resposta.
+- `encounterFormPrintBlocks` (`src/lib/encounters.ts`) monta a via do cliente a partir do
+  formulário VISÍVEL (o que o usuário acabou de digitar) e nunca inclui `internalNote`.
+
+## A3.4-H.3 — Gates (medidos neste bloco)
+
+- `npx vitest run` → **91 arquivos, 1644 testes, 0 falhas** (era 90/1611; entram o arquivo
+  novo `a34-human-test-fixes` e 32 contratos de correção).
+- `npx tsc --noEmit` → **0 erros**.
+- `npm run build` → **0**, com `Compiled successfully` e 111/111 páginas; manifest:
+  **135 rotas (92 de API + 43 de tela)**.
+- Smokes (banco local isolado, **nunca Neon de produção**): `smoke` **67 ok / 0 falhas**,
+  `smoke:ux` **87 ok / 0 falhas**, `smoke:agendar` **25 ✓ / 0 ✗**, `smoke:p3` **15/15
+  fluxos**, `smoke:p4` **18/18**, `e2e-merchant` **28 ok / 0 falhas**.
+- Verificação humana em servidor de produção local (`next start`) com sessões reais —
+  dono, secretaria e **PROFISSIONAIS com login próprio** criados via `/api/team` —
+  **25 ✓ / 0 ✗**: cadastro reaproveitado (1 contato, sem duplicar), `contactId` de outra
+  unidade recusado, **cardiologista barrado em Odonto na fila E no registro com a
+  mensagem exata**, dentista assumindo o próprio serviço, recepção impedida de fabricar
+  vínculo inelegível, encaixe 08:00 e 00:05 de hoje recusados + encaixe futuro aceito,
+  concluído saindo da fila viva para o histórico do dia e registro reaberto 1:1.
+
+## A3.4-H.4 — Escopo e ressalvas honestas
+
+- **Não tocado**: rótulo “Início”, Clientes completos para PROFISSIONAL, prontuário novo,
+  WhatsApp e Instagram (nenhuma linha). Nenhum módulo novo.
+- **Sem runner de browser/DOM no projeto** (`vitest` roda em ambiente `node`; não há
+  jsdom/testing-library/playwright instalados): a prova de mobile é por contrato de
+  markup nos três arquivos críticos (sem largura fixa acima da viewport, ações que
+  empilham, rodapé em largura total) mais revisão do CSS. Não se declara teste visual
+  automatizado.
+- **Meta/Instagram seguem `BLOCKED_EXTERNAL`** e o scheduler de cron segue
+  **`BLOCKED_DEPLOYMENT`** — nada disso mudou neste bloco.

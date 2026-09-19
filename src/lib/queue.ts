@@ -77,6 +77,64 @@ export function queuePosition(entries: QueueEntry[], businessId: string, date: s
   return idx < 0 ? 0 : idx + 1;
 }
 
+/**
+ * A3.4 (teste humano) — QUEM ASSUME O ATENDIMENTO NA FILA.
+ *
+ * A fila não pode inventar vínculo: quando o serviço exige profissionais
+ * específicos, quem INICIA o atendimento precisa ser um deles. A regra vale
+ * para os dois lados do balcão:
+ *   • login de PROFISSIONAL sem dono na entrada → assume SE atende o serviço;
+ *     se não atende, o servidor recusa (nada de "Dr. Orlando iniciou Odonto");
+ *   • entrada que já é de outro profissional → mantém quem está (o escopo do
+ *     profissional continua valendo como antes).
+ *
+ * Função pura: o servidor (rota) e a tela (dropdown) leem a MESMA resposta.
+ */
+export interface QueueAssignment {
+  ok: boolean;
+  /** Mensagem pronta para o usuário quando `ok` é falso. */
+  error: string;
+  /** Profissional que passa a valer ('' = quem estiver livre). */
+  professionalId: string;
+}
+
+export function resolveQueueAssignment(input: {
+  /** Profissionais exigidos pelo serviço (vazio = política atual: qualquer ativo). */
+  serviceProfessionalIds?: string[];
+  /** Profissional ativo/elegível da unidade, para a lista vazia do serviço. */
+  activeProfessionalIds?: string[];
+  /** Quem já está na entrada da fila ('' = ainda sem dono). */
+  entryProfessionalId: string;
+  /** Login vinculado a um profissional ('' = quem opera não é profissional). */
+  scopeProfessionalId: string;
+  /** Troca explícita pedida no PATCH (opcional). */
+  requestedProfessionalId?: string;
+  /** Profissionais atendem o serviço? Usado só quando o serviço exige lista. */
+  error?: string;
+}): QueueAssignment {
+  const required = input.serviceProfessionalIds || [];
+  const error = input.error || 'Este serviço não é atendido por este profissional.';
+  const covers = (id: string) => (required.length > 0
+    ? !!id && required.includes(id)
+    : !id || (input.activeProfessionalIds ? input.activeProfessionalIds.includes(id) : true));
+  const requested = input.requestedProfessionalId || '';
+  // 1. Troca explícita: quem foi pedido precisa atender o serviço.
+  if (requested && !covers(requested)) return { ok: false, error, professionalId: '' };
+  // 2. Entrada já com dono: mantém (o escopo já garante que é quem opera).
+  if (input.entryProfessionalId) {
+    if (!covers(input.entryProfessionalId)) return { ok: false, error, professionalId: '' };
+    return { ok: true, error: '', professionalId: requested || input.entryProfessionalId };
+  }
+  // 3. Entrada sem dono: o profissional logado assume se atender o serviço.
+  const scope = input.scopeProfessionalId;
+  if (scope) {
+    if (!covers(scope)) return { ok: false, error, professionalId: '' };
+    return { ok: true, error: '', professionalId: requested || scope };
+  }
+  // 4. Quem opera não é profissional (dono/secretaria): não fabrica vínculo.
+  return { ok: true, error: '', professionalId: requested };
+}
+
 /** Texto curto de espera para o balcão ("há 12 min" · "há 1h05"). */
 export function waitLabel(minutes: number): string {
   if (minutes < 1) return 'agora';

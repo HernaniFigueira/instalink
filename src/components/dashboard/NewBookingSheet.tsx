@@ -7,7 +7,8 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Icon } from '@/components/icons';
 import { PhoneBRInput } from '@/components/dashboard/PhoneBRInput';
-import { todayISO } from '@/lib/tz';
+import { nowHM, todayISO } from '@/lib/tz';
+import { fitInPastError } from '@/lib/fit-in';
 import { adminBookingMaxDate } from '@/lib/booking-ops';
 import { BookingRecurrence } from './BookingRecurrence';
 import type { BookingOccurrence } from '@/lib/booking-recurrence';
@@ -95,6 +96,9 @@ export function NewBookingSheet({ businessId, services, pros, timezone, initial,
   // A2-B5 (F9): "hoje" no fuso do negócio (o servidor continua validando).
   const today = todayISO(new Date(), timezone || undefined);
   const maxDate = adminBookingMaxDate(today);
+  // A3.4 (teste humano): encaixe não fura o passado. A régua é a MESMA do
+  // servidor (`fitInPastError`, no fuso do negócio) — aqui ela AVISA antes.
+  const fitInPast = fitInOpen ? fitInPastError(date, fitInTime, today, nowHM(new Date(), timezone || undefined)) : '';
   const service = bookable.find((s) => s.id === serviceId);
   const eligiblePros = service?.professionalIds?.length
     ? pros.filter((p) => p.active !== false && service.professionalIds.includes(p.id))
@@ -219,6 +223,12 @@ export function NewBookingSheet({ businessId, services, pros, timezone, initial,
     if (onlyDigits(phone).length < 10) { setError('Informe um WhatsApp válido.'); return; }
     const when = opts.timeOverride || time;
     if (!serviceId || !date || !when) { setError('Escolha serviço, data e horário.'); return; }
+    // Encaixe em horário que já passou: recusado AQUI, sem chamar o servidor
+    // (que recusaria do mesmo jeito — a frase é a mesma).
+    if (opts.fitIn) {
+      const past = fitInPastError(date, when, today, nowHM(new Date(), timezone || undefined));
+      if (past) { setError(past); return; }
+    }
     if (opts.fitIn && repeat) { setError('Encaixe não cria série — desligue a repetição.'); return; }
     setSaving(true);
     try {
@@ -447,7 +457,8 @@ export function NewBookingSheet({ businessId, services, pros, timezone, initial,
                     <Field label="Horário do encaixe">
                       <Input type="time" value={fitInTime} onChange={(e) => { setFitInTime(e.target.value); setFitInConflicts([]); setFitInMessage(''); }} className="w-32" />
                     </Field>
-                    <Button type="button" variant="warning" size="sm" disabled={saving || !fitInTime}
+                    <Button type="button" variant="warning" size="sm" disabled={saving || !fitInTime || !!fitInPast}
+                      title={fitInPast || undefined}
                       onClick={() => save({ fitIn: true, confirmFitIn: false, timeOverride: fitInTime })}>
                       {saving ? 'Verificando…' : 'Verificar e encaixar'}
                     </Button>
@@ -476,7 +487,8 @@ export function NewBookingSheet({ businessId, services, pros, timezone, initial,
                       </span>
                     </Notice>
                   )}
-                  {!fitInMessage && (
+                  {fitInPast && !fitInMessage && <Notice tone="warning">{fitInPast}</Notice>}
+                  {!fitInMessage && !fitInPast && (
                     <p className="text-xs text-[var(--text-muted)]">
                       O horário precisa estar dentro do funcionamento do dia e a equipe confirma o conflito quando existir.
                     </p>

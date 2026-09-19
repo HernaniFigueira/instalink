@@ -15,6 +15,8 @@ import { NextRequest, NextResponse } from 'next/server';
 import { randomUUID } from 'node:crypto';
 import { readDB, updateDB } from '@/lib/db';
 import { requireBusiness } from '@/lib/access';
+import { NO_PROFESSIONAL_SCOPE } from '@/lib/access-core';
+import { PROFESSIONAL_NOT_ELIGIBLE_ERROR, professionalServesService, serviceRequiresProfessional } from '@/lib/booking';
 import { pushAudit } from '@/lib/audit';
 import {
   ENCOUNTER_TEXT_FIELDS, ENCOUNTER_VERSION_REQUIRED_ERROR, cleanTags, cleanText, canFinalize,
@@ -162,10 +164,32 @@ export async function POST(req: NextRequest) {
 
     // O profissional do registro é quem atendeu: o escopo manda; sem escopo,
     // o profissional do agendamento (ou o indicado explicitamente).
-    const professionalId = guard.ctx.professionalScope
+    // O papel de PROFISSIONAL sem vínculo vem como sentinela — não é pessoa.
+    const scopeId = guard.ctx.professionalScope === NO_PROFESSIONAL_SCOPE ? '' : (guard.ctx.professionalScope || '');
+    const professionalId = scopeId
       || String(body.professionalId || booking?.professionalId || queueEntry?.professionalId || '');
-    if (booking && guard.ctx.professionalScope && booking.professionalId && booking.professionalId !== guard.ctx.professionalScope) {
+    if (booking && scopeId && booking.professionalId && booking.professionalId !== scopeId) {
       return NextResponse.json({ error: 'Você só registra os seus próprios atendimentos.' }, { status: 403 });
+    }
+    // A fila segue a MESMA régua do agendamento: entrada de outro profissional
+    // não é registrada por quem não é ele.
+    if (queueEntry && scopeId && queueEntry.professionalId && queueEntry.professionalId !== scopeId) {
+      return NextResponse.json({ error: 'Você só registra os seus próprios atendimentos.' }, { status: 403 });
+    }
+    // ── A3.4 (teste humano) — SERVIÇO × PROFISSIONAL, revalidado AQUI ──
+    // A tela já esconde o que não é elegível e a fila já recusa assumir: o
+    // registro é a última porta e não confia em nenhuma das duas. Serviço com
+    // `professionalIds` só é registrado por quem está na lista.
+    //
+    // A régua só vale quando HÁ profissional a conferir: quem opera o balcão
+    // sem vínculo (dono/secretaria) não tem "vínculo inelegível" a fabricar —
+    // o registro segue sem profissional, como sempre foi. O que nunca passa é
+    // um profissional concreto que não atende o serviço.
+    const encounterServiceId = String(body.serviceId || booking?.serviceId || queueEntry?.serviceId || '');
+    const encounterService = (db.services || []).find((s) => s.id === encounterServiceId && s.businessId === businessId);
+    if (encounterService && serviceRequiresProfessional(encounterService) && professionalId
+      && !professionalServesService(encounterService, professionalId, db.professionals || [])) {
+      return NextResponse.json({ error: PROFESSIONAL_NOT_ELIGIBLE_ERROR }, { status: 403 });
     }
 
     const row: Encounter = {
@@ -173,7 +197,7 @@ export async function POST(req: NextRequest) {
       businessId,
       bookingId: booking?.id || '',
       queueId: queueEntry?.id || '',
-      serviceId: String(body.serviceId || booking?.serviceId || queueEntry?.serviceId || ''),
+      serviceId: encounterServiceId,
       professionalId,
       customerId: String(body.customerId || booking?.customerId || ''),
       // Vínculo com o CRM: sem contato explícito, resolvemos pelo telefone do

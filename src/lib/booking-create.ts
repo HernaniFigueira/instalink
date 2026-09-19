@@ -20,7 +20,7 @@ import { onlyDigits } from './utils';
 import { isValidDateISO, isValidClockTime, effectiveTimezone, weekdayOf, todayISO, nowHM } from './tz';
 import { enqueueBookingAutomation, enqueueDueReminders } from './automations';
 import { bookingMaxDate } from './booking-ops';
-import { fitInConflictsFromDB, fitInWarning } from './fit-in';
+import { fitInConflictsFromDB, fitInPastError, fitInWarning } from './fit-in';
 // A2-B1 (F2): o destino do lead passa pela máquina OFICIAL da esteira
 // (pipeline.ts é também importado aqui — dependência circular só de funções,
 // resolvida em runtime; nenhum dos módulos executa o outro no load).
@@ -185,6 +185,14 @@ export function createBookingTx(d: DB, p: CreateBookingParams): {
   if (p.date < today) throw txError('Não é possível agendar no passado.', 400);
   const horizon = bookingMaxDate(today, cfg, isOwner);
   if (p.date > horizon) throw txError('Data fora da agenda disponível.', 400);
+  // A3.4 (teste humano): HOJE tem relógio. A grade já não oferece horário
+  // passado, mas o ENCAIXE entra por fora dela — então a régua do relógio
+  // fica aqui, no caminho único, valendo para todos os chamadores.
+  // (Mensagem específica do encaixe quando for encaixe; genérica no resto.)
+  const pastError = p.date === today ? fitInPastError(p.date, p.time, today, nowHM(nowDate, btz)) : '';
+  if (pastError) {
+    throw txError(p.bookingKind === 'fit_in' ? pastError : 'Este horário já passou. Escolha um horário a partir de agora.', 400);
+  }
 
   const activePros = d.professionals.filter((x) => x.businessId === businessId && x.active !== false);
   const eligible = (service.professionalIds || []).length > 0

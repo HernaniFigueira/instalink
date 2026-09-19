@@ -110,6 +110,30 @@ export function fitInConflictsFromDB(
   return fitInConflicts(enriched, input.professionals, q);
 }
 
+/**
+ * A3.4 (teste humano) — ENCAIXE NÃO FURA O PASSADO.
+ *
+ * O encaixe existe para aceitar um horário FORA da grade — nunca para aceitar
+ * um horário que já passou. A validação de data (`p.date < today`) já existia,
+ * mas o mesmo dia ficava aberto: às 17h era possível "encaixar" as 09h. Aqui
+ * está a régua do MESMO DIA, no fuso do negócio (quem chama passa `today` e
+ * `nowHM` já convertidos).
+ *
+ * O lead time (`leadMin`) continua sendo regra da GRADE — o encaixe é
+ * justamente a decisão humana de sair dela. O que nunca é negociável é o
+ * relógio: horário cronologicamente passado é recusado, com ou sem conflito.
+ */
+export const FIT_IN_PAST_ERROR = 'Não é possível criar um encaixe em um horário que já passou.';
+
+/** '' quando o horário ainda é futuro; a frase única quando já passou. */
+export function fitInPastError(dateISO: string, time: string, todayISO: string, nowHM: string): string {
+  if (!dateISO || dateISO !== todayISO) return '';
+  const t = timeToMin(time);
+  const n = timeToMin(nowHM);
+  if (!Number.isFinite(t) || !Number.isFinite(n)) return '';
+  return t < n ? FIT_IN_PAST_ERROR : '';
+}
+
 /** Mensagem única (servidor + tela falam a MESMA frase). */
 export function fitInWarning(conflicts: FitInConflict[]): string {
   if (conflicts.length === 0) return '';

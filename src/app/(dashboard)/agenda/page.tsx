@@ -30,6 +30,7 @@ import { Avatar, Badge, ListSkeleton, Button, IconButton, AttentionStrip, Tabs }
 import { Icon } from '@/components/icons';
 import {
   ATTENTION_MARK_CLS, ATTENTION_RING_CLS, BOOKING_BLOCK, BOOKING_DOT, BOOKING_STATUS,
+  FIT_IN_MARK_CLS, FIT_IN_STRIPE_CLS,
 } from '@/lib/status';
 import { BookingDetailSheet } from '@/components/dashboard/BookingDetailSheet';
 import { NewBookingSheet } from '@/components/dashboard/NewBookingSheet';
@@ -262,6 +263,9 @@ const GridColumn = memo(function GridColumn({ column, basisPct, variant, highlig
             width: `calc(${b.widthPct}% - 4px)`,
           }}
         >
+          {/* Encaixe = acento (faixa fina no topo), não preenchimento: o fundo
+              do bloco continua sendo o do STATUS. Nada de amarelo sobre verde. */}
+          {b.fitIn && <span aria-hidden="true" className={FIT_IN_STRIPE_CLS} />}
           {/* quem + quando + o quê + em que estado — detalhe fica no drawer. */}
           <span className="block text-[11px] font-bold leading-tight truncate">{b.name}</span>
           {b.height > 34 && <span className="block text-[10px] font-medium leading-tight truncate opacity-90">{b.service}</span>}
@@ -272,7 +276,7 @@ const GridColumn = memo(function GridColumn({ column, basisPct, variant, highlig
               <span className="truncate">{b.statusLabel}</span>
               {/* A3.4 · Bloco 4: o encaixe é visível no cartão — quem olha a
                   grade sabe que aquele horário foi uma decisão da equipe. */}
-              {b.fitIn && <span className="px-1 rounded-sm bg-[var(--attention-bg)] text-[var(--attention-fg)] border border-[var(--attention-border)]">ENCAIXE</span>}
+              {b.fitIn && <span className={`px-1 rounded-sm ${FIT_IN_MARK_CLS}`}>ENCAIXE</span>}
             </span>
           )}
           {b.checkedInAt && (
@@ -1109,9 +1113,15 @@ export default function AgendaPage() {
           <span className="w-9 h-9 shrink-0 rounded-lg bg-gradient-to-br from-[var(--brand)] to-[var(--lilac)] text-white flex items-center justify-center shadow-brand">
             <Icon n="calendar" size={18} />
           </span>
-          <div className="min-w-0">
+          <div className="min-w-0 flex-1">
             <h1 className="text-lg font-bold tracking-tight text-[var(--text)] leading-tight">Agenda</h1>
-            <span className="text-xs text-[var(--text-muted)] truncate">Clique num atendimento para ver o detalhe · arraste para reagendar.</span>
+            {/* A3.4 (teste humano): em 320–430px este texto era um `span`
+                inline com `truncate` (que não corta inline) — ele esticava a
+                página. Agora é bloco truncável: some por corte, nunca por
+                rolagem horizontal. */}
+            <span className="block max-w-full text-xs text-[var(--text-muted)] truncate">
+              Clique num atendimento para ver o detalhe · arraste para reagendar.
+            </span>
           </div>
         </div>
         <Button onClick={() => setCreating({ date: focus, time: '', professionalId: '' })} variant="primary"><Icon n="calendarPlus" size={15} /> Novo agendamento</Button>
@@ -1536,9 +1546,16 @@ export default function AgendaPage() {
                    entrada da fila. */
                 canWrite={!denied}
                 canEncounter={!denied && canEncounter}
+                /* A3.4 (teste humano): a fila busca o cliente no CRM — só faz
+                   sentido para quem tem a permissão de Clientes. */
+                canSearchContacts={permissions.clientes === true}
+                done={queueDone}
+                timezone={bizTz}
                 onChanged={loadQueue}
                 professionals={activePros.map((p) => ({ id: p.id, name: p.name }))}
-                services={services.map((x) => ({ id: x.id, name: x.name }))}
+                /* A regra do serviço (`professionalIds`) vai junto: a fila só
+                   oferece quem ATENDE o serviço escolhido. */
+                services={services.map((x) => ({ id: x.id, name: x.name, professionalIds: x.professionalIds || [] }))}
                 onOpenBooking={(id) => { const b = bookingsRef.current.get(id); if (b) setDetail(b); }}
                 onEncounter={(row) => setQueueEncounter(row)}
                 onOpenClient={(row) => { window.location.href = `/clientes?c=${encodeURIComponent(row.contactId)}`; }}
