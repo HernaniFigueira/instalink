@@ -305,7 +305,7 @@ export const AUTOMATION_ACTION_DEFS: AutomationActionDef[] = [
   {
     type: 'dispatch_webhook', label: 'Enviar webhook de saída', short: 'Enviar webhook',
     hint: 'Avisa um sistema externo pelo canal oficial do P3 (HMAC + retry).',
-    delegate: 'lib/webhooks.ts · dispatchWebhook',
+    delegate: 'lib/integrations/outbound.ts · enqueueOutboundWebhooksTx (entrega pós-commit)',
     requires: 'automation.advanced',
     fields: [
       {

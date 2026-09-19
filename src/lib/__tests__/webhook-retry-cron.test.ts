@@ -21,6 +21,8 @@ import {
   claimPendingWebhookDeliveries,
   countDueWebhookDeliveries,
   dispatchWebhook,
+  enqueueWebhookTx,
+  deliverWebhookIds,
   isWebhookClaimLive,
   isWebhookDeliveryDue,
   processPendingWebhookDeliveries,
@@ -279,17 +281,13 @@ describe('Consumidor automático no banco real (o que o cron executa)', () => {
     expect(stored.map((d) => d.attempts)).toEqual([1, 3, 2]);
   });
 
-  it('a entrega nasce PERSISTIDA com nextRetryAt (callback assíncrono do updateDB)', async () => {
-    // Regressão: o disparo acontece dentro de `updateDB(async …)`. Se a escrita
-    // ocorrer antes do fim do callback, a entrega reivindicada pelo cron nunca
-    // existiria no banco — a fila ficaria permanentemente vazia.
-    await seedStore(null as unknown as WebhookDelivery); // só o webhook
+  it('outbox é persistida antes da primeira tentativa e mantém nextRetryAt', async () => {
+    await seedStore(null); // só o webhook
     const fetchMock = failFetch(500);
     const t0 = Date.now();
-
-    await updateDB(async (db) => {
-      await dispatchWebhook(db, 'lead.created', 'biz-1', { lead: { id: 'lead-1' } }, fetchMock as any);
-    });
+    const ids = await updateDB((db) => enqueueWebhookTx(db, 'lead.created', 'biz-1', { lead: { id: 'lead-1' } }).map((d) => d.id));
+    expect((await readDB()).webhookDeliveries[0].attempts).toBe(0);
+    await deliverWebhookIds(ids, fetchMock as any);
 
     const stored = (await readDB()).webhookDeliveries;
     expect(stored).toHaveLength(1);

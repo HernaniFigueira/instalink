@@ -10,7 +10,7 @@ import {
   ingestLead, getBusinessPipeline, moveLeadStage, assignLead, addLeadNote, updateLeadFields,
   isLegacyLeadStatus, stageForLegacyStatus, normalizeLeadStageId, mapStageToStatus, resolveStageId,
 } from '@/lib/pipeline';
-import { dispatchWebhook } from '@/lib/webhooks';
+import { enqueueWebhookTx, deliverWebhookIds } from '@/lib/webhooks';
 
 function err(message: string, status: number): Error {
   return Object.assign(new Error(message), { status });
@@ -46,6 +46,7 @@ export async function POST(req: NextRequest) {
 
     let result: ReturnType<typeof ingestLead>;
 
+    const webhookDeliveryIds: string[] = [];
     await updateDB((d: DB) => {
       result = ingestLead(d, {
         businessId: business.id,
@@ -67,16 +68,17 @@ export async function POST(req: NextRequest) {
           type: customer ? 'customer' : 'system',
         },
       });
+
+      // Outbox e alteração de negócio no mesmo commit; nenhum HTTP aqui.
+      webhookDeliveryIds.push(...enqueueWebhookTx(d, result!.isNew ? 'lead.created' : 'lead.updated', business.id, {
+        lead: result!.lead,
+        isNew: result!.isNew,
+      }).map((delivery) => delivery.id));
     });
 
     // Disparo de Webhook
     try {
-      await updateDB(async (d: DB) => {
-        await dispatchWebhook(d, result!.isNew ? 'lead.created' : 'lead.updated', business.id, {
-          lead: result!.lead,
-          isNew: result!.isNew,
-        });
-      });
+      await deliverWebhookIds(webhookDeliveryIds);
     } catch { /* noop */ }
 
     return NextResponse.json({ ok: true, guest: !customer, lead: result!.lead });
@@ -163,6 +165,7 @@ export async function PATCH(req: NextRequest) {
     let updatedLead: any = null;
     let stageChanged = false;
 
+    const webhookDeliveryIds: string[] = [];
     await updateDB((d) => {
       const l = d.leads.find((x) => x.id === id && x.businessId === businessId);
       if (!l) throw err('Cliente não encontrado.', 404);
@@ -269,16 +272,17 @@ export async function PATCH(req: NextRequest) {
       }
 
       updatedLead = l;
+
+      // Outbox e alteração de negócio no mesmo commit; nenhum HTTP aqui.
+      if (stageChanged) {
+        webhookDeliveryIds.push(...enqueueWebhookTx(d, 'lead.stage_changed', businessId, { lead: updatedLead }).map((delivery) => delivery.id));
+      }
+      webhookDeliveryIds.push(...enqueueWebhookTx(d, 'lead.updated', businessId, { lead: updatedLead }).map((delivery) => delivery.id));
     });
 
     // Webhooks
     try {
-      await updateDB(async (d: DB) => {
-        if (stageChanged) {
-          await dispatchWebhook(d, 'lead.stage_changed', businessId, { lead: updatedLead });
-        }
-        await dispatchWebhook(d, 'lead.updated', businessId, { lead: updatedLead });
-      });
+      await deliverWebhookIds(webhookDeliveryIds);
     } catch { /* noop */ }
 
     return NextResponse.json({ ok: true, lead: updatedLead });

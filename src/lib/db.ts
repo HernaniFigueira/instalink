@@ -21,6 +21,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { Pool } from 'pg';
+import { runSyncMutation, type SyncMutation } from './db-transaction';
 import type { DB } from './types';
 import { defaultBookingConfig } from './types';
 import { backfillContacts } from './contacts';
@@ -83,7 +84,7 @@ export function normalizeDB(raw: unknown): DB {
   // P3: Normalização defensiva de entregas de webhooks
   for (const d of base.webhookDeliveries as any[]) {
     if (!d.status) d.status = d.deliveredAt ? 'success' : 'failed';
-    if (!d.attempts) d.attempts = 1;
+    if (d.attempts == null) d.attempts = 1; // 0 = outbox persistida antes da primeira tentativa
     if (!d.maxAttempts) d.maxAttempts = 3;
     if (!Array.isArray(d.attemptsHistory)) d.attemptsHistory = [];
     if (!d.eventId) d.eventId = (d.payloadSummary?.id as string) || d.id;
@@ -626,8 +627,8 @@ function withWriteLock<T>(run: () => Promise<T>): Promise<T> {
   return p;
 }
 
-export async function updateDB<T>(fn: (db: DB) => T): Promise<Awaited<T>> {
-  const run = async (): Promise<Awaited<T>> => {
+export async function updateDB<T>(fn: SyncMutation<T>): Promise<T> {
+  const run = async (): Promise<T> => {
     if (usePg()) {
       await pgInit();
       const client = await getPool().connect();
@@ -637,7 +638,7 @@ export async function updateDB<T>(fn: (db: DB) => T): Promise<Awaited<T>> {
         await client.query('INSERT INTO instalink_doc (id, data) VALUES (1, $1) ON CONFLICT (id) DO NOTHING', [JSON.stringify(emptyDB())]);
         const snapshot = await client.query('SELECT data FROM instalink_doc WHERE id = 1 FOR UPDATE');
         const db = normalizeDB(snapshot.rows[0].data);
-        const result: Awaited<T> = await fn(db);
+        const result = runSyncMutation(fn, db);
         prune(db);
         await client.query('UPDATE instalink_doc SET data = $1 WHERE id = 1', [JSON.stringify(db)]);
         await client.query('COMMIT');
@@ -649,11 +650,9 @@ export async function updateDB<T>(fn: (db: DB) => T): Promise<Awaited<T>> {
       } finally { client.release(); }
     }
     const db = await readDB(); // falhou? lança — NADA é escrito
-    // O callback pode ser assíncrono (ex.: disparo de webhook, que enfileira a
-    // entrega depois da 1ª tentativa HTTP): aguardamos a conclusão para que
-    // TODAS as mutações entrem na MESMA gravação. Sem isso, mutações feitas
-    // depois de um `await` dentro do callback eram perdidas na escrita.
-    const result: Awaited<T> = await fn(db); // callback lançou? nada é escrito
+    // Callback estritamente síncrono: validação + mutação, nunca HTTP.
+    // A outbox é gravada aqui; entrega e persistência do resultado vêm depois.
+    const result = runSyncMutation(fn, db); // callback lançou? nada é escrito
     prune(db);
     await writeDB(db);
     // P4 — só há trabalho quando existe execução pronta AGORA (fila, espera
@@ -747,21 +746,21 @@ export interface CasWriteOptions {
  * - Arquivo local: mesma fila de escrita de `updateDB` (uma operação por vez).
  *
  * `fn` deve ser idempotente em relação ao `db` recebido (pode rodar mais de
- * uma vez quando houver conflito) e NÃO deve conter I/O longo (HTTP etc.).
+ * uma vez quando houver conflito). Promise e I/O externo são proibidos.
  */
 export async function updateDBWithCas<T>(
-  fn: (db: DB) => T,
+  fn: SyncMutation<T>,
   options: CasWriteOptions = {},
-): Promise<CasWriteResult<Awaited<T>>> {
+): Promise<CasWriteResult<T>> {
   const attempts = Math.max(1, options.attempts ?? 4);
 
   if (!usePg()) {
     // Modo arquivo: o mutex já torna leitura+escrita indivisíveis aqui.
     return withWriteLock(async () => {
       const db = fileRead(); // falhou? lança — NADA é escrito
-      if (options.guard && !options.guard(db)) return { applied: false, result: null };
-      // Callback assíncrono (quando houver) entra na MESMA gravação.
-      const result: Awaited<T> = await fn(db);
+      if (options.guard && !runSyncMutation(options.guard, db)) return { applied: false, result: null };
+      // CAS também aceita somente mutações síncronas, sem I/O externo.
+      const result = runSyncMutation(fn, db);
       prune(db);
       fileWrite(db);
       return { applied: true, result };
@@ -770,8 +769,8 @@ export async function updateDBWithCas<T>(
 
   for (let attempt = 1; attempt <= attempts; attempt++) {
     const { db, hash } = await pgReadCas();
-    if (options.guard && !options.guard(db)) return { applied: false, result: null };
-    const result: Awaited<T> = await fn(db);
+    if (options.guard && !runSyncMutation(options.guard, db)) return { applied: false, result: null };
+    const result = runSyncMutation(fn, db);
     prune(db);
     if (await pgCasWrite(hash, db)) return { applied: true, result };
   }

@@ -3,7 +3,7 @@ import { requireBusiness } from '@/lib/access';
 import { bookLead } from '@/lib/pipeline';
 import { updateDB } from '@/lib/db';
 import { pushAudit } from '@/lib/audit';
-import { dispatchWebhook } from '@/lib/webhooks';
+import { enqueueWebhookTx, deliverWebhookIds } from '@/lib/webhooks';
 import type { DB } from '@/lib/types';
 
 export async function POST(
@@ -36,6 +36,7 @@ export async function POST(
 
     let result: ReturnType<typeof bookLead>;
 
+    const webhookDeliveryIds: string[] = [];
     await updateDB((d: DB) => {
       result = bookLead(d, {
         business,
@@ -60,20 +61,21 @@ export async function POST(
           time: body.time,
         },
       });
+
+      // Outbox e alteração de negócio no mesmo commit; nenhum HTTP aqui.
+      webhookDeliveryIds.push(...enqueueWebhookTx(d, 'booking.created', businessId, {
+        booking: result!.booking,
+        leadId: lead.id,
+      }).map((delivery) => delivery.id));
+      webhookDeliveryIds.push(...enqueueWebhookTx(d, 'lead.stage_changed', businessId, {
+        lead: result!.lead,
+        newStageId: 'scheduled',
+      }).map((delivery) => delivery.id));
     });
 
     // Webhook
     try {
-      await updateDB(async (d: DB) => {
-        await dispatchWebhook(d, 'booking.created', businessId, {
-          booking: result!.booking,
-          leadId: lead.id,
-        });
-        await dispatchWebhook(d, 'lead.stage_changed', businessId, {
-          lead: result!.lead,
-          newStageId: 'scheduled',
-        });
-      });
+      await deliverWebhookIds(webhookDeliveryIds);
     } catch { /* noop */ }
 
     return NextResponse.json({

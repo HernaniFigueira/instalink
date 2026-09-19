@@ -14,9 +14,10 @@ import type { DB, SafeWebhookConfig, WebhookConfig, WebhookDelivery, WebhookEven
 import { VALID_WEBHOOK_EVENTS } from './types';
 // Escrita condicional (CAS) do banco — usada pelo consumidor automático da
 // fila de retry para que duas execuções não entreguem a mesma tentativa.
-import { updateDBWithCas } from './db';
+import { updateDB, updateDBWithCas } from './db';
 // Guarda de destino (P6): URL de saída apontando para rede interna é recusada
 // na configuração — o mesmo critério vale para todo conector futuro.
+import { assertOutsideDBTransaction } from './db-transaction';
 import { assertOutboundUrlAllowed } from './outbound-url';
 
 export { VALID_WEBHOOK_EVENTS };
@@ -209,6 +210,7 @@ export async function executeDeliveryAttempt(
   secret: string,
   fetchFn: typeof fetch = fetch,
 ): Promise<WebhookDelivery> {
+  assertOutsideDBTransaction();
   const attemptNum = (delivery.attempts || 0) + 1;
   delivery.attempts = attemptNum;
   const now = new Date();
@@ -304,51 +306,52 @@ export async function executeDeliveryAttempt(
   return delivery;
 }
 
-/** Despacha evento para todos os webhooks ativos do negócio (Tentativa 1 imediata + agendamento de retry). */
-export async function dispatchWebhook(
-  db: DB,
-  event: WebhookEvent,
-  businessId: string,
-  data: Record<string, any>,
-  fetchFn: typeof fetch = fetch,
-): Promise<WebhookDelivery[]> {
+/** Outbox síncrona: chamada na MESMA transação do lead/booking/passo da automação.
+ * Não faz HTTP. eventId opcional fornece dedupe por execução+nó na automação.
+ */
+export function enqueueWebhookTx(
+  db: DB, event: WebhookEvent, businessId: string, data: Record<string, any>,
+  eventId = `evt_${randomUUID()}`,
+): WebhookDelivery[] {
   if (!Array.isArray(db.webhooks)) db.webhooks = [];
   if (!Array.isArray(db.webhookDeliveries)) db.webhookDeliveries = [];
-
-  const activeWebhooks = db.webhooks.filter(
-    (w) => w.businessId === businessId && w.active && w.events.includes(event),
-  );
-
-  if (activeWebhooks.length === 0) return [];
-
-  const eventId = `evt_${randomUUID()}`;
   const now = new Date().toISOString();
-  const deliveries: WebhookDelivery[] = [];
-
-  for (const hook of activeWebhooks) {
+  return db.webhooks.filter((w) => w.businessId === businessId && w.active && w.events.includes(event)).map((hook) => {
+    const existing = db.webhookDeliveries.find((d) => d.businessId === businessId && d.webhookId === hook.id && d.eventId === eventId);
+    if (existing) return existing;
     const delivery: WebhookDelivery = {
-      id: randomUUID(),
-      webhookId: hook.id,
-      businessId,
-      event,
-      eventId,
-      url: hook.url,
-      payloadSummary: data || {},
-      status: 'pending',
-      attempts: 0,
-      maxAttempts: 3,
-      attemptsHistory: [],
-      createdAt: now,
-      updatedAt: now,
+      id: randomUUID(), webhookId: hook.id, businessId, event, eventId, url: hook.url,
+      // Fotografia, não referência mutável ao lead que pode mudar no mesmo callback.
+      payloadSummary: structuredClone(data || {}), status: 'pending', attempts: 0,
+      maxAttempts: 3, attemptsHistory: [], createdAt: now, updatedAt: now,
     };
-
-    // Executa a primeira tentativa
-    await executeDeliveryAttempt(delivery, hook.secret, fetchFn);
-
     db.webhookDeliveries.push(delivery);
-    deliveries.push(delivery);
-  }
+    return delivery;
+  });
+}
 
+/** Entrega imediata pós-COMMIT pelo MESMO claim/retry do cron. IDs já persistidos.
+ * Se o processo parar, a outbox continua pendente para o próximo consumidor.
+ */
+export async function deliverWebhookIds(deliveryIds: string[], fetchFn: typeof fetch = fetch): Promise<WebhookDelivery[]> {
+  assertOutsideDBTransaction();
+  if (!deliveryIds.length) return [];
+  return processPendingWebhookDeliveries({ deliveryIds, fetchFn });
+}
+
+/** Helper determinístico para DB em memória (testes/uso embutido), NUNCA em updateDB.
+ * Produção usa enqueueWebhookTx → commit → deliverWebhookIds.
+ */
+export async function dispatchWebhook(
+  db: DB, event: WebhookEvent, businessId: string, data: Record<string, any>,
+  fetchFn: typeof fetch = fetch,
+): Promise<WebhookDelivery[]> {
+  assertOutsideDBTransaction();
+  const deliveries = enqueueWebhookTx(db, event, businessId, data);
+  for (const delivery of deliveries) {
+    const hook = db.webhooks.find((w) => w.id === delivery.webhookId && w.businessId === businessId)!;
+    await executeDeliveryAttempt(delivery, hook.secret, fetchFn);
+  }
   return deliveries;
 }
 
@@ -455,6 +458,8 @@ export const WEBHOOK_RETRY_BATCH_SIZE = 20;
 export const WEBHOOK_RETRY_BUDGET_MS = 8_000;
 
 export interface WebhookRetryRunOptions {
+  /** Restrição interna para entrega imediata pós-commit. Cron omite (toda a fila). */
+  deliveryIds?: string[];
   /** "Agora" da execução (ISO). Injetável para testes determinísticos. */
   nowISO?: string;
   /** Cliente HTTP (injetável em testes). */
@@ -522,10 +527,10 @@ export function isWebhookDeliveryDue(delivery: WebhookDelivery, nowISO = new Dat
 }
 
 /** Quantas entregas estão vencidas e livres de posse ativa (guarda do CAS). */
-export function countDueWebhookDeliveries(db: DB, nowISO = new Date().toISOString()): number {
+export function countDueWebhookDeliveries(db: DB, nowISO = new Date().toISOString(), deliveryIds?: string[]): number {
   if (!Array.isArray(db.webhookDeliveries)) return 0;
   return db.webhookDeliveries.filter(
-    (d) => isWebhookDeliveryDue(d, nowISO) && !isWebhookClaimLive(d, nowISO),
+    (d) => (!deliveryIds || deliveryIds.includes(d.id)) && isWebhookDeliveryDue(d, nowISO) && !isWebhookClaimLive(d, nowISO),
   ).length;
 }
 
@@ -560,7 +565,7 @@ function retryOrderKey(delivery: WebhookDelivery): number {
  */
 export function claimPendingWebhookDeliveries(
   db: DB,
-  options: { nowISO: string; holder: string; leaseMs?: number; limit?: number },
+  options: { nowISO: string; holder: string; leaseMs?: number; limit?: number; deliveryIds?: string[] },
 ): ClaimedWebhookDelivery[] {
   if (!Array.isArray(db.webhookDeliveries)) return [];
   if (!Array.isArray(db.webhooks)) db.webhooks = [];
@@ -571,12 +576,12 @@ export function claimPendingWebhookDeliveries(
   const nowMs = new Date(nowISO).getTime();
 
   const candidates = db.webhookDeliveries
-    .filter((d) => isWebhookDeliveryDue(d, nowISO) && !isWebhookClaimLive(d, nowISO))
+    .filter((d) => (!options.deliveryIds || options.deliveryIds.includes(d.id)) && isWebhookDeliveryDue(d, nowISO) && !isWebhookClaimLive(d, nowISO))
     .sort((a, b) => retryOrderKey(a) - retryOrderKey(b));
 
   const claimed: ClaimedWebhookDelivery[] = [];
   for (const delivery of candidates) {
-    const webhook = db.webhooks.find((w) => w.id === delivery.webhookId);
+    const webhook = db.webhooks.find((w) => w.id === delivery.webhookId && w.businessId === delivery.businessId);
     if (!webhook || !webhook.active) {
       failDeliveryWithoutWebhook(delivery, nowISO);
       continue;
@@ -647,12 +652,12 @@ async function runWebhookRetryOnDb(
   // Mesma seleção da produção (vencidas + sem posse viva de terceiros), sem
   // gravar posse: aqui não há outra instância disputando o mesmo objeto.
   const due = db.webhookDeliveries
-    .filter((d) => isWebhookDeliveryDue(d, nowISO) && !isWebhookClaimLive(d, nowISO))
+    .filter((d) => (!options.deliveryIds || options.deliveryIds.includes(d.id)) && isWebhookDeliveryDue(d, nowISO) && !isWebhookClaimLive(d, nowISO))
     .sort((a, b) => retryOrderKey(a) - retryOrderKey(b))
     .slice(0, limit === Number.POSITIVE_INFINITY ? undefined : Math.max(0, limit));
 
   for (const delivery of due) {
-    const webhook = db.webhooks.find((w) => w.id === delivery.webhookId);
+    const webhook = db.webhooks.find((w) => w.id === delivery.webhookId && w.businessId === delivery.businessId);
     if (!webhook || !webhook.active) {
       failDeliveryWithoutWebhook(delivery, nowISO);
       processed.push(delivery);
@@ -671,18 +676,20 @@ async function runWebhookRetryOnDb(
  * Nenhuma regra de retry nova — apenas a orquestração de quem já existe.
  */
 async function runWebhookRetryOnStore(options: WebhookRetryRunOptions): Promise<WebhookDelivery[]> {
+  assertOutsideDBTransaction();
   const nowISO = options.nowISO || new Date().toISOString();
   const holder = options.holder || `run_${randomUUID()}`;
-  const leaseMs = options.leaseMs ?? envPositiveInt('WEBHOOK_RETRY_LEASE_MS', WEBHOOK_RETRY_CLAIM_LEASE_MS);
+  const requestedLeaseMs = options.leaseMs ?? envPositiveInt('WEBHOOK_RETRY_LEASE_MS', WEBHOOK_RETRY_CLAIM_LEASE_MS);
   const batchSize = options.batchSize ?? envPositiveInt('WEBHOOK_RETRY_BATCH_SIZE', WEBHOOK_RETRY_BATCH_SIZE);
   const budgetMs = options.budgetMs ?? envPositiveInt('WEBHOOK_RETRY_BUDGET_MS', WEBHOOK_RETRY_BUDGET_MS);
   const fetchFn = options.fetchFn || fetch;
+  const leaseMs = Math.max(requestedLeaseMs, budgetMs + 10_000, WEBHOOK_RETRY_CLAIM_LEASE_MS);
 
   // 1) Reivindicação atômica (CAS): duas execuções simultâneas nunca pegam a
   //    mesma entrega — a segunda encontra a posse viva e não reivindica.
   const claim = await updateDBWithCas(
-    (db) => claimPendingWebhookDeliveries(db, { nowISO, holder, leaseMs, limit: batchSize }),
-    { guard: (db) => countDueWebhookDeliveries(db, nowISO) > 0 },
+    (db) => claimPendingWebhookDeliveries(db, { nowISO, holder, leaseMs, limit: batchSize, deliveryIds: options.deliveryIds }),
+    { guard: (db) => countDueWebhookDeliveries(db, nowISO, options.deliveryIds) > 0 },
   );
   const claimed = claim.result || [];
   if (claimed.length === 0) return [];
@@ -694,14 +701,17 @@ async function runWebhookRetryOnStore(options: WebhookRetryRunOptions): Promise<
   for (const item of claimed) {
     if (Date.now() - startedAt >= budgetMs) break;
     await executeDeliveryAttempt(item.delivery, item.secret, fetchFn);
+    // Curta transação por resultado; nunca segura lock enquanto entrega o próximo.
+    await updateDB((db) => applyWebhookRetryResults(db, holder, [item.delivery]));
     processed.push(item.delivery);
   }
-  if (processed.length === 0) return [];
-
-  // 3) Resultado gravado apenas enquanto a posse ainda for desta execução.
-  await updateDBWithCas((db) => applyWebhookRetryResults(db, holder, processed), {
-    guard: (db) => Array.isArray(db.webhookDeliveries) && db.webhookDeliveries.some((d) => d.claimToken === holder),
+  // Libera os itens que não chegaram ao HTTP por falta de orçamento.
+  const remaining = claimed.slice(processed.length);
+  if (remaining.length) await updateDB((db) => {
+    for (const item of remaining) {
+      const target = db.webhookDeliveries.find((d) => d.id === item.delivery.id && d.claimToken === holder);
+      if (target) releaseWebhookClaim(target);
+    }
   });
-
   return processed;
 }

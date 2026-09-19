@@ -19,7 +19,7 @@ beforeEach(() => {
 });
 afterEach(() => vi.unstubAllEnvs());
 it('BEGIN → SELECT FOR UPDATE → callback → UPDATE → COMMIT; libera conexão', async () => {
-  const result = await updateDB(async (d) => {
+  const result = await updateDB((d) => {
     const queries = mock.query.mock.calls.map(([sql]) => sql);
     expect(queries[0]).toBe('BEGIN');
     expect(queries.at(-1)).toMatch(/SELECT.*FOR UPDATE/);
@@ -55,4 +55,21 @@ it('erro de gravação faz rollback e a próxima operação continua funcionando
   mock.query.mockImplementation(async (sql: string) => ({ rows: sql.includes('FOR UPDATE') ? [{ data: emptyDB() }] : [] }));
   expect(await updateDB(() => 'recuperou')).toBe('recuperou');
   expect(mock.release).toHaveBeenCalledTimes(2);
+});
+
+it('recusa callback async antes do corpo/HTTP e faz rollback sem gravar', async () => {
+  const io = vi.fn();
+  // @ts-expect-error Promise proibida também pelo contrato público TypeScript
+  await expect(updateDB(async () => { io(); })).rejects.toThrow(/síncrono/);
+  expect(io).not.toHaveBeenCalled();
+  expect(mock.query.mock.calls.at(-1)?.[0]).toBe('ROLLBACK');
+  expect(mock.query.mock.calls.some(([q]) => q.startsWith('UPDATE'))).toBe(false);
+  expect(mock.release).toHaveBeenCalledOnce();
+});
+it('Promise indireta também é recusada, sem aguardar nem persistir', async () => {
+  const indirect = () => Promise.resolve('não aguardar');
+  // @ts-expect-error Promise indireta também deve falhar no tsc
+  await expect(updateDB(() => indirect())).rejects.toThrow(/Promise/);
+  expect(mock.query.mock.calls.at(-1)?.[0]).toBe('ROLLBACK');
+  expect(mock.query.mock.calls.some(([q]) => q.startsWith('UPDATE'))).toBe(false);
 });

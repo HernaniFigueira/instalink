@@ -8,12 +8,13 @@
 // módulo resolve QUEM entrega.
 //
 // NÃO EXISTE SEGUNDO MOTOR DE RETRY. Para webhooks, a entrega é feita pelo
-// mecanismo do P3 (`dispatchWebhook`: HMAC, timeout, histórico de tentativas,
+// mecanismo do P3 (outbox + claim: HMAC, timeout, histórico de tentativas,
 // fila persistida com posse/lease e o cron `/api/cron/webhooks`). Para canais,
 // o conector é chamado e o resultado é registrado no log do P6 — sem fila
 // paralela.
+import { assertOutsideDBTransaction } from '../db-transaction';
 import type { DB, Integration, IntegrationProviderId, WebhookDelivery, WebhookEvent } from '../types';
-import { dispatchWebhook } from '../webhooks';
+import { dispatchWebhook, enqueueWebhookTx } from '../webhooks';
 import { activeChannelIntegrations } from './connections';
 import { channelConnectorFor, sendChannelMessage, type ChannelSendResult } from './connectors';
 import { recordIntegrationEvent } from './logs';
@@ -51,14 +52,22 @@ export interface OutboundDispatchResult {
   channels: OutboundChannelAttempt[];
 }
 
+/** Parte transacional do destino webhook: só outbox, sem I/O de conector. */
+export function enqueueOutboundWebhooksTx(db: DB, input: Pick<OutboundDispatchInput, 'businessId' | 'event' | 'data'>, eventId?: string): OutboundDispatchResult {
+  const deliveries = enqueueWebhookTx(db, input.event, input.businessId, input.data, eventId);
+  return { webhooks: { destinations: deliveries.length, deliveries }, channels: [] };
+}
+
 /**
  * Despacha um evento para os sistemas externos da unidade.
- * Muta o `db` recebido (as entregas do P3 entram na MESMA gravação do chamador).
+ * Helper em memória, fora de transações. No motor use enqueueOutboundWebhooksTx
+ * seguido de entrega pós-commit; não chamar conectores sob lock.
  */
 export async function dispatchOutboundEvent(
   db: DB,
   input: OutboundDispatchInput,
 ): Promise<OutboundDispatchResult> {
+  assertOutsideDBTransaction();
   const targets = input.targets && input.targets.length > 0 ? input.targets : ['webhook' as OutboundTarget];
   const nowISO = input.nowISO || new Date().toISOString();
   const result: OutboundDispatchResult = { webhooks: { destinations: 0, deliveries: [] }, channels: [] };
