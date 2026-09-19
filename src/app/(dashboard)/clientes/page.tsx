@@ -23,10 +23,10 @@ import { Icon } from '@/components/icons';
 import { NewBookingSheet } from '@/components/dashboard/NewBookingSheet';
 import { NewClientSheet } from '@/components/dashboard/NewClientSheet';
 import { ImportClientsSheet } from '@/components/dashboard/ImportClientsSheet';
+import { usePanelPermissions } from '@/components/dashboard/usePanelPermissions';
 import { ClientProfileDrawer, type Person360 } from '@/components/dashboard/ClientProfileDrawer';
 import { effectiveHorizonDays } from '@/lib/booking-ops';
 import { AccessDenied, useAreaLoad } from '@/components/dashboard/AccessNotice';
-import { usePanelPermissions } from '@/components/dashboard/usePanelPermissions';
 import { apiGet } from '@/lib/api-client';
 
 type ListFilter = 'all' | 'access' | 'noaccess' | 'marketing' | 'attended';
@@ -66,7 +66,11 @@ export default function ClientesPage() {
   const [newClientOpen, setNewClientOpen] = useState(false);
   // A3.4 · Bloco 7 — a base entra e sai em arquivo (CSV).
   const [importOpen, setImportOpen] = useState(false);
-  const [exporting, setExporting] = useState(false);
+  const [exporting, setExporting] = useState('');
+  // A saída COMPLETA (JSON) é de quem administra a unidade — a permissão
+  // genérica de Clientes não despeja a base sensível inteira.
+  const { role } = usePanelPermissions();
+  const canExportFull = ['OWNER', 'ADMIN', 'MASTER'].includes(String(role || '').toUpperCase());
   const [pendingClientOpen, setPendingClientOpen] = useState('');
   const [services, setServices] = useState<any[]>([]);
   const [pros, setPros] = useState<any[]>([]);
@@ -86,23 +90,32 @@ export default function ClientesPage() {
    * é do NAVEGADOR (blob), e não um link direto para a rota, para que uma
    * sessão expirada não termine num arquivo JSON de erro salvo como .csv.
    */
-  async function downloadExport() {
-    setExporting(true);
+  async function downloadExport(kind: 'csv' | 'full' = 'csv') {
+    setExporting(kind);
     setError('');
     try {
-      const res = await fetch(`/api/contacts/export?businessId=${encodeURIComponent(businessId)}`);
-      if (!res.ok) { setError(res.status === 403 ? 'Seu acesso não permite exportar a base.' : 'Não foi possível exportar agora.'); return; }
+      const url = kind === 'full'
+        ? `/api/contacts/export-full?businessId=${encodeURIComponent(businessId)}`
+        : `/api/contacts/export?businessId=${encodeURIComponent(businessId)}`;
+      const res = await fetch(url);
+      if (!res.ok) {
+        setError(res.status === 403
+          ? (kind === 'full' ? 'A saída completa é de quem administra a unidade.' : 'Seu acesso não permite exportar a base.')
+          : 'Não foi possível exportar agora.');
+        return;
+      }
       const blob = await res.blob();
-      const url = URL.createObjectURL(blob);
+      const objectUrl = URL.createObjectURL(blob);
       const a = document.createElement('a');
-      a.href = url;
-      a.download = `clientes-${new Date().toISOString().slice(0, 10)}.csv`;
+      a.href = objectUrl;
+      const stamp = new Date().toISOString().slice(0, 10);
+      a.download = kind === 'full' ? `base-completa-${stamp}.json` : `clientes-${stamp}.csv`;
       a.click();
-      URL.revokeObjectURL(url);
+      URL.revokeObjectURL(objectUrl);
     } catch {
       setError('Não foi possível exportar agora.');
     } finally {
-      setExporting(false);
+      setExporting('');
     }
   }
 
@@ -191,10 +204,17 @@ export default function ClientesPage() {
             <Button variant="secondary" onClick={() => setImportOpen(true)} title="Trazer a base de outro sistema (CSV)">
               <Icon n="upload" size={15} /> Importar
             </Button>
-            <Button variant="secondary" disabled={exporting} title="Baixar a base em CSV"
-              onClick={() => { void downloadExport(); }}>
-              <Icon n="download" size={15} /> {exporting ? 'Gerando…' : 'Exportar'}
+            <Button variant="secondary" disabled={!!exporting} title="Baixar a base em CSV (reimportável)"
+              onClick={() => { void downloadExport('csv'); }}>
+              <Icon n="download" size={15} /> {exporting === 'csv' ? 'Gerando…' : 'Exportar CSV'}
             </Button>
+            {canExportFull && (
+              <Button variant="secondary" disabled={!!exporting}
+                title="Histórico completo em JSON (cadastro, perfil, agendamentos, conversas, tarefas)"
+                onClick={() => { void downloadExport('full'); }}>
+                <Icon n="download" size={15} /> {exporting === 'full' ? 'Gerando…' : 'Exportar tudo (JSON)'}
+              </Button>
+            )}
             <Button variant="primary" onClick={() => setNewClientOpen(true)}>
               <Icon n="plus" size={15} strokeWidth={2.6} /> Novo cliente
             </Button>

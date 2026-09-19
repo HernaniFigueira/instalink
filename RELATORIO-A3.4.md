@@ -737,50 +737,118 @@ trazê-la: só restava cadastrar pessoa por pessoa — ou pedir ao suporte. E a
 base que já está aqui também não saía em lugar nenhum (nem para backup, nem
 para uma campanha externa, nem para conferência).
 
+O bloco foi entregue em duas voltas. A primeira (`af53f81`) trouxe o fluxo
+funcionando; a segunda reescreveu o contrato onde ele era **perigoso**:
+atualizar cadastro existente por padrão, erro de CPF/nascimento passando,
+célula de planilha executável e saída sem histórico. O contrato que vale é o
+descrito abaixo.
+
 ### O que foi criado
 
 | Onde | Mudança |
 |---|---|
-| `lib/client-import.ts` | **novo, puro** — leitura de CSV como o arquivo VEM (`;`, `,`, TAB, BOM, aspas, aspas escapadas, quebra de linha dentro da célula), cabeçalho em português ou inglês com acento e variações, normalização dos valores (telefone BR, data, sim/não) e o **planejador** da importação (`buildImportPlan`). |
+| `lib/client-import.ts` | **novo, puro** — leitura de CSV como o arquivo VEM (`;`, `,`, TAB, BOM, aspas, aspas escapadas, quebra de linha dentro da célula), cabeçalho em português ou inglês com acento e variações, **mapeamento escolhido pelo usuário**, normalização dos valores (telefone BR, data e CPF de verdade, sim/não) e o **planejador** da importação (`buildImportPlan`) — o mesmo para CSV e XLSX. |
+| `lib/xlsx-lite.ts` | **novo, só no servidor** — leitor mínimo de `.xlsx` (ZIP + XML, primeira aba, texto compartilhado, data serial) usando só `node:zlib`. Nenhuma dependência nova: o pacote `xlsx` do npm está parado numa versão com CVE conhecida (prototype pollution) e o SheetJS saiu do npm. |
 | `lib/client-export.ts` | **novo, puro** — quais contatos da unidade entram no arquivo (busca por nome/telefone/e-mail/CPF, filtro de consentimento, teto de 5.000 linhas) e ordem estável (nome, depois id) para duas exportações serem comparáveis. |
-| `POST /api/contacts/import` | prévia (`mode:'preview'`) e gravação (`mode:'commit'`). A prévia **não escreve nada**; a gravação **recalcula o plano dentro da transação** (a base pode ter mudado entre conferir e confirmar). |
-| `GET /api/contacts/export` | CSV da unidade, com `Content-Disposition` de download. Exportar dado pessoal fica **auditado** (`contact.exported`). |
-| `ImportClientsSheet` | painel do fluxo em duas etapas: escolher arquivo **ou** colar, prévia linha por linha (situação + o que vai acontecer), botão de importar com a contagem, e **baixar modelo**. |
-| Clientes (página) | botões **Importar** e **Exportar** no cabeçalho, ao lado de "Novo cliente". |
+| `POST /api/contacts/import` | prévia (`mode:'preview'`) e gravação (`mode:'commit'`), com `existingMode` e `mapping` validados **no servidor**. A prévia **não escreve nada**; a gravação **recalcula o plano dentro da transação** (a base pode ter mudado entre conferir e confirmar). |
+| `GET /api/contacts/export` | CSV da unidade, reimportável nos campos que a importação entende. Exportar dado pessoal fica **auditado** (`contact.exported`). |
+| `GET /api/contacts/export-full` | **novo** — o histórico completo em JSON (cadastro, perfil, endereço, responsável, etiquetas, observações administrativas, agendamentos, leads, tarefas, conversas e mensagens). |
+| `ImportClientsSheet` | as etapas do produto: **arquivo → prévia → mapeamento → validar → importar → resultado**, com o modo de quem já existe, o **relatório de erros** para baixar e o modelo da planilha. |
+| Clientes (página) | botões **Importar**, **Exportar CSV** e **Exportar tudo (JSON)** no cabeçalho, ao lado de "Novo cliente". |
 | `icons.tsx` | ícone `download`. |
 
 ### Decisões
 
+- **A importação NUNCA sobrescreve.** O padrão é *Manter cadastros existentes*:
+  quem já está na base sai do arquivo com a mensagem “Já existe — não será
+  alterado.” — nome, telefone, e-mail, perfil e consentimento ficam exatamente
+  como estavam. Quem quiser aproveitar o arquivo liga, de propósito,
+  *Preencher somente dados que estiverem vazios*: o campo só recebe valor se
+  **estiver vazio mesmo** (mesma regra para perfil, endereço, responsável e
+  etiquetas). Não existe “sobrescrever tudo” nesta etapa — é o comportamento
+  que perde dado sem aviso.
 - **A identidade é a do CRM.** Telefone em dígitos, e-mail em minúsculas —
-  **nunca o nome**. Quem já está na base é *atualizado* (nunca duplicado), e
-  duplicidade dentro do próprio arquivo conta uma vez (a segunda linha vira
-  “repetido”, apontando em qual linha o primeiro apareceu).
-- **Conferir antes de escrever.** A prévia mostra, por linha, o que vai
-  acontecer — inclusive as **colunas que não foram reconhecidas**. Linha com
-  dado torto (DDD inexistente, e-mail incompleto, sem telefone nem e-mail) vira
-  **erro** e **não entra**: a régua é a mesma do Bloco 6.
-- **Consentimento não se presume.** A coluna de marketing só liga o opt-in
-  quando o arquivo diz explicitamente “sim”; ausente, o que estava na ficha
-  continua como estava.
-- **A coluna desconhecida continua desconhecida.** Aliases curtos (`numero`,
-  `uf`, `rua`) casam só por igualdade: “Número da sorte” é reportada como
-  coluna não reconhecida em vez de virar o número do endereço.
-- **Ida e volta.** O CSV exportado é lido pela própria importação — há teste
-  garantindo o ciclo completo (exportar → importar → mesmos dados).
+  **nunca o nome**. Duplicidade dentro do arquivo conta uma vez (a segunda linha
+  vira “repetido”, apontando em qual linha o primeiro apareceu).
+- **Cadastros diferentes não se misturam.** Telefone que pertence a um contato e
+  e-mail que pertence a outro → **erro**, nunca fusão automática: “Telefone e
+  e-mail pertencem a cadastros diferentes. Revise esta linha.” A mesma colisão
+  **entre duas linhas do arquivo** também é erro (a tabela de identidade dos
+  registros planejados considera todas as chaves).
+- **Consentimento não se presume nem se desfaz.** A coluna de marketing só
+  **liga** o opt-in quando o arquivo diz explicitamente “sim”; vazio não
+  presume, e “não” nunca desliga o que já estava aceito.
+- **CPF e data são conferidos de verdade.** O CPF passa por dígito verificador
+  (`isValidCpf`) — 11 dígitos com DV errado é erro, não campo preenchido. A data
+  de nascimento passa pelo calendário real: 31/02 é erro (29/02/1992 não é).
+- **A observação do arquivo NÃO é descartada.** Ela é observação
+  **administrativa**: quando o campo canônico está vazio, vai para lá; quando já
+  havia uma, entra no **histórico** com autor e auditoria (`contact.note_added`,
+  origem `importacao`) — nunca sobrepõe e nunca desaparece. Nada disso vira
+  registro de atendimento.
+- **Etiquetas ida e volta.** Tags/Etiquetas são reconhecidas, normalizadas
+  (sem repetição, dentro dos limites do perfil) e sobrevivem ao ciclo
+  exportar → importar — há teste para isso.
+- **Coluna desconhecida continua desconhecida.** Aliases curtos (`numero`, `uf`,
+  `rua`) casam só por igualdade: “Número da sorte” é reportada como não
+  reconhecida em vez de virar o número do endereço. E o CSV exportado **diz o
+  que é só saída**: `Origem`, `Criado em` e `Última interação` são reconhecidas
+  e **deliberadamente ignoradas** na volta (reimportar não recria histórico) —
+  o produto não promete “ida e volta completa” para o que não volta.
+- **Célula não é código.** Todo valor que sai (CSV e relatório de erros) passa
+  por `spreadsheetSafeCell`: aspas não bastam contra fórmula — uma célula que
+  começa com `=`, `+`, `-` ou `@` é neutralizada, e a leitura desfaz a proteção
+  para o dado voltar íntegro.
+- **Mapeamento é do usuário, mas quem decide é o servidor.** A tela sugere o que
+  detectou e, para o que não reconheceu, oferece um dropdown por coluna
+  (Ignorar/Nome/Telefone/E-mail/CPF/Nascimento/CEP/Rua/Número/Complemento/
+  Bairro/Cidade/UF/Tags/Observação/Marketing), recalculando a prévia. O
+  servidor **valida** o mapeamento: índice que não existe no arquivo ou a mesma
+  coluna apontando para dois campos devolve 400 com explicação.
+- **Excel de verdade, sem dependência insegura.** `.xlsx` é aceito (primeira
+  aba, mesmos limites, matriz montada no servidor) e entra no **mesmo
+  planejador** do CSV; o parser `xlsx-lite.ts` é *server-only* e não vai para o
+  bundle do navegador.
+- **A saída completa é de quem responde pela unidade.** `export-full` exige
+  OWNER/ADMIN/MASTER — a permissão genérica de Clientes **não** despeja a base.
+  Cada seção é escrita campo a campo (nunca um objeto do banco): **não saem**
+  senhas/hashes, sessões, chaves de API, segredos de webhook, tokens da Meta
+  (`encryptedAccessToken`) nem dados de outra unidade, e o arquivo **declara**
+  o que ficou de fora. Registro de atendimento é dado clínico: só vai para quem
+  tem a permissão `atendimento`. Toda saída é auditada (ator, formato,
+  quantidade, data).
+- **Erro tem relatório.** Linhas que não entram podem ser baixadas em CSV
+  (linha original, nome, telefone, e-mail, motivo) — também à prova de fórmula —
+  para corrigir a planilha e tentar de novo.
 
 ### Testes
 
-`src/lib/__tests__/a34-client-import.test.ts` (16 casos): separadores e
-cabeçalhos, aspas e multilinha, normalização de data/sim-não, identidade
-(nunca por nome), plano separando novo/atualização/repetido/erro, colunas
-desconhecidas, modelo e exportação relidos pela importação — e, nas rotas
-reais com banco temporário: prévia que **não grava**, commit que cria +
-atualiza + aplica perfil com auditoria, **reimportação idempotente**, fronteira
-entre unidades, exportação com filtro/consentimento e ordem estável.
+`src/lib/__tests__/a34-client-import.test.ts` (17 casos): separadores e
+cabeçalhos, aspas e multilinha, normalização de data/sim-não, identidade (nunca
+por nome), plano separando novo/complementa/repetido/erro, colunas
+desconhecidas, modelo e exportação relidos pela importação — e, nas rotas reais
+com banco temporário: prévia que **não grava**, commit que cria sem tocar em
+quem já existe, `fill_empty` completando só o vazio, e **reimportação
+idempotente**.
+
+`src/lib/__tests__/a34-client-import-integrity.test.ts` (25 casos — a segunda
+volta): SKIP padrão não altera nada, `fill_empty` não substitui campo
+preenchido, consentimento (só “sim” liga, vazio não presume, existente não cai),
+conflito telefone×e-mail entre cadastros e entre linhas, CPF com DV errado,
+31/02, CPF do responsável, observação persistida (campo canônico e histórico com
+autor), etiquetas ida e volta, `=HYPERLINK(...)`/`+cmd...`/`@foo` neutralizados,
+mapeamento customizado e mapeamento inválido recusado, `.xlsx` real (ZIP
+gerado no teste) importado pelas rotas, leitor de `.xlsx` recusando arquivo que
+não é planilha, saída completa negada a quem não administra, negada entre
+unidades, sem atendimento quando falta a permissão e **sem nenhum segredo** no
+arquivo, CSV reimportável com as colunas de histórico declaradas — e o fluxo da
+tela conferido no código-fonte (etapas, dropdowns, relatório de erros, botão da
+saída completa).
 
 ```
-npx vitest run src/lib/__tests__/a34-client-import.test.ts → 16 ok
-npx vitest run  → 84 arquivos · 1416 testes ok
+npx vitest run src/lib/__tests__/a34-client-import-integrity.test.ts → 25 ok
+npx vitest run src/lib/__tests__/a34-client-import.test.ts           → 17 ok
+npx vitest run  → 85 arquivos · 1442 testes ok
 npx tsc --noEmit → 0 erros
-npm run build    → ok (109 páginas)
+npm run build    → ok (Compiled successfully; /api/contacts/export-full criada)
 ```

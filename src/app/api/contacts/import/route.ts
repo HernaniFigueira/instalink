@@ -6,23 +6,37 @@
 //   POST { mode: 'preview' }  → devolve o PLANO (o que cada linha faria)
 //   POST { mode: 'commit' }   → aplica o plano
 //
-// A prévia e a gravação usam o MESMO planejador puro (`lib/client-import`), e
-// a gravação RODA O PLANO DE NOVO dentro da transação — o arquivo não é fonte
-// de verdade sobre a base: se alguém criou o contato no meio do caminho, a
-// linha vira atualização em vez de cadastro duplicado.
+// Aceita CSV (texto) e .xlsx (base64) — os dois passam pelo MESMO planejador
+// puro. O mapeamento de colunas pode vir da tela e é VALIDADO aqui: o navegador
+// não é autoridade sobre o que entra na base.
 //
-// A identidade é a do CRM (`findContact`): telefone em dígitos, e-mail em
-// minúsculas, nunca nome. A régua dos campos é a do Bloco 6.
+// Contratos que esta rota garante:
+//   • cadastro existente **não é sobrescrito**: o padrão é `skip_existing`
+//     ("Já existe — não será alterado") e a opção explícita é `fill_empty`
+//     (completa só o que está vazio, campo por campo);
+//   • telefone de um cadastro + e-mail de outro = **erro** (`identity_conflict`),
+//     nunca merge automático;
+//   • CPF passa pelo dígito verificador e nascimento pelo calendário real;
+//   • consentimento de marketing só LIGA com "sim" explícito — nunca desliga;
+//   • a gravação RECALCULA o plano dentro da transação (o arquivo não é fonte
+//     de verdade sobre a base).
 import { NextRequest, NextResponse } from 'next/server';
 import { updateDB } from '@/lib/db';
 import { requireBusiness } from '@/lib/access';
 import { pushAudit } from '@/lib/audit';
-import { upsertContact } from '@/lib/contacts';
+import { addContactNote, upsertContact } from '@/lib/contacts';
 import { normalizeContactProfile, profileOf } from '@/lib/contact-profile';
 import {
-  IMPORT_MAX_CHARS, buildImportPlan, importSummary, parseImportFile,
+  IMPORT_MAX_CHARS, buildImportPlan, fillEmptyUpdates, importSummary, parseImportFile, parseMatrix,
+  type ExistingMode, type ImportMappingInput, type ParsedFile,
 } from '@/lib/client-import';
+import { xlsxBase64ToMatrix } from '@/lib/xlsx-lite';
 import type { DB } from '@/lib/types';
+
+function existingModeOf(body: Record<string, any>): ExistingMode {
+  // Padrão do produto: NÃO mexer em quem já existe.
+  return String(body.existingMode || body.existing || '') === 'fill_empty' ? 'fill_empty' : 'skip';
+}
 
 export async function POST(req: NextRequest) {
   try {
@@ -31,18 +45,48 @@ export async function POST(req: NextRequest) {
     const guard = await requireBusiness(req, businessId, 'clientes');
     if (!guard.ok) return guard.res;
 
-    const csv = String(body.csv || '');
     const mode = String(body.mode || 'preview') === 'commit' ? 'commit' : 'preview';
-    if (!csv.trim()) return NextResponse.json({ error: 'Cole ou escolha um arquivo CSV com a base.' }, { status: 400 });
-    if (csv.length > IMPORT_MAX_CHARS) {
-      return NextResponse.json({ error: 'Arquivo grande demais (máximo ~2 MB). Divida em partes.' }, { status: 400 });
+    const existingMode = existingModeOf(body);
+    const mapping = (body.mapping && typeof body.mapping === 'object' ? body.mapping : undefined) as ImportMappingInput | undefined;
+    const fileName = String(body.fileName || '');
+    const base64 = String(body.fileBase64 || '');
+    const csv = String(body.csv || '');
+
+    // ── Ler o arquivo (CSV ou planilha) ─────────────────────────
+    let parsed: ParsedFile;
+    if (base64) {
+      if (base64.length > IMPORT_MAX_CHARS * 2) {
+        return NextResponse.json({ error: 'Arquivo grande demais. Divida a planilha em partes.' }, { status: 400 });
+      }
+      let matrix: string[][];
+      try {
+        matrix = xlsxBase64ToMatrix(base64);
+      } catch (e: any) {
+        return NextResponse.json({ error: e?.message || 'Não consegui ler esta planilha.' }, { status: 400 });
+      }
+      parsed = parseMatrix(matrix, { mapping, delimiter: 'xlsx' });
+    } else {
+      if (!csv.trim()) return NextResponse.json({ error: 'Cole ou escolha um arquivo com a base (CSV ou .xlsx).' }, { status: 400 });
+      if (csv.length > IMPORT_MAX_CHARS) {
+        return NextResponse.json({ error: 'Arquivo grande demais (máximo ~2 MB). Divida em partes.' }, { status: 400 });
+      }
+      parsed = parseImportFile(csv, mapping);
+    }
+    if (parsed.headerError) {
+      // Mesmo sem coluna de nome/telefone, devolvemos as colunas lidas para a
+      // tela montar o mapeamento manual — e o usuário resolve sem editar o arquivo.
+      return NextResponse.json({
+        error: parsed.headerError,
+        columns: parsed.columns,
+        mappingErrors: parsed.mappingErrors,
+      }, { status: 400 });
+    }
+    if (parsed.mappingErrors.length > 0) {
+      return NextResponse.json({ error: parsed.mappingErrors[0], columns: parsed.columns }, { status: 400 });
     }
 
-    const parsed = parseImportFile(csv);
-    if (parsed.headerError) return NextResponse.json({ error: parsed.headerError }, { status: 400 });
-
     const existing = guard.db.contacts.filter((c) => c.businessId === businessId);
-    const plan = buildImportPlan(parsed, existing);
+    const plan = buildImportPlan(parsed, existing, { existingMode });
 
     if (mode === 'preview') {
       return NextResponse.json({
@@ -50,51 +94,73 @@ export async function POST(req: NextRequest) {
         mode,
         summary: importSummary(plan),
         plan,
+        source: { fileName, kind: base64 ? 'xlsx' : 'csv' },
       });
     }
 
     // ── Gravação ────────────────────────────────────────────────
-    // O plano é RECALCULADO aqui dentro: entre a prévia e a confirmação a base
-    // pode ter mudado (outra pessoa cadastrou, o WhatsApp criou o contato…).
     const result = await updateDB((db: DB) => {
       const current = db.contacts.filter((c) => c.businessId === businessId);
-      const fresh = buildImportPlan(parsed, current);
+      const fresh = buildImportPlan(parsed, current, { existingMode });
       const now = new Date().toISOString();
       let created = 0;
-      let updated = 0;
+      let filled = 0;
+      let notes = 0;
 
       for (const row of fresh.rows) {
-        if (row.action !== 'create' && row.action !== 'update') continue;
-        const before = row.contactId ? db.contacts.find((c) => c.id === row.contactId) : undefined;
-        const contact = upsertContact(db, {
-          businessId,
-          customerId: before?.customerId || '',
-          name: row.name,
-          phone: row.phone,
-          email: row.email,
-          // Consentimento de marketing NUNCA é presumido: só entra o que o
-          // arquivo diz explicitamente (coluna ausente = não mexe).
-          marketingOptIn: row.marketingOptIn ? true : (before?.marketingOptIn === true),
-          source: before?.source || 'importacao',
-          now,
-        });
-        if (!contact) continue;
-        if (before) updated += 1; else created += 1;
+        if (row.action === 'skip' || row.action === 'error') continue;
 
-        // Perfil rico (CPF/nascimento/endereço): MESMA normalização do cadastro,
-        // aplicada por cima do que já existia — nunca apaga o que não veio no
-        // arquivo (o merge é parcial por campo, como no PATCH da ficha).
-        if (row.cpf || row.birthDate || row.cep || row.street || row.city || row.state) {
-          const patch = {
+        if (row.action === 'create') {
+          const contact = upsertContact(db, {
+            businessId, customerId: '', name: row.name, phone: row.phone, email: row.email,
+            // Consentimento só entra quando o arquivo diz "sim" — nunca presumido.
+            marketingOptIn: row.marketingOptIn === true,
+            source: 'importacao', now,
+          });
+          if (!contact) continue;
+          created += 1;
+          // Perfil completo (CPF/nascimento/endereço/responsável/etiquetas) e a
+          // observação administrativa usam as MESMAS funções do cadastro normal.
+          contact.profile = normalizeContactProfile({
             cpf: row.cpf || undefined,
             birthDate: row.birthDate || undefined,
-            address: (row.cep || row.street || row.number || row.city || row.state) ? {
-              cep: row.cep || undefined, street: row.street || undefined,
-              number: row.number || undefined, city: row.city || undefined, state: row.state || undefined,
-            } : undefined,
-          };
-          contact.profile = normalizeContactProfile(patch, profileOf(contact));
+            adminNote: row.note || undefined,
+            tags: row.tags.length > 0 ? row.tags : undefined,
+            address: addressPatchOf(row),
+            guardian: guardianPatchOf(row),
+          }, profileOf(contact));
+          continue;
         }
+
+        // ── fill_empty: SÓ campo vazio recebe valor ──
+        const target = db.contacts.find((c) => c.id === row.contactId && c.businessId === businessId);
+        if (!target) continue;
+        const updates = fillEmptyUpdates(row, target);
+        if (updates.contact.name) target.name = updates.contact.name;
+        if (updates.contact.email) target.email = updates.contact.email;
+        if (Object.keys(updates.profile).length > 0) {
+          target.profile = normalizeContactProfile(updates.profile, profileOf(target));
+        }
+        // Observação: campo canônico quando vazio; senão HISTÓRICO auditável
+        // (nada é sobrescrito e nada desaparece).
+        if (updates.adminNote) {
+          target.profile = normalizeContactProfile({ adminNote: updates.adminNote }, profileOf(target));
+        }
+        if (updates.historyNote) {
+          const note = addContactNote(target, {
+            text: updates.historyNote, by: guard.ctx.user.id, byName: guard.ctx.user.name, at: now,
+          });
+          if (note) {
+            notes += 1;
+            pushAudit(db, {
+              action: 'contact.note_added', actor: guard.ctx.user, businessId,
+              meta: { contactId: target.id, noteId: note.id, origin: 'importacao' },
+            }, now);
+          }
+        }
+        if (updates.marketingOptIn) target.marketingOptIn = true; // nunca desliga
+        target.updatedAt = now;
+        filled += 1;
       }
 
       pushAudit(db, {
@@ -102,18 +168,22 @@ export async function POST(req: NextRequest) {
         actor: guard.ctx.user,
         businessId,
         meta: {
-          created, updated, skipped: fresh.skip, errors: fresh.error,
-          total: fresh.total, columns: Object.keys(fresh.mapped),
+          created, filled, notes, skipped: fresh.skip, errors: fresh.error,
+          total: fresh.total, existingMode, source: base64 ? 'xlsx' : 'csv', fileName,
         },
       });
-      return { created, updated, skipped: fresh.skip, errors: fresh.error, total: fresh.total, rows: fresh.rows };
+
+      return { created, filled, notes, skipped: fresh.skip, errors: fresh.error, total: fresh.total, rows: fresh.rows };
     });
 
     return NextResponse.json({
       ok: true,
       mode,
       summary: importSummary({ ...plan, rows: result.rows } as any),
-      result: { created: result.created, updated: result.updated, skipped: result.skipped, errors: result.errors, total: result.total },
+      result: {
+        created: result.created, filled: result.filled, notes: result.notes,
+        skipped: result.skipped, errors: result.errors, total: result.total,
+      },
       plan: { ...plan, rows: result.rows },
     });
   } catch (e: any) {
@@ -121,4 +191,24 @@ export async function POST(req: NextRequest) {
     if (status === 500) console.error('[contacts/import] falhou:', e);
     return NextResponse.json({ error: status === 500 ? 'Não foi possível importar a base agora.' : e.message }, { status });
   }
+}
+
+/** Endereço do arquivo → patch parcial (só o que veio). */
+function addressPatchOf(row: { cep?: string; street?: string; number?: string; complement?: string; district?: string; city?: string; state?: string }) {
+  const address = {
+    cep: row.cep || undefined, street: row.street || undefined, number: row.number || undefined,
+    complement: row.complement || undefined, district: row.district || undefined,
+    city: row.city || undefined, state: row.state || undefined,
+  };
+  return Object.values(address).some(Boolean) ? address : undefined;
+}
+
+/** Responsável do arquivo → patch parcial. */
+function guardianPatchOf(row: { guardianName?: string; guardianPhone?: string; guardianCpf?: string }) {
+  const guardian = {
+    name: row.guardianName || undefined,
+    phone: row.guardianPhone || undefined,
+    cpf: row.guardianCpf || undefined,
+  };
+  return Object.values(guardian).some(Boolean) ? guardian : undefined;
 }

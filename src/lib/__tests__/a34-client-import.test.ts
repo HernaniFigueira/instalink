@@ -19,8 +19,9 @@ import { createSession } from '../auth';
 import { POST as importPOST } from '@/app/api/contacts/import/route';
 import { GET as exportGET } from '@/app/api/contacts/export/route';
 import {
-  buildImportPlan, detectDelimiter, exportContactsCSV, importIdentityKey, importSummary,
-  importTemplateCSV, mapHeader, parseBirthDate, parseCSV, parseImportFile, parseYesNo, toCSVRow,
+  buildImportPlan, detectDelimiter, exportContactsCSV, fillEmptyUpdates, importIdentityKey, importSummary,
+  importTemplateCSV, mapHeader, parseBirthDate, parseCSV, parseImportFile, parseYesNo, spreadsheetSafeCell,
+  toCSVRow, undoSpreadsheetEscape,
 } from '../client-import';
 import { filterContactsForExport } from '../client-export';
 import type { Business, DB } from '../types';
@@ -134,24 +135,26 @@ describe('A3.4 · Bloco 7 — plano da importação (prévia pura)', () => {
     lastInteraction: NOW, marketingOptIn: false,
   } as any;
 
-  function plan(csv: string, contacts = [base]) {
-    return buildImportPlan(parseImportFile(csv), contacts);
+  function plan(csv: string, contacts = [base], opts: { existingMode?: 'skip' | 'fill_empty' } = {}) {
+    return buildImportPlan(parseImportFile(csv), contacts, opts);
   }
 
-  it('separa novo, atualização, repetido e erro — e não duplica quem já existe', () => {
+  it('PADRÃO: quem já existe é MANTIDO (a importação não sobrescreve ninguém)', () => {
     const csv = [
       'Nome;Telefone;E-mail',
-      'Maria Souza;(21) 98888-7777;maria@exemplo.com',   // já existe (telefone) → atualiza
+      'Maria Souza;(21) 98888-7777;maria@exemplo.com',   // já existe → NÃO altera
       'João Lima;11912345678;',                            // novo
       'João Repetido;11912345678;',                        // repetido no arquivo
       'Sem Contato;;',                                     // erro: sem telefone/e-mail
       'Fone Torto;09912345678;',                           // erro: DDD inexistente
     ].join('\n');
     const p = plan(csv);
-    expect({ create: p.create, update: p.update, skip: p.skip, error: p.error }).toEqual({ create: 1, update: 1, skip: 1, error: 2 });
-    expect(p.rows.map((r) => r.action)).toEqual(['update', 'create', 'skip', 'error', 'error']);
-    // Atualização aponta para o contato CERTO (o do telefone digitado).
-    expect(p.rows[0].contactId).toBe('ct1');
+    expect(p.existingMode).toBe('skip');
+    expect({ create: p.create, fill: p.fill, skip: p.skip, error: p.error }).toEqual({ create: 1, fill: 0, skip: 2, error: 2 });
+    expect(p.rows.map((r) => r.action)).toEqual(['skip', 'create', 'skip', 'error', 'error']);
+    // A mensagem é a do contrato: já existe, não será alterado.
+    expect(p.rows[0].message).toMatch(/Já existe — não será alterado/);
+    expect(p.rows[0].issues).toContain('ja_existe');
     // O repetido diz em qual linha o primeiro apareceu.
     expect(p.rows[2].message).toMatch(/linha 3/);
     // Erros explicam o que consertar, em português.
@@ -160,11 +163,37 @@ describe('A3.4 · Bloco 7 — plano da importação (prévia pura)', () => {
     expect(importSummary(p)).toContain('1 novo');
   });
 
+  it('modo fill_empty: complementa só o que está VAZIO e nunca troca dado preenchido', () => {
+    const contato = {
+      ...base,
+      email: '',                       // vazio → pode preencher
+      profile: { cpf: '11144477735', birthDate: '', address: { city: 'Niterói' }, tags: ['vip'] },
+    } as any;
+    const csv = [
+      'Nome;Telefone;E-mail;CPF;Nascimento;Cidade;Tags',
+      'Maria Outro Nome;(21) 98888-7777;nova@exemplo.com;52998224725;12/05/1990;Rio de Janeiro;vip, novo',
+    ].join('\n');
+    const p = plan(csv, [contato], { existingMode: 'fill_empty' });
+    expect(p.fill).toBe(1);
+    expect(p.rows[0].action).toBe('fill');
+
+    const updates = fillEmptyUpdates(p.rows[0], contato);
+    // nome e CPF já têm valor (o CPF do cadastro) → NÃO entram.
+    expect(updates.contact.name).toBeUndefined();
+    expect(updates.profile.cpf).toBeUndefined();
+    // e-mail vazio recebe; nascimento vazio recebe; endereço só o que falta.
+    expect(updates.contact.email).toBe('nova@exemplo.com');
+    expect(updates.profile.birthDate).toBe('1990-05-12');
+    expect(updates.profile.address).toBeUndefined();   // cidade já existia; nada a completar aqui
+    // Tags: 'vip' já existe (não repete), 'novo' entra.
+    expect((updates.profile.tags as string[]).map((t) => t.toLowerCase())).toEqual(['vip', 'novo']);
+  });
+
   it('casa por e-mail também (quem não tem telefone no arquivo não vira segundo cadastro)', () => {
     const p = plan(['Nome;Telefone;E-mail', 'Maria Antiga;;maria@exemplo.com'].join('\n'));
-    expect(p.update).toBe(1);
+    expect(p.skip).toBe(1);
     expect(p.rows[0].contactId).toBe('ct1');
-    expect(p.rows[0].message).toMatch(/e-mail/i);
+    expect(p.rows[0].issues).toContain('ja_existe');
   });
 
   it('NÃO casa por nome: duas pessoas com o mesmo nome continuam duas', () => {
@@ -216,7 +245,7 @@ describe('A3.4 · Bloco 7 — importar e exportar pelas rotas reais', () => {
     expect(res.status).toBe(200);
     const body = await json(res);
     expect(body.plan.create).toBe(1);      // João
-    expect(body.plan.update).toBe(1);      // Maria (telefone já na base)
+    expect(body.plan.skip).toBe(1);        // Maria (telefone já na base) — mantida
     expect(body.plan.error).toBe(1);       // DDD inexistente
     expect(body.summary).toContain('1 novo');
     const db = await readDB();
@@ -224,34 +253,33 @@ describe('A3.4 · Bloco 7 — importar e exportar pelas rotas reais', () => {
     expect(db.audit.some((a) => a.action === 'contact.imported')).toBe(false);
   });
 
-  it('o commit cria, atualiza e aplica o perfil — com auditoria do que entrou', async () => {
+  it('o commit (modo padrão) cria o novo e NÃO toca em quem já existe', async () => {
     const res = await importPOST(jsonReq('/api/contacts/import', { businessId: BIZ, csv: CSV, mode: 'commit' }, token));
     expect(res.status).toBe(200);
     const body = await json(res);
-    expect(body.result).toMatchObject({ created: 1, updated: 1, errors: 1 });
+    expect(body.result).toMatchObject({ created: 1, filled: 0, errors: 1 });
     const db = await readDB();
     const mine = db.contacts.filter((c) => c.businessId === BIZ);
     expect(mine).toHaveLength(2); // o walk-in torto não entrou
     const maria = mine.find((c) => c.phone === '21988887777')!;
-    expect(maria.id).toBe('ct-existing');                            // atualizou, não duplicou
-    expect(maria.name).toBe('Maria Souza');
-    expect(maria.marketingOptIn).toBe(true);                         // consentimento explícito
-    expect(maria.profile?.birthDate).toBe('1990-05-12');
-    expect(maria.profile?.address?.cep).toBe('22041080');
-    expect(maria.profile?.address?.city).toBe('Rio de Janeiro');
+    expect(maria.id).toBe('ct-existing');
+    // NADA do arquivo entrou no cadastro existente.
+    expect(maria.name).toBe('Maria Antiga');
+    expect(maria.marketingOptIn).toBe(false);
+    expect(maria.profile).toBeUndefined();
     const joao = mine.find((c) => c.phone === '11912345678')!;
     expect(joao.source).toBe('importacao');
     expect(joao.marketingOptIn).toBe(false);                         // "não" no arquivo
     const audit = db.audit.find((a) => a.action === 'contact.imported')!;
-    expect(audit.meta).toMatchObject({ created: 1, updated: 1, errors: 1 });
+    expect(audit.meta).toMatchObject({ created: 1, filled: 0, errors: 1, existingMode: 'skip' });
   });
 
-  it('reimportar o MESMO arquivo não cria ninguém de novo (idempotente)', async () => {
+  it('reimportar o MESMO arquivo é idempotente (nada novo, ninguém alterado)', async () => {
     await importPOST(jsonReq('/api/contacts/import', { businessId: BIZ, csv: CSV, mode: 'commit' }, token));
     const before = (await readDB()).contacts.filter((c) => c.businessId === BIZ).length;
     const again = await json(await importPOST(jsonReq('/api/contacts/import', { businessId: BIZ, csv: CSV, mode: 'commit' }, token)));
     expect(again.result.created).toBe(0);
-    expect(again.result.updated).toBe(2);
+    expect(again.result.filled).toBe(0);
     expect((await readDB()).contacts.filter((c) => c.businessId === BIZ)).toHaveLength(before);
   });
 
