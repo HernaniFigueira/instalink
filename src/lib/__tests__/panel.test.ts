@@ -141,9 +141,11 @@ describe('catálogo — completude (por qual porta se chega até mim?)', () => {
 // 2. SEÇÕES — jornada, não organograma
 // ═══════════════════════════════════════════════════════════════
 describe('catálogo — seções', () => {
-  it('as 7 seções canônicas, na ordem de uso, todas no menu principal (A3.3)', () => {
+  it('as 8 seções canônicas, na ordem de uso, todas no menu principal (A3.4)', () => {
+    // A3.4: "Início" virou SEÇÃO de uma porta (`/dashboard`). Antes o item
+    // primário flutuava sem título; com o menu maior ele ficava sem contexto.
     expect(PANEL_SECTIONS.map((s) => s.label)).toEqual([
-      'Operação', 'Pessoas', 'Oferta', 'Crescimento', 'Resultados', 'Presença', 'Administração',
+      'Início', 'Operação', 'Pessoas', 'Oferta', 'Crescimento', 'Resultados', 'Presença', 'Administração',
     ]);
     // NENHUMA seção fica presa no rodapé: a barra tem um comportamento só.
     // Configurações é porta do menu como qualquer outra (decisão A3.3).
@@ -151,13 +153,14 @@ describe('catálogo — seções', () => {
     expect(FOOTER_SECTIONS).toEqual([]);
   });
 
-  it('toda porta (menos o item primário) pertence a uma seção existente', () => {
+  it('toda porta pertence a uma seção existente (Início inclusive)', () => {
     const ids = PANEL_SECTIONS.map((s) => s.id);
     for (const r of PANEL_ROUTES) {
-      if (r.href === '/dashboard') { expect(r.section).toBeUndefined(); continue; }
       expect(r.section, `${r.href} sem seção`).toBeDefined();
       expect(ids, `${r.href} em seção desconhecida`).toContain(r.section!);
     }
+    // Início tem seção própria e é a PRIMEIRA do menu.
+    expect(panelRoutesIn('inicio').map((r) => r.href)).toEqual(['/dashboard']);
   });
 
   it('nenhuma seção nasce vazia (Presença é a única de uma porta, por decisão)', () => {
@@ -171,14 +174,18 @@ describe('catálogo — seções', () => {
     expect(panelRoutesIn('presenca').map((r) => r.href)).toEqual(['/pagina']);
   });
 
-  it('Oferta reúne o que ofereço · quem atende · quando atende', () => {
-    expect(panelRoutesIn('oferta').map((r) => r.href)).toEqual([
-      '/servicos', '/profissionais', '/disponibilidade', '/produtos', '/pedidos',
-    ]);
+  it('Oferta é o que eu ofereço e vendo (catálogo), não a operação da equipe', () => {
+    // A3.4: Profissionais e Disponibilidade SAÍRAM daqui — a régua é quem usa
+    // a tela no dia a dia (quem atende), não a semelhança de assunto.
+    expect(panelRoutesIn('oferta').map((r) => r.href)).toEqual(['/servicos', '/produtos']);
   });
 
   it('Operação é o dia a dia; Administração é ajuste raro', () => {
-    expect(panelRoutesIn('operacao').map((r) => r.href)).toEqual(['/agenda', '/conversas', '/agente', '/tarefas']);
+    // A3.4: Profissionais, Disponibilidade e Pedidos entraram em Operação.
+    // Pedidos só existe com o módulo ativo (modes: ['orders']).
+    expect(panelRoutesIn('operacao').map((r) => r.href)).toEqual([
+      '/agenda', '/profissionais', '/disponibilidade', '/conversas', '/agente', '/tarefas', '/pedidos',
+    ]);
     expect(panelRoutesIn('administracao').map((r) => r.href)).toEqual(['/equipe', '/recursos', '/configuracoes']);
   });
 });
@@ -189,17 +196,22 @@ describe('catálogo — seções', () => {
 describe('sidebar — projeção (permissão ∩ módulos, ordem do catálogo)', () => {
   it('clínica completa: ordem exata e seções na ordem canônica', () => {
     const nav = panelNavigation(ctx());
-    expect(nav.primary?.href).toBe('/dashboard');
+    // A3.4: Início é seção de uma porta; `primary` (item sem seção) fica vazio.
+    expect(nav.primary).toBeNull();
     expect(nav.sections.map((s) => s.label)).toEqual([
-      'Operação', 'Pessoas', 'Oferta', 'Crescimento', 'Resultados', 'Presença', 'Administração',
+      'Início', 'Operação', 'Pessoas', 'Oferta', 'Crescimento', 'Resultados', 'Presença', 'Administração',
     ]);
     // Administração agora é a última seção do MENU (não do rodapé fixo).
     expect(nav.footerSections).toEqual([]);
     expect(nav.sidebar.map((r) => r.href)).toEqual([
       '/dashboard',
-      '/agenda', '/conversas', '/agente', '/tarefas',
+      // A3.4 — Operação: agenda + quem atende + quando atende + o dia.
+      // (Pedidos/Produtos exigem os módulos correspondentes: entram no teste
+      // seguinte, com o contexto de quem os tem.)
+      '/agenda', '/profissionais', '/disponibilidade',
+      '/conversas', '/agente', '/tarefas',
       '/clientes', '/funil',
-      '/servicos', '/profissionais', '/disponibilidade',
+      '/servicos',
       '/campanhas', '/automacoes', '/canais',
       '/resultados', '/organizacao',
       '/pagina',
@@ -231,6 +243,11 @@ describe('sidebar — projeção (permissão ∩ módulos, ordem do catálogo)',
     expect(hrefs).not.toContain('/agenda');
     expect(hrefs).not.toContain('/servicos');
     expect(hrefs).not.toContain('/disponibilidade');
+    // A3.4: com o módulo de pedidos ativo, Pedidos aparece em OPERAÇÃO (não em
+    // Oferta, não como "outro destino"): o histórico de pedidos é operação.
+    expect(panelRoutesIn('operacao').map((r) => r.href)).toContain('/pedidos');
+    expect(panelRoutesIn('oferta').map((r) => r.href)).not.toContain('/pedidos');
+    expect(nav.more.map((r) => r.href)).not.toContain('/pedidos');
   });
 
   it('seção sem portas permitidas não é renderizada (nada de título vazio)', () => {
@@ -246,11 +263,15 @@ describe('sidebar — projeção (permissão ∩ módulos, ordem do catálogo)',
   });
 
   it('destinos fora do menu continuam declarados e acessíveis (`sidebar: false` ≠ escondido)', () => {
+    // A3.4: Pedidos voltou ao menu — mas só com o módulo de pedidos ativo.
     const legacy = panelNavigation(ctx({ modes: ['products', 'orders'] }));
-    expect(legacy.sidebar.map((r) => r.href)).not.toContain('/pedidos');
-    expect(legacy.more.map((r) => r.href)).toContain('/pedidos');
-    expect(legacy.allowed.map((r) => r.href)).toContain('/pedidos');
+    expect(legacy.sidebar.map((r) => r.href)).toContain('/pedidos');
+    expect(legacy.more.map((r) => r.href)).not.toContain('/pedidos');
     expect(panelAccess('/pedidos', ctx({ modes: ['products', 'orders'] })).state).toBe('allow');
+    // Sem o módulo, a porta de Pedidos não aparece para o usuário.
+    const vitrine = panelNavigation(ctx({ modes: ['products'] }));
+    expect(vitrine.sidebar.map((r) => r.href)).not.toContain('/pedidos');
+    expect(panelAccess('/pedidos', ctx({ modes: ['products'] })).state).toBe('denied');
 
     const nav = panelNavigation(ctx());
     expect(nav.sidebar.map((r) => r.href)).not.toContain('/execucoes');
@@ -633,8 +654,11 @@ describe('uma porta por conceito', () => {
       ...walk(path.join(root, 'src/app/(dashboard)')),
       ...walk(path.join(root, 'src/components')),
     ];
+    // A3.4: só Execuções segue fora do menu; Pedidos passou a ser porta de
+    // Operação (com gate de módulo). Destino fora do menu SEM atalho vira
+    // porta fantasma — por isso a lista abaixo é curta de propósito.
     const offMenu = PANEL_ROUTES.filter((r) => r.sidebar === false);
-    expect(offMenu.map((r) => r.href).sort()).toEqual(['/execucoes', '/pedidos']);
+    expect(offMenu.map((r) => r.href).sort()).toEqual(['/execucoes']);
     for (const route of offMenu) {
       const own = path.join(root, `src/app/(dashboard)${route.href}`);
       const re = new RegExp('href=\\{[`\'"]' + route.href.replace(/\//g, '\\/'));
@@ -725,9 +749,10 @@ describe('guardas de servidor (regressão)', () => {
     // Regressão de arquitetura: adicionar destino ao painel exige explicar aqui.
     expect(allowedPanelRoutes(ctx()).map((r) => r.href)).toEqual([
       '/dashboard',
-      '/agenda', '/conversas', '/agente', '/tarefas',
+      '/agenda', '/profissionais', '/disponibilidade',
+      '/conversas', '/agente', '/tarefas',
       '/clientes', '/funil',
-      '/servicos', '/profissionais', '/disponibilidade',
+      '/servicos',
       '/campanhas', '/automacoes', '/canais',
       '/resultados', '/organizacao', '/execucoes',
       '/pagina',

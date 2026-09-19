@@ -14,7 +14,7 @@ export interface PermissionDef {
 }
 
 export const PERMISSIONS: PermissionDef[] = [
-  { id: 'dashboard', label: 'Dashboard', hint: 'Visão geral do negócio e indicadores do dia' },
+  { id: 'dashboard', label: 'Início', hint: 'Visão geral do negócio e indicadores do dia' },
   { id: 'agenda', label: 'Agenda', hint: 'Ver e operar a agenda (confirmar, concluir, remarcar)' },
   { id: 'clientes', label: 'Clientes', hint: 'CRM de clientes e histórico 360' },
   { id: 'leads', label: 'Leads', hint: 'Interesses e conversas captadas na página' },
@@ -28,6 +28,10 @@ export const PERMISSIONS: PermissionDef[] = [
   { id: 'config', label: 'Configuração', hint: 'Dados do negócio, recursos e regras' },
   { id: 'financeiro', label: 'Financeiro', hint: 'Resultados, receita e conversões' },
   { id: 'admin', label: 'Administração', hint: 'Área administrativa da empresa' },
+  {
+    id: 'atendimento', label: 'Atendimento',
+    hint: 'Registro do atendimento: evolução, orientações dadas e histórico do serviço',
+  },
 ];
 
 export const PERMISSION_IDS: PermissionId[] = PERMISSIONS.map((p) => p.id);
@@ -73,7 +77,7 @@ export const ROLES: RoleDef[] = [
     // (Professional.userId) e é aplicado no backend (lib/access-core.ts).
     id: 'PROFISSIONAL', label: 'Profissional',
     hint: 'Vê a própria agenda e os clientes da unidade (sem configurações)',
-    permissions: ['dashboard', 'agenda', 'clientes'],
+    permissions: ['dashboard', 'agenda', 'clientes', 'atendimento'],
   },
 ];
 

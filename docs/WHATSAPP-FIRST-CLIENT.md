@@ -84,11 +84,37 @@ No painel da Vercel (ou servidor de produção), configure as seguintes variáve
 
 ---
 
-## 7. Associação da Clínica ↔ Phone Number ID (Onboarding Master Seguro)
+## 7. Associação da Clínica ↔ Phone Number ID
 
-Para preservar a segurança, a clínica **nunca** digita tokens técnicos no painel. O Master da plataforma executa a configuração validada:
+Há **dois caminhos**, e os dois terminam no mesmo lugar (token criptografado na
+unidade, webhook assinado na WABA):
 
-### Opção A — Pela API Segura Master:
+### Opção 0 — Popup oficial da Meta (Embedded Signup) — caminho normal (A3.4 · Bloco 8)
+
+A própria clínica conecta a conta, sem ver token nenhum:
+
+1. A plataforma configura **uma vez** (variáveis de ambiente):
+   `META_APP_ID`, `META_CONFIG_ID`, `META_APP_SECRET`, `WHATSAPP_CREDENTIALS_KEY`,
+   `WHATSAPP_VERIFY_TOKEN`. No app da Meta, o domínio do painel precisa estar em
+   **Allowed domains** e **Valid OAuth redirect URIs**.
+2. No painel, a clínica abre **Canais → WhatsApp → “Conectar com a Meta”**.
+3. O popup devolve WABA, número (pode faltar) e um **código que vale 30 segundos
+   e só pode ser usado uma vez**.
+4. O servidor troca o código pelo token (`GET /oauth/access_token`), descobre o
+   que faltar (`debug_token`, `/{WABA}/phone_numbers`), **assina o webhook**
+   (`POST /{WABA}/subscribed_apps`) e guarda o token com AES-256-GCM.
+5. Se o número ainda não estiver registrado, informe o **PIN de duas etapas** no
+   próprio painel: o registro (`POST /{PHONE_NUMBER_ID}/register`) sai do nosso
+   servidor direto para a Meta e o PIN não fica guardado.
+
+Se o token expirar ou a conta for trocada, basta refazer o popup — nada é
+digitado à mão. Quando a Meta recusa a assinatura do webhook, a unidade fica
+**pendente** com o motivo escrito (nunca “conectado” sem conseguir receber).
+
+### Opção A — Pela API Segura Master (caminho assistido)
+
+Quando a plataforma ainda não tem o app da Meta configurado (ou a clínica prefere o caminho assistido), o Master da plataforma executa a configuração validada — e a conexão fica marcada com origem `master`.
+
 Faça uma requisição autenticada com sessão de Master da plataforma:
 
 ```http

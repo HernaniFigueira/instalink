@@ -170,7 +170,7 @@ export function dashboardContext(
 // a rota (permissão do catálogo): ninguém é enviado para porta proibida.
 
 export interface DashboardAttentionItem {
-  id: 'closures' | 'leadsNew' | 'tasksOverdue';
+  id: 'closures' | 'leadsNew' | 'tasksOverdue' | 'queueWaiting' | 'arrivalsPending';
   count: number;
   label: string;
   /** Destino contextual — presente somente com permissão para a rota. */
@@ -184,6 +184,10 @@ export interface DashboardAttentionInput {
   leadsNew: number;
   /** Tarefas abertas com prazo vencido (lib/automation/tasks). */
   tasksOverdue: number;
+  /** A3.4 · Bloco 4 — gente esperando no balcão (lib/queue). */
+  queueWaiting?: number;
+  /** A3.4 · Bloco 4 — chegou hoje e o check-in ainda não foi registrado. */
+  arrivalsPending?: number;
   permissions: {
     agenda: boolean;
     leads: boolean;
@@ -210,6 +214,20 @@ export function dashboardAttention(input: DashboardAttentionInput): DashboardAtt
     out.push({
       id: 'tasksOverdue', count: input.tasksOverdue, label: 'tarefas vencidas',
       href: input.permissions.tasks ? '/tarefas' : null,
+    });
+  }
+  // A3.4 · Bloco 4: a operação do balcão também é "atenção de hoje" — quem
+  // espera na fila e quem chegou sem check-in. Só aparece com dado real.
+  if ((input.queueWaiting || 0) > 0) {
+    out.push({
+      id: 'queueWaiting', count: input.queueWaiting || 0, label: 'esperando na fila',
+      href: input.permissions.agenda ? '/agenda' : null,
+    });
+  }
+  if ((input.arrivalsPending || 0) > 0) {
+    out.push({
+      id: 'arrivalsPending', count: input.arrivalsPending || 0, label: 'chegaram sem check-in',
+      href: input.permissions.agenda ? '/agenda' : null,
     });
   }
   return out;

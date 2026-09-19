@@ -3,16 +3,17 @@ import { useCallback, useEffect, useState } from 'react';
 import { useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { Icon } from '@/components/icons';
-import { Avatar, Badge, Button, Notice, PageHeader, PageSkeleton } from '@/components/ui';
+import { Avatar, Badge, Button, Notice, PageHeader, PageSkeleton, Select } from '@/components/ui';
 import { cn } from '@/lib/utils';
 import type { MemberRole, PermissionId } from '@/lib/types';
 import { AccessDenied, useAreaLoad } from '@/components/dashboard/AccessNotice';
 import { apiGet, apiSend } from '@/lib/api-client';
+import { MemberAccessSheet } from '@/components/dashboard/MemberAccessSheet';
 
 interface RoleDef { id: MemberRole; label: string; hint: string; permissions: PermissionId[] }
 interface PermDef { id: PermissionId; label: string; hint: string }
-interface Member { id: string; userId: string; name: string; email: string; role: MemberRole; permissions: Record<PermissionId, boolean>; active: boolean; note: string; createdAt: string; lastLoginAt: string; professionalId?: string; professionalName?: string; }
-interface ProfessionalOption { id: string; name: string; role: string; active: boolean; userId: string; linkedUserName: string }
+interface Member { id: string; userId: string; name: string; email: string; role: MemberRole; permissions: Record<PermissionId, boolean>; active: boolean; note: string; createdAt: string; lastLoginAt: string; professionalId?: string; professionalName?: string; professionalPhoto?: string }
+interface ProfessionalOption { id: string; name: string; role: string; active: boolean; userId: string; photo?: string; linkedUserName: string }
 interface TeamData {
   roles: RoleDef[]; permissions: PermDef[];
   me: { userId: string; role: MemberRole | 'MASTER'; isOwner: boolean; permissions: Record<PermissionId, boolean> };
@@ -21,20 +22,19 @@ interface TeamData {
   professionals?: ProfessionalOption[];
 }
 
-const input = 'w-full rounded-md border border-zinc-300 px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-zinc-900';
-
 export default function EquipePage() {
   const params = useSearchParams();
   const businessId = params.get('b') || '';
   const [data, setData] = useState<TeamData | null>(null);
+  // A3.4 — "Criar acesso" é UM componente compartilhado (MemberAccessSheet):
+  // aberto daqui ou de /profissionais, o efeito é o mesmo (/api/team grava o
+  // vínculo Professional.userId). Nada de dois formulários de acesso.
   const [creating, setCreating] = useState(false);
+  const [presetProfessionalId, setPresetProfessionalId] = useState('');
+  const [presetName, setPresetName] = useState('');
   const [drawer, setDrawer] = useState<Member | null>(null);
   const [msg, setMsg] = useState('');
   const [error, setError] = useState('');
-  // VÍNCULO User → Professional (P2): o login passa a representar um
-  // profissional da unidade e vê SOMENTE a própria agenda (regra aplicada no
-  // backend). Fica no mesmo lugar em que se criam acessos.
-  const [form, setForm] = useState({ name: '', email: '', password: '', role: 'SECRETARIA' as MemberRole, note: '', professionalId: '' });
   const [linkMsg, setLinkMsg] = useState('');
 
   // 403 aqui não pode virar "carregando para sempre": mostramos o aviso e o
@@ -49,15 +49,32 @@ export default function EquipePage() {
   }, [businessId, report]);
   useEffect(() => { load(); }, [load]);
 
-  async function create() {
-    setError(''); setMsg('');
-    const res = await apiSend<{ linkedExistingUser?: boolean }>('/api/team', 'POST', { businessId, ...form }, { scope: 'action', area: 'Equipe' });
-    const d = res.data || {};
-    if (!res.ok) { setError(res.message); return; }
-    setMsg(d.linkedExistingUser ? 'Acesso liberado — pessoa já tinha login e agora faz parte da equipe.' : 'Acesso criado. Envie e-mail e senha para /login.');
-    setCreating(false);
-    setForm({ name: '', email: '', password: '', role: 'SECRETARIA', note: '', professionalId: '' });
-    load();
+  // Deep-link (A3.4): #/equipe?member=<id> abre o membro; ?professionalId=<id>
+  // abre "Criar acesso" já vinculado. É o alvo estável do CTA "Gerenciar
+  // acesso" lá em Profissionais — um link que continua valendo depois do F5.
+  useEffect(() => {
+    if (!data) return;
+    const memberId = params.get('member') || '';
+    const proId = params.get('professionalId') || '';
+    if (memberId) {
+      const m = data.members.find((x) => x.id === memberId);
+      if (m) setDrawer(m);
+    } else if (proId) {
+      const pro = data.professionals?.find((x) => x.id === proId);
+      if (pro && !pro.userId) openAccess(pro.id, pro.name);
+      else if (pro?.userId) {
+        const m = data.members.find((x) => x.professionalId === proId);
+        if (m) setDrawer(m);
+      }
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [data, params]);
+
+  function openAccess(professionalId = '', name = '') {
+    setError('');
+    setPresetProfessionalId(professionalId);
+    setPresetName(name);
+    setCreating(true);
   }
   async function saveMember(m: Member, payload: Record<string, any>) {
     setError('');
@@ -98,21 +115,23 @@ export default function EquipePage() {
         icon="users"
         title="Equipe"
         hint="Quem acessa o painel — contas, papéis e permissões."
-        action={<Button variant="primary" size="sm" onClick={() => setCreating(true)}><Icon n="plus" size={14} /> Adicionar membro</Button>}
+        action={<Button variant="primary" size="sm" onClick={() => openAccess()}><Icon n="plus" size={14} /> Adicionar membro</Button>}
       />
 
       {/* Profissionais × Equipe: conceitos separados, nunca confundidos.
-          Aqui é acesso administrativo; quem ATENDE mora em /profissionais. */}
-      <Notice tone="info" className="mb-4" title="Sem confusão">
-        aqui você gerencia <strong>quem tem login</strong> no painel (dono, recepcionista, gerente).{' '}
-        <Link href={`/profissionais?b=${businessId}`} className="font-semibold underline">Quem realiza os atendimentos → Profissionais</Link>
-      </Notice>
+          A3.4: uma linha, não um bloco didático — a própria tela mostra as duas
+          populações (acessos × profissionais sem acesso) e isso explica sozinho. */}
+      <p className="text-xs text-[var(--text-muted)] mb-4">
+        <strong className="text-[var(--text)]">Equipe</strong> controla quem entra no sistema.{' '}
+        <Link href={`/profissionais?b=${businessId}`} className="font-semibold underline">Profissionais</Link>{' '}
+        controla quem realiza os atendimentos — nem todo profissional precisa de login.
+      </p>
       {msg && <Notice tone="info" className="mb-3">{msg}</Notice>}
       {error && <Notice tone="error" className="mb-3">{error}</Notice>}
 
       <div className="bg-white border border-zinc-200">
         <div className="px-4 py-2.5 border-b border-zinc-200 flex items-center justify-between">
-          <p className="text-xs font-semibold tracking-wide uppercase text-zinc-500">Membros · {data.members.length + 1}</p>
+          <p className="text-xs font-semibold tracking-wide uppercase text-zinc-500">Pessoas com acesso · {data.members.length + 1}</p>
           <span className="text-xs text-zinc-400 hidden sm:inline">Clique para gerenciar</span>
         </div>
         {/* Proprietário — linha enxuta */}
@@ -135,9 +154,10 @@ export default function EquipePage() {
           {data.members.map((m) => (
             <div key={m.id} className="px-4 py-3 flex sm:grid sm:grid-cols-[1fr_140px_90px_80px] gap-2 items-center hover:bg-zinc-50">
               <div className="flex items-center gap-3 min-w-0 flex-1">
-                <span className={cn('w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold shrink-0', m.active ? 'bg-white border border-zinc-200 text-zinc-700' : 'bg-zinc-100 text-zinc-400')}>
-                  {(m.name || '?').slice(0, 1).toUpperCase()}
-                </span>
+                {/* A3.4: quando o acesso representa um profissional, a foto vem
+                    do PROFESSIONAL — a mesma pessoa não aparece com foto numa
+                    tela e com inicial genérica na outra. */}
+                <Avatar name={m.name} src={m.professionalPhoto || undefined} size={32} />
                 <div className="min-w-0">
                   <p className="text-sm font-medium truncate">{m.name}</p>
                   <p className="text-xs text-zinc-500 truncate">{m.email}</p>
@@ -162,15 +182,50 @@ export default function EquipePage() {
       </div>
       <p className="text-xs text-zinc-500 mt-3">Cada pessoa entra em <Link href="/login" className="underline font-medium">/login</Link> com o próprio e-mail.</p>
 
+      {/* ── PROFISSIONAIS SEM ACESSO (A3.4) ──
+          Quem atende e ainda não tem login. A foto é a REAL do Professional:
+          a pergunta "quem é essa pessoa?" se responde olhando. */}
+      {(() => {
+        const semAcesso = (data.professionals || []).filter((p) => !p.userId && p.active !== false);
+        if (semAcesso.length === 0) return null;
+        return (
+          <div className="mt-6 bg-[var(--surface)] border border-[var(--border)] rounded-lg overflow-hidden">
+            <div className="px-4 py-2.5 border-b border-[var(--border)] flex items-center justify-between gap-2">
+              <p className="text-xs font-semibold tracking-wide uppercase text-[var(--text-muted)]">
+                Profissionais sem acesso · {semAcesso.length}
+              </p>
+              <Link href={`/profissionais?b=${businessId}`} className="text-xs font-semibold underline text-[var(--text-muted)]">Ver todos</Link>
+            </div>
+            <div className="divide-y divide-[var(--border-soft)]">
+              {semAcesso.map((p) => (
+                <div key={p.id} className="px-4 py-3 flex items-center gap-3">
+                  <Avatar name={p.name} src={p.photo || undefined} size={32} />
+                  <div className="min-w-0 flex-1">
+                    <p className="text-sm font-medium truncate">{p.name}</p>
+                    <p className="text-xs text-[var(--text-muted)] truncate">{p.role || 'Profissional'}</p>
+                  </div>
+                  <Button variant="secondary" size="sm" onClick={() => openAccess(p.id, p.name)}>
+                    Criar acesso
+                  </Button>
+                </div>
+              ))}
+            </div>
+          </div>
+        );
+      })()}
+
       {/* Drawer lateral — permissões agrupadas */}
       {drawer && (
         <div className="fixed inset-0 z-50 flex justify-end" role="dialog" aria-modal="true">
           <div className="absolute inset-0 bg-[var(--overlay)]" onClick={() => setDrawer(null)} />
           <div className="relative w-full sm:max-w-[420px] bg-white h-full overflow-y-auto border-l border-zinc-200 shadow-xl">
             <div className="sticky top-0 bg-white border-b border-zinc-200 px-4 py-3 flex items-center justify-between">
-              <div>
-                <p className="font-semibold text-sm">{drawer.name}</p>
-                <p className="text-xs text-zinc-500">{drawer.email}</p>
+              <div className="flex items-center gap-2.5 min-w-0">
+                <Avatar name={drawer.name} src={drawer.professionalPhoto || undefined} size={32} />
+                <div className="min-w-0">
+                  <p className="font-semibold text-sm truncate">{drawer.name}</p>
+                  <p className="text-xs text-zinc-500 truncate">{drawer.email}</p>
+                </div>
               </div>
               <button onClick={() => setDrawer(null)} className="p-1.5 hover:bg-zinc-100 rounded-md"><Icon n="x" size={16} /></button>
             </div>
@@ -192,11 +247,10 @@ export default function EquipePage() {
               {(data.professionals || []).length > 0 && (
                 <div>
                   <p className="text-xs font-semibold tracking-wide uppercase text-zinc-500 mb-2">Profissional vinculado</p>
-                  <select
+                  <Select
                     value={drawer.professionalId || ''}
                     onChange={(e) => linkProfessional(drawer, e.target.value)}
                     aria-label="Profissional vinculado a este acesso"
-                    className={input}
                   >
                     <option value="">Nenhum — acesso administrativo</option>
                     {(data.professionals || []).map((p) => (
@@ -204,7 +258,7 @@ export default function EquipePage() {
                         {p.name}{p.role ? ` · ${p.role}` : ''}{p.userId && p.userId !== drawer.userId ? ` (vinculado a ${p.linkedUserName})` : ''}
                       </option>
                     ))}
-                  </select>
+                  </Select>
                   <p className="text-xs text-zinc-500 mt-1.5">
                     Ao vincular, este login passa a ver <strong>somente a própria agenda</strong> — os clientes da unidade continuam acessíveis.
                     Quem atende é cadastrado em <Link href={`/profissionais?b=${businessId}`} className="underline font-medium">Profissionais</Link>.
@@ -229,52 +283,23 @@ export default function EquipePage() {
                     );
                   })}
                 </div>
-                <p className="text-xs text-zinc-500 mt-2">Inclui <strong>Dashboard</strong> como permissão independente — desative para ocultar o resumo de quem não precisa.</p>
+                <p className="text-xs text-zinc-500 mt-2">Inclui <strong>Início</strong> como permissão independente — desative para ocultar o resumo de quem não precisa.</p>
               </div>
             </div>
           </div>
         </div>
       )}
 
-      {creating && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4" role="dialog" aria-modal="true">
-          <div className="absolute inset-0 bg-[var(--overlay)]" onClick={() => setCreating(false)} />
-          <div className="relative w-full sm:max-w-md bg-white rounded-lg border border-zinc-200 max-h-[90vh] overflow-y-auto shadow-lg">
-            <div className="px-4 py-3 border-b border-zinc-200 flex items-center justify-between">
-              <p className="font-semibold text-sm">Novo acesso</p>
-              <button onClick={() => setCreating(false)} className="p-1.5 hover:bg-zinc-100 rounded-md"><Icon n="x" size={14} /></button>
-            </div>
-            <div className="px-4 py-4 space-y-3">
-              <label className="block"><span className="text-xs font-semibold tracking-wide uppercase text-zinc-500">Nome *</span><input value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} className={input + ' mt-1'} placeholder="Ana Souza" /></label>
-              <label className="block"><span className="text-xs font-semibold tracking-wide uppercase text-zinc-500">E-mail *</span><input value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} className={input + ' mt-1'} placeholder="ana@clinica.com" /></label>
-              <label className="block"><span className="text-xs font-semibold tracking-wide uppercase text-zinc-500">Senha inicial *</span><input value={form.password} onChange={(e) => setForm({ ...form, password: e.target.value })} className={input + ' mt-1'} type="text" placeholder="mín. 6 caracteres" /></label>
-              <div>
-                <span className="text-xs font-semibold tracking-wide uppercase text-zinc-500">Papel</span>
-                <div className="grid grid-cols-2 gap-1.5 mt-1">
-                  {data.roles.filter((r) => r.id !== 'OWNER').map((r) => (
-                    <button key={r.id} onClick={() => setForm({ ...form, role: r.id })} className={cn('text-xs font-medium px-3 py-2 rounded-md border', form.role === r.id ? 'bg-[var(--brand-soft)] border-[var(--brand-border)] text-[var(--brand-fg)]' : 'bg-white border-[var(--border)] text-[var(--text)]')}>{r.label}</button>
-                  ))}
-                </div>
-              </div>
-              {(data.professionals || []).length > 0 && (
-                <label className="block">
-                  <span className="text-xs font-semibold tracking-wide uppercase text-zinc-500">Profissional vinculado</span>
-                  <select value={form.professionalId} onChange={(e) => setForm({ ...form, professionalId: e.target.value })} className={input + ' mt-1'}>
-                    <option value="">Nenhum — acesso administrativo</option>
-                    {(data.professionals || []).filter((p) => !p.userId).map((p) => (
-                      <option key={p.id} value={p.id}>{p.name}{p.role ? ` · ${p.role}` : ''}</option>
-                    ))}
-                  </select>
-                  <span className="block text-[11px] text-zinc-500 mt-1">Vincule para que este login veja somente a própria agenda.</span>
-                </label>
-              )}
-              <label className="block"><span className="text-xs font-semibold tracking-wide uppercase text-zinc-500">Observação</span><input value={form.note} onChange={(e) => setForm({ ...form, note: e.target.value })} className={input + ' mt-1'} placeholder="Opcional" /></label>
-              {error && <p className="text-sm font-medium text-red-600">{error}</p>}
-              <Button variant="primary" size="lg" className="w-full" onClick={create}>Criar acesso</Button>
-            </div>
-          </div>
-        </div>
-      )}
+      {/* Criar/gerenciar acesso — componente COMPARTILHADO com Profissionais. */}
+      <MemberAccessSheet
+        open={creating}
+        businessId={businessId}
+        professionals={data.professionals || []}
+        professionalId={presetProfessionalId}
+        initialName={presetName}
+        onClose={() => setCreating(false)}
+        onCreated={(message) => { setMsg(message); void load(); }}
+      />
       <p className="sr-only">{q}</p>
     </>
   );

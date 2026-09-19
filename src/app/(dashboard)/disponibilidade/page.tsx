@@ -3,7 +3,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import type { Availability, AvailabilityException, Professional } from '@/lib/types';
-import { Button, ListSkeleton, Notice, PageHeader } from '@/components/ui';
+import { Button, ListSkeleton, Notice, PageHeader, Panel, Select } from '@/components/ui';
 import { BusinessHoursPanel } from '@/components/dashboard/BusinessHours';
 import { AccessDenied } from '@/components/dashboard/AccessNotice';
 import { apiGet, apiSend } from '@/lib/api-client';
@@ -116,12 +116,12 @@ export default function DisponibilidadePage() {
           {/* A2-B5 (F9): fuso das regras de agenda — "hoje", horizonte,
               exceções e lembretes seguem este fuso (default São Paulo).
               Inválido o servidor recusa (400); vazio volta ao default. */}
-          <div className="bg-white border border-zinc-200 rounded-lg p-5 flex flex-wrap items-center justify-between gap-3">
+          <Panel className="p-5 flex flex-wrap items-center justify-between gap-3">
             <div className="min-w-0">
-              <p className="font-bold text-sm">Fuso horário da agenda</p>
-              <p className="text-xs text-zinc-500 mt-0.5">"Hoje", exceções e prazos seguem este fuso — não o do celular de quem agenda.</p>
+              <p className="text-sm font-semibold text-[var(--text)]">Fuso horário da agenda</p>
+              <p className="text-xs text-[var(--text-muted)] mt-0.5">"Hoje", exceções e prazos seguem este fuso — não o do celular de quem agenda.</p>
             </div>
-            <select
+            <Select
               value={bizTz}
               onChange={async (e) => {
                 const tz = e.target.value;
@@ -131,24 +131,24 @@ export default function DisponibilidadePage() {
                 if (!res.ok) { setBizTz(prev); setMsg(res.message || 'Não foi possível salvar o fuso.'); setTimeout(() => setMsg(''), 3000); }
                 else { setMsg('Fuso salvo.'); setTimeout(() => setMsg(''), 2500); }
               }}
-              className="rounded-md border border-zinc-300 px-3 py-2 text-sm font-semibold bg-white shrink-0"
+              className="w-auto shrink-0 font-semibold"
               aria-label="Fuso horário da agenda"
             >
               {TIMEZONE_OPTIONS.map((t) => <option key={t} value={t}>{t}</option>)}
-            </select>
-          </div>
+            </Select>
+          </Panel>
           {/* A1.2 · Bloco 2: "como o cliente reserva" é configuração do
               negócio — mora em Configurações → Agenda. Atalho contextual
               (classe B): ajuda quem está aqui a achar a regra certa. */}
-          <div className="bg-white border border-zinc-200 rounded-lg p-5 flex flex-wrap items-center justify-between gap-3">
+          <Panel className="p-5 flex flex-wrap items-center justify-between gap-3">
             <div>
-              <p className="font-bold text-sm">Regras de reserva</p>
-              <p className="text-xs text-zinc-500 mt-0.5">Antecedência mínima, prazo de cancelamento, dias de agenda aberta e intervalo entre atendimentos.</p>
+              <p className="text-sm font-semibold text-[var(--text)]">Regras de reserva</p>
+              <p className="text-xs text-[var(--text-muted)] mt-0.5">Antecedência mínima, prazo de cancelamento, dias de agenda aberta e intervalo entre atendimentos.</p>
             </div>
             <Link href={`/configuracoes?tab=agenda&b=${businessId}`} className="shrink-0">
               <Button variant="primary" size="sm">Configurar em Configurações → Agenda</Button>
             </Link>
-          </div>
+          </Panel>
         </div>
       )}
     </>

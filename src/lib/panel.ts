@@ -21,6 +21,7 @@ import { areaLabel } from './http';
 
 // ── Seções canônicas ───────────────────────────────────────────
 export type PanelSectionId =
+  | 'inicio'
   | 'operacao'
   | 'pessoas'
   | 'oferta'
@@ -51,11 +52,23 @@ export interface PanelSectionDef {
  * Ordem canônica das seções = ordem de uso: o que se abre toda hora primeiro,
  * o que se ajusta uma vez por mês por último.
  *
- * "Oferta" reúne o que eu vendo, quem atende e quando atende — a família que o
- * lojista já pensa junta. Disponibilidade pertence a ela (decisão A1.2): um
- * grupo de um destino só custaria duas linhas de menu para entregar uma porta.
+ * A3.4 — REORGANIZAÇÃO (decisão de produto, não estética):
+ *   • "Início" virou SEÇÃO de uma porta (`/dashboard`). Antes o item primário
+ *     flutuava sem título; com o menu crescendo ele ficava sem contexto. A
+ *     linguagem de interface mudou de "Dashboard" para "Início" — a ROTA
+ *     (`/dashboard`) e a PERMISSÃO (`dashboard`) continuam iguais de propósito:
+ *     renomear rota/API/schema por causa de rótulo quebraria links, permissões
+ *     gravadas e integrações sem entregar nada ao usuário.
+ *   • PROFISSIONAIS e DISPONIBILIDADE saíram de "Oferta" e foram para
+ *     "Operação". A régua é quem usa a tela: quem ATENDE mexe nos profissionais
+ *     e nos horários no dia a dia, junto com a Agenda. "Oferta" fica com o que
+ *     se anuncia (Serviços, Produtos).
+ *   • PEDIDOS entrou em "Operação" e voltou a poder aparecer no menu — porém
+ *     SOMENTE quando o módulo de pedidos estiver ativo (`modes: ['orders']`).
+ *     Módulo desligado = porta inexistente para quem não tem o módulo.
  */
 export const PANEL_SECTIONS: PanelSectionDef[] = [
+  { id: 'inicio', label: 'Início' },
   { id: 'operacao', label: 'Operação' },
   { id: 'pessoas', label: 'Pessoas' },
   { id: 'oferta', label: 'Oferta' },
@@ -76,29 +89,65 @@ export function panelSection(id: PanelSectionId): PanelSectionDef | undefined {
 }
 
 /**
- * A3.3 CONVERGÊNCIA (ponto 8) — ACENTO DE CONTEXTO POR SEÇÃO.
+ * A3.4 — TEMA POR SEÇÃO (fonte ÚNICA de cor de contexto e de seleção).
  *
- * Regra: a cor aparece só no ÍCONE (e em detalhes pequenos), nunca pintando o
- * card/linha inteira. Serve para o lojista reconhecer a família do destino de
- * relance; não substitui a seleção, que continua BRAND.
+ * Antes existia só `SECTION_ACCENT` (a cor do ÍCONE) e o item ativo era
+ * forçado em BRAND azul (`--il-nav-active-fg`) qualquer que fosse a seção: ao
+ * clicar em Clientes (teal) ou Serviços (lilás), o rail, o texto e o fundo
+ * viravam azul — a família de cor desaparecia exatamente quando o usuário
+ * precisava dela para se localizar.
  *
- * Mapeado por variável de token (não por hex) para respeitar o tema: se o tema
- * mudar, o acento acompanha — nenhum componente carrega cor própria.
+ * Agora cada seção declara o SEU conjunto:
+ *   accent   → cor do ícone (sempre, ativo ou não) e do rail de seleção;
+ *   activeBg → fundo suave da seção quando o item está ativo;
+ *   activeFg → texto do item ativo, na mesma família.
+ *
+ * Regra que não muda: a cor aparece no ícone, no rail fino e no fundo suave —
+ * nunca pintando o menu inteiro. E o estado ativo nunca depende SÓ da cor: o
+ * rail lateral e o `aria-current` continuam lá para quem não distingue cor.
  */
-export const SECTION_ACCENT: Record<PanelSectionId, string> = {
-  operacao: 'var(--brand)',      // Agenda, Conversas, Assistente, Tarefas
-  pessoas: 'var(--teal)',        // Clientes, Funil
-  oferta: 'var(--lilac)',        // Serviços, Profissionais, Disponibilidade, Produtos, Pedidos
-  crescimento: 'var(--warning)', // Campanhas, Automações, Canais
-  resultados: 'var(--success)',  // Resultados, Organização, Execuções
-  presenca: 'var(--brand)',      // Página
-  administracao: 'var(--text-muted)', // Equipe, Recursos, Configurações (neutro de propósito)
+export interface SectionTheme {
+  /** Cor da família: ícone (sempre) e rail do item ativo. */
+  accent: string;
+  /** Fundo do item ativo — versão muito suave da família. */
+  activeBg: string;
+  /** Texto do item ativo, legível sobre `activeBg`. */
+  activeFg: string;
+}
+
+export const SECTION_THEME: Record<PanelSectionId, SectionTheme> = {
+  // Início/Operação/Presença: azul da marca (o "agora" do dia).
+  inicio: { accent: 'var(--brand)', activeBg: 'var(--brand-soft)', activeFg: 'var(--brand-fg)' },
+  operacao: { accent: 'var(--brand)', activeBg: 'var(--brand-soft)', activeFg: 'var(--brand-fg)' },
+  // Pessoas: teal (gente).
+  pessoas: { accent: 'var(--teal)', activeBg: 'var(--teal-bg)', activeFg: 'var(--teal-fg)' },
+  // Oferta: lilás (catálogo/vitrine).
+  oferta: { accent: 'var(--lilac)', activeBg: 'var(--lilac-bg)', activeFg: 'var(--lilac-fg)' },
+  // Crescimento: âmbar (campanhas/automação) — atenção, não alarme.
+  crescimento: { accent: 'var(--warning)', activeBg: 'var(--warning-bg)', activeFg: 'var(--warning-fg)' },
+  // Resultados: verde (números que fecham).
+  resultados: { accent: 'var(--success)', activeBg: 'var(--success-bg)', activeFg: 'var(--success-fg)' },
+  presenca: { accent: 'var(--brand)', activeBg: 'var(--brand-soft)', activeFg: 'var(--brand-fg)' },
+  // Administração: azul frio/neutro de propósito (ajuste raro, sem destaque).
+  administracao: { accent: 'var(--text-muted)', activeBg: 'var(--surface-3)', activeFg: 'var(--text)' },
 };
+
+/** Acento de contexto de uma seção (compatibilidade: usado em ícones/atalhos). */
+export const SECTION_ACCENT: Record<PanelSectionId, string> = Object.fromEntries(
+  (Object.keys(SECTION_THEME) as PanelSectionId[]).map((id) => [id, SECTION_THEME[id].accent]),
+) as Record<PanelSectionId, string>;
+
+const FALLBACK_THEME: SectionTheme = { accent: 'var(--text-muted)', activeBg: 'var(--surface-3)', activeFg: 'var(--text)' };
+
+/** Tema completo de uma seção, com fallback neutro para id desconhecido. */
+export function sectionTheme(id: PanelSectionId | undefined): SectionTheme {
+  if (!id) return FALLBACK_THEME;
+  return SECTION_THEME[id] ?? FALLBACK_THEME;
+}
 
 /** Acento de uma seção, com fallback neutro para id desconhecido. */
 export function sectionAccent(id: PanelSectionId | undefined): string {
-  if (!id) return 'var(--text-muted)';
-  return SECTION_ACCENT[id] ?? 'var(--text-muted)';
+  return sectionTheme(id).accent;
 }
 
 /** Destinos de uma seção, na ordem do catálogo (independente de contexto). */
@@ -169,7 +218,12 @@ export interface PanelRouteDef {
 //   • /canais    = conexão do canal, fontes de lead e integrações técnicas.
 export const PANEL_ROUTES: PanelRouteDef[] = [
   {
-    href: '/dashboard', label: 'Dashboard', icon: 'home', permission: 'dashboard', area: 'dashboard',
+    // RÓTULO "Início" (A3.4) — a ROTA segue `/dashboard` e a PERMISSÃO segue
+    // `dashboard`: renomear rota/API/schema por causa de linguagem de interface
+    // quebraria links salvos, permissões gravadas e integrações, sem entregar
+    // nada a quem opera. O que o lojista lê é o que mudou.
+    href: '/dashboard', label: 'Início', icon: 'home', section: 'inicio',
+    permission: 'dashboard', area: 'dashboard',
     description: 'Visão do dia: o que precisa de atenção, o que está marcado e os números do período.',
     width: 'full',
   },
@@ -179,6 +233,23 @@ export const PANEL_ROUTES: PanelRouteDef[] = [
     href: '/agenda', label: 'Agenda', icon: 'calendar', section: 'operacao',
     modes: ['bookings'], permission: 'agenda', area: 'agenda',
     description: 'O que está marcado, com quem, e o que ainda precisa ser fechado.',
+    width: 'full',
+  },
+  {
+    // A3.4: entrou em Operação. Quem ATENDE ajusta quem atende no dia a dia —
+    // profissional e agenda são a mesma conversa, não catálogo de vitrine.
+    href: '/profissionais', label: 'Profissionais', icon: 'idcard', section: 'operacao',
+    modes: ['services', 'bookings'], permission: 'catalogo', area: 'profissionais',
+    description: 'Quem realiza os atendimentos, com quais serviços, acesso ao sistema e agenda própria.',
+    width: 'full',
+  },
+  {
+    // A3.4: entrou em Operação, junto de Agenda e Profissionais.
+    // Era "/horarios". "Disponibilidade" é o que a tela É: quando a casa e cada
+    // profissional podem atender (janela semanal + dias especiais).
+    href: '/disponibilidade', label: 'Disponibilidade', icon: 'clock', section: 'operacao',
+    modes: ['services', 'bookings'], permission: 'catalogo', area: 'disponibilidade',
+    description: 'Quando a casa e cada profissional podem atender, inclusive dias especiais.',
     width: 'full',
   },
   {
@@ -201,6 +272,16 @@ export const PANEL_ROUTES: PanelRouteDef[] = [
     permission: ['clientes', 'agenda', 'leads', 'config'], area: 'tarefas',
     description: 'O que ficou combinado, com quem e com qual prazo — inclusive o que já venceu.',
   },
+  {
+    // A3.4: deixou de ser `sidebar: false` e passou para Operação — o histórico
+    // de pedidos é operação do negócio que vende, não "outro destino".
+    // Continua aparecendo SOMENTE quando o módulo de pedidos existe
+    // (`modes: ['orders']`): sem o módulo, a porta não existe para o usuário.
+    href: '/pedidos', label: 'Pedidos', icon: 'receipt', section: 'operacao',
+    modes: ['orders'], permission: 'pedidos', area: 'pedidos',
+    description: 'Pedidos recebidos pela página, com status, itens e histórico de cada cliente.',
+    width: 'full',
+  },
 
   // ── Pessoas: quem está do outro lado ──
   {
@@ -218,7 +299,7 @@ export const PANEL_ROUTES: PanelRouteDef[] = [
     width: 'full',
   },
 
-  // ── Oferta: o que ofereço · quem atende · quando atende · vitrine ──
+  // ── Oferta: o que eu ofereço e vendo ──
   {
     href: '/servicos', label: 'Serviços', icon: 'service', section: 'oferta',
     modes: ['services', 'bookings'], permission: 'catalogo', area: 'servicos',
@@ -226,32 +307,9 @@ export const PANEL_ROUTES: PanelRouteDef[] = [
     width: 'full',
   },
   {
-    href: '/profissionais', label: 'Profissionais', icon: 'idcard', section: 'oferta',
-    modes: ['services', 'bookings'], permission: 'catalogo', area: 'profissionais',
-    description: 'Quem realiza os atendimentos, com quais serviços e agenda própria ou da casa.',
-    width: 'full',
-  },
-  {
-    // Era "/horarios". "Disponibilidade" é o que a tela É: quando a casa e cada
-    // profissional podem atender (janela semanal + dias especiais).
-    href: '/disponibilidade', label: 'Disponibilidade', icon: 'clock', section: 'oferta',
-    modes: ['services', 'bookings'], permission: 'catalogo', area: 'disponibilidade',
-    description: 'Quando a casa e cada profissional podem atender, inclusive dias especiais.',
-    width: 'full',
-  },
-  {
     href: '/produtos', label: 'Produtos', icon: 'bag', section: 'oferta',
     modes: ['products', 'orders'], permission: 'catalogo', area: 'catalogo',
     description: 'A vitrine de produtos exibida na sua página pública, com preço e foto.',
-    width: 'full',
-  },
-  {
-    // Legado: fora do menu (régua de frequência), mas destino declarado — a
-    // rota e o histórico continuam vivos para empresas com o módulo ativo, e o
-    // Dashboard ainda aponta para cá quando existem pedidos.
-    href: '/pedidos', label: 'Pedidos', icon: 'receipt', section: 'oferta',
-    modes: ['orders', 'products'], permission: 'pedidos', area: 'pedidos', sidebar: false,
-    description: 'Histórico de pedidos das empresas que usavam o módulo legado de vendas.',
     width: 'full',
   },
 
@@ -295,7 +353,12 @@ export const PANEL_ROUTES: PanelRouteDef[] = [
   {
     // Era a 4ª aba de /automacoes. Observar o sistema funcionando é visita
     // deliberada (diagnóstico), não passagem diária: destino declarado, fora
-    // do menu, alcançável por atalho contextual dentro de Automações.
+    // do menu, alcançável por URL e pelo atalho contextual dentro de
+    // Automações ("Ver histórico de execuções").
+    //
+    // A3.4: NÃO existe mais o grupo "Outros destinos" na barra — destino com
+    // `sidebar: false` vive do atalho contextual de quem o usa, não de uma
+    // segunda lista com comportamento diferente dentro do mesmo menu.
     href: '/execucoes', label: 'Execuções', icon: 'history', section: 'resultados',
     permission: 'config', area: 'execucoes', sidebar: false,
     description: 'O que as automações fizeram — e, quando falharam, o que aconteceu e o que fazer.',

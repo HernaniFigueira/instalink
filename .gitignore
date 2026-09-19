@@ -8,3 +8,4 @@ data/*.json
 data/*.bak
 *.log
 .DS_Store
+tsconfig.tsbuildinfo

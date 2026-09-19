@@ -88,7 +88,7 @@ export async function POST(req: NextRequest) {
           };
         }
         pushAudit(db, {
-          action: 'whatsapp.disconnected' as any,
+          action: 'whatsapp.disconnected',
           actor: user,
           businessId,
           meta: { via: 'dashboard' },

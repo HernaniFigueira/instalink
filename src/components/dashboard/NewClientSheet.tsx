@@ -4,6 +4,8 @@ import { useState } from 'react';
 import { Icon } from '@/components/icons';
 import { apiSend } from '@/lib/api-client';
 import { onlyDigits } from '@/lib/utils';
+import { emailError, normalizeEmail, phoneError } from '@/lib/field-quality';
+import { PhoneBRInput } from '@/components/dashboard/PhoneBRInput';
 import { Button } from '@/components/ui';
 
 interface SavedContact {
@@ -43,7 +45,12 @@ export function NewClientSheet({
     if (saving) return;
     setError('');
     if (!name.trim()) { setError('Informe o nome do cliente.'); return; }
-    if (onlyDigits(phone).length < 10) { setError('Informe um WhatsApp válido.'); return; }
+    // A3.4 · Bloco 6: mensagem ESPECÍFICA (faltou DDD? dígito a mais? e-mail
+    // torto?) em vez de "informe um WhatsApp válido" para tudo.
+    const phoneMsg = phoneError(phone, { required: true });
+    if (phoneMsg) { setError(phoneMsg); return; }
+    const emailMsg = emailError(email);
+    if (emailMsg) { setError(emailMsg); return; }
     if (createAccess && !email.trim() && onlyDigits(phone).length < 10) {
       setError('Para criar acesso, informe um e-mail ou WhatsApp válido.');
       return;
@@ -54,7 +61,7 @@ export function NewClientSheet({
       businessId,
       name: name.trim(),
       phone: onlyDigits(phone),
-      email: email.trim(),
+      email: normalizeEmail(email),
       note: note.trim() || undefined,
       marketingOptIn,
       createAccount: createAccess,
@@ -123,7 +130,7 @@ export function NewClientSheet({
             <label className="block"><span className={label}>NOME *</span>
               <input autoFocus value={name} onChange={(e) => setName(e.target.value)} className={input + ' mt-1'} placeholder="Ex.: Marlene Silva" /></label>
             <label className="block"><span className={label}>WHATSAPP *</span>
-              <input value={phone} onChange={(e) => setPhone(e.target.value)} className={input + ' mt-1'} inputMode="tel" placeholder="(11) 99999-9999" /></label>
+              <PhoneBRInput value={phone} onChange={setPhone} className="mt-1" placeholder="(11) 99999-9999" /></label>
             <label className="block"><span className={label}>E-MAIL</span>
               <input value={email} onChange={(e) => setEmail(e.target.value)} className={input + ' mt-1'} inputMode="email" placeholder="Opcional" /></label>
             <label className="block"><span className={label}>OBSERVAÇÃO</span>

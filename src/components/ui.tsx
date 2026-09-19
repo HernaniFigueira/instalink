@@ -1,6 +1,9 @@
 import { cn } from '@/lib/utils';
 import { Icon } from '@/components/icons';
 import { toneCls, type Tone } from '@/lib/status';
+import { buildHoursChips, type HoursChipDay } from '@/lib/hours-chips';
+
+export type { HoursChipDay };
 
 // ═══════════════════════════════════════════════════════════════
 // DESIGN SYSTEM INSTALINK (A3.3) — componentes compartilhados
@@ -532,6 +535,56 @@ export function Avatar({ name, src, size = 44, className }: { name: string; src?
         <span aria-hidden="true">{initials || '?'}</span>
       )}
     </span>
+  );
+}
+
+// ═══════════════════════════════════════════════════════════════
+// HOURS CHIPS (A3.4) — horário por dia em chips, não em linha corrida
+// ═══════════════════════════════════════════════════════════════
+// O QUE mostrar em cada dia é decidido em `lib/hours-chips.ts` (testável sem
+// navegador); aqui só desenhamos. Nenhuma regra de agenda é recalculada nesta
+// camada: os dias chegam das tabelas reais de `lib/schedule.ts`.
+export function HoursChips({ days, className, size = 'md' }: {
+  /** Dias na ordem que quiser; o componente renderiza em ordem de semana. */
+  days: HoursChipDay[];
+  className?: string;
+  size?: 'sm' | 'md';
+}) {
+  const chips = buildHoursChips(days);
+  return (
+    <div className={cn('flex flex-wrap gap-1.5', className)} role="list" aria-label="Horário por dia da semana">
+      {chips.map((chip) => (
+        <span
+          key={chip.weekday}
+          role="listitem"
+          title={chip.text}
+          aria-label={chip.text}
+          className={cn(
+            'inline-flex items-center gap-1.5 rounded-md border font-semibold tabular-nums',
+            size === 'sm' ? 'text-[11px] px-2 py-1' : 'text-xs px-2.5 py-1.5',
+            chip.closed
+              ? 'bg-[var(--surface-3)] border-[var(--border)] text-[var(--text-faint)]'
+              : 'bg-[var(--surface)] border-[var(--border-strong)] text-[var(--text)]',
+          )}
+        >
+          <span className={cn('font-bold tracking-wide', chip.closed ? 'text-[var(--text-faint)]' : 'text-[var(--text-muted)]')}>
+            {chip.label}
+          </span>
+          {chip.closed ? (
+            <span>Fechado</span>
+          ) : (
+            chip.windows.map((w, i) => (
+              <span key={i} className="inline-flex items-center gap-1">
+                {i > 0 && <span className="text-[var(--text-faint)]">·</span>}
+                <span>{w.start}</span>
+                <span aria-hidden="true" className="text-[var(--brand)]">→</span>
+                <span>{w.end}</span>
+              </span>
+            ))
+          )}
+        </span>
+      ))}
+    </div>
   );
 }
 

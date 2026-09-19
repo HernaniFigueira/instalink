@@ -9,6 +9,7 @@ import { normalizeLeadStageId } from '@/lib/pipeline-stages';
 import { onlyDigits, waLink, cn, money } from '@/lib/utils';
 import { todayISO, addDaysISO } from '@/lib/tz';
 import { apiGet, apiSend } from '@/lib/api-client';
+import { PhoneBRInput } from '@/components/dashboard/PhoneBRInput';
 import Link from 'next/link';
 import { PipelineStagesPanel } from '@/components/dashboard/PipelineStagesPanel';
 
@@ -1089,13 +1090,7 @@ export function EsteiraView() {
             <div className="grid grid-cols-2 gap-2">
               <div>
                 <label className="block text-xs font-semibold text-zinc-700 mb-1">WhatsApp</label>
-                <input
-                  type="tel"
-                  placeholder="(11) 99999-9999"
-                  value={newLeadPhone}
-                  onChange={(e) => setNewLeadPhone(e.target.value)}
-                  className="w-full text-xs p-2.5 rounded-lg border border-zinc-300"
-                />
+                <PhoneBRInput value={newLeadPhone} onChange={setNewLeadPhone} placeholder="(11) 99999-9999" />
               </div>
               <div>
                 <label className="block text-xs font-semibold text-zinc-700 mb-1">E-mail</label>

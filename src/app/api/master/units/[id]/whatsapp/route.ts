@@ -113,6 +113,9 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
           verifiedName: testResult.verifiedName,
           connectedAt: now,
           lastError: undefined,
+          // Origem da conexão: cadastro assistido pelo suporte, não o popup.
+          source: 'master',
+          tokenIssuedAt: now,
         };
       }
       pushAudit(d, {

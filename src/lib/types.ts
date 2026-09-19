@@ -274,6 +274,14 @@ export interface WhatsappIntegration {
   lastError?: string;
   lastErrorAt?: string;
   webhookVerifiedAt?: string;
+  /**
+   * Como esta unidade foi conectada: 'embedded_signup' (a própria unidade
+   * autorizou no popup oficial da Meta) ou 'master' (credenciais cadastradas
+   * pelo suporte). Vazio nos registros anteriores ao Bloco 8.
+   */
+  source?: 'embedded_signup' | 'master' | '';
+  /** Data e hora em que o código do popup foi trocado pelo token. */
+  tokenIssuedAt?: string;
 }
 
 // ── DTO público: whitelist explícita do que o visitante pode ver ──
@@ -534,6 +542,111 @@ export interface Booking {
   rescheduleCount?: number; // quantas vezes este atendimento já foi movido
   // P3 — vínculo com o lead que originou o agendamento
   leadId?: string;
+  // ── A3.4 · Bloco 4 — operação do dia ──
+  /** 'fit_in' = ENCAIXE: agendamento aceito fora da grade, com conflito
+   *  reconhecido por quem criou. Ausente = agendamento normal. */
+  bookingKind?: BookingKind;
+  /** Check-in do cliente no balcão (ISO). Ausente = ainda não chegou. */
+  checkedInAt?: string;
+  /** Quem registrou o check-in (memberId) e o rótulo legível do autor. */
+  checkedInBy?: string;
+  checkedInByName?: string;
+}
+
+/** Tipo do agendamento. `standard` é o fluxo normal da grade. */
+export type BookingKind = 'standard' | 'fit_in';
+
+// ═══════════════════════════════════════════════════════════════
+// A3.4 · BLOCO 4 — FILA DE ESPERA (entidade PRÓPRIA)
+// ═══════════════════════════════════════════════════════════════
+// Fila NÃO é agenda: quem chega sem horário marcado não pode virar um Booking
+// falso (ocuparia a grade, apareceria em relatório de agendamentos e mentiria
+// sobre disponibilidade). A entrada de fila tem vida própria, pode virar
+// atendimento depois (bookingId) e guarda os horários de chamada/atendimento.
+export type QueueStatus = 'waiting' | 'called' | 'in_service' | 'done' | 'left';
+
+export interface QueueEntry {
+  id: ID;
+  businessId: ID;
+  customerName: string;
+  customerPhone: string; // só dígitos (mesma chave do CRM)
+  contactId: string; // '' = ainda não vinculado
+  serviceId: string; // '' = a definir
+  professionalId: string; // '' = qualquer um
+  /** Agendamento de origem, quando a entrada veio de um horário marcado. */
+  bookingId: string;
+  note: string;
+  status: QueueStatus;
+  /** Dia do negócio em que entrou na fila (YYYY-MM-DD, fuso da unidade). */
+  date: string;
+  createdAt: string;
+  calledAt: string;
+  startedAt: string;
+  endedAt: string; // done/left
+  /** Quem operou a última transição (memberId/servidor). */
+  updatedBy: string;
+  updatedAt: string;
+}
+
+// ═══════════════════════════════════════════════════════════════
+// A3.4 · BLOCO 5 — REGISTRO DO ATENDIMENTO (Encounter)
+// ═══════════════════════════════════════════════════════════════
+// O que foi feito, o que foi orientado e o que fica para a próxima vez. É uma
+// ENTIDADE PRÓPRIA, separada do agendamento:
+//   • um agendamento pode ter UM registro (1:1 opcional) — o histórico do
+//     serviço prestado não pode ser um campo de texto livre no Booking;
+//   • o registro tem dono (o profissional que atendeu) e escopo por unidade;
+//   • nasce rascunho e é FINALIZADO (a partir daí, editar é decisão explícita
+//     e auditada — registro de atendimento não muda sozinho).
+export type EncounterStatus = 'draft' | 'finalized';
+
+export interface Encounter {
+  id: ID;
+  businessId: ID;
+  /** Agendamento de origem ('' quando o registro foi feito sem agendamento). */
+  bookingId: string;
+  /**
+   * A3.4 fix (2ª revisão) — entrada da FILA de origem ('' quando não veio do
+   * balcão). É a chave do 1:1 com o walk-in: um cliente que chegou sem horário
+   * tem UM registro, mesmo que a tela seja aberta várias vezes.
+   */
+  queueId: string;
+  serviceId: string;
+  professionalId: string;
+  customerId: string; // conta do cliente ('' = visitante/legado)
+  contactId: string; // contato do CRM (fonte do histórico 360)
+  customerName: string;
+  /** Dia do atendimento (YYYY-MM-DD, fuso da unidade). */
+  date: string;
+  time: string;
+  /** O que o cliente procurou / queixa principal. */
+  complaint: string;
+  /** O que foi feito (evolução do atendimento). */
+  evolution: string;
+  /** Orientações entregues ao cliente (aparecem na impressão). */
+  guidance: string;
+  /** Retorno sugerido (texto curto: "em 30 dias", "se persistir"). */
+  followUp: string;
+  /** Anotações internas — NÃO saem na impressão entregue ao cliente. */
+  internalNote: string;
+  /** Etiquetas livres (procedimentos, materiais, região tratada…). */
+  tags: string[];
+  status: EncounterStatus;
+  /**
+   * A3.4 fix (revisão B5): revisão OPTIMISTA. Cada alteração REAL grava
+   * `version + 1`; a tela manda `expectedVersion` e o servidor recusa (409)
+   * quando não bate. É o que impede duas abas de se sobrescreverem em
+   * silêncio. Registros legados sem o campo valem 1 (ver `normalizeDB`).
+   */
+  version: number;
+  createdAt: string;
+  updatedAt: string;
+  createdBy: string;
+  updatedBy: string;
+  finalizedAt: string;
+  finalizedBy: string;
+  /** Quem assina o registro (nome do profissional no momento da finalização). */
+  signedBy: string;
 }
 
 export type ReviewSource = 'site' | 'google';
@@ -766,6 +879,10 @@ export interface DB {
   // ── P6: canais e integrações externas (conexões + log de entregas) ──
   integrations: Integration[];
   integrationEvents: IntegrationEvent[];
+  // ── A3.4 · Bloco 4: fila de espera (entidade própria, fora da agenda) ──
+  queue: QueueEntry[];
+  // ── A3.4 · Bloco 5: registros de atendimento (dado sensível, com dono) ──
+  encounters: Encounter[];
 }
 
 // ═══════════════════════════════════════════════════════════════
@@ -1148,6 +1265,8 @@ export interface Task {
   leadId?: string;
   bookingId?: string;
   customerId?: string;
+  /** A3.4 fix (2ª revisão): pendência nascida de um atendimento (retorno). */
+  encounterId?: string;
   source: 'automation' | 'manual';
 }
 
@@ -1218,7 +1337,11 @@ export const VALID_MEMBER_ROLES: MemberRole[] = [
 export type PermissionId =
   | 'dashboard' | 'agenda' | 'clientes' | 'leads' | 'pedidos' | 'catalogo'
   | 'pagina' | 'agente' | 'whatsapp' | 'campanhas'
-  | 'equipe' | 'config' | 'financeiro' | 'admin';
+  | 'equipe' | 'config' | 'financeiro' | 'admin'
+  // A3.4 · Bloco 5 — registro do atendimento (evolução, orientações e
+  // histórico do serviço prestado). Dado próprio: NÃO vem junto com
+  // "clientes" e não é dado por padrão para quem só opera o balcão.
+  | 'atendimento';
 
 export interface BusinessMember {
   id: ID;
@@ -1609,6 +1732,9 @@ export type AuditAction =
   | 'campaign.created' | 'campaign.ready' | 'campaign.sent'
   | 'campaign.cancelled' | 'campaign.deleted'
   | 'whatsapp.connect_requested' | 'whatsapp.webhook_received'
+  // A3.4 · Bloco 8 — onboarding real (Embedded Signup)
+  | 'whatsapp.connected' | 'whatsapp.disconnected'
+  | 'whatsapp.onboarding_blocked' | 'whatsapp.onboarding_failed'
   | 'agent.updated' | 'organization.created' | 'unit.created'
   | 'master.created' | 'master.promoted' | 'master.revoked'
   | 'user.login'
@@ -1617,6 +1743,14 @@ export type AuditAction =
   | 'appearance.updated' | 'contact.note_added'
   // Fechamento A3.3 — edição de nome/telefone/e-mail do contato da unidade
   | 'contact.identity_updated'
+  // A3.4 · Bloco 4 — operação do dia (check-in e fila de espera)
+  | 'booking.checkin' | 'booking.checkin_undo'
+  | 'queue.created' | 'queue.updated' | 'queue.removed' | 'queue.booked'
+  // A3.4 · Bloco 5 — registro do atendimento
+  | 'encounter.created' | 'encounter.updated' | 'encounter.finalized'
+  | 'encounter.reopened' | 'encounter.removed'
+  // A3.4 · Bloco 7 — base de clientes entra e sai em arquivo
+  | 'contact.imported' | 'contact.exported'
   // P3 — esteira operacional e integrações
   | 'pipeline.updated' | 'api_key.created' | 'api_key.revoked'
   | 'webhook.created' | 'webhook.updated' | 'webhook.deleted'

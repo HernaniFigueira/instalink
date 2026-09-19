@@ -12,6 +12,7 @@ import {
   REVENUE_HINTS, REVENUE_LABELS, REVENUE_UNIT_LABELS, bookingRevenue, orderRevenue,
 } from '@/lib/revenue';
 import { nowHM, todayISO } from '@/lib/tz';
+import { timeToMin } from '@/lib/utils';
 import { parsePeriodParam, periodWindows, resolvePeriodSpec } from '@/lib/periods';
 import { collectResults, resultsSummary } from '@/lib/insights';
 import { isFeatureEnabled } from '@/lib/features';
@@ -186,10 +187,21 @@ export async function GET(req: NextRequest) {
 
   // Região de atenção: apenas dados já existentes e confiáveis, com link
   // contextual somente quando o usuário pode abrir a rota.
+  // A3.4 · Bloco 4 — operação do balcão: fila de espera e chegadas de hoje
+  // ainda sem check-in (mesma leitura para a Agenda e para o Início).
+  const queueWaitingNow = (db.queue || []).filter((q) =>
+    q.businessId === bId && (q.status === 'waiting' || q.status === 'called')).length;
+  const arrivalsPendingNow = m.bookings
+    ? bookings.filter((b) =>
+      b.date === today && b.status === 'confirmed' &&
+      !b.checkedInAt && timeToMin(b.time) <= timeToMin(nowHM())).length
+    : 0;
   const attention = dashboardAttention({
     closures: closures.length,
     leadsNew: crm.leadsNew,
     tasksOverdue: tasksSummary?.overdue ?? 0,
+    queueWaiting: queueWaitingNow,
+    arrivalsPending: arrivalsPendingNow,
     permissions: { agenda: links.agenda, leads: links.funil, tasks: canTasks },
   });
 

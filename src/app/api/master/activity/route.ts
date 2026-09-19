@@ -22,6 +22,10 @@ const LABEL: Record<string, string> = {
   'campaign.sent': 'Campanha enviada',
   'agent.updated': 'Agente configurado',
   'whatsapp.connect_requested': 'WhatsApp solicitado',
+  'whatsapp.connected': 'WhatsApp conectado',
+  'whatsapp.disconnected': 'WhatsApp desconectado',
+  'whatsapp.onboarding_blocked': 'WhatsApp bloqueado pela plataforma',
+  'whatsapp.onboarding_failed': 'WhatsApp falhou ao conectar',
 };
 
 export async function GET(req: NextRequest) {
