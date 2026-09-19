@@ -285,11 +285,15 @@ export async function PATCH(req: NextRequest) {
       return NextResponse.json({ ok: true, campaign: finalCampaign });
     }
 
-    // CANCELAR — permitido enquanto não saiu disparo real (draft/ready/sending).
+    // CANCELAR — permitido apenas em draft ou ready (antes de iniciar o envio real).
+    // Campanhas em 'sending' não são canceláveis nesta versão para manter a integridade da fila ativa.
     if (action === 'cancel') {
       const def = campaignStatusDef(campaign.status);
       if (!def.cancellable) {
-        return NextResponse.json({ error: 'Campanhas já enviadas fazem parte do histórico e não podem ser canceladas.' }, { status: 409 });
+        return NextResponse.json(
+          { error: 'Campanhas em envio ou já concluídas fazem parte do histórico/fila ativa e não podem ser canceladas nesta versão.' },
+          { status: 409 },
+        );
       }
       const updated = await updateDB((d) => {
         const c = d.campaigns.find((x) => x.id === campaign.id)!;

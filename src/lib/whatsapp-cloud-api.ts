@@ -607,6 +607,11 @@ export function claimPendingCampaignRecipients(
   const leaseUntil = new Date(new Date(nowISO).getTime() + WHATSAPP_CLAIM_LEASE_MS).toISOString();
   const candidates = (db.campaignRecipients || []).filter((r) => {
     if (targetRecipientIds && !targetRecipientIds.includes(r.id)) return false;
+    // No escaneamento geral da fila pelo worker, campanhas canceladas são ignoradas
+    if (!targetRecipientIds) {
+      const parent = (db.campaigns || []).find((c) => c.id === r.campaignId);
+      if (parent && parent.status === 'cancelled') return false;
+    }
     return isCampaignRecipientDue(r, nowISO) && !isCampaignRecipientClaimLive(r, nowISO);
   });
 
@@ -638,6 +643,12 @@ export function syncCampaignStatusAndCounts(d: DB, c: Campaign, nowISO = new Dat
   c.counts.sent = sentRecs.length;
   c.counts.failed = failedRecs.length;
   c.counts.eligible = allRecs.length;
+
+  // Nenhuma campanha cancelada ou em rascunho/pronta pode ser reativada/alterada para sending/sent pelo worker
+  if (c.status === 'cancelled' || c.status === 'draft' || c.status === 'ready') {
+    c.updatedAt = nowISO;
+    return;
+  }
 
   if (pendingRecs.length > 0) {
     c.status = 'sending';
@@ -700,6 +711,22 @@ export async function deliverCampaignRecipient(
       }
     });
     return { ok: false, status: 'failed', error: 'Unidade ou campanha não encontrada.' };
+  }
+
+  // Se a campanha estiver cancelada, não executa envio externo e encerra recipient
+  if (campaign.status === 'cancelled') {
+    await updateDB((d) => {
+      const target = d.campaignRecipients.find((r) => r.id === recipientId && r.claimToken === holder);
+      if (target) {
+        target.status = 'failed';
+        target.error = 'Campanha foi cancelada.';
+        target.claimToken = undefined;
+        target.claimExpiresAt = undefined;
+      }
+      const c = d.campaigns.find((x) => x.id === campaign.id);
+      if (c) syncCampaignStatusAndCounts(d, c, nowISO);
+    });
+    return { ok: false, status: 'failed', error: 'Campanha foi cancelada.' };
   }
 
   const creds = getWhatsappCredentials(business);

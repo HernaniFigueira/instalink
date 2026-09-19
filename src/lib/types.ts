@@ -1264,8 +1264,10 @@ export const VALID_CAMPAIGN_STATUSES: CampaignStatus[] = [
 export const CAMPAIGN_EDITABLE: CampaignStatus[] = ['draft', 'ready', 'cancelled'];
 /** Estados em que a campanha pode ser EXCLUÍDA (não destrói auditoria). */
 export const CAMPAIGN_DELETABLE: CampaignStatus[] = ['draft'];
-/** Estados em que a campanha pode ser CANCELADA (ainda não fez disparo real). */
-export const CAMPAIGN_CANCELLABLE: CampaignStatus[] = ['draft', 'ready', 'sending'];
+/** Estados em que a campanha pode ser CANCELADA (ainda não começou envio real: apenas draft ou ready).
+ * Campanhas em 'sending' não podem ser canceladas nesta versão para evitar estados inconsistentes
+ * na fila ativa de disparos e entrega pós-commit. */
+export const CAMPAIGN_CANCELLABLE: CampaignStatus[] = ['draft', 'ready'];
 
 export function campaignStatusDef(s: CampaignStatus): {
   label: string; editable: boolean; deletable: boolean; cancellable: boolean; tone: string;
@@ -1273,11 +1275,11 @@ export function campaignStatusDef(s: CampaignStatus): {
   const map: Record<CampaignStatus, { label: string; editable: boolean; deletable: boolean; cancellable: boolean; tone: string }> = {
     draft: { label: 'Rascunho', editable: true, deletable: true, cancellable: true, tone: 'zinc' },
     ready: { label: 'Pronta', editable: true, deletable: false, cancellable: true, tone: 'amber' },
-    sending: { label: 'Enviando', editable: false, deletable: false, cancellable: true, tone: 'blue' },
+    sending: { label: 'Enviando', editable: false, deletable: false, cancellable: false, tone: 'blue' },
     sent: { label: 'Enviada', editable: false, deletable: false, cancellable: false, tone: 'emerald' },
     partial: { label: 'Parcial', editable: false, deletable: false, cancellable: false, tone: 'orange' },
     failed: { label: 'Falhou', editable: false, deletable: false, cancellable: false, tone: 'red' },
-    cancelled: { label: 'Cancelada', editable: true, deletable: false, cancellable: true, tone: 'zinc' },
+    cancelled: { label: 'Cancelada', editable: true, deletable: false, cancellable: false, tone: 'zinc' },
   };
   return map[s] || map.draft;
 }

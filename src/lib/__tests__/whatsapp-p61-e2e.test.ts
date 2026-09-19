@@ -21,6 +21,7 @@ import {
   sendMetaGraphMessage,
   getWhatsappCredentials,
   CAMPAIGN_IMMEDIATE_BATCH_LIMIT,
+  syncCampaignStatusAndCounts,
 } from '../whatsapp-cloud-api';
 import { registerChannelConnector, channelConnectorAvailable, channelConnectorFor } from '../integrations/connectors';
 import { maskTechnicalId } from '../whatsapp';
@@ -30,6 +31,7 @@ import { emitAutomationEvent } from '../automation/events';
 import { drainAutomations } from '../automation/executor';
 import { buildAutomation } from './helpers/automation-fixtures';
 import { assertOutsideDBTransaction } from '../db-transaction';
+import { CAMPAIGN_CANCELLABLE, campaignStatusDef } from '../types';
 import type { Business, DB, Service, Professional } from '../types';
 
 import { GET as webhookGET, POST as webhookPOST } from '@/app/api/whatsapp/webhook/route';
@@ -1478,6 +1480,201 @@ describe('P6.1 — WhatsApp Cloud API E2E', () => {
       expect(camp.counts.sent).toBe(7);
       expect(camp.counts.failed).toBe(0);
       expect(camp.sentAt).toBeDefined();
+    });
+
+    it('disciplina de cancelamento de campanha: draft e ready cancelam, sending retorna 409, cron conclui sending e nunca reativa cancelled', async () => {
+      // 0. Verifica a definição da regra estrita
+      expect(CAMPAIGN_CANCELLABLE).toEqual(['draft', 'ready']);
+      expect(campaignStatusDef('draft').cancellable).toBe(true);
+      expect(campaignStatusDef('ready').cancellable).toBe(true);
+      expect(campaignStatusDef('sending').cancellable).toBe(false);
+      expect(campaignStatusDef('cancelled').cancellable).toBe(false);
+
+      // Prepara 6 contatos com consentimento (maior que CAMPAIGN_IMMEDIATE_BATCH_LIMIT = 5)
+      await updateDB((d) => {
+        for (let i = 1; i <= 6; i++) {
+          d.contacts.push({
+            id: `cnt-cancel-rule-${i}`,
+            businessId: BIZ_A,
+            customerId: '',
+            name: `Cliente Cancel Rule ${i}`,
+            phone: `551194444000${i}`,
+            email: `cliente${i}@cancel.com`,
+            source: 'whatsapp',
+            lastInteraction: '2026-09-18T10:00:00Z',
+            marketingOptIn: true,
+            createdAt: '2026-09-18T10:00:00Z',
+            updatedAt: '2026-09-18T10:00:00Z',
+          });
+        }
+      });
+
+      const tokenA = await createSession(OWNER_A);
+
+      // 1. draft pode cancelar
+      const createDraftRes = await campaignsPOST(jsonReq('/api/campaigns', {
+        method: 'POST',
+        token: tokenA,
+        body: {
+          businessId: BIZ_A,
+          name: 'Campanha Teste Draft Cancel',
+          segment: 'all_optin',
+          message: 'Mensagem draft',
+        },
+      }));
+      expect(createDraftRes.status).toBe(200);
+      const { campaign: draftCamp } = await jsonBody(createDraftRes);
+      expect(draftCamp.status).toBe('draft');
+
+      const cancelDraftRes = await campaignsPATCH(jsonReq('/api/campaigns', {
+        method: 'PATCH',
+        token: tokenA,
+        body: { businessId: BIZ_A, id: draftCamp.id, action: 'cancel' },
+      }));
+      expect(cancelDraftRes.status).toBe(200);
+      const { campaign: cancelledFromDraft } = await jsonBody(cancelDraftRes);
+      expect(cancelledFromDraft.status).toBe('cancelled');
+
+      // 2. ready pode cancelar
+      const createReadyRes = await campaignsPOST(jsonReq('/api/campaigns', {
+        method: 'POST',
+        token: tokenA,
+        body: {
+          businessId: BIZ_A,
+          name: 'Campanha Teste Ready Cancel',
+          segment: 'all_optin',
+          message: 'Mensagem ready',
+        },
+      }));
+      expect(createReadyRes.status).toBe(200);
+      const { campaign: readyCamp } = await jsonBody(createReadyRes);
+
+      const makeReadyRes = await campaignsPATCH(jsonReq('/api/campaigns', {
+        method: 'PATCH',
+        token: tokenA,
+        body: { businessId: BIZ_A, id: readyCamp.id, action: 'ready' },
+      }));
+      expect(makeReadyRes.status).toBe(200);
+
+      const cancelReadyRes = await campaignsPATCH(jsonReq('/api/campaigns', {
+        method: 'PATCH',
+        token: tokenA,
+        body: { businessId: BIZ_A, id: readyCamp.id, action: 'cancel' },
+      }));
+      expect(cancelReadyRes.status).toBe(200);
+      const { campaign: cancelledFromReady } = await jsonBody(cancelReadyRes);
+      expect(cancelledFromReady.status).toBe('cancelled');
+
+      // 3. sending retorna 409 / não é cancelável
+      const createSendingRes = await campaignsPOST(jsonReq('/api/campaigns', {
+        method: 'POST',
+        token: tokenA,
+        body: {
+          businessId: BIZ_A,
+          name: 'Campanha Teste Sending Block',
+          segment: 'all_optin',
+          message: 'Mensagem sending',
+        },
+      }));
+      const { campaign: sendingCamp } = await jsonBody(createSendingRes);
+
+      await campaignsPATCH(jsonReq('/api/campaigns', {
+        method: 'PATCH',
+        token: tokenA,
+        body: { businessId: BIZ_A, id: sendingCamp.id, action: 'ready' },
+      }));
+
+      const sendStartRes = await campaignsPATCH(jsonReq('/api/campaigns', {
+        method: 'PATCH',
+        token: tokenA,
+        body: {
+          businessId: BIZ_A,
+          id: sendingCamp.id,
+          action: 'send',
+          templateName: 'template_cancel_test',
+        },
+      }));
+      expect(sendStartRes.status).toBe(200);
+
+      let db = await readDB();
+      const currentSendingCamp = db.campaigns.find((c) => c.id === sendingCamp.id)!;
+      expect(currentSendingCamp.status).toBe('sending');
+
+      // Tenta cancelar a campanha em 'sending' -> deve falhar com 409
+      const cancelSendingRes = await campaignsPATCH(jsonReq('/api/campaigns', {
+        method: 'PATCH',
+        token: tokenA,
+        body: { businessId: BIZ_A, id: sendingCamp.id, action: 'cancel' },
+      }));
+      expect(cancelSendingRes.status).toBe(409);
+      const cancelErr = await jsonBody(cancelSendingRes);
+      expect(cancelErr.error).toMatch(/não podem ser canceladas/);
+
+      // Status no banco continua strictly 'sending'
+      db = await readDB();
+      const postCancelAttempt = db.campaigns.find((c) => c.id === sendingCamp.id)!;
+      expect(postCancelAttempt.status).toBe('sending');
+
+      // 4. cron continua normalmente a campanha sending até sent/partial/failed
+      process.env.CRON_SECRET = 'cron_secret_test_whatsapp_999';
+      const cronRes = await cronWhatsappGET(jsonReq('/api/cron/whatsapp', {
+        headers: { authorization: 'Bearer cron_secret_test_whatsapp_999' },
+      }));
+      expect(cronRes.status).toBe(200);
+
+      db = await readDB();
+      const completedCamp = db.campaigns.find((c) => c.id === sendingCamp.id)!;
+      expect(completedCamp.status).toBe('sent');
+      expect(completedCamp.counts.sent).toBe(6);
+
+      // 5. nenhuma campanha cancelled é reativada pelo worker
+      // Simula uma campanha que ficou 'cancelled' tendo recipient pending
+      await updateDB((d) => {
+        d.campaigns.push({
+          id: 'camp-permanently-cancelled',
+          businessId: BIZ_A,
+          name: 'Campanha Cancelada Permanente',
+          segment: 'all_optin',
+          segmentRef: '',
+          message: 'Não deve ser entregue',
+          status: 'cancelled',
+          counts: { eligible: 1, sent: 0, delivered: 0, failed: 0 },
+          channel: 'whatsapp',
+          createdBy: 'user-admin',
+          sentAt: '',
+          createdAt: '2026-09-19T10:00:00Z',
+          updatedAt: '2026-09-19T10:00:00Z',
+        });
+        d.campaignRecipients.push({
+          id: 'rec-of-cancelled-camp',
+          campaignId: 'camp-permanently-cancelled',
+          businessId: BIZ_A,
+          contactId: 'cnt-cancel-rule-1',
+          phone: '5511944440001',
+          name: 'Cliente Cancel Rule 1',
+          status: 'pending',
+          error: '',
+          at: '2026-09-19T10:00:00Z',
+          attempts: 0,
+        });
+      });
+
+      // Tenta rodar worker de entrega
+      const workerDeliverRes = await deliverCampaignRecipient('rec-of-cancelled-camp');
+      expect(workerDeliverRes.status).toBe('failed');
+      expect(workerDeliverRes.error).toMatch(/cancelada/i);
+
+      // Executa também syncCampaignStatusAndCounts diretamente
+      db = await readDB();
+      await updateDB((d) => {
+        const c = d.campaigns.find((x) => x.id === 'camp-permanently-cancelled')!;
+        syncCampaignStatusAndCounts(d, c, '2026-09-19T10:05:00Z');
+      });
+
+      db = await readDB();
+      const verifiedCamp = db.campaigns.find((c) => c.id === 'camp-permanently-cancelled')!;
+      // Campanha continua strictly 'cancelled' (nunca reativada para sending ou sent)
+      expect(verifiedCamp.status).toBe('cancelled');
     });
 
     it('P4 real E2E: emitAutomationEvent -> drainAutomations() com stepAutomationRun -> entrega externa com wamid preservado', async () => {
