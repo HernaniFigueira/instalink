@@ -67,5 +67,14 @@ export function clearCustomerSessionOn(res: NextResponse): void {
 }
 
 export function publicCustomer(c: Customer) {
-  return { id: c.id, name: c.name, phone: c.phone, email: c.email, avatar: c.avatar };
+  return {
+    id: c.id,
+    name: c.name,
+    phone: c.phone,
+    email: c.email,
+    avatar: c.avatar,
+    // Sinaliza a evolução preparada para troca obrigatória; não cria um
+    // segundo fluxo de autenticação nem altera o cadastro público.
+    mustChangePassword: c.mustChangePassword === true,
+  };
 }

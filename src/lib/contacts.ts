@@ -1,7 +1,8 @@
 // Relação Customer × Business ("contato"): uma pessoa faz parte da base de
 // contatos de um negócio. A conta (Customer) é GLOBAL; o contato é
-// contextual. Upsert idempotente por customerId OU telefone normalizado —
-// nunca cria duplicado. Preserva a lógica histórica de dedupe por telefone.
+// contextual. Upsert idempotente por customerId, telefone normalizado ou
+// e-mail — nunca cria duplicado. Preserva a lógica histórica de dedupe por
+// telefone.
 import { randomUUID } from 'node:crypto';
 import { onlyDigits } from './utils';
 import type { BusinessCustomer, ContactNote, DB } from './types';
@@ -25,15 +26,31 @@ export function contactKey(customerId: string, phone: string): string {
   return '';
 }
 
-export function findContact(db: DB, businessId: string, customerId: string, phone: string, name = ''): BusinessCustomer | undefined {
+export function findContact(
+  db: DB,
+  businessId: string,
+  customerId: string,
+  phone: string,
+  name = '',
+  email = '',
+): BusinessCustomer | undefined {
   const digits = onlyDigits(phone || '');
+  const cleanEmail = String(email || '').trim().toLowerCase();
   return db.contacts.find(
-    (c) =>
-      c.businessId === businessId &&
-      ((customerId && c.customerId === customerId) ||
-        (digits && onlyDigits(c.phone) === digits) ||
-        // Só agrupa "só nome" quando os DOIS lados não têm telefone/conta.
-        (!customerId && !digits && !!name && !c.customerId && !onlyDigits(c.phone) && c.name === name)),
+    (c) => {
+      if (c.businessId !== businessId) return false;
+      const sameCustomer = !!customerId && c.customerId === customerId;
+      const samePhone = !!digits && onlyDigits(c.phone) === digits;
+      // E-mail é uma chave de identidade quando não há uma conta diferente
+      // já vinculada. Isso cobre o cadastro direto por e-mail sem fundir dois
+      // Customer distintos por acidente.
+      const sameEmail = !!cleanEmail && c.email?.trim().toLowerCase() === cleanEmail
+        && (!customerId || !c.customerId || c.customerId === customerId);
+      // Só agrupa "só nome" quando os DOIS lados não têm telefone/conta/e-mail.
+      const sameName = !customerId && !digits && !cleanEmail && !!name
+        && !c.customerId && !onlyDigits(c.phone) && !c.email && c.name === name;
+      return sameCustomer || samePhone || sameEmail || sameName;
+    },
   );
 }
 
@@ -43,7 +60,7 @@ export function upsertContact(db: DB, input: ContactInput): BusinessCustomer | n
   const name = (input.name || '').trim().slice(0, 80);
   if (!input.customerId && !digits && !name) return null;
 
-  const existing = findContact(db, input.businessId, input.customerId || '', input.phone || '', name);
+  const existing = findContact(db, input.businessId, input.customerId || '', input.phone || '', name, input.email || '');
 
   if (existing) {
     // Promove guest (phone-only) para conta quando o customerId aparece.

@@ -178,7 +178,7 @@ export function createBookingTx(d: DB, p: CreateBookingParams): {
   let ownerPro = '';
   if (isOwner) {
     ownerPro = String(p.professionalId || '');
-    if (ownerPro && activePros.length > 0 && !eligible.some((x) => x.id === ownerPro)) {
+    if (ownerPro && !eligible.some((x) => x.id === ownerPro)) {
       throw txError('Profissional indisponível para este serviço.', 400);
     }
   }

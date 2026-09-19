@@ -666,7 +666,7 @@ export default function AgendaPage() {
     const initial: DragSlots = { loading: true, error: '', slots: {}, byPro: {} };
     dragSlotsRef.current = initial;
     setDrag(initial);
-    const own = { date: b.date, time: b.time };
+    const own = { date: b.date, time: b.time, professionalId: b.professionalId || '' };
     Promise.all(dragSlotUrls(businessId, b.serviceId, dates).map(async (url, i) => {
       try {
         const r = await fetch(url);
@@ -684,10 +684,12 @@ export default function AgendaPage() {
         error: failed === entries.length ? SLOT_STATE_MESSAGE.error : '',
         slots: {},
         byPro: {},
+        eligibleProIds: {},
       };
       for (const [d, j] of entries) {
         if (!j) continue;
         next.slots[d] = withOwnSlot(d, Array.isArray(j.slots) ? [...j.slots] : [], own);
+        if (Array.isArray(j.eligibleProfessionalIds)) next.eligibleProIds![d] = j.eligibleProfessionalIds.map(String);
         const byPro = (j.byPro || {}) as Record<string, string[]>;
         next.byPro[d] = {};
         for (const pid of Object.keys(byPro)) {
@@ -743,7 +745,7 @@ export default function AgendaPage() {
       drag: dragSlotsRef.current,
       durationMin: durationRef.current,
       toleranceMin: DROP_TOLERANCE_MIN,
-      own: b ? { date: b.date, time: b.time } : null,
+      own: b ? { date: b.date, time: b.time, professionalId: b.professionalId || '' } : null,
     });
     const col = columnsRef.current[plan.column];
     const next: HoverTarget | null = plan.target
@@ -1039,11 +1041,13 @@ export default function AgendaPage() {
             <button onClick={() => move(-1)} aria-label="Anterior" className="w-8 h-8 rounded-md bg-zinc-50 border border-zinc-200 hover:bg-zinc-100 flex items-center justify-center"><Icon n="chevL" size={14} /></button>
             <button onClick={() => setFocus(today)} className={`text-xs font-semibold px-3 py-1.5 rounded-md border ${focus === today ? 'bg-zinc-900 text-white border-zinc-900' : 'bg-white border-zinc-200 hover:bg-zinc-50'}`}>Hoje</button>
             <button onClick={() => move(1)} aria-label="Próximo" className="w-8 h-8 rounded-md bg-zinc-50 border border-zinc-200 hover:bg-zinc-100 flex items-center justify-center"><Icon n="chevR" size={14} /></button>
-            <input type="date" value={focus} max="2100-12-31" onChange={(e) => { if (/^\d{4}-\d{2}-\d{2}$/.test(e.target.value)) setFocus(e.target.value); }}
-              aria-label="Ir para a data" title="Ir para a data"
-              className="text-xs font-medium bg-zinc-50 border border-zinc-200 rounded-md px-2 py-1.5 hover:bg-zinc-100 focus:outline-none focus:ring-1 focus:ring-zinc-900" />
+            <label className="relative inline-flex items-center gap-1.5 min-w-0 max-w-[min(24rem,calc(100vw-11rem))] text-xs font-semibold capitalize bg-zinc-50 border border-zinc-200 rounded-md px-3 py-1.5 hover:bg-zinc-100 focus-within:ring-1 focus-within:ring-zinc-900 cursor-pointer" title="Escolher data">
+              <span className="truncate" aria-live="polite">{focusLabel}</span>
+              <Icon n="chevD" size={12} className="shrink-0 text-zinc-500" />
+              <input type="date" value={focus} max="2100-12-31" onChange={(e) => { if (/^\d{4}-\d{2}-\d{2}$/.test(e.target.value)) setFocus(e.target.value); }}
+                aria-label="Escolher data" className="absolute inset-0 w-full h-full opacity-0 cursor-pointer" />
+            </label>
           </div>
-          <span className="text-sm font-semibold capitalize min-w-0 truncate" aria-live="polite">{focusLabel}</span>
           <div className="flex gap-1 p-0.5 bg-zinc-100 rounded-md" role="tablist" aria-label="Visualização">
             {(['day', 'week', 'month'] as View[]).map((v) => (
               <button key={v} role="tab" aria-selected={view === v} onClick={() => { endDrag(); setView(v); }} className={`text-xs font-semibold px-3 py-1 rounded ${view === v ? 'bg-white shadow-sm border border-zinc-200' : 'text-zinc-500 hover:text-zinc-900'}`}>

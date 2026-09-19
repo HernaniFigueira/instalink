@@ -30,6 +30,10 @@ export async function GET(req: NextRequest) {
     phone: string;
     email: string;
     registered: boolean;
+    accountStatus: 'none' | 'active';
+    accountEmail: string;
+    accountPhone: string;
+    mustChangePassword: boolean;
     customerSince: string;
     source: string;
     marketingOptIn: boolean;
@@ -61,7 +65,8 @@ export async function GET(req: NextRequest) {
     let p = map.get(key);
     if (!p) {
       p = {
-        key, contactId: '', note: '', notes: [], customerId, name, phone: digits, email: '', registered: false, customerSince: '',
+        key, contactId: '', note: '', notes: [], customerId, name, phone: digits, email: '', registered: false,
+        accountStatus: 'none', accountEmail: '', accountPhone: '', mustChangePassword: false, customerSince: '',
         source: '', marketingOptIn: false,
         orders: 0, spent: 0, lastOrderAt: '', bookings: [], leads: [], conversations: [], tasks: [], lastSeen: '',
       };
@@ -77,7 +82,12 @@ export async function GET(req: NextRequest) {
   for (const c of db.contacts.filter((x) => x.businessId === businessId)) {
     const p = get(c.customerId, c.phone, c.name);
     if (!p) continue;
-    p.registered = !!c.customerId;
+    const account = c.customerId ? db.customers.find((customer) => customer.id === c.customerId) : undefined;
+    p.registered = !!account;
+    p.accountStatus = account ? 'active' : 'none';
+    p.accountEmail = account?.email || '';
+    p.accountPhone = account?.phone || '';
+    p.mustChangePassword = account?.mustChangePassword === true;
     p.customerSince = c.createdAt;
     p.contactId = c.id;
     // Observações: histórico append-only (autor/data/contexto) + campo legado.

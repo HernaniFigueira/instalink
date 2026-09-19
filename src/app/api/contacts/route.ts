@@ -1,11 +1,14 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { randomUUID } from 'node:crypto';
 import { updateDB } from '@/lib/db';
+import { hashPassword } from '@/lib/auth';
 import { requireBusiness } from '@/lib/access';
 import { pushAudit } from '@/lib/audit';
-import { addContactNote, contactNotes, upsertContact } from '@/lib/contacts';
+import { addContactNote, contactNotes, findContact, upsertContact } from '@/lib/contacts';
+import { customersMatchingIdentity, generateTemporaryPassword, isValidCustomerEmail, isValidCustomerPhone, normalizeCustomerEmail, normalizeCustomerPhone } from '@/lib/customer-account';
 import { onlyDigits } from '@/lib/utils';
 import { phoneKey } from '@/lib/whatsapp';
-import type { BusinessCustomer } from '@/lib/types';
+import type { BusinessCustomer, Customer } from '@/lib/types';
 
 // CRM — contatos do negócio.
 // GET  ?businessId=&q=&limit=  → busca por nome ou WhatsApp (para vincular a
@@ -17,10 +20,18 @@ import type { BusinessCustomer } from '@/lib/types';
 //       observação (append-only): nada é sobrescrito nem apagado e o registro
 //       guarda autor + data + contexto.
 
-function toDTO(c: BusinessCustomer) {
+function toDTO(c: BusinessCustomer, customer?: Customer | null) {
+  const account = customer || null;
   return {
     id: c.id, customerId: c.customerId, name: c.name, phone: c.phone, email: c.email,
-    registered: !!c.customerId, source: c.source, createdAt: c.createdAt,
+    // `customerId` só é considerado acesso ativo quando a conta realmente
+    // existe. Contato/pessoa e conta continuam sendo conceitos distintos.
+    registered: !!account,
+    accountStatus: account ? 'active' as const : 'none' as const,
+    accountEmail: account?.email || '',
+    accountPhone: account?.phone || '',
+    mustChangePassword: account?.mustChangePassword === true,
+    source: c.source, createdAt: c.createdAt,
     lastInteraction: c.lastInteraction, marketingOptIn: c.marketingOptIn === true,
     // Observação legada (compatível) + histórico append-only (P2).
     note: c.note || '',
@@ -43,7 +54,13 @@ export async function GET(req: NextRequest) {
       (qd.length >= 3 && phoneKey(c.phone).includes(phoneKey(qd))))
     : all;
   const sorted = [...filtered].sort((a, b) => (a.lastInteraction < b.lastInteraction ? 1 : -1)).slice(0, limit);
-  return NextResponse.json({ contacts: sorted.map(toDTO), total: filtered.length });
+  return NextResponse.json({
+    contacts: sorted.map((contact) => toDTO(
+      contact,
+      guard.db.customers.find((customer) => customer.id === contact.customerId) || null,
+    )),
+    total: filtered.length,
+  });
 }
 
 export async function POST(req: NextRequest) {
@@ -54,29 +71,141 @@ export async function POST(req: NextRequest) {
     if (!guard.ok) return guard.res;
     const ctx = guard.ctx;
     const name = String(body.name || '').trim().slice(0, 80);
-    const phone = onlyDigits(String(body.phone || ''));
-    const email = String(body.email || '').trim().toLowerCase().slice(0, 120);
-    if (!name && !phone) return NextResponse.json({ error: 'Informe nome ou WhatsApp.' }, { status: 400 });
+    const phone = normalizeCustomerPhone(body.phone);
+    const email = normalizeCustomerEmail(body.email);
+    const wantsAccess = body.createAccount === true || body.createAccess === true;
+    const noteText = String(body.note || '').trim().slice(0, 1000);
 
-    const contact = await updateDB((db) => {
-      // consentimento NUNCA é presumido: só liga com `true` explícito
+    if (!name) return NextResponse.json({ error: 'Informe o nome do cliente.' }, { status: 400 });
+    if (phone && !isValidCustomerPhone(phone)) {
+      return NextResponse.json({ error: 'Informe um WhatsApp válido.' }, { status: 400 });
+    }
+    if (email && !isValidCustomerEmail(email)) {
+      return NextResponse.json({ error: 'Informe um e-mail válido.' }, { status: 400 });
+    }
+    if (!phone && !email) {
+      return NextResponse.json({ error: 'Informe um WhatsApp ou e-mail.' }, { status: 400 });
+    }
+    if (wantsAccess && !isValidCustomerPhone(phone) && !isValidCustomerEmail(email)) {
+      return NextResponse.json({ error: 'Para criar acesso, informe um WhatsApp ou e-mail válido.' }, { status: 400 });
+    }
+
+    let temporaryPassword = '';
+    let accessCreated = false;
+    const result = await updateDB((db) => {
+      // A conta é GLOBAL: identidade por telefone/e-mail é resolvida antes
+      // de criar qualquer registro. Se os dois dados apontarem para contas
+      // diferentes, parar é mais seguro que vincular a pessoa errada.
+      let customer: Customer | null = null;
+      if (wantsAccess) {
+        const matches = customersMatchingIdentity(db, phone, email);
+        const unique = [...new Map(matches.map((item) => [item.id, item])).values()];
+        if (unique.length > 1) {
+          throw Object.assign(new Error('WhatsApp e e-mail pertencem a contas diferentes.'), { status: 409 });
+        }
+        customer = unique[0] || null;
+        const existingContact = findContact(db, businessId, '', phone, name, email);
+        if (existingContact?.customerId && existingContact.customerId !== customer?.id) {
+          throw Object.assign(new Error('Este contato já está vinculado a outra conta.'), { status: 409 });
+        }
+
+        const now = new Date().toISOString();
+        if (!customer) {
+          customer = {
+            id: randomUUID(),
+            name,
+            phone,
+            email,
+            passwordHash: '',
+            googleId: '',
+            avatar: '',
+            createdAt: now,
+            mustChangePassword: true,
+            accessCreatedAt: now,
+          };
+          db.customers.push(customer);
+        } else {
+          // Nunca substitui uma identidade existente por dados vazios. Só
+          // complementa o que faltava para o vínculo permanecer deduplicado.
+          if (!customer.name) customer.name = name;
+          if (!customer.phone && phone) customer.phone = phone;
+          if (!customer.email && email) customer.email = email;
+          if (!customer.passwordHash) {
+            customer.accessCreatedAt = now;
+            customer.mustChangePassword = true;
+          }
+        }
+
+        // Conta Google sem senha também pode receber uma credencial temporária
+        // pelo fluxo administrativo; o login público continua compatível.
+        if (!customer.passwordHash) {
+          accessCreated = true;
+          temporaryPassword = generateTemporaryPassword();
+          customer.passwordHash = hashPassword(temporaryPassword);
+          customer.mustChangePassword = true;
+          customer.accessCreatedAt = now;
+        }
+      }
+
+      // Consentimento NUNCA é presumido. O formulário manual não oferece
+      // opt-in marcado por padrão; só um true explícito pode ligar a flag.
       const optIn = body.marketingOptIn === true ? true : undefined;
-      const c = upsertContact(db, {
-        businessId, name, phone, email, source: String(body.source || 'manual').slice(0, 40),
+      const wasContact = !!findContact(db, businessId, customer?.id || '', phone, name, email);
+      const contact = upsertContact(db, {
+        businessId,
+        customerId: customer?.id || '',
+        name,
+        phone,
+        email,
+        source: String(body.source || 'manual').slice(0, 40),
         marketingOptIn: optIn,
       });
-      if (ctx.role === 'MASTER') {
-        pushAudit(db, {
-          action: 'member.updated', actor: { ...ctx.user, role: ctx.role },
-          businessId, supportSessionId: ctx.support?.id, meta: { contactCreated: true },
+      if (!contact) throw Object.assign(new Error('Não foi possível salvar o contato.'), { status: 400 });
+      if (noteText) {
+        addContactNote(contact, {
+          text: noteText,
+          by: ctx.user.id,
+          byName: ctx.user.name,
         });
       }
-      return c;
+
+      if (wantsAccess && customer && accessCreated) {
+        pushAudit(db, {
+          action: 'customer.access_created',
+          actor: { ...ctx.user, role: ctx.role },
+          businessId,
+          supportSessionId: ctx.support?.id,
+          meta: {
+            contactId: contact.id,
+            customerId: customer.id,
+            created: !wasContact,
+            temporaryCredentialIssued: !!temporaryPassword,
+          },
+        });
+      }
+      // O registro de contato também fica auditável para master, preservando o
+      // comportamento anterior sem transformar todo contato em Customer.
+      if (ctx.role === 'MASTER' && !wantsAccess) {
+        pushAudit(db, {
+          action: 'member.updated', actor: { ...ctx.user, role: ctx.role },
+          businessId, supportSessionId: ctx.support?.id, meta: { contactCreated: !wasContact, contactId: contact.id },
+        });
+      }
+      return { contact, customer };
     });
-    if (!contact) return NextResponse.json({ error: 'Informe nome ou WhatsApp.' }, { status: 400 });
-    return NextResponse.json({ ok: true, contact: toDTO(contact) });
-  } catch {
-    return NextResponse.json({ error: 'Não foi possível salvar o contato.' }, { status: 500 });
+
+    return NextResponse.json({
+      ok: true,
+      contact: toDTO(result.contact, result.customer || null),
+      ...(temporaryPassword ? { temporaryPassword } : {}),
+      access: result.customer ? {
+        status: 'active',
+        temporaryCredentialIssued: !!temporaryPassword,
+      } : { status: 'none', temporaryCredentialIssued: false },
+    });
+  } catch (e: any) {
+    const status = Number(e?.status) || 500;
+    return NextResponse.json({ error: status === 500 ? 'Não foi possível salvar o contato.' : e.message }, { status });
   }
 }
 
@@ -126,7 +255,7 @@ export async function PATCH(req: NextRequest) {
         c.marketingOptIn = body.marketingOptIn === true;
       }
       c.updatedAt = new Date().toISOString();
-      return toDTO(c);
+      return toDTO(c, db.customers.find((customer) => customer.id === c.customerId) || null);
     });
     if (!updated) return NextResponse.json({ error: 'Contato não encontrado.' }, { status: 404 });
     return NextResponse.json({ ok: true, contact: updated });

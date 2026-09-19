@@ -11,6 +11,7 @@ import { leadOriginLabel } from '@/lib/leads';
 import { ListSkeleton } from '@/components/ui';
 import { Icon } from '@/components/icons';
 import { NewBookingSheet } from '@/components/dashboard/NewBookingSheet';
+import { NewClientSheet } from '@/components/dashboard/NewClientSheet';
 import { effectiveHorizonDays } from '@/lib/booking-ops';
 import { AccessDenied, useAreaLoad } from '@/components/dashboard/AccessNotice';
 import { usePanelPermissions } from '@/components/dashboard/usePanelPermissions';
@@ -24,7 +25,12 @@ interface Person {
   key: string; contactId: string; note: string;
   notes?: VisibleNote[];
   customerId: string; name: string; phone: string; email: string;
-  registered: boolean; customerSince: string; source: string; marketingOptIn: boolean;
+  registered: boolean;
+  accountStatus: 'none' | 'active';
+  accountEmail?: string;
+  accountPhone?: string;
+  mustChangePassword?: boolean;
+  customerSince: string; source: string; marketingOptIn: boolean;
   orders: number; spent: number; lastOrderAt: string;
   bookings: Array<{
     id: string; customerName: string; date: string; time: string; status: string; service: string;
@@ -80,6 +86,10 @@ export default function ClientesPage() {
   const [legacyDraft, setLegacyDraft] = useState<Record<string, string>>({});
   const [editingLegacy, setEditingLegacy] = useState('');
   const [bookingFor, setBookingFor] = useState<Person | null>(null);
+  const [newClientOpen, setNewClientOpen] = useState(false);
+  const [pendingClientOpen, setPendingClientOpen] = useState('');
+  const [accessSaving, setAccessSaving] = useState('');
+  const [accessNotice, setAccessNotice] = useState<{ key: string; password?: string; text: string; tone: 'ok' | 'error' } | null>(null);
   const [services, setServices] = useState<any[]>([]);
   const [pros, setPros] = useState<any[]>([]);
 
@@ -113,6 +123,17 @@ export default function ClientesPage() {
 
   useEffect(() => { load(); }, [load]);
 
+  // Depois do cadastro, a lista é recarregada pelo mesmo endpoint do Cliente
+  // 360. Quando o contato aparece, abrimos sua linha sem inventar uma pessoa
+  // paralela nem depender de um reload manual.
+  useEffect(() => {
+    if (!pendingClientOpen) return;
+    const person = people.find((item) => item.contactId === pendingClientOpen);
+    if (!person) return;
+    setOpen(person.key);
+    setPendingClientOpen('');
+  }, [people, pendingClientOpen]);
+
   // A2-B3 (F5): horizonte real do negócio para o "+ Novo agendamento".
   const [bookingCfg, setBookingCfg] = useState<BookingConfig | null>(null);
   // A2-B5 (F9): fuso do negócio para o sheet de agendamento.
@@ -135,6 +156,40 @@ export default function ClientesPage() {
     setError('');
     const res = await apiSend('/api/contacts', 'PATCH', { businessId, id: p.contactId, marketingOptIn: value }, { scope: 'action', area: 'Clientes' });
     if (!res.ok) { setError(res.message || 'Não foi possível atualizar.'); return; }
+    load();
+  }
+
+  // A conta é opcional também para pessoas que chegaram por lead/agendamento.
+  // A senha temporária só fica no estado desta tela e só é exibida na resposta
+  // da criação; nunca é armazenada no Customer nem reutilizada como senha padrão.
+  async function createAccess(p: Person) {
+    if (!p.contactId || (!p.phone && !p.email)) {
+      setAccessNotice({ key: p.key, tone: 'error', text: 'Adicione um WhatsApp ou e-mail válido antes de criar o acesso.' });
+      return;
+    }
+    setAccessSaving(p.key);
+    setAccessNotice(null);
+    const res = await apiSend<any>('/api/contacts', 'POST', {
+      businessId,
+      name: p.name,
+      phone: p.phone,
+      email: p.email,
+      createAccount: true,
+      source: 'manual',
+    }, { scope: 'action', area: 'Clientes' });
+    setAccessSaving('');
+    if (!res.ok) {
+      setAccessNotice({ key: p.key, tone: 'error', text: res.message || 'Não foi possível criar o acesso.' });
+      return;
+    }
+    setAccessNotice({
+      key: p.key,
+      tone: 'ok',
+      password: res.data?.temporaryPassword,
+      text: res.data?.temporaryPassword
+        ? 'Acesso criado. Mostre ou copie a senha agora; ela não será exibida novamente.'
+        : 'Acesso ativo e identidade vinculada. Esta conta já tinha uma credencial.',
+    });
     load();
   }
 
@@ -335,7 +390,13 @@ export default function ClientesPage() {
           <h1 className="text-base font-semibold tracking-tight">Clientes</h1>
           <p className="text-sm text-zinc-500 mt-0.5">Base única — agendamentos, histórico e relacionamento (visão 360){canFunil ? '. As oportunidades por etapa estão no Funil' : ''}.</p>
         </div>
-        <span className="text-xs font-medium text-zinc-500 bg-white border border-zinc-200 rounded-md px-2.5 py-1 hidden sm:inline">{total} contatos</span>
+        <div className="flex items-center gap-2">
+          <span className="text-xs font-medium text-zinc-500 bg-white border border-zinc-200 rounded-md px-2.5 py-1 hidden sm:inline">{total} contatos</span>
+          <button type="button" onClick={() => setNewClientOpen(true)}
+            className="inline-flex items-center gap-1.5 rounded-lg bg-zinc-900 text-white px-3 py-2 text-xs font-bold hover:bg-zinc-800">
+            <span className="text-base leading-none">+</span> Novo cliente
+          </button>
+        </div>
       </div>
       {error && <p className="mb-3 text-sm font-medium bg-red-600 text-white rounded-md px-3 py-2">{error}</p>}
 
@@ -392,7 +453,9 @@ export default function ClientesPage() {
                           <span className="min-w-0">
                             <span className="flex items-center gap-1.5">
                           <span className="text-sm font-medium truncate">{p.name || 'Sem nome'}</span>
-                          {p.registered && <span className="text-[10px] font-semibold bg-zinc-900 text-white px-1.5 py-0.5 rounded">CAD</span>}
+                          <span className={`text-[10px] font-semibold px-1.5 py-0.5 rounded ${p.accountStatus === 'active' ? 'bg-emerald-100 text-emerald-800' : 'bg-zinc-100 text-zinc-500'}`}>
+                            {p.accountStatus === 'active' ? 'Acesso ativo' : 'Sem acesso'}
+                          </span>
                         </span>
                         <span className="block text-xs text-zinc-500 truncate sm:hidden">{p.phone || '—'} · {p.lastSeen ? humanDay(p.lastSeen.slice(0, 10)) : '—'}</span>
                       </span>
@@ -472,6 +535,34 @@ export default function ClientesPage() {
                     ) : (
                       <p className="text-sm text-zinc-500">Sem eventos ainda — agendamentos, conversas, leads e tarefas aparecem aqui.</p>
                     )}
+                    <div className="bg-white border border-zinc-200 px-3 py-2.5 space-y-2">
+                      <div className="flex items-center justify-between gap-3">
+                        <div>
+                          <p className="text-xs font-semibold">Conta do cliente</p>
+                          <p className="text-xs text-zinc-500 mt-0.5">{p.accountStatus === 'active' ? 'Acesso ativo' : 'Sem acesso'}</p>
+                        </div>
+                        <span className={`text-xs font-semibold px-2 py-1 rounded-full ${p.accountStatus === 'active' ? 'bg-emerald-100 text-emerald-800' : 'bg-zinc-100 text-zinc-600'}`}>
+                          {p.accountStatus === 'active' ? 'Acesso ativo' : 'Sem acesso'}
+                        </span>
+                      </div>
+                      {p.accountStatus === 'none' && (
+                        <button type="button" onClick={() => createAccess(p)} disabled={accessSaving === p.key}
+                          className="text-xs font-semibold rounded-md border border-zinc-300 bg-white px-2.5 py-1.5 hover:bg-zinc-50 disabled:opacity-50">
+                          {accessSaving === p.key ? 'Criando acesso…' : 'Criar acesso opcional'}
+                        </button>
+                      )}
+                      {accessNotice?.key === p.key && (
+                        <div className={`rounded-md px-2.5 py-2 text-xs ${accessNotice.tone === 'ok' ? 'bg-emerald-50 text-emerald-900 border border-emerald-200' : 'bg-red-50 text-red-700 border border-red-200'}`}>
+                          <p>{accessNotice.text}</p>
+                          {accessNotice.password && (
+                            <div className="mt-1.5 flex items-center gap-2">
+                              <code className="select-all rounded bg-white border border-emerald-200 px-2 py-1 font-bold tracking-wider">{accessNotice.password}</code>
+                              <button type="button" onClick={() => navigator.clipboard?.writeText(accessNotice.password || '')} className="font-semibold underline">Copiar</button>
+                            </div>
+                          )}
+                        </div>
+                      )}
+                    </div>
                     <div className="flex items-center justify-between gap-3 bg-white border border-zinc-200 px-3 py-2.5">
                       <div>
                         <p className="text-xs font-semibold">Autoriza receber promoções</p>
@@ -548,6 +639,22 @@ export default function ClientesPage() {
         </div>
       )}
         </>
+      )}
+
+      {newClientOpen && (
+        <NewClientSheet
+          businessId={businessId}
+          onClose={() => setNewClientOpen(false)}
+          onSaved={(contactId) => {
+            setPendingClientOpen(contactId);
+            load();
+          }}
+          onView360={() => {
+            // `pendingClientOpen` é resolvido quando a resposta do 360 chega;
+            // o botão pode fechar a ficha sem perder o destino.
+            setNewClientOpen(false);
+          }}
+        />
       )}
 
       {bookingFor && (

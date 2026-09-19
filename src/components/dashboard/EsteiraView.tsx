@@ -411,13 +411,12 @@ export function EsteiraView() {
 
     setSavingNewLead(true);
     try {
-      const res = await apiSend('/api/leads', 'POST', {
+      const res = await apiSend('/api/leads/manual', 'POST', {
         businessId,
         name: newLeadName.trim(),
         phone: digits,
         email: newLeadEmail.trim(),
         interest: newLeadInterest.trim(),
-        origin: 'manual',
         priority: newLeadPriority,
         assignedUserId: newLeadAssignee || undefined,
         message: newLeadMessage.trim() || undefined,

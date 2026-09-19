@@ -131,6 +131,12 @@ describe('agenda-drag — requests do arraste', () => {
     expect(withOwnSlot('2026-09-14', ['10:00'], null)).toEqual(['10:00']);
   });
 
+  it('o own slot só é liberado na coluna do profissional original', () => {
+    const own = { date: '2026-09-14', time: '10:00', professionalId: 'orlando' };
+    expect(withOwnSlot('2026-09-14', [], own, 'orlando')).toEqual(['10:00']);
+    expect(withOwnSlot('2026-09-14', [], own, 'silvio')).toEqual([]);
+  });
+
   it('emptyDragSlots começa parado e sem erro', () => {
     expect(emptyDragSlots()).toEqual({ loading: false, error: '', slots: {}, byPro: {} });
   });
@@ -233,6 +239,25 @@ describe('agenda-drag — preview e destino do drop', () => {
     expect(slotsForColumn(d, '2026-09-14', 'ana')).toEqual(['10:00']);
     expect(slotsForColumn(d, '2026-09-14', '')).toEqual(['09:00']);
     expect(slotsForColumn(d, '2026-09-14', 'bruno')).toEqual([]);
+  });
+
+  it('serviço elegível só para Orlando não cria snap verde em Silvio', () => {
+    const d: DragSlots = {
+      loading: false, error: '',
+      slots: { '2026-09-14': ['10:00'] },
+      byPro: { '2026-09-14': { orlando: ['10:00'], silvio: [] } },
+      eligibleProIds: { '2026-09-14': ['orlando'] },
+    };
+    const columns: DropColumn[] = [
+      { key: 'orlando', label: 'Orlando', date: '2026-09-14', professionalId: 'orlando', isProfessional: true },
+      { key: 'silvio', label: 'Silvio Santos', date: '2026-09-14', professionalId: 'silvio', isProfessional: true },
+    ];
+    const own = { date: '2026-09-14', time: '10:00', professionalId: 'orlando' };
+    const allowed = planDrop({ point: p(120, 260), geometry: G, columns, drag: d, durationMin: 30, own });
+    const blocked = planDrop({ point: p(270, 260), geometry: G, columns, drag: d, durationMin: 30, own });
+    expect(allowed.target?.professionalId).toBe('orlando');
+    expect(blocked.target).toBeNull();
+    expect(blocked.availability).toBe('busy');
   });
 
   it('nearestSlot respeita a tolerância', () => {
