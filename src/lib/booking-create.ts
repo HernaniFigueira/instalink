@@ -17,9 +17,9 @@ import { computeSlots } from './slots';
 import { resolveProfessional } from './booking';
 import { upsertContact } from './contacts';
 import { onlyDigits } from './utils';
-import { addDaysISO, effectiveTimezone, weekdayOf, todayISO, nowHM } from './tz';
+import { isValidDateISO, isValidClockTime, effectiveTimezone, weekdayOf, todayISO, nowHM } from './tz';
 import { enqueueBookingAutomation, enqueueDueReminders } from './automations';
-import { effectiveHorizonDays } from './booking-ops';
+import { bookingMaxDate } from './booking-ops';
 // A2-B1 (F2): o destino do lead passa pela máquina OFICIAL da esteira
 // (pipeline.ts é também importado aqui — dependência circular só de funções,
 // resolvida em runtime; nenhum dos módulos executa o outro no load).
@@ -135,6 +135,7 @@ export interface CreateBookingParams {
   leadId?: string;
   /** P4: execução de automação que criou o agendamento (anti-loop). */
   originRunId?: string;
+  series?: Pick<import('./types').Booking, 'seriesId' | 'seriesIndex' | 'seriesCount' | 'seriesRequestId' | 'seriesFingerprint'>;
 }
 
 /**
@@ -162,12 +163,14 @@ export function createBookingTx(d: DB, p: CreateBookingParams): {
   if (!service || service.active === false) throw txError('Serviço indisponível.', 400);
   if (!isOwner && service.bookable === false) throw txError('Este serviço não aceita agendamento.', 400);
 
-  const cfg = p.business.booking;
+  const business = d.businesses.find((b) => b.id === businessId) || p.business;
+  const cfg = business.booking;
+  if (!isValidDateISO(p.date) || !isValidClockTime(p.time)) throw txError('Escolha data e horário.', 400);
   // A2-B5 (F9): horizonte/passado/lead time no FUSO DO NEGÓCIO.
-  const btz = effectiveTimezone(p.business.businessTimezone);
+  const btz = effectiveTimezone(business.businessTimezone);
   const today = todayISO(new Date(), btz);
   if (p.date < today) throw txError('Não é possível agendar no passado.', 400);
-  const horizon = addDaysISO(today, effectiveHorizonDays(cfg));
+  const horizon = bookingMaxDate(today, cfg, isOwner);
   if (p.date > horizon) throw txError('Data fora da agenda disponível.', 400);
 
   const activePros = d.professionals.filter((x) => x.businessId === businessId && x.active !== false);
@@ -216,6 +219,7 @@ export function createBookingTx(d: DB, p: CreateBookingParams): {
   const status: BookingStatus = isOwner ? 'confirmed' : 'pending';
   const bookingId = randomUUID();
   d.bookings.push({
+    ...p.series,
     id: bookingId,
     businessId,
     customerId: p.customer?.id || p.linkedContact?.customerId || '',

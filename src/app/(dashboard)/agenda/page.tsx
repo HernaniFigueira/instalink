@@ -1341,6 +1341,7 @@ export default function AgendaPage() {
       {detail && (
         <BookingDetailSheet
           booking={detail}
+          timezone={bizTz}
           service={serviceOf(detail.serviceId)}
           pro={detail.professionalId ? pros.find((p) => p.id === detail.professionalId) : undefined}
           businessId={businessId}

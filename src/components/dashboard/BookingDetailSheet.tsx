@@ -24,7 +24,7 @@ import { StatusBadge, Button, buttonCls, type ButtonVariant } from '@/components
 import { BOOKING_STATUS } from '@/lib/status';
 import { todayISO, nowHM, formatDateBR, humanDay } from '@/lib/tz';
 import { waLink, cn, money } from '@/lib/utils';
-import { bookingActions, bookingDuration, needsClosure, rescheduleDecision, type ClosureAction } from '@/lib/booking-ops';
+import { adminBookingMaxDate, bookingActions, bookingDuration, needsClosure, rescheduleDecision, type ClosureAction } from '@/lib/booking-ops';
 import { SLOT_STATE_MESSAGE } from '@/lib/slot-states';
 import type { Booking } from '@/lib/types';
 
@@ -44,11 +44,12 @@ const ROW = 'flex items-baseline justify-between gap-3 py-2';
 const ROW_DT = 'text-xs font-medium text-zinc-500 shrink-0';
 const ROW_DD = 'text-sm text-zinc-900 text-right font-medium';
 
-export function BookingDetailSheet({ booking, service, pro, businessId, onClose, onChanged }: {
+export function BookingDetailSheet({ booking, service, pro, businessId, timezone, onClose, onChanged }: {
   booking: Booking;
   service: ServiceRef | undefined;
   pro: ProRef | undefined;
   businessId: string;
+  timezone?: string;
   onClose: () => void;
   onChanged: () => void;
 }) {
@@ -57,6 +58,8 @@ export function BookingDetailSheet({ booking, service, pro, businessId, onClose,
   const [notice, setNotice] = useState('');
   const [rescheduling, setRescheduling] = useState(false);
   const [confirming, setConfirming] = useState(false);
+  const [cancelSeries, setCancelSeries] = useState(false);
+  const [serverToday, setServerToday] = useState('');
   const [date, setDate] = useState(booking.date);
   const [slots, setSlots] = useState<string[]>([]);
   const [time, setTime] = useState('');
@@ -69,8 +72,8 @@ export function BookingDetailSheet({ booking, service, pro, businessId, onClose,
 
   const def = BOOKING_STATUS[booking.status];
   const dur = bookingDuration(service as any);
-  const today = todayISO();
-  const late = needsClosure(booking, dur, today, nowHM());
+  const today = serverToday || todayISO(new Date(), timezone || undefined);
+  const late = needsClosure(booking, dur, today, nowHM(new Date(), timezone || undefined));
   const decision = rescheduleDecision(booking.status);
   const actions = bookingActions(booking.status);
   const [h, m] = booking.time.split(':').map(Number);
@@ -82,11 +85,12 @@ export function BookingDetailSheet({ booking, service, pro, businessId, onClose,
     setLoadingSlots(true);
     setSlotsError('');
     setTime('');
-    fetch(`/api/bookings?businessId=${businessId}&serviceId=${booking.serviceId}&date=${date}`)
+    fetch(`/api/bookings?mode=slots-admin&businessId=${businessId}&serviceId=${booking.serviceId}&date=${date}`)
       .then(async (r) => {
         const d = await r.json().catch(() => ({}));
         if (!r.ok) throw new Error(d.error || SLOT_STATE_MESSAGE.error);
         setSlots(d.slots || []);
+        if (d.today) setServerToday(d.today);
       })
       .catch((e: any) => {
         setSlots([]);
@@ -209,6 +213,17 @@ export function BookingDetailSheet({ booking, service, pro, businessId, onClose,
             </div>
           )}
 
+          {booking.seriesId && <div className="px-4 py-3 border-b border-zinc-100 space-y-2">
+            <p className="text-xs text-zinc-500">Série · {booking.seriesIndex} de {booking.seriesCount}. Reagendar altera somente este atendimento.</p>
+            {!cancelSeries ? <Button size="sm" variant="secondary" disabled={!!acting} onClick={() => setCancelSeries(true)}>Cancelar ocorrências futuras da série</Button> : <div className="space-y-2 rounded-md border border-red-200 bg-red-50 p-3">
+              <p className="text-xs text-red-900">Cancelar todos os atendimentos futuros ainda pendentes ou confirmados desta série, incluindo este se estiver no futuro? Atendimentos passados e encerrados serão preservados.</p>
+              <div className="flex gap-2">
+                <Button size="sm" variant="danger" disabled={!!acting} onClick={() => act('cancelled', { action: 'cancel-series-future' })}>Confirmar cancelamento</Button>
+                <Button size="sm" variant="secondary" disabled={!!acting} onClick={() => setCancelSeries(false)}>Voltar</Button>
+              </div>
+            </div>}
+          </div>}
+
           {/* ── Dados do atendimento (linhas com separadores discretos) ── */}
           <dl className="px-4 py-1 divide-y divide-zinc-100">
             <div className={ROW}>
@@ -290,7 +305,7 @@ export function BookingDetailSheet({ booking, service, pro, businessId, onClose,
               )}
               <label className="block">
                 <span className="text-[11px] font-semibold text-zinc-500 uppercase tracking-wide">Nova data</span>
-                <input type="date" value={date} min={today} onChange={(e) => setDate(e.target.value)}
+                <input type="date" value={date} min={today} max={adminBookingMaxDate(today)} onChange={(e) => setDate(e.target.value)}
                   className="block w-full mt-1 rounded-md border border-zinc-300 px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-[var(--action)]" />
               </label>
               {loadingSlots ? (

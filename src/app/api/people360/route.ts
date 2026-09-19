@@ -42,6 +42,7 @@ export async function GET(req: NextRequest) {
     lastOrderAt: string;
     bookings: Array<{
       id: string; customerName: string; date: string; time: string; status: string; serviceId: string;
+      seriesId?: string; seriesIndex?: number; seriesCount?: number;
       professionalId: string; rescheduleCount: number; previousId: string;
     }>;
     leads: Array<{ id: string; origin: string; status: string; stageId: string; stageName: string; interest: string; action: string; createdAt: string; priority: string; assignedUserId: string; stageHistory: any[]; lastInteraction: string }>;
@@ -166,6 +167,7 @@ export async function GET(req: NextRequest) {
     // mesmo quando um novo é criado a partir dele.
     p.bookings.push({
       id: b.id, customerName: b.customerName, date: b.date, time: b.time, status: b.status, serviceId: b.serviceId,
+      seriesId: b.seriesId, seriesIndex: b.seriesIndex, seriesCount: b.seriesCount,
       professionalId: b.professionalId || '', rescheduleCount: b.rescheduleCount || 0, previousId: b.previousId || '',
     });
     const at = `${b.date}T${b.time}:00`;

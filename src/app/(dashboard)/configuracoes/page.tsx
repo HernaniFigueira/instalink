@@ -148,8 +148,9 @@ function BookingRules({ businessId, initial, onSaved }: {
         <label className="block"><span className="text-xs font-bold text-zinc-500">CANCELAR ATÉ (MIN ANTES)</span>
           <input type="number" min={0} max={10080} value={cfg.cancelUntilMin} onChange={(e) => setCfg({ ...cfg, cancelUntilMin: Number(e.target.value) })} className={num} />
           <span className="text-[11px] text-zinc-500">Depois disso, só falando com você.</span></label>
-        <label className="block"><span className="text-xs font-bold text-zinc-500">AGENDA ABERTA (DIAS)</span>
-          <input type="number" min={1} max={365} value={cfg.horizonDays} onChange={(e) => setCfg({ ...cfg, horizonDays: Number(e.target.value) })} className={num} /></label>
+        <label className="block"><span className="text-xs font-bold text-zinc-500">AUTOAGENDAMENTO PÚBLICO (DIAS)</span>
+          <input type="number" min={1} max={365} value={cfg.horizonDays} onChange={(e) => setCfg({ ...cfg, horizonDays: Number(e.target.value) })} className={num} />
+          <span className="text-[11px] text-zinc-500">Janela do cliente na página pública. A equipe pode agendar até 5 anos à frente.</span></label>
         <label className="block"><span className="text-xs font-bold text-zinc-500">INTERVALO ENTRE ATENDIMENTOS (MIN)</span>
           <input type="number" min={0} max={240} value={cfg.bufferMin} onChange={(e) => setCfg({ ...cfg, bufferMin: Number(e.target.value) })} className={num} /></label>
       </div>

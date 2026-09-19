@@ -13,9 +13,8 @@
 // escreve sobre uma leitura que falhou.
 //
 // Concorrência: updateDB serializa escritas por instância (mutex em
-// memória). Entre instâncias serverless distintas ainda vale last-wins —
-// por isso checagens críticas (slot, código de pedido) acontecem DENTRO
-// do callback, sobre a leitura mais fresca possível.
+// memória); no Postgres a linha é bloqueada durante TODA a transação.
+// Revalidação de slots e gravação são indivisíveis também entre instâncias.
 //
 // Retenção: updateDB executa prune oportunístico (sessões expiradas e
 // eventos antigos) para o documento não crescer sem teto.
@@ -430,7 +429,7 @@ async function pgWrite(db: DB): Promise<void> {
 
 // ── Escrita condicional (CAS) — concorrência ENTRE instâncias ──
 // `updateDB` serializa por instância (mutex em memória) e, entre instâncias
-// serverless distintas, vale last-wins. Para tarefas que NÃO podem ser
+// serverless distintas, bloqueia a linha. Para tarefas que NÃO podem ser
 // duplicadas (ex.: consumidor de retry de webhooks), lemos o documento junto
 // com o hash do que está gravado e só escrevemos se ninguém tiver escrito no
 // meio (compare-and-swap atômico no próprio banco):
@@ -629,6 +628,26 @@ function withWriteLock<T>(run: () => Promise<T>): Promise<T> {
 
 export async function updateDB<T>(fn: (db: DB) => T): Promise<Awaited<T>> {
   const run = async (): Promise<Awaited<T>> => {
+    if (usePg()) {
+      await pgInit();
+      const client = await getPool().connect();
+      try {
+        await client.query('BEGIN');
+        // Inicialização concorrente segura; operações CAS também disputam esta linha.
+        await client.query('INSERT INTO instalink_doc (id, data) VALUES (1, $1) ON CONFLICT (id) DO NOTHING', [JSON.stringify(emptyDB())]);
+        const snapshot = await client.query('SELECT data FROM instalink_doc WHERE id = 1 FOR UPDATE');
+        const db = normalizeDB(snapshot.rows[0].data);
+        const result: Awaited<T> = await fn(db);
+        prune(db);
+        await client.query('UPDATE instalink_doc SET data = $1 WHERE id = 1', [JSON.stringify(db)]);
+        await client.query('COMMIT');
+        if (hasDueAutomationWork(db)) maybeRunAutomations();
+        return result;
+      } catch (e) {
+        await client.query('ROLLBACK');
+        throw e;
+      } finally { client.release(); }
+    }
     const db = await readDB(); // falhou? lança — NADA é escrito
     // O callback pode ser assíncrono (ex.: disparo de webhook, que enfileira a
     // entrega depois da 1ª tentativa HTTP): aguardamos a conclusão para que

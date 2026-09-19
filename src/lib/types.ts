@@ -497,6 +497,12 @@ export interface Order {
 export type BookingStatus = 'pending' | 'confirmed' | 'cancelled' | 'completed' | 'no_show';
 
 export interface Booking {
+  /** Série aditiva: cada ocorrência continua um Booking independente. */
+  seriesId?: string;
+  seriesIndex?: number; // 1-based; preservado ao reagendar
+  seriesCount?: number;
+  seriesRequestId?: string; // idempotência tenant-scoped
+  seriesFingerprint?: string; // recusa reutilização da chave com outro payload
   id: ID;
   businessId: ID;
   customerId: string; // '' = guest/legado

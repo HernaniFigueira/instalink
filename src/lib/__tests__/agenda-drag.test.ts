@@ -116,7 +116,7 @@ describe('agenda-drag — requests do arraste', () => {
   it('UMA URL por dia visível (nunca por pixel nem por movimento)', () => {
     const urls = dragSlotUrls('b1', 's1', ['2026-09-14', '2026-09-15']);
     expect(urls).toHaveLength(2);
-    expect(urls[0]).toBe('/api/bookings?businessId=b1&serviceId=s1&date=2026-09-14');
+    expect(urls[0]).toBe('/api/bookings?mode=slots-admin&businessId=b1&serviceId=s1&date=2026-09-14');
   });
 
   it('dia único (visão dia) = 1 request; semana = 7', () => {

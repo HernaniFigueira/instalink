@@ -5,13 +5,15 @@ import { canAccessBooking, requireBusiness, scopeBookings, scopeInfo } from '@/l
 import { customerFromRequest } from '@/lib/customer-auth';
 import { isFeatureEnabled, canBook as canBookModule } from '@/lib/features';
 import {
-  bookingDuration, effectiveHorizonDays, effectiveManageLimit, needsClosure, rescheduleDecision,
+  bookingDuration, bookingMaxDate, effectiveManageLimit, needsClosure, rescheduleDecision,
   rescheduleForwardNote, rescheduleNote,
 } from '@/lib/booking-ops';
 import { applyBookingStatusTx } from '@/lib/booking-status';
 import { computeSlots, dayAvailability } from '@/lib/slots';
 import { bookingMode } from '@/lib/booking';
 import { createBookingTx, resolveBookingIdentity } from '@/lib/booking-create';
+import { previewSeries, createSeriesTx, cancelFutureSeriesTx } from '@/lib/booking-series';
+import type { CreateBookingParams } from '@/lib/booking-create';
 import { noteLeadReschedule } from '@/lib/pipeline';
 import { enqueueDueReminders } from '@/lib/automations';
 import { upsertContact } from '@/lib/contacts';
@@ -26,13 +28,16 @@ function err(message: string, status: number): Error {
 
 // GET ?businessId=&serviceId=&date= — slots livres (público, sem escolha de profissional)
 // GET ?businessId=&serviceId=&from=&to= — mapa de dias (público)
+// GET ?businessId=&mode=slots-admin&serviceId=&date= — slots da equipe, exige agenda
 // GET ?businessId=&mode=manage[&from=&to=&page=&limit=] — gestão (dono)
 export async function GET(req: NextRequest) {
   try {
     const q = req.nextUrl.searchParams;
     const businessId = q.get('businessId') || '';
     const mode = q.get('mode');
-    const db = await readDB();
+    const slotGuard = mode === 'slots-admin' ? await requireBusiness(req, businessId, 'agenda') : null;
+    if (slotGuard && !slotGuard.ok) return slotGuard.res;
+    const db = slotGuard?.ok ? slotGuard.db : await readDB();
     const business = db.businesses.find((b) => b.id === businessId);
     if (!business) return NextResponse.json({ error: 'Negócio não encontrado.' }, { status: 404 });
 
@@ -83,7 +88,11 @@ export async function GET(req: NextRequest) {
 
     const service = db.services.find((s) => s.id === q.get('serviceId') && s.businessId === businessId);
     if (!service) return NextResponse.json({ slots: [] });
-    const requestedProfessionalId = String(q.get('professionalId') || '');
+    const scope = slotGuard?.ok ? slotGuard.ctx.professionalScope : '';
+    if (scope && q.get('professionalId') && q.get('professionalId') !== scope) {
+      return NextResponse.json({ error: 'Você só pode consultar o seu profissional.' }, { status: 403 });
+    }
+    const requestedProfessionalId = scope || String(q.get('professionalId') || '');
     const activeProsForService = db.professionals.filter((p) => p.businessId === businessId && p.active !== false);
     const eligibleProfessionalIds = (service.professionalIds || []).length > 0
       ? activeProsForService.filter((p) => service.professionalIds.includes(p.id)).map((p) => p.id)
@@ -98,7 +107,7 @@ export async function GET(req: NextRequest) {
     const cfg = business.booking;
     const btz = effectiveTimezone(business.businessTimezone); // A2-B5 (F9)
     const today = todayISO(new Date(), btz);
-    const maxDate = addDaysISO(today, effectiveHorizonDays(cfg));
+    const maxDate = bookingMaxDate(today, cfg, !!slotGuard?.ok);
 
     // O cliente NUNCA escolhe profissional: a grade é sempre "qualquer
     // profissional elegível livre" (o motor resolve internamente).
@@ -125,7 +134,7 @@ export async function GET(req: NextRequest) {
       // × passado) derivado do mesmo motor — a UI deixa de chamar de
       // "fechado" um dia que está aberto e lotado.
       const days: Record<string, ReturnType<typeof dayAvailability>> = {};
-      for (let iso = from; iso <= to && iso <= maxDate; iso = addDaysISO(iso, 1)) {
+      for (let iso = from < today ? today : from; iso <= to && iso <= maxDate; iso = addDaysISO(iso, 1)) {
         days[iso] = dayAvailability(
           { ...base, dateISO: iso, weekday: weekdayOf(iso), nowHM: iso === today ? nowHM(new Date(), btz) : '' },
           { today },
@@ -185,6 +194,7 @@ export async function POST(req: NextRequest) {
     // lojista logado NUNCA transforma sozinha uma requisição pública em
     // operação interna.
     const guard = body.asOwner === true ? await requireBusiness(req, business.id, 'agenda') : null;
+    if (guard && !guard.ok) return guard.res;
     const actor = bookingMode({
       asOwner: body.asOwner,
       ownerLogged: !!guard?.ok,
@@ -216,7 +226,7 @@ export async function POST(req: NextRequest) {
     const cfg = business.booking;
     const btz = effectiveTimezone(business.businessTimezone); // A2-B5 (F9)
     const today = todayISO(new Date(), btz);
-    const maxDate = addDaysISO(today, effectiveHorizonDays(cfg));
+    const maxDate = bookingMaxDate(today, cfg, isOwner);
     if (date < today) return NextResponse.json({ error: 'Não é possível agendar no passado.' }, { status: 400 });
     if (date > maxDate) return NextResponse.json({ error: 'Data fora da agenda disponível.' }, { status: 400 });
 
@@ -268,7 +278,11 @@ export async function POST(req: NextRequest) {
     // Mesmo motor da página, do painel e do assistente: slot revalidado na
     // transação, profissional resolvido pela política interna, CRM alimentado
     // e automação de confirmação enfileirada.
-    const result = await updateDB((d: DB) => createBookingTx(d, {
+    if (body.series && !isOwner) return NextResponse.json({ error: 'Recorrência exige permissão de Agenda.' }, { status: 403 });
+    if (guard?.ok && guard.ctx.professionalScope && body.professionalId && body.professionalId !== guard.ctx.professionalScope) {
+      return NextResponse.json({ error: 'Você só pode agendar para o seu profissional.' }, { status: 403 });
+    }
+    const params: CreateBookingParams = {
       business,
       service,
       date,
@@ -294,12 +308,19 @@ export async function POST(req: NextRequest) {
       marketingOptIn,
       source: 'agendamento',
       leadId: body.leadId ? String(body.leadId) : undefined,
-    }));
+    };
+    const scope = guard?.ok ? guard.ctx.professionalScope : '';
+    if (body.series && body.preview === true) {
+      return NextResponse.json({ occurrences: previewSeries(await readDB(), params, body.series.occurrences, scope) });
+    }
+    const result = await updateDB((d: DB) => body.series
+      ? createSeriesTx(d, params, body.series.occurrences, body.series.requestId, scope)
+      : createBookingTx(d, params));
     return NextResponse.json({ ok: true, ...result });
   } catch (e: any) {
     const status = e?.status || 500;
     if (status === 500) console.error('[bookings] POST falhou:', e);
-    return NextResponse.json({ error: status === 500 ? 'Não foi possível confirmar. Tente novamente.' : e.message }, { status });
+    return NextResponse.json({ error: status === 500 ? 'Não foi possível confirmar. Tente novamente.' : e.message, ...(e?.occurrences ? { occurrences: e.occurrences } : {}) }, { status });
   }
 }
 
@@ -320,6 +341,12 @@ export async function PATCH(req: NextRequest) {
       return NextResponse.json({ error: 'Você só pode alterar os seus próprios atendimentos.' }, { status: 403 });
     }
 
+    if (body.action === 'cancel-series-future') {
+      if (!current.seriesId) return NextResponse.json({ error: 'Agendamento sem série.' }, { status: 400 });
+      const result = await updateDB((d) => cancelFutureSeriesTx(d, business.id, current.seriesId!, guard.ctx.professionalScope));
+      return NextResponse.json({ ok: true, ...result });
+    }
+
     // ── Remarcação pelo dono ──
     if (body.date && body.time) {
       const date = String(body.date);
@@ -329,13 +356,16 @@ export async function PATCH(req: NextRequest) {
       }
       const patchTz = effectiveTimezone(business.businessTimezone); // A2-B5 (F9)
       const today = todayISO(new Date(), patchTz);
-      const maxDate = addDaysISO(today, effectiveHorizonDays(business.booking));
+      const maxDate = bookingMaxDate(today, business.booking, true);
       if (date < today) return NextResponse.json({ error: 'Não é possível remarcar para o passado.' }, { status: 400 });
       if (date > maxDate) return NextResponse.json({ error: 'Data fora da agenda disponível.' }, { status: 400 });
       const service = db.services.find((s) => s.id === current.serviceId && s.businessId === business.id);
       if (!service) return NextResponse.json({ error: 'Serviço indisponível.' }, { status: 400 });
       // Escopo do profissional: remarcação permanece com ele (nunca move o
       // atendimento para outro profissional sem permissão administrativa).
+      if (guard.ctx.professionalScope && body.professionalId && body.professionalId !== guard.ctx.professionalScope) {
+        return NextResponse.json({ error: 'Você só pode reagendar para o seu profissional.' }, { status: 403 });
+      }
       const proId = guard.ctx.professionalScope || String(body.professionalId || '');
       const activePros = db.professionals.filter((p) => p.businessId === business.id && p.active !== false);
       const eligible = (service.professionalIds || []).length > 0
@@ -348,8 +378,16 @@ export async function PATCH(req: NextRequest) {
       const result = await updateDB((d: DB) => {
         const target = d.bookings.find((x) => x.id === body.id && x.businessId === business.id);
         if (!target) throw err('Agendamento não encontrado.', 404);
+        if (!canAccessBooking(guard.ctx, target)) throw err('Você só pode alterar os seus próprios atendimentos.', 403);
         // O próprio atendimento não bloqueia o novo horário; atendimentos
         // terminais recriados também não (ficam no histórico, não na grade).
+        const freshBusiness = d.businesses.find((b) => b.id === business.id)!;
+        const freshService = d.services.find((s) => s.id === target.serviceId && s.businessId === business.id && s.active !== false);
+        if (!freshService) throw err('Serviço indisponível.', 400);
+        const freshTz = effectiveTimezone(freshBusiness.businessTimezone);
+        const freshToday = todayISO(new Date(), freshTz);
+        if (date < freshToday || date > bookingMaxDate(freshToday, freshBusiness.booking, true)) throw err('Data fora da agenda disponível.', 400);
+        const decision = rescheduleDecision(target.status);
         const others = d.bookings.filter((b) => b.businessId === business.id && b.id !== body.id);
         const r = computeSlots({
           rules: d.availability.filter((a) => a.businessId === business.id),
@@ -358,12 +396,12 @@ export async function PATCH(req: NextRequest) {
           services: d.services.filter((s) => s.businessId === business.id),
           professionals: d.professionals.filter((p) => p.businessId === business.id),
           dateISO: date, weekday: weekdayOf(date),
-          serviceId: service.id, durationMin: service.durationMin,
+          serviceId: freshService.id, durationMin: freshService.durationMin,
           professionalId: proId,
-          eligibleProIds: service.professionalIds || [],
-          nowHM: date === todayISO(new Date(), patchTz) ? nowHM(new Date(), patchTz) : '',
-          leadMin: business.booking?.leadMin || 0,
-          bufferMin: business.booking?.bufferMin || 0,
+          eligibleProIds: freshService.professionalIds || [],
+          nowHM: date === freshToday ? nowHM(new Date(), freshTz) : '',
+          leadMin: freshBusiness.booking?.leadMin || 0,
+          bufferMin: freshBusiness.booking?.bufferMin || 0,
         });
         if (!r.slots.includes(time)) throw err('Este horário está ocupado. Escolha outro.', 409);
         const now = new Date().toISOString();
@@ -382,6 +420,8 @@ export async function PATCH(req: NextRequest) {
             status: decision.nextStatus, note: target.note || '', answers: target.answers || [],
             createdAt: now, updatedAt: now,
             previousId: target.id,
+            seriesId: target.seriesId, seriesIndex: target.seriesIndex, seriesCount: target.seriesCount,
+            seriesRequestId: target.seriesRequestId, seriesFingerprint: target.seriesFingerprint,
             rescheduleCount: (target.rescheduleCount || 0) + 1,
             history: [{ at: now, from: '', to: decision.nextStatus, by: 'owner', note }],
             // A2-B3 (F7.2): a cadeia de reagendamento mantém o vínculo com o
