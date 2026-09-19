@@ -50,11 +50,14 @@ export const PROVIDERS: ProviderDef[] = [
   },
   {
     provider: 'instagram', kind: 'channel', label: 'Instagram',
-    hint: 'Mensagens diretas e comentários do Instagram.',
-    canConnect: false,
-    unavailableReason: 'A API do Instagram (mensagens e comentários) chega no P6.1.',
+    // A3.4 · BLOCO 9 — conexão REAL pelo Business Login for Instagram: as
+    // mensagens diretas caem no MESMO inbox (Conversas) e a resposta sai pelo
+    // mesmo composer. Comentários/feed ficam fora do escopo desta entrega.
+    hint: 'Mensagens diretas (Direct) no mesmo inbox do WhatsApp.',
+    canConnect: true,
+    setupHint: 'Conecte a conta profissional do Instagram em Canais e Integrações (autorização oficial da Meta).',
     direction: 'both', events: ['message.received'], defaultEvent: '',
-    nativePending: true,
+    nativePending: false,
   },
   {
     provider: 'messenger', kind: 'channel', label: 'Facebook / Messenger',

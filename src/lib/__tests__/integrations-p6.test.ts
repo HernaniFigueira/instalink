@@ -147,11 +147,13 @@ describe('P6.1 — Conexões: criar, listar, rotacionar e remover', () => {
   });
 
   it('recusa provedor que ainda NÃO existe (nada de conexão de fachada)', () => {
+    // BLOCO 9: o Instagram passou a ter caminho de conexão real (Business
+    // Login); quem continua sem caminho é o Messenger.
     const db = seedDb();
-    const instagram = createIntegration(db, 'b1', { provider: 'instagram' });
-    expect(instagram.ok).toBe(false);
-    expect(instagram.status).toBe(409);
-    expect(instagram.error).toBeDefined();
+    const messenger = createIntegration(db, 'b1', { provider: 'messenger' });
+    expect(messenger.ok).toBe(false);
+    expect(messenger.status).toBe(409);
+    expect(messenger.error).toBeDefined();
     expect(db.integrations).toHaveLength(0);
   });
 
@@ -676,12 +678,16 @@ describe('P6.5 — API (rotas reais, sessão e isolamento)', () => {
     expect(JSON.stringify(resB)).not.toContain(a.integration.id);
   });
 
-  it('catálogo da API mostra a verdade: canais indisponíveis e fontes conectáveis', async () => {
+  it('catálogo da API mostra a verdade: canais conectáveis e fontes conectáveis', async () => {
     const tokenA = await createSession(OWNER);
     const listed = await jsonBody(await integrationsGET(jsonReq('/api/integrations?businessId=b1', { token: tokenA })));
+    // BLOCO 9: o Instagram passou a ser conectável de verdade (conexão oficial),
+    // então o catálogo conta a verdade nova: sem "em breve" e sem P6.1.
     const instagram = listed.channels.find((p: any) => p.provider === 'instagram');
-    expect(instagram.canConnect).toBe(false);
-    expect(instagram.unavailableReason).toBeDefined();
+    expect(instagram.canConnect).toBe(true);
+    expect(instagram.nativePending).toBe(false);
+    expect(JSON.stringify(instagram)).not.toContain('P6.1');
+    expect(JSON.stringify(instagram)).not.toContain('em breve');
     const whatsapp = listed.channels.find((p: any) => p.provider === 'whatsapp');
     expect(whatsapp.canConnect).toBe(true);
     const form = listed.sources.find((p: any) => p.provider === 'form');

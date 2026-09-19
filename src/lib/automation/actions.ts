@@ -40,6 +40,7 @@ import { renderParams } from './conditions';
 import { addDaysISO, todayISO } from '../tz';
 import { automationActionDef } from './model';
 import { onlyDigits } from '../utils';
+import { instagramMessagingWindow } from '../instagram';
 
 export const AUTOMATION_ACTOR: LeadActor = { id: 'automation', name: 'Automação', type: 'system' };
 
@@ -424,14 +425,108 @@ export function executeAction(input: ActionInput): ActionResult {
       const lead = subjectLead(input);
       const booking = subjectBooking(input);
       const contact = subjectContact(input);
-      const rawPhone = lead?.phone || booking?.customerPhone || contact?.phone || input.run.context?.contact?.phone || input.params?.to || '';
-      const phone = onlyDigits(String(rawPhone || ''));
-      if (!phone || phone.length < 10) return missing('telefone do destinatário');
 
       const msgText = text(input, 'message', 2000) || text(input, 'body', 2000);
       if (!msgText) return { ok: false, summary: '', error: 'mensagem vazia' };
 
       const templateName = text(input, 'templateName', 120);
+
+      // ── CANAL INSTAGRAM DIRECT (BLOCO 9) ───────────────────────
+      // A identidade do destinatário é o vínculo OFICIAL do contato
+      // (`channelIdentities`, gravado pelo webhook). Nunca telefone, nunca @,
+      // nunca nome. Sem vínculo salvo, só aceita um IGSID explícito em `to`.
+      if (text(input, 'channel', 20) === 'instagram') {
+        const ig = input.business.instagramIntegration;
+        if (!ig?.igUserId || !ig.encryptedAccessToken) {
+          return {
+            ok: false, summary: '',
+            error: 'Instagram não conectado nesta unidade (conecte a conta em Canais e Integrações).',
+          };
+        }
+        if (ig.status !== 'connected') {
+          return {
+            ok: false, summary: '',
+            error: 'O Instagram desta unidade ainda não está pronto para enviar (autorize a conta e ative o webhook).',
+          };
+        }
+        const accountId = ig.igUserId;
+        const explicitTo = String(input.params?.to || '').trim();
+        const fromIdentity = (contact?.channelIdentities || [])
+          .find((i) => i.provider === 'instagram' && i.accountId === accountId)?.participantId || '';
+        const fromConversation = db.conversations
+          .find((c) => c.businessId === business.id && c.channel === 'instagram'
+            && c.channelAccountId === accountId
+            && ((contact?.id && c.contactId === contact.id) || c.channelUserId === explicitTo))
+          ?.channelUserId || '';
+        const participantId = fromIdentity || fromConversation
+          || (/^\d{5,}$/.test(explicitTo) ? explicitTo : '');
+        if (!participantId) return missing('vínculo do contato no Instagram');
+
+        const window = instagramMessagingWindow({ lastInboundAt: ig.lastInboundAt || '', nowISO: input.now });
+        if (!window.canReply) {
+          return { ok: false, summary: '', error: `Envio pelo Instagram bloqueado: ${window.reason}` };
+        }
+
+        let conv = db.conversations.find(
+          (c) => c.businessId === business.id && c.channel === 'instagram'
+            && c.channelAccountId === accountId && c.channelUserId === participantId,
+        );
+        if (!conv) {
+          conv = {
+            id: randomUUID(),
+            businessId: business.id,
+            channel: 'instagram',
+            channelUserId: participantId,
+            channelAccountId: accountId,
+            channelUsername: '',
+            contactId: contact?.id || '',
+            customerId: contact?.customerId || lead?.customerId || '',
+            name: contact?.name || lead?.name || 'Contato do Instagram',
+            phone: '',
+            status: 'open',
+            mode: 'automation',
+            unread: 0,
+            lastMessageAt: input.now,
+            lastMessagePreview: msgText.slice(0, 120),
+            createdAt: input.now,
+            context: lead ? { leadId: lead.id } : {},
+          };
+          db.conversations.push(conv);
+        } else {
+          conv.lastMessageAt = input.now;
+          conv.lastMessagePreview = msgText.slice(0, 120);
+        }
+
+        const igMsgId = randomUUID();
+        db.messages.push({
+          id: igMsgId,
+          businessId: business.id,
+          conversationId: conv.id,
+          direction: 'out',
+          body: msgText,
+          status: 'pending',
+          externalId: '',
+          by: 'automation',
+          byName: 'Automação',
+          channel: 'instagram',
+          channelUserId: participantId,
+          at: input.now,
+          meta: {
+            templateName: templateName || undefined,
+            originRunId: input.run.id,
+          },
+        });
+
+        return {
+          ok: true,
+          summary: 'mensagem enfileirada no Instagram Direct',
+          contextPatch: { messageId: igMsgId, channel: 'instagram', participantId },
+        };
+      }
+
+      const rawPhone = lead?.phone || booking?.customerPhone || contact?.phone || input.run.context?.contact?.phone || input.params?.to || '';
+      const phone = onlyDigits(String(rawPhone || ''));
+      if (!phone || phone.length < 10) return missing('telefone do destinatário');
 
       let conv = db.conversations.find((c) => c.businessId === business.id && c.phone === phone);
       if (!conv) {

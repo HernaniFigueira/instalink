@@ -47,8 +47,14 @@ export function findContact(
       const sameEmail = !!cleanEmail && c.email?.trim().toLowerCase() === cleanEmail
         && (!customerId || !c.customerId || c.customerId === customerId);
       // Só agrupa "só nome" quando os DOIS lados não têm telefone/conta/e-mail.
+      //
+      // A3.4 · BLOCO 9 — o nome NUNCA funde quem já é conhecido por identidade
+      // de CANAL (Instagram): o identificador do provedor (IGSID) é a chave, e
+      // duas pessoas diferentes podem ter o mesmo nome de exibição. Contatos
+      // legados (sem identidade de canal) seguem exatamente como antes.
       const sameName = !customerId && !digits && !cleanEmail && !!name
-        && !c.customerId && !onlyDigits(c.phone) && !c.email && c.name === name;
+        && !c.customerId && !onlyDigits(c.phone) && !c.email && c.name === name
+        && !(c.channelIdentities && c.channelIdentities.length > 0);
       return sameCustomer || samePhone || sameEmail || sameName;
     },
   );

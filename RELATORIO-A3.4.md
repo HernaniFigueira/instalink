@@ -1104,3 +1104,198 @@ formato real das respostas), incluindo criptografia AES-256-GCM de verdade,
 gravação de verdade e as recusas honestas. Falta só credencial — e o painel diz
 exatamente isso (camada “Plataforma (equipe do Instalink)” com a lista do que
 falta, sem nunca mostrar valor de segredo).
+
+---
+
+## BLOCO 9 — INSTAGRAM DIRECT NO INBOX UNIFICADO
+
+Commit deste bloco: **`A3.4 B9 — Instagram Direct no inbox unificado`**, 15º do
+PR #30 (hash exato no comentário de entrega; o relatório final do Bloco 11 lista
+os HEADs).
+O Instagram não ganhou um inbox paralelo: ele virou **um canal da caixa
+Conversas que já existia**. WhatsApp e Instagram desembocam nas MESMAS entidades
+— `Conversation`, `Message`, `Contact`, `Lead`, automações — e o que muda é a
+identidade do participante e o conector que entrega a mensagem.
+
+### 0. Reconhecimento antes de alterar (o que já existia × o que foi adicionado)
+
+| Peça | Situação antes do B9 | Decisão |
+|---|---|---|
+| `Conversation` / `Message` | já tinham `channel`, `channelUserId`, `channelAccountId?` (WhatsApp) | **reutilizados** — Instagram é só mais um valor de `channel` |
+| `ConversationChannel` | `'whatsapp' \| 'agent'` | **aditivo**: `'instagram'` (nenhum valor removido/renomeado) |
+| `Integration` (genérica) | credencial em `Integration` com `tokenHash`/`config` | **NÃO usada** para IG: mensagens exigem token do dono da conta; a credencial vive no `Business` (mesmo desenho do `WhatsappIntegration`) |
+| `BusinessCustomer` | dedupe por customerId → telefone → e-mail → nome | ganhou `channelIdentities` (aditivo) e o dedupe por nome **parou de valer** para contato com identidade de canal |
+| `ingestLead` (pipeline) | exige nome OU telefone OU e-mail; já aceitava `instagram`/`source`/`origin` | **reutilizado como motor oficial** — sem inventar telefone para quem não tem |
+| `send_channel_message` (P4) | phone-centric, criava conversa `channel:'whatsapp'` | ganhou o campo `channel` (padrão `whatsapp`); **nó novo NÃO existe** |
+| `ChannelConnector` (P6) | conector por provedor, `registerChannelConnector` | **reutilizado** — `instagramChannelConnector` registrado com `available: true` |
+| state HMAC do onboarding | `issueSignupState`/`verifySignupState` (formato B8: businessId+userId+timestamp+nonce+HMAC) | **reutilizado com segredo derivado do canal** (`HMAC(appSecret,'instagram-onboarding-state')`) |
+| AES-256-GCM das credenciais | `encryptSecret`/`decryptSecret` + `WHATSAPP_CREDENTIALS_KEY` | **reutilizado** (nenhum cofre novo, nada em localStorage) |
+| webhook WhatsApp | modelo de assinatura, tenant, dedupe e auditoria | **copiado no desenho**, endpoint próprio para o Instagram |
+
+Campos **adicionados** (todos opcionais, nada migrado): `Business.instagramIntegration`
+(`status`, `igUserId`, `username`, `displayName`, `encryptedAccessToken`,
+`keyFingerprint`, `authorizedAt`, `webhookSubscribedAt`, `tokenIssuedAt`,
+`tokenExpiresAt`, `connectedAt`, `lastWebhookAt`, `lastInboundAt`,
+`lastOutboundAt`, `requestedAt`, `lastError`, `source`),
+`Conversation.channelAccountId/channelUsername`, `BusinessCustomer.channelIdentities[]`
+(`provider`, `accountId`, `participantId`, `username`, `displayName`),
+`Message.channel/channelUserId` (já existiam) e as ações de auditoria
+`instagram.*`.
+
+### 1. Fonte oficial (conferida em 19/09/2026)
+
+Nada aqui veio de tutorial antigo, API não oficial ou sessão de navegador
+automatizada. Fontes: `developers.facebook.com/docs/instagram-platform`
+(Instagram API with Instagram Login, Business Login, Messaging API, Webhooks e
+Webhooks Examples) — páginas revisadas pela Meta em 16/09/2026 (webhooks) e
+13/03/2026 (business login) — e `developers.facebook.com/docs/graph-api`.
+
+Escolha: **Instagram API with Instagram Login** (`graph.instagram.com`), que não
+exige Página do Facebook; escopos `instagram_business_basic` +
+`instagram_business_manage_messages`; token long-lived de **60 dias** renovável
+(`ig_exchange_token`/`ig_refresh_token`). O caminho antigo via Página
+(`instagram_manage_messages`) ficou de fora por exigir um vínculo que a maioria
+das unidades não tem. Graph API: **v26.0**, liberada em 29/07/2026; o host
+`graph.instagram.com` aceita a mesma versão.
+
+- autorização: `https://www.instagram.com/oauth/authorize` (App ID do Instagram,
+  `redirect_uri` cadastrada, `state`);
+- troca do `code` (uso único, ~1 h): `POST https://api.instagram.com/oauth/access_token`;
+- long-lived: `GET https://graph.instagram.com/access_token?grant_type=ig_exchange_token`;
+  renovação: `.../refresh_access_token?grant_type=ig_refresh_token`;
+- perfil público do participante: `GET https://graph.instagram.com/{ver}/{igsid}?fields=name,username,profile_pic`
+  (neste caminho o campo é `profile_pic`, **não** `profile_picture_url`);
+- assinatura: `POST https://graph.instagram.com/{ver}/{ig-user-id}/subscribed_apps?subscribed_fields=messages`;
+- envio: `POST https://graph.instagram.com/{ver}/{ig-user-id}/messages` com
+  `{recipient:{id}, message:{text}}` → `message_id` (texto ≤ 1000 bytes UTF-8);
+- política: resposta livre só por **24 h** desde a última mensagem da pessoa;
+  fora disso a Meta oferece a tag `HUMAN_AGENT` (até 7 dias, uso humano). Sem
+  cold DM.
+
+### 2. Como o canal funciona
+
+```
+webhook (object:"instagram") → assinatura → CONTA conectada (tenant)
+   → Conversation (channel:'instagram' + IGSID) → Message (inbound)
+   → Contact/Lead (ingestLead quando cabe) → automações
+
+composer do inbox / automação → Conversation → Message (pending)
+   → connector oficial → POST /{ig-user-id}/messages → message_id → sent
+```
+
+- **Identidade nunca é nome, @ ou telefone**: a chave é
+  `businessId + channel + igUserId (conta) + IGSID (participante)`. `username` e
+  `displayName` são rótulos — e o dedupe por nome foi explicitamente **desligado**
+  para contato com identidade de canal (duas “Ana Souza” continuam duas pessoas).
+- **Pessoa mínima sem inventar cadastro**: a primeira mensagem cria o contato com
+  `channelIdentities` e **telefone/e-mail vazios**. O lead só nasce quando há
+  rótulo público (nome/@) para o motor `ingestLead` aceitar — sem isso, a conversa
+  existe e fica esperando vínculo (nada de “identidade fantasma”).
+- **Mídia não quebra o webhook**: imagem/áudio/etc. entram como
+  “Imagem recebida”/“Áudio recebida” + metadado do tipo; conteúdo não suportado é
+  rotulado como tal. Echo das nossas mensagens, apagadas e self são ignorados.
+- **Idempotência**: dedupe por `mid` **conferido dentro da transação**, além do
+  índice por `externalId`; reentrega da Meta não cria segunda `Message`, segundo
+  `Lead` nem roda automação duas vezes.
+- **Envio provado**: `2xx` sem `message_id` **não** é sucesso (erro explícito e
+  não-retryable); erro da Meta é sanitizado (sem token) e legível.
+- **Fora da política, a tela não mente**: fora da janela o compositor é trocado
+  por um aviso com o motivo; a API responde `409 outside_window` (e
+  `409 not_connected` quando a conta ainda não está pronta).
+- **Multi-tenant**: o webhook roteia pela CONTA (`igUserId`) da unidade; conta não
+  conectada é ignorada (`unmappedAccounts`) sem criar nada; o mesmo IGSID em duas
+  contas são duas pessoas (a chave inclui a conta).
+
+### 3. Endpoints
+
+| Rota | Método | O que faz |
+|---|---|---|
+| `/api/instagram/onboarding` | GET | plano em camadas + `authorizeUrl` + `state` + estado do inbox; nunca devolve segredo |
+| `/api/instagram/onboarding` | POST | `disconnect` / `retry_subscribe` / `refresh` (auditados) |
+| `/api/instagram/onboarding/callback` | GET | troca o `code` (com o `redirect_uri` idêntico), criptografa o token, assina o webhook e volta para `/canais?instagram=ok\|pending\|denied\|error&detalhe=…` |
+| `/api/instagram/webhook` | GET/POST | handshake + eventos `object:"instagram"` (HMAC fail-closed) |
+| `/api/cron/instagram` | GET/POST | reentrega de mensagens pendentes (mesmo padrão do cron do WhatsApp) |
+| `/api/conversations` | GET/POST | canal por conversa: filtro `?channel=`, contadores `channels.*`, envio pelo canal DA conversa |
+
+### 4. Onboarding em camadas e estados honestos
+
+O painel (Canais & Integrações → Canais → Instagram) mostra duas camadas, como no
+WhatsApp: **Plataforma (equipe do Instalink)** — app, segredo, cofre, URL de
+retorno e webhook cadastrados — e **Unidade** — autorizar a conta, assinar o
+webhook, receber a 1ª mensagem. Estados possíveis:
+
+```
+not_connected → authorization_pending → webhook_pending
+              → waiting_first_event → connected        (erro = error)
+```
+
+`connected` **só** aparece quando o webhook está assinado **e** já chegou um
+evento real: OAuth concluído não é conexão. Quando a plataforma não está
+configurada, o plano é `platform_blocked` + `BLOCKED_EXTERNAL` com a lista do que
+falta (nomes de variável, nunca valores). O `state` segue o modelo do B8
+(`businessId + userId + timestamp + nonce + HMAC`), com segredo derivado do canal
+— state de outra unidade, de outro usuário, expirado ou do WhatsApp não é aceito.
+
+### 5. Automações
+
+`send_channel_message` ganhou **o campo** `channel` (`whatsapp` padrão ·
+`instagram`). Não existe nó `send_instagram_message`. No caminho Instagram a
+identidade vem do **vínculo oficial do contato** (`channelIdentities`) ou de um
+IGSID explícito; sem integração pronta, sem vínculo ou fora da janela a ação
+falha com erro legível e **nada é enfileirado**.
+
+### 6. Testes deste bloco
+
+| Suíte | Casos | O que prova |
+|---|---|---|
+| `a34-instagram.test.ts` | **56** | CATALOG (conectável, sem “em breve”, sem nó novo); IDENTIDADE (echo/apagada/suporte/mídia, corte de 1000 bytes, chave conta+IGSID); WEBHOOK (handshake, 503 sem segredo, 403 assinatura, tenant por conta, duplicata, conta órfã, isolamento A/B); CRM (contato sem telefone, lead `origin/channel=instagram`, nada duplicado, nomes iguais não fundem, mesmo IGSID em contas diferentes não cruza); OUTBOUND (2xx sem id ≠ sucesso, host oficial, perfil oficial, `subscribed_apps`, janela 24h/HUMAN_AGENT, credencial criptografada); AUTOMAÇÃO (desconectado, sem vínculo, janela, envio real, WhatsApp intacto); ONBOARDING (BLOCKED_EXTERNAL, 4 estados, state ligado a unidade/usuário, separado do WhatsApp, callback ok/pendente/negado, cron fail-closed); UX (filtro por canal, badge, compositor por canal, painel em camadas) |
+
+```
+npx vitest run src/lib/__tests__/a34-instagram.test.ts → 56 ok
+npx vitest run  → 89 arquivos · 1.570 testes ok
+npx tsc --noEmit → 0 erros
+npm run build    → ok (/api/instagram/onboarding[/callback], /api/instagram/webhook e /api/cron/instagram compiladas)
+```
+
+### 7. O que está implementado × o que depende da Meta
+
+**IMPLEMENTADO (verificado por teste):** canal Instagram aditivo no inbox
+unificado; catálogo com `canConnect:true` e conector registrado; onboarding em
+camadas com state anti-CSRF e token AES-256-GCM por unidade; webhook oficial com
+assinatura HMAC e fail-closed; roteamento por conta conectada; inbound ponta a
+ponta (texto, mídia rotulada, duplicata idempotente); contato sem telefone
+inventado + lead `origin/channel=instagram` pelo motor oficial; outbound no mesmo
+inbox com `message_id` obrigatório; automação por `send_channel_message
+channel=instagram`; filtro/badge/compositor por canal; multi-tenant por conta.
+
+**MOCK META:** as chamadas ao Graph API são feitas contra um stub com o **formato
+oficial** das respostas (auth, `subscribed_apps`, `messages`, perfil) — a rede
+real não foi tocada por falta de credencial.
+
+**META REAL:** nada foi executado contra o Instagram real (nenhuma conta
+profissional, nenhum app aprovado).
+
+**BLOCKED_EXTERNAL (o que falta para o fim a fim real):**
+
+- `INSTAGRAM_APP_ID`, `INSTAGRAM_APP_SECRET` (ou um `META_APP_SECRET`
+  compartilhado), `INSTAGRAM_VERIFY_TOKEN` e a chave do cofre
+  `WHATSAPP_CREDENTIALS_KEY` no ambiente;
+- app da Meta com o produto Instagram configurado, **App Review** para
+  `instagram_business_basic` + `instagram_business_manage_messages`;
+- **conta profissional** do Instagram para conectar (o fluxo não funciona com
+  conta pessoal);
+- URL de retorno (`/api/instagram/onboarding/callback`) e webhook
+  (`/api/instagram/webhook`) cadastrados no app, com o domínio de produção
+  liberado;
+- `CRON_SECRET` para a reentrega de pendências.
+
+Até isso existir, a tela diz exatamente o que falta — e não promete Messenger,
+comentários, Direct de conta pessoal nem qualquer coisa fora do escopo do bloco.
+
+### 8. Preview
+
+`https://instalink-git-arena-01a0ba19-ff4fd6-hernanicross-3509s-projects.vercel.app`
+— branch `arena/01a0ba19-instalink` (o alias aponta para o commit mais novo).
+Caminho de verificação: **Canais & Integrações → Canais → Instagram** (estado e
+camadas) e **Conversas** (chips Todos / WhatsApp / Instagram, badge por conversa e
+compositor do canal).

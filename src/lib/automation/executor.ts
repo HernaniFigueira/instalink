@@ -27,6 +27,7 @@
 //     outra empresa, mesmo se o contexto/param vier adulterado.
 import { deliverWebhookIds } from '../webhooks';
 import { deliverWhatsappMessage, getWhatsappCredentials } from '../whatsapp-cloud-api';
+import { deliverInstagramMessage, getInstagramCredentials } from '../instagram-api';
 import { randomUUID } from 'node:crypto';
 import type {
   Automation, AutomationEdge, AutomationNode, AutomationRun, AutomationRunStep, Business, DB,
@@ -564,7 +565,18 @@ export async function drainAutomations(options: DrainOptions = {}): Promise<Auto
           const dbNow = await readDB();
           for (const pm of step.pendingMessages) {
             const biz = dbNow.businesses.find((b) => b.id === pm.businessId);
-            if (biz && getWhatsappCredentials(biz)) {
+            if (!biz) continue;
+            // A CONVERSA decide o canal: mensagem de conversa do Instagram
+            // nunca sai pelo conector do WhatsApp (e vice-versa).
+            const msg = dbNow.messages.find((m) => m.id === pm.id);
+            const conv = msg ? dbNow.conversations.find((c) => c.id === msg.conversationId) : undefined;
+            if (conv?.channel === 'instagram') {
+              if (getInstagramCredentials(biz)) {
+                await deliverInstagramMessage(pm.businessId, pm.id).catch(() => { /* cron retoma a entrega */ });
+              }
+              continue;
+            }
+            if (getWhatsappCredentials(biz)) {
               await deliverWhatsappMessage(pm.businessId, pm.id).catch(() => { /* cron retoma a entrega */ });
             }
           }

@@ -76,6 +76,50 @@ export function verifySignupState(
 }
 
 /**
+ * LÊ o estado sem conhecer o contexto de antemão.
+ *
+ * Por que existe: no fluxo do WhatsApp a troca é um POST do painel (com token
+ * de sessão) e basta `verifySignupState(state, secret, ctx)`. No fluxo do
+ * Instagram o retorno é uma NAVEGAÇÃO (redirect do instagram.com), sem header
+ * de autorização — então primeiro se confere a assinatura e a validade, e DEPOIS
+ * quem chama reconfere que aquele usuário ainda tem acesso àquela unidade
+ * (o estado é uma capacidade de curta duração, não uma sessão).
+ */
+export function readSignupState(
+  state: string,
+  secret: string,
+  now: number = Date.now(),
+  ttlMs: number = SIGNUP_STATE_TTL_MS,
+): { ok: boolean; reason: string; businessId: string; userId: string; issuedAt: number } {
+  const empty = { ok: false, reason: '', businessId: '', userId: '', issuedAt: 0 };
+  const parts = String(state || '').split('.');
+  if (parts.length !== 5) return { ...empty, reason: 'Estado de conexão ausente ou malformado — recomece a conexão.' };
+  const [bizPart, userPart, ts, nonce, sig] = parts;
+  let businessId = '';
+  let userId = '';
+  try {
+    businessId = decodeURIComponent(bizPart);
+    userId = decodeURIComponent(userPart);
+  } catch {
+    return { ...empty, reason: 'Estado de conexão malformado — recomece a conexão.' };
+  }
+  const expected = createHmac('sha256', secret)
+    .update(`${bizPart}.${userPart}.${ts}.${nonce}`)
+    .digest('hex')
+    .slice(0, 32);
+  const a = Buffer.from(sig, 'utf8');
+  const b = Buffer.from(expected, 'utf8');
+  if (a.length !== b.length || !timingSafeEqual(a, b)) {
+    return { ...empty, reason: 'Estado de conexão não confere — recomece a conexão.' };
+  }
+  const issued = Number(ts);
+  if (!Number.isFinite(issued) || now - issued > ttlMs || issued - now > 60_000) {
+    return { ...empty, reason: 'A conexão ficou aberta tempo demais — recomece.' };
+  }
+  return { ok: true, reason: '', businessId, userId, issuedAt: issued };
+}
+
+/**
  * HMAC do token com o segredo do app (`appsecret_proof`). A própria Meta
  * recomenda enviar isto em toda chamada com token: um token vazado deixa de
  * ser suficiente por si só.
