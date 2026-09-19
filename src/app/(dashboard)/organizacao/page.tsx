@@ -20,6 +20,7 @@ import { apiGet, apiSend } from '@/lib/api-client';
 import { resolvePeriodSpec, type PeriodKey } from '@/lib/periods';
 import { todayISO } from '@/lib/tz';
 import type { ResultsPayload } from '@/lib/insights';
+import { Button } from '@/components/ui';
 
 type Org = {
   id: string; name: string; canManage: boolean;
@@ -137,9 +138,9 @@ export default function OrganizationPage() {
           <p className="text-sm text-zinc-500 mt-1">Visão consolidada das unidades às quais você tem acesso.</p>
         </div>
         {org.canManage && (
-          <button onClick={() => setAdding(!adding)} className="text-xs font-semibold bg-zinc-900 text-white px-3 py-2 rounded-md">
+          <Button variant="primary" size="sm" onClick={() => setAdding(!adding)}>
             + Adicionar unidade
-          </button>
+          </Button>
         )}
       </header>
 
@@ -147,7 +148,7 @@ export default function OrganizationPage() {
         <form onSubmit={addUnit} className="bg-white border border-zinc-200 rounded-lg p-4 grid sm:grid-cols-3 gap-3">
           <input required value={name} onChange={(e) => setName(e.target.value)} placeholder="Nome da unidade" className="border border-zinc-200 rounded-md px-3 py-2 text-sm" />
           <input value={address} onChange={(e) => setAddress(e.target.value)} placeholder="Endereço" className="border border-zinc-200 rounded-md px-3 py-2 text-sm" />
-          <button className="bg-zinc-900 text-white rounded-md text-sm font-semibold">Criar unidade independente</button>
+          <Button type="submit" variant="primary">Criar unidade independente</Button>
         </form>
       )}
 

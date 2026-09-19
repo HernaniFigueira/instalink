@@ -15,6 +15,7 @@ import Link from 'next/link';
 import { cn, parseMoneyToCents, centsToBR } from '@/lib/utils';
 import type { Availability, AvailabilityException, Category, Professional, Service } from '@/lib/types';
 import { Icon } from '@/components/icons';
+import { Avatar, Button } from '@/components/ui';
 import { ImageUpload } from '@/components/dashboard/ImageUpload';
 import { followsBusinessHours } from '@/lib/schedule';
 import { panelRoutesIn } from '@/lib/panel';
@@ -26,7 +27,7 @@ export function DeleteSheet({ name, kindLabel, blocked, onDeactivate, onConfirm,
 }) {
   return (
     <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4" role="dialog" aria-modal="true" aria-label={`Excluir ${kindLabel}`}>
-      <div className="absolute inset-0 bg-black/50" onClick={onClose} />
+      <div className="absolute inset-0 bg-[var(--overlay)]" onClick={onClose} />
       <div className="relative w-full sm:max-w-md bg-white rounded-t-3xl sm:rounded-3xl p-6 space-y-3">
         <h3 className="font-bold text-lg">Excluir {kindLabel} “{name}”?</h3>
         {blocked ? (
@@ -39,7 +40,7 @@ export function DeleteSheet({ name, kindLabel, blocked, onDeactivate, onConfirm,
         )}
         <div className="space-y-2 pt-1">
           {blocked && (
-            <button onClick={onDeactivate} className="w-full font-bold bg-zinc-900 text-white py-3 rounded-md">Desativar (recomendado)</button>
+            <Button variant="primary" size="lg" className="w-full" onClick={onDeactivate}>Desativar (recomendado)</Button>
           )}
           <button onClick={onConfirm} className="w-full font-bold bg-red-50 text-red-600 py-3 rounded-md">Excluir mesmo assim</button>
           <button onClick={onClose} className="w-full font-bold bg-zinc-100 py-3 rounded-md">Voltar</button>
@@ -82,7 +83,7 @@ export function ServiceForm({ businessId, service, cats, pros, onClose, onSave }
 
   return (
     <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4" role="dialog" aria-modal="true" aria-label={service ? 'Editar serviço' : 'Novo serviço'}>
-      <div className="absolute inset-0 bg-black/50" onClick={onClose} />
+      <div className="absolute inset-0 bg-[var(--overlay)]" onClick={onClose} />
       <form onSubmit={(e) => { e.preventDefault(); setError(''); setLoading(true); onSave({ id: service?.id, name, description, image, price: parseMoneyToCents(price), showPrice, durationMin, professionalIds: proIds, categoryId, active, featured, bookable, questions }).catch((err) => setError(err.message)).finally(() => setLoading(false)); }}
         className="relative w-full sm:max-w-lg bg-white rounded-t-3xl sm:rounded-3xl p-6 max-h-[92vh] overflow-y-auto space-y-3.5">
         <div className="flex items-center justify-between">
@@ -142,7 +143,7 @@ export function ServiceForm({ businessId, service, cats, pros, onClose, onSave }
           <label className="flex items-center gap-2 text-sm font-medium"><input type="checkbox" checked={bookable} onChange={(e) => setBookable(e.target.checked)} className="w-4 h-4 accent-emerald-600" /> Aceita agendamento</label>
         </div>
         {error && <p className="text-sm font-medium text-red-600">{error}</p>}
-        <button disabled={loading} className="w-full font-bold bg-zinc-900 text-white py-3 rounded-md disabled:opacity-50">{loading ? 'Salvando…' : 'Salvar serviço'}</button>
+        <Button type="submit" variant="primary" size="lg" className="w-full" disabled={loading}>{loading ? 'Salvando…' : 'Salvar serviço'}</Button>
       </form>
     </div>
   );
@@ -180,7 +181,7 @@ export function TeamEditor({ businessId, pros, rules, onSave, onAskDelete }: {
 
   return (
     <>
-      <button onClick={() => open(null)} className="text-sm font-bold bg-zinc-900 text-white px-4 py-2.5 rounded-md mb-4">+ Profissional</button>
+      <Button variant="primary" className="mb-4" onClick={() => open(null)}><Icon n="plus" size={14} /> Profissional</Button>
       {show && (
         <form onSubmit={(e) => { e.preventDefault(); setError(''); onSave('professional.save', { id: editing?.id, name, role, photo, active, followBusinessHours: follow }).then(() => setShow(false)).catch((err) => setError(err.message)); }}
           className="mb-4 bg-white border border-zinc-200 rounded-lg p-4 space-y-2.5">
@@ -202,8 +203,8 @@ export function TeamEditor({ businessId, pros, rules, onSave, onAskDelete }: {
           </label>
           {error && <p className="text-sm font-medium text-red-600">{error}</p>}
           <div className="flex gap-2">
-            <button className="text-sm font-bold bg-zinc-900 text-white px-4 py-2.5 rounded-md">Salvar</button>
-            <button type="button" onClick={() => setShow(false)} className="text-sm font-bold bg-zinc-100 px-4 py-2.5 rounded-md">Voltar</button>
+            <Button type="submit" variant="primary">Salvar</Button>
+            <Button type="button" variant="secondary" onClick={() => setShow(false)}>Voltar</Button>
           </div>
         </form>
       )}
@@ -216,11 +217,9 @@ export function TeamEditor({ businessId, pros, rules, onSave, onAskDelete }: {
         <div className="space-y-2.5">
           {pros.map((p) => (
             <div key={p.id} className={cn('bg-white border border-zinc-200 rounded-lg p-4 flex items-center gap-3', !p.active && 'opacity-60')}>
-              {p.photo ? (
-                <img src={p.photo} alt={p.name} className="w-10 h-10 rounded-full object-cover shrink-0" />
-              ) : (
-                <div className="w-10 h-10 rounded-full bg-zinc-900 text-white flex items-center justify-center font-bold shrink-0">{p.name.slice(0, 1)}</div>
-              )}
+              {/* Ponto 9 — o MESMO Avatar de Clientes: rounded-square suave,
+                  foto real quando existe, iniciais como fallback. */}
+              <Avatar name={p.name} src={p.photo || undefined} size={40} />
               <div className="flex-1">
                 <p className="font-bold text-sm flex flex-wrap items-center gap-2">
                   {p.name}
@@ -305,7 +304,7 @@ export function ExceptionsManager({ exceptions, onSave, onDelete }: {
         )}
         <label className="block flex-1 min-w-[140px]"><span className="text-xs font-bold text-zinc-500">MOTIVO (OPCIONAL)</span>
           <input value={note} onChange={(e) => setNote(e.target.value)} placeholder="Ex: Natal" className="block w-full rounded-md border border-zinc-300 px-3 py-2 text-sm mt-1" /></label>
-        <button className="text-sm font-bold bg-zinc-900 text-white px-4 py-2.5 rounded-md">Adicionar</button>
+        <Button type="submit" variant="primary">Adicionar</Button>
       </form>
       {msg && <p className="mt-2 text-sm font-medium text-red-600">{msg}</p>}
     </div>

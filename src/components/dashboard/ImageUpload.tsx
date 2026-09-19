@@ -56,7 +56,7 @@ export function ImageUpload({ label, value, onChange, businessId, circle = false
             onChange={(e) => { const f = e.target.files?.[0]; if (f) handleFile(f); e.target.value = ''; }} />
           <div className="flex flex-wrap gap-1.5">
             <button type="button" onClick={() => inputRef.current?.click()} disabled={uploading}
-              className="text-xs font-bold bg-zinc-900 text-white px-3 py-2 rounded-lg disabled:opacity-50">
+              className="text-xs font-bold bg-[var(--brand)] text-white px-3 py-2 rounded-lg shadow-brand hover:bg-[var(--brand-strong)] disabled:opacity-50">
               {uploading ? 'Enviando…' : value ? 'Alterar' : 'Adicionar imagem'}
             </button>
             {value && (
@@ -76,7 +76,7 @@ export function ImageUpload({ label, value, onChange, businessId, circle = false
                 placeholder="https://… (para imagens já hospedadas)"
                 className="flex-1 min-w-0 rounded-lg border border-zinc-300 px-2.5 py-1.5 text-xs" />
               <button type="button" onClick={() => onChange(urlDraft.trim())}
-                className="text-xs font-bold bg-zinc-900 text-white px-3 py-2 rounded-lg">
+                className="text-xs font-bold bg-[var(--brand)] text-white px-3 py-2 rounded-lg shadow-brand hover:bg-[var(--brand-strong)]">
                 Aplicar
               </button>
             </div>

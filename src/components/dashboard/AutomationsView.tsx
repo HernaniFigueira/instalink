@@ -250,8 +250,7 @@ export function AutomationsView() {
         {([['list', 'Minhas automações', automations.length], ['ai', 'Criar com IA', ''],
           ['templates', 'Começar de um modelo', templates.length]] as const).map(([key, label, count]) => (
           <button key={key} onClick={() => setTab(key as 'list' | 'ai' | 'templates')}
-            className={cn('px-3 py-1.5 rounded-full border font-semibold transition',
-              tab === key ? 'bg-zinc-900 text-white border-zinc-900' : 'bg-white border-zinc-200 text-zinc-600 hover:bg-zinc-50')}>
+            aria-pressed={tab === key} className="il-chip">
             {label}{typeof count === 'number' && count > 0 ? ` · ${count}` : ''}
           </button>
         ))}
@@ -479,7 +478,7 @@ function AutomationEditor({ businessId, automationId, automations, options, onCl
   }
 
   return (
-    <div className="fixed inset-0 z-50 bg-zinc-900/40 flex items-start justify-center overflow-y-auto p-3 sm:p-6" role="dialog" aria-modal="true">
+    <div className="fixed inset-0 z-50 bg-[var(--overlay)] flex items-start justify-center overflow-y-auto p-3 sm:p-6" role="dialog" aria-modal="true">
       <Card className="w-full max-w-3xl my-4">
         <div className="flex items-center justify-between gap-3 px-4 py-3 border-b border-zinc-200">
           <div className="min-w-0">
@@ -783,7 +782,7 @@ function HistorySheet({ automation, businessId, onClose }: { automation: Automat
   }, [automation.id, businessId]);
 
   return (
-    <div className="fixed inset-0 z-50 bg-zinc-900/40 flex items-start justify-center overflow-y-auto p-3 sm:p-6" role="dialog" aria-modal="true">
+    <div className="fixed inset-0 z-50 bg-[var(--overlay)] flex items-start justify-center overflow-y-auto p-3 sm:p-6" role="dialog" aria-modal="true">
       <Card className="w-full max-w-2xl my-4">
         <div className="flex items-center justify-between gap-3 px-4 py-3 border-b border-zinc-200">
           <div className="min-w-0">

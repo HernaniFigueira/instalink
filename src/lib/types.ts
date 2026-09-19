@@ -579,6 +579,67 @@ export interface BusinessCustomer {
   // sobrescrito nem apagado. Cada registro guarda quem escreveu, quando e o
   // contexto (agendamento, quando houver).
   notes?: ContactNote[];
+  // ── A3.3 — DADOS CADASTRAIS RICOS (carteirinha do cliente) ──
+  // Campo ADITIVO e opcional: contato antigo simplesmente não tem perfil e a
+  // UI mostra os campos vazios para preencher. Nada é migrado nem destruído.
+  // Regra de compatibilidade: `profile` nunca substitui name/phone/email —
+  // esses três continuam sendo a identidade usada no dedupe (lib/contacts.ts).
+  profile?: ContactProfile;
+}
+
+/** Endereço do cliente (A3.3). Todos os campos são texto livre opcional. */
+export interface ContactAddress {
+  cep: string;
+  street: string;
+  number: string;
+  complement: string;
+  district: string;
+  city: string;
+  state: string;
+}
+
+/**
+ * Responsável por menor de idade (A3.3).
+ * `isMinor` é a declaração da equipe; a idade derivada da data de nascimento
+ * também sinaliza menor de idade (lib/contact-profile.ts) — as duas fontes
+ * aparecem na carteirinha, nunca se contradizem em silêncio.
+ */
+export interface ContactGuardian {
+  /**
+   * Declaração da equipe. SÓ vale quando não há data de nascimento: com
+   * `birthDate` válida, a idade derivada é a autoridade (ponto 6 do
+   * fechamento A3.3) — assim `isMinor: true` com nascimento em 1990 não
+   * classifica um adulto como menor.
+   */
+  isMinor: boolean;
+  name: string;
+  phone: string; // só dígitos
+  cpf: string;
+  /**
+   * Vínculo com outro `BusinessCustomer` da MESMA unidade ('' = responsável
+   * ainda é texto livre). Reservado para o próximo passo — "vincular
+   * responsável existente" — e opcional de propósito: nada hoje o exige,
+   * então registros antigos continuam válidos sem migração.
+   */
+  contactId?: string;
+  /** Grau de relação em texto livre ('' = não informado): mãe, pai, tutor… */
+  relationship?: string;
+}
+
+/** Dados cadastrais do cliente/paciente (A3.3 — carteirinha). */
+export interface ContactProfile {
+  /** Nascimento em YYYY-MM-DD ('' = não informado). Idade é DERIVADA. */
+  birthDate: string;
+  /** CPF do cliente ('' = não informado). */
+  cpf: string;
+  /** Como a pessoa se identifica ('' = não informado). */
+  gender: string;
+  /** Observação administrativa (preferências, restrições, convênio…). */
+  adminNote: string;
+  address: ContactAddress;
+  guardian: ContactGuardian;
+  /** Etiquetas livres curtas (ex.: convênio, indicação, VIP). */
+  tags: string[];
 }
 
 export interface ContactNote {
@@ -1554,6 +1615,8 @@ export type AuditAction =
   // P2 — vínculo de acesso e identidade do painel
   | 'member.professional_linked' | 'member.professional_unlinked'
   | 'appearance.updated' | 'contact.note_added'
+  // Fechamento A3.3 — edição de nome/telefone/e-mail do contato da unidade
+  | 'contact.identity_updated'
   // P3 — esteira operacional e integrações
   | 'pipeline.updated' | 'api_key.created' | 'api_key.revoked'
   | 'webhook.created' | 'webhook.updated' | 'webhook.deleted'

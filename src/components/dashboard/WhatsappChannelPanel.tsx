@@ -5,7 +5,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import Link from 'next/link';
 import { Icon } from '@/components/icons';
-import { PageSkeleton } from '@/components/ui';
+import { Button, PageSkeleton } from '@/components/ui';
 import { apiGet, apiSend } from '@/lib/api-client';
 import { humanDateTime } from '@/lib/tz';
 
@@ -132,9 +132,7 @@ export function WhatsappChannelPanel({ businessId }: { businessId: string }) {
               {status === 'connected' ? 'Conectado' : status === 'pending' ? 'Configurando' : status === 'error' ? 'Erro' : 'Não conectado'}
             </span>
             {connected && (
-              <Link href={`/conversas${q}`} className="text-xs font-semibold bg-zinc-900 text-white rounded-md px-3 py-1.5">
-                Abrir Conversas
-              </Link>
+              <Link href={`/conversas${q}`} className="inline-block"><Button variant="secondary" size="xs">Abrir Conversas</Button></Link>
             )}
           </div>
         </div>
@@ -187,9 +185,7 @@ export function WhatsappChannelPanel({ businessId }: { businessId: string }) {
             )}
 
             <div className="flex flex-wrap items-center gap-2 pt-2 border-t border-zinc-100">
-              <Link href={`/conversas${q}`} className="text-xs font-semibold bg-zinc-900 text-white rounded-md px-3 py-1.5">
-                Abrir Conversas
-              </Link>
+              <Link href={`/conversas${q}`} className="inline-block"><Button variant="secondary" size="xs">Abrir Conversas</Button></Link>
               <button
                 onClick={testConnection}
                 disabled={testing}
@@ -208,7 +204,7 @@ export function WhatsappChannelPanel({ businessId }: { businessId: string }) {
           </div>
         ) : (
           <div className="px-6 py-8 text-center max-w-lg mx-auto">
-            <div className="w-12 h-12 rounded-md bg-zinc-900 text-white flex items-center justify-center mx-auto"><Icon n="whatsapp" size={24} /></div>
+            <div className="w-12 h-12 rounded-md bg-[var(--success-bg)] text-[var(--success-fg)] flex items-center justify-center mx-auto"><Icon n="whatsapp" size={24} /></div>
             <h3 className="font-semibold mt-4">
               {status === 'error' ? 'Erro na conexão do WhatsApp' : 'WhatsApp não conectado'}
             </h3>
@@ -220,7 +216,7 @@ export function WhatsappChannelPanel({ businessId }: { businessId: string }) {
             <div className="mt-6 flex flex-col sm:flex-row items-center justify-center gap-2">
               <div className="flex items-center gap-2">
                 <input value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="+55 11 99999-9999" aria-label="Número de WhatsApp" className="rounded-md border border-zinc-300 px-3 py-2 text-sm w-56" />
-                <button onClick={connect} disabled={busy} className="text-sm font-semibold bg-zinc-900 text-white px-4 py-2 rounded-md disabled:opacity-50">{busy ? 'Validando…' : 'Conectar WhatsApp'}</button>
+                <Button variant="primary" onClick={connect} disabled={busy}>{busy ? 'Validando…' : 'Conectar WhatsApp'}</Button>
               </div>
             </div>
             {data.linkFallback && (

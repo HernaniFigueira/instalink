@@ -18,7 +18,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { apiGet, apiSend } from '@/lib/api-client';
 import { cn } from '@/lib/utils';
 import { useBusinessId } from '@/components/dashboard/useBusinessId';
-import { PageSkeleton } from '@/components/ui';
+import { Button, Notice, PageSkeleton } from '@/components/ui';
 
 interface SafeIntegration {
   id: string;
@@ -206,7 +206,7 @@ export function CanaisIntegracoesView({ only }: { only?: 'channel' | 'source' | 
 
   return (
     <div className="space-y-4">
-      {msg && <p className="text-xs font-medium bg-zinc-900 text-white rounded-md px-3 py-2">{msg}</p>}
+      {msg && <Notice tone="info">{msg}</Notice>}
       {error && <p className="text-xs font-medium bg-amber-50 border border-amber-200 text-amber-800 rounded-md px-3 py-2">{error}</p>}
 
       <section className="bg-white border border-zinc-200 p-4">
@@ -264,7 +264,7 @@ export function CanaisIntegracoesView({ only }: { only?: 'channel' | 'source' | 
                     <button
                       onClick={() => { setCreateFor(provider); setCreateName(provider.label); setCreateEvent(provider.defaultEvent || ''); }}
                       disabled={busy === provider.provider}
-                      className="text-xs font-semibold bg-zinc-900 text-white px-3 py-1.5 rounded-md disabled:opacity-50 shrink-0"
+                      className="text-xs font-semibold bg-[var(--brand)] text-white px-3 py-1.5 rounded-md shadow-brand hover:bg-[var(--brand-strong)] disabled:opacity-50 shrink-0"
                     >
                       Conectar
                     </button>
@@ -361,7 +361,7 @@ export function CanaisIntegracoesView({ only }: { only?: 'channel' | 'source' | 
       )}
 
       {createFor && (
-        <div className="fixed inset-0 bg-black/40 flex items-center justify-center p-4 z-50" role="dialog" aria-modal="true">
+        <div className="fixed inset-0 bg-[var(--overlay)] flex items-center justify-center p-4 z-50" role="dialog" aria-modal="true">
           <div className="bg-white rounded-lg w-full max-w-md p-5 space-y-3">
             <h2 className="text-sm font-bold">Conectar {createFor.label}</h2>
             <p className="text-xs text-zinc-500">{createFor.setupHint || createFor.hint}</p>
@@ -387,7 +387,7 @@ export function CanaisIntegracoesView({ only }: { only?: 'channel' | 'source' | 
             <div className="flex justify-end gap-2 pt-1">
               <button onClick={() => setCreateFor(null)} className="text-xs font-semibold bg-white border border-zinc-200 px-3 py-2 rounded-md">Cancelar</button>
               <button onClick={() => create(createFor)} disabled={busy === createFor.provider}
-                className="text-xs font-semibold bg-zinc-900 text-white px-3 py-2 rounded-md disabled:opacity-50">
+                className="text-xs font-semibold bg-[var(--brand)] text-white px-3 py-2 rounded-md shadow-brand hover:bg-[var(--brand-strong)] disabled:opacity-50">
                 {busy === createFor.provider ? 'Criando…' : 'Criar integração'}
               </button>
             </div>
@@ -396,7 +396,7 @@ export function CanaisIntegracoesView({ only }: { only?: 'channel' | 'source' | 
       )}
 
       {revealed && (
-        <div className="fixed inset-0 bg-black/40 flex items-center justify-center p-4 z-50" role="dialog" aria-modal="true">
+        <div className="fixed inset-0 bg-[var(--overlay)] flex items-center justify-center p-4 z-50" role="dialog" aria-modal="true">
           <div className="bg-white rounded-lg w-full max-w-lg p-5 space-y-3">
             <h2 className="text-sm font-bold">{revealed.title}</h2>
             <p className="text-xs font-medium bg-amber-50 border border-amber-200 text-amber-800 rounded px-3 py-2">
@@ -429,13 +429,13 @@ export function CanaisIntegracoesView({ only }: { only?: 'channel' | 'source' | 
             )}
             <details className="text-xs text-zinc-600">
               <summary className="cursor-pointer font-semibold">Exemplo de chamada</summary>
-              <pre className="mt-2 bg-zinc-900 text-zinc-100 rounded-md p-3 overflow-x-auto text-[11px] leading-relaxed">{`curl -X POST '${revealed.endpoint}' \\
+              <pre className="mt-2 bg-[var(--code-bg)] text-[var(--code-fg)] rounded-md p-3 overflow-x-auto text-[11px] leading-relaxed">{`curl -X POST '${revealed.endpoint}' \\
   -H 'Authorization: Bearer ${revealed.token}' \\
   -H 'Content-Type: application/json' \\
   -d '{"event":"lead.created","externalId":"evt-1","contact":{"name":"Maria","phone":"11999998888"},"data":{"interest":"Corte"}}'`}</pre>
             </details>
             <div className="flex justify-end pt-1">
-              <button onClick={() => setRevealed(null)} className="text-xs font-semibold bg-zinc-900 text-white px-3 py-2 rounded-md">Entendi</button>
+              <Button variant="primary" onClick={() => setRevealed(null)}>Entendi</Button>
             </div>
           </div>
         </div>

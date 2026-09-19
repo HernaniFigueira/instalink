@@ -167,7 +167,7 @@ export function BookingDetailSheet({ booking, service, pro, businessId, timezone
   return (
     <div className="fixed inset-0 z-50" role="dialog" aria-modal="false" aria-label="Detalhe do agendamento">
       {/* Fundo: a agenda continua visível e legível atrás do painel. */}
-      <div className="absolute inset-0 bg-black/20" onClick={onClose} />
+      <div className="absolute inset-0 bg-[var(--overlay)]" onClick={onClose} />
 
       <aside ref={panelRef} tabIndex={-1}
         className="absolute inset-y-0 right-0 w-full max-w-[420px] bg-white border-l border-zinc-200 shadow-sm flex flex-col outline-none">
@@ -368,7 +368,7 @@ export function BookingDetailSheet({ booking, service, pro, businessId, timezone
                 <ol className="mt-2 relative border-l border-zinc-200 ml-1 space-y-3">
                   {[...booking.history].reverse().map((h, i) => (
                     <li key={i} className="relative pl-4">
-                      <span aria-hidden="true" className={`absolute -left-[5px] top-1 w-2 h-2 rounded-full ${i === 0 ? 'bg-zinc-900' : 'bg-zinc-300'}`} />
+                      <span aria-hidden="true" className={`absolute -left-[5px] top-1 w-2 h-2 rounded-full ${i === 0 ? 'bg-[var(--brand)]' : 'bg-[var(--border)]'}`} />
                       <p className="text-[11px] font-semibold text-zinc-500 tabular-nums">
                         {formatDateBR((h.at || '').slice(0, 10))} {(h.at || '').slice(11, 16)}
                       </p>

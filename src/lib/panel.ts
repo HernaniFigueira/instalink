@@ -33,10 +33,16 @@ export interface PanelSectionDef {
   id: PanelSectionId;
   label: string;
   /**
-   * true = seção renderizada no RODAPÉ FIXO da sidebar, fora da área que rola.
-   * Medido em 1280×768 (notebook comum): com todas as seções na área rolável,
-   * Administração caía fora da dobra — e é justamente o grupo que mais se
-   * procura quando não se acha algo.
+   * true = a seção fica fora da sequência rolável do menu (o shell decide o
+   * lugar). NENHUMA seção usa isso hoje.
+   *
+   * A3.3 — decisão: Administração voltou para o MENU PRINCIPAL. O rodapé fixo
+   * existia para manter Configurações à vista em 1280×768, mas criava duas
+   * barras com comportamentos diferentes ("parte fixa, parte rolável") e o
+   * usuário não entendia por que só aquele grupo estava preso. O problema
+   * original foi resolvido de outro jeito: menu mais compacto, controle de
+   * recolher no topo e rodapé reservado para QUEM está logado. A marca fica
+   * disponível para uma necessidade real futura, não como decoração.
    */
   footer?: boolean;
 }
@@ -56,14 +62,43 @@ export const PANEL_SECTIONS: PanelSectionDef[] = [
   { id: 'crescimento', label: 'Crescimento' },
   { id: 'resultados', label: 'Resultados' },
   { id: 'presenca', label: 'Presença' },
-  { id: 'administracao', label: 'Administração', footer: true },
+  { id: 'administracao', label: 'Administração' },
 ];
 
-/** Seção que vive no rodapé fixo da sidebar. */
-export const FOOTER_SECTION: PanelSectionId = 'administracao';
+/**
+ * Seções fora da sequência rolável do menu (hoje: nenhuma). Mantido como
+ * projeção do catálogo para o shell honrar a marca sem decidir por conta.
+ */
+export const FOOTER_SECTIONS: PanelSectionId[] = PANEL_SECTIONS.filter((s) => s.footer).map((s) => s.id);
 
 export function panelSection(id: PanelSectionId): PanelSectionDef | undefined {
   return PANEL_SECTIONS.find((s) => s.id === id);
+}
+
+/**
+ * A3.3 CONVERGÊNCIA (ponto 8) — ACENTO DE CONTEXTO POR SEÇÃO.
+ *
+ * Regra: a cor aparece só no ÍCONE (e em detalhes pequenos), nunca pintando o
+ * card/linha inteira. Serve para o lojista reconhecer a família do destino de
+ * relance; não substitui a seleção, que continua BRAND.
+ *
+ * Mapeado por variável de token (não por hex) para respeitar o tema: se o tema
+ * mudar, o acento acompanha — nenhum componente carrega cor própria.
+ */
+export const SECTION_ACCENT: Record<PanelSectionId, string> = {
+  operacao: 'var(--brand)',      // Agenda, Conversas, Assistente, Tarefas
+  pessoas: 'var(--teal)',        // Clientes, Funil
+  oferta: 'var(--lilac)',        // Serviços, Profissionais, Disponibilidade, Produtos, Pedidos
+  crescimento: 'var(--warning)', // Campanhas, Automações, Canais
+  resultados: 'var(--success)',  // Resultados, Organização, Execuções
+  presenca: 'var(--brand)',      // Página
+  administracao: 'var(--text-muted)', // Equipe, Recursos, Configurações (neutro de propósito)
+};
+
+/** Acento de uma seção, com fallback neutro para id desconhecido. */
+export function sectionAccent(id: PanelSectionId | undefined): string {
+  if (!id) return 'var(--text-muted)';
+  return SECTION_ACCENT[id] ?? 'var(--text-muted)';
 }
 
 /** Destinos de uma seção, na ordem do catálogo (independente de contexto). */
@@ -239,7 +274,7 @@ export const PANEL_ROUTES: PanelRouteDef[] = [
     // INTEGRAÇÕES (por onde os dados viajam, com direção declarada).
     href: '/canais', label: 'Canais & Integrações', icon: 'plugs', section: 'crescimento',
     permission: 'config', area: 'canais',
-    description: 'Por onde o cliente fala com você, de onde ele chega e como outros sistemas se conectam.',
+    description: 'Por onde o cliente fala com você (WhatsApp, redes sociais), de onde ele chega e como outros sistemas se conectam.',
   },
 
   // ── Resultados: como está indo ──

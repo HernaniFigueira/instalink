@@ -20,7 +20,9 @@ import {
 import type {
   Metric, ProfessionalPerformance, ResultsPayload, ServicePerformance,
 } from '@/lib/insights';
+import { originBars, rankBars, statusMix } from '@/lib/insights-charts';
 import { Icon } from '@/components/icons';
+import { Tabs } from '@/components/ui';
 
 export interface PeriodSelection { key: PeriodKey; from: string; to: string }
 
@@ -44,7 +46,7 @@ export function PeriodPicker({ value, onChange, label = 'Período dos resultados
       aria-pressed={isKey(k)}
       className={cn(
         'text-xs font-medium px-2.5 py-1 rounded whitespace-nowrap transition-colors',
-        isKey(k) ? 'bg-zinc-900 text-white' : 'text-zinc-500 hover:text-zinc-900 hover:bg-zinc-50',
+        isKey(k) ? 'bg-[var(--brand-soft)] text-[var(--brand-fg)] border border-[var(--brand-border)]' : 'text-[var(--text-muted)] border border-transparent hover:text-[var(--text)] hover:bg-[var(--surface-2)]',
       )}
     >
       {periodKeyLabel(k)}
@@ -61,7 +63,7 @@ export function PeriodPicker({ value, onChange, label = 'Período dos resultados
           aria-pressed={value.key === 'custom'}
           className={cn(
             'text-xs font-medium px-2.5 py-1 rounded whitespace-nowrap transition-colors inline-flex items-center gap-1',
-            value.key === 'custom' ? 'bg-zinc-900 text-white' : 'text-zinc-500 hover:text-zinc-900 hover:bg-zinc-50',
+            value.key === 'custom' ? 'bg-[var(--brand-soft)] text-[var(--brand-fg)] border border-[var(--brand-border)]' : 'text-[var(--text-muted)] border border-transparent hover:text-[var(--text)] hover:bg-[var(--surface-2)]',
           )}
         >
           <Icon n="calendar" size={12} /> Personalizado
@@ -97,7 +99,7 @@ export function PeriodPicker({ value, onChange, label = 'Período dos resultados
           <button
             type="button"
             onClick={() => onChange({ key: 'custom', from, to })}
-            className="text-xs font-semibold bg-zinc-900 text-white px-3 py-2 rounded-md"
+            className="text-xs font-semibold bg-[var(--brand)] text-white px-3 py-2 rounded-md shadow-brand hover:bg-[var(--brand-strong)]"
           >
             Aplicar
           </button>
@@ -159,9 +161,9 @@ export function FunnelView({ funnel }: { funnel: ResultsPayload['funnel'] }) {
   const max = Math.max(1, ...steps.map((s) => s.value));
   let lastGroup = '';
   return (
-    <div className="bg-white border border-zinc-200 rounded-lg p-4">
-      <h3 className="font-bold text-sm">Funil do período</h3>
-      <p className="text-[11px] text-zinc-500 mt-0.5">Etapas contadas separadamente no período — o sistema não vincula cada lead a um agendamento.</p>
+    <div className="ws-panel p-4">
+      <h3 className="font-bold text-sm text-[var(--text)]">Funil do período</h3>
+      <p className="text-[11px] text-[var(--text-muted)] mt-0.5">Etapas contadas separadamente no período — o sistema não vincula cada lead a um agendamento.</p>
       <div className="mt-3 space-y-2.5">
         {steps.map((s) => {
           const groupHeader = s.group !== lastGroup;
@@ -170,46 +172,95 @@ export function FunnelView({ funnel }: { funnel: ResultsPayload['funnel'] }) {
           return (
             <div key={s.id}>
               {groupHeader && (
-                <p className="text-[10px] font-bold tracking-[0.08em] uppercase text-zinc-400 mb-1.5 mt-1">
+                <p className="text-[10px] font-bold tracking-[0.08em] uppercase text-[var(--text-faint)] mb-1.5 mt-1">
                   {s.group === 'lead' ? 'Captação' : 'Atendimento'}
                 </p>
               )}
               <div className="flex items-baseline justify-between gap-2 text-xs">
-                <span className={cn('font-medium', !s.tracked && 'text-zinc-400')}>{s.label}</span>
+                <span className={cn('font-medium text-[var(--text)]', !s.tracked && 'text-[var(--text-muted)]')}>{s.label}</span>
                 <span className="tabular-nums">
                   {s.tracked
-                    ? <>{s.value}{s.rate !== null && <span className="text-zinc-400 font-normal"> · {s.rate}%</span>}</>
-                    : <span className="text-zinc-400 font-normal">não rastreado</span>}
+                    ? <>{s.value}{s.rate !== null && <span className="text-[var(--text-muted)] font-normal"> · {s.rate}%</span>}</>
+                    : <span className="text-[var(--text-muted)] font-normal">não rastreado</span>}
                 </span>
               </div>
-              <div className="h-2.5 mt-1 rounded-full overflow-hidden bg-zinc-100">
+              <div className="h-2.5 mt-1 rounded-pill overflow-hidden bg-[var(--surface-2)]">
                 <div
-                  className={cn('h-full rounded-full', s.tracked ? (s.group === 'lead' ? 'bg-zinc-400' : 'bg-emerald-500') : 'bg-zinc-200')}
+                  className={cn('h-full rounded-full', s.tracked ? (s.group === 'lead' ? 'bg-[var(--brand)]' : 'bg-[var(--success)]') : 'bg-[var(--border)]')}
                   style={s.tracked
                     ? { width: `${width}%` }
                     : { width: '100%', backgroundImage: 'repeating-linear-gradient(45deg, transparent, transparent 6px, rgba(0,0,0,0.08) 6px, rgba(0,0,0,0.08) 12px)' }}
                 />
               </div>
-              <p className="text-[11px] text-zinc-400 mt-0.5 leading-snug">{s.hint}</p>
+              <p className="text-[11px] text-[var(--text-muted)] mt-0.5 leading-snug">{s.hint}</p>
             </div>
           );
         })}
       </div>
 
       {funnel.losses.length > 0 && (
-        <div className="mt-4 pt-3 border-t border-zinc-100">
-          <p className="text-[11px] font-semibold uppercase tracking-wide text-zinc-500 mb-1.5">Onde houve perda</p>
+        <div className="mt-4 pt-3 border-t border-[var(--border-soft)]">
+          <p className="text-[11px] font-semibold uppercase tracking-wide text-[var(--text-muted)] mb-1.5">Onde houve perda</p>
           <div className="flex flex-wrap gap-1.5">
             {funnel.losses.map((l) => (
               <span key={l.id} title={l.hint}
                 className={cn('text-[11px] font-semibold px-2 py-1 rounded border',
-                  l.value > 0 ? 'bg-amber-50 border-amber-200 text-amber-800' : 'bg-zinc-50 border-zinc-200 text-zinc-500')}>
+                  l.value > 0 ? 'bg-[var(--warning-bg)] border-[var(--warning-border)] text-[var(--warning-fg)]' : 'bg-[var(--surface-2)] border-[var(--border)] text-[var(--text-muted)]')}>
                 {l.label}: {l.value}
               </span>
             ))}
           </div>
         </div>
       )}
+    </div>
+  );
+}
+
+/**
+ * A3.3 CONVERGÊNCIA (ponto 14) — DISTRIBUIÇÃO DE ESTADOS DO PERÍODO.
+ *
+ * Uma única barra segmentada + legenda com os números ao lado: dá para bater o
+ * olho e ver a proporção sem precisar ler tabela. Cada segmento tem `title`
+ * (tooltip) e a legenda repete o valor em texto — cor nunca é o único canal.
+ *
+ * Só entra quando existe atendimento no recorte; sem dado, o bloco some em vez
+ * de mostrar uma barra vazia decorativa.
+ */
+export function StatusMixBar({ payload }: { payload: ResultsPayload }) {
+  const mix = statusMix(payload.services.rows.length > 0 ? payload.services.rows : payload.professionals.rows);
+  if (!mix.hasData) return null;
+  const visible = mix.segments.filter((seg) => seg.value > 0);
+
+  return (
+    <div className="ws-panel p-4">
+      <div className="flex items-baseline justify-between gap-2">
+        <h3 className="font-bold text-sm text-[var(--text)]">Como terminaram os atendimentos</h3>
+        <span className="text-xs text-[var(--text-muted)] tabular-nums shrink-0">{mix.total} no período</span>
+      </div>
+      <p className="text-[11px] text-[var(--text-muted)] mt-0.5">
+        “Em agenda” reúne pendentes e confirmados — a coleta por serviço não separa os dois.
+      </p>
+
+      {/* Barra segmentada: cada fatia proporcional, com tooltip. */}
+      <div className="mt-3 flex h-3 w-full overflow-hidden rounded-pill bg-[var(--surface-2)]" role="img"
+        aria-label={visible.map((seg) => `${seg.label}: ${seg.value} (${seg.pct}%)`).join(', ')}>
+        {visible.map((seg) => (
+          <span key={seg.id} title={`${seg.label}: ${seg.value} (${seg.pct}%)`}
+            className="h-full transition-[width]" style={{ width: `${seg.pct}%`, backgroundColor: seg.color }} />
+        ))}
+      </div>
+
+      {/* Legenda: cor + rótulo + número + participação (texto sempre presente). */}
+      <ul className="mt-3 flex flex-wrap gap-x-4 gap-y-1.5">
+        {mix.segments.map((seg) => (
+          <li key={seg.id} className="flex items-center gap-1.5 text-xs">
+            <span aria-hidden="true" className="w-2.5 h-2.5 rounded-sm shrink-0" style={{ backgroundColor: seg.color }} />
+            <span className={cn(seg.value === 0 && 'text-[var(--text-muted)]')}>{seg.label}</span>
+            <strong className="tabular-nums font-semibold text-[var(--text)]">{seg.value}</strong>
+            <span className="tabular-nums text-[var(--text-muted)]">({seg.pct}%)</span>
+          </li>
+        ))}
+      </ul>
     </div>
   );
 }
@@ -235,23 +286,54 @@ export function PerformanceView({ payload }: { payload: ResultsPayload }) {
   const showRevenue = !!payload.revenue.forecast && payload.revenue.forecastPriced;
 
   return (
-    <div className="bg-white border border-zinc-200 rounded-lg">
-      <div className="px-4 pt-3.5 pb-2 flex flex-wrap items-center justify-between gap-2 border-b border-zinc-100">
-        <h3 className="font-bold text-sm">Desempenho</h3>
-        <div role="tablist" aria-label="Tipo de desempenho" className="inline-flex bg-zinc-100 rounded-md p-0.5">
-          {([['services', 'Serviços'], ['professionals', 'Profissionais']] as const).map(([id, label]) => (
-            <button key={id} role="tab" aria-selected={tab === id} onClick={() => setTab(id)}
-              className={cn('text-xs font-medium px-2.5 py-1 rounded', tab === id ? 'bg-white shadow-sm border border-zinc-200' : 'text-zinc-500')}>
-              {label}
-            </button>
-          ))}
-        </div>
+    <div className="ws-panel">
+      <div className="px-4 pt-3.5 pb-2.5 flex flex-wrap items-center justify-between gap-2 border-b border-[var(--border-soft)]">
+        <h3 className="font-bold text-sm text-[var(--text)]">Desempenho</h3>
+        <Tabs
+          items={[
+            { id: 'services' as const, label: 'Serviços', icon: 'service' },
+            { id: 'professionals' as const, label: 'Profissionais', icon: 'idcard' },
+          ]}
+          value={tab}
+          onChange={(id) => setTab(id)}
+          ariaLabel="Tipo de desempenho"
+          size="sm"
+        />
       </div>
 
       {section.rows.length === 0 ? (
-        <p className="px-4 py-6 text-xs text-zinc-500">{section.reason}</p>
+        <p className="px-4 py-6 text-xs text-[var(--text-muted)]">{section.reason}</p>
       ) : (
         <>
+          {/* A3.3 (ponto 14) — comparação visual: quem faz mais, de relance. */}
+          <div className="px-4 pt-3.5 pb-1">
+            <ul className="space-y-2">
+              {rankBars(section.rows).map((b) => (
+                <li key={b.key}>
+                  <div className="flex items-baseline justify-between gap-2 text-xs">
+                    <span className="font-medium truncate text-[var(--text)]">{b.label}</span>
+                    <span className="tabular-nums text-[var(--text-muted)] shrink-0">
+                      {b.value} agend. · {b.secondary} concluídos
+                    </span>
+                  </div>
+                  <div className="relative h-2 mt-1 rounded-pill overflow-hidden bg-[var(--surface-2)]"
+                    title={`${b.label}: ${b.value} agendamento(s), ${b.secondary} concluído(s)`}>
+                    <span className="absolute inset-y-0 left-0 rounded-pill" style={{ width: `${b.widthPct}%`, backgroundColor: 'var(--brand-soft)' }} />
+                    <span className="absolute inset-y-0 left-0 rounded-pill" style={{ width: `${b.secondaryWidthPct}%`, backgroundColor: 'var(--success)' }} />
+                  </div>
+                </li>
+              ))}
+            </ul>
+            <ul className="mt-2.5 flex flex-wrap gap-x-4 gap-y-1 text-[11px] text-[var(--text-muted)]">
+              <li className="flex items-center gap-1.5">
+                <span aria-hidden="true" className="w-2.5 h-2.5 rounded-sm bg-[var(--brand-soft)]" /> agendamentos
+              </li>
+              <li className="flex items-center gap-1.5">
+                <span aria-hidden="true" className="w-2.5 h-2.5 rounded-sm bg-[var(--success)]" /> concluídos
+              </li>
+            </ul>
+          </div>
+
           {/* Desktop */}
           <div className="hidden md:block overflow-x-auto ws-scroll">
             <table className="w-full text-sm">
@@ -310,28 +392,43 @@ export function PerformanceView({ payload }: { payload: ResultsPayload }) {
 }
 
 export function OriginsView({ origins }: { origins: ResultsPayload['origins'] }) {
-  const max = Math.max(1, ...origins.rows.map((o) => o.leads));
+  // A3.3 (ponto 14): barras comparativas reais — a faixa clara é o total de
+  // leads e a preenchida por cima é quantos converteram. Tooltip + números ao
+  // lado, para não depender só do tamanho da barra.
+  const bars = originBars(origins.rows);
   return (
-    <div className="bg-white border border-zinc-200 rounded-lg p-4">
-      <h3 className="font-bold text-sm">De onde vêm os leads</h3>
-      {origins.rows.length === 0 ? (
-        <p className="text-xs text-zinc-500 mt-2">{origins.reason}</p>
+    <div className="ws-panel p-4">
+      <h3 className="font-bold text-sm text-[var(--text)]">De onde vêm os leads</h3>
+      {bars.length === 0 ? (
+        <p className="text-xs text-[var(--text-muted)] mt-2">{origins.reason}</p>
       ) : (
-        <ul className="mt-3 space-y-2.5">
-          {origins.rows.map((o) => (
-            <li key={o.name}>
-              <div className="flex items-baseline justify-between gap-2 text-xs">
-                <span className="font-medium truncate">{o.name}</span>
-                <span className="tabular-nums text-zinc-500 shrink-0">
-                  {o.leads} lead(s) · {o.converted} convertido(s) · {o.rate}%
-                </span>
-              </div>
-              <div className="h-2 mt-1 rounded-full overflow-hidden bg-zinc-100">
-                <div className="h-full bg-zinc-700 rounded-full" style={{ width: `${Math.max(4, Math.round((o.leads / max) * 100))}%` }} />
-              </div>
+        <>
+          <ul className="mt-3 space-y-2.5">
+            {bars.map((b) => (
+              <li key={b.key}>
+                <div className="flex items-baseline justify-between gap-2 text-xs">
+                  <span className="font-medium truncate text-[var(--text)]">{b.label}</span>
+                  <span className="tabular-nums text-[var(--text-muted)] shrink-0">
+                    {b.value} lead(s) · {b.secondary} convertido(s)
+                  </span>
+                </div>
+                <div className="relative h-2 mt-1 rounded-pill overflow-hidden bg-[var(--surface-2)]"
+                  title={`${b.label}: ${b.value} lead(s), ${b.secondary} convertido(s)`}>
+                  <span className="absolute inset-y-0 left-0 rounded-pill" style={{ width: `${b.widthPct}%`, backgroundColor: 'var(--brand-soft)' }} />
+                  <span className="absolute inset-y-0 left-0 rounded-pill" style={{ width: `${b.secondaryWidthPct}%`, backgroundColor: 'var(--success)' }} />
+                </div>
+              </li>
+            ))}
+          </ul>
+          <ul className="mt-3 flex flex-wrap gap-x-4 gap-y-1 text-[11px] text-[var(--text-muted)]">
+            <li className="flex items-center gap-1.5">
+              <span aria-hidden="true" className="w-2.5 h-2.5 rounded-sm bg-[var(--brand-soft)]" /> leads recebidos
             </li>
-          ))}
-        </ul>
+            <li className="flex items-center gap-1.5">
+              <span aria-hidden="true" className="w-2.5 h-2.5 rounded-sm bg-[var(--success)]" /> viraram atendimento
+            </li>
+          </ul>
+        </>
       )}
     </div>
   );
@@ -358,6 +455,8 @@ export function ResultsView({ payload, title, subtitle }: {
       {!payload.hasAnyData && (
         <p className="text-xs text-zinc-500 bg-white border border-zinc-200 rounded-lg px-4 py-3">{payload.emptyHint}</p>
       )}
+
+      <StatusMixBar payload={payload} />
 
       <div className="grid lg:grid-cols-2 gap-4">
         <FunnelView funnel={payload.funnel} />

@@ -3,7 +3,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { useSearchParams } from 'next/navigation';
 import { cn, centsToBR } from '@/lib/utils';
 import type { Category, Professional, Service } from '@/lib/types';
-import { ListSkeleton } from '@/components/ui';
+import { Button, EmptyState, IconButton, ListSkeleton, Notice, PageHeader } from '@/components/ui';
 import { Icon } from '@/components/icons';
 import { AccessDenied } from '@/components/dashboard/AccessNotice';
 import { apiGet, apiSend } from '@/lib/api-client';
@@ -105,11 +105,28 @@ export default function ServicosPage() {
     }
   }
 
+  const header = (
+    <PageHeader
+      icon="service"
+      title="Serviços"
+      hint="O que o seu negócio oferece — nomes, preços e detalhes."
+      action={loaded ? (
+        <span className="flex flex-wrap gap-2">
+          <Button variant="secondary" onClick={() => setShowCat(!showCat)}>
+            <Icon n="plus" size={14} /> Categoria
+          </Button>
+          <Button variant="primary" onClick={() => { setEditing(null); setShowForm(true); }}>
+            <Icon n="plus" size={14} /> Serviço
+          </Button>
+        </span>
+      ) : undefined}
+    />
+  );
+
   if (denied) {
     return (
       <>
-        <h1 className="text-2xl font-bold tracking-tight">Serviços</h1>
-        <p className="text-sm text-zinc-500 mt-1 mb-5">O que o seu negócio oferece — nomes, preços e detalhes.</p>
+        {header}
         <AccessDenied area="Serviços" />
       </>
     );
@@ -117,35 +134,30 @@ export default function ServicosPage() {
 
   return (
     <>
-      <h1 className="text-2xl font-bold tracking-tight">Serviços</h1>
-      <p className="text-sm text-zinc-500 mt-1 mb-5">O que o seu negócio oferece — nomes, preços e detalhes.</p>
+      {header}
 
       {loaded && <CatalogCrossLinks businessId={businessId} current="/servicos" />}
 
-      {msg && <p className="mb-4 text-sm font-medium bg-zinc-900 text-white rounded-md px-4 py-3">{msg}</p>}
+      {msg && <Notice tone="info" className="mb-4">{msg}</Notice>}
       {!loaded && <ListSkeleton rows={3} />}
 
       {loaded && (
         <>
-          <div className="flex gap-2 mb-4">
-            <button onClick={() => setShowCat(!showCat)} className="text-sm font-bold bg-white border border-zinc-200 px-4 py-2.5 rounded-md">+ Categoria</button>
-            <button onClick={() => { setEditing(null); setShowForm(true); }} className="text-sm font-bold bg-zinc-900 text-white px-4 py-2.5 rounded-md">+ Serviço</button>
-          </div>
           {showCat && (
             <form onSubmit={(e) => { e.preventDefault(); call('category.save', { name: catName, kind: 'service' }).then(() => { setCatName(''); setShowCat(false); }).catch((err) => setMsg(err.message)); }}
-              className="mb-4 bg-white border border-zinc-200 rounded-lg p-4 flex gap-2">
+              className="mb-4 ws-panel p-4 flex flex-wrap gap-2">
               <input value={catName} onChange={(e) => setCatName(e.target.value)} placeholder="Nome da categoria (ex: Cabelo)"
-                className="flex-1 rounded-md border border-zinc-300 px-3 py-2.5 text-sm" autoFocus />
-              <button className="text-sm font-bold bg-zinc-900 text-white px-4 py-2.5 rounded-md">Salvar</button>
+                className="flex-1 min-w-[200px] rounded-md border border-[var(--border-strong)] bg-white px-3 py-2 text-sm focus:outline-none focus:shadow-focus" autoFocus />
+              <Button type="submit" variant="primary">Salvar</Button>
             </form>
           )}
           {services.length === 0 ? (
-            <div className="bg-white border border-zinc-200 rounded-lg text-center py-14 px-6">
-              <div className="mx-auto w-12 h-12 rounded-lg bg-zinc-100 flex items-center justify-center text-zinc-400"><Icon n="service" size={24} /></div>
-              <h3 className="font-bold mt-3">Nenhum serviço ainda</h3>
-              <p className="text-sm text-zinc-500 mt-1">Cadastre o primeiro para exibir na página e receber agendamentos.</p>
-              <button onClick={() => { setEditing(null); setShowForm(true); }} className="mt-4 text-sm font-bold bg-zinc-900 text-white px-5 py-2.5 rounded-md">Adicionar serviço</button>
-            </div>
+            <EmptyState
+              icon="service"
+              title="Nenhum serviço ainda"
+              hint="Cadastre o primeiro para exibir na página e receber agendamentos."
+              action={<Button variant="primary" onClick={() => { setEditing(null); setShowForm(true); }}><Icon n="plus" size={14} /> Adicionar serviço</Button>}
+            />
           ) : (
             <div className="space-y-2.5">
               {services.map((sv) => {
@@ -156,9 +168,9 @@ export default function ServicosPage() {
                 return (
                   <div key={sv.id} className={cn('bg-white border border-zinc-200 rounded-lg p-4 flex items-center gap-3', !sv.active && 'opacity-60')}>
                     {sv.image ? (
-                      <img src={sv.image} alt={sv.name} className="w-11 h-11 rounded-md object-cover shrink-0" />
+                      <img src={sv.image} alt={sv.name} className="w-11 h-11 rounded-md object-cover shrink-0 border border-[var(--border)]" />
                     ) : (
-                      <div className="w-11 h-11 rounded-md bg-zinc-100 flex items-center justify-center font-extrabold text-zinc-400 shrink-0">{sv.name.slice(0, 1)}</div>
+                      <div className="w-11 h-11 rounded-md bg-[var(--surface-2)] border border-[var(--border)] flex items-center justify-center font-extrabold text-[var(--text-faint)] shrink-0">{sv.name.slice(0, 1)}</div>
                     )}
                     <div className="flex-1 min-w-0">
                       <p className="font-bold text-sm">{sv.name} {sv.featured && <Icon n="star" size={13} className="inline -mt-1 text-amber-500" />}</p>
@@ -169,10 +181,8 @@ export default function ServicosPage() {
                       </p>
                       {pros.length > 0 && <p className="text-xs text-zinc-400">Realizado por: {who}</p>}
                     </div>
-                    <button onClick={() => { setEditing(sv); setShowForm(true); }} className="text-xs font-bold bg-zinc-100 px-3 py-2 rounded-lg">Editar</button>
-                    <button onClick={() => ask('service', sv)}
-                      aria-label={`Excluir ${sv.name}`}
-                      className="text-xs font-bold text-red-500 px-2 py-2 hover:bg-red-50 rounded-lg inline-flex"><Icon n="x" size={13} /></button>
+                    <Button variant="secondary" size="xs" onClick={() => { setEditing(sv); setShowForm(true); }}>Editar</Button>
+                    <IconButton icon="x" label={`Excluir ${sv.name}`} tip={`Excluir ${sv.name}`} variant="danger" size="sm" onClick={() => ask('service', sv)} />
                   </div>
                 );
               })}

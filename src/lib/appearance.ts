@@ -1,41 +1,55 @@
 // ═══════════════════════════════════════════════════════════════
-// IDENTIDADE VISUAL DO DASHBOARD (P2) — uma cor principal por Business
+// APARÊNCIA LEGADA DO DASHBOARD (P2) — módulo de compatibilidade
 // ═══════════════════════════════════════════════════════════════
-// Escopo DELIBERADAMENTE pequeno: o dono escolhe UMA cor para a navegação
-// (sidebar/topbar do painel) e o sistema deriva os tons necessários (hover,
-// ativo, contraste do texto). NÃO é um theme editor: nada por componente,
-// nada de dezenas de opções.
+// ⚠️ ISTO NÃO É MAIS UMA FEATURE ATIVA (A3.3 convergência).
 //
-// Regras:
-//   • vive em `Business.appearance` → trocar de unidade troca a identidade;
-//   • a página pública NÃO usa nada daqui (identidade pública continua em
-//     Page.theme/ThemeStyle — sistemas independentes);
-//   • os valores saem como TOKENS CSS (`--il-nav*`), consumidos pela sidebar
-//     via classes Tailwind arbitrárias — nada de cor hardcoded espalhada.
+// O painel administrativo tem UM design system padrão. A cor de navegação por
+// empresa foi removida da UI (Configurações → aba "Aparência") e o
+// DashboardShell deixou de aplicá-la: a aparência da sidebar vem dos tokens
+// `--il-nav*` em globals.css, iguais para qualquer empresa.
+//
+// O que resta aqui, e por quê:
+//   • `Business.appearance.navColor` pode continuar PERSISTIDO — removê-lo seria
+//     migração destrutiva sobre dado de quem configurou na época. Fica inativo;
+//   • `sanitizeAppearance` continua útil para aceitar/normalizar esse campo ao
+//     gravar, sem que ele volte a ter efeito visual;
+//   • os derivadores (`navTokens`, `navTokenStyle`, presets, contraste) ficam
+//     por compatibilidade e cobertura de teste — nada no painel os chama.
+//
+// White label significa identificar a EMPRESA por logo/nome, NÃO pintar a
+// interface com a cor dela. A página pública segue com identidade própria e
+// independente (Page.theme / ThemeStyle).
 //
 // Módulo PURO (sem I/O): importável no cliente e coberto por testes.
 import type { BusinessAppearance } from './types';
 
-/** Uma cor por padrão de negócio; rótulos simples, sem jargão. */
+/**
+ * Presets da época em que a cor era configurável. Mantidos porque ainda fazem
+ * parte do histórico do produto e dos testes de compatibilidade — a UI não os
+ * oferece mais.
+ */
 export interface NavPreset {
   id: string;
   label: string;
   color: string;
 }
 
+// Paleta da época em que a cor era configurável: tons acolhedores, todos
+// escuros o suficiente para o texto branco ter contraste garantido.
+// NÃO é mais exposta na UI — mantida por compatibilidade/teste.
 export const NAV_PRESETS: NavPreset[] = [
-  { id: 'grafite', label: 'Grafite', color: '#18181b' },
-  { id: 'azul', label: 'Azul', color: '#1d4ed8' },
-  { id: 'vinho', label: 'Vinho', color: '#7f1d1d' },
-  { id: 'verde', label: 'Verde', color: '#166534' },
-  { id: 'rosa', label: 'Rosa', color: '#9d174d' },
-  { id: 'roxo', label: 'Roxo', color: '#5b21b6' },
-  { id: 'petroleo', label: 'Azul-petróleo', color: '#155e75' },
-  { id: 'terracota', label: 'Terracota', color: '#9a3412' },
+  { id: 'azul', label: 'Azul InstaLink', color: '#2f6bef' },
+  { id: 'marinho', label: 'Marinho', color: '#33405e' },
+  { id: 'verde', label: 'Verde', color: '#0f9f6e' },
+  { id: 'petroleo', label: 'Azul-petróleo', color: '#0e86b4' },
+  { id: 'roxo', label: 'Roxo', color: '#6d4fc4' },
+  { id: 'rosa', label: 'Rosa', color: '#c2185b' },
+  { id: 'vinho', label: 'Vinho', color: '#9b2c46' },
+  { id: 'terracota', label: 'Terracota', color: '#c2610f' },
 ];
 
 /** Cor de referência do produto (usada ao derivar tons de uma cor inválida). */
-export const DEFAULT_NAV_COLOR = '#18181b';
+export const DEFAULT_NAV_COLOR = '#2f6bef';
 
 const HEX = /^#([0-9a-f]{3}|[0-9a-f]{6})$/i;
 
@@ -101,26 +115,31 @@ export interface NavTokens {
 }
 
 /**
- * VISUAL ATUAL DO PAINEL (nenhuma cor configurada): sidebar branca, item ativo
- * preto. É o padrão de fábrica — escolher uma cor em Configurações → Aparência
- * é o que pinta a navegação. Assim a configuração nova não muda a cara de quem
- * nunca mexeu nela.
+ * PADRÃO DE FÁBRICA DO PAINEL (A3.3): sidebar branca e fria, item ATIVO
+ * pintado de azul suave com texto azul-escuro — o estado selecionado é
+ * reconhecível de longe, sem pintar a barra inteira.
+ *
+ * Estes são os valores que valem para TODO o painel, espelhados em
+ * globals.css (:root). Nada na UI os substitui mais.
  */
 export const DEFAULT_NAV_TOKENS: NavTokens = {
   nav: '#ffffff',
-  navFg: '#27272a',
-  navMuted: '#71717a',
-  navHover: '#f4f4f5',
-  navActive: '#f4f4f5',
-  navActiveFg: '#18181b',
-  navBorder: '#e4e4e7',
-  cta: '#18181b',
+  navFg: '#2a3145',
+  navMuted: '#79829c',
+  navHover: '#f1f4fb',
+  navActive: '#e9f0fe',
+  navActiveFg: '#1749b3',
+  navBorder: '#e4e8f3',
+  cta: '#2f6bef',
   ctaFg: '#ffffff',
 };
 
 /**
- * Tokens derivados da cor principal. Contraste NUNCA depende de escolha do
- * usuário: o texto (item normal, item ativo) é derivado da luminância.
+ * Derivador legado: gera tokens a partir de uma cor. Sem cor (ou cor
+ * inválida) devolve o padrão do painel.
+ *
+ * Mantido por compatibilidade — o painel não chama isto; consome os tokens de
+ * globals.css. Contraste sempre derivado da luminância, nunca fixo.
  */
 export function navTokens(color?: string | null): NavTokens {
   const base = normalizeHex(color);
@@ -141,7 +160,12 @@ export function navTokens(color?: string | null): NavTokens {
   };
 }
 
-/** Cor efetiva configurada no negócio ('' = padrão do produto). */
+/**
+ * Lê o `navColor` LEGADO persistido no negócio ('' quando ausente/inválido).
+ *
+ * Serve para inspecionar/sanitizar dado antigo. NÃO alimenta mais a aparência
+ * do painel — nenhuma tela deve usá-lo para montar tokens visuais.
+ */
 export function navColorOf(business?: { appearance?: BusinessAppearance } | null): string {
   return normalizeHex(business?.appearance?.navColor);
 }
@@ -152,7 +176,11 @@ export function sanitizeAppearance(input: unknown): BusinessAppearance {
   return { navColor: normalizeHex(raw.navColor) };
 }
 
-/** Estilo inline com os tokens — aplicado no container do painel. */
+/**
+ * Estilo inline com os tokens. Era aplicado no container do painel; hoje não é
+ * chamado por nenhuma tela (os tokens vêm de globals.css). Fica exportado por
+ * compatibilidade e para os testes de contrato do formato.
+ */
 export function navTokenStyle(color?: string | null): Record<string, string> {
   const t = navTokens(color);
   return {

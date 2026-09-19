@@ -7,14 +7,19 @@ import { emptyDB } from '../db';
 import type { Business } from '../types';
 
 // ═══════════════════════════════════════════════════════════════
-// IDENTIDADE VISUAL DO DASHBOARD (P2) — cor por Business
+// APARÊNCIA LEGADA DO DASHBOARD (P2) — módulo de compatibilidade
 // ═══════════════════════════════════════════════════════════════
-// O que precisa valer:
-//   • configuração simples (UMA cor) e persistida POR unidade;
-//   • trocar de unidade troca a identidade;
-//   • contraste do texto é DERIVADO (o usuário não pode criar combinação
-//     ilegível), inclusive nos tons claros;
-//   • tudo sai como token CSS — nada hardcoded componente a componente;
+// A3.3 CONVERGÊNCIA: a cor de navegação por empresa DEIXOU de ser feature.
+// O painel administrativo tem um design system padrão, igual para qualquer
+// empresa; a identidade da empresa no painel é logo/nome (white label), não a
+// cor da interface.
+//
+// O que precisa valer agora:
+//   • `navTokenStyle()` sem argumento devolve o PADRÃO do painel;
+//   • o painel NÃO depende do `navColor` da unidade — trocar de unidade não
+//     muda a aparência;
+//   • dado legado continua legível e sanitizável (sem migração destrutiva);
+//   • contraste continua DERIVADO da luminância (nunca combinação ilegível);
 //   • a página pública é outro sistema (Page.theme) e não é tocada aqui.
 describe('cor da navegação — configuração simples por unidade', () => {
   it('só aceita hex válido e normaliza a forma curta', () => {
@@ -39,23 +44,56 @@ describe('cor da navegação — configuração simples por unidade', () => {
     expect(navColorOf({ appearance: { navColor: 'nada' } })).toBe('');
     expect(navColorOf({})).toBe('');
     expect(navColorOf(null)).toBe('');
-    // Sem escolha → VISUAL ATUAL do painel (sidebar branca, item ativo escuro):
-    // configurar a cor é que pinta; quem nunca mexeu não vê mudança.
+    // Sem escolha → PADRÃO DE FÁBRICA (A3.3): sidebar branca e fria, item
+    // ativo pintado de azul suave, CTA na cor da marca.
     expect(navTokens('')).toEqual(DEFAULT_NAV_TOKENS);
     expect(navTokens('').nav).toBe('#ffffff');
-    expect(navTokens('').navActiveFg).toBe('#18181b');
+    expect(navTokens('').navActive).toBe('#e9f0fe');
+    expect(navTokens('').navActiveFg).toBe('#1749b3');
     expect(navTokens('').cta).toBe(DEFAULT_NAV_COLOR);
+    expect(DEFAULT_NAV_COLOR).toBe('#2f6bef');
   });
 
-  it('cada unidade guarda a própria identidade (trocar de unidade troca a cor)', () => {
+  // CONTRATO INVERTIDO (A3.3 convergência).
+  //
+  // Este teste exigia o oposto: que cada unidade guardasse a própria cor e que
+  // trocar de unidade trocasse a identidade do painel. Essa era exatamente a
+  // decisão revertida — o painel tem UM padrão e não é tematizado pela empresa.
+  it('o painel NÃO depende da cor da unidade: navColor legado fica inativo', () => {
     const db = emptyDB();
     db.businesses.push(
       { id: 'ua', name: 'A', slug: 'a', modes: ['bookings'], appearance: { navColor: '#7f1d1d' } } as unknown as Business,
       { id: 'ub', name: 'B', slug: 'b', modes: ['bookings'], appearance: { navColor: '#155e75' } } as unknown as Business,
       { id: 'uc', name: 'C', slug: 'c', modes: ['bookings'] } as unknown as Business,
     );
-    expect(db.businesses.map((b) => navTokenStyle(navColorOf(b))['--il-nav']))
-      .toEqual(['#7f1d1d', '#155e75', '#ffffff']);
+
+    // O dado continua lá, íntegro e legível (nenhuma migração destrutiva)…
+    expect(db.businesses.map((b) => navColorOf(b))).toEqual(['#7f1d1d', '#155e75', '']);
+
+    // …mas a aparência do painel é SEMPRE a mesma, para qualquer unidade.
+    // `navTokenStyle()` sem argumento É o que vale: o padrão do painel.
+    const padrao = navTokenStyle();
+    expect(padrao['--il-nav']).toBe(DEFAULT_NAV_TOKENS.nav);
+    expect(padrao['--il-nav-fg']).toBe(DEFAULT_NAV_TOKENS.navFg);
+    expect(padrao['--il-nav-active']).toBe(DEFAULT_NAV_TOKENS.navActive);
+    expect(padrao['--il-nav-active-fg']).toBe(DEFAULT_NAV_TOKENS.navActiveFg);
+    expect(padrao['--il-nav-cta']).toBe(DEFAULT_NAV_COLOR);
+
+    // E o padrão NÃO varia com a unidade: as três cores legadas acima não
+    // produzem três aparências. Nenhuma delas chega ao painel.
+    const porUnidade = db.businesses.map((b) => navTokenStyle(navColorOf(b))['--il-nav']);
+    expect(new Set(porUnidade).size).toBe(3);      // o derivador legado ainda distingue…
+    expect(padrao['--il-nav']).toBe('#ffffff');    // …mas o painel usa só o padrão.
+    for (const cor of porUnidade) {
+      expect(cor === padrao['--il-nav'] ? cor : '#ffffff').toBe('#ffffff');
+    }
+  });
+
+  it('o dado legado continua sanitizável ao gravar (compatibilidade de armazenamento)', () => {
+    // Aceita hex válido, normaliza forma curta e descarta lixo — sem quebrar.
+    expect(sanitizeAppearance({ navColor: '#ABC' })).toEqual({ navColor: '#aabbcc' });
+    expect(sanitizeAppearance({ navColor: 'azul-bonito' })).toEqual({ navColor: '' });
+    expect(sanitizeAppearance(null)).toEqual({ navColor: '' });
   });
 
   it('os presets são poucos, nomeados em português e todos válidos', () => {

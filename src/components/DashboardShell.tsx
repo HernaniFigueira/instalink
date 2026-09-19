@@ -4,17 +4,18 @@ import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { clearToken } from '@/lib/client-auth';
 import { cn } from '@/lib/utils';
-import { PageSkeleton } from '@/components/ui';
+import { Avatar, PageSkeleton } from '@/components/ui';
 import { AccessDenied, ForbiddenToasts, PanelHomeProvider } from '@/components/dashboard/AccessNotice';
 import {
   activePanelPath, activePanelRoute, firstAllowedPath, panelAccess, panelNavigation,
-  routeRequiresBusiness, type PanelRouteDef, type PanelSection, type PanelSectionId,
+  routeRequiresBusiness, sectionAccent, type PanelRouteDef, type PanelSection, type PanelSectionId,
 } from '@/lib/panel';
 import { isSessionExpired } from '@/lib/http';
 import type { BusinessMode, FeatureId, PermissionId } from '@/lib/types';
 import { requiresActiveBusiness } from '@/lib/business-context';
 import { unitsInSameOrganization } from '@/lib/organization';
-import { navTokenStyle } from '@/lib/appearance';
+import { NavSearch } from '@/components/dashboard/NavSearch';
+import { buildNavSearchItems } from '@/lib/nav-search';
 
 interface Biz {
   id: string;
@@ -30,8 +31,6 @@ interface Biz {
   permissions?: Record<PermissionId, boolean>;
   readOnly?: boolean;
   organizationId?: string;
-  /** Identidade visual do Dashboard (P2) — acompanha a unidade selecionada. */
-  appearance?: { navColor?: string }
   /** Escopo do profissional: preenchido ⇒ este login vê só a própria agenda. */
   professionalId?: string;
   professionalName?: string;
@@ -52,10 +51,11 @@ interface SupportInfo {
 // ficam como contorno duplo ilegível (era o "ícone do WhatsApp ruim").
 const FILL_ICONS = new Set(['whatsapp']);
 
-function Svg({ size = 18, fill = false, children }: { size?: number; fill?: boolean; children: React.ReactNode }) {
+function Svg({ size = 18, fill = false, className, children }: { size?: number; fill?: boolean; className?: string; children: React.ReactNode }) {
   return (
     <svg width={size} height={size} viewBox="0 0 24 24" fill={fill ? 'currentColor' : 'none'} stroke={fill ? 'none' : 'currentColor'}
-      strokeWidth={1.7} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" className="shrink-0">
+      strokeWidth={1.7} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"
+      className={className ? `shrink-0 ${className}` : 'shrink-0'}>
       {children}
     </svg>
   );
@@ -78,6 +78,12 @@ const PATHS: Record<string, React.ReactNode> = {
   chart: (<><path d="M3 3v18h18" /><path d="M8 17V9" /><path d="M13 17V5" /><path d="M18 17v-8" /></>),
   settings: (<><circle cx="12" cy="12" r="3" /><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9c.24.6.86 1 1.51 1H21a2 2 0 1 1 0 4h-.09c-.65 0-1.27.4-1.51 1Z" /></>),
   logout: (<><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" /><path d="m16 17 5-5-5-5" /><path d="M21 12H9" /></>),
+  search: (<><circle cx="11" cy="11" r="7" /><path d="m21 21-4.3-4.3" /></>),
+  // Ícone genérico de PAINEL LATERAL (SVG próprio do sistema): retângulo com
+  // divisão vertical. Serve para recolher E expandir — o tooltip diz qual.
+  panel: (<><rect x="3" y="4" width="18" height="16" rx="2.5" /><path d="M9.5 4v16" /></>),
+  x: (<path d="M18 6 6 18M6 6l12 12" />),
+  chevD: (<path d="m6 9 6 6 6-6" />),
   collapse: (<><path d="m11 17-5-5 5-5" /><path d="m18 17-5-5 5-5" /></>),
   expand: (<><path d="m13 17 5-5-5-5" /><path d="m6 17 5-5-5-5" /></>),
   external: (<><path d="M15 3h6v6" /><path d="M10 14 21 3" /><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6" /></>),
@@ -105,8 +111,8 @@ const PATHS: Record<string, React.ReactNode> = {
   chevron: (<path d="m6 9 6 6 6-6" />),
 };
 
-function I({ n, size = 18 }: { n: string; size?: number }) {
-  return <Svg size={size} fill={FILL_ICONS.has(n)}>{PATHS[n]}</Svg>;
+function I({ n, size = 18, className }: { n: string; size?: number; className?: string }) {
+  return <Svg size={size} fill={FILL_ICONS.has(n)} className={className}>{PATHS[n]}</Svg>;
 }
 
 // ═══════════════════════════════════════════════════════════════
@@ -119,8 +125,14 @@ function I({ n, size = 18 }: { n: string; size?: number }) {
 //   • acessar direto uma rota sem permissão mostra 403 AMIGÁVEL — nunca
 //     logout (somente 401 inicia fluxo de login; ver lib/http.ts);
 //   • estado ativo por ANCESTRALIDADE ('/clientes/123' mantém Clientes aceso);
-//   • seções colapsáveis (preferência por navegador) e Administração no
-//     rodapé fixo — nunca abaixo da dobra.
+//   • seções colapsáveis (preferência por navegador).
+//
+// A3.3 — UMA lista, um comportamento: todas as seções (inclusive
+// Administração) ficam na mesma área rolável. O "Configurações preso no
+// rodapé" gerava dois comportamentos diferentes na mesma barra; o rodapé
+// agora só carrega quem está logado e a saída. O que resolveu o problema
+// original (Administração abaixo da dobra em 1280×768) foi o menu mais
+// compacto + o controle de recolher no topo.
 const CLOSED_SECTIONS_KEY = 'il-nav-closed';
 
 function readClosedSections(): Set<PanelSectionId> {
@@ -143,8 +155,10 @@ function hrefFor(item: PanelRouteDef, unitQuery: string): string {
   return item.requiresBusiness === false ? item.href : `${item.href}${unitQuery}`;
 }
 
-function NavItem({ item, active, collapsed, href }: {
+function NavItem({ item, active, collapsed, href, accent }: {
   item: PanelRouteDef; active: boolean; collapsed: boolean; href: string;
+  /** A3.3 (ponto 8): cor de contexto da seção, aplicada APENAS no ícone. */
+  accent: string;
 }) {
   return (
     <Link href={href} data-nav-item={item.href} data-nav-active={active || undefined}
@@ -152,12 +166,29 @@ function NavItem({ item, active, collapsed, href }: {
       // sem exigir abrir a tela (e sem inventar uma segunda fonte de texto).
       title={collapsed ? `${item.label} — ${item.description}` : item.description}
       aria-current={active ? 'page' : undefined}
-      className={cn('flex items-center text-[13px] rounded-md h-9 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/70 focus-visible:ring-inset',
-        collapsed ? 'justify-center px-0' : 'gap-2.5 px-2.5',
+      className={cn(
+        'relative flex items-center text-[13px] rounded-md h-10 transition-[background-color,color] duration-150',
+        'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--brand)] focus-visible:ring-offset-1 focus-visible:ring-offset-[var(--il-nav)]',
+        collapsed ? 'justify-center px-0 il-tip' : 'gap-2.5 px-2.5',
         active
-          ? 'bg-[var(--il-nav-active)] text-[var(--il-nav-active-fg)] shadow-sm'
-          : 'text-[var(--il-nav-fg)] hover:bg-[var(--il-nav-hover)]')}>
-      <I n={item.icon} size={18} /> {!collapsed && <span className={cn('truncate', active && 'font-medium')}>{item.label}</span>}
+          ? 'bg-[var(--il-nav-active)] text-[var(--il-nav-active-fg)] font-semibold shadow-xs'
+          : 'text-[var(--il-nav-fg)] font-medium hover:bg-[var(--il-nav-hover)]',
+      )}
+      {...(collapsed ? { 'data-tip': item.label } : {})}
+    >
+      {/* Marcador do item ativo: a seleção é visível também com a barra
+          recolhida e para quem não distingue cor (não depende só do fundo). */}
+      {active && (
+        <span aria-hidden="true"
+          className={cn('absolute rounded-pill bg-[var(--il-nav-active-fg)]',
+            collapsed ? 'left-0.5 top-1/2 -translate-y-1/2 w-[3px] h-5' : 'left-0 top-1/2 -translate-y-1/2 w-[3px] h-5')} />
+      )}
+      {/* Item ativo fica BRAND (a seleção manda); inativo mostra o acento da
+          família — cor de contexto, nunca bloco saturado. */}
+      <span className="shrink-0 inline-flex" style={{ color: active ? 'var(--il-nav-active-fg)' : accent }} aria-hidden="true">
+        <I n={item.icon} size={18} />
+      </span>
+      {!collapsed && <span className="truncate">{item.label}</span>}
     </Link>
   );
 }
@@ -168,14 +199,14 @@ function NavSection({ sec, activePath, collapsed, closed, onToggle, unitQuery }:
 }) {
   const isClosed = !collapsed && closed.has(sec.id);
   return (
-    <div className={cn(collapsed ? 'mt-1' : 'mt-4 first:mt-1')}>
+    <div className={cn(collapsed ? 'mt-2' : 'mt-5 first:mt-2')}>
       {collapsed ? (
-        <div className="h-px bg-[var(--il-nav-border)] mx-1 my-1.5" aria-hidden="true" />
+        <div className="h-px bg-[var(--il-nav-border)] mx-1 my-2" aria-hidden="true" />
       ) : (
         <button type="button" onClick={() => onToggle(sec.id)}
           aria-expanded={!isClosed} aria-controls={`nav-section-${sec.id}`}
-          className="w-full flex items-center justify-between gap-2 px-2.5 mb-1 rounded-md group focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/70 focus-visible:ring-inset">
-          <span className="text-[10px] font-bold tracking-[0.08em] text-[var(--il-nav-muted)] uppercase group-hover:text-[var(--il-nav-fg)]">
+          className="w-full flex items-center justify-between gap-2 px-2.5 mb-1.5 rounded-md group focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--brand)]">
+          <span className="text-[10px] font-bold tracking-[0.1em] text-[var(--il-nav-muted)] uppercase group-hover:text-[var(--il-nav-fg)] transition-colors">
             {sec.label}
           </span>
           <span className={cn('text-[var(--il-nav-muted)] transition-transform duration-200', !isClosed && 'rotate-180')} aria-hidden="true">
@@ -187,7 +218,8 @@ function NavSection({ sec, activePath, collapsed, closed, onToggle, unitQuery }:
         <div className="space-y-0.5" id={`nav-section-${sec.id}`} role="group" aria-label={sec.label}>
           {sec.items.map((item) => (
             <NavItem key={item.href} item={item} collapsed={collapsed}
-              href={hrefFor(item, unitQuery)} active={activePath === item.href} />
+              href={hrefFor(item, unitQuery)} active={activePath === item.href}
+              accent={sectionAccent(sec.id)} />
           ))}
         </div>
       )}
@@ -199,7 +231,7 @@ export function DashboardShell({ children }: { children: React.ReactNode }) {
   const params = useSearchParams();
   const pathname = usePathname();
   const router = useRouter();
-  const [user, setUser] = useState<{ name: string; role?: string } | null>(null);
+  const [user, setUser] = useState<{ name: string; email?: string; role?: string } | null>(null);
   const [businesses, setBusinesses] = useState<Biz[]>([]);
   const [isMaster, setIsMaster] = useState(false);
   const [support, setSupport] = useState<SupportInfo | null>(null);
@@ -211,6 +243,9 @@ export function DashboardShell({ children }: { children: React.ReactNode }) {
   const [closed, setClosed] = useState<Set<PanelSectionId>>(new Set());
   // Mobile: painel "Mais" (todas as seções + destinos fora do menu).
   const [moreOpen, setMoreOpen] = useState(false);
+  // Rodapé: popover do usuário (a linha é compacta; "Sair" mora dentro dele).
+  const [userMenuOpen, setUserMenuOpen] = useState(false);
+  const userMenuRef = useRef<HTMLDivElement | null>(null);
   const [pillFade, setPillFade] = useState(false);
   const pillsRef = useRef<HTMLDivElement | null>(null);
   const lastContextAt = useRef(0);
@@ -335,6 +370,16 @@ export function DashboardShell({ children }: { children: React.ReactNode }) {
     return () => window.removeEventListener('resize', onPillsScroll);
   }, [onPillsScroll, ready, moreOpen, pathname, businesses.length]);
 
+  // Rodapé: clique fora fecha o popover do usuário.
+  useEffect(() => {
+    if (!userMenuOpen) return;
+    function onDown(e: MouseEvent) {
+      if (!userMenuRef.current?.contains(e.target as Node)) setUserMenuOpen(false);
+    }
+    document.addEventListener('mousedown', onDown);
+    return () => document.removeEventListener('mousedown', onDown);
+  }, [userMenuOpen]);
+
   function switchBiz(id: string) {
     if (id === '__overview') { router.push(`/organizacao?organization=${business?.organizationId || ''}`); return; }
     if (id === '__add') { router.push(`/organizacao?organization=${business?.organizationId || ''}&add=1`); return; }
@@ -356,8 +401,8 @@ export function DashboardShell({ children }: { children: React.ReactNode }) {
 
   if (!ready || !user) {
     return (
-      <div className="min-h-screen bg-[#fcfcfc] lg:flex" aria-label="Carregando painel">
-        <div className="hidden lg:flex w-[240px] shrink-0 flex-col bg-white border-r border-zinc-200 p-3 gap-2">
+      <div className="min-h-screen bg-[var(--bg)] lg:flex" aria-label="Carregando painel">
+        <div className="hidden lg:flex w-[248px] shrink-0 flex-col bg-white border-r border-[var(--border)] p-3 gap-2">
           <div className="h-9 w-32 bg-zinc-100 animate-pulse mb-2" />
           {Array.from({ length: 8 }).map((_, i) => <div key={i} className="h-7 bg-zinc-100 animate-pulse" />)}
         </div>
@@ -377,9 +422,14 @@ export function DashboardShell({ children }: { children: React.ReactNode }) {
   const nav = panelNavigation(panelCtx);
   const access = panelAccess(pathname, panelCtx);
   const q = business ? `?b=${business.id}` : '';
+  // BUSCA DE NAVEGAÇÃO (ponto 2): a fonte é `nav.allowed` — o MESMO cálculo de
+  // permissão que monta o menu. Nenhum destino extra entra aqui, então a busca
+  // não tem como revelar (nem levar a) uma tela que o usuário não alcança.
+  // A regra de busca fica em lib/nav-search.ts (pura e testada).
+  const navSearchItems = buildNavSearchItems(nav, q);
   const ROLE_LABEL: Record<string, string> = {
     OWNER: 'Proprietário', ADMIN: 'Administrador', SECRETARIA: 'Secretária',
-    ATENDENTE: 'Atendente', VENDEDOR: 'Vendedor', VIEWER: 'Visualizador', MASTER: 'Suporte InstaLink',
+    ATENDENTE: 'Atendente', VENDEDOR: 'Vendedor', VIEWER: 'Visualizador', MASTER: 'Suporte da plataforma',
     PROFISSIONAL: 'Profissional',
   };
 
@@ -404,121 +454,197 @@ export function DashboardShell({ children }: { children: React.ReactNode }) {
   const mobileSections = [...nav.sections, ...nav.footerSections];
 
   return (
-    // A identidade visual vive nos TOKENS (--il-nav*) injetados aqui, uma vez,
-    // a partir da cor do Business ativo. Trocar de unidade troca a identidade;
-    // nenhuma classe condicional por cor é espalhada pelo sistema.
+    // A3.3 CONVERGÊNCIA — o painel tem UM design system padrão: a aparência da
+    // navegação vem dos tokens `--il-nav*` definidos em `globals.css` (:root),
+    // e NÃO da cor da empresa.
+    //
+    // Aqui já existiu `style={navTokenStyle(business?.appearance?.navColor)}`,
+    // que fazia uma unidade com `appearance.navColor` legado (salvo quando
+    // Configurações tinha a aba "Aparência") tematizar a sidebar. Isso foi
+    // removido de propósito: white label significa identificar a EMPRESA por
+    // logo/nome, não pintar o painel administrativo com a cor dela.
+    //
+    // O dado antigo continua persistido (sem migração destrutiva) — só deixou
+    // de ser APLICADO ao painel. A página pública segue com identidade própria
+    // e independente (Page.theme).
+    //
     // `PanelHomeProvider` entrega o destino de volta a qualquer 403 do painel
     // sem que cada tela precise calcular (ou chutar) o seu.
     <PanelHomeProvider home={homeHref}>
-    <div className="min-h-screen bg-[#f8f8f8] lg:flex" style={navTokenStyle(business?.appearance?.navColor)}>
-      {/* Sidebar desktop - workspace navigation */}
+    <div className="min-h-screen bg-[var(--bg)] lg:flex">
+      {/* ═══ SIDEBAR DESKTOP (A3.3) ═══════════════════════════════
+          Três blocos, um comportamento só:
+            TOPO   → marca/unidade + controle de recolher (sempre à vista);
+            CENTRO → menu único e rolável (todas as seções, inclusive
+                     Administração — nada de "parte fixa, parte rolável");
+            RODAPÉ → quem está logado, em que papel, e a saída.
+          Cores vêm dos tokens --il-nav* definidos em globals.css (:root) —
+          padrão único do painel, independente da cor da empresa. */}
       <aside className={cn(
-        'hidden lg:flex shrink-0 flex-col bg-[var(--il-nav)] text-[var(--il-nav-fg)] border-r border-[var(--il-nav-border)] sticky top-0 h-screen transition-all duration-200',
-        collapsed ? 'w-[68px]' : 'w-[240px]',
+        'hidden lg:flex shrink-0 flex-col bg-[var(--il-nav)] text-[var(--il-nav-fg)] border-r border-[var(--il-nav-border)] sticky top-0 h-screen transition-[width] duration-200',
+        collapsed ? 'w-[72px]' : 'w-[248px]',
       )}>
-        {/* Identidade da empresa - bloco compacto (workspace first) */}
-        <div className={cn('border-b border-[var(--il-nav-border)]', collapsed ? 'px-2 py-4 flex justify-center' : 'px-4 py-4')}>
+        {/* ── TOPO (white label, ponto 1 da convergência) ──
+            O painel autenticado NÃO exibe marca do produto: quem opera é a
+            empresa, então o topo é funcional (busca + recolher) e a identidade
+            visível é a da UNIDADE, logo abaixo. Nada de "InstaLink Odonto
+            Clínica": só o nome do negócio.
+            O mesmo ícone de painel recolhe e expande — o tooltip diz qual. */}
+        <div className={cn('shrink-0 border-b border-[var(--il-nav-border)]', collapsed ? 'px-2 py-3 space-y-2' : 'px-3 py-3 space-y-2.5')}>
           {collapsed ? (
-            business.logo ? (
-              <a href={`/${business.slug}`} target="_blank" title={business.name} className="w-9 h-9 rounded-lg overflow-hidden border border-zinc-200 flex items-center justify-center bg-white">
-                {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img src={business.logo} alt={business.name} className="w-full h-full object-cover" />
-              </a>
-            ) : (
-              <a href={`/${business.slug}`} target="_blank" title={business.name}
-                className="w-9 h-9 rounded-lg bg-[var(--il-nav-cta)] text-[var(--il-nav-cta-fg)] flex items-center justify-center text-sm font-bold">
-                {business.name.slice(0, 1).toUpperCase()}
-              </a>
-            )
+            <>
+              <NavSearch items={navSearchItems} collapsed activePath={activePath} />
+              <button type="button" onClick={toggle} title="Expandir menu" aria-label="Expandir menu"
+                aria-expanded={false}
+                className="flex w-full h-8 items-center justify-center rounded-md text-[var(--il-nav-muted)] hover:text-[var(--il-nav-fg)] hover:bg-[var(--il-nav-hover)] transition-colors">
+                <I n="panel" size={17} />
+              </button>
+            </>
           ) : (
-            <div className="flex items-center gap-3 min-w-0">
-              <div className="w-9 h-9 rounded-lg overflow-hidden bg-white text-zinc-900 flex items-center justify-center font-bold shrink-0 border border-[var(--il-nav-border)]">
+            <div className="flex items-center gap-2">
+              <NavSearch items={navSearchItems} collapsed={false} activePath={activePath} />
+              <button type="button" onClick={toggle} title="Recolher menu" aria-label="Recolher menu"
+                aria-expanded={!collapsed}
+                className="shrink-0 w-8 h-8 rounded-md flex items-center justify-center text-[var(--il-nav-muted)] hover:text-[var(--il-nav-fg)] hover:bg-[var(--il-nav-hover)] transition-colors">
+                <I n="panel" size={17} />
+              </button>
+            </div>
+          )}
+
+          {/* ── IDENTIDADE DA EMPRESA: logo + nome + página pública ── */}
+          {collapsed ? (
+            <span title={`${business.name} — workspace atual`}
+              className="flex h-9 w-full items-center justify-center overflow-hidden rounded-lg border border-[var(--il-nav-border)] bg-[var(--il-nav-hover)] text-[11px] font-bold text-[var(--il-nav-fg)]">
+              {business.logo ? (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img src={business.logo} alt="" className="h-full w-full rounded-lg object-cover" />
+              ) : (business.name || '?').trim().slice(0, 1).toUpperCase()}
+            </span>
+          ) : (
+            <div className="flex items-start gap-2.5">
+              <span className="flex h-9 w-9 shrink-0 items-center justify-center overflow-hidden rounded-lg border border-[var(--il-nav-border)] bg-[var(--il-nav-cta)] text-[var(--il-nav-cta-fg)] text-[12px] font-bold shadow-brand">
                 {business.logo ? (
                   // eslint-disable-next-line @next/next/no-img-element
-                  <img src={business.logo} alt={business.name} className="w-full h-full object-cover" />
-                ) : business.name.slice(0, 1).toUpperCase()}
-              </div>
+                  <img src={business.logo} alt="" className="h-full w-full object-cover" />
+                ) : (business.name || '?').trim().split(/\s+/).slice(0, 2).map((x) => x[0]?.toUpperCase() || '').join('')}
+              </span>
               <div className="min-w-0 flex-1">
-                <p className="text-sm font-semibold leading-none truncate text-[var(--il-nav-fg)]">{business.name}</p>
-                <a href={`/${business.slug}`} target="_blank" className="text-[11px] text-[var(--il-nav-muted)] hover:text-[var(--il-nav-fg)] inline-flex items-center gap-1 leading-none mt-1">
-                  Ver site <I n="external" size={10} />
+                <p className="text-[12.5px] font-bold leading-tight truncate text-[var(--il-nav-fg)]">{business.name}</p>
+                <a href={`/${business.slug}`} target="_blank" rel="noreferrer"
+                  className="text-[11px] font-semibold text-[var(--il-nav-muted)] hover:text-[var(--il-nav-cta)] inline-flex items-center gap-1 leading-none mt-1.5">
+                  Ver página pública <I n="external" size={10} />
                 </a>
               </div>
             </div>
           )}
+          {!collapsed && businesses.length > 1 && (
+            <div>
+              <select value={business?.id || ''} onChange={(e) => switchBiz(e.target.value)} aria-label="Trocar de negócio"
+                className="w-full bg-[var(--il-nav-hover)] text-[var(--il-nav-fg)] border border-[var(--il-nav-border)] text-[11px] font-semibold rounded-md px-1.5 py-1.5 [&>option]:bg-white [&>option]:text-zinc-900">
+                <option value="__overview">Visão geral da organização</option>
+                <optgroup label="Unidades desta organização">{organizationUnits.map((x) => <option key={x.id} value={x.id}>{x.name}</option>)}</optgroup>
+                {otherBusinesses.length > 0 && <optgroup label="Outras organizações">{otherBusinesses.map((x) => <option key={x.id} value={x.id}>{x.name}</option>)}</optgroup>}
+                <option value="__add">+ Adicionar unidade</option>
+              </select>
+            </div>
+          )}
         </div>
 
-        {!collapsed && businesses.length > 1 && (
-          <div className="px-3 py-2 border-b border-[var(--il-nav-border)]">
-            <select value={business?.id || ''} onChange={(e) => switchBiz(e.target.value)} aria-label="Trocar de negócio"
-              className="w-full bg-black/10 text-[var(--il-nav-fg)] border border-[var(--il-nav-border)] text-xs font-medium rounded-md px-2 py-1.5 [&>option]:bg-white [&>option]:text-zinc-900">
-              <option value="__overview">Visão geral da organização</option>
-              <optgroup label="Unidades desta organização">{organizationUnits.map((x) => <option key={x.id} value={x.id}>{x.name}</option>)}</optgroup>
-              {otherBusinesses.length > 0 && <optgroup label="Outras organizações">{otherBusinesses.map((x) => <option key={x.id} value={x.id}>{x.name}</option>)}</optgroup>}
-              <option value="__add">+ Adicionar unidade</option>
-            </select>
-          </div>
-        )}
-
         {isMaster && (
-          <div className={cn('py-2 border-b border-[var(--il-nav-border)]', collapsed ? 'px-2' : 'px-3')}>
+          <div className={cn('shrink-0 py-2 border-b border-[var(--il-nav-border)]', collapsed ? 'px-2' : 'px-3')}>
             <Link href="/master" title="Master da plataforma"
-              className={cn('flex items-center text-xs font-semibold border rounded-md py-1.5 bg-amber-50 border-amber-200 text-amber-800 hover:bg-amber-100',
+              className={cn('flex items-center text-xs font-bold rounded-md py-2 bg-[var(--warning-bg)] border border-[var(--warning-border)] text-[var(--warning-fg)] hover:bg-[var(--attention-bg-hover)]',
                 collapsed ? 'justify-center px-0' : 'gap-2 px-2.5')}>
               <I n="shield" size={16} /> {!collapsed && 'Master'}
             </Link>
           </div>
         )}
 
-        <nav className={cn('flex-1 overflow-y-auto py-3 ws-scroll', collapsed ? 'px-1.5 space-y-0.5' : 'px-2.5')} aria-label="Navegação do painel">
+        {/* ── CENTRO: menu único (tudo rola junto; Administração incluída) ── */}
+        <nav className={cn('flex-1 overflow-y-auto py-3 ws-scroll', collapsed ? 'px-2 space-y-0.5' : 'px-2.5')} aria-label="Navegação do painel">
           {dashboardItem && (
             <NavItem item={dashboardItem} collapsed={collapsed}
-              href={hrefFor(dashboardItem, q)} active={activePath === dashboardItem.href} />
+              href={hrefFor(dashboardItem, q)} active={activePath === dashboardItem.href}
+              accent={sectionAccent(dashboardItem.section)} />
           )}
-          {!collapsed && dashboardItem && <div className="h-px bg-[var(--il-nav-border)] my-3 mx-1" aria-hidden="true" />}
           {nav.sections.map((sec) => (
             <NavSection key={sec.id} sec={sec} activePath={activePath} collapsed={collapsed} closed={closed}
               onToggle={toggleSection} unitQuery={q} />
           ))}
-          {/* Sidebar recolhida: Administração entra na área rolável (sem rótulos,
-              a ordem continua a do catálogo). */}
-          {collapsed && nav.footerSections.map((sec) => (
-            <NavSection key={sec.id} sec={sec} activePath={activePath} collapsed
-              closed={closed} onToggle={toggleSection} unitQuery={q} />
+          {/* Seções marcadas como `footer` no catálogo (nenhuma hoje): o shell
+              continua honrando a marca, sem que isso vire um segundo menu. */}
+          {nav.footerSections.map((sec) => (
+            <NavSection key={sec.id} sec={sec} activePath={activePath} collapsed={collapsed} closed={closed}
+              onToggle={toggleSection} unitQuery={q} />
           ))}
+          {nav.more.length > 0 && (
+            <div className={cn(collapsed ? 'mt-2' : 'mt-4')}>
+              {!collapsed && (
+                <p className="px-2.5 mb-1 text-[10px] font-bold tracking-[0.08em] text-[var(--il-nav-muted)] uppercase">Outros destinos</p>
+              )}
+              <div className="space-y-0.5">
+                {nav.more.map((item) => (
+                  <NavItem key={item.href} item={item} collapsed={collapsed}
+                    href={hrefFor(item, q)} active={activePath === item.href}
+                    accent={sectionAccent(item.section)} />
+                ))}
+              </div>
+            </div>
+          )}
         </nav>
 
-        {/* Administração no RODAPÉ FIXO: fora da área que rola, sempre à vista. */}
-        {!collapsed && nav.footerSections.length > 0 && (
-          <div className="shrink-0 border-t border-[var(--il-nav-border)] px-2.5 pt-2 pb-1">
-            {nav.footerSections.map((sec) => (
-              <NavSection key={sec.id} sec={sec} activePath={activePath} collapsed={false} closed={closed}
-                onToggle={toggleSection} unitQuery={q} />
-            ))}
-          </div>
-        )}
+        {/* ── RODAPÉ: QUEM está logado, em UMA linha ──
+            Avatar + nome + papel. "Sair" mora num popover, porque o rodapé não
+            é lugar de ação primária e três linhas (usuário + botão gigante +
+            marca) empurravam o menu para cima. A marca já está no topo. */}
+        <div ref={userMenuRef} className={cn('relative shrink-0 border-t border-[var(--il-nav-border)]', collapsed ? 'p-2' : 'p-2')}>
+          <button type="button" onClick={() => setUserMenuOpen((v) => !v)}
+            aria-expanded={userMenuOpen} aria-haspopup="menu" aria-controls="nav-user-menu"
+            title={collapsed ? `${user.name} — conta` : `${user.name} — conta`}
+            className={cn('flex w-full items-center rounded-lg transition-colors hover:bg-[var(--il-nav-hover)]',
+              collapsed ? 'h-9 justify-center' : 'gap-2.5 px-2 py-1.5')}>
+            {/* A3.3 (ponto 9): o usuário logado usa o MESMO Avatar das demais
+                listas de pessoas — sem um segundo avatar improvisado. */}
+            <Avatar name={user.name || 'Equipe'} size={32} />
+            {!collapsed && (
+              <span className="min-w-0 flex-1 text-left">
+                <span className="block text-xs font-bold truncate text-[var(--il-nav-fg)]">{user.name}</span>
+                <span className="block text-[11px] truncate text-[var(--il-nav-muted)]">
+                  {ROLE_LABEL[business?.role || ''] || business?.role || 'Equipe'}
+                </span>
+              </span>
+            )}
+            {!collapsed && <I n="chevD" size={14} className={cn('shrink-0 text-[var(--il-nav-muted)] transition-transform', userMenuOpen && 'rotate-180')} />}
+          </button>
 
-        <div className={cn('border-t border-[var(--il-nav-border)] shrink-0', collapsed ? 'p-2 space-y-1' : 'p-3')}>
-          {!collapsed && <p className="text-xs text-[var(--il-nav-muted)] truncate px-2 mb-2 font-medium">{user.name}</p>}
-          <button onClick={toggle} title={collapsed ? 'Expandir' : 'Recolher'}
-            className={cn('w-full flex items-center text-xs font-medium text-[var(--il-nav-muted)] hover:text-[var(--il-nav-fg)] rounded-md h-8 hover:bg-[var(--il-nav-hover)]',
-              collapsed ? 'justify-center' : 'gap-2.5 px-2.5')}>
-            <I n={collapsed ? 'expand' : 'collapse'} size={16} /> {!collapsed && 'Recolher'}
-          </button>
-          <button onClick={logout} title={collapsed ? 'Sair' : undefined}
-            className={cn('w-full flex items-center text-xs font-medium text-[var(--il-nav-muted)] hover:text-[var(--il-nav-fg)] rounded-md h-8 hover:bg-[var(--il-nav-hover)]',
-              collapsed ? 'justify-center' : 'gap-2.5 px-2.5')}>
-            <I n="logout" size={16} /> {!collapsed && 'Sair'}
-          </button>
-          {!collapsed && <p className="text-[10px] text-[var(--il-nav-muted)] text-center mt-3 px-2">powered by InstaLink.app</p>}
+          {userMenuOpen && (
+            <div id="nav-user-menu" role="menu" aria-label="Conta"
+              className={cn('absolute bottom-[calc(100%+6px)] z-50 w-[212px] rounded-xl border border-[var(--border)] bg-white p-1.5 text-[var(--text)] shadow-lg',
+                collapsed ? 'left-2' : 'left-2 right-2 w-auto')}>
+              <div className="px-2 py-1.5 border-b border-[var(--border-2)] mb-1">
+                <p className="text-xs font-bold truncate">{user.name}</p>
+                <p className="text-[11px] truncate text-[var(--text-muted)]">{user.email}</p>
+                <p className="text-[11px] truncate text-[var(--text-muted)]">
+                  {ROLE_LABEL[business?.role || ''] || business?.role || 'Equipe'}
+                </p>
+              </div>
+              {/* Só o que existe de verdade: a conta é administrada em Equipe,
+                  e não há preferência de usuário para inventar aqui. */}
+              <button type="button" role="menuitem" onClick={logout}
+                className="flex w-full items-center gap-2 rounded-lg px-2 py-2 text-left text-xs font-semibold text-[var(--danger)] transition-colors hover:bg-[var(--danger-bg)]">
+                <I n="logout" size={15} /> Sair da conta
+              </button>
+            </div>
+          )}
         </div>
       </aside>
 
+
       {/* Mobile topbar */}
-      <div className="lg:hidden sticky top-0 z-40 bg-white border-b border-zinc-200">
+      <div className="lg:hidden sticky top-0 z-40 bg-white border-b border-[var(--border)] shadow-xs">
         <div className="flex items-center justify-between px-4 py-3">
           <span className="flex items-center gap-2.5 min-w-0">
-            <span className="w-8 h-8 rounded-md overflow-hidden bg-[var(--il-nav-cta)] text-[var(--il-nav-cta-fg)] flex items-center justify-center font-bold text-sm shrink-0 border border-zinc-200">
+            <span className="w-9 h-9 rounded-xl overflow-hidden bg-[var(--il-nav-cta)] text-[var(--il-nav-cta-fg)] flex items-center justify-center font-bold text-sm shrink-0 shadow-brand">
               {business.logo ? (
                 // eslint-disable-next-line @next/next/no-img-element
                 <img src={business.logo} alt={business.name} className="w-full h-full object-cover" />
@@ -526,19 +652,19 @@ export function DashboardShell({ children }: { children: React.ReactNode }) {
             </span>
             {businesses.length > 1 ? (
               <select value={business?.id || ''} onChange={(e) => switchBiz(e.target.value)} aria-label="Trocar de negócio"
-                className="bg-zinc-50 border border-zinc-200 text-xs font-semibold rounded-md px-2 py-1.5 max-w-[160px] truncate">
+                className="bg-[var(--surface-3)] border border-[var(--border)] text-xs font-semibold rounded-md px-2 py-1.5 max-w-[160px] truncate">
                 <option value="__overview">Visão geral da organização</option>
               <optgroup label="Unidades desta organização">{organizationUnits.map((x) => <option key={x.id} value={x.id}>{x.name}</option>)}</optgroup>
               {otherBusinesses.length > 0 && <optgroup label="Outras organizações">{otherBusinesses.map((x) => <option key={x.id} value={x.id}>{x.name}</option>)}</optgroup>}
               <option value="__add">+ Adicionar unidade</option>
               </select>
             ) : (
-              <span className="font-semibold text-sm truncate text-zinc-900">{business?.name || 'InstaLink'}</span>
+              <span className="font-bold text-sm truncate text-[var(--text)]">{business?.name || 'Minha empresa'}</span>
             )}
           </span>
           <span className="flex items-center gap-2">
-            {business && <a href={`/${business.slug}`} target="_blank" className="text-xs font-semibold bg-[var(--il-nav-cta)] text-[var(--il-nav-cta-fg)] px-3 py-1.5 rounded-md">Ver site</a>}
-            <button onClick={logout} className="bg-zinc-50 border border-zinc-200 p-2 rounded-md" aria-label="Sair"><I n="logout" size={14} /></button>
+            {business && <a href={`/${business.slug}`} target="_blank" className="text-xs font-semibold bg-[var(--il-nav-cta)] text-[var(--il-nav-cta-fg)] px-3 py-1.5 rounded-md shadow-brand">Ver site</a>}
+            <button onClick={logout} className="bg-[var(--surface-3)] border border-[var(--border)] p-2 rounded-md hover:bg-[var(--danger-bg)] hover:text-[var(--danger)]" aria-label="Sair"><I n="logout" size={14} /></button>
           </span>
         </div>
 
@@ -554,10 +680,10 @@ export function DashboardShell({ children }: { children: React.ReactNode }) {
                 <Link key={i.href} href={hrefFor(i, q)} title={i.description} data-nav-item={i.href}
                   data-nav-active={activePath === i.href || undefined}
                   aria-current={activePath === i.href ? 'page' : undefined}
-                  className={cn('shrink-0 text-xs font-medium border rounded-full px-3 py-1.5 inline-flex items-center gap-1.5',
+                  className={cn('shrink-0 text-xs font-semibold border rounded-pill px-3 py-1.5 inline-flex items-center gap-1.5 shadow-xs',
                     activePath === i.href
-                      ? 'bg-[var(--il-nav-cta)] border-[var(--il-nav-cta)] text-[var(--il-nav-cta-fg)]'
-                      : 'bg-white border-zinc-200 text-zinc-600')}>
+                      ? 'bg-[var(--il-nav-cta)] border-[var(--il-nav-cta)] text-[var(--il-nav-cta-fg)] shadow-brand'
+                      : 'bg-white border-[var(--border-strong)] text-[var(--text-muted)]')}>
                   <I n={i.icon} size={14} /> {i.label}
                 </Link>
               ))}
@@ -568,8 +694,8 @@ export function DashboardShell({ children }: { children: React.ReactNode }) {
           </div>
           <button type="button" onClick={() => setMoreOpen((v) => !v)}
             aria-expanded={moreOpen} aria-controls="mobile-nav-more"
-            className={cn('shrink-0 text-xs font-semibold border rounded-full px-3 inline-flex items-center gap-1',
-              moreOpen ? 'bg-zinc-900 border-zinc-900 text-white' : 'bg-white border-zinc-300 text-zinc-700')}>
+            className={cn('shrink-0 text-xs font-bold border rounded-pill px-3 inline-flex items-center gap-1 shadow-xs',
+              moreOpen ? 'bg-[var(--brand)] border-[var(--brand)] text-white' : 'bg-white border-[var(--border-strong)] text-[var(--text)]')}>
             Mais
             <span className={cn('transition-transform duration-200', moreOpen && 'rotate-180')} aria-hidden="true"><I n="chevron" size={12} /></span>
           </button>
@@ -577,16 +703,16 @@ export function DashboardShell({ children }: { children: React.ReactNode }) {
 
         {moreOpen && (
           <div id="mobile-nav-more" className="px-3 pb-3">
-            <div className="bg-white border border-zinc-200 rounded-lg p-2 max-h-[60vh] overflow-y-auto">
+            <div className="bg-white border border-[var(--border)] rounded-lg p-2 max-h-[60vh] overflow-y-auto shadow-lg">
               {mobileSections.map((sec) => (
                 <div key={sec.id} className="mb-2 last:mb-0">
-                  <p className="text-[10px] font-bold uppercase tracking-[0.08em] text-zinc-400 px-1 mb-1">{sec.label}</p>
+                  <p className="text-[10px] font-bold uppercase tracking-[0.1em] text-[var(--text-faint)] px-1 mb-1.5">{sec.label}</p>
                   <div className="grid grid-cols-2 gap-1">
                     {sec.items.map((i) => (
                       <Link key={i.href} href={hrefFor(i, q)} title={i.description} onClick={() => setMoreOpen(false)}
                         aria-current={activePath === i.href ? 'page' : undefined}
-                        className={cn('text-xs font-medium border rounded-md px-2.5 py-2 inline-flex items-center gap-1.5 min-w-0',
-                          activePath === i.href ? 'bg-zinc-900 border-zinc-900 text-white' : 'bg-white border-zinc-200 text-zinc-700')}>
+                        className={cn('text-xs font-semibold border rounded-md px-2.5 py-2 inline-flex items-center gap-1.5 min-w-0',
+                          activePath === i.href ? 'bg-[var(--brand-soft)] border-[var(--brand-border)] text-[var(--brand-fg)]' : 'bg-white border-[var(--border)] text-[var(--text)]')}>
                         <I n={i.icon} size={14} /> <span className="truncate">{i.label}</span>
                       </Link>
                     ))}
@@ -595,13 +721,13 @@ export function DashboardShell({ children }: { children: React.ReactNode }) {
               ))}
               {nav.more.length > 0 && (
                 <div>
-                  <p className="text-[10px] font-bold uppercase tracking-[0.08em] text-zinc-400 px-1 mb-1">Outros destinos</p>
+                  <p className="text-[10px] font-bold uppercase tracking-[0.1em] text-[var(--text-faint)] px-1 mb-1.5">Outros destinos</p>
                   <div className="grid grid-cols-2 gap-1">
                     {nav.more.map((i) => (
                       <Link key={i.href} href={hrefFor(i, q)} title={i.description} onClick={() => setMoreOpen(false)}
                         aria-current={activePath === i.href ? 'page' : undefined}
-                        className={cn('text-xs font-medium border rounded-md px-2.5 py-2 inline-flex items-center gap-1.5 min-w-0',
-                          activePath === i.href ? 'bg-zinc-900 border-zinc-900 text-white' : 'bg-white border-zinc-200 text-zinc-700')}>
+                        className={cn('text-xs font-semibold border rounded-md px-2.5 py-2 inline-flex items-center gap-1.5 min-w-0',
+                          activePath === i.href ? 'bg-[var(--brand-soft)] border-[var(--brand-border)] text-[var(--brand-fg)]' : 'bg-white border-[var(--border)] text-[var(--text)]')}>
                         <I n={i.icon} size={14} /> <span className="truncate">{i.label}</span>
                       </Link>
                     ))}
@@ -613,10 +739,10 @@ export function DashboardShell({ children }: { children: React.ReactNode }) {
         )}
       </div>
 
-      <main className="flex-1 min-w-0 bg-[#f8f8f8]">
+      <main className="flex-1 min-w-0 bg-[var(--bg)]">
         {support && (
           <div className={cn('px-4 lg:px-8 py-2.5 text-xs font-semibold flex flex-wrap items-center gap-x-3 gap-y-1 border-b',
-            support.mode === 'view' ? 'bg-amber-50 text-amber-900 border-amber-200' : 'bg-red-600 text-white border-red-700')}>
+            support.mode === 'view' ? 'bg-[var(--warning-bg)] text-[var(--warning-fg)] border-[var(--warning-border)]' : 'bg-[var(--danger)] text-white border-[var(--danger-strong)]')}>
             <span className="inline-flex items-center gap-1.5"><I n="shield" size={14} /> {support.mode === 'view' ? 'Modo suporte — somente leitura' : 'Modo administrativo'}</span>
             <span className="opacity-80">Empresa: {business?.name} · expira {new Date(support.expiresAt).toISOString().slice(11, 16)} UTC</span>
             <button onClick={async () => {
@@ -628,17 +754,17 @@ export function DashboardShell({ children }: { children: React.ReactNode }) {
         )}
         <div className={cn(isAgenda ? 'px-2 sm:px-3 lg:px-4 py-3' : 'px-4 lg:px-8 py-6', !isFullWidth && 'max-w-[960px]')}>
           {isMaster && !support && (
-            <p className="mb-4 text-xs font-medium text-amber-800 bg-amber-50 border border-amber-200 rounded-md px-3 py-2 inline-flex items-center gap-2">
+            <p className="mb-4 text-xs font-semibold text-[var(--warning-fg)] bg-[var(--warning-bg)] border border-[var(--warning-border)] rounded-md px-3 py-2 inline-flex items-center gap-2 shadow-xs">
               <I n="shield" size={14} /> Você é master — <Link href="/master" className="underline font-semibold">/master</Link>
             </p>
           )}
           {business && business.role && business.role !== 'OWNER' && (
-            <p className="mb-4 text-xs text-zinc-500">Você está como <strong className="text-zinc-700">{ROLE_LABEL[business.role] || business.role}</strong>{business.readOnly ? ' · somente leitura' : ''}</p>
+            <p className="mb-4 text-xs text-[var(--text-muted)]">Você está como <strong className="text-[var(--text)]">{ROLE_LABEL[business.role] || business.role}</strong>{business.readOnly ? ' · somente leitura' : ''}</p>
           )}
           {business?.agendaScope === 'own' && (
             // Honestidade com quem atende: a agenda mostrada é SÓ a dele.
             // (A restrição é do servidor — aqui só avisamos.)
-            <p className="mb-4 text-xs font-medium text-zinc-700 bg-white border border-zinc-200 rounded-md px-3 py-2 inline-flex items-center gap-2">
+            <p className="mb-4 text-xs font-semibold text-[var(--text)] bg-white border border-[var(--border)] rounded-md px-3 py-2 inline-flex items-center gap-2 shadow-xs">
               <I n="idcard" size={14} />
               Você vê <strong>somente a sua agenda</strong>{business.professionalName ? ` (${business.professionalName})` : ''}. Os clientes da unidade continuam disponíveis em Clientes.
             </p>
@@ -646,7 +772,7 @@ export function DashboardShell({ children }: { children: React.ReactNode }) {
           {business?.agendaScope === 'none' && (
             // Vínculo ainda não configurado: a agenda fica vazia por segurança
             // (nunca a de todo mundo). O caminho para resolver é o Equipe.
-            <p className="mb-4 text-xs font-medium text-amber-900 bg-amber-50 border border-amber-200 rounded-md px-3 py-2 inline-flex flex-wrap items-center gap-2" role="status">
+            <p className="mb-4 text-xs font-semibold text-[var(--warning-fg)] bg-[var(--warning-bg)] border border-[var(--warning-border)] rounded-md px-3 py-2 inline-flex flex-wrap items-center gap-2 shadow-xs" role="status">
               <I n="alert" size={14} />
               Seu acesso de atendimento ainda <strong>não está vinculado a um profissional</strong>, então a agenda aparece vazia.
               Peça ao administrador para vincular em Equipe → “Profissional vinculado”.
@@ -664,8 +790,8 @@ export function DashboardShell({ children }: { children: React.ReactNode }) {
           ) : children}
         </div>
         {!isAgenda && (
-          <footer className="px-4 lg:px-8 py-4 border-t border-zinc-200 mt-8">
-            <p className="text-[11px] text-zinc-400 text-center">InstaLink.app — plataforma para o seu negócio · <a href={`/${business.slug}`} target="_blank" className="underline">/{business.slug}</a></p>
+          <footer className="px-4 lg:px-8 py-4 border-t border-[var(--border)] mt-8">
+            <p className="text-[11px] text-[var(--text-faint)] text-center">{business.name} · <a href={`/${business.slug}`} target="_blank" rel="noreferrer" className="underline font-semibold text-[var(--text-muted)]">página pública /{business.slug}</a></p>
           </footer>
         )}
       </main>

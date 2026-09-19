@@ -5,16 +5,31 @@ import { getBusinessPipeline, normalizeLeadStageId } from '@/lib/pipeline';
 import { taskDueLabel } from '@/lib/automation/tasks';
 import { todayISO } from '@/lib/tz';
 import { buildPeople360IdentityIndex, people360Phone, type People360Identity } from '@/lib/people360-identity';
+// A3.3 — carteirinha do cliente: o 360 entrega também o cadastro rico.
+import { ageFromBirthDate, clientTags, countAttended, emptyProfile, isMinor, profileOf } from '@/lib/contact-profile';
+import type { ContactProfile } from '@/lib/types';
 
 // GET ?businessId=&q=&page= — cliente 360 (contato-centric).
 // A base nasce da relação BusinessCustomer/Contact (cadastro/login na página
 // do negócio) e reúne pedidos, agendamentos e conversas daquela pessoa.
 // Caminho defensivo: interações sem contato ainda aparecem (dedupe por
 // telefone), preservando o histórico legado. Dono.
+/** Dígitos de um texto (busca por CPF na carteira). */
+function onlyDigitsOf(v: string): string {
+  return String(v || '').replace(/\D/g, '');
+}
+
 export async function GET(req: NextRequest) {
   const businessId = req.nextUrl.searchParams.get('businessId') || '';
   const q = (req.nextUrl.searchParams.get('q') || '').trim().toLowerCase();
   const page = Math.max(1, parseInt(req.nextUrl.searchParams.get('page') || '1', 10) || 1);
+  // A3.3 — filtros da lista de clientes (aplicados ANTES da paginação, então o
+  // total e o número de páginas refletem o filtro — nunca "página 1 de 1" falso).
+  const accessFilter = req.nextUrl.searchParams.get('access') || '';   // 'active' | 'none'
+  const consentFilter = req.nextUrl.searchParams.get('consent') || ''; // 'yes' | 'no'
+  const minorFilter = (req.nextUrl.searchParams.get('minor') || '') === 'yes';
+  // Ponto 9 — "já atendidos" = atendimento CONCLUÍDO, não "tem booking".
+  const attendedOnly = (req.nextUrl.searchParams.get('attended') || '') === 'yes';
   const limit = 30;
   const guard = await requireBusiness(req, businessId, 'clientes');
   if (!guard.ok) return guard.res;
@@ -34,9 +49,20 @@ export async function GET(req: NextRequest) {
     accountEmail: string;
     accountPhone: string;
     mustChangePassword: boolean;
+    /**
+     * Foto da CONTA global (`Customer.avatar`), quando existe vínculo.
+     * Não há segunda foto no contato: sem conta, a UI usa as iniciais.
+     */
+    avatar: string;
     customerSince: string;
     source: string;
     marketingOptIn: boolean;
+    /** A3.3 — dados cadastrais (carteirinha). Vazio quando nunca preenchidos. */
+    profile: ContactProfile;
+    /** Idade DERIVADA da data de nascimento (null = não informado). */
+    age: number | null;
+    /** Etiquetas derivadas (menor, responsável, lead, acesso, consentimento). */
+    tags: Array<{ id: string; label: string; tone: string; hint: string }>;
     orders: number;
     spent: number;
     lastOrderAt: string;
@@ -92,6 +118,9 @@ export async function GET(req: NextRequest) {
     p.accountEmail = account?.email || '';
     p.accountPhone = account?.phone || '';
     p.mustChangePassword = account?.mustChangePassword === true;
+    // Ponto 8 — avatar REAL vem da conta global, nunca de um campo novo no
+    // contato. Sem Customer vinculado, continua '' e a UI cai nas iniciais.
+    p.avatar = account?.avatar || '';
   };
 
   const get = (customerId: string, rawPhone: string, name: string, contactId = ''): P | null => {
@@ -103,7 +132,8 @@ export async function GET(req: NextRequest) {
       p = {
         key, contactId: '', note: '', notes: [], customerId: '', name: '', phone: '', email: '', registered: false,
         accountStatus: 'none', accountEmail: '', accountPhone: '', mustChangePassword: false, customerSince: '',
-        source: '', marketingOptIn: false,
+        avatar: '',
+        source: '', marketingOptIn: false, profile: emptyProfile(), age: null, tags: [],
         orders: 0, spent: 0, lastOrderAt: '', bookings: [], leads: [], conversations: [], tasks: [], lastSeen: '',
       };
       map.set(key, p);
@@ -134,7 +164,13 @@ export async function GET(req: NextRequest) {
       p.note = c.note || p.note;
       p.customerSince = p.customerSince && p.customerSince < c.createdAt ? p.customerSince : c.createdAt;
       p.source = c.source || p.source;
-    } else if (!p.customerSince || c.createdAt < p.customerSince) {
+    }
+    // Carteirinha: o contato canônico manda, mas um contato legado pode ter o
+    // cadastro preenchido — nunca descartamos dado cadastral existente.
+    const contactProfile = profileOf(c);
+    p.profile = p.contactId === c.id ? contactProfile : (p.profile.birthDate || p.profile.cpf ? p.profile : contactProfile);
+    p.age = ageFromBirthDate(p.profile.birthDate);
+    if (!choose && (!p.customerSince || c.createdAt < p.customerSince)) {
       p.customerSince = c.createdAt;
     }
     // Se houver contatos legados duplicados no mesmo telefone, não descarta
@@ -218,15 +254,42 @@ export async function GET(req: NextRequest) {
   }
 
   let people = [...map.values()];
+  // Etiquetas DERIVADAS depois de todos os eventos conhecidos: uma pessoa pode
+  // ser "cliente atendido" E "lead no funil" ao mesmo tempo.
+  people.forEach((p) => {
+    p.tags = clientTags({
+      name: p.name,
+      accountStatus: p.accountStatus,
+      marketingOptIn: p.marketingOptIn,
+      bookingsCount: p.bookings.length,
+      // Ponto 9 — só atendimento CONCLUÍDO autoriza "Cliente atendido".
+      attendedCount: countAttended(p.bookings),
+      leadsCount: p.leads.length,
+      profile: p.profile,
+    });
+  });
   people.forEach((p) => p.leads.sort((a, b) => (a.createdAt < b.createdAt ? 1 : -1)));
   people.forEach((p) => p.bookings.sort((a, b) => (a.date + a.time < b.date + b.time ? 1 : -1)));
   people.sort((a, b) => (a.lastSeen < b.lastSeen ? 1 : -1));
   if (q) {
     const qd = people360Phone(q);
     people = people.filter((p) =>
-      p.name.toLowerCase().includes(q) || (qd && p.phone.includes(qd)),
+      p.name.toLowerCase().includes(q)
+      || (qd && p.phone.includes(qd))
+      || p.email.toLowerCase().includes(q)
+      // CPF só entra na busca com trecho longo: 2-3 dígitos casariam com quase todos.
+      || (qd.length >= 6 && onlyDigitsOf(p.profile.cpf).includes(qd)),
     );
   }
+  if (accessFilter === 'active' || accessFilter === 'none') {
+    people = people.filter((p) => p.accountStatus === accessFilter);
+  }
+  if (consentFilter === 'yes' || consentFilter === 'no') {
+    const want = consentFilter === 'yes';
+    people = people.filter((p) => p.marketingOptIn === want);
+  }
+  if (minorFilter) people = people.filter((p) => isMinor(p.profile));
+  if (attendedOnly) people = people.filter((p) => countAttended(p.bookings) > 0);
   const total = people.length;
   const pros = new Map(db.professionals.filter((p) => p.businessId === businessId).map((p) => [p.id, p.name]));
   const slice = people.slice((page - 1) * limit, page * limit).map((p) => ({

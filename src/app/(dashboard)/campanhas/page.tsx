@@ -5,7 +5,7 @@ import { useCallback, useEffect, useState } from 'react';
 import Link from 'next/link';
 import { useSearchParams } from 'next/navigation';
 import { Icon } from '@/components/icons';
-import { PageSkeleton } from '@/components/ui';
+import { Button, Notice, PageHeader, PageSkeleton } from '@/components/ui';
 import { cn } from '@/lib/utils';
 import { CAMPAIGN_SEGMENTS } from '@/lib/types';
 import type { CampaignSegment } from '@/lib/types';
@@ -95,24 +95,22 @@ export default function CampanhasPage() {
 
   return (
     <>
-      <div className="flex flex-wrap items-end justify-between gap-3 mb-5">
-        <div>
-          <h1 className="text-2xl font-bold tracking-tight">Campanhas</h1>
-          <p className="text-sm text-zinc-500 mt-1">
-            Mensagens para clientes que autorizaram receber. Promoção de setembro, retorno, data especial — você escolhe o público.
-          </p>
-        </div>
-        <div className="flex items-center gap-2">
-          <Link2 href={`/clientes${q}`} label="Clientes" />
-          <button onClick={() => setCreating(true)}
-            className="text-sm font-bold bg-zinc-900 text-white px-4 py-2.5 rounded-md hover:bg-zinc-700 inline-flex items-center gap-2">
-            <Icon n="megaphone" size={16} /> Nova campanha
-          </button>
-        </div>
-      </div>
+      <PageHeader
+        icon="megaphone"
+        title="Campanhas"
+        hint="Mensagens para clientes que autorizaram receber. Promoção de setembro, retorno, data especial — você escolhe o público."
+        action={
+          <span className="flex items-center gap-2">
+            <Link2 href={`/clientes${q}`} label="Clientes" />
+            <Button variant="primary" onClick={() => setCreating(true)}>
+              <Icon n="megaphone" size={16} /> Nova campanha
+            </Button>
+          </span>
+        }
+      />
 
-      {msg && <p className="mb-4 text-sm font-semibold bg-emerald-600 text-white rounded-md px-4 py-3">{msg}</p>}
-      {error && <p className="mb-4 text-sm font-semibold bg-amber-600 text-white rounded-md px-4 py-3">{error}</p>}
+      {msg && <div role="status"><Notice tone="success" className="mb-4">{msg}</Notice></div>}
+      {error && <div role="alert"><Notice tone="warning" className="mb-4">{error}</Notice></div>}
 
       <div className="grid sm:grid-cols-4 gap-3 mb-6">
         <Card label="Autorizaram (opt-in)" value={data.consent.optedIn} tone="ok" hint="podem receber campanha" />
@@ -121,10 +119,33 @@ export default function CampanhasPage() {
         <Card label="WhatsApp" value={connected ? 'conectado' : 'não conectado'} tone={connected ? 'ok' : 'warn'} hint={connected ? 'envio disponível' : 'campanhas ficam salvas'} />
       </div>
 
-      <p className="text-xs text-zinc-500 mb-5 bg-white border border-zinc-200 rounded-lg px-4 py-3">
-        <strong>Regra de consentimento:</strong> {data.consent.rule} O sistema nunca presume autorização — promoções por
-        WhatsApp/E-mail só vão para quem marcou a autorização no cadastro do cliente.
-      </p>
+      {/* A3.3 — consentimento explicado: quem autorizou entra, quem não
+          autorizou fica de fora. Verde/laranja com ícone, não texto corrido. */}
+      <div className="mb-5 rounded-lg border border-[var(--lilac-border)] bg-[var(--lilac-bg)]/60 p-4">
+        <p className="text-sm font-bold text-[var(--lilac-fg)] inline-flex items-center gap-2">
+          <Icon n="shield" size={16} /> Quem pode receber promoção?
+        </p>
+        <ul className="mt-2.5 grid sm:grid-cols-2 gap-2">
+          <li className="flex items-start gap-2 text-xs bg-white border border-[var(--success-border)] rounded-md px-3 py-2.5">
+            <span className="w-5 h-5 shrink-0 rounded-full bg-[var(--success)] text-white flex items-center justify-center mt-px"><Icon n="check" size={11} strokeWidth={3} /></span>
+            <span className="text-[var(--text)]">
+              <strong className="text-[var(--success-fg)]">Aceitou receber promoções</strong> — {data.consent.optedIn} pessoa(s).
+              Ligado na ficha do cliente (“Autoriza receber promoções”).
+            </span>
+          </li>
+          <li className="flex items-start gap-2 text-xs bg-white border border-[var(--warning-border)] rounded-md px-3 py-2.5">
+            <span className="w-5 h-5 shrink-0 rounded-full bg-[var(--warning)] text-white flex items-center justify-center mt-px"><Icon n="x" size={11} strokeWidth={3} /></span>
+            <span className="text-[var(--text)]">
+              <strong className="text-[var(--warning-fg)]">Não aceitou</strong> — {data.consent.optedOut} pessoa(s).
+              Nunca entra em campanha, mesmo que o contato exista.
+            </span>
+          </li>
+        </ul>
+        <p className="text-xs text-[var(--lilac-fg)]/90 mt-2.5">
+          <strong>Regra de consentimento:</strong> {data.consent.rule} O sistema nunca presume autorização — promoções por
+          WhatsApp/E-mail só vão para quem marcou a autorização no cadastro do cliente.
+        </p>
+      </div>
 
       {(data.opportunities?.winBack ?? 0) > 0 && (
         <section className="bg-white border border-zinc-200 rounded-lg p-4 mb-5">
@@ -156,7 +177,7 @@ export default function CampanhasPage() {
               )}
             </div>
             <button onClick={() => call('POST', { action: 'winback' })} disabled={busy === 'winback'}
-              className="text-xs font-bold bg-zinc-900 text-white px-4 py-2.5 rounded-lg hover:bg-zinc-700 disabled:opacity-50 shrink-0">
+              className="text-xs font-bold bg-[var(--brand)] text-white px-4 py-2.5 rounded-lg shadow-brand hover:bg-[var(--brand-strong)] disabled:opacity-50 shrink-0">
               {busy === 'winback' ? 'Criando…' : 'Criar oportunidades'}
             </button>
           </div>
@@ -191,7 +212,7 @@ export default function CampanhasPage() {
               <div className="flex flex-col gap-2 shrink-0">
                 {c.status === 'draft' && (
                   <button onClick={() => call('PATCH', { id: c.id, action: 'ready' })} disabled={busy === 'ready'}
-                    className="text-xs font-bold bg-zinc-900 text-white px-3.5 py-2 rounded-lg disabled:opacity-50">Marcar como pronta</button>
+                    className="text-xs font-bold bg-[var(--brand)] text-white px-3.5 py-2 rounded-lg shadow-brand hover:bg-[var(--brand-strong)] disabled:opacity-50">Marcar como pronta</button>
                 )}
                 {(c.status === 'draft' || c.status === 'ready') && (
                   <button onClick={() => call('PATCH', { id: c.id, action: 'send' })} disabled={busy === 'send'}
@@ -221,7 +242,7 @@ export default function CampanhasPage() {
 
       {creating && (
         <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4" role="dialog" aria-modal="true">
-          <div className="absolute inset-0 bg-black/50" onClick={() => setCreating(false)} />
+          <div className="absolute inset-0 bg-[var(--overlay)]" onClick={() => setCreating(false)} />
           <div className="relative w-full sm:max-w-lg bg-white rounded-t-3xl sm:rounded-3xl max-h-[92vh] overflow-y-auto">
             <div className="sticky top-0 bg-white/95 backdrop-blur px-5 py-4 flex items-center justify-between border-b border-zinc-100">
               <p className="font-bold text-lg">Nova campanha</p>
@@ -259,7 +280,7 @@ export default function CampanhasPage() {
                 </p>
               )}
               <button onClick={() => call('POST', form)} disabled={busy === 'save' || !form.name || !form.message}
-                className="w-full font-bold bg-zinc-900 text-white py-3 rounded-md disabled:opacity-50">
+                className="w-full font-bold bg-[var(--brand)] text-white py-3 rounded-md shadow-brand hover:bg-[var(--brand-strong)] disabled:opacity-50">
                 {busy === 'save' ? 'Salvando…' : 'Salvar rascunho'}
               </button>
             </div>

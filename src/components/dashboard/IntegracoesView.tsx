@@ -6,6 +6,7 @@ import { apiGet, apiSend } from '@/lib/api-client';
 import { cn } from '@/lib/utils';
 import type { ApiKey, SafeWebhookConfig, WebhookDelivery, WebhookEvent } from '@/lib/types';
 import { VALID_WEBHOOK_EVENTS } from '@/lib/types';
+import { Notice } from '@/components/ui';
 
 function formatDateTime(iso: string): string {
   if (!iso) return '';
@@ -250,7 +251,7 @@ export function IntegracoesView() {
 
   return (
     <div className="space-y-4">
-      {msg && <p className="text-sm font-medium bg-zinc-900 text-white rounded-md px-3 py-2">{msg}</p>}
+      {msg && <Notice tone="info">{msg}</Notice>}
 
       {/* Tabs */}
       <div className="flex flex-wrap gap-1 p-1 bg-zinc-100 rounded-lg w-fit" role="tablist">
@@ -300,7 +301,7 @@ export function IntegracoesView() {
                   setGeneratedSecret(null);
                   setShowNewKeyModal(true);
                 }}
-                className="px-3.5 py-2 bg-zinc-900 text-white text-xs font-semibold rounded-lg hover:bg-zinc-800 transition"
+                data-primary-cta="1" className="px-3.5 py-2 bg-[var(--brand)] text-white text-xs font-semibold rounded-lg hover:bg-[var(--brand-strong)] shadow-brand transition"
               >
                 + Gerar Nova Chave
               </button>
@@ -373,7 +374,7 @@ export function IntegracoesView() {
               </div>
             </div>
 
-            <div className="bg-zinc-900 text-zinc-100 p-4 rounded-xl font-mono text-xs overflow-x-auto">
+            <div className="bg-[var(--code-bg)] text-[var(--code-fg)] p-4 rounded-xl font-mono text-xs overflow-x-auto">
               {codeLang === 'curl' && (
                 <pre>{`# 1. Enviar Lead Externo
 curl -X POST "${origin}/api/external/leads" \\
@@ -452,7 +453,7 @@ print(res.json())`}</pre>
               <button
                 type="button"
                 onClick={() => setShowNewWebhookModal(true)}
-                className="px-3.5 py-2 bg-zinc-900 text-white text-xs font-semibold rounded-lg hover:bg-zinc-800 transition"
+                data-primary-cta="1" className="px-3.5 py-2 bg-[var(--brand)] text-white text-xs font-semibold rounded-lg hover:bg-[var(--brand-strong)] shadow-brand transition"
               >
                 + Adicionar Webhook
               </button>
@@ -601,7 +602,7 @@ print(res.json())`}</pre>
                     navigator.clipboard?.writeText(deepLinkUrl);
                     alert('Link copiado!');
                   }}
-                  className="px-3.5 py-2 bg-zinc-900 text-white text-xs font-semibold rounded-lg hover:bg-zinc-800 whitespace-nowrap"
+                  data-primary-cta="1" className="px-3.5 py-2 bg-[var(--brand)] text-white text-xs font-semibold rounded-lg hover:bg-[var(--brand-strong)] shadow-brand whitespace-nowrap"
                 >
                   Copiar Link
                 </button>
@@ -625,7 +626,7 @@ print(res.json())`}</pre>
                   readOnly
                   rows={3}
                   value={iframeSnippet}
-                  className="w-full px-3 py-2 border border-zinc-300 rounded-lg text-xs font-mono bg-zinc-900 text-zinc-100"
+                  className="w-full px-3 py-2 border border-[var(--border)] rounded-lg text-xs font-mono bg-[var(--code-bg)] text-[var(--code-fg)]"
                 />
                 <button
                   type="button"
@@ -649,7 +650,7 @@ print(res.json())`}</pre>
                 readOnly
                 rows={3}
                 value={scriptSnippet}
-                className="w-full px-3 py-2 border border-zinc-300 rounded-lg text-xs font-mono bg-zinc-900 text-zinc-100"
+                className="w-full px-3 py-2 border border-[var(--border)] rounded-lg text-xs font-mono bg-[var(--code-bg)] text-[var(--code-fg)]"
               />
             </div>
           </section>
@@ -658,7 +659,7 @@ print(res.json())`}</pre>
 
       {/* ── Modal Gerar Nova Chave ── */}
       {showNewKeyModal && (
-        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
+        <div className="fixed inset-0 bg-[var(--overlay)] z-50 flex items-center justify-center p-4">
           <div className="bg-white rounded-2xl max-w-md w-full p-6 space-y-4 shadow-xl animate-scaleUp">
             <div className="flex items-start justify-between border-b pb-3">
               <h2 className="text-base font-bold text-zinc-900">Gerar Chave de Integração</h2>
@@ -696,7 +697,7 @@ print(res.json())`}</pre>
                         navigator.clipboard?.writeText(generatedSecret);
                         alert('Chave copiada para a área de transferência!');
                       }}
-                      className="px-3.5 py-2 bg-zinc-900 text-white text-xs font-semibold rounded-lg hover:bg-zinc-800"
+                      data-primary-cta="1" className="px-3.5 py-2 bg-[var(--brand)] text-white text-xs font-semibold rounded-lg hover:bg-[var(--brand-strong)] shadow-brand"
                     >
                       Copiar
                     </button>
@@ -709,7 +710,7 @@ print(res.json())`}</pre>
                     setShowNewKeyModal(false);
                     setGeneratedSecret(null);
                   }}
-                  className="w-full py-2 bg-zinc-900 text-white text-xs font-semibold rounded-lg"
+                  data-primary-cta="1" className="w-full py-2 bg-[var(--brand)] text-white text-xs font-semibold rounded-lg hover:bg-[var(--brand-strong)] shadow-brand"
                 >
                   Entendi, já guardei a chave
                 </button>
@@ -732,7 +733,7 @@ print(res.json())`}</pre>
                 <button
                   type="submit"
                   disabled={generatingKey || !newKeyName.trim()}
-                  className="w-full py-2.5 bg-zinc-900 text-white text-xs font-semibold rounded-lg hover:bg-zinc-800 disabled:opacity-50 transition"
+                  data-primary-cta="1" className="w-full py-2.5 bg-[var(--brand)] text-white text-xs font-semibold rounded-lg hover:bg-[var(--brand-strong)] shadow-brand disabled:opacity-50 transition"
                 >
                   {generatingKey ? 'Gerando…' : 'Gerar Chave'}
                 </button>
@@ -744,7 +745,7 @@ print(res.json())`}</pre>
 
       {/* ── Modal Adicionar Webhook ── */}
       {showNewWebhookModal && (
-        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
+        <div className="fixed inset-0 bg-[var(--overlay)] z-50 flex items-center justify-center p-4">
           <div className="bg-white rounded-2xl max-w-md w-full p-6 space-y-4 shadow-xl animate-scaleUp">
             <div className="flex items-start justify-between border-b pb-3">
               <h2 className="text-base font-bold text-zinc-900">
@@ -783,7 +784,7 @@ print(res.json())`}</pre>
                         navigator.clipboard?.writeText(generatedWebhookSecret);
                         alert('Segredo copiado para a área de transferência!');
                       }}
-                      className="px-3.5 py-2 bg-zinc-900 text-white text-xs font-semibold rounded-lg hover:bg-zinc-800"
+                      data-primary-cta="1" className="px-3.5 py-2 bg-[var(--brand)] text-white text-xs font-semibold rounded-lg hover:bg-[var(--brand-strong)] shadow-brand"
                     >
                       Copiar
                     </button>
@@ -796,7 +797,7 @@ print(res.json())`}</pre>
                     setShowNewWebhookModal(false);
                     setGeneratedWebhookSecret(null);
                   }}
-                  className="w-full py-2 bg-zinc-900 text-white text-xs font-semibold rounded-lg"
+                  data-primary-cta="1" className="w-full py-2 bg-[var(--brand)] text-white text-xs font-semibold rounded-lg hover:bg-[var(--brand-strong)] shadow-brand"
                 >
                   Entendi, já guardei o segredo
                 </button>
@@ -841,7 +842,7 @@ print(res.json())`}</pre>
                 <button
                   type="submit"
                   disabled={savingWebhook || !webhookUrl.trim() || webhookEvents.length === 0}
-                  className="w-full py-2.5 bg-zinc-900 text-white text-xs font-semibold rounded-lg hover:bg-zinc-800 disabled:opacity-50 transition"
+                  data-primary-cta="1" className="w-full py-2.5 bg-[var(--brand)] text-white text-xs font-semibold rounded-lg hover:bg-[var(--brand-strong)] shadow-brand disabled:opacity-50 transition"
                 >
                   {savingWebhook ? 'Salvando…' : 'Salvar Webhook'}
                 </button>

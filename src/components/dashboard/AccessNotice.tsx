@@ -15,6 +15,7 @@ import Link from 'next/link';
 import { Icon } from '@/components/icons';
 import { onForbidden, type ForbiddenDetail } from '@/lib/client-auth';
 import { PERMISSION_MESSAGES, deniedInfo, type DeniedContext } from '@/lib/http';
+import { Button } from '@/components/ui';
 
 /**
  * Destino de volta do 403 — derivado do CATÁLOGO (firstAllowedPath) e injetado
@@ -56,9 +57,7 @@ export function AccessDenied({ area, hint, homeHref }: {
             : 'Você continua conectado. Se precisar desse acesso, fale com o administrador da empresa.')}
         </p>
         {backHref && (
-          <Link href={backHref} className="mt-4 inline-flex text-xs font-semibold bg-zinc-900 text-white px-3.5 py-2 rounded-md">
-            Voltar para o início
-          </Link>
+          <Link href={backHref} className="mt-4 inline-block"><Button variant="primary" size="sm">Voltar para o início</Button></Link>
         )}
       </div>
     </div>

@@ -19,7 +19,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
 import { Icon } from '@/components/icons';
-import { PageSkeleton } from '@/components/ui';
+import { Badge, Button, EmptyState, Notice, PageHeader, PageSkeleton, SubCard, Switch } from '@/components/ui';
 import { AccessDenied, useAreaLoad } from '@/components/dashboard/AccessNotice';
 import { useBusinessId } from '@/components/dashboard/useBusinessId';
 import { apiGet, apiSend } from '@/lib/api-client';
@@ -108,7 +108,7 @@ export default function RecursosPage() {
         <p className="text-sm text-zinc-500 mt-1 max-w-sm mx-auto">
           Os recursos (agendamentos, serviços, produtos…) pertencem a uma empresa. Crie a sua para ativar o que você precisa.
         </p>
-        <Link href="/onboarding" className="mt-4 inline-flex text-xs font-bold bg-zinc-900 text-white px-4 py-2 rounded-md">Criar meu negócio</Link>
+        <Link href="/onboarding" className="mt-4 inline-block"><Button variant="primary" size="sm">Criar meu negócio</Button></Link>
       </div>
     );
   }
@@ -117,10 +117,10 @@ export default function RecursosPage() {
   // inteiro (contexto → dados), nunca um retry decorativo no mesmo erro.
   if (contextError) {
     return (
-      <div className="bg-white border border-red-200 rounded-lg px-4 py-10 text-center" role="alert">
-        <span className="mx-auto w-10 h-10 rounded-md bg-red-50 border border-red-200 text-red-600 flex items-center justify-center"><Icon n="alert" size={18} /></span>
-        <p className="text-sm font-medium text-zinc-700 mt-3">Sem conexão com o servidor. Verifique sua internet.</p>
-        <button onClick={retry} className="mt-4 text-xs font-bold bg-zinc-900 text-white px-4 py-2 rounded-md">Tentar de novo</button>
+      <div role="alert">
+        <EmptyState icon="alert" title="Sem conexão com o servidor"
+          hint="Verifique sua internet e tente novamente."
+          action={<Button variant="primary" size="sm" onClick={retry}>Tentar de novo</Button>} />
       </div>
     );
   }
@@ -146,37 +146,30 @@ export default function RecursosPage() {
 
   return (
     <>
-      <div className="flex flex-wrap items-end justify-between gap-3 mb-5">
-        <div>
-          <h1 className="text-2xl font-bold tracking-tight">Recursos da empresa</h1>
-          <p className="text-sm text-zinc-500 mt-1">
-            Ligue e desligue o que existe no seu negócio. A página pública, o menu e os atalhos obedecem na hora.
-          </p>
-        </div>
-        <div className="flex items-center gap-2">
-          <span className="text-xs font-bold text-zinc-500 bg-white border border-zinc-200 rounded-full px-3 py-1.5">
-            {activeCount} de {rows.length} ativos
+      <PageHeader
+        icon="grid"
+        title="Recursos da empresa"
+        hint="Ligue e desligue o que existe no seu negócio. A página pública, o menu e os atalhos obedecem na hora."
+        action={
+          <span className="flex flex-wrap items-center gap-2">
+            <Badge tone={activeCount === rows.length ? 'green' : 'zinc'}>{activeCount} de {rows.length} ativos</Badge>
+            <Link href={`/pagina${q}`}><Button variant="secondary" size="sm">Página</Button></Link>
           </span>
-          <Link href={`/pagina${q}`} className="text-xs font-bold bg-white border border-zinc-200 rounded-md px-3.5 py-2 hover:bg-zinc-50">
-            Página
-          </Link>
-        </div>
-      </div>
+        }
+      />
 
       {toast && (
-        <p className={cn(
-          'mb-4 text-sm font-semibold rounded-md px-4 py-3 border',
-          toast.kind === 'ok' ? 'bg-emerald-50 border-emerald-200 text-emerald-900' : 'bg-amber-50 border-amber-200 text-amber-900',
-        )} role="status" aria-live="polite">{toast.text}</p>
+        <div role="status" aria-live="polite">
+          <Notice tone={toast.kind === 'ok' ? 'success' : 'warning'} className="mb-4">{toast.text}</Notice>
+        </div>
       )}
 
       {failed && (
         <div className="mb-4 bg-red-50 border border-red-200 rounded-md px-4 py-3 flex flex-wrap items-center gap-3" role="alert">
           <p className="text-sm font-medium text-red-800 inline-flex items-center gap-2"><Icon n="alert" size={15} /> {failed}</p>
-          <button onClick={() => { setRows(null); setAttempt((a) => a + 1); }}
-            className="ml-auto text-xs font-bold bg-white border border-red-200 text-red-700 px-3 py-1.5 rounded-md hover:bg-red-100">
+          <Button variant="danger" size="xs" className="ml-auto" onClick={() => { setRows(null); setAttempt((a) => a + 1); }}>
             Tentar de novo
-          </button>
+          </Button>
         </div>
       )}
 
@@ -185,8 +178,7 @@ export default function RecursosPage() {
           <span className="mx-auto w-10 h-10 rounded-md bg-zinc-100 flex items-center justify-center text-zinc-400"><Icon n="grid" size={20} /></span>
           <h2 className="font-semibold text-sm mt-3">Nenhum recurso disponível ainda</h2>
           <p className="text-sm text-zinc-500 mt-1">Recarregue a página — se o problema continuar, fale com o suporte.</p>
-          <button onClick={() => { setRows(null); setAttempt((a) => a + 1); }}
-            className="mt-4 text-xs font-bold bg-zinc-900 text-white px-4 py-2 rounded-md">Recarregar</button>
+          <Button variant="primary" size="sm" className="mt-4" onClick={() => { setRows(null); setAttempt((a) => a + 1); }}>Recarregar</Button>
         </div>
       )}
 
@@ -198,54 +190,40 @@ export default function RecursosPage() {
           </div>
           <div className="grid sm:grid-cols-2 xl:grid-cols-3 gap-3">
             {rows.filter((r) => r.group === group).map((row) => (
-              <div key={row.id}
-                className={cn(
-                  'bg-white rounded-lg border p-4 flex flex-col gap-3 transition-colors',
-                  row.enabled ? 'border-emerald-200' : 'border-zinc-200',
-                )}>
+              /* A3.3 (ponto 11): card COMPACTO. O estado ativo é indicado pelo
+                 ícone, pelo Switch e pelo Badge — nunca por pintar a borda
+                 inteira do card de verde. */
+              <div key={row.id} className="ws-panel p-3.5 flex flex-col gap-2.5">
                 <div className="flex items-start justify-between gap-3">
                   <span className={cn(
-                    'w-10 h-10 rounded-md flex items-center justify-center shrink-0',
-                    row.enabled ? 'bg-emerald-50 text-emerald-700' : 'bg-zinc-100 text-zinc-400',
+                    'w-9 h-9 rounded-md flex items-center justify-center shrink-0',
+                    row.enabled ? 'bg-[var(--success-bg)] text-[var(--success-fg)]' : 'bg-[var(--surface-2)] text-[var(--text-muted)]',
                   )}>
-                    <Icon n={row.icon} size={20} />
+                    <Icon n={row.icon} size={18} />
                   </span>
-                  {/* Toggle visual: clique = salva imediatamente */}
-                  <button
-                    onClick={() => toggle(row)}
-                    disabled={busy === row.id}
-                    role="switch"
-                    aria-checked={row.enabled}
-                    aria-label={`${row.label}: ${row.enabled ? 'ativo' : 'desativado'}`}
-                    className={cn(
-                      'relative w-14 h-8 rounded-full transition-colors shrink-0 disabled:opacity-60',
-                      row.enabled ? 'bg-emerald-500' : 'bg-zinc-300',
-                    )}>
-                    <span className={cn(
-                      'absolute top-1 w-6 h-6 rounded-full bg-white shadow transition-all',
-                      row.enabled ? 'left-7' : 'left-1',
-                      busy === row.id && 'animate-pulse',
-                    )} />
-                  </button>
+                  {/* Switch ÚNICO do design system: clique = salva imediatamente */}
+                  <span className={cn(busy === row.id && 'animate-pulse')}>
+                    <Switch
+                      checked={row.enabled}
+                      onChange={() => toggle(row)}
+                      disabled={busy === row.id}
+                      label={`${row.label}: ${row.enabled ? 'ativo' : 'desativado'}`}
+                    />
+                  </span>
                 </div>
                 <div className="min-w-0">
-                  <p className="font-bold flex items-center gap-2">
+                  <p className="font-semibold text-sm text-[var(--text)] flex flex-wrap items-center gap-2">
                     {row.label}
-                    <span className={cn(
-                      'text-[10px] font-extrabold uppercase tracking-wide px-2 py-0.5 rounded-full',
-                      row.enabled ? 'bg-emerald-100 text-emerald-800' : 'bg-zinc-100 text-zinc-500',
-                    )}>
-                      {row.enabled ? 'Ativo' : 'Desativado'}
-                    </span>
+                    <Badge tone={row.enabled ? 'green' : 'zinc'}>{row.enabled ? 'Ativo' : 'Desativado'}</Badge>
                   </p>
-                  <p className="text-xs text-zinc-500 mt-1">{row.hint}</p>
+                  <p className="text-xs text-[var(--text-muted)] mt-1">{row.hint}</p>
                   {!row.enabled && (
-                    <p className="text-[11px] text-amber-700 mt-2 leading-snug">{row.disabledHint}</p>
+                    <p className="text-[11px] text-[var(--warning-fg)] mt-2 leading-snug">{row.disabledHint}</p>
                   )}
                   {/* Produtos desligado: o caminho claro para cadastrar nunca
                       some — a ativação é aqui em Recursos (regra do produto). */}
                   {!row.enabled && row.id === 'products' && (
-                    <p className="text-[11px] text-zinc-400 mt-2 leading-snug">
+                    <p className="text-[11px] text-[var(--text-muted)] mt-2 leading-snug">
                       Ative para cadastrar e exibir a vitrine. Produtos salvos continuam guardados.
                     </p>
                   )}
@@ -256,15 +234,17 @@ export default function RecursosPage() {
         </section>
       ))}
 
-      <div className="mt-8 bg-zinc-900 text-white rounded-lg p-5">
-        <p className="font-bold flex items-center gap-2"><Icon n="shield" size={16} /> Como funciona</p>
-        <ul className="mt-2 text-sm text-zinc-300 space-y-1.5">
-          <li>• <strong>Módulo da empresa</strong> decide se o recurso existe (é o que você liga aqui).</li>
-          <li>• <strong>Configuração da página</strong> decide aparência, ordem e conteúdo.</li>
-          <li>• Desativar oculta na hora — e <strong>não apaga nada</strong>: textos, fotos, serviços e histórico ficam salvos.</li>
+      <SubCard className="mt-6 p-4">
+        <p className="font-semibold text-sm text-[var(--text)] flex items-center gap-2 mb-2">
+          <Icon n="shield" size={15} className="text-[var(--text-muted)]" /> Como funciona
+        </p>
+        <ul className="text-sm text-[var(--text-muted)] space-y-1.5">
+          <li>• <strong className="text-[var(--text)]">Módulo da empresa</strong> decide se o recurso existe (é o que você liga aqui).</li>
+          <li>• <strong className="text-[var(--text)]">Configuração da página</strong> decide aparência, ordem e conteúdo.</li>
+          <li>• Desativar oculta na hora — e <strong className="text-[var(--text)]">não apaga nada</strong>: textos, fotos, serviços e histórico ficam salvos.</li>
           <li>• Reativar devolve o recurso exatamente como estava configurado.</li>
         </ul>
-      </div>
+      </SubCard>
     </>
   );
 }

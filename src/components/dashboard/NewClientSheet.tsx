@@ -4,6 +4,7 @@ import { useState } from 'react';
 import { Icon } from '@/components/icons';
 import { apiSend } from '@/lib/api-client';
 import { onlyDigits } from '@/lib/utils';
+import { Button } from '@/components/ui';
 
 interface SavedContact {
   id: string;
@@ -73,7 +74,7 @@ export function NewClientSheet({
 
   return (
     <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4" role="dialog" aria-modal="true" aria-label="Novo cliente">
-      <div className="absolute inset-0 bg-black/40" onClick={onClose} />
+      <div className="absolute inset-0 bg-[var(--overlay)]" onClick={onClose} />
       <div className="relative w-full sm:max-w-md bg-white rounded-t-2xl sm:rounded-2xl border border-zinc-200 max-h-[92vh] overflow-y-auto shadow-xl">
         <div className="sticky top-0 z-10 bg-white px-5 py-4 flex items-start justify-between border-b border-zinc-200">
           <div>
@@ -111,7 +112,7 @@ export function NewClientSheet({
             ) : null}
 
             <div className="flex flex-wrap gap-2 pt-1">
-              <button type="button" onClick={onClose} className="flex-1 min-w-[110px] rounded-lg bg-zinc-900 text-white px-3 py-2.5 text-sm font-semibold">Fechar</button>
+              <Button type="button" variant="primary" className="flex-1 min-w-[110px]" onClick={onClose}>Fechar</Button>
               {onView360 && (
                 <button type="button" onClick={() => { onView360(); onClose(); }} className="flex-1 min-w-[140px] rounded-lg border border-zinc-300 bg-white px-3 py-2.5 text-sm font-semibold text-zinc-800">Ver Cliente 360</button>
               )}
@@ -139,9 +140,9 @@ export function NewClientSheet({
             </label>
 
             {error && <p className="text-sm font-semibold text-red-600" role="alert">{error}</p>}
-            <button type="button" onClick={save} disabled={saving} className="w-full rounded-xl bg-zinc-900 text-white py-3 text-sm font-bold disabled:opacity-50">
+            <Button type="button" variant="primary" size="lg" className="w-full" onClick={save} disabled={saving}>
               {saving ? 'Salvando cliente…' : 'Salvar cliente'}
-            </button>
+            </Button>
           </div>
         )}
       </div>

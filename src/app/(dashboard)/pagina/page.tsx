@@ -9,7 +9,7 @@ import type { NavItemConfig, Professional, Service, Product } from '@/lib/types'
 import { THEME_PRESETS, matchingPreset, presetById } from '@/lib/themes';
 import { cn } from '@/lib/utils';
 import type { Block, BlockType, Business, Page, Theme } from '@/lib/types';
-import { PageSkeleton } from '@/components/ui';
+import { PageSkeleton, Tabs } from '@/components/ui';
 import { AccessDenied, useAreaLoad } from '@/components/dashboard/AccessNotice';
 import { apiGet, apiSend } from '@/lib/api-client';
 import { Icon } from '@/components/icons';
@@ -101,7 +101,7 @@ export default function PaginaPage() {
         <span className="mx-auto w-10 h-10 rounded-md bg-red-50 border border-red-200 text-red-600 flex items-center justify-center"><Icon n="alert" size={18} /></span>
         <p className="text-sm font-medium text-zinc-700 mt-3">{failed}</p>
         <button onClick={() => { setBusiness(null); setPage(null); setReloadTick((t) => t + 1); }}
-          className="mt-4 text-xs font-bold bg-zinc-900 text-white px-4 py-2 rounded-md">Tentar de novo</button>
+          className="mt-4 text-xs font-bold bg-[var(--brand)] text-white shadow-brand hover:bg-[var(--brand-strong)] px-4 py-2 rounded-md">Tentar de novo</button>
       </div>
     );
   }
@@ -160,33 +160,46 @@ export default function PaginaPage() {
             <Link href={`/dashboard?b=${businessId}`} className="hover:text-zinc-700">{business.name}</Link>
             <span aria-hidden="true"> · </span> Presença
           </p>
-          <h1 className="text-2xl font-bold tracking-tight">Minha página</h1>
-          <p className="text-sm text-zinc-500 mt-1">
-            {business.published ? <><span className="inline-block w-2.5 h-2.5 rounded-full bg-emerald-500 align-middle" /> Publicada</> : <><span className="inline-block w-2.5 h-2.5 rounded-full bg-amber-400 align-middle" /> Rascunho</>} ·{' '}
-            <a href={`/${business.slug}`} target="_blank" className="text-emerald-700 font-semibold hover:underline inline-flex items-center gap-1">instalink.app/{business.slug} <Icon n="external" size={12} /></a>
+          <h1 className="text-2xl font-bold tracking-tight text-[var(--text)]">Minha página</h1>
+          {/* A3.3 — estado da página com cor + rótulo (nunca só o ponto). */}
+          <p className="text-sm text-[var(--text-muted)] mt-1 flex flex-wrap items-center gap-2">
+            <span className={cn('inline-flex items-center gap-1.5 text-xs font-bold rounded-pill px-2 py-0.5 border',
+              business.published
+                ? 'bg-[var(--success-bg)] border-[var(--success-border)] text-[var(--success-fg)]'
+                : 'bg-[var(--warning-bg)] border-[var(--warning-border)] text-[var(--warning-fg)]')}>
+              <span aria-hidden="true" className={cn('w-2 h-2 rounded-full', business.published ? 'bg-[var(--success)]' : 'bg-[var(--warning)]')} />
+              {business.published ? 'Publicada' : 'Rascunho'}
+            </span>
+            <a href={`/${business.slug}`} target="_blank" rel="noreferrer" className="text-[var(--brand-fg)] font-semibold hover:underline inline-flex items-center gap-1">instalink.app/{business.slug} <Icon n="external" size={12} /></a>
           </p>
         </div>
         <div className="flex items-center gap-2 shrink-0">
           <a href={`/${business.slug}`} target="_blank" rel="noreferrer"
-            className="text-xs font-semibold bg-zinc-900 text-white px-3.5 py-2 rounded-md hover:bg-zinc-800 inline-flex items-center gap-1.5">
-            Ver página <Icon n="external" size={12} />
+            className="text-xs font-bold bg-[var(--brand)] text-white px-3.5 py-2 rounded-md border border-[var(--brand-strong)]/40 shadow-brand hover:bg-[var(--brand-strong)] inline-flex items-center gap-1.5">
+            <Icon n="eye" size={13} /> Ver página <Icon n="external" size={12} />
           </a>
           <Link href={`/dashboard?b=${businessId}`}
-            className="text-xs font-semibold bg-white border border-zinc-200 px-3.5 py-2 rounded-md hover:bg-zinc-50">
+            className="text-xs font-semibold bg-white border border-[var(--border-strong)] text-[var(--text)] px-3.5 py-2 rounded-md shadow-xs hover:bg-[var(--surface-hover)]">
             Dashboard
           </Link>
         </div>
       </div>
 
-      {msg && <p className="mb-4 text-sm font-medium bg-zinc-900 text-white rounded-md px-4 py-3">{msg}</p>}
+      {msg && <p role="status" className="mb-4 text-sm font-semibold bg-[var(--success-bg)] border border-[var(--success-border)] text-[var(--success-fg)] rounded-md px-4 py-3">{msg}</p>}
 
-      <div className="flex gap-2 mb-5">
-        {([['blocks', 'Estrutura'], ['nav', 'Navegação'], ['theme', 'Visual'], ['publish', 'Publicar']] as const).map(([id, label]) => (
-          <button key={id} onClick={() => setTab(id)}
-            className={cn('text-sm font-bold px-4 py-2.5 rounded-md', tab === id ? 'bg-zinc-900 text-white' : 'bg-white border border-zinc-200 text-zinc-600')}>
-            {label}
-          </button>
-        ))}
+      {/* A3.3 — abas do editor em pill (mesmo padrão das outras telas). */}
+      <div className="mb-5">
+        <Tabs
+          items={[
+            { id: 'blocks' as const, label: 'Estrutura', icon: 'grid' },
+            { id: 'nav' as const, label: 'Navegação', icon: 'menu' },
+            { id: 'theme' as const, label: 'Visual', icon: 'spark' },
+            { id: 'publish' as const, label: 'Publicar', icon: 'upload' },
+          ]}
+          value={tab}
+          onChange={(id) => setTab(id)}
+          ariaLabel="Seções do editor da página"
+        />
       </div>
 
       {tab === 'nav' && (
@@ -294,7 +307,7 @@ export default function PaginaPage() {
                       title={gate ? `Ative o módulo “${gate}” em Recursos para usar este bloco` : undefined}
                       onClick={() => updateBlocks([...blocks, { id: `b-${Date.now()}-${t}`, type: t, order: blocks.length, enabled: true, settings: {} }])}
                       className={cn('text-xs font-bold px-3 py-2 rounded-lg transition-colors',
-                        gate ? 'bg-zinc-50 text-zinc-300 cursor-not-allowed' : 'bg-zinc-100 hover:bg-zinc-900 hover:text-white')}>
+                        gate ? 'bg-[var(--surface-2)] text-[var(--text-muted)] cursor-not-allowed' : 'bg-[var(--surface-2)] text-[var(--text)] hover:bg-[var(--brand-soft)] hover:text-[var(--brand-fg)]')}>
                       + {BLOCK_DEFS[t]?.label}
                     </button>
                   );
@@ -469,8 +482,8 @@ function PageNavTab({ business, businessId, blocks, services, products, professi
                 <button onClick={() => ok && toggleItem(item)} disabled={!ok}
                   className={cn('text-[11px] font-bold px-2.5 py-1 rounded-full border shrink-0 transition-colors',
                     !ok ? 'bg-zinc-50 text-zinc-400 border-zinc-200 cursor-not-allowed'
-                    : on ? 'bg-zinc-900 text-white border-zinc-900'
-                    : 'bg-white text-zinc-500 border-zinc-300')}
+                    : on ? 'bg-[var(--brand-soft)] text-[var(--brand-fg)] border-[var(--brand-border)]'
+                    : 'bg-white text-[var(--text-muted)] border-[var(--border-strong)]')}
                   title={ok ? (on ? 'Visível no menu' : 'Oculto do menu') : unavailableHint(item.id)}>
                   {ok ? (on ? 'No menu' : 'Oculto') : 'Indisponível'}
                 </button>
@@ -493,7 +506,7 @@ function PageNavTab({ business, businessId, blocks, services, products, professi
 
         <div className="flex flex-wrap gap-2 mt-3">
           <button disabled={!dirty} onClick={() => { onSaveNav(draft || []); setDraft(null); }}
-            className="text-sm font-bold bg-zinc-900 text-white px-4 py-2.5 rounded-md hover:bg-zinc-700 disabled:opacity-40">
+            className="text-sm font-bold bg-[var(--brand)] text-white shadow-brand hover:bg-[var(--brand-strong)] px-4 py-2.5 rounded-md disabled:opacity-40">
             Salvar menu
           </button>
           {!auto && (
@@ -511,7 +524,7 @@ function PageNavTab({ business, businessId, blocks, services, products, professi
         <div className="flex items-center justify-between">
           <p className="font-bold text-sm">Sobre a empresa</p>
           <button onClick={() => onAbout({ ...aboutDraft, enabled: !about.enabled })}
-            className={cn('text-xs font-medium px-3 py-1 rounded-full border', about.enabled ? 'bg-zinc-900 text-white border-zinc-900' : 'bg-white border-zinc-200 text-zinc-500')}>
+            className={cn('text-xs font-medium px-3 py-1 rounded-full border', about.enabled ? 'bg-[var(--brand-soft)] text-[var(--brand-fg)] border-[var(--brand-border)]' : 'bg-white border-[var(--border)] text-[var(--text-muted)]')}>
             {about.enabled ? 'Visível' : 'Oculto'}
           </button>
         </div>
@@ -519,7 +532,7 @@ function PageNavTab({ business, businessId, blocks, services, products, professi
         <input value={aboutDraft.title} onChange={(e) => setAboutDraft({ ...aboutDraft, title: e.target.value })} className="w-full rounded-md border border-zinc-300 px-3 py-2 text-sm" placeholder="Título (ex: Sobre o estúdio)" />
         <textarea value={aboutDraft.text} onChange={(e) => setAboutDraft({ ...aboutDraft, text: e.target.value })} className="w-full rounded-md border border-zinc-300 px-3 py-2 text-sm" rows={3} placeholder="Ex: Somos uma clínica especializada em…" />
         <ImageUpload label="IMAGEM (OPCIONAL)" value={aboutDraft.image} onChange={(url) => setAboutDraft({ ...aboutDraft, image: url })} businessId={businessId} />
-        <button onClick={() => onAbout(aboutDraft)} className="text-sm font-bold bg-zinc-900 text-white px-4 py-2 rounded-md hover:bg-zinc-700">Salvar “Sobre”</button>
+        <button onClick={() => onAbout(aboutDraft)} className="text-sm font-bold bg-[var(--brand)] text-white shadow-brand hover:bg-[var(--brand-strong)] px-4 py-2 rounded-md">Salvar “Sobre”</button>
       </section>
     </div>
   );
@@ -555,7 +568,7 @@ function AboutSectionEditor({ about, businessId, onSave }: {
       </div>
       <ImageUpload label="IMAGEM (OPCIONAL)" value={draft.image} onChange={(url) => set('image', url)} businessId={businessId} />
       <button onClick={() => onSave({ ...draft, enabled: !!draft.enabled })}
-        className="text-sm font-bold bg-zinc-900 text-white px-4 py-2 rounded-md hover:bg-zinc-700">
+        className="text-sm font-bold bg-[var(--brand)] text-white shadow-brand hover:bg-[var(--brand-strong)] px-4 py-2 rounded-md">
         Salvar “Sobre”
       </button>
     </div>
@@ -727,7 +740,7 @@ function BlockSettings({ block, businessId, business, onChange, onSave, onRefres
                         <img src={url} alt={`Foto ${i + 1}`} className="w-full h-20 object-cover rounded-md border border-zinc-200" />
                         <button type="button" onClick={() => set('images', imgs.filter((_, j) => j !== i))}
                           aria-label={`Remover foto ${i + 1}`}
-                          className="absolute -top-1.5 -right-1.5 w-6 h-6 rounded-full bg-zinc-900 text-white text-xs font-bold flex items-center justify-center opacity-80 hover:opacity-100 hover:bg-red-600">
+                          className="absolute -top-1.5 -right-1.5 w-6 h-6 rounded-full bg-[var(--danger)] text-white text-xs font-bold flex items-center justify-center opacity-90 hover:opacity-100">
                           ×
                         </button>
                       </div>
@@ -830,7 +843,7 @@ function BlockSettings({ block, businessId, business, onChange, onSave, onRefres
           </p>
         </div>
       )}
-      <button onClick={onSave} className="text-sm font-bold bg-zinc-900 text-white px-4 py-2 rounded-md hover:bg-zinc-700">Salvar bloco</button>
+      <button onClick={onSave} className="text-sm font-bold bg-[var(--brand)] text-white shadow-brand hover:bg-[var(--brand-strong)] px-4 py-2 rounded-md">Salvar bloco</button>
     </div>
   );
 }
@@ -1058,7 +1071,7 @@ function ReviewsEditor({ businessId }: { businessId: string }) {
         </div>
         <div className="flex gap-2">
           <button disabled={acting === 'google'} onClick={saveGoogle}
-            className="text-xs font-bold bg-zinc-900 text-white px-3 py-2 rounded-lg hover:bg-zinc-700 disabled:opacity-50">
+            className="text-xs font-bold bg-[var(--brand)] text-white shadow-brand hover:bg-[var(--brand-strong)] px-3 py-2 rounded-lg disabled:opacity-50">
             Salvar Google
           </button>
           <button disabled={acting === 'import'} onClick={importGoogle}
@@ -1204,7 +1217,7 @@ function ThemeEditor({ theme, presetId, onChange, onSave, saving }: {
               </select>
             </label>
           </div>
-          <button onClick={onSave} disabled={saving} className="mt-4 text-sm font-bold bg-zinc-900 text-white px-5 py-2.5 rounded-md hover:bg-zinc-700 disabled:opacity-50">
+          <button onClick={onSave} disabled={saving} className="mt-4 text-sm font-bold bg-[var(--brand)] text-white shadow-brand hover:bg-[var(--brand-strong)] px-5 py-2.5 rounded-md disabled:opacity-50">
             {saving ? 'Salvando…' : 'Salvar visual'}
           </button>
         </details>
@@ -1246,7 +1259,7 @@ function PublishTab({ business, onSlug, onPublish }: { business: Business; busin
           <div className="mt-1.5 flex gap-2">
             <input value={slug} onChange={(e) => setSlug(e.target.value.toLowerCase().replace(/[^a-z0-9]/g, ''))}
               className="flex-1 rounded-md border border-zinc-300 px-3 py-2.5 text-sm font-mono" />
-            <button onClick={() => onSlug(slug)} className="text-sm font-bold bg-zinc-900 text-white px-4 py-2.5 rounded-md">Salvar</button>
+            <button onClick={() => onSlug(slug)} className="text-sm font-bold bg-[var(--brand)] text-white shadow-brand hover:bg-[var(--brand-strong)] px-4 py-2.5 rounded-md">Salvar</button>
           </div>
           <p className="text-xs text-zinc-500 mt-1">instalink.app/{slug}</p>
         </div>

@@ -22,7 +22,9 @@ export function PeriodSelector({ value, onChange, compact = false, label = 'PerÃ
           aria-pressed={value === p}
           className={cn(
             'text-xs font-medium px-2.5 py-1 rounded whitespace-nowrap transition-colors shrink-0',
-            value === p ? 'bg-zinc-900 text-white' : 'text-zinc-500 hover:text-zinc-900 hover:bg-zinc-50',
+            value === p
+              ? 'bg-[var(--brand-soft)] text-[var(--brand-fg)] border border-[var(--brand-border)]'
+              : 'text-[var(--text-muted)] border border-transparent hover:text-[var(--text)] hover:bg-[var(--surface-2)]',
           )}
         >
           {compact ? periodShortLabel(p) : periodLabel(p)}

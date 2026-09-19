@@ -4,6 +4,7 @@ import { useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { AccessDenied, useAreaLoad } from '@/components/dashboard/AccessNotice';
 import { EsteiraView } from '@/components/dashboard/EsteiraView';
+import { Button, PageHeader } from '@/components/ui';
 
 // ═══════════════════════════════════════════════════════════════
 // FUNIL — as oportunidades por etapa
@@ -21,22 +22,12 @@ export default function FunilPage() {
 
   return (
     <div className="space-y-4">
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <div>
-          <h1 className="text-base font-semibold text-zinc-900">Funil</h1>
-          <p className="text-xs text-zinc-500 mt-0.5">
-            Acompanhe as oportunidades por etapa, encaminhe para a secretaria e agende atendimentos.
-          </p>
-        </div>
-        <div className="flex items-center gap-2">
-          <Link
-            href={`/clientes?b=${businessId}`}
-            className="text-xs font-semibold px-3 py-1.5 rounded-lg border border-zinc-200 bg-white hover:bg-zinc-50 text-zinc-700"
-          >
-            Ver Lista de Clientes
-          </Link>
-        </div>
-      </div>
+      <PageHeader
+        icon="funnel"
+        title="Funil"
+        hint="Acompanhe as oportunidades por etapa, encaminhe para a secretaria e agende atendimentos."
+        action={<Link href={`/clientes?b=${businessId}`}><Button variant="secondary" size="sm">Ver lista de clientes</Button></Link>}
+      />
 
       <EsteiraView />
     </div>
