@@ -16,7 +16,8 @@
     "smoke:p3": "node scripts/smoke-p3.mjs",
     "master": "node scripts/master.mjs",
     "smoke:p4": "node scripts/smoke-p4.mjs",
-    "smoke:agendar": "node scripts/smoke-agendar.mjs"
+    "smoke:agendar": "node scripts/smoke-agendar.mjs",
+    "e2e-merchant": "node scripts/e2e-merchant.mjs"
   },
   "dependencies": {
     "@vercel/blob": "^2.8.0",

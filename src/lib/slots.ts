@@ -67,7 +67,9 @@ export function computeSlots(q: SlotQuery): SlotResult {
   );
   // Negócio sem equipe: opera como "profissional único" (id '').
   const soloMode = activePros.length === 0;
-  if (q.professionalId && !soloMode && !eligible.has(q.professionalId)) return { ...empty, closed: true, closedReason: 'no_windows' };
+  if (q.professionalId && (soloMode || !eligible.has(q.professionalId))) {
+    return { ...empty, closed: true, closedReason: 'no_windows' };
+  }
 
   // Herança de horário: quem segue o horário da clínica usa as regras gerais;
   // quem personalizou usa SOMENTE as próprias (dados legados sem o flag são

@@ -244,6 +244,12 @@ export interface DragSlots {
   slots: Record<string, string[]>;
   /** date → professionalId → horários livres daquele profissional. */
   byPro: Record<string, Record<string, string[]>>;
+  /**
+   * Elegibilidade estrutural retornada pelo servidor. Opcional para manter
+   * compatibilidade com estados antigos/testes; quando presente, uma coluna
+   * fora da lista nunca pode virar destino verde.
+   */
+  eligibleProIds?: Record<string, string[]>;
 }
 
 export function emptyDragSlots(): DragSlots {
@@ -268,9 +274,15 @@ export function dragSlotUrls(businessId: string, serviceId: string, dates: strin
 export function withOwnSlot(
   date: string,
   slots: string[],
-  own: { date: string; time: string } | null,
+  own: { date: string; time: string; professionalId?: string } | null,
+  targetProfessionalId?: string,
 ): string[] {
   if (!own || own.date !== date) return slots;
+  // O próprio horário só deixa de bloquear a coluna do profissional original.
+  // Para a visão semanal (targetProfessionalId vazio) a união da equipe ainda
+  // pode receber o horário; para uma coluna profissional, a comparação é
+  // estrita e impede o falso livre em outra pessoa.
+  if (targetProfessionalId && targetProfessionalId !== (own.professionalId || '')) return slots;
   if (slots.includes(own.time)) return slots;
   return [...slots, own.time].sort();
 }
@@ -337,7 +349,7 @@ export function planDrop(opts: {
   drag: DragSlots;
   durationMin: number;
   toleranceMin?: number;
-  own?: { date: string; time: string } | null;
+  own?: { date: string; time: string; professionalId?: string } | null;
 }): DropPlan {
   const { point, geometry, columns, drag, durationMin } = opts;
   const tolerance = opts.toleranceMin ?? 90;
@@ -354,7 +366,16 @@ export function planDrop(opts: {
   if (drag.error) {
     return { target: null, availability: 'unknown', minute: cell.minute, column: cell.column };
   }
-  const list = withOwnSlot(col.date, slotsForColumn(drag, col.date, col.professionalId), opts.own || null);
+  const eligible = drag.eligibleProIds?.[col.date];
+  if (col.professionalId && eligible && !eligible.includes(col.professionalId)) {
+    return { target: null, availability: 'busy', minute: cell.minute, column: cell.column };
+  }
+  const list = withOwnSlot(
+    col.date,
+    slotsForColumn(drag, col.date, col.professionalId),
+    opts.own || null,
+    col.professionalId,
+  );
   const near = nearestSlot(list, cell.minute, tolerance);
   if (!near) {
     return { target: null, availability: 'busy', minute: cell.minute, column: cell.column };

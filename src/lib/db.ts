@@ -344,6 +344,10 @@ export function normalizeDB(raw: unknown): DB {
     if (typeof (e as any).end !== 'string') (e as any).end = '';
     if (typeof (e as any).note !== 'string') (e as any).note = '';
   }
+  for (const customer of base.customers) {
+    if (typeof (customer as any).mustChangePassword !== 'boolean') (customer as any).mustChangePassword = false;
+    if (typeof (customer as any).accessCreatedAt !== 'string') (customer as any).accessCreatedAt = '';
+  }
   for (const l of base.leads) {
     if (typeof (l as any).customerId !== 'string') (l as any).customerId = '';
   }

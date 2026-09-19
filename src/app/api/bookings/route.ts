@@ -83,6 +83,14 @@ export async function GET(req: NextRequest) {
 
     const service = db.services.find((s) => s.id === q.get('serviceId') && s.businessId === businessId);
     if (!service) return NextResponse.json({ slots: [] });
+    const requestedProfessionalId = String(q.get('professionalId') || '');
+    const activeProsForService = db.professionals.filter((p) => p.businessId === businessId && p.active !== false);
+    const eligibleProfessionalIds = (service.professionalIds || []).length > 0
+      ? activeProsForService.filter((p) => service.professionalIds.includes(p.id)).map((p) => p.id)
+      : activeProsForService.map((p) => p.id);
+    if (requestedProfessionalId && !eligibleProfessionalIds.includes(requestedProfessionalId)) {
+      return NextResponse.json({ error: 'Profissional indisponível para este serviço.' }, { status: 400 });
+    }
     // Módulo de agendamentos desativado ⇒ nenhum horário é oferecido.
     if (!isFeatureEnabled(business, 'bookings')) {
       return NextResponse.json({ slots: [], closed: true, moduleOff: true });
@@ -102,7 +110,9 @@ export async function GET(req: NextRequest) {
       professionals: db.professionals.filter((p) => p.businessId === businessId),
       serviceId: service.id,
       durationMin: service.durationMin,
-      professionalId: '',
+      // A consulta administrativa pode restringir a coluna escolhida; sem
+      // filtro a resposta continua sendo a união da equipe.
+      professionalId: requestedProfessionalId,
       eligibleProIds: service.professionalIds || [],
       leadMin: cfg.leadMin || 0,
       bufferMin: cfg.bufferMin || 0,
@@ -146,6 +156,7 @@ export async function GET(req: NextRequest) {
       state: day.state, full: day.full, reason: day.reason,
       assign: r.assign,
       byPro: r.byProfessional, pros, today,
+      eligibleProfessionalIds,
     });
   } catch {
     return NextResponse.json({ error: 'Não foi possível carregar os horários.' }, { status: 500 });
@@ -330,7 +341,7 @@ export async function PATCH(req: NextRequest) {
       const eligible = (service.professionalIds || []).length > 0
         ? activePros.filter((p) => (service.professionalIds || []).includes(p.id))
         : activePros;
-      if (proId && activePros.length > 0 && !eligible.some((p) => p.id === proId)) {
+      if (proId && !eligible.some((p) => p.id === proId)) {
         return NextResponse.json({ error: 'Profissional indisponível para este serviço.' }, { status: 400 });
       }
       const decision = rescheduleDecision(current.status);

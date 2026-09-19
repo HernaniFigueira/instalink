@@ -53,6 +53,13 @@ export function NewBookingSheet({ businessId, services, pros, horizonDays, timez
   const [slotsError, setSlotsError] = useState('');
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
+  const [created, setCreated] = useState<{
+    customer: string;
+    service: string;
+    professional: string;
+    date: string;
+    time: string;
+  } | null>(null);
   const seq = useRef(0);
   const slotSeq = useRef(0);
 
@@ -72,7 +79,8 @@ export function NewBookingSheet({ businessId, services, pros, horizonDays, timez
     setLoadingSlots(true);
     setSlotsError('');
     setTime('');
-    fetch(`/api/bookings?businessId=${businessId}&serviceId=${serviceId}&date=${date}`)
+    const professionalQuery = proId ? `&professionalId=${encodeURIComponent(proId)}` : '';
+    fetch(`/api/bookings?businessId=${businessId}&serviceId=${serviceId}&date=${date}${professionalQuery}`)
       .then(async (r) => {
         const d = await r.json();
         if (mySeq !== slotSeq.current) return;
@@ -90,7 +98,7 @@ export function NewBookingSheet({ businessId, services, pros, horizonDays, timez
         if (mySeq !== slotSeq.current) return;
         setLoadingSlots(false);
       });
-  }, [businessId, serviceId, date]);
+  }, [businessId, serviceId, date, proId]);
 
   // Busca no CRM (nome OU WhatsApp) com debounce.
   useEffect(() => {
@@ -136,6 +144,7 @@ export function NewBookingSheet({ businessId, services, pros, horizonDays, timez
   }
 
   async function save() {
+    if (saving) return;
     setError('');
     if (!name.trim()) { setError('Busque o cliente ou toque em “+ Novo cliente”.'); return; }
     if (onlyDigits(phone).length < 10) { setError('Informe um WhatsApp válido.'); return; }
@@ -154,9 +163,15 @@ export function NewBookingSheet({ businessId, services, pros, horizonDays, timez
       const data = await res.json();
       if (!res.ok) throw new Error(data.error);
       onCreated();
-      onClose();
+      setCreated({
+        customer: name,
+        service: service?.name || 'Serviço',
+        professional: data.professionalName || eligiblePros.find((p) => p.id === proId)?.name || 'Definido pela agenda',
+        date,
+        time,
+      });
     } catch (e: any) {
-      setError(e.message);
+      setError(e.message || 'Não foi possível criar o agendamento.');
     } finally {
       setSaving(false);
     }
@@ -174,6 +189,26 @@ export function NewBookingSheet({ businessId, services, pros, horizonDays, timez
           <button onClick={onClose} className="text-zinc-400 hover:text-zinc-600 p-1.5" aria-label="Fechar"><Icon n="x" size={16} /></button>
         </div>
         <div className="px-5 py-4 space-y-3">
+          {created ? (
+            <div className="space-y-4" data-booking-created="true">
+              <div className="rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-4">
+                <p className="text-base font-bold text-emerald-900 flex items-center gap-2"><span className="text-lg">✓</span> Agendamento criado</p>
+                <dl className="mt-3 space-y-1.5 text-sm text-emerald-950">
+                  <div className="flex gap-2"><dt className="font-semibold min-w-24">Cliente</dt><dd>{created.customer}</dd></div>
+                  <div className="flex gap-2"><dt className="font-semibold min-w-24">Serviço</dt><dd>{created.service}</dd></div>
+                  <div className="flex gap-2"><dt className="font-semibold min-w-24">Profissional</dt><dd>{created.professional}</dd></div>
+                  <div className="flex gap-2"><dt className="font-semibold min-w-24">Data</dt><dd>{created.date}</dd></div>
+                  <div className="flex gap-2"><dt className="font-semibold min-w-24">Horário</dt><dd>{created.time}</dd></div>
+                </dl>
+              </div>
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                <button type="button" onClick={onClose} className="rounded-lg bg-zinc-900 text-white px-3 py-2.5 text-sm font-semibold">Fechar</button>
+                <button type="button" onClick={() => { window.location.assign(`/agenda?b=${encodeURIComponent(businessId)}&data=${created.date}`); }} className="rounded-lg border border-zinc-300 bg-white px-3 py-2.5 text-sm font-semibold text-zinc-800">Ver na agenda</button>
+                <button type="button" onClick={() => { setCreated(null); setServiceId(''); setDate(''); setTime(''); setNote(''); setError(''); }} className="rounded-lg border border-zinc-300 bg-white px-3 py-2.5 text-sm font-semibold text-zinc-800">Novo agendamento</button>
+              </div>
+            </div>
+          ) : (
+          <div className="space-y-3">
           {/* 1. Cliente */}
           <div>
             <span className={label}>1. CLIENTE</span>
@@ -286,6 +321,8 @@ export function NewBookingSheet({ businessId, services, pros, horizonDays, timez
           <button onClick={save} disabled={saving} className="w-full font-bold bg-zinc-900 text-white py-3 rounded-xl disabled:opacity-50">
             {saving ? 'Agendando…' : 'Salvar agendamento'}
           </button>
+          </div>
+          )}
         </div>
       </div>
     </div>

@@ -344,7 +344,7 @@ export function ingestLead(db: DB, input: IngestLeadInput): {
   const pipeline = getBusinessPipeline(db, business.id);
 
   // 1. Garante Contato no CRM (upsert idempotente, nunca duplica pessoa)
-  const contactExistedBefore = !!findContact(db, business.id, input.customerId || '', digits, name);
+  const contactExistedBefore = !!findContact(db, business.id, input.customerId || '', digits, name, email);
   const contact = upsertContact(db, {
     businessId: business.id,
     customerId: input.customerId,

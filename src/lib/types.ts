@@ -40,6 +40,11 @@ export interface Customer {
   googleId: string;
   avatar: string;
   createdAt: string;
+  // Acesso criado pela equipe: a senha real nunca é persistida em claro.
+  // Estes campos são aditivos e deixam pronta a futura troca obrigatória
+  // sem alterar o fluxo público de /api/customer/register.
+  mustChangePassword?: boolean;
+  accessCreatedAt?: string;
 }
 
 export interface CustomerSession {
@@ -1515,7 +1520,9 @@ export type AuditAction =
   // P3 — esteira operacional e integrações
   | 'pipeline.updated' | 'api_key.created' | 'api_key.revoked'
   | 'webhook.created' | 'webhook.updated' | 'webhook.deleted'
+  | 'lead.created' | 'lead.updated'
   | 'lead.stage_changed' | 'lead.assigned' | 'lead.booked' | 'lead.note_added'
+  | 'customer.access_created'
   // P4 — motor de automações e tarefas
   | 'automation.created' | 'automation.updated' | 'automation.deleted'
   | 'automation.toggled' | 'automation.duplicated'

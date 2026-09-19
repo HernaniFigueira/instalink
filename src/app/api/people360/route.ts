@@ -1,10 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { requireBusiness } from '@/lib/access';
-import { onlyDigits } from '@/lib/utils';
 import { contactNotes } from '@/lib/contacts';
 import { getBusinessPipeline, normalizeLeadStageId } from '@/lib/pipeline';
 import { taskDueLabel } from '@/lib/automation/tasks';
 import { todayISO } from '@/lib/tz';
+import { buildPeople360IdentityIndex, people360Phone, type People360Identity } from '@/lib/people360-identity';
 
 // GET ?businessId=&q=&page= — cliente 360 (contato-centric).
 // A base nasce da relação BusinessCustomer/Contact (cadastro/login na página
@@ -30,6 +30,10 @@ export async function GET(req: NextRequest) {
     phone: string;
     email: string;
     registered: boolean;
+    accountStatus: 'none' | 'active';
+    accountEmail: string;
+    accountPhone: string;
+    mustChangePassword: boolean;
     customerSince: string;
     source: string;
     marketingOptIn: boolean;
@@ -46,52 +50,107 @@ export async function GET(req: NextRequest) {
     lastSeen: string;
   }
 
+  const contacts = db.contacts.filter((x) => x.businessId === businessId);
+  const orders = db.orders.filter((x) => x.businessId === businessId);
+  const bookings = db.bookings.filter((x) => x.businessId === businessId);
+  const leads = db.leads.filter((x) => x.businessId === businessId);
+  const conversations = db.conversations.filter((x) => x.businessId === businessId);
+  const tasks = (db.tasks || []).filter((x) => x.businessId === businessId);
+
+  // Monta todos os aliases ANTES de criar o Map. Assim, quando um contato
+  // legado passa de `phone` para `customerId`, o componente já conhece os dois
+  // lados e nenhum evento histórico precisa ser regravado ou migrado.
+  const identityRecords: People360Identity[] = [
+    ...contacts.map((c) => ({ customerId: c.customerId, phone: c.phone, contactId: c.id })),
+    ...orders.map((o) => ({ customerId: o.customerId, phone: o.customerPhone })),
+    ...bookings.map((b) => ({ customerId: b.customerId, phone: b.customerPhone })),
+    ...leads.map((l) => ({ customerId: l.customerId, phone: l.phone })),
+    ...conversations.map((c) => ({ customerId: c.customerId, phone: c.phone, contactId: c.contactId })),
+  ];
+
+  for (const task of tasks) {
+    const linkedLead = task.leadId ? leads.find((l) => l.id === task.leadId) : undefined;
+    const linkedBooking = task.bookingId ? bookings.find((b) => b.id === task.bookingId) : undefined;
+    const linkedContact = task.customerId
+      ? contacts.find((c) => c.id === task.customerId || c.customerId === task.customerId)
+      : undefined;
+    if (linkedLead) identityRecords.push({ customerId: linkedLead.customerId, phone: linkedLead.phone });
+    else if (linkedBooking) identityRecords.push({ customerId: linkedBooking.customerId, phone: linkedBooking.customerPhone });
+    else if (linkedContact) identityRecords.push({ customerId: linkedContact.customerId, phone: linkedContact.phone, contactId: linkedContact.id });
+    else if (task.customerId) identityRecords.push({ customerId: task.customerId });
+  }
+
+  const identity = buildPeople360IdentityIndex(identityRecords);
   const map = new Map<string, P>();
-  const keyOf = (customerId: string, phone: string): string => {
-    const digits = onlyDigits(phone || '').replace(/^55(\d{10,11})$/, '$1');
-    return customerId ? `c:${customerId}` : digits ? `p:${digits}` : '';
+  const selectedContact = new Map<P, { hasCustomer: boolean; createdAt: string; id: string }>();
+
+  const accountFor = (p: P): void => {
+    const account = p.customerId ? db.customers.find((customer) => customer.id === p.customerId) : undefined;
+    p.registered = !!account;
+    p.accountStatus = account ? 'active' : 'none';
+    p.accountEmail = account?.email || '';
+    p.accountPhone = account?.phone || '';
+    p.mustChangePassword = account?.mustChangePassword === true;
   };
-  const get = (customerId: string, rawPhone: string, name: string): P | null => {
-    const digits = onlyDigits(rawPhone || '').replace(/^55(\d{10,11})$/, '$1');
-    let key = keyOf(customerId, digits);
-    if (!key) {
-      if (!name) return null;
-      key = `nome:${name.toLowerCase()}`;
-    }
+
+  const get = (customerId: string, rawPhone: string, name: string, contactId = ''): P | null => {
+    const digits = people360Phone(rawPhone);
+    const key = identity.key({ customerId, phone: digits, contactId }, name);
+    if (!key) return null;
     let p = map.get(key);
     if (!p) {
       p = {
-        key, contactId: '', note: '', notes: [], customerId, name, phone: digits, email: '', registered: false, customerSince: '',
+        key, contactId: '', note: '', notes: [], customerId: '', name: '', phone: '', email: '', registered: false,
+        accountStatus: 'none', accountEmail: '', accountPhone: '', mustChangePassword: false, customerSince: '',
         source: '', marketingOptIn: false,
         orders: 0, spent: 0, lastOrderAt: '', bookings: [], leads: [], conversations: [], tasks: [], lastSeen: '',
       };
       map.set(key, p);
     }
-    if (customerId && !p.customerId) p.customerId = customerId;
+    // Dados legados podem conter mais de um evento com o mesmo telefone e
+    // CustomerId. Se houver conflito, a escolha do alias também precisa ser
+    // estável e independente da ordem física do JSON.
+    if (customerId && (!p.customerId || customerId < p.customerId)) p.customerId = customerId;
     if (name && !p.name) p.name = name;
     if (digits && !p.phone) p.phone = digits;
+    if (contactId && !p.contactId) p.contactId = contactId;
+    accountFor(p);
     return p;
   };
 
   // 1. Contatos (a fonte primária): o cadastro NA PÁGINA já cria a pessoa.
-  for (const c of db.contacts.filter((x) => x.businessId === businessId)) {
-    const p = get(c.customerId, c.phone, c.name);
+  for (const c of contacts) {
+    const p = get(c.customerId, c.phone, c.name, c.id);
     if (!p) continue;
-    p.registered = !!c.customerId;
-    p.customerSince = c.createdAt;
-    p.contactId = c.id;
-    // Observações: histórico append-only (autor/data/contexto) + campo legado.
-    p.note = c.note || '';
-    p.notes = contactNotes(c);
-    p.source = c.source;
-    p.email = c.email || p.email;
-    p.marketingOptIn = c.marketingOptIn === true;
+    const rank = { hasCustomer: !!c.customerId, createdAt: c.createdAt || '', id: c.id };
+    const previous = selectedContact.get(p);
+    const choose = !previous
+      || (rank.hasCustomer && !previous.hasCustomer)
+      || (rank.hasCustomer === previous.hasCustomer && `${rank.createdAt}:${rank.id}` < `${previous.createdAt}:${previous.id}`);
+    if (choose) {
+      selectedContact.set(p, rank);
+      p.contactId = c.id;
+      p.note = c.note || p.note;
+      p.customerSince = p.customerSince && p.customerSince < c.createdAt ? p.customerSince : c.createdAt;
+      p.source = c.source || p.source;
+    } else if (!p.customerSince || c.createdAt < p.customerSince) {
+      p.customerSince = c.createdAt;
+    }
+    // Se houver contatos legados duplicados no mesmo telefone, não descarta
+    // observações nem consentimento ao escolher o contato canônico.
+    const knownNotes = new Set(p.notes.map((note) => note.id));
+    for (const note of contactNotes(c)) {
+      if (!knownNotes.has(note.id)) p.notes.push(note);
+    }
+    p.email = p.email || c.email || '';
+    p.marketingOptIn = p.marketingOptIn || c.marketingOptIn === true;
     if (!p.lastSeen || c.lastInteraction > p.lastSeen) p.lastSeen = c.lastInteraction;
+    accountFor(p);
   }
 
   // 2. Agregados de interação (pedidos / agendamentos / leads) da pessoa.
   const services = new Map(db.services.filter((s) => s.businessId === businessId).map((s) => [s.id, s.name]));
-  for (const o of db.orders.filter((x) => x.businessId === businessId)) {
+  for (const o of orders) {
     const p = get(o.customerId, o.customerPhone, o.customerName);
     if (!p) continue;
     p.orders += 1;
@@ -99,7 +158,7 @@ export async function GET(req: NextRequest) {
     if (!p.lastOrderAt || o.createdAt > p.lastOrderAt) p.lastOrderAt = o.createdAt;
     if (!p.lastSeen || o.createdAt > p.lastSeen) p.lastSeen = o.createdAt;
   }
-  for (const b of db.bookings.filter((x) => x.businessId === businessId)) {
+  for (const b of bookings) {
     const p = get(b.customerId, b.customerPhone, b.customerName);
     if (!p) continue;
     // Histórico unificado (§16): status, serviço, profissional e a cadeia de
@@ -113,7 +172,7 @@ export async function GET(req: NextRequest) {
     if (!p.lastSeen || at > p.lastSeen) p.lastSeen = at;
   }
   const pipeline = getBusinessPipeline(db, businessId);
-  for (const l of db.leads.filter((x) => x.businessId === businessId)) {
+  for (const l of leads) {
     const p = get(l.customerId, l.phone, l.name);
     if (!p) continue;
     const stageId = normalizeLeadStageId(pipeline, l);
@@ -125,19 +184,20 @@ export async function GET(req: NextRequest) {
   }
   // Tarefas vinculadas à pessoa (por lead/booking/customer)
   const today = todayISO();
-  for (const task of (db.tasks || []).filter((x) => x.businessId === businessId)) {
-    let p: any = null;
+  for (const task of tasks) {
+    let p: P | null = null;
     if (task.leadId) {
-      const lead = db.leads.find((l) => l.id === task.leadId && l.businessId === businessId);
+      const lead = leads.find((l) => l.id === task.leadId);
       if (lead) p = get(lead.customerId, lead.phone, lead.name);
     }
     if (!p && task.bookingId) {
-      const b = db.bookings.find((x) => x.id === task.bookingId && x.businessId === businessId);
+      const b = bookings.find((x) => x.id === task.bookingId);
       if (b) p = get(b.customerId, b.customerPhone, b.customerName);
     }
     if (!p && task.customerId) {
-      const c = db.contacts.find((x) => (x.id === task.customerId || x.customerId === task.customerId) && x.businessId === businessId);
-      if (c) p = get(c.customerId, c.phone, c.name);
+      const c = contacts.find((x) => x.id === task.customerId || x.customerId === task.customerId);
+      if (c) p = get(c.customerId, c.phone, c.name, c.id);
+      else p = get(task.customerId, '', '');
     }
     if (!p) continue;
     const assignee = task.assignedUserId ? db.users.find((u) => u.id === task.assignedUserId) : null;
@@ -145,9 +205,8 @@ export async function GET(req: NextRequest) {
     if (!p.lastSeen || task.updatedAt > p.lastSeen) p.lastSeen = task.updatedAt;
   }
   // Conversas (WhatsApp/agente) entram como eventos independentes do histórico.
-  const convById = new Map(db.conversations.filter((c) => c.businessId === businessId).map((c) => [c.id, c]));
-  for (const c of convById.values()) {
-    const p = get(c.customerId, c.phone, c.name);
+  for (const c of conversations) {
+    const p = get(c.customerId, c.phone, c.name, c.contactId);
     if (!p) continue;
     p.conversations.push({
       id: c.id, channel: c.channel, status: c.status, at: c.lastMessageAt || c.createdAt,
@@ -161,9 +220,9 @@ export async function GET(req: NextRequest) {
   people.forEach((p) => p.bookings.sort((a, b) => (a.date + a.time < b.date + b.time ? 1 : -1)));
   people.sort((a, b) => (a.lastSeen < b.lastSeen ? 1 : -1));
   if (q) {
-    const qd = q.replace(/\D/g, '');
+    const qd = people360Phone(q);
     people = people.filter((p) =>
-      p.name.toLowerCase().includes(q) || (qd && p.phone.replace(/\D/g, '').includes(qd)),
+      p.name.toLowerCase().includes(q) || (qd && p.phone.includes(qd)),
     );
   }
   const total = people.length;

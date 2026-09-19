@@ -48,6 +48,17 @@ describe('serviço → elegíveis → disponibilidade deles', () => {
     expect(r.slots).toEqual(['09:00', '09:45', '10:30', '11:15']);
     expect(Object.values(r.assign).every((id) => id !== 'pro-ana')).toBe(true);
   });
+
+  it('serviço vinculado só a Orlando nunca expõe a coluna de Silvio', () => {
+    const own = [{ date: '2026-09-09', time: '10:00', status: 'confirmed', serviceId: 'svc-odonto', professionalId: 'pro-orlando' }];
+    const r = computeSlots(query('svc-odonto', own));
+    expect(r.byProfessional['pro-orlando']).toEqual(['09:00', '11:00']);
+    expect(r.byProfessional['pro-joao']).toBeUndefined();
+    // Na validação do próprio atendimento, o chamador remove o booking e o
+    // mesmo motor devolve 10:00 novamente para Orlando.
+    const ownRemoved = computeSlots(query('svc-odonto', [])).byProfessional['pro-orlando'];
+    expect(ownRemoved).toContain('10:00');
+  });
 });
 
 describe('ocupados visíveis', () => {
