@@ -139,3 +139,53 @@ sidebar, Pedidos com gate de módulo, Execuções único destino fora do menu),
 `visual-convergence.test.ts` (tema por seção em vez de brand fixo),
 `product-positioning.test.ts` (Pedidos deixou de ser `sidebar:false`),
 `http.test.ts` (`AREA_LABELS.dashboard = 'Início'`).
+
+---
+
+## BLOCO 2 — PROFISSIONAIS × EQUIPE: UMA PESSOA, DOIS CONCEITOS
+
+**Commit:** `A3.4 profissionais/equipe + formulários cliente` (junto dos
+formulários do Bloco 6, quando aplicável)
+
+### O que foi reutilizado (nada de segunda entidade)
+
+- `Professional.userId` (vínculo User → Professional), `professionalForUser()`,
+  `professionalScope` em `lib/access-core.ts` — o recorte "vê só a própria
+  agenda" continua sendo do SERVIDOR.
+- `/api/team` POST/PATCH já tinham todas as guardas: 1 vínculo por profissional,
+  1 profissional por login na unidade, auditoria `member.professional_linked`.
+
+### O que foi criado/alterado
+
+| Onde | Mudança |
+|---|---|
+| `/api/catalog` `professional.save` | devolve `{ ok, professionalId }` — a tela usa o id para oferecer o acesso JÁ VINCULADO (sem recriar pessoa). |
+| `/api/team` GET | `professionals[]` ganha `photo`; `members[]` ganha `professionalPhoto`. |
+| `components/dashboard/MemberAccessSheet.tsx` | **novo** componente compartilhado de criação de acesso (nome, e-mail, senha, papel, papel PROFISSIONAL → "Vincular profissional existente" listando SÓ quem não tem login, observação e concessão explícita de acesso ao registro de atendimento). Usado por Equipe e por Profissionais. |
+| `/profissionais` | Card do profissional mostra `Sem acesso ao sistema` / `Acesso ativo` com CTA `Criar acesso` / `Gerenciar acesso`; após salvar um profissional novo, painel "Profissional criado — [Criar acesso agora] [Fazer depois]". |
+| `/equipe` | Duas populações na mesma tela: **PESSOAS COM ACESSO** e **PROFISSIONAIS SEM ACESSO** (avatar com foto REAL do Professional, função e `[Criar acesso]`); avatar dos acessos vinculados usa a foto do profissional; deep-links estáveis `?member=<id>` (abre o membro) e `?professionalId=<id>` (sem login → abre o acesso pré-vinculado; com login → abre o membro). |
+
+### Decisão de compatibilidade
+
+O POST de `/api/team` continua aceitando `role: 'PROFISSIONAL'` sem
+`professionalId` (fluxos existentes e scripts não quebram). A exigência de
+escolher o profissional existe na INTERFACE — onde a pessoa decide — e o
+servidor segue recusando o que é inválido (profissional de outra unidade,
+profissional já vinculado). Quem ficar com papel PROFISSIONAL sem vínculo vê o
+aviso honesto já existente no shell ("acesso de atendimento ainda não vinculado
+— agenda vazia por segurança").
+
+### Testes
+
+`src/lib/__tests__/a34-team.test.ts` (10 casos, rotas reais com banco temporário):
+criar profissional não cria login e devolve id; editar mantém id; criar acesso
+grava `Professional.userId`; segundo login recusado (400); um login não aponta
+para dois profissionais; GET devolve foto nos dois lados; lista "sem acesso"
+derivável; secretária independente; vínculo com profissional de outra unidade
+recusado (404/403/401) sem gravar nada.
+
+```
+npx vitest run src/lib/__tests__/a34-team.test.ts src/lib/__tests__/professional-access.test.ts → 23 ok
+npx vitest run → 76 arquivos · 1278 testes ok
+npx tsc --noEmit → 0 erros
+```

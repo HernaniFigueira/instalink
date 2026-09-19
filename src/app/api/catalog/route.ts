@@ -129,7 +129,10 @@ export async function POST(req: NextRequest) {
           if (existing) Object.assign(existing, data);
           // Profissional novo começa SEGUINDO o horário da empresa.
           else db.professionals.push({ id, businessId, followBusinessHours: true, ...data } as Professional);
-          return { ok: true };
+          // A3.4: devolvemos o id do profissional recém-salvo. A tela usa esse
+          // id para oferecer "Criar acesso agora" JÁ VINCULADO (o vínculo é
+          // Professional.userId, gravado por /api/team) — sem segunda pessoa.
+          return { ok: true, professionalId: existing?.id || id };
         }
         // ── Vínculo do profissional com o horário da empresa ──
         // follow=true  → herda por referência (regras próprias são removidas);
