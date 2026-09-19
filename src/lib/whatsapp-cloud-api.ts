@@ -13,7 +13,8 @@ import {
   registerChannelConnector,
 } from './integrations/connectors';
 
-// Última versão conferida na documentação oficial da Meta (21/07/2026).
+// Última versão conferida na documentação oficial da Meta (v26.0, liberada em
+// 29/07/2026 — a data do card de release, não a do SDK).
 // A tabela de vigência de cada versão fica em `whatsapp-onboarding.ts`
 // (GRAPH_RELEASES) — há teste garantindo que as duas não divirjam.
 export const DEFAULT_META_GRAPH_VERSION = 'v26.0';

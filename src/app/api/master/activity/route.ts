@@ -26,6 +26,7 @@ const LABEL: Record<string, string> = {
   'whatsapp.disconnected': 'WhatsApp desconectado',
   'whatsapp.onboarding_blocked': 'WhatsApp bloqueado pela plataforma',
   'whatsapp.onboarding_failed': 'WhatsApp falhou ao conectar',
+  'whatsapp.registration_pending': 'WhatsApp aguardando registro do número',
 };
 
 export async function GET(req: NextRequest) {

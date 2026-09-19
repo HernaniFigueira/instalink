@@ -27,7 +27,12 @@ import { PROFILE_NOTE_MAX, PROFILE_TAGS_MAX, PROFILE_TAG_MAX, isValidCpf, normal
 import type { BusinessCustomer } from './types';
 
 // ── Limites (segurança e sanidade) ─────────────────────────────
-export const IMPORT_MAX_ROWS = 2000;
+/**
+ * Linhas por importação — limite CANÔNICO, o mesmo para CSV e XLSX, na prévia
+ * e na gravação. Acima disso o arquivo é RECUSADO inteiro (nada de cortar as
+ * últimas linhas e deixar o usuário achando que importou tudo).
+ */
+export const IMPORT_MAX_ROWS = 5000;
 export const IMPORT_MAX_CHARS = 2_000_000;
 export const IMPORT_NAME_MAX = 80;
 /** Teto da observação administrativa importada (mesmo do perfil). */
@@ -229,9 +234,14 @@ export function mapHeader(header: string[]): Partial<Record<ImportField, number>
 /** O que o cliente pode mandar como mapeamento: campo → coluna, ou "ignore". */
 export type ImportMappingInput = Partial<Record<ImportField, number | 'ignore' | null | undefined>>;
 
-export type MappingResult =
-  | { ok: true; mapping: Partial<Record<ImportField, number>>; errors: string[] }
-  | { ok: false; mapping: Partial<Record<ImportField, number>>; errors: string[] };
+export type MappingResult = {
+  ok: boolean;
+  /** Campo → coluna (só o que deve ser LIDO). */
+  mapping: Partial<Record<ImportField, number>>;
+  /** Campos que a pessoa mandou IGNORAR, mesmo com coluna presente. */
+  ignored: ImportField[];
+  errors: string[];
+};
 
 /**
  * Valida o mapeamento vindo da TELA (nunca confiamos só no navegador):
@@ -240,12 +250,15 @@ export type MappingResult =
  */
 export function validateMapping(input: ImportMappingInput | undefined, width: number): MappingResult {
   const mapping: Partial<Record<ImportField, number>> = {};
+  const ignored: ImportField[] = [];
   const errors: string[] = [];
-  if (!input || typeof input !== 'object') return { ok: true, mapping, errors };
+  if (!input || typeof input !== 'object') return { ok: true, mapping, ignored, errors };
   const used = new Map<number, ImportField>();
   for (const [field, raw] of Object.entries(input) as [string, number | 'ignore' | null | undefined][]) {
     if (!(field in IMPORT_COLUMNS)) { errors.push(`Campo desconhecido no mapeamento: ${field}.`); continue; }
-    if (raw === 'ignore' || raw === null || raw === undefined) continue;
+    // "ignore" é uma DECISÃO, não ausência: vale também para campo que o
+    // cabeçalho detectou sozinho (a pessoa manda mais que a autodetecção).
+    if (raw === 'ignore' || raw === null || raw === undefined) { ignored.push(field as ImportField); continue; }
     const idx = Number(raw);
     if (!Number.isInteger(idx) || idx < 0 || idx >= width) {
       errors.push(`A coluna ${String(raw)} de "${IMPORT_FIELD_LABELS[field as ImportField]}" não existe no arquivo.`);
@@ -256,7 +269,7 @@ export function validateMapping(input: ImportMappingInput | undefined, width: nu
     used.set(idx, field as ImportField);
     mapping[field as ImportField] = idx;
   }
-  return { ok: errors.length === 0, mapping, errors };
+  return { ok: errors.length === 0, mapping, ignored, errors };
 }
 
 export interface ParsedRow {
@@ -300,12 +313,28 @@ export interface ImportColumn {
   exportOnly?: boolean;
 }
 
+export interface RowLimitInfo {
+  /** Quantas linhas de dados o arquivo tem (além do cabeçalho). */
+  total: number;
+  limit: number;
+  exceeded: boolean;
+}
+
+/** Mensagem única do estouro de limite (usada na prévia e na gravação). */
+export function rowLimitMessage(total: number, limit = IMPORT_MAX_ROWS): string {
+  return `Esta planilha tem ${total.toLocaleString('pt-BR')} linhas. O limite por importação é ${limit.toLocaleString('pt-BR')}. Divida o arquivo em partes.`;
+}
+
 export interface ParsedFile {
   rows: ParsedRow[];
+  /** Quantas linhas vieram e se passaram do limite (nunca truncamos). */
+  rowLimit: RowLimitInfo;
   columns: ImportColumn[];
   unknownColumns: string[];
   /** Colunas reconhecidas como histórico da exportação (não voltam). */
   exportOnlyColumns: string[];
+  /** Colunas que a PESSOA mandou ignorar (não são "desconhecidas"). */
+  ignoredColumns: string[];
   mapped: Partial<Record<ImportField, number>>;
   delimiter: string;
   headerError: string;
@@ -352,19 +381,37 @@ function rowFromCells(cells: string[], mapped: Partial<Record<ImportField, numbe
  */
 export function parseMatrix(
   table: string[][],
-  opts: { mapping?: ImportMappingInput; delimiter?: string } = {},
+  opts: {
+    mapping?: ImportMappingInput;
+    delimiter?: string;
+    /**
+     * Quantas linhas de dados o ARQUIVO tem, quando quem leu sabe disso melhor
+     * que a matriz (caso do .xlsx, cuja matriz é materializada até o limite+1
+     * só para provar o estouro). Sem isto, a contagem vem da própria matriz.
+     */
+    totalRows?: number;
+  } = {},
 ): ParsedFile {
   const empty: ParsedFile = {
-    rows: [], columns: [], unknownColumns: [], exportOnlyColumns: [], mapped: {},
-    delimiter: opts.delimiter || ',', headerError: '', mappingErrors: [],
+    rows: [], columns: [], unknownColumns: [], exportOnlyColumns: [], ignoredColumns: [],
+    rowLimit: { total: 0, limit: IMPORT_MAX_ROWS, exceeded: false },
+    mapped: {}, delimiter: opts.delimiter || ',', headerError: '', mappingErrors: [],
   };
   if (table.length === 0) return { ...empty, headerError: 'O arquivo está vazio.' };
   const [header, ...body] = table;
+  const countedRows = Number.isFinite(opts.totalRows) ? Math.max(Number(opts.totalRows), body.length) : body.length;
+  const rowLimit: RowLimitInfo = {
+    total: countedRows,
+    limit: IMPORT_MAX_ROWS,
+    exceeded: countedRows > IMPORT_MAX_ROWS,
+  };
   const detected = mapHeader(header);
   const width = header.length;
   const custom = validateMapping(opts.mapping, width);
   // O mapeamento do usuário MANDA quando vem; a autodetecção preenche o resto.
   const mapped: Partial<Record<ImportField, number>> = { ...detected, ...custom.mapping };
+  // …e o que ele mandou ignorar SAI, mesmo que o cabeçalho tenha reconhecido.
+  for (const field of custom.ignored) delete mapped[field];
 
   const exportOnlyLabels = new Set(EXPORT_ONLY_COLUMNS.map((c) => normalizeHeader(c)));
   const columns: ImportColumn[] = header.map((label, index) => {
@@ -379,23 +426,39 @@ export function parseMatrix(
   });
   // "Desconhecida" é só o que NÃO é campo e NÃO é histórico da exportação.
   const exportOnlyColumns = columns.filter((c) => c.exportOnly).map((c) => c.label);
+  // Coluna que o cabeçalho reconheceu e a PESSOA mandou ignorar: aparece como
+  // ignorada (não como "desconhecida", o que seria um erro de leitura nosso).
+  const ignoredSet = new Set(custom.ignored);
+  const ignoredColumns = columns
+    .filter((c) => {
+      const headerField = (Object.entries(detected) as [ImportField, number][])
+        .find(([, idx]) => idx === c.index)?.[0];
+      return !!headerField && ignoredSet.has(headerField);
+    })
+    .map((c) => c.label);
   const unknownColumns = columns
     .filter((c) => !c.detected && !c.exportOnly && normalizeHeader(c.label))
+    .filter((c) => !ignoredColumns.includes(c.label))
     .map((c) => c.label);
 
   if (mapped.name === undefined && mapped.phone === undefined && mapped.email === undefined) {
     return {
-      rows: [], columns, unknownColumns, exportOnlyColumns, mapped, delimiter: opts.delimiter || ',',
-      mappingErrors: custom.errors,
+      rows: [], columns, unknownColumns, exportOnlyColumns, ignoredColumns, rowLimit,
+      mapped, delimiter: opts.delimiter || ',', mappingErrors: custom.errors,
       headerError: 'Não reconheci as colunas. Escolha abaixo qual coluna é o Nome e qual é o Telefone/E-mail (ou baixe o modelo).',
     };
   }
 
-  const rows = body.slice(0, IMPORT_MAX_ROWS)
-    .map((cells, i) => rowFromCells(cells.map(undoSpreadsheetEscape), mapped, i + 2));
+  // Limite estourado: NÃO cortamos. Devolvemos as colunas (para a tela poder
+  // explicar) e nenhuma linha — quem decide recusar é o chamador, com a
+  // mensagem canônica `rowLimitMessage`.
+  const rows = rowLimit.exceeded
+    ? []
+    : body.map((cells, i) => rowFromCells(cells.map(undoSpreadsheetEscape), mapped, i + 2));
 
   return {
-    rows, columns, unknownColumns, exportOnlyColumns, mapped, delimiter: opts.delimiter || ',',
+    rows, columns, unknownColumns, exportOnlyColumns, ignoredColumns, rowLimit,
+    mapped, delimiter: opts.delimiter || ',',
     headerError: '', mappingErrors: custom.errors,
   };
 }
@@ -467,6 +530,10 @@ export interface ImportPlan {
   unknownColumns: string[];
   /** Histórico da exportação reconhecido e ignorado (não volta na importação). */
   exportOnlyColumns: string[];
+  /** Colunas que a pessoa mandou ignorar de propósito. */
+  ignoredColumns: string[];
+  /** Quantas linhas o arquivo tem e se estourou o limite (nunca truncamos). */
+  rowLimit: RowLimitInfo;
   mapped: Partial<Record<ImportField, number>>;
   delimiter: string;
   /** Modo escolhido: `skip` (padrão) ou `fill_empty`. */
@@ -650,6 +717,8 @@ export function buildImportPlan(
     columns: parsed.columns,
     unknownColumns: parsed.unknownColumns,
     exportOnlyColumns: parsed.exportOnlyColumns,
+    ignoredColumns: parsed.ignoredColumns,
+    rowLimit: parsed.rowLimit,
     mapped: parsed.mapped,
     delimiter: parsed.delimiter,
     existingMode,

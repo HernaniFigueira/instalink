@@ -541,8 +541,14 @@ describe('A3.4 · B7 (2ª volta) — o fluxo na tela', () => {
     expect(sheet).toMatch(/mode: 'commit'/);
     // Mapeamento por dropdown, com "Ignorar" e os campos nomeados.
     expect(sheet).toMatch(/<Select/);
-    expect(sheet).toMatch(/IMPORT_FIELD_LABELS\[f\]|<option value=\{ignore\}>Ignorar/);
-    expect(sheet).toMatch(/Não reconheci/);
+    expect(sheet).toMatch(/IMPORT_FIELD_LABELS\[f\]/);
+    expect(sheet).toMatch(/<option value=\{ignore\}>Ignorar<\/option>/);
+    expect(sheet).toMatch(/Mapeamento das colunas/);
+    // O mapeamento vale para TODAS as colunas: a autodetecção pode ser corrigida.
+    expect(sheet).toMatch(/columnOwner\.get\(c\.index\) \|\| ignore/);
+    expect(sheet).toMatch(/plan\.ignoredColumns/);
+    // Quem lê a planilha sabe quantas linhas vieram e qual é o limite.
+    expect(sheet).toMatch(/linhas lidas \(limite/);
     // Modos de quem já existe, com os dois rótulos canônicos.
     expect(sheet).toMatch(/EXISTING_MODE_LABELS\[m\]/);
     expect(sheet).toMatch(/'skip', 'fill_empty'/);

@@ -95,12 +95,18 @@ export function whatsappStateLabel(
     };
   }
   if (cfg.status === 'pending') {
+    // "Configurando" deixou de ser genérico: quando falta registrar o número,
+    // a unidade precisa saber EXATAMENTE o que falta (senão o número nunca
+    // envia, e o painel dizia que estava tudo certo).
+    const missingRegistration = (cfg as any).registrationRequired === true && !(cfg as any).registeredAt;
     return {
       state: 'pending',
-      label: 'Configurando',
+      label: missingRegistration ? 'Falta registrar o número' : 'Configurando',
       detail: cfg.lastError
         ? `Configuração pendente: ${cfg.lastError}`
-        : 'Aguardando validação da conta oficial junto à Meta.',
+        : missingRegistration
+          ? 'Conta autorizada — informe o PIN de duas etapas para registrar o número e concluir.'
+          : 'Aguardando validação da conta oficial junto à Meta.',
     };
   }
   if (cfg.status === 'error') {

@@ -22,10 +22,12 @@ interface OnboardingItemView { key: string; label: string; why: string; ok: bool
 interface OnboardingLayerView {
   id: 'platform' | 'unit'; title: string; owner: string; items: OnboardingItemView[]; ready: boolean; missing: string[];
 }
+interface OnboardingStepView { id: string; label: string; ok: boolean; current: boolean; detail: string }
 export interface WaOnboardingView {
   plan: {
     state: string; headline: string; detail: string; code: string;
     layers: OnboardingLayerView[];
+    steps: OnboardingStepView[];
     nextAction: { kind: string; label: string; detail: string };
     version: { current: string; level: string; message: string };
     clientConfig: { appId: string; configId: string; version: string } | null;
@@ -218,15 +220,38 @@ export function WhatsappChannelPanel({ businessId }: { businessId: string }) {
         phoneNumberId: signupRef.current.phoneNumberId,
         pin: pin.trim() || undefined,
       }, { scope: 'action', area: 'Canais' });
-      if (!res.ok) throw new Error(res.message || 'A Meta recusou a conexão.');
-      setMsg(res.data?.message || 'Conta oficial conectada.');
-      setPin('');
+      const data = res.data as any;
+      if (!res.ok && !data?.pending) throw new Error(res.message || 'A Meta recusou a conexão.');
+      // Pendente de registro não é erro: é a etapa seguinte (o PIN).
+      setMsg(data?.message || (data?.pending ? 'Falta registrar o número.' : 'Conta oficial conectada.'));
+      if (!data?.pending) setPin('');
       load();
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Não foi possível abrir o popup da Meta.');
     } finally {
       window.removeEventListener('message', onMessage);
       setSigning(false);
+    }
+  }
+
+  /**
+   * Conclui o registro do número com o PIN de duas etapas usando a autorização
+   * já guardada (sem repetir o popup).
+   */
+  async function registerNumber() {
+    setBusy(true); setMsg(''); setError('');
+    try {
+      const res = await apiSend<{ message?: string }>('/api/whatsapp/onboarding', 'POST', {
+        businessId, action: 'register', pin: pin.trim(),
+      }, { scope: 'action', area: 'Canais' });
+      if (!res.ok) throw new Error(res.message || 'Não consegui registrar o número.');
+      setPin('');
+      setMsg(res.data?.message || 'Número registrado.');
+      load();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Não consegui registrar o número.');
+    } finally {
+      setBusy(false);
     }
   }
 
@@ -389,12 +414,34 @@ export function WhatsappChannelPanel({ businessId }: { businessId: string }) {
             </div>
 
             {/* As duas camadas: o que é da plataforma (não é sua culpa) e o que é seu. */}
-            {guide && (
-              <div className="grid sm:grid-cols-2 gap-3">
-                {guide.plan.layers.map((layer) => (
-                  <LayerCard key={layer.id} layer={layer} tone={layer.id} />
+            {/* A ordem REAL: autorizado → webhook → número → registro → conectado. */}
+            {guide && guide.plan.steps.length > 0 && (
+              <ol className="border border-zinc-200 rounded-md divide-y divide-zinc-100 bg-white">
+                {guide.plan.steps.map((step) => (
+                  <li key={step.id} className="px-3 py-2 flex items-start gap-2">
+                    <span className={`mt-0.5 text-xs ${step.ok ? 'text-emerald-700' : step.current ? 'text-amber-700' : 'text-zinc-400'}`}>
+                      {step.ok ? '✓' : step.current ? '→' : '•'}
+                    </span>
+                    <span className="min-w-0">
+                      <span className={`text-xs font-medium ${step.ok ? 'text-zinc-800' : step.current ? 'text-amber-900' : 'text-zinc-600'}`}>
+                        {step.label}{step.current && !step.ok ? ' — agora' : ''}
+                      </span>
+                      <span className="block text-[11px] text-zinc-500">{step.detail}</span>
+                    </span>
+                  </li>
                 ))}
-              </div>
+              </ol>
+            )}
+
+            {guide && (
+              <details className="text-xs text-zinc-600">
+                <summary className="cursor-pointer">Ver requisitos por camada (plataforma e unidade)</summary>
+                <div className="grid sm:grid-cols-2 gap-3 mt-2">
+                  {guide.plan.layers.map((layer) => (
+                    <LayerCard key={layer.id} layer={layer} tone={layer.id} />
+                  ))}
+                </div>
+              </details>
             )}
 
             {guide?.plan.version.level !== 'ok' && (
@@ -437,7 +484,25 @@ export function WhatsappChannelPanel({ businessId }: { businessId: string }) {
                 </div>
               )}
 
-              {guide?.plan.nextAction.kind === 'fix_platform' && (
+              {guide?.plan.nextAction.kind === 'register_number' && (
+              <div className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2.5 space-y-2">
+                <p className="text-sm font-semibold text-amber-900">{guide.plan.nextAction.label}</p>
+                <p className="text-xs text-amber-900/80">{guide.plan.nextAction.detail}</p>
+                <div className="flex items-end gap-2">
+                  <input value={pin} onChange={(e) => setPin(e.target.value)} inputMode="numeric" maxLength={6}
+                    aria-label="PIN de verificação em duas etapas" placeholder="PIN de 6 dígitos"
+                    className="rounded-md border border-zinc-300 px-3 py-2 text-sm w-40 font-mono" />
+                  <Button variant="primary" onClick={registerNumber} disabled={busy || pin.trim().length !== 6}>
+                    {busy ? 'Registrando…' : 'Registrar número'}
+                  </Button>
+                </div>
+                <p className="text-[11px] text-amber-900/80">
+                  O PIN vai direto do nosso servidor para a Meta e não fica guardado aqui.
+                </p>
+              </div>
+            )}
+
+            {guide?.plan.nextAction.kind === 'fix_platform' && (
                 <div className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2.5">
                   <p className="text-sm font-semibold text-amber-900">{guide.plan.nextAction.label}</p>
                   <p className="text-xs text-amber-900/80 mt-1">{guide.plan.nextAction.detail}</p>

@@ -282,6 +282,18 @@ export interface WhatsappIntegration {
   source?: 'embedded_signup' | 'master' | '';
   /** Data e hora em que o código do popup foi trocado pelo token. */
   tokenIssuedAt?: string;
+  /** Quando a Meta confirmou a assinatura do webhook desta WABA. */
+  webhookSubscribedAt?: string;
+  /**
+   * Quando o NÚMERO foi registrado na Cloud API. Sem registro comprovado o
+   * número não envia nem recebe pela API — por isso a unidade fica `pending`
+   * (autorizado ≠ conectado).
+   */
+  registeredAt?: string;
+  /** Falta registrar o número (fluxo padrão Cloud API). */
+  registrationRequired?: boolean;
+  /** O que a Meta disse que este onboarding é (nunca presumimos coexistence). */
+  onboardingType?: 'standard' | 'coexistence' | 'unknown';
 }
 
 // ── DTO público: whitelist explícita do que o visitante pode ver ──
@@ -1735,6 +1747,7 @@ export type AuditAction =
   // A3.4 · Bloco 8 — onboarding real (Embedded Signup)
   | 'whatsapp.connected' | 'whatsapp.disconnected'
   | 'whatsapp.onboarding_blocked' | 'whatsapp.onboarding_failed'
+  | 'whatsapp.registration_pending'
   | 'agent.updated' | 'organization.created' | 'unit.created'
   | 'master.created' | 'master.promoted' | 'master.revoked'
   | 'user.login'

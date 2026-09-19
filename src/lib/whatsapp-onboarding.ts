@@ -28,13 +28,13 @@
 //   • v21.0 — disponível até 21/01/2027.
 //   • v22.0 — disponível até 20/05/2027.
 //   • v25.0 — liberada em 18/02/2026.
-//   • v26.0 — liberada em 21/07/2026 (última conferida na doc).
+//   • v26.0 — liberada em 29/07/2026 (última conferida na doc).
 export const GRAPH_RELEASES: ReadonlyArray<{ version: string; released?: string; until?: string }> = [
   { version: 'v20.0', until: '2026-09-24' },
   { version: 'v21.0', until: '2027-01-21' },
   { version: 'v22.0', until: '2027-05-20' },
   { version: 'v25.0', released: '2026-02-18' },
-  { version: 'v26.0', released: '2026-07-21' },
+  { version: 'v26.0', released: '2026-07-29' },
 ];
 
 /** Última versão conferida na documentação oficial. */
@@ -159,13 +159,28 @@ export function platformLayer(env: EnvLike): OnboardingLayer {
   };
 }
 
+/** O que a unidade tem (o formato que o store realmente grava). */
+export interface UnitIntegrationView {
+  status?: string;
+  phoneNumberId?: string;
+  wabaId?: string;
+  encryptedAccessToken?: string;
+  displayPhone?: string;
+  lastWebhookAt?: string;
+  lastInboundAt?: string;
+  lastError?: string;
+  /** Quando a Meta confirmou a assinatura do webhook desta WABA. */
+  webhookSubscribedAt?: string;
+  /** Quando o número foi REGISTRADO na Cloud API (sem isto, ele não envia). */
+  registeredAt?: string;
+  /** Falta registrar (fluxo padrão Cloud API) — estado explícito, não suposição. */
+  registrationRequired?: boolean;
+  /** O que a Meta disse que este onboarding é. Nunca presumimos coexistence. */
+  onboardingType?: 'standard' | 'coexistence' | 'unknown';
+}
+
 /** A camada da UNIDADE: o que a clínica escolhe no popup e o que o webhook já provou. */
-export function unitLayer(business: {
-  whatsappIntegration?: {
-    status?: string; phoneNumberId?: string; wabaId?: string; encryptedAccessToken?: string;
-    displayPhone?: string; lastWebhookAt?: string; lastInboundAt?: string; lastError?: string;
-  };
-}): OnboardingLayer {
+export function unitLayer(business: { whatsappIntegration?: UnitIntegrationView }): OnboardingLayer {
   const wi = business.whatsappIntegration || {};
   const items: OnboardingItem[] = [
     {
@@ -187,6 +202,12 @@ export function unitLayer(business: {
       ok: !!wi.encryptedAccessToken, secret: true, required: true,
     },
     {
+      key: 'registration',
+      label: 'Número registrado na Cloud API',
+      why: 'Enquanto o número não é registrado, ele não envia nem recebe pela API. O registro usa o PIN de duas etapas.',
+      ok: !!wi.registeredAt, secret: false, required: true,
+    },
+    {
       key: 'webhook',
       label: 'Primeiro evento recebido',
       why: 'Prova que a Meta está entregando as mensagens desta unidade no nosso webhook.',
@@ -204,12 +225,70 @@ export function unitLayer(business: {
   };
 }
 
+// ── 5. As etapas, uma a uma (o painel mostra ESTA sequência) ───
+export type OnboardingStepId =
+  | 'authorized' | 'webhook_subscribed' | 'phone_resolved' | 'registration' | 'first_event' | 'connected';
+
+export interface OnboardingStep {
+  id: OnboardingStepId;
+  label: string;
+  ok: boolean;
+  /** Etapa que o sistema está esperando agora (só uma). */
+  current: boolean;
+  detail: string;
+}
+
+/**
+ * A sequência REAL do onboarding, na ordem em que a Meta exige:
+ *
+ *   AUTHORIZED → WEBHOOK_SUBSCRIBED → PHONE_RESOLVED → REGISTRATION → CONNECTED
+ *
+ * "Conectado" só quando TUDO o que é obrigatório está provado. Um número sem
+ * registro não envia: chamar isso de conectado seria mentira (e é justamente o
+ * falso positivo que este bloco corrige).
+ */
+export function onboardingSteps(business: { whatsappIntegration?: UnitIntegrationView }): OnboardingStep[] {
+  const wi = business.whatsappIntegration || {};
+  const authorized = !!wi.encryptedAccessToken;
+  const subscribed = !!wi.webhookSubscribedAt || (!!wi.wabaId && !!wi.encryptedAccessToken);
+  const phone = !!wi.phoneNumberId;
+  const registered = !!wi.registeredAt;
+  const firstEvent = !!wi.lastWebhookAt;
+  const connected = wi.status === 'connected' && authorized && subscribed && phone && registered;
+
+  const steps: OnboardingStep[] = [
+    { id: 'authorized', label: 'Conta autorizada', ok: authorized, current: false, detail: 'A unidade autorizou o Instalink no popup oficial da Meta.' },
+    { id: 'webhook_subscribed', label: 'Webhook assinado', ok: subscribed, current: false, detail: 'A Meta está autorizada a entregar os eventos desta conta.' },
+    { id: 'phone_resolved', label: 'Número encontrado', ok: phone, current: false, detail: 'O identificador do número veio da própria Meta.' },
+    {
+      id: 'registration',
+      label: 'Número registrado',
+      ok: registered,
+      current: false,
+      detail: registered
+        ? 'Registro confirmado na Cloud API.'
+        : 'Falta registrar o número com o PIN de duas etapas — sem isso ele não envia nem recebe pela API.',
+    },
+    { id: 'connected', label: 'Conectado', ok: connected, current: false, detail: connected ? 'Tudo pronto para enviar e receber.' : 'Falta concluir as etapas anteriores.' },
+    { id: 'first_event', label: 'Primeiro evento recebido', ok: firstEvent, current: false, detail: 'Prova de ponta a ponta: a Meta entregou uma mensagem desta conta.' },
+  ];
+  const pending = steps.find((s) => !s.ok && s.id !== 'first_event');
+  if (pending) pending.current = true;
+  else {
+    const first = steps.find((s) => s.id === 'first_event')!;
+    first.current = !first.ok;
+  }
+  return steps;
+}
+
 // ── Plano de onboarding (o que a tela mostra e o que ela pode fazer) ──
 export type OnboardingState =
   | 'connected'
+  | 'waiting_first_event'
+  | 'registration_pending'
+  | 'authorized_only'
   | 'platform_blocked'
   | 'ready_for_signup'
-  | 'waiting_first_event'
   | 'failed';
 
 export interface OnboardingPlan {
@@ -217,9 +296,11 @@ export interface OnboardingPlan {
   headline: string;
   detail: string;
   layers: OnboardingLayer[];
+  /** A sequência real, etapa por etapa (o painel mostra ESTA lista). */
+  steps: OnboardingStep[];
   /** Próxima ação concreta — a tela usa isto para decidir o botão. */
   nextAction: {
-    kind: 'embedded_signup' | 'master_route' | 'test_connection' | 'fix_platform' | 'none';
+    kind: 'embedded_signup' | 'register_number' | 'master_route' | 'test_connection' | 'fix_platform' | 'none';
     label: string;
     detail: string;
   };
@@ -232,12 +313,13 @@ export interface OnboardingPlan {
 
 export function onboardingPlan(args: {
   env: EnvLike;
-  business: Parameters<typeof unitLayer>[0];
+  business: { whatsappIntegration?: UnitIntegrationView };
   todayISO: string;
 }): OnboardingPlan {
   const { env, business, todayISO } = args;
   const platform = platformLayer(env);
   const unit = unitLayer(business);
+  const steps = onboardingSteps(business);
   const currentVersion = String(env.META_GRAPH_VERSION || LATEST_VERIFIED_GRAPH_VERSION).trim();
   const version = { current: currentVersion, ...graphVersionAdvice(currentVersion, todayISO) };
   const wi = business.whatsappIntegration || {};
@@ -245,35 +327,58 @@ export function onboardingPlan(args: {
     ? { appId: String(env.META_APP_ID), configId: String(env.META_CONFIG_ID), version: currentVersion }
     : null;
 
-  // Conectado de fato = token guardado + número + WABA.
-  if (unit.ready && (wi.status === 'connected' || wi.status === 'pending')) {
-    const waiting = !wi.lastWebhookAt;
+  const authorized = !!wi.encryptedAccessToken;
+  const connected = steps.find((s) => s.id === 'connected')!.ok;
+  const registered = !!wi.registeredAt;
+  const firstEvent = !!wi.lastWebhookAt;
+
+  // 1. Tudo pronto: conectado de fato (e, sem evento, ainda avisamos).
+  if (connected) {
     return {
-      state: waiting ? 'waiting_first_event' : 'connected',
-      headline: waiting ? 'Conectado — aguardando a primeira mensagem' : 'WhatsApp conectado',
-      detail: waiting
-        ? 'A conta está autorizada. Mande uma mensagem para o número oficial (ou peça a um cliente) para o primeiro evento chegar.'
-        : 'A conta oficial está recebendo e enviando por aqui.',
+      state: firstEvent ? 'connected' : 'waiting_first_event',
+      headline: firstEvent ? 'WhatsApp conectado' : 'Tudo pronto — aguardando a primeira mensagem',
+      detail: firstEvent
+        ? 'A conta oficial está recebendo e enviando por aqui.'
+        : 'A conta está autorizada, o webhook assinado e o número registrado. Mande uma mensagem para o número oficial para o primeiro evento chegar.',
       layers: [platform, unit],
-      nextAction: waiting
-        ? {
-          kind: 'test_connection',
-          label: 'Testar conexão',
-          detail: 'Confere o token direto na Meta. Não substitui a chegada de um evento real.',
-        }
-        : { kind: 'none', label: 'Tudo pronto', detail: 'Use Conversas para responder.' },
+      steps,
+      nextAction: firstEvent
+        ? { kind: 'none', label: 'Tudo pronto', detail: 'Use Conversas para responder.' }
+        : { kind: 'test_connection', label: 'Testar conexão', detail: 'Confere o token direto na Meta. Não substitui a chegada de um evento real.' },
       version,
       code: 'OK',
       clientConfig,
     };
   }
 
+  // 2. Autorizado, mas falta registrar o número — o falso positivo que virou
+  //    estado explícito: sem registro o número NÃO envia pela API.
+  if (authorized && !registered) {
+    return {
+      state: 'registration_pending',
+      headline: 'Conta autorizada — falta registrar o número',
+      detail: 'A autorização e o webhook estão prontos, mas o número ainda não foi registrado na Cloud API: sem isso ele não envia nem recebe. Informe o PIN de verificação em duas etapas para concluir.',
+      layers: [platform, unit],
+      steps,
+      nextAction: {
+        kind: 'register_number',
+        label: 'Registrar o número',
+        detail: 'Use o PIN de 6 dígitos configurado no WhatsApp Manager.',
+      },
+      version,
+      code: 'UNIT_PENDING',
+      clientConfig,
+    };
+  }
+
+  // 3. Falhou (erro registrado pela Meta).
   if (wi.status === 'error' && wi.lastError) {
     return {
       state: 'failed',
       headline: 'A conexão falhou',
       detail: wi.lastError,
       layers: [platform, unit],
+      steps,
       nextAction: platform.ready
         ? {
           kind: 'embedded_signup', label: 'Conectar de novo',
@@ -286,12 +391,14 @@ export function onboardingPlan(args: {
     };
   }
 
+  // 4. Bloqueio de PLATAFORMA: nada conecta (nem o popup nem o cadastro Master).
   if (!platform.ready) {
     return {
       state: 'platform_blocked',
       headline: 'Falta configurar a plataforma (não é problema da sua unidade)',
       detail: `Sem ${platform.missing.join(', ')} nenhuma unidade consegue conectar. O caminho assistido segue disponível: o Master desta unidade pode cadastrar as credenciais.`,
       layers: [platform, unit],
+      steps,
       nextAction: {
         kind: 'fix_platform',
         label: 'Configuração da plataforma pendente',
@@ -303,11 +410,28 @@ export function onboardingPlan(args: {
     };
   }
 
+  // 5. Autorizado mas ainda sem número/webhook (troca interrompida no meio).
+  if (authorized) {
+    return {
+      state: 'authorized_only',
+      headline: 'Conexão começou e não terminou',
+      detail: 'A conta foi autorizada, mas faltam o número e/ou a assinatura do webhook. Refaça o popup para concluir.',
+      layers: [platform, unit],
+      steps,
+      nextAction: { kind: 'embedded_signup', label: 'Conectar com a Meta', detail: 'Rode o popup de novo para terminar a configuração.' },
+      version,
+      code: 'UNIT_PENDING',
+      clientConfig,
+    };
+  }
+
+  // 6. Pronto para começar.
   return {
     state: 'ready_for_signup',
     headline: 'Conectar sua conta oficial',
     detail: 'Você entra com o Facebook da clínica, escolhe (ou cria) a conta WhatsApp Business e o número. O Instalink recebe o token pelo servidor — você não copia nada.',
     layers: [platform, unit],
+    steps,
     nextAction: {
       kind: 'embedded_signup',
       label: 'Conectar com a Meta',
@@ -330,6 +454,12 @@ export interface SignupMessage {
   phoneNumberId: string;
   businessId: string;
   version: number;
+  /**
+   * Que tipo de onboarding a META disse que é. O Instalink NÃO presume
+   * coexistence: sem essa informação explícita, o fluxo tratado é o padrão da
+   * Cloud API (que exige registro do número).
+   */
+  onboardingType: 'standard' | 'coexistence' | 'unknown';
 }
 
 /**
@@ -338,12 +468,18 @@ export interface SignupMessage {
  */
 export function parseSignupMessage(raw: unknown): SignupMessage {
   const data = (raw && typeof raw === 'object' ? (raw as any).data : null) || {};
+  const event = String(data.event || '');
+  const onboardingType: SignupMessage['onboardingType'] =
+    event === 'FINISH_WHATSAPP_BUSINESS_APP_ONBOARDING' ? 'coexistence'
+      : event.startsWith('FINISH') ? 'standard'
+        : 'unknown';
   return {
-    event: String(data.event || ''),
+    event,
     wabaId: String(data.waba_id || ''),
     phoneNumberId: String(data.phone_number_id || ''),
     businessId: String(data.business_id || ''),
     version: Number(data.version) || 0,
+    onboardingType,
   };
 }
 

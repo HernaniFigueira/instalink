@@ -884,7 +884,7 @@ Três coisas mais:
 | `GET /api/whatsapp/onboarding` | o plano das duas camadas + o estado assinado do popup. **Zero segredo**: só diz se cada variável existe. |
 | `POST /api/whatsapp/onboarding` | `action:'exchange'` — o trabalho que a unidade não pode fazer sozinha, todo no servidor: **(1)** troca o código pelo token (`/oauth/access_token`, com o app secret), **(2)** descobre o que o popup não mandou (`debug_token` → `granular_scopes`; `/{WABA}/phone_numbers`), **(3)** **assina o webhook** na WABA (`/{WABA}/subscribed_apps`), **(4)** registra o número quando o PIN de duas etapas vem junto, **(5)** criptografa o token (AES-256-GCM) e grava na unidade, **(6)** audita. O token não volta em nenhuma resposta. |
 | `WhatsappChannelPanel` | a tela de conexão foi reescrita: mostra as **duas camadas** (com quem resolve cada uma), abre o **popup oficial** (“Conectar com a Meta”), aceita o PIN de duas etapas, e põe o `wa.me` no lugar certo — **teste**, com aviso explícito de que por ali nada entra no sistema. O técnico continua num “Diagnóstico” recolhido. |
-| `lib/whatsapp-cloud-api.ts` | versão padrão da Graph API: **v21.0 → v26.0** (última conferida na doc, liberada em 21/07/2026); `META_GRAPH_VERSION` continua mandando. |
+| `lib/whatsapp-cloud-api.ts` | versão padrão da Graph API: **v21.0 → v26.0** (última conferida na doc, liberada em **29/07/2026**); `META_GRAPH_VERSION` continua mandando. |
 | `/api/master/units/[id]/whatsapp` | marca a conexão com **origem `master`** (o painel mostra por onde a conta entrou). |
 | `AuditAction` + atividade do Master | ações próprias: `whatsapp.connected`, `whatsapp.disconnected`, `whatsapp.onboarding_blocked`, `whatsapp.onboarding_failed` — com rótulos legíveis no console. |
 | `docs/WHATSAPP-FIRST-CLIENT.md` | o passo a passo agora começa pelo caminho normal (popup, uma vez configurado o app) e deixa o cadastro pelo Master como **caminho assistido**. |
@@ -919,7 +919,7 @@ Três coisas mais:
   entra nem sai pelo sistema** (sem histórico, sem automação, sem CRM).
 - **A versão da Graph API tem prazo de validade — e a tela avisa.** A tabela
   conferida na doc oficial: v20.0 até 24/09/2026, v21.0 até 21/01/2027, v22.0
-  até 20/05/2027, v25.0 liberada em 18/02/2026, v26.0 em 21/07/2026 (padrão
+  até 20/05/2027, v25.0 liberada em 18/02/2026, v26.0 em **29/07/2026** (padrão
   novo). Se `META_GRAPH_VERSION` apontar para versão vencida, o painel mostra o
   aviso em vez de deixar a integração quebrar sozinha.
 
@@ -964,3 +964,143 @@ npx vitest run  → 86 arquivos · 1462 testes ok
 npx tsc --noEmit → 0 erros
 npm run build    → ok (Compiled successfully; /api/whatsapp/onboarding criada)
 ```
+
+---
+
+## RODADA 5 — FECHAMENTO DOS BLOCOS 7 E 8 (antes do Instagram)
+
+Revisão independente apontou duas famílias de problema: a importação/exportação
+podia **mentir sobre o tamanho** do que leu/escreveu, e o onboarding do WhatsApp
+podia dizer **“conectado”** quando ainda faltava a etapa obrigatória (registrar
+o número). Nada disso veio de reclamação de usuário: veio de leitura do código.
+Os 11 itens foram tratados aqui, no **mesmo PR #30**, sem tocar em Instagram.
+
+### 7.1 — Importação: um limite só, e ele nunca trunca em silêncio
+
+| Antes | Agora |
+|---|---|
+| o arquivo era lido e as linhas excedentes **desapareciam** sem aviso | `IMPORT_MAX_ROWS = 5_000` é o **único** limite, para CSV e .xlsx, prévia e gravação |
+| mensagem genérica | **“Esta planilha tem 6.320 linhas. O limite por importação é 5.000. Divida o arquivo em partes.”** — com o número **real** do arquivo (no .xlsx, contado no XML, não no que coube na memória) |
+| — | resposta `400 { code:'row_limit_exceeded', totalRows, limit }` e **zero escrita** (nem contato, nem auditoria) |
+| a prévia não dizia quantas linhas leu | a prévia devolve `rowsRead` e `limit`, e a tela mostra **“N linhas lidas (limite N por importação)”** |
+
+O mesmo vale para a planilha: o leitor conta as linhas do `sheetData` e o teto de
+leitura do .xlsx passou a ser derivado do limite do produto (`XLSX_MAX_PARSED_ROWS
+= IMPORT_MAX_ROWS + 1`) — não existe mais um número solto no leitor.
+
+### 7.2 — Saída completa: paginada, e cada arquivo DIZ se está completo
+
+A saída JSON da base era cortada em 5.000 contatos: quem levava o arquivo não
+tinha como saber que faltava gente. Agora a rota pagina de verdade:
+
+- `partSize` (1..5.000, padrão 1.000) e `cursor` (offset explícito); `cursor`
+  inválido → `400 invalid_cursor`; `partSize` fora da faixa → `400 invalid_part_size`;
+- cada arquivo traz `complete` (booleano) + `pagination`
+  (`part`, `partSize`, `cursor`, `totalContacts`, `exportedContacts`,
+  `exportedFrom`, `exportedTo`, `hasMore`, `nextCursor`);
+- o nome do arquivo diz a parte: `base-completa-<slug>-<data>-parte-2-de-3.json`
+  (arquivo único continua sem sufixo);
+- **só o arquivo único é `complete: true`** — uma parte nunca se apresenta como
+  “a base inteira”;
+- a tela (**Clientes → Exportar tudo (JSON)**) baixa **todas** as partes,
+  seguindo `nextCursor`, e recusa-se a salvar resposta sem `complete`/`pagination`
+  (“nenhum arquivo parcial foi salvo como se fosse a base inteira”), com aviso
+  verde de conclusão (`Base completa: N contato(s) em M arquivo(s)`).
+
+### 7.3 — .xlsx contra ZIP bomb (fail-closed)
+
+O leitor próprio (`lib/xlsx-lite.ts`, sem dependência — o pacote `xlsx` do npm
+está descartado por CVE) ganhou tetos explícitos e mensagem única:
+
+| Teto | Valor | O que recusa |
+|---|---|---|
+| arquivo comprimido | 4 MB | planilha grande demais (antes de abrir) |
+| entradas no ZIP | 200 | diretório inchado / contador mentiroso |
+| descompressão por entrada | 8 MB | `maxOutputLength` do `inflate` + conferência do declarado |
+| soma do XML descomprimido | 24 MB | várias entradas “médias” somando bomba |
+| linhas lidas | `IMPORT_MAX_ROWS + 1` | teto do produto (quem recusa é a regra de negócio) |
+
+Tudo com `throw new Error('Planilha compactada excede o limite seguro.')`,
+offsets/índices conferidos contra o arquivo e **nenhuma leitura** quando o
+arquivo mente sobre o próprio tamanho. De quebra, serial de data fora do
+calendário (0, negativo, ano de 6 dígitos) deixou de virar “data” inventada.
+
+### 7.4 — “Ignorar” no mapeamento é decisão de verdade
+
+O mapeamento agora é **campo → coluna OU campo → `ignore`**, validado no
+servidor (`A coluna 9 de "Telefone" não existe no arquivo.`, campo desconhecido,
+coluna usada em dois campos). `phone:'ignore'` **vence a autodetecção**: a
+coluna “Telefone” reconhecida pelo cabeçalho não entra no plano nem no cadastro
+(`row.phone` vazio), e a tela mostra “Ignoradas por você: Telefone — nada dessas
+colunas será importado”. Cada coluna tem seu dropdown (todas elas, não só as
+reconhecidas), então a autodetecção errada é corrigível na própria tela.
+
+### 8 — WhatsApp: “conectado” só depois de registrar o número
+
+Estados que faltavam ser distinguidos (e agora são, na lib e no painel):
+
+```
+autorizado → webhook assinado → número resolvido → REGISTRADO → conectado → 1ª mensagem
+```
+
+- **Registro é etapa obrigatória.** Sem `POST /{PHONE_NUMBER_ID}/register`
+  confirmado, a unidade fica `pending` com
+  `reason:'phone_registration_required'`, `registrationRequired:true`,
+  `registeredAt` vazio, auditoria `whatsapp.registration_pending` (nunca
+  `whatsapp.connected`) — e o token é guardado para a unidade concluir depois
+  pelo painel, com o PIN de duas etapas na mão. Sem PIN, **não há tentativa**.
+- **Registro recusado pela Meta** (PIN errado) → continua `pending`, com o
+  motivo escrito em `lastError` (“Registro do número: …”).
+- **O servidor é a autoridade**, não o navegador. Depois do `code`, sempre:
+  `debug_token` (válido? **do nosso app**? tem `whatsapp_business_management` e
+  `whatsapp_business_messaging`?) → WABA **autorizada de fato** (por
+  `granular_scopes.target_ids`) → `GET /{WABA}/phone_numbers` → o número tem de
+  **pertencer àquela WABA** (se o popup não manda número, o servidor escolhe um
+  da lista) → `subscribed_apps` → registro. Qualquer inconsistência é `400` e
+  **nada é gravado**.
+- **Coexistence só quando a Meta diz.** `onboardingType` é derivado do evento do
+  popup (`FINISH_WHATSAPP_BUSINESS_APP_ONBOARDING` ⇒ `coexistence`), nunca
+  presumido.
+- **Estado do popup ligado à unidade E ao usuário**: `HMAC(businessId.userId.
+  timestamp.nonce)` — state de outra unidade, de outro usuário, expirado ou
+  adulterado é `400 signup_state_invalid` **antes de qualquer chamada à Meta**.
+- **Data da Graph API corrigida**: v26.0 foi liberada em **29/07/2026** (a doc do
+  produto dizia 21/07, que é data de SDK/beta, não do card de release). A tabela
+  segue com v20 até 24/09/2026, v21 até 21/01/2027, v22 até 20/05/2027 — e o
+  painel avisa quando `META_GRAPH_VERSION` aponta para versão vencida.
+- **Painel honesto**: seis estados visíveis (Conta autorizada · Número
+  encontrado · Webhook assinado · **Registro pendente** · Aguardando 1ª mensagem ·
+  Conectado), com a lista de etapas (✓ feita / → agora / • falta) e o campo de
+  PIN aparecendo só quando é a etapa da vez. “WhatsApp conectado” nunca aparece
+  com etapa obrigatória faltando. O `wa.me` continua com o aviso de que é
+  **teste humano** — por ali nada entra nem sai pelo sistema.
+
+### Testes desta rodada
+
+| Suíte | Casos | O que prova |
+|---|---|---|
+| `a34-client-import-limits.test.ts` | **18** | 6.320 linhas em CSV e em .xlsx ⇒ mesmo `row_limit_exceeded` com o número real e **zero escrita**; prévia obedece ao limite; 5.000 passa; `ignore` derruba a autodetecção (inclusive no commit); mapeamento inválido recusado no servidor; 2.500 contatos em 3 partes numeradas sem repetir nem pular ninguém; `cursor`/`partSize` inválidos; a tela seguindo `nextCursor` e recusando arquivo sem `complete` |
+| `a34-xlsx-lite.test.ts` | **22** | ZIP bomb (9 MB compactado a poucos KB) barrado por entrada e por soma; declaração absurda, contador mentiroso, offset inválido, método desconhecido, entradas demais, arquivo > 4 MB; **planilha grande porém legítima continua abrindo**; datas absurdas não viram data |
+| `a34-whatsapp-onboarding.test.ts` | **32** (+12) | state ligado a unidade/usuário (troca cruzada ⇒ 400 sem tocar na rede); token inválido, de outro app, sem permissão; WABA não autorizada; número fora da WABA (nem assina o webhook); sem PIN ⇒ `pending` + auditoria de pendência; `register` com token guardado ⇒ `connected`; registro recusado ⇒ `pending` com motivo; webhook recusado ⇒ sem registro |
+| `a34-client-import-integrity.test.ts` | **25** | (ajustado) a tela de mapeamento agora é provada pelos elementos reais — todas as colunas, “Ignorar”, `ignoredColumns` e “linhas lidas (limite …)” |
+
+```
+npx vitest run   → 88 arquivos · 1.514 testes ok
+npx tsc --noEmit → 0 erros
+npm run build    → ok
+```
+
+### O que continua dependendo da Meta (`BLOCKED_EXTERNAL`)
+
+Sem app da Meta (App ID, App Secret, Config ID, domínio liberado) e sem um
+número real de teste, **não foi possível** — e nada aqui finge o contrário:
+
+- abrir o popup real e trocar um `code` de verdade (`/oauth/access_token`);
+- assinar o webhook numa WABA real e ver a primeira mensagem chegar;
+- registrar de verdade um número com PIN de duas etapas.
+
+O que está provado é o desenho inteiro contra a Graph API **simulada** (com o
+formato real das respostas), incluindo criptografia AES-256-GCM de verdade,
+gravação de verdade e as recusas honestas. Falta só credencial — e o painel diz
+exatamente isso (camada “Plataforma (equipe do Instalink)” com a lista do que
+falta, sem nunca mostrar valor de segredo).

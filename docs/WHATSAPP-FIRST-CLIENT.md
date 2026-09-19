@@ -66,7 +66,7 @@ No painel da Vercel (ou servidor de produção), configure as seguintes variáve
 | `WHATSAPP_VERIFY_TOKEN` | Token secreto definido por você para validação do webhook pela Meta | `ilk_webhook_sec_99347812` |
 | `WHATSAPP_APP_SECRET` | Chave secreta do aplicativo Meta (App Secret) para conferência de assinatura `x-hub-signature-256` | `8fbc923a10...` |
 | `WHATSAPP_CREDENTIALS_KEY` | Chave de 32 bytes para criptografia AES-256-GCM de tokens individuais de clientes no DB | `55f8c32...` |
-| `META_GRAPH_VERSION` | Versão oficial da Graph API da Meta (opcional, padrão `v21.0`) | `v21.0` |
+| `META_GRAPH_VERSION` | Versão oficial da Graph API da Meta (opcional — o padrão do produto é a última versão conferida na doc, hoje `v26.0`) | `v26.0` |
 
 ---
 

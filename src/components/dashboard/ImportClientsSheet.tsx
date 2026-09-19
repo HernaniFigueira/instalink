@@ -45,6 +45,9 @@ export function ImportClientsSheet({ businessId, onClose, onImported }: {
   const [file, setFile] = useState<{ name: string; base64: string } | null>(null);
   const [plan, setPlan] = useState<ImportPlan | null>(null);
   const [columns, setColumns] = useState<ImportColumn[]>([]);
+  // Mapeamento por CAMPO: cada campo do Instalink aponta para uma coluna ou
+  // para 'ignore'. É o contrato do servidor — "ignorar" é uma decisão explícita
+  // e vale também para coluna que o cabeçalho reconheceu sozinho.
   const [mapping, setMapping] = useState<Record<string, string>>({});
   const [existingMode, setExistingMode] = useState<ExistingMode>('skip');
   const [summary, setSummary] = useState('');
@@ -67,14 +70,48 @@ export function ImportClientsSheet({ businessId, onClose, onImported }: {
   );
   const needsMapping = unmappedColumns.length > 0;
 
-  /** Monta o mapeamento do formulário para o formato do servidor. */
-  function mappingPayload() {
-    const out: Record<string, number> = {};
+  /** Campo → coluna, invertido (para o dropdown de cada coluna). */
+  const columnOwner = useMemo(() => {
+    const owner = new Map<number, string>();
     for (const [field, value] of Object.entries(mapping)) {
-      if (!value || value === 'ignore') continue;
-      out[field] = Number(value);
+      if (value && value !== 'ignore') owner.set(Number(value), field);
     }
-    return Object.keys(out).length > 0 ? out : undefined;
+    return owner;
+  }, [mapping]);
+
+  /** Semeia o mapeamento com o que o SERVIDOR leu (autodetecção ou explícito). */
+  function seedMapping(mapped: Record<string, number>) {
+    const next: Record<string, string> = {};
+    for (const field of Object.keys(IMPORT_FIELD_LABELS)) {
+      next[field] = mapped[field] === undefined ? 'ignore' : String(mapped[field]);
+    }
+    return next;
+  }
+
+  /** Uma coluna só pode pertencer a um campo: o anterior volta para "Ignorar". */
+  function assignColumn(columnIndex: number, field: string) {
+    const next = { ...mapping };
+    const previousOwner = columnOwner.get(columnIndex);
+    if (previousOwner) next[previousOwner] = 'ignore';
+    if (field !== 'ignore') {
+      // O campo escolhido larga a coluna anterior dele.
+      next[field] = String(columnIndex);
+    }
+    setMapping(next);
+    void preview({ mapping: next });
+  }
+
+  /**
+   * Mapeamento para o servidor: todos os campos vão, com 'ignore' onde a pessoa
+   * decidiu não ler — assim uma autodetecção errada pode ser corrigida.
+   */
+  function mappingPayload() {
+    const out: Record<string, number | 'ignore'> = {};
+    for (const field of Object.keys(IMPORT_FIELD_LABELS)) {
+      const value = mapping[field];
+      out[field] = !value || value === 'ignore' ? 'ignore' : Number(value);
+    }
+    return out;
   }
 
   function download(text: string, name: string) {
@@ -88,16 +125,15 @@ export function ImportClientsSheet({ businessId, onClose, onImported }: {
 
   async function preview(overrides: { mapping?: Record<string, string> } = {}) {
     const localMapping = overrides.mapping ?? mapping;
-    const payload = Object.fromEntries(
-      Object.entries(localMapping).filter(([, v]) => v && v !== 'ignore').map(([k, v]) => [k, Number(v)]),
-    );
+    const payload: Record<string, number | 'ignore'> = {};
+    for (const field of Object.keys(IMPORT_FIELD_LABELS)) {
+      const value = localMapping[field];
+      payload[field] = !value || value === 'ignore' ? 'ignore' : Number(value);
+    }
     setBusy('preview'); setError(''); setResult(null);
     const res = await apiSend<{ plan: ImportPlan; summary: string }>(
       '/api/contacts/import', 'POST',
-      {
-        businessId, ...source, mode: 'preview', existingMode,
-        mapping: Object.keys(payload).length > 0 ? payload : undefined,
-      },
+      { businessId, ...source, mode: 'preview', existingMode, mapping: payload },
       { scope: 'action', area: 'Clientes' },
     );
     setBusy('');
@@ -115,13 +151,9 @@ export function ImportClientsSheet({ businessId, onClose, onImported }: {
     setPlan(res.data!.plan);
     setColumns(res.data!.plan.columns);
     setSummary(res.data!.summary);
-    if (Object.keys(localMapping).length === 0) {
-      // Semeia o mapeamento com o que foi detectado, para os dropdowns abrirem
-      // já mostrando a leitura atual do arquivo.
-      const seeded: Record<string, string> = {};
-      for (const [field, idx] of Object.entries(res.data!.plan.mapped)) seeded[field] = String(idx);
-      setMapping(seeded);
-    }
+    // Os dropdowns abrem mostrando a leitura ATUAL do arquivo (autodetecção ou
+    // o mapeamento que a pessoa acabou de escolher — o servidor é a autoridade).
+    setMapping(seedMapping(res.data!.plan.mapped));
     return true;
   }
 
@@ -164,9 +196,7 @@ export function ImportClientsSheet({ businessId, onClose, onImported }: {
     setPlan(res.data!.plan);
     setColumns(res.data!.plan.columns);
     setSummary(res.data!.summary);
-    const seeded: Record<string, string> = {};
-    for (const [field, idx] of Object.entries(res.data!.plan.mapped)) seeded[field] = String(idx);
-    setMapping(seeded);
+    setMapping(seedMapping(res.data!.plan.mapped));
   }
 
   async function commit() {
@@ -262,37 +292,37 @@ export function ImportClientsSheet({ businessId, onClose, onImported }: {
           />
         </div>
 
-        {/* ── 3. Mapeamento (aparece quando há coluna não reconhecida) ── */}
-        {columns.length > 0 && needsMapping && (
-          <div className="space-y-2 border border-[var(--border)] rounded-md p-3 bg-[var(--surface-2)]">
-            <p className="text-sm font-semibold text-[var(--text)]">Mapeamento das colunas</p>
-            <p className="text-xs text-[var(--text-muted)]">
-              Não reconheci {unmappedColumns.length} coluna(s). Diga o que é cada uma
-              (ou deixe em “Ignorar”) e a prévia é recalculada.
+        {/* ── 3. Mapeamento (TODAS as colunas: a autodetecção pode errar) ── */}
+        {columns.length > 0 && (
+          <details open={needsMapping} className="border border-[var(--border)] rounded-md p-3 bg-[var(--surface-2)]">
+            <summary className="cursor-pointer text-sm font-semibold text-[var(--text)]">
+              Mapeamento das colunas
+              {needsMapping
+                ? ` — ${unmappedColumns.length} sem reconhecer`
+                : ' — tudo reconhecido'}
+            </summary>
+            <p className="text-xs text-[var(--text-muted)] mt-2">
+              A leitura inicial é automática, coluna por coluna. Se alguma ficou errada, escolha outra
+              opção aqui — inclusive “Ignorar” para uma coluna que o sistema reconheceu e você NÃO quer
+              importar. A prévia é recalculada a cada mudança.
             </p>
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2">
-              {unmappedColumns.map((c) => (
-                <Field key={`col-${c.index}`} label={c.label} hint={c.sample.length > 0 ? `ex: ${c.sample.join(' · ').slice(0, 40)}` : undefined}>
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2 mt-2">
+              {columns.map((c) => (
+                <Field key={`col-${c.index}`} label={`${c.index + 1}. ${c.label}`}
+                  hint={c.sample.length > 0 ? `ex: ${c.sample.join(' · ').slice(0, 40)}` : undefined}>
                   <Select
-                    value={Object.entries(mapping).find(([, v]) => v === String(c.index))?.[0] || ignore}
-                    onChange={(e) => {
-                      const next = { ...mapping };
-                      for (const [f, v] of Object.entries(next)) if (v === String(c.index)) delete next[f];
-                      if (e.target.value !== ignore) next[e.target.value] = String(c.index);
-                      setMapping(next);
-                      void preview({ mapping: next });
-                    }}>
+                    value={columnOwner.get(c.index) || ignore}
+                    onChange={(e) => assignColumn(c.index, e.target.value)}>
                     <option value={ignore}>Ignorar</option>
                     {fields.map((f) => (
-                      <option key={f} value={f} disabled={mapping[f] !== undefined && mapping[f] !== String(c.index)}>
-                        {IMPORT_FIELD_LABELS[f]}
-                      </option>
+                      <option key={f} value={f}>{IMPORT_FIELD_LABELS[f]}</option>
                     ))}
                   </Select>
+                  {c.exportOnly && <span className="block text-[11px] text-[var(--text-faint)] mt-0.5">histórico — não volta na importação</span>}
                 </Field>
               ))}
             </div>
-          </div>
+          </details>
         )}
 
         {/* ── 4. O que fazer com quem já existe ── */}
@@ -330,7 +360,9 @@ export function ImportClientsSheet({ businessId, onClose, onImported }: {
           <div className="space-y-3">
             <div className="flex flex-wrap items-center gap-2">
               <span className="text-sm font-semibold text-[var(--text)]">Prévia</span>
-              <span className="text-xs text-[var(--text-muted)]">{summary}</span>
+              <span className="text-xs text-[var(--text-muted)]">
+                {plan.rowLimit.total.toLocaleString('pt-BR')} linhas lidas (limite {plan.rowLimit.limit.toLocaleString('pt-BR')} por importação) · {summary}
+              </span>
               {plan.create > 0 && <Badge tone="green">{plan.create} novos</Badge>}
               {plan.fill > 0 && <Badge tone="blue">{plan.fill} complementam</Badge>}
               {plan.skip > 0 && <Badge tone="zinc">{plan.skip} mantidos</Badge>}
@@ -341,6 +373,11 @@ export function ImportClientsSheet({ businessId, onClose, onImported }: {
               <p className="text-xs text-[var(--text-muted)] bg-[var(--surface-3)] border border-[var(--border)] rounded-md px-3 py-2">
                 Colunas que ficaram de fora: {plan.unknownColumns.join(', ')}.
                 Use o mapeamento acima para aproveitá-las.
+              </p>
+            )}
+            {plan.ignoredColumns.length > 0 && (
+              <p className="text-xs text-[var(--text-muted)] bg-[var(--surface-3)] border border-[var(--border)] rounded-md px-3 py-2">
+                Ignoradas por você: {plan.ignoredColumns.join(', ')} — nada dessas colunas será importado.
               </p>
             )}
             {plan.exportOnlyColumns.length > 0 && (

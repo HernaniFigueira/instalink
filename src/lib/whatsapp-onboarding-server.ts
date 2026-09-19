@@ -12,27 +12,61 @@ import { createHmac, randomBytes, timingSafeEqual } from 'node:crypto';
 // ser trocado no lugar do nosso. O estado é assinado com segredo do servidor.
 export const SIGNUP_STATE_TTL_MS = 30 * 60 * 1000; // 30 minutos
 
-export function issueSignupState(secret: string, now: number = Date.now()): string {
+/**
+ * Quem pediu o popup: o estado é LIGADO à unidade e ao usuário autenticados —
+ * não é um passe livre válido para qualquer unidade da instalação durante o TTL.
+ */
+export interface SignupStateContext {
+  businessId: string;
+  userId: string;
+}
+
+const statePart = (value: string) => encodeURIComponent(String(value || ''));
+
+export function issueSignupState(
+  secret: string,
+  ctx: SignupStateContext,
+  now: number = Date.now(),
+): string {
   const nonce = randomBytes(12).toString('hex');
-  const payload = `${now}.${nonce}`;
-  const sig = createHmac('sha256', secret).update(payload).digest('hex').slice(0, 32);
-  return `${payload}.${sig}`;
+  const bound = `${statePart(ctx.businessId)}.${statePart(ctx.userId)}.${now}.${nonce}`;
+  const sig = createHmac('sha256', secret).update(bound).digest('hex').slice(0, 32);
+  return `${bound}.${sig}`;
 }
 
 export function verifySignupState(
   state: string,
   secret: string,
+  ctx: SignupStateContext,
   now: number = Date.now(),
   ttlMs: number = SIGNUP_STATE_TTL_MS,
 ): { ok: boolean; reason: string } {
   const parts = String(state || '').split('.');
-  if (parts.length !== 3) return { ok: false, reason: 'Estado do popup ausente ou malformado.' };
-  const [ts, nonce, sig] = parts;
-  const expected = createHmac('sha256', secret).update(`${ts}.${nonce}`).digest('hex').slice(0, 32);
+  if (parts.length !== 5) return { ok: false, reason: 'Estado do popup ausente ou malformado.' };
+  const [bizPart, userPart, ts, nonce, sig] = parts;
+  let businessId = '';
+  let userId = '';
+  try {
+    businessId = decodeURIComponent(bizPart);
+    userId = decodeURIComponent(userPart);
+  } catch {
+    return { ok: false, reason: 'Estado do popup malformado — recomece a conexão.' };
+  }
+  const expected = createHmac('sha256', secret)
+    .update(`${bizPart}.${userPart}.${ts}.${nonce}`)
+    .digest('hex')
+    .slice(0, 32);
   const a = Buffer.from(sig, 'utf8');
   const b = Buffer.from(expected, 'utf8');
   if (a.length !== b.length || !timingSafeEqual(a, b)) {
     return { ok: false, reason: 'Estado do popup não confere — recomece a conexão.' };
+  }
+  // O estado só vale para a MESMA unidade e o MESMO usuário que o pediram.
+  if (businessId !== String(ctx.businessId || '')) {
+    return { ok: false, reason: 'Este estado de conexão foi emitido para outra unidade — recomece a conexão nesta unidade.' };
+  }
+  if (userId !== String(ctx.userId || '')) {
+    return { ok: false, reason: 'Este estado de conexão foi emitido para outro usuário — recomece a conexão com o seu login.' };
   }
   const issued = Number(ts);
   if (!Number.isFinite(issued) || now - issued > ttlMs || issued - now > 60_000) {

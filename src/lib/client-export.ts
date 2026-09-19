@@ -10,6 +10,20 @@ import type { BusinessCustomer } from './types';
 
 /** Teto de linhas por exportação (evita despejo acidental de base gigante). */
 export const EXPORT_LIMIT = 5000;
+/** Tamanho da PARTE na saída completa em JSON (a base sai completa, em partes). */
+export const EXPORT_PART_SIZE = 1000;
+
+/**
+ * Ordem estável do arquivo (nome, depois id). Duas exportações — e as partes de
+ * uma exportação paginada — precisam ser comparáveis e não podem repetir nem
+ * pular ninguém.
+ */
+export function compareContactsForExport(a: BusinessCustomer, b: BusinessCustomer): number {
+  const an = (a.name || '').toLowerCase();
+  const bn = (b.name || '').toLowerCase();
+  if (an !== bn) return an < bn ? -1 : 1;
+  return a.id < b.id ? -1 : 1;
+}
 
 export function filterContactsForExport(
   contacts: BusinessCustomer[],
@@ -35,13 +49,5 @@ export function filterContactsForExport(
 
   // Ordem estável (nome, depois id) para o arquivo não sair diferente a cada
   // download — quem confere duas exportações precisa poder comparar.
-  return filtered
-    .slice()
-    .sort((a, b) => {
-      const an = (a.name || '').toLowerCase();
-      const bn = (b.name || '').toLowerCase();
-      if (an !== bn) return an < bn ? -1 : 1;
-      return a.id < b.id ? -1 : 1;
-    })
-    .slice(0, max);
+  return filtered.slice().sort(compareContactsForExport).slice(0, max);
 }

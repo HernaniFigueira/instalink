@@ -114,8 +114,15 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
           connectedAt: now,
           lastError: undefined,
           // Origem da conexão: cadastro assistido pelo suporte, não o popup.
+          // Aqui o suporte valida o token E o número contra a Meta antes de
+          // gravar, então o número já é considerado registrado (o painel do
+          // WhatsApp Manager é quem registra nesse caminho).
           source: 'master',
           tokenIssuedAt: now,
+          webhookSubscribedAt: now,
+          registeredAt: now,
+          registrationRequired: false,
+          onboardingType: 'unknown',
         };
       }
       pushAudit(d, {

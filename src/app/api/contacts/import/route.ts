@@ -27,10 +27,11 @@ import { pushAudit } from '@/lib/audit';
 import { addContactNote, upsertContact } from '@/lib/contacts';
 import { normalizeContactProfile, profileOf } from '@/lib/contact-profile';
 import {
-  IMPORT_MAX_CHARS, buildImportPlan, fillEmptyUpdates, importSummary, parseImportFile, parseMatrix,
+  IMPORT_MAX_CHARS, IMPORT_MAX_ROWS, buildImportPlan, fillEmptyUpdates, importSummary, parseImportFile,
+  parseMatrix, rowLimitMessage,
   type ExistingMode, type ImportMappingInput, type ParsedFile,
 } from '@/lib/client-import';
-import { xlsxBase64ToMatrix } from '@/lib/xlsx-lite';
+import { xlsxBase64ToMatrixInfo } from '@/lib/xlsx-lite';
 import type { DB } from '@/lib/types';
 
 function existingModeOf(body: Record<string, any>): ExistingMode {
@@ -59,18 +60,33 @@ export async function POST(req: NextRequest) {
         return NextResponse.json({ error: 'Arquivo grande demais. Divida a planilha em partes.' }, { status: 400 });
       }
       let matrix: string[][];
+      let totalRows: number | undefined;
       try {
-        matrix = xlsxBase64ToMatrix(base64);
+        const read = xlsxBase64ToMatrixInfo(base64);
+        matrix = read.table;
+        totalRows = read.totalRows;
       } catch (e: any) {
         return NextResponse.json({ error: e?.message || 'Não consegui ler esta planilha.' }, { status: 400 });
       }
-      parsed = parseMatrix(matrix, { mapping, delimiter: 'xlsx' });
+      parsed = parseMatrix(matrix, { mapping, delimiter: 'xlsx', totalRows });
     } else {
       if (!csv.trim()) return NextResponse.json({ error: 'Cole ou escolha um arquivo com a base (CSV ou .xlsx).' }, { status: 400 });
       if (csv.length > IMPORT_MAX_CHARS) {
         return NextResponse.json({ error: 'Arquivo grande demais (máximo ~2 MB). Divida em partes.' }, { status: 400 });
       }
       parsed = parseImportFile(csv, mapping);
+    }
+    // ── Limite de linhas (o MESMO para CSV e XLSX, prévia e gravação) ──
+    // Acima do limite NADA é lido nem gravado: cortar em silêncio faria o
+    // usuário achar que importou tudo.
+    if (parsed.rowLimit.exceeded) {
+      return NextResponse.json({
+        error: rowLimitMessage(parsed.rowLimit.total, parsed.rowLimit.limit),
+        code: 'row_limit_exceeded',
+        totalRows: parsed.rowLimit.total,
+        limit: parsed.rowLimit.limit,
+        columns: parsed.columns,
+      }, { status: 400 });
     }
     if (parsed.headerError) {
       // Mesmo sem coluna de nome/telefone, devolvemos as colunas lidas para a
@@ -94,6 +110,8 @@ export async function POST(req: NextRequest) {
         mode,
         summary: importSummary(plan),
         plan,
+        rowsRead: plan.rowLimit.total,
+        limit: IMPORT_MAX_ROWS,
         source: { fileName, kind: base64 ? 'xlsx' : 'csv' },
       });
     }

@@ -17,12 +17,19 @@
 //
 // Atendimento (`encounters`) é dado clínico: só vai para quem tem a permissão
 // própria `atendimento`. Sem ela, o arquivo sai sem essa seção (e diz isso).
+//
+// BASE GRANDE SAI EM PARTES. "Base completa" que corta em 5.000 contatos é
+// mentira: a saída é PAGINADA (`cursor`/`nextCursor`, `part`, `hasMore`) e cada
+// arquivo DIZ se está completo (`complete: true/false`). A tela baixa todas as
+// partes; quem pegar só a primeira sabe, pelo próprio arquivo, que faltam
+// contatos.
 import { NextRequest, NextResponse } from 'next/server';
 import { updateDB } from '@/lib/db';
 import { requireBusiness } from '@/lib/access';
 import { pushAudit } from '@/lib/audit';
 import { effectiveTimezone, todayISO } from '@/lib/tz';
 import { encounterInScope, encountersForCustomer } from '@/lib/encounters';
+import { EXPORT_PART_SIZE, compareContactsForExport } from '@/lib/client-export';
 
 
 /**
@@ -33,8 +40,8 @@ const FULL_EXPORT_ROLES = ['OWNER', 'ADMIN', 'MASTER'];
 
 /** Teto de mensagens por conversa (o arquivo é de migração, não de auditoria). */
 const MESSAGES_PER_CONVERSATION = 200;
-/** Teto de contatos por exportação. */
-const MAX_CONTACTS = 5000;
+/** Teto de contatos por PARTE (a página pode ser menor, nunca maior). */
+const MAX_PART_SIZE = 5000;
 
 export async function GET(req: NextRequest) {
   const businessId = String(req.nextUrl.searchParams.get('businessId') || '');
@@ -58,7 +65,35 @@ export async function GET(req: NextRequest) {
   // dado clínico: sai só para quem já pode abri-lo no produto.
   const canSeeEncounters = guard.ctx.permissions?.atendimento === true;
 
-  const contacts = db.contacts.filter((c) => c.businessId === businessId).slice(0, MAX_CONTACTS);
+  // Ordem estável: as partes não podem repetir nem pular ninguém.
+  const allContacts = db.contacts
+    .filter((c) => c.businessId === businessId)
+    .slice()
+    .sort(compareContactsForExport);
+  const totalContacts = allContacts.length;
+
+  // Paginação explícita (offset + tamanho), com teto por parte.
+  const rawCursor = String(req.nextUrl.searchParams.get('cursor') || '0').trim();
+  const cursor = Number(rawCursor);
+  if (!Number.isInteger(cursor) || cursor < 0) {
+    return NextResponse.json({
+      error: 'Posição da parte inválida (cursor). Recomece o download do começo.',
+      code: 'invalid_cursor',
+    }, { status: 400 });
+  }
+  const rawPartSize = Number(req.nextUrl.searchParams.get('partSize') || EXPORT_PART_SIZE);
+  if (!Number.isInteger(rawPartSize) || rawPartSize < 1 || rawPartSize > MAX_PART_SIZE) {
+    return NextResponse.json({
+      error: `O tamanho da parte precisa estar entre 1 e ${MAX_PART_SIZE} contatos.`,
+      code: 'invalid_part_size',
+    }, { status: 400 });
+  }
+  const partSize = rawPartSize;
+  const part = Math.floor(cursor / partSize) + 1;
+  const contacts = allContacts.slice(cursor, cursor + partSize);
+  const hasMore = cursor + partSize < totalContacts;
+  const nextCursor = hasMore ? String(cursor + partSize) : '';
+  const complete = !hasMore && cursor === 0;
   const byCustomer = new Map<string, typeof contacts[number]>();
   for (const c of contacts) {
     if (c.customerId) byCustomer.set(c.customerId, c);
@@ -128,6 +163,19 @@ export async function GET(req: NextRequest) {
       id: business.id, name: business.name, slug: business.slug,
       timezone: tz, today,
     },
+    // O arquivo DIZ se está completo — nunca corta em silêncio.
+    complete,
+    pagination: {
+      part,
+      partSize,
+      cursor,
+      totalContacts,
+      exportedContacts: entries.length,
+      exportedFrom: entries.length > 0 ? cursor + 1 : cursor,
+      exportedTo: cursor + entries.length,
+      hasMore,
+      nextCursor,
+    },
     totals: {
       contacts: entries.length,
       bookings: entries.reduce((n, e) => n + e.bookings.length, 0),
@@ -154,18 +202,22 @@ export async function GET(req: NextRequest) {
       actor: guard.ctx.user,
       businessId,
       meta: {
-        format: 'json', scope: 'full', rows: entries.length,
-        includeEncounters: canSeeEncounters, totals: payload.totals, date: new Date().toISOString(),
+        format: 'json', scope: 'full', rows: entries.length, part, partSize, cursor,
+        totalContacts, complete, includeEncounters: canSeeEncounters,
+        totals: payload.totals, date: new Date().toISOString(),
       },
     });
   });
 
   const stamp = new Date().toISOString().slice(0, 10);
+  const baseName = `base-completa-${business.slug || businessId}-${stamp}`;
+  const totalParts = Math.max(1, Math.ceil(totalContacts / partSize));
+  const fileName = totalParts > 1 ? `${baseName}-parte-${part}-de-${totalParts}.json` : `${baseName}.json`;
   return new NextResponse(JSON.stringify(payload, null, 2), {
     status: 200,
     headers: {
       'content-type': 'application/json; charset=utf-8',
-      'content-disposition': `attachment; filename="base-completa-${business.slug || businessId}-${stamp}.json"`,
+      'content-disposition': `attachment; filename="${fileName}"`,
       'cache-control': 'no-store',
     },
   });

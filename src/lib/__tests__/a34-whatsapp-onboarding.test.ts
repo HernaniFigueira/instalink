@@ -26,8 +26,8 @@ import { createSession } from '../auth';
 import { GET as onboardingGET, POST as onboardingPOST } from '@/app/api/whatsapp/onboarding/route';
 import { DEFAULT_META_GRAPH_VERSION } from '../whatsapp-cloud-api';
 import {
-  GRAPH_RELEASES, LATEST_VERIFIED_GRAPH_VERSION, graphVersionAdvice, onboardingPlan, parseSignupMessage,
-  platformLayer, unitLayer, waMeTestLink, WA_ME_TEST_DISCLAIMER,
+  GRAPH_RELEASES, LATEST_VERIFIED_GRAPH_VERSION, graphVersionAdvice, onboardingPlan, onboardingSteps,
+  parseSignupMessage, platformLayer, unitLayer, waMeTestLink, WA_ME_TEST_DISCLAIMER,
 } from '../whatsapp-onboarding';
 import { appsecretProof, issueSignupState, verifySignupState } from '../whatsapp-onboarding-server';
 import type { Business, DB } from '../types';
@@ -148,25 +148,38 @@ describe('A3.4 · B8 — diagnóstico em duas camadas', () => {
     expect(JSON.stringify(plan.clientConfig)).not.toContain(PLATFORM_ENV.META_APP_SECRET);
   });
 
-  it('unidade conectada mas sem evento é "aguardando a primeira mensagem" (não é sucesso silencioso)', () => {
+  it('sem REGISTRO do número a unidade fica pendente — nunca "conectado" nem "aguardando evento"', () => {
     const b = business(BIZ);
     b.whatsappIntegration = {
-      status: 'connected', displayPhone: '+55 11 99999-9999', phoneNumberId: '111', wabaId: '222',
-      connectedAt: NOW, lastWebhookAt: '', requestedAt: NOW, encryptedAccessToken: 'x:y:z',
+      status: 'pending', displayPhone: '+55 11 99999-9999', phoneNumberId: '111', wabaId: '222',
+      connectedAt: '', lastWebhookAt: '', requestedAt: NOW, encryptedAccessToken: 'x:y:z',
+      webhookSubscribedAt: NOW, registrationRequired: true,
     } as any;
     const plan = onboardingPlan({ env: PLATFORM_ENV, business: b, todayISO: '2026-09-19' });
-    expect(plan.state).toBe('waiting_first_event');
-    expect(plan.code).toBe('OK');
-    expect(plan.nextAction.kind).toBe('test_connection');
-    // Com evento recebido, vira conectado de fato.
+    expect(plan.state).toBe('registration_pending');
+    expect(plan.code).toBe('UNIT_PENDING');
+    expect(plan.nextAction.kind).toBe('register_number');
+    expect(plan.headline).toMatch(/falta registrar/i);
+
+    // Com o registro comprovado: aí sim (e ainda avisando do primeiro evento).
+    b.whatsappIntegration!.registeredAt = NOW;
+    b.whatsappIntegration!.status = 'connected';
+    b.whatsappIntegration!.registrationRequired = false;
+    const pronto = onboardingPlan({ env: PLATFORM_ENV, business: b, todayISO: '2026-09-19' });
+    expect(pronto.state).toBe('waiting_first_event');
+    expect(pronto.code).toBe('OK');
+    expect(pronto.nextAction.kind).toBe('test_connection');
+
     b.whatsappIntegration!.lastWebhookAt = NOW;
     expect(onboardingPlan({ env: PLATFORM_ENV, business: b, todayISO: '2026-09-19' }).state).toBe('connected');
   });
 
-  it('a camada da unidade cobra número, WABA e token guardado', () => {
+  it('a camada da unidade cobra número, WABA, token e REGISTRO do número', () => {
     const b = business(BIZ);
-    expect(unitLayer(b).missing).toEqual(['phoneNumberId', 'wabaId', 'accessToken']);
-    b.whatsappIntegration = { status: 'connected', phoneNumberId: '1', wabaId: '2', encryptedAccessToken: 'a:b:c' } as any;
+    expect(unitLayer(b).missing).toEqual(['phoneNumberId', 'wabaId', 'accessToken', 'registration']);
+    b.whatsappIntegration = {
+      status: 'connected', phoneNumberId: '1', wabaId: '2', encryptedAccessToken: 'a:b:c', registeredAt: NOW,
+    } as any;
     const layer = unitLayer(b);
     expect(layer.ready).toBe(true);
     expect(layer.items.find((i) => i.key === 'webhook')!.ok).toBe(false);   // prova real ainda não chegou
@@ -177,6 +190,9 @@ describe('A3.4 · B8 — diagnóstico em duas camadas', () => {
     expect(graphVersionAdvice('v20.0', '2026-09-19').level).toBe('update');
     expect(graphVersionAdvice('v20.0', '2026-09-25').level).toBe('expired');
     expect(graphVersionAdvice('v26.0', '2026-09-19').level).toBe('ok');
+    // Data conferida na doc: v26.0 é de 29/07/2026 (não 21/07).
+    expect(GRAPH_RELEASES.find((r) => r.version === 'v26.0')!.released).toBe('2026-07-29');
+    expect(GRAPH_RELEASES.find((r) => r.version === 'v25.0')!.released).toBe('2026-02-18');
     expect(graphVersionAdvice('v30.0', '2026-09-19').level).toBe('unknown');
     expect(graphVersionAdvice('', '2026-09-19').level).toBe('unknown');
     // A versão padrão do cliente da Meta é a última conferida aqui — sem divergir.
@@ -184,14 +200,54 @@ describe('A3.4 · B8 — diagnóstico em duas camadas', () => {
     expect(GRAPH_RELEASES.some((r) => r.version === DEFAULT_META_GRAPH_VERSION)).toBe(true);
   });
 
-  it('o estado do popup é assinado, expira e recusa valor de outra sessão', () => {
+  it('o estado do popup é assinado E ligado à unidade + usuário que o pediram', () => {
     const now = Date.parse('2026-09-19T12:00:00.000Z');
-    const state = issueSignupState(KEY, now);
-    expect(verifySignupState(state, KEY, now + 1000).ok).toBe(true);
-    expect(verifySignupState(state, KEY, now + 60 * 60 * 1000).ok).toBe(false);       // passou de 30 min
-    expect(verifySignupState(state, 'outra-chave', now + 1000).ok).toBe(false);      // assinatura de outro segredo
-    expect(verifySignupState(state.replace(/\.\w+$/, '.0000'), KEY, now + 1000).ok).toBe(false);
-    expect(verifySignupState('', KEY, now).ok).toBe(false);
+    const ctx = { businessId: BIZ, userId: OWNER };
+    const state = issueSignupState(KEY, ctx, now);
+    expect(verifySignupState(state, KEY, ctx, now + 1000).ok).toBe(true);
+    // Passou de 30 min, assinatura de outro segredo, valor adulterado.
+    expect(verifySignupState(state, KEY, ctx, now + 60 * 60 * 1000).ok).toBe(false);
+    expect(verifySignupState(state, 'outra-chave', ctx, now + 1000).ok).toBe(false);
+    expect(verifySignupState(state.replace(/\.\w+$/, '.0000'), KEY, ctx, now + 1000).ok).toBe(false);
+    expect(verifySignupState('', KEY, ctx, now).ok).toBe(false);
+    // ESTA é a correção: o mesmo estado não vale em outra unidade nem para outro usuário.
+    expect(verifySignupState(state, KEY, { businessId: OTHER, userId: OWNER }, now + 1000).ok).toBe(false);
+    expect(verifySignupState(state, KEY, { businessId: BIZ, userId: 'outro-usuario' }, now + 1000).ok).toBe(false);
+    // Estado emitido para outra unidade não é aceito, nem com assinatura válida.
+    const outro = issueSignupState(KEY, { businessId: OTHER, userId: OWNER }, now);
+    expect(verifySignupState(outro, KEY, { businessId: BIZ, userId: OWNER }, now + 1000).ok).toBe(false);
+  });
+
+  it('a Meta diz o tipo de onboarding — e nós NÃO presumimos coexistence', () => {
+    expect(parseSignupMessage({ data: { event: 'FINISH' } }).onboardingType).toBe('standard');
+    expect(parseSignupMessage({ data: { event: 'FINISH_WHATSAPP_BUSINESS_APP_ONBOARDING' } }).onboardingType).toBe('coexistence');
+    expect(parseSignupMessage({ data: {} }).onboardingType).toBe('unknown');
+  });
+
+  it('as etapas seguem a ordem real: autorizado → webhook → número → registro → conectado', () => {
+    const b = business(BIZ);
+    const vazio = onboardingSteps(b);
+    expect(vazio.map((s) => s.id)).toEqual(['authorized', 'webhook_subscribed', 'phone_resolved', 'registration', 'connected', 'first_event']);
+    expect(vazio.every((s) => !s.ok)).toBe(true);
+    expect(vazio.find((s) => s.current)!.id).toBe('authorized');
+
+    // Autorizado + webhook + número, mas SEM registro: o registro é a etapa atual
+    // e "conectado" continua falso (era o falso positivo da primeira versão).
+    b.whatsappIntegration = {
+      status: 'pending', wabaId: '2', phoneNumberId: '1', encryptedAccessToken: 'a:b:c',
+      webhookSubscribedAt: NOW, registrationRequired: true,
+    } as any;
+    const semRegistro = onboardingSteps(b);
+    expect(semRegistro.find((s) => s.id === 'registration')!.ok).toBe(false);
+    expect(semRegistro.find((s) => s.id === 'registration')!.current).toBe(true);
+    expect(semRegistro.find((s) => s.id === 'connected')!.ok).toBe(false);
+
+    // Com o registro provado, conectado (e ainda falta o primeiro evento).
+    b.whatsappIntegration!.registeredAt = NOW;
+    b.whatsappIntegration!.status = 'connected';
+    const completo = onboardingSteps(b);
+    expect(completo.find((s) => s.id === 'connected')!.ok).toBe(true);
+    expect(completo.find((s) => s.id === 'first_event')!.current).toBe(true);
   });
 
   it('a mensagem do popup tolera número ausente e o wa.me é rotulado como TESTE', () => {
@@ -231,12 +287,22 @@ describe('A3.4 · B8 — rota de onboarding (com a Meta simulada)', () => {
     return calls;
   }
 
+  const DEBUG_OK = {
+    data: {
+      is_valid: true,
+      app_id: PLATFORM_ENV.META_APP_ID,
+      scopes: ['whatsapp_business_management', 'whatsapp_business_messaging'],
+      granular_scopes: [{ scope: 'whatsapp_business_management', target_ids: ['WABA-1'] }],
+    },
+  };
+
   const OK_META = {
     'GET /oauth/access_token': () => ({ access_token: 'TOKEN-DA-UNIDADE' }),
-    'GET /debug_token': () => ({ data: { granular_scopes: [{ scope: 'whatsapp_business_management', target_ids: ['WABA-1'] }] } }),
+    'GET /debug_token': () => DEBUG_OK,
     'GET /WABA-1/phone_numbers': () => ({ data: [{ id: 'PN-1' }] }),
     'POST /WABA-1/subscribed_apps': () => ({ success: true }),
     'GET /PN-1': () => ({ display_phone_number: '+55 21 98888-7777', verified_name: 'Clínica B8', quality_rating: 'GREEN' }),
+    'POST /PN-1/register': () => ({ success: true }),
   };
 
   it('GET entrega o plano e o estado assinado, sem vazar segredo', async () => {
@@ -276,16 +342,17 @@ describe('A3.4 · B8 — rota de onboarding (com a Meta simulada)', () => {
 
   it('fluxo real: código → token → assinatura do webhook → número, com token CRIPTOGRAFADO e auditoria', async () => {
     setEnv(PLATFORM_ENV);
-    const state = issueSignupState(KEY);
+    const state = issueSignupState(KEY, { businessId: BIZ, userId: OWNER });
     const calls = mockMeta(OK_META);
     const res = await onboardingPOST(jsonReq('/api/whatsapp/onboarding', {
-      businessId: BIZ, action: 'exchange', code: 'CODIGO-CURTO', state,
+      businessId: BIZ, action: 'exchange', code: 'CODIGO-CURTO', state, pin: '123456',
       signup: { event: 'FINISH', waba_id: 'WABA-1', phone_number_id: 'PN-1' },
     }, token));
     expect(res.status).toBe(200);
     const body = await json(res);
     expect(body.ok).toBe(true);
     expect(body.checks).toMatchObject({ tokenStored: true, webhookSubscribed: true, phoneResolved: true });
+    expect(body.checks.registration).toMatchObject({ attempted: true, ok: true });
     // Nenhuma resposta carrega o token nem o segredo do app.
     const text = JSON.stringify(body);
     expect(text).not.toContain('TOKEN-DA-UNIDADE');
@@ -314,16 +381,16 @@ describe('A3.4 · B8 — rota de onboarding (com a Meta simulada)', () => {
 
     // Auditoria com o que importa (e sem segredo nenhum).
     const audit = db.audit.find((a) => a.action === 'whatsapp.connected')!;
-    expect(audit.meta).toMatchObject({ via: 'embedded_signup', registered: null });
+    expect(audit.meta).toMatchObject({ via: 'embedded_signup', registered: true, onboardingType: 'standard' });
     expect(JSON.stringify(audit)).not.toContain('TOKEN-DA-UNIDADE');
   });
 
   it('WABA e número que o popup NÃO mandou são descobertos pelo servidor', async () => {
     setEnv(PLATFORM_ENV);
-    const state = issueSignupState(KEY);
+    const state = issueSignupState(KEY, { businessId: BIZ, userId: OWNER });
     mockMeta(OK_META);
     const res = await onboardingPOST(jsonReq('/api/whatsapp/onboarding', {
-      businessId: BIZ, action: 'exchange', code: 'CODIGO', state, signup: { event: 'FINISH' },
+      businessId: BIZ, action: 'exchange', code: 'CODIGO', state, pin: '123456', signup: { event: 'FINISH' },
     }, token));
     expect(res.status).toBe(200);
     const wi = (await readDB()).businesses.find((b) => b.id === BIZ)!.whatsappIntegration!;
@@ -334,7 +401,7 @@ describe('A3.4 · B8 — rota de onboarding (com a Meta simulada)', () => {
 
   it('código recusado pela Meta (uso único/30s) não grava token e manda recomeçar', async () => {
     setEnv(PLATFORM_ENV);
-    const state = issueSignupState(KEY);
+    const state = issueSignupState(KEY, { businessId: BIZ, userId: OWNER });
     mockMeta({
       'GET /oauth/access_token': () => ({ __status: 400, error: { message: 'This authorization code has been used.', code: 100 } }),
     });
@@ -351,6 +418,176 @@ describe('A3.4 · B8 — rota de onboarding (com a Meta simulada)', () => {
     expect(db.audit.some((a) => a.action === 'whatsapp.onboarding_failed')).toBe(true);
   });
 
+
+  // ── item 5: registro é obrigatório para ser "conectado" ──────
+  it('SEM PIN: conta autorizada + webhook assinado, mas NADA de conectado (falta registrar)', async () => {
+    setEnv(PLATFORM_ENV);
+    const calls = mockMeta(OK_META);
+    const res = await onboardingPOST(jsonReq('/api/whatsapp/onboarding', {
+      businessId: BIZ, action: 'exchange', code: 'CODIGO', state: issueSignupState(KEY, { businessId: BIZ, userId: OWNER }),
+      wabaId: 'WABA-1', phoneNumberId: 'PN-1',
+    }, token));
+    expect(res.status).toBe(200);
+    const body = await json(res);
+    expect(body.ok).toBe(false);
+    expect(body.pending).toBe(true);
+    expect(body.reason).toBe('phone_registration_required');
+    expect(body.plan.state).toBe('registration_pending');
+    // Nenhuma chamada de registro foi feita (não dá para registrar sem PIN).
+    expect(calls.some((c) => c.path === '/PN-1/register')).toBe(false);
+    const wi = (await readDB()).businesses.find((b) => b.id === BIZ)!.whatsappIntegration!;
+    expect(wi.status).toBe('pending');
+    expect(wi.registeredAt).toBeFalsy();
+    expect(wi.registrationRequired).toBe(true);
+    expect(wi.webhookSubscribedAt).toBeTruthy();       // esta etapa ficou provada
+    expect(wi.encryptedAccessToken).toBeTruthy();      // token guardado para concluir depois
+    // Auditoria honesta: não houve "connected".
+    const db = await readDB();
+    expect(db.audit.some((a) => a.action === 'whatsapp.connected')).toBe(false);
+    expect(db.audit.some((a) => a.action === 'whatsapp.registration_pending')).toBe(true);
+  });
+
+  it('action register (com o token já guardado) conclui o registro e conecta', async () => {
+    setEnv(PLATFORM_ENV);
+    mockMeta(OK_META);
+    await onboardingPOST(jsonReq('/api/whatsapp/onboarding', {
+      businessId: BIZ, action: 'exchange', code: 'CODIGO', state: issueSignupState(KEY, { businessId: BIZ, userId: OWNER }),
+      wabaId: 'WABA-1', phoneNumberId: 'PN-1',
+    }, token));
+    expect((await readDB()).businesses.find((b) => b.id === BIZ)!.whatsappIntegration!.status).toBe('pending');
+
+    const res = await onboardingPOST(jsonReq('/api/whatsapp/onboarding', {
+      businessId: BIZ, action: 'register', pin: '123456',
+    }, token));
+    expect(res.status).toBe(200);
+    const wi = (await readDB()).businesses.find((b) => b.id === BIZ)!.whatsappIntegration!;
+    expect(wi.status).toBe('connected');
+    expect(wi.registeredAt).toBeTruthy();
+    expect(wi.registrationRequired).toBe(false);
+    expect((await json(res)).plan.state).toBe('waiting_first_event');
+  });
+
+  it('registro recusado pela Meta deixa PENDENTE com o motivo (nunca conectado)', async () => {
+    setEnv(PLATFORM_ENV);
+    mockMeta({ ...OK_META, 'POST /PN-1/register': () => ({ __status: 400, error: { message: 'Invalid PIN', code: 133008 } }) });
+    const res = await onboardingPOST(jsonReq('/api/whatsapp/onboarding', {
+      businessId: BIZ, action: 'exchange', code: 'CODIGO', state: issueSignupState(KEY, { businessId: BIZ, userId: OWNER }),
+      wabaId: 'WABA-1', phoneNumberId: 'PN-1', pin: '999999',
+    }, token));
+    expect(res.status).toBe(200);
+    const body = await json(res);
+    expect(body.pending).toBe(true);
+    expect(body.message).toMatch(/Invalid PIN/);
+    const wi = (await readDB()).businesses.find((b) => b.id === BIZ)!.whatsappIntegration!;
+    expect(wi.status).toBe('pending');
+    expect(wi.lastError).toMatch(/Registro do número/);
+    expect(wi.registeredAt).toBeFalsy();
+  });
+
+  // ── item 6: o servidor é a autoridade sobre WABA/número/token ──
+  it('token inválido (is_valid=false) é recusado e nada é gravado', async () => {
+    setEnv(PLATFORM_ENV);
+    mockMeta({ ...OK_META, 'GET /debug_token': () => ({ data: { is_valid: false } }) });
+    const res = await onboardingPOST(jsonReq('/api/whatsapp/onboarding', {
+      businessId: BIZ, action: 'exchange', code: 'CODIGO', state: issueSignupState(KEY, { businessId: BIZ, userId: OWNER }),
+      wabaId: 'WABA-1', phoneNumberId: 'PN-1', pin: '123456',
+    }, token));
+    expect(res.status).toBe(400);
+    expect((await json(res)).error).toMatch(/não é válida na Meta/i);
+    expect((await readDB()).businesses.find((b) => b.id === BIZ)!.whatsappIntegration?.encryptedAccessToken).toBeFalsy();
+  });
+
+  it('token de OUTRO app da Meta é recusado', async () => {
+    setEnv(PLATFORM_ENV);
+    mockMeta({ ...OK_META, 'GET /debug_token': () => ({ data: { ...DEBUG_OK.data, app_id: '999999' } }) });
+    const res = await onboardingPOST(jsonReq('/api/whatsapp/onboarding', {
+      businessId: BIZ, action: 'exchange', code: 'CODIGO', state: issueSignupState(KEY, { businessId: BIZ, userId: OWNER }),
+    }, token));
+    expect(res.status).toBe(400);
+    expect((await json(res)).error).toMatch(/outro aplicativo/i);
+  });
+
+  it('permissões faltando no token são recusadas com o nome da permissão', async () => {
+    setEnv(PLATFORM_ENV);
+    mockMeta({
+      ...OK_META,
+      'GET /debug_token': () => ({ data: { ...DEBUG_OK.data, scopes: ['whatsapp_business_management'] } }),
+    });
+    const res = await onboardingPOST(jsonReq('/api/whatsapp/onboarding', {
+      businessId: BIZ, action: 'exchange', code: 'CODIGO', state: issueSignupState(KEY, { businessId: BIZ, userId: OWNER }),
+    }, token));
+    expect(res.status).toBe(400);
+    expect((await json(res)).error).toMatch(/whatsapp_business_messaging/);
+  });
+
+  it('WABA NÃO autorizada pelo popup é recusada (o navegador não decide)', async () => {
+    setEnv(PLATFORM_ENV);
+    mockMeta(OK_META);
+    const res = await onboardingPOST(jsonReq('/api/whatsapp/onboarding', {
+      businessId: BIZ, action: 'exchange', code: 'CODIGO', state: issueSignupState(KEY, { businessId: BIZ, userId: OWNER }),
+      wabaId: 'WABA-DE-OUTRA-EMPRESA', phoneNumberId: 'PN-1', pin: '123456',
+    }, token));
+    expect(res.status).toBe(400);
+    expect((await json(res)).error).toMatch(/não inclui a WhatsApp Business Account/i);
+    expect((await readDB()).businesses.find((b) => b.id === BIZ)!.whatsappIntegration?.encryptedAccessToken).toBeFalsy();
+  });
+
+  it('número que NÃO pertence à WABA é recusado (nada de combinação inventada)', async () => {
+    setEnv(PLATFORM_ENV);
+    const calls = mockMeta(OK_META);
+    const res = await onboardingPOST(jsonReq('/api/whatsapp/onboarding', {
+      businessId: BIZ, action: 'exchange', code: 'CODIGO', state: issueSignupState(KEY, { businessId: BIZ, userId: OWNER }),
+      wabaId: 'WABA-1', phoneNumberId: 'PN-DE-OUTRA-WABA', pin: '123456',
+    }, token));
+    expect(res.status).toBe(400);
+    expect((await json(res)).error).toMatch(/não pertence a essa conta WhatsApp Business/i);
+    // A inconsistência para TUDO: nem assina o webhook.
+    expect(calls.some((c) => c.path === '/WABA-1/subscribed_apps')).toBe(false);
+    expect((await readDB()).businesses.find((b) => b.id === BIZ)!.whatsappIntegration?.encryptedAccessToken).toBeFalsy();
+  });
+
+  it('o popup NÃO manda o número e o servidor escolhe um número DAQUELA WABA', async () => {
+    setEnv(PLATFORM_ENV);
+    mockMeta({
+      ...OK_META,
+      'GET /WABA-1/phone_numbers': () => ({ data: [{ id: 'PN-9' }] }),
+      'GET /PN-9': () => ({ display_phone_number: '+55 21 90000-0000', verified_name: 'Clínica B8' }),
+      'POST /PN-9/register': () => ({ success: true }),
+    });
+    const res = await onboardingPOST(jsonReq('/api/whatsapp/onboarding', {
+      businessId: BIZ, action: 'exchange', code: 'CODIGO', state: issueSignupState(KEY, { businessId: BIZ, userId: OWNER }),
+      wabaId: 'WABA-1', pin: '123456',
+    }, token));
+    expect(res.status).toBe(200);
+    expect((await json(res)).ok).toBe(true);
+    const wi = (await readDB()).businesses.find((b) => b.id === BIZ)!.whatsappIntegration!;
+    expect(wi.phoneNumberId).toBe('PN-9');
+    expect(wi.displayPhone).toBe('+55 21 90000-0000');
+  });
+
+  // ── item 7: o state vale só para a unidade/usuário que pediram ──
+  it('estado do popup de OUTRA unidade/usuário = 400 e nenhuma chamada à Meta', async () => {
+    setEnv(PLATFORM_ENV);
+    const deOutraUnidade = issueSignupState(KEY, { businessId: OTHER, userId: OWNER });
+    const fetchSpy1 = vi.fn();
+    vi.stubGlobal('fetch', fetchSpy1);
+    const r1 = await onboardingPOST(jsonReq('/api/whatsapp/onboarding', {
+      businessId: BIZ, action: 'exchange', code: 'CODIGO', state: deOutraUnidade,
+    }, token));
+    expect(r1.status).toBe(400);
+    expect((await json(r1)).code).toBe('signup_state_invalid');
+    expect(fetchSpy1).not.toHaveBeenCalled();
+
+    const deOutroUsuario = issueSignupState(KEY, { businessId: BIZ, userId: 'outro-usuario' });
+    const fetchSpy2 = vi.fn();
+    vi.stubGlobal('fetch', fetchSpy2);
+    const r2 = await onboardingPOST(jsonReq('/api/whatsapp/onboarding', {
+      businessId: BIZ, action: 'exchange', code: 'CODIGO', state: deOutroUsuario,
+    }, token));
+    expect(r2.status).toBe(400);
+    expect(fetchSpy2).not.toHaveBeenCalled();
+  });
+
   it('estado do popup inválido = 400 antes de qualquer chamada à Meta', async () => {
     setEnv(PLATFORM_ENV);
     const fetchSpy = vi.fn();
@@ -365,7 +602,7 @@ describe('A3.4 · B8 — rota de onboarding (com a Meta simulada)', () => {
 
   it('webhook recusado: guarda o token mas deixa PENDENTE e explica (não finge conectado)', async () => {
     setEnv(PLATFORM_ENV);
-    const state = issueSignupState(KEY);
+    const state = issueSignupState(KEY, { businessId: BIZ, userId: OWNER });
     mockMeta({
       ...OK_META,
       'POST /WABA-1/subscribed_apps': () => ({ __status: 400, error: { message: 'Permission denied', code: 200 } }),
@@ -379,11 +616,12 @@ describe('A3.4 · B8 — rota de onboarding (com a Meta simulada)', () => {
     expect(wi.status).toBe('pending');
     expect(wi.lastError).toMatch(/assinatura do webhook/i);
     expect(wi.encryptedAccessToken).toBeTruthy();
+    expect(wi.registeredAt).toBeFalsy();
   });
 
   it('PIN de duas etapas: registra o número quando informado e cobra 6 dígitos', async () => {
     setEnv(PLATFORM_ENV);
-    const state = issueSignupState(KEY);
+    const state = issueSignupState(KEY, { businessId: BIZ, userId: OWNER });
     const calls = mockMeta({ ...OK_META, 'POST /PN-1/register': () => ({ success: true }) });
     const ok = await onboardingPOST(jsonReq('/api/whatsapp/onboarding', {
       businessId: BIZ, action: 'exchange', code: 'CODIGO', state, wabaId: 'WABA-1', phoneNumberId: 'PN-1', pin: '123456',
@@ -395,7 +633,7 @@ describe('A3.4 · B8 — rota de onboarding (com a Meta simulada)', () => {
     expect(JSON.parse(String(register.init?.body))).toMatchObject({ messaging_product: 'whatsapp', pin: '123456' });
 
     // PIN torto é recusado antes de qualquer chamada.
-    const state2 = issueSignupState(KEY);
+    const state2 = issueSignupState(KEY, { businessId: BIZ, userId: OWNER });
     mockMeta(OK_META);
     const bad = await onboardingPOST(jsonReq('/api/whatsapp/onboarding', {
       businessId: BIZ, action: 'exchange', code: 'CODIGO', state: state2, wabaId: 'WABA-1', phoneNumberId: 'PN-1', pin: '12',
@@ -407,7 +645,7 @@ describe('A3.4 · B8 — rota de onboarding (com a Meta simulada)', () => {
   it('a unidade de OUTRO negócio não conecta por aqui (isolamento)', async () => {
     setEnv(PLATFORM_ENV);
     const res = await onboardingPOST(jsonReq('/api/whatsapp/onboarding', {
-      businessId: OTHER, action: 'exchange', code: 'CODIGO', state: issueSignupState(KEY),
+      businessId: OTHER, action: 'exchange', code: 'CODIGO', state: issueSignupState(KEY, { businessId: BIZ, userId: OWNER }),
     }, token));
     expect([403, 404]).toContain(res.status);
     const db = await readDB();

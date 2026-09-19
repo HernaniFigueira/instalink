@@ -20,16 +20,40 @@
 // Este arquivo importa `node:zlib` de propósito: ele NÃO pode ser importado
 // por componente de cliente (o parser não entra no bundle do navegador).
 import { inflateRawSync } from 'node:zlib';
+import { IMPORT_MAX_ROWS } from './client-import';
 
+// ── Limites (defesa contra ZIP bomb) ───────────────────────────
+// Um .xlsx é um ZIP: 4 MB comprimidos podem virar gigabytes descomprimidos se
+// alguém montar o arquivo de má-fé. Aqui NÃO se confia no que o arquivo diz:
+// cada entrada é conferida (tamanho declarado, offsets dentro do buffer) e a
+// descompressão tem teto — passou disso, o arquivo inteiro é recusado.
 /** Teto do arquivo (.xlsx binário) — mesma ordem de grandeza do CSV. */
 export const XLSX_MAX_BYTES = 4_000_000;
-export const XLSX_MAX_ROWS = 5000;
+/** Entradas (arquivos internos) aceitas no ZIP. */
+export const XLSX_MAX_ENTRIES = 200;
+/** Teto de UM XML descomprimido (por entrada). */
+export const XLSX_MAX_ENTRY_BYTES = 8_000_000;
+/** Teto do TOTAL de XML descomprimido que o parser chega a ler. */
+export const XLSX_MAX_TOTAL_XML_BYTES = 24_000_000;
+/** Linhas que o parser MATERIALIZA: o limite canônico + 1 (para provar o estouro). */
+export const XLSX_MAX_PARSED_ROWS = IMPORT_MAX_ROWS + 1;
+export const XLSX_TOO_BIG_MESSAGE = 'Planilha compactada excede o limite seguro.';
 
 const PK_LOCAL = 0x04034b50;
 const PK_CENTRAL = 0x02014b50;
 const PK_EOCD = 0x06054b50;
 
-export interface ZipEntry { name: string; method: number; dataStart: number; compressedSize: number }
+export interface ZipEntry {
+  name: string;
+  method: number;
+  dataStart: number;
+  compressedSize: number;
+  /** Tamanho declarado pelo diretório central (não confiamos nele — conferimos). */
+  uncompressedSize: number;
+}
+
+/** Acumulador do que já foi descomprimido (teto global do parser). */
+export interface XmlBudget { used: number }
 
 /** Lê o diretório central do ZIP (o mínimo para achar e descomprimir arquivos). */
 export function readZipIndex(buf: Buffer): ZipEntry[] {
@@ -40,37 +64,81 @@ export function readZipIndex(buf: Buffer): ZipEntry[] {
   }
   if (eocd < 0) throw new Error('Arquivo não parece ser um .xlsx (ZIP inválido).');
   const count = buf.readUInt16LE(eocd + 10);
-  let ptr = buf.readUInt32LE(eocd + 16);
+  if (count > XLSX_MAX_ENTRIES) throw new Error(XLSX_TOO_BIG_MESSAGE);
+  const centralOffset = buf.readUInt32LE(eocd + 16);
+  if (centralOffset > buf.length) throw new Error('Arquivo .xlsx corrompido (índice fora do arquivo).');
+  let ptr = centralOffset;
   const entries: ZipEntry[] = [];
   for (let i = 0; i < count; i++) {
-    if (ptr + 46 > buf.length || buf.readUInt32LE(ptr) !== PK_CENTRAL) break;
+    if (ptr + 46 > buf.length) throw new Error('Arquivo .xlsx corrompido (índice truncado).');
+    if (buf.readUInt32LE(ptr) !== PK_CENTRAL) throw new Error('Arquivo .xlsx corrompido (índice inválido).');
     const method = buf.readUInt16LE(ptr + 10);
     const compressedSize = buf.readUInt32LE(ptr + 20);
+    const uncompressedSize = buf.readUInt32LE(ptr + 24);
     const nameLen = buf.readUInt16LE(ptr + 28);
     const extraLen = buf.readUInt16LE(ptr + 30);
     const commentLen = buf.readUInt16LE(ptr + 32);
     const localOffset = buf.readUInt32LE(ptr + 42);
+
+    // Tamanho declarado absurdo (o truque clássico do ZIP bomb) é recusado
+    // ANTES de qualquer descompressão.
+    if (uncompressedSize > XLSX_MAX_ENTRY_BYTES) throw new Error(XLSX_TOO_BIG_MESSAGE);
+    if (compressedSize > buf.length) throw new Error('Arquivo .xlsx corrompido (tamanho da entrada).');
+
     const name = buf.slice(ptr + 46, ptr + 46 + nameLen).toString('utf8');
-    if (localOffset + 30 <= buf.length && buf.readUInt32LE(localOffset) === PK_LOCAL) {
-      const lNameLen = buf.readUInt16LE(localOffset + 26);
-      const lExtraLen = buf.readUInt16LE(localOffset + 28);
-      entries.push({
-        name: name.replace(/\\/g, '/'),
-        method,
-        dataStart: localOffset + 30 + lNameLen + lExtraLen,
-        compressedSize,
-      });
+    if (ptr + 46 + nameLen + extraLen + commentLen > buf.length) {
+      throw new Error('Arquivo .xlsx corrompido (índice truncado).');
     }
+    if (localOffset + 30 > buf.length) throw new Error('Arquivo .xlsx corrompido (offset do conteúdo).');
+    if (buf.readUInt32LE(localOffset) !== PK_LOCAL) throw new Error('Arquivo .xlsx corrompido (conteúdo ausente).');
+    const lNameLen = buf.readUInt16LE(localOffset + 26);
+    const lExtraLen = buf.readUInt16LE(localOffset + 28);
+    const dataStart = localOffset + 30 + lNameLen + lExtraLen;
+    if (dataStart + compressedSize > buf.length) {
+      throw new Error('Arquivo .xlsx corrompido (conteúdo fora do arquivo).');
+    }
+    entries.push({
+      name: name.replace(/\\/g, '/'),
+      method,
+      dataStart,
+      compressedSize,
+      uncompressedSize,
+    });
     ptr += 46 + nameLen + extraLen + commentLen;
   }
+  if (entries.length !== count) throw new Error('Arquivo .xlsx corrompido (índice incompleto).');
   return entries;
 }
 
-function readEntry(buf: Buffer, entry: ZipEntry): string {
+/**
+ * Descomprime UMA entrada com teto de saída. O `maxOutputLength` do Node faz a
+ * descompressão falhar em vez de alocar memória sem limite; depois conferimos o
+ * que saiu contra o declarado (arquivo mentiroso é recusado).
+ */
+function readEntry(buf: Buffer, entry: ZipEntry, budget: XmlBudget): string {
   const raw = buf.slice(entry.dataStart, entry.dataStart + entry.compressedSize);
-  if (entry.method === 0) return raw.toString('utf8');
-  if (entry.method !== 8) throw new Error('Compactação não suportada neste .xlsx.');
-  return inflateRawSync(raw).toString('utf8');
+  let out: string;
+  if (entry.method === 0) {
+    out = raw.toString('utf8');
+  } else if (entry.method === 8) {
+    let inflated: Buffer;
+    try {
+      inflated = inflateRawSync(raw, { maxOutputLength: XLSX_MAX_ENTRY_BYTES });
+    } catch {
+      throw new Error(XLSX_TOO_BIG_MESSAGE);
+    }
+    if (inflated.length > XLSX_MAX_ENTRY_BYTES) throw new Error(XLSX_TOO_BIG_MESSAGE);
+    // Confere o que foi declarado: divergência = arquivo forjado/corrompido.
+    if (entry.uncompressedSize > 0 && inflated.length !== entry.uncompressedSize) {
+      throw new Error('Arquivo .xlsx corrompido (tamanho declarado não confere).');
+    }
+    out = inflated.toString('utf8');
+  } else {
+    throw new Error('Compactação não suportada neste .xlsx.');
+  }
+  budget.used += out.length;
+  if (budget.used > XLSX_MAX_TOTAL_XML_BYTES) throw new Error(XLSX_TOO_BIG_MESSAGE);
+  return out;
 }
 
 /** Entidades XML que aparecem em planilha (e os acentos em forma numérica). */
@@ -138,10 +206,13 @@ export function parseDateStyles(stylesXml: string): Set<number> {
 
 /** Serial do Excel → `YYYY-MM-DD` (época 1899-12-30, já com o bug do 1900). */
 export function serialToISODate(serial: number): string {
-  const ms = Math.round((serial - 25569) * 86400 * 1000);
-  const d = new Date(ms);
+  // Fora da faixa de datas do Excel (1900-01-01 a 9999-12-31) não existe data:
+  // devolve '' em vez de um ano de 6 dígitos que ninguém reconhece.
+  if (!Number.isFinite(serial) || serial < 1 || serial > 2958465) return '';
+  const d = new Date(Math.round((serial - 25569) * 86400 * 1000));
   if (!Number.isFinite(d.getTime())) return '';
-  return d.toISOString().slice(0, 10);
+  const iso = d.toISOString().slice(0, 10);
+  return /^\d{4}-\d{2}-\d{2}$/.test(iso) ? iso : '';
 }
 
 /**
@@ -152,7 +223,12 @@ export function parseSheetXml(xml: string, shared: string[], dateStyles: Set<num
   const rows: string[][] = [];
   const rowRe = /<row\b([^>]*)>([\s\S]*?)<\/row>|<row\b([^>]*)\/>/g;
   let r: RegExpExecArray | null;
+  let seen = 0;
   while ((r = rowRe.exec(xml))) {
+    seen += 1;
+    // Materializa até o limite canônico + 1 (basta para PROVAR o estouro); o
+    // total real vem de `countSheetRows`, sem construir objetos.
+    if (seen > XLSX_MAX_PARSED_ROWS) break;
     const inner = r[2] || '';
     const cells: string[] = [];
     const cellRe = /<c\b([^>]*?)(?:\/>|>([\s\S]*?)<\/c>)/g;
@@ -189,9 +265,17 @@ export function parseSheetXml(xml: string, shared: string[], dateStyles: Set<num
       cells[col] = value;
     }
     if (cells.some((x) => x !== '')) rows.push(cells);
-    if (rows.length >= XLSX_MAX_ROWS) break;
   }
   return rows;
+}
+
+/**
+ * Quantas linhas o XML da planilha tem (contagem barata, sem montar matriz) —
+ * é o número HONESTO que aparece na mensagem de limite.
+ */
+export function countSheetRows(xml: string): number {
+  const matches = String(xml || '').match(/<row\b[\s>\/]/g);
+  return matches ? matches.length : 0;
 }
 
 /**
@@ -200,25 +284,38 @@ export function parseSheetXml(xml: string, shared: string[], dateStyles: Set<num
  * não tiver essa parte, a primeira worksheet existente no ZIP.
  */
 export function xlsxToMatrix(buf: Buffer): string[][] {
+  return xlsxToMatrixInfo(buf).table;
+}
+
+export interface XlsxMatrix {
+  table: string[][];
+  /** Linhas de dados do arquivo (fora o cabeçalho), mesmo acima do limite. */
+  totalRows: number;
+}
+
+/** Igual a `xlsxToMatrix`, mas devolve também a contagem real de linhas. */
+export function xlsxToMatrixInfo(buf: Buffer): XlsxMatrix {
   if (buf.length > XLSX_MAX_BYTES) throw new Error('Planilha grande demais (máximo ~4 MB). Divida em partes.');
   const entries = readZipIndex(buf);
   if (entries.length === 0) throw new Error('Arquivo .xlsx vazio ou corrompido.');
+  const budget: XmlBudget = { used: 0 };
   const byName = new Map(entries.map((e) => [e.name, e]));
 
   const sharedEntry = byName.get('xl/sharedStrings.xml');
-  const shared = sharedEntry ? parseSharedStrings(readEntry(buf, sharedEntry)) : [];
+  const shared = sharedEntry ? parseSharedStrings(readEntry(buf, sharedEntry, budget)) : [];
 
   const stylesEntry = byName.get('xl/styles.xml');
-  const dateStyles = stylesEntry ? parseDateStyles(readEntry(buf, stylesEntry)) : new Set<number>();
+  const dateStyles = stylesEntry ? parseDateStyles(readEntry(buf, stylesEntry, budget)) : new Set<number>();
 
   let sheetEntry: ZipEntry | undefined;
   const workbook = byName.get('xl/workbook.xml');
   const rels = byName.get('xl/_rels/workbook.xml.rels');
   if (workbook && rels) {
-    const firstSheet = readEntry(buf, workbook).match(/<sheet\b[^>]*r:id="([^"]+)"/);
+    const firstSheet = readEntry(buf, workbook, budget).match(/<sheet\b[^>]*r:id="([^"]+)"/);
     if (firstSheet) {
       const relRe = new RegExp(`<Relationship\\b[^>]*Id="${firstSheet[1]}"[^>]*Target="([^"]+)"`);
-      const rel = readEntry(buf, rels).match(relRe) || readEntry(buf, rels).match(
+      const relsXml = readEntry(buf, rels, budget);
+      const rel = relsXml.match(relRe) || relsXml.match(
         new RegExp(`<Relationship\\b[^>]*Target="([^"]+)"[^>]*Id="${firstSheet[1]}"`),
       );
       if (rel) {
@@ -232,13 +329,22 @@ export function xlsxToMatrix(buf: Buffer): string[][] {
     if (!first) throw new Error('Não encontrei nenhuma planilha dentro do arquivo.');
     sheetEntry = first;
   }
-  const matrix = parseSheetXml(readEntry(buf, sheetEntry), shared, dateStyles);
+  const sheetXml = readEntry(buf, sheetEntry, budget);
+  const matrix = parseSheetXml(sheetXml, shared, dateStyles);
   if (matrix.length === 0) throw new Error('A primeira planilha está vazia.');
-  return matrix;
+  // Linhas de dados = linhas do arquivo menos o cabeçalho (nunca negativo).
+  const totalRows = Math.max(0, countSheetRows(sheetXml) - 1);
+  return { table: matrix, totalRows };
 }
 
 /** Mesma coisa a partir do que o navegador mandou (base64). */
 export function xlsxBase64ToMatrix(base64: string): string[][] {
   const clean = String(base64 || '').replace(/^data:[^,]+,/, '');
   return xlsxToMatrix(Buffer.from(clean, 'base64'));
+}
+
+/** Mesma coisa, com a contagem real de linhas (usada pela importação). */
+export function xlsxBase64ToMatrixInfo(base64: string): XlsxMatrix {
+  const clean = String(base64 || '').replace(/^data:[^,]+,/, '');
+  return xlsxToMatrixInfo(Buffer.from(clean, 'base64'));
 }
