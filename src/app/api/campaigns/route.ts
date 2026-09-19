@@ -1,14 +1,20 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { randomUUID } from 'node:crypto';
-import { updateDB } from '@/lib/db';
+import { readDB, updateDB } from '@/lib/db';
 import { requireBusiness } from '@/lib/access';
 import { pushAudit } from '@/lib/audit';
 import { audienceCount, audienceFor, hasMarketingConsent } from '@/lib/campaigns';
 import { integrationStatus, serverCredentialsConfigured } from '@/lib/whatsapp';
+import {
+  CAMPAIGN_IMMEDIATE_BATCH_LIMIT,
+  deliverCampaignRecipient,
+  getWhatsappCredentials,
+  syncCampaignStatusAndCounts,
+} from '@/lib/whatsapp-cloud-api';
 import { createWinBackLeads, winBackCandidates } from '@/lib/automations';
 import { todayISO } from '@/lib/tz';
 import { CAMPAIGN_SEGMENTS, campaignStatusDef, VALID_CAMPAIGN_STATUSES } from '@/lib/types';
-import type { Campaign, CampaignSegment, CampaignStatus, DB } from '@/lib/types';
+import type { Campaign, CampaignRecipient, CampaignSegment, CampaignStatus, DB } from '@/lib/types';
 
 // CAMPANHAS — estrutura para disparos futuros (WhatsApp oficial).
 // Consentimento é pré-requisito absoluto: só entram contatos com
@@ -157,6 +163,8 @@ export async function PATCH(req: NextRequest) {
         if (!def.editable) return null;
         if (body.name !== undefined) c.name = String(body.name || '').trim().slice(0, 80) || c.name;
         if (body.message !== undefined) c.message = String(body.message || '').trim().slice(0, 1000) || c.message;
+        if (body.templateName !== undefined) c.templateName = String(body.templateName || '').trim();
+        if (body.templateLanguage !== undefined) c.templateLanguage = String(body.templateLanguage || '').trim();
         if (CAMPAIGN_SEGMENTS.some((s) => s.id === body.segment)) c.segment = body.segment;
         if (body.segmentRef !== undefined) c.segmentRef = String(body.segmentRef || '').slice(0, 60);
         c.counts.eligible = audienceCount(c.segment, c.segmentRef, audienceCtx(d, businessId));
@@ -203,43 +211,89 @@ export async function PATCH(req: NextRequest) {
       if (!['ready', 'sending'].includes(campaign.status)) {
         return NextResponse.json({ error: 'Deixe a campanha pronta antes de enviar.' }, { status: 409 });
       }
-      const requested = body.status as CampaignStatus;
-      const status: CampaignStatus = VALID_CAMPAIGN_STATUSES.includes(requested) ? requested : 'sent';
-      const updated = await updateDB((d) => {
+
+      // Validação de template aprovado da Meta para campanhas proativas (sem bypass de texto livre)
+      const templateName = String(body.templateName || campaign.templateName || '').trim();
+      if (!templateName) {
+        return NextResponse.json({
+          error: 'Disparos proativos pelo WhatsApp exigem o nome de um template aprovado na Meta Cloud API. Configure o template antes de disparar.',
+          code: 'template_required',
+        }, { status: 400 });
+      }
+
+      const credentials = getWhatsappCredentials(ctx.business);
+      if (!credentials) {
+        return NextResponse.json({
+          error: 'Credenciais da Cloud API não encontradas para esta unidade.',
+          code: 'missing_credentials',
+        }, { status: 409 });
+      }
+
+      const audience = audienceFor(campaign.segment, campaign.segmentRef, audienceCtx(db, businessId));
+      if (audience.length === 0) {
+        return NextResponse.json({ error: 'Nenhum contato com consentimento neste público.' }, { status: 400 });
+      }
+
+      const now = new Date().toISOString();
+      const pendingRecipientIds: Array<{ recipientId: string; contactId: string; phone: string; name: string }> = [];
+
+      // 1. Enfileira destinatários como pending dentro do DB (sem segurar request)
+      await updateDB((d) => {
         const c = d.campaigns.find((x) => x.id === campaign.id)!;
-        c.status = status;
-        c.sentAt = new Date().toISOString();
-        c.updatedAt = c.sentAt;
-        c.counts.eligible = audienceCount(c.segment, c.segmentRef, audienceCtx(d, businessId));
-        // Histórico de disparo: registra os destinatários elegíveis (auditoria).
-        if (status === 'sent' || status === 'partial') {
-          const audience = audienceFor(c.segment, c.segmentRef, audienceCtx(d, businessId));
-          const existing = new Set(
-            d.campaignRecipients.filter((r) => r.campaignId === c.id).map((r) => r.contactId),
-          );
-          for (const m of audience) {
-            if (existing.has(m.contactId)) continue;
-            d.campaignRecipients.push({
-              id: randomUUID(), businessId, campaignId: c.id, contactId: m.contactId,
-              name: m.name, phone: m.phone, status: 'sent', error: '', at: c.sentAt,
-            });
-          }
-          c.counts.sent = audience.length;
+        c.status = 'sending';
+        c.updatedAt = now;
+        if (templateName) c.templateName = templateName;
+
+        const existing = new Set(
+          d.campaignRecipients.filter((r) => r.campaignId === c.id).map((r) => r.contactId),
+        );
+
+        for (const m of audience) {
+          if (existing.has(m.contactId)) continue;
+          const recId = randomUUID();
+          d.campaignRecipients.push({
+            id: recId,
+            businessId,
+            campaignId: c.id,
+            contactId: m.contactId,
+            name: m.name,
+            phone: m.phone,
+            status: 'pending',
+            error: '',
+            at: now,
+          });
+          pendingRecipientIds.push({ recipientId: recId, contactId: m.contactId, phone: m.phone, name: m.name });
         }
+
+        syncCampaignStatusAndCounts(d, c, now);
         pushAudit(d, {
           action: 'campaign.sent', actor: { ...ctx.user, role: ctx.role }, businessId,
-          supportSessionId: ctx.support?.id, meta: { id: c.id, status },
+          supportSessionId: ctx.support?.id, meta: { id: c.id, status: c.status, queued: pendingRecipientIds.length },
         });
-        return c;
       });
-      return NextResponse.json({ ok: true, campaign: updated });
+
+      // 2. Disparo imediato limitado ao teto seguro (CAMPAIGN_IMMEDIATE_BATCH_LIMIT).
+      // Destinatários remanescentes continuam em 'pending' com claim atômico via cron worker (/api/cron/whatsapp).
+      const immediateBatch = pendingRecipientIds.slice(0, CAMPAIGN_IMMEDIATE_BATCH_LIMIT);
+      for (const item of immediateBatch) {
+        await deliverCampaignRecipient(item.recipientId).catch(() => {});
+      }
+
+      const freshDb = await readDB();
+      const finalCampaign = freshDb.campaigns.find((x) => x.id === campaign.id);
+
+      return NextResponse.json({ ok: true, campaign: finalCampaign });
     }
 
-    // CANCELAR — permitido enquanto não saiu disparo real (draft/ready/sending).
+    // CANCELAR — permitido apenas em draft ou ready (antes de iniciar o envio real).
+    // Campanhas em 'sending' não são canceláveis nesta versão para manter a integridade da fila ativa.
     if (action === 'cancel') {
       const def = campaignStatusDef(campaign.status);
       if (!def.cancellable) {
-        return NextResponse.json({ error: 'Campanhas já enviadas fazem parte do histórico e não podem ser canceladas.' }, { status: 409 });
+        return NextResponse.json(
+          { error: 'Campanhas em envio ou já concluídas fazem parte do histórico/fila ativa e não podem ser canceladas nesta versão.' },
+          { status: 409 },
+        );
       }
       const updated = await updateDB((d) => {
         const c = d.campaigns.find((x) => x.id === campaign.id)!;

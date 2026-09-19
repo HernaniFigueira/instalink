@@ -11,7 +11,7 @@
 // REGRA DE HONESTIDADE: conector de canal sem implementação devolve
 // `not_implemented` — nunca "enviado". A interface mostra o estado real.
 import { assertOutsideDBTransaction } from '../db-transaction';
-import type { DB, Integration, IntegrationProviderId } from '../types';
+import type { Business, DB, Integration, IntegrationProviderId } from '../types';
 import {
   MAX_EVENTS_PER_DELIVERY, clipText, isExternalEvent, normalizeEmail, normalizePhone, sanitizeMetadata, sanitizePayload,
   type NormalizeContext, type NormalizeResult, type NormalizedEvent,
@@ -303,7 +303,8 @@ export interface ChannelSendResult {
 
 export interface ConnectorContext {
   businessId: string;
-  integration: Integration;
+  integration?: Integration;
+  business?: Business;
   nowISO: string;
   fetchFn?: typeof fetch;
 }
@@ -399,10 +400,12 @@ export async function sendChannelMessage(
   if (!to || !body) {
     return { ok: false, provider: integration.provider, code: 'invalid_target', detail: 'Destino ou mensagem vazios.' };
   }
+  const business = (db.businesses || []).find((b) => b.id === input.businessId);
   const result = await connector.send(
     {
       businessId: input.businessId,
       integration,
+      business,
       nowISO: input.nowISO || new Date().toISOString(),
       fetchFn: input.fetchFn,
     },

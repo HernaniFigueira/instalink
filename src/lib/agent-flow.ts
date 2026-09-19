@@ -134,7 +134,7 @@ export function parseWhenPhrase(text: string, today = todayISO()): string | null
 /** Detecta intenção de agendar/marcar horário na mensagem. */
 export function wantsToBook(text: string): boolean {
   const q = norm(text);
-  return /\b(marcar|agendar|agenda|marcacao|reservar|reserva|horario|vaga|remarcar)\b/.test(q);
+  return /\b(marcar|agendar|agenda|marcacao|reservar|reserva|horario|vaga|remarcar|fazer|gostaria de|queria|quero)\b/.test(q);
 }
 
 /** Serviço mencionado na mensagem (match por palavras do nome). */
@@ -341,6 +341,9 @@ export function agentFlowStep(
       if (!date) {
         return { reply: 'Que dia você prefere?', actions: [], intent: 'flow_ask_day', flow };
       }
+      if (opts.ctx?.channelPhone) {
+        return collectIdentity(db, business, { step: 'confirm', serviceId: svc.id, date, time }, opts.ctx || {});
+      }
       return askConfirm(db, business, { step: 'confirm', serviceId: svc.id, date, time }, opts.ctx || {});
     }
     const when = parseWhenPhrase(message || '', today);
@@ -381,6 +384,14 @@ export function agentFlowStep(
       };
     }
     const when = parseWhenPhrase(message || '', today);
+    if (!when && opts.ctx?.channelPhone) {
+      return {
+        reply: `Claro! Para qual data ou dia você gostaria de agendar ${svc.name}?`,
+        actions: [],
+        intent: 'flow_ask_day',
+        flow: { step: 'pick_slot', serviceId: svc.id },
+      };
+    }
     return offerSlots(db, business, svc, today, { step: 'pick_slot', serviceId: svc.id, date: when || undefined });
   }
 
@@ -425,8 +436,10 @@ function offerSlots(
     };
   }
   const price = svc.showPrice !== false ? ` (valor ${moneyBRL(svc.price)})` : '';
+  const slotList = view.slots.slice(0, 6).join(', ');
+  const slotsText = slotList ? `: ${slotList}. Qual horário você prefere?` : '.';
   return {
-    reply: `${svc.name}${price} — horários livres em ${humanDay(date, today)}:`,
+    reply: `${svc.name}${price} — horários livres em ${humanDay(date, today)}${slotsText}`,
     actions: [
       ...slotActions({ ...state, date }, view.slots),
       { label: 'Outros dias', target: 'flow', payload: { kind: 'other_times', serviceId: svc.id, date } },

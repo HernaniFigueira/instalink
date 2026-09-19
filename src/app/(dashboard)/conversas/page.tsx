@@ -27,8 +27,8 @@ import type { WaChannelData } from '@/components/dashboard/WhatsappChannelPanel'
 //     guardada (permissão 'whatsapp', escopo da unidade) — nenhum dado novo é
 //     exposto, por isso é segura. `?q=` sobrevive a refresh e deep-link.
 // ═══════════════════════════════════════════════════════════════
-interface Conversation { id: string; name: string; phone: string; status: string; unread: number; lastMessageAt: string; lastMessagePreview: string; registered: boolean; }
-interface Message { id: string; direction: 'in' | 'out'; body: string; status: string; at: string }
+interface Conversation { id: string; name: string; phone: string; status: string; mode?: 'automation' | 'human'; unread: number; lastMessageAt: string; lastMessagePreview: string; registered: boolean; }
+interface Message { id: string; direction: 'in' | 'out'; body: string; status: string; by?: string; byName?: string; error?: string; at: string }
 
 export default function ConversasPage() {
   const params = useSearchParams();
@@ -43,15 +43,30 @@ export default function ConversasPage() {
   const [error, setError] = useState('');
   const [filter, setFilter] = useState<'all' | 'unread' | 'open'>('all');
 
-  // ── COMPOSER (A1.2 · Bloco 3): o envio usa a API EXISTENTE do inbox ──
-  // POST /api/conversations { businessId, conversationId, body } — mesmo
-  // contrato de antes, com tenant/business scoping e permissão 'whatsapp'
-  // mantidos no servidor. Honestidade: enquanto envia, o botão desabilita;
-  // qualquer falha (409 canal não conectado, 404, rede) aparece na tela e o
-  // texto digitado NÃO se perde.
+  // ── COMPOSER: envio real pelo conector oficial ──
   const [draft, setDraft] = useState('');
   const [sending, setSending] = useState(false);
   const [sendError, setSendError] = useState('');
+  const [switchingMode, setSwitchingMode] = useState(false);
+
+  async function toggleMode() {
+    if (!active || switchingMode) return;
+    const targetMode = active.conversation.mode === 'human' ? 'automation' : 'human';
+    setSwitchingMode(true);
+    try {
+      const res = await apiSend<{ mode: 'automation' | 'human' }>(
+        '/api/conversations', 'POST',
+        { businessId, conversationId: active.conversation.id, action: 'switch_mode', mode: targetMode },
+        { scope: 'action', area: 'Conversas' },
+      );
+      if (res.ok) {
+        setActive((prev) => prev ? { ...prev, conversation: { ...prev.conversation, mode: targetMode } } : prev);
+        setConversations((list) => list.map((c) => c.id === active.conversation.id ? { ...c, mode: targetMode } : c));
+      }
+    } finally {
+      setSwitchingMode(false);
+    }
+  }
 
   async function sendMessage(e?: React.FormEvent) {
     e?.preventDefault();
@@ -67,8 +82,6 @@ export default function ConversasPage() {
     );
     setSending(false);
     if (!res.ok || !res.data?.message) {
-      // Erro honesto: a mensagem do servidor (409 canal não conectado, etc.)
-      // ou a mensagem amigável do wrapper — nunca um "enviado" falso.
       setSendError(res.message || 'Não foi possível enviar a mensagem.');
       return;
     }
@@ -246,23 +259,43 @@ export default function ConversasPage() {
           <div className="flex flex-col min-h-[320px]">
             {active ? (
               <>
-                <div className="px-3 py-2 border-b border-zinc-100 flex items-center justify-between gap-2 bg-white">
+                <div className="px-3 py-2 border-b border-zinc-100 flex flex-wrap items-center justify-between gap-2 bg-white">
                   <div className="min-w-0">
-                    <p className="text-sm font-semibold truncate">{active.conversation.name}</p>
-                    <p className="text-xs text-zinc-500 truncate">{active.conversation.phone}{active.conversation.registered ? ' · cliente ✓' : ''}</p>
+                    <div className="flex items-center gap-2">
+                      <p className="text-sm font-semibold truncate">{active.conversation.name}</p>
+                      <span className={`text-[11px] font-semibold border rounded-full px-2 py-0.5 ${
+                        active.conversation.mode === 'human'
+                          ? 'bg-amber-50 border-amber-200 text-amber-800'
+                          : 'bg-emerald-50 border-emerald-200 text-emerald-800'
+                      }`}>
+                        {active.conversation.mode === 'human' ? 'Atendimento humano' : 'Atendimento automático'}
+                      </span>
+                    </div>
+                    <p className="text-xs text-zinc-500 truncate mt-0.5">{active.conversation.phone}{active.conversation.registered ? ' · cliente ✓' : ''}</p>
                   </div>
-                  <div className="flex items-center gap-1.5 shrink-0">
-                    <Link href={`/clientes?b=${businessId}&q=${encodeURIComponent(active.conversation.phone||'')}`} className="text-xs font-medium text-zinc-600 hover:underline">Ver cliente</Link>
-                    <span className="text-zinc-300">·</span>
-                    <Link href={`/funil?b=${businessId}`} className="text-xs font-medium text-zinc-600 hover:underline">Ver no funil</Link>
+                  <div className="flex items-center gap-2 shrink-0">
+                    <button
+                      onClick={toggleMode}
+                      disabled={switchingMode}
+                      className="text-xs font-medium border border-zinc-300 rounded px-2.5 py-1 hover:bg-zinc-100 disabled:opacity-50"
+                    >
+                      {active.conversation.mode === 'human' ? 'Devolver para automação' : 'Assumir atendimento'}
+                    </button>
+                    <Link href={`/clientes?b=${businessId}&q=${encodeURIComponent(active.conversation.phone||'')}`} className="text-xs font-medium text-zinc-600 hover:underline">Cliente 360</Link>
                   </div>
                 </div>
                 <div className="flex-1 overflow-y-auto p-3 space-y-2 bg-zinc-50 max-h-[360px] lg:max-h-[420px]">
                   {active.messages.map((m) => (
                     <div key={m.id} className={m.direction === 'out' ? 'flex justify-end' : 'flex justify-start'}>
                       <div className={cn('max-w-[78%] px-3 py-2 rounded-lg text-sm', m.direction === 'out' ? 'bg-zinc-900 text-white' : 'bg-white border border-zinc-200')}>
+                        <span className="block text-[11px] font-semibold opacity-75 mb-0.5">
+                          {m.byName || (m.direction === 'in' ? 'Cliente' : m.by === 'automation' ? 'Automação' : 'Equipe')}
+                        </span>
                         {m.body}
-                        <span className="block text-xs opacity-60 mt-1">{m.at.slice(11, 16)} · {m.status}</span>
+                        <span className="block text-xs opacity-60 mt-1">
+                          {m.at.slice(11, 16)} · {m.status === 'sent' ? 'enviada' : m.status === 'delivered' ? 'entregue' : m.status === 'read' ? 'lida' : m.status === 'failed' ? 'falhou' : 'pendente'}
+                          {m.error ? ` (${m.error})` : ''}
+                        </span>
                       </div>
                     </div>
                   ))}

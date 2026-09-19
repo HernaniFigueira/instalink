@@ -57,7 +57,7 @@ describe('A2-B4 · lembrete na escrita (createBookingTx)', () => {
   it('booking criado para HOJE enfileira o lembrete na mesma transação', () => {
     const d = baseDB();
     const today = todayISO();
-    const nowHMv = new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit', hour12: false });
+    const nowHMv = '08:00';
     // horário bem no futuro de hoje para sobreviver ao corte do lead time
     const res = createBookingTx(d, {
       business: d.businesses[0],
