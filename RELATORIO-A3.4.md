@@ -2,7 +2,7 @@
 
 **Repositório:** HernaniFigueira/instalink · **base:** `main` @ `19433984916793f665aa28fdedcc186692ee45c1`
 **Branch desta entrega:** `arena/01a0ba19-instalink` · **PR:** #30 — https://github.com/HernaniFigueira/instalink/pull/30 (um só, **sem merge** — aguarda revisão independente)
-**Status parcial:** Blocos 0 a 6 commitados; Blocos 7 a 11 em andamento no mesmo branch/PR.
+**Status parcial:** Blocos 0 a 8 commitados; Blocos 9 a 11 em andamento no mesmo branch/PR.
 
 Este relatório é escrito em blocos, na mesma ordem da execução. Cada bloco tem
 commit próprio, testes direcionados e `tsc --noEmit` antes do seguinte.
@@ -851,4 +851,116 @@ npx vitest run src/lib/__tests__/a34-client-import.test.ts           → 17 ok
 npx vitest run  → 85 arquivos · 1442 testes ok
 npx tsc --noEmit → 0 erros
 npm run build    → ok (Compiled successfully; /api/contacts/export-full criada)
+```
+
+---
+
+## BLOCO 8 — ONBOARDING REAL DO WHATSAPP
+
+### O diagnóstico
+
+O que existia era um **botão que não conectava**: a clínica digitava o número,
+o servidor respondia *“peça ao suporte Master”* (409) e alguém cadastrava token
+na mão. E a tela misturava dois mundos diferentes no mesmo aviso — “faltando:
+WHATSAPP_API_TOKEN…”, que é problema da **plataforma**, com “número não
+informado”, que é problema da **unidade**. A clínica lia um erro que não era
+dela; o suporte, um erro que não era dele.
+
+Três coisas mais:
+
+1. a versão da Graph API no código era **v21.0**, e a Meta já publicou v26.0 —
+   ninguém era avisado quando a versão fixada saía de linha;
+2. não havia como a unidade autorizar a **própria** conta: o fluxo oficial da
+   Meta para isso (Embedded Signup) não estava implementado;
+3. o “conectar” marcava **connected** antes de o webhook estar assinado — a
+   unidade podia aparecer conectada sem receber nada.
+
+### O que foi criado
+
+| Onde | Mudança |
+|---|---|
+| `lib/whatsapp-onboarding.ts` | **novo, puro** (seguro para os dois lados) — o plano de onboarding em **duas camadas** (plataforma × unidade), item por item com “por que isso importa”, o semáforo da versão da Graph API com as datas de vigência publicadas pela Meta, a leitura tolerante da mensagem do popup (`WA_EMBEDDED_SIGNUP`, aceitando número ausente), as URLs da troca de código e o link `wa.me` marcado como **teste**. |
+| `lib/whatsapp-onboarding-server.ts` | **novo, só no servidor** (`node:crypto`) — estado assinado do popup (anti-CSRF da troca do código, 30 min) e `appsecret_proof` (HMAC com o segredo do app). Fica separado porque o painel importa o módulo puro e `node:crypto` não pode entrar no bundle do navegador. |
+| `GET /api/whatsapp/onboarding` | o plano das duas camadas + o estado assinado do popup. **Zero segredo**: só diz se cada variável existe. |
+| `POST /api/whatsapp/onboarding` | `action:'exchange'` — o trabalho que a unidade não pode fazer sozinha, todo no servidor: **(1)** troca o código pelo token (`/oauth/access_token`, com o app secret), **(2)** descobre o que o popup não mandou (`debug_token` → `granular_scopes`; `/{WABA}/phone_numbers`), **(3)** **assina o webhook** na WABA (`/{WABA}/subscribed_apps`), **(4)** registra o número quando o PIN de duas etapas vem junto, **(5)** criptografa o token (AES-256-GCM) e grava na unidade, **(6)** audita. O token não volta em nenhuma resposta. |
+| `WhatsappChannelPanel` | a tela de conexão foi reescrita: mostra as **duas camadas** (com quem resolve cada uma), abre o **popup oficial** (“Conectar com a Meta”), aceita o PIN de duas etapas, e põe o `wa.me` no lugar certo — **teste**, com aviso explícito de que por ali nada entra no sistema. O técnico continua num “Diagnóstico” recolhido. |
+| `lib/whatsapp-cloud-api.ts` | versão padrão da Graph API: **v21.0 → v26.0** (última conferida na doc, liberada em 21/07/2026); `META_GRAPH_VERSION` continua mandando. |
+| `/api/master/units/[id]/whatsapp` | marca a conexão com **origem `master`** (o painel mostra por onde a conta entrou). |
+| `AuditAction` + atividade do Master | ações próprias: `whatsapp.connected`, `whatsapp.disconnected`, `whatsapp.onboarding_blocked`, `whatsapp.onboarding_failed` — com rótulos legíveis no console. |
+| `docs/WHATSAPP-FIRST-CLIENT.md` | o passo a passo agora começa pelo caminho normal (popup, uma vez configurado o app) e deixa o cadastro pelo Master como **caminho assistido**. |
+
+### Decisões
+
+- **Bloqueio de plataforma não é pendência da unidade.** Sem `META_APP_ID`,
+  `META_CONFIG_ID`, `META_APP_SECRET`, `WHATSAPP_CREDENTIALS_KEY` e
+  `WHATSAPP_VERIFY_TOKEN`, a resposta da troca é **503 com
+  `code:'platform_not_configured'` e `external:'BLOCKED_EXTERNAL'`**, o plano
+  mostra a camada “Plataforma (equipe do Instalink)” e **nada é gravado** — nem
+  token, nem número, nem status. Nada de “conectado” de mentira, e a clínica
+  não é culpada por um erro de instalação.
+- **O código do popup é de uso único e vive 30 segundos.** Por isso a troca é
+  imediata, sem retry, e uma falha da Meta diz **“recomece a conexão”** em vez
+  de tentar de novo com um código morto.
+- **Só fica conectado quem pode receber.** A assinatura do webhook é conferida
+  **antes** de marcar `connected`: se a Meta recusar, o token é guardado (ele é
+  válido) mas a unidade fica **pendente** com o motivo escrito. O `connected`
+  deixou de ser otimista.
+- **O token não passa pelo navegador.** A troca usa o segredo do app (que nunca
+  sai do servidor), o estado do popup é assinado (HMAC) e nenhuma resposta da
+  API contém token, segredo ou PIN.
+- **`appsecret_proof` em todas as chamadas com token.** A própria Meta
+  recomenda: um token vazado deixa de ser suficiente sozinho. (O outbox de envio
+  segue como estava — mexer nele é fora do escopo deste bloco.)
+- **PIN de duas etapas não é guardado.** Ele passa pelo servidor só para
+  registrar o número e não é persistido; sem PIN, o registro fica para quando
+  alguém tiver o número nas mãos.
+- **`wa.me` é teste, e agora diz isso.** O link externo continua ali para não
+  travar o atendimento, com o aviso de que por esse caminho a mensagem **não
+  entra nem sai pelo sistema** (sem histórico, sem automação, sem CRM).
+- **A versão da Graph API tem prazo de validade — e a tela avisa.** A tabela
+  conferida na doc oficial: v20.0 até 24/09/2026, v21.0 até 21/01/2027, v22.0
+  até 20/05/2027, v25.0 liberada em 18/02/2026, v26.0 em 21/07/2026 (padrão
+  novo). Se `META_GRAPH_VERSION` apontar para versão vencida, o painel mostra o
+  aviso em vez de deixar a integração quebrar sozinha.
+
+### O que NÃO foi possível provar aqui (`BLOCKED_EXTERNAL`)
+
+A troca de código exige um **app da Meta de verdade** (App ID, App Secret,
+Config ID do Login for Business e o domínio do painel entre os permitidos) — e
+este ambiente **não tem essas credenciais**. Portanto:
+
+- o **popup real não foi aberto contra a Meta** nesta entrega;
+- o que foi provado: o fluxo completo da rota, ponta a ponta, com a Graph API
+  **simulada** (respostas reais de formato), criptografia AES-256-GCM de
+  verdade, gravação de verdade no banco, auditoria de verdade e as recusas
+  certas (503 sem plataforma, 400 sem estado válido, 400 com código recusado,
+  400 com webhook recusado);
+- quando as credenciais existirem, falta só: (1) preencher as cinco variáveis,
+  (2) liberar o domínio do painel em **Allowed domains**/**Valid OAuth redirect
+  URIs** do app, (3) clicar em “Conectar com a Meta” e conferir a chegada do
+  primeiro webhook.
+
+### Testes
+
+`src/lib/__tests__/a34-whatsapp-onboarding.test.ts` (20 casos): camada da
+plataforma listando exatamente o que falta (sem expor valor), plano
+`BLOCKED_EXTERNAL` quando não há app, plano pronto entregando só config pública,
+“conectado mas sem evento”, camada da unidade cobrando número/WABA/token,
+semáforo de versão (v20 vencida, v26 atual, v30 desconhecida — e a versão padrão
+do cliente **batendo** com a última conferida), estado assinado (expirado, outra
+chave, adulterado), mensagem do popup sem número e `wa.me` rotulado como teste,
+`appsecret_proof` — e, contra as rotas reais com a **Meta simulada**: 503 sem
+plataforma **sem gravar nada**, troca completa (token cifrado, `source`,
+`appsecret_proof` na assinatura, `display_phone_number` da Meta, auditoria),
+descoberta de WABA/número pelo servidor, código recusado sem gravar token,
+estado inválido sem tocar na rede, webhook recusado deixando **pendente**, PIN
+de 6 dígitos registrando o número (e PIN torto recusado) e isolamento entre
+unidades. Mais a prova no código-fonte do painel (popup, origem da mensagem,
+troca no servidor, duas camadas, aviso do teste).
+
+```
+npx vitest run src/lib/__tests__/a34-whatsapp-onboarding.test.ts → 20 ok
+npx vitest run  → 86 arquivos · 1462 testes ok
+npx tsc --noEmit → 0 erros
+npm run build    → ok (Compiled successfully; /api/whatsapp/onboarding criada)
 ```

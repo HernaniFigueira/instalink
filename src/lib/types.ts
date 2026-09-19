@@ -274,6 +274,14 @@ export interface WhatsappIntegration {
   lastError?: string;
   lastErrorAt?: string;
   webhookVerifiedAt?: string;
+  /**
+   * Como esta unidade foi conectada: 'embedded_signup' (a própria unidade
+   * autorizou no popup oficial da Meta) ou 'master' (credenciais cadastradas
+   * pelo suporte). Vazio nos registros anteriores ao Bloco 8.
+   */
+  source?: 'embedded_signup' | 'master' | '';
+  /** Data e hora em que o código do popup foi trocado pelo token. */
+  tokenIssuedAt?: string;
 }
 
 // ── DTO público: whitelist explícita do que o visitante pode ver ──
@@ -1724,6 +1732,9 @@ export type AuditAction =
   | 'campaign.created' | 'campaign.ready' | 'campaign.sent'
   | 'campaign.cancelled' | 'campaign.deleted'
   | 'whatsapp.connect_requested' | 'whatsapp.webhook_received'
+  // A3.4 · Bloco 8 — onboarding real (Embedded Signup)
+  | 'whatsapp.connected' | 'whatsapp.disconnected'
+  | 'whatsapp.onboarding_blocked' | 'whatsapp.onboarding_failed'
   | 'agent.updated' | 'organization.created' | 'unit.created'
   | 'master.created' | 'master.promoted' | 'master.revoked'
   | 'user.login'
