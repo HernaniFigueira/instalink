@@ -25,6 +25,7 @@
 //   • orçamento por varredura ⇒ cabe no timeout de uma função serverless;
 //   • businessId revalidado em cada passo: uma execução jamais toca linha de
 //     outra empresa, mesmo se o contexto/param vier adulterado.
+import { deliverWebhookIds } from '../webhooks';
 import { randomUUID } from 'node:crypto';
 import type {
   Automation, AutomationEdge, AutomationNode, AutomationRun, AutomationRunStep, Business, DB,
@@ -196,10 +197,10 @@ function visitsOf(run: AutomationRun, nodeId: string): number {
  * Processa UM nó de UMA execução. Chamado dentro de `updateDB` (a ação e o
  * novo estado da execução são gravados juntos — não existe "meio passo").
  */
-export async function stepAutomationRun(
+export function stepAutomationRun(
   db: DB,
   ctx: StepContext,
-): Promise<StepOutcome> {
+): StepOutcome {
   const { runId, holder, nowISO } = ctx;
   if (!Array.isArray(db.automationRuns)) return { status: 'missing' };
   const run = db.automationRuns.find((r) => r.id === runId);
@@ -374,7 +375,7 @@ export async function stepAutomationRun(
     );
   }
 
-  const result: ActionResult = await executeAction({
+  const result: ActionResult = executeAction({
     db, business, automation, run, nodeId: node.id, now: nowISO, params,
   });
 
@@ -501,25 +502,9 @@ export interface DrainOptions {
   stepsPerRun?: number;
 }
 
-/**
- * Produção: reivindica as execuções devidas com CAS, processa nó a nó
- * (cada passo é UMA transação com a ação dentro) e devolve o que não coube no
- * orçamento. Pode ser chamado por um cron, por um request (gancho do db.ts) ou
- * por script — a decisão de quem processa é sempre do banco.
- *
- * Por que a REIVINDICAÇÃO é CAS e o PASSO é `updateDB` (e não CAS):
- *   • A reivindicação é o único ponto onde duas instâncias poderiam escolher a
- *     MESMA execução — por isso é escrita condicional (hash do documento): a
- *     segunda encontra a posse gravada e desiste (`not_mine`).
- *   • O passo contém I/O (a ação `dispatch_webhook` tenta a entrega na hora).
- *     Em CAS, cada conflito re-executaria o callback ⇒ efeito repetido para o
- *     destinatário do webhook. Preferiu-se a propriedade que o projeto já usa
- *     desde o P0 para `updateDB` (mutex por instância + last-wins entre
- *     instâncias) e, no lugar da transação atômica, a IDEMPOTÊNCIA por
- *     execução+nó: se a gravação do passo for perdida, a próxima varredura
- *     reaplica o nó e os efeitos já aplicados são reconhecidos e pulados
- *     (nota, tarefa, etapa). Um passo nunca é aplicado duas vezes; no pior
- *     caso ele é TENTADO de novo e reconhecido como feito.
+/** Produção: claim CAS, passos síncronos e transacionais, HTTP pós-commit.
+ * Outbox + avanço do nó são persistidos juntos: retomada não re-enfileira o nó.
+ * O HTTP usa claim próprio da entrega, compartilhado com o cron de webhooks.
  */
 export async function drainAutomations(options: DrainOptions = {}): Promise<AutomationDrainSummary> {
   const started = Date.now();
@@ -558,11 +543,16 @@ export async function drainAutomations(options: DrainOptions = {}): Promise<Auto
     for (let i = 0; i < stepsPerRun; i++) {
       let outcome: StepOutcome = { status: 'missing' };
       try {
-        outcome = await updateDB((db) => {
+        const step = await updateDB((db) => {
           const run = db.automationRuns.find((r) => r.id === runId);
           const limits = limitsFor(run ? db.businesses.find((b) => b.id === run.businessId) : null);
-          return stepAutomationRun(db, { runId, holder, nowISO, limits });
+          const before = db.webhookDeliveries.length;
+          const outcome = stepAutomationRun(db, { runId, holder, nowISO, limits });
+          return { outcome, deliveryIds: db.webhookDeliveries.slice(before).map((d) => d.id) };
         });
+        outcome = step.outcome;
+        // Falha de rede/worker não desfaz o passo já committed: a outbox é durável.
+        await deliverWebhookIds(step.deliveryIds).catch(() => { /* cron retoma a entrega */ });
       } catch (e: any) {
         // Falha de infraestrutura: marca o erro na execução e segue — o
         // próximo ciclo decide de novo (nenhum estado é perdido).

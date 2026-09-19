@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { requireApiKey } from '@/lib/api-keys';
 import { checkIdempotency, extractIdempotencyKey, saveIdempotency } from '@/lib/idempotency';
 import { createBookingTx } from '@/lib/booking-create';
-import { dispatchWebhook } from '@/lib/webhooks';
+import { enqueueWebhookTx, deliverWebhookIds } from '@/lib/webhooks';
 import { pushIntegrationLog } from '@/lib/integration-logs';
 import { updateDB } from '@/lib/db';
 import type { Booking, DB } from '@/lib/types';
@@ -53,7 +53,11 @@ export async function POST(req: NextRequest) {
     let createdBooking: Booking | null = null;
     let createdResult: any = null;
 
+    let replay: ReturnType<typeof checkIdempotency> = null;
+    const webhookDeliveryIds: string[] = [];
     await updateDB((d: DB) => {
+      replay = checkIdempotency(d, business.id, idempotencyKey, '/api/external/bookings');
+      if (replay) return;
       createdResult = createBookingTx(d, {
         business,
         service,
@@ -94,15 +98,21 @@ export async function POST(req: NextRequest) {
           { ok: true, booking: createdBooking, ...createdResult },
         );
       }
+
+      // Outbox e alteração de negócio no mesmo commit; nenhum HTTP aqui.
+      webhookDeliveryIds.push(...enqueueWebhookTx(d, 'booking.created', business.id, {
+        booking: createdBooking,
+      }).map((delivery) => delivery.id));
     });
+
+    if (replay) {
+      const cached = replay as NonNullable<ReturnType<typeof checkIdempotency>>;
+      return NextResponse.json(cached.responseBody, { status: cached.statusCode, headers: { 'X-Idempotent-Replay': 'true' } });
+    }
 
     // 2. Disparo de Webhook
     try {
-      await updateDB(async (d: DB) => {
-        await dispatchWebhook(d, 'booking.created', business.id, {
-          booking: createdBooking,
-        });
-      });
+      await deliverWebhookIds(webhookDeliveryIds);
     } catch (whErr) {
       console.error('[webhook dispatch error]:', whErr);
     }

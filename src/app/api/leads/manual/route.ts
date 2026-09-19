@@ -3,7 +3,7 @@ import { updateDB } from '@/lib/db';
 import { requireBusiness } from '@/lib/access';
 import { pushAudit } from '@/lib/audit';
 import { ingestLead } from '@/lib/pipeline';
-import { dispatchWebhook } from '@/lib/webhooks';
+import { enqueueWebhookTx, deliverWebhookIds } from '@/lib/webhooks';
 import type { DB, LeadPriority } from '@/lib/types';
 
 const PRIORITIES: LeadPriority[] = ['low', 'medium', 'high', 'urgent'];
@@ -40,6 +40,7 @@ export async function POST(req: NextRequest) {
     }
 
     let result!: ReturnType<typeof ingestLead>;
+    const webhookDeliveryIds: string[] = [];
     await updateDB((db: DB) => {
       result = ingestLead(db, {
         businessId,
@@ -74,18 +75,19 @@ export async function POST(req: NextRequest) {
           stageId: result.lead.stageId || 'new',
         },
       });
+
+      // Outbox e alteração de negócio no mesmo commit; nenhum HTTP aqui.
+      webhookDeliveryIds.push(...enqueueWebhookTx(db, result.isNew ? 'lead.created' : 'lead.updated', businessId, {
+        lead: result.lead,
+        isNew: result.isNew,
+        source: 'manual',
+      }).map((delivery) => delivery.id));
     });
 
     // O webhook é posterior à transação, como na captura pública. Falha de
     // entrega não desfaz o lead já criado e não muda a semântica da rota.
     try {
-      await updateDB(async (db: DB) => {
-        await dispatchWebhook(db, result.isNew ? 'lead.created' : 'lead.updated', businessId, {
-          lead: result.lead,
-          isNew: result.isNew,
-          source: 'manual',
-        });
-      });
+      await deliverWebhookIds(webhookDeliveryIds);
     } catch { /* a operação manual já foi persistida */ }
 
     return NextResponse.json({

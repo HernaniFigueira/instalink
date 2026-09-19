@@ -13,6 +13,8 @@
 //     histórico — o CRM mostra "09/09 concluído" e "16/09 agendado".
 import type { Booking, BookingStatus, Service } from './types';
 import { timeToMin } from './utils';
+import { addDaysISO } from './tz';
+import { addMonthsClamped } from './booking-recurrence';
 
 export const TERMINAL_STATUSES: BookingStatus[] = ['completed', 'no_show', 'cancelled'];
 
@@ -28,9 +30,8 @@ export function bookingDuration(service: Service | undefined, fallback = 30): nu
 // ═══════════════════════════════════════════════════════════════
 // A2-B3 (F5) — HORIZONTE EFETIVO (uma regra, zero hardcode de 60)
 // ═══════════════════════════════════════════════════════════════
-// O servidor aceita 1–365 (PATCH /api/businesses). Toda a UI e toda a API
-// passam por AQUI — painel, /agendar, página pública e NewBookingSheet não
-// podem assumir 60 como regra universal.
+// horizonDays é exclusivamente a janela pública de autoagendamento.
+// A equipe autorizada tem limite técnico próprio, inclusivo, de cinco anos.
 export const BOOKING_HORIZON_MIN_DAYS = 1;
 export const BOOKING_HORIZON_MAX_DAYS = 365;
 export const BOOKING_HORIZON_DEFAULT_DAYS = 60;
@@ -39,6 +40,14 @@ export function effectiveHorizonDays(cfg?: { horizonDays?: number } | null): num
   const n = Math.round(Number(cfg?.horizonDays));
   if (!Number.isFinite(n) || n < BOOKING_HORIZON_MIN_DAYS) return BOOKING_HORIZON_DEFAULT_DAYS;
   return Math.min(BOOKING_HORIZON_MAX_DAYS, n);
+}
+
+export const ADMIN_BOOKING_HORIZON_YEARS = 5;
+export function adminBookingMaxDate(today: string): string {
+  return addMonthsClamped(today, ADMIN_BOOKING_HORIZON_YEARS * 12);
+}
+export function bookingMaxDate(today: string, cfg: { horizonDays?: number } | undefined, admin = false): string {
+  return admin ? adminBookingMaxDate(today) : addDaysISO(today, effectiveHorizonDays(cfg));
 }
 
 // A2-B3 (F6): limite efetivo do GET manage — EXPLÍCITO no contrato. O cliente

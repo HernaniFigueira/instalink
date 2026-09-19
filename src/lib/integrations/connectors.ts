@@ -10,6 +10,7 @@
 //
 // REGRA DE HONESTIDADE: conector de canal sem implementação devolve
 // `not_implemented` — nunca "enviado". A interface mostra o estado real.
+import { assertOutsideDBTransaction } from '../db-transaction';
 import type { DB, Integration, IntegrationProviderId } from '../types';
 import {
   MAX_EVENTS_PER_DELIVERY, clipText, isExternalEvent, normalizeEmail, normalizePhone, sanitizeMetadata, sanitizePayload,
@@ -375,6 +376,7 @@ export async function sendChannelMessage(
     fetchFn?: typeof fetch;
   },
 ): Promise<ChannelSendResult & { provider: IntegrationProviderId | '' }> {
+  assertOutsideDBTransaction();
   const integration = (db.integrations || []).find(
     (i) => i.id === input.integrationId && i.businessId === input.businessId,
   );

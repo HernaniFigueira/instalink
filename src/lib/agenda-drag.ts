@@ -262,7 +262,7 @@ export function emptyDragSlots(): DragSlots {
  */
 export function dragSlotUrls(businessId: string, serviceId: string, dates: string[]): string[] {
   return dates.map(
-    (d) => `/api/bookings?businessId=${encodeURIComponent(businessId)}&serviceId=${encodeURIComponent(serviceId)}&date=${d}`,
+    (d) => `/api/bookings?mode=slots-admin&businessId=${encodeURIComponent(businessId)}&serviceId=${encodeURIComponent(serviceId)}&date=${d}`,
   );
 }
 

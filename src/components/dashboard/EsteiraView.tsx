@@ -189,7 +189,7 @@ export function EsteiraView() {
     let cancel = false;
     async function fetchSlots() {
       const res = await apiGet<{ slots: string[] }>(
-        `/api/bookings?businessId=${businessId}&serviceId=${bookServiceId}&date=${bookDate}&professionalId=${bookProId}`,
+        `/api/bookings?mode=slots-admin&businessId=${businessId}&serviceId=${bookServiceId}&date=${bookDate}&professionalId=${bookProId}`,
         { scope: 'area', area: 'Agenda' },
       );
       if (!cancel && res.ok && res.data) {

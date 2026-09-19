@@ -12,8 +12,8 @@
 //   tarefa             → lib/automation/tasks.ts · createTaskTx
 //   agendar            → lib/pipeline.ts · bookLead → createBookingTx (slot!)
 //   cancelar           → lib/booking-status.ts · applyBookingStatusTx (máquina de estados)
-//   webhook            → lib/integrations/outbound.ts · dispatchOutboundEvent
-//                        (P6 resolve o destino; webhook entrega pelo P3: HMAC + retry)
+//   webhook            → lib/integrations/outbound.ts · enqueueOutboundWebhooksTx
+//                        (P6 enfileira; pós-commit entrega pelo P3: HMAC + retry)
 //
 // Consequências:
 //   • businessId é sempre o da EXECUÇÃO (o id do payload nunca é aceito cru);
@@ -33,7 +33,7 @@ import {
 import { addContactNote, findContact } from '../contacts';
 import { applyBookingStatusTx } from '../booking-status';
 // P6 — conector de saída (a ação não conhece provedor; a camada resolve).
-import { dispatchOutboundEvent } from '../integrations/outbound';
+import { enqueueOutboundWebhooksTx } from '../integrations/outbound';
 import { createTaskTx } from './tasks';
 import { renderParams } from './conditions';
 import { addDaysISO, todayISO } from '../tz';
@@ -137,12 +137,12 @@ function missing(what: string): ActionResult {
 
 /**
  * Executa UMA ação do nó. Sincronamente sobre o `db` recebido (o executor está
- * dentro de uma transação) — exceto o webhook, que é o único I/O e já é
- * tratado pelo P3 como tentativa imediata + fila persistida.
+ * dentro de uma transação). Webhook apenas grava a outbox; o HTTP acontece
+ * depois do commit pelo consumidor P3, com claim, HMAC e retry existentes.
  * `params.__type` vem do nó (fora do `params` validado, para nenhum template
  * poder sobrescrever a ação a ser executada).
  */
-export async function executeAction(input: ActionInput): Promise<ActionResult> {
+export function executeAction(input: ActionInput): ActionResult {
   const actionType = input.params?.__type as AutomationActionType | undefined;
   const def = automationActionDef(actionType);
   if (!def) return { ok: false, summary: '', error: `ação desconhecida: ${actionType || '(vazia)'}` };
@@ -402,20 +402,17 @@ export async function executeAction(input: ActionInput): Promise<ActionResult> {
       const note = text(input, 'note', 300);
       if (note) data.note = note;
       try {
-        // P6 — a ação NÃO conhece destino nenhum: pede ao conector de saída da
-        // camada de integrações (`lib/integrations/outbound.ts`). Hoje o alvo
-        // 'webhook' entrega pelo canal assinado do P3 (HMAC + fila + retry);
-        // canais entram por este MESMO caminho quando o conector existir.
-        const dispatched = await dispatchOutboundEvent(db, {
+        // P6 — só a parte transacional do destino webhook. O executor entrega
+        // pelo P3 APÓS o commit; nunca chamar um conector HTTP neste passo.
+        const dispatched = enqueueOutboundWebhooksTx(db, {
           businessId: business.id,
           event: event as WebhookEvent,
           data,
-          targets: ['webhook'],
-        });
+        }, `evt_auto_${input.run.id}_${input.nodeId}`);
         if (dispatched.webhooks.destinations === 0) {
           return { ok: true, skipped: true, summary: 'nenhum webhook ativo para este evento' };
         }
-        return { ok: true, summary: `webhook ${event} → ${dispatched.webhooks.deliveries.length} destino(s)` };
+        return { ok: true, summary: `webhook ${event} enfileirado → ${dispatched.webhooks.deliveries.length} destino(s)` };
       } catch (e: any) {
         return { ok: false, summary: '', error: e?.message || 'falha ao enfileirar o webhook' };
       }

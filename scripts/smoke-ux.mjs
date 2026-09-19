@@ -147,8 +147,8 @@ const untouched = await api('GET', `/api/bookings?businessId=${B3}&mode=manage&f
 check('conflito recusado NÃO moveu o atendimento', (untouched.data.bookings || []).find((b) => b.id === bkId)?.time === s1, String((untouched.data.bookings || []).find((b) => b.id === bkId)?.time));
 const pastMove = await api('PATCH', '/api/bookings', { businessId: B3, id: bkId, date: isoDay(-5), time: s1 }, ownerToken);
 check('mover para o passado → 400', pastMove.status === 400, `(${pastMove.status})`);
-const farMove = await api('PATCH', '/api/bookings', { businessId: B3, id: bkId, date: isoDay(400), time: s1 }, ownerToken);
-check('mover além do horizonte → 400', farMove.status === 400, `(${farMove.status})`);
+const farMove = await api('PATCH', '/api/bookings', { businessId: B3, id: bkId, date: isoDay(6 * 366), time: s1 }, ownerToken);
+check('mover além do limite administrativo de 5 anos → 400', farMove.status === 400, `(${farMove.status})`);
 const badTime = await api('PATCH', '/api/bookings', { businessId: B3, id: bkId, date: clinicDay, time: '99:99' }, ownerToken);
 check('horário inválido → 400', badTime.status === 400, `(${badTime.status})`);
 

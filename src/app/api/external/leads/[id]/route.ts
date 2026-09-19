@@ -4,7 +4,7 @@ import {
   moveLeadStage, assignLead, addLeadNote, getBusinessPipeline,
   normalizeLeadStageId, STAGE_ALIASES,
 } from '@/lib/pipeline';
-import { dispatchWebhook } from '@/lib/webhooks';
+import { enqueueWebhookTx, deliverWebhookIds } from '@/lib/webhooks';
 import { pushIntegrationLog } from '@/lib/integration-logs';
 import { updateDB } from '@/lib/db';
 import type { DB } from '@/lib/types';
@@ -49,6 +49,7 @@ export async function PATCH(
     let updatedLead: any = null;
     let stageChanged = false;
 
+    const webhookDeliveryIds: string[] = [];
     await updateDB((d: DB) => {
       const lead = d.leads.find((l) => l.id === params.id && l.businessId === business.id);
       if (!lead) throw Object.assign(new Error('Lead não encontrado.'), { status: 404 });
@@ -109,21 +110,22 @@ export async function PATCH(
         source: 'api',
         status: 200,
       });
+
+      // Outbox e alteração de negócio no mesmo commit; nenhum HTTP aqui.
+      if (stageChanged) {
+        webhookDeliveryIds.push(...enqueueWebhookTx(d, 'lead.stage_changed', business.id, {
+          lead: updatedLead,
+          newStageId: updatedLead.stageId,
+        }).map((delivery) => delivery.id));
+      }
+      webhookDeliveryIds.push(...enqueueWebhookTx(d, 'lead.updated', business.id, {
+        lead: updatedLead,
+      }).map((delivery) => delivery.id));
     });
 
     // Disparo de Webhook
     try {
-      await updateDB(async (d: DB) => {
-        if (stageChanged) {
-          await dispatchWebhook(d, 'lead.stage_changed', business.id, {
-            lead: updatedLead,
-            newStageId: updatedLead.stageId,
-          });
-        }
-        await dispatchWebhook(d, 'lead.updated', business.id, {
-          lead: updatedLead,
-        });
-      });
+      await deliverWebhookIds(webhookDeliveryIds);
     } catch (whErr) {
       console.error('[webhook dispatch error]:', whErr);
     }

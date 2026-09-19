@@ -34,6 +34,7 @@ interface Person {
   orders: number; spent: number; lastOrderAt: string;
   bookings: Array<{
     id: string; customerName: string; date: string; time: string; status: string; service: string;
+    seriesId?: string; seriesIndex?: number; seriesCount?: number;
     professional?: string; rescheduleCount?: number; previousId?: string;
   }>;
   leads: Array<{ id: string; origin: string; status: string; stageId: string; stageName: string; interest: string; action: string; createdAt: string; stageHistory?: any[]; priority?: string; assignedUserId?: string; lastInteraction?: string }>;
@@ -309,7 +310,7 @@ export default function ClientesPage() {
         kind: 'booking', id: b.id, sortKey: `${b.date}T${b.time || '00:00'}`, icon: 'calendar',
         when: `${eventDay(b.date)}${b.time ? ` · ${b.time}` : ''}`,
         title: b.service,
-        subtitle: [b.professional, (b.rescheduleCount || 0) > 0 ? `reagendado ${b.rescheduleCount}×` : ''].filter(Boolean).join(' · ') || 'Atendimento',
+        subtitle: [b.seriesId ? `Série · ${b.seriesIndex} de ${b.seriesCount}` : '', b.professional, (b.rescheduleCount || 0) > 0 ? `reagendado ${b.rescheduleCount}×` : ''].filter(Boolean).join(' · ') || 'Atendimento',
         badge: d.panel, tone: d.tone, status: b.status,
         actions: (
           <div className="mt-2">
