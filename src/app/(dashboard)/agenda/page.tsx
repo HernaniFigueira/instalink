@@ -26,7 +26,7 @@ import { useSearchParams } from 'next/navigation';
 import { todayISO, addDaysISO, weekdayOf, formatDateBR, nowHM } from '@/lib/tz';
 import { WEEKDAYS, WEEKDAYS_LONG, timeToMin, minToTime, cn } from '@/lib/utils';
 import type { Availability, Booking, BookingConfig, BookingStatus, Professional, Service } from '@/lib/types';
-import { Avatar, ListSkeleton, Button, AttentionStrip, Tabs } from '@/components/ui';
+import { Avatar, ListSkeleton, Button, IconButton, AttentionStrip, Tabs } from '@/components/ui';
 import { Icon } from '@/components/icons';
 import {
   ATTENTION_MARK_CLS, ATTENTION_RING_CLS, BOOKING_BLOCK, BOOKING_DOT, BOOKING_STATUS,
@@ -40,7 +40,7 @@ import { apiGet, apiSend } from '@/lib/api-client';
 import { SLOT_STATE_MESSAGE, slotState } from '@/lib/slot-states';
 import {
   IDLE_INTERACTION, blockHeight, blockTop, dragPreviewLabel, dragSlotUrls, dropConfirmQuestion,
-  emptyDragSlots, geometryFromRect, layoutBlocks, planDrop, reduceInteraction, withOwnSlot,
+  emptyDragSlots, geometryFromRect, layoutBlocks, minuteFromOffsetY, planDrop, reduceInteraction, withOwnSlot,
   type CellAvailability, type DragSlots, type DropColumn, type GridGeometry, type InteractionState,
   type Point,
 } from '@/lib/agenda-drag';
@@ -55,6 +55,9 @@ const PX_PER_HOUR = 52;
 const GUTTER_W = 56;
 const COL_MIN = 148;
 const HEADER_H = 36;
+// Passo do clique-em-área-vazia (o horário só é aceito se a grade real o
+// confirmar — caso contrário o sheet abre sem horário escolhido).
+const CLICK_SNAP_MIN = 5;
 /** Folga mínima entre o fim da grade e o fim da tela (não é a causa do
  *  scroll, só respiro visual — a página continua rolando normalmente). */
 const VIEWPORT_BOTTOM_PAD = 16;
@@ -144,8 +147,12 @@ interface HoverTarget {
   availability: CellAvailability;
 }
 
+// Momento do último pointerdown sobre um atendimento: o clique que sobra de
+// um arraste/drop nunca deve abrir a criação por engano.
+let lastGridPressAt = 0;
+
 // ── Coluna da grade (memoizada: o drag não re-renderiza a grade inteira) ──
-const GridColumn = memo(function GridColumn({ column, basisPct, variant, highlight, onPressStart, onPressMove, onPressEnd, onPressCancel, onBlockClick, gridHeight, hours }: {
+const GridColumn = memo(function GridColumn({ column, basisPct, variant, highlight, onPressStart, onPressMove, onPressEnd, onPressCancel, onBlockClick, onEmptyPress, gridHeight, hours, startMinute, endMinute }: {
   column: ColumnVM;
   basisPct: number;
   variant: 'day' | 'week';
@@ -155,8 +162,12 @@ const GridColumn = memo(function GridColumn({ column, basisPct, variant, highlig
   onPressEnd: (id: string, e: React.PointerEvent) => void;
   onPressCancel: () => void;
   onBlockClick: (id: string) => void;
+  /** A3.4: clique/toque em área vazia → criar agendamento naquele horário. */
+  onEmptyPress: (columnKey: string, time: string) => void;
   gridHeight: number;
   hours: number;
+  startMinute: number;
+  endMinute: number;
 }) {
   return (
     // border-b = linha final da grade. As linhas internas param em
@@ -165,7 +176,19 @@ const GridColumn = memo(function GridColumn({ column, basisPct, variant, highlig
     // border-box: larguras inteiras determinísticas — nenhuma divergência
     // de subpixel contra o minWidth calculado em JS, nenhum resíduo que
     // fabrique overflow nas bordas.
-    <div className="relative shrink-0 border-r border-b border-zinc-100 last:border-r-0" style={{ minWidth: COL_MIN, width: `${basisPct}%`, height: gridHeight }}>
+    <div className="relative shrink-0 border-r border-b border-zinc-100 last:border-r-0"
+      style={{ minWidth: COL_MIN, width: `${basisPct}%`, height: gridHeight }}
+      onClick={(e) => {
+        // Clique em área VAZIA = criar naquele horário. Cliques em atendimento
+        // (button), no destaque de arraste e o clique que sobra de um drop são
+        // ignorados — criar nunca acontece "sem querer" depois de arrastar.
+        const el = e.target as HTMLElement;
+        if (el.closest('button')) return;
+        if (Date.now() - lastGridPressAt < 500) return;
+        const rect = e.currentTarget.getBoundingClientRect();
+        const minutes = minuteFromOffsetY(e.clientY - rect.top, { startMinute, endMinute, pxPerHour: PX_PER_HOUR }, CLICK_SNAP_MIN);
+        onEmptyPress(column.key, minToTime(minutes));
+      }}>
       {Array.from({ length: Math.max(0, hours - 1) }, (_, idx) => idx + 1).map((i) => (
         <span key={i} className="absolute left-0 right-0 border-t border-zinc-100" style={{ top: i * PX_PER_HOUR }} />
       ))}
@@ -297,7 +320,7 @@ export default function AgendaPage() {
   const [rules, setRules] = useState<Availability[]>([]);
   const [loaded, setLoaded] = useState(false);
   const [detail, setDetail] = useState<Booking | null>(null);
-  const [creating, setCreating] = useState(false);
+  const [creating, setCreating] = useState<{ date: string; time: string; professionalId: string } | null>(null);
   const [flash, setFlash] = useState<{ tone: 'ok' | 'warn' | 'error'; text: string } | null>(null);
 
   // ── Drag: estado mínimo (o movimento em si vive em refs, sem re-render) ──
@@ -779,7 +802,16 @@ export default function AgendaPage() {
   }, [computeHover]);
 
   // ── Handlers de ponteiro (estáveis: as colunas memoizadas não remontam) ──
+  /** A3.4: clique em horário vago abre o sheet JÁ naquele dia/horário/quem. */
+  const onEmptyPress = useCallback((columnKey: string, time: string) => {
+    const col = columnsRef.current.find((c) => c.key === columnKey);
+    if (!col) return;
+    setDetail(null);
+    setCreating({ date: col.date, time, professionalId: col.professionalId || '' });
+  }, []);
+
   const onPressStart = useCallback((id: string, e: React.PointerEvent) => {
+    lastGridPressAt = Date.now();
     if (e.pointerType === 'mouse' && e.button !== 0) return;
     const booking = bookingsRef.current.get(id);
     if (!booking) return;
@@ -1015,7 +1047,7 @@ export default function AgendaPage() {
             <span className="text-xs text-[var(--text-muted)] truncate">Clique num atendimento para ver o detalhe · arraste para reagendar.</span>
           </div>
         </div>
-        <Button onClick={() => setCreating(true)} variant="primary"><Icon n="calendarPlus" size={15} /> Novo agendamento</Button>
+        <Button onClick={() => setCreating({ date: focus, time: '', professionalId: '' })} variant="primary"><Icon n="calendarPlus" size={15} /> Novo agendamento</Button>
       </div>
 
       <PermissionNotice message={notice?.title} hint={notice?.hint} onDismiss={dismiss} />
@@ -1061,19 +1093,26 @@ export default function AgendaPage() {
           ficar acima dos cabeçalhos sticky (z-20/30) das colunas. */}
       <div className="relative z-40 ws-panel mb-2.5">
         <div className="flex flex-wrap items-center gap-x-3 gap-y-2.5 px-3 py-2.5">
-          {/* Navegação no tempo: [◀ ▶] + data ÚNICA (título clicável) + Hoje.
-              Antes eram seta/Hoje/seta/campo e o rótulo repetido — agora cada
-              elemento tem uma função só e a data aparece UMA vez. */}
+          {/* Navegação no tempo (A3.4): [◀] [Hoje] [▶] + título da data ao lado.
+              O "Hoje" fica SEMPRE no mesmo lugar, entre as setas — antes ele
+              aparecia e desaparecia conforme a data, então o botão se movia
+              justamente quando o usuário mais precisava dele. Estando em hoje,
+              ele continua visível, porém marcado como selecionado. */}
           <div className="flex items-center gap-2 min-w-0">
-            <span className="inline-flex rounded-md border border-[var(--border-strong)] bg-white shadow-xs overflow-hidden">
-              <button onClick={() => move(-1)} aria-label={navLabel(-1)} title={navLabel(-1)}
-                className="w-9 h-9 flex items-center justify-center text-[var(--text-muted)] hover:bg-[var(--surface-hover)] hover:text-[var(--text)] border-r border-[var(--border)]">
-                <Icon n="chevL" size={15} />
+            <span className="inline-flex rounded-md border border-[var(--border-strong)] bg-[var(--surface)] shadow-xs overflow-hidden">
+              <IconButton icon="chevL" label={navLabel(-1)} tip={navLabel(-1)} variant="ghost" onClick={() => move(-1)}
+                className="w-9 h-9 rounded-none text-[var(--text-muted)] border-r border-[var(--border)]" />
+              <button type="button" onClick={() => setFocus(today)}
+                aria-pressed={isToday}
+                title={isToday ? 'Você já está em hoje' : 'Ir para hoje'}
+                className={cn('h-9 px-3 rounded-none text-xs font-bold border-r border-[var(--border)] transition-colors',
+                  isToday
+                    ? 'bg-[var(--brand-soft)] text-[var(--brand-fg)] cursor-default'
+                    : 'text-[var(--text)] hover:bg-[var(--surface-hover)]')}>
+                Hoje
               </button>
-              <button onClick={() => move(1)} aria-label={navLabel(1)} title={navLabel(1)}
-                className="w-9 h-9 flex items-center justify-center text-[var(--text-muted)] hover:bg-[var(--surface-hover)] hover:text-[var(--text)]">
-                <Icon n="chevR" size={15} />
-              </button>
+              <IconButton icon="chevR" label={navLabel(1)} tip={navLabel(1)} variant="ghost" onClick={() => move(1)}
+                className="w-9 h-9 rounded-none text-[var(--text-muted)]" />
             </span>
             <label className="relative inline-flex flex-col min-w-0 max-w-[min(26rem,calc(100vw-12rem))] cursor-pointer rounded-md px-1 -mx-1 py-0.5 hover:bg-[var(--surface-hover)] focus-within:shadow-focus" title="Escolher outra data">
               <span className="text-[15px] font-bold leading-tight text-[var(--text)] capitalize truncate" aria-live="polite">{focusLabel}</span>
@@ -1083,11 +1122,6 @@ export default function AgendaPage() {
               <input type="date" value={focus} max="2100-12-31" onChange={(e) => { if (/^\d{4}-\d{2}-\d{2}$/.test(e.target.value)) setFocus(e.target.value); }}
                 aria-label="Escolher data" className="absolute inset-0 w-full h-full opacity-0 cursor-pointer" />
             </label>
-            {!isToday && (
-              <Button variant="soft" size="sm" onClick={() => setFocus(today)}>
-                <Icon n="calendar" size={13} /> Hoje
-              </Button>
-            )}
           </div>
           <Tabs
             items={[
@@ -1187,11 +1221,11 @@ export default function AgendaPage() {
                 </div>
               )}
             </div>
-            <button onClick={toggleFullscreen} aria-pressed={fullscreen} title={fullscreen ? 'Sair da tela cheia (ESC)' : 'Tela cheia'}
-              className="inline-flex items-center gap-1.5 text-xs font-semibold bg-zinc-50 border border-zinc-200 rounded-md px-2.5 py-1.5 hover:bg-zinc-100">
+            <Button type="button" variant="secondary" size="sm" aria-pressed={fullscreen} onClick={toggleFullscreen}
+              title={fullscreen ? 'Sair da tela cheia (ESC)' : 'Tela cheia'}>
               <Icon n={fullscreen ? 'shrink' : 'expand'} size={14} />
               <span className="hidden sm:inline">{fullscreen ? 'Sair' : 'Tela cheia'}</span>
-            </button>
+            </Button>
           </div>
         </div>
         {/* Legenda: cor = estado (mesma fonte da grade) + marcador de atenção. */}
@@ -1202,9 +1236,15 @@ export default function AgendaPage() {
               {BOOKING_STATUS[s].panel}
             </span>
           ))}
-          <span className="inline-flex items-center gap-1 text-[11px] font-medium text-zinc-500">
+          <span className="text-[11px] font-medium text-zinc-500 inline-flex items-center gap-1">
             <span className={`w-3.5 h-3.5 rounded-full text-[9px] font-black leading-[14px] text-center ${ATTENTION_MARK_CLS}`} aria-hidden="true">!</span>
             precisa de fechamento
+          </span>
+          {/* A3.4: criar pelo clique era um recurso invisível — agora a grade
+              diz que dá. Arrastar continua sendo mover o atendimento. */}
+          <span className="text-[11px] font-medium text-[var(--text-muted)] inline-flex items-center gap-1 sm:ml-auto">
+            <Icon n="calendarPlus" size={12} />
+            clique num horário vago para agendar · arraste um cartão para remarcar
           </span>
         </div>
         {isDragging && view !== 'month' && (
@@ -1346,6 +1386,9 @@ export default function AgendaPage() {
                       onPressEnd={onPressEnd}
                       onPressCancel={onPressCancel}
                       onBlockClick={onBlockClick}
+                      onEmptyPress={onEmptyPress}
+                      startMinute={grid.start}
+                      endMinute={grid.end}
                     />
                   ))}
                 </div>
@@ -1424,8 +1467,14 @@ export default function AgendaPage() {
           services={services}
           pros={pros}
           horizonDays={horizonDays}
-            timezone={bizTz}
-          onClose={() => setCreating(false)}
+          timezone={bizTz}
+          initial={{
+            name: '', phone: '',
+            date: creating.date || focus,
+            time: creating.time,
+            professionalId: creating.professionalId,
+          }}
+          onClose={() => setCreating(null)}
           onCreated={load}
         />
       )}

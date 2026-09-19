@@ -189,3 +189,58 @@ npx vitest run src/lib/__tests__/a34-team.test.ts src/lib/__tests__/professional
 npx vitest run → 76 arquivos · 1278 testes ok
 npx tsc --noEmit → 0 erros
 ```
+
+## BLOCO 3 — DISPONIBILIDADE · AGENDA · NOVO AGENDAMENTO
+
+### O diagnóstico
+
+A Disponibilidade resumia a semana numa **frase corrida** — "Seg 08:00 — 20:00 ·
+Ter 08:00 — 20:00 · Qua 08:00 — 20:00 · …" — impossível de conferir de relance,
+e o horário de cada profissional aparecia como outra frase, no mesmo formato.
+Na Agenda, o botão **Hoje** existia só quando você NÃO estava em hoje: o
+elemento mais procurado era justamente o que sumia do lugar. E a grade não
+tinha como criar por clique: quem olhava "14:00 de quinta está vago" tinha de
+abrir o formulário e redigitar dia, hora e profissional.
+
+### O que mudou
+
+| Onde | Mudança |
+|---|---|
+| `lib/hours-chips.ts` | **novo** — decide o que mostrar em cada dia (ordem da semana começando na SEGUNDA, dia fechado, turno duplo). Nenhum horário nasce aqui: a entrada vem de `businessHoursTable` / `professionalHoursTable`. |
+| `components/ui.tsx` · `<HoursChips/>` | **novo** componente do design system: `[ SEG 08:00 → 20:00 ]`, `[ DOM Fechado ]`. Chip fechado é neutro (não é erro); chip aberto é branco com borda forte; a seta usa a cor da marca. |
+| `dashboard/BusinessHours.tsx` | passa a mostrar **chips** no horário da empresa E no horário efetivo de cada profissional (mesma linguagem para comparar). Card do profissional ganha **avatar com a foto real**. Toda a tela saiu do `zinc/emerald/blue` cru para os tokens do design system; avisos usam o `Notice` compartilhado. |
+| `/disponibilidade` | fuso horário e "Regras de reserva" em `Panel` + `Select` do design system (zero classe fora do sistema). |
+| `agenda/page.tsx` · toolbar | `[◀] Hoje [▶]` num grupo único, com "Hoje" **sempre** no mesmo lugar (quando já é hoje, ele fica marcado como selecionado em vez de desaparecer). Setas e tela cheia em `IconButton`/`Button`. |
+| `agenda/page.tsx` · grade | **clicar num horário vago abre o Novo agendamento já naquele dia, hora e profissional**. O clique é convertido por `minuteFromOffsetY` (snap de 5 min, sempre dentro da grade) e NUNCA dispara depois de um arraste (`lastGridPressAt` + `el.closest('button')`). A legenda passa a ensinar as duas interações: "clique num horário vago para agendar · arraste um cartão para remarcar". |
+| `NewBookingSheet.tsx` | migrado ao design system (`Button`, `Field`, `Input`, `Select`, `Checkbox`, `Notice`, `Badge`, `Avatar`, `IconButton`): cabeçalho com passo a passo, cliente selecionado em chip verde com botão "Trocar", resultados de busca com avatar, horários em grade de botões com o escolhido em azul cheio. Aceita pré-preenchimento (`date`, `time`, `professionalId`, `serviceId`) e **só mantém o horário sugerido se a grade real do servidor oferecer aquele horário**. |
+
+### O que NÃO foi tocado (trava de motor)
+
+`computeSlots`, `createBookingTx`, recorrência/série, `moveLeadStage`,
+`ingestLead`, outbox, webhook e isolamento de tenant seguem intocados. O novo
+agendamento continua perguntando a disponibilidade ao servidor
+(`mode=slots-admin` via `lib/agenda-drag`) e salvando por `POST /api/bookings` —
+a tela não calcula slot nenhum.
+
+### Higiene de repositório
+
+`tsconfig.tsbuildinfo` (artefato de build do `tsc`) estava versionado desde
+antes desta entrega e mudava em TODO commit. Foi removido do índice e entrou no
+`.gitignore` — nenhum build futuro entra no histórico por acidente.
+
+### Testes
+
+`src/lib/__tests__/a34-agenda.test.ts` (14 casos): ordem dos chips (SEG → DOM),
+dia sem regra = "Fechado" (nenhum `00:00` inventado), turno duplo com todas as
+janelas, horário do profissional saindo da MESMA tabela do motor
+(follow × personalizado), Disponibilidade usando `<HoursChips/>`, grupo
+`[◀] Hoje [▶]` na ordem e sem render condicional, clique-na-grade abrindo o
+sheet com dia/hora/profissional, snap/limites de `minuteFromOffsetY`, e o
+contrato do sheet (design system + slots no servidor + pré-preenchimento).
+
+```
+npx vitest run src/lib/__tests__/a34-agenda.test.ts → 14 ok
+npx vitest run → 77 arquivos · 1292 testes ok
+npx tsc --noEmit → 0 erros
+npm run build → ok
+```
