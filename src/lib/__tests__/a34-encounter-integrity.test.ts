@@ -24,7 +24,8 @@ import { createSession } from '../auth';
 import {
   GET as encountersGET, POST as encountersPOST, PATCH as encountersPATCH,
 } from '@/app/api/encounters/route';
-import { POST as tasksPOST } from '@/app/api/tasks/route';
+import { POST as tasksPOST, GET as tasksGET } from '@/app/api/tasks/route';
+import { GET as people360GET } from '@/app/api/people360/route';
 import {
   applySaveResult, encounterDraftKey, encounterForQueue, followUpTaskNote, followUpTaskTitle,
 } from '../encounters';
@@ -57,6 +58,7 @@ async function seed() {
   db.businesses.push(business(OTHER));
   db.professionals.push({ id: 'pro-1', businessId: BIZ, name: 'Bia', role: '', photo: '', active: true, userId: '', followsBusinessHours: true, createdAt: NOW } as any);
   db.services.push({ id: 'svc-1', businessId: BIZ, name: 'Limpeza', durationMin: 60, price: 100, description: '', active: true, bookable: true, professionalIds: [], createdAt: NOW, updatedAt: NOW } as any);
+  db.contacts.push({ id: 'ct-r2', businessId: BIZ, name: 'Seu Zé', phone: '11933332222', customerId: '', createdAt: NOW } as any);
   // Walk-in: chegou sem horário marcado, já em atendimento.
   db.queue.push({
     id: 'q-r2', businessId: BIZ, customerName: 'Seu Zé', customerPhone: '11933332222',
@@ -251,6 +253,95 @@ describe('A3.4 · 2ª revisão — fila 1:1, reload por id e pós-atendimento (r
     expect(AGENDA).toMatch(/onScheduleReturn=\{\(info\) => \{\s*setQueueEncounter\(null\);\s*setCreating\(\{/);
     expect(AGENDA).toMatch(/initial=\{\{\s*name: creating\.name/);
     expect((await readDB()).bookings).toHaveLength(0);
+  });
+
+  // ═══════════════════════════════════════════════════════════════
+  // FECHAMENTO FINAL — os três gaps que sobraram na revisão
+  // ═══════════════════════════════════════════════════════════════
+  it('a tarefa do retorno fica VINCULADA À PESSOA e aparece no Cliente 360', async () => {
+    // Walk-in SEM agendamento — o caso que a revisão apontou.
+    const e = await createWalkIn();
+    const fin = await encountersPATCH(jsonReq('/api/encounters', {
+      businessId: BIZ, id: e.id, evolution: 'limpeza feita', followUp: 'retorno em 30 dias',
+      expectedVersion: e.version,
+    }, token, 'PATCH'));
+    const finalized = (await json(fin)).encounter;
+    await encountersPATCH(jsonReq('/api/encounters', {
+      businessId: BIZ, id: e.id, action: 'finalize', expectedVersion: finalized.version,
+    }, token, 'PATCH'));
+
+    // "Pedir à recepção" manda contactId (a tela sempre mandou)…
+    const res = await tasksPOST(jsonReq('/api/tasks', {
+      businessId: BIZ,
+      title: followUpTaskTitle(finalized.customerName),
+      note: followUpTaskNote(finalized.followUp, 'ligar e marcar'),
+      contactId: e.contactId,
+      encounterId: finalized.id,
+    }, token));
+    expect(res.status).toBe(201);
+    const task = (await json(res)).task;
+    // …e a rota projeta para o vínculo que a ficha 360 já usa (`customerId`).
+    expect(task.customerId).toBe('ct-r2');
+    expect(task.contactId).toBe('ct-r2');
+    expect(task.encounterId).toBe(finalized.id);
+
+    // Prova ponta a ponta: a tarefa aparece no histórico da PESSOA.
+    const ficha = await people360GET(jsonReq(`/api/people360?businessId=${BIZ}&c=ct-r2`, undefined, token, 'GET'));
+    expect(ficha.status).toBe(200);
+    const people = (await json(ficha)).people || [];
+    const pessoa = people.find((p: any) => (p.tasks || []).some((t: any) => t.id === task.id));
+    expect(pessoa, 'a pessoa do contato precisa existir na ficha 360').toBeTruthy();
+    const naFicha = pessoa.tasks.find((t: any) => t.id === task.id);
+    expect(naFicha.title).toBe('Agendar retorno de Seu Zé');
+    expect(naFicha.status).toBe('open');
+    // E a lista de tarefas da unidade também mostra o vínculo.
+    const lista = await tasksGET(jsonReq(`/api/tasks?businessId=${BIZ}&status=all`, undefined, token, 'GET'));
+    expect(((await json(lista)).tasks || []).some((t: any) => t.id === task.id && t.contactName === 'Seu Zé')).toBe(true);
+    // Contato de OUTRA unidade não pode ser vinculado por engano.
+    const db = await readDB();
+    db.contacts.push({ id: 'ct-outra', businessId: OTHER, name: 'De fora', phone: '11900000000', customerId: '', createdAt: NOW } as any);
+    await writeDB(db);
+    const cross = await tasksPOST(jsonReq('/api/tasks', {
+      businessId: BIZ, title: 'x', note: 'y', contactId: 'ct-outra',
+    }, token));
+    expect(cross.status).toBe(422);
+  });
+
+  it('a view do registro resolve o WhatsApp do cliente (contato → agendamento → fila)', async () => {
+    // Walk-in com contato que TEM telefone: a recepção não redigita nada.
+    const e = await createWalkIn();
+    const view = await encountersGET(jsonReq(`/api/encounters?businessId=${BIZ}&id=${e.id}`, undefined, token, 'GET'));
+    expect((await json(view)).encounter.customerPhone).toBe('11933332222');
+    // E o telefone NÃO é snapshot no documento: o banco guarda só o vínculo.
+    const db = await readDB();
+    expect('customerPhone' in db.encounters[0]).toBe(false);
+  });
+
+  it('"Agendar retorno" leva o telefone até o formulário (sem nova busca do cliente)', () => {
+    expect(SHEET).toMatch(/customerPhone: row\.customerPhone \|\| ''/);
+    expect(SHEET).toMatch(/customerPhone: string;/);
+    expect(AGENDA).toMatch(/phone: info\.customerPhone \|\| queueEncounter\.customerPhone \|\| ''/);
+    expect(AGENDA).toMatch(/phone: info\.customerPhone \|\| ''/);
+    // O formulário nasce com contato, nome, telefone, serviço e profissional.
+    expect(AGENDA).toMatch(/contactId: info\.contactId, name: info\.customerName,/);
+    expect(AGENDA).toMatch(/serviceId: info\.serviceId/);
+    expect(AGENDA).toMatch(/professionalId: info\.professionalId/);
+  });
+
+  it('o texto do retorno NÃO aparece duplicado na nota da tarefa', () => {
+    // A tela semeava o campo com o próprio followUp e a nota juntava os dois.
+    expect(followUpTaskNote('retorno em 30 dias', 'retorno em 30 dias')).toBe('retorno em 30 dias');
+    expect(followUpTaskNote('Retorno em 30 dias', ' retorno em 30 dias ')).toBe('Retorno em 30 dias');
+    // Instrução diferente entra uma vez cada, na ordem instrução · retorno.
+    expect(followUpTaskNote('retorno em 30 dias', 'ligar e marcar')).toBe('ligar e marcar · retorno em 30 dias');
+    expect(followUpTaskNote('', 'ligar e marcar')).toBe('ligar e marcar');
+    expect(followUpTaskNote('retorno em 30 dias', '')).toBe('retorno em 30 dias');
+  });
+
+  it('o campo da recepção começa VAZIO (o retorno é contexto, não texto digitado)', () => {
+    expect(SHEET).toMatch(/setFollowUpNote\(''\);/);
+    expect(SHEET).not.toMatch(/setFollowUpNote\(res\.data!\.encounter\.followUp/);
+    expect(SHEET).toMatch(/placeholder=\{row\.followUp \|\| 'Ex: ligar e marcar o retorno em 30 dias'\}/);
   });
 
   it('a fila oferece a porta de volta ao registro, sem mexer no status', () => {

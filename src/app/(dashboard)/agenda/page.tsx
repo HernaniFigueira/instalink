@@ -1576,8 +1576,8 @@ export default function AgendaPage() {
             setDetail(null);
             setCreating({
               date: today, time: '', professionalId: info.professionalId,
-              contactId: info.contactId, name: info.customerName, phone: '',
-              serviceId: info.serviceId,
+              contactId: info.contactId, name: info.customerName,
+              phone: info.customerPhone || '', serviceId: info.serviceId,
             });
           }}
           onClose={() => setDetail(null)}
@@ -1601,7 +1601,10 @@ export default function AgendaPage() {
               date: today, time: '', professionalId: info.professionalId,
               contactId: info.contactId || queueEncounter.contactId,
               name: info.customerName || queueEncounter.customerName,
-              phone: '', serviceId: info.serviceId || queueEncounter.serviceId,
+              // Telefone vem resolvido do servidor (contato/agendamento/fila):
+              // o formulário nasce pronto para agendar, sem nova busca.
+              phone: info.customerPhone || queueEncounter.customerPhone || '',
+              serviceId: info.serviceId || queueEncounter.serviceId,
             });
           }}
           onClose={() => { setQueueEncounter(null); void loadQueue(); }}

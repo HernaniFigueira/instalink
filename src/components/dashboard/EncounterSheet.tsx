@@ -44,6 +44,12 @@ export interface EncounterRow extends Encounter {
   professionalName: string;
   serviceName: string;
   bookingStatus: string;
+  /**
+   * A3.4 fix (fechamento do B5) — WhatsApp do cliente RESOLVIDO na leitura
+   * (contato do CRM → agendamento → fila). Não vive no banco: é conveniência
+   * de tela, e é o que deixa "Agendar retorno" pronto para agendar.
+   */
+  customerPhone: string;
 }
 
 export interface FollowUpSeed {
@@ -51,6 +57,8 @@ export interface FollowUpSeed {
   bookingId: string;
   contactId: string;
   customerName: string;
+  /** WhatsApp já resolvido pelo servidor — a recepção não redigita o cliente. */
+  customerPhone: string;
   serviceId: string;
   professionalId: string;
   followUp: string;
@@ -261,7 +269,10 @@ export function EncounterSheet({
     setConflict(false);
     if (action === 'finalize') {
       setSaved('Atendimento finalizado e assinado.');
-      setFollowUpNote(res.data!.encounter.followUp || '');
+      // O campo de instrução começa VAZIO: o retorno já anotado aparece como
+      // contexto (placeholder) e só entra na nota da tarefa se ninguém
+      // escrever nada diferente — nada de repetir o mesmo texto duas vezes.
+      setFollowUpNote('');
       setFollowUpOpen(true);
     } else {
       setSaved('Registro reaberto para edição (a reabertura fica na auditoria).');
@@ -288,8 +299,9 @@ export function EncounterSheet({
   async function askReception() {
     const current = latest.current.row;
     if (!current) return;
+    // A instrução escrita e o retorno anotado compõem a MESMA nota — sem eco.
     const note = followUpTaskNote(current.followUp, followUpNote);
-    if (!note && !followUpNote.trim() && !current.followUp.trim()) {
+    if (!note) {
       setError('Escreva a instrução para a recepção (ex: ligar e marcar o retorno em 30 dias).');
       return;
     }
@@ -399,8 +411,8 @@ export function EncounterSheet({
                     <Button size="sm" variant="secondary" onClick={() => {
                       onScheduleReturn({
                         encounterId: row.id, bookingId: row.bookingId, contactId: row.contactId,
-                        customerName: row.customerName, serviceId: row.serviceId,
-                        professionalId: row.professionalId, followUp: row.followUp,
+                        customerName: row.customerName, customerPhone: row.customerPhone || '',
+                        serviceId: row.serviceId, professionalId: row.professionalId, followUp: row.followUp,
                       });
                     }}>Agendar retorno</Button>
                   )}

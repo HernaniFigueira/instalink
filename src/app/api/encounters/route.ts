@@ -47,16 +47,29 @@ function canReopen(role: string): boolean {
   return role === 'OWNER' || role === 'ADMIN' || role === 'MASTER';
 }
 
-/** Visão de leitura: a entidade + o que a tela precisa para não fazer 3 GETs. */
+/**
+ * Visão de leitura: a entidade + o que a tela precisa para não fazer 3 GETs.
+ *
+ * O `customerPhone` NÃO é persistido no registro (não é snapshot do cadastro:
+ * telefone muda, e o documento do atendimento não deve carregar dado velho).
+ * Ele é RESOLVIDO na leitura, na ordem segura: contato do CRM → agendamento de
+ * origem → entrada da fila. É o que permite "Agendar retorno" abrir o
+ * formulário já preenchido, sem obrigar a recepção a redigitar o cliente.
+ */
 function view(e: Encounter, db: DB) {
   const pro = db.professionals.find((p) => p.id === e.professionalId);
   const svc = db.services.find((s) => s.id === e.serviceId);
-  const booking = e.bookingId ? db.bookings.find((b) => b.id === e.bookingId) : undefined;
+  const booking = e.bookingId ? db.bookings.find((b) => b.id === e.bookingId && b.businessId === e.businessId) : undefined;
+  const queue = e.queueId ? (db.queue || []).find((q) => q.id === e.queueId && q.businessId === e.businessId) : undefined;
+  const contact = e.contactId
+    ? db.contacts.find((c) => c.id === e.contactId && c.businessId === e.businessId)
+    : undefined;
   return {
     ...e,
     professionalName: pro?.name || '',
     serviceName: svc?.name || '',
     bookingStatus: booking?.status || '',
+    customerPhone: contact?.phone || booking?.customerPhone || queue?.customerPhone || '',
   };
 }
 

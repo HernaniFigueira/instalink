@@ -231,10 +231,20 @@ export function followUpTaskTitle(customerName: string): string {
   return `Agendar retorno de ${who}`.slice(0, 140);
 }
 
-/** Nota da tarefa: o retorno anotado + a instrução curta de quem atendeu. */
+/**
+ * Nota da tarefa de retorno: a instrução curta de quem atendeu + o retorno já
+ * anotado no registro — SEM repetir o mesmo texto duas vezes.
+ *
+ * Antes, a tela semeava o campo com o próprio `followUp` e a nota juntava os
+ * dois: saía "retorno em 30 dias · retorno em 30 dias". Agora a comparação é
+ * normalizada (espaços/caixa) e o texto idêntico entra UMA vez.
+ */
 export function followUpTaskNote(followUp: string, instruction: string): string {
-  return [String(instruction || '').trim(), String(followUp || '').trim()]
-    .filter(Boolean).join(' · ').slice(0, 1000);
+  const follow = String(followUp || '').trim();
+  const extra = String(instruction || '').trim();
+  const same = (a: string, b: string) => a.toLowerCase() === b.toLowerCase();
+  const parts = extra && same(extra, follow) ? [follow] : [extra, follow];
+  return parts.filter(Boolean).join(' · ').slice(0, 1000);
 }
 
 export const ENCOUNTER_VERSION_REQUIRED_ERROR =

@@ -692,3 +692,36 @@ Provas exigidas, em uma linha cada:
   agendamento (a base segue com zero `bookings` até alguém confirmar).
 
 Blocos 7 a 11 continuam intocados.
+
+### Fechamento final do B5 (3 gaps da revisão)
+
+1. **A tarefa do retorno fica vinculada à PESSOA.** A tela já mandava
+   `contactId` no “Pedir à recepção”, mas o POST de tarefas ignorava o campo —
+   o walk-in (sem agendamento) virava tarefa órfã na ficha. Agora `POST
+   /api/tasks` aceita `contactId` e **projeta** para `Task.customerId`, que é o
+   vínculo que a ficha 360 e o resto do CRM já usam (e que valida por
+   `c.id || c.customerId` dentro da unidade): **nenhuma identidade nova** foi
+   criada na entidade. A view da tarefa devolve `contactId`/`contactName` e a
+   auditoria registra o vínculo. Prova ponta a ponta: walk-in → registro →
+   “Pedir à recepção” → `GET /api/people360` mostra a tarefa na pessoa do
+   contato; e um contato de OUTRA unidade é recusado (422).
+2. **“Agendar retorno” abre o cliente completo.** A `view` do registro passou a
+   resolver `customerPhone` na ordem segura — **contato do CRM → agendamento de
+   origem → entrada da fila** — sem persistir snapshot (o telefone muda, o
+   documento do atendimento não deve carregar dado velho; há teste conferindo
+   que o campo não está no banco). O `FollowUpSeed` leva `customerPhone` e a
+   Agenda abre o formulário com **contato, nome, telefone, serviço e
+   profissional** — a recepção não redigita o cliente nem refaz busca. Nada é
+   agendado automaticamente.
+3. **Sem eco no texto do retorno.** A tela semeava o campo da recepção com o
+   próprio `followUp` e a nota juntava os dois (“retorno em 30 dias · retorno
+   em 30 dias”). Agora o campo começa **vazio**, o retorno anotado aparece como
+   **contexto (placeholder)** e `followUpTaskNote` só acrescenta a instrução
+   quando ela é realmente diferente (comparação normalizada): dedupe testado.
+
+```
+npx vitest run src/lib/__tests__/a34-encounter-integrity.test.ts → 18 ok
+npx vitest run  → 83 arquivos · 1400 testes ok
+npx tsc --noEmit → 0 erros
+npm run build    → ok (107 páginas)
+```
