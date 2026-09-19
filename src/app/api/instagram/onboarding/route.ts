@@ -65,6 +65,9 @@ export async function GET(req: NextRequest) {
           connectedAt: ig.connectedAt || '',
           lastWebhookAt: ig.lastWebhookAt || '',
           lastError: ig.lastError || '',
+          // Manutenção preventiva: o cron renova a credencial antes de vencer.
+          tokenIssuedAt: ig.tokenIssuedAt || '',
+          tokenExpiresAt: ig.tokenExpiresAt || '',
         }
       : null,
   });

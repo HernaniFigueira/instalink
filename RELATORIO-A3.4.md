@@ -1299,3 +1299,163 @@ comentários, Direct de conta pessoal nem qualquer coisa fora do escopo do bloco
 Caminho de verificação: **Canais & Integrações → Canais → Instagram** (estado e
 camadas) e **Conversas** (chips Todos / WhatsApp / Instagram, badge por conversa e
 compositor do canal).
+
+---
+
+## BLOCO 9 — CORREÇÃO ANTES DOS GATES FINAIS (janela por participante, tempo do webhook e isolamento de conta)
+
+Revisão independente do B9 confirmou a arquitetura (Instagram como canal do inbox
+unificado) e apontou **9 blockers de política/isolamento** + atualização de testes.
+Todos foram tratados aqui, **no mesmo PR #30**, sem tocar em WhatsApp, agenda,
+importação ou qualquer motor existente (Blocos 10/11 continuam NÃO iniciados).
+
+### 1. A janela do Instagram é do PARTICIPANTE, não da unidade
+
+Antes, o envio olhava `business.instagramIntegration.lastInboundAt` — uma
+mensagem do cliente A abria a janela para o cliente B. Agora:
+
+- `Conversation.lastInboundAt` (aditivo) guarda a última mensagem RECEBIDA
+  **desta conversa**; cada entrada faz `max(campo, horário real da mensagem)` —
+  webhook atrasado/fora de ordem **nunca retrocede** a janela;
+- helper canônico `instagramConversationLastInboundAt(db, conversation)`: se o
+  campo existe, ele manda; se a conversa é antiga (sem o campo), deriva da
+  mensagem de entrada mais recente **daquela** conversa (nunca da unidade);
+- **a mesma fonte** alimenta: `GET /api/conversations` (estado do compositor),
+  `POST /api/conversations` (envio manual), `send_channel_message` do Instagram,
+  o **conector** do P6, `deliverInstagramMessage` e os retries do cron;
+- **revalidação no momento do envio**: a política é conferida de novo na hora de
+  sair — mensagem enfileirada às 10:59 não sai no retry das 11:03 se a janela
+  fechou (o retry marca `failed` com o motivo, sem chamar a Meta);
+- `InstagramIntegration.lastInboundAt` continua existindo como **telemetria
+  global da unidade** (só avança), explicitamente **sem autorizar envio**.
+
+Provas: A escreveu agora / B há 2 dias → A pode, B não (fase `human_agent`);
+mensagem de outro participante não renova a conversa de B; retry pós-fechamento
+não sai (`messagesSent: 0`, zero chamadas ao Graph).
+
+### 2. Timestamp do webhook: segundos OU milissegundos
+
+`instagramEventTimestamp(value)` substitui o antigo `ts * 1000` cego:
+
+```
+valor >= 1e12  → já está em MILISSEGUNDOS
+valor <  1e12  → está em SEGUNDOS
+```
+
+Faixa confiável: a partir de 2010 e no máximo 5 min à frente do relógio local.
+Valor inválido/absurdo **não** é usado: a mensagem grava `receivedAt` (instante
+de recebimento) e a janela NÃO é aberta no futuro. `1_758_000_000` e
+`1_758_000_000_000` produzem exatamente `2025-09-16T05:20:00.000Z`; um valor de
+16 dígitos cai no recebimento.
+
+### 3. Instagram NÃO inicia DM por IGSID arbitrário
+
+A automação não aceita mais um `to` “que parece IGSID”. O vínculo do contato
+(`channelIdentities`) **localiza** a pessoa, mas a prova é uma **conversa real
+desta conta com ela, com mensagem de ENTRADA**. Sem isso: zero conversa criada,
+zero mensagem, zero chamada à Meta e o erro
+**“Este usuário ainda não iniciou uma conversa com a conta do Instagram.”**
+O conector oficial segue a mesma regra.
+
+### 4. Trocar de conta não envia pela conta nova
+
+`instagramAccountMismatch(business, conversation)` compara
+`conv.channelAccountId` com `business.instagramIntegration.igUserId`. Se
+diferente: código estável **`channel_account_mismatch`** e a mensagem
+“Esta conversa pertence a uma conta do Instagram conectada anteriormente.” — na
+rota (`409`), na entrega (mensagem vira `failed`, sem chamada à Meta) e no
+conector. O histórico antigo **continua visível** (lista e detalhe trazem
+`accountMismatch`/`accountMismatchMessage`) e a tela troca o compositor por esse
+aviso.
+
+### 5. Uma conta do Instagram pertence a UMA unidade
+
+- `applyInstagramAuthorization` recusa gravar um `igUserId` que já é de outra
+  unidade (nada é persistido) com auditoria
+  `instagram.onboarding_failed` / `reason: account_already_linked`; o callback
+  volta para o painel com “Esta conta do Instagram já está conectada a outra
+  unidade.”;
+- `resolveBusinessForInstagramAccountId` **fail-closed**: com mais de uma
+  unidade dona da mesma conta devolve `undefined` (função nova
+  `instagramAccountOwners` expõe o caso); o webhook ambíguo responde 200 com
+  `created: 0` e **não grava** Message/Lead/Contact em nenhuma unidade.
+
+### 6. Texto enviado = texto salvo (nunca cortar em silêncio)
+
+Nada de `clip` no envio: `instagramTextBytes`/`instagramTextFits` medem o limite
+oficial (1000 bytes UTF-8) e quem excede é **recusado antes de existir
+mensagem** — rota (`400 message_too_long` com bytes e limite), automação (erro
+explícito) e `sendInstagramMessage` (fail-closed, inclusive chamado direto).
+No limite exato (250 emoji de 4 bytes) passa, e o corpo salvo é **exatamente** o
+enviado. A tela mostra um contador discreto a partir de 800 bytes.
+
+### 7. Diagnóstico e servidor decidem igual (fallbacks)
+
+A leitura do ambiente virou fonte única (`instagramEnvAppId/AppSecret/VerifyToken/VaultKey`),
+usada pelo painel E pelo servidor:
+
+| Variável | Aceita |
+|---|---|
+| App Secret | `INSTAGRAM_APP_SECRET` **ou** `META_APP_SECRET` |
+| Verify token | `INSTAGRAM_VERIFY_TOKEN` **ou** `WHATSAPP_VERIFY_TOKEN` |
+
+Sem combinações artificiais: `META_APP_SECRET` + `WHATSAPP_VERIFY_TOKEN` deixam
+a plataforma **pronta** no painel e no servidor; sem nenhuma, os dois apontam a
+mesma lista de nomes faltantes.
+
+### 8. Ciclo de vida da credencial (cron)
+
+O cron do Instagram agora faz **manutenção preventiva** além do retry:
+
+- renova tokens a **7 dias** do vencimento (`INSTAGRAM_TOKEN_REFRESH_MARGIN_MS`) —
+  token válido é pré-requisito da renovação oficial e a folga cobre falha de rede
+  sem renovar em toda execução;
+- chamada à Meta **fora de transação**, unidade por unidade (nunca cruza tenants);
+- gravação **CAS**: se a credencial mudou no meio (reconexão), o trabalho de
+  ninguém é sobrescrito;
+- sucesso → token novo criptografado (AES-256-GCM), `tokenIssuedAt`/
+  `tokenExpiresAt` atualizados, auditoria `instagram.token_refreshed`;
+- falha → **o token atual NÃO é apagado**; `lastError` explicado e auditoria
+  `instagram.token_refresh_failed`.
+
+O painel mostra a data de emissão/vencimento (nunca o token) para o estado da
+manutenção ser visível.
+
+### 9. Conversa fechada + mensagem nova = nova demanda
+
+Mensagem real de Instagram em conversa `closed` **reabre** a conversa:
+`status = 'open'`, `unread` incrementado, **mesmo `Conversation.id`** e histórico
+inteiro preservado.
+
+### 10. Testes desta correção
+
+| Grupo | Casos | O que prova |
+|---|---|---|
+| TEMPO DO EVENTO | 7 | segundos/milissegundos dão a MESMA data; inválido/zero/negativo/antigo/16 dígitos ⇒ não confiável, cai no recebimento; `Message.at` correto no webhook de 13 dígitos; atrasado não retrocede |
+| JANELA POR CONVERSA | 4 | A pode / B não; mensagem de outro participante não renova; conversa legada deriva da mensagem; retry pós-fechamento não sai (0 chamadas à Meta) |
+| ISOLAMENTO DE CONTA | 6 | conversa da conta antiga não envia (409 `channel_account_mismatch`, entrega `failed`, conector explica); histórico segue legível; conta duplicada recusada com auditoria; webhook ambíguo não grava; dono único resolve |
+| LIMITE DE TEXTO | 3 | emoji acima do limite ⇒ 400 e nada salvo; no limite exato passa e o corpo é idêntico; `sendInstagramMessage` fail-closed direto |
+| AMBIENTE | 2 | fallbacks `META_APP_SECRET`/`WHATSAPP_VERIFY_TOKEN` bastam; sem nada, painel e servidor listam os MESMOS nomes |
+| CREDENCIAL | 3 | só renova quem está na margem (outra unidade intacta, token criptografado, auditoria); falha não apaga o token; CAS não sobrescreve reconexão |
+| CONVERSA FECHADA | 1 | `closed → inbound → open`, unread +1, mesmo id, histórico preservado |
+| CONTA TROCADA (todos os caminhos) | 2 | conector e automação devolvem o motivo estável, sem chamar a Meta |
+
+```
+npx vitest run src/lib/__tests__/a34-instagram.test.ts → 86 ok
+npx vitest run  → 89 arquivos · 1.600 testes ok
+npx tsc --noEmit → 0 erros
+npm run build    → ok
+```
+
+Arquivos alterados nesta correção: `src/lib/types.ts`, `src/lib/instagram.ts`,
+`src/lib/instagram-api.ts`, `src/lib/automation/actions.ts`,
+`src/app/api/conversations/route.ts`, `src/app/api/instagram/onboarding/route.ts`,
+`src/app/api/instagram/onboarding/callback/route.ts`,
+`src/app/api/cron/instagram/route.ts`,
+`src/components/dashboard/InstagramChannelPanel.tsx`,
+`src/app/(dashboard)/conversas/page.tsx` e
+`src/lib/__tests__/a34-instagram.test.ts`.
+
+Segue valendo: nada foi executado contra o Instagram real (**BLOCKED_EXTERNAL**
+para app aprovado, conta profissional e credenciais); o Graph API foi exercitado
+contra mock com o formato oficial; Blocos 10 e 11 **não** foram iniciados.

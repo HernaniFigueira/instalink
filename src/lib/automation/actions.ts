@@ -24,7 +24,7 @@
 //   • erro em ação não corrompe estado: o executor grava `failed` + mensagem.
 import { randomUUID } from 'node:crypto';
 import type {
-  Automation, AutomationActionType, AutomationRun, Business, DB, WebhookEvent,
+  Automation, AutomationActionType, AutomationRun, Business, Conversation, DB, WebhookEvent,
 } from '../types';
 import { VALID_WEBHOOK_EVENTS } from '../types';
 import {
@@ -40,7 +40,10 @@ import { renderParams } from './conditions';
 import { addDaysISO, todayISO } from '../tz';
 import { automationActionDef } from './model';
 import { onlyDigits } from '../utils';
-import { instagramMessagingWindow } from '../instagram';
+import {
+  INSTAGRAM_ACCOUNT_MISMATCH_MESSAGE, INSTAGRAM_NO_INBOUND_MESSAGE, instagramConversationWindow,
+} from '../instagram-api';
+import { INSTAGRAM_TEXT_MAX_BYTES, instagramTextFits, instagramTextLimitError } from '../instagram';
 
 export const AUTOMATION_ACTOR: LeadActor = { id: 'automation', name: 'Automação', type: 'system' };
 
@@ -432,9 +435,10 @@ export function executeAction(input: ActionInput): ActionResult {
       const templateName = text(input, 'templateName', 120);
 
       // ── CANAL INSTAGRAM DIRECT (BLOCO 9) ───────────────────────
-      // A identidade do destinatário é o vínculo OFICIAL do contato
-      // (`channelIdentities`, gravado pelo webhook). Nunca telefone, nunca @,
-      // nunca nome. Sem vínculo salvo, só aceita um IGSID explícito em `to`.
+      // A Meta só permite responder quem JÁ ESCREVEU. Então a automação NUNCA
+      // inicia conversa: o vínculo do contato (`channelIdentities`) só LOCALIZA
+      // a pessoa — a prova é uma conversa real desta conta com ela, com
+      // mensagem de ENTRADA. Um `to` com IGSID arbitrário não abre nada.
       if (text(input, 'channel', 20) === 'instagram') {
         const ig = input.business.instagramIntegration;
         if (!ig?.igUserId || !ig.encryptedAccessToken) {
@@ -449,59 +453,62 @@ export function executeAction(input: ActionInput): ActionResult {
             error: 'O Instagram desta unidade ainda não está pronto para enviar (autorize a conta e ative o webhook).',
           };
         }
+        // Limite oficial (1000 bytes UTF-8): recusa ANTES de gravar — o
+        // histórico precisa mostrar exatamente o que saiu.
+        if (!instagramTextFits(msgText, INSTAGRAM_TEXT_MAX_BYTES)) {
+          return { ok: false, summary: '', error: instagramTextLimitError(INSTAGRAM_TEXT_MAX_BYTES) };
+        }
+
         const accountId = ig.igUserId;
         const explicitTo = String(input.params?.to || '').trim();
-        const fromIdentity = (contact?.channelIdentities || [])
+        const identityParticipant = (contact?.channelIdentities || [])
           .find((i) => i.provider === 'instagram' && i.accountId === accountId)?.participantId || '';
-        const fromConversation = db.conversations
-          .find((c) => c.businessId === business.id && c.channel === 'instagram'
-            && c.channelAccountId === accountId
-            && ((contact?.id && c.contactId === contact.id) || c.channelUserId === explicitTo))
-          ?.channelUserId || '';
-        const participantId = fromIdentity || fromConversation
-          || (/^\d{5,}$/.test(explicitTo) ? explicitTo : '');
-        if (!participantId) return missing('vínculo do contato no Instagram');
+        const conversationFor = (participantId: string) => db.conversations.find(
+          (c) => c.businessId === business.id && c.channel === 'instagram'
+            && c.channelAccountId === accountId && c.channelUserId === participantId,
+        );
+        const conversationWithInbound = (c: Conversation | undefined) =>
+          !!c && db.messages.some((m) => m.conversationId === c.id && m.direction === 'in');
 
-        const window = instagramMessagingWindow({ lastInboundAt: ig.lastInboundAt || '', nowISO: input.now });
+        let conv = identityParticipant ? conversationFor(identityParticipant) : undefined;
+        if (!conv && explicitTo) conv = conversationFor(explicitTo);
+        if (!conv && contact?.id) {
+          conv = db.conversations.find(
+            (c) => c.businessId === business.id && c.channel === 'instagram'
+              && c.channelAccountId === accountId && c.contactId === contact.id,
+          );
+        }
+        // Sem conversa iniciada pelo USUÁRIO não existe DM: nada é criado,
+        // nada é enfileirado e a Meta não é chamada. Se a pessoa tem histórico
+        // numa conta ANTIGA, o motivo é o desencontro de conta (mais útil).
+        if (!conversationWithInbound(conv)) {
+          const fromOtherAccount = (contact?.channelIdentities || [])
+            .some((i) => i.provider === 'instagram' && i.accountId !== accountId);
+          return {
+            ok: false, summary: '',
+            error: fromOtherAccount ? INSTAGRAM_ACCOUNT_MISMATCH_MESSAGE : INSTAGRAM_NO_INBOUND_MESSAGE,
+          };
+        }
+        const participantId = conv!.channelUserId || '';
+
+        // Política da Meta revalidada no momento do enfileiramento: a janela é
+        // DESTA conversa (mensagem de outro cliente não renova esta).
+        const window = instagramConversationWindow(db, conv!, input.now);
         if (!window.canReply) {
           return { ok: false, summary: '', error: `Envio pelo Instagram bloqueado: ${window.reason}` };
         }
 
-        let conv = db.conversations.find(
-          (c) => c.businessId === business.id && c.channel === 'instagram'
-            && c.channelAccountId === accountId && c.channelUserId === participantId,
-        );
-        if (!conv) {
-          conv = {
-            id: randomUUID(),
-            businessId: business.id,
-            channel: 'instagram',
-            channelUserId: participantId,
-            channelAccountId: accountId,
-            channelUsername: '',
-            contactId: contact?.id || '',
-            customerId: contact?.customerId || lead?.customerId || '',
-            name: contact?.name || lead?.name || 'Contato do Instagram',
-            phone: '',
-            status: 'open',
-            mode: 'automation',
-            unread: 0,
-            lastMessageAt: input.now,
-            lastMessagePreview: msgText.slice(0, 120),
-            createdAt: input.now,
-            context: lead ? { leadId: lead.id } : {},
-          };
-          db.conversations.push(conv);
-        } else {
-          conv.lastMessageAt = input.now;
-          conv.lastMessagePreview = msgText.slice(0, 120);
-        }
+        conv!.contactId = conv!.contactId || contact?.id || '';
+        conv!.customerId = conv!.customerId || contact?.customerId || lead?.customerId || '';
+        conv!.lastMessageAt = input.now;
+        conv!.lastMessagePreview = msgText.slice(0, 120);
+        if (lead && !conv!.context?.leadId) conv!.context = { ...(conv!.context || {}), leadId: lead.id };
 
         const igMsgId = randomUUID();
         db.messages.push({
           id: igMsgId,
           businessId: business.id,
-          conversationId: conv.id,
+          conversationId: conv!.id,
           direction: 'out',
           body: msgText,
           status: 'pending',

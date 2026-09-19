@@ -4,9 +4,14 @@
 // Mesmo desenho do cron do WhatsApp: uma passada por todas as unidades com
 // mensagem de saída pendente vencida. O claim é o mesmo de
 // `deliverInstagramMessage` — nada de fila paralela nem de segundo motor.
+//
+// Além das mensagens, o cron cuida da CREDENCIAL: token longo do Instagram
+// vence em ~60 dias e precisa ser renovado ANTES disso (a renovação oficial
+// exige token válido). A renovação roda fora de transação, unidade por unidade,
+// e falha nunca apaga o token atual.
 import { NextRequest, NextResponse } from 'next/server';
 import { verifyCronAuth } from '@/lib/cron-auth';
-import { processPendingInstagramRetries } from '@/lib/instagram-api';
+import { processPendingInstagramRetries, refreshInstagramTokens } from '@/lib/instagram-api';
 
 export const dynamic = 'force-dynamic';
 export const runtime = 'nodejs';
@@ -23,7 +28,8 @@ async function handleCron(req: NextRequest) {
   const startedAt = Date.now();
   try {
     const summary = await processPendingInstagramRetries();
-    return NextResponse.json({ ok: true, ...summary, durationMs: Date.now() - startedAt }, { status: 200 });
+    const tokens = await refreshInstagramTokens();
+    return NextResponse.json({ ok: true, ...summary, tokens, durationMs: Date.now() - startedAt }, { status: 200 });
   } catch {
     console.error('[cron/instagram] falha ao processar as mensagens pendentes do Instagram.');
     return NextResponse.json(

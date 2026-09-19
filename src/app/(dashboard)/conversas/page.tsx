@@ -8,6 +8,7 @@ import { cn } from '@/lib/utils';
 import { humanDateTime } from '@/lib/tz';
 import { AccessDenied, useAreaLoad } from '@/components/dashboard/AccessNotice';
 import { apiGet, apiSend } from '@/lib/api-client';
+import { INSTAGRAM_TEXT_MAX_BYTES, instagramTextBytes, instagramTextFits, instagramTextLimitError } from '@/lib/instagram';
 import type { WaChannelData } from '@/components/dashboard/WhatsappChannelPanel';
 
 // ═══════════════════════════════════════════════════════════════
@@ -50,6 +51,9 @@ export default function ConversasPage() {
   const [channels, setChannels] = useState<ChannelsView>({ whatsapp: false, instagram: false });
   const [igInfo, setIgInfo] = useState<InstagramInbox | null>(null);
   const [window, setWindow] = useState<MessageWindow | null>(null);
+  // Conversa de uma conta do Instagram que não é mais a conectada: histórico
+  // visível, envio bloqueado (o texto abaixo explica o porquê).
+  const [accountMismatch, setAccountMismatch] = useState('');
 
   // ── COMPOSER: envio real pelo conector oficial ──
   const [draft, setDraft] = useState('');
@@ -81,6 +85,12 @@ export default function ConversasPage() {
     if (!active || sending) return;
     const text = draft.trim();
     if (!text) return;
+    // Limite oficial do Instagram medido em BYTES: recusa aqui (e no servidor)
+    // para o histórico nunca mostrar um texto diferente do que saiu.
+    if (active.conversation.channel === 'instagram' && !instagramTextFits(text, INSTAGRAM_TEXT_MAX_BYTES)) {
+      setSendError(instagramTextLimitError(INSTAGRAM_TEXT_MAX_BYTES));
+      return;
+    }
     setSending(true);
     setSendError('');
     const res = await apiSend<{ message?: Message }>(
@@ -131,12 +141,14 @@ export default function ConversasPage() {
   useEffect(() => { load(); }, [load]);
 
   async function openConversation(id: string) {
-    const res = await apiGet<{ conversation: Conversation; messages?: Message[]; window?: MessageWindow | null }>(
-      `/api/conversations?businessId=${businessId}&id=${id}`, { scope: 'action', area: 'Conversas' },
-    );
+    const res = await apiGet<{
+      conversation: Conversation; messages?: Message[]; window?: MessageWindow | null;
+      accountMismatch?: boolean; accountMismatchMessage?: string;
+    }>(`/api/conversations?businessId=${businessId}&id=${id}`, { scope: 'action', area: 'Conversas' });
     if (res.ok && res.data) {
       setActive({ conversation: res.data.conversation, messages: res.data.messages || [] });
       setWindow(res.data.conversation.channel === 'instagram' ? (res.data.window || null) : null);
+      setAccountMismatch(res.data.accountMismatchMessage || '');
       setDraft('');
       setSendError('');
     } else if (!res.ok) setError(res.message);
@@ -148,6 +160,9 @@ export default function ConversasPage() {
   // Link para o canal: mantém a unidade ativa (?b=) e abre já na aba Canais.
   const channelsHref = `/canais?tab=canais${businessId ? `&b=${businessId}` : ''}`;
   const channelFilter = (params.get('canal') || 'all') as 'all' | 'whatsapp' | 'instagram';
+  // Contador do limite do Instagram (aviso discreto perto do teto).
+  const igComposer = active?.conversation.channel === 'instagram';
+  const draftBytes = igComposer ? instagramTextBytes(draft) : 0;
   // Um canal é mostrado quando existe conexão OU conversa dele (histórico
   // antigo continua visível mesmo se a conta foi desconectada).
   const hasInstagram = channels.instagram || conversations.some((c) => c.channel === 'instagram');
@@ -405,14 +420,29 @@ export default function ConversasPage() {
                 </div>
                 <div className="p-2.5 border-t border-[var(--border)] bg-white">
                   {sendError && <p role="alert" className="mb-2 text-xs font-semibold bg-[var(--danger-bg)] border border-[var(--danger-border)] text-[var(--danger-fg)] rounded-md px-2.5 py-1.5">{sendError}</p>}
-                  {/* Política do Instagram: fora da janela de 24 h a Meta recusa
-                      o envio. A tela TROCA o compositor por um aviso — nada de
-                      botão que promete o que a política não permite. */}
-                  {active.conversation.channel === 'instagram' && window && !window.canReply ? (
+                  {/* Conta trocada: esta conversa é de uma conta que não está
+                      mais conectada. O histórico fica em leitura. */}
+                  {active.conversation.channel === 'instagram' && accountMismatch ? (
+                    <p role="status" className="text-xs font-semibold bg-[var(--danger-bg)] border border-[var(--danger-border)] text-[var(--danger-fg)] rounded-md px-2.5 py-1.5">
+                      {accountMismatch}
+                    </p>
+                  ) : active.conversation.channel === 'instagram' && window && !window.canReply ? (
+                    /* Política do Instagram: fora da janela de 24 h a Meta recusa
+                       o envio. A tela TROCA o compositor por um aviso — nada de
+                       botão que promete o que a política não permite. */
                     <p role="status" className="text-xs font-semibold bg-[var(--warning-bg)] border border-[var(--warning-border)] text-[var(--warning-fg)] rounded-md px-2.5 py-1.5">
                       {window.reason} Você ainda pode responder no Direct do Instagram; aqui o compositor reabre quando a pessoa escrever de novo.
                     </p>
                   ) : (
+                    <>
+                    {/* Limite oficial do Instagram (1000 bytes): aviso discreto
+                        antes do teto; acima dele o envio é recusado. */}
+                    {igComposer && draftBytes >= 800 && (
+                      <p className={`mb-2 text-[11px] font-semibold ${draftBytes > INSTAGRAM_TEXT_MAX_BYTES ? 'text-[var(--danger-fg)]' : 'text-[var(--text-muted)]'}`}>
+                        {draftBytes} de {INSTAGRAM_TEXT_MAX_BYTES} bytes do Instagram
+                        {draftBytes > INSTAGRAM_TEXT_MAX_BYTES ? ' — reduza para enviar.' : ''}
+                      </p>
+                    )}
                     <form onSubmit={sendMessage} className="flex gap-2">
                       <input
                         value={draft}
@@ -429,6 +459,7 @@ export default function ConversasPage() {
                         <Icon n="send" size={14} /> {sending ? 'Enviando…' : 'Enviar'}
                       </button>
                     </form>
+                    </>
                   )}
                 </div>
               </>

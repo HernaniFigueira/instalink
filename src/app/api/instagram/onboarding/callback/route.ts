@@ -111,8 +111,10 @@ export async function GET(req: NextRequest) {
     : '';
 
   // 4. Credencial criptografada + estado inicial (autorizado, webhook pendente).
-  await updateDB((db) => {
-    applyInstagramAuthorization(db, {
+  //    A conta é ÚNICA: se outra unidade já tem este `igUserId`, nada é gravado
+  //    (o webhook ficaria ambíguo) e a tela explica o motivo.
+  const saved = await updateDB((db) => {
+    const applied = applyInstagramAuthorization(db, {
       businessId: decoded.businessId,
       igUserId: exchanged.igUserId,
       username: account.ok ? account.username : '',
@@ -120,19 +122,28 @@ export async function GET(req: NextRequest) {
       encryptedAccessToken: encryptInstagramToken(exchanged.accessToken),
       now,
       tokenExpiresAt: expiresAt,
+      actor: { id: auth.user.id, email: auth.user.email, role: access.role },
     });
+    if (!applied.ok) return applied;
     pushAudit(db, {
       action: 'instagram.connected',
       actor: { id: auth.user.id, email: auth.user.email, role: access.role },
       businessId: decoded.businessId,
       meta: {
         step: 'authorized',
-        igUserId: exchanged.igUserId,
         username: account.ok ? account.username : '',
         keyFingerprint: instagramKeyFingerprint(),
       },
     });
+    return applied;
   });
+
+  if (!saved.ok) {
+    const detail = saved.reason === 'account_already_linked'
+      ? 'Esta conta do Instagram já está conectada a outra unidade.'
+      : 'Não foi possível guardar a autorização desta unidade.';
+    return backToPanel(req, 'error', decoded.businessId, detail);
+  }
 
   // 5. Assinatura do webhook desta conta — sem isso as mensagens não chegam.
   const sub = await subscribeInstagramAccount({

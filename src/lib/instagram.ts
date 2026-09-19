@@ -24,6 +24,28 @@ import type { InstagramIntegration } from './types';
 
 export type EnvLike = Record<string, string | undefined>;
 
+// ── Leitura do AMBIENTE (fonte única) ───────────────────────────
+// O painel (diagnóstico) e o servidor precisam chegar à MESMA decisão. Os
+// fallbacks são deliberados e NÃO exigem combinação artificial entre variáveis
+// independentes:
+//   • App Secret   → INSTAGRAM_APP_SECRET || META_APP_SECRET (mesmo app da Meta)
+//   • Verify token → INSTAGRAM_VERIFY_TOKEN || WHATSAPP_VERIFY_TOKEN (mesmo app)
+export function instagramEnvAppId(env: EnvLike): string {
+  return String(env.INSTAGRAM_APP_ID || '').trim();
+}
+
+export function instagramEnvAppSecret(env: EnvLike): string {
+  return String(env.INSTAGRAM_APP_SECRET || env.META_APP_SECRET || '').trim();
+}
+
+export function instagramEnvVerifyToken(env: EnvLike): string {
+  return String(env.INSTAGRAM_VERIFY_TOKEN || env.WHATSAPP_VERIFY_TOKEN || '').trim();
+}
+
+export function instagramEnvVaultKey(env: EnvLike): string {
+  return String(env.WHATSAPP_CREDENTIALS_KEY || '').trim();
+}
+
 export const INSTAGRAM_GRAPH_HOST = 'graph.instagram.com';
 export const INSTAGRAM_AUTHORIZE_URL = 'https://www.instagram.com/oauth/authorize';
 export const INSTAGRAM_CODE_TOKEN_URL = 'https://api.instagram.com/oauth/access_token';
@@ -173,26 +195,25 @@ export function instagramPlatformLayer(env: EnvLike): OnboardingLayer {
       key: 'INSTAGRAM_APP_ID',
       label: 'App do Instagram (App ID)',
       why: 'Identifica o Instalink na tela oficial de autorização do Instagram.',
-      ok: !!env.INSTAGRAM_APP_ID, secret: false, required: true,
+      ok: !!instagramEnvAppId(env), secret: false, required: true,
     },
     {
       key: 'INSTAGRAM_APP_SECRET',
       label: 'Segredo do app (App Secret)',
-      why: 'Troca o código autorizado pelo token da conta e valida a assinatura dos webhooks.',
-      ok: !!env.INSTAGRAM_APP_SECRET, secret: true, required: true,
+      why: 'Troca o código autorizado pelo token da conta e valida a assinatura dos webhooks. Vale INSTAGRAM_APP_SECRET ou META_APP_SECRET (mesmo app da Meta).',
+      ok: !!instagramEnvAppSecret(env), secret: true, required: true,
     },
     {
       key: 'INSTAGRAM_VERIFY_TOKEN',
       label: 'Token de verificação do webhook',
-      why: 'É o valor que a Meta manda no handshake do webhook desta instalação.',
-      ok: !!env.INSTAGRAM_VERIFY_TOKEN
-        || !!(env.META_APP_SECRET && env.WHATSAPP_VERIFY_TOKEN), secret: true, required: true,
+      why: 'É o valor que a Meta manda no handshake do webhook desta instalação. Vale INSTAGRAM_VERIFY_TOKEN ou WHATSAPP_VERIFY_TOKEN (mesmo app).',
+      ok: !!instagramEnvVerifyToken(env), secret: true, required: true,
     },
     {
       key: 'WHATSAPP_CREDENTIALS_KEY',
       label: 'Chave do cofre de credenciais',
       why: 'Criptografa o token da conta em repouso (mesmo cofre do WhatsApp).',
-      ok: !!env.WHATSAPP_CREDENTIALS_KEY, secret: true, required: true,
+      ok: !!instagramEnvVaultKey(env), secret: true, required: true,
     },
   ];
   const missing = items.filter((i) => i.required && !i.ok).map((i) => i.key);
@@ -411,6 +432,52 @@ export function instagramPlan(args: {
   };
 }
 
+// ── Tempo do evento (segundos OU milissegundos) ─────────────────
+// Payloads reais do Messaging chegam em SEGUNDOS (`entry.time`,
+// `messaging[].timestamp`), mas há entregas de 13 dígitos (ms). Multiplicar um
+// valor de 13 dígitos por 1000 joga a data mil anos no futuro e ABRIRIA uma
+// janela artificial — então a regra é explícita:
+//
+//   valor >= 1e12  → já está em MILISSEGUNDOS
+//   valor <  1e12  → está em SEGUNDOS
+//
+// Fora da faixa confiável (antes de 2010 ou no futuro além da tolerância de
+// relógio) o horário NÃO é usado: quem chama cai no `receivedAt`.
+export const INSTAGRAM_EVENT_MIN_MS = Date.UTC(2010, 0, 1);
+/** Tolerância para relógio adiantado do provedor (5 min). */
+export const INSTAGRAM_EVENT_FUTURE_TOLERANCE_MS = 5 * 60 * 1000;
+
+export interface InstagramEventTime {
+  /** ISO quando confiável; '' quando não dá para confiar. */
+  iso: string;
+  reliable: boolean;
+  reason: string;
+}
+
+export function instagramEventTimestamp(value: unknown, nowMs: number = Date.now()): InstagramEventTime {
+  const raw = typeof value === 'number' ? value : Number(String(value ?? '').trim());
+  if (!Number.isFinite(raw) || raw <= 0) {
+    return { iso: '', reliable: false, reason: 'Evento sem horário utilizável.' };
+  }
+  const ms = raw >= 1e12 ? raw : raw * 1000;
+  if (ms < INSTAGRAM_EVENT_MIN_MS) {
+    return { iso: '', reliable: false, reason: 'Horário do evento anterior à faixa confiável.' };
+  }
+  if (ms > nowMs + INSTAGRAM_EVENT_FUTURE_TOLERANCE_MS) {
+    return { iso: '', reliable: false, reason: 'Horário do evento no futuro — não abre janela.' };
+  }
+  return { iso: new Date(ms).toISOString(), reliable: true, reason: '' };
+}
+
+/** Maior de dois instantes ISO (a janela NUNCA retrocede). */
+export function instagramMaxISO(a: string | undefined, b: string | undefined): string {
+  const left = String(a || '');
+  const right = String(b || '');
+  if (!left) return right;
+  if (!right) return left;
+  return right > left ? right : left;
+}
+
 // ── Leitura do webhook (formato OFICIAL) ────────────────────────
 export type InstagramNotificationKind =
   | 'text' | 'media' | 'unsupported' | 'echo' | 'deleted' | 'self' | 'unknown';
@@ -422,8 +489,14 @@ export interface InstagramNotification {
   participantId: string;
   /** Id oficial da mensagem (`message.mid`) — usado para deduplicar. */
   messageId: string;
-  /** Momento informado pela Meta (segundos → ISO). */
+  /**
+   * Momento informado pela Meta, normalizado (segundos OU milissegundos → ISO).
+   * Vazio quando o valor não é confiável: nesse caso quem grava usa o instante
+   * de recebimento (nunca um horário inventado).
+   */
   at: string;
+  /** `false` quando o horário veio fora da faixa confiável (ver o parser). */
+  atReliable: boolean;
   kind: InstagramNotificationKind;
   text: string;
   attachmentTypes: string[];
@@ -493,12 +566,14 @@ export function parseInstagramWebhook(payload: unknown): InstagramParseResult {
 
       // O participante é sempre o OUTRO lado da conversa.
       const participantId = senderId && senderId !== accountId ? senderId : recipientId;
-      const ts = Number(event?.timestamp);
+      // `messaging[].timestamp` (segundos ou ms) — nunca multiplicar 13 dígitos.
+      const time = instagramEventTimestamp(event?.timestamp);
       notifications.push({
         accountId,
         participantId,
         messageId: String(message.mid || ''),
-        at: Number.isFinite(ts) && ts > 0 ? new Date(ts * 1000).toISOString() : '',
+        at: time.iso,
+        atReliable: time.reliable,
         kind,
         text: text.slice(0, 4000),
         attachmentTypes: attachments,
@@ -536,14 +611,25 @@ export function instagramConversationKey(accountId: string, participantId: strin
   return `ig:${accountId}:${participantId}`;
 }
 
-/** Corte por BYTES (a API limita o texto a 1000 bytes), sem quebrar caractere. */
-export function clipInstagramText(text: string, maxBytes = INSTAGRAM_TEXT_MAX_BYTES): string {
-  const value = String(text || '');
-  if (new TextEncoder().encode(value).length <= maxBytes) return value;
-  let out = '';
-  for (const char of value) {
-    if (new TextEncoder().encode(out + char).length > maxBytes) break;
-    out += char;
-  }
-  return out;
+/**
+ * Tamanho REAL do texto em bytes UTF-8 (a API limita a 1000 bytes por
+ * mensagem). Contar caracteres não serve: emoji e acentos ocupam mais de um
+ * byte, e é por bytes que a Meta recusa.
+ */
+export function instagramTextBytes(text: string): number {
+  return new TextEncoder().encode(String(text || '')).length;
+}
+
+/**
+ * O texto cabe no limite do Instagram? Quando NÃO cabe, a operação é recusada
+ * com erro explícito — nunca cortada em silêncio (o que sairia pelo canal
+ * precisa ser exatamente o que está no histórico).
+ */
+export function instagramTextFits(text: string, maxBytes = INSTAGRAM_TEXT_MAX_BYTES): boolean {
+  return instagramTextBytes(text) <= maxBytes;
+}
+
+/** Mensagem única do limite (UI, rotas e automação usam a MESMA frase). */
+export function instagramTextLimitError(maxBytes = INSTAGRAM_TEXT_MAX_BYTES): string {
+  return `Mensagem do Instagram excede o limite permitido (${maxBytes} bytes).`;
 }

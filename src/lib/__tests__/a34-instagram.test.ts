@@ -27,7 +27,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { NextRequest } from 'next/server';
-import { emptyDB, readDB, writeDB } from '../db';
+import { emptyDB, readDB, updateDB, writeDB } from '../db';
 import { createSession } from '../auth';
 import { decryptSecret, encryptSecret } from '../whatsapp-cloud-api';
 import { issueSignupState, verifySignupState } from '../whatsapp-onboarding-server';
@@ -36,13 +36,19 @@ import { channelConnectorAvailable, channelConnectorFor } from '../integrations/
 import { AUTOMATION_ACTION_DEFS, automationActionDef } from '../automation/model';
 import { executeAction } from '../automation/actions';
 import {
-  clipInstagramText, instagramAuthorizeUrl, instagramConversationKey, instagramDedupeKey,
-  instagramInboundBody, instagramMessagingWindow, instagramPlan, parseInstagramWebhook,
+  INSTAGRAM_TEXT_MAX_BYTES, instagramAuthorizeUrl, instagramConversationKey, instagramDedupeKey,
+  instagramEventTimestamp, instagramInboundBody, instagramMaxISO, instagramMessagingWindow,
+  instagramPlan, instagramTextBytes, instagramTextFits, instagramTextLimitError, parseInstagramWebhook,
 } from '../instagram';
 import {
-  deliverInstagramMessage, ensureInstagramContact, exchangeInstagramCode, fetchInstagramProfile,
-  getInstagramCredentials, ingestInstagramNotification, issueInstagramState, readInstagramState,
-  sendInstagramMessage, subscribeInstagramAccount, verifyInstagramState,
+  INSTAGRAM_ACCOUNT_MISMATCH_CODE, INSTAGRAM_ACCOUNT_MISMATCH_MESSAGE, INSTAGRAM_NO_INBOUND_MESSAGE,
+  INSTAGRAM_TOKEN_REFRESH_MARGIN_MS, applyInstagramAuthorization, deliverInstagramMessage,
+  ensureInstagramContact, exchangeInstagramCode, fetchInstagramProfile, getInstagramCredentials,
+  ingestInstagramNotification, instagramAccountMismatch, instagramAccountOwners, instagramAppSecret,
+  instagramConversationLastInboundAt, instagramConversationWindow, instagramMissingPlatformConfig,
+  instagramTokenNeedsRefresh, instagramVerifyToken,
+  issueInstagramState, processPendingInstagramRetries, readInstagramState, refreshInstagramTokens,
+  resolveBusinessForInstagramAccountId, sendInstagramMessage, subscribeInstagramAccount, verifyInstagramState,
 } from '../instagram-api';
 import { GET as igWebhookGET, POST as igWebhookPOST } from '@/app/api/instagram/webhook/route';
 import { GET as igOnboardingGET, POST as igOnboardingPOST } from '@/app/api/instagram/onboarding/route';
@@ -125,7 +131,8 @@ function instagramPayload(input: {
   isDeleted?: boolean;
   isUnsupported?: boolean;
   attachments?: Array<{ type: string }>;
-  timestamp?: number;
+  /** Valor cru de `messaging[].timestamp` (segundos OU ms) — como a Meta manda. */
+  timestamp?: number | string;
 }) {
   const message: Record<string, any> = { mid: input.mid || 'mid-1' };
   if (input.text !== undefined) message.text = input.text;
@@ -141,11 +148,60 @@ function instagramPayload(input: {
       messaging: [{
         sender: { id: input.senderId || 'igsid-ana' },
         recipient: { id: input.accountId || ACC_A },
-        timestamp: input.timestamp || 1_758_000_000,
+        timestamp: input.timestamp ?? 1_758_000_000,
         message,
       }],
     }],
   };
+}
+
+/** Conversa do Instagram com evidência de ENTRADA (o que a Meta exige). */
+function nowPlusDays(days: number): string {
+  return new Date(Date.parse(NOW) + days * 24 * 60 * 60 * 1000).toISOString();
+}
+
+async function seedInstagramConversation(input: {
+  conversationId: string;
+  accountId?: string;
+  participantId?: string;
+  lastInboundAt?: string;
+  inboundAt?: string;
+  status?: 'open' | 'closed';
+  unread?: number;
+  withInbound?: boolean;
+}) {
+  const db = await readDB();
+  const now = input.inboundAt || NOW;
+  const conversation = {
+    id: input.conversationId,
+    businessId: BIZ_A,
+    channel: 'instagram' as const,
+    channelUserId: input.participantId || 'igsid-ana',
+    channelAccountId: input.accountId || ACC_A,
+    channelUsername: 'ana.souza',
+    contactId: '',
+    customerId: '',
+    name: 'Ana Souza',
+    phone: '',
+    status: input.status || ('open' as const),
+    mode: 'human' as const,
+    unread: input.unread ?? 0,
+    lastMessageAt: now,
+    lastMessagePreview: 'oi',
+    lastInboundAt: input.lastInboundAt ?? (input.withInbound === false ? '' : now),
+    createdAt: now,
+    context: {},
+  };
+  db.conversations.push(conversation as any);
+  if (input.withInbound !== false) {
+    db.messages.push({
+      id: `in-${input.conversationId}`, businessId: BIZ_A, conversationId: conversation.id,
+      direction: 'in', body: 'oi', status: 'delivered', externalId: `ig:in-${input.conversationId}`,
+      by: 'contact', channel: 'instagram', channelUserId: conversation.channelUserId, at: now,
+    } as any);
+  }
+  await writeDB(db);
+  return conversation;
 }
 
 function jsonReq(path: string, options: { method?: string; body?: unknown; token?: string; headers?: Record<string, string> } = {}) {
@@ -334,11 +390,13 @@ describe('B9 · IDENTIDADE — conta + IGSID, nunca nome/@/telefone', () => {
     expect(instagramConversationKey(ACC_A, 'igsid-ana')).toBe(`ig:${ACC_A}:igsid-ana`);
   });
 
-  it('o corte de texto respeita os 1000 bytes sem quebrar caractere', () => {
+  it('o limite de texto é medido em BYTES (nunca cortado em silêncio)', () => {
     const text = 'á'.repeat(600); // 2 bytes por caractere em UTF-8
-    const clipped = clipInstagramText(text);
-    expect(Buffer.byteLength(clipped, 'utf8')).toBeLessThanOrEqual(1000);
-    expect(clipped.endsWith('á')).toBe(true);
+    expect(instagramTextBytes(text)).toBe(1200);
+    expect(instagramTextFits(text)).toBe(false);
+    expect(instagramTextFits('á'.repeat(499))).toBe(true);
+    expect(instagramTextFits('🙂'.repeat(250))).toBe(true); // 4 bytes cada = 1000
+    expect(instagramTextFits('🙂'.repeat(251))).toBe(false);
   });
 });
 
@@ -586,28 +644,32 @@ describe('B9 · OUTBOUND — prova de envio, janela e isolamento', () => {
     expect(failed.ok).toBe(false);
   });
 
-  it('conector recusa fora da janela de 24h com motivo (política da Meta)', async () => {
-    const past = '2026-09-14T12:00:00.000Z'; // 5 dias atrás: fora das 24 h e dentro do HUMAN_AGENT
-    await writeDB({
-      ...(await readDB()),
-      businesses: (await readDB()).businesses.map((b) => b.id === BIZ_A
-        ? { ...b, instagramIntegration: { ...b.instagramIntegration!, lastInboundAt: past } }
-        : b),
-    } as DB);
-    stubGraph();
+  it('conector exige conversa iniciada pelo contato (a Meta não permite DM fria)', async () => {
+    const calls = stubGraph();
+    const res = await channelConnectorFor('instagram')!.send(
+      { businessId: BIZ_A, nowISO: NOW },
+      { businessId: BIZ_A, integrationId: 'ig', provider: 'instagram', to: 'igsid-nunca-escreveu', body: 'oi' },
+    );
+    expect(res.ok).toBe(false);
+    expect(res.detail).toBe(INSTAGRAM_NO_INBOUND_MESSAGE);
+    expect(calls).toHaveLength(0); // nenhuma chamada à Meta
+  });
+
+  it('conector recusa fora da janela do PARTICIPANTE com motivo (política da Meta)', async () => {
+    const past = '2026-09-14T12:00:00.000Z'; // 5 dias atrás: fora das 24 h, dentro do HUMAN_AGENT
+    await seedInstagramConversation({ conversationId: 'conv-antiga-janela', lastInboundAt: past, inboundAt: past });
+    const calls = stubGraph();
     const res = await channelConnectorFor('instagram')!.send(
       { businessId: BIZ_A, nowISO: NOW },
       { businessId: BIZ_A, integrationId: 'ig', provider: 'instagram', to: 'igsid-ana', body: 'oi' },
     );
     expect(res.ok).toBe(false);
     expect(res.detail).toMatch(/24 h|HUMAN_AGENT|janela/i);
-
-    const window = instagramMessagingWindow({ lastInboundAt: past, nowISO: NOW });
-    expect(window.phase).toBe('human_agent');
-    expect(window.canReply).toBe(false);
+    expect(calls).toHaveLength(0);
   });
 
-  it('conector envia quando a janela está aberta e devolve o id oficial', async () => {
+  it('conector envia quando a janela DESTA conversa está aberta e devolve o id oficial', async () => {
+    await seedInstagramConversation({ conversationId: 'conv-conector' });
     stubGraph({ sendMessageId: 'mid-conector' });
     const res = await channelConnectorFor('instagram')!.send(
       { businessId: BIZ_A, nowISO: NOW },
@@ -635,8 +697,14 @@ describe('B9 · OUTBOUND — prova de envio, janela e isolamento', () => {
     const igConv = {
       id: 'conv-ig-1', businessId: BIZ_A, channel: 'instagram' as const, channelUserId: 'igsid-ana',
       channelAccountId: ACC_A, contactId: '', customerId: '', name: 'Ana', phone: '', status: 'open' as const,
-      mode: 'human' as const, unread: 0, lastMessageAt: now, lastMessagePreview: 'oi', createdAt: now, context: {},
+      mode: 'human' as const, unread: 0, lastMessageAt: now, lastMessagePreview: 'oi',
+      lastInboundAt: now, createdAt: now, context: {},
     };
+    db.messages.push({
+      id: 'in-conv-ig-1', businessId: BIZ_A, conversationId: 'conv-ig-1', direction: 'in', body: 'oi',
+      status: 'delivered', externalId: 'ig:in-conv-ig-1', by: 'contact', channel: 'instagram',
+      channelUserId: 'igsid-ana', at: now,
+    } as Message);
     const waConv = {
       id: 'conv-wa-1', businessId: BIZ_A, channel: 'whatsapp' as const, channelUserId: '5511999990000',
       contactId: '', customerId: '', name: 'Ana', phone: '5511999990000', status: 'open' as const,
@@ -699,20 +767,42 @@ describe('B9 · AUTOMAÇÃO — send_channel_message com canal Instagram', () =>
     expect(db.messages).toHaveLength(0);
   });
 
-  it('sem vínculo do contato ⇒ erro explícito de identidade', async () => {
+  it('IGSID arbitrário sem conversa iniciada ⇒ nada é criado e a Meta não é chamada', async () => {
     const db = await readDB();
-    const input = actionInput(
-      { __type: 'send_channel_message', channel: 'instagram' },
-      { customer: { id: 'contato-sem-vinculo' } },
-    );
+    const calls = stubGraph();
+    const input = actionInput({ __type: 'send_channel_message', channel: 'instagram', to: '17841499999999999' });
     input.db = db;
     input.business = db.businesses.find((b) => b.id === BIZ_A)!;
     const res = executeAction(input as any);
     expect(res.ok).toBe(false);
-    expect(res.error).toMatch(/vínculo do contato no Instagram/i);
+    expect(res.error).toBe(INSTAGRAM_NO_INBOUND_MESSAGE);
+    expect(db.conversations).toHaveLength(0);
+    expect(db.messages).toHaveLength(0);
+    expect(calls).toHaveLength(0);
   });
 
-  it('conectado + janela aberta ⇒ mensagem pendente na conversa do Instagram', async () => {
+  it('vínculo do contato sem conversa real ⇒ continua recusando (identidade não é prova)', async () => {
+    const db = await readDB();
+    const contact = ensureInstagramContact(db, {
+      businessId: BIZ_A, accountId: ACC_A, participantId: 'igsid-sem-conversa', username: 'x', displayName: 'Cliente X', now: NOW,
+    });
+    await writeDB(db);
+    const fresh = await readDB();
+    const input = actionInput(
+      { __type: 'send_channel_message', channel: 'instagram' },
+      { customer: { id: contact.id } },
+    );
+    input.db = fresh;
+    input.business = fresh.businesses.find((b) => b.id === BIZ_A)!;
+    const res = executeAction(input as any);
+    expect(res.ok).toBe(false);
+    expect(res.error).toBe(INSTAGRAM_NO_INBOUND_MESSAGE);
+    expect(fresh.conversations).toHaveLength(0);
+    expect(fresh.messages).toHaveLength(0);
+  });
+
+  it('conectado + conversa iniciada + janela aberta ⇒ mensagem pendente na conversa existente', async () => {
+    await seedInstagramConversation({ conversationId: 'conv-auto', participantId: 'igsid-automacao' });
     const db = await readDB();
     const contact = ensureInstagramContact(db, {
       businessId: BIZ_A, accountId: ACC_A, participantId: 'igsid-automacao', username: 'auto', displayName: 'Cliente Auto', now: NOW,
@@ -728,29 +818,45 @@ describe('B9 · AUTOMAÇÃO — send_channel_message com canal Instagram', () =>
     const res = executeAction(input as any);
     expect(res.ok).toBe(true);
     expect(res.summary).toMatch(/Instagram/i);
-    const conv = fresh.conversations.find((c) => c.channel === 'instagram')!;
+    // NENHUMA conversa nova: usa a que o contato já tinha iniciado.
+    expect(fresh.conversations.filter((c) => c.channel === 'instagram')).toHaveLength(1);
+    const conv = fresh.conversations[0];
     expect(conv.channelUserId).toBe('igsid-automacao');
     expect(conv.channelAccountId).toBe(ACC_A);
-    const msg = fresh.messages.find((m) => m.conversationId === conv.id)!;
+    expect(conv.contactId).toBe(contact.id);
+    const msg = fresh.messages.find((m) => m.direction === 'out')!;
     expect(msg.channel).toBe('instagram');
     expect(msg.status).toBe('pending');
     expect(msg.body).toBe('Olá!');
-    expect(contact.id).toBe(conv.contactId);
   });
 
-  it('fora da janela ⇒ erro explícito de política (nada enfileirado)', async () => {
-    const db = await readDB();
-    ensureInstagramContact(db, {
-      businessId: BIZ_A, accountId: ACC_A, participantId: 'igsid-velho', username: 'velho', displayName: 'Cliente Velho', now: NOW,
+  it('fora da janela da conversa ⇒ erro explícito de política (nada enfileirado)', async () => {
+    await seedInstagramConversation({
+      conversationId: 'conv-velha', participantId: 'igsid-velho',
+      lastInboundAt: '2026-08-01T00:00:00.000Z', inboundAt: '2026-08-01T00:00:00.000Z',
     });
-    db.businesses.find((b) => b.id === BIZ_A)!.instagramIntegration!.lastInboundAt = '2026-08-01T00:00:00.000Z';
-    const input = actionInput({ __type: 'send_channel_message', channel: 'instagram' });
+    const db = await readDB();
+    const input = actionInput({ __type: 'send_channel_message', channel: 'instagram', to: 'igsid-velho' });
     input.db = db;
     input.business = db.businesses.find((b) => b.id === BIZ_A)!;
     const res = executeAction(input as any);
     expect(res.ok).toBe(false);
     expect(res.error).toMatch(/Instagram/i);
-    expect(db.messages).toHaveLength(0);
+    expect(db.messages.filter((m) => m.direction === 'out')).toHaveLength(0);
+  });
+
+  it('texto acima do limite ⇒ recusa explícita, sem Message e sem chamada à Meta', async () => {
+    await seedInstagramConversation({ conversationId: 'conv-limite' });
+    const db = await readDB();
+    const calls = stubGraph();
+    const input = actionInput({ __type: 'send_channel_message', channel: 'instagram', message: '🙂'.repeat(300) });
+    input.db = db;
+    input.business = db.businesses.find((b) => b.id === BIZ_A)!;
+    const res = executeAction(input as any);
+    expect(res.ok).toBe(false);
+    expect(res.error).toMatch(/excede o limite/i);
+    expect(db.messages.filter((m) => m.direction === 'out')).toHaveLength(0);
+    expect(calls).toHaveLength(0);
   });
 
   it('sem o campo channel, o comportamento do WhatsApp continua igual', async () => {
@@ -984,13 +1090,7 @@ describe('B9 · INBOX — canal, badge e compositor por canal', () => {
   });
 
   it('responder numa conversa do Instagram usa o canal DA CONVERSA (não o WhatsApp)', async () => {
-    const db = await readDB();
-    db.conversations.push({
-      id: 'conv-responder', businessId: BIZ_A, channel: 'instagram', channelUserId: 'igsid-ana', channelAccountId: ACC_A,
-      contactId: '', customerId: '', name: 'Ana', phone: '', status: 'open', mode: 'human', unread: 0,
-      lastMessageAt: NOW, lastMessagePreview: 'oi', createdAt: NOW, context: {},
-    } as any);
-    await writeDB(db);
+    await seedInstagramConversation({ conversationId: 'conv-responder' });
     const calls = stubGraph({ sendMessageId: 'mid-resposta' });
     const res = await conversationsPOST(jsonReq('/api/conversations', {
       method: 'POST', token: tokenA,
@@ -1006,14 +1106,8 @@ describe('B9 · INBOX — canal, badge e compositor por canal', () => {
   });
 
   it('fora da janela, o inbox recusa com 409 e motivo (nunca "enviado" falso)', async () => {
-    const db = await readDB();
-    db.businesses.find((b) => b.id === BIZ_A)!.instagramIntegration!.lastInboundAt = '2026-08-01T00:00:00.000Z';
-    db.conversations.push({
-      id: 'conv-janela', businessId: BIZ_A, channel: 'instagram', channelUserId: 'igsid-ana', channelAccountId: ACC_A,
-      contactId: '', customerId: '', name: 'Ana', phone: '', status: 'open', mode: 'human', unread: 0,
-      lastMessageAt: NOW, lastMessagePreview: 'oi', createdAt: NOW, context: {},
-    } as any);
-    await writeDB(db);
+    // Conversa sem mensagem de entrada: não existe janela para este contato.
+    await seedInstagramConversation({ conversationId: 'conv-janela', withInbound: false, lastInboundAt: '' });
     stubGraph();
     const res = await conversationsPOST(jsonReq('/api/conversations', {
       method: 'POST', token: tokenA,
@@ -1054,5 +1148,459 @@ describe('B9 · INBOX — canal, badge e compositor por canal', () => {
     const canais = read('src/app/(dashboard)/canais/page.tsx');
     expect(canais).toContain('InstagramChannelPanel');
     expect(canais).toContain('WhatsappChannelPanel');
+  });
+});
+
+// ═══════════════════════════════════════════════════════════════
+// B9 FIX — janela POR PARTICIPANTE, tempo do webhook, isolamento de conta,
+// limite de texto, credencial e reabertura de conversa fechada.
+// ═══════════════════════════════════════════════════════════════
+describe('B9 fix · TEMPO DO EVENTO — segundos, milissegundos e valores absurdos', () => {
+  it('epoch em SEGUNDOS vira a data correta', () => {
+    const t = instagramEventTimestamp(1_758_000_000, Date.now());
+    expect(t.reliable).toBe(true);
+    expect(t.iso).toBe('2025-09-16T05:20:00.000Z');
+  });
+
+  it('epoch em MILISSEGUNDOS dá exatamente a MESMA data (nunca ×1000)', () => {
+    const seconds = instagramEventTimestamp(1_758_000_000, Date.now());
+    const millis = instagramEventTimestamp(1_758_000_000_000, Date.now());
+    expect(millis.reliable).toBe(true);
+    expect(millis.iso).toBe(seconds.iso);
+  });
+
+  it('timestamp inválido, zero, negativo ou fora da faixa não é confiável', () => {
+    for (const value of ['', 'abc', null, undefined, 0, -10, 1, 999]) {
+      const t = instagramEventTimestamp(value as any, Date.now());
+      expect(t.reliable).toBe(false);
+      expect(t.iso).toBe('');
+    }
+  });
+
+  it('timestamp no futuro absurdo não abre janela futura', () => {
+    const t = instagramEventTimestamp(9_999_999_999_999, Date.now());
+    expect(t.reliable).toBe(false);
+  });
+
+  it('webhook realista de 13 dígitos grava Message.at correto', async () => {
+    process.env.INSTAGRAM_APP_SECRET = APP_SECRET;
+    stubGraph();
+    const res = await igWebhookPOST(signedWebhookReq(instagramPayload({ mid: 'm-ms', text: 'oi', timestamp: 1_758_000_000_000 })));
+    expect(res.status).toBe(200);
+    const db = await readDB();
+    const msg = db.messages.find((m) => m.externalId === 'ig:m-ms')!;
+    expect(msg.at).toBe('2025-09-16T05:20:00.000Z');
+    const conv = db.conversations.find((c) => c.id === msg.conversationId)!;
+    expect(conv.lastInboundAt).toBe('2025-09-16T05:20:00.000Z');
+    // E a janela abriu (mensagem recente de verdade, 24 h a partir do horário).
+    expect(instagramMessagingWindow({ lastInboundAt: conv.lastInboundAt, nowISO: NOW }).canReply).toBe(false);
+    expect(instagramMessagingWindow({ lastInboundAt: conv.lastInboundAt, nowISO: '2025-09-16T23:00:00.000Z' }).canReply).toBe(true);
+  });
+
+  it('timestamp absurdo cai no horário de RECEBIMENTO (sem janela inventada)', async () => {
+    process.env.INSTAGRAM_APP_SECRET = APP_SECRET;
+    stubGraph();
+    await igWebhookPOST(signedWebhookReq(instagramPayload({ mid: 'm-absurdo', text: 'oi', timestamp: 9_999_999_999_999 })));
+    const db = await readDB();
+    const msg = db.messages.find((m) => m.externalId === 'ig:m-absurdo')!;
+    expect(Date.parse(msg.at)).toBeLessThanOrEqual(Date.now() + 60_000);
+    expect(Date.parse(msg.at)).toBeGreaterThan(Date.now() - 60 * 60 * 1000);
+    const conv = db.conversations.find((c) => c.id === msg.conversationId)!;
+    expect(conv.lastInboundAt).toBe(msg.at);
+  });
+
+  it('webhook atrasado não RETROCEDE a janela da conversa (max)', async () => {
+    process.env.INSTAGRAM_APP_SECRET = APP_SECRET;
+    stubGraph();
+    await igWebhookPOST(signedWebhookReq(instagramPayload({ mid: 'm-novo', text: 'agora', timestamp: 1_758_000_000 })));
+    const before = await readDB();
+    const conv = before.conversations.find((c) => c.channel === 'instagram')!;
+    expect(conv.lastInboundAt).toBe('2025-09-16T05:20:00.000Z');
+    // Entrega fora de ordem: mensagem ANTIGA chega depois.
+    await igWebhookPOST(signedWebhookReq(instagramPayload({ mid: 'm-antigo', text: 'atrasada', timestamp: 1_757_000_000 })));
+    const after = await readDB();
+    expect(after.conversations.find((c) => c.id === conv.id)!.lastInboundAt).toBe('2025-09-16T05:20:00.000Z');
+  });
+});
+
+describe('B9 fix · JANELA POR CONVERSA — a mensagem de A não abre (nem renova) a de B', () => {
+  it('A escreveu agora e B há 2 dias: A pode responder, B não', async () => {
+    const twoDaysAgo = '2026-09-17T12:00:00.000Z';
+    await seedInstagramConversation({ conversationId: 'conv-a', participantId: 'igsid-a' });
+    await seedInstagramConversation({ conversationId: 'conv-b', participantId: 'igsid-b', lastInboundAt: twoDaysAgo, inboundAt: twoDaysAgo });
+    const db = await readDB();
+    const convA = db.conversations.find((c) => c.id === 'conv-a')!;
+    const convB = db.conversations.find((c) => c.id === 'conv-b')!;
+    expect(instagramConversationWindow(db, convA, NOW).canReply).toBe(true);
+    const winB = instagramConversationWindow(db, convB, NOW);
+    expect(winB.canReply).toBe(false);
+    expect(winB.phase).toBe('human_agent');
+  });
+
+  it('mensagem de OUTRO participante não renova a janela desta conversa', async () => {
+    const old = '2026-09-17T12:00:00.000Z';
+    await seedInstagramConversation({ conversationId: 'conv-b2', participantId: 'igsid-b', lastInboundAt: old, inboundAt: old });
+    await seedInstagramConversation({ conversationId: 'conv-a2', participantId: 'igsid-a' });
+    stubGraph();
+    // A escreve de novo agora.
+    await igWebhookPOST(signedWebhookReq(instagramPayload({ mid: 'm-a-nova', senderId: 'igsid-a', text: 'oi' })));
+    const db = await readDB();
+    const convB = db.conversations.find((c) => c.id === 'conv-b2')!;
+    expect(convB.lastInboundAt).toBe(old);
+    // Telemetria global da unidade avança (não autoriza envio).
+    expect(db.businesses.find((b) => b.id === BIZ_A)!.instagramIntegration!.lastInboundAt! >= old).toBe(true);
+  });
+
+  it('conversa antiga SEM o campo derivado da mensagem mais recente (compatibilidade)', async () => {
+    const at = '2026-09-18T09:00:00.000Z';
+    const db = await readDB();
+    db.conversations.push({
+      id: 'conv-legado', businessId: BIZ_A, channel: 'instagram', channelUserId: 'igsid-legado',
+      channelAccountId: ACC_A, contactId: '', customerId: '', name: 'Legado', phone: '', status: 'open',
+      mode: 'human', unread: 0, lastMessageAt: at, lastMessagePreview: 'oi', createdAt: at, context: {},
+    } as any);
+    db.messages.push({
+      id: 'in-legado', businessId: BIZ_A, conversationId: 'conv-legado', direction: 'in', body: 'oi',
+      status: 'delivered', externalId: 'ig:legado', by: 'contact', channel: 'instagram', at,
+    } as any);
+    await writeDB(db);
+    const fresh = await readDB();
+    expect(instagramConversationLastInboundAt(fresh, fresh.conversations.find((c) => c.id === 'conv-legado')!)).toBe(at);
+  });
+
+  it('retry revalida a janela NO MOMENTO DO ENVIO (retry depois do fechamento não sai)', async () => {
+    await seedInstagramConversation({ conversationId: 'conv-retry' });
+    const db = await readDB();
+    db.messages.push({
+      id: 'out-retry', businessId: BIZ_A, conversationId: 'conv-retry', direction: 'out', body: 'Bom dia',
+      status: 'pending', externalId: '', by: 'user', at: NOW,
+    } as any);
+    await writeDB(db);
+    // O tempo passa: a última mensagem do contato já está fora da janela.
+    const later = await readDB();
+    later.conversations.find((c) => c.id === 'conv-retry')!.lastInboundAt = '2026-09-11T12:00:00.000Z';
+    await writeDB(later);
+
+    const calls = stubGraph({ sendMessageId: 'mid-nao-devia-sair' });
+    const res = await processPendingInstagramRetries({ nowISO: NOW });
+    expect(res.messagesSent).toBe(0);
+    expect(calls).toHaveLength(0);
+    const after = await readDB();
+    const msg = after.messages.find((m) => m.id === 'out-retry')!;
+    expect(msg.status).toBe('failed');
+    expect(msg.error).toMatch(/janela|24 h|7 dias/i);
+  });
+});
+
+describe('B9 fix · ISOLAMENTO DE CONTA — troca de conta e unicidade', () => {
+  it('conversa da conta antiga não é enviada pela conta nova (rota responde 409)', async () => {
+    await seedInstagramConversation({ conversationId: 'conv-conta-antiga', accountId: ACC_A });
+    const db = await readDB();
+    const biz = db.businesses.find((b) => b.id === BIZ_A)!;
+    biz.instagramIntegration!.igUserId = ACC_B; // trocou de conta no painel
+    biz.instagramIntegration!.encryptedAccessToken = encryptSecret(TOKEN_B);
+    await writeDB(db);
+
+    const calls = stubGraph();
+    const res = await conversationsPOST(jsonReq('/api/conversations', {
+      method: 'POST', token: tokenA,
+      body: { businessId: BIZ_A, conversationId: 'conv-conta-antiga', body: 'oi' },
+    }));
+    expect(res.status).toBe(409);
+    const body = await res.json();
+    expect(body.code).toBe(INSTAGRAM_ACCOUNT_MISMATCH_CODE);
+    expect(body.error).toBe(INSTAGRAM_ACCOUNT_MISMATCH_MESSAGE);
+    expect(calls).toHaveLength(0);
+    const after = await readDB();
+    expect(after.messages.filter((m) => m.direction === 'out')).toHaveLength(0);
+  });
+
+  it('a entrega também recusa (channel_account_mismatch) e o histórico continua legível', async () => {
+    await seedInstagramConversation({ conversationId: 'conv-mismatch' });
+    const db = await readDB();
+    const biz = db.businesses.find((b) => b.id === BIZ_A)!;
+    biz.instagramIntegration!.igUserId = ACC_B;
+    biz.instagramIntegration!.encryptedAccessToken = encryptSecret(TOKEN_B);
+    db.messages.push({
+      id: 'out-mismatch', businessId: BIZ_A, conversationId: 'conv-mismatch', direction: 'out', body: 'oi',
+      status: 'pending', externalId: '', by: 'user', at: NOW,
+    } as any);
+    await writeDB(db);
+
+    const calls = stubGraph();
+    const res = await deliverInstagramMessage(BIZ_A, 'out-mismatch', { nowISO: NOW });
+    expect(res.ok).toBe(false);
+    expect(res.code).toBe(INSTAGRAM_ACCOUNT_MISMATCH_CODE);
+    expect(res.error).toBe(INSTAGRAM_ACCOUNT_MISMATCH_MESSAGE);
+    expect(calls).toHaveLength(0);
+
+    // A conversa (e o histórico) continua visível na listagem do inbox.
+    const list = await conversationsGET(jsonReq(`/api/conversations?businessId=${BIZ_A}`, { token: tokenA }));
+    const body = await list.json();
+    expect(body.conversations.some((c: any) => c.id === 'conv-mismatch')).toBe(true);
+
+    // E a tela recebe o aviso explícito.
+    const detail = await conversationsGET(jsonReq(`/api/conversations?businessId=${BIZ_A}&id=conv-mismatch`, { token: tokenA }));
+    const detailBody = await detail.json();
+    expect(detailBody.accountMismatch).toBe(true);
+    expect(detailBody.accountMismatchMessage).toContain(INSTAGRAM_ACCOUNT_MISMATCH_MESSAGE);
+    expect(instagramAccountMismatch(biz, { channelAccountId: ACC_A })).toBeTruthy();
+  });
+
+  it('a MESMA conta não pode pertencer a duas unidades (recusa + auditoria)', async () => {
+    const db = await readDB();
+    const res = applyInstagramAuthorization(db, {
+      businessId: BIZ_B,
+      igUserId: ACC_A, // já é da unidade A
+      username: 'clinica.b',
+      displayName: 'Clínica B',
+      encryptedAccessToken: encryptSecret(TOKEN_B),
+      now: NOW,
+    });
+    expect(res.ok).toBe(false);
+    if (!res.ok) {
+      expect(res.reason).toBe('account_already_linked');
+      expect(res.ownerBusinessId).toBe(BIZ_A);
+    }
+    expect(db.businesses.find((b) => b.id === BIZ_B)!.instagramIntegration!.igUserId).toBe(ACC_B);
+    expect(db.audit.some((a: any) => a.action === 'instagram.onboarding_failed'
+      && a.meta?.reason === 'account_already_linked' && a.businessId === BIZ_B)).toBe(true);
+  });
+
+  it('webhook de conta duplicada é ambíguo: fail-closed, nada gravado em nenhuma unidade', async () => {
+    process.env.INSTAGRAM_APP_SECRET = APP_SECRET;
+    const db = await readDB();
+    // Duas unidades com a MESMA conta (estado inconsistente que precisa ser seguro).
+    db.businesses.find((b) => b.id === BIZ_B)!.instagramIntegration = {
+      ...integrationFor(ACC_B, TOKEN_B), igUserId: ACC_A,
+    } as any;
+    await writeDB(db);
+    expect(instagramAccountOwners(await readDB(), ACC_A)).toHaveLength(2);
+    expect(resolveBusinessForInstagramAccountId(await readDB(), ACC_A)).toBeUndefined();
+
+    stubGraph();
+    const res = await igWebhookPOST(signedWebhookReq(instagramPayload({ mid: 'm-ambiguo', text: 'oi' })));
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body.created).toBe(0);
+    expect(body.unmappedAccounts).toContain(ACC_A);
+    const after = await readDB();
+    expect(after.messages.filter((m) => m.externalId === 'ig:m-ambiguo')).toHaveLength(0);
+    expect(after.conversations).toHaveLength(0);
+  });
+
+  it('resolver por conta devolve a unidade quando o dono é ÚNICO', async () => {
+    const db = await readDB();
+    expect(resolveBusinessForInstagramAccountId(db, ACC_A)!.id).toBe(BIZ_A);
+    expect(resolveBusinessForInstagramAccountId(db, ACC_B)!.id).toBe(BIZ_B);
+    expect(resolveBusinessForInstagramAccountId(db, '17841400000000099')).toBeUndefined();
+  });
+});
+
+describe('B9 fix · LIMITE DE TEXTO — recusa explícita, nunca truncar', () => {
+  it('a rota recusa acima do limite (emoji/multibyte) e NÃO grava nada', async () => {
+    await seedInstagramConversation({ conversationId: 'conv-limite-rota' });
+    const calls = stubGraph();
+    const text = '🙂'.repeat(251); // 1004 bytes
+    expect(instagramTextBytes(text)).toBeGreaterThan(INSTAGRAM_TEXT_MAX_BYTES);
+    const res = await conversationsPOST(jsonReq('/api/conversations', {
+      method: 'POST', token: tokenA,
+      body: { businessId: BIZ_A, conversationId: 'conv-limite-rota', body: text },
+    }));
+    expect(res.status).toBe(400);
+    const body = await res.json();
+    expect(body.code).toBe('message_too_long');
+    expect(body.error).toBe(instagramTextLimitError(INSTAGRAM_TEXT_MAX_BYTES));
+    expect(calls).toHaveLength(0);
+    const after = await readDB();
+    expect(after.messages.filter((m) => m.direction === 'out')).toHaveLength(0);
+  });
+
+  it('no limite exato, passa — e o corpo salvo é EXATAMENTE o enviado', async () => {
+    await seedInstagramConversation({ conversationId: 'conv-limite-ok' });
+    const text = '🙂'.repeat(250); // exatamente 1000 bytes
+    const calls = stubGraph({ sendMessageId: 'mid-limite' });
+    const res = await conversationsPOST(jsonReq('/api/conversations', {
+      method: 'POST', token: tokenA,
+      body: { businessId: BIZ_A, conversationId: 'conv-limite-ok', body: text },
+    }));
+    expect(res.status).toBe(200);
+    const after = await readDB();
+    const msg = after.messages.find((m) => m.direction === 'out')!;
+    expect(msg.body).toBe(text);
+    expect(calls.some((u) => u.includes('/messages'))).toBe(true);
+  });
+
+  it('sendInstagramMessage é fail-closed quando chamado direto (sem cortar)', async () => {
+    const calls = stubGraph({ sendMessageId: 'mid-nao-devia' });
+    const res = await sendInstagramMessage({
+      igUserId: ACC_A, accessToken: TOKEN_A, to: 'igsid-ana', text: 'á'.repeat(600), // 1200 bytes
+    });
+    expect(res.ok).toBe(false);
+    expect(res.error).toMatch(/excede o limite/i);
+    expect(calls).toHaveLength(0);
+  });
+});
+
+describe('B9 fix · AMBIENTE — painel e servidor decidem igual (fallbacks)', () => {
+  it('META_APP_SECRET + WHATSAPP_VERIFY_TOKEN bastam (mesmo app da Meta)', async () => {
+    process.env.INSTAGRAM_APP_ID = APP_ID;
+    process.env.META_APP_SECRET = APP_SECRET;
+    process.env.WHATSAPP_VERIFY_TOKEN = 'verify-compartilhado';
+    delete process.env.INSTAGRAM_APP_SECRET;
+    delete process.env.INSTAGRAM_VERIFY_TOKEN;
+
+    const db = await readDB();
+    const plan = instagramPlan({ env: process.env, business: db.businesses[0], siteUrl: 'https://app.instalink.test' });
+    expect(plan.layers[0].ready).toBe(true);
+    expect(plan.layers[0].missing).toEqual([]);
+    expect(plan.clientConfig).not.toBeNull();
+    expect(instagramMissingPlatformConfig()).toEqual([]);
+    expect(instagramAppSecret()).toBe(APP_SECRET);
+    expect(instagramVerifyToken()).toBe('verify-compartilhado');
+  });
+
+  it('sem os fallbacks, painel e servidor apontam exatamente os mesmos nomes', async () => {
+    for (const key of ['INSTAGRAM_APP_ID', 'INSTAGRAM_APP_SECRET', 'INSTAGRAM_VERIFY_TOKEN', 'WHATSAPP_VERIFY_TOKEN', 'META_APP_SECRET', 'WHATSAPP_CREDENTIALS_KEY']) {
+      delete process.env[key];
+    }
+    const db = await readDB();
+    const plan = instagramPlan({ env: {}, business: db.businesses[0], siteUrl: 'https://app.instalink.test' });
+    expect(plan.layers[0].missing).toEqual(instagramMissingPlatformConfig());
+    expect(plan.layers[0].missing).toEqual([
+      'INSTAGRAM_APP_ID', 'INSTAGRAM_APP_SECRET', 'INSTAGRAM_VERIFY_TOKEN', 'WHATSAPP_CREDENTIALS_KEY',
+    ]);
+  });
+});
+
+describe('B9 fix · CREDENCIAL — renovação preventiva e isolada por unidade', () => {
+  it('só renova quem está dentro da margem e mantém o token criptografado', async () => {
+    const db = await readDB();
+    db.businesses.find((b) => b.id === BIZ_A)!.instagramIntegration!.tokenExpiresAt = '2026-09-24T12:00:00.000Z'; // 5 dias
+    db.businesses.find((b) => b.id === BIZ_B)!.instagramIntegration!.tokenExpiresAt = '2026-10-30T12:00:00.000Z'; // 41 dias
+    await writeDB(db);
+    const fresh = await readDB();
+    expect(instagramTokenNeedsRefresh(fresh.businesses.find((b) => b.id === BIZ_A)!.instagramIntegration, NOW)).toBe(true);
+    expect(instagramTokenNeedsRefresh(fresh.businesses.find((b) => b.id === BIZ_B)!.instagramIntegration, NOW)).toBe(false);
+    expect(INSTAGRAM_TOKEN_REFRESH_MARGIN_MS).toBe(7 * 24 * 60 * 60 * 1000);
+
+    const calls: string[] = [];
+    const fetchFn = (async (url: string | URL | Request) => {
+      calls.push(String(url));
+      return { ok: true, status: 200, json: async () => ({ access_token: 'token-renovado-A', expires_in: 5_184_000 }) } as any;
+    }) as any;
+
+    const summary = await refreshInstagramTokens({ nowISO: NOW, fetchFn });
+    expect(summary.businessesChecked).toBe(1);
+    expect(summary.refreshed).toBe(1);
+    expect(summary.failed).toBe(0);
+    expect(calls).toHaveLength(1);
+    expect(calls[0]).toContain('refresh_access_token');
+
+    const after = await readDB();
+    const igA = after.businesses.find((b) => b.id === BIZ_A)!.instagramIntegration!;
+    const igB = after.businesses.find((b) => b.id === BIZ_B)!.instagramIntegration!;
+    expect(igA.encryptedAccessToken).not.toContain('token-renovado-A');
+    expect(decryptSecret(igA.encryptedAccessToken!)).toBe('token-renovado-A');
+    expect(igA.tokenIssuedAt).toBe(NOW);
+    expect(igA.tokenExpiresAt).toBe(nowPlusDays(60));
+    expect(decryptSecret(igB.encryptedAccessToken!)).toBe(TOKEN_B); // outra unidade intacta
+    expect(after.audit.some((a: any) => a.action === 'instagram.token_refreshed' && a.businessId === BIZ_A)).toBe(true);
+    expect(after.audit.some((a: any) => a.action === 'instagram.token_refreshed' && a.businessId === BIZ_B)).toBe(false);
+  });
+
+  it('falha na renovação NÃO apaga o token atual (só registra o motivo)', async () => {
+    const db = await readDB();
+    const before = db.businesses.find((b) => b.id === BIZ_A)!.instagramIntegration!.encryptedAccessToken;
+    db.businesses.find((b) => b.id === BIZ_A)!.instagramIntegration!.tokenExpiresAt = '2026-09-21T12:00:00.000Z';
+    await writeDB(db);
+    const fetchFn = (async () => ({ ok: false, status: 400, json: async () => ({ error: { message: 'Session expired' } }) })) as any;
+    const summary = await refreshInstagramTokens({ nowISO: NOW, fetchFn });
+    expect(summary.failed).toBe(1);
+    const after = await readDB();
+    const igA = after.businesses.find((b) => b.id === BIZ_A)!.instagramIntegration!;
+    expect(igA.encryptedAccessToken).toBe(before);
+    expect(igA.lastError).toMatch(/Session expired|Renovação/i);
+    expect(after.audit.some((a: any) => a.action === 'instagram.token_refresh_failed' && a.businessId === BIZ_A)).toBe(true);
+  });
+
+  it('não sobrescreve credencial trocada no meio (CAS)', async () => {
+    const db = await readDB();
+    db.businesses.find((b) => b.id === BIZ_A)!.instagramIntegration!.tokenExpiresAt = '2026-09-21T12:00:00.000Z';
+    await writeDB(db);
+    const fetchFn = (async () => {
+      // Alguém reconectou a conta enquanto a Meta respondia.
+      await updateDB((d) => {
+        d.businesses.find((b) => b.id === BIZ_A)!.instagramIntegration!.encryptedAccessToken = encryptSecret('token-novo-da-reconexao');
+      });
+      return { ok: true, status: 200, json: async () => ({ access_token: 'token-renovado', expires_in: 5_184_000 }) } as any;
+    }) as any;
+    const summary = await refreshInstagramTokens({ nowISO: NOW, fetchFn });
+    expect(summary.refreshed).toBe(1);
+    const after = await readDB();
+    expect(decryptSecret(after.businesses.find((b) => b.id === BIZ_A)!.instagramIntegration!.encryptedAccessToken!))
+      .toBe('token-novo-da-reconexao');
+  });
+});
+
+describe('B9 fix · CONVERSA FECHADA — nova mensagem real reabre', () => {
+  it('closed → inbound → open, com o MESMO id, unread incrementado e histórico preservado', async () => {
+    process.env.INSTAGRAM_APP_SECRET = APP_SECRET;
+    await seedInstagramConversation({ conversationId: 'conv-fechada', status: 'closed', unread: 0 });
+    stubGraph();
+    const res = await igWebhookPOST(signedWebhookReq(instagramPayload({ mid: 'm-reabre', text: 'voltei' })));
+    expect(res.status).toBe(200);
+    const db = await readDB();
+    const conv = db.conversations.find((c) => c.id === 'conv-fechada')!;
+    expect(conv.status).toBe('open');
+    expect(conv.unread).toBe(1);
+    expect(db.conversations.filter((c) => c.channel === 'instagram')).toHaveLength(1);
+    expect(db.messages.filter((m) => m.conversationId === 'conv-fechada')).toHaveLength(2);
+    expect(db.messages.some((m) => m.externalId === 'ig:m-reabre')).toBe(true);
+  });
+});
+
+describe('B9 fix · CONTA TROCADA — o motivo estável aparece em TODOS os caminhos', () => {
+  it('conector explica o desencontro de conta (não "nunca escreveu")', async () => {
+    await seedInstagramConversation({ conversationId: 'conv-conta-velha', accountId: ACC_A });
+    const db = await readDB();
+    const biz = db.businesses.find((b) => b.id === BIZ_A)!;
+    biz.instagramIntegration!.igUserId = ACC_B; // conta trocada no painel
+    biz.instagramIntegration!.encryptedAccessToken = encryptSecret(TOKEN_B);
+    await writeDB(db);
+    const calls = stubGraph();
+    const res = await channelConnectorFor('instagram')!.send(
+      { businessId: BIZ_A, nowISO: NOW },
+      { businessId: BIZ_A, integrationId: 'ig', provider: 'instagram', to: 'igsid-ana', body: 'oi' },
+    );
+    expect(res.ok).toBe(false);
+    expect(res.detail).toContain(INSTAGRAM_ACCOUNT_MISMATCH_MESSAGE);
+    expect(calls).toHaveLength(0);
+  });
+
+  it('automação explica o desencontro de conta quando o vínculo é de outra conta', async () => {
+    await seedInstagramConversation({ conversationId: 'conv-auto-antiga', accountId: ACC_A });
+    const db = await readDB();
+    const contact = ensureInstagramContact(db, {
+      businessId: BIZ_A, accountId: ACC_A, participantId: 'igsid-ana', username: 'ana', displayName: 'Ana', now: NOW,
+    });
+    const biz = db.businesses.find((b) => b.id === BIZ_A)!;
+    biz.instagramIntegration!.igUserId = ACC_B;
+    biz.instagramIntegration!.encryptedAccessToken = encryptSecret(TOKEN_B);
+    await writeDB(db);
+    const fresh = await readDB();
+    const input = {
+      db: fresh,
+      business: fresh.businesses.find((b) => b.id === BIZ_A)!,
+      automation: { id: 'auto-1', businessId: BIZ_A } as any,
+      run: { id: 'run-1', businessId: BIZ_A, context: { customer: { id: contact.id } } } as any,
+      nodeId: 'node-1',
+      now: NOW,
+      params: { __type: 'send_channel_message', channel: 'instagram', message: 'Olá!' },
+    };
+    const res = executeAction(input as any);
+    expect(res.ok).toBe(false);
+    expect(res.error).toBe(INSTAGRAM_ACCOUNT_MISMATCH_MESSAGE);
+    expect(fresh.messages.filter((m) => m.direction === 'out')).toHaveLength(0);
   });
 });

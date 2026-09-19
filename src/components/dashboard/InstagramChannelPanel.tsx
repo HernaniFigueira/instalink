@@ -32,6 +32,7 @@ export interface InstagramChannelData {
   integration: {
     username: string; displayName: string; authorizedAt: string; webhookSubscribedAt: string;
     connectedAt: string; lastWebhookAt: string; lastError: string;
+    tokenIssuedAt: string; tokenExpiresAt: string;
   } | null;
 }
 
@@ -162,6 +163,15 @@ export function InstagramChannelPanel({ businessId }: { businessId: string }) {
             <p className="text-xs text-zinc-600">
               Conta: <span className="font-semibold text-zinc-800">{ig.displayName || ig.username}</span>
               {ig.username && <span className="text-zinc-500"> · @{ig.username}</span>}
+            </p>
+          )}
+
+          {/* Manutenção da credencial: o cron renova antes do vencimento (nunca
+              no meio de um envio). Só a DATA — nunca o token. */}
+          {ig?.tokenExpiresAt && (
+            <p className="text-[11px] text-zinc-500">
+              Credencial renovada automaticamente · vence em {ig.tokenExpiresAt.slice(0, 10)}
+              {ig.tokenIssuedAt ? ` (emitida em ${ig.tokenIssuedAt.slice(0, 10)})` : ''}
             </p>
           )}
 

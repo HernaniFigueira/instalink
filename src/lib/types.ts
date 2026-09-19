@@ -1502,6 +1502,13 @@ export interface Conversation {
    * channelUserId.
    */
   channelAccountId?: string;
+  /**
+   * A3.4 · B9 (correção) — última mensagem RECEBIDA **deste participante nesta
+   * conversa**. É a única fonte da janela de resposta do Instagram: mensagem do
+   * cliente A não abre (nem renova) a janela do cliente B. Nunca diminui —
+   * webhook atrasado/fora de ordem não retrocede o valor.
+   */
+  lastInboundAt?: string;
   /** @ do participante quando a API informa (exibição; nunca chave). */
   channelUsername?: string;
   contactId: string; // contato do CRM ('' quando ainda não resolvido)
@@ -1877,7 +1884,8 @@ export type AuditAction =
   | 'integration.token_rotated'
   // A3.4 · Bloco 9 — Instagram Direct entra no inbox unificado
   | 'instagram.connected' | 'instagram.disconnected'
-  | 'instagram.onboarding_failed' | 'instagram.webhook_received';
+  | 'instagram.onboarding_failed' | 'instagram.webhook_received'
+  | 'instagram.token_refreshed' | 'instagram.token_refresh_failed';
 
 export interface AuditEntry {
   id: ID;

@@ -4,8 +4,11 @@ import { updateDB } from '@/lib/db';
 import { requireBusiness } from '@/lib/access';
 import { integrationStatus, serverCredentialsConfigured } from '@/lib/whatsapp';
 import { deliverWhatsappMessage } from '@/lib/whatsapp-cloud-api';
-import { deliverInstagramMessage, getInstagramCredentials } from '@/lib/instagram-api';
-import { instagramIntegrationStatus, instagramMessagingWindow } from '@/lib/instagram';
+import {
+  INSTAGRAM_ACCOUNT_MISMATCH_CODE, INSTAGRAM_ACCOUNT_MISMATCH_MESSAGE,
+  deliverInstagramMessage, getInstagramCredentials, instagramAccountMismatch, instagramConversationWindow,
+} from '@/lib/instagram-api';
+import { INSTAGRAM_TEXT_MAX_BYTES, instagramIntegrationStatus, instagramTextBytes, instagramTextLimitError } from '@/lib/instagram';
 import type { Conversation, Message } from '@/lib/types';
 
 // INBOX unificado (WhatsApp + Instagram) dentro do CRM.
@@ -69,10 +72,19 @@ export async function GET(req: NextRequest) {
       channels,
       channelConnected: conv.channel === 'instagram' ? instagramConnected : whatsappConnected,
       instagramStatus: igStatus,
-      // Janela do Instagram: só informativa; o envio revalida na hora.
+      // Janela DESTA conversa (participante), não da unidade: mensagem do
+      // cliente A não abre janela para o cliente B. Informativa aqui; o envio
+      // revalida no momento de sair.
       window: conv.channel === 'instagram'
-        ? instagramMessagingWindow({ lastInboundAt: ctx.business.instagramIntegration?.lastInboundAt || '', nowISO: new Date().toISOString() })
+        ? instagramConversationWindow(db, conv, new Date().toISOString())
         : null,
+      // Conversa de uma conta antiga: histórico visível, envio bloqueado.
+      accountMismatch: conv.channel === 'instagram'
+        ? !!instagramAccountMismatch(ctx.business, conv)
+        : false,
+      accountMismatchMessage: conv.channel === 'instagram'
+        ? instagramAccountMismatch(ctx.business, conv)
+        : '',
     });
   }
 
@@ -157,7 +169,32 @@ export async function POST(req: NextRequest) {
           code: 'not_connected',
         }, { status: 409 });
       }
-      const window = instagramMessagingWindow({ lastInboundAt: ctx.business.instagramIntegration?.lastInboundAt || '', nowISO: new Date().toISOString() });
+
+      // A conversa é da conta conectada AGORA? Depois de trocar de conta, o
+      // histórico antigo continua visível, mas responder por ele sairia da
+      // conta errada (e a Meta recusaria).
+      const mismatch = instagramAccountMismatch(ctx.business, conv);
+      if (mismatch) {
+        return NextResponse.json({
+          error: INSTAGRAM_ACCOUNT_MISMATCH_MESSAGE,
+          detail: mismatch,
+          code: INSTAGRAM_ACCOUNT_MISMATCH_CODE,
+        }, { status: 409 });
+      }
+
+      // Limite oficial (1000 bytes UTF-8): recusa ANTES de gravar — o que sai
+      // pelo canal precisa ser exatamente o que está no histórico.
+      if (instagramTextBytes(text) > INSTAGRAM_TEXT_MAX_BYTES) {
+        return NextResponse.json({
+          error: instagramTextLimitError(INSTAGRAM_TEXT_MAX_BYTES),
+          code: 'message_too_long',
+          limitBytes: INSTAGRAM_TEXT_MAX_BYTES,
+          bytes: instagramTextBytes(text),
+        }, { status: 400 });
+      }
+
+      // Política revalidada AGORA, com a janela DESTA conversa.
+      const window = instagramConversationWindow(db, conv, new Date().toISOString());
       if (!window.canReply) {
         return NextResponse.json({
           error: window.reason,

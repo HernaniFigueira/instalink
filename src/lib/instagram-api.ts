@@ -29,37 +29,37 @@ import {
 } from './whatsapp-cloud-api';
 import {
   INSTAGRAM_CODE_TOKEN_URL, INSTAGRAM_LONG_LIVED_URL, INSTAGRAM_REFRESH_URL,
-  INSTAGRAM_TEXT_MAX_BYTES, INSTAGRAM_WEBHOOK_FIELDS, clipInstagramText, instagramDedupeKey,
-  instagramGraphBase, instagramInboundBody, instagramMessagingWindow, type InstagramNotification,
+  INSTAGRAM_TEXT_MAX_BYTES, INSTAGRAM_WEBHOOK_FIELDS, instagramDedupeKey,
+  instagramEnvAppId, instagramEnvAppSecret, instagramEnvVaultKey, instagramEnvVerifyToken,
+  instagramGraphBase, instagramInboundBody, instagramMaxISO, instagramMessagingWindow,
+  instagramTextFits, instagramTextLimitError, type InstagramNotification,
 } from './instagram';
 import { registerChannelConnector, type ChannelConnector, type ChannelSendResult, type ConnectorContext, type OutboundChannelMessage } from './integrations/connectors';
 import type { Business, BusinessCustomer, ChannelIdentity, Conversation, DB, InstagramIntegration, Message } from './types';
 
 // ── Configuração da plataforma (nunca vaza segredo) ─────────────
+// A leitura do ambiente vive em `instagram.ts` (módulo puro) para que o painel
+// e o servidor tomem EXATAMENTE a mesma decisão — inclusive nos fallbacks.
 export function instagramAppId(env: NodeJS.ProcessEnv = process.env): string {
-  return String(env.INSTAGRAM_APP_ID || '').trim();
+  return instagramEnvAppId(env);
 }
 
-/**
- * App Secret do Instagram. Fallback deliberado para `META_APP_SECRET` (quem
- * compartilha o app da Meta usa o mesmo segredo) — nunca para um valor fixo.
- */
+/** App Secret: `INSTAGRAM_APP_SECRET` ou `META_APP_SECRET` (mesmo app da Meta). */
 export function instagramAppSecret(env: NodeJS.ProcessEnv = process.env): string {
-  return String(env.INSTAGRAM_APP_SECRET || env.META_APP_SECRET || '').trim();
+  return instagramEnvAppSecret(env);
 }
 
+/** Verify token: `INSTAGRAM_VERIFY_TOKEN` ou `WHATSAPP_VERIFY_TOKEN` (mesmo app). */
 export function instagramVerifyToken(env: NodeJS.ProcessEnv = process.env): string {
-  return String(env.INSTAGRAM_VERIFY_TOKEN || '').trim();
+  return instagramEnvVerifyToken(env);
 }
 
 export function instagramMissingPlatformConfig(env: NodeJS.ProcessEnv = process.env): string[] {
-  // O token de verificação pode ser compartilhado com o WhatsApp (mesmo app),
-  // então aceitar `WHATSAPP_VERIFY_TOKEN` como equivalente NÃO afrouxa nada.
   const missing: string[] = [];
   if (!instagramAppId(env)) missing.push('INSTAGRAM_APP_ID');
   if (!instagramAppSecret(env)) missing.push('INSTAGRAM_APP_SECRET');
-  if (!instagramVerifyToken(env) && !String(env.WHATSAPP_VERIFY_TOKEN || '').trim()) missing.push('INSTAGRAM_VERIFY_TOKEN');
-  if (!String(env.WHATSAPP_CREDENTIALS_KEY || '').trim()) missing.push('WHATSAPP_CREDENTIALS_KEY');
+  if (!instagramVerifyToken(env)) missing.push('INSTAGRAM_VERIFY_TOKEN');
+  if (!instagramEnvVaultKey(env)) missing.push('WHATSAPP_CREDENTIALS_KEY');
   return missing;
 }
 
@@ -388,8 +388,14 @@ export async function sendInstagramMessage(input: {
   const version = getMetaGraphVersion() || DEFAULT_META_GRAPH_VERSION;
   const to = String(input.to || '').trim();
   if (!to) return { ok: false, externalId: '', error: 'Contato sem identificador do Instagram.', retryable: false, statusCode: 0 };
-  const text = clipInstagramText(input.text, INSTAGRAM_TEXT_MAX_BYTES);
+  const text = String(input.text || '');
   if (!text.trim()) return { ok: false, externalId: '', error: 'Mensagem vazia.', retryable: false, statusCode: 0 };
+  // FAIL-CLOSED no limite: cortar aqui faria o histórico mostrar um texto e o
+  // Instagram receber outro. Quem recusa é quem cria a mensagem (e esta
+  // função também recusa, para nunca sair algo diferente do que foi salvo).
+  if (!instagramTextFits(text, INSTAGRAM_TEXT_MAX_BYTES)) {
+    return { ok: false, externalId: '', error: instagramTextLimitError(INSTAGRAM_TEXT_MAX_BYTES), retryable: false, statusCode: 0 };
+  }
 
   try {
     const url = new URL(`${instagramGraphBase(version)}/${encodeURIComponent(input.igUserId)}/messages`);
@@ -427,7 +433,78 @@ export async function sendInstagramMessage(input: {
 export function resolveBusinessForInstagramAccountId(db: DB, igUserId: string): Business | undefined {
   const id = String(igUserId || '').trim();
   if (!id) return undefined;
-  return db.businesses.find((b) => b.instagramIntegration?.igUserId === id);
+  const owners = instagramAccountOwners(db, id);
+  // FAIL-CLOSED: a mesma conta em duas unidades é ambígua — o webhook não
+  // escolhe a primeira, não grava em nenhuma e a tela mostra a pendência.
+  return owners.length === 1 ? owners[0] : undefined;
+}
+
+/** Todas as unidades que dizem ser donas desta conta (mais de uma = ambíguo). */
+export function instagramAccountOwners(db: DB, igUserId: string): Business[] {
+  const id = String(igUserId || '').trim();
+  if (!id) return [];
+  return db.businesses.filter((b) => b.instagramIntegration?.igUserId === id);
+}
+
+/** A conta já pertence a OUTRA unidade? (unicidade da conta, multi-tenant) */
+export function instagramAccountTakenBy(db: DB, igUserId: string, businessId: string): Business | undefined {
+  return instagramAccountOwners(db, igUserId).find((b) => b.id !== businessId);
+}
+
+// ── Janela POR CONVERSA (nunca por unidade) ─────────────────────
+/**
+ * Última mensagem RECEBIDA deste participante NESTA conversa. É a única fonte
+ * válida da janela do Instagram: a mensagem do cliente A não abre (nem renova)
+ * a janela do cliente B.
+ *
+ * Compatibilidade: conversa antiga (criada antes deste campo) deriva da
+ * mensagem de entrada mais recente da própria conversa.
+ */
+export function instagramConversationLastInboundAt(
+  db: DB,
+  conversation: { id: string; lastInboundAt?: string },
+): string {
+  // O campo é a autoridade (cada entrada o atualiza com `max`).
+  const stored = String(conversation.lastInboundAt || '');
+  if (stored) return stored;
+  // Conversa legada (sem o campo): deriva da mensagem de entrada mais recente
+  // DELA — nunca da unidade, nunca de outra conversa.
+  let fromMessages = '';
+  for (const m of db.messages) {
+    if (m.conversationId !== conversation.id) continue;
+    if (m.direction !== 'in') continue;
+    fromMessages = instagramMaxISO(fromMessages, m.at);
+  }
+  return fromMessages;
+}
+
+/** Janela de resposta DESTA conversa (mesma política para todos os caminhos). */
+export function instagramConversationWindow(
+  db: DB,
+  conversation: { id: string; lastInboundAt?: string },
+  nowISO: string,
+): ReturnType<typeof instagramMessagingWindow> {
+  return instagramMessagingWindow({ lastInboundAt: instagramConversationLastInboundAt(db, conversation), nowISO });
+}
+
+/** Frase única do desencontro conta/conversa (rota, conector e entrega). */
+export const INSTAGRAM_ACCOUNT_MISMATCH_CODE = 'channel_account_mismatch';
+export const INSTAGRAM_ACCOUNT_MISMATCH_MESSAGE = 'Esta conversa pertence a uma conta do Instagram conectada anteriormente.';
+export const INSTAGRAM_ACCOUNT_MISMATCH_DETAIL = 'Esta conversa pertence a uma conta do Instagram conectada anteriormente. Reconecte a conta original ou continue a conversa pelo Direct.';
+/** Frase única de quem nunca escreveu (a Meta não permite iniciar DM). */
+export const INSTAGRAM_NO_INBOUND_CODE = 'no_inbound_conversation';
+export const INSTAGRAM_NO_INBOUND_MESSAGE = 'Este usuário ainda não iniciou uma conversa com a conta do Instagram.';
+
+/**
+ * A conversa é da conta que está conectada AGORA? Depois de trocar de conta, o
+ * histórico antigo continua visível, mas NÃO pode ser enviado pela credencial
+ * nova (a Meta recusaria, e pior: sairia da conta errada).
+ */
+export function instagramAccountMismatch(business: Business, conversation: { channelAccountId?: string }): string {
+  const ig = business.instagramIntegration;
+  const accountId = String(conversation.channelAccountId || '');
+  if (!ig?.igUserId || !accountId) return '';
+  return accountId === ig.igUserId ? '' : INSTAGRAM_ACCOUNT_MISMATCH_DETAIL;
 }
 
 // ── Claim + entrega (mesmo desenho do WhatsApp) ─────────────────
@@ -436,6 +513,8 @@ export interface InstagramDeliveryResult {
   status: 'sent' | 'pending' | 'failed' | 'claimed_by_other';
   externalId?: string;
   error?: string;
+  /** Código estável para a rota/UI (ex.: `channel_account_mismatch`). */
+  code?: string;
   nextRetryAt?: string;
   attempts?: number;
 }
@@ -469,7 +548,12 @@ export async function deliverInstagramMessage(
     msg.claimToken = holder;
     msg.claimExpiresAt = new Date(Date.parse(nowISO) + WHATSAPP_CLAIM_LEASE_MS).toISOString();
     msg.attempts = (msg.attempts || 0) + 1;
-    return { attempts: msg.attempts, to: conv.channelUserId || msg.channelUserId || '', body: msg.body };
+    return {
+      attempts: msg.attempts,
+      conversationId: conv.id,
+      to: conv.channelUserId || msg.channelUserId || '',
+      body: msg.body,
+    };
   });
 
   if (!claim) return { ok: false, status: 'claimed_by_other', error: 'Mensagem já reivindicada ou fora do estado pendente.' };
@@ -490,6 +574,31 @@ export async function deliverInstagramMessage(
   if (!business || !creds) {
     await release({ status: 'pending' });
     return { ok: false, status: 'pending', error: 'Instagram não está conectado nesta unidade.' };
+  }
+
+  const conversation = db.conversations.find((c) => c.id === claim.conversationId);
+  if (!conversation) {
+    await release({ status: 'failed', error: 'Conversa do Instagram não encontrada.', nextRetryAt: undefined });
+    return { ok: false, status: 'failed', error: 'Conversa do Instagram não encontrada.' };
+  }
+
+  // 1. A conversa é da conta conectada AGORA? Depois de trocar de conta, o
+  //    histórico antigo é leitura — nada sai pela credencial nova.
+  const mismatch = instagramAccountMismatch(business, conversation);
+  if (mismatch) {
+    await release({ status: 'failed', error: INSTAGRAM_ACCOUNT_MISMATCH_MESSAGE, nextRetryAt: undefined });
+    return {
+      ok: false, status: 'failed', code: INSTAGRAM_ACCOUNT_MISMATCH_CODE,
+      error: INSTAGRAM_ACCOUNT_MISMATCH_MESSAGE, attempts: claim.attempts,
+    };
+  }
+
+  // 2. Política da Meta revalidada AGORA (não basta valer no enfileiramento):
+  //    retry que só roda depois do fechamento da janela NÃO sai.
+  const window = instagramConversationWindow(db, conversation, nowISO);
+  if (!window.canReply) {
+    await release({ status: 'failed', error: window.reason, nextRetryAt: undefined });
+    return { ok: false, status: 'failed', error: window.reason, attempts: claim.attempts };
   }
 
   const sent = await sendInstagramMessage({
@@ -574,9 +683,32 @@ export const instagramChannelConnector: ChannelConnector = {
       };
     }
 
-    // Política da Meta: a janela é do CONTATO com a conta. Fora dela, o envio é
-    // recusado com motivo claro — nada de "enviado" que nunca saiu.
-    const window = instagramMessagingWindow({ lastInboundAt: ig.lastInboundAt, nowISO: ctx.nowISO });
+    const to = String(message.to || '').trim();
+    // A Meta só permite responder quem JÁ escreveu. Sem conversa real deste
+    // participante com ESTA conta (e sem evidência de entrada), não existe DM
+    // para iniciar — o conector recusa em vez de inventar destinatário.
+    const conversation = to
+      ? db.conversations.find((c) => c.businessId === business.id && c.channel === 'instagram'
+        && c.channelAccountId === ig.igUserId && c.channelUserId === to)
+      : undefined;
+    if (!conversation) {
+      // Conversa do mesmo participante com OUTRA conta conectada: a explicação
+      // estável é o desencontro de conta (não "nunca escreveu").
+      const fromOtherAccount = to
+        ? db.conversations.find((c) => c.businessId === business.id && c.channel === 'instagram' && c.channelUserId === to)
+        : undefined;
+      if (fromOtherAccount) {
+        return { ok: false, code: 'provider_error', retryable: false, detail: INSTAGRAM_ACCOUNT_MISMATCH_DETAIL };
+      }
+      return { ok: false, code: 'invalid_target', retryable: false, detail: INSTAGRAM_NO_INBOUND_MESSAGE };
+    }
+    if (!db.messages.some((m) => m.conversationId === conversation.id && m.direction === 'in')) {
+      return { ok: false, code: 'invalid_target', retryable: false, detail: INSTAGRAM_NO_INBOUND_MESSAGE };
+    }
+
+    // Política da Meta: a janela é DESTA conversa (participante), revalidada no
+    // momento do envio. Fora dela, nada sai — com motivo claro.
+    const window = instagramConversationWindow(db, conversation, ctx.nowISO);
     if (!window.canReply) {
       return { ok: false, code: 'provider_error', retryable: false, detail: `Envio bloqueado pela política do Instagram: ${window.reason}` };
     }
@@ -584,7 +716,7 @@ export const instagramChannelConnector: ChannelConnector = {
     const res = await sendInstagramMessage({
       igUserId: creds.igUserId,
       accessToken: creds.accessToken,
-      to: message.to,
+      to,
       text: message.body,
       fetchFn: ctx.fetchFn,
     });
@@ -672,7 +804,121 @@ export async function processPendingInstagramRetries(options?: {
   return { businessesChecked: due.size, messagesProcessed: processed, messagesSent: sent, ranAt: nowISO };
 }
 
+// ── Ciclo de vida do TOKEN (manutenção preventiva) ──────────────
+/**
+ * Margem de renovação: 7 dias antes do vencimento. O token longo do Instagram
+ * dura ~60 dias e a renovação oficial (`ig_refresh_token`) exige um token ainda
+ * VÁLIDO — renovar cedo dá folga para uma falha de rede sem derrubar o canal, e
+ * evita renovar a cada execução do cron.
+ */
+export const INSTAGRAM_TOKEN_REFRESH_MARGIN_MS = 7 * 24 * 60 * 60 * 1000;
+/** Validade presumida quando a Meta não informa `expires_in` (60 dias). */
+export const INSTAGRAM_TOKEN_FALLBACK_TTL_MS = 60 * 24 * 60 * 60 * 1000;
+
+/** A credencial desta unidade está perto de vencer (e pode ser renovada)? */
+export function instagramTokenNeedsRefresh(
+  ig: { encryptedAccessToken?: string; tokenExpiresAt?: string } | undefined,
+  nowISO: string,
+): boolean {
+  if (!ig?.encryptedAccessToken) return false;
+  const expires = Date.parse(String(ig.tokenExpiresAt || ''));
+  if (!Number.isFinite(expires)) return false; // sem validade conhecida: não inventa
+  const now = Date.parse(nowISO) || Date.now();
+  if (expires <= now) return true; // vencido: ainda tentamos renovar
+  return expires - now <= INSTAGRAM_TOKEN_REFRESH_MARGIN_MS;
+}
+
+export interface InstagramTokenRefreshSummary {
+  businessesChecked: number;
+  refreshed: number;
+  failed: number;
+  skipped: number;
+  ranAt: string;
+}
+
+/**
+ * Renova as credenciais próximas do vencimento, unidade por unidade:
+ *   • a chamada à Meta acontece FORA de qualquer transação;
+ *   • a gravação é CAS: se a credencial mudou no meio (reconexão), não
+ *     sobrescreve o trabalho de ninguém;
+ *   • falha NÃO apaga o token atual — só registra `lastError` e audita;
+ *   • cada unidade é tratada separadamente (nunca cruza tenants).
+ */
+export async function refreshInstagramTokens(options?: {
+  nowISO?: string;
+  fetchFn?: typeof fetch;
+  limit?: number;
+}): Promise<InstagramTokenRefreshSummary> {
+  assertOutsideDBTransaction();
+  const nowISO = options?.nowISO || new Date().toISOString();
+  const limit = options?.limit ?? 25;
+  const db = await readDB();
+  const due = db.businesses
+    .filter((b) => instagramTokenNeedsRefresh(b.instagramIntegration, nowISO))
+    .slice(0, limit);
+
+  let refreshed = 0;
+  let failed = 0;
+  let skipped = 0;
+
+  for (const business of due) {
+    const ig = business.instagramIntegration!;
+    const creds = getInstagramCredentials(business);
+    if (!creds) { skipped += 1; continue; }
+    const previousEncrypted = ig.encryptedAccessToken;
+
+    const res = await refreshLongLivedToken({ accessToken: creds.accessToken, fetchFn: options?.fetchFn });
+
+    if (!res.ok) {
+      failed += 1;
+      await updateDB((d: DB) => {
+        const biz = d.businesses.find((b) => b.id === business.id);
+        const current = biz?.instagramIntegration;
+        if (!current || current.encryptedAccessToken !== previousEncrypted) return; // trocou no meio
+        current.lastError = `Renovação da credencial: ${res.error}`;
+        current.lastErrorAt = nowISO;
+        pushAudit(d, {
+          action: 'instagram.token_refresh_failed',
+          actor: INSTAGRAM_SYSTEM_ACTOR,
+          businessId: business.id,
+          meta: { reason: res.error },
+        });
+      });
+      continue;
+    }
+
+    refreshed += 1;
+    const ttl = res.expiresIn > 0 ? res.expiresIn * 1000 : INSTAGRAM_TOKEN_FALLBACK_TTL_MS;
+    const expiresAt = new Date((Date.parse(nowISO) || Date.now()) + ttl).toISOString();
+    await updateDB((d: DB) => {
+      const biz = d.businesses.find((b) => b.id === business.id);
+      const current = biz?.instagramIntegration;
+      if (!current || current.encryptedAccessToken !== previousEncrypted) return; // trocou no meio
+      current.encryptedAccessToken = encryptInstagramToken(res.accessToken);
+      current.tokenIssuedAt = nowISO;
+      current.tokenExpiresAt = expiresAt;
+      current.lastError = undefined;
+      current.lastErrorAt = undefined;
+      pushAudit(d, {
+        action: 'instagram.token_refreshed',
+        actor: INSTAGRAM_SYSTEM_ACTOR,
+        businessId: business.id,
+        meta: { expiresAt },
+      });
+    });
+  }
+
+  return { businessesChecked: due.length, refreshed, failed, skipped, ranAt: nowISO };
+}
+
 // ── Gravação do resultado do onboarding (usada pelo callback) ────
+export type InstagramAuthorizationResult =
+  | { ok: true; integration: InstagramIntegration }
+  | { ok: false; reason: 'business_not_found' | 'account_already_linked'; ownerBusinessId?: string };
+
+/** Ator das ações de sistema (webhook, cron) no histórico de auditoria. */
+export const INSTAGRAM_SYSTEM_ACTOR = { id: 'system', email: 'instagram@instalink.app', role: 'system' };
+
 export function applyInstagramAuthorization(
   db: DB,
   input: {
@@ -683,10 +929,27 @@ export function applyInstagramAuthorization(
     encryptedAccessToken: string;
     now: string;
     tokenExpiresAt?: string;
+    /** Quem autorizou (usado na auditoria). */
+    actor?: { id: string; email: string; role?: string };
   },
-): InstagramIntegration | null {
+): InstagramAuthorizationResult {
   const business = db.businesses.find((b) => b.id === input.businessId);
-  if (!business) return null;
+  if (!business) return { ok: false, reason: 'business_not_found' };
+
+  // UMA conta pertence a UMA unidade. Se outra unidade já tem esta conta, não
+  // gravamos nada: o webhook ficaria ambíguo e poderia entregar na unidade
+  // errada. Fail-closed, com auditoria do motivo.
+  const owner = instagramAccountTakenBy(db, input.igUserId, input.businessId);
+  if (owner) {
+    pushAudit(db, {
+      action: 'instagram.onboarding_failed',
+      actor: input.actor || INSTAGRAM_SYSTEM_ACTOR,
+      businessId: input.businessId,
+      meta: { step: 'authorize', reason: 'account_already_linked', ownerBusinessId: owner.id },
+    });
+    return { ok: false, reason: 'account_already_linked', ownerBusinessId: owner.id };
+  }
+
   const tokenChanged = business.instagramIntegration?.encryptedAccessToken !== input.encryptedAccessToken;
   const previous = business.instagramIntegration;
   business.instagramIntegration = {
@@ -713,7 +976,7 @@ export function applyInstagramAuthorization(
     business.instagramIntegration.lastError = undefined;
     business.instagramIntegration.lastErrorAt = undefined;
   }
-  return business.instagramIntegration;
+  return { ok: true, integration: business.instagramIntegration };
 }
 
 // ── Identidade do contato (IGSID) por unidade ───────────────────
@@ -842,8 +1105,17 @@ export async function ingestInstagramNotification(input: {
   const displayName = String(input.profile?.name || '').trim().slice(0, 80);
 
   const before = await readDB();
+  const owners = instagramAccountOwners(before, n.accountId);
   const business = resolveBusinessForInstagramAccountId(before, n.accountId);
-  if (!business) return { ...empty, status: 'unmapped', reason: 'Conta do Instagram não está conectada em nenhuma unidade.' };
+  if (!business) {
+    return {
+      ...empty,
+      status: 'unmapped',
+      reason: owners.length > 1
+        ? 'Esta conta do Instagram aparece conectada em mais de uma unidade — webhook ambíguo, nada foi gravado.'
+        : 'Conta do Instagram não está conectada em nenhuma unidade.',
+    };
+  }
   const businessId = business.id;
   if (before.messages.some((m) => m.businessId === businessId && m.externalId === dedupeKey)) {
     return { ...empty, status: 'duplicate', businessId, reason: 'Evento já processado (mesmo id oficial).' };
@@ -857,6 +1129,11 @@ export async function ingestInstagramNotification(input: {
     if (db.messages.some((m) => m.businessId === businessId && m.externalId === dedupeKey)) {
       return { ...result, status: 'duplicate', reason: 'Evento já processado (mesmo id oficial).' };
     }
+
+    // Horário do evento: só vale se for confiável; senão, o recebimento manda.
+    // Nunca usar um valor absurdo (futuro/passado fora da faixa) para ABRIR
+    // janela — isso autorizaria envio que a Meta recusaria.
+    const atISO = n.atReliable && n.at ? n.at : now;
 
     const known = findChannelIdentity(db, businessId, n.accountId, n.participantId);
     let contact: BusinessCustomer;
@@ -917,6 +1194,12 @@ export async function ingestInstagramNotification(input: {
       conv.lastMessageAt = now;
       conv.lastMessagePreview = preview;
       conv.unread = (conv.unread || 0) + 1;
+      // A janela é DESTA conversa: mensagem nova do contato abre/renova só a
+      // dela. Nunca retrocede com webhook atrasado (max).
+      conv.lastInboundAt = instagramMaxISO(conv.lastInboundAt, atISO);
+      // Nova mensagem real é nova demanda: conversa fechada volta a abrir, com
+      // o MESMO id e o histórico inteiro.
+      if (conv.status === 'closed') conv.status = 'open';
       if (leadId && !conv.context?.leadId) conv.context = { ...(conv.context || {}), leadId };
     } else {
       conv = {
@@ -935,6 +1218,7 @@ export async function ingestInstagramNotification(input: {
         unread: 1,
         lastMessageAt: now,
         lastMessagePreview: preview,
+        lastInboundAt: atISO,
         createdAt: now,
         context: leadId ? { leadId } : {},
       };
@@ -954,7 +1238,7 @@ export async function ingestInstagramNotification(input: {
       byName: contactName,
       channel: 'instagram',
       channelUserId: n.participantId,
-      at: n.at || now,
+      at: atISO,
       meta: {
         instagram: {
           kind: n.kind,
@@ -966,7 +1250,9 @@ export async function ingestInstagramNotification(input: {
     db.messages.push(message);
 
     biz.instagramIntegration.lastWebhookAt = now;
-    biz.instagramIntegration.lastInboundAt = now;
+    // Telemetria GLOBAL da unidade (não autoriza envio — quem autoriza é a
+    // janela da conversa). Também só avança.
+    biz.instagramIntegration.lastInboundAt = instagramMaxISO(biz.instagramIntegration.lastInboundAt, atISO);
     // Só AQUI a conexão é declarada de verdade: a Meta entregou um evento.
     biz.instagramIntegration.status = 'connected';
     biz.instagramIntegration.connectedAt = biz.instagramIntegration.connectedAt || now;
