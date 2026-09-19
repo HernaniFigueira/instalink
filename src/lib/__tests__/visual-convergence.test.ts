@@ -210,14 +210,52 @@ describe('A3.3 — personalização de cor do painel saiu da UI', () => {
     expect(cfg).not.toMatch(/aparência do painel/i);
   });
 
-  it('o dado antigo continua compatível (sem migração destrutiva)', () => {
-    // A UI parou de oferecer, mas `appearance.navColor` continua sendo lido:
-    // quem tinha uma cor salva não perde dado nem quebra.
+  it('o dado antigo continua ARMAZENADO (sem migração destrutiva)', () => {
+    // Compatibilidade de armazenamento: o campo segue no schema e os helpers
+    // legados continuam existindo para sanitizar/ler dado antigo. Isso é
+    // diferente de APLICAR a cor ao painel — ver teste seguinte.
     const appearance = read('src/lib/appearance.ts');
     expect(appearance).toMatch(/navColorOf/);
     expect(appearance).toMatch(/NAV_PRESETS/);
+    expect(appearance).toMatch(/sanitizeAppearance/);
     const types = read('src/lib/types.ts');
     expect(types).toMatch(/navColor/);
+  });
+
+  it('REGRESSÃO: o DashboardShell NÃO aplica o navColor da unidade ao painel', () => {
+    // Este é o ponto que importa. Remover a aba "Aparência" da UI não basta:
+    // enquanto o shell injetasse `navTokenStyle(business?.appearance?.navColor)`
+    // no container, qualquer unidade com cor legada persistida continuava
+    // tematizando a sidebar — contradizendo "painel com UM design system".
+    //
+    // A régua é ampla de propósito: pega a leitura direta, a chamada com o
+    // business como argumento e o campo no tipo local do shell.
+    // Com comentários removidos: o shell documenta DE PROPÓSITO o que foi
+    // retirado ("aqui já existiu style={navTokenStyle(business?.appearance?
+    // .navColor)}"), e auditar o texto do comentário produziria falso positivo.
+    // O que importa é o código executável — como no teste de white label.
+    const shell = stripComments(read('src/components/DashboardShell.tsx'));
+
+    expect(shell).not.toMatch(/appearance\?\.navColor/);
+    expect(shell).not.toMatch(/navColorOf\(/);
+    expect(shell).not.toMatch(/navTokenStyle\(\s*business/);
+    expect(shell).not.toMatch(/appearance\?\s*:\s*\{\s*navColor/);
+
+    // Nenhuma injeção inline de token de navegação a partir do business.
+    expect(shell).not.toMatch(/style=\{navTokenStyle\([^)]+\)\}/);
+
+    // A aparência da navegação vem de globals.css (:root), que é onde os
+    // tokens padrão já estão definidos — fonte única, igual para toda empresa.
+    const css = read('src/app/globals.css');
+    for (const token of ['--il-nav', '--il-nav-fg', '--il-nav-active', '--il-nav-active-fg', '--il-nav-cta']) {
+      expect(css, token).toMatch(new RegExp(`${token}:`));
+    }
+  });
+
+  it('nenhuma outra tela do painel lê navColor para montar a aparência', () => {
+    // Impede o mesmo erro por outro caminho (um layout novo, um provider…).
+    const offenders = PANEL_FILES.filter((f) => /navColorOf\(|navTokenStyle\(\s*business/.test(stripComments(read(f))));
+    expect(offenders).toEqual([]);
   });
 });
 

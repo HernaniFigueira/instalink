@@ -14,7 +14,6 @@ import { isSessionExpired } from '@/lib/http';
 import type { BusinessMode, FeatureId, PermissionId } from '@/lib/types';
 import { requiresActiveBusiness } from '@/lib/business-context';
 import { unitsInSameOrganization } from '@/lib/organization';
-import { navTokenStyle } from '@/lib/appearance';
 import { NavSearch } from '@/components/dashboard/NavSearch';
 import { buildNavSearchItems } from '@/lib/nav-search';
 
@@ -32,8 +31,6 @@ interface Biz {
   permissions?: Record<PermissionId, boolean>;
   readOnly?: boolean;
   organizationId?: string;
-  /** Identidade visual do Dashboard (P2) — acompanha a unidade selecionada. */
-  appearance?: { navColor?: string }
   /** Escopo do profissional: preenchido ⇒ este login vê só a própria agenda. */
   professionalId?: string;
   professionalName?: string;
@@ -457,20 +454,32 @@ export function DashboardShell({ children }: { children: React.ReactNode }) {
   const mobileSections = [...nav.sections, ...nav.footerSections];
 
   return (
-    // A identidade visual vive nos TOKENS (--il-nav*) injetados aqui, uma vez,
-    // a partir da cor do Business ativo. Trocar de unidade troca a identidade;
-    // nenhuma classe condicional por cor é espalhada pelo sistema.
+    // A3.3 CONVERGÊNCIA — o painel tem UM design system padrão: a aparência da
+    // navegação vem dos tokens `--il-nav*` definidos em `globals.css` (:root),
+    // e NÃO da cor da empresa.
+    //
+    // Aqui já existiu `style={navTokenStyle(business?.appearance?.navColor)}`,
+    // que fazia uma unidade com `appearance.navColor` legado (salvo quando
+    // Configurações tinha a aba "Aparência") tematizar a sidebar. Isso foi
+    // removido de propósito: white label significa identificar a EMPRESA por
+    // logo/nome, não pintar o painel administrativo com a cor dela.
+    //
+    // O dado antigo continua persistido (sem migração destrutiva) — só deixou
+    // de ser APLICADO ao painel. A página pública segue com identidade própria
+    // e independente (Page.theme).
+    //
     // `PanelHomeProvider` entrega o destino de volta a qualquer 403 do painel
     // sem que cada tela precise calcular (ou chutar) o seu.
     <PanelHomeProvider home={homeHref}>
-    <div className="min-h-screen bg-[var(--bg)] lg:flex" style={navTokenStyle(business?.appearance?.navColor)}>
+    <div className="min-h-screen bg-[var(--bg)] lg:flex">
       {/* ═══ SIDEBAR DESKTOP (A3.3) ═══════════════════════════════
           Três blocos, um comportamento só:
             TOPO   → marca/unidade + controle de recolher (sempre à vista);
             CENTRO → menu único e rolável (todas as seções, inclusive
                      Administração — nada de "parte fixa, parte rolável");
             RODAPÉ → quem está logado, em que papel, e a saída.
-          Cores vêm dos tokens --il-nav* (lib/appearance.ts). */}
+          Cores vêm dos tokens --il-nav* definidos em globals.css (:root) —
+          padrão único do painel, independente da cor da empresa. */}
       <aside className={cn(
         'hidden lg:flex shrink-0 flex-col bg-[var(--il-nav)] text-[var(--il-nav-fg)] border-r border-[var(--il-nav-border)] sticky top-0 h-screen transition-[width] duration-200',
         collapsed ? 'w-[72px]' : 'w-[248px]',

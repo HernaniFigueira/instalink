@@ -168,13 +168,21 @@
   /* ── Foco visível ───────────────────────────────────────────── */
   --focus-ring: 0 0 0 3px var(--brand-ring);
 
-  /* ── Navegação do painel (P2) ──────────────────────────────────
-   * Identidade visual por BUSINESS: o negócio escolhe UMA cor
-   * (configurações → Aparência) e o DashboardShell injeta estes tokens no
-   * container do painel. Os valores abaixo são o PADRÃO do produto (A3.3):
-   * sidebar clara, levemente fria, com item ativo pintado de azul suave.
-   * Texto/hover/ativo de cor customizada são DERIVADOS (lib/appearance.ts) —
-   * contraste garantido. */
+  /* ── Navegação do painel ───────────────────────────────────────
+   * A3.3 CONVERGÊNCIA: estes são os ÚNICOS tokens de aparência da navegação e
+   * valem para TODO o painel administrativo — um padrão só, igual para qualquer
+   * empresa. Sidebar clara e levemente fria, item ativo em azul suave.
+   *
+   * Nada aqui é derivado da cor do negócio. A identidade da EMPRESA no painel
+   * é dada por logo/nome (white label), não por tematizar a interface; e a
+   * página pública tem sistema próprio e independente (Page.theme).
+   *
+   * Histórico: a cor era configurável em Configurações → Aparência e o
+   * DashboardShell a injetava inline. Essa UI saiu e a injeção também.
+   * `Business.appearance.navColor` pode continuar persistido (compatibilidade,
+   * sem migração destrutiva) — apenas não é mais aplicado ao painel.
+   * Os derivadores legados seguem em lib/appearance.ts para sanitizar dado
+   * antigo, não como feature ativa. */
   --il-nav: #ffffff;
   --il-nav-fg: #2a3145;
   --il-nav-muted: #79829c;
