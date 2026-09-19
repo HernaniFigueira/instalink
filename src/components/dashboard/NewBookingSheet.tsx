@@ -6,7 +6,7 @@
 //   4. serviço → data → horário (grade real da agenda) → observação.
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Icon } from '@/components/icons';
-import { maskPhoneBR } from '@/lib/field-quality';
+import { PhoneBRInput } from '@/components/dashboard/PhoneBRInput';
 import { todayISO } from '@/lib/tz';
 import { adminBookingMaxDate } from '@/lib/booking-ops';
 import { BookingRecurrence } from './BookingRecurrence';
@@ -360,7 +360,7 @@ export function NewBookingSheet({ businessId, services, pros, timezone, initial,
                       <Input value={name} onChange={(e) => setName(e.target.value)} placeholder="Ex: Marlene Silva" />
                     </Field>
                     <Field label="WhatsApp" required>
-                      <Input value={maskPhoneBR(phone)} onChange={(e) => setPhone(e.target.value)} inputMode="tel" placeholder="(11) 99999-9999" />
+                      <PhoneBRInput value={phone} onChange={setPhone} />
                     </Field>
                     <Field label="E-mail" hint="Opcional">
                       <Input value={email} onChange={(e) => setEmail(e.target.value)} inputMode="email" placeholder="nome@email.com" />

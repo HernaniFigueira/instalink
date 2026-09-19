@@ -12,7 +12,7 @@
 // aqui. Quem quiser marcar um horário usa a agenda (é outro caminho).
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Icon } from '@/components/icons';
-import { maskPhoneBR } from '@/lib/field-quality';
+import { PhoneBRInput } from '@/components/dashboard/PhoneBRInput';
 import { Badge, Button, EmptyState, Field, IconButton, Input, Notice, SubCard } from '@/components/ui';
 import { apiSend } from '@/lib/api-client';
 import { QUEUE_LONG_WAIT_MIN, QUEUE_STATUS, queuePosition, queueTransitionAllowed, waitLabel, waitMinutes } from '@/lib/queue';
@@ -36,18 +36,30 @@ const NEXT_ACTION: Record<string, { to: QueueStatus; label: string; variant: 'pr
   in_service: { to: 'done', label: 'Concluir', variant: 'success' },
 };
 
-export function QueuePanel({ businessId, date, rows, loading, canWrite, onChanged, professionals, services, onOpenBooking }: {
+export function QueuePanel({ businessId, date, rows, loading, canWrite, canEncounter, onChanged, professionals, services, onOpenBooking, onEncounter, onOpenClient, onFitIn }: {
   businessId: string;
   /** Dia do negócio em exibição (a fila mostrada é sempre a de HOJE + a viva). */
   date: string;
   rows: QueueRow[];
   loading: boolean;
   canWrite: boolean;
+  /**
+   * A3.4 fix (revisão B5) — permissão PRÓPRIA do registro de atendimento.
+   * Sem ela o balcão continua operando a fila (chamar, iniciar, concluir),
+   * mas não abre o conteúdo profissional do atendimento.
+   */
+  canEncounter: boolean;
   onChanged: () => void;
   professionals: Array<{ id: string; name: string }>;
   services: Array<{ id: string; name: string }>;
   /** Abre o agendamento de origem (quando a entrada veio de um horário marcado). */
   onOpenBooking?: (bookingId: string) => void;
+  /** "Iniciar atendimento" com permissão: a fila avança E o registro abre. */
+  onEncounter?: (row: QueueRow) => void;
+  /** Abrir a ficha do cliente (a que existe no CRM desta unidade). */
+  onOpenClient?: (row: QueueRow) => void;
+  /** "Encaixar na agenda": abre o agendamento PRÉ-PREENCHIDO (não cria nada). */
+  onFitIn?: (row: QueueRow) => void;
 }) {
   const [adding, setAdding] = useState(false);
   const [busy, setBusy] = useState('');
@@ -74,7 +86,10 @@ export function QueuePanel({ businessId, date, rows, loading, canWrite, onChange
     setBusy('');
     if (!res.ok) { setError(res.message || 'Não foi possível atualizar a fila.'); return; }
     onChanged();
-  }, [businessId, onChanged]);
+    // Handoff: sair da fila para "em atendimento" é o momento em que o registro
+    // deve abrir — sem isso a pessoa teria que reencontrar o cliente pela agenda.
+    if (to === 'in_service' && canEncounter && onEncounter) onEncounter(row);
+  }, [businessId, canEncounter, onChanged, onEncounter]);
 
   const remove = useCallback(async (row: QueueRow) => {
     setBusy(row.id); setError('');
@@ -130,7 +145,7 @@ export function QueuePanel({ businessId, date, rows, loading, canWrite, onChange
               <Input value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} placeholder="Ex: Marlene" autoFocus />
             </Field>
             <Field label="WhatsApp" hint="Opcional se já tiver o nome">
-              <Input value={maskPhoneBR(form.phone)} onChange={(e) => setForm({ ...form, phone: e.target.value })} inputMode="tel" placeholder="(11) 99999-9999" />
+              <PhoneBRInput value={form.phone} onChange={(digits) => setForm({ ...form, phone: digits })} />
             </Field>
             <Field label="Serviço">
               <select value={form.serviceId} onChange={(e) => setForm({ ...form, serviceId: e.target.value })}
@@ -204,7 +219,8 @@ export function QueuePanel({ businessId, date, rows, loading, canWrite, onChange
                 </div>
                 {canWrite && action && (
                   <>
-                    <Button size="sm" variant={action.variant} disabled={busy === row.id} onClick={() => move(row, action.to)}>
+                    <Button size="sm" variant={action.variant} disabled={busy === row.id} onClick={() => move(row, action.to)}
+                      title={action.to === 'in_service' && canEncounter ? 'Abre o registro do atendimento já vinculado' : undefined}>
                       {busy === row.id ? 'Salvando…' : action.label}
                     </Button>
                     {/* Ações secundárias: só as transições que a máquina permite. */}
@@ -213,6 +229,12 @@ export function QueuePanel({ businessId, date, rows, loading, canWrite, onChange
                     )}
                     {row.status === 'called' && (
                       <Button size="sm" variant="ghost" disabled={busy === row.id} onClick={() => move(row, 'waiting')}>Voltar para a fila</Button>
+                    )}
+                    {row.contactId && onOpenClient && (
+                      <Button size="sm" variant="ghost" onClick={() => onOpenClient(row)}>Abrir cliente</Button>
+                    )}
+                    {onFitIn && (
+                      <Button size="sm" variant="ghost" onClick={() => onFitIn(row)}>Encaixar na agenda</Button>
                     )}
                     {row.bookingId && onOpenBooking && (
                       <Button size="sm" variant="secondary" onClick={() => onOpenBooking(row.bookingId)}>Ver horário</Button>

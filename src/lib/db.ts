@@ -85,6 +85,12 @@ export function normalizeDB(raw: unknown): DB {
   ] as const) {
     if (!Array.isArray((base as any)[key])) (base as any)[key] = [];
   }
+  // A3.4 fix (revisão B5) — registros de atendimento criados antes do campo
+  // `version` valem 1, nunca `undefined`: sem isso a primeira trava de
+  // concorrência otimista da tela viraria um 409 falso. Idempotente.
+  for (const e of base.encounters as any[]) {
+    if (e && typeof e.version !== 'number') e.version = 1;
+  }
   // P3: Normalização defensiva de entregas de webhooks
   for (const d of base.webhookDeliveries as any[]) {
     if (!d.status) d.status = d.deliveredAt ? 'success' : 'failed';

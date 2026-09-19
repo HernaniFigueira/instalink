@@ -618,6 +618,13 @@ export interface Encounter {
   /** Etiquetas livres (procedimentos, materiais, região tratada…). */
   tags: string[];
   status: EncounterStatus;
+  /**
+   * A3.4 fix (revisão B5): revisão OPTIMISTA. Cada alteração REAL grava
+   * `version + 1`; a tela manda `expectedVersion` e o servidor recusa (409)
+   * quando não bate. É o que impede duas abas de se sobrescreverem em
+   * silêncio. Registros legados sem o campo valem 1 (ver `normalizeDB`).
+   */
+  version: number;
   createdAt: string;
   updatedAt: string;
   createdBy: string;

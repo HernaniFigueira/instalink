@@ -28,7 +28,8 @@ import {
 import { Avatar, Badge, Button, Drawer, IconButton, Input, Notice, Select, StatusBadge, SubCard, Switch, Tabs, Textarea, type TabItem } from '@/components/ui';
 import { Icon } from '@/components/icons';
 import { apiGet, apiSend } from '@/lib/api-client';
-import { cepError, contactFieldErrors, emailError, hasFieldErrors, maskCep, maskCpf, maskPhoneBR, phoneError } from '@/lib/field-quality';
+import { cepError, contactFieldErrors, emailError, hasFieldErrors, maskCep, maskCpf, phoneError } from '@/lib/field-quality';
+import { PhoneBRInput } from '@/components/dashboard/PhoneBRInput';
 import { EncounterList, EncounterSheet, type EncounterRow } from '@/components/dashboard/EncounterSheet';
 import { usePanelPermissions } from '@/components/dashboard/usePanelPermissions';
 
@@ -353,7 +354,7 @@ export function ClientProfileDrawer({ person, businessId, pipeline, canFunil, on
     { id: 'conversations', label: 'Conversas', icon: 'chat', count: (person.conversations || []).length },
     { id: 'leads', label: 'Leads', icon: 'spark', count: person.leads.length },
     { id: 'tasks', label: 'Tarefas', icon: 'tasks', count: (person.tasks || []).length },
-    { id: 'notes', label: 'Observações', icon: 'receipt', count: (person.notes || []).length },
+    { id: 'notes', label: 'Observações administrativas', icon: 'receipt', count: (person.notes || []).length },
   ];
 
   const notes = person.notes || [];
@@ -595,8 +596,8 @@ export function ClientProfileDrawer({ person, businessId, pipeline, canFunil, on
                 </label>
                 <label className="block">
                   <span className="block text-xs font-semibold text-[var(--text-muted)] mb-1.5">Telefone / WhatsApp</span>
-                  <Input inputMode="tel" value={maskPhoneBR(identityDraft.phone)} placeholder="(11) 91234-5678"
-                    onChange={(e) => setIdentityDraft((d) => ({ ...d, phone: e.target.value }))} />
+                  <PhoneBRInput value={identityDraft.phone}
+                    onChange={(digits) => setIdentityDraft((d) => ({ ...d, phone: digits }))} />
                   {phoneError(identityDraft.phone) && (
                     <span className="block text-xs text-[var(--danger-fg)] mt-1">{phoneError(identityDraft.phone)}</span>
                   )}
@@ -689,8 +690,8 @@ export function ClientProfileDrawer({ person, businessId, pipeline, canFunil, on
                 </label>
                 <label className="block">
                   <span className="block text-xs font-semibold text-[var(--text-muted)] mb-1.5">Telefone do responsável</span>
-                  <Input inputMode="tel" value={maskPhoneBR(draft.guardian.phone)}
-                    onChange={(e) => setDraft((d) => ({ ...d, guardian: { ...d.guardian, phone: e.target.value.replace(/\D/g, '').slice(0, 13) } }))} />
+                  <PhoneBRInput value={draft.guardian.phone}
+                    onChange={(digits) => setDraft((d) => ({ ...d, guardian: { ...d.guardian, phone: digits } }))} />
                 </label>
                 <label className="block">
                   <span className="block text-xs font-semibold text-[var(--text-muted)] mb-1.5">CPF do responsável</span>
@@ -737,7 +738,7 @@ export function ClientProfileDrawer({ person, businessId, pipeline, canFunil, on
 
             <label className="block mt-4">
               <span className="text-[11px] font-bold uppercase tracking-[0.08em] text-[var(--text-faint)] mb-2 block">Observação administrativa</span>
-              <Textarea value={draft.adminNote} rows={3} placeholder="Preferências, convênio, observações de atendimento…"
+              <Textarea value={draft.adminNote} rows={3} placeholder="Prefere horário da manhã, confirmar por telefone, convênio..."
                 onChange={(e) => setDraft((d) => ({ ...d, adminNote: e.target.value }))} />
             </label>
 
@@ -899,7 +900,10 @@ export function ClientProfileDrawer({ person, businessId, pipeline, canFunil, on
             <div className="p-4 space-y-3">
               {notes.length === 0 ? (
                 <p className="text-sm text-[var(--text-muted)] bg-[var(--surface-3)] border border-[var(--border)] rounded-md px-3 py-2.5">
-                  Nenhuma observação ainda. O que você escrever aqui fica no histórico do cliente e ajuda quem atender depois.
+                  Nenhuma observação administrativa ainda. Aqui vai o que ajuda a OPERAR o atendimento —
+                  preferência de horário, quem confirmar, convênio, combinados do dia a dia.
+                  {' '}<strong className="font-semibold text-[var(--text)]">O que aconteceu no atendimento fica em Atendimentos</strong>,
+                  com registro assinado: esta lista não substitui nem copia aquele conteúdo.
                 </p>
               ) : (
                 <ul className="space-y-2">

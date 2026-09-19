@@ -17,15 +17,28 @@ import { readDB, updateDB } from '@/lib/db';
 import { requireBusiness } from '@/lib/access';
 import { pushAudit } from '@/lib/audit';
 import {
-  cleanTags, cleanText, canFinalize, encounterForBooking, encounterInScope, encountersForCustomer,
+  ENCOUNTER_TEXT_FIELDS, cleanTags, cleanText, canFinalize, encounterForBooking, encounterInScope,
+  encountersForCustomer, versionConflict,
 } from '@/lib/encounters';
-import { effectiveTimezone, todayISO } from '@/lib/tz';
+import { effectiveTimezone, nowHM, todayISO } from '@/lib/tz';
 import { onlyDigits } from '@/lib/utils';
 import { findContact } from '@/lib/contacts';
 import type { DB, Encounter } from '@/lib/types';
 
 function err(message: string, status: number): Error {
   return Object.assign(new Error(message), { status });
+}
+
+/** Hora local (HH:MM) do fuso da unidade a partir de um ISO — para a chegada. */
+function hmOf(iso: string, tz: string): string {
+  const d = new Date(iso);
+  return Number.isFinite(d.getTime()) ? nowHM(d, tz) : '';
+}
+
+/** Revisão atual do registro (documento legado sem o campo vale 1). */
+function encounterVersionOf(row: { version?: number }): number {
+  const v = Number(row?.version);
+  return Number.isFinite(v) && v > 0 ? v : 1;
 }
 
 /** Quem pode reabrir um registro finalizado: quem manda na unidade. */
@@ -98,6 +111,16 @@ export async function POST(req: NextRequest) {
     if (bookingId && !booking) {
       return NextResponse.json({ error: 'Agendamento não encontrado nesta unidade.' }, { status: 404 });
     }
+    // Registro sem agendamento: quem chegou direto no balcão. A entrada da
+    // fila é a referência (horário e profissional vêm dela) — e NADA de
+    // fabricar um Booking falso: a agenda continua dizendo a verdade.
+    const queueId = String(body.queueId || '');
+    const queueEntry = queueId
+      ? (db.queue || []).find((q) => q.id === queueId && q.businessId === businessId)
+      : undefined;
+    if (queueId && !queueEntry) {
+      return NextResponse.json({ error: 'Entrada da fila não encontrada nesta unidade.' }, { status: 404 });
+    }
     // 1:1 — um agendamento tem UM registro. Se já existe, devolvemos o
     // existente (a tela abre o que está lá em vez de criar documento paralelo).
     const existing = encounterForBooking(db.encounters || [], businessId, bookingId);
@@ -111,7 +134,7 @@ export async function POST(req: NextRequest) {
     // O profissional do registro é quem atendeu: o escopo manda; sem escopo,
     // o profissional do agendamento (ou o indicado explicitamente).
     const professionalId = guard.ctx.professionalScope
-      || String(body.professionalId || booking?.professionalId || '');
+      || String(body.professionalId || booking?.professionalId || queueEntry?.professionalId || '');
     if (booking && guard.ctx.professionalScope && booking.professionalId && booking.professionalId !== guard.ctx.professionalScope) {
       return NextResponse.json({ error: 'Você só registra os seus próprios atendimentos.' }, { status: 403 });
     }
@@ -120,21 +143,24 @@ export async function POST(req: NextRequest) {
       id: randomUUID(),
       businessId,
       bookingId: booking?.id || '',
-      serviceId: String(body.serviceId || booking?.serviceId || ''),
+      serviceId: String(body.serviceId || booking?.serviceId || queueEntry?.serviceId || ''),
       professionalId,
       customerId: String(body.customerId || booking?.customerId || ''),
       // Vínculo com o CRM: sem contato explícito, resolvemos pelo telefone do
       // agendamento (mesma chave de identidade do resto do sistema) — é o que
       // faz o registro aparecer no histórico 360 do cliente. Nunca por nome.
-      contactId: String(body.contactId || '') || (findContact(
+      contactId: String(body.contactId || queueEntry?.contactId || '') || (findContact(
         db, businessId,
         String(body.customerId || booking?.customerId || ''),
-        booking?.customerPhone || String(body.customerPhone || ''),
-        booking?.customerName || String(body.customerName || ''),
+        booking?.customerPhone || queueEntry?.customerPhone || String(body.customerPhone || ''),
+        booking?.customerName || queueEntry?.customerName || String(body.customerName || ''),
       )?.id || ''),
-      customerName: String(body.customerName || booking?.customerName || '').slice(0, 80),
-      date: String(body.date || booking?.date || todayISO(new Date(), tz)),
-      time: String(body.time || booking?.time || ''),
+      customerName: String(body.customerName || booking?.customerName || queueEntry?.customerName || '').slice(0, 80),
+      date: String(body.date || booking?.date || queueEntry?.date || todayISO(new Date(), tz)),
+      // Sem agendamento, o "horário" é a CHEGADA/INÍCIO da fila — o registro
+      // diz quando o atendimento aconteceu, não um horário de agenda inventado.
+      time: String(body.time || booking?.time
+        || (queueEntry ? (queueEntry.startedAt ? hmOf(queueEntry.startedAt, tz) : hmOf(queueEntry.createdAt, tz)) : '')),
       complaint: cleanText(body.complaint, 'complaint'),
       evolution: cleanText(body.evolution, 'evolution'),
       guidance: cleanText(body.guidance, 'guidance'),
@@ -142,6 +168,7 @@ export async function POST(req: NextRequest) {
       internalNote: cleanText(body.internalNote, 'internalNote'),
       tags: cleanTags(body.tags),
       status: 'draft',
+      version: 1,
       createdAt: now, updatedAt: now,
       createdBy: guard.ctx.user.id, updatedBy: guard.ctx.user.id,
       finalizedAt: '', finalizedBy: '', signedBy: '',
@@ -156,7 +183,7 @@ export async function POST(req: NextRequest) {
       d.encounters.push(row);
       pushAudit(d, {
         action: 'encounter.created', businessId, actor: guard.ctx.user,
-        meta: { encounterId: row.id, bookingId: row.bookingId, professionalId: row.professionalId },
+        meta: { encounterId: row.id, bookingId: row.bookingId, queueId, professionalId: row.professionalId },
       }, now);
     });
     return NextResponse.json({ ok: true, encounter: view(row, await readDB()) });
@@ -193,7 +220,12 @@ export async function PATCH(req: NextRequest) {
       }
 
       // ── Transições de estado (máquina explícita) ──
+      // Na ordem: primeiro o que DESTRAVA o usuário (reabrir), depois a trava
+      // de concorrência. Quem está numa versão velha E num registro finalizado
+      // precisa ouvir a instrução certa — reabrir —, não um "recarregue".
       if (action === 'finalize') {
+        const conflict = versionConflict(target, body.expectedVersion);
+        if (conflict.conflict) throw err(conflict.message, 409);
         if (target.status === 'finalized') throw err('Este registro já está finalizado.', 409);
         const check = canFinalize(target);
         if (!check.ok) throw err(check.error, 400);
@@ -204,44 +236,56 @@ export async function PATCH(req: NextRequest) {
           || guard.ctx.user.name || '';
         target.updatedAt = now;
         target.updatedBy = guard.ctx.user.id;
+        target.version = encounterVersionOf(target) + 1;
         pushAudit(d, {
           action: 'encounter.finalized', businessId, actor: guard.ctx.user,
-          meta: { encounterId: target.id, bookingId: target.bookingId },
+          meta: { encounterId: target.id, bookingId: target.bookingId, version: target.version },
         }, now);
         return target;
       }
       if (action === 'reopen') {
+        const conflict = versionConflict(target, body.expectedVersion);
+        if (conflict.conflict) throw err(conflict.message, 409);
         if (target.status === 'draft') throw err('Este registro ainda é rascunho.', 409);
         if (!reopen) throw err('Só quem administra a unidade reabre um registro finalizado.', 403);
         target.status = 'draft';
         target.updatedAt = now;
         target.updatedBy = guard.ctx.user.id;
+        target.version = encounterVersionOf(target) + 1;
         pushAudit(d, {
           action: 'encounter.reopened', businessId, actor: guard.ctx.user,
-          meta: { encounterId: target.id },
+          meta: { encounterId: target.id, version: target.version },
         }, now);
         return target;
       }
 
       // ── Edição de conteúdo ──
-      // Finalizado só é editado por quem pode reabrir: o documento que o
-      // cliente levou para casa não muda em silêncio.
-      if (target.status === 'finalized' && !reopen) {
-        throw err('Registro finalizado. Reabra o atendimento para editar (fica registrado na auditoria).', 403);
+      // A3.4 fix (revisão B5): FINALIZADO É DOCUMENTO FECHADO. Nem OWNER nem
+      // ADMIN editam conteúdo aqui: a única porta é `action:'reopen'` (que
+      // fica na auditoria) e só então o rascunho volta a aceitar edição.
+      if (target.status === 'finalized') {
+        throw err('Registro finalizado não é editado direto. Use "Reabrir para editar" — a reabertura fica na auditoria.', 409);
       }
+      const conflict = versionConflict(target, body.expectedVersion);
+      if (conflict.conflict) throw err(conflict.message, 409);
       const before = { ...target };
-      for (const field of ['complaint', 'evolution', 'guidance', 'followUp', 'internalNote'] as const) {
+      for (const field of ENCOUNTER_TEXT_FIELDS) {
         if (body[field] !== undefined) target[field] = cleanText(body[field], field);
       }
       if (body.tags !== undefined) target.tags = cleanTags(body.tags);
-      if (body.followUp !== undefined) target.followUp = cleanText(body.followUp, 'followUp');
-      target.updatedAt = now;
-      target.updatedBy = guard.ctx.user.id;
       const changed = (['complaint', 'evolution', 'guidance', 'followUp', 'internalNote', 'tags'] as const)
         .filter((f) => JSON.stringify((before as any)[f]) !== JSON.stringify((target as any)[f]));
+      if (changed.length === 0) {
+        // Nada mudou: não inventa versão nova nem suja a auditoria (o autosave
+        // da tela bate aqui com frequência e precisa ser barato e honesto).
+        return target;
+      }
+      target.updatedAt = now;
+      target.updatedBy = guard.ctx.user.id;
+      target.version = encounterVersionOf(target) + 1;
       pushAudit(d, {
         action: 'encounter.updated', businessId, actor: guard.ctx.user,
-        meta: { encounterId: target.id, fields: changed },
+        meta: { encounterId: target.id, fields: changed, version: target.version },
       }, now);
       return target;
     });

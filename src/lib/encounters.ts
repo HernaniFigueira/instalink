@@ -151,6 +151,78 @@ export function encounterSignature(e: Pick<Encounter, 'signedBy' | 'finalizedBy'
  * Quem pode ALTERAR um registro: rascunho é livre para quem tem a permissão
  * (e está no escopo); finalizado só é alterado por quem pode reabrir.
  */
+// ── Editor do registro (autosave) ──────────────────────────────────────────
+/** Silêncio depois da última tecla antes do autosave (nem ansioso, nem perdido). */
+export const ENCOUNTER_AUTOSAVE_MS = 1000;
+
+/** Formulário da tela: os campos de texto + etiquetas como TEXTO (vírgula). */
+export interface EncounterDraftForm {
+  complaint: string;
+  evolution: string;
+  guidance: string;
+  followUp: string;
+  internalNote: string;
+  tags: string;
+}
+
+export const ENCOUNTER_AUTOSAVE_LABELS = {
+  saving: 'Salvando…',
+  saved: 'Salvo agora',
+  error: 'Erro ao salvar',
+} as const;
+
+/** Assinatura do conteúdo: o autosave reage a MUDANÇA REAL, não a tecla. */
+export function encounterDraftKey(form: EncounterDraftForm): string {
+  return JSON.stringify([
+    form.complaint ?? '', form.evolution ?? '', form.guidance ?? '',
+    form.followUp ?? '', form.internalNote ?? '', form.tags ?? '',
+  ]);
+}
+
+/**
+ * Corpo do PATCH de conteúdo. `expectedVersion` só entra quando a tela sabe a
+ * revisão do registro — sem ele a trava não age (chamador legado).
+ */
+export function encounterContentPayload(
+  businessId: string, id: string, form: EncounterDraftForm, expectedVersion?: number,
+) {
+  return {
+    businessId, id,
+    complaint: form.complaint, evolution: form.evolution, guidance: form.guidance,
+    followUp: form.followUp, internalNote: form.internalNote,
+    tags: String(form.tags || '').split(',').map((t) => t.trim()).filter(Boolean),
+    ...(expectedVersion === undefined ? {} : { expectedVersion }),
+  };
+}
+
+/**
+ * A3.4 fix (revisão B5) — trava de concorrência otimista.
+ *
+ * O `expectedVersion` é OPCIONAL (chamador legado/script continua funcionando),
+ * mas quando vem precisa bater com a revisão atual do servidor. Sem isso duas
+ * abas sobrescrevem uma à outra sem ninguém perceber.
+ */
+export function versionConflict(
+  current: { version?: number } | null | undefined,
+  expected: unknown,
+): { conflict: false } | { conflict: true; message: string } {
+  if (expected === undefined || expected === null || expected === '') return { conflict: false };
+  const want = Number(expected);
+  if (!Number.isFinite(want)) return { conflict: false };
+  return want === encounterVersion(current)
+    ? { conflict: false }
+    : { conflict: true, message: ENCOUNTER_VERSION_ERROR };
+}
+
+/** Revisão do registro; documento legado (sem campo) vale 1. */
+export function encounterVersion(row: { version?: number } | null | undefined): number {
+  const v = Number(row?.version);
+  return Number.isFinite(v) && v > 0 ? v : 1;
+}
+
+export const ENCOUNTER_VERSION_ERROR =
+  'Este atendimento foi atualizado em outra aba. Recarregue antes de salvar.';
+
 export function canEditEncounter(e: Pick<Encounter, 'status'>, opts: { canReopen: boolean }): boolean {
   return e.status === 'draft' ? true : opts.canReopen;
 }

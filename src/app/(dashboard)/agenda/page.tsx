@@ -34,6 +34,8 @@ import {
 import { BookingDetailSheet } from '@/components/dashboard/BookingDetailSheet';
 import { NewBookingSheet } from '@/components/dashboard/NewBookingSheet';
 import { QueuePanel, type QueueRow } from '@/components/dashboard/QueuePanel';
+import { EncounterSheet } from '@/components/dashboard/EncounterSheet';
+import { usePanelPermissions } from '@/components/dashboard/usePanelPermissions';
 import { AccessDenied, PermissionNotice, useAreaLoad, useForbiddenNotice } from '@/components/dashboard/AccessNotice';
 import { useRevalidateOnFocus } from '@/components/dashboard/use-revalidate';
 import { bookingDuration, effectiveHorizonDays, needsClosure, rescheduleDecision } from '@/lib/booking-ops';
@@ -332,9 +334,18 @@ export default function AgendaPage() {
   const [rules, setRules] = useState<Availability[]>([]);
   const [loaded, setLoaded] = useState(false);
   const [detail, setDetail] = useState<Booking | null>(null);
-  const [creating, setCreating] = useState<{ date: string; time: string; professionalId: string } | null>(null);
+  const [creating, setCreating] = useState<{
+    date: string; time: string; professionalId: string;
+    /** A3.4 fix (revisão B5): "Encaixar na agenda" vem da FILA já preenchido. */
+    contactId?: string; name?: string; phone?: string; serviceId?: string;
+  } | null>(null);
   // A3.4 · Bloco 4 — fila do balcão (entidade própria, fora da agenda).
   const [queueRows, setQueueRows] = useState<QueueRow[]>([]);
+  // A3.4 fix (revisão B5): o registro do atendimento tem permissão PRÓPRIA —
+  // a fila continua operável por quem só faz balcão, sem abrir o conteúdo.
+  const { permissions } = usePanelPermissions();
+  const canEncounter = permissions.atendimento === true;
+  const [queueEncounter, setQueueEncounter] = useState<QueueRow | null>(null);
   const [queueDone, setQueueDone] = useState<QueueRow[]>([]);
   const [queueLoading, setQueueLoading] = useState(false);
   const [showQueue, setShowQueue] = useState(false);
@@ -1172,10 +1183,17 @@ export default function AgendaPage() {
                  o escopo do profissional continua valendo no servidor por
                  entrada da fila. */
               canWrite={!denied}
+              canEncounter={!denied && canEncounter}
               onChanged={loadQueue}
               professionals={activePros.map((p) => ({ id: p.id, name: p.name }))}
               services={services.map((x) => ({ id: x.id, name: x.name }))}
               onOpenBooking={(id) => { const b = bookingsRef.current.get(id); if (b) setDetail(b); }}
+              onEncounter={(row) => setQueueEncounter(row)}
+              onOpenClient={(row) => { window.location.href = `/clientes?c=${encodeURIComponent(row.contactId)}`; }}
+              onFitIn={(row) => setCreating({
+                date: today, time: nowHM(), professionalId: row.professionalId,
+                contactId: row.contactId, name: row.customerName, phone: row.customerPhone, serviceId: row.serviceId,
+              })}
             />
           )}
         </div>
@@ -1554,6 +1572,21 @@ export default function AgendaPage() {
         />
       )}
 
+      {queueEncounter && (
+        <EncounterSheet
+          businessId={businessId}
+          queueId={queueEncounter.id}
+          seed={{
+            customerName: queueEncounter.customerName, serviceId: queueEncounter.serviceId,
+            professionalId: queueEncounter.professionalId, date: queueEncounter.date,
+            contactId: queueEncounter.contactId,
+          }}
+          canReopen={false}
+          onClose={() => { setQueueEncounter(null); void loadQueue(); }}
+          onChanged={loadQueue}
+        />
+      )}
+
       {creating && (
         <NewBookingSheet
           businessId={businessId}
@@ -1562,7 +1595,8 @@ export default function AgendaPage() {
           horizonDays={horizonDays}
           timezone={bizTz}
           initial={{
-            name: '', phone: '',
+            name: creating.name || '', phone: creating.phone || '',
+            contactId: creating.contactId, serviceId: creating.serviceId,
             date: creating.date || focus,
             time: creating.time,
             professionalId: creating.professionalId,

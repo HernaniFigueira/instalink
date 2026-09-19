@@ -10,13 +10,14 @@
 //   • reabrir: só quem administra a unidade (e fica na auditoria);
 //   • imprimir: uma via do CLIENTE com o que ele levou para casa — a anotação
 //     interna não entra no papel.
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Icon } from '@/components/icons';
 import { Badge, Button, Drawer, Field, Input, Notice, Textarea } from '@/components/ui';
 import { apiGet, apiSend } from '@/lib/api-client';
 import {
-  ENCOUNTER_LABELS, ENCOUNTER_STATUS, canEditEncounter, canFinalize, encounterPrintBlocks,
-  encounterSignature, encounterSummary,
+  ENCOUNTER_AUTOSAVE_LABELS, ENCOUNTER_AUTOSAVE_MS, ENCOUNTER_LABELS, ENCOUNTER_STATUS,
+  ENCOUNTER_VERSION_ERROR, canEditEncounter, canFinalize, encounterContentPayload, encounterDraftKey,
+  encounterPrintBlocks, encounterSignature, encounterSummary,
 } from '@/lib/encounters';
 import { formatDateBR } from '@/lib/tz';
 import type { Encounter } from '@/lib/types';
@@ -35,6 +36,8 @@ interface Props {
   seed?: { customerName?: string; serviceId?: string; professionalId?: string; date?: string; time?: string; contactId?: string; customerId?: string };
   /** Modelo de leitura (aberto pelo histórico do cliente, já existente). */
   existing?: EncounterRow | null;
+  /** Entrada da fila de origem (o registro nasce com a chegada como horário). */
+  queueId?: string;
   /** Quem manda na unidade: único que reabre registro finalizado. */
   canReopen?: boolean;
   onClose: () => void;
@@ -45,7 +48,9 @@ const EMPTY = {
   complaint: '', evolution: '', guidance: '', followUp: '', internalNote: '', tags: '',
 };
 
-export function EncounterSheet({ businessId, bookingId, seed, existing, canReopen = false, onClose, onChanged }: Props) {
+type Form = typeof EMPTY;
+
+export function EncounterSheet({ businessId, bookingId, seed, existing, queueId, canReopen = false, onClose, onChanged }: Props) {
   const [row, setRow] = useState<EncounterRow | null>(existing || null);
   const [form, setForm] = useState({ ...EMPTY });
   const [loading, setLoading] = useState(!existing);
@@ -53,13 +58,40 @@ export function EncounterSheet({ businessId, bookingId, seed, existing, canReope
   const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
   const [saved, setSaved] = useState('');
+  /**
+   * A3.4 fix (revisão B5) — AUTOSAVE de verdade.
+   *
+   * O rascunho não pode depender de lembrar de apertar Salvar: quem atende
+   * está com o cliente na frente. O que a tela faz:
+   *   • espera `ENCOUNTER_AUTOSAVE_MS` de silêncio depois da última tecla (nada de uma
+   *     requisição por caractere);
+   *   • só roda em `draft`, com mudança real e sem request em andamento;
+   *   • manda `expectedVersion` — se outra aba salvou antes, mostra o 409 e
+   *     para, em vez de sobrescrever;
+   *   • diz o que está acontecendo ("Salvando…", "Salvo agora", erro);
+   *   • ao fechar com alteração pendente, tenta o flush e, se não der, avisa
+   *     em vez de perder o texto em silêncio.
+   */
+  const [autoState, setAutoState] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle');
+  const [autoAt, setAutoAt] = useState('');
+  const [conflict, setConflict] = useState(false);
+  // Espelho síncrono: o timer e o fechamento leem SEMPRE o último texto, mesmo
+  // antes de o React reprocessar o estado.
+  const latest = useRef({ row: existing || null, form: { ...EMPTY } });
+  const inflight = useRef<Promise<boolean> | null>(null);
+  const lastSaved = useRef('');
 
   const apply = useCallback((e: EncounterRow) => {
-    setRow(e);
-    setForm({
+    const next = {
       complaint: e.complaint || '', evolution: e.evolution || '', guidance: e.guidance || '',
       followUp: e.followUp || '', internalNote: e.internalNote || '', tags: (e.tags || []).join(', '),
-    });
+    };
+    latest.current = { row: e, form: next };
+    lastSaved.current = encounterDraftKey(next);
+    setRow(e);
+    setForm(next);
+    setAutoState('saved');
+    setAutoAt(new Date().toISOString());
   }, []);
 
   const open = useCallback(async (create = false) => {
@@ -79,11 +111,12 @@ export function EncounterSheet({ businessId, bookingId, seed, existing, canReope
       customerName: seed?.customerName || '', serviceId: seed?.serviceId || '',
       professionalId: seed?.professionalId || '', date: seed?.date || '', time: seed?.time || '',
       contactId: seed?.contactId || '', customerId: seed?.customerId || '',
+      queueId: queueId || '',
     }, { scope: 'action', area: 'Atendimento' });
     setLoading(false);
     if (!created.ok) { setError(created.message || 'Não foi possível abrir o atendimento.'); return; }
     apply(created.data!.encounter);
-  }, [apply, bookingId, businessId, existing, seed]);
+  }, [apply, bookingId, businessId, existing, queueId, seed]);
 
   useEffect(() => { open(); }, [open]);
 
@@ -99,21 +132,66 @@ export function EncounterSheet({ businessId, bookingId, seed, existing, canReope
       || form.tags !== (row.tags || []).join(', ');
   }, [form, row]);
 
-  async function save() {
-    if (!row) return;
-    setBusy('save'); setError(''); setSaved('');
-    const res = await apiSend<{ encounter: EncounterRow }>('/api/encounters', 'PATCH', {
-      businessId, id: row.id,
-      complaint: form.complaint, evolution: form.evolution, guidance: form.guidance,
-      followUp: form.followUp, internalNote: form.internalNote,
-      tags: form.tags.split(',').map((t) => t.trim()).filter(Boolean),
-    }, { scope: 'action', area: 'Atendimento' });
-    setBusy('');
-    if (!res.ok) { setError(res.message); return; }
-    apply(res.data!.encounter);
-    setSaved('Registro salvo.');
-    onChanged?.();
-  }
+  /**
+   * Salva o conteúdo. `silent` é o caminho do autosave (não usa os avisos
+   * grandes, só o indicador discreto). Devolve `true` quando gravou.
+   */
+  const save = useCallback(async (opts: { silent?: boolean } = {}): Promise<boolean> => {
+    const current = latest.current.row;
+    const currentForm = latest.current.form;
+    if (!current || current.status !== 'draft') return false;
+    if (encounterDraftKey(currentForm) === lastSaved.current) return true; // nada novo
+    if (inflight.current) return inflight.current;                 // um por vez
+
+    if (!opts.silent) { setBusy('save'); setError(''); setSaved(''); }
+    setAutoState('saving');
+    const run = (async () => {
+      const res = await apiSend<{ encounter: EncounterRow }>('/api/encounters', 'PATCH',
+        encounterContentPayload(businessId, current.id, currentForm, current.version),
+        { scope: 'action', area: 'Atendimento' });
+      if (!res.ok) {
+        setAutoState('error');
+        setConflict(res.status === 409);
+        setError(res.message);
+        return false;
+      }
+      apply(res.data!.encounter);
+      setConflict(false);
+      if (!opts.silent) { setBusy(''); setSaved('Registro salvo.'); }
+      return true;
+    })();
+    inflight.current = run;
+    try {
+      return await run;
+    } finally {
+      inflight.current = null;
+      setBusy((b) => (b === 'save' ? '' : b));
+      onChanged?.();
+    }
+  }, [apply, businessId, onChanged]);
+
+  // Autosave: só em rascunho, só com mudança real, um request por vez, e só
+  // depois de o dedo parar. `conflict` desliga o automatismo: com a versão
+  // velha, insistir só repetiria o 409.
+  useEffect(() => {
+    if (!row || row.status !== 'draft' || conflict) return;
+    if (encounterDraftKey(form) === lastSaved.current) return;
+    const t = setTimeout(() => { void save({ silent: true }); }, ENCOUNTER_AUTOSAVE_MS);
+    return () => clearTimeout(t);
+  }, [form, row, conflict, save]);
+
+  /** Fecha com alteração pendente: tenta salvar; se falhar, avisa (não engole). */
+  const close = useCallback(async () => {
+    const current = latest.current.row;
+    if (current && current.status === 'draft' && encounterDraftKey(latest.current.form) !== lastSaved.current) {
+      const ok = await save({ silent: true });
+      if (!ok) {
+        const keep = window.confirm('Não foi possível salvar o atendimento agora. Fechar mesmo assim e perder o que foi digitado?');
+        if (!keep) return;
+      }
+    }
+    onClose();
+  }, [save, onClose]);
 
   async function finalize() {
     if (!row) return;
@@ -121,7 +199,10 @@ export function EncounterSheet({ businessId, bookingId, seed, existing, canReope
     if (!check.ok) { setError(check.error); return; }
     setError('');
     // Salvar antes de assinar: o documento final tem o texto que está na tela.
-    if (dirty) await save();
+    if (dirty) {
+      const ok = await save();
+      if (!ok) return;
+    }
     setBusy('finalize');
     const res = await apiSend<{ encounter: EncounterRow }>('/api/encounters', 'PATCH', {
       businessId, id: row.id, action: 'finalize',
@@ -163,7 +244,7 @@ export function EncounterSheet({ businessId, bookingId, seed, existing, canReope
   return (
     <Drawer
       open
-      onClose={onClose}
+      onClose={() => { void close(); }}
       title="Atendimento"
       subtitle={row ? `${formatDateBR(row.date)}${row.time ? ` · ${row.time}` : ''} · ${row.customerName || 'Cliente'}` : 'Registro do atendimento'}
       width="max-w-[620px]"
@@ -173,13 +254,18 @@ export function EncounterSheet({ businessId, bookingId, seed, existing, canReope
             <span className="mr-auto flex items-center gap-2 text-xs text-[var(--text-muted)]">
               <Badge tone={statusDef!.tone}>{statusDef!.label}</Badge>
               {row.status === 'finalized' && <span>Assinado por {encounterSignature(row)}</span>}
+              {/* Indicador do autosave: discreto, no lugar onde a pessoa olha. */}
+              {isDraft && autoState === 'saving' && <span>{ENCOUNTER_AUTOSAVE_LABELS.saving}</span>}
+              {isDraft && autoState === 'saved' && !dirty && <span>{ENCOUNTER_AUTOSAVE_LABELS.saved}</span>}
+              {isDraft && autoState === 'error'
+                && <span className="text-[var(--danger-fg)]">{ENCOUNTER_AUTOSAVE_LABELS.error}</span>}
             </span>
           )}
           <Button variant="secondary" size="sm" onClick={print} disabled={!row}>
             <Icon n="printer" size={13} /> Imprimir via do cliente
           </Button>
           {editable && (
-            <Button variant="secondary" size="sm" onClick={save} disabled={!!busy || !dirty}>
+            <Button variant="secondary" size="sm" onClick={() => { void save(); }} disabled={!!busy || !dirty}>
               {busy === 'save' ? 'Salvando…' : 'Salvar'}
             </Button>
           )}
@@ -203,15 +289,29 @@ export function EncounterSheet({ businessId, bookingId, seed, existing, canReope
 
         {row && (
           <>
+            {conflict && (
+              <Notice tone="warning" title="Esta versão ficou velha">
+                {ENCOUNTER_VERSION_ERROR} O que você digitou continua na tela — recarregue o registro
+                para ver o que a outra aba salvou antes de decidir o que fica.
+                <button type="button" className="ml-1 underline font-semibold"
+                  onClick={() => { setConflict(false); void open(true); }}>Recarregar registro</button>
+              </Notice>
+            )}
             {row.status === 'finalized' && (
               <Notice tone="info" title="Registro finalizado">
                 Este documento foi assinado por {encounterSignature(row)}. Alterar exige reabrir — e a
                 reabertura fica registrada na auditoria da unidade.
               </Notice>
             )}
+            {isDraft && editable && (
+              <p className="text-xs text-[var(--text-muted)]">
+                Enquanto é rascunho, o texto é salvo sozinho um segundo depois de você parar de digitar.
+              </p>
+            )}
             {!editable && !isDraft && (
               <p className="text-xs text-[var(--text-muted)]">
-                Você está vendo um registro finalizado. Só quem administra a unidade reabre para edição.
+                Você está vendo um registro finalizado. Para editar, use “Reabrir para editar” (só quem
+                administra a unidade) — e a reabertura fica na auditoria.
               </p>
             )}
 

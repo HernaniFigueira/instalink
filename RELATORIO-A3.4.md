@@ -421,3 +421,131 @@ npx vitest run → 81 arquivos · 1349 testes ok
 npx tsc --noEmit → 0 erros
 npm run build → ok (107 páginas)
 ```
+
+---
+
+## CORREÇÃO INTERMEDIÁRIA (revisão independente dos Blocos 0–6)
+
+Revisão pedida antes de abrir o Bloco 7. Os seis pontos, um por um.
+
+### 1. Registro finalizado NÃO é editado direto — nem pelo dono
+
+**O que estava errado.** A rota deixava a edição de conteúdo passar para quem
+tem capacidade de reabrir (`if (target.status === 'finalized' && !reopen)`). Na
+prática, OWNER e ADMIN alteravam um documento assinado **sem** reabrir e sem
+deixar a reabertura na auditoria: o registro dizia “finalizado” enquanto o
+texto mudava por baixo.
+
+**Como está agora.** Qualquer PATCH de conteúdo em registro `finalized`
+devolve **409** com a instrução certa — “Use *Reabrir para editar*” —, para
+QUALQUER papel. A única porta é `action:'reopen'` (que assina a auditoria) e
+só então o rascunho volta a aceitar texto. A ordem das checagens foi escolhida
+de propósito: primeiro a instrução que destrava o usuário (reabrir), depois a
+trava de concorrência — quem está numa versão velha **e** num registro fechado
+precisa ouvir “reabra”, não “recarregue”.
+
+Provas (rotas reais, banco temporário):
+`OWNER não edita direto` · `ADMIN da unidade também não` ·
+`PROFISSIONAL não edita nem o próprio` · depois de `reopen`, a edição funciona e
+a auditoria fica **na ordem**: `created → finalized → reopened → updated`.
+
+### 2. `version` — concorrência otimista
+
+Campo **aditivo** `Encounter.version` (número; documento antigo vale **1** via
+`normalizeDB`, para a primeira trava não dar 409 falso). Toda alteração real
+grava `version + 1`; salvar sem mudança **não** cria versão nova (o autosave
+bate aqui o tempo todo). O PATCH aceita `expectedVersion` — quando não bate:
+**409** com “Este atendimento foi atualizado em outra aba. Recarregue antes de
+salvar.” Finalizar e reabrir respeitam o mesmo campo. **Não** usamos
+`updatedAt` como lock.
+
+Provas: duas abas (A salva com a versão 1 → vira 2; B insiste na 1 → 409 e o
+texto de A continua intacto; B recarrega com a 2 → grava) e a prova de que
+finalizar/reabrir com versão velha também são recusados.
+
+### 3. Autosave real no registro
+
+Debounce de **1 s** (`ENCOUNTER_AUTOSAVE_MS`) só quando é rascunho, há mudança
+**real** (assinatura de conteúdo, não tecla) e não há request em andamento
+(`inflight`). Indicador discreto: **Salvando… · Salvo agora · Erro ao salvar**.
+O botão **Salvar** continua como caminho manual. Ao **fechar com alteração
+pendente**, a tela tenta o flush; se não conseguir, **avisa** (“fechar mesmo
+assim e perder o que foi digitado?”) em vez de descartar em silêncio. Conflito
+de versão desliga o automatismo e mostra o aviso com “Recarregar registro”.
+
+### 4. Observações administrativas
+
+A aba virou **“Observações administrativas”** (mesmo array de `notes`, sem
+migrar dado), o campo agora é “Observação administrativa”, o placeholder virou
+exemplo puramente operacional — “Prefere horário da manhã, confirmar por
+telefone, convênio...” — e o vazio diz explicitamente que **o que aconteceu no
+atendimento fica em Atendimentos**, com registro assinado: esta lista não
+substitui nem copia aquele conteúdo.
+
+### 5. Fila → atendimento (inclusive SEM agendamento)
+
+“Iniciar atendimento” passou a fazer o handoff: move a entrada para
+`in_service` **e** abre o registro com os dados da chegada (contato, nome,
+serviço, profissional, dia e **horário real de início/chegada**). Sem
+agendamento, `bookingId` fica **vazio** — o sistema **não fabrica um Booking**
+(a agenda continua dizendo a verdade; há teste garantindo que nenhum
+agendamento nasce desse caminho). Com `bookingId`, o vínculo é o do horário
+marcado.
+
+A alça de permissão é a que a revisão pediu: quem **não** tem `atendimento`
+continua operando a fila inteira (chamar, iniciar, concluir, remover) **sem**
+abrir o conteúdo profissional. Ações secundárias na linha: **Abrir cliente**
+(quando há contato no CRM), **Encaixar na agenda** (abre o agendamento
+pré-preenchido — nada é criado automaticamente) e **Ver horário** (quando a
+entrada veio de um horário marcado).
+
+### 6. +55 visual fixo nos campos de telefone
+
+Componente único `PhoneBRInput`: `[ +55 ] [ (21) 99999-9999 ]`. O prefixo é
+**texto fixo** (não é campo, não é editável, `aria-hidden` porque o número já
+leva DDD), **não duplica** ao colar `+55 …` (a máscara remove o código do
+país) e **não** muda o contrato de persistência: o `onChange` entrega dígitos,
+como o resto do sistema sempre gravou. Aplicado em **NewClientSheet,
+ClientProfileDrawer (cliente e responsável), NewBookingSheet, QueuePanel e
+EsteiraView** — as cinco telas usam o mesmo componente e nenhuma delas voltou a
+chamar a máscara na mão (há teste que falha se voltarem).
+
+### 7. `tsconfig.tsbuildinfo`
+
+Artefato gerado. Estado conferido e confirmado:
+
+```
+git ls-tree origin/main  → tsconfig.tsbuildinfo  (estava versionado na base)
+git ls-tree HEAD         → (ausente: removido do índice nesta branch, em 24ffd84)
+.gitignore               → tsconfig.tsbuildinfo  (linha 11)
+git check-ignore -v      → .gitignore:11:tsconfig.tsbuildinfo
+tsconfig.json            → intacto (nenhuma configuração real do TypeScript foi tocada)
+```
+
+A remoção aparece no PR como **deleção** do artefato (0 adições), o arquivo
+continua existindo no disco como cache local de build e **não volta** a ser
+versionado — há teste novo travando o `.gitignore` e a integridade do
+`tsconfig.json`.
+
+### Testes e portões desta correção
+
+```
+npx vitest run src/lib/__tests__/a34-encounter.test.ts     → 27 ok
+npx vitest run src/lib/__tests__/a34-review-fix.test.ts    → 20 ok  (novo)
+npx vitest run src/lib/__tests__/a34-field-quality.test.ts → 11 ok
+npx vitest run src/lib/__tests__/a34-queue.test.ts         → ok
+npx vitest run src/lib/__tests__/a34-operative-routes.test.ts → 15 ok
+npx vitest run  → 82 arquivos · 1379 testes ok
+npx tsc --noEmit → 0 erros
+npm run build    → ok (107 páginas)
+```
+
+Suíte nova (`a34-review-fix.test.ts`) foca no que não é servidor: debounce e
+guardas do autosave, `expectedVersion` no payload, flush no fechamento,
+handoff da fila, as cinco telas usando o `PhoneBRInput` sem duplicar máscara, a
+fronteira das observações administrativas e o artefato fora do versionamento.
+
+### O que esta correção NÃO toca
+
+Blocos 7 a 11 seguem **não iniciados**: import/export, onboarding do WhatsApp,
+Instagram, Graph API, canais e storage ficaram intocados.

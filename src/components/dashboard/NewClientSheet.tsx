@@ -4,7 +4,8 @@ import { useState } from 'react';
 import { Icon } from '@/components/icons';
 import { apiSend } from '@/lib/api-client';
 import { onlyDigits } from '@/lib/utils';
-import { emailError, maskPhoneBR, normalizeEmail, phoneError } from '@/lib/field-quality';
+import { emailError, normalizeEmail, phoneError } from '@/lib/field-quality';
+import { PhoneBRInput } from '@/components/dashboard/PhoneBRInput';
 import { Button } from '@/components/ui';
 
 interface SavedContact {
@@ -129,7 +130,7 @@ export function NewClientSheet({
             <label className="block"><span className={label}>NOME *</span>
               <input autoFocus value={name} onChange={(e) => setName(e.target.value)} className={input + ' mt-1'} placeholder="Ex.: Marlene Silva" /></label>
             <label className="block"><span className={label}>WHATSAPP *</span>
-              <input value={maskPhoneBR(phone)} onChange={(e) => setPhone(e.target.value)} className={input + ' mt-1'} inputMode="tel" placeholder="(11) 99999-9999" /></label>
+              <PhoneBRInput value={phone} onChange={setPhone} className="mt-1" placeholder="(11) 99999-9999" /></label>
             <label className="block"><span className={label}>E-MAIL</span>
               <input value={email} onChange={(e) => setEmail(e.target.value)} className={input + ' mt-1'} inputMode="email" placeholder="Opcional" /></label>
             <label className="block"><span className={label}>OBSERVAÇÃO</span>
