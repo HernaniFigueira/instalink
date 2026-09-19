@@ -148,10 +148,10 @@ describe('P6.1 — Conexões: criar, listar, rotacionar e remover', () => {
 
   it('recusa provedor que ainda NÃO existe (nada de conexão de fachada)', () => {
     const db = seedDb();
-    const whatsapp = createIntegration(db, 'b1', { provider: 'whatsapp' });
-    expect(whatsapp.ok).toBe(false);
-    expect(whatsapp.status).toBe(409);
-    expect(whatsapp.error).toMatch(/P6\.1/);
+    const instagram = createIntegration(db, 'b1', { provider: 'instagram' });
+    expect(instagram.ok).toBe(false);
+    expect(instagram.status).toBe(409);
+    expect(instagram.error).toBeDefined();
     expect(db.integrations).toHaveLength(0);
   });
 
@@ -474,14 +474,14 @@ describe('P6.4 — Saída: evento interno → connector → sistema externo', ()
     // Conexão de canal só existe quando o conector existir — para testar a
     // camada de saída, registramos a linha como o P6.1 faria.
     const integration: Integration = {
-      id: 'ch-1', businessId: 'b1', kind: 'channel', provider: 'whatsapp', name: 'WhatsApp',
+      id: 'ch-1', businessId: 'b1', kind: 'channel', provider: 'instagram', name: 'Instagram',
       direction: 'both', status: 'active', tokenHash: 'h', tokenPrefix: 'ilk_live_12345678',
       signingSecret: 's', signingSecretPrefix: 'ilsec_12345', requireSignature: false,
       defaultEvent: '', config: {}, createdAt: FIXED_NOW, updatedAt: FIXED_NOW,
       createdByUserId: '', rotatedAt: '', lastEventAt: '', eventCount: 0,
     };
     db.integrations.push(integration);
-    expect(channelConnectorAvailable('whatsapp')).toBe(false);
+    expect(channelConnectorAvailable('instagram')).toBe(false);
 
     const result = await dispatchOutboundEvent(db, {
       businessId: 'b1', event: 'lead.created', data: { to: '11999998888', message: 'Oi' }, targets: ['channel'],
@@ -489,6 +489,7 @@ describe('P6.4 — Saída: evento interno → connector → sistema externo', ()
     expect(result.channels).toHaveLength(1);
     expect(result.channels[0].ok).toBe(false);
     expect(result.channels[0].code).toBe('not_implemented');
+
     // A tentativa fica registrada como falha — não como entregue.
     const log = integrationEventsOf(db, 'b1')[0];
     expect(log.direction).toBe('out');
@@ -678,12 +679,13 @@ describe('P6.5 — API (rotas reais, sessão e isolamento)', () => {
   it('catálogo da API mostra a verdade: canais indisponíveis e fontes conectáveis', async () => {
     const tokenA = await createSession(OWNER);
     const listed = await jsonBody(await integrationsGET(jsonReq('/api/integrations?businessId=b1', { token: tokenA })));
+    const instagram = listed.channels.find((p: any) => p.provider === 'instagram');
+    expect(instagram.canConnect).toBe(false);
+    expect(instagram.unavailableReason).toBeDefined();
     const whatsapp = listed.channels.find((p: any) => p.provider === 'whatsapp');
-    expect(whatsapp.canConnect).toBe(false);
-    expect(whatsapp.unavailableReason).toMatch(/P6\.1/);
+    expect(whatsapp.canConnect).toBe(true);
     const form = listed.sources.find((p: any) => p.provider === 'form');
     expect(form.canConnect).toBe(true);
-    expect(listed.eventsCatalog.find((e: any) => e.id === 'message.received').supported).toBe(false);
   });
 });
 

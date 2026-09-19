@@ -79,6 +79,13 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
       }, { status: 400 });
     }
 
+    if (!process.env.WHATSAPP_CREDENTIALS_KEY || process.env.WHATSAPP_CREDENTIALS_KEY.trim().length === 0) {
+      return NextResponse.json({
+        error: 'WHATSAPP_CREDENTIALS_KEY não está configurada no servidor. Não é possível salvar credenciais com segurança.',
+        code: 'missing_credentials_key',
+      }, { status: 503 });
+    }
+
     // 1. Validação REAL junto à Graph API da Meta (fora de qualquer lock)
     const testResult = await testMetaConnection(phoneNumberId, accessToken);
     if (!testResult.ok) {

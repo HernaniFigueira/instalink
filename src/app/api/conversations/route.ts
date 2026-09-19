@@ -160,9 +160,11 @@ export async function POST(req: NextRequest) {
     const sendResult = await deliverWhatsappMessage(businessId, result.message.id);
     const finalMsg = {
       ...result.message,
-      status: sendResult.status,
+      status: sendResult.status === 'claimed_by_other' ? 'pending' : sendResult.status,
       externalId: sendResult.externalId || '',
       error: sendResult.error,
+      nextRetryAt: sendResult.nextRetryAt,
+      attempts: sendResult.attempts,
     };
 
     return NextResponse.json({

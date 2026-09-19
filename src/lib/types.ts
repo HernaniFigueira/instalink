@@ -1334,6 +1334,10 @@ export interface CampaignRecipient {
   externalId?: string;
   error: string;
   at: string;
+  nextRetryAt?: string;
+  attempts?: number;
+  claimToken?: string;
+  claimExpiresAt?: string;
 }
 
 // ═══════════════════════════════════════════════════════════════

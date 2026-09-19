@@ -5,7 +5,7 @@ import { requireBusiness } from '@/lib/access';
 import { pushAudit } from '@/lib/audit';
 import { audienceCount, audienceFor, hasMarketingConsent } from '@/lib/campaigns';
 import { integrationStatus, serverCredentialsConfigured } from '@/lib/whatsapp';
-import { getWhatsappCredentials, sendMetaGraphMessage } from '@/lib/whatsapp-cloud-api';
+import { getWhatsappCredentials, sendMetaGraphMessage, WHATSAPP_MAX_ATTEMPTS, WHATSAPP_RETRY_INTERVALS_MS } from '@/lib/whatsapp-cloud-api';
 import { createWinBackLeads, winBackCandidates } from '@/lib/automations';
 import { todayISO } from '@/lib/tz';
 import { CAMPAIGN_SEGMENTS, campaignStatusDef, VALID_CAMPAIGN_STATUSES } from '@/lib/types';
@@ -207,10 +207,9 @@ export async function PATCH(req: NextRequest) {
         return NextResponse.json({ error: 'Deixe a campanha pronta antes de enviar.' }, { status: 409 });
       }
 
-      // Validação de template aprovado da Meta para campanhas proativas
+      // Validação de template aprovado da Meta para campanhas proativas (sem bypass de texto livre)
       const templateName = String(body.templateName || campaign.templateName || '').trim();
-      const allowFreeText = body.allowFreeText === true;
-      if (!templateName && !allowFreeText) {
+      if (!templateName) {
         return NextResponse.json({
           error: 'Disparos proativos pelo WhatsApp exigem o nome de um template aprovado na Meta Cloud API. Configure o template antes de disparar.',
           code: 'template_required',
@@ -263,11 +262,17 @@ export async function PATCH(req: NextRequest) {
       });
 
       // 2. Chamadas HTTP para a Meta Cloud API FORA DE QUALQUER LOCK
-      const results: Array<{ recipientId: string; ok: boolean; externalId?: string; error?: string }> = [];
-      const templateConfig = templateName ? {
+      const results: Array<{
+        recipientId: string;
+        ok: boolean;
+        externalId?: string;
+        error?: string;
+        retryable?: boolean;
+      }> = [];
+      const templateConfig = {
         name: templateName,
         language: campaign.templateLanguage || body.templateLanguage || 'pt_BR',
-      } : undefined;
+      };
 
       for (const rec of pendingRecipientIds) {
         const sendRes = await sendMetaGraphMessage({
@@ -283,14 +288,16 @@ export async function PATCH(req: NextRequest) {
           ok: sendRes.ok,
           externalId: sendRes.externalId,
           error: sendRes.error,
+          retryable: sendRes.retryable,
         });
       }
 
-      // 3. Atualização pós-envio com status REAL da entrega
+      // 3. Atualização pós-envio com status REAL da entrega e retenção de retentativas
       const finalCampaign = await updateDB((d) => {
         const c = d.campaigns.find((x) => x.id === campaign.id)!;
         let sentCount = 0;
         let failedCount = 0;
+        let pendingCount = 0;
 
         for (const r of results) {
           const target = d.campaignRecipients.find((rec) => rec.id === r.recipientId);
@@ -299,22 +306,37 @@ export async function PATCH(req: NextRequest) {
               target.status = 'sent';
               target.externalId = r.externalId;
               target.error = '';
+              target.nextRetryAt = undefined;
               sentCount++;
             } else {
-              target.status = 'failed';
+              const attempts = (target.attempts || 0) + 1;
+              target.attempts = attempts;
               target.error = r.error || 'Falha no envio';
-              failedCount++;
+              if (r.retryable && attempts < WHATSAPP_MAX_ATTEMPTS) {
+                target.status = 'pending';
+                const delay = WHATSAPP_RETRY_INTERVALS_MS[attempts - 1] || 120_000;
+                target.nextRetryAt = new Date(Date.now() + delay).toISOString();
+                pendingCount++;
+              } else {
+                target.status = 'failed';
+                target.nextRetryAt = undefined;
+                failedCount++;
+              }
             }
           }
         }
 
-        const totalAttempts = sentCount + failedCount;
-        let finalStatus: CampaignStatus = 'sent';
-        if (failedCount > 0 && sentCount > 0) finalStatus = 'partial';
-        else if (failedCount > 0 && sentCount === 0) finalStatus = 'failed';
+        let finalStatus: CampaignStatus = 'sending';
+        if (pendingCount === 0) {
+          if (failedCount > 0 && sentCount > 0) finalStatus = 'partial';
+          else if (failedCount > 0 && sentCount === 0) finalStatus = 'failed';
+          else finalStatus = 'sent';
+          c.sentAt = now;
+        } else {
+          finalStatus = 'sending';
+        }
 
         c.status = finalStatus;
-        c.sentAt = now;
         c.updatedAt = now;
         c.counts.sent = sentCount;
         c.counts.failed = failedCount;
@@ -322,7 +344,7 @@ export async function PATCH(req: NextRequest) {
 
         pushAudit(d, {
           action: 'campaign.sent', actor: { ...ctx.user, role: ctx.role }, businessId,
-          supportSessionId: ctx.support?.id, meta: { id: c.id, status: finalStatus, sent: sentCount, failed: failedCount },
+          supportSessionId: ctx.support?.id, meta: { id: c.id, status: finalStatus, sent: sentCount, failed: failedCount, pending: pendingCount },
         });
 
         return c;

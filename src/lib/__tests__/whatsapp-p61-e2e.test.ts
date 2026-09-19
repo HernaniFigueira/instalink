@@ -8,8 +8,17 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { NextRequest } from 'next/server';
 import { emptyDB, readDB, updateDB, writeDB } from '../db';
 import { createSession } from '../auth';
-import { encryptSecret, decryptSecret } from '../whatsapp-cloud-api';
-import { registerChannelConnector } from '../integrations/connectors';
+import {
+  encryptSecret,
+  decryptSecret,
+  getCredentialsKey,
+  verifyMetaWebhookSignature,
+  resolveTenantForChange,
+  deliverWhatsappMessage,
+  deliverPendingWhatsappMessages,
+  processPendingWhatsappRetries,
+} from '../whatsapp-cloud-api';
+import { registerChannelConnector, channelConnectorAvailable } from '../integrations/connectors';
 import { maskTechnicalId } from '../whatsapp';
 import { createBookingTx } from '../booking-create';
 import { executeAction } from '../automation/actions';
@@ -20,6 +29,7 @@ import { GET as settingsGET } from '@/app/api/whatsapp/route';
 import { POST as masterWhatsappPOST } from '@/app/api/master/units/[id]/whatsapp/route';
 import { POST as conversationsPOST } from '@/app/api/conversations/route';
 import { POST as campaignsPOST, PATCH as campaignsPATCH } from '@/app/api/campaigns/route';
+import { GET as cronWhatsappGET, POST as cronWhatsappPOST } from '@/app/api/cron/whatsapp/route';
 
 const TEST_APP_SECRET = 'meta_app_secret_test_1234567890';
 const TEST_VERIFY_TOKEN = 'test_verify_token_xyz_987';
@@ -1012,6 +1022,202 @@ describe('P6.1 — WhatsApp Cloud API E2E', () => {
       // Secret must be encrypted
       expect(unitA.whatsappIntegration?.encryptedAccessToken).toBeDefined();
       expect(decryptSecret(unitA.whatsappIntegration!.encryptedAccessToken!)).toBe('EAATestValidMasterConfigToken');
+    });
+
+    it('retorna 503 se WHATSAPP_CREDENTIALS_KEY estiver ausente ao tentar configurar pelo Master', async () => {
+      const origKey = process.env.WHATSAPP_CREDENTIALS_KEY;
+      delete process.env.WHATSAPP_CREDENTIALS_KEY;
+      try {
+        const masterToken = await createSession(MASTER_USER_ID);
+        const res = await masterWhatsappPOST(jsonReq(`/api/master/units/${BIZ_A}/whatsapp`, {
+          method: 'POST',
+          token: masterToken,
+          body: {
+            phoneNumberId: '109283746152999',
+            accessToken: 'EAATokenWithoutKey',
+          },
+        }), { params: Promise.resolve({ id: BIZ_A }) });
+        expect(res.status).toBe(503);
+      } finally {
+        process.env.WHATSAPP_CREDENTIALS_KEY = origKey;
+      }
+    });
+  });
+
+  // 10. Hardening & Review Fixes (Fail-closed, CAS Claim, Status, Webhook tenant resolution, Cron)
+  describe('10. Hardening e Resiliência da Integração WhatsApp', () => {
+    it('getCredentialsKey não faz fallback para outros segredos e encryptSecret falha se chave ausente', () => {
+      const origKey = process.env.WHATSAPP_CREDENTIALS_KEY;
+      delete process.env.WHATSAPP_CREDENTIALS_KEY;
+      process.env.WHATSAPP_API_TOKEN = 'fallback_token';
+      try {
+        expect(getCredentialsKey()).toBeNull();
+        expect(() => encryptSecret('my_token')).toThrowError(/WHATSAPP_CREDENTIALS_KEY/);
+      } finally {
+        process.env.WHATSAPP_CREDENTIALS_KEY = origKey;
+      }
+    });
+
+    it('webhook falha fechado (503) se appSecret estiver ausente do servidor', async () => {
+      const origSecret = process.env.WHATSAPP_APP_SECRET;
+      delete process.env.WHATSAPP_APP_SECRET;
+      delete process.env.META_APP_SECRET;
+      try {
+        expect(verifyMetaWebhookSignature('body', 'sha256=123')).toBe(false);
+        const res = await webhookPOST(new NextRequest('http://localhost:3000/api/whatsapp/webhook', {
+          method: 'POST',
+          headers: { 'content-type': 'application/json', 'x-hub-signature-256': 'sha256=123' },
+          body: JSON.stringify({}),
+        }));
+        expect(res.status).toBe(503);
+      } finally {
+        process.env.WHATSAPP_APP_SECRET = origSecret;
+      }
+    });
+
+    it('resolveTenantForChange respeita autoridade de phoneNumberId e não cai para WABA se phoneId não bateu', async () => {
+      const db = await readDB();
+      // Phone ID correto da clínica A
+      const matchA = resolveTenantForChange(db, PHONE_ID_A, 'waba-123456');
+      expect(matchA?.id).toBe(BIZ_A);
+
+      // Phone ID desconhecido com WABA da clínica A: NUNCA deve retornar a clínica A!
+      const mismatch = resolveTenantForChange(db, 'unknown_phone_id', 'waba-123456');
+      expect(mismatch).toBeNull();
+
+      // Sem phoneId, mas com WABA unívoco: fallback seguro
+      const fallbackWaba = resolveTenantForChange(db, '', 'waba-789012');
+      expect(fallbackWaba?.id).toBe(BIZ_B);
+    });
+
+    it('deliverPendingWhatsappMessages não gera double claim e respeita lease de envio', async () => {
+      await updateDB((d) => {
+        d.messages.push({
+          id: 'msg-double-claim-1',
+          businessId: BIZ_A,
+          conversationId: 'conv-test-1',
+          channel: 'whatsapp',
+          channelUserId: '5511988887777',
+          direction: 'out',
+          body: 'Teste de concorrência outbox',
+          status: 'pending',
+          at: '2026-09-19T10:00:00Z',
+        });
+      });
+
+      const count = await deliverPendingWhatsappMessages(BIZ_A);
+      expect(count).toBe(1);
+
+      const db = await readDB();
+      const sentMsg = db.messages.find((m) => m.id === 'msg-double-claim-1');
+      expect(sentMsg?.status).toBe('sent');
+      expect(sentMsg?.claimToken).toBeUndefined();
+    });
+
+    it('falha transitiva na Graph API mantém status "pending", agenda nextRetryAt e deliverWhatsappMessage não retorna "failed"', async () => {
+      // Mock fetch to simulate 500 transient error
+      const mock500Fetch = vi.fn(async () => ({
+        ok: false,
+        status: 500,
+        json: async () => ({ error: { message: 'Meta server error', code: 2 } }),
+      })) as any;
+
+      await updateDB((d) => {
+        d.messages.push({
+          id: 'msg-retry-test-1',
+          businessId: BIZ_A,
+          conversationId: 'conv-test-1',
+          channel: 'whatsapp',
+          channelUserId: '5511988887777',
+          direction: 'out',
+          body: 'Teste de retry status honesto',
+          status: 'pending',
+          at: '2026-09-19T10:00:00Z',
+        });
+      });
+
+      const res = await deliverWhatsappMessage(BIZ_A, 'msg-retry-test-1', { fetchFn: mock500Fetch });
+      expect(res.ok).toBe(false);
+      expect(res.status).toBe('pending'); // HONESTO: pending, não failed!
+      expect(res.nextRetryAt).toBeDefined();
+
+      const db = await readDB();
+      const msg = db.messages.find((m) => m.id === 'msg-retry-test-1')!;
+      expect(msg.status).toBe('pending');
+      expect(msg.attempts).toBe(1);
+      expect(msg.nextRetryAt).toBeDefined();
+    });
+
+    it('cron de WhatsApp autenticado (/api/cron/whatsapp) roda retry queue com verifyCronAuth', async () => {
+      process.env.CRON_SECRET = 'cron_secret_test_whatsapp_999';
+
+      // 1. Sem autorização -> 401
+      const noAuthRes = await cronWhatsappGET(jsonReq('/api/cron/whatsapp'));
+      expect(noAuthRes.status).toBe(401);
+
+      // 2. Com token correto -> 200 e processa retentativas
+      const authReq = jsonReq('/api/cron/whatsapp', {
+        headers: { authorization: 'Bearer cron_secret_test_whatsapp_999' },
+      });
+      const okRes = await cronWhatsappGET(authReq);
+      expect(okRes.status).toBe(200);
+      const summary = await jsonBody(okRes);
+      expect(summary.ok).toBe(true);
+      expect(summary.ranAt).toBeDefined();
+      expect(typeof summary.messagesProcessed).toBe('number');
+    });
+
+    it('campanha rejeita envio sem templateName (sem bypass allowFreeText)', async () => {
+      await updateDB((d) => {
+        d.contacts.push({
+          id: 'cnt-optin-template-test',
+          businessId: BIZ_A,
+          customerId: '',
+          name: 'Cliente OptIn',
+          phone: '5511911119999',
+          email: 'optin@email.com',
+          source: 'whatsapp',
+          lastInteraction: '2026-09-18T10:00:00Z',
+          marketingOptIn: true,
+          createdAt: '2026-09-18T10:00:00Z',
+          updatedAt: '2026-09-18T10:00:00Z',
+        });
+      });
+
+      const tokenA = await createSession(OWNER_A);
+      const createRes = await campaignsPOST(jsonReq('/api/campaigns', {
+        method: 'POST',
+        token: tokenA,
+        body: {
+          businessId: BIZ_A,
+          name: 'Campanha Sem Template',
+          segment: 'all_optin',
+          message: 'Mensagem sem template',
+        },
+      }));
+      const { campaign } = await jsonBody(createRes);
+
+      const readyRes = await campaignsPATCH(jsonReq('/api/campaigns', {
+        method: 'PATCH',
+        token: tokenA,
+        body: { businessId: BIZ_A, id: campaign.id, action: 'ready' },
+      }));
+      expect(readyRes.status).toBe(200);
+
+      // Tenta enviar com allowFreeText: true mas sem templateName -> 400 template_required
+      const sendRes = await campaignsPATCH(jsonReq('/api/campaigns', {
+        method: 'PATCH',
+        token: tokenA,
+        body: {
+          businessId: BIZ_A,
+          id: campaign.id,
+          action: 'send',
+          allowFreeText: true,
+        },
+      }));
+      expect(sendRes.status).toBe(400);
+      const errBody = await jsonBody(sendRes);
+      expect(errBody.code).toBe('template_required');
     });
   });
 });

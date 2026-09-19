@@ -26,6 +26,7 @@
 //   • businessId revalidado em cada passo: uma execução jamais toca linha de
 //     outra empresa, mesmo se o contexto/param vier adulterado.
 import { deliverWebhookIds } from '../webhooks';
+import { deliverWhatsappMessage, getWhatsappCredentials } from '../whatsapp-cloud-api';
 import { randomUUID } from 'node:crypto';
 import type {
   Automation, AutomationEdge, AutomationNode, AutomationRun, AutomationRunStep, Business, DB,
@@ -546,13 +547,28 @@ export async function drainAutomations(options: DrainOptions = {}): Promise<Auto
         const step = await updateDB((db) => {
           const run = db.automationRuns.find((r) => r.id === runId);
           const limits = limitsFor(run ? db.businesses.find((b) => b.id === run.businessId) : null);
-          const before = db.webhookDeliveries.length;
+          const beforeDeliveries = db.webhookDeliveries.length;
+          const beforeMessages = db.messages.length;
           const outcome = stepAutomationRun(db, { runId, holder, nowISO, limits });
-          return { outcome, deliveryIds: db.webhookDeliveries.slice(before).map((d) => d.id) };
+          const newMessages = db.messages.slice(beforeMessages).filter((m) => m.direction === 'out' && m.status === 'pending');
+          return {
+            outcome,
+            deliveryIds: db.webhookDeliveries.slice(beforeDeliveries).map((d) => d.id),
+            pendingMessages: newMessages.map((m) => ({ businessId: m.businessId, id: m.id })),
+          };
         });
         outcome = step.outcome;
         // Falha de rede/worker não desfaz o passo já committed: a outbox é durável.
         await deliverWebhookIds(step.deliveryIds).catch(() => { /* cron retoma a entrega */ });
+        if (step.pendingMessages.length > 0) {
+          const dbNow = await updateDB((d) => d); // snapshot fresco
+          for (const pm of step.pendingMessages) {
+            const biz = dbNow.businesses.find((b) => b.id === pm.businessId);
+            if (biz && getWhatsappCredentials(biz)) {
+              await deliverWhatsappMessage(pm.businessId, pm.id).catch(() => { /* cron retoma a entrega */ });
+            }
+          }
+        }
       } catch (e: any) {
         // Falha de infraestrutura: marca o erro na execução e segue — o
         // próximo ciclo decide de novo (nenhum estado é perdido).

@@ -160,3 +160,13 @@ O servidor InstaLink:
    - **403 Webhook**: Verifique se `WHATSAPP_VERIFY_TOKEN` e `WHATSAPP_APP_SECRET` batem exatamente com as configurações do painel Meta.
    - **131030 (Payment issue)**: A conta da WABA precisa ter uma forma de pagamento cadastrada no Gerenciador de Negócios da Meta.
    - **Template Required**: Mensagens ativas fora da janela de 24 horas exigem templates aprovados na Meta.
+
+---
+
+## 11. Processamento em Segundo Plano e Fila de Retentativas
+
+Para garantir a entrega resiliente de mensagens e campanhas mesmo em caso de instabilidades transitórias da Meta Cloud API:
+- **Endpoint**: `GET /api/cron/whatsapp` ou `POST /api/cron/whatsapp`
+- **Cabeçalho**: `Authorization: Bearer <CRON_SECRET>`
+- **Agendamento**: a cada 1 ou 2 minutos via Vercel Cron, GitHub Actions ou agendador externo.
+- As mensagens falhadas com erros transitórios (rate limits, 5xx, erros 131016/131021 da Meta) são reprocessadas com recuo exponencial (30s, 120s) e claim atômico via CAS.

@@ -43,10 +43,10 @@ export const PROVIDERS: ProviderDef[] = [
   {
     provider: 'whatsapp', kind: 'channel', label: 'WhatsApp',
     hint: 'Conversas do WhatsApp na caixa do InstaLink e envio pelo canal oficial.',
-    canConnect: false,
-    unavailableReason: 'Integração oficial (WhatsApp Cloud API) chega no P6.1. Hoje o InstaLink abre o WhatsApp por link e guarda a conversa na caixa de entrada.',
+    canConnect: true,
+    setupHint: 'Configure o WhatsApp Cloud API no painel do negócio ou via Master.',
     direction: 'both', events: ['message.received'], defaultEvent: '',
-    nativePending: true,
+    nativePending: false,
   },
   {
     provider: 'instagram', kind: 'channel', label: 'Instagram',
