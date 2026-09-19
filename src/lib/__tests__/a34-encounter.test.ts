@@ -19,9 +19,10 @@ import { createSession } from '../auth';
 import { GET as encountersGET, POST as encountersPOST, PATCH as encountersPATCH, DELETE as encountersDELETE } from '@/app/api/encounters/route';
 import { PERMISSIONS, permissionsFor } from '../permissions';
 import {
-  ENCOUNTER_LIMITS, ENCOUNTER_STATUS, ENCOUNTER_VERSION_ERROR, canEditEncounter, canFinalize,
-  cleanTags, cleanText, encounterForBooking, encounterInScope, encounterPrintBlocks,
-  encounterSignature, encounterSummary, encounterVersion, encountersForCustomer, versionConflict,
+  ENCOUNTER_LIMITS, ENCOUNTER_STATUS, ENCOUNTER_VERSION_ERROR, ENCOUNTER_VERSION_REQUIRED_ERROR,
+  canEditEncounter, canFinalize, canReopenEncounter, cleanTags, cleanText, encounterForBooking,
+  encounterForQueue, encounterInScope, encounterPrintBlocks, encounterSignature, encounterSummary,
+  encounterVersion, encountersForCustomer, hasExpectedVersion, versionConflict,
 } from '../encounters';
 import type { Business, DB, Encounter } from '../types';
 import { TEMP_DB_FILE } from './helpers/temp-db';
@@ -48,7 +49,7 @@ function business(id: string, ownerId = OWNER): Business {
 }
 
 const encounter = (extra: Partial<Encounter> & { id: string }): Encounter => ({
-  businessId: BIZ, bookingId: '', serviceId: 'svc-1', professionalId: 'pro-1', customerId: '',
+  businessId: BIZ, bookingId: '', queueId: '', serviceId: 'svc-1', professionalId: 'pro-1', customerId: '',
   contactId: 'ct-1', customerName: 'Ana', date: '2026-09-19', time: '09:00',
   complaint: '', evolution: 'Limpeza', guidance: 'Evitar frios', followUp: '', internalNote: '',
   tags: [], status: 'draft', version: 1, createdAt: NOW, updatedAt: NOW, createdBy: OWNER, updatedBy: OWNER,
@@ -95,6 +96,23 @@ function jsonReq(path: string, body: unknown, token?: string, method = 'POST'): 
 }
 const json = (res: Response) => res.json() as Promise<any>;
 
+/**
+ * PATCH como a TELA manda: sempre com `expectedVersion` fiel à revisão atual
+ * do servidor (a API recusa escrita sem trava — ver o teste do 400 adiante).
+ * Quando o próprio teste quer forçar uma revisão velha, passa `expectedVersion`.
+ */
+async function patch(body: Record<string, any>, tk = token) {
+  const id = String(body.id || '');
+  let expectedVersion = body.expectedVersion;
+  if (expectedVersion === undefined && id) {
+    const cur = (await readDB()).encounters.find((e) => e.id === id && e.businessId === BIZ);
+    if (cur) expectedVersion = encounterVersion(cur);
+  }
+  return encountersPATCH(jsonReq('/api/encounters', {
+    ...body, ...(expectedVersion === undefined ? {} : { expectedVersion }),
+  }, tk, 'PATCH'));
+}
+
 let token = '';
 beforeEach(async () => {
   fs.rmSync(TEMP_DB_FILE, { force: true });
@@ -140,25 +158,37 @@ describe('A3.4 · Bloco 5 — regras puras do registro', () => {
     expect(canFinalize({ evolution: '', complaint: 'dor no dente', guidance: '' }).ok).toBe(true);
   });
 
-  it('rascunho é editável; finalizado só depois de reabrir', () => {
+  it('finalized é READ ONLY para todos: canReopen só controla o botão', () => {
     expect(canEditEncounter({ status: 'draft' }, { canReopen: false })).toBe(true);
-    // Quem administra pode REABRIR (é a porta auditada), mas enquanto o
-    // registro está finalizado a edição de conteúdo continua fechada — a
-    // prova de que isso vale no servidor está nos testes de rota abaixo.
+    expect(canEditEncounter({ status: 'draft' }, { canReopen: true })).toBe(true);
+    // Nem o dono edita enquanto o documento está finalizado: a tela não pode
+    // deixar digitar para o servidor recusar depois.
     expect(canEditEncounter({ status: 'finalized' }, { canReopen: false })).toBe(false);
-    expect(canEditEncounter({ status: 'finalized' }, { canReopen: true })).toBe(true);
+    expect(canEditEncounter({ status: 'finalized' }, { canReopen: true })).toBe(false);
+    // Quem reabre segue sendo quem administra a unidade (mesma régua do servidor).
+    expect(canReopenEncounter('OWNER')).toBe(true);
+    expect(canReopenEncounter('ADMIN')).toBe(true);
+    expect(canReopenEncounter('MASTER')).toBe(true);
+    expect(canReopenEncounter('PROFISSIONAL')).toBe(false);
+    expect(canReopenEncounter('SECRETARIA')).toBe(false);
   });
 
-  it('revisão do registro: legado sem campo vale 1; a trava só age quando o chamador manda a versão', () => {
+  it('revisão do registro: legado sem campo vale 1 e escrita SEM versão é recusada', () => {
     expect(encounterVersion({ version: 3 })).toBe(3);
     expect(encounterVersion({})).toBe(1);
     expect(encounterVersion(null)).toBe(1);
     expect(encounterVersion({ version: 0 as number })).toBe(1);
-    // Sem expectedVersion (script/legado) não há conflito inventado.
-    expect(versionConflict({ version: 2 }, undefined)).toEqual({ conflict: false });
+    // A trava é obrigatória: sem número, não é "sem conflito", é erro de uso.
+    for (const missing of [undefined, null, '', 'abc', 0]) {
+      const res = versionConflict({ version: 2 }, missing);
+      expect(res.conflict, `expectedVersion inválido: ${String(missing)}`).toBe(true);
+      expect(res.conflict && res.message).toBe(ENCOUNTER_VERSION_REQUIRED_ERROR);
+    }
+    expect(hasExpectedVersion(1)).toBe(true);
+    expect(hasExpectedVersion('2')).toBe(true);
+    expect(hasExpectedVersion(undefined)).toBe(false);
     expect(versionConflict({ version: 2 }, 2)).toEqual({ conflict: false });
     const stale = versionConflict({ version: 2 }, 1);
-    expect(stale.conflict).toBe(true);
     expect(stale.conflict && stale.message).toBe(ENCOUNTER_VERSION_ERROR);
     expect(ENCOUNTER_VERSION_ERROR).toMatch(/atualizado em outra aba/i);
   });
@@ -236,7 +266,7 @@ describe('A3.4 · Bloco 5 — registro pelas rotas reais', () => {
   it('finalizar assina o registro e cria a versão seguinte', async () => {
     const e = await createFor('bk-1', { evolution: 'limpeza completa', guidance: 'evitar frios' });
     expect(e.version).toBe(1);
-    const fin = await encountersPATCH(jsonReq('/api/encounters', { businessId: BIZ, id: e.id, action: 'finalize' }, token, 'PATCH'));
+    const fin = await patch({ businessId: BIZ, id: e.id, action: 'finalize' }, token);
     expect(fin.status).toBe(200);
     const finalized = (await json(fin)).encounter;
     expect(finalized.status).toBe('finalized');
@@ -250,11 +280,11 @@ describe('A3.4 · Bloco 5 — registro pelas rotas reais', () => {
   // ═══════════════════════════════════════════════════════════════════
   it('doc/OWNER NÃO edita registro finalizado direto — só reabrindo', async () => {
     const e = await createFor('bk-1', { evolution: 'limpeza completa' });
-    await encountersPATCH(jsonReq('/api/encounters', { businessId: BIZ, id: e.id, action: 'finalize' }, token, 'PATCH'));
+    await patch({ businessId: BIZ, id: e.id, action: 'finalize' }, token);
 
-    const direto = await encountersPATCH(jsonReq('/api/encounters', {
+    const direto = await patch({
       businessId: BIZ, id: e.id, evolution: 'mudei por baixo', expectedVersion: e.version,
-    }, token, 'PATCH'));
+    }, token);
     expect(direto.status).toBe(409);
     expect((await json(direto)).error).toMatch(/finalizado não é editado direto/i);
 
@@ -267,9 +297,9 @@ describe('A3.4 · Bloco 5 — registro pelas rotas reais', () => {
       .toEqual(['encounter.created', 'encounter.finalized']);
 
     // A porta certa: reabrir (auditado) e SÓ ENTÃO editar.
-    const reabrir = await encountersPATCH(jsonReq('/api/encounters', { businessId: BIZ, id: e.id, action: 'reopen' }, token, 'PATCH'));
+    const reabrir = await patch({ businessId: BIZ, id: e.id, action: 'reopen' }, token);
     expect(reabrir.status).toBe(200);
-    const depois = await encountersPATCH(jsonReq('/api/encounters', { businessId: BIZ, id: e.id, evolution: 'agora sim' }, token, 'PATCH'));
+    const depois = await patch({ businessId: BIZ, id: e.id, evolution: 'agora sim' }, token);
     expect(depois.status).toBe(200);
     expect((await json(depois)).encounter.evolution).toBe('agora sim');
 
@@ -283,28 +313,28 @@ describe('A3.4 · Bloco 5 — registro pelas rotas reais', () => {
 
   it('ADMIN da unidade também NÃO edita finalizado direto', async () => {
     const e = await createFor('bk-1', { evolution: 'limpeza' });
-    await encountersPATCH(jsonReq('/api/encounters', { businessId: BIZ, id: e.id, action: 'finalize' }, token, 'PATCH'));
+    await patch({ businessId: BIZ, id: e.id, action: 'finalize' }, token);
     const adminToken = await createSession(ADMIN_USER);
     // O admin VÊ o registro (tem a permissão por padrão)…
     const get = await encountersGET(jsonReq(`/api/encounters?businessId=${BIZ}&bookingId=bk-1`, undefined, adminToken, 'GET'));
     expect((await json(get)).encounter?.id).toBe(e.id);
     // …e ainda assim a edição direta é recusada. Precisa reabrir.
-    const direto = await encountersPATCH(jsonReq('/api/encounters', { businessId: BIZ, id: e.id, guidance: 'x' }, adminToken, 'PATCH'));
+    const direto = await patch({ businessId: BIZ, id: e.id, guidance: 'x' }, adminToken);
     expect(direto.status).toBe(409);
-    const reabre = await encountersPATCH(jsonReq('/api/encounters', { businessId: BIZ, id: e.id, action: 'reopen' }, adminToken, 'PATCH'));
+    const reabre = await patch({ businessId: BIZ, id: e.id, action: 'reopen' }, adminToken);
     expect(reabre.status).toBe(200);
-    const edita = await encountersPATCH(jsonReq('/api/encounters', { businessId: BIZ, id: e.id, guidance: 'x' }, adminToken, 'PATCH'));
+    const edita = await patch({ businessId: BIZ, id: e.id, guidance: 'x' }, adminToken);
     expect(edita.status).toBe(200);
   });
 
   it('PROFISSIONAL também NÃO edita finalizado direto (nem o próprio)', async () => {
     const e = await createFor('bk-1', { evolution: 'limpeza' });
-    await encountersPATCH(jsonReq('/api/encounters', { businessId: BIZ, id: e.id, action: 'finalize' }, token, 'PATCH'));
+    await patch({ businessId: BIZ, id: e.id, action: 'finalize' }, token);
     const profToken = await createSession(PROF_USER);
-    const direto = await encountersPATCH(jsonReq('/api/encounters', { businessId: BIZ, id: e.id, evolution: 'x' }, profToken, 'PATCH'));
+    const direto = await patch({ businessId: BIZ, id: e.id, evolution: 'x' }, profToken);
     expect([403, 409]).toContain(direto.status);
     // E reabrir não é para ele — quem administra é que reabre.
-    const reabre = await encountersPATCH(jsonReq('/api/encounters', { businessId: BIZ, id: e.id, action: 'reopen' }, profToken, 'PATCH'));
+    const reabre = await patch({ businessId: BIZ, id: e.id, action: 'reopen' }, profToken);
     expect(reabre.status).toBe(403);
     const db = await readDB();
     expect(db.encounters.find((x) => x.id === e.id)!.evolution).toBe('limpeza');
@@ -317,16 +347,16 @@ describe('A3.4 · Bloco 5 — registro pelas rotas reais', () => {
   it('duas abas: a segunda com versão velha recebe 409 e NÃO sobrescreve', async () => {
     const e = await createFor('bk-1', { evolution: 'v1' });
     // Aba A salvou primeiro (versão 1 → 2).
-    const abaA = await encountersPATCH(jsonReq('/api/encounters', {
+    const abaA = await patch({
       businessId: BIZ, id: e.id, evolution: 'texto da aba A', expectedVersion: 1,
-    }, token, 'PATCH'));
+    }, token);
     expect(abaA.status).toBe(200);
     expect((await json(abaA)).encounter.version).toBe(2);
 
     // Aba B ainda acha que está na 1: recusa EXPLÍCITA, com recado claro.
-    const abaB = await encountersPATCH(jsonReq('/api/encounters', {
+    const abaB = await patch({
       businessId: BIZ, id: e.id, evolution: 'texto da aba B', expectedVersion: 1,
-    }, token, 'PATCH'));
+    }, token);
     expect(abaB.status).toBe(409);
     expect((await json(abaB)).error).toBe(ENCOUNTER_VERSION_ERROR);
 
@@ -336,9 +366,9 @@ describe('A3.4 · Bloco 5 — registro pelas rotas reais', () => {
     expect(row.version).toBe(2);
 
     // Recarregando (versão 2), a aba B consegue salvar o que ela quer.
-    const abaB2 = await encountersPATCH(jsonReq('/api/encounters', {
+    const abaB2 = await patch({
       businessId: BIZ, id: e.id, evolution: 'texto da aba B', expectedVersion: 2,
-    }, token, 'PATCH'));
+    }, token);
     expect(abaB2.status).toBe(200);
     expect((await json(abaB2)).encounter.version).toBe(3);
   });
@@ -346,23 +376,77 @@ describe('A3.4 · Bloco 5 — registro pelas rotas reais', () => {
   it('finalizar e reabrir também respeitam expectedVersion', async () => {
     const e = await createFor('bk-1', { evolution: 'limpeza' });
     // Primeiro salva (1 → 2); quem ainda manda versão 1 é recusado já no finalize.
-    await encountersPATCH(jsonReq('/api/encounters', { businessId: BIZ, id: e.id, evolution: 'limpeza feita' }, token, 'PATCH'));
-    const finVelho = await encountersPATCH(jsonReq('/api/encounters', { businessId: BIZ, id: e.id, action: 'finalize', expectedVersion: 1 }, token, 'PATCH'));
+    await patch({ businessId: BIZ, id: e.id, evolution: 'limpeza feita' }, token);
+    const finVelho = await patch({ businessId: BIZ, id: e.id, action: 'finalize', expectedVersion: 1 }, token);
     expect(finVelho.status).toBe(409);
-    const finOk = await encountersPATCH(jsonReq('/api/encounters', { businessId: BIZ, id: e.id, action: 'finalize', expectedVersion: 2 }, token, 'PATCH'));
+    const finOk = await patch({ businessId: BIZ, id: e.id, action: 'finalize', expectedVersion: 2 }, token);
     expect(finOk.status).toBe(200);
-    const reopenVelho = await encountersPATCH(jsonReq('/api/encounters', { businessId: BIZ, id: e.id, action: 'reopen', expectedVersion: 1 }, token, 'PATCH'));
+    const reopenVelho = await patch({ businessId: BIZ, id: e.id, action: 'reopen', expectedVersion: 1 }, token);
     expect(reopenVelho.status).toBe(409);
-    const reopenOk = await encountersPATCH(jsonReq('/api/encounters', { businessId: BIZ, id: e.id, action: 'reopen', expectedVersion: 3 }, token, 'PATCH'));
+    const reopenOk = await patch({ businessId: BIZ, id: e.id, action: 'reopen', expectedVersion: 3 }, token);
     expect(reopenOk.status).toBe(200);
     expect((await json(reopenOk)).encounter.version).toBe(4);
   });
 
+  it('PATCH sem expectedVersion é 400 — não existe caminho de escrita sem trava', async () => {
+    const e = await createFor('bk-1', { evolution: 'limpeza' });
+    for (const body of [
+      { businessId: BIZ, id: e.id, evolution: 'sem trava' },
+      { businessId: BIZ, id: e.id, evolution: 'sem trava', expectedVersion: '' },
+      { businessId: BIZ, id: e.id, evolution: 'sem trava', expectedVersion: 'x' },
+      { businessId: BIZ, id: e.id, action: 'finalize' },
+    ]) {
+      const res = await encountersPATCH(jsonReq('/api/encounters', body, token, 'PATCH'));
+      expect(res.status).toBe(400);
+      expect((await json(res)).error).toBe(ENCOUNTER_VERSION_REQUIRED_ERROR);
+    }
+    const db = await readDB();
+    expect(db.encounters[0].evolution).toBe('limpeza');
+    expect(db.encounters[0].status).toBe('draft');
+    expect(db.audit.map((a) => a.action)).toEqual(['encounter.created']);
+  });
+
+  it('a ENTRADA DA FILA também é 1:1: abrir de novo devolve o MESMO registro', async () => {
+    const db0 = await readDB();
+    db0.queue.push({
+      id: 'q-9', businessId: BIZ, customerName: 'Walk-in', customerPhone: '11944443333',
+      contactId: '', serviceId: '', professionalId: '', bookingId: '', note: '',
+      status: 'in_service', date: '2026-09-19', createdAt: '2026-09-19T11:00:00.000Z',
+      calledAt: '', startedAt: '2026-09-19T11:05:00.000Z', endedAt: '', updatedBy: OWNER, updatedAt: NOW,
+    } as any);
+    await writeDB(db0);
+
+    const first = await json(await encountersPOST(jsonReq('/api/encounters', { businessId: BIZ, queueId: 'q-9' }, token)));
+    const second = await json(await encountersPOST(jsonReq('/api/encounters', { businessId: BIZ, queueId: 'q-9' }, token)));
+    expect(first.encounter.queueId).toBe('q-9');
+    expect(second.reused).toBe(true);
+    expect(second.encounter.id).toBe(first.encounter.id);
+    const db = await readDB();
+    expect(db.encounters.filter((e) => e.queueId === 'q-9')).toHaveLength(1);
+    // A leitura por fila (usada pela tela) devolve o mesmo registro.
+    const get = await encountersGET(jsonReq(`/api/encounters?businessId=${BIZ}&queueId=q-9`, undefined, token, 'GET'));
+    expect((await json(get)).encounter.id).toBe(first.encounter.id);
+  });
+
+  it('recarregar por ID é leitura pura: nunca cria um segundo registro', async () => {
+    const e = await createFor('bk-1', { evolution: 'limpeza' });
+    const before = (await readDB()).encounters.length;
+    const res = await encountersGET(jsonReq(`/api/encounters?businessId=${BIZ}&id=${e.id}`, undefined, token, 'GET'));
+    expect(res.status).toBe(200);
+    expect((await json(res)).encounter.id).toBe(e.id);
+    const get2 = await encountersGET(jsonReq(`/api/encounters?businessId=${BIZ}&id=${e.id}`, undefined, token, 'GET'));
+    expect((await json(get2)).encounter.version).toBe(e.version);
+    expect((await readDB()).encounters.length).toBe(before);
+    // Registro de OUTRA unidade não aparece nem por id.
+    const other = await encountersGET(jsonReq(`/api/encounters?businessId=${BIZ}&id=bk-outra`, undefined, token, 'GET'));
+    expect(other.status).toBe(404);
+  });
+
   it('salvar sem mudança não cria versão nova (o autosave bate aqui e precisa ser barato)', async () => {
     const e = await createFor('bk-1', { evolution: 'limpeza' });
-    const igual = await encountersPATCH(jsonReq('/api/encounters', {
+    const igual = await patch({
       businessId: BIZ, id: e.id, evolution: 'limpeza', expectedVersion: 1,
-    }, token, 'PATCH'));
+    }, token);
     expect(igual.status).toBe(200);
     expect((await json(igual)).encounter.version).toBe(1);
     const db = await readDB();
@@ -375,16 +459,16 @@ describe('A3.4 · Bloco 5 — registro pelas rotas reais', () => {
     const db = await readDB();
     delete (db.encounters.find((x) => x.id === e.id) as any).version;
     await writeDB(db);
-    const res = await encountersPATCH(jsonReq('/api/encounters', {
+    const res = await patch({
       businessId: BIZ, id: e.id, evolution: 'agora com versão', expectedVersion: 1,
-    }, token, 'PATCH'));
+    }, token);
     expect(res.status).toBe(200);
     expect((await json(res)).encounter.version).toBe(2);
   });
 
   it('finalizar sem conteúdo responde 400 com a razão', async () => {
     const e = await createFor('bk-1');
-    const res = await encountersPATCH(jsonReq('/api/encounters', { businessId: BIZ, id: e.id, action: 'finalize' }, token, 'PATCH'));
+    const res = await patch({ businessId: BIZ, id: e.id, action: 'finalize' }, token);
     expect(res.status).toBe(400);
     expect((await json(res)).error).toMatch(/o que foi feito/i);
   });
@@ -399,16 +483,16 @@ describe('A3.4 · Bloco 5 — registro pelas rotas reais', () => {
     const outro = await createFor('bk-2');
     const getOutro = await encountersGET(jsonReq(`/api/encounters?businessId=${BIZ}&bookingId=bk-2`, undefined, profToken, 'GET'));
     expect((await json(getOutro)).encounter).toBeNull();
-    const editarOutro = await encountersPATCH(jsonReq('/api/encounters', { businessId: BIZ, id: outro.id, evolution: 'x' }, profToken, 'PATCH'));
+    const editarOutro = await patch({ businessId: BIZ, id: outro.id, evolution: 'x' }, profToken);
     expect(editarOutro.status).toBe(403);
     // E finalizar o do colega também não passa.
-    const fin = await encountersPATCH(jsonReq('/api/encounters', { businessId: BIZ, id: outro.id, action: 'finalize' }, profToken, 'PATCH'));
+    const fin = await patch({ businessId: BIZ, id: outro.id, action: 'finalize' }, profToken);
     expect(fin.status).toBe(403);
   });
 
   it('registro finalizado não é apagado por profissional, mas é por quem administra', async () => {
     const e = await createFor('bk-1', { evolution: 'limpeza' });
-    await encountersPATCH(jsonReq('/api/encounters', { businessId: BIZ, id: e.id, action: 'finalize' }, token, 'PATCH'));
+    await patch({ businessId: BIZ, id: e.id, action: 'finalize' }, token);
     const profToken = await createSession(PROF_USER);
     const doProf = await encountersDELETE(jsonReq('/api/encounters', { businessId: BIZ, id: e.id }, profToken, 'DELETE'));
     expect(doProf.status).toBe(403);

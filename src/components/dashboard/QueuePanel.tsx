@@ -236,6 +236,14 @@ export function QueuePanel({ businessId, date, rows, loading, canWrite, canEncou
                     {onFitIn && (
                       <Button size="sm" variant="ghost" onClick={() => onFitIn(row)}>Encaixar na agenda</Button>
                     )}
+                    {/* A3.4 fix (2ª revisão): depois que o registro fecha, falta
+                        uma porta óbvia para voltar nele. Quem está em atendimento
+                        e tem a permissão reabre o registro AQUI — sem tocar no
+                        status da fila. Sem a permissão, a linha segue só
+                        operacional (nada de conteúdo profissional). */}
+                    {row.status === 'in_service' && canEncounter && onEncounter && (
+                      <Button size="sm" variant="secondary" onClick={() => onEncounter(row)}>Abrir atendimento</Button>
+                    )}
                     {row.bookingId && onOpenBooking && (
                       <Button size="sm" variant="secondary" onClick={() => onOpenBooking(row.bookingId)}>Ver horário</Button>
                     )}

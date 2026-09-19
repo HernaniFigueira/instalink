@@ -85,7 +85,8 @@ describe('A3.4 fix · autosave do registro (contrato da tela)', () => {
   });
 
   it('o salvamento manda expectedVersion e lê o 409 como conflito (nada de overwrite silencioso)', () => {
-    expect(SHEET).toMatch(/encounterContentPayload\(businessId, current\.id, currentForm, current\.version\)/);
+    // O payload carrega o que foi ENVIADO (sentForm) e a revisão conhecida.
+    expect(SHEET).toMatch(/encounterContentPayload\(businessId, current\.id, sentForm, current\.version\)/);
     expect(SHEET).toMatch(/setConflict\(res\.status === 409\)/);
     expect(SHEET).toMatch(/ENCOUNTER_VERSION_ERROR/);
     expect(SHEET).toMatch(/Recarregar registro/);
@@ -100,7 +101,7 @@ describe('A3.4 fix · autosave do registro (contrato da tela)', () => {
 
   it('a tela finalizada explica a porta da reabertura (não some com a ação)', () => {
     expect(SHEET).toMatch(/Reabrir para editar/);
-    expect(SHEET).toMatch(/action: 'reopen'/);
+    expect(SHEET).toMatch(/transition\('reopen'\)/);
   });
 });
 
@@ -202,7 +203,7 @@ describe('A3.4 fix · artefato de build fora do versionamento', () => {
 describe('A3.4 fix · a via impressa continua saindo do MESMO registro', () => {
   it('anotação interna nunca entra no papel, e a assinatura vem de quem atendeu', () => {
     const row: Encounter = {
-      id: 'e1', businessId: 'b1', bookingId: 'bk-1', serviceId: 's1', professionalId: 'p1',
+      id: 'e1', businessId: 'b1', bookingId: 'bk-1', queueId: '', serviceId: 's1', professionalId: 'p1',
       customerId: '', contactId: 'c1', customerName: 'Ana', date: '2026-09-19', time: '09:00',
       complaint: 'dor', evolution: 'limpeza', guidance: 'evitar frios', followUp: 'retorno em 30 dias',
       internalNote: 'segredo da unidade', tags: [], status: 'finalized', version: 2,

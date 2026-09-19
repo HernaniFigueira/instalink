@@ -597,6 +597,12 @@ export interface Encounter {
   businessId: ID;
   /** Agendamento de origem ('' quando o registro foi feito sem agendamento). */
   bookingId: string;
+  /**
+   * A3.4 fix (2ª revisão) — entrada da FILA de origem ('' quando não veio do
+   * balcão). É a chave do 1:1 com o walk-in: um cliente que chegou sem horário
+   * tem UM registro, mesmo que a tela seja aberta várias vezes.
+   */
+  queueId: string;
   serviceId: string;
   professionalId: string;
   customerId: string; // conta do cliente ('' = visitante/legado)
@@ -1251,6 +1257,8 @@ export interface Task {
   leadId?: string;
   bookingId?: string;
   customerId?: string;
+  /** A3.4 fix (2ª revisão): pendência nascida de um atendimento (retorno). */
+  encounterId?: string;
   source: 'automation' | 'manual';
 }
 

@@ -2,22 +2,40 @@
 // ═══════════════════════════════════════════════════════════════
 // A3.4 · BLOCO 5 — REGISTRO DO ATENDIMENTO (painel lateral)
 // ═══════════════════════════════════════════════════════════════
-// Abre a partir do agendamento ("Atendimento") ou do histórico do cliente.
+// Abre a partir do agendamento ("Atendimento"), da fila ("Abrir atendimento")
+// ou do histórico do cliente.
+//
 // O que a tela faz:
-//   • rascunho: escrita livre, salva sem fechar;
+//   • rascunho: escrita livre, salva SOZINHO um segundo depois da última tecla;
 //   • finalizar: exige conteúdo mínimo e ASSINA o registro (nome do
-//     profissional) — depois disso o texto não muda em silêncio;
+//     profissional) — depois disso o texto só muda reabrindo;
 //   • reabrir: só quem administra a unidade (e fica na auditoria);
+//   • depois de finalizar: "como fica o acompanhamento?" — encerrar, agendar o
+//     retorno (abre o agendamento pré-preenchido, não cria nada) ou pedir à
+//     recepção (cria uma Tarefa de verdade, vinculada ao atendimento);
 //   • imprimir: uma via do CLIENTE com o que ele levou para casa — a anotação
 //     interna não entra no papel.
+//
+// REGRAS DE OURO DESTA TELA (2ª revisão da B5):
+//   1. o ref `latest` é a fonte SÍNCRONA do que está na tela — todo caminho que
+//      muda o formulário passa por `updateForm`, e o salvamento lê SEMPRE dali
+//      (nunca do último payload do servidor);
+//   2. se a pessoa digitar enquanto o request está em voo, a resposta NÃO pode
+//      apagar o texto novo: só adota o formulário do servidor quando ninguém
+//      mexeu desde o envio (`applySaveResult`);
+//   3. `finalized` é READ ONLY para todos os papéis: `canReopen` só decide se o
+//      botão "Reabrir para editar" aparece;
+//   4. toda escrita manda `expectedVersion` — e recarregar depois de conflito é
+//      leitura POR ID (nunca POST, que criaria outro registro).
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Icon } from '@/components/icons';
 import { Badge, Button, Drawer, Field, Input, Notice, Textarea } from '@/components/ui';
 import { apiGet, apiSend } from '@/lib/api-client';
 import {
   ENCOUNTER_AUTOSAVE_LABELS, ENCOUNTER_AUTOSAVE_MS, ENCOUNTER_LABELS, ENCOUNTER_STATUS,
-  ENCOUNTER_VERSION_ERROR, canEditEncounter, canFinalize, encounterContentPayload, encounterDraftKey,
-  encounterPrintBlocks, encounterSignature, encounterSummary,
+  ENCOUNTER_VERSION_ERROR, applySaveResult, canEditEncounter, canFinalize, encounterContentPayload,
+  encounterDraftKey, encounterPrintBlocks, encounterSignature, encounterSummary,
+  followUpTaskNote, followUpTaskTitle,
 } from '@/lib/encounters';
 import { formatDateBR } from '@/lib/tz';
 import type { Encounter } from '@/lib/types';
@@ -28,6 +46,16 @@ export interface EncounterRow extends Encounter {
   bookingStatus: string;
 }
 
+export interface FollowUpSeed {
+  encounterId: string;
+  bookingId: string;
+  contactId: string;
+  customerName: string;
+  serviceId: string;
+  professionalId: string;
+  followUp: string;
+}
+
 interface Props {
   businessId: string;
   /** Agendamento de origem (o registro é 1:1 com ele). */
@@ -36,10 +64,12 @@ interface Props {
   seed?: { customerName?: string; serviceId?: string; professionalId?: string; date?: string; time?: string; contactId?: string; customerId?: string };
   /** Modelo de leitura (aberto pelo histórico do cliente, já existente). */
   existing?: EncounterRow | null;
-  /** Entrada da fila de origem (o registro nasce com a chegada como horário). */
+  /** Entrada da fila de origem (o registro é 1:1 com ela). */
   queueId?: string;
   /** Quem manda na unidade: único que reabre registro finalizado. */
   canReopen?: boolean;
+  /** "Agendar retorno": quem sabe abrir o agendamento pré-preenchido é o pai. */
+  onScheduleReturn?: (seed: FollowUpSeed) => void;
   onClose: () => void;
   onChanged?: () => void;
 }
@@ -50,62 +80,67 @@ const EMPTY = {
 
 type Form = typeof EMPTY;
 
-export function EncounterSheet({ businessId, bookingId, seed, existing, queueId, canReopen = false, onClose, onChanged }: Props) {
+const formOf = (e: EncounterRow): Form => ({
+  complaint: e.complaint || '', evolution: e.evolution || '', guidance: e.guidance || '',
+  followUp: e.followUp || '', internalNote: e.internalNote || '', tags: (e.tags || []).join(', '),
+});
+
+export function EncounterSheet({
+  businessId, bookingId, seed, existing, queueId, canReopen = false, onScheduleReturn, onClose, onChanged,
+}: Props) {
   const [row, setRow] = useState<EncounterRow | null>(existing || null);
-  const [form, setForm] = useState({ ...EMPTY });
+  const [form, setForm] = useState<Form>({ ...EMPTY });
   const [loading, setLoading] = useState(!existing);
   const [busy, setBusy] = useState('');
   const [error, setError] = useState('');
-  const [notice, setNotice] = useState('');
   const [saved, setSaved] = useState('');
-  /**
-   * A3.4 fix (revisão B5) — AUTOSAVE de verdade.
-   *
-   * O rascunho não pode depender de lembrar de apertar Salvar: quem atende
-   * está com o cliente na frente. O que a tela faz:
-   *   • espera `ENCOUNTER_AUTOSAVE_MS` de silêncio depois da última tecla (nada de uma
-   *     requisição por caractere);
-   *   • só roda em `draft`, com mudança real e sem request em andamento;
-   *   • manda `expectedVersion` — se outra aba salvou antes, mostra o 409 e
-   *     para, em vez de sobrescrever;
-   *   • diz o que está acontecendo ("Salvando…", "Salvo agora", erro);
-   *   • ao fechar com alteração pendente, tenta o flush e, se não der, avisa
-   *     em vez de perder o texto em silêncio.
-   */
   const [autoState, setAutoState] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle');
-  const [autoAt, setAutoAt] = useState('');
   const [conflict, setConflict] = useState(false);
-  // Espelho síncrono: o timer e o fechamento leem SEMPRE o último texto, mesmo
-  // antes de o React reprocessar o estado.
-  const latest = useRef({ row: existing || null, form: { ...EMPTY } });
+  // Pós-atendimento (item 9): "como fica o acompanhamento?"
+  const [followUpOpen, setFollowUpOpen] = useState(false);
+  const [followUpNote, setFollowUpNote] = useState('');
+  const [taskBusy, setTaskBusy] = useState(false);
+  const [taskDone, setTaskDone] = useState('');
+
+  /**
+   * Espelho SÍNCRONO do estado da tela. É daqui que o autosave, o flush de
+   * fechamento e as ações de estado leem — não do último render nem do último
+   * payload do servidor. Todo caminho que mexe no formulário passa por
+   * `updateForm` (não existe `setForm` solto no arquivo).
+   */
+  const latest = useRef<{ row: EncounterRow | null; form: Form }>({ row: existing || null, form: { ...EMPTY } });
   const inflight = useRef<Promise<boolean> | null>(null);
   const lastSaved = useRef('');
 
+  /** Única porta de escrita do formulário: mantém ref e estado juntos. */
+  const updateForm = useCallback((next: Form) => {
+    latest.current = { ...latest.current, form: next };
+    setForm(next);
+  }, []);
+
+  /** Única porta de escrita do registro (row) — sempre com o ref em sincronia. */
+  const updateRow = useCallback((next: EncounterRow) => {
+    latest.current = { ...latest.current, row: next };
+    setRow(next);
+  }, []);
+
+  /** Adota o que veio do servidor (registro + formulário). */
   const apply = useCallback((e: EncounterRow) => {
-    const next = {
-      complaint: e.complaint || '', evolution: e.evolution || '', guidance: e.guidance || '',
-      followUp: e.followUp || '', internalNote: e.internalNote || '', tags: (e.tags || []).join(', '),
-    };
+    const next = formOf(e);
     latest.current = { row: e, form: next };
     lastSaved.current = encounterDraftKey(next);
     setRow(e);
     setForm(next);
     setAutoState('saved');
-    setAutoAt(new Date().toISOString());
   }, []);
 
-  const open = useCallback(async (create = false) => {
+  const open = useCallback(async () => {
     setError('');
-    if (existing && !create) { apply(existing); setLoading(false); return; }
+    if (existing) { apply(existing); setLoading(false); return; }
     setLoading(true);
-    const query = bookingId ? `bookingId=${encodeURIComponent(bookingId)}` : '';
-    const res = query
-      ? await apiGet<{ encounter: EncounterRow | null }>(`/api/encounters?businessId=${businessId}&${query}`, { scope: 'area', area: 'Atendimento' })
-      : null;
-    if (res && !res.ok) { setError(res.message || 'Não foi possível abrir o atendimento.'); setLoading(false); return; }
-    const found = res?.data?.encounter || null;
-    if (found) { apply(found); setLoading(false); return; }
-    // Ainda não existe: o registro nasce junto com o agendamento (rascunho).
+    // Sem registro em mãos: o POST é IDEMPOTENTE por vínculo (agendamento ou
+    // entrada da fila) — ele devolve o existente com `reused: true` em vez de
+    // criar um segundo documento.
     const created = await apiSend<{ encounter: EncounterRow }>('/api/encounters', 'POST', {
       businessId, bookingId,
       customerName: seed?.customerName || '', serviceId: seed?.serviceId || '',
@@ -118,44 +153,63 @@ export function EncounterSheet({ businessId, bookingId, seed, existing, queueId,
     apply(created.data!.encounter);
   }, [apply, bookingId, businessId, existing, queueId, seed]);
 
-  useEffect(() => { open(); }, [open]);
+  useEffect(() => { void open(); }, [open]);
+
+  /** Recarrega PELO ID — leitura pura. Nunca cria registro novo. */
+  const reload = useCallback(async () => {
+    const current = latest.current.row;
+    if (!current?.id) return;
+    setError('');
+    const res = await apiGet<{ encounter: EncounterRow }>(
+      `/api/encounters?businessId=${businessId}&id=${encodeURIComponent(current.id)}`,
+      { scope: 'area', area: 'Atendimento' },
+    );
+    if (!res.ok || !res.data?.encounter) { setError(res.message || 'Não foi possível recarregar o atendimento.'); return; }
+    setConflict(false);
+    apply(res.data.encounter);
+  }, [apply, businessId]);
 
   const isDraft = row?.status === 'draft';
   const editable = row ? canEditEncounter(row, { canReopen }) : false;
-  const dirty = useMemo(() => {
-    if (!row) return false;
-    return form.complaint !== (row.complaint || '')
-      || form.evolution !== (row.evolution || '')
-      || form.guidance !== (row.guidance || '')
-      || form.followUp !== (row.followUp || '')
-      || form.internalNote !== (row.internalNote || '')
-      || form.tags !== (row.tags || []).join(', ');
-  }, [form, row]);
+  const dirty = useMemo(() => !!row && encounterDraftKey(form) !== lastSaved.current, [form, row]);
 
   /**
-   * Salva o conteúdo. `silent` é o caminho do autosave (não usa os avisos
-   * grandes, só o indicador discreto). Devolve `true` quando gravou.
+   * Salva o conteúdo. Lê SEMPRE o estado atual do ref (o que está na tela
+   * agora), manda a revisão conhecida e, ao voltar, só adota o texto do
+   * servidor se ninguém digitou durante o envio.
    */
   const save = useCallback(async (opts: { silent?: boolean } = {}): Promise<boolean> => {
     const current = latest.current.row;
-    const currentForm = latest.current.form;
     if (!current || current.status !== 'draft') return false;
-    if (encounterDraftKey(currentForm) === lastSaved.current) return true; // nada novo
-    if (inflight.current) return inflight.current;                 // um por vez
+    const sentForm = latest.current.form;
+    const sentKey = encounterDraftKey(sentForm);
+    if (sentKey === lastSaved.current) return true;      // nada para salvar
+    if (inflight.current) return inflight.current;        // um request por vez
 
     if (!opts.silent) { setBusy('save'); setError(''); setSaved(''); }
     setAutoState('saving');
     const run = (async () => {
-      const res = await apiSend<{ encounter: EncounterRow }>('/api/encounters', 'PATCH',
-        encounterContentPayload(businessId, current.id, currentForm, current.version),
-        { scope: 'action', area: 'Atendimento' });
+      const res = await apiSend<{ encounter: EncounterRow }>(
+        '/api/encounters', 'PATCH',
+        encounterContentPayload(businessId, current.id, sentForm, current.version),
+        { scope: 'action', area: 'Atendimento' },
+      );
       if (!res.ok) {
         setAutoState('error');
         setConflict(res.status === 409);
         setError(res.message);
         return false;
       }
-      apply(res.data!.encounter);
+      const serverRow = res.data!.encounter;
+      // O que o servidor confirmou é `sentKey`. Se a tela já tem texto mais
+      // novo, ele é PRESERVADO: o próximo ciclo salva o resto com a versão nova.
+      const result = applySaveResult({
+        sentKey, currentKey: encounterDraftKey(latest.current.form), serverVersion: serverRow.version,
+      });
+      lastSaved.current = result.lastSavedKey;
+      updateRow(serverRow);
+      if (result.adoptServerForm) { updateForm(formOf(serverRow)); setAutoState('saved'); }
+      else setAutoState('idle');
       setConflict(false);
       if (!opts.silent) { setBusy(''); setSaved('Registro salvo.'); }
       return true;
@@ -168,11 +222,11 @@ export function EncounterSheet({ businessId, bookingId, seed, existing, queueId,
       setBusy((b) => (b === 'save' ? '' : b));
       onChanged?.();
     }
-  }, [apply, businessId, onChanged]);
+  }, [businessId, onChanged, updateForm, updateRow]);
 
-  // Autosave: só em rascunho, só com mudança real, um request por vez, e só
-  // depois de o dedo parar. `conflict` desliga o automatismo: com a versão
-  // velha, insistir só repetiria o 409.
+  // Autosave: só em rascunho, só com mudança real, um request por vez e só
+  // depois de o dedo parar. `conflict` desliga o automatismo (insistir só
+  // repetiria o 409) até a pessoa recarregar.
   useEffect(() => {
     if (!row || row.status !== 'draft' || conflict) return;
     if (encounterDraftKey(form) === lastSaved.current) return;
@@ -193,37 +247,65 @@ export function EncounterSheet({ businessId, bookingId, seed, existing, queueId,
     onClose();
   }, [save, onClose]);
 
+  /** Toda escrita de estado manda a revisão FRESCA do ref (nunca a do render). */
+  async function transition(action: 'finalize' | 'reopen') {
+    const current = latest.current.row;
+    if (!current) return;
+    setError(''); setSaved(''); setBusy(action);
+    const res = await apiSend<{ encounter: EncounterRow }>('/api/encounters', 'PATCH', {
+      businessId, id: current.id, action, expectedVersion: current.version,
+    }, { scope: 'action', area: 'Atendimento' });
+    setBusy('');
+    if (!res.ok) { setConflict(res.status === 409); setError(res.message); return; }
+    apply(res.data!.encounter);
+    setConflict(false);
+    if (action === 'finalize') {
+      setSaved('Atendimento finalizado e assinado.');
+      setFollowUpNote(res.data!.encounter.followUp || '');
+      setFollowUpOpen(true);
+    } else {
+      setSaved('Registro reaberto para edição (a reabertura fica na auditoria).');
+      setFollowUpOpen(false);
+    }
+    onChanged?.();
+  }
+
   async function finalize() {
     if (!row) return;
     const check = canFinalize(form);
     if (!check.ok) { setError(check.error); return; }
     setError('');
-    // Salvar antes de assinar: o documento final tem o texto que está na tela.
+    // Salvar antes de assinar: o documento final tem o texto que está na tela —
+    // e a versão usada na assinatura é a que voltou do save, não a do render.
     if (dirty) {
       const ok = await save();
       if (!ok) return;
     }
-    setBusy('finalize');
-    const res = await apiSend<{ encounter: EncounterRow }>('/api/encounters', 'PATCH', {
-      businessId, id: row.id, action: 'finalize',
-    }, { scope: 'action', area: 'Atendimento' });
-    setBusy('');
-    if (!res.ok) { setError(res.message); return; }
-    apply(res.data!.encounter);
-    setSaved('Atendimento finalizado e assinado.');
-    onChanged?.();
+    await transition('finalize');
   }
 
-  async function reopen() {
-    if (!row) return;
-    setBusy('reopen'); setError('');
-    const res = await apiSend<{ encounter: EncounterRow }>('/api/encounters', 'PATCH', {
-      businessId, id: row.id, action: 'reopen',
+  /** "Pedir à recepção": cria uma TAREFA (o sistema que já existe). */
+  async function askReception() {
+    const current = latest.current.row;
+    if (!current) return;
+    const note = followUpTaskNote(current.followUp, followUpNote);
+    if (!note && !followUpNote.trim() && !current.followUp.trim()) {
+      setError('Escreva a instrução para a recepção (ex: ligar e marcar o retorno em 30 dias).');
+      return;
+    }
+    setTaskBusy(true); setError('');
+    const res = await apiSend<{ task: { id: string } }>('/api/tasks', 'POST', {
+      businessId,
+      title: followUpTaskTitle(current.customerName),
+      note: note || current.followUp,
+      contactId: current.contactId || undefined,
+      bookingId: current.bookingId || undefined,
+      encounterId: current.id,
     }, { scope: 'action', area: 'Atendimento' });
-    setBusy('');
-    if (!res.ok) { setError(res.message); return; }
-    apply(res.data!.encounter);
-    setSaved('Registro reaberto para edição (a reabertura fica na auditoria).');
+    setTaskBusy(false);
+    if (!res.ok) { setError(res.message || 'Não foi possível pedir à recepção.'); return; }
+    setTaskDone('Pedido registrado como tarefa para a recepção.');
+    setFollowUpOpen(false);
     onChanged?.();
   }
 
@@ -275,7 +357,7 @@ export function EncounterSheet({ businessId, bookingId, seed, existing, queueId,
             </Button>
           )}
           {row && !isDraft && canReopen && (
-            <Button variant="warning" size="sm" onClick={reopen} disabled={!!busy}>
+            <Button variant="warning" size="sm" onClick={() => { void transition('reopen'); }} disabled={!!busy}>
               {busy === 'reopen' ? 'Reabrindo…' : 'Reabrir para editar'}
             </Button>
           )}
@@ -285,6 +367,7 @@ export function EncounterSheet({ businessId, bookingId, seed, existing, queueId,
       <div className="px-5 py-4 space-y-4">
         {error && <Notice tone="error">{error}</Notice>}
         {saved && !error && <Notice tone="success">{saved}</Notice>}
+        {taskDone && !error && <Notice tone="success">{taskDone}</Notice>}
         {loading && <p className="text-sm text-[var(--text-muted)]">Abrindo o atendimento…</p>}
 
         {row && (
@@ -293,25 +376,59 @@ export function EncounterSheet({ businessId, bookingId, seed, existing, queueId,
               <Notice tone="warning" title="Esta versão ficou velha">
                 {ENCOUNTER_VERSION_ERROR} O que você digitou continua na tela — recarregue o registro
                 para ver o que a outra aba salvou antes de decidir o que fica.
-                <button type="button" className="ml-1 underline font-semibold"
-                  onClick={() => { setConflict(false); void open(true); }}>Recarregar registro</button>
+                <button type="button" className="ml-1 underline font-semibold" onClick={() => { void reload(); }}>
+                  Recarregar registro
+                </button>
               </Notice>
             )}
+
             {row.status === 'finalized' && (
               <Notice tone="info" title="Registro finalizado">
                 Este documento foi assinado por {encounterSignature(row)}. Alterar exige reabrir — e a
                 reabertura fica registrada na auditoria da unidade.
               </Notice>
             )}
+
+            {/* ── Pós-atendimento: "como fica o acompanhamento?" ── */}
+            {followUpOpen && row.status === 'finalized' && (
+              <div className="rounded-md border border-[var(--border)] bg-[var(--surface-2)] p-4 space-y-3">
+                <p className="text-sm font-semibold text-[var(--text)]">Atendimento finalizado. Próximo passo:</p>
+                <div className="flex flex-wrap gap-2">
+                  <Button size="sm" variant="primary" onClick={() => { setFollowUpOpen(false); onClose(); }}>Encerrar</Button>
+                  {onScheduleReturn && (
+                    <Button size="sm" variant="secondary" onClick={() => {
+                      onScheduleReturn({
+                        encounterId: row.id, bookingId: row.bookingId, contactId: row.contactId,
+                        customerName: row.customerName, serviceId: row.serviceId,
+                        professionalId: row.professionalId, followUp: row.followUp,
+                      });
+                    }}>Agendar retorno</Button>
+                  )}
+                  <Button size="sm" variant="secondary" disabled={taskBusy} onClick={askReception}>
+                    {taskBusy ? 'Pedindo…' : 'Pedir à recepção'}
+                  </Button>
+                </div>
+                <Field label="O que a recepção deve fazer" hint="Ex: ligar em 30 dias e marcar o retorno; confirmar por telefone.">
+                  <Input value={followUpNote} onChange={(e) => setFollowUpNote(e.target.value)}
+                    placeholder={row.followUp || 'Ex: ligar e marcar o retorno em 30 dias'} maxLength={200} />
+                </Field>
+                <p className="text-xs text-[var(--text-muted)]">
+                  Agendar retorno abre o agendamento já preenchido — nada é marcado sem você confirmar.
+                  Pedir à recepção cria uma tarefa para a equipe.
+                </p>
+              </div>
+            )}
+
             {isDraft && editable && (
               <p className="text-xs text-[var(--text-muted)]">
                 Enquanto é rascunho, o texto é salvo sozinho um segundo depois de você parar de digitar.
               </p>
             )}
-            {!editable && !isDraft && (
+            {!isDraft && (
               <p className="text-xs text-[var(--text-muted)]">
-                Você está vendo um registro finalizado. Para editar, use “Reabrir para editar” (só quem
-                administra a unidade) — e a reabertura fica na auditoria.
+                {canReopen
+                  ? 'Registro finalizado é somente leitura. Para editar, use “Reabrir para editar” — e a reabertura fica na auditoria.'
+                  : 'Você está vendo um registro finalizado. Só quem administra a unidade reabre para edição.'}
               </p>
             )}
 
@@ -319,40 +436,41 @@ export function EncounterSheet({ businessId, bookingId, seed, existing, queueId,
               <span className="inline-flex items-center gap-1.5">
                 <Icon n="user" size={13} /> {row.customerName || 'Cliente'}
               </span>
-              {row.serviceName && <span className="inline-flex items-center gap-1.5"><Icon n="tag" size={13} /> {row.serviceName}</span>}
+              {row.serviceName && <span className="inline-flex items-center gap-1.5"><Icon n="fileText" size={13} /> {row.serviceName}</span>}
               {row.professionalName && <span className="inline-flex items-center gap-1.5"><Icon n="users" size={13} /> {row.professionalName}</span>}
               {row.bookingId && <span className="inline-flex items-center gap-1.5"><Icon n="calendar" size={13} /> veio de um agendamento</span>}
+              {row.queueId && <span className="inline-flex items-center gap-1.5"><Icon n="clock" size={13} /> veio da fila do balcão</span>}
             </div>
 
             {/* ── Conteúdo do registro ── */}
             <Field label={ENCOUNTER_LABELS.complaint}>
               <Textarea value={form.complaint} disabled={!editable} maxLength={600}
-                onChange={(e) => setForm({ ...form, complaint: e.target.value })}
+                onChange={(e) => updateForm({ ...form, complaint: e.target.value })}
                 placeholder="Ex: dor no dente do fundo do lado direito há dois dias" />
             </Field>
             <Field label={ENCOUNTER_LABELS.evolution} hint="O que foi feito neste atendimento — é o coração do registro.">
               <Textarea value={form.evolution} disabled={!editable} maxLength={4000}
-                onChange={(e) => setForm({ ...form, evolution: e.target.value })}
+                onChange={(e) => updateForm({ ...form, evolution: e.target.value })}
                 placeholder="Ex: limpeza completa, aplicação de flúor; sem intercorrências" />
             </Field>
             <Field label={ENCOUNTER_LABELS.guidance} hint="Sai na via impressa que o cliente leva.">
               <Textarea value={form.guidance} disabled={!editable} maxLength={2000}
-                onChange={(e) => setForm({ ...form, guidance: e.target.value })}
+                onChange={(e) => updateForm({ ...form, guidance: e.target.value })}
                 placeholder="Ex: evitar alimentos muito frios por 24h; escovar com pasta para sensibilidade" />
             </Field>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <Field label={ENCOUNTER_LABELS.followUp}>
                 <Input value={form.followUp} disabled={!editable} maxLength={200}
-                  onChange={(e) => setForm({ ...form, followUp: e.target.value })} placeholder="Ex: retorno em 30 dias" />
+                  onChange={(e) => updateForm({ ...form, followUp: e.target.value })} placeholder="Ex: retorno em 30 dias" />
               </Field>
               <Field label="Etiquetas" hint="Separe por vírgula (procedimento, material, região…).">
                 <Input value={form.tags} disabled={!editable}
-                  onChange={(e) => setForm({ ...form, tags: e.target.value })} placeholder="Ex: limpeza, flúor" />
+                  onChange={(e) => updateForm({ ...form, tags: e.target.value })} placeholder="Ex: limpeza, flúor" />
               </Field>
             </div>
             <Field label={ENCOUNTER_LABELS.internalNote} hint="Fica só na unidade — não entra na via do cliente.">
               <Textarea value={form.internalNote} disabled={!editable} maxLength={2000}
-                onChange={(e) => setForm({ ...form, internalNote: e.target.value })}
+                onChange={(e) => updateForm({ ...form, internalNote: e.target.value })}
                 placeholder="Ex: cliente relatou sensibilidade; acompanhar no próximo retorno" />
             </Field>
           </>

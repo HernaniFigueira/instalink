@@ -30,6 +30,7 @@ import { Icon } from '@/components/icons';
 import { apiGet, apiSend } from '@/lib/api-client';
 import { cepError, contactFieldErrors, emailError, hasFieldErrors, maskCep, maskCpf, phoneError } from '@/lib/field-quality';
 import { PhoneBRInput } from '@/components/dashboard/PhoneBRInput';
+import { canReopenEncounter } from '@/lib/encounters';
 import { EncounterList, EncounterSheet, type EncounterRow } from '@/components/dashboard/EncounterSheet';
 import { usePanelPermissions } from '@/components/dashboard/usePanelPermissions';
 
@@ -381,7 +382,8 @@ export function ClientProfileDrawer({ person, businessId, pipeline, canFunil, on
         <EncounterSheet
           businessId={businessId}
           existing={encounterOpen}
-          canReopen={role === 'OWNER' || role === 'ADMIN'}
+          canReopen={canReopenEncounter(role)}
+          onScheduleReturn={() => { setEncounterOpen(null); onNewBooking(person); }}
           onClose={() => setEncounterOpen(null)}
           onChanged={() => { setEncountersLoaded(false); onChanged(); }}
         />

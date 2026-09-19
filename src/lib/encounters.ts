@@ -206,13 +206,39 @@ export function versionConflict(
   current: { version?: number } | null | undefined,
   expected: unknown,
 ): { conflict: false } | { conflict: true; message: string } {
-  if (expected === undefined || expected === null || expected === '') return { conflict: false };
+  if (!hasExpectedVersion(expected)) return { conflict: true, message: ENCOUNTER_VERSION_REQUIRED_ERROR };
   const want = Number(expected);
-  if (!Number.isFinite(want)) return { conflict: false };
   return want === encounterVersion(current)
     ? { conflict: false }
     : { conflict: true, message: ENCOUNTER_VERSION_ERROR };
 }
+
+/**
+ * `expectedVersion` só serve se vier de verdade. A API do Encounter é NOVA:
+ * não existe chamador legado para proteger, então NÃO há caminho "sem trava" —
+ * editar sem informar a revisão seria justamente o overwrite silencioso que a
+ * revisão mandou fechar.
+ */
+export function hasExpectedVersion(expected: unknown): boolean {
+  if (expected === undefined || expected === null || expected === '') return false;
+  const want = Number(expected);
+  return Number.isFinite(want) && want > 0;
+}
+
+/** Título da tarefa criada quando o retorno fica com a recepção. */
+export function followUpTaskTitle(customerName: string): string {
+  const who = String(customerName || '').trim() || 'cliente';
+  return `Agendar retorno de ${who}`.slice(0, 140);
+}
+
+/** Nota da tarefa: o retorno anotado + a instrução curta de quem atendeu. */
+export function followUpTaskNote(followUp: string, instruction: string): string {
+  return [String(instruction || '').trim(), String(followUp || '').trim()]
+    .filter(Boolean).join(' · ').slice(0, 1000);
+}
+
+export const ENCOUNTER_VERSION_REQUIRED_ERROR =
+  'Informe a revisão do atendimento (expectedVersion) para salvar — sem ela não é possível garantir que ninguém sobrescreveu este registro.';
 
 /** Revisão do registro; documento legado (sem campo) vale 1. */
 export function encounterVersion(row: { version?: number } | null | undefined): number {
@@ -223,8 +249,60 @@ export function encounterVersion(row: { version?: number } | null | undefined): 
 export const ENCOUNTER_VERSION_ERROR =
   'Este atendimento foi atualizado em outra aba. Recarregue antes de salvar.';
 
-export function canEditEncounter(e: Pick<Encounter, 'status'>, opts: { canReopen: boolean }): boolean {
-  return e.status === 'draft' ? true : opts.canReopen;
+/**
+ * A3.4 fix (2ª revisão) — REGISTRO FINALIZADO É **READ ONLY PARA TODOS**.
+ *
+ * Antes, quem tinha poder de reabrir (OWNER/ADMIN) podia editar os campos
+ * enquanto o documento ainda estava `finalized`: a tela deixava digitar e o
+ * erro só aparecia no salvar (409 do servidor). Isso é mentira de interface.
+ *
+ * `canReopen` agora controla SOMENTE a exibição do botão "Reabrir para
+ * editar". Enquanto o status for `finalized`, os campos ficam desabilitados
+ * para qualquer papel; depois de `action:'reopen'` o status vira `draft` e a
+ * edição volta a valer.
+ */
+export function canEditEncounter(e: Pick<Encounter, 'status'>, _opts?: { canReopen?: boolean }): boolean {
+  return e.status === 'draft';
+}
+
+/** Quem pode REABRIR (mesma régua do servidor: dono da unidade e administração). */
+export function canReopenEncounter(role: unknown): boolean {
+  const r = String(role || '').toUpperCase();
+  return r === 'OWNER' || r === 'ADMIN' || r === 'MASTER';
+}
+
+/**
+ * A3.4 fix (2ª revisão) — o que fazer com a resposta de um save.
+ *
+ * O profissional digita enquanto o request está em voo. Quando a resposta
+ * chega, ela descreve o que foi GRAVADO (`sentKey`), não o que está na tela.
+ * Regra: adota o texto do servidor SÓ se ninguém mexeu no formulário desde o
+ * envio. Se mexeu, o texto novo fica onde está e o próximo ciclo salva o
+ * restante já com a versão atualizada.
+ */
+export function applySaveResult(args: { sentKey: string; currentKey: string; serverVersion: number }): {
+  /** true = pode adotar o formulário do servidor (ninguém digitou durante o envio). */
+  adoptServerForm: boolean;
+  /** O que foi efetivamente gravado — é a nova referência de "sem mudanças". */
+  lastSavedKey: string;
+  /** Revisão devolvida pelo servidor: base do PRÓXIMO save. */
+  baseVersion: number;
+} {
+  return {
+    adoptServerForm: args.currentKey === args.sentKey,
+    lastSavedKey: args.sentKey,
+    baseVersion: encounterVersion({ version: args.serverVersion }),
+  };
+}
+
+/**
+ * Registro do walk-in: 1 entrada da fila → no máximo 1 registro. Sem isso, um
+ * cliente sem agendamento podia ganhar dois atendimentos por abrir a tela
+ * duas vezes (o 1:1 do booking não cobre quem não tem booking).
+ */
+export function encounterForQueue(rows: Encounter[], businessId: string, queueId: string): Encounter | null {
+  if (!queueId) return null;
+  return (rows || []).find((e) => e.businessId === businessId && e.queueId === queueId) || null;
 }
 
 /**

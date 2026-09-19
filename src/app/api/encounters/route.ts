@@ -17,8 +17,9 @@ import { readDB, updateDB } from '@/lib/db';
 import { requireBusiness } from '@/lib/access';
 import { pushAudit } from '@/lib/audit';
 import {
-  ENCOUNTER_TEXT_FIELDS, cleanTags, cleanText, canFinalize, encounterForBooking, encounterInScope,
-  encountersForCustomer, versionConflict,
+  ENCOUNTER_TEXT_FIELDS, ENCOUNTER_VERSION_REQUIRED_ERROR, cleanTags, cleanText, canFinalize,
+  encounterForBooking, encounterForQueue, encounterInScope, encountersForCustomer,
+  hasExpectedVersion, versionConflict,
 } from '@/lib/encounters';
 import { effectiveTimezone, nowHM, todayISO } from '@/lib/tz';
 import { onlyDigits } from '@/lib/utils';
@@ -64,6 +65,8 @@ export async function GET(req: NextRequest) {
   const guard = await requireBusiness(req, businessId, 'atendimento');
   if (!guard.ok) return guard.res;
   const db = guard.db;
+  const id = String(req.nextUrl.searchParams.get('id') || '');
+  const queueId = String(req.nextUrl.searchParams.get('queueId') || '');
   const bookingId = String(req.nextUrl.searchParams.get('bookingId') || '');
   const contactId = String(req.nextUrl.searchParams.get('contactId') || '');
   const customerId = String(req.nextUrl.searchParams.get('customerId') || '');
@@ -71,6 +74,17 @@ export async function GET(req: NextRequest) {
 
   const scoped = (db.encounters || []).filter((e) => e.businessId === businessId && encounterInScope(e, guard.ctx.professionalScope));
 
+  // Leitura POR ID: é o que a tela usa para "recarregar" depois de um conflito
+  // de versão. Nunca cria nada — e por isso não pode virar POST por acidente.
+  if (id) {
+    const found = scoped.find((e) => e.id === id);
+    if (!found) return NextResponse.json({ error: 'Registro de atendimento não encontrado.' }, { status: 404 });
+    return NextResponse.json({ ok: true, encounter: view(found, db) });
+  }
+  if (queueId) {
+    const found = encounterForQueue(scoped, businessId, queueId);
+    return NextResponse.json({ ok: true, encounter: found ? view(found, db) : null });
+  }
   if (bookingId) {
     const found = scoped.find((e) => e.bookingId === bookingId) || null;
     return NextResponse.json({ ok: true, encounter: found ? view(found, db) : null });
@@ -121,9 +135,11 @@ export async function POST(req: NextRequest) {
     if (queueId && !queueEntry) {
       return NextResponse.json({ error: 'Entrada da fila não encontrada nesta unidade.' }, { status: 404 });
     }
-    // 1:1 — um agendamento tem UM registro. Se já existe, devolvemos o
-    // existente (a tela abre o que está lá em vez de criar documento paralelo).
-    const existing = encounterForBooking(db.encounters || [], businessId, bookingId);
+    // 1:1 — um agendamento tem UM registro, e uma ENTRADA DA FILA também.
+    // Se já existe, devolvemos o existente (a tela abre o que está lá em vez de
+    // criar documento paralelo). Vale para os dois vínculos.
+    const existing = encounterForBooking(db.encounters || [], businessId, bookingId)
+      || encounterForQueue(db.encounters || [], businessId, queueId);
     if (existing) {
       if (!encounterInScope(existing, guard.ctx.professionalScope)) {
         return NextResponse.json({ error: 'Você só registra os seus próprios atendimentos.' }, { status: 403 });
@@ -143,6 +159,7 @@ export async function POST(req: NextRequest) {
       id: randomUUID(),
       businessId,
       bookingId: booking?.id || '',
+      queueId: queueEntry?.id || '',
       serviceId: String(body.serviceId || booking?.serviceId || queueEntry?.serviceId || ''),
       professionalId,
       customerId: String(body.customerId || booking?.customerId || ''),
@@ -176,14 +193,17 @@ export async function POST(req: NextRequest) {
 
     await updateDB((d: DB) => {
       // Revalidação dentro da transação: nada de dois registros para o mesmo
-      // agendamento por corrida de duplo clique.
+      // agendamento (nem para a mesma entrada da fila) por corrida de clique.
       if (row.bookingId && encounterForBooking(d.encounters, businessId, row.bookingId)) {
         throw err('Este agendamento já tem registro de atendimento.', 409);
+      }
+      if (row.queueId && encounterForQueue(d.encounters, businessId, row.queueId)) {
+        throw err('Esta entrada da fila já tem registro de atendimento.', 409);
       }
       d.encounters.push(row);
       pushAudit(d, {
         action: 'encounter.created', businessId, actor: guard.ctx.user,
-        meta: { encounterId: row.id, bookingId: row.bookingId, queueId, professionalId: row.professionalId },
+        meta: { encounterId: row.id, bookingId: row.bookingId, queueId: row.queueId, professionalId: row.professionalId },
       }, now);
     });
     return NextResponse.json({ ok: true, encounter: view(row, await readDB()) });
@@ -211,6 +231,12 @@ export async function PATCH(req: NextRequest) {
     const reopen = canReopen(role);
     const action = String(body.action || '');
     const now = new Date().toISOString();
+    // A trava de concorrência é OBRIGATÓRIA (2ª revisão): sem `expectedVersion`
+    // qualquer PATCH seria um overwrite cego — e esta API é nova, não há
+    // chamador legítimo para manter funcionando sem trava.
+    if (!hasExpectedVersion(body.expectedVersion)) {
+      return NextResponse.json({ error: ENCOUNTER_VERSION_REQUIRED_ERROR }, { status: 400 });
+    }
 
     const updated = await updateDB((d: DB) => {
       const target = d.encounters.find((e) => e.id === id && e.businessId === businessId);

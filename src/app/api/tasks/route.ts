@@ -80,6 +80,7 @@ export async function POST(req: NextRequest) {
         source: 'manual',
         leadId: body.leadId ? String(body.leadId) : undefined,
         bookingId: body.bookingId ? String(body.bookingId) : undefined,
+        encounterId: body.encounterId ? String(body.encounterId) : undefined,
       });
       if (!res.task) throw Object.assign(new Error(res.reason || 'não foi possível criar a tarefa'), { status: 422 });
       if (res.created) {
@@ -87,7 +88,10 @@ export async function POST(req: NextRequest) {
           action: 'task.created',
           actor: guard.ctx.user,
           businessId,
-          meta: { taskId: res.task.id, title: res.task.title },
+          meta: {
+            taskId: res.task.id, title: res.task.title,
+            encounterId: res.task.encounterId || '', bookingId: res.task.bookingId || '',
+          },
         });
       }
       return res.task;

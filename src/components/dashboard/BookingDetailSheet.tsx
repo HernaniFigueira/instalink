@@ -23,6 +23,8 @@ import { Icon } from '@/components/icons';
 import { StatusBadge, Button, buttonCls, type ButtonVariant } from '@/components/ui';
 import { EncounterSheet } from '@/components/dashboard/EncounterSheet';
 import { usePanelPermissions } from '@/components/dashboard/usePanelPermissions';
+import { canReopenEncounter } from '@/lib/encounters';
+import type { FollowUpSeed } from '@/components/dashboard/EncounterSheet';
 import { BOOKING_STATUS } from '@/lib/status';
 import { todayISO, nowHM, formatDateBR, humanDay } from '@/lib/tz';
 import { waLink, cn, money } from '@/lib/utils';
@@ -46,12 +48,14 @@ const ROW = 'flex items-baseline justify-between gap-3 py-2';
 const ROW_DT = 'text-xs font-medium text-zinc-500 shrink-0';
 const ROW_DD = 'text-sm text-zinc-900 text-right font-medium';
 
-export function BookingDetailSheet({ booking, service, pro, businessId, timezone, onClose, onChanged }: {
+export function BookingDetailSheet({ booking, service, pro, businessId, timezone, onScheduleReturn, onClose, onChanged }: {
   booking: Booking;
   service: ServiceRef | undefined;
   pro: ProRef | undefined;
   businessId: string;
   timezone?: string;
+  /** "Agendar retorno" do pós-atendimento: quem abre o agendamento é o pai. */
+  onScheduleReturn?: (info: FollowUpSeed) => void;
   onClose: () => void;
   onChanged: () => void;
 }) {
@@ -228,7 +232,8 @@ export function BookingDetailSheet({ booking, service, pro, businessId, timezone
             time: booking.time,
             customerId: booking.customerId,
           }}
-          canReopen={role === 'OWNER' || role === 'ADMIN'}
+          canReopen={canReopenEncounter(role)}
+          onScheduleReturn={onScheduleReturn ? (info: FollowUpSeed) => onScheduleReturn(info) : undefined}
           onClose={() => setEncounterOpen(false)}
           onChanged={onChanged}
         />

@@ -36,6 +36,7 @@ import { NewBookingSheet } from '@/components/dashboard/NewBookingSheet';
 import { QueuePanel, type QueueRow } from '@/components/dashboard/QueuePanel';
 import { EncounterSheet } from '@/components/dashboard/EncounterSheet';
 import { usePanelPermissions } from '@/components/dashboard/usePanelPermissions';
+import { canReopenEncounter } from '@/lib/encounters';
 import { AccessDenied, PermissionNotice, useAreaLoad, useForbiddenNotice } from '@/components/dashboard/AccessNotice';
 import { useRevalidateOnFocus } from '@/components/dashboard/use-revalidate';
 import { bookingDuration, effectiveHorizonDays, needsClosure, rescheduleDecision } from '@/lib/booking-ops';
@@ -343,8 +344,12 @@ export default function AgendaPage() {
   const [queueRows, setQueueRows] = useState<QueueRow[]>([]);
   // A3.4 fix (revisão B5): o registro do atendimento tem permissão PRÓPRIA —
   // a fila continua operável por quem só faz balcão, sem abrir o conteúdo.
-  const { permissions } = usePanelPermissions();
+  const { permissions, role } = usePanelPermissions();
   const canEncounter = permissions.atendimento === true;
+  // Reabrir é de quem administra — a MESMA régua do servidor (nada de a tela
+  // mostrar um botão que o servidor vai recusar). Ter a permissão de
+  // atendimento não dá poder de reabrir.
+  const canReopen = canReopenEncounter(role);
   const [queueEncounter, setQueueEncounter] = useState<QueueRow | null>(null);
   const [queueDone, setQueueDone] = useState<QueueRow[]>([]);
   const [queueLoading, setQueueLoading] = useState(false);
@@ -1567,6 +1572,14 @@ export default function AgendaPage() {
           service={serviceOf(detail.serviceId)}
           pro={detail.professionalId ? pros.find((p) => p.id === detail.professionalId) : undefined}
           businessId={businessId}
+          onScheduleReturn={(info) => {
+            setDetail(null);
+            setCreating({
+              date: today, time: '', professionalId: info.professionalId,
+              contactId: info.contactId, name: info.customerName, phone: '',
+              serviceId: info.serviceId,
+            });
+          }}
           onClose={() => setDetail(null)}
           onChanged={() => { setDetail(null); load(); }}
         />
@@ -1581,7 +1594,16 @@ export default function AgendaPage() {
             professionalId: queueEncounter.professionalId, date: queueEncounter.date,
             contactId: queueEncounter.contactId,
           }}
-          canReopen={false}
+          canReopen={canReopen}
+          onScheduleReturn={(info) => {
+            setQueueEncounter(null);
+            setCreating({
+              date: today, time: '', professionalId: info.professionalId,
+              contactId: info.contactId || queueEncounter.contactId,
+              name: info.customerName || queueEncounter.customerName,
+              phone: '', serviceId: info.serviceId || queueEncounter.serviceId,
+            });
+          }}
           onClose={() => { setQueueEncounter(null); void loadQueue(); }}
           onChanged={loadQueue}
         />

@@ -549,3 +549,146 @@ fronteira das observações administrativas e o artefato fora do versionamento.
 
 Blocos 7 a 11 seguem **não iniciados**: import/export, onboarding do WhatsApp,
 Instagram, Graph API, canais e storage ficaram intocados.
+
+---
+
+## SEGUNDO FECHAMENTO DOS BLOCOS 5/6 (revisão do Atendimento)
+
+### 1. O autosave lia formulário velho — CORRIGIDO
+
+`latest.current.form` só era escrito em `apply()` (quando a resposta chegava).
+Enquanto a pessoa digitava, o ref continuava com o último texto do servidor: o
+autosave podia achar que “nada mudou” e não salvar o que estava na tela.
+
+Agora existe **um único caminho de escrita**: todo `onChange` passa por
+`updateForm(next)`, que grava o ref e o estado juntos (`updateRow` faz o mesmo
+para o registro). `save()` lê `latest.current.form` **no momento do envio**, e
+há regressão de fonte que falha se alguém voltar a chamar `setForm` direto
+(exatamente o blocker da revisão).
+
+### 2. Digitação durante o request não é apagada — CORRIGIDO
+
+O save captura `sentForm`, `sentKey` e a revisão; ao responder, decide pela
+regra pura `applySaveResult`:
+
+```
+draft A → request envia A → usuário muda para B antes da resposta
+→ servidor confirma A/version 2
+→ adoptServerForm = false  (B continua na tela, intocado)
+→ lastSavedKey = A         (o que foi gravado é A)
+→ baseVersion = 2          (o próximo ciclo salva B com a versão nova)
+```
+
+Se ninguém digitou durante o envio, o formulário do servidor é adotado
+(normalização de tags/limites continua valendo).
+
+### 3. `finalized` é READ ONLY na UI
+
+`canEditEncounter()` devolvia `opts.canReopen` para registro finalizado: OWNER
+e ADMIN digitavam à vontade e só descobriam o 409 ao salvar. Agora
+`finalized` → **false para qualquer papel**; `canReopen` só decide se o botão
+**Reabrir para editar** aparece (`canReopenEncounter(role)`, a mesma régua do
+servidor: OWNER/ADMIN/MASTER). Depois de `reopen` o status vira `draft` e os
+campos voltam a aceitar texto.
+
+### 4. `expectedVersion` também no finalizar/reabrir (com versão fresca)
+
+`transition(action)` lê `latest.current.row.version` **no clique** — depois de
+um save pré-finalização essa é a versão que o servidor acabou de devolver, não
+a do render. `finalize()` salva o que está na tela **antes** de assinar e só
+então chama a transição.
+
+### 5. Escrita sem trava não passa
+
+`versionConflict` deixou de tratar ausência como “sem conflito”: a API do
+Encounter é **nova**, não existe chamador legado a preservar, então não há
+caminho inseguro. PATCH (conteúdo, `finalize` ou `reopen`) sem
+`expectedVersion` válido → **400** com
+`ENCOUNTER_VERSION_REQUIRED_ERROR`. Todos os chamadores internos foram
+atualizados (a tela já mandava; os testes passaram a mandar).
+
+### 6. `QueueEntry` agora é 1:1 com `Encounter`
+
+Campo aditivo `Encounter.queueId` (documento antigo normaliza para `''`),
+`encounterForQueue()` como regra pura, POST devolvendo o existente com
+`reused: true` **e** revalidação dentro da transação (corrida de duplo clique).
+Prova: walk-in cria **um** registro; abrir de novo devolve o **mesmo id**;
+outra unidade não alcança a entrada nem o registro; o 1:1 do agendamento segue
+independente.
+
+### 7. Porta de volta na fila
+
+Quem está `in_service` e tem a permissão ganhou **Abrir atendimento**: abre (ou
+reutiliza) o registro pelo `queueId`, **sem** mexer no status da fila. Sem a
+permissão `atendimento`, a linha continua só operacional — nada de conteúdo
+profissional para quem faz balcão.
+
+### 8. Recarregar conflito não cria registro novo
+
+Nova leitura estável `GET /api/encounters?businessId=…&id=…` (escopada por
+unidade **e** por profissional). O botão “Recarregar registro” usa **id** e
+nunca POST — abrir pelo Cliente 360 (onde `bookingId` é `''`) não corre mais o
+risco de gerar um segundo documento. Prova: após o conflito, recarregar mantém
+a contagem em **1**.
+
+### 9. Pós-atendimento: “como fica o acompanhamento?”
+
+Depois de finalizar, aparece o painel discreto:
+
+**Atendimento finalizado. Próximo passo:** `[ Encerrar ]` `[ Agendar retorno ]`
+`[ Pedir à recepção ]`
+
+- **Encerrar** — dispensa o painel e fecha o atendimento normalmente.
+- **Agendar retorno** — abre o `NewBookingSheet` **pré-preenchido** (cliente,
+  serviço, profissional). **Nada é marcado automaticamente**; a confirmação é
+  humana.
+- **Pedir à recepção** — cria uma **Task** de verdade (o sistema de pendência
+  que já existe), com `title` “Agendar retorno de {cliente}”, nota = retorno
+  anotado + instrução curta (campo aparece quando o `followUp` está vazio),
+  `contactId`, `bookingId` quando houver e o novo **`encounterId`** — o vínculo
+  aparece na auditoria (`task.created`). Nenhum sistema paralelo foi criado.
+
+### 10. Reabertura no fluxo da fila
+
+O `EncounterSheet` da fila recebia `canReopen={false}` chumbado. Agora usa o
+papel real do painel: **OWNER/ADMIN** podem reabrir; **PROFISSIONAL** não; e
+ter a permissão `atendimento` **não** dá poder de reabrir (mesma regra da API).
+
+### Arquivos desta rodada
+
+`lib/types.ts` (queueId, Task.encounterId) · `lib/db.ts` (normalização) ·
+`lib/encounters.ts` (canEditEncounter, canReopenEncounter, versionConflict
+obrigatório, applySaveResult, encounterForQueue, títulos da tarefa) ·
+`lib/automation/tasks.ts` + `api/tasks/route.ts` (vínculo com o atendimento) ·
+`api/encounters/route.ts` (GET por id/fila, POST 1:1 pela fila, PATCH com
+trava obrigatória) · `EncounterSheet.tsx` (refs síncronas, preservação do
+draft, pós-atendimento) · `QueuePanel.tsx` (Abrir atendimento) ·
+`BookingDetailSheet.tsx` · `ClientProfileDrawer.tsx` · `agenda/page.tsx`
+(reabertura por papel, retorno pré-preenchido) · testes.
+
+### Testes desta rodada
+
+```
+npx vitest run src/lib/__tests__/a34-encounter.test.ts           → 30 ok
+npx vitest run src/lib/__tests__/a34-encounter-integrity.test.ts → 13 ok  (novo)
+npx vitest run src/lib/__tests__/a34-review-fix.test.ts          → 20 ok
+npx vitest run src/lib/__tests__/a34-queue.test.ts               → ok
+npx vitest run  → 83 arquivos · 1395 testes ok
+npx tsc --noEmit → 0 erros
+npm run build    → ok (107 páginas)
+```
+
+Provas exigidas, em uma linha cada:
+
+- **autosave concorrente** — `applySaveResult`: A enviado, B digitado durante o
+  voo → `adoptServerForm=false`, `lastSavedKey=A`, `baseVersion=2`; e o
+  formulário da tela segue B.
+- **fila 1:1** — walk-in: 1 registro; segunda abertura devolve o mesmo id;
+  contagem na base continua 1; outra unidade → 404/null.
+- **reload sem duplicação** — conflito de versão + “Recarregar registro” por
+  `id`: `encounters` continua com 1 documento.
+- **pós-atendimento** — `task.created` com `encounterId`, título
+  “Agendar retorno de Seu Zé”, status `open`; “Agendar retorno” não cria
+  agendamento (a base segue com zero `bookings` até alguém confirmar).
+
+Blocos 7 a 11 continuam intocados.
