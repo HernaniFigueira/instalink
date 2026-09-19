@@ -315,6 +315,16 @@ export const AUTOMATION_ACTION_DEFS: AutomationActionDef[] = [
       { key: 'note', label: 'Recado no payload', type: 'text', template: true, max: 300 },
     ],
   },
+  {
+    type: 'send_channel_message', label: 'Enviar mensagem pelo WhatsApp', short: 'Enviar WhatsApp',
+    hint: 'Envia mensagem oficial pelo conector de WhatsApp da unidade.',
+    delegate: 'lib/integrations/outbound.ts · attemptChannelSend (entrega pós-commit)',
+    requires: 'automation.advanced',
+    fields: [
+      { key: 'message', label: 'Mensagem', type: 'textarea', required: true, template: true, max: 2000 },
+      { key: 'templateName', label: 'Template (opcional)', type: 'text', hint: 'Nome do template para mensagens ativas fora da janela de 24h.' },
+    ],
+  },
 ];
 
 export function automationActionDef(type: unknown): AutomationActionDef | undefined {

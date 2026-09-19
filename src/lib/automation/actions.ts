@@ -22,6 +22,7 @@
 //   • idempotência: ação já aplicada é reconhecida e PULADA (a retomada de
 //     uma execução interrompida não duplica efeito);
 //   • erro em ação não corrompe estado: o executor grava `failed` + mensagem.
+import { randomUUID } from 'node:crypto';
 import type {
   Automation, AutomationActionType, AutomationRun, Business, DB, WebhookEvent,
 } from '../types';
@@ -38,6 +39,7 @@ import { createTaskTx } from './tasks';
 import { renderParams } from './conditions';
 import { addDaysISO, todayISO } from '../tz';
 import { automationActionDef } from './model';
+import { onlyDigits } from '../utils';
 
 export const AUTOMATION_ACTOR: LeadActor = { id: 'automation', name: 'Automação', type: 'system' };
 
@@ -416,6 +418,68 @@ export function executeAction(input: ActionInput): ActionResult {
       } catch (e: any) {
         return { ok: false, summary: '', error: e?.message || 'falha ao enfileirar o webhook' };
       }
+    }
+
+    case 'send_channel_message': {
+      const lead = subjectLead(input);
+      const booking = subjectBooking(input);
+      const contact = subjectContact(input);
+      const rawPhone = lead?.phone || booking?.customerPhone || contact?.phone || input.run.context?.contact?.phone || input.params?.to || '';
+      const phone = onlyDigits(String(rawPhone || ''));
+      if (!phone || phone.length < 10) return missing('telefone do destinatário');
+
+      const msgText = text(input, 'message', 2000) || text(input, 'body', 2000);
+      if (!msgText) return { ok: false, summary: '', error: 'mensagem vazia' };
+
+      const templateName = text(input, 'templateName', 120);
+
+      let conv = db.conversations.find((c) => c.businessId === business.id && c.phone === phone);
+      if (!conv) {
+        conv = {
+          id: randomUUID(),
+          businessId: business.id,
+          channel: 'whatsapp',
+          contactId: contact?.id || lead?.customerId || '',
+          customerId: contact?.customerId || lead?.customerId || '',
+          name: contact?.name || lead?.name || phone,
+          phone,
+          status: 'open',
+          mode: 'automation',
+          unread: 0,
+          lastMessageAt: input.now,
+          lastMessagePreview: msgText.slice(0, 120),
+          createdAt: input.now,
+          context: lead ? { leadId: lead.id } : {},
+        };
+        db.conversations.push(conv);
+      } else {
+        conv.lastMessageAt = input.now;
+        conv.lastMessagePreview = msgText.slice(0, 120);
+      }
+
+      const msgId = randomUUID();
+      db.messages.push({
+        id: msgId,
+        businessId: business.id,
+        conversationId: conv.id,
+        direction: 'out',
+        body: msgText,
+        status: 'pending',
+        externalId: '',
+        by: 'automation',
+        byName: 'Automação',
+        at: input.now,
+        meta: {
+          templateName: templateName || undefined,
+          originRunId: input.run.id,
+        },
+      });
+
+      return {
+        ok: true,
+        summary: `mensagem para ${phone} enfileirada no WhatsApp`,
+        contextPatch: { messageId: msgId, phone },
+      };
     }
 
     default:

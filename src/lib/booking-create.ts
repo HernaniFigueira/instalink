@@ -168,7 +168,8 @@ export function createBookingTx(d: DB, p: CreateBookingParams): {
   if (!isValidDateISO(p.date) || !isValidClockTime(p.time)) throw txError('Escolha data e horário.', 400);
   // A2-B5 (F9): horizonte/passado/lead time no FUSO DO NEGÓCIO.
   const btz = effectiveTimezone(business.businessTimezone);
-  const today = todayISO(new Date(), btz);
+  const nowDate = p.now ? new Date(p.now) : new Date();
+  const today = todayISO(nowDate, btz);
   if (p.date < today) throw txError('Não é possível agendar no passado.', 400);
   const horizon = bookingMaxDate(today, cfg, isOwner);
   if (p.date > horizon) throw txError('Data fora da agenda disponível.', 400);
@@ -199,7 +200,7 @@ export function createBookingTx(d: DB, p: CreateBookingParams): {
     durationMin: service.durationMin,
     professionalId: isOwner ? ownerPro : '',
     eligibleProIds: service.professionalIds || [],
-    nowHM: p.date === today ? nowHM(new Date(), btz) : '',
+    nowHM: p.date === today ? nowHM(nowDate, btz) : '',
     leadMin: cfg?.leadMin || 0,
     bufferMin: cfg?.bufferMin || 0,
   });

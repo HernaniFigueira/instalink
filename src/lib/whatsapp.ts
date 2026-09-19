@@ -1,19 +1,19 @@
 // ═══════════════════════════════════════════════════════════════
 // WHATSAPP — estrutura de integração (sem credenciais no banco)
 // ═══════════════════════════════════════════════════════════════
-// Hoje o produto abre o WhatsApp externamente (link wa.me). Isso continua
-// valendo como FALLBACK. Este módulo prepara a integração OFICIAL:
+// O produto abre o WhatsApp externamente (link wa.me) como FALLBACK.
+// Este módulo prepara e gerencia o estado da integração OFICIAL:
 //
 //   • identificadores públicos da conta (phone number id / WABA id)
 //   • status de conexão por empresa
 //   • conversas, mensagens e associação com contato/lead do CRM
-//   • webhook (verificação por token de ambiente)
+//   • webhook (verificação por token de ambiente e assinatura Meta)
 //
 // REGRA DE HONESTIDADE: nada aqui finge estar conectado. `integrationStatus`
-// só devolve 'connected' quando o servidor tem credenciais configuradas E a
-// empresa tem uma conta registrada. Tokens vivem em variáveis de ambiente
-// (WHATSAPP_*), nunca no banco, nunca no frontend.
-import type { Business, WhatsappIntegration } from './types';
+// só devolve 'connected' quando a empresa tem credenciais válidas configuradas
+// (no próprio Business de forma criptografada ou no servidor).
+// Tokens nunca são expostos em plaintext ao frontend.
+import type { Business, WhatsappIntegration, WhatsappStatus } from './types';
 
 export function defaultWhatsappIntegration(): WhatsappIntegration {
   return {
@@ -27,7 +27,7 @@ export function defaultWhatsappIntegration(): WhatsappIntegration {
   };
 }
 
-/** Credenciais existem no SERVIDOR? (nunca expostas ao cliente) */
+/** Credenciais globais existem no SERVIDOR? (nunca expostas ao cliente) */
 export function serverCredentialsConfigured(): boolean {
   return !!(
     process.env.WHATSAPP_API_TOKEN &&
@@ -39,19 +39,32 @@ export function webhookVerifyToken(): string {
   return process.env.WHATSAPP_VERIFY_TOKEN || '';
 }
 
+/** Máscara para IDs técnicos (exibe apenas os 4 últimos dígitos). */
+export function maskTechnicalId(id?: string): string {
+  const val = String(id || '').trim();
+  if (!val) return '';
+  if (val.length <= 4) return val;
+  return `••••••••${val.slice(-4)}`;
+}
+
+export const maskPhoneNumberId = maskTechnicalId;
+export const maskWabaId = maskTechnicalId;
+
 /**
- * Status real da integração de uma empresa. O status persistido é elevado a
- * 'connected' apenas quando: (a) a empresa registrou a conta e (b) o servidor
- * tem credenciais. Caso contrário o produto mostra "não conectado".
- * `serverConfigured` é injetado por quem chama (evita ler env no cliente).
+ * Status real da integração de uma empresa.
+ * A conta é considerada configurada se possui token próprio criptografado
+ * OU se o servidor possui variáveis globais configuradas.
  */
 export function integrationStatus(
   business: Pick<Business, 'whatsappIntegration'>,
   serverConfigured = true,
 ): WhatsappIntegration {
   const cfg = { ...defaultWhatsappIntegration(), ...(business.whatsappIntegration || {}) };
-  if (cfg.status === 'connected' && !serverConfigured) {
-    // Credenciais removidas do servidor → não mentimos: volta a pendente.
+  const hasBusinessCredentials = !!(cfg.phoneNumberId && cfg.encryptedAccessToken);
+  const isConfigured = hasBusinessCredentials || serverConfigured;
+
+  if (cfg.status === 'connected' && !isConfigured) {
+    // Credenciais removidas → volta a pendente
     return { ...cfg, status: 'pending' };
   }
   return cfg;
@@ -69,26 +82,37 @@ export function whatsappStateLabel(
   business: Pick<Business, 'whatsappIntegration' | 'whatsapp'>,
   serverConfigured = true,
 ): {
-  state: 'not_connected' | 'pending' | 'connected' | 'link_only';
+  state: WhatsappStatus | 'link_only';
   label: string;
   detail: string;
 } {
   const cfg = integrationStatus(business, serverConfigured);
   if (cfg.status === 'connected') {
-    return { state: 'connected', label: 'WhatsApp conectado', detail: cfg.displayPhone || 'Conta oficial conectada' };
+    return {
+      state: 'connected',
+      label: 'Conectado',
+      detail: cfg.displayPhone || (cfg.phoneNumberId ? `Conta oficial ${maskTechnicalId(cfg.phoneNumberId)}` : 'Conta oficial conectada'),
+    };
   }
   if (cfg.status === 'pending') {
     return {
       state: 'pending',
-      label: 'Conexão em andamento',
-      detail: serverConfigured
-        ? 'Aguardando a conclusão do cadastro da conta oficial.'
-        : 'O servidor ainda não tem as credenciais oficiais configuradas.',
+      label: 'Configurando',
+      detail: cfg.lastError
+        ? `Configuração pendente: ${cfg.lastError}`
+        : 'Aguardando validação da conta oficial junto à Meta.',
+    };
+  }
+  if (cfg.status === 'error') {
+    return {
+      state: 'error',
+      label: 'Erro',
+      detail: cfg.lastError || 'Falha recente na comunicação com a API do WhatsApp.',
     };
   }
   return business.whatsapp
-    ? { state: 'link_only', label: 'Abre o WhatsApp (link)', detail: 'Converse pelo app, sem integração oficial ainda.' }
-    : { state: 'not_connected', label: 'Não conectado', detail: 'Cadastre um número para receber conversas.' };
+    ? { state: 'link_only', label: 'Não conectado (link apenas)', detail: 'Converse pelo app wa.me, sem integração oficial ainda.' }
+    : { state: 'not_connected', label: 'Não conectado', detail: 'Cadastre um número oficial para receber e responder conversas.' };
 }
 
 // ── Variáveis de ambiente necessárias (exibidas na configuração) ──

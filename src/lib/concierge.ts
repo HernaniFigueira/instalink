@@ -84,9 +84,12 @@ export function conciergeAnswer(
     if (services.length) opts.push('ver serviços');
     if (isFeatureEnabled(business, 'bookings')) opts.push('agendar horário');
     if (isFeatureEnabled(business, 'quote')) opts.push('pedir orçamento');
+    const knownName = (options.flowCtx?.channelName || options.flowCtx?.customer?.name || '').trim();
+    const greetingStart = knownName ? `Olá ${knownName}!` : 'Olá!';
+    const canDo = opts.length ? `Posso ajudar você a ${opts.slice(0, 3).join(', ').replace(/, ([^,]*)$/, ' ou $1')}. O que você procura?` : 'Como posso ajudar você hoje?';
     return {
       intent: 'greeting',
-      reply: `Olá! Bem-vindo(a) à ${business.name}. Posso ajudar você a ${opts.slice(0, 3).join(', ').replace(/, ([^,]*)$/, ' ou $1')}. O que você procura?`,
+      reply: `${greetingStart} Bem-vindo(a) à ${business.name}. ${canDo}`,
       actions: [
         ...(products.length ? [{ label: 'Ver produtos', target: '#produtos' } as ConciergeAction] : []),
         ...(services.length ? [{ label: 'Ver serviços', target: '#servicos' } as ConciergeAction] : []),

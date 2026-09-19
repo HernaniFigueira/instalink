@@ -255,7 +255,7 @@ export interface Business {
 }
 
 // ── Integração de WhatsApp (estrutura; sem credenciais no banco) ──
-export type WhatsappStatus = 'not_connected' | 'pending' | 'connected';
+export type WhatsappStatus = 'not_connected' | 'pending' | 'connected' | 'error';
 
 export interface WhatsappIntegration {
   status: WhatsappStatus;
@@ -265,6 +265,15 @@ export interface WhatsappIntegration {
   connectedAt: string; // '' quando não conectado
   lastWebhookAt: string; // '' quando nunca recebeu evento
   requestedAt: string; // quando o lojista pediu a conexão
+  // Credencial criptografada por Business (AES-256-GCM via WHATSAPP_CREDENTIALS_KEY)
+  encryptedAccessToken?: string;
+  keyFingerprint?: string;
+  verifiedName?: string;
+  lastInboundAt?: string;
+  lastOutboundAt?: string;
+  lastError?: string;
+  lastErrorAt?: string;
+  webhookVerifiedAt?: string;
 }
 
 // ── DTO público: whitelist explícita do que o visitante pode ver ──
@@ -916,7 +925,8 @@ export type AutomationActionType =
   | 'create_task'
   | 'create_booking'
   | 'cancel_booking'
-  | 'dispatch_webhook';
+  | 'dispatch_webhook'
+  | 'send_channel_message';
 
 /** Modo de espera (P4.6). `event` está Preparado, ainda não dispara. */
 export type AutomationWaitMode = 'duration' | 'until' | 'event';
@@ -1202,11 +1212,13 @@ export interface Conversation {
   id: ID;
   businessId: ID;
   channel: ConversationChannel;
+  channelUserId?: string;
   contactId: string; // contato do CRM ('' quando ainda não resolvido)
   customerId: string;
   name: string;
   phone: string; // só dígitos
   status: ConversationStatus;
+  mode?: 'automation' | 'human'; // 'automation' (padrão) | 'human' (equipe assumiu)
   unread: number;
   lastMessageAt: string;
   lastMessagePreview: string;
@@ -1223,9 +1235,18 @@ export interface Message {
   direction: 'in' | 'out';
   body: string;
   status: MessageStatus;
-  externalId: string; // id do provedor (webhook)
-  by: string; // userId do membro (envio interno) ou 'contact' (recebida)
+  externalId: string; // id do provedor (webhook: wamid)
+  by: string; // userId do membro (envio interno) ou 'contact' (recebida) ou 'automation'
+  byName?: string;
+  channel?: string;
+  channelUserId?: string;
   at: string;
+  error?: string;
+  claimToken?: string;
+  claimExpiresAt?: string;
+  attempts?: number;
+  nextRetryAt?: string;
+  meta?: Record<string, any>;
 }
 
 // ═══════════════════════════════════════════════════════════════
@@ -1288,6 +1309,9 @@ export interface Campaign {
   businessId: ID;
   name: string;
   message: string;
+  templateName?: string;
+  templateLanguage?: string;
+  templateParams?: Record<string, any>;
   segment: CampaignSegment;
   segmentRef: string; // serviceId quando segment = 'by_service'
   status: CampaignStatus;
@@ -1307,6 +1331,7 @@ export interface CampaignRecipient {
   name: string;
   phone: string;
   status: 'pending' | 'sent' | 'delivered' | 'failed';
+  externalId?: string;
   error: string;
   at: string;
 }
