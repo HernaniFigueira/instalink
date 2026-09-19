@@ -6,7 +6,7 @@ import { taskDueLabel } from '@/lib/automation/tasks';
 import { todayISO } from '@/lib/tz';
 import { buildPeople360IdentityIndex, people360Phone, type People360Identity } from '@/lib/people360-identity';
 // A3.3 — carteirinha do cliente: o 360 entrega também o cadastro rico.
-import { ageFromBirthDate, clientTags, emptyProfile, isMinor, profileOf } from '@/lib/contact-profile';
+import { ageFromBirthDate, clientTags, countAttended, emptyProfile, isMinor, profileOf } from '@/lib/contact-profile';
 import type { ContactProfile } from '@/lib/types';
 
 // GET ?businessId=&q=&page= — cliente 360 (contato-centric).
@@ -28,7 +28,8 @@ export async function GET(req: NextRequest) {
   const accessFilter = req.nextUrl.searchParams.get('access') || '';   // 'active' | 'none'
   const consentFilter = req.nextUrl.searchParams.get('consent') || ''; // 'yes' | 'no'
   const minorFilter = (req.nextUrl.searchParams.get('minor') || '') === 'yes';
-  const withBookings = (req.nextUrl.searchParams.get('attended') || '') === 'yes';
+  // Ponto 9 — "já atendidos" = atendimento CONCLUÍDO, não "tem booking".
+  const attendedOnly = (req.nextUrl.searchParams.get('attended') || '') === 'yes';
   const limit = 30;
   const guard = await requireBusiness(req, businessId, 'clientes');
   if (!guard.ok) return guard.res;
@@ -48,6 +49,11 @@ export async function GET(req: NextRequest) {
     accountEmail: string;
     accountPhone: string;
     mustChangePassword: boolean;
+    /**
+     * Foto da CONTA global (`Customer.avatar`), quando existe vínculo.
+     * Não há segunda foto no contato: sem conta, a UI usa as iniciais.
+     */
+    avatar: string;
     customerSince: string;
     source: string;
     marketingOptIn: boolean;
@@ -112,6 +118,9 @@ export async function GET(req: NextRequest) {
     p.accountEmail = account?.email || '';
     p.accountPhone = account?.phone || '';
     p.mustChangePassword = account?.mustChangePassword === true;
+    // Ponto 8 — avatar REAL vem da conta global, nunca de um campo novo no
+    // contato. Sem Customer vinculado, continua '' e a UI cai nas iniciais.
+    p.avatar = account?.avatar || '';
   };
 
   const get = (customerId: string, rawPhone: string, name: string, contactId = ''): P | null => {
@@ -123,6 +132,7 @@ export async function GET(req: NextRequest) {
       p = {
         key, contactId: '', note: '', notes: [], customerId: '', name: '', phone: '', email: '', registered: false,
         accountStatus: 'none', accountEmail: '', accountPhone: '', mustChangePassword: false, customerSince: '',
+        avatar: '',
         source: '', marketingOptIn: false, profile: emptyProfile(), age: null, tags: [],
         orders: 0, spent: 0, lastOrderAt: '', bookings: [], leads: [], conversations: [], tasks: [], lastSeen: '',
       };
@@ -252,6 +262,8 @@ export async function GET(req: NextRequest) {
       accountStatus: p.accountStatus,
       marketingOptIn: p.marketingOptIn,
       bookingsCount: p.bookings.length,
+      // Ponto 9 — só atendimento CONCLUÍDO autoriza "Cliente atendido".
+      attendedCount: countAttended(p.bookings),
       leadsCount: p.leads.length,
       profile: p.profile,
     });
@@ -277,7 +289,7 @@ export async function GET(req: NextRequest) {
     people = people.filter((p) => p.marketingOptIn === want);
   }
   if (minorFilter) people = people.filter((p) => isMinor(p.profile));
-  if (withBookings) people = people.filter((p) => p.bookings.length > 0);
+  if (attendedOnly) people = people.filter((p) => countAttended(p.bookings) > 0);
   const total = people.length;
   const pros = new Map(db.professionals.filter((p) => p.businessId === businessId).map((p) => [p.id, p.name]));
   const slice = people.slice((page - 1) * limit, page * limit).map((p) => ({

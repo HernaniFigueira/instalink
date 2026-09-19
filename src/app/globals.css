@@ -50,6 +50,9 @@
   --brand-border: #c6d8fd;
   --brand-fg: #1749b3;
   --brand-ring: rgba(47, 107, 239, 0.22);
+  /* Estado hover das superfícies TINTED (botão soft, chip, pílula). Existe
+     para que nenhum componente escreva hex próprio: o hover é token. */
+  --brand-bg-hover: #dde9fe;
 
   /* Nomes legados (consumidos por ui.tsx e telas) → apontam para a marca.
      Uma futura identidade por negócio só precisa REATRIBUIR estes valores. */
@@ -65,6 +68,7 @@
   --success: #0f9f6e;
   --success-strong: #0b7d55;
   --success-bg: #e6f7ef;
+  --success-bg-hover: #d7f2e6;
   --success-border: #b6e4cf;
   --success-fg: #0a6a48;
 
@@ -87,6 +91,8 @@
   --attention-border: #ffc978;
   --attention-fg: #7d4c00;
   --attention-mark: #ffb020;
+  /* Texto sobre a marca âmbar: escuro o bastante para contraste AA. */
+  --attention-mark-fg: #5c3800;
 
   /* ── Destrutivo ─────────────────────────────────────────────── */
   --danger: #dc3b45;
@@ -99,8 +105,12 @@
   --lilac: #7a5cd0;
   --lilac-strong: #5f43ad;
   --lilac-bg: #f2edfd;
+  --lilac-bg-hover: #e9e0fc;
   --lilac-border: #dbccf7;
   --lilac-fg: #54358f;
+
+  /* Véu de modal/drawer: token único em vez de hex + opacidade avulsos. */
+  --overlay: rgba(13, 17, 34, 0.45);
 
   /* ── Raio ───────────────────────────────────────────────────── */
   --radius-xs: 6px;

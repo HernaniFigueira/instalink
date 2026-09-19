@@ -153,7 +153,7 @@ export default function ClientesPage() {
           <>
             {canFunil && (
               <Link href={`/funil?b=${businessId}`}
-                className="inline-flex items-center justify-center gap-1.5 text-xs font-semibold rounded-md px-3 py-2 bg-[var(--lilac-bg)] text-[var(--lilac-fg)] border border-[var(--lilac-border)] hover:bg-[#e9e0fc]">
+                className="inline-flex items-center justify-center gap-1.5 text-xs font-semibold rounded-md px-3 py-2 bg-[var(--lilac-bg)] text-[var(--lilac-fg)] border border-[var(--lilac-border)] hover:bg-[var(--lilac-bg-hover)]">
                 <Icon n="funnel" size={14} /> Funil de oportunidades
               </Link>
             )}
@@ -215,7 +215,7 @@ export default function ClientesPage() {
                         className="flex items-center gap-3 min-w-0 flex-1 text-left focus-visible:outline-none focus-visible:shadow-focus rounded-md"
                         aria-label={`Abrir perfil de ${p.name || 'cliente'}`}
                       >
-                        <Avatar name={p.name} size={42} />
+                        <Avatar name={p.name} src={p.avatar || undefined} size={42} />
                         <span className="min-w-0 flex-1">
                           <span className="flex flex-wrap items-center gap-1.5">
                             <span className="text-sm font-bold text-[var(--text)] truncate">{p.name || 'Sem nome'}</span>
@@ -250,7 +250,7 @@ export default function ClientesPage() {
                         </Button>
                         {p.phone && (
                           <a href={waLink(p.phone, `Olá, ${(p.name || '').split(' ')[0]}!`)} target="_blank" rel="noreferrer"
-                            className="inline-flex items-center justify-center gap-1.5 text-xs font-semibold rounded-md px-2.5 py-1.5 bg-[var(--success-bg)] text-[var(--success-fg)] border border-[var(--success-border)] hover:bg-[#d7f2e6]"
+                            className="inline-flex items-center justify-center gap-1.5 text-xs font-semibold rounded-md px-2.5 py-1.5 bg-[var(--success-bg)] text-[var(--success-fg)] border border-[var(--success-border)] hover:bg-[var(--success-bg-hover)]"
                             title="Abrir WhatsApp">
                             <Icon n="whatsapp" size={14} />
                           </a>

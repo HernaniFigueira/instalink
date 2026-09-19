@@ -310,7 +310,7 @@ export default function ConversasPage() {
                       {active.conversation.mode === 'human' ? 'Devolver ao assistente' : 'Assumir atendimento'}
                     </button>
                     <Link href={`/clientes?b=${businessId}&q=${encodeURIComponent(active.conversation.phone||'')}`}
-                      className="text-xs font-bold text-[var(--brand-fg)] bg-[var(--brand-soft)] border border-[var(--brand-border)] rounded-md px-2.5 py-1.5 hover:bg-[#dde9fe] inline-flex items-center gap-1.5">
+                      className="text-xs font-bold text-[var(--brand-fg)] bg-[var(--brand-soft)] border border-[var(--brand-border)] rounded-md px-2.5 py-1.5 hover:bg-[var(--brand-bg-hover)] inline-flex items-center gap-1.5">
                       <Icon n="wallet" size={13} /> Ver no CRM
                     </Link>
                   </div>
@@ -387,7 +387,7 @@ export default function ConversasPage() {
                     <Link href={`/clientes?b=${businessId}&q=${encodeURIComponent(active.conversation.phone||'')}`} className="flex items-center gap-1.5 text-xs font-semibold bg-[var(--surface-3)] border border-[var(--border)] rounded-md px-3 py-2 hover:bg-[var(--brand-soft)] hover:text-[var(--brand-fg)] hover:border-[var(--brand-border)]"><Icon n="wallet" size={13} /> Ver no CRM</Link>
                     <Link href={`/funil?b=${businessId}`} className="flex items-center gap-1.5 text-xs font-semibold bg-[var(--surface-3)] border border-[var(--border)] rounded-md px-3 py-2 hover:bg-[var(--lilac-bg)] hover:text-[var(--lilac-fg)] hover:border-[var(--lilac-border)]"><Icon n="funnel" size={13} /> Ver no funil</Link>
                     <Link href={`/agenda?b=${businessId}`} className="flex items-center gap-1.5 text-xs font-semibold bg-[var(--surface-3)] border border-[var(--border)] rounded-md px-3 py-2 hover:bg-[var(--brand-soft)] hover:text-[var(--brand-fg)] hover:border-[var(--brand-border)]"><Icon n="calendar" size={13} /> Ver agenda</Link>
-                    <a href={data.linkFallback} target="_blank" rel="noreferrer" className="flex items-center gap-1.5 text-xs font-semibold bg-[var(--success-bg)] text-[var(--success-fg)] border border-[var(--success-border)] rounded-md px-3 py-2 hover:bg-[#d7f2e6]">
+                    <a href={data.linkFallback} target="_blank" rel="noreferrer" className="flex items-center gap-1.5 text-xs font-semibold bg-[var(--success-bg)] text-[var(--success-fg)] border border-[var(--success-border)] rounded-md px-3 py-2 hover:bg-[var(--success-bg-hover)]">
                       <Icon n="whatsapp" size={13} /> Abrir no WhatsApp <Icon n="external" size={11} />
                     </a>
                   </div>

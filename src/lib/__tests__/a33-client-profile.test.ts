@@ -146,9 +146,25 @@ describe('etiquetas da carteirinha (derivadas, nunca chutadas)', () => {
 
   it('cliente atendido + lead + acesso + consentimento convivem', () => {
     const tags = clientTags({
-      name: 'Maria', accountStatus: 'active', marketingOptIn: true, bookingsCount: 3, leadsCount: 1, profile: emptyProfile(),
+      name: 'Maria', accountStatus: 'active', marketingOptIn: true,
+      bookingsCount: 3, attendedCount: 2, leadsCount: 1, profile: emptyProfile(),
     });
     expect(tags.map((t) => t.id)).toEqual(['paciente', 'lead', 'acesso', 'marketing']);
+    // O hint distingue concluídos do total: 2 de 3.
+    expect(tags.find((t) => t.id === 'paciente')?.hint).toContain('2 atendimento(s) concluído(s) de 3');
+  });
+
+  // ── Ponto 9: "atendido" é atendimento CONCLUÍDO, não "tem booking" ──
+  it('agendamento sem nenhum concluído NÃO vira "Cliente atendido"', () => {
+    const tags = clientTags({ name: 'João', bookingsCount: 3, profile: emptyProfile() });
+    expect(tags.map((t) => t.id)).toEqual(['agendado']);
+    expect(tags[0].label).toBe('Com agendamentos');
+    expect(tags[0].hint).toContain('nenhum concluído');
+  });
+
+  it('um único atendimento concluído já autoriza a etiqueta', () => {
+    const tags = clientTags({ name: 'João', bookingsCount: 1, attendedCount: 1, profile: emptyProfile() });
+    expect(tags.map((t) => t.id)).toEqual(['paciente']);
   });
 
   it('sem dado nenhum, sem etiqueta (nada é inventado)', () => {

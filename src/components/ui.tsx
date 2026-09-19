@@ -34,7 +34,7 @@ const BTN_VARIANT_CLS: Record<ButtonVariant, string> = {
   danger:
     'bg-[var(--danger)] text-white border border-[var(--danger-strong)]/40 shadow-sm hover:bg-[var(--danger-strong)] active:translate-y-px',
   soft:
-    'bg-[var(--brand-soft)] text-[var(--brand-fg)] border border-[var(--brand-border)] hover:bg-[#dde9fe] active:translate-y-px',
+    'bg-[var(--brand-soft)] text-[var(--brand-fg)] border border-[var(--brand-border)] hover:bg-[var(--brand-bg-hover)] active:translate-y-px',
   secondary:
     'bg-white text-[var(--text)] border border-[var(--border-strong)] shadow-xs hover:bg-[var(--surface-hover)] hover:border-[var(--brand-border)] active:translate-y-px',
   ghost:
@@ -291,7 +291,7 @@ export function StatusBadge({ tone = 'zinc', className, children }: { tone?: Ton
 export function AttentionStrip({ title, hint, action }: { title: string; hint?: string; action?: React.ReactNode }) {
   return (
     <div className="mb-3 border border-[var(--warning-border)] bg-[var(--warning-bg)] rounded-lg px-3 py-2.5 flex flex-wrap items-center gap-2 shadow-xs">
-      <span className="w-6 h-6 rounded-md bg-[var(--attention-mark)] text-[#5c3800] flex items-center justify-center shrink-0">
+      <span className="w-6 h-6 rounded-md bg-[var(--attention-mark)] text-[var(--attention-mark-fg)] flex items-center justify-center shrink-0">
         <Icon n="alert" size={14} strokeWidth={2.2} />
       </span>
       <span className="text-xs font-bold text-[var(--warning-fg)]">{title}</span>
@@ -455,7 +455,7 @@ export function Stat({ label, value, hint, tone = 'brand', icon }: {
   );
 }
 
-export function Notice({ tone = 'info', children, title }: { tone?: 'info' | 'success' | 'error' | 'warning'; children: React.ReactNode; title?: string }) {
+export function Notice({ tone = 'info', children, title, className }: { tone?: 'info' | 'success' | 'error' | 'warning'; children: React.ReactNode; title?: string; className?: string }) {
   const map = {
     info: 'bg-[var(--info-bg)] text-[var(--info-fg)] border-[var(--info-border)]',
     success: 'bg-[var(--success-bg)] text-[var(--success-fg)] border-[var(--success-border)]',
@@ -464,7 +464,7 @@ export function Notice({ tone = 'info', children, title }: { tone?: 'info' | 'su
   }[tone];
   const icon = { info: 'spark', success: 'checkCircle', warning: 'alert', error: 'alert' }[tone];
   return (
-    <div className={cn('rounded-md px-3 py-2.5 text-sm font-medium border flex items-start gap-2', map)}>
+    <div className={cn('rounded-md px-3 py-2.5 text-sm font-medium border flex items-start gap-2', map, className)}>
       <Icon n={icon} size={15} className="mt-0.5 shrink-0" />
       <div className="min-w-0">
         {title && <p className="font-semibold">{title}</p>}
@@ -486,7 +486,7 @@ export function Drawer({ open, onClose, title, subtitle, children, footer, width
         type="button"
         aria-label="Fechar painel"
         onClick={onClose}
-        className="absolute inset-0 bg-[#0d1122]/45 backdrop-blur-[1px]"
+        className="absolute inset-0 bg-[var(--overlay)] backdrop-blur-[1px]"
       />
       <div className={cn('relative w-full h-full bg-[var(--bg)] shadow-xl flex flex-col', width)}>
         <header className="shrink-0 flex items-center justify-between gap-3 px-4 py-3 bg-[var(--surface)] border-b border-[var(--border)]">

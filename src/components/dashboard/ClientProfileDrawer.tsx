@@ -22,7 +22,7 @@ import { BOOKING_STATUS, LEAD_STATUS, type StatusDef } from '@/lib/status';
 import { leadOriginLabel } from '@/lib/leads';
 import type { BusinessPipeline, ContactProfile } from '@/lib/types';
 import {
-  BRAZILIAN_STATES, PROFILE_TAGS_MAX, ageFromBirthDate, clientTags, formatCep, formatCpf,
+  BRAZILIAN_STATES, PROFILE_TAGS_MAX, ageFromBirthDate, clientTags, countAttended, formatCep, formatCpf,
   formatPhoneBR, isValidCpf, normalizeBirthDate, profileOf,
 } from '@/lib/contact-profile';
 import { Avatar, Badge, Button, Drawer, IconButton, Input, Notice, Select, StatusBadge, SubCard, Switch, Tabs, Textarea, type TabItem } from '@/components/ui';
@@ -43,6 +43,8 @@ export interface Person360 {
   accountEmail?: string;
   accountPhone?: string;
   mustChangePassword?: boolean;
+  /** Foto da conta global, quando existe vínculo ('' = usar iniciais). */
+  avatar?: string;
   customerSince: string; source: string; marketingOptIn: boolean;
   orders: number; spent: number; lastOrderAt: string;
   /** A3.3 — dados cadastrais (carteirinha). */
@@ -85,6 +87,11 @@ export function ClientProfileDrawer({ person, businessId, pipeline, canFunil, on
   const [tab, setTab] = useState<HistoryTab>('timeline');
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState<ContactProfile>(() => profileOf(person.profile));
+  // Identidade (nome/telefone/e-mail) é editável de verdade (ponto 3). Fica em
+  // estado próprio porque NÃO faz parte de `profile`: são campos do contato.
+  const [identityDraft, setIdentityDraft] = useState({
+    name: person.name || '', phone: person.phone || '', email: person.email || '',
+  });
   const [saving, setSaving] = useState(false);
   const [notice, setNotice] = useState<{ tone: 'info' | 'success' | 'error' | 'warning'; text: string; password?: string } | null>(null);
   const [noteDraft, setNoteDraft] = useState('');
@@ -99,8 +106,33 @@ export function ClientProfileDrawer({ person, businessId, pipeline, canFunil, on
     ? person.tags
     : clientTags({
       name: person.name, accountStatus: person.accountStatus, marketingOptIn: person.marketingOptIn,
-      bookingsCount: person.bookings.length, leadsCount: person.leads.length, profile,
+      bookingsCount: person.bookings.length,
+      // Ponto 9 — só atendimento concluído autoriza "Cliente atendido".
+      attendedCount: countAttended(person.bookings),
+      leadsCount: person.leads.length, profile,
     })), [person, profile]);
+
+  // O cadastro mudou em relação ao que veio do servidor? Serve para não mandar
+  // PATCH à toa e para dizer com clareza "nada para salvar".
+  const draftChanged = useMemo(
+    () => JSON.stringify(draft) !== JSON.stringify(profileOf(person.profile)),
+    [draft, person.profile],
+  );
+
+  // Endereço em UMA linha legível (ponto 10): rua, número, complemento —
+  // bairro, cidade/UF. Só as partes preenchidas entram, sem vírgula sobrando.
+  const addressLine = useMemo(() => {
+    const a = profile.address;
+    const first = [a.street, a.number ? (a.street ? `${a.street}, ${a.number}` : a.number) : '', a.complement]
+      .filter(Boolean).join(' · ');
+    const second = [a.district, [a.city, a.state].filter(Boolean).join('/')].filter(Boolean).join(' — ');
+    const cep = a.cep ? formatCep(a.cep) : '';
+    return [first, second, cep].filter(Boolean).join(' · ');
+  }, [profile.address]);
+
+  // A seção "Cadastro" só aparece quando há algo cadastrado de verdade.
+  const hasCadastre = !!(addressLine || profile.guardian.name || profile.guardian.phone
+    || profile.adminNote || profile.tags.length > 0);
 
   const firstName = (person.name || '').split(' ')[0] || 'cliente';
 
@@ -119,7 +151,21 @@ export function ClientProfileDrawer({ person, businessId, pipeline, canFunil, on
     if (!person.contactId) { setNotice({ tone: 'error', text: 'Este contato ainda não tem cadastro no CRM.' }); return; }
     if (draft.cpf && !isValidCpf(draft.cpf)) { setNotice({ tone: 'error', text: 'CPF inválido — confira os dígitos.' }); return; }
     if (draft.guardian.cpf && !isValidCpf(draft.guardian.cpf)) { setNotice({ tone: 'error', text: 'CPF do responsável inválido.' }); return; }
-    const ok = await patch({ profile: draft }, 'Dados cadastrais salvos.');
+    // Ponto 3 — identidade editável. Só envia o que mudou, e a validação de
+    // verdade (normalização + conflito com outro contato) é do servidor: o
+    // React aqui só evita ida inútil.
+    const identity: Record<string, string> = {};
+    const name = identityDraft.name.trim();
+    if (name && name !== (person.name || '')) identity.name = name;
+    const phone = identityDraft.phone.replace(/\D/g, '');
+    if (phone !== (person.phone || '')) identity.phone = phone;
+    const email = identityDraft.email.trim().toLowerCase();
+    if (email !== (person.email || '')) identity.email = email;
+    if (Object.keys(identity).length === 0 && !draftChanged) {
+      setNotice({ tone: 'info', text: 'Nada para salvar — nenhum campo foi alterado.' });
+      return;
+    }
+    const ok = await patch({ ...identity, profile: draft }, 'Dados cadastrais salvos.');
     if (ok) setEditing(false);
   }
 
@@ -315,7 +361,8 @@ export function ClientProfileDrawer({ person, businessId, pipeline, canFunil, on
       <div className="p-4">
         <div className="il-idcard rounded-xl border border-[var(--border)] shadow-md p-4">
           <div className="relative flex flex-wrap items-start gap-4">
-            <Avatar name={person.name} size={72} />
+            {/* Ponto 8 — foto real da conta global quando existe; sem ela, iniciais. */}
+            <Avatar name={person.name} src={person.avatar || undefined} size={72} />
             <div className="min-w-0 flex-1">
               <h2 className="text-lg font-bold text-[var(--text)] leading-tight break-words">{person.name || 'Sem nome'}</h2>
               <p className="text-sm text-[var(--text-muted)] mt-0.5">
@@ -375,6 +422,63 @@ export function ClientProfileDrawer({ person, businessId, pipeline, canFunil, on
           </div>
         </SubCard>
 
+        {/* ═══ CADASTRO (visão de leitura) ═══
+            Ponto 10: endereço, responsável e observação não podem existir só
+            dentro da edição. Aqui aparece o que já está preenchido — e só o
+            que está preenchido, para a ficha não virar formulário vazio.
+            Não é prontuário: é dado administrativo. */}
+        {hasCadastre && (
+          <SubCard className="mt-3 p-3.5">
+            <div className="flex items-center justify-between gap-3 mb-2">
+              <p className="text-sm font-semibold text-[var(--text)] inline-flex items-center gap-1.5">
+                <Icon n="idcard" size={14} className="text-[var(--text-muted)]" /> Cadastro
+              </p>
+              <Button size="xs" variant="quiet" onClick={() => setEditing(true)}>
+                <Icon n="pencil" size={12} /> Editar
+              </Button>
+            </div>
+            <dl className="grid sm:grid-cols-2 gap-x-4 gap-y-2.5">
+              {addressLine && (
+                <div className="sm:col-span-2">
+                  <dt className="text-[10px] font-bold uppercase tracking-[0.08em] text-[var(--text-faint)]">Endereço</dt>
+                  <dd className="text-xs text-[var(--text)] mt-0.5">{addressLine}</dd>
+                </div>
+              )}
+              {profile.guardian.name && (
+                <div>
+                  <dt className="text-[10px] font-bold uppercase tracking-[0.08em] text-[var(--text-faint)]">Responsável</dt>
+                  <dd className="text-xs text-[var(--text)] mt-0.5">
+                    {profile.guardian.name}
+                    {profile.guardian.relationship ? ` · ${profile.guardian.relationship}` : ''}
+                  </dd>
+                </div>
+              )}
+              {profile.guardian.phone && (
+                <div>
+                  <dt className="text-[10px] font-bold uppercase tracking-[0.08em] text-[var(--text-faint)]">Contato do responsável</dt>
+                  <dd className="text-xs text-[var(--text)] mt-0.5">{formatPhoneBR(profile.guardian.phone)}</dd>
+                </div>
+              )}
+              {profile.adminNote && (
+                <div className="sm:col-span-2">
+                  <dt className="text-[10px] font-bold uppercase tracking-[0.08em] text-[var(--text-faint)]">Observação administrativa</dt>
+                  <dd className="text-xs text-[var(--text-muted)] mt-0.5 whitespace-pre-line">{profile.adminNote}</dd>
+                </div>
+              )}
+              {profile.tags.length > 0 && (
+                <div className="sm:col-span-2">
+                  <dt className="text-[10px] font-bold uppercase tracking-[0.08em] text-[var(--text-faint)] mb-1">Etiquetas do cadastro</dt>
+                  <dd className="flex flex-wrap gap-1.5">
+                    {profile.tags.map((t) => (
+                      <span key={t} className="rounded-md border border-[var(--border-2)] bg-[var(--surface-2)] px-2 py-0.5 text-[11px] font-semibold text-[var(--text-muted)]">{t}</span>
+                    ))}
+                  </dd>
+                </div>
+              )}
+            </dl>
+          </SubCard>
+        )}
+
         {/* Consentimento de marketing — o que significa, sem jargão. */}
         <SubCard className="mt-3 p-3.5 flex flex-wrap items-center justify-between gap-3">
           <div className="min-w-0">
@@ -420,6 +524,11 @@ export function ClientProfileDrawer({ person, businessId, pipeline, canFunil, on
             <fieldset className="space-y-3">
               <legend className="text-[11px] font-bold uppercase tracking-[0.08em] text-[var(--text-faint)] mb-2">Dados básicos</legend>
               <div className="grid sm:grid-cols-2 gap-3">
+                <label className="block sm:col-span-2">
+                  <span className="block text-xs font-semibold text-[var(--text-muted)] mb-1.5">Nome completo</span>
+                  <Input value={identityDraft.name} placeholder="Nome do cliente"
+                    onChange={(e) => setIdentityDraft((d) => ({ ...d, name: e.target.value }))} />
+                </label>
                 <label className="block">
                   <span className="block text-xs font-semibold text-[var(--text-muted)] mb-1.5">Data de nascimento</span>
                   <Input type="date" value={draft.birthDate} max={new Date().toISOString().slice(0, 10)}
@@ -435,16 +544,31 @@ export function ClientProfileDrawer({ person, businessId, pipeline, canFunil, on
                 </label>
                 <label className="block">
                   <span className="block text-xs font-semibold text-[var(--text-muted)] mb-1.5">Telefone / WhatsApp</span>
-                  <Input inputMode="tel" defaultValue={person.phone} disabled
-                    className="bg-[var(--surface-3)]" />
-                  <span className="block text-xs text-[var(--text-muted)] mt-1">O telefone é a identidade do contato — edite pela busca/criação.</span>
+                  <Input inputMode="tel" value={identityDraft.phone} placeholder="(11) 91234-5678"
+                    onChange={(e) => setIdentityDraft((d) => ({ ...d, phone: e.target.value }))} />
+                  <span className="block text-xs text-[var(--text-muted)] mt-1">
+                    Se já pertencer a outro cliente desta unidade, a troca é recusada — ninguém é fundido por engano.
+                  </span>
                 </label>
                 <label className="block">
                   <span className="block text-xs font-semibold text-[var(--text-muted)] mb-1.5">E-mail</span>
-                  <Input type="email" defaultValue={person.email} disabled className="bg-[var(--surface-3)]" />
+                  <Input type="email" value={identityDraft.email} placeholder="nome@exemplo.com"
+                    onChange={(e) => setIdentityDraft((d) => ({ ...d, email: e.target.value }))} />
                 </label>
               </div>
             </fieldset>
+
+            {/* A conta de login é OUTRA coisa: trocar o cadastro daqui não muda
+                a identidade global da conta, e isso fica dito, não subentendido. */}
+            {person.accountStatus === 'active' && (
+              <Notice tone="info" className="mt-3">
+                <strong>Conta de acesso separada.</strong> Este cliente entra na área do cliente com
+                {person.accountEmail ? ` ${person.accountEmail}` : 'o e-mail da conta'}
+                {person.accountPhone ? ` / ${formatPhoneBR(person.accountPhone)}` : ''}.
+                Alterar o cadastro desta ficha não muda o login — para trocar a identidade da conta,
+                faça isso em Equipe/Acesso.
+              </Notice>
+            )}
 
             <fieldset className="space-y-3 mt-4">
               <legend className="text-[11px] font-bold uppercase tracking-[0.08em] text-[var(--text-faint)] mb-2">Endereço</legend>
@@ -553,7 +677,7 @@ export function ClientProfileDrawer({ person, businessId, pipeline, canFunil, on
 
             <label className="block mt-4">
               <span className="text-[11px] font-bold uppercase tracking-[0.08em] text-[var(--text-faint)] mb-2 block">Observação administrativa</span>
-              <Textarea value={draft.adminNote} rows={3} placeholder="Preferências, restrições, convênio, alergias…"
+              <Textarea value={draft.adminNote} rows={3} placeholder="Preferências, convênio, observações de atendimento…"
                 onChange={(e) => setDraft((d) => ({ ...d, adminNote: e.target.value }))} />
             </label>
 
@@ -740,7 +864,7 @@ export function ClientProfileDrawer({ person, businessId, pipeline, canFunil, on
               <div className="flex gap-2">
                 <Input value={noteDraft} onChange={(e) => setNoteDraft(e.target.value)}
                   onKeyDown={(e) => { if (e.key === 'Enter') addNote(); }}
-                  placeholder="Nova observação (ex.: prefere manhã, alergia a X…)" />
+                  placeholder="Nova observação (ex.: prefere horário da manhã, avisa antes…)" />
                 <Button variant="primary" size="sm" onClick={addNote} disabled={!noteDraft.trim() || saving}>
                   <Icon n="plus" size={14} /> Adicionar
                 </Button>
@@ -781,7 +905,7 @@ function CopyChip({ value }: { value: string }) {
 function A2({ href, label, icon }: { href: string; label: string; icon: string }) {
   return (
     <a href={href} target="_blank" rel="noreferrer"
-      className="inline-flex items-center justify-center gap-1.5 text-xs font-semibold rounded-md px-2.5 py-1.5 bg-[var(--success-bg)] text-[var(--success-fg)] border border-[var(--success-border)] hover:bg-[#d7f2e6]">
+      className="inline-flex items-center justify-center gap-1.5 text-xs font-semibold rounded-md px-2.5 py-1.5 bg-[var(--success-bg)] text-[var(--success-fg)] border border-[var(--success-border)] hover:bg-[var(--success-bg-hover)]">
       <Icon n={icon} size={14} /> {label}
     </a>
   );

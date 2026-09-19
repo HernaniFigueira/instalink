@@ -248,7 +248,7 @@ export const PANEL_ROUTES: PanelRouteDef[] = [
     // INTEGRAÇÕES (por onde os dados viajam, com direção declarada).
     href: '/canais', label: 'Canais & Integrações', icon: 'plugs', section: 'crescimento',
     permission: 'config', area: 'canais',
-    description: 'Por onde o cliente fala com você, de onde ele chega e como outros sistemas se conectam.',
+    description: 'Por onde o cliente fala com você (WhatsApp, redes sociais), de onde ele chega e como outros sistemas se conectam.',
   },
 
   // ── Resultados: como está indo ──

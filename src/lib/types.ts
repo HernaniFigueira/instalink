@@ -605,10 +605,25 @@ export interface ContactAddress {
  * aparecem na carteirinha, nunca se contradizem em silêncio.
  */
 export interface ContactGuardian {
+  /**
+   * Declaração da equipe. SÓ vale quando não há data de nascimento: com
+   * `birthDate` válida, a idade derivada é a autoridade (ponto 6 do
+   * fechamento A3.3) — assim `isMinor: true` com nascimento em 1990 não
+   * classifica um adulto como menor.
+   */
   isMinor: boolean;
   name: string;
   phone: string; // só dígitos
   cpf: string;
+  /**
+   * Vínculo com outro `BusinessCustomer` da MESMA unidade ('' = responsável
+   * ainda é texto livre). Reservado para o próximo passo — "vincular
+   * responsável existente" — e opcional de propósito: nada hoje o exige,
+   * então registros antigos continuam válidos sem migração.
+   */
+  contactId?: string;
+  /** Grau de relação em texto livre ('' = não informado): mãe, pai, tutor… */
+  relationship?: string;
 }
 
 /** Dados cadastrais do cliente/paciente (A3.3 — carteirinha). */
@@ -1600,6 +1615,8 @@ export type AuditAction =
   // P2 — vínculo de acesso e identidade do painel
   | 'member.professional_linked' | 'member.professional_unlinked'
   | 'appearance.updated' | 'contact.note_added'
+  // Fechamento A3.3 — edição de nome/telefone/e-mail do contato da unidade
+  | 'contact.identity_updated'
   // P3 — esteira operacional e integrações
   | 'pipeline.updated' | 'api_key.created' | 'api_key.revoked'
   | 'webhook.created' | 'webhook.updated' | 'webhook.deleted'

@@ -33,7 +33,7 @@ export function emptyAddress(): ContactAddress {
 }
 
 export function emptyGuardian(): ContactGuardian {
-  return { isMinor: false, name: '', phone: '', cpf: '' };
+  return { isMinor: false, name: '', phone: '', cpf: '', contactId: '', relationship: '' };
 }
 
 export function emptyProfile(): ContactProfile {
@@ -70,12 +70,21 @@ export function ageFromBirthDate(birthDate: string, now: Date = new Date()): num
   return age >= 0 ? age : null;
 }
 
-/** Menor de idade: pela idade derivada OU pela declaração da equipe. */
+/**
+ * Menor de idade — hierarquia sem contradição (ponto 6 do fechamento A3.3):
+ *
+ *   1. Se existe `birthDate` VÁLIDA, a idade derivada é a autoridade:
+ *      `guardian.isMinor: true` com nascimento em 1990 NÃO classifica adulto.
+ *   2. Sem `birthDate`, `guardian.isMinor` vale como declaração manual da
+ *      equipe — é o único indício disponível.
+ *
+ * Assim as duas fontes nunca se contradizem em silêncio na carteirinha.
+ */
 export function isMinor(profile?: Pick<ContactProfile, 'birthDate' | 'guardian'> | null, now: Date = new Date()): boolean {
   if (!profile) return false;
-  if (profile.guardian?.isMinor === true) return true;
   const age = ageFromBirthDate(profile.birthDate, now);
-  return age !== null && age < MAJOR_AGE;
+  if (age !== null) return age < MAJOR_AGE;
+  return profile.guardian?.isMinor === true;
 }
 
 /** CPF válido (dígitos verificadores) — '' é aceito como "não informado". */
@@ -90,6 +99,28 @@ export function isValidCpf(input: string): boolean {
     return rest === 10 ? 0 : rest;
   };
   return digit(9) === Number(d[9]) && digit(10) === Number(d[10]);
+}
+
+/**
+ * Validação canônica de CPF do cadastro, no SERVIDOR (ponto 4 do fechamento
+ * A3.3). Cobre os DOIS campos e é chamada por POST e PATCH — a validação do
+ * React é só conforto, nunca a autoridade.
+ *
+ * Regra: `''` = não informado, permitido. Havendo valor, precisa passar em
+ * `isValidCpf`. Devolve `''` quando está tudo certo, ou a mensagem específica
+ * do campo com problema.
+ */
+export function profileCpfError(profile: unknown): string {
+  if (!profile || typeof profile !== 'object') return '';
+  const raw = profile as Record<string, unknown>;
+  const cpf = String(raw.cpf ?? '');
+  if (onlyDigits(cpf) && !isValidCpf(cpf)) return 'CPF inválido.';
+  const guardian = raw.guardian;
+  if (guardian && typeof guardian === 'object') {
+    const gCpf = String((guardian as Record<string, unknown>).cpf ?? '');
+    if (onlyDigits(gCpf) && !isValidCpf(gCpf)) return 'CPF do responsável inválido.';
+  }
+  return '';
 }
 
 export function formatCpf(input: string): string {
@@ -115,27 +146,44 @@ export function formatCep(input: string): string {
   return d.length > 5 ? `${d.slice(0, 5)}-${d.slice(5)}` : d;
 }
 
-function normalizeAddress(v: unknown): ContactAddress {
+/**
+ * Normaliza o endereço preservando o que o patch NÃO enviou.
+ *
+ * Sem o `base`, `{ address: { number: '200' } }` reconstruía o objeto do zero
+ * e apagava cep/street/city — o oposto da promessa de PATCH parcial (ponto 5
+ * do fechamento A3.3). Regra: subcampo ausente (`undefined`) preserva o atual;
+ * string vazia enviada de propósito continua limpando o campo.
+ */
+function normalizeAddress(v: unknown, base?: ContactAddress): ContactAddress {
+  const from = base || emptyAddress();
   const raw = (v && typeof v === 'object' ? v : {}) as Record<string, unknown>;
-  const state = text(raw.state, 2).toUpperCase();
+  const has = (k: string) => raw[k] !== undefined;
+  const state = text(has('state') ? raw.state : from.state, 2).toUpperCase();
   return {
-    cep: onlyDigits(String(raw.cep ?? '')).slice(0, 8),
-    street: text(raw.street),
-    number: text(raw.number, 20),
-    complement: text(raw.complement, 60),
-    district: text(raw.district),
-    city: text(raw.city),
+    cep: onlyDigits(String(has('cep') ? raw.cep ?? '' : from.cep)).slice(0, 8),
+    street: has('street') ? text(raw.street) : from.street,
+    number: has('number') ? text(raw.number, 20) : from.number,
+    complement: has('complement') ? text(raw.complement, 60) : from.complement,
+    district: has('district') ? text(raw.district) : from.district,
+    city: has('city') ? text(raw.city) : from.city,
     state: (BRAZILIAN_STATES as readonly string[]).includes(state) ? state : '',
   };
 }
 
-function normalizeGuardian(v: unknown): ContactGuardian {
+/** Idem ao endereço: cada subcampo ausente preserva o valor atual. */
+function normalizeGuardian(v: unknown, base?: ContactGuardian): ContactGuardian {
+  const from = base || emptyGuardian();
   const raw = (v && typeof v === 'object' ? v : {}) as Record<string, unknown>;
+  const has = (k: string) => raw[k] !== undefined;
   return {
-    isMinor: raw.isMinor === true,
-    name: text(raw.name, 80),
-    phone: onlyDigits(String(raw.phone ?? '')).slice(0, 13),
-    cpf: onlyDigits(String(raw.cpf ?? '')).slice(0, 11),
+    isMinor: has('isMinor') ? raw.isMinor === true : from.isMinor,
+    name: has('name') ? text(raw.name, 80) : from.name,
+    phone: onlyDigits(String(has('phone') ? raw.phone ?? '' : from.phone)).slice(0, 13),
+    cpf: onlyDigits(String(has('cpf') ? raw.cpf ?? '' : from.cpf)).slice(0, 11),
+    // Vínculo futuro com outro contato da mesma unidade (ponto 7): opcional e
+    // aditivo — ausente no patch preserva o atual; '' desvincula de propósito.
+    contactId: has('contactId') ? text(raw.contactId, 64) : from.contactId,
+    relationship: has('relationship') ? text(raw.relationship, 40) : from.relationship,
   };
 }
 
@@ -166,8 +214,8 @@ export function normalizeContactProfile(patch: unknown, current?: ContactProfile
     cpf: has('cpf') ? onlyDigits(String(raw.cpf ?? '')).slice(0, 11) : base.cpf,
     gender: has('gender') ? text(raw.gender, 40) : base.gender,
     adminNote: has('adminNote') ? text(raw.adminNote, PROFILE_NOTE_MAX) : base.adminNote,
-    address: has('address') ? normalizeAddress(raw.address) : normalizeAddress(base.address),
-    guardian: has('guardian') ? normalizeGuardian(raw.guardian) : normalizeGuardian(base.guardian),
+    address: has('address') ? normalizeAddress(raw.address, base.address) : normalizeAddress(base.address),
+    guardian: has('guardian') ? normalizeGuardian(raw.guardian, base.guardian) : normalizeGuardian(base.guardian),
     tags: has('tags') ? normalizeTags(raw.tags) : normalizeTags(base.tags),
   };
 }
@@ -230,6 +278,24 @@ export interface ClientTag {
 }
 
 /**
+ * O que conta como atendimento REALIZADO (ponto 9 do fechamento A3.3).
+ *
+ * "Cliente atendido" não pode significar "tem booking": agendamento futuro,
+ * pendente, cancelado ou falta não é atendimento realizado. Só `completed`
+ * entra na conta — regra única, consumida pela etiqueta, pelo filtro
+ * "Já atendidos" e pelo drawer.
+ */
+export const ATTENDED_BOOKING_STATUS = 'completed';
+
+export function isAttendedBooking(status: unknown): boolean {
+  return String(status ?? '') === ATTENDED_BOOKING_STATUS;
+}
+
+export function countAttended(bookings: ReadonlyArray<{ status?: string } | null | undefined>): number {
+  return bookings.filter((b) => isAttendedBooking(b?.status)).length;
+}
+
+/**
  * Etiquetas da carteirinha, DERIVADAS dos dados reais (nunca digitadas à mão
  * para fingir estado). Ordem = importância para quem atende.
  */
@@ -237,7 +303,10 @@ export function clientTags(input: {
   name?: string;
   accountStatus?: 'none' | 'active';
   marketingOptIn?: boolean;
+  /** Total de agendamentos no histórico (qualquer status). */
   bookingsCount?: number;
+  /** Só os CONCLUÍDOS: é isso que autoriza a etiqueta "Cliente atendido". */
+  attendedCount?: number;
   leadsCount?: number;
   profile?: ContactProfile | null;
   now?: Date;
@@ -262,8 +331,27 @@ export function clientTags(input: {
     out.push({ id: 'responsavel', label: 'Tem responsável', tone: 'blue', hint: `Responsável: ${profile.guardian.name}` });
   }
 
-  if ((input.bookingsCount || 0) > 0) {
-    out.push({ id: 'paciente', label: 'Cliente atendido', tone: 'green', hint: `${input.bookingsCount} agendamento(s) no histórico` });
+  // Ponto 9: a etiqueta exige atendimento CONCLUÍDO. Ter agendamento futuro
+  // ou pendente não faz de ninguém "cliente atendido".
+  const attended = input.attendedCount || 0;
+  if (attended > 0) {
+    const total = input.bookingsCount || attended;
+    out.push({
+      id: 'paciente',
+      label: 'Cliente atendido',
+      tone: 'green',
+      hint: total > attended
+        ? `${attended} atendimento(s) concluído(s) de ${total} no histórico`
+        : `${attended} atendimento(s) concluído(s)`,
+    });
+  } else if ((input.bookingsCount || 0) > 0) {
+    // Tem agenda, mas nada concluído ainda — dito com todas as letras.
+    out.push({
+      id: 'agendado',
+      label: 'Com agendamentos',
+      tone: 'blue',
+      hint: `${input.bookingsCount} agendamento(s) no histórico, nenhum concluído`,
+    });
   }
   if ((input.leadsCount || 0) > 0) {
     out.push({ id: 'lead', label: 'Lead no funil', tone: 'lilac', hint: `${input.leadsCount} oportunidade(s) em aberto` });
