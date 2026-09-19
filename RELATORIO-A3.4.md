@@ -1,7 +1,8 @@
 # A3.4 — Consolidação operacional do produto
 
 **Repositório:** HernaniFigueira/instalink · **base:** `main` @ `19433984916793f665aa28fdedcc186692ee45c1`
-**Branch desta entrega:** `arena/01a0ba19-instalink` · **PR:** um só, sem merge (aguarda revisão independente)
+**Branch desta entrega:** `arena/01a0ba19-instalink` · **PR:** #30 — https://github.com/HernaniFigueira/instalink/pull/30 (um só, **sem merge** — aguarda revisão independente)
+**Status parcial:** Blocos 0 a 6 commitados; Blocos 7 a 11 em andamento no mesmo branch/PR.
 
 Este relatório é escrito em blocos, na mesma ordem da execução. Cada bloco tem
 commit próprio, testes direcionados e `tsc --noEmit` antes do seguinte.
