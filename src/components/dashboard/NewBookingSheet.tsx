@@ -56,6 +56,11 @@ export function NewBookingSheet({ businessId, services, pros, timezone, initial,
   const [date, setDate] = useState(initial?.date || '');
   const [time, setTime] = useState(initial?.time || '');
   const [note, setNote] = useState('');
+  // A3.4 · Bloco 4 — ENCAIXE: horário fora da grade, com conflito mostrado.
+  const [fitInOpen, setFitInOpen] = useState(false);
+  const [fitInTime, setFitInTime] = useState(initial?.time || '');
+  const [fitInConflicts, setFitInConflicts] = useState<Array<{ id: string; customerName: string; time: string; endTime: string; professionalName: string }>>([]);
+  const [fitInMessage, setFitInMessage] = useState('');
   const [repeat, setRepeat] = useState(false);
   const [occurrences, setOccurrences] = useState<BookingOccurrence[]>([]);
   const [preview, setPreview] = useState<OccurrencePreview[] | null>(null);
@@ -78,6 +83,8 @@ export function NewBookingSheet({ businessId, services, pros, timezone, initial,
     professional: string;
     date: string;
     time: string;
+    /** A3.4 · Bloco 4: este atendimento nasceu de um encaixe. */
+    fitIn?: boolean;
   } | null>(null);
   const seq = useRef(0);
   const slotSeq = useRef(0);
@@ -198,21 +205,39 @@ export function NewBookingSheet({ businessId, services, pros, timezone, initial,
     } catch (e: any) { setError(e.message || 'Não foi possível validar a série.'); }
     finally { setReviewing(false); }
   }
-  async function save() {
+  /**
+   * `fitIn` reaproveita o MESMO caminho de criação (createBookingTx): sem
+   * `confirmFitIn`, o servidor devolve os conflitos e não grava nada — a tela
+   * mostra com quem o horário bate e só então confirma.
+   */
+  async function save(opts: { fitIn?: boolean; confirmFitIn?: boolean; timeOverride?: string } = {}) {
     if (saving || reviewing) return;
     if (repeat && (!preview || preview.some((r) => r.state !== 'available'))) { setError('Valide e corrija todas as ocorrências antes de confirmar.'); return; }
     setError('');
     if (!name.trim()) { setError('Busque o cliente ou toque em “+ Novo cliente”.'); return; }
     if (onlyDigits(phone).length < 10) { setError('Informe um WhatsApp válido.'); return; }
-    if (!serviceId || !date || !time) { setError('Escolha serviço, data e horário.'); return; }
+    const when = opts.timeOverride || time;
+    if (!serviceId || !date || !when) { setError('Escolha serviço, data e horário.'); return; }
+    if (opts.fitIn && repeat) { setError('Encaixe não cria série — desligue a repetição.'); return; }
     setSaving(true);
     try {
       const res = await fetch('/api/bookings', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload()),
+        body: JSON.stringify({
+          ...payload(),
+          ...(opts.timeOverride ? { time: opts.timeOverride } : {}),
+          ...(opts.fitIn ? { bookingKind: 'fit_in', confirmFitIn: opts.confirmFitIn === true } : {}),
+        }),
       });
       const data = await res.json();
+      if (opts.fitIn && res.status === 409) {
+        // Conflito: NADA foi criado. Dizemos com quem bate e esperamos o "sim".
+        setFitInConflicts(data.conflicts || []);
+        setFitInMessage(data.error || 'Este horário tem conflito.');
+        setSaving(false);
+        return;
+      }
       if (!res.ok) {
         if (data.occurrences) setPreview(data.occurrences);
         throw new Error(data.error);
@@ -225,7 +250,8 @@ export function NewBookingSheet({ businessId, services, pros, timezone, initial,
         service: service?.name || 'Serviço',
         professional: data.occurrences ? 'Veja as ocorrências abaixo' : data.professionalName || eligiblePros.find((p) => p.id === proId)?.name || 'Definido pela agenda',
         date: data.occurrences?.[0]?.date || date,
-        time: data.occurrences?.[0]?.time || time,
+        time: data.occurrences?.[0]?.time || when,
+        fitIn: opts.fitIn === true,
       });
     } catch (e: any) {
       setError(e.message || 'Não foi possível criar o agendamento.');
@@ -251,7 +277,13 @@ export function NewBookingSheet({ businessId, services, pros, timezone, initial,
               <div className="rounded-xl border border-[var(--success-border)] bg-[var(--success-bg)] px-4 py-4">
                 <p className="text-base font-bold text-[var(--success-fg)] flex items-center gap-2">
                   <Icon n="check" size={18} strokeWidth={3} /> {created.count ? `${created.count} atendimentos criados` : 'Agendamento criado'}
+                  {created.fitIn && <Badge tone="amber">Encaixe</Badge>}
                 </p>
+                {created.fitIn && (
+                  <p className="text-xs text-[var(--success-fg)] mt-1">
+                    Encaixe registrado: este horário estava fora da grade e a decisão foi da equipe.
+                  </p>
+                )}
                 <dl className="mt-3 space-y-1.5 text-sm text-[var(--text)]">
                   <div className="flex gap-2"><dt className="font-semibold min-w-24 text-[var(--text-muted)]">Cliente</dt><dd>{created.customer}</dd></div>
                   <div className="flex gap-2"><dt className="font-semibold min-w-24 text-[var(--text-muted)]">Serviço</dt><dd>{created.service}</dd></div>
@@ -393,6 +425,66 @@ export function NewBookingSheet({ businessId, services, pros, timezone, initial,
             </div>
           )}
 
+          {/* A3.4 · Bloco 4 — ENCAIXE. Fica DEPOIS da grade: primeiro o que
+              está livre de verdade; o encaixe é a exceção, e o conflito é dito
+              com nome e horário antes de qualquer coisa ser gravada. */}
+          {date && serviceId && !repeat && (
+            <div className="rounded-lg border border-[var(--border)] bg-[var(--surface-2)] px-3.5 py-3">
+              {!fitInOpen ? (
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <div className="min-w-0">
+                    <p className="text-xs font-semibold text-[var(--text)]">Precisa de um horário que não está na lista?</p>
+                    <p className="text-xs text-[var(--text-muted)] mt-0.5">O encaixe aceita fora da grade — mostra o conflito e é registrado como encaixe.</p>
+                  </div>
+                  <Button type="button" variant="secondary" size="sm" onClick={() => { setFitInOpen(true); setFitInMessage(''); setFitInConflicts([]); setFitInTime(time || '09:00'); }}>
+                    <Icon n="clock" size={13} /> Encaixar
+                  </Button>
+                </div>
+              ) : (
+                <div className="space-y-3">
+                  <div className="flex flex-wrap items-end gap-2">
+                    <Field label="Horário do encaixe">
+                      <Input type="time" value={fitInTime} onChange={(e) => { setFitInTime(e.target.value); setFitInConflicts([]); setFitInMessage(''); }} className="w-32" />
+                    </Field>
+                    <Button type="button" variant="warning" size="sm" disabled={saving || !fitInTime}
+                      onClick={() => save({ fitIn: true, confirmFitIn: false, timeOverride: fitInTime })}>
+                      {saving ? 'Verificando…' : 'Verificar e encaixar'}
+                    </Button>
+                    <Button type="button" variant="ghost" size="sm" onClick={() => { setFitInOpen(false); setFitInConflicts([]); setFitInMessage(''); }}>
+                      Cancelar
+                    </Button>
+                  </div>
+                  {fitInMessage && (
+                    <Notice tone="warning" title="Este horário tem conflito">
+                      <span className="block">{fitInMessage} Nada foi agendado ainda.</span>
+                      <span className="block mt-1.5 space-y-1">
+                        {fitInConflicts.map((c) => (
+                          <span key={c.id} className="block text-xs">
+                            • {c.time}–{c.endTime} · {c.customerName}{c.professionalName ? ` · ${c.professionalName}` : ''}
+                          </span>
+                        ))}
+                      </span>
+                      <span className="mt-2 flex flex-wrap gap-2">
+                        <Button type="button" variant="warning" size="sm" disabled={saving}
+                          onClick={() => save({ fitIn: true, confirmFitIn: true, timeOverride: fitInTime })}>
+                          {saving ? 'Encaixando…' : 'Encaixar mesmo assim'}
+                        </Button>
+                        <Button type="button" variant="secondary" size="sm" onClick={() => { setFitInConflicts([]); setFitInMessage(''); }}>
+                          Escolher outro
+                        </Button>
+                      </span>
+                    </Notice>
+                  )}
+                  {!fitInMessage && (
+                    <p className="text-xs text-[var(--text-muted)]">
+                      O horário precisa estar dentro do funcionamento do dia e a equipe confirma o conflito quando existir.
+                    </p>
+                  )}
+                </div>
+              )}
+            </div>
+          )}
+
           <Checkbox label="Repetir este agendamento" hint="Séries (semanal, quinzenal…) com conferência ocorrência por ocorrência."
             checked={repeat} disabled={saving || reviewing} onChange={setRepeat} />
           {repeat && <BookingRecurrence first={{ date, time, professionalId: proId }} rows={occurrences} preview={preview}
@@ -404,7 +496,7 @@ export function NewBookingSheet({ businessId, services, pros, timezone, initial,
           </Field>
 
           {error && <Notice tone="error">{error}</Notice>}
-          <Button type="button" variant="primary" size="lg" onClick={save}
+          <Button type="button" variant="primary" size="lg" onClick={() => save()}
             disabled={saving || reviewing || (repeat && (!preview || preview.some((r) => r.state !== 'available')))}
             className="w-full">
             {saving ? 'Agendando…' : reviewing ? 'Validando…' : repeat ? `Confirmar ${occurrences.length} atendimentos` : 'Salvar agendamento'}

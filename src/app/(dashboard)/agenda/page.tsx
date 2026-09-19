@@ -26,16 +26,18 @@ import { useSearchParams } from 'next/navigation';
 import { todayISO, addDaysISO, weekdayOf, formatDateBR, nowHM } from '@/lib/tz';
 import { WEEKDAYS, WEEKDAYS_LONG, timeToMin, minToTime, cn } from '@/lib/utils';
 import type { Availability, Booking, BookingConfig, BookingStatus, Professional, Service } from '@/lib/types';
-import { Avatar, ListSkeleton, Button, IconButton, AttentionStrip, Tabs } from '@/components/ui';
+import { Avatar, Badge, ListSkeleton, Button, IconButton, AttentionStrip, Tabs } from '@/components/ui';
 import { Icon } from '@/components/icons';
 import {
   ATTENTION_MARK_CLS, ATTENTION_RING_CLS, BOOKING_BLOCK, BOOKING_DOT, BOOKING_STATUS,
 } from '@/lib/status';
 import { BookingDetailSheet } from '@/components/dashboard/BookingDetailSheet';
 import { NewBookingSheet } from '@/components/dashboard/NewBookingSheet';
+import { QueuePanel, type QueueRow } from '@/components/dashboard/QueuePanel';
 import { AccessDenied, PermissionNotice, useAreaLoad, useForbiddenNotice } from '@/components/dashboard/AccessNotice';
 import { useRevalidateOnFocus } from '@/components/dashboard/use-revalidate';
 import { bookingDuration, effectiveHorizonDays, needsClosure, rescheduleDecision } from '@/lib/booking-ops';
+import { queueSummary, waitLabel } from '@/lib/queue';
 import { apiGet, apiSend } from '@/lib/api-client';
 import { SLOT_STATE_MESSAGE, slotState } from '@/lib/slot-states';
 import {
@@ -116,6 +118,9 @@ interface BlockVM {
   cls: string;
   /** Horário passou e continua em aberto: marcador amarelo de atenção. */
   attention: boolean;
+  /** A3.4 · Bloco 4: encaixe (fora da grade) e check-in do cliente. */
+  fitIn: boolean;
+  checkedInAt: string;
   dragging: boolean;
   label: string;
 }
@@ -262,7 +267,14 @@ const GridColumn = memo(function GridColumn({ column, basisPct, variant, highlig
               <span className="tabular-nums opacity-90 whitespace-nowrap">{b.timeRange}</span>
               <span aria-hidden="true" className="opacity-60">·</span>
               <span className="truncate">{b.statusLabel}</span>
+              {/* A3.4 · Bloco 4: o encaixe é visível no cartão — quem olha a
+                  grade sabe que aquele horário foi uma decisão da equipe. */}
+              {b.fitIn && <span className="px-1 rounded-sm bg-[var(--attention-bg)] text-[var(--attention-fg)] border border-[var(--attention-border)]">ENCAIXE</span>}
             </span>
+          )}
+          {b.checkedInAt && (
+            <span title="Cliente já fez check-in" aria-hidden="true"
+              className="absolute top-1 right-1 w-4 h-4 rounded-full text-[9px] font-black leading-4 text-center bg-[var(--success)] text-white">✓</span>
           )}
           {b.attention && (
             <span title="Precisa de fechamento" aria-hidden="true"
@@ -321,6 +333,11 @@ export default function AgendaPage() {
   const [loaded, setLoaded] = useState(false);
   const [detail, setDetail] = useState<Booking | null>(null);
   const [creating, setCreating] = useState<{ date: string; time: string; professionalId: string } | null>(null);
+  // A3.4 · Bloco 4 — fila do balcão (entidade própria, fora da agenda).
+  const [queueRows, setQueueRows] = useState<QueueRow[]>([]);
+  const [queueDone, setQueueDone] = useState<QueueRow[]>([]);
+  const [queueLoading, setQueueLoading] = useState(false);
+  const [showQueue, setShowQueue] = useState(false);
   const [flash, setFlash] = useState<{ tone: 'ok' | 'warn' | 'error'; text: string } | null>(null);
 
   // ── Drag: estado mínimo (o movimento em si vive em refs, sem re-render) ──
@@ -365,6 +382,19 @@ export default function AgendaPage() {
     return { from: addDaysISO(focus, -21), to: addDaysISO(focus, 28) };
   }, [view, focus]);
 
+  /** A3.4 · Bloco 4 — a fila do balcão é lida junto com a agenda. */
+  const loadQueue = useCallback(async () => {
+    if (!businessId) return;
+    setQueueLoading(true);
+    const res = await apiGet<{ entries?: QueueRow[]; done?: QueueRow[] }>(
+      `/api/queue?businessId=${businessId}`, { scope: 'area', area: 'Agenda' },
+    );
+    setQueueLoading(false);
+    if (!res.ok) return;
+    setQueueRows(res.data?.entries || []);
+    setQueueDone(res.data?.done || []);
+  }, [businessId]);
+
   const load = useCallback(async () => {
     if (!businessId) return;
     const [cat, bk] = await Promise.all([
@@ -390,7 +420,8 @@ export default function AgendaPage() {
     setRules(d.availability || []);
     setBookings(bk.ok ? (bk.data?.bookings || []) : []);
     setLoaded(true);
-  }, [businessId, range.from, range.to, report]);
+    void loadQueue();
+  }, [businessId, range.from, range.to, report, loadQueue]);
 
   useEffect(() => { load(); }, [load]);
 
@@ -496,6 +527,14 @@ export default function AgendaPage() {
     [bookings, serviceOf, today, bizTz],
   );
 
+  // A3.4 · Bloco 4 — o que precisa de atenção AGORA no balcão: atrasados para
+  // fechar (regra já existente) + fila esperando além do confortável. Uma
+  // fonte só para a faixa, nada de alerta duplicado.
+  const queueInfo = useMemo(
+    () => queueSummary(queueRows, businessId, today, new Date()),
+    [queueRows, businessId, today],
+  );
+
   // ── Colunas: dia = profissionais; semana = dias ──
   // Filtros compactos (status + profissional) só escondem blocos/colunas da
   // grade — dados, drag e ações continuam sobre os mesmos agendamentos.
@@ -562,8 +601,10 @@ export default function AgendaPage() {
           statusLabel,
           cls: BOOKING_BLOCK[b.status],
           attention,
+          fitIn: b.bookingKind === 'fit_in',
+          checkedInAt: b.checkedInAt || '',
           dragging: dragId === b.id,
-          label: `${b.customerName} · ${serviceName(b.serviceId)} · ${formatDateBR(b.date)} ${b.time}${pro ? ` · ${pro}` : ''} · ${statusLabel}${attention ? ' — precisa de fechamento' : ''} — clique para ver o detalhe ou arraste para reagendar`,
+          label: `${b.customerName} · ${serviceName(b.serviceId)} · ${formatDateBR(b.date)} ${b.time}${pro ? ` · ${pro}` : ''} · ${statusLabel}${b.bookingKind === 'fit_in' ? ' · encaixe' : ''}${b.checkedInAt ? ' · cliente já chegou' : ''}${attention ? ' — precisa de fechamento' : ''} — clique para ver o detalhe ou arraste para reagendar`,
         };
       });
       return { ...c, isToday: c.date === today, blocks };
@@ -1078,14 +1119,66 @@ export default function AgendaPage() {
           action={(
             <>
               {pendencies.slice(0, 4).map((b) => (
-                <button key={b.id} onClick={() => setDetail(b)} className="text-xs font-medium bg-white border border-amber-200 text-amber-900 px-2.5 py-1 rounded-md hover:bg-amber-50">
+                <button key={b.id} onClick={() => setDetail(b)} className="text-xs font-medium bg-[var(--surface)] border border-[var(--attention-border)] text-[var(--attention-fg)] px-2.5 py-1 rounded-md hover:bg-[var(--attention-bg-hover)]">
                   {formatDateBR(b.date)} {b.time} · {b.customerName}
                 </button>
               ))}
-              {pendencies.length > 4 && <span className="text-xs font-medium text-amber-900 self-center">+{pendencies.length - 4}</span>}
+              {pendencies.length > 4 && <span className="text-xs font-medium text-[var(--attention-fg)] self-center">+{pendencies.length - 4}</span>}
             </>
           )}
         />
+      )}
+
+      {/* A3.4 · Bloco 4 — FILA DO BALCÃO. Fica na própria Agenda porque é onde
+          a equipe já está olhando o dia; abrir/fechar é decisão de quem opera
+          (o balcão não precisa dela o tempo todo). A faixa de atenção avisa
+          quando a espera passa do confortável. */}
+      {loaded && (
+        <div className="space-y-2.5">
+          {queueInfo.longWait && !showQueue && (
+            <AttentionStrip
+              title={`${queueInfo.waiting + queueInfo.called} na fila — maior espera ${waitLabel(queueInfo.longestWaitMin)}`}
+              hint="o balcão está esperando mais do que o normal"
+              action={<Button size="sm" variant="warning" onClick={() => setShowQueue(true)}>Abrir fila</Button>}
+            />
+          )}
+          <button
+            type="button"
+            onClick={() => setShowQueue((v) => !v)}
+            aria-expanded={showQueue}
+            className="w-full flex items-center gap-2 px-3 py-2 rounded-md border border-[var(--border)] bg-[var(--surface)] hover:bg-[var(--surface-hover)] text-left"
+          >
+            <Icon n={showQueue ? 'chevD' : 'chevR'} size={14} className="text-[var(--text-faint)]" />
+            <Icon n="clock" size={14} className="text-[var(--text-muted)]" />
+            <span className="text-sm font-semibold text-[var(--text)]">Fila de hoje</span>
+            {(queueInfo.waiting + queueInfo.called + queueInfo.inService) === 0 ? (
+              <span className="text-xs text-[var(--text-muted)]">ninguém esperando</span>
+            ) : (
+              <span className="flex flex-wrap items-center gap-1.5">
+                {queueInfo.waiting > 0 && <Badge tone="amber">{queueInfo.waiting} aguardando</Badge>}
+                {queueInfo.called > 0 && <Badge tone="blue">{queueInfo.called} chamado{queueInfo.called > 1 ? 's' : ''}</Badge>}
+                {queueInfo.inService > 0 && <Badge tone="green">{queueInfo.inService} em atendimento</Badge>}
+              </span>
+            )}
+            <span className="ml-auto text-xs text-[var(--text-muted)]">{showQueue ? 'fechar' : 'abrir'}</span>
+          </button>
+          {showQueue && (
+            <QueuePanel
+              businessId={businessId}
+              date={today}
+              rows={queueRows}
+              loading={queueLoading}
+              /* A tela inteira exige permissão de Agenda (a porta barra antes);
+                 o escopo do profissional continua valendo no servidor por
+                 entrada da fila. */
+              canWrite={!denied}
+              onChanged={loadQueue}
+              professionals={activePros.map((p) => ({ id: p.id, name: p.name }))}
+              services={services.map((x) => ({ id: x.id, name: x.name }))}
+              onOpenBooking={(id) => { const b = bookingsRef.current.get(id); if (b) setDetail(b); }}
+            />
+          )}
+        </div>
       )}
 
       {/* Toolbar operacional: navegação · Dia/Semana/Mês · filtros · tela cheia.

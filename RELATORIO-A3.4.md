@@ -244,3 +244,65 @@ npx vitest run → 77 arquivos · 1292 testes ok
 npx tsc --noEmit → 0 erros
 npm run build → ok
 ```
+
+## BLOCO 4 — ATENÇÃO · ENCAIXE · CHECK-IN · FILA DE ESPERA
+
+### O diagnóstico
+
+A Agenda sabia o que estava MARCADO, mas não o que estava ACONTECENDO: não
+havia como registrar que o cliente chegou, não havia como encaixar alguém fora
+da grade sem mentir sobre disponibilidade, e quem chegava sem horário não tinha
+onde existir (ou virava um agendamento falso, ou virava um papel na recepção).
+A "atenção" existia só como lista de pendências de fechamento — correta, porém
+cega para o balcão.
+
+### O que foi criado
+
+| Onde | Mudança |
+|---|---|
+| `lib/types.ts` | **aditivo**: `Booking.bookingKind` (`'standard'`/`'fit_in'`), `Booking.checkedInAt` / `checkedInBy` / `checkedInByName`, a entidade **`QueueEntry`** (+ `QueueStatus`) e o array `DB.queue`. `AuditAction` ganha `booking.checkin`, `booking.checkin_undo`, `queue.created/updated/removed`. |
+| `lib/db.ts` | `emptyDB()` cria `queue: []` e a migração defensiva garante o array em documento antigo (idempotente, reversível). |
+| `lib/queue.ts` | **novo** — regras puras da fila: `QUEUE_STATUS`, `QUEUE_TRANSITIONS` (máquina de estados), ordem por chegada, posição, `waitMinutes` (congela quando o atendimento começa), `waitLabel`, `queueSummary` e o limite de espera longa. |
+| `lib/fit-in.ts` | **novo** — conflito do encaixe: quem se sobrepõe, de quem é o horário e a frase única que servidor e tela usam (`fitInWarning`). `fitInConflictsFromDB` resolve a duração de cada agendamento pelo serviço dele. |
+| `lib/booking-create.ts` | `createBookingTx` aceita `bookingKind:'fit_in'` (+ `fitInConfirmed`). O encaixe muda **uma** regra (o horário não precisa estar na grade) e mantém todas as outras (tenant, serviço, data, horizonte, passado, profissional elegível). Sem confirmação, o conflito é devolvido com 409 e **nada é gravado**. O agendamento nasce com `bookingKind:'fit_in'`, nota no histórico e evento `booking_created` com `meta.kind='fit_in'`. Encaixe só é aceito com `actor === 'owner'` (equipe) — nunca do fluxo público. |
+| `/api/bookings` POST | valida o encaixe (403 sem equipe, 400 com série) e faz a pré-checagem de conflito (`code: 'fit_in_conflict'` + lista) antes de escrever. |
+| `/api/bookings` PATCH | ações `check-in` e `check-in-undo`: gravam chegada + auditoria **sem mudar status** (chegar não é concluir), respeitam o escopo do profissional e recusam atendimento já encerrado. |
+| `/api/queue` | **novo** — GET (fila do dia + vivas + resumo + opções), POST (entrada com nome ou WhatsApp, alimenta o CRM via `upsertContact`), PATCH (transição válida da máquina, marca `calledAt`/`startedAt`/`endedAt`, auditoria) e DELETE. Tudo escopado por unidade e por profissional. |
+| `components/dashboard/QueuePanel.tsx` | **novo** — fila do balcão: posição, espera ao vivo (30s), selo de espera longa, UMA ação principal por linha (Chamar → Iniciar → Concluir), ações secundárias só quando a máquina permite, e "Adicionar à fila" para quem chegou sem horário. |
+| `components/dashboard/BookingDetailSheet.tsx` | selos `Encaixe` e `Chegou` no cabeçalho e botões **Registrar chegada** / **Chegou às HH:MM** (reversível), com a frase que explica que o status não mudou. |
+| `components/dashboard/NewBookingSheet.tsx` | bloco **Encaixar**: horário fora da grade → o servidor responde com o conflito (nome + horário + profissional), a tela mostra "Nada foi agendado ainda" e só então oferece "Encaixar mesmo assim". A tela de sucesso marca o Encaixe. |
+| `app/(dashboard)/agenda/page.tsx` | cartões mostram `ENCAIXE` e ✓ de chegada; painel **Fila de hoje** abaixo da toolbar com badges de aguardando/chamado/em atendimento e faixa de atenção quando a espera passa do confortável. |
+| `lib/dashboard.ts` + `/api/overview` | a região de atenção do Início ganha `esperando na fila` e `chegaram sem check-in` — mesma leitura da Agenda, nenhum alerta paralelo. |
+
+### Decisões
+
+- **Fila é entidade própria.** Um cliente sem horário marcado NUNCA vira
+  Booking: isso ocuparia a grade, mentiria sobre disponibilidade e poluiria os
+  relatórios. A entrada de fila pode apontar para um agendamento (quando veio
+  de horário marcado) ou existir sozinha.
+- **`needsClosure` continua derivado.** Nada foi adicionado a `BookingStatus`:
+  check-in e encaixe são campos operacionais, e o fechamento continua sendo a
+  máquina de estados existente (`applyBookingStatusTx`).
+- **Encaixe não é caminho paralelo.** Ele passa pelo MESMO `createBookingTx`;
+  o que muda é uma condição declarativa, com confirmação explícita e registro
+  no histórico — auditável e reversível de entender.
+
+### Testes
+
+`src/lib/__tests__/a34-queue.test.ts` (14 casos puros: ordem, posição, espera
+congelada, resumo, máquina de estados, rótulos; conflito de encaixe encostado,
+por profissional, por equipe, terminal ignorado, duração por serviço).
+`src/lib/__tests__/a34-operative-routes.test.ts` (15 casos com as ROTAS REAIS e
+banco temporário: encaixe não grava sem confirmação e grava marcado com ela,
+cliente público nunca encaixa, série + encaixe recusada, check-in sem mudar
+status + auditoria + reversível + recusa em encerrado + isolamento de unidade,
+fila alimentando o CRM sem criar Booking, GET escopado, transições válidas e
+inválidas, espera congelada, entrada vazia recusada).
+
+```
+npx vitest run src/lib/__tests__/a34-queue.test.ts → 14 ok
+npx vitest run src/lib/__tests__/a34-operative-routes.test.ts → 15 ok
+npx vitest run → 79 arquivos · 1321 testes ok
+npx tsc --noEmit → 0 erros
+npm run build → ok
+```

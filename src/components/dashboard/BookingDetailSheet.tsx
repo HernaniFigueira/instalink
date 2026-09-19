@@ -118,6 +118,26 @@ export function BookingDetailSheet({ booking, service, pro, businessId, timezone
     }
   }
 
+  /** A3.4 · Bloco 4 — check-in do cliente no balcão (não muda o status). */
+  async function checkIn(undo = false) {
+    setError(''); setNotice('');
+    setActing(undo ? 'checkin-undo' : 'checkin');
+    try {
+      const res = await fetch('/api/bookings', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ businessId, id: booking.id, action: undo ? 'check-in-undo' : 'check-in' }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error);
+      onChanged();
+      onClose();
+    } catch (e: any) {
+      setError(e.message);
+      setActing('');
+    }
+  }
+
   async function reschedule() {
     setError(''); setNotice('');
     setActing('reschedule');
@@ -163,6 +183,10 @@ export function BookingDetailSheet({ booking, service, pro, businessId, timezone
   }
 
   const hasHistory = (booking.history || []).length > 0;
+  const checkedInHM = booking.checkedInAt
+    ? new Intl.DateTimeFormat('pt-BR', { hour: '2-digit', minute: '2-digit', timeZone: timezone || undefined })
+      .format(new Date(booking.checkedInAt))
+    : '';
 
   return (
     <div className="fixed inset-0 z-50" role="dialog" aria-modal="false" aria-label="Detalhe do agendamento">
@@ -177,6 +201,8 @@ export function BookingDetailSheet({ booking, service, pro, businessId, timezone
             <div className="flex items-center gap-2 flex-wrap">
               <span className="text-xs font-semibold text-zinc-600 tabular-nums">{formatDateBR(booking.date)} · {booking.time}–{endHM}</span>
               <StatusBadge tone={def.tone}>{def.panel}</StatusBadge>
+              {booking.bookingKind === 'fit_in' && <StatusBadge tone="amber">Encaixe</StatusBadge>}
+              {booking.checkedInAt && <StatusBadge tone="emerald">Chegou</StatusBadge>}
             </div>
             <p className="font-semibold text-sm mt-1 leading-snug truncate">{service?.name || 'Serviço'}</p>
             <p className="text-xs text-zinc-500 mt-0.5">{humanDay(booking.date, today)} · {dur} min</p>
@@ -209,7 +235,24 @@ export function BookingDetailSheet({ booking, service, pro, businessId, timezone
                 <Button size="sm" variant="secondary" onClick={() => { setRescheduling(true); setError(''); }} disabled={!!acting}>
                   <Icon n="calendar" size={13} /> Reagendar
                 </Button>
+                {/* A3.4 · Bloco 4 — chegada do cliente. Fica junto das ações
+                    porque é decisão do balcão, e é REVERSÍVEL (engano acontece). */}
+                {booking.checkedInAt ? (
+                  <Button size="sm" variant="ghost" onClick={() => checkIn(true)} disabled={!!acting}
+                    title="Desfazer o check-in deste atendimento">
+                    <Icon n="check" size={13} /> Chegou às {checkedInHM}
+                  </Button>
+                ) : (
+                  <Button size="sm" variant="soft" onClick={() => checkIn(false)} disabled={!!acting}>
+                    <Icon n="check" size={13} /> {acting === 'checkin' ? 'Registrando…' : 'Registrar chegada'}
+                  </Button>
+                )}
               </div>
+              {booking.checkedInAt && (
+                <p className="text-[11px] text-[var(--text-muted)] mt-2">
+                  Check-in registrado{booking.checkedInByName ? ` por ${booking.checkedInByName}` : ''} — o status do atendimento continua “{def.panel}”.
+                </p>
+              )}
             </div>
           )}
 

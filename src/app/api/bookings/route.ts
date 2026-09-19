@@ -19,6 +19,9 @@ import { enqueueDueReminders } from '@/lib/automations';
 import { upsertContact } from '@/lib/contacts';
 import { todayISO, nowHM, weekdayOf, addDaysISO, effectiveTimezone, isValidDateISO, isValidClockTime } from '@/lib/tz';
 import { onlyDigits } from '@/lib/utils';
+import { fitInConflictsFromDB, fitInWarning } from '@/lib/fit-in';
+import { isTerminal as isTerminalStatus } from '@/lib/booking-ops';
+import { pushAudit } from '@/lib/audit';
 import { rateLimit, ipFrom } from '@/lib/rate-limit';
 import type { BookingStatus, DB } from '@/lib/types';
 
@@ -279,6 +282,14 @@ export async function POST(req: NextRequest) {
     // transação, profissional resolvido pela política interna, CRM alimentado
     // e automação de confirmação enfileirada.
     if (body.series && !isOwner) return NextResponse.json({ error: 'Recorrência exige permissão de Agenda.' }, { status: 403 });
+    // A3.4 · Bloco 4 — ENCAIXE. Só a equipe (dono/membro com agenda) encaixa;
+    // recorrência + encaixe juntos não existem (uma decisão por vez).
+    if (body.bookingKind === 'fit_in' && !isOwner) {
+      return NextResponse.json({ error: 'Encaixe é uma decisão da equipe.' }, { status: 403 });
+    }
+    if (body.bookingKind === 'fit_in' && body.series) {
+      return NextResponse.json({ error: 'Encaixe não cria série.' }, { status: 400 });
+    }
     if (guard?.ok && guard.ctx.professionalScope && body.professionalId && body.professionalId !== guard.ctx.professionalScope) {
       return NextResponse.json({ error: 'Você só pode agendar para o seu profissional.' }, { status: 403 });
     }
@@ -306,10 +317,33 @@ export async function POST(req: NextRequest) {
       note: body.note,
       answers: body.answers,
       marketingOptIn,
-      source: 'agendamento',
+      source: body.bookingKind === 'fit_in' ? 'encaixe' : 'agendamento',
       leadId: body.leadId ? String(body.leadId) : undefined,
+      bookingKind: body.bookingKind === 'fit_in' ? 'fit_in' : undefined,
+      fitInConfirmed: body.confirmFitIn === true,
     };
     const scope = guard?.ok ? guard.ctx.professionalScope : '';
+    // Encaixe exige CONFIRMAÇÃO EXPLÍCITA: sem `confirmFitIn`, o servidor
+    // devolve a lista de conflitos e NÃO grava nada. A tela mostra com quem
+    // está batendo e só então reenvia com a confirmação.
+    if (body.bookingKind === 'fit_in' && body.confirmFitIn !== true) {
+      const conflicts = fitInConflictsFromDB({
+        bookings: db.bookings.filter((b) => b.businessId === business.id),
+        services: db.services.filter((x) => x.businessId === business.id),
+        professionals: db.professionals.filter((p) => p.businessId === business.id && p.active !== false).map((p) => ({ id: p.id, name: p.name })),
+      }, {
+        date, time, durationMin: service.durationMin,
+        professionalId: (guard?.ok ? guard.ctx.professionalScope : '') || String(body.professionalId || ''),
+        eligibleProIds: service.professionalIds || [],
+      });
+      if (conflicts.length > 0) {
+        return NextResponse.json({
+          error: fitInWarning(conflicts),
+          code: 'fit_in_conflict',
+          conflicts,
+        }, { status: 409 });
+      }
+    }
     if (body.series && body.preview === true) {
       return NextResponse.json({ occurrences: previewSeries(await readDB(), params, body.series.occurrences, scope) });
     }
@@ -320,7 +354,11 @@ export async function POST(req: NextRequest) {
   } catch (e: any) {
     const status = e?.status || 500;
     if (status === 500) console.error('[bookings] POST falhou:', e);
-    return NextResponse.json({ error: status === 500 ? 'Não foi possível confirmar. Tente novamente.' : e.message, ...(e?.occurrences ? { occurrences: e.occurrences } : {}) }, { status });
+    return NextResponse.json({
+      error: status === 500 ? 'Não foi possível confirmar. Tente novamente.' : e.message,
+      ...(e?.occurrences ? { occurrences: e.occurrences } : {}),
+      ...(e?.conflicts ? { conflicts: e.conflicts, code: 'fit_in_conflict' } : {}),
+    }, { status });
   }
 }
 
@@ -339,6 +377,49 @@ export async function PATCH(req: NextRequest) {
     // outra pessoa é recusado no servidor — o id não pode ser manipulado.
     if (!canAccessBooking(guard.ctx, current)) {
       return NextResponse.json({ error: 'Você só pode alterar os seus próprios atendimentos.' }, { status: 403 });
+    }
+
+    // ── A3.4 · Bloco 4 — CHECK-IN do cliente no balcão ──
+    // Não muda STATUS (chegar não é conclusão): grava o instante da chegada,
+    // quem registrou e uma linha no histórico do atendimento. Reversível
+    // (engano no balcão acontece) — sempre com auditoria.
+    if (body.action === 'check-in' || body.action === 'check-in-undo') {
+      const undo = body.action === 'check-in-undo';
+      const nowIso = new Date().toISOString();
+      const updated = await updateDB((d: DB) => {
+        const target = d.bookings.find((x) => x.id === body.id && x.businessId === business.id);
+        if (!target) throw err('Agendamento não encontrado.', 404);
+        if (!canAccessBooking(guard.ctx, target)) throw err('Você só pode alterar os seus próprios atendimentos.', 403);
+        if (isTerminalStatus(target.status)) {
+          throw err('Atendimento encerrado não recebe check-in.', 400);
+        }
+        if (undo) {
+          if (!target.checkedInAt) throw err('Este atendimento não tem check-in registrado.', 400);
+          target.checkedInAt = undefined;
+          target.checkedInBy = undefined;
+          target.checkedInByName = undefined;
+          target.updatedAt = nowIso;
+          target.history.push({ at: nowIso, from: target.status, to: target.status, by: 'owner', note: 'Check-in desfeito no balcão' });
+          pushAudit(d, {
+            action: 'booking.checkin_undo', businessId: business.id,
+            actor: guard.ctx.user, meta: { bookingId: target.id, date: target.date, time: target.time },
+          }, nowIso);
+          return { checkedInAt: '', checkedInByName: '' };
+        }
+        if (!target.checkedInAt) {
+          target.checkedInAt = nowIso;
+          target.checkedInBy = guard.ctx.user.id;
+          target.checkedInByName = guard.ctx.user.name || guard.ctx.user.email || 'Equipe';
+          target.updatedAt = nowIso;
+          target.history.push({ at: nowIso, from: target.status, to: target.status, by: 'owner', note: `Check-in às ${nowHM(new Date(), effectiveTimezone(business.businessTimezone))}` });
+          pushAudit(d, {
+            action: 'booking.checkin', businessId: business.id,
+            actor: guard.ctx.user, meta: { bookingId: target.id, date: target.date, time: target.time },
+          }, nowIso);
+        }
+        return { checkedInAt: target.checkedInAt || '', checkedInByName: target.checkedInByName || '' };
+      });
+      return NextResponse.json({ ok: true, ...updated });
     }
 
     if (body.action === 'cancel-series-future') {

@@ -63,6 +63,8 @@ export function emptyDB(): DB {
     aiProposals: [],
     // P6 — canais e integrações externas (conexões + log de entregas)
     integrations: [], integrationEvents: [],
+    // A3.4 · Bloco 4 — fila de espera (aditiva; documento antigo ganha [])
+    queue: [],
   };
 }
 
@@ -77,7 +79,7 @@ export function normalizeDB(raw: unknown): DB {
     'messages', 'campaigns', 'campaignRecipients', 'audit', 'supportSessions',
     'pipelines', 'apiKeys', 'webhooks', 'webhookDeliveries', 'idempotencyKeys', 'integrationLogs',
     'automations', 'automationRuns', 'tasks', 'aiProposals',
-    'integrations', 'integrationEvents',
+    'integrations', 'integrationEvents', 'queue',
   ] as const) {
     if (!Array.isArray((base as any)[key])) (base as any)[key] = [];
   }

@@ -534,6 +534,50 @@ export interface Booking {
   rescheduleCount?: number; // quantas vezes este atendimento já foi movido
   // P3 — vínculo com o lead que originou o agendamento
   leadId?: string;
+  // ── A3.4 · Bloco 4 — operação do dia ──
+  /** 'fit_in' = ENCAIXE: agendamento aceito fora da grade, com conflito
+   *  reconhecido por quem criou. Ausente = agendamento normal. */
+  bookingKind?: BookingKind;
+  /** Check-in do cliente no balcão (ISO). Ausente = ainda não chegou. */
+  checkedInAt?: string;
+  /** Quem registrou o check-in (memberId) e o rótulo legível do autor. */
+  checkedInBy?: string;
+  checkedInByName?: string;
+}
+
+/** Tipo do agendamento. `standard` é o fluxo normal da grade. */
+export type BookingKind = 'standard' | 'fit_in';
+
+// ═══════════════════════════════════════════════════════════════
+// A3.4 · BLOCO 4 — FILA DE ESPERA (entidade PRÓPRIA)
+// ═══════════════════════════════════════════════════════════════
+// Fila NÃO é agenda: quem chega sem horário marcado não pode virar um Booking
+// falso (ocuparia a grade, apareceria em relatório de agendamentos e mentiria
+// sobre disponibilidade). A entrada de fila tem vida própria, pode virar
+// atendimento depois (bookingId) e guarda os horários de chamada/atendimento.
+export type QueueStatus = 'waiting' | 'called' | 'in_service' | 'done' | 'left';
+
+export interface QueueEntry {
+  id: ID;
+  businessId: ID;
+  customerName: string;
+  customerPhone: string; // só dígitos (mesma chave do CRM)
+  contactId: string; // '' = ainda não vinculado
+  serviceId: string; // '' = a definir
+  professionalId: string; // '' = qualquer um
+  /** Agendamento de origem, quando a entrada veio de um horário marcado. */
+  bookingId: string;
+  note: string;
+  status: QueueStatus;
+  /** Dia do negócio em que entrou na fila (YYYY-MM-DD, fuso da unidade). */
+  date: string;
+  createdAt: string;
+  calledAt: string;
+  startedAt: string;
+  endedAt: string; // done/left
+  /** Quem operou a última transição (memberId/servidor). */
+  updatedBy: string;
+  updatedAt: string;
 }
 
 export type ReviewSource = 'site' | 'google';
@@ -766,6 +810,8 @@ export interface DB {
   // ── P6: canais e integrações externas (conexões + log de entregas) ──
   integrations: Integration[];
   integrationEvents: IntegrationEvent[];
+  // ── A3.4 · Bloco 4: fila de espera (entidade própria, fora da agenda) ──
+  queue: QueueEntry[];
 }
 
 // ═══════════════════════════════════════════════════════════════
@@ -1617,6 +1663,9 @@ export type AuditAction =
   | 'appearance.updated' | 'contact.note_added'
   // Fechamento A3.3 — edição de nome/telefone/e-mail do contato da unidade
   | 'contact.identity_updated'
+  // A3.4 · Bloco 4 — operação do dia (check-in e fila de espera)
+  | 'booking.checkin' | 'booking.checkin_undo'
+  | 'queue.created' | 'queue.updated' | 'queue.removed' | 'queue.booked'
   // P3 — esteira operacional e integrações
   | 'pipeline.updated' | 'api_key.created' | 'api_key.revoked'
   | 'webhook.created' | 'webhook.updated' | 'webhook.deleted'

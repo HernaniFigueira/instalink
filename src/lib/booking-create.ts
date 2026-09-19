@@ -20,6 +20,7 @@ import { onlyDigits } from './utils';
 import { isValidDateISO, isValidClockTime, effectiveTimezone, weekdayOf, todayISO, nowHM } from './tz';
 import { enqueueBookingAutomation, enqueueDueReminders } from './automations';
 import { bookingMaxDate } from './booking-ops';
+import { fitInConflictsFromDB, fitInWarning } from './fit-in';
 // A2-B1 (F2): o destino do lead passa pela máquina OFICIAL da esteira
 // (pipeline.ts é também importado aqui — dependência circular só de funções,
 // resolvida em runtime; nenhum dos módulos executa o outro no load).
@@ -135,6 +136,17 @@ export interface CreateBookingParams {
   leadId?: string;
   /** P4: execução de automação que criou o agendamento (anti-loop). */
   originRunId?: string;
+  /**
+   * A3.4 · Bloco 4 — ENCAIXE. `fit_in` aceita um horário FORA da grade (com
+   * conflito reconhecido por quem cria). A autorização é do servidor: só o
+   * dono/equipe agenda encaixe — o fluxo público do cliente nunca consegue.
+   */
+  bookingKind?: import('./types').BookingKind;
+  /**
+   * O conflito do encaixe foi MOSTRADO e confirmado por quem cria. Sem isto,
+   * o motor recusa o encaixe conflitante (nada é gravado em silêncio).
+   */
+  fitInConfirmed?: boolean;
   series?: Pick<import('./types').Booking, 'seriesId' | 'seriesIndex' | 'seriesCount' | 'seriesRequestId' | 'seriesFingerprint'>;
 }
 
@@ -204,16 +216,48 @@ export function createBookingTx(d: DB, p: CreateBookingParams): {
     leadMin: cfg?.leadMin || 0,
     bufferMin: cfg?.bufferMin || 0,
   });
-  if (!r.slots.includes(p.time)) {
+  // ── A3.4 · Bloco 4: encaixe (fit_in) ────────────────────────────────
+  // O encaixe NÃO cria um segundo caminho de agendamento: muda UMA regra
+  // (o horário não precisa estar na grade) e mantém TODAS as outras
+  // (tenant, serviço, data, horizonte, passado, profissional elegível).
+  // O que ele nunca faz é esconder o conflito: a mensagem diz com quem bate.
+  const fitIn = p.bookingKind === 'fit_in';
+  if (fitIn && !isOwner) throw txError('Encaixe é uma decisão da equipe.', 403);
+  if (!fitIn && !r.slots.includes(p.time)) {
     throw txError('Este horário acabou de ser ocupado. Escolha outro.', 409);
   }
+  if (fitIn) {
+    const conflicts = fitInConflictsFromDB({
+      bookings: d.bookings.filter((b) => b.businessId === businessId),
+      services: d.services.filter((s) => s.businessId === businessId),
+      professionals: eligible.map((x) => ({ id: x.id, name: x.name })),
+    }, {
+      date: p.date, time: p.time, durationMin: service.durationMin,
+      professionalId: ownerPro, eligibleProIds: service.professionalIds || [],
+    });
+    if (conflicts.length > 0 && !p.fitInConfirmed) {
+      throw Object.assign(txError(fitInWarning(conflicts), 409), { conflicts });
+    }
+  }
+
+  // No encaixe sem escolha explícita o `r.assign` pode não existir (o horário
+  // não está na grade): escolhemos, entre os elegíveis, quem tem MENOS
+  // atendimentos ativos naquele dia — a mesma ideia de equilíbrio da agenda,
+  // sem inventar uma segunda política.
+  const fitInFallback = (() => {
+    if (!fitIn || ownerPro || eligible.length === 0) return '';
+    const loadOf = (id: string) => d.bookings.filter((b) =>
+      b.businessId === businessId && b.date === p.date && b.professionalId === id &&
+      (b.status === 'pending' || b.status === 'confirmed')).length;
+    return [...eligible].sort((a, b) => (loadOf(a.id) - loadOf(b.id)) || a.name.localeCompare(b.name))[0]?.id || '';
+  })();
 
   const finalPro = resolveProfessional({
     service,
     professionals: d.professionals.filter((x) => x.businessId === businessId),
     assign: r.assign,
     time: p.time,
-    requested: ownerPro,
+    requested: ownerPro || fitInFallback,
     allowRequested: isOwner,
   });
 
@@ -231,15 +275,23 @@ export function createBookingTx(d: DB, p: CreateBookingParams): {
     customerName: name,
     customerPhone: digits,
     status,
+    ...(fitIn ? { bookingKind: 'fit_in' as const } : {}),
     note: String(p.note || '').slice(0, 300),
     createdAt: now,
     answers: (Array.isArray(p.answers) ? p.answers : [])
       .map((x: any) => String(x || '').trim().slice(0, 300)).slice(0, 3),
     updatedAt: now,
-    history: [{ at: now, from: '', to: status, by: isOwner ? 'owner' : p.actor === 'agent' ? 'agent' : 'customer' }],
+    history: [{
+      at: now, from: '', to: status,
+      by: isOwner ? 'owner' : p.actor === 'agent' ? 'agent' : 'customer',
+      ...(fitIn ? { note: 'Encaixe criado fora da grade (conflito reconhecido pela equipe).' } : {}),
+    }],
     leadId: p.leadId || undefined,
   });
-  d.events.push({ id: randomUUID(), businessId, type: 'booking_created', path: '', meta: { serviceId: service.id, via: p.actor }, createdAt: now });
+  d.events.push({
+    id: randomUUID(), businessId, type: 'booking_created', path: '',
+    meta: { serviceId: service.id, via: p.actor, ...(fitIn ? { kind: 'fit_in' } : {}) }, createdAt: now,
+  });
   d.events.push({ id: randomUUID(), businessId, type: 'conversion', path: '', meta: { kind: 'booking' }, createdAt: now });
 
   // CRM: o atendimento SEMPRE alimenta a base (upsert, nunca duplica).
