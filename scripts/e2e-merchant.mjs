@@ -4,7 +4,9 @@
 const BASE = process.env.E2E_BASE || 'http://localhost:3000';
 const TAG = `e2e${Date.now().toString(36)}`;
 const RUN = String(Date.now() % 100000000).padStart(8, '0');
-const ph = (n) => `119${RUN.slice(0, 4)}${String(n).padStart(4, '0')}`;
+// Os 4 dígitos FINAIS mudam a cada milissegundo; os iniciais só a cada ~10s e
+// faziam duas rodadas seguidas colidirem no mesmo telefone ("Você já tem conta").
+const ph = (n) => `119${RUN.slice(-4)}${String(n).padStart(4, '0')}`;
 
 let pass = 0, fail = 0;
 const failures = [];
@@ -12,15 +14,21 @@ function check(name, cond, extra = '') {
   if (cond) { pass++; console.log(`  ✓ ${name}`); }
   else { fail++; failures.push(name); console.log(`  ✗ ${name} ${extra}`); }
 }
-async function api(method, path, body, token) {
+async function api(method, path, body, token, attempt = 0) {
   const res = await fetch(BASE + path, {
     method,
     headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) },
     body: body ? JSON.stringify(body) : undefined,
   });
   if (res.status === 429) {
+    // Antes o retry era infinito: com o teto de 10 negócios/hora o script
+    // ficava girando para sempre. Agora tenta 5x e desiste com erro claro.
+    if (attempt >= 5) {
+      console.error(`  ! 429 persistente em ${method} ${path} — rate limit esgotado, abortando.`);
+      process.exit(1);
+    }
     await new Promise((r) => setTimeout(r, 5000));
-    return api(method, path, body, token);
+    return api(method, path, body, token, attempt + 1);
   }
   const data = await res.json().catch(() => ({}));
   return { status: res.status, data };

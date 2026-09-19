@@ -5,7 +5,7 @@ import { AccessDenied, useAreaLoad } from '@/components/dashboard/AccessNotice';
 import { CanaisIntegracoesView } from '@/components/dashboard/CanaisIntegracoesView';
 import { IntegracoesView } from '@/components/dashboard/IntegracoesView';
 import { WhatsappChannelPanel } from '@/components/dashboard/WhatsappChannelPanel';
-import { cn } from '@/lib/utils';
+import { PageHeader, Tabs } from '@/components/ui';
 
 // ═══════════════════════════════════════════════════════════════
 // CANAIS & INTEGRAÇÕES — porta única das conexões
@@ -24,6 +24,13 @@ import { cn } from '@/lib/utils';
 // certo e qualquer link continua compartilhável. Configurações deixa de ter
 // abas de canais/integrações e passa a apontar para cá.
 type CanaisTab = 'canais' | 'fontes' | 'integracoes';
+
+/** Ícone de cada aba — a seção é reconhecível sem ler o rótulo. */
+const TAB_ICON: Record<CanaisTab, string> = {
+  canais: 'chat',
+  fontes: 'spark',
+  integracoes: 'plugs',
+};
 
 const TABS: Array<[CanaisTab, string]> = [
   ['canais', 'Canais'],
@@ -58,30 +65,21 @@ export default function CanaisPage() {
 
   return (
     <>
-      <div className="mb-4">
-        <h1 className="text-base font-semibold text-zinc-900">Canais &amp; Integrações</h1>
-        <p className="text-xs text-zinc-500 mt-0.5">
-          Por onde o cliente fala com você, de onde ele chega e como outros sistemas se conectam.
-        </p>
-      </div>
+      <PageHeader
+        icon="plugs"
+        title="Canais & Integrações"
+        hint="Por onde o cliente fala com você, de onde ele chega e como outros sistemas se conectam."
+      />
 
-      <div className="flex flex-wrap gap-1 p-1 bg-zinc-100 rounded-md mb-4 w-fit max-w-full" role="tablist" aria-label="Seções de Canais & Integrações">
-        {TABS.map(([id, label]) => (
-          <button
-            key={id}
-            role="tab"
-            id={`canais-tab-${id}`}
-            aria-selected={tab === id}
-            aria-controls={`canais-panel-${id}`}
-            onClick={() => choose(id)}
-            className={cn(
-              'text-xs font-medium px-3 py-1.5 rounded whitespace-nowrap',
-              tab === id ? 'bg-white shadow-sm border border-zinc-200 text-zinc-900' : 'text-zinc-500',
-            )}
-          >
-            {label}
-          </button>
-        ))}
+      {/* A3.3 — abas em pill (padrão único de navegação interna do painel).
+          `aria-controls`/`id` continuam ligando aba e painel para leitor de tela. */}
+      <div className="mb-4">
+        <Tabs
+          items={TABS.map(([id, label]) => ({ id, label, icon: TAB_ICON[id] }))}
+          value={tab}
+          onChange={(id) => choose(id)}
+          ariaLabel="Seções de Canais & Integrações"
+        />
       </div>
 
       <div role="tabpanel" id={`canais-panel-${tab}`} aria-labelledby={`canais-tab-${tab}`}>

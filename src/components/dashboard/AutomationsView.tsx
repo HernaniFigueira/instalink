@@ -250,8 +250,7 @@ export function AutomationsView() {
         {([['list', 'Minhas automações', automations.length], ['ai', 'Criar com IA', ''],
           ['templates', 'Começar de um modelo', templates.length]] as const).map(([key, label, count]) => (
           <button key={key} onClick={() => setTab(key as 'list' | 'ai' | 'templates')}
-            className={cn('px-3 py-1.5 rounded-full border font-semibold transition',
-              tab === key ? 'bg-zinc-900 text-white border-zinc-900' : 'bg-white border-zinc-200 text-zinc-600 hover:bg-zinc-50')}>
+            aria-pressed={tab === key} className="il-chip">
             {label}{typeof count === 'number' && count > 0 ? ` · ${count}` : ''}
           </button>
         ))}

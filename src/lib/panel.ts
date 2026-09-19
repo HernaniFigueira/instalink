@@ -33,10 +33,16 @@ export interface PanelSectionDef {
   id: PanelSectionId;
   label: string;
   /**
-   * true = seção renderizada no RODAPÉ FIXO da sidebar, fora da área que rola.
-   * Medido em 1280×768 (notebook comum): com todas as seções na área rolável,
-   * Administração caía fora da dobra — e é justamente o grupo que mais se
-   * procura quando não se acha algo.
+   * true = a seção fica fora da sequência rolável do menu (o shell decide o
+   * lugar). NENHUMA seção usa isso hoje.
+   *
+   * A3.3 — decisão: Administração voltou para o MENU PRINCIPAL. O rodapé fixo
+   * existia para manter Configurações à vista em 1280×768, mas criava duas
+   * barras com comportamentos diferentes ("parte fixa, parte rolável") e o
+   * usuário não entendia por que só aquele grupo estava preso. O problema
+   * original foi resolvido de outro jeito: menu mais compacto, controle de
+   * recolher no topo e rodapé reservado para QUEM está logado. A marca fica
+   * disponível para uma necessidade real futura, não como decoração.
    */
   footer?: boolean;
 }
@@ -56,11 +62,14 @@ export const PANEL_SECTIONS: PanelSectionDef[] = [
   { id: 'crescimento', label: 'Crescimento' },
   { id: 'resultados', label: 'Resultados' },
   { id: 'presenca', label: 'Presença' },
-  { id: 'administracao', label: 'Administração', footer: true },
+  { id: 'administracao', label: 'Administração' },
 ];
 
-/** Seção que vive no rodapé fixo da sidebar. */
-export const FOOTER_SECTION: PanelSectionId = 'administracao';
+/**
+ * Seções fora da sequência rolável do menu (hoje: nenhuma). Mantido como
+ * projeção do catálogo para o shell honrar a marca sem decidir por conta.
+ */
+export const FOOTER_SECTIONS: PanelSectionId[] = PANEL_SECTIONS.filter((s) => s.footer).map((s) => s.id);
 
 export function panelSection(id: PanelSectionId): PanelSectionDef | undefined {
   return PANEL_SECTIONS.find((s) => s.id === id);

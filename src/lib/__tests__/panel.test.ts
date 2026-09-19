@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { existsSync, readFileSync, readdirSync } from 'node:fs';
 import path from 'node:path';
 import {
-  API_GUARDS, FULL_WIDTH_PATHS, LEGACY_ROUTES, PANEL_ROUTES, PANEL_SECTIONS,
+  API_GUARDS, FOOTER_SECTIONS, FULL_WIDTH_PATHS, LEGACY_ROUTES, PANEL_ROUTES, PANEL_SECTIONS,
   allowedPanelRoutes, activePanelPath, activePanelRoute, emptyPanelContext, firstAllowedPath,
   hasAnyPermission, hasPermission, isPanelRouteAllowed, isPanelRouteVisible, panelAccess,
   panelNavigation, panelRouteFor, panelRoutesIn, permissionForPath, permissionsForRoute,
@@ -141,11 +141,14 @@ describe('catálogo — completude (por qual porta se chega até mim?)', () => {
 // 2. SEÇÕES — jornada, não organograma
 // ═══════════════════════════════════════════════════════════════
 describe('catálogo — seções', () => {
-  it('as 7 seções canônicas, na ordem de uso, com Administração no rodapé', () => {
+  it('as 7 seções canônicas, na ordem de uso, todas no menu principal (A3.3)', () => {
     expect(PANEL_SECTIONS.map((s) => s.label)).toEqual([
       'Operação', 'Pessoas', 'Oferta', 'Crescimento', 'Resultados', 'Presença', 'Administração',
     ]);
-    expect(PANEL_SECTIONS.filter((s) => s.footer).map((s) => s.id)).toEqual(['administracao']);
+    // NENHUMA seção fica presa no rodapé: a barra tem um comportamento só.
+    // Configurações é porta do menu como qualquer outra (decisão A3.3).
+    expect(PANEL_SECTIONS.filter((s) => s.footer).map((s) => s.id)).toEqual([]);
+    expect(FOOTER_SECTIONS).toEqual([]);
   });
 
   it('toda porta (menos o item primário) pertence a uma seção existente', () => {
@@ -188,9 +191,10 @@ describe('sidebar — projeção (permissão ∩ módulos, ordem do catálogo)',
     const nav = panelNavigation(ctx());
     expect(nav.primary?.href).toBe('/dashboard');
     expect(nav.sections.map((s) => s.label)).toEqual([
-      'Operação', 'Pessoas', 'Oferta', 'Crescimento', 'Resultados', 'Presença',
+      'Operação', 'Pessoas', 'Oferta', 'Crescimento', 'Resultados', 'Presença', 'Administração',
     ]);
-    expect(nav.footerSections.map((s) => s.label)).toEqual(['Administração']);
+    // Administração agora é a última seção do MENU (não do rodapé fixo).
+    expect(nav.footerSections).toEqual([]);
     expect(nav.sidebar.map((r) => r.href)).toEqual([
       '/dashboard',
       '/agenda', '/conversas', '/agente', '/tarefas',

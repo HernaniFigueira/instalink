@@ -130,6 +130,8 @@ export const BOOKING_DOT: Record<BookingStatus, string> = {
 
 // ── Atenção operacional (pendência de fechamento — NÃO é um status) ──
 // Atendimento em aberto com horário já passado: o sistema nunca muda o
-// status sozinho, então o bloco ganha o marcador amarelo pedindo decisão.
-export const ATTENTION_RING_CLS = 'ring-2 ring-inset ring-yellow-300';
-export const ATTENTION_MARK_CLS = 'bg-yellow-300 text-yellow-950';
+// status sozinho, então o bloco ganha o marcador de atenção pedindo decisão.
+// A3.3: o amarelo apagado (yellow-300) virou âmbar quente com contraste
+// real — alerta precisa ser perceptível sem ser gritante.
+export const ATTENTION_RING_CLS = 'ring-2 ring-inset ring-amber-400';
+export const ATTENTION_MARK_CLS = 'bg-[var(--attention-mark)] text-[#5c3800]';

@@ -41,7 +41,7 @@ import Link from 'next/link';
 import { cn } from '@/lib/utils';
 import type { BookingConfig, Business } from '@/lib/types';
 import { defaultBookingConfig } from '@/lib/types';
-import { PageSkeleton } from '@/components/ui';
+import { PageHeader, PageSkeleton, Tabs } from '@/components/ui';
 import { Icon } from '@/components/icons';
 import { ImageUpload } from '@/components/dashboard/ImageUpload';
 import { AccessDenied, useAreaLoad } from '@/components/dashboard/AccessNotice';
@@ -62,6 +62,13 @@ type ConfigTab = 'negocio' | 'agenda' | 'aparencia';
  *   • "Agenda" → agora EDITA as regras de reserva (antes viviam dentro de
  *     Disponibilidade, misturadas com "quando atende").
  */
+/** Ícone de cada aba (A3.3): a aba é reconhecível sem ler o rótulo. */
+const CONFIG_TAB_ICON: Record<ConfigTab, string> = {
+  negocio: 'store',
+  agenda: 'calendar',
+  aparencia: 'spark',
+};
+
 const CONFIG_TABS: Array<[ConfigTab, string]> = [
   ['negocio', 'Negócio'],
   ['agenda', 'Agenda'],
@@ -255,20 +262,24 @@ export default function ConfigPage() {
   if (denied) return <AccessDenied area="Configurações" />;
   if (!biz) return <PageSkeleton />;
   const set = (k: keyof Business, v: any) => setBiz({ ...biz, [k]: v });
-  const input = 'w-full rounded-md border border-zinc-300 px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-zinc-900';
+  const input = 'w-full rounded-md border border-[var(--border-strong)] px-3 py-2 text-sm shadow-xs focus:outline-none focus:shadow-focus focus:border-[var(--brand)]';
 
   return (
     <>
-      <h1 className="text-base font-semibold">Configurações</h1>
-      <p className="text-sm text-zinc-500 mt-0.5 mb-4">As informações do seu negócio, as regras de reserva e a aparência do painel. A página pública se constrói no editor de Página.</p>
-      {msg && <p className="mb-3 text-sm font-medium bg-zinc-900 text-white rounded-md px-3 py-2">{msg}</p>}
+      <PageHeader
+        icon="settings"
+        title="Configurações"
+        hint="As informações do seu negócio, as regras de reserva e a aparência do painel. A página pública se constrói no editor de Página."
+      />
+      {msg && <p role="status" className="mb-3 text-sm font-semibold bg-[var(--success-bg)] border border-[var(--success-border)] text-[var(--success-fg)] rounded-md px-3 py-2">{msg}</p>}
 
-      <div className="flex flex-wrap gap-1 p-1 bg-zinc-100 rounded-md mb-4 w-fit" role="tablist">
-        {CONFIG_TABS.map(([id, label]) => (
-          <button key={id} role="tab" aria-selected={tab === id} onClick={() => choose(id)} className={cn('text-xs font-medium px-3 py-1.5 rounded', tab === id ? 'bg-white shadow-sm border border-zinc-200 text-zinc-900' : 'text-zinc-500')}>
-            {label}
-          </button>
-        ))}
+      <div className="mb-4">
+        <Tabs
+          items={CONFIG_TABS.map(([id, label]) => ({ id: id as ConfigTab, label, icon: CONFIG_TAB_ICON[id as ConfigTab] }))}
+          value={tab}
+          onChange={(id) => choose(id)}
+          ariaLabel="Seções de Configurações"
+        />
       </div>
 
       <div className="space-y-3">

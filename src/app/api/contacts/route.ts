@@ -5,6 +5,8 @@ import { hashPassword } from '@/lib/auth';
 import { requireBusiness } from '@/lib/access';
 import { pushAudit } from '@/lib/audit';
 import { addContactNote, contactNotes, findContact, upsertContact } from '@/lib/contacts';
+// A3.3 — carteirinha do cliente: dados cadastrais ricos (aditivos, opcionais).
+import { ageFromBirthDate, applyContactProfile, clientTags, isValidCpf, profileOf } from '@/lib/contact-profile';
 import { customersMatchingIdentity, generateTemporaryPassword, isValidCustomerEmail, isValidCustomerPhone, normalizeCustomerEmail, normalizeCustomerPhone } from '@/lib/customer-account';
 import { onlyDigits } from '@/lib/utils';
 import { phoneKey } from '@/lib/whatsapp';
@@ -20,14 +22,17 @@ import type { BusinessCustomer, Customer } from '@/lib/types';
 //       observação (append-only): nada é sobrescrito nem apagado e o registro
 //       guarda autor + data + contexto.
 
-function toDTO(c: BusinessCustomer, customer?: Customer | null) {
+function toDTO(c: BusinessCustomer, customer?: Customer | null, counts?: { bookings?: number; leads?: number }) {
   const account = customer || null;
+  const accountStatus = account ? ('active' as const) : ('none' as const);
+  // Carteirinha (A3.3): perfil normalizado + idade DERIVADA + etiquetas.
+  const profile = profileOf(c);
   return {
     id: c.id, customerId: c.customerId, name: c.name, phone: c.phone, email: c.email,
     // `customerId` só é considerado acesso ativo quando a conta realmente
     // existe. Contato/pessoa e conta continuam sendo conceitos distintos.
     registered: !!account,
-    accountStatus: account ? 'active' as const : 'none' as const,
+    accountStatus,
     accountEmail: account?.email || '',
     accountPhone: account?.phone || '',
     mustChangePassword: account?.mustChangePassword === true,
@@ -36,6 +41,16 @@ function toDTO(c: BusinessCustomer, customer?: Customer | null) {
     // Observação legada (compatível) + histórico append-only (P2).
     note: c.note || '',
     notes: contactNotes(c),
+    profile,
+    age: ageFromBirthDate(profile.birthDate),
+    tags: clientTags({
+      name: c.name,
+      accountStatus,
+      marketingOptIn: c.marketingOptIn === true,
+      bookingsCount: counts?.bookings || 0,
+      leadsCount: counts?.leads || 0,
+      profile,
+    }),
   };
 }
 
@@ -168,6 +183,8 @@ export async function POST(req: NextRequest) {
           byName: ctx.user.name,
         });
       }
+      // A3.3 — cadastro já pode nascer com dados da carteirinha.
+      if (body.profile !== undefined) applyContactProfile(contact, body.profile);
 
       if (wantsAccess && customer && accessCreated) {
         pushAudit(db, {
@@ -196,7 +213,7 @@ export async function POST(req: NextRequest) {
 
     return NextResponse.json({
       ok: true,
-      contact: toDTO(result.contact, result.customer || null),
+      contact: toDTO(result.contact, result.customer || null, { bookings: 0, leads: 0 }),
       ...(temporaryPassword ? { temporaryPassword } : {}),
       access: result.customer ? {
         status: 'active',
@@ -247,6 +264,11 @@ export async function PATCH(req: NextRequest) {
     const updated = await updateDB((db) => {
       const c = db.contacts.find((x) => x.id === id && x.businessId === businessId);
       if (!c) return null;
+      // Contagens reais para as etiquetas da carteirinha (derivadas, nunca chutadas).
+      const counts = {
+        bookings: db.bookings.filter((b) => b.businessId === businessId && b.customerId === c.customerId && c.customerId).length,
+        leads: db.leads.filter((l) => l.businessId === businessId && l.customerId === c.customerId && c.customerId).length,
+      };
       if (body.name !== undefined) c.name = String(body.name || '').trim().slice(0, 80) || c.name;
       if (body.email !== undefined) c.email = String(body.email || '').trim().toLowerCase().slice(0, 120);
       if (body.note !== undefined) c.note = String(body.note || '').slice(0, 1000);
@@ -254,12 +276,22 @@ export async function PATCH(req: NextRequest) {
       if (body.marketingOptIn === true || body.marketingOptIn === false) {
         c.marketingOptIn = body.marketingOptIn === true;
       }
+      // A3.3 — dados cadastrais (carteirinha). PATCH PARCIAL: só os campos
+      // enviados mudam; os demais ficam intactos. CPF inválido é rejeitado.
+      if (body.profile !== undefined) {
+        const cpf = body.profile && typeof body.profile === 'object' ? String((body.profile as any).cpf ?? '') : '';
+        if (onlyDigits(cpf) && !isValidCpf(cpf)) {
+          throw Object.assign(new Error('CPF inválido.'), { status: 400 });
+        }
+        applyContactProfile(c, body.profile);
+      }
       c.updatedAt = new Date().toISOString();
-      return toDTO(c, db.customers.find((customer) => customer.id === c.customerId) || null);
+      return toDTO(c, db.customers.find((customer) => customer.id === c.customerId) || null, counts);
     });
     if (!updated) return NextResponse.json({ error: 'Contato não encontrado.' }, { status: 404 });
     return NextResponse.json({ ok: true, contact: updated });
-  } catch {
-    return NextResponse.json({ error: 'Não foi possível atualizar o contato.' }, { status: 500 });
+  } catch (e: any) {
+    const status = Number(e?.status) || 500;
+    return NextResponse.json({ error: status === 500 ? 'Não foi possível atualizar o contato.' : e.message }, { status });
   }
 }

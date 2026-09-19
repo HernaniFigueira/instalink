@@ -9,7 +9,7 @@ import type { NavItemConfig, Professional, Service, Product } from '@/lib/types'
 import { THEME_PRESETS, matchingPreset, presetById } from '@/lib/themes';
 import { cn } from '@/lib/utils';
 import type { Block, BlockType, Business, Page, Theme } from '@/lib/types';
-import { PageSkeleton } from '@/components/ui';
+import { PageSkeleton, Tabs } from '@/components/ui';
 import { AccessDenied, useAreaLoad } from '@/components/dashboard/AccessNotice';
 import { apiGet, apiSend } from '@/lib/api-client';
 import { Icon } from '@/components/icons';
@@ -160,33 +160,46 @@ export default function PaginaPage() {
             <Link href={`/dashboard?b=${businessId}`} className="hover:text-zinc-700">{business.name}</Link>
             <span aria-hidden="true"> · </span> Presença
           </p>
-          <h1 className="text-2xl font-bold tracking-tight">Minha página</h1>
-          <p className="text-sm text-zinc-500 mt-1">
-            {business.published ? <><span className="inline-block w-2.5 h-2.5 rounded-full bg-emerald-500 align-middle" /> Publicada</> : <><span className="inline-block w-2.5 h-2.5 rounded-full bg-amber-400 align-middle" /> Rascunho</>} ·{' '}
-            <a href={`/${business.slug}`} target="_blank" className="text-emerald-700 font-semibold hover:underline inline-flex items-center gap-1">instalink.app/{business.slug} <Icon n="external" size={12} /></a>
+          <h1 className="text-2xl font-bold tracking-tight text-[var(--text)]">Minha página</h1>
+          {/* A3.3 — estado da página com cor + rótulo (nunca só o ponto). */}
+          <p className="text-sm text-[var(--text-muted)] mt-1 flex flex-wrap items-center gap-2">
+            <span className={cn('inline-flex items-center gap-1.5 text-xs font-bold rounded-pill px-2 py-0.5 border',
+              business.published
+                ? 'bg-[var(--success-bg)] border-[var(--success-border)] text-[var(--success-fg)]'
+                : 'bg-[var(--warning-bg)] border-[var(--warning-border)] text-[var(--warning-fg)]')}>
+              <span aria-hidden="true" className={cn('w-2 h-2 rounded-full', business.published ? 'bg-[var(--success)]' : 'bg-[var(--warning)]')} />
+              {business.published ? 'Publicada' : 'Rascunho'}
+            </span>
+            <a href={`/${business.slug}`} target="_blank" rel="noreferrer" className="text-[var(--brand-fg)] font-semibold hover:underline inline-flex items-center gap-1">instalink.app/{business.slug} <Icon n="external" size={12} /></a>
           </p>
         </div>
         <div className="flex items-center gap-2 shrink-0">
           <a href={`/${business.slug}`} target="_blank" rel="noreferrer"
-            className="text-xs font-semibold bg-zinc-900 text-white px-3.5 py-2 rounded-md hover:bg-zinc-800 inline-flex items-center gap-1.5">
-            Ver página <Icon n="external" size={12} />
+            className="text-xs font-bold bg-[var(--brand)] text-white px-3.5 py-2 rounded-md border border-[var(--brand-strong)]/40 shadow-brand hover:bg-[var(--brand-strong)] inline-flex items-center gap-1.5">
+            <Icon n="eye" size={13} /> Ver página <Icon n="external" size={12} />
           </a>
           <Link href={`/dashboard?b=${businessId}`}
-            className="text-xs font-semibold bg-white border border-zinc-200 px-3.5 py-2 rounded-md hover:bg-zinc-50">
+            className="text-xs font-semibold bg-white border border-[var(--border-strong)] text-[var(--text)] px-3.5 py-2 rounded-md shadow-xs hover:bg-[var(--surface-hover)]">
             Dashboard
           </Link>
         </div>
       </div>
 
-      {msg && <p className="mb-4 text-sm font-medium bg-zinc-900 text-white rounded-md px-4 py-3">{msg}</p>}
+      {msg && <p role="status" className="mb-4 text-sm font-semibold bg-[var(--success-bg)] border border-[var(--success-border)] text-[var(--success-fg)] rounded-md px-4 py-3">{msg}</p>}
 
-      <div className="flex gap-2 mb-5">
-        {([['blocks', 'Estrutura'], ['nav', 'Navegação'], ['theme', 'Visual'], ['publish', 'Publicar']] as const).map(([id, label]) => (
-          <button key={id} onClick={() => setTab(id)}
-            className={cn('text-sm font-bold px-4 py-2.5 rounded-md', tab === id ? 'bg-zinc-900 text-white' : 'bg-white border border-zinc-200 text-zinc-600')}>
-            {label}
-          </button>
-        ))}
+      {/* A3.3 — abas do editor em pill (mesmo padrão das outras telas). */}
+      <div className="mb-5">
+        <Tabs
+          items={[
+            { id: 'blocks' as const, label: 'Estrutura', icon: 'grid' },
+            { id: 'nav' as const, label: 'Navegação', icon: 'menu' },
+            { id: 'theme' as const, label: 'Visual', icon: 'spark' },
+            { id: 'publish' as const, label: 'Publicar', icon: 'upload' },
+          ]}
+          value={tab}
+          onChange={(id) => setTab(id)}
+          ariaLabel="Seções do editor da página"
+        />
       </div>
 
       {tab === 'nav' && (

@@ -26,7 +26,7 @@ import { useSearchParams } from 'next/navigation';
 import { todayISO, addDaysISO, weekdayOf, formatDateBR, nowHM } from '@/lib/tz';
 import { WEEKDAYS, WEEKDAYS_LONG, timeToMin, minToTime, cn } from '@/lib/utils';
 import type { Availability, Booking, BookingConfig, BookingStatus, Professional, Service } from '@/lib/types';
-import { ListSkeleton, Button, AttentionStrip } from '@/components/ui';
+import { ListSkeleton, Button, AttentionStrip, Tabs } from '@/components/ui';
 import { Icon } from '@/components/icons';
 import {
   ATTENTION_MARK_CLS, ATTENTION_RING_CLS, BOOKING_BLOCK, BOOKING_DOT, BOOKING_STATUS,
@@ -177,19 +177,27 @@ const GridColumn = memo(function GridColumn({ column, basisPct, variant, highlig
       {highlight && (
         <div
           className={
+            // A3.3 — feedback de arraste legível: verde = pode soltar,
+            // vermelho = não pode (e o rótulo diz por quê), tracejado = ainda
+            // verificando. O rótulo vai na BORDA SUPERIOR para não cobrir o
+            // horário vizinho.
             'pointer-events-none absolute z-20 rounded-md border-2 flex items-start justify-center overflow-hidden '
             + (highlight.tone === 'free'
-              ? 'border-emerald-500 bg-emerald-100/70'
+              ? 'border-[var(--success)] bg-[var(--success-bg)]'
               : highlight.tone === 'loading'
-                ? 'border-zinc-300 bg-zinc-100/70 border-dashed'
-                : 'border-red-400 bg-red-100/70')
+                ? 'border-[var(--border-strong)] bg-[var(--surface-3)] border-dashed'
+                : 'border-[var(--danger)] bg-[var(--danger-bg)]')
           }
           style={{ top: highlight.top, height: highlight.height, left: 2, right: 2 }}
           aria-hidden="true"
         >
           <span className={
-            'text-[10px] font-bold px-1.5 py-0.5 rounded-b '
-            + (highlight.tone === 'free' ? 'bg-emerald-600 text-white' : highlight.tone === 'loading' ? 'bg-zinc-500 text-white' : 'bg-red-600 text-white')
+            'text-[10px] font-bold px-1.5 py-0.5 rounded-b-md shadow-xs '
+            + (highlight.tone === 'free'
+              ? 'bg-[var(--success)] text-white'
+              : highlight.tone === 'loading'
+                ? 'bg-[var(--text-faint)] text-white'
+                : 'bg-[var(--danger)] text-white')
           }>
             {highlight.label}
           </span>
@@ -212,7 +220,9 @@ const GridColumn = memo(function GridColumn({ column, basisPct, variant, highlig
             'absolute rounded-md border border-l-4 px-2 py-1 text-left overflow-hidden touch-none select-none shadow-sm '
             + b.cls
             + (b.attention && !b.dragging ? ` ${ATTENTION_RING_CLS}` : '')
-            + (b.dragging ? ' opacity-40 ring-2 ring-zinc-900 ring-offset-1 cursor-grabbing' : ' hover:brightness-95 cursor-grab active:cursor-grabbing')
+            + (b.dragging
+              ? ' il-dragging ring-2 ring-[var(--brand)] ring-offset-1 cursor-grabbing shadow-lg'
+              : ' hover:brightness-[0.97] hover:shadow-md cursor-grab active:cursor-grabbing')
           }
           style={{
             top: b.top,
@@ -250,13 +260,7 @@ const GridColumn = memo(function GridColumn({ column, basisPct, variant, highlig
 // estado: filtrar não é status.
 function FilterChip({ active, onClick, children }: { active: boolean; onClick: () => void; children: React.ReactNode }) {
   return (
-    <button type="button" onClick={onClick}
-      className={cn(
-        'text-xs font-medium px-2 py-1 rounded-md border transition-colors',
-        active
-          ? 'bg-[var(--action)] text-[var(--action-contrast)] border-[var(--action)]'
-          : 'bg-white text-zinc-600 border-zinc-200 hover:bg-zinc-50',
-      )}>
+    <button type="button" onClick={onClick} aria-pressed={active} className="il-chip">
       {children}
     </button>
   );
@@ -942,11 +946,26 @@ export default function AgendaPage() {
     setFocus((f) => addDaysISO(f, view === 'week' ? dir * 7 : dir));
   }
 
+  // A3.3 — UMA leitura de data na barra (antes havia rótulo + campo duplicados,
+  // e o usuário não sabia em qual clicar). `focusLabel` é o título grande;
+  // `focusRange` explica o alcance da visão sem repetir a mesma string.
   const focusLabel = view === 'month'
     ? new Date(focus + 'T12:00:00Z').toLocaleDateString('pt-BR', { month: 'long', year: 'numeric', timeZone: 'UTC' })
     : view === 'week'
       ? `${formatDateBR(weekDays[0])} — ${formatDateBR(weekDays[6])}`
       : `${WEEKDAYS_LONG[weekdayOf(focus)]}, ${formatDateBR(focus)}`;
+  const focusRange = view === 'month'
+    ? 'Mês inteiro'
+    : view === 'week'
+      ? '7 dias'
+      : 'Um dia';
+  const isToday = focus === today;
+  /** Rótulo acessível do botão de navegação (não é só "anterior"). */
+  const navLabel = (dir: -1 | 1) => (view === 'month'
+    ? (dir < 0 ? 'Mês anterior' : 'Próximo mês')
+    : view === 'week'
+      ? (dir < 0 ? 'Semana anterior' : 'Próxima semana')
+      : (dir < 0 ? 'Dia anterior' : 'Próximo dia'));
 
   const dragging = dragId ? bookingsRef.current.get(dragId) || bookings.find((b) => b.id === dragId) || null : null;
   const isDragging = !!dragId;
@@ -984,14 +1003,19 @@ export default function AgendaPage() {
   const statusOptions = (['pending', 'confirmed', 'completed', 'no_show', 'cancelled'] as BookingStatus[]);
 
   return (
-    <div className={fullscreen ? 'fixed inset-0 z-40 overflow-y-auto bg-[#f8f8f8] px-2 py-3 sm:px-4 ws-scroll' : undefined}>
+    <div className={fullscreen ? 'fixed inset-0 z-40 overflow-y-auto bg-[var(--bg)] px-2 py-3 sm:px-4 ws-scroll' : undefined}>
       {/* Cabeçalho compacto: a grade é o conteúdo — o título não compete. */}
-      <div className="flex flex-wrap items-center justify-between gap-2 mb-2">
-        <div className="flex items-baseline gap-2 min-w-0">
-          <h1 className="text-lg font-semibold tracking-tight">Agenda</h1>
-          <span className="text-xs text-zinc-500 hidden md:inline truncate">Clique para ver o detalhe · arraste para reagendar.</span>
+      <div className="flex flex-wrap items-center justify-between gap-2 mb-2.5">
+        <div className="flex items-start gap-2.5 min-w-0">
+          <span className="w-9 h-9 shrink-0 rounded-lg bg-gradient-to-br from-[var(--brand)] to-[var(--lilac)] text-white flex items-center justify-center shadow-brand">
+            <Icon n="calendar" size={18} />
+          </span>
+          <div className="min-w-0">
+            <h1 className="text-lg font-bold tracking-tight text-[var(--text)] leading-tight">Agenda</h1>
+            <span className="text-xs text-[var(--text-muted)] truncate">Clique num atendimento para ver o detalhe · arraste para reagendar.</span>
+          </div>
         </div>
-        <Button onClick={() => setCreating(true)} variant="primary" size="sm"><Icon n="calendarPlus" size={15} /> Novo agendamento</Button>
+        <Button onClick={() => setCreating(true)} variant="primary"><Icon n="calendarPlus" size={15} /> Novo agendamento</Button>
       </div>
 
       <PermissionNotice message={notice?.title} hint={notice?.hint} onDismiss={dismiss} />
@@ -1001,17 +1025,17 @@ export default function AgendaPage() {
           role="status"
           aria-live="polite"
           className={
-            'mb-3 border px-3 py-2.5 text-xs font-medium flex items-start gap-2 '
+            'mb-3 border rounded-lg px-3 py-2.5 text-xs font-semibold flex items-start gap-2 shadow-xs '
             + (flash.tone === 'ok'
-              ? 'border-emerald-200 bg-emerald-50 text-emerald-900'
+              ? 'border-[var(--success-border)] bg-[var(--success-bg)] text-[var(--success-fg)]'
               : flash.tone === 'warn'
-                ? 'border-amber-200 bg-amber-50 text-amber-900'
-                : 'border-red-200 bg-red-50 text-red-700')
+                ? 'border-[var(--warning-border)] bg-[var(--warning-bg)] text-[var(--warning-fg)]'
+                : 'border-[var(--danger-border)] bg-[var(--danger-bg)] text-[var(--danger-fg)]')
           }
         >
-          <Icon n={flash.tone === 'ok' ? 'checkCircle' : 'alert'} size={14} className="mt-0.5" />
+          <Icon n={flash.tone === 'ok' ? 'checkCircle' : 'alert'} size={15} className="mt-px" />
           <span>{flash.text}</span>
-          <button onClick={() => setFlash(null)} className="ml-auto underline underline-offset-2 shrink-0">Fechar</button>
+          <button onClick={() => setFlash(null)} className="ml-auto font-bold underline underline-offset-2 shrink-0">Fechar</button>
         </div>
       )}
 
@@ -1035,26 +1059,47 @@ export default function AgendaPage() {
       {/* Toolbar operacional: navegação · Dia/Semana/Mês · filtros · tela cheia.
           relative z-40: o popover de filtros abre sobre a grade e precisa
           ficar acima dos cabeçalhos sticky (z-20/30) das colunas. */}
-      <div className="relative z-40 bg-white border border-zinc-200 mb-2">
-        <div className="flex flex-wrap items-center gap-x-3 gap-y-2 px-3 py-2">
-          <div className="flex items-center gap-1.5">
-            <button onClick={() => move(-1)} aria-label="Anterior" className="w-8 h-8 rounded-md bg-zinc-50 border border-zinc-200 hover:bg-zinc-100 flex items-center justify-center"><Icon n="chevL" size={14} /></button>
-            <button onClick={() => setFocus(today)} className={`text-xs font-semibold px-3 py-1.5 rounded-md border ${focus === today ? 'bg-zinc-900 text-white border-zinc-900' : 'bg-white border-zinc-200 hover:bg-zinc-50'}`}>Hoje</button>
-            <button onClick={() => move(1)} aria-label="Próximo" className="w-8 h-8 rounded-md bg-zinc-50 border border-zinc-200 hover:bg-zinc-100 flex items-center justify-center"><Icon n="chevR" size={14} /></button>
-            <label className="relative inline-flex items-center gap-1.5 min-w-0 max-w-[min(24rem,calc(100vw-11rem))] text-xs font-semibold capitalize bg-zinc-50 border border-zinc-200 rounded-md px-3 py-1.5 hover:bg-zinc-100 focus-within:ring-1 focus-within:ring-zinc-900 cursor-pointer" title="Escolher data">
-              <span className="truncate" aria-live="polite">{focusLabel}</span>
-              <Icon n="chevD" size={12} className="shrink-0 text-zinc-500" />
+      <div className="relative z-40 ws-panel mb-2.5">
+        <div className="flex flex-wrap items-center gap-x-3 gap-y-2.5 px-3 py-2.5">
+          {/* Navegação no tempo: [◀ ▶] + data ÚNICA (título clicável) + Hoje.
+              Antes eram seta/Hoje/seta/campo e o rótulo repetido — agora cada
+              elemento tem uma função só e a data aparece UMA vez. */}
+          <div className="flex items-center gap-2 min-w-0">
+            <span className="inline-flex rounded-md border border-[var(--border-strong)] bg-white shadow-xs overflow-hidden">
+              <button onClick={() => move(-1)} aria-label={navLabel(-1)} title={navLabel(-1)}
+                className="w-9 h-9 flex items-center justify-center text-[var(--text-muted)] hover:bg-[var(--surface-hover)] hover:text-[var(--text)] border-r border-[var(--border)]">
+                <Icon n="chevL" size={15} />
+              </button>
+              <button onClick={() => move(1)} aria-label={navLabel(1)} title={navLabel(1)}
+                className="w-9 h-9 flex items-center justify-center text-[var(--text-muted)] hover:bg-[var(--surface-hover)] hover:text-[var(--text)]">
+                <Icon n="chevR" size={15} />
+              </button>
+            </span>
+            <label className="relative inline-flex flex-col min-w-0 max-w-[min(26rem,calc(100vw-12rem))] cursor-pointer rounded-md px-1 -mx-1 py-0.5 hover:bg-[var(--surface-hover)] focus-within:shadow-focus" title="Escolher outra data">
+              <span className="text-[15px] font-bold leading-tight text-[var(--text)] capitalize truncate" aria-live="polite">{focusLabel}</span>
+              <span className="text-[11px] font-semibold text-[var(--text-muted)] leading-tight inline-flex items-center gap-1">
+                <Icon n="calendar" size={11} /> {focusRange} · clique para escolher a data
+              </span>
               <input type="date" value={focus} max="2100-12-31" onChange={(e) => { if (/^\d{4}-\d{2}-\d{2}$/.test(e.target.value)) setFocus(e.target.value); }}
                 aria-label="Escolher data" className="absolute inset-0 w-full h-full opacity-0 cursor-pointer" />
             </label>
+            {!isToday && (
+              <Button variant="soft" size="sm" onClick={() => setFocus(today)}>
+                <Icon n="calendar" size={13} /> Hoje
+              </Button>
+            )}
           </div>
-          <div className="flex gap-1 p-0.5 bg-zinc-100 rounded-md" role="tablist" aria-label="Visualização">
-            {(['day', 'week', 'month'] as View[]).map((v) => (
-              <button key={v} role="tab" aria-selected={view === v} onClick={() => { endDrag(); setView(v); }} className={`text-xs font-semibold px-3 py-1 rounded ${view === v ? 'bg-white shadow-sm border border-zinc-200' : 'text-zinc-500 hover:text-zinc-900'}`}>
-                {v === 'day' ? 'Dia' : v === 'week' ? 'Semana' : 'Mês'}
-              </button>
-            ))}
-          </div>
+          <Tabs
+            items={[
+              { id: 'day' as View, label: 'Dia', icon: 'calendar' },
+              { id: 'week' as View, label: 'Semana', icon: 'grid' },
+              { id: 'month' as View, label: 'Mês', icon: 'receipt' },
+            ]}
+            value={view}
+            onChange={(v) => { endDrag(); setView(v); }}
+            ariaLabel="Visualização da agenda"
+            size="sm"
+          />
           <div className="flex items-center gap-1.5 ml-auto">
             {/* P1.1 — UM botão de filtro (contador quando ativo). O popover
                 agrupa Status + Especialidade + Profissional pesquisável:
@@ -1163,24 +1208,45 @@ export default function AgendaPage() {
           </span>
         </div>
         {isDragging && view !== 'month' && (
-          <div className="px-3 py-2 bg-amber-50 border-b border-amber-200 flex flex-wrap items-center justify-between gap-2 text-xs">
-            <span className="font-medium text-amber-900 inline-flex items-center gap-2">
-              <Icon n="calendar" size={13} />
-              Solte no novo horário
+          <div
+            role="status"
+            aria-live="polite"
+            className={
+              'px-3 py-2 border-b flex flex-wrap items-center justify-between gap-2 text-xs '
+              + (hover?.time
+                ? 'bg-[var(--success-bg)] border-[var(--success-border)]'
+                : slotsState === 'error'
+                  ? 'bg-[var(--danger-bg)] border-[var(--danger-border)]'
+                  : 'bg-[var(--warning-bg)] border-[var(--warning-border)]')
+            }
+          >
+            <span className={
+              'font-semibold inline-flex items-center gap-2 '
+              + (hover?.time
+                ? 'text-[var(--success-fg)]'
+                : slotsState === 'error' ? 'text-[var(--danger-fg)]' : 'text-[var(--warning-fg)]')
+            }>
+              <Icon n={hover?.time ? 'checkCircle' : 'calendar'} size={14} />
+              {hover?.time ? 'Pode soltar aqui' : 'Solte no novo horário'}
               <span className={
-                'font-semibold px-1.5 py-0.5 rounded border '
-                + (slotsState === 'loading'
-                  ? 'bg-white border-amber-300 text-amber-800'
+                'font-bold px-2 py-0.5 rounded-pill border bg-white shadow-xs '
+                + (hover?.time
+                  ? 'border-[var(--success-border)] text-[var(--success-fg)]'
                   : slotsState === 'error'
-                    ? 'bg-white border-red-300 text-red-700'
-                    : 'bg-white border-amber-300 text-amber-800')
+                    ? 'border-[var(--danger-border)] text-[var(--danger-fg)]'
+                    : 'border-[var(--warning-border)] text-[var(--warning-fg)]')
               }>
                 {hover?.time
                   ? dragPreviewLabel(hover.date, hover.time)
                   : SLOT_STATE_MESSAGE[slotsState] || 'Aponte para um horário livre'}
               </span>
+              {!hover?.time && slotsState !== 'loading' && !drag.error && (
+                <span className="font-medium opacity-85 hidden sm:inline">— horário ocupado ou fora do expediente</span>
+              )}
             </span>
-            <button onClick={endDrag} className="font-semibold text-amber-900 underline underline-offset-2">Cancelar arraste</button>
+            <Button size="xs" variant="secondary" onClick={endDrag}>
+              <Icon n="x" size={12} /> Cancelar arraste
+            </Button>
           </div>
         )}
       </div>

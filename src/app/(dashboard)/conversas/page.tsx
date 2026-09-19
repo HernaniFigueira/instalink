@@ -150,32 +150,37 @@ export default function ConversasPage() {
     return (
       <>
         <div className="flex items-center justify-between gap-3 mb-4">
-          <div>
-            <h1 className="text-base font-semibold">Conversas</h1>
-            <p className="text-sm text-zinc-500 mt-0.5">As conversas com os seus clientes em um só lugar.</p>
+          <div className="flex items-start gap-2.5">
+            <span className="w-9 h-9 shrink-0 rounded-lg bg-gradient-to-br from-[var(--success)] to-[var(--brand)] text-white flex items-center justify-center shadow-md">
+              <Icon n="inbox" size={18} />
+            </span>
+            <div>
+              <h1 className="text-base font-bold text-[var(--text)] leading-tight">Conversas</h1>
+              <p className="text-sm text-[var(--text-muted)] mt-0.5">As conversas com os seus clientes em um só lugar.</p>
+            </div>
           </div>
-          <Link href={`/clientes${clientesQ}`} className="text-xs font-medium bg-white border border-zinc-200 rounded-md px-3 py-1.5">Ver clientes</Link>
+          <Link href={`/clientes${clientesQ}`} className="text-xs font-semibold bg-white border border-[var(--border-strong)] text-[var(--text)] rounded-md px-3 py-1.5 shadow-xs hover:bg-[var(--surface-hover)]">Ver clientes</Link>
         </div>
-        {error && <p className="mb-3 text-sm font-medium bg-amber-600 text-white rounded-md px-3 py-2">{error}</p>}
+        {error && <p role="alert" className="mb-3 text-sm font-semibold bg-[var(--warning-bg)] border border-[var(--warning-border)] text-[var(--warning-fg)] rounded-md px-3 py-2">{error}</p>}
 
-        <div className="bg-white border border-zinc-200">
-          <div className="px-6 py-12 text-center max-w-lg mx-auto">
-            <div className="w-12 h-12 rounded-md bg-zinc-100 text-zinc-500 flex items-center justify-center mx-auto"><Icon n="chat" size={24} /></div>
-            <h2 className="font-semibold mt-4">Nenhuma conversa ainda</h2>
-            <p className="text-sm text-zinc-500 mt-1">
+        <div className="ws-panel">
+          <div className="il-empty max-w-lg mx-auto">
+            <div className="il-empty__icon"><Icon n="chat" size={24} /></div>
+            <h2 className="font-bold text-[var(--text)]">Nenhuma conversa ainda</h2>
+            <p className="text-sm text-[var(--text-muted)] mt-1">
               Para receber e responder por aqui é preciso conectar um canal. {data.label.detail}
             </p>
-            <div className="mt-6 flex flex-col sm:flex-row items-center justify-center gap-2">
-              <Link href={channelsHref} className="text-sm font-semibold bg-zinc-900 text-white px-4 py-2 rounded-md">
-                Conectar canal
+            <div className="mt-5 flex flex-col sm:flex-row items-center justify-center gap-2">
+              <Link href={channelsHref} className="inline-flex items-center justify-center gap-1.5 text-sm font-bold bg-[var(--brand)] text-white px-4 py-2 rounded-md border border-[var(--brand-strong)]/40 shadow-brand hover:bg-[var(--brand-strong)]">
+                <Icon n="plugs" size={15} /> Conectar canal
               </Link>
               {data.linkFallback && (
-                <a href={data.linkFallback} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1.5 text-xs font-medium text-zinc-600 hover:text-zinc-900 underline">
+                <a href={data.linkFallback} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1.5 text-xs font-semibold text-[var(--text-muted)] hover:text-[var(--brand-fg)] underline underline-offset-2">
                   Abrir WhatsApp (link externo) <Icon n="external" size={12} />
                 </a>
               )}
             </div>
-            <p className="text-xs text-zinc-400 mt-4">
+            <p className="text-xs text-[var(--text-faint)] mt-4">
               Nada é perdido enquanto o canal não está conectado: cadastros, agendamentos e leads continuam chegando normalmente.
             </p>
           </div>
@@ -187,69 +192,86 @@ export default function ConversasPage() {
   // ── CONECTADO: workspace 3 colunas ──
   return (
     <>
-      <div className="flex items-center justify-between gap-3 mb-3">
-        <div>
-          <h1 className="text-base font-semibold">Conversas</h1>
-          <p className="text-xs text-zinc-500">{data.inbox.open} abertas · {data.inbox.unread} não lidas · {data.integration.displayPhone && <span className="font-medium text-zinc-700">{data.integration.displayPhone}</span>}</p>
+      <div className="flex flex-wrap items-center justify-between gap-3 mb-3">
+        <div className="flex items-start gap-2.5 min-w-0">
+          <span className="w-9 h-9 shrink-0 rounded-lg bg-gradient-to-br from-[var(--success)] to-[var(--brand)] text-white flex items-center justify-center shadow-md">
+            <Icon n="inbox" size={18} />
+          </span>
+          <div className="min-w-0">
+            <h1 className="text-base font-bold text-[var(--text)] leading-tight">Conversas</h1>
+            <p className="text-xs text-[var(--text-muted)]">
+              {data.inbox.open} abertas · {data.inbox.unread} não lidas
+              {data.integration.displayPhone && <> · <span className="font-semibold text-[var(--text)]">{data.integration.displayPhone}</span></>}
+            </p>
+          </div>
         </div>
         <div className="flex items-center gap-2">
-          <Link href={channelsHref} className="hidden sm:inline-flex items-center gap-1.5 text-xs font-medium bg-emerald-50 border border-emerald-200 text-emerald-800 rounded-full px-2.5 py-1">
-            <span className="w-1.5 h-1.5 rounded-full bg-emerald-600" /> Conectado
+          <Link href={channelsHref} className="hidden sm:inline-flex items-center gap-1.5 text-xs font-bold bg-[var(--success-bg)] border border-[var(--success-border)] text-[var(--success-fg)] rounded-pill px-2.5 py-1 shadow-xs">
+            <span className="w-1.5 h-1.5 rounded-full bg-[var(--success)]" /> WhatsApp conectado
           </Link>
-          <Link href={`/clientes${clientesQ}`} className="text-xs font-medium bg-white border border-zinc-200 rounded-md px-3 py-1.5">Clientes</Link>
+          <Link href={`/clientes${clientesQ}`} className="text-xs font-semibold bg-white border border-[var(--border-strong)] text-[var(--text)] rounded-md px-3 py-1.5 shadow-xs hover:bg-[var(--surface-hover)]">
+            Ver clientes
+          </Link>
         </div>
       </div>
-      {error && <p className="mb-3 text-sm font-medium bg-amber-600 text-white rounded-md px-3 py-2">{error}</p>}
+      {error && <p role="alert" className="mb-3 text-sm font-semibold bg-[var(--warning-bg)] border border-[var(--warning-border)] text-[var(--warning-fg)] rounded-md px-3 py-2">{error}</p>}
 
-      <div className="bg-white border border-zinc-200 overflow-hidden">
+      <div className="ws-panel overflow-hidden">
         {/* Toolbar compacta */}
-        <div className="flex flex-wrap items-center gap-2 px-3 py-2 border-b border-zinc-200 bg-zinc-50">
-          <span className="text-xs font-semibold tracking-wide uppercase text-zinc-500 hidden sm:inline">Inbox</span>
+        <div className="flex flex-wrap items-center gap-2 px-3 py-2.5 border-b border-[var(--border)] bg-[var(--surface-2)]">
+          <span className="text-[11px] font-bold tracking-[0.08em] uppercase text-[var(--text-faint)] hidden sm:inline">Inbox</span>
           {/* Busca contextual (A1.2 · Bloco 2): estado na URL (?q=), filtro
               client-side sobre a lista já autorizada — deep-link e refresh
               preservam o termo. */}
           <div className="relative flex-1 min-w-[160px] max-w-xs">
-            <Icon n="search" size={13} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-zinc-400" />
+            <Icon n="search" size={13} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-[var(--text-faint)]" />
             <input
               value={q}
               onChange={(e) => setQuery(e.target.value)}
               placeholder="Buscar por nome ou telefone…"
               aria-label="Buscar conversas"
-              className="w-full bg-white border border-zinc-200 rounded-md pl-7 pr-3 py-1.5 text-xs focus:outline-none focus:border-zinc-400"
+              className="w-full bg-white border border-[var(--border-strong)] rounded-md pl-7 pr-3 py-1.5 text-xs shadow-xs focus:outline-none focus:shadow-focus focus:border-[var(--brand)]"
             />
           </div>
           <div className="flex gap-1 ml-auto sm:ml-2">
             {(['all', 'unread', 'open'] as const).map((f) => (
-              <button key={f} onClick={() => setFilter(f)} aria-pressed={filter === f} className={`text-xs font-medium px-2.5 py-1 rounded-md border ${filter === f ? 'bg-zinc-900 text-white border-zinc-900' : 'bg-white border-zinc-200 text-zinc-600'}`}>
+              <button key={f} onClick={() => setFilter(f)} aria-pressed={filter === f} className="il-chip">
                 {f === 'all' ? 'Todas' : f === 'unread' ? 'Não lidas' : 'Em atendimento'}
               </button>
             ))}
           </div>
         </div>
 
-        <div className="grid lg:grid-cols-[260px_1fr_240px] min-h-[480px] divide-y lg:divide-y-0 lg:divide-x divide-zinc-200">
+        <div className="grid lg:grid-cols-[280px_1fr_250px] min-h-[480px] divide-y lg:divide-y-0 lg:divide-x divide-[var(--border)]">
           {/* Col 1: Conversas */}
           <div className="flex flex-col min-h-[280px] lg:min-h-0">
-            <div className="px-3 py-2 border-b border-zinc-100 bg-white">
-              <p className="text-xs font-semibold tracking-wide uppercase text-zinc-500">Conversas · {filtered.length}</p>
+            <div className="px-3 py-2 border-b border-[var(--border-soft)] bg-white">
+              <p className="text-[11px] font-bold tracking-[0.08em] uppercase text-[var(--text-faint)]">Conversas · {filtered.length}</p>
             </div>
             <div className="flex-1 overflow-y-auto max-h-[320px] lg:max-h-[520px]">
               {filtered.length === 0 ? (
-                <p className="text-sm text-zinc-500 px-3 py-8 text-center">
+                <p className="text-sm text-[var(--text-muted)] px-3 py-8 text-center">
                   {q ? `Nenhuma conversa para “${q}”.` : 'Nenhuma conversa neste filtro.'}
                 </p>
               ) : (
-                <div className="divide-y divide-zinc-100">
-                  {filtered.map((c) => (
-                    <button key={c.id} onClick={() => openConversation(c.id)} className={cn('w-full text-left px-3 py-2.5 hover:bg-zinc-50 flex flex-col gap-0.5', active?.conversation.id === c.id && 'bg-zinc-50')} aria-current={active?.conversation.id === c.id}>
+                <div className="divide-y divide-[var(--border-soft)]">
+                  {filtered.map((c) => {
+                    const isActive = active?.conversation.id === c.id;
+                    return (
+                    <button key={c.id} onClick={() => openConversation(c.id)}
+                      className={cn('relative w-full text-left px-3 py-2.5 flex flex-col gap-0.5 transition-colors',
+                        isActive ? 'bg-[var(--brand-soft)]' : 'hover:bg-[var(--surface-hover)]')}
+                      aria-current={isActive}>
+                      {isActive && <span aria-hidden="true" className="absolute left-0 top-2 bottom-2 w-[3px] rounded-pill bg-[var(--brand)]" />}
                       <span className="flex items-center justify-between gap-2">
-                        <span className="text-sm font-medium truncate">{c.name}</span>
-                        {c.unread > 0 && <span className="text-xs font-bold bg-zinc-900 text-white px-1.5 py-0.5 rounded-full shrink-0">{c.unread}</span>}
+                        <span className={cn('text-sm truncate', isActive ? 'font-bold text-[var(--brand-fg)]' : 'font-semibold text-[var(--text)]')}>{c.name}</span>
+                        {c.unread > 0 && <span className="text-[11px] font-bold bg-[var(--brand)] text-white min-w-[18px] text-center px-1 py-0.5 rounded-pill shrink-0 tabular-nums">{c.unread}</span>}
                       </span>
-                      <span className="text-xs text-zinc-500 truncate">{c.lastMessagePreview || c.phone}</span>
-                      <span className="text-xs text-zinc-400">{c.phone}{c.registered ? ' · cliente' : ''}</span>
+                      <span className="text-xs text-[var(--text-muted)] truncate">{c.lastMessagePreview || c.phone}</span>
+                      <span className="text-[11px] text-[var(--text-faint)]">{c.phone}{c.registered ? ' · cliente' : ''}</span>
                     </button>
-                  ))}
+                    );
+                  })}
                 </div>
               )}
             </div>
@@ -259,35 +281,44 @@ export default function ConversasPage() {
           <div className="flex flex-col min-h-[320px]">
             {active ? (
               <>
-                <div className="px-3 py-2 border-b border-zinc-100 flex flex-wrap items-center justify-between gap-2 bg-white">
+                <div className="px-3 py-2.5 border-b border-[var(--border-soft)] flex flex-wrap items-center justify-between gap-2 bg-white">
                   <div className="min-w-0">
-                    <div className="flex items-center gap-2">
-                      <p className="text-sm font-semibold truncate">{active.conversation.name}</p>
-                      <span className={`text-[11px] font-semibold border rounded-full px-2 py-0.5 ${
+                    <div className="flex flex-wrap items-center gap-2">
+                      <p className="text-sm font-bold text-[var(--text)] truncate">{active.conversation.name}</p>
+                      {/* Estado do atendimento: quem está respondendo AGORA. */}
+                      <span className={cn('text-[11px] font-bold border rounded-pill px-2 py-0.5 inline-flex items-center gap-1',
                         active.conversation.mode === 'human'
-                          ? 'bg-amber-50 border-amber-200 text-amber-800'
-                          : 'bg-emerald-50 border-emerald-200 text-emerald-800'
-                      }`}>
-                        {active.conversation.mode === 'human' ? 'Atendimento humano' : 'Atendimento automático'}
+                          ? 'bg-[var(--warning-bg)] border-[var(--warning-border)] text-[var(--warning-fg)]'
+                          : 'bg-[var(--success-bg)] border-[var(--success-border)] text-[var(--success-fg)]'
+                      )}>
+                        <span aria-hidden="true" className={cn('w-1.5 h-1.5 rounded-full', active.conversation.mode === 'human' ? 'bg-[var(--warning)]' : 'bg-[var(--success)]')} />
+                        {active.conversation.mode === 'human' ? 'Você está atendendo' : 'Assistente respondendo'}
                       </span>
                     </div>
-                    <p className="text-xs text-zinc-500 truncate mt-0.5">{active.conversation.phone}{active.conversation.registered ? ' · cliente ✓' : ''}</p>
+                    <p className="text-xs text-[var(--text-muted)] truncate mt-0.5">{active.conversation.phone}{active.conversation.registered ? ' · cliente cadastrado' : ' · ainda sem cadastro'}</p>
                   </div>
-                  <div className="flex items-center gap-2 shrink-0">
+                  <div className="flex flex-wrap items-center gap-2 shrink-0">
                     <button
                       onClick={toggleMode}
                       disabled={switchingMode}
-                      className="text-xs font-medium border border-zinc-300 rounded px-2.5 py-1 hover:bg-zinc-100 disabled:opacity-50"
+                      className={cn('text-xs font-bold rounded-md px-2.5 py-1.5 border shadow-xs disabled:opacity-50 inline-flex items-center gap-1.5',
+                        active.conversation.mode === 'human'
+                          ? 'bg-white border-[var(--border-strong)] text-[var(--text)] hover:bg-[var(--surface-hover)]'
+                          : 'bg-[var(--warning-bg)] border-[var(--warning-border)] text-[var(--warning-fg)] hover:bg-[var(--attention-bg-hover)]')}
                     >
-                      {active.conversation.mode === 'human' ? 'Devolver para automação' : 'Assumir atendimento'}
+                      <Icon n={active.conversation.mode === 'human' ? 'sync' : 'handHeart'} size={13} />
+                      {active.conversation.mode === 'human' ? 'Devolver ao assistente' : 'Assumir atendimento'}
                     </button>
-                    <Link href={`/clientes?b=${businessId}&q=${encodeURIComponent(active.conversation.phone||'')}`} className="text-xs font-medium text-zinc-600 hover:underline">Cliente 360</Link>
+                    <Link href={`/clientes?b=${businessId}&q=${encodeURIComponent(active.conversation.phone||'')}`}
+                      className="text-xs font-bold text-[var(--brand-fg)] bg-[var(--brand-soft)] border border-[var(--brand-border)] rounded-md px-2.5 py-1.5 hover:bg-[#dde9fe] inline-flex items-center gap-1.5">
+                      <Icon n="wallet" size={13} /> Ver no CRM
+                    </Link>
                   </div>
                 </div>
-                <div className="flex-1 overflow-y-auto p-3 space-y-2 bg-zinc-50 max-h-[360px] lg:max-h-[420px]">
+                <div className="flex-1 overflow-y-auto p-3 space-y-2 bg-[var(--bg-tint)] max-h-[360px] lg:max-h-[420px]">
                   {active.messages.map((m) => (
                     <div key={m.id} className={m.direction === 'out' ? 'flex justify-end' : 'flex justify-start'}>
-                      <div className={cn('max-w-[78%] px-3 py-2 rounded-lg text-sm', m.direction === 'out' ? 'bg-zinc-900 text-white' : 'bg-white border border-zinc-200')}>
+                      <div className={cn('max-w-[78%] px-3 py-2 rounded-lg text-sm shadow-xs', m.direction === 'out' ? 'bg-[var(--brand)] text-white rounded-br-sm' : 'bg-white border border-[var(--border)] rounded-bl-sm')}>
                         <span className="block text-[11px] font-semibold opacity-75 mb-0.5">
                           {m.byName || (m.direction === 'in' ? 'Cliente' : m.by === 'automation' ? 'Automação' : 'Equipe')}
                         </span>
@@ -300,55 +331,68 @@ export default function ConversasPage() {
                     </div>
                   ))}
                 </div>
-                <div className="p-2 border-t border-zinc-200 bg-white">
-                  {sendError && <p role="alert" className="mb-2 text-xs font-medium bg-amber-600 text-white rounded-md px-2.5 py-1.5">{sendError}</p>}
+                <div className="p-2.5 border-t border-[var(--border)] bg-white">
+                  {sendError && <p role="alert" className="mb-2 text-xs font-semibold bg-[var(--danger-bg)] border border-[var(--danger-border)] text-[var(--danger-fg)] rounded-md px-2.5 py-1.5">{sendError}</p>}
                   <form onSubmit={sendMessage} className="flex gap-2">
                     <input
                       value={draft}
                       onChange={(e) => setDraft(e.target.value)}
                       placeholder="Escreva uma mensagem…"
                       aria-label="Mensagem"
-                      className="flex-1 rounded-md border border-zinc-300 px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-zinc-900"
+                      className="flex-1 rounded-md border border-[var(--border-strong)] px-3 py-2 text-sm shadow-xs focus:outline-none focus:shadow-focus focus:border-[var(--brand)]"
                     />
                     {/* O botão só parece funcional quando é: desabilitado sem
                         texto e durante o envio — nunca um "Enviar" de mentira. */}
                     <button type="submit" disabled={sending || !draft.trim()}
-                      className="text-sm font-semibold bg-zinc-900 text-white px-4 py-2 rounded-md disabled:opacity-50 disabled:cursor-not-allowed">
-                      {sending ? 'Enviando…' : 'Enviar'}
+                      className="text-sm font-bold bg-[var(--brand)] text-white px-4 py-2 rounded-md border border-[var(--brand-strong)]/40 shadow-brand hover:bg-[var(--brand-strong)] disabled:opacity-50 disabled:cursor-not-allowed disabled:shadow-none inline-flex items-center gap-1.5">
+                      <Icon n="send" size={14} /> {sending ? 'Enviando…' : 'Enviar'}
                     </button>
                   </form>
                 </div>
               </>
             ) : (
               <div className="flex-1 flex flex-col items-center justify-center text-center px-6 py-12">
-                <div className="w-10 h-10 rounded-md bg-zinc-100 flex items-center justify-center text-zinc-400"><Icon n="chat" size={20} /></div>
-                <p className="text-sm font-semibold mt-3">Selecione uma conversa</p>
-                <p className="text-xs text-zinc-500 mt-1 max-w-sm">Cada mensagem vira histórico do cliente. O assistente pode responder com os dados do negócio.</p>
+                <div className="il-empty__icon"><Icon n="chat" size={22} /></div>
+                <p className="text-sm font-bold text-[var(--text)]">Escolha uma conversa</p>
+                <p className="text-xs text-[var(--text-muted)] mt-1 max-w-sm">Cada mensagem vira histórico do cliente. O assistente pode responder com os dados do negócio.</p>
               </div>
             )}
           </div>
 
           {/* Col 3: Contato */}
-          <div className="bg-zinc-50">
+          <div className="bg-[var(--surface-2)]">
             {active ? (
               <div className="p-3 space-y-3">
-                <div className="bg-white border border-zinc-200 p-3">
-                  <p className="text-xs font-semibold tracking-wide uppercase text-zinc-500">Contato</p>
-                  <p className="text-sm font-semibold mt-1">{active.conversation.name}</p>
-                  <p className="text-xs text-zinc-500">{active.conversation.phone}</p>
-                  <span className={`inline-block mt-2 text-xs font-medium px-1.5 py-0.5 rounded border ${active.conversation.registered ? 'bg-zinc-900 text-white border-zinc-900' : 'bg-white border-zinc-200 text-zinc-600'}`}>{active.conversation.registered ? 'Cliente cadastrado' : 'Lead'}</span>
+                <div className="il-idcard rounded-lg border border-[var(--border)] p-3 shadow-sm">
+                  <div className="relative flex items-center gap-2.5">
+                    <span className="w-10 h-10 shrink-0 rounded-xl il-avatar text-sm" aria-hidden="true">
+                      {(active.conversation.name || '?').trim().split(/\s+/).slice(0, 2).map((x) => x[0]?.toUpperCase() || '').join('')}
+                    </span>
+                    <div className="min-w-0">
+                      <p className="text-sm font-bold text-[var(--text)] truncate">{active.conversation.name}</p>
+                      <p className="text-xs text-[var(--text-muted)] truncate">{active.conversation.phone}</p>
+                    </div>
+                  </div>
+                  <span className={cn('relative inline-flex items-center gap-1 mt-2.5 text-[11px] font-bold px-2 py-0.5 rounded-pill border',
+                    active.conversation.registered
+                      ? 'bg-[var(--brand-soft)] border-[var(--brand-border)] text-[var(--brand-fg)]'
+                      : 'bg-[var(--lilac-bg)] border-[var(--lilac-border)] text-[var(--lilac-fg)]')}>
+                    <Icon n={active.conversation.registered ? 'wallet' : 'spark'} size={11} />
+                    {active.conversation.registered ? 'Cliente cadastrado' : 'Lead (sem cadastro)'}
+                  </span>
                 </div>
-                <div className="bg-white border border-zinc-200 p-3">
-                  <p className="text-xs font-semibold tracking-wide uppercase text-zinc-500 mb-2">Atalhos</p>
+                <div className="bg-white border border-[var(--border)] rounded-lg p-3 shadow-xs">
+                  <p className="text-[11px] font-bold tracking-[0.08em] uppercase text-[var(--text-faint)] mb-2">Atalhos</p>
                   <div className="space-y-1.5">
-                    <Link href={`/clientes?b=${businessId}&q=${encodeURIComponent(active.conversation.phone||'')}`} className="block text-xs font-medium bg-white border border-zinc-200 rounded-md px-3 py-2 hover:bg-zinc-50">Ver cliente</Link>
-                    <Link href={`/funil?b=${businessId}`} className="block text-xs font-medium bg-white border border-zinc-200 rounded-md px-3 py-2 hover:bg-zinc-50">Ver no funil</Link>
-                    <a href={data.linkFallback} target="_blank" rel="noreferrer" className="block text-xs font-medium bg-white border border-zinc-200 rounded-md px-3 py-2 hover:bg-zinc-50 inline-flex items-center gap-1.5">
-                      Abrir no WhatsApp <Icon n="external" size={12} />
+                    <Link href={`/clientes?b=${businessId}&q=${encodeURIComponent(active.conversation.phone||'')}`} className="flex items-center gap-1.5 text-xs font-semibold bg-[var(--surface-3)] border border-[var(--border)] rounded-md px-3 py-2 hover:bg-[var(--brand-soft)] hover:text-[var(--brand-fg)] hover:border-[var(--brand-border)]"><Icon n="wallet" size={13} /> Ver no CRM</Link>
+                    <Link href={`/funil?b=${businessId}`} className="flex items-center gap-1.5 text-xs font-semibold bg-[var(--surface-3)] border border-[var(--border)] rounded-md px-3 py-2 hover:bg-[var(--lilac-bg)] hover:text-[var(--lilac-fg)] hover:border-[var(--lilac-border)]"><Icon n="funnel" size={13} /> Ver no funil</Link>
+                    <Link href={`/agenda?b=${businessId}`} className="flex items-center gap-1.5 text-xs font-semibold bg-[var(--surface-3)] border border-[var(--border)] rounded-md px-3 py-2 hover:bg-[var(--brand-soft)] hover:text-[var(--brand-fg)] hover:border-[var(--brand-border)]"><Icon n="calendar" size={13} /> Ver agenda</Link>
+                    <a href={data.linkFallback} target="_blank" rel="noreferrer" className="flex items-center gap-1.5 text-xs font-semibold bg-[var(--success-bg)] text-[var(--success-fg)] border border-[var(--success-border)] rounded-md px-3 py-2 hover:bg-[#d7f2e6]">
+                      <Icon n="whatsapp" size={13} /> Abrir no WhatsApp <Icon n="external" size={11} />
                     </a>
                   </div>
                 </div>
-                <div className="text-xs text-zinc-500 px-1">
+                <div className="text-xs text-[var(--text-muted)] px-1">
                   <p>Última mensagem: {active.conversation.lastMessageAt ? humanDateTime(active.conversation.lastMessageAt.slice(0, 10), active.conversation.lastMessageAt.slice(11, 16)) : '—'}</p>
                 </div>
               </div>

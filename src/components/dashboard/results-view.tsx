@@ -21,6 +21,7 @@ import type {
   Metric, ProfessionalPerformance, ResultsPayload, ServicePerformance,
 } from '@/lib/insights';
 import { Icon } from '@/components/icons';
+import { Tabs } from '@/components/ui';
 
 export interface PeriodSelection { key: PeriodKey; from: string; to: string }
 
@@ -235,17 +236,19 @@ export function PerformanceView({ payload }: { payload: ResultsPayload }) {
   const showRevenue = !!payload.revenue.forecast && payload.revenue.forecastPriced;
 
   return (
-    <div className="bg-white border border-zinc-200 rounded-lg">
-      <div className="px-4 pt-3.5 pb-2 flex flex-wrap items-center justify-between gap-2 border-b border-zinc-100">
-        <h3 className="font-bold text-sm">Desempenho</h3>
-        <div role="tablist" aria-label="Tipo de desempenho" className="inline-flex bg-zinc-100 rounded-md p-0.5">
-          {([['services', 'Serviços'], ['professionals', 'Profissionais']] as const).map(([id, label]) => (
-            <button key={id} role="tab" aria-selected={tab === id} onClick={() => setTab(id)}
-              className={cn('text-xs font-medium px-2.5 py-1 rounded', tab === id ? 'bg-white shadow-sm border border-zinc-200' : 'text-zinc-500')}>
-              {label}
-            </button>
-          ))}
-        </div>
+    <div className="ws-panel">
+      <div className="px-4 pt-3.5 pb-2.5 flex flex-wrap items-center justify-between gap-2 border-b border-[var(--border-soft)]">
+        <h3 className="font-bold text-sm text-[var(--text)]">Desempenho</h3>
+        <Tabs
+          items={[
+            { id: 'services' as const, label: 'Serviços', icon: 'service' },
+            { id: 'professionals' as const, label: 'Profissionais', icon: 'idcard' },
+          ]}
+          value={tab}
+          onChange={(id) => setTab(id)}
+          ariaLabel="Tipo de desempenho"
+          size="sm"
+        />
       </div>
 
       {section.rows.length === 0 ? (

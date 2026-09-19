@@ -440,10 +440,30 @@ export function EsteiraView() {
 
   const priorityBadge = (priority?: LeadPriority) => {
     switch (priority) {
-      case 'urgent': return <span className="bg-red-600 text-white text-[10px] px-1.5 py-0.5 rounded font-bold uppercase tracking-wider">Urgente</span>;
-      case 'high': return <span className="bg-orange-600 text-white text-[10px] px-1.5 py-0.5 rounded font-bold uppercase tracking-wider">Alta</span>;
-      case 'low': return <span className="bg-zinc-200 text-zinc-700 text-[10px] px-1.5 py-0.5 rounded font-semibold">Baixa</span>;
+      case 'urgent': return <span className="bg-[var(--danger)] text-white text-[10px] px-2 py-0.5 rounded-pill font-bold uppercase tracking-wider shadow-xs">Urgente</span>;
+      case 'high': return <span className="bg-[var(--warning-bg)] text-[var(--warning-fg)] border border-[var(--warning-border)] text-[10px] px-2 py-0.5 rounded-pill font-bold uppercase tracking-wider">Alta</span>;
+      case 'low': return <span className="bg-[var(--surface-3)] text-[var(--text-muted)] border border-[var(--border)] text-[10px] px-2 py-0.5 rounded-pill font-semibold uppercase tracking-wider">Baixa</span>;
       default: return null;
+    }
+  };
+
+  /**
+   * Ponto de cor da coluna (A3.3): cada etapa tem uma cor estável, e a coluna
+   * inteira fica reconhecível sem depender só do nome. Mesma semântica de cor
+   * do restante do produto (azul = novo, âmbar = em andamento, verde = ganho,
+   * vermelho = perdido).
+   */
+  const stageToneDot = (stage: { id: string; color?: string }) => {
+    switch (stage.id) {
+      case 'new': return 'bg-[var(--info)]';
+      case 'in_progress': return 'bg-[var(--warning)]';
+      case 'qualifying': return 'bg-[var(--lilac)]';
+      case 'qualified': return 'bg-[var(--success)]';
+      case 'waiting_secretary': return 'bg-orange-500';
+      case 'scheduled': return 'bg-[var(--brand)]';
+      case 'converted': return 'bg-[var(--success-strong)]';
+      case 'lost': return 'bg-[var(--danger)]';
+      default: return 'bg-[var(--text-faint)]';
     }
   };
 
@@ -464,26 +484,28 @@ export function EsteiraView() {
   return (
     <div className="space-y-4">
       {msg && (
-        <div className="p-3 bg-zinc-900 text-white rounded-lg text-sm font-medium animate-fadeIn">
+        <div role="status" className="p-3 bg-[var(--brand)] text-white rounded-lg text-sm font-semibold shadow-brand animate-fadeIn">
           {msg}
         </div>
       )}
 
       {/* Barra de Ações e Filtros */}
-      <div className="bg-white border border-zinc-200 rounded-xl p-3 sm:p-4 shadow-sm flex flex-wrap items-center justify-between gap-3">
+      <div className="ws-panel p-3 sm:p-4 flex flex-wrap items-center justify-between gap-3">
         <div className="flex flex-wrap items-center gap-2 flex-1 min-w-[280px]">
           <input
             type="text"
             placeholder="Buscar por nome, telefone ou interesse…"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            className="px-3 py-1.5 text-xs rounded-lg border border-zinc-300 focus:outline-none focus:ring-1 focus:ring-zinc-900 w-full sm:w-64"
+            aria-label="Buscar oportunidades"
+            className="px-3 py-2 text-xs rounded-md border border-[var(--border-strong)] bg-[var(--surface-3)] shadow-xs focus:outline-none focus:shadow-focus focus:border-[var(--brand)] focus:bg-white w-full sm:w-64"
           />
 
           <select
             value={filterUser}
             onChange={(e) => setFilterUser(e.target.value)}
-            className="px-2.5 py-1.5 text-xs rounded-lg border border-zinc-300 bg-white text-zinc-700 focus:outline-none"
+            aria-label="Filtrar por responsável"
+            className="px-2.5 py-2 text-xs rounded-md border border-[var(--border-strong)] bg-white text-[var(--text)] shadow-xs focus:outline-none focus:shadow-focus"
           >
             <option value="">Todos os responsáveis</option>
             <option value="unassigned">Sem responsável</option>
@@ -495,7 +517,8 @@ export function EsteiraView() {
           <select
             value={filterPriority}
             onChange={(e) => setFilterPriority(e.target.value)}
-            className="px-2.5 py-1.5 text-xs rounded-lg border border-zinc-300 bg-white text-zinc-700 focus:outline-none"
+            aria-label="Filtrar por prioridade"
+            className="px-2.5 py-2 text-xs rounded-md border border-[var(--border-strong)] bg-white text-[var(--text)] shadow-xs focus:outline-none focus:shadow-focus"
           >
             <option value="">Todas prioridades</option>
             <option value="urgent">Urgente</option>
@@ -510,15 +533,16 @@ export function EsteiraView() {
           <button
             type="button"
             onClick={() => setSimpleMode(!simpleMode)}
+            aria-pressed={simpleMode}
             className={cn(
-              'px-3 py-1.5 text-xs font-semibold rounded-lg border transition',
+              'px-3 py-2 text-xs font-semibold rounded-md border transition shadow-xs',
               simpleMode
-                ? 'bg-zinc-900 text-white border-zinc-900'
-                : 'bg-white text-zinc-700 border-zinc-200 hover:bg-zinc-50',
+                ? 'bg-[var(--brand)] text-white border-[var(--brand)]'
+                : 'bg-white text-[var(--text)] border-[var(--border-strong)] hover:bg-[var(--surface-hover)]',
             )}
             title="Modo simplificado para profissional autônomo ou enxuto"
           >
-            {simpleMode ? 'Modo Simplificado' : 'Modo Completo'}
+            {simpleMode ? 'Modo simplificado' : 'Modo completo'}
           </button>
 
           {/* A1.2 · Bloco 2: administração das etapas da MESMA máquina usada
@@ -528,7 +552,7 @@ export function EsteiraView() {
             <button
               type="button"
               onClick={() => setShowStagesPanel(true)}
-              className="px-3 py-1.5 bg-white text-zinc-700 text-xs font-semibold rounded-lg border border-zinc-200 hover:bg-zinc-50 transition"
+              className="px-3 py-2 bg-white text-[var(--text)] text-xs font-semibold rounded-md border border-[var(--border-strong)] hover:bg-[var(--surface-hover)] transition shadow-xs"
             >
               Configurar etapas
             </button>
@@ -537,16 +561,16 @@ export function EsteiraView() {
           <button
             type="button"
             onClick={() => setShowNewLeadModal(true)}
-            className="px-3 py-1.5 bg-zinc-900 text-white text-xs font-semibold rounded-lg hover:bg-zinc-800 transition flex items-center gap-1.5"
+            className="px-3.5 py-2 bg-[var(--brand)] text-white text-xs font-bold rounded-md border border-[var(--brand-strong)]/40 shadow-brand hover:bg-[var(--brand-strong)] transition flex items-center gap-1.5"
           >
-            <span>+</span> Novo Lead
+            <span className="text-sm leading-none">+</span> Novo lead
           </button>
         </div>
       </div>
 
       {/* Quadro Kanban do Funil */}
       {loading ? (
-        <div className="p-12 text-center text-zinc-400 text-sm">Carregando funil…</div>
+        <div className="p-12 text-center text-[var(--text-muted)] text-sm font-semibold">Carregando funil…</div>
       ) : (
         <div className="grid grid-flow-col auto-cols-[280px] sm:auto-cols-[300px] gap-3.5 overflow-x-auto pb-4 scrollbar-none items-start">
           {visibleStages.map((stage) => {
@@ -557,15 +581,22 @@ export function EsteiraView() {
                 onDragOver={(e)=>{e.preventDefault(); setDragOverStage(stage.id);}}
                 onDragLeave={()=> setDragOverStage((prev)=> prev===stage.id? null: prev)}
                 onDrop={(e)=>{e.preventDefault(); if (dragLeadId) { if (stage.id==='scheduled') { const l = leads.find((x)=> x.id===dragLeadId); if (l) openBookingForLead(l); } else handleMoveStage(dragLeadId, stage.id); } setDragLeadId(null); setDragOverStage(null);}}
-                className={"bg-zinc-100/80 border border-zinc-200 rounded-xl p-3 flex flex-col max-h-[78vh] flex-shrink-0 " + (dragOverStage===stage.id? 'ring-2 ring-zinc-900 border-zinc-900' : '')}
+                className={cn(
+                  'rounded-xl p-3 flex flex-col max-h-[78vh] flex-shrink-0 border transition-[box-shadow,border-color,background-color]',
+                  dragOverStage === stage.id
+                    // Destino do arraste: verde = pode soltar aqui (regra não mudou).
+                    ? 'bg-[var(--success-bg)] border-[var(--success)] shadow-md'
+                    : 'bg-[var(--surface-3)] border-[var(--border)]',
+                )}
               >
                 {/* Cabeçalho da coluna */}
-                <div className="flex items-center justify-between pb-2.5 mb-2.5 border-b border-zinc-200/80">
-                  <div className="flex items-center gap-2">
-                    <span className="font-bold text-xs text-zinc-900 uppercase tracking-wide">
+                <div className="flex items-center justify-between pb-2.5 mb-2.5 border-b border-[var(--border)]">
+                  <div className="flex items-center gap-2 min-w-0">
+                    <span aria-hidden="true" className={cn('w-2.5 h-2.5 rounded-full shrink-0', stageToneDot(stage))} />
+                    <span className="font-bold text-xs text-[var(--text)] uppercase tracking-wide truncate">
                       {stage.name}
                     </span>
-                    <span className="text-[11px] font-bold px-1.5 py-0.2 rounded-full bg-zinc-200 text-zinc-700">
+                    <span className="text-[11px] font-bold px-2 py-0.5 rounded-pill bg-white border border-[var(--border)] text-[var(--text-muted)] tabular-nums">
                       {stageLeads.length}
                     </span>
                   </div>
@@ -574,7 +605,7 @@ export function EsteiraView() {
                 {/* Lista de cards */}
                 <div className="space-y-2.5 overflow-y-auto pr-1 flex-1">
                   {stageLeads.length === 0 ? (
-                    <div className="py-6 text-center text-zinc-400 text-xs italic">
+                    <div className="py-6 text-center text-[var(--text-faint)] text-xs font-medium">
                       Nenhum lead nesta etapa
                     </div>
                   ) : (
@@ -586,16 +617,19 @@ export function EsteiraView() {
                           draggable
                           onDragStart={()=> setDragLeadId(lead.id)}
                           onDragEnd={()=> {setDragLeadId(null); setDragOverStage(null);}}
-                          className={"bg-white border border-zinc-200 hover:border-zinc-300 rounded-xl p-3.5 shadow-sm transition hover:shadow cursor-grab active:cursor-grabbing space-y-2.5 " + (dragLeadId===lead.id? 'opacity-50' : '')}
+                          className={cn(
+                            'bg-white border rounded-xl p-3.5 shadow-sm transition hover:shadow-md hover:border-[var(--brand-border)] cursor-grab active:cursor-grabbing space-y-2.5',
+                            dragLeadId === lead.id ? 'il-dragging border-[var(--brand)]' : 'border-[var(--border)]',
+                          )}
                           onClick={() => setSelectedLead(lead)}
                         >
                           <div className="flex items-start justify-between gap-2">
                             <div>
-                              <p className="font-bold text-sm text-zinc-900 leading-snug">
+                              <p className="font-bold text-sm text-[var(--text)] leading-snug">
                                 {lead.name || 'Sem nome informado'}
                               </p>
                               {lead.phone && (
-                                <p className="text-xs text-zinc-500 font-mono mt-0.5">
+                                <p className="text-xs text-[var(--text-muted)] font-mono mt-0.5">
                                   {lead.phone}
                                 </p>
                               )}
@@ -604,35 +638,38 @@ export function EsteiraView() {
                           </div>
 
                           {lead.interest && (
-                            <p className="text-xs text-zinc-700 bg-zinc-50 p-1.5 rounded border border-zinc-100 line-clamp-2">
+                            <p className="text-xs text-[var(--text)] bg-[var(--surface-3)] p-1.5 rounded-md border border-[var(--border-soft)] line-clamp-2">
                               {lead.interest}
                             </p>
                           )}
 
-                          <div className="flex flex-wrap items-center justify-between text-[11px] text-zinc-500 pt-1 border-t border-zinc-100 gap-1.5">
-                            <span className="bg-zinc-100 px-2 py-0.5 rounded text-zinc-600 font-medium">
+                          <div className="flex flex-wrap items-center justify-between text-[11px] text-[var(--text-muted)] pt-1.5 border-t border-[var(--border-soft)] gap-1.5">
+                            <span className="bg-[var(--surface-3)] border border-[var(--border)] px-2 py-0.5 rounded-pill text-[var(--text-muted)] font-semibold">
                               {leadOriginLabel(lead.origin)}
                             </span>
 
                             {assignee ? (
-                              <span className="text-zinc-600 font-semibold" title={`Responsável: ${assignee.name}`}>
-                                👤 {assignee.name}
+                              <span className="text-[var(--text)] font-semibold inline-flex items-center gap-1" title={`Responsável: ${assignee.name}`}>
+                                <span aria-hidden="true" className="w-4 h-4 rounded-full bg-[var(--brand-soft)] text-[var(--brand-fg)] text-[9px] font-bold inline-flex items-center justify-center">
+                                  {assignee.name.trim().slice(0, 1).toUpperCase()}
+                                </span>
+                                {assignee.name}
                               </span>
                             ) : (
-                              <span className="text-zinc-400">Sem responsável</span>
+                              <span className="text-[var(--text-faint)]">Sem responsável</span>
                             )}
                           </div>
 
                           {/* Mover para (mobile) */}
                           <div className="sm:hidden" onClick={(e)=>e.stopPropagation()}>
-                            <label className="text-[11px] font-semibold text-zinc-600">Mover para…</label>
-                            <select value={pipeline ? normalizeLeadStageId(pipeline, lead) : lead.stageId} onChange={(e)=> handleStageSelect(lead.id, e.target.value)} className="mt-1 w-full text-xs p-1.5 rounded border border-zinc-300 bg-white">
+                            <label className="text-[11px] font-semibold text-[var(--text-muted)]">Mover para…</label>
+                            <select value={pipeline ? normalizeLeadStageId(pipeline, lead) : lead.stageId} onChange={(e)=> handleStageSelect(lead.id, e.target.value)} className="mt-1 w-full text-xs p-1.5 rounded-md border border-[var(--border-strong)] bg-white shadow-xs">
                               {(pipeline?.stages||[]).map((s)=> <option key={s.id} value={s.id}>{s.name}</option>)}
                             </select>
                           </div>
                           {/* Ações Rápidas no Card */}
                           <div
-                            className="pt-1 flex items-center justify-between gap-1 border-t border-zinc-100 text-xs"
+                            className="pt-1.5 flex items-center justify-between gap-1.5 border-t border-[var(--border-soft)] text-xs"
                             onClick={(e) => e.stopPropagation()}
                           >
                             {lead.phone && (
@@ -640,7 +677,7 @@ export function EsteiraView() {
                                 href={waLink(lead.phone, `Olá ${lead.name || ''}, tudo bem? Sou da equipe da ${businessName || 'empresa'}.`)}
                                 target="_blank"
                                 rel="noopener noreferrer"
-                                className="text-emerald-700 hover:underline font-semibold flex items-center gap-1"
+                                className="text-[var(--success-fg)] hover:underline font-bold flex items-center gap-1 px-2 py-1 rounded-md bg-[var(--success-bg)] border border-[var(--success-border)]"
                               >
                                 WhatsApp
                               </a>
@@ -653,7 +690,7 @@ export function EsteiraView() {
                                   type="button"
                                   onClick={() => handleMoveStage(lead.id, 'waiting_secretary', 'Encaminhado para secretaria')}
                                   title="Encaminhar atendimento para a secretaria"
-                                  className="text-[11px] px-2 py-1 rounded bg-orange-50 text-orange-700 border border-orange-200 font-medium hover:bg-orange-100"
+                                  className="text-[11px] px-2 py-1 rounded-md bg-[var(--warning-bg)] text-[var(--warning-fg)] border border-[var(--warning-border)] font-semibold hover:bg-[var(--attention-bg-hover)]"
                                 >
                                   Secretaria
                                 </button>
@@ -666,7 +703,7 @@ export function EsteiraView() {
                                   setBookingLead(lead);
                                   if (services.length > 0) setBookServiceId(services[0].id);
                                 }}
-                                className="text-[11px] px-2 py-1 rounded bg-zinc-900 text-white font-medium hover:bg-zinc-800"
+                                className="text-[11px] px-2.5 py-1 rounded-md bg-[var(--brand)] text-white font-bold shadow-brand hover:bg-[var(--brand-strong)]"
                               >
                                 Agendar
                               </button>

@@ -2,92 +2,354 @@
 @tailwind components;
 @tailwind utilities;
 
+/* ═══════════════════════════════════════════════════════════════
+   DESIGN SYSTEM INSTALINK — A3.3 (painel premium)
+   ═══════════════════════════════════════════════════════════════
+   UMA fonte de verdade para o painel. Nenhuma tela inventa cor, raio,
+   sombra ou espaçamento: tudo sai dos tokens abaixo e é consumido pelos
+   componentes compartilhados (components/ui.tsx) ou por classes utilitárias
+   do Tailwind mapeadas em tailwind.config.js (bg-brand, text-ink, …).
+
+   Camadas de cor:
+     ESTRUTURA  → neutros frios (--bg / --surface* / --border* / --text*).
+     AÇÃO       → --brand (azul amigável) = ação principal do produto.
+     ESTADO     → --success / --info.
+     ATENÇÃO    → --warning / --attention (âmbar quente, legível).
+     DESTRUTIVO → --danger (vermelho, SÓ para perigo).
+     APOIO      → --lilac (roxo leve: marketing, qualificado, automação).
+
+   Regra de contraste: todo token *-fg foi escolhido para atingir ≥ 4.5:1
+   sobre o seu próprio *-bg. Estado nunca depende só de cor (selos têm
+   rótulo; blocos da agenda têm rótulo impresso).
+   ═══════════════════════════════════════════════════════════════ */
 :root {
   color-scheme: light;
-  /* Design tokens - workspace first
-   * ── Linguagem de cor do painel (P1.1) ─────────────────────────────
-   *  ESTRUTURA  → neutros (zinc/Tailwind): superfícies, bordas, texto.
-   *  AÇÃO       → --action: cor de marca/destaque das ações primárias.
-   *  ESTADO     → --success / --info: cores semânticas de resultado.
-   *  ATENÇÃO    → --attention*: amarelo/laranja operacional.
-   *  DESTRUTIVO → --danger*: vermelho.
-   * Os componentes compartilhados (ui.tsx) consomem estas variáveis —
-   * uma futura identidade de marca por negócio só precisa REATRIBUIR
-   * estas variáveis (como a página pública faz via ThemeStyle/--il-*),
-   * sem reescrever componentes.
-   */
-  --bg: #f8f8f8;
-  --surface: #ffffff;
-  --surface-hover: #fafafa;
-  --border: #e4e4e7;
-  --border-strong: #d4d4d8;
-  --text: #18181b;
-  --text-muted: #71717a;
-  --text-faint: #a1a1aa;
-  /* Ação (marca) — hoje: neutro essencial; futuro: cor do negócio. */
-  --action: #18181b;
-  --action-strong: #27272a;
+
+  /* ── Estrutura: fundo, superfícies e bordas ─────────────────── */
+  --bg: #f3f5fb;              /* fundo do painel (limpo, levemente frio) */
+  --bg-tint: #eef1fa;         /* faixa/área de apoio */
+  --surface: #ffffff;         /* cartão */
+  --surface-2: #fbfcff;       /* cartão sobre cartão (profundidade leve) */
+  --surface-3: #f4f6fc;       /* área rebaixada (inset) */
+  --surface-hover: #f2f5fc;
+  --border: #e4e8f3;
+  --border-soft: #eef1f8;
+  --border-strong: #d3daea;
+
+  /* ── Texto ──────────────────────────────────────────────────── */
+  --text: #161b2e;
+  --text-strong: #0d1122;
+  --text-muted: #5a6480;
+  --text-faint: #9099b3;
+
+  /* ── Ação (marca do produto) ────────────────────────────────── */
+  --brand: #2f6bef;
+  --brand-strong: #1d55d1;
+  --brand-soft: #e9f0fe;
+  --brand-softer: #f4f8ff;
+  --brand-border: #c6d8fd;
+  --brand-fg: #1749b3;
+  --brand-ring: rgba(47, 107, 239, 0.22);
+
+  /* Nomes legados (consumidos por ui.tsx e telas) → apontam para a marca.
+     Uma futura identidade por negócio só precisa REATRIBUIR estes valores. */
+  --action: var(--brand);
+  --action-strong: var(--brand-strong);
   --action-contrast: #ffffff;
-  --accent: #18181b;
+  --action-soft: var(--brand-soft);
+  --action-soft-border: var(--brand-border);
+  --accent: var(--brand);
   --accent-contrast: #ffffff;
-  /* Estado */
-  --success: #16a34a;
-  --success-strong: #15803d;
-  --success-bg: #f0fdf4;
-  --info: #2563eb;
-  --info-strong: #1d4ed8;
-  /* Atenção (pendências, alertas operacionais) */
-  --warning: #eab308;
-  --warning-bg: #fefce8;
-  --attention: #b45309;
-  --attention-bg: #fef3c7;
-  --attention-bg-hover: #fde68a;
-  --attention-border: #fcd34d;
-  /* Destrutivo */
-  --danger: #dc2626;
-  --danger-strong: #b91c1c;
-  --danger-bg: #fef2f2;
-  --radius-sm: 6px;
-  --radius-md: 8px;
-  --radius-lg: 10px;
-  --shadow-sm: 0 1px 2px rgba(0,0,0,0.04);
-  --shadow-md: 0 2px 8px rgba(0,0,0,0.06);
+
+  /* ── Estado ─────────────────────────────────────────────────── */
+  --success: #0f9f6e;
+  --success-strong: #0b7d55;
+  --success-bg: #e6f7ef;
+  --success-border: #b6e4cf;
+  --success-fg: #0a6a48;
+
+  --info: #0e86b4;
+  --info-strong: #0a6b91;
+  --info-bg: #e6f5fb;
+  --info-border: #b8e2f1;
+  --info-fg: #0a5d7e;
+
+  /* ── Atenção (âmbar quente: perceptível sem ser gritante) ───── */
+  --warning: #d9860b;
+  --warning-strong: #b06b06;
+  --warning-bg: #fff4e0;
+  --warning-border: #ffd691;
+  --warning-fg: #7d4c00;
+
+  --attention: #8a5300;
+  --attention-bg: #fff4e0;
+  --attention-bg-hover: #ffe9c4;
+  --attention-border: #ffc978;
+  --attention-fg: #7d4c00;
+  --attention-mark: #ffb020;
+
+  /* ── Destrutivo ─────────────────────────────────────────────── */
+  --danger: #dc3b45;
+  --danger-strong: #b52530;
+  --danger-bg: #fdedef;
+  --danger-border: #f6c8cd;
+  --danger-fg: #a51f29;
+
+  /* ── Apoio (lilás leve) ─────────────────────────────────────── */
+  --lilac: #7a5cd0;
+  --lilac-strong: #5f43ad;
+  --lilac-bg: #f2edfd;
+  --lilac-border: #dbccf7;
+  --lilac-fg: #54358f;
+
+  /* ── Raio ───────────────────────────────────────────────────── */
+  --radius-xs: 6px;
+  --radius-sm: 9px;
+  --radius-md: 11px;
+  --radius-lg: 14px;
+  --radius-xl: 18px;
+  --radius-2xl: 24px;
+  --radius-pill: 999px;
+
+  /* ── Sombra (camadas suaves, nunca dura) ────────────────────── */
+  --shadow-xs: 0 1px 2px rgba(19, 26, 54, 0.05);
+  --shadow-sm: 0 1px 2px rgba(19, 26, 54, 0.05), 0 2px 6px -2px rgba(19, 26, 54, 0.06);
+  --shadow-md: 0 2px 6px -2px rgba(19, 26, 54, 0.08), 0 8px 20px -10px rgba(19, 26, 54, 0.12);
+  --shadow-lg: 0 6px 14px -6px rgba(19, 26, 54, 0.12), 0 20px 40px -20px rgba(19, 26, 54, 0.22);
+  --shadow-xl: 0 12px 24px -10px rgba(19, 26, 54, 0.16), 0 32px 64px -28px rgba(19, 26, 54, 0.30);
+  --shadow-brand: 0 6px 16px -8px rgba(47, 107, 239, 0.55);
+  --shadow-inset: inset 0 1px 2px rgba(19, 26, 54, 0.06);
+
+  /* ── Espaçamento (escala do sistema; Tailwind continua valendo) ─ */
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 20px;
+  --space-6: 24px;
+  --space-8: 32px;
+  --space-10: 40px;
+
+  /* ── Foco visível ───────────────────────────────────────────── */
+  --focus-ring: 0 0 0 3px var(--brand-ring);
+
   /* ── Navegação do painel (P2) ──────────────────────────────────
    * Identidade visual por BUSINESS: o negócio escolhe UMA cor
    * (configurações → Aparência) e o DashboardShell injeta estes tokens no
-   * container do painel. Os valores abaixo são o PADRÃO do produto (visual
-   * atual preservado para quem não configurou nada). Texto/hover/ativo são
-   * DERIVADOS da cor principal (lib/appearance.ts) — contraste garantido. */
+   * container do painel. Os valores abaixo são o PADRÃO do produto (A3.3):
+   * sidebar clara, levemente fria, com item ativo pintado de azul suave.
+   * Texto/hover/ativo de cor customizada são DERIVADOS (lib/appearance.ts) —
+   * contraste garantido. */
   --il-nav: #ffffff;
-  --il-nav-fg: #27272a;
-  --il-nav-muted: #71717a;
-  --il-nav-hover: #f4f4f5;
-  --il-nav-active: #f4f4f5;
-  --il-nav-active-fg: #18181b;
-  --il-nav-border: #e4e4e7;
-  --il-nav-cta: #18181b;
+  --il-nav-fg: #2a3145;
+  --il-nav-muted: #79829c;
+  --il-nav-hover: #f1f4fb;
+  --il-nav-active: #e9f0fe;
+  --il-nav-active-fg: #1749b3;
+  --il-nav-border: #e4e8f3;
+  --il-nav-cta: #2f6bef;
   --il-nav-cta-fg: #ffffff;
 }
+
 html { scroll-behavior: smooth; }
 body {
   @apply antialiased;
   background: var(--bg);
   color: var(--text);
   font-family: var(--font-inter), system-ui, -apple-system, sans-serif;
+  font-feature-settings: 'cv11', 'ss01';
 }
 .font-display { font-family: var(--font-sora), var(--font-inter), system-ui, sans-serif; }
-::selection { background: #18181b; color: #fff; }
+::selection { background: var(--brand); color: #fff; }
 
-/* Workspace panel - substitui card gigante */
+/* Foco visível em QUALQUER elemento interativo do painel — coerente e
+   acessível (WCAG 2.4.7). Botões/inputs herdam isto sem repetir classe. */
+:focus-visible {
+  outline: none;
+  box-shadow: var(--focus-ring);
+  border-radius: var(--radius-sm);
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   PRIMITIVAS DO PAINEL — classes reutilizáveis (não espalhar estilo)
+   ═══════════════════════════════════════════════════════════════ */
+
+/* Cartão base: branco, borda suave, sombra de uma camada. */
 .ws-panel {
   background: var(--surface);
   border: 1px solid var(--border);
   border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-sm);
 }
-.ws-section {
+/* Cartão sobre cartão: profundidade leve sem virar "caixa dentro de caixa". */
+.ws-panel--raised { box-shadow: var(--shadow-md); }
+.ws-panel--inset {
+  background: var(--surface-2);
+  box-shadow: var(--shadow-inset);
+}
+.ws-section { border-top: 1px solid var(--border-soft); }
+.ws-section:first-child { border-top: 0; }
+
+/* Abas do painel (pills) — padrão único de navegação interna. */
+.il-tabbar {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  padding: 4px;
+  background: var(--surface-3);
+  border: 1px solid var(--border-soft);
+  border-radius: var(--radius-pill);
+}
+.il-tab {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 7px 14px;
+  border-radius: var(--radius-pill);
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 1.1;
+  color: var(--text-muted);
+  white-space: nowrap;
+  transition: background 0.15s ease, color 0.15s ease, box-shadow 0.15s ease;
+}
+.il-tab:hover { color: var(--text); background: rgba(47, 107, 239, 0.08); }
+.il-tab[aria-selected='true'] {
+  background: var(--surface);
+  color: var(--brand-fg);
+  box-shadow: var(--shadow-sm);
+}
+.il-tab:disabled { opacity: 0.45; pointer-events: none; }
+
+/* Chips de filtro (agenda, listas): pill suave, ativo = azul. */
+.il-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 5px 11px;
+  border-radius: var(--radius-pill);
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 1.1;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--text-muted);
+  transition: background 0.15s ease, color 0.15s ease, border-color 0.15s ease;
+}
+.il-chip:hover { border-color: var(--brand-border); color: var(--brand-fg); background: var(--brand-softer); }
+.il-chip[aria-pressed='true'], .il-chip[data-active='true'] {
+  background: var(--brand);
+  border-color: var(--brand);
+  color: #fff;
+}
+
+/* Tooltip simples (sidebar recolhida, ícones sem rótulo). */
+.il-tip { position: relative; }
+.il-tip::after {
+  content: attr(data-tip);
+  position: absolute;
+  left: calc(100% + 10px);
+  top: 50%;
+  transform: translateY(-50%) scale(0.96);
+  padding: 5px 9px;
+  border-radius: var(--radius-sm);
+  background: #232a44;
+  color: #fff;
+  font-size: 11px;
+  font-weight: 600;
+  white-space: nowrap;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.12s ease, transform 0.12s ease;
+  z-index: 60;
+  box-shadow: var(--shadow-md);
+}
+.il-tip:hover::after, .il-tip:focus-visible::after { opacity: 1; transform: translateY(-50%) scale(1); }
+.il-tip[data-tip-pos='bottom']::after {
+  left: 50%;
+  top: calc(100% + 8px);
+  transform: translateX(-50%) scale(0.96);
+}
+.il-tip[data-tip-pos='bottom']:hover::after,
+.il-tip[data-tip-pos='bottom']:focus-visible::after { transform: translateX(-50%) scale(1); }
+
+/* Estado vazio: amigável, com ícone em círculo colorido. */
+.il-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  padding: 48px 24px;
+}
+.il-empty__icon {
+  width: 48px;
+  height: 48px;
+  border-radius: var(--radius-lg);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--brand-soft);
+  color: var(--brand-fg);
+  margin-bottom: var(--space-3);
+}
+
+/* Carteirinha do cliente: cabeçalho de perfil com faixa da marca. */
+.il-idcard {
+  position: relative;
+  overflow: hidden;
+  background:
+    linear-gradient(135deg, rgba(47, 107, 239, 0.14), rgba(122, 92, 208, 0.10) 46%, transparent 78%),
+    var(--surface);
+}
+.il-idcard::after {
+  content: '';
+  position: absolute;
+  inset: auto -40px -70px auto;
+  width: 190px;
+  height: 190px;
+  border-radius: 50%;
+  background: radial-gradient(circle at 30% 30%, rgba(47, 107, 239, 0.16), transparent 65%);
+  pointer-events: none;
+}
+
+/* Avatar com placeholder bonito (iniciais em gradiente suave). */
+.il-avatar {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  color: #fff;
+  background: linear-gradient(140deg, #4d86f5, #7a5cd0);
+  box-shadow: var(--shadow-sm);
+  overflow: hidden;
+  flex-shrink: 0;
+}
+
+/* Divisor com rótulo ("quem é a pessoa" × "o que aconteceu"). */
+.il-divider {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  color: var(--text-faint);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+.il-divider::before, .il-divider::after {
+  content: '';
+  flex: 1;
+  height: 1px;
+  background: var(--border);
+}
+
+/* Botão "flutuante" de ação contextual (ex.: salvar barra fixa). */
+.il-actionbar {
+  background: color-mix(in srgb, var(--surface) 88%, transparent);
+  backdrop-filter: blur(8px);
   border-top: 1px solid var(--border);
 }
-.ws-section:first-child { border-top: 0; }
 
 /* Página pública usa tokens do negócio via CSS vars */
 .il-page {
@@ -140,5 +402,10 @@ input[type='color'] { @apply cursor-pointer; }
 
 /* Scrollbar sutil para workspace */
 .ws-scroll::-webkit-scrollbar { height: 6px; width: 6px; }
-.ws-scroll::-webkit-scrollbar-thumb { background: #d4d4d8; border-radius: 999px; }
+.ws-scroll::-webkit-scrollbar-thumb { background: #ccd4e6; border-radius: 999px; }
 .ws-scroll::-webkit-scrollbar-track { background: transparent; }
+
+/* Feedback de arraste (agenda / funil): o que pode, o que não pode e por quê. */
+.il-dragging { opacity: 0.45; }
+.il-dropzone-ok { box-shadow: inset 0 0 0 2px var(--success); background: var(--success-bg); }
+.il-dropzone-no { box-shadow: inset 0 0 0 2px var(--danger-border); background: var(--danger-bg); cursor: not-allowed; }

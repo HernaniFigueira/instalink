@@ -7,7 +7,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { Icon } from '@/components/icons';
-import { PageSkeleton } from '@/components/ui';
+import { PageSkeleton, Tabs } from '@/components/ui';
 import { cn } from '@/lib/utils';
 import type { AgentObjective, AgentTone, BusinessAgent } from '@/lib/types';
 import { AccessDenied, useAreaLoad } from '@/components/dashboard/AccessNotice';
@@ -114,17 +114,20 @@ export default function AgentePage() {
         </p>
       )}
 
-      <div className="flex gap-1 p-1 bg-zinc-100 rounded-md mb-4 w-fit" role="tablist">
-        {(['config', 'conhecimento'] as const).map((t) => (
-          <button key={t} role="tab" aria-selected={tab === t} onClick={() => setTab(t)}
-            className={cn('text-xs font-bold px-4 py-2 rounded-lg', tab === t ? 'bg-white shadow-sm text-zinc-900' : 'text-zinc-500')}>
-            {t === 'config' ? 'Configuração' : 'Conhecimento usado'}
-          </button>
-        ))}
+      <div className="mb-4">
+        <Tabs
+          items={[
+            { id: 'config' as const, label: 'Configuração', icon: 'settings' },
+            { id: 'conhecimento' as const, label: 'Conhecimento usado', icon: 'spark' },
+          ]}
+          value={tab}
+          onChange={(t) => setTab(t)}
+          ariaLabel="Seções do Assistente"
+        />
       </div>
 
-      {msg && <p className="mb-4 text-sm font-semibold bg-emerald-600 text-white rounded-md px-4 py-3">{msg}</p>}
-      {error && <p className="mb-4 text-sm font-semibold bg-red-600 text-white rounded-md px-4 py-3">{error}</p>}
+      {msg && <p role="status" className="mb-4 text-sm font-semibold bg-[var(--success-bg)] border border-[var(--success-border)] text-[var(--success-fg)] rounded-md px-4 py-3">{msg}</p>}
+      {error && <p role="alert" className="mb-4 text-sm font-semibold bg-[var(--danger-bg)] border border-[var(--danger-border)] text-[var(--danger-fg)] rounded-md px-4 py-3">{error}</p>}
 
       {tab === 'config' ? (
         <div className="space-y-4">

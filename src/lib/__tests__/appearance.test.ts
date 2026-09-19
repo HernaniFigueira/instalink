@@ -39,12 +39,14 @@ describe('cor da navegação — configuração simples por unidade', () => {
     expect(navColorOf({ appearance: { navColor: 'nada' } })).toBe('');
     expect(navColorOf({})).toBe('');
     expect(navColorOf(null)).toBe('');
-    // Sem escolha → VISUAL ATUAL do painel (sidebar branca, item ativo escuro):
-    // configurar a cor é que pinta; quem nunca mexeu não vê mudança.
+    // Sem escolha → PADRÃO DE FÁBRICA (A3.3): sidebar branca e fria, item
+    // ativo pintado de azul suave, CTA na cor da marca.
     expect(navTokens('')).toEqual(DEFAULT_NAV_TOKENS);
     expect(navTokens('').nav).toBe('#ffffff');
-    expect(navTokens('').navActiveFg).toBe('#18181b');
+    expect(navTokens('').navActive).toBe('#e9f0fe');
+    expect(navTokens('').navActiveFg).toBe('#1749b3');
     expect(navTokens('').cta).toBe(DEFAULT_NAV_COLOR);
+    expect(DEFAULT_NAV_COLOR).toBe('#2f6bef');
   });
 
   it('cada unidade guarda a própria identidade (trocar de unidade troca a cor)', () => {

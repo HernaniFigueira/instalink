@@ -96,23 +96,28 @@ export default function CampanhasPage() {
   return (
     <>
       <div className="flex flex-wrap items-end justify-between gap-3 mb-5">
-        <div>
-          <h1 className="text-2xl font-bold tracking-tight">Campanhas</h1>
-          <p className="text-sm text-zinc-500 mt-1">
-            Mensagens para clientes que autorizaram receber. Promoção de setembro, retorno, data especial — você escolhe o público.
-          </p>
+        <div className="flex items-start gap-3">
+          <span className="w-11 h-11 shrink-0 rounded-xl bg-gradient-to-br from-[var(--lilac)] to-[var(--brand)] text-white flex items-center justify-center shadow-md">
+            <Icon n="megaphone" size={20} />
+          </span>
+          <div>
+            <h1 className="text-2xl font-bold tracking-tight text-[var(--text)]">Campanhas</h1>
+            <p className="text-sm text-[var(--text-muted)] mt-1">
+              Mensagens para clientes que autorizaram receber. Promoção de setembro, retorno, data especial — você escolhe o público.
+            </p>
+          </div>
         </div>
         <div className="flex items-center gap-2">
           <Link2 href={`/clientes${q}`} label="Clientes" />
           <button onClick={() => setCreating(true)}
-            className="text-sm font-bold bg-zinc-900 text-white px-4 py-2.5 rounded-md hover:bg-zinc-700 inline-flex items-center gap-2">
+            className="text-sm font-bold bg-[var(--brand)] text-white px-4 py-2.5 rounded-md border border-[var(--brand-strong)]/40 shadow-brand hover:bg-[var(--brand-strong)] inline-flex items-center gap-2">
             <Icon n="megaphone" size={16} /> Nova campanha
           </button>
         </div>
       </div>
 
-      {msg && <p className="mb-4 text-sm font-semibold bg-emerald-600 text-white rounded-md px-4 py-3">{msg}</p>}
-      {error && <p className="mb-4 text-sm font-semibold bg-amber-600 text-white rounded-md px-4 py-3">{error}</p>}
+      {msg && <p role="status" className="mb-4 text-sm font-semibold bg-[var(--success-bg)] border border-[var(--success-border)] text-[var(--success-fg)] rounded-lg px-4 py-3">{msg}</p>}
+      {error && <p role="alert" className="mb-4 text-sm font-semibold bg-[var(--warning-bg)] border border-[var(--warning-border)] text-[var(--warning-fg)] rounded-lg px-4 py-3">{error}</p>}
 
       <div className="grid sm:grid-cols-4 gap-3 mb-6">
         <Card label="Autorizaram (opt-in)" value={data.consent.optedIn} tone="ok" hint="podem receber campanha" />
@@ -121,10 +126,33 @@ export default function CampanhasPage() {
         <Card label="WhatsApp" value={connected ? 'conectado' : 'não conectado'} tone={connected ? 'ok' : 'warn'} hint={connected ? 'envio disponível' : 'campanhas ficam salvas'} />
       </div>
 
-      <p className="text-xs text-zinc-500 mb-5 bg-white border border-zinc-200 rounded-lg px-4 py-3">
-        <strong>Regra de consentimento:</strong> {data.consent.rule} O sistema nunca presume autorização — promoções por
-        WhatsApp/E-mail só vão para quem marcou a autorização no cadastro do cliente.
-      </p>
+      {/* A3.3 — consentimento explicado: quem autorizou entra, quem não
+          autorizou fica de fora. Verde/laranja com ícone, não texto corrido. */}
+      <div className="mb-5 rounded-lg border border-[var(--lilac-border)] bg-[var(--lilac-bg)]/60 p-4">
+        <p className="text-sm font-bold text-[var(--lilac-fg)] inline-flex items-center gap-2">
+          <Icon n="shield" size={16} /> Quem pode receber promoção?
+        </p>
+        <ul className="mt-2.5 grid sm:grid-cols-2 gap-2">
+          <li className="flex items-start gap-2 text-xs bg-white border border-[var(--success-border)] rounded-md px-3 py-2.5">
+            <span className="w-5 h-5 shrink-0 rounded-full bg-[var(--success)] text-white flex items-center justify-center mt-px"><Icon n="check" size={11} strokeWidth={3} /></span>
+            <span className="text-[var(--text)]">
+              <strong className="text-[var(--success-fg)]">Aceitou receber promoções</strong> — {data.consent.optedIn} pessoa(s).
+              Ligado na ficha do cliente (“Autoriza receber promoções”).
+            </span>
+          </li>
+          <li className="flex items-start gap-2 text-xs bg-white border border-[var(--warning-border)] rounded-md px-3 py-2.5">
+            <span className="w-5 h-5 shrink-0 rounded-full bg-[var(--warning)] text-white flex items-center justify-center mt-px"><Icon n="x" size={11} strokeWidth={3} /></span>
+            <span className="text-[var(--text)]">
+              <strong className="text-[var(--warning-fg)]">Não aceitou</strong> — {data.consent.optedOut} pessoa(s).
+              Nunca entra em campanha, mesmo que o contato exista.
+            </span>
+          </li>
+        </ul>
+        <p className="text-xs text-[var(--lilac-fg)]/90 mt-2.5">
+          <strong>Regra de consentimento:</strong> {data.consent.rule} O sistema nunca presume autorização — promoções por
+          WhatsApp/E-mail só vão para quem marcou a autorização no cadastro do cliente.
+        </p>
+      </div>
 
       {(data.opportunities?.winBack ?? 0) > 0 && (
         <section className="bg-white border border-zinc-200 rounded-lg p-4 mb-5">

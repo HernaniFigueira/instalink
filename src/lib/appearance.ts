@@ -23,19 +23,21 @@ export interface NavPreset {
   color: string;
 }
 
+// A3.3 — paleta amigável: tons acolhedores (não gritantes) e todos escuros o
+// suficiente para o texto branco ter contraste garantido.
 export const NAV_PRESETS: NavPreset[] = [
-  { id: 'grafite', label: 'Grafite', color: '#18181b' },
-  { id: 'azul', label: 'Azul', color: '#1d4ed8' },
-  { id: 'vinho', label: 'Vinho', color: '#7f1d1d' },
-  { id: 'verde', label: 'Verde', color: '#166534' },
-  { id: 'rosa', label: 'Rosa', color: '#9d174d' },
-  { id: 'roxo', label: 'Roxo', color: '#5b21b6' },
-  { id: 'petroleo', label: 'Azul-petróleo', color: '#155e75' },
-  { id: 'terracota', label: 'Terracota', color: '#9a3412' },
+  { id: 'azul', label: 'Azul InstaLink', color: '#2f6bef' },
+  { id: 'marinho', label: 'Marinho', color: '#33405e' },
+  { id: 'verde', label: 'Verde', color: '#0f9f6e' },
+  { id: 'petroleo', label: 'Azul-petróleo', color: '#0e86b4' },
+  { id: 'roxo', label: 'Roxo', color: '#6d4fc4' },
+  { id: 'rosa', label: 'Rosa', color: '#c2185b' },
+  { id: 'vinho', label: 'Vinho', color: '#9b2c46' },
+  { id: 'terracota', label: 'Terracota', color: '#c2610f' },
 ];
 
 /** Cor de referência do produto (usada ao derivar tons de uma cor inválida). */
-export const DEFAULT_NAV_COLOR = '#18181b';
+export const DEFAULT_NAV_COLOR = '#2f6bef';
 
 const HEX = /^#([0-9a-f]{3}|[0-9a-f]{6})$/i;
 
@@ -101,20 +103,20 @@ export interface NavTokens {
 }
 
 /**
- * VISUAL ATUAL DO PAINEL (nenhuma cor configurada): sidebar branca, item ativo
- * preto. É o padrão de fábrica — escolher uma cor em Configurações → Aparência
- * é o que pinta a navegação. Assim a configuração nova não muda a cara de quem
- * nunca mexeu nela.
+ * PADRÃO DE FÁBRICA DO PAINEL (A3.3): sidebar branca e fria, item ATIVO
+ * pintado de azul suave com texto azul-escuro — o estado selecionado é
+ * reconhecível de longe, sem pintar a barra inteira. Escolher uma cor em
+ * Configurações → Aparência substitui estes valores pelos derivados dela.
  */
 export const DEFAULT_NAV_TOKENS: NavTokens = {
   nav: '#ffffff',
-  navFg: '#27272a',
-  navMuted: '#71717a',
-  navHover: '#f4f4f5',
-  navActive: '#f4f4f5',
-  navActiveFg: '#18181b',
-  navBorder: '#e4e4e7',
-  cta: '#18181b',
+  navFg: '#2a3145',
+  navMuted: '#79829c',
+  navHover: '#f1f4fb',
+  navActive: '#e9f0fe',
+  navActiveFg: '#1749b3',
+  navBorder: '#e4e8f3',
+  cta: '#2f6bef',
   ctaFg: '#ffffff',
 };
 
