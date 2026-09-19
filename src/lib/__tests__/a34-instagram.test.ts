@@ -1524,7 +1524,7 @@ describe('B9 fix · CREDENCIAL — renovação preventiva e isolada por unidade'
     expect(after.audit.some((a: any) => a.action === 'instagram.token_refresh_failed' && a.businessId === BIZ_A)).toBe(true);
   });
 
-  it('não sobrescreve credencial trocada no meio (CAS)', async () => {
+  it('não sobrescreve credencial trocada no meio (CAS) — e a métrica não mente', async () => {
     const db = await readDB();
     db.businesses.find((b) => b.id === BIZ_A)!.instagramIntegration!.tokenExpiresAt = '2026-09-21T12:00:00.000Z';
     await writeDB(db);
@@ -1536,10 +1536,58 @@ describe('B9 fix · CREDENCIAL — renovação preventiva e isolada por unidade'
       return { ok: true, status: 200, json: async () => ({ access_token: 'token-renovado', expires_in: 5_184_000 }) } as any;
     }) as any;
     const summary = await refreshInstagramTokens({ nowISO: NOW, fetchFn });
-    expect(summary.refreshed).toBe(1);
+    // A Meta devolveu token novo, mas o CAS NÃO aplicou: nada de "renovado".
+    expect(summary.refreshed).toBe(0);
+    expect(summary.superseded).toBe(1);
+    expect(summary.failed).toBe(0);
     const after = await readDB();
     expect(decryptSecret(after.businesses.find((b) => b.id === BIZ_A)!.instagramIntegration!.encryptedAccessToken!))
       .toBe('token-novo-da-reconexao');
+    // Sem renovação aplicada, não existe auditoria de sucesso para esta unidade.
+    expect(after.audit.some((a: any) => a.action === 'instagram.token_refreshed')).toBe(false);
+  });
+
+  it('o resumo do cron distingue renovado, falho, pulado e superseded', async () => {
+    const db = await readDB();
+    db.businesses.find((b) => b.id === BIZ_A)!.instagramIntegration!.tokenExpiresAt = '2026-09-21T12:00:00.000Z';
+    db.businesses.find((b) => b.id === BIZ_B)!.instagramIntegration!.tokenExpiresAt = '2026-09-23T12:00:00.000Z';
+    // Terceira unidade: credencial ilegível (cofre não decifra) ⇒ `skipped`.
+    db.businesses.push({
+      ...db.businesses.find((b) => b.id === BIZ_B)!,
+      id: 'biz-ig-c',
+      instagramIntegration: {
+        ...db.businesses.find((b) => b.id === BIZ_B)!.instagramIntegration!,
+        igUserId: '17841400000000003',
+        encryptedAccessToken: 'nao-e-um-cifra-valido',
+      } as any,
+    } as any);
+    await writeDB(db);
+
+    const calls: string[] = [];
+    const fetchFn = (async (url: string | URL | Request) => {
+      const u = new URL(String(url));
+      calls.push(u.toString());
+      const token = u.searchParams.get('access_token') || '';
+      if (token === TOKEN_B) {
+        return { ok: false, status: 400, json: async () => ({ error: { message: 'token expirado' } }) } as any;
+      }
+      return { ok: true, status: 200, json: async () => ({ access_token: 'renovado-A', expires_in: 5_184_000 }) } as any;
+    }) as any;
+
+    const summary = await refreshInstagramTokens({ nowISO: NOW, fetchFn });
+    expect(summary).toMatchObject({ businessesChecked: 3, refreshed: 1, failed: 1, skipped: 1, superseded: 0 });
+    // O resumo é sempre fechado: nada "sumiu" nem foi contado duas vezes.
+    expect(summary.refreshed + summary.failed + summary.skipped + summary.superseded).toBe(summary.businessesChecked);
+
+    const after = await readDB();
+    expect(decryptSecret(after.businesses.find((b) => b.id === BIZ_A)!.instagramIntegration!.encryptedAccessToken!))
+      .toBe('renovado-A');
+    const igB = after.businesses.find((b) => b.id === BIZ_B)!.instagramIntegration!;
+    expect(decryptSecret(igB.encryptedAccessToken!)).toBe(TOKEN_B); // falha não apaga
+    expect(igB.lastError).toMatch(/token expirado|Renovação/i);
+    expect(after.businesses.find((b) => b.id === 'biz-ig-c')!.instagramIntegration!.encryptedAccessToken)
+      .toBe('nao-e-um-cifra-valido'); // intocada
+    expect(calls).toHaveLength(2); // só as duas unidades com credencial utilizável
   });
 });
 

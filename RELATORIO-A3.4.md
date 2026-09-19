@@ -2,7 +2,9 @@
 
 **Repositório:** HernaniFigueira/instalink · **base:** `main` @ `19433984916793f665aa28fdedcc186692ee45c1`
 **Branch desta entrega:** `arena/01a0ba19-instalink` · **PR:** #30 — https://github.com/HernaniFigueira/instalink/pull/30 (um só, **sem merge** — aguarda revisão independente)
-**Status parcial:** Blocos 0 a 8 commitados; Blocos 9 a 11 em andamento no mesmo branch/PR.
+**Status:** Blocos 0 a 11 concluídos neste branch/PR — `READY_FOR_INDEPENDENT_REVIEW`
+(**não mergeado**). Números finais, auditoria de invariantes, checklists e dívidas
+registradas em “FECHAMENTO A3.4”, no fim deste documento.
 
 Este relatório é escrito em blocos, na mesma ordem da execução. Cada bloco tem
 commit próprio, testes direcionados e `tsc --noEmit` antes do seguinte.
@@ -1459,3 +1461,413 @@ Arquivos alterados nesta correção: `src/lib/types.ts`, `src/lib/instagram.ts`,
 Segue valendo: nada foi executado contra o Instagram real (**BLOCKED_EXTERNAL**
 para app aprovado, conta profissional e credenciais); o Graph API foi exercitado
 contra mock com o formato oficial; Blocos 10 e 11 **não** foram iniciados.
+
+---
+
+# FECHAMENTO A3.4
+
+**BASE:** `19433984916793f665aa28fdedcc186692ee45c1` (`main`)
+**BRANCH:** `arena/01a0ba19-instalink`
+**HEAD FINAL:** commit `A3.4 B10-B11 — final regression gates and delivery report` (17º do PR #30).
+O hash exato está no comentário de entrega do PR #30 — um documento não pode citar o
+próprio hash sem mentir; o último hash citável aqui é o do pai direto, `9f35f784bc01984272488e893320c38edd3a7b34`.
+**PR:** #30 — https://github.com/HernaniFigueira/instalink/pull/30
+**STATUS:** `READY_FOR_INDEPENDENT_REVIEW` — **NÃO MERGEADO**. Este relatório fecha a
+entrega; a decisão de merge é da revisão independente.
+
+Os blocos 0 a 9 estão descritos acima, na ordem em que foram executados. Esta
+seção final registra **o que foi medido no HEAD final** (Blocos 10 e 11): portões
+de regressão, auditoria de invariantes, smokes, rotas no build, dívidas reais e a
+lista honesta do que depende de terceiros.
+
+---
+
+## BLOCO 10 — GATES FINAIS
+
+### 10.1 A métrica do cron do Instagram parou de mentir
+
+O `refreshInstagramTokens()` usava `updateDB()` e incrementava `refreshed`
+ANTES de saber se a gravação concorrente (compare-and-swap) seria aplicada: se
+outra sessão reconectasse a conta no meio do refresh, o cron contava uma
+renovação que não existia. Agora o resumo separa os desfechos:
+
+```ts
+export interface InstagramTokenRefreshSummary {
+  businessesChecked: number;
+  refreshed: number;
+  failed: number;
+  skipped: number;
+  superseded: number; // A3.4 B10.1 — a reconexão venceu o CAS
+}
+```
+
+A proteção em si não mudou (o CAS continua sendo a única escrita do token):
+mudou **o que o cron afirma ter feito**:
+
+```ts
+const applied = await updateDB((d: DB): boolean => { /* troca o token SE for o mesmo */ });
+if (applied) refreshed += 1;
+else superseded += 1;   // reconexão no meio: o token NOVO fica, o cron não se apropria dele
+```
+
+Arquivos: `src/lib/instagram-api.ts`,
+`src/lib/__tests__/a34-instagram.test.ts`. Testes: o caso de reconexão
+concorrente (que antes contava `refreshed: 1`) agora exige `refreshed: 0` /
+`superseded: 1` / token da reconexão preservado / **sem** audit de sucesso; e um
+novo teste mede o resumo completo do cron com **soma fechada**
+(`businessesChecked`, `refreshed`, `failed`, `skipped`, `superseded`) em três
+unidades com desfechos diferentes. Suíte `a34-instagram`: **87/87**.
+
+### 10.2 Auditoria de invariantes (código + suíte que cobre)
+
+Auditoria feita no HEAD, invariante por invariante, com evidência no código e na
+suíte correspondente. **Nenhuma violação real encontrada** — por isso nenhum
+arquivo de domínio foi alterado neste bloco (a única alteração de código do
+Bloco 10 é a métrica 10.1).
+
+| Área | Invariante | Onde está no código | Cobertura |
+|---|---|---|---|
+| Navegação | Dashboard é **Início** na interface, rota `/dashboard` inalterada | `lib/http.ts`, `lib/panel.ts` | `a34-nav` (13) |
+| Navegação | Grupo “Outros destinos” removido (desktop e mobile) | `DashboardShell.tsx` | `a34-nav` |
+| Navegação | Item ativo usa a cor da família da seção (`SECTION_THEME`) | `lib/panel.ts` | `a34-nav` |
+| Navegação | Execuções **fora** da sidebar, acessível por atalho contextual | `lib/panel.ts` (`nav.more`) | `a34-nav` |
+| Navegação | Pedidos no menu **só** com o módulo ligado (`modes: ['orders']`) | `lib/panel.ts` | `a34-nav` |
+| Equipe | `Professional` = quem atende; `Member`/`User` = acesso; sem entidade paralela | `api/team/route.ts` | `a34-team` (10) |
+| Equipe | `Professional.userId` é vínculo 1:1 por unidade (sem login duplicado) | `api/team/route.ts` | `a34-team` |
+| Equipe | Criar profissional **não** cria membro em silêncio; profissional sem login e secretária sem Professional funcionam | `api/team/route.ts` | `a34-team` |
+| Agenda | “Hoje” fixo entre as setas, sem render condicional | `(dashboard)/agenda/page.tsx` | `a34-agenda` (14) |
+| Agenda | Clique em espaço vazio abre agendamento pré-preenchido; o motor de slots continua no servidor | `lib/agenda-*` + página | `a34-agenda` |
+| Agenda | Drag-and-drop intacto | `lib/agenda-drag.ts` | `a34-agenda` |
+| Agenda | `needsClosure` é **derivado** (nunca um status) | `lib/booking-ops.ts` | `a34-agenda` |
+| Agenda | Encaixe não enfraquece o `createBookingTx` normal (autorização do servidor + conflito confirmado) | `lib/booking-create.ts` | `a34-agenda` |
+| Fila | `QueueEntry` ≠ `Booking`; walk-in **não** fabrica agendamento (`bookingId` vazio) | `api/queue`, `api/encounters` | `a34-queue` (14) + `a34-encounter` |
+| Fila | Check-in é idempotente (segunda chamada não regrava) | `api/bookings` (`if (!target.checkedInAt)`) | `a34-encounter` |
+| Fila | `QueueEntry` é 1:1 com `Encounter` | `api/encounters` | `a34-encounter` |
+| Atendimento | `Encounter` ≠ `Booking`; finalizado é read-only; reabertura explícita | `api/encounters` | `a34-encounter` (30) |
+| Atendimento | `expectedVersion` obrigatório em toda escrita; PATCH sem versão = 400 | `api/encounters` | `a34-encounter` |
+| Atendimento | Autosave não perde digitação; recarregar por id não duplica | tela + ref síncrono | `a34-encounter-integrity` (18) |
+| Atendimento | Secretária **sem** a permissão `atendimento` não lê o registro | `api/encounters` (`requireBusiness(..., 'atendimento')`) | `a34-encounter` |
+| Atendimento | Pós-atendimento usa `Task` existente (retorno não cria agendamento sozinho) | `api/tasks` | `a34-encounter-integrity` |
+| Clientes | E-mail/telefone/CPF compartilhados na base (sem cópia por tela) | `lib/contact-profile.ts`, `lib/field-quality.ts` | `a34-field-quality` (11) |
+| Clientes | `+55` não duplica o telefone (dígitos normalizados) | `lib/field-quality.ts` | `a34-field-quality` |
+| Clientes | Importação **não** sobrescreve por padrão (`skip`), conflitos falham | `api/contacts/import` | `a34-client-import` (17) + `-integrity` (25) |
+| Clientes | CSV/Excel formula injection neutralizado; XLSX com tetos e anti-bomb | `lib/client-import.ts`, `lib/xlsx-lite.ts` | `a34-client-import-limits` (18) + `a34-xlsx-lite` (22) |
+| Clientes | Saída completa é paginada e cada parte **diz** se está completa | `api/contacts/export-full` | `a34-client-import-limits` |
+| WhatsApp | Credencial por unidade, criptografada (AES-256-GCM), server-only | `lib/whatsapp-credentials.ts` | `a34-whatsapp-onboarding` (32) |
+| WhatsApp | Plataforma × unidade separadas no diagnóstico; “conectado” só após o fluxo obrigatório | `lib/whatsapp-onboarding-server.ts` | `a34-whatsapp-onboarding` |
+| WhatsApp | Webhook fail-closed; token/segredo nunca chegam ao frontend | `api/whatsapp/webhook`, painéis | `a34-whatsapp-onboarding` |
+| Instagram | Conversation/Message canônicas; identidade por IGSID + conta; **sem** dedupe por nome | `lib/instagram-api.ts` | `a34-instagram` (87) |
+| Instagram | Janela de 24 h POR CONVERSA, revalidada no envio; ts do webhook em s/ms | `Conversation.lastInboundAt` + `instagramEventTimestamp` | `a34-instagram` |
+| Instagram | Sem DM para IGSID arbitrário; mismatch fail-closed; conta única por unidade; refresh tenant-safe | `lib/instagram-api.ts`, `api/conversations` | `a34-instagram` |
+| Instagram | Webhook com assinatura + dedupe (`mid`) | `api/instagram/webhook` | `a34-instagram` |
+| Multi-tenant | Toda entidade nova tem `businessId`; rotas revalidam a unidade | `types.ts` + `requireBusiness` | todas as suítes A3.4 |
+
+Nota de arquitetura (para não confundir a revisão): `InstagramIntegration` e
+`ChannelIdentity` **não** têm `businessId` porque não são entidades de topo —
+elas vivem dentro de `Business.instagramIntegration` e de
+`BusinessCustomer.channelIdentities[]`, ou seja, só existem *dentro* de um
+documento já isolado por unidade. Não há rota que as leia sem passar por
+`requireBusiness` e a auditoria não achou caminho cruzando unidades.
+
+### 10.3 Suítes A3.4 rodadas (nenhuma removida ou skipada)
+
+```
+npx vitest run <13 arquivos a34-*>            → 13 arquivos · 311 testes ok
+npx vitest run a34-operative-routes a34-review-fix → 2 arquivos · 35 testes ok
+```
+
+| Suíte | Testes |
+|---|---|
+| `a34-nav` | 13 |
+| `a34-team` | 10 |
+| `a34-agenda` | 14 |
+| `a34-queue` | 14 |
+| `a34-encounter` | 30 |
+| `a34-encounter-integrity` | 18 |
+| `a34-field-quality` | 11 |
+| `a34-import` (`a34-client-import`) | 17 |
+| `a34-client-import-integrity` | 25 |
+| `a34-client-import-limits` | 18 |
+| `a34-xlsx-lite` | 22 |
+| `a34-whatsapp-onboarding` | 32 |
+| `a34-instagram` | 87 |
+| `a34-operative-routes` | 15 |
+| `a34-review-fix` | 20 |
+| **Total A3.4** | **346** |
+
+### 10.4 Portões globais (medidos neste HEAD)
+
+```
+npx vitest run          → 89 arquivos · 1.601 testes · 0 falhas (33,65 s)
+npx tsc --noEmit        → 0 erros
+npm run build           → ok em 43 s · "Compiled successfully"
+                          · 111 páginas estáticas geradas
+                          · 135 rotas no manifesto (92 API · 42 páginas · 1 widget)
+                          · First Load JS compartilhado: 87,3 kB
+```
+
+O número de testes subiu de 1.600 (B9) para **1.601** exatamente por causa do
+teste novo do resumo do cron (10.1). Nenhum teste foi removido, renomeado para
+sumir ou marcado como `skip`.
+
+### 10.5 Smokes — banco isolado, com o motivo de cada resultado
+
+**Banco identificado ANTES de rodar qualquer coisa** (regra do bloco):
+`DATABASE_URL` está **vazio** neste ambiente, `PGSSLMODE` e `INSTALINK_DB_FILE`
+também — logo o modo é **arquivo local** (`data/instalink.db.json`, fora do Git,
+com `.bak` gerado pelo seed). **Nada tocou Neon/produção**: os smokes e o seed
+só conseguem escrever no arquivo local enquanto `DATABASE_URL` não existir.
+
+| Smoke | Servidor `npm run dev` | Servidor de produção (`npm start`) |
+|---|---|---|
+| `npm run smoke` | **67 ok · 0 falhas** | **67 ok · 0 falhas** |
+| `npm run smoke:ux` | **87 ok · 0 falhas** | **87 ok · 0 falhas** |
+| `npm run smoke:p3` | **15 fluxos ok** (aviso: `CRON_SECRET` ausente → consumidor automático não acionado) | **15 fluxos ok** (mesmo aviso) |
+| `npm run smoke:agendar` | **25 ✓ · 0 ✗** | **25 ✓ · 0 ✗** |
+| `npm run smoke:p4` | **18 verificações ok** | **FALHA** no `POST /api/integrations/webhooks` (400) — e o motivo importa: ver abaixo |
+| `npm run e2e-merchant` | **28 ok · 0 falhas** | não rodado em produção (script feito para servidor descartável de dev) |
+
+O `smoke:p4` **exige** `node scripts/seed.mjs` antes (feito, no banco local) e o
+`smoke:agendar` também — os dois foram rodados depois do seed.
+
+**Sobre o FAIL do P4 em produção (não é regressão deste PR).** O passo que
+quebra é a criação de um webhook de saída apontando para um receptor **local**
+(`http://127.0.0.1:<porta>/p4-hook`). O servidor de produção roda com
+`NODE_ENV=production`, e nesse modo o guard de SSRF do P6
+(`lib/outbound-url.ts`) **recusa por padrão** URLs de rede privada/loopback —
+comportamento deliberado e documentado. A prova de que a causa é só essa: com a
+válvula de escape documentada (`ALLOW_PRIVATE_OUTBOUND_URLS=1`) o mesmo smoke,
+no mesmo build de produção, passa **18/18**. Em `npm run dev`
+(`NODE_ENV=development`) a válvula já é o padrão do código e o P4 passa direto.
+Nada no Bloco 10 toca webhooks/SSRF; o produto em produção **deve** continuar
+recusando destino privado.
+
+### 10.6 Rotas críticas presentes no build
+
+Conferidas no manifesto do build (135 rotas), todas presentes:
+
+```
+/api/bookings · /api/queue · /api/encounters · /api/contacts
+/api/contacts/import · /api/contacts/export · /api/contacts/export-full
+/api/team · /api/conversations · /api/whatsapp · /api/whatsapp/onboarding
+/api/whatsapp/webhook · /api/instagram/onboarding
+/api/instagram/onboarding/callback · /api/instagram/webhook
+/api/cron/whatsapp · /api/cron/instagram
+```
+
+### 10.7 Scheduler real — `BLOCKED_DEPLOYMENT`
+
+Não existe **nenhum** agendador versionado no repositório: nem `vercel.json`,
+nem `.github/workflows`, nem bloco `crons` em `package.json`. As rotas
+`/api/cron/whatsapp` e `/api/cron/instagram` existem, são fail-closed
+(`verifyCronAuth`) e foram exercitadas por teste — mas **quem as chama** é
+infraestrutura de deploy, que não faz parte deste PR.
+
+**Pendência de produção (não é bug de código):** configurar um agendador real
+(Vercel Cron, GitHub Actions ou serviço externo) chamando, com o header de
+autorização derivado de **`CRON_SECRET`**:
+
+```
+GET/POST /api/cron/whatsapp    (a cada 5–15 min — outbox/retries do WhatsApp)
+GET/POST /api/cron/instagram   (1×/dia — renovação do token de 60 dias + retries)
+```
+
+Sem isso, o retry de mensagens e a renovação do token do Instagram **não
+acontecem sozinhos** em produção. Registrado como `BLOCKED_DEPLOYMENT`, sem
+criar infraestrutura neste PR.
+
+### 10.8 Storage — estado registrado (V2 fica para depois)
+
+- O produto usa **Vercel Blob** (`@vercel/blob` ^2.8.0) em `/api/upload`, com
+  `put(...)`, e responde erro claro quando `BLOB_READ_WRITE_TOKEN` não existe.
+- O que falta é **configuração de ambiente** (token do Blob ou OIDC da Vercel),
+  não código. Sem token, o upload de imagens fica desligado de forma honesta.
+- Não há S3/Cloudflare/R2 no projeto e **nada** de Storage V2 foi implementado
+  aqui (fora do escopo da A3.4).
+
+### 10.9 Banco — estado registrado (Persistência V2 fica para depois)
+
+- Produção: **Postgres (Neon)** com o documento JSONB em linha única
+  (`instalink_doc`), como o próprio `seed` escreve; dev sem `DATABASE_URL` usa
+  arquivo JSON local.
+- Multi-tenant é **lógico**, por `businessId` dentro do documento, revalidado em
+  toda rota (`requireBusiness`) — não há RLS nem *schema* por unidade.
+- Toda a A3.4 foi **aditiva** no documento: arrays/campos novos ganham default na
+  normalização (`normalizeDB`), então documento antigo continua legível. Não
+  houve migração estrutural — e **não** foi feita Persistência V2.
+
+### 10.10 `BLOCKED_EXTERNAL` — o que depende da Meta (separado por canal)
+
+Classificação usada: **IMPLEMENTADO** (código pronto) · **TESTADO LOCAL-MOCK**
+(exercitado com payload/resposta no formato oficial, contra servidor fake) ·
+**TESTADO REAL EXTERNO** (executado contra a Meta de verdade) ·
+**BLOCKED_EXTERNAL** (não dá para executar sem ação de terceiros).
+
+#### WHATSAPP
+
+| Item | Estado | O que falta para virar REAL |
+|---|---|---|
+| Embedded Signup (fluxo interno) | IMPLEMENTADO · TESTADO LOCAL-MOCK | App ID/Config ID reais e domínio autorizado |
+| Diagnóstico plataforma × unidade | IMPLEMENTADO · TESTADO LOCAL-MOCK | — |
+| Credencial por unidade (AES-256-GCM) | IMPLEMENTADO · TESTADO LOCAL-MOCK | `WHATSAPP_CREDENTIALS_KEY` no ambiente |
+| Envio de mensagem (Cloud API) | IMPLEMENTADO · TESTADO LOCAL-MOCK | `WHATSAPP_API_TOKEN` + `WHATSAPP_PHONE_NUMBER_ID` reais |
+| Webhook (handshake + assinatura) | IMPLEMENTADO · TESTADO LOCAL-MOCK | `WHATSAPP_VERIFY_TOKEN` + `WHATSAPP_APP_SECRET` + URL pública |
+| `POST /{PHONE_NUMBER_ID}/register` | IMPLEMENTADO · TESTADO LOCAL-MOCK | **número real** + PIN de duas etapas |
+| Receber o 1º evento real | **BLOCKED_EXTERNAL** | número conectado, webhook assinado no app, tráfego real |
+| **TESTADO REAL EXTERNO** | **nenhum** | — |
+
+#### INSTAGRAM
+
+| Item | Estado | O que falta para virar REAL |
+|---|---|---|
+| Business Login (OAuth + state) | IMPLEMENTADO · TESTADO LOCAL-MOCK | `INSTAGRAM_APP_ID`/`INSTAGRAM_APP_SECRET` + *redirect URIs* cadastradas |
+| Token de longa duração + refresh (60 d) | IMPLEMENTADO · TESTADO LOCAL-MOCK | app aprovado; cron real chamando `/api/cron/instagram` |
+| Assinatura do webhook (`subscribed_apps`) | IMPLEMENTADO · TESTADO LOCAL-MOCK | conta profissional + app aprovado |
+| Ingestão do webhook (assinatura, dedupe `mid`, tenant por `entry.id`) | IMPLEMENTADO · TESTADO LOCAL-MOCK | `INSTAGRAM_VERIFY_TOKEN` + URL pública |
+| Envio pelo Direct (janela 24 h / HUMAN_AGENT) | IMPLEMENTADO · TESTADO LOCAL-MOCK | permissões aprovadas + conta profissional |
+| Receber o 1º evento real | **BLOCKED_EXTERNAL** | conta profissional conectada e webhook ativo |
+| **TESTADO REAL EXTERNO** | **nenhum** | — |
+
+**Nada aqui foi testado contra a Meta real.** Não há credenciais de app, conta
+profissional, número real, URL pública nem permissões aprovadas neste ambiente.
+O que existe é implementação conferida contra a documentação oficial
+(Instagram Platform: Instagram API with Instagram Login, Business Login,
+Messaging API e Webhooks; Graph API v26.0) e exercitada contra servidores fake
+com o formato oficial. **A3.4 não declara Meta E2E real** — nem WhatsApp, nem
+Instagram.
+
+---
+
+## BLOCO 11 — ENTREGA (resumo por bloco, schema real e checklists)
+
+### 11.1 Resumo dos blocos B0–B11 (objetivo · arquivos · schema · testes)
+
+| Bloco | Objetivo | Principais arquivos | Schema | Testes |
+|---|---|---|---|---|
+| **B0** | Auditoria antes de alterar (o que existe × o que criar) | — (levantamento) | — | — |
+| **B1** | Navegação e coerência visual: Início, seções, cor da própria família, fim do “Outros destinos” | `lib/panel.ts`, `lib/http.ts`, `components/DashboardShell.tsx` | `PanelSectionId` + `inicio`, `SECTION_THEME` | `a34-nav` (13) |
+| **B2** | Profissionais × Equipe: uma pessoa, dois conceitos (acesso × atendimento) | `api/team/route.ts`, `equipe`, `profissionais`, `catalog-panels.tsx` | `Professional.userId` (vínculo 1:1) | `a34-team` (10) |
+| **B3** | Disponibilidade · Agenda · Novo agendamento (Hoje fixo, clique no vago, encaixe) | `(dashboard)/agenda/page.tsx`, `lib/agenda-drag.ts`, `NewBookingSheet` | `Booking.bookingKind` | `a34-agenda` (14) |
+| **B4** | Atenção · encaixe · check-in · **fila de espera como entidade própria** | `api/queue`, `api/bookings`, `lib/fit-in.ts` | `QueueEntry`, `Booking.checkedIn*` | `a34-queue` (14) |
+| **B5** | Registro do atendimento: evolução, orientações, impressão, 1:1 com agendamento e fila | `api/encounters`, `lib/encounters.ts`, tela de atendimento | `Encounter`, `EncounterStatus`, `version` | `a34-encounter` (30) + `a34-encounter-integrity` (18) |
+| **B6** | Qualidade dos campos BR: telefone, e-mail, CPF (DV real), CEP | `lib/field-quality.ts`, `lib/contact-profile.ts` | — (regras puras) | `a34-field-quality` (11) |
+| **B7** | Importar/exportar a base: CSV com prévia, mapeamento, sem sobrescrever, `.xlsx` com limites, saída completa paginada | `api/contacts/import|export|export-full`, `lib/client-import.ts`, `lib/client-export.ts`, `lib/xlsx-lite.ts` | — (rotas + relatórios) | `a34-client-import` (17) + `-integrity` (25) + `-limits` (18) + `a34-xlsx-lite` (22) |
+| **B8** | Onboarding real do WhatsApp (Embedded Signup) e diagnóstico em duas camadas | `lib/whatsapp-onboarding-server.ts`, `api/whatsapp/*`, `WhatsappChannelPanel` | `Business.whatsappIntegration` | `a34-whatsapp-onboarding` (32) |
+| **B9** | Instagram Direct no inbox unificado (Business Login, webhook, janela, conector) | `lib/instagram.ts`, `lib/instagram-api.ts`, `api/instagram/*`, `api/conversations`, `cron/instagram` | `Business.instagramIntegration`, `Conversation.channel='instagram'`, `channelAccountId`, `channelUsername`, `lastInboundAt`, `BusinessCustomer.channelIdentities[]` | `a34-instagram` (87) |
+| **B10** | Gates finais: métrica do CAS honesta + auditoria de invariantes + todas as suítes + vitest/tsc/build + smokes + rotas + dívidas registradas | `lib/instagram-api.ts` (métrica), `a34-instagram.test.ts` | `InstagramTokenRefreshSummary.superseded` | `a34-instagram` 87 · suíte global 89/1601 |
+| **B11** | Este fechamento: relatório, checklists e entrega do PR | `RELATORIO-A3.4.md` | — | — |
+
+### 11.2 Schema aditivo final (lido de `src/lib/types.ts`, não inventado)
+
+Tudo abaixo é **aditivo e retrocompatível**: campo novo é opcional/ausente em
+documento antigo, e `normalizeDB()` (em `lib/db.ts`) garante array/campo com
+default ao ler. Nenhum campo existente mudou de tipo; nenhuma migração
+estrutural foi necessária.
+
+| Onde | Campo(s) | Comentário |
+|---|---|---|
+| `Business` | `instagramIntegration?: InstagramIntegration` | Mesmo desenho do `whatsappIntegration`: identificadores **públicos** + status; a credencial é criptografada (`encryptedAccessToken`, AES-256-GCM) e nunca sai do servidor |
+| `InstagramIntegration` | `status`, `igUserId`, `username`, `displayName`, `authorizedAt`, `webhookSubscribedAt`, `tokenIssuedAt`, `tokenExpiresAt?`, `connectedAt`, `lastWebhookAt`, `lastInboundAt?`, `lastOutboundAt?`, `lastError?`, `lastErrorAt?`, `requestedAt`, `encryptedAccessToken?`, `keyFingerprint?`, `source?` | `connectedAt` só é preenchido quando o fluxo obrigatório termina (autorização + assinatura do webhook + token longo) |
+| `Conversation` | `channel: ConversationChannel` (agora inclui `'instagram'`), `channelAccountId?`, `channelUsername?`, `lastInboundAt?` | `channelUserId` (IGSID) já existia desde o P6.1; a chave estável é `businessId + channel + channelAccountId + channelUserId`. `lastInboundAt` é a **autoridade da janela por conversa** (nunca diminui) |
+| `BusinessCustomer` | `channelIdentities?: ChannelIdentity[]` com `ChannelIdentity = { provider: 'instagram', accountId, participantId, username?, linkedAt }` | Identidade por CONTA + IGSID. `username` é só exibição — **nunca** chave de dedupe |
+| `Booking` | `bookingKind?: 'standard' | 'fit_in'`, `checkedInAt?`, `checkedInBy?`, `checkedInByName?` | Ausente = comportamento antigo (agendamento normal, sem check-in) |
+| `DB` | `queue: QueueEntry[]`, `encounters: Encounter[]` | Arrays novos; documento antigo ganha `[]` |
+| `QueueEntry` | `id`, `businessId`, `customerName`, `customerPhone`, `contactId`, `serviceId`, `professionalId`, `bookingId`, `note`, `status`, `date`, `createdAt`, `calledAt`, `startedAt`, `endedAt`, `updatedBy`, `updatedAt` | Fila **não** é agenda: entrada própria, com `bookingId` só quando veio de um horário marcado |
+| `QueueStatus` | `'waiting' | 'called' | 'in_service' | 'done' | 'left'` | Máquina de estados fechada (sem transição inventada) |
+| `Encounter` | `id`, `businessId`, `bookingId`, `queueId`, `serviceId`, `professionalId`, `customerId`, `contactId`, `customerName`, `date`, `time`, `complaint`, `evolution`, `guidance`, `followUp`, `internalNote`, `tags[]`, `status`, `version`, `createdAt`, `updatedAt`, `createdBy`, `updatedBy`, `finalizedAt`, `finalizedBy`, `signedBy` | `bookingId` **ou** `queueId` identifica a origem (1:1); `version` é a trava otimista |
+| `EncounterStatus` | `'draft' | 'finalized'` | Finalizado é read-only; reabrir é ação explícita e auditada |
+| `Task` | `encounterId?` (retorno do atendimento) | Reusa a tarefa existente; **não** cria agendamento sozinho |
+| `AuditAction` | ações `instagram.*` (ex.: conexão, troca de status, envio, falha) | Auditoria do canal sem registrar segredo |
+| `InstagramTokenRefreshSummary` | `businessesChecked`, `refreshed`, `failed`, `skipped`, `superseded` | Resumo do cron com **soma fechada** (B10.1) |
+
+### 11.3 Permissão `atendimento` (a que protege o registro do atendimento)
+
+- É uma permissão **própria**, no mesmo catálogo de sempre (`lib/permissions.ts`) —
+  **não** virou sinônimo de `clientes`, e quem tem `clientes` **não** herda o
+  registro do atendimento.
+- **Recebem por padrão:** `OWNER` (todas), `ADMIN` (todas menos `admin`) e
+  `PROFISSIONAL` (quem atende).
+- **Não recebem por padrão:** `SECRETARIA`, `ATENDENTE`, `VENDEDOR`, `VIEWER`.
+  Uma pessoa específica pode receber a permissão por override individual
+  (`permissionsFor(role, { atendimento: true })`), decisão auditada de quem
+  administra.
+- **O que protege:** ler e escrever o registro do atendimento
+  (`/api/encounters` inteiro exige `requireBusiness(..., 'atendimento')`),
+  incluindo evolução, orientações e anotações internas. É o dado mais sensível
+  do produto; o recorte de “só o que atendeu” soma-se a isso via
+  `Professional.userId`.
+
+### 11.4 Checklist de ambiente (sem nenhum valor secreto)
+
+Preencher no ambiente de produção/piloto. **Nada aqui vai para o repositório.**
+
+| Grupo | Variável | Para que serve |
+|---|---|---|
+| CORE | `DATABASE_URL` | Postgres (Neon). Ausente ⇒ modo arquivo local (só dev) |
+| CORE | `WHATSAPP_CREDENTIALS_KEY` | Chave AES-256-GCM das credenciais de canal por unidade |
+| CORE | `NEXT_PUBLIC_SITE_URL` / `SITE_URL` | URL pública usada em links e callbacks |
+| CORE | `RESEND_API_KEY`, `MAIL_FROM` | E-mail transacional (recuperação de senha) — opcional |
+| CORE | `MASTER_EMAILS`, `MASTER_BOOTSTRAP_*` | Acesso Master da plataforma |
+| STORAGE | `BLOB_READ_WRITE_TOKEN` | Vercel Blob (upload de imagens). Sem ele, upload fica desligado |
+| META WHATSAPP | `WHATSAPP_APP_SECRET`, `WHATSAPP_VERIFY_TOKEN` | Assinatura do webhook + handshake |
+| META WHATSAPP | `WHATSAPP_API_TOKEN`, `WHATSAPP_PHONE_NUMBER_ID`, `WHATSAPP_WABA_ID` | Envio pela Cloud API e registro do número |
+| META WHATSAPP | `META_APP_ID`, `META_APP_SECRET`, `META_GRAPH_VERSION`(opcional) | App da Meta e versão da Graph API |
+| META INSTAGRAM | `INSTAGRAM_APP_ID`, `INSTAGRAM_APP_SECRET` | Instagram App (Business Login) |
+| META INSTAGRAM | `INSTAGRAM_VERIFY_TOKEN` | Handshake do webhook do Instagram |
+| CRON | `CRON_SECRET` | Autoriza `/api/cron/*`. **Sem ele os crons são fail-closed (503)** |
+
+### 11.5 Checklist do 1º piloto (só marcar com prova)
+
+- [ ] Backup/PITR do Postgres ligado e **um restore testado** de verdade
+- [ ] Produção separada de qualquer ambiente de teste (banco e domínio)
+- [ ] Storage configurado (`BLOB_READ_WRITE_TOKEN`) — ou upload assumidamente desligado
+- [ ] Scheduler do WhatsApp ativo chamando `/api/cron/whatsapp` com `CRON_SECRET`
+- [ ] Scheduler do Instagram ativo chamando `/api/cron/instagram` com `CRON_SECRET`
+- [ ] App Meta criado, permissões aprovadas e *redirect URIs* cadastradas
+- [ ] WhatsApp **conectado de verdade** (número real registrado, 1º evento recebido)
+- [ ] Instagram **conectado de verdade** (conta profissional, webhook ativo, 1º evento recebido)
+- [ ] Webhook real testado com evento real (não só replay de payload)
+- [ ] Exportação de clientes executada em produção e conferida
+- [ ] Perfis criados: ADMIN, secretária, profissional (cada um com o recorte real)
+- [ ] Agendamento ponta a ponta pela página pública
+- [ ] Check-in e fila do balcão no dia real de operação
+- [ ] Atendimento: criar, finalizar, reabrir (e conferir a impressão)
+- [ ] Retorno/tarefa criados a partir do atendimento
+- [ ] **Restore** do backup exercitado uma vez
+
+### 11.6 Roadmap — fora da A3.4 (registrado, **não** implementado)
+
+1. **Persistência V2** — hoje o banco é o documento JSONB em linha única
+   (`instalink_doc`) com multi-tenant lógico. A V2 (tabelas por domínio, RLS,
+   índices de verdade) não faz parte desta entrega.
+2. **Storage V2** — hoje Vercel Blob para imagens. CDN/otimização/limpeza de
+   órfãos e política de retenção ficam para depois.
+3. **A3.5 — voz, transcrição e IA** no atendimento (o registro já tem o dono e a
+   versão que essa fase vai precisar).
+4. **Meta E2E real** — WhatsApp e Instagram contra a Meta de verdade, com app
+   aprovado, número real e conta profissional (hoje: `BLOCKED_EXTERNAL`).
+5. **Onboarding comercial** — cobrança, autosserviço e medição de ativação.
+
+Nada disso entrou no código neste PR.
+
+---
+
+## ENCERRAMENTO
+
+- **HEAD final:** commit `A3.4 B10-B11 — final regression gates and delivery report`
+  (17º do PR #30; hash exato no comentário de entrega do PR). O último HEAD cujo hash
+  este documento cita é o do pai direto: `9f35f784bc01984272488e893320c38edd3a7b34` (B9 fix).
+- **PR #30:** aberto, **não mergeado** — `READY_FOR_INDEPENDENT_REVIEW`.
+- **Portões no HEAD final:** `npx vitest run` → 89 arquivos / 1.601 testes · 0 falhas;
+  `npx tsc --noEmit` → 0 erros; `npm run build` → ok (111 páginas, 135 rotas).
+- **Suítes A3.4:** 346 testes verdes (15 arquivos). Nenhuma suíte removida ou skipada.
+- **Smokes:** todos PASS em servidor de desenvolvimento; o único FAIL (P4 em
+  produção) tem causa identificada e não é regressão — é o guard de SSRF
+  recusando destino privado, como deve.
+- **Dívidas registradas:** `BLOCKED_DEPLOYMENT` (scheduler real) e
+  `BLOCKED_EXTERNAL` (Meta WhatsApp e Instagram — nenhum teste E2E real).
+- **Limite honesto desta entrega:** tudo que depende de terceiros está declarado
+  como bloqueado em vez de “aprovado por omissão”. Nenhum número deste relatório
+  foi estimado: os que aparecem aqui foram medidos neste HEAD.
+
+**Aguarda revisão independente final. Não mergear por conta deste relatório.**

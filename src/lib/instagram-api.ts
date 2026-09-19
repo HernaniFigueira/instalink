@@ -830,9 +830,13 @@ export function instagramTokenNeedsRefresh(
 
 export interface InstagramTokenRefreshSummary {
   businessesChecked: number;
+  /** Renovações EFETIVAMENTE gravadas (o CAS confirmou a persistência). */
   refreshed: number;
   failed: number;
+  /** Sem credencial utilizável no momento da passada. */
   skipped: number;
+  /** A Meta devolveu token novo, mas a credencial mudou no meio (reconexão): o CAS NÃO sobrescreveu. */
+  superseded: number;
   ranAt: string;
 }
 
@@ -860,6 +864,7 @@ export async function refreshInstagramTokens(options?: {
   let refreshed = 0;
   let failed = 0;
   let skipped = 0;
+  let superseded = 0;
 
   for (const business of due) {
     const ig = business.instagramIntegration!;
@@ -887,13 +892,15 @@ export async function refreshInstagramTokens(options?: {
       continue;
     }
 
-    refreshed += 1;
     const ttl = res.expiresIn > 0 ? res.expiresIn * 1000 : INSTAGRAM_TOKEN_FALLBACK_TTL_MS;
     const expiresAt = new Date((Date.parse(nowISO) || Date.now()) + ttl).toISOString();
-    await updateDB((d: DB) => {
+    // A métrica segue a GRAVAÇÃO, não a resposta da Meta: se a reconexão trocou
+    // a credencial no meio, o CAS não aplica e isso é `superseded` — nunca
+    // "renovado". O resumo do cron precisa ser verdadeiro.
+    const applied = await updateDB((d: DB): boolean => {
       const biz = d.businesses.find((b) => b.id === business.id);
       const current = biz?.instagramIntegration;
-      if (!current || current.encryptedAccessToken !== previousEncrypted) return; // trocou no meio
+      if (!current || current.encryptedAccessToken !== previousEncrypted) return false; // trocou no meio
       current.encryptedAccessToken = encryptInstagramToken(res.accessToken);
       current.tokenIssuedAt = nowISO;
       current.tokenExpiresAt = expiresAt;
@@ -905,10 +912,13 @@ export async function refreshInstagramTokens(options?: {
         businessId: business.id,
         meta: { expiresAt },
       });
+      return true;
     });
+    if (applied) refreshed += 1;
+    else superseded += 1;
   }
 
-  return { businessesChecked: due.length, refreshed, failed, skipped, ranAt: nowISO };
+  return { businessesChecked: due.length, refreshed, failed, skipped, superseded, ranAt: nowISO };
 }
 
 // ── Gravação do resultado do onboarding (usada pelo callback) ────
