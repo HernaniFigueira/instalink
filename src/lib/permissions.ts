@@ -14,7 +14,7 @@ export interface PermissionDef {
 }
 
 export const PERMISSIONS: PermissionDef[] = [
-  { id: 'dashboard', label: 'Dashboard', hint: 'Visão geral do negócio e indicadores do dia' },
+  { id: 'dashboard', label: 'Início', hint: 'Visão geral do negócio e indicadores do dia' },
   { id: 'agenda', label: 'Agenda', hint: 'Ver e operar a agenda (confirmar, concluir, remarcar)' },
   { id: 'clientes', label: 'Clientes', hint: 'CRM de clientes e histórico 360' },
   { id: 'leads', label: 'Leads', hint: 'Interesses e conversas captadas na página' },

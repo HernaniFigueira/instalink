@@ -8,7 +8,8 @@ import { Avatar, PageSkeleton } from '@/components/ui';
 import { AccessDenied, ForbiddenToasts, PanelHomeProvider } from '@/components/dashboard/AccessNotice';
 import {
   activePanelPath, activePanelRoute, firstAllowedPath, panelAccess, panelNavigation,
-  routeRequiresBusiness, sectionAccent, type PanelRouteDef, type PanelSection, type PanelSectionId,
+  routeRequiresBusiness, sectionTheme, type PanelRouteDef, type PanelSection, type PanelSectionId,
+  type SectionTheme,
 } from '@/lib/panel';
 import { isSessionExpired } from '@/lib/http';
 import type { BusinessMode, FeatureId, PermissionId } from '@/lib/types';
@@ -155,10 +156,16 @@ function hrefFor(item: PanelRouteDef, unitQuery: string): string {
   return item.requiresBusiness === false ? item.href : `${item.href}${unitQuery}`;
 }
 
-function NavItem({ item, active, collapsed, href, accent }: {
+function NavItem({ item, active, collapsed, href, theme }: {
   item: PanelRouteDef; active: boolean; collapsed: boolean; href: string;
-  /** A3.3 (ponto 8): cor de contexto da seção, aplicada APENAS no ícone. */
-  accent: string;
+  /**
+   * A3.4 — tema da SEÇÃO (cor de contexto + estado ativo), vindo de
+   * `sectionTheme(sec.id)` em lib/panel.ts. Ativo e inativo usam a MESMA
+   * família de cor: clicar em Clientes (teal) não vira azul, clicar em
+   * Serviços (lilás) não vira azul. O azul da marca continua sendo a cor do
+   * PRODUTO (ações, botões) — não a cor de toda seleção do menu.
+   */
+  theme: SectionTheme;
 }) {
   return (
     <Link href={href} data-nav-item={item.href} data-nav-active={active || undefined}
@@ -166,26 +173,32 @@ function NavItem({ item, active, collapsed, href, accent }: {
       // sem exigir abrir a tela (e sem inventar uma segunda fonte de texto).
       title={collapsed ? `${item.label} — ${item.description}` : item.description}
       aria-current={active ? 'page' : undefined}
+      // Fundo ativo = versão soft DA SEÇÃO. Valor de token declarado no
+      // catálogo (não classe Tailwind): um mapa de classes por seção seria uma
+      // segunda fonte de cor, exatamente o que este bloco elimina.
+      style={active ? { backgroundColor: theme.activeBg, color: theme.activeFg } : undefined}
       className={cn(
         'relative flex items-center text-[13px] rounded-md h-10 transition-[background-color,color] duration-150',
         'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--brand)] focus-visible:ring-offset-1 focus-visible:ring-offset-[var(--il-nav)]',
         collapsed ? 'justify-center px-0 il-tip' : 'gap-2.5 px-2.5',
         active
-          ? 'bg-[var(--il-nav-active)] text-[var(--il-nav-active-fg)] font-semibold shadow-xs'
+          // Sem `--il-nav-active` azul fixo: quem manda é o tema da seção.
+          ? 'font-semibold shadow-xs'
           : 'text-[var(--il-nav-fg)] font-medium hover:bg-[var(--il-nav-hover)]',
       )}
       {...(collapsed ? { 'data-tip': item.label } : {})}
     >
-      {/* Marcador do item ativo: a seleção é visível também com a barra
-          recolhida e para quem não distingue cor (não depende só do fundo). */}
+      {/* Marcador do item ativo: pequena ABA de 3px na cor DA SEÇÃO, com
+          extremidades arredondadas — seleção visível sem borda grossa em
+          volta do item e sem depender só do fundo. */}
       {active && (
-        <span aria-hidden="true"
-          className={cn('absolute rounded-pill bg-[var(--il-nav-active-fg)]',
-            collapsed ? 'left-0.5 top-1/2 -translate-y-1/2 w-[3px] h-5' : 'left-0 top-1/2 -translate-y-1/2 w-[3px] h-5')} />
+        <span aria-hidden="true" data-nav-rail="true"
+          className={cn('absolute rounded-pill w-[3px]',
+            collapsed ? 'left-0.5 top-1/2 -translate-y-1/2 h-5' : 'left-0.5 top-1/2 -translate-y-1/2 h-6')}
+          style={{ backgroundColor: theme.accent }} />
       )}
-      {/* Item ativo fica BRAND (a seleção manda); inativo mostra o acento da
-          família — cor de contexto, nunca bloco saturado. */}
-      <span className="shrink-0 inline-flex" style={{ color: active ? 'var(--il-nav-active-fg)' : accent }} aria-hidden="true">
+      {/* O ícone NUNCA troca de família: ativo ou não, usa o acento da seção. */}
+      <span className="shrink-0 inline-flex" style={{ color: theme.accent }} aria-hidden="true">
         <I n={item.icon} size={18} />
       </span>
       {!collapsed && <span className="truncate">{item.label}</span>}
@@ -219,7 +232,7 @@ function NavSection({ sec, activePath, collapsed, closed, onToggle, unitQuery }:
           {sec.items.map((item) => (
             <NavItem key={item.href} item={item} collapsed={collapsed}
               href={hrefFor(item, unitQuery)} active={activePath === item.href}
-              accent={sectionAccent(sec.id)} />
+              theme={sectionTheme(sec.id)} />
           ))}
         </div>
       )}
@@ -565,7 +578,7 @@ export function DashboardShell({ children }: { children: React.ReactNode }) {
           {dashboardItem && (
             <NavItem item={dashboardItem} collapsed={collapsed}
               href={hrefFor(dashboardItem, q)} active={activePath === dashboardItem.href}
-              accent={sectionAccent(dashboardItem.section)} />
+              theme={sectionTheme(dashboardItem.section)} />
           )}
           {nav.sections.map((sec) => (
             <NavSection key={sec.id} sec={sec} activePath={activePath} collapsed={collapsed} closed={closed}
@@ -577,20 +590,12 @@ export function DashboardShell({ children }: { children: React.ReactNode }) {
             <NavSection key={sec.id} sec={sec} activePath={activePath} collapsed={collapsed} closed={closed}
               onToggle={toggleSection} unitQuery={q} />
           ))}
-          {nav.more.length > 0 && (
-            <div className={cn(collapsed ? 'mt-2' : 'mt-4')}>
-              {!collapsed && (
-                <p className="px-2.5 mb-1 text-[10px] font-bold tracking-[0.08em] text-[var(--il-nav-muted)] uppercase">Outros destinos</p>
-              )}
-              <div className="space-y-0.5">
-                {nav.more.map((item) => (
-                  <NavItem key={item.href} item={item} collapsed={collapsed}
-                    href={hrefFor(item, q)} active={activePath === item.href}
-                    accent={sectionAccent(item.section)} />
-                ))}
-              </div>
-            </div>
-          )}
+          {/* A3.4: aqui existia o grupo "Outros destinos" (destinos com
+              `sidebar: false`). Ele foi REMOVIDO: dois comportamentos na mesma
+              barra confundiam mais do que ajudavam. Destino declarado sem linha
+              de menu continua acessível por URL e por atalho contextual de quem
+              o usa (ex.: "Ver histórico de execuções" dentro de Automações). */}
+
         </nav>
 
         {/* ── RODAPÉ: QUEM está logado, em UMA linha ──
@@ -711,29 +716,17 @@ export function DashboardShell({ children }: { children: React.ReactNode }) {
                     {sec.items.map((i) => (
                       <Link key={i.href} href={hrefFor(i, q)} title={i.description} onClick={() => setMoreOpen(false)}
                         aria-current={activePath === i.href ? 'page' : undefined}
+                        style={activePath === i.href
+                          ? { backgroundColor: sectionTheme(sec.id).activeBg, color: sectionTheme(sec.id).activeFg, borderColor: 'transparent' }
+                          : undefined}
                         className={cn('text-xs font-semibold border rounded-md px-2.5 py-2 inline-flex items-center gap-1.5 min-w-0',
-                          activePath === i.href ? 'bg-[var(--brand-soft)] border-[var(--brand-border)] text-[var(--brand-fg)]' : 'bg-white border-[var(--border)] text-[var(--text)]')}>
-                        <I n={i.icon} size={14} /> <span className="truncate">{i.label}</span>
+                          activePath === i.href ? 'shadow-xs' : 'bg-white border-[var(--border)] text-[var(--text)]')}>
+                        <I n={i.icon} size={14} className="shrink-0" /> <span className="truncate">{i.label}</span>
                       </Link>
                     ))}
                   </div>
                 </div>
               ))}
-              {nav.more.length > 0 && (
-                <div>
-                  <p className="text-[10px] font-bold uppercase tracking-[0.1em] text-[var(--text-faint)] px-1 mb-1.5">Outros destinos</p>
-                  <div className="grid grid-cols-2 gap-1">
-                    {nav.more.map((i) => (
-                      <Link key={i.href} href={hrefFor(i, q)} title={i.description} onClick={() => setMoreOpen(false)}
-                        aria-current={activePath === i.href ? 'page' : undefined}
-                        className={cn('text-xs font-semibold border rounded-md px-2.5 py-2 inline-flex items-center gap-1.5 min-w-0',
-                          activePath === i.href ? 'bg-[var(--brand-soft)] border-[var(--brand-border)] text-[var(--brand-fg)]' : 'bg-white border-[var(--border)] text-[var(--text)]')}>
-                        <I n={i.icon} size={14} /> <span className="truncate">{i.label}</span>
-                      </Link>
-                    ))}
-                  </div>
-                </div>
-              )}
             </div>
           </div>
         )}

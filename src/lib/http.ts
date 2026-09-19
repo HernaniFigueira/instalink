@@ -155,7 +155,9 @@ export function decideAuthedResponse(
  * Mantido aqui (e não em panel.ts) para que o servidor também possa rotular.
  */
 export const AREA_LABELS: Record<string, string> = {
-  dashboard: 'Dashboard',
+  // A3.4: a INTERFACE chama esta porta de "Início". A chave continua
+  // `dashboard` porque é o id da permissão (`dashboard`) gravado por tenant.
+  dashboard: 'Início',
   agenda: 'Agenda',
   clientes: 'Clientes',
   leads: 'Leads',

@@ -229,7 +229,7 @@ export default function EquipePage() {
                     );
                   })}
                 </div>
-                <p className="text-xs text-zinc-500 mt-2">Inclui <strong>Dashboard</strong> como permissão independente — desative para ocultar o resumo de quem não precisa.</p>
+                <p className="text-xs text-zinc-500 mt-2">Inclui <strong>Início</strong> como permissão independente — desative para ocultar o resumo de quem não precisa.</p>
               </div>
             </div>
           </div>
