@@ -2,8 +2,9 @@
 // META WHATSAPP CLOUD API — CLIENTE OFICIAL, CRIPTOGRAFIA & OUTBOX
 // ═══════════════════════════════════════════════════════════════
 import { createCipheriv, createDecipheriv, createHash, createHmac, randomBytes, randomUUID, timingSafeEqual } from 'node:crypto';
-import type { Business, DB, Message, WhatsappIntegration } from './types';
+import type { Business, Campaign, CampaignRecipient, DB, Message, WhatsappIntegration } from './types';
 import { readDB, updateDB, updateDBWithCas } from './db';
+import { assertOutsideDBTransaction } from './db-transaction';
 import {
   type ChannelConnector,
   type ChannelSendResult,
@@ -16,6 +17,8 @@ export const DEFAULT_META_GRAPH_VERSION = 'v21.0';
 export const WHATSAPP_CLAIM_LEASE_MS = 60_000; // 60 segundos
 export const WHATSAPP_RETRY_INTERVALS_MS = [30_000, 120_000]; // 1º retry em 30s, 2º retry em 120s
 export const WHATSAPP_MAX_ATTEMPTS = 3;
+export const CAMPAIGN_IMMEDIATE_BATCH_LIMIT = 5; // Disparo síncrono inicial máximo no request da campanha
+export const CAMPAIGN_CRON_BATCH_SIZE = 20; // Lote por ciclo do cron worker
 
 export function getMetaGraphVersion(): string {
   return (process.env.META_GRAPH_VERSION || DEFAULT_META_GRAPH_VERSION).trim();
@@ -76,7 +79,7 @@ export function decryptSecret(cipherText: string): string {
   }
 }
 
-// ── Resolução de Credenciais por Business (Tenant Isolation) ──
+// ── Resolução de Credenciais por Business (Tenant Isolation Estrito) ──
 
 export interface ResolvedWhatsappCredentials {
   phoneNumberId: string;
@@ -87,9 +90,13 @@ export interface ResolvedWhatsappCredentials {
 
 /**
  * Resolve credenciais ativas do WhatsApp para o negócio informado.
- * Prioridade:
- *   1. Credencial configurada e criptografada no Business.
- *   2. Variáveis de ambiente globais do servidor (fallback de implantação única).
+ * AUTORIDADE DE PRODUÇÃO:
+ *   1. Credencial configurada e criptografada no Business (Business.whatsappIntegration + encryptedAccessToken).
+ * MODO LEGADO (SOMENTE MONO-TENANT / DESENVOLVIMENTO):
+ *   2. Se a unidade não possuir credenciais próprias, e as variáveis de ambiente globais
+ *      estiverem configuradas (WHATSAPP_API_TOKEN e WHATSAPP_PHONE_NUMBER_ID):
+ *      O phoneNumberId da unidade DEVE coincidir exatamente com o global (ou a unidade não ter nenhum definido).
+ *      NUNCA combina token global com um phoneNumberId arbitrário de outra unidade!
  */
 export function getWhatsappCredentials(business: Business): ResolvedWhatsappCredentials | null {
   const integration = business.whatsappIntegration;
@@ -105,15 +112,19 @@ export function getWhatsappCredentials(business: Business): ResolvedWhatsappCred
     }
   }
 
-  // Fallback do servidor (apenas se configurado nas env vars)
-  const envToken = process.env.WHATSAPP_API_TOKEN || '';
-  const envPhoneId = integration?.phoneNumberId || process.env.WHATSAPP_PHONE_NUMBER_ID || '';
-  const envWabaId = integration?.wabaId || process.env.WHATSAPP_WABA_ID || '';
+  // Fallback do servidor legado monotenant
+  const envToken = (process.env.WHATSAPP_API_TOKEN || '').trim();
+  const envPhoneId = (process.env.WHATSAPP_PHONE_NUMBER_ID || '').trim();
+  const envWabaId = (process.env.WHATSAPP_WABA_ID || '').trim();
 
   if (envToken && envPhoneId) {
+    // Se a unidade possui phoneNumberId definido e difere do global, RECUSA o fallback global
+    if (integration?.phoneNumberId && integration.phoneNumberId !== envPhoneId) {
+      return null; // Isolamento: impede que Business B use o token global do Business A!
+    }
     return {
       phoneNumberId: envPhoneId,
-      wabaId: envWabaId,
+      wabaId: integration?.wabaId || envWabaId,
       accessToken: envToken,
       source: 'server',
     };
@@ -244,6 +255,7 @@ export function isRetryableMetaStatus(statusCode?: number, errorCode?: number): 
 /**
  * Envia mensagem real via Meta WhatsApp Cloud API.
  * Deve ser chamada EXCLUSIVAMENTE FORA de transações/locks de banco.
+ * SUCESSO SEM WAMID NÃO É SUCESSO: exige externalId válido da Meta.
  */
 export async function sendMetaGraphMessage(opts: SendMessageOptions): Promise<SendMessageResult> {
   assertOutsideDBTransaction();
@@ -304,7 +316,20 @@ export async function sendMetaGraphMessage(opts: SendMessageOptions): Promise<Se
       };
     }
 
-    const messageId = data?.messages?.[0]?.id;
+    const messageId = typeof data?.messages?.[0]?.id === 'string' && data.messages[0].id.trim().length > 0
+      ? data.messages[0].id.trim()
+      : undefined;
+
+    // Regra P6.1: Sucesso sem wamid NÃO é aceito como enviado
+    if (!messageId) {
+      return {
+        ok: false,
+        statusCode: res.status,
+        error: 'Meta API respondeu status de sucesso mas não retornou o identificador da mensagem (wamid ausente).',
+        retryable: false,
+      };
+    }
+
     return {
       ok: true,
       statusCode: res.status,
@@ -320,12 +345,6 @@ export async function sendMetaGraphMessage(opts: SendMessageOptions): Promise<Se
 }
 
 // ── Outbox & Retry Engine de Mensagens WhatsApp ──
-
-function assertOutsideDBTransaction() {
-  if (process.env.INSTALINK_IN_TRANSACTION === 'true') {
-    throw new Error('VIOLAÇÃO DE ARQUITETURA: Chamada externa de rede executada dentro de uma transação ou lock do banco de dados.');
-  }
-}
 
 /** Verifica se a mensagem está atualmente com lease de envio ativo. */
 export function isWhatsappMessageClaimLive(msg: Message, nowISO = new Date().toISOString()): boolean {
@@ -416,11 +435,10 @@ export async function deliverWhatsappMessage(
   const msgBody = claimed.body;
   const msgMeta = claimed.meta;
 
-  await updateDB((d) => {
-    business = d.businesses.find((b) => b.id === businessId);
-    const conv = d.conversations.find((c) => c.id === claimed.conversationId);
-    destinationPhone = conv?.phone || claimed.channelUserId || '';
-  });
+  const db = await readDB();
+  business = db.businesses.find((b) => b.id === businessId);
+  const conv = db.conversations.find((c) => c.id === claimed.conversationId);
+  destinationPhone = conv?.phone || claimed.channelUserId || '';
 
   if (!business) {
     await updateDB((d) => {
@@ -432,6 +450,8 @@ export async function deliverWhatsappMessage(
 
   const credentials = getWhatsappCredentials(business);
   if (!credentials) {
+    // Se o WhatsApp não estiver configurado para esta unidade, libera o lease
+    // sem abortar destrutivamente para respeitar filas pendentes de rascunho/P3
     await updateDB((d) => {
       const m = d.messages.find((x) => x.id === messageId && x.claimToken === holder);
       if (m) {
@@ -497,7 +517,7 @@ export async function deliverWhatsappMessage(
       if (sendRes.retryable && attemptNum < WHATSAPP_MAX_ATTEMPTS) {
         target.status = 'pending';
         const delay = WHATSAPP_RETRY_INTERVALS_MS[attemptNum - 1] || 120_000;
-        target.nextRetryAt = new Date(Date.now() + delay).toISOString();
+        target.nextRetryAt = new Date(new Date(nowISO).getTime() + delay).toISOString();
         nextRetryAtStr = target.nextRetryAt;
         finalStatus = 'pending';
       } else {
@@ -514,13 +534,18 @@ export async function deliverWhatsappMessage(
   });
 
   return {
-    ok: sendRes.ok,
+    ok: sendRes.ok && !!sendRes.externalId,
     status: finalStatus,
     externalId: sendRes.externalId,
     error: sendRes.error,
     nextRetryAt: nextRetryAtStr,
     attempts: attemptsCount,
   };
+}
+
+export interface BatchDeliveryResult {
+  processed: number;
+  sent: number;
 }
 
 /**
@@ -530,7 +555,7 @@ export async function deliverWhatsappMessage(
 export async function deliverPendingWhatsappMessages(
   businessId: string,
   options?: { fetchFn?: typeof fetch; limit?: number; nowISO?: string },
-): Promise<number> {
+): Promise<BatchDeliveryResult> {
   assertOutsideDBTransaction();
   const limit = options?.limit || 10;
   const nowISO = options?.nowISO || new Date().toISOString();
@@ -542,22 +567,223 @@ export async function deliverPendingWhatsappMessages(
     .map((m) => m.id);
 
   let sentCount = 0;
+  let processedCount = 0;
+
   for (const messageId of candidateIds) {
+    processedCount++;
     const res = await deliverWhatsappMessage(businessId, messageId, options);
     if (res.ok) sentCount++;
   }
 
-  return sentCount;
+  return { processed: processedCount, sent: sentCount };
+}
+
+// ── Outbox & Claim/Lease de Destinatários de Campanhas (CampaignRecipient) ──
+
+/** Verifica se o recipient de campanha está com lease ativo. */
+export function isCampaignRecipientClaimLive(rec: CampaignRecipient, nowISO = new Date().toISOString()): boolean {
+  if (!rec.claimToken || !rec.claimExpiresAt) return false;
+  const expires = new Date(rec.claimExpiresAt).getTime();
+  const now = new Date(nowISO).getTime();
+  return Number.isFinite(expires) && expires > now;
+}
+
+/** Recipient de campanha elegível para envio ou retry? */
+export function isCampaignRecipientDue(rec: CampaignRecipient, nowISO = new Date().toISOString()): boolean {
+  if (rec.status !== 'pending') return false;
+  if (!rec.nextRetryAt) return true;
+  const due = new Date(rec.nextRetryAt).getTime();
+  return Number.isFinite(due) && due <= new Date(nowISO).getTime();
+}
+
+/** Claim atômico de recipients de campanha pendentes via CAS. */
+export function claimPendingCampaignRecipients(
+  db: DB,
+  holder: string,
+  limit = 10,
+  nowISO = new Date().toISOString(),
+  targetRecipientIds?: string[],
+): CampaignRecipient[] {
+  const leaseUntil = new Date(new Date(nowISO).getTime() + WHATSAPP_CLAIM_LEASE_MS).toISOString();
+  const candidates = (db.campaignRecipients || []).filter((r) => {
+    if (targetRecipientIds && !targetRecipientIds.includes(r.id)) return false;
+    return isCampaignRecipientDue(r, nowISO) && !isCampaignRecipientClaimLive(r, nowISO);
+  });
+
+  const claimed: CampaignRecipient[] = [];
+  for (const r of candidates.slice(0, limit)) {
+    r.claimToken = holder;
+    r.claimExpiresAt = leaseUntil;
+    claimed.push(r);
+  }
+  return claimed;
+}
+
+export type DeliverCampaignRecipientResult = {
+  ok: boolean;
+  status: 'sent' | 'pending' | 'failed' | 'claimed_by_other';
+  externalId?: string;
+  error?: string;
+  attempts?: number;
+  nextRetryAt?: string;
+};
+
+/** Sincroniza contadores e status de campanha com honestidade estrita. */
+export function syncCampaignStatusAndCounts(d: DB, c: Campaign, nowISO = new Date().toISOString()): void {
+  const allRecs = (d.campaignRecipients || []).filter((r) => r.campaignId === c.id);
+  const pendingRecs = allRecs.filter((r) => r.status === 'pending');
+  const sentRecs = allRecs.filter((r) => r.status === 'sent');
+  const failedRecs = allRecs.filter((r) => r.status === 'failed');
+
+  c.counts.sent = sentRecs.length;
+  c.counts.failed = failedRecs.length;
+  c.counts.eligible = allRecs.length;
+
+  if (pendingRecs.length > 0) {
+    c.status = 'sending';
+  } else {
+    if (sentRecs.length > 0 && failedRecs.length === 0) {
+      c.status = 'sent';
+    } else if (sentRecs.length > 0 && failedRecs.length > 0) {
+      c.status = 'partial';
+    } else if (sentRecs.length === 0 && failedRecs.length > 0) {
+      c.status = 'failed';
+    }
+    // sentAt definitivo é gravado SOMENTE quando nenhum recipient estiver pending!
+    if (!c.sentAt) {
+      c.sentAt = nowISO;
+    }
+  }
+  c.updatedAt = nowISO;
+}
+
+/**
+ * Entrega um recipient de campanha específico com claim atômico via CAS.
+ * Executa HTTP fora do lock e atualiza o recipient e a campanha pai.
+ */
+export async function deliverCampaignRecipient(
+  recipientId: string,
+  options?: { fetchFn?: typeof fetch; nowISO?: string },
+): Promise<DeliverCampaignRecipientResult> {
+  assertOutsideDBTransaction();
+  const nowISO = options?.nowISO || new Date().toISOString();
+  const holder = `camp_${randomUUID()}`;
+
+  // 1. Claim atômico exclusivo via CAS
+  const claimRes = await updateDBWithCas(
+    (d) => claimPendingCampaignRecipients(d, holder, 1, nowISO, [recipientId]),
+    { guard: (d) => (d.campaignRecipients || []).some((r) => r.id === recipientId && r.status === 'pending') },
+  );
+
+  const claimed = claimRes.result?.[0];
+  if (!claimed) {
+    return {
+      ok: false,
+      status: 'claimed_by_other',
+      error: 'Destinatário de campanha já reivindicado ou indisponível.',
+    };
+  }
+
+  // 2. Busca dados de negócio e campanha
+  const db = await readDB();
+  const business = db.businesses.find((b) => b.id === claimed.businessId);
+  const campaign = db.campaigns.find((c) => c.id === claimed.campaignId);
+
+  if (!business || !campaign) {
+    await updateDB((d) => {
+      const target = d.campaignRecipients.find((r) => r.id === recipientId && r.claimToken === holder);
+      if (target) {
+        target.status = 'failed';
+        target.error = 'Unidade ou campanha não encontrada.';
+        target.claimToken = undefined;
+        target.claimExpiresAt = undefined;
+      }
+    });
+    return { ok: false, status: 'failed', error: 'Unidade ou campanha não encontrada.' };
+  }
+
+  const creds = getWhatsappCredentials(business);
+  if (!creds) {
+    await updateDB((d) => {
+      const target = d.campaignRecipients.find((r) => r.id === recipientId && r.claimToken === holder);
+      if (target) {
+        target.status = 'failed';
+        target.error = 'WhatsApp não configurado para esta unidade.';
+        target.claimToken = undefined;
+        target.claimExpiresAt = undefined;
+      }
+    });
+    return { ok: false, status: 'failed', error: 'WhatsApp não configurado para esta unidade.' };
+  }
+
+  const templateConfig = campaign.templateName ? {
+    name: campaign.templateName,
+    language: campaign.templateLanguage || 'pt_BR',
+  } : undefined;
+
+  // 3. Chamada HTTP fora de qualquer lock
+  const sendRes = await sendMetaGraphMessage({
+    phoneNumberId: creds.phoneNumberId,
+    accessToken: creds.accessToken,
+    to: claimed.phone,
+    body: campaign.message,
+    template: templateConfig,
+    fetchFn: options?.fetchFn,
+  });
+
+  // 4. Gravação atômica curta pós-envio
+  let finalStatus: 'sent' | 'pending' | 'failed' = 'failed';
+  let nextRetryAtStr: string | undefined;
+  let attemptsCount = (claimed.attempts || 0) + 1;
+
+  await updateDB((d) => {
+    const target = d.campaignRecipients.find((r) => r.id === recipientId && r.claimToken === holder);
+    if (!target) return;
+
+    target.claimToken = undefined;
+    target.claimExpiresAt = undefined;
+
+    if (sendRes.ok && sendRes.externalId) {
+      target.status = 'sent';
+      target.externalId = sendRes.externalId;
+      target.error = '';
+      target.nextRetryAt = undefined;
+      finalStatus = 'sent';
+    } else {
+      const attempts = (target.attempts || 0) + 1;
+      target.attempts = attempts;
+      attemptsCount = attempts;
+      target.error = sendRes.error || 'Falha no envio';
+      if (sendRes.retryable && attempts < WHATSAPP_MAX_ATTEMPTS) {
+        const delay = WHATSAPP_RETRY_INTERVALS_MS[attempts - 1] || 120_000;
+        target.nextRetryAt = new Date(new Date(nowISO).getTime() + delay).toISOString();
+        nextRetryAtStr = target.nextRetryAt;
+        finalStatus = 'pending';
+      } else {
+        target.status = 'failed';
+        target.nextRetryAt = undefined;
+        finalStatus = 'failed';
+      }
+    }
+
+    const c = d.campaigns.find((x) => x.id === claimed.campaignId);
+    if (c) {
+      syncCampaignStatusAndCounts(d, c, nowISO);
+    }
+  });
+
+  return {
+    ok: sendRes.ok && !!sendRes.externalId,
+    status: finalStatus,
+    externalId: sendRes.externalId,
+    error: sendRes.error,
+    attempts: attemptsCount,
+    nextRetryAt: nextRetryAtStr,
+  };
 }
 
 // ── Consumidor Geral de Retentativas de WhatsApp (Mensagens + Campanhas) ──
 
-/**
- * Resolve a unidade para uma change específica do webhook.
- * PHONE_NUMBER_ID É A AUTORIDADE:
- * - Se phoneNumberId foi informado, busca EXATAMENTE por phoneNumberId. Se não achar, NUNCA cai para WABA.
- * - WABA é fallback SOMENTE quando phoneNumberId estiver ausente e houver inequivocamente 1 unidade.
- */
 export function resolveTenantForChange(
   db: DB,
   phoneNumberId?: string,
@@ -585,6 +811,7 @@ export interface WhatsappRetrySummary {
   businessesChecked: number;
   messagesProcessed: number;
   messagesSent: number;
+  campaignRecipientsProcessed: number;
   campaignRecipientsSent: number;
   ranAt: string;
 }
@@ -592,6 +819,7 @@ export interface WhatsappRetrySummary {
 /**
  * Consome periodicamente todas as mensagens e campanhas pendentes vencidas de todos os tenants.
  * Disparado pelo cron autenticado (/api/cron/whatsapp).
+ * messagesProcessed e campaignRecipientsProcessed refletem tentativas reais executadas.
  */
 export async function processPendingWhatsappRetries(options?: {
   nowISO?: string;
@@ -601,7 +829,7 @@ export async function processPendingWhatsappRetries(options?: {
   const nowISO = options?.nowISO || new Date().toISOString();
   const db = await readDB();
 
-  // 1. Identifica unidades com mensagens devidas
+  // 1. Mensagens de conversas pendentes
   const dueBusinesses = new Set<string>();
   for (const m of db.messages) {
     if (m.direction === 'out' && isWhatsappMessageDue(m, nowISO) && !isWhatsappMessageClaimLive(m, nowISO)) {
@@ -609,89 +837,37 @@ export async function processPendingWhatsappRetries(options?: {
     }
   }
 
-  let totalSent = 0;
-  let totalProcessed = 0;
+  let totalMsgSent = 0;
+  let totalMsgProcessed = 0;
 
   for (const bizId of dueBusinesses) {
-    const sent = await deliverPendingWhatsappMessages(bizId, { ...options, nowISO });
-    totalSent += sent;
-    totalProcessed += sent;
+    const batchRes = await deliverPendingWhatsappMessages(bizId, { ...options, nowISO });
+    totalMsgProcessed += batchRes.processed;
+    totalMsgSent += batchRes.sent;
   }
 
-  // 2. Destinatários de campanhas pendentes vencidos (Item 11)
-  let campaignSent = 0;
-  const dueRecipients = (db.campaignRecipients || []).filter((r) => {
-    if (r.status !== 'pending') return false;
-    if (!r.nextRetryAt) return true;
-    return new Date(r.nextRetryAt).getTime() <= new Date(nowISO).getTime();
-  });
+  // 2. Destinatários de campanhas pendentes devidos com claim atômico
+  let totalCampaignProcessed = 0;
+  let totalCampaignSent = 0;
+
+  const dueRecipients = (db.campaignRecipients || [])
+    .filter((r) => isCampaignRecipientDue(r, nowISO) && !isCampaignRecipientClaimLive(r, nowISO))
+    .slice(0, CAMPAIGN_CRON_BATCH_SIZE);
 
   for (const rec of dueRecipients) {
-    const biz = db.businesses.find((b) => b.id === rec.businessId);
-    const creds = biz ? getWhatsappCredentials(biz) : null;
-    const campaign = db.campaigns.find((c) => c.id === rec.campaignId);
-    if (!creds || !campaign) continue;
-
-    const templateConfig = campaign.templateName ? {
-      name: campaign.templateName,
-      language: campaign.templateLanguage || 'pt_BR',
-    } : undefined;
-
-    const res = await sendMetaGraphMessage({
-      phoneNumberId: creds.phoneNumberId,
-      accessToken: creds.accessToken,
-      to: rec.phone,
-      body: campaign.message,
-      template: templateConfig,
-      fetchFn: options?.fetchFn,
-    });
-
-    await updateDB((d) => {
-      const target = d.campaignRecipients.find((r) => r.id === rec.id);
-      if (!target) return;
-      if (res.ok && res.externalId) {
-        target.status = 'sent';
-        target.externalId = res.externalId;
-        target.error = '';
-        target.nextRetryAt = undefined;
-        campaignSent++;
-      } else {
-        const attempts = (target.attempts || 0) + 1;
-        target.attempts = attempts;
-        target.error = res.error || 'Falha no envio';
-        if (res.retryable && attempts < WHATSAPP_MAX_ATTEMPTS) {
-          target.status = 'pending';
-          const delay = WHATSAPP_RETRY_INTERVALS_MS[attempts - 1] || 120_000;
-          target.nextRetryAt = new Date(Date.now() + delay).toISOString();
-        } else {
-          target.status = 'failed';
-          target.nextRetryAt = undefined;
-        }
-      }
-
-      // Atualiza o status da campanha se todos os recipients foram resolvidos
-      const c = d.campaigns.find((x) => x.id === rec.campaignId);
-      if (c) {
-        const allRecs = d.campaignRecipients.filter((r) => r.campaignId === c.id);
-        const hasPending = allRecs.some((r) => r.status === 'pending');
-        const sentRecs = allRecs.filter((r) => r.status === 'sent').length;
-        const failedRecs = allRecs.filter((r) => r.status === 'failed').length;
-        c.counts.sent = sentRecs;
-        c.counts.failed = failedRecs;
-        if (!hasPending) {
-          if (sentRecs > 0 && failedRecs === 0) c.status = 'sent';
-          else if (sentRecs > 0 && failedRecs > 0) c.status = 'partial';
-          else if (sentRecs === 0 && failedRecs > 0) c.status = 'failed';
-        }
-      }
-    });
+    totalCampaignProcessed++;
+    const res = await deliverCampaignRecipient(rec.id, { ...options, nowISO });
+    if (res.ok) {
+      totalCampaignSent++;
+    }
   }
 
   return {
     businessesChecked: dueBusinesses.size,
-    messagesProcessed: totalProcessed,
-    messagesSent: totalSent,
-    campaignRecipientsSent: campaignSent,
+    messagesProcessed: totalMsgProcessed,
+    messagesSent: totalMsgSent,
+    campaignRecipientsProcessed: totalCampaignProcessed,
+    campaignRecipientsSent: totalCampaignSent,
     ranAt: nowISO,
   };
 }
@@ -741,7 +917,7 @@ const whatsappChannelConnector: ChannelConnector = {
       fetchFn: ctx.fetchFn,
     });
 
-    if (res.ok) {
+    if (res.ok && res.externalId) {
       return {
         ok: true,
         code: 'sent',

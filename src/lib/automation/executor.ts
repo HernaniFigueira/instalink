@@ -31,7 +31,7 @@ import { randomUUID } from 'node:crypto';
 import type {
   Automation, AutomationEdge, AutomationNode, AutomationRun, AutomationRunStep, Business, DB,
 } from '../types';
-import { updateDB, updateDBWithCas } from '../db';
+import { readDB, updateDB, updateDBWithCas } from '../db';
 import { hasCapability, limitsFor, type CapabilityLimits } from './capabilities';
 import { evaluateCondition } from './conditions';
 import { executeAction, prepareActionParams, type ActionResult } from './actions';
@@ -561,7 +561,7 @@ export async function drainAutomations(options: DrainOptions = {}): Promise<Auto
         // Falha de rede/worker não desfaz o passo já committed: a outbox é durável.
         await deliverWebhookIds(step.deliveryIds).catch(() => { /* cron retoma a entrega */ });
         if (step.pendingMessages.length > 0) {
-          const dbNow = await updateDB((d) => d); // snapshot fresco
+          const dbNow = await readDB();
           for (const pm of step.pendingMessages) {
             const biz = dbNow.businesses.find((b) => b.id === pm.businessId);
             if (biz && getWhatsappCredentials(biz)) {

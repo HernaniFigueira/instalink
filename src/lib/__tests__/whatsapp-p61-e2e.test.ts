@@ -16,12 +16,20 @@ import {
   resolveTenantForChange,
   deliverWhatsappMessage,
   deliverPendingWhatsappMessages,
+  deliverCampaignRecipient,
   processPendingWhatsappRetries,
+  sendMetaGraphMessage,
+  getWhatsappCredentials,
+  CAMPAIGN_IMMEDIATE_BATCH_LIMIT,
 } from '../whatsapp-cloud-api';
-import { registerChannelConnector, channelConnectorAvailable } from '../integrations/connectors';
+import { registerChannelConnector, channelConnectorAvailable, channelConnectorFor } from '../integrations/connectors';
 import { maskTechnicalId } from '../whatsapp';
 import { createBookingTx } from '../booking-create';
 import { executeAction } from '../automation/actions';
+import { emitAutomationEvent } from '../automation/events';
+import { drainAutomations } from '../automation/executor';
+import { buildAutomation } from './helpers/automation-fixtures';
+import { assertOutsideDBTransaction } from '../db-transaction';
 import type { Business, DB, Service, Professional } from '../types';
 
 import { GET as webhookGET, POST as webhookPOST } from '@/app/api/whatsapp/webhook/route';
@@ -1101,12 +1109,14 @@ describe('P6.1 — WhatsApp Cloud API E2E', () => {
           direction: 'out',
           body: 'Teste de concorrência outbox',
           status: 'pending',
+          externalId: '',
+          by: 'automation',
           at: '2026-09-19T10:00:00Z',
         });
       });
 
       const count = await deliverPendingWhatsappMessages(BIZ_A);
-      expect(count).toBe(1);
+      expect(count.sent).toBe(1);
 
       const db = await readDB();
       const sentMsg = db.messages.find((m) => m.id === 'msg-double-claim-1');
@@ -1132,6 +1142,8 @@ describe('P6.1 — WhatsApp Cloud API E2E', () => {
           direction: 'out',
           body: 'Teste de retry status honesto',
           status: 'pending',
+          externalId: '',
+          by: 'automation',
           at: '2026-09-19T10:00:00Z',
         });
       });
@@ -1218,6 +1230,634 @@ describe('P6.1 — WhatsApp Cloud API E2E', () => {
       expect(sendRes.status).toBe(400);
       const errBody = await jsonBody(sendRes);
       expect(errBody.code).toBe('template_required');
+    });
+
+    it('rejeita chamadas externas Meta dentro de updateDB usando a guarda canônica de db-transaction', async () => {
+      // 1. Chamada direta à guarda canônica dentro de mutação do banco falha sincronicamente
+      await expect(
+        updateDB(() => {
+          assertOutsideDBTransaction();
+        }),
+      ).rejects.toThrow(/I\/O externo não é permitido dentro de uma mutação do banco/);
+
+      // 2. sendMetaGraphMessage invoca assertOutsideDBTransaction e falha na chamada
+      let caughtSendError: any;
+      await updateDB(() => {
+        sendMetaGraphMessage({
+          phoneNumberId: PHONE_ID_A,
+          accessToken: 'dummy-token',
+          to: '5511999999999',
+          body: 'Tentativa dentro de transação',
+        }).catch((err) => {
+          caughtSendError = err;
+        });
+      });
+      expect(caughtSendError?.message).toMatch(/I\/O externo não é permitido dentro de uma mutação do banco/);
+
+      // 3. deliverWhatsappMessage invoca assertOutsideDBTransaction e falha na chamada
+      let caughtDeliverError: any;
+      await updateDB(() => {
+        deliverWhatsappMessage(BIZ_A, 'dummy-msg').catch((err) => {
+          caughtDeliverError = err;
+        });
+      });
+      expect(caughtDeliverError?.message).toMatch(/I\/O externo não é permitido dentro de uma mutação do banco/);
+    });
+
+    it('sendMetaGraphMessage e connector rejeitam resposta 200 da Meta se messages[0].id (wamid) estiver ausente', async () => {
+      // Mock fetch responding 200 OK but with empty messages array (no wamid)
+      const emptyIdFetch = vi.fn(async () => ({
+        ok: true,
+        status: 200,
+        json: async () => ({
+          messaging_product: 'whatsapp',
+          contacts: [{ input: '5511999990000', wa_id: '5511999990000' }],
+          messages: [], // Missing wamid!
+        }),
+      })) as any;
+
+      const res = await sendMetaGraphMessage({
+        phoneNumberId: PHONE_ID_A,
+        accessToken: 'EAATestValidTokenClinicA',
+        to: '5511999990000',
+        body: 'Teste sem wamid',
+        fetchFn: emptyIdFetch,
+      });
+
+      expect(res.ok).toBe(false);
+      expect(res.externalId).toBeUndefined();
+      expect(res.error).toMatch(/wamid ausente/);
+      expect(res.retryable).toBe(false);
+
+      // Verify channel connector also rejects with provider_error and does NOT return code 'sent'
+      const db = await readDB();
+      const clinic = db.businesses.find((b) => b.id === BIZ_A)!;
+      const connector = channelConnectorFor('whatsapp')!;
+      const sendResult = await connector.send(
+        { businessId: BIZ_A, business: clinic, nowISO: new Date().toISOString(), fetchFn: emptyIdFetch },
+        { businessId: BIZ_A, integrationId: 'int-wa', provider: 'whatsapp', to: '5511999990000', body: 'Teste' },
+      );
+      expect(sendResult.ok).toBe(false);
+      expect(sendResult.code).not.toBe('sent');
+      expect(sendResult.code).toBe('provider_error');
+    });
+
+    it('getWhatsappCredentials nunca acopla token global a uma unidade com phoneNumberId diferente', async () => {
+      const origToken = process.env.WHATSAPP_API_TOKEN;
+      const origPhone = process.env.WHATSAPP_PHONE_NUMBER_ID;
+      process.env.WHATSAPP_API_TOKEN = 'global_server_token_123';
+      process.env.WHATSAPP_PHONE_NUMBER_ID = PHONE_ID_A; // Global token belongs to clinic A
+
+      try {
+        const db = await readDB();
+        // Clínica C: tem phoneNumberId próprio mas não tem token criptografado
+        const clinicC: Business = {
+          ...db.businesses.find((b) => b.id === BIZ_B)!,
+          id: 'biz-clinic-c',
+          whatsappIntegration: {
+            status: 'not_connected',
+            phoneNumberId: '999888777666', // Different phone number ID!
+            wabaId: 'waba-c',
+            displayPhone: '',
+            encryptedAccessToken: '',
+          } as any,
+        };
+
+        const creds = getWhatsappCredentials(clinicC);
+        // NUNCA pode acoplar o token global do Phone A à Clínica C!
+        expect(creds).toBeNull();
+      } finally {
+        process.env.WHATSAPP_API_TOKEN = origToken;
+        process.env.WHATSAPP_PHONE_NUMBER_ID = origPhone;
+      }
+    });
+
+    it('deliverCampaignRecipient faz claim atômico via CAS: duas chamadas concorrentes geram apenas 1 HTTP', async () => {
+      let httpCalls = 0;
+      const countingFetch = vi.fn(async () => {
+        httpCalls++;
+        return {
+          ok: true,
+          status: 200,
+          json: async () => ({
+            messaging_product: 'whatsapp',
+            messages: [{ id: 'wamid.campaign_recipient_concurrency' }],
+          }),
+        };
+      }) as any;
+
+      await updateDB((d) => {
+        d.campaigns.push({
+          id: 'camp-conc-1',
+          businessId: BIZ_A,
+          name: 'Campanha Concorrência',
+          segment: 'all_optin',
+          segmentRef: '',
+          channel: 'whatsapp',
+          createdBy: OWNER_A,
+          sentAt: '',
+          message: 'Mensagem de teste',
+          templateName: 'promo_conc',
+          status: 'sending',
+          counts: { eligible: 1, sent: 0, delivered: 0, failed: 0 },
+          createdAt: '2026-09-19T10:00:00Z',
+          updatedAt: '2026-09-19T10:00:00Z',
+        });
+        d.campaignRecipients.push({
+          id: 'rec-conc-1',
+          businessId: BIZ_A,
+          campaignId: 'camp-conc-1',
+          contactId: 'cnt-1',
+          name: 'Destinatário Concorrente',
+          phone: '5511988880001',
+          status: 'pending',
+          error: '',
+          at: '2026-09-19T10:00:00Z',
+        });
+      });
+
+      // Dispara 2 entregas simultâneas para o mesmo destinatário
+      const [res1, res2] = await Promise.all([
+        deliverCampaignRecipient('rec-conc-1', { fetchFn: countingFetch }),
+        deliverCampaignRecipient('rec-conc-1', { fetchFn: countingFetch }),
+      ]);
+
+      // Exatamente UMA chamada HTTP executada
+      expect(httpCalls).toBe(1);
+      const okCount = [res1, res2].filter((r) => r.ok).length;
+      const claimedCount = [res1, res2].filter((r) => r.status === 'claimed_by_other').length;
+      expect(okCount).toBe(1);
+      expect(claimedCount).toBe(1);
+
+      const db = await readDB();
+      const rec = db.campaignRecipients.find((r) => r.id === 'rec-conc-1')!;
+      expect(rec.status).toBe('sent');
+      expect(rec.externalId).toBe('wamid.campaign_recipient_concurrency');
+    });
+
+    it('campanha limita envio imediato no request a CAMPAIGN_IMMEDIATE_BATCH_LIMIT e cron continua a fila', async () => {
+      // Cria 7 contatos com marketingOptIn
+      await updateDB((d) => {
+        for (let i = 1; i <= 7; i++) {
+          d.contacts.push({
+            id: `cnt-batch-test-${i}`,
+            businessId: BIZ_A,
+            customerId: '',
+            name: `Cliente Lote ${i}`,
+            phone: `551193333000${i}`,
+            email: `cliente${i}@lote.com`,
+            source: 'whatsapp',
+            lastInteraction: '2026-09-18T10:00:00Z',
+            marketingOptIn: true,
+            createdAt: '2026-09-18T10:00:00Z',
+            updatedAt: '2026-09-18T10:00:00Z',
+          });
+        }
+      });
+
+      const tokenA = await createSession(OWNER_A);
+      const createRes = await campaignsPOST(jsonReq('/api/campaigns', {
+        method: 'POST',
+        token: tokenA,
+        body: {
+          businessId: BIZ_A,
+          name: 'Campanha Lote Grande',
+          segment: 'all_optin',
+          message: 'Mensagem de lote',
+        },
+      }));
+      const { campaign } = await jsonBody(createRes);
+
+      await campaignsPATCH(jsonReq('/api/campaigns', {
+        method: 'PATCH',
+        token: tokenA,
+        body: { businessId: BIZ_A, id: campaign.id, action: 'ready' },
+      }));
+
+      // Dispara envio: request deve enviar no máximo CAMPAIGN_IMMEDIATE_BATCH_LIMIT (=5)
+      const sendRes = await campaignsPATCH(jsonReq('/api/campaigns', {
+        method: 'PATCH',
+        token: tokenA,
+        body: {
+          businessId: BIZ_A,
+          id: campaign.id,
+          action: 'send',
+          templateName: 'template_lote',
+        },
+      }));
+      expect(sendRes.status).toBe(200);
+
+      let db = await readDB();
+      const recs = db.campaignRecipients.filter((r) => r.campaignId === campaign.id);
+      expect(recs.length).toBe(7);
+
+      const sentImmediately = recs.filter((r) => r.status === 'sent');
+      const pendingRemanentes = recs.filter((r) => r.status === 'pending');
+      expect(sentImmediately.length).toBe(CAMPAIGN_IMMEDIATE_BATCH_LIMIT);
+      expect(pendingRemanentes.length).toBe(7 - CAMPAIGN_IMMEDIATE_BATCH_LIMIT);
+
+      // Enquanto houver pending, a campanha segue como 'sending' e sentAt não está definitivo
+      let camp = db.campaigns.find((c) => c.id === campaign.id)!;
+      expect(camp.status).toBe('sending');
+      expect(camp.counts.sent).toBe(5);
+
+      // Executa o cron worker (/api/cron/whatsapp) para processar o restante da fila
+      process.env.CRON_SECRET = 'cron_secret_test_whatsapp_999';
+      const cronRes = await cronWhatsappGET(jsonReq('/api/cron/whatsapp', {
+        headers: { authorization: 'Bearer cron_secret_test_whatsapp_999' },
+      }));
+      expect(cronRes.status).toBe(200);
+
+      // Agora todos os 7 foram enviados e a campanha foi finalizada como 'sent'
+      db = await readDB();
+      const allRecs = db.campaignRecipients.filter((r) => r.campaignId === campaign.id);
+      expect(allRecs.every((r) => r.status === 'sent')).toBe(true);
+
+      camp = db.campaigns.find((c) => c.id === campaign.id)!;
+      expect(camp.status).toBe('sent');
+      expect(camp.counts.sent).toBe(7);
+      expect(camp.counts.failed).toBe(0);
+      expect(camp.sentAt).toBeDefined();
+    });
+
+    it('P4 real E2E: emitAutomationEvent -> drainAutomations() com stepAutomationRun -> entrega externa com wamid preservado', async () => {
+      let graphCalls = 0;
+      const p4Fetch = vi.fn(async () => {
+        graphCalls++;
+        return {
+          ok: true,
+          status: 200,
+          json: async () => ({
+            messaging_product: 'whatsapp',
+            messages: [{ id: 'wamid.p4_e2e_real_999' }],
+          }),
+        };
+      }) as any;
+
+      // 1. Cadastra automação construída e validada via buildAutomation
+      const auto = buildAutomation({
+        id: 'auto-p4-real-test',
+        businessId: BIZ_A,
+        name: 'Automação P4 WhatsApp Real',
+        event: 'lead.created',
+        steps: [
+          {
+            kind: 'action',
+            action: {
+              type: 'send_channel_message',
+              params: {
+                channel: 'whatsapp',
+                to: '5511999998888',
+                message: 'Olá, seu agendamento está confirmado!',
+                templateName: 'confirma_agendamento',
+              },
+            },
+          },
+        ],
+      });
+
+      await updateDB((d) => {
+        d.automations.push(auto);
+
+        // Habilita capacidades de automação na clínica
+        const b = d.businesses.find((x) => x.id === BIZ_A)!;
+        b.capabilityFlags = {
+          ...(b.capabilityFlags || {}),
+          'automation.basic': true,
+          'automation.advanced': true,
+        };
+
+        // Emite o evento na transação (enfileira a execução)
+        emitAutomationEvent(d, {
+          businessId: BIZ_A,
+          event: 'lead.created',
+          data: {
+            lead: { id: 'lead-p4-test', name: 'Paula', phone: '5511999998888' },
+          },
+          at: '2026-09-19T10:00:00Z',
+        });
+      });
+
+      // 2. Mock global de fetch temporário para o disparo pós-commit do drainAutomations
+      vi.stubGlobal('fetch', p4Fetch);
+
+      try {
+        // Executa o motor fora de transação
+        const summary = await drainAutomations({ businessId: BIZ_A, nowISO: '2026-09-19T10:00:00Z' });
+        expect(summary.claimed).toBeGreaterThanOrEqual(1);
+
+        // Verifica que exatamente UMA chamada HTTP aconteceu
+        expect(graphCalls).toBe(1);
+
+        const db = await readDB();
+        const p4Msg = db.messages.find((m) => m.body === 'Olá, seu agendamento está confirmado!')!;
+        expect(p4Msg).toBeDefined();
+        expect(p4Msg.status).toBe('sent');
+        expect(p4Msg.externalId).toBe('wamid.p4_e2e_real_999');
+        expect(p4Msg.meta?.originRunId).toBeDefined();
+      } finally {
+        // Restaura mock padrão do beforeEach
+        vi.stubGlobal('fetch', vi.fn(async (url: string | URL | Request) => {
+          const urlStr = String(url);
+          if (urlStr.includes('/messages')) {
+            return {
+              ok: true,
+              status: 200,
+              json: async () => ({
+                messaging_product: 'whatsapp',
+                contacts: [{ input: '5511999990000', wa_id: '5511999990000' }],
+                messages: [{ id: 'wamid.HBgLMTIzNDU2Nzg5MA==' }],
+              }),
+            } as any;
+          }
+          return {
+            ok: true,
+            status: 200,
+            json: async () => ({
+              id: PHONE_ID_A,
+              display_phone_number: '+55 11 99999-1111',
+              verified_name: 'Clínica Odonto A',
+              quality_rating: 'GREEN',
+            }),
+          } as any;
+        }));
+      }
+    });
+
+    it('webhook processa lote com entry/change para Business A e Business B no mesmo payload com isolamento total', async () => {
+      const mixedPayload = {
+        object: 'whatsapp_business_account',
+        entry: [
+          {
+            id: 'waba-123456',
+            changes: [
+              {
+                field: 'messages',
+                value: {
+                  messaging_product: 'whatsapp',
+                  metadata: { display_phone_number: '+5511999991111', phone_number_id: PHONE_ID_A },
+                  messages: [
+                    {
+                      from: '5511911111111',
+                      id: 'wamid.msg_for_clinic_a',
+                      timestamp: '1758240000',
+                      text: { body: 'Mensagem exclusiva para Clínica A' },
+                      type: 'text',
+                    },
+                  ],
+                },
+              },
+            ],
+          },
+          {
+            id: 'waba-789012',
+            changes: [
+              {
+                field: 'messages',
+                value: {
+                  messaging_product: 'whatsapp',
+                  metadata: { display_phone_number: '+5511999992222', phone_number_id: PHONE_ID_B },
+                  messages: [
+                    {
+                      from: '5511922222222',
+                      id: 'wamid.msg_for_clinic_b',
+                      timestamp: '1758240001',
+                      text: { body: 'Mensagem exclusiva para Clínica B' },
+                      type: 'text',
+                    },
+                  ],
+                },
+              },
+            ],
+          },
+        ],
+      };
+
+      const rawBody = JSON.stringify(mixedPayload);
+      const signature = signPayload(rawBody);
+
+      const res = await webhookPOST(new NextRequest('http://localhost:3000/api/whatsapp/webhook', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json', 'x-hub-signature-256': signature },
+        body: rawBody,
+      }));
+      expect(res.status).toBe(200);
+
+      const db = await readDB();
+      // Mensagem A gravada EXCLUSIVAMENTE na Clínica A
+      const msgA = db.messages.find((m) => m.externalId === 'wamid.msg_for_clinic_a');
+      expect(msgA).toBeDefined();
+      expect(msgA?.businessId).toBe(BIZ_A);
+
+      // Mensagem B gravada EXCLUSIVAMENTE na Clínica B
+      const msgB = db.messages.find((m) => m.externalId === 'wamid.msg_for_clinic_b');
+      expect(msgB).toBeDefined();
+      expect(msgB?.businessId).toBe(BIZ_B);
+
+      // Isolamento total de contatos
+      const contactA = db.contacts.find((c) => c.phone.includes('11911111111'));
+      expect(contactA?.businessId).toBe(BIZ_A);
+      const contactB = db.contacts.find((c) => c.phone.includes('11922222222'));
+      expect(contactB?.businessId).toBe(BIZ_B);
+    });
+
+    it('webhook com phoneNumberId desconhecido e WABA válido de A não escreve nada em A', async () => {
+      const spoofPayload = {
+        object: 'whatsapp_business_account',
+        entry: [
+          {
+            id: 'waba-123456', // WABA válido de A
+            changes: [
+              {
+                field: 'messages',
+                value: {
+                  messaging_product: 'whatsapp',
+                  metadata: { display_phone_number: '+5511000000000', phone_number_id: 'unknown_unmatched_phone_id' },
+                  messages: [
+                    {
+                      from: '5511999997777',
+                      id: 'wamid.spoof_attack_attempt',
+                      timestamp: '1758240000',
+                      text: { body: 'Tentativa de spoofing via WABA' },
+                      type: 'text',
+                    },
+                  ],
+                },
+              },
+            ],
+          },
+        ],
+      };
+
+      const rawBody = JSON.stringify(spoofPayload);
+      const signature = signPayload(rawBody);
+
+      const res = await webhookPOST(new NextRequest('http://localhost:3000/api/whatsapp/webhook', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json', 'x-hub-signature-256': signature },
+        body: rawBody,
+      }));
+      expect(res.status).toBe(200);
+
+      const db = await readDB();
+      // Não pode gravar em nenhuma unidade
+      expect(db.messages.some((m) => m.externalId === 'wamid.spoof_attack_attempt')).toBe(false);
+      expect(db.contacts.some((c) => c.phone.includes('11999997777'))).toBe(false);
+    });
+
+    it('ciclo completo de retry de mensagem: 500 agenda 30s, cron antes do prazo não envia, cron depois envia', async () => {
+      const fixedBaseTime = new Date('2026-09-19T10:00:00Z').getTime();
+
+      // Tentativa 1: falha transitiva 500
+      let callCount = 0;
+      const lifecycleFetch = vi.fn(async () => {
+        callCount++;
+        if (callCount === 1) {
+          return {
+            ok: false,
+            status: 500,
+            json: async () => ({ error: { message: 'Meta 500 transient', code: 2 } }),
+          };
+        }
+        return {
+          ok: true,
+          status: 200,
+          json: async () => ({
+            messaging_product: 'whatsapp',
+            messages: [{ id: 'wamid.lifecycle_success_attempt2' }],
+          }),
+        };
+      }) as any;
+
+      await updateDB((d) => {
+        d.messages.push({
+          id: 'msg-lifecycle-1',
+          businessId: BIZ_A,
+          conversationId: 'conv-test-1',
+          channel: 'whatsapp',
+          channelUserId: '5511988887777',
+          direction: 'out',
+          body: 'Teste ciclo completo',
+          status: 'pending',
+          externalId: '',
+          by: 'automation',
+          at: new Date(fixedBaseTime).toISOString(),
+        });
+      });
+
+      // 1. Primeira tentativa falha com 500
+      const res1 = await deliverWhatsappMessage(BIZ_A, 'msg-lifecycle-1', {
+        fetchFn: lifecycleFetch,
+        nowISO: new Date(fixedBaseTime).toISOString(),
+      });
+      expect(res1.ok).toBe(false);
+      expect(res1.status).toBe('pending');
+      expect(res1.attempts).toBe(1);
+      expect(res1.nextRetryAt).toBeDefined();
+
+      let db = await readDB();
+      let msg = db.messages.find((m) => m.id === 'msg-lifecycle-1')!;
+      expect(msg.status).toBe('pending');
+      expect(msg.attempts).toBe(1);
+
+      // 2. Cron executado antes do prazo (10 segundos após o erro; delay era de 30s)
+      const earlyISO = new Date(fixedBaseTime + 10_000).toISOString();
+      const earlyCron = await processPendingWhatsappRetries({
+        nowISO: earlyISO,
+        fetchFn: lifecycleFetch,
+      });
+      // 0 mensagens enviadas
+      expect(earlyCron.messagesSent).toBe(0);
+      expect(callCount).toBe(1); // Nenhuma nova chamada externa
+
+      // 3. Cron executado depois do prazo (35 segundos após o erro)
+      const dueISO = new Date(fixedBaseTime + 35_000).toISOString();
+      const dueCron = await processPendingWhatsappRetries({
+        nowISO: dueISO,
+        fetchFn: lifecycleFetch,
+      });
+      expect(dueCron.messagesSent).toBe(1);
+      expect(callCount).toBe(2); // Segunda tentativa realizada
+
+      // Status final no banco
+      db = await readDB();
+      msg = db.messages.find((m) => m.id === 'msg-lifecycle-1')!;
+      expect(msg.status).toBe('sent');
+      expect(msg.externalId).toBe('wamid.lifecycle_success_attempt2');
+    });
+
+    it('dois crons concorrentes disputando a mesma mensagem executam apenas 1 chamada HTTP', async () => {
+      let httpCalls = 0;
+      const countFetch = vi.fn(async () => {
+        httpCalls++;
+        return {
+          ok: true,
+          status: 200,
+          json: async () => ({
+            messaging_product: 'whatsapp',
+            messages: [{ id: 'wamid.concurrent_cron_msg' }],
+          }),
+        };
+      }) as any;
+
+      await updateDB((d) => {
+        d.messages.push({
+          id: 'msg-concurrent-cron-1',
+          businessId: BIZ_A,
+          conversationId: 'conv-test-1',
+          channel: 'whatsapp',
+          channelUserId: '5511988887777',
+          direction: 'out',
+          body: 'Concorrência cron',
+          status: 'pending',
+          externalId: '',
+          by: 'automation',
+          at: '2026-09-19T10:00:00Z',
+        });
+      });
+
+      // Dispara 2 crons concorrentes
+      const [cron1, cron2] = await Promise.all([
+        processPendingWhatsappRetries({ fetchFn: countFetch }),
+        processPendingWhatsappRetries({ fetchFn: countFetch }),
+      ]);
+
+      expect(httpCalls).toBe(1);
+      expect(cron1.messagesSent + cron2.messagesSent).toBe(1);
+
+      const db = await readDB();
+      const msg = db.messages.find((m) => m.id === 'msg-concurrent-cron-1')!;
+      expect(msg.status).toBe('sent');
+      expect(msg.externalId).toBe('wamid.concurrent_cron_msg');
+    });
+
+    it('métrica messagesProcessed no resumo do cron conta tentativas reais e não apenas sucessos', async () => {
+      const failFetch = vi.fn(async () => ({
+        ok: false,
+        status: 500,
+        json: async () => ({ error: { message: '500 error', code: 2 } }),
+      })) as any;
+
+      await updateDB((d) => {
+        d.messages.push({
+          id: 'msg-processed-metric-1',
+          businessId: BIZ_A,
+          conversationId: 'conv-test-1',
+          channel: 'whatsapp',
+          channelUserId: '5511988887777',
+          direction: 'out',
+          body: 'Métrica teste',
+          status: 'pending',
+          externalId: '',
+          by: 'automation',
+          at: '2026-09-19T10:00:00Z',
+        });
+      });
+
+      const summary = await processPendingWhatsappRetries({ fetchFn: failFetch });
+      // Tentativa real executada: processed deve ser 1, sent deve ser 0
+      expect(summary.messagesProcessed).toBe(1);
+      expect(summary.messagesSent).toBe(0);
     });
   });
 });

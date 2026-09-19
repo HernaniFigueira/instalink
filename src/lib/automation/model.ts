@@ -322,6 +322,7 @@ export const AUTOMATION_ACTION_DEFS: AutomationActionDef[] = [
     requires: 'automation.advanced',
     fields: [
       { key: 'message', label: 'Mensagem', type: 'textarea', required: true, template: true, max: 2000 },
+      { key: 'to', label: 'Destinatário (opcional)', type: 'text', template: true, max: 30, hint: 'Telefone explícito ou template {{lead.phone}}' },
       { key: 'templateName', label: 'Template (opcional)', type: 'text', hint: 'Nome do template para mensagens ativas fora da janela de 24h.' },
     ],
   },

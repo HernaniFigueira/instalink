@@ -1,11 +1,16 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { randomUUID } from 'node:crypto';
-import { updateDB } from '@/lib/db';
+import { readDB, updateDB } from '@/lib/db';
 import { requireBusiness } from '@/lib/access';
 import { pushAudit } from '@/lib/audit';
 import { audienceCount, audienceFor, hasMarketingConsent } from '@/lib/campaigns';
 import { integrationStatus, serverCredentialsConfigured } from '@/lib/whatsapp';
-import { getWhatsappCredentials, sendMetaGraphMessage, WHATSAPP_MAX_ATTEMPTS, WHATSAPP_RETRY_INTERVALS_MS } from '@/lib/whatsapp-cloud-api';
+import {
+  CAMPAIGN_IMMEDIATE_BATCH_LIMIT,
+  deliverCampaignRecipient,
+  getWhatsappCredentials,
+  syncCampaignStatusAndCounts,
+} from '@/lib/whatsapp-cloud-api';
 import { createWinBackLeads, winBackCandidates } from '@/lib/automations';
 import { todayISO } from '@/lib/tz';
 import { CAMPAIGN_SEGMENTS, campaignStatusDef, VALID_CAMPAIGN_STATUSES } from '@/lib/types';
@@ -232,7 +237,7 @@ export async function PATCH(req: NextRequest) {
       const now = new Date().toISOString();
       const pendingRecipientIds: Array<{ recipientId: string; contactId: string; phone: string; name: string }> = [];
 
-      // 1. Enfileira destinatários como pending dentro do DB
+      // 1. Enfileira destinatários como pending dentro do DB (sem segurar request)
       await updateDB((d) => {
         const c = d.campaigns.find((x) => x.id === campaign.id)!;
         c.status = 'sending';
@@ -259,96 +264,23 @@ export async function PATCH(req: NextRequest) {
           });
           pendingRecipientIds.push({ recipientId: recId, contactId: m.contactId, phone: m.phone, name: m.name });
         }
-      });
 
-      // 2. Chamadas HTTP para a Meta Cloud API FORA DE QUALQUER LOCK
-      const results: Array<{
-        recipientId: string;
-        ok: boolean;
-        externalId?: string;
-        error?: string;
-        retryable?: boolean;
-      }> = [];
-      const templateConfig = {
-        name: templateName,
-        language: campaign.templateLanguage || body.templateLanguage || 'pt_BR',
-      };
-
-      for (const rec of pendingRecipientIds) {
-        const sendRes = await sendMetaGraphMessage({
-          phoneNumberId: credentials.phoneNumberId,
-          accessToken: credentials.accessToken,
-          to: rec.phone,
-          body: campaign.message,
-          template: templateConfig,
-        });
-
-        results.push({
-          recipientId: rec.recipientId,
-          ok: sendRes.ok,
-          externalId: sendRes.externalId,
-          error: sendRes.error,
-          retryable: sendRes.retryable,
-        });
-      }
-
-      // 3. Atualização pós-envio com status REAL da entrega e retenção de retentativas
-      const finalCampaign = await updateDB((d) => {
-        const c = d.campaigns.find((x) => x.id === campaign.id)!;
-        let sentCount = 0;
-        let failedCount = 0;
-        let pendingCount = 0;
-
-        for (const r of results) {
-          const target = d.campaignRecipients.find((rec) => rec.id === r.recipientId);
-          if (target) {
-            if (r.ok && r.externalId) {
-              target.status = 'sent';
-              target.externalId = r.externalId;
-              target.error = '';
-              target.nextRetryAt = undefined;
-              sentCount++;
-            } else {
-              const attempts = (target.attempts || 0) + 1;
-              target.attempts = attempts;
-              target.error = r.error || 'Falha no envio';
-              if (r.retryable && attempts < WHATSAPP_MAX_ATTEMPTS) {
-                target.status = 'pending';
-                const delay = WHATSAPP_RETRY_INTERVALS_MS[attempts - 1] || 120_000;
-                target.nextRetryAt = new Date(Date.now() + delay).toISOString();
-                pendingCount++;
-              } else {
-                target.status = 'failed';
-                target.nextRetryAt = undefined;
-                failedCount++;
-              }
-            }
-          }
-        }
-
-        let finalStatus: CampaignStatus = 'sending';
-        if (pendingCount === 0) {
-          if (failedCount > 0 && sentCount > 0) finalStatus = 'partial';
-          else if (failedCount > 0 && sentCount === 0) finalStatus = 'failed';
-          else finalStatus = 'sent';
-          c.sentAt = now;
-        } else {
-          finalStatus = 'sending';
-        }
-
-        c.status = finalStatus;
-        c.updatedAt = now;
-        c.counts.sent = sentCount;
-        c.counts.failed = failedCount;
-        c.counts.eligible = audience.length;
-
+        syncCampaignStatusAndCounts(d, c, now);
         pushAudit(d, {
           action: 'campaign.sent', actor: { ...ctx.user, role: ctx.role }, businessId,
-          supportSessionId: ctx.support?.id, meta: { id: c.id, status: finalStatus, sent: sentCount, failed: failedCount, pending: pendingCount },
+          supportSessionId: ctx.support?.id, meta: { id: c.id, status: c.status, queued: pendingRecipientIds.length },
         });
-
-        return c;
       });
+
+      // 2. Disparo imediato limitado ao teto seguro (CAMPAIGN_IMMEDIATE_BATCH_LIMIT).
+      // Destinatários remanescentes continuam em 'pending' com claim atômico via cron worker (/api/cron/whatsapp).
+      const immediateBatch = pendingRecipientIds.slice(0, CAMPAIGN_IMMEDIATE_BATCH_LIMIT);
+      for (const item of immediateBatch) {
+        await deliverCampaignRecipient(item.recipientId).catch(() => {});
+      }
+
+      const freshDb = await readDB();
+      const finalCampaign = freshDb.campaigns.find((x) => x.id === campaign.id);
 
       return NextResponse.json({ ok: true, campaign: finalCampaign });
     }
