@@ -9,6 +9,7 @@ import { normalizeLeadStageId } from '@/lib/pipeline-stages';
 import { onlyDigits, waLink, cn, money } from '@/lib/utils';
 import { todayISO, addDaysISO } from '@/lib/tz';
 import { apiGet, apiSend } from '@/lib/api-client';
+import { maskPhoneBR } from '@/lib/field-quality';
 import Link from 'next/link';
 import { PipelineStagesPanel } from '@/components/dashboard/PipelineStagesPanel';
 
@@ -1091,8 +1092,7 @@ export function EsteiraView() {
                 <label className="block text-xs font-semibold text-zinc-700 mb-1">WhatsApp</label>
                 <input
                   type="tel"
-                  placeholder="(11) 99999-9999"
-                  value={newLeadPhone}
+                  value={maskPhoneBR(newLeadPhone)} placeholder="(11) 99999-9999"
                   onChange={(e) => setNewLeadPhone(e.target.value)}
                   className="w-full text-xs p-2.5 rounded-lg border border-zinc-300"
                 />

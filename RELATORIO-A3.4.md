@@ -363,3 +363,60 @@ npx vitest run → 80 arquivos · 1338 testes ok
 npx tsc --noEmit → 0 erros
 npm run build → ok (107 páginas)
 ```
+
+## BLOCO 6 — QUALIDADE DOS CAMPOS (TELEFONE BR · E-MAIL · CPF · CEP)
+
+### O diagnóstico
+
+Telefone era validado por tamanho (10 a 15 dígitos, qualquer coisa),
+aceitando `09912345678` e recusando só o óbvio — e a mensagem de recusa era
+sempre a mesma ("informe um WhatsApp válido"), sem dizer o que estava errado.
+E-mail tinha **duas** réguas diferentes (uma no cadastro de contato, outra na
+conta do cliente): dava para o mesmo endereço ser válido numa tela e inválido
+na outra. CEP não era validado em lugar nenhum. E o campo não ajudava enquanto
+se digitava: `11 9...` era o que a pessoa via.
+
+### O que foi criado
+
+| Onde | Mudança |
+|---|---|
+| `lib/field-quality.ts` | **novo, puro** — máscaras progressivas e a régua brasileira: telefone (10/11 dígitos com DDD plausível; `+55` reconhecido), e-mail, CPF e CEP, com **mensagem específica** por erro e `contactFieldErrors` para o conjunto do contato. |
+| `lib/customer-account.ts` | `isValidCustomerEmail` passa a delegar para `isValidEmail` — **uma régua só** para o contato e para a conta. |
+| `lib/contact-identity.ts` | a troca de telefone na ficha usa a mesma régua (antes aceitava 10–15 dígitos genéricos). |
+| `/api/contacts` | POST recusa telefone/e-mail/CEP tortos com **400 antes de escrever**, cada um com a mensagem do seu problema. |
+| `ClientProfileDrawer` | máscara ao digitar em CPF, telefone, CEP e nos dados do responsável; erro inline embaixo do campo; o "Salvar" avisa em vez de enviar cadastro torto (o servidor continua sendo a autoridade). |
+| `NewClientSheet` | máscara de WhatsApp e as mensagens específicas ("Faltam dígitos…", "Falta o @…"). |
+| `QueuePanel`, `NewBookingSheet`, `EsteiraView` | WhatsApp com máscara — quem chega sem horário, o agendamento novo e o cadastro rápido do lead. |
+
+### Decisões
+
+- **A máscara não mente sobre o tipo.** Até 5 dígitos do assinante nada de
+  traço: em `(11) 91234` ainda não se sabe se é celular (9) ou fixo (8), e
+  inserir/mover o traço no meio fazia o cursor pular. O traço aparece quando a
+  dúvida acaba.
+- **Fixo também é cliente.** A régua aceita DDD + 8 dígitos (2–5); exigir
+  nono dígito transformaria o fixo do consultório em cadastro inválido.
+- **Erro que ensina.** "Faltam dígitos no WhatsApp — informe DDD + número" e
+  "O e-mail tem mais de um @' dizem o que consertar; a mensagem genérica
+  antiga obrigava a pessoa a adivinhar.
+- **Diagnóstico mais forte no que não faz sentido.** Gravação segue os dígitos
+  como vieram (o `+55` não vira `55` duplicado nem some o formato que o
+  WhatsApp usa); a normalização do código do país acontece na **validação**.
+
+### Testes
+
+`src/lib/__tests__/a34-field-quality.test.ts` (11 casos): máscaras
+progressivas (inclusive a comparação com `formatPhoneBR`/`formatCpf`/
+`formatCep` antigos, para garantir que o resultado final não mudou), celular
+× fixo × DDD inexistente, mensagem por tipo de erro, e-mail com a prova de
+que a régua antiga (`isValidCustomerEmail`) agora usa a nova, CEP incompleto —
+e, nas ROTAS REAIS com banco temporário: recusas com 400 e **nada gravado**,
+celular com máscara que vira dígitos, CEP pela metade barrando o cadastro e o
+PATCH de identidade usando exatamente a mesma régua.
+
+```
+npx vitest run src/lib/__tests__/a34-field-quality.test.ts → 11 ok
+npx vitest run → 81 arquivos · 1349 testes ok
+npx tsc --noEmit → 0 erros
+npm run build → ok (107 páginas)
+```

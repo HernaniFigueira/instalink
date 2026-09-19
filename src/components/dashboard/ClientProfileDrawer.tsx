@@ -28,6 +28,7 @@ import {
 import { Avatar, Badge, Button, Drawer, IconButton, Input, Notice, Select, StatusBadge, SubCard, Switch, Tabs, Textarea, type TabItem } from '@/components/ui';
 import { Icon } from '@/components/icons';
 import { apiGet, apiSend } from '@/lib/api-client';
+import { cepError, contactFieldErrors, emailError, hasFieldErrors, maskCep, maskCpf, maskPhoneBR, phoneError } from '@/lib/field-quality';
 import { EncounterList, EncounterSheet, type EncounterRow } from '@/components/dashboard/EncounterSheet';
 import { usePanelPermissions } from '@/components/dashboard/usePanelPermissions';
 
@@ -163,6 +164,17 @@ export function ClientProfileDrawer({ person, businessId, pipeline, canFunil, on
     // Ponto 3 — identidade editável. Só envia o que mudou, e a validação de
     // verdade (normalização + conflito com outro contato) é do servidor: o
     // React aqui só evita ida inútil.
+    // Qualidade dos campos (A3.4 · Bloco 6): o telefone vai com máscara na
+    // tela, mas quem grava é dígito; e um erro bobo de digitação é avisado
+    // AQUI, com a mensagem específica, em vez de virar cadastro torto.
+    const errs = contactFieldErrors(
+      { name: identityDraft.name, phone: identityDraft.phone, email: identityDraft.email, cpf: draft.cpf, cep: draft.address.cep },
+      { requireName: true },
+    );
+    if (hasFieldErrors(errs)) {
+      setNotice({ tone: 'error', text: Object.values(errs).find(Boolean) || 'Confira os campos destacados.' });
+      return;
+    }
     const identity: Record<string, string> = {};
     const name = identityDraft.name.trim();
     if (name && name !== (person.name || '')) identity.name = name;
@@ -575,13 +587,19 @@ export function ClientProfileDrawer({ person, businessId, pipeline, canFunil, on
                 </label>
                 <label className="block">
                   <span className="block text-xs font-semibold text-[var(--text-muted)] mb-1.5">CPF</span>
-                  <Input inputMode="numeric" value={draft.cpf ? formatCpf(draft.cpf) : ''} placeholder="000.000.000-00"
+                  <Input inputMode="numeric" value={maskCpf(draft.cpf)} placeholder="000.000.000-00"
                     onChange={(e) => setDraft((d) => ({ ...d, cpf: e.target.value.replace(/\D/g, '').slice(0, 11) }))} />
+                  {draft.cpf.length === 11 && !isValidCpf(draft.cpf) && (
+                    <span className="block text-xs text-[var(--danger-fg)] mt-1">CPF inválido — confira os dígitos.</span>
+                  )}
                 </label>
                 <label className="block">
                   <span className="block text-xs font-semibold text-[var(--text-muted)] mb-1.5">Telefone / WhatsApp</span>
-                  <Input inputMode="tel" value={identityDraft.phone} placeholder="(11) 91234-5678"
+                  <Input inputMode="tel" value={maskPhoneBR(identityDraft.phone)} placeholder="(11) 91234-5678"
                     onChange={(e) => setIdentityDraft((d) => ({ ...d, phone: e.target.value }))} />
+                  {phoneError(identityDraft.phone) && (
+                    <span className="block text-xs text-[var(--danger-fg)] mt-1">{phoneError(identityDraft.phone)}</span>
+                  )}
                   <span className="block text-xs text-[var(--text-muted)] mt-1">
                     Se já pertencer a outro cliente desta unidade, a troca é recusada — ninguém é fundido por engano.
                   </span>
@@ -590,6 +608,9 @@ export function ClientProfileDrawer({ person, businessId, pipeline, canFunil, on
                   <span className="block text-xs font-semibold text-[var(--text-muted)] mb-1.5">E-mail</span>
                   <Input type="email" value={identityDraft.email} placeholder="nome@exemplo.com"
                     onChange={(e) => setIdentityDraft((d) => ({ ...d, email: e.target.value }))} />
+                  {emailError(identityDraft.email) && (
+                    <span className="block text-xs text-[var(--danger-fg)] mt-1">{emailError(identityDraft.email)}</span>
+                  )}
                 </label>
               </div>
             </fieldset>
@@ -611,8 +632,11 @@ export function ClientProfileDrawer({ person, businessId, pipeline, canFunil, on
               <div className="grid sm:grid-cols-6 gap-3">
                 <label className="block sm:col-span-2">
                   <span className="block text-xs font-semibold text-[var(--text-muted)] mb-1.5">CEP</span>
-                  <Input inputMode="numeric" value={draft.address.cep ? formatCep(draft.address.cep) : ''} placeholder="00000-000"
+                  <Input inputMode="numeric" value={maskCep(draft.address.cep)} placeholder="00000-000"
                     onChange={(e) => setDraft((d) => ({ ...d, address: { ...d.address, cep: e.target.value.replace(/\D/g, '').slice(0, 8) } }))} />
+                  {cepError(draft.address.cep) && (
+                    <span className="block text-xs text-[var(--danger-fg)] mt-1">{cepError(draft.address.cep)}</span>
+                  )}
                 </label>
                 <label className="block sm:col-span-4">
                   <span className="block text-xs font-semibold text-[var(--text-muted)] mb-1.5">Rua</span>
@@ -665,12 +689,12 @@ export function ClientProfileDrawer({ person, businessId, pipeline, canFunil, on
                 </label>
                 <label className="block">
                   <span className="block text-xs font-semibold text-[var(--text-muted)] mb-1.5">Telefone do responsável</span>
-                  <Input inputMode="tel" value={draft.guardian.phone ? formatPhoneBR(draft.guardian.phone) : ''}
+                  <Input inputMode="tel" value={maskPhoneBR(draft.guardian.phone)}
                     onChange={(e) => setDraft((d) => ({ ...d, guardian: { ...d.guardian, phone: e.target.value.replace(/\D/g, '').slice(0, 13) } }))} />
                 </label>
                 <label className="block">
                   <span className="block text-xs font-semibold text-[var(--text-muted)] mb-1.5">CPF do responsável</span>
-                  <Input inputMode="numeric" value={draft.guardian.cpf ? formatCpf(draft.guardian.cpf) : ''}
+                  <Input inputMode="numeric" value={maskCpf(draft.guardian.cpf)}
                     onChange={(e) => setDraft((d) => ({ ...d, guardian: { ...d.guardian, cpf: e.target.value.replace(/\D/g, '').slice(0, 11) } }))} />
                 </label>
               </div>

@@ -7,6 +7,7 @@ import { pushAudit } from '@/lib/audit';
 import { addContactNote, contactNotes, findContact, upsertContact } from '@/lib/contacts';
 // A3.3 — carteirinha do cliente: dados cadastrais ricos (aditivos, opcionais).
 import { ageFromBirthDate, applyContactProfile, clientTags, countAttended, profileCpfError, profileOf } from '@/lib/contact-profile';
+import { cepError, emailError, isValidPhoneBR, phoneError } from '@/lib/field-quality';
 // A3.3 (fechamento) — regra canônica de edição de nome/telefone/e-mail.
 import { resolveContactIdentity } from '@/lib/contact-identity';
 import { customersMatchingIdentity, generateTemporaryPassword, isValidCustomerEmail, isValidCustomerPhone, normalizeCustomerEmail, normalizeCustomerPhone } from '@/lib/customer-account';
@@ -96,12 +97,18 @@ export async function POST(req: NextRequest) {
     const noteText = String(body.note || '').trim().slice(0, 1000);
 
     if (!name) return NextResponse.json({ error: 'Informe o nome do cliente.' }, { status: 400 });
-    if (phone && !isValidCustomerPhone(phone)) {
-      return NextResponse.json({ error: 'Informe um WhatsApp válido.' }, { status: 400 });
+    // A3.4 · Bloco 6 — a régua de telefone/e-mail é a MESMA da tela e da
+    // importação (`lib/field-quality.ts`), com mensagem ESPECÍFICA: o cliente
+    // digitou DDD errado? faltou um dígito? o e-mail está sem domínio?
+    if (phone && !isValidPhoneBR(phone)) {
+      return NextResponse.json({ error: phoneError(phone) || 'Telefone inválido.' }, { status: 400 });
     }
     if (email && !isValidCustomerEmail(email)) {
-      return NextResponse.json({ error: 'Informe um e-mail válido.' }, { status: 400 });
+      return NextResponse.json({ error: emailError(email) || 'Informe um e-mail válido.' }, { status: 400 });
     }
+    // CEP opcional, mas completo quando informado (8 dígitos).
+    const cepMsg = cepError((body.profile as Record<string, any> | undefined)?.address?.cep);
+    if (cepMsg) return NextResponse.json({ error: cepMsg }, { status: 400 });
     if (!phone && !email) {
       return NextResponse.json({ error: 'Informe um WhatsApp ou e-mail.' }, { status: 400 });
     }

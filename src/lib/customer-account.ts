@@ -4,6 +4,7 @@
 import { randomBytes } from 'node:crypto';
 import type { Customer, DB } from './types';
 import { onlyDigits } from './utils';
+import { isValidEmail } from './field-quality';
 
 const TEMP_ALPHABET = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789';
 
@@ -12,8 +13,10 @@ export function normalizeCustomerEmail(value: unknown): string {
 }
 
 export function isValidCustomerEmail(value: unknown): boolean {
-  const email = normalizeCustomerEmail(value);
-  return email.length <= 120 && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
+  // A3.4 · Bloco 6: a régua é UMA (`lib/field-quality.ts`). Antes havia uma
+  // expressão regular aqui e outra no cadastro de contato — duas respostas
+  // possíveis para a mesma pergunta.
+  return isValidEmail(value);
 }
 
 export function normalizeCustomerPhone(value: unknown): string {

@@ -18,7 +18,9 @@
 //     dizer "estas duas pessoas são a mesma".
 //
 // Módulo PURO (sem I/O/DOM): recebe o DB, devolve decisão. Testável.
-import { normalizeCustomerEmail, normalizeCustomerPhone, isValidCustomerEmail, isValidCustomerPhone } from './customer-account';
+import { normalizeCustomerEmail, normalizeCustomerPhone, isValidCustomerEmail } from './customer-account';
+// A3.4 · Bloco 6 — a régua de telefone é a MESMA da tela e da importação.
+import { isValidPhoneBR, phoneError } from './field-quality';
 import type { BusinessCustomer, DB } from './types';
 
 export const CONTACT_NAME_MAX = 80;
@@ -58,8 +60,8 @@ export function resolveContactIdentity(
   // Ausente = mantém. Presente e vazio = remover o telefone (só se sobrar
   // e-mail, senão a ficha perde a única âncora de identidade).
   const phone = edit.phone === undefined ? normalizeCustomerPhone(contact.phone) : normalizeCustomerPhone(edit.phone);
-  if (edit.phone !== undefined && phone && !isValidCustomerPhone(phone)) {
-    return { ok: false, status: 400, error: 'Informe um WhatsApp válido.' };
+  if (edit.phone !== undefined && phone && !isValidPhoneBR(phone)) {
+    return { ok: false, status: 400, error: phoneError(phone) || 'Telefone inválido.' };
   }
 
   // ── E-mail ──────────────────────────────────────────────────────

@@ -12,6 +12,7 @@
 // aqui. Quem quiser marcar um horário usa a agenda (é outro caminho).
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Icon } from '@/components/icons';
+import { maskPhoneBR } from '@/lib/field-quality';
 import { Badge, Button, EmptyState, Field, IconButton, Input, Notice, SubCard } from '@/components/ui';
 import { apiSend } from '@/lib/api-client';
 import { QUEUE_LONG_WAIT_MIN, QUEUE_STATUS, queuePosition, queueTransitionAllowed, waitLabel, waitMinutes } from '@/lib/queue';
@@ -129,7 +130,7 @@ export function QueuePanel({ businessId, date, rows, loading, canWrite, onChange
               <Input value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} placeholder="Ex: Marlene" autoFocus />
             </Field>
             <Field label="WhatsApp" hint="Opcional se já tiver o nome">
-              <Input value={form.phone} onChange={(e) => setForm({ ...form, phone: e.target.value })} inputMode="tel" placeholder="(11) 99999-9999" />
+              <Input value={maskPhoneBR(form.phone)} onChange={(e) => setForm({ ...form, phone: e.target.value })} inputMode="tel" placeholder="(11) 99999-9999" />
             </Field>
             <Field label="Serviço">
               <select value={form.serviceId} onChange={(e) => setForm({ ...form, serviceId: e.target.value })}
