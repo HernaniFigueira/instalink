@@ -42,7 +42,9 @@ interface Notice { tone: 'ok' | 'error' | 'denied'; text: string; hint?: string 
 
 const inputCls = 'rounded-md border border-zinc-300 px-2 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-zinc-900';
 const btnGhost = 'text-xs font-semibold bg-white border border-zinc-300 px-3 py-1.5 rounded-md hover:bg-zinc-50 disabled:opacity-50';
-const btnDark = 'text-xs font-semibold bg-zinc-900 text-white px-3.5 py-2 rounded-md hover:bg-zinc-800 disabled:opacity-50';
+/* A3.3 (ponto 4): o primário desta tela é o AZUL do design system — preto
+   nunca é CTA. Nome mantido para não tocar em cada chamada. */
+const btnDark = 'text-xs font-semibold bg-[var(--brand)] text-white px-3.5 py-2 rounded-md shadow-brand hover:bg-[var(--brand-strong)] disabled:opacity-50';
 
 function periodsFrom(rules: Availability[]): Period[][] {
   const days: Period[][] = Array.from({ length: 7 }, () => []);
@@ -384,7 +386,7 @@ export function BusinessHoursPanel({ businessId, professionals, rules, onChanged
 
       {inheritAsk && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4" role="dialog" aria-modal="true" aria-label="Voltar a seguir o horário da empresa">
-          <div className="absolute inset-0 bg-black/40" onClick={() => busy !== `follow-${inheritAsk.id}` && setInheritAsk(null)} />
+          <div className="absolute inset-0 bg-[var(--overlay)]" onClick={() => busy !== `follow-${inheritAsk.id}` && setInheritAsk(null)} />
           <div className="relative w-full sm:max-w-sm bg-white rounded-lg border border-zinc-200 p-5 shadow-lg">
             <p className="font-semibold text-sm">{inheritAsk.name} vai seguir o horário da empresa?</p>
             <p className="text-xs text-zinc-600 mt-1.5">

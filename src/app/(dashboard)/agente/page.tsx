@@ -7,7 +7,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { Icon } from '@/components/icons';
-import { PageSkeleton, Tabs } from '@/components/ui';
+import { Button, Notice, PageHeader, PageSkeleton, Tabs } from '@/components/ui';
 import { cn } from '@/lib/utils';
 import type { AgentObjective, AgentTone, BusinessAgent } from '@/lib/types';
 import { AccessDenied, useAreaLoad } from '@/components/dashboard/AccessNotice';
@@ -25,7 +25,7 @@ interface Preview {
   moduleEnabled: boolean; canBook: boolean; whatsapp: boolean; whatsappStatus: string;
 }
 
-const input = 'w-full rounded-md border border-zinc-300 px-3.5 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500';
+const input = 'w-full rounded-md border border-[var(--border-strong)] px-3.5 py-2.5 text-sm focus:outline-none focus:shadow-focus';
 const money = (c: number) => (c / 100).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
 
 export default function AgentePage() {
@@ -86,32 +86,29 @@ export default function AgentePage() {
 
   return (
     <>
-      <div className="flex flex-wrap items-end justify-between gap-3 mb-5">
-        <div>
-          <h1 className="text-2xl font-bold tracking-tight">Agente de atendimento</h1>
-          <p className="text-sm text-zinc-500 mt-1">
-            O assistente que responde na sua página usando os dados reais do negócio — sem inventar e sem mexer na sua agenda.
-          </p>
-        </div>
-        <div className="flex items-center gap-2">
+      <PageHeader
+        icon="spark"
+        title="Agente de atendimento"
+        hint="O assistente que responde na sua página usando os dados reais do negócio — sem inventar e sem mexer na sua agenda."
+        action={
+        <span className="flex items-center gap-2">
           <span className={cn(
             'text-xs font-bold rounded-full px-3 py-1.5 border inline-flex items-center gap-1.5',
-            preview?.moduleEnabled ? 'bg-emerald-50 border-emerald-200 text-emerald-800' : 'bg-zinc-100 border-zinc-200 text-zinc-500',
+            preview?.moduleEnabled ? 'bg-[var(--success-bg)] border-[var(--success-border)] text-[var(--success-fg)]' : 'bg-[var(--surface-2)] border-[var(--border)] text-[var(--text-muted)]',
           )}>
-            <span className={cn('w-2 h-2 rounded-full', preview?.moduleEnabled ? 'bg-emerald-600' : 'bg-zinc-400')} />
+            <span className={cn('w-2 h-2 rounded-full', preview?.moduleEnabled ? 'bg-[var(--success)]' : 'bg-[var(--border-strong)]')} />
             {preview?.moduleEnabled ? 'Módulo ativo na página' : 'Módulo desativado'}
           </span>
-          <Link href={`/recursos${q}`} className="text-xs font-bold bg-white border border-zinc-200 rounded-md px-3.5 py-2 hover:bg-zinc-50">
-            Recursos
-          </Link>
-        </div>
-      </div>
+          <Link href={`/recursos${q}`}><Button variant="secondary" size="sm">Recursos</Button></Link>
+        </span>
+        }
+      />
 
       {!preview?.moduleEnabled && (
-        <p className="mb-4 text-sm bg-amber-50 border border-amber-200 text-amber-900 rounded-md px-4 py-3">
+        <Notice tone="warning" className="mb-4">
           O recurso <strong>Assistente</strong> está desativado na empresa. Configure aqui e ligue em{' '}
           <Link href={`/recursos${q}`} className="underline font-bold">Recursos</Link> para ele aparecer na página.
-        </p>
+        </Notice>
       )}
 
       <div className="mb-4">
@@ -138,7 +135,7 @@ export default function AgentePage() {
                 <p className="text-xs text-zinc-500 mt-1">Como o agente se apresenta e se comporta.</p>
               </div>
               <button onClick={() => set('enabled', !agent.enabled)} role="switch" aria-checked={agent.enabled}
-                className={cn('text-xs font-bold px-3.5 py-2 rounded-full border-2', agent.enabled ? 'border-emerald-500 bg-emerald-50 text-emerald-800' : 'border-zinc-200 text-zinc-500')}>
+                className={cn('text-xs font-bold px-3.5 py-2 rounded-full border-2', agent.enabled ? 'border-[var(--success-border)] bg-[var(--success-bg)] text-[var(--success-fg)]' : 'border-[var(--border)] bg-white text-[var(--text-muted)]')}>
                 {agent.enabled ? 'Ativo' : 'Desativado'}
               </button>
             </div>
@@ -153,7 +150,7 @@ export default function AgentePage() {
               <div className="flex flex-wrap gap-2 mt-1.5">
                 {options.tones.map((t) => (
                   <button key={t.id} onClick={() => set('tone', t.id)} title={t.hint}
-                    className={cn('text-sm font-bold px-3.5 py-2 rounded-md border-2', agent.tone === t.id ? 'border-emerald-500 bg-emerald-50 text-emerald-800' : 'border-zinc-200 text-zinc-500')}>
+                    className={cn('text-sm font-bold px-3.5 py-2 rounded-md border-2', agent.tone === t.id ? 'border-[var(--lilac-border)] bg-[var(--lilac-bg)] text-[var(--lilac-fg)]' : 'border-[var(--border)] bg-white text-[var(--text-muted)]')}>
                     {t.label}
                   </button>
                 ))}
@@ -166,7 +163,7 @@ export default function AgentePage() {
                   const on = agent.objectives.includes(o.id);
                   return (
                     <button key={o.id} onClick={() => toggleObjective(o.id)}
-                      className={cn('text-sm font-bold px-3.5 py-2 rounded-md border-2', on ? 'border-emerald-500 bg-emerald-50 text-emerald-800' : 'border-zinc-200 text-zinc-500')}>
+                      className={cn('text-sm font-bold px-3.5 py-2 rounded-md border-2', on ? 'border-[var(--lilac-border)] bg-[var(--lilac-bg)] text-[var(--lilac-fg)]' : 'border-[var(--border)] bg-white text-[var(--text-muted)]')}>
                       {on && <Icon n="check" size={13} className="inline -mt-0.5 mr-1" />}{o.label}
                     </button>
                   );
@@ -190,7 +187,7 @@ export default function AgentePage() {
               <p className="text-xs font-bold text-zinc-600 mb-2">CANAIS</p>
               <div className="flex flex-wrap gap-2">
                 <button onClick={() => set('channels', { ...agent.channels, site: !agent.channels.site })}
-                  className={cn('text-xs font-bold px-3 py-2 rounded-lg border-2', agent.channels.site ? 'border-emerald-500 bg-emerald-50 text-emerald-800' : 'border-zinc-200 text-zinc-500')}>
+                  className={cn('text-xs font-bold px-3 py-2 rounded-lg border-2', agent.channels.site ? 'border-[var(--success-border)] bg-[var(--success-bg)] text-[var(--success-fg)]' : 'border-[var(--border)] bg-white text-[var(--text-muted)]')}>
                   Site {agent.channels.site ? '✓' : '—'}
                 </button>
                 <Link href={`/canais?tab=canais${businessId ? `&b=${businessId}` : ''}`}
@@ -211,10 +208,9 @@ export default function AgentePage() {
           </section>
 
           <div className="sticky bottom-4">
-            <button onClick={save} disabled={saving}
-              className="w-full sm:w-auto font-bold bg-zinc-900 text-white px-6 py-3.5 rounded-md disabled:opacity-50 shadow-lg">
+            <Button variant="primary" size="lg" className="w-full sm:w-auto" onClick={save} disabled={saving}>
               {saving ? 'Salvando…' : 'Salvar agente'}
-            </button>
+            </Button>
           </div>
         </div>
       ) : (

@@ -5,7 +5,7 @@ import type { Order, OrderStatus } from '@/lib/types';
 import { money, waLink } from '@/lib/utils';
 import { humanDay } from '@/lib/tz';
 import { ORDER_STATUS, toneCls } from '@/lib/status';
-import { ListSkeleton } from '@/components/ui';
+import { Button, FilterPill, ListSkeleton, Notice, PageHeader } from '@/components/ui';
 import { AccessDenied, useAreaLoad } from '@/components/dashboard/AccessNotice';
 import { apiGet, apiSend } from '@/lib/api-client';
 import { Icon } from '@/components/icons';
@@ -58,14 +58,13 @@ export default function PedidosPage() {
 
   return (
     <>
-      <h1 className="text-2xl font-bold tracking-tight">Pedidos</h1>
-      <p className="text-sm text-zinc-500 mt-1 mb-5">Acompanhe e atualize o status de cada pedido.</p>
-      {error && <p className="mb-4 text-sm font-medium bg-red-600 text-white rounded-xl px-4 py-3">{error}</p>}
+      <PageHeader icon="bag" title="Pedidos" hint="Acompanhe e atualize o status de cada pedido." />
+      {error && <Notice tone="error" className="mb-4">{error}</Notice>}
 
-      <div className="flex gap-2 mb-4 overflow-x-auto pb-1">
-        <button onClick={() => setFilter('')} className={`shrink-0 text-xs font-bold px-3.5 py-2 rounded-full ${filter === '' ? 'bg-zinc-900 text-white' : 'bg-white border border-zinc-200'}`}>Todos ({total})</button>
+      <div className="flex flex-wrap gap-1.5 mb-4">
+        <FilterPill active={filter === ''} onClick={() => setFilter('')}>Todos ({total})</FilterPill>
         {STATUS_IDS.map((s) => (
-          <button key={s} onClick={() => setFilter(s)} className={`shrink-0 text-xs font-bold px-3.5 py-2 rounded-full ${filter === s ? 'bg-zinc-900 text-white' : 'bg-white border border-zinc-200'}`}>{ORDER_STATUS[s].panel}</button>
+          <FilterPill key={s} active={filter === s} onClick={() => setFilter(s)}>{ORDER_STATUS[s].panel}</FilterPill>
         ))}
       </div>
 
@@ -109,17 +108,18 @@ export default function PedidosPage() {
                     <span className="block text-xs text-zinc-500 pt-1"><Icon n="phone" size={12} className="inline -mt-0.5" /> {o.customerPhone}{o.customerAddress && <> · <Icon n="pin" size={12} className="inline -mt-0.5" /> {o.customerAddress}</>}{o.note && ` · “${o.note}”`}</span>
                     <span className="flex flex-wrap gap-2 pt-2">
                       {NEXT[o.status] && (
-                        <button onClick={() => setStatus(o.id, NEXT[o.status])} className="text-xs font-bold bg-zinc-900 text-white px-3.5 py-2 rounded-lg">{NEXT_LABEL[o.status]}</button>
+                        <Button variant="primary" size="xs" onClick={() => setStatus(o.id, NEXT[o.status])}>{NEXT_LABEL[o.status]}</Button>
                       )}
                       {o.status !== 'completed' && o.status !== 'cancelled' && (
-                        <button
-                          onClick={() => { if (armCancel === o.id) setStatus(o.id, 'cancelled'); else { setArmCancel(o.id); setTimeout(() => setArmCancel((c) => (c === o.id ? '' : c)), 4000); } }}
-                          className="text-xs font-bold bg-zinc-100 px-3.5 py-2 rounded-lg">
+                        <Button
+                          variant={armCancel === o.id ? 'danger' : 'secondary'}
+                          size="xs"
+                          onClick={() => { if (armCancel === o.id) setStatus(o.id, 'cancelled'); else { setArmCancel(o.id); setTimeout(() => setArmCancel((c) => (c === o.id ? '' : c)), 4000); } }}>
                           {armCancel === o.id ? 'Toque para confirmar' : 'Cancelar'}
-                        </button>
+                        </Button>
                       )}
                       <a href={waLink(o.customerPhone, `Olá, ${o.customerName.split(' ')[0]}! Sobre seu pedido ${o.code}:`)} target="_blank" rel="noreferrer"
-                        className="text-xs font-bold bg-[#22c55e]/10 text-green-700 px-3.5 py-2 rounded-lg">WhatsApp</a>
+                        className="text-xs font-bold bg-[var(--success-bg)] text-[var(--success-fg)] border border-[var(--success-border)] px-3.5 py-2 rounded-lg">WhatsApp</a>
                     </span>
                   </span>
                 )}

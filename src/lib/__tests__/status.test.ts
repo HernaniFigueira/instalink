@@ -49,12 +49,35 @@ describe('apresentação dos estados (P1 — cor = estado)', () => {
     expect(BOOKING_STATUS.cancelled.tone).toBe('red');
   });
 
-  it('todo tom rende selo sólido (bg presente, sem aparência apagada)', () => {
+  // A3.3 (convergência, ponto 5) — o selo deixou de ser bloco sólido.
+  // Este teste TRAVA a decisão nova: fundo tonalizado por token, texto na cor
+  // (nunca branco sobre saturado) e borda própria. Se alguém voltar a
+  // `bg-*-600 text-white`, isto falha.
+  it('todo tom rende selo SUAVE: fundo tonalizado, texto colorido e borda', () => {
     for (const tone of ['amber', 'orange', 'yellow', 'emerald', 'blue', 'zinc', 'red', 'purple'] as const) {
       const cls = toneCls(tone);
-      expect(cls).toMatch(/bg-\S+-600|bg-\S+-500|bg-yellow-400/);
-      expect(cls).toMatch(/text-(white|yellow-950)/);
+      expect(cls, `${tone} sem fundo`).toMatch(/\bbg-/);
+      expect(cls, `${tone} sem cor de texto`).toMatch(/\btext-/);
+      expect(cls, `${tone} sem borda`).toMatch(/\bborder-/);
+      // Nada de bloco saturado com texto branco.
+      expect(cls, `${tone} voltou a ser sólido`).not.toMatch(/bg-\S+-(500|600|700)\b/);
+      expect(cls, `${tone} com texto branco`).not.toMatch(/text-white/);
+      // Vem dos tokens do design system, não de hex/escala solta.
+      expect(cls, `${tone} fora dos tokens`).toMatch(/var\(--/);
     }
+  });
+
+  it('tons diferentes não renderizam o mesmo selo', () => {
+    const tons = ['amber', 'emerald', 'blue', 'red', 'purple', 'zinc'] as const;
+    const classes = tons.map((t) => toneCls(t));
+    expect(new Set(classes).size).toBe(tons.length);
+  });
+
+  it('o anel de atenção é discreto (1px, token) — não contorno grosso', () => {
+    expect(ATTENTION_RING_CLS).toMatch(/ring-1\b/);
+    expect(ATTENTION_RING_CLS).not.toMatch(/ring-2\b/);
+    expect(ATTENTION_RING_CLS).toMatch(/var\(--attention-border\)/);
+    expect(ATTENTION_MARK_CLS).toMatch(/var\(--attention-mark\)/);
   });
 
   it('cada status de agendamento tem bloco e ponto próprios e distintos', () => {

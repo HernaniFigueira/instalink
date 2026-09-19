@@ -3,7 +3,7 @@ import { useCallback, useEffect, useState } from 'react';
 import Link from 'next/link';
 import { useSearchParams } from 'next/navigation';
 import type { Availability, Professional } from '@/lib/types';
-import { ListSkeleton } from '@/components/ui';
+import { ListSkeleton, Notice, PageHeader, SubCard } from '@/components/ui';
 import { AccessDenied } from '@/components/dashboard/AccessNotice';
 import { apiGet, apiSend } from '@/lib/api-client';
 import { DeleteSheet, TeamEditor, CatalogCrossLinks } from '@/components/dashboard/catalog-panels';
@@ -91,11 +91,18 @@ export default function ProfissionaisPage() {
     }
   }
 
+  const header = (
+    <PageHeader
+      icon="users"
+      title="Profissionais"
+      hint="Quem atende no seu negócio. Cada um tem agenda própria e aparece na página pública."
+    />
+  );
+
   if (denied) {
     return (
       <>
-        <h1 className="text-2xl font-bold tracking-tight">Profissionais</h1>
-        <p className="text-sm text-zinc-500 mt-1 mb-5">Quem atende no seu negócio.</p>
+        {header}
         <AccessDenied area="Profissionais" />
       </>
     );
@@ -103,8 +110,7 @@ export default function ProfissionaisPage() {
 
   return (
     <>
-      <h1 className="text-2xl font-bold tracking-tight">Profissionais</h1>
-      <p className="text-sm text-zinc-500 mt-1 mb-5">Quem atende no seu negócio. Cada um tem agenda própria e aparece na página pública.</p>
+      {header}
 
       {loaded && <CatalogCrossLinks businessId={businessId} current="/profissionais" />}
 
@@ -112,26 +118,22 @@ export default function ProfissionaisPage() {
           Equipe. Quem tem vínculo vê SOMENTE a própria agenda (regra do
           servidor). Aqui só deixamos o caminho visível. */}
       {loaded && (
-        <div className="bg-white border border-zinc-200 rounded-lg px-5 py-3.5 mb-4 text-xs text-zinc-600 flex flex-wrap items-center gap-x-2 gap-y-1">
-          <strong>Um profissional que atende precisa de login?</strong>
-          <span>Crie o acesso em</span>
-          <Link href={`/equipe?b=${businessId}`} className="font-semibold text-zinc-900 underline">Equipe</Link>
-          <span>e vincule ao profissional — ele passa a ver somente a própria agenda, com os clientes da unidade.</span>
-        </div>
+        <Notice tone="info" className="mb-4" title="Um profissional que atende precisa de login?">
+          Crie o acesso em{' '}
+          <Link href={`/equipe?b=${businessId}`} className="font-semibold underline">Equipe</Link>{' '}
+          e vincule ao profissional — ele passa a ver somente a própria agenda, com os clientes da unidade.
+        </Notice>
       )}
 
-      {msg && <p className="mb-4 text-sm font-medium bg-zinc-900 text-white rounded-md px-4 py-3">{msg}</p>}
+      {msg && <Notice tone="info" className="mb-4">{msg}</Notice>}
       {!loaded && <ListSkeleton rows={3} />}
 
       {loaded && (
-        <div className="bg-white border border-zinc-200 rounded-lg px-5 py-4 mb-4 text-sm text-zinc-600 flex gap-2.5">
-          <span aria-hidden>💡</span>
-          <p>
-            A <strong>distribuição dos agendamentos é automática</strong>: o cliente nunca escolhe profissional.
-            Você só cadastra quem atende; a agenda equilibra a equipe sozinha, respeitando horários, vínculos
-            com serviços e pausas.
-          </p>
-        </div>
+        <SubCard className="mb-4 p-4 text-sm text-[var(--text-muted)]">
+          <strong className="text-[var(--text)]">A distribuição dos agendamentos é automática:</strong>{' '}
+          o cliente nunca escolhe profissional. Você só cadastra quem atende; a agenda equilibra a equipe
+          sozinha, respeitando horários, vínculos com serviços e pausas.
+        </SubCard>
       )}
 
       {loaded && (

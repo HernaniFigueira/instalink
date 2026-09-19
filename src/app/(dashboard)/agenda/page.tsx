@@ -26,7 +26,7 @@ import { useSearchParams } from 'next/navigation';
 import { todayISO, addDaysISO, weekdayOf, formatDateBR, nowHM } from '@/lib/tz';
 import { WEEKDAYS, WEEKDAYS_LONG, timeToMin, minToTime, cn } from '@/lib/utils';
 import type { Availability, Booking, BookingConfig, BookingStatus, Professional, Service } from '@/lib/types';
-import { ListSkeleton, Button, AttentionStrip, Tabs } from '@/components/ui';
+import { Avatar, ListSkeleton, Button, AttentionStrip, Tabs } from '@/components/ui';
 import { Icon } from '@/components/icons';
 import {
   ATTENTION_MARK_CLS, ATTENTION_RING_CLS, BOOKING_BLOCK, BOOKING_DOT, BOOKING_STATUS,
@@ -1311,9 +1311,11 @@ export default function AgendaPage() {
                   {columns.map((c) => (
                     <div key={c.key} className="shrink-0 px-3 flex items-center gap-2 border-r border-zinc-100 last:border-r-0" style={{ minWidth: COL_MIN, width: `${100 / Math.max(1, columns.length)}%`, height: HEADER_H }}>
                       {view === 'day' && (
-                        <span className="w-5 h-5 rounded-full bg-zinc-900 text-white text-[10px] font-bold flex items-center justify-center shrink-0">
-                          {c.isProfessional ? c.label.slice(0, 1).toUpperCase() : '—'}
-                        </span>
+                        c.isProfessional ? (
+                          <Avatar name={c.label} size={20} />
+                        ) : (
+                          <span className="w-5 h-5 rounded-md bg-[var(--surface-2)] text-[var(--text-muted)] text-[10px] font-bold flex items-center justify-center shrink-0">—</span>
+                        )
                       )}
                       <span className="min-w-0">
                         <span className={`block text-xs font-semibold truncate ${c.isToday ? 'text-emerald-700' : 'text-zinc-800'}`}>{c.label}</span>
@@ -1360,7 +1362,7 @@ export default function AgendaPage() {
         aria-hidden="true"
         style={{ willChange: 'transform' }}
       >
-        <div className="bg-zinc-900 text-white rounded-md shadow-lg px-2.5 py-1.5 max-w-[220px]">
+        <div className="bg-[var(--text)] text-white rounded-md shadow-lg px-2.5 py-1.5 max-w-[220px]">
           <p className="text-[11px] font-semibold leading-tight truncate">
             {dragging ? `${dragging.customerName} · ${serviceName(dragging.serviceId)}` : ''}
           </p>
@@ -1376,7 +1378,7 @@ export default function AgendaPage() {
       {/* Confirmação explícita do drop — nada acontece em silêncio */}
       {dropAsk && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4" role="dialog" aria-modal="true" aria-label="Confirmar reagendamento">
-          <div className="absolute inset-0 bg-black/40" onClick={() => !saving && setDropAsk(null)} />
+          <div className="absolute inset-0 bg-[var(--overlay)]" onClick={() => !saving && setDropAsk(null)} />
           <div className="relative w-full sm:max-w-sm bg-white rounded-lg border border-zinc-200 p-5 shadow-lg">
             <p className="font-semibold">{dropConfirmQuestion(dropAsk.date, dropAsk.time)}</p>
             <p className="text-sm text-zinc-600 mt-1.5"><strong>{dropAsk.booking.customerName}</strong> · {serviceName(dropAsk.booking.serviceId)}</p>

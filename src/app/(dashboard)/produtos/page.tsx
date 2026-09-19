@@ -17,7 +17,7 @@ import { useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { centsToBR, cn, parseMoneyToCents } from '@/lib/utils';
 import type { Category, Product } from '@/lib/types';
-import { ListSkeleton } from '@/components/ui';
+import { Button, EmptyState, ListSkeleton, Notice, PageHeader, Switch } from '@/components/ui';
 import { AccessDenied, useAreaLoad } from '@/components/dashboard/AccessNotice';
 import { apiGet, apiSend } from '@/lib/api-client';
 import { Icon } from '@/components/icons';
@@ -78,43 +78,38 @@ export default function ProdutosPage() {
 
   return (
     <>
-      <div className="flex flex-wrap items-start justify-between gap-3 mb-4">
-        <div>
-          <h1 className="text-base font-semibold tracking-tight">Vitrine de produtos</h1>
-          <p className="text-sm text-zinc-500 mt-0.5">
-            Produtos exibidos na sua página com CTA “Tenho interesse” direto no WhatsApp. Sem carrinho, sem checkout.
-          </p>
-        </div>
-        <div className="flex gap-2">
-          <button onClick={() => setShowCat(!showCat)} className="text-sm font-medium bg-white border border-zinc-200 px-3.5 py-2 rounded-md hover:bg-zinc-50">+ Categoria</button>
-          <button onClick={() => { setEditing(null); setShowForm(true); }} className="text-sm font-semibold bg-zinc-900 text-white px-3.5 py-2 rounded-md hover:bg-zinc-700">+ Produto</button>
-        </div>
-      </div>
+      <PageHeader
+        icon="bag"
+        title="Vitrine de produtos"
+        hint="Produtos exibidos na sua página com CTA “Tenho interesse” direto no WhatsApp. Sem carrinho, sem checkout."
+        action={
+          <span className="flex flex-wrap gap-2">
+            <Button variant="secondary" onClick={() => setShowCat(!showCat)}><Icon n="plus" size={14} /> Categoria</Button>
+            <Button variant="primary" onClick={() => { setEditing(null); setShowForm(true); }}><Icon n="plus" size={14} /> Produto</Button>
+          </span>
+        }
+      />
 
-      {msg && <p className="mb-3 text-sm font-medium bg-zinc-900 text-white rounded-md px-3 py-2">{msg}</p>}
+      {msg && <Notice tone="info" className="mb-3">{msg}</Notice>}
 
       {showCat && (
         <form onSubmit={(e) => { e.preventDefault(); call('category.save', { name: catName, kind: 'product' }).then(() => { setCatName(''); setShowCat(false); }).catch((err) => setMsg(err.message)); }}
           className="mb-3 bg-white border border-zinc-200 rounded-md p-3 flex gap-2">
           <input value={catName} onChange={(e) => setCatName(e.target.value)} placeholder="Nome da categoria (ex: Skincare, Kits, Cuidados em casa)"
-            className="flex-1 rounded-md border border-zinc-300 px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-zinc-900" autoFocus />
-          <button className="text-sm font-semibold bg-zinc-900 text-white px-3.5 py-2 rounded-md">Salvar</button>
+            className="flex-1 min-w-[200px] rounded-md border border-[var(--border-strong)] bg-white px-3 py-2 text-sm focus:outline-none focus:shadow-focus" autoFocus />
+          <Button type="submit" variant="primary">Salvar</Button>
         </form>
       )}
 
       {denied ? <AccessDenied area="Produtos" /> : failed ? (
-        <div className="bg-white border border-zinc-200 rounded-md text-center py-10 px-6" role="alert">
-          <span className="mx-auto w-10 h-10 rounded-md bg-red-50 border border-red-200 text-red-600 flex items-center justify-center"><Icon n="alert" size={18} /></span>
-          <p className="text-sm font-medium text-zinc-700 mt-3">{failed}</p>
-          <button onClick={() => setReloadTick((t) => t + 1)} className="mt-4 text-xs font-bold bg-zinc-900 text-white px-4 py-2 rounded-md">Tentar de novo</button>
+        <div role="alert">
+          <EmptyState icon="alert" title="Não foi possível carregar a vitrine" hint={failed}
+            action={<Button variant="primary" size="sm" onClick={() => setReloadTick((t) => t + 1)}>Tentar de novo</Button>} />
         </div>
       ) : !loaded ? <ListSkeleton rows={4} /> : products.length === 0 ? (
-        <div className="bg-white border border-zinc-200 rounded-md text-center py-12 px-6">
-          <div className="mx-auto w-10 h-10 rounded-md bg-zinc-100 flex items-center justify-center text-zinc-400"><Icon n="bag" size={20} /></div>
-          <h3 className="font-semibold text-sm mt-3">Sua vitrine está vazia</h3>
-          <p className="text-sm text-zinc-500 mt-1">Cadastre um produto (ex: pomada, sérum, kit de cuidados). Quem se interessar fala com você no WhatsApp.</p>
-          <button onClick={() => { setEditing(null); setShowForm(true); }} className="mt-4 text-sm font-semibold bg-zinc-900 text-white px-4 py-2 rounded-md">Adicionar produto</button>
-        </div>
+        <EmptyState icon="bag" title="Sua vitrine está vazia"
+          hint="Cadastre um produto (ex: pomada, sérum, kit de cuidados). Quem se interessar fala com você no WhatsApp."
+          action={<Button variant="primary" onClick={() => { setEditing(null); setShowForm(true); }}><Icon n="plus" size={14} /> Adicionar produto</Button>} />
       ) : (
         <div className="bg-white border border-zinc-200">
           <div className="hidden sm:grid grid-cols-[1fr_140px_110px_150px_80px] gap-3 px-4 py-2 border-b border-zinc-200 bg-zinc-50 text-xs font-semibold tracking-wide uppercase text-zinc-500">
@@ -127,7 +122,7 @@ export default function ProdutosPage() {
               return (
                 <div key={p.id} className={cn('flex sm:grid sm:grid-cols-[1fr_140px_110px_150px_80px] items-center gap-3 px-4 py-3', !p.active && 'opacity-60')}>
                   <span className="flex items-center gap-3 min-w-0">
-                    <span className="w-10 h-10 rounded-md bg-zinc-100 flex items-center justify-center font-bold text-zinc-500 overflow-hidden shrink-0 border border-zinc-200">
+                    <span className="w-10 h-10 rounded-md bg-[var(--surface-2)] flex items-center justify-center font-bold text-[var(--text-faint)] overflow-hidden shrink-0 border border-[var(--border)]">
                       {p.image ? <img src={p.image} alt={p.name} className="w-full h-full object-cover" /> : p.name.slice(0, 1)}
                     </span>
                     <span className="min-w-0">
@@ -231,7 +226,7 @@ function ProductForm({ product, cats, businessId, onClose, onSave }: {
 
   return (
     <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4">
-      <div className="absolute inset-0 bg-black/40" onClick={onClose} />
+      <div className="absolute inset-0 bg-[var(--overlay)]" onClick={onClose} />
       <form onSubmit={submit} className="relative w-full sm:max-w-md bg-white rounded-t-2xl sm:rounded-lg p-6 max-h-[92vh] overflow-y-auto space-y-3.5">
         <div className="flex items-center justify-between">
           <h3 className="font-semibold text-base">{product ? 'Editar produto' : 'Novo produto da vitrine'}</h3>
@@ -250,12 +245,12 @@ function ProductForm({ product, cats, businessId, onClose, onSave }: {
             </select></label>
         </div>
         <div className="flex gap-4">
-          <label className="flex items-center gap-2 text-sm font-medium"><input type="checkbox" checked={active} onChange={(e) => setActive(e.target.checked)} className="w-4 h-4 accent-emerald-600" /> Visível na vitrine</label>
-          <label className="flex items-center gap-2 text-sm font-medium"><input type="checkbox" checked={featured} onChange={(e) => setFeatured(e.target.checked)} className="w-4 h-4 accent-emerald-600" /> Destaque <Icon n="star" size={14} className="text-amber-500" /></label>
+          <span className="flex items-center gap-2 text-sm font-medium"><Switch checked={active} onChange={setActive} label="Visível na vitrine" /> Visível na vitrine</span>
+          <span className="flex items-center gap-2 text-sm font-medium"><Switch checked={featured} onChange={setFeatured} label="Destaque na vitrine" /> Destaque <Icon n="star" size={14} className="text-amber-500" /></span>
         </div>
         <p className="text-[11px] text-zinc-400 leading-snug">Na página pública, o visitante toca em “Tenho interesse” e abre o WhatsApp do negócio com o nome (e o preço, se houver) já escritos. Nenhum pedido é gerado.</p>
         {error && <p className="text-sm font-medium text-red-600">{error}</p>}
-        <button disabled={loading || !name.trim()} className="w-full font-semibold bg-zinc-900 text-white py-2.5 rounded-md disabled:opacity-50">{loading ? 'Salvando…' : 'Salvar produto'}</button>
+        <Button type="submit" variant="primary" size="lg" className="w-full" disabled={loading || !name.trim()}>{loading ? 'Salvando…' : 'Salvar produto'}</Button>
       </form>
     </div>
   );

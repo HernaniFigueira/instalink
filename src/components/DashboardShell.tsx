@@ -4,11 +4,11 @@ import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { clearToken } from '@/lib/client-auth';
 import { cn } from '@/lib/utils';
-import { PageSkeleton } from '@/components/ui';
+import { Avatar, PageSkeleton } from '@/components/ui';
 import { AccessDenied, ForbiddenToasts, PanelHomeProvider } from '@/components/dashboard/AccessNotice';
 import {
   activePanelPath, activePanelRoute, firstAllowedPath, panelAccess, panelNavigation,
-  routeRequiresBusiness, type PanelRouteDef, type PanelSection, type PanelSectionId,
+  routeRequiresBusiness, sectionAccent, type PanelRouteDef, type PanelSection, type PanelSectionId,
 } from '@/lib/panel';
 import { isSessionExpired } from '@/lib/http';
 import type { BusinessMode, FeatureId, PermissionId } from '@/lib/types';
@@ -82,6 +82,9 @@ const PATHS: Record<string, React.ReactNode> = {
   settings: (<><circle cx="12" cy="12" r="3" /><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9c.24.6.86 1 1.51 1H21a2 2 0 1 1 0 4h-.09c-.65 0-1.27.4-1.51 1Z" /></>),
   logout: (<><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" /><path d="m16 17 5-5-5-5" /><path d="M21 12H9" /></>),
   search: (<><circle cx="11" cy="11" r="7" /><path d="m21 21-4.3-4.3" /></>),
+  // Ícone genérico de PAINEL LATERAL (SVG próprio do sistema): retângulo com
+  // divisão vertical. Serve para recolher E expandir — o tooltip diz qual.
+  panel: (<><rect x="3" y="4" width="18" height="16" rx="2.5" /><path d="M9.5 4v16" /></>),
   x: (<path d="M18 6 6 18M6 6l12 12" />),
   chevD: (<path d="m6 9 6 6 6-6" />),
   collapse: (<><path d="m11 17-5-5 5-5" /><path d="m18 17-5-5 5-5" /></>),
@@ -155,8 +158,10 @@ function hrefFor(item: PanelRouteDef, unitQuery: string): string {
   return item.requiresBusiness === false ? item.href : `${item.href}${unitQuery}`;
 }
 
-function NavItem({ item, active, collapsed, href }: {
+function NavItem({ item, active, collapsed, href, accent }: {
   item: PanelRouteDef; active: boolean; collapsed: boolean; href: string;
+  /** A3.3 (ponto 8): cor de contexto da seção, aplicada APENAS no ícone. */
+  accent: string;
 }) {
   return (
     <Link href={href} data-nav-item={item.href} data-nav-active={active || undefined}
@@ -181,7 +186,12 @@ function NavItem({ item, active, collapsed, href }: {
           className={cn('absolute rounded-pill bg-[var(--il-nav-active-fg)]',
             collapsed ? 'left-0.5 top-1/2 -translate-y-1/2 w-[3px] h-5' : 'left-0 top-1/2 -translate-y-1/2 w-[3px] h-5')} />
       )}
-      <I n={item.icon} size={18} /> {!collapsed && <span className="truncate">{item.label}</span>}
+      {/* Item ativo fica BRAND (a seleção manda); inativo mostra o acento da
+          família — cor de contexto, nunca bloco saturado. */}
+      <span className="shrink-0 inline-flex" style={{ color: active ? 'var(--il-nav-active-fg)' : accent }} aria-hidden="true">
+        <I n={item.icon} size={18} />
+      </span>
+      {!collapsed && <span className="truncate">{item.label}</span>}
     </Link>
   );
 }
@@ -211,7 +221,8 @@ function NavSection({ sec, activePath, collapsed, closed, onToggle, unitQuery }:
         <div className="space-y-0.5" id={`nav-section-${sec.id}`} role="group" aria-label={sec.label}>
           {sec.items.map((item) => (
             <NavItem key={item.href} item={item} collapsed={collapsed}
-              href={hrefFor(item, unitQuery)} active={activePath === item.href} />
+              href={hrefFor(item, unitQuery)} active={activePath === item.href}
+              accent={sectionAccent(sec.id)} />
           ))}
         </div>
       )}
@@ -421,7 +432,7 @@ export function DashboardShell({ children }: { children: React.ReactNode }) {
   const navSearchItems = buildNavSearchItems(nav, q);
   const ROLE_LABEL: Record<string, string> = {
     OWNER: 'Proprietário', ADMIN: 'Administrador', SECRETARIA: 'Secretária',
-    ATENDENTE: 'Atendente', VENDEDOR: 'Vendedor', VIEWER: 'Visualizador', MASTER: 'Suporte InstaLink',
+    ATENDENTE: 'Atendente', VENDEDOR: 'Vendedor', VIEWER: 'Visualizador', MASTER: 'Suporte da plataforma',
     PROFISSIONAL: 'Profissional',
   };
 
@@ -464,59 +475,68 @@ export function DashboardShell({ children }: { children: React.ReactNode }) {
         'hidden lg:flex shrink-0 flex-col bg-[var(--il-nav)] text-[var(--il-nav-fg)] border-r border-[var(--il-nav-border)] sticky top-0 h-screen transition-[width] duration-200',
         collapsed ? 'w-[72px]' : 'w-[248px]',
       )}>
-        {/* ── TOPO: marca do PRODUTO + busca + recolher ──
-            A marca no topo é a do InstaLink, não a da unidade: o topo responde
-            "onde estou" (produto) e o bloco abaixo responde "de quem é este
-            workspace". Recolhida, a marca EXPANDE o menu — ela nunca abre a
-            página pública, que tem link próprio no contexto da unidade. */}
+        {/* ── TOPO (white label, ponto 1 da convergência) ──
+            O painel autenticado NÃO exibe marca do produto: quem opera é a
+            empresa, então o topo é funcional (busca + recolher) e a identidade
+            visível é a da UNIDADE, logo abaixo. Nada de "InstaLink Odonto
+            Clínica": só o nome do negócio.
+            O mesmo ícone de painel recolhe e expande — o tooltip diz qual. */}
         <div className={cn('shrink-0 border-b border-[var(--il-nav-border)]', collapsed ? 'px-2 py-3 space-y-2' : 'px-3 py-3 space-y-2.5')}>
           {collapsed ? (
-            <button type="button" onClick={toggle} title="Expandir menu" aria-label="Expandir menu"
-              aria-expanded={false}
-              className="flex w-full h-9 items-center justify-center rounded-lg bg-[var(--il-nav-cta)] text-[var(--il-nav-cta-fg)] shadow-brand transition-opacity hover:opacity-90">
-              <span className="text-[11px] font-black tracking-tight">IL</span>
-            </button>
+            <>
+              <NavSearch items={navSearchItems} collapsed activePath={activePath} />
+              <button type="button" onClick={toggle} title="Expandir menu" aria-label="Expandir menu"
+                aria-expanded={false}
+                className="flex w-full h-8 items-center justify-center rounded-md text-[var(--il-nav-muted)] hover:text-[var(--il-nav-fg)] hover:bg-[var(--il-nav-hover)] transition-colors">
+                <I n="panel" size={17} />
+              </button>
+            </>
           ) : (
             <div className="flex items-center gap-2">
-              <span className="flex items-center gap-2 shrink-0" aria-label="InstaLink">
-                <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-[var(--il-nav-cta)] text-[var(--il-nav-cta-fg)] shadow-brand text-[11px] font-black tracking-tight">IL</span>
-                <span className="text-[13px] font-black tracking-tight text-[var(--il-nav-fg)]">InstaLink</span>
-              </span>
               <NavSearch items={navSearchItems} collapsed={false} activePath={activePath} />
               <button type="button" onClick={toggle} title="Recolher menu" aria-label="Recolher menu"
                 aria-expanded={!collapsed}
                 className="shrink-0 w-8 h-8 rounded-md flex items-center justify-center text-[var(--il-nav-muted)] hover:text-[var(--il-nav-fg)] hover:bg-[var(--il-nav-hover)] transition-colors">
-                <I n="collapse" size={16} />
+                <I n="panel" size={17} />
               </button>
             </div>
           )}
-          {collapsed && <NavSearch items={navSearchItems} collapsed activePath={activePath} />}
 
-          {/* ── CONTEXTO DO WORKSPACE: de quem é esta unidade ── */}
+          {/* ── IDENTIDADE DA EMPRESA: logo + nome + página pública ── */}
           {collapsed ? (
             <span title={`${business.name} — workspace atual`}
-              className="flex h-9 w-full items-center justify-center rounded-lg border border-[var(--il-nav-border)] bg-[var(--il-nav-hover)] text-[11px] font-bold text-[var(--il-nav-fg)]">
+              className="flex h-9 w-full items-center justify-center overflow-hidden rounded-lg border border-[var(--il-nav-border)] bg-[var(--il-nav-hover)] text-[11px] font-bold text-[var(--il-nav-fg)]">
               {business.logo ? (
                 // eslint-disable-next-line @next/next/no-img-element
                 <img src={business.logo} alt="" className="h-full w-full rounded-lg object-cover" />
-              ) : business.name.slice(0, 1).toUpperCase()}
+              ) : (business.name || '?').trim().slice(0, 1).toUpperCase()}
             </span>
           ) : (
-            <div className="rounded-lg bg-[var(--il-nav-hover)] px-2.5 py-2">
-              <p className="text-[12px] font-bold leading-tight truncate text-[var(--il-nav-fg)]">{business.name}</p>
-              <a href={`/${business.slug}`} target="_blank" rel="noreferrer"
-                className="text-[11px] font-semibold text-[var(--il-nav-muted)] hover:text-[var(--il-nav-cta)] inline-flex items-center gap-1 leading-none mt-1.5">
-                Ver página pública <I n="external" size={10} />
-              </a>
-              {businesses.length > 1 && (
-                <select value={business?.id || ''} onChange={(e) => switchBiz(e.target.value)} aria-label="Trocar de negócio"
-                  className="mt-2 w-full bg-[var(--il-nav)] text-[var(--il-nav-fg)] border border-[var(--il-nav-border)] text-[11px] font-semibold rounded-md px-1.5 py-1.5 [&>option]:bg-white [&>option]:text-zinc-900">
-                  <option value="__overview">Visão geral da organização</option>
-                  <optgroup label="Unidades desta organização">{organizationUnits.map((x) => <option key={x.id} value={x.id}>{x.name}</option>)}</optgroup>
-                  {otherBusinesses.length > 0 && <optgroup label="Outras organizações">{otherBusinesses.map((x) => <option key={x.id} value={x.id}>{x.name}</option>)}</optgroup>}
-                  <option value="__add">+ Adicionar unidade</option>
-                </select>
-              )}
+            <div className="flex items-start gap-2.5">
+              <span className="flex h-9 w-9 shrink-0 items-center justify-center overflow-hidden rounded-lg border border-[var(--il-nav-border)] bg-[var(--il-nav-cta)] text-[var(--il-nav-cta-fg)] text-[12px] font-bold shadow-brand">
+                {business.logo ? (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img src={business.logo} alt="" className="h-full w-full object-cover" />
+                ) : (business.name || '?').trim().split(/\s+/).slice(0, 2).map((x) => x[0]?.toUpperCase() || '').join('')}
+              </span>
+              <div className="min-w-0 flex-1">
+                <p className="text-[12.5px] font-bold leading-tight truncate text-[var(--il-nav-fg)]">{business.name}</p>
+                <a href={`/${business.slug}`} target="_blank" rel="noreferrer"
+                  className="text-[11px] font-semibold text-[var(--il-nav-muted)] hover:text-[var(--il-nav-cta)] inline-flex items-center gap-1 leading-none mt-1.5">
+                  Ver página pública <I n="external" size={10} />
+                </a>
+              </div>
+            </div>
+          )}
+          {!collapsed && businesses.length > 1 && (
+            <div>
+              <select value={business?.id || ''} onChange={(e) => switchBiz(e.target.value)} aria-label="Trocar de negócio"
+                className="w-full bg-[var(--il-nav-hover)] text-[var(--il-nav-fg)] border border-[var(--il-nav-border)] text-[11px] font-semibold rounded-md px-1.5 py-1.5 [&>option]:bg-white [&>option]:text-zinc-900">
+                <option value="__overview">Visão geral da organização</option>
+                <optgroup label="Unidades desta organização">{organizationUnits.map((x) => <option key={x.id} value={x.id}>{x.name}</option>)}</optgroup>
+                {otherBusinesses.length > 0 && <optgroup label="Outras organizações">{otherBusinesses.map((x) => <option key={x.id} value={x.id}>{x.name}</option>)}</optgroup>}
+                <option value="__add">+ Adicionar unidade</option>
+              </select>
             </div>
           )}
         </div>
@@ -535,7 +555,8 @@ export function DashboardShell({ children }: { children: React.ReactNode }) {
         <nav className={cn('flex-1 overflow-y-auto py-3 ws-scroll', collapsed ? 'px-2 space-y-0.5' : 'px-2.5')} aria-label="Navegação do painel">
           {dashboardItem && (
             <NavItem item={dashboardItem} collapsed={collapsed}
-              href={hrefFor(dashboardItem, q)} active={activePath === dashboardItem.href} />
+              href={hrefFor(dashboardItem, q)} active={activePath === dashboardItem.href}
+              accent={sectionAccent(dashboardItem.section)} />
           )}
           {nav.sections.map((sec) => (
             <NavSection key={sec.id} sec={sec} activePath={activePath} collapsed={collapsed} closed={closed}
@@ -555,7 +576,8 @@ export function DashboardShell({ children }: { children: React.ReactNode }) {
               <div className="space-y-0.5">
                 {nav.more.map((item) => (
                   <NavItem key={item.href} item={item} collapsed={collapsed}
-                    href={hrefFor(item, q)} active={activePath === item.href} />
+                    href={hrefFor(item, q)} active={activePath === item.href}
+                    accent={sectionAccent(item.section)} />
                 ))}
               </div>
             </div>
@@ -572,15 +594,14 @@ export function DashboardShell({ children }: { children: React.ReactNode }) {
             title={collapsed ? `${user.name} — conta` : `${user.name} — conta`}
             className={cn('flex w-full items-center rounded-lg transition-colors hover:bg-[var(--il-nav-hover)]',
               collapsed ? 'h-9 justify-center' : 'gap-2.5 px-2 py-1.5')}>
-            <span className="w-8 h-8 shrink-0 rounded-full bg-[var(--il-nav-cta)] text-[var(--il-nav-cta-fg)] flex items-center justify-center text-xs font-bold"
-              aria-hidden="true">
-              {(user.name || '?').trim().split(/\s+/).slice(0, 2).map((x) => x[0]?.toUpperCase() || '').join('')}
-            </span>
+            {/* A3.3 (ponto 9): o usuário logado usa o MESMO Avatar das demais
+                listas de pessoas — sem um segundo avatar improvisado. */}
+            <Avatar name={user.name || 'Equipe'} size={32} />
             {!collapsed && (
               <span className="min-w-0 flex-1 text-left">
                 <span className="block text-xs font-bold truncate text-[var(--il-nav-fg)]">{user.name}</span>
                 <span className="block text-[11px] truncate text-[var(--il-nav-muted)]">
-                  {ROLE_LABEL[business?.role || ''] || business?.role || 'InstaLink'}
+                  {ROLE_LABEL[business?.role || ''] || business?.role || 'Equipe'}
                 </span>
               </span>
             )}
@@ -595,7 +616,7 @@ export function DashboardShell({ children }: { children: React.ReactNode }) {
                 <p className="text-xs font-bold truncate">{user.name}</p>
                 <p className="text-[11px] truncate text-[var(--text-muted)]">{user.email}</p>
                 <p className="text-[11px] truncate text-[var(--text-muted)]">
-                  {ROLE_LABEL[business?.role || ''] || business?.role || 'InstaLink'}
+                  {ROLE_LABEL[business?.role || ''] || business?.role || 'Equipe'}
                 </p>
               </div>
               {/* Só o que existe de verdade: a conta é administrada em Equipe,
@@ -629,7 +650,7 @@ export function DashboardShell({ children }: { children: React.ReactNode }) {
               <option value="__add">+ Adicionar unidade</option>
               </select>
             ) : (
-              <span className="font-bold text-sm truncate text-[var(--text)]">{business?.name || 'InstaLink'}</span>
+              <span className="font-bold text-sm truncate text-[var(--text)]">{business?.name || 'Minha empresa'}</span>
             )}
           </span>
           <span className="flex items-center gap-2">
@@ -761,7 +782,7 @@ export function DashboardShell({ children }: { children: React.ReactNode }) {
         </div>
         {!isAgenda && (
           <footer className="px-4 lg:px-8 py-4 border-t border-[var(--border)] mt-8">
-            <p className="text-[11px] text-[var(--text-faint)] text-center">InstaLink.app — plataforma para o seu negócio · <a href={`/${business.slug}`} target="_blank" className="underline font-semibold text-[var(--text-muted)]">/{business.slug}</a></p>
+            <p className="text-[11px] text-[var(--text-faint)] text-center">{business.name} · <a href={`/${business.slug}`} target="_blank" rel="noreferrer" className="underline font-semibold text-[var(--text-muted)]">página pública /{business.slug}</a></p>
           </footer>
         )}
       </main>

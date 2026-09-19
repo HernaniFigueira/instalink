@@ -256,7 +256,7 @@ export function Switch({ checked, onChange, label, disabled }: {
 // ── Etiquetas e estados ────────────────────────────────────────
 export type BadgeTone = 'zinc' | 'green' | 'amber' | 'red' | 'blue' | 'pink' | 'lilac';
 
-export function Badge({ tone = 'zinc', children, icon }: { tone?: BadgeTone; children: React.ReactNode; icon?: string }) {
+export function Badge({ tone = 'zinc', children, icon, className, title }: { tone?: BadgeTone; children: React.ReactNode; icon?: string; className?: string; title?: string }) {
   const tones: Record<BadgeTone, string> = {
     zinc: 'bg-[var(--surface-3)] text-[var(--text-muted)] border-[var(--border)]',
     green: 'bg-[var(--success-bg)] text-[var(--success-fg)] border-[var(--success-border)]',
@@ -267,7 +267,7 @@ export function Badge({ tone = 'zinc', children, icon }: { tone?: BadgeTone; chi
     lilac: 'bg-[var(--lilac-bg)] text-[var(--lilac-fg)] border-[var(--lilac-border)]',
   };
   return (
-    <span className={cn('inline-flex items-center gap-1 rounded-pill px-2 py-0.5 text-[11px] font-semibold border', tones[tone])}>
+    <span title={title} className={cn('inline-flex items-center gap-1 rounded-pill px-2 py-0.5 text-[11px] font-semibold border', tones[tone], className)}>
       {icon && <Icon n={icon} size={11} />}
       {children}
     </span>
@@ -288,14 +288,22 @@ export function StatusBadge({ tone = 'zinc', className, children }: { tone?: Ton
 // Faixa de atenção operacional (pendências que pedem decisão): mesma
 // apresentação na Dashboard e na Agenda — um componente, não dois estilos.
 // A3.3: âmbar quente com ícone presente (o amarelo apagado sumiu).
+/**
+ * Faixa de atenção operacional (ponto 6 da convergência).
+ *
+ * Antes era uma caixa âmbar com contorno em toda a volta — com três pendências
+ * na tela virava alarme. Agora: fundo âmbar MUITO suave, sem contorno, uma
+ * rail de 3px à esquerda como acento, ícone laranja e título com contraste.
+ * Perceptível para quem procura, elegante para quem só passa o olho.
+ */
 export function AttentionStrip({ title, hint, action }: { title: string; hint?: string; action?: React.ReactNode }) {
   return (
-    <div className="mb-3 border border-[var(--warning-border)] bg-[var(--warning-bg)] rounded-lg px-3 py-2.5 flex flex-wrap items-center gap-2 shadow-xs">
+    <div className="mb-3 rounded-lg bg-[var(--warning-bg)] border-l-[3px] border-l-[var(--attention-mark)] px-3 py-2.5 flex flex-wrap items-center gap-2">
       <span className="w-6 h-6 rounded-md bg-[var(--attention-mark)] text-[var(--attention-mark-fg)] flex items-center justify-center shrink-0">
         <Icon n="alert" size={14} strokeWidth={2.2} />
       </span>
-      <span className="text-xs font-bold text-[var(--warning-fg)]">{title}</span>
-      {hint && <span className="text-xs text-[var(--warning-fg)]/85 hidden sm:inline">· {hint}</span>}
+      <span className="text-xs font-bold text-[var(--text)]">{title}</span>
+      {hint && <span className="text-xs text-[var(--warning-fg)] hidden sm:inline">· {hint}</span>}
       {action && <span className="flex flex-wrap gap-1.5 ml-auto">{action}</span>}
     </div>
   );

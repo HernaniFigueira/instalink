@@ -31,7 +31,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { useSearchParams } from 'next/navigation';
 import Link from 'next/link';
-import { PageSkeleton, StatusBadge } from '@/components/ui';
+import { Button, EmptyState, PageSkeleton, StatusBadge } from '@/components/ui';
 import { Icon } from '@/components/icons';
 import { AccessDenied, PermissionNotice, useForbiddenNotice } from '@/components/dashboard/AccessNotice';
 import { PeriodSelector } from '@/components/dashboard/PeriodSelector';
@@ -170,10 +170,9 @@ export default function DashboardPage() {
 
   if (failed) {
     return (
-      <div className="bg-white border border-zinc-200 rounded-lg px-4 py-10 text-center" role="alert">
-        <span className="mx-auto w-10 h-10 rounded-md bg-red-50 border border-red-200 text-red-600 flex items-center justify-center"><Icon n="alert" size={18} /></span>
-        <p className="text-sm font-medium text-zinc-700 mt-3">{failed}</p>
-        <button onClick={() => setRetry((r) => r + 1)} className="mt-4 text-xs font-bold bg-zinc-900 text-white px-4 py-2 rounded-md">Tentar de novo</button>
+      <div role="alert">
+        <EmptyState icon="alert" title="Não foi possível carregar o painel" hint={failed}
+          action={<Button variant="primary" size="sm" onClick={() => setRetry((r) => r + 1)}>Tentar de novo</Button>} />
       </div>
     );
   }
@@ -215,11 +214,11 @@ export default function DashboardPage() {
   return (
     <>
       {welcome && (
-        <div className="mb-4 border border-zinc-900 bg-zinc-900 text-white px-4 py-3 flex items-start gap-3">
-          <div className="w-8 h-8 rounded-md bg-white text-zinc-900 flex items-center justify-center font-bold shrink-0">✓</div>
+        <div className="mb-4 bg-[var(--brand-soft)] border-l-[3px] border-l-[var(--brand)] rounded-r-md px-4 py-3 flex items-start gap-3">
+          <span className="w-8 h-8 rounded-md bg-white text-[var(--brand-fg)] flex items-center justify-center shrink-0"><Icon n="checkCircle" size={18} /></span>
           <div>
-            <p className="text-sm font-semibold">{business.name} está criado, {user.name.split(' ')[0]}!</p>
-            <p className="text-xs text-zinc-400 mt-0.5">Agenda, serviços e página já estão ativos. Siga o “Comece por aqui” abaixo — ou ignore e use o que precisa primeiro.</p>
+            <p className="text-sm font-semibold text-[var(--text)]">{business.name} está criado, {user.name.split(' ')[0]}!</p>
+            <p className="text-xs text-[var(--text-muted)] mt-0.5">Agenda, serviços e página já estão ativos. Siga o “Comece por aqui” abaixo — ou ignore e use o que precisa primeiro.</p>
           </div>
         </div>
       )}
@@ -227,25 +226,25 @@ export default function DashboardPage() {
       {/* Identidade da empresa — a marca do cliente é a identidade do workspace.
           B4.2: sem título "Dashboard" repetido (o shell já nomeia a tela). */}
       <div className="flex items-center gap-3 mb-5 pb-4 border-b border-zinc-200">
-        <div className="w-10 h-10 rounded-md overflow-hidden bg-zinc-900 text-white flex items-center justify-center font-bold shrink-0 border border-zinc-200">
+        <div className="w-10 h-10 rounded-md overflow-hidden bg-[var(--brand-soft)] text-[var(--brand-fg)] flex items-center justify-center font-bold shrink-0 border border-[var(--brand-border)]">
           {business.logo ? (
             // eslint-disable-next-line @next/next/no-img-element
             <img src={business.logo} alt={business.name} className="w-full h-full object-cover" />
           ) : business.name.slice(0, 1).toUpperCase()}
         </div>
         <div className="min-w-0 flex-1">
-          <h1 className="text-base font-semibold leading-none text-zinc-900 truncate">{business.name}</h1>
+          <h1 className="text-base font-semibold leading-none text-[var(--text)] truncate">{business.name}</h1>
           <div className="flex items-center gap-2 mt-1">
             {business.published ? <span className="text-[11px] font-medium text-emerald-700 bg-emerald-50 border border-emerald-200 rounded-full px-2 py-0.5 inline-flex items-center gap-1"><span className="w-1.5 h-1.5 rounded-full bg-emerald-600" /> Publicada</span> : <span className="text-[11px] font-medium text-amber-800 bg-amber-50 border border-amber-200 rounded-full px-2 py-0.5">Rascunho</span>}
             <a href={`/${business.slug}`} target="_blank" rel="noreferrer" className="text-xs text-zinc-500 hover:text-zinc-700 inline-flex items-center gap-1">Ver site <Icon n="external" size={10} /></a>
           </div>
         </div>
         <div className="hidden sm:flex items-center gap-2 ml-auto">
-          <Link href={`/pagina${q}`} className="text-xs font-semibold bg-zinc-900 text-white px-3 py-1.5 rounded-md hover:bg-zinc-800">Editar página</Link>
+          <Link href={`/pagina${q}`}><Button variant="secondary" size="xs">Editar página</Button></Link>
         </div>
       </div>
       <div className="sm:hidden flex items-center gap-2 mb-4">
-        <Link href={`/pagina${q}`} className="text-xs font-semibold bg-zinc-900 text-white px-3 py-1.5 rounded-md ml-auto shrink-0">Editar página</Link>
+        <Link href={`/pagina${q}`} className="ml-auto shrink-0"><Button variant="secondary" size="xs">Editar página</Button></Link>
       </div>
 
       <PermissionNotice message={notice?.title} hint={notice?.hint} onDismiss={dismiss} />
@@ -343,7 +342,7 @@ export default function DashboardPage() {
             <div className="flex-1 px-4 py-6 text-center">
               <p className="text-sm text-zinc-500">{crm?.contacts ?? 0} contatos na base</p>
               {links.clientes === true && (
-                <Link href={`/clientes${q}`} className="mt-3 inline-block text-xs font-semibold bg-zinc-900 text-white px-3 py-1.5 rounded-md">Abrir clientes</Link>
+                <Link href={`/clientes${q}`} className="mt-3 inline-block"><Button variant="soft" size="xs">Abrir clientes</Button></Link>
               )}
             </div>
           </section>
@@ -488,7 +487,7 @@ export default function DashboardPage() {
           <div className="px-4 py-2 border-t border-zinc-100 mt-auto">
             <p className="text-[11px] text-zinc-400 leading-snug">
               Cada indicador usa a data correta do seu significado (atendimento, cadastro do cliente ou criação do lead).
-              “Receita” é previsão: o InstaLink não registra o pagamento.
+              “Receita” é previsão: a plataforma não registra o pagamento.
             </p>
           </div>
         </section>
@@ -617,8 +616,8 @@ export default function DashboardPage() {
                   </span>
                 </div>
                 <div className="px-4 py-3">
-                  <div className="h-1.5 bg-zinc-100 rounded-full overflow-hidden mb-3">
-                    <div className="h-full bg-zinc-900 rounded-full" style={{ width: `${pct}%` }} />
+                  <div className="h-1.5 bg-[var(--surface-2)] rounded-pill overflow-hidden mb-3">
+                    <div className="h-full bg-[var(--brand)] rounded-full transition-[width]" style={{ width: `${pct}%` }} />
                   </div>
                   <ul className="divide-y divide-zinc-100 -mx-4">
                     {checklist.map((c) => (
@@ -626,7 +625,7 @@ export default function DashboardPage() {
                         {/* Linha inteira clicável: um único destino, indicação
                             visual de interação, sem segundo link duplicado. */}
                         <Link href={c.href} className={`flex items-center gap-2.5 text-sm px-4 py-2 hover:bg-zinc-50 transition-colors ${c.done ? 'text-zinc-400' : ''}`}>
-                          <span className={`w-4 h-4 rounded-full flex items-center justify-center shrink-0 ${c.done ? 'bg-zinc-900 text-white' : 'border border-zinc-300'}`}>{c.done ? <Icon n="check" size={10} /> : null}</span>
+                          <span className={`w-4 h-4 rounded-full flex items-center justify-center shrink-0 ${c.done ? 'bg-[var(--success)] text-white' : 'border border-[var(--border-strong)]'}`}>{c.done ? <Icon n="check" size={10} /> : null}</span>
                           <span className={c.done ? 'line-through' : 'text-zinc-700 font-medium'}>{c.label}</span>
                           {!c.done && <span className="ml-auto text-xs font-medium text-zinc-900">Fazer →</span>}
                         </Link>
@@ -642,7 +641,7 @@ export default function DashboardPage() {
                   <p className="text-sm font-semibold">Conectar canal de mensagens</p>
                   <p className="text-xs text-zinc-500 mt-0.5">Para conversar com os seus clientes por aqui.</p>
                 </div>
-                <Link href={`/canais?tab=canais&b=${business.id}`} className="text-xs font-semibold bg-zinc-900 text-white px-3 py-1.5 rounded-md shrink-0">Conectar</Link>
+                <Link href={`/canais?tab=canais&b=${business.id}`} className="shrink-0"><Button variant="primary" size="xs">Conectar</Button></Link>
               </div>
             )}
           </section>

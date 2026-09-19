@@ -3,7 +3,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import type { Availability, AvailabilityException, Professional } from '@/lib/types';
-import { ListSkeleton } from '@/components/ui';
+import { Button, ListSkeleton, Notice, PageHeader } from '@/components/ui';
 import { BusinessHoursPanel } from '@/components/dashboard/BusinessHours';
 import { AccessDenied } from '@/components/dashboard/AccessNotice';
 import { apiGet, apiSend } from '@/lib/api-client';
@@ -73,11 +73,18 @@ export default function DisponibilidadePage() {
     setTimeout(() => setMsg(''), 2500);
   }
 
+  const header = (
+    <PageHeader
+      icon="clock"
+      title="Disponibilidade"
+      hint="Quando a casa e cada profissional podem atender — a base de tudo. Profissionais podem seguir a janela da casa ou ter a sua."
+    />
+  );
+
   if (denied) {
     return (
       <>
-        <h1 className="text-2xl font-bold tracking-tight">Disponibilidade</h1>
-        <p className="text-sm text-zinc-500 mt-1 mb-5">Quando a casa e cada profissional podem atender.</p>
+        {header}
         <AccessDenied area="Disponibilidade" />
       </>
     );
@@ -85,12 +92,11 @@ export default function DisponibilidadePage() {
 
   return (
     <>
-      <h1 className="text-2xl font-bold tracking-tight">Disponibilidade</h1>
-      <p className="text-sm text-zinc-500 mt-1 mb-5">Quando a casa e cada profissional podem atender — a base de tudo. Profissionais podem seguir a janela da casa ou ter a sua.</p>
+      {header}
 
       {loaded && <CatalogCrossLinks businessId={businessId} current="/disponibilidade" />}
 
-      {msg && <p className="mb-4 text-sm font-medium bg-zinc-900 text-white rounded-md px-4 py-3">{msg}</p>}
+      {msg && <Notice tone="info" className="mb-4">{msg}</Notice>}
       {!loaded && <ListSkeleton rows={3} />}
 
       {loaded && (
@@ -139,9 +145,8 @@ export default function DisponibilidadePage() {
               <p className="font-bold text-sm">Regras de reserva</p>
               <p className="text-xs text-zinc-500 mt-0.5">Antecedência mínima, prazo de cancelamento, dias de agenda aberta e intervalo entre atendimentos.</p>
             </div>
-            <Link href={`/configuracoes?tab=agenda&b=${businessId}`}
-              className="text-xs font-bold bg-zinc-900 text-white px-4 py-2.5 rounded-md shrink-0">
-              Configurar em Configurações → Agenda
+            <Link href={`/configuracoes?tab=agenda&b=${businessId}`} className="shrink-0">
+              <Button variant="primary" size="sm">Configurar em Configurações → Agenda</Button>
             </Link>
           </div>
         </div>

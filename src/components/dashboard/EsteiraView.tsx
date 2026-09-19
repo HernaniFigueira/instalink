@@ -722,7 +722,7 @@ export function EsteiraView() {
 
       {/* ── Modal Detalhes do Lead ── */}
       {selectedLead && (
-        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
+        <div className="fixed inset-0 bg-[var(--overlay)] z-50 flex items-center justify-center p-4">
           <div className="bg-white rounded-2xl max-w-xl w-full max-h-[90vh] overflow-y-auto p-6 space-y-5 shadow-xl animate-scaleUp">
             <div className="flex items-start justify-between border-b pb-4">
               <div>
@@ -824,7 +824,7 @@ export function EsteiraView() {
                   setBookingLead(selectedLead);
                   if (services.length > 0) setBookServiceId(services[0].id);
                 }}
-                className="flex-1 py-2 bg-zinc-900 text-white font-semibold text-xs rounded-lg hover:bg-zinc-800 transition"
+                className="flex-1 py-2 bg-[var(--brand)] text-white shadow-brand hover:bg-[var(--brand-strong)] font-semibold text-xs rounded-lg transition"
               >
                 Agendar Atendimento
               </button>
@@ -869,7 +869,7 @@ export function EsteiraView() {
                   type="button"
                   disabled={savingNote || !newNoteText.trim()}
                   onClick={() => handleAddNote(selectedLead.id)}
-                  className="px-3 py-2 bg-zinc-900 text-white text-xs font-semibold rounded-lg disabled:opacity-50"
+                  className="px-3 py-2 bg-[var(--brand)] text-white shadow-brand hover:bg-[var(--brand-strong)] text-xs font-semibold rounded-lg disabled:opacity-50"
                 >
                   Salvar
                 </button>
@@ -933,11 +933,11 @@ export function EsteiraView() {
                       <input value={ctxTaskNote} onChange={(e)=> setCtxTaskNote(e.target.value)} placeholder="Nota (opcional)" className="w-full text-xs p-2 rounded-lg border border-zinc-300" />
                       <button disabled={ctxTaskBusy || !ctxTaskTitle.trim()} onClick={async()=>{ if(!ctxTaskTitle.trim()) return; setCtxTaskBusy(true); const res=await apiSend('/api/tasks','POST',{businessId, title: ctxTaskTitle.trim(), note: ctxTaskNote.trim(), dueAt: ctxTaskDueAt.trim(), assignedUserId: ctxTaskAssignee, leadId: selectedLead.id}); setCtxTaskBusy(false); if(res.ok){ setCtxTaskTitle(''); setCtxTaskNote(''); setCtxTaskDueAt(''); setCtxTaskAssignee(''); // recarrega tasks do lead
                         try { const tRes=await apiGet<any>(`/api/tasks?businessId=${businessId}&status=all`, {scope:'area', area:'Funil'}); if(tRes.ok) setLeadTasks((tRes.data.tasks||[]).filter((x:any)=> x.leadId===selectedLead.id).slice(0,5)); } catch {}
-                      } else alert(res.message||'Erro ao criar tarefa'); }} className="w-full py-1.5 bg-zinc-900 text-white text-xs font-semibold rounded-lg disabled:opacity-50">Criar tarefa</button>
+                      } else alert(res.message||'Erro ao criar tarefa'); }} className="w-full py-1.5 bg-[var(--brand)] text-white shadow-brand hover:bg-[var(--brand-strong)] text-xs font-semibold rounded-lg disabled:opacity-50">Criar tarefa</button>
                     </div>
                 </div>
                 <div className="flex flex-wrap gap-2 pt-1">
-                  <button type="button" onClick={()=> openBookingForLead(selectedLead)} className="text-xs font-semibold bg-zinc-900 text-white px-3 py-1.5 rounded-md">Agendar atendimento</button>
+                  <button type="button" onClick={()=> openBookingForLead(selectedLead)} className="text-xs font-semibold bg-[var(--brand)] text-white shadow-brand hover:bg-[var(--brand-strong)] px-3 py-1.5 rounded-md">Agendar atendimento</button>
                   {selectedLead.phone && <Link href={`/conversas?b=${businessId}&q=${encodeURIComponent(selectedLead.phone)}`} className="text-xs font-semibold bg-white border border-zinc-200 px-3 py-1.5 rounded-md">Abrir no inbox</Link>}
                   {selectedLead.phone && <a href={waLink(selectedLead.phone, `Olá ${selectedLead.name||''}, tudo bem?`)} target="_blank" rel="noopener noreferrer" className="text-xs font-semibold bg-white border border-zinc-200 px-3 py-1.5 rounded-md">WhatsApp</a>}
                   <Link href={`/clientes?b=${businessId}&q=${encodeURIComponent(selectedLead.phone||selectedLead.name||'')}`} className="text-xs font-semibold text-zinc-700 underline">Ver cliente no CRM 360 →</Link>
@@ -949,7 +949,7 @@ export function EsteiraView() {
 
       {/* ── Modal de Agendamento Direto a partir do Lead (Bloco 5) ── */}
       {bookingLead && (
-        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
+        <div className="fixed inset-0 bg-[var(--overlay)] z-50 flex items-center justify-center p-4">
           <form
             onSubmit={handleConfirmBooking}
             className="bg-white rounded-2xl max-w-md w-full p-6 space-y-4 shadow-xl animate-scaleUp"
@@ -1024,8 +1024,8 @@ export function EsteiraView() {
                       className={cn(
                         'p-1.5 rounded text-xs font-semibold border transition',
                         bookTime === s
-                          ? 'bg-zinc-900 text-white border-zinc-900'
-                          : 'bg-white text-zinc-800 border-zinc-200 hover:bg-zinc-50',
+                          ? 'bg-[var(--brand-soft)] text-[var(--brand-fg)] border-[var(--brand-border)]'
+                          : 'bg-white text-[var(--text)] border-[var(--border)] hover:bg-[var(--surface-2)]',
                       )}
                     >
                       {s}
@@ -1049,7 +1049,7 @@ export function EsteiraView() {
             <button
               type="submit"
               disabled={bookingLoading || !bookTime}
-              className="w-full py-2.5 bg-zinc-900 text-white text-xs font-semibold rounded-lg hover:bg-zinc-800 disabled:opacity-50 transition"
+              className="w-full py-2.5 bg-[var(--brand)] text-white shadow-brand hover:bg-[var(--brand-strong)] text-xs font-semibold rounded-lg disabled:opacity-50 transition"
             >
               {bookingLoading ? 'Criando agendamento…' : 'Confirmar e Marcar Agendado'}
             </button>
@@ -1059,7 +1059,7 @@ export function EsteiraView() {
 
       {/* ── Modal Novo Lead Manual ── */}
       {showNewLeadModal && (
-        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
+        <div className="fixed inset-0 bg-[var(--overlay)] z-50 flex items-center justify-center p-4">
           <form
             onSubmit={handleCreateManualLead}
             className="bg-white rounded-2xl max-w-md w-full p-6 space-y-3.5 shadow-xl animate-scaleUp"
@@ -1164,7 +1164,7 @@ export function EsteiraView() {
             <button
               type="submit"
               disabled={savingNewLead}
-              className="w-full py-2.5 bg-zinc-900 text-white text-xs font-semibold rounded-lg hover:bg-zinc-800 disabled:opacity-50 transition"
+              className="w-full py-2.5 bg-[var(--brand)] text-white shadow-brand hover:bg-[var(--brand-strong)] text-xs font-semibold rounded-lg disabled:opacity-50 transition"
             >
               {savingNewLead ? 'Salvando…' : 'Criar Oportunidade'}
             </button>

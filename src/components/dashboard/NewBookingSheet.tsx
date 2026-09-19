@@ -13,6 +13,7 @@ import type { BookingOccurrence } from '@/lib/booking-recurrence';
 import type { OccurrencePreview } from '@/lib/booking-series';
 import { onlyDigits } from '@/lib/utils';
 import type { Professional, Service } from '@/lib/types';
+import { Button } from '@/components/ui';
 
 interface Contact {
   id: string;
@@ -215,7 +216,7 @@ export function NewBookingSheet({ businessId, services, pros, timezone, initial,
 
   return (
     <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4" role="dialog" aria-modal="true" aria-label="Novo agendamento">
-      <div className="absolute inset-0 bg-black/40" onClick={onClose} />
+      <div className="absolute inset-0 bg-[var(--overlay)]" onClick={onClose} />
       <div className="relative w-full sm:max-w-md bg-white rounded-lg border border-zinc-200 max-h-[92vh] overflow-y-auto shadow-lg">
         <div className="sticky top-0 bg-white px-5 py-3 flex items-center justify-between border-b border-zinc-200">
           <p className="font-semibold">Novo agendamento</p>
@@ -238,7 +239,7 @@ export function NewBookingSheet({ businessId, services, pros, timezone, initial,
                 </ol>}
               </div>
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
-                <button type="button" onClick={onClose} className="rounded-lg bg-zinc-900 text-white px-3 py-2.5 text-sm font-semibold">Fechar</button>
+                <Button type="button" variant="primary" onClick={onClose}>Fechar</Button>
                 <button type="button" onClick={() => { window.location.assign(`/agenda?b=${encodeURIComponent(businessId)}&data=${created.date}`); }} className="rounded-lg border border-zinc-300 bg-white px-3 py-2.5 text-sm font-semibold text-zinc-800">Ver na agenda</button>
                 <button type="button" onClick={() => { setCreated(null); setRepeat(false); setOccurrences([]); setPreview(null); requestId.current = ''; setServiceId(''); setDate(''); setTime(''); setNote(''); setError(''); }} className="rounded-lg border border-zinc-300 bg-white px-3 py-2.5 text-sm font-semibold text-zinc-800">Novo agendamento</button>
               </div>
@@ -341,7 +342,7 @@ export function NewBookingSheet({ businessId, services, pros, timezone, initial,
                 <div className="flex flex-wrap gap-1.5 mt-1.5">
                   {slots.map((t) => (
                     <button key={t} disabled={saving || reviewing} onClick={() => setTime(t)}
-                      className={`text-xs font-medium px-3 py-1.5 rounded-md border ${time === t ? 'bg-zinc-900 text-white border-zinc-900' : 'bg-white border-zinc-200 hover:border-zinc-300'}`}>
+                      className={`text-xs font-medium px-3 py-1.5 rounded-md border ${time === t ? 'bg-[var(--brand-soft)] text-[var(--brand-fg)] border-[var(--brand-border)]' : 'bg-white border-[var(--border)] hover:border-[var(--brand-border)]'}`}>
                       {t}
                     </button>
                   ))}
@@ -362,7 +363,7 @@ export function NewBookingSheet({ businessId, services, pros, timezone, initial,
             <input value={note} onChange={(e) => setNote(e.target.value)} maxLength={300} className={input + ' mt-1'} placeholder="Opcional — fica no histórico do atendimento" /></label>
 
           {error && <p className="text-sm font-semibold text-red-600">{error}</p>}
-          <button onClick={save} disabled={saving || reviewing || (repeat && (!preview || preview.some((r) => r.state !== 'available')))} className="w-full font-bold bg-zinc-900 text-white py-3 rounded-xl disabled:opacity-50">
+          <button onClick={save} disabled={saving || reviewing || (repeat && (!preview || preview.some((r) => r.state !== 'available')))} className="w-full font-bold bg-[var(--brand)] text-white py-3 rounded-xl shadow-brand hover:bg-[var(--brand-strong)] disabled:opacity-50">
             {saving ? 'Agendando…' : reviewing ? 'Validando…' : repeat ? `Confirmar ${occurrences.length} atendimentos` : 'Salvar agendamento'}
           </button>
           </div>

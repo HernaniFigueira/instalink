@@ -93,16 +93,44 @@ export function canTransition<T extends string>(flow: Record<T, T[]>, from: T, t
 // Classes do painel (Tailwind) por tom — SÓLIDAS e presentes, sem aparência
 // de transparência. Incluem a cor da borda para os selos que usam `border`;
 // onde não há borda, a cor extra é inócua.
+/**
+ * Selo de status em apresentação SUAVE (A3.3 — convergência visual, ponto 5).
+ *
+ * Antes isto devolvia blocos sólidos (`bg-emerald-600 text-white`), que numa
+ * lista de 30 atendimentos viravam uma parede de cor saturada. O estado agora é
+ * reconhecido por **fundo tonalizado + texto na cor + borda levíssima** — a
+ * mesma lógica que a grade da Agenda já usava em `BOOKING_BLOCK`.
+ *
+ * Duas regras que não mudam:
+ *   • a cor NUNCA é o único indicador (o rótulo vai sempre impresso);
+ *   • o texto continua nítido — suave não é apagado.
+ *
+ * Tudo vem dos tokens do design system: nenhum hex novo por status.
+ */
 export function toneCls(tone: Tone): string {
   switch (tone) {
-    case 'amber': return 'bg-amber-500 text-white border-amber-600';
-    case 'orange': return 'bg-orange-600 text-white border-orange-700';
-    case 'yellow': return 'bg-yellow-400 text-yellow-950 border-yellow-500';
-    case 'emerald': return 'bg-emerald-600 text-white border-emerald-700';
-    case 'blue': return 'bg-blue-600 text-white border-blue-700';
-    case 'red': return 'bg-red-600 text-white border-red-700';
-    case 'purple': return 'bg-violet-600 text-white border-violet-700';
-    default: return 'bg-zinc-500 text-white border-zinc-600';
+    // Pendente / aguardando → âmbar claro, texto âmbar escuro.
+    case 'amber':
+    case 'orange':
+      return 'bg-[var(--warning-bg)] text-[var(--warning-fg)] border-[var(--warning-border)]';
+    // Alerta quente (atenção de fechamento) → um degrau acima do âmbar.
+    case 'yellow':
+      return 'bg-[var(--attention-bg)] text-[var(--attention-fg)] border-[var(--attention-border)]';
+    // Confirmado / ativo / conectado → verde-mint claro.
+    case 'emerald':
+      return 'bg-[var(--success-bg)] text-[var(--success-fg)] border-[var(--success-border)]';
+    // Concluído / informativo → azul claro.
+    case 'blue':
+      return 'bg-[var(--info-bg)] text-[var(--info-fg)] border-[var(--info-border)]';
+    // Cancelado → vermelho/rosa claro, texto vermelho moderado.
+    case 'red':
+      return 'bg-[var(--danger-bg)] text-[var(--danger-fg)] border-[var(--danger-border)]';
+    // Lead / qualificado → lilás claro.
+    case 'purple':
+      return 'bg-[var(--lilac-bg)] text-[var(--lilac-fg)] border-[var(--lilac-border)]';
+    // Faltou / neutro → cinza frio muito claro.
+    default:
+      return 'bg-[var(--surface-2)] text-[var(--text-muted)] border-[var(--border-2)]';
   }
 }
 
@@ -131,7 +159,11 @@ export const BOOKING_DOT: Record<BookingStatus, string> = {
 // ── Atenção operacional (pendência de fechamento — NÃO é um status) ──
 // Atendimento em aberto com horário já passado: o sistema nunca muda o
 // status sozinho, então o bloco ganha o marcador de atenção pedindo decisão.
-// A3.3: o amarelo apagado (yellow-300) virou âmbar quente com contraste
-// real — alerta precisa ser perceptível sem ser gritante.
-export const ATTENTION_RING_CLS = 'ring-2 ring-inset ring-amber-400';
-export const ATTENTION_MARK_CLS = 'bg-[var(--attention-mark)] text-[#5c3800]';
+//
+// A3.3 (convergência, ponto 6): o contorno grosso `ring-2 ring-amber-400`
+// transformava a Semana inteira numa caixa amarela gritante quando havia
+// várias pendências. Agora o anel é de 1px na borda de atenção: perceptível de
+// perto, discreto de longe. Quem precisa ser notado de longe é o MARCADOR
+// (o ponto com "!"), que continua âmbar quente e com contraste real.
+export const ATTENTION_RING_CLS = 'ring-1 ring-inset ring-[var(--attention-border)]';
+export const ATTENTION_MARK_CLS = 'bg-[var(--attention-mark)] text-[var(--attention-mark-fg)]';

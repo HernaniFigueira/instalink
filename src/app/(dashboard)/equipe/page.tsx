@@ -3,7 +3,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { Icon } from '@/components/icons';
-import { PageSkeleton } from '@/components/ui';
+import { Avatar, Badge, Button, Notice, PageHeader, PageSkeleton } from '@/components/ui';
 import { cn } from '@/lib/utils';
 import type { MemberRole, PermissionId } from '@/lib/types';
 import { AccessDenied, useAreaLoad } from '@/components/dashboard/AccessNotice';
@@ -94,23 +94,21 @@ export default function EquipePage() {
 
   return (
     <>
-      <div className="flex items-center justify-between gap-3 mb-4">
-        <div>
-          <h1 className="text-base font-semibold">Equipe</h1>
-          <p className="text-sm text-zinc-500 mt-0.5">Quem acessa o painel — contas, papéis e permissões.</p>
-        </div>
-        <button onClick={() => setCreating(true)} className="text-xs font-semibold bg-zinc-900 text-white px-3 py-2 rounded-md inline-flex items-center gap-1.5"><Icon n="plus" size={14} /> Adicionar membro</button>
-      </div>
+      <PageHeader
+        icon="users"
+        title="Equipe"
+        hint="Quem acessa o painel — contas, papéis e permissões."
+        action={<Button variant="primary" size="sm" onClick={() => setCreating(true)}><Icon n="plus" size={14} /> Adicionar membro</Button>}
+      />
 
       {/* Profissionais × Equipe: conceitos separados, nunca confundidos.
           Aqui é acesso administrativo; quem ATENDE mora em /profissionais. */}
-      <div className="mb-4 text-xs text-zinc-600 bg-white border border-zinc-200 rounded-lg px-4 py-3 flex flex-wrap items-center gap-x-2 gap-y-1">
-        <strong>Sem confusão:</strong>
-        <span>aqui você gerencia <strong>quem tem login</strong> no painel (dono, recepcionista, gerente).</span>
-        <Link href={`/profissionais?b=${businessId}`} className="font-semibold text-zinc-900 underline">Quem realiza os atendimentos → Profissionais</Link>
-      </div>
-      {msg && <p className="mb-3 text-sm font-medium bg-zinc-900 text-white rounded-md px-3 py-2">{msg}</p>}
-      {error && <p className="mb-3 text-sm font-medium bg-red-600 text-white rounded-md px-3 py-2">{error}</p>}
+      <Notice tone="info" className="mb-4" title="Sem confusão">
+        aqui você gerencia <strong>quem tem login</strong> no painel (dono, recepcionista, gerente).{' '}
+        <Link href={`/profissionais?b=${businessId}`} className="font-semibold underline">Quem realiza os atendimentos → Profissionais</Link>
+      </Notice>
+      {msg && <Notice tone="info" className="mb-3">{msg}</Notice>}
+      {error && <Notice tone="error" className="mb-3">{error}</Notice>}
 
       <div className="bg-white border border-zinc-200">
         <div className="px-4 py-2.5 border-b border-zinc-200 flex items-center justify-between">
@@ -120,9 +118,9 @@ export default function EquipePage() {
         {/* Proprietário — linha enxuta */}
         <div className="grid grid-cols-[1fr_auto] sm:grid-cols-[1fr_140px_100px] gap-2 px-4 py-3 border-b border-zinc-100 bg-zinc-50/50 items-center">
           <div className="flex items-center gap-3 min-w-0">
-            <span className="w-8 h-8 rounded-full bg-zinc-900 text-white flex items-center justify-center text-xs font-bold shrink-0">{(data.owner?.name || 'P').slice(0, 1).toUpperCase()}</span>
+            <Avatar name={data.owner?.name || 'Proprietário'} size={32} />
             <div className="min-w-0">
-              <p className="text-sm font-medium truncate">{data.owner?.name} <span className="text-xs font-semibold bg-zinc-900 text-white px-1.5 py-0.5 rounded ml-1">PROPRIETÁRIO</span></p>
+              <p className="text-sm font-medium truncate">{data.owner?.name} <Badge tone="blue" className="ml-1">Proprietário</Badge></p>
               <p className="text-xs text-zinc-500 truncate">{data.owner?.email}</p>
             </div>
           </div>
@@ -167,7 +165,7 @@ export default function EquipePage() {
       {/* Drawer lateral — permissões agrupadas */}
       {drawer && (
         <div className="fixed inset-0 z-50 flex justify-end" role="dialog" aria-modal="true">
-          <div className="absolute inset-0 bg-black/30" onClick={() => setDrawer(null)} />
+          <div className="absolute inset-0 bg-[var(--overlay)]" onClick={() => setDrawer(null)} />
           <div className="relative w-full sm:max-w-[420px] bg-white h-full overflow-y-auto border-l border-zinc-200 shadow-xl">
             <div className="sticky top-0 bg-white border-b border-zinc-200 px-4 py-3 flex items-center justify-between">
               <div>
@@ -185,7 +183,7 @@ export default function EquipePage() {
                 <p className="text-xs font-semibold tracking-wide uppercase text-zinc-500 mb-2">Papel</p>
                 <div className="grid grid-cols-2 gap-1.5">
                   {data.roles.filter((r) => r.id !== 'OWNER').map((r) => (
-                    <button key={r.id} onClick={() => { saveMember(drawer, { role: r.id }); setDrawer({ ...drawer, role: r.id }); }} className={cn('text-xs font-medium px-3 py-2 rounded-md border text-left', drawer.role === r.id ? 'bg-zinc-900 text-white border-zinc-900' : 'bg-white border-zinc-200 text-zinc-700 hover:bg-zinc-50')}>
+                    <button key={r.id} onClick={() => { saveMember(drawer, { role: r.id }); setDrawer({ ...drawer, role: r.id }); }} className={cn('text-xs font-medium px-3 py-2 rounded-md border text-left', drawer.role === r.id ? 'bg-[var(--brand-soft)] border-[var(--brand-border)] text-[var(--brand-fg)]' : 'bg-white border-[var(--border)] text-[var(--text)] hover:bg-[var(--surface-2)]')}>
                       {r.label}
                     </button>
                   ))}
@@ -240,7 +238,7 @@ export default function EquipePage() {
 
       {creating && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4" role="dialog" aria-modal="true">
-          <div className="absolute inset-0 bg-black/40" onClick={() => setCreating(false)} />
+          <div className="absolute inset-0 bg-[var(--overlay)]" onClick={() => setCreating(false)} />
           <div className="relative w-full sm:max-w-md bg-white rounded-lg border border-zinc-200 max-h-[90vh] overflow-y-auto shadow-lg">
             <div className="px-4 py-3 border-b border-zinc-200 flex items-center justify-between">
               <p className="font-semibold text-sm">Novo acesso</p>
@@ -254,7 +252,7 @@ export default function EquipePage() {
                 <span className="text-xs font-semibold tracking-wide uppercase text-zinc-500">Papel</span>
                 <div className="grid grid-cols-2 gap-1.5 mt-1">
                   {data.roles.filter((r) => r.id !== 'OWNER').map((r) => (
-                    <button key={r.id} onClick={() => setForm({ ...form, role: r.id })} className={cn('text-xs font-medium px-3 py-2 rounded-md border', form.role === r.id ? 'bg-zinc-900 text-white border-zinc-900' : 'bg-white border-zinc-200')}>{r.label}</button>
+                    <button key={r.id} onClick={() => setForm({ ...form, role: r.id })} className={cn('text-xs font-medium px-3 py-2 rounded-md border', form.role === r.id ? 'bg-[var(--brand-soft)] border-[var(--brand-border)] text-[var(--brand-fg)]' : 'bg-white border-[var(--border)] text-[var(--text)]')}>{r.label}</button>
                   ))}
                 </div>
               </div>
@@ -272,7 +270,7 @@ export default function EquipePage() {
               )}
               <label className="block"><span className="text-xs font-semibold tracking-wide uppercase text-zinc-500">Observação</span><input value={form.note} onChange={(e) => setForm({ ...form, note: e.target.value })} className={input + ' mt-1'} placeholder="Opcional" /></label>
               {error && <p className="text-sm font-medium text-red-600">{error}</p>}
-              <button onClick={create} className="w-full font-semibold bg-zinc-900 text-white py-2.5 rounded-md">Criar acesso</button>
+              <Button variant="primary" size="lg" className="w-full" onClick={create}>Criar acesso</Button>
             </div>
           </div>
         </div>

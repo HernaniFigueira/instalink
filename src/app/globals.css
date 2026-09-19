@@ -35,12 +35,20 @@
   --border: #e4e8f3;
   --border-soft: #eef1f8;
   --border-strong: #d3daea;
+  /* A3.3 CONVERGÊNCIA: `--border-2` já era USADO por ClientProfileDrawer,
+     NavSearch e DashboardShell mas nunca foi definido aqui — a declaração
+     `border-[var(--border-2)]` não resolvia para nada. Definido como o degrau
+     intermediário entre `--border` e `--border-strong`. */
+  --border-2: #dbe1ef;
 
   /* ── Texto ──────────────────────────────────────────────────── */
   --text: #161b2e;
   --text-strong: #0d1122;
   --text-muted: #5a6480;
   --text-faint: #9099b3;
+  /* Idem: `--text-soft` era usado no placeholder/descrição do NavSearch sem
+     existir. Fica entre `--text-muted` e `--text-faint`. */
+  --text-soft: #7680a0;
 
   /* ── Ação (marca do produto) ────────────────────────────────── */
   --brand: #2f6bef;
@@ -109,8 +117,25 @@
   --lilac-border: #dbccf7;
   --lilac-fg: #54358f;
 
+  /* ── Apoio (teal leve) ──────────────────────────────────────── */
+  /* A3.3 CONVERGÊNCIA (ponto 8): acento de contexto das PESSOAS (Clientes,
+     Funil). Mesmo formato das outras famílias — só acento de ícone/detalhe,
+     nunca bloco saturado. */
+  --teal: #0e9488;
+  --teal-strong: #0b7369;
+  --teal-bg: #e7f6f4;
+  --teal-border: #bfe4df;
+  --teal-fg: #0b6660;
+
   /* Véu de modal/drawer: token único em vez de hex + opacidade avulsos. */
   --overlay: rgba(13, 17, 34, 0.45);
+
+  /* A3.3 CONVERGÊNCIA (ponto 4): preto NUNCA é CTA primário — mas continua
+     permitido como texto, overlay e superfície de CÓDIGO (snippets de
+     integração, chave de API). Centralizado aqui para não virar um zinc-900
+     solto dentro de componente. */
+  --code-bg: #16181d;
+  --code-fg: #e6e8ee;
 
   /* ── Raio ───────────────────────────────────────────────────── */
   --radius-xs: 6px;

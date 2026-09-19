@@ -498,7 +498,14 @@ describe('uma porta por conceito', () => {
     expect(cfgPage).not.toMatch(/IntegracoesView/);
     expect(cfgPage).toMatch(/\['negocio', 'Negócio'\]/);
     expect(cfgPage).toMatch(/\['agenda', 'Agenda'\]/);
-    expect(cfgPage).toMatch(/\['aparencia', 'Aparência'\]/);
+    // A3.3 CONVERGÊNCIA (ponto 2): a aba "Aparência" / "Identidade do painel"
+    // SAIU da UI. O painel usa o design system padrão — cor de sidebar não é
+    // mais uma escolha do lojista. `appearance.navColor` continua aceito nos
+    // dados (sem migração destrutiva), mas nada na tela o edita.
+    expect(cfgPage).not.toMatch(/\['aparencia', 'Aparência'\]/);
+    expect(cfgPage).not.toMatch(/NAV_PRESETS/);
+    expect(cfgPage).not.toMatch(/Identidade do painel/i);
+    expect(cfgPage).not.toMatch(/aparência do painel/i);
     expect(cfgPage).not.toMatch(/\['canais', 'Canais'\]/);
     expect(cfgPage).not.toMatch(/\['integracoes', 'Integrações'\]/);
     // A1.2 · Bloco 2: a aba CRM antiga saiu — era texto + links para portas

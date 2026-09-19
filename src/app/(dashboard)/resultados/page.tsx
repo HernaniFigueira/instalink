@@ -13,7 +13,7 @@
 // sobrevive a recarregar a página/favoritos.
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
-import { PageSkeleton } from '@/components/ui';
+import { PageHeader, PageSkeleton } from '@/components/ui';
 import { AccessDenied, useAreaLoad } from '@/components/dashboard/AccessNotice';
 import { PeriodPicker, ResultsView } from '@/components/dashboard/results-view';
 import { useRevalidateOnFocus } from '@/components/dashboard/use-revalidate';
@@ -141,15 +141,12 @@ export default function ResultadosPage() {
 
   return (
     <>
-      <div className="flex flex-wrap items-start justify-between gap-3 mb-5">
-        <div>
-          <h1 className="text-2xl font-bold tracking-tight">Resultados</h1>
-          <p className="text-sm text-zinc-500 mt-1">
-            Como está o negócio no período — números reais dos atendimentos, clientes e leads.
-          </p>
-        </div>
-        <PeriodPicker value={spec} onChange={changePeriod} />
-      </div>
+      <PageHeader
+        icon="chart"
+        title="Resultados"
+        hint="Como está o negócio no período — números reais dos atendimentos, clientes e leads."
+        action={<PeriodPicker value={spec} onChange={changePeriod} />}
+      />
 
       {loading && <p className="text-xs text-zinc-400 mb-2" role="status">Atualizando…</p>}
 

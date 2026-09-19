@@ -75,6 +75,32 @@ export function panelSection(id: PanelSectionId): PanelSectionDef | undefined {
   return PANEL_SECTIONS.find((s) => s.id === id);
 }
 
+/**
+ * A3.3 CONVERGÊNCIA (ponto 8) — ACENTO DE CONTEXTO POR SEÇÃO.
+ *
+ * Regra: a cor aparece só no ÍCONE (e em detalhes pequenos), nunca pintando o
+ * card/linha inteira. Serve para o lojista reconhecer a família do destino de
+ * relance; não substitui a seleção, que continua BRAND.
+ *
+ * Mapeado por variável de token (não por hex) para respeitar o tema: se o tema
+ * mudar, o acento acompanha — nenhum componente carrega cor própria.
+ */
+export const SECTION_ACCENT: Record<PanelSectionId, string> = {
+  operacao: 'var(--brand)',      // Agenda, Conversas, Assistente, Tarefas
+  pessoas: 'var(--teal)',        // Clientes, Funil
+  oferta: 'var(--lilac)',        // Serviços, Profissionais, Disponibilidade, Produtos, Pedidos
+  crescimento: 'var(--warning)', // Campanhas, Automações, Canais
+  resultados: 'var(--success)',  // Resultados, Organização, Execuções
+  presenca: 'var(--brand)',      // Página
+  administracao: 'var(--text-muted)', // Equipe, Recursos, Configurações (neutro de propósito)
+};
+
+/** Acento de uma seção, com fallback neutro para id desconhecido. */
+export function sectionAccent(id: PanelSectionId | undefined): string {
+  if (!id) return 'var(--text-muted)';
+  return SECTION_ACCENT[id] ?? 'var(--text-muted)';
+}
+
 /** Destinos de uma seção, na ordem do catálogo (independente de contexto). */
 export function panelRoutesIn(section: PanelSectionId): PanelRouteDef[] {
   return PANEL_ROUTES.filter((r) => r.section === section);

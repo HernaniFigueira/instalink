@@ -29,6 +29,7 @@ import { stagesInOrder } from '@/lib/pipeline-stages';
 import { apiSend } from '@/lib/api-client';
 import { Icon } from '@/components/icons';
 import { cn } from '@/lib/utils';
+import { Badge, Button } from '@/components/ui';
 
 interface StageDraft {
   id: string;
@@ -124,7 +125,7 @@ export function PipelineStagesPanel({ businessId, pipeline, onClose, onSaved }: 
   }
 
   return (
-    <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
+    <div className="fixed inset-0 bg-[var(--overlay)] z-50 flex items-center justify-center p-4">
       <div className="bg-white rounded-2xl max-w-lg w-full max-h-[90vh] overflow-y-auto p-6 space-y-4 shadow-xl animate-scaleUp" role="dialog" aria-modal="true" aria-label="Etapas do funil">
         <div className="flex items-start justify-between border-b pb-3">
           <div>
@@ -150,7 +151,7 @@ export function PipelineStagesPanel({ businessId, pipeline, onClose, onSaved }: 
                 aria-label={`Nome da etapa ${i + 1}`}
                 className="flex-1 min-w-0 text-xs font-semibold rounded-md border border-zinc-300 bg-white px-2.5 py-1.5 focus:outline-none focus:ring-1 focus:ring-zinc-900"
               />
-              {isSystemStage(s) && <span className="text-[9px] font-bold px-1.5 py-0.5 rounded bg-zinc-900 text-white uppercase tracking-wider" title="Etapa de sistema — essencial para agenda/CRM/automação">sistema</span>}
+              {isSystemStage(s) && <Badge tone="zinc" className="uppercase tracking-wider" title="Etapa de sistema — essencial para agenda/CRM/automação">sistema</Badge>}
               <label className={`inline-flex items-center gap-1 text-[11px] shrink-0 ${['new','scheduled','converted'].includes(s.id) ? 'text-zinc-400 cursor-not-allowed' : 'text-zinc-600 cursor-pointer'}`} title={['new','scheduled','converted'].includes(s.id) ? 'Semântica estrutural preservada pelo servidor (new/scheduled não terminais, converted terminal)' : 'Etapa final: encerra a oportunidade (ex.: concluído, perdido).'}>
                 <input type="checkbox" checked={s.isTerminal} disabled={['new','scheduled','converted'].includes(s.id)} onChange={(e) => patch(i, { isTerminal: e.target.checked })} className="w-3.5 h-3.5 accent-zinc-900 disabled:opacity-50" />
                 final
@@ -182,10 +183,9 @@ export function PipelineStagesPanel({ businessId, pipeline, onClose, onSaved }: 
         {error && <p className="text-xs font-medium text-red-600">{error}</p>}
 
         <div className="flex gap-2 pt-1 border-t">
-          <button type="button" onClick={save} disabled={saving}
-            className="flex-1 py-2.5 bg-zinc-900 text-white text-xs font-semibold rounded-lg hover:bg-zinc-800 disabled:opacity-50 transition">
+          <Button type="button" variant="primary" className="flex-1" onClick={save} disabled={saving}>
             {saving ? 'Salvando…' : 'Salvar etapas'}
-          </button>
+          </Button>
           <button type="button" onClick={onClose}
             className="px-4 py-2.5 bg-zinc-100 text-zinc-700 text-xs font-semibold rounded-lg">
             Cancelar
