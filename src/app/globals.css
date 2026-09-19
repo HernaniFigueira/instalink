@@ -130,6 +130,12 @@
   /* Véu de modal/drawer: token único em vez de hex + opacidade avulsos. */
   --overlay: rgba(13, 17, 34, 0.45);
 
+  /* A3.4 — teto de altura da RAIL LATERAL da fila (Agenda). O valor exato é
+     medido em runtime e sobrescrito inline no próprio `<aside>` (topo do
+     workspace + folga inferior); o que mora aqui é o padrão de CSS, que vale
+     enquanto a medição não aconteceu — nunca um teto "stale" de tela antiga. */
+  --queue-rail-maxh: calc(100dvh - 160px);
+
   /* A3.3 CONVERGÊNCIA (ponto 4): preto NUNCA é CTA primário — mas continua
      permitido como texto, overlay e superfície de CÓDIGO (snippets de
      integração, chave de API). Centralizado aqui para não virar um zinc-900

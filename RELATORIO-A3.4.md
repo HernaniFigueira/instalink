@@ -2,7 +2,8 @@
 
 **Repositório:** HernaniFigueira/instalink · **base:** `main` @ `19433984916793f665aa28fdedcc186692ee45c1`
 **Branch desta entrega:** `arena/01a0ba19-instalink` · **PR:** #30 — https://github.com/HernaniFigueira/instalink/pull/30 (um só, **sem merge** — aguarda revisão independente)
-**Status:** Blocos 0 a 11 concluídos neste branch/PR — `READY_FOR_INDEPENDENT_REVIEW`
+**Status:** Blocos 0 a 11 concluídos neste branch/PR, **mais o fechamento visual/operacional A3.4**
+(QueueRail lateral + fluxos A–G verificados) — `READY_FOR_INDEPENDENT_REVIEW`
 (**não mergeado**). Números finais, auditoria de invariantes, checklists e dívidas
 registradas em “FECHAMENTO A3.4”, no fim deste documento.
 
@@ -1871,3 +1872,146 @@ Nada disso entrou no código neste PR.
   foi estimado: os que aparecem aqui foram medidos neste HEAD.
 
 **Aguarda revisão independente final. Não mergear por conta deste relatório.**
+
+---
+
+# A3.4 — FECHAMENTO VISUAL/OPERACIONAL (QueueRail + fluxos A–G)
+
+**Escopo deste bloco:** UMA correção visual real — a fila deixou de ser “mais um
+card empilhado” e passou a ser **rail lateral do workspace da Agenda** — mais a
+validação funcional dos fluxos A–G em ambiente local/isolado. Nenhum módulo novo,
+nenhuma arquitetura nova, nenhum subsistema inventado, nenhum bloco B1–B11 reaberto,
+nenhum PR novo.
+**HEAD deste bloco:** commit `A3.4 final UX fix — queue rail and core flow verification`
+(18º do PR #30) — o hash exato está no comentário de entrega do PR #30; pelo mesmo
+motivo já explicado no “FECHAMENTO A3.4” (um documento não cita o próprio hash), o
+último hash citável aqui é o do pai direto: `e9b10a591ba42e10c97f41f5ebf5133bd07e9e63`.
+
+## A3.4.1 — O que estava errado
+Abrir “Fila de hoje” empilhava o painel ACIMA da toolbar/agenda: a grade era
+empurrada para baixo, a altura útil (`gridMaxH`) passava a depender da fila aberta e,
+ao fechar, sobrava um card no meio do caminho — além de, em tela estreita, espremer
+a Agenda por ~380 px. Visualmente a fila parecia “mais um card” da pilha, não uma
+região de trabalho ao lado da grade.
+
+## A3.4.2 — O que passou a ser (mesma lógica, outro lugar)
+- **Workspace horizontal** (`data-agenda-workspace`, `flex items-start gap-2.5`) com
+  `<main data-agenda-main className="flex-1 min-w-0">` (toolbar + grade) e, SÓ quando
+  `showQueue`, `<aside data-queue-rail aria-label="Fila de hoje">` contendo o **ÚNICO**
+  `<QueuePanel>` da base (`data-queue-panel`, inalterado) — sem duplicar domínio.
+- **Desktop (xl+):** a rail entra no fluxo como coluna
+  (`xl:static xl:inset-auto xl:w-[368px] 2xl:w-[392px] xl:shrink-0 xl:self-start`).
+  Fechar a fila devolve **100 % da largura** ao `<main>` imediatamente: não há largura
+  manual, não há `setTimeout` corretivo e não sobra espaço residual. O
+  `ResizeObserver` que já existia (gauge = o próprio scroller + body) percebe a
+  mudança de largura sozinho e re-mede a coluna da grade.
+- **Altura:** a rail usa a MESMA região útil da agenda —
+  `xl:max-h-[var(--queue-rail-maxh)]` medido do **topo do workspace** até o fim da
+  viewport, com `overflow-y-auto` interno, header do painel *sticky* e a lista rolando
+  por dentro. A fila **não** aumenta a página verticalmente.
+- **`gridMaxH` parou de olhar a fila:** a grade é `min(gridContentH, gridMaxH)` e
+  `gridMaxH = viewport − topo − VIEWPORT_BOTTOM_PAD − hbarReserve`. O efeito de layout
+  roda de novo quando `showQueue` muda (deps `[…, hbarReserve, showQueue]`), então
+  fechar **não deixa altura velha nem buraco embaixo**. O token `--queue-rail-maxh` tem
+  padrão CSS em `globals.css` (`calc(100dvh - 160px)`) e o valor exato é medido em
+  runtime e sobrescrito inline apenas no próprio `<aside>`.
+- **Mobile/tablet (<xl):** a Agenda **não** é espremida. A fila vira overlay deslizante
+  (`fixed inset-y-0 right-0 w-[min(92vw,380px)]` + véu `bg-[var(--overlay)]`, token
+  A3.3 — não `bg-black/40`), fechando pelo `[X]`, pelo botão “Fila de hoje” ou pelo
+  fundo. Mesmo componente, mesmo conteúdo, uma implementação só.
+- **Aparência da rail:** o `SubCard` interno saiu; a superfície é a própria rail (borda
+  esquerda; sombra só na forma overlay). Header com “Fila de hoje” + badges + `[X]`;
+  “+ Adicionar à fila” abre o formulário **dentro** da lateral, sem empurrar a Agenda.
+- **Comportamento funcional INTOCADO:** QueueEntry ≠ Booking; walk-in entra na fila sem
+  Booking inventado; cliente com horário segue Booking → check-in → fila vinculada;
+  waiting → called → in_service → done; Encounter 1:1 (queueId ou bookingId);
+  “Encaixar na agenda” continua abrindo o `NewBookingSheet` pré-preenchido (não cria
+  Booking) e “Abrir atendimento” continua reusando o Encounter existente.
+- **Atributos estáveis:** `data-agenda-workspace`, `data-agenda-main`, `data-queue-rail`
+  (novos) e `data-queue-panel` (mantido).
+- **Regressão de layout:** `src/lib/__tests__/a34-queue-rail.test.ts` (10 testes) trava
+  a ordem `main` < toolbar < `</main>` < rail, a rail condicional por `showQueue`, o
+  overlay só abaixo de `xl`, a existência de UM só `QueuePanel` (sem `SubCard`), a
+  medição (`--queue-rail-maxh` + dep `showQueue`) e a proibição de `width:` manual e
+  `setTimeout` na rail. A suíte `visual-convergence.test.ts` (A3.3) também foi
+  respeitada: o véu do overlay passou a usar `var(--overlay)` e o token novo foi
+  declarado em `globals.css` em vez de existir solto dentro do componente.
+
+## A3.4.3 — Gates (medidos no HEAD deste bloco)
+| Portão | Comando | Resultado |
+|---|---|---|
+| Testes direcionados Agenda/Fila (16 suítes `a34-*`) | `npx vitest run src/lib/__tests__/a34-*.test.ts` | **16 arquivos · 356 testes · 0 falhas** |
+| Suíte completa | `npx vitest run` | **90 arquivos · 1611 testes · 0 falhas** |
+| Tipos | `npx tsc --noEmit` | **0 erros** |
+| Build | `npm run build` | **exit 0** · 111 páginas · 135 rotas (92 API + 43 páginas/outros) · 17/17 rotas críticas presentes |
+| Convergência visual A3.3 | `npx vitest run src/lib/__tests__/visual-convergence.test.ts` | 39/39 (após tokenizar o véu e declarar `--queue-rail-maxh`) |
+
+Os 356 testes direcionados incluem os 206 já existentes que não podiam quebrar
+(`a34-review-fix` 20, `a34-agenda` 14, `a34-encounter-integrity` 18, `a34-queue` 14,
+`a34-encounter` 30 …) — nenhum foi relaxado para passar.
+
+## A3.4.4 — Smokes A–G (local/isolado; NUNCA Neon de produção)
+Ambiente: `DATABASE_URL` vazio ⇒ banco de arquivo local `data/instalink.db.json`,
+recriado pelo `npm run seed` (39 088 B) antes de cada rodada; app servido a partir do
+**build de produção** em `http://localhost:3000`; login `demo@instalink.app` (dono do
+`biz-barbeariajoao`). Script: `/tmp/a34-flows.mjs` (230 linhas) — cobre SÓ fluxos já
+implementados.
+
+| Fluxo | O que foi exercitado | Resultado |
+|---|---|---|
+| **A — CRM** | novo contato → Clientes → Cliente 360 → dados consistentes nas duas pontas | ✅ |
+| **B — Lead/Kanban** | entra lead → Funil → muda de estágio pelo **motor oficial** → histórico correto | ✅ |
+| **C — Automação** | automação JÁ existente (template) → disparo → execução → ação real (Lead/Task/Conversation) | ✅ |
+| **D — Agendamento** | cliente → serviço → profissional → disponibilidade → `createBookingTx` → aparece na Agenda; 2º no MESMO horário/profissional → **409**; slot consumido sai da grade | ✅ |
+| **E — Agendamento automático** | lead → disponibilidade (mesmo profissional) → **Booking pelo caminho existente** (`/api/leads/[id]/book` → `bookLead`) → Agenda → lead vinculado ao Booking | ✅ |
+| **F — Fila** | walk-in → fila (SEM Booking) → waiting → called → in_service → Encounter 1:1 → finalização → done | ✅ |
+| **G — Retorno** | Encounter finalizado → retorno pedido à recepção → **Task** vinculada ao atendimento → aparece na equipe e no histórico do cliente | ✅ |
+
+**RESULTADO FLUXOS A–G: 46 verificações, 0 falhas** — três rodadas consecutivas
+limpas (duas no servidor de desenvolvimento durante o ajuste e uma no **build de
+produção** deste HEAD), com o banco local recriado entre as rodadas.
+
+Smokes gerais re-rodados neste HEAD (todos sobre o build de produção, banco local):
+`smoke` **67 ok/0**, `smoke:ux` **87 ok/0**, `smoke:p3` **15/15** (o aviso de
+`CRON_SECRET` ausente é o esperado — ver B10.7), `smoke:agendar` **25 ✓/0 ✗**,
+`smoke:p4` **18 verificações passaram** (com `ALLOW_PRIVATE_OUTBOUND_URLS=1`, exigido
+pela guarda de SSRF fora de dev — ver “Errors & Dead Ends” do fechamento anterior),
+`e2e-merchant` **28 ok/0**.
+
+Correção de percurso registrada para quem repetir a medição: o smoke A–G precisa
+repetir o `professionalId` **no GET de disponibilidade** e usar horários distintos
+entre os fluxos D e E — o motor recusa de propósito o mesmo profissional no mesmo
+horário (409 “Este horário acabou de ser ocupado”). Isso é o comportamento correto,
+não um defeito.
+
+## A3.4.5 — `AUTOMATIC_BOOKING_GAP`
+**Nenhum.** O caminho automático JÁ existente é completo no código e compartilha o
+MESMO motor (`createBookingTx` / `bookLead`) em todas as portas de entrada:
+`/api/leads/[id]/book` (fluxo E acima, ponta a ponta), ação `book` das automações
+(`src/lib/automation/actions.ts:356`), assistente (`src/app/api/concierge/route.ts:79`),
+API externa (`src/app/api/external/bookings/route.ts:61`) e webhook de WhatsApp
+(`src/app/api/whatsapp/webhook/route.ts:384`). Nada foi inventado para “fechar” o
+fluxo. Ressalva honesta: o disparo automático por canal real (WhatsApp) **não** pôde
+ser exercitado externamente — ver A3.4.6 — e continua coberto por teste local-mock.
+
+## A3.4.6 — WhatsApp e Instagram
+- **`WHATSAPP_CODE_READY = true`** — onboarding/webhook/connector/envio e recebimento
+  em modo mock, janela de conversa, criação de `Conversation`/`Lead` e rota de
+  scheduler (`/api/cron/whatsapp`) estão implementados e testados (32 testes da suíte
+  `a34-whatsapp-onboarding`, além dos smokes acima). O status “conectado” continua
+  aparecendo **só** ao final do fluxo obrigatório de registro — nada foi afrouxado.
+- **`WHATSAPP_REAL_CONNECTED = false`** — não há credenciais Meta reais neste ambiente
+  e nenhum smoke externo foi executado. Meta permanece **IMPLEMENTADO · TESTADO
+  LOCAL-MOCK · `BLOCKED_EXTERNAL`** (WhatsApp e Instagram), exatamente como no
+  fechamento anterior. **Instagram não foi tocado neste bloco** — só se confirmou que
+  as suítes seguem verdes.
+- Consequência de infraestrutura inalterada: sem `vercel.json`/workflows de cron,
+  produção precisa chamar `/api/cron/whatsapp` e `/api/cron/instagram` com
+  `CRON_SECRET` (**`BLOCKED_DEPLOYMENT`**) — não se cria infraestrutura neste PR.
+
+## A3.4.7 — Nota de escopo
+Este bloco toca **três arquivos de produto/teste** (`src/components/dashboard/QueuePanel.tsx`,
+`src/app/(dashboard)/agenda/page.tsx`, `src/lib/__tests__/a34-queue-rail.test.ts`) e
+**dois pontos de design system** (`src/app/globals.css`: token `--queue-rail-maxh`;
+véu do overlay usando `var(--overlay)`). É o **último ajuste do PR #30 antes da revisão
+independente**. **Não mergeado.**

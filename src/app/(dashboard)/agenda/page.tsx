@@ -21,7 +21,7 @@
 //   pending/confirmed            → move o registro existente
 //   completed/no_show/cancelled  → cria NOVO agendamento 'pending'
 //   preservando previousId, rescheduleCount e histórico.
-import { memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import { memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties } from 'react';
 import { useSearchParams } from 'next/navigation';
 import { todayISO, addDaysISO, weekdayOf, formatDateBR, nowHM } from '@/lib/tz';
 import { WEEKDAYS, WEEKDAYS_LONG, timeToMin, minToTime, cn } from '@/lib/utils';
@@ -377,6 +377,9 @@ export default function AgendaPage() {
   const lastPointerUpRef = useRef<{ id: string; at: number }>({ id: '', at: 0 });
   const scrollRef = useRef<HTMLDivElement>(null);
   const colsRef = useRef<HTMLDivElement>(null);
+  // A3.4 final UX — o workspace é a linha [Agenda | Fila]. É dele que sai o
+  // topo da rail (mesma região útil da grade), sem medir números na mão.
+  const workspaceRef = useRef<HTMLDivElement>(null);
   const [colWidth, setColWidth] = useState(COL_MIN);
 
   const { notice, dismiss } = useForbiddenNotice('Agenda');
@@ -702,6 +705,9 @@ export default function AgendaPage() {
   }, [columns.length]);
 
   const [gridMaxH, setGridMaxH] = useState<number | null>(null);
+  // Altura útil da rail da fila: mesma linha de base da grade. Fechar a
+  // fila não deixa valor velho — o efeito roda de novo quando showQueue muda.
+  const [railMaxH, setRailMaxH] = useState<number | null>(null);
   useLayoutEffect(() => {
     const fit = () => {
       const el = scrollRef.current;
@@ -715,6 +721,10 @@ export default function AgendaPage() {
         : hbarReserve;
       const h = window.innerHeight - top - VIEWPORT_BOTTOM_PAD - reserve;
       setGridMaxH(Math.max(320, Math.floor(h)));
+      // A rail termina na MESMA linha de base da grade (o topo dela é o topo do
+      // workspace, não o do scroller) — e a lista rola por dentro.
+      const wtop = workspaceRef.current?.getBoundingClientRect().top ?? top;
+      setRailMaxH(Math.max(320, Math.floor(window.innerHeight - wtop - VIEWPORT_BOTTOM_PAD)));
     };
     fit();
     const ro = lightRO();
@@ -722,7 +732,7 @@ export default function AgendaPage() {
     if (typeof document !== 'undefined') obs.observe(document.body);
     window.addEventListener('resize', fit);
     return () => { obs.disconnect(); window.removeEventListener('resize', fit); };
-  }, [loaded, view, fullscreen, pendencies.length, notice?.title, statusFilter, proFilter, specFilter, hbarReserve]);
+  }, [loaded, view, fullscreen, pendencies.length, notice?.title, statusFilter, proFilter, specFilter, hbarReserve, showQueue]);
 
   const readGeometry = useCallback((): { g: GridGeometry; minX: number; minY: number } | null => {
     const scroll = scrollRef.current;
@@ -1150,7 +1160,7 @@ export default function AgendaPage() {
           (o balcão não precisa dela o tempo todo). A faixa de atenção avisa
           quando a espera passa do confortável. */}
       {loaded && (
-        <div className="space-y-2.5">
+        <div className="space-y-2.5 mb-2.5">
           {queueInfo.longWait && !showQueue && (
             <AttentionStrip
               title={`${queueInfo.waiting + queueInfo.called} na fila — maior espera ${waitLabel(queueInfo.longestWaitMin)}`}
@@ -1178,32 +1188,14 @@ export default function AgendaPage() {
             )}
             <span className="ml-auto text-xs text-[var(--text-muted)]">{showQueue ? 'fechar' : 'abrir'}</span>
           </button>
-          {showQueue && (
-            <QueuePanel
-              businessId={businessId}
-              date={today}
-              rows={queueRows}
-              loading={queueLoading}
-              /* A tela inteira exige permissão de Agenda (a porta barra antes);
-                 o escopo do profissional continua valendo no servidor por
-                 entrada da fila. */
-              canWrite={!denied}
-              canEncounter={!denied && canEncounter}
-              onChanged={loadQueue}
-              professionals={activePros.map((p) => ({ id: p.id, name: p.name }))}
-              services={services.map((x) => ({ id: x.id, name: x.name }))}
-              onOpenBooking={(id) => { const b = bookingsRef.current.get(id); if (b) setDetail(b); }}
-              onEncounter={(row) => setQueueEncounter(row)}
-              onOpenClient={(row) => { window.location.href = `/clientes?c=${encodeURIComponent(row.contactId)}`; }}
-              onFitIn={(row) => setCreating({
-                date: today, time: nowHM(), professionalId: row.professionalId,
-                contactId: row.contactId, name: row.customerName, phone: row.customerPhone, serviceId: row.serviceId,
-              })}
-            />
-          )}
         </div>
       )}
 
+      {/* A3.4 final UX — WORKSPACE da agenda: [Agenda (flex-1) | Fila (rail)].
+          A fila NÃO entra mais no fluxo vertical (não empurra a grade para
+          baixo): ela é coluna ao lado no desktop largo e overlay no resto. */}
+      <div ref={workspaceRef} data-agenda-workspace="true" className="flex items-start gap-2.5 min-w-0">
+        <main data-agenda-main="true" className="flex-1 min-w-0">
       {/* Toolbar operacional: navegação · Dia/Semana/Mês · filtros · tela cheia.
           relative z-40: o popover de filtros abre sobre a grade e precisa
           ficar acima dos cabeçalhos sticky (z-20/30) das colunas. */}
@@ -1513,6 +1505,53 @@ export default function AgendaPage() {
           </div>
         </div>
       )}
+
+        </main>
+
+        {/* RAIL DA FILA — um só QueuePanel para os dois tamanhos de tela:
+            • xl+ (desktop largo): coluna ao lado, com a MESMA linha de base da
+              grade; a lista rola DENTRO da rail (max-height medida do workspace);
+            • abaixo de xl: overlay deslizante (a agenda nunca é espremida por
+              380px num tablet) — fecha pelo X, pelo botão ou pelo fundo. */}
+        {showQueue && (
+          <>
+            <div
+              className="xl:hidden fixed inset-0 z-40 bg-[var(--overlay)]"
+              aria-hidden="true"
+              onClick={() => setShowQueue(false)}
+            />
+            <aside
+              data-queue-rail="true"
+              aria-label="Fila de hoje"
+              style={{ '--queue-rail-maxh': railMaxH ? `${railMaxH}px` : undefined } as CSSProperties}
+              className="z-50 overflow-y-auto ws-scroll bg-[var(--surface)] border-[var(--border)] fixed inset-y-0 right-0 w-[min(92vw,380px)] border-l shadow-2xl xl:static xl:inset-auto xl:z-auto xl:w-[368px] 2xl:w-[392px] xl:shrink-0 xl:self-start xl:max-h-[var(--queue-rail-maxh)] xl:rounded-xl xl:border xl:shadow-sm"
+            >
+              <QueuePanel
+                businessId={businessId}
+                date={today}
+                rows={queueRows}
+                loading={queueLoading}
+                /* A tela inteira exige permissão de Agenda (a porta barra antes);
+                   o escopo do profissional continua valendo no servidor por
+                   entrada da fila. */
+                canWrite={!denied}
+                canEncounter={!denied && canEncounter}
+                onChanged={loadQueue}
+                professionals={activePros.map((p) => ({ id: p.id, name: p.name }))}
+                services={services.map((x) => ({ id: x.id, name: x.name }))}
+                onOpenBooking={(id) => { const b = bookingsRef.current.get(id); if (b) setDetail(b); }}
+                onEncounter={(row) => setQueueEncounter(row)}
+                onOpenClient={(row) => { window.location.href = `/clientes?c=${encodeURIComponent(row.contactId)}`; }}
+                onClose={() => setShowQueue(false)}
+                onFitIn={(row) => setCreating({
+                  date: today, time: nowHM(), professionalId: row.professionalId,
+                  contactId: row.contactId, name: row.customerName, phone: row.customerPhone, serviceId: row.serviceId,
+                })}
+              />
+            </aside>
+          </>
+        )}
+      </div>
 
       {/* Ghost do atendimento sendo arrastado (posição via DOM: zero re-render) */}
       <div

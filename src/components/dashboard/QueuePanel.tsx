@@ -13,7 +13,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Icon } from '@/components/icons';
 import { PhoneBRInput } from '@/components/dashboard/PhoneBRInput';
-import { Badge, Button, EmptyState, Field, IconButton, Input, Notice, SubCard } from '@/components/ui';
+import { Badge, Button, EmptyState, Field, IconButton, Input, Notice } from '@/components/ui';
 import { apiSend } from '@/lib/api-client';
 import { QUEUE_LONG_WAIT_MIN, QUEUE_STATUS, queuePosition, queueTransitionAllowed, waitLabel, waitMinutes } from '@/lib/queue';
 import { cn } from '@/lib/utils';
@@ -36,7 +36,7 @@ const NEXT_ACTION: Record<string, { to: QueueStatus; label: string; variant: 'pr
   in_service: { to: 'done', label: 'Concluir', variant: 'success' },
 };
 
-export function QueuePanel({ businessId, date, rows, loading, canWrite, canEncounter, onChanged, professionals, services, onOpenBooking, onEncounter, onOpenClient, onFitIn }: {
+export function QueuePanel({ businessId, date, rows, loading, canWrite, canEncounter, onChanged, professionals, services, onOpenBooking, onEncounter, onOpenClient, onFitIn, onClose }: {
   businessId: string;
   /** Dia do negócio em exibição (a fila mostrada é sempre a de HOJE + a viva). */
   date: string;
@@ -60,6 +60,12 @@ export function QueuePanel({ businessId, date, rows, loading, canWrite, canEncou
   onOpenClient?: (row: QueueRow) => void;
   /** "Encaixar na agenda": abre o agendamento PRÉ-PREENCHIDO (não cria nada). */
   onFitIn?: (row: QueueRow) => void;
+  /**
+   * A3.4 final UX — fechar a rail (o painel vive ao LADO da agenda; quem
+   * decide se ele aparece é a tela, não ele). Sem a prop, nenhum [X] é
+   * renderizado: o mesmo painel continua servindo outro host.
+   */
+  onClose?: () => void;
 }) {
   const [adding, setAdding] = useState(false);
   const [busy, setBusy] = useState('');
@@ -117,8 +123,10 @@ export function QueuePanel({ businessId, date, rows, loading, canWrite, canEncou
   }
 
   return (
-    <SubCard className="p-0 overflow-hidden" data-queue-panel="true">
-      <div className="flex flex-wrap items-center gap-2 px-4 py-3 border-b border-[var(--border)]">
+    <div data-queue-panel="true" className="flex min-h-0 flex-col">
+      {/* Header sticky: a lista rola DENTRO da rail e o título/badges continuam
+          à vista. O [X] fecha a rail (a fila do dia segue no botão da agenda). */}
+      <div className="sticky top-0 z-10 flex flex-wrap items-center gap-2 px-3 py-2.5 border-b border-[var(--border)] bg-[var(--surface)]">
         <Icon n="clock" size={15} className="text-[var(--text-muted)]" />
         <span className="text-sm font-semibold text-[var(--text)]">Fila de hoje</span>
         {waiting > 0 && <Badge tone="amber">{waiting} aguardando</Badge>}
@@ -126,11 +134,17 @@ export function QueuePanel({ businessId, date, rows, loading, canWrite, canEncou
           <Badge tone="green">{rows.filter((r) => r.status === 'in_service').length} em atendimento</Badge>
         )}
         {longest >= QUEUE_LONG_WAIT_MIN && <Badge tone="red">maior espera: {waitLabel(longest)}</Badge>}
-        {canWrite && (
-          <Button size="sm" variant="secondary" className="ml-auto" onClick={() => { setAdding((v) => !v); setError(''); }}>
-            <Icon n="plus" size={14} /> {adding ? 'Fechar' : 'Adicionar à fila'}
-          </Button>
-        )}
+        <div className="ml-auto flex items-center gap-1.5">
+          {canWrite && (
+            <Button size="sm" variant="secondary" onClick={() => { setAdding((v) => !v); setError(''); }}>
+              <Icon n="plus" size={14} /> {adding ? 'Fechar' : 'Adicionar à fila'}
+            </Button>
+          )}
+          {onClose && (
+            <IconButton icon="x" label="Fechar a fila" tip="Fechar a fila (a agenda volta a ocupar a largura toda)"
+              size="sm" variant="ghost" onClick={onClose} />
+          )}
+        </div>
       </div>
 
       {error && <Notice tone="error" className="m-3">{error}</Notice>}
@@ -256,6 +270,6 @@ export function QueuePanel({ businessId, date, rows, loading, canWrite, canEncou
           })}
         </ul>
       )}
-    </SubCard>
+    </div>
   );
 }
