@@ -12,7 +12,11 @@ import { POST as publicLeadsPOST } from '@/app/api/leads/route';
 import { POST as manualLeadsPOST } from '@/app/api/leads/manual/route';
 import { POST as contactsPOST } from '@/app/api/contacts/route';
 import { POST as customerRegisterPOST } from '@/app/api/customer/register/route';
+import { POST as customerLoginPOST } from '@/app/api/customer/login/route';
+import { POST as customerResetPOST } from '@/app/api/customer/reset/route';
+import { GET as people360GET } from '@/app/api/people360/route';
 import { PATCH as bookingsPATCH } from '@/app/api/bookings/route';
+import { newResetToken } from '../password-reset';
 import type { Business, DB } from '../types';
 import { TEMP_DB_FILE } from './helpers/temp-db';
 
@@ -51,7 +55,9 @@ function jsonReq(path: string, body: unknown, token?: string, method = 'POST'): 
   const headers: Record<string, string> = { 'content-type': 'application/json' };
   if (token) headers.authorization = `Bearer ${token}`;
   return new NextRequest(`http://localhost:3000${path}`, {
-    method, headers, body: JSON.stringify(body),
+    method,
+    headers,
+    ...(method === 'GET' || method === 'HEAD' ? {} : { body: JSON.stringify(body) }),
   });
 }
 
@@ -148,6 +154,84 @@ describe('A3.1 — servidor é autoridade na elegibilidade do drag', () => {
   });
 });
 
+describe('A3.1 — identidade canônica do Cliente 360', () => {
+  it('promover contato legado a Customer não fragmenta lead e booking históricos', async () => {
+    const contact = await contactsPOST(jsonReq('/api/contacts', {
+      businessId: BUSINESS_ID, name: 'Histórico unificado', phone: '11999999999',
+    }, ownerToken));
+    const contactBody = await json(contact);
+    const contactId = contactBody.contact.id;
+
+    const lead = await manualLeadsPOST(jsonReq('/api/leads/manual', {
+      businessId: BUSINESS_ID, name: 'Histórico unificado', phone: '11999999999',
+    }, ownerToken));
+    expect(lead.status).toBe(200);
+
+    await updateDB((db) => {
+      db.bookings.push({
+        id: 'booking-legacy-a31', businessId: BUSINESS_ID, customerId: '', serviceId: 'svc-history', professionalId: '',
+        date: '2026-09-22', time: '10:00', customerName: 'Histórico unificado', customerPhone: '+55 (11) 99999-9999',
+        status: 'confirmed', note: '', answers: [], createdAt: NOW, updatedAt: NOW, history: [],
+      });
+      const leadId = db.leads[0].id;
+      db.tasks.push({
+        id: 'task-legacy-a31', businessId: BUSINESS_ID, title: 'Retornar ligação', note: '', status: 'open',
+        dueAt: '', createdAt: NOW, updatedAt: NOW, doneAt: '', assignedUserId: '', createdBy: OWNER_ID,
+        leadId, source: 'manual',
+      });
+      db.conversations.push({
+        id: 'conversation-legacy-a31', businessId: BUSINESS_ID, channel: 'whatsapp', contactId: '', customerId: '',
+        name: 'Histórico unificado', phone: '5511999999999', status: 'open', unread: 1,
+        lastMessageAt: NOW, lastMessagePreview: 'Olá', createdAt: NOW,
+      });
+    });
+
+    const before = await people360GET(jsonReq(`/api/people360?businessId=${BUSINESS_ID}`, undefined, ownerToken, 'GET'));
+    const beforeBody = await json(before);
+    expect(before.status).toBe(200);
+    expect(beforeBody.people).toHaveLength(1);
+    expect(beforeBody.people[0].leads).toHaveLength(1);
+    expect(beforeBody.people[0].bookings).toHaveLength(1);
+    expect(beforeBody.people[0].phone).toBe('11999999999');
+    expect(beforeBody.people[0].tasks).toHaveLength(1);
+    expect(beforeBody.people[0].conversations).toHaveLength(1);
+
+    const access = await contactsPOST(jsonReq('/api/contacts', {
+      businessId: BUSINESS_ID, name: 'Histórico unificado', phone: '11999999999', createAccount: true,
+    }, ownerToken));
+    const accessBody = await json(access);
+    const customerId = accessBody.contact.customerId;
+    expect(accessBody.contact.id).toBe(contactId);
+    expect(accessBody.contact.accountStatus).toBe('active');
+    expect(customerId).toBeTruthy();
+
+    // Repetir a ação deve reutilizar a mesma Customer, sem nova conta nem
+    // segunda pessoa canônica.
+    const repeated = await contactsPOST(jsonReq('/api/contacts', {
+      businessId: BUSINESS_ID, name: 'Histórico unificado', phone: '11999999999', createAccount: true,
+    }, ownerToken));
+    const repeatedBody = await json(repeated);
+    expect(repeatedBody.contact.customerId).toBe(customerId);
+    expect((await readDB()).customers).toHaveLength(1);
+
+    const after = await people360GET(jsonReq(`/api/people360?businessId=${BUSINESS_ID}`, undefined, ownerToken, 'GET'));
+    const afterBody = await json(after);
+    expect(after.status).toBe(200);
+    expect(afterBody.people).toHaveLength(1);
+    expect(afterBody.people[0]).toMatchObject({
+      contactId,
+      customerId,
+      accountStatus: 'active',
+    });
+    expect(afterBody.people[0].leads).toHaveLength(1);
+    expect(afterBody.people[0].bookings).toHaveLength(1);
+    expect(afterBody.people[0].tasks).toHaveLength(1);
+    expect(afterBody.people[0].conversations).toHaveLength(1);
+    expect(afterBody.people[0].leads[0].id).toBe((await readDB()).leads[0].id);
+    expect(afterBody.people[0].bookings[0].id).toBe('booking-legacy-a31');
+  });
+});
+
 describe('A3.1 — cadastro direto de pessoa e conta opcional', () => {
   it('contato sem acesso não cria Lead/Booking e opt-in começa desligado', async () => {
     const res = await contactsPOST(jsonReq('/api/contacts', {
@@ -209,6 +293,46 @@ describe('A3.1 — cadastro direto de pessoa e conta opcional', () => {
     expect(db.leads).toHaveLength(0);
     expect(db.bookings).toHaveLength(0);
     expect(db.audit.filter((a) => a.action === 'customer.access_created')).toHaveLength(1);
+  });
+
+  it('reset definitivo limpa mustChangePassword e invalida a senha temporária', async () => {
+    const created = await contactsPOST(jsonReq('/api/contacts', {
+      businessId: BUSINESS_ID, name: 'Troca de senha', phone: '11994445555', email: 'troca@example.com', createAccount: true,
+    }, ownerToken));
+    const createdBody = await json(created);
+    const temporary = createdBody.temporaryPassword;
+    const customerId = createdBody.contact.customerId;
+    expect(createdBody.contact.mustChangePassword).toBe(true);
+
+    const resetToken = newResetToken();
+    await updateDB((db) => {
+      db.passwordResets.push({
+        id: 'reset-a31', kind: 'customer', accountId: customerId, tokenHash: resetToken.hash,
+        expiresAt: new Date(Date.now() + 60 * 60 * 1000).toISOString(), usedAt: '', createdAt: NOW,
+      });
+    });
+
+    const reset = await customerResetPOST(jsonReq('/api/customer/reset', {
+      token: resetToken.token, password: 'senha-definitiva-123',
+    }));
+    const resetBody = await json(reset);
+    expect(reset.status).toBe(200);
+    expect(resetBody.customer.mustChangePassword).toBe(false);
+
+    const db = await readDB();
+    const customer = db.customers.find((c) => c.id === customerId)!;
+    expect(customer.mustChangePassword).toBe(false);
+    expect(verifyPassword('senha-definitiva-123', customer.passwordHash)).toBe(true);
+    expect(verifyPassword(temporary, customer.passwordHash)).toBe(false);
+
+    const loginWithNewPassword = await customerLoginPOST(jsonReq('/api/customer/login', {
+      login: 'troca@example.com', password: 'senha-definitiva-123',
+    }));
+    expect(loginWithNewPassword.status).toBe(200);
+    const loginWithTemporaryPassword = await customerLoginPOST(jsonReq('/api/customer/login', {
+      login: 'troca@example.com', password: temporary,
+    }));
+    expect(loginWithTemporaryPassword.status).toBe(401);
   });
 
   it('o cadastro público continua criando conta com a mesma rota existente', async () => {

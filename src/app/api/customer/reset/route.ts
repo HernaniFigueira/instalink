@@ -25,6 +25,9 @@ export async function POST(req: NextRequest) {
       const r = d.passwordResets.find((x) => x.id === reset.id);
       if (!c || !r || r.usedAt) throw new Error('Link inválido ou expirado.');
       c.passwordHash = hashPassword(password);
+      // A senha temporária/admin já foi substituída por uma senha definitiva.
+      // O histórico de criação continua em accessCreatedAt.
+      c.mustChangePassword = false;
       r.usedAt = new Date().toISOString();
       out = { ...c };
     });
