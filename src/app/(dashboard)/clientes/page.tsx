@@ -22,6 +22,7 @@ import {
 import { Icon } from '@/components/icons';
 import { NewBookingSheet } from '@/components/dashboard/NewBookingSheet';
 import { NewClientSheet } from '@/components/dashboard/NewClientSheet';
+import { ImportClientsSheet } from '@/components/dashboard/ImportClientsSheet';
 import { ClientProfileDrawer, type Person360 } from '@/components/dashboard/ClientProfileDrawer';
 import { effectiveHorizonDays } from '@/lib/booking-ops';
 import { AccessDenied, useAreaLoad } from '@/components/dashboard/AccessNotice';
@@ -63,6 +64,9 @@ export default function ClientesPage() {
   const [error, setError] = useState('');
   const [bookingFor, setBookingFor] = useState<Person360 | null>(null);
   const [newClientOpen, setNewClientOpen] = useState(false);
+  // A3.4 · Bloco 7 — a base entra e sai em arquivo (CSV).
+  const [importOpen, setImportOpen] = useState(false);
+  const [exporting, setExporting] = useState(false);
   const [pendingClientOpen, setPendingClientOpen] = useState('');
   const [services, setServices] = useState<any[]>([]);
   const [pros, setPros] = useState<any[]>([]);
@@ -74,6 +78,33 @@ export default function ClientesPage() {
   const { permissions, ready: permsReady } = usePanelPermissions();
   const canFunil = permsReady && permissions.leads === true;
   const [pipeline, setPipeline] = useState<BusinessPipeline | null>(null);
+
+  /**
+   * A3.4 · Bloco 7 — exporta a base em CSV.
+   *
+   * Baixa o arquivo que a própria importação entende (ida e volta). O download
+   * é do NAVEGADOR (blob), e não um link direto para a rota, para que uma
+   * sessão expirada não termine num arquivo JSON de erro salvo como .csv.
+   */
+  async function downloadExport() {
+    setExporting(true);
+    setError('');
+    try {
+      const res = await fetch(`/api/contacts/export?businessId=${encodeURIComponent(businessId)}`);
+      if (!res.ok) { setError(res.status === 403 ? 'Seu acesso não permite exportar a base.' : 'Não foi possível exportar agora.'); return; }
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `clientes-${new Date().toISOString().slice(0, 10)}.csv`;
+      a.click();
+      URL.revokeObjectURL(url);
+    } catch {
+      setError('Não foi possível exportar agora.');
+    } finally {
+      setExporting(false);
+    }
+  }
 
   const load = useCallback(async () => {
     if (!businessId) return;
@@ -157,6 +188,13 @@ export default function ClientesPage() {
                 <Icon n="funnel" size={14} /> Funil de oportunidades
               </Link>
             )}
+            <Button variant="secondary" onClick={() => setImportOpen(true)} title="Trazer a base de outro sistema (CSV)">
+              <Icon n="upload" size={15} /> Importar
+            </Button>
+            <Button variant="secondary" disabled={exporting} title="Baixar a base em CSV"
+              onClick={() => { void downloadExport(); }}>
+              <Icon n="download" size={15} /> {exporting ? 'Gerando…' : 'Exportar'}
+            </Button>
             <Button variant="primary" onClick={() => setNewClientOpen(true)}>
               <Icon n="plus" size={15} strokeWidth={2.6} /> Novo cliente
             </Button>
@@ -285,6 +323,14 @@ export default function ClientesPage() {
           onClose={() => setOpenKey(null)}
           onChanged={load}
           onNewBooking={(p) => { setOpenKey(null); openBooking(p); }}
+        />
+      )}
+
+      {importOpen && (
+        <ImportClientsSheet
+          businessId={businessId}
+          onClose={() => setImportOpen(false)}
+          onImported={load}
         />
       )}
 

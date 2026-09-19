@@ -1738,6 +1738,8 @@ export type AuditAction =
   // A3.4 · Bloco 5 — registro do atendimento
   | 'encounter.created' | 'encounter.updated' | 'encounter.finalized'
   | 'encounter.reopened' | 'encounter.removed'
+  // A3.4 · Bloco 7 — base de clientes entra e sai em arquivo
+  | 'contact.imported' | 'contact.exported'
   // P3 — esteira operacional e integrações
   | 'pipeline.updated' | 'api_key.created' | 'api_key.revoked'
   | 'webhook.created' | 'webhook.updated' | 'webhook.deleted'

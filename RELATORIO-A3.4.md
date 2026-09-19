@@ -725,3 +725,62 @@ npx vitest run  → 83 arquivos · 1400 testes ok
 npx tsc --noEmit → 0 erros
 npm run build    → ok (107 páginas)
 ```
+
+---
+
+## BLOCO 7 — IMPORTAR E EXPORTAR A BASE DE CLIENTES
+
+### O diagnóstico
+
+Quem chega de outro sistema tem a base num arquivo e **nenhuma porta** para
+trazê-la: só restava cadastrar pessoa por pessoa — ou pedir ao suporte. E a
+base que já está aqui também não saía em lugar nenhum (nem para backup, nem
+para uma campanha externa, nem para conferência).
+
+### O que foi criado
+
+| Onde | Mudança |
+|---|---|
+| `lib/client-import.ts` | **novo, puro** — leitura de CSV como o arquivo VEM (`;`, `,`, TAB, BOM, aspas, aspas escapadas, quebra de linha dentro da célula), cabeçalho em português ou inglês com acento e variações, normalização dos valores (telefone BR, data, sim/não) e o **planejador** da importação (`buildImportPlan`). |
+| `lib/client-export.ts` | **novo, puro** — quais contatos da unidade entram no arquivo (busca por nome/telefone/e-mail/CPF, filtro de consentimento, teto de 5.000 linhas) e ordem estável (nome, depois id) para duas exportações serem comparáveis. |
+| `POST /api/contacts/import` | prévia (`mode:'preview'`) e gravação (`mode:'commit'`). A prévia **não escreve nada**; a gravação **recalcula o plano dentro da transação** (a base pode ter mudado entre conferir e confirmar). |
+| `GET /api/contacts/export` | CSV da unidade, com `Content-Disposition` de download. Exportar dado pessoal fica **auditado** (`contact.exported`). |
+| `ImportClientsSheet` | painel do fluxo em duas etapas: escolher arquivo **ou** colar, prévia linha por linha (situação + o que vai acontecer), botão de importar com a contagem, e **baixar modelo**. |
+| Clientes (página) | botões **Importar** e **Exportar** no cabeçalho, ao lado de "Novo cliente". |
+| `icons.tsx` | ícone `download`. |
+
+### Decisões
+
+- **A identidade é a do CRM.** Telefone em dígitos, e-mail em minúsculas —
+  **nunca o nome**. Quem já está na base é *atualizado* (nunca duplicado), e
+  duplicidade dentro do próprio arquivo conta uma vez (a segunda linha vira
+  “repetido”, apontando em qual linha o primeiro apareceu).
+- **Conferir antes de escrever.** A prévia mostra, por linha, o que vai
+  acontecer — inclusive as **colunas que não foram reconhecidas**. Linha com
+  dado torto (DDD inexistente, e-mail incompleto, sem telefone nem e-mail) vira
+  **erro** e **não entra**: a régua é a mesma do Bloco 6.
+- **Consentimento não se presume.** A coluna de marketing só liga o opt-in
+  quando o arquivo diz explicitamente “sim”; ausente, o que estava na ficha
+  continua como estava.
+- **A coluna desconhecida continua desconhecida.** Aliases curtos (`numero`,
+  `uf`, `rua`) casam só por igualdade: “Número da sorte” é reportada como
+  coluna não reconhecida em vez de virar o número do endereço.
+- **Ida e volta.** O CSV exportado é lido pela própria importação — há teste
+  garantindo o ciclo completo (exportar → importar → mesmos dados).
+
+### Testes
+
+`src/lib/__tests__/a34-client-import.test.ts` (16 casos): separadores e
+cabeçalhos, aspas e multilinha, normalização de data/sim-não, identidade
+(nunca por nome), plano separando novo/atualização/repetido/erro, colunas
+desconhecidas, modelo e exportação relidos pela importação — e, nas rotas
+reais com banco temporário: prévia que **não grava**, commit que cria +
+atualiza + aplica perfil com auditoria, **reimportação idempotente**, fronteira
+entre unidades, exportação com filtro/consentimento e ordem estável.
+
+```
+npx vitest run src/lib/__tests__/a34-client-import.test.ts → 16 ok
+npx vitest run  → 84 arquivos · 1416 testes ok
+npx tsc --noEmit → 0 erros
+npm run build    → ok (109 páginas)
+```
