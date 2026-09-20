@@ -484,7 +484,7 @@ export function DashboardShell({ children }: { children: React.ReactNode }) {
     // `PanelHomeProvider` entrega o destino de volta a qualquer 403 do painel
     // sem que cada tela precise calcular (ou chutar) o seu.
     <PanelHomeProvider home={homeHref}>
-    <div className="min-h-screen bg-[var(--bg)] lg:flex">
+    <div className="il-platform min-h-screen bg-[var(--bg)] lg:flex">
       {/* ═══ SIDEBAR DESKTOP (A3.3) ═══════════════════════════════
           Três blocos, um comportamento só:
             TOPO   → marca/unidade + controle de recolher (sempre à vista);

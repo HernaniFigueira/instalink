@@ -480,3 +480,182 @@ input[type='color'] { @apply cursor-pointer; }
   body.il-printing .il-print-area .il-print-hide { display: none !important; }
   @page { margin: 14mm; }
 }
+
+/* D1a — platform palette. Opt-in only: never change :root, zinc, .il-page,
+   authentication, landing or a clinic's --il-* theme. D1b will reorganize
+   navigation; this layer only changes the existing workspace's appearance. */
+.il-platform {
+  color-scheme: light;
+  --bg: #f7f7f4;
+  --bg-tint: #f0f1ee;
+  --surface: #fffefa;
+  --surface-2: #ffffff;
+  --surface-3: #f0f1ee;
+  --surface-hover: #ecefed;
+  --border: #dde0dd;
+  --border-soft: #e8eae6;
+  --border-strong: #7c858f;
+  --border-2: #c4c9c8;
+  --text: #252a31;
+  --text-strong: #191e25;
+  --text-muted: #5c626b;
+  /* Slightly darker than the D0 candidate: AA also on the inset/hover surface. */
+  --text-faint: #626a73;
+  --text-soft: var(--text-faint);
+  --brand: #2459a6;
+  --brand-strong: #1c4786;
+  --brand-soft: #edf3fb;
+  --brand-softer: #f4f7fc;
+  --brand-border: #a8bdd9;
+  --brand-fg: #204d8b;
+  --brand-ring: rgba(36, 89, 166, 0.24);
+  --brand-bg-hover: #dfe9f7;
+  --action: var(--brand);
+  --action-strong: var(--brand-strong);
+  --action-contrast: #ffffff;
+  --action-soft: var(--brand-soft);
+  --action-soft-border: var(--brand-border);
+  --accent: var(--brand);
+  --accent-contrast: #ffffff;
+
+  /* State colors stay semantic. Filled controls also need AA with white. */
+  --success: #146344;
+  --success-strong: #104e36;
+  --success-bg: #eaf5ee;
+  --success-bg-hover: #dceee3;
+  --success-border: #b8d9c5;
+  --success-fg: #146344;
+  --info: #2459a6;
+  --info-strong: #1c4786;
+  --info-bg: #edf3fb;
+  --info-border: #a8bdd9;
+  --info-fg: #204d8b;
+  --warning: #835000;
+  --warning-strong: #663e00;
+  --warning-bg: #fff4dd;
+  --warning-border: #e4c994;
+  --warning-fg: #835000;
+  --attention: var(--warning-fg);
+  --attention-bg: var(--warning-bg);
+  --attention-bg-hover: #f5e7c9;
+  --attention-border: var(--warning-border);
+  --attention-fg: var(--warning-fg);
+  --attention-mark: #efc26a;
+  --attention-mark-fg: #523500;
+  --danger: #a62d38;
+  --danger-strong: #84232c;
+  --danger-bg: #fceef0;
+  --danger-border: #e9bec4;
+  --danger-fg: #a62d38;
+  /* Lilac/teal remain available to legacy status consumers. Do not remap
+     them globally just to neutralize the navigation's decorative accents. */
+  --overlay: rgba(25, 30, 37, 0.36);
+  --radius-xs: 4px;
+  --radius-sm: 6px;
+  --radius-md: 8px;
+  --radius-lg: 12px;
+  --radius-xl: 16px;
+  --shadow-xs: 0 0 #0000;
+  --shadow-sm: 0 0 #0000;
+  --shadow-brand: 0 0 #0000;
+  --shadow-inset: 0 0 #0000;
+  --shadow-md: 0 8px 24px rgba(25, 30, 37, 0.10);
+  --shadow-lg: var(--shadow-md);
+  --shadow-xl: var(--shadow-md);
+  --focus-ring: 0 0 0 3px var(--brand-ring);
+  --focus-outline: 2px solid var(--brand);
+  --il-nav: var(--surface);
+  --il-nav-fg: var(--text);
+  --il-nav-muted: var(--text-muted);
+  --il-nav-hover: var(--surface-hover);
+  --il-nav-active: var(--brand-soft);
+  --il-nav-active-fg: var(--brand-fg);
+  --il-nav-border: var(--border);
+  --il-nav-cta: var(--brand);
+  --il-nav-cta-fg: var(--action-contrast);
+  color: var(--text);
+}
+
+/* More specific than utility outline-none; no global recoloring. */
+.il-platform :focus-visible {
+  outline: var(--focus-outline);
+  outline-offset: 2px;
+  box-shadow: none;
+}
+.il-platform .peer:focus-visible + span {
+  outline: var(--focus-outline);
+  outline-offset: 2px;
+}
+.il-platform .il-page-header__icon {
+  background-image: none;
+  background-color: var(--brand-soft);
+  color: var(--brand-fg);
+  box-shadow: none;
+}
+.il-platform .il-avatar {
+  background: var(--brand-soft);
+  color: var(--brand-fg);
+  box-shadow: none;
+}
+.il-platform .il-idcard { background: var(--surface-3); }
+.il-platform .il-idcard::after { display: none; }
+.il-platform .il-actionbar { background: var(--surface); backdrop-filter: none; }
+.il-platform .il-tabbar--sm { transform: none; }
+.il-platform .il-tab:hover { background: var(--surface-hover); }
+.il-platform .il-tab[aria-selected='true'] { background: var(--brand-soft); }
+
+/* The catalog still owns routes, permissions, groups and order. These scoped
+   overrides intentionally win over its old inline SECTION_THEME colors, but
+   ONLY on existing navigation nodes. Semantic status tokens are untouched. */
+.il-platform [data-nav-item] { color: var(--il-nav-fg); }
+.il-platform [data-nav-item][aria-current='page'],
+.il-platform #mobile-nav-more a[aria-current='page'] {
+  background-color: var(--il-nav-active) !important;
+  color: var(--il-nav-active-fg) !important;
+  box-shadow: none;
+}
+.il-platform [data-nav-item] > span[aria-hidden='true'] { color: var(--il-nav-muted) !important; }
+.il-platform [data-nav-item][aria-current='page'] > span[aria-hidden='true'] { color: var(--il-nav-active-fg) !important; }
+.il-platform [data-nav-rail] { background-color: var(--brand) !important; }
+
+.il-platform .il-control { min-height: 44px; }
+.il-platform .il-control--xs,
+.il-platform .il-control--sm { min-height: 36px; }
+.il-platform .il-icon-button { min-width: 36px; }
+.il-platform .il-field-control { min-height: 44px; }
+.il-platform textarea.il-field-control { min-height: 72px; }
+.il-platform .il-tab { min-height: 36px; }
+
+@media (pointer: coarse), (max-width: 767px) {
+  .il-platform .il-control,
+  .il-platform .il-tab { min-height: 44px; }
+  .il-platform .il-icon-button { min-width: 44px; }
+  .il-platform .il-field-control { font-size: 16px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .il-platform, .il-platform *, .il-platform *::before, .il-platform *::after {
+    scroll-behavior: auto !important;
+    animation: none !important;
+    transition: none !important;
+  }
+  /* ScrollingElement is html, not the workspace. This condition applies only
+     while the workspace exists (including SPA navigation), never auth/public. */
+  html:has(.il-platform) { scroll-behavior: auto; }
+}
+
+/* Native Drawer geometry only; inherits the caller's theme. This is not a
+   global dialog reset. Native showModal supplies inertness and tab containment. */
+dialog.il-drawer {
+  margin: 0;
+  padding: 0;
+  border: 0;
+  width: 100%;
+  height: 100dvh;
+  max-width: none;
+  max-height: none;
+  background: transparent;
+  color: inherit;
+  overflow: hidden;
+}
+dialog.il-drawer:not([open]) { display: none; }
+dialog.il-drawer::backdrop { background: transparent; }
