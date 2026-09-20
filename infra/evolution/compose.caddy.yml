@@ -1,0 +1,29 @@
+# Optional reverse proxy for a NEW authorized host with port 443 free.
+# If a host proxy already exists, use the base compose + localhost:8080 instead.
+services:
+  caddy:
+    image: caddy:2.10.2-alpine@sha256:4c6e91c6ed0e2fa03efd5b44747b625fec79bc9cd06ac5235a779726618e530d
+    restart: unless-stopped
+    depends_on:
+      evolution:
+        condition: service_healthy
+    ports:
+      - '443:443'
+    environment:
+      EVOLUTION_HOST: ${EVOLUTION_HOST:?Set an authorized DNS hostname}
+      ACME_EMAIL: ${ACME_EMAIL:?Set the certificate operator email}
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    networks: [egress]
+    security_opt: [no-new-privileges:true]
+    logging:
+      driver: local
+      options:
+        max-size: 10m
+        max-file: '3'
+
+volumes:
+  caddy_data:
+  caddy_config:

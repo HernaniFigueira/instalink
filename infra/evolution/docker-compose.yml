@@ -1,0 +1,163 @@
+name: instalink-evolution
+
+services:
+  postgres:
+    image: postgres:15-alpine@sha256:a46e076249ce434e41203b8c1dadfaa025b9726331d72390df038385d6dc29cd
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: evolution
+      POSTGRES_USER: evolution
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Generate POSTGRES_PASSWORD on the authorized server}
+      POSTGRES_INITDB_ARGS: --auth-host=scram-sha-256
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    networks: [backend]
+    healthcheck:
+      test: [CMD-SHELL, 'pg_isready -U evolution -d evolution']
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
+    security_opt: [no-new-privileges:true]
+    logging:
+      driver: local
+      options:
+        max-size: 10m
+        max-file: '3'
+
+  redis:
+    image: redis:7-alpine@sha256:520775a41a63e77e06c73e35d2fd9cc15921a609516818796b4ecbb813078bc7
+    restart: unless-stopped
+    environment:
+      REDIS_PASSWORD: ${REDIS_PASSWORD:?Generate independent REDIS_PASSWORD on the authorized server}
+    # $$ defers expansion to the container, not Compose. Never use a literal password.
+    command:
+      - /bin/sh
+      - -ec
+      - 'exec /usr/local/bin/docker-entrypoint.sh redis-server --appendonly yes --appendfsync everysec --requirepass "$$REDIS_PASSWORD"'
+    volumes:
+      - redis_data:/data
+    networks: [backend]
+    healthcheck:
+      test: [CMD-SHELL, 'REDISCLI_AUTH="$$REDIS_PASSWORD" redis-cli ping | grep -qx PONG']
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 10s
+    security_opt: [no-new-privileges:true]
+    logging:
+      driver: local
+      options:
+        max-size: 10m
+        max-file: '3'
+
+  evolution:
+    image: evoapicloud/evolution-api:v2.3.7@sha256:1bd8afc4a6cf48822e6cf02469aeae7bd35a12a6b616eacd1291926307f4d339
+    restart: unless-stopped
+    init: true
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    # Host reverse proxy only. NEVER change the host IP to 0.0.0.0.
+    ports:
+      - '127.0.0.1:8080:8080'
+    volumes:
+      - evolution_instances:/evolution/instances
+    networks: [backend, egress]
+    environment:
+      NODE_ENV: production
+      SERVER_TYPE: http
+      SERVER_PORT: '8080'
+      SERVER_URL: ${SERVER_URL:?Set the authorized public HTTPS origin}
+      SERVER_DISABLE_MANAGER: 'true'
+      AUTHENTICATION_API_KEY: ${AUTHENTICATION_API_KEY:?Generate AUTHENTICATION_API_KEY on the authorized server}
+      AUTHENTICATION_EXPOSE_IN_FETCH_INSTANCES: 'false'
+      # 2.3.7 does not consume DATABASE_ENABLED. Provider/URI are its real contract.
+      DATABASE_PROVIDER: postgresql
+      # Intentionally bound to the dedicated local Postgres, NEVER InstaLink/Neon.
+      # Hex-generated passwords need no URI escaping. Do not print rendered config.
+      DATABASE_CONNECTION_URI: postgresql://evolution:${POSTGRES_PASSWORD:?Required}@postgres:5432/evolution?schema=public
+      DATABASE_CONNECTION_CLIENT_NAME: instalink_evolution
+      DATABASE_SAVE_DATA_INSTANCE: 'true'
+      DATABASE_SAVE_DATA_NEW_MESSAGE: 'true'
+      DATABASE_SAVE_MESSAGE_UPDATE: 'true'
+      DATABASE_SAVE_DATA_CONTACTS: 'true'
+      DATABASE_SAVE_DATA_CHATS: 'true'
+      DATABASE_SAVE_DATA_LABELS: 'false'
+      DATABASE_SAVE_DATA_HISTORIC: 'false'
+      DATABASE_SAVE_IS_ON_WHATSAPP: 'true'
+      DATABASE_SAVE_IS_ON_WHATSAPP_DAYS: '7'
+      DATABASE_DELETE_MESSAGE: 'true'
+      CACHE_REDIS_ENABLED: 'true'
+      CACHE_REDIS_URI: redis://:${REDIS_PASSWORD:?Required}@redis:6379/0
+      CACHE_REDIS_PREFIX_KEY: instalink_evolution
+      CACHE_REDIS_SAVE_INSTANCES: 'false'
+      CACHE_LOCAL_ENABLED: 'false'
+      DEL_INSTANCE: 'false'
+      DEL_TEMP_INSTANCES: 'false'
+      CONFIG_SESSION_PHONE_CLIENT: InstaLink Homologation
+      CONFIG_SESSION_PHONE_NAME: Chrome
+      CORS_ORIGIN: ${SERVER_URL:?Required}
+      CORS_METHODS: GET,POST,DELETE
+      CORS_CREDENTIALS: 'false'
+      LOG_LEVEL: ERROR,WARN
+      LOG_COLOR: 'false'
+      LOG_BAILEYS: silent
+      TELEMETRY_ENABLED: 'false'
+      SENTRY_DSN: ''
+      PROMETHEUS_METRICS: 'false'
+      # Only per-instance webhook configured by the InstaLink lifecycle.
+      WEBHOOK_GLOBAL_ENABLED: 'false'
+      WEBHOOK_GLOBAL_URL: ''
+      WEBHOOK_REQUEST_TIMEOUT_MS: '60000'
+      WEBHOOK_RETRY_MAX_ATTEMPTS: '10'
+      WEBHOOK_RETRY_INITIAL_DELAY_SECONDS: '5'
+      WEBHOOK_RETRY_USE_EXPONENTIAL_BACKOFF: 'true'
+      WEBHOOK_RETRY_MAX_DELAY_SECONDS: '300'
+      WEBHOOK_RETRY_JITTER_FACTOR: '0.2'
+      WEBHOOK_RETRY_NON_RETRYABLE_STATUS_CODES: 400,401,403,404,422
+      CHATWOOT_ENABLED: 'false'
+      OPENAI_ENABLED: 'false'
+      TYPEBOT_ENABLED: 'false'
+      N8N_ENABLED: 'false'
+      DIFY_ENABLED: 'false'
+      EVOAI_ENABLED: 'false'
+      FLOWISE_ENABLED: 'false'
+      RABBITMQ_ENABLED: 'false'
+      SQS_ENABLED: 'false'
+      S3_ENABLED: 'false'
+      KAFKA_ENABLED: 'false'
+      PUSHER_ENABLED: 'false'
+      WEBSOCKET_ENABLED: 'false'
+      PROVIDER_ENABLED: 'false'
+    healthcheck:
+      # Image contains Node 24; no assumption that curl exists in final image.
+      # Authenticated, read-only API check. NEVER print response (may contain tokens).
+      test:
+        - CMD
+        - node
+        - -e
+        - "fetch('http://127.0.0.1:8080/instance/fetchInstances',{headers:{apikey:process.env.AUTHENTICATION_API_KEY},signal:AbortSignal.timeout(5000)}).then(r=>process.exit(r.status===200?0:1)).catch(()=>process.exit(1))"
+      interval: 30s
+      timeout: 8s
+      retries: 5
+      start_period: 120s
+    security_opt: [no-new-privileges:true]
+    # Upstream exceptions/startup can contain pairing material/headers. Do not
+    # retain unredacted stdout. Use healthchecks + sanitized probes, not attach/logs.
+    logging:
+      driver: none
+
+networks:
+  backend:
+    internal: true
+  # Only Evolution (and optional reverse proxy) needs Internet egress.
+  egress:
+    driver: bridge
+
+volumes:
+  postgres_data:
+  redis_data:
+  evolution_instances:
