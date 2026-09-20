@@ -51,6 +51,7 @@ export interface WaChannelData {
     phoneNumberId: string;
     wabaId?: string;
   };
+  canViewDiagnostics?: boolean;
   diagnostics?: {
     credentialsConfigured: boolean;
     credentialSource: string;
@@ -61,7 +62,7 @@ export interface WaChannelData {
     lastOutboundAt: string;
     recentError: string;
   };
-  server: { configured: boolean; missingEnv: string[]; envVars: readonly string[] };
+  server?: { configured: boolean; missingEnv: string[]; envVars: readonly string[] };
   inbox: { conversations: number; open: number; unread: number };
   linkFallback: string;
 }
@@ -512,8 +513,8 @@ export function WhatsappChannelPanel({ businessId }: { businessId: string }) {
                 </div>
               )}
 
-              {/* Caminho assistido: só quando o servidor JÁ tem credenciais globais. */}
-              {data.server.configured && (status === 'error' || guide?.plan.nextAction.kind === 'test_connection') && (
+              {/* Caminho assistido: só quando o servidor JÁ tem credenciais globais e usuário tem permissão técnica. */}
+              {data.canViewDiagnostics && data.server?.configured && (status === 'error' || guide?.plan.nextAction.kind === 'test_connection') && (
                 <div className="border border-zinc-200 rounded-md p-3">
                   <p className="text-xs font-semibold text-zinc-600">Caminho assistido (suporte Master)</p>
                   <div className="flex items-center gap-2 mt-2">
@@ -539,26 +540,30 @@ export function WhatsappChannelPanel({ businessId }: { businessId: string }) {
           </div>
         )}
 
-        <details className="border-t border-zinc-200 text-left bg-zinc-50 p-3">
-          <summary className="text-xs font-semibold cursor-pointer">Diagnóstico técnico</summary>
-          <ul className="text-xs font-mono mt-2 space-y-1">
-            {data.server.envVars.map((v) => (
-              <li key={v} className={data.server.missingEnv.includes(v) ? 'text-amber-700' : 'text-emerald-700'}>{data.server.missingEnv.includes(v) ? '• ' : '✓ '}{v}</li>
-            ))}
-          </ul>
-          <p className="text-xs text-zinc-500 mt-2">Webhook URL da Meta: <span className="font-mono text-zinc-800">/api/whatsapp/webhook</span></p>
-          <p className="text-xs text-zinc-500 mt-1">
-            Graph API: <span className="font-mono text-zinc-800">{guide?.plan.version.current || '—'}</span>
-            {guide?.plan.version.level === 'ok' ? ' ✓' : ` — ${guide?.plan.version.message || ''}`}
-          </p>
-          <p className="text-xs text-zinc-500 mt-1">
-            Conectado por: <span className="font-mono text-zinc-800">
-              {(data.integration as any).source === 'embedded_signup'
-                ? 'popup oficial (a própria unidade autorizou)'
-                : (data.integration as any).source === 'master' ? 'suporte Master' : 'não registrado'}
-            </span>
-          </p>
-        </details>
+        {data.canViewDiagnostics && data.server && (
+          <details className="border-t border-zinc-200 text-left bg-zinc-50 p-3">
+            <summary className="text-xs font-semibold cursor-pointer">Diagnóstico técnico (Master / Administrador)</summary>
+            <ul className="text-xs font-mono mt-2 space-y-1">
+              {data.server.envVars.map((v) => (
+                <li key={v} className={data.server?.missingEnv.includes(v) ? 'text-amber-700' : 'text-emerald-700'}>
+                  {data.server?.missingEnv.includes(v) ? '• ' : '✓ '}{v}
+                </li>
+              ))}
+            </ul>
+            <p className="text-xs text-zinc-500 mt-2">Webhook URL da Meta: <span className="font-mono text-zinc-800">/api/whatsapp/webhook</span></p>
+            <p className="text-xs text-zinc-500 mt-1">
+              Graph API: <span className="font-mono text-zinc-800">{guide?.plan.version.current || '—'}</span>
+              {guide?.plan.version.level === 'ok' ? ' ✓' : ` — ${guide?.plan.version.message || ''}`}
+            </p>
+            <p className="text-xs text-zinc-500 mt-1">
+              Conectado por: <span className="font-mono text-zinc-800">
+                {(data.integration as any).source === 'embedded_signup'
+                  ? 'popup oficial (a própria unidade autorizou)'
+                  : (data.integration as any).source === 'master' ? 'suporte Master' : 'não registrado'}
+              </span>
+            </p>
+          </details>
+        )}
       </div>
     </div>
   );

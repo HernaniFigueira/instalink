@@ -166,9 +166,12 @@ export interface UnitIntegrationView {
   wabaId?: string;
   encryptedAccessToken?: string;
   displayPhone?: string;
+  verifiedName?: string;
   lastWebhookAt?: string;
   lastInboundAt?: string;
   lastError?: string;
+  source?: string;
+  tokenIssuedAt?: string;
   /** Quando a Meta confirmou a assinatura do webhook desta WABA. */
   webhookSubscribedAt?: string;
   /** Quando o número foi REGISTRADO na Cloud API (sem isto, ele não envia). */
@@ -177,6 +180,10 @@ export interface UnitIntegrationView {
   registrationRequired?: boolean;
   /** O que a Meta disse que este onboarding é. Nunca presumimos coexistence. */
   onboardingType?: 'standard' | 'coexistence' | 'unknown';
+  /** Confirmação oficial server-to-server da Meta para Coexistence. */
+  coexistenceConfirmedAt?: string;
+  isOnBizApp?: boolean;
+  platformType?: string;
 }
 
 /** A camada da UNIDADE: o que a clínica escolhe no popup e o que o webhook já provou. */
@@ -250,11 +257,19 @@ export interface OnboardingStep {
 export function onboardingSteps(business: { whatsappIntegration?: UnitIntegrationView }): OnboardingStep[] {
   const wi = business.whatsappIntegration || {};
   const authorized = !!wi.encryptedAccessToken;
-  const subscribed = !!wi.webhookSubscribedAt || (!!wi.wabaId && !!wi.encryptedAccessToken);
+  // COMPROVAÇÃO ESTRITA: nunca considerar webhook assinado apenas porque existem WABA e token.
+  // Exige estritamente !!wi.webhookSubscribedAt proveniente da chamada oficial bem-sucedida.
+  const subscribed = !!wi.webhookSubscribedAt;
   const phone = !!wi.phoneNumberId;
-  const registered = !!wi.registeredAt;
+  const isCoexistence = wi.onboardingType === 'coexistence';
+  // Standard: exige registeredAt comprovado com PIN e registrationRequired !== true.
+  // Coexistence: exige coexistenceConfirmedAt (prova server-to-server da Meta: is_on_biz_app=true && platform_type=CLOUD_API).
+  const registered = isCoexistence
+    ? (!!wi.coexistenceConfirmedAt && wi.isOnBizApp === true && wi.platformType === 'CLOUD_API')
+    : (!!wi.registeredAt && wi.registrationRequired !== true);
   const firstEvent = !!wi.lastWebhookAt;
-  const connected = wi.status === 'connected' && authorized && subscribed && phone && registered;
+  const computed = computeConnectionStatus(wi);
+  const connected = computed.connected;
 
   const steps: OnboardingStep[] = [
     { id: 'authorized', label: 'Conta autorizada', ok: authorized, current: false, detail: 'A unidade autorizou o Instalink no popup oficial da Meta.' },
@@ -262,14 +277,16 @@ export function onboardingSteps(business: { whatsappIntegration?: UnitIntegratio
     { id: 'phone_resolved', label: 'Número encontrado', ok: phone, current: false, detail: 'O identificador do número veio da própria Meta.' },
     {
       id: 'registration',
-      label: 'Número registrado',
+      label: isCoexistence ? 'Número verificado na Meta (Coexistence)' : 'Número registrado',
       ok: registered,
       current: false,
       detail: registered
-        ? 'Registro confirmado na Cloud API.'
-        : 'Falta registrar o número com o PIN de duas etapas — sem isso ele não envia nem recebe pela API.',
+        ? (isCoexistence ? 'Coexistência comprovada e verificada na Meta Cloud API.' : 'Registro confirmado na Cloud API.')
+        : (isCoexistence
+            ? 'Aguardando confirmação oficial da Meta de que o número está ativo no app WhatsApp Business e na Cloud API.'
+            : 'Falta registrar o número com o PIN de duas etapas — sem isso ele não envia nem recebe pela API.'),
     },
-    { id: 'connected', label: 'Conectado', ok: connected, current: false, detail: connected ? 'Tudo pronto para enviar e receber.' : 'Falta concluir as etapas anteriores.' },
+    { id: 'connected', label: 'Conectado', ok: connected, current: false, detail: connected ? 'Tudo pronto para enviar e receber.' : (computed.reason || 'Falta concluir as etapas anteriores.') },
     { id: 'first_event', label: 'Primeiro evento recebido', ok: firstEvent, current: false, detail: 'Prova de ponta a ponta: a Meta entregou uma mensagem desta conta.' },
   ];
   const pending = steps.find((s) => !s.ok && s.id !== 'first_event');
@@ -347,6 +364,25 @@ export function onboardingPlan(args: {
         : { kind: 'test_connection', label: 'Testar conexão', detail: 'Confere o token direto na Meta. Não substitui a chegada de um evento real.' },
       version,
       code: 'OK',
+      clientConfig,
+    };
+  }
+
+  // 1.1 Coexistence com verificação pendente ou inconclusiva junto à Meta
+  if (authorized && wi.onboardingType === 'coexistence' && !wi.coexistenceConfirmedAt) {
+    return {
+      state: 'registration_pending',
+      headline: 'Verificação de Coexistência pendente',
+      detail: wi.lastError || 'A conta foi autorizada no modo Coexistence, mas a Meta ainda não confirmou o status no app WhatsApp Business. Tente novamente ou refaça o fluxo.',
+      layers: [platform, unit],
+      steps,
+      nextAction: {
+        kind: 'test_connection',
+        label: 'Verificar status na Meta',
+        detail: 'Consulta a Graph API para confirmar o status da Coexistência.',
+      },
+      version,
+      code: 'UNIT_PENDING',
       clientConfig,
     };
   }
@@ -447,7 +483,87 @@ export function onboardingPlan(args: {
 // `whatsapp-onboarding-server.ts` (usam node:crypto e não podem entrar no
 // bundle do navegador). Este módulo aqui é seguro para os dois lados.
 
-// ── Mensagem do popup (WA_EMBEDDED_SIGNUP) ──────────────────────
+export function computeConnectionStatus(wi: Partial<UnitIntegrationView> | undefined | null): {
+  status: 'connected' | 'not_connected' | 'error' | 'pending';
+  connected: boolean;
+  registrationRequired: boolean;
+  onboardingType: 'standard' | 'coexistence' | 'unknown';
+  reason?: string;
+} {
+  if (!wi) {
+    return { status: 'not_connected', connected: false, registrationRequired: false, onboardingType: 'unknown', reason: 'Nenhuma integração configurada.' };
+  }
+
+  const hasToken = !!wi.encryptedAccessToken;
+  const hasWaba = !!wi.wabaId;
+  const hasPhone = !!wi.phoneNumberId;
+  const hasWebhook = !!wi.webhookSubscribedAt;
+  const onboardingType = wi.onboardingType || (wi.coexistenceConfirmedAt ? 'coexistence' : (wi.registeredAt ? 'standard' : 'unknown'));
+
+  // Requisitos comuns: encryptedAccessToken, wabaId, phoneNumberId, webhookSubscribedAt
+  if (!hasToken || !hasWaba || !hasPhone || !hasWebhook) {
+    return {
+      status: wi.status === 'error' ? 'error' : (hasToken || hasPhone || hasWaba || wi.displayPhone ? 'pending' : 'not_connected'),
+      connected: false,
+      registrationRequired: onboardingType === 'standard' && !wi.registeredAt,
+      onboardingType,
+      reason: !hasWebhook && (hasToken && hasWaba && hasPhone)
+        ? 'Webhook da WABA ainda não assinado na Meta.'
+        : 'Credenciais, identificadores ou assinatura de webhook incompletos.',
+    };
+  }
+
+  // Coexistence: exige onboardingType === 'coexistence' && coexistenceConfirmedAt && isOnBizApp === true && platformType === 'CLOUD_API'
+  if (onboardingType === 'coexistence') {
+    const coexistenceOk = !!wi.coexistenceConfirmedAt && wi.isOnBizApp === true && wi.platformType === 'CLOUD_API';
+    if (!coexistenceOk) {
+      return {
+        status: wi.status === 'error' ? 'error' : 'pending',
+        connected: false,
+        registrationRequired: false,
+        onboardingType: 'coexistence',
+        reason: 'Coexistência não confirmada server-to-server com a Meta (exige is_on_biz_app=true e platform_type=CLOUD_API).',
+      };
+    }
+    return {
+      status: 'connected',
+      connected: true,
+      registrationRequired: false,
+      onboardingType: 'coexistence',
+    };
+  }
+
+  // Standard: exige estritamente onboardingType === 'standard' && registeredAt && registrationRequired !== true
+  if (onboardingType === 'standard') {
+    const standardOk = !!wi.registeredAt && wi.registrationRequired !== true;
+    if (!standardOk) {
+      return {
+        status: wi.status === 'error' ? 'error' : 'pending',
+        connected: false,
+        registrationRequired: true,
+        onboardingType: 'standard',
+        reason: 'Número não registrado com PIN na Cloud API da Meta.',
+      };
+    }
+    return {
+      status: 'connected',
+      connected: true,
+      registrationRequired: false,
+      onboardingType: 'standard',
+    };
+  }
+
+  // Contrato estrito: unknown NÃO é standard!
+  // Registros com onboardingType: 'unknown' permanecem 'pending', mesmo com timestamps antigos,
+  // até que sejam explicitamente concluídos ou migrados.
+  return {
+    status: wi.status === 'error' ? 'error' : 'pending',
+    connected: false,
+    registrationRequired: false,
+    onboardingType: 'unknown',
+    reason: 'Tipo de onboarding indefinido (unknown). A integração deve ser concluída pelo Embedded Signup oficial.',
+  };
+}
 export interface SignupMessage {
   event: string;
   wabaId: string;
@@ -503,7 +619,7 @@ export function subscribeAppUrl(base: string, wabaId: string): string {
   return `${base}/${encodeURIComponent(wabaId)}/subscribed_apps`;
 }
 export function phoneNumberFieldsUrl(base: string, phoneNumberId: string): string {
-  return `${base}/${encodeURIComponent(phoneNumberId)}?fields=display_phone_number,verified_name,quality_rating`;
+  return `${base}/${encodeURIComponent(phoneNumberId)}?fields=display_phone_number,verified_name,quality_rating,is_on_biz_app,platform_type`;
 }
 export function registerNumberUrl(base: string, phoneNumberId: string): string {
   return `${base}/${encodeURIComponent(phoneNumberId)}/register`;

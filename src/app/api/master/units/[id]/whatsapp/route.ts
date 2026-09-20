@@ -3,6 +3,7 @@ import { requireMaster } from '@/lib/access';
 import { pushAudit } from '@/lib/audit';
 import { updateDB } from '@/lib/db';
 import { defaultWhatsappIntegration, maskTechnicalId } from '@/lib/whatsapp';
+import { computeConnectionStatus, type UnitIntegrationView } from '@/lib/whatsapp-onboarding';
 import { encryptSecret, testMetaConnection } from '@/lib/whatsapp-cloud-api';
 import { onlyDigits } from '@/lib/utils';
 
@@ -18,20 +19,24 @@ export async function GET(req: NextRequest, { params }: { params: { id: string }
   const business = db.businesses.find((b) => b.id === id);
   if (!business) return NextResponse.json({ error: 'Unidade não encontrada.' }, { status: 404 });
 
-  const wi = business.whatsappIntegration || defaultWhatsappIntegration();
+  const rawWi = business.whatsappIntegration || defaultWhatsappIntegration();
+  const computed = computeConnectionStatus(rawWi as UnitIntegrationView);
 
   return NextResponse.json({
-    status: wi.status,
-    displayPhone: wi.displayPhone || '',
-    phoneNumberId: maskTechnicalId(wi.phoneNumberId),
-    wabaId: maskTechnicalId(wi.wabaId),
-    verifiedName: wi.verifiedName || '',
-    connectedAt: wi.connectedAt || '',
-    lastWebhookAt: wi.lastWebhookAt || '',
-    lastInboundAt: wi.lastInboundAt || '',
-    lastOutboundAt: wi.lastOutboundAt || '',
-    lastError: wi.lastError || '',
-    hasCredentials: !!wi.encryptedAccessToken,
+    status: computed.status,
+    connected: computed.connected,
+    onboardingType: computed.onboardingType,
+    registrationRequired: computed.registrationRequired,
+    displayPhone: rawWi.displayPhone || '',
+    phoneNumberId: maskTechnicalId(rawWi.phoneNumberId),
+    wabaId: maskTechnicalId(rawWi.wabaId),
+    verifiedName: rawWi.verifiedName || '',
+    connectedAt: computed.connected ? (rawWi.connectedAt || '') : '',
+    lastWebhookAt: rawWi.lastWebhookAt || '',
+    lastInboundAt: rawWi.lastInboundAt || '',
+    lastOutboundAt: rawWi.lastOutboundAt || '',
+    lastError: computed.connected ? (rawWi.lastError || '') : (rawWi.lastError || computed.reason || ''),
+    hasCredentials: !!rawWi.encryptedAccessToken,
   });
 }
 
@@ -99,31 +104,40 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
     const encryptedToken = encryptSecret(accessToken);
     const now = new Date().toISOString();
 
-    // 3. Persiste no Business apenas após validação confirmada
+    // 3. Centralização: passa pela autoridade única de computeConnectionStatus
+    // REGRA DE HONESTIDADE: A configuração manual do Master NÃO pode fabricar evidências
+    // (webhookSubscribedAt, registeredAt, coexistenceConfirmedAt).
+    // Ela valida e guarda o token, número e WABA, mantendo o status honesto ('pending')
+    // até que as etapas oficiais da Meta sejam executadas.
+    const existingWi = business.whatsappIntegration || defaultWhatsappIntegration();
+    const candidateWi: Partial<UnitIntegrationView> = {
+      ...existingWi,
+      phoneNumberId,
+      wabaId: wabaId || existingWi.wabaId || '',
+      displayPhone: testResult.displayPhoneNumber || displayPhone || existingWi.displayPhone || '',
+      encryptedAccessToken: encryptedToken,
+      verifiedName: testResult.verifiedName,
+      source: 'master',
+      tokenIssuedAt: now,
+      // Preserva dados se já comprovados anteriormente, mas NUNCA inventa novas evidências
+      webhookSubscribedAt: existingWi.webhookSubscribedAt,
+      registeredAt: existingWi.registeredAt,
+      registrationRequired: existingWi.registrationRequired ?? true,
+      onboardingType: existingWi.onboardingType || 'unknown',
+    };
+
+    const computed = computeConnectionStatus(candidateWi);
+
+    // Persiste no Business após validação e computação
     await updateDB((d) => {
       const b = d.businesses.find((x) => x.id === id);
       if (b) {
         b.whatsappIntegration = {
-          ...(b.whatsappIntegration || defaultWhatsappIntegration()),
-          status: 'connected',
-          phoneNumberId,
-          wabaId,
-          displayPhone: testResult.displayPhoneNumber || displayPhone || b.whatsappIntegration?.displayPhone || '',
-          encryptedAccessToken: encryptedToken,
-          verifiedName: testResult.verifiedName,
-          connectedAt: now,
-          lastError: undefined,
-          // Origem da conexão: cadastro assistido pelo suporte, não o popup.
-          // Aqui o suporte valida o token E o número contra a Meta antes de
-          // gravar, então o número já é considerado registrado (o painel do
-          // WhatsApp Manager é quem registra nesse caminho).
-          source: 'master',
-          tokenIssuedAt: now,
-          webhookSubscribedAt: now,
-          registeredAt: now,
-          registrationRequired: false,
-          onboardingType: 'unknown',
-        };
+          ...candidateWi,
+          status: computed.status,
+          connectedAt: computed.connected ? (b.whatsappIntegration?.connectedAt || now) : '',
+          lastError: computed.connected ? undefined : computed.reason,
+        } as any;
       }
       pushAudit(d, {
         action: 'business.updated_by_master',
@@ -133,17 +147,20 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
           whatsappAction: 'configured',
           phoneNumberIdMasked: maskTechnicalId(phoneNumberId),
           verifiedName: testResult.verifiedName,
+          status: computed.status,
         },
       });
     });
 
     return NextResponse.json({
-      ok: true,
-      status: 'connected',
+      ok: computed.connected,
+      status: computed.status,
       verifiedName: testResult.verifiedName,
       displayPhone: testResult.displayPhoneNumber || displayPhone,
       phoneNumberId: maskTechnicalId(phoneNumberId),
-      message: 'Conta oficial do WhatsApp conectada com sucesso à unidade.',
+      message: computed.connected
+        ? 'Conta oficial do WhatsApp conectada com sucesso à unidade.'
+        : `Credenciais salvas, mas a integração permanece como ${computed.status}: ${computed.reason}`,
     });
   } catch {
     return NextResponse.json({ error: 'Erro ao configurar credenciais do WhatsApp.' }, { status: 500 });

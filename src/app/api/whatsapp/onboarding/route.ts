@@ -35,7 +35,7 @@ import { effectiveTimezone, todayISO } from '@/lib/tz';
 import { defaultWhatsappIntegration } from '@/lib/whatsapp';
 import { decryptSecret, encryptSecret, getMetaGraphVersion } from '@/lib/whatsapp-cloud-api';
 import {
-  debugTokenUrl, exchangeCodeUrl, firstPhoneNumberId, graphBase, metaErrorMessage, onboardingPlan,
+  computeConnectionStatus, debugTokenUrl, exchangeCodeUrl, firstPhoneNumberId, graphBase, metaErrorMessage, onboardingPlan,
   parseSignupMessage, phoneNumberFieldsUrl, platformLayer, registerNumberUrl, subscribeAppUrl,
   wabaIdFromDebugToken, wabaPhoneNumbersUrl, type UnitIntegrationView,
 } from '@/lib/whatsapp-onboarding';
@@ -83,15 +83,23 @@ export async function GET(req: NextRequest) {
 
   const plan = planFor(guard.ctx.business);
   const credentialsKey = String(process.env.WHATSAPP_CREDENTIALS_KEY || '');
+  // Camada da plataforma só é detalhada para Master/Admin
+  const canViewDiagnostics = guard.ctx.isMaster || guard.ctx.isOwner || guard.ctx.role === 'ADMIN';
+
   return NextResponse.json({
-    plan,
+    plan: {
+      ...plan,
+      layers: canViewDiagnostics
+        ? plan.layers
+        : plan.layers.filter((l) => l.id !== 'platform'),
+    },
     // Estado assinado, ligado À UNIDADE e AO USUÁRIO que pediu o popup.
     signupState: plan.clientConfig
       ? issueSignupState(credentialsKey, { businessId: guard.ctx.business.id, userId: guard.ctx.user.id })
       : '',
     // Caminho assistido continua valendo (o Master cadastra as credenciais).
-    masterRouteAvailable: true,
-    webhookPath: '/api/whatsapp/webhook',
+    masterRouteAvailable: canViewDiagnostics,
+    webhookPath: canViewDiagnostics ? '/api/whatsapp/webhook' : undefined,
   });
 }
 
@@ -142,6 +150,30 @@ export async function POST(req: NextRequest) {
   // action: register — concluir o registro do número depois da autorização
   // ═════════════════════════════════════════════════════════════
   if (action === 'register') {
+    const wi = business.whatsappIntegration;
+    const isCoexistenceConfirmed = wi?.onboardingType === 'coexistence' &&
+      !!wi?.coexistenceConfirmedAt &&
+      wi?.isOnBizApp === true &&
+      wi?.platformType === 'CLOUD_API';
+
+    if (isCoexistenceConfirmed) {
+      return NextResponse.json({
+        error: 'Esta conta foi integrada e comprovada no modo Coexistence oficial: o número já é registrado pelo aplicativo WhatsApp Business e não requer PIN.',
+        code: 'coexistence_no_register_needed',
+        plan: planFor(business),
+      }, { status: 400 });
+    }
+
+    // Se o cliente alegou Coexistence mas a verificação server-to-server ainda está pendente ou inconclusiva
+    const isCoexistencePending = wi?.onboardingType === 'coexistence' && !isCoexistenceConfirmed;
+    if (isCoexistencePending) {
+      return NextResponse.json({
+        error: 'A conta está com verificação de Coexistência pendente junto à Meta. Não é permitido registrar com PIN enquanto o status no aplicativo WhatsApp Business não for resolvido com segurança. Tente verificar o status novamente ou refaça o Embedded Signup.',
+        code: 'coexistence_verification_pending',
+        plan: planFor(business),
+      }, { status: 400 });
+    }
+
     const stored = decryptSecret(String(business.whatsappIntegration?.encryptedAccessToken || ''));
     const phoneNumberId = String(business.whatsappIntegration?.phoneNumberId || '');
     if (!stored || !phoneNumberId) {
@@ -190,9 +222,10 @@ export async function POST(req: NextRequest) {
         wi.registrationRequired = false;
         wi.lastError = undefined;
         wi.lastErrorAt = undefined;
-        // Só agora, com autorização + webhook + número + registro: conectado.
-        wi.status = wi.wabaId && wi.phoneNumberId ? 'connected' : 'pending';
-        if (wi.status === 'connected' && !wi.connectedAt) wi.connectedAt = now;
+        // Centralização: avalia pelo computeConnectionStatus
+        const computed = computeConnectionStatus(wi as UnitIntegrationView);
+        wi.status = computed.status;
+        if (computed.connected && !wi.connectedAt) wi.connectedAt = now;
       }
       pushAudit(db, {
         action: 'whatsapp.connected', actor: user, businessId,
@@ -376,36 +409,102 @@ export async function POST(req: NextRequest) {
   verifiedName = String(fields.data?.verified_name || verifiedName);
   qualityRating = String(fields.data?.quality_rating || '');
 
-  // ── 8. Registro do número (é o que habilita enviar/receber) ────
+  // ── 8. Registro do número / Tratamento de Coexistence ───────────
+  // REGRA OFICIAL DA META (Onboarding WhatsApp Business App Users / Coexistence):
+  // Em Coexistence (FINISH_WHATSAPP_BUSINESS_APP_ONBOARDING), a Meta instrui
+  // explicitamente: "skip the phone number registration step, as the number is already registered".
+  // Para confirmar a Coexistência, fazemos validação server-to-server:
+  // fields.ok === true && fields.data.is_on_biz_app === true && fields.data.platform_type === 'CLOUD_API'.
+  // O evento do navegador (msg.onboardingType === 'coexistence') é apenas uma pista não confiável.
+  const clientClaimsCoexistence = msg.onboardingType === 'coexistence';
   const pin = String(body.pin || '').replace(/\D/g, '');
   const now = new Date().toISOString();
-  if (pin && pin.length !== 6) {
-    return fail('O PIN de verificação em duas etapas tem 6 dígitos.');
-  }
-  let registration: { attempted: boolean; ok: boolean; detail: string } = { attempted: false, ok: false, detail: '' };
-  if (pin) {
-    const reg = await graphJson(registerNumberUrl(base, phoneNumberId), {
-      method: 'POST',
-      headers: { authorization: `Bearer ${token}`, 'content-type': 'application/json' },
-      body: JSON.stringify({ messaging_product: 'whatsapp', pin, appsecret_proof: proof }),
-    });
+
+  const isOnBizApp = fields.ok && fields.data?.is_on_biz_app === true;
+  const platformType = fields.ok && typeof fields.data?.platform_type === 'string' ? fields.data.platform_type : '';
+  const isServerVerifiedCoexistence = isOnBizApp && platformType === 'CLOUD_API';
+
+  let effectiveOnboardingType: 'standard' | 'coexistence' | 'unknown' = clientClaimsCoexistence ? 'coexistence' : 'standard';
+  let coexistenceConfirmedAt: string | undefined = undefined;
+
+  let registration: { attempted: boolean; ok: boolean; detail: string; skipped?: boolean } = {
+    attempted: false,
+    ok: false,
+    detail: '',
+  };
+
+  if (isServerVerifiedCoexistence) {
+    // Coexistence comprovada server-to-server direto na Graph API da Meta
+    effectiveOnboardingType = 'coexistence';
+    coexistenceConfirmedAt = now;
     registration = {
-      attempted: true,
-      ok: reg.ok,
-      detail: reg.ok ? '' : metaErrorMessage(reg.data, 'a Meta recusou o registro do número.'),
+      attempted: false,
+      ok: true,
+      skipped: true,
+      detail: 'Número verificado server-to-server no app WhatsApp Business e Cloud API (Coexistence oficial da Meta).',
     };
+  } else if (clientClaimsCoexistence && !isServerVerifiedCoexistence) {
+    // REGRA DE SEGURANÇA E HONESTIDADE:
+    // O navegador indicou Coexistence e a consulta server-to-server falhou, retornou timeout,
+    // resposta inválida, campos omitidos ou rate limit.
+    // NUNCA converter automaticamente para Standard e NUNCA instruir o usuário a registrar com PIN!
+    // Mantém onboardingType = 'coexistence', com estado pendente e erro acionável.
+    effectiveOnboardingType = 'coexistence';
+    const reason = !fields.ok
+      ? 'A consulta de status do número à Meta falhou ou retornou erro temporário.'
+      : !isOnBizApp
+        ? 'A Meta não retornou is_on_biz_app=true para este número.'
+        : `platform_type retornado pela Meta (${platformType || 'vazio'}) não é CLOUD_API.`;
+
+    registration = {
+      attempted: false,
+      ok: false,
+      detail: `Verificação de Coexistência pendente na Meta (${reason}). Tente novamente ou refaça o Embedded Signup.`,
+    };
+  } else {
+    // Fluxo Standard da Cloud API: exige registro com PIN de duas etapas
+    effectiveOnboardingType = 'standard';
+    if (pin && pin.length !== 6) {
+      return fail('O PIN de verificação em duas etapas tem 6 dígitos.');
+    }
+    if (pin) {
+      const reg = await graphJson(registerNumberUrl(base, phoneNumberId), {
+        method: 'POST',
+        headers: { authorization: `Bearer ${token}`, 'content-type': 'application/json' },
+        body: JSON.stringify({ messaging_product: 'whatsapp', pin, appsecret_proof: proof }),
+      });
+      registration = {
+        attempted: true,
+        ok: reg.ok,
+        detail: reg.ok ? '' : metaErrorMessage(reg.data, 'a Meta recusou o registro do número.'),
+      };
+    }
   }
-  const registered = registration.attempted && registration.ok;
+
+  // Avaliação centralizada por computeConnectionStatus
+  const draftWi: Partial<UnitIntegrationView> = {
+    encryptedAccessToken: encryptSecret(token),
+    phoneNumberId,
+    wabaId,
+    webhookSubscribedAt: now,
+    onboardingType: effectiveOnboardingType,
+    coexistenceConfirmedAt,
+    isOnBizApp: fields.ok ? fields.data?.is_on_biz_app : undefined,
+    platformType: fields.ok ? fields.data?.platform_type : undefined,
+    registeredAt: effectiveOnboardingType === 'standard' && registration.attempted && registration.ok ? now : undefined,
+    registrationRequired: effectiveOnboardingType === 'standard' ? !(registration.attempted && registration.ok) : false,
+  };
+  const computedStatus = computeConnectionStatus(draftWi);
+  const connected = computedStatus.connected;
 
   // ── 9. Guardar (token criptografado, nunca em claro) ───────────
-  const encrypted = encryptSecret(token);
-  const connected = registered;
+  const encrypted = draftWi.encryptedAccessToken!;
   await updateDB((db) => {
     const b = db.businesses.find((x) => x.id === businessId);
     if (b) {
       b.whatsappIntegration = {
         ...(b.whatsappIntegration || defaultWhatsappIntegration()),
-        status: connected ? 'connected' : 'pending',
+        status: computedStatus.status,
         phoneNumberId,
         wabaId,
         displayPhone,
@@ -414,13 +513,18 @@ export async function POST(req: NextRequest) {
         connectedAt: connected ? now : (b.whatsappIntegration?.connectedAt || ''),
         requestedAt: now,
         webhookSubscribedAt: now,
-        registeredAt: registered ? now : '',
-        registrationRequired: !registered,
-        onboardingType: msg.onboardingType,
+        registeredAt: draftWi.registeredAt || '',
+        registrationRequired: computedStatus.registrationRequired,
+        onboardingType: effectiveOnboardingType,
+        coexistenceConfirmedAt,
+        isOnBizApp: fields.ok ? fields.data?.is_on_biz_app : undefined,
+        platformType: fields.ok ? fields.data?.platform_type : undefined,
         lastError: registration.attempted && !registration.ok
           ? `Registro do número: ${registration.detail}`
-          : (connected ? undefined : 'Falta registrar o número na Cloud API (PIN de duas etapas).'),
-        lastErrorAt: !registered ? now : undefined,
+          : (!connected && clientClaimsCoexistence && !isServerVerifiedCoexistence)
+            ? registration.detail
+            : (connected ? undefined : computedStatus.reason || 'Falta concluir etapas de registro na Meta.'),
+        lastErrorAt: !connected ? now : undefined,
         source: 'embedded_signup',
         tokenIssuedAt: now,
       } as any;
@@ -432,10 +536,11 @@ export async function POST(req: NextRequest) {
       meta: {
         via: 'embedded_signup',
         graphVersion: getMetaGraphVersion(),
-        onboardingType: msg.onboardingType,
+        onboardingType: effectiveOnboardingType,
+        coexistenceServerVerified: isServerVerifiedCoexistence,
         wabaId: 'presente',
         phoneNumberId: 'presente',
-        registered,
+        registered: connected,
       },
     });
   });
@@ -443,13 +548,20 @@ export async function POST(req: NextRequest) {
   // Sem registro comprovado NÃO é "conectado": a unidade fica pendente e a
   // resposta diz exatamente o que falta.
   if (!connected) {
+    let pendingMessage = 'Conta autorizada e webhook assinado. Falta registrar o número: informe o PIN de verificação em duas etapas (6 dígitos) para o número poder enviar e receber pela API.';
+    let pendingReason = 'phone_registration_required';
+
+    if (registration.attempted) {
+      pendingMessage = `A conta foi autorizada, mas o registro do número falhou: ${registration.detail} Confira o PIN de duas etapas no WhatsApp Manager.`;
+    } else if (clientClaimsCoexistence && !isServerVerifiedCoexistence) {
+      pendingReason = 'coexistence_verification_pending';
+      pendingMessage = `A conta foi autorizada, mas a Meta ainda não confirmou o status de Coexistência (${registration.detail}). Tente novamente mais tarde ou refaça o Embedded Signup.`;
+    }
     return NextResponse.json({
       ok: false,
       pending: true,
-      reason: 'phone_registration_required',
-      message: registration.attempted
-        ? `A conta foi autorizada, mas o registro do número falhou: ${registration.detail} Confira o PIN de duas etapas no WhatsApp Manager.`
-        : 'Conta autorizada e webhook assinado. Falta registrar o número: informe o PIN de verificação em duas etapas (6 dígitos) para o número poder enviar e receber pela API.',
+      reason: pendingReason,
+      message: pendingMessage,
       integration: { status: 'pending', displayPhone, verifiedName, qualityRating },
       checks: { tokenStored: true, webhookSubscribed: true, phoneResolved: true, registration },
       plan: await freshPlan(businessId, business),

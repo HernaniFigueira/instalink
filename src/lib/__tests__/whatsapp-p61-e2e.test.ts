@@ -209,6 +209,10 @@ beforeEach(async () => {
     requestedAt: '',
     encryptedAccessToken: encryptSecret('EAATestValidTokenClinicA'),
     keyFingerprint: 'fp-1234',
+    webhookSubscribedAt: '2026-09-10T12:00:00Z',
+    registeredAt: '2026-09-10T12:00:00Z',
+    registrationRequired: false,
+    onboardingType: 'standard',
   };
 
   const clinicB = createClinic(BIZ_B, OWNER_B, 'Clínica Odonto B');
@@ -223,6 +227,10 @@ beforeEach(async () => {
     requestedAt: '',
     encryptedAccessToken: encryptSecret('EAATestValidTokenClinicB'),
     keyFingerprint: 'fp-5678',
+    webhookSubscribedAt: '2026-09-10T12:00:00Z',
+    registeredAt: '2026-09-10T12:00:00Z',
+    registrationRequired: false,
+    onboardingType: 'standard',
   };
 
   db.businesses.push(clinicA, clinicB);
@@ -1021,6 +1029,9 @@ describe('P6.1 — WhatsApp Cloud API E2E', () => {
       const res = await masterWhatsappPOST(masterReq, { params: Promise.resolve({ id: BIZ_A }) });
       expect(res.status).toBe(200);
       const body = await jsonBody(res);
+      // Como a clínica BIZ_A já tinha webhookSubscribedAt e registeredAt antes deste POST,
+      // as evidências prévias são preservadas e o status resulta em 'connected'.
+      expect(body.status).toBe('connected');
       expect(body.ok).toBe(true);
       expect(body.accessToken).toBeUndefined(); // Secrets not returned!
 

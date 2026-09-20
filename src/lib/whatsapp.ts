@@ -15,6 +15,9 @@
 // Tokens nunca são expostos em plaintext ao frontend.
 import type { Business, WhatsappIntegration, WhatsappStatus } from './types';
 
+// ── Rótulos/UX de estado (usado pelo painel e pela página) ──
+import { computeConnectionStatus, type UnitIntegrationView } from './whatsapp-onboarding';
+
 export function defaultWhatsappIntegration(): WhatsappIntegration {
   return {
     status: 'not_connected',
@@ -52,8 +55,13 @@ export const maskWabaId = maskTechnicalId;
 
 /**
  * Status real da integração de uma empresa.
- * A conta é considerada configurada se possui token próprio criptografado
- * OU se o servidor possui variáveis globais configuradas.
+ * REGRA CENTRALIZADA: `computeConnectionStatus` é a única autoridade.
+ * Nenhum valor antigo de `status: 'connected'` ou flag global vence os requisitos completos:
+ *   - encryptedAccessToken
+ *   - wabaId
+ *   - phoneNumberId
+ *   - webhookSubscribedAt
+ *   - e comprovação (Standard: registeredAt & !registrationRequired; Coexistence: coexistenceConfirmedAt & isOnBizApp & CLOUD_API).
  */
 export function integrationStatus(
   business: Pick<Business, 'whatsappIntegration'>,
@@ -64,10 +72,19 @@ export function integrationStatus(
   const isConfigured = hasBusinessCredentials || serverConfigured;
 
   if (cfg.status === 'connected' && !isConfigured) {
-    // Credenciais removidas → volta a pendente
     return { ...cfg, status: 'pending' };
   }
-  return cfg;
+
+  const computed = computeConnectionStatus(cfg as UnitIntegrationView);
+
+  // Se o objeto no banco dizia 'connected' mas não atende aos requisitos contratuais,
+  // prevalece a autoridade centralizada de computeConnectionStatus.
+  return {
+    ...cfg,
+    status: computed.status,
+    registrationRequired: computed.registrationRequired,
+    onboardingType: computed.onboardingType,
+  };
 }
 
 export function isConnected(
@@ -87,33 +104,41 @@ export function whatsappStateLabel(
   detail: string;
 } {
   const cfg = integrationStatus(business, serverConfigured);
-  if (cfg.status === 'connected') {
+  const computed = computeConnectionStatus(cfg as UnitIntegrationView);
+
+  if (computed.status === 'connected') {
     return {
       state: 'connected',
       label: 'Conectado',
       detail: cfg.displayPhone || (cfg.phoneNumberId ? `Conta oficial ${maskTechnicalId(cfg.phoneNumberId)}` : 'Conta oficial conectada'),
     };
   }
-  if (cfg.status === 'pending') {
-    // "Configurando" deixou de ser genérico: quando falta registrar o número,
-    // a unidade precisa saber EXATAMENTE o que falta (senão o número nunca
-    // envia, e o painel dizia que estava tudo certo).
-    const missingRegistration = (cfg as any).registrationRequired === true && !(cfg as any).registeredAt;
+  if (computed.status === 'pending') {
+    const isCoexPending = computed.onboardingType === 'coexistence' && !(cfg as any).coexistenceConfirmedAt;
+    const isRegRequired = computed.registrationRequired;
+
+    let detail = cfg.lastError || computed.reason || 'Aguardando validação da conta oficial junto à Meta.';
+    let label = 'Configurando';
+
+    if (isCoexPending) {
+      label = 'Verificação de Coexistência pendente';
+      detail = cfg.lastError || 'Aguardando confirmação oficial da Meta sobre o status no aplicativo WhatsApp Business.';
+    } else if (isRegRequired) {
+      label = 'Falta registrar o número';
+      detail = cfg.lastError || 'Conta autorizada — informe o PIN de duas etapas para registrar o número e concluir.';
+    }
+
     return {
       state: 'pending',
-      label: missingRegistration ? 'Falta registrar o número' : 'Configurando',
-      detail: cfg.lastError
-        ? `Configuração pendente: ${cfg.lastError}`
-        : missingRegistration
-          ? 'Conta autorizada — informe o PIN de duas etapas para registrar o número e concluir.'
-          : 'Aguardando validação da conta oficial junto à Meta.',
+      label,
+      detail,
     };
   }
-  if (cfg.status === 'error') {
+  if (computed.status === 'error') {
     return {
       state: 'error',
       label: 'Erro',
-      detail: cfg.lastError || 'Falha recente na comunicação com a API do WhatsApp.',
+      detail: cfg.lastError || computed.reason || 'Falha na comunicação ou configuração da API do WhatsApp.',
     };
   }
   return business.whatsapp
