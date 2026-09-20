@@ -262,12 +262,14 @@ export function onboardingSteps(business: { whatsappIntegration?: UnitIntegratio
     { id: 'phone_resolved', label: 'Número encontrado', ok: phone, current: false, detail: 'O identificador do número veio da própria Meta.' },
     {
       id: 'registration',
-      label: 'Número registrado',
+      label: wi.onboardingType === 'coexistence' ? 'Número verificado na Meta (Coexistence)' : 'Número registrado',
       ok: registered,
       current: false,
       detail: registered
-        ? 'Registro confirmado na Cloud API.'
-        : 'Falta registrar o número com o PIN de duas etapas — sem isso ele não envia nem recebe pela API.',
+        ? (wi.onboardingType === 'coexistence' ? 'Coexistência verificada na Cloud API.' : 'Registro confirmado na Cloud API.')
+        : (wi.onboardingType === 'coexistence'
+            ? 'Aguardando verificação do número de coexistência junto à Meta.'
+            : 'Falta registrar o número com o PIN de duas etapas — sem isso ele não envia nem recebe pela API.'),
     },
     { id: 'connected', label: 'Conectado', ok: connected, current: false, detail: connected ? 'Tudo pronto para enviar e receber.' : 'Falta concluir as etapas anteriores.' },
     { id: 'first_event', label: 'Primeiro evento recebido', ok: firstEvent, current: false, detail: 'Prova de ponta a ponta: a Meta entregou uma mensagem desta conta.' },
@@ -503,7 +505,7 @@ export function subscribeAppUrl(base: string, wabaId: string): string {
   return `${base}/${encodeURIComponent(wabaId)}/subscribed_apps`;
 }
 export function phoneNumberFieldsUrl(base: string, phoneNumberId: string): string {
-  return `${base}/${encodeURIComponent(phoneNumberId)}?fields=display_phone_number,verified_name,quality_rating`;
+  return `${base}/${encodeURIComponent(phoneNumberId)}?fields=display_phone_number,verified_name,quality_rating,is_on_biz_app,platform_type`;
 }
 export function registerNumberUrl(base: string, phoneNumberId: string): string {
   return `${base}/${encodeURIComponent(phoneNumberId)}/register`;

@@ -83,15 +83,23 @@ export async function GET(req: NextRequest) {
 
   const plan = planFor(guard.ctx.business);
   const credentialsKey = String(process.env.WHATSAPP_CREDENTIALS_KEY || '');
+  // Camada da plataforma só é detalhada para Master/Admin
+  const canViewDiagnostics = guard.ctx.isMaster || guard.ctx.isOwner || guard.ctx.role === 'ADMIN';
+
   return NextResponse.json({
-    plan,
+    plan: {
+      ...plan,
+      layers: canViewDiagnostics
+        ? plan.layers
+        : plan.layers.filter((l) => l.id !== 'platform'),
+    },
     // Estado assinado, ligado À UNIDADE e AO USUÁRIO que pediu o popup.
     signupState: plan.clientConfig
       ? issueSignupState(credentialsKey, { businessId: guard.ctx.business.id, userId: guard.ctx.user.id })
       : '',
     // Caminho assistido continua valendo (o Master cadastra as credenciais).
-    masterRouteAvailable: true,
-    webhookPath: '/api/whatsapp/webhook',
+    masterRouteAvailable: canViewDiagnostics,
+    webhookPath: canViewDiagnostics ? '/api/whatsapp/webhook' : undefined,
   });
 }
 
@@ -142,6 +150,14 @@ export async function POST(req: NextRequest) {
   // action: register — concluir o registro do número depois da autorização
   // ═════════════════════════════════════════════════════════════
   if (action === 'register') {
+    const isCoexistence = business.whatsappIntegration?.onboardingType === 'coexistence';
+    if (isCoexistence) {
+      return NextResponse.json({
+        error: 'Esta conta foi integrada no modo Coexistence oficial: o número já é registrado pelo aplicativo WhatsApp Business e não requer PIN.',
+        code: 'coexistence_no_register_needed',
+        plan: planFor(business),
+      }, { status: 400 });
+    }
     const stored = decryptSecret(String(business.whatsappIntegration?.encryptedAccessToken || ''));
     const phoneNumberId = String(business.whatsappIntegration?.phoneNumberId || '');
     if (!stored || !phoneNumberId) {
@@ -376,26 +392,50 @@ export async function POST(req: NextRequest) {
   verifiedName = String(fields.data?.verified_name || verifiedName);
   qualityRating = String(fields.data?.quality_rating || '');
 
-  // ── 8. Registro do número (é o que habilita enviar/receber) ────
+  // ── 8. Registro do número / Tratamento de Coexistence ───────────
+  // REGRA OFICIAL DA META (Onboarding WhatsApp Business App Users / Coexistence):
+  // Em Coexistence (FINISH_WHATSAPP_BUSINESS_APP_ONBOARDING), a Meta instrui
+  // explicitamente: "skip the phone number registration step, as the number is already registered".
+  // NUNCA chamar /register com PIN no modo coexistence.
+  const isCoexistence = msg.onboardingType === 'coexistence';
   const pin = String(body.pin || '').replace(/\D/g, '');
   const now = new Date().toISOString();
-  if (pin && pin.length !== 6) {
-    return fail('O PIN de verificação em duas etapas tem 6 dígitos.');
-  }
-  let registration: { attempted: boolean; ok: boolean; detail: string } = { attempted: false, ok: false, detail: '' };
-  if (pin) {
-    const reg = await graphJson(registerNumberUrl(base, phoneNumberId), {
-      method: 'POST',
-      headers: { authorization: `Bearer ${token}`, 'content-type': 'application/json' },
-      body: JSON.stringify({ messaging_product: 'whatsapp', pin, appsecret_proof: proof }),
-    });
+
+  let registration: { attempted: boolean; ok: boolean; detail: string; skipped?: boolean } = {
+    attempted: false,
+    ok: false,
+    detail: '',
+  };
+
+  if (isCoexistence) {
+    // Coexistence: o número já está registrado na Meta.
+    // Confirmamos o status de integração via campos oficiais is_on_biz_app e platform_type se disponíveis.
     registration = {
-      attempted: true,
-      ok: reg.ok,
-      detail: reg.ok ? '' : metaErrorMessage(reg.data, 'a Meta recusou o registro do número.'),
+      attempted: false,
+      ok: true,
+      skipped: true,
+      detail: 'Número já registrado no app WhatsApp Business (modo Coexistence oficial da Meta).',
     };
+  } else {
+    // Fluxo Standard da Cloud API: exige registro com PIN de duas etapas
+    if (pin && pin.length !== 6) {
+      return fail('O PIN de verificação em duas etapas tem 6 dígitos.');
+    }
+    if (pin) {
+      const reg = await graphJson(registerNumberUrl(base, phoneNumberId), {
+        method: 'POST',
+        headers: { authorization: `Bearer ${token}`, 'content-type': 'application/json' },
+        body: JSON.stringify({ messaging_product: 'whatsapp', pin, appsecret_proof: proof }),
+      });
+      registration = {
+        attempted: true,
+        ok: reg.ok,
+        detail: reg.ok ? '' : metaErrorMessage(reg.data, 'a Meta recusou o registro do número.'),
+      };
+    }
   }
-  const registered = registration.attempted && registration.ok;
+
+  const registered = isCoexistence ? registration.ok : (registration.attempted && registration.ok);
 
   // ── 9. Guardar (token criptografado, nunca em claro) ───────────
   const encrypted = encryptSecret(token);

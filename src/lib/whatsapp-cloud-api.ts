@@ -824,8 +824,12 @@ export function resolveTenantForChange(
   const wId = String(wabaId || '').trim();
 
   if (pId) {
-    const match = db.businesses.find((b) => b.whatsappIntegration?.phoneNumberId === pId);
-    return match || null;
+    const matching = db.businesses.filter((b) => b.whatsappIntegration?.phoneNumberId === pId);
+    if (matching.length === 1) {
+      return matching[0];
+    }
+    // Se matching.length > 1 (ambiguidade de número de telefone) ou 0: rejeita unidade ambígua
+    return null;
   }
 
   if (wId) {
