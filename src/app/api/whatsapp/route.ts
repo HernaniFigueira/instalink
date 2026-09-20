@@ -1,3 +1,4 @@
+import { evolutionConfigured } from '@/lib/whatsapp-providers/evolution';
 import { NextRequest, NextResponse } from 'next/server';
 import { updateDB } from '@/lib/db';
 import { requireBusiness } from '@/lib/access';
@@ -21,7 +22,7 @@ export async function GET(req: NextRequest) {
   if (!guard.ok) return guard.res;
   const db = guard.db;
   const business = guard.ctx.business;
-  const serverConfigured = serverCredentialsConfigured();
+  const serverConfigured = business.whatsappIntegration?.provider === 'whatsapp_web' ? evolutionConfigured() : serverCredentialsConfigured();
   const integration = integrationStatus(business, serverConfigured);
   const label = whatsappStateLabel(business, serverConfigured);
   const credentials = getWhatsappCredentials(business);

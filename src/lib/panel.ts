@@ -618,6 +618,7 @@ export const API_GUARDS: Array<{ route: string; file: string; permission: Permis
   { route: '/api/businesses/:id', file: 'src/app/api/businesses/[id]/route.ts', permission: 'config', area: 'config' },
   { route: '/api/bookings', file: 'src/app/api/bookings/route.ts', permission: 'agenda', area: 'agenda' },
   // Conexão do canal: a porta é Canais & Integrações (a operação fica em /conversas).
+  { route: '/api/whatsapp/providers/evolution', file: 'src/app/api/whatsapp/providers/evolution/route.ts', permission: 'whatsapp', area: 'canais' },
   { route: '/api/whatsapp', file: 'src/app/api/whatsapp/route.ts', permission: 'whatsapp', area: 'canais' },
   // Conversas (inbox): leitura e envio exigem a mesma permissão do canal.
   { route: '/api/conversations', file: 'src/app/api/conversations/route.ts', permission: 'whatsapp', area: 'conversas' },

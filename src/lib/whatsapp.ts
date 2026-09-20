@@ -61,7 +61,7 @@ export function integrationStatus(
   serverConfigured = true,
 ): WhatsappIntegration {
   const cfg = { ...defaultWhatsappIntegration(), ...(business.whatsappIntegration || {}) };
-  if (cfg.provider === 'whatsapp_web') return cfg;
+  if (cfg.provider === 'whatsapp_web') return serverConfigured ? cfg : { ...cfg, status: 'not_configured' };
   const hasBusinessCredentials = !!(cfg.phoneNumberId && cfg.encryptedAccessToken);
   const isConfigured = hasBusinessCredentials || serverConfigured;
 
@@ -93,8 +93,12 @@ export function whatsappStateLabel(
     return {
       state: 'connected',
       label: 'Conectado',
-      detail: cfg.displayPhone || (cfg.phoneNumberId ? `Conta oficial ${maskTechnicalId(cfg.phoneNumberId)}` : 'Conta oficial conectada'),
+      detail: cfg.displayPhone || (cfg.provider === 'whatsapp_web' ? 'Conexão experimental por QR Code' : cfg.phoneNumberId ? `Conta oficial ${maskTechnicalId(cfg.phoneNumberId)}` : 'Conta oficial conectada'),
     };
+  }
+  if (cfg.provider === 'whatsapp_web') {
+    const labels: Partial<Record<WhatsappStatus, string>> = { not_configured: 'Não configurado', not_connected: 'Não conectado', qr_pending: 'Aguardando QR', connecting: 'Conectando', disconnected: 'Desconectado', error: 'Erro' };
+    return { state: cfg.status, label: labels[cfg.status] || 'Não conectado', detail: cfg.lastError || 'Conexão experimental por QR Code.' };
   }
   if (cfg.status === 'pending') {
     // "Configurando" deixou de ser genérico: quando falta registrar o número,

@@ -1,3 +1,4 @@
+import { evolutionConfigured } from '@/lib/whatsapp-providers/evolution';
 import { NextRequest, NextResponse } from 'next/server';
 import { randomUUID } from 'node:crypto';
 import { updateDB } from '@/lib/db';
@@ -23,7 +24,7 @@ export async function GET(req: NextRequest) {
   const guard = await requireBusiness(req, businessId, 'whatsapp');
   if (!guard.ok) return guard.res;
   const { db, ctx } = guard;
-  const whatsappConnected = integrationStatus(ctx.business, serverCredentialsConfigured()).status === 'connected';
+  const whatsappConnected = integrationStatus(ctx.business, ctx.business.whatsappIntegration?.provider === 'whatsapp_web' ? evolutionConfigured() : serverCredentialsConfigured()).status === 'connected';
   const igStatus = instagramIntegrationStatus(ctx.business.instagramIntegration?.status);
   const instagramConnected = ctx.business.instagramIntegration?.status === 'connected';
   const channels = { whatsapp: whatsappConnected, instagram: instagramConnected };
@@ -257,10 +258,10 @@ export async function POST(req: NextRequest) {
       }, { status: 409 });
     }
 
-    const connected = integrationStatus(ctx.business, serverCredentialsConfigured()).status === 'connected';
+    const connected = integrationStatus(ctx.business, ctx.business.whatsappIntegration?.provider === 'whatsapp_web' ? evolutionConfigured() : serverCredentialsConfigured()).status === 'connected';
     if (!connected) {
       return NextResponse.json({
-        error: 'WhatsApp ainda não conectado. Conecte a conta oficial para enviar mensagens por aqui.',
+        error: 'WhatsApp ainda não conectado. Conecte o canal em Canais para enviar mensagens por aqui.',
         code: 'not_connected',
       }, { status: 409 });
     }
