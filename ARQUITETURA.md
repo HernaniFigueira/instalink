@@ -277,12 +277,38 @@ P4 (ação) → conector de saída → sistema externo (webhook assinado do P3)
 
 Detalhes e contrato do envelope: [`docs/integracoes-p6.md`](docs/integracoes-p6.md).
 
+## P6.1 — WhatsApp oficial + QR experimental (20/09/2026)
+
+- `Business.whatsappIntegration.provider` escolhe `meta_cloud` (default legado)
+  ou `whatsapp_web`. Modelo aditivo, mesma unidade e mesmo histórico; instância
+  externa vinculada explicitamente por `instanceName`, sem API key no DB.
+- Meta preserva Embedded Signup e assinatura HMAC. Evolution API **2.3.7** é o
+  primeiro transporte experimental: sessão WhatsApp Web **fora do Next/Vercel**,
+  client isolado em `lib/whatsapp-providers/evolution.ts`. Gestão autenticada e
+  webhook dedicado em `/api/whatsapp/providers/evolution[/webhook]`.
+- Ambos normalizam para `processWhatsappInbound` (`lib/whatsapp-inbound.ts`),
+  extraído do webhook oficial: dedupe transacional por unidade/provider/ID,
+  `upsertContact`/`ingestLead`, Conversation/Message, agente/concierge/agent-flow,
+  `computeSlots` e **`createBookingTx`** — nenhuma Agenda/CRM paralela.
+- Saída conserva a outbox/CAS/cron já existentes (`deliverWhatsappMessage`),
+  delegando transporte a `whatsapp-providers/send.ts`. A fachada de estado para
+  consumidores é `whatsapp-server.ts`; detalhes Evolution não entram no inbox.
+- `conversation.mode=human` vence automação; flag é `agent.channels.whatsapp`,
+  não outra configuração. Confirmação de horário usa o passo existente `confirm`.
+- Header de webhook derivado por instância (HMAC, timing-safe), vínculo persistido
+  como autoridade; instância desconhecida/ambígua não toca nenhum tenant.
+  Lifecycle tem lease persistido; QR transitório, sem cache/segredos no DB/logs.
+- UI em Canais distingue **Oficial/Recomendado** e **QR/Experimental**; conexão
+  só após estado remoto `open`, com polling limitado e handoff no inbox existente.
+- Homologação física continua dependente de VPS, secrets e telefones reais.
+  Contrato, riscos, testes e roteiro: [`RELATORIO-P6.1.md`](RELATORIO-P6.1.md).
+
 ## O que NÃO foi construído (evolução futura)
 
-Billing/planos, domínio próprio, WhatsApp API, pagamentos online, delivery com
+Billing/planos, domínio próprio, pagamentos online, delivery com
 roteirização, estoque, fidelidade, CRM avançado, PWA instalável, app nativo.
-Ficam para o **P6.1/P6.2**: conector oficial de WhatsApp/Instagram
-(Cloud API/Graph), Messenger, Telegram, conector nativo de Lead Ads,
+Ficam para entregas posteriores: homologação externa dos canais WhatsApp/Instagram,
+Messenger, Telegram, conector nativo de Lead Ads,
 `wait_for_event` por evento de canal, editor visual de grafo e a reserva atômica
 (CAS) da idempotência entre instâncias simultâneas. O P5 (IA/agente) vive em
 `src/lib/ai/` **por cima** do P4: a IA não executa, o motor de automações executa.
