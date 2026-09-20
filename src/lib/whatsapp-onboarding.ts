@@ -257,6 +257,8 @@ export interface OnboardingStep {
 export function onboardingSteps(business: { whatsappIntegration?: UnitIntegrationView }): OnboardingStep[] {
   const wi = business.whatsappIntegration || {};
   const authorized = !!wi.encryptedAccessToken;
+  // COMPROVAÇÃO ESTRITA: nunca considerar webhook assinado apenas porque existem WABA e token.
+  // Exige estritamente !!wi.webhookSubscribedAt proveniente da chamada oficial bem-sucedida.
   const subscribed = !!wi.webhookSubscribedAt;
   const phone = !!wi.phoneNumberId;
   const isCoexistence = wi.onboardingType === 'coexistence';
@@ -531,8 +533,8 @@ export function computeConnectionStatus(wi: Partial<UnitIntegrationView> | undef
     };
   }
 
-  // Standard: exige onboardingType === 'standard' && registeredAt && registrationRequired !== true
-  if (onboardingType === 'standard' || onboardingType === 'unknown') {
+  // Standard: exige estritamente onboardingType === 'standard' && registeredAt && registrationRequired !== true
+  if (onboardingType === 'standard') {
     const standardOk = !!wi.registeredAt && wi.registrationRequired !== true;
     if (!standardOk) {
       return {
@@ -551,13 +553,15 @@ export function computeConnectionStatus(wi: Partial<UnitIntegrationView> | undef
     };
   }
 
-  // Tipo não determinado com segurança (unknown)
+  // Contrato estrito: unknown NÃO é standard!
+  // Registros com onboardingType: 'unknown' permanecem 'pending', mesmo com timestamps antigos,
+  // até que sejam explicitamente concluídos ou migrados.
   return {
     status: wi.status === 'error' ? 'error' : 'pending',
     connected: false,
     registrationRequired: false,
     onboardingType: 'unknown',
-    reason: 'Tipo de onboarding não determinado com evidência suficiente.',
+    reason: 'Tipo de onboarding indefinido (unknown). A integração deve ser concluída pelo Embedded Signup oficial.',
   };
 }
 export interface SignupMessage {

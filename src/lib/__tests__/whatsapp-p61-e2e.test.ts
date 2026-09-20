@@ -1029,6 +1029,9 @@ describe('P6.1 — WhatsApp Cloud API E2E', () => {
       const res = await masterWhatsappPOST(masterReq, { params: Promise.resolve({ id: BIZ_A }) });
       expect(res.status).toBe(200);
       const body = await jsonBody(res);
+      // Como a clínica BIZ_A já tinha webhookSubscribedAt e registeredAt antes deste POST,
+      // as evidências prévias são preservadas e o status resulta em 'connected'.
+      expect(body.status).toBe('connected');
       expect(body.ok).toBe(true);
       expect(body.accessToken).toBeUndefined(); // Secrets not returned!
 

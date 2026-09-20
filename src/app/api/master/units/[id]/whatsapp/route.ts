@@ -19,20 +19,24 @@ export async function GET(req: NextRequest, { params }: { params: { id: string }
   const business = db.businesses.find((b) => b.id === id);
   if (!business) return NextResponse.json({ error: 'Unidade não encontrada.' }, { status: 404 });
 
-  const wi = business.whatsappIntegration || defaultWhatsappIntegration();
+  const rawWi = business.whatsappIntegration || defaultWhatsappIntegration();
+  const computed = computeConnectionStatus(rawWi as UnitIntegrationView);
 
   return NextResponse.json({
-    status: wi.status,
-    displayPhone: wi.displayPhone || '',
-    phoneNumberId: maskTechnicalId(wi.phoneNumberId),
-    wabaId: maskTechnicalId(wi.wabaId),
-    verifiedName: wi.verifiedName || '',
-    connectedAt: wi.connectedAt || '',
-    lastWebhookAt: wi.lastWebhookAt || '',
-    lastInboundAt: wi.lastInboundAt || '',
-    lastOutboundAt: wi.lastOutboundAt || '',
-    lastError: wi.lastError || '',
-    hasCredentials: !!wi.encryptedAccessToken,
+    status: computed.status,
+    connected: computed.connected,
+    onboardingType: computed.onboardingType,
+    registrationRequired: computed.registrationRequired,
+    displayPhone: rawWi.displayPhone || '',
+    phoneNumberId: maskTechnicalId(rawWi.phoneNumberId),
+    wabaId: maskTechnicalId(rawWi.wabaId),
+    verifiedName: rawWi.verifiedName || '',
+    connectedAt: computed.connected ? (rawWi.connectedAt || '') : '',
+    lastWebhookAt: rawWi.lastWebhookAt || '',
+    lastInboundAt: rawWi.lastInboundAt || '',
+    lastOutboundAt: rawWi.lastOutboundAt || '',
+    lastError: computed.connected ? (rawWi.lastError || '') : (rawWi.lastError || computed.reason || ''),
+    hasCredentials: !!rawWi.encryptedAccessToken,
   });
 }
 
@@ -101,19 +105,25 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
     const now = new Date().toISOString();
 
     // 3. Centralização: passa pela autoridade única de computeConnectionStatus
+    // REGRA DE HONESTIDADE: A configuração manual do Master NÃO pode fabricar evidências
+    // (webhookSubscribedAt, registeredAt, coexistenceConfirmedAt).
+    // Ela valida e guarda o token, número e WABA, mantendo o status honesto ('pending')
+    // até que as etapas oficiais da Meta sejam executadas.
+    const existingWi = business.whatsappIntegration || defaultWhatsappIntegration();
     const candidateWi: Partial<UnitIntegrationView> = {
-      ...(business.whatsappIntegration || defaultWhatsappIntegration()),
+      ...existingWi,
       phoneNumberId,
-      wabaId,
-      displayPhone: testResult.displayPhoneNumber || displayPhone || business.whatsappIntegration?.displayPhone || '',
+      wabaId: wabaId || existingWi.wabaId || '',
+      displayPhone: testResult.displayPhoneNumber || displayPhone || existingWi.displayPhone || '',
       encryptedAccessToken: encryptedToken,
       verifiedName: testResult.verifiedName,
       source: 'master',
       tokenIssuedAt: now,
-      webhookSubscribedAt: now,
-      registeredAt: now,
-      registrationRequired: false,
-      onboardingType: 'standard',
+      // Preserva dados se já comprovados anteriormente, mas NUNCA inventa novas evidências
+      webhookSubscribedAt: existingWi.webhookSubscribedAt,
+      registeredAt: existingWi.registeredAt,
+      registrationRequired: existingWi.registrationRequired ?? true,
+      onboardingType: existingWi.onboardingType || 'unknown',
     };
 
     const computed = computeConnectionStatus(candidateWi);

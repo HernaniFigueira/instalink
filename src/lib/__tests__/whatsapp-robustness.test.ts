@@ -14,10 +14,11 @@ import { GET as whatsappGET, POST as whatsappPOST } from '@/app/api/whatsapp/rou
 import { GET as webhookGET, POST as webhookPOST } from '@/app/api/whatsapp/webhook/route';
 import { POST as masterWhatsappPOST } from '@/app/api/master/units/[id]/whatsapp/route';
 import { issueSignupState } from '../whatsapp-onboarding-server';
-import { computeConnectionStatus } from '../whatsapp-onboarding';
+import { computeConnectionStatus, onboardingSteps } from '../whatsapp-onboarding';
 import { integrationStatus } from '../whatsapp';
 import { encryptSecret, resolveTenantForChange } from '../whatsapp-cloud-api';
 import { createBookingTx } from '../booking-create';
+import { GET as masterWhatsappGET } from '@/app/api/master/units/[id]/whatsapp/route';
 import type { Business, DB } from '../types';
 import { TEMP_DB_FILE } from './helpers/temp-db';
 
@@ -461,6 +462,88 @@ describe('Meta WhatsApp Cloud API — Onboarding Coexistence e Standard', () => 
     const db = await readDB();
     const wiFinal = db.businesses.find((b) => b.id === BIZ_A)?.whatsappIntegration;
     expect(wiFinal?.status).toBe('pending');
+  });
+
+  it('rota Master não fabrica evidências e GET Master corrige status connected legado incompleto', async () => {
+    // 1. Configuração Master de token e número válidos
+    vi.stubGlobal('fetch', vi.fn(async (url: any) => {
+      const u = String(url);
+      if (u.includes('?fields=')) return new Response(JSON.stringify({
+        display_phone_number: '+55 11 98888-0099',
+        verified_name: 'Clínica Master Config Test',
+      }), { status: 200 });
+      return new Response(JSON.stringify({ error: { message: 'not found' } }), { status: 404 });
+    }));
+
+    const resMasterPost = await masterWhatsappPOST(jsonReq(`/api/master/units/${BIZ_A}/whatsapp`, {
+      phoneNumberId: 'PN-MASTER-1',
+      wabaId: 'WABA-MASTER-1',
+      accessToken: 'EAATokenMasterValid',
+      displayPhone: '11988880099',
+    }, masterToken), { params: Promise.resolve({ id: BIZ_A }) });
+
+    expect(resMasterPost.status).toBe(200);
+    const bodyMasterPost = await resMasterPost.json();
+    // A rota Master NÃO pode fabricar registeredAt nem webhookSubscribedAt
+    expect(bodyMasterPost.ok).toBe(false);
+    expect(bodyMasterPost.status).toBe('pending');
+
+    const dbPost = await readDB();
+    const wiPost = dbPost.businesses.find((b) => b.id === BIZ_A)?.whatsappIntegration;
+    expect(wiPost?.status).toBe('pending');
+    expect(wiPost?.registeredAt).toBeFalsy(); // NÃO inventou registeredAt
+    expect(wiPost?.webhookSubscribedAt).toBeFalsy(); // NÃO inventou webhookSubscribedAt
+    expect(wiPost?.encryptedAccessToken).toBeTruthy();
+
+    // 2. Simula um registro legado no banco que tinha status: 'connected' mas sem evidências
+    await updateDB((d) => {
+      const b = d.businesses.find((x) => x.id === BIZ_A)!;
+      b.whatsappIntegration = {
+        status: 'connected', // Fabricado no passado
+        phoneNumberId: 'PN-LEGACY',
+        wabaId: 'WABA-LEGACY',
+        encryptedAccessToken: encryptSecret('TOKEN-LEGACY'),
+        // Sem webhookSubscribedAt e sem registeredAt
+      } as any;
+    });
+
+    const resMasterGet = await masterWhatsappGET(jsonReq(`/api/master/units/${BIZ_A}/whatsapp`, undefined, masterToken, 'GET'), {
+      params: Promise.resolve({ id: BIZ_A }),
+    });
+    expect(resMasterGet.status).toBe(200);
+    const bodyMasterGet = await resMasterGet.json();
+    // GET Master deve calcular pelo computeConnectionStatus e corrigir para 'pending'
+    expect(bodyMasterGet.status).toBe('pending');
+    expect(bodyMasterGet.connected).toBe(false);
+
+    // 3. onboardingType: 'unknown', mesmo com timestamps antigos, nunca conecta
+    const unknownWithTimestamps = {
+      status: 'connected',
+      phoneNumberId: 'PN-UNK',
+      wabaId: 'WABA-UNK',
+      encryptedAccessToken: encryptSecret('TOKEN-UNK'),
+      webhookSubscribedAt: NOW,
+      registeredAt: NOW,
+      registrationRequired: false,
+      onboardingType: 'unknown' as const,
+    };
+    const compUnknown = computeConnectionStatus(unknownWithTimestamps as any);
+    expect(compUnknown.connected).toBe(false);
+    expect(compUnknown.status).toBe('pending');
+    expect(compUnknown.onboardingType).toBe('unknown');
+
+    // 4. onboardingSteps NÃO marca webhook concluído apenas com WABA + token (exige webhookSubscribedAt)
+    const bizSemWebhookSubscribed = {
+      whatsappIntegration: {
+        phoneNumberId: 'PN-TEST',
+        wabaId: 'WABA-TEST',
+        encryptedAccessToken: 'token-enc',
+        // webhookSubscribedAt omitido
+      },
+    };
+    const steps = onboardingSteps(bizSemWebhookSubscribed as any);
+    const stepWebhook = steps.find((s) => s.id === 'webhook_subscribed');
+    expect(stepWebhook?.ok).toBe(false);
   });
 
   it('troca de código com token inválido rejeita e não persiste credenciais', async () => {
