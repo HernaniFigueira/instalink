@@ -4,6 +4,8 @@ import { experimentalLifecycle, experimentalView, type ExperimentalAction } from
 import { EvolutionError } from '@/lib/whatsapp-providers/evolution';
 
 const headers = { 'Cache-Control': 'no-store' };
+export const maxDuration = 60;
+
 export async function GET(req: NextRequest) {
   const guard = await requireBusiness(req, req.nextUrl.searchParams.get('businessId') || '', 'whatsapp');
   if (!guard.ok) return guard.res;

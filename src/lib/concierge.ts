@@ -172,6 +172,10 @@ export function conciergeAnswer(
     // VITRINE, não carrinho: o interesse é tratado no WhatsApp do negócio.
     return { intent: 'order', reply: `Confira nossa vitrine — destaques: ${names}. Toque em "Tenho interesse" que a gente combina tudo pelo WhatsApp!`, actions: [{ label: 'Ver vitrine', target: '#produtos' }] };
   }
+  if (options.flowCtx?.channelPhone && has('servico', 'tratamento', 'procedimento')) {
+    const list = services.map((s) => `${s.name}${s.showPrice !== false ? ` (${money(s.price)})` : ''}`).join(' • ');
+    return { intent: 'services', reply: list ? `Nossos serviços: ${list}. Qual deles você gostaria de conhecer ou agendar?` : 'Não há serviços disponíveis no catálogo agora. Peça para falar com um atendente.', actions: [] };
+  }
   if (has('orcamento', 'orçamento', 'proposta', 'servico', 'reforma', 'quanto fica')) {
     return { intent: 'quote', reply: 'Claro! Preencha rapidinho que retornamos com o orçamento.', actions: isFeatureEnabled(business, 'quote') ? [{ label: 'Pedir orçamento', target: '#orcamento' }] : [wa] };
   }

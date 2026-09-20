@@ -54,7 +54,7 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
       await updateDB((d) => {
         const b = d.businesses.find((x) => x.id === id);
         if (b?.whatsappIntegration?.provider === 'whatsapp_web') throw new Error('Provider alterado durante a operação.');
-      if (b) {
+        if (b) {
           b.whatsappIntegration = {
             ...defaultWhatsappIntegration(),
             status: 'not_connected',

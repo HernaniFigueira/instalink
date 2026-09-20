@@ -4,6 +4,8 @@ import { processWhatsappInbound } from '@/lib/whatsapp-inbound';
 import { evolutionConfigured, normalizeEvolutionMessage, validEvolutionWebhook } from '@/lib/whatsapp-providers/evolution';
 import { experimentalLifecycle } from '@/lib/whatsapp-providers/lifecycle';
 
+export const maxDuration = 60;
+
 export async function POST(req: NextRequest) {
   if (!evolutionConfigured()) return NextResponse.json({ error: 'Provider indisponível.' }, { status: 503 });
   try {
@@ -51,7 +53,9 @@ export async function POST(req: NextRequest) {
     }
     const messages = Array.isArray(payload.data) ? payload.data : [payload.data];
     let received = 0;
+    const deadline = Date.now() + 40_000;
     for (const data of messages) {
+      if (Date.now() > deadline) return NextResponse.json({ error: 'Reentregue o lote para continuar.' }, { status: 503 });
       const normalized = normalizeEvolutionMessage(data);
       if (!normalized) continue;
       await processWhatsappInbound({ ...normalized, businessId, provider: 'whatsapp_web', instance });

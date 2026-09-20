@@ -105,7 +105,7 @@ export function WhatsappExperimentalPanel({ businessId, onChange }: { businessId
         {data.lastError && <div className="text-rose-700">{data.lastError}</div>}
       </dl>
     </details>}
-    <dialog ref={dialog} onCancel={close} onClose={() => { if (open) close(); }} aria-labelledby="whatsapp-qr-title" className="w-[min(94vw,460px)] rounded-xl p-6 backdrop:bg-black/40">
+    <dialog ref={dialog} onCancel={close} onClose={() => { if (open) close(); }} aria-labelledby="whatsapp-qr-title" className="w-[min(94vw,460px)] rounded-xl p-6 backdrop:bg-[var(--overlay)]">
       <div className="flex items-center justify-between gap-3"><h3 id="whatsapp-qr-title" className="font-semibold">Conectar por QR Code</h3><button onClick={close} aria-label="Fechar QR Code" className="p-2">✕</button></div>
       <p className="text-sm text-zinc-600 mt-3">WhatsApp &gt; Aparelhos conectados &gt; Conectar aparelho</p>
       {qr ? <img src={qr} alt="QR Code para vincular seu WhatsApp" width={360} height={360} className="w-full max-w-[360px] mx-auto my-3" />

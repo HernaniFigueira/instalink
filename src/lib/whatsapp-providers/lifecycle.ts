@@ -90,7 +90,7 @@ export async function experimentalLifecycle(businessId: string, action: Experime
       if (status === 'disconnected' && previous !== 'disconnected') audit('whatsapp.experimental_disconnected');
       if (action === 'remove') {
         audit('whatsapp.experimental_removed');
-        audit('whatsapp.provider_changed');
+        pushAudit(d, { action: 'whatsapp.provider_changed', businessId, actor, meta: { from: 'whatsapp_web', provider: 'meta_cloud', instance } });
         i.provider = 'meta_cloud'; i.instanceName = undefined; i.displayPhone = ''; i.connectedAt = '';
       }
       i.lifecycleClaim = undefined; i.lifecycleExpiresAt = undefined;

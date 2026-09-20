@@ -4,6 +4,7 @@
 import { createCipheriv, createDecipheriv, createHash, createHmac, randomBytes, randomUUID, timingSafeEqual } from 'node:crypto';
 import type { Business, Campaign, CampaignRecipient, DB, Message, WhatsappIntegration } from './types';
 import { readDB, updateDB, updateDBWithCas } from './db';
+import { agentFor, agentActive } from './agent';
 import { logWhatsapp } from './whatsapp-log';
 import { sendWhatsappText, whatsappTransportReady } from './whatsapp-providers/send';
 import { assertOutsideDBTransaction } from './db-transaction';
@@ -384,15 +385,20 @@ export function claimPendingWhatsappMessages(
   const leaseUntil = new Date(new Date(nowISO).getTime() + WHATSAPP_CLAIM_LEASE_MS).toISOString();
   const candidates = db.messages.filter((m) => {
     if (m.businessId !== businessId) return false;
+    if (m.direction !== 'out') return false;
+    if (targetMessageIds && !targetMessageIds.includes(m.id)) return false;
     if (m.channel && m.channel !== 'whatsapp') return false;
     const conv = db.conversations.find((c) => c.id === m.conversationId && c.businessId === businessId);
     if (conv?.channel && conv.channel !== 'whatsapp') return false;
+    const business = db.businesses.find((b) => b.id === businessId);
+    if (m.status === 'pending' && m.meta?.agentReply && business && !agentActive(business, agentFor(db, business), 'whatsapp')) {
+      m.status = 'failed'; m.error = 'Atendimento automático desativado neste canal.';
+      return false;
+    }
     if (m.status === 'pending' && m.by === 'automation' && conv?.mode === 'human' && !m.meta?.handoff) {
       m.status = 'failed'; m.error = 'Automação interrompida: conversa em modo humano.';
       return false;
     }
-    if (m.direction !== 'out') return false;
-    if (targetMessageIds && !targetMessageIds.includes(m.id)) return false;
     return isWhatsappMessageDue(m, nowISO) && !isWhatsappMessageClaimLive(m, nowISO);
   });
 

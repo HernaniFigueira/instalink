@@ -53,15 +53,18 @@ export function evolutionState(state: unknown): WhatsappStatus {
 }
 
 export class EvolutionClient {
+  private readonly startedAt = Date.now();
   constructor(private fetchFn: typeof fetch = fetch) {}
   private async request(path: string, method = 'GET', body?: unknown): Promise<any> {
     assertOutsideDBTransaction();
     const c = config();
+    const remaining = 45_000 - (Date.now() - this.startedAt);
+    if (remaining <= 0) throw new EvolutionError(504);
     try {
       const response = await this.fetchFn(`${c.url}${path}`, {
         method, headers: { apikey: c.key, 'Content-Type': 'application/json' },
         ...(body ? { body: JSON.stringify(body) } : {}),
-        signal: AbortSignal.timeout(12_000), cache: 'no-store', redirect: 'error',
+        signal: AbortSignal.timeout(Math.min(12_000, remaining)), cache: 'no-store', redirect: 'error',
       });
       if (!response.ok) throw new EvolutionError(response.status);
       const data = await response.json();

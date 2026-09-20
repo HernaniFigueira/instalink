@@ -630,6 +630,11 @@ describe('P6.1 — WhatsApp Cloud API E2E', () => {
   // 5. Human Handoff / Takeover
   describe('5. Transição Humano vs Automação', () => {
     it('quando em modo human, bot não responde e operador envia mensagem manual pelo inbox', async () => {
+      // Handoff acknowledgement is automation: explicitly enable the real channel.
+      await updateDB((d) => {
+        d.businesses.find((b) => b.id === BIZ_A)!.features = { agent: true } as any;
+        d.agents.push({ businessId: BIZ_A, enabled: true, channels: { site: true, whatsapp: true } } as any);
+      });
       const customerPhone = '5511922221111';
       // Inbound asking for human
       const payload1 = {

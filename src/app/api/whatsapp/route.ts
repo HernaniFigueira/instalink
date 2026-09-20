@@ -1,4 +1,4 @@
-import { evolutionConfigured } from '@/lib/whatsapp-providers/evolution';
+import { whatsappServerConfigured } from '@/lib/whatsapp-server';
 import { NextRequest, NextResponse } from 'next/server';
 import { updateDB } from '@/lib/db';
 import { requireBusiness } from '@/lib/access';
@@ -22,7 +22,7 @@ export async function GET(req: NextRequest) {
   if (!guard.ok) return guard.res;
   const db = guard.db;
   const business = guard.ctx.business;
-  const serverConfigured = business.whatsappIntegration?.provider === 'whatsapp_web' ? evolutionConfigured() : serverCredentialsConfigured();
+  const serverConfigured = whatsappServerConfigured(business);
   const integration = integrationStatus(business, serverConfigured);
   const label = whatsappStateLabel(business, serverConfigured);
   const credentials = getWhatsappCredentials(business);
@@ -85,7 +85,7 @@ export async function POST(req: NextRequest) {
       await updateDB((db) => {
         const b = db.businesses.find((x) => x.id === businessId);
         if (b?.whatsappIntegration?.provider === 'whatsapp_web') throw new Error('Provider alterado durante a operação.');
-      if (b) {
+        if (b) {
           b.whatsappIntegration = {
             ...defaultWhatsappIntegration(),
             status: 'not_connected',
@@ -168,7 +168,7 @@ export async function POST(req: NextRequest) {
       await updateDB((db) => {
         const b = db.businesses.find((x) => x.id === businessId);
         if (b?.whatsappIntegration?.provider === 'whatsapp_web') throw new Error('Provider alterado durante a operação.');
-      if (b) {
+        if (b) {
           b.whatsappIntegration = {
             ...(b.whatsappIntegration || defaultWhatsappIntegration()),
             status: 'pending',
@@ -201,7 +201,7 @@ export async function POST(req: NextRequest) {
       await updateDB((db) => {
         const b = db.businesses.find((x) => x.id === businessId);
         if (b?.whatsappIntegration?.provider === 'whatsapp_web') throw new Error('Provider alterado durante a operação.');
-      if (b) {
+        if (b) {
           b.whatsappIntegration = {
             ...(b.whatsappIntegration || defaultWhatsappIntegration()),
             status: 'error',
