@@ -7,6 +7,7 @@ import Link from 'next/link';
 import { Icon } from '@/components/icons';
 import { Button, PageSkeleton } from '@/components/ui';
 import { apiGet, apiSend } from '@/lib/api-client';
+import { WhatsappExperimentalPanel, WhatsappAgentControl } from './WhatsappExperimentalPanel';
 import { humanDateTime } from '@/lib/tz';
 import {
   EMBEDDED_SIGNUP_SDK_SRC, SIGNUP_CODE_TTL_SECONDS, SIGNUP_MESSAGE_ORIGIN, SIGNUP_MESSAGE_TYPE,
@@ -143,6 +144,25 @@ function LayerCard({ layer, tone }: { layer: OnboardingLayerView; tone: 'platfor
 }
 
 export function WhatsappChannelPanel({ businessId }: { businessId: string }) {
+  const [experimental, setExperimental] = useState(false);
+  const [state, setState] = useState('');
+  const changed = useCallback((selected: boolean, status: string) => {
+    setExperimental(selected); setState(`${selected}:${status}`);
+  }, []);
+  const metaChanged = useCallback((status: string) => setState(`meta:${status}`), []);
+  return <div className="space-y-4" key={businessId}>
+    <section className="rounded-lg border border-zinc-200 bg-white p-4 sm:p-5 space-y-3">
+      <div className="flex flex-wrap gap-2 items-center"><h3 className="font-semibold">WhatsApp oficial</h3><span className="text-xs rounded-full bg-emerald-100 text-emerald-900 px-2 py-1">Recomendado</span></div>
+      <p className="text-sm text-zinc-600">Conecte sua conta oficial do WhatsApp Business pela Meta. Indicado para uso em produção.</p>
+      {experimental ? <p className="text-sm text-zinc-500">Remova a conexão experimental antes de conectar com Meta. Seu histórico será preservado.</p> :
+        <details><summary className="cursor-pointer text-sm font-semibold text-emerald-800">Conectar com Meta / gerenciar conexão</summary><div className="mt-4"><MetaWhatsappChannelPanel businessId={businessId} onChange={metaChanged} /></div></details>}
+    </section>
+    <WhatsappExperimentalPanel businessId={businessId} onChange={changed} />
+    <WhatsappAgentControl key={`${businessId}:${state}`} businessId={businessId} />
+  </div>;
+}
+
+function MetaWhatsappChannelPanel({ businessId, onChange }: { businessId: string; onChange: (status: string) => void }) {
   const [data, setData] = useState<WaChannelData | null>(null);
   const [guide, setGuide] = useState<WaOnboardingView | null>(null);
   const [phone, setPhone] = useState('');
@@ -164,12 +184,13 @@ export function WhatsappChannelPanel({ businessId }: { businessId: string }) {
     });
     if (!res.ok) { setError(res.message); return; }
     setData(res.data || null);
+    onChange(res.data?.status || 'not_connected');
     setError('');
     const g = await apiGet<WaOnboardingView>(`/api/whatsapp/onboarding?businessId=${businessId}`, {
       scope: 'area', area: 'Canais',
     });
     if (g.ok) setGuide(g.data || null);
-  }, [businessId]);
+  }, [businessId, onChange]);
 
   useEffect(() => { load(); }, [load]);
 

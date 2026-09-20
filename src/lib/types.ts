@@ -262,9 +262,15 @@ export interface Business {
 }
 
 // ── Integração de WhatsApp (estrutura; sem credenciais no banco) ──
-export type WhatsappStatus = 'not_connected' | 'pending' | 'connected' | 'error';
+export type WhatsappProvider = 'meta_cloud' | 'whatsapp_web';
+export type WhatsappStatus = 'not_configured' | 'not_connected' | 'pending' | 'qr_pending' | 'connecting' | 'connected' | 'disconnected' | 'error';
 
 export interface WhatsappIntegration {
+  /** Absent in legacy records = meta_cloud. Evolution credentials NEVER persist. */
+  provider?: WhatsappProvider;
+  instanceName?: string;
+  lifecycleClaim?: string;
+  lifecycleExpiresAt?: string;
   status: WhatsappStatus;
   displayPhone: string; // número público exibido ("+55 11 ...")
   phoneNumberId: string; // identificador da conta (público, não secreto)
@@ -1533,6 +1539,7 @@ export interface Message {
   direction: 'in' | 'out';
   body: string;
   status: MessageStatus;
+  whatsappProvider?: WhatsappProvider;
   externalId: string; // id do provedor (webhook: wamid)
   by: string; // userId do membro (envio interno) ou 'contact' (recebida) ou 'automation'
   byName?: string;
@@ -1850,6 +1857,9 @@ export type AuditAction =
   | 'whatsapp.connected' | 'whatsapp.disconnected'
   | 'whatsapp.onboarding_blocked' | 'whatsapp.onboarding_failed'
   | 'whatsapp.registration_pending'
+  | 'whatsapp.experimental_instance_created' | 'whatsapp.experimental_qr_generated'
+  | 'whatsapp.experimental_connected' | 'whatsapp.experimental_disconnected'
+  | 'whatsapp.experimental_removed' | 'whatsapp.provider_changed'
   | 'agent.updated' | 'organization.created' | 'unit.created'
   | 'master.created' | 'master.promoted' | 'master.revoked'
   | 'user.login'

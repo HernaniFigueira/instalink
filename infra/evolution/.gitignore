@@ -1,0 +1,13 @@
+# Runtime credentials, exports, session material and backups stay off Git.
+.env*
+!.env.example
+.instalink.env
+*.dump
+*.sql
+*.tar
+*.tar.gz
+*.tgz
+*.zip
+backups/
+evidence-private/
+secrets/

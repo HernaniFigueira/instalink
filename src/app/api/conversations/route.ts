@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { randomUUID } from 'node:crypto';
 import { updateDB } from '@/lib/db';
 import { requireBusiness } from '@/lib/access';
-import { integrationStatus, serverCredentialsConfigured } from '@/lib/whatsapp';
+import { whatsappChannelStatus, whatsappServerConfigured } from '@/lib/whatsapp-server';
 import { deliverWhatsappMessage } from '@/lib/whatsapp-cloud-api';
 import {
   INSTAGRAM_ACCOUNT_MISMATCH_CODE, INSTAGRAM_ACCOUNT_MISMATCH_MESSAGE,
@@ -23,7 +23,7 @@ export async function GET(req: NextRequest) {
   const guard = await requireBusiness(req, businessId, 'whatsapp');
   if (!guard.ok) return guard.res;
   const { db, ctx } = guard;
-  const whatsappConnected = integrationStatus(ctx.business, serverCredentialsConfigured()).status === 'connected';
+  const whatsappConnected = whatsappChannelStatus(ctx.business).status === 'connected';
   const igStatus = instagramIntegrationStatus(ctx.business.instagramIntegration?.status);
   const instagramConnected = ctx.business.instagramIntegration?.status === 'connected';
   const channels = { whatsapp: whatsappConnected, instagram: instagramConnected };
@@ -105,7 +105,7 @@ export async function GET(req: NextRequest) {
     conversations,
     connected: whatsappConnected,
     channels,
-    serverConfigured: serverCredentialsConfigured(),
+    serverConfigured: whatsappServerConfigured(ctx.business),
     instagram: {
       ...igStatus,
       connected: instagramConnected,
@@ -257,10 +257,10 @@ export async function POST(req: NextRequest) {
       }, { status: 409 });
     }
 
-    const connected = integrationStatus(ctx.business, serverCredentialsConfigured()).status === 'connected';
+    const connected = whatsappChannelStatus(ctx.business).status === 'connected';
     if (!connected) {
       return NextResponse.json({
-        error: 'WhatsApp ainda não conectado. Conecte a conta oficial para enviar mensagens por aqui.',
+        error: 'WhatsApp ainda não conectado. Conecte o canal em Canais para enviar mensagens por aqui.',
         code: 'not_connected',
       }, { status: 409 });
     }

@@ -106,6 +106,7 @@ export async function POST(req: NextRequest) {
   const guard = await requireBusiness(req, businessId, 'whatsapp');
   if (!guard.ok) return guard.res;
   const { user, business } = guard.ctx;
+  if (business.whatsappIntegration?.provider === 'whatsapp_web') return NextResponse.json({ error: 'Remova a conexão experimental antes de configurar a Meta.' }, { status: 409 });
 
   const action = String(body.action || 'exchange');
   if (action !== 'exchange' && action !== 'register') {
@@ -165,6 +166,7 @@ export async function POST(req: NextRequest) {
       const why = metaErrorMessage(reg.data, 'a Meta recusou o registro do número.');
       await updateDB((db) => {
         const b = db.businesses.find((x) => x.id === businessId);
+        if (b?.whatsappIntegration?.provider === 'whatsapp_web') throw new Error('Provider alterado durante a operação.');
         if (b?.whatsappIntegration) {
           b.whatsappIntegration.status = 'pending';
           b.whatsappIntegration.registrationRequired = true;
@@ -184,6 +186,7 @@ export async function POST(req: NextRequest) {
     }
     await updateDB((db) => {
       const b = db.businesses.find((x) => x.id === businessId);
+      if (b?.whatsappIntegration?.provider === 'whatsapp_web') throw new Error('Provider alterado durante a operação.');
       if (b?.whatsappIntegration) {
         const wi = b.whatsappIntegration;
         wi.registeredAt = now;
@@ -339,6 +342,7 @@ export async function POST(req: NextRequest) {
     const now = new Date().toISOString();
     await updateDB((db) => {
       const b = db.businesses.find((x) => x.id === businessId);
+      if (b?.whatsappIntegration?.provider === 'whatsapp_web') throw new Error('Provider alterado durante a operação.');
       if (b) {
         b.whatsappIntegration = {
           ...(b.whatsappIntegration || defaultWhatsappIntegration()),
@@ -402,6 +406,7 @@ export async function POST(req: NextRequest) {
   const connected = registered;
   await updateDB((db) => {
     const b = db.businesses.find((x) => x.id === businessId);
+    if (b?.whatsappIntegration?.provider === 'whatsapp_web') throw new Error('Provider alterado durante a operação.');
     if (b) {
       b.whatsappIntegration = {
         ...(b.whatsappIntegration || defaultWhatsappIntegration()),

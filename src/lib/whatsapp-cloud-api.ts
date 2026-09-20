@@ -4,6 +4,9 @@
 import { createCipheriv, createDecipheriv, createHash, createHmac, randomBytes, randomUUID, timingSafeEqual } from 'node:crypto';
 import type { Business, Campaign, CampaignRecipient, DB, Message, WhatsappIntegration } from './types';
 import { readDB, updateDB, updateDBWithCas } from './db';
+import { agentFor, agentActive } from './agent';
+import { logWhatsapp } from './whatsapp-log';
+import { sendWhatsappText, whatsappTransportReady } from './whatsapp-providers/send';
 import { assertOutsideDBTransaction } from './db-transaction';
 import {
   type ChannelConnector,
@@ -104,6 +107,7 @@ export interface ResolvedWhatsappCredentials {
  */
 export function getWhatsappCredentials(business: Business): ResolvedWhatsappCredentials | null {
   const integration = business.whatsappIntegration;
+  if (integration?.provider === 'whatsapp_web') return null;
   if (integration?.phoneNumberId && integration.encryptedAccessToken) {
     const token = decryptSecret(integration.encryptedAccessToken);
     if (token) {
@@ -383,6 +387,18 @@ export function claimPendingWhatsappMessages(
     if (m.businessId !== businessId) return false;
     if (m.direction !== 'out') return false;
     if (targetMessageIds && !targetMessageIds.includes(m.id)) return false;
+    if (m.channel && m.channel !== 'whatsapp') return false;
+    const conv = db.conversations.find((c) => c.id === m.conversationId && c.businessId === businessId);
+    if (conv?.channel && conv.channel !== 'whatsapp') return false;
+    const business = db.businesses.find((b) => b.id === businessId);
+    if (m.status === 'pending' && m.meta?.agentReply && business && !agentActive(business, agentFor(db, business), 'whatsapp')) {
+      m.status = 'failed'; m.error = 'Atendimento automático desativado neste canal.';
+      return false;
+    }
+    if (m.status === 'pending' && m.by === 'automation' && conv?.mode === 'human' && !m.meta?.handoff) {
+      m.status = 'failed'; m.error = 'Automação interrompida: conversa em modo humano.';
+      return false;
+    }
     return isWhatsappMessageDue(m, nowISO) && !isWhatsappMessageClaimLive(m, nowISO);
   });
 
@@ -441,8 +457,8 @@ export async function deliverWhatsappMessage(
 
   const db = await readDB();
   business = db.businesses.find((b) => b.id === businessId);
-  const conv = db.conversations.find((c) => c.id === claimed.conversationId);
-  destinationPhone = conv?.phone || claimed.channelUserId || '';
+  const conv = db.conversations.find((c) => c.id === claimed.conversationId && c.businessId === businessId);
+  destinationPhone = conv?.channelUserId || conv?.phone || claimed.channelUserId || '';
 
   if (!business) {
     await updateDB((d) => {
@@ -452,8 +468,7 @@ export async function deliverWhatsappMessage(
     return { ok: false, status: 'failed', error: 'Unidade não encontrada.' };
   }
 
-  const credentials = getWhatsappCredentials(business);
-  if (!credentials) {
+  if (!whatsappTransportReady(business)) {
     // Se o WhatsApp não estiver configurado para esta unidade, libera o lease
     // sem abortar destrutivamente para respeitar filas pendentes de rascunho/P3
     await updateDB((d) => {
@@ -464,6 +479,14 @@ export async function deliverWhatsappMessage(
       }
     });
     return { ok: false, status: 'pending', error: 'WhatsApp não configurado para esta unidade.' };
+  }
+
+  if (claimed.whatsappProvider && claimed.whatsappProvider !== (business.whatsappIntegration?.provider || 'meta_cloud')) {
+    await updateDB((d) => {
+      const m = d.messages.find((x) => x.id === messageId && x.claimToken === holder);
+      if (m) { m.status = 'failed'; m.error = 'Provider alterado; envio antigo bloqueado.'; m.claimToken = undefined; m.claimExpiresAt = undefined; }
+    });
+    return { ok: false, status: 'failed', error: 'Provider alterado; envio antigo bloqueado.' };
   }
 
   if (!destinationPhone) {
@@ -481,9 +504,7 @@ export async function deliverWhatsappMessage(
     components: msgMeta.templateComponents,
   } : undefined;
 
-  const sendRes = await sendMetaGraphMessage({
-    phoneNumberId: credentials.phoneNumberId,
-    accessToken: credentials.accessToken,
+  const sendRes = await sendWhatsappText(business, {
     to: destinationPhone,
     body: msgBody,
     template: templateConfig,
@@ -536,6 +557,10 @@ export async function deliverWhatsappMessage(
       }
     }
   });
+
+  logWhatsapp({ provider: business.whatsappIntegration?.provider || 'meta_cloud', businessId,
+    instance: business.whatsappIntegration?.instanceName, direction: 'out', event: 'delivery',
+    externalId: sendRes.externalId || '', status: finalStatus, ...(sendRes.ok ? {} : { error: 'provider_error' as const }) });
 
   return {
     ok: sendRes.ok && !!sendRes.externalId,
@@ -733,8 +758,7 @@ export async function deliverCampaignRecipient(
     return { ok: false, status: 'failed', error: 'Campanha foi cancelada.' };
   }
 
-  const creds = getWhatsappCredentials(business);
-  if (!creds) {
+  if (!whatsappTransportReady(business)) {
     await updateDB((d) => {
       const target = d.campaignRecipients.find((r) => r.id === recipientId && r.claimToken === holder);
       if (target) {
@@ -753,9 +777,7 @@ export async function deliverCampaignRecipient(
   } : undefined;
 
   // 3. Chamada HTTP fora de qualquer lock
-  const sendRes = await sendMetaGraphMessage({
-    phoneNumberId: creds.phoneNumberId,
-    accessToken: creds.accessToken,
+  const sendRes = await sendWhatsappText(business, {
     to: claimed.phone,
     body: campaign.message,
     template: templateConfig,
@@ -824,12 +846,12 @@ export function resolveTenantForChange(
   const wId = String(wabaId || '').trim();
 
   if (pId) {
-    const match = db.businesses.find((b) => b.whatsappIntegration?.phoneNumberId === pId);
-    return match || null;
+    const matches = db.businesses.filter((b) => b.whatsappIntegration?.provider !== 'whatsapp_web' && b.whatsappIntegration?.phoneNumberId === pId);
+    return matches.length === 1 ? matches[0] : null;
   }
 
   if (wId) {
-    const matching = db.businesses.filter((b) => b.whatsappIntegration?.wabaId === wId);
+    const matching = db.businesses.filter((b) => b.whatsappIntegration?.provider !== 'whatsapp_web' && b.whatsappIntegration?.wabaId === wId);
     if (matching.length === 1) {
       return matching[0];
     }
@@ -923,8 +945,7 @@ const whatsappChannelConnector: ChannelConnector = {
       };
     }
 
-    const creds = getWhatsappCredentials(business);
-    if (!creds) {
+    if (!whatsappTransportReady(business)) {
       return {
         ok: false,
         code: 'missing_credentials',
@@ -939,9 +960,7 @@ const whatsappChannelConnector: ChannelConnector = {
       components: message.meta.templateComponents,
     } : undefined;
 
-    const res = await sendMetaGraphMessage({
-      phoneNumberId: creds.phoneNumberId,
-      accessToken: creds.accessToken,
+    const res = await sendWhatsappText(business, {
       to: message.to,
       body: message.body,
       template: templateConfig,

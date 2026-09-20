@@ -1,0 +1,32 @@
+{
+	# TLS-ALPN-01 on 443: no public HTTP/80 listener or redirect needed.
+	auto_https disable_redirects
+	email {$ACME_EMAIL}
+	admin off
+}
+
+{$EVOLUTION_HOST} {
+	tls {
+		issuer acme {
+			disable_http_challenge
+		}
+	}
+	header {
+		-Server
+		Cache-Control "no-store"
+		X-Content-Type-Options "nosniff"
+	}
+
+	# Only the endpoints used by PR #31. Manager/assets/docs/metrics and all
+	# unrelated integrations are denied, even if the vendor exposes them.
+	@instalink {
+		path / /instance/create /instance/fetchInstances /instance/connect/* /instance/connectionState/* /instance/logout/* /instance/delete/* /webhook/set/* /message/sendText/*
+	}
+	handle @instalink {
+		reverse_proxy evolution:8080
+	}
+	handle {
+		respond "Not found" 404
+	}
+	# Deliberately no access log, no debug, no header/body logging.
+}

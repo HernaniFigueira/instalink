@@ -1,3 +1,4 @@
+import { whatsappServerConfigured } from '@/lib/whatsapp-server';
 import { NextRequest, NextResponse } from 'next/server';
 import { updateDB } from '@/lib/db';
 import { requireBusiness } from '@/lib/access';
@@ -21,7 +22,7 @@ export async function GET(req: NextRequest) {
   if (!guard.ok) return guard.res;
   const db = guard.db;
   const business = guard.ctx.business;
-  const serverConfigured = serverCredentialsConfigured();
+  const serverConfigured = whatsappServerConfigured(business);
   const integration = integrationStatus(business, serverConfigured);
   const label = whatsappStateLabel(business, serverConfigured);
   const credentials = getWhatsappCredentials(business);
@@ -32,6 +33,7 @@ export async function GET(req: NextRequest) {
     status: integration.status,
     label,
     integration: {
+      provider: integration.provider || 'meta_cloud',
       displayPhone: integration.displayPhone,
       phoneNumberId: maskTechnicalId(integration.phoneNumberId),
       wabaId: maskTechnicalId(integration.wabaId),
@@ -75,12 +77,14 @@ export async function POST(req: NextRequest) {
     const guard = await requireBusiness(req, businessId, 'whatsapp');
     if (!guard.ok) return guard.res;
     const { user, business } = guard.ctx;
+    if (business.whatsappIntegration?.provider === 'whatsapp_web') return NextResponse.json({ error: 'Remova a conexão experimental antes de configurar a Meta.' }, { status: 409 });
     const action = String(body.action || 'connect');
 
     // ── DESCONECTAR ──────────────────────────────────────────────
     if (action === 'disconnect') {
       await updateDB((db) => {
         const b = db.businesses.find((x) => x.id === businessId);
+        if (b?.whatsappIntegration?.provider === 'whatsapp_web') throw new Error('Provider alterado durante a operação.');
         if (b) {
           b.whatsappIntegration = {
             ...defaultWhatsappIntegration(),
@@ -114,6 +118,7 @@ export async function POST(req: NextRequest) {
 
       await updateDB((db) => {
         const b = db.businesses.find((x) => x.id === businessId);
+        if (b?.whatsappIntegration?.provider === 'whatsapp_web') throw new Error('Provider alterado durante a operação.');
         if (b && b.whatsappIntegration) {
           if (testResult.ok) {
             b.whatsappIntegration.status = 'connected';
@@ -162,6 +167,7 @@ export async function POST(req: NextRequest) {
       const missing = missingEnvVars();
       await updateDB((db) => {
         const b = db.businesses.find((x) => x.id === businessId);
+        if (b?.whatsappIntegration?.provider === 'whatsapp_web') throw new Error('Provider alterado durante a operação.');
         if (b) {
           b.whatsappIntegration = {
             ...(b.whatsappIntegration || defaultWhatsappIntegration()),
@@ -194,6 +200,7 @@ export async function POST(req: NextRequest) {
     if (!testRes.ok) {
       await updateDB((db) => {
         const b = db.businesses.find((x) => x.id === businessId);
+        if (b?.whatsappIntegration?.provider === 'whatsapp_web') throw new Error('Provider alterado durante a operação.');
         if (b) {
           b.whatsappIntegration = {
             ...(b.whatsappIntegration || defaultWhatsappIntegration()),
@@ -214,6 +221,7 @@ export async function POST(req: NextRequest) {
     // Sucesso confirmado na Meta: marca como connected
     await updateDB((db) => {
       const b = db.businesses.find((x) => x.id === businessId);
+      if (b?.whatsappIntegration?.provider === 'whatsapp_web') throw new Error('Provider alterado durante a operação.');
       if (b) {
         b.whatsappIntegration = {
           ...(b.whatsappIntegration || defaultWhatsappIntegration()),
