@@ -28,6 +28,8 @@ export async function GET(req: NextRequest) {
   const conversations = db.conversations.filter((c) => c.businessId === businessId);
   const messages = db.messages.filter((m) => m.businessId === businessId);
 
+  const canViewDiagnostics = guard.ctx.isMaster || guard.ctx.isOwner || guard.ctx.role === 'ADMIN';
+
   return NextResponse.json({
     status: integration.status,
     label,
@@ -42,7 +44,9 @@ export async function GET(req: NextRequest) {
       lastError: integration.lastError || '',
       requestedAt: integration.requestedAt,
     },
-    diagnostics: {
+    // Diagnósticos técnicos reservados para Master/Admin
+    canViewDiagnostics,
+    diagnostics: canViewDiagnostics ? {
       credentialsConfigured: !!credentials,
       credentialSource: credentials?.source || 'none',
       hasPhoneNumberId: !!integration.phoneNumberId,
@@ -51,8 +55,12 @@ export async function GET(req: NextRequest) {
       lastInboundAt: integration.lastInboundAt || '',
       lastOutboundAt: integration.lastOutboundAt || '',
       recentError: integration.lastError || '',
-    },
-    server: { configured: serverConfigured, missingEnv: missingEnvVars(), envVars: REQUIRED_ENV_VARS },
+    } : undefined,
+    server: canViewDiagnostics ? {
+      configured: serverConfigured,
+      missingEnv: missingEnvVars(),
+      envVars: REQUIRED_ENV_VARS,
+    } : undefined,
     inbox: {
       conversations: conversations.length,
       open: conversations.filter((c) => c.status === 'open').length,
@@ -64,7 +72,7 @@ export async function GET(req: NextRequest) {
     linkFallback: business.whatsapp
       ? `https://wa.me/55${onlyDigits(business.whatsapp).replace(/^55/, '')}`
       : '',
-    webhookPath: '/api/whatsapp/webhook',
+    webhookPath: canViewDiagnostics ? '/api/whatsapp/webhook' : undefined,
   });
 }
 
