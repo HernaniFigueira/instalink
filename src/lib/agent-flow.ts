@@ -341,9 +341,6 @@ export function agentFlowStep(
       if (!date) {
         return { reply: 'Que dia você prefere?', actions: [], intent: 'flow_ask_day', flow };
       }
-      if (opts.ctx?.channelPhone) {
-        return collectIdentity(db, business, { step: 'confirm', serviceId: svc.id, date, time }, opts.ctx || {});
-      }
       return askConfirm(db, business, { step: 'confirm', serviceId: svc.id, date, time }, opts.ctx || {});
     }
     const when = parseWhenPhrase(message || '', today);
