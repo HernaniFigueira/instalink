@@ -244,6 +244,8 @@ describe('A3.4 · B8 — diagnóstico em duas camadas', () => {
 
     // Com o registro provado, conectado (e ainda falta o primeiro evento).
     b.whatsappIntegration!.registeredAt = NOW;
+    b.whatsappIntegration!.registrationRequired = false;
+    b.whatsappIntegration!.onboardingType = 'standard';
     b.whatsappIntegration!.status = 'connected';
     const completo = onboardingSteps(b);
     expect(completo.find((s) => s.id === 'connected')!.ok).toBe(true);

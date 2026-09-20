@@ -6,6 +6,7 @@ import {
   REQUIRED_ENV_VARS, defaultWhatsappIntegration, integrationStatus, maskTechnicalId,
   missingEnvVars, serverCredentialsConfigured, whatsappStateLabel,
 } from '@/lib/whatsapp';
+import { computeConnectionStatus, type UnitIntegrationView } from '@/lib/whatsapp-onboarding';
 import { getWhatsappCredentials, testMetaConnection } from '@/lib/whatsapp-cloud-api';
 import { onlyDigits } from '@/lib/utils';
 
@@ -43,6 +44,8 @@ export async function GET(req: NextRequest) {
       lastOutboundAt: integration.lastOutboundAt || '',
       lastError: integration.lastError || '',
       requestedAt: integration.requestedAt,
+      onboardingType: integration.onboardingType,
+      registrationRequired: integration.registrationRequired,
     },
     // Diagnósticos técnicos reservados para Master/Admin
     canViewDiagnostics,
@@ -124,21 +127,19 @@ export async function POST(req: NextRequest) {
         const b = db.businesses.find((x) => x.id === businessId);
         if (b && b.whatsappIntegration) {
           if (testResult.ok) {
-            // Regra de honestidade: testar conexão NUNCA promove arbitrariamente
-            // uma conta incompleta ou não registrada (ex: pending) para 'connected'.
-            // Apenas preserva 'connected' se já cumpria os requisitos, ou mantém o status
-            // atual limpando o erro.
-            if (b.whatsappIntegration.status === 'connected') {
-              b.whatsappIntegration.lastError = undefined;
-            } else if (b.whatsappIntegration.status === 'error') {
-              b.whatsappIntegration.status = 'pending';
-              b.whatsappIntegration.lastError = undefined;
-            }
+            // Apenas atualiza metadados informativos e limpa erros se ok.
+            // NUNCA modifica o status contratual: computeConnectionStatus é a autoridade.
+            const currentWi = b.whatsappIntegration;
+            b.whatsappIntegration.lastError = undefined;
             if (testResult.displayPhoneNumber) b.whatsappIntegration.displayPhone = testResult.displayPhoneNumber;
             if (testResult.verifiedName) b.whatsappIntegration.verifiedName = testResult.verifiedName;
+
+            const computed = computeConnectionStatus(currentWi as any);
+            b.whatsappIntegration.status = computed.status;
           } else {
             b.whatsappIntegration.lastError = testResult.error;
             b.whatsappIntegration.lastErrorAt = now;
+            b.whatsappIntegration.status = 'error';
           }
         }
       });
@@ -227,43 +228,43 @@ export async function POST(req: NextRequest) {
       }, { status: 400 });
     }
 
-    // Se a unidade está usando Embedded Signup e ainda falta registrar o número com PIN
-    // ou confirmar Coexistence server-to-server, action 'connect' NÃO pode burlar
-    // a exigência de registro para forçar status='connected'.
-    const currentWi = business.whatsappIntegration;
-    const isEmbeddedSignup = currentWi?.source === 'embedded_signup';
-    const isCoexistenceConfirmed = currentWi?.onboardingType === 'coexistence' && !!currentWi?.coexistenceConfirmedAt;
-    const isStandardRegistered = !!currentWi?.registeredAt && !currentWi?.registrationRequired;
-    const canBeConnected = !isEmbeddedSignup || isCoexistenceConfirmed || isStandardRegistered;
+    // REGRA CENTRALIZADA: computeConnectionStatus é a autoridade absoluta.
+    // Nenhum bypass legado (!isEmbeddedSignup ou credencial global) pode conectar silenciosamente
+    // uma unidade sem comprovação completa (token criptografado na unidade, wabaId, phoneId, webhookSubscribedAt e registro/coexistência).
+    const currentWi = business.whatsappIntegration || defaultWhatsappIntegration();
+    const candidateWi = {
+      ...currentWi,
+      displayPhone: testRes.displayPhoneNumber || displayPhone,
+      phoneNumberId: phoneIdToValidate,
+      wabaId: currentWi.wabaId || process.env.WHATSAPP_WABA_ID || '',
+      verifiedName: testRes.verifiedName,
+    };
 
-    const targetStatus = canBeConnected ? 'connected' : 'pending';
+    const computed = computeConnectionStatus(candidateWi as any);
 
     await updateDB((db) => {
       const b = db.businesses.find((x) => x.id === businessId);
       if (b) {
         b.whatsappIntegration = {
-          ...(b.whatsappIntegration || defaultWhatsappIntegration()),
-          status: targetStatus,
-          displayPhone: testRes.displayPhoneNumber || displayPhone,
-          phoneNumberId: phoneIdToValidate,
-          wabaId: b.whatsappIntegration?.wabaId || process.env.WHATSAPP_WABA_ID || '',
-          connectedAt: targetStatus === 'connected' ? (b.whatsappIntegration?.connectedAt || now) : '',
-          lastError: targetStatus === 'connected' ? undefined : 'Falta concluir o registro do número com PIN na Cloud API.',
-          verifiedName: testRes.verifiedName,
+          ...candidateWi,
+          status: computed.status,
+          registrationRequired: computed.registrationRequired,
+          connectedAt: computed.connected ? (currentWi.connectedAt || now) : '',
+          lastError: computed.connected ? undefined : (computed.reason || 'Integração incompleta junto à Meta.'),
         };
       }
       pushAudit(db, {
         action: 'whatsapp.connect_requested', actor: user, businessId,
-        meta: { displayPhone, connected: targetStatus === 'connected', status: targetStatus, verifiedName: testRes.verifiedName },
+        meta: { displayPhone, connected: computed.connected, status: computed.status, verifiedName: testRes.verifiedName },
       });
     });
 
-    if (targetStatus !== 'connected') {
+    if (!computed.connected) {
       return NextResponse.json({
         ok: false,
         pending: true,
-        status: 'pending',
-        message: 'Conta autorizada e validada na Meta, mas o número ainda requer registro de PIN na Cloud API para enviar e receber mensagens.',
+        status: computed.status,
+        message: computed.reason || 'Conta validada na Meta, mas ainda não atende a todos os requisitos contratuais de conexão (webhook assinado, registro com PIN ou confirmação de Coexistência).',
         verifiedName: testRes.verifiedName,
         displayPhone: testRes.displayPhoneNumber || displayPhone,
         webhookPath: '/api/whatsapp/webhook',

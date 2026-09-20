@@ -209,6 +209,10 @@ beforeEach(async () => {
     requestedAt: '',
     encryptedAccessToken: encryptSecret('EAATestValidTokenClinicA'),
     keyFingerprint: 'fp-1234',
+    webhookSubscribedAt: '2026-09-10T12:00:00Z',
+    registeredAt: '2026-09-10T12:00:00Z',
+    registrationRequired: false,
+    onboardingType: 'standard',
   };
 
   const clinicB = createClinic(BIZ_B, OWNER_B, 'Clínica Odonto B');
@@ -223,6 +227,10 @@ beforeEach(async () => {
     requestedAt: '',
     encryptedAccessToken: encryptSecret('EAATestValidTokenClinicB'),
     keyFingerprint: 'fp-5678',
+    webhookSubscribedAt: '2026-09-10T12:00:00Z',
+    registeredAt: '2026-09-10T12:00:00Z',
+    registrationRequired: false,
+    onboardingType: 'standard',
   };
 
   db.businesses.push(clinicA, clinicB);

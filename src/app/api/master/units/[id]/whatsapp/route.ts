@@ -3,6 +3,7 @@ import { requireMaster } from '@/lib/access';
 import { pushAudit } from '@/lib/audit';
 import { updateDB } from '@/lib/db';
 import { defaultWhatsappIntegration, maskTechnicalId } from '@/lib/whatsapp';
+import { computeConnectionStatus, type UnitIntegrationView } from '@/lib/whatsapp-onboarding';
 import { encryptSecret, testMetaConnection } from '@/lib/whatsapp-cloud-api';
 import { onlyDigits } from '@/lib/utils';
 
@@ -99,31 +100,34 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
     const encryptedToken = encryptSecret(accessToken);
     const now = new Date().toISOString();
 
-    // 3. Persiste no Business apenas após validação confirmada
+    // 3. Centralização: passa pela autoridade única de computeConnectionStatus
+    const candidateWi: Partial<UnitIntegrationView> = {
+      ...(business.whatsappIntegration || defaultWhatsappIntegration()),
+      phoneNumberId,
+      wabaId,
+      displayPhone: testResult.displayPhoneNumber || displayPhone || business.whatsappIntegration?.displayPhone || '',
+      encryptedAccessToken: encryptedToken,
+      verifiedName: testResult.verifiedName,
+      source: 'master',
+      tokenIssuedAt: now,
+      webhookSubscribedAt: now,
+      registeredAt: now,
+      registrationRequired: false,
+      onboardingType: 'standard',
+    };
+
+    const computed = computeConnectionStatus(candidateWi);
+
+    // Persiste no Business após validação e computação
     await updateDB((d) => {
       const b = d.businesses.find((x) => x.id === id);
       if (b) {
         b.whatsappIntegration = {
-          ...(b.whatsappIntegration || defaultWhatsappIntegration()),
-          status: 'connected',
-          phoneNumberId,
-          wabaId,
-          displayPhone: testResult.displayPhoneNumber || displayPhone || b.whatsappIntegration?.displayPhone || '',
-          encryptedAccessToken: encryptedToken,
-          verifiedName: testResult.verifiedName,
-          connectedAt: now,
-          lastError: undefined,
-          // Origem da conexão: cadastro assistido pelo suporte, não o popup.
-          // Aqui o suporte valida o token E o número contra a Meta antes de
-          // gravar, então o número já é considerado registrado (o painel do
-          // WhatsApp Manager é quem registra nesse caminho).
-          source: 'master',
-          tokenIssuedAt: now,
-          webhookSubscribedAt: now,
-          registeredAt: now,
-          registrationRequired: false,
-          onboardingType: 'unknown',
-        };
+          ...candidateWi,
+          status: computed.status,
+          connectedAt: computed.connected ? (b.whatsappIntegration?.connectedAt || now) : '',
+          lastError: computed.connected ? undefined : computed.reason,
+        } as any;
       }
       pushAudit(d, {
         action: 'business.updated_by_master',
@@ -133,17 +137,20 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
           whatsappAction: 'configured',
           phoneNumberIdMasked: maskTechnicalId(phoneNumberId),
           verifiedName: testResult.verifiedName,
+          status: computed.status,
         },
       });
     });
 
     return NextResponse.json({
-      ok: true,
-      status: 'connected',
+      ok: computed.connected,
+      status: computed.status,
       verifiedName: testResult.verifiedName,
       displayPhone: testResult.displayPhoneNumber || displayPhone,
       phoneNumberId: maskTechnicalId(phoneNumberId),
-      message: 'Conta oficial do WhatsApp conectada com sucesso à unidade.',
+      message: computed.connected
+        ? 'Conta oficial do WhatsApp conectada com sucesso à unidade.'
+        : `Credenciais salvas, mas a integração permanece como ${computed.status}: ${computed.reason}`,
     });
   } catch {
     return NextResponse.json({ error: 'Erro ao configurar credenciais do WhatsApp.' }, { status: 500 });

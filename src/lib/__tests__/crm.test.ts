@@ -87,9 +87,18 @@ describe('WhatsApp — status honesto', () => {
   });
 
   it('empresa diz conectado MAS servidor sem credenciais → volta para pendente (não mente)', () => {
-    const b = biz({ whatsappIntegration: { ...defaultWhatsappIntegration(), status: 'connected', displayPhone: '+55 11 99999-9999' } });
+    const b = biz({ whatsappIntegration: {
+      ...defaultWhatsappIntegration(),
+      status: 'connected',
+      displayPhone: '+55 11 99999-9999',
+      wabaId: 'WABA-CRM',
+      webhookSubscribedAt: '2026-09-01T00:00:00Z',
+      registeredAt: '2026-09-01T00:00:00Z',
+      registrationRequired: false,
+      onboardingType: 'standard',
+    } });
     expect(integrationStatus(b, false).status).toBe('pending');
-    expect(integrationStatus(b, true).status).toBe('connected');
+    expect(integrationStatus(b, true).status).toBe('pending'); // Sem phoneNumberId nem encryptedAccessToken, nunca conectado
     expect(isConnected(b, false)).toBe(false);
   });
 

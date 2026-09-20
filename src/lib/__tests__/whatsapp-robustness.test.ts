@@ -14,6 +14,8 @@ import { GET as whatsappGET, POST as whatsappPOST } from '@/app/api/whatsapp/rou
 import { GET as webhookGET, POST as webhookPOST } from '@/app/api/whatsapp/webhook/route';
 import { POST as masterWhatsappPOST } from '@/app/api/master/units/[id]/whatsapp/route';
 import { issueSignupState } from '../whatsapp-onboarding-server';
+import { computeConnectionStatus } from '../whatsapp-onboarding';
+import { integrationStatus } from '../whatsapp';
 import { encryptSecret, resolveTenantForChange } from '../whatsapp-cloud-api';
 import { createBookingTx } from '../booking-create';
 import type { Business, DB } from '../types';
@@ -287,18 +289,30 @@ describe('Meta WhatsApp Cloud API — Onboarding Coexistence e Standard', () => 
 
     expect(res.status).toBe(200);
     const body = await res.json();
-    // NÃO pode conectar! Deve reverter para pending exigindo registro padrão
+    // NÃO pode conectar! Deve manter Coexistence com status pending e motivo explicativo
     expect(body.ok).toBe(false);
     expect(body.pending).toBe(true);
-    expect(body.reason).toBe('phone_registration_required');
-    expect(body.message).toMatch(/não confirmou a coexistência oficial/i);
+    expect(body.reason).toBe('coexistence_verification_pending');
+    expect(body.message).toMatch(/não confirmou o status de Coexistência/i);
 
     const db = await readDB();
     const wi = db.businesses.find((b) => b.id === BIZ_A)?.whatsappIntegration;
     expect(wi?.status).toBe('pending');
-    expect(wi?.registrationRequired).toBe(true);
+    expect(wi?.onboardingType).toBe('coexistence');
+    expect(wi?.registrationRequired).toBe(false);
     expect(wi?.registeredAt).toBeFalsy();
     expect(wi?.coexistenceConfirmedAt).toBeFalsy();
+
+    // REGRA DE OURO: Enquanto a verificação de Coexistência estiver pendente/inconclusiva,
+    // a rota /register NÃO PODE aceitar PIN de duas etapas
+    const resForbiddenPin = await onboardingPOST(jsonReq('/api/whatsapp/onboarding', {
+      businessId: BIZ_A,
+      action: 'register',
+      pin: '654321',
+    }, ownerToken));
+    expect(resForbiddenPin.status).toBe(400);
+    const errBody = await resForbiddenPin.json();
+    expect(errBody.code).toBe('coexistence_verification_pending');
   });
 
   it('rotas whatsapp/route.ts (test e connect) não fabricam status connected em contas pendentes', async () => {
@@ -350,6 +364,103 @@ describe('Meta WhatsApp Cloud API — Onboarding Coexistence e Standard', () => 
     db = await readDB();
     wi = db.businesses.find((b) => b.id === BIZ_A)?.whatsappIntegration;
     expect(wi?.status).toBe('pending');
+  });
+
+  it('centralidade de computeConnectionStatus: registros antigos ou legados sem evidências completas nunca conectam', async () => {
+    // 1. Registro antigo com status 'connected', mas SEM webhookSubscribedAt
+    const oldWithoutWebhook = {
+      status: 'connected',
+      phoneNumberId: 'PN-OLD-1',
+      wabaId: 'WABA-OLD-1',
+      encryptedAccessToken: encryptSecret('TOKEN-1'),
+      registeredAt: NOW,
+      registrationRequired: false,
+      onboardingType: 'standard' as const,
+    };
+    const c1 = computeConnectionStatus(oldWithoutWebhook as any);
+    expect(c1.connected).toBe(false);
+    expect(c1.status).toBe('pending');
+    expect(c1.reason).toMatch(/Webhook da WABA/i);
+
+    // Avalia também através de integrationStatus (usado pela leitura do painel)
+    const bizFake1: any = { whatsappIntegration: oldWithoutWebhook };
+    const status1 = integrationStatus(bizFake1, true);
+    expect(status1.status).toBe('pending');
+
+    // 2. Registro Standard sem registeredAt
+    const stdWithoutReg = {
+      status: 'connected', // Tentativa de mentir
+      phoneNumberId: 'PN-OLD-2',
+      wabaId: 'WABA-OLD-2',
+      encryptedAccessToken: encryptSecret('TOKEN-2'),
+      webhookSubscribedAt: NOW,
+      onboardingType: 'standard' as const,
+      registrationRequired: true,
+    };
+    const c2 = computeConnectionStatus(stdWithoutReg as any);
+    expect(c2.connected).toBe(false);
+    expect(c2.status).toBe('pending');
+    expect(c2.registrationRequired).toBe(true);
+
+    const bizFake2: any = { whatsappIntegration: stdWithoutReg };
+    const status2 = integrationStatus(bizFake2, true);
+    expect(status2.status).toBe('pending');
+
+    // 3. Registro Coexistence sem confirmação completa (ex: sem isOnBizApp ou sem platformType CLOUD_API)
+    const coexIncomplete = {
+      status: 'connected',
+      phoneNumberId: 'PN-OLD-3',
+      wabaId: 'WABA-OLD-3',
+      encryptedAccessToken: encryptSecret('TOKEN-3'),
+      webhookSubscribedAt: NOW,
+      onboardingType: 'coexistence' as const,
+      coexistenceConfirmedAt: NOW,
+      isOnBizApp: true,
+      platformType: 'ON_PREMISE', // Inválido!
+    };
+    const c3 = computeConnectionStatus(coexIncomplete as any);
+    expect(c3.connected).toBe(false);
+    expect(c3.status).toBe('pending');
+    expect(c3.reason).toMatch(/Coexistência não confirmada/i);
+
+    // 4. Action connect com credenciais globais e sem credencial completa da unidade NÃO conecta
+    await updateDB((d) => {
+      const b = d.businesses.find((x) => x.id === BIZ_A)!;
+      // Reseta integração para nula/básica
+      b.whatsappIntegration = {
+        status: 'not_connected',
+        phoneNumberId: '',
+        wabaId: '',
+        connectedAt: '',
+        requestedAt: '',
+      } as any;
+    });
+
+    vi.stubGlobal('fetch', vi.fn(async (url: any) => {
+      const u = String(url);
+      if (u.includes('?fields=')) return new Response(JSON.stringify({
+        display_phone_number: '+55 11 98888-0005',
+        verified_name: 'Clínica Global Creds Test',
+      }), { status: 200 });
+      return new Response(JSON.stringify({ error: { message: 'not found' } }), { status: 404 });
+    }));
+
+    // Tenta action connect
+    const resGlobalConnect = await whatsappPOST(jsonReq('/api/whatsapp', {
+      businessId: BIZ_A,
+      action: 'connect',
+      displayPhone: '11988880005',
+    }, ownerToken));
+
+    // Como faltam credenciais no servidor ou token na unidade, a rota retorna erro e mantém pending
+    expect(resGlobalConnect.status).toBeGreaterThanOrEqual(400);
+    const bodyGlobal = await resGlobalConnect.json();
+    expect(bodyGlobal.status === 'pending' || bodyGlobal.code === 'not_configured').toBe(true);
+
+    // Prova no banco que o status gravado é pending e NÃO connected
+    const db = await readDB();
+    const wiFinal = db.businesses.find((b) => b.id === BIZ_A)?.whatsappIntegration;
+    expect(wiFinal?.status).toBe('pending');
   });
 
   it('troca de código com token inválido rejeita e não persiste credenciais', async () => {

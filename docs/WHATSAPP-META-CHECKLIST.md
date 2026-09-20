@@ -89,7 +89,13 @@ Configure na Vercel (aba **Settings → Environment Variables**) para o ambiente
 
 ## 3. Roteiro de Homologação com Dois Telefones Físicos
 
-> **Aviso Importante sobre Homologação:** A homologação descrita abaixo é o **roteiro operacional para execução humana em campo**. Como este ambiente é um container CI/sandbox automatizado sem modems GSM/telefones físicos conectados, a integridade de todos os contratos é comprovada matematicamente pelos testes de integração automatizados (`whatsapp-robustness.test.ts` e `whatsapp-p61-e2e.test.ts`). O operador deve seguir este roteiro físico ao implantar em staging/produção com números reais.
+> **Aviso Importante sobre Homologação:** Os testes automatizados validam os contratos internos e respostas simuladas da Graph API. A integração real permanece pendente de homologação com a Meta e dois telefones físicos.
+> 
+> Não declare como homologado fisicamente sem a execução ponta a ponta deste roteiro:
+> - Nenhuma conexão com a Meta real;
+> - Nenhum envio/recebimento real de mensagens SMS/WhatsApp;
+> - Nenhuma aprovação real de Webhooks em produção;
+> - Nenhuma versão de Graph API testada fora do ambiente de testes automatizados.
 
 Para homologar a integração antes de liberar para clínicas reais, utilize dois aparelhos:
 - **Aparelho 1 (Número da Clínica)**: Telefone oficial cadastrado na WABA e conectado ao InstaLink.
