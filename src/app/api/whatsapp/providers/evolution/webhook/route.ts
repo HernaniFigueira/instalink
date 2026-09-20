@@ -44,6 +44,11 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ ok: true });
     }
     if (event !== 'messages.upsert') return NextResponse.json({ ok: true, received: 0 });
+    // The first message can race the connection event/UI poll. Reconcile before
+    // acknowledging it; a busy lifecycle returns 503 so the provider may redeliver.
+    if (['qr_pending', 'connecting', 'error'].includes(matches[0].whatsappIntegration!.status)) {
+      await experimentalLifecycle(businessId, 'status', { id: 'system', email: 'webhook@instalink.app' });
+    }
     const messages = Array.isArray(payload.data) ? payload.data : [payload.data];
     let received = 0;
     for (const data of messages) {

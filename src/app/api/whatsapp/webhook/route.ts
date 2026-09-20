@@ -179,6 +179,7 @@ export async function POST(req: NextRequest) {
       await updateDB((d) => {
         const now = new Date().toISOString();
         const b = d.businesses.find((x) => x.id === businessId)!;
+        if (b.whatsappIntegration?.provider === 'whatsapp_web') return;
         if (!b.whatsappIntegration) {
           b.whatsappIntegration = {
             status: 'not_connected', displayPhone: '', phoneNumberId: '', wabaId: '',

@@ -71,9 +71,10 @@ export function agentFor(db: DB, business: Business): BusinessAgent {
 export function agentActive(
   business: Pick<Business, 'id' | 'features' | 'modes'>,
   agent: Pick<BusinessAgent, 'enabled' | 'channels'>,
+  channel: 'site' | 'whatsapp' = 'site',
 ): boolean {
   const moduleOn = business.features?.agent === true;
-  return moduleOn && agent.enabled === true && agent.channels?.site !== false;
+  return moduleOn && agent.enabled === true && (channel === 'whatsapp' ? agent.channels?.whatsapp === true : agent.channels?.site !== false);
 }
 
 // ── Conhecimento real disponível para o agente ───────────────
