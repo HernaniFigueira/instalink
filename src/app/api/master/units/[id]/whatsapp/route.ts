@@ -45,6 +45,7 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
   if (!business) return NextResponse.json({ error: 'Unidade não encontrada.' }, { status: 404 });
 
   try {
+    if (business.whatsappIntegration?.provider === 'whatsapp_web') return NextResponse.json({ error: 'Remova a conexão experimental em Canais antes de configurar a Meta.' }, { status: 409 });
     const body = await req.json();
     const action = String(body.action || 'configure');
 
@@ -52,7 +53,8 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
     if (action === 'disconnect') {
       await updateDB((d) => {
         const b = d.businesses.find((x) => x.id === id);
-        if (b) {
+        if (b?.whatsappIntegration?.provider === 'whatsapp_web') throw new Error('Provider alterado durante a operação.');
+      if (b) {
           b.whatsappIntegration = {
             ...defaultWhatsappIntegration(),
             status: 'not_connected',
@@ -102,6 +104,7 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
     // 3. Persiste no Business apenas após validação confirmada
     await updateDB((d) => {
       const b = d.businesses.find((x) => x.id === id);
+      if (b?.whatsappIntegration?.provider === 'whatsapp_web') throw new Error('Provider alterado durante a operação.');
       if (b) {
         b.whatsappIntegration = {
           ...(b.whatsappIntegration || defaultWhatsappIntegration()),
