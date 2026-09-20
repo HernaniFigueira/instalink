@@ -1,21 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { randomUUID } from 'node:crypto';
 import { readDB, updateDB } from '@/lib/db';
-import { upsertContact, findContact } from '@/lib/contacts';
-import { phoneKey, webhookVerifyToken } from '@/lib/whatsapp';
+import { webhookVerifyToken } from '@/lib/whatsapp';
 import { pushAudit } from '@/lib/audit';
-import { agentFor, agentActive } from '@/lib/agent';
-import { conciergeAnswer } from '@/lib/concierge';
-import { createBookingTx } from '@/lib/booking-create';
-import { findLead, ingestLead } from '@/lib/pipeline';
-import { onlyDigits } from '@/lib/utils';
-import { formatDateBR } from '@/lib/tz';
-import {
-  deliverWhatsappMessage,
-  resolveTenantForChange,
-  verifyMetaWebhookSignature,
-} from '@/lib/whatsapp-cloud-api';
-import type { Message, Conversation, Business, DB } from '@/lib/types';
+import { processWhatsappInbound } from '@/lib/whatsapp-inbound';
+import { resolveTenantForChange, verifyMetaWebhookSignature } from '@/lib/whatsapp-cloud-api';
 
 // WEBHOOK do WhatsApp oficial (provedor → InstaLink).
 // GET  ?hub.mode=subscribe&hub.verify_token=… → handshake de verificação.
@@ -177,7 +165,6 @@ export async function POST(req: NextRequest) {
 
     const db = await readDB();
     let totalProcessed = 0;
-    const postCommitOutbound: Array<{ businessId: string; messageId: string }> = [];
 
     // 3. Processa CADA entry/change isoladamente para o seu respectivo tenant (Item 7)
     for (const batch of batches) {
@@ -188,7 +175,6 @@ export async function POST(req: NextRequest) {
       }
 
       const businessId = business.id;
-      const newOutboundMessageIds: string[] = [];
 
       await updateDB((d) => {
         const now = new Date().toISOString();
@@ -215,222 +201,6 @@ export async function POST(req: NextRequest) {
           }
         }
 
-        // 3.2. Processar mensagens recebidas (inbound)
-        for (const m of batch.messages) {
-          const rawDigits = onlyDigits(m.phone);
-          const digits = phoneKey(m.phone);
-          if (!digits && !rawDigits) continue;
-
-          // Deduplicação estrita de reentrega da Meta
-          if (m.externalId && d.messages.some((x) => x.externalId === m.externalId && x.businessId === businessId)) {
-            continue;
-          }
-
-          // Reconhecimento de pessoa (Contato existente vs Novo contato)
-          const existingContact = findContact(d, businessId, '', digits) || (rawDigits ? findContact(d, businessId, '', rawDigits) : undefined);
-          const existingCustomer = existingContact?.customerId
-            ? d.customers.find((c) => c.id === existingContact.customerId)
-            : d.customers.find((c) => c.phone && (onlyDigits(c.phone) === digits || onlyDigits(c.phone) === rawDigits));
-          const isKnown = !!(existingContact || existingCustomer);
-
-          let contact = existingContact || null;
-          let leadId: string | undefined;
-
-          if (!isKnown) {
-            contact = upsertContact(d, {
-              businessId,
-              name: m.name,
-              phone: digits,
-              source: 'whatsapp',
-              now,
-            });
-
-            try {
-              const ingestRes = ingestLead(d, {
-                businessId,
-                customerId: contact?.customerId || undefined,
-                name: m.name || contact?.name || '',
-                phone: digits,
-                source: 'whatsapp',
-                channel: 'whatsapp',
-                message: m.body,
-                now,
-              });
-              leadId = ingestRes.lead.id;
-            } catch { /* ingestLead defensivo */ }
-          } else {
-            contact = upsertContact(d, {
-              businessId,
-              customerId: existingCustomer?.id || existingContact?.customerId,
-              name: existingContact?.name || existingCustomer?.name || m.name,
-              phone: digits,
-              source: 'whatsapp',
-              now,
-            });
-
-            const activeLead = findLead(d, businessId, {
-              customerId: contact?.customerId || existingCustomer?.id,
-              phone: digits,
-            });
-            if (activeLead) leadId = activeLead.id;
-          }
-
-          // Conversa única ligada à pessoa
-          const existingConv = d.conversations.find((c) => c.businessId === businessId && (c.phone === digits || (c.channelUserId && (c.channelUserId === rawDigits || c.channelUserId === digits))));
-          let conv: Conversation;
-          if (!existingConv) {
-            conv = {
-              id: randomUUID(),
-              businessId,
-              channel: 'whatsapp',
-              channelUserId: rawDigits || digits,
-              contactId: contact?.id || '',
-              customerId: contact?.customerId || existingCustomer?.id || '',
-              name: contact?.name || m.name || digits,
-              phone: digits,
-              status: 'open',
-              mode: 'automation',
-              unread: 0,
-              lastMessageAt: now,
-              lastMessagePreview: m.body.slice(0, 120),
-              createdAt: now,
-              context: leadId ? { leadId } : {},
-            };
-            d.conversations.push(conv);
-          } else {
-            conv = existingConv;
-            conv.channelUserId = rawDigits || digits;
-            conv.contactId = contact?.id || conv.contactId;
-            conv.customerId = contact?.customerId || existingCustomer?.id || conv.customerId;
-            if (!conv.mode) conv.mode = 'automation';
-            if (leadId && (!conv.context || !conv.context.leadId)) {
-              conv.context = { ...(conv.context || {}), leadId };
-            }
-          }
-
-          // Grava mensagem inbound
-          const inMsg: Message = {
-            id: randomUUID(),
-            businessId,
-            conversationId: conv.id,
-            direction: 'in',
-            body: m.body,
-            status: 'delivered',
-            externalId: m.externalId,
-            by: 'contact',
-            byName: contact?.name || m.name || 'Cliente',
-            at: now,
-          };
-          d.messages.push(inMsg);
-
-          conv.unread = (conv.unread || 0) + 1;
-          conv.lastMessageAt = now;
-          conv.lastMessagePreview = m.body.slice(0, 120);
-          b.whatsappIntegration.lastInboundAt = now;
-
-          // 3.3. Atendimento Concierge / Agente (Silenciado em modo humano)
-          if (conv.mode === 'human') {
-            continue;
-          }
-
-          const wantsHuman = /\b(humano|atendente|falar com (uma )?pessoa|falar com atendente|suporte humano|atendente humano)\b/i.test(m.body);
-          if (wantsHuman) {
-            conv.mode = 'human';
-            const agent = agentFor(d, business);
-            const replyText = agent.handoffMessage || 'Vou transferir seu atendimento para a nossa equipe. Um atendente já vai te responder por aqui!';
-            const outId = randomUUID();
-            d.messages.push({
-              id: outId,
-              businessId,
-              conversationId: conv.id,
-              direction: 'out',
-              body: replyText,
-              status: 'pending',
-              externalId: '',
-              by: 'automation',
-              byName: 'Automação',
-              at: now,
-            });
-            conv.lastMessageAt = now;
-            conv.lastMessagePreview = replyText.slice(0, 120);
-            newOutboundMessageIds.push(outId);
-            continue;
-          }
-
-          try {
-            const agent = agentFor(d, business);
-            if (agentActive(business, agent) && agent.channels?.whatsapp) {
-              const contactName = (contact?.name || '').trim();
-              const answer = conciergeAnswer(d, business, m.body, {
-                agent,
-                flow: conv.context?.flow || null,
-                flowCtx: {
-                  channelPhone: digits,
-                  channelName: contactName,
-                  customer: existingCustomer || null,
-                },
-              });
-
-              let reply = answer.reply;
-
-              // Conclusão de agendamento: cria Booking REAL e move lead para scheduled
-              if (answer.bookingRequest) {
-                const rq = answer.bookingRequest;
-                const svc = d.services.find((sv) => sv.id === rq.serviceId && sv.businessId === businessId);
-                const phoneDigits = onlyDigits(rq.phone || digits);
-
-                if (svc && phoneDigits.length >= 10) {
-                  try {
-                    const bookingRes = createBookingTx(d, {
-                      business,
-                      service: svc,
-                      date: rq.date,
-                      time: rq.time,
-                      actor: 'agent',
-                      customer: {
-                        id: existingCustomer?.id || contact?.customerId || '',
-                        name: rq.name || contactName || 'Cliente',
-                        phone: phoneDigits,
-                      },
-                      source: 'whatsapp',
-                      leadId: conv.context?.leadId || leadId,
-                    });
-                    const proName = bookingRes.professionalName ? ` com ${bookingRes.professionalName}` : '';
-                    reply = `Agendado! ${svc.name} em ${formatDateBR(rq.date)} às ${rq.time}${proName}. A ${business.name} confirma por aqui em instantes.`;
-                  } catch {
-                    reply = 'Esse horário acabou de ser ocupado. Por favor, escolha outro horário ou dia que reservo para você na hora.';
-                  }
-                }
-              }
-
-              if (reply && reply.trim()) {
-                const outId = randomUUID();
-                d.messages.push({
-                  id: outId,
-                  businessId,
-                  conversationId: conv.id,
-                  direction: 'out',
-                  body: reply.slice(0, 2000),
-                  status: 'pending',
-                  externalId: '',
-                  by: 'automation',
-                  byName: 'Automação',
-                  at: now,
-                });
-                conv.lastMessageAt = now;
-                conv.lastMessagePreview = reply.slice(0, 120);
-                newOutboundMessageIds.push(outId);
-              }
-
-              conv.context = {
-                ...(conv.context || {}),
-                flow: answer.flow || null,
-              };
-            }
-          } catch {
-            // Defensivo
-          }
-        }
 
         pushAudit(d, {
           action: 'whatsapp.webhook_received',
@@ -441,17 +211,8 @@ export async function POST(req: NextRequest) {
       });
 
       totalProcessed += batch.messages.length + batch.statuses.length;
-      for (const msgId of newOutboundMessageIds) {
-        postCommitOutbound.push({ businessId, messageId: msgId });
-      }
-    }
-
-    // 4. DISPARO REAL PÓS-COMMIT (FORA DO LOCK)
-    for (const item of postCommitOutbound) {
-      try {
-        await deliverWhatsappMessage(item.businessId, item.messageId);
-      } catch {
-        // Falha pós-commit é absorvida; outbox mantém para retry
+      for (const message of batch.messages) {
+        await processWhatsappInbound({ ...message, businessId, provider: 'meta_cloud' });
       }
     }
 
@@ -461,7 +222,7 @@ export async function POST(req: NextRequest) {
       mapped: totalProcessed > 0,
     });
   } catch (err) {
-    console.error('[WHATSAPP WEBHOOK POST ERROR]', err);
+    console.error('[WHATSAPP WEBHOOK POST ERROR] Processing failed');
     return NextResponse.json({ error: 'Falha ao processar o webhook.' }, { status: 500 });
   }
 }

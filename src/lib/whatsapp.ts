@@ -17,6 +17,7 @@ import type { Business, WhatsappIntegration, WhatsappStatus } from './types';
 
 export function defaultWhatsappIntegration(): WhatsappIntegration {
   return {
+    provider: 'meta_cloud',
     status: 'not_connected',
     displayPhone: '',
     phoneNumberId: '',
@@ -60,6 +61,7 @@ export function integrationStatus(
   serverConfigured = true,
 ): WhatsappIntegration {
   const cfg = { ...defaultWhatsappIntegration(), ...(business.whatsappIntegration || {}) };
+  if (cfg.provider === 'whatsapp_web') return cfg;
   const hasBusinessCredentials = !!(cfg.phoneNumberId && cfg.encryptedAccessToken);
   const isConfigured = hasBusinessCredentials || serverConfigured;
 
