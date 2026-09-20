@@ -38,6 +38,8 @@ Configure na Vercel (aba **Settings → Environment Variables**) para o ambiente
    - Para produção, adicione o número oficial da clínica e faça a verificação via código SMS/ligação.
 
 ### Passo 2.3 — Embedded Signup & Facebook Login for Business Configuration
+> **Documentação Oficial da Meta:** [Embedded Signup for WhatsApp Business Platform](https://developers.facebook.com/documentation/business-messaging/whatsapp/embedded-signup) e [Onboarding WhatsApp Business App Users (Coexistence)](https://developers.facebook.com/documentation/business-messaging/whatsapp/embedded-signup/onboarding-business-app-users).
+
 1. No menu lateral, adicione/acesse **Facebook Login for Business** (Login do Facebook para Empresas).
 2. Vá em **Configurações** (Configurations) e clique em **Criar Configuração** (ou use o Embedded Signup Builder):
    - Atribua um nome à configuração (ex.: `InstaLink Embedded Signup`).
@@ -49,19 +51,23 @@ Configure na Vercel (aba **Settings → Environment Variables**) para o ambiente
 3. Salve a configuração e copie o **Configuration ID** gerado (preencher em `META_CONFIG_ID` na Vercel).
 
 ### Passo 2.4 — Domínios Permitidos e Redirecionamentos OAuth
+> **Documentação Oficial da Meta:** [Security and Domain Verification](https://developers.facebook.com/docs/development/create-an-app/app-dashboard/basic-settings).
+
 1. Em **Configurações → Básica** do App Meta:
-   - Adicione o domínio da aplicação em **Domínios do aplicativo** (App Domains): `app.instalink.app` (e o domínio de produção correspondente).
-   - Preencha os links de **Política de Privacidade** e **Termos de Serviço**.
+   - Adicione o domínio da aplicação em **Domínios do aplicativo** (App Domains): `https://<seu-dominio-efetivo-vercel-ou-custom>` (ex.: `https://instalink.vercel.app` ou seu domínio customizado).
+   - Preencha os links de **Política de Privacidade** e **Termos de Serviço** acessíveis publicamente.
 2. Em **Facebook Login for Business → Configurações**:
    - Ative **OAuth Web do cliente** (Client OAuth Login).
-   - Em **URIs de redirecionamento do OAuth válidos**, adicione a URL da aplicação (ex.: `https://app.instalink.app/canais`, `https://app.instalink.app`).
-   - Em **Domínios permitidos para o SDK do JavaScript**, adicione: `https://app.instalink.app`.
+   - Em **URIs de redirecionamento do OAuth válidos**, adicione a URL da aplicação: `https://<seu-dominio>/canais`, `https://<seu-dominio>`.
+   - Em **Domínios permitidos para o SDK do JavaScript**, adicione: `https://<seu-dominio>`.
 
 ### Passo 2.5 — Configuração do Webhook Oficial
+> **Documentação Oficial da Meta:** [Webhooks for WhatsApp Business Platform](https://developers.facebook.com/docs/whatsapp/cloud-api/webhooks).
+
 1. No menu do app, navegue até **WhatsApp → Configuração** (Configuration).
 2. No bloco **Webhook**, clique em **Editar**:
    - **URL de Retorno de Chamada (Callback URL)**:
-     `https://<seu-dominio-vercel>/api/whatsapp/webhook`
+     `https://<seu-dominio-efetivo>/api/whatsapp/webhook`
    - **Verificar Token (Verify Token)**:
      Insira exatamente o mesmo valor definido na variável `WHATSAPP_VERIFY_TOKEN`.
 3. Clique em **Verificar e Salvar**. A Meta disparará uma requisição `GET` com o desafio (`hub.challenge`) que a rota `/api/whatsapp/webhook` valida e responde imediatamente.
@@ -71,15 +77,19 @@ Configure na Vercel (aba **Settings → Environment Variables**) para o ambiente
      - `smb_message_echoes` (necessário se utilizar o modo Coexistence para espelhar mensagens enviadas pelo app de celular).
 
 ### Passo 2.6 — Revisão do App e Modo de Produção
+> **Documentação Oficial da Meta:** [App Review for WhatsApp](https://developers.facebook.com/docs/development/release/app-review).
+
 1. Enquanto em **Modo de Desenvolvimento**, apenas desenvolvedores/testadores do aplicativo e administradores do Business Manager podem enviar e receber mensagens pelo número de teste ou números adicionados à lista de destinatários permitidos.
 2. Para liberar para qualquer número de cliente e permitir que clínicas façam o onboarding sem restrições:
    - Alterne o app da Meta de **Desenvolvimento** para **Ao Vivo** (Live / Produção).
    - Verifique a empresa (Business Verification) no Meta Business Suite.
-   - Envie o aplicativo para Análise da Meta (App Review) solicitando as permissões `whatsapp_business_messaging` e `whatsapp_business_management` com gravação de tela simples demonstrando o uso no painel `/canais`.
+   - Envie o aplicativo para Análise da Meta (App Review) solicitando as permissões `whatsapp_business_messaging` e `whatsapp_business_management` com gravação de tela demonstrando o fluxo em `/canais`.
 
 ---
 
 ## 3. Roteiro de Homologação com Dois Telefones Físicos
+
+> **Aviso Importante sobre Homologação:** A homologação descrita abaixo é o **roteiro operacional para execução humana em campo**. Como este ambiente é um container CI/sandbox automatizado sem modems GSM/telefones físicos conectados, a integridade de todos os contratos é comprovada matematicamente pelos testes de integração automatizados (`whatsapp-robustness.test.ts` e `whatsapp-p61-e2e.test.ts`). O operador deve seguir este roteiro físico ao implantar em staging/produção com números reais.
 
 Para homologar a integração antes de liberar para clínicas reais, utilize dois aparelhos:
 - **Aparelho 1 (Número da Clínica)**: Telefone oficial cadastrado na WABA e conectado ao InstaLink.
@@ -93,7 +103,7 @@ Para homologar a integração antes de liberar para clínicas reais, utilize doi
    - Faça login com o Facebook do administrador da WABA.
    - Selecione a WABA e o número do Aparelho 1.
    - Se for Standard: informe o PIN de 6 dígitos de duas etapas quando solicitado.
-   - Se for Coexistence: o sistema detecta `FINISH_WHATSAPP_BUSINESS_APP_ONBOARDING` e dispensa PIN.
+   - Se for Coexistence: o servidor verifica via Graph API (`GET /{phone_number_id}?fields=is_on_biz_app,platform_type`) que `is_on_biz_app === true` e `platform_type === 'CLOUD_API'`. Se confirmado, a Meta dispensa `/register` e a conexão é concluída.
 4. Conclusão:
    - O popup fecha. A requisição server-to-server conclui a troca do código por token, assina o webhook da WABA e criptografa a credencial.
    - O card atualiza para o estado verdadeiro **Conectado** (exibindo o número verificado e data de conexão).

@@ -15,6 +15,7 @@ import { GET as webhookGET, POST as webhookPOST } from '@/app/api/whatsapp/webho
 import { POST as masterWhatsappPOST } from '@/app/api/master/units/[id]/whatsapp/route';
 import { issueSignupState } from '../whatsapp-onboarding-server';
 import { encryptSecret, resolveTenantForChange } from '../whatsapp-cloud-api';
+import { createBookingTx } from '../booking-create';
 import type { Business, DB } from '../types';
 import { TEMP_DB_FILE } from './helpers/temp-db';
 
@@ -233,7 +234,7 @@ describe('Meta WhatsApp Cloud API — Onboarding Coexistence e Standard', () => 
     const wi = db.businesses.find((b) => b.id === BIZ_A)?.whatsappIntegration;
     expect(wi?.status).toBe('connected');
     expect(wi?.onboardingType).toBe('coexistence');
-    expect(wi?.registeredAt).toBeTruthy();
+    expect(wi?.coexistenceConfirmedAt).toBeTruthy();
     expect(wi?.registrationRequired).toBe(false);
 
     // Tentar chamar register com PIN em conta coexistence retorna erro explicativo 400
@@ -245,6 +246,110 @@ describe('Meta WhatsApp Cloud API — Onboarding Coexistence e Standard', () => 
     expect(resForbiddenPin.status).toBe(400);
     const errBody = await resForbiddenPin.json();
     expect(errBody.code).toBe('coexistence_no_register_needed');
+  });
+
+  it('coexistence server-to-server gate: rejeita Coexistence se a Meta não confirmar is_on_biz_app e CLOUD_API', async () => {
+    // Caso 1: O cliente envia evento de Coexistence pelo postMessage, mas a Meta retorna is_on_biz_app=false
+    vi.stubGlobal('fetch', vi.fn(async (url: any) => {
+      const u = String(url);
+      if (u.includes('/oauth/access_token')) return new Response(JSON.stringify({ access_token: 'EAATokenForged' }), { status: 200 });
+      if (u.includes('/debug_token')) return new Response(JSON.stringify({
+        data: {
+          is_valid: true,
+          app_id: PLATFORM_ENV.META_APP_ID,
+          scopes: ['whatsapp_business_management', 'whatsapp_business_messaging'],
+          granular_scopes: [{ scope: 'whatsapp_business_management', target_ids: ['WABA-GATE'] }],
+        },
+      }), { status: 200 });
+      if (u.includes('/phone_numbers')) return new Response(JSON.stringify({ data: [{ id: 'PN-GATE' }] }), { status: 200 });
+      if (u.includes('/subscribed_apps')) return new Response(JSON.stringify({ success: true }), { status: 200 });
+      if (u.includes('/PN-GATE?fields=')) return new Response(JSON.stringify({
+        display_phone_number: '+55 11 98888-0003',
+        verified_name: 'Clínica Gate Test',
+        quality_rating: 'GREEN',
+        is_on_biz_app: false, // Meta diz NÃO!
+        platform_type: 'ON_PREMISE',
+      }), { status: 200 });
+      return new Response(JSON.stringify({ error: { message: 'not found' } }), { status: 404 });
+    }));
+
+    const state = issueSignupState(KEY, { businessId: BIZ_A, userId: OWNER_A });
+
+    const res = await onboardingPOST(jsonReq('/api/whatsapp/onboarding', {
+      businessId: BIZ_A,
+      action: 'exchange',
+      code: 'CODE-GATE-FORGED',
+      state,
+      wabaId: 'WABA-GATE',
+      phoneNumberId: 'PN-GATE',
+      signup: { event: 'FINISH_WHATSAPP_BUSINESS_APP_ONBOARDING', waba_id: 'WABA-GATE', phone_number_id: 'PN-GATE' },
+    }, ownerToken));
+
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    // NÃO pode conectar! Deve reverter para pending exigindo registro padrão
+    expect(body.ok).toBe(false);
+    expect(body.pending).toBe(true);
+    expect(body.reason).toBe('phone_registration_required');
+    expect(body.message).toMatch(/não confirmou a coexistência oficial/i);
+
+    const db = await readDB();
+    const wi = db.businesses.find((b) => b.id === BIZ_A)?.whatsappIntegration;
+    expect(wi?.status).toBe('pending');
+    expect(wi?.registrationRequired).toBe(true);
+    expect(wi?.registeredAt).toBeFalsy();
+    expect(wi?.coexistenceConfirmedAt).toBeFalsy();
+  });
+
+  it('rotas whatsapp/route.ts (test e connect) não fabricam status connected em contas pendentes', async () => {
+    // 1. Configura unidade com token mas sem registro (pending)
+    await updateDB((d) => {
+      const b = d.businesses.find((x) => x.id === BIZ_A)!;
+      b.whatsappIntegration = {
+        status: 'pending',
+        phoneNumberId: 'PN-PENDING',
+        wabaId: 'WABA-PENDING',
+        encryptedAccessToken: encryptSecret('TOKEN-VALID'),
+        registrationRequired: true,
+        source: 'embedded_signup',
+      } as any;
+    });
+
+    vi.stubGlobal('fetch', vi.fn(async (url: any) => {
+      const u = String(url);
+      if (u.includes('/PN-PENDING?fields=')) return new Response(JSON.stringify({
+        display_phone_number: '+55 11 98888-0004',
+        verified_name: 'Clínica Teste Fake Connect',
+      }), { status: 200 });
+      return new Response(JSON.stringify({ error: { message: 'not found' } }), { status: 404 });
+    }));
+
+    // Executa action === 'test'
+    const resTest = await whatsappPOST(jsonReq('/api/whatsapp', {
+      businessId: BIZ_A,
+      action: 'test',
+    }, ownerToken));
+    expect(resTest.status).toBe(200);
+
+    let db = await readDB();
+    let wi = db.businesses.find((b) => b.id === BIZ_A)?.whatsappIntegration;
+    // O teste NÃO pode transformar 'pending' em 'connected'!
+    expect(wi?.status).toBe('pending');
+
+    // Executa action === 'connect'
+    const resConnect = await whatsappPOST(jsonReq('/api/whatsapp', {
+      businessId: BIZ_A,
+      action: 'connect',
+      displayPhone: '11988880004',
+    }, ownerToken));
+    expect(resConnect.status).toBe(400);
+    const bodyConnect = await resConnect.json();
+    expect(bodyConnect.pending).toBe(true);
+    expect(bodyConnect.status).toBe('pending');
+
+    db = await readDB();
+    wi = db.businesses.find((b) => b.id === BIZ_A)?.whatsappIntegration;
+    expect(wi?.status).toBe('pending');
   });
 
   it('troca de código com token inválido rejeita e não persiste credenciais', async () => {
@@ -523,22 +628,29 @@ describe('Meta WhatsApp Cloud API — Onboarding Coexistence e Standard', () => 
     expect(bookings[0].serviceId).toBe('srv-consulta');
 
     // 4. Proteção contra Double Booking: novo agendamento no mesmo horário é barrado
-    await updateDB((d) => {
-      // Tenta criar outro booking no mesmo horário
-      expect(() => {
+    await expect(
+      updateDB((d) => {
         const s = d.services.find((x) => x.id === 'srv-consulta')!;
         const b = d.businesses.find((x) => x.id === BIZ_A)!;
-        import('../booking-create').then((m) => {
-          m.createBookingTx(d, {
-            business: b,
-            service: s,
-            date: bookings[0].date,
-            time: '10:00',
-            actor: 'customer',
-            customer: { id: '', name: 'Outro Paciente', phone: '5511999995555' },
-          });
+        // Tenta criar outro booking síncrono no mesmo horário para outro paciente
+        // Deve lançar erro de conflito de horário
+        createBookingTx(d, {
+          business: b,
+          service: s,
+          date: bookings[0].date,
+          time: '10:00',
+          actor: 'customer',
+          customer: { id: '', name: 'Outro Paciente', phone: '5511999995555' },
         });
-      }).toBeDefined();
-    });
+      })
+    ).rejects.toThrow(/horário|ocupado|conflito/i);
+
+    // Prova no banco que NENHUM segundo agendamento foi persistido no horário
+    const dbFinal = await readDB();
+    const finalBookingsAtSlot = dbFinal.bookings.filter(
+      (b) => b.businessId === BIZ_A && b.date === bookings[0].date && b.time === '10:00'
+    );
+    expect(finalBookingsAtSlot).toHaveLength(1);
+    expect(finalBookingsAtSlot[0].customerPhone).toContain('999991234');
   });
 });

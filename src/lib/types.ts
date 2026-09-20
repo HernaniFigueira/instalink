@@ -301,6 +301,10 @@ export interface WhatsappIntegration {
   registrationRequired?: boolean;
   /** O que a Meta disse que este onboarding é (nunca presumimos coexistence). */
   onboardingType?: 'standard' | 'coexistence' | 'unknown';
+  /** Confirmação oficial server-to-server da Meta para Coexistence (is_on_biz_app=true && platform_type=CLOUD_API). */
+  coexistenceConfirmedAt?: string;
+  isOnBizApp?: boolean;
+  platformType?: string;
 }
 
 // ═══════════════════════════════════════════════════════════════

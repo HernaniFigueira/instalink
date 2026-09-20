@@ -124,8 +124,16 @@ export async function POST(req: NextRequest) {
         const b = db.businesses.find((x) => x.id === businessId);
         if (b && b.whatsappIntegration) {
           if (testResult.ok) {
-            b.whatsappIntegration.status = 'connected';
-            b.whatsappIntegration.lastError = undefined;
+            // Regra de honestidade: testar conexão NUNCA promove arbitrariamente
+            // uma conta incompleta ou não registrada (ex: pending) para 'connected'.
+            // Apenas preserva 'connected' se já cumpria os requisitos, ou mantém o status
+            // atual limpando o erro.
+            if (b.whatsappIntegration.status === 'connected') {
+              b.whatsappIntegration.lastError = undefined;
+            } else if (b.whatsappIntegration.status === 'error') {
+              b.whatsappIntegration.status = 'pending';
+              b.whatsappIntegration.lastError = undefined;
+            }
             if (testResult.displayPhoneNumber) b.whatsappIntegration.displayPhone = testResult.displayPhoneNumber;
             if (testResult.verifiedName) b.whatsappIntegration.verifiedName = testResult.verifiedName;
           } else {
@@ -219,26 +227,48 @@ export async function POST(req: NextRequest) {
       }, { status: 400 });
     }
 
-    // Sucesso confirmado na Meta: marca como connected
+    // Se a unidade está usando Embedded Signup e ainda falta registrar o número com PIN
+    // ou confirmar Coexistence server-to-server, action 'connect' NÃO pode burlar
+    // a exigência de registro para forçar status='connected'.
+    const currentWi = business.whatsappIntegration;
+    const isEmbeddedSignup = currentWi?.source === 'embedded_signup';
+    const isCoexistenceConfirmed = currentWi?.onboardingType === 'coexistence' && !!currentWi?.coexistenceConfirmedAt;
+    const isStandardRegistered = !!currentWi?.registeredAt && !currentWi?.registrationRequired;
+    const canBeConnected = !isEmbeddedSignup || isCoexistenceConfirmed || isStandardRegistered;
+
+    const targetStatus = canBeConnected ? 'connected' : 'pending';
+
     await updateDB((db) => {
       const b = db.businesses.find((x) => x.id === businessId);
       if (b) {
         b.whatsappIntegration = {
           ...(b.whatsappIntegration || defaultWhatsappIntegration()),
-          status: 'connected',
+          status: targetStatus,
           displayPhone: testRes.displayPhoneNumber || displayPhone,
           phoneNumberId: phoneIdToValidate,
           wabaId: b.whatsappIntegration?.wabaId || process.env.WHATSAPP_WABA_ID || '',
-          connectedAt: now,
-          lastError: undefined,
+          connectedAt: targetStatus === 'connected' ? (b.whatsappIntegration?.connectedAt || now) : '',
+          lastError: targetStatus === 'connected' ? undefined : 'Falta concluir o registro do número com PIN na Cloud API.',
           verifiedName: testRes.verifiedName,
         };
       }
       pushAudit(db, {
         action: 'whatsapp.connect_requested', actor: user, businessId,
-        meta: { displayPhone, connected: true, verifiedName: testRes.verifiedName },
+        meta: { displayPhone, connected: targetStatus === 'connected', status: targetStatus, verifiedName: testRes.verifiedName },
       });
     });
+
+    if (targetStatus !== 'connected') {
+      return NextResponse.json({
+        ok: false,
+        pending: true,
+        status: 'pending',
+        message: 'Conta autorizada e validada na Meta, mas o número ainda requer registro de PIN na Cloud API para enviar e receber mensagens.',
+        verifiedName: testRes.verifiedName,
+        displayPhone: testRes.displayPhoneNumber || displayPhone,
+        webhookPath: '/api/whatsapp/webhook',
+      }, { status: 400 });
+    }
 
     return NextResponse.json({
       ok: true,
