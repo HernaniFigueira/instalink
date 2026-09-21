@@ -120,7 +120,7 @@ export function platformLayer(env: EnvLike): OnboardingLayer {
     {
       key: 'META_APP_ID',
       label: 'App da Meta (App ID)',
-      why: 'Identifica o Instalink no popup oficial de conexão (Embedded Signup).',
+      why: 'Identifica o GoDoutor no popup oficial de conexão (Embedded Signup).',
       ok: !!env.META_APP_ID, secret: false, required: true,
     },
     {
@@ -144,15 +144,15 @@ export function platformLayer(env: EnvLike): OnboardingLayer {
     {
       key: 'WHATSAPP_VERIFY_TOKEN',
       label: 'Token de verificação do webhook',
-      why: 'É o que a Meta usa para confirmar que o webhook do Instalink é nosso.',
+      why: 'É o que a Meta usa para confirmar que o webhook do GoDoutor é nosso.',
       ok: !!env.WHATSAPP_VERIFY_TOKEN, secret: true, required: true,
     },
   ];
   const missing = items.filter((i) => i.required && !i.ok).map((i) => i.key);
   return {
     id: 'platform',
-    title: 'Plataforma (equipe do Instalink)',
-    owner: 'Quem administra o Instalink, uma vez só — vale para todas as unidades.',
+    title: 'Plataforma (equipe do GoDoutor)',
+    owner: 'Quem administra o GoDoutor, uma vez só — vale para todas as unidades.',
     items,
     ready: missing.length === 0,
     missing,
@@ -272,7 +272,7 @@ export function onboardingSteps(business: { whatsappIntegration?: UnitIntegratio
   const connected = computed.connected;
 
   const steps: OnboardingStep[] = [
-    { id: 'authorized', label: 'Conta autorizada', ok: authorized, current: false, detail: 'A unidade autorizou o Instalink no popup oficial da Meta.' },
+    { id: 'authorized', label: 'Conta autorizada', ok: authorized, current: false, detail: 'A unidade autorizou o GoDoutor no popup oficial da Meta.' },
     { id: 'webhook_subscribed', label: 'Webhook assinado', ok: subscribed, current: false, detail: 'A Meta está autorizada a entregar os eventos desta conta.' },
     { id: 'phone_resolved', label: 'Número encontrado', ok: phone, current: false, detail: 'O identificador do número veio da própria Meta.' },
     {
@@ -465,7 +465,7 @@ export function onboardingPlan(args: {
   return {
     state: 'ready_for_signup',
     headline: 'Conectar sua conta oficial',
-    detail: 'Você entra com o Facebook da clínica, escolhe (ou cria) a conta WhatsApp Business e o número. O Instalink recebe o token pelo servidor — você não copia nada.',
+    detail: 'Você entra com o Facebook da clínica, escolhe (ou cria) a conta WhatsApp Business e o número. O GoDoutor recebe o token pelo servidor — você não copia nada.',
     layers: [platform, unit],
     steps,
     nextAction: {
@@ -571,7 +571,7 @@ export interface SignupMessage {
   businessId: string;
   version: number;
   /**
-   * Que tipo de onboarding a META disse que é. O Instalink NÃO presume
+   * Que tipo de onboarding a META disse que é. O GoDoutor NÃO presume
    * coexistence: sem essa informação explícita, o fluxo tratado é o padrão da
    * Cloud API (que exige registro do número).
    */

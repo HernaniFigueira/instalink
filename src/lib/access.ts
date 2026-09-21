@@ -15,6 +15,11 @@ import type { DB, PermissionId, SupportSession, User } from './types';
 import {
   isMasterUser, resolveAccess, type AccessContext,
 } from './access-core';
+import { relationalActive } from './relational/config';
+import {
+  relUserBySession, relResolveAccess, relSupportById, relAccessibleDoc,
+  relAccessibleDocForMaster,
+} from './relational/auth-store';
 
 // Reexporta o núcleo puro + catálogo (API pública estável de @/lib/access).
 export {
@@ -48,6 +53,8 @@ export async function supportFromCookies(): Promise<SupportSession | null> {
 }
 
 async function supportFromDb(id: string): Promise<SupportSession | null> {
+  // MODO RELACIONAL: sessão de suporte direto do SQL.
+  if (relationalActive()) return relSupportById(id);
   const db = await readDB();
   const s = db.supportSessions.find((x) => x.id === id);
   if (!s || s.endedAt) return null;
@@ -93,6 +100,23 @@ export async function requireBusiness(
   if (!businessId) return { ok: false, res: unauthorized('Negócio não informado.', 400) };
   const auth = await requireUser(req);
   if (!auth.ok) return auth;
+  // MODO RELACIONAL: permissões resolvidas por consultas pontuais no SQL
+  // (mesmo núcleo resolveAccess — mesma matriz de papéis/permissões).
+  if (relationalActive()) {
+    const support = isMasterUser(auth.user) ? await supportFromRequest(req, auth.user.id) : null;
+    const ctx = await relResolveAccess(auth.user, businessId, support);
+    if (!ctx) return { ok: false, res: unauthorized('Você não tem acesso a este negócio.') };
+    if (ctx.readOnly && req.method !== 'GET' && req.method !== 'HEAD') {
+      return { ok: false, res: unauthorized('Modo suporte (visualização): alterações bloqueadas.', 403) };
+    }
+    if (permission) {
+      const needed = Array.isArray(permission) ? permission : [permission];
+      if (!needed.some((perm) => ctx.permissions[perm] === true)) {
+        return { ok: false, res: unauthorized('Seu perfil não tem permissão para esta ação.', 403) };
+      }
+    }
+    return { ok: true, db: await relAccessibleDoc(auth.user, support), ctx };
+  }
   const db = await readDB();
   const support = isMasterUser(auth.user) ? await supportFromRequest(req, auth.user.id) : null;
   const ctx = resolveAccess(db, auth.user, businessId, support);
@@ -116,6 +140,10 @@ export async function requireMaster(req: NextRequest): Promise<
   const auth = await requireUser(req);
   if (!auth.ok) return auth;
   if (!isMasterUser(auth.user)) return { ok: false, res: unauthorized('Área restrita da plataforma.') };
+  if (relationalActive()) {
+    const support = await supportFromRequest(req, auth.user.id);
+    return { ok: true, user: auth.user, db: await relAccessibleDocForMaster(support) };
+  }
   const db = await readDB();
   return { ok: true, user: auth.user, db };
 }
@@ -128,6 +156,11 @@ export async function currentAccess(businessId: string): Promise<AccessContext |
   const sessionId = cookies().get(COOKIE_NAME)?.value;
   const user = await getUserBySession(sessionId);
   if (!user) return null;
+  // MODO RELACIONAL: mesma resolução, dados do SQL.
+  if (relationalActive()) {
+    const support = isMasterUser(user) ? await supportFromCookies() : null;
+    return relResolveAccess(user, businessId, support);
+  }
   const db = await readDB();
   const support = isMasterUser(user) ? await supportFromCookies() : null;
   return resolveAccess(db, user, businessId, support);

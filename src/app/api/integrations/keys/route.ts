@@ -1,10 +1,14 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { blockIfRelational } from '@/lib/relational/blocked';
 import { requireBusiness } from '@/lib/access';
 import { createApiKey, listApiKeys, revokeApiKey } from '@/lib/api-keys';
 import { updateDB } from '@/lib/db';
 import { pushAudit } from '@/lib/audit';
 
 export async function GET(req: NextRequest) {
+  const blocked = blockIfRelational('Integrações · chaves');
+  if (blocked) return blocked;
+
   const businessId = req.nextUrl.searchParams.get('businessId') || '';
   const guard = await requireBusiness(req, businessId, 'config');
   if (!guard.ok) return guard.res;
@@ -14,6 +18,9 @@ export async function GET(req: NextRequest) {
 }
 
 export async function POST(req: NextRequest) {
+  const blocked = blockIfRelational('Integrações · chaves');
+  if (blocked) return blocked;
+
   try {
     const body = await req.json();
     const businessId = String(body.businessId || req.nextUrl.searchParams.get('businessId') || '');
@@ -45,6 +52,9 @@ export async function POST(req: NextRequest) {
 }
 
 export async function DELETE(req: NextRequest) {
+  const blocked = blockIfRelational('Integrações · chaves');
+  if (blocked) return blocked;
+
   try {
     const body = await req.json();
     const businessId = String(body.businessId || '');

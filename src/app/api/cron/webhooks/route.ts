@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { blockIfRelational } from '@/lib/relational/blocked';
 import { processPendingWebhookDeliveries, summarizeWebhookRetryRun } from '@/lib/webhooks';
 import { verifyCronAuth } from '@/lib/cron-auth';
 
@@ -30,6 +31,9 @@ export const dynamic = 'force-dynamic';
 export const runtime = 'nodejs';
 
 export async function GET(req: NextRequest) {
+  const blocked = blockIfRelational('Cron · despacho de webhooks');
+  if (blocked) return blocked;
+
   const auth = verifyCronAuth(req.headers);
   if (!auth.ok) {
     // Sem o segredo configurado o consumidor está desligado: registra o motivo

@@ -3,13 +3,19 @@ import { requireBusiness } from '@/lib/access';
 import { getBusinessPipeline, updateBusinessPipeline } from '@/lib/pipeline';
 import { updateDB } from '@/lib/db';
 import { pushAudit } from '@/lib/audit';
+import { relationalActive } from '@/lib/relational/config';
+import { runRelationalWrite, runRelationalRead } from '@/lib/relational/slice';
 
 export async function GET(req: NextRequest) {
   const businessId = req.nextUrl.searchParams.get('businessId') || '';
   const guard = await requireBusiness(req, businessId, 'leads');
   if (!guard.ok) return guard.res;
 
-  const pipeline = getBusinessPipeline(guard.db, businessId);
+  // DOIS MOTORES: a esteira é engine pura sobre o doc (lib/pipeline.ts) —
+  // no relacional chega da fatia mínima (só pipelines da unidade).
+  const pipeline = relationalActive()
+    ? getBusinessPipeline(await runRelationalRead(businessId, { pipelines: {} }), businessId)
+    : getBusinessPipeline(guard.db, businessId);
   // A1.2 · Bloco 2: a leitura é liberada para quem opera o funil ('leads'),
   // mas administrar etapas é ação de configuração — o flag vem da permissão
   // REAL do usuário nesta unidade (a UI só mostra o editor com ele; a
@@ -28,7 +34,8 @@ export async function PATCH(req: NextRequest) {
 
     let updatedPipeline: any = null;
 
-    await updateDB((d) => {
+    // Mutação PURA (DOIS motores): mesma engine da esteira + auditoria.
+    const pipelineTx = (d: any) => {
       updatedPipeline = updateBusinessPipeline(d, businessId, stages);
       pushAudit(d, {
         action: 'pipeline.updated',
@@ -36,7 +43,13 @@ export async function PATCH(req: NextRequest) {
         businessId,
         meta: { stagesCount: updatedPipeline.stages.length },
       });
-    });
+      return updatedPipeline;
+    };
+    if (relationalActive()) {
+      await runRelationalWrite(businessId, pipelineTx, { load: { pipelines: {} } });
+    } else {
+      await updateDB(pipelineTx);
+    }
 
     return NextResponse.json({ ok: true, pipeline: updatedPipeline });
   } catch (err: any) {

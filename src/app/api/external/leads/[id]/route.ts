@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { blockIfRelational } from '@/lib/relational/blocked';
 import { requireApiKey } from '@/lib/api-keys';
 import {
   moveLeadStage, assignLead, addLeadNote, getBusinessPipeline,
@@ -13,6 +14,9 @@ export async function GET(
   req: NextRequest,
   { params }: { params: { id: string } },
 ) {
+  const blocked = blockIfRelational('API externa · lead');
+  if (blocked) return blocked;
+
   const auth = await requireApiKey(req);
   if (!auth.ok) return auth.res;
 
@@ -39,6 +43,9 @@ export async function PATCH(
   req: NextRequest,
   { params }: { params: { id: string } },
 ) {
+  const blocked = blockIfRelational('API externa · lead');
+  if (blocked) return blocked;
+
   const auth = await requireApiKey(req);
   if (!auth.ok) return auth.res;
 

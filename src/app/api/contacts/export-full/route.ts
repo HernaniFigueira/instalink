@@ -25,6 +25,8 @@
 // contatos.
 import { NextRequest, NextResponse } from 'next/server';
 import { updateDB } from '@/lib/db';
+import { relationalActive } from '@/lib/relational/config';
+import { runRelationalWrite, runRelationalRead } from '@/lib/relational/slice';
 import { requireBusiness } from '@/lib/access';
 import { pushAudit } from '@/lib/audit';
 import { effectiveTimezone, todayISO } from '@/lib/tz';
@@ -55,7 +57,15 @@ export async function GET(req: NextRequest) {
     }, { status: 403 });
   }
 
-  const db = guard.db;
+  // DOIS MOTORES: a base completa é da unidade (contatos + referências de
+  // agenda/esteira/inbox/tarefas/atendimentos). No relacional chega da fatia
+  // direcionada; a auditoria da saída é gravada na transação da fatia.
+  const db: any = relationalActive()
+    ? await runRelationalRead(businessId, {
+        contacts: {}, bookings: {}, leads: {}, orders: {}, conversations: {},
+        messages: {}, tasks: {}, encounters: {},
+      })
+    : guard.db;
   const business = guard.ctx.business;
   const tz = effectiveTimezone(business.businessTimezone);
   const today = todayISO(new Date(), tz);
@@ -67,7 +77,7 @@ export async function GET(req: NextRequest) {
 
   // Ordem estável: as partes não podem repetir nem pular ninguém.
   const allContacts = db.contacts
-    .filter((c) => c.businessId === businessId)
+    .filter((c: any) => c.businessId === businessId)
     .slice()
     .sort(compareContactsForExport);
   const totalContacts = allContacts.length;
@@ -98,35 +108,35 @@ export async function GET(req: NextRequest) {
   for (const c of contacts) {
     if (c.customerId) byCustomer.set(c.customerId, c);
   }
-  const entries = contacts.map((c) => {
+  const entries = contacts.map((c: any) => {
     const profile = (c.profile || {}) as Record<string, any>;
     const bookings = db.bookings
-      .filter((b) => b.businessId === businessId && ((c.customerId && b.customerId === c.customerId) || (c.phone && b.customerPhone === c.phone)))
-      .map((b) => ({
+      .filter((b: any) => b.businessId === businessId && ((c.customerId && b.customerId === c.customerId) || (c.phone && b.customerPhone === c.phone)))
+      .map((b: any) => ({
         id: b.id, serviceId: b.serviceId, professionalId: b.professionalId, date: b.date, time: b.time,
         status: b.status, createdAt: b.createdAt,
       }));
     const leads = db.leads
-      .filter((l) => l.businessId === businessId && ((c.customerId && l.customerId === c.customerId) || (c.phone && l.phone === c.phone)))
-      .map((l) => ({ id: l.id, name: l.name, origin: l.origin, status: l.status, createdAt: l.createdAt, lastInteraction: l.lastInteraction }));
+      .filter((l: any) => l.businessId === businessId && ((c.customerId && l.customerId === c.customerId) || (c.phone && l.phone === c.phone)))
+      .map((l: any) => ({ id: l.id, name: l.name, origin: l.origin, status: l.status, createdAt: l.createdAt, lastInteraction: l.lastInteraction }));
     const tasks = db.tasks
-      .filter((t) => t.businessId === businessId && ((c.customerId && t.customerId === c.customerId) || (c.id && t.customerId === c.id)))
-      .map((t) => ({ id: t.id, title: t.title, status: t.status, dueAt: t.dueAt, createdAt: t.createdAt, encounterId: t.encounterId || '' }));
+      .filter((t: any) => t.businessId === businessId && ((c.customerId && t.customerId === c.customerId) || (c.id && t.customerId === c.id)))
+      .map((t: any) => ({ id: t.id, title: t.title, status: t.status, dueAt: t.dueAt, createdAt: t.createdAt, encounterId: t.encounterId || '' }));
     const conversations = db.conversations
-      .filter((cv) => cv.businessId === businessId && ((c.customerId && cv.customerId === c.customerId) || (c.id && cv.contactId === c.id)))
-      .map((cv) => ({
+      .filter((cv: any) => cv.businessId === businessId && ((c.customerId && cv.customerId === c.customerId) || (c.id && cv.contactId === c.id)))
+      .map((cv: any) => ({
         id: cv.id, channel: cv.channel, status: cv.status, createdAt: cv.createdAt,
         // Mensagens: só o conteúdo da conversa (texto/direção/quando). Mídia e
         // metadados internos de canal ficam de fora.
         messages: db.messages
-          .filter((m) => m.conversationId === cv.id)
+          .filter((m: any) => m.conversationId === cv.id)
           .slice(-MESSAGES_PER_CONVERSATION)
-          .map((m) => ({ id: m.id, direction: m.direction, text: m.body, at: m.at })),
+          .map((m: any) => ({ id: m.id, direction: m.direction, text: m.body, at: m.at })),
       }));
     const encounters = canSeeEncounters
       ? encountersForCustomer(db.encounters || [], businessId, { contactId: c.id, customerId: c.customerId })
-        .filter((e) => encounterInScope(e, guard.ctx.professionalScope))
-        .map((e) => ({
+        .filter((e: any) => encounterInScope(e, guard.ctx.professionalScope))
+        .map((e: any) => ({
           id: e.id, date: e.date, time: e.time, bookingId: e.bookingId, queueId: e.queueId,
           serviceId: e.serviceId, professionalId: e.professionalId, status: e.status,
           complaint: e.complaint, evolution: e.evolution, guidance: e.guidance, followUp: e.followUp,
@@ -148,7 +158,7 @@ export async function GET(req: NextRequest) {
         address: profile.address || null,
         guardian: profile.guardian || null,
       },
-      administrativeNotes: (c.notes || []).map((n) => ({ id: n.id, text: n.text, by: n.by, byName: n.byName, at: n.at })),
+      administrativeNotes: (c.notes || []).map((n: any) => ({ id: n.id, text: n.text, by: n.by, byName: n.byName, at: n.at })),
       legacyNote: c.note || '',
       bookings, leads, tasks, conversations,
       ...(encounters === undefined ? {} : { encounters }),
@@ -178,11 +188,11 @@ export async function GET(req: NextRequest) {
     },
     totals: {
       contacts: entries.length,
-      bookings: entries.reduce((n, e) => n + e.bookings.length, 0),
-      leads: entries.reduce((n, e) => n + e.leads.length, 0),
-      tasks: entries.reduce((n, e) => n + e.tasks.length, 0),
-      conversations: entries.reduce((n, e) => n + e.conversations.length, 0),
-      encounters: canSeeEncounters ? entries.reduce((n, e) => n + (e.encounters?.length || 0), 0) : 0,
+      bookings: entries.reduce((n: number, e: any) => n + e.bookings.length, 0),
+      leads: entries.reduce((n: number, e: any) => n + e.leads.length, 0),
+      tasks: entries.reduce((n: number, e: any) => n + e.tasks.length, 0),
+      conversations: entries.reduce((n: number, e: any) => n + e.conversations.length, 0),
+      encounters: canSeeEncounters ? entries.reduce((n: number, e: any) => n + (e.encounters?.length || 0), 0) : 0,
     },
     /** O que NÃO foi incluído, dito na cara — transparência para quem migra. */
     omitted: [
@@ -196,18 +206,26 @@ export async function GET(req: NextRequest) {
   };
 
   // Auditoria da saída de dados: quem, o quê, quanto, quando.
-  await updateDB((db2) => {
-    pushAudit(db2, {
-      action: 'contact.exported',
-      actor: guard.ctx.user,
-      businessId,
-      meta: {
-        format: 'json', scope: 'full', rows: entries.length, part, partSize, cursor,
-        totalContacts, complete, includeEncounters: canSeeEncounters,
-        totals: payload.totals, date: new Date().toISOString(),
-      },
+  const auditEntry: any = {
+    action: 'contact.exported',
+    actor: guard.ctx.user,
+    businessId,
+    meta: {
+      format: 'json', scope: 'full', rows: entries.length, part, partSize, cursor,
+      totalContacts, complete, includeEncounters: canSeeEncounters,
+      totals: payload.totals, date: new Date().toISOString(),
+    },
+  };
+  if (relationalActive()) {
+    await runRelationalWrite(businessId, (d: any) => {
+      pushAudit(d, auditEntry);
+      return true;
+    }, { load: {} });
+  } else {
+    await updateDB((db2) => {
+      pushAudit(db2, auditEntry);
     });
-  });
+  }
 
   const stamp = new Date().toISOString().slice(0, 10);
   const baseName = `base-completa-${business.slug || businessId}-${stamp}`;

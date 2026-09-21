@@ -174,7 +174,7 @@ describe('A3.3 — white label no painel autenticado', () => {
     const shell = stripComments(read('src/components/DashboardShell.tsx'));
     // Marcas antigas: iniciais "IL", wordmark, fallback de nome/role e rodapé
     // "InstaLink.app". Tudo saiu — a identidade visível é a da EMPRESA.
-    expect(shell).not.toMatch(/InstaLink/);
+    expect(shell).not.toMatch(/InstaLink|GoDoutor/);
     expect(shell).not.toMatch(/>\s*IL\s*</);
     expect(shell).not.toMatch(/InstaLink\.app/);
   });
@@ -184,7 +184,7 @@ describe('A3.3 — white label no painel autenticado', () => {
 
 
   it('nenhuma rota do painel escreve o nome do produto na tela', () => {
-    const offenders = ROUTE_FILES.filter((f) => /InstaLink/.test(stripComments(read(f))));
+    const offenders = ROUTE_FILES.filter((f) => /InstaLink|GoDoutor/.test(stripComments(read(f))));
     expect(offenders).toEqual([]);
   });
 });

@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { blockIfRelational } from '@/lib/relational/blocked';
 import { randomUUID } from 'node:crypto';
 import { readDB, updateDB } from '@/lib/db';
 import { createCustomerSession } from '@/lib/customer-auth';
@@ -8,6 +9,9 @@ import { popupHtml, verifyState } from '@/lib/google-auth';
 // GET ?code=&state= — callback do Google. Localiza/cria o consumidor,
 // abre sessão e devolve o token ao popup via postMessage.
 export async function GET(req: NextRequest) {
+  const blocked = blockIfRelational('Login com Google (callback)');
+  if (blocked) return blocked;
+
   const html = (title: string, text: string) =>
     new NextResponse(popupHtml(title, text), { headers: { 'Content-Type': 'text/html; charset=utf-8' } });
 

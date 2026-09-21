@@ -1,8 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { blockIfRelational } from '@/lib/relational/blocked';
 import { requireMaster } from '@/lib/access';
 import { listOrganizationsForMaster, safeUserView } from '@/lib/master';
 
 export async function GET(req: NextRequest, { params }: { params: { id: string } }) {
+  const blocked = blockIfRelational('Master · organização');
+  if (blocked) return blocked;
+
   const guard = await requireMaster(req);
   if (!guard.ok) return guard.res;
   const { db } = guard;

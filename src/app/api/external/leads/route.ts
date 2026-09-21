@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { blockIfRelational } from '@/lib/relational/blocked';
 import { requireApiKey } from '@/lib/api-keys';
 import { checkIdempotency, extractIdempotencyKey, saveIdempotency } from '@/lib/idempotency';
 import { ingestLead, getBusinessPipeline, resolveStageId, normalizeLeadStageId } from '@/lib/pipeline';
@@ -8,6 +9,9 @@ import { updateDB } from '@/lib/db';
 import type { DB } from '@/lib/types';
 
 export async function GET(req: NextRequest) {
+  const blocked = blockIfRelational('API externa · leads');
+  if (blocked) return blocked;
+
   const auth = await requireApiKey(req);
   if (!auth.ok) return auth.res;
 
@@ -64,6 +68,9 @@ export async function GET(req: NextRequest) {
 }
 
 export async function POST(req: NextRequest) {
+  const blocked = blockIfRelational('API externa · leads');
+  if (blocked) return blocked;
+
   const auth = await requireApiKey(req);
   if (!auth.ok) return auth.res;
 

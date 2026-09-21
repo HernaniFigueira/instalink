@@ -4,7 +4,7 @@
 // ═══════════════════════════════════════════════════════════════
 // A tela mostra a VERDADE em duas camadas (mesmo desenho do B8):
 //
-//   PLATAFORMA — o que só o dono do Instalink configura (app, segredo, cofre).
+//   PLATAFORMA — o que só o dono do GoDoutor configura (app, segredo, cofre).
 //   UNIDADE    — o que esta unidade resolve no fluxo oficial do Instagram.
 //
 // Nada de token, segredo ou identificador técnico na tela: só o @ e o nome de

@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { blockIfRelational } from '@/lib/relational/blocked';
 import { randomUUID } from 'node:crypto';
 import { readDB, updateDB } from '@/lib/db';
 import { requireBusiness } from '@/lib/access';
@@ -34,6 +35,9 @@ function dto(c: Campaign, eligible: number) {
 }
 
 export async function GET(req: NextRequest) {
+  const blocked = blockIfRelational('Campanhas');
+  if (blocked) return blocked;
+
   const businessId = req.nextUrl.searchParams.get('businessId') || '';
   const guard = await requireBusiness(req, businessId, 'campanhas');
   if (!guard.ok) return guard.res;
@@ -91,6 +95,9 @@ export async function GET(req: NextRequest) {
   }
 
 export async function POST(req: NextRequest) {
+  const blocked = blockIfRelational('Campanhas');
+  if (blocked) return blocked;
+
   try {
     const body = await req.json();
     const businessId = String(body.businessId || '');
@@ -130,6 +137,9 @@ export async function POST(req: NextRequest) {
 
 // PATCH { businessId, id, action: 'update' | 'ready' | 'send' | 'cancel' | 'duplicate' | 'winback', ... }
 export async function PATCH(req: NextRequest) {
+  const blocked = blockIfRelational('Campanhas');
+  if (blocked) return blocked;
+
   try {
     const body = await req.json();
     const businessId = String(body.businessId || '');
@@ -342,6 +352,9 @@ export async function PATCH(req: NextRequest) {
 // Campanhas prontas/enviadas/canceladas permanecem: enviadas são auditoria;
 // a ação correta delas é cancelar (ou excluir depois de reabrir como rascunho).
 export async function DELETE(req: NextRequest) {
+  const blocked = blockIfRelational('Campanhas');
+  if (blocked) return blocked;
+
   try {
     const businessId = req.nextUrl.searchParams.get('businessId') || '';
     const id = req.nextUrl.searchParams.get('id') || '';

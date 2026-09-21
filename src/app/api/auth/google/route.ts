@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { blockIfRelational } from '@/lib/relational/blocked';
 import { popupHtml, signState } from '@/lib/google-auth';
 
 // GET ?slug= — inicia o login com Google (conta do consumidor).
@@ -9,6 +10,9 @@ import { popupHtml, signState } from '@/lib/google-auth';
 // Sem as variáveis, o popup informa que o Google ainda não foi ativado
 // e o consumidor usa e-mail/senha normalmente.
 export async function GET(req: NextRequest) {
+  const blocked = blockIfRelational('Login com Google');
+  if (blocked) return blocked;
+
   const clientId = process.env.GOOGLE_CLIENT_ID || '';
   const slug = req.nextUrl.searchParams.get('slug') || '';
   if (!clientId) {

@@ -2,6 +2,7 @@
 // CRON DE RETENTATIVA & PROCESSAMENTO PENDENTE DE WHATSAPP
 // ═══════════════════════════════════════════════════════════════
 import { NextRequest, NextResponse } from 'next/server';
+import { blockIfRelational } from '@/lib/relational/blocked';
 import { verifyCronAuth } from '@/lib/cron-auth';
 import { processPendingWhatsappRetries } from '@/lib/whatsapp-cloud-api';
 
@@ -35,9 +36,15 @@ async function handleCron(req: NextRequest) {
 }
 
 export async function GET(req: NextRequest) {
+  const blocked = blockIfRelational('Cron · despacho WhatsApp');
+  if (blocked) return blocked;
+
   return handleCron(req);
 }
 
 export async function POST(req: NextRequest) {
+  const blocked = blockIfRelational('Cron · despacho WhatsApp');
+  if (blocked) return blocked;
+
   return handleCron(req);
 }

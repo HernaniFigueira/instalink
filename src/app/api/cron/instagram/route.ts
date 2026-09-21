@@ -10,6 +10,7 @@
 // exige token válido). A renovação roda fora de transação, unidade por unidade,
 // e falha nunca apaga o token atual.
 import { NextRequest, NextResponse } from 'next/server';
+import { blockIfRelational } from '@/lib/relational/blocked';
 import { verifyCronAuth } from '@/lib/cron-auth';
 import { processPendingInstagramRetries, refreshInstagramTokens } from '@/lib/instagram-api';
 
@@ -40,9 +41,15 @@ async function handleCron(req: NextRequest) {
 }
 
 export async function GET(req: NextRequest) {
+  const blocked = blockIfRelational('Cron · despacho Instagram');
+  if (blocked) return blocked;
+
   return handleCron(req);
 }
 
 export async function POST(req: NextRequest) {
+  const blocked = blockIfRelational('Cron · despacho Instagram');
+  if (blocked) return blocked;
+
   return handleCron(req);
 }

@@ -5,6 +5,8 @@ import { rateLimit, ipFrom } from '@/lib/rate-limit';
 import { isMasterUser } from '@/lib/access';
 import { authUnavailable } from '@/lib/auth-failure';
 import { pushAudit } from '@/lib/audit';
+import { relationalActive } from '@/lib/relational/config';
+import { relUserByEmail, relTouchLogin } from '@/lib/relational/auth-store';
 
 export async function POST(req: NextRequest) {
   const rl = rateLimit(`login:${ipFrom(req)}`, 15, 60000);
@@ -17,6 +19,23 @@ export async function POST(req: NextRequest) {
   const { email, password } = body;
   let stage: 'login_read' | 'login_session' | 'login_audit' = 'login_read';
   try {
+    // MODO RELACIONAL: usuário/sessão/auditoria de login no SQL.
+    if (relationalActive()) {
+      const user = await relUserByEmail(email || '');
+      if (!user || !verifyPassword(password || '', user.passwordHash)) {
+        return NextResponse.json({ error: 'E-mail ou senha incorretos.' }, { status: 401 });
+      }
+      stage = 'login_session';
+      const sessionId = await createSession(user.id);
+      stage = 'login_audit';
+      await relTouchLogin(user);
+      const redirectTo = isMasterUser(user) ? '/master' : '/dashboard';
+      const res = NextResponse.json({
+        ok: true, token: sessionId, redirectTo, isMaster: isMasterUser(user),
+      }, { headers: { 'Cache-Control': 'no-store' } });
+      setSessionOn(res, sessionId);
+      return res;
+    }
     const db = await readDB();
     const user = db.users.find((u) => u.email.toLowerCase() === (email || '').toLowerCase());
     if (!user || !verifyPassword(password || '', user.passwordHash)) {

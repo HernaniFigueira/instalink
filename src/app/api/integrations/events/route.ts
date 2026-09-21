@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { blockIfRelational } from '@/lib/relational/blocked';
 import { requireBusiness } from '@/lib/access';
 import { integrationEventsOf, summarizeIntegrationEvents } from '@/lib/integrations/logs';
 import type { IntegrationEventStatus } from '@/lib/types';
@@ -14,6 +15,9 @@ export const dynamic = 'force-dynamic';
 export const runtime = 'nodejs';
 
 export async function GET(req: NextRequest) {
+  const blocked = blockIfRelational('Integrações · eventos');
+  if (blocked) return blocked;
+
   const businessId = String(req.nextUrl.searchParams.get('businessId') || '').trim();
   const guard = await requireBusiness(req, businessId, 'config');
   if (!guard.ok) return guard.res;

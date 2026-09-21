@@ -28,6 +28,7 @@
 // `registration_pending` — antes, um número não registrado aparecia como
 // "conectado" e simplesmente não enviava.
 import { NextRequest, NextResponse } from 'next/server';
+import { blockIfRelational } from '@/lib/relational/blocked';
 import { readDB, updateDB } from '@/lib/db';
 import { requireBusiness } from '@/lib/access';
 import { pushAudit } from '@/lib/audit';
@@ -77,6 +78,9 @@ async function graphJson(url: string, init?: RequestInit): Promise<{ ok: boolean
 }
 
 export async function GET(req: NextRequest) {
+  const blocked = blockIfRelational('Canais · WhatsApp (onboarding)');
+  if (blocked) return blocked;
+
   const businessId = String(req.nextUrl.searchParams.get('businessId') || '');
   const guard = await requireBusiness(req, businessId, 'whatsapp');
   if (!guard.ok) return guard.res;
@@ -104,6 +108,9 @@ export async function GET(req: NextRequest) {
 }
 
 export async function POST(req: NextRequest) {
+  const blocked = blockIfRelational('Canais · WhatsApp (onboarding)');
+  if (blocked) return blocked;
+
   let body: any = {};
   try {
     body = await req.json();

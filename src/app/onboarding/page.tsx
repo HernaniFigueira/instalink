@@ -99,8 +99,8 @@ export default function CreateBusinessPage() {
     <main className="min-h-screen bg-zinc-50 flex items-center justify-center px-4 py-10">
       <div className="w-full max-w-md">
         <div className="flex items-center justify-center gap-2 mb-6">
-          <div className="w-9 h-9 rounded-xl bg-zinc-900 flex items-center justify-center font-black text-white">IL</div>
-          <span className="font-bold text-lg">InstaLink<span className="text-emerald-600">.app</span></span>
+          <div className="w-9 h-9 rounded-xl bg-zinc-900 flex items-center justify-center font-black text-white">GD</div>
+          <span className="font-bold text-lg">GoDoutor</span>
         </div>
 
         <form onSubmit={finish} className="bg-white border border-zinc-200 rounded-lg p-6 shadow-sm">
@@ -117,7 +117,7 @@ export default function CreateBusinessPage() {
                 className="w-full rounded-md border border-zinc-300 px-3.5 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500" />
               {name.trim() && (
                 <p className="text-xs text-zinc-500 mt-1.5">
-                  Seu link: <strong>instalink.app/{slugify(name) || '…'}</strong>
+                  Seu link: <strong>/{slugify(name) || '…'}</strong>
                 </p>
               )}
             </div>

@@ -1,9 +1,13 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { blockIfRelational } from '@/lib/relational/blocked';
 import { requireMaster } from '@/lib/access';
 
 // AUDITORIA da plataforma (somente master). Ações administrativas
 // relevantes: suporte, edição de módulos/configuração, equipe, campanhas.
 export async function GET(req: NextRequest) {
+  const blocked = blockIfRelational('Admin · auditoria');
+  if (blocked) return blocked;
+
   const guard = await requireMaster(req);
   if (!guard.ok) return guard.res;
   const { db } = guard;

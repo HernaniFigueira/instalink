@@ -3,6 +3,8 @@ import { requireBusiness } from '@/lib/access';
 import { bookLead } from '@/lib/pipeline';
 import { updateDB } from '@/lib/db';
 import { pushAudit } from '@/lib/audit';
+import { relationalActive } from '@/lib/relational/config';
+import { runRelationalWrite, bookingOpSpec } from '@/lib/relational/slice';
 import { enqueueWebhookTx, deliverWebhookIds } from '@/lib/webhooks';
 import type { DB } from '@/lib/types';
 
@@ -16,17 +18,16 @@ export async function POST(
     const guard = await requireBusiness(req, businessId, 'agenda');
     if (!guard.ok) return guard.res;
 
-    const db = guard.db;
     const business = guard.ctx.business;
-    const service = db.services.find((s) => s.id === body.serviceId && s.businessId === businessId && s.active !== false);
-    if (!service) {
-      return NextResponse.json({ error: 'Serviço não encontrado ou indisponível.' }, { status: 400 });
-    }
 
-    const lead = db.leads.find((l) => l.id === params.id && l.businessId === businessId);
-    if (!lead) {
-      return NextResponse.json({ error: 'Lead não encontrado.' }, { status: 404 });
-    }
+    /** Validações de serviço/lead fora da escrita (mesmas mensagens/status). */
+    const resolveInputs = (db: any) => {
+      const service = (db.services || []).find((sv: any) => sv.id === body.serviceId && sv.businessId === businessId && sv.active !== false);
+      if (!service) throw Object.assign(new Error('Serviço não encontrado ou indisponível.'), { status: 400 });
+      const lead = (db.leads || []).find((l: any) => l.id === params.id && l.businessId === businessId);
+      if (!lead) throw Object.assign(new Error('Lead não encontrado.'), { status: 404 });
+      return { service, lead };
+    };
 
     const actor = {
       id: guard.ctx.user.id,
@@ -37,7 +38,9 @@ export async function POST(
     let result: ReturnType<typeof bookLead>;
 
     const webhookDeliveryIds: string[] = [];
-    await updateDB((d: DB) => {
+    /** Mutação PURA (DOIS MOTORES): agenda a partir do lead (portas oficiais). */
+    const bookTx = (d: any) => {
+      const { service, lead } = resolveInputs(d);
       result = bookLead(d, {
         business,
         service,
@@ -47,7 +50,7 @@ export async function POST(
         professionalId: body.professionalId || undefined,
         note: body.note,
         actor,
-      });
+      } as any);
 
       pushAudit(d, {
         action: 'lead.booked',
@@ -71,12 +74,29 @@ export async function POST(
         lead: result!.lead,
         newStageId: 'scheduled',
       }).map((delivery) => delivery.id));
-    });
+      return true;
+    };
 
-    // Webhook
-    try {
-      await deliverWebhookIds(webhookDeliveryIds);
-    } catch { /* noop */ }
+    if (relationalActive()) {
+      // Fatia da operação: serviços, lead citado, agenda/profissionais +
+      // referências (engine de agenda compartilhada). Webhook segue 'pending'
+      // no outbox SQL (matriz §3) — entrega HTTP é rodada própria.
+      const date = String(body.date || '').trim();
+      await runRelationalWrite(businessId, bookTx, {
+        load: bookingOpSpec({
+          leadId: params.id,
+          ...(date ? { dateFrom: date, dateTo: date } : {}),
+        }),
+      });
+    } else {
+      const db = guard.db;
+      resolveInputs(db);
+      await updateDB(bookTx as (d: DB) => boolean);
+      // Webhook
+      try {
+        await deliverWebhookIds(webhookDeliveryIds);
+      } catch { /* noop */ }
+    }
 
     return NextResponse.json({
       ok: true,

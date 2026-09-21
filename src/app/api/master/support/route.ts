@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { blockIfRelational } from '@/lib/relational/blocked';
 import { randomUUID } from 'node:crypto';
 import { updateDB } from '@/lib/db';
 import { SUPPORT_COOKIE, requireMaster, supportExpiry, supportFromRequest } from '@/lib/access';
@@ -10,6 +11,9 @@ import type { SupportMode } from '@/lib/types';
 // Escopo estrito à unidade; expiração 60 min; auditado.
 
 export async function GET(req: NextRequest) {
+  const blocked = blockIfRelational('Master · suporte');
+  if (blocked) return blocked;
+
   const guard = await requireMaster(req);
   if (!guard.ok) return guard.res;
   const session = await supportFromRequest(req, guard.user.id);
@@ -17,6 +21,9 @@ export async function GET(req: NextRequest) {
 }
 
 export async function POST(req: NextRequest) {
+  const blocked = blockIfRelational('Master · suporte');
+  if (blocked) return blocked;
+
   const guard = await requireMaster(req);
   if (!guard.ok) return guard.res;
   const { db, user } = guard;
@@ -62,6 +69,9 @@ export async function POST(req: NextRequest) {
 }
 
 export async function DELETE(req: NextRequest) {
+  const blocked = blockIfRelational('Master · suporte');
+  if (blocked) return blocked;
+
   const guard = await requireMaster(req);
   if (!guard.ok) return guard.res;
   const { user } = guard;

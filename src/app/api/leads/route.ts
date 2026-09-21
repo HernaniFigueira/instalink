@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { readDB, updateDB } from '@/lib/db';
+import { relationalActive } from '@/lib/relational/config';
+import { runRelationalWrite, runRelationalRead, relationalLeadsDoc, leadWriteSpec, rowToLead } from '@/lib/relational/slice';
 import { requireBusiness } from '@/lib/access';
 import { isFeatureEnabled } from '@/lib/features';
 import { customerFromRequest } from '@/lib/customer-auth';
@@ -9,7 +11,9 @@ import type { DB } from '@/lib/types';
 import {
   ingestLead, getBusinessPipeline, moveLeadStage, assignLead, addLeadNote, updateLeadFields,
   isLegacyLeadStatus, stageForLegacyStatus, normalizeLeadStageId, mapStageToStatus, resolveStageId,
+  STAGE_ALIASES, LEGACY_LEAD_STATUSES, stagesInOrder,
 } from '@/lib/pipeline';
+import { getPool } from '@/lib/relational/pool';
 import { enqueueWebhookTx, deliverWebhookIds } from '@/lib/webhooks';
 
 function err(message: string, status: number): Error {
@@ -24,8 +28,18 @@ export async function POST(req: NextRequest) {
   if (!rl.ok) return NextResponse.json({ error: 'Muitas tentativas. Aguarde um instante.' }, { status: 429 });
   try {
     const body = await req.json();
-    const db = await readDB();
-    const business = db.businesses.find((b) => b.id === body.businessId);
+    // MODO RELACIONAL: o negócio vem do SQL — o documento legado NÃO é tocado.
+    let business: any;
+    if (relationalActive()) {
+      const { getPool } = await import('@/lib/relational/pool');
+      const { rowToBusiness } = await import('@/lib/relational/slice');
+      const bRow = await getPool().query('SELECT * FROM app.businesses WHERE id = $1', [String(body.businessId || '')]);
+      if (!bRow.rows[0]) return NextResponse.json({ error: 'Negócio não encontrado.' }, { status: 404 });
+      business = rowToBusiness(bRow.rows[0]);
+    } else {
+      const db = await readDB();
+      business = db.businesses.find((b) => b.id === body.businessId);
+    }
     if (!business) return NextResponse.json({ error: 'Negócio não encontrado.' }, { status: 404 });
 
     // Orçamento desativado não vira lead (a captação inteira é o módulo).
@@ -47,7 +61,7 @@ export async function POST(req: NextRequest) {
     let result: ReturnType<typeof ingestLead>;
 
     const webhookDeliveryIds: string[] = [];
-    await updateDB((d: DB) => {
+    const ingest = (d: DB) => {
       result = ingestLead(d, {
         businessId: business.id,
         customerId: customer?.id || '',
@@ -74,12 +88,28 @@ export async function POST(req: NextRequest) {
         lead: result!.lead,
         isNew: result!.isNew,
       }).map((delivery) => delivery.id));
-    });
-
-    // Disparo de Webhook
-    try {
-      await deliverWebhookIds(webhookDeliveryIds);
-    } catch { /* noop */ }
+    };
+    // MODO RELACIONAL: ingestLead canônico sobre a fatia da unidade no SQL.
+    // Entrega HTTP do webhook fica para o ciclo do motor de documento
+    // (outbox permanece pending — portada em rodada própria).
+    if (relationalActive()) {
+      // Carrega SÓ as identidades candidatas (dedupe exato) + pipeline/config
+      // de webhook da unidade — nunca o histórico da esteira.
+      await runRelationalWrite(business.id, ingest, {
+        load: leadWriteSpec({
+          phones: [onlyDigits(phone)],
+          emails: [email],
+          customerId: customer?.id || '',
+          name,
+        }),
+      });
+    } else {
+      await updateDB(ingest);
+      // Disparo de Webhook
+      try {
+        await deliverWebhookIds(webhookDeliveryIds);
+      } catch { /* noop */ }
+    }
 
     return NextResponse.json({ ok: true, guest: !customer, lead: result!.lead });
   } catch (e: any) {
@@ -92,6 +122,90 @@ export async function GET(req: NextRequest) {
   const businessId = req.nextUrl.searchParams.get('businessId') || '';
   const guard = await requireBusiness(req, businessId, 'leads');
   if (!guard.ok) return guard.res;
+
+  if (relationalActive()) {
+    // PAGINAÇÃO NO SQL (fim do corte fixo de 500): o total vem de COUNT(*)
+    // com o MESMO filtro da página e a janela vem de LIMIT/OFFSET — todas as
+    // páginas alcançáveis. O filtro de etapa compara pelo stage_id bruto que
+    // NORMALIZA para a etapa pedida (mesma fn de resolução do produto), com
+    // fallback explícito: todo valor desconhecido cai na 1ª etapa.
+    const page = Math.max(1, Number(req.nextUrl.searchParams.get('page')) || 1);
+    const limit = Math.min(200, Math.max(1, Number(req.nextUrl.searchParams.get('limit')) || 50));
+    const stage = req.nextUrl.searchParams.get('stage') || '';
+
+    const base = await runRelationalRead(businessId, {
+      pipelines: {}, members: {},
+      users: (partial: any) => {
+        const ids = new Set<string>((partial.members || []).map((m: any) => m.userId).filter(Boolean));
+        const ownerId = partial.businesses?.[0]?.ownerId;
+        if (ownerId) ids.add(ownerId);
+        if (ids.size === 0) return null;
+        return { global: true, where: 'id = ANY($2)', args: [[...ids]] };
+      },
+    });
+    const pipeline = getBusinessPipeline(base, businessId);
+
+    const conds = ['business_id = $1'];
+    const args: unknown[] = [businessId];
+    if (stage) {
+      const target = resolveStageId(pipeline, stage).stageId;
+      // Universo de valores brutos conhecidos (ids canônicos, mappedStatus,
+      // aliases pt/br e status legados) → quais normalizam para a etapa alvo.
+      const universe = new Set<string>();
+      for (const st of stagesInOrder(pipeline)) {
+        universe.add(st.id);
+        if (st.mappedStatus) universe.add(st.mappedStatus);
+      }
+      for (const alias of Object.keys(STAGE_ALIASES)) universe.add(alias);
+      for (const legacy of LEGACY_LEAD_STATUSES) universe.add(legacy);
+      const toTarget = [...universe].filter((r) => resolveStageId(pipeline, r).stageId === target);
+      const firstId = stagesInOrder(pipeline)[0]?.id || 'new';
+      args.push(toTarget);
+      if (target === firstId) {
+        // 1ª etapa: unknown/fora do universo TAMBÉM caem nela (fallback).
+        args.push([...universe]);
+        conds.push(`(stage_id = ANY($${args.length - 1}) OR NOT (stage_id = ANY($${args.length})))`);
+      } else {
+        conds.push(`stage_id = ANY($${args.length})`);
+      }
+    }
+    const pool = getPool();
+    const countRes = await pool.query(
+      `SELECT count(*)::int AS n FROM app.leads WHERE ${conds.join(' AND ')}`,
+      args,
+    );
+    const total = countRes.rows[0]?.n || 0;
+    const pageRes = await pool.query(
+      `SELECT * FROM app.leads WHERE ${conds.join(' AND ')} ORDER BY created_at DESC LIMIT ${limit} OFFSET ${(page - 1) * limit}`,
+      args,
+    );
+    const leads = pageRes.rows.map(rowToLead);
+    const members = (base.members || [])
+      .filter((m: any) => m.businessId === businessId && m.active !== false)
+      .map((m: any) => {
+        const user = (base.users || []).find((u: any) => u.id === m.userId);
+        return { userId: m.userId, name: user?.name || m.note || 'Membro', role: m.role };
+      });
+    const biz = (base.businesses || [])[0];
+    if (biz) {
+      const owner = (base.users || []).find((u: any) => u.id === biz.ownerId);
+      if (owner && !members.some((m: any) => m.userId === owner.id)) {
+        members.unshift({ userId: owner.id, name: owner.name, role: 'OWNER' });
+      }
+    }
+    return NextResponse.json({
+      leads,
+      total,
+      page,
+      limit,
+      pipeline,
+      members,
+      canEditPipeline: guard.ctx.permissions.config === true,
+      business: biz ? { id: biz.id, name: biz.name } : null,
+    });
+  }
+
+  // MODO LEGADO (rollback): comportamento histórico intacto.
   const db = guard.db;
   const page = Math.max(1, Number(req.nextUrl.searchParams.get('page')) || 1);
   const limit = Math.min(200, Math.max(1, Number(req.nextUrl.searchParams.get('limit')) || 50));
@@ -166,7 +280,7 @@ export async function PATCH(req: NextRequest) {
     let stageChanged = false;
 
     const webhookDeliveryIds: string[] = [];
-    await updateDB((d) => {
+    const mutate = (d: DB) => {
       const l = d.leads.find((x) => x.id === id && x.businessId === businessId);
       if (!l) throw err('Cliente não encontrado.', 404);
 
@@ -278,12 +392,22 @@ export async function PATCH(req: NextRequest) {
         webhookDeliveryIds.push(...enqueueWebhookTx(d, 'lead.stage_changed', businessId, { lead: updatedLead }).map((delivery) => delivery.id));
       }
       webhookDeliveryIds.push(...enqueueWebhookTx(d, 'lead.updated', businessId, { lead: updatedLead }).map((delivery) => delivery.id));
-    });
-
-    // Webhooks
-    try {
-      await deliverWebhookIds(webhookDeliveryIds);
-    } catch { /* noop */ }
+    };
+    // MODO RELACIONAL: moveLeadStage/assignLead/addLeadNote canônicos na fatia.
+    if (relationalActive()) {
+      await runRelationalWrite(String(businessId || ''), mutate, {
+        load: leadWriteSpec({
+          leadId: String(body.id || ''),
+          assignedUserId: body.assignedUserId !== undefined ? String(body.assignedUserId || '') : undefined,
+        }),
+      });
+    } else {
+      await updateDB(mutate);
+      // Webhooks
+      try {
+        await deliverWebhookIds(webhookDeliveryIds);
+      } catch { /* noop */ }
+    }
 
     return NextResponse.json({ ok: true, lead: updatedLead });
   } catch (e: any) {

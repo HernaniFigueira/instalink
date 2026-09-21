@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { blockIfRelational } from '@/lib/relational/blocked';
 import { requireApiKey } from '@/lib/api-keys';
 import { checkIdempotency, extractIdempotencyKey, saveIdempotency } from '@/lib/idempotency';
 import { createBookingTx } from '@/lib/booking-create';
@@ -10,6 +11,9 @@ import { isValidDateISO, isValidClockTime } from '@/lib/tz';
 import { onlyDigits } from '@/lib/utils';
 
 export async function POST(req: NextRequest) {
+  const blocked = blockIfRelational('API externa · agendamentos');
+  if (blocked) return blocked;
+
   const auth = await requireApiKey(req);
   if (!auth.ok) return auth.res;
 

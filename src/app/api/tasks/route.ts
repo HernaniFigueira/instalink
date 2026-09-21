@@ -10,6 +10,8 @@ import { NextRequest, NextResponse } from 'next/server';
 import { readDB, updateDB } from '@/lib/db';
 import { requireBusiness } from '@/lib/access';
 import { pushAudit } from '@/lib/audit';
+import { relationalActive } from '@/lib/relational/config';
+import { runRelationalWrite, runRelationalRead, type SliceSpec } from '@/lib/relational/slice';
 import {
   createTaskTx, openTasks, setTaskStatusTx, summarizeTasks, taskAssigneeOptions, taskDueLabel,
 } from '@/lib/automation/tasks';
@@ -45,22 +47,38 @@ export async function GET(req: NextRequest) {
   const guard = await requireBusiness(req, businessId, ['leads', 'agenda', 'clientes', 'config']);
   if (!guard.ok) return guard.res;
   const status = req.nextUrl.searchParams.get('status') || 'open';
-  const db = guard.db;
   const mineOnly = req.nextUrl.searchParams.get('mine') === '1';
   const today = todayISO();
-  const list = (db.tasks || []).filter((t) => t.businessId === businessId && (status === 'all' || t.status === status));
-  const scoped = mineOnly ? list.filter((t) => t.assignedUserId === guard.ctx.user.id) : list;
-  const items = (status === 'open' && !mineOnly ? openTasks(db, businessId, 100) : scoped.slice(-100).reverse())
-    .map((t) => view(db, t));
-  return NextResponse.json({
-    ok: true,
-    tasks: items,
-    summary: summarizeTasks(db, businessId, today, guard.ctx.user.id),
-    // Responsáveis possíveis (mesma projeção do editor de automações). A tela
-    // de Tarefas é porta própria: não pode depender de /api/automations (que
-    // exige permissão de configuração) para conseguir atribuir uma tarefa.
-    members: taskAssigneeOptions(db, businessId),
-  });
+  /** View PURA (DOIS MOTORES): lista + resumo + responsáveis. */
+  const listView = (db: any) => {
+    const list = (db.tasks || []).filter((t: any) => t.businessId === businessId && (status === 'all' || t.status === status));
+    const scoped = mineOnly ? list.filter((t: any) => t.assignedUserId === guard.ctx.user.id) : list;
+    const items = (status === 'open' && !mineOnly ? openTasks(db, businessId, 100) : scoped.slice(-100).reverse())
+      .map((t: any) => view(db, t));
+    return {
+      ok: true,
+      tasks: items,
+      summary: summarizeTasks(db, businessId, today, guard.ctx.user.id),
+      // Responsáveis possíveis (mesma projeção do editor de automações). A tela
+      // de Tarefas é porta própria: não pode depender de /api/automations (que
+      // exige permissão de configuração) para conseguir atribuir uma tarefa.
+      members: taskAssigneeOptions(db, businessId),
+    };
+  };
+  if (relationalActive()) {
+    // Fatia da tela: tarefas da unidade + referências que a view resolve
+    // (lead/agendamento/contato) + equipe (responsáveis e resumo).
+    const db = await runRelationalRead(businessId, {
+      tasks: {}, leads: {}, bookings: {}, contacts: {}, members: {},
+      users: (partial) => {
+        const ids = new Set<string>((partial.members || []).map((m: any) => m.userId).filter(Boolean));
+        if (ids.size === 0) return null;
+        return { global: true, where: 'id = ANY($2)', args: [[...ids]] };
+      },
+    });
+    return NextResponse.json(listView(db));
+  }
+  return NextResponse.json(listView(guard.db));
 }
 
 export async function POST(req: NextRequest) {
@@ -69,7 +87,10 @@ export async function POST(req: NextRequest) {
     const businessId = String(body.businessId || req.nextUrl.searchParams.get('businessId') || '');
     const guard = await requireBusiness(req, businessId, ['leads', 'agenda', 'clientes', 'config']);
     if (!guard.ok) return guard.res;
-    const created = await updateDB((d) => {
+
+    /** Mutação PURA (DOIS motores): cria tarefa pela engine compartilhada.
+     * Retorna { task, slice } para a view responder sem reler o legado. */
+    const taskCreateTx = (d: any) => {
       // O responsável precisa ser da equipe desta unidade (a mesma regra que a
       // automação já passa — sem caminho paralelo de validação).
       const assignee = String(body.assignedUserId || '');
@@ -110,10 +131,27 @@ export async function POST(req: NextRequest) {
           },
         });
       }
-      return res.task;
-    });
-    const db = await readDB();
-    return NextResponse.json({ ok: true, task: view(db, created!) }, { status: 201 });
+      return { task: res.task, slice: d };
+    };
+    let created: any;
+    if (relationalActive()) {
+      created = await runRelationalWrite(businessId, taskCreateTx, {
+        load: {
+          tasks: {}, members: {}, leads: {}, bookings: {}, encounters: {}, contacts: {},
+          users: (partial) => {
+            const ids = new Set<string>((partial.members || []).map((m: any) => m.userId).filter(Boolean));
+            if (ids.size === 0) return null;
+            return { global: true, where: 'id = ANY($2)', args: [[...ids]] };
+          },
+        } as SliceSpec,
+      });
+    } else {
+      // A tx devolve { task, slice } — separar antes de montar a resposta.
+      const txOut = await updateDB(taskCreateTx);
+      const db = await readDB();
+      created = { task: txOut.task, slice: db };
+    }
+    return NextResponse.json({ ok: true, task: view(created.slice, created.task!) }, { status: 201 });
   } catch (e: any) {
     return NextResponse.json({ ok: false, error: e?.message || 'Não foi possível criar a tarefa.' }, { status: e?.status || 400 });
   }
@@ -125,7 +163,9 @@ export async function PATCH(req: NextRequest) {
     const businessId = String(body.businessId || req.nextUrl.searchParams.get('businessId') || '');
     const guard = await requireBusiness(req, businessId, ['leads', 'agenda', 'clientes', 'config']);
     if (!guard.ok) return guard.res;
-    const updated = await updateDB((d) => {
+
+    /** Mutação PURA (DOIS motores): edição operacional + máquina de status. */
+    const taskPatchTx = (d: any) => {
       const taskId = String(body.id || '');
       const existing = (d.tasks || []).find((x: any) => x.id === taskId && x.businessId === businessId);
       if (!existing) throw Object.assign(new Error('Tarefa não encontrada.'), { status: 404 });
@@ -162,11 +202,11 @@ export async function PATCH(req: NextRequest) {
         if (status === 'done') {
           pushAudit(d, { action: 'task.completed', actor: guard.ctx.user, businessId, meta: { taskId: res.id, title: res.title } });
         }
-        return res;
+        return { task: res, slice: d };
       }
       if (touched) {
         existing.updatedAt = new Date().toISOString();
-        return existing;
+        return { task: existing, slice: d };
       }
       // fallback to status handler for legacy call with status
       const status = body.status === 'done' ? 'done' : body.status === 'cancelled' ? 'cancelled' : 'open';
@@ -175,10 +215,27 @@ export async function PATCH(req: NextRequest) {
       if (status === 'done') {
         pushAudit(d, { action: 'task.completed', actor: guard.ctx.user, businessId, meta: { taskId: task.id, title: task.title } });
       }
-      return task;
-    });
-    const db = await readDB();
-    return NextResponse.json({ ok: true, task: view(db, updated!) });
+      return { task, slice: d };
+    };
+    let updated: any;
+    if (relationalActive()) {
+      updated = await runRelationalWrite(businessId, taskPatchTx, {
+        load: {
+          tasks: {}, members: {}, leads: {}, bookings: {}, encounters: {}, contacts: {},
+          users: (partial) => {
+            const ids = new Set<string>((partial.members || []).map((m: any) => m.userId).filter(Boolean));
+            if (ids.size === 0) return null;
+            return { global: true, where: 'id = ANY($2)', args: [[...ids]] };
+          },
+        } as SliceSpec,
+      });
+    } else {
+      // A tx devolve { task, slice } — separar antes de montar a resposta.
+      const txOut = await updateDB(taskPatchTx);
+      const db = await readDB();
+      updated = { task: txOut.task, slice: db };
+    }
+    return NextResponse.json({ ok: true, task: view(updated.slice, updated.task!) });
   } catch (e: any) {
     return NextResponse.json({ ok: false, error: e?.message || 'Não foi possível atualizar a tarefa.' }, { status: e?.status || 400 });
   }

@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { updateDB } from '@/lib/db';
 import { requireBusiness } from '@/lib/access';
+import { relationalActive } from '@/lib/relational/config';
+import { runRelationalWrite, leadWriteSpec } from '@/lib/relational/slice';
 import { pushAudit } from '@/lib/audit';
 import { ingestLead } from '@/lib/pipeline';
 import { enqueueWebhookTx, deliverWebhookIds } from '@/lib/webhooks';
@@ -41,7 +43,8 @@ export async function POST(req: NextRequest) {
 
     let result!: ReturnType<typeof ingestLead>;
     const webhookDeliveryIds: string[] = [];
-    await updateDB((db: DB) => {
+    /** Mutação PURA (DOIS MOTORES): entrada manual pela porta oficial. */
+    const ingest = (db: DB) => {
       result = ingestLead(db, {
         businessId,
         name,
@@ -82,13 +85,29 @@ export async function POST(req: NextRequest) {
         isNew: result.isNew,
         source: 'manual',
       }).map((delivery) => delivery.id));
-    });
+    };
 
-    // O webhook é posterior à transação, como na captura pública. Falha de
-    // entrega não desfaz o lead já criado e não muda a semântica da rota.
-    try {
-      await deliverWebhookIds(webhookDeliveryIds);
-    } catch { /* a operação manual já foi persistida */ }
+    if (relationalActive()) {
+      // Mesma porta oficial sobre a fatia da unidade (identidades candidatas,
+      // pipeline, webhook config e equipe para validação do responsável).
+      // Entrega HTTP do webhook fica para o despachante (outbox 'pending' —
+      // matriz §3); o lead já nasce persistido no SQL.
+      await runRelationalWrite(businessId, ingest, {
+        load: leadWriteSpec({
+          phones: [phone.replace(/\D/g, '')],
+          emails: [email],
+          name,
+          assignedUserId,
+        }),
+      });
+    } else {
+      await updateDB(ingest);
+      // O webhook é posterior à transação, como na captura pública. Falha de
+      // entrega não desfaz o lead já criado e não muda a semântica da rota.
+      try {
+        await deliverWebhookIds(webhookDeliveryIds);
+      } catch { /* a operação manual já foi persistida */ }
+    }
 
     return NextResponse.json({
       ok: true,

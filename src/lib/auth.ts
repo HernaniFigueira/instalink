@@ -6,6 +6,10 @@ import { cookies } from 'next/headers';
 import type { NextResponse } from 'next/server';
 import { readDB, updateDB } from './db';
 import type { User } from './types';
+import { relationalActive } from './relational/config';
+import {
+  relUserBySession, relUserByEmail, relCreateSession, relDestroySession,
+} from './relational/auth-store';
 
 export const COOKIE_NAME = 'il_session';
 const SESSION_DAYS = 30;
@@ -31,6 +35,8 @@ export function verifyPassword(password: string, stored: string): boolean {
 }
 
 export async function createSession(userId: string): Promise<string> {
+  // MODO RELACIONAL: sessão vive no Postgres (mesmo cookie, mesmo TTL).
+  if (relationalActive()) return relCreateSession(userId);
   const id = randomUUID();
   const now = new Date();
   const expires = new Date(now.getTime() + SESSION_DAYS * 24 * 3600 * 1000);
@@ -41,6 +47,7 @@ export async function createSession(userId: string): Promise<string> {
 }
 
 export async function destroySession(sessionId: string): Promise<void> {
+  if (relationalActive()) return relDestroySession(sessionId);
   await updateDB((db) => {
     db.sessions = db.sessions.filter((s) => s.id !== sessionId);
   });
@@ -48,6 +55,8 @@ export async function destroySession(sessionId: string): Promise<void> {
 
 export async function getUserBySession(sessionId: string | undefined): Promise<User | null> {
   if (!sessionId) return null;
+  // MODO RELACIONAL: JOIN sessions×users no SQL — sem tocar o documento legado.
+  if (relationalActive()) return relUserBySession(sessionId);
   const db = await readDB();
   const session = db.sessions.find((s) => s.id === sessionId);
   if (!session) return null;

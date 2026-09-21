@@ -6,12 +6,17 @@ import { randomUUID } from 'node:crypto';
 import type { NextResponse } from 'next/server';
 import { readDB, updateDB } from './db';
 import type { Customer } from './types';
+import { relationalActive } from './relational/config';
+import {
+  relCustomerBySession, relCreateCustomerSession, relDestroyCustomerSession,
+} from './relational/auth-store';
 
 export const CUSTOMER_COOKIE = 'il_cust_session';
 const SESSION_DAYS = 90;
 export const CUSTOMER_MAX_AGE = SESSION_DAYS * 24 * 3600;
 
 export async function createCustomerSession(customerId: string): Promise<string> {
+  if (relationalActive()) return relCreateCustomerSession(customerId);
   const id = randomUUID();
   const now = new Date();
   const expires = new Date(now.getTime() + SESSION_DAYS * 24 * 3600 * 1000);
@@ -22,6 +27,7 @@ export async function createCustomerSession(customerId: string): Promise<string>
 }
 
 export async function destroyCustomerSession(sessionId: string): Promise<void> {
+  if (relationalActive()) return relDestroyCustomerSession(sessionId);
   await updateDB((db) => {
     db.customerSessions = db.customerSessions.filter((s) => s.id !== sessionId);
   });
@@ -29,6 +35,7 @@ export async function destroyCustomerSession(sessionId: string): Promise<void> {
 
 export async function getCustomerBySession(sessionId: string | undefined): Promise<Customer | null> {
   if (!sessionId) return null;
+  if (relationalActive()) return relCustomerBySession(sessionId) as Promise<Customer | null>;
   const db = await readDB();
   const session = db.customerSessions.find((s) => s.id === sessionId);
   if (!session) return null;

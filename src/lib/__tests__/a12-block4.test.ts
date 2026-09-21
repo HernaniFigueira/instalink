@@ -182,7 +182,7 @@ describe('B4 (servidor) — payload da Dashboard consolida sem mudar regra', () 
 
   it('payload entrega attention/links/tasksSummary e não tem mais `areas`', () => {
     expect(route).toMatch(/const attention = dashboardAttention\(/);
-    expect(route).toMatch(/const links = dashboardLinks\(guard\.ctx\.permissions\)/);
+    expect(route).toMatch(/const links = dashboardLinks\(ctx\.permissions\)/);
     expect(route).toMatch(/\n\s+attention,\n\s+links,\n\s+tasksSummary,/);
     expect(route).not.toMatch(/areas: context\.areas/);
   });
@@ -190,7 +190,7 @@ describe('B4 (servidor) — payload da Dashboard consolida sem mudar regra', () 
   it('tarefas vencidas vêm da MESMA engine (lib/automation/tasks), com permissão', () => {
     expect(route).toMatch(/import \{ summarizeTasks \} from '@\/lib\/automation\/tasks'/);
     expect(route).toMatch(/TASKS_PERMS: PermissionId\[\] = \['leads', 'agenda', 'clientes', 'config'\]/);
-    expect(route).toMatch(/canTasks \? summarizeTasks\(db, bId, today\) : null/);
+    expect(route).toMatch(/canTasks \? summarizeTasks\(db, bId, today/);
   });
 
   it('nenhum sistema novo de alerta/notificação/scheduler', () => {

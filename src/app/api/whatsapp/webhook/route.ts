@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { blockIfRelational } from '@/lib/relational/blocked';
 import { randomUUID } from 'node:crypto';
 import { readDB, updateDB } from '@/lib/db';
 import { upsertContact, findContact } from '@/lib/contacts';
@@ -17,10 +18,13 @@ import {
 } from '@/lib/whatsapp-cloud-api';
 import type { Message, Conversation, Business, DB } from '@/lib/types';
 
-// WEBHOOK do WhatsApp oficial (provedor → InstaLink).
+// WEBHOOK do WhatsApp oficial (provedor → GoDoutor).
 // GET  ?hub.mode=subscribe&hub.verify_token=… → handshake de verificação.
 // POST → recebe mensagens e atualizações de status da Meta com fail-closed.
 export async function GET(req: NextRequest) {
+  const blocked = blockIfRelational('Canais · WhatsApp (recebimento)');
+  if (blocked) return blocked;
+
   const q = req.nextUrl.searchParams;
   const mode = q.get('hub.mode');
   const token = q.get('hub.verify_token') || '';
@@ -152,6 +156,9 @@ function parseWebhookBatches(payload: any): WebhookChangeBatch[] {
 }
 
 export async function POST(req: NextRequest) {
+  const blocked = blockIfRelational('Canais · WhatsApp (recebimento)');
+  if (blocked) return blocked;
+
   try {
     const rawBody = await req.text();
     const signature = req.headers.get('x-hub-signature-256');

@@ -25,7 +25,7 @@ export const SERVICE_MODEL_OPTIONS: ServiceModelOption[] = [
   {
     id: 'agenda',
     label: 'Serviços e agendamento',
-    hint: 'Clientes marcam horário com você (o padrão do InstaLink).',
+    hint: 'Clientes marcam horário com você (o padrão do GoDoutor).',
   },
   {
     id: 'produtos',

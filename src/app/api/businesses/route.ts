@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { randomUUID } from 'node:crypto';
 import { readDB, updateDB } from '@/lib/db';
+import { relationalActive } from '@/lib/relational/config';
 import { userFromRequest } from '@/lib/auth';
 import { canManageOrganization, organizationsFor } from '@/lib/organization';
 import { pushAudit } from '@/lib/audit';
@@ -33,9 +34,38 @@ export async function POST(req: NextRequest) {
       .filter((m: string) => VALID_MODES.includes(m as BusinessMode)) as BusinessMode[];
     let slug = slugify(body.slug || name);
     if (!name) return NextResponse.json({ error: 'Dê um nome ao seu negócio.' }, { status: 400 });
-    // Lista vazia é permitida de propósito: o InstaLink também serve como
+    // Lista vazia é permitida de propósito: o GoDoutor também serve como
     // página de perfil (link na bio). O painel guia a ativação dos recursos.
     if (!isValidSlug(slug)) return NextResponse.json({ error: 'Esse endereço não é válido. Use ao menos 3 letras/números.' }, { status: 400 });
+
+    // MODO RELACIONAL: cadastro direto no SQL — organização autorizada no
+    // servidor, slug único com sufixo, página-template e auditoria na MESMA
+    // transação. O documento legado não é aberto.
+    if (relationalActive()) {
+      const { relCreateBusiness, relCanManageOrganization, relOrganizationsFor } = await import('@/lib/relational/unit-store');
+      const { defaultBlocks, defaultPresetId, defaultTheme, NEW_BUSINESS_DEFAULTS } = await import('@/lib/templates');
+      const { normalizeFeatures } = await import('@/lib/features');
+      const { defaultWhatsappIntegration } = await import('@/lib/whatsapp');
+      let organizationId = String(body.organizationId || '');
+      if (organizationId && !(await relCanManageOrganization(user, organizationId))) {
+        return NextResponse.json({ error: 'Você não pode adicionar unidades nesta organização.' }, { status: 403 });
+      }
+      if (!organizationId) organizationId = (await relOrganizationsFor(user)).find((o) => o.ownerId === user.id)?.id || '';
+      const created = await relCreateBusiness({
+        user, name, slug, niche, modes, organizationId,
+        whatsapp: String(body.whatsapp || '').slice(0, 20),
+        address: String(body.address || '').trim().slice(0, 240),
+        defaultBookingConfig, defaultWhatsappIntegration, normalizeFeatures,
+        defaultBlocks, defaultPresetId, defaultTheme, NEW_BUSINESS_DEFAULTS,
+        audit: {
+          action: 'unit.created', actor: user as any, businessId: '', meta: {}, at: new Date().toISOString(),
+        },
+      }).catch((e: any) => {
+        if (e?.code === 'ORG') throw Object.assign(new Error('ORGANIZATION_UNAVAILABLE'), { handled: true });
+        return Promise.reject(e);
+      });
+      return NextResponse.json({ ok: true, businessId: created.businessId, organizationId: created.organizationId, slug: created.slug });
+    }
 
     const db = await readDB();
     // Organização é resolvida e autorizada no servidor. Para contas legadas,
@@ -92,6 +122,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ ok: true, businessId, organizationId, slug });
   } catch (error) {
     if (error instanceof Error && error.message === 'ORGANIZATION_UNAVAILABLE') return NextResponse.json({ error: 'A organização não está mais disponível. Atualize a página.' }, { status: 409 });
+    if ((error as any)?.handled) return NextResponse.json({ error: 'A organização não está mais disponível. Atualize a página.' }, { status: 409 });
     return NextResponse.json({ error: 'Não conseguimos criar seu negócio. Tente novamente.' }, { status: 500 });
   }
 }

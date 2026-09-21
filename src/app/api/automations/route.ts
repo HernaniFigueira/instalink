@@ -17,6 +17,7 @@
 // gravada se o gatilho existir, as condições usarem campos conhecidos, as ações
 // existirem no catálogo e o grafo não tiver ciclo sem espera nem nó órfão.
 import { NextRequest, NextResponse } from 'next/server';
+import { blockIfRelational } from '@/lib/relational/blocked';
 import { randomUUID } from 'node:crypto';
 import { readDB, updateDB } from '@/lib/db';
 import { requireBusiness } from '@/lib/access';
@@ -59,6 +60,9 @@ function validateForBusiness(db: DB, businessId: string, draft: Record<string, a
 }
 
 export async function GET(req: NextRequest) {
+  const blocked = blockIfRelational('Automações (configuração)');
+  if (blocked) return blocked;
+
   const businessId = businessIdOf(req);
   const guard = await requireBusiness(req, businessId, 'config');
   if (!guard.ok) return guard.res;
@@ -105,6 +109,9 @@ export async function GET(req: NextRequest) {
 }
 
 export async function POST(req: NextRequest) {
+  const blocked = blockIfRelational('Automações (configuração)');
+  if (blocked) return blocked;
+
   try {
     const body = await req.json().catch(() => ({} as Record<string, any>));
     const businessId = businessIdOf(req, body);
@@ -280,6 +287,9 @@ export async function POST(req: NextRequest) {
 }
 
 export async function PATCH(req: NextRequest) {
+  const blocked = blockIfRelational('Automações (configuração)');
+  if (blocked) return blocked;
+
   try {
     const body = await req.json().catch(() => ({} as Record<string, any>));
     const businessId = businessIdOf(req, body);
@@ -355,6 +365,9 @@ export async function PATCH(req: NextRequest) {
 }
 
 export async function DELETE(req: NextRequest) {
+  const blocked = blockIfRelational('Automações (configuração)');
+  if (blocked) return blocked;
+
   try {
     const body = await req.json().catch(() => ({} as Record<string, any>));
     const businessId = businessIdOf(req, body);

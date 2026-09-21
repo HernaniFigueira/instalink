@@ -4,6 +4,8 @@ import { readDB, updateDB } from '@/lib/db';
 import { hashPassword } from '@/lib/auth';
 import { requireBusiness, PERMISSIONS, ROLES, isValidPermission, isValidRole, permissionsFor } from '@/lib/access';
 import { pushAudit } from '@/lib/audit';
+import { relationalActive } from '@/lib/relational/config';
+import { runRelationalWrite, runRelationalRead } from '@/lib/relational/slice';
 import type { BusinessMember, MemberRole, PermissionId } from '@/lib/types';
 import { professionalForUser } from '@/lib/access';
 
@@ -20,20 +22,27 @@ import { professionalForUser } from '@/lib/access';
 // O vínculo NÃO cria usuário, NÃO cria papel novo e NÃO substitui as
 // permissões do papel — ele só define o escopo de agenda (o profissional vê
 // apenas a própria agenda, aplicado no backend).
-export async function GET(req: NextRequest) {
-  const businessId = req.nextUrl.searchParams.get('businessId') || '';
-  const guard = await requireBusiness(req, businessId, 'equipe');
-  if (!guard.ok) return guard.res;
-  const { db, ctx } = guard;
-  const members = db.members.filter((m) => m.businessId === businessId);
-  const users = new Map(db.users.map((u) => [u.id, u]));
-  const professionals = db.professionals.filter((p) => p.businessId === businessId);
-  return NextResponse.json({
+//
+// DOIS MOTORES: as mutações são funções PURAS sobre um doc mínimo (fatia).
+// O modo relacional carrega via runRelationalRead/runRelationalWrite — as
+// mesmas re-checagens de governança rodam DENTRO da transação (lock por
+// unidade), então nenhuma decisão usa o documento legado.
+function httpError(status: number, message: string) {
+  return Object.assign(new Error(message), { status });
+}
+
+/** View PURA (DOIS motores): payload da tela Equipe a partir de um doc mínimo. */
+function teamView(db: any, ctx: any) {
+  const businessId = ctx.business.id;
+  const members = (db.members || []).filter((m: any) => m.businessId === businessId);
+  const users = new Map<string, any>((db.users || []).map((u: any) => [u.id, u] as [string, any]));
+  const professionals = (db.professionals || []).filter((p: any) => p.businessId === businessId);
+  return {
     roles: ROLES,
     permissions: PERMISSIONS,
     // Profissionais da unidade + quem já está vinculado (para a vinculação
     // simples na tela de Equipe). Nenhum dado de outra unidade entra aqui.
-    professionals: professionals.map((p) => ({
+    professionals: professionals.map((p: any) => ({
       id: p.id, name: p.name, role: p.role || '',
       active: p.active !== false, userId: p.userId || '',
       // A3.4 — foto: a MESMA pessoa não pode aparecer com foto numa tela e com
@@ -43,10 +52,10 @@ export async function GET(req: NextRequest) {
     })),
     me: { userId: ctx.user.id, role: ctx.role, isOwner: ctx.isOwner, permissions: ctx.permissions },
     owner: (() => {
-      const o = db.users.find((u) => u.id === ctx.business.ownerId);
+      const o = (db.users || []).find((u: any) => u.id === ctx.business.ownerId);
       return o ? { userId: o.id, name: o.name, email: o.email, role: 'OWNER' as MemberRole } : null;
     })(),
-    members: members.map((m) => {
+    members: members.map((m: any) => {
       const u = users.get(m.userId);
       const linked = professionalForUser(db, businessId, m.userId);
       return {
@@ -60,7 +69,31 @@ export async function GET(req: NextRequest) {
         professionalPhoto: linked?.photo || '',
       };
     }),
-  });
+  };
+}
+
+export async function GET(req: NextRequest) {
+  const businessId = req.nextUrl.searchParams.get('businessId') || '';
+  const guard = await requireBusiness(req, businessId, 'equipe');
+  if (!guard.ok) return guard.res;
+  const { ctx } = guard;
+  if (relationalActive()) {
+    // Fatia DIRECIONADA: membros + profissionais da unidade e SOMENTE os
+    // usuários referenciados (membros + proprietário). Nada mais.
+    const db = await runRelationalRead(businessId, {
+      members: {},
+      professionals: {},
+      users: (partial) => {
+        const ids = new Set<string>((partial.members || []).map((m: any) => m.userId).filter(Boolean));
+        const ownerId = partial.businesses?.[0]?.ownerId;
+        if (ownerId) ids.add(ownerId);
+        if (ids.size === 0) return null;
+        return { global: true, where: 'id = ANY($2)', args: [[...ids]] };
+      },
+    });
+    return NextResponse.json(teamView(db, ctx));
+  }
+  return NextResponse.json(teamView(guard.db, ctx));
 }
 
 export async function POST(req: NextRequest) {
@@ -95,22 +128,22 @@ export async function POST(req: NextRequest) {
       }
     }
 
-    // E-mail já existe = pessoa que já tem login (outro negócio). NUNCA
-    // duplicamos conta nem sobrescrevemos senha: apenas vinculamos.
-    const db0 = await readDB();
-    if (db0.members.some((m) => m.businessId === businessId && db0.users.find((u) => u.id === m.userId)?.email === email)) {
-      return NextResponse.json({ error: 'Esta pessoa já faz parte da equipe.' }, { status: 400 });
-    }
-    const existingUser = db0.users.find((u) => u.email === email);
-    if (requestedProfessionalId) {
-      const target = db0.professionals.find((p) => p.id === requestedProfessionalId && p.businessId === businessId);
-      if (!target) return NextResponse.json({ error: 'Profissional não encontrado nesta unidade.' }, { status: 404 });
-      if (target.userId && target.userId !== existingUser?.id) {
-        return NextResponse.json({ error: 'Este profissional já está vinculado a outro login.' }, { status: 400 });
+    /** Mutação PURA (DOIS motores): cria/vincula login + membro + agenda.
+     * Re-checa TUDO sob lock (mesma ordem e mensagens do legado). */
+    const teamCreateTx = (db: any) => {
+      // E-mail já existe = pessoa que já tem login (outro negócio). NUNCA
+      // duplicamos conta nem sobrescrevemos senha: apenas vinculamos.
+      if ((db.members || []).some((m: any) => (db.users || []).find((u: any) => u.id === m.userId)?.email === email)) {
+        throw httpError(400, 'Esta pessoa já faz parte da equipe.');
       }
-    }
-
-    const created = await updateDB((db) => {
+      const existingUser = (db.users || []).find((u: any) => u.email === email);
+      if (requestedProfessionalId) {
+        const target = (db.professionals || []).find((p: any) => p.id === requestedProfessionalId && p.businessId === businessId);
+        if (!target) throw httpError(404, 'Profissional não encontrado nesta unidade.');
+        if (target.userId && target.userId !== existingUser?.id) {
+          throw httpError(400, 'Este profissional já está vinculado a outro login.');
+        }
+      }
       const now = new Date().toISOString();
       let userId = existingUser?.id || '';
       if (!userId) {
@@ -125,7 +158,7 @@ export async function POST(req: NextRequest) {
       };
       db.members.push(member);
       if (requestedProfessionalId) {
-        const pro = db.professionals.find((p) => p.id === requestedProfessionalId && p.businessId === businessId);
+        const pro = (db.professionals || []).find((p: any) => p.id === requestedProfessionalId && p.businessId === businessId);
         if (pro) {
           pro.userId = userId;
           pushAudit(db, {
@@ -139,11 +172,44 @@ export async function POST(req: NextRequest) {
         supportSessionId: ctx.support?.id, meta: { role, linkedExistingUser: !!existingUser, email },
       });
       return { member, linked: !!existingUser };
-    });
+    };
 
+    if (relationalActive()) {
+      // Fatia: membros/profissionais da unidade + o usuário do e-mail
+      // informado e os usuários já membros da unidade (checagem de duplicata).
+      const created = await runRelationalWrite(businessId, teamCreateTx, {
+        load: {
+          members: {},
+          professionals: {},
+          users: {
+            global: true,
+            where: `lower(email) = $2 OR id IN (SELECT user_id FROM app.members WHERE business_id = $1)`,
+            args: [email],
+          },
+        },
+      });
+      return NextResponse.json({ ok: true, linkedExistingUser: created.linked, memberId: created.member.id });
+    }
+
+    // Pré-checagem legada fora da transação (mesmo comportamento histórico);
+    // a própria tx re-checa sob lock — a fn é compartilhada.
+    const db0 = await readDB();
+    if (db0.members.some((m) => m.businessId === businessId && db0.users.find((u) => u.id === m.userId)?.email === email)) {
+      return NextResponse.json({ error: 'Esta pessoa já faz parte da equipe.' }, { status: 400 });
+    }
+    const existingUser = db0.users.find((u) => u.email === email);
+    if (requestedProfessionalId) {
+      const target = db0.professionals.find((p) => p.id === requestedProfessionalId && p.businessId === businessId);
+      if (!target) return NextResponse.json({ error: 'Profissional não encontrado nesta unidade.' }, { status: 404 });
+      if (target.userId && target.userId !== existingUser?.id) {
+        return NextResponse.json({ error: 'Este profissional já está vinculado a outro login.' }, { status: 400 });
+      }
+    }
+    const created = await updateDB(teamCreateTx);
     return NextResponse.json({ ok: true, linkedExistingUser: created.linked, memberId: created.member.id });
-  } catch {
-    return NextResponse.json({ error: 'Não foi possível criar o acesso.' }, { status: 500 });
+  } catch (e: any) {
+    const status = Number(e?.status) || 500;
+    return NextResponse.json({ error: status === 500 ? 'Não foi possível criar o acesso.' : e.message }, { status });
   }
 }
 
@@ -153,29 +219,30 @@ export async function PATCH(req: NextRequest) {
     const businessId = String(body.businessId || '');
     const guard = await requireBusiness(req, businessId, 'equipe');
     if (!guard.ok) return guard.res;
-    const { ctx, db } = guard;
-    const member = db.members.find((m) => m.id === String(body.id) && m.businessId === businessId);
-    if (!member) return NextResponse.json({ error: 'Membro não encontrado.' }, { status: 404 });
-    if (member.role === 'OWNER') return NextResponse.json({ error: 'O proprietário não pode ser editado.' }, { status: 403 });
-    if (!ctx.isOwner && ctx.role !== 'ADMIN' && member.role === 'ADMIN') {
-      return NextResponse.json({ error: 'Sem permissão para editar administradores.' }, { status: 403 });
-    }
-    if (body.role !== undefined && body.role === 'ADMIN' && !ctx.isOwner && ctx.role !== 'ADMIN') {
-      return NextResponse.json({ error: 'Sem permissão para promover a administrador.' }, { status: 403 });
-    }
+    const { ctx } = guard;
 
     const linkRequested = body.professionalId !== undefined;
     const nextProfessionalId = linkRequested ? String(body.professionalId || '').trim() : '';
-    if (linkRequested && nextProfessionalId) {
-      const target = db.professionals.find((p) => p.id === nextProfessionalId && p.businessId === businessId);
-      if (!target) return NextResponse.json({ error: 'Profissional não encontrado nesta unidade.' }, { status: 404 });
-      if (target.userId && target.userId !== member.userId) {
-        return NextResponse.json({ error: 'Este profissional já está vinculado a outro login.' }, { status: 400 });
-      }
-    }
 
-    const updated = await updateDB((d) => {
-      const m = d.members.find((x) => x.id === member.id)!;
+    /** Mutação PURA (DOIS motores): papel/permissões/nota/vínculo de agenda.
+     * Governança re-checada dentro da transação (mesmas mensagens do legado). */
+    const teamPatchTx = (d: any) => {
+      const m = (d.members || []).find((x: any) => x.id === String(body.id) && x.businessId === businessId);
+      if (!m) throw httpError(404, 'Membro não encontrado.');
+      if (m.role === 'OWNER') throw httpError(403, 'O proprietário não pode ser editado.');
+      if (!ctx.isOwner && ctx.role !== 'ADMIN' && m.role === 'ADMIN') {
+        throw httpError(403, 'Sem permissão para editar administradores.');
+      }
+      if (body.role !== undefined && body.role === 'ADMIN' && !ctx.isOwner && ctx.role !== 'ADMIN') {
+        throw httpError(403, 'Sem permissão para promover a administrador.');
+      }
+      if (linkRequested && nextProfessionalId) {
+        const target = (d.professionals || []).find((p: any) => p.id === nextProfessionalId && p.businessId === businessId);
+        if (!target) throw httpError(404, 'Profissional não encontrado nesta unidade.');
+        if (target.userId && target.userId !== m.userId) {
+          throw httpError(400, 'Este profissional já está vinculado a outro login.');
+        }
+      }
       if (isValidRole(body.role) && body.role !== 'OWNER') m.role = body.role;
       if (typeof body.active === 'boolean') m.active = body.active;
       if (body.note !== undefined) m.note = String(body.note || '').slice(0, 200);
@@ -188,11 +255,11 @@ export async function PATCH(req: NextRequest) {
       }
       if (linkRequested) {
         // Um login aponta para no máximo UM profissional nesta unidade.
-        for (const p of d.professionals) {
+        for (const p of d.professionals || []) {
           if (p.businessId === businessId && p.userId === m.userId) p.userId = '';
         }
         if (nextProfessionalId) {
-          const pro = d.professionals.find((p) => p.id === nextProfessionalId && p.businessId === businessId);
+          const pro = (d.professionals || []).find((p: any) => p.id === nextProfessionalId && p.businessId === businessId);
           if (pro) pro.userId = m.userId;
         }
         pushAudit(d, {
@@ -207,10 +274,20 @@ export async function PATCH(req: NextRequest) {
         supportSessionId: ctx.support?.id, meta: { memberId: m.id, role: m.role, active: m.active },
       });
       return m;
-    });
+    };
+
+    let updated: any;
+    if (relationalActive()) {
+      updated = await runRelationalWrite(businessId, teamPatchTx, {
+        load: { members: {}, professionals: {} },
+      });
+    } else {
+      updated = await updateDB(teamPatchTx);
+    }
     return NextResponse.json({ ok: true, member: { id: updated.id, role: updated.role, active: updated.active } });
-  } catch {
-    return NextResponse.json({ error: 'Não foi possível atualizar o membro.' }, { status: 500 });
+  } catch (e: any) {
+    const status = Number(e?.status) || 500;
+    return NextResponse.json({ error: status === 500 ? 'Não foi possível atualizar o membro.' : e.message }, { status });
   }
 }
 
@@ -220,15 +297,73 @@ export async function DELETE(req: NextRequest) {
     const id = req.nextUrl.searchParams.get('id') || '';
     const guard = await requireBusiness(req, businessId, 'equipe');
     if (!guard.ok) return guard.res;
-    const { ctx, db } = guard;
-    const member = db.members.find((m) => m.id === id && m.businessId === businessId);
+    const { ctx } = guard;
+
+    if (relationalActive()) {
+      // Pré-leitura PONTUAL (fora da fatia): papel do membro e se o login
+      // sobrevive em outra unidade/unidade própria — a decisão de apagar
+      // sessões é GLOBAL (membros de outras unidades não entram na fatia).
+      const { getPool } = await import('@/lib/relational/pool');
+      const pool = getPool();
+      const mem = await pool.query(
+        'SELECT id, user_id, role FROM app.members WHERE id = $1 AND business_id = $2',
+        [id, businessId],
+      );
+      if (mem.rows.length === 0) return NextResponse.json({ error: 'Membro não encontrado.' }, { status: 404 });
+      const memberUserId = String(mem.rows[0].user_id || '');
+      const memberRole = String(mem.rows[0].role || '');
+      if (memberUserId === ctx.user.id) {
+        return NextResponse.json({ error: 'Você não pode remover seu próprio acesso.' }, { status: 400 });
+      }
+      if (memberRole === 'ADMIN' && !ctx.isOwner && ctx.role !== 'ADMIN') {
+        return NextResponse.json({ error: 'Sem permissão para remover administradores.' }, { status: 403 });
+      }
+      const surv = await pool.query(
+        `SELECT EXISTS(SELECT 1 FROM app.members WHERE user_id = $1 AND id <> $2 AND active = true) AS still_member,
+                EXISTS(SELECT 1 FROM app.businesses WHERE owner_id = $1) AS owns_anything`,
+        [memberUserId, id],
+      );
+      const mayDropSessions = surv.rows[0].still_member !== true && surv.rows[0].owns_anything !== true;
+
+      /** Mutação PURA (relacional): remove membro, desvincula agenda e,
+       * se o login não sobrevive em nenhum outro lugar, derruba sessões. */
+      const removeTx = (d: any) => {
+        d.members = (d.members || []).filter((x: any) => x.id !== id);
+        // Remove o vínculo de agenda deste login nesta unidade: sem acesso, o
+        // profissional deixa de aparecer como "com login" (a categoria
+        // profissional em si NÃO é apagada — só o vínculo).
+        for (const p of d.professionals || []) {
+          if (p.businessId === businessId && p.userId === memberUserId) p.userId = '';
+        }
+        if (mayDropSessions) {
+          d.sessions = (d.sessions || []).filter((sess: any) => sess.userId !== memberUserId);
+        }
+        pushAudit(d, {
+          action: 'member.removed', actor: { ...ctx.user, role: ctx.role }, businessId,
+          supportSessionId: ctx.support?.id, meta: { memberId: id, role: memberRole },
+        });
+        return true;
+      };
+      await runRelationalWrite(businessId, removeTx, {
+        load: {
+          members: { where: 'id = $2', args: [id] },
+          professionals: {},
+          sessions: { global: true, where: 'user_id = $2', args: [memberUserId] },
+        },
+      });
+      return NextResponse.json({ ok: true });
+    }
+
+    // Legado (caminho de rollback): comportamento histórico intacto.
+    const legacyGuard = guard as unknown as { db: any };
+    const member = legacyGuard.db.members.find((m: any) => m.id === id && m.businessId === businessId);
     if (!member) return NextResponse.json({ error: 'Membro não encontrado.' }, { status: 404 });
     if (member.userId === ctx.user.id) return NextResponse.json({ error: 'Você não pode remover seu próprio acesso.' }, { status: 400 });
     if (member.role === 'ADMIN' && !ctx.isOwner && ctx.role !== 'ADMIN') {
       return NextResponse.json({ error: 'Sem permissão para remover administradores.' }, { status: 403 });
     }
     await updateDB((d) => {
-      d.members = d.members.filter((x) => x.id !== member.id);
+      d.members = d.members.filter((x: any) => x.id !== member.id);
       // Remove o vínculo de agenda deste login nesta unidade: sem acesso, o
       // profissional deixa de aparecer como "com login" (a categoria
       // profissional em si NÃO é apagada — só o vínculo).
@@ -236,10 +371,10 @@ export async function DELETE(req: NextRequest) {
         if (p.businessId === businessId && p.userId === member.userId) p.userId = '';
       }
       // Sessões do usuário removido caem junto (isolamento imediato).
-      const stillMember = d.members.some((x) => x.userId === member.userId && x.active !== false);
-      const ownsAnything = d.businesses.some((b) => b.ownerId === member.userId);
+      const stillMember = d.members.some((x: any) => x.userId === member.userId && x.active !== false);
+      const ownsAnything = d.businesses.some((b: any) => b.ownerId === member.userId);
       if (!stillMember && !ownsAnything) {
-        d.sessions = d.sessions.filter((s) => s.userId !== member.userId);
+        d.sessions = d.sessions.filter((s: any) => s.userId !== member.userId);
       }
       pushAudit(d, {
         action: 'member.removed', actor: { ...ctx.user, role: ctx.role }, businessId,
@@ -247,7 +382,8 @@ export async function DELETE(req: NextRequest) {
       });
     });
     return NextResponse.json({ ok: true });
-  } catch {
-    return NextResponse.json({ error: 'Não foi possível remover o acesso.' }, { status: 500 });
+  } catch (e: any) {
+    const status = Number(e?.status) || 500;
+    return NextResponse.json({ error: status === 500 ? 'Não foi possível remover o acesso.' : e.message }, { status });
   }
 }

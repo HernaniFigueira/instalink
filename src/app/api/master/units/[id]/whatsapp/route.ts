@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { blockIfRelational } from '@/lib/relational/blocked';
 import { requireMaster } from '@/lib/access';
 import { pushAudit } from '@/lib/audit';
 import { updateDB } from '@/lib/db';
@@ -11,6 +12,9 @@ import { onlyDigits } from '@/lib/utils';
 // Permite cadastrar e validar credenciais seguras por unidade.
 // Os tokens são criptografados com AES-256-GCM em repouso e NUNCA retornados na API.
 export async function GET(req: NextRequest, { params }: { params: { id: string } | Promise<{ id: string }> }) {
+  const blocked = blockIfRelational('Master · WhatsApp da unidade');
+  if (blocked) return blocked;
+
   const guard = await requireMaster(req);
   if (!guard.ok) return guard.res;
   const { db } = guard;
@@ -41,6 +45,9 @@ export async function GET(req: NextRequest, { params }: { params: { id: string }
 }
 
 export async function POST(req: NextRequest, { params }: { params: { id: string } | Promise<{ id: string }> }) {
+  const blocked = blockIfRelational('Master · WhatsApp da unidade');
+  if (blocked) return blocked;
+
   const guard = await requireMaster(req);
   if (!guard.ok) return guard.res;
   const { db, user } = guard;

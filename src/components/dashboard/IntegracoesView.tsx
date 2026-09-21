@@ -292,7 +292,7 @@ export function IntegracoesView() {
               <div>
                 <h3 className="font-semibold text-sm text-zinc-900">Chaves de API para Integrações</h3>
                 <p className="text-xs text-zinc-500 mt-0.5">
-                  Conecte seu site externo, formulário ou sistema próprio diretamente ao InstaLink com segurança isolada por negócio.
+                  Conecte seu site externo, formulário ou sistema próprio diretamente ao GoDoutor com segurança isolada por negócio.
                 </p>
               </div>
               <button
@@ -809,7 +809,7 @@ print(res.json())`}</pre>
                   <input
                     type="url"
                     required
-                    placeholder="https://seusite.com/api/webhooks/instalink"
+                    placeholder="https://seusite.com/api/webhooks/godoutor"
                     value={webhookUrl}
                     onChange={(e) => setWebhookUrl(e.target.value)}
                     className="w-full text-xs p-2.5 rounded-lg border border-zinc-300"

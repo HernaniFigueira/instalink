@@ -1,6 +1,7 @@
 import { toPublicBusiness } from './public-business';
 import { cookies } from 'next/headers';
 import { readDB } from './db';
+import { relationalActive } from './relational/config';
 import { COOKIE_NAME, getUserBySession } from './auth';
 import type { Business, BusinessAgent, Category, DB, Page, Product, ProductOption, ProductOptionValue, Professional, PublicBusiness, Review, Service } from './types';
 import { agentFor, defaultAgent } from './agent';
@@ -37,6 +38,29 @@ function emptyPublicBusiness(b: Business): PublicBusiness {
 }
 
 export async function getPublicData(slug: string): Promise<(PublicData & { notFound?: boolean; notPublished?: boolean }) | null> {
+  // MODO RELACIONAL: página pública lida do SQL (consultas por unidade) — o
+  // documento legado não é aberto. Mesmo contrato, mesmas sanitizações.
+  if (relationalActive()) {
+    const { relPublicData } = await import('./relational/public-store');
+    const rel = await relPublicData(slug);
+    if (!rel) return null;
+    if (rel.notPublished) {
+      return {
+        business: emptyPublicBusiness(rel.business as Business), page: rel.page,
+        categories: [], products: [], options: [], optionValues: [], services: [],
+        serviceCategories: [], professionals: [], reviews: [],
+        isOwnerPreview: false, notPublished: true, agent: rel.agent, openNow: null,
+      };
+    }
+    return {
+      business: toPublicBusiness(rel.business as Business), page: rel.page,
+      openNow: rel.openNow,
+      categories: rel.categories, products: rel.products, options: rel.options,
+      optionValues: rel.optionValues, services: rel.services,
+      serviceCategories: rel.serviceCategories, professionals: rel.professionals,
+      reviews: rel.reviews, isOwnerPreview: rel.isOwnerPreview, agent: rel.agent,
+    };
+  }
   const db: DB = await readDB();
   const business = db.businesses.find((b) => b.slug === slug);
   if (!business) return null;

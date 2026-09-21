@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { blockIfRelational } from '@/lib/relational/blocked';
 import { requireMaster } from '@/lib/access';
 import { pushAudit } from '@/lib/audit';
 import { updateDB } from '@/lib/db';
@@ -10,6 +11,9 @@ import { safeUserView } from '@/lib/master';
 // Detalhe de uma unidade (leitura de plataforma). NÃO concede acesso
 // operacional — para operar, o Master inicia SupportSession.
 export async function GET(req: NextRequest, { params }: { params: { id: string } }) {
+  const blocked = blockIfRelational('Master · unidade');
+  if (blocked) return blocked;
+
   const guard = await requireMaster(req);
   if (!guard.ok) return guard.res;
   const { db, user } = guard;

@@ -14,6 +14,8 @@ import { NextRequest, NextResponse } from 'next/server';
 import { updateDB } from '@/lib/db';
 import { requireBusiness } from '@/lib/access';
 import { pushAudit } from '@/lib/audit';
+import { relationalActive } from '@/lib/relational/config';
+import { runRelationalWrite, runRelationalRead } from '@/lib/relational/slice';
 import { EXPORT_LIMIT, filterContactsForExport } from '@/lib/client-export';
 import { exportContactsCSV } from '@/lib/client-import';
 
@@ -26,19 +28,37 @@ export async function GET(req: NextRequest) {
   const marketingOnly = req.nextUrl.searchParams.get('marketing') === '1';
   const max = Math.min(EXPORT_LIMIT, Math.max(1, Number(req.nextUrl.searchParams.get('max')) || EXPORT_LIMIT));
 
-  const mine = guard.db.contacts.filter((c) => c.businessId === businessId);
-  const rows = filterContactsForExport(mine, { q, marketingOnly, max });
-  const csv = exportContactsCSV(rows);
+  let rows: any[];
+  if (relationalActive()) {
+    // Base da unidade vem do SQL (somente contatos); a auditoria da saída de
+    // dado pessoal é gravada na mesma transação da fatia.
+    const db = await runRelationalRead(businessId, { contacts: {} });
+    const mine = (db.contacts || []).filter((c: any) => c.businessId === businessId);
+    rows = filterContactsForExport(mine as any, { q, marketingOnly, max }) as any[];
+    await runRelationalWrite(businessId, (d: any) => {
+      pushAudit(d, {
+        action: 'contact.exported',
+        actor: guard.ctx.user,
+        businessId,
+        meta: { rows: rows.length, q: q.trim(), marketingOnly },
+      });
+      return true;
+    }, { load: {} });
+  } else {
+    const mine = guard.db.contacts.filter((c) => c.businessId === businessId);
+    rows = filterContactsForExport(mine, { q, marketingOnly, max }) as any[];
 
-  // Exportação é saída de dado pessoal: fica registrada (quem, quando, quanto).
-  await updateDB((db) => {
-    pushAudit(db, {
-      action: 'contact.exported',
-      actor: guard.ctx.user,
-      businessId,
-      meta: { rows: rows.length, q: q.trim(), marketingOnly },
+    // Exportação é saída de dado pessoal: fica registrada (quem, quando, quanto).
+    await updateDB((db) => {
+      pushAudit(db, {
+        action: 'contact.exported',
+        actor: guard.ctx.user,
+        businessId,
+        meta: { rows: rows.length, q: q.trim(), marketingOnly },
+      });
     });
-  });
+  }
+  const csv = exportContactsCSV(rows as any);
 
   const stamp = new Date().toISOString().slice(0, 10);
   return new NextResponse(csv, {

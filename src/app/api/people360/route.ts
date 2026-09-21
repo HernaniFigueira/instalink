@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { requireBusiness } from '@/lib/access';
+import { relationalActive } from '@/lib/relational/config';
+import { runRelationalRead } from '@/lib/relational/slice';
 import { contactNotes } from '@/lib/contacts';
 import { getBusinessPipeline, normalizeLeadStageId } from '@/lib/pipeline';
 import { taskDueLabel } from '@/lib/automation/tasks';
@@ -33,7 +35,24 @@ export async function GET(req: NextRequest) {
   const limit = 30;
   const guard = await requireBusiness(req, businessId, 'clientes');
   if (!guard.ok) return guard.res;
-  const db = guard.db;
+  // DOIS MOTORES: a agregação 360 é inteiramente da UNIDADE (contatos, pedidos,
+  // agenda, esteira, conversas, tarefas) + contas globais referenciadas +
+  // nomes de responsáveis. No relacional chega da fatia direcionada; as regras
+  // de dedupe/identidade seguem nas fns puras abaixo (idênticas nos dois).
+  const db: any = relationalActive()
+    ? await runRelationalRead(businessId, {
+        contacts: {}, orders: {}, bookings: {}, leads: {}, conversations: {}, tasks: {}, members: {},
+        customers: () => ({}),
+        users: (partial: any) => {
+          const ids = new Set<string>(
+            (partial.members || []).map((m: any) => m.userId).filter(Boolean)
+              .concat((partial.tasks || []).map((t: any) => t.assignedUserId).filter(Boolean)),
+          );
+          if (ids.size === 0) return null;
+          return { global: true, where: 'id = ANY($2)', args: [[...ids]] };
+        },
+      })
+    : guard.db;
 
   interface P {
     key: string;
@@ -77,29 +96,29 @@ export async function GET(req: NextRequest) {
     lastSeen: string;
   }
 
-  const contacts = db.contacts.filter((x) => x.businessId === businessId);
-  const orders = db.orders.filter((x) => x.businessId === businessId);
-  const bookings = db.bookings.filter((x) => x.businessId === businessId);
-  const leads = db.leads.filter((x) => x.businessId === businessId);
-  const conversations = db.conversations.filter((x) => x.businessId === businessId);
-  const tasks = (db.tasks || []).filter((x) => x.businessId === businessId);
+  const contacts = db.contacts.filter((x: any) => x.businessId === businessId);
+  const orders = db.orders.filter((x: any) => x.businessId === businessId);
+  const bookings = db.bookings.filter((x: any) => x.businessId === businessId);
+  const leads = db.leads.filter((x: any) => x.businessId === businessId);
+  const conversations = db.conversations.filter((x: any) => x.businessId === businessId);
+  const tasks = (db.tasks || []).filter((x: any) => x.businessId === businessId);
 
   // Monta todos os aliases ANTES de criar o Map. Assim, quando um contato
   // legado passa de `phone` para `customerId`, o componente já conhece os dois
   // lados e nenhum evento histórico precisa ser regravado ou migrado.
   const identityRecords: People360Identity[] = [
-    ...contacts.map((c) => ({ customerId: c.customerId, phone: c.phone, contactId: c.id })),
-    ...orders.map((o) => ({ customerId: o.customerId, phone: o.customerPhone })),
-    ...bookings.map((b) => ({ customerId: b.customerId, phone: b.customerPhone })),
-    ...leads.map((l) => ({ customerId: l.customerId, phone: l.phone })),
-    ...conversations.map((c) => ({ customerId: c.customerId, phone: c.phone, contactId: c.contactId })),
+    ...contacts.map((c: any) => ({ customerId: c.customerId, phone: c.phone, contactId: c.id })),
+    ...orders.map((o: any) => ({ customerId: o.customerId, phone: o.customerPhone })),
+    ...bookings.map((b: any) => ({ customerId: b.customerId, phone: b.customerPhone })),
+    ...leads.map((l: any) => ({ customerId: l.customerId, phone: l.phone })),
+    ...conversations.map((c: any) => ({ customerId: c.customerId, phone: c.phone, contactId: c.contactId })),
   ];
 
   for (const task of tasks) {
-    const linkedLead = task.leadId ? leads.find((l) => l.id === task.leadId) : undefined;
-    const linkedBooking = task.bookingId ? bookings.find((b) => b.id === task.bookingId) : undefined;
+    const linkedLead = task.leadId ? leads.find((l: any) => l.id === task.leadId) : undefined;
+    const linkedBooking = task.bookingId ? bookings.find((b: any) => b.id === task.bookingId) : undefined;
     const linkedContact = task.customerId
-      ? contacts.find((c) => c.id === task.customerId || c.customerId === task.customerId)
+      ? contacts.find((c: any) => c.id === task.customerId || c.customerId === task.customerId)
       : undefined;
     if (linkedLead) identityRecords.push({ customerId: linkedLead.customerId, phone: linkedLead.phone });
     else if (linkedBooking) identityRecords.push({ customerId: linkedBooking.customerId, phone: linkedBooking.customerPhone });
@@ -112,7 +131,7 @@ export async function GET(req: NextRequest) {
   const selectedContact = new Map<P, { hasCustomer: boolean; createdAt: string; id: string }>();
 
   const accountFor = (p: P): void => {
-    const account = p.customerId ? db.customers.find((customer) => customer.id === p.customerId) : undefined;
+    const account = p.customerId ? db.customers.find((customer: any) => customer.id === p.customerId) : undefined;
     p.registered = !!account;
     p.accountStatus = account ? 'active' : 'none';
     p.accountEmail = account?.email || '';
@@ -186,7 +205,7 @@ export async function GET(req: NextRequest) {
   }
 
   // 2. Agregados de interação (pedidos / agendamentos / leads) da pessoa.
-  const services = new Map(db.services.filter((s) => s.businessId === businessId).map((s) => [s.id, s.name]));
+  const services = new Map(db.services.filter((s: any) => s.businessId === businessId).map((s: any) => [s.id, s.name]));
   for (const o of orders) {
     const p = get(o.customerId, o.customerPhone, o.customerName);
     if (!p) continue;
@@ -214,7 +233,7 @@ export async function GET(req: NextRequest) {
     const p = get(l.customerId, l.phone, l.name);
     if (!p) continue;
     const stageId = normalizeLeadStageId(pipeline, l);
-    const stage = pipeline.stages.find((s) => s.id === stageId);
+    const stage = pipeline.stages.find((s: any) => s.id === stageId);
     p.leads.push({ id: l.id, origin: l.origin, status: l.status, stageId, stageName: stage?.name || stageId, interest: l.interest || '', action: l.action || '', createdAt: l.createdAt, priority: l.priority || 'medium', assignedUserId: l.assignedUserId || '', stageHistory: l.stageHistory || [], lastInteraction: l.lastInteraction || l.createdAt });
     if (!p.lastSeen || l.createdAt > p.lastSeen) p.lastSeen = l.createdAt;
     const li = l.lastInteraction || l.createdAt;
@@ -225,20 +244,20 @@ export async function GET(req: NextRequest) {
   for (const task of tasks) {
     let p: P | null = null;
     if (task.leadId) {
-      const lead = leads.find((l) => l.id === task.leadId);
+      const lead = leads.find((l: any) => l.id === task.leadId);
       if (lead) p = get(lead.customerId, lead.phone, lead.name);
     }
     if (!p && task.bookingId) {
-      const b = bookings.find((x) => x.id === task.bookingId);
+      const b = bookings.find((x: any) => x.id === task.bookingId);
       if (b) p = get(b.customerId, b.customerPhone, b.customerName);
     }
     if (!p && task.customerId) {
-      const c = contacts.find((x) => x.id === task.customerId || x.customerId === task.customerId);
+      const c = contacts.find((x: any) => x.id === task.customerId || x.customerId === task.customerId);
       if (c) p = get(c.customerId, c.phone, c.name, c.id);
       else p = get(task.customerId, '', '');
     }
     if (!p) continue;
-    const assignee = task.assignedUserId ? db.users.find((u) => u.id === task.assignedUserId) : null;
+    const assignee = task.assignedUserId ? db.users.find((u: any) => u.id === task.assignedUserId) : null;
     p.tasks.push({ id: task.id, title: task.title, status: task.status, dueAt: task.dueAt || '', dueLabel: taskDueLabel(task.dueAt || '', today), assignedUserId: task.assignedUserId || '', assigneeName: assignee?.name || '', leadId: task.leadId || '', bookingId: task.bookingId || '' });
     if (!p.lastSeen || task.updatedAt > p.lastSeen) p.lastSeen = task.updatedAt;
   }
@@ -256,7 +275,7 @@ export async function GET(req: NextRequest) {
   let people = [...map.values()];
   // Etiquetas DERIVADAS depois de todos os eventos conhecidos: uma pessoa pode
   // ser "cliente atendido" E "lead no funil" ao mesmo tempo.
-  people.forEach((p) => {
+  people.forEach((p: any) => {
     p.tags = clientTags({
       name: p.name,
       accountStatus: p.accountStatus,
@@ -268,12 +287,12 @@ export async function GET(req: NextRequest) {
       profile: p.profile,
     });
   });
-  people.forEach((p) => p.leads.sort((a, b) => (a.createdAt < b.createdAt ? 1 : -1)));
-  people.forEach((p) => p.bookings.sort((a, b) => (a.date + a.time < b.date + b.time ? 1 : -1)));
-  people.sort((a, b) => (a.lastSeen < b.lastSeen ? 1 : -1));
+  people.forEach((p: any) => p.leads.sort((a: any, b: any) => (a.createdAt < b.createdAt ? 1 : -1)));
+  people.forEach((p: any) => p.bookings.sort((a: any, b: any) => (a.date + a.time < b.date + b.time ? 1 : -1)));
+  people.sort((a: any, b: any) => (a.lastSeen < b.lastSeen ? 1 : -1));
   if (q) {
     const qd = people360Phone(q);
-    people = people.filter((p) =>
+    people = people.filter((p: any) =>
       p.name.toLowerCase().includes(q)
       || (qd && p.phone.includes(qd))
       || p.email.toLowerCase().includes(q)
@@ -282,19 +301,19 @@ export async function GET(req: NextRequest) {
     );
   }
   if (accessFilter === 'active' || accessFilter === 'none') {
-    people = people.filter((p) => p.accountStatus === accessFilter);
+    people = people.filter((p: any) => p.accountStatus === accessFilter);
   }
   if (consentFilter === 'yes' || consentFilter === 'no') {
     const want = consentFilter === 'yes';
-    people = people.filter((p) => p.marketingOptIn === want);
+    people = people.filter((p: any) => p.marketingOptIn === want);
   }
-  if (minorFilter) people = people.filter((p) => isMinor(p.profile));
-  if (attendedOnly) people = people.filter((p) => countAttended(p.bookings) > 0);
+  if (minorFilter) people = people.filter((p: any) => isMinor(p.profile));
+  if (attendedOnly) people = people.filter((p: any) => countAttended(p.bookings) > 0);
   const total = people.length;
-  const pros = new Map(db.professionals.filter((p) => p.businessId === businessId).map((p) => [p.id, p.name]));
-  const slice = people.slice((page - 1) * limit, page * limit).map((p) => ({
+  const pros = new Map(db.professionals.filter((p: any) => p.businessId === businessId).map((p: any) => [p.id, p.name]));
+  const slice = people.slice((page - 1) * limit, page * limit).map((p: any) => ({
     ...p,
-    bookings: p.bookings.map((b) => ({
+    bookings: p.bookings.map((b: any) => ({
       ...b,
       service: services.get(b.serviceId) || 'Serviço',
       professional: b.professionalId ? pros.get(b.professionalId) || '' : '',

@@ -7,6 +7,7 @@
 //        `drain` (empurrar a fila agora, sem esperar o agendador).
 // A posse interna do motor nunca sai na resposta (sanitizeAutomationRunForDisplay).
 import { NextRequest, NextResponse } from 'next/server';
+import { blockIfRelational } from '@/lib/relational/blocked';
 import { readDB, updateDB } from '@/lib/db';
 import { requireBusiness } from '@/lib/access';
 import { pushAudit } from '@/lib/audit';
@@ -21,6 +22,9 @@ export async function GET(
   req: NextRequest,
   { params }: { params: { id: string } },
 ) {
+  const blocked = blockIfRelational('Automações (configuração)');
+  if (blocked) return blocked;
+
   const businessId = String(req.nextUrl.searchParams.get('businessId') || '');
   const guard = await requireBusiness(req, businessId, 'config');
   if (!guard.ok) return guard.res;
@@ -47,6 +51,9 @@ export async function POST(
   req: NextRequest,
   { params }: { params: { id: string } },
 ) {
+  const blocked = blockIfRelational('Automações (configuração)');
+  if (blocked) return blocked;
+
   try {
     const body = await req.json().catch(() => ({} as Record<string, any>));
     const businessId = String(body.businessId || req.nextUrl.searchParams.get('businessId') || '');

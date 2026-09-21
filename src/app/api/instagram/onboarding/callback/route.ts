@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { blockIfRelational } from '@/lib/relational/blocked';
 import { readDB, updateDB } from '@/lib/db';
 import { requireUser } from '@/lib/access';
 import { resolveAccess } from '@/lib/access-core';
@@ -42,6 +43,9 @@ function backToPanel(req: NextRequest, result: string, businessId = '', detail =
 }
 
 export async function GET(req: NextRequest) {
+  const blocked = blockIfRelational('Canais · Instagram (callback)');
+  if (blocked) return blocked;
+
   const params = req.nextUrl.searchParams;
   const code = String(params.get('code') || '').trim();
   const state = String(params.get('state') || '').trim();

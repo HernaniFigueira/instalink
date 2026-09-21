@@ -1,8 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { blockIfRelational } from '@/lib/relational/blocked';
 import { requireBusiness } from '@/lib/access';
 import { signWebhookPayload } from '@/lib/webhooks';
 
 export async function POST(req: NextRequest) {
+  const blocked = blockIfRelational('Integrações · teste de webhook');
+  if (blocked) return blocked;
+
   try {
     const body = await req.json();
     const businessId = String(body.businessId || req.nextUrl.searchParams.get('businessId') || '');
@@ -38,7 +42,7 @@ export async function POST(req: NextRequest) {
       data: {
         lead: {
           id: 'lead-test-123',
-          name: 'Lead Teste InstaLink',
+          name: 'Lead Teste GoDoutor',
           phone: '11999999999',
           email: 'teste@instalink.app',
           origin: 'external_site',

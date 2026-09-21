@@ -9,6 +9,8 @@ import {
 import { organizationsFor } from '@/lib/organization';
 import { normalizeFeatures } from '@/lib/features';
 import type { BusinessAppearance } from '@/lib/types';
+import { relationalActive } from '@/lib/relational/config';
+import { relAccessibleDoc } from '@/lib/relational/auth-store';
 
 // GET — quem está logado + negócios acessíveis COM papel e permissões.
 // É a fonte do menu do painel: cada tela só aparece quando há permissão real
@@ -20,7 +22,10 @@ export async function GET(req: NextRequest) {
 async function loadSession(req: NextRequest) {
   const user = await userFromRequest(req);
   if (!user) return NextResponse.json({ user: null }, { status: 401 });
-  const db = await readDB();
+  // MODO RELACIONAL: o que o usuário alcança, consultado no SQL (sem documento).
+  const db = relationalActive()
+    ? await relAccessibleDoc(user, isMasterUser(user) ? await supportFromRequest(req, user.id) : null)
+    : await readDB();
   // Sessão de suporte é resolvida ANTES da lista: a empresa em suporte
   // precisa aparecer para o painel abrir (e só ela, além das do usuário).
   const support = isMasterUser(user) ? await supportFromRequest(req, user.id) : null;

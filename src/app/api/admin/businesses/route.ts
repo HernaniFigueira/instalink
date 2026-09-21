@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { blockIfRelational } from '@/lib/relational/blocked';
 import { requireMaster } from '@/lib/access';
 import { enabledFeatureIds } from '@/lib/features';
 import { integrationStatus } from '@/lib/whatsapp';
@@ -7,6 +8,9 @@ import { todayISO } from '@/lib/tz';
 // ÁREA MASTER — lista de empresas da plataforma com os números que importam
 // para operação/suporte. Nunca expõe segredos (pixKey, googleApiKey, hashes).
 export async function GET(req: NextRequest) {
+  const blocked = blockIfRelational('Admin · negócios');
+  if (blocked) return blocked;
+
   const guard = await requireMaster(req);
   if (!guard.ok) return guard.res;
   const { db } = guard;
