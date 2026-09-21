@@ -444,12 +444,10 @@ describe('A3.4 · LINGUAGEM — sem promessa de assinatura digital', () => {
 
 // ═══════════════════════════════════════════════════════════════
 describe('A3.4 · MOBILE (320–430px) — sem rolagem horizontal da página', () => {
-  it('o subtítulo da Agenda não estica mais a viewport', () => {
-    const trecho = AGENDA.slice(AGENDA.indexOf('Clique num atendimento'));
-    const bloco = trecho.slice(0, trecho.indexOf('</span>'));
-    // Bloco truncável (antes era `span` inline com `truncate` — que não corta).
-    expect(AGENDA).toMatch(/className="block max-w-full text-xs text-\[var\(--text-muted\)\] truncate"/);
-    expect(bloco).not.toMatch(/whitespace-nowrap/);
+  it('a Agenda não tem mais subtítulo permanente e mantém uma data móvel curta', () => {
+    expect(AGENDA).not.toContain('Abra um atendimento para ver detalhes e ações.');
+    expect(AGENDA).toContain('agenda-date-narrow');
+
   });
 
   it('na fila as ações descem de linha em vez de espremer nome/serviço', () => {

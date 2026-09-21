@@ -22,7 +22,7 @@ function setup(overrides:any={}) {
 describe('Direction correction — navigation behavior',()=>{
   it('exposes operational routes directly and only three group controls',()=>{
     setup();const main=screen.getByRole('navigation',{name:'Menu principal'});
-    for(const name of ['Agenda','Profissionais','Disponibilidade','Clientes','Conversas']) expect(within(main).getByRole('link',{name})).toBeTruthy();
+    for(const name of ['Agenda','Fila de atendimento','Profissionais','Disponibilidade','Pacientes','Conversas']) expect(within(main).getByRole('link',{name})).toBeTruthy();
     expect(within(main).getAllByRole('button').map(b=>b.getAttribute('aria-label'))).toEqual(['Automação','Gestão','Ajustes']);
     expect(screen.queryByLabelText('Fechar submenu')).toBeNull();
   });
@@ -44,7 +44,7 @@ describe('Direction correction — navigation behavior',()=>{
     expect(within(side).getByRole('combobox',{name:'Trocar unidade'})).toBeTruthy();
   });
   it('only collapses on explicit button',async()=>{
-    const u=userEvent.setup();const {onCollapse}=setup();await u.click(screen.getByRole('button',{name:'Recolher navegação'}));expect(onCollapse).toHaveBeenCalledOnce();
+    const u=userEvent.setup();const {onCollapse}=setup();await u.click(screen.getByRole('button',{name:'Recolher menu'}));expect(onCollapse).toHaveBeenCalledOnce();
   });
   it('uses one mobile dialog with a back step instead of two columns',async()=>{
     const u=userEvent.setup();setup();await u.click(screen.getByRole('button',{name:'Abrir navegação'}));
@@ -55,6 +55,6 @@ describe('Direction correction — navigation behavior',()=>{
   });
   it('never introduces unauthorized routes or groups',()=>{
     setup({nav:panelNavigation({permissions:{agenda:true},modes:['bookings'],features:{}})});
-    expect(screen.queryByRole('button',{name:'Gestão'})).toBeNull();expect(screen.queryByRole('link',{name:'Clientes'})).toBeNull();
+    expect(screen.queryByRole('button',{name:'Gestão'})).toBeNull();expect(screen.queryByRole('link',{name:'Pacientes'})).toBeNull();
   });
 });

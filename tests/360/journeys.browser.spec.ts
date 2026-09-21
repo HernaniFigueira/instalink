@@ -58,7 +58,7 @@ test('two-level navigation, logo, unit boundary and mobile unified menu', async 
   await page.getByRole('button',{name:'Abrir navegação'}).click();
   const menu=page.getByRole('dialog',{name:'Navegar na clínica'}); await expect(menu).toBeVisible();
   await page.screenshot({path:info.outputPath('navigation-390.png')});
-  await menu.getByRole('link',{name:'Clientes',exact:true}).click();
+  await menu.getByRole('link',{name:'Pacientes',exact:true}).click();
   await expect(menu).toHaveCount(0); await expect(page).toHaveURL(/clientes/); await noOverflow(page);
 });
 
@@ -367,16 +367,16 @@ for(const width of [1440,1280,1024,390]) test(`direction acceptance: navigation,
     await nav.getByRole('button',{name:'Automação',exact:true}).click();
     await expect(page.locator('.workspace-secondary')).toHaveCount(0);
     expect(before-(await page.locator('[data-agenda-main]').boundingBox())!.x).toBe(216);
-    await page.getByRole('button',{name:'Recolher navegação'}).click();
+    await page.getByRole('button',{name:'Recolher menu'}).click();
     expect((await page.locator('.workspace-sidebar').boundingBox())!.width).toBe(64);
-    await page.getByRole('button',{name:'Expandir navegação'}).click();
+    await page.getByRole('button',{name:'Expandir menu'}).click();
   }else{
     await expect(page.locator('.workspace-sidebar')).toBeHidden();
     const open=page.getByRole('button',{name:'Abrir navegação'});await open.click();
     let menu=page.getByRole('dialog');await menu.getByRole('button',{name:'Gestão',exact:true}).click();
     await expect(menu.getByRole('button',{name:/Voltar/})).toBeVisible();
     await page.screenshot({path:info.outputPath(`menu-${width}.png`)});
-    await menu.getByRole('button',{name:/Voltar/}).click();await expect(menu.getByRole('button',{name:'Sair da conta'})).toBeVisible();
+    await menu.getByRole('button',{name:/Voltar/}).click();await expect(menu.getByRole('button',{name:'Sair da conta'})).toHaveCount(0);
     await page.keyboard.press('Escape');await expect(open).toBeFocused();
   }
   await noOverflow(page);await page.screenshot({path:info.outputPath(`agenda-${width}.png`)});

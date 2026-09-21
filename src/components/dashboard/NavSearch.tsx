@@ -27,6 +27,7 @@ export function NavSearch({ items, collapsed, activePath }: {
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState('');
   const [cursor, setCursor] = useState(0);
+  const triggerRef = useRef<HTMLButtonElement>(null);
   const boxRef = useRef<HTMLDivElement | null>(null);
   const inputRef = useRef<HTMLInputElement | null>(null);
 
@@ -76,7 +77,7 @@ export function NavSearch({ items, collapsed, activePath }: {
   }
 
   function onInputKey(e: React.KeyboardEvent<HTMLInputElement>) {
-    if (e.key === 'Escape') { setOpen(false); return; }
+    if (e.key === 'Escape') { setOpen(false); triggerRef.current?.focus(); return; }
     if (e.key === 'ArrowDown') { e.preventDefault(); setCursor((c) => Math.min(c + 1, results.length - 1)); return; }
     if (e.key === 'ArrowUp') { e.preventDefault(); setCursor((c) => Math.max(c - 1, 0)); return; }
     if (e.key === 'Enter') { e.preventDefault(); go(); }
@@ -85,6 +86,7 @@ export function NavSearch({ items, collapsed, activePath }: {
   return (
     <div ref={boxRef} className="relative min-w-0 flex-1">
       <button
+        ref={triggerRef}
         type="button"
         onClick={() => setOpen((v) => !v)}
         aria-label="Buscar no menu"

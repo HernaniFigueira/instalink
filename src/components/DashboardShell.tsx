@@ -58,7 +58,7 @@ export function DashboardShell({ children }: { children: React.ReactNode }) {
   const params = useSearchParams();
   const pathname = usePathname();
   const router = useRouter();
-  const [user, setUser] = useState<{ name: string; email?: string; role?: string } | null>(null);
+  const [user, setUser] = useState<{ id?: string; name: string; email?: string; role?: string } | null>(null);
   const [businesses, setBusinesses] = useState<Biz[]>([]);
   const [organizations,setOrganizations] = useState<Array<{id:string;name:string;canManage:boolean}>>([]);
   const [isMaster, setIsMaster] = useState(false);
@@ -234,7 +234,7 @@ export function DashboardShell({ children }: { children: React.ReactNode }) {
     // `PanelHomeProvider` entrega o destino de volta a qualquer 403 do painel
     // sem que cada tela precise calcular (ou chutar) o seu.
     <PanelHomeProvider home={homeHref}>
-    <WorkspaceContext.Provider value={{ role: business.role, agendaScope: business.agendaScope }}>
+    <WorkspaceContext.Provider value={{ userId:user.id, role: business.role, agendaScope: business.agendaScope }}>
     <div style={{'--area-color': routeAreaColor(activePath)} as React.CSSProperties} className="il-platform workspace-shell min-h-screen bg-[var(--bg)]">
       <a href="#workspace-content" className="workspace-skip">Ir para o conteúdo</a>
       <WorkspaceNavigation nav={nav} activePath={activePath} unit={business} units={businesses}
@@ -259,9 +259,6 @@ export function DashboardShell({ children }: { children: React.ReactNode }) {
             <p className="mb-4 text-xs font-semibold text-[var(--warning-fg)] bg-[var(--warning-bg)] border border-[var(--warning-border)] rounded-md px-3 py-2 inline-flex items-center gap-2 shadow-xs">
               <I n="shield" size={14} /> Você é master — <Link href="/master" className="underline font-semibold">/master</Link>
             </p>
-          )}
-          {business && business.role && business.role !== 'OWNER' && (
-            <p className="mb-4 text-xs text-[var(--text-muted)]">Você está como <strong className="text-[var(--text)]">{ROLE_LABEL[business.role] || business.role}</strong>{business.readOnly ? ' · somente leitura' : ''}</p>
           )}
           {business?.agendaScope === 'own' && (
             // Honestidade com quem atende: a agenda mostrada é SÓ a dele.

@@ -84,7 +84,7 @@ describe('A3.4 · Bloco 3 — Agenda: "Hoje" sempre no lugar, clique cria', () =
   const agenda = stripComments(read('src/app/(dashboard)/agenda/page.tsx'));
 
   it('as setas e o "Hoje" formam um grupo fixo, nesta ordem', () => {
-    const group = agenda.slice(agenda.indexOf('inline-flex rounded-md border border-[var(--border-strong)]'), agenda.indexOf('Escolher outra data'));
+    const group = agenda.slice(agenda.indexOf('inline-flex rounded-md border border-[var(--border-strong)]'), agenda.indexOf('<Tabs', agenda.indexOf('inline-flex rounded-md')));
     expect(group).toBeTruthy();
     const prev = group.indexOf('chevL');
     const today = group.indexOf('Hoje');

@@ -58,14 +58,14 @@ describe('A3.4 final UX · workspace [Agenda | Fila]', () => {
     expect(panelAt).toBeGreaterThan(toolbarAt);
     // E não sobrou nenhum painel antes da toolbar (o resumo acima é permitido).
     expect(AGENDA.slice(0, toolbarAt)).not.toContain('<QueuePanel');
-    expect(AGENDA.slice(0, toolbarAt)).toContain('aria-expanded={showQueue}');
+    expect(AGENDA.slice(toolbarAt,panelAt)).toContain('aria-expanded={showQueue}');
   });
 
   it('a rail é condicional por showQueue e fechar devolve 100% da largura', () => {
     const railAt = AGENDA.indexOf('<QueueDock');
     const antes = AGENDA.slice(railAt - 300, railAt);
     expect(antes).toMatch(/\{showQueue && \(/);
-    expect(AGENDA).toMatch(/onClose=\{\(\) => setShowQueue\(false\)\}/);
+    expect(AGENDA).toMatch(/onClose=\{closeQueue\}/);
   });
 
   it('tela estreita usa overlay; o rail só existe no desktop largo (sem espremer a agenda)', () => {
@@ -97,7 +97,7 @@ describe('A3.4 final UX · workspace [Agenda | Fila]', () => {
     expect(AGENDA).toMatch(/const \[railMaxH, setRailMaxH\] = useState<number \| null>\(null\)/);
     expect(AGENDA).toMatch(/setRailMaxH\(Math\.max\(320, Math\.floor\(window\.innerHeight - wtop - VIEWPORT_BOTTOM_PAD\)\)\)/);
     // O medidor roda de novo quando a fila abre/fecha (nada de valor velho).
-    expect(AGENDA).toMatch(/hbarReserve, showQueue\]\);/);
+    expect(AGENDA).toMatch(/hbarReserve, showQueue, flash, grid.hours\]\);/);
     // E a grade continua medindo o próprio scroller — a fila não a encolhe.
     expect(AGENDA).toMatch(/const top = el\.getBoundingClientRect\(\)\.top/);
   });

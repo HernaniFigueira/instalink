@@ -4,7 +4,7 @@ import type { PanelRouteDef } from './panel';
 // Operational order comes from PANEL_ROUTES (historical Operação/Pessoas/Oferta).
 export const WORKSPACE_AREAS = [
   { id: 'automation', label: 'Automação', icon: 'bolt', color: '#B45309', routes: ['/automacoes', '/execucoes', '/agente', '/campanhas'] },
-  { id: 'management', label: 'Gestão', icon: 'chart', color: '#0369A1', routes: ['/resultados', '/equipe', '/organizacao'] },
+  { id: 'management', label: 'Gestão', icon: 'chart', color: '#0369A1', routes: ['/resultados', '/equipe'] },
   { id: 'settings', label: 'Ajustes', icon: 'settings', color: '#526174', routes: ['/configuracoes', '/recursos', '/canais'] },
 ] as const;
 export function workspaceAreas(allowed: PanelRouteDef[]) {
