@@ -68,7 +68,7 @@ export default function MasterOverviewPage() {
       <div className="mb-6">
         <h1 className="text-2xl font-extrabold tracking-tight">Visão geral</h1>
         <p className="text-sm text-zinc-500 mt-1">
-          Camada Master do InstaLink — acima de todas as Organizations. Dados reais da plataforma.
+          Camada Master do GoDoutor — acima de todas as Organizations. Dados reais da plataforma.
         </p>
       </div>
 

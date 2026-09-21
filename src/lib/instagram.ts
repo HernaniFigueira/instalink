@@ -185,7 +185,7 @@ export function instagramIntegrationStatus(status: string | undefined): {
 
 // ── Camada da PLATAFORMA ────────────────────────────────────────
 /**
- * O que só o dono do Instalink configura. O App ID e o token de verificação
+ * O que só o dono do GoDoutor configura. O App ID e o token de verificação
  * são públicos na prática (aparecem no app da Meta), mas o App Secret NUNCA
  * aparece: a tela só sabe se existe.
  */
@@ -194,7 +194,7 @@ export function instagramPlatformLayer(env: EnvLike): OnboardingLayer {
     {
       key: 'INSTAGRAM_APP_ID',
       label: 'App do Instagram (App ID)',
-      why: 'Identifica o Instalink na tela oficial de autorização do Instagram.',
+      why: 'Identifica o GoDoutor na tela oficial de autorização do Instagram.',
       ok: !!instagramEnvAppId(env), secret: false, required: true,
     },
     {
@@ -220,7 +220,7 @@ export function instagramPlatformLayer(env: EnvLike): OnboardingLayer {
   return {
     id: 'platform',
     title: 'Plataforma',
-    owner: 'Responsável pelo Instalink (não é a sua unidade)',
+    owner: 'Responsável pelo GoDoutor (não é a sua unidade)',
     items,
     ready: missing.length === 0,
     missing,
@@ -234,7 +234,7 @@ export function instagramUnitLayer(business: { instagramIntegration?: InstagramV
     {
       key: 'authorized',
       label: 'Conta autorizada',
-      why: 'Alguém da unidade autorizou o Instalink na tela oficial do Instagram.',
+      why: 'Alguém da unidade autorizou o GoDoutor na tela oficial do Instagram.',
       ok: !!ig.encryptedAccessToken && !!ig.igUserId, secret: false, required: true,
     },
     {
@@ -286,7 +286,7 @@ export function instagramOnboardingSteps(business: { instagramIntegration?: Inst
   const firstEvent = !!ig.lastWebhookAt;
   const connected = authorized && subscribed && firstEvent && ig.status === 'connected';
   const steps: InstagramOnboardingStep[] = [
-    { id: 'authorized', label: 'Conta autorizada', ok: authorized, current: false, detail: 'A unidade autorizou o Instalink na tela oficial do Instagram.' },
+    { id: 'authorized', label: 'Conta autorizada', ok: authorized, current: false, detail: 'A unidade autorizou o GoDoutor na tela oficial do Instagram.' },
     { id: 'webhook_subscribed', label: 'Webhook assinado', ok: subscribed, current: false, detail: subscribed ? 'A Meta confirmou a entrega dos eventos desta conta.' : 'Falta a Meta confirmar a assinatura dos eventos desta conta.' },
     { id: 'first_event', label: 'Primeira mensagem recebida', ok: firstEvent, current: false, detail: firstEvent ? 'A entrega já foi provada com uma mensagem real.' : 'Peça para alguém enviar um Direct para a conta conectada.' },
     { id: 'connected', label: 'Conectado', ok: connected, current: false, detail: connected ? 'Tudo pronto: conversar e responder pelo inbox.' : 'Falta concluir as etapas anteriores.' },
@@ -350,7 +350,7 @@ export function instagramPlan(args: {
       state: 'platform_blocked',
       code: 'BLOCKED_EXTERNAL',
       headline: 'Conexão do Instagram indisponível nesta instalação',
-      detail: `Falta configurar a plataforma: ${platform.missing.join(', ')}. É um bloqueio técnico do Instalink (não é erro da sua unidade) e nenhuma conta pode ser conectada enquanto isso.`,
+      detail: `Falta configurar a plataforma: ${platform.missing.join(', ')}. É um bloqueio técnico do GoDoutor (não é erro da sua unidade) e nenhuma conta pode ser conectada enquanto isso.`,
       nextAction: {
         kind: 'fix_platform',
         label: 'Aguardando a plataforma',
@@ -387,7 +387,7 @@ export function instagramPlan(args: {
       nextAction: {
         kind: 'authorize',
         label: pending ? 'Refazer a autorização' : 'Conectar Instagram',
-        detail: 'Abre a tela oficial do Instagram para autorizar o Instalink.',
+        detail: 'Abre a tela oficial do Instagram para autorizar o GoDoutor.',
       },
     };
   }

@@ -47,7 +47,7 @@ function RecuperarForm() {
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Não foi possível enviar.');
       if (data.sent === false) {
-        setInfo('Recebemos sua solicitação, mas o envio automático de e-mails ainda não está ativo. Fale com o suporte do InstaLink.');
+        setInfo('Recebemos sua solicitação, mas o envio automático de e-mails ainda não está ativo. Fale com o suporte do GoDoutor.');
       } else {
         setInfo('Se existir uma conta com este e-mail, enviamos o link de redefinição. Confira sua caixa de entrada (e o spam).');
       }

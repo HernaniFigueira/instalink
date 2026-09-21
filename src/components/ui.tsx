@@ -9,7 +9,7 @@ import { buildHoursChips, type HoursChipDay } from '@/lib/hours-chips';
 export type { HoursChipDay };
 
 // ═══════════════════════════════════════════════════════════════
-// DESIGN SYSTEM INSTALINK (A3.3) — componentes compartilhados
+// DESIGN SYSTEM GODOUTOR (A3.3) — componentes compartilhados
 // ═══════════════════════════════════════════════════════════════
 // Toda a linguagem visual do painel vive AQUI + nos tokens de
 // src/app/globals.css. Telas não inventam estilo: importam destes

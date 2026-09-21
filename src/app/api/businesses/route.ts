@@ -33,7 +33,7 @@ export async function POST(req: NextRequest) {
       .filter((m: string) => VALID_MODES.includes(m as BusinessMode)) as BusinessMode[];
     let slug = slugify(body.slug || name);
     if (!name) return NextResponse.json({ error: 'Dê um nome ao seu negócio.' }, { status: 400 });
-    // Lista vazia é permitida de propósito: o InstaLink também serve como
+    // Lista vazia é permitida de propósito: o GoDoutor também serve como
     // página de perfil (link na bio). O painel guia a ativação dos recursos.
     if (!isValidSlug(slug)) return NextResponse.json({ error: 'Esse endereço não é válido. Use ao menos 3 letras/números.' }, { status: 400 });
 

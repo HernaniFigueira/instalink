@@ -191,7 +191,7 @@ export default function PaginaPage() {
               <span aria-hidden="true" className={cn('w-2 h-2 rounded-full', business.published ? 'bg-[var(--success)]' : 'bg-[var(--warning)]')} />
               {business.published ? 'Publicada' : 'Não publicada'}
             </span>
-            <a href={`/${business.slug}`} target="_blank" rel="noreferrer" className="text-[var(--brand-fg)] font-semibold hover:underline inline-flex items-center gap-1">instalink.app/{business.slug} <Icon n="external" size={12} /></a>
+            <a href={`/${business.slug}`} target="_blank" rel="noreferrer" className="text-[var(--brand-fg)] font-semibold hover:underline inline-flex items-center gap-1">/{business.slug} <Icon n="external" size={12} /></a>
           </p>
         </div>
         <div className="flex items-center gap-2 shrink-0">
@@ -1253,7 +1253,7 @@ function PublishTab({ business, onSlug, onPublish }: { business: Business; busin
               className="flex-1 rounded-md border border-zinc-300 px-3 py-2.5 text-sm font-mono" />
             <button onClick={() => onSlug(slug)} className="text-sm font-bold bg-[var(--brand)] text-white shadow-brand hover:bg-[var(--brand-strong)] px-4 py-2.5 rounded-md">Salvar</button>
           </div>
-          <p className="text-xs text-zinc-500 mt-1">instalink.app/{slug}</p>
+          <p className="text-xs text-zinc-500 mt-1">/{slug}</p>
         </div>
       </div>
       <div className="bg-white border border-zinc-200 rounded-lg p-5 text-center">

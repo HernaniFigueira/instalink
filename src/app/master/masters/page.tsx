@@ -82,7 +82,7 @@ export default function MasterMastersPage() {
     <>
       <h1 className="text-2xl font-extrabold tracking-tight">Masters</h1>
       <p className="text-sm text-zinc-500 mt-1 mb-5">
-        Contas Master do InstaLink. Não pertencem a Organizations. Ações críticas exigem confirmação e vão para a auditoria.
+        Contas Master do GoDoutor. Não pertencem a Organizations. Ações críticas exigem confirmação e vão para a auditoria.
         O último Master não pode ser removido.
       </p>
 

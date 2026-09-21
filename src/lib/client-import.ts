@@ -306,7 +306,7 @@ export interface ImportColumn {
   /** Amostra de valores (ajuda a reconhecer a coluna certa na tela). */
   sample: string[];
   /**
-   * Coluna de histórico do PRÓPRIO Instalink (Origem, Criado em, Última
+   * Coluna de histórico do PRÓPRIO GoDoutor (Origem, Criado em, Última
    * interação). É reconhecida de propósito e ignorada: reimportar não recria
    * histórico — por isso a tela não pede mapeamento nem diz que "veio tudo".
    */

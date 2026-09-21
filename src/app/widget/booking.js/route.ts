@@ -11,7 +11,7 @@ import { NextResponse } from 'next/server';
 // embed (antes: altura fixa de 680px cortava o fluxo com dados de contato).
 export async function GET() {
   const script = `/**
- * InstaLink Booking Widget (P3 · A2)
+ * GoDoutor Booking Widget (P3 · A2)
  * Uso simples em qualquer site:
  *   <div id="instalink-booking" data-business="slug-do-negocio"></div>
  *   <script src="https://instalink.app/widget/booking.js" async><\/script>

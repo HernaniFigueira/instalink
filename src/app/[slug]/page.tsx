@@ -27,17 +27,17 @@ import type { Block, Business, PublicBusiness, Review } from '@/lib/types';
 
 export async function generateMetadata({ params }: { params: { slug: string } }): Promise<Metadata> {
   const data = await getPublicData(params.slug);
-  if (!data) return { title: 'Página não encontrada — InstaLink.app' };
+  if (!data) return { title: 'Página não encontrada — GoDoutor' };
   const { business } = data;
   return {
-    title: `${business.name} — InstaLink.app`,
-    description: business.description || `Visite ${business.name} no InstaLink.app`,
+    title: `${business.name} — GoDoutor`,
+    description: business.description || `Visite ${business.name} no GoDoutor`,
     openGraph: {
       title: business.name,
       description: business.description || undefined,
       type: 'website',
       locale: 'pt_BR',
-      siteName: 'InstaLink.app',
+      siteName: 'GoDoutor',
       ...(business.logo && business.logo.startsWith('http') ? { images: [business.logo] } : {}),
     },
   };
@@ -150,12 +150,12 @@ export default async function PublicPage({ params }: { params: { slug: string } 
         ))}
         {profileIdx < 0 && aboutOk && <AboutView about={business.about} />}
 
-        {/* White label: a marca do NEGÓCIO manda; o InstaLink fica discreto. */}
+        {/* White label: a marca do NEGÓCIO manda; o GoDoutor fica discreto. */}
         <footer className="text-center pt-2 pb-1">
           {/* A1.2 · Bloco 3: link interno do rodapé via Link (navegação do Next,
               sem reload) — é interno ao app, não link externo. */}
           <Link href="/" className="il-muted text-[10px] font-medium opacity-70 hover:opacity-100 hover:underline">
-            Feito com InstaLink
+            Feito com GoDoutor
           </Link>
         </footer>
       </div>

@@ -4,7 +4,7 @@
 // Toda URL que o SERVIDOR vai chamar (webhook de saída, conector de canal,
 // nó do n8n) passa por aqui antes de virar configuração. Sem isso, um destino
 // `http://127.0.0.1:5432` ou `http://169.254.169.254/...` transforma o
-// InstaLink em proxy para a rede interna do host.
+// GoDoutor em proxy para a rede interna do host.
 //
 // Escopo desta função (PURA, sem I/O):
 //   • só http/https;

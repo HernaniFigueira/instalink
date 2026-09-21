@@ -1,8 +1,8 @@
 {
-  "name": "instalink",
+  "name": "godoutor",
   "version": "1.0.0",
   "private": true,
-  "description": "InstaLink.app — Página, agenda e relacionamento para negócios de atendimento. SaaS multi-tenant",
+  "description": "GoDoutor — Página, agenda e relacionamento para negócios de atendimento. SaaS multi-tenant",
   "scripts": {
     "dev": "next dev -p 3000 -H 0.0.0.0",
     "build": "next build",

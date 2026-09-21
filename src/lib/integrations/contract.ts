@@ -1,7 +1,7 @@
 // ═══════════════════════════════════════════════════════════════
 // P6 — CONTRATO DE EVENTO EXTERNO (o "formato canônico")
 // ═══════════════════════════════════════════════════════════════
-// Todo dado que entra no InstaLink vindo de fora passa por aqui antes de virar
+// Todo dado que entra no GoDoutor vindo de fora passa por aqui antes de virar
 // efeito: é este contrato que o P4 consome e que qualquer conector futuro
 // (WhatsApp, Instagram, n8n, formulário) precisa produzir.
 //
