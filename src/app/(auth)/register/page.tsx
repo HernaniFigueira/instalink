@@ -64,7 +64,7 @@ export default function RegisterPage() {
         </div>
         {error && <p className="text-sm font-medium text-red-400 bg-red-500/10 border border-red-500/20 rounded-xl px-4 py-3">{error}</p>}
         <button disabled={loading} className="w-full font-bold bg-emerald-500 text-zinc-950 py-3 rounded-xl hover:bg-emerald-400 disabled:opacity-50">
-          {loading ? 'Criando…' : 'Criar conta grátis'}
+          {loading ? 'Criando…' : 'Criar conta'}
         </button>
       </form>
       <p className="text-sm text-zinc-400 mt-6 text-center">

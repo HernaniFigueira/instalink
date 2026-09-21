@@ -1,15 +1,11 @@
 import Link from 'next/link';
-
 export default function AuthLayout({ children }: { children: React.ReactNode }) {
-  return (
-    <main className="min-h-screen bg-zinc-950 text-white flex items-center justify-center px-4 py-10">
-      <div className="w-full max-w-md">
-        <Link href="/" className="flex items-center justify-center gap-2 mb-8">
-          <div className="w-9 h-9 rounded-xl bg-emerald-500 flex items-center justify-center font-black text-zinc-950">IL</div>
-          <span className="font-bold text-lg">InstaLink<span className="text-emerald-400">.app</span></span>
-        </Link>
-        <div className="bg-zinc-900 border border-zinc-800 rounded-3xl p-8">{children}</div>
-      </div>
-    </main>
-  );
+  return <main className="il-auth">
+    <section className="auth-form-side">
+      <Link href="/" className="auth-wordmark">instalink<span> / clínicas</span></Link>
+      <div className="auth-form-card">{children}</div>
+      <p className="auth-patient-note">É paciente? Acesse sua conta pelo link da clínica onde você é atendido.</p>
+    </section>
+    <aside className="auth-story"><p className="auth-eyebrow">UM DIA MAIS ORGANIZADO</p><h2>Mais clareza para a equipe.<br />Mais cuidado em cada encontro.</h2><p>Agenda, pacientes e atendimento conectados à rotina da sua clínica.</p><div className="auth-story-list"><p><span>01</span> Recepção com os próximos passos à vista.</p><p><span>02</span> Profissionais com contexto para atender.</p><p><span>03</span> Gestão com uma visão da operação.</p></div><p className="auth-story-foot">Cada pessoa com seu acesso. Cada clínica com sua identidade.</p></aside>
+  </main>;
 }

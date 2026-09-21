@@ -62,7 +62,7 @@ function LoginForm() {
   return (
     <>
       <h1 className="text-2xl font-bold">Bem-vindo de volta</h1>
-      <p className="text-sm text-zinc-400 mt-1">Acesse o painel do seu negócio.</p>
+      <p className="text-sm text-zinc-400 mt-1">Acesso da equipe à sua clínica.</p>
       {expired && (
         <p className="mt-4 text-sm font-medium text-amber-300 bg-amber-500/10 border border-amber-500/20 rounded-xl px-4 py-3">
           Sua sessão expirou. Entre novamente para continuar de onde parou.
@@ -88,7 +88,7 @@ function LoginForm() {
         <Link href="/recuperar?kind=user" className="font-semibold text-emerald-400 hover:text-emerald-300">Esqueci minha senha</Link>
       </p>
       <p className="text-sm text-zinc-400 mt-3 text-center">
-        Ainda não tem conta? <Link href="/register" className="font-semibold text-emerald-400 hover:text-emerald-300">Criar grátis</Link>
+        Ainda não tem conta? <Link href="/register" className="font-semibold text-emerald-400 hover:text-emerald-300">Criar acesso</Link>
       </p>
     </>
   );
