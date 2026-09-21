@@ -1,5 +1,6 @@
 'use client';
 import { cloneElement, createContext, isValidElement, useContext, useEffect, useId, useRef } from 'react';
+import { wrapDialogFocus } from '@/lib/dialog-focus';
 import { cn } from '@/lib/utils';
 import { Icon } from '@/components/icons';
 import { toneCls, type Tone } from '@/lib/status';
@@ -590,22 +591,7 @@ export function Drawer({ open, onClose, title, subtitle, children, footer, width
         // Native modal inertness prevents focus in the page, but some browsers
         // Tab from the final control into browser chrome. Wrap the boundaries
         // explicitly, querying current controls (async/disabled fields included).
-        if (event.key === 'Tab' && !event.defaultPrevented) {
-          const dialog = event.currentTarget;
-          const controls = Array.from(dialog.querySelectorAll<HTMLElement>(
-            'a[href], button, input, select, textarea, [tabindex], [contenteditable="true"]',
-          )).filter((element) => element.tabIndex >= 0 && !element.matches(':disabled')
-            && !element.closest('[hidden], [inert]') && element.getClientRects().length > 0
-            && element.closest('dialog') === dialog);
-          const first = controls[0];
-          const last = controls[controls.length - 1];
-          if (!first) { event.preventDefault(); titleRef.current?.focus(); }
-          else if (event.shiftKey && (document.activeElement === first || document.activeElement === titleRef.current)) {
-            event.preventDefault(); last.focus();
-          } else if (!event.shiftKey && document.activeElement === last) {
-            event.preventDefault(); first.focus();
-          }
-        }
+        wrapDialogFocus(event, event.currentTarget, titleRef.current);
         // Do not let Escape also close an underlying legacy booking sheet.
         // An inner widget may preventDefault to consume Escape itself.
         if (event.key === 'Escape') {
@@ -618,8 +604,8 @@ export function Drawer({ open, onClose, title, subtitle, children, footer, width
         <div className={cn('relative w-full h-full bg-[var(--bg)] shadow-xl flex flex-col', width)}>
           <header className="shrink-0 flex items-center justify-between gap-3 px-4 py-3 bg-[var(--surface)] border-b border-[var(--border)]">
             <div className="min-w-0">
-              <h2 ref={titleRef} tabIndex={-1} id={`${id}-title`} className="text-sm font-semibold text-[var(--text)] truncate">{title}</h2>
-              {subtitle && <p id={`${id}-description`} className="text-xs text-[var(--text-muted)] truncate">{subtitle}</p>}
+              <h2 ref={titleRef} tabIndex={-1} id={`${id}-title`} className="text-sm font-semibold text-[var(--text)] break-words">{title}</h2>
+              {subtitle && <p id={`${id}-description`} className="text-xs text-[var(--text-muted)] break-words">{subtitle}</p>}
             </div>
             <IconButton type="button" icon="x" label="Fechar" size="sm" variant="ghost" onClick={onClose} />
           </header>

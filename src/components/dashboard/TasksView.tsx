@@ -11,7 +11,7 @@ import Link from 'next/link';
 import { apiGet } from '@/lib/api-client';
 import { useBusinessId } from '@/components/dashboard/useBusinessId';
 import { ListSkeleton, Notice, PageHeader } from '@/components/ui';
-import { AccessDenied, useAreaLoad } from '@/components/dashboard/AccessNotice';
+import { AccessDenied, AreaLoadError, useAreaLoad } from '@/components/dashboard/AccessNotice';
 import { TaskPanel, type TaskSummaryView, type TaskView } from '@/components/dashboard/TaskPanel';
 import { useRevalidateOnFocus } from '@/components/dashboard/use-revalidate';
 
@@ -43,6 +43,7 @@ export function TasksView() {
   if (denied) return <AccessDenied area="Tarefas" />;
   if (noBusiness) return <Notice tone="info">Crie sua empresa primeiro para acompanhar as tarefas da equipe.</Notice>;
 
+  if (failed) return <AreaLoadError area="Tarefas" message={failed} onRetry={load} />;
   const q = businessId ? `?b=${businessId}` : '';
 
   return (
@@ -57,7 +58,6 @@ export function TasksView() {
         )}
       />
 
-      {failed && <Notice tone="error">{failed}</Notice>}
       {loading ? <ListSkeleton rows={4} /> : (
         <TaskPanel
           tasks={tasks}

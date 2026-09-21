@@ -29,7 +29,7 @@ import { stagesInOrder } from '@/lib/pipeline-stages';
 import { apiSend } from '@/lib/api-client';
 import { Icon } from '@/components/icons';
 import { cn } from '@/lib/utils';
-import { Badge, Button } from '@/components/ui';
+import { Badge, Button, Drawer } from '@/components/ui';
 
 interface StageDraft {
   id: string;
@@ -125,21 +125,9 @@ export function PipelineStagesPanel({ businessId, pipeline, onClose, onSaved }: 
   }
 
   return (
-    <div className="fixed inset-0 bg-[var(--overlay)] z-50 flex items-center justify-center p-4">
-      <div className="bg-white rounded-2xl max-w-lg w-full max-h-[90vh] overflow-y-auto p-6 space-y-4 shadow-xl animate-scaleUp" role="dialog" aria-modal="true" aria-label="Etapas do funil">
-        <div className="flex items-start justify-between border-b pb-3">
-          <div>
-            <h2 className="text-base font-bold text-zinc-900">Etapas do funil</h2>
-            <p className="text-xs text-zinc-500 mt-0.5">
-              A máquina de estados das oportunidades: renomeie, reordene, marque etapas finais ou crie novas. As mudanças valem para todo o funil.
-            </p>
-          </div>
-          <button type="button" onClick={onClose} aria-label="Fechar"
-            className="w-7 h-7 rounded-full border border-zinc-200 text-zinc-500 flex items-center justify-center hover:bg-zinc-100">
-            <Icon n="x" size={14} />
-          </button>
-        </div>
-
+    <Drawer open onClose={onClose} title="Etapas do funil" width="max-w-lg">
+      <div className="p-5 space-y-4">
+        <p className="text-sm text-[var(--text-muted)]">Renomeie, reordene, marque etapas finais ou crie novas. As mudanças valem para todo o funil.</p>
         <ol className="space-y-2">
           {stages.map((s, i) => (
             <li key={s.id} className="flex items-center gap-2 bg-zinc-50 border border-zinc-200 rounded-lg px-2.5 py-2">
@@ -192,6 +180,6 @@ export function PipelineStagesPanel({ businessId, pipeline, onClose, onSaved }: 
           </button>
         </div>
       </div>
-    </div>
+    </Drawer>
   );
 }

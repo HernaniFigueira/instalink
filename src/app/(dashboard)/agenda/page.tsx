@@ -26,7 +26,7 @@ import { useSearchParams } from 'next/navigation';
 import { todayISO, addDaysISO, weekdayOf, formatDateBR, nowHM } from '@/lib/tz';
 import { WEEKDAYS, WEEKDAYS_LONG, timeToMin, minToTime, cn } from '@/lib/utils';
 import type { Availability, Booking, BookingConfig, BookingStatus, Professional, Service } from '@/lib/types';
-import { Avatar, Badge, ListSkeleton, Button, IconButton, AttentionStrip, Tabs } from '@/components/ui';
+import { Avatar, Badge, Drawer, ListSkeleton, Button, IconButton, AttentionStrip, Tabs } from '@/components/ui';
 import { Icon } from '@/components/icons';
 import {
   ATTENTION_MARK_CLS, ATTENTION_RING_CLS, BOOKING_BLOCK, BOOKING_DOT, BOOKING_STATUS,
@@ -51,7 +51,7 @@ import {
   type Point,
 } from '@/lib/agenda-drag';
 
-type View = 'day' | 'week' | 'month';
+type View = 'day' | 'week' | 'month' | 'list';
 
 // Cores dos estados vêm da fonte única (lib/status.ts). P1.1: os blocos da
 // grade usam a apresentação SUAVE definida lá (BOOKING_BLOCK) — a semântica
@@ -311,25 +311,25 @@ function FilterChip({ active, onClick, children }: { active: boolean; onClick: (
 export default function AgendaPage() {
   const params = useSearchParams();
   const businessId = params.get('b') || '';
-  const [view, setView] = useState<View>('day');
-  // Deep-link operacional: /agenda?b=…&data=2026-09-20 abre focada no dia
-  // (usado pelo "Ver na agenda" do histórico do cliente). Valor inválido
-  // é ignorado e cai para hoje — nunca quebra a tela.
+  const [defaultView, setDefaultView] = useState<View>('day');
+  useEffect(() => { if (window.matchMedia('(max-width: 767px)').matches) setDefaultView('list'); }, []);
+  const view = (['day','week','month','list'].includes(params.get('view') || '') ? params.get('view') : defaultView) as View;
   const dataParam = params.get('data') || '';
-  const [focus, setFocus] = useState(
-    /^\d{4}-\d{2}-\d{2}$/.test(dataParam) ? dataParam : todayISO(),
-  );
-  useEffect(() => {
-    if (/^\d{4}-\d{2}-\d{2}$/.test(dataParam)) setFocus(dataParam);
-  }, [dataParam]);
-  // Tela cheia do produto (expande sobre a sidebar; ESC sai) + filtros.
+  const focus = /^\d{4}-\d{2}-\d{2}$/.test(dataParam) ? dataParam : todayISO();
+  const statusFilter = Object.keys(BOOKING_STATUS).includes(params.get('status') || '') ? params.get('status') as BookingStatus : '';
+  const proFilter = params.get('professionalId') || '';
+  const specFilter = params.get('specialty') || '';
+  // Native history integration keeps filters/date and back/forward in sync,
+  // without requesting another server render or changing scheduling rules.
+  function setPresentation(patch: Record<string, string>) {
+    const url = new URL(window.location.href);
+    for (const [key, value] of Object.entries(patch)) { if (value) url.searchParams.set(key,value); else url.searchParams.delete(key); }
+    window.history.pushState(null, '', url.pathname + url.search);
+  }
+  const setView = (value: View) => setPresentation({view:value});
+  const setFocus = (value: string) => setPresentation({data:value});
+  const setStatusFilter = (value: string) => setPresentation({status:value});
   const [fullscreen, setFullscreen] = useState(false);
-  const [statusFilter, setStatusFilter] = useState<'' | BookingStatus>('');
-  const [proFilter, setProFilter] = useState('');
-  // P1.1 — filtros em escala: UM popover compacto (Status + Especialidade +
-  // Profissional pesquisável). "Especialidade" deriva do campo `role` que JÁ
-  // existe no Professional — nenhum schema novo.
-  const [specFilter, setSpecFilter] = useState('');
   const [filterOpen, setFilterOpen] = useState(false);
   const [proSearch, setProSearch] = useState('');
   const filterWrapRef = useRef<HTMLDivElement>(null);
@@ -480,23 +480,15 @@ export default function AgendaPage() {
   // Especialidade + profissional combinam: escolher um valor que conflita
   // com o outro limpa o outro — o resultado nunca é um beco sem saída.
   function pickSpec(role: string) {
-    setSpecFilter(role);
-    if (role && proFilter) {
-      const p = activePros.find((x) => x.id === proFilter);
-      if (p && (p.role || '').trim() !== role) setProFilter('');
-    }
+    const p = activePros.find(p => p.id === proFilter);
+    setPresentation({specialty:role, professionalId:role && p && (p.role || '').trim() !== role ? '' : proFilter});
   }
   function pickPro(id: string) {
-    setProFilter(id);
-    if (id && specFilter) {
-      const p = activePros.find((x) => x.id === id);
-      if (p && (p.role || '').trim() !== specFilter) setSpecFilter('');
-    }
+    const p = activePros.find(p => p.id === id);
+    setPresentation({professionalId:id, specialty:id && p && (p.role || '').trim() !== specFilter ? '' : specFilter});
   }
   function clearFilters() {
-    setStatusFilter('');
-    setSpecFilter('');
-    setProFilter('');
+    setPresentation({status:'',specialty:'',professionalId:''});
     setProSearch('');
   }
   const activeFilterCount = [statusFilter, specFilter, proFilter].filter(Boolean).length;
@@ -1046,7 +1038,7 @@ export default function AgendaPage() {
       setFocus(nd.toISOString().slice(0, 10));
       return;
     }
-    setFocus((f) => addDaysISO(f, view === 'week' ? dir * 7 : dir));
+    setFocus(addDaysISO(focus, view === 'week' ? dir * 7 : dir));
   }
 
   // A3.3 — UMA leitura de data na barra (antes havia rótulo + campo duplicados,
@@ -1110,7 +1102,7 @@ export default function AgendaPage() {
       {/* Cabeçalho compacto: a grade é o conteúdo — o título não compete. */}
       <div className="flex flex-wrap items-center justify-between gap-2 mb-2.5">
         <div className="flex items-start gap-2.5 min-w-0">
-          <span className="w-9 h-9 shrink-0 rounded-lg bg-gradient-to-br from-[var(--brand)] to-[var(--lilac)] text-white flex items-center justify-center shadow-brand">
+          <span className="w-9 h-9 shrink-0 rounded-lg bg-[var(--brand-soft)] text-[var(--brand-fg)] flex items-center justify-center shadow-brand">
             <Icon n="calendar" size={18} />
           </span>
           <div className="min-w-0 flex-1">
@@ -1120,7 +1112,7 @@ export default function AgendaPage() {
                 página. Agora é bloco truncável: some por corte, nunca por
                 rolagem horizontal. */}
             <span className="block max-w-full text-xs text-[var(--text-muted)] truncate">
-              Clique num atendimento para ver o detalhe · arraste para reagendar.
+              Abra um atendimento para ver detalhes e ações. Na grade, arraste para remarcar.
             </span>
           </div>
         </div>
@@ -1246,6 +1238,7 @@ export default function AgendaPage() {
               { id: 'day' as View, label: 'Dia', icon: 'calendar' },
               { id: 'week' as View, label: 'Semana', icon: 'grid' },
               { id: 'month' as View, label: 'Mês', icon: 'receipt' },
+              { id: 'list' as View, label: 'Lista', icon: 'tasks' },
             ]}
             value={view}
             onChange={(v) => { endDrag(); setView(v); }}
@@ -1409,7 +1402,16 @@ export default function AgendaPage() {
         )}
       </div>
 
-      {denied ? <AccessDenied area="Agenda" /> : !loaded ? <ListSkeleton rows={4} /> : view === 'month' ? (
+      {denied ? <AccessDenied area="Agenda" /> : !loaded ? <ListSkeleton rows={4} /> : view === 'list' ? (
+        <section className="space-y-3" aria-label="Lista de atendimentos do dia">
+          <p className="text-sm text-[var(--text-muted)]">{formatDateBR(focus)} · Toque para abrir o atendimento. Horários livres e intervalos estão na visualização Dia.</p>
+          {columns.flatMap(c => c.blocks).length === 0 && <div className="p-8 bg-[var(--surface)] border border-[var(--border)] rounded-lg"><h2 className="font-semibold">Nenhum atendimento nesta seleção</h2><p className="text-sm text-[var(--text-muted)] mt-1">Confira os filtros ou use Novo agendamento para consultar horários disponíveis.</p></div>}
+          {[...new Map(columns.flatMap(c => c.blocks).map(b => [b.id,b])).values()].sort((a,b) => a.time.localeCompare(b.time)).map(item => <button key={item.id} type="button" onClick={() => { const booking = bookings.find(b => b.id === item.id); if (booking) setDetail(booking); }} className="w-full flex gap-4 items-start text-left p-4 bg-[var(--surface)] border border-[var(--border)] rounded-lg">
+            <span className="font-semibold tabular-nums text-[var(--brand-fg)]">{item.time}</span>
+            <span className="min-w-0 flex-1"><strong className="block text-sm">{bookings.find(b => b.id === item.id)?.customerName}</strong><span className="block text-xs text-[var(--text-muted)] mt-1">{item.service} · {proName(bookings.find(b => b.id === item.id)?.professionalId || '') || 'Sem profissional'}</span><span className="inline-block text-xs mt-2 font-semibold">{item.statusLabel}{bookings.find(b => b.id === item.id)?.bookingKind === 'fit_in' ? ' · Encaixe' : ''}</span></span><Icon n="chevR" size={16} />
+          </button>)}
+        </section>
+      ) : view === 'month' ? (
         <div className="bg-white border border-zinc-200 overflow-hidden p-2">
           <div className="grid grid-cols-7 gap-px mb-1">
             {['seg', 'ter', 'qua', 'qui', 'sex', 'sáb', 'dom'].map((d) => (
@@ -1426,7 +1428,7 @@ export default function AgendaPage() {
               const pend = list.filter((b) => needsClosure(b, bookingDuration(serviceOf(b.serviceId)), today, nowHM(new Date(), bizTz))).length;
               const inMonth = d.slice(0, 7) === focus.slice(0, 7);
               return (
-                <button key={d} onClick={() => { setFocus(d); setView('day'); }} className={`bg-white p-1.5 min-h-[72px] text-left hover:bg-zinc-50 ${d === today ? 'ring-1 ring-inset ring-emerald-500 bg-emerald-50/40' : ''} ${!inMonth ? 'bg-zinc-50 text-zinc-400' : ''}`}>
+                <button key={d} onClick={() => { setPresentation({data:d,view:'day'}); }} className={`bg-white p-1.5 min-h-[72px] text-left hover:bg-zinc-50 ${d === today ? 'ring-1 ring-inset ring-emerald-500 bg-emerald-50/40' : ''} ${!inMonth ? 'bg-zinc-50 text-zinc-400' : ''}`}>
                   <span className="flex items-center justify-between">
                     <span className={`text-xs font-semibold ${d === today ? 'text-emerald-700' : inMonth ? 'text-zinc-700' : 'text-zinc-400'}`}>{Number(d.slice(8, 10))}</span>
                     {pend > 0 && <span className="text-[9px] font-bold bg-amber-500 text-white rounded-full px-1">{pend}</span>}
@@ -1592,9 +1594,8 @@ export default function AgendaPage() {
 
       {/* Confirmação explícita do drop — nada acontece em silêncio */}
       {dropAsk && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4" role="dialog" aria-modal="true" aria-label="Confirmar reagendamento">
-          <div className="absolute inset-0 bg-[var(--overlay)]" onClick={() => !saving && setDropAsk(null)} />
-          <div className="relative w-full sm:max-w-sm bg-white rounded-lg border border-zinc-200 p-5 shadow-lg">
+        <Drawer open onClose={() => !saving && setDropAsk(null)} title="Confirmar reagendamento" width="max-w-lg">
+          <div className="p-5">
             <p className="font-semibold">{dropConfirmQuestion(dropAsk.date, dropAsk.time)}</p>
             <p className="text-sm text-zinc-600 mt-1.5"><strong>{dropAsk.booking.customerName}</strong> · {serviceName(dropAsk.booking.serviceId)}</p>
             <p className="text-sm mt-1">
@@ -1618,7 +1619,7 @@ export default function AgendaPage() {
               <Button variant="secondary" onClick={() => setDropAsk(null)} disabled={saving}>Cancelar</Button>
             </div>
           </div>
-        </div>
+        </Drawer>
       )}
 
       {detail && (

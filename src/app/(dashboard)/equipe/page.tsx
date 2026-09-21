@@ -3,10 +3,10 @@ import { useCallback, useEffect, useState } from 'react';
 import { useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { Icon } from '@/components/icons';
-import { Avatar, Badge, Button, Notice, PageHeader, PageSkeleton, Select } from '@/components/ui';
+import { Avatar, Badge, Button, Drawer, Notice, PageHeader, PageSkeleton, Select } from '@/components/ui';
 import { cn } from '@/lib/utils';
 import type { MemberRole, PermissionId } from '@/lib/types';
-import { AccessDenied, useAreaLoad } from '@/components/dashboard/AccessNotice';
+import { AccessDenied, AreaLoadError, useAreaLoad } from '@/components/dashboard/AccessNotice';
 import { apiGet, apiSend } from '@/lib/api-client';
 import { MemberAccessSheet } from '@/components/dashboard/MemberAccessSheet';
 
@@ -39,7 +39,7 @@ export default function EquipePage() {
 
   // 403 aqui não pode virar "carregando para sempre": mostramos o aviso e o
   // usuário continua logado (somente 401 inicia o fluxo de login).
-  const { denied, report } = useAreaLoad('Equipe');
+  const { denied, failed, report } = useAreaLoad('Equipe');
 
   const load = useCallback(async () => {
     if (!businessId) return;
@@ -105,6 +105,7 @@ export default function EquipePage() {
   }
 
   if (denied) return <AccessDenied area="Equipe" />;
+  if (failed) return <AreaLoadError area="Equipe" message={failed} onRetry={load} />;
   if (!data) return <PageSkeleton />;
   const q = `?b=${businessId}`;
   const roleLabel = (r: string) => data.roles.find((x) => x.id === r)?.label || r;
@@ -216,19 +217,7 @@ export default function EquipePage() {
 
       {/* Drawer lateral — permissões agrupadas */}
       {drawer && (
-        <div className="fixed inset-0 z-50 flex justify-end" role="dialog" aria-modal="true">
-          <div className="absolute inset-0 bg-[var(--overlay)]" onClick={() => setDrawer(null)} />
-          <div className="relative w-full sm:max-w-[420px] bg-white h-full overflow-y-auto border-l border-zinc-200 shadow-xl">
-            <div className="sticky top-0 bg-white border-b border-zinc-200 px-4 py-3 flex items-center justify-between">
-              <div className="flex items-center gap-2.5 min-w-0">
-                <Avatar name={drawer.name} src={drawer.professionalPhoto || undefined} size={32} />
-                <div className="min-w-0">
-                  <p className="font-semibold text-sm truncate">{drawer.name}</p>
-                  <p className="text-xs text-zinc-500 truncate">{drawer.email}</p>
-                </div>
-              </div>
-              <button onClick={() => setDrawer(null)} className="p-1.5 hover:bg-zinc-100 rounded-md"><Icon n="x" size={16} /></button>
-            </div>
+        <Drawer open onClose={() => setDrawer(null)} title={drawer.name} subtitle={drawer.email} width="max-w-[480px]">
             <div className="p-4 space-y-5">
               <div className="flex items-center gap-2">
                 <button onClick={() => saveMember(drawer, { active: !drawer.active })} className={`text-xs font-semibold px-3 py-1.5 rounded-md border ${drawer.active ? 'bg-white border-zinc-200' : 'bg-amber-50 border-amber-200 text-amber-800'}`}>{drawer.active ? 'Desativar' : 'Ativar'}</button>
@@ -286,8 +275,7 @@ export default function EquipePage() {
                 <p className="text-xs text-zinc-500 mt-2">Inclui <strong>Início</strong> como permissão independente — desative para ocultar o resumo de quem não precisa.</p>
               </div>
             </div>
-          </div>
-        </div>
+        </Drawer>
       )}
 
       {/* Criar/gerenciar acesso — componente COMPARTILHADO com Profissionais. */}

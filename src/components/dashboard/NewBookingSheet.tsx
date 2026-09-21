@@ -16,7 +16,7 @@ import type { OccurrencePreview } from '@/lib/booking-series';
 import { onlyDigits } from '@/lib/utils';
 import { cn } from '@/lib/utils';
 import type { Professional, Service } from '@/lib/types';
-import { Avatar, Badge, Button, Checkbox, Field, IconButton, Input, Notice, Select } from '@/components/ui';
+import { Drawer, Avatar, Badge, Button, Checkbox, Field, IconButton, Input, Notice, Select } from '@/components/ui';
 
 interface Contact {
   id: string;
@@ -272,16 +272,7 @@ export function NewBookingSheet({ businessId, services, pros, timezone, initial,
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4" role="dialog" aria-modal="true" aria-label="Novo agendamento">
-      <button type="button" aria-label="Fechar" onClick={onClose} className="absolute inset-0 bg-[var(--overlay)] backdrop-blur-[1px]" />
-      <div className="relative w-full sm:max-w-xl bg-[var(--surface)] rounded-t-xl sm:rounded-xl border border-[var(--border)] max-h-[92vh] overflow-y-auto ws-scroll shadow-xl">
-        <div className="sticky top-0 z-10 bg-[var(--surface)] px-5 py-3.5 flex items-center justify-between gap-3 border-b border-[var(--border)]">
-          <div className="min-w-0">
-            <p className="text-sm font-semibold text-[var(--text)]">Novo agendamento</p>
-            <p className="text-xs text-[var(--text-muted)]">Cliente → serviço → data → horário</p>
-          </div>
-          <IconButton icon="x" label="Fechar" size="sm" variant="ghost" onClick={onClose} />
-        </div>
+    <Drawer open onClose={() => { if (!saving && !reviewing) onClose(); }} title="Novo agendamento" subtitle="Paciente → serviço → data e horário → confirmação" width="max-w-xl">
         <div className="px-5 py-4 space-y-3.5">
           {created ? (
             <div className="space-y-4" data-booking-created="true">
@@ -318,11 +309,11 @@ export function NewBookingSheet({ businessId, services, pros, timezone, initial,
           <div>
             <span className="block text-xs font-semibold text-[var(--text-muted)] mb-1.5">1. Cliente <span className="text-[var(--danger)]">*</span></span>
             {picked ? (
-              <div className="flex items-center gap-3 bg-[var(--success-bg)] border border-[var(--success-border)] rounded-lg px-3.5 py-3">
+              <div className="flex flex-wrap items-center gap-3 bg-[var(--success-bg)] border border-[var(--success-border)] rounded-lg px-3.5 py-3">
                 <Avatar name={name || '?'} size={36} />
-                <span className="min-w-0 flex-1">
-                  <span className="block text-sm font-semibold text-[var(--text)] truncate">{name}</span>
-                  <span className="block text-xs text-[var(--success-fg)] truncate">
+                <span className="min-w-0 flex-1 basis-40">
+                  <span className="block text-sm font-semibold text-[var(--text)] break-words">{name}</span>
+                  <span className="block text-xs text-[var(--success-fg)] break-words">
                     {phone}{email ? ` · ${email}` : ''}
                   </span>
                 </span>
@@ -505,9 +496,12 @@ export function NewBookingSheet({ businessId, services, pros, timezone, initial,
             onChange={changeOccurrences} onReview={review} onDisable={() => setRepeat(false)} />}
 
           <Field label="Observação" hint="Opcional — fica no histórico do atendimento">
-            <Input value={note} onChange={(e) => setNote(e.target.value)} maxLength={300} placeholder="Ex: cliente prefere esmalte claro" />
+            <Input value={note} onChange={(e) => setNote(e.target.value)} maxLength={300} placeholder="Ex: paciente solicitou um retorno" />
           </Field>
 
+          {service && date && (time || repeat) && <section aria-label="Revise o agendamento" className="rounded-lg bg-[var(--surface-3)] p-4 text-sm space-y-1">
+            <h3 className="font-semibold">Confira antes de confirmar</h3><p>{name || 'Cadastro selecionado'} · {service.name}</p><p>{date.split('-').reverse().join('/')} às {time || 'Horários da recorrência'}</p><p className="text-xs text-[var(--text-muted)]">{eligiblePros.find(p => p.id === proId)?.name || 'Distribuição automática entre profissionais elegíveis'}{repeat ? ` · ${occurrences.length} ocorrências` : ''}</p>
+          </section>}
           {error && <Notice tone="error">{error}</Notice>}
           <Button type="button" variant="primary" size="lg" onClick={() => save()}
             disabled={saving || reviewing || (repeat && (!preview || preview.some((r) => r.state !== 'available')))}
@@ -517,7 +511,6 @@ export function NewBookingSheet({ businessId, services, pros, timezone, initial,
           </div>
           )}
         </div>
-      </div>
-    </div>
+    </Drawer>
   );
 }

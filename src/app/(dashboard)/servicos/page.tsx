@@ -5,7 +5,7 @@ import { cn, centsToBR } from '@/lib/utils';
 import type { Category, Professional, Service } from '@/lib/types';
 import { Button, EmptyState, IconButton, ListSkeleton, Notice, PageHeader } from '@/components/ui';
 import { Icon } from '@/components/icons';
-import { AccessDenied } from '@/components/dashboard/AccessNotice';
+import { AccessDenied, AreaLoadError } from '@/components/dashboard/AccessNotice';
 import { apiGet, apiSend } from '@/lib/api-client';
 import { DeleteSheet, ServiceForm, CatalogCrossLinks } from '@/components/dashboard/catalog-panels';
 
@@ -37,6 +37,7 @@ export default function ServicosPage() {
   const [catName, setCatName] = useState('');
   const [askDelete, setAskDelete] = useState<DeleteAsk | null>(null);
   // 403 nesta tela → aviso amigável (o usuário continua logado).
+  const [loadError, setLoadError] = useState('');
   const [denied, setDenied] = useState(false);
 
   const load = useCallback(async () => {
@@ -44,10 +45,12 @@ export default function ServicosPage() {
     const res = await apiGet<any>(`/api/catalog/get?businessId=${businessId}`, { scope: 'area', area: 'Serviços' });
     if (!res.ok) {
       // Sem permissão: mostra o aviso e NÃO tenta desenhar a tela vazia.
+      setLoadError(res.message || 'Falha de conexão.');
       setDenied(res.status === 403);
       setLoaded(true);
       return;
     }
+    setLoadError('');
     const d = res.data || {};
     setCats((d.categories || []).filter((c: Category) => c.kind === 'service'));
     setServices(d.services || []);
@@ -131,6 +134,8 @@ export default function ServicosPage() {
       </>
     );
   }
+
+  if (loadError) return <>{header}<AreaLoadError area="Serviços" message={loadError} onRetry={load} /></>;
 
   return (
     <>

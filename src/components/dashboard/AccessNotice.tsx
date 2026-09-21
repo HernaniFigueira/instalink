@@ -184,3 +184,13 @@ export function useAreaLoad(area: string) {
 }
 
 export { PERMISSION_MESSAGES };
+
+/** A failed request is neither an empty list nor an endless skeleton. */
+export function AreaLoadError({ area, message, onRetry }: { area: string; message: string; onRetry: () => void | Promise<void> }) {
+  const [retrying, setRetrying] = useState(false);
+  return <section role="alert" className="rounded-lg border border-[var(--danger-border)] bg-[var(--surface)] p-6 space-y-3">
+    <h2 className="font-semibold">Não foi possível carregar {area.toLocaleLowerCase('pt-BR')}</h2>
+    <p className="text-sm text-[var(--text-muted)]">{message} Nenhum dado foi apagado. Sua sessão foi preservada.</p>
+    <Button variant="secondary" disabled={retrying} onClick={async () => { setRetrying(true); try { await onRetry(); } finally { setRetrying(false); } }}>{retrying ? 'Tentando…' : 'Tentar novamente'}</Button>
+  </section>;
+}

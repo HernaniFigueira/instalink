@@ -43,7 +43,7 @@ import { defaultBookingConfig } from '@/lib/types';
 import { Button, PageHeader, PageSkeleton, Tabs } from '@/components/ui';
 import { Icon } from '@/components/icons';
 import { ImageUpload } from '@/components/dashboard/ImageUpload';
-import { AccessDenied, useAreaLoad } from '@/components/dashboard/AccessNotice';
+import { AccessDenied, AreaLoadError, useAreaLoad } from '@/components/dashboard/AccessNotice';
 import { apiGet, apiSend } from '@/lib/api-client';
 
 type ConfigTab = 'negocio' | 'agenda';
@@ -197,7 +197,7 @@ export default function ConfigPage() {
   }, [tabParam, businessId, router]);
 
   // 403 → aviso amigável (sessão preservada), nunca skeleton infinito.
-  const { denied, report } = useAreaLoad('Configurações');
+  const { denied, failed, report } = useAreaLoad('Configurações');
 
   const load = useCallback(async () => {
     if (!businessId) return;
@@ -237,6 +237,7 @@ export default function ConfigPage() {
   // Salva só a cor da navegação; a página pública não é tocada.
 
   if (denied) return <AccessDenied area="Configurações" />;
+  if (failed) return <AreaLoadError area="Configurações" message={failed} onRetry={load} />;
   if (!biz) return <PageSkeleton />;
   const set = (k: keyof Business, v: any) => setBiz({ ...biz, [k]: v });
   const input = 'w-full rounded-md border border-[var(--border-strong)] px-3 py-2 text-sm shadow-xs focus:outline-none focus:shadow-focus focus:border-[var(--brand)]';

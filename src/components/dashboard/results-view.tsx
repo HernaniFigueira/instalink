@@ -54,8 +54,8 @@ export function PeriodPicker({ value, onChange, label = 'Período dos resultados
   );
 
   return (
-    <div className="max-w-full">
-      <div role="group" aria-label={label} className="inline-flex items-center bg-white border border-zinc-200 rounded-md p-0.5 gap-0.5 max-w-full overflow-x-auto no-scrollbar">
+    <div className="min-w-0 max-w-full">
+      <div role="group" aria-label={label} className="inline-flex flex-wrap items-center bg-white border border-zinc-200 rounded-md p-0.5 gap-0.5 max-w-full overflow-x-auto no-scrollbar">
         {MAIN_PERIOD_KEYS.map(chip)}
         <button
           type="button"
@@ -79,7 +79,7 @@ export function PeriodPicker({ value, onChange, label = 'Período dos resultados
       </div>
 
       {openMore && (
-        <div className="mt-2 inline-flex items-center bg-white border border-zinc-200 rounded-md p-0.5 gap-0.5">
+        <div className="mt-2 inline-flex flex-wrap items-center bg-white border border-zinc-200 rounded-md p-0.5 gap-0.5">
           {MORE_PERIOD_KEYS.map(chip)}
         </div>
       )}

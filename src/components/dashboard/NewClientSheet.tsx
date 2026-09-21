@@ -6,7 +6,7 @@ import { apiSend } from '@/lib/api-client';
 import { onlyDigits } from '@/lib/utils';
 import { emailError, normalizeEmail, phoneError } from '@/lib/field-quality';
 import { PhoneBRInput } from '@/components/dashboard/PhoneBRInput';
-import { Button } from '@/components/ui';
+import { Button, Drawer } from '@/components/ui';
 
 interface SavedContact {
   id: string;
@@ -80,19 +80,7 @@ export function NewClientSheet({
   const label = 'block text-xs font-semibold tracking-wide uppercase text-zinc-500';
 
   return (
-    <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4" role="dialog" aria-modal="true" aria-label="Novo cliente">
-      <div className="absolute inset-0 bg-[var(--overlay)]" onClick={onClose} />
-      <div className="relative w-full sm:max-w-md bg-white rounded-t-2xl sm:rounded-2xl border border-zinc-200 max-h-[92vh] overflow-y-auto shadow-xl">
-        <div className="sticky top-0 z-10 bg-white px-5 py-4 flex items-start justify-between border-b border-zinc-200">
-          <div>
-            <p className="font-bold text-zinc-900">Novo cliente</p>
-            <p className="text-xs text-zinc-500 mt-0.5">Cadastro direto no CRM, sem criar lead ou agendamento.</p>
-          </div>
-          <button type="button" onClick={onClose} className="text-zinc-400 hover:text-zinc-700 p-1.5" aria-label="Fechar">
-            <Icon n="x" size={17} />
-          </button>
-        </div>
-
+    <Drawer open onClose={() => { if (!saving) onClose(); }} title="Novo cliente" subtitle="Cadastro direto, sem criar oportunidade ou agendamento." width="max-w-md">
         {saved ? (
           <div className="px-5 py-6 space-y-4">
             <div className="rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-4">
@@ -152,7 +140,6 @@ export function NewClientSheet({
             </Button>
           </div>
         )}
-      </div>
-    </div>
+    </Drawer>
   );
 }

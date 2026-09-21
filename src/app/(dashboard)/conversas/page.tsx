@@ -6,7 +6,7 @@ import { Icon } from '@/components/icons';
 import { PageSkeleton } from '@/components/ui';
 import { cn } from '@/lib/utils';
 import { humanDateTime } from '@/lib/tz';
-import { AccessDenied, useAreaLoad } from '@/components/dashboard/AccessNotice';
+import { AccessDenied, AreaLoadError, useAreaLoad } from '@/components/dashboard/AccessNotice';
 import { apiGet, apiSend } from '@/lib/api-client';
 import { INSTAGRAM_TEXT_MAX_BYTES, instagramTextBytes, instagramTextFits, instagramTextLimitError } from '@/lib/instagram';
 import type { WaChannelData } from '@/components/dashboard/WhatsappChannelPanel';
@@ -119,7 +119,7 @@ export default function ConversasPage() {
   }
 
   // 403 → aviso amigável (a sessão continua); nada de skeleton infinito.
-  const { denied, report } = useAreaLoad('Conversas');
+  const { denied, failed, report } = useAreaLoad('Conversas');
 
   const load = useCallback(async () => {
     if (!businessId) return;
@@ -155,6 +155,7 @@ export default function ConversasPage() {
   }
 
   if (denied) return <AccessDenied area="Conversas" />;
+  if (failed) return <AreaLoadError area="Conversas" message={failed} onRetry={load} />;
   if (!data) return <PageSkeleton />;
   const clientesQ = `?b=${businessId}`;
   // Link para o canal: mantém a unidade ativa (?b=) e abre já na aba Canais.

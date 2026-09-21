@@ -14,7 +14,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { PageHeader, PageSkeleton } from '@/components/ui';
-import { AccessDenied, useAreaLoad } from '@/components/dashboard/AccessNotice';
+import { AccessDenied, AreaLoadError, useAreaLoad } from '@/components/dashboard/AccessNotice';
 import { PeriodPicker, ResultsView } from '@/components/dashboard/results-view';
 import { useRevalidateOnFocus } from '@/components/dashboard/use-revalidate';
 import { apiGet } from '@/lib/api-client';
@@ -77,11 +77,14 @@ export default function ResultadosPage() {
   const toParam = params.get('to');
 
   const [data, setData] = useState<ResultsResponse | null>(null);
+  const [analyticsError, setAnalyticsError] = useState('');
+  const [analyticsLoading, setAnalyticsLoading] = useState(true);
+  const [analyticsRetry, setAnalyticsRetry] = useState(0);
   const [page, setPage] = useState<Analytics | null>(null);
   const [loading, setLoading] = useState(true);
 
   // 403 → aviso amigável (sessão preservada), nunca skeleton infinito.
-  const { denied, report } = useAreaLoad('Resultados');
+  const { denied, failed, report } = useAreaLoad('Resultados');
 
   // Período resolvido pela FONTE ÚNICA (lib/periods.ts) — a mesma que a API usa.
   const spec = useMemo(
@@ -116,9 +119,12 @@ export default function ResultadosPage() {
           : spec.key;
   useEffect(() => {
     if (!businessId) return;
+    let alive = true;
+    setPage(null); setAnalyticsError(''); setAnalyticsLoading(true);
     apiGet<Analytics>(`/api/analytics?businessId=${businessId}&period=${analyticsPeriod}`, { scope: 'area', area: 'Resultados' })
-      .then((res) => { if (res.ok && res.data) setPage(res.data); });
-  }, [businessId, analyticsPeriod]);
+      .then(res => { if (!alive) return; if (res.ok && res.data) setPage(res.data); else setAnalyticsError(res.message || 'Falha de conexão.'); setAnalyticsLoading(false); });
+    return () => { alive = false; };
+  }, [businessId, analyticsPeriod, analyticsRetry]);
 
   function changePeriod(next: { key: PeriodKey; from: string; to: string }) {
     const sp = new URLSearchParams(params.toString());
@@ -134,6 +140,7 @@ export default function ResultadosPage() {
   }
 
   if (denied) return <AccessDenied area="Resultados" />;
+  if (failed) return <AreaLoadError area="Resultados" message={failed} onRetry={load} />;
   if (!data) return <PageSkeleton />;
 
   const pageTotals = page?.totals;
@@ -153,6 +160,8 @@ export default function ResultadosPage() {
       <ResultsView payload={data.results} />
 
       {/* ── Camada 2: o que a PÁGINA PÚBLICA produziu (endpoint preservado) ── */}
+      {analyticsLoading && <p role="status" className="text-sm mt-6">Carregando estatísticas da página pública…</p>}
+      {analyticsError && <AreaLoadError area="estatísticas da página pública" message={analyticsError} onRetry={() => setAnalyticsRetry(n => n+1)} />}
       {pageTotals && (
         <section className="mt-6 space-y-4">
           <div className="pt-4 border-t border-zinc-200">

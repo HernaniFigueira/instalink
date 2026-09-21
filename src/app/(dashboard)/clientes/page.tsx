@@ -73,6 +73,7 @@ export default function ClientesPage() {
   const { role } = usePanelPermissions();
   const canExportFull = ['OWNER', 'ADMIN', 'MASTER'].includes(String(role || '').toUpperCase());
   const [pendingClientOpen, setPendingClientOpen] = useState('');
+  const [createdClientId, setCreatedClientId] = useState('');
   const [services, setServices] = useState<any[]>([]);
   const [pros, setPros] = useState<any[]>([]);
 
@@ -411,12 +412,12 @@ export default function ClientesPage() {
           businessId={businessId}
           onClose={() => setNewClientOpen(false)}
           onSaved={(contactId) => {
-            setPendingClientOpen(contactId);
+            setCreatedClientId(contactId);
             load();
           }}
           onView360={() => {
-            // `pendingClientOpen` é resolvido quando a resposta do 360 chega;
-            // o botão pode fechar a ficha sem perder o destino.
+            // Open only on the explicit action, never over the save confirmation.
+            setPendingClientOpen(createdClientId);
             setNewClientOpen(false);
           }}
         />

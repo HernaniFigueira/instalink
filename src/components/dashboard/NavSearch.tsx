@@ -13,6 +13,7 @@
 //   • O `?b=businessId` é preservado pelo `href` já resolvido que chega pronto.
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
+import { mayLeaveEditor } from './useUnsavedChanges';
 import { Icon } from '@/components/icons';
 
 // O tipo e a regra de busca vêm de lib/nav-search.ts (pura e testável).
@@ -68,7 +69,7 @@ export function NavSearch({ items, collapsed, activePath }: {
 
   function go(item?: NavSearchItem) {
     const target = item || results[cursor];
-    if (!target) return;
+    if (!target || !mayLeaveEditor()) return;
     setOpen(false);
     setQuery('');
     router.push(target.href);

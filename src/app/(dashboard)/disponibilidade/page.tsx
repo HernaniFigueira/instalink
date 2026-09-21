@@ -5,7 +5,7 @@ import Link from 'next/link';
 import type { Availability, AvailabilityException, Professional } from '@/lib/types';
 import { Button, ListSkeleton, Notice, PageHeader, Panel, Select } from '@/components/ui';
 import { BusinessHoursPanel } from '@/components/dashboard/BusinessHours';
-import { AccessDenied } from '@/components/dashboard/AccessNotice';
+import { AccessDenied, AreaLoadError } from '@/components/dashboard/AccessNotice';
 import { apiGet, apiSend } from '@/lib/api-client';
 import { ExceptionsManager, CatalogCrossLinks } from '@/components/dashboard/catalog-panels';
 
@@ -43,16 +43,19 @@ export default function DisponibilidadePage() {
   const [loaded, setLoaded] = useState(false);
   const [msg, setMsg] = useState('');
   // 403 nesta tela → aviso amigável (o usuário continua logado).
+  const [loadError, setLoadError] = useState('');
   const [denied, setDenied] = useState(false);
 
   const load = useCallback(async () => {
     if (!businessId) return;
     const res = await apiGet<any>(`/api/catalog/get?businessId=${businessId}`, { scope: 'area', area: 'Disponibilidade' });
     if (!res.ok) {
+      setLoadError(res.message || 'Falha de conexão.');
       setDenied(res.status === 403);
       setLoaded(true);
       return;
     }
+    setLoadError('');
     const d = res.data || {};
     setPros(d.professionals || []);
     setRules(d.availability || []);
@@ -89,6 +92,8 @@ export default function DisponibilidadePage() {
       </>
     );
   }
+
+  if (loadError) return <>{header}<AreaLoadError area="Disponibilidade" message={loadError} onRetry={load} /></>;
 
   return (
     <>

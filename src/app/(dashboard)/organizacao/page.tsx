@@ -13,6 +13,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
+import { AreaLoadError } from '@/components/dashboard/AccessNotice';
 import { money } from '@/lib/utils';
 import { PeriodPicker, ResultsView } from '@/components/dashboard/results-view';
 import { useRevalidateOnFocus } from '@/components/dashboard/use-revalidate';
@@ -51,6 +52,9 @@ function unitMetrics(results: ResultsPayload) {
 export default function OrganizationPage() {
   const params = useSearchParams();
   const router = useRouter();
+  const [loadError, setLoadError] = useState('');
+  const [resultsError, setResultsError] = useState('');
+  const [orgRetry, setOrgRetry] = useState(0);
   const [orgs, setOrgs] = useState<Org[] | null>(null);
   const [adding, setAdding] = useState(() => params.get('add') === '1');
   const [name, setName] = useState('');
@@ -66,21 +70,21 @@ export default function OrganizationPage() {
   }), [params]);
 
   useEffect(() => {
+    setLoadError('');
     apiGet<{ organizations: Org[] }>('/api/organizations')
-      .then((res) => setOrgs(res.ok ? (res.data?.organizations || []) : []))
-      .catch(() => setOrgs([]));
-  }, []);
+      .then(res => { if (res.ok) setOrgs(res.data?.organizations || []); else setLoadError(res.message || 'Falha de conexão.'); });
+  }, [orgRetry]);
 
   const loadResults = useCallback(async () => {
     if (!org) return;
-    setLoading(true);
+    setLoading(true); setResultsError(''); setData(null);
     const query = spec.key === 'custom'
       ? `period=custom&from=${spec.from}&to=${spec.to}`
       : `period=${spec.key === 'all' ? '0' : spec.key}`;
     const res = await apiGet<ConsolidatedResponse>(`/api/results?organizationId=${org.id}&${query}`, { scope: 'area', area: 'Resultados' });
     setLoading(false);
     if (res.ok && res.data) setData(res.data);
-    else setData(null);
+    else { setData(null); setResultsError(res.message || 'Falha de conexão.'); }
   }, [org?.id, spec.key, spec.from, spec.to]);
 
   useEffect(() => { loadResults(); }, [loadResults]);
@@ -114,6 +118,7 @@ export default function OrganizationPage() {
     router.replace(`/organizacao?${sp.toString()}`);
   }
 
+  if (loadError) return <AreaLoadError area="Organização" message={loadError} onRetry={() => setOrgRetry(n => n+1)} />;
   if (!orgs) return <p className="text-sm text-zinc-500">Carregando organização…</p>;
   if (!org) return <p className="text-sm text-zinc-500">Nenhuma organização disponível.</p>;
 
@@ -146,8 +151,8 @@ export default function OrganizationPage() {
 
       {adding && (
         <form onSubmit={addUnit} className="bg-white border border-zinc-200 rounded-lg p-4 grid sm:grid-cols-3 gap-3">
-          <input required value={name} onChange={(e) => setName(e.target.value)} placeholder="Nome da unidade" className="border border-zinc-200 rounded-md px-3 py-2 text-sm" />
-          <input value={address} onChange={(e) => setAddress(e.target.value)} placeholder="Endereço" className="border border-zinc-200 rounded-md px-3 py-2 text-sm" />
+          <input aria-label="Nome da unidade" required value={name} onChange={(e) => setName(e.target.value)} placeholder="Nome da unidade" className="border border-zinc-200 rounded-md px-3 py-2 text-sm" />
+          <input aria-label="Endereço da unidade" value={address} onChange={(e) => setAddress(e.target.value)} placeholder="Endereço" className="border border-zinc-200 rounded-md px-3 py-2 text-sm" />
           <Button type="submit" variant="primary">Criar unidade independente</Button>
         </form>
       )}
@@ -157,7 +162,9 @@ export default function OrganizationPage() {
           ['Unidades', String(org.totals.units)],
           ['Agendamentos (total)', String(org.totals.bookings)],
           ['Clientes na base', String(org.totals.clients)],
-          ['Receita prevista (total)', money(org.totals.predictedRevenue)],
+          // The legacy organizations response is broader than its UI gate (D0-S).
+          // Show this total only when the guarded results endpoint authorized EVERY unit.
+          ...(data?.organization.id === org.id && org.units.every(u => data.units.some(x => x.id === u.id)) ? [['Receita prevista (total)', money(org.totals.predictedRevenue)]] : []),
         ].map(([l, v]) => (
           <div key={l} className="bg-white p-4">
             <p className="text-xs text-zinc-500">{l}</p>
@@ -179,11 +186,7 @@ export default function OrganizationPage() {
         </div>
 
         {loading && <p className="text-xs text-zinc-400" role="status">Carregando resultados…</p>}
-        {!loading && !data && (
-          <p className="text-xs text-zinc-600 bg-white border border-zinc-200 rounded-lg px-4 py-3">
-            Seu perfil não tem acesso aos resultados destas unidades.
-          </p>
-        )}
+        {resultsError && <AreaLoadError area="Resultados consolidados" message={resultsError} onRetry={loadResults} />}
         {data && <ResultsView payload={data.consolidated} />}
       </section>
 
@@ -203,10 +206,10 @@ export default function OrganizationPage() {
                   </span>
                 </div>
                 <span className="flex items-center gap-2 shrink-0">
-                  <Link href={`/resultados?b=${u.id}&period=${spec.key === 'custom' ? '30' : spec.key === 'all' ? '0' : spec.key}`}
+                  {unitResults && <Link href={`/resultados?b=${u.id}&period=${spec.key === 'custom' ? '30' : spec.key === 'all' ? '0' : spec.key}`}
                     className="text-xs font-semibold bg-white border border-zinc-200 px-3 py-1.5 rounded-md">
                     Resultados
-                  </Link>
+                  </Link>}
                   <Link href={`/dashboard?b=${u.id}`} className="text-xs font-semibold text-zinc-600 px-1">Abrir unidade →</Link>
                 </span>
               </div>
