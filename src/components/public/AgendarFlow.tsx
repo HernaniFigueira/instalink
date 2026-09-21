@@ -58,6 +58,9 @@ export default function AgendarFlow({ business, services, professionals, today, 
   const [note, setNote] = useState('');
   const [marketingOptIn, setMarketingOptIn] = useState(false);
 
+  const submitLock = useRef(false);
+  const [daysError, setDaysError] = useState('');
+  const [daysTry, setDaysTry] = useState(0);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState('');
   const [done, setDone] = useState<{ status: string; time: string; date: string; professionalName?: string } | null>(null);
@@ -89,16 +92,17 @@ export default function AgendarFlow({ business, services, professionals, today, 
   useEffect(() => {
     if (!serviceId || days.length === 0) return;
     let alive = true;
+    setDaysError(''); setDayInfo({});
     fetch(`/api/bookings?businessId=${business.id}&serviceId=${serviceId}&from=${days[0]}&to=${days[days.length - 1]}`)
-      .then((r) => r.json())
+      .then(async r => { const d = await r.json(); if (!r.ok) throw Error('Não foi possível consultar a disponibilidade dos dias.'); return d; })
       .then((d) => {
         if (!alive) return;
         setDayInfo(d.days || {});
         if (d.today) setServerToday(d.today);
       })
-      .catch(() => { if (alive) setDayInfo({}); });
+      .catch(() => { if (alive) setDaysError('Não foi possível consultar a disponibilidade dos dias.'); });
     return () => { alive = false; };
-  }, [serviceId, business.id, days[0], days.length]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [serviceId, business.id, days[0], days.length, daysTry]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Slots do dia selecionado.
   useEffect(() => {
@@ -160,6 +164,8 @@ export default function AgendarFlow({ business, services, professionals, today, 
       setError('Informe seu nome e um WhatsApp válido.');
       return;
     }
+    if (submitLock.current) return;
+    submitLock.current = true;
     setSubmitting(true);
     try {
       const res = await fetch('/api/bookings', {
@@ -195,6 +201,7 @@ export default function AgendarFlow({ business, services, professionals, today, 
     } catch (err: any) {
       setError(err.message || 'Falha ao agendar. Tente novamente.');
     } finally {
+      submitLock.current = false;
       setSubmitting(false);
     }
   }
@@ -215,7 +222,7 @@ export default function AgendarFlow({ business, services, professionals, today, 
           </h2>
           <p className="text-sm text-zinc-600 mb-6">
             {pending
-              ? `Recebemos seu pedido na ${business.name}. A equipe vai confirmar pelo WhatsApp.`
+              ? `Recebemos seu pedido na ${business.name}. A confirmação depende da clínica; confira os canais de contato disponíveis.`
               : `Sua reserva na ${business.name} está confirmada.`}
           </p>
           <div className="bg-zinc-50 border border-zinc-200 rounded-xl p-4 text-left text-sm space-y-2 mb-6">
@@ -250,18 +257,19 @@ export default function AgendarFlow({ business, services, professionals, today, 
           >
             Fazer outro agendamento
           </button>
+          <a href={`/${business.slug}?conta=1`} className="block text-sm underline mt-4">{me ? 'Acessar minha conta na clínica' : 'Entrar ou criar acesso na clínica'}</a>
         </div>
       </div>
     );
   }
 
   return (
-    <div ref={rootRef} className={cn('max-w-2xl mx-auto p-4 sm:p-6', !embed && 'my-6')}>
+    <div ref={rootRef} className={cn('public-booking-flow max-w-2xl mx-auto p-4 sm:p-6', !embed && 'my-6')}>
       <div className={cn('bg-white rounded-2xl border border-zinc-200 shadow-sm overflow-hidden', embed && 'border-none shadow-none')}>
         {/* Cabeçalho do negócio */}
         <div className="p-5 border-b border-zinc-100 flex items-center gap-3.5 bg-zinc-50/50">
           {business.logo ? (
-            <img src={business.logo} alt={business.name} className="w-12 h-12 rounded-full object-cover border border-zinc-200" />
+            <img src={business.logo} alt={business.name} className="w-24 max-h-16 object-contain" />
           ) : (
             <div className="w-12 h-12 rounded-full bg-zinc-900 text-white flex items-center justify-center font-bold text-lg">
               {business.name?.[0]?.toUpperCase() || '•'}
@@ -269,7 +277,7 @@ export default function AgendarFlow({ business, services, professionals, today, 
           )}
           <div>
             <h1 className="text-base font-bold text-zinc-900 leading-snug">{business.name}</h1>
-            <p className="text-xs text-zinc-500">Agendamento online · confirmação pela equipe</p>
+            <p className="text-xs text-zinc-500">Agendamento online · confira os dados antes de confirmar</p>
           </div>
         </div>
 
@@ -280,12 +288,13 @@ export default function AgendarFlow({ business, services, professionals, today, 
         )}
 
         <form onSubmit={submit} className="p-5 sm:p-6 space-y-6">
+          {!embed && <a href={`/${business.slug}`} className="inline-block text-sm underline">← Voltar à clínica</a>}
           {/* 1. Serviço */}
           <div>
             <label className="block text-xs font-bold uppercase tracking-wider text-zinc-500 mb-2">1. Escolha o serviço</label>
             {services.length === 0 ? (
               <p className="text-xs text-zinc-500 bg-zinc-50 border border-zinc-200 p-3 rounded-lg">
-                Este negócio ainda não tem serviços com agendamento online. Fale com a equipe pelo WhatsApp.
+                Esta clínica ainda não tem serviços com agendamento online. Entre em contato com a equipe.
               </p>
             ) : (
               <div className="grid gap-2">
@@ -320,6 +329,7 @@ export default function AgendarFlow({ business, services, professionals, today, 
           {serviceId && (
             <div>
               <label className="block text-xs font-bold uppercase tracking-wider text-zinc-500 mb-2">2. Escolha o dia</label>
+              {daysError && <div role="alert" className="text-sm mb-3"><p>{daysError}</p><button type="button" className="border rounded-md px-3 py-2 mt-2" onClick={() => setDaysTry(n => n+1)}>Tentar consultar os dias novamente</button></div>}
               <div className="flex gap-2 overflow-x-auto pb-2">
                 {days.map((d) => {
                   const info = dayInfo[d];
@@ -428,7 +438,7 @@ export default function AgendarFlow({ business, services, professionals, today, 
                         type="text"
                         required
                         placeholder="Ex: Carlos Alberto"
-                        value={name}
+                        aria-label="Seu nome" value={name}
                         onChange={(e) => setName(e.target.value)}
                         className="w-full px-3 py-2 border border-zinc-300 rounded-lg text-sm focus:outline-none focus:ring-1 focus:ring-zinc-900"
                       />
@@ -440,7 +450,7 @@ export default function AgendarFlow({ business, services, professionals, today, 
                         required
                         inputMode="tel"
                         placeholder="(11) 99999-9999"
-                        value={phone}
+                        aria-label="WhatsApp" value={phone}
                         onChange={(e) => setPhone(e.target.value)}
                         className="w-full px-3 py-2 border border-zinc-300 rounded-lg text-sm focus:outline-none focus:ring-1 focus:ring-zinc-900"
                       />
@@ -451,7 +461,7 @@ export default function AgendarFlow({ business, services, professionals, today, 
                     <input
                       type="email"
                       placeholder="seu@email.com"
-                      value={email}
+                      aria-label="E-mail" value={email}
                       onChange={(e) => setEmail(e.target.value)}
                       className="w-full px-3 py-2 border border-zinc-300 rounded-lg text-sm focus:outline-none focus:ring-1 focus:ring-zinc-900"
                     />
@@ -464,7 +474,7 @@ export default function AgendarFlow({ business, services, professionals, today, 
                 <textarea
                   rows={2}
                   placeholder="Algum detalhe sobre seu atendimento?"
-                  value={note}
+                  aria-label="Observações ou dúvidas" value={note}
                   onChange={(e) => setNote(e.target.value)}
                   className="w-full px-3 py-2 border border-zinc-300 rounded-lg text-sm focus:outline-none focus:ring-1 focus:ring-zinc-900"
                 />
@@ -484,6 +494,7 @@ export default function AgendarFlow({ business, services, professionals, today, 
             </div>
           )}
 
+          {time && service && <section className="bg-zinc-50 border border-zinc-200 rounded-lg p-4 text-sm" aria-label="Resumo da reserva"><h2 className="font-semibold mb-2">Confira antes de confirmar</h2><p>{business.name}</p><p className="font-semibold">{service.name} · {humanDay(date, serverToday)} às {time}</p><p className="text-zinc-600 mt-1">{me?.name || name || 'Informe seu nome acima'}</p><p className="text-xs text-zinc-500 mt-2">Profissional definido pela disponibilidade da clínica. A confirmação só aparece depois de salvar a reserva.</p></section>}
           <button
             type="submit"
             disabled={submitting || !canSubmit}

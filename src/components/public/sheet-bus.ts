@@ -13,6 +13,8 @@ export interface SheetState {
     title?: string;
     serviceId?: string;
     rescheduleId?: string;
+    initialDate?: string;
+    currentTime?: string;
     businessId?: string;
     businessName?: string;
     googleUrl?: string;
@@ -30,6 +32,12 @@ const authListeners = new Set<AuthListener>();
 
 function emit() {
   for (const fn of listeners) fn([...stack]);
+}
+
+let businessScope = '';
+/** Never reuse another clinic's open forms when navigating between clinics. */
+export function scopeSheets(businessId: string) {
+  if (businessScope !== businessId) { businessScope = businessId; stack = []; emit(); }
 }
 
 export function openSheet(type: SheetType, props: SheetState['props'] = {}) {

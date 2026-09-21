@@ -4,7 +4,7 @@ import Link from 'next/link';
 import { useSearchParams } from 'next/navigation';
 import type { Availability, Professional } from '@/lib/types';
 import { Button, ListSkeleton, Notice, PageHeader, SubCard } from '@/components/ui';
-import { AccessDenied } from '@/components/dashboard/AccessNotice';
+import { AccessDenied, AreaLoadError } from '@/components/dashboard/AccessNotice';
 import { apiGet, apiSend } from '@/lib/api-client';
 import { DeleteSheet, TeamEditor, CatalogCrossLinks } from '@/components/dashboard/catalog-panels';
 import { MemberAccessSheet } from '@/components/dashboard/MemberAccessSheet';
@@ -40,16 +40,19 @@ export default function ProfissionaisPage() {
   const [access, setAccess] = useState<{ professionalId: string; name: string } | null>(null);
   const [team, setTeam] = useState<Array<{ id: string; name: string; role: string; active: boolean; userId: string; photo?: string; linkedUserName?: string }>>([]);
   // 403 nesta tela → aviso amigável (o usuário continua logado).
+  const [loadError, setLoadError] = useState('');
   const [denied, setDenied] = useState(false);
 
   const load = useCallback(async () => {
     if (!businessId) return;
     const res = await apiGet<any>(`/api/catalog/get?businessId=${businessId}`, { scope: 'area', area: 'Profissionais' });
     if (!res.ok) {
+      setLoadError(res.message || 'Falha de conexão.');
       setDenied(res.status === 403);
       setLoaded(true);
       return;
     }
+    setLoadError('');
     const d = res.data || {};
     setPros(d.professionals || []);
     setRules(d.availability || []);
@@ -121,6 +124,8 @@ export default function ProfissionaisPage() {
       </>
     );
   }
+
+  if (loadError) return <>{header}<AreaLoadError area="Profissionais" message={loadError} onRetry={load} /></>;
 
   return (
     <>

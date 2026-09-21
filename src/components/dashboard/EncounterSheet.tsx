@@ -1,4 +1,5 @@
 'use client';
+import { createPortal } from 'react-dom';
 // ═══════════════════════════════════════════════════════════════
 // A3.4 · BLOCO 5 — REGISTRO DO ATENDIMENTO (painel lateral)
 // ═══════════════════════════════════════════════════════════════
@@ -97,7 +98,7 @@ export function EncounterSheet({
   businessId, bookingId, seed, existing, queueId, canReopen = false, onScheduleReturn, onClose, onChanged,
 }: Props) {
   const [row, setRow] = useState<EncounterRow | null>(existing || null);
-  const [form, setForm] = useState<Form>({ ...EMPTY });
+  const [form, setForm] = useState<Form>(() => existing ? formOf(existing) : { ...EMPTY });
   const [loading, setLoading] = useState(!existing);
   const [busy, setBusy] = useState('');
   const [error, setError] = useState('');
@@ -116,9 +117,9 @@ export function EncounterSheet({
    * payload do servidor. Todo caminho que mexe no formulário passa por
    * `updateForm` (não existe `setForm` solto no arquivo).
    */
-  const latest = useRef<{ row: EncounterRow | null; form: Form }>({ row: existing || null, form: { ...EMPTY } });
+  const latest = useRef<{ row: EncounterRow | null; form: Form }>({ row: existing || null, form: existing ? formOf(existing) : { ...EMPTY } });
   const inflight = useRef<Promise<boolean> | null>(null);
-  const lastSaved = useRef('');
+  const lastSaved = useRef(existing ? encounterDraftKey(formOf(existing)) : '');
 
   /** Única porta de escrita do formulário: mantém ref e estado juntos. */
   const updateForm = useCallback((next: Form) => {
@@ -492,7 +493,7 @@ export function EncounterSheet({
       </div>
 
       {/* ── VIA DO CLIENTE (única coisa que a impressão enxerga) ── */}
-      {row && (
+      {row && typeof document !== 'undefined' && createPortal(
         /* Fica fora da tela durante o uso normal e é trazida para o papel pelo
            CSS de impressão (`body.il-printing`) — a via do cliente não é um
            segundo conteúdo, é o MESMO registro visto de outro jeito. */
@@ -521,7 +522,7 @@ export function EncounterSheet({
               </p>
             )}
           </div>
-        </div>
+        </div>, document.body
       )}
     </Drawer>
   );

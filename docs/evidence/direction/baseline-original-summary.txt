@@ -1,0 +1,14 @@
+ FAIL  src/lib/__tests__/a34-instagram.test.ts > B9 · OUTBOUND — prova de envio, janela e isolamento > deliverInstagramMessage entrega pendente do Instagram e ignora conversa de WhatsApp
+AssertionError: expected false to be true // Object.is equality
+ FAIL  src/lib/__tests__/a34-instagram.test.ts > B9 · INBOX — canal, badge e compositor por canal > responder numa conversa do Instagram usa o canal DA CONVERSA (não o WhatsApp)
+AssertionError: expected 409 to be 200 // Object.is equality
+ FAIL  src/lib/__tests__/a34-instagram.test.ts > B9 fix · LIMITE DE TEXTO — recusa explícita, nunca truncar > no limite exato, passa — e o corpo salvo é EXATAMENTE o enviado
+AssertionError: expected 409 to be 200 // Object.is equality
+ FAIL  src/lib/__tests__/automation-audit-p4.test.ts > P4 auditoria — persistência e poda (item 6) > a poda preserva queued/running/waiting mesmo com o histórico estourado
+AssertionError: expected 'failed' to be 'waiting' // Object.is equality
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 4 ⎯⎯⎯⎯⎯⎯⎯
+ Test Files  2 failed (2)
+      Tests  4 failed | 104 passed (108)
+   Start at  12:19:32
+   Duration  2.35s (transform 696ms, setup 0ms, import 1.02s, tests 881ms, environment 0ms)

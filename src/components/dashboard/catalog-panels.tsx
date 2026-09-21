@@ -15,7 +15,7 @@ import Link from 'next/link';
 import { cn, parseMoneyToCents, centsToBR } from '@/lib/utils';
 import type { Availability, AvailabilityException, Category, Professional, Service } from '@/lib/types';
 import { Icon } from '@/components/icons';
-import { Avatar, Badge, Button } from '@/components/ui';
+import { Avatar, Badge, Button, Drawer } from '@/components/ui';
 import { ImageUpload } from '@/components/dashboard/ImageUpload';
 import { followsBusinessHours } from '@/lib/schedule';
 import { panelRoutesIn } from '@/lib/panel';
@@ -26,8 +26,7 @@ export function DeleteSheet({ name, kindLabel, blocked, onDeactivate, onConfirm,
   onDeactivate: () => void; onConfirm: () => void; onClose: () => void;
 }) {
   return (
-    <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4" role="dialog" aria-modal="true" aria-label={`Excluir ${kindLabel}`}>
-      <div className="absolute inset-0 bg-[var(--overlay)]" onClick={onClose} />
+    <Drawer open onClose={onClose} title={`Excluir ${kindLabel}`} width="max-w-md">
       <div className="relative w-full sm:max-w-md bg-white rounded-t-3xl sm:rounded-3xl p-6 space-y-3">
         <h3 className="font-bold text-lg">Excluir {kindLabel} “{name}”?</h3>
         {blocked ? (
@@ -46,7 +45,7 @@ export function DeleteSheet({ name, kindLabel, blocked, onDeactivate, onConfirm,
           <button onClick={onClose} className="w-full font-bold bg-zinc-100 py-3 rounded-md">Voltar</button>
         </div>
       </div>
-    </div>
+    </Drawer>
   );
 }
 
@@ -82,16 +81,11 @@ export function ServiceForm({ businessId, service, cats, pros, onClose, onSave }
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4" role="dialog" aria-modal="true" aria-label={service ? 'Editar serviço' : 'Novo serviço'}>
-      <div className="absolute inset-0 bg-[var(--overlay)]" onClick={onClose} />
+    <Drawer open onClose={() => { if (!loading) onClose(); }} title={service ? 'Editar serviço' : 'Novo serviço'} width="max-w-lg">
       <form onSubmit={(e) => { e.preventDefault(); setError(''); setLoading(true); onSave({ id: service?.id, name, description, image, price: parseMoneyToCents(price), showPrice, durationMin, professionalIds: proIds, categoryId, active, featured, bookable, questions }).catch((err) => setError(err.message)).finally(() => setLoading(false)); }}
-        className="relative w-full sm:max-w-lg bg-white rounded-t-3xl sm:rounded-3xl p-6 max-h-[92vh] overflow-y-auto space-y-3.5">
-        <div className="flex items-center justify-between">
-          <h3 className="font-bold text-lg">{service ? 'Editar serviço' : 'Novo serviço'}</h3>
-          <button type="button" onClick={onClose} className="font-bold text-zinc-400 px-2 inline-flex" aria-label="Fechar"><Icon n="x" size={16} /></button>
-        </div>
-        <input value={name} onChange={(e) => setName(e.target.value)} className={input} placeholder="Nome * (ex: Consulta inicial)" autoFocus />
-        <textarea value={description} onChange={(e) => setDescription(e.target.value)} className={input} rows={2} placeholder="Descrição (opcional)" />
+        className="p-5 space-y-3.5">
+        <input aria-label="Nome do serviço" value={name} onChange={(e) => setName(e.target.value)} className={input} placeholder="Nome * (ex: Consulta inicial)" autoFocus />
+        <textarea aria-label="Descrição do serviço" value={description} onChange={(e) => setDescription(e.target.value)} className={input} rows={2} placeholder="Descrição (opcional)" />
         <ImageUpload label="FOTO DO SERVIÇO" value={image} onChange={setImage} businessId={businessId} />
         <div className="grid grid-cols-2 gap-3">
           <label className="block"><span className="text-xs font-bold text-zinc-500">PREÇO (R$) *</span>
@@ -145,7 +139,7 @@ export function ServiceForm({ businessId, service, cats, pros, onClose, onSave }
         {error && <p className="text-sm font-medium text-red-600">{error}</p>}
         <Button type="submit" variant="primary" size="lg" className="w-full" disabled={loading}>{loading ? 'Salvando…' : 'Salvar serviço'}</Button>
       </form>
-    </div>
+    </Drawer>
   );
 }
 
@@ -221,11 +215,11 @@ export function TeamEditor({ businessId, pros, rules, onSave, onAskDelete, onCre
       ) : (
         <div className="space-y-2.5">
           {pros.map((p) => (
-            <div key={p.id} className={cn('bg-white border border-zinc-200 rounded-lg p-4 flex items-center gap-3', !p.active && 'opacity-60')}>
+            <div key={p.id} className={cn('bg-white border border-zinc-200 rounded-lg p-4 flex flex-wrap items-center gap-3', !p.active && 'opacity-60')}>
               {/* Ponto 9 — o MESMO Avatar de Clientes: rounded-square suave,
                   foto real quando existe, iniciais como fallback. */}
               <Avatar name={p.name} src={p.photo || undefined} size={40} />
-              <div className="flex-1">
+              <div className="flex-1 min-w-0 basis-[180px]">
                 <p className="font-bold text-sm flex flex-wrap items-center gap-2">
                   {p.name}
                   <span className={cn('text-[11px] font-semibold px-2 py-0.5 rounded-full border', followsBusinessHours(p, rules) ? 'border-zinc-200 bg-zinc-50 text-zinc-600' : 'border-blue-200 bg-blue-50 text-blue-700')}>

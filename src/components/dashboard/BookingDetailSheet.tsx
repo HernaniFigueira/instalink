@@ -20,7 +20,7 @@
 import { useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
 import { Icon } from '@/components/icons';
-import { StatusBadge, Button, buttonCls, type ButtonVariant } from '@/components/ui';
+import { StatusBadge, Button, Drawer, buttonCls, type ButtonVariant } from '@/components/ui';
 import { EncounterSheet } from '@/components/dashboard/EncounterSheet';
 import { usePanelPermissions } from '@/components/dashboard/usePanelPermissions';
 import { canReopenEncounter } from '@/lib/encounters';
@@ -178,13 +178,6 @@ export function BookingDetailSheet({ booking, service, pro, businessId, timezone
   const waMsg = `Olá, ${(booking.customerName || '').split(' ')[0]}! Sobre seu agendamento de ${service?.name || 'atendimento'} (${formatDateBR(booking.date)} às ${booking.time}):`;
 
   // Drawer recebe o foco e fecha em ESC (como qualquer painel do workspace).
-  const panelRef = useRef<HTMLDivElement>(null);
-  useEffect(() => {
-    panelRef.current?.focus();
-    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose(); };
-    window.addEventListener('keydown', onKey);
-    return () => window.removeEventListener('keydown', onKey);
-  }, [onClose]);
 
   function showHistory() {
     setHistoryOpen(true);
@@ -198,12 +191,7 @@ export function BookingDetailSheet({ booking, service, pro, businessId, timezone
     : '';
 
   return (
-    <div className="fixed inset-0 z-50" role="dialog" aria-modal="false" aria-label="Detalhe do agendamento">
-      {/* Fundo: a agenda continua visível e legível atrás do painel. */}
-      <div className="absolute inset-0 bg-[var(--overlay)]" onClick={onClose} />
-
-      <aside ref={panelRef} tabIndex={-1}
-        className="absolute inset-y-0 right-0 w-full max-w-[420px] bg-white border-l border-zinc-200 shadow-sm flex flex-col outline-none">
+    <Drawer open onClose={onClose} title="Detalhe do agendamento" width="max-w-[460px]">
         {/* ── Cabeçalho denso ── */}
         <header className="shrink-0 px-4 py-3 flex items-start justify-between gap-3 border-b border-zinc-200">
           <div className="min-w-0">
@@ -216,8 +204,7 @@ export function BookingDetailSheet({ booking, service, pro, businessId, timezone
             <p className="font-semibold text-sm mt-1 leading-snug truncate">{service?.name || 'Serviço'}</p>
             <p className="text-xs text-zinc-500 mt-0.5">{humanDay(booking.date, today)} · {dur} min</p>
           </div>
-          <button onClick={onClose} aria-label="Fechar"
-            className="text-zinc-400 hover:text-zinc-900 hover:bg-zinc-50 rounded-md p-1.5 -m-1 inline-flex shrink-0"><Icon n="x" size={16} /></button>
+
         </header>
 
         {encounterOpen && (
@@ -239,7 +226,7 @@ export function BookingDetailSheet({ booking, service, pro, businessId, timezone
         />
       )}
 
-      <div className="flex-1 min-h-0 overflow-y-auto ws-scroll">
+      <div className="flex-1 min-h-0 ws-scroll">
           {/* ── Pendência: passado e ainda aberto (aviso, decisão fica nas ações) ── */}
           {late && !rescheduling && (
             <div className="px-4 py-2.5 bg-amber-50/60 border-b border-amber-200/60">
@@ -462,7 +449,6 @@ export function BookingDetailSheet({ booking, service, pro, businessId, timezone
             </div>
           )}
         </div>
-      </aside>
-    </div>
+    </Drawer>
   );
 }

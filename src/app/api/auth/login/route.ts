@@ -3,19 +3,28 @@ import { readDB, updateDB } from '@/lib/db';
 import { verifyPassword, createSession, setSessionOn } from '@/lib/auth';
 import { rateLimit, ipFrom } from '@/lib/rate-limit';
 import { isMasterUser } from '@/lib/access';
+import { authUnavailable } from '@/lib/auth-failure';
 import { pushAudit } from '@/lib/audit';
 
 export async function POST(req: NextRequest) {
   const rl = rateLimit(`login:${ipFrom(req)}`, 15, 60000);
   if (!rl.ok) return NextResponse.json({ error: 'Muitas tentativas de login. Aguarde um minuto.' }, { status: 429 });
+  let body;
+  try { body = await req.json(); } catch { return NextResponse.json({ error: 'Requisição inválida.' }, { status: 400 }); }
+  if (!body || typeof body.email !== 'string' || typeof body.password !== 'string') {
+    return NextResponse.json({ error: 'Confira os campos de e-mail e senha.' }, { status: 400 });
+  }
+  const { email, password } = body;
+  let stage: 'login_read' | 'login_session' | 'login_audit' = 'login_read';
   try {
-    const { email, password } = await req.json();
     const db = await readDB();
     const user = db.users.find((u) => u.email.toLowerCase() === (email || '').toLowerCase());
     if (!user || !verifyPassword(password || '', user.passwordHash)) {
       return NextResponse.json({ error: 'E-mail ou senha incorretos.' }, { status: 401 });
     }
+    stage = 'login_session';
     const sessionId = await createSession(user.id);
+    stage = 'login_audit';
     // Último acesso (visível para o próprio usuário e para o suporte master).
     await updateDB((d) => {
       const u = d.users.find((x) => x.id === user.id);
@@ -33,10 +42,10 @@ export async function POST(req: NextRequest) {
       token: sessionId,
       redirectTo,
       isMaster: isMasterUser(user),
-    });
+    }, { headers: { 'Cache-Control': 'no-store' } });
     setSessionOn(res, sessionId);
     return res;
   } catch {
-    return NextResponse.json({ error: 'Não foi possível entrar. Tente novamente.' }, { status: 500 });
+    return authUnavailable(stage);
   }
 }

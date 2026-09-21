@@ -8,6 +8,7 @@ import { leadOriginLabel } from '@/lib/leads';
 import { normalizeLeadStageId } from '@/lib/pipeline-stages';
 import { onlyDigits, waLink, cn, money } from '@/lib/utils';
 import { todayISO, addDaysISO } from '@/lib/tz';
+import { AreaLoadError } from './AccessNotice';
 import { apiGet, apiSend } from '@/lib/api-client';
 import { PhoneBRInput } from '@/components/dashboard/PhoneBRInput';
 import Link from 'next/link';
@@ -49,6 +50,7 @@ export function EsteiraView() {
   const [members, setMembers] = useState<TeamMember[]>([]);
   const [services, setServices] = useState<ServiceItem[]>([]);
   const [professionals, setProfessionals] = useState<ProfessionalItem[]>([]);
+  const [loadError, setLoadError] = useState('');
   const [loading, setLoading] = useState(true);
   const [msg, setMsg] = useState('');
 
@@ -113,7 +115,9 @@ export function EsteiraView() {
         `/api/leads?businessId=${businessId}&limit=200`,
         { scope: 'area', area: 'Funil' },
       );
+      if (!res.ok) setLoadError(res.message || 'Falha de conexão.');
       if (res.ok && res.data) {
+        setLoadError('');
         setLeads(res.data.leads || []);
         setPipeline(res.data.pipeline || null);
         setMembers(res.data.members || []);
@@ -482,6 +486,7 @@ export function EsteiraView() {
     }
   };
 
+  if (loadError) return <AreaLoadError area="Funil" message={loadError} onRetry={loadLeads} />;
   return (
     <div className="space-y-4">
       {msg && (

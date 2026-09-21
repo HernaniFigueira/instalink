@@ -16,19 +16,24 @@ import { addDaysISO, effectiveTimezone, todayISO } from '@/lib/tz';
 const WEEK = ['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb'];
 
 // ── AGENDAMENTO ──────────────────────────────────────────
-export function BookingIsland({ business, services, professionals, title, initialServiceId, rescheduleId, bare }: {
+export function BookingIsland({ business, services, professionals, title, initialServiceId, initialDate, currentTime, rescheduleId, bare }: {
   business: PublicBusiness;
   services: Service[];
   professionals: Professional[];
   title: string;
   initialServiceId?: string;
+  initialDate?: string;
+  currentTime?: string;
   rescheduleId?: string;
   bare?: boolean;
 }) {
   const bookable = services.filter((s) => s.bookable);
   const [serviceId, setServiceId] = useState(() =>
     initialServiceId && bookable.some((s) => s.id === initialServiceId) ? initialServiceId : '');
-  const [date, setDate] = useState('');
+  const [date, setDate] = useState(initialDate || '');
+  const [daysError, setDaysError] = useState('');
+  const [daysTry, setDaysTry] = useState(0);
+  const submitLock = useRef(false);
   const [dayInfo, setDayInfo] = useState<Record<string, DayAvailability>>({});
   const [slots, setSlots] = useState<string[]>([]);
   const [occupied, setOccupied] = useState<string[]>([]);
@@ -47,6 +52,8 @@ export function BookingIsland({ business, services, professionals, title, initia
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
   const [done, setDone] = useState(false);
+  const [savedStatus, setSavedStatus] = useState('');
+  const [notice, setNotice] = useState('');
   // CONSENTIMENTO EXPLÍCITO (nunca presumido): caixa começa DESMARCADA —
   // agendar/cadastrar/conversar NÃO autoriza marketing por si só.
   const [marketingOptIn, setMarketingOptIn] = useState(false);
@@ -83,16 +90,15 @@ export function BookingIsland({ business, services, professionals, title, initia
 
   useEffect(() => {
     if (!serviceId) { setDayInfo({}); return; }
-    if (days.length === 0) return;
-    fetch(`/api/bookings?businessId=${business.id}&serviceId=${serviceId}&from=${days[0].iso}&to=${days[days.length - 1].iso}`)
-      .then((r) => r.json())
-      .then((d) => {
-        setDayInfo(d.days || {});
-        if (d.today) setServerToday(d.today);
-      })
-      .catch(() => setDayInfo({}));
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [serviceId, business.id, serverToday]);
+    if (!days.length) return;
+    let alive = true;
+    setDaysError(''); setDayInfo({});
+    fetch(`/api/bookings?businessId=${business.id}&serviceId=${serviceId}&from=${days[0].iso}&to=${days[days.length-1].iso}`)
+      .then(async r => { const d = await r.json(); if (!r.ok) throw Error('Não foi possível consultar a disponibilidade dos dias.'); return d; })
+      .then(d => { if (alive) { setDayInfo(d.days || {}); if (d.today) setServerToday(d.today); } })
+      .catch(() => { if (alive) setDaysError('Não foi possível consultar a disponibilidade dos dias.'); });
+    return () => { alive = false; };
+  }, [serviceId, business.id, serverToday, daysTry]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     if (!serviceId || Object.keys(dayInfo).length === 0) return;
@@ -108,12 +114,14 @@ export function BookingIsland({ business, services, professionals, title, initia
 
   useEffect(() => {
     if (!serviceId || !date) { setSlots([]); setSlotsError(''); return; }
+    let alive = true;
     setLoadingSlots(true);
     setSlotsError('');
     setTime('');
     fetch(`/api/bookings?businessId=${business.id}&serviceId=${serviceId}&date=${date}`)
       .then(async (r) => {
         const d = await r.json().catch(() => ({}));
+        if (!alive) return;
         if (!r.ok) throw new Error(d.error || SLOT_STATE_MESSAGE.error);
         setSlots(d.slots || []);
         setOccupied(d.occupied || []);
@@ -128,12 +136,14 @@ export function BookingIsland({ business, services, professionals, title, initia
         if (d.today) setServerToday(d.today);
       })
       .catch(() => {
+        if (!alive) return;
         setSlots([]);
         setOccupied([]);
         setDayState(null);
         setSlotsError(SLOT_STATE_MESSAGE.error);
       })
-      .finally(() => setLoadingSlots(false));
+      .finally(() => { if (alive) setLoadingSlots(false); });
+    return () => { alive = false; };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [serviceId, date, business.id, slotsTry]);
 
@@ -148,10 +158,12 @@ export function BookingIsland({ business, services, professionals, title, initia
   // O cliente NUNCA escolhe profissional: o servidor resolve e devolve o
   // nome apenas para uso interno (painel) — nunca é exibido aqui.
   async function submit() {
+    if (submitLock.current) return;
     setError('');
     if (!serviceId) { setError('Escolha um serviço.'); return; }
     if (!date || !time) { setError('Escolha data e horário.'); return; }
-    if (!(await form.ensure({ phone: true }))) { form.afterAuth(() => submit()); return; }
+    submitLock.current = true;
+    if (!(await form.ensure({ phone: true }))) { submitLock.current = false; form.afterAuth(() => setNotice('Acesso identificado. Confira o resumo e confirme seu horário.')); return; }
     setLoading(true);
     try {
       if (!rescheduleId) trackEvent(business.id, 'booking_started');
@@ -165,14 +177,18 @@ export function BookingIsland({ business, services, professionals, title, initia
       });
       const data = await res.json();
       if (!res.ok) {
-        if (data.code === 'login_required') { openSheet('auth', {}); form.afterAuth(() => submit()); return; }
-        if (data.code === 'phone_required') { openSheet('phone', {}); form.afterAuth(() => submit()); return; }
-        throw new Error(data.error);
+        if (data.code === 'login_required') { openSheet('auth', {}); form.afterAuth(() => setNotice('Acesso identificado. Confira o resumo e confirme seu horário.')); return; }
+        if (data.code === 'phone_required') { openSheet('phone', {}); form.afterAuth(() => setNotice('Acesso identificado. Confira o resumo e confirme seu horário.')); return; }
+        if (res.status === 409) { setTime(''); setSlotsTry(n => n + 1); }
+        throw new Error(data.error || 'Não foi possível reservar este horário.');
       }
+      window.dispatchEvent(new CustomEvent('il:bookings-changed', { detail: { businessId: business.id } }));
+      setSavedStatus(data.status || 'pending');
       setDone(true);
     } catch (err: any) {
       setError(err.message);
     } finally {
+      submitLock.current = false;
       setLoading(false);
     }
   }
@@ -184,15 +200,15 @@ export function BookingIsland({ business, services, professionals, title, initia
     return (
       <div id="agendar" className={bare ? 'text-center py-2' : 'il-card p-6 text-center scroll-mt-20'}>
         <span className="inline-flex w-16 h-16 rounded-full items-center justify-center" style={{ background: 'color-mix(in srgb, var(--il-primary) 12%, transparent)', color: 'var(--il-primary)' }}><Icon n="calendar" size={30} /></span>
-        <h3 className="text-xl font-extrabold mt-3">{rescheduleId ? 'Horário remarcado!' : 'Agendamento recebido!'}</h3>
+        <h3 className="text-xl font-extrabold mt-3">{rescheduleId ? 'Horário remarcado!' : savedStatus === 'confirmed' ? 'Agendamento confirmado!' : 'Agendamento recebido!'}</h3>
         <p className="il-muted text-sm mt-1">{service.name} · {d}/{m} às {time}</p>
-        <p className="il-muted text-sm">vamos confirmar pelo seu WhatsApp.</p>
+        <p className="il-muted text-sm">{savedStatus === 'confirmed' ? 'Sua reserva foi confirmada pela clínica.' : 'Acompanhe a situação na sua conta. A confirmação depende da clínica.'}</p>
         <div className="mt-4 space-y-2">
           {business.whatsapp && !rescheduleId && (
             <a className="il-btn block font-extrabold py-3.5" target="_blank" rel="noreferrer"
               href={waLink(business.whatsapp, `Olá! Agendei ${service.name} para ${d}/${m} às ${time} (${form.name}).`)}
               onClick={() => trackEvent(business.id, 'whatsapp_click', { from: 'booking_success' })}>
-              Confirmar no WhatsApp
+              Falar com a clínica
             </a>
           )}
           {/* O convite de calendário precisa do fim do evento para ser útil;
@@ -212,6 +228,7 @@ export function BookingIsland({ business, services, professionals, title, initia
     <div id="agendar" className="scroll-mt-20">
       {!bare && <h2 className="text-xl font-extrabold tracking-tight mb-3">{title || 'Agende seu horário'}</h2>}
       <div className="il-card p-4 space-y-4">
+        {rescheduleId && initialDate && <p className="il-muted text-sm">Horário atual: {initialDate.split('-').reverse().join('/')} às {currentTime}. Escolha um novo horário abaixo.</p>}
         {rescheduleId && (
           <p className="text-xs font-bold px-3 py-2 rounded-xl" style={{ background: 'color-mix(in srgb, var(--il-primary) 10%, transparent)' }}>
             Escolha o novo horário — seu agendamento atual só muda quando você confirmar.
@@ -247,6 +264,7 @@ export function BookingIsland({ business, services, professionals, title, initia
         {serviceId && (
           <div>
             <p className="text-xs font-bold il-muted mb-1.5">2 · DIA</p>
+            {daysError && <div role="alert" className="text-sm mb-3"><p>{daysError}</p><button type="button" className="il-card px-3 py-2 mt-2" onClick={() => setDaysTry(n => n+1)}>Tentar consultar os dias novamente</button></div>}
             <div className="flex gap-2 overflow-x-auto pb-1">
               {days.map((d) => {
                 // A2-B3 (F4): "fechado" desabilita; "lotado" continua clicável
@@ -369,8 +387,10 @@ export function BookingIsland({ business, services, professionals, title, initia
           </div>
         )}
 
-        {error && <p className="text-sm font-semibold text-red-600">{error}</p>}
-        <div className="sticky bottom-0 -mx-1 px-1 pt-2 pb-1" style={{ background: 'linear-gradient(transparent, color-mix(in srgb, var(--il-bg) 94%, transparent) 35%)' }}>
+        {time && service && <section className="il-card p-4 text-sm" aria-label="Resumo do agendamento"><h4 className="font-bold mb-2">Confira seu atendimento</h4><p>{business.name}</p><p className="font-semibold">{service.name} · {date.split('-').reverse().join('/')} às {time}</p><p className="il-muted text-xs mt-1">Profissional definido pela disponibilidade da clínica.</p>{form.logged && <p className="mt-2">Paciente: {form.customer?.name}</p>}</section>}
+        {notice && <p role="status" className="il-muted text-sm">{notice}</p>}
+        {error && <p role="alert" className="text-sm font-semibold text-red-600">{error}</p>}
+        <div className="sticky bottom-0 -mx-1 px-1 pt-2 pb-1" style={{ background: 'var(--il-bg)' }}>
           <button onClick={submit} disabled={loading || !time || !serviceId} className="il-btn w-full font-extrabold py-3.5 disabled:opacity-50">
             {loading ? 'Confirmando…' : time ? `${rescheduleId ? 'Remarcar' : 'Confirmar'} · ${time}` : serviceId ? 'Escolha um horário' : 'Escolha um serviço'}
           </button>

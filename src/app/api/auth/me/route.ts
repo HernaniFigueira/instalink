@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { authUnavailable } from '@/lib/auth-failure';
 import { userFromRequest } from '@/lib/auth';
 import { readDB } from '@/lib/db';
 import {
@@ -13,6 +14,10 @@ import type { BusinessAppearance } from '@/lib/types';
 // É a fonte do menu do painel: cada tela só aparece quando há permissão real
 // (e a API revalida a mesma coisa no servidor).
 export async function GET(req: NextRequest) {
+  try { return await loadSession(req); } catch { return authUnavailable('session_lookup'); }
+}
+
+async function loadSession(req: NextRequest) {
   const user = await userFromRequest(req);
   if (!user) return NextResponse.json({ user: null }, { status: 401 });
   const db = await readDB();

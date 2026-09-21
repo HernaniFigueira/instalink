@@ -44,6 +44,7 @@ const FILE = process.env.INSTALINK_DB_FILE || path.join(process.cwd(), 'data', '
 
 export function emptyDB(): DB {
   return {
+    deletionAuthorizations: [],
     users: [], sessions: [], customers: [], customerSessions: [],
     passwordResets: [],
     organizations: [], organizationMembers: [],
@@ -77,7 +78,7 @@ export function normalizeDB(raw: unknown): DB {
   // Arrays novos (members/agents/campaigns/audit/...): documento antigo pode
   // ter chaves ausentes ou inválidas — garantimos array em todos os casos.
   for (const key of [
-    'organizations', 'organizationMembers', 'members', 'agents', 'conversations',
+    'deletionAuthorizations', 'organizations', 'organizationMembers', 'members', 'agents', 'conversations',
     'messages', 'campaigns', 'campaignRecipients', 'audit', 'supportSessions',
     'pipelines', 'apiKeys', 'webhooks', 'webhookDeliveries', 'idempotencyKeys', 'integrationLogs',
     'automations', 'automationRuns', 'tasks', 'aiProposals',

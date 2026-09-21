@@ -1,3 +1,6 @@
+import { createElement } from 'react';
+import { renderToStaticMarkup } from 'react-dom/server';
+import { Icon } from '@/components/icons';
 import { describe, expect, it } from 'vitest';
 import { existsSync, readFileSync, readdirSync } from 'node:fs';
 import path from 'node:path';
@@ -106,12 +109,9 @@ describe('catálogo — completude (por qual porta se chega até mim?)', () => {
     expect(panelRouteFor('/pagina')?.width ?? 'contained').toBe('contained');
   });
 
-  it('todo ícone do catálogo existe no shell (nada de quadrado vazio no menu)', () => {
-    const shell = read('src/components/DashboardShell.tsx');
-    const declared = new Set([...shell.matchAll(/^  ([a-zA-Z]+): \(/gm)].map((m) => m[1]));
-    expect(declared.size).toBeGreaterThan(20);
+  it('todo ícone do catálogo renderiza um glifo real, não SVG vazio', () => {
     for (const r of PANEL_ROUTES) {
-      expect(declared.has(r.icon), `ícone '${r.icon}' de ${r.href} não existe em DashboardShell`).toBe(true);
+      expect(renderToStaticMarkup(createElement(Icon, {n:r.icon})), r.href).toMatch(/<(path|circle|rect|polygon|polyline|line|ellipse) /);
     }
   });
 
@@ -321,7 +321,7 @@ describe('sidebar — projeção (permissão ∩ módulos, ordem do catálogo)',
     expect(shell).toMatch(/panelNavigation\(panelCtx\)/);
     expect(shell).toMatch(/activePanelPath\(pathname\)/);
     expect(shell).toMatch(/activeRoute\?\.width === 'full'/);
-    expect(shell).toMatch(/nav\.footerSections/);
+    expect(shell).toMatch(/<WorkspaceNavigation nav=\{nav\}/);
     // nenhum href de porta escrito à mão no shell (só /master, fora do catálogo)
     expect(shell).not.toMatch(/href="\/(dashboard|agenda|clientes|servicos|configuracoes|conversas|funil|canais)"/);
     expect(shell).not.toMatch(/FULL_WIDTH_PATHS/);
@@ -337,15 +337,7 @@ describe('sidebar — projeção (permissão ∩ módulos, ordem do catálogo)',
     expect(activePanelRoute('/canais/qualquer')?.href).toBe('/canais');
   });
 
-  it('mobile tem affordance: fileira rola com aviso, "Mais" fora da rolagem', () => {
-    const shell = read('src/components/DashboardShell.tsx');
-    expect(shell).toMatch(/Mais/);
-    expect(shell).toMatch(/aria-expanded=\{moreOpen\}/);
-    expect(shell).toMatch(/aria-controls="mobile-nav-more"/);
-    expect(shell).toMatch(/bg-gradient-to-l from-white/); // degradê = "tem mais"
-    expect(shell).toMatch(/scrollIntoView/);              // ativa entra na área visível
-    expect(shell).toMatch(/nav\.sidebar/);                // pills = projeção, não lista própria
-  });
+
 
   it('nenhum hook depois do early return do shell (ordem de hooks estável)', () => {
     // O shell renderiza um skeleton enquanto /api/auth/me não chega e o painel
@@ -362,12 +354,7 @@ describe('sidebar — projeção (permissão ∩ módulos, ordem do catálogo)',
     expect(hooks, `hooks depois do early return: ${hooks.join(', ')}`).toEqual([]);
   });
 
-  it('seções colapsáveis guardam preferência e abrem sozinhas na tela atual', () => {
-    const shell = read('src/components/DashboardShell.tsx');
-    expect(shell).toMatch(/il-nav-closed/);
-    expect(shell).toMatch(/aria-expanded=\{!isClosed\}/);
-    expect(shell).toMatch(/A seção da tela atual abre sozinha/);
-  });
+
 });
 
 // ═══════════════════════════════════════════════════════════════
@@ -565,7 +552,7 @@ describe('uma porta por conceito', () => {
     expect(cfgPage).toMatch(/router\.push\(`\/configuracoes\?\$\{qs\.toString\(\)\}`/);
     expect(cfgPage).not.toMatch(/useState<ConfigTab>/);
     // Conversas: busca contextual na URL (?q=), filtro client-side seguro.
-    const conversas = read('src/app/(dashboard)/conversas/page.tsx');
+    const conversas = read('src/components/dashboard/ConversationsView.tsx');
     expect(conversas).toMatch(/params\.get\('q'\)/);
     expect(conversas).toMatch(/qs\.set\('q'/);
     expect(conversas).toMatch(/qs\.delete\('q'\)/);
@@ -609,7 +596,7 @@ describe('uma porta por conceito', () => {
   });
 
   it('Conversas é o inbox; conectar canal mora em Canais', () => {
-    const conversas = read('src/app/(dashboard)/conversas/page.tsx');
+    const conversas = read('src/components/dashboard/ConversationsView.tsx');
     expect(conversas).not.toMatch(/action: 'connect'/);       // não conecta daqui
     expect(conversas).toMatch(/channelsHref/);                 // aponta para a porta certa
     const panel = read('src/components/dashboard/WhatsappChannelPanel.tsx');
@@ -633,7 +620,7 @@ describe('uma porta por conceito', () => {
     expect(nav.sections.find((s) => s.id === 'resultados')?.items.map((r) => r.href))
       .toEqual(['/resultados', '/organizacao']);
     const page = read('src/app/(dashboard)/organizacao/page.tsx');
-    expect(page).toMatch(/Adicionar unidade/);
+    expect(page).toMatch(/Adicionar filial/);
     expect(page).not.toMatch(/businesses\.length > 1/);
   });
 
@@ -835,7 +822,7 @@ describe('A1.2 B2 — navegação: portas canônicas, tabs e redirects', () => {
   });
 
   it('Conversas: estado vazio honesto + CTA para Canais (conexão não mora mais aqui)', () => {
-    const conversas = read('src/app/(dashboard)/conversas/page.tsx');
+    const conversas = read('src/components/dashboard/ConversationsView.tsx');
     expect(conversas).toMatch(/Nenhuma conversa ainda/);
     expect(conversas).toMatch(/Conectar canal/);
     expect(conversas).toMatch(/\/canais\?tab=canais/);

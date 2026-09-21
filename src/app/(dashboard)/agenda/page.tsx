@@ -1,4 +1,10 @@
 'use client';
+import { readAgendaBookings } from '@/lib/agenda-read';
+import { agendaEnvelope, agendaScale, type AgendaDensity } from '@/lib/agenda-density';
+import { useAgendaPreferences } from '@/components/dashboard/useAgendaPreferences';
+import { useWorkspace } from '@/components/dashboard/WorkspaceContext';
+import { computeSlots } from '@/lib/slots';
+import { QueueDock } from '@/components/dashboard/QueueDock';
 // ═══════════════════════════════════════════════════════════════
 // AGENDA — clique abre detalhe, arraste move o atendimento
 // ═══════════════════════════════════════════════════════════════
@@ -25,8 +31,8 @@ import { memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useStat
 import { useSearchParams } from 'next/navigation';
 import { todayISO, addDaysISO, weekdayOf, formatDateBR, nowHM } from '@/lib/tz';
 import { WEEKDAYS, WEEKDAYS_LONG, timeToMin, minToTime, cn } from '@/lib/utils';
-import type { Availability, Booking, BookingConfig, BookingStatus, Professional, Service } from '@/lib/types';
-import { Avatar, Badge, ListSkeleton, Button, IconButton, AttentionStrip, Tabs } from '@/components/ui';
+import type { Availability, AvailabilityException, Booking, BookingConfig, BookingStatus, Professional, Service } from '@/lib/types';
+import { Avatar, Badge, Drawer, ListSkeleton, Button, IconButton, AttentionStrip, Tabs } from '@/components/ui';
 import { Icon } from '@/components/icons';
 import {
   ATTENTION_MARK_CLS, ATTENTION_RING_CLS, BOOKING_BLOCK, BOOKING_DOT, BOOKING_STATUS,
@@ -38,7 +44,7 @@ import { QueuePanel, type QueueRow } from '@/components/dashboard/QueuePanel';
 import { EncounterSheet } from '@/components/dashboard/EncounterSheet';
 import { usePanelPermissions } from '@/components/dashboard/usePanelPermissions';
 import { canReopenEncounter } from '@/lib/encounters';
-import { AccessDenied, PermissionNotice, useAreaLoad, useForbiddenNotice } from '@/components/dashboard/AccessNotice';
+import { AccessDenied, AreaLoadError, PermissionNotice, useAreaLoad, useForbiddenNotice } from '@/components/dashboard/AccessNotice';
 import { useRevalidateOnFocus } from '@/components/dashboard/use-revalidate';
 import { bookingDuration, effectiveHorizonDays, needsClosure, rescheduleDecision } from '@/lib/booking-ops';
 import { queueSummary, waitLabel } from '@/lib/queue';
@@ -51,22 +57,21 @@ import {
   type Point,
 } from '@/lib/agenda-drag';
 
-type View = 'day' | 'week' | 'month';
+type View = 'day' | 'week' | 'month' | 'list';
 
 // Cores dos estados vêm da fonte única (lib/status.ts). P1.1: os blocos da
 // grade usam a apresentação SUAVE definida lá (BOOKING_BLOCK) — a semântica
 // permanece, sem o peso da cor sólida na Semana. Nada de mapa local de cor.
 
-const PX_PER_HOUR = 52;
 const GUTTER_W = 56;
-const COL_MIN = 148;
-const HEADER_H = 36;
+const COL_MIN = 200;
+const HEADER_H = 48;
 // Passo do clique-em-área-vazia (o horário só é aceito se a grade real o
 // confirmar — caso contrário o sheet abre sem horário escolhido).
 const CLICK_SNAP_MIN = 5;
 /** Folga mínima entre o fim da grade e o fim da tela (não é a causa do
  *  scroll, só respiro visual — a página continua rolando normalmente). */
-const VIEWPORT_BOTTOM_PAD = 16;
+const VIEWPORT_BOTTOM_PAD = 64;
 
 // Espessura REAL da barra de rolagem horizontal (0 quando o SO usa barra
 // overlay). A grade usa a classe `.ws-scroll` (6px custom no Chromium); o
@@ -138,6 +143,7 @@ interface ColumnVM {
   isProfessional: boolean;
   isToday: boolean;
   blocks: BlockVM[];
+  freeRanges: Array<{start:number;end:number}>;
 }
 
 interface HighlightVM {
@@ -161,8 +167,10 @@ interface HoverTarget {
 let lastGridPressAt = 0;
 
 // ── Coluna da grade (memoizada: o drag não re-renderiza a grade inteira) ──
-const GridColumn = memo(function GridColumn({ column, basisPct, variant, highlight, onPressStart, onPressMove, onPressEnd, onPressCancel, onBlockClick, onEmptyPress, gridHeight, hours, startMinute, endMinute }: {
+const GridColumn = memo(function GridColumn({ column, basisPct, variant, highlight, onPressStart, onPressMove, onPressEnd, onPressCancel, onBlockClick, onEmptyPress, gridHeight, hours, startMinute, endMinute, pxPerHour, onSummary }: {
   column: ColumnVM;
+  pxPerHour: number;
+  onSummary: (label: string) => void;
   basisPct: number;
   variant: 'day' | 'week';
   highlight: HighlightVM | null;
@@ -185,7 +193,7 @@ const GridColumn = memo(function GridColumn({ column, basisPct, variant, highlig
     // border-box: larguras inteiras determinísticas — nenhuma divergência
     // de subpixel contra o minWidth calculado em JS, nenhum resíduo que
     // fabrique overflow nas bordas.
-    <div className="relative shrink-0 border-r border-b border-zinc-100 last:border-r-0"
+    <div className="relative shrink-0 border-r border-b border-zinc-100 last:border-r-0 bg-[var(--agenda-unavailable)]"
       style={{ minWidth: COL_MIN, width: `${basisPct}%`, height: gridHeight }}
       onClick={(e) => {
         // Clique em área VAZIA = criar naquele horário. Cliques em atendimento
@@ -195,15 +203,13 @@ const GridColumn = memo(function GridColumn({ column, basisPct, variant, highlig
         if (el.closest('button')) return;
         if (Date.now() - lastGridPressAt < 500) return;
         const rect = e.currentTarget.getBoundingClientRect();
-        const minutes = minuteFromOffsetY(e.clientY - rect.top, { startMinute, endMinute, pxPerHour: PX_PER_HOUR }, CLICK_SNAP_MIN);
+        const minutes = minuteFromOffsetY(e.clientY - rect.top, { startMinute, endMinute, pxPerHour: pxPerHour }, CLICK_SNAP_MIN);
         onEmptyPress(column.key, minToTime(minutes));
       }}>
+      {column.freeRanges.map((r,i)=><span key={i} aria-hidden="true" className="absolute inset-x-0 bg-white pointer-events-none" style={{top:(r.start-startMinute)/60*pxPerHour,height:(r.end-r.start)/60*pxPerHour}}/>)}
       {Array.from({ length: Math.max(0, hours - 1) }, (_, idx) => idx + 1).map((i) => (
-        <span key={i} className="absolute left-0 right-0 border-t border-zinc-100" style={{ top: i * PX_PER_HOUR }} />
+        <span key={i} className="absolute left-0 right-0 border-t border-zinc-100" style={{ top: i * pxPerHour }} />
       ))}
-      {column.isToday && (
-        <span className="absolute inset-0 bg-emerald-50/25 pointer-events-none" aria-hidden="true" />
-      )}
 
       {/* Célula destino destacada durante o arraste */}
       {highlight && (
@@ -240,6 +246,8 @@ const GridColumn = memo(function GridColumn({ column, basisPct, variant, highlig
         <button
           key={b.id}
           type="button"
+          data-agenda-event={b.id}
+          onFocus={()=>onSummary(b.label)} onMouseEnter={()=>onSummary(b.label)} onBlur={()=>onSummary('')} onMouseLeave={()=>onSummary('')}
           aria-label={b.label}
           title={b.label}
           draggable={false}
@@ -249,7 +257,7 @@ const GridColumn = memo(function GridColumn({ column, basisPct, variant, highlig
           onPointerCancel={onPressCancel}
           onClick={() => onBlockClick(b.id)}
           className={
-            'absolute rounded-md border border-l-4 px-2 py-1 text-left overflow-hidden touch-none select-none shadow-sm '
+            'absolute rounded-md border-l-4 px-1 text-left overflow-hidden touch-none select-none agenda-event '
             + b.cls
             + (b.attention && !b.dragging ? ` ${ATTENTION_RING_CLS}` : '')
             + (b.dragging
@@ -267,11 +275,11 @@ const GridColumn = memo(function GridColumn({ column, basisPct, variant, highlig
               do bloco continua sendo o do STATUS. Nada de amarelo sobre verde. */}
           {b.fitIn && <span aria-hidden="true" className={FIT_IN_STRIPE_CLS} />}
           {/* quem + quando + o quê + em que estado — detalhe fica no drawer. */}
-          <span className="block text-[11px] font-bold leading-tight truncate">{b.name}</span>
-          {b.height > 34 && <span className="block text-[10px] font-medium leading-tight truncate opacity-90">{b.service}</span>}
-          {b.height > 54 && (
-            <span className="mt-0.5 flex items-center gap-1 text-[9px] font-bold uppercase tracking-wide leading-tight">
-              <span className="tabular-nums opacity-90 whitespace-nowrap">{b.timeRange}</span>
+          {b.height < 38 ? <span className="agenda-event-summary"><span className="agenda-event-time">{b.time}</span><span className="min-w-0 flex-1 truncate">{b.name}</span><span className="shrink-0">{b.statusLabel}</span></span> : <span className="block text-sm font-semibold leading-tight truncate">{b.name}</span>}
+          {b.height > 54 && <span className="block text-xs font-medium leading-tight truncate">{b.service}</span>}
+          {b.height >= 38 && (
+            <span className="mt-0.5 flex items-center gap-1 text-xs font-semibold leading-tight">
+              <span className="tabular-nums whitespace-nowrap">{b.timeRange}</span>
               <span aria-hidden="true" className="opacity-60">·</span>
               <span className="truncate">{b.statusLabel}</span>
               {/* A3.4 · Bloco 4: o encaixe é visível no cartão — quem olha a
@@ -311,25 +319,33 @@ function FilterChip({ active, onClick, children }: { active: boolean; onClick: (
 export default function AgendaPage() {
   const params = useSearchParams();
   const businessId = params.get('b') || '';
-  const [view, setView] = useState<View>('day');
-  // Deep-link operacional: /agenda?b=…&data=2026-09-20 abre focada no dia
-  // (usado pelo "Ver na agenda" do histórico do cliente). Valor inválido
-  // é ignorado e cai para hoje — nunca quebra a tela.
+  const [defaultView, setDefaultView] = useState<View>('day');
+  useEffect(() => { if (window.matchMedia('(max-width: 767px)').matches) setDefaultView('list'); }, []);
+  const view = (['day','week','month','list'].includes(params.get('view') || '') ? params.get('view') : defaultView) as View;
   const dataParam = params.get('data') || '';
-  const [focus, setFocus] = useState(
-    /^\d{4}-\d{2}-\d{2}$/.test(dataParam) ? dataParam : todayISO(),
-  );
-  useEffect(() => {
-    if (/^\d{4}-\d{2}-\d{2}$/.test(dataParam)) setFocus(dataParam);
-  }, [dataParam]);
-  // Tela cheia do produto (expande sobre a sidebar; ESC sai) + filtros.
-  const [fullscreen, setFullscreen] = useState(false);
-  const [statusFilter, setStatusFilter] = useState<'' | BookingStatus>('');
-  const [proFilter, setProFilter] = useState('');
-  // P1.1 — filtros em escala: UM popover compacto (Status + Especialidade +
-  // Profissional pesquisável). "Especialidade" deriva do campo `role` que JÁ
-  // existe no Professional — nenhum schema novo.
-  const [specFilter, setSpecFilter] = useState('');
+  const focus = /^\d{4}-\d{2}-\d{2}$/.test(dataParam) ? dataParam : todayISO();
+  const statusFilter = Object.keys(BOOKING_STATUS).includes(params.get('status') || '') ? params.get('status') as BookingStatus : '';
+  const proFilter = params.get('professionalId') || '';
+  const specFilter = params.get('specialty') || '';
+  // Native history integration keeps filters/date and back/forward in sync,
+  // without requesting another server render or changing scheduling rules.
+  function setPresentation(patch: Record<string, string>) {
+    const url = new URL(window.location.href);
+    for (const [key, value] of Object.entries(patch)) { if (value) url.searchParams.set(key,value); else url.searchParams.delete(key); }
+    window.history.pushState(null, '', url.pathname + url.search);
+  }
+  const setView = (value: View) => setPresentation({view:value});
+  const setFocus = (value: string) => setPresentation({data:value});
+  const setStatusFilter = (value: string) => setPresentation({status:value});
+  const {userId}=useWorkspace();
+  const {density,setDensity,showQueue,setShowQueue}=useAgendaPreferences(userId,businessId);
+  const [gridMaxH, setGridMaxH] = useState<number | null>(null);
+  const [hbarReserve, setHbarReserve] = useState(0);
+  const [eventSummary,setEventSummary]=useState('');
+  const loadGeneration=useRef(0);
+  function closeQueue(){setShowQueue(false);const url=new URL(window.location.href);if(url.searchParams.has('fila')){url.searchParams.delete('fila');window.history.replaceState(null,'',url.pathname+url.search);}}
+  useEffect(()=>{if(params.get('fila')==='1')setShowQueue(true);},[params.get('fila'),setShowQueue]);
+  useEffect(()=>{const open=(e:Event)=>{if((e as CustomEvent).detail===businessId)setShowQueue(true);};window.addEventListener('il:queue-open',open);return()=>window.removeEventListener('il:queue-open',open);},[businessId,setShowQueue]);
   const [filterOpen, setFilterOpen] = useState(false);
   const [proSearch, setProSearch] = useState('');
   const filterWrapRef = useRef<HTMLDivElement>(null);
@@ -337,6 +353,7 @@ export default function AgendaPage() {
   const [services, setServices] = useState<Service[]>([]);
   const [pros, setPros] = useState<Professional[]>([]);
   const [rules, setRules] = useState<Availability[]>([]);
+  const [exceptions,setExceptions] = useState<AvailabilityException[]>([]);
   const [loaded, setLoaded] = useState(false);
   const [detail, setDetail] = useState<Booking | null>(null);
   const [creating, setCreating] = useState<{
@@ -357,7 +374,7 @@ export default function AgendaPage() {
   const [queueEncounter, setQueueEncounter] = useState<QueueRow | null>(null);
   const [queueDone, setQueueDone] = useState<QueueRow[]>([]);
   const [queueLoading, setQueueLoading] = useState(false);
-  const [showQueue, setShowQueue] = useState(false);
+  const [queueError,setQueueError]=useState(false);
   const [flash, setFlash] = useState<{ tone: 'ok' | 'warn' | 'error'; text: string } | null>(null);
 
   // ── Drag: estado mínimo (o movimento em si vive em refs, sem re-render) ──
@@ -387,13 +404,19 @@ export default function AgendaPage() {
   const [colWidth, setColWidth] = useState(COL_MIN);
 
   const { notice, dismiss } = useForbiddenNotice('Agenda');
-  const { denied, report } = useAreaLoad('Agenda');
+  const { denied, failed, report } = useAreaLoad('Agenda');
 
   // A2-B5 (F9): '' enquanto carrega = default do produto (America/Sao_Paulo).
   const [bizTz, setBizTz] = useState('');
   // "hoje" e "agora" no FUSO DO NEGÓCIO (nunca o do navegador).
   const today = todayISO(new Date(), bizTz);
   const nowMin = timeToMin(nowHM(new Date(), bizTz));
+
+  const weekStart = useMemo(() => {
+    const dow = weekdayOf(focus);
+    return addDaysISO(focus, -((dow + 6) % 7));
+  }, [focus]);
+  const weekDays = useMemo(() => Array.from({ length: 7 }, (_, i) => addDaysISO(weekStart, i)), [weekStart]);
 
   const range = useMemo(() => {
     if (view === 'month') {
@@ -402,8 +425,8 @@ export default function AgendaPage() {
       const gridStart = addDaysISO(first, -((dow + 6) % 7));
       return { from: gridStart, to: addDaysISO(gridStart, 41) };
     }
-    return { from: addDaysISO(focus, -21), to: addDaysISO(focus, 28) };
-  }, [view, focus]);
+    return view==='week'?{from:weekDays[0],to:weekDays[6]}:{from:focus,to:focus};
+  }, [view, focus, weekDays]);
 
   /** A3.4 · Bloco 4 — a fila do balcão é lida junto com a agenda. */
   const loadQueue = useCallback(async () => {
@@ -413,6 +436,7 @@ export default function AgendaPage() {
       `/api/queue?businessId=${businessId}`, { scope: 'area', area: 'Agenda' },
     );
     setQueueLoading(false);
+    setQueueError(!res.ok);
     if (!res.ok) return;
     setQueueRows(res.data?.entries || []);
     setQueueDone(res.data?.done || []);
@@ -420,18 +444,19 @@ export default function AgendaPage() {
 
   const load = useCallback(async () => {
     if (!businessId) return;
+    const generation=++loadGeneration.current;setLoaded(false);
     const [cat, bk] = await Promise.all([
-      apiGet<any>(`/api/catalog/get?businessId=${businessId}`, { scope: 'area', area: 'Agenda' }),
-      // A2-B3 (F6): pede o teto real do servidor (500) — pedir 1000 só
-      // produzia um corte silencioso; o contrato agora é explícito.
-      apiGet<{ bookings?: Booking[] }>(
+      apiGet<any>(`/api/catalog/get?businessId=${businessId}&from=${range.from}&to=${range.to}`, { scope: 'area', area: 'Agenda' }),
+      // Consume all authorized pages within the visible range; keep the server limit at 500.
+      readAgendaBookings(
         `/api/bookings?businessId=${businessId}&mode=manage&from=${range.from}&to=${range.to}&limit=500`,
-        { scope: 'area', area: 'Agenda' },
+        ()=>generation===loadGeneration.current,
       ),
     ]);
     // Sem permissão (403): mostra o aviso amigável e PARA de carregar — a tela
     // não pode ficar em skeleton para sempre. A sessão continua intacta.
-    if (!report(cat)) { setLoaded(true); return; }
+    if(generation!==loadGeneration.current)return;
+    if (!report(cat) || !report(bk)) { setLoaded(true); return; }
     const d = cat.data || {};
     setServices(d.services || []);
     setPros(d.professionals || []);
@@ -441,12 +466,13 @@ export default function AgendaPage() {
     // linha do agora, destaque de hoje) — mesma referência do servidor.
     setBizTz(d.business?.businessTimezone || '');
     setRules(d.availability || []);
+    setExceptions(d.exceptions || []);
     setBookings(bk.ok ? (bk.data?.bookings || []) : []);
     setLoaded(true);
     void loadQueue();
   }, [businessId, range.from, range.to, report, loadQueue]);
 
-  useEffect(() => { load(); }, [load]);
+  useEffect(() => { void load(); return () => { loadGeneration.current++; }; }, [load]);
 
   // Estado real da agenda (P2): quem atende vê a confirmação/chegada registrada
   // pela recepção ao VOLTAR para a tela — sem F5 e sem polling.
@@ -480,23 +506,15 @@ export default function AgendaPage() {
   // Especialidade + profissional combinam: escolher um valor que conflita
   // com o outro limpa o outro — o resultado nunca é um beco sem saída.
   function pickSpec(role: string) {
-    setSpecFilter(role);
-    if (role && proFilter) {
-      const p = activePros.find((x) => x.id === proFilter);
-      if (p && (p.role || '').trim() !== role) setProFilter('');
-    }
+    const p = activePros.find(p => p.id === proFilter);
+    setPresentation({specialty:role, professionalId:role && p && (p.role || '').trim() !== role ? '' : proFilter});
   }
   function pickPro(id: string) {
-    setProFilter(id);
-    if (id && specFilter) {
-      const p = activePros.find((x) => x.id === id);
-      if (p && (p.role || '').trim() !== specFilter) setSpecFilter('');
-    }
+    const p = activePros.find(p => p.id === id);
+    setPresentation({professionalId:id, specialty:id && p && (p.role || '').trim() !== specFilter ? '' : specFilter});
   }
   function clearFilters() {
-    setStatusFilter('');
-    setSpecFilter('');
-    setProFilter('');
+    setPresentation({status:'',specialty:'',professionalId:''});
     setProSearch('');
   }
   const activeFilterCount = [statusFilter, specFilter, proFilter].filter(Boolean).length;
@@ -520,23 +538,8 @@ export default function AgendaPage() {
     return () => document.removeEventListener('mousedown', onDown);
   }, [filterOpen]);
 
-  const grid = useMemo(() => {
-    let s = 8 * 60, e = 20 * 60;
-    for (const r of rules) {
-      s = Math.min(s, timeToMin(r.start));
-      e = Math.max(e, timeToMin(r.end));
-    }
-    s = Math.floor(s / 60) * 60;
-    e = Math.ceil(e / 60) * 60;
-    if (e - s < 6 * 60) e = s + 6 * 60;
-    return { start: s, end: e, span: e - s, hours: Math.floor((e - s) / 60) };
-  }, [rules]);
-
-  const weekStart = useMemo(() => {
-    const dow = weekdayOf(focus);
-    return addDaysISO(focus, -((dow + 6) % 7));
-  }, [focus]);
-  const weekDays = useMemo(() => Array.from({ length: 7 }, (_, i) => addDaysISO(weekStart, i)), [weekStart]);
+  const grid = useMemo(()=>agendaEnvelope(view==='week'?weekDays:[focus],rules,exceptions,bookings,services),[view,weekDays,focus,rules,exceptions,bookings,services]);
+  const pxPerHour=agendaScale(density,grid.hours,(gridMaxH||500)-HEADER_H-hbarReserve-2);
 
   const serviceOf = useCallback((id: string) => services.find((s) => s.id === id), [services]);
   const serviceName = useCallback((id: string) => serviceOf(id)?.name || 'Serviço', [serviceOf]);
@@ -600,7 +603,7 @@ export default function AgendaPage() {
         .sort((a, b) => (a.time < b.time ? -1 : 1));
       const layout = layoutBlocks(
         list.map((b) => ({ id: b.id, minute: timeToMin(b.time), durationMin: durationOf(b) })),
-        { startMinute: grid.start, pxPerHour: PX_PER_HOUR },
+        { startMinute: grid.start, pxPerHour, minHeight: 0 },
       );
       const byId = new Map(layout.map((l) => [l.id, l]));
       const blocks: BlockVM[] = list.map((b) => {
@@ -630,9 +633,19 @@ export default function AgendaPage() {
           label: `${b.customerName} · ${serviceName(b.serviceId)} · ${formatDateBR(b.date)} ${b.time}${pro ? ` · ${pro}` : ''} · ${statusLabel}${b.bookingKind === 'fit_in' ? ' · encaixe' : ''}${b.checkedInAt ? ' · cliente já chegou' : ''}${attention ? ' — precisa de fechamento' : ''} — clique para ver o detalhe ou arraste para reagendar`,
         };
       });
-      return { ...c, isToday: c.date === today, blocks };
+      // Display only: use the SAME pure slot engine; every write still revalidates on the server.
+      const ranges: Array<{start:number;end:number}> = [];
+      if(bookingCfg && c.date>=today && c.date<=addDaysISO(today,effectiveHorizonDays(bookingCfg)) && bookings.length<500) {
+        for(const service of services.filter(s=>s.active!==false && s.bookable!==false)) {
+          const result=computeSlots({rules,exceptions,bookings,services,professionals:activePros.filter(p=>!specFilter||(p.role||'').trim()===specFilter),dateISO:c.date,weekday:weekdayOf(c.date),serviceId:service.id,durationMin:service.durationMin,professionalId:c.professionalId||proFilter,eligibleProIds:service.professionalIds||[],nowHM:c.date===today?nowHM(new Date(),bizTz):'',leadMin:bookingCfg.leadMin,bufferMin:bookingCfg.bufferMin});
+          for(const time of result.slots) ranges.push({start:timeToMin(time),end:timeToMin(time)+service.durationMin});
+        }
+      }
+      const freeRanges: typeof ranges=[];
+      for(const r of ranges.sort((a,b)=>a.start-b.start)) {const last=freeRanges[freeRanges.length-1];if(last&&r.start<=last.end)last.end=Math.max(last.end,r.end);else freeRanges.push({...r});}
+      return { ...c, isToday: c.date === today, blocks, freeRanges };
     });
-  }, [view, weekDays, activePros, focus, bookings, grid.start, durationOf, proName, serviceName, dragId, today, statusFilter, proFilter, specFilter, proRoleOf, bizTz]);
+  }, [view, weekDays, activePros, focus, bookings, grid.start, durationOf, proName, serviceName, dragId, today, statusFilter, proFilter, specFilter, proRoleOf, bizTz, rules, exceptions, services, bookingCfg, pxPerHour]);
 
   // Colunas usadas pelo cálculo de destino (mesma ordem da renderização).
   useEffect(() => {
@@ -641,7 +654,7 @@ export default function AgendaPage() {
     }));
   }, [columns]);
 
-  const gridHeight = Math.max(460, Math.round((grid.span / 60) * PX_PER_HOUR));
+  const gridHeight = (grid.span / 60) * pxPerHour;
   const dayWidth = GUTTER_W + columns.length * COL_MIN;
 
   // ── Geometria (medida, não por pixel de evento) ──
@@ -661,7 +674,7 @@ export default function AgendaPage() {
 
   // ── Altura útil da grade (P1.1 — viewport real, sem scroll fantasma) ──
   // Medimos a posição REAL do container (header + toolbar + margens +
-  // sidebar + tela cheia já estão embutidos no `top` medido) e usamos o
+  // sidebar já estão embutidos no `top` medido) e usamos o
   // resto da viewport. A altura final é `min(conteúdo, disponível)`:
   //   • a grade cabe  → o container fica do tamanho exato do conteúdo e a
   //                     barra de rolagem NÃO aparece (nem por alguns pixels);
@@ -674,7 +687,7 @@ export default function AgendaPage() {
   // (consome ~6px de altura de um painel que tinha o tamanho EXATO do
   // conteúdo). Medimos o overflow do próprio scroller e reservamos a
   // espessura da barra só quando ela aparece.
-  const [hbarReserve, setHbarReserve] = useState(0);
+
   useLayoutEffect(() => {
     const bodyEl = document.body;
     const docEl = document.documentElement;
@@ -708,7 +721,7 @@ export default function AgendaPage() {
     return () => obs.disconnect();
   }, [columns.length]);
 
-  const [gridMaxH, setGridMaxH] = useState<number | null>(null);
+
   // Altura útil da rail da fila: mesma linha de base da grade. Fechar a
   // fila não deixa valor velho — o efeito roda de novo quando showQueue muda.
   const [railMaxH, setRailMaxH] = useState<number | null>(null);
@@ -724,7 +737,7 @@ export default function AgendaPage() {
         ? window.innerHeight - top
         : hbarReserve;
       const h = window.innerHeight - top - VIEWPORT_BOTTOM_PAD - reserve;
-      setGridMaxH(Math.max(320, Math.floor(h)));
+      setGridMaxH(Math.max(100, Math.floor(h)));
       // A rail termina na MESMA linha de base da grade (o topo dela é o topo do
       // workspace, não o do scroller) — e a lista rola por dentro.
       const wtop = workspaceRef.current?.getBoundingClientRect().top ?? top;
@@ -736,7 +749,7 @@ export default function AgendaPage() {
     if (typeof document !== 'undefined') obs.observe(document.body);
     window.addEventListener('resize', fit);
     return () => { obs.disconnect(); window.removeEventListener('resize', fit); };
-  }, [loaded, view, fullscreen, pendencies.length, notice?.title, statusFilter, proFilter, specFilter, hbarReserve, showQueue]);
+  }, [loaded, view, density, pendencies.length, notice?.title, statusFilter, proFilter, specFilter, hbarReserve, showQueue, flash, grid.hours]);
 
   const readGeometry = useCallback((): { g: GridGeometry; minX: number; minY: number } | null => {
     const scroll = scrollRef.current;
@@ -749,12 +762,12 @@ export default function AgendaPage() {
       {
         gutterWidth: 0, scrollLeft: 0, scrollTop: 0,
         columnWidth: colWidth, columnCount: columns.length,
-        startMinute: grid.start, endMinute: grid.end, pxPerHour: PX_PER_HOUR,
+        startMinute: grid.start, endMinute: grid.end, pxPerHour: pxPerHour,
       },
     );
     // O gutter (horas) e o cabeçalho são fixos: nada de destino atrás deles.
     return { g, minX: scrollRect.left + GUTTER_W, minY: scrollRect.top + HEADER_H };
-  }, [colWidth, columns.length, grid.start, grid.end]);
+  }, [colWidth, columns.length, grid.start, grid.end, pxPerHour]);
 
   useEffect(() => { geometryRef.current = readGeometry(); }, [readGeometry]);
 
@@ -978,32 +991,17 @@ export default function AgendaPage() {
   }, []);
 
   // ESC cancela o arraste sem salvar nada; fecha o popover de filtros;
-  // sem nenhum dos dois, sai da tela cheia. (Ordem: mais interno primeiro.)
+  // Sem nenhum dos dois, não interfere nos outros painéis.
   useEffect(() => {
-    if (!dragId && !fullscreen && !filterOpen) return;
+    if (!dragId && !filterOpen) return;
     const onKey = (e: KeyboardEvent) => {
       if (e.key !== 'Escape') return;
       if (dragId) endDrag();
-      else if (filterOpen) setFilterOpen(false);
-      else setFullscreen(false);
+      else if (filterOpen) {setFilterOpen(false);filterWrapRef.current?.querySelector('button')?.focus();}
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [dragId, fullscreen, filterOpen, endDrag]);
-
-  function toggleFullscreen() {
-    // Nunca troca de modo no meio de um arraste: cancela primeiro.
-    if (dragId) endDrag();
-    setFullscreen((f) => !f);
-  }
-
-  // Em tela cheia a página de fundo não rola — só a grade, internamente.
-  useEffect(() => {
-    if (!fullscreen) return;
-    const prev = document.body.style.overflow;
-    document.body.style.overflow = 'hidden';
-    return () => { document.body.style.overflow = prev; };
-  }, [fullscreen]);
+  }, [dragId, filterOpen, endDrag]);
 
   // Cancela o drag se a view mudar no meio do movimento.
   useEffect(() => { endDrag(); /* eslint-disable-next-line react-hooks/exhaustive-deps */ }, [view, focus]);
@@ -1046,7 +1044,7 @@ export default function AgendaPage() {
       setFocus(nd.toISOString().slice(0, 10));
       return;
     }
-    setFocus((f) => addDaysISO(f, view === 'week' ? dir * 7 : dir));
+    setFocus(addDaysISO(focus, view === 'week' ? dir * 7 : dir));
   }
 
   // A3.3 — UMA leitura de data na barra (antes havia rótulo + campo duplicados,
@@ -1080,19 +1078,19 @@ export default function AgendaPage() {
     if (!hover.time) {
       const minute = Math.max(grid.start, Math.min(grid.end - duration, hover.minute));
       return {
-        top: blockTop(minute, grid.start, PX_PER_HOUR),
-        height: blockHeight(duration, PX_PER_HOUR),
+        top: blockTop(minute, grid.start, pxPerHour),
+        height: blockHeight(duration, pxPerHour, 0),
         label: hover.availability === 'loading' ? 'Carregando horários...' : 'Indisponível',
         tone: hover.availability === 'loading' ? 'loading' : 'busy',
       };
     }
     return {
-      top: blockTop(hover.time, grid.start, PX_PER_HOUR),
-      height: blockHeight(duration, PX_PER_HOUR),
+      top: blockTop(hover.time, grid.start, pxPerHour),
+      height: blockHeight(duration, pxPerHour, 0),
       label: hover.availability === 'free' ? hover.time : 'Indisponível',
       tone: hover.availability === 'free' ? 'free' : 'busy',
     };
-  }, [isDragging, hover, grid.start, grid.end]);
+  }, [isDragging, hover, grid.start, grid.end, pxPerHour]);
 
   const ghostLabel = hover?.time
     ? dragPreviewLabel(hover.date, hover.time)
@@ -1106,27 +1104,7 @@ export default function AgendaPage() {
   const statusOptions = (['pending', 'confirmed', 'completed', 'no_show', 'cancelled'] as BookingStatus[]);
 
   return (
-    <div className={fullscreen ? 'fixed inset-0 z-40 overflow-y-auto bg-[var(--bg)] px-2 py-3 sm:px-4 ws-scroll' : undefined}>
-      {/* Cabeçalho compacto: a grade é o conteúdo — o título não compete. */}
-      <div className="flex flex-wrap items-center justify-between gap-2 mb-2.5">
-        <div className="flex items-start gap-2.5 min-w-0">
-          <span className="w-9 h-9 shrink-0 rounded-lg bg-gradient-to-br from-[var(--brand)] to-[var(--lilac)] text-white flex items-center justify-center shadow-brand">
-            <Icon n="calendar" size={18} />
-          </span>
-          <div className="min-w-0 flex-1">
-            <h1 className="text-lg font-bold tracking-tight text-[var(--text)] leading-tight">Agenda</h1>
-            {/* A3.4 (teste humano): em 320–430px este texto era um `span`
-                inline com `truncate` (que não corta inline) — ele esticava a
-                página. Agora é bloco truncável: some por corte, nunca por
-                rolagem horizontal. */}
-            <span className="block max-w-full text-xs text-[var(--text-muted)] truncate">
-              Clique num atendimento para ver o detalhe · arraste para reagendar.
-            </span>
-          </div>
-        </div>
-        <Button onClick={() => setCreating({ date: focus, time: '', professionalId: '' })} variant="primary"><Icon n="calendarPlus" size={15} /> Novo agendamento</Button>
-      </div>
-
+    <div className="agenda-workspace-page" data-density={density}>
       <PermissionNotice message={notice?.title} hint={notice?.hint} onDismiss={dismiss} />
 
       {flash && (
@@ -1169,7 +1147,7 @@ export default function AgendaPage() {
           a equipe já está olhando o dia; abrir/fechar é decisão de quem opera
           (o balcão não precisa dela o tempo todo). A faixa de atenção avisa
           quando a espera passa do confortável. */}
-      {loaded && (
+      {loaded && queueInfo.longWait && !showQueue && !queueError && (
         <div className="space-y-2.5 mb-2.5">
           {queueInfo.longWait && !showQueue && (
             <AttentionStrip
@@ -1178,26 +1156,6 @@ export default function AgendaPage() {
               action={<Button size="sm" variant="warning" onClick={() => setShowQueue(true)}>Abrir fila</Button>}
             />
           )}
-          <button
-            type="button"
-            onClick={() => setShowQueue((v) => !v)}
-            aria-expanded={showQueue}
-            className="w-full flex items-center gap-2 px-3 py-2 rounded-md border border-[var(--border)] bg-[var(--surface)] hover:bg-[var(--surface-hover)] text-left"
-          >
-            <Icon n={showQueue ? 'chevD' : 'chevR'} size={14} className="text-[var(--text-faint)]" />
-            <Icon n="clock" size={14} className="text-[var(--text-muted)]" />
-            <span className="text-sm font-semibold text-[var(--text)]">Fila de hoje</span>
-            {(queueInfo.waiting + queueInfo.called + queueInfo.inService) === 0 ? (
-              <span className="text-xs text-[var(--text-muted)]">ninguém esperando</span>
-            ) : (
-              <span className="flex flex-wrap items-center gap-1.5">
-                {queueInfo.waiting > 0 && <Badge tone="amber">{queueInfo.waiting} aguardando</Badge>}
-                {queueInfo.called > 0 && <Badge tone="blue">{queueInfo.called} chamado{queueInfo.called > 1 ? 's' : ''}</Badge>}
-                {queueInfo.inService > 0 && <Badge tone="green">{queueInfo.inService} em atendimento</Badge>}
-              </span>
-            )}
-            <span className="ml-auto text-xs text-[var(--text-muted)]">{showQueue ? 'fechar' : 'abrir'}</span>
-          </button>
         </div>
       )}
 
@@ -1206,11 +1164,19 @@ export default function AgendaPage() {
           baixo): ela é coluna ao lado no desktop largo e overlay no resto. */}
       <div ref={workspaceRef} data-agenda-workspace="true" className="flex items-start gap-2.5 min-w-0">
         <main data-agenda-main="true" className="flex-1 min-w-0">
-      {/* Toolbar operacional: navegação · Dia/Semana/Mês · filtros · tela cheia.
+      {/* Toolbar operacional: navegação · Dia/Semana/Mês · filtros · densidade · fila.
           relative z-40: o popover de filtros abre sobre a grade e precisa
           ficar acima dos cabeçalhos sticky (z-20/30) das colunas. */}
       <div className="relative z-40 ws-panel mb-2.5">
-        <div className="flex flex-wrap items-center gap-x-3 gap-y-2.5 px-3 py-2.5">
+        <div className="agenda-title-row"><div className="agenda-title-date"><h1 className="text-xl font-semibold">Agenda</h1>            <label className="relative inline-flex flex-col min-w-0 max-w-full cursor-pointer rounded-md px-1 -mx-1 py-0.5 hover:bg-[var(--surface-hover)] focus-within:shadow-focus" title="Escolher outra data">
+              <span className="text-[15px] font-bold leading-tight text-[var(--text)] capitalize truncate" aria-live="polite"><span className="agenda-date-wide">{focusLabel}</span><span className="agenda-date-narrow">{view==='week'?`${formatDateBR(weekDays[0]).slice(0,5)}–${formatDateBR(weekDays[6]).slice(0,5)}`:view==='month'?`${focus.slice(5,7)}/${focus.slice(0,4)}`:formatDateBR(focus)}</span></span>
+              <span className="text-[11px] font-semibold text-[var(--text-muted)] leading-tight inline-flex items-center gap-1">
+                <Icon n="calendar" size={11} /> {focusRange}
+              </span>
+              <input type="date" value={focus} max="2100-12-31" onChange={(e) => { if (/^\d{4}-\d{2}-\d{2}$/.test(e.target.value)) setFocus(e.target.value); }}
+                aria-label="Escolher data" className="absolute inset-0 w-full h-full opacity-0 cursor-pointer" />
+            </label></div><Button onClick={() => setCreating({date:focus,time:'',professionalId:''})} variant="primary"><Icon n="plus" size={18}/>Novo agendamento</Button></div>
+        <div className="agenda-controls-row">
           {/* Navegação no tempo (A3.4): [◀] [Hoje] [▶] + título da data ao lado.
               O "Hoje" fica SEMPRE no mesmo lugar, entre as setas — antes ele
               aparecia e desaparecia conforme a data, então o botão se movia
@@ -1232,27 +1198,20 @@ export default function AgendaPage() {
               <IconButton icon="chevR" label={navLabel(1)} tip={navLabel(1)} variant="ghost" onClick={() => move(1)}
                 className="w-9 h-9 rounded-none text-[var(--text-muted)]" />
             </span>
-            <label className="relative inline-flex flex-col min-w-0 max-w-[min(26rem,calc(100vw-12rem))] cursor-pointer rounded-md px-1 -mx-1 py-0.5 hover:bg-[var(--surface-hover)] focus-within:shadow-focus" title="Escolher outra data">
-              <span className="text-[15px] font-bold leading-tight text-[var(--text)] capitalize truncate" aria-live="polite">{focusLabel}</span>
-              <span className="text-[11px] font-semibold text-[var(--text-muted)] leading-tight inline-flex items-center gap-1">
-                <Icon n="calendar" size={11} /> {focusRange} · clique para escolher a data
-              </span>
-              <input type="date" value={focus} max="2100-12-31" onChange={(e) => { if (/^\d{4}-\d{2}-\d{2}$/.test(e.target.value)) setFocus(e.target.value); }}
-                aria-label="Escolher data" className="absolute inset-0 w-full h-full opacity-0 cursor-pointer" />
-            </label>
+
           </div>
           <Tabs
             items={[
               { id: 'day' as View, label: 'Dia', icon: 'calendar' },
               { id: 'week' as View, label: 'Semana', icon: 'grid' },
               { id: 'month' as View, label: 'Mês', icon: 'receipt' },
+              { id: 'list' as View, label: 'Lista', icon: 'tasks' },
             ]}
             value={view}
             onChange={(v) => { endDrag(); setView(v); }}
             ariaLabel="Visualização da agenda"
-            size="sm"
           />
-          <div className="flex items-center gap-1.5 ml-auto">
+          <div className="agenda-toolbar-actions">
             {/* P1.1 — UM botão de filtro (contador quando ativo). O popover
                 agrupa Status + Especialidade + Profissional pesquisável:
                 escala para 10/20/50 profissionais sem poluir a toolbar. */}
@@ -1260,7 +1219,7 @@ export default function AgendaPage() {
               <Button variant="secondary" size="sm" onClick={() => { setFilterOpen((o) => !o); setProSearch(''); }}
                 aria-expanded={filterOpen} aria-haspopup="dialog" title="Filtros">
                 <Icon n="filter" size={13} />
-                {activeFilterCount > 0 ? `Filtro · ${activeFilterCount}` : 'Filtro'}
+                {activeFilterCount > 0 ? `Filtros · ${activeFilterCount}` : 'Filtros'}
                 <Icon n="chevD" size={12} className={`transition-transform ${filterOpen ? 'rotate-180' : ''}`} />
               </Button>
 
@@ -1339,31 +1298,9 @@ export default function AgendaPage() {
                 </div>
               )}
             </div>
-            <Button type="button" variant="secondary" size="sm" aria-pressed={fullscreen} onClick={toggleFullscreen}
-              title={fullscreen ? 'Sair da tela cheia (ESC)' : 'Tela cheia'}>
-              <Icon n={fullscreen ? 'shrink' : 'expand'} size={14} />
-              <span className="hidden sm:inline">{fullscreen ? 'Sair' : 'Tela cheia'}</span>
-            </Button>
+            <select aria-label="Densidade da agenda" className="il-field-control agenda-density" value={density} onChange={e=>{endDrag();setDensity(e.target.value as AgendaDensity);}}><option value="compact">Compacta</option><option value="comfortable">Confortável</option></select>
+            <Button variant="secondary" size="sm" aria-label="Fila de atendimento" aria-expanded={showQueue} onClick={()=>showQueue?closeQueue():setShowQueue(true)}><Icon n="clock" size={16}/>Fila <span aria-label="Pessoas na fila">{queueLoading?'…':queueError?'—':queueInfo.waiting+queueInfo.called+queueInfo.inService}</span></Button>
           </div>
-        </div>
-        {/* Legenda: cor = estado (mesma fonte da grade) + marcador de atenção. */}
-        <div className="flex flex-wrap items-center gap-x-3 gap-y-1 px-3 pb-2" aria-label="Legenda dos estados">
-          {statusOptions.map((s) => (
-            <span key={s} className="inline-flex items-center gap-1 text-[11px] font-medium text-zinc-500">
-              <span className={`w-2 h-2 rounded-sm ${BOOKING_DOT[s]}`} aria-hidden="true" />
-              {BOOKING_STATUS[s].panel}
-            </span>
-          ))}
-          <span className="text-[11px] font-medium text-zinc-500 inline-flex items-center gap-1">
-            <span className={`w-3.5 h-3.5 rounded-full text-[9px] font-black leading-[14px] text-center ${ATTENTION_MARK_CLS}`} aria-hidden="true">!</span>
-            precisa de fechamento
-          </span>
-          {/* A3.4: criar pelo clique era um recurso invisível — agora a grade
-              diz que dá. Arrastar continua sendo mover o atendimento. */}
-          <span className="text-[11px] font-medium text-[var(--text-muted)] inline-flex items-center gap-1 sm:ml-auto">
-            <Icon n="calendarPlus" size={12} />
-            clique num horário vago para agendar · arraste um cartão para remarcar
-          </span>
         </div>
         {isDragging && view !== 'month' && (
           <div
@@ -1409,7 +1346,16 @@ export default function AgendaPage() {
         )}
       </div>
 
-      {denied ? <AccessDenied area="Agenda" /> : !loaded ? <ListSkeleton rows={4} /> : view === 'month' ? (
+      {denied ? <AccessDenied area="Agenda" /> : failed ? <AreaLoadError area="Agenda" message={failed} onRetry={load}/> : !loaded ? <ListSkeleton rows={4} /> : view === 'list' ? (
+        <section className="space-y-3" aria-label="Lista de atendimentos do dia">
+          <p className="text-sm text-[var(--text-muted)]">{formatDateBR(focus)} · Toque para abrir o atendimento. Horários livres e intervalos estão na visualização Dia.</p>
+          {columns.flatMap(c => c.blocks).length === 0 && <div className="p-8 bg-[var(--surface)] border border-[var(--border)] rounded-lg"><h2 className="font-semibold">Nenhum atendimento nesta seleção</h2><p className="text-sm text-[var(--text-muted)] mt-1">Confira os filtros ou use Novo agendamento para consultar horários disponíveis.</p></div>}
+          {[...new Map(columns.flatMap(c => c.blocks).map(b => [b.id,b])).values()].sort((a,b) => a.time.localeCompare(b.time)).map(item => <button key={item.id} type="button" onClick={() => { const booking = bookings.find(b => b.id === item.id); if (booking) setDetail(booking); }} className="w-full flex gap-4 items-start text-left p-4 bg-[var(--surface)] border border-[var(--border)] rounded-lg">
+            <span className="font-semibold tabular-nums text-[var(--brand-fg)]">{item.time}</span>
+            <span className="min-w-0 flex-1"><strong className="block text-sm">{bookings.find(b => b.id === item.id)?.customerName}</strong><span className="block text-xs text-[var(--text-muted)] mt-1">{item.service} · {proName(bookings.find(b => b.id === item.id)?.professionalId || '') || 'Sem profissional'}</span><span className="inline-block text-xs mt-2 font-semibold">{item.statusLabel}{bookings.find(b => b.id === item.id)?.bookingKind === 'fit_in' ? ' · Encaixe' : ''}</span></span><Icon n="chevR" size={16} />
+          </button>)}
+        </section>
+      ) : view === 'month' ? (
         <div className="bg-white border border-zinc-200 overflow-hidden p-2">
           <div className="grid grid-cols-7 gap-px mb-1">
             {['seg', 'ter', 'qua', 'qui', 'sex', 'sáb', 'dom'].map((d) => (
@@ -1426,7 +1372,7 @@ export default function AgendaPage() {
               const pend = list.filter((b) => needsClosure(b, bookingDuration(serviceOf(b.serviceId)), today, nowHM(new Date(), bizTz))).length;
               const inMonth = d.slice(0, 7) === focus.slice(0, 7);
               return (
-                <button key={d} onClick={() => { setFocus(d); setView('day'); }} className={`bg-white p-1.5 min-h-[72px] text-left hover:bg-zinc-50 ${d === today ? 'ring-1 ring-inset ring-emerald-500 bg-emerald-50/40' : ''} ${!inMonth ? 'bg-zinc-50 text-zinc-400' : ''}`}>
+                <button key={d} onClick={() => { setPresentation({data:d,view:'day'}); }} className={`bg-white p-1.5 min-h-[72px] text-left hover:bg-zinc-50 ${d === today ? 'ring-1 ring-inset ring-emerald-500 bg-emerald-50/40' : ''} ${!inMonth ? 'bg-zinc-50 text-zinc-400' : ''}`}>
                   <span className="flex items-center justify-between">
                     <span className={`text-xs font-semibold ${d === today ? 'text-emerald-700' : inMonth ? 'text-zinc-700' : 'text-zinc-400'}`}>{Number(d.slice(8, 10))}</span>
                     {pend > 0 && <span className="text-[9px] font-bold bg-amber-500 text-white rounded-full px-1">{pend}</span>}
@@ -1446,19 +1392,19 @@ export default function AgendaPage() {
         <div className="bg-white border border-zinc-200 overflow-hidden">
           {/* Altura EXATA = min(conteúdo, viewport disponível). Se a grade
               cabe, o container tem o tamanho dela e não há barra alguma. */}
-          <div ref={scrollRef} className={`overflow-auto ws-scroll ${isDragging ? 'select-none' : ''}`}
+          <div data-agenda-grid data-hour-scale={pxPerHour} data-start-minute={grid.start} data-end-minute={grid.end} ref={scrollRef} className={`overflow-auto ws-scroll ${isDragging ? 'select-none' : ''}`}
             style={{ height: gridMaxH ? Math.min(gridContentH, gridMaxH) : undefined }}>
             <div className="flex" style={{ minWidth: dayWidth }}>
               {/* Gutter de horas (fixo na horizontal) */}
               <div className="sticky left-0 z-30 bg-white shrink-0 border-r border-zinc-200" style={{ width: GUTTER_W }}>
-                <div style={{ height: HEADER_H }} className="border-b border-zinc-200" />
+                <div style={{ height: HEADER_H }} className="sticky top-0 z-30 bg-white border-b border-zinc-200" />
                 {/* O último rótulo ancora ACIMA da linha: nenhum elemento
                     ultrapassa gridHeight (zero scroll fantasma). */}
                 <div className="relative" style={{ height: gridHeight }}>
                   {Array.from({ length: grid.hours + 1 }, (_, i) => (
                     <span key={i}
-                      className={`absolute right-2 text-[10px] font-medium text-zinc-400 ${i === grid.hours ? '-translate-y-full' : '-translate-y-1/2'}`}
-                      style={{ top: i * PX_PER_HOUR }}>{minToTime(grid.start + i * 60)}</span>
+                      className={`absolute right-2 text-sm font-medium text-[var(--text-muted)] ${i === grid.hours ? '-translate-y-full' : i === 0 ? '' : '-translate-y-1/2'}`}
+                      style={{ top: i * pxPerHour }}>{minToTime(grid.start + i * 60)}</span>
                   ))}
                 </div>
               </div>
@@ -1476,7 +1422,7 @@ export default function AgendaPage() {
                         )
                       )}
                       <span className="min-w-0">
-                        <span className={`block text-xs font-semibold truncate ${c.isToday ? 'text-emerald-700' : 'text-zinc-800'}`}>{c.label}</span>
+                        <span className={`block text-sm font-semibold truncate ${c.isToday ? 'text-emerald-700' : 'text-zinc-800'}`}>{c.label}</span>
                         {c.sub && <span className="block text-[10px] text-zinc-400 truncate">{c.sub}</span>}
                       </span>
                     </div>
@@ -1486,7 +1432,7 @@ export default function AgendaPage() {
                 {/* Corpo da grade */}
                 <div className="flex relative" ref={colsRef}>
                   {view === 'day' && focus === today && nowMin >= grid.start && nowMin <= grid.end && (
-                    <span className="absolute left-0 right-0 border-t border-red-500 z-10 pointer-events-none" style={{ top: ((nowMin - grid.start) / 60) * PX_PER_HOUR }}>
+                    <span className="absolute left-0 right-0 border-t border-red-500 z-10 pointer-events-none" style={{ top: ((nowMin - grid.start) / 60) * pxPerHour }}>
                       <span className="absolute -left-1 -top-[4px] w-2 h-2 rounded-full bg-red-500" />
                     </span>
                   )}
@@ -1494,6 +1440,8 @@ export default function AgendaPage() {
                     <GridColumn
                       key={c.key}
                       column={c}
+                      pxPerHour={pxPerHour}
+                      onSummary={setEventSummary}
                       basisPct={100 / Math.max(1, columns.length)}
                       variant={view === 'week' ? 'week' : 'day'}
                       highlight={highlightFor(i)}
@@ -1516,6 +1464,7 @@ export default function AgendaPage() {
         </div>
       )}
 
+        <footer className="agenda-footer"><details className="agenda-legend"><summary>Legenda</summary><div className="agenda-legend-panel" aria-label="Legenda dos estados">{statusOptions.map(status=><span key={status}><i className={BOOKING_DOT[status]} aria-hidden="true"/>{BOOKING_STATUS[status].panel}</span>)}<p>Branco: livre para algum serviço. Cinza: indisponível. A reserva é sempre validada pelo servidor.{bookings.length>=500?' Em agendas extensas, consulte a disponibilidade no formulário.':''}</p></div></details><output aria-live="polite" className="truncate text-xs text-[var(--text-muted)]" title={eventSummary}>{eventSummary}</output></footer>
         </main>
 
         {/* RAIL DA FILA — um só QueuePanel para os dois tamanhos de tela:
@@ -1524,18 +1473,8 @@ export default function AgendaPage() {
             • abaixo de xl: overlay deslizante (a agenda nunca é espremida por
               380px num tablet) — fecha pelo X, pelo botão ou pelo fundo. */}
         {showQueue && (
-          <>
-            <div
-              className="xl:hidden fixed inset-0 z-40 bg-[var(--overlay)]"
-              aria-hidden="true"
-              onClick={() => setShowQueue(false)}
-            />
-            <aside
-              data-queue-rail="true"
-              aria-label="Fila de hoje"
-              style={{ '--queue-rail-maxh': railMaxH ? `${railMaxH}px` : undefined } as CSSProperties}
-              className="z-50 overflow-y-auto ws-scroll bg-[var(--surface)] border-[var(--border)] fixed inset-y-0 right-0 w-[min(92vw,380px)] border-l shadow-2xl xl:static xl:inset-auto xl:z-auto xl:w-[368px] 2xl:w-[392px] xl:shrink-0 xl:self-start xl:max-h-[var(--queue-rail-maxh)] xl:rounded-xl xl:border xl:shadow-sm"
-            >
+          <QueueDock onClose={closeQueue} maxHeight={railMaxH}>
+              {queueError&&<p role="alert" className="p-3 text-sm">Não foi possível atualizar a fila. <button className="underline" onClick={loadQueue}>Tentar novamente</button></p>}
               <QueuePanel
                 businessId={businessId}
                 date={today}
@@ -1559,14 +1498,13 @@ export default function AgendaPage() {
                 onOpenBooking={(id) => { const b = bookingsRef.current.get(id); if (b) setDetail(b); }}
                 onEncounter={(row) => setQueueEncounter(row)}
                 onOpenClient={(row) => { window.location.href = `/clientes?c=${encodeURIComponent(row.contactId)}`; }}
-                onClose={() => setShowQueue(false)}
+                onClose={closeQueue}
                 onFitIn={(row) => setCreating({
                   date: today, time: nowHM(), professionalId: row.professionalId,
                   contactId: row.contactId, name: row.customerName, phone: row.customerPhone, serviceId: row.serviceId,
                 })}
               />
-            </aside>
-          </>
+          </QueueDock>
         )}
       </div>
 
@@ -1592,9 +1530,8 @@ export default function AgendaPage() {
 
       {/* Confirmação explícita do drop — nada acontece em silêncio */}
       {dropAsk && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4" role="dialog" aria-modal="true" aria-label="Confirmar reagendamento">
-          <div className="absolute inset-0 bg-[var(--overlay)]" onClick={() => !saving && setDropAsk(null)} />
-          <div className="relative w-full sm:max-w-sm bg-white rounded-lg border border-zinc-200 p-5 shadow-lg">
+        <Drawer open onClose={() => !saving && setDropAsk(null)} title="Confirmar reagendamento" width="max-w-lg">
+          <div className="p-5">
             <p className="font-semibold">{dropConfirmQuestion(dropAsk.date, dropAsk.time)}</p>
             <p className="text-sm text-zinc-600 mt-1.5"><strong>{dropAsk.booking.customerName}</strong> · {serviceName(dropAsk.booking.serviceId)}</p>
             <p className="text-sm mt-1">
@@ -1618,7 +1555,7 @@ export default function AgendaPage() {
               <Button variant="secondary" onClick={() => setDropAsk(null)} disabled={saving}>Cancelar</Button>
             </div>
           </div>
-        </div>
+        </Drawer>
       )}
 
       {detail && (

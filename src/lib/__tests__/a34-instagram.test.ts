@@ -1122,7 +1122,7 @@ describe('B9 · INBOX — canal, badge e compositor por canal', () => {
 
   it('a tela de Conversas tem filtro por canal, badge e compositor por canal (fonte)', () => {
     const read = (rel: string) => fs.readFileSync(path.join(process.cwd(), rel), 'utf8');
-    const page = read('src/app/(dashboard)/conversas/page.tsx');
+    const page = read('src/components/dashboard/ConversationsView.tsx');
     expect(page).toContain('Todos');
     expect(page).toContain("label: 'WhatsApp'");
     expect(page).toContain("label: 'Instagram'");

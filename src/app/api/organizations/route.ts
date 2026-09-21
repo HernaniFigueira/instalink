@@ -2,7 +2,9 @@ import { NextRequest, NextResponse } from 'next/server';
 import { randomUUID } from 'node:crypto';
 import { requireUser } from '@/lib/access';
 import { readDB, updateDB } from '@/lib/db';
-import { organizationsFor, unitsForOrganization } from '@/lib/organization';
+import { organizationOverview } from '@/lib/organization-overview';
+import { resolvePeriodSpec } from '@/lib/periods';
+import { todayISO, DEFAULT_TIMEZONE } from '@/lib/tz';
 import { pushAudit } from '@/lib/audit';
 
 // Contexto consolidado. Só agrega unidades às quais o usuário já tem acesso;
@@ -11,25 +13,16 @@ export async function GET(req: NextRequest) {
   const guard = await requireUser(req);
   if (!guard.ok) return guard.res;
   const { user } = guard;
-  const db = await readDB();
-  const organizations = organizationsFor(db, user).map((organization) => {
-    const units = unitsForOrganization(db, user, organization.id);
-    const ids = new Set(units.map((u) => u.id));
-    const bookings = db.bookings.filter((x) => ids.has(x.businessId));
-    const servicePrices = new Map(db.services.filter((x) => ids.has(x.businessId)).map((x) => [x.id, x.price]));
-    return {
-      id: organization.id, name: organization.name,
-      canManage: organization.ownerId === user.id || db.organizationMembers.some((m) => m.organizationId === organization.id && m.userId === user.id && m.active && m.role === 'ADMIN'),
-      units: units.map((u) => ({ id: u.id, name: u.name, slug: u.slug, address: u.address, published: u.published })),
-      totals: {
-        units: units.length,
-        bookings: bookings.length,
-        clients: db.contacts.filter((x) => ids.has(x.businessId)).length,
-        predictedRevenue: bookings.filter((x) => !['cancelled', 'no_show'].includes(x.status)).reduce((sum, x) => sum + (servicePrices.get(x.serviceId) || 0), 0),
-      },
-    };
-  });
-  return NextResponse.json({ organizations });
+  try {
+    const db = await readDB();
+    const q=req.nextUrl.searchParams;
+    const period=resolvePeriodSpec({period:q.get('period'),from:q.get('from'),to:q.get('to'),today:todayISO()});
+    const organizations=organizationOverview(db,user,period);
+    const requested=q.get('organizationId');
+    if(requested && !organizations.some(o=>o.id===requested)) return NextResponse.json({error:'Organização não disponível.'},{status:403});
+    return NextResponse.json({organizations,period,referenceTimezone:DEFAULT_TIMEZONE},{headers:{'Cache-Control':'no-store'}});
+  } catch { return NextResponse.json({error:'Não foi possível carregar a organização.'},{status:500}); }
+
 }
 
 export async function POST(req: NextRequest) {

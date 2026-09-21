@@ -10,7 +10,7 @@ import { Icon } from '@/components/icons';
 import { Button, Notice, PageHeader, PageSkeleton, Tabs } from '@/components/ui';
 import { cn } from '@/lib/utils';
 import type { AgentObjective, AgentTone, BusinessAgent } from '@/lib/types';
-import { AccessDenied, useAreaLoad } from '@/components/dashboard/AccessNotice';
+import { AccessDenied, AreaLoadError, useAreaLoad } from '@/components/dashboard/AccessNotice';
 import { apiGet, apiSend } from '@/lib/api-client';
 
 interface Options { tones: Array<{ id: AgentTone; label: string; hint: string }>; objectives: Array<{ id: AgentObjective; label: string }> }
@@ -40,7 +40,7 @@ export default function AgentePage() {
   const [error, setError] = useState('');
 
   // 403 → aviso amigável na tela (o usuário continua logado).
-  const { denied, report } = useAreaLoad('Agente');
+  const { denied, failed, report } = useAreaLoad('Agente');
 
   const load = useCallback(async () => {
     if (!businessId) return;
@@ -75,6 +75,7 @@ export default function AgentePage() {
   }
 
   if (denied) return <AccessDenied area="Agente" />;
+  if (failed) return <AreaLoadError area="Agente" message={failed} onRetry={load} />;
   if (!agent || !options) return <PageSkeleton />;
   const pv = preview as Preview | null;
   const q = `?b=${businessId}`;

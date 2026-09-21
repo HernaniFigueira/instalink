@@ -1,4 +1,4 @@
-import type { Metadata } from 'next';
+import type { Metadata, Viewport } from 'next';
 import { Inter, Sora } from 'next/font/google';
 import './globals.css';
 import { AuthBootstrap } from '@/components/AuthBootstrap';
@@ -7,22 +7,23 @@ const inter = Inter({ subsets: ['latin'], display: 'swap', variable: '--font-int
 const sora = Sora({ subsets: ['latin'], weight: ['600', '700', '800'], display: 'swap', variable: '--font-sora' });
 
 export const metadata: Metadata = {
-  title: 'InstaLink.app — Página, agenda e clientes em um link',
-  description: 'Transforme o link da bio em atendimento organizado: página, serviços, agenda, clientes, WhatsApp, assistente e resultados.',
-  themeColor: '#0e090b',
+  title: 'InstaLink — Sua clínica organizada',
+  description: 'Da primeira reserva ao próximo atendimento: página da clínica, agenda, pacientes e equipe em um só lugar.',
   openGraph: {
-    title: 'InstaLink.app — Página, agenda e clientes em um link',
-    description: 'Página, serviços, agenda, clientes, WhatsApp e resultados em um só link.',
+    title: 'InstaLink — Sua clínica organizada',
+    description: 'Página da clínica, agenda, pacientes e equipe em um só lugar.',
     type: 'website',
     locale: 'pt_BR',
-    siteName: 'InstaLink.app',
+    siteName: 'InstaLink',
   },
   twitter: {
     card: 'summary',
-    title: 'InstaLink.app — Página, agenda e clientes em um link',
-    description: 'Página, serviços, agenda, clientes, WhatsApp e resultados em um só link.',
+    title: 'InstaLink — Sua clínica organizada',
+    description: 'Página da clínica, agenda, pacientes e equipe em um só lugar.',
   },
 };
+
+export const viewport: Viewport = { themeColor: '#f7f7f4' };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (

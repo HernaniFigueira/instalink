@@ -1,0 +1,19 @@
+ FAIL  src/lib/__tests__/a34-instagram.test.ts > B9 · OUTBOUND — prova de envio, janela e isolamento > deliverInstagramMessage entrega pendente do Instagram e ignora conversa de WhatsApp
+AssertionError: expected false to be true // Object.is equality
+ FAIL  src/lib/__tests__/a34-instagram.test.ts > B9 · INBOX — canal, badge e compositor por canal > responder numa conversa do Instagram usa o canal DA CONVERSA (não o WhatsApp)
+AssertionError: expected 409 to be 200 // Object.is equality
+ FAIL  src/lib/__tests__/a34-instagram.test.ts > B9 fix · LIMITE DE TEXTO — recusa explícita, nunca truncar > no limite exato, passa — e o corpo salvo é EXATAMENTE o enviado
+AssertionError: expected 409 to be 200 // Object.is equality
+ FAIL  src/lib/__tests__/automation-audit-p4.test.ts > P4 auditoria — persistência e poda (item 6) > a poda preserva queued/running/waiting mesmo com o histórico estourado
+AssertionError: expected 'failed' to be 'waiting' // Object.is equality
+ FAIL  src/lib/__tests__/whatsapp-robustness.test.ts > Meta WhatsApp Cloud API — Onboarding Coexistence e Standard > fluxo de agendamento no webhook com confirmação explícita antes de criar booking
+AssertionError: expected [] to have a length of 1 but got +0
+
+ ✓ src/lib/__tests__/entity-deletion.test.ts (46 tests) 2716ms
+ ✓ src/lib/__tests__/organization-direction.test.ts (6 tests) 49ms
+ ✓ src/lib/__tests__/workspace-navigation.test.ts (6 tests) 6ms
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 5 ⎯⎯⎯⎯⎯⎯⎯
+ Test Files  3 failed | 96 passed (99)
+      Tests  5 failed | 1746 passed (1751)
+   Start at  12:41:14
+   Duration  47.91s (transform 2.98s, setup 0ms, import 11.81s, tests 20.99s, environment 787ms)

@@ -9,3 +9,8 @@ data/*.bak
 *.log
 .DS_Store
 tsconfig.tsbuildinfo
+
+# Generated artifacts from the isolated D1a browser harness
+.cache/d1a-browser/
+
+.cache/360-browser/

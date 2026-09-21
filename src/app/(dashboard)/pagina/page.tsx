@@ -1,5 +1,5 @@
 'use client';
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { BLOCK_DEFS } from '@/lib/templates';
@@ -13,6 +13,8 @@ import { PageSkeleton, Tabs } from '@/components/ui';
 import { AccessDenied, useAreaLoad } from '@/components/dashboard/AccessNotice';
 import { apiGet, apiSend } from '@/lib/api-client';
 import { Icon } from '@/components/icons';
+import { ClinicPreview } from '@/components/dashboard/ClinicPreview';
+import { useUnsavedChanges } from '@/components/dashboard/useUnsavedChanges';
 import { ImageUpload } from '@/components/dashboard/ImageUpload';
 import { readFaqItems, visibleFaqItems, type FaqItem } from '@/lib/faq';
 
@@ -30,6 +32,15 @@ export default function PaginaPage() {
   const [products, setProducts] = useState<Product[]>([]);
   const [professionals, setProfessionals] = useState<Professional[]>([]);
   const [saving, setSaving] = useState(false);
+  const savingRef = useRef(false);
+  const [savedPage, setSavedPage] = useState('');
+  const [savedAbout, setSavedAbout] = useState('');
+  const [navDraft, setNavDraft] = useState<NavItemConfig[] | null>(null);
+  const [previewOpen, setPreviewOpen] = useState(false);
+  const [catalog, setCatalog] = useState({ categories: [], products: [], options: [], optionValues: [], services: [], serviceCategories: [], professionals: [], reviews: [] });
+  const snapshot = (p: Page) => JSON.stringify([p.blocks, p.theme, p.presetId]);
+  const dirty = !!page && !!savedPage && (snapshot(page) !== savedPage || JSON.stringify(business?.about) !== savedAbout || navDraft !== null);
+  useUnsavedChanges(dirty);
 
   // 403 → aviso amigável (sessão preservada), nunca skeleton infinito.
   const { denied, failed, report } = useAreaLoad('Página');
@@ -47,11 +58,15 @@ export default function PaginaPage() {
       );
       if (!report(res) || !res.data) return;
       setBusiness(res.data.business);
+      setSavedAbout(JSON.stringify(res.data.business.about));
+      setNavDraft(null);
       setPage(res.data.page);
+      setSavedPage(snapshot(res.data.page));
       // Catálogo: alimenta o cálculo de disponibilidade dos itens de menu
       // (seção vazia/módulo desligado nunca aparece no menu público).
       const cat = await apiGet<any>(`/api/catalog/get?businessId=${businessId}`, { scope: 'area', area: 'Página' });
       if (cat.ok && cat.data) {
+        setCatalog({ categories: cat.data.categories || [], serviceCategories: cat.data.serviceCategories || [], options: cat.data.options || [], optionValues: cat.data.optionValues || [], services: (cat.data.services || []).filter((x: any) => x.active), professionals: (cat.data.professionals || []).filter((x: any) => x.active), products: (cat.data.products || []).filter((x: any) => x.active), reviews: rv.ok ? ((rv.data as any)?.reviews || []).filter((x: any) => x.status === 'published') : [] });
         setServices(cat.data.services || []);
         setProducts(cat.data.products || []);
         setProfessionals(cat.data.professionals || []);
@@ -67,26 +82,30 @@ export default function PaginaPage() {
     nav?: string[]; navCustom?: boolean; about?: Business['about'];
     navItems?: NavItemConfig[];
   }) {
+    if (savingRef.current) return false;
+    savingRef.current = true;
     setSaving(true);
     setMsg('');
     try {
-      const res = await apiSend<{ business?: Business; page?: Page }>('/api/pages', 'PUT', { businessId, ...patch }, { scope: 'action', area: 'Página' });
+      const res = await apiSend<{ business?: Business; page?: Page }>('/api/pages', 'PUT', { businessId, about: business?.about, ...(navDraft !== null ? { navItems: navDraft } : {}), ...(page ? { blocks: page.blocks, theme: page.theme, presetId: page.presetId } : {}), ...patch }, { scope: 'action', area: 'Página' });
       if (!res.ok) throw new Error(res.message);
       // REVALIDAÇÃO HONESTA (auditoria §15): nada de assumir "salvo" pelo
       // toast. O servidor devolve o estado CANÔNICO recém-lido do banco e é
       // ELE que atualiza a tela — se não estiver lá, nada aparece salvo.
-      if (res.data?.business) setBusiness(res.data.business);
-      if (res.data?.page) setPage(res.data.page);
-      setMsg(res.data?.page || res.data?.business ? 'Alterações salvas e confirmadas no servidor.' : 'Alterações salvas.');
+      if (res.data?.business) { setBusiness(res.data.business); setSavedAbout(JSON.stringify(res.data.business.about)); setNavDraft(null); }
+      if (res.data?.page) { setPage(res.data.page); setSavedPage(snapshot(res.data.page)); }
+      setMsg(business?.published ? 'Alterações salvas. A página pública já foi atualizada.' : 'Alterações salvas e confirmadas no servidor.');
+      return true;
     } catch (err: any) {
-      setMsg(`Falha ao salvar: ${err.message}`);
+      setMsg(`Falha ao salvar: ${err.message}. Suas alterações continuam nesta tela.`);
+      return false;
     } finally {
+      savingRef.current = false;
       setSaving(false);
-      setTimeout(() => setMsg(''), 4500);
     }
   }
 
-  function updateBlocks(blocks: Block[], persist = true) {
+  function updateBlocks(blocks: Block[], persist = false) {
     if (!page) return;
     const next = { ...page, blocks: blocks.map((b, i) => ({ ...b, order: i })) };
     setPage(next);
@@ -107,6 +126,7 @@ export default function PaginaPage() {
   }
   if (!business || !page) return <PageSkeleton />;
 
+  const previewBusiness = navDraft === null ? business : { ...business, navItems: navDraft };
   const blocks = [...page.blocks].sort((a, b) => a.order - b.order);
 
   // SOBRE A EMPRESA — linha sintética da Estrutura: seção pública fixa logo
@@ -131,9 +151,9 @@ export default function PaginaPage() {
           </p>
           <p className="text-xs text-zinc-500 truncate">História, diferenciais e imagem do negócio</p>
         </div>
-        <button onClick={() => setEditing(editing === 'about' ? null : 'about')}
+        <button aria-label="Editar Sobre a clínica" aria-expanded={editing === 'about'} onClick={() => setEditing(editing === 'about' ? null : 'about')}
           className="text-xs font-bold bg-zinc-100 px-3 py-1.5 rounded-lg hover:bg-zinc-200">Editar</button>
-        <button onClick={() => save({ about: { ...aboutData, enabled: !aboutData.enabled } })}
+        <button onClick={() => setBusiness({ ...business, about: { ...aboutData, enabled: !aboutData.enabled } })}
           className={cn('text-xs font-bold px-3 py-1.5 rounded-lg min-w-[64px]', aboutData.enabled ? 'bg-emerald-100 text-emerald-800 hover:bg-emerald-200' : 'bg-zinc-100 text-zinc-500 hover:bg-zinc-200')}>
           {aboutData.enabled ? 'Ativo' : 'Oculto'}
         </button>
@@ -142,8 +162,9 @@ export default function PaginaPage() {
         <div className="mt-3 pt-3 border-t border-zinc-100">
           <AboutSectionEditor
             about={aboutData}
+            onChange={about => setBusiness({ ...business, about })}
             businessId={businessId}
-            onSave={(a) => { save({ about: a }); setEditing(null); }}
+            onSave={async (a) => { if (await save({ about: a })) setEditing(null); }}
           />
         </div>
       )}
@@ -168,7 +189,7 @@ export default function PaginaPage() {
                 ? 'bg-[var(--success-bg)] border-[var(--success-border)] text-[var(--success-fg)]'
                 : 'bg-[var(--warning-bg)] border-[var(--warning-border)] text-[var(--warning-fg)]')}>
               <span aria-hidden="true" className={cn('w-2 h-2 rounded-full', business.published ? 'bg-[var(--success)]' : 'bg-[var(--warning)]')} />
-              {business.published ? 'Publicada' : 'Rascunho'}
+              {business.published ? 'Publicada' : 'Não publicada'}
             </span>
             <a href={`/${business.slug}`} target="_blank" rel="noreferrer" className="text-[var(--brand-fg)] font-semibold hover:underline inline-flex items-center gap-1">instalink.app/{business.slug} <Icon n="external" size={12} /></a>
           </p>
@@ -185,19 +206,27 @@ export default function PaginaPage() {
         </div>
       </div>
 
-      {msg && <p role="status" className="mb-4 text-sm font-semibold bg-[var(--success-bg)] border border-[var(--success-border)] text-[var(--success-fg)] rounded-md px-4 py-3">{msg}</p>}
+      <div className="editor-savebar" role="region" aria-label="Salvamento da página">
+        <div><p className="font-semibold text-sm">{saving ? 'Salvando…' : dirty ? 'Alterações não salvas' : 'Conteúdo salvo'}</p>
+          <p className="text-xs text-[var(--text-muted)]">{business.published ? 'Ao salvar, suas alterações entram no site público imediatamente.' : 'Salvar mantém o conteúdo. Use Publicação para colocar a página no ar.'} Todo botão salvar aplica as alterações desta tela, incluindo conteúdo, aparência e menu.</p></div>
+        <div className="flex gap-2 flex-wrap"><button type="button" className="il-control border rounded-md px-3" aria-expanded={previewOpen} onClick={() => setPreviewOpen(!previewOpen)}>Prévia das alterações</button>
+          <button type="button" disabled={saving || !dirty} className="il-control px-4 rounded-md bg-[var(--brand)] text-white disabled:opacity-50" onClick={() => save({ blocks: page.blocks, theme: page.theme, presetId: page.presetId })}>Salvar alterações</button></div>
+      </div>
+      {msg && <p role={msg.startsWith('Falha') ? 'alert' : 'status'} className={`mb-4 text-sm rounded-md px-4 py-3 ${msg.startsWith('Falha') ? 'bg-[var(--danger-bg)] text-[var(--danger-fg)]' : 'bg-[var(--success-bg)] text-[var(--success-fg)]'}`}>{msg}</p>}
+      {previewOpen && <ClinicPreview business={previewBusiness} page={page} catalog={catalog} />}
+      <fieldset disabled={saving} className="min-w-0 mt-5">
 
       {/* A3.3 — abas do editor em pill (mesmo padrão das outras telas). */}
       <div className="mb-5">
         <Tabs
           items={[
-            { id: 'blocks' as const, label: 'Estrutura', icon: 'grid' },
-            { id: 'nav' as const, label: 'Navegação', icon: 'menu' },
-            { id: 'theme' as const, label: 'Visual', icon: 'spark' },
-            { id: 'publish' as const, label: 'Publicar', icon: 'upload' },
+            { id: 'blocks' as const, label: 'Conteúdo e blocos', icon: 'grid' },
+            { id: 'nav' as const, label: 'Navegação e ações', icon: 'menu' },
+            { id: 'theme' as const, label: 'Aparência', icon: 'spark' },
+            { id: 'publish' as const, label: 'Publicação', icon: 'upload' },
           ]}
           value={tab}
-          onChange={(id) => setTab(id)}
+          onChange={setTab}
           ariaLabel="Seções do editor da página"
         />
       </div>
@@ -211,6 +240,8 @@ export default function PaginaPage() {
           products={products}
           professionals={professionals}
           reviewCount={rvCounts.published}
+          draft={navDraft} setDraft={setNavDraft}
+          onChangeAbout={about => setBusiness({ ...business, about })}
           onSaveNav={(navItems) => save({ navItems })}
           onAbout={(about) => save({ about } as any)}
         />
@@ -227,15 +258,15 @@ export default function PaginaPage() {
               {blocks.map((b, i) => {
                 const gate = blockModuleGate(business, b.type);
                 return (
-                  <div key={b.id}>
+                  <div key={b.id} data-block-id={b.id}>
                   <div className={cn('px-3 py-2.5', !b.enabled && 'bg-zinc-50/60')}>
-                    <div className="flex items-center gap-2.5">
+                    <div className="flex flex-wrap items-center gap-2.5">
                       <span className="w-6 text-center text-[11px] font-bold text-zinc-400 tabular-nums shrink-0">{i + 1}</span>
                       <div className="flex flex-col gap-0.5 shrink-0">
                         <button disabled={i === 0} onClick={() => { const n = [...blocks]; [n[i - 1], n[i]] = [n[i], n[i - 1]]; updateBlocks(n); }}
-                          className="text-zinc-400 hover:text-zinc-900 hover:bg-zinc-100 rounded p-0.5 disabled:opacity-20 disabled:hover:bg-transparent inline-flex" aria-label={`Mover ${BLOCK_DEFS[b.type]?.label || b.type} para cima`}><Icon n="chevU" size={12} /></button>
+                          className="text-zinc-500 hover:text-zinc-900 hover:bg-zinc-100 rounded p-2 disabled:opacity-20 disabled:hover:bg-transparent inline-flex" aria-label={`Mover ${BLOCK_DEFS[b.type]?.label || b.type} para cima`}><Icon n="chevU" size={12} /></button>
                         <button disabled={i === blocks.length - 1} onClick={() => { const n = [...blocks]; [n[i + 1], n[i]] = [n[i], n[i + 1]]; updateBlocks(n); }}
-                          className="text-zinc-400 hover:text-zinc-900 hover:bg-zinc-100 rounded p-0.5 disabled:opacity-20 disabled:hover:bg-transparent inline-flex" aria-label={`Mover ${BLOCK_DEFS[b.type]?.label || b.type} para baixo`}><Icon n="chevD" size={12} /></button>
+                          className="text-zinc-500 hover:text-zinc-900 hover:bg-zinc-100 rounded p-2 disabled:opacity-20 disabled:hover:bg-transparent inline-flex" aria-label={`Mover ${BLOCK_DEFS[b.type]?.label || b.type} para baixo`}><Icon n="chevD" size={12} /></button>
                       </div>
                       <div className="flex-1 min-w-0">
                         <p className="font-bold text-sm flex items-center gap-1.5 flex-wrap">
@@ -257,7 +288,7 @@ export default function PaginaPage() {
                         </p>
                         <p className="text-xs text-zinc-500 truncate">{BLOCK_DEFS[b.type]?.hint}</p>
                       </div>
-                      <button onClick={() => setEditing(editing === b.id ? null : b.id)}
+                      <button aria-label={`Editar ${BLOCK_DEFS[b.type]?.label || b.type}`} aria-expanded={editing === b.id} onClick={() => setEditing(editing === b.id ? null : b.id)}
                         className="text-xs font-bold bg-zinc-100 px-3 py-1.5 rounded-lg hover:bg-zinc-200">Editar</button>
                       <button onClick={() => updateBlocks(blocks.map((x) => (x.id === b.id ? { ...x, enabled: !x.enabled } : x)))}
                         className={cn('text-xs font-bold px-3 py-1.5 rounded-lg min-w-[64px]', b.enabled ? 'bg-emerald-100 text-emerald-800 hover:bg-emerald-200' : 'bg-zinc-100 text-zinc-500 hover:bg-zinc-200')}>
@@ -278,7 +309,7 @@ export default function PaginaPage() {
                             const n = blocks.map((x) => (x.id === b.id ? { ...x, settings } : x));
                             setPage({ ...page, blocks: n });
                           }}
-                          onSave={() => { save({ blocks: page.blocks }); setEditing(null); }}
+                          onSave={async () => { if (await save({ blocks: page.blocks })) setEditing(null); }}
                           onRefresh={() => setReloadTick((t) => t + 1)}
                         />
                       </div>
@@ -330,7 +361,7 @@ export default function PaginaPage() {
           <div className="order-1 lg:order-2 lg:sticky lg:top-4 space-y-2">
             {/* Prévia da PÁGINA REAL mora na aba Visual: o lojista vê o
                 resultado de verdade enquanto ajusta tema e cores. */}
-            <PagePreview slug={business.slug} published={!!business.published} />
+            <ClinicPreview business={previewBusiness} page={page} catalog={catalog} />
           </div>
         </div>
       )}
@@ -338,6 +369,7 @@ export default function PaginaPage() {
       {tab === 'publish' && (
         <PublishTab business={business} businessId={businessId} onSlug={(slug) => save({ slug })} onPublish={(published) => save({ published })} />
       )}
+      </fieldset>
     </>
   );
 }
@@ -349,7 +381,7 @@ export default function PaginaPage() {
 // desabilitado ("indisponível"), nunca some silenciosamente do menu do
 // editor — e nunca vai para o ar apontando para nada.
 // ═══════════════════════════════════════════════════════════════
-function PageNavTab({ business, businessId, blocks, services, products, professionals, reviewCount, onSaveNav, onAbout }: {
+function PageNavTab({ business, businessId, blocks, services, products, professionals, reviewCount, onSaveNav, onAbout, draft, setDraft, onChangeAbout }: {
   business: Business;
   businessId: string;
   blocks: Block[];
@@ -357,18 +389,16 @@ function PageNavTab({ business, businessId, blocks, services, products, professi
   products: Product[];
   professionals: Professional[];
   reviewCount: number;
-  onSaveNav: (navItems: NavItemConfig[]) => void | Promise<void>;
-  onAbout: (about: Business['about']) => void | Promise<void>;
+  draft: NavItemConfig[] | null;
+  setDraft: (value: NavItemConfig[] | null) => void;
+  onChangeAbout: (about: Business['about']) => void;
+  onSaveNav: (navItems: NavItemConfig[]) => void | Promise<boolean | void>;
+  onAbout: (about: Business['about']) => void | Promise<boolean | void>;
 }) {
   const about = business.about || { title: '', text: '', image: '', enabled: false };
-  const [aboutDraft, setAboutDraft] = useState(about);
-  useEffect(() => { setAboutDraft(about); /* eslint-disable-next-line react-hooks/exhaustive-deps */ }, [business.about]);
-
-  const auto = !Array.isArray(business.navItems) || business.navItems.length === 0;
-  // Rascunho local: começa da configuração atual (ou do automático) e só
-  // persiste quando o lojista salva — edição sem sustos.
-  const [draft, setDraft] = useState<NavItemConfig[] | null>(null);
-  useEffect(() => { setDraft(null); /* eslint-disable-next-line react-hooks/exhaustive-deps */ }, [JSON.stringify(business.navItems)]);
+  const aboutDraft = about;
+  const setAboutDraft = onChangeAbout;
+  const auto = (draft ?? business.navItems ?? []).length === 0;
 
   const hasFaq = blocks.some((b) => b.type === 'faq' && b.enabled !== false
     && Array.isArray(b.settings?.items) && (b.settings.items as any[]).some((x) => String(x?.q || '').trim() && String(x?.a || '').trim()));
@@ -388,8 +418,7 @@ function PageNavTab({ business, businessId, blocks, services, products, professi
   }));
 
   // Configuração efetiva (o que está salvo ou o automático mostraria).
-  const current: NavItemConfig[] = draft
-    ?? (auto
+  const current: NavItemConfig[] = draft?.length ? draft : (auto
       ? ([
           ...(Object.keys(NAV_ANCHORS) as string[])
             .filter((id) => available.has(id))
@@ -487,7 +516,7 @@ function PageNavTab({ business, businessId, blocks, services, products, professi
                   title={ok ? (on ? 'Visível no menu' : 'Oculto do menu') : unavailableHint(item.id)}>
                   {ok ? (on ? 'No menu' : 'Oculto') : 'Indisponível'}
                 </button>
-                <input value={item.label} onChange={(e) => rename(item, e.target.value)} disabled={!ok}
+                <input aria-label={`Nome no menu: ${NAV_ANCHORS[item.id]?.label || item.id}`} value={item.label} onChange={(e) => rename(item, e.target.value)} disabled={!ok}
                   className="flex-1 min-w-[110px] bg-transparent border-0 focus:border focus:border-zinc-300 rounded-md px-2 py-1 text-sm font-semibold disabled:text-zinc-400"
                   placeholder={NAV_ANCHORS[item.id]?.label || item.id} maxLength={40} />
                 <span className="text-[10px] font-bold text-zinc-400 uppercase shrink-0 w-14 text-right">
@@ -505,12 +534,12 @@ function PageNavTab({ business, businessId, blocks, services, products, professi
         )}
 
         <div className="flex flex-wrap gap-2 mt-3">
-          <button disabled={!dirty} onClick={() => { onSaveNav(draft || []); setDraft(null); }}
+          <button disabled={!dirty} onClick={async () => { if (await onSaveNav(draft || []) !== false) setDraft(null); }}
             className="text-sm font-bold bg-[var(--brand)] text-white shadow-brand hover:bg-[var(--brand-strong)] px-4 py-2.5 rounded-md disabled:opacity-40">
             Salvar menu
           </button>
           {!auto && (
-            <button onClick={() => { setDraft(null); onSaveNav([]); }} className="text-sm font-bold bg-zinc-100 px-4 py-2.5 rounded-md hover:bg-zinc-200">
+            <button onClick={() => setDraft([])} className="text-sm font-bold bg-zinc-100 px-4 py-2.5 rounded-md hover:bg-zinc-200">
               Voltar ao automático
             </button>
           )}
@@ -523,14 +552,14 @@ function PageNavTab({ business, businessId, blocks, services, products, professi
       <section className="bg-white border border-zinc-200 rounded-lg p-4 space-y-3">
         <div className="flex items-center justify-between">
           <p className="font-bold text-sm">Sobre a empresa</p>
-          <button onClick={() => onAbout({ ...aboutDraft, enabled: !about.enabled })}
+          <button onClick={() => setAboutDraft({ ...aboutDraft, enabled: !about.enabled })}
             className={cn('text-xs font-medium px-3 py-1 rounded-full border', about.enabled ? 'bg-[var(--brand-soft)] text-[var(--brand-fg)] border-[var(--brand-border)]' : 'bg-white border-[var(--border)] text-[var(--text-muted)]')}>
             {about.enabled ? 'Visível' : 'Oculto'}
           </button>
         </div>
         <p className="text-xs text-zinc-500 -mt-1">Aparece na página logo abaixo do Perfil, quando ativado e com conteúdo.</p>
-        <input value={aboutDraft.title} onChange={(e) => setAboutDraft({ ...aboutDraft, title: e.target.value })} className="w-full rounded-md border border-zinc-300 px-3 py-2 text-sm" placeholder="Título (ex: Sobre o estúdio)" />
-        <textarea value={aboutDraft.text} onChange={(e) => setAboutDraft({ ...aboutDraft, text: e.target.value })} className="w-full rounded-md border border-zinc-300 px-3 py-2 text-sm" rows={3} placeholder="Ex: Somos uma clínica especializada em…" />
+        <input aria-label="Título sobre a clínica" value={aboutDraft.title} onChange={(e) => setAboutDraft({ ...aboutDraft, title: e.target.value })} className="w-full rounded-md border border-zinc-300 px-3 py-2 text-sm" placeholder="Título (ex: Sobre a clínica)" />
+        <textarea aria-label="Texto sobre a clínica" value={aboutDraft.text} onChange={(e) => setAboutDraft({ ...aboutDraft, text: e.target.value })} className="w-full rounded-md border border-zinc-300 px-3 py-2 text-sm" rows={3} placeholder="Ex: Somos uma clínica especializada em…" />
         <ImageUpload label="IMAGEM (OPCIONAL)" value={aboutDraft.image} onChange={(url) => setAboutDraft({ ...aboutDraft, image: url })} businessId={businessId} />
         <button onClick={() => onAbout(aboutDraft)} className="text-sm font-bold bg-[var(--brand)] text-white shadow-brand hover:bg-[var(--brand-strong)] px-4 py-2 rounded-md">Salvar “Sobre”</button>
       </section>
@@ -543,26 +572,25 @@ function PageNavTab({ business, businessId, blocks, services, products, professi
 // "Sobre a empresa" pertence à página pública: não existe página
 // administrativa "Sobre" — só esta configuração dentro de Página.
 // ═══════════════════════════════════════════════════════════════
-function AboutSectionEditor({ about, businessId, onSave }: {
+function AboutSectionEditor({ about, businessId, onSave, onChange }: {
   about: Business['about'];
   businessId: string;
   onSave: (about: Business['about']) => void;
+  onChange: (about: Business['about']) => void;
 }) {
-  const base = about || { title: '', text: '', image: '', enabled: false };
-  const [draft, setDraft] = useState(base);
-  useEffect(() => { setDraft(base); /* eslint-disable-next-line react-hooks/exhaustive-deps */ }, [about?.title, about?.text, about?.image, about?.enabled]);
-  const set = (k: 'title' | 'text' | 'image', v: string) => setDraft((d) => ({ ...d, [k]: v }));
+  const draft = about || { title: '', text: '', image: '', enabled: false };
+  const set = (k: 'title' | 'text' | 'image', v: string) => onChange({ ...draft, [k]: v });
   return (
     <div className="space-y-3">
       <div>
         <span className="text-xs font-bold text-zinc-500">TÍTULO</span>
-        <input value={draft.title} onChange={(e) => set('title', e.target.value)}
+        <input aria-label="Título sobre a clínica" value={draft.title} onChange={(e) => set('title', e.target.value)}
           className="mt-1 w-full rounded-md border border-zinc-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500"
-          placeholder="Ex: Sobre o estúdio" maxLength={80} />
+          placeholder="Ex: Sobre a clínica" maxLength={80} />
       </div>
       <div>
         <span className="text-xs font-bold text-zinc-500">TEXTO</span>
-        <textarea value={draft.text} onChange={(e) => set('text', e.target.value)}
+        <textarea aria-label="Texto sobre a clínica" value={draft.text} onChange={(e) => set('text', e.target.value)}
           className="mt-1 w-full rounded-md border border-zinc-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500"
           rows={4} placeholder="Ex: Somos uma clínica especializada em…" maxLength={1200} />
       </div>
@@ -1087,43 +1115,6 @@ function ReviewsEditor({ businessId }: { businessId: string }) {
 
 // ── Prévia da página REAL (aba Visual, §24) ──
 // Mesma origem + sessão do dono: o rascunho aparece (isOwnerPreview).
-function PagePreview({ slug, published }: { slug: string; published: boolean }) {
-  const [wide, setWide] = useState(true);
-  const [nonce, setNonce] = useState(0);
-  return (
-    <div className="bg-white border border-zinc-200 rounded-lg p-4">
-      <div className="flex flex-wrap items-center justify-between gap-2 mb-3">
-        <div>
-          <p className="font-bold text-sm">Prévia da página</p>
-          <p className="text-xs text-zinc-500">
-            {published ? 'Como está no ar agora.' : 'Rascunho — só você vê esta versão.'}
-          </p>
-        </div>
-        <div className="flex items-center gap-2">
-          <div className="flex bg-zinc-100 rounded-lg p-0.5">
-            <button onClick={() => setWide(true)} aria-label="Prévia em tela larga"
-              className={cn('text-xs font-bold px-3 py-1.5 rounded-md', wide && 'bg-white shadow-sm')}>Larga</button>
-            <button onClick={() => setWide(false)} aria-label="Prévia em tela de celular"
-              className={cn('text-xs font-bold px-3 py-1.5 rounded-md', !wide && 'bg-white shadow-sm')}>Celular</button>
-          </div>
-          <button onClick={() => setNonce((n) => n + 1)} className="text-xs font-bold bg-zinc-100 hover:bg-zinc-200 px-3 py-2 rounded-md inline-flex items-center gap-1.5">
-            <Icon n="sync" size={13} /> Atualizar
-          </button>
-        </div>
-      </div>
-      <div className="flex justify-center">
-        <div className={cn('transition-all w-full', !wide && 'sm:w-[390px] sm:max-w-full')}>
-          <div className="rounded-xl border border-zinc-200 overflow-hidden bg-zinc-50 w-full"
-            style={{ height: wide ? 'min(76dvh, 720px)' : 620, minHeight: 520 }}>
-            <iframe key={nonce} src={`/${slug}`} title="Prévia da página pública"
-              className="w-full h-full border-0" sandbox="allow-same-origin allow-scripts allow-popups allow-forms" />
-          </div>
-        </div>
-      </div>
-    </div>
-  );
-}
-
 function ThemeEditor({ theme, presetId, onChange, onSave, saving }: {
   theme: Theme;
   presetId: string;
@@ -1242,6 +1233,7 @@ function ThemeEditor({ theme, presetId, onChange, onSave, saving }: {
 
 function PublishTab({ business, onSlug, onPublish }: { business: Business; businessId: string; onSlug: (slug: string) => void; onPublish: (p: boolean) => void }) {
   const [slug, setSlug] = useState(business.slug);
+  useUnsavedChanges(slug !== business.slug);
   const origin = typeof window !== 'undefined' ? window.location.origin : '';
   return (
     <div className="grid lg:grid-cols-2 gap-4 items-start">
@@ -1266,7 +1258,7 @@ function PublishTab({ business, onSlug, onPublish }: { business: Business; busin
       </div>
       <div className="bg-white border border-zinc-200 rounded-lg p-5 text-center">
         <p className="font-bold text-sm">QR Code da sua página</p>
-        <p className="text-xs text-zinc-500 mb-3">Imprima e cole no balcão, cardápio ou vitrine.</p>
+        <p className="text-xs text-zinc-500 mb-3">Imprima e cole na recepção ou em materiais da clínica.</p>
         <img src={`/api/qr?text=${encodeURIComponent(`${origin}/${business.slug}`)}`} alt="QR Code da página"
           className="mx-auto w-48 h-48 rounded-lg border border-zinc-200" />
         <a href={`/api/qr?text=${encodeURIComponent(`${origin}/${business.slug}`)}`} download={`qr-${business.slug}.png`}

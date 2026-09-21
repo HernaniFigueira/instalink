@@ -1,252 +1,62 @@
 import Link from 'next/link';
-import { THEME_PRESETS } from '@/lib/themes';
 import { Icon } from '@/components/icons';
 
-const ICONS: Record<string, React.ReactNode> = {
-  link: (<><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71" /><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71" /></>),
-  cart: (<><circle cx="8" cy="21" r="1" /><circle cx="19" cy="21" r="1" /><path d="M2.05 2.05h2l2.66 12.42a2 2 0 0 0 2 1.58h9.78a2 2 0 0 0 1.95-1.57l1.65-7.43H5.12" /></>),
-  bag: (<><path d="M6 7h12l1 13a1 1 0 0 1-1 1H6a1 1 0 0 1-1-1z" /><path d="M9 10V6a3 3 0 0 1 6 0v4" /></>),
-  users: (<><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2" /><circle cx="9" cy="7" r="4" /><path d="M22 21v-2a4 4 0 0 0-3-3.87" /><path d="M16 3.13a3.4 3.4 0 0 1 0 7.75" /></>),
-  calendar: (<><rect x="3" y="4" width="18" height="18" rx="2" /><path d="M16 2v4" /><path d="M8 2v4" /><path d="M3 10h18" /></>),
-  chat: (<path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />),
-  spark: (<path d="M12 3l1.9 5.1L19 10l-5.1 1.9L12 17l-1.9-5.1L5 10l5.1-1.9zM19 15l.9 2.1L22 18l-2.1.9L19 21l-.9-2.1L16 18l2.1-.9z" />),
-  chart: (<><path d="M3 3v18h18" /><path d="M8 17V9" /><path d="M13 17V5" /><path d="M18 17v-8" /></>),
-  check: (<path d="M20 6 9 17l-5-5" />),
-  qr: (<><rect x="3" y="3" width="7" height="7" rx="1" /><rect x="14" y="3" width="7" height="7" rx="1" /><rect x="3" y="14" width="7" height="7" rx="1" /><path d="M14 14h3v3h4v4h-7z" /></>),
-};
-
-function I({ n, size = 22 }: { n: string; size?: number }) {
-  return (
-    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor"
-      strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" className="shrink-0">
-      {ICONS[n]}
-    </svg>
-  );
-}
-
-const FEATURES = [
-  { icon: 'link', title: 'Sua página profissional', text: 'Perfil, serviços, avaliações e contato num link pronto para a bio — montada em blocos, sem designer.' },
-  { icon: 'calendar', title: 'Agenda sem planilha', text: 'Serviços, profissionais, horários e folgas. O cliente escolhe dia e hora e marca sozinho.' },
-  { icon: 'users', title: 'Clientes no mesmo lugar', text: 'Cada agendamento vira histórico: compareceu, remarcou, o que já fez — sem caderninho.' },
-  { icon: 'chat', title: 'WhatsApp no fluxo', text: 'Botão flutuante e mensagens prontas para confirmar, avisar e reengajar.' },
-  { icon: 'spark', title: 'Assistente virtual', text: 'Tira dúvidas e guia o visitante até agendar, na página e no WhatsApp.' },
-  { icon: 'bag', title: 'Vitrine opcional', text: 'Vende produtos no balcão? Mostre na página com um toque “Tenho interesse” direto no seu WhatsApp.' },
+const journeys = [
+  { n: '01', title: 'Receber bem começa antes da consulta.', role: 'PARA A RECEPÇÃO', text: 'Agenda, cadastro, fila e tarefas no mesmo ambiente. Encontre o paciente, acompanhe a chegada e saiba o que ainda precisa de atenção.', items: ['Agenda por dia, semana ou mês', 'Cadastro e histórico reunidos', 'Fila e pendências da operação'] },
+  { n: '02', title: 'Mais contexto para cada atendimento.', role: 'PARA O PROFISSIONAL', text: 'Consulte sua agenda, abra o atendimento e registre orientações. Cada pessoa da equipe acessa o que seu papel e seus vínculos permitem.', items: ['Agenda vinculada ao profissional', 'Registro e histórico autorizado', 'Orientações e retorno sugerido'] },
+  { n: '03', title: 'Uma visão clara da sua clínica.', role: 'PARA A GESTÃO', text: 'Organize serviços, equipe e unidades. Acompanhe os indicadores disponíveis e configure a página que apresenta sua clínica ao paciente.', items: ['Equipe com permissões por unidade', 'Serviços e disponibilidade', 'Resultados com origem e período definidos'] },
 ];
-
-const FAQS = [
-  { q: 'É grátis mesmo?', a: 'Sim. Você cria a página e recebe agendamentos sem pagar nada e sem cartão. Recursos avançados (Pro) chegam depois — quem está dentro desde já garante condições especiais.' },
-  { q: 'Preciso de site ou domínio?', a: 'Não. Sua página vive em instalink.app/seunegocio e já funciona no celular, pronta para o link da bio do Instagram e TikTok.' },
-  { q: 'Meu cliente precisa baixar app?', a: 'Não. Tudo abre no navegador: ele escolhe o serviço, vê horários livres, agenda e acompanha os próprios atendimentos na área “Minha conta”.' },
-  { q: 'Para quem é o InstaLink?', a: 'Para negócios que trabalham com atendimento marcado: salões, barbearias, clínicas, estética, fisioterapia, psicologia, nutrição, veterinária e autônomos que vendem tempo. Quem também vende produtos pode ativar a vitrine — sem precisar de loja virtual.' },
-  { q: 'E se eu quiser vender produtos?', a: 'Ative a vitrine em um clique. Cada produto mostra foto, preço e o botão “Tenho interesse”, que abre seu WhatsApp com a mensagem pronta. Sem carrinho, sem checkout, sem taxa sobre venda.' },
+const questions = [
+  ['Para quais clínicas o InstaLink foi pensado?', 'Clínicas médicas, odontológicas, veterinárias e de estética. Você organiza os serviços e os profissionais conforme sua operação. O sistema não substitui sistemas clínicos especializados nem representa um prontuário veterinário de pets.'],
+  ['O paciente precisa instalar um aplicativo?', 'Não. A página da clínica, o agendamento e a área da conta abrem no navegador. As opções de acompanhamento, cancelamento e remarcação seguem as regras configuradas pela clínica.'],
+  ['Posso manter a identidade da minha clínica?', 'Sim. Sua página pública tem logo, conteúdo, cores e aparência próprios. O painel da equipe mantém uma interface consistente para o trabalho diário.'],
+  ['Toda a equipe vê as mesmas informações?', 'Não. O acesso depende do papel, das permissões e das unidades às quais cada pessoa está vinculada. O profissional pode ter a agenda limitada ao seu próprio vínculo.'],
+  ['Como começar?', 'Crie seu acesso, configure a clínica e cadastre os serviços, profissionais e horários. Revise a página e as regras de reserva antes de compartilhar o link com pacientes.'],
+  ['Há envio automático por WhatsApp ou Instagram?', 'Esta apresentação não promete integração homologada ou envio automático por esses canais. A disponibilidade depende de configuração e validação específicas, fora desta entrega.'],
 ];
-
-function PhoneMock() {
-  return (
-    <div className="mx-auto w-[270px] rounded-[2.6rem] border-[10px] border-zinc-800 bg-[#120a0b] p-4 shadow-[0_30px_80px_-20px_rgba(163,230,53,0.25)] rotate-2">
-      <div className="mx-auto mb-3 h-5 w-24 rounded-full bg-zinc-800" />
-      <div className="text-center">
-        <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-full bg-gradient-to-br from-lime-300 to-blue-600 font-black text-[#120a0b]">BH</div>
-        <div className="mx-auto mt-2 h-3.5 w-28 rounded-full bg-zinc-100" />
-        <div className="mx-auto mt-1.5 h-2.5 w-20 rounded-full bg-zinc-600" />
-      </div>
-      <div className="mt-3 rounded-2xl bg-lime-300 py-2.5 text-center text-xs font-black uppercase tracking-wide text-[#120a0b]">
-        Agendar horário
-      </div>
-      <div className="mt-2 space-y-2">
-        {['Corte + Barba · R$ 60', 'Consulta · Ter 14:00 livre'].map((t) => (
-          <div key={t} className="flex items-center gap-2 rounded-2xl border border-white/10 bg-white/5 p-2.5">
-            <div className="h-8 w-8 shrink-0 rounded-xl bg-gradient-to-br from-lime-300/70 to-emerald-400/70" />
-            <div className="h-2.5 flex-1 rounded-full bg-zinc-600" />
-            <div className="rounded-lg bg-white/10 px-2 py-1 text-[10px] font-black text-lime-200">OK</div>
-          </div>
-        ))}
-      </div>
-      <p className="sr-only">Prévia de página criada no InstaLink</p>
-    </div>
-  );
-}
-
 export default function Landing() {
-  return (
-    <main className="min-h-screen bg-[#0e090b] text-white overflow-x-hidden">
-      {/* ── topo ── */}
-      <header className="mx-auto flex max-w-6xl items-center justify-between px-5 py-5">
-        <Link href="/" className="flex items-center gap-2">
-          <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-lime-300 font-black text-[#120a0b]">IL</div>
-          <span className="font-display text-lg font-bold tracking-tight">InstaLink<span className="text-lime-300">.app</span></span>
-        </Link>
-        <nav className="hidden items-center gap-6 text-sm font-semibold text-zinc-400 md:flex">
-          <a href="#recursos" className="hover:text-white">Recursos</a>
-          <a href="#modelos" className="hover:text-white">Modelos</a>
-          <a href="#duvidas" className="hover:text-white">Dúvidas</a>
-        </nav>
-        <nav className="flex items-center gap-2.5">
-          <Link href="/login" className="px-3 py-2 text-sm font-semibold text-zinc-300 hover:text-white">Entrar</Link>
-          <Link href="/register" className="rounded-xl bg-lime-300 px-4 py-2.5 text-sm font-bold text-[#120a0b] hover:bg-lime-200">
-            Criar grátis
-          </Link>
-        </nav>
-      </header>
-
-      {/* ── hero ── */}
-      <section className="mx-auto grid max-w-6xl items-center gap-10 px-5 pb-14 pt-10 lg:grid-cols-[1.15fr_0.85fr] lg:pt-16">
-        <div className="text-center lg:text-left">
-          <p className="inline-flex items-center gap-2 rounded-full border border-lime-300/25 bg-lime-300/10 px-4 py-1.5 text-xs font-semibold uppercase tracking-widest text-lime-200">
-            <I n="spark" size={14} /> Novo · Conta do cliente + Agendamento rápido
-          </p>
-          <h1 className="font-display mt-6 text-4xl font-extrabold leading-[1.05] tracking-tight sm:text-6xl">
-            Página, agenda e clientes<br />em <span className="text-lime-300">um link</span>.
-          </h1>
-          <p className="mx-auto mt-5 max-w-xl text-lg text-zinc-400 lg:mx-0">
-            O Instagram manda o cliente. O InstaLink mostra seus serviços, deixa
-            ele agendar sozinho e organiza o relacionamento — tudo a partir do
-            link da bio.
-          </p>
-          <div className="mt-8 flex flex-col items-center gap-3 sm:flex-row lg:justify-start sm:justify-center">
-            <Link href="/register" className="w-full rounded-2xl bg-lime-300 px-8 py-4 text-center text-base font-bold text-[#120a0b] hover:bg-lime-200 sm:w-auto">
-              Criar minha página grátis
-            </Link>
-            <Link href="/barbeariadojoao" className="w-full rounded-2xl border border-zinc-700 px-8 py-4 text-center text-base font-semibold hover:bg-zinc-900 sm:w-auto">
-              Ver demonstração
-            </Link>
-          </div>
-          <p className="mt-4 text-xs text-zinc-500">Sem cartão · Pronto em minutos · Cancele quando quiser</p>
-          <div className="mt-5 flex flex-wrap items-center justify-center gap-2 text-xs font-semibold lg:justify-start">
-            <span className="text-zinc-500">Experimente ao vivo:</span>
-            <Link href="/barbeariadojoao" className="rounded-full border border-zinc-800 bg-zinc-900/60 px-3.5 py-1.5 hover:border-lime-300/40 hover:text-lime-200 inline-flex items-center gap-1.5"><Icon n="scissors" size={14} /> Barbearia</Link>
-            <Link href="/clinicavitta" className="rounded-full border border-zinc-800 bg-zinc-900/60 px-3.5 py-1.5 hover:border-lime-300/40 hover:text-lime-200 inline-flex items-center gap-1.5"><Icon n="calendar" size={14} /> Clínica</Link>
-          </div>
+  return <main className="il-marketing">
+    <a className="marketing-skip" href="#conteudo">Ir para o conteúdo</a>
+    <header className="marketing-nav marketing-wrap">
+      <Link href="/" className="marketing-wordmark">instalink<span> / clínicas</span></Link>
+      <nav aria-label="Principal"><a href="#produto">O produto</a><a href="#rotina">Na sua rotina</a><a href="#duvidas">Dúvidas</a></nav>
+      <Link href="/login" className="marketing-login">Acesso da equipe <span aria-hidden="true">↗</span></Link>
+    </header>
+    <section id="conteudo" className="marketing-hero marketing-wrap">
+      <div>
+        <p className="marketing-eyebrow"><span /> MAIS CLAREZA NA ROTINA DA CLÍNICA</p>
+        <h1>Sua clínica organizada,<br />do primeiro contato ao <em>próximo atendimento.</em></h1>
+        <p className="marketing-intro">Da recepção ao acompanhamento do paciente. Agenda, equipe, atendimento e sua página online em um só lugar — cada pessoa com o acesso de que precisa.</p>
+        <div className="marketing-actions"><Link className="marketing-cta" href="/register">Começar a organizar <span aria-hidden="true">→</span></Link><a className="marketing-text-link" href="#produto">Conhecer o produto ↓</a></div>
+        <p className="marketing-note">Médica · Odontológica · Veterinária · Estética</p>
+      </div>
+      <div className="marketing-product" aria-label="Demonstração ilustrativa da agenda, com dados fictícios">
+        <div className="marketing-window"><span /><span /><span /><p>Clínica Aurora · demonstração ilustrativa</p></div>
+        <div className="marketing-demo-body">
+          <div className="marketing-demo-heading"><div><p className="marketing-eyebrow">ATENDIMENTO</p><h2>Uma boa manhã começa aqui.</h2></div><span className="marketing-demo-date">SEG<br /><strong>21</strong></span></div>
+          <div className="marketing-demo-toolbar"><strong>Agenda de hoje</strong><span>Dia　 Semana　 Mês</span></div>
+          <div className="marketing-demo-appointment"><time>09:00</time><div><strong>Marina Alves</strong><p>Consulta · Dra. Helena</p></div><span>Confirmado</span></div>
+          <div className="marketing-demo-appointment is-arrived"><time>09:30</time><div><strong>Rafael Lima</strong><p>Avaliação · Dr. Pedro</p></div><span>Na recepção</span></div>
+          <div className="marketing-demo-appointment"><time>10:00</time><div><strong>Clara Souza</strong><p>Retorno · Dra. Helena</p></div><span>Confirmado</span></div>
+          <div className="marketing-demo-task"><Icon n="checkCircle" size={20} /><div><strong>O próximo passo, sem procurar.</strong><p>Agenda, fila e histórico ao alcance da equipe.</p></div></div>
         </div>
-        <PhoneMock />
-      </section>
-
-      {/* ── canais ── */}
-      <section className="border-y border-white/5 bg-white/[0.02]">
-        <div className="mx-auto flex max-w-6xl flex-wrap items-center justify-center gap-x-8 gap-y-3 px-5 py-5 text-sm font-semibold text-zinc-400">
-          <span className="text-xs uppercase tracking-widest text-zinc-600">Feito para quem atende pelo</span>
-          <span>Instagram</span><span>TikTok</span><span>WhatsApp</span><span>Google</span>
+        <p className="marketing-demo-caption">Visão ilustrativa. Nomes e atendimentos fictícios.</p>
+      </div>
+    </section>
+    <section id="produto" className="marketing-product-section">
+      <div className="marketing-wrap"><div className="marketing-section-heading"><p className="marketing-eyebrow">DO ONLINE À RECEPÇÃO</p><h2>Uma experiência contínua.<br />Dos dois lados do balcão.</h2><p>A clínica organiza a operação. O paciente encontra o caminho para o próximo cuidado.</p></div>
+        <div className="marketing-split">
+          <article><span className="marketing-feature-icon"><Icon n="calendar" size={26} /></span><h3>Por dentro, uma rotina mais clara.</h3><p>Agenda com profissionais e disponibilidade, pacientes e responsáveis, fila de chegada e registros de atendimento. Sem trocar o contexto da unidade a cada tarefa.</p><ul><li>Reaproveite cadastros ao agendar</li><li>Veja o que está marcado e o que precisa de ação</li><li>Organize acessos da recepção, profissionais e gestão</li></ul></article>
+          <article><span className="marketing-feature-icon"><Icon n="globe" size={26} /></span><h3>Por fora, a identidade da sua clínica.</h3><p>Uma página própria para apresentar serviços, equipe e localização. O paciente escolhe o atendimento e consulta os horários realmente disponíveis.</p><ul><li>Página com suas cores e seu conteúdo</li><li>Agendamento online com revisão antes de confirmar</li><li>Conta para acompanhar as próprias consultas</li></ul></article>
         </div>
-      </section>
-
-      {/* ── recursos ── */}
-      <section id="recursos" className="mx-auto max-w-6xl scroll-mt-20 px-5 py-16">
-        <p className="text-center text-xs font-bold uppercase tracking-widest text-lime-300">Tudo num lugar só</p>
-        <h2 className="font-display mx-auto mt-3 max-w-2xl text-center text-3xl font-extrabold tracking-tight sm:text-4xl">
-          Do primeiro clique ao horário agendado
-        </h2>
-        <div className="mt-10 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-          {FEATURES.map((f) => (
-            <div key={f.title} className="rounded-3xl border border-white/10 bg-white/[0.03] p-6 transition-colors hover:border-lime-300/30">
-              <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-lime-300/15 text-lime-300">
-                <I n={f.icon} />
-              </div>
-              <h3 className="mt-4 font-bold">{f.title}</h3>
-              <p className="mt-1 text-sm leading-relaxed text-zinc-400">{f.text}</p>
-            </div>
-          ))}
-        </div>
-      </section>
-
-      {/* ── modelos ── */}
-      <section id="modelos" className="mx-auto max-w-6xl scroll-mt-20 px-5 pb-16">
-        <div className="rounded-[2rem] border border-white/10 bg-gradient-to-br from-zinc-900 to-[#171017] p-8 sm:p-12">
-          <div className="grid items-center gap-8 lg:grid-cols-[0.9fr_1.1fr]">
-            <div>
-              <p className="text-xs font-bold uppercase tracking-widest text-lime-300">Design pronto</p>
-              <h2 className="font-display mt-3 text-3xl font-extrabold tracking-tight sm:text-4xl">
-                Modelos prontos.<br />Sua cara em 1 clique.
-              </h2>
-              <p className="mt-3 text-zinc-400">
-                Escolha uma combinação fechada de cores, fonte e formato — depois
-                ajuste qualquer cor. Sem designer, sem adivinhação.
-              </p>
-              <ul className="mt-5 space-y-2.5 text-sm font-medium text-zinc-300">
-                {['8 modelos para todos os estilos', 'Prévia ao vivo antes de salvar', 'Troque quando quiser, sem refazer a página'].map((t) => (
-                  <li key={t} className="flex items-center gap-2.5">
-                    <span className="text-lime-300"><I n="check" size={16} /></span>{t}
-                  </li>
-                ))}
-              </ul>
-              <Link href="/register" className="mt-6 inline-block rounded-2xl bg-white px-6 py-3.5 text-sm font-bold text-zinc-950 hover:bg-zinc-200">
-                Testar os modelos grátis
-              </Link>
-            </div>
-            <div className="grid grid-cols-2 gap-3 sm:grid-cols-4 lg:grid-cols-2 xl:grid-cols-4">
-              {THEME_PRESETS.map((p) => (
-                <div key={p.id} className="overflow-hidden rounded-2xl border border-white/10" title={`${p.name} — ${p.hint}`}>
-                  <div className="p-2.5" style={{ background: p.theme.background }}>
-                    <div className="flex items-center gap-1.5">
-                      <div className="h-5 w-5 shrink-0 rounded-full" style={{ background: `linear-gradient(135deg, ${p.theme.primary}, ${p.theme.secondary})` }} />
-                      <div className="flex-1 space-y-1">
-                        <div className="h-1.5 w-3/4 rounded-full" style={{ background: p.theme.text }} />
-                        <div className="h-1.5 w-1/2 rounded-full" style={{ background: p.theme.muted }} />
-                      </div>
-                    </div>
-                    <div className="mt-2 h-6" style={{ background: p.theme.primary, borderRadius: Math.min(p.theme.radius, 8) }} />
-                  </div>
-                  <p className="bg-black/30 px-2.5 py-1.5 text-[11px] font-bold">{p.name}</p>
-                </div>
-              ))}
-            </div>
-          </div>
-        </div>
-      </section>
-
-      {/* ── como funciona ── */}
-      <section className="mx-auto max-w-6xl px-5 pb-16">
-        <h2 className="font-display text-center text-3xl font-extrabold tracking-tight sm:text-4xl">No ar em 3 passos</h2>
-        <div className="mt-10 grid gap-4 md:grid-cols-3">
-          {[
-            { n: '1', t: 'Crie seu negócio', d: 'Nome e WhatsApp. Página, agenda e serviços já nascem prontos para atendimento. Leva um minuto.' },
-            { n: '2', t: 'Monte sua agenda', d: 'Cadastre serviços, horários e profissionais. Aplique um modelo visual e veja a prévia na hora.' },
-            { n: '3', t: 'Compartilhe e agende', d: 'Publique, coloque o link na bio, imprima o QR — e receba agendamentos sozinhos.' },
-          ].map((s) => (
-            <div key={s.n} className="rounded-3xl border border-white/10 bg-white/[0.03] p-6">
-              <div className="font-display text-4xl font-extrabold text-lime-300">{s.n}</div>
-              <h3 className="mt-3 font-bold">{s.t}</h3>
-              <p className="mt-1 text-sm leading-relaxed text-zinc-400">{s.d}</p>
-            </div>
-          ))}
-        </div>
-      </section>
-
-      {/* ── dúvidas ── */}
-      <section id="duvidas" className="mx-auto max-w-3xl scroll-mt-20 px-5 pb-16">
-        <h2 className="font-display text-center text-3xl font-extrabold tracking-tight sm:text-4xl">Dúvidas frequentes</h2>
-        <div className="mt-8 space-y-2.5">
-          {FAQS.map((f) => (
-            <details key={f.q} className="group rounded-2xl border border-white/10 bg-white/[0.03] p-5">
-              <summary className="cursor-pointer text-sm font-bold">{f.q}</summary>
-              <p className="mt-2 text-sm leading-relaxed text-zinc-400">{f.a}</p>
-            </details>
-          ))}
-        </div>
-      </section>
-
-      {/* ── CTA final ── */}
-      <section className="mx-auto max-w-6xl px-5 pb-16">
-        <div className="rounded-[2rem] bg-lime-300 p-8 text-center text-[#120a0b] sm:p-14">
-          <h2 className="font-display text-3xl font-extrabold tracking-tight sm:text-5xl">
-            Entre pelo Instagram.<br />Saia com o horário agendado.
-          </h2>
-          <Link href="/register" className="mt-8 inline-block rounded-2xl bg-[#120a0b] px-10 py-4 font-bold text-white hover:bg-zinc-800">
-            Começar agora — é grátis
-          </Link>
-          <p className="mt-3 text-xs font-semibold opacity-60">Sem cartão · Pronto em 5 minutos</p>
-        </div>
-      </section>
-
-      <footer className="border-t border-white/5">
-        <div className="mx-auto flex max-w-6xl flex-col items-center justify-between gap-3 px-5 py-8 text-xs text-zinc-500 sm:flex-row">
-          <span>© 2026 InstaLink.app — Página, agenda e clientes em um link</span>
-          <span className="flex gap-5 font-semibold">
-            <Link href="/login" className="hover:text-white">Entrar</Link>
-            <Link href="/register" className="hover:text-white">Criar conta</Link>
-            <Link href="/barbeariadojoao" className="hover:text-white">Demonstração</Link>
-          </span>
-        </div>
-      </footer>
-    </main>
-  );
+      </div>
+    </section>
+    <section id="rotina" className="marketing-wrap marketing-journeys"><div className="marketing-section-heading"><p className="marketing-eyebrow">CADA PAPEL, SEU FOCO</p><h2>Menos ruído.<br />Mais atenção ao que importa.</h2></div>
+      {journeys.map(j => <article key={j.n} className="marketing-journey"><span className="marketing-number">{j.n}</span><div><p className="marketing-eyebrow">{j.role}</p><h3>{j.title}</h3></div><div><p>{j.text}</p><ul>{j.items.map(i => <li key={i}><Icon n="check" size={15} />{i}</li>)}</ul></div></article>)}
+    </section>
+    <section className="marketing-start"><div className="marketing-wrap"><p className="marketing-eyebrow">COMECE COM O QUE JÁ FAZ PARTE DA SUA ROTINA</p><h2>Da configuração<br />ao primeiro agendamento.</h2><ol><li><strong>01 / Configure sua clínica</strong><p>Identidade, equipe, serviços e horários de atendimento.</p></li><li><strong>02 / Revise a experiência</strong><p>Confira sua página e as regras de reserva antes de compartilhar.</p></li><li><strong>03 / Receba e acompanhe</strong><p>Organize a agenda e dê continuidade ao atendimento.</p></li></ol></div></section>
+    <section id="duvidas" className="marketing-wrap marketing-faq"><div><p className="marketing-eyebrow">ANTES DE COMEÇAR</p><h2>Perguntas<br />frequentes.</h2></div><div>{questions.map(([q,a]) => <details key={q}><summary>{q}<span aria-hidden="true">+</span></summary><p>{a}</p></details>)}</div></section>
+    <section className="marketing-wrap marketing-final"><p className="marketing-eyebrow">UM PRÓXIMO PASSO MAIS SIMPLES</p><h2>Cuide da sua clínica.<br />Organize o caminho até ela.</h2><Link href="/register" className="marketing-cta">Criar meu acesso →</Link><p>Já faz parte da equipe? <Link href="/login">Entrar no painel</Link></p></section>
+    <footer className="marketing-wrap marketing-footer"><Link href="/" className="marketing-wordmark">instalink</Link><p>Organização para clínicas e equipes de atendimento.</p><Link href="/login">Acesso da equipe</Link><p>Paciente? Acesse pelo link da sua clínica.</p></footer>
+  </main>;
 }

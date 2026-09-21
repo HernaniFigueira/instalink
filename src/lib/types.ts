@@ -924,7 +924,15 @@ export interface AnalyticsEvent {
   createdAt: string;
 }
 
+export interface DeletionAuthorization {
+  tokenHash: string; userId: string; sessionHash: string;
+  kind: 'business' | 'organization'; targetId: string; organizationId: string; targetName: string;
+  expiresAt: number; usedAt: number;
+}
+
 export interface DB {
+  /** Short-lived, single-action reauthentication. Never contains a password. */
+  deletionAuthorizations?: DeletionAuthorization[];
   users: User[];
   sessions: Session[];
   customers: Customer[];
@@ -1843,6 +1851,7 @@ export interface SupportSession {
 }
 
 export type AuditAction =
+  | 'entity.deletion_authorized' | 'entity.deletion_password_failed' | 'entity.deletion_denied' | 'entity.deleted'
   | 'support.view_started' | 'support.admin_started' | 'support.ended'
   | 'business.viewed' | 'business.updated_by_master'
   | 'member.created' | 'member.updated' | 'member.removed'

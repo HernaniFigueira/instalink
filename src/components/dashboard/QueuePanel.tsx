@@ -232,7 +232,7 @@ export function QueuePanel({ businessId, date, rows, done = [], loading, canWrit
           à vista. O [X] fecha a rail (a fila do dia segue no botão da agenda). */}
       <div className="sticky top-0 z-10 flex flex-wrap items-center gap-2 px-3 py-2.5 border-b border-[var(--border)] bg-[var(--surface)]">
         <Icon n="clock" size={15} className="text-[var(--text-muted)]" />
-        <span className="text-sm font-semibold text-[var(--text)]">Fila de hoje</span>
+        <span className="text-sm font-semibold text-[var(--text)]">Fila de atendimento</span>
         {waiting > 0 && <Badge tone="amber">{waiting} aguardando</Badge>}
         {rows.some((r) => r.status === 'in_service') && (
           <Badge tone="green">{rows.filter((r) => r.status === 'in_service').length} em atendimento</Badge>

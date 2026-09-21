@@ -96,6 +96,7 @@ export function ClientProfileDrawer({ person, businessId, pipeline, canFunil, on
   const canEncounter = permissions.atendimento === true;
   const [encounters, setEncounters] = useState<EncounterRow[]>([]);
   const [encounterOpen, setEncounterOpen] = useState<EncounterRow | null>(null);
+  const [encountersError, setEncountersError] = useState('');
   const [encountersLoaded, setEncountersLoaded] = useState(false);
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState<ContactProfile>(() => profileOf(person.profile));
@@ -351,7 +352,7 @@ export function ClientProfileDrawer({ person, businessId, pipeline, canFunil, on
   const tabItems: TabItem<HistoryTab>[] = [
     { id: 'timeline', label: 'Linha do tempo', icon: 'history', count: timeline.length },
     { id: 'bookings', label: 'Agendamentos', icon: 'calendar', count: person.bookings.length },
-    { id: 'encounters', label: 'Atendimentos', icon: 'fileText', count: encounters.length },
+    { id: 'encounters', label: 'Atendimentos', icon: 'fileText', count: encountersLoaded && !encountersError ? encounters.length : undefined },
     { id: 'conversations', label: 'Conversas', icon: 'chat', count: (person.conversations || []).length },
     { id: 'leads', label: 'Leads', icon: 'spark', count: person.leads.length },
     { id: 'tasks', label: 'Tarefas', icon: 'tasks', count: (person.tasks || []).length },
@@ -367,10 +368,12 @@ export function ClientProfileDrawer({ person, businessId, pipeline, canFunil, on
       : person.customerId ? `customerId=${encodeURIComponent(person.customerId)}` : '';
     if (!q) { setEncountersLoaded(true); return; }
     let cancelled = false;
+    setEncountersError('');
     apiGet<{ encounters?: EncounterRow[] }>(`/api/encounters?businessId=${businessId}&${q}`, { scope: 'area', area: 'Atendimento' })
       .then((res) => {
         if (cancelled) return;
-        setEncounters(res.ok ? (res.data?.encounters || []) : []);
+        if (res.ok) setEncounters(res.data?.encounters || []);
+        else setEncountersError(res.message || 'Não foi possível carregar os atendimentos.');
         setEncountersLoaded(true);
       });
     return () => { cancelled = true; };
@@ -816,7 +819,9 @@ export function ClientProfileDrawer({ person, businessId, pipeline, canFunil, on
           )}
 
           {tab === 'encounters' && (
-            encounters.length === 0
+            !encountersLoaded ? <p role="status" className="p-4 text-sm">Carregando atendimentos…</p>
+            : encountersError ? <div role="alert" className="p-4 text-sm"><p>{encountersError}</p><Button variant="secondary" onClick={() => setEncountersLoaded(false)}>Tentar novamente</Button></div>
+            : encounters.length === 0
               ? <Empty hint="Nenhum registro de atendimento para esta pessoa ainda. Abra um agendamento e use “Atendimento” para registrar o que foi feito." />
               : <div className="px-4 py-3"><EncounterList rows={encounters} onOpen={setEncounterOpen} empty="" /></div>
           )}

@@ -57,6 +57,8 @@ export async function POST(req: NextRequest) {
     const now = new Date().toISOString();
     const businessId = randomUUID();
     await updateDB((d) => {
+      // A concurrently deleted organization must not be silently recreated.
+      if (body.organizationId && !canManageOrganization(d, user, organizationId)) throw new Error('ORGANIZATION_UNAVAILABLE');
       if (!d.organizations.some((o) => o.id === organizationId)) {
         d.organizations.push({ id: organizationId, name, ownerId: user.id, metadata: {}, createdAt: now, updatedAt: now });
       }
@@ -88,7 +90,8 @@ export async function POST(req: NextRequest) {
       pushAudit(d, { action: 'unit.created', actor: user, businessId, meta: { organizationId } });
     });
     return NextResponse.json({ ok: true, businessId, organizationId, slug });
-  } catch {
+  } catch (error) {
+    if (error instanceof Error && error.message === 'ORGANIZATION_UNAVAILABLE') return NextResponse.json({ error: 'A organização não está mais disponível. Atualize a página.' }, { status: 409 });
     return NextResponse.json({ error: 'Não conseguimos criar seu negócio. Tente novamente.' }, { status: 500 });
   }
 }

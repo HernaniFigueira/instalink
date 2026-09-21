@@ -444,12 +444,10 @@ describe('A3.4 · LINGUAGEM — sem promessa de assinatura digital', () => {
 
 // ═══════════════════════════════════════════════════════════════
 describe('A3.4 · MOBILE (320–430px) — sem rolagem horizontal da página', () => {
-  it('o subtítulo da Agenda não estica mais a viewport', () => {
-    const trecho = AGENDA.slice(AGENDA.indexOf('Clique num atendimento'));
-    const bloco = trecho.slice(0, trecho.indexOf('</span>'));
-    // Bloco truncável (antes era `span` inline com `truncate` — que não corta).
-    expect(AGENDA).toMatch(/className="block max-w-full text-xs text-\[var\(--text-muted\)\] truncate"/);
-    expect(bloco).not.toMatch(/whitespace-nowrap/);
+  it('a Agenda não tem mais subtítulo permanente e mantém uma data móvel curta', () => {
+    expect(AGENDA).not.toContain('Abra um atendimento para ver detalhes e ações.');
+    expect(AGENDA).toContain('agenda-date-narrow');
+
   });
 
   it('na fila as ações descem de linha em vez de espremer nome/serviço', () => {
@@ -474,37 +472,5 @@ describe('A3.4 · MOBILE (320–430px) — sem rolagem horizontal da página', (
 });
 
 // ═══════════════════════════════════════════════════════════════
-describe('A3.4 · SIDEBAR — identidade primeiro, busca depois', () => {
-  it('a ordem expandida é: empresa → busca/recolher', () => {
-    const nome = SHELL.indexOf('{business.name}</p>');
-    const busca = SHELL.indexOf('<NavSearch items={navSearchItems} collapsed={false}');
-    const recolher = SHELL.indexOf('title="Recolher menu"');
-    expect(nome).toBeGreaterThan(0);
-    expect(busca).toBeGreaterThan(nome);
-    expect(recolher).toBeGreaterThan(busca);
-  });
-
-  it('o link da página pública saiu do cabeçalho (e continua no menu da conta)', () => {
-    const bruto = SHELL.slice(SHELL.indexOf('QUEM É A EMPRESA'), SHELL.indexOf('BUSCA + RECOLHER'));
-    // O comentário do bloco CITA a remoção; o que interessa é o JSX depois dele.
-    const topo = bruto.slice(bruto.indexOf('*/}') + 3);
-    expect(topo).not.toMatch(/Ver página pública/);
-    expect(SHELL).toMatch(/Ver página pública/);          // acesso preservado
-    expect(SHELL.lastIndexOf('Ver página pública')).toBeGreaterThan(SHELL.lastIndexOf('nav-user-menu'));
-  });
-
-  it('recolhida: logo legível + botão expandir + busca compacta', () => {
-    const logo = SHELL.indexOf('h-11 w-full');
-    const expandir = SHELL.indexOf('Expandir menu');
-    const buscaCompacta = SHELL.indexOf('<NavSearch items={navSearchItems} collapsed activePath={activePath} />');
-    expect(logo).toBeGreaterThan(0);
-    expect(expandir).toBeGreaterThan(logo);
-    expect(buscaCompacta).toBeGreaterThan(expandir);
-  });
-
-  it('o acento do item ativo acompanha o CARD (não é linha solta no meio)', () => {
-    expect(SHELL).toMatch(/data-nav-rail="true"[\s\S]{0,140}rounded-pill w-\[3px\]/);
-    expect(SHELL).toMatch(/left-1 top-1\.5 bottom-1\.5/);
-    expect(SHELL).not.toMatch(/data-nav-rail="true"[\s\S]{0,140}top-1\/2 -translate-y-1\/2/);
-  });
-});
+// D360: sidebar geometry/identity/collapse now covered by WorkspaceNavigation.test.tsx
+// and real desktop/mobile journeys, rather than retired CSS/source strings.

@@ -1,11 +1,12 @@
 'use client';
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useId, useRef, useState } from 'react';
+import { wrapDialogFocus } from '@/lib/dialog-focus';
 import Link from 'next/link';
 import type { Business, PublicBusiness, Professional, Service } from '@/lib/types';
 import { saveCustomerToken, clearCustomerToken } from '@/lib/client-auth';
-import { openSheet, closeSheet, onSheetChange, notifyAuthOk, gcalLink, type SheetState } from './sheet-bus';
+import { openSheet, closeSheet, onSheetChange, notifyAuthOk, scopeSheets, ensureCustomer, onAuthOk, gcalLink, type SheetState } from './sheet-bus';
 import { BOOKING_STATUS, ORDER_STATUS } from '@/lib/status';
-import { todayISO, humanDateTime } from '@/lib/tz';
+import { todayISO, humanDateTime, nowHM, effectiveTimezone } from '@/lib/tz';
 import type { BookingStatus, OrderStatus } from '@/lib/types';
 import { Icon } from '@/components/icons';
 import { requestedCtaTarget, resolveCtaTarget } from '@/lib/cta';
@@ -15,27 +16,32 @@ import { BookingIsland, QuoteIsland } from './widgets2';
 
 // ── Sheet genérico (bottom sheet mobile-first) ───────────────
 export function SheetShell({ title, onClose, zIndex, children }: { title: string; onClose: () => void; zIndex?: number; children: React.ReactNode }) {
-  const ref = useRef<HTMLDivElement>(null);
+  const ref = useRef<HTMLDialogElement>(null);
+  const heading = useRef<HTMLHeadingElement>(null);
+  const id = useId();
   useEffect(() => {
-    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose(); };
-    window.addEventListener('keydown', onKey);
-    ref.current?.focus();
-    return () => window.removeEventListener('keydown', onKey);
-  }, [onClose]);
+    const dialog = ref.current;
+    if (!dialog) return;
+    const previous = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    dialog.showModal(); heading.current?.focus({ preventScroll: true });
+    return () => { dialog.close(); if (previous?.isConnected) previous.focus({ preventScroll: true }); };
+  }, []);
   return (
-    <div ref={ref} tabIndex={-1} className="fixed inset-0 flex items-end sm:items-center justify-center outline-none" style={{ zIndex: zIndex || 50 }} role="dialog" aria-modal="true" aria-label={title}>
+    <dialog ref={ref} className="il-customer-dialog fixed inset-0 flex items-end sm:items-center justify-center" style={{ zIndex: zIndex || 50 }} aria-modal="true" aria-labelledby={id}
+      onCancel={event => { event.preventDefault(); event.stopPropagation(); onClose(); }}
+      onKeyDown={event => { wrapDialogFocus(event, event.currentTarget, heading.current); if (event.key === 'Escape') { event.stopPropagation(); if (!event.defaultPrevented) { event.preventDefault(); onClose(); } } }}>
       <div className="absolute inset-0 bg-black/60" onClick={onClose} />
       <div className="il-page relative w-full sm:max-w-md max-h-[92vh] flex flex-col rounded-t-3xl sm:rounded-3xl overflow-hidden" style={{ background: 'var(--il-bg)' }}>
         <div className="pt-2.5 pb-1 flex justify-center shrink-0" aria-hidden="true">
           <span className="w-10 h-1.5 rounded-full" style={{ background: 'color-mix(in srgb, var(--il-muted) 35%, transparent)' }} />
         </div>
         <div className="flex items-center justify-between px-5 pb-3 shrink-0">
-          <h3 className="text-lg font-extrabold">{title}</h3>
+          <h3 id={id} ref={heading} tabIndex={-1} className="text-lg font-extrabold">{title}</h3>
           <button onClick={onClose} aria-label="Fechar" className="il-card w-9 h-9 font-bold shrink-0 flex items-center justify-center"><Icon n="x" size={16} /></button>
         </div>
         <div className="overflow-y-auto px-5 pb-6">{children}</div>
       </div>
-    </div>
+    </dialog>
   );
 }
 
@@ -52,7 +58,16 @@ export function SheetHost({ business, services, professionals }: {
 }) {
   const [stack, setStack] = useState<SheetState[]>([]);
 
-  useEffect(() => onSheetChange(setStack), []);
+  useEffect(() => { scopeSheets(business.id); return onSheetChange(setStack); }, [business.id]);
+  useEffect(() => {
+    if (new URL(window.location.href).searchParams.get('conta') !== '1') return;
+    let alive = true;
+    const showAccount = () => { if (alive) { off(); openSheet('account'); } };
+    const off = onAuthOk(showAccount);
+    ensureCustomer().then(ok => { if (ok) showAccount(); });
+    return () => { alive = false; off(); };
+  }, [business.id]);
+
 
   useEffect(() => {
     document.body.style.overflow = stack.length > 0 ? 'hidden' : '';
@@ -76,7 +91,7 @@ export function SheetHost({ business, services, professionals }: {
       {stack.map((sheet, i) => {
         const titles: Record<SheetState['type'], string> = {
           products: 'Vitrine',
-          booking: sheet.props.title || 'Agendar',
+          booking: sheet.props.title || (sheet.props.rescheduleId ? 'Remarcar consulta' : 'Agendar'),
           quote: sheet.props.title || 'Orçamento',
           auth: 'Entrar',
           account: 'Minha conta',
@@ -88,7 +103,7 @@ export function SheetHost({ business, services, professionals }: {
             {sheet.type === 'booking' && (
               <BookingIsland
                 business={business} services={services} professionals={professionals}
-                title="" initialServiceId={sheet.props.serviceId || ''} rescheduleId={sheet.props.rescheduleId} bare
+                title="" initialServiceId={sheet.props.serviceId || ''} initialDate={sheet.props.initialDate} currentTime={sheet.props.currentTime} rescheduleId={sheet.props.rescheduleId} bare
               />
             )}
             {sheet.type === 'quote' && <QuoteIsland businessId={business.id} title="" bare />}
@@ -194,7 +209,7 @@ export function CustomerAuthSheet({ business }: { business: PublicBusiness }) {
 
   return (
     <div>
-      <p className="il-muted text-sm -mt-1 mb-4 flex items-center gap-2"><Icon n="shield" size={18} /> Uma conta para pedir, agendar e acompanhar tudo.</p>
+      <p className="il-muted text-sm -mt-1 mb-4 flex items-center gap-2"><Icon n="shield" size={18} /> Acesso do paciente · {business.name}. Suas escolhas de agendamento serão mantidas.</p>
       <div className="grid grid-cols-2 gap-2 mb-4">
         <button onClick={() => { setTab('login'); setError(''); }}
           className={`font-bold text-sm py-2.5 border ${tab === 'login' ? 'il-chip-active border-transparent' : 'il-card'}`}
@@ -210,8 +225,8 @@ export function CustomerAuthSheet({ business }: { business: PublicBusiness }) {
 
       {tab === 'login' ? (
         <div className="space-y-2.5">
-          <input value={login} onChange={(e) => setLogin(e.target.value)} placeholder="WhatsApp ou e-mail" autoComplete="username" className={input} />
-          <input value={password} onChange={(e) => setPassword(e.target.value)} type="password" placeholder="Senha" autoComplete="current-password"
+          <input value={login} onChange={(e) => setLogin(e.target.value)} aria-label="WhatsApp ou e-mail" placeholder="WhatsApp ou e-mail" autoComplete="username" className={input} />
+          <input value={password} onChange={(e) => setPassword(e.target.value)} type="password" aria-label="Senha" placeholder="Senha" autoComplete="current-password"
             onKeyDown={(e) => { if (e.key === 'Enter') submitLogin(); }} className={input} />
           {error && <p className="text-sm font-semibold text-red-600">{error}</p>}
           <button onClick={submitLogin} disabled={loading} className="il-btn w-full font-extrabold py-3.5 disabled:opacity-50">
@@ -222,13 +237,13 @@ export function CustomerAuthSheet({ business }: { business: PublicBusiness }) {
         </div>
       ) : (
         <div className="space-y-2.5">
-          <input value={name} onChange={(e) => setName(e.target.value)} placeholder="Seu nome *" autoComplete="name" className={input} />
-          <input value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="WhatsApp *" inputMode="tel" autoComplete="tel" className={input} />
-          <input value={email} onChange={(e) => setEmail(e.target.value)} placeholder="E-mail (opcional)" inputMode="email" autoComplete="email" className={input} />
-          <input value={password} onChange={(e) => setPassword(e.target.value)} type="password" placeholder="Crie uma senha *" autoComplete="new-password" className={input} />
+          <input value={name} onChange={(e) => setName(e.target.value)} aria-label="Seu nome" placeholder="Seu nome *" autoComplete="name" className={input} />
+          <input value={phone} onChange={(e) => setPhone(e.target.value)} aria-label="WhatsApp" placeholder="WhatsApp *" inputMode="tel" autoComplete="tel" className={input} />
+          <input value={email} onChange={(e) => setEmail(e.target.value)} aria-label="E-mail (opcional)" placeholder="E-mail (opcional)" inputMode="email" autoComplete="email" className={input} />
+          <input value={password} onChange={(e) => setPassword(e.target.value)} type="password" aria-label="Crie uma senha" placeholder="Crie uma senha *" autoComplete="new-password" className={input} />
           {error && <p className="text-sm font-semibold text-red-600">{error}</p>}
           <button onClick={submitRegister} disabled={loading} className="il-btn w-full font-extrabold py-3.5 disabled:opacity-50">
-            {loading ? 'Criando…' : 'Criar conta grátis'}
+            {loading ? 'Criando…' : 'Criar conta'}
           </button>
         </div>
       )}
@@ -261,6 +276,8 @@ export function CustomerAccountSheet({ business }: { business: PublicBusiness })
   const [tab, setTab] = useState<'orders' | 'bookings'>(
     business.modes.includes('orders') ? 'orders' : 'bookings',
   );
+  const [bookingView, setBookingView] = useState<'upcoming' | 'history'>('upcoming');
+  const [loadError, setLoadError] = useState('');
   const [orders, setOrders] = useState<any[]>([]);
   const [bookings, setBookings] = useState<any[]>([]);
   const [reviewed, setReviewed] = useState<{ orderIds: string[]; bookingIds: string[] }>({ orderIds: [], bookingIds: [] });
@@ -271,10 +288,10 @@ export function CustomerAccountSheet({ business }: { business: PublicBusiness })
   const [actionError, setActionError] = useState('');
 
   function load() {
-    setLoading(true);
+    setLoading(true); setLoadError('');
     Promise.all([
-      fetch(`/api/customer/orders?businessId=${business.id}`).then((r) => (r.ok ? r.json() : { orders: [] })),
-      fetch(`/api/customer/bookings?businessId=${business.id}`).then((r) => (r.ok ? r.json() : { bookings: [] })),
+      fetch(`/api/customer/orders?businessId=${business.id}`).then((r) => (r.ok ? r.json() : Promise.reject(new Error('Não foi possível carregar seus pedidos.')))),
+      fetch(`/api/customer/bookings?businessId=${business.id}`).then((r) => (r.ok ? r.json() : Promise.reject(new Error('Não foi possível carregar suas consultas.')))),
       fetch(`/api/reviews?businessId=${business.id}&mine=1`).then((r) => (r.ok ? r.json() : { orderIds: [], bookingIds: [] })),
     ])
       .then(([o, b, r]) => {
@@ -302,14 +319,17 @@ export function CustomerAccountSheet({ business }: { business: PublicBusiness })
           }
         } catch { /* sem storage: sem auto-convite */ }
       })
+      .catch(e => setLoadError(e.message || 'Falha de conexão. Tente novamente.'))
       .finally(() => setLoading(false));
   }
 
   useEffect(() => {
     load();
     const changed = () => load();
+    const bookingsChanged = (e: Event) => { if ((e as CustomEvent).detail?.businessId === business.id) load(); };
     window.addEventListener('il:reviews-changed', changed);
-    return () => window.removeEventListener('il:reviews-changed', changed);
+    window.addEventListener('il:bookings-changed', bookingsChanged);
+    return () => { window.removeEventListener('il:reviews-changed', changed); window.removeEventListener('il:bookings-changed', bookingsChanged); };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [business.id]);
 
@@ -334,7 +354,7 @@ export function CustomerAccountSheet({ business }: { business: PublicBusiness })
   }
 
   function reschedule(b: any) {
-    openSheet('booking', { serviceId: b.serviceId, rescheduleId: b.id });
+    openSheet('booking', { serviceId: b.serviceId, rescheduleId: b.id, initialDate:b.date, currentTime:b.time });
   }
 
   async function logout() {
@@ -350,10 +370,13 @@ export function CustomerAccountSheet({ business }: { business: PublicBusiness })
 
   const showOrders = business.modes.includes('orders');
   const showBookings = business.modes.includes('bookings');
-  const today = todayISO();
+  const today = todayISO(new Date(), effectiveTimezone(business.businessTimezone));
+  const upcoming = (b: any) => ['pending', 'confirmed'].includes(b.status) && (b.date > today || (b.date === today && b.time >= nowHM(new Date(), effectiveTimezone(business.businessTimezone))));
+  const shownBookings = bookings.filter(b => bookingView === 'upcoming' ? upcoming(b) : !upcoming(b)).sort((a,b) => bookingView === 'upcoming' ? (a.date+a.time).localeCompare(b.date+b.time) : (b.date+b.time).localeCompare(a.date+a.time));
   const canReviewBooking = (b: any) =>
     b.status !== 'cancelled' && (b.status === 'completed' || b.date < today) && !reviewed.bookingIds.includes(b.id);
-  const nowMin = new Date().getHours() * 60 + new Date().getMinutes();
+  const [hours, minutes] = nowHM(new Date(), effectiveTimezone(business.businessTimezone)).split(':').map(Number);
+  const nowMin = hours * 60 + minutes;
   const canCancel = (b: any) =>
     ['pending', 'confirmed'].includes(b.status) && b.date >= today &&
     (b.date !== today || (Number(b.time.slice(0, 2)) * 60 + Number(b.time.slice(3, 5)) - nowMin) >= cancelMin);
@@ -375,8 +398,10 @@ export function CustomerAccountSheet({ business }: { business: PublicBusiness })
         </div>
       )}
 
+      {showBookings && tab === 'bookings' && <div className="flex gap-2 mb-4" role="group" aria-label="Consultas"><button type="button" aria-pressed={bookingView === 'upcoming'} className="il-card px-3 py-2 text-sm" onClick={() => setBookingView('upcoming')}>Próximas consultas</button><button type="button" aria-pressed={bookingView === 'history'} className="il-card px-3 py-2 text-sm" onClick={() => setBookingView('history')}>Histórico</button></div>}
+      <p className="il-muted text-xs mb-3">{business.name} · Apenas os registros da sua conta.</p>
       {actionError && <p className="text-sm font-semibold text-red-600 mb-3">{actionError}</p>}
-      {loading ? (
+      {loadError ? <div role="alert"><p>{loadError}</p><button className="il-btn px-4 py-3 mt-3" onClick={load}>Tentar novamente</button></div> : loading ? (
         <div className="space-y-2.5" aria-label="Carregando">
           {[0, 1, 2].map((i) => (
             <div key={i} className="il-card p-4 animate-pulse">
@@ -417,15 +442,15 @@ export function CustomerAccountSheet({ business }: { business: PublicBusiness })
             ))}
           </div>
         )
-      ) : bookings.length === 0 ? (
+      ) : shownBookings.length === 0 ? (
         <div className="text-center py-8">
           <span className="inline-flex w-12 h-12 rounded-full items-center justify-center" style={{ background: 'color-mix(in srgb, var(--il-primary) 12%, transparent)', color: 'var(--il-primary)' }}><Icon n="calendar" size={22} /></span>
-          <p className="il-muted text-sm mt-2">Nenhum agendamento ainda.</p>
+          <p className="il-muted text-sm mt-2">{bookingView === 'upcoming' ? 'Nenhuma consulta futura nesta clínica.' : 'Nenhum atendimento no histórico desta clínica.'}</p>
         </div>
       ) : (
         <div className="space-y-2.5">
-          {bookings.map((b) => (
-            <div key={b.id} className="il-card p-4">
+          {shownBookings.map((b) => (
+            <div key={b.id} data-booking-id={b.id} className="il-card p-4">
               <div className="flex justify-between items-center gap-2">
                 <p className="font-extrabold text-sm">{b.service}</p>
                 <span className="text-xs font-bold px-2.5 py-1 rounded-full il-chip-active">{BOOKING_STATUS[b.status as BookingStatus]?.consumer || b.status}</span>

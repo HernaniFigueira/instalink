@@ -1,0 +1,16 @@
+
+> instalink@1.0.0 test:d1a:browser
+> playwright test --config tests/d1a/playwright.config.ts
+
+
+Running 7 tests using 1 worker
+
+  ✓  1 tests/d1a/ui.browser.spec.ts:5:5 › Drawer traps keyboard, makes background inert, preserves edits, returns focus and scroll (3.3s)
+  ✓  2 tests/d1a/ui.browser.spec.ts:30:5 › nested Drawers close only the top layer and restore focus/scroll in order (610ms)
+  ✓  3 tests/d1a/ui.browser.spec.ts:46:5 › Tabs use one tab stop, skip disabled and link real panels (396ms)
+  ✓  4 tests/d1a/ui.browser.spec.ts:57:5 › platform colors/decorations do not leak into unscoped or clinic themes (516ms)
+  ✓  5 tests/d1a/ui.browser.spec.ts:78:5 › visible focus and reduced-motion follow the scope, including root scrolling (422ms)
+  ✓  6 tests/d1a/ui.browser.spec.ts:92:7 › layout 390px: fields, touch targets, dialog bounds and screenshot (538ms)
+  ✓  7 tests/d1a/ui.browser.spec.ts:92:7 › layout 1366px: fields, touch targets, dialog bounds and screenshot (676ms)
+
+  7 passed (7.3s)

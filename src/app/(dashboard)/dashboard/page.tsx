@@ -31,6 +31,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { useSearchParams } from 'next/navigation';
 import Link from 'next/link';
+import { useWorkspace } from '@/components/dashboard/WorkspaceContext';
 import { Button, EmptyState, PageSkeleton, StatusBadge } from '@/components/ui';
 import { Icon } from '@/components/icons';
 import { AccessDenied, PermissionNotice, useForbiddenNotice } from '@/components/dashboard/AccessNotice';
@@ -113,6 +114,7 @@ interface Overview {
 }
 
 export default function DashboardPage() {
+  const workspace = useWorkspace();
   const params = useSearchParams();
   const businessId = params.get('b') || '';
   const welcome = params.get('welcome') === '1';
@@ -182,7 +184,9 @@ export default function DashboardPage() {
   const { user, business, totals, upcoming, checklist, pct, recent, today, crm, pageStats, whatsapp, ordersPanel, productsPanel, context } = data;
   const modules = context.modules;
   const results = data.results;
-  const showMoney = data.showMoney !== false;
+  const showMoney = data.showMoney === true;
+  const operational = !showMoney;
+  const ownAgenda = workspace.agendaScope === 'own' || workspace.role === 'PROFISSIONAL';
   const revenueDetail = data.revenueDetail;
   const bookingRevenue = revenueDetail?.bookings || null;
   const orderRevenue = revenueDetail?.orders || null;
@@ -223,30 +227,17 @@ export default function DashboardPage() {
         </div>
       )}
 
-      {/* Identidade da empresa — a marca do cliente é a identidade do workspace.
-          B4.2: sem título "Dashboard" repetido (o shell já nomeia a tela). */}
-      <div className="flex items-center gap-3 mb-5 pb-4 border-b border-zinc-200">
-        <div className="w-10 h-10 rounded-md overflow-hidden bg-[var(--brand-soft)] text-[var(--brand-fg)] flex items-center justify-center font-bold shrink-0 border border-[var(--brand-border)]">
-          {business.logo ? (
-            // eslint-disable-next-line @next/next/no-img-element
-            <img src={business.logo} alt={business.name} className="w-full h-full object-cover" />
-          ) : business.name.slice(0, 1).toUpperCase()}
+      <header className="mb-6 flex flex-wrap items-start justify-between gap-4">
+        <div><p className="text-xs text-[var(--text-muted)] mb-1">Olá, {user.name.split(' ')[0]}</p>
+          <h1 className="text-2xl font-semibold">{ownAgenda ? 'Minha agenda e atendimentos' : operational ? 'Sua operação hoje' : 'Visão geral da clínica'}</h1>
+          <p className="text-sm text-[var(--text-muted)] mt-2">{ownAgenda ? 'Seus próximos horários e o contexto para atender.' : operational ? 'Chegadas, próximos horários e o que precisa de atenção.' : 'Acompanhe o dia e os resultados disponíveis da operação.'}</p>
         </div>
-        <div className="min-w-0 flex-1">
-          <h1 className="text-base font-semibold leading-none text-[var(--text)] truncate">{business.name}</h1>
-          <div className="flex items-center gap-2 mt-1">
-            {business.published ? <span className="text-[11px] font-medium text-emerald-700 bg-emerald-50 border border-emerald-200 rounded-full px-2 py-0.5 inline-flex items-center gap-1"><span className="w-1.5 h-1.5 rounded-full bg-emerald-600" /> Publicada</span> : <span className="text-[11px] font-medium text-amber-800 bg-amber-50 border border-amber-200 rounded-full px-2 py-0.5">Rascunho</span>}
-            <a href={`/${business.slug}`} target="_blank" rel="noreferrer" className="text-xs text-zinc-500 hover:text-zinc-700 inline-flex items-center gap-1">Ver site <Icon n="external" size={10} /></a>
-          </div>
-        </div>
-        <div className="hidden sm:flex items-center gap-2 ml-auto">
-          <Link href={`/pagina${q}`}><Button variant="secondary" size="xs">Editar página</Button></Link>
-        </div>
-      </div>
-      <div className="sm:hidden flex items-center gap-2 mb-4">
-        <Link href={`/pagina${q}`} className="ml-auto shrink-0"><Button variant="secondary" size="xs">Editar página</Button></Link>
-      </div>
-
+        <nav aria-label="Ações frequentes" className="flex flex-wrap gap-2">
+          {links.agenda === true && <Link className="il-control px-4 py-2 rounded-md bg-[var(--brand)] text-white font-semibold" href={`/agenda${q}`}>Abrir agenda e fila</Link>}
+          {links.clientes === true && <Link className="il-control px-4 py-2 rounded-md border border-[var(--border-strong)]" href={`/clientes${q}`}>Pacientes e clientes</Link>}
+          {links.pagina === true && <Link className="il-control px-4 py-2 rounded-md border border-[var(--border-strong)]" href={`/pagina${q}`}>Editar página</Link>}
+        </nav>
+      </header>
       <PermissionNotice message={notice?.title} hint={notice?.hint} onDismiss={dismiss} />
 
       {/* ── 1 · ATENÇÃO: num único lugar, com dados que JÁ existem. Link
@@ -286,11 +277,11 @@ export default function DashboardPage() {
 
       {/* ── 3 + 4 · grade coerente de 12 colunas (5 + 7): próximos à esquerda,
           período consolidado à direita. Em telas menores tudo empilha. ── */}
-      <div className="grid lg:grid-cols-12 gap-3 mb-3">
+      <div className={`grid items-start ${operational ? "grid-cols-1" : "lg:grid-cols-12"} gap-4 mb-4`}>
 
         {/* 3 · PRÓXIMOS COMPROMISSOS (varejo: pedidos; sem módulo: clientes) */}
         {modules.bookings ? (
-          <section className="lg:col-span-5 bg-white border border-zinc-200 flex flex-col min-w-0">
+          <section className={`${operational ? "" : "lg:col-span-5"} bg-white border border-zinc-200 flex flex-col min-w-0`}>
             <div className="px-4 py-2.5 border-b border-zinc-100 flex items-center justify-between">
               <h3 className="text-xs font-semibold tracking-wide uppercase text-zinc-500">Próximos atendimentos</h3>
               {links.agenda === true && <Link href={`/agenda${q}`} className="text-xs font-medium text-zinc-600 hover:text-zinc-900">Ver agenda →</Link>}
@@ -299,11 +290,11 @@ export default function DashboardPage() {
               {upcoming.length === 0 ? <p className="text-sm text-zinc-500 px-4 py-6 text-center">Nenhum atendimento futuro.</p> : (
                 <div className="divide-y divide-zinc-100">
                   {upcoming.slice(0, 5).map((b) => (
-                    <ListRow key={b.id} allowed={links.agenda === true} href={`/agenda${q}`}
+                    <ListRow key={b.id} allowed={links.agenda === true} href={`/agenda${q}&data=${b.date}`}
                       className="flex items-center gap-3 px-4 py-2.5 text-sm">
                       <span className="text-xs font-medium text-zinc-500 w-14 shrink-0">{humanDay(b.date)} {b.time}</span>
                       <span className="flex-1 min-w-0 truncate"><strong className="font-medium">{b.customerName}</strong> <span className="text-zinc-500">· {b.service}{b.professional ? ` · ${b.professional}` : ''}</span></span>
-                      <StatusBadge tone={b.status === 'confirmed' ? 'emerald' : 'orange'}>{b.status === 'confirmed' ? 'conf' : 'pend'}</StatusBadge>
+                      <StatusBadge tone={b.status === 'confirmed' ? 'emerald' : 'orange'}>{bookDef(b.status).panel}</StatusBadge>
                     </ListRow>
                   ))}
                 </div>
@@ -311,7 +302,7 @@ export default function DashboardPage() {
             </div>
           </section>
         ) : modules.orders ? (
-          <section className="lg:col-span-5 bg-white border border-zinc-200 flex flex-col min-w-0">
+          <section className={`${operational ? "" : "lg:col-span-5"} bg-white border border-zinc-200 flex flex-col min-w-0`}>
             <div className="px-4 py-2.5 border-b border-zinc-100 flex items-center justify-between">
               <h3 className="text-xs font-semibold tracking-wide uppercase text-zinc-500">Pedidos</h3>
               {links.pedidos === true && <Link href={`/pedidos${q}`} className="text-xs font-medium text-zinc-600 hover:text-zinc-900">Ver pedidos →</Link>}
@@ -335,7 +326,7 @@ export default function DashboardPage() {
             </div>
           </section>
         ) : (
-          <section className="lg:col-span-5 bg-white border border-zinc-200 flex flex-col min-w-0">
+          <section className={`${operational ? "" : "lg:col-span-5"} bg-white border border-zinc-200 flex flex-col min-w-0`}>
             <div className="px-4 py-2.5 border-b border-zinc-100">
               <h3 className="text-xs font-semibold tracking-wide uppercase text-zinc-500">Clientes</h3>
             </div>
@@ -351,7 +342,8 @@ export default function DashboardPage() {
         {/* 4 · PERÍODO — receita + resultados + página + movimento num único
             bloco (B4.3), cada subseção com a JANELA honesta. Nenhuma fórmula
             nova: mesma origem de dados de antes, só hierarquia. */}
-        <section className="lg:col-span-7 bg-white border border-zinc-200 min-w-0 flex flex-col">
+        <details open={!operational} className="lg:col-span-7 bg-white border border-zinc-200 min-w-0">
+          <summary className="px-4 py-3 cursor-pointer text-sm font-semibold">Indicadores e atividade do período</summary>
           <div className="px-4 py-2.5 border-b border-zinc-100 flex flex-wrap items-center justify-between gap-2">
             <h3 className="text-xs font-semibold tracking-wide uppercase text-zinc-500">Período <span className="normal-case font-medium text-zinc-400">· {periodLabel(period)}</span></h3>
             <div className="flex flex-wrap items-center gap-2 ml-auto">
@@ -370,7 +362,7 @@ export default function DashboardPage() {
               <div className="px-4 py-4"><p className="text-sm text-zinc-500">Sem acesso financeiro.</p></div>
             ) : (revenueDetail?.sources || []).length === 0 ? (
               <div className="px-4 py-4">
-                <p className="text-2xl font-semibold tracking-tight">{money(0)}</p>
+                <p className="text-xl font-semibold tracking-tight">Sem valores disponíveis</p>
                 <p className="text-xs text-zinc-500 mt-1">{NO_DATA_MESSAGE}</p>
                 <p className="text-[11px] text-zinc-400 mt-2">Ative um módulo comercial (agendamentos/serviços ou produtos/pedidos) em Recursos para acompanhar valores.</p>
               </div>
@@ -490,7 +482,7 @@ export default function DashboardPage() {
               “Receita” é previsão: a plataforma não registra o pagamento.
             </p>
           </div>
-        </section>
+        </details>
       </div>
 
       {/* ── Pedidos/Produtos: SOMENTE com módulo ativo ── */}

@@ -12,9 +12,10 @@
 // tarefas que nasceram delas. Nenhum número é decorativo.
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
+import { AreaLoadError } from './AccessNotice';
 import { apiGet, apiSend } from '@/lib/api-client';
 import { useBusinessId } from '@/components/dashboard/useBusinessId';
-import { Badge, Button, Card, EmptyState, Field, Input, Notice, PageHeader, Select, Skeleton, Textarea } from '@/components/ui';
+import { Badge, Button, Card, Drawer, EmptyState, Field, Input, Notice, PageHeader, Select, Skeleton, Textarea } from '@/components/ui';
 import { Icon } from '@/components/icons';
 import { cn } from '@/lib/utils';
 import {
@@ -146,6 +147,7 @@ export function AutomationsView() {
   // 'runs' e 'tasks' não são mais abas: viraram portas próprias (/execucoes e
   // /tarefas). Uma porta por conceito — aqui fica só o atalho contextual.
   const [tab, setTab] = useState<'list' | 'ai' | 'templates'>('list');
+  const [loadError, setLoadError] = useState('');
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
@@ -163,7 +165,8 @@ export function AutomationsView() {
   const load = useCallback(async () => {
     if (!businessId) return;
     const res = await apiGet<any>(`/api/automations?businessId=${businessId}`, { scope: 'area', area: 'Automações' });
-    if (!res.ok) { setError(res.message); setLoading(false); return; }
+    if (!res.ok) { setLoadError(res.message || 'Falha de conexão.'); setLoading(false); return; }
+    setLoadError('');
     setError('');
     setAutomations(res.data?.automations || []);
     setTemplates(res.data?.templates || []);
@@ -229,6 +232,7 @@ export function AutomationsView() {
 
   const unitQuery = businessId ? `?b=${businessId}` : '';
 
+  if (loadError) return <AreaLoadError area="Automações" message={loadError} onRetry={load} />;
   return (
     <div className="space-y-4">
       <PageHeader
@@ -478,16 +482,7 @@ function AutomationEditor({ businessId, automationId, automations, options, onCl
   }
 
   return (
-    <div className="fixed inset-0 z-50 bg-[var(--overlay)] flex items-start justify-center overflow-y-auto p-3 sm:p-6" role="dialog" aria-modal="true">
-      <Card className="w-full max-w-3xl my-4">
-        <div className="flex items-center justify-between gap-3 px-4 py-3 border-b border-zinc-200">
-          <div className="min-w-0">
-            <h2 className="text-sm font-semibold text-zinc-900">{current ? 'Editar automação' : 'Nova automação'}</h2>
-            <p className="text-xs text-zinc-500">Quando acontecer X, se Y, faça Z.</p>
-          </div>
-          <button onClick={onClose} className="text-xs font-semibold text-zinc-500 hover:text-zinc-900 px-2 py-1" aria-label="Fechar">Fechar</button>
-        </div>
-
+    <Drawer open onClose={onClose} title={current ? 'Editar automação' : 'Nova automação'} subtitle="Quando acontecer X, se Y, faça Z." width="max-w-3xl">
         <div className="p-4 space-y-4">
           {graphOnly && (
             <Notice tone="info">Esta automação tem um grafo livre (criada por modelo avançado). A edição linear não consegue representá-la sem simplificar — use a API/grafo para alterá-la.</Notice>
@@ -594,8 +589,7 @@ function AutomationEditor({ businessId, automationId, automations, options, onCl
             </Button>
           </div>
         </div>
-      </Card>
-    </div>
+    </Drawer>
   );
 }
 
@@ -773,28 +767,24 @@ function StepList({ label, hint, steps, setSteps, options, event }: {
 function HistorySheet({ automation, businessId, onClose }: { automation: AutomationView; businessId: string; onClose: () => void }) {
   const [runs, setRuns] = useState<RunView[]>([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
+  const [revision, setRevision] = useState(0);
 
   useEffect(() => {
     let cancelled = false;
+    setLoading(true); setError('');
     apiGet<any>(`/api/automations/${automation.id}?businessId=${businessId}&limit=30`, { scope: 'area', area: 'Automações' })
-      .then((res) => { if (!cancelled) { setRuns(res.ok ? res.data?.runs || [] : []); setLoading(false); } });
+      .then((res) => { if (!cancelled) { if (res.ok) setRuns(res.data?.runs || []); else setError(res.message || 'Não foi possível carregar o histórico.'); setLoading(false); } });
     return () => { cancelled = true; };
-  }, [automation.id, businessId]);
+  }, [automation.id, businessId, revision]);
 
   return (
-    <div className="fixed inset-0 z-50 bg-[var(--overlay)] flex items-start justify-center overflow-y-auto p-3 sm:p-6" role="dialog" aria-modal="true">
-      <Card className="w-full max-w-2xl my-4">
-        <div className="flex items-center justify-between gap-3 px-4 py-3 border-b border-zinc-200">
-          <div className="min-w-0">
-            <h2 className="text-sm font-semibold text-zinc-900">Histórico — {automation.name}</h2>
-            <p className="text-xs text-zinc-500">Cada passo que o motor deu, com o veredito das condições.</p>
-          </div>
-          <button onClick={onClose} className="text-xs font-semibold text-zinc-500 hover:text-zinc-900 px-2 py-1">Fechar</button>
-        </div>
-        <div className="p-4 space-y-3 max-h-[70vh] overflow-y-auto">
+    <Drawer open onClose={onClose} title={`Histórico — ${automation.name}`} subtitle="Cada passo que o motor deu, com o veredito das condições." width="max-w-2xl">
+        <div className="p-4 space-y-3">
           {loading && <Skeleton className="h-24" />}
-          {!loading && !runs.length && <p className="text-sm text-zinc-500">Ainda não houve execução. O próximo “{automation.eventLabel}” aparece aqui.</p>}
-          {runs.map((r) => (
+          {error && <AreaLoadError area="Histórico de automações" message={error} onRetry={() => setRevision(n => n + 1)} />}
+          {!loading && !error && !runs.length && <p className="text-sm text-zinc-500">Ainda não houve execução. O próximo “{automation.eventLabel}” aparece aqui.</p>}
+          {!loading && !error && runs.map((r) => (
             <div key={r.id} className="border border-zinc-200 rounded-md p-3">
               <div className="flex flex-wrap items-center gap-2">
                 <RunStatusBadge status={r.status} />
@@ -812,13 +802,12 @@ function HistorySheet({ automation, businessId, onClose }: { automation: Automat
               </ol>
               {r.error && <p className="mt-2 text-[11px] text-red-700">{r.error}</p>}
               {(r.status === 'waiting' || r.status === 'queued' || r.status === 'running') && (
-                <RunActions businessId={businessId} automationId={automation.id} runId={r.id} onDone={() => { /* recarrega abaixo */ }} />
+                <RunActions businessId={businessId} automationId={automation.id} runId={r.id} onDone={() => setRevision(n => n + 1)} />
               )}
             </div>
           ))}
         </div>
-      </Card>
-    </div>
+    </Drawer>
   );
 }
 

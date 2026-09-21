@@ -1,3 +1,6 @@
+'use client';
+import { cloneElement, createContext, isValidElement, useContext, useEffect, useId, useRef } from 'react';
+import { wrapDialogFocus } from '@/lib/dialog-focus';
 import { cn } from '@/lib/utils';
 import { Icon } from '@/components/icons';
 import { toneCls, type Tone } from '@/lib/status';
@@ -59,7 +62,8 @@ const BTN_SIZE_CLS: Record<ButtonSize, string> = {
  *  elementos de navegação (Link/a) sem duplicar estilo fora do ui.tsx. */
 export function buttonCls(variant: ButtonVariant = 'primary', size: ButtonSize = 'md'): string {
   return cn(
-    'inline-flex items-center justify-center font-semibold rounded-md whitespace-nowrap',
+    'il-control inline-flex items-center justify-center font-semibold rounded-md whitespace-nowrap',
+    `il-control--${size}`,
     'transition-[background-color,border-color,color,box-shadow,transform] duration-150',
     'focus-visible:outline-none focus-visible:shadow-focus',
     'disabled:opacity-50 disabled:pointer-events-none disabled:shadow-none',
@@ -89,6 +93,7 @@ export function IconButton(props: React.ButtonHTMLAttributes<HTMLButtonElement> 
       title={tip || label}
       className={cn(
         buttonCls(variant, size),
+        'il-icon-button',
         size === 'sm' ? 'w-8 h-8 p-0' : 'w-9 h-9 p-0',
         className,
       )}
@@ -149,23 +154,58 @@ export function SectionHeader({ title, hint, action, icon }: { title: string; hi
 
 // ── Formulários ────────────────────────────────────────────────
 const FIELD_CLS =
-  'w-full rounded-md border border-[var(--border-strong)] bg-white px-3 py-2 text-sm text-[var(--text)] ' +
+  'il-field-control w-full rounded-md border border-[var(--border-strong)] bg-white px-3 py-2 text-sm text-[var(--text)] ' +
   'placeholder:text-[var(--text-faint)] shadow-xs transition-[border-color,box-shadow] ' +
   'focus:outline-none focus:shadow-focus focus:border-[var(--brand)] ' +
   'disabled:bg-[var(--surface-3)] disabled:text-[var(--text-muted)] disabled:cursor-not-allowed';
 
+interface FieldContextValue {
+  controlId: string;
+  labelId: string;
+  descriptionIds: string[];
+  required?: boolean;
+  invalid?: boolean;
+}
+const FieldContext = createContext<FieldContextValue | null>(null);
+
+/** Preserve caller IDs/ARIA and add the Field's help/error without replacing them. */
+function useFieldControl<T extends {
+  id?: string; required?: boolean; 'aria-label'?: string; 'aria-labelledby'?: string;
+  'aria-describedby'?: string; 'aria-invalid'?: React.AriaAttributes['aria-invalid'];
+  'aria-required'?: React.AriaAttributes['aria-required'];
+}>(props: T): T {
+  const field = useContext(FieldContext);
+  return field ? fieldControlProps(props, field) : props;
+}
+
+function fieldControlProps<T extends React.AriaAttributes & { id?: string; required?: boolean }>(props: T, field: FieldContextValue): T {
+  const descriptions = [...new Set([
+    ...(props['aria-describedby'] || '').split(/\s+/).filter(Boolean), ...field.descriptionIds,
+  ])].join(' ');
+  return {
+    ...props,
+    id: props.id || field.controlId,
+    'aria-labelledby': props['aria-labelledby'] || (props['aria-label'] ? undefined : field.labelId),
+    'aria-describedby': descriptions || undefined,
+    'aria-invalid': props['aria-invalid'] ?? (field.invalid || undefined),
+    // Field.required was presentation only. Announce it, but do NOT introduce
+    // native submit blocking into existing forms; explicit required still wins.
+    'aria-required': props['aria-required'] ?? (props.required || field.required || undefined),
+  };
+}
+
 export function Input(props: React.InputHTMLAttributes<HTMLInputElement>) {
-  const { className, ...rest } = props;
+  const { className, ...rest } = useFieldControl(props);
   return <input className={cn(FIELD_CLS, className)} {...rest} />;
 }
 
 export function Textarea(props: React.TextareaHTMLAttributes<HTMLTextAreaElement>) {
-  const { className, ...rest } = props;
+  const { className, ...rest } = useFieldControl(props);
   return <textarea className={cn(FIELD_CLS, 'min-h-[72px]', className)} {...rest} />;
 }
 
 export function Select(props: React.SelectHTMLAttributes<HTMLSelectElement>) {
-  const { className, children, ...rest } = props;
+  const { className, children, ...rest } = useFieldControl(props);
   return (
     <select className={cn(FIELD_CLS, 'pr-8 appearance-none bg-[length:14px] bg-no-repeat bg-[right_10px_center]', className)}
       style={{
@@ -179,15 +219,30 @@ export function Select(props: React.SelectHTMLAttributes<HTMLSelectElement>) {
   );
 }
 
-export function Field({ label, hint, children, required }: { label: string; hint?: string; children: React.ReactNode; required?: boolean }) {
+export function Field({ label, hint, children, required, htmlFor, error }: {
+  label: string; hint?: string; children: React.ReactNode; required?: boolean;
+  htmlFor?: string; error?: string;
+}) {
+  const id = useId();
+  const child = isValidElement<{ id?: string }>(children) ? children : null;
+  const nativeControl = child && typeof child.type === 'string' && ['input', 'select', 'textarea'].includes(child.type);
+  const field: FieldContextValue = {
+    controlId: child?.props.id || htmlFor || `${id}-control`,
+    labelId: `${id}-label`,
+    descriptionIds: [hint ? `${id}-hint` : '', error ? `${id}-error` : ''].filter(Boolean),
+    required, invalid: !!error,
+  };
   return (
-    <label className="block">
-      <span className="block text-xs font-semibold text-[var(--text-muted)] mb-1.5">
-        {label} {required && <span className="text-[var(--danger)]">*</span>}
-      </span>
-      {children}
-      {hint && <span className="block text-xs text-[var(--text-muted)] mt-1">{hint}</span>}
-    </label>
+    <FieldContext.Provider value={field}>
+      <label className="block" htmlFor={htmlFor || child?.props.id || (nativeControl || child?.type === Input || child?.type === Select || child?.type === Textarea ? field.controlId : undefined)}>
+        <span id={field.labelId} className="block text-xs font-semibold text-[var(--text-muted)] mb-1.5">
+          {label} {required && <span aria-hidden="true" className="text-[var(--danger)]">*</span>}
+        </span>
+        {nativeControl ? cloneElement(child, fieldControlProps(child.props, field)) : children}
+        {hint && <span id={`${id}-hint`} className="block text-xs text-[var(--text-muted)] mt-1">{hint}</span>}
+        {error && <span id={`${id}-error`} role="alert" className="block text-xs text-[var(--danger-fg)] mt-1">{error}</span>}
+      </label>
+    </FieldContext.Provider>
   );
 }
 
@@ -328,7 +383,7 @@ export function PageHeader({ title, hint, action, icon }: { title: string; hint?
     <div className="flex flex-wrap items-start justify-between gap-3 mb-5">
       <div className="flex items-start gap-3 min-w-0">
         {icon && (
-          <span className="w-10 h-10 shrink-0 rounded-lg bg-gradient-to-br from-[var(--brand)] to-[var(--lilac)] text-white flex items-center justify-center shadow-brand">
+          <span className="il-page-header__icon w-10 h-10 shrink-0 rounded-lg bg-gradient-to-br from-[var(--brand)] to-[var(--lilac)] text-white flex items-center justify-center shadow-brand">
             <Icon n={icon} size={19} />
           </span>
         )}
@@ -350,48 +405,57 @@ export interface TabItem<T extends string = string> {
   count?: number;
   disabled?: boolean;
   title?: string;
+  /** Optional IDs for consumers with a real tabpanel (filters need none). */
+  tabId?: string;
+  panelId?: string;
 }
 
 /** Abas/pills de navegação interna. `role="tablist"` + setas do teclado. */
-export function Tabs<T extends string = string>({ items, value, onChange, ariaLabel, size = 'md' }: {
+export function Tabs<T extends string = string>({ items, value, onChange, ariaLabel, size = 'md', idPrefix }: {
   items: TabItem<T>[]; value: T; onChange: (id: T) => void; ariaLabel: string; size?: 'sm' | 'md';
+  idPrefix?: string;
 }) {
-  const idx = Math.max(0, items.findIndex((i) => i.id === value));
-  function move(delta: number) {
-    const enabled = items.map((i, n) => ({ i, n })).filter((x) => !x.i.disabled);
-    if (!enabled.length) return;
-    const pos = enabled.findIndex((x) => x.n === idx);
-    const next = enabled[(pos + delta + enabled.length) % enabled.length];
-    onChange(next.i.id);
+  const generatedId = useId();
+  const prefix = idPrefix || generatedId;
+  const buttons = useRef(new Map<T, HTMLButtonElement>());
+  const enabled = items.filter((item) => !item.disabled);
+  const entry = enabled.find((item) => item.id === value) || enabled[0];
+  function move(event: React.KeyboardEvent<HTMLButtonElement>, current: T) {
+    if (event.altKey || event.ctrlKey || event.metaKey) return;
+    const position = enabled.findIndex((item) => item.id === current);
+    let next: TabItem<T> | undefined;
+    if (event.key === 'ArrowRight') next = enabled[(position + 1) % enabled.length];
+    if (event.key === 'ArrowLeft') next = enabled[(position - 1 + enabled.length) % enabled.length];
+    if (event.key === 'Home') next = enabled[0];
+    if (event.key === 'End') next = enabled[enabled.length - 1];
+    if (!next) return;
+    event.preventDefault();
+    buttons.current.get(next.id)?.focus();
+    onChange(next.id);
   }
   return (
-    <div
-      role="tablist"
-      aria-label={ariaLabel}
-      className={cn('il-tabbar max-w-full overflow-x-auto no-scrollbar', size === 'sm' && 'scale-95 origin-left')}
-      onKeyDown={(e) => {
-        if (e.key === 'ArrowRight') { e.preventDefault(); move(1); }
-        if (e.key === 'ArrowLeft') { e.preventDefault(); move(-1); }
-      }}
-    >
-      {items.map((i) => (
-        <button
-          key={i.id}
-          type="button"
-          role="tab"
-          title={i.title}
-          aria-selected={value === i.id}
-          disabled={i.disabled}
-          onClick={() => onChange(i.id)}
-          className="il-tab"
-        >
-          {i.icon && <Icon n={i.icon} size={14} />}
-          {i.label}
-          {typeof i.count === 'number' && (
+    <div role="tablist" aria-label={ariaLabel}
+      className={cn('il-tabbar max-w-full overflow-x-auto no-scrollbar', size === 'sm' && 'il-tabbar--sm scale-95 origin-left')}>
+      {items.map((item) => (
+        <button key={item.id} type="button" role="tab"
+          ref={(node) => { if (node) buttons.current.set(item.id, node); else buttons.current.delete(item.id); }}
+          id={item.tabId || `${prefix}-tab-${item.id}`}
+          // Do not fabricate aria-controls pointing to an absent panel.
+          aria-controls={item.panelId}
+          title={item.title}
+          aria-selected={value === item.id}
+          tabIndex={entry?.id === item.id ? 0 : -1}
+          disabled={item.disabled}
+          onKeyDown={(event) => move(event, item.id)}
+          onClick={() => onChange(item.id)}
+          className="il-tab">
+          {item.icon && <Icon n={item.icon} size={14} />}
+          {item.label}
+          {typeof item.count === 'number' && (
             <span className={cn(
               'ml-0.5 min-w-[18px] h-[18px] px-1 rounded-pill text-[10px] font-bold inline-flex items-center justify-center',
-              value === i.id ? 'bg-[var(--brand-soft)] text-[var(--brand-fg)]' : 'bg-[var(--border)] text-[var(--text-muted)]',
-            )}>{i.count}</span>
+              value === item.id ? 'bg-[var(--brand-soft)] text-[var(--brand-fg)]' : 'bg-[var(--border)] text-[var(--text-muted)]',
+            )}>{item.count}</span>
           )}
         </button>
       ))}
@@ -485,32 +549,71 @@ export function Notice({ tone = 'info', children, title, className }: { tone?: '
   );
 }
 
-// ── Drawer (painel lateral) — padrão do A3.3 para fichas ricas ──
+// ── Drawer — native modal: focus containment and background inertness are
+// browser responsibilities, including nested dialogs. Kept in its DOM parent
+// (no portal) so platform/public CSS scopes are never copied or leaked.
+const openDrawers = new Set<HTMLDialogElement>();
+let bodyOverflowBeforeDrawer = '';
+
 export function Drawer({ open, onClose, title, subtitle, children, footer, width = 'max-w-[720px]' }: {
   open: boolean; onClose: () => void; title: string; subtitle?: string;
   children: React.ReactNode; footer?: React.ReactNode; width?: string;
 }) {
+  const dialogRef = useRef<HTMLDialogElement>(null);
+  const titleRef = useRef<HTMLHeadingElement>(null);
+  const id = useId();
+  useEffect(() => {
+    const dialog = dialogRef.current;
+    if (!open || !dialog) return;
+    const previous = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    if (!openDrawers.size) {
+      bodyOverflowBeforeDrawer = document.body.style.overflow;
+      document.body.style.overflow = 'hidden';
+    }
+    openDrawers.add(dialog);
+    dialog.showModal();
+    // Start at the heading rather than scrolling to a distant form autofocus.
+    titleRef.current?.focus({ preventScroll: true });
+    return () => {
+      dialog.close();
+      openDrawers.delete(dialog);
+      if (!openDrawers.size) document.body.style.overflow = bodyOverflowBeforeDrawer;
+      if (previous?.isConnected) previous.focus({ preventScroll: true });
+    };
+  }, [open]);
+
   if (!open) return null;
   return (
-    <div className="fixed inset-0 z-50 flex justify-end" role="dialog" aria-modal="true" aria-label={title}>
-      <button
-        type="button"
-        aria-label="Fechar painel"
-        onClick={onClose}
-        className="absolute inset-0 bg-[var(--overlay)] backdrop-blur-[1px]"
-      />
-      <div className={cn('relative w-full h-full bg-[var(--bg)] shadow-xl flex flex-col', width)}>
-        <header className="shrink-0 flex items-center justify-between gap-3 px-4 py-3 bg-[var(--surface)] border-b border-[var(--border)]">
-          <div className="min-w-0">
-            <h2 className="text-sm font-semibold text-[var(--text)] truncate">{title}</h2>
-            {subtitle && <p className="text-xs text-[var(--text-muted)] truncate">{subtitle}</p>}
-          </div>
-          <IconButton icon="x" label="Fechar" size="sm" variant="ghost" onClick={onClose} />
-        </header>
-        <div className="flex-1 overflow-y-auto ws-scroll">{children}</div>
-        {footer && <footer className="il-actionbar shrink-0 px-4 py-3 flex flex-wrap items-center justify-end gap-2">{footer}</footer>}
+    <dialog ref={dialogRef} className="il-drawer fixed inset-0 z-50" aria-modal="true"
+      aria-labelledby={`${id}-title`} aria-describedby={subtitle ? `${id}-description` : undefined}
+      onCancel={(event) => { event.preventDefault(); event.stopPropagation(); onClose(); }}
+      onKeyDown={(event) => {
+        // Native modal inertness prevents focus in the page, but some browsers
+        // Tab from the final control into browser chrome. Wrap the boundaries
+        // explicitly, querying current controls (async/disabled fields included).
+        wrapDialogFocus(event, event.currentTarget, titleRef.current);
+        // Do not let Escape also close an underlying legacy booking sheet.
+        // An inner widget may preventDefault to consume Escape itself.
+        if (event.key === 'Escape') {
+          event.stopPropagation();
+          if (!event.defaultPrevented) { event.preventDefault(); onClose(); }
+        }
+      }}>
+      <div className="flex h-full justify-end">
+        <div aria-hidden="true" onClick={onClose} className="absolute inset-0 bg-[var(--overlay)] backdrop-blur-[1px]" />
+        <div className={cn('relative w-full h-full bg-[var(--bg)] shadow-xl flex flex-col', width)}>
+          <header className="shrink-0 flex items-center justify-between gap-3 px-4 py-3 bg-[var(--surface)] border-b border-[var(--border)]">
+            <div className="min-w-0">
+              <h2 ref={titleRef} tabIndex={-1} id={`${id}-title`} className="text-sm font-semibold text-[var(--text)] break-words">{title}</h2>
+              {subtitle && <p id={`${id}-description`} className="text-xs text-[var(--text-muted)] break-words">{subtitle}</p>}
+            </div>
+            <IconButton type="button" icon="x" label="Fechar" size="sm" variant="ghost" onClick={onClose} />
+          </header>
+          <div className="flex-1 min-h-0 overflow-y-auto ws-scroll">{children}</div>
+          {footer && <footer className="il-actionbar shrink-0 px-4 py-3 flex flex-wrap items-center justify-end gap-2">{footer}</footer>}
+        </div>
       </div>
-    </div>
+    </dialog>
   );
 }
 

@@ -19,6 +19,11 @@ export async function GET(req: NextRequest) {
   const scope = guard.ctx.professionalScope;
   const optIds = new Set(db.options.filter((o) => o.businessId === businessId).map((o) => o.id));
   const today = todayISO();
+  // Agenda can inspect a historical day: do not silently omit that day's exceptions.
+  // Same business/professional guard as before; only the read window changes.
+  const fromParam=req.nextUrl.searchParams.get('from')||'', toParam=req.nextUrl.searchParams.get('to')||'';
+  const exceptionFrom=/^\d{4}-\d{2}-\d{2}$/.test(fromParam)?fromParam:today;
+  const exceptionTo=/^\d{4}-\d{2}-\d{2}$/.test(toParam)?toParam:'';
   const future = db.bookings.filter(
     (b) => b.businessId === businessId && b.status !== 'cancelled' && b.date >= today,
   );
@@ -36,7 +41,7 @@ export async function GET(req: NextRequest) {
       // funcionamento da grade; horários PERSONALIZADOS de colegas não.
       .filter((a) => !scope || !a.professionalId || a.professionalId === scope),
     exceptions: db.exceptions
-      .filter((e) => e.businessId === businessId && e.date >= today)
+      .filter((e) => e.businessId === businessId && e.date >= exceptionFrom && (!exceptionTo || e.date <= exceptionTo))
       .sort((a, b) => (a.date < b.date ? -1 : 1)),
     scope: scopeInfo(guard.ctx),
     bookingRefs: {

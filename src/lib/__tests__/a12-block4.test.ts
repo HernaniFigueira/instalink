@@ -163,8 +163,8 @@ describe('B4.7 — Onde agir: só ações existentes', () => {
 describe('B4.9 — estados vazios honestos', () => {
   const page = read('src/app/(dashboard)/dashboard/page.tsx');
 
-  it('sem dado: R$ 0 honesto, sem valores inventados, lista vazia diz a verdade', () => {
-    expect(page).toMatch(/\{money\(0\)\}/);
+  it('listas vazias e ausência de permissão são explícitas, sem dinheiro fabricado', () => {
+    expect(page).not.toMatch(/\{money\(0\)\}/); // no hard-coded zero: only authorized server metrics
     expect(page).toMatch(/Nenhum atendimento futuro\./);
     expect(page).toMatch(/Nenhuma atividade ainda\./);
     expect(page).toMatch(/Nenhum pedido ainda\./);

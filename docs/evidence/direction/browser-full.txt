@@ -1,0 +1,93 @@
+
+> instalink@1.0.0 test:360:browser
+> playwright test --config tests/360/playwright.config.ts
+
+
+Running 29 tests using 1 worker
+
+  ✓   1 tests/360/journeys.browser.spec.ts:30:37 › landing and team authentication 1366 (828ms)
+  ✓   2 tests/360/journeys.browser.spec.ts:30:37 › landing and team authentication 390 (709ms)
+  ✓   3 tests/360/journeys.browser.spec.ts:41:5 › two-level navigation, logo, unit boundary and mobile unified menu (2.7s)
+  ✓   4 tests/360/journeys.browser.spec.ts:65:72 › role navigation and protected data SECRETARIA (1.8s)
+  ✓   5 tests/360/journeys.browser.spec.ts:65:72 › role navigation and protected data PROFISSIONAL (1.8s)
+  ✓   6 tests/360/journeys.browser.spec.ts:65:72 › role navigation and protected data ADMIN (1.3s)
+  ✓   7 tests/360/journeys.browser.spec.ts:65:72 › role navigation and protected data VIEWER (705ms)
+  ✓   8 tests/360/journeys.browser.spec.ts:83:5 › agenda detail, mobile list and reuse of a registered patient (1.3s)
+  ✓   9 tests/360/journeys.browser.spec.ts:99:5 › editor local preview, failed save retention and actual published persistence (1.5s)
+  ✓  10 tests/360/journeys.browser.spec.ts:119:5 › client profile, nested encounter and real multipage PDF excluding internal note (1.4s)
+  ✓  11 tests/360/journeys.browser.spec.ts:143:5 › public clinic, preserved selection across patient login and persisted booking/account (2.1s)
+  ✓  12 tests/360/journeys.browser.spec.ts:185:5 › editor about/menu drafts survive tabs, browser back is guarded, keyboard reorders (3.3s)
+  ✓  13 tests/360/journeys.browser.spec.ts:210:5 › operational screens on desktop and mobile (5.5s)
+  ✓  14 tests/360/journeys.browser.spec.ts:223:5 › agenda URL preserves view/date/filter across history and reload (953ms)
+  ✓  15 tests/360/journeys.browser.spec.ts:234:5 › public availability network error is not reported as a full/closed day (631ms)
+  ✓  16 tests/360/journeys.browser.spec.ts:243:5 › new patient, keyboard modal containment and persisted team appointment (1.6s)
+  ✓  17 tests/360/journeys.browser.spec.ts:267:5 › queue contact reuse, attendance start and nested sheet Escape (1.3s)
+  ✓  18 tests/360/journeys.browser.spec.ts:283:5 › standalone guest booking keeps identity after 409 and confirms only persisted data (1.9s)
+  ✓  19 tests/360/journeys.browser.spec.ts:297:5 › operational failures preserve session, distinguish error from empty, and retry (2.7s)
+  ✓  20 tests/360/journeys.browser.spec.ts:308:5 › 320px layouts remain within the viewport (1.5s)
+  ✓  21 tests/360/journeys.browser.spec.ts:316:5 › administrative sheets share keyboard containment and history errors are not empty results (1.4s)
+  ✓  22 tests/360/journeys.browser.spec.ts:353:46 › direction acceptance: navigation, agenda, conversations and organization 1440 (2.5s)
+  ✓  23 tests/360/journeys.browser.spec.ts:353:46 › direction acceptance: navigation, agenda, conversations and organization 1280 (2.4s)
+  ✓  24 tests/360/journeys.browser.spec.ts:353:46 › direction acceptance: navigation, agenda, conversations and organization 1024 (2.0s)
+  ✓  25 tests/360/journeys.browser.spec.ts:353:46 › direction acceptance: navigation, agenda, conversations and organization 390 (2.1s)
+  ✓  26 tests/360/journeys.browser.spec.ts:407:5 › direction acceptance: direct grouped route, back-forward and reduced motion (848ms)
+  ✘  27 tests/360/journeys.browser.spec.ts:420:5 › direction acceptance: server impact, blocked dependency and real password deletion of empty synthetic targets (720ms)
+  ✓  28 tests/360/journeys.browser.spec.ts:450:5 › direction acceptance: organization failure is not zero and financial payload is withheld (747ms)
+  ✘  29 tests/360/journeys.browser.spec.ts:460:6 › direction acceptance: failed booking read never paints a free agenda (651ms)
+
+
+  1) tests/360/journeys.browser.spec.ts:420:5 › direction acceptance: server impact, blocked dependency and real password deletion of empty synthetic targets
+
+    Error: locator.selectOption: options[0]: expected object, got undefined
+
+      432 |   const organizations=page.getByRole('combobox',{name:'Selecionar organização'});
+      433 |   const otherOrg=await organizations.locator('option').evaluateAll((nodes,id)=>nodes.map(n=>(n as HTMLOptionElement).value).find(v=>v!==id)!,targets.org);
+    > 434 |   await organizations.selectOption(otherOrg);await expect(page).toHaveURL(/from=2026-09-01&to=2026-09-21/);
+          |                       ^
+      435 |   await organizations.selectOption(targets.org);await expect(page).toHaveURL(new RegExp(`organization=${targets.org}`));
+      436 |   await page.getByRole('button',{name:'Excluir filial',exact:true}).click();d=page.getByRole('dialog');
+      437 |   await d.getByLabel('Digite o nome exato: Filial sintética vazia').fill('Filial sintética vazia');
+        at /home/user/instalink/tests/360/journeys.browser.spec.ts:434:23
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    .cache/360-browser/journeys.browser-direction-0e1d1--of-empty-synthetic-targets/test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: .cache/360-browser/journeys.browser-direction-0e1d1--of-empty-synthetic-targets/error-context.md
+
+  2) tests/360/journeys.browser.spec.ts:460:6 › direction acceptance: failed booking read never paints a free agenda
+
+    Error: expect(locator).toContainText(expected) failed
+
+    Locator: getByRole('alert')
+    Expected substring: "Não foi possível carregar"
+    Error: strict mode violation: getByRole('alert') resolved to 2 elements:
+        1) <section role="alert" class="rounded-lg border border-[var(--danger-border)] bg-[var(--surface)] p-6 space-y-3">…</section> aka getByText('Não foi possível carregar agendaFalha sintética na leitura Nenhum dado foi')
+        2) <div role="alert" aria-live="assertive" id="__next-route-announcer__"></div> aka locator('[id="__next-route-announcer__"]')
+
+    Call log:
+      - Expect "toContainText" getByRole('alert') with timeout 15000ms
+      - waiting for getByRole('alert')
+        - locator resolved to <div role="alert" aria-live="assertive" id="__next-route-announcer__"></div>
+        - unexpected value ""
+
+
+      460 |  test('direction acceptance: failed booking read never paints a free agenda',async({page},info)=>{
+      461 |   await login(page);await page.route('**/api/bookings?**',r=>r.fulfill({status:503,json:{error:'Falha sintética na leitura'}}));
+    > 462 |   await page.goto(`/agenda?b=${f.b}&data=${f.date}&view=day`);await expect(page.getByRole('alert')).toContainText('Não foi possível carregar');
+          |                                                                                                     ^
+      463 |   await expect(page.getByRole('button',{name:/Marina.*clique para ver/})).toHaveCount(0);await page.screenshot({path:info.outputPath('agenda-load-error.png')});
+      464 |  });
+      465 |
+        at /home/user/instalink/tests/360/journeys.browser.spec.ts:462:101
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    .cache/360-browser/journeys.browser-direction-87a04--never-paints-a-free-agenda/test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: .cache/360-browser/journeys.browser-direction-87a04--never-paints-a-free-agenda/error-context.md
+
+  2 failed
+    tests/360/journeys.browser.spec.ts:420:5 › direction acceptance: server impact, blocked dependency and real password deletion of empty synthetic targets
+    tests/360/journeys.browser.spec.ts:460:6 › direction acceptance: failed booking read never paints a free agenda
+  27 passed (51.1s)

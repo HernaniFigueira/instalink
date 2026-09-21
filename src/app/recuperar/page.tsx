@@ -6,8 +6,8 @@ import { saveToken, saveCustomerToken } from '@/lib/client-auth';
 
 export default function RecuperarPage() {
   return (
-    <main className="min-h-screen bg-zinc-950 text-white flex items-center justify-center px-4">
-      <div className="w-full max-w-md">
+    <main className="il-auth auth-recovery">
+      <div className="auth-form-card">
         <Suspense fallback={<p className="text-sm text-zinc-400">Carregando…</p>}>
           <RecuperarForm />
         </Suspense>
