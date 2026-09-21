@@ -16,6 +16,7 @@ import type { BusinessMode, FeatureId, PermissionId } from '@/lib/types';
 import { requiresActiveBusiness } from '@/lib/business-context';
 import { mayLeaveEditor } from '@/components/dashboard/useUnsavedChanges';
 import { WorkspaceContext } from '@/components/dashboard/WorkspaceContext';
+import { ConversationsDock } from '@/components/dashboard/ConversationsDock';
 import { WorkspaceNavigation } from '@/components/dashboard/WorkspaceNavigation';
 import { routeAreaColor, switchUnitHref } from '@/lib/workspace-navigation';
 
@@ -234,6 +235,7 @@ export function DashboardShell({ children }: { children: React.ReactNode }) {
       <WorkspaceNavigation nav={nav} activePath={activePath} unit={business} units={businesses}
         onUnit={switchBiz} collapsed={collapsed} onCollapse={toggle} user={user} onLogout={logout} />
 
+      {nav.allowed.some(i => i.href === '/conversas') && activePath !== '/conversas' && activePath !== '/organizacao' && <ConversationsDock key={business.id} businessId={business.id}/>}
       <main id="workspace-content" tabIndex={-1} className="flex-1 min-w-0 bg-[var(--bg)]">
         {support && (
           <div className={cn('px-4 lg:px-8 py-2.5 text-xs font-semibold flex flex-wrap items-center gap-x-3 gap-y-1 border-b',

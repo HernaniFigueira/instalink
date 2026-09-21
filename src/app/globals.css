@@ -840,3 +840,27 @@ dialog.il-customer-dialog::backdrop { background:transparent; }
 .il-platform [data-queue-rail] { width:280px; flex-shrink:0; align-self:flex-start; max-height:var(--queue-rail-maxh); overflow-y:auto; background:var(--surface); border:1px solid var(--border); border-radius:8px; }
 @media(min-width:1200px) { .il-platform .agenda-page-gutter { padding:16px; } }
 @media(max-width:767px) { .il-platform .il-tab { min-height:44px; } }
+
+/* Conversations is intentionally overlaid; the left submenu never is. */
+.conversation-shortcut { position:fixed; right:0; bottom:24px; z-index:35; display:flex; align-items:center; gap:8px; min-height:44px; padding:10px 14px; background:var(--surface); color:#047857; border:1px solid var(--border); border-radius:8px 0 0 8px; }
+dialog.conversations-dock { position:fixed; inset:16px 16px 16px auto; margin:0!important; padding:0; width:min(960px,85vw); height:calc(100dvh - 32px); max-width:none; max-height:none; border:1px solid var(--border); border-radius:12px; background:var(--surface); color:var(--text); overflow:hidden; }
+.conversations-dock::backdrop { background:rgba(31,41,55,.20); }
+.conversations-dock[open] { animation:conversation-in 180ms ease-out; }
+.conversations-dock[data-closing="true"] { animation:conversation-out 180ms ease-in forwards; }
+.conversation-dock-inner { display:flex; flex-direction:column; height:100%; }
+@keyframes conversation-in { from { opacity:0; transform:translateX(100%); } to { opacity:1; transform:none; } }
+@keyframes conversation-out { to { opacity:0; transform:translateX(100%); } }
+.conversation-view[data-panel="true"] .inbox-layout { grid-template-columns:260px minmax(0,1fr); }
+.conversation-view[data-panel="true"] .inbox-contact { display:none; }
+.inbox-back { display:none; }
+@media(max-width:767px) {
+  dialog.conversations-dock { inset:8px; width:calc(100vw - 16px); height:calc(100dvh - 16px); }
+  .conversation-view .inbox-layout, .conversation-view[data-panel="true"] .inbox-layout { display:block; }
+  .conversation-view[data-active="true"] .inbox-list, .conversation-view[data-active="false"] .inbox-detail, .conversation-view .inbox-contact { display:none; }
+  .inbox-back { display:flex; }
+  .conversation-shortcut span { display:none; }
+}
+
+
+.il-platform .conversation-view :is(button,input), .il-platform .conversation-view a.inline-flex { min-height:40px; }
+@media(max-width:767px) { .il-platform .conversation-view :is(button,input), .il-platform .conversation-view a.inline-flex { min-height:44px; } }
