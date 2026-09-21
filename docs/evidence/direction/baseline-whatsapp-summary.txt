@@ -1,0 +1,8 @@
+ FAIL  src/lib/__tests__/whatsapp-robustness.test.ts > Meta WhatsApp Cloud API — Onboarding Coexistence e Standard > fluxo de agendamento no webhook com confirmação explícita antes de criar booking
+AssertionError: expected [] to have a length of 1 but got +0
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+ Test Files  1 failed (1)
+      Tests  1 failed | 11 passed (12)
+   Start at  12:37:01
+   Duration  2.26s (transform 1.20s, setup 0ms, import 1.44s, tests 297ms, environment 0ms)

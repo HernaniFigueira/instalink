@@ -41,11 +41,11 @@ for (const width of [1366,390]) test(`landing and team authentication ${width}`,
 test('two-level navigation, logo, unit boundary and mobile unified menu', async ({page},info) => {
   await login(page); await page.goto(`/dashboard?b=${f.b}`);
   await expect(page.getByRole('heading',{name:'Visão geral da clínica'})).toBeVisible();
-  await expect(page.getByRole('navigation',{name:'Áreas',exact:true}).getByRole('link')).toHaveCount(7);
-  expect((await page.locator('.workspace-sidebar').boundingBox())?.width).toBe(248);
+  await expect(page.getByRole('navigation',{name:'Menu principal',exact:true}).getByRole('button')).toHaveCount(3);
+  expect((await page.locator('.workspace-sidebar').boundingBox())?.width).toBe(232);
   await expect(page.locator('.workspace-logo')).toHaveCSS('object-fit','contain');
   await page.screenshot({path:info.outputPath('dashboard-1366.png'),fullPage:true});
-  await page.getByRole('navigation',{name:'Áreas',exact:true}).getByRole('link',{name:'Gestão',exact:true}).click();
+  await page.getByRole('navigation',{name:'Menu principal',exact:true}).getByRole('button',{name:'Gestão',exact:true}).click();
   await expect(page.getByRole('navigation',{name:'Gestão',exact:true}).getByRole('link',{name:'Equipe',exact:true})).toBeVisible();
   await page.goto(`/agenda?b=${f.b}&data=${f.date}&view=list&professionalId=${f.p1}&member=private&q=Marina`);
   await page.getByRole('combobox',{name:'Trocar unidade'}).selectOption(f.other);
@@ -64,10 +64,10 @@ test('two-level navigation, logo, unit boundary and mobile unified menu', async 
 
 for (const role of ['SECRETARIA','PROFISSIONAL','ADMIN','VIEWER']) test(`role navigation and protected data ${role}`, async ({page},info) => {
   await login(page,f.roles[role]); await page.goto(`/dashboard?b=${f.b}`);
-  if(role==='VIEWER') { await expect(page.getByText(/não.*acesso|permissão/i).first()).toBeVisible(); await expect(page.getByRole('navigation',{name:'Áreas',exact:true}).getByRole('link')).toHaveCount(0); return; }
+  if(role==='VIEWER') { await expect(page.getByText(/não.*acesso|permissão/i).first()).toBeVisible(); await expect(page.getByRole('navigation',{name:'Menu principal',exact:true}).getByRole('link')).toHaveCount(0); return; }
   await expect(page.getByRole('heading',{level:1})).toBeVisible();
   if(role!=='ADMIN') {
-    await expect(page.getByRole('navigation',{name:'Áreas',exact:true}).getByRole('link',{name:'Página da clínica'})).toHaveCount(0);
+    await expect(page.getByRole('navigation',{name:'Menu principal',exact:true}).getByRole('link',{name:'Página da clínica'})).toHaveCount(0);
     const status = await page.evaluate(async path => (await fetch(path)).status, `/api/results?businessId=${f.b}`); expect(status).toBe(403);
   }
   if(role==='PROFISSIONAL') {
@@ -184,7 +184,7 @@ test('public clinic, preserved selection across patient login and persisted book
 
 test('editor about/menu drafts survive tabs, browser back is guarded, keyboard reorders',async({page})=>{
   await login(page); await page.goto(`/dashboard?b=${f.b}`);
-  await page.getByRole('navigation',{name:'Áreas',exact:true}).getByRole('link',{name:'Página da clínica'}).click();
+  await page.getByRole('navigation',{name:'Menu principal',exact:true}).getByRole('link',{name:'Página',exact:true}).click();
   await page.getByRole('button',{name:'Editar Sobre a clínica'}).click();
   const title=`Nossa história · revisão ${Date.now()}`;
   await page.getByLabel('Título sobre a clínica').fill(title);
@@ -349,3 +349,117 @@ test('administrative sheets share keyboard containment and history errors are no
   await expect(history).toContainText('Ainda não houve execução'); await expect(history.getByRole('alert')).toHaveCount(0);
   await page.keyboard.press('Escape'); await expect(history).toHaveCount(0);
 });
+
+for(const width of [1440,1280,1024,390]) test(`direction acceptance: navigation, agenda, conversations and organization ${width}`,async({page},info)=>{
+  await login(page);await page.setViewportSize({width,height:900});
+  await page.goto(`/agenda?b=${f.b}&data=${f.date}&view=day`);
+  await expect(page.locator('[data-agenda-main]')).toBeVisible();await noOverflow(page);
+  if(width>=1200){
+    expect((await page.locator('.workspace-sidebar').boundingBox())!.width).toBe(232);
+    const nav=page.getByRole('navigation',{name:'Menu principal',exact:true});
+    await nav.getByRole('button',{name:'Gestão',exact:true}).click();
+    expect((await page.locator('.workspace-secondary').boundingBox())!.width).toBe(216);
+    const before=(await page.locator('[data-agenda-main]').boundingBox())!.x;
+    await page.screenshot({path:info.outputPath(`menu-${width}.png`)});
+    await nav.getByRole('button',{name:'Automação',exact:true}).click();
+    await expect(page.getByRole('navigation',{name:'Gestão',exact:true})).toHaveCount(0);
+    await expect(page.getByRole('navigation',{name:'Automação',exact:true})).toBeVisible();
+    await nav.getByRole('button',{name:'Automação',exact:true}).click();
+    await expect(page.locator('.workspace-secondary')).toHaveCount(0);
+    expect(before-(await page.locator('[data-agenda-main]').boundingBox())!.x).toBe(216);
+    await page.getByRole('button',{name:'Recolher navegação'}).click();
+    expect((await page.locator('.workspace-sidebar').boundingBox())!.width).toBe(64);
+    await page.getByRole('button',{name:'Expandir navegação'}).click();
+  }else{
+    await expect(page.locator('.workspace-sidebar')).toBeHidden();
+    const open=page.getByRole('button',{name:'Abrir navegação'});await open.click();
+    let menu=page.getByRole('dialog');await menu.getByRole('button',{name:'Gestão',exact:true}).click();
+    await expect(menu.getByRole('button',{name:/Voltar/})).toBeVisible();
+    await page.screenshot({path:info.outputPath(`menu-${width}.png`)});
+    await menu.getByRole('button',{name:/Voltar/}).click();await expect(menu.getByRole('button',{name:'Sair da conta'})).toBeVisible();
+    await page.keyboard.press('Escape');await expect(open).toBeFocused();
+  }
+  await noOverflow(page);await page.screenshot({path:info.outputPath(`agenda-${width}.png`)});
+  await page.getByRole('button',{name:/Fila de atendimento/}).first().click();
+  if(width>=1280){expect((await page.locator('[data-queue-rail]').boundingBox())!.width).toBe(280);await page.screenshot({path:info.outputPath(`queue-${width}.png`)});await page.getByRole('button',{name:'Fechar a fila'}).click();}
+  else {await expect(page.getByRole('dialog',{name:'Fila de atendimento'})).toBeVisible();await page.screenshot({path:info.outputPath(`queue-${width}.png`)});await page.keyboard.press('Escape');}
+  const trigger=page.getByRole('button',{name:'Abrir painel de Conversas'});
+  const url=page.url(),scroll=await page.evaluate(()=>scrollY);await trigger.click();
+  const dock=page.getByRole('dialog',{name:'Conversas',exact:true});await expect(dock).toBeVisible();
+  await expect(dock.getByRole('heading',{level:2,name:'Conversas',exact:true})).toBeFocused();
+  await page.keyboard.press('Shift+Tab');expect(await dock.evaluate(d=>d.contains(document.activeElement))).toBe(true);
+  await dock.getByRole('button').filter({hasText:'Marina · conversa sintética'}).click();
+  const draft=dock.getByRole('textbox',{name:'Mensagem'});await draft.fill(`Rascunho sintético ${width}`);
+  await expect(dock.getByRole('button',{name:'Enviar',exact:true})).toBeDisabled();
+  await page.screenshot({path:info.outputPath(`conversations-${width}.png`)});await noOverflow(page);
+  await page.keyboard.press('Escape');await expect(dock).not.toBeVisible();await expect(trigger).toBeFocused();
+  expect(page.url()).toBe(url);expect(await page.evaluate(()=>scrollY)).toBe(scroll);
+  await trigger.click();await expect(draft).toHaveValue(`Rascunho sintético ${width}`);
+  if(width<768){await dock.getByRole('button',{name:/Voltar às conversas/}).click();await expect(dock.locator('.inbox-list')).toBeVisible();}
+  await page.keyboard.press('Escape');
+  await page.goto('/organizacao');await expect(page.getByRole('region',{name:'Resumo consolidado'})).toBeVisible();await noOverflow(page);
+  await page.screenshot({path:info.outputPath(`organization-${width}.png`)});
+  await page.getByRole('region',{name:'Filiais',exact:true}).getByRole('link',{name:'Abrir filial →',exact:true}).first().click();
+  await expect(page).toHaveURL(/\/dashboard\?b=/);
+  expect([f.b,f.other]).toContain(new URL(page.url()).searchParams.get('b'));
+});
+
+test('direction acceptance: direct grouped route, back-forward and reduced motion',async({page},info)=>{
+  await login(page);await page.setViewportSize({width:1440,height:900});
+  await page.goto(`/equipe?b=${f.b}`);await expect(page.getByRole('navigation',{name:'Gestão',exact:true})).toBeVisible();
+  await page.getByRole('navigation',{name:'Menu principal',exact:true}).getByRole('link',{name:'Agenda',exact:true}).click();
+  await expect(page).toHaveURL(/\/agenda\?b=/);await expect(page.locator('.workspace-secondary')).toHaveCount(0);await page.goBack();
+  await expect(page.getByRole('navigation',{name:'Gestão',exact:true})).toBeVisible();await page.goForward();
+  await expect(page.locator('.workspace-secondary')).toHaveCount(0);
+  await page.emulateMedia({reducedMotion:'reduce'});await page.getByRole('button',{name:'Abrir painel de Conversas'}).click();
+  const d=page.getByRole('dialog',{name:'Conversas',exact:true});
+  expect(parseFloat(await d.evaluate(e=>getComputedStyle(e).animationDuration))).toBeLessThanOrEqual(.001);
+  await page.screenshot({path:info.outputPath('conversations-reduced-motion.png')});await page.keyboard.press('Escape');await expect(d).not.toBeVisible();
+});
+
+test('direction acceptance: server impact, blocked dependency and real password deletion of empty synthetic targets',async({page},info)=>{
+  await login(page);await page.goto('/organizacao');
+  await page.getByRole('button',{name:'Excluir filial',exact:true}).first().click();
+  let d=page.getByRole('dialog');await expect(d.getByText('Exclusão bloqueada',{exact:true})).toBeVisible();
+  await expect(d.getByLabel('Senha atual')).toHaveCount(0);await page.screenshot({path:info.outputPath('deletion-blocked.png')});await page.keyboard.press('Escape');
+  const targets=await page.evaluate(async()=>{
+    const post=async(path:string,body:unknown)=>{const r=await fetch(path,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});if(!r.ok)throw Error(`Synthetic create ${r.status}`);return r.json();};
+    const o=await post('/api/organizations',{name:'Organização sintética de exclusão'});
+    const b=await post('/api/businesses',{name:'Filial sintética vazia',organizationId:o.organization.id,niche:'clinica'});
+    return {org:o.organization.id,b:b.businessId};
+  });
+  await page.goto(`/organizacao?organization=${targets.org}&period=custom&from=2026-09-01&to=2026-09-21`);
+  const organizations=page.getByRole('combobox',{name:'Selecionar organização'});
+  await expect(organizations).toBeVisible();
+  const otherOrg=await organizations.locator('option').evaluateAll((nodes,id)=>nodes.map(n=>(n as HTMLOptionElement).value).find(v=>v!==id)!,targets.org);
+  await organizations.selectOption(otherOrg);await expect(page).toHaveURL(new RegExp(`organization=${otherOrg}.*from=2026-09-01&to=2026-09-21`));
+  await organizations.selectOption(targets.org);await expect(page).toHaveURL(new RegExp(`organization=${targets.org}`));
+  await page.getByRole('button',{name:'Excluir filial',exact:true}).click();d=page.getByRole('dialog');
+  await d.getByLabel('Digite o nome exato: Filial sintética vazia').fill('Filial sintética vazia');
+  await d.getByLabel('Senha atual').fill('Senha-incorreta-de-teste');await d.getByRole('button',{name:'Excluir filial definitivamente'}).click();
+  await expect(d.getByRole('alert')).toContainText('Senha atual incorreta');await expect(d.getByLabel('Senha atual')).toHaveValue('');
+  await page.screenshot({path:info.outputPath('deletion-password-rejected.png')});
+  await d.getByLabel('Senha atual').fill(f.owner.password);await d.getByRole('button',{name:'Excluir filial definitivamente'}).click();
+  await expect(d).toHaveCount(0);await expect(page.getByText('Esta organização ainda não possui filiais.')).toBeVisible();
+  await page.getByRole('button',{name:'Verificar exclusão da organização'}).click();d=page.getByRole('dialog');
+  await d.getByLabel('Digite o nome exato: Organização sintética de exclusão').fill('Organização sintética de exclusão');
+  await d.getByLabel('Senha atual').fill(f.owner.password);await d.getByRole('button',{name:'Excluir organização definitivamente'}).click();
+  await expect(d).toHaveCount(0);await expect(page).toHaveURL(/\/organizacao$/);
+  expect(await page.evaluate(async(id)=>(await fetch('/api/entity-deletion?'+new URLSearchParams({kind:'organization',id,organizationId:id}))).status,targets.org)).toBe(403);
+});
+
+test('direction acceptance: organization failure is not zero and financial payload is withheld',async({page},info)=>{
+  await login(page,f.roles.SECRETARIA);await page.goto('/organizacao');
+  const data=await page.evaluate(async()=>{const r=await fetch('/api/organizations');return r.json();});
+  expect(JSON.stringify(data)).not.toContain('predictedRevenue');expect(data.organizations.flatMap((o:any)=>o.units).map((u:any)=>u.id)).toEqual([f.b]);
+  await expect(page.getByRole('button',{name:'Excluir filial'})).toHaveCount(0);
+  await page.route('**/api/organizations*',r=>r.fulfill({status:503,json:{error:'Falha sintética controlada'}}));await page.reload();
+  await expect(page.getByRole('alert')).toBeVisible();await expect(page.getByRole('region',{name:'Resumo consolidado'})).toHaveCount(0);
+  await page.screenshot({path:info.outputPath('organization-error.png')});
+});
+
+ test('direction acceptance: failed booking read never paints a free agenda',async({page},info)=>{
+  await login(page);await page.route('**/api/bookings?**',r=>r.fulfill({status:503,json:{error:'Falha sintética na leitura'}}));
+  await page.goto(`/agenda?b=${f.b}&data=${f.date}&view=day`);await expect(page.getByRole('alert').filter({hasText:'Não foi possível carregar'})).toBeVisible();
+  await expect(page.getByRole('button',{name:/Marina.*clique para ver/})).toHaveCount(0);await page.screenshot({path:info.outputPath('agenda-load-error.png')});
+ });

@@ -9,6 +9,7 @@ import { apiGet, apiSend } from '@/lib/api-client';
 import { money } from '@/lib/utils';
 import type { OrganizationOverview } from '@/lib/organization-overview';
 import type { PeriodSpec, PeriodKey } from '@/lib/periods';
+import { DeleteEntityDialog, type DeleteTarget } from '@/components/dashboard/DeleteEntityDialog';
 import { Button, Field, Input } from '@/components/ui';
 
 type Response = {organizations:OrganizationOverview[];period:PeriodSpec;referenceTimezone:string};
@@ -16,6 +17,7 @@ export default function OrganizationPage() {
   const params=useSearchParams(), router=useRouter();
   const [data,setData]=useState<Response|null>(null), [error,setError]=useState(''), [loading,setLoading]=useState(true);
   const [adding,setAdding]=useState(params.get('add')==='1'), [name,setName]=useState(''), [address,setAddress]=useState(''), [saving,setSaving]=useState(false), [saveError,setSaveError]=useState('');
+  const [deleting,setDeleting]=useState<DeleteTarget|null>(null);
   const generation=useRef(0);
   const requested=params.get('organization');
   const org=requested?data?.organizations.find(o=>o.id===requested):data?.organizations[0];
@@ -62,7 +64,10 @@ export default function OrganizationPage() {
       {org.units.length===0&&<p>Esta organização ainda não possui filiais.</p>}
       {org.units.map(u=><article key={u.id} className="bg-white border border-[var(--border)] rounded-lg p-4"><div className="flex flex-wrap items-start justify-between gap-3"><div><h3 className="font-semibold">{u.name}</h3><p className="text-sm text-[var(--text-muted)]">{u.address} · {u.timezone}</p></div><div className="flex flex-wrap gap-3"><Link className="workspace-link" href={`/dashboard?b=${u.id}`}>Abrir filial →</Link>{u.canAgenda&&<Link className="workspace-link" href={`/agenda?b=${u.id}`}>Abrir agenda desta filial</Link>}</div></div>
         <p className="mt-3">Agendamentos: {number(u.summary.bookings)} · Concluídos: {number(u.summary.completed)} · Cadastros: {number(u.summary.clients)}</p>{u.summary.predictedRevenue!==undefined&&<p>Receita prevista: {money(u.summary.predictedRevenue)}</p>}
+        {u.canDelete&&<Button variant="danger" size="sm" className="mt-4" onClick={()=>setDeleting({kind:'business',id:u.id,organizationId:org.id,name:u.name})}>Excluir filial</Button>}
       </article>)}
     </section>
+    {org.canDelete&&<section className="border border-[var(--danger-border)] rounded-lg p-4"><h2 className="font-semibold">Excluir organização</h2><p className="mb-3 text-sm">Somente quando não houver filiais ou dependências. Não exclui filiais em cascata.</p><Button variant="danger" onClick={()=>setDeleting({kind:'organization',id:org.id,organizationId:org.id,name:org.name})}>Verificar exclusão da organização</Button></section>}
+    {deleting&&<DeleteEntityDialog target={deleting} onClose={()=>setDeleting(null)} onDeleted={()=>{const kind=deleting.kind;setDeleting(null);window.dispatchEvent(new Event('il:business-refresh'));if(kind==='organization')router.replace('/organizacao');else void load();}}/>}
   </div>;
 }

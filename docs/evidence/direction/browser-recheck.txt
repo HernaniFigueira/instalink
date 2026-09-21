@@ -1,0 +1,11 @@
+
+> instalink@1.0.0 test:360:browser
+> playwright test --config tests/360/playwright.config.ts --last-failed
+
+
+Running 2 tests using 1 worker
+
+  ✓  1 tests/360/journeys.browser.spec.ts:420:5 › direction acceptance: server impact, blocked dependency and real password deletion of empty synthetic targets (1.6s)
+  ✓  2 tests/360/journeys.browser.spec.ts:461:6 › direction acceptance: failed booking read never paints a free agenda (730ms)
+
+  2 passed (3.3s)
