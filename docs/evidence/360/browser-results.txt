@@ -1,0 +1,30 @@
+
+> instalink@1.0.0 test:360:browser
+> playwright test --config tests/360/playwright.config.ts
+
+
+Running 21 tests using 1 worker
+
+  ✓   1 tests/360/journeys.browser.spec.ts:30:37 › landing and team authentication 1366 (916ms)
+  ✓   2 tests/360/journeys.browser.spec.ts:30:37 › landing and team authentication 390 (758ms)
+  ✓   3 tests/360/journeys.browser.spec.ts:41:5 › two-level navigation, logo, unit boundary and mobile unified menu (2.2s)
+  ✓   4 tests/360/journeys.browser.spec.ts:65:72 › role navigation and protected data SECRETARIA (1.0s)
+  ✓   5 tests/360/journeys.browser.spec.ts:65:72 › role navigation and protected data PROFISSIONAL (1.3s)
+  ✓   6 tests/360/journeys.browser.spec.ts:65:72 › role navigation and protected data ADMIN (1.0s)
+  ✓   7 tests/360/journeys.browser.spec.ts:65:72 › role navigation and protected data VIEWER (669ms)
+  ✓   8 tests/360/journeys.browser.spec.ts:83:5 › agenda detail, mobile list and reuse of a registered patient (1.7s)
+  ✓   9 tests/360/journeys.browser.spec.ts:99:5 › editor local preview, failed save retention and actual published persistence (1.6s)
+  ✓  10 tests/360/journeys.browser.spec.ts:119:5 › client profile, nested encounter and real multipage PDF excluding internal note (2.0s)
+  ✓  11 tests/360/journeys.browser.spec.ts:143:5 › public clinic, preserved selection across patient login and persisted booking/account (2.3s)
+  ✓  12 tests/360/journeys.browser.spec.ts:185:5 › editor about/menu drafts survive tabs, browser back is guarded, keyboard reorders (3.3s)
+  ✓  13 tests/360/journeys.browser.spec.ts:210:5 › operational screens on desktop and mobile (5.7s)
+  ✓  14 tests/360/journeys.browser.spec.ts:223:5 › agenda URL preserves view/date/filter across history and reload (1.1s)
+  ✓  15 tests/360/journeys.browser.spec.ts:234:5 › public availability network error is not reported as a full/closed day (600ms)
+  ✓  16 tests/360/journeys.browser.spec.ts:243:5 › new patient, keyboard modal containment and persisted team appointment (1.8s)
+  ✓  17 tests/360/journeys.browser.spec.ts:267:5 › queue contact reuse, attendance start and nested sheet Escape (1.8s)
+  ✓  18 tests/360/journeys.browser.spec.ts:283:5 › standalone guest booking keeps identity after 409 and confirms only persisted data (1.9s)
+  ✓  19 tests/360/journeys.browser.spec.ts:297:5 › operational failures preserve session, distinguish error from empty, and retry (2.9s)
+  ✓  20 tests/360/journeys.browser.spec.ts:308:5 › 320px layouts remain within the viewport (2.0s)
+  ✓  21 tests/360/journeys.browser.spec.ts:316:5 › administrative sheets share keyboard containment and history errors are not empty results (1.9s)
+
+  21 passed (39.8s)
