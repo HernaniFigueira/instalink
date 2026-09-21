@@ -19,7 +19,7 @@ const root = path.resolve(__dirname, '..', '..', '..');
 const read = (rel: string) => readFileSync(path.join(root, rel), 'utf8');
 
 describe('B3.1 — composer de /conversas executa o envio de verdade', () => {
-  const page = read('src/app/(dashboard)/conversas/page.tsx');
+  const page = read('src/components/dashboard/ConversationsView.tsx');
 
   it('usa a API EXISTENTE (POST /api/conversations) com o contrato do inbox', () => {
     expect(page).toMatch(/apiSend<\{ message\?: Message \}>\(\s*'\/api\/conversations', 'POST',/);
@@ -31,7 +31,7 @@ describe('B3.1 — composer de /conversas executa o envio de verdade', () => {
 
   it('o botão Enviar nunca é decorativo: estado de envio + desabilitado sem texto', () => {
     expect(page).toMatch(/const \[sending, setSending\] = useState\(false\)/);
-    expect(page).toMatch(/disabled=\{sending \|\| !draft\.trim\(\)\}/);
+    expect(page).toMatch(/disabled=\{sending \|\| !draft\.trim\(\) \|\| \(active\.conversation\.channel === \'instagram\' \? !channels\.instagram : !channels\.whatsapp\)\}/);
     expect(page).toMatch(/\{sending \? 'Enviando…' : 'Enviar'\}/);
   });
 
@@ -117,12 +117,13 @@ describe('B3.4 — navegação interna sem recarregar a aplicação', () => {
   it('organização: trocar organização e criar unidade navegam via router', () => {
     const org = read('src/app/(dashboard)/organizacao/page.tsx');
     expect(org).not.toMatch(/window\.location\.assign/);
-    expect(org).toMatch(/router\.replace\(`\/organizacao\?organization=\$\{e\.target\.value\}`\)/);
+    expect(org).toContain('onChange={e=>changeOrganization(e.target.value)}');
+    expect(org).toContain("q.set('organization',id);q.delete('b')");
     // A unidade nova precisa entrar no contexto do shell: o MESMO canal de
     // revalidação usado em Recursos (il:business-refresh) é disparado antes
     // do router.push — o `?b=` da unidade nova não cai no fallback.
     expect(org).toMatch(/dispatchEvent\(new Event\('il:business-refresh'\)\)/);
-    expect(org).toMatch(/router\.push\(`\/dashboard\?b=\$\{res\.data\.businessId\}`\)/);
+    expect(org).toMatch(/router\.push\(`\/dashboard\?b=\$\{res\.data\?\.businessId\}`\)/);
   });
 
   it('redirecionamentos de identidade continuam sendo recarga REAL (intencional)', () => {

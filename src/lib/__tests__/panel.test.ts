@@ -552,7 +552,7 @@ describe('uma porta por conceito', () => {
     expect(cfgPage).toMatch(/router\.push\(`\/configuracoes\?\$\{qs\.toString\(\)\}`/);
     expect(cfgPage).not.toMatch(/useState<ConfigTab>/);
     // Conversas: busca contextual na URL (?q=), filtro client-side seguro.
-    const conversas = read('src/app/(dashboard)/conversas/page.tsx');
+    const conversas = read('src/components/dashboard/ConversationsView.tsx');
     expect(conversas).toMatch(/params\.get\('q'\)/);
     expect(conversas).toMatch(/qs\.set\('q'/);
     expect(conversas).toMatch(/qs\.delete\('q'\)/);
@@ -596,7 +596,7 @@ describe('uma porta por conceito', () => {
   });
 
   it('Conversas é o inbox; conectar canal mora em Canais', () => {
-    const conversas = read('src/app/(dashboard)/conversas/page.tsx');
+    const conversas = read('src/components/dashboard/ConversationsView.tsx');
     expect(conversas).not.toMatch(/action: 'connect'/);       // não conecta daqui
     expect(conversas).toMatch(/channelsHref/);                 // aponta para a porta certa
     const panel = read('src/components/dashboard/WhatsappChannelPanel.tsx');
@@ -620,7 +620,7 @@ describe('uma porta por conceito', () => {
     expect(nav.sections.find((s) => s.id === 'resultados')?.items.map((r) => r.href))
       .toEqual(['/resultados', '/organizacao']);
     const page = read('src/app/(dashboard)/organizacao/page.tsx');
-    expect(page).toMatch(/Adicionar unidade/);
+    expect(page).toMatch(/Adicionar filial/);
     expect(page).not.toMatch(/businesses\.length > 1/);
   });
 
@@ -822,7 +822,7 @@ describe('A1.2 B2 — navegação: portas canônicas, tabs e redirects', () => {
   });
 
   it('Conversas: estado vazio honesto + CTA para Canais (conexão não mora mais aqui)', () => {
-    const conversas = read('src/app/(dashboard)/conversas/page.tsx');
+    const conversas = read('src/components/dashboard/ConversationsView.tsx');
     expect(conversas).toMatch(/Nenhuma conversa ainda/);
     expect(conversas).toMatch(/Conectar canal/);
     expect(conversas).toMatch(/\/canais\?tab=canais/);

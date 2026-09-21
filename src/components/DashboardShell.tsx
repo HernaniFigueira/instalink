@@ -9,7 +9,7 @@ import { PageSkeleton } from '@/components/ui';
 import { AccessDenied, ForbiddenToasts, PanelHomeProvider } from '@/components/dashboard/AccessNotice';
 import {
   activePanelPath, activePanelRoute, firstAllowedPath, panelAccess, panelNavigation,
-  routeRequiresBusiness, type PanelRouteDef,
+  routeRequiresBusiness, PANEL_ROUTES, type PanelRouteDef,
 } from '@/lib/panel';
 import { isSessionExpired } from '@/lib/http';
 import type { BusinessMode, FeatureId, PermissionId } from '@/lib/types';
@@ -60,6 +60,7 @@ export function DashboardShell({ children }: { children: React.ReactNode }) {
   const router = useRouter();
   const [user, setUser] = useState<{ name: string; email?: string; role?: string } | null>(null);
   const [businesses, setBusinesses] = useState<Biz[]>([]);
+  const [organizations,setOrganizations] = useState<Array<{id:string;name:string;canManage:boolean}>>([]);
   const [isMaster, setIsMaster] = useState(false);
   const [support, setSupport] = useState<SupportInfo | null>(null);
   const [ready, setReady] = useState(false);
@@ -93,7 +94,9 @@ export function DashboardShell({ children }: { children: React.ReactNode }) {
           router.replace('/master');
           return;
         }
-        if (!d.businesses?.length) { router.replace('/onboarding'); return; }
+        if (!d.businesses?.length && !d.organizations?.some((o: {canManage:boolean})=>o.canManage)) { router.replace('/onboarding'); return; }
+        setOrganizations(d.organizations || []);
+        if (!d.businesses?.length && pathname !== '/organizacao') router.replace(`/organizacao?organization=${d.organizations[0].id}`);
         setUser(d.user);
         setBusinesses(d.businesses);
         setReady(true);
@@ -175,13 +178,15 @@ export function DashboardShell({ children }: { children: React.ReactNode }) {
     );
   }
 
-  const business = businesses.find((b) => b.id === params.get('b')) || businesses[0];
+  const organization = organizations.find(o=>o.id === params.get('organization')) || organizations.find(o=>o.id === businesses.find(b=>b.id===params.get('b'))?.organizationId) || organizations[0];
+  const business: Biz = (activePath === '/organizacao' ? businesses.find(b=>b.organizationId===organization?.id) : businesses.find(b=>b.id===params.get('b')) || businesses[0]) || {id:'',slug:'',name:organization?.name || 'Organização',organizationId:organization?.id,modes:[],features:{},published:false};
   const modes = business?.modes || [];
   const features = business?.features || {};
   const permissions: Partial<Record<PermissionId, boolean>> = business?.permissions || {};
   // Navegação e guarda de rota vêm da fonte única (lib/panel.ts).
   const panelCtx = { permissions, modes, features: features as Partial<Record<FeatureId, boolean>> };
   const nav = panelNavigation(panelCtx);
+  if (!business.id) nav.allowed = organization?.canManage ? PANEL_ROUTES.filter(r=>r.href==='/organizacao') : [];
   const access = panelAccess(pathname, panelCtx);
   const q = business ? `?b=${business.id}` : '';
   // BUSCA DE NAVEGAÇÃO (ponto 2): a fonte é `nav.allowed` — o MESMO cálculo de
@@ -233,7 +238,7 @@ export function DashboardShell({ children }: { children: React.ReactNode }) {
     <div style={{'--area-color': routeAreaColor(activePath)} as React.CSSProperties} className="il-platform workspace-shell min-h-screen bg-[var(--bg)]">
       <a href="#workspace-content" className="workspace-skip">Ir para o conteúdo</a>
       <WorkspaceNavigation nav={nav} activePath={activePath} unit={business} units={businesses}
-        onUnit={switchBiz} collapsed={collapsed} onCollapse={toggle} user={user} onLogout={logout} />
+        overview={activePath === '/organizacao'} onUnit={switchBiz} collapsed={collapsed} onCollapse={toggle} user={user} onLogout={logout} />
 
       {nav.allowed.some(i => i.href === '/conversas') && activePath !== '/conversas' && activePath !== '/organizacao' && <ConversationsDock key={business.id} businessId={business.id}/>}
       <main id="workspace-content" tabIndex={-1} className="flex-1 min-w-0 bg-[var(--bg)]">
@@ -275,7 +280,7 @@ export function DashboardShell({ children }: { children: React.ReactNode }) {
               Peça ao administrador para vincular em Equipe → “Profissional vinculado”.
             </p>
           )}
-          {access.state === 'denied' ? (
+          {access.state === 'denied' && !(activePath === '/organizacao' && organization?.canManage) ? (
             // 403 AMIGÁVEL: o usuário continua logado e dentro do painel.
             // Nada aqui limpa token ou redireciona para /login.
             <AccessDenied
@@ -286,7 +291,7 @@ export function DashboardShell({ children }: { children: React.ReactNode }) {
             />
           ) : children}
         </div>
-        {!isAgenda && (
+        {!isAgenda && business.id && (
           <footer className="px-4 lg:px-8 py-4 border-t border-[var(--border)] mt-8">
             <p className="text-[11px] text-[var(--text-faint)] text-center">{business.name} · <a href={`/${business.slug}`} target="_blank" rel="noreferrer" className="underline font-semibold text-[var(--text-muted)]">página pública /{business.slug}</a></p>
           </footer>
