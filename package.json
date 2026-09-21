@@ -19,7 +19,9 @@
     "smoke:agendar": "node scripts/smoke-agendar.mjs",
     "e2e-merchant": "node scripts/e2e-merchant.mjs",
     "test:d1a:browser": "playwright test --config tests/d1a/playwright.config.ts",
-    "test:d1a:serve": "vite --config tests/d1a/vite.config.ts"
+    "test:d1a:serve": "vite --config tests/d1a/vite.config.ts",
+    "test:360:setup": "node tests/360/setup.mjs",
+    "test:360:browser": "playwright test --config tests/360/playwright.config.ts"
   },
   "dependencies": {
     "@vercel/blob": "^2.8.0",
@@ -40,6 +42,7 @@
     "@types/react-dom": "^18.3.0",
     "autoprefixer": "^10.4.19",
     "jsdom": "^26.1.0",
+    "pdfjs-dist": "^6.3.289",
     "postcss": "^8.4.38",
     "tailwindcss": "^3.4.10",
     "typescript": "^5.5.0",

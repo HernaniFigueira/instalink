@@ -122,20 +122,9 @@ describe('A3.4 · NAV — seções e ordem nova', () => {
   });
 });
 
-describe('A3.4 · NAV — cor do item ativo é a cor DA SEÇÃO', () => {
-  it('o shell usa o tema da seção no item ativo (rail, ícone e fundo)', () => {
-    const shell = read('src/components/DashboardShell.tsx');
-    expect(shell).toMatch(/sectionTheme\(/);
-    // Fundo soft + texto na família da seção.
-    expect(shell).toMatch(/backgroundColor: theme\.activeBg, color: theme\.activeFg/);
-    // Ícone permanece na cor da seção, ativo ou não.
-    expect(shell).toMatch(/color: theme\.accent/);
-    // Rail de 3px com extremidades arredondadas na cor da seção.
-    expect(shell).toMatch(/rounded-pill w-\[3px\]/);
-    // E o azul fixo de seleção NÃO é aplicado por cima de todas as seções.
-    expect(shell).not.toMatch(/bg-\[var\(--il-nav-active\)\]/);
-    expect(shell).not.toMatch(/active \? 'var\(--il-nav-active-fg\)'/);
-  });
+// Legacy theme helpers stay compatible; the D360 workspace selection is tested in DOM/browser.
+describe('A3.4 · NAV — compatibilidade dos temas legados', () => {
+
 
   it('cada seção tem fundo ativo próprio (não existe "azul para tudo")', () => {
     const bags = PANEL_SECTIONS.map((s) => SECTION_THEME[s.id].activeBg);

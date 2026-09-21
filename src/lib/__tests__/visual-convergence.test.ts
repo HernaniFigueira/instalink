@@ -179,20 +179,9 @@ describe('A3.3 — white label no painel autenticado', () => {
     expect(shell).not.toMatch(/InstaLink\.app/);
   });
 
-  it('o shell mostra a identidade da empresa (logo, nome e página pública)', () => {
-    const shell = read('src/components/DashboardShell.tsx');
-    expect(shell).toMatch(/business\.name/);
-    expect(shell).toMatch(/Ver página pública/);
-  });
 
-  it('o botão de recolher usa ícone de painel próprio, com tooltip nas duas direções', () => {
-    const shell = read('src/components/DashboardShell.tsx');
-    // Ícone nosso (retângulo com divisor vertical) — não é asset copiado.
-    expect(shell).toMatch(/panel:\s*\(/);
-    // Recolher e expandir precisam ser compreensíveis sem texto: aria-label.
-    expect(shell).toMatch(/Recolher menu/);
-    expect(shell).toMatch(/Expandir menu/);
-  });
+
+
 
   it('nenhuma rota do painel escreve o nome do produto na tela', () => {
     const offenders = ROUTE_FILES.filter((f) => /InstaLink/.test(stripComments(read(f))));
@@ -275,7 +264,6 @@ describe('A3.3 — avatar único para pessoas', () => {
     'src/app/(dashboard)/clientes/page.tsx',
     'src/components/dashboard/catalog-panels.tsx', // TeamEditor = lista de profissionais
     'src/components/dashboard/ClientProfileDrawer.tsx',
-    'src/components/DashboardShell.tsx', // usuário logado no rodapé
   ];
 
   it('nenhuma tela de pessoas desenha avatar na mão — todas usam <Avatar>', () => {
@@ -286,11 +274,10 @@ describe('A3.3 — avatar único para pessoas', () => {
     expect(offenders).toEqual([]);
   });
 
-  it('logo da empresa e thumbnails de catálogo seguem o mesmo raio e token', () => {
+  it('thumbnails do catálogo preservam tokens; logo proporcional é verificado no browser', () => {
     // Ponto 9/10: são OUTROS conceitos (não são Avatar de pessoa), mas não podem
     // viver com classe ad-hoc — mesmo `rounded-md` e cores de token.
     const THUMBNAILS = [
-      ['src/app/(dashboard)/dashboard/page.tsx', /rounded-md overflow-hidden bg-\[var\(--brand-soft\)\]/],
       ['src/app/(dashboard)/servicos/page.tsx', /rounded-md bg-\[var\(--surface-2\)\] border border-\[var\(--border\)\]/],
       ['src/app/(dashboard)/produtos/page.tsx', /rounded-md bg-\[var\(--surface-2\)\][^"]*border border-\[var\(--border\)\]/],
     ] as const;
@@ -407,19 +394,7 @@ describe('A3.3/A3.4 — cor por contexto de seção', () => {
     expect(sectionAccent('nao-existe' as never)).toBe('var(--text-muted)');
   });
 
-  it('A3.4 — o item ativo usa a cor DA SEÇÃO (ícone, rail e fundo soft)', () => {
-    const shell = read('src/components/DashboardShell.tsx');
-    expect(shell).toMatch(/sectionTheme\(/);
-    // Fundo e texto ativos vêm do tema da seção…
-    expect(shell).toMatch(/backgroundColor: theme\.activeBg, color: theme\.activeFg/);
-    // …e o ícone continua na cor da seção mesmo ativo.
-    expect(shell).toMatch(/style=\{\{ color: theme\.accent \}\}/);
-    // O rail do item ativo também é da seção.
-    expect(shell).toMatch(/backgroundColor: theme\.accent/);
-    // E o azul fixo de seleção NÃO volta para pintar o item inteiro.
-    expect(shell).not.toMatch(/bg-\[var\(--il-nav-active\)\]/);
-    expect(shell).not.toMatch(/active \? 'var\(--il-nav-active-fg\)'/);
-  });
+
 
   it('as famílias de cor de contexto existem como token', () => {
     const css = read('src/app/globals.css');
@@ -429,17 +404,7 @@ describe('A3.3/A3.4 — cor por contexto de seção', () => {
   });
 });
 
-describe('A3.3 — item ativo tem rail lateral', () => {
-  it('o marcador do item ativo é um rail fino de pontas arredondadas', () => {
-    const shell = read('src/components/DashboardShell.tsx');
-    // 2–3px, `rounded-pill` (pontas arredondadas), posicionado à esquerda e na
-    // cor da SEÇÃO (A3.4 — pequena aba, não um traço azul genérico).
-    expect(shell).toMatch(/rounded-pill w-\[3px\]/);
-    expect(shell).toMatch(/w-\[3px\]/);
-    // E NÃO é um contorno grosso em volta do card inteiro.
-    expect(shell).not.toMatch(/ring-2[^']*ring-\[var\(--il-nav-active/);
-  });
-});
+// D360 identity/current-page/collapse semantics: WorkspaceNavigation.test.tsx + Chromium.
 
 describe('A3.3 — Resultados é gráfico, e honesto', () => {
   it('a matemática dos gráficos é pura e vive em lib (testável)', () => {
