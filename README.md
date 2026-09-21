@@ -1,4 +1,4 @@
-# InstaLink.app — Página, agenda e clientes em um link
+# GoDoutor — Página, agenda e clientes em um link
 
 Plataforma de **página, agendamento e relacionamento** para negócios que
 trabalham com atendimento marcado: salões, barbearias, clínicas (odonto,
@@ -20,7 +20,7 @@ npm run dev      # http://localhost:3000
 
 ## Master da plataforma (`/master`)
 
-A conta Master pertence ao InstaLink (não a uma Organization). Usa o login
+A conta Master pertence ao GoDoutor (não a uma Organization). Usa o login
 normal (e-mail + senha com hash scrypt) — **sem senha universal**.
 
 ```bash
