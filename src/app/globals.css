@@ -485,31 +485,34 @@ input[type='color'] { @apply cursor-pointer; }
    authentication, landing or a clinic's --il-* theme. D1b will reorganize
    navigation; this layer only changes the existing workspace's appearance. */
 .il-platform {
+  --agenda-unavailable:#E9EDF2;
   color-scheme: light;
-  --bg: #f7f7f4;
-  --bg-tint: #f0f1ee;
-  --surface: #fffefa;
+  --bg: #F4F6F8;
+  --bg-tint: #F4F6F8;
+  --surface: #FFFFFF;
   --surface-2: #ffffff;
-  --surface-3: #f0f1ee;
-  --surface-hover: #ecefed;
-  --border: #dde0dd;
+  --surface-3: #F4F6F8;
+  --surface-hover: #E3F6FB;
+  --border: #DDE3EA;
   --border-soft: #e8eae6;
   --border-strong: #7c858f;
   --border-2: #c4c9c8;
-  --text: #252a31;
-  --text-strong: #191e25;
-  --text-muted: #5c626b;
+  --text: #1F2937;
+  --text-strong: #1F2937;
+  --text-muted: #526174;
   /* Slightly darker than the D0 candidate: AA also on the inset/hover surface. */
-  --text-faint: #626a73;
+  --text-faint: #526174;
   --text-soft: var(--text-faint);
-  --brand: #2459a6;
-  --brand-strong: #1c4786;
-  --brand-soft: #edf3fb;
+  --brand: #007FA3;
+  --brand-strong: #006B89;
+  --brand-soft: #E3F6FB;
   --brand-softer: #f4f7fc;
   --brand-border: #a8bdd9;
-  --brand-fg: #204d8b;
+  --brand-fg: #006B89;
   --brand-ring: rgba(36, 89, 166, 0.24);
   --brand-bg-hover: #dfe9f7;
+  --decoration-cyan: #22C3E6;
+  --area-color: var(--brand);
   --action: var(--brand);
   --action-strong: var(--brand-strong);
   --action-contrast: #ffffff;
@@ -525,11 +528,11 @@ input[type='color'] { @apply cursor-pointer; }
   --success-bg-hover: #dceee3;
   --success-border: #b8d9c5;
   --success-fg: #146344;
-  --info: #2459a6;
-  --info-strong: #1c4786;
-  --info-bg: #edf3fb;
+  --info: #007FA3;
+  --info-strong: #006B89;
+  --info-bg: #E3F6FB;
   --info-border: #a8bdd9;
-  --info-fg: #204d8b;
+  --info-fg: #006B89;
   --warning: #835000;
   --warning-strong: #663e00;
   --warning-bg: #fff4dd;
@@ -551,10 +554,10 @@ input[type='color'] { @apply cursor-pointer; }
      them globally just to neutralize the navigation's decorative accents. */
   --overlay: rgba(25, 30, 37, 0.36);
   --radius-xs: 4px;
-  --radius-sm: 6px;
+  --radius-sm: 8px;
   --radius-md: 8px;
   --radius-lg: 12px;
-  --radius-xl: 16px;
+  --radius-xl: 12px;
   --shadow-xs: 0 0 #0000;
   --shadow-sm: 0 0 #0000;
   --shadow-brand: 0 0 #0000;
@@ -620,11 +623,11 @@ input[type='color'] { @apply cursor-pointer; }
 
 .il-platform .il-control { min-height: 44px; }
 .il-platform .il-control--xs,
-.il-platform .il-control--sm { min-height: 36px; }
-.il-platform .il-icon-button { min-width: 36px; }
+.il-platform .il-control--sm { min-height: 40px; }
+.il-platform .il-icon-button { min-width: 40px; }
 .il-platform .il-field-control { min-height: 44px; }
 .il-platform textarea.il-field-control { min-height: 72px; }
-.il-platform .il-tab { min-height: 36px; }
+.il-platform .il-tab { min-height: 40px; }
 
 @media (pointer: coarse), (max-width: 767px) {
   .il-platform .il-control,
@@ -825,3 +828,15 @@ dialog.il-customer-dialog::backdrop { background:transparent; }
 .public-booking-flow :is(input,select,textarea):focus-visible { outline:2px solid #2459a6; outline-offset:2px; }
 .public-booking-flow :is(button,input:not([type=checkbox]),select) { min-height:44px; }
 @media(max-width:767px) { .public-booking-flow input,.public-booking-flow textarea { font-size:16px; } }
+
+/* Direction correction: workspace only, never the public theme or access/landing. */
+.il-platform .il-tabbar { background:transparent; border-radius:0; gap:8px; padding:0; }
+.il-platform .il-tab { min-height:40px; padding:8px 12px; font-size:14px; border-radius:8px 8px 0 0; border:0; border-bottom:3px solid transparent; background:transparent; color:var(--text-muted); }
+.il-platform .il-tab[aria-selected="true"] { color:var(--text); background:var(--brand-soft); border-bottom-color:var(--area-color,var(--brand)); box-shadow:none; }
+.il-platform [class*="backdrop-blur"] { backdrop-filter:none; }
+.il-platform * { text-shadow:none; }
+.il-platform .agenda-page-gutter { padding:8px; }
+.il-platform [data-agenda-main] > div { border-radius:8px; box-shadow:none; }
+.il-platform [data-queue-rail] { width:280px; flex-shrink:0; align-self:flex-start; max-height:var(--queue-rail-maxh); overflow-y:auto; background:var(--surface); border:1px solid var(--border); border-radius:8px; }
+@media(min-width:1200px) { .il-platform .agenda-page-gutter { padding:16px; } }
+@media(max-width:767px) { .il-platform .il-tab { min-height:44px; } }

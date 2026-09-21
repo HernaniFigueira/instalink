@@ -12,7 +12,7 @@
 //   1. o QueuePanel NÃO volta para o fluxo vertical acima da toolbar/grade;
 //   2. o desktop tem workspace [Agenda flex-1 · rail da fila];
 //   3. a rail é condicional (`showQueue`) e fechar devolve 100% da largura;
-//   4. tela estreita usa overlay — a agenda nunca é espremida por 380px;
+//   4. tela estreita usa overlay — a agenda nunca é espremida por 280px;
 //   5. existe UM só QueuePanel (sem duas versões da fila) e a rail é a
 //      superfície (nada de SubCard externo);
 //   6. abrir/fechar a fila não deixa altura stale na agenda (o medidor roda de
@@ -28,6 +28,8 @@ const stripComments = (src: string) =>
   src.replace(/\/\*[\s\S]*?\*\//g, '').split('\n').filter((l) => !/^\s*\/\//.test(l)).join('\n');
 
 const AGENDA = stripComments(read('src/app/(dashboard)/agenda/page.tsx'));
+const DOCK=stripComments(read('src/components/dashboard/QueueDock.tsx'));
+const CSS=read('src/app/globals.css');
 const QUEUE = stripComments(read('src/components/dashboard/QueuePanel.tsx'));
 
 describe('A3.4 final UX · workspace [Agenda | Fila]', () => {
@@ -40,7 +42,7 @@ describe('A3.4 final UX · workspace [Agenda | Fila]', () => {
   it('a toolbar e a grade ficam DENTRO da coluna da agenda (a fila é irmã, não irmã-de-cima)', () => {
     const mainAt = AGENDA.indexOf('data-agenda-main="true"');
     const toolbarAt = AGENDA.indexOf('relative z-40 ws-panel');
-    const railAt = AGENDA.indexOf('data-queue-rail="true"');
+    const railAt = AGENDA.indexOf('<QueueDock');
     const closeMainAt = AGENDA.indexOf('</main>');
     expect(mainAt).toBeGreaterThan(-1);
     expect(toolbarAt).toBeGreaterThan(mainAt);
@@ -49,7 +51,7 @@ describe('A3.4 final UX · workspace [Agenda | Fila]', () => {
   });
 
   it('o QueuePanel vive DENTRO da rail — nunca acima da toolbar/grade', () => {
-    const railAt = AGENDA.indexOf('data-queue-rail="true"');
+    const railAt = AGENDA.indexOf('<QueueDock');
     const panelAt = AGENDA.indexOf('<QueuePanel');
     const toolbarAt = AGENDA.indexOf('relative z-40 ws-panel');
     expect(panelAt).toBeGreaterThan(railAt);
@@ -60,29 +62,19 @@ describe('A3.4 final UX · workspace [Agenda | Fila]', () => {
   });
 
   it('a rail é condicional por showQueue e fechar devolve 100% da largura', () => {
-    const railAt = AGENDA.indexOf('data-queue-rail="true"');
+    const railAt = AGENDA.indexOf('<QueueDock');
     const antes = AGENDA.slice(railAt - 300, railAt);
     expect(antes).toMatch(/\{showQueue && \(/);
     expect(AGENDA).toMatch(/onClose=\{\(\) => setShowQueue\(false\)\}/);
   });
 
   it('tela estreita usa overlay; o rail só existe no desktop largo (sem espremer a agenda)', () => {
-    const aside = AGENDA.slice(AGENDA.indexOf('<aside'), AGENDA.indexOf('</aside>'));
-    // Overlay padrão: ocupa a direita, some do fluxo (position fixed).
-    expect(aside).toMatch(/fixed inset-y-0 right-0/);
-    expect(aside).toMatch(/w-\[min\(92vw,380px\)\]/);
-    // Desktop largo: entra no fluxo como coluna do workspace.
-    expect(aside).toMatch(/xl:static/);
-    expect(aside).toMatch(/xl:inset-auto/);
-    expect(aside).toMatch(/xl:w-\[368px\]/);
-    expect(aside).toMatch(/xl:shrink-0/);
-    expect(aside).toMatch(/xl:self-start/);
-    // A lista rola DENTRO da rail, com a altura útil medida do workspace.
-    expect(aside).toMatch(/xl:max-h-\[var\(--queue-rail-maxh\)\]/);
-    expect(aside).toMatch(/overflow-y-auto/);
-    // Fundo só no modo overlay (o desktop não escurece a agenda) e pelo
-    // TOKEN de véu do design system (A3.3), não por opacidade avulsa.
-    expect(AGENDA).toMatch(/xl:hidden fixed inset-0 z-40 bg-\[var\(--overlay\)\]/);
+    expect(DOCK).toContain("matchMedia('(min-width:1280px)')");
+    expect(DOCK).toContain('<Drawer open title="Fila de atendimento"');
+    expect(DOCK).toContain('<aside data-queue-rail');
+    expect(CSS).toMatch(/\[data-queue-rail\][^}]*width:280px/);
+    expect(CSS).toMatch(/\[data-queue-rail\][^}]*overflow-y:auto/);
+
   });
 
   it('existe UM só QueuePanel — sem duas versões da fila', () => {
@@ -98,7 +90,7 @@ describe('A3.4 final UX · workspace [Agenda | Fila]', () => {
     expect(QUEUE).toMatch(/icon="x" label="Fechar a fila"/);
     expect(QUEUE).toMatch(/\{adding && \(/);
     // O botão continua existindo para abrir/fechar a fila pela agenda.
-    expect(AGENDA).toContain('Fila de hoje');
+    expect(AGENDA).toContain('Fila de atendimento');
   });
 
   it('abrir/fechar a fila não deixa altura stale na agenda', () => {
@@ -111,13 +103,11 @@ describe('A3.4 final UX · workspace [Agenda | Fila]', () => {
   });
 
   it('nada de largura na mão nem setTimeout para consertar a rail', () => {
-    const rail = AGENDA.slice(AGENDA.indexOf('data-queue-rail'), AGENDA.indexOf('</aside>'));
-    // A rail não calcula largura em JS: overlay por `w-[min(92vw,380px)]`,
-    // desktop por `xl:w-[368px]`. O único valor medido é a ALTURA útil.
-    expect(rail).not.toMatch(/setTimeout/);
-    expect(rail).not.toMatch(/width:/);
-    expect(rail).toMatch(/--queue-rail-maxh/);
+    expect(DOCK).not.toMatch(/setTimeout/);
+    expect(DOCK).not.toMatch(/style=\{\{width:/);
+    expect(DOCK).toContain('--queue-rail-maxh');
     expect(AGENDA).toMatch(/data-agenda-workspace="true"[^>]*min-w-0/);
+
   });
 
   it('o comportamento da fila não mudou (layout não toca domínio)', () => {

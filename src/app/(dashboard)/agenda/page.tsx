@@ -1,4 +1,6 @@
 'use client';
+import { computeSlots } from '@/lib/slots';
+import { QueueDock } from '@/components/dashboard/QueueDock';
 // ═══════════════════════════════════════════════════════════════
 // AGENDA — clique abre detalhe, arraste move o atendimento
 // ═══════════════════════════════════════════════════════════════
@@ -25,7 +27,7 @@ import { memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useStat
 import { useSearchParams } from 'next/navigation';
 import { todayISO, addDaysISO, weekdayOf, formatDateBR, nowHM } from '@/lib/tz';
 import { WEEKDAYS, WEEKDAYS_LONG, timeToMin, minToTime, cn } from '@/lib/utils';
-import type { Availability, Booking, BookingConfig, BookingStatus, Professional, Service } from '@/lib/types';
+import type { Availability, AvailabilityException, Booking, BookingConfig, BookingStatus, Professional, Service } from '@/lib/types';
 import { Avatar, Badge, Drawer, ListSkeleton, Button, IconButton, AttentionStrip, Tabs } from '@/components/ui';
 import { Icon } from '@/components/icons';
 import {
@@ -38,7 +40,7 @@ import { QueuePanel, type QueueRow } from '@/components/dashboard/QueuePanel';
 import { EncounterSheet } from '@/components/dashboard/EncounterSheet';
 import { usePanelPermissions } from '@/components/dashboard/usePanelPermissions';
 import { canReopenEncounter } from '@/lib/encounters';
-import { AccessDenied, PermissionNotice, useAreaLoad, useForbiddenNotice } from '@/components/dashboard/AccessNotice';
+import { AccessDenied, AreaLoadError, PermissionNotice, useAreaLoad, useForbiddenNotice } from '@/components/dashboard/AccessNotice';
 import { useRevalidateOnFocus } from '@/components/dashboard/use-revalidate';
 import { bookingDuration, effectiveHorizonDays, needsClosure, rescheduleDecision } from '@/lib/booking-ops';
 import { queueSummary, waitLabel } from '@/lib/queue';
@@ -57,10 +59,10 @@ type View = 'day' | 'week' | 'month' | 'list';
 // grade usam a apresentação SUAVE definida lá (BOOKING_BLOCK) — a semântica
 // permanece, sem o peso da cor sólida na Semana. Nada de mapa local de cor.
 
-const PX_PER_HOUR = 52;
+const PX_PER_HOUR = 128;
 const GUTTER_W = 56;
-const COL_MIN = 148;
-const HEADER_H = 36;
+const COL_MIN = 200;
+const HEADER_H = 48;
 // Passo do clique-em-área-vazia (o horário só é aceito se a grade real o
 // confirmar — caso contrário o sheet abre sem horário escolhido).
 const CLICK_SNAP_MIN = 5;
@@ -138,6 +140,7 @@ interface ColumnVM {
   isProfessional: boolean;
   isToday: boolean;
   blocks: BlockVM[];
+  freeRanges: Array<{start:number;end:number}>;
 }
 
 interface HighlightVM {
@@ -185,7 +188,7 @@ const GridColumn = memo(function GridColumn({ column, basisPct, variant, highlig
     // border-box: larguras inteiras determinísticas — nenhuma divergência
     // de subpixel contra o minWidth calculado em JS, nenhum resíduo que
     // fabrique overflow nas bordas.
-    <div className="relative shrink-0 border-r border-b border-zinc-100 last:border-r-0"
+    <div className="relative shrink-0 border-r border-b border-zinc-100 last:border-r-0 bg-[var(--agenda-unavailable)]"
       style={{ minWidth: COL_MIN, width: `${basisPct}%`, height: gridHeight }}
       onClick={(e) => {
         // Clique em área VAZIA = criar naquele horário. Cliques em atendimento
@@ -198,12 +201,10 @@ const GridColumn = memo(function GridColumn({ column, basisPct, variant, highlig
         const minutes = minuteFromOffsetY(e.clientY - rect.top, { startMinute, endMinute, pxPerHour: PX_PER_HOUR }, CLICK_SNAP_MIN);
         onEmptyPress(column.key, minToTime(minutes));
       }}>
+      {column.freeRanges.map((r,i)=><span key={i} aria-hidden="true" className="absolute inset-x-0 bg-white pointer-events-none" style={{top:(r.start-startMinute)/60*PX_PER_HOUR,height:(r.end-r.start)/60*PX_PER_HOUR}}/>)}
       {Array.from({ length: Math.max(0, hours - 1) }, (_, idx) => idx + 1).map((i) => (
         <span key={i} className="absolute left-0 right-0 border-t border-zinc-100" style={{ top: i * PX_PER_HOUR }} />
       ))}
-      {column.isToday && (
-        <span className="absolute inset-0 bg-emerald-50/25 pointer-events-none" aria-hidden="true" />
-      )}
 
       {/* Célula destino destacada durante o arraste */}
       {highlight && (
@@ -267,11 +268,11 @@ const GridColumn = memo(function GridColumn({ column, basisPct, variant, highlig
               do bloco continua sendo o do STATUS. Nada de amarelo sobre verde. */}
           {b.fitIn && <span aria-hidden="true" className={FIT_IN_STRIPE_CLS} />}
           {/* quem + quando + o quê + em que estado — detalhe fica no drawer. */}
-          <span className="block text-[11px] font-bold leading-tight truncate">{b.name}</span>
-          {b.height > 34 && <span className="block text-[10px] font-medium leading-tight truncate opacity-90">{b.service}</span>}
-          {b.height > 54 && (
-            <span className="mt-0.5 flex items-center gap-1 text-[9px] font-bold uppercase tracking-wide leading-tight">
-              <span className="tabular-nums opacity-90 whitespace-nowrap">{b.timeRange}</span>
+          <span className="block text-sm font-semibold leading-tight truncate">{b.name}</span>
+          {b.height > 54 && <span className="block text-xs font-medium leading-tight truncate">{b.service}</span>}
+          {b.height > 34 && (
+            <span className="mt-0.5 flex items-center gap-1 text-xs font-semibold leading-tight">
+              <span className="tabular-nums whitespace-nowrap">{b.timeRange}</span>
               <span aria-hidden="true" className="opacity-60">·</span>
               <span className="truncate">{b.statusLabel}</span>
               {/* A3.4 · Bloco 4: o encaixe é visível no cartão — quem olha a
@@ -337,6 +338,7 @@ export default function AgendaPage() {
   const [services, setServices] = useState<Service[]>([]);
   const [pros, setPros] = useState<Professional[]>([]);
   const [rules, setRules] = useState<Availability[]>([]);
+  const [exceptions,setExceptions] = useState<AvailabilityException[]>([]);
   const [loaded, setLoaded] = useState(false);
   const [detail, setDetail] = useState<Booking | null>(null);
   const [creating, setCreating] = useState<{
@@ -387,7 +389,7 @@ export default function AgendaPage() {
   const [colWidth, setColWidth] = useState(COL_MIN);
 
   const { notice, dismiss } = useForbiddenNotice('Agenda');
-  const { denied, report } = useAreaLoad('Agenda');
+  const { denied, failed, report } = useAreaLoad('Agenda');
 
   // A2-B5 (F9): '' enquanto carrega = default do produto (America/Sao_Paulo).
   const [bizTz, setBizTz] = useState('');
@@ -431,7 +433,7 @@ export default function AgendaPage() {
     ]);
     // Sem permissão (403): mostra o aviso amigável e PARA de carregar — a tela
     // não pode ficar em skeleton para sempre. A sessão continua intacta.
-    if (!report(cat)) { setLoaded(true); return; }
+    if (!report(cat) || !report(bk)) { setLoaded(true); return; }
     const d = cat.data || {};
     setServices(d.services || []);
     setPros(d.professionals || []);
@@ -441,6 +443,7 @@ export default function AgendaPage() {
     // linha do agora, destaque de hoje) — mesma referência do servidor.
     setBizTz(d.business?.businessTimezone || '');
     setRules(d.availability || []);
+    setExceptions(d.exceptions || []);
     setBookings(bk.ok ? (bk.data?.bookings || []) : []);
     setLoaded(true);
     void loadQueue();
@@ -622,9 +625,19 @@ export default function AgendaPage() {
           label: `${b.customerName} · ${serviceName(b.serviceId)} · ${formatDateBR(b.date)} ${b.time}${pro ? ` · ${pro}` : ''} · ${statusLabel}${b.bookingKind === 'fit_in' ? ' · encaixe' : ''}${b.checkedInAt ? ' · cliente já chegou' : ''}${attention ? ' — precisa de fechamento' : ''} — clique para ver o detalhe ou arraste para reagendar`,
         };
       });
-      return { ...c, isToday: c.date === today, blocks };
+      // Display only: use the SAME pure slot engine; every write still revalidates on the server.
+      const ranges: Array<{start:number;end:number}> = [];
+      if(bookingCfg && c.date>=today && c.date<=addDaysISO(today,effectiveHorizonDays(bookingCfg)) && bookings.length<500) {
+        for(const service of services.filter(s=>s.active!==false && s.bookable!==false)) {
+          const result=computeSlots({rules,exceptions,bookings,services,professionals:activePros.filter(p=>!specFilter||(p.role||'').trim()===specFilter),dateISO:c.date,weekday:weekdayOf(c.date),serviceId:service.id,durationMin:service.durationMin,professionalId:c.professionalId||proFilter,eligibleProIds:service.professionalIds||[],nowHM:c.date===today?nowHM(new Date(),bizTz):'',leadMin:bookingCfg.leadMin,bufferMin:bookingCfg.bufferMin});
+          for(const time of result.slots) ranges.push({start:timeToMin(time),end:timeToMin(time)+service.durationMin});
+        }
+      }
+      const freeRanges: typeof ranges=[];
+      for(const r of ranges.sort((a,b)=>a.start-b.start)) {const last=freeRanges[freeRanges.length-1];if(last&&r.start<=last.end)last.end=Math.max(last.end,r.end);else freeRanges.push({...r});}
+      return { ...c, isToday: c.date === today, blocks, freeRanges };
     });
-  }, [view, weekDays, activePros, focus, bookings, grid.start, durationOf, proName, serviceName, dragId, today, statusFilter, proFilter, specFilter, proRoleOf, bizTz]);
+  }, [view, weekDays, activePros, focus, bookings, grid.start, durationOf, proName, serviceName, dragId, today, statusFilter, proFilter, specFilter, proRoleOf, bizTz, rules, exceptions, services, bookingCfg]);
 
   // Colunas usadas pelo cálculo de destino (mesma ordem da renderização).
   useEffect(() => {
@@ -1116,7 +1129,7 @@ export default function AgendaPage() {
             </span>
           </div>
         </div>
-        <Button onClick={() => setCreating({ date: focus, time: '', professionalId: '' })} variant="primary"><Icon n="calendarPlus" size={15} /> Novo agendamento</Button>
+
       </div>
 
       <PermissionNotice message={notice?.title} hint={notice?.hint} onDismiss={dismiss} />
@@ -1174,11 +1187,11 @@ export default function AgendaPage() {
             type="button"
             onClick={() => setShowQueue((v) => !v)}
             aria-expanded={showQueue}
-            className="w-full flex items-center gap-2 px-3 py-2 rounded-md border border-[var(--border)] bg-[var(--surface)] hover:bg-[var(--surface-hover)] text-left"
+            className="flex items-center gap-2 px-3 py-2 rounded-md border border-[var(--border)] bg-[var(--surface)] hover:bg-[var(--surface-hover)] text-left"
           >
             <Icon n={showQueue ? 'chevD' : 'chevR'} size={14} className="text-[var(--text-faint)]" />
             <Icon n="clock" size={14} className="text-[var(--text-muted)]" />
-            <span className="text-sm font-semibold text-[var(--text)]">Fila de hoje</span>
+            <span className="text-sm font-semibold text-[var(--text)]">Fila de atendimento</span>
             {(queueInfo.waiting + queueInfo.called + queueInfo.inService) === 0 ? (
               <span className="text-xs text-[var(--text-muted)]">ninguém esperando</span>
             ) : (
@@ -1193,6 +1206,7 @@ export default function AgendaPage() {
         </div>
       )}
 
+      <p className="text-sm text-[var(--text-muted)] mb-2">Branco: horário livre para algum serviço · Cinza: {bookings.length>=500?'disponibilidade não calculada':'indisponível'} · Cartão: agendamento com estado. A reserva é confirmada pelo servidor.{bookings.length>=500?' Limite de leitura atingido: consulte disponibilidade no formulário.':''}</p>
       {/* A3.4 final UX — WORKSPACE da agenda: [Agenda (flex-1) | Fila (rail)].
           A fila NÃO entra mais no fluxo vertical (não empurra a grade para
           baixo): ela é coluna ao lado no desktop largo e overlay no resto. */}
@@ -1202,7 +1216,7 @@ export default function AgendaPage() {
           relative z-40: o popover de filtros abre sobre a grade e precisa
           ficar acima dos cabeçalhos sticky (z-20/30) das colunas. */}
       <div className="relative z-40 ws-panel mb-2.5">
-        <div className="flex flex-wrap items-center gap-x-3 gap-y-2.5 px-3 py-2.5">
+        <div className="flex flex-wrap items-center gap-x-3 gap-y-2.5 px-3 py-2.5"><Button onClick={() => setCreating({ date: focus, time: '', professionalId: '' })} variant="primary"><Icon n="calendarPlus" size={15} /> Novo agendamento</Button>
           {/* Navegação no tempo (A3.4): [◀] [Hoje] [▶] + título da data ao lado.
               O "Hoje" fica SEMPRE no mesmo lugar, entre as setas — antes ele
               aparecia e desaparecia conforme a data, então o botão se movia
@@ -1402,7 +1416,7 @@ export default function AgendaPage() {
         )}
       </div>
 
-      {denied ? <AccessDenied area="Agenda" /> : !loaded ? <ListSkeleton rows={4} /> : view === 'list' ? (
+      {denied ? <AccessDenied area="Agenda" /> : failed ? <AreaLoadError area="Agenda" message={failed} onRetry={load}/> : !loaded ? <ListSkeleton rows={4} /> : view === 'list' ? (
         <section className="space-y-3" aria-label="Lista de atendimentos do dia">
           <p className="text-sm text-[var(--text-muted)]">{formatDateBR(focus)} · Toque para abrir o atendimento. Horários livres e intervalos estão na visualização Dia.</p>
           {columns.flatMap(c => c.blocks).length === 0 && <div className="p-8 bg-[var(--surface)] border border-[var(--border)] rounded-lg"><h2 className="font-semibold">Nenhum atendimento nesta seleção</h2><p className="text-sm text-[var(--text-muted)] mt-1">Confira os filtros ou use Novo agendamento para consultar horários disponíveis.</p></div>}
@@ -1459,7 +1473,7 @@ export default function AgendaPage() {
                 <div className="relative" style={{ height: gridHeight }}>
                   {Array.from({ length: grid.hours + 1 }, (_, i) => (
                     <span key={i}
-                      className={`absolute right-2 text-[10px] font-medium text-zinc-400 ${i === grid.hours ? '-translate-y-full' : '-translate-y-1/2'}`}
+                      className={`absolute right-2 text-sm font-medium text-[var(--text-muted)] ${i === grid.hours ? '-translate-y-full' : '-translate-y-1/2'}`}
                       style={{ top: i * PX_PER_HOUR }}>{minToTime(grid.start + i * 60)}</span>
                   ))}
                 </div>
@@ -1478,7 +1492,7 @@ export default function AgendaPage() {
                         )
                       )}
                       <span className="min-w-0">
-                        <span className={`block text-xs font-semibold truncate ${c.isToday ? 'text-emerald-700' : 'text-zinc-800'}`}>{c.label}</span>
+                        <span className={`block text-sm font-semibold truncate ${c.isToday ? 'text-emerald-700' : 'text-zinc-800'}`}>{c.label}</span>
                         {c.sub && <span className="block text-[10px] text-zinc-400 truncate">{c.sub}</span>}
                       </span>
                     </div>
@@ -1526,18 +1540,7 @@ export default function AgendaPage() {
             • abaixo de xl: overlay deslizante (a agenda nunca é espremida por
               380px num tablet) — fecha pelo X, pelo botão ou pelo fundo. */}
         {showQueue && (
-          <>
-            <div
-              className="xl:hidden fixed inset-0 z-40 bg-[var(--overlay)]"
-              aria-hidden="true"
-              onClick={() => setShowQueue(false)}
-            />
-            <aside
-              data-queue-rail="true"
-              aria-label="Fila de hoje"
-              style={{ '--queue-rail-maxh': railMaxH ? `${railMaxH}px` : undefined } as CSSProperties}
-              className="z-50 overflow-y-auto ws-scroll bg-[var(--surface)] border-[var(--border)] fixed inset-y-0 right-0 w-[min(92vw,380px)] border-l shadow-2xl xl:static xl:inset-auto xl:z-auto xl:w-[368px] 2xl:w-[392px] xl:shrink-0 xl:self-start xl:max-h-[var(--queue-rail-maxh)] xl:rounded-xl xl:border xl:shadow-sm"
-            >
+          <QueueDock onClose={() => setShowQueue(false)} maxHeight={railMaxH}>
               <QueuePanel
                 businessId={businessId}
                 date={today}
@@ -1567,8 +1570,7 @@ export default function AgendaPage() {
                   contactId: row.contactId, name: row.customerName, phone: row.customerPhone, serviceId: row.serviceId,
                 })}
               />
-            </aside>
-          </>
+          </QueueDock>
         )}
       </div>
 

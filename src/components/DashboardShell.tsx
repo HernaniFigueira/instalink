@@ -17,7 +17,7 @@ import { requiresActiveBusiness } from '@/lib/business-context';
 import { mayLeaveEditor } from '@/components/dashboard/useUnsavedChanges';
 import { WorkspaceContext } from '@/components/dashboard/WorkspaceContext';
 import { WorkspaceNavigation } from '@/components/dashboard/WorkspaceNavigation';
-import { switchUnitHref } from '@/lib/workspace-navigation';
+import { routeAreaColor, switchUnitHref } from '@/lib/workspace-navigation';
 
 interface Biz {
   id: string;
@@ -229,7 +229,7 @@ export function DashboardShell({ children }: { children: React.ReactNode }) {
     // sem que cada tela precise calcular (ou chutar) o seu.
     <PanelHomeProvider home={homeHref}>
     <WorkspaceContext.Provider value={{ role: business.role, agendaScope: business.agendaScope }}>
-    <div className="il-platform workspace-shell min-h-screen bg-[var(--bg)]">
+    <div style={{'--area-color': routeAreaColor(activePath)} as React.CSSProperties} className="il-platform workspace-shell min-h-screen bg-[var(--bg)]">
       <a href="#workspace-content" className="workspace-skip">Ir para o conteúdo</a>
       <WorkspaceNavigation nav={nav} activePath={activePath} unit={business} units={businesses}
         onUnit={switchBiz} collapsed={collapsed} onCollapse={toggle} user={user} onLogout={logout} />
@@ -247,7 +247,7 @@ export function DashboardShell({ children }: { children: React.ReactNode }) {
             }} className="ml-auto underline underline-offset-2">Sair do modo suporte</button>
           </div>
         )}
-        <div key={business.id} className={cn(isAgenda ? 'px-2 sm:px-3 lg:px-4 py-3' : 'px-4 lg:px-8 py-6', !isFullWidth && 'max-w-[960px]')}>
+        <div key={business.id} className={cn(isAgenda ? 'agenda-page-gutter' : 'px-4 lg:px-8 py-6', !isFullWidth && 'max-w-[960px]')}>
           {isMaster && !support && (
             <p className="mb-4 text-xs font-semibold text-[var(--warning-fg)] bg-[var(--warning-bg)] border border-[var(--warning-border)] rounded-md px-3 py-2 inline-flex items-center gap-2 shadow-xs">
               <I n="shield" size={14} /> Você é master — <Link href="/master" className="underline font-semibold">/master</Link>
