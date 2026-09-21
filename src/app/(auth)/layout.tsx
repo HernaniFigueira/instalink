@@ -2,7 +2,7 @@ import Link from 'next/link';
 export default function AuthLayout({ children }: { children: React.ReactNode }) {
   return <main className="il-auth">
     <section className="auth-form-side">
-      <Link href="/" className="auth-wordmark">instalink<span> / clínicas</span></Link>
+      <Link href="/" className="auth-wordmark">GoDoutor<span> / clínicas</span></Link>
       <div className="auth-form-card">{children}</div>
       <p className="auth-patient-note">É paciente? Acesse sua conta pelo link da clínica onde você é atendido.</p>
     </section>

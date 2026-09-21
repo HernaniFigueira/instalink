@@ -45,7 +45,7 @@ export function ImportClientsSheet({ businessId, onClose, onImported }: {
   const [file, setFile] = useState<{ name: string; base64: string } | null>(null);
   const [plan, setPlan] = useState<ImportPlan | null>(null);
   const [columns, setColumns] = useState<ImportColumn[]>([]);
-  // Mapeamento por CAMPO: cada campo do Instalink aponta para uma coluna ou
+  // Mapeamento por CAMPO: cada campo do GoDoutor aponta para uma coluna ou
   // para 'ignore'. É o contrato do servidor — "ignorar" é uma decisão explícita
   // e vale também para coluna que o cabeçalho reconheceu sozinho.
   const [mapping, setMapping] = useState<Record<string, string>>({});

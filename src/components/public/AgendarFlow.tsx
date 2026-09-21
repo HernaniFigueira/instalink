@@ -423,7 +423,7 @@ export default function AgendarFlow({ business, services, professionals, today, 
                   </span>
                   <div className="min-w-0">
                     <p className="text-sm font-bold text-zinc-900 truncate">{me.name}</p>
-                    <p className="text-xs text-emerald-800 truncate">{me.phone}{me.email ? ` · ${me.email}` : ''} · conta InstaLink</p>
+                    <p className="text-xs text-emerald-800 truncate">{me.phone}{me.email ? ` · ${me.email}` : ''} · conta GoDoutor</p>
                   </div>
                 </div>
               ) : (

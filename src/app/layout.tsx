@@ -7,18 +7,18 @@ const inter = Inter({ subsets: ['latin'], display: 'swap', variable: '--font-int
 const sora = Sora({ subsets: ['latin'], weight: ['600', '700', '800'], display: 'swap', variable: '--font-sora' });
 
 export const metadata: Metadata = {
-  title: 'InstaLink — Sua clínica organizada',
+  title: 'GoDoutor — Sua clínica organizada',
   description: 'Da primeira reserva ao próximo atendimento: página da clínica, agenda, pacientes e equipe em um só lugar.',
   openGraph: {
-    title: 'InstaLink — Sua clínica organizada',
+    title: 'GoDoutor — Sua clínica organizada',
     description: 'Página da clínica, agenda, pacientes e equipe em um só lugar.',
     type: 'website',
     locale: 'pt_BR',
-    siteName: 'InstaLink',
+    siteName: 'GoDoutor',
   },
   twitter: {
     card: 'summary',
-    title: 'InstaLink — Sua clínica organizada',
+    title: 'GoDoutor — Sua clínica organizada',
     description: 'Página da clínica, agenda, pacientes e equipe em um só lugar.',
   },
 };

@@ -38,7 +38,7 @@ export async function POST(req: NextRequest) {
       data: {
         lead: {
           id: 'lead-test-123',
-          name: 'Lead Teste InstaLink',
+          name: 'Lead Teste GoDoutor',
           phone: '11999999999',
           email: 'teste@instalink.app',
           origin: 'external_site',
