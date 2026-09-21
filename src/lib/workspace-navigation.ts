@@ -1,20 +1,21 @@
 import type { PanelRouteDef } from './panel';
 
 // Presentation only. Routes and authorization remain owned by panel.ts.
+// Operational order comes from PANEL_ROUTES (historical Operação/Pessoas/Oferta).
 export const WORKSPACE_AREAS = [
-  { id: 'overview', label: 'Visão geral', short: 'Início', icon: 'home', routes: ['/dashboard'] },
-  { id: 'care', label: 'Atendimento', short: 'Atender', icon: 'calendar', routes: ['/agenda', '/conversas', '/tarefas', '/pedidos'] },
-  { id: 'people', label: 'Pacientes e clientes', short: 'Pessoas', icon: 'users', routes: ['/clientes', '/funil'] },
-  { id: 'page', label: 'Página da clínica', short: 'Página', icon: 'globe', routes: ['/pagina'] },
-  { id: 'automation', label: 'Automação', short: 'Automação', icon: 'bolt', routes: ['/automacoes', '/execucoes', '/agente', '/campanhas'] },
-  { id: 'management', label: 'Gestão', short: 'Gestão', icon: 'chart', routes: ['/resultados', '/equipe', '/profissionais', '/servicos', '/disponibilidade', '/produtos', '/organizacao'] },
-  { id: 'settings', label: 'Configurações', short: 'Ajustes', icon: 'settings', routes: ['/configuracoes', '/recursos', '/canais'] },
+  { id: 'automation', label: 'Automação', icon: 'bolt', color: '#B45309', routes: ['/automacoes', '/execucoes', '/agente', '/campanhas'] },
+  { id: 'management', label: 'Gestão', icon: 'chart', color: '#0369A1', routes: ['/resultados', '/equipe', '/organizacao'] },
+  { id: 'settings', label: 'Ajustes', icon: 'settings', color: '#526174', routes: ['/configuracoes', '/recursos', '/canais'] },
 ] as const;
-
 export function workspaceAreas(allowed: PanelRouteDef[]) {
-  return WORKSPACE_AREAS.map(area => ({ ...area,
-    items: area.routes.flatMap(href => allowed.filter(route => route.href === href)),
-  })).filter(area => area.items.length > 0);
+  const groups = WORKSPACE_AREAS.map(area => ({ ...area, items: allowed.filter(route => (area.routes as readonly string[]).includes(route.href)) })).filter(area => area.items.length);
+  const grouped = new Set(groups.flatMap(g => g.items.map(i => i.href)));
+  return [{ id: 'operations', label: 'Operação', icon: 'calendar', color: '#007FA3', items: allowed.filter(i => !grouped.has(i.href)) }, ...groups].filter(g => g.items.length);
+}
+export function routeAreaColor(path: string) {
+  if (['/clientes','/funil'].includes(path)) return '#7C3AED';
+  if (path === '/conversas') return '#047857';
+  return WORKSPACE_AREAS.find(a => (a.routes as readonly string[]).includes(path))?.color || '#007FA3';
 }
 
 /** Only presentation filters cross units. Never carry entity IDs or text searches. */

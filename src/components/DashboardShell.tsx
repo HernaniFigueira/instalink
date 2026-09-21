@@ -64,7 +64,7 @@ export function DashboardShell({ children }: { children: React.ReactNode }) {
   const [ready, setReady] = useState(false);
   const [contextError, setContextError] = useState(false);
   const [collapsed, setCollapsed] = useState(() => {
-    try { return localStorage.getItem('il-side') === 'mini'; } catch { return false; }
+    try { return localStorage.getItem('il-side-v2') === 'mini'; } catch { return false; }
   });
   const lastContextAt = useRef(0);
 
@@ -150,7 +150,7 @@ export function DashboardShell({ children }: { children: React.ReactNode }) {
   }
   function toggle() {
     setCollapsed((c) => {
-      try { localStorage.setItem('il-side', c ? 'full' : 'mini'); } catch {}
+      try { localStorage.setItem('il-side-v2', c ? 'full' : 'mini'); } catch {}
       return !c;
     });
   }
@@ -229,7 +229,7 @@ export function DashboardShell({ children }: { children: React.ReactNode }) {
     // sem que cada tela precise calcular (ou chutar) o seu.
     <PanelHomeProvider home={homeHref}>
     <WorkspaceContext.Provider value={{ role: business.role, agendaScope: business.agendaScope }}>
-    <div className="il-platform min-h-screen bg-[var(--bg)] lg:flex">
+    <div className="il-platform workspace-shell min-h-screen bg-[var(--bg)]">
       <a href="#workspace-content" className="workspace-skip">Ir para o conteúdo</a>
       <WorkspaceNavigation nav={nav} activePath={activePath} unit={business} units={businesses}
         onUnit={switchBiz} collapsed={collapsed} onCollapse={toggle} user={user} onLogout={logout} />

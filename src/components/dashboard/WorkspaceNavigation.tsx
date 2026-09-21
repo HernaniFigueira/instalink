@@ -4,66 +4,69 @@ import Link from 'next/link';
 import { Icon } from '@/components/icons';
 import { Drawer } from '@/components/ui';
 import { NavSearch } from './NavSearch';
-import { workspaceAreas } from '@/lib/workspace-navigation';
+import { workspaceAreas, routeAreaColor } from '@/lib/workspace-navigation';
 import { buildNavSearchItems } from '@/lib/nav-search';
 import type { panelNavigation } from '@/lib/panel';
 
-type Unit = { id: string; name: string; logo?: string; slug: string; role?: string };
-export function WorkspaceNavigation({ nav, activePath, unit, units, onUnit, collapsed, onCollapse, user, onLogout }: {
+type Unit = { id: string; name: string; logo?: string; slug: string; role?: string; organizationId?: string };
+export function WorkspaceNavigation({ nav, activePath, unit, units, onUnit, collapsed, onCollapse, user, onLogout, overview = false }: {
   nav: ReturnType<typeof panelNavigation>; activePath: string; unit: Unit; units: Unit[];
   onUnit: (id: string) => void; collapsed: boolean; onCollapse: () => void;
-  user: { name: string }; onLogout: () => void;
+  user: { name: string }; onLogout: () => void; overview?: boolean;
 }) {
-  const [mobile, setMobile] = useState(false);
-  useEffect(() => setMobile(false), [activePath, unit.id]);
   const areas = workspaceAreas(nav.allowed);
-  const selected = areas.find(area => area.items.some(item => item.href === activePath)) || areas[0];
-  const href = (item: { href: string; requiresBusiness?: boolean }) => item.requiresBusiness === false ? item.href : `${item.href}?b=${unit.id}`;
+  const groups = areas.filter(a => a.id !== 'operations');
+  const activeGroup = groups.find(g => g.items.some(i => i.href === activePath))?.id || null;
+  const [opened, setOpened] = useState<string | null>(activeGroup);
+  const [mobile, setMobile] = useState(false);
+  const [mobileGroup, setMobileGroup] = useState<string | null>(null);
+  useEffect(() => { setOpened(activeGroup); setMobile(false); setMobileGroup(null); }, [activePath, unit.id, activeGroup]);
+  useEffect(() => {
+    const media = window.matchMedia?.('(min-width:1200px)');
+    const close = () => { if (media?.matches) setMobile(false); };
+    media?.addEventListener('change', close); return () => media?.removeEventListener('change', close);
+  }, []);
+  const selected = groups.find(g => g.id === opened);
+  const mobileSelected = groups.find(g => g.id === mobileGroup);
+  const href = (item: typeof nav.allowed[number]) => item.href === '/organizacao' ? `/organizacao?organization=${unit.organizationId || ''}` : item.requiresBusiness === false ? item.href : `${item.href}?b=${unit.id}`;
+  const canOverview = nav.allowed.some(i => i.href === '/organizacao');
   const identity = <div className="workspace-identity">
     {unit.logo && <img src={unit.logo} alt="" className="workspace-logo" />}
-    {units.length > 1 ? <label className="block"><span className="text-xs text-[var(--text-muted)]">Unidade em atendimento</span>
-      <select aria-label="Trocar unidade" value={unit.id} onChange={e => onUnit(e.target.value)} className="il-field-control w-full mt-1 bg-transparent font-semibold rounded-md py-2">
+    <label className="block"><span className="sr-only">Contexto da clínica</span>
+      <select aria-label="Trocar unidade" value={overview ? '__overview' : unit.id} onChange={e => onUnit(e.target.value)} className="il-field-control w-full mt-2 bg-transparent font-semibold py-2" title={unit.name}>
+        {canOverview && <option value="__overview">Visão geral da organização</option>}
         {units.map(item => <option key={item.id} value={item.id}>{item.name}</option>)}
-      </select></label> : <p className="font-semibold text-sm mt-2 break-words">{unit.name}</p>}
+      </select>
+    </label>
   </div>;
-  const contextLinks = (items: typeof nav.allowed) => items.map(item => <Link key={item.href} href={href(item)}
-    data-nav-item={item.href} aria-current={activePath === item.href ? 'page' : undefined}
-    onClick={() => setMobile(false)} title={item.description} className="workspace-link">
-    <Icon n={item.icon} size={17} /><span>{item.label}</span>
+  const links = (items: typeof nav.allowed, primary = false) => items.map(item => <Link key={item.href} href={href(item)}
+    data-nav-item={item.href} aria-label={item.label} aria-current={activePath === item.href ? 'page' : undefined}
+    onClick={() => { setMobile(false); if (primary) setOpened(null); }} title={item.description} className="workspace-link">
+    <span style={{color: routeAreaColor(item.href)}}><Icon n={item.icon} size={20} /></span><span className="workspace-label">{item.label}</span>
   </Link>);
+  const groupButtons = (onSelect: (id: string) => void, current: string | null) => groups.map(group => <button key={group.id} type="button" className="workspace-link w-full text-left" aria-label={group.label} aria-expanded={current === group.id} onClick={e => { e.currentTarget.closest('dialog')?.querySelector<HTMLElement>('h2')?.focus(); onSelect(group.id); }}>
+    <span style={{color:group.color}}><Icon n={group.icon} size={20} /></span><span className="workspace-label">{group.label}</span><span aria-hidden="true" className="ml-auto workspace-label">›</span>
+  </button>);
+  const operations = areas.find(a => a.id === 'operations')?.items || [];
   return <>
     <aside className={`workspace-sidebar ${collapsed ? 'is-collapsed' : ''}`} aria-label="Navegação da clínica">
       {!collapsed && identity}
-      <div className="workspace-tools">
-        <NavSearch items={buildNavSearchItems(nav, `?b=${unit.id}`)} collapsed={collapsed} activePath={activePath} />
-        <button type="button" aria-label={collapsed ? 'Expandir navegação' : 'Recolher navegação'} onClick={onCollapse} className="workspace-icon-button"><Icon n="menu" size={18} /></button>
+      <div className="workspace-tools"><NavSearch items={buildNavSearchItems(nav, `?b=${unit.id}`)} collapsed={collapsed} activePath={activePath} />
+        <button type="button" aria-label={collapsed ? 'Expandir navegação' : 'Recolher navegação'} onClick={onCollapse} className="workspace-icon-button"><Icon n="menu" size={20} /></button>
       </div>
-      <div className="workspace-levels">
-        <nav aria-label="Áreas" className="workspace-primary">
-          {areas.map(area => <Link key={area.id} href={href(area.id === selected?.id ? area.items.find(i => i.href === activePath) || area.items[0] : area.items[0])}
-            aria-label={area.label} title={area.label} aria-current={area.id === selected?.id ? 'true' : undefined} className="workspace-area">
-            <Icon n={area.icon} size={20} /><span>{area.short}</span>
-          </Link>)}
-        </nav>
-        {!collapsed && selected && <nav aria-label={selected.label} className="workspace-context">
-          <p className="workspace-context-title">{selected.label}</p>
-          {contextLinks(selected.items)}
-          {selected.id === 'care' && selected.items.some(i => i.href === '/agenda') && <p className="text-xs text-[var(--text-muted)] px-3 mt-4 leading-relaxed">A fila e os atendimentos estão na Agenda.</p>}
-        </nav>}
-      </div>
-      <div className="workspace-account">
-        {!collapsed && <><p className="text-xs font-semibold truncate">{user.name}</p><a className="text-xs underline text-[var(--text-muted)]" href={`/${unit.slug}`} target="_blank" rel="noreferrer">Página pública ↗</a></>}
-        <button type="button" className="workspace-icon-button" aria-label="Sair da conta" onClick={onLogout}><Icon n="logout" size={17} /></button>
+      <nav aria-label="Menu principal" className="workspace-primary">{links(operations,true)}{groupButtons(id => setOpened(opened === id ? null : id), opened)}</nav>
+      <div className="workspace-account">{!collapsed && <><p className="font-semibold truncate">{user.name}</p><a className="text-sm underline" href={`/${unit.slug}`} target="_blank" rel="noreferrer">Página pública ↗</a></>}
+        <button type="button" className="workspace-icon-button" aria-label="Sair da conta" onClick={onLogout}><Icon n="logout" size={20} /></button>
       </div>
     </aside>
-    <header className="workspace-mobile">
-      <div className="min-w-0"><p className="text-xs text-[var(--text-muted)] truncate">{unit.name}</p><p className="font-semibold text-sm">{nav.allowed.find(i => i.href === activePath)?.label || 'Minha clínica'}</p></div>
-      <button type="button" onClick={() => setMobile(true)} className="workspace-icon-button" aria-label="Abrir navegação"><Icon n="menu" size={22} /></button>
-    </header>
-    <Drawer open={mobile} onClose={() => setMobile(false)} title="Navegar na clínica" width="max-w-[420px]">
-      {identity}
-      <nav aria-label="Todas as áreas" className="p-4 space-y-5">{areas.map(area => <section key={area.id}><h3 className="text-xs font-semibold text-[var(--text-muted)] mb-2">{area.label}</h3>{contextLinks(area.items)}</section>)}</nav>
-      <div className="p-4 border-t border-[var(--border)]"><p className="text-sm mb-3">{user.name}</p><button type="button" className="workspace-link" onClick={onLogout}>Sair da conta</button></div>
+    {selected && <aside className="workspace-secondary" aria-label={`Submenu ${selected.label}`}>
+      <header><h2>{selected.label}</h2><button type="button" className="workspace-icon-button" aria-label="Fechar submenu" onClick={() => setOpened(null)}><Icon n="x" size={20}/></button></header>
+      <nav aria-label={selected.label}>{links(selected.items)}</nav>
+    </aside>}
+    <header className="workspace-mobile"><p className="font-semibold">{nav.allowed.find(i => i.href === activePath)?.label || 'Minha clínica'}</p><button type="button" onClick={() => {setMobile(true);setMobileGroup(activeGroup);}} className="workspace-icon-button" aria-label="Abrir navegação"><Icon n="menu" size={20}/></button></header>
+    <Drawer open={mobile} onClose={() => setMobile(false)} title={mobileSelected?.label || 'Navegar na clínica'} width="max-w-[420px]">
+      {mobileSelected ? <div className="p-3"><button type="button" className="workspace-link" onClick={e => { e.currentTarget.closest('dialog')?.querySelector<HTMLElement>('h2')?.focus(); setMobileGroup(null); }}>← Voltar</button><nav aria-label={mobileSelected.label}>{links(mobileSelected.items)}</nav></div> : <>{identity}<nav aria-label="Menu móvel" className="p-3">{links(operations,true)}{groupButtons(setMobileGroup,mobileGroup)}</nav></>}
+      <div className="workspace-account"><p className="font-semibold truncate">{user.name}</p>{unit.slug&&<a className="text-sm underline" href={`/${unit.slug}`} target="_blank" rel="noreferrer">Página pública ↗</a>}<button type="button" className="workspace-link" onClick={onLogout}><Icon n="logout" size={20}/>Sair da conta</button></div>
     </Drawer>
   </>;
 }
