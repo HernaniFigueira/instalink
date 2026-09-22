@@ -115,7 +115,7 @@ else
 fi
 
 # ── Item 4: criar unidade + persistência nas tabelas app ──
-req POST /api/businesses "{\"name\":\"Clínica Validação Preview $T\",\"whatsapp\":\"11961000$((T % 10000))\",\"address\":\"Rua da Validação, 1\"}"
+req POST /api/businesses "{\"name\":\"Clínica Validação Preview $T\",\"whatsapp\":\"11961000$((T % 10000))\",\"address\":\"Rua da Validação, 1\"}" 1
 BIZ=$(jqget "$BODY" '.businessId'); SLUG=$(jqget "$BODY" '.slug')
 if [ "$STATUS" = 200 ] && [ -n "$BIZ" ] && [ "$BIZ" != null ]; then
   say 4a-criar-unidade "PASS" "POST /api/businesses → businessId=$BIZ slug=$SLUG"
