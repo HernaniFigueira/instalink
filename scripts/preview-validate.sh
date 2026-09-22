@@ -25,7 +25,7 @@ req() { # req <metodo> <caminho> <json-ou-vazio> <auth:0|1> → set BODY/STATUS/
 jqget() { printf '%s' "$1" | jq -r "$2 // empty" 2>/dev/null; }
 
 # ── Item 0: preflight — Vercel Authentication (Deployment Protection) ──
-H=$(curl -s -m 60 -o /tmp/probe.json -w '%{http_code}' "$BASE/api/automations" 2>&1)
+H=$(curl -s -m 60 -o /tmp/probe.json -w '%{http_code}' -X POST -H 'content-type: application/json' -d '{}' "$BASE/api/auth/register" 2>&1)
 PB=$(printf '%s' "$(cat /tmp/probe.json)" | head -c 400)
 if printf '%s' "$PB" | grep -q 'vercel_auth_callback\|Protected deployment'; then
   say 0-protecao "FAIL" "Vercel Authentication (Deployment Protection) ATIVO — preview só acessível via SSO. Desativar em: Vercel → projeto godoutor → Settings → Deployment Protection → Vercel Authentication → Disabled. Detalhe: $(printf '%s' "$PB" | head -c 200)"
