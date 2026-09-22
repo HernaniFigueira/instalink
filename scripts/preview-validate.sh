@@ -24,6 +24,17 @@ req() { # req <metodo> <caminho> <json-ou-vazio> <auth:0|1> → set BODY/STATUS/
 }
 jqget() { printf '%s' "$1" | jq -r "$2 // empty" 2>/dev/null; }
 
+# ── Item 0: preflight — Vercel Authentication (Deployment Protection) ──
+H=$(curl -s -m 60 -o /tmp/probe.json -w '%{http_code}' "$BASE/api/automations" 2>&1)
+PB=$(printf '%s' "$(cat /tmp/probe.json)" | head -c 400)
+if printf '%s' "$PB" | grep -q 'vercel_auth_callback\|Protected deployment'; then
+  say 0-protecao "FAIL" "Vercel Authentication (Deployment Protection) ATIVO — preview só acessível via SSO. Desativar em: Vercel → projeto godoutor → Settings → Deployment Protection → Vercel Authentication → Disabled. Detalhe: $(printf '%s' "$PB" | head -c 200)"
+  echo "RESUMO|PASS=0|FAIL=1|BLOQUEIO=vercel-auth"
+  echo "VALIDACAO BLOQUEADA: Deployment Protection"
+  exit 0
+fi
+say 0-protecao "PASS" "sem Vercel Authentication no preview"
+
 # ── Item 1: modo relacional ativo (rota não migrada → 503 explícito) ──
 H=$(curl -s -m 60 -D - -o /tmp/probe.json "$BASE/api/automations" 2>&1)
 CODE=$(printf '%s' "$H" | head -n1 | grep -oE '[0-9]{3}$' || echo 000)
@@ -75,7 +86,7 @@ else
   say 4b-pagina-persistida "FAIL" "GET /$SLUG → $PCODE. Conteúdo: $(printf '%s' "$PBODY" | head -c 200)"
 fi
 req GET "/api/catalog/get?businessId=$BIZ" '' 1
-[ "$STATUS" = 200 ] && say 4c-catalogo-leitura "PASS" "catalog/get 200 (app.businesses/app.services legíveis)" || say 4c-catalogo-leitura "FAIL" "catalog/get → $STATUS. Erro: $(printf '%s' "$BODY" | head -c 300)"
+printf '%s' "$BODY" | jq -e '.services' >/dev/null 2>&1 && say 4c-catalogo-leitura "PASS" "catalog/get 200 JSON (app.businesses/app.services legíveis)" || say 4c-catalogo-leitura "FAIL" "catalog/get → $STATUS sem JSON .services. Corpo: $(printf '%s' "$BODY" | head -c 300)"
 
 # ── Item 5: fluxo de agendamento ──
 req PATCH "/api/businesses/$BIZ/features" '{"feature":"services","enabled":true}' 1
