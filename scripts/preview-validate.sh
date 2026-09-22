@@ -205,3 +205,5 @@ exit 0
 # reexecução pós-desativação do Vercel Authentication (validação completa)
 
 # reexecução pós ALTER ROLE godoutor_app (validação completa)
+
+# reexecução pós-correção do username do pooler (role.ref)
