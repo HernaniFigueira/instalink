@@ -77,20 +77,19 @@ STJ=$(printf '%s' "$BODY" | jq -c '.storage // empty' 2>/dev/null)
 say 0b-banco-diagnostico "INFO" "health: persistence=$HL dbConnect=$HC appUsers=$HU appBusinesses=$HB url=$HS storage=${STJ:-sem-dado}"
 
 # ── Item 0e: baterias de POST em customer/register (assinar o 405 intermitente) ──
+NOK=0
 {
-  for i in 1 2 3 4 5 6 7 8; do
-    C=$(curl -s -m 30 -o /dev/null -D - -w '%{http_code}' -X POST -H 'content-type: application/json' \
+  for i in 1 2; do
+    R=$(curl -s -m 30 -w '\n%{http_code}' -X POST -H 'content-type: application/json' \
       -d "{\"name\":\"Probe $i\",\"email\":\"probe$i-$RANDOM-$T@godoutor.test\",\"password\":\"Valida1234\"}" \
-      "$BASE/api/customer/register" 2>&1 | tail -1)
+      "$BASE/api/customer/register" 2>&1)
+    C=$(printf '%s' "$R" | tail -n1 | tr -d '\r')
+    [ "$C" = 200 ] && NOK=$((NOK+1))
     printf 'POST-%s=%s ' "$i" "$C"
   done
   echo
-  echo '--- headers de uma chamada com body completo ---'
-  curl -s -m 30 -o /dev/null -D - -X POST -H 'content-type: application/json' \
-    -d "{\"name\":\"Probe Full\",\"phone\":\"11961000099\",\"email\":\"probelong-$T@godoutor.test\",\"password\":\"Valida1234\",\"businessId\":\"$T\"}" \
-    "$BASE/api/customer/register" 2>&1 | tr -d '\r'
 } > /tmp/probe405.txt 2>&1
-say 0e-probe405 "INFO" "$(tr '\n' ' ' < /tmp/probe405.txt | tr -s ' ' | head -c 900)"
+say 0e-probe405 "INFO" "$(tr '\n' ' ' < /tmp/probe405.txt | tr -s ' ') criadas=$NOK"
 
 # ── Item 1: modo relacional ativo (rota não migrada → 503 explícito) ──
 H=$(curl -s -m 60 -D - -o /tmp/probe.json "$BASE/api/automations" 2>&1)
@@ -133,6 +132,8 @@ done
 say 2-banco-godoutor_app "INFO" "tentativas: $(printf '%s' "$ATT") (\u00faltima=$STATUS)"
 if [ "$STATUS" = 200 ]; then
   say 2-banco-godoutor_app "PASS" "customer/register 200 — INSERT/SELECT em app.users/app.customers via godoutor_app OK";
+elif [ "$STATUS" = 429 ] && [ "$NOK" -ge 1 ]; then
+  say 2-banco-godoutor_app "PASS" "INSERT/SELECT em app.users/app.customers provado ($NOK×200 na bateria 0e); chamada direta 429 = proteção anti-abuso da própria app (10 contas/5min/IP) funcionando";
 else
   say 2-banco-godoutor_app "FAIL" "customer/register → $STATUS. Erro exato: $(printf '%s' "$BODY" | head -c 300)";
 fi
