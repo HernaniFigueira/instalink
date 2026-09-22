@@ -1,8 +1,10 @@
 CHECK|0-protecao|PASS|sem Vercel Authentication no preview
-CHECK|0b-banco-diagnostico|INFO|health: persistence=| dbConnect=| appUsers=| appBusinesses=| url=| corpo=<!DOCTYPE html><html lang="pt-BR" class="__variable_ab14f4 __variable_b92147"><head><meta charSet="utf-8"/><meta name="viewport" content="width=device-width, initial-scale=1"/><link rel="preload" href="/_next/static/media/09921fa5fb0e4948-s.p.woff2" as="font" crossorigin="" type="font/woff2"/><link rel="preload" href="/_next/static/media/90b4584b21337547-s.p.woff2" as="font" crossorigin="" type="f
-CHECK|1-relacional|FAIL|GET /api/automations → 000 (code=module_not_migrated, blocked=Automa%C3%A7%C3%B5es) — esperado 503 module_not_migrated. Corpo: {"error":"“Automações (configuração)” está temporariamente indisponível no modo de persistência relacional. Este módulo ainda não foi migrado do motor legado — o acesso está bloqueado de propósito para nunca ler nem gravar no banco antigo.","code":"module_not_migrated","module":"Aut
+CHECK|0a-deployment|PASS|deployment com /api/health servindo (x-vercel-id: cle1::knz8p-1790104027444-8342ac93cd03)
+CHECK|0c-edge-diag|INFO|--- POST /api/customer/register (cru) --- HTTP/2 400  cache-control: public, max-age=0, must-revalidate content-type: application/json date: Tue, 22 Sep 2026 19:07:07 GMT server: Vercel strict-transport-security: max-age=63072000; includeSubDomains; preload vary: RSC, Next-Router-State-Tree, Next-Router-Prefetch x-matched-path: /api/customer/register --- POST /api/auth/register (cru) --- HTTP/2 400  cache-control: public, max-age=0, must-revalidate content-type: application/json date: Tue, 22 Sep 2026 19:07:07 GMT server: Vercel strict-transport-security: max-age=63072000; includeSubDomains; preload vary: RSC, Next-Router-State-Tree, Next-Router-Prefetch x-matched-path: /api/auth/register --- GET /api/health (cru) --- HTTP/2 200  age: 0 cache-control: public, max-age=0, must-revalidate content-type: application/json date: Tue, 22 Sep 2026 19:07:08 GMT server: Vercel
+CHECK|0b-banco-diagnostico|INFO|health: persistence=relational| dbConnect=fail:SELF_SIGNED_CERT_IN_CHAIN:self-signed certificate in certificate chain| appUsers=| appBusinesses=| url=postgresql://***@aws-0-sa-east-1.pooler.supabase.com:6543/postgres?sslmode| corpo={"ok":true,"persistence":"relational","dbUrlConfigured":true,"dbUrlShape":"postgresql://***@aws-0-sa-east-1.pooler.supabase.com:6543/postgres?sslmode","dbConnect":"fail:SELF_SIGNED_CERT_IN_CHAIN:self-signed certificate in certificate chain"}
+CHECK|1-relacional|PASS|503 module_not_migrated (x-godoutor-blocked=Automa%C3%A7%C3%B5es, persistence=relational) — GODOUTOR_PERSISTENCE=relational ATIVO
 CHECK|3a-cadastro-equipe|FAIL|register → 500. Erro: {"error":"Não conseguimos criar sua conta. Tente novamente."}
-CHECK|3b-login-equipe|FAIL|login → 503 token=''. Erro: {"error":"O serviço de acesso está temporariamente indisponível. Tente novamente em instantes.","code":"AUTH_UNAVAILABLE","requestId":"93716bcb-74bb-447b-9202-835dfeb325d1"}
+CHECK|3b-login-equipe|FAIL|login → 503 token=''. Erro: {"error":"O serviço de acesso está temporariamente indisponível. Tente novamente em instantes.","code":"AUTH_UNAVAILABLE","requestId":"d9190b67-9c98-409a-a5d7-d9cfb969d2b2"}
 CHECK|3c-sessao|FAIL|me → 401 email=''. Erro: {"user":null}
 CHECK|2-banco-godoutor_app|FAIL|customer/register → 405. Erro exato: 
 CHECK|4a-criar-unidade|FAIL|→ 401. Erro: {"error":"Não autenticado."}
@@ -23,5 +25,5 @@ CHECK|7a-contato|FAIL|contatos → 400. Erro: {"error":"Negócio não informado.
 CHECK|7b-upload-privado|FAIL|sem contato
 CHECK|7c-reassinatura|FAIL|sem contato
 CHECK|7d-leitura-privada|FAIL|sem contato
-RESUMO|PASS=1|FAIL=24
+RESUMO|PASS=3|FAIL=24
 VALIDACAO COM FALHAS
