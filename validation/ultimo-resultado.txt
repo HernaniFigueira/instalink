@@ -1,3 +1,26 @@
-CHECK|0-protecao|FAIL|Vercel Authentication (Deployment Protection) ATIVO — preview só acessível via SSO. Desativar em: Vercel → projeto godoutor → Settings → Deployment Protection → Vercel Authentication → Disabled. Detalhe: {"protection":{"vercel_auth_enabled":true,"vercel_auth_callback":"https:\/\/vercel.com\/sso-api?url=https%3A%2F%2Fgodoutor-git-arena-01a0c526-327ceb-hernanicross-3509s-projects.vercel.app%2Fapi%2Fauth
-RESUMO|PASS=0|FAIL=1|BLOQUEIO=vercel-auth
-VALIDACAO BLOQUEADA: Deployment Protection
+CHECK|0-protecao|PASS|sem Vercel Authentication no preview
+CHECK|1-relacional|FAIL|GET /api/automations → 000 (code=module_not_migrated, blocked=Automa%C3%A7%C3%B5es) — esperado 503 module_not_migrated. Corpo: {"error":"“Automações (configuração)” está temporariamente indisponível no modo de persistência relacional. Este módulo ainda não foi migrado do motor legado — o acesso está bloqueado de propósito para nunca ler nem gravar no banco antigo.","code":"module_not_migrated","module":"Aut
+CHECK|3a-cadastro-equipe|FAIL|register → 500. Erro: {"error":"Não conseguimos criar sua conta. Tente novamente."}
+CHECK|3b-login-equipe|FAIL|login → 503 token=''. Erro: {"error":"O serviço de acesso está temporariamente indisponível. Tente novamente em instantes.","code":"AUTH_UNAVAILABLE","requestId":"ba77613d-bb53-4540-86f7-89965d7a0341"}
+CHECK|3c-sessao|FAIL|me → 401 email=''. Erro: {"user":null}
+CHECK|2-banco-godoutor_app|FAIL|customer/register → 405. Erro exato: 
+CHECK|4a-criar-unidade|FAIL|→ 401. Erro: {"error":"Não autenticado."}
+CHECK|4b-pagina-persistida|FAIL|GET / → 200. Conteúdo: <!DOCTYPE html><html lang="pt-BR" class="__variable_ab14f4 __variable_b92147"><head><meta charSet="utf-8"/><meta name="viewport" content="width=device-width, initial-scale=1"/><link rel="preload" href
+CHECK|4c-catalogo-leitura|FAIL|catalog/get → 400 sem JSON .services. Corpo: {"error":"Negócio não informado."}
+CHECK|5a-modulos|FAIL|features → 401. Erro: {"error":"Não autenticado."}
+CHECK|5b-profissional|FAIL|→ 401. Erro: {"error":"Não autorizado."}
+CHECK|5c-servico|FAIL|→ 401. Erro: {"error":"Não autorizado."}
+CHECK|5d-horarios|FAIL|→ 401. Erro: {"error":"Não autorizado."}
+CHECK|5e-catalogo-id|FAIL|services vazio no catalog/get: {"error":"Negócio não informado."}
+CHECK|5f-slots|FAIL|GET slots → 500 nslots=0. Erro: {"error":"Não foi possível carregar os horários."}
+CHECK|5g-reserva|FAIL|sem slots
+CHECK|5h-confirmar|FAIL|sem slots
+CHECK|5i-persistiu|FAIL|sem slots
+CHECK|6a-upload-publico|FAIL|upload → 400. Erro: {"error":"Negócio não informado."}
+CHECK|6b-objeto-publico|FAIL|sem url
+CHECK|7a-contato|FAIL|contatos → 400. Erro: {"error":"Negócio não informado."}
+CHECK|7b-upload-privado|FAIL|sem contato
+CHECK|7c-reassinatura|FAIL|sem contato
+CHECK|7d-leitura-privada|FAIL|sem contato
+RESUMO|PASS=1|FAIL=23
+VALIDACAO COM FALHAS
