@@ -211,3 +211,5 @@ exit 0
 # reexecução: diagnóstico do formato do username do pooler
 
 # reexecução: senha sincronizada (ALTER no projeto certo + env var)
+
+# reexecução: pwdShape no diagnóstico

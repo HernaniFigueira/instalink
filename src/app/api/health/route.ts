@@ -19,10 +19,23 @@ function maskUrl(url: string): string {
     // se o sufixo .project-ref está presente (ex.: go***(33)).
     const user = u.username;
     const userShape = `${user.slice(0, 2)}***(len ${user.length})`;
-    return `${u.protocol}//${userShape}@${u.hostname}:${u.port || '-'}/${db}${ssl}`;
+    return `${u.protocol}//${userShape}@${u.hostname}:${u.port || '-'}/${db}${ssl}#pwd=${pwdShape(u)}`;
   } catch {
     return 'malformed';
   }
+}
+
+/** Forma da senha SEM o valor: comprimentos raw/decodificado + anomalias. */
+function pwdShape(u: URL): string {
+  const raw = u.password || '';
+  let decoded = raw;
+  try { decoded = decodeURIComponent(raw); } catch { return `len ${raw.length} PCT-INVALIDO`; }
+  const flags = [
+    raw.length !== decoded.length ? 'pct-encoded' : 'no-pct',
+    /\s/.test(decoded) ? 'TEM-ESPACO/QUEBRA' : 'no-ws',
+    /^[A-Za-z0-9]+$/.test(decoded) ? 'alnum' : 'tem-simbolo',
+  ].join(',');
+  return `len ${raw.length};${flags}`;
 }
 
 function errTag(e: unknown, max = 140): string {
