@@ -241,3 +241,5 @@ exit 0
 # reexecução: fixes do catálogo (writeback services/professionals + quoting start/end)
 
 # reexecução: storage no health + retry com headers crus no customer/register
+
+# reexecução final: service_role key corrigida
