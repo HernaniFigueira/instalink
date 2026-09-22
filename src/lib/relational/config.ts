@@ -54,13 +54,28 @@ export function storageConfig(): {
 }
 
 /** Config do pool por ambiente (Vercel serverless: pool pequeno e honesto). */
+/** Remove sslmode/ssl da query string — o objeto ssl do pool manda, sempre. */
+function stripSslParams(connectionString: string): string {
+  try {
+    const u = new URL(connectionString);
+    u.searchParams.delete('sslmode');
+    u.searchParams.delete('ssl');
+    return u.toString();
+  } catch {
+    return connectionString;
+  }
+}
+
 export function poolConfig(connectionString: string): {
   connectionString: string; ssl: boolean | { rejectUnauthorized: boolean };
   max: number; connectionTimeoutMillis: number; idleTimeoutMillis: number;
 } {
   const local = /localhost|127\.0\.0\.1/.test(connectionString) || process.env.PGSSLMODE === 'disable';
   return {
-    connectionString,
+    // sslmode na URL sobrepõe o objeto ssl e faz o pg validar a cadeia
+    // autoassinada do pooler (SELF_SIGNED_CERT_IN_CHAIN). Criptografia SEMPRE,
+    // validação de cadeia só quando o Supabase publicar CA confiável.
+    connectionString: stripSslParams(connectionString),
     // Supabase/Neon exigem SSL; Postgres local de teste não.
     ssl: local ? false : { rejectUnauthorized: false },
     max: Number(process.env.PGPOOL_MAX || 5),
