@@ -209,3 +209,5 @@ exit 0
 # reexecução pós-correção do username do pooler (role.ref)
 
 # reexecução: diagnóstico do formato do username do pooler
+
+# reexecução: senha sincronizada (ALTER no projeto certo + env var)
