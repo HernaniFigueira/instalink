@@ -15,7 +15,11 @@ function maskUrl(url: string): string {
     const u = new URL(url);
     const db = (u.pathname || '').replace(/^\//, '');
     const ssl = u.searchParams.has('sslmode') ? '?sslmode' : '';
-    return `${u.protocol}//***@${u.hostname}:${u.port || '-'}/${db}${ssl}`;
+    // Usuário NÃO é segredo (role + project-ref); expõe formato p/ diagnosticar
+    // se o sufixo .project-ref está presente (ex.: go***(33)).
+    const user = u.username;
+    const userShape = `${user.slice(0, 2)}***(len ${user.length})`;
+    return `${u.protocol}//${userShape}@${u.hostname}:${u.port || '-'}/${db}${ssl}`;
   } catch {
     return 'malformed';
   }
