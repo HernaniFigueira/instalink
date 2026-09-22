@@ -49,7 +49,17 @@ else
   say 0a-deployment "FAIL" "/api/health não respondeu 200 em 240s ($DPL) — validação contra deployment sem o commit corrente; último corpo: $(head -c 200 /tmp/h.json)"
 fi
 
-# ── Item 0c: bateria de diagnóstico de borda (headers crus) ──
+# ── Item 0d: sondas de roteamento do pooler (senhas ERRADAS de propósito) ──
+# Sem segredos: comparamos o ERRO de uma senha errada no role custom vs postgres.<ref>.
+# Se o custom role dá erro DIFERENTE de 28P01 (ex.: tenant not found), o roteamento
+# do pooler para roles customizados está quebrado — se dá 28P01 igual, o roteamento
+# está OK e a questão é a senha no banco.
+PRef=sefwhobqafkretljjlqx
+PHost=aws-0-sa-east-1.pooler.supabase.com
+E1=$(PGPASSWORD='sonda-errada-proposito' psql -h "$PHost" -p 6543 -U "godoutor_app.$PRef" -d postgres -c 'select 1' 2>&1 | head -2 | tr '\n' ' ' | head -c 200)
+E2=$(PGPASSWORD='sonda-errada-proposito' psql -h "$PHost" -p 6543 -U "postgres.$PRef" -d postgres -c 'select 1' 2>&1 | head -2 | tr '\n' ' ' | head -c 200)
+say 0d-pooler-probe "INFO" "role.custom+pwd-errada: ${E1:-sem-erro} ||| postgres.ref+pwd-errada: ${E2:-sem-erro}"
+
 {
   echo '--- POST /api/customer/register (cru) ---'
   curl -s -m 30 -o /dev/null -D - -X POST -H 'content-type: application/json' -d '{"name":"x"}' "$BASE/api/customer/register" | head -8
@@ -213,3 +223,5 @@ exit 0
 # reexecução: senha sincronizada (ALTER no projeto certo + env var)
 
 # reexecução: pwdShape no diagnóstico
+
+# reexecução: sondas de roteamento do pooler
