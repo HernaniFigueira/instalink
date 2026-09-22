@@ -1,0 +1,85 @@
+CHECK|1-relacional|FAIL|GET /api/automations → 000 (code=, blocked=) — esperado 503 module_not_migrated. Corpo: The deployment could not be found on Vercel.
+
+DEPLOYMENT_NOT_FOUND
+
+iad1::sh7z7-1790102896088-ed50911db91b
+CHECK|3a-cadastro-equipe|FAIL|register → 404. Erro: The deployment could not be found on Vercel.
+
+DEPLOYMENT_NOT_FOUND
+
+iad1::xv62t-1790102896147-6efdd91d2a4b
+CHECK|3b-login-equipe|FAIL|login → 404 token=''. Erro: The deployment could not be found on Vercel.
+
+DEPLOYMENT_NOT_FOUND
+
+iad1::8c2b9-1790102896204-1e95c969a196
+CHECK|3c-sessao|FAIL|me → 404 email=''. Erro: The deployment could not be found on Vercel.
+
+DEPLOYMENT_NOT_FOUND
+
+iad1::cdsd7-1790102896275-d7006bd700cf
+CHECK|2-banco-godoutor_app|FAIL|customer/register → 404. Erro exato: The deployment could not be found on Vercel.
+
+DEPLOYMENT_NOT_FOUND
+
+iad1::rkf4b-1790102896476-8614929e5efc
+CHECK|4a-criar-unidade|FAIL|→ 404. Erro: The deployment could not be found on Vercel.
+
+DEPLOYMENT_NOT_FOUND
+
+iad1::cw8lj-1790102896589-223d39cf5e83
+CHECK|4b-pagina-persistida|FAIL|GET / → 404. Conteúdo: The deployment could not be found on Vercel.
+
+DEPLOYMENT_NOT_FOUND
+
+iad1::gzjbl-1790102896669-0792bb67cc5a
+CHECK|4c-catalogo-leitura|FAIL|catalog/get → 404. Erro: The deployment could not be found on Vercel.
+
+DEPLOYMENT_NOT_FOUND
+
+iad1::tw5vb-1790102896782-9a7925ff832e
+CHECK|5a-modulos|FAIL|features → 308. Erro: Redirecting...
+CHECK|5b-profissional|FAIL|→ 404. Erro: The deployment could not be found on Vercel.
+
+DEPLOYMENT_NOT_FOUND
+
+iad1::vwqsb-1790102896982-4834305969c2
+CHECK|5c-servico|FAIL|→ 404. Erro: The deployment could not be found on Vercel.
+
+DEPLOYMENT_NOT_FOUND
+
+iad1::59fqd-1790102897031-aec015528da1
+CHECK|5d-horarios|FAIL|→ 404. Erro: The deployment could not be found on Vercel.
+
+DEPLOYMENT_NOT_FOUND
+
+iad1::qls6g-1790102897097-42df30e9ddd6
+CHECK|5e-catalogo-id|FAIL|services vazio no catalog/get: The deployment could not be found on Vercel.
+
+DEPLOYMENT_NOT_FOUND
+
+iad1::svvfd-1790102897147-68fd402e400e
+CHECK|5f-slots|FAIL|GET slots → 404 nslots=. Erro: The deployment could not be found on Vercel.
+
+DEPLOYMENT_NOT_FOUND
+
+iad1::g5skn-1790102897223-c10646b94209
+CHECK|5g-reserva|FAIL|sem slots
+CHECK|5h-confirmar|FAIL|sem slots
+CHECK|5i-persistiu|FAIL|sem slots
+CHECK|6a-upload-publico|FAIL|upload → 404. Erro: The deployment could not be found on Vercel.
+
+DEPLOYMENT_NOT_FOUND
+
+iad1::qw646-1790102897277-bab7e71e345f
+CHECK|6b-objeto-publico|FAIL|sem url
+CHECK|7a-contato|FAIL|contatos → 404. Erro: The deployment could not be found on Vercel.
+
+DEPLOYMENT_NOT_FOUND
+
+iad1::ctz7f-1790102897327-b78378824411
+CHECK|7b-upload-privado|FAIL|sem contato
+CHECK|7c-reassinatura|FAIL|sem contato
+CHECK|7d-leitura-privada|FAIL|sem contato
+RESUMO|PASS=0|FAIL=23
+VALIDACAO COM FALHAS
