@@ -34,6 +34,8 @@ export async function GET() {
     persistence: mode,
     dbUrlConfigured: Boolean(url),
     dbUrlShape: url ? maskUrl(url) : null,
+    // Permite à validação esperar EXATAMENTE o deployment deste commit.
+    commit: process.env.VERCEL_GIT_COMMIT_SHA ?? null,
   };
   if (mode === 'relational') {
     try {

@@ -37,9 +37,9 @@ say 0-protecao "PASS" "sem Vercel Authentication no preview"
 
 # ── Item 0a: esperar o deployment do commit corrente (marcado por /api/health) ──
 HEALTHOK=0
-for i in $(seq 1 24); do
+for i in $(seq 1 60); do
   ST=$(curl -s -m 20 -o /tmp/h.json -w '%{http_code}' "$BASE/api/health" 2>&1)
-  if [ "$ST" = 200 ] && jqget "$(cat /tmp/h.json)" '.ok' | grep -q true; then HEALTHOK=1; break; fi
+  if [ "$ST" = 200 ] && [ "$(jqget "$(cat /tmp/h.json)" '.commit')" = "${GITHUB_SHA:-}" ]; then HEALTHOK=1; break; fi
   sleep 10
 done
 DPL=$(curl -sI -m 20 "$BASE/" | grep -i '^x-vercel-id:' | tr -d '\r' | head -1)
