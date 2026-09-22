@@ -213,3 +213,5 @@ revalidação com os motores canônicos + constraint de exclusão no banco
 Escritas de usuários/membros respeitam FK (writeback ordena `users` antes de
 `members`); unicidade global de slug continua garantida pela constraint do
 banco (checagem de UI por consulta pontual).
+
+<!-- marcador de redeploy: validação de preview da rodada 4 (2026-09-22) — sem alteração funcional -->
