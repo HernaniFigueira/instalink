@@ -11,7 +11,7 @@ T=$(date +%s)
 EMAIL="preview-valid-$T@godoutor.test"
 TOKEN=''
 PASSN=0; FAILN=0
-say() { if [ "$2" = PASS ]; then PASSN=$((PASSN+1)); else FAILN=$((FAILN+1)); fi; echo "CHECK|$1|$2|$3"; }
+say() { if [ "$2" = PASS ]; then PASSN=$((PASSN+1)); elif [ "$2" = FAIL ]; then FAILN=$((FAILN+1)); fi; echo "CHECK|$1|$2|$3"; }
 
 req() { # req <metodo> <caminho> <json-ou-vazio> <auth:0|1> → set BODY/STATUS/HDRS
   local m=$1 p=$2 d=${3:-} a=${4:-0}
