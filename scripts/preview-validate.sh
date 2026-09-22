@@ -168,3 +168,5 @@ fi
 echo "RESUMO|PASS=$PASSN|FAIL=$FAILN"
 [ "$FAILN" = 0 ] && echo 'VALIDACAO OK' || echo 'VALIDACAO COM FALHAS'
 exit 0
+
+# reexecução pós-desativação do Vercel Authentication (validação completa)
