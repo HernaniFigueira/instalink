@@ -1,26 +1,3 @@
-CHECK|0-protecao|PASS|sem Vercel Authentication no preview
-CHECK|1-relacional|FAIL|GET /api/automations → 000 (code=, blocked=) — esperado 503 module_not_migrated. Corpo: Redirecting...
-CHECK|3a-cadastro-equipe|FAIL|register → 401. Erro: {"error":{"message":"Protected deployment","code":"401"},"protection":{"auto_vercel_auth_redirect":true,"password_enabled":false,"vercel_auth_enabled":true,"vercel_auth_callback":"https:\/\/vercel.com\/sso-api?url=https%3A%2F%2Fgodoutor-git-arena-01a0c526-327ceb-hernanicross-3509s-projects.vercel.app%2Fapi%2Fauth%2Fregister&nonce=d1e7878daf37503ded11f2acbecdd813fd97135c56fb397151930693f1cc8028"}}
-CHECK|3b-login-equipe|FAIL|login → 401 token=''. Erro: {"protection":{"vercel_auth_callback":"https:\/\/vercel.com\/sso-api?url=https%3A%2F%2Fgodoutor-git-arena-01a0c526-327ceb-hernanicross-3509s-projects.vercel.app%2Fapi%2Fauth%2Flogin&nonce=bee6c90e59f1879cd3d0c3454b2e577a33a5ea3411c71262522ee4ba2780f4d9","auto_vercel_auth_redirect":true,"password_enabled":false,"vercel_auth_enabled":true},"error":{"code":"401","message":"Protected deployment"}}
-CHECK|3c-sessao|FAIL|me → 200 email=''. Erro: <!DOCTYPE html><html data-dpl-id="dpl_2sUnymMpko3MGskHi3N7Bh98FKSN" class="VEU71W_className _4L_FiG_className VEU71W_variable _4L_FiG_variable dash" lang="en-US"><head><meta charSet="utf-8"/><meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1"/><link rel="stylesheet" 
-CHECK|2-banco-godoutor_app|FAIL|customer/register → 405. Erro exato: 
-CHECK|4a-criar-unidade|FAIL|→ 401. Erro: {"error":{"code":"401","message":"Protected deployment"},"protection":{"vercel_auth_callback":"https:\/\/vercel.com\/sso-api?url=https%3A%2F%2Fgodoutor-git-arena-01a0c526-327ceb-hernanicross-3509s-projects.vercel.app%2Fapi%2Fbusinesses&nonce=b44a8bfbb09095074164bb46a5b5c3aed00719c9fc923850f5c525422fe00a39","auto_vercel_auth_redirect":true,"password_enabled":false,"vercel_auth_enabled":true}}
-CHECK|4b-pagina-persistida|FAIL|GET / → 302. Conteúdo: Redirecting...
-CHECK|4c-catalogo-leitura|FAIL|catalog/get → 200 sem JSON .services. Corpo: <!DOCTYPE html><html data-dpl-id="dpl_2sUnymMpko3MGskHi3N7Bh98FKSN" class="VEU71W_className _4L_FiG_className VEU71W_variable _4L_FiG_variable dash" lang="en-US"><head><meta charSet="utf-8"/><meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1"/><link rel="stylesheet" 
-CHECK|5a-modulos|FAIL|features → 401. Erro: {"protection":{"password_enabled":false,"vercel_auth_enabled":true,"vercel_auth_callback":"https:\/\/vercel.com\/sso-api?url=https%3A%2F%2Fgodoutor-git-arena-01a0c526-327ceb-hernanicross-3509s-projects.vercel.app%2Fapi%2Fbusinesses%2Ffeatures&nonce=7b5384bd1ea5da4df909236693e91a9976478fe134a9860dc32
-CHECK|5b-profissional|FAIL|→ 401. Erro: {"protection":{"vercel_auth_enabled":true,"vercel_auth_callback":"https:\/\/vercel.com\/sso-api?url=https%3A%2F%2Fgodoutor-git-arena-01a0c526-327ceb-hernanicross-3509s-projects.vercel.app%2Fapi%2Fcatalog&nonce=3429423bc7d849abcd7843d968961275ae1e7bb62b41b16fff2e0a075490ad5d","auto_vercel_auth_redire
-CHECK|5c-servico|FAIL|→ 401. Erro: {"error":{"message":"Protected deployment","code":"401"},"protection":{"vercel_auth_callback":"https:\/\/vercel.com\/sso-api?url=https%3A%2F%2Fgodoutor-git-arena-01a0c526-327ceb-hernanicross-3509s-projects.vercel.app%2Fapi%2Fcatalog&nonce=fc5880d9d966e57b94a72d62489947de9ee3e5e4bdd4e62d00aee6b3befd7
-CHECK|5d-horarios|FAIL|→ 401. Erro: {"error":{"code":"401","message":"Protected deployment"},"protection":{"password_enabled":false,"vercel_auth_enabled":true,"vercel_auth_callback":"https:\/\/vercel.com\/sso-api?url=https%3A%2F%2Fgodoutor-git-arena-01a0c526-327ceb-hernanicross-3509s-projects.vercel.app%2Fapi%2Fcatalog&nonce=edf985e6a
-CHECK|5e-catalogo-id|FAIL|services vazio no catalog/get: <!DOCTYPE html><html data-dpl-id="dpl_2sUnymMpko3MGskHi3N7Bh98FKSN" class="VEU71W_className _4L_FiG_className VEU71W_variable _4L_FiG_variable dash" lang="en-US"><head><meta charSet="utf-8"/><meta nam
-CHECK|5f-slots|FAIL|GET slots → 200 nslots=. Erro: <!DOCTYPE html><html data-dpl-id="dpl_2sUnymMpko3MGskHi3N7Bh98FKSN" class="VEU71W_className _4L_FiG_className VEU71W_variable _4L_FiG_variable dash" lang="en-US"><head><meta charSet="utf-8"/><meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1"/><link rel="stylesheet" 
-CHECK|5g-reserva|FAIL|sem slots
-CHECK|5h-confirmar|FAIL|sem slots
-CHECK|5i-persistiu|FAIL|sem slots
-CHECK|6a-upload-publico|FAIL|upload → 302. Erro: Redirecting...
-CHECK|6b-objeto-publico|FAIL|sem url
-CHECK|7a-contato|FAIL|contatos → 401. Erro: {"error":{"code":"401","message":"Protected deployment"},"protection":{"vercel_auth_enabled":true,"vercel_auth_callback":"https:\/\/vercel.com\/sso-api?url=https%3A%2F%2Fgodoutor-git-arena-01a0c526-327ceb-hernanicross-3509s-projects.vercel.app%2Fapi%2Fcontacts&nonce=79c4f0803168f6373e8ea639222c40b178877a9f4b531b36f24bc6a14e76cd30","auto_vercel_auth_redirect":true,"password_enabled":false}}
-CHECK|7b-upload-privado|FAIL|sem contato
-CHECK|7c-reassinatura|FAIL|sem contato
-CHECK|7d-leitura-privada|FAIL|sem contato
-RESUMO|PASS=1|FAIL=23
-VALIDACAO COM FALHAS
+CHECK|0-protecao|FAIL|Vercel Authentication (Deployment Protection) ATIVO — preview só acessível via SSO. Desativar em: Vercel → projeto godoutor → Settings → Deployment Protection → Vercel Authentication → Disabled. Detalhe: {"protection":{"vercel_auth_enabled":true,"vercel_auth_callback":"https:\/\/vercel.com\/sso-api?url=https%3A%2F%2Fgodoutor-git-arena-01a0c526-327ceb-hernanicross-3509s-projects.vercel.app%2Fapi%2Fauth
+RESUMO|PASS=0|FAIL=1|BLOQUEIO=vercel-auth
+VALIDACAO BLOQUEADA: Deployment Protection
