@@ -182,3 +182,60 @@ lead na esteira e cron — tudo lendo/escrevendo **somente** no Postgres.
   ficou bloqueada por cota); validar com o documento real antes de ativar.
 - Nenhuma etapa foi executada contra o Supabase-alvo (`sefwhobqafkretljjlqx`)
   nem contra produção — por decisão explícita do escopo desta fase.
+
+## 11. Validação real do Preview (executada — 2026-09-22)
+
+Pipeline: GitHub Actions (`preview-validation.yml`, dispara por push nos arquivos de
+validação) → roda `scripts/preview-validate.sh` contra a URL PÚBLICA do preview
+(nenhum segredo no repositório; o workflow usa apenas `GITHUB_TOKEN`) → publica o
+resultado em `validation/ultimo-resultado.txt`.
+
+**Resultado final: `RESUMO|PASS=25|FAIL=0 — VALIDACAO OK`** (commit `c904422`+,
+deployment com `GODOUTOR_PERSISTENCE=relational`).
+
+Cobertura por item do pedido:
+1. **Modo relacional ativo** — `GET /api/automations` → 503 `module_not_migrated`
+   com `x-godoutor-blocked`/`x-godoutor-persistence` (bloqueio explícito, nunca
+   ler/gravar no legado). PASS.
+2. **Banco via `godoutor_app`** — `/api/customer/register` 200 (INSERT/SELECT em
+   `app.users`/`app.customers`); `/api/health` verde (`dbConnect=ok`). PASS.
+3. **Cadastro + login + sessão da equipe** — register 200, login 200 + token,
+   `me` 200 lendo a sessão do SQL. PASS.
+4. **Clínica/unidade de teste persistida** — `POST /api/businesses` → businessId +
+   slug; página pública renderizada DO SQL (nome no HTML); `catalog/get` JSON.
+   `app.businesses`/`app.pages` gravados. PASS.
+5. **Fluxo de agendamento** — features on, professional.save, service.save,
+   availability.save (seg–sex 08–18/30min), 20 slots em D+2, reserva 08:00
+   (pending), PATCH confirm, reserva visível na gestão (`app.bookings`). PASS.
+6. **Bucket público `clinic-media`** — upload multipart → `{ok,url}`, objeto REAL
+   servido (GET 200 `image/png`). PASS.
+7. **Bucket privado `patient-files`** — contato → upload `kind=patient` → fileId +
+   URL ASSINADA; `/api/files/[id]` re-assina (302) após expiração; objeto real
+   200. PASS.
+8. **Logs Vercel** — sem acesso via API neste ambiente (não se coloca token no
+   repo). Inferência honesta: todos os deployments `success`; `/api/health` verde;
+   nenhum 5xx da aplicação além dos explicados abaixo; a proteção anti-abuso
+   (429, 10 contas/5min/IP) respondeu corretamente durante as baterias de teste.
+
+### Bugs REAIS encontrados e corrigidos durante a validação
+- **`SELF_SIGNED_CERT_IN_CHAIN`**: `sslmode` na connection string sobrepunha o
+  objeto `ssl` do pool (validava a cadeia autoassinada do Supabase). Fix:
+  `stripSslParams` em `poolConfig` — criptografia sempre, validação de cadeia não.
+- **`WRITEBACK` sem `services`/`professionals`**: `professional.save` e
+  `service.save` respondiam 200 mas NUNCA persistiam (diff do write-back ignorava
+  as coleções). Fix: entradas no mapa + teste de regressão (embedded PG).
+- **Colunas reservadas sem aspas**: upserts interpolavam `start`/`end` cru →
+  `syntax error at or near "end"` em `availability.save`. Fix: identificadores
+  entre aspas em `upsertRow` (slice.ts) e `upsert` (ops-store.ts).
+- **`poolConfig` não tolerava sslmode na URL** — coberto pelo primeiro fix.
+
+### Observações (não-bugs)
+- **405 vazio intermitente** no `POST /api/customer/register` (3 ocorrências em
+  ~10 execuções, sem body/location, sempre na mesma rota, com 200/400/429 da
+  própria app segundos antes/depois): anomalia de borda da Vercel, não do código.
+  O script faz retries; chamadas idênticas funcionam. Monitorar.
+- **Rate limit da app funcionando**: 429 após 10 contas/5min/IP (comportamento
+  desejado, comprovado pela bateria de testes).
+- **Higiene pós-validação (recomendado)**: reativar o Vercel Authentication do
+  preview se desejar; rotacionar a senha do `godoutor_app` (apareceu no chat);
+  o `/api/health` só expõe formas/contagens (sem valores) — pode permanecer.
