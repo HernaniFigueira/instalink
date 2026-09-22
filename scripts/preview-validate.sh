@@ -34,10 +34,15 @@ if printf '%s' "$PB" | grep -q 'vercel_auth_callback\|Protected deployment'; the
   exit 0
 fi
 say 0-protecao "PASS" "sem Vercel Authentication no preview"
+req GET /api/health '' 0
+HL=$(jqget "$BODY" '.persistence')$(printf '|'); HC=$(jqget "$BODY" '.dbConnect')$(printf '|')
+HU=$(jqget "$BODY" '.appUsers')$(printf '|'); HB=$(jqget "$BODY" '.appBusinesses')$(printf '|')
+HS=$(jqget "$BODY" '.dbUrlShape')$(printf '|')
+say 0b-banco-diagnostico "INFO" "health: persistence=$HL dbConnect=$HC appUsers=$HU appBusinesses=$HB url=$HS corpo=$(printf '%s' "$BODY" | head -c 400)"
 
 # ── Item 1: modo relacional ativo (rota não migrada → 503 explícito) ──
 H=$(curl -s -m 60 -D - -o /tmp/probe.json "$BASE/api/automations" 2>&1)
-CODE=$(printf '%s' "$H" | head -n1 | grep -oE '[0-9]{3}$' || echo 000)
+CODE=$(printf '%s' "$H" | head -n1 | tr -d '\r' | grep -oE '[0-9]{3}$' || echo 000)
 BLOCKED=$(printf '%s' "$H" | grep -i '^x-godoutor-blocked:' | tr -d '\r' | cut -d' ' -f2)
 PERS=$(printf '%s' "$H" | grep -i '^x-godoutor-persistence:' | tr -d '\r' | cut -d' ' -f2)
 ERR1=$(jqget "$(cat /tmp/probe.json)" '.code')
@@ -63,7 +68,10 @@ ME=$(jqget "$BODY" '.user.email')
 if [ "$STATUS" = 200 ] && [ "$ME" = "$EMAIL" ]; then say 3c-sessao "PASS" "me 200 (sessão lida do banco)"; else say 3c-sessao "FAIL" "me → $STATUS email='$ME'. Erro: $(printf '%s' "$BODY" | head -c 300)"; fi
 
 # ── Item 2: conexão ao banco via godoutor_app (conta global do paciente) ──
-req POST /api/customer/register "{\"name\":\"Paciente Validação\",\"phone\":\"11996000001\",\"email\":\"pac-$EMAIL\",\"password\":\"Valida1234\",\"businessId\":\"$T\"}"
+RAW2=$(curl -s -m 90 -o /tmp/r2.json -D /tmp/r2.hdr -w '%{http_code}' -X POST -H 'content-type: application/json' -d "{\"name\":\"Paciente Validação\",\"phone\":\"11996000001\",\"email\":\"pac-$EMAIL\",\"password\":\"Valida1234\",\"businessId\":\"$T\"}" "$BASE/api/customer/register" 2>&1)
+STATUS=$RAW2; BODY=$(cat /tmp/r2.json)
+RL=$(grep -i '^location:' /tmp/r2.hdr | tr -d '\r' | head -c 160)
+[ -n "$RL" ] && BODY="$BODY |||| location=$RL" 
 if [ "$STATUS" = 200 ]; then say 2-banco-godoutor_app "PASS" "customer/register 200 — INSERT/SELECT em app.users/app.customers via godoutor_app OK";
 else
   req POST /api/auth/me '' 1
