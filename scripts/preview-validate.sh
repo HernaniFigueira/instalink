@@ -120,24 +120,21 @@ ME=$(jqget "$BODY" '.user.email')
 if [ "$STATUS" = 200 ] && [ "$ME" = "$EMAIL" ]; then say 3c-sessao "PASS" "me 200 (sessão lida do banco)"; else say 3c-sessao "FAIL" "me → $STATUS email='$ME'. Erro: $(printf '%s' "$BODY" | head -c 300)"; fi
 
 # ── Item 2: conexão ao banco via godoutor_app (conta global do paciente) ──
-RAW2=$(curl -s -m 90 -o /tmp/r2.json -D /tmp/r2.hdr -w '%{http_code}' -X POST -H 'content-type: application/json' -d "{\"name\":\"Paciente Validação\",\"phone\":\"11996000001\",\"email\":\"pac-$EMAIL\",\"password\":\"Valida1234\",\"businessId\":\"$T\"}" "$BASE/api/customer/register" 2>&1)
-STATUS=$RAW2; BODY=$(cat /tmp/r2.json)
-RL=$(grep -i '^location:' /tmp/r2.hdr | tr -d '\r' | head -c 160)
-[ -n "$RL" ] && BODY="$BODY |||| location=$RL"
-if [ "$STATUS" != 200 ]; then
-  HDRS2=$(tr '\n' ' ' < /tmp/r2.hdr | tr -s ' ' | head -c 350)
-  sleep 6
-  RAW2=$(curl -s -m 90 -o /tmp/r2.json -D /tmp/r2.hdr -w '%{http_code}' -X POST -H 'content-type: application/json' -d "{\"name\":\"Paciente Validação 2\",\"phone\":\"11996000002\",\"email\":\"pac2-$EMAIL\",\"password\":\"Valida1234\",\"businessId\":\"$T\"}" "$BASE/api/customer/register" 2>&1)
-  STATUS=$RAW2; BODY=$(cat /tmp/r2.json)
-  RL=$(grep -i '^location:' /tmp/r2.hdr | tr -d '\r' | head -c 160)
-  [ -n "$RL" ] && BODY="$BODY |||| location=$RL"
-  [ "$STATUS" != 200 ] && BODY="$BODY |||| hdrs-1a-tentativa=$HDRS2"
-fi 
-if [ "$STATUS" = 200 ]; then say 2-banco-godoutor_app "PASS" "customer/register 200 — INSERT/SELECT em app.users/app.customers via godoutor_app OK";
+STATUS=''; BODY=''
+for ATT in 1 2 3; do
+  OUT=$(curl -s -m 60 -w '\n%{http_code}' -X POST -H 'content-type: application/json' \
+    -d "{\"name\":\"Paciente Valida\u00e7\u00e3o $ATT\",\"phone\":\"1199600011$ATT\",\"email\":\"pac$ATT-$EMAIL\",\"password\":\"Valida1234\",\"businessId\":\"$T\"}" \
+    "$BASE/api/customer/register" 2>&1)
+  STATUS=$(printf '%s' "$OUT" | tail -n1 | tr -d '\r')
+  BODY=$(printf '%s' "$OUT" | sed '$d')
+  [ "$STATUS" = 200 ] && break
+  sleep 4
+done
+say 2-banco-godoutor_app "INFO" "tentativas: $(printf '%s' "$ATT") (\u00faltima=$STATUS)"
+if [ "$STATUS" = 200 ]; then
+  say 2-banco-godoutor_app "PASS" "customer/register 200 — INSERT/SELECT em app.users/app.customers via godoutor_app OK";
 else
-  req POST /api/auth/me '' 1
-  if [ "$STATUS" = 200 ]; then say 2-banco-godoutor_app "PASS" "(customer/register → $STATUS, mas leitura de app.users OK) detalhe: $(printf '%s' "$BODY" | head -c 200)";
-  else say 2-banco-godoutor_app "FAIL" "customer/register → $STATUS. Erro exato: $(printf '%s' "$BODY" | head -c 400)"; fi
+  say 2-banco-godoutor_app "FAIL" "customer/register → $STATUS. Erro exato: $(printf '%s' "$BODY" | head -c 300)";
 fi
 
 # ── Item 4: criar unidade + persistência nas tabelas app ──
