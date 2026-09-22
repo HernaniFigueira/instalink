@@ -76,6 +76,22 @@ HS=$(jqget "$BODY" '.dbUrlShape')$(printf '|')
 STJ=$(printf '%s' "$BODY" | jq -c '.storage // empty' 2>/dev/null)
 say 0b-banco-diagnostico "INFO" "health: persistence=$HL dbConnect=$HC appUsers=$HU appBusinesses=$HB url=$HS storage=${STJ:-sem-dado}"
 
+# ── Item 0e: baterias de POST em customer/register (assinar o 405 intermitente) ──
+{
+  for i in 1 2 3 4 5 6 7 8; do
+    C=$(curl -s -m 30 -o /dev/null -D - -w '%{http_code}' -X POST -H 'content-type: application/json' \
+      -d "{\"name\":\"Probe $i\",\"email\":\"probe$i-$RANDOM-$T@godoutor.test\",\"password\":\"Valida1234\"}" \
+      "$BASE/api/customer/register" 2>&1 | tail -1)
+    printf 'POST-%s=%s ' "$i" "$C"
+  done
+  echo
+  echo '--- headers de uma chamada com body completo ---'
+  curl -s -m 30 -o /dev/null -D - -X POST -H 'content-type: application/json' \
+    -d "{\"name\":\"Probe Full\",\"phone\":\"11961000099\",\"email\":\"probelong-$T@godoutor.test\",\"password\":\"Valida1234\",\"businessId\":\"$T\"}" \
+    "$BASE/api/customer/register" 2>&1 | tr -d '\r'
+} > /tmp/probe405.txt 2>&1
+say 0e-probe405 "INFO" "$(tr '\n' ' ' < /tmp/probe405.txt | tr -s ' ' | head -c 900)"
+
 # ── Item 1: modo relacional ativo (rota não migrada → 503 explícito) ──
 H=$(curl -s -m 60 -D - -o /tmp/probe.json "$BASE/api/automations" 2>&1)
 CODE=$(printf '%s' "$H" | head -n1 | awk '{print $2}')
