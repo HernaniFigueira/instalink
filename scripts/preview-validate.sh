@@ -243,3 +243,5 @@ exit 0
 # reexecução: storage no health + retry com headers crus no customer/register
 
 # reexecução final: service_role key corrigida
+
+# reexecução final 2: service_role JWT completo no Preview
