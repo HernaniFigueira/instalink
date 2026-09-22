@@ -1,30 +1,30 @@
 CHECK|0-protecao|PASS|sem Vercel Authentication no preview
-CHECK|0a-deployment|PASS|deployment com /api/health servindo (x-vercel-id: pdx1::fw6v4-1790112994134-f0e57912c905)
-CHECK|0d-pooler-probe|INFO|role.custom+pwd-errada: psql: error: connection to server at "aws-0-sa-east-1.pooler.supabase.com" (15.229.150.166), port 6543 failed: FATAL:  password authentication failed for user "godoutor_app" connection to server at "a ||| postgres.ref+pwd-errada: psql: error: connection to server at "aws-0-sa-east-1.pooler.supabase.com" (15.229.150.166), port 6543 failed: FATAL:  password authentication failed for user "postgres" connection to server at "aws-0
-CHECK|0c-edge-diag|INFO|--- POST /api/customer/register (cru) --- HTTP/2 400  cache-control: public, max-age=0, must-revalidate content-type: application/json date: Tue, 22 Sep 2026 21:36:40 GMT server: Vercel strict-transport-security: max-age=63072000; includeSubDomains; preload vary: RSC, Next-Router-State-Tree, Next-Router-Prefetch x-matched-path: /api/customer/register --- POST /api/auth/register (cru) --- HTTP/2 400  cache-control: public, max-age=0, must-revalidate content-type: application/json date: Tue, 22 Sep 2026 21:36:40 GMT server: Vercel strict-transport-security: max-age=63072000; includeSubDomains; preload vary: RSC, Next-Router-State-Tree, Next-Router-Prefetch x-matched-path: /api/auth/register --- GET /api/health (cru) --- HTTP/2 200  age: 0 cache-control: public, max-age=0, must-revalidate content-type: application/json date: Tue, 22 Sep 2026 21:36:41 GMT server: Vercel
-CHECK|0b-banco-diagnostico|INFO|health: persistence=relational| dbConnect=ok| appUsers=ok:2 registros| appBusinesses=ok:1 registros| url=postgresql://go***(len 33)@aws-0-sa-east-1.pooler.supabase.com:6543/postgres?sslmode#pwd=len 15;no-pct,no-ws,alnum| corpo={"ok":true,"persistence":"relational","dbUrlConfigured":true,"dbUrlShape":"postgresql://go***(len 33)@aws-0-sa-east-1.pooler.supabase.com:6543/postgres?sslmode#pwd=len 15;no-pct,no-ws,alnum","commit":"f4b8b0d23abc18e93b2e7fee690f2f77a30656a0","dbConnect":"ok","appUsers":"ok:2 registros","appBusinesses":"ok:1 registros","storage":{"urlConfigured":true,"serviceKeyLen":25,"bucketPublic":"clinic-media
+CHECK|0a-deployment|PASS|deployment com /api/health servindo (x-vercel-id: iad1::cbp8w-1790113535140-e490ff4c7dc9)
+CHECK|0d-pooler-probe|INFO|role.custom+pwd-errada: psql: error: connection to server at "aws-0-sa-east-1.pooler.supabase.com" (54.94.90.106), port 6543 failed: FATAL:  password authentication failed for user "godoutor_app" connection to server at "aws ||| postgres.ref+pwd-errada: psql: error: connection to server at "aws-0-sa-east-1.pooler.supabase.com" (15.229.150.166), port 6543 failed: FATAL:  password authentication failed for user "postgres" connection to server at "aws-0
+CHECK|0c-edge-diag|INFO|--- POST /api/customer/register (cru) --- HTTP/2 400  cache-control: public, max-age=0, must-revalidate content-type: application/json date: Tue, 22 Sep 2026 21:45:40 GMT server: Vercel strict-transport-security: max-age=63072000; includeSubDomains; preload vary: RSC, Next-Router-State-Tree, Next-Router-Prefetch x-matched-path: /api/customer/register --- POST /api/auth/register (cru) --- HTTP/2 400  cache-control: public, max-age=0, must-revalidate content-type: application/json date: Tue, 22 Sep 2026 21:45:40 GMT server: Vercel strict-transport-security: max-age=63072000; includeSubDomains; preload vary: RSC, Next-Router-State-Tree, Next-Router-Prefetch x-matched-path: /api/auth/register --- GET /api/health (cru) --- HTTP/2 200  age: 0 cache-control: public, max-age=0, must-revalidate content-type: application/json date: Tue, 22 Sep 2026 21:45:40 GMT server: Vercel
+CHECK|0b-banco-diagnostico|INFO|health: persistence=relational| dbConnect=ok| appUsers=ok:3 registros| appBusinesses=ok:2 registros| url=postgresql://go***(len 33)@aws-0-sa-east-1.pooler.supabase.com:6543/postgres?sslmode#pwd=len 15;no-pct,no-ws,alnum| storage={"urlConfigured":true,"serviceKeyLen":25,"bucketPublic":"clinic-media","bucketPrivate":"patient-files","bucketPublicProbe":"400 {\"statusCode\":\"404\",\"error\":\"not_found\",\"message\":\"Object no"}
 CHECK|1-relacional|PASS|503 module_not_migrated (x-godoutor-blocked=Automa%C3%A7%C3%B5es, persistence=relational) — GODOUTOR_PERSISTENCE=relational ATIVO
-CHECK|3a-cadastro-equipe|PASS|register 200 (preview-valid-1790112914@godoutor.test)
+CHECK|3a-cadastro-equipe|PASS|register 200 (preview-valid-1790113457@godoutor.test)
 CHECK|3b-login-equipe|PASS|login 200 + token de sessão
 CHECK|3c-sessao|PASS|me 200 (sessão lida do banco)
-CHECK|2-banco-godoutor_app|FAIL|customer/register → 405. Erro exato: 
-CHECK|4a-criar-unidade|PASS|POST /api/businesses → businessId=48839139-eb09-4352-90a2-4d9ad52bf2e9 slug=clinicavalidacaopreview1790112
-CHECK|4b-pagina-persistida|PASS|GET /clinicavalidacaopreview1790112 → 200 renderizada do SQL (nome no HTML)
+CHECK|2-banco-godoutor_app|PASS|customer/register 200 — INSERT/SELECT em app.users/app.customers via godoutor_app OK
+CHECK|4a-criar-unidade|PASS|POST /api/businesses → businessId=1cc0b9fa-d9c6-4652-9fab-61940c6f631e slug=clinicavalidacaopreview1790113
+CHECK|4b-pagina-persistida|PASS|GET /clinicavalidacaopreview1790113 → 200 renderizada do SQL (nome no HTML)
 CHECK|4c-catalogo-leitura|PASS|catalog/get 200 JSON (app.businesses/app.services legíveis)
 CHECK|5a-modulos|PASS|features services+bookings ligadas
-CHECK|5b-profissional|PASS|professional.save → c0b4c870-9434-4d7d-b37e-9d8d2693d299
+CHECK|5b-profissional|PASS|professional.save → 653dea06-7774-4784-8c6b-36249748dee4
 CHECK|5c-servico|PASS|service.save ok
 CHECK|5d-horarios|PASS|availability.save ok
-CHECK|5e-catalogo-id|PASS|serviceId=70fa9221-f567-4cfa-99dd-f56d40fb9905
+CHECK|5e-catalogo-id|PASS|serviceId=1e093bfd-50f3-4da5-8c26-a98e906dbdd8
 CHECK|5f-slots|PASS|20 slots em 2026-09-24
-CHECK|5g-reserva|PASS|bookingId=7e3f1661-bbad-4fe0-b273-2cae1533801a status=pending slot=08:00
+CHECK|5g-reserva|PASS|bookingId=7cf78123-0ca3-4689-861c-4ba62543abc3 status=pending slot=08:00
 CHECK|5h-confirmar|PASS|PATCH confirm → 200
 CHECK|5i-persistiu|PASS|reserva visível na gestão (app.bookings)
 CHECK|6a-upload-publico|FAIL|upload → 500. Erro: {"error":"Não foi possível enviar o arquivo. Tente novamente."}
 CHECK|6b-objeto-publico|FAIL|sem url
-CHECK|7a-contato|PASS|contato criado (b29705f0-df66-478f-bd78-2a537c9bc7d6)
+CHECK|7a-contato|PASS|contato criado (b2f6a77f-a445-4628-815a-fe391a379d1f)
 CHECK|7b-upload-privado|FAIL|upload paciente → 500. Erro: {"error":"Não foi possível enviar o arquivo. Tente novamente."}
 CHECK|7c-reassinatura|FAIL|sem fileId
 CHECK|7d-leitura-privada|FAIL|sem fileId
-RESUMO|PASS=19|FAIL=9
+RESUMO|PASS=20|FAIL=8
 VALIDACAO COM FALHAS
