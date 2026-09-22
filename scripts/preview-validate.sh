@@ -225,3 +225,5 @@ exit 0
 # reexecução: pwdShape no diagnóstico
 
 # reexecução: sondas de roteamento do pooler
+
+# reexecução: ALTER ROLE confirmado no projeto correto
