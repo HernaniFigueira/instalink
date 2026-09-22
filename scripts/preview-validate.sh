@@ -34,6 +34,31 @@ if printf '%s' "$PB" | grep -q 'vercel_auth_callback\|Protected deployment'; the
   exit 0
 fi
 say 0-protecao "PASS" "sem Vercel Authentication no preview"
+
+# ── Item 0a: esperar o deployment do commit corrente (marcado por /api/health) ──
+HEALTHOK=0
+for i in $(seq 1 24); do
+  ST=$(curl -s -m 20 -o /tmp/h.json -w '%{http_code}' "$BASE/api/health" 2>&1)
+  if [ "$ST" = 200 ] && jqget "$(cat /tmp/h.json)" '.ok' | grep -q true; then HEALTHOK=1; break; fi
+  sleep 10
+done
+DPL=$(curl -sI -m 20 "$BASE/" | grep -i '^x-vercel-id:' | tr -d '\r' | head -1)
+if [ "$HEALTHOK" = 1 ]; then
+  say 0a-deployment "PASS" "deployment com /api/health servindo ($DPL)"
+else
+  say 0a-deployment "FAIL" "/api/health não respondeu 200 em 240s ($DPL) — validação contra deployment sem o commit corrente; último corpo: $(head -c 200 /tmp/h.json)"
+fi
+
+# ── Item 0c: bateria de diagnóstico de borda (headers crus) ──
+{
+  echo '--- POST /api/customer/register (cru) ---'
+  curl -s -m 30 -o /dev/null -D - -X POST -H 'content-type: application/json' -d '{"name":"x"}' "$BASE/api/customer/register" | head -8
+  echo '--- POST /api/auth/register (cru) ---'
+  curl -s -m 30 -o /dev/null -D - -X POST -H 'content-type: application/json' -d '{}' "$BASE/api/auth/register" | head -8
+  echo '--- GET /api/health (cru) ---'
+  curl -s -m 30 -o /dev/null -D - "$BASE/api/health" | head -8
+} > /tmp/diag.txt 2>&1
+say 0c-edge-diag "INFO" "$(tr '\n' ' ' < /tmp/diag.txt | head -c 900)"
 req GET /api/health '' 0
 HL=$(jqget "$BODY" '.persistence')$(printf '|'); HC=$(jqget "$BODY" '.dbConnect')$(printf '|')
 HU=$(jqget "$BODY" '.appUsers')$(printf '|'); HB=$(jqget "$BODY" '.appBusinesses')$(printf '|')
@@ -42,7 +67,7 @@ say 0b-banco-diagnostico "INFO" "health: persistence=$HL dbConnect=$HC appUsers=
 
 # ── Item 1: modo relacional ativo (rota não migrada → 503 explícito) ──
 H=$(curl -s -m 60 -D - -o /tmp/probe.json "$BASE/api/automations" 2>&1)
-CODE=$(printf '%s' "$H" | head -n1 | tr -d '\r' | grep -oE '[0-9]{3}$' || echo 000)
+CODE=$(printf '%s' "$H" | head -n1 | awk '{print $2}')
 BLOCKED=$(printf '%s' "$H" | grep -i '^x-godoutor-blocked:' | tr -d '\r' | cut -d' ' -f2)
 PERS=$(printf '%s' "$H" | grep -i '^x-godoutor-persistence:' | tr -d '\r' | cut -d' ' -f2)
 ERR1=$(jqget "$(cat /tmp/probe.json)" '.code')
