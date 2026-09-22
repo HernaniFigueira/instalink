@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { updateDB } from '@/lib/db';
+import { relationalActive } from '@/lib/relational/config';
+import { runRelationalWrite } from '@/lib/relational/slice';
 import { requireBusiness } from '@/lib/access';
 import { featureDef, isValidFeature, normalizeFeatures, offeredFeatureState, withActivationBlock } from '@/lib/features';
 import { businessIdFromRoute } from '@/lib/business-context';
@@ -45,8 +47,9 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
     const enabled = body.enabled !== false && body.enabled !== undefined ? !!body.enabled : false;
     const def = featureDef(feature)!;
 
-    const result = await updateDB((db) => {
-      const b = db.businesses.find((x) => x.id === businessId);
+    /** Mutação PURA (DOIS MOTORES): liga/desliga módulo e reflete na página. */
+    const featureTx = (db: any) => {
+      const b = db.businesses.find((x: any) => x.id === businessId);
       if (!b) return null;
       if (def.mode) {
         const set = new Set(b.modes || []);
@@ -59,7 +62,7 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
         // contas antigas com pedidos — a contradição auditada em §4).
         if (def.id === 'products') b.productsOff = !enabled;
       } else {
-        const features = normalizeFeatures(b, db.pages.find((p) => p.businessId === b.id)?.blocks || []);
+        const features = normalizeFeatures(b, db.pages.find((p: any) => p.businessId === b.id)?.blocks || []);
         features[def.id as OptionalFeatureId] = enabled;
         b.features = features;
         // "Sobre" espelha o flag legado para compatibilidade de renderização.
@@ -70,7 +73,7 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
       // ATIVAR reflete na página na hora: garante o bloco de apresentação
       // (aditivo — desativar nunca remove/apaga blocos nem configurações).
       if (enabled) {
-        const page = db.pages.find((p) => p.businessId === businessId);
+        const page = db.pages.find((p: any) => p.businessId === businessId);
         if (page) {
           const next = withActivationBlock(page.blocks, def.id, true);
           if (next !== page.blocks) {
@@ -87,8 +90,15 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
         supportSessionId: ctx.support?.id,
         meta: { feature: def.id, enabled },
       });
-      return { modes: b.modes, features: normalizeFeatures(b, db.pages.find((p) => p.businessId === b.id)?.blocks || []) };
-    });
+      return { modes: b.modes, features: normalizeFeatures(b, (db.pages || []).find((p: any) => p.businessId === b.id)?.blocks || []) };
+    };
+    let result: any;
+    if (relationalActive()) {
+      // Fatia mínima: a unidade (auto) + a página (blocos refletem ativação).
+      result = await runRelationalWrite(businessId, featureTx, { load: { pages: {} } });
+    } else {
+      result = await updateDB(featureTx);
+    }
 
     if (!result) return NextResponse.json({ error: 'Negócio não encontrado.' }, { status: 404 });
     return NextResponse.json({

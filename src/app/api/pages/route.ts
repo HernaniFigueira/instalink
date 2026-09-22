@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { readDB, updateDB } from '@/lib/db';
+import { relationalActive } from '@/lib/relational/config';
+import { runRelationalWrite } from '@/lib/relational/slice';
 import { requireBusiness } from '@/lib/access';
 import { slugify, isValidSlug } from '@/lib/utils';
 import { featuresForActivatedBlocks } from '@/lib/features';
@@ -37,12 +39,81 @@ function sanitizeNavItems(raw: unknown): NavItemConfig[] {
   return out;
 }
 
+/** Mutação PURA: navegação/sobre (usada pelos DOIS motores). */
+function applyPageNavAbout(d: Pick<any, 'businesses'>, businessId: string, body: Record<string, any>): void {
+  const b = d.businesses.find((x: any) => x.id === businessId);
+  if (!b) return;
+  if (body.nav !== undefined) {
+    const nav = Array.isArray(body.nav) ? body.nav.filter((n: unknown) => VALID_NAV.includes(n as string)) : [];
+    b.nav = [...new Set(nav as string[])];
+  }
+  if (body.navCustom !== undefined) b.navCustom = !!body.navCustom;
+  if (body.navItems !== undefined) {
+    b.navItems = sanitizeNavItems(body.navItems);
+  }
+  if (body.about !== undefined && body.about && typeof body.about === 'object') {
+    const a = body.about as Record<string, any>;
+    b.about = {
+      title: pageStr(a.title, 80),
+      text: pageStr(a.text, 1200),
+      image: pageStr(a.image, 500),
+      enabled: a.enabled !== false && !!a.enabled,
+    };
+    // Sincroniza o módulo: visível + conteúdo ⇒ features.about ligado.
+    const hasContent = !!(b.about.title.trim() || b.about.text.trim() || b.about.image.trim());
+    if (b.about.enabled && hasContent) {
+      const features = { ...(b.features || {}) } as Record<string, boolean>;
+      features.about = true;
+      b.features = features as typeof b.features;
+    }
+  }
+  b.updatedAt = new Date().toISOString();
+}
+
+/** Mutação PURA: tema/preset/blocos + coerência editor→módulo (DOIS motores). */
+function applyPageDesign(d: Pick<any, 'businesses' | 'pages'>, businessId: string, body: Record<string, any>): void {
+  const page = d.pages.find((p: any) => p.businessId === businessId);
+  if (!page) return;
+  const previousBlocks = page.blocks;
+  if (body.theme) page.theme = { ...page.theme, ...body.theme };
+  if (body.presetId !== undefined) page.presetId = String(body.presetId || '');
+  if (Array.isArray(body.blocks)) {
+    page.blocks = body.blocks.map((bl: any, i: number) => ({
+      id: String(bl.id), type: bl.type, order: i,
+      // `enabled` é APRESENTAÇÃO: o módulo da empresa (lib/features)
+      // continua sendo quem decide se o recurso existe no ar.
+      enabled: bl.enabled !== false,
+      settings: (bl.settings && typeof bl.settings === 'object') ? bl.settings : {},
+    }));
+    // Coerência editor→módulo (correção do "salvei a galeria e nada
+    // apareceu"): adicionar/reativar um bloco de conteúdo aqui liga o
+    // módulo OPCIONAL correspondente. Só a ação do usuário conta —
+    // salvar por cima não reativa módulo desligado de propósito.
+    const b = d.businesses.find((x: any) => x.id === businessId);
+    if (b) {
+      const patch = featuresForActivatedBlocks(b, previousBlocks, page.blocks);
+      if (patch) {
+        b.features = patch as NonNullable<typeof b.features>;
+        b.updatedAt = new Date().toISOString();
+      }
+    }
+  }
+  page.updatedAt = new Date().toISOString();
+}
+
 // GET ?businessId= — página + tema + blocos (dono)
 // PUT — salvar blocos/tema/publicação/slug (dono)
 export async function GET(req: NextRequest) {
   const businessId = req.nextUrl.searchParams.get('businessId') || '';
   const guard = await requireBusiness(req, businessId);
   if (!guard.ok) return guard.res;
+  // MODO RELACIONAL: página da unidade vem do SQL (consulta pontual).
+  if (relationalActive()) {
+    const { getPool } = await import('@/lib/relational/pool');
+    const { rowToPage } = await import('@/lib/relational/public-store');
+    const r = await getPool().query('SELECT * FROM app.pages WHERE business_id = $1 LIMIT 1', [businessId]);
+    return NextResponse.json({ business: guard.ctx.business, page: r.rows[0] ? rowToPage(r.rows[0]) : null });
+  }
   const page = guard.db.pages.find((p) => p.businessId === businessId);
   return NextResponse.json({ business: guard.ctx.business, page });
 }
@@ -55,6 +126,37 @@ export async function PUT(req: NextRequest) {
     if (!guard.ok) return guard.res;
     const db = guard.db;
 
+    // MODO RELACIONAL: mesmas regras sobre a fatia mínima (businesses+pages).
+    if (relationalActive()) {
+      if (body.slug !== undefined) {
+        const slug = slugify(body.slug);
+        if (!isValidSlug(slug)) return NextResponse.json({ error: 'Endereço inválido.' }, { status: 400 });
+        const { relSlugTakenByOther } = await import('@/lib/relational/unit-store');
+        if (await relSlugTakenByOther(slug, businessId)) {
+          return NextResponse.json({ error: 'Este endereço já está em uso.' }, { status: 400 });
+        }
+        await runRelationalWrite(businessId, (d) => {
+          const b = d.businesses.find((x: any) => x.id === businessId);
+          if (b) b.slug = slug;
+        }, { load: { businesses: {} } });
+      }
+      if (body.published !== undefined) {
+        await runRelationalWrite(businessId, (d) => {
+          const b = d.businesses.find((x: any) => x.id === businessId)!;
+          b.published = !!body.published;
+          b.updatedAt = new Date().toISOString();
+        }, { load: { businesses: {} } });
+      }
+      if (body.nav !== undefined || body.navCustom !== undefined || body.about !== undefined || body.navItems !== undefined) {
+        await runRelationalWrite(businessId, (d) => applyPageNavAbout(d as any, businessId, body), { load: { businesses: {} } });
+      }
+      if (body.theme || body.blocks || body.presetId !== undefined) {
+        await runRelationalWrite(businessId, (d) => applyPageDesign(d as any, businessId, body), { load: { businesses: {}, pages: {} } });
+      }
+      const { relBusinessWithPage } = await import('@/lib/relational/unit-store');
+      const fresh = await relBusinessWithPage(businessId);
+      return NextResponse.json({ ok: true, business: fresh.business, page: fresh.page });
+    }
     if (body.slug !== undefined) {
       const slug = slugify(body.slug);
       if (!isValidSlug(slug)) return NextResponse.json({ error: 'Endereço inválido.' }, { status: 400 });
@@ -78,65 +180,10 @@ export async function PUT(req: NextRequest) {
     // também LIGA o módulo 'about' (features) — o editor é a fonte única;
     // o lojista nunca precisa caçar o toggle em Recursos para ver a seção no ar.
     if (body.nav !== undefined || body.navCustom !== undefined || body.about !== undefined || body.navItems !== undefined) {
-      await updateDB((d) => {
-        const b = d.businesses.find((x) => x.id === businessId)!;
-        if (body.nav !== undefined) {
-          const nav = Array.isArray(body.nav) ? body.nav.filter((n: unknown) => VALID_NAV.includes(n as string)) : [];
-          b.nav = [...new Set(nav as string[])];
-        }
-        if (body.navCustom !== undefined) b.navCustom = !!body.navCustom;
-        if (body.navItems !== undefined) {
-          b.navItems = sanitizeNavItems(body.navItems);
-        }
-        if (body.about !== undefined && body.about && typeof body.about === 'object') {
-          const a = body.about as Record<string, any>;
-          b.about = {
-            title: pageStr(a.title, 80),
-            text: pageStr(a.text, 1200),
-            image: pageStr(a.image, 500),
-            enabled: a.enabled !== false && !!a.enabled,
-          };
-          // Sincroniza o módulo: visível + conteúdo ⇒ features.about ligado.
-          const hasContent = !!(b.about.title.trim() || b.about.text.trim() || b.about.image.trim());
-          if (b.about.enabled && hasContent) {
-            const features = { ...(b.features || {}) } as Record<string, boolean>;
-            features.about = true;
-            b.features = features as typeof b.features;
-          }
-        }
-        b.updatedAt = new Date().toISOString();
-      });
+      await updateDB((d) => applyPageNavAbout(d, businessId, body));
     }
     if (body.theme || body.blocks || body.presetId !== undefined) {
-      await updateDB((d) => {
-        const page = d.pages.find((p) => p.businessId === businessId);
-        if (!page) return;
-        const previousBlocks = page.blocks;
-        if (body.theme) page.theme = { ...page.theme, ...body.theme };
-        if (body.presetId !== undefined) page.presetId = String(body.presetId || '');
-        if (Array.isArray(body.blocks)) {
-          page.blocks = body.blocks.map((bl: any, i: number) => ({
-            id: String(bl.id), type: bl.type, order: i,
-            // `enabled` é APRESENTAÇÃO: o módulo da empresa (lib/features)
-            // continua sendo quem decide se o recurso existe no ar.
-            enabled: bl.enabled !== false,
-            settings: (bl.settings && typeof bl.settings === 'object') ? bl.settings : {},
-          }));
-          // Coerência editor→módulo (correção do "salvei a galeria e nada
-          // apareceu"): adicionar/reativar um bloco de conteúdo aqui liga o
-          // módulo OPCIONAL correspondente. Só a ação do usuário conta —
-          // salvar por cima não reativa módulo desligado de propósito.
-          const b = d.businesses.find((x) => x.id === businessId);
-          if (b) {
-            const patch = featuresForActivatedBlocks(b, previousBlocks, page.blocks);
-            if (patch) {
-              b.features = patch as NonNullable<typeof b.features>;
-              b.updatedAt = new Date().toISOString();
-            }
-          }
-        }
-        page.updatedAt = new Date().toISOString();
-      });
+      await updateDB((d) => applyPageDesign(d, businessId, body));
     }
     // O editor revalida a persistência a partir do ESTADO CANÔNICO do banco
     // (nunca do eco do que foi enviado): nada de "Alterações salvas" sobre

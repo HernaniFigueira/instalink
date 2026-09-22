@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { randomUUID } from 'node:crypto';
 import { readDB, updateDB } from '@/lib/db';
+import { relationalActive } from '@/lib/relational/config';
+import { runRelationalWrite } from '@/lib/relational/slice';
 import { requireBusiness } from '@/lib/access';
 import { clampCents } from '@/lib/utils';
 import type { Professional } from '@/lib/types';
@@ -29,18 +31,20 @@ export async function POST(req: NextRequest) {
 
     const id = body.id || randomUUID();
 
-    const result = await updateDB((db) => {
+    // Mutação PURA (DOIS motores): TODAS as ações do catálogo em um lugar —
+    // a regra nunca diverge entre documento e SQL.
+    const catalogAction = (db: any): any => {
       switch (action) {
         // ── Categorias ──
         case 'category.save': {
           if (!body.name?.trim()) throw new Error('Dê um nome à categoria.');
-          const existing = db.categories.find((c) => c.id === body.id && c.businessId === businessId);
+          const existing = db.categories.find((c: any) => c.id === body.id && c.businessId === businessId);
           if (existing) { existing.name = body.name.trim(); existing.active = body.active !== false; }
-          else db.categories.push({ id, businessId, kind: body.kind === 'service' ? 'service' : 'product', name: body.name.trim(), order: db.categories.filter((c) => c.businessId === businessId).length, active: true });
+          else db.categories.push({ id, businessId, kind: body.kind === 'service' ? 'service' : 'product', name: body.name.trim(), order: db.categories.filter((c: any) => c.businessId === businessId).length, active: true });
           return { ok: true };
         }
         case 'category.delete': {
-          db.categories = db.categories.filter((c) => !(c.id === body.id && c.businessId === businessId));
+          db.categories = db.categories.filter((c: any) => !(c.id === body.id && c.businessId === businessId));
           return { ok: true };
         }
         // ── Produtos ──
@@ -48,17 +52,17 @@ export async function POST(req: NextRequest) {
           if (!body.name?.trim()) throw new Error('Dê um nome ao produto.');
           const price = clampCents(Number(body.price) || 0);
           const promo = clampCents(Number(body.promoPrice) || 0);
-          const existing = db.products.find((p) => p.id === body.id && p.businessId === businessId);
+          const existing = db.products.find((p: any) => p.id === body.id && p.businessId === businessId);
           const data = { name: body.name.trim(), description: body.description || '', image: body.image || '', price: price, promoPrice: promo > 0 && promo < price ? promo : 0, categoryId: body.categoryId || '', active: body.active !== false, featured: !!body.featured };
           if (existing) Object.assign(existing, data);
-          else db.products.push({ id, businessId, order: db.products.filter((p) => p.businessId === businessId).length, ...data });
+          else db.products.push({ id, businessId, order: db.products.filter((p: any) => p.businessId === businessId).length, ...data });
           return { ok: true, id: existing?.id || id };
         }
         case 'product.delete': {
-          const optIds = db.options.filter((o) => o.productId === body.id).map((o) => o.id);
-          db.products = db.products.filter((p) => !(p.id === body.id && p.businessId === businessId));
-          db.options = db.options.filter((o) => o.productId !== body.id);
-          db.optionValues = db.optionValues.filter((v) => !optIds.includes(v.optionId));
+          const optIds = db.options.filter((o: any) => o.productId === body.id).map((o: any) => o.id);
+          db.products = db.products.filter((p: any) => !(p.id === body.id && p.businessId === businessId));
+          db.options = db.options.filter((o: any) => o.productId !== body.id);
+          db.optionValues = db.optionValues.filter((v: any) => !optIds.includes(v.optionId));
           return { ok: true };
         }
         // ── Opções do produto (genéricas: tamanho, sabor, adicional…) ──
@@ -67,7 +71,7 @@ export async function POST(req: NextRequest) {
           if (!body.name?.trim()) throw new Error('Dê um nome à opção (ex: Tamanho).');
           const values: Array<{ id?: string; name: string; priceDelta: number }> = Array.isArray(body.values) ? body.values : [];
           const optId = body.id || randomUUID();
-          const existing = db.options.find((o) => o.id === body.id && o.businessId === businessId);
+          const existing = db.options.find((o: any) => o.id === body.id && o.businessId === businessId);
           const data = { name: body.name.trim(), required: !!body.required, multiple: !!body.multiple, min: Number(body.min) || 0, max: Number(body.max) || 0 };
           if (existing) {
             Object.assign(existing, data);
@@ -79,7 +83,7 @@ export async function POST(req: NextRequest) {
           for (const v of values) {
             if (!v.name?.trim()) continue;
             const delta = clampCents(Number(v.priceDelta) || 0);
-            const prev = v.id ? db.optionValues.find((x) => x.id === v.id && x.optionId === targetId) : undefined;
+            const prev = v.id ? db.optionValues.find((x: any) => x.id === v.id && x.optionId === targetId) : undefined;
             if (prev) {
               prev.name = v.name.trim(); prev.priceDelta = delta; prev.active = true;
               seen.add(prev.id);
@@ -89,20 +93,20 @@ export async function POST(req: NextRequest) {
               seen.add(nid);
             }
           }
-          db.optionValues = db.optionValues.filter((x) => x.optionId !== targetId || seen.has(x.id));
+          db.optionValues = db.optionValues.filter((x: any) => x.optionId !== targetId || seen.has(x.id));
           return { ok: true };
         }
         case 'option.delete': {
-          db.options = db.options.filter((o) => !(o.id === body.id && o.businessId === businessId));
-          db.optionValues = db.optionValues.filter((v) => v.optionId !== body.id);
+          db.options = db.options.filter((o: any) => !(o.id === body.id && o.businessId === businessId));
+          db.optionValues = db.optionValues.filter((v: any) => v.optionId !== body.id);
           return { ok: true };
         }
         // ── Serviços ──
         case 'service.save': {
           if (!body.name?.trim()) throw new Error('Dê um nome ao serviço.');
-          const existing = db.services.find((s) => s.id === body.id && s.businessId === businessId);
+          const existing = db.services.find((sv: any) => sv.id === body.id && sv.businessId === businessId);
           const proIds = Array.isArray(body.professionalIds)
-            ? body.professionalIds.map((x: any) => String(x)).filter((x: string) => db.professionals.some((pr) => pr.id === x && pr.businessId === businessId))
+            ? body.professionalIds.map((x: any) => String(x)).filter((x: string) => db.professionals.some((pr: any) => pr.id === x && pr.businessId === businessId))
             : (existing?.professionalIds || []);
           // showPrice (Mostrar preço na página pública): ausente preserva o
           // valor atual (legado = true); explícito grava a decisão do lojista.
@@ -115,13 +119,13 @@ export async function POST(req: NextRequest) {
           return { ok: true };
         }
         case 'service.delete': {
-          db.services = db.services.filter((s) => !(s.id === body.id && s.businessId === businessId));
+          db.services = db.services.filter((s: any) => !(s.id === body.id && s.businessId === businessId));
           return { ok: true };
         }
         // ── Profissionais ──
         case 'professional.save': {
           if (!body.name?.trim()) throw new Error('Dê um nome ao profissional.');
-          const existing = db.professionals.find((p) => p.id === body.id && p.businessId === businessId);
+          const existing = db.professionals.find((pp: any) => pp.id === body.id && pp.businessId === businessId);
           const data: Record<string, any> = { name: body.name.trim(), role: body.role || '', photo: body.photo || '', active: body.active !== false };
           // Herança do horário da empresa só muda quando vem explícita no corpo
           // (editar nome/foto nunca altera a agenda do profissional).
@@ -139,14 +143,14 @@ export async function POST(req: NextRequest) {
         // follow=false → horário personalizado (copia o horário da empresa como
         //                ponto de partida, ou grava as janelas enviadas).
         case 'professional.hours': {
-          const pro = db.professionals.find((p) => p.id === body.id && p.businessId === businessId);
+          const pro = db.professionals.find((p: any) => p.id === body.id && p.businessId === businessId);
           if (!pro) throw new Error('Profissional não encontrado.');
           if (typeof body.follow !== 'boolean') throw new Error('Informe se o profissional segue o horário da empresa.');
-          const all = db.availability.filter((a) => a.businessId === businessId);
+          const all = db.availability.filter((a: any) => a.businessId === businessId);
           const patch = followTogglePatch({ follow: body.follow, rules: all, professionalId: pro.id });
           pro.followBusinessHours = patch.followBusinessHours;
           // Remove o horário próprio anterior em qualquer um dos dois casos.
-          db.availability = db.availability.filter((a) => !(a.businessId === businessId && a.professionalId === pro.id));
+          db.availability = db.availability.filter((a: any) => !(a.businessId === businessId && a.professionalId === pro.id));
           if (!patch.followBusinessHours) {
             const raw = Array.isArray(body.rules) ? body.rules : null;
             const sent = sanitizeWindows(raw ?? []);
@@ -168,18 +172,18 @@ export async function POST(req: NextRequest) {
           return { ok: true, followBusinessHours: pro.followBusinessHours };
         }
         case 'professional.delete': {
-          db.professionals = db.professionals.filter((p) => !(p.id === body.id && p.businessId === businessId));
+          db.professionals = db.professionals.filter((p: any) => !(p.id === body.id && p.businessId === businessId));
           return { ok: true };
         }
         // ── Disponibilidade (substitui SOMENTE o escopo editado) ──
         case 'availability.save': {
-          const rules = Array.isArray(body.rules) ? body.rules : [];
+          const rules: any[] = Array.isArray(body.rules) ? body.rules : [];
           const scope = body.scope && typeof body.scope === 'object' ? body.scope : {};
           const scopePro = typeof scope.professionalId === 'string' ? scope.professionalId : undefined;
           const scopeSvc = typeof scope.serviceId === 'string' ? scope.serviceId : undefined;
           const rx = /^\d{2}:\d{2}$/;
           const toMin = (t: string) => { const parts = t.split(':').map(Number); return parts[0] * 60 + parts[1]; };
-          db.availability = db.availability.filter((a) =>
+          db.availability = db.availability.filter((a: any) =>
             a.businessId !== businessId ||
             (scopePro !== undefined && a.professionalId !== scopePro) ||
             (scopeSvc !== undefined && a.serviceId !== scopeSvc),
@@ -202,13 +206,13 @@ export async function POST(req: NextRequest) {
         // Toca SOMENTE em quem segue a empresa. Quem tem horário personalizado
         // é listado como ignorado (nunca sobrescrito em silêncio).
         case 'availability.applyToAll': {
-          const all = db.availability.filter((a) => a.businessId === businessId);
+          const all = db.availability.filter((a: any) => a.businessId === businessId);
           if (businessRules(all).length === 0) throw new Error('Defina o horário da empresa antes de aplicar a todos.');
-          const pros = db.professionals.filter((p) => p.businessId === businessId);
+          const pros = db.professionals.filter((p: any) => p.businessId === businessId);
           const plan = planApplyBusinessHoursToAll(pros, all);
           const update = new Set(plan.update);
           // Herança é por referência: basta remover regras próprias residuais.
-          db.availability = db.availability.filter((a) => !(a.businessId === businessId && a.professionalId && update.has(a.professionalId)));
+          db.availability = db.availability.filter((a: any) => !(a.businessId === businessId && a.professionalId && update.has(a.professionalId)));
           for (const p of pros) if (update.has(p.id)) p.followBusinessHours = true;
           return { ok: true, updated: plan.update.length, skipped: plan.skip.length, message: applyToAllResultMessage(plan) };
         }
@@ -230,13 +234,13 @@ export async function POST(req: NextRequest) {
               // A2-B5 (F9): "hoje" no fuso do negócio da exceção.
               today: todayISO(
                 new Date(),
-                effectiveTimezone(db.businesses.find((b) => b.id === businessId)?.businessTimezone),
+                effectiveTimezone(db.businesses.find((b: any) => b.id === businessId)?.businessTimezone),
               ),
-              rules: db.availability.filter((a) => a.businessId === businessId),
+              rules: db.availability.filter((a: any) => a.businessId === businessId),
             },
           );
           if (!check.ok) throw new Error(check.error);
-          const found = db.exceptions.find((e) => e.businessId === businessId && e.date === date);
+          const found = db.exceptions.find((e: any) => e.businessId === businessId && e.date === date);
           if (found) {
             found.closed = closed; found.start = start; found.end = end;
             found.note = String(body.note || '').slice(0, 80);
@@ -246,13 +250,26 @@ export async function POST(req: NextRequest) {
           return { ok: true };
         }
         case 'exception.delete': {
-          db.exceptions = db.exceptions.filter((e) => !(e.businessId === businessId && (e.id === body.id || e.date === body.date)));
+          db.exceptions = db.exceptions.filter((e: any) => !(e.businessId === businessId && (e.id === body.id || e.date === body.date)));
           return { ok: true };
         }
         default:
           throw new Error('Ação inválida.');
       }
-    });
+    };
+    // MODO RELACIONAL: a MESMA mutação sobre a fatia do catálogo
+    // (categorias/produtos/opções/serviços/profissionais/horários/exceções).
+    if (relationalActive()) {
+      const result = await runRelationalWrite(businessId, catalogAction, {
+        load: {
+          categories: {}, products: {}, options: {}, services: {}, professionals: {},
+          availability: {}, exceptions: {}, businesses: {},
+          optionValues: (partial) => (partial.options.length ? {} : null),
+        },
+      });
+      return NextResponse.json(result);
+    }
+    const result = await updateDB(catalogAction);
     return NextResponse.json(result);
   } catch (err: any) {
     return NextResponse.json({ error: err.message || 'Não foi possível salvar.' }, { status: 400 });

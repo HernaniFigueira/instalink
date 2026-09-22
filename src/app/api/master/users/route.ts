@@ -1,10 +1,14 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { blockIfRelational } from '@/lib/relational/blocked';
 import { requireMaster } from '@/lib/access';
 import { listPlatformUsers } from '@/lib/master';
 
 // Lista GLOBAL de usuários — somente Master.
 // Nunca expõe passwordHash, tokens ou segredos.
 export async function GET(req: NextRequest) {
+  const blocked = blockIfRelational('Master · usuários');
+  if (blocked) return blocked;
+
   const guard = await requireMaster(req);
   if (!guard.ok) return guard.res;
   const q = (req.nextUrl.searchParams.get('q') || '').trim().toLowerCase();

@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { randomUUID } from 'node:crypto';
 import { updateDB } from '@/lib/db';
+import { relationalActive } from '@/lib/relational/config';
+import { runRelationalWrite } from '@/lib/relational/slice';
 import { hashPassword } from '@/lib/auth';
 import { requireBusiness } from '@/lib/access';
 import { pushAudit } from '@/lib/audit';
@@ -24,6 +26,21 @@ import type { BusinessCustomer, Customer } from '@/lib/types';
 // PATCH { businessId, id, addNote: { text, bookingId? } } → ACRESCENTA uma
 //       observação (append-only): nada é sobrescrito nem apagado e o registro
 //       guarda autor + data + contexto.
+
+function rowToContactLight(r: any): BusinessCustomer {
+  const isoOf = (v: any) => (v instanceof Date ? v.toISOString() : String(v ?? ''));
+  return {
+    id: String(r.id), businessId: String(r.business_id), customerId: String(r.customer_id || ''),
+    name: String(r.name || ''), phone: String(r.phone || ''), email: String(r.email || ''),
+    createdAt: isoOf(r.created_at), updatedAt: isoOf(r.updated_at),
+    source: String(r.source || 'interaction'),
+    ...(r.last_interaction ? { lastInteraction: isoOf(r.last_interaction) } : {}),
+    marketingOptIn: r.marketing_opt_in === true, note: String(r.note || ''),
+    ...(r.notes ? { notes: typeof r.notes === 'string' ? JSON.parse(r.notes) : r.notes } : {}),
+    ...(r.profile ? { profile: typeof r.profile === 'string' ? JSON.parse(r.profile) : r.profile } : {}),
+    ...(r.channel_identities ? { channelIdentities: typeof r.channel_identities === 'string' ? JSON.parse(r.channel_identities) : r.channel_identities } : {}),
+  } as any;
+}
 
 function toDTO(c: BusinessCustomer, customer?: Customer | null, counts?: { bookings?: number; attended?: number; leads?: number }) {
   const account = customer || null;
@@ -67,6 +84,41 @@ export async function GET(req: NextRequest) {
   const limit = Math.min(50, Math.max(1, Number(req.nextUrl.searchParams.get('limit')) || 12));
   const qd = onlyDigits(q);
 
+  // MODO RELACIONAL: busca/paginação no SQL (total correto, sem corte fixo).
+  if (relationalActive()) {
+    const { getPool } = await import('@/lib/relational/pool');
+    const pool = getPool();
+    const conds = ['business_id = $1'];
+    const args: unknown[] = [businessId];
+    if (q) {
+      args.push(`%${q}%`);
+      conds.push(`lower(name) LIKE $${args.length}`);
+      if (qd.length >= 3) {
+        args.push(`%${qd}%`);
+        conds.push(`regexp_replace(phone, '\\D', '', 'g') LIKE $${args.length}`);
+      }
+    }
+    const where = conds.join(' AND ');
+    const total = Number((await pool.query(`SELECT count(*)::int AS n FROM app.contacts WHERE ${where}`, args)).rows[0].n);
+    const rows = (await pool.query(
+      `SELECT * FROM app.contacts WHERE ${where}
+        ORDER BY COALESCE(last_interaction, created_at) DESC LIMIT ${limit}`,
+      args,
+    )).rows;
+    const custIds = [...new Set(rows.map((r: any) => r.customer_id).filter(Boolean))] as string[];
+    const customers = custIds.length
+      ? (await pool.query('SELECT * FROM app.customers WHERE id = ANY($1)', [custIds])).rows
+      : [];
+    const custOf = new Map(customers.map((c: any) => [String(c.id), c]));
+    const dtoOf = (r: any) => {
+      const c = rowToContactLight(r);
+      const account = c.customerId ? custOf.get(c.customerId) : undefined;
+      return toDTO(c, account
+        ? { id: String(account.id), name: String(account.name || ''), phone: String(account.phone || ''), email: String(account.email || ''), passwordHash: '', googleId: '', avatar: '', mustChangePassword: account.must_change_password === true, createdAt: new Date(account.created_at).toISOString() } as any
+        : null);
+    };
+    return NextResponse.json({ contacts: rows.map(dtoOf), total });
+  }
   const all = guard.db.contacts.filter((c) => c.businessId === businessId);
   const filtered = q
     ? all.filter((c) =>
@@ -123,7 +175,8 @@ export async function POST(req: NextRequest) {
 
     let temporaryPassword = '';
     let accessCreated = false;
-    const result = await updateDB((db) => {
+    /** Mutação PURA (DOIS motores): conta global + contato dedup + notas + auditoria. */
+    const createContactTx = (db: any) => {
       // A conta é GLOBAL: identidade por telefone/e-mail é resolvida antes
       // de criar qualquer registro. Se os dois dados apontarem para contas
       // diferentes, parar é mais seguro que vincular a pessoa errada.
@@ -224,8 +277,43 @@ export async function POST(req: NextRequest) {
           businessId, supportSessionId: ctx.support?.id, meta: { contactCreated: !wasContact, contactId: contact.id },
         });
       }
-      return { contact, customer };
-    });
+      return { contact, customer, temporaryPassword, accessCreated };
+    };
+    let result: any;
+    if (relationalActive()) {
+      // SQL: identidades candidatas globais (conta) + contato da unidade.
+      result = await runRelationalWrite(businessId, createContactTx, {
+        load: {
+          businesses: {},
+          contacts: {
+            where: `($2 <> '' AND phone = $2) OR ($3 <> '' AND lower(email) = $3)
+              OR ($4 <> '' AND name = $4 AND COALESCE(phone, '') = '' AND COALESCE(email, '') = '' AND (customer_id IS NULL OR customer_id = ''))
+              OR ($2 <> '' AND regexp_replace(phone, '\\D', '', 'g') = $2)`,
+            args: [phone, email, name],
+          },
+          customers: (partial) => {
+            const phones: string[] = [];
+            const emails: string[] = [];
+            for (const c of partial.contacts) {
+              if (c.phone) phones.push(c.phone);
+              if (c.email) emails.push(c.email.toLowerCase());
+            }
+            if (phone) phones.push(phone);
+            if (email) emails.push(email.toLowerCase());
+            if (!phones.length && !emails.length) return null;
+            const conds: string[] = [];
+            const cargs: unknown[] = [];
+            if (phones.length) { conds.push(`regexp_replace(phone, '\\D', '', 'g') = ANY($1)`); cargs.push(phones); }
+            if (emails.length) { conds.push(`lower(email) = ANY($${cargs.length + 1})`); cargs.push(emails); }
+            return { where: conds.join(' OR '), args: cargs, global: true };
+          },
+        },
+      });
+    } else {
+      result = await updateDB(createContactTx);
+    }
+    temporaryPassword = result.temporaryPassword || '';
+    accessCreated = result.accessCreated === true;
 
     return NextResponse.json({
       ok: true,
@@ -253,8 +341,8 @@ export async function PATCH(req: NextRequest) {
     if (body.addNote !== undefined) {
       const text = String((body.addNote && body.addNote.text) || '');
       if (!text.trim()) return NextResponse.json({ error: 'Escreva a observação.' }, { status: 400 });
-      const note = await updateDB((db) => {
-        const c = db.contacts.find((x) => x.id === id && x.businessId === businessId);
+      const addNoteTx = (db: any) => {
+        const c = db.contacts.find((x: any) => x.id === id && x.businessId === businessId);
         if (!c) return null;
         const created = addContactNote(c, {
           text,
@@ -272,24 +360,30 @@ export async function PATCH(req: NextRequest) {
           });
         }
         return created;
-      });
+      };
+      if (relationalActive()) {
+        const note = await runRelationalWrite(businessId, addNoteTx, { load: { contacts: { where: `id = $2`, args: [id] } } });
+        if (!note) return NextResponse.json({ error: 'Contato não encontrado.' }, { status: 404 });
+        return NextResponse.json({ ok: true, note });
+      }
+      const note = await updateDB(addNoteTx);
       if (!note) return NextResponse.json({ error: 'Contato não encontrado.' }, { status: 404 });
       return NextResponse.json({ ok: true, note });
     }
-
-    const updated = await updateDB((db) => {
-      const c = db.contacts.find((x) => x.id === id && x.businessId === businessId);
+    /** Mutação PURA (DOIS motores): identidade + perfil + consentimento + contagens. */
+    const editContactTx = (db: any) => {
+      const c = db.contacts.find((x: any) => x.id === id && x.businessId === businessId);
       if (!c) return null;
       // A3.3 (ponto 9) — "cliente atendido" é quem TEM atendimento CONCLUÍDO.
       // Agendamento futuro, pendente, cancelado ou falta não é atendimento
       // realizado; contar tudo transformava "tem booking" em "foi atendido".
       // Os dois números seguem separados: o total explica o histórico, o de
       // concluídos decide a etiqueta.
-      const mine = db.bookings.filter((b) => b.businessId === businessId && b.customerId === c.customerId && c.customerId);
+      const mine = db.bookings.filter((b: any) => b.businessId === businessId && b.customerId === c.customerId && c.customerId);
       const counts = {
         bookings: mine.length,
         attended: countAttended(mine),
-        leads: db.leads.filter((l) => l.businessId === businessId && l.customerId === c.customerId && c.customerId).length,
+        leads: db.leads.filter((l: any) => l.businessId === businessId && l.customerId === c.customerId && c.customerId).length,
       };
       // Identidade (nome/telefone/e-mail) pela regra canônica: normaliza,
       // valida e RECUSA conflito com outro contato da mesma unidade. Nunca
@@ -315,8 +409,8 @@ export async function PATCH(req: NextRequest) {
               contactId: c.id,
               fields: resolved.changed,
               // Só o que mudou, e sem a conta global: auditoria de cadastro.
-              from: Object.fromEntries(resolved.changed.map((f) => [f, before[f as keyof typeof before]])),
-              to: Object.fromEntries(resolved.changed.map((f) => [f, resolved[f as keyof typeof resolved]])),
+              from: Object.fromEntries(resolved.changed.map((f: any) => [f, before[f as keyof typeof before]])),
+              to: Object.fromEntries(resolved.changed.map((f: any) => [f, resolved[f as keyof typeof resolved]])),
               customerTouched: false,
             },
           });
@@ -336,8 +430,25 @@ export async function PATCH(req: NextRequest) {
         applyContactProfile(c, body.profile);
       }
       c.updatedAt = new Date().toISOString();
-      return toDTO(c, db.customers.find((customer) => customer.id === c.customerId) || null, counts);
-    });
+      return toDTO(c, db.customers.find((customer: any) => customer.id === c.customerId) || null, counts);
+    };
+    let updated: any;
+    if (relationalActive()) {
+      updated = await runRelationalWrite(businessId, editContactTx, {
+        load: {
+          contacts: {
+            where: `(id = $2) OR ($3 <> '' AND phone = $3) OR ($4 <> '' AND lower(email) = $4)
+              OR ($5 <> '' AND name = $5 AND COALESCE(phone, '') = '' AND COALESCE(email, '') = '' AND (customer_id IS NULL OR customer_id = ''))`,
+            args: [id, String(body.phone || ''), String(body.email || ''), String(body.name || '')],
+          },
+          bookings: { where: `customer_id = (SELECT customer_id FROM app.contacts WHERE id = $2 AND business_id = $1 AND customer_id IS NOT NULL)`, args: [id] },
+          leads: { where: `customer_id = (SELECT customer_id FROM app.contacts WHERE id = $2 AND business_id = $1 AND customer_id IS NOT NULL)`, args: [id] },
+          customers: () => ({}), // planner de ids referenciados (contacts/bookings/leads)
+        },
+      });
+    } else {
+      updated = await updateDB(editContactTx);
+    }
     if (!updated) return NextResponse.json({ error: 'Contato não encontrado.' }, { status: 404 });
     return NextResponse.json({ ok: true, contact: updated });
   } catch (e: any) {

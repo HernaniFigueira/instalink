@@ -4,6 +4,8 @@ import { readDB, updateDB } from '@/lib/db';
 import { rateLimit, ipFrom } from '@/lib/rate-limit';
 import { sendMail, resetEmailHtml } from '@/lib/mailer';
 import { newResetToken, RESET_TTL_MS } from '@/lib/password-reset';
+import { relationalActive } from '@/lib/relational/config';
+import { relUserByEmail, relCreatePasswordReset } from '@/lib/relational/auth-store';
 
 // POST { email } — inicia recuperação do lojista. Resposta sempre ok
 // (não revela se o e-mail existe).
@@ -14,6 +16,16 @@ export async function POST(req: NextRequest) {
     const { email } = await req.json();
     const clean = String(email || '').trim().toLowerCase();
     if (!clean.includes('@')) return NextResponse.json({ ok: true });
+    // MODO RELACIONAL: pedido de redefinição no SQL (mesma resposta honesta).
+    if (relationalActive()) {
+      const user = await relUserByEmail(clean);
+      if (!user) return NextResponse.json({ ok: true });
+      const { token, hash } = newResetToken();
+      await relCreatePasswordReset('user', user.id, hash, RESET_TTL_MS);
+      const link = `${req.nextUrl.origin}/recuperar?kind=user&token=${token}`;
+      const mail = await sendMail(user.email, 'Redefinir sua senha — GoDoutor', resetEmailHtml(user.name, link, 'lojista'));
+      return NextResponse.json({ ok: true, sent: mail.sent });
+    }
     const db = await readDB();
     const user = db.users.find((u) => u.email.toLowerCase() === clean);
     if (!user) return NextResponse.json({ ok: true });

@@ -1,5 +1,6 @@
 import { randomBytes } from 'node:crypto';
 import { NextRequest, NextResponse } from 'next/server';
+import { blockIfRelational } from '@/lib/relational/blocked';
 import { requireUser } from '@/lib/access';
 import { readDB, updateDB } from '@/lib/db';
 import { COOKIE_NAME, getBearerToken, verifyPassword } from '@/lib/auth';
@@ -25,6 +26,9 @@ function liveSession(db:DB,req:NextRequest,userId:string) {
   return candidates.map(id=>db.sessions.find(s=>s.id===id && s.userId===userId && Date.parse(s.expiresAt)>Date.now())).find(Boolean);
 }
 export async function GET(req:NextRequest) {
+  const blocked = blockIfRelational('Exclusão de entidades');
+  if (blocked) return blocked;
+
   const auth=await requireUser(req);if(!auth.ok)return auth.res;
   const q=req.nextUrl.searchParams,kind=q.get('kind'),id=q.get('id')||'',org=q.get('organizationId')||'';
   if(!validKind(kind))return reply({error:'Tipo de alvo inválido.'},400);
@@ -33,9 +37,15 @@ export async function GET(req:NextRequest) {
   }catch{return reply({error:'Não foi possível verificar as dependências.'},500);}
 }
 /** Password is checked now by existing scrypt; grant lasts two minutes, scoped to session/user/action/target. */
-export async function POST(req:NextRequest) {return mutate(req,false);}
+export async function POST(req:NextRequest) {
+  const blocked = blockIfRelational('Exclusão de entidades');
+  if (blocked) return blocked;
+return mutate(req,false);}
 /** The grant is consumed inside the SAME transaction that rechecks ownership/dependencies and deletes. */
-export async function DELETE(req:NextRequest) {return mutate(req,true);}
+export async function DELETE(req:NextRequest) {
+  const blocked = blockIfRelational('Exclusão de entidades');
+  if (blocked) return blocked;
+return mutate(req,true);}
 async function mutate(req:NextRequest,execute:boolean) {
   if(!safeMutation(req))return reply({error:'Origem ou proteção da requisição inválida.'},403);
   const auth=await requireUser(req);if(!auth.ok)return auth.res;

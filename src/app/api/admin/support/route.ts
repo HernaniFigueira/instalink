@@ -4,6 +4,8 @@ import { updateDB } from '@/lib/db';
 import { SUPPORT_COOKIE, requireMaster, supportExpiry, supportFromRequest } from '@/lib/access';
 import { pushAudit } from '@/lib/audit';
 import type { SupportMode } from '@/lib/types';
+import { relationalActive } from '@/lib/relational/config';
+import { relSupportEnd, relAudit } from '@/lib/relational/auth-store';
 
 // MODO SUPORTE — o master entra na visão de uma empresa SEM se misturar com a
 // conta do proprietário. A sessão é explícita, expira em 60 minutos, é
@@ -58,7 +60,11 @@ export async function DELETE(req: NextRequest) {
   if (!guard.ok) return guard.res;
   const { user } = guard;
   const session = await supportFromRequest(req, guard.user.id);
-  if (session) {
+  if (session && relationalActive()) {
+    await relSupportEnd(session.id, user.id);
+    await relAudit({ action: 'support.ended', actor: user, businessId: session.businessId, supportSessionId: session.id });
+  }
+  if (session && !relationalActive()) {
     await updateDB((d) => {
       const s = d.supportSessions.find((x) => x.id === session.id);
       if (s) s.endedAt = new Date().toISOString();

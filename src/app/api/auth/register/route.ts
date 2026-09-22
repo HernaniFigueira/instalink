@@ -3,6 +3,8 @@ import { randomUUID } from 'node:crypto';
 import { readDB, updateDB } from '@/lib/db';
 import { hashPassword, createSession, setSessionOn } from '@/lib/auth';
 import { rateLimit, ipFrom } from '@/lib/rate-limit';
+import { relationalActive } from '@/lib/relational/config';
+import { relUserByEmail, relCreateUser } from '@/lib/relational/auth-store';
 
 export async function POST(req: NextRequest) {
   const rl = rateLimit(`register:${ipFrom(req)}`, 10, 300000);
@@ -13,6 +15,19 @@ export async function POST(req: NextRequest) {
     if (!email?.includes('@')) return NextResponse.json({ error: 'Informe um e-mail válido.' }, { status: 400 });
     if (!password || password.length < 6) return NextResponse.json({ error: 'A senha precisa de ao menos 6 caracteres.' }, { status: 400 });
 
+    // MODO RELACIONAL: usuário criado no SQL (e-mail único garantido pelo banco).
+    if (relationalActive()) {
+      if (await relUserByEmail(email)) {
+        return NextResponse.json({ error: 'Este e-mail já está cadastrado. Tente entrar.' }, { status: 400 });
+      }
+      const user = await relCreateUser({
+        name: name.trim(), email: email.trim().toLowerCase(), passwordHash: hashPassword(password), role: 'owner',
+      });
+      const sessionId = await createSession(user.id);
+      const res = NextResponse.json({ ok: true, token: sessionId });
+      setSessionOn(res, sessionId);
+      return res;
+    }
     const db = await readDB();
     if (db.users.some((u) => u.email.toLowerCase() === email.toLowerCase())) {
       return NextResponse.json({ error: 'Este e-mail já está cadastrado. Tente entrar.' }, { status: 400 });

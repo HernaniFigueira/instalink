@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { blockIfRelational } from '@/lib/relational/blocked';
 import { requireMaster } from '@/lib/access';
 import { pushAudit } from '@/lib/audit';
 import { updateDB } from '@/lib/db';
@@ -9,6 +10,9 @@ import { todayISO } from '@/lib/tz';
 // ÁREA MASTER — visão de suporte de UMA empresa (somente leitura).
 // Registra no histórico/auditoria o acesso (quem, quando, qual empresa).
 export async function GET(req: NextRequest, { params }: { params: { id: string } }) {
+  const blocked = blockIfRelational('Admin · negócio');
+  if (blocked) return blocked;
+
   const guard = await requireMaster(req);
   if (!guard.ok) return guard.res;
   const { db, user } = guard;

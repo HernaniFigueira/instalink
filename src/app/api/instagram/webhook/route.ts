@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { blockIfRelational } from '@/lib/relational/blocked';
 import { readDB } from '@/lib/db';
 import { parseInstagramWebhook } from '@/lib/instagram';
 import {
@@ -20,6 +21,9 @@ export const dynamic = 'force-dynamic';
 export const runtime = 'nodejs';
 
 export async function GET(req: NextRequest) {
+  const blocked = blockIfRelational('Canais · Instagram (recebimento)');
+  if (blocked) return blocked;
+
   const q = req.nextUrl.searchParams;
   const expected = instagramVerifyToken() || String(process.env.WHATSAPP_VERIFY_TOKEN || '').trim();
   if (!expected) {
@@ -33,6 +37,9 @@ export async function GET(req: NextRequest) {
 }
 
 export async function POST(req: NextRequest) {
+  const blocked = blockIfRelational('Canais · Instagram (recebimento)');
+  if (blocked) return blocked;
+
   try {
     const rawBody = await req.text();
 

@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { blockIfRelational } from '@/lib/relational/blocked';
 import { requireMaster } from '@/lib/access';
 import { updateDB } from '@/lib/db';
 import { pushAudit } from '@/lib/audit';
@@ -17,6 +18,9 @@ import {
 // Fonte administrativa: role='master'. MASTER_EMAILS é fallback visível à parte.
 
 export async function GET(req: NextRequest) {
+  const blocked = blockIfRelational('Master · contas master');
+  if (blocked) return blocked;
+
   const guard = await requireMaster(req);
   if (!guard.ok) return guard.res;
   const masters = listMastersSafe(guard.db);
@@ -33,6 +37,9 @@ export async function GET(req: NextRequest) {
 }
 
 export async function POST(req: NextRequest) {
+  const blocked = blockIfRelational('Master · contas master');
+  if (blocked) return blocked;
+
   const guard = await requireMaster(req);
   if (!guard.ok) return guard.res;
   const { user: actor } = guard;
@@ -98,6 +105,9 @@ export async function POST(req: NextRequest) {
 }
 
 export async function DELETE(req: NextRequest) {
+  const blocked = blockIfRelational('Master · contas master');
+  if (blocked) return blocked;
+
   const guard = await requireMaster(req);
   if (!guard.ok) return guard.res;
   const { user: actor } = guard;

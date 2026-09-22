@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { blockIfRelational } from '@/lib/relational/blocked';
 import { randomUUID } from 'node:crypto';
 import { readDB, updateDB } from '@/lib/db';
 import { conciergeAnswer } from '@/lib/concierge';
@@ -23,6 +24,9 @@ import type { DB } from '@/lib/types';
 // identificado pelo WhatsApp informado no chat (sem exigir conta completa);
 // cliente conhecido é reaproveitado do CRM (não pergunta o nome de novo).
 export async function POST(req: NextRequest) {
+  const blocked = blockIfRelational('Concierge');
+  if (blocked) return blocked;
+
   const rl = rateLimit(`cz:${ipFrom(req)}`, 30, 60000);
   if (!rl.ok) return NextResponse.json({ error: 'Muitas mensagens. Aguarde um instante.' }, { status: 429 });
   try {

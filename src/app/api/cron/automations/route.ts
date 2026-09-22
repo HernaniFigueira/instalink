@@ -28,6 +28,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { verifyCronAuth } from '@/lib/cron-auth';
 import { drainAutomations } from '@/lib/automation/executor';
+import { relationalActive } from '@/lib/relational/config';
+import { drainRelationalAutomations } from '@/lib/relational/slice';
 
 export const dynamic = 'force-dynamic';
 export const runtime = 'nodejs';
@@ -45,7 +47,11 @@ export async function GET(req: NextRequest) {
   try {
     // Sem parâmetros de "agora": quem dispara controla QUANDO (o cron), não o
     // relógio das esperas — retomar uma espera antes da hora é decisão do motor.
-    const summary = await drainAutomations();
+    // MODO RELACIONAL: a MESMA fila (automation_runs), claim CAS no SQL e os
+    // mesmos motores canônicos — sobre a fatia da unidade de cada execução.
+    const summary = relationalActive()
+      ? await drainRelationalAutomations()
+      : await drainAutomations();
     return NextResponse.json({
       ok: true,
       ranAt: new Date().toISOString(),

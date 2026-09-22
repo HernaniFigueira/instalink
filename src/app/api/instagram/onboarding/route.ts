@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { blockIfRelational } from '@/lib/relational/blocked';
 import { updateDB } from '@/lib/db';
 import { requireBusiness } from '@/lib/access';
 import { pushAudit } from '@/lib/audit';
@@ -29,6 +30,9 @@ function siteUrl(req: NextRequest): string {
 }
 
 export async function GET(req: NextRequest) {
+  const blocked = blockIfRelational('Canais · Instagram (onboarding)');
+  if (blocked) return blocked;
+
   const businessId = String(req.nextUrl.searchParams.get('businessId') || '').trim();
   const guard = await requireBusiness(req, businessId, 'whatsapp');
   if (!guard.ok) return guard.res;
@@ -74,6 +78,9 @@ export async function GET(req: NextRequest) {
 }
 
 export async function POST(req: NextRequest) {
+  const blocked = blockIfRelational('Canais · Instagram (onboarding)');
+  if (blocked) return blocked;
+
   try {
     const body = await req.json().catch(() => ({} as Record<string, any>));
     const businessId = String(body?.businessId || '').trim();

@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { blockIfRelational } from '@/lib/relational/blocked';
 import { ipFrom, rateLimit } from '@/lib/rate-limit';
 import { MAX_INBOUND_BYTES } from '@/lib/integrations/contract';
 import { receiveInboundRequest } from '@/lib/integrations/inbound';
@@ -21,6 +22,9 @@ export const dynamic = 'force-dynamic';
 export const runtime = 'nodejs';
 
 export async function POST(req: NextRequest, ctx: { params: { id: string } }) {
+  const blocked = blockIfRelational('Integrações · inbound');
+  if (blocked) return blocked;
+
   const integrationId = String(ctx?.params?.id || '').trim().slice(0, 64);
   if (!integrationId) {
     return NextResponse.json({ ok: false, error: 'Integração não encontrada.', code: 'integration_not_found' }, { status: 404 });
@@ -62,6 +66,9 @@ export async function POST(req: NextRequest, ctx: { params: { id: string } }) {
 
 /** GET não é um caminho de dados — responde 405 sem revelar nada. */
 export async function GET() {
+  const blocked = blockIfRelational('Integrações · inbound');
+  if (blocked) return blocked;
+
   return NextResponse.json(
     { ok: false, error: 'Use POST neste endpoint.', code: 'method_not_allowed' },
     { status: 405, headers: { Allow: 'POST' } },

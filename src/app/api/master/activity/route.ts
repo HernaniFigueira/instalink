@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { blockIfRelational } from '@/lib/relational/blocked';
 import { requireMaster } from '@/lib/access';
 
 // Atividade da plataforma — somente eventos REAIS já registrados.
@@ -30,6 +31,9 @@ const LABEL: Record<string, string> = {
 };
 
 export async function GET(req: NextRequest) {
+  const blocked = blockIfRelational('Master · atividade');
+  if (blocked) return blocked;
+
   const guard = await requireMaster(req);
   if (!guard.ok) return guard.res;
   const { db } = guard;

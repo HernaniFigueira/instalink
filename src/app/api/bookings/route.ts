@@ -24,6 +24,7 @@ import { isTerminal as isTerminalStatus } from '@/lib/booking-ops';
 import { pushAudit } from '@/lib/audit';
 import { rateLimit, ipFrom } from '@/lib/rate-limit';
 import type { BookingStatus, DB } from '@/lib/types';
+import { relationalActive, relationalBookingsGET, relationalBookingsPOST, relationalBookingsPATCH, relationalHeader } from '@/lib/relational/booking-routes';
 
 function err(message: string, status: number): Error {
   return Object.assign(new Error(message), { status });
@@ -40,6 +41,21 @@ export async function GET(req: NextRequest) {
     const mode = q.get('mode');
     const slotGuard = mode === 'slots-admin' ? await requireBusiness(req, businessId, 'agenda') : null;
     if (slotGuard && !slotGuard.ok) return slotGuard.res;
+    // MODO RELACIONAL (opt-in via GODOUTOR_PERSISTENCE): slots/mapa/gestão
+    // lidos por SQL, com a MESMA autenticação e escopo. Inativo ⇒ null e a
+    // rota segue pelo caminho do documento (rollback preservado).
+    if (relationalActive()) {
+      // Gestão exige MESMA permissão do caminho do documento (agenda) — a
+      // guarda é feita AQUI, antes de qualquer leitura no SQL.
+      let relCtx = slotGuard?.ok ? slotGuard.ctx : null;
+      if (!relCtx && mode === 'manage') {
+        const manageGuard = await requireBusiness(req, businessId, 'agenda');
+        if (!manageGuard.ok) return manageGuard.res;
+        relCtx = manageGuard.ctx;
+      }
+      const rel = await relationalBookingsGET(q, businessId, relCtx);
+      if (rel) return relationalHeader(rel);
+    }
     const db = slotGuard?.ok ? slotGuard.db : await readDB();
     const business = db.businesses.find((b) => b.id === businessId);
     if (!business) return NextResponse.json({ error: 'Negócio não encontrado.' }, { status: 404 });
@@ -183,6 +199,26 @@ export async function POST(req: NextRequest) {
   if (!rl.ok) return NextResponse.json({ error: 'Muitas tentativas. Aguarde um instante.' }, { status: 429 });
   try {
     const body = await req.json();
+    // MODO RELACIONAL (opt-in): autenticação/escopo IGUAIS (requireBusiness —
+    // que neste modo consulta o SQL), escrita transacional no Postgres pelos
+    // MOTORES CANÔNICOS sobre a fatia da unidade. Inativo ⇒ segue o documento.
+    if (relationalActive()) {
+      const bizId = String(body.businessId || '');
+      const relGuard = body.asOwner === true ? await requireBusiness(req, bizId, 'agenda') : null;
+      if (relGuard && !relGuard.ok) return relGuard.res;
+      const relActor = bookingMode({ asOwner: body.asOwner, ownerLogged: !!relGuard?.ok, ownerMatches: !!relGuard?.ok });
+      const relCustomer = relActor === 'owner' ? null : await customerFromRequest(req);
+      const relRes = await relationalBookingsPOST({
+        body,
+        businessId: bizId,
+        isOwner: relActor === 'owner',
+        actorProfessionalScope: relGuard?.ok ? (relGuard.ctx.professionalScope || '') : '',
+        sessionCustomer: relCustomer
+          ? { id: relCustomer.id, name: relCustomer.name, phone: relCustomer.phone, email: relCustomer.email }
+          : null,
+      });
+      if (relRes) return relationalHeader(relRes);
+    }
     const db = await readDB();
     const business = db.businesses.find((b) => b.id === body.businessId);
     if (!business) return NextResponse.json({ error: 'Negócio não encontrado.' }, { status: 404 });
@@ -369,6 +405,12 @@ export async function PATCH(req: NextRequest) {
     const body = await req.json();
     const guard = await requireBusiness(req, String(body.businessId || ''), 'agenda');
     if (!guard.ok) return guard.res;
+    // MODO RELACIONAL (opt-in): check-in/cancelar série/remarcar/status pelos
+    // motores canônicos sobre a fatia da unidade no Postgres.
+    if (relationalActive()) {
+      const relRes = await relationalBookingsPATCH({ body, ctx: guard.ctx });
+      if (relRes) return relationalHeader(relRes);
+    }
     const db = guard.db;
     const business = guard.ctx.business;
     const current = db.bookings.find((x) => x.id === body.id && x.businessId === business.id);

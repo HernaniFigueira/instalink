@@ -1,7 +1,42 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { readDB } from '@/lib/db';
 import { requireBusiness, scopeInfo, scopeProfessionals } from '@/lib/access';
+import { relationalActive } from '@/lib/relational/config';
+import { runRelationalRead } from '@/lib/relational/slice';
 import { todayISO } from '@/lib/tz';
+
+/** View PURA (DOIS motores): catálogo completo do dono a partir de um doc
+ * mínimo. Recebe as janelas já normalizadas; nenhum acesso a banco aqui. */
+function catalogView(db: any, businessId: string, scope: string, ctx: any, exceptionFrom: string, exceptionTo: string, today: string) {
+  const optIds = new Set((db.options || []).filter((o: any) => o.businessId === businessId).map((o: any) => o.id));
+  const future = (db.bookings || []).filter(
+    (b: any) => b.businessId === businessId && b.status !== 'cancelled' && b.date >= today,
+  );
+  return {
+    business: ctx.business,
+    categories: (db.categories || []).filter((c: any) => c.businessId === businessId),
+    products: (db.products || []).filter((p: any) => p.businessId === businessId),
+    options: (db.options || []).filter((o: any) => o.businessId === businessId),
+    optionValues: (db.optionValues || []).filter((v: any) => optIds.has(v.optionId)),
+    services: (db.services || []).filter((s: any) => s.businessId === businessId),
+    professionals: scopeProfessionals((db.professionals || []).filter((p: any) => p.businessId === businessId), scope),
+    availability: (db.availability || [])
+      .filter((a: any) => a.businessId === businessId)
+      // Regras do horário geral da empresa continuam disponíveis para o
+      // funcionamento da grade; horários PERSONALIZADOS de colegas não.
+      .filter((a: any) => !scope || !a.professionalId || a.professionalId === scope),
+    exceptions: (db.exceptions || [])
+      .filter((e: any) => e.businessId === businessId && e.date >= exceptionFrom && (!exceptionTo || e.date <= exceptionTo))
+      .sort((a: any, b: any) => (a.date < b.date ? -1 : 1)),
+    scope: scopeInfo(ctx),
+    bookingRefs: {
+      services: [...new Set(future.map((b: any) => b.serviceId))],
+      professionals: [...new Set(future
+        .filter((b: any) => !scope || (b.professionalId || '') === scope)
+        .map((b: any) => b.professionalId).filter(Boolean))],
+    },
+  };
+}
 
 // GET ?businessId= — todo o catálogo do negócio (dono) + exceções +
 // referências de agendamentos futuros (para exclusão segura).
@@ -11,44 +46,30 @@ export async function GET(req: NextRequest) {
   // profissionais; editar continua exigindo 'catalogo' (rotas de escrita).
   const guard = await requireBusiness(req, businessId, ['catalogo', 'agenda', 'clientes', 'pedidos', 'config', 'pagina']);
   if (!guard.ok) return guard.res;
-  const db = guard.db;
   // ESCOPO DO PROFISSIONAL (P2): o login vinculado a um profissional recebe
   // apenas o PRÓPRIO profissional e o PRÓPRIO horário. Assim a agenda, a
   // captura de agendamento e os filtros da tela não expõem colegas — nem por
   // URL manipulada, nem por chamada direta à API.
-  const scope = guard.ctx.professionalScope;
-  const optIds = new Set(db.options.filter((o) => o.businessId === businessId).map((o) => o.id));
+  const scope: string = (guard.ctx.professionalScope as any) || '';
   const today = todayISO();
   // Agenda can inspect a historical day: do not silently omit that day's exceptions.
   // Same business/professional guard as before; only the read window changes.
-  const fromParam=req.nextUrl.searchParams.get('from')||'', toParam=req.nextUrl.searchParams.get('to')||'';
-  const exceptionFrom=/^\d{4}-\d{2}-\d{2}$/.test(fromParam)?fromParam:today;
-  const exceptionTo=/^\d{4}-\d{2}-\d{2}$/.test(toParam)?toParam:'';
-  const future = db.bookings.filter(
-    (b) => b.businessId === businessId && b.status !== 'cancelled' && b.date >= today,
-  );
-  return NextResponse.json({
-    business: guard.ctx.business,
-    categories: db.categories.filter((c) => c.businessId === businessId),
-    products: db.products.filter((p) => p.businessId === businessId),
-    options: db.options.filter((o) => o.businessId === businessId),
-    optionValues: db.optionValues.filter((v) => optIds.has(v.optionId)),
-    services: db.services.filter((s) => s.businessId === businessId),
-    professionals: scopeProfessionals(db.professionals.filter((p) => p.businessId === businessId), scope),
-    availability: db.availability
-      .filter((a) => a.businessId === businessId)
-      // Regras do horário geral da empresa continuam disponíveis para o
-      // funcionamento da grade; horários PERSONALIZADOS de colegas não.
-      .filter((a) => !scope || !a.professionalId || a.professionalId === scope),
-    exceptions: db.exceptions
-      .filter((e) => e.businessId === businessId && e.date >= exceptionFrom && (!exceptionTo || e.date <= exceptionTo))
-      .sort((a, b) => (a.date < b.date ? -1 : 1)),
-    scope: scopeInfo(guard.ctx),
-    bookingRefs: {
-      services: [...new Set(future.map((b) => b.serviceId))],
-      professionals: [...new Set(future
-        .filter((b) => !scope || (b.professionalId || '') === scope)
-        .map((b) => b.professionalId).filter(Boolean))],
-    },
-  });
+  const fromParam = req.nextUrl.searchParams.get('from') || '', toParam = req.nextUrl.searchParams.get('to') || '';
+  const exceptionFrom = /^\d{4}-\d{2}-\d{2}$/.test(fromParam) ? fromParam : today;
+  const exceptionTo = /^\d{4}-\d{2}-\d{2}$/.test(toParam) ? toParam : '';
+
+  if (relationalActive()) {
+    // Fatia DIRECIONADA do catálogo: coleções da unidade, exceções só da
+    // janela pedida e SOMENTE agendamentos futuros (referências de exclusão).
+    // optionValues: TODOS os valores da unidade (inclusive inativos — tela de
+    // edição), via carga fixa business_id = $1.
+    const db = await runRelationalRead(businessId, {
+      categories: {}, products: {}, options: {}, optionValues: {},
+      services: {}, professionals: {}, availability: {},
+      exceptions: { where: 'date >= $2', args: [exceptionFrom], order: 'date ASC' },
+      bookings: { where: `COALESCE(status, '') <> $2 AND date >= $3`, args: ['cancelled', today] },
+    });
+    return NextResponse.json(catalogView(db, businessId, scope, guard.ctx, exceptionFrom, exceptionTo, today));
+  }
+  return NextResponse.json(catalogView(guard.db, businessId, scope, guard.ctx, exceptionFrom, exceptionTo, today));
 }

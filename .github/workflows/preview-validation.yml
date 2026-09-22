@@ -1,0 +1,45 @@
+name: Preview Validation (GoDoutor)
+# Validação do PREVIEW (Vercel + Supabase) — SEM segredos no repositório:
+# o script só fala com a URL pública do preview. Disparo manual.
+on:
+  # Dispara quando os arquivos de validação mudam (push na branch da sessão)
+  # ou manualmente — SEM segredos; o script só fala com a URL pública.
+  push:
+    branches: [arena/01a0c526-instalink]
+    paths: ['.github/workflows/preview-validation.yml', 'scripts/preview-validate.sh']
+  workflow_dispatch:
+    inputs:
+      base_url:
+        description: 'Base URL do preview (https://…vercel.app); vazio = padrão abaixo'
+        required: false
+        default: ''
+permissions:
+  contents: write
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Validar preview (relacional, banco, cadastro, agenda, uploads)
+        env:
+          BASE_URL: ${{ inputs.base_url || 'https://godoutor-git-arena-01a0c526-327ceb-hernanicross-3509s-projects.vercel.app' }}
+        run: |
+          bash scripts/preview-validate.sh | tee /tmp/resultado.txt
+          {
+            echo '### Validação do Preview (`2a81644`)'
+            echo '```'
+            cat /tmp/resultado.txt
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+      - name: Publicar resultado no repositório (validation/ultimo-resultado.txt)
+        if: always()
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          git config user.name "validation-bot"
+          git config user.email "actions@users.noreply.github.com"
+          mkdir -p validation
+          cp /tmp/resultado.txt validation/ultimo-resultado.txt
+          git add validation/ultimo-resultado.txt
+          git commit -m "ci: resultado da validação do preview [skip ci]" || echo "nada a commitar"
+          git push origin HEAD:"${{ github.ref_name }}" || echo "push falhou" 

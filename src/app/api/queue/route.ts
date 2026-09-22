@@ -11,6 +11,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { randomUUID } from 'node:crypto';
 import { readDB, updateDB } from '@/lib/db';
+import { relationalActive } from '@/lib/relational/config';
 import { requireBusiness } from '@/lib/access';
 import { NO_PROFESSIONAL_SCOPE } from '@/lib/access-core';
 import { pushAudit } from '@/lib/audit';
@@ -52,7 +53,11 @@ export async function GET(req: NextRequest) {
   const business = guard.ctx.business;
   const tz = effectiveTimezone(business.businessTimezone);
   const date = String(req.nextUrl.searchParams.get('date') || '') || todayISO(new Date(), tz);
-  const db = guard.db;
+  // MODO RELACIONAL: leitura DIRECIONADA no SQL (fila viva + encerradas do
+  // dia + catálogo enxuto) — a fatia do guard não contém fila.
+  const db = relationalActive()
+    ? await (await import('@/lib/relational/ops-store')).loadQueueDoc(businessId, String(req.nextUrl.searchParams.get('date') || '') || todayISO(new Date(), effectiveTimezone(business.businessTimezone)))
+    : guard.db;
   // Encerradas do dia (para conferência) + fila viva (qualquer data: uma fila
   // que virou a noite não desaparece da tela por causa do relógio).
   const doneToday = (db.queue || []).filter((e) =>
@@ -72,6 +77,46 @@ export async function GET(req: NextRequest) {
     services: db.services.filter((s) => s.businessId === businessId && s.active !== false).map((s) => ({ id: s.id, name: s.name })),
     professionals: db.professionals.filter((p) => p.businessId === businessId && p.active !== false).map((p) => ({ id: p.id, name: p.name })),
   });
+}
+
+/** Mutação PURA da entrada (usada pelos DOIS motores — mesma regra). */
+function enqueueQueueEntry(d: DB, ctx: { businessId: string; user: { id: string }; contactIdInput: string; name: string; phone: string; serviceId: string; professionalId: string; bookingId: string; note: string; date: string; nowIso: string }): QueueEntry {
+  // O CRM é alimentado como em qualquer atendimento — fila não é terra de
+  // ninguém: quem chegou vira contato (dedupe por telefone) e a entrada
+  // guarda o vínculo. Quando a recepção JÁ escolheu um cadastro, é ele que
+  // vale: nada de criar um segundo contato para a mesma pessoa.
+  const picked = ctx.contactIdInput
+    ? d.contacts.find((c) => c.id === ctx.contactIdInput && c.businessId === ctx.businessId)
+    : undefined;
+  if (ctx.contactIdInput && !picked) throw err('Este cadastro não é desta unidade.', 400);
+  const contact = picked || ((ctx.name || ctx.phone)
+    ? upsertContact(d, { businessId: ctx.businessId, name: ctx.name || ctx.phone, phone: ctx.phone, source: 'fila', now: ctx.nowIso })
+    : null);
+  const row: QueueEntry = {
+    id: randomUUID(),
+    businessId: ctx.businessId,
+    customerName: contact?.name || ctx.name || ctx.phone,
+    customerPhone: picked?.phone || ctx.phone,
+    contactId: contact?.id || '',
+    serviceId: ctx.serviceId,
+    professionalId: ctx.professionalId,
+    bookingId: ctx.bookingId,
+    note: ctx.note,
+    status: 'waiting',
+    date: ctx.date,
+    createdAt: ctx.nowIso,
+    calledAt: '',
+    startedAt: '',
+    endedAt: '',
+    updatedBy: ctx.user.id,
+    updatedAt: ctx.nowIso,
+  };
+  d.queue.push(row);
+  pushAudit(d, {
+    action: 'queue.created', businessId: ctx.businessId, actor: ctx.user as any,
+    meta: { entryId: row.id, serviceId: row.serviceId, hasBooking: !!row.bookingId },
+  }, ctx.nowIso);
+  return row;
 }
 
 export async function POST(req: NextRequest) {
@@ -120,52 +165,97 @@ export async function POST(req: NextRequest) {
     const scopeServes = !scopeId || !service || !serviceRequiresProfessional(service)
       || professionalServesService(service, scopeId, guard.db.professionals || []);
     const professionalId = askedProfessionalId || (scopeServes ? scopeId : '');
-    const entry = await updateDB((d: DB) => {
-      // O CRM é alimentado como em qualquer atendimento — fila não é terra de
-      // ninguém: quem chegou vira contato (dedupe por telefone) e a entrada
-      // guarda o vínculo. Quando a recepção JÁ escolheu um cadastro, é ele que
-      // vale: nada de criar um segundo contato para a mesma pessoa.
-      const picked = contactIdInput
-        ? d.contacts.find((c) => c.id === contactIdInput && c.businessId === businessId)
-        : undefined;
-      if (contactIdInput && !picked) throw err('Este cadastro não é desta unidade.', 400);
-      const contact = picked || ((name || phone)
-        ? upsertContact(d, { businessId, name: name || phone, phone, source: 'fila', now: now.toISOString() })
-        : null);
-      const row: QueueEntry = {
-        id: randomUUID(),
-        businessId,
-        customerName: contact?.name || name || phone,
-        customerPhone: picked?.phone || phone,
-        contactId: contact?.id || '',
-        serviceId: String(body.serviceId || ''),
-        professionalId,
-        bookingId: String(body.bookingId || ''),
-        note: String(body.note || '').slice(0, 200),
-        status: 'waiting',
-        date: todayISO(now, tz),
-        createdAt: now.toISOString(),
-        calledAt: '',
-        startedAt: '',
-        endedAt: '',
-        updatedBy: guard.ctx.user.id,
-        updatedAt: now.toISOString(),
-      };
-      d.queue.push(row);
-      pushAudit(d, {
-        action: 'queue.created', businessId, actor: guard.ctx.user,
-        meta: { entryId: row.id, serviceId: row.serviceId, hasBooking: !!row.bookingId },
-      }, now.toISOString());
-      return row;
-    });
+    const entryInput = {
+      businessId, user: guard.ctx.user, contactIdInput, name, phone,
+      serviceId: String(body.serviceId || ''),
+      professionalId,
+      bookingId: String(body.bookingId || ''),
+      note: String(body.note || '').slice(0, 200),
+      date: todayISO(now, tz),
+      nowIso: now.toISOString(),
+    };
+    let entry: QueueEntry;
+    if (relationalActive()) {
+      // Escrita no SQL: identidades candidatas (dedupe do contato) + catálogo.
+      const { runOpsWrite } = await import('@/lib/relational/ops-store');
+      entry = await runOpsWrite(businessId, {
+        contacts: {
+          where: `${phone ? `(phone = $2)` : 'false'}
+            OR (id = $3 AND $3 <> '')
+            OR ($4 <> '' AND name = $4 AND COALESCE(phone, '') = '' AND COALESCE(email, '') = '' AND (customer_id IS NULL OR customer_id = ''))`,
+          args: [phone, contactIdInput, name],
+        },
+        services: true,
+        professionals: true,
+      }, (d) => enqueueQueueEntry(d, entryInput));
+    } else {
+      entry = await updateDB((d: DB) => enqueueQueueEntry(d, entryInput));
+    }
     // A visão é montada sobre a leitura FRESCA: nome de serviço/profissional
     // recém-gravados não pode sair vazio por causa do snapshot do guard.
-    return NextResponse.json({ ok: true, entry: view(entry, await readDB()) });
+    const freshDb = relationalActive()
+      ? await (await import('@/lib/relational/ops-store')).loadQueueDoc(businessId, entry.date)
+      : await readDB();
+    return NextResponse.json({ ok: true, entry: view(entry, freshDb) });
   } catch (e: any) {
     const status = e?.status || 500;
     if (status === 500) console.error('[queue] POST falhou:', e);
     return NextResponse.json({ error: status === 500 ? 'Não foi possível adicionar à fila.' : e.message }, { status });
   }
+}
+
+/** Mutação PURA da transição de status (usada pelos DOIS motores). */
+function mutateQueueEntry(
+  d: DB, id: string, body: Record<string, any>,
+  ctx: { user: { id: string }; professionalScope: string },
+  fromStatus: QueueStatus, to: QueueStatus, businessId: string,
+): QueueEntry {
+  const target = d.queue.find((e) => e.id === id && e.businessId === businessId);
+  if (!target) throw err('Entrada da fila não encontrada.', 404);
+  if (!canAccess(target, ctx)) throw err('Você só pode operar a sua fila.', 403);
+  // Máquina de estados da fila: a UI não inventa caminho (memória e
+  // servidor falam a MESMA regra).
+  if (!queueTransitionAllowed(target.status, to)) {
+    throw err(`Não é possível ir de “${QUEUE_STATUS[target.status].label}” para “${QUEUE_STATUS[to].label}”.`, 409);
+  }
+  // A3.4 (teste humano) — SERVIÇO × PROFISSIONAL, revalidado no SERVIDOR.
+  // Assumir (waiting/called → in_service) não é um clique de tela: quem
+  // passa a responder pelo atendimento precisa ATENDER o serviço. Vale
+  // para o login de PROFISSIONAL (que assume o próprio escopo) e para
+  // qualquer troca explícita de profissional feita pela recepção — dono e
+  // secretaria não podem fabricar vínculo inelegível.
+  if (to === 'in_service' || body.professionalId !== undefined) {
+    const nextServiceId = body.serviceId !== undefined ? String(body.serviceId || '') : target.serviceId;
+    const nextService = (d.services || []).find((x) => x.id === nextServiceId && x.businessId === businessId);
+    const assignment = resolveQueueAssignment({
+      serviceProfessionalIds: nextService?.professionalIds || [],
+      activeProfessionalIds: (d.professionals || [])
+        .filter((p) => p.businessId === businessId && p.active !== false).map((p) => p.id),
+      // Troca explícita de profissional vale como "quem estiver livre" se vier vazia.
+      entryProfessionalId: body.professionalId !== undefined ? '' : target.professionalId,
+      scopeProfessionalId: ctx.professionalScope === NO_PROFESSIONAL_SCOPE ? '' : (ctx.professionalScope || ''),
+      requestedProfessionalId: body.professionalId !== undefined ? String(body.professionalId || '') : '',
+      error: PROFESSIONAL_NOT_ELIGIBLE_ERROR,
+    });
+    if (!assignment.ok) throw err(assignment.error, 403);
+    target.professionalId = assignment.professionalId;
+  }
+  const nowIso = new Date().toISOString();
+  target.status = to;
+  target.updatedAt = nowIso;
+  target.updatedBy = ctx.user.id;
+  if (to === 'called') target.calledAt = nowIso;
+  // Voltar para "aguardando" (chamou a pessoa errada) limpa a chamada.
+  if (to === 'waiting') { target.calledAt = ''; }
+  if (to === 'in_service' && !target.startedAt) target.startedAt = nowIso;
+  if (to === 'done' || to === 'left') target.endedAt = nowIso;
+  if (body.serviceId !== undefined) target.serviceId = String(body.serviceId || '');
+  if (body.note !== undefined) target.note = String(body.note || '').slice(0, 200);
+  pushAudit(d, {
+    action: 'queue.updated', businessId, actor: ctx.user as any,
+    meta: { entryId: target.id, from: fromStatus, to },
+  }, nowIso);
+  return target;
 }
 
 export async function PATCH(req: NextRequest) {
@@ -177,7 +267,21 @@ export async function PATCH(req: NextRequest) {
     const business = guard.ctx.business;
     const tz = effectiveTimezone(business.businessTimezone);
     const id = String(body.id || '');
-    const current = (guard.db.queue || []).find((e) => e.id === id && e.businessId === businessId);
+    // MODO RELACIONAL: a entrada atual vem do SQL (a fatia do guard não
+    // contém fila).
+    let current: QueueEntry | undefined;
+    if (relationalActive()) {
+      const { runOpsWrite } = await import('@/lib/relational/ops-store');
+      const { rowToQueueEntry } = await import('@/lib/relational/ops-store');
+      const { getPool } = await import('@/lib/relational/pool');
+      const r = await getPool().query(
+        'SELECT * FROM app.queue_entries WHERE id = $1 AND business_id = $2 LIMIT 1',
+        [id, businessId],
+      );
+      current = r.rows[0] ? rowToQueueEntry(r.rows[0]) : undefined;
+    } else {
+      current = (guard.db.queue || []).find((e) => e.id === id && e.businessId === businessId);
+    }
     if (!current) return NextResponse.json({ error: 'Entrada da fila não encontrada.' }, { status: 404 });
     if (!canAccess(current, guard.ctx)) {
       return NextResponse.json({ error: 'Você só pode operar a sua fila.' }, { status: 403 });
@@ -185,55 +289,22 @@ export async function PATCH(req: NextRequest) {
     const to = body.status as QueueStatus;
     if (!isQueueStatus(to)) return NextResponse.json({ error: 'Status inválido.' }, { status: 400 });
 
-    const updated = await updateDB((d: DB) => {
-      const target = d.queue.find((e) => e.id === id && e.businessId === businessId);
-      if (!target) throw err('Entrada da fila não encontrada.', 404);
-      if (!canAccess(target, guard.ctx)) throw err('Você só pode operar a sua fila.', 403);
-      // Máquina de estados da fila: a UI não inventa caminho (memória e
-      // servidor falam a MESMA regra).
-      if (!queueTransitionAllowed(target.status, to)) {
-        throw err(`Não é possível ir de “${QUEUE_STATUS[target.status].label}” para “${QUEUE_STATUS[to].label}”.`, 409);
-      }
-      // A3.4 (teste humano) — SERVIÇO × PROFISSIONAL, revalidado no SERVIDOR.
-      // Assumir (waiting/called → in_service) não é um clique de tela: quem
-      // passa a responder pelo atendimento precisa ATENDER o serviço. Vale
-      // para o login de PROFISSIONAL (que assume o próprio escopo) e para
-      // qualquer troca explícita de profissional feita pela recepção — dono e
-      // secretaria não podem fabricar vínculo inelegível.
-      if (to === 'in_service' || body.professionalId !== undefined) {
-        const nextServiceId = body.serviceId !== undefined ? String(body.serviceId || '') : target.serviceId;
-        const nextService = (d.services || []).find((x) => x.id === nextServiceId && x.businessId === businessId);
-        const assignment = resolveQueueAssignment({
-          serviceProfessionalIds: nextService?.professionalIds || [],
-          activeProfessionalIds: (d.professionals || [])
-            .filter((p) => p.businessId === businessId && p.active !== false).map((p) => p.id),
-          // Troca explícita de profissional vale como "quem estiver livre" se vier vazia.
-          entryProfessionalId: body.professionalId !== undefined ? '' : target.professionalId,
-          scopeProfessionalId: guard.ctx.professionalScope === NO_PROFESSIONAL_SCOPE ? '' : (guard.ctx.professionalScope || ''),
-          requestedProfessionalId: body.professionalId !== undefined ? String(body.professionalId || '') : '',
-          error: PROFESSIONAL_NOT_ELIGIBLE_ERROR,
-        });
-        if (!assignment.ok) throw err(assignment.error, 403);
-        target.professionalId = assignment.professionalId;
-      }
-      const nowIso = new Date().toISOString();
-      target.status = to;
-      target.updatedAt = nowIso;
-      target.updatedBy = guard.ctx.user.id;
-      if (to === 'called') target.calledAt = nowIso;
-      // Voltar para "aguardando" (chamou a pessoa errada) limpa a chamada.
-      if (to === 'waiting') { target.calledAt = ''; }
-      if (to === 'in_service' && !target.startedAt) target.startedAt = nowIso;
-      if (to === 'done' || to === 'left') target.endedAt = nowIso;
-      if (body.serviceId !== undefined) target.serviceId = String(body.serviceId || '');
-      if (body.note !== undefined) target.note = String(body.note || '').slice(0, 200);
-      pushAudit(d, {
-        action: 'queue.updated', businessId, actor: guard.ctx.user,
-        meta: { entryId: target.id, from: current.status, to },
-      }, nowIso);
-      return target;
-    });
-    return NextResponse.json({ ok: true, entry: view(updated, await readDB()), at: nowHM(new Date(), tz) });
+    let updated: QueueEntry;
+    if (relationalActive()) {
+      // Escrita no SQL: a linha da fila + catálogo (revalidação serviço×pro).
+      const { runOpsWrite } = await import('@/lib/relational/ops-store');
+      updated = await runOpsWrite(businessId, {
+        queue: { where: `id = $2`, args: [id] },
+        services: true,
+        professionals: true,
+      }, (d) => mutateQueueEntry(d, id, body, guard.ctx, current.status, to, businessId));
+    } else {
+      updated = await updateDB((d: DB) => mutateQueueEntry(d, id, body, guard.ctx, current.status, to, businessId));
+    }
+    const freshDb = relationalActive()
+      ? await (await import('@/lib/relational/ops-store')).loadQueueDoc(businessId, updated.date)
+      : await readDB();
+    return NextResponse.json({ ok: true, entry: view(updated, freshDb), at: nowHM(new Date(), tz) });
   } catch (e: any) {
     const status = e?.status || 500;
     if (status === 500) console.error('[queue] PATCH falhou:', e);
@@ -248,7 +319,7 @@ export async function DELETE(req: NextRequest) {
     const guard = await requireBusiness(req, businessId, 'agenda');
     if (!guard.ok) return guard.res;
     const id = String(body.id || '');
-    await updateDB((d: DB) => {
+    const removeEntry = (d: DB): void => {
       const idx = d.queue.findIndex((e) => e.id === id && e.businessId === businessId);
       if (idx < 0) throw err('Entrada da fila não encontrada.', 404);
       if (!canAccess(d.queue[idx], guard.ctx)) throw err('Você só pode operar a sua fila.', 403);
@@ -256,7 +327,13 @@ export async function DELETE(req: NextRequest) {
       pushAudit(d, {
         action: 'queue.removed', businessId, actor: guard.ctx.user, meta: { entryId: id },
       }, new Date().toISOString());
-    });
+    };
+    if (relationalActive()) {
+      const { runOpsWrite } = await import('@/lib/relational/ops-store');
+      await runOpsWrite(businessId, { queue: { where: `id = $2`, args: [id] } }, removeEntry);
+    } else {
+      await updateDB(removeEntry);
+    }
     return NextResponse.json({ ok: true });
   } catch (e: any) {
     const status = e?.status || 500;

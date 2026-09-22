@@ -284,7 +284,10 @@ describe('A1.2 B2 — configurações, tarefas e execuções não atravessam ten
     // escopada ao registro daquele id (nada de atualização por body.businessId)
     const route = readFileSync(path.join(root, 'src/app/api/businesses/[id]/route.ts'), 'utf8');
     expect(route).toMatch(/requireBusiness\(req, params\.id, 'config'\)/);
-    expect(route).toMatch(/d\.businesses\.find\(\(x\) => x\.id === params\.id\)/);
+    // A mutação pura é invocada com o id do PATH (doc e relacional) e o
+    // escopo da escrita segue sendo o registro daquele id.
+    expect(route).toMatch(/applyBusinessProfilePatch\((?:d as any, )?params\.id/);
+    expect(route).toMatch(/d\.businesses\.find\(\(x: any\) => x\.id === businessId\)/);
     expect(route).not.toMatch(/body\.businessId/);
   });
 

@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { blockIfRelational } from '@/lib/relational/blocked';
 import { updateDB } from '@/lib/db';
 import { requireBusiness } from '@/lib/access';
 import { pushAudit } from '@/lib/audit';
@@ -15,6 +16,9 @@ import { integrationStatus } from '@/lib/whatsapp';
 // GET  ?businessId= → configuração + prévia + conhecimento disponível
 // PUT  { businessId, ...campos } → salva a configuração
 export async function GET(req: NextRequest) {
+  const blocked = blockIfRelational('Agente de IA');
+  if (blocked) return blocked;
+
   const businessId = req.nextUrl.searchParams.get('businessId') || '';
   const guard = await requireBusiness(req, businessId, 'agente');
   if (!guard.ok) return guard.res;
@@ -40,6 +44,9 @@ export async function GET(req: NextRequest) {
 }
 
 export async function PUT(req: NextRequest) {
+  const blocked = blockIfRelational('Agente de IA');
+  if (blocked) return blocked;
+
   try {
     const body = await req.json();
     const businessId = String(body.businessId || '');

@@ -1,9 +1,13 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { blockIfRelational } from '@/lib/relational/blocked';
 import { requireApiKey } from '@/lib/api-keys';
 import { pushIntegrationLog } from '@/lib/integration-logs';
 import { updateDB } from '@/lib/db';
 
 export async function GET(req: NextRequest) {
+  const blocked = blockIfRelational('API externa · serviços');
+  if (blocked) return blocked;
+
   const auth = await requireApiKey(req);
   if (!auth.ok) return auth.res;
 

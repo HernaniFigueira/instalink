@@ -6,6 +6,9 @@ import { createCustomerSession, setCustomerSessionOn, publicCustomer } from '@/l
 import { upsertContact } from '@/lib/contacts';
 import { onlyDigits } from '@/lib/utils';
 import { rateLimit, ipFrom } from '@/lib/rate-limit';
+import { relationalActive } from '@/lib/relational/config';
+import { relCustomerByLogin, relUpsertContactOnLogin } from '@/lib/relational/auth-store';
+import { getPool } from '@/lib/relational/pool';
 
 // POST público: cria conta do consumidor (nome + whatsapp ou e-mail + senha).
 // businessId (opcional): ao criar a conta A PARTIR da página de um negócio,
@@ -24,6 +27,35 @@ export async function POST(req: NextRequest) {
     }
     if (!password || password.length < 4) {
       return NextResponse.json({ error: 'Crie uma senha de ao menos 4 caracteres.' }, { status: 400 });
+    }
+    // MODO RELACIONAL: conta do consumidor criada no SQL (e-mail/telefone).
+    if (relationalActive()) {
+      if (await relCustomerByLogin(digits || cleanEmail)) {
+        return NextResponse.json({ error: 'Você já tem conta. Entre com sua senha.', code: 'exists' }, { status: 400 });
+      }
+      const pool = getPool();
+      const id = randomUUID();
+      await pool.query(
+        `INSERT INTO app.customers (id, name, phone, email, password_hash, created_at)
+         VALUES ($1, $2, $3, $4, $5, now())`,
+        [id, cleanName, digits, cleanEmail, hashPassword(password)],
+      );
+      if (businessId) {
+        const biz = await pool.query('SELECT id FROM app.businesses WHERE id = $1', [String(businessId)]);
+        if (biz.rows[0]) {
+          const client = await pool.connect();
+          try {
+            await relUpsertContactOnLogin(client, {
+              businessId: String(businessId), customerId: id,
+              name: cleanName, phone: digits, email: cleanEmail,
+            });
+          } finally { client.release(); }
+        }
+      }
+      const sessionId = await createCustomerSession(id);
+      const res = NextResponse.json({ ok: true, token: sessionId, customer: { id, name: cleanName, phone: digits, email: cleanEmail, avatar: '', mustChangePassword: false } });
+      setCustomerSessionOn(res, sessionId);
+      return res;
     }
     const db = await readDB();
     const exists = db.customers.find(

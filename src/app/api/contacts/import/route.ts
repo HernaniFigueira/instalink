@@ -24,6 +24,8 @@ import { NextRequest, NextResponse } from 'next/server';
 import { updateDB } from '@/lib/db';
 import { requireBusiness } from '@/lib/access';
 import { pushAudit } from '@/lib/audit';
+import { relationalActive } from '@/lib/relational/config';
+import { runRelationalWrite, runRelationalRead } from '@/lib/relational/slice';
 import { addContactNote, upsertContact } from '@/lib/contacts';
 import { normalizeContactProfile, profileOf } from '@/lib/contact-profile';
 import {
@@ -117,8 +119,8 @@ export async function POST(req: NextRequest) {
     }
 
     // ── Gravação ────────────────────────────────────────────────
-    const result = await updateDB((db: DB) => {
-      const current = db.contacts.filter((c) => c.businessId === businessId);
+    const importTx = (db: any) => {
+      const current = (db.contacts || []).filter((c: any) => c.businessId === businessId);
       const fresh = buildImportPlan(parsed, current, { existingMode });
       const now = new Date().toISOString();
       let created = 0;
@@ -151,7 +153,7 @@ export async function POST(req: NextRequest) {
         }
 
         // ── fill_empty: SÓ campo vazio recebe valor ──
-        const target = db.contacts.find((c) => c.id === row.contactId && c.businessId === businessId);
+        const target = (db.contacts || []).find((c: any) => c.id === row.contactId && c.businessId === businessId);
         if (!target) continue;
         const updates = fillEmptyUpdates(row, target);
         if (updates.contact.name) target.name = updates.contact.name;
@@ -192,7 +194,16 @@ export async function POST(req: NextRequest) {
       });
 
       return { created, filled, notes, skipped: fresh.skip, errors: fresh.error, total: fresh.total, rows: fresh.rows };
-    });
+    };
+
+    let result: ReturnType<typeof importTx>;
+    if (relationalActive()) {
+      // Importação grava SOMENTE na fatia da unidade (contatos) — o plano é
+      // refeito dentro da transação contra o estado atual do SQL.
+      result = await runRelationalWrite(businessId, importTx, { load: { contacts: {} } });
+    } else {
+      result = await updateDB(importTx);
+    }
 
     return NextResponse.json({
       ok: true,
