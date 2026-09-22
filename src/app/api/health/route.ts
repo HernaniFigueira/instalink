@@ -3,7 +3,7 @@
 // URL, o modo de persistência e códigos/msgs curtos de erro do Postgres
 // (ex.: 28P01 senha inválida, 42P01 tabela ausente, ENOTFOUND/ECONNREFUSED).
 import { NextResponse } from 'next/server';
-import { persistenceMode, relationalDatabaseUrl } from '@/lib/relational/config';
+import { persistenceMode, relationalDatabaseUrl, storageConfig } from '@/lib/relational/config';
 import { getPool } from '@/lib/relational/pool';
 
 export const dynamic = 'force-dynamic';
@@ -73,6 +73,29 @@ export async function GET() {
       out.appBusinesses = `ok:${r.rows[0]?.n ?? '?'} registros`;
     } catch (e) {
       out.appBusinesses = `fail:${errTag(e)}`;
+    }
+    // Storage: presença de env (formas, sem valores) + existência do bucket
+    // público (404 = bucket existe e objeto não; 400 Bucket not found = falta
+    // a migração 0002). O bucket privado não é sonda pública por definição.
+    const sc = storageConfig();
+    if (!sc) {
+      out.storage = 'fail:ENV-AUSENTE:SUPABASE_URL+SUPABASE_SERVICE_ROLE_KEY';
+    } else {
+      const storage: Record<string, unknown> = {
+        urlConfigured: true,
+        serviceKeyLen: sc.serviceKey.length,
+        bucketPublic: sc.publicBucket,
+        bucketPrivate: sc.privateBucket,
+      };
+      try {
+        const probe = await fetch(`${sc.url}/storage/v1/object/public/${sc.publicBucket}/_probe.png`, {
+          signal: AbortSignal.timeout(5000),
+        });
+        storage.bucketPublicProbe = `${probe.status} ${(await probe.text()).slice(0, 60)}`;
+      } catch (e) {
+        storage.bucketPublicProbe = `fail:${errTag(e, 60)}`;
+      }
+      out.storage = storage;
     }
   }
   return NextResponse.json(out);

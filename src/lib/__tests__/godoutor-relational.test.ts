@@ -27,7 +27,7 @@ import {
 } from '../storage';
 import { withTransaction } from '../relational/pool';
 import { computeSlots } from '../slots';
-import { weekdayOf } from '../tz';
+import { effectiveTimezone, nowHM, todayISO, weekdayOf } from '../tz';
 
 const PORT = 54399;
 const URL = `postgres://postgres:pw@127.0.0.1:${PORT}/godoutor_test`;
@@ -151,8 +151,14 @@ describe('consultas por clínica, unidade e período', () => {
   it('slotsForDate reproduz o motor do documento com os MESMOS dados', async () => {
     // O par esperado vem do motor puro sobre o DOCUMENTO (fonte de verdade
     // das regras) — o SQL só muda de onde vêm os dados.
+    // `now` CONGELADO e repassado aos DOIS lados: quando a data do booking é
+    // HOJE, o caminho SQL filtra horários passados (nowHM real) — sem isso o
+    // teste passa de manhã e falha à tarde. Reproduz exatamente o baseQuery.
+    const now = new Date();
     const date = doc.bookings.find((b) => b.id === 'bk_a3')!.date;
     const service = doc.services.find((s) => s.id === 'srv_biz_unidade_a_consulta')!;
+    const btz = effectiveTimezone(doc.businesses.find((b) => b.id === 'biz_unidade_a')?.businessTimezone);
+    const nowHmValue = date === todayISO(now, btz) ? nowHM(now, btz) : '';
     const expected = computeSlots({
       rules: doc.availability.filter((a) => a.businessId === 'biz_unidade_a'),
       exceptions: doc.exceptions.filter((e) => e.businessId === 'biz_unidade_a'),
@@ -161,9 +167,9 @@ describe('consultas por clínica, unidade e período', () => {
       professionals: doc.professionals.filter((p) => p.businessId === 'biz_unidade_a'),
       dateISO: date, weekday: weekdayOf(date), serviceId: service.id,
       durationMin: service.durationMin, professionalId: '', eligibleProIds: [],
-      nowHM: '', leadMin: 30, bufferMin: 0,
+      nowHM: nowHmValue, leadMin: 30, bufferMin: 0,
     });
-    const outcome = await slotsForDate(pool, { businessId: 'biz_unidade_a', serviceId: service.id, date });
+    const outcome = await slotsForDate(pool, { businessId: 'biz_unidade_a', serviceId: service.id, date, now });
     expect(outcome.ok).toBe(true);
     if (outcome.ok) {
       expect(outcome.result.slots).toEqual(expected.slots);
@@ -471,6 +477,53 @@ describe('arquivos privados — autorização e referência permanente', () => {
     expect(fileId).toBeTruthy();
     const rec = await getPatientFileRecord(fileId);
     expect(rec).toMatchObject({ businessId: 'biz_unidade_a', contactId: 'ct_a_carla', path: 'biz_unidade_a/ct_a_carla/teste.pdf' });
+  });
+});
+
+describe('catálogo — write-back de services/professionals/availability (achado do preview)', () => {
+  const unitA = 'biz_unidade_a';
+  const proId = 'test-pro-preview';
+  const svcId = 'test-svc-preview';
+  const avId = 'test-av-preview';
+  const spec = {
+    categories: {}, products: {}, options: {}, services: {}, professionals: {},
+    availability: {}, exceptions: {}, businesses: {},
+  } as any;
+
+  it('professional.save, service.save e availability.save PERSISTEM e releem', async () => {
+    await runRelationalWrite(unitA, (db: any) => {
+      db.professionals.push({ id: proId, businessId: unitA, name: 'Dra. Writeback', role: '', photo: '', active: true });
+      return { professionalId: proId };
+    }, { load: structuredClone(spec) });
+    await runRelationalWrite(unitA, (db: any) => {
+      db.services.push({ id: svcId, businessId: unitA, categoryId: '', name: 'Consulta Writeback',
+        description: '', image: '', price: 10000, showPrice: true, durationMin: 30,
+        professionalIds: [proId], active: true, featured: false, bookable: true, questions: [] });
+      return { ok: true };
+    }, { load: structuredClone(spec) });
+    // Colunas reservadas (start/"end") — regressão do "syntax error at or near end".
+    await runRelationalWrite(unitA, (db: any) => {
+      db.availability = db.availability.filter((a: any) => a.professionalId !== proId);
+      db.availability.push({ id: avId, businessId: unitA, professionalId: proId, serviceId: '',
+        weekday: 1, start: '08:00', end: '18:00', slotMin: 30 });
+      return { ok: true };
+    }, { load: structuredClone(spec) });
+
+    const pro = await pool.query('SELECT * FROM app.professionals WHERE id = $1', [proId]);
+    const svc = await pool.query('SELECT * FROM app.services WHERE id = $1', [svcId]);
+    const av = await pool.query('SELECT * FROM app.availability WHERE id = $1', [avId]);
+    expect(pro.rows).toHaveLength(1);
+    expect(pro.rows[0].name).toBe('Dra. Writeback');
+    expect(svc.rows).toHaveLength(1);
+    expect(svc.rows[0].professional_ids).toEqual([proId]);
+    expect(svc.rows[0].duration_min).toBe(30);
+    expect(av.rows).toHaveLength(1);
+    expect(av.rows[0].slot_min).toBe(30);
+    // Releitura pelo MESMO caminho do catalog/get (mapear linha → domínio).
+    const slice = await (await import('../relational/slice')).runRelationalRead(unitA, structuredClone(spec));
+    expect(slice.services.map((x: any) => x.id)).toContain(svcId);
+    expect(slice.professionals.map((x: any) => x.id)).toContain(proId);
+    expect(slice.availability.map((x: any) => x.id)).toContain(avId);
   });
 });
 

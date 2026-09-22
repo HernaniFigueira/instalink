@@ -650,6 +650,23 @@ const WRITEBACK: Record<string, { table: string; row: (x: any, ctx: { durationOf
     id: v.id, business_id: ctx.optionBiz.get(v.optionId) || '', option_id: v.optionId,
     name: v.name ?? '', price_delta: v.priceDelta ?? 0, active: v.active !== false,
   }), idOf: (x) => x.id },
+  // Catálogo da agenda: SEM estes dois, professional.save/service.save
+  // respondiam 200 mas NUNCA persistiam (achado da validação do preview —
+  // o diff do write-back ignorava as coleções inteiras).
+  services: { table: 'app.services', row: (s: any): Row => ({
+    id: s.id, business_id: s.businessId, category_id: s.categoryId || null,
+    name: s.name ?? '', description: s.description ?? '', image: s.image ?? '',
+    price: s.price ?? 0, show_price: s.showPrice !== false,
+    duration_min: s.durationMin ?? 30,
+    professional_ids: JSON.stringify(s.professionalIds || []),
+    active: s.active !== false, featured: s.featured === true,
+    bookable: s.bookable !== false, questions: JSON.stringify(s.questions || []),
+  }), idOf: (x) => x.id },
+  professionals: { table: 'app.professionals', row: (p: any): Row => ({
+    id: p.id, business_id: p.businessId, name: p.name ?? '', role: p.role ?? '',
+    photo: p.photo ?? '', active: p.active !== false, user_id: p.userId || null,
+    follow_business_hours: p.followBusinessHours !== false,
+  }), idOf: (x) => x.id },
   availability: { table: 'app.availability', row: (a: any): Row => ({
     id: a.id, business_id: a.businessId, professional_id: a.professionalId || null,
     service_id: a.serviceId || null, weekday: a.weekday,
@@ -751,10 +768,15 @@ function webhookDeliveryRow(d: any): Row {
 }
 
 async function upsertRow(client: PoolClient, table: string, row: Row): Promise<void> {
-  const cols = Object.keys(row);
+  // Identificadores ENTRE ASPAS: colunas como start/"end" (horários) são
+  // palavras reservadas do Postgres — sem aspas, INSERT estoura
+  // "syntax error at or near end". Os nomes vêm sempre das nossas Row specs
+  // (nunca de input do usuário), então as aspas são seguras.
+  const cols = Object.keys(row).map((c) => `"${c}"`);
   const values = Object.values(row);
   const placeholders = cols.map((_, i) => `$${i + 1}`).join(', ');
-  const updates = cols.slice(1).map((c, i) => `${c} = $${i + 2}`).join(', ');
+  const rawCols = Object.keys(row);
+  const updates = rawCols.slice(1).map((c, i) => `"${c}" = $${i + 2}`).join(', ');
   await client.query(
     `INSERT INTO ${table} (${cols.join(', ')}) VALUES (${placeholders})
      ON CONFLICT (id) DO UPDATE SET ${updates}`,

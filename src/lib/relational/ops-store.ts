@@ -154,10 +154,12 @@ async function loadOps(client: PoolClient, businessId: string, load: OpsLoad): P
 }
 
 async function upsert(client: PoolClient, table: string, row: Record<string, unknown>): Promise<void> {
-  const cols = Object.keys(row);
+  // Identificadores entre aspas (start/"end" são reservados no Postgres).
+  const cols = Object.keys(row).map((c) => `"${c}"`);
   const values = Object.values(row);
   const placeholders = cols.map((_, i) => `$${i + 1}`).join(', ');
-  const updates = cols.slice(1).map((c, i) => `${c} = $${i + 2}`).join(', ');
+  const rawCols = Object.keys(row);
+  const updates = rawCols.slice(1).map((c, i) => `"${c}" = $${i + 2}`).join(', ');
   await client.query(
     `INSERT INTO ${table} (${cols.join(', ')}) VALUES (${placeholders})
      ON CONFLICT (id) DO UPDATE SET ${updates}`,
