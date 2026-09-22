@@ -15,7 +15,7 @@ say() { if [ "$2" = PASS ]; then PASSN=$((PASSN+1)); else FAILN=$((FAILN+1)); fi
 
 req() { # req <metodo> <caminho> <json-ou-vazio> <auth:0|1> → set BODY/STATUS/HDRS
   local m=$1 p=$2 d=${3:-} a=${4:-0}
-  local args=(-s -m 90 -w $'\n%{http_code}' -X "$m")
+  local args=(-s -L -m 90 -w $'\n%{http_code}' -X "$m")
   [ -n "$d" ] && args+=(-H 'content-type: application/json' -d "$d")
   [ "$a" = 1 ] && args+=(-H "authorization: Bearer $TOKEN")
   local out; out=$(curl "${args[@]}" "$BASE$p" 2>&1)

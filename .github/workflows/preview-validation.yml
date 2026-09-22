@@ -22,7 +22,7 @@ jobs:
       - uses: actions/checkout@v4
       - name: Validar preview (relacional, banco, cadastro, agenda, uploads)
         env:
-          BASE_URL: ${{ inputs.base_url || 'https://godoutor-git-arena-01a0c526-2a81644-hernanicross-3509s-projects.vercel.app' }}
+          BASE_URL: ${{ inputs.base_url || 'https://godoutor-git-arena-01a0c526-327ceb-hernanicross-3509s-projects.vercel.app' }}
         run: |
           bash scripts/preview-validate.sh | tee /tmp/resultado.txt
           {
