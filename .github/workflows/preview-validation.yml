@@ -1,0 +1,18 @@
+name: Preview Validation (GoDoutor)
+# Validação do PREVIEW (Vercel + Supabase) — SEM segredos no repositório:
+# o script só fala com a URL pública do preview. Disparo manual.
+on:
+  workflow_dispatch:
+    inputs:
+      base_url:
+        description: 'Base URL do preview (https://…vercel.app)'
+        required: true
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Validar preview (relacional, banco, cadastro, agenda, uploads)
+        env:
+          BASE_URL: ${{ inputs.base_url }}
+        run: bash scripts/preview-validate.sh
