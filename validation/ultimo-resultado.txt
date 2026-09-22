@@ -1,22 +1,22 @@
 CHECK|0-protecao|PASS|sem Vercel Authentication no preview
-CHECK|0a-deployment|PASS|deployment com /api/health servindo (x-vercel-id: sfo1::9jtw4-1790109696873-975d2eda8829)
-CHECK|0d-pooler-probe|INFO|role.custom+pwd-errada: psql: error: connection to server at "aws-0-sa-east-1.pooler.supabase.com" (54.94.90.106), port 6543 failed: FATAL:  password authentication failed for user "godoutor_app" connection to server at "aws ||| postgres.ref+pwd-errada: psql: error: connection to server at "aws-0-sa-east-1.pooler.supabase.com" (54.94.90.106), port 6543 failed: FATAL:  password authentication failed for user "postgres" connection to server at "aws-0-s
-CHECK|0c-edge-diag|INFO|--- POST /api/customer/register (cru) --- HTTP/2 400  cache-control: public, max-age=0, must-revalidate content-type: application/json date: Tue, 22 Sep 2026 20:41:42 GMT server: Vercel strict-transport-security: max-age=63072000; includeSubDomains; preload vary: RSC, Next-Router-State-Tree, Next-Router-Prefetch x-matched-path: /api/customer/register --- POST /api/auth/register (cru) --- HTTP/2 400  cache-control: public, max-age=0, must-revalidate content-type: application/json date: Tue, 22 Sep 2026 20:41:43 GMT server: Vercel strict-transport-security: max-age=63072000; includeSubDomains; preload vary: RSC, Next-Router-State-Tree, Next-Router-Prefetch x-matched-path: /api/auth/register --- GET /api/health (cru) --- HTTP/2 200  age: 0 cache-control: public, max-age=0, must-revalidate content-type: application/json date: Tue, 22 Sep 2026 20:41:44 GMT server: Vercel
-CHECK|0b-banco-diagnostico|INFO|health: persistence=relational| dbConnect=fail:28P01:password authentication failed for user "godoutor_app"| appUsers=| appBusinesses=| url=postgresql://go***(len 33)@aws-0-sa-east-1.pooler.supabase.com:6543/postgres?sslmode#pwd=len 15;no-pct,no-ws,alnum| corpo={"ok":true,"persistence":"relational","dbUrlConfigured":true,"dbUrlShape":"postgresql://go***(len 33)@aws-0-sa-east-1.pooler.supabase.com:6543/postgres?sslmode#pwd=len 15;no-pct,no-ws,alnum","commit":"e7002a188a8a1d8539b464d88625e1212b568c66","dbConnect":"fail:28P01:password authentication failed for user \"godoutor_app\""}
+CHECK|0a-deployment|PASS|deployment com /api/health servindo (x-vercel-id: yul1::bf5br-1790110991699-f9011fdc3586)
+CHECK|0d-pooler-probe|INFO|role.custom+pwd-errada: psql: error: connection to server at "aws-0-sa-east-1.pooler.supabase.com" (15.229.150.166), port 6543 failed: FATAL:  password authentication failed for user "godoutor_app" connection to server at "a ||| postgres.ref+pwd-errada: psql: error: connection to server at "aws-0-sa-east-1.pooler.supabase.com" (15.229.150.166), port 6543 failed: FATAL:  password authentication failed for user "postgres" connection to server at "aws-0
+CHECK|0c-edge-diag|INFO|--- POST /api/customer/register (cru) --- HTTP/2 400  cache-control: public, max-age=0, must-revalidate content-type: application/json date: Tue, 22 Sep 2026 21:03:16 GMT server: Vercel strict-transport-security: max-age=63072000; includeSubDomains; preload vary: RSC, Next-Router-State-Tree, Next-Router-Prefetch x-matched-path: /api/customer/register --- POST /api/auth/register (cru) --- HTTP/2 400  cache-control: public, max-age=0, must-revalidate content-type: application/json date: Tue, 22 Sep 2026 21:03:16 GMT server: Vercel strict-transport-security: max-age=63072000; includeSubDomains; preload vary: RSC, Next-Router-State-Tree, Next-Router-Prefetch x-matched-path: /api/auth/register --- GET /api/health (cru) --- HTTP/2 200  age: 0 cache-control: public, max-age=0, must-revalidate content-type: application/json date: Tue, 22 Sep 2026 21:03:17 GMT server: Vercel
+CHECK|0b-banco-diagnostico|INFO|health: persistence=relational| dbConnect=ok| appUsers=ok:0 registros| appBusinesses=ok:0 registros| url=postgresql://go***(len 33)@aws-0-sa-east-1.pooler.supabase.com:6543/postgres?sslmode#pwd=len 15;no-pct,no-ws,alnum| corpo={"ok":true,"persistence":"relational","dbUrlConfigured":true,"dbUrlShape":"postgresql://go***(len 33)@aws-0-sa-east-1.pooler.supabase.com:6543/postgres?sslmode#pwd=len 15;no-pct,no-ws,alnum","commit":"d47cb97ac5af3541b274ed1425310e8d8461731a","dbConnect":"ok","appUsers":"ok:0 registros","appBusinesses":"ok:0 registros"}
 CHECK|1-relacional|PASS|503 module_not_migrated (x-godoutor-blocked=Automa%C3%A7%C3%B5es, persistence=relational) — GODOUTOR_PERSISTENCE=relational ATIVO
-CHECK|3a-cadastro-equipe|FAIL|register → 500. Erro: {"error":"Não conseguimos criar sua conta. Tente novamente."}
-CHECK|3b-login-equipe|FAIL|login → 503 token=''. Erro: {"error":"O serviço de acesso está temporariamente indisponível. Tente novamente em instantes.","code":"AUTH_UNAVAILABLE","requestId":"44563492-ad24-4d81-8018-b67a5492932e"}
-CHECK|3c-sessao|FAIL|me → 401 email=''. Erro: {"user":null}
-CHECK|2-banco-godoutor_app|FAIL|customer/register → 405. Erro exato: 
+CHECK|3a-cadastro-equipe|PASS|register 200 (preview-valid-1790110945@godoutor.test)
+CHECK|3b-login-equipe|PASS|login 200 + token de sessão
+CHECK|3c-sessao|PASS|me 200 (sessão lida do banco)
+CHECK|2-banco-godoutor_app|PASS|customer/register 200 — INSERT/SELECT em app.users/app.customers via godoutor_app OK
 CHECK|4a-criar-unidade|FAIL|→ 401. Erro: {"error":"Não autenticado."}
 CHECK|4b-pagina-persistida|FAIL|GET / → 200. Conteúdo: <!DOCTYPE html><html lang="pt-BR" class="__variable_ab14f4 __variable_b92147"><head><meta charSet="utf-8"/><meta name="viewport" content="width=device-width, initial-scale=1"/><link rel="preload" href
 CHECK|4c-catalogo-leitura|FAIL|catalog/get → 400 sem JSON .services. Corpo: {"error":"Negócio não informado."}
-CHECK|5a-modulos|FAIL|features → 401. Erro: {"error":"Não autenticado."}
+CHECK|5a-modulos|FAIL|features → 403. Erro: {"error":"Você não tem acesso a este negócio."}
 CHECK|5b-profissional|FAIL|→ 401. Erro: {"error":"Não autorizado."}
 CHECK|5c-servico|FAIL|→ 401. Erro: {"error":"Não autorizado."}
 CHECK|5d-horarios|FAIL|→ 401. Erro: {"error":"Não autorizado."}
 CHECK|5e-catalogo-id|FAIL|services vazio no catalog/get: {"error":"Negócio não informado."}
-CHECK|5f-slots|FAIL|GET slots → 500 nslots=0. Erro: {"error":"Não foi possível carregar os horários."}
+CHECK|5f-slots|FAIL|GET slots → 404 nslots=0. Erro: {"error":"Negócio não encontrado."}
 CHECK|5g-reserva|FAIL|sem slots
 CHECK|5h-confirmar|FAIL|sem slots
 CHECK|5i-persistiu|FAIL|sem slots
@@ -26,5 +26,5 @@ CHECK|7a-contato|FAIL|contatos → 400. Erro: {"error":"Negócio não informado.
 CHECK|7b-upload-privado|FAIL|sem contato
 CHECK|7c-reassinatura|FAIL|sem contato
 CHECK|7d-leitura-privada|FAIL|sem contato
-RESUMO|PASS=3|FAIL=25
+RESUMO|PASS=7|FAIL=21
 VALIDACAO COM FALHAS
