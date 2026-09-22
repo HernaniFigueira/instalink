@@ -227,3 +227,5 @@ exit 0
 # reexecução: sondas de roteamento do pooler
 
 # reexecução: ALTER ROLE confirmado no projeto correto
+
+# reexecução: fixes do catálogo (writeback services/professionals + quoting start/end)
