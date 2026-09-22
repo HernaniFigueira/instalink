@@ -284,7 +284,7 @@ export async function relAccessibleDoc(user: User, support: SupportSession | nul
   if (support) {
     // Master em suporte: somente a unidade alvo.
     const b = await pool.query('SELECT * FROM app.businesses WHERE id = $1', [support.businessId]);
-    db.businesses = b.rows;
+    db.businesses = b.rows.map((r: any) => rowToBusiness(r));
     return db as DB;
   }
   const memberRows = await pool.query('SELECT * FROM app.members WHERE user_id = $1 AND active = true', [user.id]);
@@ -310,7 +310,7 @@ export async function relAccessibleDoc(user: User, support: SupportSession | nul
     : { rows: [] };
   const bizById = new Map<string, any>();
   for (const r of [...owned.rows, ...byMember.rows, ...byOrg.rows]) bizById.set(s(r.id), r);
-  db.businesses = [...bizById.values()];
+  db.businesses = [...bizById.values()].map((r: any) => rowToBusiness(r));
   db.organizations = orgRows.rows.map((o: any) => ({
     id: s(o.id), name: s(o.name), ownerId: s(o.owner_id),
     metadata: typeof o.metadata === 'object' ? o.metadata : JSON.parse(o.metadata || '{}'),
