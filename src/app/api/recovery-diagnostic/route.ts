@@ -3,14 +3,27 @@ import { Pool } from 'pg';
 
 export const runtime = 'nodejs';
 
+function sanitizePostgresUrl(raw: string): string {
+  try {
+    const url = new URL(raw);
+    url.searchParams.delete('sslmode');
+    return url.toString();
+  } catch {
+    return raw;
+  }
+}
+
 export async function GET() {
   const supabaseUrl = process.env.SUPABASE_DB_URL || '';
   const databaseUrl = process.env.DATABASE_URL || '';
+  const sanitizedSupabaseUrl = supabaseUrl ? sanitizePostgresUrl(supabaseUrl) : '';
+  const sanitizedDatabaseUrl = databaseUrl ? sanitizePostgresUrl(databaseUrl) : '';
   const result: Record<string, unknown> = {
     supabaseDbUrlConfigured: !!supabaseUrl,
     databaseUrlConfigured: !!databaseUrl,
     databaseUrlUsesSupabase: !!databaseUrl && /supabase|pooler/i.test(databaseUrl),
-    bridgeMatched: !!supabaseUrl && databaseUrl === supabaseUrl,
+    bridgeMatched: !!supabaseUrl && sanitizedDatabaseUrl === sanitizedSupabaseUrl,
+    sslmodeRemoved: !!supabaseUrl && sanitizedSupabaseUrl !== supabaseUrl,
   };
 
   if (!supabaseUrl) {
@@ -18,7 +31,7 @@ export async function GET() {
   }
 
   const pool = new Pool({
-    connectionString: supabaseUrl,
+    connectionString: sanitizedSupabaseUrl,
     ssl: { rejectUnauthorized: false },
     max: 1,
     connectionTimeoutMillis: 8000,
