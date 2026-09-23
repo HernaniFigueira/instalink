@@ -1,7 +1,7 @@
 # Homologação FASE 2 — Matriz de correções
 
 **Branch:** `arena/01a0ce4e-instalink` · **Base PR #37:** `arena/01a0cc3f-instalink` · **PR #37:** https://github.com/HernaniFigueira/instalink/pull/37
-**Estado:** FECHAMENTO FASE 2 — última rodada; Fase 2 congela após esta entrega.
+**Estado:** Ajustes pós-smoke humano (scroll/X/tipografia) — Fase 2 congela após este smoke passar.
 
 ## Commits
 
@@ -24,6 +24,9 @@
 | C | `b8bdecb` | ux: public page full-bleed cover, single-scroll editor, clean first-level headers | itens 8–11: capa full-bleed, scroll único editor, prévia enxuta, cabeçalhos 1º nível |
 | D | `2264438` | feat: my profile, also-attends link, safe anamnese template upgrade, platform docs | itens 6–7, 12–14: `/perfil`, link Professional, upgrade de template, fundação platform admin |
 | E | `d1a7770` | test: adapt nav/agenda contracts for /perfil route and clean agenda header | adaptações de contrato + dica de uso na Legenda |
+| F | `99a3861` | fix: standard X close on WorkspaceSheet + shared body scroll-lock | linguiña abandonada → X padrão; scroll-lock ref-counted; CSS mobile; pub-hero dedup |
+| G | `2c5928b` | fix: agenda grows with the page — vertical scroll is the document | agenda sem scrollbar interna vertical |
+| H | `f6a1460` | ux: lighter global typography + cleaner preview chrome | pesos 600/500; sem extrabold/black no painel; preview enxuta |
 
 ## Matriz — rodada de fechamento
 
@@ -54,10 +57,23 @@
 
 - `./node_modules/.bin/tsc --noEmit` → **0**
 - `npm run build` → **OK** (inclui `/perfil` 4.58 kB)
-- `npx vitest run` → **1902 pass · 6 fail** — apenas as 6 pré-existentes da base `e622848`:
+- `npx vitest run` → **1907 pass · 6 fail** (pós-ajustes smoke) — apenas as 6 pré-existentes da base `e622848`:
   `a34-instagram` ×3, `automation-audit-p4`, `pipeline`, `whatsapp-p61-e2e` (data/ambiente; não são da Fase 2)
 - Suites novas do fechamento: `fase2-ws-sheet-close` (6), `fase2-close-ux` (6), `fase2-close-profile` (6)
 - Contratos adaptados: `panel` 71/71 (26 rotas + `/perfil`), `a34-nav` 12/12, `a34-human` 29/29, `workspace-navigation` 8/8
+
+## Smoke humano pós-fechamento (ajustes finais)
+
+| Item | Status | Evidência |
+|------|--------|-----------|
+| Linguinha removida; X padrão topo-direita em todo WorkspaceSheet | ✅ | `99a3861` · `fase2-ws-sheet-close` (7) + `WorkspaceSheet.test` (7) |
+| Scroll-lock compartilhado (sheets empilhados, teardown em qualquer ordem) | ✅ | `src/lib/scroll-lock.ts` · `scroll-lock-nested` (4) |
+| CSS mobile `dialog.ws-sheet` aninhado corrigido | ✅ | `99a3861` |
+| `.pub-hero__sheet--overlap` fonte única | ✅ | `99a3861` · teste `fase2-close-ux` |
+| Agenda: rolagem vertical da página (sem caixa interna ~viewport) | ✅ | `2c5928b` · suites agenda 66 |
+| Tipografia mais leve (design system → telas) | ✅ | sem `font-extrabold`/`font-black`/`font-bold` no escopo painel |
+| Preview sem texto explicativo excessivo | ✅ | ClinicPreview só Celular/Desktop/Ver menu |
+| tsc / suíte / build | ✅ | tsc 0 · 1907 pass / 6 pré-existentes · `next build` OK |
 
 ## Gaps restantes (honestos)
 
