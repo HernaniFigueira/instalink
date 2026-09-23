@@ -15,7 +15,8 @@ import type { BookingOccurrence } from '@/lib/booking-recurrence';
 import type { OccurrencePreview } from '@/lib/booking-series';
 import { onlyDigits } from '@/lib/utils';
 import { cn } from '@/lib/utils';
-import type { Professional, Service } from '@/lib/types';
+import type { Pet, Professional, Service } from '@/lib/types';
+import { apiGet } from '@/lib/api-client';
 import { Drawer, Avatar, Badge, Button, Checkbox, Field, IconButton, Input, Notice, Select } from '@/components/ui';
 
 interface Contact {
@@ -58,6 +59,10 @@ export function NewBookingSheet({ businessId, services, pros, timezone, initial,
   const [date, setDate] = useState(initial?.date || '');
   const [time, setTime] = useState(initial?.time || '');
   const [note, setNote] = useState('');
+  // FASE 2 · P6 — veterinária: pet do tutor selecionado (paciente da agenda).
+  const [pets, setPets] = useState<Pet[]>([]);
+  const [isVet, setIsVet] = useState(false);
+  const [petId, setPetId] = useState('');
   // A3.4 · Bloco 4 — ENCAIXE: horário fora da grade, com conflito mostrado.
   const [fitInOpen, setFitInOpen] = useState(false);
   const [fitInTime, setFitInTime] = useState(initial?.time || '');
@@ -167,6 +172,22 @@ export function NewBookingSheet({ businessId, services, pros, timezone, initial,
 
   const picked = !!contactId || (!!name && !newClient);
 
+  // FASE 2 · P6 — pets do tutor (só clínica veterinária devolve `vet: true`).
+  useEffect(() => {
+    setPetId('');
+    if (!contactId) { setPets([]); setIsVet(false); return; }
+    let on = true;
+    apiGet<{ vet: boolean; pets: Pet[] }>(
+      `/api/pets?businessId=${encodeURIComponent(businessId)}&tutorId=${encodeURIComponent(contactId)}`,
+      { scope: 'area', area: 'Agenda' },
+    ).then((r) => {
+      if (!on) return;
+      setIsVet(!!r.data?.vet);
+      setPets(r.data?.pets?.filter((p) => p.active !== false) || []);
+    }).catch(() => { if (on) { setPets([]); setIsVet(false); } });
+    return () => { on = false; };
+  }, [contactId, businessId]);
+
   function pick(c: Contact) {
     setContactId(c.id);
     setName(c.name);
@@ -190,6 +211,7 @@ export function NewBookingSheet({ businessId, services, pros, timezone, initial,
   function resetClient() {
     setContactId(''); setName(''); setPhone(''); setEmail('');
     setNewClient(false); setQuery(''); setResults([]);
+    setPetId(''); setPets([]); setIsVet(false);
   }
 
   function payload(rows = occurrences) {
@@ -197,6 +219,8 @@ export function NewBookingSheet({ businessId, services, pros, timezone, initial,
     return {
       businessId, asOwner: true, customerName: name, customerPhone: phone, customerEmail: email,
       contactId: contactId || undefined, serviceId, professionalId: proId, date, time, note,
+      // FASE 2 · P6 — pet escolhido (o servidor revalida na unidade).
+      ...(isVet && petId ? { petId } : {}),
       ...(repeat ? { series: { requestId: requestId.current, occurrences: rows } } : {}),
     };
   }
@@ -372,6 +396,16 @@ export function NewBookingSheet({ businessId, services, pros, timezone, initial,
               </>
             )}
           </div>
+
+          {/* FASE 2 · P6 — veterinária: o PET é o paciente do agendamento. */}
+          {picked && contactId && isVet && pets.length > 0 && (
+            <Field label="Pet (paciente)" hint="Em clínica veterinária a agenda identifica pelo pet; o tutor continua sendo o contato.">
+              <Select value={petId} disabled={saving || reviewing} onChange={(e) => setPetId(e.target.value)}>
+                <option value="">Sem vínculo (só tutor)</option>
+                {pets.map((p) => <option key={p.id} value={p.id}>{p.name}{p.breed ? ` · ${p.breed}` : ''}</option>)}
+              </Select>
+            </Field>
+          )}
 
           <Field label="2. Serviço" required>
             <Select value={serviceId} disabled={saving || reviewing} onChange={(e) => setServiceId(e.target.value)}>

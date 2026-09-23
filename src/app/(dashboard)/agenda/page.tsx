@@ -639,7 +639,8 @@ export default function AgendaPage() {
           leftPct: l.leftPct,
           widthPct: l.widthPct,
           time: b.time,
-          name: b.customerName,
+          // FASE 2 · P6 — veterinária: PET primeiro; tutor vira contexto.
+          name: b.petName || b.customerName,
           service: serviceName(b.serviceId),
           timeRange: `${b.time}–${endHM}`,
           statusLabel,
@@ -1375,7 +1376,7 @@ export default function AgendaPage() {
             <>
               {pendencies.slice(0, 4).map((b) => (
                 <button key={b.id} onClick={() => setDetail(b)} className="text-xs font-medium bg-[var(--surface)] border border-[var(--attention-border)] text-[var(--attention-fg)] px-2.5 py-1 rounded-md hover:bg-[var(--attention-bg-hover)]">
-                  {formatDateBR(b.date)} {b.time} · {b.customerName}
+                  {formatDateBR(b.date)} {b.time} · {b.petName || b.customerName}
                 </button>
               ))}
               {pendencies.length > 4 && <span className="text-xs font-medium text-[var(--attention-fg)] self-center">+{pendencies.length - 4}</span>}
@@ -1502,7 +1503,7 @@ export default function AgendaPage() {
           {columns.flatMap(c => c.blocks).length === 0 && <div className="p-8 bg-[var(--surface)] border border-[var(--border)] rounded-lg"><h2 className="font-semibold">Nenhum atendimento nesta seleção</h2><p className="text-sm text-[var(--text-muted)] mt-1">Confira os filtros ou use Novo agendamento para consultar horários disponíveis.</p></div>}
           {[...new Map(columns.flatMap(c => c.blocks).map(b => [b.id,b])).values()].sort((a,b) => a.time.localeCompare(b.time)).map(item => <button key={item.id} type="button" onClick={() => { const booking = bookings.find(b => b.id === item.id); if (booking) setDetail(booking); }} className="w-full flex gap-4 items-start text-left p-4 bg-[var(--surface)] border border-[var(--border)] rounded-lg">
             <span className="font-semibold tabular-nums text-[var(--brand-fg)]">{item.time}</span>
-            <span className="min-w-0 flex-1"><strong className="block text-sm">{bookings.find(b => b.id === item.id)?.customerName}</strong><span className="block text-xs text-[var(--text-muted)] mt-1">{item.service} · {proName(bookings.find(b => b.id === item.id)?.professionalId || '') || 'Sem profissional'}</span><span className="inline-block text-xs mt-2 font-semibold">{item.statusLabel}{bookings.find(b => b.id === item.id)?.bookingKind === 'fit_in' ? ' · Encaixe' : ''}</span></span><Icon n="chevR" size={16} />
+            <span className="min-w-0 flex-1"><strong className="block text-sm">{(() => { const bk = bookings.find(b => b.id === item.id); return bk?.petName || bk?.customerName; })()}</strong><span className="block text-xs text-[var(--text-muted)] mt-1">{(() => { const bk = bookings.find(b => b.id === item.id); return bk?.petName ? `Tutor: ${bk.customerName} · ` : ''; })()}{item.service} · {proName(bookings.find(b => b.id === item.id)?.professionalId || '') || 'Sem profissional'}</span><span className="inline-block text-xs mt-2 font-semibold">{item.statusLabel}{bookings.find(b => b.id === item.id)?.bookingKind === 'fit_in' ? ' · Encaixe' : ''}</span></span><Icon n="chevR" size={16} />
           </button>)}
         </section>
       ) : view === 'month' ? (
@@ -1675,7 +1676,7 @@ export default function AgendaPage() {
       >
         <div className="bg-[var(--text)] text-white rounded-md shadow-lg px-2.5 py-1.5 max-w-[220px]">
           <p className="text-[11px] font-semibold leading-tight truncate">
-            {dragging ? `${dragging.customerName} · ${serviceName(dragging.serviceId)}` : ''}
+            {dragging ? `${dragging.petName || dragging.customerName} · ${serviceName(dragging.serviceId)}` : ''}
           </p>
           <p className={
             'text-[11px] leading-tight mt-0.5 '
@@ -1691,7 +1692,7 @@ export default function AgendaPage() {
         <Drawer open onClose={() => !saving && setDropAsk(null)} title="Confirmar reagendamento" width="max-w-lg">
           <div className="p-5">
             <p className="font-semibold">{dropConfirmQuestion(dropAsk.date, dropAsk.time)}</p>
-            <p className="text-sm text-zinc-600 mt-1.5"><strong>{dropAsk.booking.customerName}</strong> · {serviceName(dropAsk.booking.serviceId)}</p>
+            <p className="text-sm text-zinc-600 mt-1.5"><strong>{dropAsk.booking.petName || dropAsk.booking.customerName}</strong>{dropAsk.booking.petName ? ` (tutor: ${dropAsk.booking.customerName})` : ''} · {serviceName(dropAsk.booking.serviceId)}</p>
             <p className="text-sm mt-1">
               {formatDateBR(dropAsk.booking.date)} {dropAsk.booking.time} → <strong>{formatDateBR(dropAsk.date)} {dropAsk.time}</strong>
             </p>

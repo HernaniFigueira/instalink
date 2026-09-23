@@ -229,6 +229,10 @@ export async function POST(req: NextRequest) {
       createdAt: now, updatedAt: now,
       createdBy: guard.ctx.user.id, updatedBy: guard.ctx.user.id,
       finalizedAt: '', finalizedBy: '', signedBy: '',
+      // FASE 2 · P6 — pet do agendamento herdado (ou informado e validado na unidade).
+      petId: booking?.petId
+        || (body.petId && db.pets.some((p) => p.id === String(body.petId) && p.businessId === businessId)
+          ? String(body.petId) : ''),
     };
 
     await updateDB((d: DB) => {

@@ -629,6 +629,12 @@ export interface Booking {
   checkedInByName?: string;
   /** P6 · veterinária — pet atendido ('' quando não se aplica). Aditivo. */
   petId?: string;
+  /**
+   * FASE 2 · P6 — CAMPO DERIVADO de leitura (a agenda resolve o pet ativo).
+   * NUNCA é persistido nem aceito na escrita — existe só para a UI mostrar o
+   * PET primeiro na clínica veterinária.
+   */
+  petName?: string;
 }
 
 /** Tipo do agendamento. `standard` é o fluxo normal da grade. */
@@ -1942,7 +1948,9 @@ export type AuditAction =
   | 'instagram.token_refreshed' | 'instagram.token_refresh_failed'
   // FASE 2 · P4 — motor de anamnese (templates administrativos editáveis)
   | 'anamnese.template_created' | 'anamnese.template_updated'
-  | 'anamnese.template_deleted' | 'anamnese.response_saved';
+  | 'anamnese.template_deleted' | 'anamnese.response_saved'
+  // FASE 2 · P6 — pacientes veterinários (tutor ≠ pet)
+  | 'pet.created' | 'pet.updated' | 'pet.deleted';
 
 export interface AuditEntry {
   id: ID;

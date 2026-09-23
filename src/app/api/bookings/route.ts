@@ -76,8 +76,19 @@ export async function GET(req: NextRequest) {
       const today = todayISO(new Date(), btz);
       const now = nowHM(new Date(), btz);
       const slice = all.slice((page - 1) * limit, page * limit);
+      // FASE 2 · P6 — veterinária: a agenda lê PRIMEIRO o PET (o tutor fica
+      // como contexto). `petName` só existe quando há vínculo — dados legados
+      // e outras clínicas seguem exatamente como antes.
+      const petsById: Record<string, string> = business.clinicType === 'veterinaria'
+        ? Object.fromEntries(
+          guard.db.pets.filter((p) => p.businessId === businessId && p.active !== false).map((p) => [p.id, p.name]),
+        )
+        : {};
+      const withPet = slice.map((b) => (
+        b.petId && petsById[b.petId] ? { ...b, petName: petsById[b.petId] } : b
+      ));
       return NextResponse.json({
-        bookings: slice,
+        bookings: withPet,
         total: all.length, page, limit,
         ...(capped ? { limitCapped: true, requestedLimit: requested } : {}),
         today,
@@ -321,6 +332,13 @@ export async function POST(req: NextRequest) {
       leadId: body.leadId ? String(body.leadId) : undefined,
       bookingKind: body.bookingKind === 'fit_in' ? 'fit_in' : undefined,
       fitInConfirmed: body.confirmFitIn === true,
+      // FASE 2 · P6 — pet escolhido pelo DONO (validado na unidade; público nunca envia).
+      petId: (() => {
+        if (!isOwner || !body.petId) return undefined;
+        const pet = db.pets.find((x) => x.id === String(body.petId) && x.businessId === business.id);
+        if (!pet) return undefined;
+        return pet.id;
+      })(),
     };
     const scope = guard?.ok ? guard.ctx.professionalScope : '';
     // Encaixe exige CONFIRMAÇÃO EXPLÍCITA: sem `confirmFitIn`, o servidor

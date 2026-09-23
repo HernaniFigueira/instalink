@@ -36,6 +36,7 @@ import { PhoneBRInput } from '@/components/dashboard/PhoneBRInput';
 import { canReopenEncounter } from '@/lib/encounters';
 import { EncounterList, EncounterSheet, type EncounterRow } from '@/components/dashboard/EncounterSheet';
 import { usePanelPermissions } from '@/components/dashboard/usePanelPermissions';
+import { PetsSection } from '@/components/dashboard/PetsSection';
 
 // Observações do cliente (P2): histórico append-only com autor e data.
 // `legacy: true` marca o registro antigo (campo único), preservado como está.
@@ -556,6 +557,11 @@ export function ClientProfileDrawer({ person, businessId, pipeline, canFunil, on
             <Data label="Atendimentos" value={String(person.bookings.length)} />
           </dl>
         </div>
+
+        {/* FASE 2 · P6 — pets do tutor (aparece SOMENTE em clínica veterinária). */}
+        {person.contactId && (
+          <PetsSection businessId={businessId} tutorId={person.contactId} tutorName={person.name} onChanged={onChanged} />
+        )}
 
         {/* Acesso do cliente */}
         <SubCard className="mt-3 p-3.5">

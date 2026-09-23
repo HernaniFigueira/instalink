@@ -290,10 +290,17 @@ export function BookingDetailSheet({ booking, service, pro, businessId, timezone
           {/* ── Dados do atendimento (linhas com separadores discretos) ── */}
           <dl className="px-4 py-1 divide-y divide-zinc-100">
             <div className={ROW}>
-              <dt className={ROW_DT}>Cliente</dt>
+              <dt className={ROW_DT}>{booking.petName ? 'Pet / Tutor' : 'Cliente'}</dt>
               <dd className={ROW_DD}>
-                {booking.customerName}
-                {booking.customerPhone && <span className="block text-xs text-zinc-500 font-normal">{booking.customerPhone}</span>}
+                {/* FASE 2 · P6 — veterinária: PET em primeiro; tutor identificado. */}
+                {booking.petName || booking.customerName}
+                {(booking.petName || booking.customerPhone) && (
+                  <span className="block text-xs text-zinc-500 font-normal">
+                    {booking.petName ? `Tutor: ${booking.customerName}` : ''}
+                    {booking.petName && booking.customerPhone ? ' · ' : ''}
+                    {booking.customerPhone || ''}
+                  </span>
+                )}
               </dd>
             </div>
             <div className={ROW}>

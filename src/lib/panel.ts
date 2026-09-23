@@ -683,4 +683,6 @@ export const API_GUARDS: Array<{ route: string; file: string; permission: Permis
   { route: '/api/anamnese', file: 'src/app/api/anamnese/route.ts', permission: ['atendimento', 'config'], area: 'atendimento' },
   // FASE 2 · P7 — financeiro básico (mesma permissão da porta).
   { route: '/api/finance', file: 'src/app/api/finance/route.ts', permission: 'financeiro', area: 'financeiro' },
+  // FASE 2 · P6 — pets (pacientes veterinários; tutor = contato do CRM).
+  { route: '/api/pets', file: 'src/app/api/pets/route.ts', permission: ['clientes', 'atendimento'], area: 'clientes' },
 ];
