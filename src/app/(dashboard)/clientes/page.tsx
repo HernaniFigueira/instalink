@@ -247,9 +247,7 @@ export default function ClientesPage() {
   return (
     <>
       <PageHeader
-        icon="users"
         title="Clientes"
-        hint={`Base única de pessoas: cadastro, histórico e relacionamento${canFunil ? '. As oportunidades por etapa estão no Funil' : ''}.`}
         action={
           <>
             {canFunil && (

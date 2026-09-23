@@ -333,21 +333,22 @@ export function DashboardShell({ children }: { children: React.ReactNode }) {
         <div key={business.id} className={cn(isAgenda ? 'agenda-page-gutter' : 'px-4 lg:px-8 py-6', !isFullWidth && 'max-w-[960px]')}>
           {/* Breadcrumb de CONTEXTO no conteúdo (o branding vive na sidebar e o
               nome da clínica, uma vez, no seletor de unidade da topbar). */}
-          <nav aria-label="Breadcrumb" className="ws-crumbs--content">
-            {activePath !== fallbackHref && homeHref && (
-              <>
-                <Link href={homeHref}>Início</Link>
-                <I n="chevronRight" size={12} aria-hidden="true" />
-              </>
-            )}
-            {crumb.group && (
-              <>
-                <span>{crumb.group}</span>
-                <I n="chevronRight" size={12} aria-hidden="true" />
-              </>
-            )}
-            <span aria-current="page">{activeRoute?.label || 'Painel'}</span>
-          </nav>
+          {/* Breadcrumb só em páginas PROFUNDAS (grupo/estrutura). Páginas de
+              1º nível (Agenda, Pacientes…) ficam sem "Início >" — o título da
+              própria tela é o cabeçalho. */}
+          {crumb.group && homeHref && (
+            <nav aria-label="Breadcrumb" className="ws-crumbs--content">
+              <Link href={homeHref}>Início</Link>
+              <I n="chevronRight" size={12} aria-hidden="true" />
+              {crumb.group && (
+                <>
+                  <span>{crumb.group}</span>
+                  <I n="chevronRight" size={12} aria-hidden="true" />
+                </>
+              )}
+              <span aria-current="page">{activeRoute?.label || 'Painel'}</span>
+            </nav>
+          )}
           {isMaster && !support && (
             <p className="mb-4 text-xs font-semibold text-[var(--warning-fg)] bg-[var(--warning-bg)] border border-[var(--warning-border)] rounded-md px-3 py-2 inline-flex items-center gap-2 shadow-xs">
               <I n="shield" size={14} /> Você é master — <Link href="/master" className="underline font-semibold">/master</Link>

@@ -146,9 +146,7 @@ export default function FinanceiroPage() {
 
   const header = (
     <PageHeader
-      icon="wallet"
       title="Financeiro"
-      hint="O que entrou, o que está pendente e o que sai — por período e com formas de pagamento registradas."
       action={loaded && !denied && !loadError ? (
         <Button variant="primary" onClick={() => { setFormError(''); setEditing(blankEntry()); }}>
           <Icon n="plus" size={14} /> Movimentação

@@ -20,7 +20,7 @@
 import { useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
 import { Icon } from '@/components/icons';
-import { StatusBadge, Button, Drawer, buttonCls, type ButtonVariant } from '@/components/ui';
+import { StatusBadge, Button, buttonCls, type ButtonVariant } from '@/components/ui';
 import { EncounterSheet } from '@/components/dashboard/EncounterSheet';
 import { Pet360Sheet } from '@/components/dashboard/Pet360Sheet';
 import { usePanelPermissions } from '@/components/dashboard/usePanelPermissions';
@@ -191,7 +191,7 @@ export function BookingDetailSheet({ booking, service, pro, businessId, timezone
 
   const waMsg = `Olá, ${(booking.customerName || '').split(' ')[0]}! Sobre seu agendamento de ${service?.name || 'atendimento'} (${formatDateBR(booking.date)} às ${booking.time}):`;
 
-  // Drawer recebe o foco e fecha em ESC (como qualquer painel do workspace).
+  // WorkspaceSheet recebe o foco e fecha em ESC (como qualquer painel).
 
   function showHistory() {
     setHistoryOpen(true);

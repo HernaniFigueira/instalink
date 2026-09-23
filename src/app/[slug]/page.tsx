@@ -122,11 +122,36 @@ export default async function PublicPage({ params }: { params: { slug: string } 
         </div>
       )}
 
+      {/* Capa/perfil full-bleed (ZERO margem no hero) — encosta topo+laterais;
+          o card branco e o resto da página ficam no container de leitura. */}
+      {profileIdx >= 0 && (
+        <div className="w-full" data-public-hero="true">
+          <BlockView
+            block={blocks[profileIdx]}
+            business={business}
+            agent={agentOn ? { name: agent.name, greeting: renderGreeting(agent, business.name), enabled: agent.enabled } : null}
+            catalog={{ categories, products, options, optionValues, services, serviceCategories, professionals, reviews }}
+            extras={{
+              canBook, socialLinks, showWhatsapp,
+              openNow,
+              primaryCta: primaryCta
+                ? {
+                    id: primaryCta.id,
+                    label: String(primaryCta.settings?.label || 'Agendar horário'),
+                    target: String(primaryCta.settings?.target || ''),
+                  }
+                : null,
+            }}
+          />
+        </div>
+      )}
+
       <div
-        className="clinic-content mx-auto w-full max-w-[900px] px-5 sm:px-8 pt-6 sm:pt-10 space-y-10"
+        className="clinic-content mx-auto w-full max-w-[900px] px-5 sm:px-8 space-y-10"
         style={{ paddingBottom: 'calc(6.5rem + env(safe-area-inset-bottom, 0px))' }}
       >
         {blocks.map((block, i) => (
+          block.type === 'profile' ? null : (
           <Fragment key={block.id}>
             <BlockView
               block={block}
@@ -145,10 +170,10 @@ export default async function PublicPage({ params }: { params: { slug: string } 
                   : null,
               }}
             />
-            {i === profileIdx && aboutOk && <AboutView about={business.about} />}
           </Fragment>
+          )
         ))}
-        {profileIdx < 0 && aboutOk && <AboutView about={business.about} />}
+        {aboutOk && <AboutView about={business.about} />}
 
         {/* White label: a marca do NEGÓCIO manda; o InstaLink fica discreto. */}
         <footer className="text-center pt-2 pb-1">

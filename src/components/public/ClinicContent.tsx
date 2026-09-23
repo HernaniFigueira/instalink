@@ -121,7 +121,7 @@ export function BlockView({ block, business, agent, catalog, extras }: {
             </div>
           ) : null}
           <div className={`pub-hero__sheet${business.cover ? ' pub-hero__sheet--overlap' : ''}`}>
-            <div className={`flex justify-center ${business.cover ? 'relative z-10 -mt-11 sm:-mt-14' : 'pt-2'}`}>
+            <div className={`flex justify-center ${business.cover ? 'relative z-10 -mt-[54px] sm:-mt-[66px]' : 'pt-2'}`}>
               {business.logo
                 ? <span className="pub-avatar pub-avatar--ring"><img src={business.logo} alt={`Logo de ${business.name}`} /></span>
                 : <span className="pub-avatar pub-avatar--initials pub-avatar--ring" style={{ color: 'var(--il-primary)' }}>{initials(business.name)}</span>}

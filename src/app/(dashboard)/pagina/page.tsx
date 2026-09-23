@@ -519,7 +519,7 @@ export default function PaginaPage() {
           </fieldset>
         </div>
 
-        {/* Prévia ÚNICA e fixa: conteúdo real em edição, sem salvar. */}
+        {/* Prévia fixa — acompanha a edição. */}
         <aside className="pe-preview" aria-label="Prévia">
           <ClinicPreview business={previewBusiness} page={page} catalog={catalog} />
         </aside>
@@ -570,7 +570,7 @@ export default function PaginaPage() {
         <Icon n="monitor" size={15} /> Prévia
       </button>
       <WorkspaceSheet open={previewSheet} onClose={() => setPreviewSheet(false)} title="Prévia"
-        subtitle="Conteúdo real em edição, sem salvar" icon="eye" width="min(560px, 94vw)">
+        icon="eye" width="min(560px, 94vw)">
         <div className="p-3"><ClinicPreview business={previewBusiness} page={page} catalog={catalog} /></div>
       </WorkspaceSheet>
     </>

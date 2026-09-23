@@ -1148,11 +1148,8 @@ export default function AgendaPage() {
         {/* HOMOLOGAÇÃO · P1 — cabeçalho enxuto: título + controles.
             A ajuda fica na Legenda (tooltip/popover), não em frase permanente. */}
         <div className="flex items-center gap-2 min-w-0">
+          {/* Título limpo (fechamento): sem "?" — ajuda real mora na Legenda. */}
           <h1 className="text-lg font-bold tracking-tight text-[var(--text)] leading-tight">Agenda</h1>
-          <button type="button" className="ws-help" title="Clique num atendimento para detalhes e ações; arraste para reagendar. Legenda completa no botão à direita."
-            aria-label="Ajuda da agenda" onClick={() => setHelpOpen(true)}>
-            <span aria-hidden="true" className="text-[15px] font-bold leading-none">?</span>
-          </button>
         </div>
         <div className="flex flex-wrap items-center justify-end gap-1.5 ml-auto">
           {loaded && (

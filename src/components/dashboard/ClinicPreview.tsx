@@ -25,8 +25,11 @@ export function ClinicPreview({ business, page, catalog }: { business: Business;
   const about = publicBusiness.about;
   const aboutVisible = isFeatureEnabled(publicBusiness, 'about') && about.enabled && !!(about.title || about.text || about.image);
   return <section className="bg-white border border-[var(--border)] rounded-lg p-4 mt-4">
-    <div className="flex flex-wrap items-start justify-between gap-3 mb-3"><div><h2 className="font-semibold text-sm">Prévia das alterações</h2><p className="text-xs text-[var(--text-muted)] mt-1">Conteúdo real em edição, sem salvar ou fazer reservas. Ações desativadas nesta prévia.</p></div>
-      <div className="flex flex-wrap gap-2"><button type="button" aria-pressed={menu} onClick={() => setMenu(!menu)} className="il-control pe-devbtn px-3 rounded-md border">Ver menu</button><button type="button" data-preview-device="mobile" aria-pressed={!wide} onClick={() => setWide(false)} className="il-control pe-devbtn px-3 rounded-md border">Celular</button><button type="button" data-preview-device="desktop" aria-pressed={wide} onClick={() => setWide(true)} className="il-control pe-devbtn px-3 rounded-md border">Desktop</button></div>
+    {/* Controles de prévia: só Celular/Desktop + Ver menu (função real). */}
+    <div className="flex flex-wrap items-end justify-end gap-2 mb-3">
+      <button type="button" aria-pressed={menu} onClick={() => setMenu(!menu)} className="il-control pe-devbtn px-3 rounded-md border">Ver menu</button>
+      <button type="button" data-preview-device="mobile" aria-pressed={!wide} onClick={() => setWide(false)} className="il-control pe-devbtn px-3 rounded-md border">Celular</button>
+      <button type="button" data-preview-device="desktop" aria-pressed={wide} onClick={() => setWide(true)} className="il-control pe-devbtn px-3 rounded-md border">Desktop</button>
     </div>
     <div className="overflow-x-auto bg-[var(--surface-3)] rounded-xl p-4">
       {/* Moldura de dispositivo: presença de celular no desktop (proporção do
@@ -60,7 +63,7 @@ export function ClinicPreview({ business, page, catalog }: { business: Business;
     <div className="mt-3 flex items-start gap-2.5 rounded-lg border border-[var(--success-border)] bg-[var(--success-bg)] px-3 py-2.5">
       <Icon n="spark" size={15} className="text-[var(--success-fg)] mt-0.5 shrink-0" />
       <p className="text-[11.5px] leading-relaxed text-[var(--success-fg)]">
-        <strong>Dica:</strong> as alterações aparecem em tempo real nesta prévia, sem salvar nem receber reservas. Quando estiver satisfeito, publique a página.
+        <strong>Prévia:</strong> o conteúdo acompanha a edição em tempo real.
       </p>
     </div>
   </section>;

@@ -1464,9 +1464,22 @@ dialog.il-customer-dialog::backdrop { background:transparent; }
   border: 4px solid #fff;
   box-shadow: 0 8px 22px -14px color-mix(in srgb, var(--il-muted) 70%, transparent);
 }
-/* HOMOLOGAÇÃO · geometria padrão da página pública */
-.pub-hero__cover { width: 100%; max-height: 288px; overflow: hidden; }
+/* HOMOLOGAÇÃO · fechamento — geometria de perfil social:
+   capa encosta topo+laterais (ZERO margem), object-fit cover;
+   card branco sobe com cantos superiores GRANDES; logo circular
+   cruza a borda ~50/50. Só a geometria muda — identidade preservada. */
+.pub-hero { width: 100%; margin: 0; }
+.pub-hero__cover { width: 100%; max-height: 320px; overflow: hidden; margin: 0; padding: 0; }
+.pub-hero__cover img { width: 100%; height: 100%; min-height: 180px; max-height: 320px; object-fit: cover; display: block; border-radius: 0; }
 .pub-hero__sheet { padding: 0 4px 8px; }
+.pub-hero__sheet--overlap {
+  position: relative; z-index: 1;
+  margin-top: -54px;
+  background: var(--il-bg, #fff);
+  border-radius: 36px 36px 0 0;
+  padding-top: 0;
+  box-shadow: 0 -10px 30px -18px rgba(15, 23, 42, 0.25);
+}
 .pub-hero__sheet--overlap {
   position: relative; z-index: 1;
   margin-top: -40px;
@@ -1556,7 +1569,9 @@ dialog.il-customer-dialog::backdrop { background:transparent; }
 .pe-tag--warn { background: var(--warning-bg); color: var(--warning-fg); }
 .pe-toggle { min-width: 64px; min-height: 28px; padding: 0 10px; border-radius: var(--radius-md); background: var(--surface-hover); color: var(--text-muted); font-size: 11.5px; font-weight: 800; }
 .pe-toggle--on { background: var(--success-bg); color: var(--success-fg); }
-.pe-preview { display: none; position: sticky; top: calc(var(--topbar-h) + 14px); max-height: calc(100dvh - var(--topbar-h) - 28px); overflow: auto; }
+/* Prévia sticky: SEM max-height/overflow — a ÚNICA scrollbar é a página. */
+.pe-preview { display: none; position: sticky; top: calc(var(--topbar-h) + 14px); }
+.pe-preview iframe { border: 0; overflow: hidden; background: transparent; }
 @media (min-width: 1280px) { .pe-preview { display: block; } }
 .pe-fab { position: fixed; right: var(--sheet-gap); bottom: calc(var(--sheet-gap) + 56px); z-index: 34; display: none; align-items: center; gap: 8px; min-height: 40px; padding: 0 14px; border-radius: var(--radius-pill); background: var(--surface); border: 1px solid var(--border); box-shadow: var(--shadow-md); font-size: 12.5px; font-weight: 800; color: var(--text); }
 @media (max-width: 1279px) { .pe-fab { display: inline-flex; } }
