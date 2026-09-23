@@ -62,7 +62,7 @@ type View = 'day' | 'week' | 'month' | 'list';
 
 const PX_PER_HOUR = 128;
 const GUTTER_W = 56;
-const COL_MIN = 200;
+const COL_MIN = 152;
 const HEADER_H = 48;
 // Passo do clique-em-área-vazia (o horário só é aceito se a grade real o
 // confirmar — caso contrário o sheet abre sem horário escolhido).
@@ -123,6 +123,9 @@ interface BlockVM {
   timeRange: string;
   statusLabel: string;
   cls: string;
+  /** Profissional (linha discreta do cartão) e ponto de estado (ícone). */
+  pro: string;
+  dot: string;
   /** Horário passou e continua em aberto: marcador amarelo de atenção. */
   attention: boolean;
   /** A3.4 · Bloco 4: encaixe (fora da grade) e check-in do cliente. */
@@ -251,7 +254,7 @@ const GridColumn = memo(function GridColumn({ column, basisPct, variant, highlig
           onPointerCancel={onPressCancel}
           onClick={() => onBlockClick(b.id)}
           className={
-            'absolute rounded-md border border-l-4 px-2 py-1 text-left overflow-hidden touch-none select-none shadow-sm '
+            'absolute rounded-lg border border-l-4 px-2 py-1 text-left overflow-hidden touch-none select-none shadow-xs '
             + b.cls
             + (b.attention && !b.dragging ? ` ${ATTENTION_RING_CLS}` : '')
             + (b.dragging
@@ -261,6 +264,8 @@ const GridColumn = memo(function GridColumn({ column, basisPct, variant, highlig
           style={{
             top: b.top,
             height: b.height,
+            // Dia com coluna única: o cartão não vira faixa de largura total.
+            ...(basisPct === 100 ? { maxWidth: 380 } : {}),
             left: `calc(${b.leftPct}% + 2px)`,
             width: `calc(${b.widthPct}% - 4px)`,
           }}
@@ -268,13 +273,15 @@ const GridColumn = memo(function GridColumn({ column, basisPct, variant, highlig
           {/* Encaixe = acento (faixa fina no topo), não preenchimento: o fundo
               do bloco continua sendo o do STATUS. Nada de amarelo sobre verde. */}
           {b.fitIn && <span aria-hidden="true" className={FIT_IN_STRIPE_CLS} />}
-          {/* quem + quando + o quê + em que estado — detalhe fica no drawer. */}
-          <span className="block text-sm font-semibold leading-tight truncate">{b.name}</span>
-          {b.height > 54 && <span className="block text-xs font-medium leading-tight truncate">{b.service}</span>}
-          {b.height > 34 && (
-            <span className="mt-0.5 flex items-center gap-1 text-xs font-semibold leading-tight">
-              <span className="tabular-nums whitespace-nowrap">{b.timeRange}</span>
-              <span aria-hidden="true" className="opacity-60">·</span>
+          {/* quem + quando + o quê + com quem — detalhe fica no drawer.
+              Densidade do mockup: nome forte, linhas de apoio discretas. */}
+          <span className="block text-[12.5px] font-bold leading-tight truncate">{b.name}</span>
+          <span className="block text-[11px] font-semibold tabular-nums leading-tight opacity-80">{b.timeRange}</span>
+          {b.height > 58 && <span className="block text-[11px] leading-tight truncate opacity-75">{b.service}</span>}
+          {b.height > 74 && b.pro && <span className="block text-[11px] leading-tight truncate opacity-70">{b.pro}</span>}
+          {b.height > 40 && (
+            <span className="mt-0.5 flex items-center gap-1 text-[10px] font-semibold leading-tight">
+              <span className={`w-1.5 h-1.5 rounded-full ${b.dot}`} aria-hidden="true" />
               <span className="truncate">{b.statusLabel}</span>
               {/* A3.4 · Bloco 4: o encaixe é visível no cartão — quem olha a
                   grade sabe que aquele horário foi uma decisão da equipe. */}
@@ -619,10 +626,12 @@ export default function AgendaPage() {
           widthPct: l.widthPct,
           time: b.time,
           name: b.customerName,
-          service: view === 'week' && pro ? `${serviceName(b.serviceId)} · ${pro}` : serviceName(b.serviceId),
+          service: serviceName(b.serviceId),
           timeRange: `${b.time}–${endHM}`,
           statusLabel,
           cls: BOOKING_BLOCK[b.status],
+          pro: pro || '',
+          dot: BOOKING_DOT[b.status],
           attention,
           fitIn: b.bookingKind === 'fit_in',
           checkedInAt: b.checkedInAt || '',
@@ -1134,25 +1143,30 @@ export default function AgendaPage() {
           </div>
         <div className="flex flex-wrap items-center justify-end gap-1.5 ml-auto">
           {loaded && (
-            <Button type="button" variant="secondary" size="sm" aria-expanded={showQueue}
-              aria-label="Fila de atendimento"
-              onClick={() => setShowQueue((v) => !v)}
-              title={showQueue ? 'Fechar fila de atendimento' : 'Abrir fila de atendimento'}>
-              <Icon n="clock" size={14} />
-              <span className="hidden sm:inline">Fila</span>
-              {(queueInfo.waiting + queueInfo.called + queueInfo.inService) > 0 && (
-                <span className="flex items-center gap-1">
-                  {queueInfo.waiting > 0 && <Badge tone="amber">{queueInfo.waiting}</Badge>}
-                  {queueInfo.called > 0 && <Badge tone="blue">{queueInfo.called}</Badge>}
-                  {queueInfo.inService > 0 && <Badge tone="green">{queueInfo.inService}</Badge>}
+            <div className="dsh-card flex items-center gap-3 pl-2.5 pr-2 py-2">
+              <span className="dsh-kpi__icon" style={{ background: 'var(--warning-bg)', color: 'var(--warning-fg)' }}>
+                <Icon n="clock" size={18} />
+              </span>
+              <span className="leading-tight mr-1">
+                <span className="block text-[12.5px] font-bold text-[var(--text)]">Fila de atendimento</span>
+                <span className="block text-[11px] text-[var(--text-muted)]">
+                  {(queueInfo.waiting + queueInfo.called + queueInfo.inService) > 0
+                    ? `${queueInfo.waiting + queueInfo.called} aguardando · ${queueInfo.inService} em atendimento`
+                    : 'ninguém aguardando agora'}
                 </span>
-              )}
-            </Button>
+              </span>
+              <Button type="button" variant="secondary" size="sm" aria-expanded={showQueue}
+                aria-label="Fila de atendimento"
+                onClick={() => setShowQueue((v) => !v)}
+                title={showQueue ? 'Fechar fila de atendimento' : 'Abrir fila de atendimento'}>
+                Ver fila <Icon n="chevronRight" size={13} />
+              </Button>
+            </div>
           )}
               {/* P1.1 — UM botão de filtro (contador quando ativo). O popover
                   agrupa Status + Especialidade + Profissional pesquisável:
                   escala para 10/20/50 profissionais sem poluir a toolbar. */}
-              <div className="relative" ref={filterWrapRef}>
+              <div className="relative lg:hidden" ref={filterWrapRef}>
                 <Button variant="secondary" size="sm" onClick={() => { setFilterOpen((o) => !o); setProSearch(''); }}
                   aria-expanded={filterOpen} aria-haspopup="dialog" title="Filtros">
                   <Icon n="filter" size={13} />
@@ -1235,7 +1249,7 @@ export default function AgendaPage() {
                   </div>
                 )}
               </div>
-              <div ref={helpWrapRef} className="relative">
+              <div ref={helpWrapRef} className="relative lg:hidden">
                 <Button type="button" variant="secondary" size="sm" aria-expanded={helpOpen} aria-haspopup="dialog"
                   onClick={() => setHelpOpen((v) => !v)} title="Legenda e como usar a grade">
                   <Icon n="eye" size={14} />
@@ -1270,6 +1284,63 @@ export default function AgendaPage() {
                 <span className="hidden sm:inline">{fullscreen ? 'Sair do foco' : 'Modo foco'}</span>
               </Button>
         </div>
+        </div>
+
+        {/* Filtros + legenda INLINE no desktop (hierarquia do mockup): em telas
+            menores os mesmos controles vivem nos popovers Filtro/Legenda. */}
+        <div className="hidden lg:flex flex-wrap items-center gap-x-4 gap-y-2 mb-2.5">
+          {activePros.length > 0 && (
+            <label className="flex items-center gap-2 text-[12px] font-semibold text-[var(--text-muted)]">
+              Profissionais:
+              <span className="flex -space-x-1.5" aria-hidden="true">
+                {activePros.slice(0, 4).map((p) => <Avatar key={p.id} name={p.name} size={22} />)}
+              </span>
+              <select value={proFilter} onChange={(e) => pickPro(e.target.value)}
+                aria-label="Filtrar por profissional"
+                className="text-[12px] font-semibold text-[var(--text)] bg-[var(--surface)] border border-[var(--border)] rounded-md px-2 py-1.5 max-w-[180px]">
+                <option value="">Todos</option>
+                {prosInFilter.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
+              </select>
+            </label>
+          )}
+          {specialties.length > 0 && (
+            <label className="flex items-center gap-2 text-[12px] font-semibold text-[var(--text-muted)]">
+              Serviços:
+              <select value={specFilter} onChange={(e) => pickSpec(e.target.value)}
+                aria-label="Filtrar por especialidade"
+                className="text-[12px] font-semibold text-[var(--text)] bg-[var(--surface)] border border-[var(--border)] rounded-md px-2 py-1.5 max-w-[180px]">
+                <option value="">Todas</option>
+                {specialties.map((r) => <option key={r} value={r}>{r}</option>)}
+              </select>
+            </label>
+          )}
+          <label className="flex items-center gap-2 text-[12px] font-semibold text-[var(--text-muted)]">
+            Status:
+            <select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value as BookingStatus | '')}
+              aria-label="Filtrar por status"
+              className="text-[12px] font-semibold text-[var(--text)] bg-[var(--surface)] border border-[var(--border)] rounded-md px-2 py-1.5 max-w-[160px]">
+              <option value="">Todos</option>
+              {statusOptions.map((st) => <option key={st} value={st}>{BOOKING_STATUS[st].panel}</option>)}
+            </select>
+          </label>
+          {activeFilterCount > 0 && (
+            <button type="button" onClick={clearFilters}
+              className="text-[12px] font-semibold text-[var(--danger)] hover:text-[var(--danger-strong)]">
+              Limpar filtros
+            </button>
+          )}
+          <div className="ml-auto flex flex-wrap items-center gap-x-3 gap-y-1" aria-label="Legenda dos estados">
+            {statusOptions.map((st) => (
+              <span key={st} className="inline-flex items-center gap-1.5 text-[11px] font-medium text-[var(--text-muted)]">
+                <span className={`w-2 h-2 rounded-full ${BOOKING_DOT[st]}`} aria-hidden="true" />
+                {BOOKING_STATUS[st].panel}
+              </span>
+            ))}
+            <span className="inline-flex items-center gap-1.5 text-[11px] font-medium text-[var(--text-muted)]">
+              <span className={`w-3 h-3 rounded-full text-[8px] font-black leading-3 text-center ${ATTENTION_MARK_CLS}`} aria-hidden="true">!</span>
+              precisa de fechamento
+            </span>
+          </div>
         </div>
 
       </div>
@@ -1522,7 +1593,7 @@ export default function AgendaPage() {
                     return (
                       <span className="ag-nowline" style={place.left ? { top: place.top, left: place.left, width: place.width } : { top: place.top, left: 0, right: 0 }}>
                         <span className="ag-nowline__dot" />
-                        <span className="ag-nowline__time">{nowHM(new Date(), bizTz)}</span>
+                        <span className="ag-nowline__time">Agora · {nowHM(new Date(), bizTz)}</span>
                       </span>
                     );
                   })()}

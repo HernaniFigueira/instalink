@@ -285,12 +285,20 @@ export function DashboardShell({ children }: { children: React.ReactNode }) {
     >
       <a href="#workspace-content" className="workspace-skip">Ir para o conteúdo</a>
 
+      {/* `nav={nav}`: a navegação continua vindo do catálogo (lib/panel.ts) —
+          o shell não tem lista própria de destinos. Sidebar primeiro: ela
+          ocupa top:0→bottom:0 e a topbar vive na coluna da direita. */}
+      <WorkspaceNavigation nav={nav}
+        activePath={activePath} unit={business}
+        collapsed={collapsed} onCollapse={toggle}
+        mobileOpen={mobileNav} onMobileOpen={setMobileNav}
+      />
+
+      <div className="workspace-main-col">
       <WorkspaceTopbar
-        crumbs={{
-          clinic: business.name || 'Clínica',
-          group: crumb.group,
-          page: activeRoute?.label || 'Painel',
-        }}
+        group={crumb.group}
+        page={activeRoute?.label || 'Painel'}
+        query={q}
         searchItems={buildNavSearchItems(nav, q)}
         activePath={activePath}
         alerts={alerts}
@@ -305,14 +313,7 @@ export function DashboardShell({ children }: { children: React.ReactNode }) {
         onUnit={switchBiz}
         onLogout={logout}
         onOpenNav={() => setMobileNav(true)}
-      />
-
-      {/* `nav={nav}`: a navegação continua vindo do catálogo (lib/panel.ts) —
-          o shell não tem lista própria de destinos. */}
-      <WorkspaceNavigation nav={nav}
-        activePath={activePath} unit={business}
-        collapsed={collapsed} onCollapse={toggle}
-        mobileOpen={mobileNav} onMobileOpen={setMobileNav}
+        canCreate={nav.allowed.map((i) => i.href).filter((h) => ['/agenda', '/clientes', '/tarefas', '/servicos'].includes(h))}
       />
 
       {nav.allowed.some(i => i.href === '/conversas') && activePath !== '/conversas' && activePath !== '/organizacao' && <ConversationsDock key={business.id} businessId={business.id}/>}
@@ -330,6 +331,23 @@ export function DashboardShell({ children }: { children: React.ReactNode }) {
           </div>
         )}
         <div key={business.id} className={cn(isAgenda ? 'agenda-page-gutter' : 'px-4 lg:px-8 py-6', !isFullWidth && 'max-w-[960px]')}>
+          {/* Breadcrumb de CONTEXTO no conteúdo (o branding vive na sidebar e o
+              nome da clínica, uma vez, no seletor de unidade da topbar). */}
+          <nav aria-label="Breadcrumb" className="ws-crumbs--content">
+            {activePath !== fallbackHref && homeHref && (
+              <>
+                <Link href={homeHref}>Início</Link>
+                <I n="chevronRight" size={12} aria-hidden="true" />
+              </>
+            )}
+            {crumb.group && (
+              <>
+                <span>{crumb.group}</span>
+                <I n="chevronRight" size={12} aria-hidden="true" />
+              </>
+            )}
+            <span aria-current="page">{activeRoute?.label || 'Painel'}</span>
+          </nav>
           {isMaster && !support && (
             <p className="mb-4 text-xs font-semibold text-[var(--warning-fg)] bg-[var(--warning-bg)] border border-[var(--warning-border)] rounded-md px-3 py-2 inline-flex items-center gap-2 shadow-xs">
               <I n="shield" size={14} /> Você é master — <Link href="/master" className="underline font-semibold">/master</Link>
@@ -372,6 +390,7 @@ export function DashboardShell({ children }: { children: React.ReactNode }) {
           </footer>
         )}
       </main>
+      </div>
 
       {/* 403 de qualquer ação do painel → aviso amigável (sessão preservada). */}
       <ForbiddenToasts context={{ scope: 'action', area: access.area || activeRoute?.label }} />

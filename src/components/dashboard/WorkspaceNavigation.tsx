@@ -90,7 +90,7 @@ export function WorkspaceNavigation({ nav, activePath, unit, collapsed, onCollap
       className={`workspace-link${collapsed ? ' il-tip' : ''}`}
       {...(collapsed ? { 'data-tip': item.label } : {})}
     >
-      <span className="workspace-link__icon" style={{ color: area?.color || 'var(--text-muted)' }}>
+      <span className="workspace-link__icon">
         <Icon n={item.icon} size={19} />
       </span>
       <span className="workspace-label">{item.label}</span>
@@ -118,7 +118,7 @@ export function WorkspaceNavigation({ nav, activePath, unit, collapsed, onCollap
           onSelect(open ? '' : area.id);
         }}
       >
-        <span className="workspace-link__icon" style={{ color: area.color }}><Icon n={area.icon} size={19} /></span>
+        <span className="workspace-link__icon"><Icon n={area.icon} size={19} /></span>
         <span className="workspace-label">{area.label}</span>
         {!collapsed && (
           <Icon n="chevronRight" size={15} className="workspace-link__chevron" aria-hidden="true" />
@@ -130,13 +130,12 @@ export function WorkspaceNavigation({ nav, activePath, unit, collapsed, onCollap
 
   const identity = (
     <div className="workspace-identity">
-      {/* Identidade da CLÍNICA (logo quando existe). O fallback usa a marca
-          atual do produto — o rebrand é outra frente e não entra nesta rodada,
-          para não deixar a marca aplicada pela metade. */}
+      {/* Identidade sem redundância: o logo da clínica (quando existe) OU a
+          marca do produto. O NOME da clínica não repete aqui — ele vive uma
+          única vez no seletor de unidade da topbar (troca de unidade incluída). */}
       {unit.logo
-        ? <img src={unit.logo} alt="" className="workspace-logo" />
-        : <span className="workspace-wordmark">Insta<span>Link</span></span>}
-      {!collapsed && <p className="workspace-clinic" title={unit.name}>{unit.name || 'Minha clínica'}</p>}
+        ? <img src={unit.logo} alt={unit.name || 'Clínica'} className="workspace-logo" />
+        : <span className="workspace-wordmark" title={unit.name || 'Minha clínica'}>Insta<span>Link</span></span>}
     </div>
   );
 

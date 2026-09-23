@@ -247,10 +247,8 @@ export default function PaginaPage() {
       {/* ══ TOPO DO EDITOR: estado real + ações globais ══ */}
       <div className="pe-top">
         <div className="min-w-0">
-          <p className="pe-crumb">
-            <Link href={`/dashboard?b=${businessId}`} className="hover:text-[var(--text)]">{business.name}</Link>
-            <span aria-hidden="true"> · </span> Presença
-          </p>
+          {/* Sem eyebrow de branding: o breadcrumb do shell já dá o contexto
+              (Início › Página); o nome da clínica vive no seletor de unidade. */}
           <h1 className="pe-title">Editor da página</h1>
         </div>
         <div className="pe-top__actions">
@@ -264,7 +262,7 @@ export default function PaginaPage() {
           <a href={`/${business.slug}`} target="_blank" rel="noreferrer" className="pe-btn">
             <Icon n="eye" size={13} /> Ver página <Icon n="external" size={11} />
           </a>
-          <button type="button" disabled={saving} onClick={() => save({ published: true })} className="pe-btn pe-btn--lime">
+          <button type="button" disabled={saving} onClick={() => save({ published: true })} className="pe-btn pe-btn--green">
             <Icon n="upload" size={13} />
             {saving ? 'Publicando…' : business.published ? 'Atualizar publicação' : 'Publicar'}
           </button>

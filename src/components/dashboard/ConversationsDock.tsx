@@ -59,7 +59,7 @@ export function ConversationsDock({ businessId }: { businessId: string }) {
         minimizable
         minimized={minimized}
         onMinimizedChange={setMinimized}
-        width="min(1040px, 92vw)"
+        width="clamp(720px, 72vw, 1400px)"
       >
         <div className="p-4 h-full min-h-0">
           {visited && <ConversationsView unitId={businessId} panel />}
