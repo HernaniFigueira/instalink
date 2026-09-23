@@ -1480,14 +1480,6 @@ dialog.il-customer-dialog::backdrop { background:transparent; }
   padding-top: 0;
   box-shadow: 0 -10px 30px -18px rgba(15, 23, 42, 0.25);
 }
-.pub-hero__sheet--overlap {
-  position: relative; z-index: 1;
-  margin-top: -40px;
-  background: var(--il-bg, #fff);
-  border-radius: 28px 28px 0 0;
-  padding-top: 0;
-  box-shadow: 0 -10px 30px -18px rgba(15, 23, 42, 0.25);
-}
 .pub-avatar--ring { box-shadow: 0 0 0 4px var(--il-bg, #fff), 0 0 0 5.5px color-mix(in srgb, var(--il-muted) 22%, transparent); }
 
 .il-page .pub-avatar img { width: 100%; height: 100%; object-fit: cover; }
@@ -1685,40 +1677,33 @@ dialog.ws-sheet[data-closing] { animation: ws-sheet-out 200ms ease-in forwards; 
   transition: background-color .15s ease, color .15s ease;
 }
 .ws-sheet__icon-button:hover { background: var(--surface-hover); color: var(--text); }
-.ws-sheet__close { border-radius: 10px; }
-/* ── Linguinha de fechar (aba externa à esquerda) ────────────────
-   Padrão compartilhado: TODO WorkspaceSheet herda sem reimplementar.
-   ~40px, canto arredondado no lado externo, parcialmente fora do sheet,
-   coral/vermelho suave, hover mais forte, alvo ≥40px de altura. */
-.ws-sheet__tab {
-  position: absolute;
-  left: -22px;
-  top: 18px;
-  z-index: 2;
-  width: 42px;
-  height: 42px;
-  display: flex;
+/* ── Fechar: X padrão no canto superior direito ─────────────────
+   Padrão único de TODO WorkspaceSheet (sem linguinha/aba externa).
+   Circular, fundo suave, vermelho acolhedor (não agressivo), X legível,
+   alvo ≥34px; hover reforça; tooltip "Fechar"; ESC também fecha. */
+.ws-sheet__close {
+  display: inline-flex;
   align-items: center;
   justify-content: center;
-  border: 1px solid color-mix(in srgb, var(--danger) 35%, var(--border));
-  border-right: none;
-  border-radius: 14px 0 0 14px;
-  background: color-mix(in srgb, var(--danger) 14%, var(--surface));
-  color: var(--danger-fg, var(--danger));
-  box-shadow: -4px 2px 10px -4px rgba(15, 23, 42, 0.25);
+  width: 34px;
+  height: 34px;
+  flex-shrink: 0;
+  border-radius: 999px;
+  border: 1px solid color-mix(in srgb, var(--danger) 22%, var(--border));
+  background: color-mix(in srgb, var(--danger) 9%, var(--surface));
+  color: color-mix(in srgb, var(--danger) 75%, var(--text));
   cursor: pointer;
-  transition: background 0.12s ease, color 0.12s ease, transform 0.12s ease;
+  transition: background 0.12s ease, color 0.12s ease, border-color 0.12s ease;
 }
-.ws-sheet__tab:hover {
-  background: color-mix(in srgb, var(--danger) 28%, var(--surface));
-  color: var(--danger);
-  transform: translateX(-2px);
+.ws-sheet__close:hover {
+  background: color-mix(in srgb, var(--danger) 20%, var(--surface));
+  border-color: color-mix(in srgb, var(--danger) 40%, var(--border));
+  color: var(--danger-fg, var(--danger));
 }
-.ws-sheet__tab:focus-visible {
+.ws-sheet__close:focus-visible {
   outline: 2px solid var(--brand);
   outline-offset: 2px;
 }
-.ws-sheet__close:hover { background: var(--danger-bg); color: var(--danger-fg); border-color: var(--danger-border); }
 
 .ws-sheet__body { flex: 1; min-height: 0; overflow-y: auto; }
 .ws-sheet__footer {
@@ -1751,11 +1736,11 @@ dialog.ws-sheet[data-minimized]::backdrop { background: transparent; }
 /* ── Mobile: sheet quase cheio, mesmas margens e mesmo comportamento ── */
 @media (max-width: 767px) {
   dialog.ws-sheet {
-  .ws-sheet__tab { left: -16px; width: 40px; height: 40px; border-radius: 12px 0 0 12px; }
     top: calc(var(--topbar-h) + 8px);
     right: 8px; bottom: 8px;
     width: calc(100vw - 16px);
   }
+  .ws-sheet__close { width: 36px; height: 36px; }
   dialog.ws-sheet[data-minimized] { width: min(344px, calc(100vw - 16px)); }
 }
 

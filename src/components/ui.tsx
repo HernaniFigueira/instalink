@@ -1,6 +1,7 @@
 'use client';
 import { cloneElement, createContext, isValidElement, useContext, useEffect, useId, useRef } from 'react';
 import { wrapDialogFocus } from '@/lib/dialog-focus';
+import { lockBodyScroll, unlockBodyScroll } from '@/lib/scroll-lock';
 import { cn } from '@/lib/utils';
 import { Icon } from '@/components/icons';
 import { toneCls, type Tone } from '@/lib/status';
@@ -552,8 +553,6 @@ export function Notice({ tone = 'info', children, title, className }: { tone?: '
 // ── Drawer — native modal: focus containment and background inertness are
 // browser responsibilities, including nested dialogs. Kept in its DOM parent
 // (no portal) so platform/public CSS scopes are never copied or leaked.
-const openDrawers = new Set<HTMLDialogElement>();
-let bodyOverflowBeforeDrawer = '';
 
 export function Drawer({ open, onClose, title, subtitle, children, footer, width = 'max-w-[720px]' }: {
   open: boolean; onClose: () => void; title: string; subtitle?: string;
@@ -566,18 +565,13 @@ export function Drawer({ open, onClose, title, subtitle, children, footer, width
     const dialog = dialogRef.current;
     if (!open || !dialog) return;
     const previous = document.activeElement instanceof HTMLElement ? document.activeElement : null;
-    if (!openDrawers.size) {
-      bodyOverflowBeforeDrawer = document.body.style.overflow;
-      document.body.style.overflow = 'hidden';
-    }
-    openDrawers.add(dialog);
+    lockBodyScroll(dialog);
     dialog.showModal();
     // Start at the heading rather than scrolling to a distant form autofocus.
     titleRef.current?.focus({ preventScroll: true });
     return () => {
       dialog.close();
-      openDrawers.delete(dialog);
-      if (!openDrawers.size) document.body.style.overflow = bodyOverflowBeforeDrawer;
+      unlockBodyScroll(dialog);
       if (previous?.isConnected) previous.focus({ preventScroll: true });
     };
   }, [open]);
