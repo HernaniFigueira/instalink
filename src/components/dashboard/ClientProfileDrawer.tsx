@@ -16,16 +16,19 @@
 //   • etapa de lead só muda via PipelineStage real (nunca LeadStatus legado).
 import { useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
-import { cn, waLink } from '@/lib/utils';
-import { humanDateTime } from '@/lib/tz';
+import { centsToBR, cn, waLink } from '@/lib/utils';
+import { humanDateTime, formatDateBR, todayISO } from '@/lib/tz';
 import { BOOKING_STATUS, LEAD_STATUS, type StatusDef } from '@/lib/status';
 import { leadOriginLabel } from '@/lib/leads';
-import type { BusinessPipeline, ContactProfile } from '@/lib/types';
+import type { BusinessPipeline, ContactProfile, FinanceEntry } from '@/lib/types';
+import { FINANCE_STATUS_LABEL } from '@/lib/finance';
+import { followUpDueDate } from '@/lib/encounters';
+import { WorkspaceSheet } from '@/components/dashboard/WorkspaceSheet';
 import {
   BRAZILIAN_STATES, PROFILE_TAGS_MAX, ageFromBirthDate, clientTags, countAttended, formatCep, formatCpf,
   formatPhoneBR, isValidCpf, normalizeBirthDate, profileOf,
 } from '@/lib/contact-profile';
-import { Avatar, Badge, Button, Drawer, IconButton, Input, Notice, Select, StatusBadge, SubCard, Switch, Tabs, Textarea, type TabItem } from '@/components/ui';
+import { Avatar, Badge, Button, IconButton, Input, Kpi, Notice, Select, StatusBadge, SubCard, Switch, Tabs, Textarea, type TabItem } from '@/components/ui';
 import { Icon } from '@/components/icons';
 import { apiGet, apiSend } from '@/lib/api-client';
 import { cepError, contactFieldErrors, emailError, hasFieldErrors, maskCep, maskCpf, phoneError } from '@/lib/field-quality';
@@ -60,6 +63,8 @@ export interface Person360 {
     id: string; customerName: string; date: string; time: string; status: string; service: string;
     seriesId?: string; seriesIndex?: number; seriesCount?: number;
     professional?: string; rescheduleCount?: number; previousId?: string;
+    // FASE 2 · P2 — "Iniciar atendimento" precisa dos vínculos reais.
+    serviceId?: string; professionalId?: string;
   }>;
   leads: Array<{ id: string; origin: string; status: string; stageId: string; stageName: string; interest: string; action: string; createdAt: string; stageHistory?: any[]; priority?: string; assignedUserId?: string; lastInteraction?: string }>;
   conversations?: Array<{ id: string; channel: string; status: string; at: string; preview: string; unread: number }>;
@@ -78,7 +83,11 @@ function eventDay(iso: string): string {
 const bookDef = (s: string): StatusDef => (BOOKING_STATUS as Record<string, StatusDef>)[s] || { panel: s, tone: 'zinc', consumer: s, desc: '' };
 const leadDef = (s: string): StatusDef => (LEAD_STATUS as Record<string, StatusDef>)[s] || { panel: s, tone: 'zinc', consumer: s, desc: '' };
 
-type HistoryTab = 'timeline' | 'bookings' | 'encounters' | 'conversations' | 'leads' | 'tasks' | 'notes';
+// FASE 2 · P2 — Paciente 360: Visão geral · Agenda · Atendimento · Conversas ·
+// Arquivos · Financeiro · Histórico (+ leads/tarefas/notas que já existiam).
+type HistoryTab =
+  | 'overview' | 'bookings' | 'encounters' | 'conversations'
+  | 'files' | 'finance' | 'timeline' | 'leads' | 'tasks' | 'notes';
 
 export function ClientProfileDrawer({ person, businessId, pipeline, canFunil, onClose, onChanged, onNewBooking }: {
   person: Person360;
@@ -89,11 +98,19 @@ export function ClientProfileDrawer({ person, businessId, pipeline, canFunil, on
   onChanged: () => void;
   onNewBooking: (p: Person360) => void;
 }) {
-  const [tab, setTab] = useState<HistoryTab>('timeline');
+  const [tab, setTab] = useState<HistoryTab>('overview');
+  // FASE 2 · P2/P7 — financeiro do paciente (carga única, escopo do contato).
+  const [financeEntries, setFinanceEntries] = useState<FinanceEntry[]>([]);
+  const [financeLoaded, setFinanceLoaded] = useState(false);
+  const [financeError, setFinanceError] = useState('');
+  // FASE 2 · P2 — "Iniciar atendimento" do próximo agendamento futuro.
+  const [startEncounter, setStartEncounter] = useState<{ bookingId: string; seed: Record<string, string> } | null>(null);
   // A3.4 · Bloco 5 — registros de atendimento da pessoa. A permissão é PRÓPRIA
   // (`atendimento`): sem ela, a aba nem aparece e a rota não é chamada.
   const { permissions, role } = usePanelPermissions();
   const canEncounter = permissions.atendimento === true;
+  // FASE 2 · P2 — aba Financeiro só existe com a permissão correspondente.
+  const canFinance = permissions.financeiro === true;
   const [encounters, setEncounters] = useState<EncounterRow[]>([]);
   const [encounterOpen, setEncounterOpen] = useState<EncounterRow | null>(null);
   const [encountersError, setEncountersError] = useState('');
@@ -346,14 +363,32 @@ export function ClientProfileDrawer({ person, businessId, pipeline, canFunil, on
         ),
       });
     }
+    // FASE 2 · P2 — pagamentos entram no Histórico (dados reais do financeiro).
+    for (const f of financeEntries) {
+      if (f.status === 'cancelado') continue;
+      out.push({
+        kind: 'finance', id: f.id, sortKey: (f.paidAt || f.dueDate || f.createdAt || '').slice(0, 16),
+        icon: f.kind === 'receita' ? 'wallet' : 'receipt',
+        when: f.paidAt ? eventDay(f.paidAt) : (f.dueDate ? eventDay(f.dueDate) : ''),
+        title: `${f.kind === 'receita' ? 'Recebimento' : 'Despesa'} · ${centsToBR(f.amount)}`,
+        subtitle: f.description,
+        badge: FINANCE_STATUS_LABEL[f.status],
+        tone: f.status === 'pago' ? 'emerald' : 'amber', // cancelados já saíram acima
+      });
+    }
     return out.sort((a, b) => (a.sortKey < b.sortKey ? 1 : -1));
-  }, [person, pipeline, canFunil, businessId, saving]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [person, pipeline, canFunil, businessId, saving, financeEntries]); // eslint-disable-line react-hooks/exhaustive-deps
 
+  // FASE 2 · P2 — ordem da jornada do paciente: visão → agenda → atendimento →
+  // conversa → arquivos → financeiro → histórico (+ as abas operacionais já existentes).
   const tabItems: TabItem<HistoryTab>[] = [
-    { id: 'timeline', label: 'Linha do tempo', icon: 'history', count: timeline.length },
-    { id: 'bookings', label: 'Agendamentos', icon: 'calendar', count: person.bookings.length },
-    { id: 'encounters', label: 'Atendimentos', icon: 'fileText', count: encountersLoaded && !encountersError ? encounters.length : undefined },
+    { id: 'overview', label: 'Visão geral', icon: 'grid' },
+    { id: 'bookings', label: 'Agenda', icon: 'calendar', count: person.bookings.length },
+    { id: 'encounters', label: 'Atendimento', icon: 'fileText', count: encountersLoaded && !encountersError ? encounters.length : undefined },
     { id: 'conversations', label: 'Conversas', icon: 'chat', count: (person.conversations || []).length },
+    { id: 'files', label: 'Arquivos', icon: 'upload', count: encounters.reduce((n, e) => n + ((e.files || []).length), 0) },
+    ...(canFinance ? [{ id: 'finance' as const, label: 'Financeiro', icon: 'wallet', count: financeEntries.length }] : []),
+    { id: 'timeline', label: 'Histórico', icon: 'history', count: timeline.length },
     { id: 'leads', label: 'Leads', icon: 'spark', count: person.leads.length },
     { id: 'tasks', label: 'Tarefas', icon: 'tasks', count: (person.tasks || []).length },
     { id: 'notes', label: 'Observações administrativas', icon: 'receipt', count: (person.notes || []).length },
@@ -379,6 +414,43 @@ export function ClientProfileDrawer({ person, businessId, pipeline, canFunil, on
     return () => { cancelled = true; };
   }, [canEncounter, encountersLoaded, person.contactId, person.customerId, businessId]);
 
+  // FASE 2 · P2/P7 — cobranças do paciente (uma carga; sem permissão = sem chamada).
+  useEffect(() => {
+    if (!canFinance || financeLoaded || !person.contactId) { if (!canFinance) setFinanceLoaded(true); return; }
+    let cancelled = false;
+    setFinanceError('');
+    apiGet<{ entries?: FinanceEntry[] }>(
+      `/api/finance?businessId=${encodeURIComponent(businessId)}&contactId=${encodeURIComponent(person.contactId)}`,
+      { scope: 'area', area: 'Financeiro' },
+    ).then((res) => {
+      if (cancelled) return;
+      if (res.ok) setFinanceEntries(res.data?.entries || []);
+      else setFinanceError(res.message || 'Não foi possível carregar o financeiro.');
+      setFinanceLoaded(true);
+    });
+    return () => { cancelled = true; };
+  }, [canFinance, financeLoaded, person.contactId, businessId]);
+
+  // ── FASE 2 · P2 — Visão geral: só dados reais, derivados do que já está aqui ──
+  const today = todayISO();
+  const nextBooking = useMemo(
+    () => [...person.bookings]
+      .filter((b) => b.date >= today && b.status !== 'cancelled' && b.status !== 'completed' && b.status !== 'no_show')
+      .sort((a, b) => (a.date + (a.time || '') < b.date + (b.time || '') ? 1 : -1))[0] || null,
+    [person.bookings, today],
+  );
+  const lastEncounter = encounters[0] || null; // a API devolve mais recente primeiro
+  const lastNote = notes[0] || null;
+  const pendingReturn = [...encounters]
+    .filter((e) => e.status === 'finalized' && (e.followUpMode === 'date' || e.followUpMode === 'interval'))
+    .map((e) => ({ e, due: followUpDueDate(e) }))
+    .filter((x) => x.due)
+    .sort((a, b) => (a.due < b.due ? 1 : -1))[0] || null;
+  const financeReceived = financeEntries.filter((f) => f.kind === 'receita' && f.status === 'pago').reduce((a, f) => a + f.amount, 0);
+  const financePending = financeEntries.filter((f) => f.kind === 'receita' && f.status !== 'pago' && f.status !== 'cancelado').reduce((a, f) => a + f.amount, 0);
+  // Arquivos reais: anexos dos atendimentos desta pessoa (Storage + referência).
+  const files = useMemo(() => encounters.flatMap((e) => (e.files || []).map((f) => ({ ...f, encounterDate: e.date, encounterId: e.id }))), [encounters]);
+
   return (
     <>
       {encounterOpen && (
@@ -391,16 +463,46 @@ export function ClientProfileDrawer({ person, businessId, pipeline, canFunil, on
           onChanged={() => { setEncountersLoaded(false); onChanged(); }}
         />
       )}
-    <Drawer
+      {/* FASE 2 · P2 — "Iniciar atendimento" do próximo agendamento (quando aplicável). */}
+      {startEncounter && (
+        <EncounterSheet
+          businessId={businessId}
+          bookingId={startEncounter.bookingId}
+          seed={startEncounter.seed as any}
+          canReopen={canReopenEncounter(role)}
+          onScheduleReturn={() => { setStartEncounter(null); onNewBooking(person); }}
+          onClose={() => setStartEncounter(null)}
+          onChanged={() => { setEncountersLoaded(false); onChanged(); }}
+        />
+      )}
+    <WorkspaceSheet
       open
       onClose={onClose}
       title={person.name || 'Cliente'}
-      subtitle={person.contactId ? 'Perfil e histórico 360' : 'Pessoa ainda sem cadastro no CRM'}
-      width="max-w-[820px]"
+      subtitle={person.contactId ? 'Paciente 360 — perfil, agenda, atendimento e financeiro' : 'Pessoa ainda sem cadastro no CRM'}
+      icon="users"
+      width="max-w-[860px]"
       footer={
         <>
           {person.phone && (
             <A2 href={waLink(person.phone, `Olá, ${firstName}!`)} label="WhatsApp" icon="whatsapp" />
+          )}
+          {/* FASE 2 · P2 — ações rápidas: nota e iniciar atendimento (quando aplicável). */}
+          <Button variant="quiet" size="sm" onClick={() => setTab('notes')}>
+            <Icon n="pencil" size={14} /> Registrar nota
+          </Button>
+          {canEncounter && nextBooking && (
+            <Button variant="secondary" size="sm" onClick={() => setStartEncounter({
+              bookingId: nextBooking.id,
+              seed: {
+                customerName: person.name || '',
+                serviceId: nextBooking.serviceId || '', professionalId: nextBooking.professionalId || '',
+                date: nextBooking.date, time: nextBooking.time || '',
+                contactId: person.contactId || '', customerId: person.customerId || '',
+              },
+            })}>
+              <Icon n="fileText" size={14} /> Iniciar atendimento
+            </Button>
           )}
           <Button variant="secondary" size="sm" onClick={() => setEditing((v) => !v)}>
             <Icon n={editing ? 'x' : 'pencil'} size={14} /> {editing ? 'Fechar edição' : 'Editar dados'}
@@ -763,6 +865,125 @@ export function ClientProfileDrawer({ person, businessId, pipeline, canFunil, on
         <Tabs items={tabItems} value={tab} onChange={setTab} ariaLabel="Seções do histórico do cliente" />
 
         <div className="mt-4 ws-panel">
+          {/* ── FASE 2 · P2 — VISÃO GERAL (próximo passo em primeiro) ── */}
+          {tab === 'overview' && (
+            <div className="p-4 space-y-4">
+              <div className="grid gap-3 sm:grid-cols-3">
+                <div className="rounded-lg border border-[var(--border)] p-3">
+                  <p className="text-[11.5px] font-bold text-[var(--text-muted)] uppercase tracking-wide">Próximo agendamento</p>
+                  {nextBooking ? (
+                    <>
+                      <p className="text-[15px] font-extrabold text-[var(--text)] mt-1">{formatDateBR(nextBooking.date)}{nextBooking.time ? ` · ${nextBooking.time}` : ''}</p>
+                      <p className="text-[12px] text-[var(--text-muted)]">{nextBooking.service}{nextBooking.professional ? ` · ${nextBooking.professional}` : ''}</p>
+                      <Link href={`/agenda?b=${businessId}&data=${nextBooking.date}`} className="text-[12px] font-semibold text-[var(--brand-fg)] hover:underline">Ver na agenda</Link>
+                    </>
+                  ) : <p className="text-[13px] text-[var(--text-muted)] mt-1">Nenhum futuro marcado.</p>}
+                </div>
+                <div className="rounded-lg border border-[var(--border)] p-3">
+                  <p className="text-[11.5px] font-bold text-[var(--text-muted)] uppercase tracking-wide">Último atendimento</p>
+                  {lastEncounter ? (
+                    <>
+                      <p className="text-[15px] font-extrabold text-[var(--text)] mt-1">{formatDateBR(lastEncounter.date)}{lastEncounter.time ? ` · ${lastEncounter.time}` : ''}</p>
+                      <p className="text-[12px] text-[var(--text-muted)] line-clamp-2">{lastEncounter.evolution || lastEncounter.complaint || 'Sem descrição'}</p>
+                      <button type="button" className="text-[12px] font-semibold text-[var(--brand-fg)] hover:underline" onClick={() => setEncounterOpen(lastEncounter)}>Abrir registro</button>
+                    </>
+                  ) : <p className="text-[13px] text-[var(--text-muted)] mt-1">Sem registro de atendimento.</p>}
+                </div>
+                <div className="rounded-lg border border-[var(--border)] p-3">
+                  <p className="text-[11.5px] font-bold text-[var(--text-muted)] uppercase tracking-wide">Retorno previsto</p>
+                  {pendingReturn ? (
+                    <>
+                      <p className="text-[15px] font-extrabold text-[var(--text)] mt-1">{formatDateBR(pendingReturn.due)}</p>
+                      <p className="text-[12px] text-[var(--text-muted)]">{pendingReturn.e.followUp || (pendingReturn.e.followUpMode === 'interval' ? `Intervalo de ${pendingReturn.e.followUpDays} dias` : 'Retorno programado')}</p>
+                    </>
+                  ) : <p className="text-[13px] text-[var(--text-muted)] mt-1">Sem retorno estruturado registrado.</p>}
+                </div>
+              </div>
+
+              <div className="grid gap-3 sm:grid-cols-2">
+                <div className="rounded-lg border border-[var(--border)] p-3">
+                  <p className="text-[11.5px] font-bold text-[var(--text-muted)] uppercase tracking-wide">Observação importante</p>
+                  {lastNote ? (
+                    <p className="text-[13px] text-[var(--text)] mt-1 line-clamp-3">{lastNote.text}</p>
+                  ) : profile.adminNote ? (
+                    <p className="text-[13px] text-[var(--text)] mt-1 line-clamp-3">{profile.adminNote}</p>
+                  ) : <p className="text-[13px] text-[var(--text-muted)] mt-1">Nenhuma observação registrada.</p>}
+                  <button type="button" className="text-[12px] font-semibold text-[var(--brand-fg)] hover:underline mt-1" onClick={() => setTab('notes')}>Ver observações</button>
+                </div>
+                {canFinance ? (
+                  <div className="rounded-lg border border-[var(--border)] p-3">
+                    <p className="text-[11.5px] font-bold text-[var(--text-muted)] uppercase tracking-wide">Financeiro do paciente</p>
+                    {!financeLoaded ? <p className="text-[13px] text-[var(--text-muted)] mt-1">Carregando…</p> : (
+                      <div className="grid grid-cols-2 gap-2 mt-1">
+                        <Kpi label="Recebido" value={centsToBR(financeReceived)} tone="success" />
+                        <Kpi label="Em aberto" value={centsToBR(financePending)} tone={financePending > 0 ? 'warning' : 'default'} />
+                      </div>
+                    )}
+                    <button type="button" className="text-[12px] font-semibold text-[var(--brand-fg)] hover:underline mt-1" onClick={() => setTab('finance')}>Abrir financeiro</button>
+                  </div>
+                ) : (
+                  <div className="rounded-lg border border-[var(--border)] p-3">
+                    <p className="text-[11.5px] font-bold text-[var(--text-muted)] uppercase tracking-wide">Status</p>
+                    <div className="flex flex-wrap gap-1.5 mt-2">
+                      {tags.map((t) => <Badge key={t.id} tone={(t.tone as any) || 'zinc'}>{t.label}</Badge>)}
+                      {tags.length === 0 && <Badge tone="zinc">Sem etiquetas</Badge>}
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+
+          {/* ── FASE 2 · P2 — ARQUIVOS (anexos reais dos atendimentos) ── */}
+          {tab === 'files' && (
+            !canEncounter ? <div className="p-4"><Empty hint="Seu perfil não tem a permissão de Atendimento para ver os arquivos do cuidado." /></div>
+              : !encountersLoaded ? <p role="status" className="p-4 text-sm">Carregando arquivos…</p>
+              : files.length === 0 ? <div className="p-4"><Empty hint="Nenhum arquivo anexado — anexos são adicionados dentro do registro do atendimento." /></div>
+              : (
+                <ul className="divide-y divide-[var(--border-soft)]">
+                  {files.map((f) => (
+                    <li key={f.id} className="flex items-center gap-3 px-4 py-3">
+                      <span className="grid place-items-center h-8 w-8 rounded-lg bg-[var(--brand-soft)] text-[var(--brand-fg)] shrink-0"><Icon n="upload" size={15} /></span>
+                      <div className="min-w-0 flex-1">
+                        <a href={f.url} target="_blank" rel="noreferrer" className="text-[13.5px] font-bold text-[var(--text)] hover:underline truncate block">{f.name}</a>
+                        <p className="text-[11.5px] text-[var(--text-muted)]">Atendimento de {formatDateBR(f.encounterDate)} · {Math.max(1, Math.round(f.size / 1024))} KB</p>
+                      </div>
+                      <button type="button" className="il-chip" onClick={() => { const e = encounters.find((x) => x.id === f.encounterId); if (e) setEncounterOpen(e); }}>Abrir atendimento</button>
+                    </li>
+                  ))}
+                </ul>
+              )
+          )}
+
+          {/* ── FASE 2 · P2/P7 — FINANCEIRO DO PACIENTE ── */}
+          {tab === 'finance' && canFinance && (
+            !financeLoaded ? <p role="status" className="p-4 text-sm">Carregando financeiro…</p>
+              : financeError ? <div role="alert" className="p-4 text-sm"><p>{financeError}</p><Button variant="secondary" size="sm" onClick={() => setFinanceLoaded(false)}>Tentar novamente</Button></div>
+              : financeEntries.length === 0 ? <div className="p-4"><Empty hint="Nenhuma movimentação vinculada a este paciente." /></div>
+              : (
+                <div>
+                  <div className="grid grid-cols-2 gap-2 p-4">
+                    <Kpi label="Recebido" value={centsToBR(financeReceived)} tone="success" />
+                    <Kpi label="Em aberto" value={centsToBR(financePending)} tone={financePending > 0 ? 'warning' : 'default'} />
+                  </div>
+                  <ul className="divide-y divide-[var(--border-soft)]">
+                    {financeEntries.map((f) => (
+                      <li key={f.id} className="flex items-center gap-3 px-4 py-2.5">
+                        <span className="text-[12.5px] text-[var(--text-muted)] tabular-nums w-[92px] shrink-0">{f.dueDate ? f.dueDate.split('-').reverse().join('/') : '—'}</span>
+                        <div className="min-w-0 flex-1">
+                          <p className="text-[13px] font-semibold text-[var(--text)] truncate">{f.description}</p>
+                          <p className="text-[11.5px] text-[var(--text-muted)]">{FINANCE_STATUS_LABEL[f.status]}{f.method ? ` · ${f.method}` : ''}</p>
+                        </div>
+                        <span className={`text-[13.5px] font-extrabold tabular-nums ${f.kind === 'receita' ? 'text-[var(--success-fg)]' : 'text-[var(--danger)]'}`}>
+                          {f.kind === 'receita' ? '+' : '−'}{centsToBR(f.amount)}
+                        </span>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )
+          )}
+
           {tab === 'timeline' && (
             timeline.length === 0
               ? <Empty hint="Sem eventos ainda — agendamentos, conversas, leads e tarefas aparecem aqui." />
@@ -951,7 +1172,7 @@ export function ClientProfileDrawer({ person, businessId, pipeline, canFunil, on
           )}
         </div>
       </div>
-    </Drawer>
+    </WorkspaceSheet>
     </>
   );
 }
