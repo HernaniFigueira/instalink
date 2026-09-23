@@ -1,7 +1,6 @@
 'use client';
 import { Fragment, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { Icon } from '@/components/icons';
 import type { ComponentProps } from 'react';
 import type { Business, Page } from '@/lib/types';
 import { BlockView, AboutView } from '@/components/public/ClinicContent';
@@ -59,12 +58,6 @@ export function ClinicPreview({ business, page, catalog }: { business: Business;
         <BottomBarView items={bottomBarItems({canBook:canBook(publicBusiness,catalog.services),whatsapp:whatsappVisible(publicBusiness)})} menuOpen={menu}/>
       </main>, body)}
       </div>
-    </div>
-    <div className="mt-3 flex items-start gap-2.5 rounded-lg border border-[var(--success-border)] bg-[var(--success-bg)] px-3 py-2.5">
-      <Icon n="spark" size={15} className="text-[var(--success-fg)] mt-0.5 shrink-0" />
-      <p className="text-[11.5px] leading-relaxed text-[var(--success-fg)]">
-        <strong>Prévia:</strong> o conteúdo acompanha a edição em tempo real.
-      </p>
     </div>
   </section>;
 }

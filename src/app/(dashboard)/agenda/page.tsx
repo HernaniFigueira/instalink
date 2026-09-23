@@ -290,11 +290,11 @@ const GridColumn = memo(function GridColumn({ column, basisPct, variant, highlig
           )}
           {b.checkedInAt && (
             <span title="Cliente já fez check-in" aria-hidden="true"
-              className="absolute bottom-1 right-1 w-4 h-4 rounded-full text-[9px] font-black leading-4 text-center bg-[var(--success)] text-white">✓</span>
+              className="absolute bottom-1 right-1 w-4 h-4 rounded-full text-[9px] font-semibold leading-4 text-center bg-[var(--success)] text-white">✓</span>
           )}
           {b.attention ? (
             <span title="Precisa de fechamento" aria-hidden="true"
-              className={`absolute top-1 right-1 w-4.5 h-4.5 w-[18px] h-[18px] rounded-full text-[10px] font-black leading-[18px] text-center ${ATTENTION_MARK_CLS}`}>
+              className={`absolute top-1 right-1 w-4.5 h-4.5 w-[18px] h-[18px] rounded-full text-[10px] font-semibold leading-[18px] text-center ${ATTENTION_MARK_CLS}`}>
               !
             </span>
           ) : (
@@ -707,15 +707,12 @@ export default function AgendaPage() {
     return () => { ro?.disconnect(); window.removeEventListener('resize', measure); };
   }, [columns.length, view, loaded]);
 
-  // ── Altura útil da grade (P1.1 — viewport real, sem scroll fantasma) ──
-  // Medimos a posição REAL do container (header + toolbar + margens +
-  // sidebar + tela cheia já estão embutidos no `top` medido) e usamos o
-  // resto da viewport. A altura final é `min(conteúdo, disponível)`:
-  //   • a grade cabe  → o container fica do tamanho exato do conteúdo e a
-  //                     barra de rolagem NÃO aparece (nem por alguns pixels);
-  //   • não cabe      → scroll SOMENTE interno da grade.
-  // Nenhum min-height arbitrário força overflow; nada é "escondido".
-  const gridContentH = HEADER_H + gridHeight;
+  // ── Altura da grade = altura do CONTEÚDO (a página rola, não a grade) ──
+  // Regra de produto: o painel NÃO é viewport travada. Verticalmente a
+  // agenda cresce no fluxo do documento; html/body é o scroll principal.
+  // Horizontal permanece no próprio scroller (overflow-x) quando há mais
+  // colunas que cabem na largura. Sem caixa de 700px com scrollbar interna
+  // para ver 08h–21h.
   // Conteúdo horizontal REAL da grade: pode estourar a largura no dia com
   // muitos profissionais / na semana em tela estreita. Quando estoura, a
   // barra horizontal entra — e é ELA o gatilho do scroll vertical fantasma
@@ -756,25 +753,16 @@ export default function AgendaPage() {
     return () => obs.disconnect();
   }, [columns.length]);
 
-  const [gridMaxH, setGridMaxH] = useState<number | null>(null);
-  // Altura útil da rail da fila: mesma linha de base da grade. Fechar a
-  // fila não deixa valor velho — o efeito roda de novo quando showQueue muda.
+  // Altura útil da rail da fila (overlay lateral — pode ter scroll interno
+  // sem competir com a página). A GRADE em si não recebe cap de altura.
   const [railMaxH, setRailMaxH] = useState<number | null>(null);
   useLayoutEffect(() => {
     const fit = () => {
       const el = scrollRef.current;
       if (!el) return;
       const top = el.getBoundingClientRect().top;
-      // Reserva a altura da barra horizontal QUANDO ela está visível: é o
-      // que impede `scrollHeight` de passar de `clientHeight` por causa dela
-      // e fabricar a rolagem vertical fantasma de alguns pixels.
-      const reserve = top >= 0 && window.innerHeight - top < VIEWPORT_BOTTOM_PAD
-        ? window.innerHeight - top
-        : hbarReserve;
-      const h = window.innerHeight - top - VIEWPORT_BOTTOM_PAD - reserve;
-      setGridMaxH(Math.max(320, Math.floor(h)));
-      // A rail termina na MESMA linha de base da grade (o topo dela é o topo do
-      // workspace, não o do scroller) — e a lista rola por dentro.
+      // A rail termina perto da base da viewport (o topo dela é o topo do
+      // workspace) — lista rola por dentro; a agenda não.
       const wtop = workspaceRef.current?.getBoundingClientRect().top ?? top;
       setRailMaxH(Math.max(320, Math.floor(window.innerHeight - wtop - VIEWPORT_BOTTOM_PAD)));
     };
@@ -1278,7 +1266,7 @@ export default function AgendaPage() {
                         </span>
                       ))}
                       <span className="text-[11px] font-medium text-zinc-500 inline-flex items-center gap-1">
-                        <span className={`w-3.5 h-3.5 rounded-full text-[9px] font-black leading-[14px] text-center ${ATTENTION_MARK_CLS}`} aria-hidden="true">!</span>
+                        <span className={`w-3.5 h-3.5 rounded-full text-[9px] font-semibold leading-[14px] text-center ${ATTENTION_MARK_CLS}`} aria-hidden="true">!</span>
                         precisa de fechamento
                       </span>
                     </div>
@@ -1345,7 +1333,7 @@ export default function AgendaPage() {
               </span>
             ))}
             <span className="inline-flex items-center gap-1.5 text-[11px] font-medium text-[var(--text-muted)]">
-              <span className={`w-3 h-3 rounded-full text-[8px] font-black leading-3 text-center ${ATTENTION_MARK_CLS}`} aria-hidden="true">!</span>
+              <span className={`w-3 h-3 rounded-full text-[8px] font-semibold leading-3 text-center ${ATTENTION_MARK_CLS}`} aria-hidden="true">!</span>
               Precisa de fechamento
             </span>
             <span className="inline-flex items-center gap-1.5 text-[11px] font-medium text-[var(--text-muted)]">
@@ -1547,11 +1535,12 @@ export default function AgendaPage() {
           </div>
         </div>
       ) : (
-        <div className="bg-white border border-zinc-200 overflow-hidden">
-          {/* Altura EXATA = min(conteúdo, viewport disponível). Se a grade
-              cabe, o container tem o tamanho dela e não há barra alguma. */}
-          <div ref={scrollRef} className={`overflow-auto ws-scroll ${isDragging ? 'select-none' : ''}`}
-            style={{ height: gridMaxH ? Math.min(gridContentH, gridMaxH) : undefined }}>
+        <div className="bg-white border border-zinc-200">
+          {/* Altura NATURAL do conteúdo (sem cap) — a rolagem vertical é a
+              da página. overflow-x só quando as colunas não cabem na largura;
+              como a caixa cresce com o conteúdo, não há scrollbar vertical
+              interna nem caixa fixa competindo com o documento. */}
+          <div ref={scrollRef} className={`overflow-x-auto ws-scroll ${isDragging ? 'select-none' : ''}`}>
             <div className="flex" style={{ minWidth: dayWidth }}>
               {/* Gutter de horas (fixo na horizontal) */}
               <div className="sticky left-0 z-30 bg-white shrink-0 border-r border-zinc-200" style={{ width: GUTTER_W }}>
