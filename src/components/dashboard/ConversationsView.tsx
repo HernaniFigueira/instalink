@@ -201,7 +201,7 @@ export function ConversationsView({ unitId, panel = false }: { unitId?: string; 
   // ── NENHUM CANAL CONECTADO: inbox vazio honesto + a porta certa ──
   if (!anyChannel && conversations.length === 0) {
     return (
-      <>
+      <div className="conversation-view" data-panel={panel} data-active={false}>
         <div className="flex items-center justify-between gap-3 mb-4">
           <div className="flex items-start gap-2.5">
             <span className="w-9 h-9 shrink-0 rounded-lg bg-[var(--brand)] text-white flex items-center justify-center shadow-md">
@@ -238,7 +238,7 @@ export function ConversationsView({ unitId, panel = false }: { unitId?: string; 
             </p>
           </div>
         </div>
-      </>
+      </div>
     );
   }
 

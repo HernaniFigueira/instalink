@@ -1303,24 +1303,165 @@ dialog.il-customer-dialog::backdrop { background:transparent; }
 @media(min-width:1200px) { .il-platform .agenda-page-gutter { padding:16px; } }
 @media(max-width:767px) { .il-platform .il-tab { min-height:44px; } }
 
+/* ═══════════════════════════════════════════════════════════════
+   WORKSPACE SHEET — Etapa B
+   ═══════════════════════════════════════════════════════════════
+   Geometria por token: abaixo da topbar, à direita de --sheet-left (medido em
+   runtime pelo shell), com --sheet-gap nas extremidades. Por construção o
+   sheet NÃO cobre topbar nem sidebar/topbar-rail — não é uma regra solta, é
+   aritmética dos tokens. */
+dialog.ws-sheet {
+  position: fixed;
+  top: calc(var(--topbar-h) + var(--sheet-gap));
+  right: var(--sheet-gap);
+  bottom: var(--sheet-gap);
+  left: auto;
+  margin: 0 !important;
+  padding: 0;
+  width: min(var(--sheet-w), calc(100vw - var(--sheet-left, 0px) - (var(--sheet-gap) * 2)));
+  height: auto;
+  max-width: none;
+  max-height: none;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-xl);
+  background: var(--surface);
+  color: var(--text);
+  overflow: hidden;
+  box-shadow: var(--shadow-sheet);
+  transition: width .2s cubic-bezier(.32,.72,.28,1), height .2s cubic-bezier(.32,.72,.28,1),
+    top .2s cubic-bezier(.32,.72,.28,1), bottom .2s cubic-bezier(.32,.72,.28,1),
+    border-radius .2s ease;
+}
+dialog.ws-sheet:not([open]) { display: none; }
+dialog.ws-sheet::backdrop { background: var(--sheet-backdrop); }
+dialog.ws-sheet[open] { animation: ws-sheet-in 200ms cubic-bezier(.32,.72,.28,1); }
+dialog.ws-sheet[data-closing] { animation: ws-sheet-out 200ms ease-in forwards; }
+@keyframes ws-sheet-in {
+  from { opacity: 0; transform: translateX(26px) scale(.985); }
+  to { opacity: 1; transform: none; }
+}
+@keyframes ws-sheet-out {
+  to { opacity: 0; transform: translateX(26px) scale(.985); }
+}
+
+.ws-sheet__inner { display: flex; flex-direction: column; height: 100%; min-height: 0; }
+
+.ws-sheet__header {
+  display: flex; align-items: center; gap: 10px;
+  padding: 12px 12px 12px 16px;
+  border-bottom: 1px solid var(--border-soft);
+  background: linear-gradient(180deg, var(--surface-2), var(--surface));
+  border-radius: var(--radius-xl) var(--radius-xl) 0 0;
+}
+.ws-sheet__icon {
+  display: flex; align-items: center; justify-content: center;
+  width: 32px; height: 32px; flex-shrink: 0;
+  border-radius: var(--radius-sm);
+  background: color-mix(in srgb, var(--area-color, var(--brand)) 12%, var(--surface));
+  color: var(--area-color, var(--brand-fg));
+}
+.ws-sheet__titles { flex: 1; min-width: 0; }
+.ws-sheet__titles h2 {
+  margin: 0; font-size: 15px; font-weight: 800; letter-spacing: -.01em; color: var(--text);
+  outline: none; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.ws-sheet__sub {
+  margin: 2px 0 0; font-size: 11.5px; color: var(--text-muted);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.ws-sheet__actions { display: flex; align-items: center; gap: 4px; flex-shrink: 0; }
+.ws-sheet__fullpage {
+  display: inline-flex; align-items: center; gap: 6px;
+  min-height: var(--control-h-sm); padding: 0 10px;
+  font-size: 12px; font-weight: 700; color: var(--text-muted);
+  border: 1px solid var(--border); border-radius: var(--radius-pill);
+  background: var(--surface);
+  transition: color .15s ease, border-color .15s ease, background-color .15s ease;
+}
+.ws-sheet__fullpage:hover { color: var(--brand-fg); border-color: var(--brand-border); background: var(--brand-softer); }
+.ws-sheet__icon-button {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 34px; height: 34px; border-radius: var(--radius-md);
+  color: var(--text-muted);
+  transition: background-color .15s ease, color .15s ease;
+}
+.ws-sheet__icon-button:hover { background: var(--surface-hover); color: var(--text); }
+.ws-sheet__close:hover { background: var(--danger-bg); color: var(--danger-fg); }
+
+.ws-sheet__body { flex: 1; min-height: 0; overflow-y: auto; }
+.ws-sheet__footer {
+  padding: 10px 16px;
+  border-top: 1px solid var(--border-soft);
+  background: var(--surface-2);
+  border-radius: 0 0 var(--radius-xl) var(--radius-xl);
+}
+
+/* ── Minimizado: pílula ancorada no canto; o conteúdo NÃO desmonta ── */
+dialog.ws-sheet[data-minimized] {
+  top: auto;
+  left: auto;
+  right: var(--sheet-gap);
+  bottom: var(--sheet-gap);
+  width: 344px;
+  height: 58px;
+  border-radius: var(--radius-pill);
+  box-shadow: var(--shadow-lg);
+}
+dialog.ws-sheet[data-minimized] .ws-sheet__header {
+  height: 56px; border-bottom: 0; border-radius: var(--radius-pill);
+  background: var(--surface);
+}
+dialog.ws-sheet[data-minimized] .ws-sheet__body,
+dialog.ws-sheet[data-minimized] .ws-sheet__footer,
+dialog.ws-sheet[data-minimized] .ws-sheet__fullpage { display: none; }
+dialog.ws-sheet[data-minimized]::backdrop { background: transparent; }
+
+/* ── Mobile: sheet quase cheio, mesmas margens e mesmo comportamento ── */
+@media (max-width: 767px) {
+  dialog.ws-sheet {
+    top: calc(var(--topbar-h) + 8px);
+    right: 8px; bottom: 8px;
+    width: calc(100vw - 16px);
+  }
+  dialog.ws-sheet[data-minimized] { width: min(344px, calc(100vw - 16px)); }
+}
+
+/* ── Dock refinado de Conversas (era o botão flutuante colado na borda) ── */
+.conversation-shortcut {
+  position: fixed; right: var(--sheet-gap); bottom: var(--sheet-gap); z-index: 34;
+  display: inline-flex; align-items: center; gap: 9px;
+  min-height: 44px; padding: 0 16px;
+  background: var(--surface); color: var(--cyan-fg);
+  border: 1px solid var(--cyan-border);
+  border-radius: var(--radius-pill);
+  box-shadow: var(--shadow-md);
+  font-size: 13px; font-weight: 700;
+  transition: transform .15s ease, box-shadow .15s ease, background-color .15s ease;
+}
+.conversation-shortcut:hover {
+  background: var(--cyan-bg);
+  box-shadow: var(--shadow-lg);
+  transform: translateY(-1px);
+}
+.conversation-shortcut:active { transform: translateY(0); }
+.conversation-shortcut .conversation-shortcut__icon {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 26px; height: 26px; border-radius: var(--radius-pill);
+  background: var(--cyan-bg); color: var(--cyan-fg);
+}
+.conversation-shortcut:hover .conversation-shortcut__icon { background: var(--surface); }
 /* Conversations is intentionally overlaid; the left submenu never is. */
-.conversation-shortcut { position:fixed; right:0; bottom:24px; z-index:35; display:flex; align-items:center; gap:8px; min-height:44px; padding:10px 14px; background:var(--surface); color:#047857; border:1px solid var(--border); border-radius:8px 0 0 8px; }
-dialog.conversations-dock { position:fixed; inset:16px 16px 16px auto; margin:0!important; padding:0; width:min(960px,85vw); height:calc(100dvh - 32px); max-width:none; max-height:none; border:1px solid var(--border); border-radius:12px; background:var(--surface); color:var(--text); overflow:hidden; }
-.conversations-dock::backdrop { background:rgba(31,41,55,.20); }
-.conversations-dock[open] { animation:conversation-in 180ms ease-out; }
-.conversations-dock[data-closing="true"] { animation:conversation-out 180ms ease-in forwards; }
-.conversation-dock-inner { display:flex; flex-direction:column; height:100%; }
-@keyframes conversation-in { from { opacity:0; transform:translateX(100%); } to { opacity:1; transform:none; } }
-@keyframes conversation-out { to { opacity:0; transform:translateX(100%); } }
 .conversation-view[data-panel="true"] .inbox-layout { grid-template-columns:260px minmax(0,1fr); }
+/* No sheet o título/ícone são do próprio Workspace Sheet: o view não repete;
+   a linha restante (status/atalhos) continua útil, encostada à direita. */
+.conversation-view[data-panel="true"] > div:first-child > div:first-child { display: none; }
+.conversation-view[data-panel="true"] > div:first-child { justify-content: flex-end; }
 .conversation-view[data-panel="true"] .inbox-contact { display:none; }
 .inbox-back { display:none; }
 @media(max-width:767px) {
-  dialog.conversations-dock { inset:8px; width:calc(100vw - 16px); height:calc(100dvh - 16px); }
   .conversation-view .inbox-layout, .conversation-view[data-panel="true"] .inbox-layout { display:block; }
   .conversation-view[data-active="true"] .inbox-list, .conversation-view[data-active="false"] .inbox-detail, .conversation-view .inbox-contact { display:none; }
   .inbox-back { display:flex; }
-  .conversation-shortcut span { display:none; }
 }
 
 

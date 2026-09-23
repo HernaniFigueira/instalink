@@ -109,7 +109,7 @@ const PATHS: Record<string, React.ReactNode> = {
      Workspace Sheet e os dois alvos do preview do editor (Mobile | Desktop). */
   bell: (<><path d="M18 8a6 6 0 0 0-12 0c0 7-3 9-3 9h18s-3-2-3-9" /><path d="M13.73 21a2 2 0 0 1-3.46 0" /></>),
   chevronRight: (<path d="m9 18 6-6-6-6" />),
-  minimize: (<><path d="M12 4v10" /><path d="m8 11 4 4 4-4" /><path d="M4 19h16" /></>),
+  minimize: (<><path d="M5 15h14" /><path d="M5 10h14" opacity=".35" /></>),
   monitor: (<><rect x="2" y="3" width="20" height="14" rx="2" /><path d="M8 21h8" /><path d="M12 17v4" /></>),
   smartphone: (<><rect x="6" y="2" width="12" height="20" rx="2.5" /><path d="M11 18h2" /></>),
 
