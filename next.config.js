@@ -39,6 +39,9 @@ const LEGACY_REDIRECTS = [
 const nextConfig = {
   reactStrictMode: true,
   poweredByHeader: false,
+  experimental: {
+    instrumentationHook: true,
+  },
   async redirects() {
     return LEGACY_REDIRECTS.map(({ from, to }) => ({
       source: from,
