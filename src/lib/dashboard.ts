@@ -170,7 +170,7 @@ export function dashboardContext(
 // a rota (permissão do catálogo): ninguém é enviado para porta proibida.
 
 export interface DashboardAttentionItem {
-  id: 'closures' | 'leadsNew' | 'tasksOverdue' | 'queueWaiting' | 'arrivalsPending';
+  id: 'closures' | 'leadsNew' | 'tasksOverdue' | 'queueWaiting' | 'arrivalsPending' | 'returnsDue';
   count: number;
   label: string;
   /** Destino contextual — presente somente com permissão para a rota. */
@@ -188,11 +188,15 @@ export interface DashboardAttentionInput {
   queueWaiting?: number;
   /** A3.4 · Bloco 4 — chegou hoje e o check-in ainda não foi registrado. */
   arrivalsPending?: number;
+  /** FASE 2 · P10 — retornos vencidos/hoje sem novo agendamento (Paciente 360). */
+  returnsDue?: number;
   permissions: {
     agenda: boolean;
     leads: boolean;
     /** Qualquer uma das permissões da porta /tarefas. */
     tasks: boolean;
+    /** FASE 2 · P10 — rota /followup (perfis com config ou clientes). */
+    followUp?: boolean;
   };
 }
 
@@ -230,6 +234,14 @@ export function dashboardAttention(input: DashboardAttentionInput): DashboardAtt
       href: input.permissions.agenda ? '/agenda' : null,
     });
   }
+  // FASE 2 · P10 — retorno do profissional venceu e o paciente não voltou.
+  if ((input.returnsDue || 0) > 0) {
+    out.push({
+      id: 'returnsDue', count: input.returnsDue || 0,
+      label: input.returnsDue === 1 ? 'retorno pendente' : 'retornos pendentes',
+      href: input.permissions.followUp === false ? null : '/followup',
+    });
+  }
   return out;
 }
 
@@ -249,6 +261,8 @@ export interface DashboardLinkFlags {
   resultados: boolean;
   canais: boolean;
   configuracoes: boolean;
+  /** FASE 2 · P10 — porta /followup (mesma permissão de config). */
+  followUp: boolean;
 }
 
 export function dashboardLinks(
@@ -268,6 +282,7 @@ export function dashboardLinks(
     // (config) — catálogo lib/panel.ts.
     canais: has('config'),
     configuracoes: has('config'),
+    followUp: has('config'),
   };
 }
 

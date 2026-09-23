@@ -47,7 +47,7 @@ function dashboardRouteFolders(): string[] {
 // ═══════════════════════════════════════════════════════════════
 describe('catálogo — completude (por qual porta se chega até mim?)', () => {
   it('tem as 22 portas da arquitetura consolidada', () => {
-    expect(PANEL_ROUTES).toHaveLength(24);
+    expect(PANEL_ROUTES).toHaveLength(25);
   });
 
   it('toda porta do catálogo tem uma rota real no disco', () => {
@@ -214,7 +214,7 @@ describe('sidebar — projeção (permissão ∩ módulos, ordem do catálogo)',
       '/conversas', '/agente', '/tarefas',
       '/clientes', '/funil',
       '/servicos',
-      '/campanhas', '/automacoes', '/canais',
+      '/campanhas', '/automacoes', '/followup', '/canais',
       '/resultados', '/financeiro', '/organizacao',
       '/pagina',
       '/equipe', '/recursos', '/configuracoes',
@@ -742,7 +742,7 @@ describe('guardas de servidor (regressão)', () => {
       '/conversas', '/agente', '/tarefas',
       '/clientes', '/funil',
       '/servicos',
-      '/campanhas', '/automacoes', '/canais',
+      '/campanhas', '/automacoes', '/followup', '/canais',
       '/resultados', '/financeiro', '/organizacao', '/execucoes',
       '/pagina',
       '/equipe', '/recursos', '/configuracoes',

@@ -196,13 +196,46 @@ export async function GET(req: NextRequest) {
       b.date === today && b.status === 'confirmed' &&
       !b.checkedInAt && timeToMin(b.time) <= timeToMin(nowHM())).length
     : 0;
+  // FASE 2 · P10 — RETORNOS PENDENTES (dado real): finalizado com retorno
+  // estruturado vencido/até hoje e o paciente SEM futuro agendamento.
+  const returnsDue = (() => {
+    // Booking não guarda contactId: o vínculo com o CRM é pelo TELEFONE.
+    const digitsOf = (v: string) => String(v || '').replace(/\D/g, '');
+    const futurePhones = new Set(
+      allBookings
+        .filter((b) => b.date >= today && b.status !== 'cancelled' && b.status !== 'no_show')
+        .map((b) => digitsOf(b.customerPhone))
+        .filter(Boolean),
+    );
+    const contactById = new Map(db.contacts.filter((c) => c.businessId === bId).map((c) => [c.id, c]));
+    const seen = new Set<string>();
+    let n = 0;
+    for (const e of db.encounters) {
+      if (e.businessId !== bId || e.status !== 'finalized') continue;
+      if (e.followUpMode !== 'date' && e.followUpMode !== 'interval') continue;
+      const due = e.followUpMode === 'date' ? e.followUpDate
+        : (() => {
+          const t = Date.parse(`${e.date}T00:00:00Z`);
+          return Number.isFinite(t) && e.followUpDays ? new Date(t + e.followUpDays * 86400000).toISOString().slice(0, 10) : '';
+        })();
+      if (!due || due > today) continue;
+      const contact = e.contactId ? contactById.get(e.contactId) : undefined;
+      if (contact && futurePhones.has(digitsOf(contact.phone))) continue; // já voltou
+      const key = e.contactId || e.id;
+      if (seen.has(key)) continue;
+      seen.add(key);
+      n += 1;
+    }
+    return n;
+  })();
   const attention = dashboardAttention({
     closures: closures.length,
     leadsNew: crm.leadsNew,
     tasksOverdue: tasksSummary?.overdue ?? 0,
     queueWaiting: queueWaitingNow,
     arrivalsPending: arrivalsPendingNow,
-    permissions: { agenda: links.agenda, leads: links.funil, tasks: canTasks },
+    returnsDue,
+    permissions: { agenda: links.agenda, leads: links.funil, tasks: canTasks, followUp: links.followUp },
   });
 
   // ── Página: o que ela produziu no período ──

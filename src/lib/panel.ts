@@ -336,6 +336,15 @@ export const PANEL_ROUTES: PanelRouteDef[] = [
     description: 'Quando acontecer X, se Y, o sistema faz Z sozinho — sem ninguém lembrar.',
   },
   {
+    // FASE 2 · P10 — fundação de follow-up: receitas (gatilho/atraso/público/
+    // ação) + prévia de candidatos com dado real. SEM envio nesta fase: o canal
+    // pode não estar operacional e a tela diz "Aguardando conexão do WhatsApp".
+    href: '/followup', label: 'Follow-up', icon: 'send', section: 'crescimento',
+    permission: 'config', area: 'automations',
+    description: 'Receitas de retorno: confirmação, falta, pós-atendimento e paciente inativo — nada sai sem canal conectado.',
+    width: 'full',
+  },
+  {
     // Porta única que substitui três: a rota /integracoes, a aba "Integrações"
     // e a aba "Canais" de Configurações. Três seções nomeadas e exclusivas:
     // CANAIS (por onde se fala) · FONTES (de onde o lead chega) ·
@@ -685,4 +694,6 @@ export const API_GUARDS: Array<{ route: string; file: string; permission: Permis
   { route: '/api/finance', file: 'src/app/api/finance/route.ts', permission: 'financeiro', area: 'financeiro' },
   // FASE 2 · P6 — pets (pacientes veterinários; tutor = contato do CRM).
   { route: '/api/pets', file: 'src/app/api/pets/route.ts', permission: ['clientes', 'atendimento'], area: 'clientes' },
+  // FASE 2 · P10 — fundação de follow-up (mesma permissão da porta).
+  { route: '/api/followup', file: 'src/app/api/followup/route.ts', permission: 'config', area: 'automations' },
 ];

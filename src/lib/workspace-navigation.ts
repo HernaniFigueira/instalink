@@ -70,7 +70,7 @@ export const WORKSPACE_AREAS: WorkspaceAreaDef[] = [
   },
   {
     id: 'inteligencia', label: 'Automação', icon: 'spark', color: 'var(--violet)',
-    routes: ['/automacoes', '/agente', '/campanhas', '/execucoes'],
+    routes: ['/automacoes', '/followup', '/agente', '/campanhas', '/execucoes'],
   },
   {
     id: 'gestao', label: 'Gestão', icon: 'chart', color: 'var(--success)',

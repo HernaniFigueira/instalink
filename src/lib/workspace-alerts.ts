@@ -61,6 +61,8 @@ const ATTENTION_PRESENTATION: Record<string, { tone: AlertTone; icon: string }> 
   tasksOverdue: { tone: 'danger', icon: 'tasks' },
   queueWaiting: { tone: 'warning', icon: 'users' },
   arrivalsPending: { tone: 'warning', icon: 'idcard' },
+  // FASE 2 · P10 — retorno vencido (dado real do atendimento).
+  returnsDue: { tone: 'violet', icon: 'history' },
 };
 
 const FALLBACK_PRESENTATION: { tone: AlertTone; icon: string } = { tone: 'warning', icon: 'alert' };
