@@ -18,7 +18,13 @@ import { mayLeaveEditor } from '@/components/dashboard/useUnsavedChanges';
 import { WorkspaceContext } from '@/components/dashboard/WorkspaceContext';
 import { ConversationsDock } from '@/components/dashboard/ConversationsDock';
 import { WorkspaceNavigation } from '@/components/dashboard/WorkspaceNavigation';
-import { routeAreaColor, switchUnitHref } from '@/lib/workspace-navigation';
+import { WorkspaceTopbar } from '@/components/dashboard/WorkspaceTopbar';
+import { useWorkspaceAlerts } from '@/components/dashboard/NotificationsBell';
+import { buildNavSearchItems } from '@/lib/nav-search';
+import { roleLabel } from '@/lib/role-labels';
+import {
+  routeAreaColor, routeBreadcrumb, switchUnitHref, workspaceAreas,
+} from '@/lib/workspace-navigation';
 
 interface Biz {
   id: string;
@@ -69,6 +75,10 @@ export function DashboardShell({ children }: { children: React.ReactNode }) {
     try { return localStorage.getItem('il-side-v2') === 'mini'; } catch { return false; }
   });
   const lastContextAt = useRef(0);
+  // Etapa A: o drawer de navegação móvel pertence ao shell porque quem o abre
+  // é o botão de menu da TOPBAR (a busca e o menu saíram da sidebar).
+  const [mobileNav, setMobileNav] = useState(false);
+  const mainRef = useRef<HTMLElement | null>(null);
 
   const loadContext = useCallback(() => {
     setContextError(false);
@@ -144,6 +154,34 @@ export function DashboardShell({ children }: { children: React.ReactNode }) {
   const activePath = activePanelPath(pathname);
   const activeRoute = activePanelRoute(pathname);
 
+  // ── Notificações reais (Etapa A) ────────────────────────────────────────
+  // Hook declarado ANTES de qualquer early return (regra de hooks do React).
+  // O id vem do ?b= válido ou da primeira unidade; na visão de organização o
+  // painel some (não há unidade ativa para ler pendências).
+  const provisionalBiz = params.get('b') && businesses.some((b) => b.id === params.get('b'))
+    ? params.get('b')!
+    : businesses[0]?.id || '';
+  const alertsBiz = activePath === '/organizacao' ? '' : provisionalBiz;
+  const alerts = useWorkspaceAlerts(alertsBiz, alertsBiz ? `?b=${alertsBiz}` : '');
+
+  // ── Geometria do Workspace Sheet (Etapa B consome) ────────────────────────
+  // O sheet NUNCA cobre sidebar/topbar. Em vez de calcular larguras no código
+  // (recolher + segunda coluna contextual mudam isso), medimos onde o conteúdo
+  // realmente começa e publicamos em `--sheet-left`. Sempre verdadeiro.
+  useEffect(() => {
+    const el = mainRef.current;
+    if (!el) return;
+    const apply = () => {
+      const left = Math.max(0, Math.round(el.getBoundingClientRect().left));
+      document.documentElement.style.setProperty('--sheet-left', `${left}px`);
+    };
+    apply();
+    const observer = typeof ResizeObserver !== 'undefined' ? new ResizeObserver(apply) : null;
+    observer?.observe(el);
+    window.addEventListener('resize', apply);
+    return () => { observer?.disconnect(); window.removeEventListener('resize', apply); };
+  });
+
   function switchBiz(id: string) {
     if (!mayLeaveEditor()) return;
     if (id === '__overview') { router.push(`/organizacao?organization=${business?.organizationId || ''}`); return; }
@@ -193,11 +231,14 @@ export function DashboardShell({ children }: { children: React.ReactNode }) {
   // permissão que monta o menu. Nenhum destino extra entra aqui, então a busca
   // não tem como revelar (nem levar a) uma tela que o usuário não alcança.
   // A regra de busca fica em lib/nav-search.ts (pura e testada).
-  const ROLE_LABEL: Record<string, string> = {
-    OWNER: 'Proprietário', ADMIN: 'Administrador', SECRETARIA: 'Secretária',
-    ATENDENTE: 'Atendente', VENDEDOR: 'Vendedor', VIEWER: 'Visualizador', MASTER: 'Suporte da plataforma',
-    PROFISSIONAL: 'Profissional',
-  };
+  // ── Breadcrumb + notificações (Etapa A) ─────────────────────────────────
+  // O breadcrumb é projeção da MESMA partição que monta o menu: nunca cita área
+  // que o usuário não alcança. As notificações vêm de /api/overview (dado real).
+  const areas = workspaceAreas(nav.allowed);
+  const crumb = routeBreadcrumb(activePath, areas);
+  const unitRole = business.role && business.role !== 'OWNER'
+    ? `${roleLabel(business.role)}${business.readOnly ? ' · somente leitura' : ''}`
+    : undefined;
 
   // Dashboard fica sempre no topo, sem seção; demais itens agrupados.
   // A Agenda é o ambiente operacional: chrome mínimo para a grade ocupar a
@@ -235,13 +276,47 @@ export function DashboardShell({ children }: { children: React.ReactNode }) {
     // sem que cada tela precise calcular (ou chutar) o seu.
     <PanelHomeProvider home={homeHref}>
     <WorkspaceContext.Provider value={{ role: business.role, agendaScope: business.agendaScope }}>
-    <div style={{'--area-color': routeAreaColor(activePath)} as React.CSSProperties} className="il-platform workspace-shell min-h-screen bg-[var(--bg)]">
+    <div
+      style={{
+        '--area-color': crumb.area?.color || routeAreaColor(activePath, areas),
+        '--sidebar-w': collapsed ? 'var(--sidebar-w-mini)' : undefined,
+      } as React.CSSProperties}
+      className="il-platform workspace-shell min-h-screen bg-[var(--bg)]"
+    >
       <a href="#workspace-content" className="workspace-skip">Ir para o conteúdo</a>
-      <WorkspaceNavigation nav={nav} activePath={activePath} unit={business} units={businesses}
-        overview={activePath === '/organizacao'} onUnit={switchBiz} collapsed={collapsed} onCollapse={toggle} user={user} onLogout={logout} />
+
+      <WorkspaceTopbar
+        crumbs={{
+          clinic: business.name || 'Clínica',
+          group: crumb.group,
+          page: activeRoute?.label || 'Painel',
+        }}
+        searchItems={buildNavSearchItems(nav, q)}
+        activePath={activePath}
+        alerts={alerts}
+        user={{ ...user, role: unitRole || user.role }}
+        unit={business}
+        units={businesses}
+        overview={activePath === '/organizacao'}
+        canOverview={nav.allowed.some((i) => i.href === '/organizacao')}
+        canTeam={nav.allowed.some((i) => i.href === '/equipe')}
+        canConfig={nav.allowed.some((i) => i.href === '/configuracoes')}
+        isMaster={isMaster}
+        onUnit={switchBiz}
+        onLogout={logout}
+        onOpenNav={() => setMobileNav(true)}
+      />
+
+      {/* `nav={nav}`: a navegação continua vindo do catálogo (lib/panel.ts) —
+          o shell não tem lista própria de destinos. */}
+      <WorkspaceNavigation nav={nav}
+        activePath={activePath} unit={business}
+        collapsed={collapsed} onCollapse={toggle}
+        mobileOpen={mobileNav} onMobileOpen={setMobileNav}
+      />
 
       {nav.allowed.some(i => i.href === '/conversas') && activePath !== '/conversas' && activePath !== '/organizacao' && <ConversationsDock key={business.id} businessId={business.id}/>}
-      <main id="workspace-content" tabIndex={-1} className="flex-1 min-w-0 bg-[var(--bg)]">
+      <main ref={mainRef} id="workspace-content" tabIndex={-1} className="workspace-content flex-1 min-w-0 bg-[var(--bg)]">
         {support && (
           <div className={cn('px-4 lg:px-8 py-2.5 text-xs font-semibold flex flex-wrap items-center gap-x-3 gap-y-1 border-b',
             support.mode === 'view' ? 'bg-[var(--warning-bg)] text-[var(--warning-fg)] border-[var(--warning-border)]' : 'bg-[var(--danger)] text-white border-[var(--danger-strong)]')}>
@@ -260,9 +335,9 @@ export function DashboardShell({ children }: { children: React.ReactNode }) {
               <I n="shield" size={14} /> Você é master — <Link href="/master" className="underline font-semibold">/master</Link>
             </p>
           )}
-          {business && business.role && business.role !== 'OWNER' && (
-            <p className="mb-4 text-xs text-[var(--text-muted)]">Você está como <strong className="text-[var(--text)]">{ROLE_LABEL[business.role] || business.role}</strong>{business.readOnly ? ' · somente leitura' : ''}</p>
-          )}
+          {/* Hierarquia (item 4 do briefing): o papel de quem está logado era
+              um parágrafo permanente no miolo de TODA tela. A informação não
+              foi removida — mora na topbar, ao lado do nome, onde pertence. */}
           {business?.agendaScope === 'own' && (
             // Honestidade com quem atende: a agenda mostrada é SÓ a dele.
             // (A restrição é do servidor — aqui só avisamos.)
