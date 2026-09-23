@@ -48,7 +48,7 @@ const ROW = 'flex items-baseline justify-between gap-3 py-2';
 const ROW_DT = 'text-xs font-medium text-zinc-500 shrink-0';
 const ROW_DD = 'text-sm text-zinc-900 text-right font-medium';
 
-export function BookingDetailSheet({ booking, service, pro, businessId, timezone, onScheduleReturn, onClose, onChanged }: {
+export function BookingDetailSheet({ booking, service, pro, businessId, timezone, onScheduleReturn, onClose, onSaved, onChanged }: {
   booking: Booking;
   service: ServiceRef | undefined;
   pro: ProRef | undefined;
@@ -56,7 +56,17 @@ export function BookingDetailSheet({ booking, service, pro, businessId, timezone
   timezone?: string;
   /** "Agendar retorno" do pós-atendimento: quem abre o agendamento é o pai. */
   onScheduleReturn?: (info: FollowUpSeed) => void;
+  /** Fechamento pedido pelo usuário (ESC/X) — nunca por autosave. */
   onClose: () => void;
+  /**
+   * Save silencioso do atendimento: sincroniza o pai SEM fechar este sheet
+   * nem o EncounterSheet (P0-1).
+   */
+  onSaved?: () => void;
+  /**
+   * Mudança estrutural (status/check-in/reagendar/finalizar): o pai
+   * atualiza dados. Quem fecha é só `onClose` (após ação explícita).
+   */
   onChanged: () => void;
 }) {
   const [acting, setActing] = useState('');
@@ -222,6 +232,7 @@ export function BookingDetailSheet({ booking, service, pro, businessId, timezone
           canReopen={canReopenEncounter(role)}
           onScheduleReturn={onScheduleReturn ? (info: FollowUpSeed) => onScheduleReturn(info) : undefined}
           onClose={() => setEncounterOpen(false)}
+          onSaved={onSaved}
           onChanged={onChanged}
         />
       )}

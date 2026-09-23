@@ -461,6 +461,7 @@ export function ClientProfileDrawer({ person, businessId, pipeline, canFunil, on
           canReopen={canReopenEncounter(role)}
           onScheduleReturn={() => { setEncounterOpen(null); onNewBooking(person); }}
           onClose={() => setEncounterOpen(null)}
+          onSaved={() => { /* silencioso: não recarrega nem fecha */ }}
           onChanged={() => { setEncountersLoaded(false); onChanged(); }}
         />
       )}
@@ -473,6 +474,7 @@ export function ClientProfileDrawer({ person, businessId, pipeline, canFunil, on
           canReopen={canReopenEncounter(role)}
           onScheduleReturn={() => { setStartEncounter(null); onNewBooking(person); }}
           onClose={() => setStartEncounter(null)}
+          onSaved={() => { /* silencioso: não recarrega nem fecha */ }}
           onChanged={() => { setEncountersLoaded(false); onChanged(); }}
         />
       )}

@@ -6,7 +6,7 @@ import {
 } from '../follow-up';
 import { buildWorkspaceAlerts } from '../workspace-alerts';
 import { dashboardAttention } from '../dashboard';
-import type { Booking, Contact, Encounter, FollowUpRule, Lead } from '../types';
+import type { Booking, BusinessCustomer as Contact, Encounter, FollowUpRule, Lead } from '../types';
 
 const root = path.resolve(__dirname, '../../..');
 const read = (rel: string) => readFileSync(path.join(root, rel), 'utf8');

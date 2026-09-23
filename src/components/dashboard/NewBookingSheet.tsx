@@ -53,7 +53,16 @@ export function NewBookingSheet({ businessId, services, pros, timezone, initial,
   const [name, setName] = useState(initial?.name || '');
   const [phone, setPhone] = useState(initial?.phone || '');
   const [email, setEmail] = useState(initial?.email || '');
-  const [newClient, setNewClient] = useState(false);
+  /**
+   * P0-2 — fluxo EXPLÍCITO de cliente novo:
+   *   search     → busca no CRM
+   *   new-form   → cadastro temporário (ainda NÃO existe no CRM)
+   *   new-ready  → rascunho confirmado ("Usar neste agendamento"); o contato
+   *                só nasce na criação do agendamento.
+   * `newClient` legado vira `stage !== 'search' && !contactId`.
+   */
+  type ClientStage = 'search' | 'new-form' | 'new-ready';
+  const [clientStage, setClientStage] = useState<ClientStage>(initial?.contactId || initial?.name ? (initial?.contactId ? 'search' : 'new-ready') : 'search');
   const [serviceId, setServiceId] = useState(initial?.serviceId || '');
   const [proId, setProId] = useState(initial?.professionalId || '');
   const [date, setDate] = useState(initial?.date || '');
@@ -170,7 +179,8 @@ export function NewBookingSheet({ businessId, services, pros, timezone, initial,
     return () => clearTimeout(t);
   }, [query, businessId]);
 
-  const picked = !!contactId || (!!name && !newClient);
+  // Selecionado = contato existente OU rascunho novo confirmado (new-ready).
+  const picked = !!contactId || clientStage === 'new-ready';
 
   // FASE 2 · P6 — pets do tutor (só clínica veterinária devolve `vet: true`).
   useEffect(() => {
@@ -193,7 +203,7 @@ export function NewBookingSheet({ businessId, services, pros, timezone, initial,
     setName(c.name);
     setPhone(c.phone);
     setEmail(c.email || '');
-    setNewClient(false);
+    setClientStage('search');
     setResults([]);
     setQuery('');
   }
@@ -204,13 +214,27 @@ export function NewBookingSheet({ businessId, services, pros, timezone, initial,
     setName(digits.length >= 10 ? '' : query.trim());
     setPhone(digits.length >= 10 ? query.trim() : '');
     setEmail('');
-    setNewClient(true);
+    setClientStage('new-form');
     setResults([]);
+  }
+
+  /** "Usar neste agendamento": mantém o rascunho selecionado (ainda sem CRM). */
+  function confirmNewDraft() {
+    if (!name.trim()) { setError('Informe o nome do novo cliente.'); return; }
+    if (onlyDigits(phone).length < 10) { setError('Informe um WhatsApp válido.'); return; }
+    setError('');
+    setClientStage('new-ready');
+  }
+
+  /** "Cancelar" do cadastro temporário: LIMPA tudo e volta para a busca. */
+  function cancelNewDraft() {
+    setContactId(''); setName(''); setPhone(''); setEmail('');
+    setClientStage('search'); setQuery(''); setResults([]); setError('');
   }
 
   function resetClient() {
     setContactId(''); setName(''); setPhone(''); setEmail('');
-    setNewClient(false); setQuery(''); setResults([]);
+    setClientStage('search'); setQuery(''); setResults([]); setError('');
     setPetId(''); setPets([]); setIsVet(false);
   }
 
@@ -243,7 +267,8 @@ export function NewBookingSheet({ businessId, services, pros, timezone, initial,
     if (saving || reviewing) return;
     if (repeat && (!preview || preview.some((r) => r.state !== 'available'))) { setError('Valide e corrija todas as ocorrências antes de confirmar.'); return; }
     setError('');
-    if (!name.trim()) { setError('Busque o cliente ou toque em “+ Novo cliente”.'); return; }
+    if (!picked || !name.trim()) { setError('Busque o cliente ou cadastre um novo para usar neste agendamento.'); return; }
+    if (!contactId && clientStage !== 'new-ready') { setError('Confirme o novo cliente em “Usar neste agendamento”.'); return; }
     if (onlyDigits(phone).length < 10) { setError('Informe um WhatsApp válido.'); return; }
     const when = opts.timeOverride || time;
     if (!serviceId || !date || !when) { setError('Escolha serviço, data e horário.'); return; }
@@ -346,17 +371,38 @@ export function NewBookingSheet({ businessId, services, pros, timezone, initial,
                 </Badge>
                 <Button type="button" variant="ghost" size="xs" onClick={resetClient}>Trocar</Button>
               </div>
+            ) : clientStage === 'new-form' ? (
+              /* ── Cadastro temporário (P0-2): ainda NÃO existe no CRM ── */
+              <div className="space-y-3 rounded-lg border border-[var(--border)] bg-[var(--surface-2)] p-3.5" data-new-client-form="true">
+                <p className="text-xs font-semibold text-[var(--text-muted)]">Cadastrar novo cliente</p>
+                <Field label="Nome" required>
+                  <Input value={name} onChange={(e) => setName(e.target.value)} placeholder="Ex: Marlene Silva" autoFocus />
+                </Field>
+                <Field label="WhatsApp" required>
+                  <PhoneBRInput value={phone} onChange={setPhone} />
+                </Field>
+                <Field label="E-mail" hint="Opcional">
+                  <Input value={email} onChange={(e) => setEmail(e.target.value)} inputMode="email" placeholder="nome@email.com" />
+                </Field>
+                <p className="text-xs text-[var(--text-muted)] rounded-md bg-[var(--info-bg)] border border-[var(--info-border)] px-2.5 py-2">
+                  O cliente será cadastrado quando este agendamento for confirmado.
+                </p>
+                <div className="flex flex-wrap gap-2">
+                  <Button type="button" variant="primary" size="sm" onClick={confirmNewDraft}>Usar neste agendamento</Button>
+                  <Button type="button" variant="secondary" size="sm" onClick={cancelNewDraft}>Cancelar</Button>
+                </div>
+              </div>
             ) : (
               <>
                 <Input value={query} onChange={(e) => setQuery(e.target.value)} autoFocus
-                  placeholder="Buscar por nome ou WhatsApp…" aria-label="Buscar cliente" />
+                  placeholder="Buscar cliente por nome ou WhatsApp…" aria-label="Buscar cliente" />
                 <p className="text-xs text-[var(--text-muted)] mt-1.5">
                   Buscamos no CRM para não duplicar cadastro — o cliente pode já ter conta na sua página.
                 </p>
                 {searching && <p className="text-xs text-[var(--text-faint)] mt-1.5">Buscando…</p>}
-                {!searching && query.trim().length >= 2 && results.length === 0 && !newClient && (
-                  <Button type="button" variant="soft" onClick={startNew} className="mt-2 w-full justify-start">
-                    + Novo cliente “{query.trim()}”
+                {!searching && query.trim().length >= 2 && results.length === 0 && (
+                  <Button type="button" variant="soft" onClick={startNew} className="mt-2 w-full justify-start" data-new-client-trigger="true">
+                    + Cadastrar novo cliente “{query.trim()}”
                   </Button>
                 )}
                 {!searching && results.length > 0 && (
@@ -377,21 +423,6 @@ export function NewBookingSheet({ businessId, services, pros, timezone, initial,
                       </li>
                     ))}
                   </ul>
-                )}
-                {newClient && (
-                  <div className="mt-3 space-y-3 rounded-lg border border-[var(--border)] bg-[var(--surface-2)] p-3.5">
-                    <p className="text-xs font-semibold text-[var(--text-muted)]">Novo cliente — o contato é criado junto com o agendamento</p>
-                    <Field label="Nome" required>
-                      <Input value={name} onChange={(e) => setName(e.target.value)} placeholder="Ex: Marlene Silva" />
-                    </Field>
-                    <Field label="WhatsApp" required>
-                      <PhoneBRInput value={phone} onChange={setPhone} />
-                    </Field>
-                    <Field label="E-mail" hint="Opcional">
-                      <Input value={email} onChange={(e) => setEmail(e.target.value)} inputMode="email" placeholder="nome@email.com" />
-                    </Field>
-                    <Button type="button" variant="ghost" size="xs" onClick={() => setNewClient(false)}>Voltar para a busca</Button>
-                  </div>
                 )}
               </>
             )}

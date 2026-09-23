@@ -487,7 +487,12 @@ export default function AgendaPage() {
   // pela recepção ao VOLTAR para a tela — sem F5 e sem polling.
   useRevalidateOnFocus(load);
 
-  useEffect(() => { bookingsRef.current = new Map(bookings.map((b) => [b.id, b])); }, [bookings]);
+  useEffect(() => {
+    bookingsRef.current = new Map(bookings.map((b) => [b.id, b]));
+    // P0-1: se o detalhe está aberto, atualiza o registro em silêncio com a
+    // lista freca — NUNCA fecha o sheet por causa de autosave/reload.
+    setDetail((d) => (d ? bookings.find((b) => b.id === d.id) || d : d));
+  }, [bookings]);
 
   const activePros = useMemo(() => pros.filter((p) => p.active !== false), [pros]);
   // A2-B3 (F5): enquanto o catálogo chega, o default do produto (60) vale;
@@ -1741,7 +1746,12 @@ export default function AgendaPage() {
             });
           }}
           onClose={() => setDetail(null)}
-          onChanged={() => { setDetail(null); load(); }}
+          /* P0-1: save silencioso NÃO fecha o detalhe nem o atendimento —
+             só sincroniza a grade em segundo plano. */
+          onSaved={() => { void load(); }}
+          /* Mudança estrutural (status/finalizar): atualiza dados, mantém
+             sheets abertos — o fechamento é só onClose (ação do usuário). */
+          onChanged={() => { void load(); }}
         />
       )}
 
@@ -1768,6 +1778,7 @@ export default function AgendaPage() {
             });
           }}
           onClose={() => { setQueueEncounter(null); void loadQueue(); }}
+          onSaved={loadQueue}
           onChanged={loadQueue}
         />
       )}

@@ -82,7 +82,18 @@ interface Props {
   canReopen?: boolean;
   /** "Agendar retorno": quem sabe abrir o agendamento pré-preenchido é o pai. */
   onScheduleReturn?: (seed: FollowUpSeed) => void;
+  /** SOMENTE fechamento solicitado pelo usuário (ESC, X, Encerrar). */
   onClose: () => void;
+  /**
+   * Sincronização silenciosa após um save (autosave ou Salvar manual).
+   * NUNCA fecha o sheet nem desmonta o formulário — só permite ao pai
+   * atualizar listas/dados em segundo plano.
+   */
+  onSaved?: () => void;
+  /**
+   * Mudança estrutural relevante para o pai (finalizar, reabrir, arquivos,
+   * anamnese). Ainda NÃO fecha este sheet — o pós-atendimento abre aqui.
+   */
   onChanged?: () => void;
 }
 
@@ -104,7 +115,7 @@ const formOf = (e: EncounterRow): Form => ({
 const fileUid = () => (typeof crypto !== 'undefined' && crypto.randomUUID ? crypto.randomUUID() : `f_${Math.random().toString(36).slice(2)}`);
 
 export function EncounterSheet({
-  businessId, bookingId, seed, existing, queueId, canReopen = false, onScheduleReturn, onClose, onChanged,
+  businessId, bookingId, seed, existing, queueId, canReopen = false, onScheduleReturn, onClose, onSaved, onChanged,
 }: Props) {
   const [row, setRow] = useState<EncounterRow | null>(existing || null);
   const [form, setForm] = useState<Form>(() => existing ? formOf(existing) : { ...EMPTY });
@@ -234,6 +245,7 @@ export function EncounterSheet({
     } finally { setFileBusy(false); }
   }
 
+
   async function removeFile(fileId: string) {
     const current = latest.current.row;
     if (!current || current.status !== 'draft') return;
@@ -313,9 +325,11 @@ export function EncounterSheet({
     } finally {
       inflight.current = null;
       setBusy((b) => (b === 'save' ? '' : b));
-      onChanged?.();
+      // Save (silencioso ou manual) = sincronização silenciosa. NUNCA fecha
+      // o sheet nem desmonta o pai — só avisa que há dado novo.
+      onSaved?.();
     }
-  }, [businessId, onChanged, updateForm, updateRow]);
+  }, [businessId, onSaved, updateForm, updateRow]);
 
   // Autosave: só em rascunho, só com mudança real, um request por vez e só
   // depois de o dedo parar. `conflict` desliga o automatismo (insistir só
