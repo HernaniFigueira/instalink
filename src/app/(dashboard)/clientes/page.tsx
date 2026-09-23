@@ -64,6 +64,13 @@ export default function ClientesPage() {
   const [error, setError] = useState('');
   const [bookingFor, setBookingFor] = useState<Person360 | null>(null);
   const [newClientOpen, setNewClientOpen] = useState(false);
+  // FASE 2 · P9 — Quick Create global: ?novo=1 abre a criação de paciente.
+  const [novoHandled, setNovoHandled] = useState(false);
+  useEffect(() => {
+    if (novoHandled || !businessId || params.get('novo') !== '1') return;
+    setNovoHandled(true);
+    setNewClientOpen(true);
+  }, [novoHandled, businessId, params]);
   // A3.4 · Bloco 7 — a base entra e sai em arquivo (CSV).
   const [importOpen, setImportOpen] = useState(false);
   const [exporting, setExporting] = useState('');

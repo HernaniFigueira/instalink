@@ -339,6 +339,9 @@ export function normalizeDB(raw: unknown): DB {
     }
     if (!Array.isArray((b as any).navItems)) (b as any).navItems = [];
     if (!b.automations || typeof b.automations !== 'object') (b as any).automations = {};
+    // FASE 2 · P8 — itens pulados do checklist (aditivo; só strings curtas).
+    if (!Array.isArray((b as any).setupSkipped)) (b as any).setupSkipped = [];
+    else (b as any).setupSkipped = (b as any).setupSkipped.filter((x: unknown) => typeof x === 'string' && x.length <= 40).slice(0, 20);
     // P4 — capacidades (planos/flags) são aditivas: ausente = padrão do produto.
     if (!b.capabilityFlags || typeof b.capabilityFlags !== 'object') (b as any).capabilityFlags = {};
   }

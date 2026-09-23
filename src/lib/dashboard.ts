@@ -290,9 +290,14 @@ export function recentActivityLists(m: DashboardModules): {
 //   • a área some quando não há pendência; não bloqueia nada;
 //   • nenhum caminho de pedido/checkout aparece aqui.
 export interface SetupCheckInput {
-  business: Pick<Business, 'description' | 'logo' | 'cover' | 'whatsapp' | 'phone' | 'address' | 'published'>;
+  business: Pick<Business, 'description' | 'logo' | 'cover' | 'whatsapp' | 'phone' | 'address' | 'published'>
+    & { setupSkipped?: string[] };
   modules: DashboardModules;
   counts: { services: number; availability: number; professionals: number; products: number };
+  /** FASE 2 · P8 — a página já foi personalizada de verdade (blocos/navegação/sobre). */
+  pageCustomized?: boolean;
+  /** FASE 2 · P8 — WhatsApp oficial conectado (item OPCIONAL do checklist). */
+  whatsappConnected?: boolean;
 }
 
 export interface SetupCheckItem {
@@ -300,30 +305,58 @@ export interface SetupCheckItem {
   done: boolean;
   label: string;
   href: string;
+  /** FASE 2 · P8 — item não obrigatório: pode ser pulado sem travar o progresso. */
+  optional?: boolean;
 }
 
+// FASE 2 · P8 — caminho operacional (ordem do ciclo de abrir a clínica):
+// dados → serviço → profissional → horários → (vitrine) → personalizar →
+// publicar → (opcional) WhatsApp. Progresso REAL; pular só o opcional;
+// "continuar depois" = ocultar o bloco (nada é perdido).
 export function setupChecklist(input: SetupCheckInput): SetupCheckItem[] {
   const { business, modules, counts } = input;
   const items: SetupCheckItem[] = [];
+  const skipped = new Set(Array.isArray(business.setupSkipped) ? business.setupSkipped : []);
   const hasContact = !!(String(business.whatsapp || '').trim() || String(business.phone || '').trim());
   const hasIdentity = !!(String(business.description || '').trim() || business.logo || business.cover);
-  items.push({
+  const push = (item: SetupCheckItem) => {
+    // Só OBRIGATÓRIOS podem ser pulados? Não: apenas `optional` honra o skip —
+    // um id obrigatório em setupSkipped (dado malicioso/legado) é ignorado.
+    // Item pulado conta como resolvido: o opcional nunca trava o 100%.
+    const honored = item.optional === true && skipped.has(item.id);
+    items.push(honored ? { ...item, done: true } : item);
+  };
+  push({
     id: 'profile',
     done: hasIdentity && hasContact,
-    label: 'Crie o perfil do negócio',
+    label: 'Dados da clínica',
     href: '/configuracoes',
   });
   if (modules.services || modules.bookings) {
-    items.push({ id: 'services', done: counts.services > 0, label: 'Cadastre seus serviços', href: '/servicos' });
+    push({ id: 'services', done: counts.services > 0, label: 'Cadastre o primeiro serviço', href: '/servicos' });
   }
   if (modules.bookings) {
-    items.push({ id: 'hours', done: counts.availability > 0, label: 'Defina quando você atende', href: '/disponibilidade' });
-    items.push({ id: 'team', done: counts.professionals > 0, label: 'Adicione profissionais', href: '/profissionais' });
+    // Ordem do ciclo (P8): quem realiza ANTES de quando atende.
+    push({ id: 'team', done: counts.professionals > 0, label: 'Cadastre um profissional', href: '/profissionais' });
+    push({ id: 'hours', done: counts.availability > 0, label: 'Configure os horários', href: '/disponibilidade' });
   }
   if (modules.products) {
-    items.push({ id: 'products', done: counts.products > 0, label: 'Monte sua vitrine de produtos', href: '/produtos' });
+    push({ id: 'products', done: counts.products > 0, label: 'Monte sua vitrine de produtos', href: '/produtos' });
   }
-  items.push({ id: 'publish', done: !!business.published, label: 'Publique sua página', href: '/pagina' });
+  push({
+    id: 'personalize',
+    done: input.pageCustomized === true,
+    label: 'Personalize a página',
+    href: '/pagina',
+  });
+  push({ id: 'publish', done: !!business.published, label: 'Publique a página', href: '/pagina' });
+  push({
+    id: 'whatsapp',
+    done: input.whatsappConnected === true,
+    label: 'Conecte o WhatsApp',
+    href: '/canais',
+    optional: true,
+  });
   return items;
 }
 

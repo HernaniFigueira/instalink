@@ -66,12 +66,19 @@ export function WorkspaceTopbar({ group, page, query, searchItems, activePath, a
   const newRef = useOutside(() => setNewOpen(false));
   const helpRef = useOutside(() => setHelpOpen(false));
 
+  // FASE 2 · P9 — Quick Create GLOBAL: as seis criações do produto, somente o
+  // que o papel/módulo deste usuário permite (canCreate vem do catálogo).
+  // `open: 'novo=1'` = a página abre o formulário em Workspace Sheet na hora.
   const createItems = [
-    { href: '/agenda', label: 'Novo agendamento', icon: 'calendarPlus' },
-    { href: '/clientes', label: 'Novo cliente', icon: 'users' },
-    { href: '/tarefas', label: 'Nova tarefa', icon: 'tasks' },
-    { href: '/servicos', label: 'Novo serviço', icon: 'service' },
+    { href: '/agenda', label: 'Novo agendamento', icon: 'calendarPlus', open: 'novo=1' },
+    { href: '/clientes', label: 'Novo paciente', icon: 'users', open: 'novo=1' },
+    { href: '/profissionais', label: 'Novo profissional', icon: 'idcard', open: '' },
+    { href: '/servicos', label: 'Novo serviço', icon: 'service', open: '' },
+    { href: '/tarefas', label: 'Nova tarefa', icon: 'tasks', open: '' },
+    { href: '/financeiro', label: 'Recebimento', icon: 'wallet', open: 'novo=1' },
   ].filter((i) => canCreate.includes(i.href));
+  const createHref = (i: { href: string; open: string }) =>
+    `${i.href}${query || '?'}${query ? '&' : ''}${i.open || ''}`;
 
   return (
     <header className="ws-topbar">
@@ -128,7 +135,7 @@ export function WorkspaceTopbar({ group, page, query, searchItems, activePath, a
             {newOpen && (
               <div className="ws-pop" role="menu" aria-label="Criar novo">
                 {createItems.map((i) => (
-                  <Link key={i.href} href={`${i.href}${query}`} role="menuitem" className="ws-pop__item"
+                  <Link key={i.href + i.label} href={createHref(i)} role="menuitem" className="ws-pop__item"
                     onClick={() => setNewOpen(false)}>
                     <Icon n={i.icon} size={15} className="text-[var(--brand-fg)]" /> {i.label}
                   </Link>

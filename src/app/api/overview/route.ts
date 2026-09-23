@@ -250,6 +250,17 @@ export async function GET(req: NextRequest) {
   // Itens calculados a partir de dados existentes (lib/dashboard.ts);
   // nada é pré-marcado como concluído. A área é opcional e some quando
   // não há pendência.
+  // FASE 2 · P8 — personalização REAL da página (nenhum número inventado):
+  // bloco desativado, navegação escolhida, "Sobre" ligado ou ordem manual.
+  const page = db.pages.find((p) => p.businessId === bId);
+  const pageCustomized = !!(
+    page && (
+      (page.blocks || []).some((blk) => blk.enabled === false)
+      || ((business as any).navItems?.length || 0) > 0
+      || (business as any).navCustom === true
+      || business.about?.enabled === true
+    )
+  );
   const setupItems = setupChecklist({
     business,
     modules: m,
@@ -259,8 +270,13 @@ export async function GET(req: NextRequest) {
       professionals: db.professionals.filter((p) => p.businessId === bId && p.active).length,
       products: db.products.filter((p) => p.businessId === bId && p.active).length,
     },
+    pageCustomized,
+    whatsappConnected: business.whatsappIntegration?.status === 'connected',
   });
-  const checklist = setupItems.map((c) => ({ done: c.done, label: c.label, href: `${c.href}${q}` }));
+  const checklist = setupItems.map((c) => ({
+    done: c.done, label: c.label, href: `${c.href}${q}`,
+    id: c.id, optional: c.optional === true,
+  }));
   const pendingSetup = checklist.filter((c) => !c.done).length;
 
   // ── Resultados do período (P2, Bloco 1) ──

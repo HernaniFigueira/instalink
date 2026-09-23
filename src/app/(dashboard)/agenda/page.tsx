@@ -370,6 +370,14 @@ export default function AgendaPage() {
     /** A3.4 fix (revisão B5): "Encaixar na agenda" vem da FILA já preenchido. */
     contactId?: string; name?: string; phone?: string; serviceId?: string;
   } | null>(null);
+  // FASE 2 · P9 — Quick Create global: ?novo=1 abre o sheet de agendamento
+  // direto (uma abertura por visita; SPA não reabre sozinho ao voltar).
+  const [novoHandled, setNovoHandled] = useState(false);
+  useEffect(() => {
+    if (novoHandled || !businessId || params.get('novo') !== '1') return;
+    setNovoHandled(true);
+    setCreating({ date: '', time: '', professionalId: '', name: '', phone: '' });
+  }, [novoHandled, businessId, params]);
   // A3.4 · Bloco 4 — fila do balcão (entidade própria, fora da agenda).
   const [queueRows, setQueueRows] = useState<QueueRow[]>([]);
   // A3.4 fix (revisão B5): o registro do atendimento tem permissão PRÓPRIA —

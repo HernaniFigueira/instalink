@@ -313,7 +313,7 @@ export function DashboardShell({ children }: { children: React.ReactNode }) {
         onUnit={switchBiz}
         onLogout={logout}
         onOpenNav={() => setMobileNav(true)}
-        canCreate={nav.allowed.map((i) => i.href).filter((h) => ['/agenda', '/clientes', '/tarefas', '/servicos'].includes(h))}
+        canCreate={nav.allowed.map((i) => i.href).filter((h) => ['/agenda', '/clientes', '/tarefas', '/servicos', '/profissionais', '/financeiro'].includes(h))}
       />
 
       {nav.allowed.some(i => i.href === '/conversas') && activePath !== '/conversas' && activePath !== '/organizacao' && <ConversationsDock key={business.id} businessId={business.id}/>}

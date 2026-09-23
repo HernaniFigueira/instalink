@@ -41,6 +41,13 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
       if (body.clinicType !== undefined && isClinicType(body.clinicType)) {
         b.clinicType = body.clinicType;
       }
+      // FASE 2 · P8 — itens pulados do checklist (ids curtos; lista limitada).
+      if (Array.isArray(body.setupSkipped)) {
+        b.setupSkipped = body.setupSkipped
+          .filter((x: unknown) => typeof x === 'string' && x.trim().length > 0 && x.length <= 40)
+          .map((x: string) => x.trim())
+          .slice(0, 20);
+      }
       for (const key of ALLOWED) {
         if (body[key] === undefined) continue;
         if (key === 'modes') {

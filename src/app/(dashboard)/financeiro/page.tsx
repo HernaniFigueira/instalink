@@ -109,6 +109,14 @@ export default function FinanceiroPage() {
 
   useEffect(() => { load(); }, [load]);
 
+  // FASE 2 · P9 — Quick Create global: ?novo=1 abre o registro de recebimento.
+  const [novoHandled, setNovoHandled] = useState(false);
+  useEffect(() => {
+    if (novoHandled || !businessId || params.get('novo') !== '1') return;
+    setNovoHandled(true);
+    setEditing(blankEntry());
+  }, [novoHandled, businessId, params]);
+
   async function save() {
     if (!editing) return;
     setSaving(true); setFormError('');

@@ -85,7 +85,7 @@ interface Overview {
   whatsapp?: { status: string; open: number; unread: number; pendingMessages: number; link: string } | null;
   hasBookingsModule?: boolean;
   upcoming: Array<{ id: string; customerName: string; date: string; time: string; status: string; service: string; professional: string }>;
-  checklist: Array<{ done: boolean; label: string; href: string }>;
+  checklist: Array<{ done: boolean; label: string; href: string; id?: string; optional?: boolean }>;
   pct: number;
   pendingSetup?: number;
   period: number;
@@ -130,6 +130,24 @@ export default function DashboardPage() {
   function hideSetup() {
     setSetupHidden(true);
     try { localStorage.setItem(`il-setup-hidden-${businessId}`, '1'); } catch { /* noop */ }
+  }
+  // FASE 2 · P8 — pular um item OBRIGATÓRIO não existe: só os `optional`
+  // têm este botão, e a gravação é no servidor (reabrir o painel mantém).
+  const [skipping, setSkipping] = useState('');
+  async function skipSetupItem(id: string) {
+    if (!businessId || skipping) return;
+    const current = (data?.checklist || []).filter((c) => c.optional && c.id && !c.done).map((c) => c.id!);
+    const next = Array.from(new Set([...current, id])); // mantém os já pulados que ainda aparecem
+    const already = (data?.checklist || []).filter((c) => c.done && c.optional && c.id).map((c) => c.id!);
+    const payload = Array.from(new Set([...already, ...next]));
+    setSkipping(id);
+    try {
+      const res = await fetch(`/api/businesses/${businessId}`, {
+        method: 'PATCH', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ setupSkipped: payload }),
+      });
+      if (res.ok) setRetry((r) => r + 1); // recarrega o overview com o progresso real
+    } finally { setSkipping(''); }
   }
   const { notice, dismiss } = useForbiddenNotice('Início');
   // Estados completos (auditoria §12, mesma família do bug do /recursos):
@@ -386,11 +404,23 @@ export default function DashboardPage() {
                         <span className="line-through opacity-70 flex-1">{c.label}</span>
                       </div>
                     ) : (
-                      <Link key={c.label} href={`${c.href}${c.href.includes('?') ? '&' : '?'}b=${business.id}`} className="dsh-check hover:border-[var(--brand-border)]">
-                        <span className="dsh-check__mark dsh-check__mark--todo" aria-hidden="true" />
-                        <span className="flex-1">{c.label}</span>
-                        <span className="text-[11.5px] font-bold text-[var(--brand-fg)]">Fazer →</span>
-                      </Link>
+                      <div key={c.label} className="flex gap-1.5 items-stretch">
+                        <Link href={`${c.href}${c.href.includes('?') ? '&' : '?'}b=${business.id}`} className="dsh-check hover:border-[var(--brand-border)] flex-1">
+                          <span className="dsh-check__mark dsh-check__mark--todo" aria-hidden="true" />
+                          <span className="flex-1">{c.label}{c.optional ? ' (opcional)' : ''}</span>
+                          <span className="text-[11.5px] font-bold text-[var(--brand-fg)]">Fazer →</span>
+                        </Link>
+                        {/* FASE 2 · P8 — pular só o NÃO obrigatório (nunca trava o progresso). */}
+                        {c.optional && c.id && (
+                          <button type="button"
+                            onClick={() => { void skipSetupItem(c.id!); }}
+                            disabled={skipping === c.id}
+                            className="rounded-md border border-[var(--border)] px-2 text-[11px] font-semibold text-[var(--text-muted)] hover:bg-[var(--surface-hover)] disabled:opacity-60"
+                            title="Marcar como resolvido sem conectar agora">
+                            {skipping === c.id ? '…' : 'Pular'}
+                          </button>
+                        )}
+                      </div>
                     )
                   ))}
                 </div>

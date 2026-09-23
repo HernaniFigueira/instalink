@@ -255,6 +255,12 @@ export interface Business {
   // Automações operacionais (confirmação, lembrete, pós-atendimento, avaliação,
   // retorno). Ausente/true = ativa; false = desligada pelo lojista.
   automations?: Record<string, boolean>;
+  /**
+   * FASE 2 · P8 — itens OBRIGATÓRIOS do checklist de onboarding que o usuário
+   * PULOU (ids em lib/dashboard.ts). Aditivo/ausente = nada pulado. Itens não
+   * listados aqui nunca são afetados; só os `optional` podem ser pulados.
+   */
+  setupSkipped?: string[];
   // P4 — bandeiras de CAPACIDADE por unidade (camada única de planos/flags).
   // Nunca é lida fora de lib/automation/capabilities.ts; ausente = padrão do
   // produto (nada de `if plan === ...` espalhado pelo código).
