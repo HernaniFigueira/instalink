@@ -727,6 +727,29 @@ export interface Encounter {
   signedBy: string;
   /** P6 · veterinária — pet atendido ('' quando não se aplica). Aditivo. */
   petId?: string;
+  // ── FASE 2 · P3 — retorno ESTRUTURADO (aditivo) ──
+  // Ausente em dado legado (normalizeDB deriva: texto ⇒ 'custom', vazio ⇒ 'none').
+  //   none    → sem retorno; date → data específica; interval → após N dias;
+  //   custom  → só o texto livre (`followUp`, que continua imprimível).
+  followUpMode?: EncounterFollowUpMode;
+  followUpDate?: string; // YYYY-MM-DD (modo 'date')
+  followUpDays?: number; // dias (modo 'interval')
+  // Arquivos do atendimento: SÓ referências/metadados — o binário fica no
+  // Storage (Vercel Blob), nunca no documento. Aditivo/ausente = sem arquivos.
+  files?: EncounterFile[];
+}
+
+/** Como fica o acompanhamento depois deste atendimento. */
+export type EncounterFollowUpMode = 'none' | 'date' | 'interval' | 'custom';
+
+/** Referência de um arquivo anexado ao atendimento (Storage + metadados). */
+export interface EncounterFile {
+  id: ID;
+  name: string;
+  url: string;
+  size: number;
+  createdAt: string;
+  by: string;
 }
 
 export type ReviewSource = 'site' | 'google';

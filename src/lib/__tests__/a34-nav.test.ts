@@ -91,7 +91,8 @@ describe('A3.4 · NAV — seções e ordem nova', () => {
 
   it('Profissionais e Disponibilidade estão em OPERAÇÃO (não mais em Oferta)', () => {
     expect(panelRoutesIn('operacao').map((r) => r.href)).toEqual([
-      '/agenda', '/profissionais', '/disponibilidade', '/conversas', '/agente', '/tarefas', '/pedidos',
+      // FASE 2 · P1 — hub Estrutura é a porta de entrada da operação da clínica.
+      '/estrutura', '/agenda', '/profissionais', '/disponibilidade', '/conversas', '/agente', '/tarefas', '/pedidos',
     ]);
     expect(panelRoutesIn('oferta').map((r) => r.href)).toEqual(['/servicos', '/produtos']);
   });

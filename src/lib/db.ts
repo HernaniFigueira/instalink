@@ -100,6 +100,13 @@ export function normalizeDB(raw: unknown): DB {
     // Documento criado antes do vínculo com a fila: sem id de entrada, mas
     // SEMPRE string (o resto do código compara direto, nunca `undefined`).
     if (typeof e.queueId !== 'string') e.queueId = '';
+    // FASE 2 · P3 — retorno estruturado + arquivos (aditivos e idempotentes).
+    if (!['none', 'date', 'interval', 'custom'].includes(e.followUpMode)) {
+      e.followUpMode = typeof e.followUp === 'string' && e.followUp.trim() ? 'custom' : 'none';
+    }
+    if (typeof e.followUpDate !== 'string') e.followUpDate = '';
+    if (typeof e.followUpDays !== 'number' || !Number.isFinite(e.followUpDays) || e.followUpDays <= 0) e.followUpDays = 0;
+    if (!Array.isArray(e.files)) e.files = [];
   }
   // P3: Normalização defensiva de entregas de webhooks
   for (const d of base.webhookDeliveries as any[]) {
