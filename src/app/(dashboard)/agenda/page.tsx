@@ -1269,6 +1269,7 @@ export default function AgendaPage() {
                 {helpOpen && (
                   <div role="dialog" aria-label="Legenda e ajuda da agenda"
                     className="absolute right-0 top-[calc(100%+6px)] z-50 w-[min(22rem,calc(100vw-2rem))] rounded-lg border border-[var(--border)] bg-[var(--surface)] shadow-lg p-3 space-y-2.5">
+                    <p className="text-xs text-[var(--text-muted)] mb-2">Clique num atendimento para detalhes e ações; arraste para reagendar.</p>
                     <div className="flex flex-wrap items-center gap-x-3 gap-y-1" aria-label="Legenda dos estados">
                       {statusOptions.map((s) => (
                         <span key={s} className="inline-flex items-center gap-1 text-[11px] font-medium text-zinc-500">

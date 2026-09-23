@@ -110,7 +110,7 @@ describe('A3.4 · NAV — seções e ordem nova', () => {
   it('Execuções NÃO aparece na sidebar — e continua acessível por atalho contextual', () => {
     const nav = panelNavigation(ctx());
     expect(nav.sidebar.map((r) => r.href)).not.toContain('/execucoes');
-    expect(nav.more.map((r) => r.href)).toEqual(['/execucoes']);
+    expect(nav.more.map((r) => r.href)).toEqual(['/execucoes', '/perfil']); // perfil fora do menu (AccountMenu)
     // O atalho vive dentro de Automações (fonte: URLs diretas do painel).
     const automations = read('src/components/dashboard/AutomationsView.tsx');
     expect(automations).toMatch(/\/execucoes/);

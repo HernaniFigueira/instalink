@@ -444,11 +444,11 @@ describe('A3.4 · LINGUAGEM — sem promessa de assinatura digital', () => {
 
 // ═══════════════════════════════════════════════════════════════
 describe('A3.4 · MOBILE (320–430px) — sem rolagem horizontal da página', () => {
-  it('cabeçalho da Agenda: só título + ajuda (sem subtítulo que estique a viewport)', () => {
-    // HOMOLOGAÇÃO · P1 — sem frase permanente sob o título; ajuda via "?".
+  it('cabeçalho da Agenda: só o título (sem "?" nem subtítulo — fechamento item 11)', () => {
+    // Sem frase permanente sob o título; ajuda saiu do "?" inline (legenda).
     expect(AGENDA).toMatch(/>Agenda<\/h1>/);
-    expect(AGENDA).not.toMatch(/Clique num atendimento para detalhes e ações\.\s*<\/span>/);
-    expect(AGENDA).toContain('Clique num atendimento para detalhes e ações; arraste para reagendar');
+    expect(AGENDA).not.toMatch(/aria-label="Ajuda da agenda"/);
+    expect(AGENDA).not.toMatch(/className="ws-help"/);
     expect(AGENDA).not.toMatch(/className="block max-w-full text-xs text-\[var\(--text-muted\)\] truncate"/);
     // Sem largura fixa absurda no cabeçalho.
     expect(AGENDA.slice(0, AGENDA.indexOf('id="agenda') + 2000)).not.toMatch(/\bw-\[\d{4,}px\]/);

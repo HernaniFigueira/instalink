@@ -78,7 +78,7 @@ export const WORKSPACE_AREAS: WorkspaceAreaDef[] = [
   },
   {
     id: 'ajustes', label: 'Ajustes', icon: 'settings', color: 'var(--text-muted)',
-    routes: ['/configuracoes', '/recursos', '/canais'],
+    routes: ['/configuracoes', '/recursos', '/canais', '/perfil'],
   },
 ];
 
