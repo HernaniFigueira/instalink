@@ -54,7 +54,7 @@ export const WORKSPACE_AREAS: WorkspaceAreaDef[] = [
     // MESMA pergunta do usuário ("quem atende o quê, quando, com qual acesso")
     // — agrupados na experiência, separados no modelo.
     id: 'estrutura', label: 'Estrutura da clínica', icon: 'grid', color: 'var(--brand)',
-    routes: ['/servicos', '/profissionais', '/disponibilidade', '/equipe', '/produtos'],
+    routes: ['/estrutura', '/servicos', '/profissionais', '/disponibilidade', '/equipe', '/produtos'],
   },
   {
     id: 'operacao', label: 'Operação', icon: 'tasks', color: 'var(--orange-deep)',

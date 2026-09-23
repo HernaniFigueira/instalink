@@ -164,6 +164,8 @@ export const AREA_LABELS: Record<string, string> = {
   pedidos: 'Pedidos',
   catalogo: 'Catálogo',
   servicos: 'Serviços',
+  // FASE 2 · P1 — hub que reúne Serviços/Profissionais/Horários/Acessos.
+  estrutura: 'Estrutura da clínica',
   profissionais: 'Profissionais',
   pagina: 'Página',
   agente: 'Agente',

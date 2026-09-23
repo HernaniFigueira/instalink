@@ -33,7 +33,7 @@ describe('360 navigation is an authorized projection', () => {
     // "Estrutura da clínica" reúne os quatro conceitos pedidos, sem unir modelos.
     const estrutura = areas.find((a) => a.id === 'estrutura')!;
     expect(estrutura.items.map((i) => i.href).sort()).toEqual(
-      ['/disponibilidade', '/equipe', '/produtos', '/profissionais', '/servicos'].sort(),
+      ['/disponibilidade', '/equipe', '/estrutura', '/produtos', '/profissionais', '/servicos'].sort(),
     );
   });
 

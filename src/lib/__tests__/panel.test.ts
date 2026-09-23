@@ -47,7 +47,7 @@ function dashboardRouteFolders(): string[] {
 // ═══════════════════════════════════════════════════════════════
 describe('catálogo — completude (por qual porta se chega até mim?)', () => {
   it('tem as 22 portas da arquitetura consolidada', () => {
-    expect(PANEL_ROUTES).toHaveLength(22);
+    expect(PANEL_ROUTES).toHaveLength(23);
   });
 
   it('toda porta do catálogo tem uma rota real no disco', () => {
@@ -186,7 +186,7 @@ describe('catálogo — seções', () => {
     // A3.4: Profissionais, Disponibilidade e Pedidos entraram em Operação.
     // Pedidos só existe com o módulo ativo (modes: ['orders']).
     expect(panelRoutesIn('operacao').map((r) => r.href)).toEqual([
-      '/agenda', '/profissionais', '/disponibilidade', '/conversas', '/agente', '/tarefas', '/pedidos',
+      '/estrutura', '/agenda', '/profissionais', '/disponibilidade', '/conversas', '/agente', '/tarefas', '/pedidos',
     ]);
     expect(panelRoutesIn('administracao').map((r) => r.href)).toEqual(['/equipe', '/recursos', '/configuracoes']);
   });
@@ -210,7 +210,7 @@ describe('sidebar — projeção (permissão ∩ módulos, ordem do catálogo)',
       // A3.4 — Operação: agenda + quem atende + quando atende + o dia.
       // (Pedidos/Produtos exigem os módulos correspondentes: entram no teste
       // seguinte, com o contexto de quem os tem.)
-      '/agenda', '/profissionais', '/disponibilidade',
+      '/estrutura', '/agenda', '/profissionais', '/disponibilidade',
       '/conversas', '/agente', '/tarefas',
       '/clientes', '/funil',
       '/servicos',
@@ -738,7 +738,7 @@ describe('guardas de servidor (regressão)', () => {
     // Regressão de arquitetura: adicionar destino ao painel exige explicar aqui.
     expect(allowedPanelRoutes(ctx()).map((r) => r.href)).toEqual([
       '/dashboard',
-      '/agenda', '/profissionais', '/disponibilidade',
+      '/estrutura', '/agenda', '/profissionais', '/disponibilidade',
       '/conversas', '/agente', '/tarefas',
       '/clientes', '/funil',
       '/servicos',

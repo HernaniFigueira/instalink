@@ -230,6 +230,16 @@ export const PANEL_ROUTES: PanelRouteDef[] = [
 
   // ── Operação: onde o dia acontece ──
   {
+    // FASE 2 · P1 — HUB "Estrutura da clínica". Uma tela que reúne Serviços,
+    // Profissionais, Horários e Acessos (com contagens/status REAIS) sem
+    // unificar os modelos internos (Professional e User/Member seguem
+    // separados). As rotas antigas continuam existindo e alcançáveis daqui.
+    href: '/estrutura', label: 'Estrutura', icon: 'grid', section: 'operacao',
+    modes: ['services', 'bookings'], permission: ['catalogo', 'equipe'], area: 'estrutura',
+    description: 'O que a clínica oferece, quem realiza, quando atende e quem pode entrar no sistema.',
+    width: 'full',
+  },
+  {
     href: '/agenda', label: 'Agenda', icon: 'calendar', section: 'operacao',
     modes: ['bookings'], permission: 'agenda', area: 'agenda',
     description: 'O que está marcado, com quem, e o que ainda precisa ser fechado.',
