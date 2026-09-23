@@ -13,6 +13,7 @@ import type { BusinessMode, Niche } from '@/lib/types';
 import { VALID_MODES, VALID_NICHES, defaultBookingConfig, isClinicType } from '@/lib/types';
 import { NEW_BUSINESS_DEFAULTS } from '@/lib/templates';
 import { templateFromPreset } from '@/lib/clinic-presets';
+import { clinicPresetId, presetById } from '@/lib/themes';
 
 // POST = cria negócio + página inicial a partir do template.
 // NOVO FLUXO: o cadastro não pergunta mais "tipo de negócio" nem "forma de
@@ -90,7 +91,15 @@ export async function POST(req: NextRequest) {
       if (unitOwnerId !== user.id) {
         d.members.push({ id: randomUUID(), businessId, userId: user.id, role: 'ADMIN', permissions: {}, active: true, note: 'Administrador da organização', invitedBy: unitOwnerId, createdAt: now, updatedAt: now });
       }
-      d.pages.push({ id: randomUUID(), businessId, presetId: defaultPresetId(niche), theme: defaultTheme(niche), blocks, updatedAt: now });
+      // FASE 2 · P9 — unidade nova nasce com o MODELO do tipo de clínica
+      // (mesmos blocos; só aparência). Sem tipo ⇒ nicho, como sempre.
+      const clinicPreset = clinicType !== 'geral' ? clinicPresetId(clinicType) : '';
+      const initialPreset = clinicPreset || defaultPresetId(niche);
+      d.pages.push({
+        id: randomUUID(), businessId, presetId: initialPreset,
+        theme: clinicPreset ? { ...presetById(clinicPreset).theme } : defaultTheme(niche),
+        blocks, updatedAt: now,
+      });
       // FASE 2 · P5 — configuração inicial: semeia a ficha de anamnese do
       // preset do tipo de clínica ('geral' não semeia — o hub pode criar depois).
       if (clinicType !== 'geral') {

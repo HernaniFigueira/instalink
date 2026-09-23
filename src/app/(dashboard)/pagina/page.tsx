@@ -6,7 +6,7 @@ import { BLOCK_DEFS } from '@/lib/templates';
 import { blockModuleGate } from '@/lib/features';
 import { NAV_ANCHORS, availableNavIds } from '@/lib/nav';
 import type { NavItemConfig, Professional, Service, Product } from '@/lib/types';
-import { THEME_PRESETS, matchingPreset, presetById } from '@/lib/themes';
+import { THEME_PRESETS, clinicPresetId, matchingPreset, presetById } from '@/lib/themes';
 import { cn } from '@/lib/utils';
 import type { Block, BlockType, Business, Page, Theme } from '@/lib/types';
 import { PageSkeleton, Tabs } from '@/components/ui';
@@ -306,6 +306,7 @@ export default function PaginaPage() {
                   theme={page.theme}
                   presetId={page.presetId || undefined}
                   niche={business.niche}
+                  clinicType={business.clinicType}
                   onApply={(t, id) => setPage({ ...page, theme: t, presetId: id })}
                 />
                 <details className="bg-white border border-zinc-200 rounded-lg p-4">
@@ -1295,14 +1296,26 @@ function ReviewsEditor({ businessId }: { businessId: string }) {
 /** Cartões VISUAIS de modelo — o ponto de partida da página, como no mockup
     da seção "Modelo": aparência inicial em miniatura, estado aplicado e
     recomendação por contexto do negócio (quando o nicho existe). */
-function ThemePresetCards({ theme, presetId, niche, onApply }: {
-  theme: Theme; presetId?: string; niche?: string; onApply: (t: Theme, id: string) => void;
+function ThemePresetCards({ theme, presetId, niche, clinicType, onApply }: {
+  theme: Theme; presetId?: string; niche?: string;
+  /** FASE 2 · P9 — tipo da clínica: destaca o modelo do preset (mesmos blocos). */
+  clinicType?: string;
+  onApply: (t: Theme, id: string) => void;
 }) {
   const match = matchingPreset(theme);
   const baseName = presetId ? presetById(presetId).name : '';
   const NICHE_REC: Record<string, string> = { alimentacao: 'pordosol', beleza: 'rose', pet: 'fresh', saude: 'fresh', loja: 'noite', servicos: 'oceano' };
   const NICHE_LABEL: Record<string, string> = { alimentacao: 'alimentação', beleza: 'beleza', pet: 'pet', saude: 'saúde', loja: 'loja', servicos: 'serviços' };
   const rec = niche ? NICHE_REC[niche] : undefined;
+  // FASE 2 · P9 — o modelo do tipo da clínica aparece PRIMEIRO, com selo.
+  const clinicLabel: Record<string, string> = {
+    medica: 'médica', odontologica: 'odontológica', veterinaria: 'veterinária',
+    estetica: 'estética', particular: 'profissional particular', geral: 'clínica',
+  };
+  const suggestedId = clinicType ? clinicPresetId(clinicType) : '';
+  const ordered = suggestedId
+    ? [...THEME_PRESETS].sort((a, b) => (a.id === suggestedId ? -1 : b.id === suggestedId ? 1 : 0))
+    : THEME_PRESETS;
   return (
       <div className="bg-white border border-zinc-200 rounded-lg p-5">
         <div className="flex flex-wrap items-center justify-between gap-2 mb-1">
@@ -1319,7 +1332,7 @@ function ThemePresetCards({ theme, presetId, niche, onApply }: {
         </div>
         <p className="text-xs text-zinc-500 mb-4">Escolha uma combinação fechada de cores, fonte e formato — depois ajuste o que quiser abaixo.</p>
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-          {THEME_PRESETS.map((p) => (
+          {ordered.map((p) => (
             <button key={p.id} onClick={() => onApply({ ...p.theme }, p.id)}
               className={cn('text-left rounded-md border-2 p-1.5 transition-all hover:-translate-y-0.5', match === p.id ? 'border-zinc-900' : 'border-transparent hover:border-zinc-200')}
               aria-label={`Aplicar modelo ${p.name}`}>
@@ -1337,7 +1350,12 @@ function ThemePresetCards({ theme, presetId, niche, onApply }: {
               </span>
               <span className="block text-xs font-bold mt-1.5 px-0.5">{p.name}</span>
               <span className="block text-[11px] text-zinc-500 px-0.5 leading-tight">{p.hint}</span>
-              {rec === p.id && match !== p.id && niche && (
+              {suggestedId === p.id && match !== p.id && (
+                <span className="block mt-1 px-0.5">
+                  <span className="text-[10px] font-extrabold bg-[var(--brand-soft)] text-[var(--brand-fg)] px-2 py-0.5 rounded-full">Sugerido para clínica {clinicLabel[p.clinicType || ''] || ''}</span>
+                </span>
+              )}
+              {!(suggestedId === p.id) && rec === p.id && match !== p.id && niche && (
                 <span className="block mt-1 px-0.5">
                   <span className="text-[10px] font-extrabold bg-[var(--brand-soft)] text-[var(--brand-fg)] px-2 py-0.5 rounded-full">Recomendado para {NICHE_LABEL[niche]}</span>
                 </span>
