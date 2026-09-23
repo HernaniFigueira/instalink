@@ -273,9 +273,11 @@ export default function ConfigPage() {
                 <label className="block"><span className="text-xs font-semibold tracking-wide uppercase text-zinc-500">E-mail</span><input value={biz.email} onChange={(e) => set('email', e.target.value)} className={input + ' mt-1'} /></label>
               </div>
               <label className="block"><span className="text-xs font-semibold tracking-wide uppercase text-zinc-500">Descrição</span><textarea value={biz.description} onChange={(e) => set('description', e.target.value)} className={input + ' mt-1'} rows={2} placeholder="Ex: Consultas de estética avançada com hora marcada." /></label>
-              <div className="grid sm:grid-cols-2 gap-4">
-                <ImageUpload label="LOGO" value={biz.logo} onChange={(url) => set('logo', url)} businessId={businessId} circle />
-                <ImageUpload label="CAPA / BANNER" value={biz.cover} onChange={(url) => set('cover', url)} businessId={businessId} />
+              {/* HOMOLOGAÇÃO · P1 — Identidade da clínica = nome + logo.
+                  A CAPA da página pública mora SÓ em Página → Perfil. */}
+              <div className="space-y-2">
+                <ImageUpload label="LOGO DA CLÍNICA" value={biz.logo} onChange={(url) => set('logo', url)} businessId={businessId} circle />
+                <p className="text-[11px] text-zinc-500">A capa/hero da página pública é editada em Página → Perfil — não aqui.</p>
               </div>
             </section>
 

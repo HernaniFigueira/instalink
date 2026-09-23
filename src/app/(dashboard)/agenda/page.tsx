@@ -1145,18 +1145,14 @@ export default function AgendaPage() {
     <div>
       {/* Cabeçalho compacto: a grade é o conteúdo — o título não compete. */}
       <div className="flex flex-wrap items-center justify-between gap-3 mb-4">
-        <div className="flex items-start gap-2.5 min-w-0">
-          <span className="w-9 h-9 shrink-0 rounded-lg bg-[var(--brand-soft)] text-[var(--brand-fg)] flex items-center justify-center shadow-brand">
-            <Icon n="calendar" size={18} />
-          </span>
-          <div className="min-w-0 flex-1">
-            <h1 className="text-lg font-bold tracking-tight text-[var(--text)] leading-tight">Agenda</h1>
-            {/* Bloco truncável (guarda de mobile): some por corte, nunca por
-                rolagem horizontal. Uma frase só — o resto vive na Legenda. */}
-            <span className="block max-w-full text-xs text-[var(--text-muted)] truncate">
-              Clique num atendimento para detalhes e ações.
-            </span>
-          </div>
+        {/* HOMOLOGAÇÃO · P1 — cabeçalho enxuto: título + controles.
+            A ajuda fica na Legenda (tooltip/popover), não em frase permanente. */}
+        <div className="flex items-center gap-2 min-w-0">
+          <h1 className="text-lg font-bold tracking-tight text-[var(--text)] leading-tight">Agenda</h1>
+          <button type="button" className="ws-help" title="Clique num atendimento para detalhes e ações; arraste para reagendar. Legenda completa no botão à direita."
+            aria-label="Ajuda da agenda" onClick={() => setHelpOpen(true)}>
+            <span aria-hidden="true" className="text-[15px] font-bold leading-none">?</span>
+          </button>
         </div>
         <div className="flex flex-wrap items-center justify-end gap-1.5 ml-auto">
           {loaded && (

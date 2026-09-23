@@ -383,7 +383,7 @@ export function PageHeader({ title, hint, action, icon }: { title: string; hint?
     <div className="flex flex-wrap items-start justify-between gap-3 mb-5">
       <div className="flex items-start gap-3 min-w-0">
         {icon && (
-          <span className="il-page-header__icon w-10 h-10 shrink-0 rounded-lg bg-gradient-to-br from-[var(--brand)] to-[var(--lilac)] text-white flex items-center justify-center shadow-brand">
+          <span className="il-page-header__icon w-10 h-10 shrink-0 rounded-lg bg-[var(--surface-3)] text-[var(--brand-fg)] flex items-center justify-center border border-[var(--border)]">
             <Icon n={icon} size={19} />
           </span>
         )}
@@ -692,8 +692,10 @@ export function HoursChips({ days, className, size = 'md' }: {
 }
 
 // ── Skeletons ───────────────────────────────────────────────
+// HOMOLOGAÇÃO · P0-5 — contraste real via tokens --skeleton-* + shimmer.
+// Nunca "branco sobre cinza quase branco"; não esconde lentidão — sinaliza.
 export function Skeleton({ className }: { className?: string }) {
-  return <div aria-hidden="true" className={cn('animate-pulse rounded-md bg-[var(--surface-3)]', className)} />;
+  return <div aria-hidden="true" className={cn('il-skeleton', className)} />;
 }
 
 export function PageSkeleton() {

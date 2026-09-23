@@ -151,22 +151,29 @@ export function WorkspaceNavigation({ nav, activePath, unit, collapsed, onCollap
   // público virou ação global na topbar.
   const identity = (withCollapse = true) => (
     <div className="workspace-identity">
-      {/* Identidade sem redundância: o logo da clínica (quando existe) OU a
-          marca do produto. O NOME da clínica não repete aqui — ele vive uma
-          única vez no seletor de unidade da topbar (troca de unidade incluída). */}
-      {!collapsed && (unit.logo
-        ? <img src={unit.logo} alt={unit.name || 'Clínica'} className="workspace-logo" />
-        : <span className="workspace-wordmark" title={unit.name || 'Minha clínica'}>Insta<span>Link</span></span>)}
+      {/* HOMOLOGAÇÃO · P1 — painel = GoDoutor (marca ESTÁVEL). A clínica é
+          CONTEXTO: nome/logo vivem no seletor da topbar — nunca trocam a
+          marca do produto na sidebar. */}
+      {!collapsed && (
+        <span className="workspace-wordmark workspace-wordmark--product" title="GoDoutor">
+          Go<span>Doutor</span>
+        </span>
+      )}
+      {collapsed && (
+        <span className="workspace-wordmark workspace-wordmark--product workspace-wordmark--mini" title="GoDoutor" aria-label="GoDoutor">
+          G<span>D</span>
+        </span>
+      )}
       {withCollapse && (
         <button
           type="button"
-          className={`workspace-icon-button workspace-identity__collapse${collapsed ? ' il-tip' : ''}`}
+          className={`workspace-collapse-btn${collapsed ? ' il-tip is-mini' : ''}`}
           aria-label={collapsed ? 'Expandir navegação' : 'Recolher navegação'}
           title={collapsed ? 'Expandir navegação' : 'Recolher navegação'}
           {...(collapsed ? { 'data-tip': 'Expandir navegação', 'data-tip-pos': 'right' } : {})}
           onClick={onCollapse}
         >
-          <Icon n={collapsed ? 'expand' : 'collapse'} size={16} />
+          <Icon n="panel" size={15} />
         </button>
       )}
     </div>

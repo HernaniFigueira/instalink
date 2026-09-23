@@ -93,11 +93,13 @@ describe('Etapa A — sidebar por seções', () => {
     expect(screen.queryByRole('navigation', { name: 'Ajustes' })).toBeNull();
   });
 
-  it('mantém a identidade da clínica (logo) na sidebar', () => {
+  it('marca estável na sidebar: GoDoutor (sem logo da clínica)', () => {
+    // HOMOLOGAÇÃO · P1 — painel é GoDoutor; logo/nome da clínica vivem no seletor da topbar.
     setup();
     const side = screen.getByRole('complementary', { name: 'Navegação da clínica' });
-    expect(side.querySelectorAll('img')).toHaveLength(1);
-    expect(side.querySelector('img')?.getAttribute('src')).toBe(unit.logo);
+    expect(side.querySelectorAll('img')).toHaveLength(0);
+    expect(side.textContent).toContain('GoDoutor');
+    expect(side.textContent).not.toContain(unit.name);
   });
 
   it('só recolhe no botão explícito', async () => {

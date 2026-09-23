@@ -25,9 +25,10 @@ import { readFaqItems, visibleFaqItems, type FaqItem } from '@/lib/faq';
 // seção vazia promessa. "Modelo" reúne estrutura + menu; as demais abrem o
 // formulário daquela área com a prévia fixa ao lado.
 // ═══════════════════════════════════════════════════════════════
-type PageSection = 'modelo' | 'perfil' | 'servicos' | 'equipe' | 'contato' | 'avaliacoes' | 'faq' | 'localizacao' | 'aparencia' | 'publicacao';
+type PageSection = 'modelo' | 'secoes' | 'perfil' | 'servicos' | 'equipe' | 'contato' | 'avaliacoes' | 'faq' | 'localizacao' | 'aparencia' | 'publicacao';
 const PAGE_SECTIONS: { id: PageSection; label: string; icon: string; available: (blocks: Block[]) => boolean }[] = [
   { id: 'modelo', label: 'Modelo', icon: 'grid', available: () => true },
+  { id: 'secoes', label: 'Seções da página', icon: 'panel', available: () => true },
   { id: 'perfil', label: 'Perfil', icon: 'store', available: (b) => b.some((x) => x.type === 'profile') },
   { id: 'servicos', label: 'Serviços', icon: 'service', available: (b) => b.some((x) => x.type === 'services') },
   { id: 'equipe', label: 'Equipe', icon: 'users', available: (b) => b.some((x) => x.type === 'professionals') },
@@ -302,6 +303,7 @@ export default function PaginaPage() {
           <fieldset disabled={saving} className="min-w-0 space-y-4">
             {active === 'modelo' && (
               <>
+                {/* HOMOLOGAÇÃO · P1 — Modelo = templates/preset da página. */}
                 <ThemePresetCards
                   theme={page.theme}
                   presetId={page.presetId || undefined}
@@ -309,32 +311,46 @@ export default function PaginaPage() {
                   clinicType={business.clinicType}
                   onApply={(t, id) => setPage({ ...page, theme: t, presetId: id })}
                 />
-                <details className="bg-white border border-zinc-200 rounded-lg p-4">
-                  <summary className="cursor-pointer text-xs font-bold uppercase tracking-wide text-[var(--text-muted)]">
-                    Itens do menu público e texto de apresentação · configuração técnica
-                  </summary>
-                  <div className="mt-3">
-                <PageNavTab
-                  business={business}
-                  businessId={businessId}
-                  blocks={blocks}
-                  services={services}
-                  products={products}
-                  professionals={professionals}
-                  reviewCount={rvCounts.published}
-                  draft={navDraft} setDraft={setNavDraft}
-                  onChangeAbout={about => setBusiness({ ...business, about })}
-                  onSaveNav={(navItems) => save({ navItems })}
-                  onAbout={(about) => save({ about } as any)}
-                />
-                  </div>
-                </details>
+                <div className="bg-white border border-zinc-200 rounded-lg p-4">
+                  <p className="font-bold text-sm mb-1">Itens do menu e blocos da página</p>
+                  <p className="text-xs text-zinc-500 mb-3">Ordem, ativação e conteúdo dos blocos vivem em <strong>Seções da página</strong>. O menu público segue o que está ativo.</p>
+                  <button type="button" onClick={() => setSection('secoes')}
+                    className="text-sm font-bold bg-[var(--surface-2)] text-[var(--text)] px-4 py-2 rounded-md hover:bg-[var(--brand-soft)] hover:text-[var(--brand-fg)]">
+                    Abrir Seções da página
+                  </button>
+                </div>
+              </>
+            )}
+            {active === 'secoes' && (
+              <>
+                <div className="bg-white border border-zinc-200 rounded-lg p-4">
+                  <p className="font-bold text-sm mb-1">Menu público e texto de apresentação</p>
+                  <p className="text-xs text-zinc-500 mb-3">Configure os itens de navegação e o “Sobre” — o menu segue os blocos ativos.</p>
+                  <details className="mt-2">
+                    <summary className="cursor-pointer text-xs font-bold uppercase tracking-wide text-[var(--text-muted)]">Abrir configuração do menu</summary>
+                    <div className="mt-3">
+                      <PageNavTab
+                        business={business}
+                        businessId={businessId}
+                        blocks={blocks}
+                        services={services}
+                        products={products}
+                        professionals={professionals}
+                        reviewCount={rvCounts.published}
+                        draft={navDraft} setDraft={setNavDraft}
+                        onChangeAbout={about => setBusiness({ ...business, about })}
+                        onSaveNav={(navItems) => save({ navItems })}
+                        onAbout={(about) => save({ about } as any)}
+                      />
+                    </div>
+                  </details>
+                </div>
 
                 <div className="space-y-4">
                   <div className="bg-white border border-zinc-200 rounded-lg overflow-hidden">
                     <div className="flex items-center justify-between px-4 py-2.5 border-b border-zinc-100 bg-zinc-50/60">
-                      <p className="text-xs font-semibold tracking-wide uppercase text-zinc-500">Ordem na página · {blocks.length} blocos</p>
-                      <p className="text-[11px] text-zinc-400 hidden sm:block">as setas definem a ordem de exibição</p>
+                      <p className="text-xs font-semibold tracking-wide uppercase text-zinc-500">Seções da página · {blocks.length} blocos</p>
+                      <p className="text-[11px] text-zinc-400 hidden sm:block">ordenar, ativar e editar — Editar abre o bloco</p>
                     </div>
                     <div className="divide-y divide-zinc-100">
                       {blocks.map((b, i) => {
@@ -370,7 +386,7 @@ export default function PaginaPage() {
                                 </p>
                                 <p className="text-xs text-zinc-500 truncate">{BLOCK_DEFS[b.type]?.hint}</p>
                               </div>
-                              <button aria-label={`Editar ${BLOCK_DEFS[b.type]?.label || b.type}`} aria-expanded={editing === b.id} onClick={() => setEditing(editing === b.id ? null : b.id)}
+                              <button aria-label={`Editar ${BLOCK_DEFS[b.type]?.label || b.type}`} aria-expanded={editing === b.id} onClick={() => { setEditing(editing === b.id ? null : b.id); }}
                                 className="text-xs font-bold bg-zinc-100 px-3 py-1.5 rounded-lg hover:bg-zinc-200">Editar</button>
                               <button onClick={() => updateBlocks(blocks.map((x) => (x.id === b.id ? { ...x, enabled: !x.enabled } : x)))}
                                 className={cn('text-xs font-bold px-3 py-1.5 rounded-lg min-w-[64px]', b.enabled ? 'bg-emerald-100 text-emerald-800 hover:bg-emerald-200' : 'bg-zinc-100 text-zinc-500 hover:bg-zinc-200')}>
@@ -401,15 +417,12 @@ export default function PaginaPage() {
                           </div>
                         );
                       })}
-                      {/* Página sem bloco de Perfil (raro): o "Sobre" continua visível
-                          na Estrutura — preso ao final, com o aviso de seção fixa. */}
                       {!hasProfileBlock && aboutRow}
                     </div>
                   </div>
                   <div className="bg-white border border-zinc-200 rounded-lg p-4 lg:sticky lg:top-4">
                     <p className="font-bold text-sm mb-1">Adicionar bloco</p>
-                    {/* Estrutura = o que existe e em que ordem. Cores/fonte ficam na aba Visual — nunca aqui. */}
-                    <p className="text-xs text-zinc-500 mb-3">Blocos de conversão seguem os módulos da empresa (Recursos). Agendamento e CTA já existem na página padrão.</p>
+                    <p className="text-xs text-zinc-500 mb-3">Blocos de conversão seguem os módulos da empresa (Recursos).</p>
                     <div className="flex flex-wrap gap-2">
                       {(Object.keys(BLOCK_DEFS) as BlockType[])
                         .filter((t) => t !== 'profile' && t !== 'booking' && t !== 'quote')
@@ -432,6 +445,12 @@ export default function PaginaPage() {
             )}
             {active === 'perfil' && (
               <>
+{/* HOMOLOGAÇÃO · P1 — capa/hero da página pública (mesma fonte institucional). */}
+                <div className="bg-white border border-zinc-200 rounded-lg p-4 space-y-2">
+                  <p className="font-bold text-sm">Capa da página</p>
+                  <p className="text-xs text-zinc-500">Aparece no topo da página pública. A logo fica em Configurações → Identidade.</p>
+                  <ImageUpload label="CAPA / HERO" value={business.cover || ''} onChange={(url) => setBusiness({ ...business, cover: url })} businessId={businessId} />
+                </div>
                 {cardFor(blockOf('profile'))}
                 <section className="pe-card">
                   <header className="pe-card__head">
@@ -484,7 +503,13 @@ export default function PaginaPage() {
               </>
             )}
             {active === 'faq' && cardFor(blockOf('faq'))}
-            {active === 'localizacao' && cardFor(blockOf('location'))}
+            {active === 'localizacao' && (
+              <>
+                <LocationAddressEditor business={business} businessId={businessId}
+                  onSave={(patch) => setBusiness({ ...business, ...patch })} />
+                {cardFor(blockOf('location'))}
+              </>
+            )}
             {active === 'aparencia' && (
               <ThemeEditor theme={page.theme} presetId={page.presetId || ''} onChange={(theme, presetId) => { setPage({ ...page, theme, presetId }); }} onSave={() => save({ theme: page.theme, presetId: page.presetId || '' })} saving={saving} />
             )}
@@ -495,7 +520,7 @@ export default function PaginaPage() {
         </div>
 
         {/* Prévia ÚNICA e fixa: conteúdo real em edição, sem salvar. */}
-        <aside className="pe-preview" aria-label="Prévia da página em edição">
+        <aside className="pe-preview" aria-label="Prévia">
           <ClinicPreview business={previewBusiness} page={page} catalog={catalog} />
         </aside>
       </div>
@@ -544,7 +569,7 @@ export default function PaginaPage() {
       <button type="button" className="pe-fab" onClick={() => setPreviewSheet(true)} aria-haspopup="dialog">
         <Icon n="monitor" size={15} /> Prévia
       </button>
-      <WorkspaceSheet open={previewSheet} onClose={() => setPreviewSheet(false)} title="Prévia da página"
+      <WorkspaceSheet open={previewSheet} onClose={() => setPreviewSheet(false)} title="Prévia"
         subtitle="Conteúdo real em edição, sem salvar" icon="eye" width="min(560px, 94vw)">
         <div className="p-3"><ClinicPreview business={previewBusiness} page={page} catalog={catalog} /></div>
       </WorkspaceSheet>
@@ -804,6 +829,63 @@ function blockIsEmpty(b: Block, rvCounts: { pending: number; published: number }
   }
 }
 
+
+// HOMOLOGAÇÃO · P1 — Localização edita a MESMA fonte institucional do
+// endereço (Business.address/…) que alimenta Configurações e a página.
+function LocationAddressEditor({ business, businessId, onSave }: {
+  business: Business;
+  businessId: string;
+  onSave: (patch: Partial<Business>) => void;
+}) {
+  const [draft, setDraft] = useState({
+    address: business.address || '',
+    mapsUrl: business.mapsUrl || '',
+  });
+  const [saving, setSaving] = useState(false);
+  const [saved, setSaved] = useState(false);
+  const save = async () => {
+    setSaving(true);
+    try {
+      const res = await fetch(`/api/businesses/${businessId}`, {
+        method: 'PATCH', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ address: draft.address, mapsUrl: draft.mapsUrl }),
+      });
+      if (res.ok) {
+        onSave({ address: draft.address, mapsUrl: draft.mapsUrl });
+        setSaved(true);
+        setTimeout(() => setSaved(false), 2000);
+      }
+    } finally { setSaving(false); }
+  };
+  return (
+    <div className="bg-white border border-zinc-200 rounded-lg p-4 space-y-3" data-testid="location-address-editor">
+      <div>
+        <p className="font-bold text-sm">Endereço da clínica</p>
+        <p className="text-xs text-zinc-500">Mesma fonte de Configurações → Contato — editar aqui atualiza o cadastro institucional.</p>
+      </div>
+      <label className="block">
+        <span className="text-xs font-semibold tracking-wide uppercase text-zinc-500">Endereço completo</span>
+        <input value={draft.address} onChange={(e) => setDraft({ ...draft, address: e.target.value })}
+          className="mt-1 w-full rounded-md border border-zinc-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500"
+          placeholder="Rua, número, bairro, cidade" />
+      </label>
+      <label className="block">
+        <span className="text-xs font-semibold tracking-wide uppercase text-zinc-500">Link do Google Maps</span>
+        <input value={draft.mapsUrl} onChange={(e) => setDraft({ ...draft, mapsUrl: e.target.value })}
+          className="mt-1 w-full rounded-md border border-zinc-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500"
+          placeholder="https://maps.app.goo.gl/…" />
+      </label>
+      <div className="flex items-center gap-3">
+        <button type="button" onClick={save} disabled={saving}
+          className="text-sm font-bold bg-[var(--brand)] text-white shadow-brand hover:bg-[var(--brand-strong)] px-4 py-2 rounded-md disabled:opacity-60">
+          {saving ? 'Salvando…' : 'Salvar endereço'}
+        </button>
+        {saved && <span className="text-xs font-bold text-[var(--success)]">Salvo ✓</span>}
+      </div>
+    </div>
+  );
+}
+
 function BlockSettings({ block, businessId, business, onChange, onSave, onRefresh }: {
   block: Block;
   businessId: string;
@@ -902,7 +984,7 @@ function BlockSettings({ block, businessId, business, onChange, onSave, onRefres
                   type="button"
                   onClick={() => activateModule('products')}
                   disabled={!!activating}
-                  className="inline-flex items-center gap-1.5 text-xs font-bold bg-emerald-600 text-white px-3.5 py-2 rounded-md hover:bg-emerald-700 disabled:opacity-60">
+                  className="inline-flex items-center gap-1.5 text-xs font-bold pe-btn--green px-3.5 py-2 rounded-md hover:bg-emerald-700 disabled:opacity-60">
                   {activating === 'products' && <span className="w-3 h-3 border-2 border-white/40 border-t-white rounded-full animate-spin" />}
                   Ativar Produtos agora
                 </button>
@@ -1209,7 +1291,7 @@ function ReviewsEditor({ businessId }: { businessId: string }) {
         <div className="flex gap-2 mt-2">
           {r.status !== 'published' && (
             <button disabled={acting === r.id} onClick={() => setStatus(r.id, 'published')}
-              className="text-xs font-bold bg-emerald-600 text-white px-3 py-1.5 rounded-lg hover:bg-emerald-700 disabled:opacity-50">
+              className="text-xs font-bold pe-btn--green px-3 py-1.5 rounded-lg hover:bg-emerald-700 disabled:opacity-50">
               Publicar
             </button>
           )}
@@ -1388,7 +1470,7 @@ function ThemeEditor({ theme, presetId, onChange, onSave, saving }: {
   return (
     <div className="space-y-4">
       <div className="space-y-4">
-        <details className="bg-white border border-zinc-200 rounded-lg p-5" open={!match}>
+        <details className="bg-white border border-zinc-200 rounded-lg p-5" open>
           <summary className="font-bold text-sm cursor-pointer">Ajustar cores e detalhes</summary>
           <div className="grid grid-cols-2 sm:grid-cols-3 gap-4 mt-4">
             {colors.map(([key, label]) => (
@@ -1427,12 +1509,12 @@ function ThemeEditor({ theme, presetId, onChange, onSave, saving }: {
           </button>
         </details>
         <div className="rounded-lg p-5" style={{ background: theme.background, color: theme.text }}>
-          <p className="text-xs font-bold opacity-60 mb-3">PRÉVIA AO VIVO</p>
+          <p className="text-xs font-bold opacity-60 mb-3">Prévia</p>
           <div className="text-center mb-3">
             <div className="w-14 h-14 mx-auto rounded-full flex items-center justify-center font-black"
               style={{ background: `linear-gradient(135deg, ${theme.primary}, ${theme.secondary})`, color: '#fff' }}>SN</div>
             <p className="font-extrabold mt-2">Seu negócio</p>
-            <p className="text-xs" style={{ color: theme.muted }}>Prévia com as cores escolhidas</p>
+            <p className="text-xs" style={{ color: theme.muted }}>Prévia</p>
           </div>
           <div className="p-4" style={{ background: theme.surface, borderRadius: theme.radius, border: '1px solid rgba(0,0,0,0.08)' }}>
             <p className="font-extrabold text-sm">Card de exemplo</p>
@@ -1456,7 +1538,7 @@ function PublishTab({ business, onSlug, onPublish }: { business: Business; busin
           <p className="font-bold text-sm">Status</p>
           <p className="text-sm text-zinc-500 mt-0.5">{business.published ? <><span className="inline-block w-2.5 h-2.5 rounded-full bg-emerald-500 align-middle" /> Sua página está no ar.</> : <><span className="inline-block w-2.5 h-2.5 rounded-full bg-amber-400 align-middle" /> Sua página está como rascunho (só você vê).</>}</p>
           <button onClick={() => onPublish(!business.published)}
-            className={cn('mt-3 text-sm font-bold px-5 py-2.5 rounded-md', business.published ? 'bg-zinc-100 hover:bg-zinc-200' : 'bg-emerald-600 text-white hover:bg-emerald-500')}>
+            className={cn('mt-3 text-sm font-bold px-5 py-2.5 rounded-md', business.published ? 'bg-zinc-100 hover:bg-zinc-200' : 'pe-btn--green')}>
             {business.published ? 'Despublicar' : 'Publicar página'}
           </button>
         </div>

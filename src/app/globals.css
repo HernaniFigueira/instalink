@@ -52,6 +52,9 @@
 
   /* ── Ação (marca do produto) ────────────────────────────────── */
   --brand: #7c3aed;
+  /* HOMOLOGAÇÃO · P0-5 — skeleton com contraste real (não branco sobre cinza). */
+  --skeleton-base: #e4e8f0;
+  --skeleton-highlight: #f1f4f9;
   --brand-strong: #6d28d9;
   --brand-soft: #f3e8ff;
   --brand-softer: #faf7ff;
@@ -1035,7 +1038,9 @@ button.ws-bell__item:hover { background: var(--surface-hover); }
 .ws-bell__text strong { font-weight: 800; }
 .ws-bell__chevron { color: var(--text-faint); }
 .ws-bell__loading { padding: 12px 14px; display: flex; flex-direction: column; gap: 9px; }
-.ws-skeleton-line { display: block; height: 11px; border-radius: var(--radius-pill); background: var(--surface-3); animation: ws-pulse 1.4s ease-in-out infinite; }
+.ws-skeleton-line { display: block; height: 11px; border-radius: var(--radius-pill); background: linear-gradient(90deg, var(--skeleton-base) 25%, var(--skeleton-highlight) 50%, var(--skeleton-base) 75%); background-size: 200% 100%; animation: skeleton-shimmer 1.4s ease-in-out infinite; }
+@keyframes skeleton-shimmer { 0% { background-position: 200% 0; } 100% { background-position: -200% 0; } }
+.il-skeleton { background: linear-gradient(90deg, var(--skeleton-base) 25%, var(--skeleton-highlight) 50%, var(--skeleton-base) 75%); background-size: 200% 100%; animation: skeleton-shimmer 1.4s ease-in-out infinite; border-radius: var(--radius-md); }
 .ws-skeleton-line--short { width: 55%; }
 @keyframes ws-pulse { 0%, 100% { opacity: 1; } 50% { opacity: .45; } }
 
@@ -1110,7 +1115,21 @@ button.ws-bell__item:hover { background: var(--surface-hover); }
 .il-platform .workspace-sidebar.is-collapsed { width: var(--sidebar-w-mini); }
 .is-collapsed .workspace-label { display: none; }
 
-.workspace-identity { padding: 14px 14px 12px; border-bottom: 1px solid var(--border-soft); display: flex; align-items: center; justify-content: space-between; gap: 6px; }
+/* HOMOLOGAÇÃO · sidebar = UMA superfície contínua (sem linha sob a marca). */
+.workspace-identity { padding: 14px 14px 12px; border-bottom: 0; display: flex; align-items: center; justify-content: space-between; gap: 6px; }
+.workspace-collapse-btn {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 30px; height: 30px; flex-shrink: 0;
+  border-radius: 8px; border: 1px solid var(--border);
+  background: var(--surface); color: var(--text-muted);
+  transition: background-color .12s ease, color .12s ease, border-color .12s ease;
+}
+.workspace-collapse-btn:hover { background: var(--surface-hover); color: var(--text); border-color: var(--border-strong); }
+.workspace-collapse-btn.is-mini { width: 28px; height: 28px; border-color: transparent; background: transparent; }
+.workspace-collapse-btn.is-mini:hover { background: var(--surface-hover); border-color: var(--border); }
+.workspace-wordmark--product { color: var(--text); }
+.is-collapsed .workspace-wordmark--product { font-size: 12px; letter-spacing: -.04em; }
+.ws-unitpill__logo { width: 18px; height: 18px; border-radius: 50%; object-fit: cover; flex-shrink: 0; }
 .workspace-identity__collapse { color: var(--text-faint); border-radius: 8px; flex-shrink: 0; }
 .workspace-identity__collapse:hover { color: var(--text); background: var(--surface-hover); }
 .is-collapsed .workspace-identity { padding: 12px 8px; justify-content: center; }
@@ -1225,7 +1244,7 @@ button.ws-bell__item:hover { background: var(--surface-hover); }
   .ws-newbtn { font-size: 0; gap: 0; padding: 0 11px; }
 }
 @media (prefers-reduced-motion: reduce) {
-  .ws-skeleton-line { animation: none; }
+  .ws-skeleton-line, .il-skeleton { animation: none; background: var(--skeleton-base); }
   .ws-topbar { backdrop-filter: none; background: var(--surface); }
 }
 /* Consistent reading rhythm without recoloring public clinic themes. */
@@ -1445,6 +1464,19 @@ dialog.il-customer-dialog::backdrop { background:transparent; }
   border: 4px solid #fff;
   box-shadow: 0 8px 22px -14px color-mix(in srgb, var(--il-muted) 70%, transparent);
 }
+/* HOMOLOGAÇÃO · geometria padrão da página pública */
+.pub-hero__cover { width: 100%; max-height: 288px; overflow: hidden; }
+.pub-hero__sheet { padding: 0 4px 8px; }
+.pub-hero__sheet--overlap {
+  position: relative; z-index: 1;
+  margin-top: -40px;
+  background: var(--il-bg, #fff);
+  border-radius: 28px 28px 0 0;
+  padding-top: 0;
+  box-shadow: 0 -10px 30px -18px rgba(15, 23, 42, 0.25);
+}
+.pub-avatar--ring { box-shadow: 0 0 0 4px var(--il-bg, #fff), 0 0 0 5.5px color-mix(in srgb, var(--il-muted) 22%, transparent); }
+
 .il-page .pub-avatar img { width: 100%; height: 100%; object-fit: cover; }
 .il-page .pub-avatar--initials { font-size: 34px; font-weight: 800; letter-spacing: -.02em; }
 @media (min-width: 640px) {

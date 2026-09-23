@@ -93,7 +93,9 @@ export function WorkspaceTopbar({ group, page, query, searchItems, activePath, a
           <button type="button" className="ws-unitpill" aria-haspopup="menu" aria-expanded={unitOpen}
             title={`Unidade atual: ${unit.name || 'Clínica'} — clique para trocar`}
             onClick={() => setUnitOpen((v) => !v)}>
-            <span className="ws-unitpill__dot" aria-hidden="true">{initials(unit.name || 'Clínica')}</span>
+            {unit.logo
+              ? <img src={unit.logo} alt="" aria-hidden="true" className="ws-unitpill__logo" />
+              : <span className="ws-unitpill__dot" aria-hidden="true">{initials(unit.name || 'Clínica')}</span>}
             <span className="truncate max-w-[18ch]">{unit.name || 'Clínica'}</span>
             <Icon n="chevD" size={13} className="text-[var(--text-faint)]" />
           </button>
@@ -103,7 +105,9 @@ export function WorkspaceTopbar({ group, page, query, searchItems, activePath, a
               {units.map((u) => (
                 <button key={u.id} type="button" role="menuitem" className="ws-pop__item"
                   onClick={() => { setUnitOpen(false); if (u.id !== unit.id) onUnit(u.id); }}>
-                  <span className="ws-unitpill__dot" aria-hidden="true">{initials(u.name || 'Clínica')}</span>
+                  {u.logo
+                    ? <img src={u.logo} alt="" aria-hidden="true" className="ws-unitpill__logo" />
+                    : <span className="ws-unitpill__dot" aria-hidden="true">{initials(u.name || 'Clínica')}</span>}
                   <span className="flex-1 truncate">{u.name || 'Clínica'}</span>
                   {u.id === unit.id && <Icon n="check" size={14} className="text-[var(--success)]" />}
                 </button>
