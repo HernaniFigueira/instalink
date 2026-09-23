@@ -1303,6 +1303,25 @@ dialog.il-customer-dialog::backdrop { background:transparent; }
 @media(min-width:1200px) { .il-platform .agenda-page-gutter { padding:16px; } }
 @media(max-width:767px) { .il-platform .il-tab { min-height:44px; } }
 
+/* ── Linha do horário atual (Agenda) — coral gráfico, só quando visível ── */
+.ag-nowline {
+  position: absolute; z-index: 10; pointer-events: none;
+  height: 0; border-top: 2px solid var(--now);
+}
+.ag-nowline__dot {
+  position: absolute; left: -4px; top: -5px;
+  width: 8px; height: 8px; border-radius: 50%;
+  background: var(--now);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--now) 22%, transparent);
+}
+.ag-nowline__time {
+  position: absolute; right: 4px; top: -9px;
+  padding: 1px 5px; border-radius: var(--radius-pill);
+  background: var(--now); color: #fff;
+  font-size: 9.5px; font-weight: 800; letter-spacing: .02em;
+  font-variant-numeric: tabular-nums;
+}
+
 /* ═══════════════════════════════════════════════════════════════
    WORKSPACE SHEET — Etapa B
    ═══════════════════════════════════════════════════════════════
