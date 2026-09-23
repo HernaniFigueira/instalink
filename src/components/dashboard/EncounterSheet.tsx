@@ -54,6 +54,8 @@ export interface EncounterRow extends Encounter {
    * de tela, e é o que deixa "Agendar retorno" pronto para agendar.
    */
   customerPhone: string;
+  /** P0-3 — nome do PET resolvido na leitura (paciente veterinário). */
+  petName?: string;
 }
 
 export interface FollowUpSeed {
@@ -451,7 +453,7 @@ export function EncounterSheet({
       open
       onClose={() => { void close(); }}
       title="Atendimento"
-      subtitle={row ? `${formatDateBR(row.date)}${row.time ? ` · ${row.time}` : ''} · ${row.customerName || 'Cliente'}` : 'Registro do atendimento'}
+      subtitle={row ? `${formatDateBR(row.date)}${row.time ? ` · ${row.time}` : ''} · ${row.petName || row.customerName || 'Cliente'}${row.petName && row.customerName ? ` · Tutor: ${row.customerName}` : ''}` : 'Registro do atendimento'}
       width="max-w-[620px]"
       footer={(
         <>
@@ -575,7 +577,8 @@ export function EncounterSheet({
 
             <div className="flex flex-wrap items-center gap-2 text-xs text-[var(--text-muted)]">
               <span className="inline-flex items-center gap-1.5">
-                <Icon n="user" size={13} /> {row.customerName || 'Cliente'}
+                <Icon n="user" size={13} /> {row.petName || row.customerName || 'Cliente'}
+                {row.petName && row.customerName ? <span className="text-[var(--text-faint)]">· Tutor: {row.customerName}</span> : null}
               </span>
               {row.serviceName && <span className="inline-flex items-center gap-1.5"><Icon n="fileText" size={13} /> {row.serviceName}</span>}
               {row.professionalName && <span className="inline-flex items-center gap-1.5"><Icon n="users" size={13} /> {row.professionalName}</span>}

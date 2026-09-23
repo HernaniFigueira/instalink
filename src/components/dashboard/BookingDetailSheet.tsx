@@ -22,6 +22,7 @@ import Link from 'next/link';
 import { Icon } from '@/components/icons';
 import { StatusBadge, Button, Drawer, buttonCls, type ButtonVariant } from '@/components/ui';
 import { EncounterSheet } from '@/components/dashboard/EncounterSheet';
+import { Pet360Sheet } from '@/components/dashboard/Pet360Sheet';
 import { usePanelPermissions } from '@/components/dashboard/usePanelPermissions';
 import { canReopenEncounter } from '@/lib/encounters';
 import type { FollowUpSeed } from '@/components/dashboard/EncounterSheet';
@@ -73,6 +74,8 @@ export function BookingDetailSheet({ booking, service, pro, businessId, timezone
   // A3.4 · Bloco 5 — registro do atendimento: permissão própria + quem reabre.
   const { permissions, role } = usePanelPermissions();
   const [encounterOpen, setEncounterOpen] = useState(false);
+  // P0-3/P1 — Pet 360 a partir do nome do pet no detalhe.
+  const [pet360Open, setPet360Open] = useState(false);
   const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
   const [rescheduling, setRescheduling] = useState(false);
@@ -217,6 +220,20 @@ export function BookingDetailSheet({ booking, service, pro, businessId, timezone
 
         </header>
 
+        {pet360Open && booking.petId && booking.petName && (
+          <Pet360Sheet
+            open={pet360Open}
+            onClose={() => setPet360Open(false)}
+            businessId={businessId}
+            pet={{
+              id: booking.petId, businessId, tutorId: booking.customerId || '',
+              name: booking.petName, photo: '', species: '', breed: '', sex: '', birthDate: '',
+              weightKg: 0, notes: '', active: true, createdAt: '', updatedAt: '',
+            }}
+            tutorName={booking.customerName}
+            tutorPhone={booking.customerPhone}
+          />
+        )}
         {encounterOpen && (
         <EncounterSheet
           businessId={businessId}
@@ -303,8 +320,14 @@ export function BookingDetailSheet({ booking, service, pro, businessId, timezone
             <div className={ROW}>
               <dt className={ROW_DT}>{booking.petName ? 'Pet / Tutor' : 'Cliente'}</dt>
               <dd className={ROW_DD}>
-                {/* FASE 2 · P6 — veterinária: PET em primeiro; tutor identificado. */}
-                {booking.petName || booking.customerName}
+                {/* FASE 2 · P6 — veterinária: PET em primeiro; tutor identificado.
+                    Clique no pet abre o Pet 360 (HOMOLOGAÇÃO P1). */}
+                {booking.petId && booking.petName ? (
+                  <button type="button" className="font-semibold hover:underline text-[var(--brand-fg)]"
+                    onClick={() => setPet360Open(true)} title={`Abrir ficha de ${booking.petName}`}>
+                    {booking.petName}
+                  </button>
+                ) : (booking.petName || booking.customerName)}
                 {(booking.petName || booking.customerPhone) && (
                   <span className="block text-xs text-zinc-500 font-normal">
                     {booking.petName ? `Tutor: ${booking.customerName}` : ''}

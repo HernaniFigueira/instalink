@@ -332,7 +332,8 @@ export async function POST(req: NextRequest) {
       leadId: body.leadId ? String(body.leadId) : undefined,
       bookingKind: body.bookingKind === 'fit_in' ? 'fit_in' : undefined,
       fitInConfirmed: body.confirmFitIn === true,
-      // FASE 2 · P6 — pet escolhido pelo DONO (validado na unidade; público nunca envia).
+      // FASE 2 · P6 / P0-3 — pet escolhido pelo DONO (validado na unidade;
+      // público nunca envia). Veterinária + tutor com pets ativos = OBRIGATÓRIO.
       petId: (() => {
         if (!isOwner || !body.petId) return undefined;
         const pet = db.pets.find((x) => x.id === String(body.petId) && x.businessId === business.id);
@@ -340,6 +341,18 @@ export async function POST(req: NextRequest) {
         return pet.id;
       })(),
     };
+    // P0-3 — veterinária: tutor já com pet não agenda "só tutor".
+    if (
+      isOwner
+      && business.clinicType === 'veterinaria'
+      && linkedContact
+      && db.pets.some((x) => x.businessId === business.id && x.tutorId === linkedContact.id && x.active !== false)
+      && !params.petId
+    ) {
+      return NextResponse.json({
+        error: 'Em clínica veterinária, selecione o pet (paciente) deste agendamento.',
+      }, { status: 400 });
+    }
     const scope = guard?.ok ? guard.ctx.professionalScope : '';
     // Encaixe exige CONFIRMAÇÃO EXPLÍCITA: sem `confirmFitIn`, o servidor
     // devolve a lista de conflitos e NÃO grava nada. A tela mostra com quem

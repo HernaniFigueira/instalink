@@ -16,7 +16,8 @@ import type { OccurrencePreview } from '@/lib/booking-series';
 import { onlyDigits } from '@/lib/utils';
 import { cn } from '@/lib/utils';
 import type { Pet, Professional, Service } from '@/lib/types';
-import { apiGet } from '@/lib/api-client';
+import { apiGet, apiSend } from '@/lib/api-client';
+import { breedSuggestions, PET_SPECIES, PET_SPECIES_LABELS, validatePet } from '@/lib/pets';
 import { Drawer, Avatar, Badge, Button, Checkbox, Field, IconButton, Input, Notice, Select } from '@/components/ui';
 
 interface Contact {
@@ -72,6 +73,11 @@ export function NewBookingSheet({ businessId, services, pros, timezone, initial,
   const [pets, setPets] = useState<Pet[]>([]);
   const [isVet, setIsVet] = useState(false);
   const [petId, setPetId] = useState('');
+  // P0-3 — cadastro de pet DENTRO do fluxo (tutor sem pet).
+  const [petFormOpen, setPetFormOpen] = useState(false);
+  const [petDraft, setPetDraft] = useState({ name: '', species: 'cachorro', breed: '', sex: '', birthDate: '', weightKg: '' as string | number, notes: '' });
+  const [petBusy, setPetBusy] = useState(false);
+  const [petError, setPetError] = useState('');
   // A3.4 · Bloco 4 — ENCAIXE: horário fora da grade, com conflito mostrado.
   const [fitInOpen, setFitInOpen] = useState(false);
   const [fitInTime, setFitInTime] = useState(initial?.time || '');
@@ -185,6 +191,8 @@ export function NewBookingSheet({ businessId, services, pros, timezone, initial,
   // FASE 2 · P6 — pets do tutor (só clínica veterinária devolve `vet: true`).
   useEffect(() => {
     setPetId('');
+    setPetFormOpen(false);
+    setPetError('');
     if (!contactId) { setPets([]); setIsVet(false); return; }
     let on = true;
     apiGet<{ vet: boolean; pets: Pet[] }>(
@@ -269,6 +277,11 @@ export function NewBookingSheet({ businessId, services, pros, timezone, initial,
     setError('');
     if (!picked || !name.trim()) { setError('Busque o cliente ou cadastre um novo para usar neste agendamento.'); return; }
     if (!contactId && clientStage !== 'new-ready') { setError('Confirme o novo cliente em “Usar neste agendamento”.'); return; }
+    // P0-3 — veterinária com pets no tutor: o PET é o paciente (obrigatório).
+    if (isVet && contactId && pets.length > 0 && !petId) {
+      setError('Em clínica veterinária, escolha o pet (paciente) deste agendamento.');
+      return;
+    }
     if (onlyDigits(phone).length < 10) { setError('Informe um WhatsApp válido.'); return; }
     const when = opts.timeOverride || time;
     if (!serviceId || !date || !when) { setError('Escolha serviço, data e horário.'); return; }
@@ -428,14 +441,83 @@ export function NewBookingSheet({ businessId, services, pros, timezone, initial,
             )}
           </div>
 
-          {/* FASE 2 · P6 — veterinária: o PET é o paciente do agendamento. */}
-          {picked && contactId && isVet && pets.length > 0 && (
-            <Field label="Pet (paciente)" hint="Em clínica veterinária a agenda identifica pelo pet; o tutor continua sendo o contato.">
-              <Select value={petId} disabled={saving || reviewing} onChange={(e) => setPetId(e.target.value)}>
-                <option value="">Sem vínculo (só tutor)</option>
-                {pets.map((p) => <option key={p.id} value={p.id}>{p.name}{p.breed ? ` · ${p.breed}` : ''}</option>)}
-              </Select>
-            </Field>
+          {/* FASE 2 · P6 / P0-3 — veterinária: o PET é o paciente (obrigatório
+              quando o tutor já tem pet; sem pet, o cadastro nasce aqui). */}
+          {picked && contactId && isVet && !petFormOpen && (
+            pets.length > 0 ? (
+              <Field label="Pet (paciente)" required
+                hint="Em clínica veterinária a agenda identifica pelo pet; o tutor continua sendo o contato.">
+                <Select value={petId} disabled={saving || reviewing} onChange={(e) => setPetId(e.target.value)}>
+                  <option value="">Selecione o pet…</option>
+                  {pets.map((p) => <option key={p.id} value={p.id}>{p.name}{p.breed ? ` · ${p.breed}` : ''}</option>)}
+                </Select>
+              </Field>
+            ) : (
+              <div className="rounded-lg border border-[var(--border)] bg-[var(--surface-2)] px-3.5 py-3" data-vet-pet-empty="true">
+                <p className="text-xs font-semibold text-[var(--text)]">Este tutor ainda não tem pet cadastrado.</p>
+                <p className="text-xs text-[var(--text-muted)] mt-0.5">Em clínica veterinária o pet é o paciente do agendamento.</p>
+                <Button type="button" variant="secondary" size="sm" className="mt-2" disabled={saving || reviewing}
+                  onClick={() => { setPetError(''); setPetFormOpen(true); }}>
+                  <Icon n="plus" size={13} /> Cadastrar pet
+                </Button>
+              </div>
+            )
+          )}
+          {/* Cadastro de pet inline — após salvar, o pet recém-criado é SELECIONADO. */}
+          {picked && contactId && isVet && petFormOpen && (
+            <div className="space-y-3 rounded-lg border border-[var(--border)] bg-[var(--surface-2)] p-3.5" data-pet-form="true">
+              <p className="text-xs font-semibold text-[var(--text-muted)]">Novo pet — paciente de {name || 'tutor'}</p>
+              {petError && <Notice tone="error">{petError}</Notice>}
+              <Field label="Nome do pet" required>
+                <Input value={petDraft.name} onChange={(e) => setPetDraft({ ...petDraft, name: e.target.value })} placeholder="Ex: Greg" autoFocus />
+              </Field>
+              <div className="grid grid-cols-2 gap-3">
+                <Field label="Espécie">
+                  <Select value={petDraft.species} onChange={(e) => setPetDraft({ ...petDraft, species: e.target.value, breed: '' })}>
+                    {PET_SPECIES.map((s) => <option key={s} value={s}>{PET_SPECIES_LABELS[s]}</option>)}
+                  </Select>
+                </Field>
+                <Field label="Raça" hint="Autocomplete — pode digitar outra.">
+                  <Input value={petDraft.breed} list="nb-pet-breeds" onChange={(e) => setPetDraft({ ...petDraft, breed: e.target.value })} placeholder="Ex: Bulldog" />
+                  <datalist id="nb-pet-breeds">
+                    {breedSuggestions(petDraft.species).map((b) => <option key={b} value={b} />)}
+                  </datalist>
+                </Field>
+                <Field label="Sexo">
+                  <Select value={petDraft.sex} onChange={(e) => setPetDraft({ ...petDraft, sex: e.target.value })}>
+                    <option value="">Não informado</option>
+                    <option value="M">Macho</option>
+                    <option value="F">Fêmea</option>
+                  </Select>
+                </Field>
+                <Field label="Nascimento">
+                  <Input type="date" value={petDraft.birthDate} onChange={(e) => setPetDraft({ ...petDraft, birthDate: e.target.value })} />
+                </Field>
+              </div>
+              <div className="flex flex-wrap gap-2">
+                <Button type="button" variant="primary" size="sm" disabled={petBusy}
+                  onClick={async () => {
+                    const problem = validatePet(petDraft as any);
+                    if (problem) { setPetError(problem); return; }
+                    setPetBusy(true); setPetError('');
+                    const res = await apiSend<{ pet: Pet }>('/api/pets', 'POST', {
+                      action: 'create', businessId, tutorId: contactId, pet: petDraft,
+                    }, { scope: 'action', area: 'Agenda' });
+                    setPetBusy(false);
+                    if (!res.ok || !res.data?.pet) { setPetError(res.message || 'Não foi possível salvar o pet.'); return; }
+                    const created = res.data.pet;
+                    setPets((list) => [created, ...list]);
+                    setPetId(created.id);
+                    setPetFormOpen(false);
+                    setPetDraft({ name: '', species: 'cachorro', breed: '', sex: '', birthDate: '', weightKg: '', notes: '' });
+                  }}>
+                  {petBusy ? 'Salvando…' : 'Salvar e usar neste agendamento'}
+                </Button>
+                <Button type="button" variant="secondary" size="sm" disabled={petBusy} onClick={() => { setPetFormOpen(false); setPetError(''); }}>
+                  Cancelar
+                </Button>
+              </div>
+            </div>
           )}
 
           <Field label="2. Serviço" required>

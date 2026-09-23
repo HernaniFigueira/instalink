@@ -4,7 +4,7 @@ import { Icon } from '@/components/icons';
 import { Avatar, Badge, Button, Field, IconButton, Input, Notice, Select, SubCard, Textarea } from '@/components/ui';
 import { WorkspaceSheet } from '@/components/dashboard/WorkspaceSheet';
 import { apiGet, apiSend } from '@/lib/api-client';
-import { PET_SPECIES, PET_SPECIES_LABELS, petAge, petLabel, validatePet } from '@/lib/pets';
+import { PET_SPECIES, PET_SPECIES_LABELS, breedSuggestions, petAge, petLabel, validatePet } from '@/lib/pets';
 import type { Pet } from '@/lib/types';
 
 // ═══════════════════════════════════════════════════════════════
@@ -15,8 +15,10 @@ const EMPTY_PET: Partial<Pet> = {
   name: '', species: 'cachorro', breed: '', sex: '', birthDate: '', weightKg: 0, notes: '', photo: '',
 };
 
-export function PetsSection({ businessId, tutorId, tutorName, onChanged }: {
+export function PetsSection({ businessId, tutorId, tutorName, onChanged, onOpenPet }: {
   businessId: string; tutorId: string; tutorName: string; onChanged?: () => void;
+  /** Abre o Pet 360 (ficha do animal) — HOMOLOGAÇÃO P1. */
+  onOpenPet?: (pet: Pet) => void;
 }) {
   const [vet, setVet] = useState<boolean | null>(null); // null = ainda não perguntou
   const [pets, setPets] = useState<Pet[]>([]);
@@ -102,9 +104,10 @@ export function PetsSection({ businessId, tutorId, tutorName, onChanged }: {
               <li key={p.id} className="flex items-center gap-3 rounded-lg border border-[var(--border)] px-3 py-2">
                 <Avatar name={p.name} src={p.photo || undefined} size={36} />
                 <div className="min-w-0 flex-1">
-                  <p className="text-[13.5px] font-bold text-[var(--text)] truncate">
+                  <button type="button" className="text-[13.5px] font-bold text-[var(--text)] truncate hover:underline text-left w-full"
+                    onClick={() => onOpenPet?.(p)} title={`Abrir ficha de ${p.name}`}>
                     {p.name}{!p.active && <span className="ml-2 text-[11px] font-semibold text-[var(--text-muted)]">(inativo)</span>}
-                  </p>
+                  </button>
                   <p className="text-[11.5px] text-[var(--text-muted)] truncate">
                     {[PET_SPECIES_LABELS[p.species] || p.species, p.breed, age !== null ? `${age} ano(s)` : '', p.weightKg ? `${p.weightKg} kg` : ''].filter(Boolean).join(' · ') || 'Sem detalhes'}
                   </p>
@@ -145,8 +148,11 @@ export function PetsSection({ businessId, tutorId, tutorName, onChanged }: {
                   {PET_SPECIES.map((s) => <option key={s} value={s}>{PET_SPECIES_LABELS[s]}</option>)}
                 </Select>
               </Field>
-              <Field label="Raça" htmlFor="pet-breed">
-                <Input id="pet-breed" value={editing.breed || ''} onChange={(e) => setEditing({ ...editing, breed: e.target.value })} placeholder="Ex.: Pastor alemão" />
+              <Field label="Raça" htmlFor="pet-breed" hint="Autocomplete pela espécie — pode digitar outra.">
+                <Input id="pet-breed" list="pet-breeds-datalist" value={editing.breed || ''} onChange={(e) => setEditing({ ...editing, breed: e.target.value })} placeholder="Ex.: Pastor alemão" />
+                <datalist id="pet-breeds-datalist">
+                  {breedSuggestions(editing.species || '').map((b) => <option key={b} value={b} />)}
+                </datalist>
               </Field>
               <Field label="Sexo" htmlFor="pet-sex">
                 <Select id="pet-sex" value={editing.sex || ''} onChange={(e) => setEditing({ ...editing, sex: e.target.value as any })}>

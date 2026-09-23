@@ -84,3 +84,39 @@ export function agendaLabelFor(booking: { customerName: string; petId?: string }
   if (pet) return { primary: pet.name, secondary: booking.customerName };
   return { primary: booking.customerName, secondary: '' };
 }
+
+// ── HOMOLOGAÇÃO · raças em autocomplete (leve, sem banco complexo) ──
+export const DOG_BREEDS = [
+  'Akita', 'Australian Shepherd', 'Beagle', 'Bichon Frise', 'Border Collie', 'Bulldog Francês',
+  'Bulldog Inglês', 'Basset Hound', 'Chihuahua', 'Cocker Spaniel', 'Dachshund', 'Dalmata',
+  'Fox Paulistinha', 'Golden Retriever', 'Husky Siberiano', 'Jack Russell', 'Labrador',
+  'Lhasa Apso', 'Maltese', 'Maltês', 'Mastiff', 'Ovelheiro Gaúcho', 'Pastor Alemão',
+  'Pastor Belga', 'Pembroke', 'Pinscher', 'Pit Bull', 'Pomeranian', 'Poodle', 'Pug',
+  'Rhodesian', 'Rottweiler', 'Samoyeda', 'Schnauzer', 'Shar Pei', 'Shiba Inu', 'Shih Tzu',
+  'Staffordshire', 'Weimaraner', 'Yorkshire', 'Vira-lata (SRD)', 'Outra raça',
+] as const;
+
+export const CAT_BREEDS = [
+  'Abissínio', 'American Shorthair', 'Bengal', 'Birmanês', 'British Shorthair', 'Siamês',
+  'Sphynx', 'Maine Coon', 'Persa', 'Ragdoll', 'Russian Blue', 'Norwegian Forest',
+  'Scottish Fold', 'Turkish Angora', 'Himalaia', 'Mestiço (SRD)', 'Outra raça',
+] as const;
+
+/** Sugestões de raça pela espécie (autocomplete — o usuário sempre pode digitar outra). */
+export function breedSuggestions(species: string): string[] {
+  const sp = String(species || '').toLowerCase();
+  if (sp === 'cachorro' || sp === 'dog') return [...DOG_BREEDS];
+  if (sp === 'gato' || sp === 'cat') return [...CAT_BREEDS];
+  return []; // ave/roedor/reptil/outro = campo livre
+}
+
+/**
+ * P0-3 — veterinária: se o tutor JÁ tem pets ativos, o agendamento EXIGE pet.
+ * Usado no client (NewBookingSheet) e no servidor (bookings POST).
+ */
+export function vetPetRequired(input: {
+  clinicType?: string;
+  hasActivePets: boolean;
+}): boolean {
+  return input.clinicType === 'veterinaria' && input.hasActivePets;
+}

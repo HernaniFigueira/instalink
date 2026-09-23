@@ -20,7 +20,7 @@ import { centsToBR, cn, waLink } from '@/lib/utils';
 import { humanDateTime, formatDateBR, todayISO } from '@/lib/tz';
 import { BOOKING_STATUS, LEAD_STATUS, type StatusDef } from '@/lib/status';
 import { leadOriginLabel } from '@/lib/leads';
-import type { BusinessPipeline, ContactProfile, FinanceEntry } from '@/lib/types';
+import type { BusinessPipeline, ContactProfile, FinanceEntry , Pet } from '@/lib/types';
 import { FINANCE_STATUS_LABEL } from '@/lib/finance';
 import { followUpDueDate } from '@/lib/encounters';
 import { WorkspaceSheet } from '@/components/dashboard/WorkspaceSheet';
@@ -37,6 +37,7 @@ import { canReopenEncounter } from '@/lib/encounters';
 import { EncounterList, EncounterSheet, type EncounterRow } from '@/components/dashboard/EncounterSheet';
 import { usePanelPermissions } from '@/components/dashboard/usePanelPermissions';
 import { PetsSection } from '@/components/dashboard/PetsSection';
+import { Pet360Sheet } from '@/components/dashboard/Pet360Sheet';
 
 // Observações do cliente (P2): histórico append-only com autor e data.
 // `legacy: true` marca o registro antigo (campo único), preservado como está.
@@ -113,6 +114,8 @@ export function ClientProfileDrawer({ person, businessId, pipeline, canFunil, on
   // FASE 2 · P2 — aba Financeiro só existe com a permissão correspondente.
   const canFinance = permissions.financeiro === true;
   const [encounters, setEncounters] = useState<EncounterRow[]>([]);
+  // HOMOLOGAÇÃO · P1 — Pet 360 (ficha do animal).
+  const [pet360, setPet360] = useState<Pet | null>(null);
   const [encounterOpen, setEncounterOpen] = useState<EncounterRow | null>(null);
   const [encountersError, setEncountersError] = useState('');
   const [encountersLoaded, setEncountersLoaded] = useState(false);
@@ -562,7 +565,7 @@ export function ClientProfileDrawer({ person, businessId, pipeline, canFunil, on
 
         {/* FASE 2 · P6 — pets do tutor (aparece SOMENTE em clínica veterinária). */}
         {person.contactId && (
-          <PetsSection businessId={businessId} tutorId={person.contactId} tutorName={person.name} onChanged={onChanged} />
+          <PetsSection businessId={businessId} tutorId={person.contactId} tutorName={person.name} onChanged={onChanged} onOpenPet={setPet360} />
         )}
 
         {/* Acesso do cliente */}
@@ -867,6 +870,17 @@ export function ClientProfileDrawer({ person, businessId, pipeline, canFunil, on
         )}
       </div>
 
+      {pet360 && (
+        <Pet360Sheet
+          open={!!pet360}
+          onClose={() => setPet360(null)}
+          businessId={businessId}
+          pet={pet360}
+          tutorName={person.name}
+          tutorPhone={person.phone}
+          onOpenEncounter={(row) => { setPet360(null); setEncounterOpen(row); }}
+        />
+      )}
       {/* ═══ O QUE ACONTECEU — histórico ═══ */}
       <div className="px-4 pb-6">
         <div className="il-divider my-4">O que aconteceu com {firstName}</div>

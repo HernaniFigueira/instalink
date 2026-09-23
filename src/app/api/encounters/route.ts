@@ -69,12 +69,15 @@ function view(e: Encounter, db: DB) {
   const contact = e.contactId
     ? db.contacts.find((c) => c.id === e.contactId && c.businessId === e.businessId)
     : undefined;
+  const pet = e.petId ? (db.pets || []).find((x) => x.id === e.petId && x.businessId === e.businessId) : undefined;
   return {
     ...e,
     professionalName: pro?.name || '',
     serviceName: svc?.name || '',
     bookingStatus: booking?.status || '',
     customerPhone: contact?.phone || booking?.customerPhone || queue?.customerPhone || '',
+    // P0-3 — no atendimento o PACIENTE é o pet; o tutor fica como contexto.
+    petName: pet?.name || booking?.petName || '',
   };
 }
 
