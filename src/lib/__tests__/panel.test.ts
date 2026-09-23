@@ -46,8 +46,8 @@ function dashboardRouteFolders(): string[] {
 // 1. CATÁLOGO — a única lista de destinos
 // ═══════════════════════════════════════════════════════════════
 describe('catálogo — completude (por qual porta se chega até mim?)', () => {
-  it('tem as 22 portas da arquitetura consolidada', () => {
-    expect(PANEL_ROUTES).toHaveLength(25);
+  it('tem as 26 portas da arquitetura consolidada (inclui /perfil)', () => {
+    expect(PANEL_ROUTES).toHaveLength(26);
   });
 
   it('toda porta do catálogo tem uma rota real no disco', () => {
@@ -188,7 +188,7 @@ describe('catálogo — seções', () => {
     expect(panelRoutesIn('operacao').map((r) => r.href)).toEqual([
       '/estrutura', '/agenda', '/profissionais', '/disponibilidade', '/conversas', '/agente', '/tarefas', '/pedidos',
     ]);
-    expect(panelRoutesIn('administracao').map((r) => r.href)).toEqual(['/equipe', '/recursos', '/configuracoes']);
+    expect(panelRoutesIn('administracao').map((r) => r.href)).toEqual(['/perfil', '/equipe', '/recursos', '/configuracoes']);
   });
 });
 
@@ -277,7 +277,7 @@ describe('sidebar — projeção (permissão ∩ módulos, ordem do catálogo)',
 
     const nav = panelNavigation(ctx());
     expect(nav.sidebar.map((r) => r.href)).not.toContain('/execucoes');
-    expect(nav.more.map((r) => r.href)).toEqual(['/execucoes']);
+    expect(nav.more.map((r) => r.href)).toEqual(['/execucoes', '/perfil']);
     expect(panelAccess('/execucoes', ctx()).state).toBe('allow');
   });
 
@@ -647,7 +647,7 @@ describe('uma porta por conceito', () => {
     // Operação (com gate de módulo). Destino fora do menu SEM atalho vira
     // porta fantasma — por isso a lista abaixo é curta de propósito.
     const offMenu = PANEL_ROUTES.filter((r) => r.sidebar === false);
-    expect(offMenu.map((r) => r.href).sort()).toEqual(['/execucoes']);
+    expect(offMenu.map((r) => r.href).sort()).toEqual(['/execucoes', '/perfil']);
     for (const route of offMenu) {
       const own = path.join(root, `src/app/(dashboard)${route.href}`);
       const re = new RegExp('href=\\{[`\'"]' + route.href.replace(/\//g, '\\/'));
@@ -745,6 +745,7 @@ describe('guardas de servidor (regressão)', () => {
       '/campanhas', '/automacoes', '/followup', '/canais',
       '/resultados', '/financeiro', '/organizacao', '/execucoes',
       '/pagina',
+      '/perfil',
       '/equipe', '/recursos', '/configuracoes',
     ]);
   });

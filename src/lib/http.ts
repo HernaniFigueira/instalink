@@ -185,6 +185,7 @@ export const AREA_LABELS: Record<string, string> = {
   esteira: 'Funil',
   integracoes: 'Canais & Integrações',
   equipe: 'Equipe',
+  perfil: 'Meu perfil',
   config: 'Configurações',
   recursos: 'Recursos',
   resultados: 'Resultados',

@@ -403,6 +403,14 @@ export const PANEL_ROUTES: PanelRouteDef[] = [
 
   // ── Administração: rodapé fixo ──
   {
+    // PERFIL DO USUÁRIO (AccountMenu → Meu perfil). Lado a lado com Equipe:
+    // /perfil = esta conta · /equipe = quem tem login na unidade.
+    // sidebar: false → fora do menu; alcançável pelo menu da conta.
+    href: '/perfil', label: 'Meu perfil', icon: 'userCircle', section: 'administracao',
+    permission: 'dashboard', area: 'perfil', sidebar: false, requiresBusiness: false,
+    description: 'Foto, nome, contato, cargo e dados profissionais desta conta.',
+  },
+  {
     href: '/equipe', label: 'Equipe', icon: 'shield', section: 'administracao',
     permission: 'equipe', area: 'equipe',
     description: 'Quem tem login, com qual papel, o que enxerga e o vínculo com o profissional.',

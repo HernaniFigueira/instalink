@@ -20,6 +20,17 @@ export interface User {
   role?: UserRole; // ausente = 'owner' (compatível com dados legados)
   lastLoginAt?: string;
   active?: boolean;
+  // ── PERFIL PESSOAL (aditivo — doc antigo sem estes campos continua válido) ──
+  /** Telefone de contato do usuário (formato livre). */
+  phone?: string;
+  /** Foto de perfil (URL). A topbar passa a usá-la quando presente. */
+  photo?: string;
+  /** Cargo/função na empresa (ex.: "Clínico responsável"). */
+  title?: string;
+  /** Conselho profissional (ex.: "CRM 123456", "CRO 7890"). */
+  conselho?: string;
+  /** Breve apresentação profissional (dados complementares). */
+  professionalBio?: string;
 }
 
 export interface Session {

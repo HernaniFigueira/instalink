@@ -64,7 +64,7 @@ export function DashboardShell({ children }: { children: React.ReactNode }) {
   const params = useSearchParams();
   const pathname = usePathname();
   const router = useRouter();
-  const [user, setUser] = useState<{ name: string; email?: string; role?: string } | null>(null);
+  const [user, setUser] = useState<{ name: string; email?: string; role?: string; photo?: string } | null>(null);
   const [businesses, setBusinesses] = useState<Biz[]>([]);
   const [organizations,setOrganizations] = useState<Array<{id:string;name:string;canManage:boolean}>>([]);
   const [isMaster, setIsMaster] = useState(false);

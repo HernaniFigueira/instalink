@@ -6,9 +6,9 @@
 // configurações · sair).
 //
 // Nada aqui inventa destino: cada item só aparece quando existe rota REAL e
-// permissão para ela. "Meu perfil" resolve o deep-link do próprio acesso em
-// /equipe (rota que já existe) e degrada para a tela /equipe quando o vínculo
-// não é encontrado — nunca para uma tela vazia inventada.
+// permissão para ela. "Meu perfil" abre /perfil (rota própria do usuário:
+// foto, contato, cargo e dados profissionais). Equipe continua sendo a lista
+// de acessos da unidade.
 import { useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
 import { Icon } from '@/components/icons';
@@ -26,7 +26,7 @@ export interface AccountUnit {
 }
 
 export function AccountMenu({ user, unit, units, overview, canOverview, canTeam, canConfig, onUnit, onLogout, isMaster }: {
-  user: { name: string; email?: string; role?: string };
+  user: { name: string; email?: string; role?: string; photo?: string };
   unit: AccountUnit;
   units: AccountUnit[];
   /** true = o contexto atual é a visão de organização (não uma unidade). */
@@ -39,7 +39,6 @@ export function AccountMenu({ user, unit, units, overview, canOverview, canTeam,
   isMaster?: boolean;
 }) {
   const [open, setOpen] = useState(false);
-  const [profileHref, setProfileHref] = useState<string | null>(null);
   const boxRef = useRef<HTMLDivElement | null>(null);
   const buttonRef = useRef<HTMLButtonElement | null>(null);
   const q = unit.id ? `?b=${unit.id}` : '';
@@ -57,23 +56,6 @@ export function AccountMenu({ user, unit, units, overview, canOverview, canTeam,
     return () => { document.removeEventListener('mousedown', onDown); document.removeEventListener('keydown', onKey); };
   }, [open]);
 
-  // Deep-link do MEU acesso: só com permissão de equipe, e só se o servidor
-  // confirmar que existe um membro para este login. Senão, /equipe (tela real).
-  useEffect(() => {
-    if (!open || !canTeam || !unit.id) { return; }
-    let cancelled = false;
-    const base = `/equipe?b=${unit.id}`;
-    fetch(`/api/team?businessId=${encodeURIComponent(unit.id)}`)
-      .then(async (r) => (r.ok ? r.json() : null))
-      .then((d) => {
-        if (cancelled || !d) { if (!cancelled) setProfileHref(base); return; }
-        const me = d.me?.userId;
-        const mine = (d.members || []).find((m: { userId?: string; id: string }) => m.userId && m.userId === me);
-        setProfileHref(mine ? `${base}&member=${encodeURIComponent(mine.id)}` : base);
-      })
-      .catch(() => { if (!cancelled) setProfileHref(base); });
-    return () => { cancelled = true; };
-  }, [open, canTeam, unit.id]);
 
   function pick(id: string) {
     if (!mayLeaveEditor()) return;
@@ -96,7 +78,7 @@ export function AccountMenu({ user, unit, units, overview, canOverview, canTeam,
       >
         {/* Avatar do USUÁRIO (iniciais). O logo da clínica vive na sidebar e o
             avatar da página pública é outro contexto — nunca misturar. */}
-        <Avatar name={user.name} size={32} />
+        <Avatar name={user.name} src={user.photo || undefined} size={32} />
         <span className="ws-account__who">
           <span className="ws-account__name">{user.name}</span>
           <span className="ws-account__role">{roleLabel(role) || 'Equipe'}</span>
@@ -107,7 +89,7 @@ export function AccountMenu({ user, unit, units, overview, canOverview, canTeam,
       {open && (
         <div className="ws-popover ws-account__panel" role="dialog" aria-label="Menu da conta">
           <header className="ws-account__header">
-            <Avatar name={user.name} size={40} />
+            <Avatar name={user.name} src={user.photo || undefined} size={40} />
             <div className="ws-account__identity">
               <p className="ws-account__identity-name">{user.name}</p>
               {user.email && <p className="ws-account__identity-email">{user.email}</p>}
@@ -120,7 +102,7 @@ export function AccountMenu({ user, unit, units, overview, canOverview, canTeam,
 
           <div className="ws-menu">
             {canTeam && (
-              <Link className="ws-menu__item" href={profileHref || `/equipe${q}`} onClick={() => setOpen(false)}>
+              <Link className="ws-menu__item" href={`/perfil${q}`} onClick={() => setOpen(false)}>
                 <Icon n="userCircle" size={16} /> Meu perfil
               </Link>
             )}

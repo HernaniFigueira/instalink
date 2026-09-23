@@ -45,7 +45,7 @@ export function WorkspaceTopbar({ group, page, query, searchItems, activePath, a
   searchItems: NavSearchItem[];
   activePath: string;
   alerts: WorkspaceAlerts;
-  user: { name: string; email?: string; role?: string };
+  user: { name: string; email?: string; role?: string; photo?: string };
   unit: AccountUnit;
   units: AccountUnit[];
   overview?: boolean;

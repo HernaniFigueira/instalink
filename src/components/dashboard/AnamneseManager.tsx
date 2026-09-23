@@ -50,6 +50,19 @@ export function AnamneseManager({ open, onClose, businessId, clinicType }: {
 
   useEffect(() => { if (open) load(); }, [open, load]);
 
+  async function upgrade(id: string) {
+    setBusy(true);
+    try {
+      const res = await apiSend('/api/anamnese', 'POST', { action: 'template.upgrade', businessId, id }, { scope: 'area', area: 'Atendimento' });
+      if (res.ok) {
+        setMsg(res.data?.message || 'Ficha atualizada.');
+        await load();
+      } else {
+        setMsg(res.data?.error || res.message || 'Não foi possível atualizar.');
+      }
+    } finally { setBusy(false); }
+  }
+
   async function seed() {
     setBusy(true); setMsg('');
     const res = await apiSend('/api/anamnese', 'POST', { action: 'template.seed', businessId }, { scope: 'area', area: 'Atendimento' });
@@ -159,6 +172,7 @@ export function AnamneseManager({ open, onClose, businessId, clinicType }: {
         />
       ) : (
         <div className="p-1 space-y-2">
+          {msg && <Notice tone="info">{msg}</Notice>}
           <div className="flex gap-2 flex-wrap">
             <Button variant="secondary" size="sm" onClick={seed} disabled={busy}><Icon n="spark" size={14} /> Do preset</Button>
             <Button variant="secondary" size="sm" onClick={() => setEditing({ id: '', businessId, name: '', description: '', preset: 'custom', fields: [emptyField()], active: true, createdAt: '', updatedAt: '' })}><Icon n="plus" size={14} /> Nova ficha</Button>
@@ -171,6 +185,9 @@ export function AnamneseManager({ open, onClose, businessId, clinicType }: {
                 <p className="text-[12px] text-[var(--text-muted)]">{t.fields.length} campo(s){t.preset && t.preset !== 'custom' ? ` · preset ${t.preset}` : ''}</p>
               </div>
               {!t.active && <Badge tone="zinc">Inativa</Badge>}
+              {t.preset && t.preset !== 'custom' && (
+                <IconButton icon="sync" label="Atualizar do preset (mantém campos customizados)" size="sm" variant="ghost" onClick={() => upgrade(t.id)} />
+              )}
               <IconButton icon="pencil" label="Editar ficha" size="sm" onClick={() => setEditing({ ...t })} />
               <IconButton icon="x" label="Excluir ficha" size="sm" variant="ghost" onClick={() => remove(t.id)} />
             </div>

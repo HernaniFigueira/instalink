@@ -6,7 +6,7 @@ import { pushAudit } from '@/lib/audit';
 import {
   sanitizeTemplate, validateAnamneseAnswers, normalizeAnswers,
 } from '@/lib/anamnese';
-import { templateFromPreset } from '@/lib/clinic-presets';
+import { templateFromPreset, upgradeTemplate } from '@/lib/clinic-presets';
 import type { AnamneseResponse, AnamneseTemplate } from '@/lib/types';
 
 // ═══════════════════════════════════════════════════════════════
@@ -56,6 +56,55 @@ export async function POST(req: NextRequest) {
         return tpl;
       });
       return NextResponse.json({ ok: true, template: created });
+    }
+
+    // ── Upgrade SEGURO do template antigo a partir do preset (item 7) ──
+    // Só ADICIONA campos do preset que faltam; nunca sobrescreve customizados
+    // nem remove o que a clínica criou. Sem template custom puro sem preset.
+    if (action === 'template.upgrade') {
+      const id = String(body.id || '');
+      const updated = await updateDB((db) => {
+        const biz = db.businesses.find((b) => b.id === businessId);
+        const existing = db.anamneseTemplates.find((t) => t.id === id && t.businessId === businessId);
+        if (!existing) return null;
+        // Template 100% custom (preset 'custom' ou '') não tem preset de origem:
+        // upgrade não se aplica — a clínica escolheu os campos.
+        if (!existing.preset || existing.preset === 'custom') {
+          return { skipped: true as const, template: existing };
+        }
+        const now = new Date().toISOString();
+        // Preset de origem: o DO template (compat com clinicType antigo da unidade)
+        const type = existing.preset === 'veterinaria' || existing.preset === 'medica'
+          || existing.preset === 'odontologica' || existing.preset === 'estetica'
+          || existing.preset === 'geral'
+          ? existing.preset
+          : (biz?.clinicType as never);
+        const { template, addedIds } = upgradeTemplate(existing, type, now);
+        if (addedIds.length) {
+          Object.assign(existing, template);
+          pushAudit(db, {
+            action: 'anamnese.template_updated',
+            actor: { ...ctx.user, role: ctx.role },
+            businessId, supportSessionId: ctx.support?.id,
+            meta: { templateId: existing.id, upgraded: true, added: addedIds.length, addedIds },
+          });
+        }
+        return { skipped: false as const, template: existing, addedIds };
+      });
+      if (!updated) return NextResponse.json({ error: 'Ficha não encontrada.' }, { status: 404 });
+      if (updated.skipped) {
+        return NextResponse.json({
+          ok: true, skipped: true, template: updated.template,
+          message: 'Ficha customizada — upgrade de preset não se aplica.',
+        });
+      }
+      return NextResponse.json({
+        ok: true, skipped: false, template: updated.template,
+        addedIds: updated.addedIds || [],
+        message: (updated.addedIds || []).length
+          ? `${(updated.addedIds || []).length} campo(s) do preset adicionado(s). Customizados preservados.`
+          : 'Ficha já está atualizada com o preset.',
+      });
     }
 
     // ── Criar/atualizar template ──

@@ -226,3 +226,43 @@ export function templateFromPreset(
     updatedAt: now,
   };
 }
+
+
+/**
+ * Upgrade SEGURO de template antigo a partir do preset atual.
+ * Regras (item 7 do fechamento):
+ *   • NUNCA sobrescreve campo customizado (mesmo id → mantém o do usuário);
+ *   • NUNCA remove campos do usuário (só adiciona os que faltam do preset);
+ *   • preserva name/description/active/id/businessId/createdAt;
+ *   • `updatedAt` avança para sinalizar a mudança.
+ * Retorna o MESMO objeto mutado (ou shallow copy) + lista de ids adicionados.
+ */
+export function upgradeTemplate(
+  existing: AnamneseTemplate,
+  type: ClinicType | undefined | null,
+  now: string,
+): { template: AnamneseTemplate; addedIds: string[] } {
+  const preset = anamnesePresetFor(type);
+  const have = new Set(existing.fields.map((f) => f.id));
+  const added: string[] = [];
+  const fields = existing.fields.map((f) => ({ ...f }));
+  for (const seed of preset.fields) {
+    if (have.has(seed.id)) continue; // customizado/definido — não toca
+    const next = templateFromPreset(type, () => seed.id, now)
+      .fields.find((x) => x.id === seed.id);
+    if (next) {
+      fields.push({ ...next });
+      added.push(seed.id);
+    }
+  }
+  return {
+    template: {
+      ...existing,
+      // preset passa a refletir a origem atual (mantém 'custom' se era custom)
+      preset: existing.preset === 'custom' ? 'custom' : (preset.preset || existing.preset),
+      fields,
+      updatedAt: added.length ? now : existing.updatedAt,
+    },
+    addedIds: added,
+  };
+}
