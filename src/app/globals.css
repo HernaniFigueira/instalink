@@ -1207,9 +1207,18 @@ button.ws-bell__item:hover { background: var(--surface-hover); }
   .ws-account__trigger { padding: 4px; }
 }
 @media (max-width: 767px) {
+  /* Topbar mobile sem sobreposição: pill vira só o dot, ajuda some e o
+     centro encolhe de verdade (a busca continua acessível). */
+  .ws-unitpill { padding: 0 6px; }
+  .ws-unitpill .truncate, .ws-unitpill > svg { display: none; }
+  .ws-help { display: none; }
+  .ws-topbar__center { flex: 1 1 0; min-width: 0; }
   .ws-topbar { gap: 8px; padding: 0 10px; }
   .ws-crumbs__clinic { max-width: 14ch; }
   .global-search__kbd { display: none; }
+}
+@media (max-width: 479px) {
+  .ws-newbtn { font-size: 0; gap: 0; padding: 0 11px; }
 }
 @media (prefers-reduced-motion: reduce) {
   .ws-skeleton-line { animation: none; }
