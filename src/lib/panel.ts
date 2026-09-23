@@ -353,6 +353,14 @@ export const PANEL_ROUTES: PanelRouteDef[] = [
     width: 'full',
   },
   {
+    // FASE 2 · P7 — Financeiro básico (Gestão). Não é ERP: movimentações
+    // registradas (receita/despesa) com filtros, totais e gráficos simples.
+    href: '/financeiro', label: 'Financeiro', icon: 'wallet', section: 'resultados',
+    permission: 'financeiro', area: 'financeiro',
+    description: 'O que foi recebido, o que está pendente e o que sai — com filtros e período.',
+    width: 'full',
+  },
+  {
     // Antes só existia atrás do seletor de unidade — e o seletor só aparece com
     // 2+ unidades, o que tornava impossível criar a segunda. Porta real.
     href: '/organizacao', label: 'Organização', icon: 'buildings', section: 'resultados',
@@ -673,4 +681,6 @@ export const API_GUARDS: Array<{ route: string; file: string; permission: Permis
   { route: '/api/ai/automations', file: 'src/app/api/ai/automations/route.ts', permission: 'config', area: 'automations' },
   // FASE 2 · P4 — motor de anamnese (templates + respostas do paciente).
   { route: '/api/anamnese', file: 'src/app/api/anamnese/route.ts', permission: ['atendimento', 'config'], area: 'atendimento' },
+  // FASE 2 · P7 — financeiro básico (mesma permissão da porta).
+  { route: '/api/finance', file: 'src/app/api/finance/route.ts', permission: 'financeiro', area: 'financeiro' },
 ];

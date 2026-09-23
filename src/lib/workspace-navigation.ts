@@ -74,7 +74,7 @@ export const WORKSPACE_AREAS: WorkspaceAreaDef[] = [
   },
   {
     id: 'gestao', label: 'Gestão', icon: 'chart', color: 'var(--success)',
-    routes: ['/resultados', '/organizacao'],
+    routes: ['/resultados', '/financeiro', '/organizacao'],
   },
   {
     id: 'ajustes', label: 'Ajustes', icon: 'settings', color: 'var(--text-muted)',

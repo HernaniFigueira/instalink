@@ -47,7 +47,7 @@ function dashboardRouteFolders(): string[] {
 // ═══════════════════════════════════════════════════════════════
 describe('catálogo — completude (por qual porta se chega até mim?)', () => {
   it('tem as 22 portas da arquitetura consolidada', () => {
-    expect(PANEL_ROUTES).toHaveLength(23);
+    expect(PANEL_ROUTES).toHaveLength(24);
   });
 
   it('toda porta do catálogo tem uma rota real no disco', () => {
@@ -215,7 +215,7 @@ describe('sidebar — projeção (permissão ∩ módulos, ordem do catálogo)',
       '/clientes', '/funil',
       '/servicos',
       '/campanhas', '/automacoes', '/canais',
-      '/resultados', '/organizacao',
+      '/resultados', '/financeiro', '/organizacao',
       '/pagina',
       '/equipe', '/recursos', '/configuracoes',
     ]);
@@ -620,7 +620,7 @@ describe('uma porta por conceito', () => {
     const nav = panelNavigation(ctx());
     expect(nav.sidebar.map((r) => r.href)).toContain('/organizacao');
     expect(nav.sections.find((s) => s.id === 'resultados')?.items.map((r) => r.href))
-      .toEqual(['/resultados', '/organizacao']);
+      .toEqual(['/resultados', '/financeiro', '/organizacao']);
     const page = read('src/app/(dashboard)/organizacao/page.tsx');
     expect(page).toMatch(/Adicionar filial/);
     expect(page).not.toMatch(/businesses\.length > 1/);
@@ -743,7 +743,7 @@ describe('guardas de servidor (regressão)', () => {
       '/clientes', '/funil',
       '/servicos',
       '/campanhas', '/automacoes', '/canais',
-      '/resultados', '/organizacao', '/execucoes',
+      '/resultados', '/financeiro', '/organizacao', '/execucoes',
       '/pagina',
       '/equipe', '/recursos', '/configuracoes',
     ]);
