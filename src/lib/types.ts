@@ -193,6 +193,14 @@ export interface Business {
   logo: string;
   cover: string;
   niche: Niche;
+  /**
+   * FASE 2 · P5 — TIPO DE CLÍNICA (preset, NÃO aplicação separada).
+   * Define terminologia, templates de anamnese sugeridos, módulos sugeridos e
+   * configuração inicial. É UM produto com presets — nunca cria dashboards,
+   * rotas ou componentes diferentes. Ausente/'geral' = genérico (compatível
+   * com todo dado legado; nada é migrado nem adivinhado).
+   */
+  clinicType?: ClinicType;
   modes: BusinessMode[];
   // Módulos opcionais (avaliações, FAQ, galeria, localização, WhatsApp,
   // Sobre, agente). Preenchido de forma defensiva na leitura (migração
@@ -619,6 +627,8 @@ export interface Booking {
   /** Quem registrou o check-in (memberId) e o rótulo legível do autor. */
   checkedInBy?: string;
   checkedInByName?: string;
+  /** P6 · veterinária — pet atendido ('' quando não se aplica). Aditivo. */
+  petId?: string;
 }
 
 /** Tipo do agendamento. `standard` é o fluxo normal da grade. */
@@ -715,6 +725,8 @@ export interface Encounter {
   finalizedBy: string;
   /** Quem assina o registro (nome do profissional no momento da finalização). */
   signedBy: string;
+  /** P6 · veterinária — pet atendido ('' quando não se aplica). Aditivo. */
+  petId?: string;
 }
 
 export type ReviewSource = 'site' | 'google';
@@ -985,6 +997,12 @@ export interface DB {
   queue: QueueEntry[];
   // ── A3.4 · Bloco 5: registros de atendimento (dado sensível, com dono) ──
   encounters: Encounter[];
+  // ── FASE 2 · Product Revolution (ADITIVAS; defaults em normalizeDB) ──
+  pets: Pet[]; // P6 — veterinária: tutor (contato) ≠ pet (paciente)
+  anamneseTemplates: AnamneseTemplate[]; // P4 — motor único de anamnese
+  anamneseResponses: AnamneseResponse[]; // P4 — respostas do paciente
+  financeEntries: FinanceEntry[]; // P7 — financeiro básico (não é ERP)
+  followUpRules: FollowUpRule[]; // P10/11 — fundação de follow-up
 }
 
 // ═══════════════════════════════════════════════════════════════
@@ -1910,4 +1928,158 @@ export interface AuditEntry {
   businessId: string;
   supportSessionId: string;
   meta: Record<string, any>;
+}
+
+// ═══════════════════════════════════════════════════════════════
+// FASE 2 — PRODUCT REVOLUTION (GoDoutor)
+// Estruturas ADITIVAS. Nenhum dado legado é migrado nem destruído: arrays e
+// campos novos ganham defaults em normalizeDB (db.ts). Um produto, presets.
+// ═══════════════════════════════════════════════════════════════
+
+// ── P5 · Tipo de clínica (preset, não aplicação separada) ──
+export type ClinicType = 'medica' | 'odontologica' | 'veterinaria' | 'estetica' | 'geral';
+
+export const VALID_CLINIC_TYPES: ClinicType[] = [
+  'medica', 'odontologica', 'veterinaria', 'estetica', 'geral',
+];
+
+export function isClinicType(v: unknown): v is ClinicType {
+  return typeof v === 'string' && (VALID_CLINIC_TYPES as string[]).includes(v);
+}
+
+// ── P6 · Veterinária: TUTOR (contato) ≠ PET (paciente) ──
+// O tutor é um BusinessCustomer normal (pessoa de contato). O Pet é entidade
+// própria ligada a um tutor; um tutor pode ter vários pets. Essa estrutura NÃO
+// se aplica às outras clínicas (petId fica '' — aditivo e opcional).
+export interface Pet {
+  id: ID;
+  businessId: ID;
+  /** Tutor — contato do CRM (BusinessCustomer.id) dono do pet. */
+  tutorId: ID;
+  name: string;
+  photo: string;
+  species: string; // espécie: cachorro, gato, ave…
+  breed: string; // raça
+  sex: 'M' | 'F' | ''; // '' = não informado
+  birthDate: string; // YYYY-MM-DD ('' = não informado); idade é derivada
+  weightKg: number; // 0 = não informado
+  notes: string; // observações (comportamento, alergias, cuidados)
+  active: boolean;
+  createdAt: string;
+  updatedAt: string;
+}
+
+// ── P4 · Motor único de anamnese (template → campos → resposta) ──
+// NÃO é uma tabela hardcoded por clínica: é um motor de formulários clínicos.
+// Templates administrativos editáveis — NÃO são diagnóstico médico.
+export type AnamneseFieldType =
+  | 'text' | 'textarea' | 'boolean' | 'select' | 'multiselect'
+  | 'number' | 'date' | 'scale' | 'note';
+
+export interface AnamneseField {
+  id: ID;
+  label: string;
+  type: AnamneseFieldType;
+  required: boolean;
+  help?: string; // texto de apoio exibido abaixo do rótulo
+  options?: string[]; // select / multiselect
+  scaleMin?: number; // escala
+  scaleMax?: number;
+  scaleMinLabel?: string; // rótulo dos extremos (ex.: "Nenhuma" / "Muita")
+  scaleMaxLabel?: string;
+}
+
+export interface AnamneseTemplate {
+  id: ID;
+  businessId: ID;
+  name: string;
+  description: string;
+  /** Preset de origem. '' = criado/editado pela clínica. */
+  preset: ClinicType | 'custom' | '';
+  fields: AnamneseField[];
+  active: boolean;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface AnamneseResponse {
+  id: ID;
+  businessId: ID;
+  templateId: ID;
+  /** Atendimento de origem ('' = resposta avulsa, sem atendimento). */
+  encounterId: ID;
+  /** Paciente (contato do CRM). */
+  contactId: ID;
+  /** Pet ('' quando não é veterinária). */
+  petId: ID;
+  professionalId: ID;
+  /** fieldId → valor (string | number | boolean | string[] conforme o tipo). */
+  answers: Record<string, unknown>;
+  createdAt: string;
+  updatedAt: string;
+  createdBy: ID;
+}
+
+// ── P7 · Financeiro básico (não é ERP) ──
+export type FinanceKind = 'receita' | 'despesa';
+export type FinanceStatus = 'previsto' | 'pendente' | 'pago' | 'cancelado';
+
+export interface FinanceEntry {
+  id: ID;
+  businessId: ID;
+  kind: FinanceKind;
+  status: FinanceStatus;
+  /** Valor em centavos (sempre positivo; o `kind` define receita/despesa). */
+  amount: number;
+  description: string;
+  dueDate: string; // YYYY-MM-DD — data prevista
+  paidAt: string; // YYYY-MM-DD — data do pagamento ('' = não pago)
+  method: string; // pix | card | cash | … ('' = não informado)
+  // Vínculos opcionais ('' = não vinculado).
+  contactId: ID; // paciente
+  bookingId: ID;
+  serviceId: ID;
+  professionalId: ID;
+  encounterId: ID;
+  note: string;
+  createdAt: string;
+  updatedAt: string;
+  createdBy: ID;
+}
+
+// ── P10/11 · Follow-up: fundação (receitas internas) ──
+// NÃO envia nada sozinho nesta fase. Cada receita descreve gatilho, atraso,
+// público e ação pretendida. Quando o canal (WhatsApp) não estiver operacional,
+// a UI mostra "Aguardando conexão do WhatsApp" — nunca finge envio.
+export type FollowUpTrigger =
+  | 'lead_no_booking' // lead não agendou após X tempo
+  | 'before_appointment' // confirmação antes do atendimento
+  | 'no_show' // após falta
+  | 'after_completion' // pós-atendimento
+  | 'return_due' // retorno na data/intervalo definido
+  | 'inactive_patient'; // sem atendimento há X tempo
+
+export interface FollowUpRule {
+  id: ID;
+  businessId: ID;
+  name: string;
+  trigger: FollowUpTrigger;
+  active: boolean;
+  /** Atraso em relação ao gatilho. */
+  delayValue: number;
+  delayUnit: 'minutes' | 'hours' | 'days';
+  /**
+   * Parâmetros do gatilho:
+   *  - before_appointment: horas antes do atendimento;
+   *  - inactive_patient: dias sem atendimento;
+   *  - return_due: deriva do Encounter.followUp / data de retorno.
+   */
+  params: Record<string, unknown>;
+  /** Ação pretendida (descrição; o canal pode não estar operacional). */
+  action: string;
+  channel: 'whatsapp' | 'interno' | 'email';
+  /** Descrição do público (ex.: "todos os pacientes ativos"). */
+  audience: string;
+  createdAt: string;
+  updatedAt: string;
 }

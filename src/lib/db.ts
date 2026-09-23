@@ -23,7 +23,7 @@ import path from 'node:path';
 import { Pool } from 'pg';
 import { runSyncMutation, type SyncMutation } from './db-transaction';
 import type { DB } from './types';
-import { defaultBookingConfig } from './types';
+import { defaultBookingConfig, isClinicType } from './types';
 import { backfillContacts } from './contacts';
 import { normalizeFeatures } from './features';
 import { sanitizeAppearance } from './appearance';
@@ -68,6 +68,9 @@ export function emptyDB(): DB {
     queue: [],
     // A3.4 · Bloco 5 — registros de atendimento
     encounters: [],
+    // FASE 2 · Product Revolution (aditivas — documento antigo ganha []).
+    pets: [], anamneseTemplates: [], anamneseResponses: [],
+    financeEntries: [], followUpRules: [],
   };
 }
 
@@ -83,6 +86,8 @@ export function normalizeDB(raw: unknown): DB {
     'pipelines', 'apiKeys', 'webhooks', 'webhookDeliveries', 'idempotencyKeys', 'integrationLogs',
     'automations', 'automationRuns', 'tasks', 'aiProposals',
     'integrations', 'integrationEvents', 'queue', 'encounters',
+    // FASE 2 · Product Revolution
+    'pets', 'anamneseTemplates', 'anamneseResponses', 'financeEntries', 'followUpRules',
   ] as const) {
     if (!Array.isArray((base as any)[key])) (base as any)[key] = [];
   }
@@ -282,6 +287,9 @@ export function normalizeDB(raw: unknown): DB {
     // (idempotente; valor explícito do lojista nunca é sobrescrito).
     const page = base.pages.find((p) => p.businessId === b.id);
     b.features = normalizeFeatures(b, page?.blocks || []);
+    // FASE 2 · P5 — tipo de clínica (preset). Default defensivo 'geral':
+    // negócio legado continua genérico; nada é adivinhado a partir do nicho.
+    if (!isClinicType((b as any).clinicType)) (b as any).clinicType = 'geral';
     if (!b.whatsappIntegration || typeof b.whatsappIntegration !== 'object') {
       b.whatsappIntegration = defaultWhatsappIntegration();
     } else {
