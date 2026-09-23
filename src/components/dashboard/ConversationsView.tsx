@@ -208,7 +208,7 @@ export function ConversationsView({ unitId, panel = false }: { unitId?: string; 
               <Icon n="inbox" size={18} />
             </span>
             <div>
-              <h1 className="text-base font-bold text-[var(--text)] leading-tight">Conversas</h1>
+              <h1 className="text-base font-semibold text-[var(--text)] leading-tight">Conversas</h1>
               <p className="text-sm text-[var(--text-muted)] mt-0.5">As conversas com os seus clientes em um só lugar.</p>
             </div>
           </div>
@@ -219,12 +219,12 @@ export function ConversationsView({ unitId, panel = false }: { unitId?: string; 
         <div className="ws-panel">
           <div className="il-empty max-w-lg mx-auto">
             <div className="il-empty__icon"><Icon n="chat" size={24} /></div>
-            <h2 className="font-bold text-[var(--text)]">Nenhuma conversa ainda</h2>
+            <h2 className="font-semibold text-[var(--text)]">Nenhuma conversa ainda</h2>
             <p className="text-sm text-[var(--text-muted)] mt-1">
               Para receber e responder por aqui é preciso conectar um canal. {data.label.detail}
             </p>
             <div className="mt-5 flex flex-col sm:flex-row items-center justify-center gap-2">
-              <Link href={channelsHref} className="inline-flex items-center justify-center gap-1.5 text-sm font-bold bg-[var(--brand)] text-white px-4 py-2 rounded-md border border-[var(--brand-strong)]/40 shadow-brand hover:bg-[var(--brand-strong)]">
+              <Link href={channelsHref} className="inline-flex items-center justify-center gap-1.5 text-sm font-semibold bg-[var(--brand)] text-white px-4 py-2 rounded-md border border-[var(--brand-strong)]/40 shadow-brand hover:bg-[var(--brand-strong)]">
                 <Icon n="plugs" size={15} /> Conectar canal
               </Link>
               {data.linkFallback && (
@@ -251,7 +251,7 @@ export function ConversationsView({ unitId, panel = false }: { unitId?: string; 
             <Icon n="inbox" size={18} />
           </span>
           <div className="min-w-0">
-            <h1 className="text-base font-bold text-[var(--text)] leading-tight">Conversas</h1>
+            <h1 className="text-base font-semibold text-[var(--text)] leading-tight">Conversas</h1>
             <p className="text-xs text-[var(--text-muted)]">
               {data.inbox.open} abertas · {data.inbox.unread} não lidas
               {channels.whatsapp && data.integration.displayPhone && <> · <span className="font-semibold text-[var(--text)]">{data.integration.displayPhone}</span></>}
@@ -261,17 +261,17 @@ export function ConversationsView({ unitId, panel = false }: { unitId?: string; 
         </div>
         <div className="flex items-center gap-2">
           {channels.whatsapp && (
-            <Link href={channelsHref} className="hidden sm:inline-flex items-center gap-1.5 text-xs font-bold bg-[var(--success-bg)] border border-[var(--success-border)] text-[var(--success-fg)] rounded-pill px-2.5 py-1 shadow-xs">
+            <Link href={channelsHref} className="hidden sm:inline-flex items-center gap-1.5 text-xs font-semibold bg-[var(--success-bg)] border border-[var(--success-border)] text-[var(--success-fg)] rounded-pill px-2.5 py-1 shadow-xs">
               <Icon n="whatsapp" size={12} /> WhatsApp conectado
             </Link>
           )}
           {channels.instagram && (
-            <Link href={channelsHref} className="hidden sm:inline-flex items-center gap-1.5 text-xs font-bold bg-[var(--success-bg)] border border-[var(--success-border)] text-[var(--success-fg)] rounded-pill px-2.5 py-1 shadow-xs">
+            <Link href={channelsHref} className="hidden sm:inline-flex items-center gap-1.5 text-xs font-semibold bg-[var(--success-bg)] border border-[var(--success-border)] text-[var(--success-fg)] rounded-pill px-2.5 py-1 shadow-xs">
               <Icon n="instagram" size={12} /> Instagram conectado
             </Link>
           )}
           {!channels.whatsapp && hasInstagram && (
-            <Link href={channelsHref} className="hidden sm:inline-flex items-center gap-1.5 text-xs font-bold bg-[var(--warning-bg)] border border-[var(--warning-border)] text-[var(--warning-fg)] rounded-pill px-2.5 py-1 shadow-xs">
+            <Link href={channelsHref} className="hidden sm:inline-flex items-center gap-1.5 text-xs font-semibold bg-[var(--warning-bg)] border border-[var(--warning-border)] text-[var(--warning-fg)] rounded-pill px-2.5 py-1 shadow-xs">
               <Icon n="whatsapp" size={12} /> WhatsApp não conectado
             </Link>
           )}
@@ -285,7 +285,7 @@ export function ConversationsView({ unitId, panel = false }: { unitId?: string; 
       <div className="ws-panel overflow-hidden">
         {/* Toolbar compacta */}
         <div className="flex flex-wrap items-center gap-2 px-3 py-2.5 border-b border-[var(--border)] bg-[var(--surface-2)]">
-          <span className="text-[11px] font-bold tracking-[0.08em] uppercase text-[var(--text-faint)] hidden sm:inline">Inbox</span>
+          <span className="text-[11px] font-semibold tracking-[0.08em] uppercase text-[var(--text-faint)] hidden sm:inline">Inbox</span>
           {/* Busca contextual (A1.2 · Bloco 2): estado na URL (?q=), filtro
               client-side sobre a lista já autorizada — deep-link e refresh
               preservam o termo. */}
@@ -328,7 +328,7 @@ export function ConversationsView({ unitId, panel = false }: { unitId?: string; 
           {/* Col 1: Conversas */}
           <div className="inbox-list flex flex-col min-h-[280px] lg:min-h-0">
             <div className="px-3 py-2 border-b border-[var(--border-soft)] bg-white">
-              <p className="text-[11px] font-bold tracking-[0.08em] uppercase text-[var(--text-faint)]">Conversas · {filtered.length}</p>
+              <p className="text-[11px] font-semibold tracking-[0.08em] uppercase text-[var(--text-faint)]">Conversas · {filtered.length}</p>
             </div>
             <div className="flex-1 overflow-y-auto max-h-[320px] lg:max-h-[520px]">
               {filtered.length === 0 ? (
@@ -349,9 +349,9 @@ export function ConversationsView({ unitId, panel = false }: { unitId?: string; 
                         <span className="flex items-center gap-1.5 min-w-0">
                           <Icon n={c.channel === 'instagram' ? 'instagram' : c.channel === 'whatsapp' ? 'whatsapp' : 'chat'} size={12}
                             className={c.channel === 'instagram' ? 'shrink-0 text-[var(--lilac-fg)]' : 'shrink-0 text-[var(--success-fg)]'} />
-                          <span className={cn('text-sm truncate', isActive ? 'font-bold text-[var(--brand-fg)]' : 'font-semibold text-[var(--text)]')}>{c.name}</span>
+                          <span className={cn('text-sm truncate', isActive ? 'font-semibold text-[var(--brand-fg)]' : 'font-semibold text-[var(--text)]')}>{c.name}</span>
                         </span>
-                        {c.unread > 0 && <span className="text-[11px] font-bold bg-[var(--brand)] text-white min-w-[18px] text-center px-1 py-0.5 rounded-pill shrink-0 tabular-nums">{c.unread}</span>}
+                        {c.unread > 0 && <span className="text-[11px] font-semibold bg-[var(--brand)] text-white min-w-[18px] text-center px-1 py-0.5 rounded-pill shrink-0 tabular-nums">{c.unread}</span>}
                       </span>
                       <span className="text-xs text-[var(--text-muted)] truncate">{c.lastMessagePreview || c.phone || c.channelUsername || ''}</span>
                       <span className="text-[11px] text-[var(--text-faint)]">
@@ -374,9 +374,9 @@ export function ConversationsView({ unitId, panel = false }: { unitId?: string; 
                 <div className="px-3 py-2.5 border-b border-[var(--border-soft)] flex flex-wrap items-center justify-between gap-2 bg-white">
                   <div className="min-w-0">
                     <div className="flex flex-wrap items-center gap-2">
-                      <p className="text-sm font-bold text-[var(--text)] truncate">{active.conversation.name}</p>
+                      <p className="text-sm font-semibold text-[var(--text)] truncate">{active.conversation.name}</p>
                       {/* Estado do atendimento: quem está respondendo AGORA. */}
-                      <span className={cn('text-[11px] font-bold border rounded-pill px-2 py-0.5 inline-flex items-center gap-1',
+                      <span className={cn('text-[11px] font-semibold border rounded-pill px-2 py-0.5 inline-flex items-center gap-1',
                         active.conversation.mode === 'human'
                           ? 'bg-[var(--warning-bg)] border-[var(--warning-border)] text-[var(--warning-fg)]'
                           : 'bg-[var(--success-bg)] border-[var(--success-border)] text-[var(--success-fg)]'
@@ -396,7 +396,7 @@ export function ConversationsView({ unitId, panel = false }: { unitId?: string; 
                     <button
                       onClick={toggleMode}
                       disabled={switchingMode}
-                      className={cn('text-xs font-bold rounded-md px-2.5 py-1.5 border shadow-xs disabled:opacity-50 inline-flex items-center gap-1.5',
+                      className={cn('text-xs font-semibold rounded-md px-2.5 py-1.5 border shadow-xs disabled:opacity-50 inline-flex items-center gap-1.5',
                         active.conversation.mode === 'human'
                           ? 'bg-white border-[var(--border-strong)] text-[var(--text)] hover:bg-[var(--surface-hover)]'
                           : 'bg-[var(--warning-bg)] border-[var(--warning-border)] text-[var(--warning-fg)] hover:bg-[var(--attention-bg-hover)]')}
@@ -405,7 +405,7 @@ export function ConversationsView({ unitId, panel = false }: { unitId?: string; 
                       {active.conversation.mode === 'human' ? 'Devolver ao assistente' : 'Assumir atendimento'}
                     </button>
                     <Link href={`/clientes?b=${businessId}&q=${encodeURIComponent(active.conversation.phone||'')}`}
-                      className="text-xs font-bold text-[var(--brand-fg)] bg-[var(--brand-soft)] border border-[var(--brand-border)] rounded-md px-2.5 py-1.5 hover:bg-[var(--brand-bg-hover)] inline-flex items-center gap-1.5">
+                      className="text-xs font-semibold text-[var(--brand-fg)] bg-[var(--brand-soft)] border border-[var(--brand-border)] rounded-md px-2.5 py-1.5 hover:bg-[var(--brand-bg-hover)] inline-flex items-center gap-1.5">
                       <Icon n="wallet" size={13} /> Ver no CRM
                     </Link>
                   </div>
@@ -464,7 +464,7 @@ export function ConversationsView({ unitId, panel = false }: { unitId?: string; 
                           texto e durante o envio — nunca um "Enviar" de mentira. */}
                       <button type="submit"
                         disabled={sending || !draft.trim() || (active.conversation.channel === 'instagram' ? !channels.instagram : !channels.whatsapp)}
-                        className="text-sm font-bold bg-[var(--brand)] text-white px-4 py-2 rounded-md border border-[var(--brand-strong)]/40 shadow-brand hover:bg-[var(--brand-strong)] disabled:opacity-50 disabled:cursor-not-allowed disabled:shadow-none inline-flex items-center gap-1.5">
+                        className="text-sm font-semibold bg-[var(--brand)] text-white px-4 py-2 rounded-md border border-[var(--brand-strong)]/40 shadow-brand hover:bg-[var(--brand-strong)] disabled:opacity-50 disabled:cursor-not-allowed disabled:shadow-none inline-flex items-center gap-1.5">
                         <Icon n="send" size={14} /> {sending ? 'Enviando…' : 'Enviar'}
                       </button>
                     </form>
@@ -475,7 +475,7 @@ export function ConversationsView({ unitId, panel = false }: { unitId?: string; 
             ) : (
               <div className="flex-1 flex flex-col items-center justify-center text-center px-6 py-12">
                 <div className="il-empty__icon"><Icon n="chat" size={22} /></div>
-                <p className="text-sm font-bold text-[var(--text)]">Escolha uma conversa</p>
+                <p className="text-sm font-semibold text-[var(--text)]">Escolha uma conversa</p>
                 <p className="text-xs text-[var(--text-muted)] mt-1 max-w-sm">Cada mensagem vira histórico do cliente. O assistente pode responder com os dados do negócio.</p>
               </div>
             )}
@@ -491,7 +491,7 @@ export function ConversationsView({ unitId, panel = false }: { unitId?: string; 
                       {(active.conversation.name || '?').trim().split(/\s+/).slice(0, 2).map((x) => x[0]?.toUpperCase() || '').join('')}
                     </span>
                     <div className="min-w-0">
-                      <p className="text-sm font-bold text-[var(--text)] truncate">{active.conversation.name}</p>
+                      <p className="text-sm font-semibold text-[var(--text)] truncate">{active.conversation.name}</p>
                       <p className="text-xs text-[var(--text-muted)] truncate">
                         {active.conversation.channel === 'instagram'
                           ? (active.conversation.channelUsername ? `@${active.conversation.channelUsername}` : 'Contato do Instagram')
@@ -499,7 +499,7 @@ export function ConversationsView({ unitId, panel = false }: { unitId?: string; 
                       </p>
                     </div>
                   </div>
-                  <span className={cn('relative inline-flex items-center gap-1 mt-2.5 text-[11px] font-bold px-2 py-0.5 rounded-pill border',
+                  <span className={cn('relative inline-flex items-center gap-1 mt-2.5 text-[11px] font-semibold px-2 py-0.5 rounded-pill border',
                     active.conversation.registered
                       ? 'bg-[var(--brand-soft)] border-[var(--brand-border)] text-[var(--brand-fg)]'
                       : 'bg-[var(--lilac-bg)] border-[var(--lilac-border)] text-[var(--lilac-fg)]')}>
@@ -508,7 +508,7 @@ export function ConversationsView({ unitId, panel = false }: { unitId?: string; 
                   </span>
                 </div>
                 <div className="bg-white border border-[var(--border)] rounded-lg p-3 shadow-xs">
-                  <p className="text-[11px] font-bold tracking-[0.08em] uppercase text-[var(--text-faint)] mb-2">Atalhos</p>
+                  <p className="text-[11px] font-semibold tracking-[0.08em] uppercase text-[var(--text-faint)] mb-2">Atalhos</p>
                   <div className="space-y-1.5">
                     <Link href={`/clientes?b=${businessId}&q=${encodeURIComponent(active.conversation.phone || active.conversation.channelUsername || active.conversation.name || '')}`} className="flex items-center gap-1.5 text-xs font-semibold bg-[var(--surface-3)] border border-[var(--border)] rounded-md px-3 py-2 hover:bg-[var(--brand-soft)] hover:text-[var(--brand-fg)] hover:border-[var(--brand-border)]"><Icon n="wallet" size={13} /> Ver no CRM</Link>
                     <Link href={`/funil?b=${businessId}`} className="flex items-center gap-1.5 text-xs font-semibold bg-[var(--surface-3)] border border-[var(--border)] rounded-md px-3 py-2 hover:bg-[var(--lilac-bg)] hover:text-[var(--lilac-fg)] hover:border-[var(--lilac-border)]"><Icon n="funnel" size={13} /> Ver no funil</Link>

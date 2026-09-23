@@ -131,7 +131,7 @@ export function PipelineStagesPanel({ businessId, pipeline, onClose, onSaved }: 
         <ol className="space-y-2">
           {stages.map((s, i) => (
             <li key={s.id} className="flex items-center gap-2 bg-zinc-50 border border-zinc-200 rounded-lg px-2.5 py-2">
-              <span className="text-[11px] font-bold text-zinc-400 w-5 text-center shrink-0">{i + 1}</span>
+              <span className="text-[11px] font-semibold text-zinc-400 w-5 text-center shrink-0">{i + 1}</span>
               <input
                 value={s.name}
                 onChange={(e) => patch(i, { name: e.target.value })}

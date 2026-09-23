@@ -185,7 +185,7 @@ export default function RecursosPage() {
       {!failed && groups.map((group) => (
         <section key={group} className="mb-6 last:mb-0">
           <div className="flex items-baseline gap-2 mb-2.5">
-            <h2 className="text-xs font-extrabold uppercase tracking-wider text-zinc-400">{group}</h2>
+            <h2 className="text-xs font-semibold uppercase tracking-wider text-zinc-400">{group}</h2>
             <span className="text-xs text-zinc-400">{GROUP_HINT[group] || ''}</span>
           </div>
           <div className="grid sm:grid-cols-2 xl:grid-cols-3 gap-3">

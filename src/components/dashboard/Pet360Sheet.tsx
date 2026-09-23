@@ -106,7 +106,7 @@ export function Pet360Sheet({ open, onClose, businessId, pet, tutorName, tutorPh
         <div className="flex items-center gap-3.5">
           <Avatar name={pet.name} src={pet.photo || undefined} size={56} />
           <div className="min-w-0">
-            <p className="text-base font-extrabold text-[var(--text)]">{pet.name}</p>
+            <p className="text-base font-semibold text-[var(--text)]">{pet.name}</p>
             <p className="text-xs text-[var(--text-muted)]">
               {petLabel(pet)}{age !== null ? ` · ${age} ano(s)` : ''}{pet.weightKg ? ` · ${pet.weightKg} kg` : ''}
             </p>
@@ -199,7 +199,7 @@ export function Pet360Sheet({ open, onClose, businessId, pet, tutorName, tutorPh
                   <p className="text-xs text-[var(--text-muted)] tabular-nums">
                     Última ficha: {formatDateBR((lastResponse.createdAt || '').slice(0, 10))} · {templateName(lastResponse.templateId)}
                     {' '}·{' '}
-                    <button type="button" className="font-bold text-[var(--brand-fg)] hover:underline"
+                    <button type="button" className="font-semibold text-[var(--brand-fg)] hover:underline"
                       onClick={() => setHistoryOpen((v) => !v)} aria-expanded={historyOpen}>
                       {historyOpen ? 'Ocultar histórico' : 'Ver histórico'}
                     </button>

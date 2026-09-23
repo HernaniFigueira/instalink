@@ -334,7 +334,7 @@ export default function ClientesPage() {
                         <Avatar name={p.name} src={p.avatar || undefined} size={42} />
                         <span className="min-w-0 flex-1">
                           <span className="flex flex-wrap items-center gap-1.5">
-                            <span className="text-sm font-bold text-[var(--text)] truncate">{p.name || 'Sem nome'}</span>
+                            <span className="text-sm font-semibold text-[var(--text)] truncate">{p.name || 'Sem nome'}</span>
                             {p.age !== null && p.age !== undefined && (
                               <span className="text-xs text-[var(--text-muted)] tabular-nums">{p.age} anos</span>
                             )}

@@ -630,7 +630,7 @@ function ConditionValue({ row, fields, onChange }: {
 function Block({ label, hint, children }: { label: string; hint?: string; children: React.ReactNode }) {
   return (
     <div className="border border-zinc-200 rounded-md p-3">
-      <p className="text-[11px] font-bold uppercase tracking-wide text-zinc-500">{label}</p>
+      <p className="text-[11px] font-semibold uppercase tracking-wide text-zinc-500">{label}</p>
       {hint && <p className="text-[11px] text-zinc-400 mb-2">{hint}</p>}
       <div className={cn(!hint && 'mt-2')}>{children}</div>
     </div>
@@ -663,7 +663,7 @@ function StepList({ label, hint, steps, setSteps, options, event }: {
         {steps.map((s, i) => (
           <div key={s.id} className="border border-zinc-200 rounded-md p-2.5 bg-zinc-50/50">
             <div className="flex flex-wrap items-center gap-2">
-              <span className="text-[10px] font-bold uppercase tracking-wide text-zinc-400 w-14">
+              <span className="text-[10px] font-semibold uppercase tracking-wide text-zinc-400 w-14">
                 {i === 0 ? label.toLowerCase() : 'depois'}
               </span>
               <Select className="max-w-[260px]" value={s.kind === 'wait' ? '__wait' : s.type}

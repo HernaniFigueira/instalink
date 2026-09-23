@@ -156,7 +156,7 @@ export default function MeuPerfilPage() {
 
       {/* Também atende — vínculo User → Professional, sem unir entidades */}
       <section className="bg-white border border-[var(--border)] rounded-lg p-5 mt-5">
-        <h2 className="text-sm font-bold flex items-center gap-2">
+        <h2 className="text-sm font-semibold flex items-center gap-2">
           <Icon n="idcard" size={16} /> Também atende pacientes
         </h2>
         <p className="text-xs text-[var(--text-muted)] mt-1.5 leading-relaxed">

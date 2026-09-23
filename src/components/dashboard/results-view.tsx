@@ -147,7 +147,7 @@ export function MetricGrid({ metrics, hasPrevious }: { metrics: Metric[]; hasPre
       {metrics.map((m) => (
         <div key={m.id} className={cn('bg-white border border-zinc-200 rounded-lg p-3.5', !m.hasData && 'bg-zinc-50/60')}>
           <p className="text-xs text-zinc-500">{m.label}</p>
-          <p className={cn('text-xl font-extrabold tracking-tight mt-0.5', !m.hasData && 'text-zinc-300')}>{fmt(m)}</p>
+          <p className={cn('text-xl font-semibold tracking-tight mt-0.5', !m.hasData && 'text-zinc-300')}>{fmt(m)}</p>
           <div className="mt-1 min-h-[16px]"><ComparisonBadge metric={m} hasPrevious={hasPrevious} /></div>
           <p className="text-[11px] text-zinc-400 mt-1 leading-snug">{m.hasData ? m.hint : (m.noDataHint || m.hint)}</p>
         </div>
@@ -162,7 +162,7 @@ export function FunnelView({ funnel }: { funnel: ResultsPayload['funnel'] }) {
   let lastGroup = '';
   return (
     <div className="ws-panel p-4">
-      <h3 className="font-bold text-sm text-[var(--text)]">Funil do período</h3>
+      <h3 className="font-semibold text-sm text-[var(--text)]">Funil do período</h3>
       <p className="text-[11px] text-[var(--text-muted)] mt-0.5">Etapas contadas separadamente no período — o sistema não vincula cada lead a um agendamento.</p>
       <div className="mt-3 space-y-2.5">
         {steps.map((s) => {
@@ -172,7 +172,7 @@ export function FunnelView({ funnel }: { funnel: ResultsPayload['funnel'] }) {
           return (
             <div key={s.id}>
               {groupHeader && (
-                <p className="text-[10px] font-bold tracking-[0.08em] uppercase text-[var(--text-faint)] mb-1.5 mt-1">
+                <p className="text-[10px] font-semibold tracking-[0.08em] uppercase text-[var(--text-faint)] mb-1.5 mt-1">
                   {s.group === 'lead' ? 'Captação' : 'Atendimento'}
                 </p>
               )}
@@ -234,7 +234,7 @@ export function StatusMixBar({ payload }: { payload: ResultsPayload }) {
   return (
     <div className="ws-panel p-4">
       <div className="flex items-baseline justify-between gap-2">
-        <h3 className="font-bold text-sm text-[var(--text)]">Como terminaram os atendimentos</h3>
+        <h3 className="font-semibold text-sm text-[var(--text)]">Como terminaram os atendimentos</h3>
         <span className="text-xs text-[var(--text-muted)] tabular-nums shrink-0">{mix.total} no período</span>
       </div>
       <p className="text-[11px] text-[var(--text-muted)] mt-0.5">
@@ -288,7 +288,7 @@ export function PerformanceView({ payload }: { payload: ResultsPayload }) {
   return (
     <div className="ws-panel">
       <div className="px-4 pt-3.5 pb-2.5 flex flex-wrap items-center justify-between gap-2 border-b border-[var(--border-soft)]">
-        <h3 className="font-bold text-sm text-[var(--text)]">Desempenho</h3>
+        <h3 className="font-semibold text-sm text-[var(--text)]">Desempenho</h3>
         <Tabs
           items={[
             { id: 'services' as const, label: 'Serviços', icon: 'service' },
@@ -398,7 +398,7 @@ export function OriginsView({ origins }: { origins: ResultsPayload['origins'] })
   const bars = originBars(origins.rows);
   return (
     <div className="ws-panel p-4">
-      <h3 className="font-bold text-sm text-[var(--text)]">De onde vêm os leads</h3>
+      <h3 className="font-semibold text-sm text-[var(--text)]">De onde vêm os leads</h3>
       {bars.length === 0 ? (
         <p className="text-xs text-[var(--text-muted)] mt-2">{origins.reason}</p>
       ) : (

@@ -104,7 +104,7 @@ export function PetsSection({ businessId, tutorId, tutorName, onChanged, onOpenP
               <li key={p.id} className="flex items-center gap-3 rounded-lg border border-[var(--border)] px-3 py-2">
                 <Avatar name={p.name} src={p.photo || undefined} size={36} />
                 <div className="min-w-0 flex-1">
-                  <button type="button" className="text-[13.5px] font-bold text-[var(--text)] truncate hover:underline text-left w-full"
+                  <button type="button" className="text-[13.5px] font-semibold text-[var(--text)] truncate hover:underline text-left w-full"
                     onClick={() => onOpenPet?.(p)} title={`Abrir ficha de ${p.name}`}>
                     {p.name}{!p.active && <span className="ml-2 text-[11px] font-semibold text-[var(--text-muted)]">(inativo)</span>}
                   </button>

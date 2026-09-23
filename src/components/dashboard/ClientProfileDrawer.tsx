@@ -526,7 +526,7 @@ export function ClientProfileDrawer({ person, businessId, pipeline, canFunil, on
             {/* Ponto 8 — foto real da conta global quando existe; sem ela, iniciais. */}
             <Avatar name={person.name} src={person.avatar || undefined} size={72} />
             <div className="min-w-0 flex-1">
-              <h2 className="text-lg font-bold text-[var(--text)] leading-tight break-words">{person.name || 'Sem nome'}</h2>
+              <h2 className="text-lg font-semibold text-[var(--text)] leading-tight break-words">{person.name || 'Sem nome'}</h2>
               <p className="text-sm text-[var(--text-muted)] mt-0.5">
                 {age !== null ? `${age} anos` : 'Idade não informada'}
                 {profile.birthDate ? ` · nasceu em ${profile.birthDate.split('-').reverse().join('/')}` : ''}
@@ -607,13 +607,13 @@ export function ClientProfileDrawer({ person, businessId, pipeline, canFunil, on
             <dl className="grid sm:grid-cols-2 gap-x-4 gap-y-2.5">
               {addressLine && (
                 <div className="sm:col-span-2">
-                  <dt className="text-[10px] font-bold uppercase tracking-[0.08em] text-[var(--text-faint)]">Endereço</dt>
+                  <dt className="text-[10px] font-semibold uppercase tracking-[0.08em] text-[var(--text-faint)]">Endereço</dt>
                   <dd className="text-xs text-[var(--text)] mt-0.5">{addressLine}</dd>
                 </div>
               )}
               {profile.guardian.name && (
                 <div>
-                  <dt className="text-[10px] font-bold uppercase tracking-[0.08em] text-[var(--text-faint)]">Responsável</dt>
+                  <dt className="text-[10px] font-semibold uppercase tracking-[0.08em] text-[var(--text-faint)]">Responsável</dt>
                   <dd className="text-xs text-[var(--text)] mt-0.5">
                     {profile.guardian.name}
                     {profile.guardian.relationship ? ` · ${profile.guardian.relationship}` : ''}
@@ -622,19 +622,19 @@ export function ClientProfileDrawer({ person, businessId, pipeline, canFunil, on
               )}
               {profile.guardian.phone && (
                 <div>
-                  <dt className="text-[10px] font-bold uppercase tracking-[0.08em] text-[var(--text-faint)]">Contato do responsável</dt>
+                  <dt className="text-[10px] font-semibold uppercase tracking-[0.08em] text-[var(--text-faint)]">Contato do responsável</dt>
                   <dd className="text-xs text-[var(--text)] mt-0.5">{formatPhoneBR(profile.guardian.phone)}</dd>
                 </div>
               )}
               {profile.adminNote && (
                 <div className="sm:col-span-2">
-                  <dt className="text-[10px] font-bold uppercase tracking-[0.08em] text-[var(--text-faint)]">Observação administrativa</dt>
+                  <dt className="text-[10px] font-semibold uppercase tracking-[0.08em] text-[var(--text-faint)]">Observação administrativa</dt>
                   <dd className="text-xs text-[var(--text-muted)] mt-0.5 whitespace-pre-line">{profile.adminNote}</dd>
                 </div>
               )}
               {profile.tags.length > 0 && (
                 <div className="sm:col-span-2">
-                  <dt className="text-[10px] font-bold uppercase tracking-[0.08em] text-[var(--text-faint)] mb-1">Etiquetas do cadastro</dt>
+                  <dt className="text-[10px] font-semibold uppercase tracking-[0.08em] text-[var(--text-faint)] mb-1">Etiquetas do cadastro</dt>
                   <dd className="flex flex-wrap gap-1.5">
                     {profile.tags.map((t) => (
                       <span key={t} className="rounded-md border border-[var(--border-2)] bg-[var(--surface-2)] px-2 py-0.5 text-[11px] font-semibold text-[var(--text-muted)]">{t}</span>
@@ -657,7 +657,7 @@ export function ClientProfileDrawer({ person, businessId, pipeline, canFunil, on
             </p>
           </div>
           <div className="flex items-center gap-2.5">
-            <span className={cn('text-xs font-bold', person.marketingOptIn ? 'text-[var(--success-fg)]' : 'text-[var(--text-muted)]')}>
+            <span className={cn('text-xs font-semibold', person.marketingOptIn ? 'text-[var(--success-fg)]' : 'text-[var(--text-muted)]')}>
               {person.marketingOptIn ? 'Aceitou' : 'Não aceitou'}
             </span>
             <Switch checked={person.marketingOptIn} onChange={setConsent} label="Autoriza receber promoções" disabled={!person.contactId} />
@@ -669,7 +669,7 @@ export function ClientProfileDrawer({ person, businessId, pipeline, canFunil, on
             <Notice tone={notice.tone}>{notice.text}
               {notice.password && (
                 <span className="mt-2 flex items-center gap-2">
-                  <code className="select-all rounded bg-white border border-[var(--success-border)] px-2 py-1 font-bold tracking-wider text-[var(--text)]">{notice.password}</code>
+                  <code className="select-all rounded bg-white border border-[var(--success-border)] px-2 py-1 font-semibold tracking-wider text-[var(--text)]">{notice.password}</code>
                   <Button size="xs" variant="secondary" onClick={() => navigator.clipboard?.writeText(notice.password || '')}>Copiar senha</Button>
                 </span>
               )}
@@ -682,14 +682,14 @@ export function ClientProfileDrawer({ person, businessId, pipeline, canFunil, on
           <div className="mt-3 ws-panel p-4">
             <div className="flex items-center justify-between gap-3 mb-3">
               <div>
-                <h3 className="text-sm font-bold text-[var(--text)]">Dados cadastrais</h3>
+                <h3 className="text-sm font-semibold text-[var(--text)]">Dados cadastrais</h3>
                 <p className="text-xs text-[var(--text-muted)] mt-0.5">Só o que você preencher é salvo. Nenhum campo é obrigatório.</p>
               </div>
               <IconButton icon="x" label="Cancelar edição" size="sm" variant="ghost" onClick={() => { setDraft(profileOf(person.profile)); setEditing(false); }} />
             </div>
 
             <fieldset className="space-y-3">
-              <legend className="text-[11px] font-bold uppercase tracking-[0.08em] text-[var(--text-faint)] mb-2">Dados básicos</legend>
+              <legend className="text-[11px] font-semibold uppercase tracking-[0.08em] text-[var(--text-faint)] mb-2">Dados básicos</legend>
               <div className="grid sm:grid-cols-2 gap-3">
                 <label className="block sm:col-span-2">
                   <span className="block text-xs font-semibold text-[var(--text-muted)] mb-1.5">Nome completo</span>
@@ -747,7 +747,7 @@ export function ClientProfileDrawer({ person, businessId, pipeline, canFunil, on
             )}
 
             <fieldset className="space-y-3 mt-4">
-              <legend className="text-[11px] font-bold uppercase tracking-[0.08em] text-[var(--text-faint)] mb-2">Endereço</legend>
+              <legend className="text-[11px] font-semibold uppercase tracking-[0.08em] text-[var(--text-faint)] mb-2">Endereço</legend>
               <div className="grid sm:grid-cols-6 gap-3">
                 <label className="block sm:col-span-2">
                   <span className="block text-xs font-semibold text-[var(--text-muted)] mb-1.5">CEP</span>
@@ -794,7 +794,7 @@ export function ClientProfileDrawer({ person, businessId, pipeline, canFunil, on
             </fieldset>
 
             <fieldset className="space-y-3 mt-4 rounded-md border border-[var(--warning-border)] bg-[var(--warning-bg)]/60 p-3">
-              <legend className="text-[11px] font-bold uppercase tracking-[0.08em] text-[var(--warning-fg)] mb-1 px-1">Menor de idade / responsável</legend>
+              <legend className="text-[11px] font-semibold uppercase tracking-[0.08em] text-[var(--warning-fg)] mb-1 px-1">Menor de idade / responsável</legend>
               <label className="flex items-center gap-2.5 cursor-pointer select-none">
                 <Switch checked={draft.guardian.isMinor} label="É menor de idade"
                   onChange={(v) => setDraft((d) => ({ ...d, guardian: { ...d.guardian, isMinor: v } }))} />
@@ -820,7 +820,7 @@ export function ClientProfileDrawer({ person, businessId, pipeline, canFunil, on
             </fieldset>
 
             <fieldset className="space-y-3 mt-4">
-              <legend className="text-[11px] font-bold uppercase tracking-[0.08em] text-[var(--text-faint)] mb-2">Etiquetas</legend>
+              <legend className="text-[11px] font-semibold uppercase tracking-[0.08em] text-[var(--text-faint)] mb-2">Etiquetas</legend>
               <div className="flex flex-wrap gap-1.5 mb-2">
                 {draft.tags.map((t) => (
                   <span key={t} className="inline-flex items-center gap-1 rounded-pill bg-[var(--surface-3)] border border-[var(--border)] px-2.5 py-1 text-xs font-semibold text-[var(--text)]">
@@ -855,7 +855,7 @@ export function ClientProfileDrawer({ person, businessId, pipeline, canFunil, on
             </fieldset>
 
             <label className="block mt-4">
-              <span className="text-[11px] font-bold uppercase tracking-[0.08em] text-[var(--text-faint)] mb-2 block">Observação administrativa</span>
+              <span className="text-[11px] font-semibold uppercase tracking-[0.08em] text-[var(--text-faint)] mb-2 block">Observação administrativa</span>
               <Textarea value={draft.adminNote} rows={3} placeholder="Prefere horário da manhã, confirmar por telefone, convênio..."
                 onChange={(e) => setDraft((d) => ({ ...d, adminNote: e.target.value }))} />
             </label>
@@ -892,30 +892,30 @@ export function ClientProfileDrawer({ person, businessId, pipeline, canFunil, on
             <div className="p-4 space-y-4">
               <div className="grid gap-3 sm:grid-cols-3">
                 <div className="rounded-lg border border-[var(--border)] p-3">
-                  <p className="text-[11.5px] font-bold text-[var(--text-muted)] uppercase tracking-wide">Próximo agendamento</p>
+                  <p className="text-[11.5px] font-semibold text-[var(--text-muted)] uppercase tracking-wide">Próximo agendamento</p>
                   {nextBooking ? (
                     <>
-                      <p className="text-[15px] font-extrabold text-[var(--text)] mt-1">{formatDateBR(nextBooking.date)}{nextBooking.time ? ` · ${nextBooking.time}` : ''}</p>
+                      <p className="text-[15px] font-semibold text-[var(--text)] mt-1">{formatDateBR(nextBooking.date)}{nextBooking.time ? ` · ${nextBooking.time}` : ''}</p>
                       <p className="text-[12px] text-[var(--text-muted)]">{nextBooking.service}{nextBooking.professional ? ` · ${nextBooking.professional}` : ''}</p>
                       <Link href={`/agenda?b=${businessId}&data=${nextBooking.date}`} className="text-[12px] font-semibold text-[var(--brand-fg)] hover:underline">Ver na agenda</Link>
                     </>
                   ) : <p className="text-[13px] text-[var(--text-muted)] mt-1">Nenhum futuro marcado.</p>}
                 </div>
                 <div className="rounded-lg border border-[var(--border)] p-3">
-                  <p className="text-[11.5px] font-bold text-[var(--text-muted)] uppercase tracking-wide">Último atendimento</p>
+                  <p className="text-[11.5px] font-semibold text-[var(--text-muted)] uppercase tracking-wide">Último atendimento</p>
                   {lastEncounter ? (
                     <>
-                      <p className="text-[15px] font-extrabold text-[var(--text)] mt-1">{formatDateBR(lastEncounter.date)}{lastEncounter.time ? ` · ${lastEncounter.time}` : ''}</p>
+                      <p className="text-[15px] font-semibold text-[var(--text)] mt-1">{formatDateBR(lastEncounter.date)}{lastEncounter.time ? ` · ${lastEncounter.time}` : ''}</p>
                       <p className="text-[12px] text-[var(--text-muted)] line-clamp-2">{lastEncounter.evolution || lastEncounter.complaint || 'Sem descrição'}</p>
                       <button type="button" className="text-[12px] font-semibold text-[var(--brand-fg)] hover:underline" onClick={() => setEncounterOpen(lastEncounter)}>Abrir registro</button>
                     </>
                   ) : <p className="text-[13px] text-[var(--text-muted)] mt-1">Sem registro de atendimento.</p>}
                 </div>
                 <div className="rounded-lg border border-[var(--border)] p-3">
-                  <p className="text-[11.5px] font-bold text-[var(--text-muted)] uppercase tracking-wide">Retorno previsto</p>
+                  <p className="text-[11.5px] font-semibold text-[var(--text-muted)] uppercase tracking-wide">Retorno previsto</p>
                   {pendingReturn ? (
                     <>
-                      <p className="text-[15px] font-extrabold text-[var(--text)] mt-1">{formatDateBR(pendingReturn.due)}</p>
+                      <p className="text-[15px] font-semibold text-[var(--text)] mt-1">{formatDateBR(pendingReturn.due)}</p>
                       <p className="text-[12px] text-[var(--text-muted)]">{pendingReturn.e.followUp || (pendingReturn.e.followUpMode === 'interval' ? `Intervalo de ${pendingReturn.e.followUpDays} dias` : 'Retorno programado')}</p>
                     </>
                   ) : <p className="text-[13px] text-[var(--text-muted)] mt-1">Sem retorno estruturado registrado.</p>}
@@ -924,7 +924,7 @@ export function ClientProfileDrawer({ person, businessId, pipeline, canFunil, on
 
               <div className="grid gap-3 sm:grid-cols-2">
                 <div className="rounded-lg border border-[var(--border)] p-3">
-                  <p className="text-[11.5px] font-bold text-[var(--text-muted)] uppercase tracking-wide">Observação importante</p>
+                  <p className="text-[11.5px] font-semibold text-[var(--text-muted)] uppercase tracking-wide">Observação importante</p>
                   {lastNote ? (
                     <p className="text-[13px] text-[var(--text)] mt-1 line-clamp-3">{lastNote.text}</p>
                   ) : profile.adminNote ? (
@@ -934,7 +934,7 @@ export function ClientProfileDrawer({ person, businessId, pipeline, canFunil, on
                 </div>
                 {canFinance ? (
                   <div className="rounded-lg border border-[var(--border)] p-3">
-                    <p className="text-[11.5px] font-bold text-[var(--text-muted)] uppercase tracking-wide">Financeiro do paciente</p>
+                    <p className="text-[11.5px] font-semibold text-[var(--text-muted)] uppercase tracking-wide">Financeiro do paciente</p>
                     {!financeLoaded ? <p className="text-[13px] text-[var(--text-muted)] mt-1">Carregando…</p> : (
                       <div className="grid grid-cols-2 gap-2 mt-1">
                         <Kpi label="Recebido" value={centsToBR(financeReceived)} tone="success" />
@@ -945,7 +945,7 @@ export function ClientProfileDrawer({ person, businessId, pipeline, canFunil, on
                   </div>
                 ) : (
                   <div className="rounded-lg border border-[var(--border)] p-3">
-                    <p className="text-[11.5px] font-bold text-[var(--text-muted)] uppercase tracking-wide">Status</p>
+                    <p className="text-[11.5px] font-semibold text-[var(--text-muted)] uppercase tracking-wide">Status</p>
                     <div className="flex flex-wrap gap-1.5 mt-2">
                       {tags.map((t) => <Badge key={t.id} tone={(t.tone as any) || 'zinc'}>{t.label}</Badge>)}
                       {tags.length === 0 && <Badge tone="zinc">Sem etiquetas</Badge>}
@@ -967,7 +967,7 @@ export function ClientProfileDrawer({ person, businessId, pipeline, canFunil, on
                     <li key={f.id} className="flex items-center gap-3 px-4 py-3">
                       <span className="grid place-items-center h-8 w-8 rounded-lg bg-[var(--brand-soft)] text-[var(--brand-fg)] shrink-0"><Icon n="upload" size={15} /></span>
                       <div className="min-w-0 flex-1">
-                        <a href={f.url} target="_blank" rel="noreferrer" className="text-[13.5px] font-bold text-[var(--text)] hover:underline truncate block">{f.name}</a>
+                        <a href={f.url} target="_blank" rel="noreferrer" className="text-[13.5px] font-semibold text-[var(--text)] hover:underline truncate block">{f.name}</a>
                         <p className="text-[11.5px] text-[var(--text-muted)]">Atendimento de {formatDateBR(f.encounterDate)} · {Math.max(1, Math.round(f.size / 1024))} KB</p>
                       </div>
                       <button type="button" className="il-chip" onClick={() => { const e = encounters.find((x) => x.id === f.encounterId); if (e) setEncounterOpen(e); }}>Abrir atendimento</button>
@@ -996,7 +996,7 @@ export function ClientProfileDrawer({ person, businessId, pipeline, canFunil, on
                           <p className="text-[13px] font-semibold text-[var(--text)] truncate">{f.description}</p>
                           <p className="text-[11.5px] text-[var(--text-muted)]">{FINANCE_STATUS_LABEL[f.status]}{f.method ? ` · ${f.method}` : ''}</p>
                         </div>
-                        <span className={`text-[13.5px] font-extrabold tabular-nums ${f.kind === 'receita' ? 'text-[var(--success-fg)]' : 'text-[var(--danger)]'}`}>
+                        <span className={`text-[13.5px] font-semibold tabular-nums ${f.kind === 'receita' ? 'text-[var(--success-fg)]' : 'text-[var(--danger)]'}`}>
                           {f.kind === 'receita' ? '+' : '−'}{centsToBR(f.amount)}
                         </span>
                       </li>
@@ -1203,7 +1203,7 @@ export function ClientProfileDrawer({ person, businessId, pipeline, canFunil, on
 function Data({ label, value, action, mono }: { label: string; value: string; action?: React.ReactNode; mono?: boolean }) {
   return (
     <div className="min-w-0">
-      <dt className="text-[10px] font-bold uppercase tracking-[0.08em] text-[var(--text-faint)]">{label}</dt>
+      <dt className="text-[10px] font-semibold uppercase tracking-[0.08em] text-[var(--text-faint)]">{label}</dt>
       <dd className={cn('text-sm font-semibold text-[var(--text)] truncate mt-0.5 flex items-center gap-1.5', mono && 'font-mono text-xs')}>
         <span className="truncate">{value}</span>
         {action}

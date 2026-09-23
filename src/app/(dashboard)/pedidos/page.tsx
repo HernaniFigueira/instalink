@@ -71,7 +71,7 @@ export default function PedidosPage() {
       {denied ? <AccessDenied area="Pedidos" /> : !loaded ? <ListSkeleton rows={4} /> : list.length === 0 ? (
         <div className="bg-white border border-zinc-200 rounded-2xl text-center py-14 px-6">
           <div className="mx-auto w-12 h-12 rounded-2xl bg-zinc-100 flex items-center justify-center text-zinc-400"><Icon n="receipt" size={24} /></div>
-          <h3 className="font-bold mt-3">Nenhum pedido {filter ? 'neste status' : 'ainda'}</h3>
+          <h3 className="font-semibold mt-3">Nenhum pedido {filter ? 'neste status' : 'ainda'}</h3>
           <p className="text-sm text-zinc-500 mt-1">Quando um cliente finalizar uma compra, ela aparece aqui.</p>
         </div>
       ) : (
@@ -83,14 +83,14 @@ export default function PedidosPage() {
                 <button onClick={() => setOpen(open === o.id ? null : o.id)} className="w-full text-left">
                   <span className="flex flex-wrap items-center gap-2 justify-between">
                     <span>
-                      <span className="font-extrabold">{o.code}</span>{' '}
-                      <span className="font-bold text-sm">{o.customerName}</span>{' '}
+                      <span className="font-semibold">{o.code}</span>{' '}
+                      <span className="font-semibold text-sm">{o.customerName}</span>{' '}
                       <span className="text-xs text-zinc-500 inline-flex items-center gap-1"><Icon n={o.type === 'delivery' ? 'truck' : 'bag'} size={13} /> {o.type === 'delivery' ? 'Entrega' : 'Retirada'} · {payLabels[o.payment] || o.payment}</span>
                       <span className="block text-[11px] text-zinc-400 mt-0.5">{humanDay(o.createdAt.slice(0, 10))} às {o.createdAt.slice(11, 16)}</span>
                     </span>
                     <span className="flex items-center gap-2">
-                      <span className="font-extrabold text-sm">{money(o.total)}</span>
-                      <span className={`text-xs font-bold px-2.5 py-1 rounded-full ${toneCls(def.tone)}`}>
+                      <span className="font-semibold text-sm">{money(o.total)}</span>
+                      <span className={`text-xs font-semibold px-2.5 py-1 rounded-full ${toneCls(def.tone)}`}>
                         {def.panel}
                       </span>
                     </span>
@@ -102,7 +102,7 @@ export default function PedidosPage() {
                       <span key={i} className="block text-sm">
                         <strong>{it.qty}×</strong> {it.name}
                         {it.optionsLabel && <span className="text-zinc-500"> ({it.optionsLabel})</span>}
-                        <span className="float-right font-bold">{money(it.total)}</span>
+                        <span className="float-right font-semibold">{money(it.total)}</span>
                       </span>
                     ))}
                     <span className="block text-xs text-zinc-500 pt-1"><Icon n="phone" size={12} className="inline -mt-0.5" /> {o.customerPhone}{o.customerAddress && <> · <Icon n="pin" size={12} className="inline -mt-0.5" /> {o.customerAddress}</>}{o.note && ` · “${o.note}”`}</span>
@@ -119,7 +119,7 @@ export default function PedidosPage() {
                         </Button>
                       )}
                       <a href={waLink(o.customerPhone, `Olá, ${o.customerName.split(' ')[0]}! Sobre seu pedido ${o.code}:`)} target="_blank" rel="noreferrer"
-                        className="text-xs font-bold bg-[var(--success-bg)] text-[var(--success-fg)] border border-[var(--success-border)] px-3.5 py-2 rounded-lg">WhatsApp</a>
+                        className="text-xs font-semibold bg-[var(--success-bg)] text-[var(--success-fg)] border border-[var(--success-border)] px-3.5 py-2 rounded-lg">WhatsApp</a>
                     </span>
                   </span>
                 )}
@@ -129,10 +129,10 @@ export default function PedidosPage() {
           {pages > 1 && (
             <div className="flex items-center justify-center gap-2 pt-3">
               <button onClick={() => setPage((p) => Math.max(1, p - 1))} disabled={page <= 1}
-                className="text-xs font-bold bg-white border border-zinc-200 px-4 py-2 rounded-xl disabled:opacity-40">Anterior</button>
-              <span className="text-xs text-zinc-500 font-bold">{page} de {pages}</span>
+                className="text-xs font-semibold bg-white border border-zinc-200 px-4 py-2 rounded-xl disabled:opacity-40">Anterior</button>
+              <span className="text-xs text-zinc-500 font-semibold">{page} de {pages}</span>
               <button onClick={() => setPage((p) => Math.min(pages, p + 1))} disabled={page >= pages}
-                className="text-xs font-bold bg-white border border-zinc-200 px-4 py-2 rounded-xl disabled:opacity-40">Próxima</button>
+                className="text-xs font-semibold bg-white border border-zinc-200 px-4 py-2 rounded-xl disabled:opacity-40">Próxima</button>
             </div>
           )}
         </div>

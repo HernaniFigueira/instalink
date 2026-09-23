@@ -280,7 +280,7 @@ export function AiAutomations({
 
       {proposals.filter((p) => p.status === 'draft' || p.status === 'approved').length > 0 && (
         <div className="space-y-2">
-          <h3 className="text-xs font-bold uppercase tracking-wide text-zinc-500">Propostas em aberto</h3>
+          <h3 className="text-xs font-semibold uppercase tracking-wide text-zinc-500">Propostas em aberto</h3>
           {proposals.filter((p) => p.status === 'draft' || p.status === 'approved').map((p) => (
             <button key={p.id} type="button" onClick={() => show(p)}
               className={cn('w-full text-left border rounded-md p-3 hover:bg-zinc-50', current?.id === p.id ? 'border-zinc-900' : 'border-zinc-200')}>
@@ -307,7 +307,7 @@ export function AiAutomations({
 function Row({ kicker, text, detail }: { kicker: string; text: string; detail?: string }) {
   return (
     <div className="px-3 py-2 flex gap-3">
-      <span className="w-16 shrink-0 text-[10px] font-bold uppercase tracking-wide text-zinc-400 pt-0.5">{kicker}</span>
+      <span className="w-16 shrink-0 text-[10px] font-semibold uppercase tracking-wide text-zinc-400 pt-0.5">{kicker}</span>
       <div className="min-w-0">
         <p className="text-sm text-zinc-900">{text}</p>
         {detail && <p className="text-[11px] text-zinc-500 mt-0.5">{detail}</p>}

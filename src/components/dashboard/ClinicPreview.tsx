@@ -54,7 +54,7 @@ export function ClinicPreview({ business, page, catalog }: { business: Business;
             {block.type === 'profile' && aboutVisible && <AboutView about={about} />}</Fragment>)}
           {!blocks.some(b => b.type === 'profile') && aboutVisible && <AboutView about={about} />}
         </div>
-        {menu && <aside aria-label="Menu nesta prévia" className="fixed inset-x-3 bottom-20 z-40 il-card p-5"><h2 className="font-bold mb-3">Menu</h2><ul className="space-y-3">{nav.map(item => <li key={item.id}>{item.label}</li>)}</ul>{!nav.length && <p className="il-muted">Nenhuma seção preenchida no menu.</p>}</aside>}
+        {menu && <aside aria-label="Menu nesta prévia" className="fixed inset-x-3 bottom-20 z-40 il-card p-5"><h2 className="font-semibold mb-3">Menu</h2><ul className="space-y-3">{nav.map(item => <li key={item.id}>{item.label}</li>)}</ul>{!nav.length && <p className="il-muted">Nenhuma seção preenchida no menu.</p>}</aside>}
         <BottomBarView items={bottomBarItems({canBook:canBook(publicBusiness,catalog.services),whatsapp:whatsappVisible(publicBusiness)})} menuOpen={menu}/>
       </main>, body)}
       </div>

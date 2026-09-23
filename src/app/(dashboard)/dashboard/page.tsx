@@ -299,7 +299,7 @@ export default function DashboardPage() {
       {/* ── Saudação + resumo curto (hierarquia do mockup) ── */}
       <header className="mb-5 flex flex-wrap items-start justify-between gap-3">
         <div className="min-w-0">
-        <h1 className="text-[26px] leading-tight font-extrabold tracking-tight text-[var(--text)]">
+        <h1 className="text-[26px] leading-tight font-semibold tracking-tight text-[var(--text)]">
           {greeting()}, {user.name.split(' ')[0]}!
         </h1>
         <p className="text-sm text-[var(--text-muted)] mt-1">
@@ -312,7 +312,7 @@ export default function DashboardPage() {
         </div>
         <div className="dsh-card flex items-center gap-2.5 px-3.5 py-2.5" title="Data de hoje">
           <Icon n="calendar" size={16} className="text-[var(--brand-fg)]" />
-          <span className="text-[12.5px] font-bold text-[var(--text)]">
+          <span className="text-[12.5px] font-semibold text-[var(--text)]">
             Hoje, {new Date().toLocaleDateString('pt-BR', { day: '2-digit', month: 'long', year: 'numeric' })}
           </span>
         </div>
@@ -321,7 +321,7 @@ export default function DashboardPage() {
       {/* ── 1 · ATENÇÃO (dados do servidor, links só com permissão) ── */}
       {attention.length > 0 && (
         <div className="mb-4 border border-[var(--warning-border)] bg-[var(--warning-bg)] px-3 py-2.5 flex flex-wrap items-center gap-x-3 gap-y-2 rounded-lg" role="status" aria-label="Itens que precisam de atenção">
-          <span className="text-xs font-bold tracking-wide uppercase text-[var(--warning-fg)] inline-flex items-center gap-1.5">
+          <span className="text-xs font-semibold tracking-wide uppercase text-[var(--warning-fg)] inline-flex items-center gap-1.5">
             <Icon n="alert" size={14} /> Atenção
           </span>
           {attention.map((a) => {
@@ -390,7 +390,7 @@ export default function DashboardPage() {
             <>
               <div className="dsh-card__head">
                 <h3 className="dsh-card__title">Sua clínica está pronta?</h3>
-                <span className="text-[12px] font-bold text-[var(--brand-fg)]">{pct}%</span>
+                <span className="text-[12px] font-semibold text-[var(--brand-fg)]">{pct}%</span>
               </div>
               <div className="dsh-card__body">
                 <div className="h-2 rounded-full bg-[var(--surface-3)] overflow-hidden mb-3" role="progressbar" aria-valuenow={pct} aria-valuemin={0} aria-valuemax={100}>
@@ -408,7 +408,7 @@ export default function DashboardPage() {
                         <Link href={`${c.href}${c.href.includes('?') ? '&' : '?'}b=${business.id}`} className="dsh-check hover:border-[var(--brand-border)] flex-1">
                           <span className="dsh-check__mark dsh-check__mark--todo" aria-hidden="true" />
                           <span className="flex-1">{c.label}{c.optional ? ' (opcional)' : ''}</span>
-                          <span className="text-[11.5px] font-bold text-[var(--brand-fg)]">Fazer →</span>
+                          <span className="text-[11.5px] font-semibold text-[var(--brand-fg)]">Fazer →</span>
                         </Link>
                         {/* FASE 2 · P8 — pular só o NÃO obrigatório (nunca trava o progresso). */}
                         {c.optional && c.id && (
@@ -449,12 +449,12 @@ export default function DashboardPage() {
           <>
               <div className="dsh-card__head">
                 <h3 className="dsh-card__title">Presença online</h3>
-                {links.pagina === true && <Link href={`/pagina${q}`} className="text-[12px] font-bold text-[var(--brand-fg)] hover:underline">Editar página →</Link>}
+                {links.pagina === true && <Link href={`/pagina${q}`} className="text-[12px] font-semibold text-[var(--brand-fg)] hover:underline">Editar página →</Link>}
               </div>
               <div className="dsh-card__body">
                 {pageStats ? (
                   <>
-                    <p className="text-[11px] font-bold uppercase tracking-wider text-[var(--text-faint)] mb-2">Página · no período</p>
+                    <p className="text-[11px] font-semibold uppercase tracking-wider text-[var(--text-faint)] mb-2">Página · no período</p>
                     <p className="text-[12.5px] font-semibold text-[var(--text-soft)] mb-3">
                       {pageStats.published
                         ? <>Página <strong className="text-[var(--success-fg)]">publicada</strong> em /{pageStats.slug}.</>
@@ -484,7 +484,7 @@ export default function DashboardPage() {
             {showMoney && bookingRevenue ? (
               <div className="flex flex-wrap items-end justify-between gap-2 mb-1">
                 <div>
-                  <p className="text-[30px] leading-none font-extrabold tracking-tight text-[var(--text)]">{money(bookingRevenue.total)}</p>
+                  <p className="text-[30px] leading-none font-semibold tracking-tight text-[var(--text)]">{money(bookingRevenue.total)}</p>
                   <p className="text-[12px] text-[var(--text-muted)] mt-1.5">
                     {bookingRevenue.count} atendimentos elegíveis · ticket {money(bookingRevenue.ticket || 0)}
                   </p>
@@ -501,11 +501,11 @@ export default function DashboardPage() {
 
             {results && results.items.length > 0 && (
               <div className="mb-4">
-              <p className="text-[11px] font-bold uppercase tracking-wider text-[var(--text-faint)] mb-2">Resultados · {results.periodLabel}</p>
+              <p className="text-[11px] font-semibold uppercase tracking-wider text-[var(--text-faint)] mb-2">Resultados · {results.periodLabel}</p>
               <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
                 {results.items.slice(0, 4).map((it) => (
                   <div key={it.id} className="rounded-lg border border-[var(--border-soft)] bg-[var(--surface)] px-2.5 py-2">
-                    <p className="text-[17px] font-extrabold leading-tight text-[var(--text)] tabular-nums">
+                    <p className="text-[17px] font-semibold leading-tight text-[var(--text)] tabular-nums">
                       {it.unit === 'money' ? money(it.value) : it.unit === 'percent' ? `${it.value}%` : it.value}
                     </p>
                     <p className="text-[11px] font-semibold text-[var(--text-muted)] truncate">{it.label}</p>
@@ -518,7 +518,7 @@ export default function DashboardPage() {
 
             <div className="grid sm:grid-cols-2 gap-4">
               <div>
-                <p className="text-[11px] font-bold uppercase tracking-wider text-[var(--text-faint)] mb-2">Agendamentos por dia · {period}d</p>
+                <p className="text-[11px] font-semibold uppercase tracking-wider text-[var(--text-faint)] mb-2">Agendamentos por dia · {period}d</p>
                 {series && series.some((d) => d.count > 0) ? (
                   <BarsChart data={series} />
                 ) : (
@@ -528,7 +528,7 @@ export default function DashboardPage() {
                 )}
               </div>
               <div>
-                <p className="text-[11px] font-bold uppercase tracking-wider text-[var(--text-faint)] mb-2">Status dos atendimentos · período</p>
+                <p className="text-[11px] font-semibold uppercase tracking-wider text-[var(--text-faint)] mb-2">Status dos atendimentos · período</p>
                 {periodMix && Object.values(periodMix).some((v) => v > 0) ? (
                   <DonutChart parts={[
                     { label: 'Confirmados', value: periodMix.confirmed || 0, color: 'var(--success)' },
@@ -551,7 +551,7 @@ export default function DashboardPage() {
         <section className="dsh-card min-w-0">
           <div className="dsh-card__head">
             <h3 className="dsh-card__title">Próximos atendimentos</h3>
-            {links.agenda === true && <Link href={`/agenda${q}`} className="text-[12px] font-bold text-[var(--brand-fg)] hover:underline">Ver agenda →</Link>}
+            {links.agenda === true && <Link href={`/agenda${q}`} className="text-[12px] font-semibold text-[var(--brand-fg)] hover:underline">Ver agenda →</Link>}
           </div>
           <div className="dsh-card__body pt-2">
             {modules.bookings ? (
@@ -563,7 +563,7 @@ export default function DashboardPage() {
                     <ListRow key={b.id} allowed={links.agenda === true} href={`/agenda${q}&data=${b.date}`}
                       className="flex items-center gap-2.5 rounded-lg border border-[var(--border-soft)] px-2.5 py-2 text-[12.5px]"
                       style={{ borderLeft: `3px solid ${STATUS_BAR[b.status] || 'var(--border-strong)'}` }}>
-                      <span className="text-[11px] font-bold text-[var(--text-muted)] w-16 shrink-0 tabular-nums">{humanDay(b.date)} {b.time}</span>
+                      <span className="text-[11px] font-semibold text-[var(--text-muted)] w-16 shrink-0 tabular-nums">{humanDay(b.date)} {b.time}</span>
                       <span className="flex-1 min-w-0 truncate font-semibold text-[var(--text)]">{b.customerName} <span className="font-normal text-[var(--text-muted)]">· {b.service}</span></span>
                       <StatusBadge tone={b.status === 'confirmed' ? 'emerald' : b.status === 'pending' ? 'orange' : 'blue'}>{bookDef(b.status).panel}</StatusBadge>
                     </ListRow>
@@ -578,7 +578,7 @@ export default function DashboardPage() {
                     return (
                       <ListRow key={o.id} allowed={links.pedidos === true} href={`/pedidos${q}`}
                         className="flex items-center gap-2.5 rounded-lg border border-[var(--border-soft)] px-2.5 py-2 text-[12.5px]">
-                        <span className="text-[11px] font-bold text-[var(--text-muted)] w-16 shrink-0">{o.code}</span>
+                        <span className="text-[11px] font-semibold text-[var(--text-muted)] w-16 shrink-0">{o.code}</span>
                         <span className="flex-1 min-w-0 truncate font-semibold text-[var(--text)]">{o.customerName}</span>
                         <span className={`text-[11px] px-1.5 py-0.5 rounded font-medium border ${toneCls(d.tone)}`}>{d.panel}</span>
                       </ListRow>
@@ -595,7 +595,7 @@ export default function DashboardPage() {
         <section className="dsh-card min-w-0">
           <div className="dsh-card__head">
             <h3 className="dsh-card__title">Conversas e tarefas</h3>
-            {links.conversas === true && <Link href={`/conversas${q}`} className="text-[12px] font-bold text-[var(--brand-fg)] hover:underline">Abrir →</Link>}
+            {links.conversas === true && <Link href={`/conversas${q}`} className="text-[12px] font-semibold text-[var(--brand-fg)] hover:underline">Abrir →</Link>}
           </div>
           <div className="dsh-card__body pt-2 space-y-1.5">
             {whatsapp ? (
@@ -603,7 +603,7 @@ export default function DashboardPage() {
                 className="flex items-center gap-2.5 rounded-lg border border-[var(--border-soft)] px-2.5 py-2 text-[12.5px]">
                 <span className="dsh-kpi__icon !w-7 !h-7" style={{ background: 'var(--cyan-bg)', color: 'var(--cyan-fg)' }}><Icon n="chat" size={15} /></span>
                 <span className="flex-1 font-semibold text-[var(--text)]">Conversas não lidas</span>
-                <span className="text-[13px] font-extrabold tabular-nums text-[var(--text)]">{whatsapp.unread}</span>
+                <span className="text-[13px] font-semibold tabular-nums text-[var(--text)]">{whatsapp.unread}</span>
               </ListRow>
             ) : (
               <p className="text-[12.5px] text-[var(--text-muted)] rounded-lg border border-dashed border-[var(--border)] px-2.5 py-2">Canal de conversas não conectado.</p>
@@ -613,14 +613,14 @@ export default function DashboardPage() {
                 className="flex items-center gap-2.5 rounded-lg border border-[var(--border-soft)] px-2.5 py-2 text-[12.5px]">
                 <span className="dsh-kpi__icon !w-7 !h-7" style={{ background: 'var(--warning-bg)', color: 'var(--warning-fg)' }}><Icon n="clock" size={15} /></span>
                 <span className="flex-1 font-semibold text-[var(--text)]">Leads para follow-up</span>
-                <span className="text-[13px] font-extrabold tabular-nums text-[var(--text)]">{totals.leads}</span>
+                <span className="text-[13px] font-semibold tabular-nums text-[var(--text)]">{totals.leads}</span>
               </ListRow>
             )}
             {canalConnected && (
               <div className="flex items-center gap-2.5 rounded-lg border border-[var(--success-border)] bg-[var(--success-bg)] px-2.5 py-2">
                 <span className="dsh-kpi__icon !w-7 !h-7" style={{ background: 'var(--success)', color: '#fff' }}><Icon n="chat" size={15} /></span>
                 <span className="flex-1 text-[11.5px] font-semibold text-[var(--success-fg)]">Envie mensagens para seus pacientes</span>
-                <Link href={`/conversas${q}`} className="text-[11.5px] font-bold text-white bg-[var(--success)] hover:bg-[var(--success-strong)] px-2.5 py-1.5 rounded-md">Abrir conversas</Link>
+                <Link href={`/conversas${q}`} className="text-[11.5px] font-semibold text-white bg-[var(--success)] hover:bg-[var(--success-strong)] px-2.5 py-1.5 rounded-md">Abrir conversas</Link>
               </div>
             )}
             {taskSum && taskSum.open > 0 ? (
@@ -633,7 +633,7 @@ export default function DashboardPage() {
                       className="flex items-center gap-2.5 rounded-lg border border-[var(--border-soft)] px-2.5 py-2 text-[12.5px]">
                       <span className="w-4 h-4 rounded border-2 shrink-0" style={{ borderColor: tone }} aria-hidden="true" />
                       <span className="flex-1 min-w-0 truncate font-semibold text-[var(--text)]">{t.title}</span>
-                      <span className="text-[10.5px] font-bold" style={{ color: lbl === 'atrasada' ? 'var(--danger-fg)' : lbl === 'hoje' ? 'var(--warning-fg)' : 'var(--text-faint)' }}>{lbl}</span>
+                      <span className="text-[10.5px] font-semibold" style={{ color: lbl === 'atrasada' ? 'var(--danger-fg)' : lbl === 'hoje' ? 'var(--warning-fg)' : 'var(--text-faint)' }}>{lbl}</span>
                     </ListRow>
                   );
                 })}
@@ -752,7 +752,7 @@ function KpiDelta({ now, prev, has }: { now: number; prev: number; has: boolean 
   const up = pct >= 0;
   return (
     <span className="flex items-center gap-1.5 mt-1">
-      <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded ${up ? 'bg-[var(--success-bg)] text-[var(--success-fg)]' : 'bg-[var(--danger-bg)] text-[var(--danger-fg)]'}`}>
+      <span className={`text-[10px] font-semibold px-1.5 py-0.5 rounded ${up ? 'bg-[var(--success-bg)] text-[var(--success-fg)]' : 'bg-[var(--danger-bg)] text-[var(--danger-fg)]'}`}>
         {up ? '↑' : '↓'} {Math.abs(pct)}%
       </span>
       <span className="text-[10px] text-[var(--text-faint)]">vs. ontem ({prev})</span>

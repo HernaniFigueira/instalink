@@ -122,7 +122,7 @@ export default function CampanhasPage() {
       {/* A3.3 — consentimento explicado: quem autorizou entra, quem não
           autorizou fica de fora. Verde/laranja com ícone, não texto corrido. */}
       <div className="mb-5 rounded-lg border border-[var(--lilac-border)] bg-[var(--lilac-bg)]/60 p-4">
-        <p className="text-sm font-bold text-[var(--lilac-fg)] inline-flex items-center gap-2">
+        <p className="text-sm font-semibold text-[var(--lilac-fg)] inline-flex items-center gap-2">
           <Icon n="shield" size={16} /> Quem pode receber promoção?
         </p>
         <ul className="mt-2.5 grid sm:grid-cols-2 gap-2">
@@ -151,10 +151,10 @@ export default function CampanhasPage() {
         <section className="bg-white border border-zinc-200 rounded-lg p-4 mb-5">
           <div className="flex flex-wrap items-start justify-between gap-3">
             <div className="min-w-0">
-              <p className="font-bold text-sm flex items-center gap-2">
+              <p className="font-semibold text-sm flex items-center gap-2">
                 <Icon n="spark" size={15} className="text-amber-500" />
                 Clientes sem retorno
-                <span className="text-[10px] font-extrabold bg-amber-100 text-amber-800 px-2 py-0.5 rounded-full">
+                <span className="text-[10px] font-semibold bg-amber-100 text-amber-800 px-2 py-0.5 rounded-full">
                   {data.opportunities!.winBack} oportunidade(s)
                 </span>
               </p>
@@ -177,7 +177,7 @@ export default function CampanhasPage() {
               )}
             </div>
             <button onClick={() => call('POST', { action: 'winback' })} disabled={busy === 'winback'}
-              className="text-xs font-bold bg-[var(--brand)] text-white px-4 py-2.5 rounded-lg shadow-brand hover:bg-[var(--brand-strong)] disabled:opacity-50 shrink-0">
+              className="text-xs font-semibold bg-[var(--brand)] text-white px-4 py-2.5 rounded-lg shadow-brand hover:bg-[var(--brand-strong)] disabled:opacity-50 shrink-0">
               {busy === 'winback' ? 'Criando…' : 'Criar oportunidades'}
             </button>
           </div>
@@ -192,9 +192,9 @@ export default function CampanhasPage() {
           <div key={c.id} className="p-4">
             <div className="flex flex-wrap items-start justify-between gap-3">
               <div className="min-w-0">
-                <p className="font-bold flex items-center gap-2 flex-wrap">
+                <p className="font-semibold flex items-center gap-2 flex-wrap">
                   {c.name}
-                  <span className={cn('text-[10px] font-extrabold uppercase px-2 py-0.5 rounded-full', STATUS_STYLE[c.status] || 'bg-zinc-100 text-zinc-600')}>{STATUS_LABEL[c.status] || c.status}</span>
+                  <span className={cn('text-[10px] font-semibold uppercase px-2 py-0.5 rounded-full', STATUS_STYLE[c.status] || 'bg-zinc-100 text-zinc-600')}>{STATUS_LABEL[c.status] || c.status}</span>
                 </p>
                 <p className="text-xs text-zinc-500 mt-1">
                   Público: <strong>{segLabel(c.segment)}</strong> · {c.counts.eligible} elegível(is)
@@ -202,7 +202,7 @@ export default function CampanhasPage() {
                   {c.createdBy ? ` · por ${c.createdBy}` : ''}
                 </p>
                 <p className="text-sm text-zinc-700 mt-2 bg-zinc-50 border border-zinc-100 rounded-md px-3 py-2 whitespace-pre-wrap">{c.message}</p>
-                <div className="flex flex-wrap gap-3 mt-2 text-[11px] font-bold text-zinc-500">
+                <div className="flex flex-wrap gap-3 mt-2 text-[11px] font-semibold text-zinc-500">
                   <span>elegíveis {c.counts.eligible}</span>
                   <span>enviadas {c.counts.sent}</span>
                   <span>entregues {c.counts.delivered}</span>
@@ -212,11 +212,11 @@ export default function CampanhasPage() {
               <div className="flex flex-col gap-2 shrink-0">
                 {c.status === 'draft' && (
                   <button onClick={() => call('PATCH', { id: c.id, action: 'ready' })} disabled={busy === 'ready'}
-                    className="text-xs font-bold bg-[var(--brand)] text-white px-3.5 py-2 rounded-lg shadow-brand hover:bg-[var(--brand-strong)] disabled:opacity-50">Marcar como pronta</button>
+                    className="text-xs font-semibold bg-[var(--brand)] text-white px-3.5 py-2 rounded-lg shadow-brand hover:bg-[var(--brand-strong)] disabled:opacity-50">Marcar como pronta</button>
                 )}
                 {(c.status === 'draft' || c.status === 'ready') && (
                   <button onClick={() => call('PATCH', { id: c.id, action: 'send' })} disabled={busy === 'send'}
-                    className={cn('text-xs font-bold px-3.5 py-2 rounded-lg disabled:opacity-50',
+                    className={cn('text-xs font-semibold px-3.5 py-2 rounded-lg disabled:opacity-50',
                       connected ? 'bg-emerald-600 text-white' : 'bg-zinc-100 text-zinc-500')}
                     title={connected ? 'Enviar campanha' : 'WhatsApp ainda não conectado'}>
                     Enviar
@@ -224,15 +224,15 @@ export default function CampanhasPage() {
                 )}
                 {(c.status === 'draft' || c.status === 'ready') && (
                   <button onClick={() => call('PATCH', { id: c.id, action: 'cancel' })}
-                    className="text-xs font-bold bg-zinc-100 px-3.5 py-2 rounded-lg hover:bg-zinc-200">Cancelar</button>
+                    className="text-xs font-semibold bg-zinc-100 px-3.5 py-2 rounded-lg hover:bg-zinc-200">Cancelar</button>
                 )}
                 {c.status !== 'sent' && (
                   <button onClick={() => call('PATCH', { id: c.id, action: 'duplicate' })}
-                    className="text-xs font-bold bg-zinc-100 px-3.5 py-2 rounded-lg hover:bg-zinc-200">Duplicar</button>
+                    className="text-xs font-semibold bg-zinc-100 px-3.5 py-2 rounded-lg hover:bg-zinc-200">Duplicar</button>
                 )}
                 {c.status === 'draft' && (
                   <button onClick={() => call('DELETE', { id: c.id })}
-                    className="text-xs font-bold text-red-500 px-3.5 py-2 rounded-lg hover:bg-red-50">Excluir</button>
+                    className="text-xs font-semibold text-red-500 px-3.5 py-2 rounded-lg hover:bg-red-50">Excluir</button>
                 )}
               </div>
             </div>
@@ -245,20 +245,20 @@ export default function CampanhasPage() {
           <div className="absolute inset-0 bg-[var(--overlay)]" onClick={() => setCreating(false)} />
           <div className="relative w-full sm:max-w-lg bg-white rounded-t-3xl sm:rounded-3xl max-h-[92vh] overflow-y-auto">
             <div className="sticky top-0 bg-white/95 backdrop-blur px-5 py-4 flex items-center justify-between border-b border-zinc-100">
-              <p className="font-bold text-lg">Nova campanha</p>
-              <button onClick={() => setCreating(false)} className="font-bold text-zinc-400 p-2 inline-flex" aria-label="Fechar"><Icon n="x" size={16} /></button>
+              <p className="font-semibold text-lg">Nova campanha</p>
+              <button onClick={() => setCreating(false)} className="font-semibold text-zinc-400 p-2 inline-flex" aria-label="Fechar"><Icon n="x" size={16} /></button>
             </div>
             <div className="px-5 py-4 space-y-3.5">
-              <label className="block"><span className="text-xs font-bold text-zinc-500">NOME *</span>
+              <label className="block"><span className="text-xs font-semibold text-zinc-500">NOME *</span>
                 <input value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} className={input + ' mt-1'} placeholder="Ex: Promoção de Setembro" /></label>
               <div>
-                <span className="text-xs font-bold text-zinc-500">PÚBLICO</span>
+                <span className="text-xs font-semibold text-zinc-500">PÚBLICO</span>
                 <div className="flex flex-wrap gap-1.5 mt-1.5">
                   {CAMPAIGN_SEGMENTS.map((s) => {
                     const count = data.audience.find((a) => a.segment === s.id)?.count ?? 0;
                     return (
                       <button key={s.id} onClick={() => setForm({ ...form, segment: s.id })}
-                        className={cn('text-xs font-bold px-3 py-2 rounded-lg border-2 text-left',
+                        className={cn('text-xs font-semibold px-3 py-2 rounded-lg border-2 text-left',
                           form.segment === s.id ? 'border-emerald-500 bg-emerald-50 text-emerald-800' : 'border-zinc-200 text-zinc-500')}>
                         {s.label} <span className="opacity-60">({count})</span>
                       </button>
@@ -269,7 +269,7 @@ export default function CampanhasPage() {
                   Este público tem <strong>{eligiblePreview}</strong> contato(s) com autorização de marketing.
                 </p>
               </div>
-              <label className="block"><span className="text-xs font-bold text-zinc-500">MENSAGEM *</span>
+              <label className="block"><span className="text-xs font-semibold text-zinc-500">MENSAGEM *</span>
                 <textarea value={form.message} onChange={(e) => setForm({ ...form, message: e.target.value })} rows={5} className={input + ' mt-1'}
                   placeholder="Ex: Olá {nome}! Setembro chegou com 20% de desconto no corte. Responda AGENDAR para marcar ✂️" />
                 <span className="text-[11px] text-zinc-500">Use <code>{'{nome}'}</code> para o primeiro nome do cliente.</span></label>
@@ -280,7 +280,7 @@ export default function CampanhasPage() {
                 </p>
               )}
               <button onClick={() => call('POST', form)} disabled={busy === 'save' || !form.name || !form.message}
-                className="w-full font-bold bg-[var(--brand)] text-white py-3 rounded-md shadow-brand hover:bg-[var(--brand-strong)] disabled:opacity-50">
+                className="w-full font-semibold bg-[var(--brand)] text-white py-3 rounded-md shadow-brand hover:bg-[var(--brand-strong)] disabled:opacity-50">
                 {busy === 'save' ? 'Salvando…' : 'Salvar rascunho'}
               </button>
             </div>
@@ -294,8 +294,8 @@ export default function CampanhasPage() {
 function Card({ label, value, hint, tone }: { label: string; value: number | string; hint?: string; tone?: 'ok' | 'warn' }) {
   return (
     <div className={cn('rounded-lg border p-4', tone === 'ok' ? 'bg-emerald-50 border-emerald-200' : tone === 'warn' ? 'bg-amber-50 border-amber-200' : 'bg-white border-zinc-200')}>
-      <p className="text-xs font-bold text-zinc-500">{label}</p>
-      <p className="text-xl font-extrabold mt-0.5">{value}</p>
+      <p className="text-xs font-semibold text-zinc-500">{label}</p>
+      <p className="text-xl font-semibold mt-0.5">{value}</p>
       {hint && <p className="text-[11px] text-zinc-500">{hint}</p>}
     </div>
   );
@@ -303,5 +303,5 @@ function Card({ label, value, hint, tone }: { label: string; value: number | str
 
 function Link2({ href, label }: { href: string; label: string }) {
   // A1.2 · Bloco 3: navegação interna via Link (sem recarregar a aplicação).
-  return <Link href={href} className="text-xs font-bold bg-white border border-zinc-200 rounded-md px-3.5 py-2 hover:bg-zinc-50">{label}</Link>;
+  return <Link href={href} className="text-xs font-semibold bg-white border border-zinc-200 rounded-md px-3.5 py-2 hover:bg-zinc-50">{label}</Link>;
 }

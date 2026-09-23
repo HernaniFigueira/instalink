@@ -206,13 +206,13 @@ export function WorkspaceNavigation({ nav, activePath, unit, collapsed, onCollap
         </nav>
         {!collapsed && setup && (
           <div className="ws-setup-mini">
-            <p className="text-[12px] font-extrabold text-[var(--text)] leading-tight">Sua clínica está {setup.pct}% pronta!</p>
+            <p className="text-[12px] font-semibold text-[var(--text)] leading-tight">Sua clínica está {setup.pct}% pronta!</p>
             <p className="text-[10.5px] text-[var(--text-muted)] mt-1 leading-snug">Complete a configuração e comece a receber agendamentos.</p>
             <div className="h-1.5 rounded-full bg-white overflow-hidden mt-2" aria-hidden="true">
               <div className="h-full rounded-full bg-[var(--success)]" style={{ width: `${setup.pct}%` }} />
             </div>
             <Link href={`${setup.href}${setup.href.includes('?') ? '&' : '?'}b=${unit.id}`}
-              className="mt-2 inline-flex w-full items-center justify-center rounded-md border border-[var(--brand-border)] bg-white px-2 py-1.5 text-[11px] font-bold text-[var(--brand-fg)] hover:bg-[var(--brand-softer)]">
+              className="mt-2 inline-flex w-full items-center justify-center rounded-md border border-[var(--brand-border)] bg-white px-2 py-1.5 text-[11px] font-semibold text-[var(--brand-fg)] hover:bg-[var(--brand-softer)]">
               Continuar
             </Link>
           </div>

@@ -358,7 +358,7 @@ export function NewBookingSheet({ businessId, services, pros, timezone, initial,
           {created ? (
             <div className="space-y-4" data-booking-created="true">
               <div className="rounded-xl border border-[var(--success-border)] bg-[var(--success-bg)] px-4 py-4">
-                <p className="text-base font-bold text-[var(--success-fg)] flex items-center gap-2">
+                <p className="text-base font-semibold text-[var(--success-fg)] flex items-center gap-2">
                   <Icon n="check" size={18} strokeWidth={3} /> {created.count ? `${created.count} atendimentos criados` : 'Agendamento criado'}
                   {created.fitIn && <Badge tone="amber">Encaixe</Badge>}
                 </p>

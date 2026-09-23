@@ -154,13 +154,13 @@ export function WorkspaceTopbar({ group, page, query, searchItems, activePath, a
         <div className="relative" ref={helpRef}>
           <button type="button" className="ws-help" aria-haspopup="dialog" aria-expanded={helpOpen}
             aria-label="Ajuda e atalhos" title="Ajuda e atalhos" onClick={() => setHelpOpen((v) => !v)}>
-            <span aria-hidden="true" className="text-[15px] font-bold leading-none">?</span>
+            <span aria-hidden="true" className="text-[15px] font-semibold leading-none">?</span>
           </button>
           {helpOpen && (
             <div className="ws-pop" role="dialog" aria-label="Ajuda e atalhos">
               <p className="ws-pop__label">Atalhos</p>
-              <p className="ws-pop__item"><kbd className="ml-auto text-[10px] font-bold bg-[var(--surface-hover)] border border-[var(--border)] rounded px-1.5 py-0.5">Ctrl K</kbd> buscar em tudo</p>
-              <p className="ws-pop__item"><kbd className="ml-auto text-[10px] font-bold bg-[var(--surface-hover)] border border-[var(--border)] rounded px-1.5 py-0.5">Esc</kbd> fechar sheet e popovers</p>
+              <p className="ws-pop__item"><kbd className="ml-auto text-[10px] font-semibold bg-[var(--surface-hover)] border border-[var(--border)] rounded px-1.5 py-0.5">Ctrl K</kbd> buscar em tudo</p>
+              <p className="ws-pop__item"><kbd className="ml-auto text-[10px] font-semibold bg-[var(--surface-hover)] border border-[var(--border)] rounded px-1.5 py-0.5">Esc</kbd> fechar sheet e popovers</p>
               <p className="ws-pop__label">Navegação</p>
               <p className="ws-pop__item">Grupos com seta abrem a segunda coluna com as subáreas — neste momento: {group || page}.</p>
             </div>

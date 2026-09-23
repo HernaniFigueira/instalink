@@ -231,7 +231,7 @@ const GridColumn = memo(function GridColumn({ column, basisPct, variant, highlig
           aria-hidden="true"
         >
           <span className={
-            'text-[10px] font-bold px-1.5 py-0.5 rounded-b-md shadow-xs '
+            'text-[10px] font-semibold px-1.5 py-0.5 rounded-b-md shadow-xs '
             + (highlight.tone === 'free'
               ? 'bg-[var(--success)] text-white'
               : highlight.tone === 'loading'
@@ -278,7 +278,7 @@ const GridColumn = memo(function GridColumn({ column, basisPct, variant, highlig
           {/* quem + quando + o quê + com quem — detalhe fica no drawer.
               Densidade do mockup: nome forte, linhas de apoio discretas. */}
           <span className="block text-[10.5px] font-semibold tabular-nums leading-tight opacity-75">{b.timeRange}</span>
-          <span className="block text-[12.5px] font-bold leading-tight truncate">{b.name}</span>
+          <span className="block text-[12.5px] font-semibold leading-tight truncate">{b.name}</span>
           {b.height > 62 && <span className="block text-[11px] leading-tight truncate opacity-75">{b.service}</span>}
           {b.height > 80 && b.pro && <span className="block text-[11px] leading-tight truncate opacity-70">{b.pro}</span>}
           {b.height > 96 && (
@@ -1137,7 +1137,7 @@ export default function AgendaPage() {
             A ajuda fica na Legenda (tooltip/popover), não em frase permanente. */}
         <div className="flex items-center gap-2 min-w-0">
           {/* Título limpo (fechamento): sem "?" — ajuda real mora na Legenda. */}
-          <h1 className="text-lg font-bold tracking-tight text-[var(--text)] leading-tight">Agenda</h1>
+          <h1 className="text-lg font-semibold tracking-tight text-[var(--text)] leading-tight">Agenda</h1>
         </div>
         <div className="flex flex-wrap items-center justify-end gap-1.5 ml-auto">
           {loaded && (
@@ -1146,7 +1146,7 @@ export default function AgendaPage() {
                 <Icon n="users" size={18} />
               </span>
               <span className="leading-tight mr-1">
-                <span className="block text-[12.5px] font-bold text-[var(--text)]">Fila de atendimento</span>
+                <span className="block text-[12.5px] font-semibold text-[var(--text)]">Fila de atendimento</span>
                 <span className="block text-[11px] text-[var(--text-muted)]">
                   {(queueInfo.waiting + queueInfo.called + queueInfo.inService) > 0
                     ? <><strong className="text-[var(--warning-fg)] font-semibold">{queueInfo.waiting + queueInfo.called} aguardando</strong>{' · '}<strong className="text-[var(--success-fg)] font-semibold">{queueInfo.inService} em atendimento</strong></>
@@ -1157,7 +1157,7 @@ export default function AgendaPage() {
                 aria-label="Fila de atendimento"
                 onClick={() => setShowQueue((v) => !v)}
                 title={showQueue ? 'Fechar fila de atendimento' : 'Abrir fila de atendimento'}
-                className="inline-flex items-center gap-1 text-[12.5px] font-bold text-[var(--brand-fg)] hover:underline px-2 py-1.5">
+                className="inline-flex items-center gap-1 text-[12.5px] font-semibold text-[var(--brand-fg)] hover:underline px-2 py-1.5">
                 Ver fila <Icon n="chevronRight" size={13} />
               </button>
             </div>
@@ -1177,7 +1177,7 @@ export default function AgendaPage() {
                   <div role="dialog" aria-label="Filtros da agenda"
                     className="absolute right-0 top-full mt-1.5 z-30 w-[300px] max-w-[calc(100vw-1.25rem)] bg-white border border-zinc-200 rounded-lg shadow-lg text-left">
                     <div className="px-3 pt-2.5 pb-1.5 flex items-center justify-between gap-2">
-                      <p className="text-[11px] font-bold uppercase tracking-wider text-zinc-400">Filtros</p>
+                      <p className="text-[11px] font-semibold uppercase tracking-wider text-zinc-400">Filtros</p>
                       {activeFilterCount > 0 && (
                         <button type="button" onClick={clearFilters}
                           className="text-xs font-semibold text-[var(--danger)] hover:text-[var(--danger-strong)]">
@@ -1359,7 +1359,7 @@ export default function AgendaPage() {
         >
           <Icon n={flash.tone === 'ok' ? 'checkCircle' : 'alert'} size={15} className="mt-px" />
           <span>{flash.text}</span>
-          <button onClick={() => setFlash(null)} className="ml-auto font-bold underline underline-offset-2 shrink-0">Fechar</button>
+          <button onClick={() => setFlash(null)} className="ml-auto font-semibold underline underline-offset-2 shrink-0">Fechar</button>
         </div>
       )}
 
@@ -1417,7 +1417,7 @@ export default function AgendaPage() {
               <button type="button" onClick={() => setFocus(today)}
                 aria-pressed={isToday}
                 title={isToday ? 'Você já está em hoje' : 'Ir para hoje'}
-                className={cn('h-9 px-3 rounded-none text-xs font-bold border-r border-[var(--border)] transition-colors',
+                className={cn('h-9 px-3 rounded-none text-xs font-semibold border-r border-[var(--border)] transition-colors',
                   isToday
                     ? 'bg-[var(--brand-soft)] text-[var(--brand-fg)] cursor-default'
                     : 'text-[var(--text)] hover:bg-[var(--surface-hover)]')}>
@@ -1427,7 +1427,7 @@ export default function AgendaPage() {
                 className="w-9 h-9 rounded-none text-[var(--text-muted)]" />
             </span>
             <label className="relative inline-flex flex-col min-w-0 max-w-[min(26rem,calc(100vw-12rem))] cursor-pointer rounded-md px-1 -mx-1 py-0.5 hover:bg-[var(--surface-hover)] focus-within:shadow-focus" title="Escolher outra data">
-              <span className="text-[15px] font-bold leading-tight text-[var(--text)] capitalize truncate" aria-live="polite">{focusLabel}</span>
+              <span className="text-[15px] font-semibold leading-tight text-[var(--text)] capitalize truncate" aria-live="polite">{focusLabel}</span>
               <span className="text-[11px] font-semibold text-[var(--text-muted)] leading-tight inline-flex items-center gap-1">
                 <Icon n="calendar" size={11} /> {focusRange} · clique para escolher a data
               </span>
@@ -1470,7 +1470,7 @@ export default function AgendaPage() {
               <Icon n={hover?.time ? 'checkCircle' : 'calendar'} size={14} />
               {hover?.time ? 'Pode soltar aqui' : 'Solte no novo horário'}
               <span className={
-                'font-bold px-2 py-0.5 rounded-pill border bg-white shadow-xs '
+                'font-semibold px-2 py-0.5 rounded-pill border bg-white shadow-xs '
                 + (hover?.time
                   ? 'border-[var(--success-border)] text-[var(--success-fg)]'
                   : slotsState === 'error'
@@ -1521,7 +1521,7 @@ export default function AgendaPage() {
                 <button key={d} onClick={() => { setPresentation({data:d,view:'day'}); }} className={`bg-white p-1.5 min-h-[72px] text-left hover:bg-zinc-50 ${d === today ? 'ring-1 ring-inset ring-emerald-500 bg-emerald-50/40' : ''} ${!inMonth ? 'bg-zinc-50 text-zinc-400' : ''}`}>
                   <span className="flex items-center justify-between">
                     <span className={`text-xs font-semibold ${d === today ? 'text-emerald-700' : inMonth ? 'text-zinc-700' : 'text-zinc-400'}`}>{Number(d.slice(8, 10))}</span>
-                    {pend > 0 && <span className="text-[9px] font-bold bg-amber-500 text-white rounded-full px-1">{pend}</span>}
+                    {pend > 0 && <span className="text-[9px] font-semibold bg-amber-500 text-white rounded-full px-1">{pend}</span>}
                   </span>
                   {list.length > 0 && (
                     <>
@@ -1565,7 +1565,7 @@ export default function AgendaPage() {
                         c.isProfessional ? (
                           <Avatar name={c.label} size={20} />
                         ) : (
-                          <span className="w-5 h-5 rounded-md bg-[var(--surface-2)] text-[var(--text-muted)] text-[10px] font-bold flex items-center justify-center shrink-0">—</span>
+                          <span className="w-5 h-5 rounded-md bg-[var(--surface-2)] text-[var(--text-muted)] text-[10px] font-semibold flex items-center justify-center shrink-0">—</span>
                         )
                       )}
                       <span className="min-w-0">

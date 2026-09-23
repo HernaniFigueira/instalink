@@ -363,7 +363,7 @@ export function CanaisIntegracoesView({ only }: { only?: 'channel' | 'source' | 
       {createFor && (
         <div className="fixed inset-0 bg-[var(--overlay)] flex items-center justify-center p-4 z-50" role="dialog" aria-modal="true">
           <div className="bg-white rounded-lg w-full max-w-md p-5 space-y-3">
-            <h2 className="text-sm font-bold">Conectar {createFor.label}</h2>
+            <h2 className="text-sm font-semibold">Conectar {createFor.label}</h2>
             <p className="text-xs text-zinc-500">{createFor.setupHint || createFor.hint}</p>
             <label className="block">
               <span className="text-xs font-semibold uppercase tracking-wide text-zinc-500">Nome</span>
@@ -398,7 +398,7 @@ export function CanaisIntegracoesView({ only }: { only?: 'channel' | 'source' | 
       {revealed && (
         <div className="fixed inset-0 bg-[var(--overlay)] flex items-center justify-center p-4 z-50" role="dialog" aria-modal="true">
           <div className="bg-white rounded-lg w-full max-w-lg p-5 space-y-3">
-            <h2 className="text-sm font-bold">{revealed.title}</h2>
+            <h2 className="text-sm font-semibold">{revealed.title}</h2>
             <p className="text-xs font-medium bg-amber-50 border border-amber-200 text-amber-800 rounded px-3 py-2">
               Copie agora: o token não será mostrado novamente.
             </p>

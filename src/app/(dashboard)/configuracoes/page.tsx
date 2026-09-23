@@ -136,7 +136,7 @@ function BookingRules({ businessId, initial, onSaved }: {
                 de funcionamento. A indicação abaixo é explicitamente NÃO
                 interativa. */}
             <div className="rounded-md border border-zinc-200 bg-zinc-50 px-3 py-2.5" aria-label="Distribuição dos agendamentos: automática (fixa)">
-              <p className="text-xs font-bold text-zinc-500">DISTRIBUIÇÃO DOS AGENDAMENTOS</p>
+              <p className="text-xs font-semibold text-zinc-500">DISTRIBUIÇÃO DOS AGENDAMENTOS</p>
               <p className="text-sm font-medium text-zinc-800 mt-1 inline-flex items-center gap-1.5">
                 <Icon n="lock" size={13} className="text-zinc-400" />
                 Automática — equilibra a equipe
@@ -145,16 +145,16 @@ function BookingRules({ businessId, initial, onSaved }: {
             </div>
           </div>
         )}
-        <label className="block"><span className="text-xs font-bold text-zinc-500">ANTECEDÊNCIA MÍNIMA (MIN)</span>
+        <label className="block"><span className="text-xs font-semibold text-zinc-500">ANTECEDÊNCIA MÍNIMA (MIN)</span>
           <input type="number" min={0} max={1440} value={cfg.leadMin} onChange={(e) => setCfg({ ...cfg, leadMin: Number(e.target.value) })} className={num} />
           <span className="text-[11px] text-zinc-500">Ex: 30 = só reserva com 30 min de folga.</span></label>
-        <label className="block"><span className="text-xs font-bold text-zinc-500">CANCELAR ATÉ (MIN ANTES)</span>
+        <label className="block"><span className="text-xs font-semibold text-zinc-500">CANCELAR ATÉ (MIN ANTES)</span>
           <input type="number" min={0} max={10080} value={cfg.cancelUntilMin} onChange={(e) => setCfg({ ...cfg, cancelUntilMin: Number(e.target.value) })} className={num} />
           <span className="text-[11px] text-zinc-500">Depois disso, só falando com você.</span></label>
-        <label className="block"><span className="text-xs font-bold text-zinc-500">AUTOAGENDAMENTO PÚBLICO (DIAS)</span>
+        <label className="block"><span className="text-xs font-semibold text-zinc-500">AUTOAGENDAMENTO PÚBLICO (DIAS)</span>
           <input type="number" min={1} max={365} value={cfg.horizonDays} onChange={(e) => setCfg({ ...cfg, horizonDays: Number(e.target.value) })} className={num} />
           <span className="text-[11px] text-zinc-500">Janela do cliente na página pública. A equipe pode agendar até 5 anos à frente.</span></label>
-        <label className="block"><span className="text-xs font-bold text-zinc-500">INTERVALO ENTRE ATENDIMENTOS (MIN)</span>
+        <label className="block"><span className="text-xs font-semibold text-zinc-500">INTERVALO ENTRE ATENDIMENTOS (MIN)</span>
           <input type="number" min={0} max={240} value={cfg.bufferMin} onChange={(e) => setCfg({ ...cfg, bufferMin: Number(e.target.value) })} className={num} /></label>
       </div>
       {error && <p className="text-sm font-medium text-red-600">{error}</p>}

@@ -221,7 +221,7 @@ export default function FinanceiroPage() {
           {/* ── Gráficos simples (CSS, sem lib pesada) ── */}
           <div className="grid gap-3 lg:grid-cols-3">
             <Card className="p-4 lg:col-span-1">
-              <h3 className="text-[13px] font-extrabold text-[var(--text)] mb-3">Receitas por período</h3>
+              <h3 className="text-[13px] font-semibold text-[var(--text)] mb-3">Receitas por período</h3>
               <div className="flex items-end gap-1 h-32" role="img" aria-label="Barras de receita e despesa por período">
                 {bars.length === 0 ? <p className="text-[12px] text-[var(--text-muted)]">Sem dados no período.</p> : bars.map((b) => (
                   <div key={b.from} className="flex-1 flex flex-col justify-end gap-0.5 min-w-[6px]" title={`${b.label}: +${centsToBR(b.receita)} / −${centsToBR(b.despesa)}`}>
@@ -237,7 +237,7 @@ export default function FinanceiroPage() {
             </Card>
 
             <Card className="p-4">
-              <h3 className="text-[13px] font-extrabold text-[var(--text)] mb-3">Previsto × realizado</h3>
+              <h3 className="text-[13px] font-semibold text-[var(--text)] mb-3">Previsto × realizado</h3>
               <div className="space-y-3">
                 {planned.map((row) => (
                   <div key={row.label}>
@@ -253,7 +253,7 @@ export default function FinanceiroPage() {
             </Card>
 
             <Card className="p-4">
-              <h3 className="text-[13px] font-extrabold text-[var(--text)] mb-3">Formas de pagamento (recebido)</h3>
+              <h3 className="text-[13px] font-semibold text-[var(--text)] mb-3">Formas de pagamento (recebido)</h3>
               {methods.length === 0 ? <p className="text-[12px] text-[var(--text-muted)]">Nenhum recebimento pago no período.</p> : (
                 <div className="space-y-2">
                   {methods.map((m) => {
@@ -273,7 +273,7 @@ export default function FinanceiroPage() {
           {/* ── Lista ── */}
           <Card className="overflow-hidden">
             <div className="px-4 pt-4 pb-2 flex items-center justify-between">
-              <h3 className="text-[13px] font-extrabold text-[var(--text)]">Movimentações ({entries.length})</h3>
+              <h3 className="text-[13px] font-semibold text-[var(--text)]">Movimentações ({entries.length})</h3>
             </div>
             {entries.length === 0 ? (
               <div className="p-4">
@@ -290,7 +290,7 @@ export default function FinanceiroPage() {
                       <Icon n={e.kind === 'receita' ? 'plus' : 'minus'} size={15} />
                     </span>
                     <div className="flex-1 min-w-[180px]">
-                      <p className="text-[13.5px] font-bold text-[var(--text)] truncate">{e.description}</p>
+                      <p className="text-[13.5px] font-semibold text-[var(--text)] truncate">{e.description}</p>
                       <p className="text-[11.5px] text-[var(--text-muted)]">
                         {e.dueDate ? e.dueDate.split('-').reverse().join('/') : '—'}
                         {e.method ? ` · ${FINANCE_METHODS.find((m) => m.id === e.method)?.label || e.method}` : ''}
@@ -298,7 +298,7 @@ export default function FinanceiroPage() {
                       </p>
                     </div>
                     <Badge tone={statusTone(e.status)}>{FINANCE_STATUS_LABEL[e.status]}</Badge>
-                    <span className={cn('text-[14px] font-extrabold tabular-nums w-[110px] text-right', e.kind === 'receita' ? 'text-[var(--success-fg)]' : 'text-[var(--danger)]')}>
+                    <span className={cn('text-[14px] font-semibold tabular-nums w-[110px] text-right', e.kind === 'receita' ? 'text-[var(--success-fg)]' : 'text-[var(--danger)]')}>
                       {e.kind === 'receita' ? '+' : '−'}{centsToBR(e.amount)}
                     </span>
                     <IconButton icon="pencil" label="Editar movimentação" size="sm" onClick={() => { setFormError(''); setEditing({ ...e }); }} />

@@ -112,7 +112,7 @@ export function AnamneseFiller({
         {f.type === 'scale' && (
           <div className="flex items-center gap-3">
             <input type="range" min={f.scaleMin ?? 0} max={f.scaleMax ?? 10} value={Number(answers[f.id] ?? f.scaleMin ?? 0)} onChange={(e) => setAns(f, Number(e.target.value))} className="flex-1" />
-            <span className="text-[13px] font-bold text-[var(--text)] w-10 text-right">{String(answers[f.id] ?? f.scaleMin ?? 0)}</span>
+            <span className="text-[13px] font-semibold text-[var(--text)] w-10 text-right">{String(answers[f.id] ?? f.scaleMin ?? 0)}</span>
           </div>
         )}
         {(f.type === 'text') && <Input {...common} value={String(answers[f.id] ?? '')} onChange={(e) => setAns(f, e.target.value)} />}
@@ -133,7 +133,7 @@ export function AnamneseFiller({
           {/* HOMOLOGAÇÃO · dados PERMANENTES do pet = CONTEXTO (não se editam aqui). */}
           {pet && (
             <section data-testid="anamnese-pet-context" className="rounded-md border border-[var(--border)] bg-[var(--surface-2)] px-3 py-2.5 space-y-1.5">
-              <p className="text-[11px] font-bold uppercase tracking-wide text-[var(--text-muted)]">Contexto do paciente</p>
+              <p className="text-[11px] font-semibold uppercase tracking-wide text-[var(--text-muted)]">Contexto do paciente</p>
               <div className="grid grid-cols-2 sm:grid-cols-4 gap-x-3 gap-y-1 text-[12.5px]">
                 <div><span className="text-[var(--text-muted)]">Espécie: </span>{PET_SPECIES_LABELS[pet.species] || pet.species || '—'}</div>
                 <div><span className="text-[var(--text-muted)]">Raça: </span>{pet.breed || '—'}</div>
@@ -154,7 +154,7 @@ export function AnamneseFiller({
               </p>
             ) : <span />}
             {lastResponse && (
-              <button type="button" className="text-[12px] font-bold text-[var(--brand-fg)] hover:underline"
+              <button type="button" className="text-[12px] font-semibold text-[var(--brand-fg)] hover:underline"
                 onClick={() => setHistoryOpen((v) => !v)} aria-expanded={historyOpen}>
                 {historyOpen ? 'Ocultar histórico' : 'Ver histórico'}
               </button>
@@ -162,7 +162,7 @@ export function AnamneseFiller({
           </div>
           {historyOpen && lastResponse && (
             <section data-testid="anamnese-history" className="rounded-md border border-[var(--border)] px-3 py-2 space-y-1 max-h-48 overflow-y-auto">
-              <p className="text-[11px] font-bold uppercase tracking-wide text-[var(--text-muted)]">Respostas anteriores (só leitura)</p>
+              <p className="text-[11px] font-semibold uppercase tracking-wide text-[var(--text-muted)]">Respostas anteriores (só leitura)</p>
               {Object.entries(lastResponse.answers || {}).map(([k, v]) => (
                 <div key={k} className="text-[12.5px]"><span className="text-[var(--text-muted)]">{k}: </span>{String(v ?? '—')}</div>
               ))}
@@ -170,7 +170,7 @@ export function AnamneseFiller({
           )}
 
           {template.description ? <p className="text-[12.5px] text-[var(--text-muted)]">{template.description}</p> : null}
-          <p className="text-[11px] font-bold uppercase tracking-wide text-[var(--text-muted)]">Episódio atual</p>
+          <p className="text-[11px] font-semibold uppercase tracking-wide text-[var(--text-muted)]">Episódio atual</p>
           {template.fields.map(renderField)}
         </div>
       )}

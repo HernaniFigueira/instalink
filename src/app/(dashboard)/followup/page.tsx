@@ -130,7 +130,7 @@ export default function FollowUpPage() {
                 <div className="flex flex-wrap items-start gap-3">
                   <div className="flex-1 min-w-[240px]">
                     <div className="flex items-center gap-2 flex-wrap">
-                      <h3 className="text-[14px] font-extrabold text-[var(--text)]">{rule.name}</h3>
+                      <h3 className="text-[14px] font-semibold text-[var(--text)]">{rule.name}</h3>
                       <Badge tone={rule.active ? 'green' : 'zinc'}>{rule.active ? 'Ativa' : 'Desligada'}</Badge>
                       {!channel.ready && <Badge tone="amber" icon="whatsapp">Aguardando conexão do WhatsApp</Badge>}
                     </div>
@@ -174,7 +174,7 @@ export default function FollowUpPage() {
 
                 {/* Prévia REAL: sobre quem a regra agiria agora (dry-run). */}
                 <div className="mt-3 rounded-md bg-[var(--surface-2)] border border-[var(--border)] p-3">
-                  <p className="text-[12px] font-bold text-[var(--text)]">
+                  <p className="text-[12px] font-semibold text-[var(--text)]">
                     Prévia agora: {mine.length} {mine.length === 1 ? 'pessoa' : 'pessoas'}
                     <span className="font-normal text-[var(--text-muted)]"> — nada é enviado ainda</span>
                   </p>

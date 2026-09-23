@@ -122,7 +122,7 @@ export function AnamneseManager({ open, onClose, businessId, clinicType }: {
 
           <div className="space-y-3">
             <div className="flex items-center justify-between">
-              <h3 className="text-[13px] font-extrabold text-[var(--text)]">Campos ({editing.fields.length})</h3>
+              <h3 className="text-[13px] font-semibold text-[var(--text)]">Campos ({editing.fields.length})</h3>
               <Button variant="secondary" size="sm" onClick={() => setEditing({ ...editing, fields: [...editing.fields, emptyField()] })}>
                 <Icon n="plus" size={14} /> Campo
               </Button>
@@ -181,7 +181,7 @@ export function AnamneseManager({ open, onClose, businessId, clinicType }: {
             <div key={t.id} className="flex items-center gap-3 rounded-xl border border-[var(--border)] p-3">
               <span className="grid place-items-center h-9 w-9 rounded-lg bg-[var(--brand-soft)] text-[var(--brand-fg)] shrink-0"><Icon n="fileText" size={17} /></span>
               <div className="flex-1 min-w-0">
-                <p className="text-[13.5px] font-bold text-[var(--text)] truncate">{t.name}</p>
+                <p className="text-[13.5px] font-semibold text-[var(--text)] truncate">{t.name}</p>
                 <p className="text-[12px] text-[var(--text-muted)]">{t.fields.length} campo(s){t.preset && t.preset !== 'custom' ? ` · preset ${t.preset}` : ''}</p>
               </div>
               {!t.active && <Badge tone="zinc">Inativa</Badge>}

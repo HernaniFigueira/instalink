@@ -659,13 +659,13 @@ export function EncounterSheet({
             <div className="rounded-md border border-[var(--border)] p-3">
               <div className="flex items-center justify-between gap-2 flex-wrap">
                 <div>
-                  <p className="text-[13px] font-bold text-[var(--text)]">Anamnese</p>
+                  <p className="text-[13px] font-semibold text-[var(--text)]">Anamnese</p>
                   <p className="text-[11.5px] text-[var(--text-muted)]">
                     {anamneseCount > 0
                       ? <>
                           Última ficha: {anamneseLast ? formatAnamneseDate(anamneseLast.createdAt) : '—'}
                           {' · '}
-                          <button type="button" className="font-bold text-[var(--brand-fg)] hover:underline"
+                          <button type="button" className="font-semibold text-[var(--brand-fg)] hover:underline"
                             onClick={() => setAnamneseHistoryOpen((v) => !v)} aria-expanded={anamneseHistoryOpen}>
                             {anamneseHistoryOpen ? 'Ocultar histórico' : 'Ver histórico'}
                           </button>
@@ -685,7 +685,7 @@ export function EncounterSheet({
               </div>
               {anamneseHistoryOpen && anamneseLast && (
                 <div data-testid="encounter-anamnese-history" className="mt-2 rounded-md border border-[var(--border)] bg-[var(--surface-2)] px-3 py-2 space-y-1 max-h-40 overflow-y-auto">
-                  <p className="text-[11px] font-bold uppercase tracking-wide text-[var(--text-muted)]">Respostas (só leitura — nada é copiado para a nova ficha)</p>
+                  <p className="text-[11px] font-semibold uppercase tracking-wide text-[var(--text-muted)]">Respostas (só leitura — nada é copiado para a nova ficha)</p>
                   {Object.entries(anamneseLast.answers || {}).map(([k, v]) => (
                     <div key={k} className="text-[12px]"><span className="text-[var(--text-muted)]">{k}: </span>{String(v ?? '—')}</div>
                   ))}
@@ -695,7 +695,7 @@ export function EncounterSheet({
 
             {/* ── FASE 2 · P3 — arquivos (Storage + referência no documento) ── */}
             <div className="rounded-md border border-[var(--border)] p-3">
-              <p className="text-[13px] font-bold text-[var(--text)]">Arquivos</p>
+              <p className="text-[13px] font-semibold text-[var(--text)]">Arquivos</p>
               <p className="text-[11.5px] text-[var(--text-muted)] mt-0.5">Exames, laudos, receitas, imagens ou documentos em PDF.</p>
               {fileError && <p className="text-[12px] text-[var(--danger-fg)] mt-1">{fileError}</p>}
               {(row.files || []).length > 0 ? (

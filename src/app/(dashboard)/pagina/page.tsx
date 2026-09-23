@@ -161,7 +161,7 @@ export default function PaginaPage() {
         <span className="mx-auto w-10 h-10 rounded-md bg-red-50 border border-red-200 text-red-600 flex items-center justify-center"><Icon n="alert" size={18} /></span>
         <p className="text-sm font-medium text-zinc-700 mt-3">{failed}</p>
         <button onClick={() => { setBusiness(null); setPage(null); setReloadTick((t) => t + 1); }}
-          className="mt-4 text-xs font-bold bg-[var(--brand)] text-white shadow-brand hover:bg-[var(--brand-strong)] px-4 py-2 rounded-md">Tentar de novo</button>
+          className="mt-4 text-xs font-semibold bg-[var(--brand)] text-white shadow-brand hover:bg-[var(--brand-strong)] px-4 py-2 rounded-md">Tentar de novo</button>
       </div>
     );
   }
@@ -183,19 +183,19 @@ export default function PaginaPage() {
         <span className="w-6 shrink-0" />
         <span className="w-[18px] shrink-0 flex justify-center text-zinc-300"><Icon n="pin" size={11} /></span>
         <div className="flex-1 min-w-0">
-          <p className="font-bold text-sm flex items-center gap-1.5 flex-wrap">
+          <p className="font-semibold text-sm flex items-center gap-1.5 flex-wrap">
             <span className={cn(aboutData.enabled ? 'text-zinc-900' : 'text-zinc-400')}>Sobre a empresa</span>
-            <span className="text-[10px] font-extrabold bg-zinc-100 text-zinc-500 px-2 py-0.5 rounded-full">seção fixa abaixo do Perfil</span>
+            <span className="text-[10px] font-semibold bg-zinc-100 text-zinc-500 px-2 py-0.5 rounded-full">seção fixa abaixo do Perfil</span>
             {!aboutFilled && (
-              <span className="text-[10px] font-extrabold bg-amber-100 text-amber-800 px-2 py-0.5 rounded-full">Falta preencher</span>
+              <span className="text-[10px] font-semibold bg-amber-100 text-amber-800 px-2 py-0.5 rounded-full">Falta preencher</span>
             )}
           </p>
           <p className="text-xs text-zinc-500 truncate">História, diferenciais e imagem do negócio</p>
         </div>
         <button aria-label="Editar Sobre a clínica" aria-expanded={editing === 'about'} onClick={() => setEditing(editing === 'about' ? null : 'about')}
-          className="text-xs font-bold bg-zinc-100 px-3 py-1.5 rounded-lg hover:bg-zinc-200">Editar</button>
+          className="text-xs font-semibold bg-zinc-100 px-3 py-1.5 rounded-lg hover:bg-zinc-200">Editar</button>
         <button onClick={() => setBusiness({ ...business, about: { ...aboutData, enabled: !aboutData.enabled } })}
-          className={cn('text-xs font-bold px-3 py-1.5 rounded-lg min-w-[64px]', aboutData.enabled ? 'bg-emerald-100 text-emerald-800 hover:bg-emerald-200' : 'bg-zinc-100 text-zinc-500 hover:bg-zinc-200')}>
+          className={cn('text-xs font-semibold px-3 py-1.5 rounded-lg min-w-[64px]', aboutData.enabled ? 'bg-emerald-100 text-emerald-800 hover:bg-emerald-200' : 'bg-zinc-100 text-zinc-500 hover:bg-zinc-200')}>
           {aboutData.enabled ? 'Ativo' : 'Oculto'}
         </button>
       </div>
@@ -312,10 +312,10 @@ export default function PaginaPage() {
                   onApply={(t, id) => setPage({ ...page, theme: t, presetId: id })}
                 />
                 <div className="bg-white border border-zinc-200 rounded-lg p-4">
-                  <p className="font-bold text-sm mb-1">Itens do menu e blocos da página</p>
+                  <p className="font-semibold text-sm mb-1">Itens do menu e blocos da página</p>
                   <p className="text-xs text-zinc-500 mb-3">Ordem, ativação e conteúdo dos blocos vivem em <strong>Seções da página</strong>. O menu público segue o que está ativo.</p>
                   <button type="button" onClick={() => setSection('secoes')}
-                    className="text-sm font-bold bg-[var(--surface-2)] text-[var(--text)] px-4 py-2 rounded-md hover:bg-[var(--brand-soft)] hover:text-[var(--brand-fg)]">
+                    className="text-sm font-semibold bg-[var(--surface-2)] text-[var(--text)] px-4 py-2 rounded-md hover:bg-[var(--brand-soft)] hover:text-[var(--brand-fg)]">
                     Abrir Seções da página
                   </button>
                 </div>
@@ -324,10 +324,10 @@ export default function PaginaPage() {
             {active === 'secoes' && (
               <>
                 <div className="bg-white border border-zinc-200 rounded-lg p-4">
-                  <p className="font-bold text-sm mb-1">Menu público e texto de apresentação</p>
+                  <p className="font-semibold text-sm mb-1">Menu público e texto de apresentação</p>
                   <p className="text-xs text-zinc-500 mb-3">Configure os itens de navegação e o “Sobre” — o menu segue os blocos ativos.</p>
                   <details className="mt-2">
-                    <summary className="cursor-pointer text-xs font-bold uppercase tracking-wide text-[var(--text-muted)]">Abrir configuração do menu</summary>
+                    <summary className="cursor-pointer text-xs font-semibold uppercase tracking-wide text-[var(--text-muted)]">Abrir configuração do menu</summary>
                     <div className="mt-3">
                       <PageNavTab
                         business={business}
@@ -359,7 +359,7 @@ export default function PaginaPage() {
                           <div key={b.id} data-block-id={b.id}>
                           <div className={cn('px-3 py-2.5', !b.enabled && 'bg-zinc-50/60')}>
                             <div className="flex flex-wrap items-center gap-2.5">
-                              <span className="w-6 text-center text-[11px] font-bold text-zinc-400 tabular-nums shrink-0">{i + 1}</span>
+                              <span className="w-6 text-center text-[11px] font-semibold text-zinc-400 tabular-nums shrink-0">{i + 1}</span>
                               <div className="flex flex-col gap-0.5 shrink-0">
                                 <button disabled={i === 0} onClick={() => { const n = [...blocks]; [n[i - 1], n[i]] = [n[i], n[i - 1]]; updateBlocks(n); }}
                                   className="text-zinc-500 hover:text-zinc-900 hover:bg-zinc-100 rounded p-2 disabled:opacity-20 disabled:hover:bg-transparent inline-flex" aria-label={`Mover ${BLOCK_DEFS[b.type]?.label || b.type} para cima`}><Icon n="chevU" size={12} /></button>
@@ -367,34 +367,34 @@ export default function PaginaPage() {
                                   className="text-zinc-500 hover:text-zinc-900 hover:bg-zinc-100 rounded p-2 disabled:opacity-20 disabled:hover:bg-transparent inline-flex" aria-label={`Mover ${BLOCK_DEFS[b.type]?.label || b.type} para baixo`}><Icon n="chevD" size={12} /></button>
                               </div>
                               <div className="flex-1 min-w-0">
-                                <p className="font-bold text-sm flex items-center gap-1.5 flex-wrap">
+                                <p className="font-semibold text-sm flex items-center gap-1.5 flex-wrap">
                                   <span className={cn(b.enabled ? 'text-zinc-900' : 'text-zinc-400')}>{BLOCK_DEFS[b.type]?.label || b.type}</span>
                                   {blockIsEmpty(b, rvCounts) && (
-                                    <span className="text-[10px] font-extrabold bg-amber-100 text-amber-800 px-2 py-0.5 rounded-full">Falta preencher</span>
+                                    <span className="text-[10px] font-semibold bg-amber-100 text-amber-800 px-2 py-0.5 rounded-full">Falta preencher</span>
                                   )}
                                   {gate && (
-                                    <span className="text-[10px] font-extrabold bg-zinc-100 text-zinc-500 px-2 py-0.5 rounded-full inline-flex items-center gap-1" title={`O módulo ${gate} está desligado — o bloco fica salvo, mas não aparece na página até o módulo voltar em Recursos.`}>
+                                    <span className="text-[10px] font-semibold bg-zinc-100 text-zinc-500 px-2 py-0.5 rounded-full inline-flex items-center gap-1" title={`O módulo ${gate} está desligado — o bloco fica salvo, mas não aparece na página até o módulo voltar em Recursos.`}>
                                       <Icon n="lock" size={9} /> módulo {gate} desligado
                                     </span>
                                   )}
                                   {b.type === 'testimonials' && rvCounts.pending > 0 && (
-                                    <span className="text-[10px] font-extrabold bg-blue-100 text-blue-800 px-2 py-0.5 rounded-full">{rvCounts.pending} para aprovar</span>
+                                    <span className="text-[10px] font-semibold bg-blue-100 text-blue-800 px-2 py-0.5 rounded-full">{rvCounts.pending} para aprovar</span>
                                   )}
                                   {b.type === 'testimonials' && rvCounts.published > 0 && (
-                                    <span className="text-[10px] font-extrabold bg-emerald-100 text-emerald-800 px-2 py-0.5 rounded-full">{rvCounts.published} no ar</span>
+                                    <span className="text-[10px] font-semibold bg-emerald-100 text-emerald-800 px-2 py-0.5 rounded-full">{rvCounts.published} no ar</span>
                                   )}
                                 </p>
                                 <p className="text-xs text-zinc-500 truncate">{BLOCK_DEFS[b.type]?.hint}</p>
                               </div>
                               <button aria-label={`Editar ${BLOCK_DEFS[b.type]?.label || b.type}`} aria-expanded={editing === b.id} onClick={() => { setEditing(editing === b.id ? null : b.id); }}
-                                className="text-xs font-bold bg-zinc-100 px-3 py-1.5 rounded-lg hover:bg-zinc-200">Editar</button>
+                                className="text-xs font-semibold bg-zinc-100 px-3 py-1.5 rounded-lg hover:bg-zinc-200">Editar</button>
                               <button onClick={() => updateBlocks(blocks.map((x) => (x.id === b.id ? { ...x, enabled: !x.enabled } : x)))}
-                                className={cn('text-xs font-bold px-3 py-1.5 rounded-lg min-w-[64px]', b.enabled ? 'bg-emerald-100 text-emerald-800 hover:bg-emerald-200' : 'bg-zinc-100 text-zinc-500 hover:bg-zinc-200')}>
+                                className={cn('text-xs font-semibold px-3 py-1.5 rounded-lg min-w-[64px]', b.enabled ? 'bg-emerald-100 text-emerald-800 hover:bg-emerald-200' : 'bg-zinc-100 text-zinc-500 hover:bg-zinc-200')}>
                                 {b.enabled ? 'Ativo' : 'Oculto'}
                               </button>
                               {b.type !== 'profile' && (
                                 <button onClick={() => { if (confirm('Remover este bloco?')) updateBlocks(blocks.filter((x) => (x.id !== b.id))); }}
-                                  className="text-xs font-bold text-red-500 px-2 py-1.5 hover:bg-red-50 rounded-lg inline-flex" aria-label="Remover bloco"><Icon n="x" size={12} /></button>
+                                  className="text-xs font-semibold text-red-500 px-2 py-1.5 hover:bg-red-50 rounded-lg inline-flex" aria-label="Remover bloco"><Icon n="x" size={12} /></button>
                               )}
                             </div>
                             {editing === b.id && (
@@ -421,7 +421,7 @@ export default function PaginaPage() {
                     </div>
                   </div>
                   <div className="bg-white border border-zinc-200 rounded-lg p-4 lg:sticky lg:top-4">
-                    <p className="font-bold text-sm mb-1">Adicionar bloco</p>
+                    <p className="font-semibold text-sm mb-1">Adicionar bloco</p>
                     <p className="text-xs text-zinc-500 mb-3">Blocos de conversão seguem os módulos da empresa (Recursos).</p>
                     <div className="flex flex-wrap gap-2">
                       {(Object.keys(BLOCK_DEFS) as BlockType[])
@@ -432,7 +432,7 @@ export default function PaginaPage() {
                             <button key={t} disabled={!!gate}
                               title={gate ? `Ative o módulo “${gate}” em Recursos para usar este bloco` : undefined}
                               onClick={() => updateBlocks([...blocks, { id: `b-${Date.now()}-${t}`, type: t, order: blocks.length, enabled: true, settings: {} }])}
-                              className={cn('text-xs font-bold px-3 py-2 rounded-lg transition-colors',
+                              className={cn('text-xs font-semibold px-3 py-2 rounded-lg transition-colors',
                                 gate ? 'bg-[var(--surface-2)] text-[var(--text-muted)] cursor-not-allowed' : 'bg-[var(--surface-2)] text-[var(--text)] hover:bg-[var(--brand-soft)] hover:text-[var(--brand-fg)]')}>
                               + {BLOCK_DEFS[t]?.label}
                             </button>
@@ -447,7 +447,7 @@ export default function PaginaPage() {
               <>
 {/* HOMOLOGAÇÃO · P1 — capa/hero da página pública (mesma fonte institucional). */}
                 <div className="bg-white border border-zinc-200 rounded-lg p-4 space-y-2">
-                  <p className="font-bold text-sm">Capa da página</p>
+                  <p className="font-semibold text-sm">Capa da página</p>
                   <p className="text-xs text-zinc-500">Aparece no topo da página pública. A logo fica em Configurações → Identidade.</p>
                   <ImageUpload label="CAPA / HERO" value={business.cover || ''} onChange={(url) => setBusiness({ ...business, cover: url })} businessId={businessId} />
                 </div>
@@ -555,7 +555,7 @@ export default function PaginaPage() {
                     Continuar configuração <Icon n="chevronRight" size={14} />
                   </Link>
                 ) : (
-                  <span className="ml-auto text-[12px] font-bold text-[var(--success-fg)] inline-flex items-center gap-1.5">
+                  <span className="ml-auto text-[12px] font-semibold text-[var(--success-fg)] inline-flex items-center gap-1.5">
                     <Icon n="checkCircle" size={15} /> Configuração completa
                   </span>
                 );
@@ -677,7 +677,7 @@ function PageNavTab({ business, businessId, blocks, services, products, professi
       <section className="bg-white border border-zinc-200 rounded-lg p-4">
         <div className="flex flex-wrap items-center justify-between gap-2 mb-1">
           <div>
-            <p className="font-bold text-sm">Itens do menu público</p>
+            <p className="font-semibold text-sm">Itens do menu público</p>
             <p className="text-xs text-zinc-500 mt-0.5">
               {auto
                 ? 'Modo automático: a página monta o menu conforme módulos e conteúdo preenchido. Qualquer ajuste abaixo vira configuração sua.'
@@ -700,7 +700,7 @@ function PageNavTab({ business, businessId, blocks, services, products, professi
             return (
               <div key={item.id}>
                 {showGroupHeader && (
-                  <p className="px-3 pt-2.5 pb-1 text-[10px] font-extrabold uppercase tracking-wider text-zinc-400 bg-zinc-50/60">
+                  <p className="px-3 pt-2.5 pb-1 text-[10px] font-semibold uppercase tracking-wider text-zinc-400 bg-zinc-50/60">
                     {item.type === 'anchor' ? 'Seções da página' : 'Links externos'}
                   </p>
                 )}
@@ -712,7 +712,7 @@ function PageNavTab({ business, businessId, blocks, services, products, professi
                     className="text-zinc-400 hover:text-zinc-900 disabled:opacity-20 px-0.5 inline-flex"><Icon n="chevD" size={11} /></button>
                 </div>
                 <button onClick={() => ok && toggleItem(item)} disabled={!ok}
-                  className={cn('text-[11px] font-bold px-2.5 py-1 rounded-full border shrink-0 transition-colors',
+                  className={cn('text-[11px] font-semibold px-2.5 py-1 rounded-full border shrink-0 transition-colors',
                     !ok ? 'bg-zinc-50 text-zinc-400 border-zinc-200 cursor-not-allowed'
                     : on ? 'bg-[var(--brand-soft)] text-[var(--brand-fg)] border-[var(--brand-border)]'
                     : 'bg-white text-[var(--text-muted)] border-[var(--border-strong)]')}
@@ -722,7 +722,7 @@ function PageNavTab({ business, businessId, blocks, services, products, professi
                 <input aria-label={`Nome no menu: ${NAV_ANCHORS[item.id]?.label || item.id}`} value={item.label} onChange={(e) => rename(item, e.target.value)} disabled={!ok}
                   className="flex-1 min-w-[110px] bg-transparent border-0 focus:border focus:border-zinc-300 rounded-md px-2 py-1 text-sm font-semibold disabled:text-zinc-400"
                   placeholder={NAV_ANCHORS[item.id]?.label || item.id} maxLength={40} />
-                <span className="text-[10px] font-bold text-zinc-400 uppercase shrink-0 w-14 text-right">
+                <span className="text-[10px] font-semibold text-zinc-400 uppercase shrink-0 w-14 text-right">
                   {item.type === 'anchor' ? 'Seção' : 'Link'}
                 </span>
                 </div>
@@ -738,23 +738,23 @@ function PageNavTab({ business, businessId, blocks, services, products, professi
 
         <div className="flex flex-wrap gap-2 mt-3">
           <button disabled={!dirty} onClick={async () => { if (await onSaveNav(draft || []) !== false) setDraft(null); }}
-            className="text-sm font-bold bg-[var(--brand)] text-white shadow-brand hover:bg-[var(--brand-strong)] px-4 py-2.5 rounded-md disabled:opacity-40">
+            className="text-sm font-semibold bg-[var(--brand)] text-white shadow-brand hover:bg-[var(--brand-strong)] px-4 py-2.5 rounded-md disabled:opacity-40">
             Salvar menu
           </button>
           {!auto && (
-            <button onClick={() => setDraft([])} className="text-sm font-bold bg-zinc-100 px-4 py-2.5 rounded-md hover:bg-zinc-200">
+            <button onClick={() => setDraft([])} className="text-sm font-semibold bg-zinc-100 px-4 py-2.5 rounded-md hover:bg-zinc-200">
               Voltar ao automático
             </button>
           )}
           {dirty && (
-            <button onClick={() => setDraft(null)} className="text-sm font-bold text-zinc-500 px-3 py-2.5 rounded-md hover:text-zinc-900">Descartar</button>
+            <button onClick={() => setDraft(null)} className="text-sm font-semibold text-zinc-500 px-3 py-2.5 rounded-md hover:text-zinc-900">Descartar</button>
           )}
         </div>
       </section>
 
       <section className="bg-white border border-zinc-200 rounded-lg p-4 space-y-3">
         <div className="flex items-center justify-between">
-          <p className="font-bold text-sm">Sobre a empresa</p>
+          <p className="font-semibold text-sm">Sobre a empresa</p>
           <button onClick={() => setAboutDraft({ ...aboutDraft, enabled: !about.enabled })}
             className={cn('text-xs font-medium px-3 py-1 rounded-full border', about.enabled ? 'bg-[var(--brand-soft)] text-[var(--brand-fg)] border-[var(--brand-border)]' : 'bg-white border-[var(--border)] text-[var(--text-muted)]')}>
             {about.enabled ? 'Visível' : 'Oculto'}
@@ -764,7 +764,7 @@ function PageNavTab({ business, businessId, blocks, services, products, professi
         <input aria-label="Título sobre a clínica" value={aboutDraft.title} onChange={(e) => setAboutDraft({ ...aboutDraft, title: e.target.value })} className="w-full rounded-md border border-zinc-300 px-3 py-2 text-sm" placeholder="Título (ex: Sobre a clínica)" />
         <textarea aria-label="Texto sobre a clínica" value={aboutDraft.text} onChange={(e) => setAboutDraft({ ...aboutDraft, text: e.target.value })} className="w-full rounded-md border border-zinc-300 px-3 py-2 text-sm" rows={3} placeholder="Ex: Somos uma clínica especializada em…" />
         <ImageUpload label="IMAGEM (OPCIONAL)" value={aboutDraft.image} onChange={(url) => setAboutDraft({ ...aboutDraft, image: url })} businessId={businessId} />
-        <button onClick={() => onAbout(aboutDraft)} className="text-sm font-bold bg-[var(--brand)] text-white shadow-brand hover:bg-[var(--brand-strong)] px-4 py-2 rounded-md">Salvar “Sobre”</button>
+        <button onClick={() => onAbout(aboutDraft)} className="text-sm font-semibold bg-[var(--brand)] text-white shadow-brand hover:bg-[var(--brand-strong)] px-4 py-2 rounded-md">Salvar “Sobre”</button>
       </section>
     </div>
   );
@@ -786,20 +786,20 @@ function AboutSectionEditor({ about, businessId, onSave, onChange }: {
   return (
     <div className="space-y-3">
       <div>
-        <span className="text-xs font-bold text-zinc-500">TÍTULO</span>
+        <span className="text-xs font-semibold text-zinc-500">TÍTULO</span>
         <input aria-label="Título sobre a clínica" value={draft.title} onChange={(e) => set('title', e.target.value)}
           className="mt-1 w-full rounded-md border border-zinc-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500"
           placeholder="Ex: Sobre a clínica" maxLength={80} />
       </div>
       <div>
-        <span className="text-xs font-bold text-zinc-500">TEXTO</span>
+        <span className="text-xs font-semibold text-zinc-500">TEXTO</span>
         <textarea aria-label="Texto sobre a clínica" value={draft.text} onChange={(e) => set('text', e.target.value)}
           className="mt-1 w-full rounded-md border border-zinc-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500"
           rows={4} placeholder="Ex: Somos uma clínica especializada em…" maxLength={1200} />
       </div>
       <ImageUpload label="IMAGEM (OPCIONAL)" value={draft.image} onChange={(url) => set('image', url)} businessId={businessId} />
       <button onClick={() => onSave({ ...draft, enabled: !!draft.enabled })}
-        className="text-sm font-bold bg-[var(--brand)] text-white shadow-brand hover:bg-[var(--brand-strong)] px-4 py-2 rounded-md">
+        className="text-sm font-semibold bg-[var(--brand)] text-white shadow-brand hover:bg-[var(--brand-strong)] px-4 py-2 rounded-md">
         Salvar “Sobre”
       </button>
     </div>
@@ -860,7 +860,7 @@ function LocationAddressEditor({ business, businessId, onSave }: {
   return (
     <div className="bg-white border border-zinc-200 rounded-lg p-4 space-y-3" data-testid="location-address-editor">
       <div>
-        <p className="font-bold text-sm">Endereço da clínica</p>
+        <p className="font-semibold text-sm">Endereço da clínica</p>
         <p className="text-xs text-zinc-500">Mesma fonte de Configurações → Contato — editar aqui atualiza o cadastro institucional.</p>
       </div>
       <label className="block">
@@ -877,10 +877,10 @@ function LocationAddressEditor({ business, businessId, onSave }: {
       </label>
       <div className="flex items-center gap-3">
         <button type="button" onClick={save} disabled={saving}
-          className="text-sm font-bold bg-[var(--brand)] text-white shadow-brand hover:bg-[var(--brand-strong)] px-4 py-2 rounded-md disabled:opacity-60">
+          className="text-sm font-semibold bg-[var(--brand)] text-white shadow-brand hover:bg-[var(--brand-strong)] px-4 py-2 rounded-md disabled:opacity-60">
           {saving ? 'Salvando…' : 'Salvar endereço'}
         </button>
-        {saved && <span className="text-xs font-bold text-[var(--success)]">Salvo ✓</span>}
+        {saved && <span className="text-xs font-semibold text-[var(--success)]">Salvo ✓</span>}
       </div>
     </div>
   );
@@ -931,7 +931,7 @@ function BlockSettings({ block, businessId, business, onChange, onSave, onRefres
     <div className="space-y-3">
       {['cta', 'products', 'services', 'booking', 'contact', 'quote', 'concierge', 'highlights', 'professionals', 'gallery', 'testimonials', 'faq', 'location'].includes(block.type) && (
         <label className="block">
-          <span className="text-xs font-bold text-zinc-500">{block.type === 'cta' ? 'TEXTO DO BOTÃO' : 'TÍTULO'}</span>
+          <span className="text-xs font-semibold text-zinc-500">{block.type === 'cta' ? 'TEXTO DO BOTÃO' : 'TÍTULO'}</span>
           <input value={block.type === 'cta' ? s.label || '' : s.title || ''} onChange={(e) => set(block.type === 'cta' ? 'label' : 'title', e.target.value)}
             className={input + ' mt-1'} placeholder={block.type === 'cta' ? 'Ex: Agendar horário' : 'Título da seção'} />
         </label>
@@ -943,14 +943,14 @@ function BlockSettings({ block, businessId, business, onChange, onSave, onRefres
       )}
       {['products', 'services', 'gallery', 'testimonials', 'faq', 'highlights', 'professionals', 'location'].includes(block.type) && (
         <label className="block">
-          <span className="text-xs font-bold text-zinc-500">SUBTÍTULO (OPCIONAL)</span>
+          <span className="text-xs font-semibold text-zinc-500">SUBTÍTULO (OPCIONAL)</span>
           <input value={s.subtitle || ''} onChange={(e) => set('subtitle', e.target.value.slice(0, 120))}
             className={input + ' mt-1'} placeholder="Uma linha que explica a seção (ex: Toque em um serviço para agendar)" />
         </label>
       )}
       {block.type === 'cta' && (
         <label className="block">
-          <span className="text-xs font-bold text-zinc-500">DESTINO DO BOTÃO</span>
+          <span className="text-xs font-semibold text-zinc-500">DESTINO DO BOTÃO</span>
           <select value={s.target || 'auto'} onChange={(e) => set('target', e.target.value === 'auto' ? '' : e.target.value)}
             className={input + ' mt-1'}>
             <option value="auto">Automático (pelo texto)</option>
@@ -984,7 +984,7 @@ function BlockSettings({ block, businessId, business, onChange, onSave, onRefres
                   type="button"
                   onClick={() => activateModule('products')}
                   disabled={!!activating}
-                  className="inline-flex items-center gap-1.5 text-xs font-bold pe-btn--green px-3.5 py-2 rounded-md hover:bg-emerald-700 disabled:opacity-60">
+                  className="inline-flex items-center gap-1.5 text-xs font-semibold pe-btn--green px-3.5 py-2 rounded-md hover:bg-emerald-700 disabled:opacity-60">
                   {activating === 'products' && <span className="w-3 h-3 border-2 border-white/40 border-t-white rounded-full animate-spin" />}
                   Ativar Produtos agora
                 </button>
@@ -1028,7 +1028,7 @@ function BlockSettings({ block, businessId, business, onChange, onSave, onRefres
                         <img src={url} alt={`Foto ${i + 1}`} className="w-full h-20 object-cover rounded-md border border-zinc-200" />
                         <button type="button" onClick={() => set('images', imgs.filter((_, j) => j !== i))}
                           aria-label={`Remover foto ${i + 1}`}
-                          className="absolute -top-1.5 -right-1.5 w-6 h-6 rounded-full bg-[var(--danger)] text-white text-xs font-bold flex items-center justify-center opacity-90 hover:opacity-100">
+                          className="absolute -top-1.5 -right-1.5 w-6 h-6 rounded-full bg-[var(--danger)] text-white text-xs font-semibold flex items-center justify-center opacity-90 hover:opacity-100">
                           ×
                         </button>
                       </div>
@@ -1043,7 +1043,7 @@ function BlockSettings({ block, businessId, business, onChange, onSave, onRefres
                   </p>
                 </div>
                 <details>
-                  <summary className="text-[11px] font-bold text-zinc-500 cursor-pointer">ou colar URLs (uma por linha)</summary>
+                  <summary className="text-[11px] font-semibold text-zinc-500 cursor-pointer">ou colar URLs (uma por linha)</summary>
                   <textarea value={imgs.join('\n')} onChange={(e) => set('images', e.target.value.split('\n').map((x) => x.trim()).filter(Boolean))}
                     className={input + ' mt-2'} rows={4} placeholder="https://…" />
                 </details>
@@ -1060,7 +1060,7 @@ function BlockSettings({ block, businessId, business, onChange, onSave, onRefres
       {block.type === 'testimonials' && (
         <>
           <ReviewsEditor businessId={businessId} />
-          <p className="text-xs font-bold text-zinc-500 pt-1">DEPOIMENTOS FIXOS (aparecem só se nenhuma avaliação estiver publicada)</p>
+          <p className="text-xs font-semibold text-zinc-500 pt-1">DEPOIMENTOS FIXOS (aparecem só se nenhuma avaliação estiver publicada)</p>
           <input value={s.title || ''} onChange={(e) => set('title', e.target.value)} className={input} placeholder="Título (opcional)" />
           <textarea value={(s.items || []).map((t: any) => `${t.name || ''} | ${t.text || ''}`).join('\n')}
             onChange={(e) => set('items', e.target.value.split('\n').map((line) => { const [name, text] = line.split('|').map((x) => (x || '').trim()); return { name, text }; }).filter((t) => t.text))}
@@ -1070,7 +1070,7 @@ function BlockSettings({ block, businessId, business, onChange, onSave, onRefres
       {block.type === 'faq' && (
         <>
           <label className="block">
-            <span className="text-xs font-bold text-zinc-500">TÍTULO DA SEÇÃO (OPCIONAL)</span>
+            <span className="text-xs font-semibold text-zinc-500">TÍTULO DA SEÇÃO (OPCIONAL)</span>
             <input value={s.title || ''} onChange={(e) => set('title', e.target.value)} className={input + ' mt-1'} placeholder="Ex: Dúvidas frequentes" />
           </label>
           <FaqEditor items={s.items} onChange={(items) => set('items', items)} inputClass={input} />
@@ -1078,15 +1078,15 @@ function BlockSettings({ block, businessId, business, onChange, onSave, onRefres
       )}
       {block.type === 'highlights' && (
         <div className="space-y-2">
-          <p className="text-xs font-bold text-zinc-500 pt-1">DIFERENCIAIS (UM POR LINHA)</p>
+          <p className="text-xs font-semibold text-zinc-500 pt-1">DIFERENCIAIS (UM POR LINHA)</p>
           <p className="text-[11px] text-zinc-500 -mt-1">Título é obrigatório; texto e ícone são opcionais. Ex.: “Atendimento no dia”, “Primeira avaliação grátis”.</p>
           {((Array.isArray(s.items) ? s.items : [{ icon: '', title: '', text: '' }]) as any[]).map((it, i, arr) => (
             <div key={i} className="rounded-md border border-zinc-200 bg-zinc-50/60 p-3 space-y-2">
               <div className="flex items-center justify-between">
-                <p className="text-xs font-bold text-zinc-600">Item {i + 1}</p>
+                <p className="text-xs font-semibold text-zinc-600">Item {i + 1}</p>
                 {arr.length > 1 && (
                   <button type="button" onClick={() => set('items', arr.filter((_, j) => j !== i))}
-                    className="text-[11px] font-bold text-red-600 px-2 py-1 rounded-lg hover:bg-red-50">Remover</button>
+                    className="text-[11px] font-semibold text-red-600 px-2 py-1 rounded-lg hover:bg-red-50">Remover</button>
                 )}
               </div>
               <div className="grid grid-cols-[1fr_auto] gap-2">
@@ -1108,7 +1108,7 @@ function BlockSettings({ block, businessId, business, onChange, onSave, onRefres
             </div>
           ))}
           <button type="button" onClick={() => set('items', [...(Array.isArray(s.items) ? s.items : []), { icon: '', title: '', text: '' }])}
-            className="text-sm font-bold bg-zinc-100 text-zinc-700 px-4 py-2 rounded-md hover:bg-zinc-200">+ Adicionar diferencial</button>
+            className="text-sm font-semibold bg-zinc-100 text-zinc-700 px-4 py-2 rounded-md hover:bg-zinc-200">+ Adicionar diferencial</button>
         </div>
       )}
       {block.type === 'professionals' && (
@@ -1131,7 +1131,7 @@ function BlockSettings({ block, businessId, business, onChange, onSave, onRefres
           </p>
         </div>
       )}
-      <button onClick={onSave} className="text-sm font-bold bg-[var(--brand)] text-white shadow-brand hover:bg-[var(--brand-strong)] px-4 py-2 rounded-md">Salvar bloco</button>
+      <button onClick={onSave} className="text-sm font-semibold bg-[var(--brand)] text-white shadow-brand hover:bg-[var(--brand-strong)] px-4 py-2 rounded-md">Salvar bloco</button>
     </div>
   );
 }
@@ -1159,12 +1159,12 @@ function FaqEditor({ items: rawItems, onChange, inputClass }: {
       {items.map((item, index) => (
         <div key={index} className="rounded-md border border-zinc-200 bg-zinc-50/60 p-3 sm:p-4 space-y-3">
           <div className="flex items-center justify-between gap-3">
-            <p className="text-sm font-bold text-zinc-700">Pergunta {index + 1}</p>
+            <p className="text-sm font-semibold text-zinc-700">Pergunta {index + 1}</p>
             {savedItems.length > 0 && (
               <button
                 type="button"
                 onClick={() => removeItem(index)}
-                className="text-xs font-bold text-red-600 px-2 py-1 rounded-lg hover:bg-red-50"
+                className="text-xs font-semibold text-red-600 px-2 py-1 rounded-lg hover:bg-red-50"
                 aria-label={`Remover pergunta ${index + 1}`}
               >
                 Remover
@@ -1172,7 +1172,7 @@ function FaqEditor({ items: rawItems, onChange, inputClass }: {
             )}
           </div>
           <label className="block">
-            <span className="text-xs font-bold text-zinc-500">PERGUNTA</span>
+            <span className="text-xs font-semibold text-zinc-500">PERGUNTA</span>
             <input
               value={item.q}
               onChange={(event) => updateItem(index, 'q', event.target.value)}
@@ -1181,7 +1181,7 @@ function FaqEditor({ items: rawItems, onChange, inputClass }: {
             />
           </label>
           <label className="block">
-            <span className="text-xs font-bold text-zinc-500">RESPOSTA</span>
+            <span className="text-xs font-semibold text-zinc-500">RESPOSTA</span>
             <textarea
               value={item.a}
               onChange={(event) => updateItem(index, 'a', event.target.value)}
@@ -1195,7 +1195,7 @@ function FaqEditor({ items: rawItems, onChange, inputClass }: {
       <button
         type="button"
         onClick={() => onChange([...items, { q: '', a: '' }])}
-        className="text-sm font-bold bg-zinc-100 text-zinc-700 px-4 py-2 rounded-md hover:bg-zinc-200"
+        className="text-sm font-semibold bg-zinc-100 text-zinc-700 px-4 py-2 rounded-md hover:bg-zinc-200"
       >
         + Adicionar pergunta
       </button>
@@ -1279,36 +1279,36 @@ function ReviewsEditor({ businessId }: { businessId: string }) {
     return (
       <div key={r.id} className="border border-zinc-200 rounded-md p-3">
         <div className="flex items-center gap-1.5 flex-wrap">
-          <span className="inline-flex items-center gap-1 text-xs font-extrabold text-amber-600">
+          <span className="inline-flex items-center gap-1 text-xs font-semibold text-amber-600">
             <Icon n="star" size={13} /> {r.rating}/5
           </span>
-          <span className="text-xs font-bold">{r.customerName}</span>
+          <span className="text-xs font-semibold">{r.customerName}</span>
           {r.source === 'google' && (
-            <span className="text-[10px] font-extrabold bg-blue-100 text-blue-800 px-2 py-0.5 rounded-full">Google</span>
+            <span className="text-[10px] font-semibold bg-blue-100 text-blue-800 px-2 py-0.5 rounded-full">Google</span>
           )}
         </div>
         {r.text && <p className="text-sm text-zinc-600 mt-1">“{r.text}”</p>}
         <div className="flex gap-2 mt-2">
           {r.status !== 'published' && (
             <button disabled={acting === r.id} onClick={() => setStatus(r.id, 'published')}
-              className="text-xs font-bold pe-btn--green px-3 py-1.5 rounded-lg hover:bg-emerald-700 disabled:opacity-50">
+              className="text-xs font-semibold pe-btn--green px-3 py-1.5 rounded-lg hover:bg-emerald-700 disabled:opacity-50">
               Publicar
             </button>
           )}
           {r.status !== 'hidden' && (
             <button disabled={acting === r.id} onClick={() => setStatus(r.id, 'hidden')}
-              className="text-xs font-bold bg-zinc-100 px-3 py-1.5 rounded-lg hover:bg-zinc-200 disabled:opacity-50">
+              className="text-xs font-semibold bg-zinc-100 px-3 py-1.5 rounded-lg hover:bg-zinc-200 disabled:opacity-50">
               Ocultar
             </button>
           )}
           {r.status === 'hidden' && (
             <button disabled={acting === r.id} onClick={() => setStatus(r.id, 'pending')}
-              className="text-xs font-bold bg-zinc-100 px-3 py-1.5 rounded-lg hover:bg-zinc-200 disabled:opacity-50">
+              className="text-xs font-semibold bg-zinc-100 px-3 py-1.5 rounded-lg hover:bg-zinc-200 disabled:opacity-50">
               Reavaliar
             </button>
           )}
           <button onClick={() => remove(r.id)}
-            className="text-xs font-bold text-red-500 px-2 py-1.5 hover:bg-red-50 rounded-lg">
+            className="text-xs font-semibold text-red-500 px-2 py-1.5 hover:bg-red-50 rounded-lg">
             Excluir
           </button>
         </div>
@@ -1318,7 +1318,7 @@ function ReviewsEditor({ businessId }: { businessId: string }) {
 
   return (
     <div className="rounded-lg border border-zinc-200 bg-zinc-50 p-3 space-y-3">
-      <p className="text-xs font-bold text-zinc-500">AVALIAÇÕES DOS CLIENTES (vão para a página ao publicar — máx. 4 no ar)</p>
+      <p className="text-xs font-semibold text-zinc-500">AVALIAÇÕES DOS CLIENTES (vão para a página ao publicar — máx. 4 no ar)</p>
       {loading ? (
         <p className="text-sm text-zinc-500">Carregando…</p>
       ) : reviews.length === 0 ? (
@@ -1329,26 +1329,26 @@ function ReviewsEditor({ businessId }: { businessId: string }) {
         <div className="space-y-2">
           {pending.length > 0 && (
             <div className="space-y-2">
-              <p className="text-xs font-extrabold text-blue-700">AGUARDANDO APROVAÇÃO ({pending.length})</p>
+              <p className="text-xs font-semibold text-blue-700">AGUARDANDO APROVAÇÃO ({pending.length})</p>
               {pending.map(row)}
             </div>
           )}
           {published.length > 0 && (
             <div className="space-y-2">
-              <p className="text-xs font-extrabold text-emerald-700">NO AR ({published.length})</p>
+              <p className="text-xs font-semibold text-emerald-700">NO AR ({published.length})</p>
               {published.map(row)}
             </div>
           )}
           {hidden.length > 0 && (
             <div className="space-y-2">
-              <p className="text-xs font-extrabold text-zinc-500">OCULTAS ({hidden.length})</p>
+              <p className="text-xs font-semibold text-zinc-500">OCULTAS ({hidden.length})</p>
               {hidden.map(row)}
             </div>
           )}
         </div>
       )}
       <div className="pt-1 space-y-2 border-t border-zinc-200">
-        <p className="text-xs font-bold text-zinc-500 pt-2">GOOGLE (opcional)</p>
+        <p className="text-xs font-semibold text-zinc-500 pt-2">GOOGLE (opcional)</p>
         <input value={google.googleUrl} onChange={(e) => setGoogle({ ...google, googleUrl: e.target.value })}
           className={input} placeholder="Link “avaliar no Google” (Perfil da Empresa > Compartilhar)" />
         <div className="grid grid-cols-2 gap-2">
@@ -1359,11 +1359,11 @@ function ReviewsEditor({ businessId }: { businessId: string }) {
         </div>
         <div className="flex gap-2">
           <button disabled={acting === 'google'} onClick={saveGoogle}
-            className="text-xs font-bold bg-[var(--brand)] text-white shadow-brand hover:bg-[var(--brand-strong)] px-3 py-2 rounded-lg disabled:opacity-50">
+            className="text-xs font-semibold bg-[var(--brand)] text-white shadow-brand hover:bg-[var(--brand-strong)] px-3 py-2 rounded-lg disabled:opacity-50">
             Salvar Google
           </button>
           <button disabled={acting === 'import'} onClick={importGoogle}
-            className="text-xs font-bold bg-zinc-100 px-3 py-2 rounded-lg hover:bg-zinc-200 disabled:opacity-50">
+            className="text-xs font-semibold bg-zinc-100 px-3 py-2 rounded-lg hover:bg-zinc-200 disabled:opacity-50">
             {acting === 'import' ? 'Importando…' : 'Importar do Google'}
           </button>
         </div>
@@ -1401,13 +1401,13 @@ function ThemePresetCards({ theme, presetId, niche, clinicType, onApply }: {
   return (
       <div className="bg-white border border-zinc-200 rounded-lg p-5">
         <div className="flex flex-wrap items-center justify-between gap-2 mb-1">
-          <p className="font-bold text-sm">Modelos prontos</p>
+          <p className="font-semibold text-sm">Modelos prontos</p>
           {match ? (
-            <span className="text-xs font-bold bg-emerald-100 text-emerald-800 px-3 py-1 rounded-full inline-flex items-center gap-1">
+            <span className="text-xs font-semibold bg-emerald-100 text-emerald-800 px-3 py-1 rounded-full inline-flex items-center gap-1">
               {presetById(match).name} aplicado <Icon n="check" size={12} />
             </span>
           ) : (
-            <span className="text-xs font-bold bg-amber-100 text-amber-800 px-3 py-1 rounded-full">
+            <span className="text-xs font-semibold bg-amber-100 text-amber-800 px-3 py-1 rounded-full">
               Personalizado{baseName ? ` (base: ${baseName})` : ''}
             </span>
           )}
@@ -1430,16 +1430,16 @@ function ThemePresetCards({ theme, presetId, niche, clinicType, onApply }: {
                   <span className="block mt-2 h-6" style={{ background: p.theme.primary, borderRadius: Math.min(p.theme.radius, 8) }} />
                 </span>
               </span>
-              <span className="block text-xs font-bold mt-1.5 px-0.5">{p.name}</span>
+              <span className="block text-xs font-semibold mt-1.5 px-0.5">{p.name}</span>
               <span className="block text-[11px] text-zinc-500 px-0.5 leading-tight">{p.hint}</span>
               {suggestedId === p.id && match !== p.id && (
                 <span className="block mt-1 px-0.5">
-                  <span className="text-[10px] font-extrabold bg-[var(--brand-soft)] text-[var(--brand-fg)] px-2 py-0.5 rounded-full">Sugerido para clínica {clinicLabel[p.clinicType || ''] || ''}</span>
+                  <span className="text-[10px] font-semibold bg-[var(--brand-soft)] text-[var(--brand-fg)] px-2 py-0.5 rounded-full">Sugerido para clínica {clinicLabel[p.clinicType || ''] || ''}</span>
                 </span>
               )}
               {!(suggestedId === p.id) && rec === p.id && match !== p.id && niche && (
                 <span className="block mt-1 px-0.5">
-                  <span className="text-[10px] font-extrabold bg-[var(--brand-soft)] text-[var(--brand-fg)] px-2 py-0.5 rounded-full">Recomendado para {NICHE_LABEL[niche]}</span>
+                  <span className="text-[10px] font-semibold bg-[var(--brand-soft)] text-[var(--brand-fg)] px-2 py-0.5 rounded-full">Recomendado para {NICHE_LABEL[niche]}</span>
                 </span>
               )}
             </button>
@@ -1471,11 +1471,11 @@ function ThemeEditor({ theme, presetId, onChange, onSave, saving }: {
     <div className="space-y-4">
       <div className="space-y-4">
         <details className="bg-white border border-zinc-200 rounded-lg p-5" open>
-          <summary className="font-bold text-sm cursor-pointer">Ajustar cores e detalhes</summary>
+          <summary className="font-semibold text-sm cursor-pointer">Ajustar cores e detalhes</summary>
           <div className="grid grid-cols-2 sm:grid-cols-3 gap-4 mt-4">
             {colors.map(([key, label]) => (
               <label key={key} className="block">
-                <span className="text-xs font-bold text-zinc-500">{label.toUpperCase()}</span>
+                <span className="text-xs font-semibold text-zinc-500">{label.toUpperCase()}</span>
                 <span className="mt-1 flex items-center gap-2">
                   <input type="color" value={theme[key] as string} onChange={(e) => set(key, e.target.value)} className="w-10 h-10 rounded-lg border border-zinc-200 bg-white p-1 shrink-0" />
                   <input value={theme[key] as string} onChange={(e) => set(key, e.target.value)} className="w-full min-w-0 rounded-md border border-zinc-300 px-2.5 py-1.5 text-xs font-mono" />
@@ -1485,18 +1485,18 @@ function ThemeEditor({ theme, presetId, onChange, onSave, saving }: {
           </div>
           <div className="grid grid-cols-3 gap-4 mt-4">
             <label className="block">
-              <span className="text-xs font-bold text-zinc-500">CANTOS</span>
+              <span className="text-xs font-semibold text-zinc-500">CANTOS</span>
               <input type="range" min={0} max={28} value={theme.radius} onChange={(e) => set('radius', Number(e.target.value))} className="w-full mt-2" />
               <span className="text-xs text-zinc-500">{theme.radius}px</span>
             </label>
             <label className="block">
-              <span className="text-xs font-bold text-zinc-500">TIPOGRAFIA</span>
+              <span className="text-xs font-semibold text-zinc-500">TIPOGRAFIA</span>
               <select value={theme.font} onChange={(e) => set('font', e.target.value)} className="mt-1 w-full rounded-md border border-zinc-300 px-2 py-2 text-sm">
                 {fonts.map(([v, l]) => <option key={v} value={v}>{l}</option>)}
               </select>
             </label>
             <label className="block">
-              <span className="text-xs font-bold text-zinc-500">BOTÕES</span>
+              <span className="text-xs font-semibold text-zinc-500">BOTÕES</span>
               <select value={theme.buttonStyle} onChange={(e) => set('buttonStyle', e.target.value)} className="mt-1 w-full rounded-md border border-zinc-300 px-2 py-2 text-sm">
                 <option value="solid">Cheio</option>
                 <option value="soft">Suave</option>
@@ -1504,22 +1504,22 @@ function ThemeEditor({ theme, presetId, onChange, onSave, saving }: {
               </select>
             </label>
           </div>
-          <button onClick={onSave} disabled={saving} className="mt-4 text-sm font-bold bg-[var(--brand)] text-white shadow-brand hover:bg-[var(--brand-strong)] px-5 py-2.5 rounded-md disabled:opacity-50">
+          <button onClick={onSave} disabled={saving} className="mt-4 text-sm font-semibold bg-[var(--brand)] text-white shadow-brand hover:bg-[var(--brand-strong)] px-5 py-2.5 rounded-md disabled:opacity-50">
             {saving ? 'Salvando…' : 'Salvar visual'}
           </button>
         </details>
         <div className="rounded-lg p-5" style={{ background: theme.background, color: theme.text }}>
-          <p className="text-xs font-bold opacity-60 mb-3">Prévia</p>
+          <p className="text-xs font-semibold opacity-60 mb-3">Prévia</p>
           <div className="text-center mb-3">
-            <div className="w-14 h-14 mx-auto rounded-full flex items-center justify-center font-black"
+            <div className="w-14 h-14 mx-auto rounded-full flex items-center justify-center font-semibold"
               style={{ background: `linear-gradient(135deg, ${theme.primary}, ${theme.secondary})`, color: '#fff' }}>SN</div>
-            <p className="font-extrabold mt-2">Seu negócio</p>
+            <p className="font-semibold mt-2">Seu negócio</p>
             <p className="text-xs" style={{ color: theme.muted }}>Prévia</p>
           </div>
           <div className="p-4" style={{ background: theme.surface, borderRadius: theme.radius, border: '1px solid rgba(0,0,0,0.08)' }}>
-            <p className="font-extrabold text-sm">Card de exemplo</p>
+            <p className="font-semibold text-sm">Card de exemplo</p>
             <p className="text-sm" style={{ color: theme.muted }}>Assim ficam os textos e cards.</p>
-            <div className="mt-3 font-bold text-center py-3 text-sm" style={{ background: theme.buttonStyle === 'solid' ? theme.primary : 'transparent', color: theme.buttonStyle === 'solid' ? '#fff' : theme.primary, borderRadius: theme.radius, border: theme.buttonStyle === 'solid' ? 'none' : `2px solid ${theme.primary}` }}>Botão principal</div>
+            <div className="mt-3 font-semibold text-center py-3 text-sm" style={{ background: theme.buttonStyle === 'solid' ? theme.primary : 'transparent', color: theme.buttonStyle === 'solid' ? '#fff' : theme.primary, borderRadius: theme.radius, border: theme.buttonStyle === 'solid' ? 'none' : `2px solid ${theme.primary}` }}>Botão principal</div>
           </div>
         </div>
       </div>
@@ -1535,30 +1535,30 @@ function PublishTab({ business, onSlug, onPublish }: { business: Business; busin
     <div className="grid lg:grid-cols-2 gap-4 items-start">
       <div className="bg-white border border-zinc-200 rounded-lg p-5 space-y-4">
         <div>
-          <p className="font-bold text-sm">Status</p>
+          <p className="font-semibold text-sm">Status</p>
           <p className="text-sm text-zinc-500 mt-0.5">{business.published ? <><span className="inline-block w-2.5 h-2.5 rounded-full bg-emerald-500 align-middle" /> Sua página está no ar.</> : <><span className="inline-block w-2.5 h-2.5 rounded-full bg-amber-400 align-middle" /> Sua página está como rascunho (só você vê).</>}</p>
           <button onClick={() => onPublish(!business.published)}
-            className={cn('mt-3 text-sm font-bold px-5 py-2.5 rounded-md', business.published ? 'bg-zinc-100 hover:bg-zinc-200' : 'pe-btn--green')}>
+            className={cn('mt-3 text-sm font-semibold px-5 py-2.5 rounded-md', business.published ? 'bg-zinc-100 hover:bg-zinc-200' : 'pe-btn--green')}>
             {business.published ? 'Despublicar' : 'Publicar página'}
           </button>
         </div>
         <div>
-          <p className="font-bold text-sm">Endereço</p>
+          <p className="font-semibold text-sm">Endereço</p>
           <div className="mt-1.5 flex gap-2">
             <input value={slug} onChange={(e) => setSlug(e.target.value.toLowerCase().replace(/[^a-z0-9]/g, ''))}
               className="flex-1 rounded-md border border-zinc-300 px-3 py-2.5 text-sm font-mono" />
-            <button onClick={() => onSlug(slug)} className="text-sm font-bold bg-[var(--brand)] text-white shadow-brand hover:bg-[var(--brand-strong)] px-4 py-2.5 rounded-md">Salvar</button>
+            <button onClick={() => onSlug(slug)} className="text-sm font-semibold bg-[var(--brand)] text-white shadow-brand hover:bg-[var(--brand-strong)] px-4 py-2.5 rounded-md">Salvar</button>
           </div>
           <p className="text-xs text-zinc-500 mt-1">instalink.app/{slug}</p>
         </div>
       </div>
       <div className="bg-white border border-zinc-200 rounded-lg p-5 text-center">
-        <p className="font-bold text-sm">QR Code da sua página</p>
+        <p className="font-semibold text-sm">QR Code da sua página</p>
         <p className="text-xs text-zinc-500 mb-3">Imprima e cole na recepção ou em materiais da clínica.</p>
         <img src={`/api/qr?text=${encodeURIComponent(`${origin}/${business.slug}`)}`} alt="QR Code da página"
           className="mx-auto w-48 h-48 rounded-lg border border-zinc-200" />
         <a href={`/api/qr?text=${encodeURIComponent(`${origin}/${business.slug}`)}`} download={`qr-${business.slug}.png`}
-          className="inline-block mt-3 text-sm font-bold bg-zinc-100 px-4 py-2 rounded-md hover:bg-zinc-200">Baixar QR</a>
+          className="inline-block mt-3 text-sm font-semibold bg-zinc-100 px-4 py-2 rounded-md hover:bg-zinc-200">Baixar QR</a>
       </div>
     </div>
   );

@@ -198,7 +198,7 @@ export function NewClientSheet({
       {saved ? (
         <div className="px-5 py-6 space-y-4">
           <div className="rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-4">
-            <p className="font-bold text-emerald-900 flex items-center gap-2"><span className="text-lg">✓</span> Cadastro salvo</p>
+            <p className="font-semibold text-emerald-900 flex items-center gap-2"><span className="text-lg">✓</span> Cadastro salvo</p>
             <p className="text-sm text-emerald-800 mt-1">O registro está no CRM e permanece mesmo se o agendamento for abandonado.</p>
             {savedResult?.petId && <p className="text-sm text-emerald-800 mt-1">Pet vinculado ao tutor.</p>}
             <p className="text-xs text-emerald-800 mt-2">Consentimento de marketing: {marketingOptIn ? 'concedido' : 'não concedido'}.</p>
@@ -206,10 +206,10 @@ export function NewClientSheet({
           </div>
           {saved.temporaryPassword ? (
             <div className="rounded-xl border border-amber-300 bg-amber-50 px-4 py-4 space-y-2">
-              <p className="text-sm font-bold text-amber-950">Acesso criado — credencial temporária</p>
+              <p className="text-sm font-semibold text-amber-950">Acesso criado — credencial temporária</p>
               <p className="text-xs text-amber-900">Mostre ou copie esta senha agora. Ela não será exibida novamente e não é uma senha universal.</p>
               <div className="flex gap-2">
-                <code className="flex-1 select-all rounded-lg bg-white border border-amber-200 px-3 py-2 text-sm font-bold tracking-wider text-amber-950">{saved.temporaryPassword}</code>
+                <code className="flex-1 select-all rounded-lg bg-white border border-amber-200 px-3 py-2 text-sm font-semibold tracking-wider text-amber-950">{saved.temporaryPassword}</code>
                 <button type="button" onClick={() => navigator.clipboard?.writeText(saved.temporaryPassword || '')} className="text-xs font-semibold bg-white border border-amber-300 rounded-lg px-3 py-2 text-amber-950">Copiar</button>
               </div>
             </div>
@@ -228,7 +228,7 @@ export function NewClientSheet({
       ) : (
         <div className="px-5 py-5 space-y-3.5">
           {vetMode && (
-            <p className="text-[11px] font-bold uppercase tracking-wide text-[var(--brand-fg)]">Tutor (contato)</p>
+            <p className="text-[11px] font-semibold uppercase tracking-wide text-[var(--brand-fg)]">Tutor (contato)</p>
           )}
           <label className="block"><span className={label}>NOME *</span>
             <input autoFocus value={name} onChange={(e) => setName(e.target.value)} className={input + ' mt-1'} placeholder="Ex.: Bernardo Souza" /></label>
@@ -248,7 +248,7 @@ export function NewClientSheet({
           {/* ── Responsável legal (humano · menor de 18) ── aditivo, NÃO um segundo paciente. */}
           {showGuardian && (
             <section data-testid="guardian-section" className="rounded-lg border border-amber-200 bg-amber-50/60 p-3.5 space-y-2.5">
-              <p className="text-xs font-bold text-amber-950 uppercase tracking-wide">Responsável legal</p>
+              <p className="text-xs font-semibold text-amber-950 uppercase tracking-wide">Responsável legal</p>
               <p className="text-[11px] text-amber-900 -mt-1">Vinculado ao paciente como contato responsável — não cria outro cadastro de paciente.</p>
               <label className="block"><span className={label}>NOME DO RESPONSÁVEL *</span>
                 <input value={guardian.name} onChange={(e) => setGuardian({ ...guardian, name: e.target.value })} className={input + ' mt-1'} placeholder="Ex.: Maria Souza" /></label>
@@ -280,7 +280,7 @@ export function NewClientSheet({
           {vetMode && (
             <section data-testid="vet-pet-section" className="rounded-lg border border-[var(--border)] bg-[var(--surface-2)] p-3.5 space-y-2.5">
               <div className="flex items-center justify-between gap-2">
-                <p className="text-xs font-bold uppercase tracking-wide text-[var(--text-muted)]">Paciente (pet)</p>
+                <p className="text-xs font-semibold uppercase tracking-wide text-[var(--text-muted)]">Paciente (pet)</p>
                 <label className="flex items-center gap-2 text-xs font-semibold text-[var(--text)] cursor-pointer">
                   <input type="checkbox" checked={petOn} onChange={(e) => setPetOn(e.target.checked)} className="h-4 w-4 accent-zinc-900" />
                   Adicionar pet

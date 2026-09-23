@@ -105,12 +105,12 @@ export default function EstruturaPage() {
             <Icon n={icon} size={20} />
           </span>
           <div className="min-w-0">
-            <h2 className="text-[15px] font-extrabold text-[var(--text)] leading-tight">{title}</h2>
+            <h2 className="text-[15px] font-semibold text-[var(--text)] leading-tight">{title}</h2>
             <p className="text-[12.5px] text-[var(--text-muted)] mt-0.5 leading-snug">{question}</p>
           </div>
         </div>
         <div>
-          <p className="text-[22px] font-extrabold text-[var(--text)] leading-none">{metric}</p>
+          <p className="text-[22px] font-semibold text-[var(--text)] leading-none">{metric}</p>
           <p className="text-[12px] text-[var(--text-muted)] mt-1">{metricHint}</p>
         </div>
         <div className="flex flex-wrap gap-2 mt-auto">
@@ -169,12 +169,12 @@ export default function EstruturaPage() {
               <Icon n="fileText" size={20} />
             </span>
             <div className="min-w-0">
-              <h2 className="text-[15px] font-extrabold text-[var(--text)] leading-tight">Fichas de anamnese</h2>
+              <h2 className="text-[15px] font-semibold text-[var(--text)] leading-tight">Fichas de anamnese</h2>
               <p className="text-[12.5px] text-[var(--text-muted)] mt-0.5 leading-snug">Questionários preenchidos no atendimento</p>
             </div>
           </div>
           <div>
-            <p className="text-[15px] font-extrabold text-[var(--text)] leading-snug">Motor único de formulários</p>
+            <p className="text-[15px] font-semibold text-[var(--text)] leading-snug">Motor único de formulários</p>
             <p className="text-[12px] text-[var(--text-muted)] mt-1">Presets por tipo de clínica, campos editáveis. Não é diagnóstico médico.</p>
           </div>
           <div className="flex flex-wrap gap-2 mt-auto">

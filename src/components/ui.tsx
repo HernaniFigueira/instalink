@@ -63,7 +63,7 @@ const BTN_SIZE_CLS: Record<ButtonSize, string> = {
  *  elementos de navegação (Link/a) sem duplicar estilo fora do ui.tsx. */
 export function buttonCls(variant: ButtonVariant = 'primary', size: ButtonSize = 'md'): string {
   return cn(
-    'il-control inline-flex items-center justify-center font-semibold rounded-md whitespace-nowrap',
+    'il-control inline-flex items-center justify-center font-medium rounded-md whitespace-nowrap',
     `il-control--${size}`,
     'transition-[background-color,border-color,color,box-shadow,transform] duration-150',
     'focus-visible:outline-none focus-visible:shadow-focus',
@@ -361,7 +361,7 @@ export function AttentionStrip({ title, hint, action }: { title: string; hint?: 
       <span className="w-6 h-6 rounded-md bg-[var(--attention-mark)] text-[var(--attention-mark-fg)] flex items-center justify-center shrink-0">
         <Icon n="alert" size={14} strokeWidth={2.2} />
       </span>
-      <span className="text-xs font-bold text-[var(--text)]">{title}</span>
+      <span className="text-xs font-semibold text-[var(--text)]">{title}</span>
       {hint && <span className="text-xs text-[var(--warning-fg)] hidden sm:inline">· {hint}</span>}
       {action && <span className="flex flex-wrap gap-1.5 ml-auto">{action}</span>}
     </div>
@@ -454,7 +454,7 @@ export function Tabs<T extends string = string>({ items, value, onChange, ariaLa
           {item.label}
           {typeof item.count === 'number' && (
             <span className={cn(
-              'ml-0.5 min-w-[18px] h-[18px] px-1 rounded-pill text-[10px] font-bold inline-flex items-center justify-center',
+              'ml-0.5 min-w-[18px] h-[18px] px-1 rounded-pill text-[10px] font-semibold inline-flex items-center justify-center',
               value === item.id ? 'bg-[var(--brand-soft)] text-[var(--brand-fg)]' : 'bg-[var(--border)] text-[var(--text-muted)]',
             )}>{item.count}</span>
           )}
@@ -491,7 +491,7 @@ export function Kpi({ label, value, hint, tone, icon }: {
     <div className="px-4 py-3">
       <div className="flex items-center gap-1.5">
         {icon && <Icon n={icon} size={13} className="text-[var(--text-faint)]" />}
-        <p className="text-[11px] font-bold tracking-wider uppercase text-[var(--text-muted)]">{label}</p>
+        <p className="text-[11px] font-semibold tracking-wider uppercase text-[var(--text-muted)]">{label}</p>
       </div>
       <p className={cn('text-xl font-semibold mt-1 leading-none tabular-nums', toneCls2)}>{value}</p>
       {hint && <p className="text-xs text-[var(--text-muted)] mt-1">{hint}</p>}
@@ -664,7 +664,7 @@ export function HoursChips({ days, className, size = 'md' }: {
               : 'bg-[var(--surface)] border-[var(--border-strong)] text-[var(--text)]',
           )}
         >
-          <span className={cn('font-bold tracking-wide', chip.closed ? 'text-[var(--text-faint)]' : 'text-[var(--text-muted)]')}>
+          <span className={cn('font-semibold tracking-wide', chip.closed ? 'text-[var(--text-faint)]' : 'text-[var(--text-muted)]')}>
             {chip.label}
           </span>
           {chip.closed ? (

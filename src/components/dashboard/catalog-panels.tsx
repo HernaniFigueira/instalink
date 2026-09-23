@@ -28,7 +28,7 @@ export function DeleteSheet({ name, kindLabel, blocked, onDeactivate, onConfirm,
   return (
     <Drawer open onClose={onClose} title={`Excluir ${kindLabel}`} width="max-w-md">
       <div className="relative w-full sm:max-w-md bg-white rounded-t-3xl sm:rounded-3xl p-6 space-y-3">
-        <h3 className="font-bold text-lg">Excluir {kindLabel} “{name}”?</h3>
+        <h3 className="font-semibold text-lg">Excluir {kindLabel} “{name}”?</h3>
         {blocked ? (
           <p className="text-sm text-amber-800 bg-amber-50 border border-amber-200 rounded-md px-4 py-3">
             Existem agendamentos futuros vinculados. Excluir vai deixá-los sem {kindLabel === 'serviço' ? 'serviço' : 'profissional'}.
@@ -41,8 +41,8 @@ export function DeleteSheet({ name, kindLabel, blocked, onDeactivate, onConfirm,
           {blocked && (
             <Button variant="primary" size="lg" className="w-full" onClick={onDeactivate}>Desativar (recomendado)</Button>
           )}
-          <button onClick={onConfirm} className="w-full font-bold bg-red-50 text-red-600 py-3 rounded-md">Excluir mesmo assim</button>
-          <button onClick={onClose} className="w-full font-bold bg-zinc-100 py-3 rounded-md">Voltar</button>
+          <button onClick={onConfirm} className="w-full font-semibold bg-red-50 text-red-600 py-3 rounded-md">Excluir mesmo assim</button>
+          <button onClick={onClose} className="w-full font-semibold bg-zinc-100 py-3 rounded-md">Voltar</button>
         </div>
       </div>
     </Drawer>
@@ -88,9 +88,9 @@ export function ServiceForm({ businessId, service, cats, pros, onClose, onSave }
         <textarea aria-label="Descrição do serviço" value={description} onChange={(e) => setDescription(e.target.value)} className={input} rows={2} placeholder="Descrição (opcional)" />
         <ImageUpload label="FOTO DO SERVIÇO" value={image} onChange={setImage} businessId={businessId} />
         <div className="grid grid-cols-2 gap-3">
-          <label className="block"><span className="text-xs font-bold text-zinc-500">PREÇO (R$) *</span>
+          <label className="block"><span className="text-xs font-semibold text-zinc-500">PREÇO (R$) *</span>
             <input value={price} onChange={(e) => setPrice(e.target.value)} className={input + ' mt-1'} placeholder="45,00" inputMode="decimal" /></label>
-          <label className="block"><span className="text-xs font-bold text-zinc-500">DURAÇÃO (MIN)</span>
+          <label className="block"><span className="text-xs font-semibold text-zinc-500">DURAÇÃO (MIN)</span>
             <input type="number" min={5} step={5} value={durationMin} onChange={(e) => setDurationMin(Number(e.target.value))} className={input + ' mt-1'} />
             <span className="text-[11px] text-zinc-500">Interna — usada pela agenda (conflito, buffer).</span></label>
         </div>
@@ -105,13 +105,13 @@ export function ServiceForm({ businessId, service, cats, pros, onClose, onSave }
             </span>
           </span>
         </label>
-        <label className="block"><span className="text-xs font-bold text-zinc-500">CATEGORIA</span>
+        <label className="block"><span className="text-xs font-semibold text-zinc-500">CATEGORIA</span>
           <select value={categoryId} onChange={(e) => setCategoryId(e.target.value)} className={input + ' mt-1'}>
             <option value="">Sem categoria</option>
             {cats.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
           </select></label>
         <div>
-          <span className="text-xs font-bold text-zinc-500">PERGUNTAS NA RESERVA (OPCIONAL, ATÉ 3)</span>
+          <span className="text-xs font-semibold text-zinc-500">PERGUNTAS NA RESERVA (OPCIONAL, ATÉ 3)</span>
           {[0, 1, 2].map((i) => (
             <input key={i} value={questions[i] || ''} onChange={(e) => setQuestions((v) => { const n = [...v]; n[i] = e.target.value; return n; })}
               className={input + ' mt-1.5'} placeholder={i === 0 ? 'Ex: Possui convênio? Qual?' : `Pergunta ${i + 1}`} maxLength={120} />
@@ -119,12 +119,12 @@ export function ServiceForm({ businessId, service, cats, pros, onClose, onSave }
         </div>
         {pros.length > 0 && (
           <div>
-            <span className="text-xs font-bold text-zinc-500">QUEM REALIZA ESTE ATENDIMENTO?</span>
+            <span className="text-xs font-semibold text-zinc-500">QUEM REALIZA ESTE ATENDIMENTO?</span>
             <p className="text-[11px] text-zinc-500 mt-0.5">Sem seleção = todos os profissionais elegíveis. O cliente não escolhe — a distribuição é automática.</p>
             <div className="flex flex-wrap gap-2 mt-1.5">
               {pros.filter((p) => p.active !== false).map((p) => (
                 <button type="button" key={p.id} onClick={() => togglePro(p.id)}
-                  className={cn('text-sm font-bold px-4 py-2 rounded-md border-2', proIds.includes(p.id) ? 'border-emerald-500 bg-emerald-50 text-emerald-800' : 'border-zinc-200 text-zinc-500')}>
+                  className={cn('text-sm font-semibold px-4 py-2 rounded-md border-2', proIds.includes(p.id) ? 'border-emerald-500 bg-emerald-50 text-emerald-800' : 'border-zinc-200 text-zinc-500')}>
                   {p.name}
                 </button>
               ))}
@@ -184,7 +184,7 @@ export function TeamEditor({ businessId, pros, rules, onSave, onAskDelete, onCre
       {show && (
         <form onSubmit={(e) => { e.preventDefault(); setError(''); onSave('professional.save', { id: editing?.id, name, role, photo, active, followBusinessHours: follow }).then((data: any) => { setShow(false); if (!editing) onCreated?.(String(data?.professionalId || ''), name); }).catch((err) => setError(err.message)); }}
           className="mb-4 bg-white border border-zinc-200 rounded-lg p-4 space-y-2.5">
-          <p className="font-bold text-sm">{editing ? 'Editar profissional' : 'Novo profissional'}</p>
+          <p className="font-semibold text-sm">{editing ? 'Editar profissional' : 'Novo profissional'}</p>
           <input value={name} onChange={(e) => setName(e.target.value)} placeholder="Nome * (ex: Dra. Ana)" className="w-full rounded-md border border-zinc-300 px-3 py-2.5 text-sm" autoFocus />
           <input value={role} onChange={(e) => setRole(e.target.value)} placeholder="Função (ex: Dentista)" className="w-full rounded-md border border-zinc-300 px-3 py-2.5 text-sm" />
           <ImageUpload label="FOTO DO PROFISSIONAL" value={photo} onChange={setPhoto} businessId={businessId} circle />
@@ -209,7 +209,7 @@ export function TeamEditor({ businessId, pros, rules, onSave, onAskDelete, onCre
       )}
       {pros.length === 0 ? (
         <div className="bg-white border border-zinc-200 rounded-lg text-center py-12 px-6">
-          <p className="font-bold">Só você por aqui? Sem problema.</p>
+          <p className="font-semibold">Só você por aqui? Sem problema.</p>
           <p className="text-sm text-zinc-500 mt-1">A agenda funciona sem equipe. Adicione profissionais se precisar.</p>
         </div>
       ) : (
@@ -220,7 +220,7 @@ export function TeamEditor({ businessId, pros, rules, onSave, onAskDelete, onCre
                   foto real quando existe, iniciais como fallback. */}
               <Avatar name={p.name} src={p.photo || undefined} size={40} />
               <div className="flex-1 min-w-0 basis-[180px]">
-                <p className="font-bold text-sm flex flex-wrap items-center gap-2">
+                <p className="font-semibold text-sm flex flex-wrap items-center gap-2">
                   {p.name}
                   <span className={cn('text-[11px] font-semibold px-2 py-0.5 rounded-full border', followsBusinessHours(p, rules) ? 'border-zinc-200 bg-zinc-50 text-zinc-600' : 'border-blue-200 bg-blue-50 text-blue-700')}>
                     {followsBusinessHours(p, rules) ? 'Segue a empresa' : 'Horário próprio'}
@@ -241,13 +241,13 @@ export function TeamEditor({ businessId, pros, rules, onSave, onAskDelete, onCre
                 </p>
               </div>
               {onManageAccess && (
-                <button onClick={() => onManageAccess(p)} className="text-xs font-bold bg-white border border-zinc-200 px-3 py-2 rounded-lg hover:bg-zinc-50">
+                <button onClick={() => onManageAccess(p)} className="text-xs font-semibold bg-white border border-zinc-200 px-3 py-2 rounded-lg hover:bg-zinc-50">
                   {p.userId ? 'Gerenciar acesso' : 'Criar acesso'}
                 </button>
               )}
-              <button onClick={() => open(p)} className="text-xs font-bold bg-zinc-100 px-3 py-2 rounded-lg">Editar</button>
+              <button onClick={() => open(p)} className="text-xs font-semibold bg-zinc-100 px-3 py-2 rounded-lg">Editar</button>
               <button onClick={() => onAskDelete(p)} aria-label={`Excluir ${p.name}`}
-                className="text-xs font-bold text-red-500 px-2 py-2 hover:bg-red-50 rounded-lg inline-flex"><Icon n="x" size={13} /></button>
+                className="text-xs font-semibold text-red-500 px-2 py-2 hover:bg-red-50 rounded-lg inline-flex"><Icon n="x" size={13} /></button>
             </div>
           ))}
         </div>
@@ -282,38 +282,38 @@ export function ExceptionsManager({ exceptions, onSave, onDelete }: {
 
   return (
     <div className="bg-white border border-zinc-200 rounded-lg p-5">
-      <p className="font-bold text-sm">Dias especiais</p>
+      <p className="font-semibold text-sm">Dias especiais</p>
       <p className="text-xs text-zinc-500 mb-4">Feriados, folgas e horários excepcionais — sem editar nada técnico.</p>
       {exceptions.length > 0 && (
         <div className="space-y-2 mb-4">
           {exceptions.map((x) => (
             <div key={x.id} className="flex items-center gap-3 bg-zinc-50 border border-zinc-200 rounded-md px-3.5 py-2.5">
               <div className="flex-1 min-w-0">
-                <p className="font-bold text-sm">{x.date.split('-').reverse().join('/')} · {x.closed ? 'Fechado' : `${x.start}–${x.end}`}</p>
+                <p className="font-semibold text-sm">{x.date.split('-').reverse().join('/')} · {x.closed ? 'Fechado' : `${x.start}–${x.end}`}</p>
                 {x.note && <p className="text-xs text-zinc-500">{x.note}</p>}
               </div>
-              <button onClick={() => onDelete(x.id)} className="text-xs font-bold text-red-500 hover:bg-red-50 px-2 py-1.5 rounded-lg">Remover</button>
+              <button onClick={() => onDelete(x.id)} className="text-xs font-semibold text-red-500 hover:bg-red-50 px-2 py-1.5 rounded-lg">Remover</button>
             </div>
           ))}
         </div>
       )}
       <form onSubmit={submit} className="flex flex-wrap items-end gap-2.5">
-        <label className="block"><span className="text-xs font-bold text-zinc-500">DATA</span>
+        <label className="block"><span className="text-xs font-semibold text-zinc-500">DATA</span>
           <input type="date" value={date} onChange={(e) => setDate(e.target.value)} required className="block rounded-md border border-zinc-300 px-3 py-2 text-sm mt-1" /></label>
-        <label className="block"><span className="text-xs font-bold text-zinc-500">TIPO</span>
+        <label className="block"><span className="text-xs font-semibold text-zinc-500">TIPO</span>
           <select value={closed ? 'closed' : 'special'} onChange={(e) => setClosed(e.target.value === 'closed')} className="block rounded-md border border-zinc-300 px-3 py-2 text-sm mt-1">
             <option value="closed">Fechado o dia todo</option>
             <option value="special">Horário especial</option>
           </select></label>
         {!closed && (
           <>
-            <label className="block"><span className="text-xs font-bold text-zinc-500">DAS</span>
+            <label className="block"><span className="text-xs font-semibold text-zinc-500">DAS</span>
               <input type="time" value={start} onChange={(e) => setStart(e.target.value)} className="block rounded-md border border-zinc-300 px-3 py-2 text-sm mt-1" /></label>
-            <label className="block"><span className="text-xs font-bold text-zinc-500">ATÉ</span>
+            <label className="block"><span className="text-xs font-semibold text-zinc-500">ATÉ</span>
               <input type="time" value={end} onChange={(e) => setEnd(e.target.value)} className="block rounded-md border border-zinc-300 px-3 py-2 text-sm mt-1" /></label>
           </>
         )}
-        <label className="block flex-1 min-w-[140px]"><span className="text-xs font-bold text-zinc-500">MOTIVO (OPCIONAL)</span>
+        <label className="block flex-1 min-w-[140px]"><span className="text-xs font-semibold text-zinc-500">MOTIVO (OPCIONAL)</span>
           <input value={note} onChange={(e) => setNote(e.target.value)} placeholder="Ex: Natal" className="block w-full rounded-md border border-zinc-300 px-3 py-2 text-sm mt-1" /></label>
         <Button type="submit" variant="primary">Adicionar</Button>
       </form>
