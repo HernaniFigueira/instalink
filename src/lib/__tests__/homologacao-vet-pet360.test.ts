@@ -26,16 +26,18 @@ describe('P0-3 · veterinária exige pet quando o tutor já tem pets', () => {
     expect(api).toContain('!params.petId');
   });
 
-  it('NewBookingSheet: pet obrigatório, sem "Sem vínculo", com cadastro inline', () => {
+    it('NewBookingSheet: pet obrigatório; cadastro de pet vive no NewClientSheet unificado', () => {
     const sheet = read('src/components/dashboard/NewBookingSheet.tsx');
-    expect(sheet).not.toContain('Sem vínculo (só tutor)');
+    expect(sheet).toContain('data-vet-pet-empty');
+    expect(sheet).toContain('Pet (paciente)');
     expect(sheet).toContain('Selecione o pet…');
     expect(sheet).toContain('escolha o pet (paciente)');
-    expect(sheet).toContain('Cadastrar pet');
-    expect(sheet).toContain('Salvar e usar neste agendamento');
-    expect(sheet).toContain('data-vet-pet-empty');
-    // Após criar, seleciona o pet recém-criado
-    expect(sheet).toMatch(/setPetId\(created\.id\)/);
+    // Cadastro unificado tutor+pet (fechamento Fase 2): fora do form temporário.
+    expect(sheet).toContain('NewClientSheet');
+    const reg = read('src/components/dashboard/NewClientSheet.tsx');
+    expect(reg).toContain('Adicionar pet');
+    expect(reg).toContain('Salvar tutor e pet');
+    expect(reg).toContain("action: 'create'");
   });
 
   it('agenda e atendimento apresentam PET primeiro com Tutor como contexto', () => {
@@ -98,13 +100,13 @@ describe('P1 · raças em autocomplete (sempre digitar outra)', () => {
     expect(CAT_BREEDS).toContain('Persa');
   });
 
-  it('PetsSection e NewBookingSheet usam datalist (não lista fechada)', () => {
+  it('PetsSection e cadastro de pet (NewClientSheet) usam datalist (não lista fechada)', () => {
     const section = read('src/components/dashboard/PetsSection.tsx');
     expect(section).toContain('list="pet-breeds-datalist"');
     expect(section).toContain('breedSuggestions');
-    const nb = read('src/components/dashboard/NewBookingSheet.tsx');
-    expect(nb).toContain('list="nb-pet-breeds"');
-    expect(nb).toContain('breedSuggestions');
+    const reg = read('src/components/dashboard/NewClientSheet.tsx');
+    expect(reg).toContain('list="new-client-breeds"');
+    expect(reg).toContain('breedSuggestions');
   });
 });
 

@@ -19,6 +19,7 @@ import type { Pet, Professional, Service } from '@/lib/types';
 import { apiGet, apiSend } from '@/lib/api-client';
 import { breedSuggestions, PET_SPECIES, PET_SPECIES_LABELS, validatePet } from '@/lib/pets';
 import { Drawer, Avatar, Badge, Button, Checkbox, Field, IconButton, Input, Notice, Select } from '@/components/ui';
+import { NewClientSheet } from '@/components/dashboard/NewClientSheet';
 
 interface Contact {
   id: string;
@@ -54,16 +55,11 @@ export function NewBookingSheet({ businessId, services, pros, timezone, initial,
   const [name, setName] = useState(initial?.name || '');
   const [phone, setPhone] = useState(initial?.phone || '');
   const [email, setEmail] = useState(initial?.email || '');
-  /**
-   * P0-2 — fluxo EXPLÍCITO de cliente novo:
-   *   search     → busca no CRM
-   *   new-form   → cadastro temporário (ainda NÃO existe no CRM)
-   *   new-ready  → rascunho confirmado ("Usar neste agendamento"); o contato
-   *                só nasce na criação do agendamento.
-   * `newClient` legado vira `stage !== 'search' && !contactId`.
-   */
-  type ClientStage = 'search' | 'new-form' | 'new-ready';
-  const [clientStage, setClientStage] = useState<ClientStage>(initial?.contactId || initial?.name ? (initial?.contactId ? 'search' : 'new-ready') : 'search');
+  // HOMOLOGAÇÃO · fechamento — SEM cadastro temporário: "+ Cadastrar" abre o
+  // CADASTRO REAL (NewClientSheet) que grava no CRM na hora. Abandonar o
+  // agendamento depois NÃO apaga o paciente.
+  const [registerOpen, setRegisterOpen] = useState(false);
+  const [vetMode, setVetMode] = useState(false);
   const [serviceId, setServiceId] = useState(initial?.serviceId || '');
   const [proId, setProId] = useState(initial?.professionalId || '');
   const [date, setDate] = useState(initial?.date || '');
@@ -73,11 +69,6 @@ export function NewBookingSheet({ businessId, services, pros, timezone, initial,
   const [pets, setPets] = useState<Pet[]>([]);
   const [isVet, setIsVet] = useState(false);
   const [petId, setPetId] = useState('');
-  // P0-3 — cadastro de pet DENTRO do fluxo (tutor sem pet).
-  const [petFormOpen, setPetFormOpen] = useState(false);
-  const [petDraft, setPetDraft] = useState({ name: '', species: 'cachorro', breed: '', sex: '', birthDate: '', weightKg: '' as string | number, notes: '' });
-  const [petBusy, setPetBusy] = useState(false);
-  const [petError, setPetError] = useState('');
   // A3.4 · Bloco 4 — ENCAIXE: horário fora da grade, com conflito mostrado.
   const [fitInOpen, setFitInOpen] = useState(false);
   const [fitInTime, setFitInTime] = useState(initial?.time || '');
@@ -185,15 +176,25 @@ export function NewBookingSheet({ businessId, services, pros, timezone, initial,
     return () => clearTimeout(t);
   }, [query, businessId]);
 
-  // Selecionado = contato existente OU rascunho novo confirmado (new-ready).
-  const picked = !!contactId || clientStage === 'new-ready';
+  // Selecionado = contato JÁ existente no CRM (cadastro real salvo).
+  const picked = !!contactId;
 
-  // FASE 2 · P6 — pets do tutor (só clínica veterinária devolve `vet: true`).
+  // FASE 2 · P6 — tipo da clínica vem do BUSINESS/contexto (nunca de
+  // contactId preexistente). Pets do tutor carregam quando há tutor.
+  useEffect(() => {
+    let on = true;
+    // Vet mode: flag do negócio (pets?businessId sem tutorId devolve `vet`).
+    apiGet<{ vet: boolean }>(
+      `/api/pets?businessId=${encodeURIComponent(businessId)}`,
+      { scope: 'area', area: 'Agenda' },
+    ).then((r) => { if (on) { setVetMode(!!r.data?.vet); setIsVet(!!r.data?.vet); } })
+      .catch(() => { if (on) { setVetMode(false); setIsVet(false); } });
+    return () => { on = false; };
+  }, [businessId]);
+
   useEffect(() => {
     setPetId('');
-    setPetFormOpen(false);
-    setPetError('');
-    if (!contactId) { setPets([]); setIsVet(false); return; }
+    if (!contactId) { setPets([]); return; }
     let on = true;
     apiGet<{ vet: boolean; pets: Pet[] }>(
       `/api/pets?businessId=${encodeURIComponent(businessId)}&tutorId=${encodeURIComponent(contactId)}`,
@@ -202,7 +203,7 @@ export function NewBookingSheet({ businessId, services, pros, timezone, initial,
       if (!on) return;
       setIsVet(!!r.data?.vet);
       setPets(r.data?.pets?.filter((p) => p.active !== false) || []);
-    }).catch(() => { if (on) { setPets([]); setIsVet(false); } });
+    }).catch(() => { if (on) setPets([]); });
     return () => { on = false; };
   }, [contactId, businessId]);
 
@@ -211,38 +212,56 @@ export function NewBookingSheet({ businessId, services, pros, timezone, initial,
     setName(c.name);
     setPhone(c.phone);
     setEmail(c.email || '');
-    setClientStage('search');
+    
     setResults([]);
     setQuery('');
   }
 
+  /** Abre o CADASTRO REAL (CRM). Prefill do que já foi digitado na busca. */
   function startNew() {
     const digits = onlyDigits(query);
     setContactId('');
     setName(digits.length >= 10 ? '' : query.trim());
     setPhone(digits.length >= 10 ? query.trim() : '');
     setEmail('');
-    setClientStage('new-form');
     setResults([]);
+    setRegisterOpen(true);
   }
 
-  /** "Usar neste agendamento": mantém o rascunho selecionado (ainda sem CRM). */
-  function confirmNewDraft() {
-    if (!name.trim()) { setError('Informe o nome do novo cliente.'); return; }
-    if (onlyDigits(phone).length < 10) { setError('Informe um WhatsApp válido.'); return; }
-    setError('');
-    setClientStage('new-ready');
-  }
-
-  /** "Cancelar" do cadastro temporário: LIMPA tudo e volta para a busca. */
-  function cancelNewDraft() {
-    setContactId(''); setName(''); setPhone(''); setEmail('');
-    setClientStage('search'); setQuery(''); setResults([]); setError('');
+  /**
+   * Cadastro real salvo → volta ao agendamento com tutor selecionado e,
+   * em veterinária, o pet recém-criado selecionado.
+   */
+  function onClientRegistered(contactId: string, extra?: { petId?: string }) {
+    setRegisterOpen(false);
+    setContactId(contactId);
+    setQuery(''); setResults([]); setError('');
+    // Recarrega dados do contato + pets (efeitos reagem ao contactId).
+    fetch(`/api/contacts?businessId=${businessId}&q=${encodeURIComponent(name.trim())}&limit=5`)
+      .then((r) => r.json())
+      .then((d) => {
+        const hit = (d.contacts || []).find((c: Contact) => c.id === contactId);
+        if (hit) { setName(hit.name); setPhone(hit.phone); setEmail(hit.email || ''); }
+      })
+      .catch(() => { /* mantém o nome digitado */ });
+    if (extra?.petId) {
+      // Pet veio do cadastro unificado — seleciona após o load de pets.
+      setTimeout(() => setPetId(extra.petId || ''), 0);
+      // Também injeta na lista local para o <Select> ter a opção.
+      apiGet<{ pets: Pet[] }>(
+        `/api/pets?businessId=${encodeURIComponent(businessId)}&tutorId=${encodeURIComponent(contactId)}`,
+        { scope: 'area', area: 'Agenda' },
+      ).then((r) => {
+        const list = r.data?.pets?.filter((x) => x.active !== false) || [];
+        setPets(list);
+        if (extra.petId) setPetId(extra.petId);
+      }).catch(() => { if (extra.petId) setPetId(extra.petId); });
+    }
   }
 
   function resetClient() {
     setContactId(''); setName(''); setPhone(''); setEmail('');
-    setClientStage('search'); setQuery(''); setResults([]); setError('');
+    setQuery(''); setResults([]); setError('');
     setPetId(''); setPets([]); setIsVet(false);
   }
 
@@ -276,7 +295,7 @@ export function NewBookingSheet({ businessId, services, pros, timezone, initial,
     if (repeat && (!preview || preview.some((r) => r.state !== 'available'))) { setError('Valide e corrija todas as ocorrências antes de confirmar.'); return; }
     setError('');
     if (!picked || !name.trim()) { setError('Busque o cliente ou cadastre um novo para usar neste agendamento.'); return; }
-    if (!contactId && clientStage !== 'new-ready') { setError('Confirme o novo cliente em “Usar neste agendamento”.'); return; }
+    if (!contactId) { setError('Busque um paciente existente ou cadastre um novo (o cadastro fica no CRM).'); return; }
     // P0-3 — veterinária com pets no tutor: o PET é o paciente (obrigatório).
     if (isVet && contactId && pets.length > 0 && !petId) {
       setError('Em clínica veterinária, escolha o pet (paciente) deste agendamento.');
@@ -379,31 +398,8 @@ export function NewBookingSheet({ businessId, services, pros, timezone, initial,
                     {phone}{email ? ` · ${email}` : ''}
                   </span>
                 </span>
-                <Badge tone={contactId ? 'green' : 'blue'} icon={contactId ? 'check' : 'spark'}>
-                  {contactId ? 'Cadastro vinculado' : 'Novo cliente'}
-                </Badge>
+                <Badge tone="green" icon="check">Cadastro vinculado</Badge>
                 <Button type="button" variant="ghost" size="xs" onClick={resetClient}>Trocar</Button>
-              </div>
-            ) : clientStage === 'new-form' ? (
-              /* ── Cadastro temporário (P0-2): ainda NÃO existe no CRM ── */
-              <div className="space-y-3 rounded-lg border border-[var(--border)] bg-[var(--surface-2)] p-3.5" data-new-client-form="true">
-                <p className="text-xs font-semibold text-[var(--text-muted)]">Cadastrar novo cliente</p>
-                <Field label="Nome" required>
-                  <Input value={name} onChange={(e) => setName(e.target.value)} placeholder="Ex: Marlene Silva" autoFocus />
-                </Field>
-                <Field label="WhatsApp" required>
-                  <PhoneBRInput value={phone} onChange={setPhone} />
-                </Field>
-                <Field label="E-mail" hint="Opcional">
-                  <Input value={email} onChange={(e) => setEmail(e.target.value)} inputMode="email" placeholder="nome@email.com" />
-                </Field>
-                <p className="text-xs text-[var(--text-muted)] rounded-md bg-[var(--info-bg)] border border-[var(--info-border)] px-2.5 py-2">
-                  O cliente será cadastrado quando este agendamento for confirmado.
-                </p>
-                <div className="flex flex-wrap gap-2">
-                  <Button type="button" variant="primary" size="sm" onClick={confirmNewDraft}>Usar neste agendamento</Button>
-                  <Button type="button" variant="secondary" size="sm" onClick={cancelNewDraft}>Cancelar</Button>
-                </div>
               </div>
             ) : (
               <>
@@ -415,7 +411,13 @@ export function NewBookingSheet({ businessId, services, pros, timezone, initial,
                 {searching && <p className="text-xs text-[var(--text-faint)] mt-1.5">Buscando…</p>}
                 {!searching && query.trim().length >= 2 && results.length === 0 && (
                   <Button type="button" variant="soft" onClick={startNew} className="mt-2 w-full justify-start" data-new-client-trigger="true">
-                    + Cadastrar novo cliente “{query.trim()}”
+                    + Cadastrar paciente {vetMode ? '(tutor e pet)' : `“${query.trim()}”`}
+                  </Button>
+                )}
+                {!searching && query.trim().length < 2 && (
+                  <Button type="button" variant="secondary" onClick={startNew}
+                    className="mt-2 w-full justify-start" data-new-client-trigger="true">
+                    + Cadastrar paciente
                   </Button>
                 )}
                 {!searching && results.length > 0 && (
@@ -441,86 +443,25 @@ export function NewBookingSheet({ businessId, services, pros, timezone, initial,
             )}
           </div>
 
-          {/* FASE 2 · P6 / P0-3 — veterinária: o PET é o paciente (obrigatório
-              quando o tutor já tem pet; sem pet, o cadastro nasce aqui). */}
-          {picked && contactId && isVet && !petFormOpen && (
-            pets.length > 0 ? (
-              <Field label="Pet (paciente)" required
-                hint="Em clínica veterinária a agenda identifica pelo pet; o tutor continua sendo o contato.">
-                <Select value={petId} disabled={saving || reviewing} onChange={(e) => setPetId(e.target.value)}>
-                  <option value="">Selecione o pet…</option>
-                  {pets.map((p) => <option key={p.id} value={p.id}>{p.name}{p.breed ? ` · ${p.breed}` : ''}</option>)}
-                </Select>
-              </Field>
-            ) : (
-              <div className="rounded-lg border border-[var(--border)] bg-[var(--surface-2)] px-3.5 py-3" data-vet-pet-empty="true">
-                <p className="text-xs font-semibold text-[var(--text)]">Este tutor ainda não tem pet cadastrado.</p>
-                <p className="text-xs text-[var(--text-muted)] mt-0.5">Em clínica veterinária o pet é o paciente do agendamento.</p>
-                <Button type="button" variant="secondary" size="sm" className="mt-2" disabled={saving || reviewing}
-                  onClick={() => { setPetError(''); setPetFormOpen(true); }}>
-                  <Icon n="plus" size={13} /> Cadastrar pet
-                </Button>
-              </div>
-            )
+          {/* FASE 2 · P6 — veterinária: o PET é o paciente (obrigatório quando
+              o tutor já tem pet; sem pet, use o cadastro unificado). */}
+          {picked && contactId && (isVet || vetMode) && pets.length > 0 && (
+            <Field label="Pet (paciente)" required
+              hint="Em clínica veterinária a agenda identifica pelo pet; o tutor continua sendo o contato.">
+              <Select value={petId} disabled={saving || reviewing} onChange={(e) => setPetId(e.target.value)}>
+                <option value="">Selecione o pet…</option>
+                {pets.map((p) => <option key={p.id} value={p.id}>{p.name}{p.breed ? ` · ${p.breed}` : ''}</option>)}
+              </Select>
+            </Field>
           )}
-          {/* Cadastro de pet inline — após salvar, o pet recém-criado é SELECIONADO. */}
-          {picked && contactId && isVet && petFormOpen && (
-            <div className="space-y-3 rounded-lg border border-[var(--border)] bg-[var(--surface-2)] p-3.5" data-pet-form="true">
-              <p className="text-xs font-semibold text-[var(--text-muted)]">Novo pet — paciente de {name || 'tutor'}</p>
-              {petError && <Notice tone="error">{petError}</Notice>}
-              <Field label="Nome do pet" required>
-                <Input value={petDraft.name} onChange={(e) => setPetDraft({ ...petDraft, name: e.target.value })} placeholder="Ex: Greg" autoFocus />
-              </Field>
-              <div className="grid grid-cols-2 gap-3">
-                <Field label="Espécie">
-                  <Select value={petDraft.species} onChange={(e) => setPetDraft({ ...petDraft, species: e.target.value, breed: '' })}>
-                    {PET_SPECIES.map((s) => <option key={s} value={s}>{PET_SPECIES_LABELS[s]}</option>)}
-                  </Select>
-                </Field>
-                <Field label="Raça" hint="Autocomplete — pode digitar outra.">
-                  <Input value={petDraft.breed} list="nb-pet-breeds" onChange={(e) => setPetDraft({ ...petDraft, breed: e.target.value })} placeholder="Ex: Bulldog" />
-                  <datalist id="nb-pet-breeds">
-                    {breedSuggestions(petDraft.species).map((b) => <option key={b} value={b} />)}
-                  </datalist>
-                </Field>
-                <Field label="Sexo">
-                  <Select value={petDraft.sex} onChange={(e) => setPetDraft({ ...petDraft, sex: e.target.value })}>
-                    <option value="">Não informado</option>
-                    <option value="M">Macho</option>
-                    <option value="F">Fêmea</option>
-                  </Select>
-                </Field>
-                <Field label="Nascimento">
-                  <Input type="date" value={petDraft.birthDate} onChange={(e) => setPetDraft({ ...petDraft, birthDate: e.target.value })} />
-                </Field>
-              </div>
-              <div className="flex flex-wrap gap-2">
-                <Button type="button" variant="primary" size="sm" disabled={petBusy}
-                  onClick={async () => {
-                    const problem = validatePet(petDraft as any);
-                    if (problem) { setPetError(problem); return; }
-                    setPetBusy(true); setPetError('');
-                    const res = await apiSend<{ pet: Pet }>('/api/pets', 'POST', {
-                      action: 'create', businessId, tutorId: contactId, pet: petDraft,
-                    }, { scope: 'action', area: 'Agenda' });
-                    setPetBusy(false);
-                    if (!res.ok || !res.data?.pet) { setPetError(res.message || 'Não foi possível salvar o pet.'); return; }
-                    const created = res.data.pet;
-                    setPets((list) => [created, ...list]);
-                    setPetId(created.id);
-                    setPetFormOpen(false);
-                    setPetDraft({ name: '', species: 'cachorro', breed: '', sex: '', birthDate: '', weightKg: '', notes: '' });
-                  }}>
-                  {petBusy ? 'Salvando…' : 'Salvar e usar neste agendamento'}
-                </Button>
-                <Button type="button" variant="secondary" size="sm" disabled={petBusy} onClick={() => { setPetFormOpen(false); setPetError(''); }}>
-                  Cancelar
-                </Button>
-              </div>
+          {picked && contactId && (isVet || vetMode) && pets.length === 0 && (
+            <div className="rounded-lg border border-[var(--border)] bg-[var(--surface-2)] px-3.5 py-3" data-vet-pet-empty="true">
+              <p className="text-xs font-semibold text-[var(--text)]">Este tutor ainda não tem pet cadastrado.</p>
+              <p className="text-xs text-[var(--text-muted)] mt-0.5">Cadastre pelo fluxo “+ Cadastrar paciente” — o pet nasce junto com o tutor no CRM.</p>
             </div>
           )}
 
-          <Field label="2. Serviço" required>
+          <Field label="2. Serviço" required hint="O que será feito neste agendamento">
             <Select value={serviceId} disabled={saving || reviewing} onChange={(e) => setServiceId(e.target.value)}>
               <option value="">Selecione…</option>
               {bookable.map((s) => <option key={s.id} value={s.id}>{s.name} · {s.durationMin} min</option>)}
@@ -655,9 +596,20 @@ export function NewBookingSheet({ businessId, services, pros, timezone, initial,
             className="w-full">
             {saving ? 'Agendando…' : reviewing ? 'Validando…' : repeat ? `Confirmar ${occurrences.length} atendimentos` : 'Salvar agendamento'}
           </Button>
-          </div>
-          )}
         </div>
+      )}
+        </div>
+      {/* Cadastro REAL no CRM — mesma experiência de Clientes; fecha e seleciona. */}
+      {registerOpen && (
+        <NewClientSheet
+          businessId={businessId}
+          vetMode={vetMode || isVet}
+          initialName={onlyDigits(query).length >= 10 ? '' : query.trim()}
+          initialPhone={onlyDigits(query).length >= 10 ? query.trim() : ''}
+          onClose={() => setRegisterOpen(false)}
+          onSaved={(cid, extra) => onClientRegistered(cid, extra)}
+        />
+      )}
     </Drawer>
   );
 }

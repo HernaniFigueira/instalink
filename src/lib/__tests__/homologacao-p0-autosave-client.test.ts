@@ -54,48 +54,48 @@ describe('P0-1 · autosave não fecha EncounterSheet/BookingDetailSheet', () => 
   });
 });
 
-describe('P0-2 · novo cliente dentro do agendamento', () => {
-  it('estágios explícitos: search → new-form → new-ready', () => {
-    expect(NEW_BOOKING).toMatch(/type ClientStage = 'search' \| 'new-form' \| 'new-ready'/);
-    expect(NEW_BOOKING).toMatch(/setClientStage\('new-form'\)/);
-    expect(NEW_BOOKING).toMatch(/confirmNewDraft/);
-    expect(NEW_BOOKING).toMatch(/cancelNewDraft/);
+// HOMOLOGAÇÃO · Fase 2 fechamento — o "cliente temporário" foi eliminado.
+// "+ Cadastrar" abre o CADASTRO REAL (NewClientSheet → POST /api/contacts);
+// abandonar o agendamento NÃO apaga o cadastro; sem formulário duplicado.
+describe('P0-2 · cadastro real dentro do agendamento (fechamento Fase 2)', () => {
+  it('SEM stages temporários — só busca + registro real via NewClientSheet', () => {
+    expect(NEW_BOOKING).not.toContain('new-form');
+    expect(NEW_BOOKING).not.toContain('new-ready');
+    expect(NEW_BOOKING).not.toContain('confirmNewDraft');
+    expect(NEW_BOOKING).not.toContain('cancelNewDraft');
+    expect(NEW_BOOKING).toContain('NewClientSheet');
+    expect(NEW_BOOKING).toContain('setRegisterOpen(true)');
+    expect(NEW_BOOKING).toContain('onClientRegistered');
+    // Nenhum formulário de cliente duplicado dentro do agendamento
+    expect(NEW_BOOKING).not.toContain('data-new-client-form');
+    expect(NEW_BOOKING).not.toContain('O cliente será cadastrado quando este agendamento');
   });
 
-  it('formulário avisa que o cadastro só nasce na confirmação do agendamento', () => {
-    expect(NEW_BOOKING).toContain('O cliente será cadastrado quando este agendamento for confirmado.');
-    expect(NEW_BOOKING).toContain('Usar neste agendamento');
-    expect(NEW_BOOKING).toContain('Cadastrar novo cliente');
-  });
-
-  it('badge correto: "Novo cliente" nunca diz "Cadastro vinculado" sem contactId', () => {
-    expect(NEW_BOOKING).toMatch(/\{contactId \? 'Cadastro vinculado' : 'Novo cliente'\}/);
-  });
-
-  it('cancelar LIMPA nome/telefone/e-mail/estágio e volta para a busca', () => {
-    const cancel = NEW_BOOKING.match(/function cancelNewDraft\(\) \{[\s\S]{0,400}?\}/);
-    expect(cancel).toBeTruthy();
-    const body = cancel![0];
-    expect(body).toContain("setName('')");
-    expect(body).toContain("setPhone('')");
-    expect(body).toContain("setEmail('')");
-    expect(body).toContain("setClientStage('search')");
-    expect(body).toContain("setContactId('')");
-  });
-
-  it('picked só com contactId ou rascunho confirmado (new-ready) — formulário não finge seleção', () => {
-    expect(NEW_BOOKING).toMatch(/const picked = !!contactId \|\| clientStage === 'new-ready'/);
-    // "Voltar para a busca" antigo não pode deixar nome órfão virar selecionado
+  it('picked = contato JÁ existente no CRM (nunca rascunho falso)', () => {
+    expect(NEW_BOOKING).toMatch(/const picked = !!contactId/);
+    expect(NEW_BOOKING).toContain('Cadastro vinculado');
     expect(NEW_BOOKING).not.toContain('Voltar para a busca');
   });
 
-  it('submit exige rascunho confirmado e usa saving flag (sem duplicidade por duplo clique)', () => {
+  it('submit exige contactId real e usa saving flag (sem duplicidade por duplo clique)', () => {
     expect(NEW_BOOKING).toMatch(/if \(saving \|\| reviewing\) return/);
-    expect(NEW_BOOKING).toMatch(/clientStage !== 'new-ready'/);
+    expect(NEW_BOOKING).toContain("if (!contactId)");
     expect(NEW_BOOKING).toMatch(/requestId/);
   });
 
-  it('gatilho de busca usa "Cadastrar novo cliente"', () => {
-    expect(NEW_BOOKING).toContain('+ Cadastrar novo cliente');
+  it('gatilho de busca é "+ Cadastrar paciente" e abre cadastro real', () => {
+    expect(NEW_BOOKING).toContain('+ Cadastrar paciente');
+    expect(NEW_BOOKING).toContain('data-new-client-trigger');
+  });
+
+  it('resetClient limpa contato/pet e volta para a busca', () => {
+    const reset = NEW_BOOKING.match(/function resetClient\(\) \{[\s\S]{0,400}?\}/);
+    expect(reset).toBeTruthy();
+    const body = reset![0];
+    expect(body).toContain("setName('')");
+    expect(body).toContain("setPhone('')");
+    expect(body).toContain("setEmail('')");
+    expect(body).toContain("setContactId('')");
+    expect(body).toContain("setPetId('')");
   });
 });
