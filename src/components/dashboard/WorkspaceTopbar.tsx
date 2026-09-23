@@ -104,6 +104,14 @@ export function WorkspaceTopbar({ group, page, query, searchItems, activePath, a
             </div>
           )}
         </div>
+
+        {/* Atalho global e discreto para a página pública (nova aba). */}
+        {unit.slug && (
+          <a className="ws-topbar__icon-button" href={`/${unit.slug}`} target="_blank" rel="noreferrer"
+            aria-label="Ver página pública (abre em nova aba)" title="Ver página pública">
+            <Icon n="globe" size={17} />
+          </a>
+        )}
       </div>
 
       <div className="ws-topbar__center">

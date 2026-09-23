@@ -628,8 +628,8 @@ export function Avatar({ name, src, size = 44, className }: { name: string; src?
     .join('');
   return (
     <span
-      className={cn('il-avatar rounded-xl', className)}
-      style={{ width: size, height: size, fontSize: Math.round(size * 0.38), borderRadius: size >= 56 ? 18 : 12 }}
+      className={cn('il-avatar rounded-full', className)}
+      style={{ width: size, height: size, fontSize: Math.round(size * 0.38) }}
     >
       {src ? (
         // eslint-disable-next-line @next/next/no-img-element

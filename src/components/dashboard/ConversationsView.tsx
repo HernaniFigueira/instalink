@@ -487,7 +487,7 @@ export function ConversationsView({ unitId, panel = false }: { unitId?: string; 
               <div className="p-3 space-y-3">
                 <div className="il-idcard rounded-lg border border-[var(--border)] p-3 shadow-sm">
                   <div className="relative flex items-center gap-2.5">
-                    <span className="w-10 h-10 shrink-0 rounded-xl il-avatar text-sm" aria-hidden="true">
+                    <span className="w-10 h-10 shrink-0 rounded-full il-avatar text-sm" aria-hidden="true">
                       {(active.conversation.name || '?').trim().split(/\s+/).slice(0, 2).map((x) => x[0]?.toUpperCase() || '').join('')}
                     </span>
                     <div className="min-w-0">

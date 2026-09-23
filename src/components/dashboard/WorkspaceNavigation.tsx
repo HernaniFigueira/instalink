@@ -146,14 +146,29 @@ export function WorkspaceNavigation({ nav, activePath, unit, collapsed, onCollap
     );
   };
 
-  const identity = (
+  // Identidade no TOPO com o controle de recolher ao lado (Fidelity Pass 3):
+  // o rodapé antigo ("Página pública / Recolher") não existe mais — o atalho
+  // público virou ação global na topbar.
+  const identity = (withCollapse = true) => (
     <div className="workspace-identity">
       {/* Identidade sem redundância: o logo da clínica (quando existe) OU a
           marca do produto. O NOME da clínica não repete aqui — ele vive uma
           única vez no seletor de unidade da topbar (troca de unidade incluída). */}
-      {unit.logo
+      {!collapsed && (unit.logo
         ? <img src={unit.logo} alt={unit.name || 'Clínica'} className="workspace-logo" />
-        : <span className="workspace-wordmark" title={unit.name || 'Minha clínica'}>Insta<span>Link</span></span>}
+        : <span className="workspace-wordmark" title={unit.name || 'Minha clínica'}>Insta<span>Link</span></span>)}
+      {withCollapse && (
+        <button
+          type="button"
+          className={`workspace-icon-button workspace-identity__collapse${collapsed ? ' il-tip' : ''}`}
+          aria-label={collapsed ? 'Expandir navegação' : 'Recolher navegação'}
+          title={collapsed ? 'Expandir navegação' : 'Recolher navegação'}
+          {...(collapsed ? { 'data-tip': 'Expandir navegação', 'data-tip-pos': 'right' } : {})}
+          onClick={onCollapse}
+        >
+          <Icon n={collapsed ? 'expand' : 'collapse'} size={16} />
+        </button>
+      )}
     </div>
   );
 
@@ -178,7 +193,7 @@ export function WorkspaceNavigation({ nav, activePath, unit, collapsed, onCollap
   return (
     <>
       <aside className={`workspace-sidebar${collapsed ? ' is-collapsed' : ''}`} aria-label="Navegação da clínica">
-        {identity}
+        {identity(true)}
         <nav aria-label="Menu principal" className="workspace-primary ws-scroll">
           {menu((id) => setOpened(id || null), opened)}
         </nav>
@@ -195,24 +210,6 @@ export function WorkspaceNavigation({ nav, activePath, unit, collapsed, onCollap
             </Link>
           </div>
         )}
-        <div className="workspace-footer">
-          {!collapsed && unit.slug && (
-            <a className="workspace-public-link" href={`/${unit.slug}`} target="_blank" rel="noreferrer">
-              <Icon n="external" size={14} /> Página pública
-            </a>
-          )}
-          <button
-            type="button"
-            aria-label={collapsed ? 'Expandir navegação' : 'Recolher navegação'}
-            onClick={onCollapse}
-            className={`workspace-icon-button${collapsed ? ' il-tip' : ''}`}
-            title={collapsed ? 'Expandir navegação' : 'Recolher navegação'}
-            {...(collapsed ? { 'data-tip': 'Expandir navegação', 'data-tip-pos': 'top' } : {})}
-          >
-            <Icon n={collapsed ? 'expand' : 'collapse'} size={18} />
-            {!collapsed && <span className="workspace-label">Recolher</span>}
-          </button>
-        </div>
       </aside>
 
       {/* Segunda coluna contextual: só para subáreas (nunca para o conteúdo). */}
@@ -245,16 +242,9 @@ export function WorkspaceNavigation({ nav, activePath, unit, collapsed, onCollap
           </div>
         ) : (
           <>
-            {identity}
+            {identity(false)}
             <nav aria-label="Menu móvel" className="p-3">{menu(setMobileGroup, mobileGroup)}</nav>
           </>
-        )}
-        {unit.slug && (
-          <div className="workspace-footer">
-            <a className="workspace-public-link" href={`/${unit.slug}`} target="_blank" rel="noreferrer">
-              <Icon n="external" size={14} /> Página pública
-            </a>
-          </div>
         )}
       </Drawer>
     </>

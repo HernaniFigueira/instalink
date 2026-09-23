@@ -353,7 +353,6 @@ export default function AgendaPage() {
   const setView = (value: View) => setPresentation({view:value});
   const setFocus = (value: string) => setPresentation({data:value});
   const setStatusFilter = (value: string) => setPresentation({status:value});
-  const [fullscreen, setFullscreen] = useState(false);
   const [filterOpen, setFilterOpen] = useState(false);
   const [proSearch, setProSearch] = useState('');
   const filterWrapRef = useRef<HTMLDivElement>(null);
@@ -771,7 +770,7 @@ export default function AgendaPage() {
     if (typeof document !== 'undefined') obs.observe(document.body);
     window.addEventListener('resize', fit);
     return () => { obs.disconnect(); window.removeEventListener('resize', fit); };
-  }, [loaded, view, fullscreen, pendencies.length, notice?.title, statusFilter, proFilter, specFilter, hbarReserve, showQueue]);
+  }, [loaded, view, pendencies.length, notice?.title, statusFilter, proFilter, specFilter, hbarReserve, showQueue]);
 
   const readGeometry = useCallback((): { g: GridGeometry; minX: number; minY: number } | null => {
     const scroll = scrollRef.current;
@@ -1015,31 +1014,18 @@ export default function AgendaPage() {
   // ESC cancela o arraste sem salvar nada; fecha o popover de filtros;
   // sem nenhum dos dois, sai da tela cheia. (Ordem: mais interno primeiro.)
   useEffect(() => {
-    if (!dragId && !fullscreen && !filterOpen && !helpOpen) return;
+    if (!dragId && !filterOpen && !helpOpen) return;
     const onKey = (e: KeyboardEvent) => {
       if (e.key !== 'Escape') return;
       if (dragId) endDrag();
       else if (filterOpen) setFilterOpen(false);
       else if (helpOpen) setHelpOpen(false);
-      else setFullscreen(false);
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [dragId, fullscreen, filterOpen, helpOpen, endDrag]);
+  }, [dragId, filterOpen, helpOpen, endDrag]);
 
-  function toggleFullscreen() {
-    // Nunca troca de modo no meio de um arraste: cancela primeiro.
-    if (dragId) endDrag();
-    setFullscreen((f) => !f);
-  }
 
-  // Em tela cheia a página de fundo não rola — só a grade, internamente.
-  useEffect(() => {
-    if (!fullscreen) return;
-    const prev = document.body.style.overflow;
-    document.body.style.overflow = 'hidden';
-    return () => { document.body.style.overflow = prev; };
-  }, [fullscreen]);
 
   // Cancela o drag se a view mudar no meio do movimento.
   useEffect(() => { endDrag(); /* eslint-disable-next-line react-hooks/exhaustive-deps */ }, [view, focus]);
@@ -1142,9 +1128,9 @@ export default function AgendaPage() {
   const statusOptions = (['pending', 'confirmed', 'completed', 'no_show', 'cancelled'] as BookingStatus[]);
 
   return (
-    <div className={fullscreen ? 'fixed inset-0 z-40 overflow-y-auto bg-[var(--bg)] px-2 py-3 sm:px-4 ws-scroll' : undefined}>
+    <div>
       {/* Cabeçalho compacto: a grade é o conteúdo — o título não compete. */}
-      <div className="flex flex-wrap items-center justify-between gap-2 mb-2.5">
+      <div className="flex flex-wrap items-center justify-between gap-3 mb-4">
         <div className="flex items-start gap-2.5 min-w-0">
           <span className="w-9 h-9 shrink-0 rounded-lg bg-[var(--brand-soft)] text-[var(--brand-fg)] flex items-center justify-center shadow-brand">
             <Icon n="calendar" size={18} />
@@ -1157,6 +1143,7 @@ export default function AgendaPage() {
               Clique num atendimento para detalhes e ações.
             </span>
           </div>
+        </div>
         <div className="flex flex-wrap items-center justify-end gap-1.5 ml-auto">
           {loaded && (
             <div className="dsh-card flex items-center gap-3 pl-2.5 pr-2 py-2">
@@ -1295,17 +1282,12 @@ export default function AgendaPage() {
                   </div>
                 )}
               </div>
-              <Button type="button" variant="secondary" size="sm" aria-pressed={fullscreen} onClick={toggleFullscreen}
-                title={fullscreen ? 'Sair do modo foco (ESC)' : 'Modo foco: só a grade, sem distrações'}>
-                <Icon n={fullscreen ? 'shrink' : 'expand'} size={14} />
-                <span className="hidden sm:inline">{fullscreen ? 'Sair do foco' : 'Modo foco'}</span>
-              </Button>
         </div>
         </div>
 
         {/* Filtros + legenda INLINE no desktop (hierarquia do mockup): em telas
             menores os mesmos controles vivem nos popovers Filtro/Legenda. */}
-        <div className="hidden lg:flex flex-wrap items-center gap-x-4 gap-y-2 mb-2.5">
+        <div className="hidden lg:flex flex-wrap items-center gap-x-5 gap-y-2 mb-2">
           {activePros.length > 0 && (
             <label className="flex items-center gap-2 text-[12px] font-semibold text-[var(--text-muted)]">
               Profissionais:
@@ -1363,8 +1345,6 @@ export default function AgendaPage() {
               Indisponível
             </span>
           </div>
-
-      </div>
 
       <PermissionNotice message={notice?.title} hint={notice?.hint} onDismiss={dismiss} />
 
@@ -1427,7 +1407,7 @@ export default function AgendaPage() {
       {/* Toolbar operacional: navegação · Dia/Semana/Mês · filtros · tela cheia.
           relative z-40: o popover de filtros abre sobre a grade e precisa
           ficar acima dos cabeçalhos sticky (z-20/30) das colunas. */}
-      <div className="relative z-40 ws-panel mb-2.5">
+      <div className="relative z-40 ws-panel mt-3 mb-4">
         <div className="flex flex-wrap items-center gap-x-3 gap-y-2.5 px-3 py-2.5"><Button onClick={() => setCreating({ date: focus, time: '', professionalId: '' })} variant="primary"><Icon n="calendarPlus" size={15} /> Novo agendamento</Button>
           {/* Navegação no tempo (A3.4): [◀] [Hoje] [▶] + título da data ao lado.
               O "Hoje" fica SEMPRE no mesmo lugar, entre as setas — antes ele

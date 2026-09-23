@@ -106,7 +106,9 @@ describe('catálogo — completude (por qual porta se chega até mim?)', () => {
     expect(panelRouteFor('/funil')?.width).toBe('full');
     expect(panelRouteFor('/conversas')?.width).toBe('full');
     expect(panelRouteFor('/configuracoes')?.width ?? 'contained').toBe('contained');
-    expect(panelRouteFor('/pagina')?.width ?? 'contained').toBe('contained');
+    // Fidelity Pass 3: o Editor 2.0 tem três colunas (seções · formulário ·
+    // prévia) e precisa do workspace inteiro — política declarada no catálogo.
+    expect(panelRouteFor('/pagina')?.width).toBe('full');
   });
 
   it('todo ícone do catálogo renderiza um glifo real, não SVG vazio', () => {

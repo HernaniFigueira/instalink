@@ -202,7 +202,7 @@
 
 html { scroll-behavior: smooth; }
 body {
-  @apply antialiased;
+  @apply subpixel-antialiased;
   background: var(--bg);
   color: var(--text);
   font-family: var(--font-inter), system-ui, -apple-system, sans-serif;
@@ -366,6 +366,8 @@ body {
   display: inline-flex;
   align-items: center;
   justify-content: center;
+  aspect-ratio: 1;
+  border-radius: 9999px;
   font-weight: 700;
   letter-spacing: -0.02em;
   color: #fff;
@@ -374,6 +376,7 @@ body {
   overflow: hidden;
   flex-shrink: 0;
 }
+.il-avatar img { width: 100%; height: 100%; object-fit: cover; border-radius: inherit; }
 
 /* Divisor com rótulo ("quem é a pessoa" × "o que aconteceu"). */
 .il-divider {
@@ -515,7 +518,7 @@ input[type='color'] { @apply cursor-pointer; }
   --sidebar-w-mini: 68px;
   --rail-w: 220px;
   --sheet-gap: 14px;
-  --sheet-w: 960px;
+  --sheet-w: min(1160px, calc((100vw - var(--sheet-left, 0px)) * 0.74));
   /* Borda esquerda disponível para o Workspace Sheet. O shell sobrescreve em
      runtime com a posição real do conteúdo (sidebar recolhida + segunda coluna
      mudam esse valor) — o padrão 0 só vale antes da primeira medição. */
@@ -1107,8 +1110,10 @@ button.ws-bell__item:hover { background: var(--surface-hover); }
 .il-platform .workspace-sidebar.is-collapsed { width: var(--sidebar-w-mini); }
 .is-collapsed .workspace-label { display: none; }
 
-.workspace-identity { padding: 14px 14px 12px; border-bottom: 1px solid var(--border-soft); }
-.is-collapsed .workspace-identity { padding: 12px 8px; }
+.workspace-identity { padding: 14px 14px 12px; border-bottom: 1px solid var(--border-soft); display: flex; align-items: center; justify-content: space-between; gap: 6px; }
+.workspace-identity__collapse { color: var(--text-faint); border-radius: 8px; flex-shrink: 0; }
+.workspace-identity__collapse:hover { color: var(--text); background: var(--surface-hover); }
+.is-collapsed .workspace-identity { padding: 12px 8px; justify-content: center; }
 .workspace-logo { display: block; width: 100%; max-height: 52px; object-fit: contain; object-position: left center; }
 .workspace-wordmark { font-size: 17px; font-weight: 800; letter-spacing: -.02em; color: var(--text); }
 .workspace-wordmark span { color: var(--brand); }
@@ -1159,12 +1164,6 @@ button.ws-bell__item:hover { background: var(--surface-hover); }
   border-radius: 12px;
   background: var(--brand-soft); border: 1px solid var(--brand-border);
 }
-.workspace-footer { display: flex; flex-direction: column; gap: 2px; padding: 8px; border-top: 1px solid var(--border-soft); }
-.workspace-public-link {
-  display: flex; align-items: center; gap: 8px; min-height: 34px; padding: 0 10px;
-  font-size: 12.5px; font-weight: 600; color: var(--text-muted); border-radius: var(--radius-md);
-}
-.workspace-public-link:hover { background: var(--surface-hover); color: var(--text); }
 .workspace-icon-button {
   display: flex; align-items: center; gap: 9px;
   min-height: 36px; min-width: 36px; padding: 0 10px;
@@ -1230,7 +1229,7 @@ button.ws-bell__item:hover { background: var(--surface-hover); }
   .ws-topbar { backdrop-filter: none; background: var(--surface); }
 }
 /* Consistent reading rhythm without recoloring public clinic themes. */
-.il-platform { font-size:14px; line-height:1.5; -webkit-font-smoothing:antialiased; -moz-osx-font-smoothing:grayscale; text-rendering:optimizeLegibility; }
+.il-platform { font-size:14px; line-height:1.5; -webkit-font-smoothing:subpixel-antialiased; -moz-osx-font-smoothing:auto; text-rendering:optimizeLegibility; }
 .il-platform h1 { letter-spacing:-.035em; }
 .il-platform th { color:var(--text-muted); font-size:11px; letter-spacing:.04em; text-align:left; }
 .il-platform td { vertical-align:middle; }
@@ -1590,11 +1589,11 @@ dialog.ws-sheet::backdrop { background: rgba(15, 23, 42, .34); }
 dialog.ws-sheet[open] { animation: ws-sheet-in 200ms cubic-bezier(.32,.72,.28,1); }
 dialog.ws-sheet[data-closing] { animation: ws-sheet-out 200ms ease-in forwards; }
 @keyframes ws-sheet-in {
-  from { opacity: 0; transform: translateX(26px) scale(.985); }
+  from { opacity: 0; transform: translateX(40px) scale(.985); }
   to { opacity: 1; transform: none; }
 }
 @keyframes ws-sheet-out {
-  to { opacity: 0; transform: translateX(26px) scale(.985); }
+  to { opacity: 0; transform: translateX(40px) scale(.985); }
 }
 
 .ws-sheet__inner { display: flex; flex-direction: column; height: 100%; min-height: 0; }
@@ -1622,7 +1621,7 @@ dialog.ws-sheet[data-closing] { animation: ws-sheet-out 200ms ease-in forwards; 
   margin: 2px 0 0; font-size: 11.5px; color: var(--text-muted);
   overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
-.ws-sheet__actions { display: flex; align-items: center; gap: 4px; flex-shrink: 0; }
+.ws-sheet__actions { display: flex; align-items: center; gap: 6px; flex-shrink: 0; border-left: 1px solid var(--border-soft); padding-left: 10px; margin-left: 6px; }
 .ws-sheet__fullpage {
   display: inline-flex; align-items: center; gap: 6px;
   min-height: var(--control-h-sm); padding: 0 10px;
@@ -1639,7 +1638,7 @@ dialog.ws-sheet[data-closing] { animation: ws-sheet-out 200ms ease-in forwards; 
   transition: background-color .15s ease, color .15s ease;
 }
 .ws-sheet__icon-button:hover { background: var(--surface-hover); color: var(--text); }
-.ws-sheet__close { border: 1px solid var(--border); border-radius: 50%; background: var(--surface); }
+.ws-sheet__close { border-radius: 10px; }
 .ws-sheet__close:hover { background: var(--danger-bg); color: var(--danger-fg); border-color: var(--danger-border); }
 
 .ws-sheet__body { flex: 1; min-height: 0; overflow-y: auto; }

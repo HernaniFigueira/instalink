@@ -302,6 +302,17 @@ export default function PaginaPage() {
           <fieldset disabled={saving} className="min-w-0 space-y-4">
             {active === 'modelo' && (
               <>
+                <ThemePresetCards
+                  theme={page.theme}
+                  presetId={page.presetId || undefined}
+                  niche={business.niche}
+                  onApply={(t, id) => setPage({ ...page, theme: t, presetId: id })}
+                />
+                <details className="bg-white border border-zinc-200 rounded-lg p-4">
+                  <summary className="cursor-pointer text-xs font-bold uppercase tracking-wide text-[var(--text-muted)]">
+                    Itens do menu público e texto de apresentação · configuração técnica
+                  </summary>
+                  <div className="mt-3">
                 <PageNavTab
                   business={business}
                   businessId={businessId}
@@ -315,6 +326,8 @@ export default function PaginaPage() {
                   onSaveNav={(navItems) => save({ navItems })}
                   onAbout={(about) => save({ about } as any)}
                 />
+                  </div>
+                </details>
 
                 <div className="space-y-4">
                   <div className="bg-white border border-zinc-200 rounded-lg overflow-hidden">
@@ -1279,6 +1292,63 @@ function ReviewsEditor({ businessId }: { businessId: string }) {
 
 // ── Prévia da página REAL (aba Visual, §24) ──
 // Mesma origem + sessão do dono: o rascunho aparece (isOwnerPreview).
+/** Cartões VISUAIS de modelo — o ponto de partida da página, como no mockup
+    da seção "Modelo": aparência inicial em miniatura, estado aplicado e
+    recomendação por contexto do negócio (quando o nicho existe). */
+function ThemePresetCards({ theme, presetId, niche, onApply }: {
+  theme: Theme; presetId?: string; niche?: string; onApply: (t: Theme, id: string) => void;
+}) {
+  const match = matchingPreset(theme);
+  const baseName = presetId ? presetById(presetId).name : '';
+  const NICHE_REC: Record<string, string> = { alimentacao: 'pordosol', beleza: 'rose', pet: 'fresh', saude: 'fresh', loja: 'noite', servicos: 'oceano' };
+  const NICHE_LABEL: Record<string, string> = { alimentacao: 'alimentação', beleza: 'beleza', pet: 'pet', saude: 'saúde', loja: 'loja', servicos: 'serviços' };
+  const rec = niche ? NICHE_REC[niche] : undefined;
+  return (
+      <div className="bg-white border border-zinc-200 rounded-lg p-5">
+        <div className="flex flex-wrap items-center justify-between gap-2 mb-1">
+          <p className="font-bold text-sm">Modelos prontos</p>
+          {match ? (
+            <span className="text-xs font-bold bg-emerald-100 text-emerald-800 px-3 py-1 rounded-full inline-flex items-center gap-1">
+              {presetById(match).name} aplicado <Icon n="check" size={12} />
+            </span>
+          ) : (
+            <span className="text-xs font-bold bg-amber-100 text-amber-800 px-3 py-1 rounded-full">
+              Personalizado{baseName ? ` (base: ${baseName})` : ''}
+            </span>
+          )}
+        </div>
+        <p className="text-xs text-zinc-500 mb-4">Escolha uma combinação fechada de cores, fonte e formato — depois ajuste o que quiser abaixo.</p>
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+          {THEME_PRESETS.map((p) => (
+            <button key={p.id} onClick={() => onApply({ ...p.theme }, p.id)}
+              className={cn('text-left rounded-md border-2 p-1.5 transition-all hover:-translate-y-0.5', match === p.id ? 'border-zinc-900' : 'border-transparent hover:border-zinc-200')}
+              aria-label={`Aplicar modelo ${p.name}`}>
+              <span className="block rounded-lg overflow-hidden border border-black/10" style={{ background: p.theme.background }}>
+                <span className="block p-2">
+                  <span className="flex items-center gap-1.5">
+                    <span className="w-5 h-5 rounded-full shrink-0" style={{ background: `linear-gradient(135deg, ${p.theme.primary}, ${p.theme.secondary})` }} />
+                    <span className="flex-1 space-y-1">
+                      <span className="block h-1.5 rounded-full w-3/4" style={{ background: p.theme.text }} />
+                      <span className="block h-1.5 rounded-full w-1/2" style={{ background: p.theme.muted }} />
+                    </span>
+                  </span>
+                  <span className="block mt-2 h-6" style={{ background: p.theme.primary, borderRadius: Math.min(p.theme.radius, 8) }} />
+                </span>
+              </span>
+              <span className="block text-xs font-bold mt-1.5 px-0.5">{p.name}</span>
+              <span className="block text-[11px] text-zinc-500 px-0.5 leading-tight">{p.hint}</span>
+              {rec === p.id && match !== p.id && niche && (
+                <span className="block mt-1 px-0.5">
+                  <span className="text-[10px] font-extrabold bg-[var(--brand-soft)] text-[var(--brand-fg)] px-2 py-0.5 rounded-full">Recomendado para {NICHE_LABEL[niche]}</span>
+                </span>
+              )}
+            </button>
+          ))}
+        </div>
+      </div>
+  );
+}
+
 function ThemeEditor({ theme, presetId, onChange, onSave, saving }: {
   theme: Theme;
   presetId: string;
@@ -1299,44 +1369,6 @@ function ThemeEditor({ theme, presetId, onChange, onSave, saving }: {
   ];
   return (
     <div className="space-y-4">
-      <div className="bg-white border border-zinc-200 rounded-lg p-5">
-        <div className="flex flex-wrap items-center justify-between gap-2 mb-1">
-          <p className="font-bold text-sm">Modelos prontos</p>
-          {match ? (
-            <span className="text-xs font-bold bg-emerald-100 text-emerald-800 px-3 py-1 rounded-full inline-flex items-center gap-1">
-              {presetById(match).name} aplicado <Icon n="check" size={12} />
-            </span>
-          ) : (
-            <span className="text-xs font-bold bg-amber-100 text-amber-800 px-3 py-1 rounded-full">
-              Personalizado{baseName ? ` (base: ${baseName})` : ''}
-            </span>
-          )}
-        </div>
-        <p className="text-xs text-zinc-500 mb-4">Escolha uma combinação fechada de cores, fonte e formato — depois ajuste o que quiser abaixo.</p>
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-          {THEME_PRESETS.map((p) => (
-            <button key={p.id} onClick={() => onChange({ ...p.theme }, p.id)}
-              className={cn('text-left rounded-md border-2 p-1.5 transition-all hover:-translate-y-0.5', match === p.id ? 'border-zinc-900' : 'border-transparent hover:border-zinc-200')}
-              aria-label={`Aplicar modelo ${p.name}`}>
-              <span className="block rounded-lg overflow-hidden border border-black/10" style={{ background: p.theme.background }}>
-                <span className="block p-2">
-                  <span className="flex items-center gap-1.5">
-                    <span className="w-5 h-5 rounded-full shrink-0" style={{ background: `linear-gradient(135deg, ${p.theme.primary}, ${p.theme.secondary})` }} />
-                    <span className="flex-1 space-y-1">
-                      <span className="block h-1.5 rounded-full w-3/4" style={{ background: p.theme.text }} />
-                      <span className="block h-1.5 rounded-full w-1/2" style={{ background: p.theme.muted }} />
-                    </span>
-                  </span>
-                  <span className="block mt-2 h-6" style={{ background: p.theme.primary, borderRadius: Math.min(p.theme.radius, 8) }} />
-                </span>
-              </span>
-              <span className="block text-xs font-bold mt-1.5 px-0.5">{p.name}</span>
-              <span className="block text-[11px] text-zinc-500 px-0.5 leading-tight">{p.hint}</span>
-            </button>
-          ))}
-        </div>
-      </div>
-
       <div className="space-y-4">
         <details className="bg-white border border-zinc-200 rounded-lg p-5" open={!match}>
           <summary className="font-bold text-sm cursor-pointer">Ajustar cores e detalhes</summary>

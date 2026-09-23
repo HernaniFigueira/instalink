@@ -368,6 +368,9 @@ export const PANEL_ROUTES: PanelRouteDef[] = [
   {
     href: '/pagina', label: 'Página', icon: 'link', section: 'presenca',
     permission: 'pagina', area: 'pagina',
+    // Editor 2.0: três colunas (seções · formulário · prévia) precisam do
+    // workspace inteiro — contained/960px espremia o editor (Fidelity Pass 3).
+    width: 'full',
     description: 'O editor da sua página pública: blocos, navegação, visual, avaliações e publicação.',
   },
 
