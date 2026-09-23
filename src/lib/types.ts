@@ -1288,7 +1288,7 @@ export type AutomationActionType =
   | 'send_channel_message';
 
 /** Modo de espera (P4.6). `event` está Preparado, ainda não dispara. */
-export type AutomationWaitMode = 'duration' | 'until' | 'event';
+export type AutomationWaitMode = 'duration' | 'until' | 'event' | 'booking_offset';
 
 export interface AutomationWaitConfig {
   mode: AutomationWaitMode;
@@ -1298,6 +1298,12 @@ export interface AutomationWaitConfig {
   at?: string;
   /** event: (futuro) evento que libera a espera. */
   waitForEvent?: string;
+  /**
+   * booking_offset: minutos em relação ao INÍCIO do agendamento no contexto.
+   * Negativo = antes (−1440 = 24 h antes); positivo = depois.
+   * Recalculado na retomada — remarcação/cancelamento revalidam o alvo.
+   */
+  offsetMinutes?: number;
 }
 
 export interface AutomationBranchConfig {
@@ -1344,12 +1350,25 @@ export interface AutomationSettings {
   dedupeField?: string;
 }
 
+/** Ciclo de vida da automação (F3). `active` espelha `status === 'active'`. */
+export type AutomationStatus = 'draft' | 'active' | 'paused' | 'archived';
+
+/** Quem criou a definição (rastro de origem, nunca interpretado pelo motor). */
+export type AutomationSource = 'manual' | 'template' | 'ai';
+
 export interface Automation {
   id: ID;
   businessId: ID;
   name: string;
   description: string;
   active: boolean;
+  /**
+   * F3: draft (rascunho, nunca auto-ativa) | active | paused | archived.
+   * Ausente em documentos antigos ⇒ derivado de `active` (compat aditiva).
+   */
+  status?: AutomationStatus;
+  /** Origem da definição. Ausente ⇒ 'manual'. */
+  source?: AutomationSource;
   /** Gatilho + condição de entrada (atalho do editor linear). */
   trigger: { event: AutomationEventId; condition?: AutomationCondition };
   nodes: AutomationNode[];

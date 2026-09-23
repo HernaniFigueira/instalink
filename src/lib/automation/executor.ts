@@ -56,6 +56,77 @@ function envPositiveInt(name: string, fallback: number): number {
   return Number.isFinite(value) && value > 0 ? Math.floor(value) : fallback;
 }
 
+/**
+ * Atualiza a fotografia de lead/cliente/agendamento no contexto a partir do
+ * banco VIVENTE (mesmo tenant). Nada é criado aqui — só espelhos de leitura.
+ * Usado antes de esperas e ações: a retomada de um lembrete de 24 h nunca
+ * usa data morta nem telefone de um booking já cancelado.
+ */
+function refreshRunSubjectContext(db: DB, run: AutomationRun, businessId: string): void {
+  const ctx = (run.context || {}) as Record<string, any>;
+  const bookingId = String(ctx.booking?.id || '');
+  if (bookingId) {
+    const live = db.bookings.find((b) => b.id === bookingId && b.businessId === businessId);
+    if (live) {
+      ctx.booking = {
+        id: live.id,
+        status: live.status,
+        date: live.date,
+        time: live.time,
+        serviceId: live.serviceId,
+        professionalId: live.professionalId || '',
+        customerId: live.customerId || '',
+        customerName: live.customerName || '',
+        customerPhone: live.customerPhone || '',
+        leadId: live.leadId || '',
+        note: (live.note || '').slice(0, 200),
+        createdAt: live.createdAt,
+        updatedAt: live.updatedAt,
+      };
+    } else {
+      ctx.booking = { ...(ctx.booking || {}), status: 'cancelled', date: '', time: '' };
+    }
+  }
+  const leadId = String(ctx.lead?.id || '');
+  if (leadId) {
+    const live = db.leads.find((l) => l.id === leadId && l.businessId === businessId);
+    if (live) {
+      ctx.lead = {
+        ...(ctx.lead || {}),
+        id: live.id,
+        name: live.name,
+        phone: live.phone,
+        email: live.email,
+        origin: live.origin,
+        status: live.status,
+        stageId: live.stageId || live.status || 'new',
+        priority: live.priority,
+        assignedUserId: live.assignedUserId || '',
+        serviceId: live.serviceId || '',
+        bookingId: live.bookingId || '',
+        interest: live.interest || '',
+        lastInteraction: live.lastInteraction,
+      };
+    }
+  }
+  const customerId = String(ctx.customer?.id || '');
+  if (customerId) {
+    const live = db.contacts.find((c) => c.id === customerId && c.businessId === businessId);
+    if (live) {
+      ctx.customer = {
+        ...(ctx.customer || {}),
+        id: live.id,
+        customerId: live.customerId || '',
+        name: live.name,
+        phone: live.phone,
+        email: live.email,
+        marketingOptIn: live.marketingOptIn === true,
+        lastInteraction: live.lastInteraction,
+      };
+    }
+  }
+}
+
 // ── Estado e elegibilidade ───────────────────────────────────
 export const isAutomationTerminal = (run: AutomationRun): boolean => isTerminalStatus(run.status);
 
@@ -323,10 +394,17 @@ export function stepAutomationRun(
       moveTo(run, next, nowISO);
       return { status: 'advanced', detail: 'wait_for_event não suportado' };
     }
+    // Contexto SEMPRE fotografia viva do booking no momento da espera:
+    // cancelamento/remarcação antes do disparo mudam o alvo (ou encerram o run).
+    refreshRunSubjectContext(db, run, business.id);
+    const subjStatus = String(run.context?.booking?.status || '');
+    if (waitMode === 'booking_offset' && (subjStatus === 'cancelled' || subjStatus === 'no_show')) {
+      return finish(run, 'cancelled', nowISO, `agendamento ${subjStatus} — espera de lembrete encerrada`, '');
+    }
     const res = resolveWait(node.config.wait, new Date(nowISO), {
       ...limits,
       maxWaitMinutes: Math.min(limits.maxWaitMinutes, automation.settings?.maxWaitMinutes || limits.maxWaitMinutes),
-    });
+    }, run.context);
     if (!res.ok) {
       // Duração inválida: não trava a fila — registra e encerra com diagnóstico.
       return finish(run, 'failed', nowISO, res.error || 'espera inválida', res.error || 'espera inválida');
@@ -363,6 +441,9 @@ export function stepAutomationRun(
   if (node.type !== 'action') {
     return finish(run, 'failed', nowISO, `tipo de nó não suportado: ${node.type}`, 'nó inválido');
   }
+  // Revalida o assunto (booking/lead vivos) antes de toda ação — especialmente
+  // as que retomam de uma espera longa (cancelou? reagendou? lead virou cliente?).
+  refreshRunSubjectContext(db, run, business.id);
   const params = prepareActionParams(node.config.action, run);
   const actionType = node.config.action?.type;
   const def = automationActionDef(actionType);

@@ -430,6 +430,23 @@ export function executeAction(input: ActionInput): ActionResult {
       const booking = subjectBooking(input);
       const contact = subjectContact(input);
 
+      // Revalidação do assunto no MOMENTO do envio (retomada de espera longa):
+      // cancelado ⇒ nunca manda mensagem de agenda. no_show ⇒ não manda
+      // lembrete/confirmação (a menos que a receita peça explicitamente —
+      // recuperação de falta é mensagem QUE QUEREMOS enviar no no_show).
+      if (booking && booking.status === 'cancelled' && String(input.params?.forceSendOnCancelled || '') !== 'true') {
+        return {
+          ok: true, skipped: true,
+          summary: 'agendamento cancelado — mensagem de agenda não enviada',
+        };
+      }
+      if (booking && booking.status === 'no_show' && String(input.params?.forceSendOnNoShow || '') !== 'true') {
+        return {
+          ok: true, skipped: true,
+          summary: 'paciente não compareceu — lembrete de agenda não enviado',
+        };
+      }
+
       const msgText = text(input, 'message', 2000) || text(input, 'body', 2000);
       if (!msgText) return { ok: false, summary: '', error: 'mensagem vazia' };
 

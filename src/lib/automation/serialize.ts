@@ -8,7 +8,7 @@
 import type { Automation, AutomationRun, DB } from '../types';
 import {
   analyzeGraph, automationActionDef, automationEventLabel, automationFieldLabel,
-  graphToLinear, isTerminalStatus, type LinearAutomation,
+  automationStatusOf, graphToLinear, humanDuration, isTerminalStatus, type LinearAutomation,
 } from './model';
 import { describeCondition } from './conditions';
 
@@ -17,6 +17,10 @@ export interface AutomationView {
   name: string;
   description: string;
   active: boolean;
+  /** draft | active | paused | archived (derivado de `active` em docs antigos). */
+  status: string;
+  /** manual | template | ai. */
+  source: string;
   event: string;
   eventLabel: string;
   templateId: string;
@@ -86,7 +90,16 @@ function summaryOf(automation: Automation, linear: LinearAutomation | null): str
   const parts: string[] = [`Quando ${automationEventLabel(automation.trigger?.event)}`];
   if (linear?.condition) parts.push(`Se ${describeCondition(linear.condition, automationFieldLabel)}`);
   for (const step of linear?.steps || []) {
-    if (step.kind === 'wait') parts.push(`Depois: esperar (tempo)`);
+    if (step.kind === 'wait') {
+      const w = step.wait;
+      if (w?.mode === 'booking_offset') {
+        const off = Math.abs(Number(w.offsetMinutes || 0));
+        parts.push(off >= 1440
+          ? `Depois: ${off / 1440} dia(s) ${Number(w.offsetMinutes) < 0 ? 'antes' : 'depois'} do agendamento`
+          : `Depois: ${off} min ${Number(w.offsetMinutes) < 0 ? 'antes' : 'depois'} do agendamento`);
+      } else if (w?.mode === 'until' && w.at) parts.push(`Depois: até ${String(w.at).replace('T', ' ')}`);
+      else parts.push(`Depois: esperar ${humanDuration(Number(w?.minutes || 0)) || '(tempo)'}`);
+    }
     else if (step.kind === 'action') parts.push(`Então: ${automationActionDef(step.action?.type)?.short || 'ação'}`);
   }
   if (linear?.elseSteps?.length) parts.push(`Senão: ${automationActionDef(linear.elseSteps[0]?.action?.type)?.short || 'outro caminho'}`);
@@ -101,6 +114,8 @@ export function automationView(db: DB, automation: Automation): AutomationView {
     name: automation.name,
     description: automation.description,
     active: automation.active,
+    status: automationStatusOf(automation),
+    source: automation.source || 'manual',
     event: automation.trigger?.event || '',
     eventLabel: automationEventLabel(automation.trigger?.event),
     templateId: automation.templateId || '',

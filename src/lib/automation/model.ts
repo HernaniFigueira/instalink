@@ -12,7 +12,7 @@ import type {
   Automation, AutomationActionType, AutomationCondition, AutomationEdge,
   AutomationEventId, AutomationNode, AutomationNodeConfig, AutomationNodeType,
   AutomationRun, AutomationRunStatus, AutomationRunStep, AutomationSettings,
-  AutomationWaitConfig, ConditionOperator, DB,
+  AutomationSource, AutomationStatus, AutomationWaitConfig, ConditionOperator, DB,
 } from '../types';
 import { AUTOMATION_EVENTS } from '../types';
 import { VALID_WEBHOOK_EVENTS } from '../types';
@@ -147,15 +147,15 @@ export const AUTOMATION_FIELDS: AutomationFieldDef[] = [
   { path: 'customer.phone', label: 'Cliente · telefone', type: 'text', events: ['customer.created', 'customer.updated', 'lead.created', 'lead.updated'] },
   { path: 'customer.email', label: 'Cliente · e-mail', type: 'text', events: ['customer.created', 'customer.updated'] },
   { path: 'customer.source', label: 'Cliente · origem na base', type: 'text', events: ['customer.created', 'customer.updated'] },
-  { path: 'customer.marketingOptIn', label: 'Cliente · aceita campanhas', type: 'boolean', events: ['customer.created', 'customer.updated'] },
-  { path: 'booking.id', label: 'Agendamento · id', type: 'text', events: ['booking.created', 'booking.confirmed', 'booking.cancelled', 'booking.completed'] },
-  { path: 'booking.status', label: 'Agendamento · status', type: 'enum', options: BOOKING_STATUS_OPTIONS, events: ['booking.created', 'booking.confirmed', 'booking.cancelled', 'booking.completed'] },
-  { path: 'booking.date', label: 'Agendamento · data', type: 'date', events: ['booking.created', 'booking.confirmed', 'booking.cancelled', 'booking.completed'] },
-  { path: 'booking.time', label: 'Agendamento · hora', type: 'text', events: ['booking.created', 'booking.confirmed', 'booking.cancelled', 'booking.completed'] },
-  { path: 'booking.serviceId', label: 'Agendamento · serviço', type: 'text', events: ['booking.created', 'booking.confirmed', 'booking.cancelled', 'booking.completed'] },
-  { path: 'booking.professionalId', label: 'Agendamento · profissional', type: 'text', events: ['booking.created', 'booking.confirmed', 'booking.cancelled', 'booking.completed'] },
-  { path: 'booking.leadId', label: 'Agendamento · lead de origem', type: 'text', events: ['booking.created', 'booking.confirmed', 'booking.cancelled', 'booking.completed'] },
-  { path: 'booking.customerName', label: 'Agendamento · cliente', type: 'text', events: ['booking.created', 'booking.confirmed', 'booking.cancelled', 'booking.completed'] },
+  { path: 'customer.marketingOptIn', label: 'Cliente · aceita campanhas', type: 'boolean', events: ['customer.created', 'customer.updated', 'patient.inactive'] },
+  { path: 'booking.id', label: 'Agendamento · id', type: 'text', events: ['booking.created', 'booking.confirmed', 'booking.rescheduled', 'booking.cancelled', 'booking.no_show', 'booking.completed', 'followup.due'] },
+  { path: 'booking.status', label: 'Agendamento · status', type: 'enum', options: BOOKING_STATUS_OPTIONS, events: ['booking.created', 'booking.confirmed', 'booking.rescheduled', 'booking.cancelled', 'booking.no_show', 'booking.completed', 'followup.due'] },
+  { path: 'booking.date', label: 'Agendamento · data', type: 'date', events: ['booking.created', 'booking.confirmed', 'booking.rescheduled', 'booking.cancelled', 'booking.no_show', 'booking.completed', 'followup.due'] },
+  { path: 'booking.time', label: 'Agendamento · hora', type: 'text', events: ['booking.created', 'booking.confirmed', 'booking.rescheduled', 'booking.cancelled', 'booking.no_show', 'booking.completed', 'followup.due'] },
+  { path: 'booking.serviceId', label: 'Agendamento · serviço', type: 'text', events: ['booking.created', 'booking.confirmed', 'booking.rescheduled', 'booking.cancelled', 'booking.no_show', 'booking.completed', 'followup.due'] },
+  { path: 'booking.professionalId', label: 'Agendamento · profissional', type: 'text', events: ['booking.created', 'booking.confirmed', 'booking.rescheduled', 'booking.cancelled', 'booking.no_show', 'booking.completed', 'followup.due'] },
+  { path: 'booking.leadId', label: 'Agendamento · lead de origem', type: 'text', events: ['booking.created', 'booking.confirmed', 'booking.rescheduled', 'booking.cancelled', 'booking.no_show', 'booking.completed', 'followup.due'] },
+  { path: 'booking.customerName', label: 'Agendamento · cliente', type: 'text', events: ['booking.created', 'booking.confirmed', 'booking.rescheduled', 'booking.cancelled', 'booking.no_show', 'booking.completed', 'followup.due'] },
   { path: 'service.id', label: 'Serviço · id', type: 'text' },
   { path: 'service.name', label: 'Serviço · nome', type: 'text' },
   { path: 'service.durationMin', label: 'Serviço · duração (min)', type: 'number' },
@@ -183,6 +183,16 @@ export function isFieldAllowed(path: string, event?: AutomationEventId | ''): bo
   if (!event) return true;
   if (!def.events) return true;
   return def.events.includes(event);
+}
+
+/**
+ * Status efetivo da automação. Documentos antigos sem `status` derivam de
+ * `active` (ligado ⇒ active; desligado ⇒ paused — nunca "draft" retroativo).
+ */
+export function automationStatusOf(a: Pick<Automation, 'active' | 'status'> | null | undefined): AutomationStatus {
+  if (!a) return 'draft';
+  if (a.status === 'draft' || a.status === 'archived') return a.status;
+  return a.active ? 'active' : 'paused';
 }
 
 // ═══════════════════════════════════════════════════════════════
@@ -396,6 +406,7 @@ export function resolveWait(
   wait: AutomationWaitConfig | undefined,
   now = new Date(),
   limits: CapabilityLimits = ADVANCED_LIMITS,
+  context?: Record<string, any> | null,
 ): WaitResolution {
   const mode = String(wait?.mode || 'duration');
   if (mode === 'event') {
@@ -403,6 +414,9 @@ export function resolveWait(
       ok: false, resumeAt: '', label: '',
       error: 'espera por evento ainda não está disponível nesta versão',
     };
+  }
+  if (mode === 'booking_offset') {
+    return resolveBookingOffsetWait(wait, now, limits, context);
   }
   if (mode === 'until') {
     const raw = String(wait?.at || '').trim();
@@ -433,6 +447,50 @@ export function resolveWait(
     resumeAt: new Date(now.getTime() + minutes * 60000).toISOString(),
     label: humanDuration(minutes),
   };
+}
+
+/**
+ * Espera ancorada no horário do agendamento (F3 receitas: 24 h antes, 2 h antes…).
+ * O alvo é SEMPRE recalculado do booking VIVENTE no contexto — se a agenda mudou
+ * antes da retomada, o executor revalida e reprograma (nunca lembra data morta).
+ */
+export function resolveBookingOffsetWait(
+  wait: AutomationWaitConfig | undefined,
+  now = new Date(),
+  limits: CapabilityLimits = ADVANCED_LIMITS,
+  context?: Record<string, any> | null,
+): WaitResolution {
+  const offset = Math.floor(Number(wait?.offsetMinutes ?? 0));
+  if (!Number.isFinite(offset) || offset === 0) {
+    return { ok: false, resumeAt: '', label: '', error: 'espera relativa ao agendamento sem deslocamento válido' };
+  }
+  // Teto de deslocamento: −30 dias antes … +7 dias depois do início.
+  if (offset < -30 * 1440 || offset > 7 * 1440) {
+    return { ok: false, resumeAt: '', label: '', error: 'deslocamento fora do intervalo (−30 a +7 dias do agendamento)' };
+  }
+  const booking = context?.booking as { date?: string; time?: string } | null | undefined;
+  const date = String(booking?.date || '').trim();
+  const time = String(booking?.time || '').trim() || '00:00';
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(date) || !/^\d{2}:\d{2}$/.test(time)) {
+    return { ok: false, resumeAt: '', label: '', error: 'espera relativa precisa de um agendamento com data e hora' };
+  }
+  const iso = normalizeDateTimeInput(`${date} ${time}`, now);
+  const startMs = Date.parse(iso);
+  if (!Number.isFinite(startMs)) {
+    return { ok: false, resumeAt: '', label: '', error: 'horário do agendamento ilegível' };
+  }
+  const targetMs = startMs + offset * 60000;
+  const abs = Math.abs(offset);
+  const when = offset < 0 ? `${humanDuration(abs)} antes do agendamento` : `${humanDuration(abs)} depois do agendamento`;
+  if (targetMs <= now.getTime()) {
+    return { ok: true, resumeAt: now.toISOString(), label: `${when} (prazo já passou — retoma já)` };
+  }
+  const minutes = Math.round((targetMs - now.getTime()) / 60000);
+  if (minutes > limits.maxWaitMinutes) {
+    return { ok: false, resumeAt: '', label: '', error: `espera maior que o limite (${limits.maxWaitMinutes} min)` };
+  }
+  const resumeAt = new Date(targetMs).toISOString();
+  return { ok: true, resumeAt, label: `${when} · ${resumeAt.slice(0, 16).replace('T', ' ')}` };
 }
 
 /**
@@ -773,6 +831,18 @@ function sanitizeWait(input: unknown, limits: CapabilityLimits): { wait: Automat
     if (!at) errors.push('espera "até" precisa de data e hora no formato AAAA-MM-DD HH:MM');
     return { wait: { mode: 'until', ...(at ? { at } : {}) }, errors };
   }
+  if (mode === 'booking_offset') {
+    const offset = Math.floor(Number(raw.offsetMinutes));
+    if (!Number.isFinite(offset) || offset === 0) {
+      errors.push('espera relativa precisa de offset em minutos (negativo = antes do agendamento)');
+      return { wait: { mode: 'booking_offset', offsetMinutes: 0 }, errors };
+    }
+    if (offset < -30 * 1440 || offset > 7 * 1440) {
+      errors.push('deslocamento da espera fora do intervalo (−30 a +7 dias)');
+      return { wait: { mode: 'booking_offset', offsetMinutes: 0 }, errors };
+    }
+    return { wait: { mode: 'booking_offset', offsetMinutes: offset }, errors };
+  }
   const minutes = Math.floor(Number(raw.minutes));
   if (!Number.isFinite(minutes) || minutes <= 0) {
     errors.push('espera precisa de uma duração em minutos');
@@ -897,6 +967,10 @@ export interface AutomationDraft {
   name?: string;
   description?: string;
   active?: boolean;
+  /** F3: rascunho/ativo/pausado/arquivado (compat: ausente deriva de active). */
+  status?: AutomationStatus;
+  /** F3: manual | template | ai. */
+  source?: AutomationSource;
   /** Forma linear do editor (Quando / Se / Então / Senão). */
   event?: AutomationEventId;
   condition?: unknown;
@@ -1065,12 +1139,23 @@ export function validateAutomationDraft(
   if (dedupeField && isFieldAllowed(dedupeField, triggerEvent)) settings.dedupeField = dedupeField;
   else if (dedupeField) warnings.push(`campo de deduplicação inválido ignorado: ${dedupeField}`);
 
+  const draftStatus = (draft as any).status as AutomationStatus | undefined;
+  const draftSource = (draft as any).source as AutomationSource | undefined;
+  const status: AutomationStatus =
+    draftStatus === 'draft' || draftStatus === 'active' || draftStatus === 'paused' || draftStatus === 'archived'
+      ? draftStatus
+      : (active ? 'active' : 'paused');
+  const source: AutomationSource =
+    draftSource === 'template' || draftSource === 'ai' || draftSource === 'manual' ? draftSource : 'manual';
+
   const automation: Omit<Automation, 'createdAt' | 'updatedAt' | 'version'> = {
     id: cleanString(draft.id, 64),
     businessId: '', // preenchido pela camada de API (nunca pelo cliente)
     name: name || 'Automação sem nome',
     description,
-    active,
+    active: status === 'active',
+    status,
+    source,
     trigger: {
       event: (triggerEvent || 'lead.created') as AutomationEventId,
       ...(triggerCondition ? { condition: triggerCondition } : {}),
@@ -1234,6 +1319,12 @@ export function normalizeAutomationRecord(raw: any, now = new Date().toISOString
     name: String(raw.name || 'Automação').slice(0, MAX_NAME),
     description: String(raw.description || '').slice(0, MAX_DESCRIPTION),
     active: raw.active !== false,
+    ...(raw.status === 'draft' || raw.status === 'active' || raw.status === 'paused' || raw.status === 'archived'
+      ? { status: raw.status as AutomationStatus }
+      : {}),
+    ...(raw.source === 'template' || raw.source === 'ai' || raw.source === 'manual'
+      ? { source: raw.source as AutomationSource }
+      : {}),
     trigger: {
       event: triggerEvent,
       ...(raw?.trigger?.condition ? { condition: raw.trigger.condition as AutomationCondition } : {}),

@@ -54,6 +54,7 @@ export function planToDraft(plan: AiPlan, extra: Partial<AutomationDraft> = {}):
     edges: graph.edges,
     settings: { ...(plan.settings || {}) } as Record<string, unknown>,
     templateId: AI_TEMPLATE_ID,
+    source: 'ai',
     ...extra,
   };
 }
