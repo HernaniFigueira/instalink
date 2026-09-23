@@ -53,6 +53,17 @@ export default function PaginaPage() {
     } catch { return 'perfil'; }
   });
   const [previewSheet, setPreviewSheet] = useState(false);
+  // "Próximos passos" usa o MESMO checklist real do /api/overview (nada inventado).
+  const [setup, setSetup] = useState<{ pct: number; checklist: Array<{ done: boolean; label: string; href: string }> } | null>(null);
+  useEffect(() => {
+    if (!businessId) return;
+    let on = true;
+    apiGet<{ pct?: number; checklist?: Array<{ done: boolean; label: string; href: string }> }>(
+      `/api/overview?businessId=${businessId}&period=7`, { scope: 'area', area: 'Página' },
+    ).then((r) => { if (on && r.ok) setSetup({ pct: r.data?.pct ?? 0, checklist: r.data?.checklist || [] }); })
+      .catch(() => { if (on) setSetup(null); });
+    return () => { on = false; };
+  }, [businessId]);
   const [editing, setEditing] = useState<string | null>(null);
   const [msg, setMsg] = useState('');
   const [rvCounts, setRvCounts] = useState({ pending: 0, published: 0 });
@@ -474,6 +485,46 @@ export default function PaginaPage() {
           <ClinicPreview business={previewBusiness} page={page} catalog={catalog} />
         </aside>
       </div>
+
+      {/* Barra de progresso da configuração (mockup): dados reais do overview. */}
+      {setup && setup.checklist.length > 0 && (
+        <section className="dsh-card mt-4" aria-label="Próximos passos da configuração">
+          <div className="dsh-card__head">
+            <h2 className="dsh-card__title">Próximos passos</h2>
+            <span className="text-[12px] font-semibold text-[var(--text-muted)]">
+              {setup.checklist.filter((c) => c.done).length} de {setup.checklist.length} concluídos
+            </span>
+          </div>
+          <div className="dsh-card__body">
+            <div className="h-2 rounded-full bg-[var(--surface-3)] overflow-hidden mb-3" role="progressbar"
+              aria-valuenow={setup.pct} aria-valuemin={0} aria-valuemax={100}>
+              <div className="h-full rounded-full bg-[var(--brand)] transition-all" style={{ width: `${setup.pct}%` }} />
+            </div>
+            <div className="flex flex-wrap items-center gap-2">
+              {setup.checklist.map((c) => (
+                <span key={c.label} className={`pe-next__chip ${c.done ? 'pe-next__chip--done' : ''}`}>
+                  <span className={`dsh-check__mark ${c.done ? 'dsh-check__mark--done' : 'dsh-check__mark--todo'}`} aria-hidden="true">
+                    {c.done && <Icon n="check" size={12} />}
+                  </span>
+                  {c.label}
+                </span>
+              ))}
+              {(() => {
+                const next = setup.checklist.find((c) => !c.done);
+                return next ? (
+                  <Link href={`${next.href}${next.href.includes('?') ? '&' : '?'}b=${businessId}`} className="ws-newbtn ml-auto">
+                    Continuar configuração <Icon n="chevronRight" size={14} />
+                  </Link>
+                ) : (
+                  <span className="ml-auto text-[12px] font-bold text-[var(--success-fg)] inline-flex items-center gap-1.5">
+                    <Icon n="checkCircle" size={15} /> Configuração completa
+                  </span>
+                );
+              })()}
+            </div>
+          </div>
+        </section>
+      )}
 
       {/* Telas estreitas: a mesma prévia abre em sheet, nunca some. */}
       <button type="button" className="pe-fab" onClick={() => setPreviewSheet(true)} aria-haspopup="dialog">

@@ -1154,6 +1154,11 @@ button.ws-bell__item:hover { background: var(--surface-hover); }
 .is-collapsed .workspace-link__chevron,
 .is-collapsed .workspace-link__rail { display: none; }
 
+.ws-setup-mini {
+  margin: 0 10px 10px; padding: 12px;
+  border-radius: 12px;
+  background: var(--brand-soft); border: 1px solid var(--brand-border);
+}
 .workspace-footer { display: flex; flex-direction: column; gap: 2px; padding: 8px; border-top: 1px solid var(--border-soft); }
 .workspace-public-link {
   display: flex; align-items: center; gap: 8px; min-height: 34px; padding: 0 10px;
@@ -1487,6 +1492,24 @@ dialog.il-customer-dialog::backdrop { background:transparent; }
   content: ''; position: absolute; top: 6px; left: 50%; transform: translateX(-50%);
   width: 92px; height: 16px; border-radius: 10px; background: #101426; z-index: 3;
 }
+.pe-device__status {
+  position: absolute; top: 11px; left: 20px; right: 20px; z-index: 4;
+  display: flex; align-items: center; justify-content: space-between;
+  color: #fff; font-size: 10px; font-weight: 700; letter-spacing: .02em;
+  pointer-events: none;
+}
+.pe-device__status i {
+  display: block; width: 40px; height: 9px; border-radius: 2px; opacity: .95;
+  background: linear-gradient(90deg, currentColor 0 7px, transparent 7px 10px, currentColor 10px 17px, transparent 17px 20px, currentColor 20px 27px);
+}
+.pe-devbtn[aria-pressed="true"] { background: var(--brand); border-color: var(--brand); color: #fff; font-weight: 700; }
+.pe-next__chip {
+  display: inline-flex; align-items: center; gap: 7px;
+  padding: 7px 12px; border-radius: var(--radius-md);
+  border: 1px solid var(--border-soft); background: var(--surface);
+  font-size: 11.5px; font-weight: 600; color: var(--text-soft);
+}
+.pe-next__chip--done { color: var(--text-muted); }
 .pe-device--desktop { width: 100%; border-width: 8px; border-radius: 18px; }
 .pe-device--desktop::before { display: none; }
 .pe-nav { position: sticky; top: calc(var(--topbar-h) + 14px); display: flex; flex-direction: column; gap: 2px; padding: 8px; background: var(--surface); border: 1px solid var(--border-soft); border-radius: var(--radius-lg); }
@@ -1512,6 +1535,9 @@ dialog.il-customer-dialog::backdrop { background:transparent; }
 }
 
 /* ── Linha do horário atual (Agenda) — coral gráfico, só quando visível ── */
+.ag-hatch {
+  background: repeating-linear-gradient(45deg, rgba(100, 116, 139, .07) 0 6px, transparent 6px 12px);
+}
 .ag-nowline {
   position: absolute; z-index: 10; pointer-events: none;
   height: 0; border-top: 2px solid var(--now);

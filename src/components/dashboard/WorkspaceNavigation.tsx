@@ -24,6 +24,7 @@ import { useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
 import { Icon } from '@/components/icons';
 import { Drawer } from '@/components/ui';
+import { apiGet } from '@/lib/api-client';
 import type { panelNavigation } from '@/lib/panel';
 import {
   areaOfRoute, workspaceAreas, workspaceSections, type WorkspaceArea,
@@ -42,6 +43,23 @@ export function WorkspaceNavigation({ nav, activePath, unit, collapsed, onCollap
   const mobile = !!mobileOpen;
   const areas = useMemo(() => workspaceAreas(nav.allowed), [nav.allowed]);
   const sections = useMemo(() => workspaceSections(areas), [areas]);
+
+  // Mini-card de setup (mockup): MESMO checklist real do /api/overview —
+  // aparece em todas as telas enquanto houver passo pendente.
+  const [setup, setSetup] = useState<{ pct: number; href: string } | null>(null);
+  useEffect(() => {
+    if (!unit.id) return;
+    let on = true;
+    apiGet<{ pct?: number; pendingSetup?: number; checklist?: Array<{ done: boolean; label: string; href: string }> }>(
+      `/api/overview?businessId=${unit.id}&period=7`, { scope: 'area', area: 'Início' },
+    ).then((r) => {
+      if (!on || !r.ok) return;
+      const next = (r.data?.checklist || []).find((c) => !c.done);
+      const pending = r.data?.pendingSetup ?? (r.data?.checklist || []).filter((c) => !c.done).length;
+      setSetup(next && pending ? { pct: r.data?.pct ?? 0, href: next.href } : null);
+    }).catch(() => { if (on) setSetup(null); });
+    return () => { on = false; };
+  }, [unit.id]);
 
   // Destinos com `sidebar: false` não ocupam linha no menu (régua: frequência),
   // mas continuam acessíveis por URL/atalho contextual.
@@ -164,6 +182,19 @@ export function WorkspaceNavigation({ nav, activePath, unit, collapsed, onCollap
         <nav aria-label="Menu principal" className="workspace-primary ws-scroll">
           {menu((id) => setOpened(id || null), opened)}
         </nav>
+        {!collapsed && setup && (
+          <div className="ws-setup-mini">
+            <p className="text-[12px] font-extrabold text-[var(--text)] leading-tight">Sua clínica está {setup.pct}% pronta!</p>
+            <p className="text-[10.5px] text-[var(--text-muted)] mt-1 leading-snug">Complete a configuração e comece a receber agendamentos.</p>
+            <div className="h-1.5 rounded-full bg-white overflow-hidden mt-2" aria-hidden="true">
+              <div className="h-full rounded-full bg-[var(--success)]" style={{ width: `${setup.pct}%` }} />
+            </div>
+            <Link href={`${setup.href}${setup.href.includes('?') ? '&' : '?'}b=${unit.id}`}
+              className="mt-2 inline-flex w-full items-center justify-center rounded-md border border-[var(--brand-border)] bg-white px-2 py-1.5 text-[11px] font-bold text-[var(--brand-fg)] hover:bg-[var(--brand-softer)]">
+              Continuar
+            </Link>
+          </div>
+        )}
         <div className="workspace-footer">
           {!collapsed && unit.slug && (
             <a className="workspace-public-link" href={`/${unit.slug}`} target="_blank" rel="noreferrer">

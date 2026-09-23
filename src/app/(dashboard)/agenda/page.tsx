@@ -123,9 +123,10 @@ interface BlockVM {
   timeRange: string;
   statusLabel: string;
   cls: string;
-  /** Profissional (linha discreta do cartão) e ponto de estado (ícone). */
+  /** Profissional (linha discreta do cartão), ponto e ícone de estado. */
   pro: string;
   dot: string;
+  ico: string;
   /** Horário passou e continua em aberto: marcador amarelo de atenção. */
   attention: boolean;
   /** A3.4 · Bloco 4: encaixe (fora da grade) e check-in do cliente. */
@@ -206,6 +207,7 @@ const GridColumn = memo(function GridColumn({ column, basisPct, variant, highlig
         onEmptyPress(column.key, minToTime(minutes));
       }}>
       {column.freeRanges.map((r,i)=><span key={i} aria-hidden="true" className="absolute inset-x-0 bg-white pointer-events-none" style={{top:(r.start-startMinute)/60*PX_PER_HOUR,height:(r.end-r.start)/60*PX_PER_HOUR}}/>)}
+      {column.isToday && <span aria-hidden="true" className="absolute inset-0 bg-[var(--brand-softer)] pointer-events-none" />}
       {Array.from({ length: Math.max(0, hours - 1) }, (_, idx) => idx + 1).map((i) => (
         <span key={i} className="absolute left-0 right-0 border-t border-zinc-100" style={{ top: i * PX_PER_HOUR }} />
       ))}
@@ -275,14 +277,12 @@ const GridColumn = memo(function GridColumn({ column, basisPct, variant, highlig
           {b.fitIn && <span aria-hidden="true" className={FIT_IN_STRIPE_CLS} />}
           {/* quem + quando + o quê + com quem — detalhe fica no drawer.
               Densidade do mockup: nome forte, linhas de apoio discretas. */}
+          <span className="block text-[10.5px] font-semibold tabular-nums leading-tight opacity-75">{b.timeRange}</span>
           <span className="block text-[12.5px] font-bold leading-tight truncate">{b.name}</span>
-          <span className="block text-[11px] font-semibold tabular-nums leading-tight opacity-80">{b.timeRange}</span>
-          {b.height > 58 && <span className="block text-[11px] leading-tight truncate opacity-75">{b.service}</span>}
-          {b.height > 74 && b.pro && <span className="block text-[11px] leading-tight truncate opacity-70">{b.pro}</span>}
-          {b.height > 40 && (
+          {b.height > 62 && <span className="block text-[11px] leading-tight truncate opacity-75">{b.service}</span>}
+          {b.height > 80 && b.pro && <span className="block text-[11px] leading-tight truncate opacity-70">{b.pro}</span>}
+          {b.height > 96 && (
             <span className="mt-0.5 flex items-center gap-1 text-[10px] font-semibold leading-tight">
-              <span className={`w-1.5 h-1.5 rounded-full ${b.dot}`} aria-hidden="true" />
-              <span className="truncate">{b.statusLabel}</span>
               {/* A3.4 · Bloco 4: o encaixe é visível no cartão — quem olha a
                   grade sabe que aquele horário foi uma decisão da equipe. */}
               {b.fitIn && <span className={`px-1 rounded-sm ${FIT_IN_MARK_CLS}`}>ENCAIXE</span>}
@@ -290,17 +290,32 @@ const GridColumn = memo(function GridColumn({ column, basisPct, variant, highlig
           )}
           {b.checkedInAt && (
             <span title="Cliente já fez check-in" aria-hidden="true"
-              className="absolute top-1 right-1 w-4 h-4 rounded-full text-[9px] font-black leading-4 text-center bg-[var(--success)] text-white">✓</span>
+              className="absolute bottom-1 right-1 w-4 h-4 rounded-full text-[9px] font-black leading-4 text-center bg-[var(--success)] text-white">✓</span>
           )}
-          {b.attention && (
+          {b.attention ? (
             <span title="Precisa de fechamento" aria-hidden="true"
-              className={`absolute top-1 right-1 w-4 h-4 rounded-full text-[10px] font-black leading-4 text-center ${ATTENTION_MARK_CLS}`}>
+              className={`absolute top-1 right-1 w-4.5 h-4.5 w-[18px] h-[18px] rounded-full text-[10px] font-black leading-[18px] text-center ${ATTENTION_MARK_CLS}`}>
               !
+            </span>
+          ) : (
+            <span title={b.statusLabel} aria-hidden="true"
+              className={`absolute top-1 right-1 w-[18px] h-[18px] rounded-full text-white flex items-center justify-center ${b.dot}`}>
+              <Icon n={b.ico} size={10} />
             </span>
           )}
         </button>
       ))}
-      {variant === 'week' && column.blocks.length === 0 && (
+      {variant === 'week' && column.blocks.length === 0 && column.freeRanges.length === 0 && (
+        <>
+          <span aria-hidden="true" className="ag-hatch absolute inset-0 pointer-events-none" />
+          <span className="absolute inset-x-0 top-24 text-center pointer-events-none">
+            <Icon n="calendar" size={18} className="mx-auto text-zinc-300" />
+            <span className="block text-[11px] font-semibold text-zinc-400 mt-1">Indisponível</span>
+            <span className="block text-[10px] text-zinc-300">Não há atendimento</span>
+          </span>
+        </>
+      )}
+      {variant === 'week' && column.blocks.length === 0 && column.freeRanges.length > 0 && (
         <span className="absolute inset-x-0 top-3 text-center text-[11px] text-zinc-300 pointer-events-none">—</span>
       )}
     </div>
@@ -632,6 +647,7 @@ export default function AgendaPage() {
           cls: BOOKING_BLOCK[b.status],
           pro: pro || '',
           dot: BOOKING_DOT[b.status],
+          ico: b.status === 'pending' ? 'clock' : b.status === 'cancelled' || b.status === 'no_show' ? 'x' : 'check',
           attention,
           fitIn: b.bookingKind === 'fit_in',
           checkedInAt: b.checkedInAt || '',
@@ -1144,23 +1160,24 @@ export default function AgendaPage() {
         <div className="flex flex-wrap items-center justify-end gap-1.5 ml-auto">
           {loaded && (
             <div className="dsh-card flex items-center gap-3 pl-2.5 pr-2 py-2">
-              <span className="dsh-kpi__icon" style={{ background: 'var(--warning-bg)', color: 'var(--warning-fg)' }}>
-                <Icon n="clock" size={18} />
+              <span className="dsh-kpi__icon" style={{ background: 'var(--brand-soft)', color: 'var(--brand-fg)' }}>
+                <Icon n="users" size={18} />
               </span>
               <span className="leading-tight mr-1">
                 <span className="block text-[12.5px] font-bold text-[var(--text)]">Fila de atendimento</span>
                 <span className="block text-[11px] text-[var(--text-muted)]">
                   {(queueInfo.waiting + queueInfo.called + queueInfo.inService) > 0
-                    ? `${queueInfo.waiting + queueInfo.called} aguardando · ${queueInfo.inService} em atendimento`
+                    ? <><strong className="text-[var(--warning-fg)] font-semibold">{queueInfo.waiting + queueInfo.called} aguardando</strong>{' · '}<strong className="text-[var(--success-fg)] font-semibold">{queueInfo.inService} em atendimento</strong></>
                     : 'ninguém aguardando agora'}
                 </span>
               </span>
-              <Button type="button" variant="secondary" size="sm" aria-expanded={showQueue}
+              <button type="button" aria-expanded={showQueue}
                 aria-label="Fila de atendimento"
                 onClick={() => setShowQueue((v) => !v)}
-                title={showQueue ? 'Fechar fila de atendimento' : 'Abrir fila de atendimento'}>
+                title={showQueue ? 'Fechar fila de atendimento' : 'Abrir fila de atendimento'}
+                className="inline-flex items-center gap-1 text-[12.5px] font-bold text-[var(--brand-fg)] hover:underline px-2 py-1.5">
                 Ver fila <Icon n="chevronRight" size={13} />
-              </Button>
+              </button>
             </div>
           )}
               {/* P1.1 — UM botão de filtro (contador quando ativo). O popover
@@ -1329,7 +1346,8 @@ export default function AgendaPage() {
               Limpar filtros
             </button>
           )}
-          <div className="ml-auto flex flex-wrap items-center gap-x-3 gap-y-1" aria-label="Legenda dos estados">
+        </div>
+        <div className="hidden lg:flex flex-wrap items-center gap-x-4 gap-y-1 mb-2.5" aria-label="Legenda dos estados">
             {statusOptions.map((st) => (
               <span key={st} className="inline-flex items-center gap-1.5 text-[11px] font-medium text-[var(--text-muted)]">
                 <span className={`w-2 h-2 rounded-full ${BOOKING_DOT[st]}`} aria-hidden="true" />
@@ -1338,10 +1356,13 @@ export default function AgendaPage() {
             ))}
             <span className="inline-flex items-center gap-1.5 text-[11px] font-medium text-[var(--text-muted)]">
               <span className={`w-3 h-3 rounded-full text-[8px] font-black leading-3 text-center ${ATTENTION_MARK_CLS}`} aria-hidden="true">!</span>
-              precisa de fechamento
+              Precisa de fechamento
+            </span>
+            <span className="inline-flex items-center gap-1.5 text-[11px] font-medium text-[var(--text-muted)]">
+              <span className="w-2 h-2 rounded-full bg-zinc-300" aria-hidden="true" />
+              Indisponível
             </span>
           </div>
-        </div>
 
       </div>
 
@@ -1571,7 +1592,7 @@ export default function AgendaPage() {
                         )
                       )}
                       <span className="min-w-0">
-                        <span className={`block text-sm font-semibold truncate ${c.isToday ? 'text-emerald-700' : 'text-zinc-800'}`}>{c.label}</span>
+                        <span className={`block text-sm font-semibold truncate ${c.isToday ? 'text-[var(--brand-fg)]' : 'text-zinc-800'}`}>{c.label}</span>
                         {c.sub && <span className="block text-[10px] text-zinc-400 truncate">{c.sub}</span>}
                       </span>
                     </div>

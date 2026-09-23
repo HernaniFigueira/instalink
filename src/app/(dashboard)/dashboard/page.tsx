@@ -142,13 +142,20 @@ export default function DashboardPage() {
   // Série diária de agendamentos do período (contagem REAL vinda da mesma API
   // que a Agenda usa — nenhuma fórmula nova, nenhum dado inventado).
   const [series, setSeries] = useState<Array<{ date: string; count: number }> | null>(null);
+  const [yday, setYday] = useState<{ total: number; byStatus: Record<string, number> } | null>(null);
+  const [periodMix, setPeriodMix] = useState<Record<string, number> | null>(null);
+  const [openTasks, setOpenTasks] = useState<Array<{ id: string; title: string; dueAt: string }> | null>(null);
   useEffect(() => {
     if (!businessId) return;
     let on = true;
-    apiGet<{ summary?: { open: number; overdue: number; dueToday: number; mine: number } }>(
+    apiGet<{ summary?: { open: number; overdue: number; dueToday: number; mine: number }; tasks?: Array<{ id: string; title: string; dueAt: string; status?: string }> }>(
       `/api/tasks?businessId=${businessId}&status=open`, { scope: 'area', area: 'Início' },
-    ).then((r) => { if (on) setTaskSum(r.ok && r.data?.summary ? r.data.summary : null); })
-      .catch(() => { if (on) setTaskSum(null); });
+    ).then((r) => {
+      if (!on) return;
+      setTaskSum(r.ok && r.data?.summary ? r.data.summary : null);
+      const list = Array.isArray(r.data?.tasks) ? r.data.tasks : [];
+      setOpenTasks(list.filter((t: { status?: string }) => (t.status || 'open') === 'open').slice(0, 4));
+    }).catch(() => { if (on) { setTaskSum(null); setOpenTasks(null); } });
     return () => { on = false; };
   }, [businessId]);
   useEffect(() => {
@@ -157,17 +164,26 @@ export default function DashboardPage() {
     const iso = (d: Date) => d.toISOString().slice(0, 10);
     const from = new Date(Date.now() - (period - 1) * 86400000);
     const to = new Date();
-    apiGet<{ bookings?: Array<{ date: string }> }>(
+    apiGet<{ bookings?: Array<{ date: string; status: string }> }>(
       `/api/bookings?businessId=${businessId}&mode=manage&from=${iso(from)}&to=${iso(to)}&limit=500`,
       { scope: 'area', area: 'Início' },
     ).then((r) => {
       if (!on) return;
-      if (!r.ok || !Array.isArray(r.data?.bookings)) { setSeries(null); return; }
+      if (!r.ok || !Array.isArray(r.data?.bookings)) { setSeries(null); setYday(null); setPeriodMix(null); return; }
       const map = new Map<string, number>();
       for (let i = 0; i < period; i++) map.set(iso(new Date(from.getTime() + i * 86400000)), 0);
       for (const b of r.data.bookings) if (map.has(b.date)) map.set(b.date, (map.get(b.date) || 0) + 1);
       setSeries([...map.entries()].map(([date, count]) => ({ date, count })));
-    }).catch(() => { if (on) setSeries(null); });
+      // Ontem (comparação REAL dos KPIs) e mix de status do período (donut).
+      const y = iso(new Date(Date.now() - 86400000));
+      const yb = r.data.bookings.filter((b) => b.date === y);
+      const bySt: Record<string, number> = {};
+      for (const b of yb) bySt[b.status] = (bySt[b.status] || 0) + 1;
+      setYday({ total: yb.length, byStatus: bySt });
+      const mix: Record<string, number> = {};
+      for (const b of r.data.bookings) mix[b.status] = (mix[b.status] || 0) + 1;
+      setPeriodMix(mix);
+    }).catch(() => { if (on) { setSeries(null); setYday(null); setPeriodMix(null); } });
     return () => { on = false; };
   }, [businessId, period]);
 
@@ -237,11 +253,11 @@ export default function DashboardPage() {
 
   /** Linha de lista: com permissão vira link (linha inteira clicável, com
       indicação visual); sem permissão vira texto — nunca um 403 à toa. */
-  function ListRow({ href, allowed, className, children }: {
-    href: string; allowed: boolean; className: string; children: React.ReactNode;
+  function ListRow({ href, allowed, className, children, style }: {
+    href: string; allowed: boolean; className: string; children: React.ReactNode; style?: React.CSSProperties;
   }) {
-    if (!allowed) return <div className={className}>{children}</div>;
-    return <Link href={href} className={`${className} hover:bg-zinc-50 transition-colors`}>{children}</Link>;
+    if (!allowed) return <div className={className} style={style}>{children}</div>;
+    return <Link href={href} style={style} className={`${className} hover:bg-zinc-50 transition-colors`}>{children}</Link>;
   }
 
   // 6 · ONDE AGIR — só ações que EXISTEM: checklist real + conectar canal.
@@ -263,7 +279,8 @@ export default function DashboardPage() {
       <PermissionNotice message={notice?.title} hint={notice?.hint} onDismiss={dismiss} />
 
       {/* ── Saudação + resumo curto (hierarquia do mockup) ── */}
-      <header className="mb-5">
+      <header className="mb-5 flex flex-wrap items-start justify-between gap-3">
+        <div className="min-w-0">
         <h1 className="text-[26px] leading-tight font-extrabold tracking-tight text-[var(--text)]">
           {greeting()}, {user.name.split(' ')[0]}!
         </h1>
@@ -274,6 +291,13 @@ export default function DashboardPage() {
               ? 'Chegadas, próximos horários e o que precisa de atenção.'
               : 'Acompanhe o dia e os resultados disponíveis da operação.'}
         </p>
+        </div>
+        <div className="dsh-card flex items-center gap-2.5 px-3.5 py-2.5" title="Data de hoje">
+          <Icon n="calendar" size={16} className="text-[var(--brand-fg)]" />
+          <span className="text-[12.5px] font-bold text-[var(--text)]">
+            Hoje, {new Date().toLocaleDateString('pt-BR', { day: '2-digit', month: 'long', year: 'numeric' })}
+          </span>
+        </div>
       </header>
 
       {/* ── 1 · ATENÇÃO (dados do servidor, links só com permissão) ── */}
@@ -298,23 +322,33 @@ export default function DashboardPage() {
           <h3 className="sr-only">Hoje</h3>
           <div className="dsh-kpi">
             <span className="dsh-kpi__icon" style={{ background: 'var(--brand-soft)', color: 'var(--brand-fg)' }}><Icon n="calendar" size={19} /></span>
-            <span><span className="dsh-kpi__num">{today.total}</span><span className="dsh-kpi__label block">Atendimentos hoje</span></span>
+            <span><span className="dsh-kpi__num">{today.total}</span><span className="dsh-kpi__label block">Atendimentos hoje</span>
+              <KpiDelta now={today.total} prev={yday?.total ?? 0} has={yday !== null} />
+            </span>
           </div>
           <div className="dsh-kpi">
             <span className="dsh-kpi__icon" style={{ background: 'var(--success-bg)', color: 'var(--success-fg)' }}><Icon n="checkCircle" size={19} /></span>
-            <span><span className="dsh-kpi__num">{today.confirmed}</span><span className="dsh-kpi__label block">Confirmados</span></span>
+            <span><span className="dsh-kpi__num">{today.confirmed}</span><span className="dsh-kpi__label block">Confirmados</span>
+              <KpiDelta now={today.confirmed} prev={yday?.byStatus['confirmed'] ?? 0} has={yday !== null} />
+            </span>
           </div>
           <div className="dsh-kpi">
             <span className="dsh-kpi__icon" style={{ background: 'var(--warning-bg)', color: 'var(--warning-fg)' }}><Icon n="clock" size={19} /></span>
-            <span><span className="dsh-kpi__num">{today.pending}</span><span className="dsh-kpi__label block">Aguardando</span></span>
+            <span><span className="dsh-kpi__num">{today.pending}</span><span className="dsh-kpi__label block">Aguardando</span>
+              <KpiDelta now={today.pending} prev={yday?.byStatus['pending'] ?? 0} has={yday !== null} />
+            </span>
           </div>
           <div className="dsh-kpi">
             <span className="dsh-kpi__icon" style={{ background: 'var(--ops-soft)', color: 'var(--ops-fg)' }}><Icon n="tasks" size={19} /></span>
-            <span><span className="dsh-kpi__num">{today.completed}</span><span className="dsh-kpi__label block">Concluídos</span></span>
+            <span><span className="dsh-kpi__num">{today.completed}</span><span className="dsh-kpi__label block">Concluídos</span>
+              <KpiDelta now={today.completed} prev={yday?.byStatus['completed'] ?? 0} has={yday !== null} />
+            </span>
           </div>
           <div className="dsh-kpi">
             <span className="dsh-kpi__icon" style={{ background: 'var(--danger-bg)', color: 'var(--danger-fg)' }}><Icon n="alert" size={19} /></span>
-            <span><span className="dsh-kpi__num">{today.noShow}</span><span className="dsh-kpi__label block">Faltas</span></span>
+            <span><span className="dsh-kpi__num">{today.noShow}</span><span className="dsh-kpi__label block">Faltas</span>
+              <KpiDelta now={today.noShow} prev={yday?.byStatus['no_show'] ?? 0} has={yday !== null} />
+            </span>
           </div>
           {showMoney && bookingRevenue ? (
             <div className="dsh-kpi">
@@ -464,17 +498,17 @@ export default function DashboardPage() {
                 )}
               </div>
               <div>
-                <p className="text-[11px] font-bold uppercase tracking-wider text-[var(--text-faint)] mb-2">Status dos atendimentos · hoje</p>
-                {today && today.total > 0 ? (
+                <p className="text-[11px] font-bold uppercase tracking-wider text-[var(--text-faint)] mb-2">Status dos atendimentos · período</p>
+                {periodMix && Object.values(periodMix).some((v) => v > 0) ? (
                   <DonutChart parts={[
-                    { label: 'Confirmados', value: today.confirmed, color: 'var(--success)' },
-                    { label: 'Aguardando', value: today.pending, color: 'var(--warning)' },
-                    { label: 'Concluídos', value: today.completed, color: 'var(--ops)' },
-                    { label: 'Faltas', value: today.noShow, color: 'var(--danger)' },
-                    { label: 'Cancelados', value: today.cancelled, color: 'var(--text-faint)' },
+                    { label: 'Confirmados', value: periodMix.confirmed || 0, color: 'var(--success)' },
+                    { label: 'Concluídos', value: periodMix.completed || 0, color: 'var(--ops)' },
+                    { label: 'Aguardando', value: periodMix.pending || 0, color: 'var(--warning)' },
+                    { label: 'Faltas', value: periodMix.no_show || 0, color: 'var(--danger)' },
+                    { label: 'Cancelados', value: periodMix.cancelled || 0, color: 'var(--text-faint)' },
                   ].filter((p) => p.value > 0)} />
                 ) : (
-                  <p className="text-[12px] text-[var(--text-muted)] bg-[var(--surface-2)] rounded-lg px-3 py-6 text-center">Nenhum atendimento hoje ainda.</p>
+                  <p className="text-[12px] text-[var(--text-muted)] bg-[var(--surface-2)] rounded-lg px-3 py-6 text-center">Nenhum atendimento no período ainda.</p>
                 )}
               </div>
             </div>
@@ -497,7 +531,8 @@ export default function DashboardPage() {
                 <div className="space-y-1.5">
                   {upcoming.slice(0, 5).map((b) => (
                     <ListRow key={b.id} allowed={links.agenda === true} href={`/agenda${q}&data=${b.date}`}
-                      className="flex items-center gap-2.5 rounded-lg border border-[var(--border-soft)] px-2.5 py-2 text-[12.5px]">
+                      className="flex items-center gap-2.5 rounded-lg border border-[var(--border-soft)] px-2.5 py-2 text-[12.5px]"
+                      style={{ borderLeft: `3px solid ${STATUS_BAR[b.status] || 'var(--border-strong)'}` }}>
                       <span className="text-[11px] font-bold text-[var(--text-muted)] w-16 shrink-0 tabular-nums">{humanDay(b.date)} {b.time}</span>
                       <span className="flex-1 min-w-0 truncate font-semibold text-[var(--text)]">{b.customerName} <span className="font-normal text-[var(--text-muted)]">· {b.service}</span></span>
                       <StatusBadge tone={b.status === 'confirmed' ? 'emerald' : b.status === 'pending' ? 'orange' : 'blue'}>{bookDef(b.status).panel}</StatusBadge>
@@ -543,24 +578,42 @@ export default function DashboardPage() {
             ) : (
               <p className="text-[12.5px] text-[var(--text-muted)] rounded-lg border border-dashed border-[var(--border)] px-2.5 py-2">Canal de conversas não conectado.</p>
             )}
-            {taskSum ? (
+            {whatsapp && totals.leads > 0 && (
+              <ListRow allowed={links.funil === true} href={`/funil${q}`}
+                className="flex items-center gap-2.5 rounded-lg border border-[var(--border-soft)] px-2.5 py-2 text-[12.5px]">
+                <span className="dsh-kpi__icon !w-7 !h-7" style={{ background: 'var(--warning-bg)', color: 'var(--warning-fg)' }}><Icon n="clock" size={15} /></span>
+                <span className="flex-1 font-semibold text-[var(--text)]">Leads para follow-up</span>
+                <span className="text-[13px] font-extrabold tabular-nums text-[var(--text)]">{totals.leads}</span>
+              </ListRow>
+            )}
+            {canalConnected && (
+              <div className="flex items-center gap-2.5 rounded-lg border border-[var(--success-border)] bg-[var(--success-bg)] px-2.5 py-2">
+                <span className="dsh-kpi__icon !w-7 !h-7" style={{ background: 'var(--success)', color: '#fff' }}><Icon n="chat" size={15} /></span>
+                <span className="flex-1 text-[11.5px] font-semibold text-[var(--success-fg)]">Envie mensagens para seus pacientes</span>
+                <Link href={`/conversas${q}`} className="text-[11.5px] font-bold text-white bg-[var(--success)] hover:bg-[var(--success-strong)] px-2.5 py-1.5 rounded-md">Abrir conversas</Link>
+              </div>
+            )}
+            {taskSum && taskSum.open > 0 ? (
               <>
-                <ListRow allowed={links.tarefas === true} href={`/tarefas${q}`}
-                  className="flex items-center gap-2.5 rounded-lg border border-[var(--border-soft)] px-2.5 py-2 text-[12.5px]">
-                  <span className="dsh-kpi__icon !w-7 !h-7" style={{ background: 'var(--brand-soft)', color: 'var(--brand-fg)' }}><Icon n="tasks" size={15} /></span>
-                  <span className="flex-1 font-semibold text-[var(--text)]">Tarefas abertas</span>
-                  <span className="text-[13px] font-extrabold tabular-nums text-[var(--text)]">{taskSum.open}</span>
-                </ListRow>
-                {(taskSum.overdue > 0 || taskSum.dueToday > 0) && (
-                  <p className="text-[11.5px] text-[var(--text-muted)] px-1">
-                    {taskSum.overdue > 0 && <span className="text-[var(--danger-fg)] font-semibold">{taskSum.overdue} atrasada{taskSum.overdue === 1 ? '' : 's'}</span>}
-                    {taskSum.overdue > 0 && taskSum.dueToday > 0 && ' · '}
-                    {taskSum.dueToday > 0 && <span className="font-semibold">{taskSum.dueToday} para hoje</span>}
-                  </p>
-                )}
+                {(openTasks || []).map((t) => {
+                  const lbl = dueLabel(t.dueAt);
+                  const tone = lbl === 'atrasada' ? 'var(--danger)' : lbl === 'hoje' ? 'var(--warning)' : 'var(--border-strong)';
+                  return (
+                    <ListRow key={t.id} allowed={links.tarefas === true} href={`/tarefas${q}`}
+                      className="flex items-center gap-2.5 rounded-lg border border-[var(--border-soft)] px-2.5 py-2 text-[12.5px]">
+                      <span className="w-4 h-4 rounded border-2 shrink-0" style={{ borderColor: tone }} aria-hidden="true" />
+                      <span className="flex-1 min-w-0 truncate font-semibold text-[var(--text)]">{t.title}</span>
+                      <span className="text-[10.5px] font-bold" style={{ color: lbl === 'atrasada' ? 'var(--danger-fg)' : lbl === 'hoje' ? 'var(--warning-fg)' : 'var(--text-faint)' }}>{lbl}</span>
+                    </ListRow>
+                  );
+                })}
+                <p className="text-[11px] text-[var(--text-faint)] px-1">
+                  {taskSum.open} aberta{taskSum.open === 1 ? '' : 's'}
+                  {taskSum.overdue > 0 && <> · <span className="text-[var(--danger-fg)] font-semibold">{taskSum.overdue} atrasada{taskSum.overdue === 1 ? '' : 's'}</span></>}
+                </p>
               </>
             ) : (
-              <p className="text-[12.5px] text-[var(--text-muted)] rounded-lg border border-dashed border-[var(--border)] px-2.5 py-2">Sem tarefas neste contexto.</p>
+              <p className="text-[12.5px] text-[var(--text-muted)] rounded-lg border border-dashed border-[var(--border)] px-2.5 py-2">Nenhuma tarefa pendente.</p>
             )}
             {attention.length === 0 && !whatsapp && !taskSum && (
               <p className="text-[12.5px] text-[var(--text-muted)] text-center py-4">Nada pendente por aqui.</p>
@@ -645,6 +698,38 @@ export default function DashboardPage() {
   );
 }
 
+/** Rótulo curto de prazo (hoje/atrasada/amanhã/data) — apresentação honesta. */
+function dueLabel(dueAt: string): string {
+  if (!dueAt) return 'sem prazo';
+  const d = dueAt.slice(0, 10);
+  const t = new Date().toISOString().slice(0, 10);
+  if (d < t) return 'atrasada';
+  if (d === t) return 'hoje';
+  if (d === new Date(Date.now() + 86400000).toISOString().slice(0, 10)) return 'amanhã';
+  return d.split('-').reverse().slice(0, 2).join('/');
+}
+
+/** Barra de estado das linhas de "Próximos atendimentos" (mockup). */
+const STATUS_BAR: Record<string, string> = {
+  confirmed: 'var(--success)', pending: 'var(--warning)', completed: 'var(--ops)',
+  cancelled: 'var(--danger)', no_show: 'var(--text-faint)',
+};
+
+/** Delta REAL vs. ontem — só renderiza quando existe base de comparação. */
+function KpiDelta({ now, prev, has }: { now: number; prev: number; has: boolean }) {
+  if (!has || prev <= 0) return null;
+  const pct = Math.round(((now - prev) / prev) * 100);
+  const up = pct >= 0;
+  return (
+    <span className="flex items-center gap-1.5 mt-1">
+      <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded ${up ? 'bg-[var(--success-bg)] text-[var(--success-fg)]' : 'bg-[var(--danger-bg)] text-[var(--danger-fg)]'}`}>
+        {up ? '↑' : '↓'} {Math.abs(pct)}%
+      </span>
+      <span className="text-[10px] text-[var(--text-faint)]">vs. ontem ({prev})</span>
+    </span>
+  );
+}
+
 /** Moeda compacta para o tile de KPI (sem centavos quando inteiros). */
 function moneyKpi(cents: number): string {
   const v = cents / 100;
@@ -668,13 +753,19 @@ function BarsChart({ data }: { data: Array<{ date: string; count: number }> }) {
   return (
     <svg viewBox={`0 0 ${W} ${H}`} className="w-full h-[96px]" role="img" aria-label={`Agendamentos por dia, máximo ${max} em um dia`}>
       <line x1={pad} y1={H - 14} x2={W - pad} y2={H - 14} stroke="var(--surface-3)" strokeWidth={1} />
-      {data.map((d, i) => {
-        const h = (d.count / max) * (H - 22);
+      {(() => {
+        const pts = data.map((d, i) => [pad + i * bw + bw / 2, H - 14 - (d.count / max) * (H - 26)] as const);
+        const line = pts.map(([x, y]) => `${x.toFixed(1)},${y.toFixed(1)}`).join(' ');
+        const area = `${pad},${H - 14} ${line} ${(W - pad)},${H - 14}`;
+        const last = pts[pts.length - 1];
         return (
-          <rect key={d.date} x={pad + i * bw + 1} y={H - 14 - h} width={Math.max(3, bw - 3)} height={Math.max(2, h)}
-            rx={2.5} fill={d.date === todayISO ? 'var(--brand)' : 'var(--brand-border)'} />
+          <>
+            <polygon points={area} fill="var(--brand-soft)" />
+            <polyline points={line} fill="none" stroke="var(--brand)" strokeWidth={2} strokeLinejoin="round" strokeLinecap="round" />
+            {last && <circle cx={last[0]} cy={last[1]} r={3.5} fill="var(--brand)" stroke="var(--surface)" strokeWidth={1.5} />}
+          </>
         );
-      })}
+      })()}
       <text x={pad} y={H - 2} fontSize={9} fill="var(--text-faint)">{data[0]?.date.slice(8, 10)}/{data[0]?.date.slice(5, 7)}</text>
       <text x={W - pad} y={H - 2} fontSize={9} textAnchor="end" fill="var(--text-faint)">{data[data.length - 1]?.date.slice(8, 10)}/{data[data.length - 1]?.date.slice(5, 7)}</text>
     </svg>
@@ -706,7 +797,7 @@ function DonutChart({ parts }: { parts: Array<{ label: string; value: number; co
           <li key={p.label} className="flex items-center gap-2 text-[11.5px] font-semibold text-[var(--text-soft)]">
             <span className="w-2 h-2 rounded-full shrink-0" style={{ background: p.color }} aria-hidden="true" />
             <span className="flex-1 truncate">{p.label}</span>
-            <span className="tabular-nums text-[var(--text)]">{p.value}</span>
+            <span className="tabular-nums text-[var(--text)]">{p.value} ({Math.round((p.value / total) * 100)}%)</span>
           </li>
         ))}
       </ul>
