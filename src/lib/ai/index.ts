@@ -17,3 +17,7 @@ export {
 export type { ProposalView, GenerateResult, PublishResult } from './proposals';
 export { observeBusiness, explainRun } from './observe';
 export type { BusinessObservation, ObservedFailure, ObservedSuggestion } from './observe';
+export { simulatePlan } from './simulate';
+export type { SimulationResult, SimulatedStep } from './simulate';
+export { refinePlan } from './refine';
+export type { RefineResult } from './refine';
