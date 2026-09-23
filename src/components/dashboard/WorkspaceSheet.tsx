@@ -18,7 +18,9 @@
 //   • `prefers-reduced-motion` zera a animação (ver CSS).
 //
 // Cabeçalho: título · ação opcional "abrir página completa" · minimizar
-// (quando `minimizable`) · X de fechar. Minimizar NÃO desmonta o conteúdo: o
+// (quando `minimizable`). O fechar é a LINGUINHA externa à esquerda (aba
+// coral fora do sheet), herdada por qualquer conteúdo. Minimizar NÃO
+// desmonta o conteúdo: o
 // sheet vira uma pílula ancorada no canto e o estado interno é preservado.
 import { useEffect, useId, useRef, useState } from 'react';
 import Link from 'next/link';
@@ -118,6 +120,20 @@ export function WorkspaceSheet({ open, onClose, title, subtitle, icon, fullPageH
         if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); close(); }
       }}
     >
+      {/* Linguinha de fechar — aba externa ~40px saindo do LADO ESQUERDO,
+          perto do topo, parcialmente fora do sheet. Coral/vermelho suave;
+          hover mais forte; tooltip "Fechar"; alvo acessível; ESC também fecha.
+          Sheet sobre sheet: o superior (mais à direita/último no DOM) fica
+          com a linguinha visível — a do subjacente fica coberta. */}
+      <button
+        type="button"
+        className="ws-sheet__tab"
+        aria-label={`Fechar ${title}`}
+        title="Fechar"
+        onClick={close}
+      >
+        <Icon n="x" size={16} />
+      </button>
       <div className="ws-sheet__inner">
         <header className="ws-sheet__header">
           {icon && (
@@ -145,15 +161,8 @@ export function WorkspaceSheet({ open, onClose, title, subtitle, icon, fullPageH
                 <Icon n={minimized ? 'expand' : 'minimize'} size={16} />
               </button>
             )}
-            <button
-              type="button"
-              className="ws-sheet__icon-button ws-sheet__close"
-              aria-label={`Fechar ${title}`}
-              title="Fechar (Esc)"
-              onClick={close}
-            >
-              <Icon n="x" size={17} />
-            </button>
+            {/* X do canto removido de propósito: o fechar é a linguinha
+                externa à esquerda (aba acessível, herdada por TODO sheet). */}
           </div>
         </header>
 

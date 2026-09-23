@@ -1,5 +1,6 @@
 'use client';
 import { createPortal } from 'react-dom';
+import { WorkspaceSheet } from '@/components/dashboard/WorkspaceSheet';
 // ═══════════════════════════════════════════════════════════════
 // A3.4 · BLOCO 5 — REGISTRO DO ATENDIMENTO (painel lateral)
 // ═══════════════════════════════════════════════════════════════
@@ -30,7 +31,7 @@ import { createPortal } from 'react-dom';
 //      leitura POR ID (nunca POST, que criaria outro registro).
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Icon } from '@/components/icons';
-import { Badge, Button, Drawer, Field, Input, Notice, Textarea } from '@/components/ui';
+import { Badge, Button, Field, Input, Notice, Textarea } from '@/components/ui';
 import { apiGet, apiSend } from '@/lib/api-client';
 import {
   ENCOUNTER_AUTOSAVE_LABELS, ENCOUNTER_AUTOSAVE_MS, ENCOUNTER_LABELS, ENCOUNTER_STATUS,
@@ -454,11 +455,12 @@ export function EncounterSheet({
   const printBlocks = row ? encounterFormPrintBlocks(form) : [];
 
   return (
-    <Drawer
+    <WorkspaceSheet
       open
       onClose={() => { void close(); }}
       title="Atendimento"
       subtitle={row ? `${formatDateBR(row.date)}${row.time ? ` · ${row.time}` : ''} · ${row.petName || row.customerName || 'Cliente'}${row.petName && row.customerName ? ` · Tutor: ${row.customerName}` : ''}` : 'Registro do atendimento'}
+      icon="stethoscope"
       width="max-w-[620px]"
       footer={(
         <>
@@ -781,7 +783,8 @@ export function EncounterSheet({
           </div>
         </div>, document.body
       )}
-    </Drawer>
+    
+    </WorkspaceSheet>
   );
 }
 

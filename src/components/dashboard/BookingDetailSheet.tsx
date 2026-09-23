@@ -32,6 +32,7 @@ import { waLink, cn, money } from '@/lib/utils';
 import { adminBookingMaxDate, bookingActions, bookingDuration, needsClosure, rescheduleDecision, type ClosureAction } from '@/lib/booking-ops';
 import { SLOT_STATE_MESSAGE } from '@/lib/slot-states';
 import type { Booking } from '@/lib/types';
+import { WorkspaceSheet } from '@/components/dashboard/WorkspaceSheet';
 
 interface ServiceRef { id: string; name: string; durationMin: number; price?: number; questions?: string[] }
 interface ProRef { id: string; name: string }
@@ -204,7 +205,13 @@ export function BookingDetailSheet({ booking, service, pro, businessId, timezone
     : '';
 
   return (
-    <Drawer open onClose={onClose} title="Detalhe do agendamento" width="max-w-[460px]">
+    <WorkspaceSheet
+      open
+      onClose={onClose}
+      title="Detalhe do agendamento"
+      icon="calendar"
+      width="max-w-[620px]"
+      >
         {/* ── Cabeçalho denso ── */}
         <header className="shrink-0 px-4 py-3 flex items-start justify-between gap-3 border-b border-zinc-200">
           <div className="min-w-0">
@@ -490,6 +497,6 @@ export function BookingDetailSheet({ booking, service, pro, businessId, timezone
             </div>
           )}
         </div>
-    </Drawer>
+        </WorkspaceSheet>
   );
 }
