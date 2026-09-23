@@ -599,7 +599,8 @@ export default function DashboardPage() {
             {showSetup && (
               <div className="bg-white border border-zinc-200">
                 <div className="px-4 py-2.5 border-b border-zinc-100 flex items-center justify-between">
-                  <h3 className="text-sm font-semibold">Comece por aqui</h3>
+                  <h3 className="text-sm font-semibold">Sua clínica está pronta?</h3>
+                  <p className="text-[11px] text-[var(--text-muted)]">Comece por aqui — na ordem que fizer sentido.</p>
                   <span className="flex items-center gap-2">
                     <span className="text-xs font-medium text-zinc-500">{doneCount}/{checklist.length}</span>
                     <button onClick={hideSetup} className="text-xs font-medium text-zinc-400 hover:text-zinc-700 inline-flex items-center gap-1" title="Ocultar checklist">

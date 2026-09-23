@@ -128,8 +128,13 @@ export function BlockView({ block, business, agent, catalog, extras }: {
             </div>
           ) : null}
           <div className={'px-1 pt-2'}>
-            <div className="flex justify-center py-4">
-              {business.logo ? <img src={business.logo} alt="" className="w-full max-w-[240px] max-h-[100px] object-contain" /> : <span className="text-3xl font-semibold" style={{ color: 'var(--il-primary)' }}>{initials(business.name)}</span>}
+            {/* Identidade: o avatar/logo SOBREPÕE a capa (metade em cada lado) —
+                é o rosto do negócio, não um rodapé da capa. Sem capa, respira
+                com o espaçamento normal. */}
+            <div className={`flex justify-center ${business.cover ? 'relative z-10 -mt-12 sm:-mt-14' : 'py-4'}`}>
+              {business.logo
+                ? <span className="pub-avatar"><img src={business.logo} alt={`Logo de ${business.name}`} /></span>
+                : <span className="pub-avatar pub-avatar--initials" style={{ color: 'var(--il-primary)' }}>{initials(business.name)}</span>}
             </div>
             <div className="text-center mt-2.5">
               <h1 className="text-[30px] sm:text-[40px] leading-tight font-extrabold tracking-tight">{business.name}</h1>
