@@ -7,6 +7,7 @@ import { buttonCls, Card, PageHeader, ListSkeleton, Badge } from '@/components/u
 import { AccessDenied, AreaLoadError } from '@/components/dashboard/AccessNotice';
 import { apiGet } from '@/lib/api-client';
 import { clinicTerms } from '@/lib/clinic-presets';
+import { AnamneseManager } from '@/components/dashboard/AnamneseManager';
 import type { Availability, AvailabilityException, Business, Professional, Service } from '@/lib/types';
 
 // ═══════════════════════════════════════════════════════════════
@@ -33,6 +34,7 @@ export default function EstruturaPage() {
   const [exceptions, setExceptions] = useState<AvailabilityException[]>([]);
   // Acessos: null = sem permissão para ler a equipe (403) — o bloco avisa.
   const [members, setMembers] = useState<TeamMember[] | null>(null);
+  const [showAnamnese, setShowAnamnese] = useState(false);
 
   const load = useCallback(async () => {
     if (!businessId) return;
@@ -160,7 +162,30 @@ export default function EstruturaPage() {
           primary: 'Gerenciar acessos', onPrimary: withB('/equipe'),
           secondary: 'Ver equipe', onSecondary: withB('/equipe'),
         })}
+        {/* P4 — Fichas de anamnese: ação que abre o gerenciador (Workspace Sheet). */}
+        <Card className="p-5 flex flex-col gap-4">
+          <div className="flex items-start gap-3">
+            <span className="grid place-items-center h-10 w-10 rounded-xl shrink-0 bg-[var(--brand-soft)] text-[var(--brand-fg)]">
+              <Icon n="fileText" size={20} />
+            </span>
+            <div className="min-w-0">
+              <h2 className="text-[15px] font-extrabold text-[var(--text)] leading-tight">Fichas de anamnese</h2>
+              <p className="text-[12.5px] text-[var(--text-muted)] mt-0.5 leading-snug">Questionários preenchidos no atendimento</p>
+            </div>
+          </div>
+          <div>
+            <p className="text-[15px] font-extrabold text-[var(--text)] leading-snug">Motor único de formulários</p>
+            <p className="text-[12px] text-[var(--text-muted)] mt-1">Presets por tipo de clínica, campos editáveis. Não é diagnóstico médico.</p>
+          </div>
+          <div className="flex flex-wrap gap-2 mt-auto">
+            <button type="button" onClick={() => setShowAnamnese(true)} className={buttonCls('primary', 'md')}>
+              <Icon n="fileText" size={14} /> Gerenciar fichas
+            </button>
+          </div>
+        </Card>
       </div>
+
+      <AnamneseManager open={showAnamnese} onClose={() => setShowAnamnese(false)} businessId={businessId} clinicType={biz?.clinicType} />
 
       <Card className="p-4 mt-4 flex items-center gap-3 flex-wrap">
         <Badge tone="zinc" icon="spark">Dica</Badge>

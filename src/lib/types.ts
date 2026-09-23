@@ -1916,7 +1916,10 @@ export type AuditAction =
   // A3.4 · Bloco 9 — Instagram Direct entra no inbox unificado
   | 'instagram.connected' | 'instagram.disconnected'
   | 'instagram.onboarding_failed' | 'instagram.webhook_received'
-  | 'instagram.token_refreshed' | 'instagram.token_refresh_failed';
+  | 'instagram.token_refreshed' | 'instagram.token_refresh_failed'
+  // FASE 2 · P4 — motor de anamnese (templates administrativos editáveis)
+  | 'anamnese.template_created' | 'anamnese.template_updated'
+  | 'anamnese.template_deleted' | 'anamnese.response_saved';
 
 export interface AuditEntry {
   id: ID;

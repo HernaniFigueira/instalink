@@ -671,4 +671,6 @@ export const API_GUARDS: Array<{ route: string; file: string; permission: Permis
   { route: '/api/tasks', file: 'src/app/api/tasks/route.ts', permission: ['leads', 'agenda', 'clientes', 'config'], area: 'tarefas' },
   // P5 — propostas de IA (mesma permissão do editor: a IA não publica sozinha).
   { route: '/api/ai/automations', file: 'src/app/api/ai/automations/route.ts', permission: 'config', area: 'automations' },
+  // FASE 2 · P4 — motor de anamnese (templates + respostas do paciente).
+  { route: '/api/anamnese', file: 'src/app/api/anamnese/route.ts', permission: ['atendimento', 'config'], area: 'atendimento' },
 ];
