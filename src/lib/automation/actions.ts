@@ -36,6 +36,7 @@ import { applyBookingStatusTx } from '../booking-status';
 // P6 — conector de saída (a ação não conhece provedor; a camada resolve).
 import { enqueueOutboundWebhooksTx } from '../integrations/outbound';
 import { createTaskTx } from './tasks';
+import { emitAutomationEvent } from './events';
 import { renderParams } from './conditions';
 import { addDaysISO, todayISO } from '../tz';
 import { automationActionDef } from './model';
@@ -575,6 +576,15 @@ export function executeAction(input: ActionInput): ActionResult {
           templateName: templateName || undefined,
           originRunId: input.run.id,
         },
+      });
+      // F3 — mensagem aceita na fila do canal (não confirma leitura/recebimento).
+      emitAutomationEvent(db, {
+        event: 'message.sent',
+        businessId: business.id,
+        at: input.now,
+        fromRunId: input.run.id,
+        bookingId: input.run.context && (input.run.context as any).booking?.id ? (input.run.context as any).booking.id : undefined,
+        data: { messageId: msgId, channel: 'whatsapp', phone, conversationId: conv.id, status: 'pending', originRunId: input.run.id },
       });
 
       return {

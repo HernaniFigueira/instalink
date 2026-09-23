@@ -43,12 +43,13 @@ export interface ApplyBookingStatusResult {
   status_code?: number;
 }
 
-/** Evento de automação correspondente a um novo status (P4.2). */
-export function bookingStatusEvent(to: BookingStatus): 'booking.confirmed' | 'booking.cancelled' | 'booking.completed' | null {
+/** Evento de automação correspondente a um novo status (P4.2 + F3 no_show). */
+export function bookingStatusEvent(to: BookingStatus): 'booking.confirmed' | 'booking.cancelled' | 'booking.completed' | 'booking.no_show' | null {
   switch (to) {
     case 'confirmed': return 'booking.confirmed';
     case 'cancelled': return 'booking.cancelled';
     case 'completed': return 'booking.completed';
+    case 'no_show': return 'booking.no_show';
     default: return null;
   }
 }

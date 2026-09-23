@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { randomUUID } from 'node:crypto';
 import { updateDB } from '@/lib/db';
+import { emitAutomationEvent } from '@/lib/automation/events';
 import { requireBusiness } from '@/lib/access';
 import { integrationStatus, serverCredentialsConfigured } from '@/lib/whatsapp';
 import { deliverWhatsappMessage } from '@/lib/whatsapp-cloud-api';
@@ -139,7 +140,17 @@ export async function POST(req: NextRequest) {
       const updated = await updateDB((db) => {
         const conv = db.conversations.find((c) => c.id === conversationId && c.businessId === businessId);
         if (!conv) return null;
+        const prev = conv.mode || 'automation';
         conv.mode = newMode;
+        // F3 — takeover: só em transição real automation → human.
+        if (newMode === 'human' && prev !== 'human') {
+          emitAutomationEvent(db, {
+            event: 'conversation.handoff',
+            businessId,
+            at: new Date().toISOString(),
+            data: { conversationId: conv.id, channel: conv.channel || '', phone: conv.phone || '', from: prev, to: newMode },
+          });
+        }
         return { id: conv.id, mode: conv.mode };
       });
 

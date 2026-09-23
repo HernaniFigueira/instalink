@@ -18,6 +18,7 @@ import { requireBusiness } from '@/lib/access';
 import { NO_PROFESSIONAL_SCOPE } from '@/lib/access-core';
 import { PROFESSIONAL_NOT_ELIGIBLE_ERROR, professionalServesService, serviceRequiresProfessional } from '@/lib/booking';
 import { pushAudit } from '@/lib/audit';
+import { emitAutomationEvent } from '@/lib/automation/events';
 import {
   ENCOUNTER_TEXT_FIELDS, ENCOUNTER_VERSION_REQUIRED_ERROR, cleanTags, cleanText, canFinalize,
   encounterForBooking, encounterForQueue, encounterInScope, encountersForCustomer,
@@ -252,6 +253,14 @@ export async function POST(req: NextRequest) {
         action: 'encounter.created', businessId, actor: guard.ctx.user,
         meta: { encounterId: row.id, bookingId: row.bookingId, queueId: row.queueId, professionalId: row.professionalId },
       }, now);
+      emitAutomationEvent(d, {
+        event: 'encounter.started',
+        businessId,
+        at: now,
+        bookingId: row.bookingId || undefined,
+        customerId: row.customerId || undefined,
+        data: { encounterId: row.id, professionalId: row.professionalId, serviceId: row.serviceId },
+      });
     });
     return NextResponse.json({ ok: true, encounter: view(row, await readDB()) });
   } catch (e: any) {
@@ -335,6 +344,14 @@ export async function PATCH(req: NextRequest) {
           action: 'encounter.finalized', businessId, actor: guard.ctx.user,
           meta: { encounterId: target.id, bookingId: target.bookingId, version: target.version },
         }, now);
+        emitAutomationEvent(d, {
+          event: 'encounter.completed',
+          businessId,
+          at: now,
+          bookingId: target.bookingId || undefined,
+          customerId: target.customerId || undefined,
+          data: { encounterId: target.id, professionalId: target.professionalId, serviceId: target.serviceId, version: target.version },
+        });
         return target;
       }
       if (action === 'reopen') {

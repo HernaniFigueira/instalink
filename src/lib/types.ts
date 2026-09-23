@@ -1207,7 +1207,7 @@ export interface IntegrationLog {
 // Multi-tenancy: `businessId` está em TODA entidade e é revalidado em cada
 // passo. Uma execução jamais toca linha de outra empresa.
 
-/** Eventos que LIGAM automações. São os eventos que o sistema já produz. */
+/** Eventos que LIGAM automações (Event Layer da Fase 3). */
 export type AutomationEventId =
   | 'lead.created'
   | 'lead.updated'
@@ -1217,13 +1217,28 @@ export type AutomationEventId =
   | 'customer.updated'
   | 'booking.created'
   | 'booking.confirmed'
+  | 'booking.rescheduled'
   | 'booking.cancelled'
-  | 'booking.completed';
+  | 'booking.no_show'
+  | 'booking.completed'
+  | 'encounter.started'
+  | 'encounter.completed'
+  | 'followup.due'
+  | 'patient.inactive'
+  | 'conversation.started'
+  | 'conversation.handoff'
+  | 'message.received'
+  | 'message.sent';
 
 export const AUTOMATION_EVENTS: AutomationEventId[] = [
   'lead.created', 'lead.updated', 'lead.stage_changed', 'lead.assigned',
   'customer.created', 'customer.updated',
-  'booking.created', 'booking.confirmed', 'booking.cancelled', 'booking.completed',
+  'booking.created', 'booking.confirmed', 'booking.rescheduled',
+  'booking.cancelled', 'booking.no_show', 'booking.completed',
+  'encounter.started', 'encounter.completed',
+  'followup.due', 'patient.inactive',
+  'conversation.started', 'conversation.handoff',
+  'message.received', 'message.sent',
 ];
 
 // ── Condições (P4.3) ─────────────────────────────────────────

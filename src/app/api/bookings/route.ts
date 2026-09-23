@@ -15,6 +15,7 @@ import { createBookingTx, resolveBookingIdentity } from '@/lib/booking-create';
 import { previewSeries, createSeriesTx, cancelFutureSeriesTx } from '@/lib/booking-series';
 import type { CreateBookingParams } from '@/lib/booking-create';
 import { noteLeadReschedule } from '@/lib/pipeline';
+import { emitAutomationEvent } from '@/lib/automation/events';
 import { enqueueDueReminders } from '@/lib/automations';
 import { upsertContact } from '@/lib/contacts';
 import { todayISO, nowHM, weekdayOf, addDaysISO, effectiveTimezone, isValidDateISO, isValidClockTime } from '@/lib/tz';
@@ -557,6 +558,15 @@ export async function PATCH(req: NextRequest) {
             businessId: business.id, customerId: target.customerId || '',
             name: target.customerName, phone: target.customerPhone, source: 'reagendamento', now,
           });
+          emitAutomationEvent(d, {
+            event: 'booking.rescheduled',
+            businessId: business.id,
+            at: now,
+            bookingId: newId,
+            leadId: target.leadId || undefined,
+            customerId: target.customerId || undefined,
+            data: { previousId: target.id, fromDate: target.date, fromTime: target.time, date, time, kind: 'recreate' },
+          });
           return { created: true, newId };
         }
 
@@ -579,6 +589,15 @@ export async function PATCH(req: NextRequest) {
           businessId: business.id, leadId: target.leadId,
           from: { date: fromDate, time: fromTime }, to: { date, time },
           by: 'owner', now,
+        });
+        emitAutomationEvent(d, {
+          event: 'booking.rescheduled',
+          businessId: business.id,
+          at: now,
+          bookingId: target.id,
+          leadId: target.leadId || undefined,
+          customerId: target.customerId || undefined,
+          data: { previousId: target.id, fromDate, fromTime, date, time, kind: 'move' },
         });
         return { created: false, newId: target.id };
       });

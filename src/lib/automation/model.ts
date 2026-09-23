@@ -25,7 +25,7 @@ import { addDaysISO, todayISO } from '../tz';
 // ═══════════════════════════════════════════════════════════════
 // GATILHOS (P4.2) — só eventos que o sistema JÁ produz
 // ═══════════════════════════════════════════════════════════════
-export type AutomationEntity = 'lead' | 'customer' | 'booking';
+export type AutomationEntity = 'lead' | 'customer' | 'booking' | 'encounter' | 'conversation' | 'message' | 'patient';
 
 export interface AutomationEventDef {
   id: AutomationEventId;
@@ -45,8 +45,18 @@ export const AUTOMATION_EVENT_DEFS: AutomationEventDef[] = [
   { id: 'customer.updated', label: 'Cliente atualizado', hint: 'Dados do contato mudaram.', entity: 'customer', source: 'lib/pipeline.ts · ingestLead' },
   { id: 'booking.created', label: 'Agendamento criado', hint: 'Reserva registrada (qualquer caminho).', entity: 'booking', source: 'lib/booking-create.ts · createBookingTx' },
   { id: 'booking.confirmed', label: 'Agendamento confirmado', hint: 'pending → confirmed.', entity: 'booking', source: 'lib/booking-status.ts · applyBookingStatusTx' },
+  { id: 'booking.rescheduled', label: 'Agendamento reagendado', hint: 'Data/hora mudou (mesmo booking ou cadeia).', entity: 'booking', source: 'app/api/bookings · PATCH remarcação' },
   { id: 'booking.cancelled', label: 'Agendamento cancelado', hint: 'Cancelado pelo negócio ou pelo cliente.', entity: 'booking', source: 'lib/booking-status.ts · applyBookingStatusTx' },
+  { id: 'booking.no_show', label: 'Paciente faltou', hint: 'Status virou no_show (falta).', entity: 'booking', source: 'lib/booking-status.ts · applyBookingStatusTx' },
   { id: 'booking.completed', label: 'Atendimento concluído', hint: 'Serviço finalizado.', entity: 'booking', source: 'lib/booking-status.ts · applyBookingStatusTx' },
+  { id: 'encounter.started', label: 'Atendimento iniciado', hint: 'Registro de atendimento criado.', entity: 'encounter', source: 'app/api/encounters · POST' },
+  { id: 'encounter.completed', label: 'Atendimento finalizado', hint: 'Registro finalizado (evolução assinada).', entity: 'encounter', source: 'app/api/encounters · finalize' },
+  { id: 'followup.due', label: 'Retorno vencendo', hint: 'followUpDate/followUpDays do atendimento chegou.', entity: 'booking', source: 'lib/follow-up.ts · evaluateFollowUps' },
+  { id: 'patient.inactive', label: 'Paciente inativo', hint: 'Sem atendimento há N dias configurados.', entity: 'patient', source: 'lib/follow-up.ts · inactive_patient' },
+  { id: 'conversation.started', label: 'Conversa iniciada', hint: 'Primeira mensagem de um contato.', entity: 'conversation', source: 'lib/integrations/inbound.ts' },
+  { id: 'conversation.handoff', label: 'Transferido para humano', hint: 'IA parou; recepção assume (takeover).', entity: 'conversation', source: 'app/api/conversations · switch_mode' },
+  { id: 'message.received', label: 'Mensagem recebida', hint: 'Inbound normalizado no canal.', entity: 'message', source: 'lib/integrations/inbound.ts' },
+  { id: 'message.sent', label: 'Mensagem enviada', hint: 'Outbound aceito pelo provider/simulador.', entity: 'message', source: 'whatsapp-cloud-api · deliver' },
 ];
 
 export function automationEventDef(id: unknown): AutomationEventDef | undefined {

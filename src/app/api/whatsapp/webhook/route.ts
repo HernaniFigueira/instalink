@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { randomUUID } from 'node:crypto';
 import { readDB, updateDB } from '@/lib/db';
+import { emitAutomationEvent } from '@/lib/automation/events';
 import { upsertContact, findContact } from '@/lib/contacts';
 import { phoneKey, webhookVerifyToken } from '@/lib/whatsapp';
 import { pushAudit } from '@/lib/audit';
@@ -297,6 +298,12 @@ export async function POST(req: NextRequest) {
               context: leadId ? { leadId } : {},
             };
             d.conversations.push(conv);
+            emitAutomationEvent(d, {
+              event: 'conversation.started',
+              businessId,
+              at: now,
+              data: { conversationId: conv.id, channel: 'whatsapp', phone: conv.phone || digits },
+            });
           } else {
             conv = existingConv;
             conv.channelUserId = rawDigits || digits;
@@ -322,6 +329,12 @@ export async function POST(req: NextRequest) {
             at: now,
           };
           d.messages.push(inMsg);
+          emitAutomationEvent(d, {
+            event: 'message.received',
+            businessId,
+            at: now,
+            data: { conversationId: inMsg.conversationId || '', channel: 'whatsapp', phone: digits, externalId: String(inMsg.externalId || '') },
+          });
 
           conv.unread = (conv.unread || 0) + 1;
           conv.lastMessageAt = now;
