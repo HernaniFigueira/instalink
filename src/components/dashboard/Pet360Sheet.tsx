@@ -32,6 +32,7 @@ export function Pet360Sheet({ open, onClose, businessId, pet, tutorName, tutorPh
   const [encounters, setEncounters] = useState<EncounterRow[]>([]);
   const [bookings, setBookings] = useState<Booking[]>([]);
   const [responses, setResponses] = useState<AnamneseResponse[]>([]);
+  const [historyOpen, setHistoryOpen] = useState(false);
   const [templates, setTemplates] = useState<AnamneseTemplate[]>([]);
   const [loaded, setLoaded] = useState(false);
   const [error, setError] = useState('');
@@ -195,21 +196,26 @@ export function Pet360Sheet({ open, onClose, businessId, pet, tutorName, tutorPh
               <div className="p-4 space-y-3">
                 <p className="text-xs font-semibold text-[var(--text-muted)]">Fichas respondidas de {pet.name}</p>
                 {lastResponse && (
-                  <p className="text-xs text-[var(--text-muted)]">
+                  <p className="text-xs text-[var(--text-muted)] tabular-nums">
                     Última ficha: {formatDateBR((lastResponse.createdAt || '').slice(0, 10))} · {templateName(lastResponse.templateId)}
+                    {' '}·{' '}
+                    <button type="button" className="font-bold text-[var(--brand-fg)] hover:underline"
+                      onClick={() => setHistoryOpen((v) => !v)} aria-expanded={historyOpen}>
+                      {historyOpen ? 'Ocultar histórico' : 'Ver histórico'}
+                    </button>
                   </p>
                 )}
                 {responses.length === 0
                   ? <p className="text-sm text-[var(--text-muted)]">Nenhuma anamnese respondida para este pet.</p>
                   : (
                     <ul className="space-y-2">
-                      {responses.map((r) => (
-                        <li key={r.id} className="rounded-md border border-[var(--border)] px-3 py-2">
+                      {(historyOpen ? responses : responses.slice(0, 1)).map((r) => (
+                        <li key={r.id} className="rounded-md border border-[var(--border)] px-3 py-2" data-testid={historyOpen ? 'pet360-history-item' : undefined}>
                           <p className="text-xs font-semibold text-[var(--text-muted)] tabular-nums">
                             {formatDateBR((r.createdAt || '').slice(0, 10))} · {templateName(r.templateId)}
                           </p>
                           <dl className="mt-1 space-y-0.5">
-                            {Object.entries(r.answers || {}).slice(0, 6).map(([k, v]) => (
+                            {Object.entries(r.answers || {}).slice(0, historyOpen ? 40 : 6).map(([k, v]) => (
                               <div key={k} className="text-xs"><span className="text-[var(--text-muted)]">{k}: </span>{String(v ?? '—')}</div>
                             ))}
                           </dl>
@@ -222,7 +228,8 @@ export function Pet360Sheet({ open, onClose, businessId, pet, tutorName, tutorPh
 
             {tab === 'files' && (
               <div className="p-4">
-                <p className="text-xs font-semibold text-[var(--text-muted)] mb-2">Exames, laudos e imagens de {pet.name}</p>
+                <p className="text-xs font-semibold text-[var(--text-muted)] mb-1">Exames, laudos e imagens de {pet.name}</p>
+                <p className="text-[11px] text-[var(--text-muted)] mb-2">Exames, laudos, receitas, imagens ou documentos em PDF.</p>
                 {files.length === 0
                   ? <p className="text-sm text-[var(--text-muted)]">Nenhum arquivo vinculado a este pet.</p>
                   : (

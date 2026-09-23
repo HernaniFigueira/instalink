@@ -29,7 +29,7 @@ import { todayISO, addDaysISO, weekdayOf, formatDateBR, nowHM } from '@/lib/tz';
 import { nowLinePlacement } from '@/lib/agenda-nowline';
 import { WEEKDAYS, WEEKDAYS_LONG, timeToMin, minToTime, cn } from '@/lib/utils';
 import type { Availability, AvailabilityException, Booking, BookingConfig, BookingStatus, Professional, Service } from '@/lib/types';
-import { Avatar, Badge, Drawer, ListSkeleton, Button, IconButton, AttentionStrip, Tabs } from '@/components/ui';
+import { Avatar, Badge, Drawer, AgendaSkeleton, ListSkeleton, Button, IconButton, AttentionStrip, Tabs } from '@/components/ui';
 import { Icon } from '@/components/icons';
 import {
   ATTENTION_MARK_CLS, ATTENTION_RING_CLS, BOOKING_BLOCK, BOOKING_DOT, BOOKING_STATUS,
@@ -1506,7 +1506,7 @@ export default function AgendaPage() {
         )}
       </div>
 
-      {denied ? <AccessDenied area="Agenda" /> : failed ? <AreaLoadError area="Agenda" message={failed} onRetry={load}/> : !loaded ? <ListSkeleton rows={4} /> : view === 'list' ? (
+      {denied ? <AccessDenied area="Agenda" /> : failed ? <AreaLoadError area="Agenda" message={failed} onRetry={load}/> : !loaded ? <AgendaSkeleton /> : view === 'list' ? (
         <section className="space-y-3" aria-label="Lista de atendimentos do dia">
           <p className="text-sm text-[var(--text-muted)]">{formatDateBR(focus)} · Toque para abrir o atendimento. Horários livres e intervalos estão na visualização Dia.</p>
           {columns.flatMap(c => c.blocks).length === 0 && <div className="p-8 bg-[var(--surface)] border border-[var(--border)] rounded-lg"><h2 className="font-semibold">Nenhum atendimento nesta seleção</h2><p className="text-sm text-[var(--text-muted)] mt-1">Confira os filtros ou use Novo agendamento para consultar horários disponíveis.</p></div>}

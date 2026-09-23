@@ -136,6 +136,8 @@ export function EncounterSheet({
   const [anamneseTemplates, setAnamneseTemplates] = useState<AnamneseTemplate[]>([]);
   const [anamneseOpen, setAnamneseOpen] = useState(false);
   const [anamneseCount, setAnamneseCount] = useState(0);
+  const [anamneseLast, setAnamneseLast] = useState<{ id: string; createdAt: string; answers: Record<string, unknown> } | null>(null);
+  const [anamneseHistoryOpen, setAnamneseHistoryOpen] = useState(false);
   const [fileBusy, setFileBusy] = useState(false);
   const [fileError, setFileError] = useState('');
   const [paymentSeed, setPaymentSeed] = useState<PaymentSeed | null>(null);
@@ -199,13 +201,16 @@ export function EncounterSheet({
   useEffect(() => {
     if (!row?.id) return;
     let on = true;
-    apiGet<{ templates: AnamneseTemplate[]; responses?: Array<{ id: string; encounterId: string }> }>(
+    apiGet<{ templates: AnamneseTemplate[]; responses?: Array<{ id: string; encounterId: string; createdAt?: string; answers?: Record<string, unknown> }> }>(
       `/api/anamnese?businessId=${businessId}${row.contactId ? `&responsesFor=${encodeURIComponent(row.contactId)}` : ''}`,
       { scope: 'area', area: 'Atendimento' },
     ).then((r) => {
       if (!on || !r.ok) return;
       setAnamneseTemplates((r.data?.templates || []).filter((t) => t.active));
-      setAnamneseCount((r.data?.responses || []).filter((x) => x.encounterId === row.id).length);
+      const mine = (r.data?.responses || []).filter((x) => x.encounterId === row.id);
+      setAnamneseCount(mine.length);
+      setAnamneseLast(mine[0] ? { id: mine[0].id, createdAt: mine[0].createdAt || '', answers: mine[0].answers || {} } : null);
+      setAnamneseHistoryOpen(false);
     }).catch(() => { /* segue sem fichas */ });
     return () => { on = false; };
   }, [row?.id, row?.contactId, businessId]);
@@ -654,7 +659,16 @@ export function EncounterSheet({
                 <div>
                   <p className="text-[13px] font-bold text-[var(--text)]">Anamnese</p>
                   <p className="text-[11.5px] text-[var(--text-muted)]">
-                    {anamneseCount > 0 ? `${anamneseCount} ficha(s) respondida(s) neste atendimento.` : 'Ficha clínica do paciente (questionário administrativo).'}
+                    {anamneseCount > 0
+                      ? <>
+                          Última ficha: {anamneseLast ? formatAnamneseDate(anamneseLast.createdAt) : '—'}
+                          {' · '}
+                          <button type="button" className="font-bold text-[var(--brand-fg)] hover:underline"
+                            onClick={() => setAnamneseHistoryOpen((v) => !v)} aria-expanded={anamneseHistoryOpen}>
+                            {anamneseHistoryOpen ? 'Ocultar histórico' : 'Ver histórico'}
+                          </button>
+                        </>
+                      : 'Ficha clínica do paciente — episódio atual.'}
                   </p>
                 </div>
                 {anamneseTemplates.length > 0 && row.contactId ? (
@@ -667,11 +681,20 @@ export function EncounterSheet({
                   </span>
                 )}
               </div>
+              {anamneseHistoryOpen && anamneseLast && (
+                <div data-testid="encounter-anamnese-history" className="mt-2 rounded-md border border-[var(--border)] bg-[var(--surface-2)] px-3 py-2 space-y-1 max-h-40 overflow-y-auto">
+                  <p className="text-[11px] font-bold uppercase tracking-wide text-[var(--text-muted)]">Respostas (só leitura — nada é copiado para a nova ficha)</p>
+                  {Object.entries(anamneseLast.answers || {}).map(([k, v]) => (
+                    <div key={k} className="text-[12px]"><span className="text-[var(--text-muted)]">{k}: </span>{String(v ?? '—')}</div>
+                  ))}
+                </div>
+              )}
             </div>
 
             {/* ── FASE 2 · P3 — arquivos (Storage + referência no documento) ── */}
             <div className="rounded-md border border-[var(--border)] p-3">
               <p className="text-[13px] font-bold text-[var(--text)]">Arquivos</p>
+              <p className="text-[11.5px] text-[var(--text-muted)] mt-0.5">Exames, laudos, receitas, imagens ou documentos em PDF.</p>
               {fileError && <p className="text-[12px] text-[var(--danger-fg)] mt-1">{fileError}</p>}
               {(row.files || []).length > 0 ? (
                 <ul className="mt-2 space-y-1.5">
@@ -791,4 +814,12 @@ export function EncounterList({ rows, onOpen, empty }: {
       })}
     </ul>
   );
+}
+
+/** DD/MM/AAAA de um ISO de resposta de anamnese. */
+function formatAnamneseDate(iso: string): string {
+  const d = (iso || '').slice(0, 10);
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(d)) return '—';
+  const [y, m, day] = d.split('-');
+  return `${day}/${m}/${y}`;
 }

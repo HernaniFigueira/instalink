@@ -32,7 +32,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { useWorkspace } from '@/components/dashboard/WorkspaceContext';
-import { Button, EmptyState, PageSkeleton, StatusBadge } from '@/components/ui';
+import { Button, DashboardSkeleton, EmptyState, PageSkeleton, StatusBadge } from '@/components/ui';
 import { Icon } from '@/components/icons';
 import { AccessDenied, PermissionNotice, useForbiddenNotice } from '@/components/dashboard/AccessNotice';
 import { PeriodSelector } from '@/components/dashboard/PeriodSelector';
@@ -247,7 +247,7 @@ export default function DashboardPage() {
     );
   }
 
-  if (!data) return <PageSkeleton />;
+  if (!data) return <DashboardSkeleton />;
 
   const { user, business, totals, upcoming, checklist, pct, recent, today, crm, pageStats, whatsapp, ordersPanel, productsPanel, context } = data;
   const modules = context.modules;

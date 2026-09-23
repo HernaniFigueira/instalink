@@ -3,7 +3,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useSearchParams } from 'next/navigation';
 import { centsToBR, cn } from '@/lib/utils';
 import { Icon } from '@/components/icons';
-import {
+import { FinanceSkeleton,
   Badge, Button, Card, Field, FilterPill, IconButton, Input, Kpi, ListSkeleton,
   Notice, PageHeader, Select, EmptyState, Tabs, Textarea,
 } from '@/components/ui';
@@ -171,7 +171,7 @@ export default function FinanceiroPage() {
       {header}
       {flash ? <Notice tone="success">{flash}</Notice> : null}
 
-      {!loaded ? <ListSkeleton rows={6} /> : (
+      {!loaded ? <FinanceSkeleton /> : (
         <>
           {/* ── Totais ── */}
           <div className="grid gap-3 grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">

@@ -16,7 +16,7 @@ import type { BookingConfig, BusinessPipeline } from '@/lib/types';
 import { money, waLink } from '@/lib/utils';
 import { humanDay } from '@/lib/tz';
 import { formatPhoneBR } from '@/lib/contact-profile';
-import {
+import { SearchListSkeleton,
   Avatar, Badge, Button, EmptyState, ListSkeleton, PageHeader, Tabs, type TabItem,
 } from '@/components/ui';
 import { Icon } from '@/components/icons';
@@ -309,7 +309,7 @@ export default function ClientesPage() {
             <Tabs items={tabItems} value={filter} onChange={(v) => setFilter(v)} ariaLabel="Filtrar clientes" size="sm" />
           </div>
 
-          {denied ? <AccessDenied area="Clientes" /> : !loaded ? <ListSkeleton rows={5} /> : people.length === 0 ? (
+          {denied ? <AccessDenied area="Clientes" /> : !loaded ? <SearchListSkeleton rows={5} /> : people.length === 0 ? (
             <div className="ws-panel">
               <EmptyState
                 icon={search ? 'search' : 'users'}

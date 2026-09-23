@@ -699,16 +699,25 @@ export function Skeleton({ className }: { className?: string }) {
 }
 
 export function PageSkeleton() {
+  // HOMOLOGAÇÃO · P1 — menu (esq.) + formulário + prévia (dir.) = a forma da tela.
   return (
-    <div className="space-y-4" aria-label="Carregando">
+    <div className="space-y-4" aria-label="Carregando página">
       <Skeleton className="h-6 w-48" />
-      <Skeleton className="h-4 w-72" />
-      <div className="grid sm:grid-cols-3 gap-3">
-        <Skeleton className="h-24" />
-        <Skeleton className="h-24" />
-        <Skeleton className="h-24" />
+      <Skeleton className="h-4 w-72 max-w-full" />
+      <div className="grid lg:grid-cols-[232px_minmax(0,1fr)_minmax(0,430px)] gap-4">
+        <div className="hidden lg:block space-y-2">
+          {Array.from({ length: 8 }).map((_, i) => <Skeleton key={i} className="h-9" />)}
+        </div>
+        <div className="space-y-3">
+          <div className="grid sm:grid-cols-3 gap-3">
+            <Skeleton className="h-24" />
+            <Skeleton className="h-24" />
+            <Skeleton className="h-24" />
+          </div>
+          <Skeleton className="h-64" />
+        </div>
+        <div className="hidden lg:block"><Skeleton className="h-[420px] rounded-[40px]" /></div>
       </div>
-      <Skeleton className="h-64" />
     </div>
   );
 }
@@ -719,6 +728,77 @@ export function ListSkeleton({ rows = 4 }: { rows?: number }) {
       {Array.from({ length: rows }).map((_, i) => (
         <Skeleton key={i} className="h-16" />
       ))}
+    </div>
+  );
+}
+
+// HOMOLOGAÇÃO · P1 — skeletons ESPECÍFicos (KPIs, grade, menu).
+// Sinalizam lentidão com contraste real; nunca escondem o carregamento.
+export function KpiSkeleton({ count = 6 }: { count?: number }) {
+  return (
+    <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-6 gap-3" aria-label="Carregando indicadores">
+      {Array.from({ length: count }).map((_, i) => (
+        <div key={i} className="il-skeleton h-24 rounded-lg" />
+      ))}
+    </div>
+  );
+}
+
+export function DashboardSkeleton() {
+  return (
+    <div className="space-y-4" aria-label="Carregando painel">
+      <div className="space-y-2">
+        <Skeleton className="h-6 w-56" />
+        <Skeleton className="h-4 w-80 max-w-full" />
+      </div>
+      <KpiSkeleton />
+      <div className="grid lg:grid-cols-12 gap-4">
+        <Skeleton className="h-64 lg:col-span-5" />
+        <Skeleton className="h-64 lg:col-span-7" />
+      </div>
+    </div>
+  );
+}
+
+export function AgendaSkeleton() {
+  return (
+    <div className="space-y-3" aria-label="Carregando agenda">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <Skeleton className="h-8 w-36" />
+        <div className="flex gap-2">
+          <Skeleton className="h-8 w-24" />
+          <Skeleton className="h-8 w-24" />
+          <Skeleton className="h-8 w-28" />
+        </div>
+      </div>
+      <div className="grid grid-cols-1 md:grid-cols-5 gap-px bg-[var(--border)] rounded-lg overflow-hidden">
+        {Array.from({ length: 5 }).map((_, c) => (
+          <div key={c} className="bg-[var(--surface)] p-2 space-y-2 min-h-[280px]">
+            <Skeleton className="h-5 w-20 mx-auto" />
+            <Skeleton className="h-14 w-full" />
+            <Skeleton className="h-14 w-full" />
+            <Skeleton className="h-14 w-full" />
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+export function SearchListSkeleton({ rows = 5 }: { rows?: number }) {
+  return (
+    <div className="space-y-3" aria-label="Carregando">
+      <Skeleton className="h-10 w-full max-w-md" />
+      <ListSkeleton rows={rows} />
+    </div>
+  );
+}
+
+export function FinanceSkeleton() {
+  return (
+    <div className="space-y-4" aria-label="Carregando financeiro">
+      <KpiSkeleton count={6} />
+      <Skeleton className="h-48 w-full" />
     </div>
   );
 }
