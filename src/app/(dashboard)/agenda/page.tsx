@@ -26,6 +26,7 @@ import { QueueDock } from '@/components/dashboard/QueueDock';
 import { memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties } from 'react';
 import { useSearchParams } from 'next/navigation';
 import { todayISO, addDaysISO, weekdayOf, formatDateBR, nowHM } from '@/lib/tz';
+import { nowLinePlacement } from '@/lib/agenda-nowline';
 import { WEEKDAYS, WEEKDAYS_LONG, timeToMin, minToTime, cn } from '@/lib/utils';
 import type { Availability, AvailabilityException, Booking, BookingConfig, BookingStatus, Professional, Service } from '@/lib/types';
 import { Avatar, Badge, Drawer, ListSkeleton, Button, IconButton, AttentionStrip, Tabs } from '@/components/ui';
@@ -61,7 +62,7 @@ type View = 'day' | 'week' | 'month' | 'list';
 
 const PX_PER_HOUR = 128;
 const GUTTER_W = 56;
-const COL_MIN = 200;
+const COL_MIN = 152;
 const HEADER_H = 48;
 // Passo do clique-em-área-vazia (o horário só é aceito se a grade real o
 // confirmar — caso contrário o sheet abre sem horário escolhido).
@@ -122,6 +123,10 @@ interface BlockVM {
   timeRange: string;
   statusLabel: string;
   cls: string;
+  /** Profissional (linha discreta do cartão), ponto e ícone de estado. */
+  pro: string;
+  dot: string;
+  ico: string;
   /** Horário passou e continua em aberto: marcador amarelo de atenção. */
   attention: boolean;
   /** A3.4 · Bloco 4: encaixe (fora da grade) e check-in do cliente. */
@@ -202,6 +207,7 @@ const GridColumn = memo(function GridColumn({ column, basisPct, variant, highlig
         onEmptyPress(column.key, minToTime(minutes));
       }}>
       {column.freeRanges.map((r,i)=><span key={i} aria-hidden="true" className="absolute inset-x-0 bg-white pointer-events-none" style={{top:(r.start-startMinute)/60*PX_PER_HOUR,height:(r.end-r.start)/60*PX_PER_HOUR}}/>)}
+      {column.isToday && <span aria-hidden="true" className="absolute inset-0 bg-[var(--brand-softer)] pointer-events-none" />}
       {Array.from({ length: Math.max(0, hours - 1) }, (_, idx) => idx + 1).map((i) => (
         <span key={i} className="absolute left-0 right-0 border-t border-zinc-100" style={{ top: i * PX_PER_HOUR }} />
       ))}
@@ -250,7 +256,7 @@ const GridColumn = memo(function GridColumn({ column, basisPct, variant, highlig
           onPointerCancel={onPressCancel}
           onClick={() => onBlockClick(b.id)}
           className={
-            'absolute rounded-md border border-l-4 px-2 py-1 text-left overflow-hidden touch-none select-none shadow-sm '
+            'absolute rounded-lg border border-l-4 px-2 py-1 text-left overflow-hidden touch-none select-none shadow-xs '
             + b.cls
             + (b.attention && !b.dragging ? ` ${ATTENTION_RING_CLS}` : '')
             + (b.dragging
@@ -260,6 +266,8 @@ const GridColumn = memo(function GridColumn({ column, basisPct, variant, highlig
           style={{
             top: b.top,
             height: b.height,
+            // Dia com coluna única: o cartão não vira faixa de largura total.
+            ...(basisPct === 100 ? { maxWidth: 380 } : {}),
             left: `calc(${b.leftPct}% + 2px)`,
             width: `calc(${b.widthPct}% - 4px)`,
           }}
@@ -267,14 +275,14 @@ const GridColumn = memo(function GridColumn({ column, basisPct, variant, highlig
           {/* Encaixe = acento (faixa fina no topo), não preenchimento: o fundo
               do bloco continua sendo o do STATUS. Nada de amarelo sobre verde. */}
           {b.fitIn && <span aria-hidden="true" className={FIT_IN_STRIPE_CLS} />}
-          {/* quem + quando + o quê + em que estado — detalhe fica no drawer. */}
-          <span className="block text-sm font-semibold leading-tight truncate">{b.name}</span>
-          {b.height > 54 && <span className="block text-xs font-medium leading-tight truncate">{b.service}</span>}
-          {b.height > 34 && (
-            <span className="mt-0.5 flex items-center gap-1 text-xs font-semibold leading-tight">
-              <span className="tabular-nums whitespace-nowrap">{b.timeRange}</span>
-              <span aria-hidden="true" className="opacity-60">·</span>
-              <span className="truncate">{b.statusLabel}</span>
+          {/* quem + quando + o quê + com quem — detalhe fica no drawer.
+              Densidade do mockup: nome forte, linhas de apoio discretas. */}
+          <span className="block text-[10.5px] font-semibold tabular-nums leading-tight opacity-75">{b.timeRange}</span>
+          <span className="block text-[12.5px] font-bold leading-tight truncate">{b.name}</span>
+          {b.height > 62 && <span className="block text-[11px] leading-tight truncate opacity-75">{b.service}</span>}
+          {b.height > 80 && b.pro && <span className="block text-[11px] leading-tight truncate opacity-70">{b.pro}</span>}
+          {b.height > 96 && (
+            <span className="mt-0.5 flex items-center gap-1 text-[10px] font-semibold leading-tight">
               {/* A3.4 · Bloco 4: o encaixe é visível no cartão — quem olha a
                   grade sabe que aquele horário foi uma decisão da equipe. */}
               {b.fitIn && <span className={`px-1 rounded-sm ${FIT_IN_MARK_CLS}`}>ENCAIXE</span>}
@@ -282,17 +290,32 @@ const GridColumn = memo(function GridColumn({ column, basisPct, variant, highlig
           )}
           {b.checkedInAt && (
             <span title="Cliente já fez check-in" aria-hidden="true"
-              className="absolute top-1 right-1 w-4 h-4 rounded-full text-[9px] font-black leading-4 text-center bg-[var(--success)] text-white">✓</span>
+              className="absolute bottom-1 right-1 w-4 h-4 rounded-full text-[9px] font-black leading-4 text-center bg-[var(--success)] text-white">✓</span>
           )}
-          {b.attention && (
+          {b.attention ? (
             <span title="Precisa de fechamento" aria-hidden="true"
-              className={`absolute top-1 right-1 w-4 h-4 rounded-full text-[10px] font-black leading-4 text-center ${ATTENTION_MARK_CLS}`}>
+              className={`absolute top-1 right-1 w-4.5 h-4.5 w-[18px] h-[18px] rounded-full text-[10px] font-black leading-[18px] text-center ${ATTENTION_MARK_CLS}`}>
               !
+            </span>
+          ) : (
+            <span title={b.statusLabel} aria-hidden="true"
+              className={`absolute top-1 right-1 w-[18px] h-[18px] rounded-full text-white flex items-center justify-center ${b.dot}`}>
+              <Icon n={b.ico} size={10} />
             </span>
           )}
         </button>
       ))}
-      {variant === 'week' && column.blocks.length === 0 && (
+      {variant === 'week' && column.blocks.length === 0 && column.freeRanges.length === 0 && (
+        <>
+          <span aria-hidden="true" className="ag-hatch absolute inset-0 pointer-events-none" />
+          <span className="absolute inset-x-0 top-24 text-center pointer-events-none">
+            <Icon n="calendar" size={18} className="mx-auto text-zinc-300" />
+            <span className="block text-[11px] font-semibold text-zinc-400 mt-1">Indisponível</span>
+            <span className="block text-[10px] text-zinc-300">Não há atendimento</span>
+          </span>
+        </>
+      )}
+      {variant === 'week' && column.blocks.length === 0 && column.freeRanges.length > 0 && (
         <span className="absolute inset-x-0 top-3 text-center text-[11px] text-zinc-300 pointer-events-none">—</span>
       )}
     </div>
@@ -330,10 +353,11 @@ export default function AgendaPage() {
   const setView = (value: View) => setPresentation({view:value});
   const setFocus = (value: string) => setPresentation({data:value});
   const setStatusFilter = (value: string) => setPresentation({status:value});
-  const [fullscreen, setFullscreen] = useState(false);
   const [filterOpen, setFilterOpen] = useState(false);
   const [proSearch, setProSearch] = useState('');
   const filterWrapRef = useRef<HTMLDivElement>(null);
+  const [helpOpen, setHelpOpen] = useState(false);
+  const helpWrapRef = useRef<HTMLDivElement>(null);
   const [bookings, setBookings] = useState<Booking[]>([]);
   const [services, setServices] = useState<Service[]>([]);
   const [pros, setPros] = useState<Professional[]>([]);
@@ -505,15 +529,17 @@ export default function AgendaPage() {
       .sort((a, b) => a.name.localeCompare(b.name, 'pt-BR'));
   }, [activePros, specFilter, proSearch]);
 
-  // Fecha o popover clicando fora (ESC é tratado junto com drag/tela cheia).
+  // Fecha os popovers clicando fora (ESC é tratado junto com drag/modo foco).
   useEffect(() => {
-    if (!filterOpen) return;
+    if (!filterOpen && !helpOpen) return;
     const onDown = (e: MouseEvent) => {
-      if (filterWrapRef.current && !filterWrapRef.current.contains(e.target as Node)) setFilterOpen(false);
+      const t = e.target as Node;
+      if (filterOpen && filterWrapRef.current && !filterWrapRef.current.contains(t)) setFilterOpen(false);
+      if (helpOpen && helpWrapRef.current && !helpWrapRef.current.contains(t)) setHelpOpen(false);
     };
     document.addEventListener('mousedown', onDown);
     return () => document.removeEventListener('mousedown', onDown);
-  }, [filterOpen]);
+  }, [filterOpen, helpOpen]);
 
   const grid = useMemo(() => {
     let s = 8 * 60, e = 20 * 60;
@@ -614,10 +640,13 @@ export default function AgendaPage() {
           widthPct: l.widthPct,
           time: b.time,
           name: b.customerName,
-          service: view === 'week' && pro ? `${serviceName(b.serviceId)} · ${pro}` : serviceName(b.serviceId),
+          service: serviceName(b.serviceId),
           timeRange: `${b.time}–${endHM}`,
           statusLabel,
           cls: BOOKING_BLOCK[b.status],
+          pro: pro || '',
+          dot: BOOKING_DOT[b.status],
+          ico: b.status === 'pending' ? 'clock' : b.status === 'cancelled' || b.status === 'no_show' ? 'x' : 'check',
           attention,
           fitIn: b.bookingKind === 'fit_in',
           checkedInAt: b.checkedInAt || '',
@@ -741,7 +770,7 @@ export default function AgendaPage() {
     if (typeof document !== 'undefined') obs.observe(document.body);
     window.addEventListener('resize', fit);
     return () => { obs.disconnect(); window.removeEventListener('resize', fit); };
-  }, [loaded, view, fullscreen, pendencies.length, notice?.title, statusFilter, proFilter, specFilter, hbarReserve, showQueue]);
+  }, [loaded, view, pendencies.length, notice?.title, statusFilter, proFilter, specFilter, hbarReserve, showQueue]);
 
   const readGeometry = useCallback((): { g: GridGeometry; minX: number; minY: number } | null => {
     const scroll = scrollRef.current;
@@ -985,30 +1014,18 @@ export default function AgendaPage() {
   // ESC cancela o arraste sem salvar nada; fecha o popover de filtros;
   // sem nenhum dos dois, sai da tela cheia. (Ordem: mais interno primeiro.)
   useEffect(() => {
-    if (!dragId && !fullscreen && !filterOpen) return;
+    if (!dragId && !filterOpen && !helpOpen) return;
     const onKey = (e: KeyboardEvent) => {
       if (e.key !== 'Escape') return;
       if (dragId) endDrag();
       else if (filterOpen) setFilterOpen(false);
-      else setFullscreen(false);
+      else if (helpOpen) setHelpOpen(false);
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [dragId, fullscreen, filterOpen, endDrag]);
+  }, [dragId, filterOpen, helpOpen, endDrag]);
 
-  function toggleFullscreen() {
-    // Nunca troca de modo no meio de um arraste: cancela primeiro.
-    if (dragId) endDrag();
-    setFullscreen((f) => !f);
-  }
 
-  // Em tela cheia a página de fundo não rola — só a grade, internamente.
-  useEffect(() => {
-    if (!fullscreen) return;
-    const prev = document.body.style.overflow;
-    document.body.style.overflow = 'hidden';
-    return () => { document.body.style.overflow = prev; };
-  }, [fullscreen]);
 
   // Cancela o drag se a view mudar no meio do movimento.
   useEffect(() => { endDrag(); /* eslint-disable-next-line react-hooks/exhaustive-deps */ }, [view, focus]);
@@ -1111,26 +1128,223 @@ export default function AgendaPage() {
   const statusOptions = (['pending', 'confirmed', 'completed', 'no_show', 'cancelled'] as BookingStatus[]);
 
   return (
-    <div className={fullscreen ? 'fixed inset-0 z-40 overflow-y-auto bg-[var(--bg)] px-2 py-3 sm:px-4 ws-scroll' : undefined}>
+    <div>
       {/* Cabeçalho compacto: a grade é o conteúdo — o título não compete. */}
-      <div className="flex flex-wrap items-center justify-between gap-2 mb-2.5">
+      <div className="flex flex-wrap items-center justify-between gap-3 mb-4">
         <div className="flex items-start gap-2.5 min-w-0">
           <span className="w-9 h-9 shrink-0 rounded-lg bg-[var(--brand-soft)] text-[var(--brand-fg)] flex items-center justify-center shadow-brand">
             <Icon n="calendar" size={18} />
           </span>
           <div className="min-w-0 flex-1">
             <h1 className="text-lg font-bold tracking-tight text-[var(--text)] leading-tight">Agenda</h1>
-            {/* A3.4 (teste humano): em 320–430px este texto era um `span`
-                inline com `truncate` (que não corta inline) — ele esticava a
-                página. Agora é bloco truncável: some por corte, nunca por
-                rolagem horizontal. */}
+            {/* Bloco truncável (guarda de mobile): some por corte, nunca por
+                rolagem horizontal. Uma frase só — o resto vive na Legenda. */}
             <span className="block max-w-full text-xs text-[var(--text-muted)] truncate">
-              Abra um atendimento para ver detalhes e ações. Na grade, arraste para remarcar.
+              Clique num atendimento para detalhes e ações.
             </span>
           </div>
         </div>
+        <div className="flex flex-wrap items-center justify-end gap-1.5 ml-auto">
+          {loaded && (
+            <div className="dsh-card flex items-center gap-3 pl-2.5 pr-2 py-2">
+              <span className="dsh-kpi__icon" style={{ background: 'var(--brand-soft)', color: 'var(--brand-fg)' }}>
+                <Icon n="users" size={18} />
+              </span>
+              <span className="leading-tight mr-1">
+                <span className="block text-[12.5px] font-bold text-[var(--text)]">Fila de atendimento</span>
+                <span className="block text-[11px] text-[var(--text-muted)]">
+                  {(queueInfo.waiting + queueInfo.called + queueInfo.inService) > 0
+                    ? <><strong className="text-[var(--warning-fg)] font-semibold">{queueInfo.waiting + queueInfo.called} aguardando</strong>{' · '}<strong className="text-[var(--success-fg)] font-semibold">{queueInfo.inService} em atendimento</strong></>
+                    : 'ninguém aguardando agora'}
+                </span>
+              </span>
+              <button type="button" aria-expanded={showQueue}
+                aria-label="Fila de atendimento"
+                onClick={() => setShowQueue((v) => !v)}
+                title={showQueue ? 'Fechar fila de atendimento' : 'Abrir fila de atendimento'}
+                className="inline-flex items-center gap-1 text-[12.5px] font-bold text-[var(--brand-fg)] hover:underline px-2 py-1.5">
+                Ver fila <Icon n="chevronRight" size={13} />
+              </button>
+            </div>
+          )}
+              {/* P1.1 — UM botão de filtro (contador quando ativo). O popover
+                  agrupa Status + Especialidade + Profissional pesquisável:
+                  escala para 10/20/50 profissionais sem poluir a toolbar. */}
+              <div className="relative lg:hidden" ref={filterWrapRef}>
+                <Button variant="secondary" size="sm" onClick={() => { setFilterOpen((o) => !o); setProSearch(''); }}
+                  aria-expanded={filterOpen} aria-haspopup="dialog" title="Filtros">
+                  <Icon n="filter" size={13} />
+                  {activeFilterCount > 0 ? `Filtro · ${activeFilterCount}` : 'Filtro'}
+                  <Icon n="chevD" size={12} className={`transition-transform ${filterOpen ? 'rotate-180' : ''}`} />
+                </Button>
 
-      </div>
+                {filterOpen && (
+                  <div role="dialog" aria-label="Filtros da agenda"
+                    className="absolute right-0 top-full mt-1.5 z-30 w-[300px] max-w-[calc(100vw-1.25rem)] bg-white border border-zinc-200 rounded-lg shadow-lg text-left">
+                    <div className="px-3 pt-2.5 pb-1.5 flex items-center justify-between gap-2">
+                      <p className="text-[11px] font-bold uppercase tracking-wider text-zinc-400">Filtros</p>
+                      {activeFilterCount > 0 && (
+                        <button type="button" onClick={clearFilters}
+                          className="text-xs font-semibold text-[var(--danger)] hover:text-[var(--danger-strong)]">
+                          Limpar filtros
+                        </button>
+                      )}
+                    </div>
+
+                    <div className="px-3 pb-2.5">
+                      <p className="text-[11px] font-semibold text-zinc-500 mb-1.5">Status</p>
+                      <div className="flex flex-wrap gap-1">
+                        <FilterChip active={!statusFilter} onClick={() => setStatusFilter('')}>Todos</FilterChip>
+                        {statusOptions.map((s) => (
+                          <FilterChip key={s} active={statusFilter === s} onClick={() => setStatusFilter(statusFilter === s ? '' : s)}>
+                            {BOOKING_STATUS[s].panel}
+                          </FilterChip>
+                        ))}
+                      </div>
+                    </div>
+
+                    {specialties.length > 0 && (
+                      <div className="px-3 pb-2.5 border-t border-zinc-100 pt-2.5">
+                        <p className="text-[11px] font-semibold text-zinc-500 mb-1.5">Especialidade</p>
+                        <div className="flex flex-wrap gap-1">
+                          <FilterChip active={!specFilter} onClick={() => pickSpec('')}>Todas</FilterChip>
+                          {specialties.map((r) => (
+                            <FilterChip key={r} active={specFilter === r} onClick={() => pickSpec(specFilter === r ? '' : r)}>
+                              {r}
+                            </FilterChip>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+
+                    {activePros.length > 0 && (
+                      <div className="px-3 pb-3 border-t border-zinc-100 pt-2.5">
+                        <p className="text-[11px] font-semibold text-zinc-500 mb-1.5">Profissional</p>
+                        <div className="relative">
+                          <Icon n="search" size={13} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-zinc-400" />
+                          <input value={proSearch} onChange={(e) => setProSearch(e.target.value)}
+                            placeholder="Pesquisar profissional..." aria-label="Pesquisar profissional"
+                            className="w-full text-xs bg-zinc-50 border border-zinc-200 rounded-md pl-8 pr-2 py-1.5 focus:outline-none focus:ring-1 focus:ring-[var(--action)] focus:bg-white" />
+                        </div>
+                        <div className="mt-1.5 max-h-44 overflow-y-auto ws-scroll space-y-0.5">
+                          <button type="button" onClick={() => pickPro('')}
+                            className={cn('w-full flex items-center gap-2 px-2 py-1.5 rounded-md text-left text-xs font-medium',
+                              !proFilter ? 'bg-zinc-100' : 'hover:bg-zinc-50')}>
+                            <span className="flex-1">Todos</span>
+                            {!proFilter && <Icon n="check" size={13} className="text-emerald-600 shrink-0" />}
+                          </button>
+                          {prosInFilter.map((p) => (
+                            <button key={p.id} type="button" onClick={() => pickPro(proFilter === p.id ? '' : p.id)}
+                              className={cn('w-full flex items-center gap-2 px-2 py-1.5 rounded-md text-left text-xs',
+                                proFilter === p.id ? 'bg-zinc-100' : 'hover:bg-zinc-50')}>
+                              <span className="flex-1 min-w-0 truncate">
+                                <span className="font-semibold text-zinc-800">{p.name}</span>
+                                {p.role && <span className="text-zinc-400"> · {p.role}</span>}
+                              </span>
+                              {proFilter === p.id && <Icon n="check" size={13} className="text-emerald-600 shrink-0" />}
+                            </button>
+                          ))}
+                          {prosInFilter.length === 0 && (
+                            <p className="text-xs text-zinc-400 px-2 py-1.5">Nenhum profissional encontrado.</p>
+                          )}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+              <div ref={helpWrapRef} className="relative lg:hidden">
+                <Button type="button" variant="secondary" size="sm" aria-expanded={helpOpen} aria-haspopup="dialog"
+                  onClick={() => setHelpOpen((v) => !v)} title="Legenda e como usar a grade">
+                  <Icon n="eye" size={14} />
+                  <span className="hidden sm:inline">Legenda</span>
+                </Button>
+                {helpOpen && (
+                  <div role="dialog" aria-label="Legenda e ajuda da agenda"
+                    className="absolute right-0 top-[calc(100%+6px)] z-50 w-[min(22rem,calc(100vw-2rem))] rounded-lg border border-[var(--border)] bg-[var(--surface)] shadow-lg p-3 space-y-2.5">
+                    <div className="flex flex-wrap items-center gap-x-3 gap-y-1" aria-label="Legenda dos estados">
+                      {statusOptions.map((s) => (
+                        <span key={s} className="inline-flex items-center gap-1 text-[11px] font-medium text-zinc-500">
+                          <span className={`w-2 h-2 rounded-sm ${BOOKING_DOT[s]}`} aria-hidden="true" />
+                          {BOOKING_STATUS[s].panel}
+                        </span>
+                      ))}
+                      <span className="text-[11px] font-medium text-zinc-500 inline-flex items-center gap-1">
+                        <span className={`w-3.5 h-3.5 rounded-full text-[9px] font-black leading-[14px] text-center ${ATTENTION_MARK_CLS}`} aria-hidden="true">!</span>
+                        precisa de fechamento
+                      </span>
+                    </div>
+                    <p className="text-xs text-[var(--text-muted)]">Branco: horário livre para algum serviço · Cinza: {bookings.length>=500?'disponibilidade não calculada':'indisponível'} · Cartão: agendamento com estado. A reserva é confirmada pelo servidor.{bookings.length>=500?' Limite de leitura atingido: consulte disponibilidade no formulário.':''}</p>
+                    <p className="text-xs text-[var(--text-muted)] inline-flex items-center gap-1">
+                      <Icon n="calendarPlus" size={12} />
+                      clique num horário vago para agendar · arraste um cartão para remarcar
+                    </p>
+                  </div>
+                )}
+              </div>
+        </div>
+        </div>
+
+        {/* Filtros + legenda INLINE no desktop (hierarquia do mockup): em telas
+            menores os mesmos controles vivem nos popovers Filtro/Legenda. */}
+        <div className="hidden lg:flex flex-wrap items-center gap-x-5 gap-y-2 mb-2">
+          {activePros.length > 0 && (
+            <label className="flex items-center gap-2 text-[12px] font-semibold text-[var(--text-muted)]">
+              Profissionais:
+              <span className="flex -space-x-1.5" aria-hidden="true">
+                {activePros.slice(0, 4).map((p) => <Avatar key={p.id} name={p.name} size={22} />)}
+              </span>
+              <select value={proFilter} onChange={(e) => pickPro(e.target.value)}
+                aria-label="Filtrar por profissional"
+                className="text-[12px] font-semibold text-[var(--text)] bg-[var(--surface)] border border-[var(--border)] rounded-md px-2 py-1.5 max-w-[180px]">
+                <option value="">Todos</option>
+                {prosInFilter.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
+              </select>
+            </label>
+          )}
+          {specialties.length > 0 && (
+            <label className="flex items-center gap-2 text-[12px] font-semibold text-[var(--text-muted)]">
+              Serviços:
+              <select value={specFilter} onChange={(e) => pickSpec(e.target.value)}
+                aria-label="Filtrar por especialidade"
+                className="text-[12px] font-semibold text-[var(--text)] bg-[var(--surface)] border border-[var(--border)] rounded-md px-2 py-1.5 max-w-[180px]">
+                <option value="">Todas</option>
+                {specialties.map((r) => <option key={r} value={r}>{r}</option>)}
+              </select>
+            </label>
+          )}
+          <label className="flex items-center gap-2 text-[12px] font-semibold text-[var(--text-muted)]">
+            Status:
+            <select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value as BookingStatus | '')}
+              aria-label="Filtrar por status"
+              className="text-[12px] font-semibold text-[var(--text)] bg-[var(--surface)] border border-[var(--border)] rounded-md px-2 py-1.5 max-w-[160px]">
+              <option value="">Todos</option>
+              {statusOptions.map((st) => <option key={st} value={st}>{BOOKING_STATUS[st].panel}</option>)}
+            </select>
+          </label>
+          {activeFilterCount > 0 && (
+            <button type="button" onClick={clearFilters}
+              className="text-[12px] font-semibold text-[var(--danger)] hover:text-[var(--danger-strong)]">
+              Limpar filtros
+            </button>
+          )}
+        </div>
+        <div className="hidden lg:flex flex-wrap items-center gap-x-4 gap-y-1 mb-2.5" aria-label="Legenda dos estados">
+            {statusOptions.map((st) => (
+              <span key={st} className="inline-flex items-center gap-1.5 text-[11px] font-medium text-[var(--text-muted)]">
+                <span className={`w-2 h-2 rounded-full ${BOOKING_DOT[st]}`} aria-hidden="true" />
+                {BOOKING_STATUS[st].panel}
+              </span>
+            ))}
+            <span className="inline-flex items-center gap-1.5 text-[11px] font-medium text-[var(--text-muted)]">
+              <span className={`w-3 h-3 rounded-full text-[8px] font-black leading-3 text-center ${ATTENTION_MARK_CLS}`} aria-hidden="true">!</span>
+              Precisa de fechamento
+            </span>
+            <span className="inline-flex items-center gap-1.5 text-[11px] font-medium text-[var(--text-muted)]">
+              <span className="w-2 h-2 rounded-full bg-zinc-300" aria-hidden="true" />
+              Indisponível
+            </span>
+          </div>
 
       <PermissionNotice message={notice?.title} hint={notice?.hint} onDismiss={dismiss} />
 
@@ -1174,39 +1388,17 @@ export default function AgendaPage() {
           a equipe já está olhando o dia; abrir/fechar é decisão de quem opera
           (o balcão não precisa dela o tempo todo). A faixa de atenção avisa
           quando a espera passa do confortável. */}
-      {loaded && (
-        <div className="space-y-2.5 mb-2.5">
-          {queueInfo.longWait && !showQueue && (
-            <AttentionStrip
-              title={`${queueInfo.waiting + queueInfo.called} na fila — maior espera ${waitLabel(queueInfo.longestWaitMin)}`}
-              hint="o balcão está esperando mais do que o normal"
-              action={<Button size="sm" variant="warning" onClick={() => setShowQueue(true)}>Abrir fila</Button>}
-            />
-          )}
-          <button
-            type="button"
-            onClick={() => setShowQueue((v) => !v)}
-            aria-expanded={showQueue}
-            className="flex items-center gap-2 px-3 py-2 rounded-md border border-[var(--border)] bg-[var(--surface)] hover:bg-[var(--surface-hover)] text-left"
-          >
-            <Icon n={showQueue ? 'chevD' : 'chevR'} size={14} className="text-[var(--text-faint)]" />
-            <Icon n="clock" size={14} className="text-[var(--text-muted)]" />
-            <span className="text-sm font-semibold text-[var(--text)]">Fila de atendimento</span>
-            {(queueInfo.waiting + queueInfo.called + queueInfo.inService) === 0 ? (
-              <span className="text-xs text-[var(--text-muted)]">ninguém esperando</span>
-            ) : (
-              <span className="flex flex-wrap items-center gap-1.5">
-                {queueInfo.waiting > 0 && <Badge tone="amber">{queueInfo.waiting} aguardando</Badge>}
-                {queueInfo.called > 0 && <Badge tone="blue">{queueInfo.called} chamado{queueInfo.called > 1 ? 's' : ''}</Badge>}
-                {queueInfo.inService > 0 && <Badge tone="green">{queueInfo.inService} em atendimento</Badge>}
-              </span>
-            )}
-            <span className="ml-auto text-xs text-[var(--text-muted)]">{showQueue ? 'fechar' : 'abrir'}</span>
-          </button>
+      {/* Fila: só o alerta REAL de espera ocupa o fluxo; o toggle vive na toolbar. */}
+      {loaded && queueInfo.longWait && !showQueue && (
+        <div className="mb-2.5">
+          <AttentionStrip
+            title={`${queueInfo.waiting + queueInfo.called} na fila — maior espera ${waitLabel(queueInfo.longestWaitMin)}`}
+            hint="o balcão está esperando mais do que o normal"
+            action={<Button size="sm" variant="warning" onClick={() => setShowQueue(true)}>Abrir fila</Button>}
+          />
         </div>
       )}
 
-      <p className="text-sm text-[var(--text-muted)] mb-2">Branco: horário livre para algum serviço · Cinza: {bookings.length>=500?'disponibilidade não calculada':'indisponível'} · Cartão: agendamento com estado. A reserva é confirmada pelo servidor.{bookings.length>=500?' Limite de leitura atingido: consulte disponibilidade no formulário.':''}</p>
       {/* A3.4 final UX — WORKSPACE da agenda: [Agenda (flex-1) | Fila (rail)].
           A fila NÃO entra mais no fluxo vertical (não empurra a grade para
           baixo): ela é coluna ao lado no desktop largo e overlay no resto. */}
@@ -1215,7 +1407,7 @@ export default function AgendaPage() {
       {/* Toolbar operacional: navegação · Dia/Semana/Mês · filtros · tela cheia.
           relative z-40: o popover de filtros abre sobre a grade e precisa
           ficar acima dos cabeçalhos sticky (z-20/30) das colunas. */}
-      <div className="relative z-40 ws-panel mb-2.5">
+      <div className="relative z-40 ws-panel mt-3 mb-4">
         <div className="flex flex-wrap items-center gap-x-3 gap-y-2.5 px-3 py-2.5"><Button onClick={() => setCreating({ date: focus, time: '', professionalId: '' })} variant="primary"><Icon n="calendarPlus" size={15} /> Novo agendamento</Button>
           {/* Navegação no tempo (A3.4): [◀] [Hoje] [▶] + título da data ao lado.
               O "Hoje" fica SEMPRE no mesmo lugar, entre as setas — antes ele
@@ -1259,118 +1451,6 @@ export default function AgendaPage() {
             ariaLabel="Visualização da agenda"
             size="sm"
           />
-          <div className="flex items-center gap-1.5 ml-auto">
-            {/* P1.1 — UM botão de filtro (contador quando ativo). O popover
-                agrupa Status + Especialidade + Profissional pesquisável:
-                escala para 10/20/50 profissionais sem poluir a toolbar. */}
-            <div className="relative" ref={filterWrapRef}>
-              <Button variant="secondary" size="sm" onClick={() => { setFilterOpen((o) => !o); setProSearch(''); }}
-                aria-expanded={filterOpen} aria-haspopup="dialog" title="Filtros">
-                <Icon n="filter" size={13} />
-                {activeFilterCount > 0 ? `Filtro · ${activeFilterCount}` : 'Filtro'}
-                <Icon n="chevD" size={12} className={`transition-transform ${filterOpen ? 'rotate-180' : ''}`} />
-              </Button>
-
-              {filterOpen && (
-                <div role="dialog" aria-label="Filtros da agenda"
-                  className="absolute right-0 top-full mt-1.5 z-30 w-[300px] max-w-[calc(100vw-1.25rem)] bg-white border border-zinc-200 rounded-lg shadow-lg text-left">
-                  <div className="px-3 pt-2.5 pb-1.5 flex items-center justify-between gap-2">
-                    <p className="text-[11px] font-bold uppercase tracking-wider text-zinc-400">Filtros</p>
-                    {activeFilterCount > 0 && (
-                      <button type="button" onClick={clearFilters}
-                        className="text-xs font-semibold text-[var(--danger)] hover:text-[var(--danger-strong)]">
-                        Limpar filtros
-                      </button>
-                    )}
-                  </div>
-
-                  <div className="px-3 pb-2.5">
-                    <p className="text-[11px] font-semibold text-zinc-500 mb-1.5">Status</p>
-                    <div className="flex flex-wrap gap-1">
-                      <FilterChip active={!statusFilter} onClick={() => setStatusFilter('')}>Todos</FilterChip>
-                      {statusOptions.map((s) => (
-                        <FilterChip key={s} active={statusFilter === s} onClick={() => setStatusFilter(statusFilter === s ? '' : s)}>
-                          {BOOKING_STATUS[s].panel}
-                        </FilterChip>
-                      ))}
-                    </div>
-                  </div>
-
-                  {specialties.length > 0 && (
-                    <div className="px-3 pb-2.5 border-t border-zinc-100 pt-2.5">
-                      <p className="text-[11px] font-semibold text-zinc-500 mb-1.5">Especialidade</p>
-                      <div className="flex flex-wrap gap-1">
-                        <FilterChip active={!specFilter} onClick={() => pickSpec('')}>Todas</FilterChip>
-                        {specialties.map((r) => (
-                          <FilterChip key={r} active={specFilter === r} onClick={() => pickSpec(specFilter === r ? '' : r)}>
-                            {r}
-                          </FilterChip>
-                        ))}
-                      </div>
-                    </div>
-                  )}
-
-                  {activePros.length > 0 && (
-                    <div className="px-3 pb-3 border-t border-zinc-100 pt-2.5">
-                      <p className="text-[11px] font-semibold text-zinc-500 mb-1.5">Profissional</p>
-                      <div className="relative">
-                        <Icon n="search" size={13} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-zinc-400" />
-                        <input value={proSearch} onChange={(e) => setProSearch(e.target.value)}
-                          placeholder="Pesquisar profissional..." aria-label="Pesquisar profissional"
-                          className="w-full text-xs bg-zinc-50 border border-zinc-200 rounded-md pl-8 pr-2 py-1.5 focus:outline-none focus:ring-1 focus:ring-[var(--action)] focus:bg-white" />
-                      </div>
-                      <div className="mt-1.5 max-h-44 overflow-y-auto ws-scroll space-y-0.5">
-                        <button type="button" onClick={() => pickPro('')}
-                          className={cn('w-full flex items-center gap-2 px-2 py-1.5 rounded-md text-left text-xs font-medium',
-                            !proFilter ? 'bg-zinc-100' : 'hover:bg-zinc-50')}>
-                          <span className="flex-1">Todos</span>
-                          {!proFilter && <Icon n="check" size={13} className="text-emerald-600 shrink-0" />}
-                        </button>
-                        {prosInFilter.map((p) => (
-                          <button key={p.id} type="button" onClick={() => pickPro(proFilter === p.id ? '' : p.id)}
-                            className={cn('w-full flex items-center gap-2 px-2 py-1.5 rounded-md text-left text-xs',
-                              proFilter === p.id ? 'bg-zinc-100' : 'hover:bg-zinc-50')}>
-                            <span className="flex-1 min-w-0 truncate">
-                              <span className="font-semibold text-zinc-800">{p.name}</span>
-                              {p.role && <span className="text-zinc-400"> · {p.role}</span>}
-                            </span>
-                            {proFilter === p.id && <Icon n="check" size={13} className="text-emerald-600 shrink-0" />}
-                          </button>
-                        ))}
-                        {prosInFilter.length === 0 && (
-                          <p className="text-xs text-zinc-400 px-2 py-1.5">Nenhum profissional encontrado.</p>
-                        )}
-                      </div>
-                    </div>
-                  )}
-                </div>
-              )}
-            </div>
-            <Button type="button" variant="secondary" size="sm" aria-pressed={fullscreen} onClick={toggleFullscreen}
-              title={fullscreen ? 'Sair da tela cheia (ESC)' : 'Tela cheia'}>
-              <Icon n={fullscreen ? 'shrink' : 'expand'} size={14} />
-              <span className="hidden sm:inline">{fullscreen ? 'Sair' : 'Tela cheia'}</span>
-            </Button>
-          </div>
-        </div>
-        {/* Legenda: cor = estado (mesma fonte da grade) + marcador de atenção. */}
-        <div className="flex flex-wrap items-center gap-x-3 gap-y-1 px-3 pb-2" aria-label="Legenda dos estados">
-          {statusOptions.map((s) => (
-            <span key={s} className="inline-flex items-center gap-1 text-[11px] font-medium text-zinc-500">
-              <span className={`w-2 h-2 rounded-sm ${BOOKING_DOT[s]}`} aria-hidden="true" />
-              {BOOKING_STATUS[s].panel}
-            </span>
-          ))}
-          <span className="text-[11px] font-medium text-zinc-500 inline-flex items-center gap-1">
-            <span className={`w-3.5 h-3.5 rounded-full text-[9px] font-black leading-[14px] text-center ${ATTENTION_MARK_CLS}`} aria-hidden="true">!</span>
-            precisa de fechamento
-          </span>
-          {/* A3.4: criar pelo clique era um recurso invisível — agora a grade
-              diz que dá. Arrastar continua sendo mover o atendimento. */}
-          <span className="text-[11px] font-medium text-[var(--text-muted)] inline-flex items-center gap-1 sm:ml-auto">
-            <Icon n="calendarPlus" size={12} />
-            clique num horário vago para agendar · arraste um cartão para remarcar
-          </span>
         </div>
         {isDragging && view !== 'month' && (
           <div
@@ -1492,7 +1572,7 @@ export default function AgendaPage() {
                         )
                       )}
                       <span className="min-w-0">
-                        <span className={`block text-sm font-semibold truncate ${c.isToday ? 'text-emerald-700' : 'text-zinc-800'}`}>{c.label}</span>
+                        <span className={`block text-sm font-semibold truncate ${c.isToday ? 'text-[var(--brand-fg)]' : 'text-zinc-800'}`}>{c.label}</span>
                         {c.sub && <span className="block text-[10px] text-zinc-400 truncate">{c.sub}</span>}
                       </span>
                     </div>
@@ -1501,11 +1581,23 @@ export default function AgendaPage() {
 
                 {/* Corpo da grade */}
                 <div className="flex relative" ref={colsRef}>
-                  {view === 'day' && focus === today && nowMin >= grid.start && nowMin <= grid.end && (
-                    <span className="absolute left-0 right-0 border-t border-red-500 z-10 pointer-events-none" style={{ top: ((nowMin - grid.start) / 60) * PX_PER_HOUR }}>
-                      <span className="absolute -left-1 -top-[4px] w-2 h-2 rounded-full bg-red-500" />
-                    </span>
-                  )}
+                  {/* Linha do agora: só quando o dia/hora atual está no recorte
+                      visível (dia focado em hoje, ou coluna de hoje na semana).
+                      Puramente visual — nenhuma regra de tempo muda. */}
+                  {(() => {
+                    const place = nowLinePlacement({
+                      view, focus, today, nowMin,
+                      gridStart: grid.start, gridEnd: grid.end,
+                      columns, pxPerHour: PX_PER_HOUR,
+                    });
+                    if (!place) return null;
+                    return (
+                      <span className="ag-nowline" style={place.left ? { top: place.top, left: place.left, width: place.width } : { top: place.top, left: 0, right: 0 }}>
+                        <span className="ag-nowline__dot" />
+                        <span className="ag-nowline__time">Agora · {nowHM(new Date(), bizTz)}</span>
+                      </span>
+                    );
+                  })()}
                   {columns.map((c, i) => (
                     <GridColumn
                       key={c.key}

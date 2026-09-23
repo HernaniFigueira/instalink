@@ -14,16 +14,56 @@ import { AccessDenied, useAreaLoad } from '@/components/dashboard/AccessNotice';
 import { apiGet, apiSend } from '@/lib/api-client';
 import { Icon } from '@/components/icons';
 import { ClinicPreview } from '@/components/dashboard/ClinicPreview';
+import { WorkspaceSheet } from '@/components/dashboard/WorkspaceSheet';
 import { useUnsavedChanges } from '@/components/dashboard/useUnsavedChanges';
 import { ImageUpload } from '@/components/dashboard/ImageUpload';
 import { readFaqItems, visibleFaqItems, type FaqItem } from '@/lib/faq';
+
+// ═══════════════════════════════════════════════════════════════
+// EDITOR 2.0 — seções da coluna esquerda. Só entra na lista o que o
+// produto REALMENTE suporta (bloco existente/módulo possível): nenhuma
+// seção vazia promessa. "Modelo" reúne estrutura + menu; as demais abrem o
+// formulário daquela área com a prévia fixa ao lado.
+// ═══════════════════════════════════════════════════════════════
+type PageSection = 'modelo' | 'perfil' | 'servicos' | 'equipe' | 'contato' | 'avaliacoes' | 'faq' | 'localizacao' | 'aparencia' | 'publicacao';
+const PAGE_SECTIONS: { id: PageSection; label: string; icon: string; available: (blocks: Block[]) => boolean }[] = [
+  { id: 'modelo', label: 'Modelo', icon: 'grid', available: () => true },
+  { id: 'perfil', label: 'Perfil', icon: 'store', available: (b) => b.some((x) => x.type === 'profile') },
+  { id: 'servicos', label: 'Serviços', icon: 'service', available: (b) => b.some((x) => x.type === 'services') },
+  { id: 'equipe', label: 'Equipe', icon: 'users', available: (b) => b.some((x) => x.type === 'professionals') },
+  { id: 'contato', label: 'Botões e contato', icon: 'phone', available: (b) => b.some((x) => x.type === 'buttons' || x.type === 'cta' || x.type === 'whatsapp' || x.type === 'quote') },
+  { id: 'avaliacoes', label: 'Avaliações', icon: 'star', available: (b) => b.some((x) => x.type === 'testimonials') },
+  { id: 'faq', label: 'FAQ', icon: 'chat', available: (b) => b.some((x) => x.type === 'faq') },
+  { id: 'localizacao', label: 'Localização', icon: 'pin', available: (b) => b.some((x) => x.type === 'location') },
+  { id: 'aparencia', label: 'Aparência', icon: 'spark', available: () => true },
+  { id: 'publicacao', label: 'Publicação', icon: 'upload', available: () => true },
+];
 
 export default function PaginaPage() {
   const params = useSearchParams();
   const businessId = params.get('b') || '';
   const [business, setBusiness] = useState<Business | null>(null);
   const [page, setPage] = useState<Page | null>(null);
-  const [tab, setTab] = useState<'blocks' | 'nav' | 'theme' | 'publish'>('blocks');
+  const [section, setSection] = useState<PageSection>(() => {
+    // Deep-link compatível com as abas antigas (?tab=…): editor 2.0 abre já na
+    // seção certa sem quebrar links/fluxos existentes.
+    try {
+      const q = new URLSearchParams(window.location.search).get('tab') as PageSection | null;
+      return q && PAGE_SECTIONS.some((x) => x.id === q) ? q : 'perfil';
+    } catch { return 'perfil'; }
+  });
+  const [previewSheet, setPreviewSheet] = useState(false);
+  // "Próximos passos" usa o MESMO checklist real do /api/overview (nada inventado).
+  const [setup, setSetup] = useState<{ pct: number; checklist: Array<{ done: boolean; label: string; href: string }> } | null>(null);
+  useEffect(() => {
+    if (!businessId) return;
+    let on = true;
+    apiGet<{ pct?: number; checklist?: Array<{ done: boolean; label: string; href: string }> }>(
+      `/api/overview?businessId=${businessId}&period=7`, { scope: 'area', area: 'Página' },
+    ).then((r) => { if (on && r.ok) setSetup({ pct: r.data?.pct ?? 0, checklist: r.data?.checklist || [] }); })
+      .catch(() => { if (on) setSetup(null); });
+    return () => { on = false; };
+  }, [businessId]);
   const [editing, setEditing] = useState<string | null>(null);
   const [msg, setMsg] = useState('');
   const [rvCounts, setRvCounts] = useState({ pending: 0, published: 0 });
@@ -36,7 +76,7 @@ export default function PaginaPage() {
   const [savedPage, setSavedPage] = useState('');
   const [savedAbout, setSavedAbout] = useState('');
   const [navDraft, setNavDraft] = useState<NavItemConfig[] | null>(null);
-  const [previewOpen, setPreviewOpen] = useState(false);
+
   const [catalog, setCatalog] = useState({ categories: [], products: [], options: [], optionValues: [], services: [], serviceCategories: [], professionals: [], reviews: [] });
   const snapshot = (p: Page) => JSON.stringify([p.blocks, p.theme, p.presetId]);
   const dirty = !!page && !!savedPage && (snapshot(page) !== savedPage || JSON.stringify(business?.about) !== savedAbout || navDraft !== null);
@@ -172,204 +212,341 @@ export default function PaginaPage() {
   );
   const hasProfileBlock = blocks.some((b) => b.type === 'profile');
 
+  const available = PAGE_SECTIONS
+    .map((s) => ({ ...s, ok: s.available(blocks) }))
+    .filter((s) => s.ok);
+  const active = available.find((s) => s.id === section) ? section : 'modelo';
+  const blockOf = (t: BlockType) => blocks.find((b) => b.type === t);
+  const cardFor = (b: Block | undefined, extra?: React.ReactNode) => {
+    if (!b) return null;
+    return (
+      <section className="pe-card" key={b.id}>
+        <header className="pe-card__head">
+          <div className="min-w-0">
+            <p className="pe-card__title">
+              {BLOCK_DEFS[b.type]?.label || b.type}
+              {blockIsEmpty(b, rvCounts) && <span className="pe-tag pe-tag--warn">Falta preencher</span>}
+              {!b.enabled && <span className="pe-tag">oculto na página</span>}
+            </p>
+            <p className="pe-card__hint">{BLOCK_DEFS[b.type]?.hint}</p>
+          </div>
+          <button onClick={() => updateBlocks(blocks.map((x) => (x.id === b.id ? { ...x, enabled: !x.enabled } : x)))}
+            className={cn('pe-toggle', b.enabled && 'pe-toggle--on')}>
+            {b.enabled ? 'Ativo' : 'Oculto'}
+          </button>
+        </header>
+        <div className="pe-card__body">
+          <BlockSettings
+            block={b}
+            businessId={businessId}
+            business={business}
+            onChange={(settings) => {
+              const n = blocks.map((x) => (x.id === b.id ? { ...x, settings } : x));
+              setPage({ ...page, blocks: n });
+            }}
+            onSave={async () => { await save({ blocks: page.blocks }); }}
+            onRefresh={() => setReloadTick((t) => t + 1)}
+          />
+          {extra}
+        </div>
+      </section>
+    );
+  };
+
   return (
     <>
-      <div className="flex flex-wrap items-start justify-between gap-3 mb-6">
+      {/* ══ TOPO DO EDITOR: estado real + ações globais ══ */}
+      <div className="pe-top">
         <div className="min-w-0">
-          {/* Contexto: a página pertence ao negócio — nunca uma ilha isolada. */}
-          <p className="text-[11px] font-semibold tracking-wide uppercase text-zinc-400 mb-1">
-            <Link href={`/dashboard?b=${businessId}`} className="hover:text-zinc-700">{business.name}</Link>
-            <span aria-hidden="true"> · </span> Presença
-          </p>
-          <h1 className="text-2xl font-bold tracking-tight text-[var(--text)]">Minha página</h1>
-          {/* A3.3 — estado da página com cor + rótulo (nunca só o ponto). */}
-          <p className="text-sm text-[var(--text-muted)] mt-1 flex flex-wrap items-center gap-2">
-            <span className={cn('inline-flex items-center gap-1.5 text-xs font-bold rounded-pill px-2 py-0.5 border',
-              business.published
-                ? 'bg-[var(--success-bg)] border-[var(--success-border)] text-[var(--success-fg)]'
-                : 'bg-[var(--warning-bg)] border-[var(--warning-border)] text-[var(--warning-fg)]')}>
-              <span aria-hidden="true" className={cn('w-2 h-2 rounded-full', business.published ? 'bg-[var(--success)]' : 'bg-[var(--warning)]')} />
-              {business.published ? 'Publicada' : 'Não publicada'}
-            </span>
-            <a href={`/${business.slug}`} target="_blank" rel="noreferrer" className="text-[var(--brand-fg)] font-semibold hover:underline inline-flex items-center gap-1">instalink.app/{business.slug} <Icon n="external" size={12} /></a>
-          </p>
+          {/* Sem eyebrow de branding: o breadcrumb do shell já dá o contexto
+              (Início › Página); o nome da clínica vive no seletor de unidade. */}
+          <h1 className="pe-title">Editor da página</h1>
         </div>
-        <div className="flex items-center gap-2 shrink-0">
-          <a href={`/${business.slug}`} target="_blank" rel="noreferrer"
-            className="text-xs font-bold bg-[var(--brand)] text-white px-3.5 py-2 rounded-md border border-[var(--brand-strong)]/40 shadow-brand hover:bg-[var(--brand-strong)] inline-flex items-center gap-1.5">
-            <Icon n="eye" size={13} /> Ver página <Icon n="external" size={12} />
+        <div className="pe-top__actions">
+          <span className={cn('pe-state', business.published ? 'pe-state--on' : 'pe-state--draft')}>
+            <span aria-hidden="true" className="pe-state__dot" />
+            {business.published ? 'Publicado' : 'Rascunho'}
+          </span>
+          <span className="pe-state pe-state--muted" aria-live="polite">
+            {saving ? 'Salvando…' : dirty ? 'Alterações não salvas' : 'Tudo salvo'}
+          </span>
+          <a href={`/${business.slug}`} target="_blank" rel="noreferrer" className="pe-btn">
+            <Icon n="eye" size={13} /> Ver página <Icon n="external" size={11} />
           </a>
-          <Link href={`/dashboard?b=${businessId}`}
-            className="text-xs font-semibold bg-white border border-[var(--border-strong)] text-[var(--text)] px-3.5 py-2 rounded-md shadow-xs hover:bg-[var(--surface-hover)]">
-            Início
-          </Link>
+          <button type="button" disabled={saving} onClick={() => save({ published: true })} className="pe-btn pe-btn--green">
+            <Icon n="upload" size={13} />
+            {saving ? 'Publicando…' : business.published ? 'Atualizar publicação' : 'Publicar'}
+          </button>
+          <button type="button" disabled={saving || !dirty}
+            onClick={() => save({ blocks: page.blocks, theme: page.theme, presetId: page.presetId })}
+            className="pe-btn pe-btn--primary">
+            <Icon n="check" size={13} />
+            {saving ? 'Salvando…' : 'Salvar alterações'}
+          </button>
         </div>
       </div>
+      {msg && <p role={msg.startsWith('Falha') ? 'alert' : 'status'} className={`pe-msg ${msg.startsWith('Falha') ? 'pe-msg--err' : ''}`}>{msg}</p>}
 
-      <div className="editor-savebar" role="region" aria-label="Salvamento da página">
-        <div><p className="font-semibold text-sm">{saving ? 'Salvando…' : dirty ? 'Alterações não salvas' : 'Conteúdo salvo'}</p>
-          <p className="text-xs text-[var(--text-muted)]">{business.published ? 'Ao salvar, suas alterações entram no site público imediatamente.' : 'Salvar mantém o conteúdo. Use Publicação para colocar a página no ar.'} Todo botão salvar aplica as alterações desta tela, incluindo conteúdo, aparência e menu.</p></div>
-        <div className="flex gap-2 flex-wrap"><button type="button" className="il-control border rounded-md px-3" aria-expanded={previewOpen} onClick={() => setPreviewOpen(!previewOpen)}>Prévia das alterações</button>
-          <button type="button" disabled={saving || !dirty} className="il-control px-4 rounded-md bg-[var(--brand)] text-white disabled:opacity-50" onClick={() => save({ blocks: page.blocks, theme: page.theme, presetId: page.presetId })}>Salvar alterações</button></div>
-      </div>
-      {msg && <p role={msg.startsWith('Falha') ? 'alert' : 'status'} className={`mb-4 text-sm rounded-md px-4 py-3 ${msg.startsWith('Falha') ? 'bg-[var(--danger-bg)] text-[var(--danger-fg)]' : 'bg-[var(--success-bg)] text-[var(--success-fg)]'}`}>{msg}</p>}
-      {previewOpen && <ClinicPreview business={previewBusiness} page={page} catalog={catalog} />}
-      <fieldset disabled={saving} className="min-w-0 mt-5">
+      {/* ══ WORKSPACE DO EDITOR: seções · formulário · prévia fixa ══ */}
+      <div className="pe-grid">
+        <nav className="pe-nav" aria-label="Seções do editor da página">
+          {available.map((s) => (
+            <button key={s.id} type="button" aria-current={active === s.id ? 'page' : undefined}
+              onClick={() => setSection(s.id)} className="pe-nav__item">
+              <Icon n={s.icon} size={15} /> <span>{s.label}</span>
+            </button>
+          ))}
+        </nav>
 
-      {/* A3.3 — abas do editor em pill (mesmo padrão das outras telas). */}
-      <div className="mb-5">
-        <Tabs
-          items={[
-            { id: 'blocks' as const, label: 'Conteúdo e blocos', icon: 'grid' },
-            { id: 'nav' as const, label: 'Navegação e ações', icon: 'menu' },
-            { id: 'theme' as const, label: 'Aparência', icon: 'spark' },
-            { id: 'publish' as const, label: 'Publicação', icon: 'upload' },
-          ]}
-          value={tab}
-          onChange={setTab}
-          ariaLabel="Seções do editor da página"
-        />
-      </div>
+        <div className="pe-form min-w-0">
+          <fieldset disabled={saving} className="min-w-0 space-y-4">
+            {active === 'modelo' && (
+              <>
+                <ThemePresetCards
+                  theme={page.theme}
+                  presetId={page.presetId || undefined}
+                  niche={business.niche}
+                  onApply={(t, id) => setPage({ ...page, theme: t, presetId: id })}
+                />
+                <details className="bg-white border border-zinc-200 rounded-lg p-4">
+                  <summary className="cursor-pointer text-xs font-bold uppercase tracking-wide text-[var(--text-muted)]">
+                    Itens do menu público e texto de apresentação · configuração técnica
+                  </summary>
+                  <div className="mt-3">
+                <PageNavTab
+                  business={business}
+                  businessId={businessId}
+                  blocks={blocks}
+                  services={services}
+                  products={products}
+                  professionals={professionals}
+                  reviewCount={rvCounts.published}
+                  draft={navDraft} setDraft={setNavDraft}
+                  onChangeAbout={about => setBusiness({ ...business, about })}
+                  onSaveNav={(navItems) => save({ navItems })}
+                  onAbout={(about) => save({ about } as any)}
+                />
+                  </div>
+                </details>
 
-      {tab === 'nav' && (
-        <PageNavTab
-          business={business}
-          businessId={businessId}
-          blocks={blocks}
-          services={services}
-          products={products}
-          professionals={professionals}
-          reviewCount={rvCounts.published}
-          draft={navDraft} setDraft={setNavDraft}
-          onChangeAbout={about => setBusiness({ ...business, about })}
-          onSaveNav={(navItems) => save({ navItems })}
-          onAbout={(about) => save({ about } as any)}
-        />
-      )}
-
-      {tab === 'blocks' && (
-        <div className="grid lg:grid-cols-[minmax(0,1fr)_280px] gap-4 items-start">
-          <div className="bg-white border border-zinc-200 rounded-lg overflow-hidden">
-            <div className="flex items-center justify-between px-4 py-2.5 border-b border-zinc-100 bg-zinc-50/60">
-              <p className="text-xs font-semibold tracking-wide uppercase text-zinc-500">Ordem na página · {blocks.length} blocos</p>
-              <p className="text-[11px] text-zinc-400 hidden sm:block">as setas definem a ordem de exibição</p>
-            </div>
-            <div className="divide-y divide-zinc-100">
-              {blocks.map((b, i) => {
-                const gate = blockModuleGate(business, b.type);
-                return (
-                  <div key={b.id} data-block-id={b.id}>
-                  <div className={cn('px-3 py-2.5', !b.enabled && 'bg-zinc-50/60')}>
-                    <div className="flex flex-wrap items-center gap-2.5">
-                      <span className="w-6 text-center text-[11px] font-bold text-zinc-400 tabular-nums shrink-0">{i + 1}</span>
-                      <div className="flex flex-col gap-0.5 shrink-0">
-                        <button disabled={i === 0} onClick={() => { const n = [...blocks]; [n[i - 1], n[i]] = [n[i], n[i - 1]]; updateBlocks(n); }}
-                          className="text-zinc-500 hover:text-zinc-900 hover:bg-zinc-100 rounded p-2 disabled:opacity-20 disabled:hover:bg-transparent inline-flex" aria-label={`Mover ${BLOCK_DEFS[b.type]?.label || b.type} para cima`}><Icon n="chevU" size={12} /></button>
-                        <button disabled={i === blocks.length - 1} onClick={() => { const n = [...blocks]; [n[i + 1], n[i]] = [n[i], n[i + 1]]; updateBlocks(n); }}
-                          className="text-zinc-500 hover:text-zinc-900 hover:bg-zinc-100 rounded p-2 disabled:opacity-20 disabled:hover:bg-transparent inline-flex" aria-label={`Mover ${BLOCK_DEFS[b.type]?.label || b.type} para baixo`}><Icon n="chevD" size={12} /></button>
-                      </div>
-                      <div className="flex-1 min-w-0">
-                        <p className="font-bold text-sm flex items-center gap-1.5 flex-wrap">
-                          <span className={cn(b.enabled ? 'text-zinc-900' : 'text-zinc-400')}>{BLOCK_DEFS[b.type]?.label || b.type}</span>
-                          {blockIsEmpty(b, rvCounts) && (
-                            <span className="text-[10px] font-extrabold bg-amber-100 text-amber-800 px-2 py-0.5 rounded-full">Falta preencher</span>
-                          )}
-                          {gate && (
-                            <span className="text-[10px] font-extrabold bg-zinc-100 text-zinc-500 px-2 py-0.5 rounded-full inline-flex items-center gap-1" title={`O módulo ${gate} está desligado — o bloco fica salvo, mas não aparece na página até o módulo voltar em Recursos.`}>
-                              <Icon n="lock" size={9} /> módulo {gate} desligado
-                            </span>
-                          )}
-                          {b.type === 'testimonials' && rvCounts.pending > 0 && (
-                            <span className="text-[10px] font-extrabold bg-blue-100 text-blue-800 px-2 py-0.5 rounded-full">{rvCounts.pending} para aprovar</span>
-                          )}
-                          {b.type === 'testimonials' && rvCounts.published > 0 && (
-                            <span className="text-[10px] font-extrabold bg-emerald-100 text-emerald-800 px-2 py-0.5 rounded-full">{rvCounts.published} no ar</span>
-                          )}
-                        </p>
-                        <p className="text-xs text-zinc-500 truncate">{BLOCK_DEFS[b.type]?.hint}</p>
-                      </div>
-                      <button aria-label={`Editar ${BLOCK_DEFS[b.type]?.label || b.type}`} aria-expanded={editing === b.id} onClick={() => setEditing(editing === b.id ? null : b.id)}
-                        className="text-xs font-bold bg-zinc-100 px-3 py-1.5 rounded-lg hover:bg-zinc-200">Editar</button>
-                      <button onClick={() => updateBlocks(blocks.map((x) => (x.id === b.id ? { ...x, enabled: !x.enabled } : x)))}
-                        className={cn('text-xs font-bold px-3 py-1.5 rounded-lg min-w-[64px]', b.enabled ? 'bg-emerald-100 text-emerald-800 hover:bg-emerald-200' : 'bg-zinc-100 text-zinc-500 hover:bg-zinc-200')}>
-                        {b.enabled ? 'Ativo' : 'Oculto'}
-                      </button>
-                      {b.type !== 'profile' && (
-                        <button onClick={() => { if (confirm('Remover este bloco?')) updateBlocks(blocks.filter((x) => (x.id !== b.id))); }}
-                          className="text-xs font-bold text-red-500 px-2 py-1.5 hover:bg-red-50 rounded-lg inline-flex" aria-label="Remover bloco"><Icon n="x" size={12} /></button>
-                      )}
+                <div className="space-y-4">
+                  <div className="bg-white border border-zinc-200 rounded-lg overflow-hidden">
+                    <div className="flex items-center justify-between px-4 py-2.5 border-b border-zinc-100 bg-zinc-50/60">
+                      <p className="text-xs font-semibold tracking-wide uppercase text-zinc-500">Ordem na página · {blocks.length} blocos</p>
+                      <p className="text-[11px] text-zinc-400 hidden sm:block">as setas definem a ordem de exibição</p>
                     </div>
-                    {editing === b.id && (
-                      <div className="mt-3 pt-3 border-t border-zinc-100">
-                        <BlockSettings
-                          block={b}
-                          businessId={businessId}
-                          business={business}
-                          onChange={(settings) => {
-                            const n = blocks.map((x) => (x.id === b.id ? { ...x, settings } : x));
-                            setPage({ ...page, blocks: n });
-                          }}
-                          onSave={async () => { if (await save({ blocks: page.blocks })) setEditing(null); }}
-                          onRefresh={() => setReloadTick((t) => t + 1)}
-                        />
-                      </div>
-                    )}
+                    <div className="divide-y divide-zinc-100">
+                      {blocks.map((b, i) => {
+                        const gate = blockModuleGate(business, b.type);
+                        return (
+                          <div key={b.id} data-block-id={b.id}>
+                          <div className={cn('px-3 py-2.5', !b.enabled && 'bg-zinc-50/60')}>
+                            <div className="flex flex-wrap items-center gap-2.5">
+                              <span className="w-6 text-center text-[11px] font-bold text-zinc-400 tabular-nums shrink-0">{i + 1}</span>
+                              <div className="flex flex-col gap-0.5 shrink-0">
+                                <button disabled={i === 0} onClick={() => { const n = [...blocks]; [n[i - 1], n[i]] = [n[i], n[i - 1]]; updateBlocks(n); }}
+                                  className="text-zinc-500 hover:text-zinc-900 hover:bg-zinc-100 rounded p-2 disabled:opacity-20 disabled:hover:bg-transparent inline-flex" aria-label={`Mover ${BLOCK_DEFS[b.type]?.label || b.type} para cima`}><Icon n="chevU" size={12} /></button>
+                                <button disabled={i === blocks.length - 1} onClick={() => { const n = [...blocks]; [n[i + 1], n[i]] = [n[i], n[i + 1]]; updateBlocks(n); }}
+                                  className="text-zinc-500 hover:text-zinc-900 hover:bg-zinc-100 rounded p-2 disabled:opacity-20 disabled:hover:bg-transparent inline-flex" aria-label={`Mover ${BLOCK_DEFS[b.type]?.label || b.type} para baixo`}><Icon n="chevD" size={12} /></button>
+                              </div>
+                              <div className="flex-1 min-w-0">
+                                <p className="font-bold text-sm flex items-center gap-1.5 flex-wrap">
+                                  <span className={cn(b.enabled ? 'text-zinc-900' : 'text-zinc-400')}>{BLOCK_DEFS[b.type]?.label || b.type}</span>
+                                  {blockIsEmpty(b, rvCounts) && (
+                                    <span className="text-[10px] font-extrabold bg-amber-100 text-amber-800 px-2 py-0.5 rounded-full">Falta preencher</span>
+                                  )}
+                                  {gate && (
+                                    <span className="text-[10px] font-extrabold bg-zinc-100 text-zinc-500 px-2 py-0.5 rounded-full inline-flex items-center gap-1" title={`O módulo ${gate} está desligado — o bloco fica salvo, mas não aparece na página até o módulo voltar em Recursos.`}>
+                                      <Icon n="lock" size={9} /> módulo {gate} desligado
+                                    </span>
+                                  )}
+                                  {b.type === 'testimonials' && rvCounts.pending > 0 && (
+                                    <span className="text-[10px] font-extrabold bg-blue-100 text-blue-800 px-2 py-0.5 rounded-full">{rvCounts.pending} para aprovar</span>
+                                  )}
+                                  {b.type === 'testimonials' && rvCounts.published > 0 && (
+                                    <span className="text-[10px] font-extrabold bg-emerald-100 text-emerald-800 px-2 py-0.5 rounded-full">{rvCounts.published} no ar</span>
+                                  )}
+                                </p>
+                                <p className="text-xs text-zinc-500 truncate">{BLOCK_DEFS[b.type]?.hint}</p>
+                              </div>
+                              <button aria-label={`Editar ${BLOCK_DEFS[b.type]?.label || b.type}`} aria-expanded={editing === b.id} onClick={() => setEditing(editing === b.id ? null : b.id)}
+                                className="text-xs font-bold bg-zinc-100 px-3 py-1.5 rounded-lg hover:bg-zinc-200">Editar</button>
+                              <button onClick={() => updateBlocks(blocks.map((x) => (x.id === b.id ? { ...x, enabled: !x.enabled } : x)))}
+                                className={cn('text-xs font-bold px-3 py-1.5 rounded-lg min-w-[64px]', b.enabled ? 'bg-emerald-100 text-emerald-800 hover:bg-emerald-200' : 'bg-zinc-100 text-zinc-500 hover:bg-zinc-200')}>
+                                {b.enabled ? 'Ativo' : 'Oculto'}
+                              </button>
+                              {b.type !== 'profile' && (
+                                <button onClick={() => { if (confirm('Remover este bloco?')) updateBlocks(blocks.filter((x) => (x.id !== b.id))); }}
+                                  className="text-xs font-bold text-red-500 px-2 py-1.5 hover:bg-red-50 rounded-lg inline-flex" aria-label="Remover bloco"><Icon n="x" size={12} /></button>
+                              )}
+                            </div>
+                            {editing === b.id && (
+                              <div className="mt-3 pt-3 border-t border-zinc-100">
+                                <BlockSettings
+                                  block={b}
+                                  businessId={businessId}
+                                  business={business}
+                                  onChange={(settings) => {
+                                    const n = blocks.map((x) => (x.id === b.id ? { ...x, settings } : x));
+                                    setPage({ ...page, blocks: n });
+                                  }}
+                                  onSave={async () => { if (await save({ blocks: page.blocks })) setEditing(null); }}
+                                  onRefresh={() => setReloadTick((t) => t + 1)}
+                                />
+                              </div>
+                            )}
+                          </div>
+                          {b.type === 'profile' && aboutRow}
+                          </div>
+                        );
+                      })}
+                      {/* Página sem bloco de Perfil (raro): o "Sobre" continua visível
+                          na Estrutura — preso ao final, com o aviso de seção fixa. */}
+                      {!hasProfileBlock && aboutRow}
+                    </div>
                   </div>
-                  {b.type === 'profile' && aboutRow}
+                  <div className="bg-white border border-zinc-200 rounded-lg p-4 lg:sticky lg:top-4">
+                    <p className="font-bold text-sm mb-1">Adicionar bloco</p>
+                    {/* Estrutura = o que existe e em que ordem. Cores/fonte ficam na aba Visual — nunca aqui. */}
+                    <p className="text-xs text-zinc-500 mb-3">Blocos de conversão seguem os módulos da empresa (Recursos). Agendamento e CTA já existem na página padrão.</p>
+                    <div className="flex flex-wrap gap-2">
+                      {(Object.keys(BLOCK_DEFS) as BlockType[])
+                        .filter((t) => t !== 'profile' && t !== 'booking' && t !== 'quote')
+                        .map((t) => {
+                          const gate = blockModuleGate(business, t);
+                          return (
+                            <button key={t} disabled={!!gate}
+                              title={gate ? `Ative o módulo “${gate}” em Recursos para usar este bloco` : undefined}
+                              onClick={() => updateBlocks([...blocks, { id: `b-${Date.now()}-${t}`, type: t, order: blocks.length, enabled: true, settings: {} }])}
+                              className={cn('text-xs font-bold px-3 py-2 rounded-lg transition-colors',
+                                gate ? 'bg-[var(--surface-2)] text-[var(--text-muted)] cursor-not-allowed' : 'bg-[var(--surface-2)] text-[var(--text)] hover:bg-[var(--brand-soft)] hover:text-[var(--brand-fg)]')}>
+                              + {BLOCK_DEFS[t]?.label}
+                            </button>
+                          );
+                        })}
+                    </div>
                   </div>
-                );
-              })}
-              {/* Página sem bloco de Perfil (raro): o "Sobre" continua visível
-                  na Estrutura — preso ao final, com o aviso de seção fixa. */}
-              {!hasProfileBlock && aboutRow}
-            </div>
-          </div>
-          <div className="bg-white border border-zinc-200 rounded-lg p-4 lg:sticky lg:top-4">
-            <p className="font-bold text-sm mb-1">Adicionar bloco</p>
-            {/* Estrutura = o que existe e em que ordem. Cores/fonte ficam na aba Visual — nunca aqui. */}
-            <p className="text-xs text-zinc-500 mb-3">Blocos de conversão seguem os módulos da empresa (Recursos). Agendamento e CTA já existem na página padrão.</p>
-            <div className="flex flex-wrap gap-2">
-              {(Object.keys(BLOCK_DEFS) as BlockType[])
-                .filter((t) => t !== 'profile' && t !== 'booking' && t !== 'quote')
-                .map((t) => {
-                  const gate = blockModuleGate(business, t);
-                  return (
-                    <button key={t} disabled={!!gate}
-                      title={gate ? `Ative o módulo “${gate}” em Recursos para usar este bloco` : undefined}
-                      onClick={() => updateBlocks([...blocks, { id: `b-${Date.now()}-${t}`, type: t, order: blocks.length, enabled: true, settings: {} }])}
-                      className={cn('text-xs font-bold px-3 py-2 rounded-lg transition-colors',
-                        gate ? 'bg-[var(--surface-2)] text-[var(--text-muted)] cursor-not-allowed' : 'bg-[var(--surface-2)] text-[var(--text)] hover:bg-[var(--brand-soft)] hover:text-[var(--brand-fg)]')}>
-                      + {BLOCK_DEFS[t]?.label}
+                </div>
+              </>
+            )}
+            {active === 'perfil' && (
+              <>
+                {cardFor(blockOf('profile'))}
+                <section className="pe-card">
+                  <header className="pe-card__head">
+                    <div className="min-w-0">
+                      <p className="pe-card__title">
+                        Sobre a empresa
+                        <span className="pe-tag">seção fixa abaixo do Perfil</span>
+                        {!aboutFilled && <span className="pe-tag pe-tag--warn">Falta preencher</span>}
+                      </p>
+                      <p className="pe-card__hint">História, diferenciais e imagem do negócio.</p>
+                    </div>
+                    <button onClick={() => setBusiness({ ...business, about: { ...aboutData, enabled: !aboutData.enabled } })}
+                      className={cn('pe-toggle', aboutData.enabled && 'pe-toggle--on')}>
+                      {aboutData.enabled ? 'Ativo' : 'Oculto'}
                     </button>
-                  );
-                })}
+                  </header>
+                  <div className="pe-card__body">
+                    <AboutSectionEditor
+                      about={aboutData}
+                      onChange={about => setBusiness({ ...business, about })}
+                      businessId={businessId}
+                      onSave={async (a) => { await save({ about: a }); }}
+                    />
+                  </div>
+                </section>
+              </>
+            )}
+            {active === 'servicos' && cardFor(blockOf('services'))}
+            {active === 'equipe' && cardFor(blockOf('professionals'))}
+            {active === 'contato' && (
+              <>
+                {cardFor(blockOf('buttons'))}
+                {cardFor(blockOf('cta'))}
+                {cardFor(blockOf('whatsapp'))}
+                {cardFor(blockOf('quote'))}
+              </>
+            )}
+            {active === 'avaliacoes' && (
+              <>
+                {cardFor(blockOf('testimonials'))}
+                <section className="pe-card">
+                  <header className="pe-card__head">
+                    <div className="min-w-0">
+                      <p className="pe-card__title">Moderação das avaliações</p>
+                      <p className="pe-card__hint">O que entra no ar na seção de avaliações.</p>
+                    </div>
+                  </header>
+                  <div className="pe-card__body"><ReviewsEditor businessId={businessId} /></div>
+                </section>
+              </>
+            )}
+            {active === 'faq' && cardFor(blockOf('faq'))}
+            {active === 'localizacao' && cardFor(blockOf('location'))}
+            {active === 'aparencia' && (
+              <ThemeEditor theme={page.theme} presetId={page.presetId || ''} onChange={(theme, presetId) => { setPage({ ...page, theme, presetId }); }} onSave={() => save({ theme: page.theme, presetId: page.presetId || '' })} saving={saving} />
+            )}
+            {active === 'publicacao' && (
+              <PublishTab business={business} businessId={businessId} onSlug={(slug) => save({ slug })} onPublish={(published) => save({ published })} />
+            )}
+          </fieldset>
+        </div>
+
+        {/* Prévia ÚNICA e fixa: conteúdo real em edição, sem salvar. */}
+        <aside className="pe-preview" aria-label="Prévia da página em edição">
+          <ClinicPreview business={previewBusiness} page={page} catalog={catalog} />
+        </aside>
+      </div>
+
+      {/* Barra de progresso da configuração (mockup): dados reais do overview. */}
+      {setup && setup.checklist.length > 0 && (
+        <section className="dsh-card mt-4" aria-label="Próximos passos da configuração">
+          <div className="dsh-card__head">
+            <h2 className="dsh-card__title">Próximos passos</h2>
+            <span className="text-[12px] font-semibold text-[var(--text-muted)]">
+              {setup.checklist.filter((c) => c.done).length} de {setup.checklist.length} concluídos
+            </span>
+          </div>
+          <div className="dsh-card__body">
+            <div className="h-2 rounded-full bg-[var(--surface-3)] overflow-hidden mb-3" role="progressbar"
+              aria-valuenow={setup.pct} aria-valuemin={0} aria-valuemax={100}>
+              <div className="h-full rounded-full bg-[var(--brand)] transition-all" style={{ width: `${setup.pct}%` }} />
+            </div>
+            <div className="flex flex-wrap items-center gap-2">
+              {setup.checklist.map((c) => (
+                <span key={c.label} className={`pe-next__chip ${c.done ? 'pe-next__chip--done' : ''}`}>
+                  <span className={`dsh-check__mark ${c.done ? 'dsh-check__mark--done' : 'dsh-check__mark--todo'}`} aria-hidden="true">
+                    {c.done && <Icon n="check" size={12} />}
+                  </span>
+                  {c.label}
+                </span>
+              ))}
+              {(() => {
+                const next = setup.checklist.find((c) => !c.done);
+                return next ? (
+                  <Link href={`${next.href}${next.href.includes('?') ? '&' : '?'}b=${businessId}`} className="ws-newbtn ml-auto">
+                    Continuar configuração <Icon n="chevronRight" size={14} />
+                  </Link>
+                ) : (
+                  <span className="ml-auto text-[12px] font-bold text-[var(--success-fg)] inline-flex items-center gap-1.5">
+                    <Icon n="checkCircle" size={15} /> Configuração completa
+                  </span>
+                );
+              })()}
             </div>
           </div>
-        </div>
+        </section>
       )}
 
-      {tab === 'theme' && (
-        // Audito §16: a aba Visual usava só a coluna esquerda e empilhava o
-        // preview embaixo. Agora é workspace: CONTROLES à esquerda, PREVIEW
-        // DA PÁGINA REAL à direita (sticky, alto) — no desktop a área branca
-        // deixa de ser desperdiçada. No mobile, o preview vem primeiro e o
-        // controle acompanha, adaptando naturalmente.
-        <div className="grid lg:grid-cols-[minmax(0,1fr)_minmax(360px,420px)] gap-4 items-start">
-          <div className="order-2 lg:order-1 space-y-4">
-            <ThemeEditor theme={page.theme} presetId={page.presetId || ''} onChange={(theme, presetId) => { setPage({ ...page, theme, presetId }); }} onSave={() => save({ theme: page.theme, presetId: page.presetId || '' })} saving={saving} />
-          </div>
-          <div className="order-1 lg:order-2 lg:sticky lg:top-4 space-y-2">
-            {/* Prévia da PÁGINA REAL mora na aba Visual: o lojista vê o
-                resultado de verdade enquanto ajusta tema e cores. */}
-            <ClinicPreview business={previewBusiness} page={page} catalog={catalog} />
-          </div>
-        </div>
-      )}
-
-      {tab === 'publish' && (
-        <PublishTab business={business} businessId={businessId} onSlug={(slug) => save({ slug })} onPublish={(published) => save({ published })} />
-      )}
-      </fieldset>
+      {/* Telas estreitas: a mesma prévia abre em sheet, nunca some. */}
+      <button type="button" className="pe-fab" onClick={() => setPreviewSheet(true)} aria-haspopup="dialog">
+        <Icon n="monitor" size={15} /> Prévia
+      </button>
+      <WorkspaceSheet open={previewSheet} onClose={() => setPreviewSheet(false)} title="Prévia da página"
+        subtitle="Conteúdo real em edição, sem salvar" icon="eye" width="min(560px, 94vw)">
+        <div className="p-3"><ClinicPreview business={previewBusiness} page={page} catalog={catalog} /></div>
+      </WorkspaceSheet>
     </>
   );
 }
@@ -1115,6 +1292,63 @@ function ReviewsEditor({ businessId }: { businessId: string }) {
 
 // ── Prévia da página REAL (aba Visual, §24) ──
 // Mesma origem + sessão do dono: o rascunho aparece (isOwnerPreview).
+/** Cartões VISUAIS de modelo — o ponto de partida da página, como no mockup
+    da seção "Modelo": aparência inicial em miniatura, estado aplicado e
+    recomendação por contexto do negócio (quando o nicho existe). */
+function ThemePresetCards({ theme, presetId, niche, onApply }: {
+  theme: Theme; presetId?: string; niche?: string; onApply: (t: Theme, id: string) => void;
+}) {
+  const match = matchingPreset(theme);
+  const baseName = presetId ? presetById(presetId).name : '';
+  const NICHE_REC: Record<string, string> = { alimentacao: 'pordosol', beleza: 'rose', pet: 'fresh', saude: 'fresh', loja: 'noite', servicos: 'oceano' };
+  const NICHE_LABEL: Record<string, string> = { alimentacao: 'alimentação', beleza: 'beleza', pet: 'pet', saude: 'saúde', loja: 'loja', servicos: 'serviços' };
+  const rec = niche ? NICHE_REC[niche] : undefined;
+  return (
+      <div className="bg-white border border-zinc-200 rounded-lg p-5">
+        <div className="flex flex-wrap items-center justify-between gap-2 mb-1">
+          <p className="font-bold text-sm">Modelos prontos</p>
+          {match ? (
+            <span className="text-xs font-bold bg-emerald-100 text-emerald-800 px-3 py-1 rounded-full inline-flex items-center gap-1">
+              {presetById(match).name} aplicado <Icon n="check" size={12} />
+            </span>
+          ) : (
+            <span className="text-xs font-bold bg-amber-100 text-amber-800 px-3 py-1 rounded-full">
+              Personalizado{baseName ? ` (base: ${baseName})` : ''}
+            </span>
+          )}
+        </div>
+        <p className="text-xs text-zinc-500 mb-4">Escolha uma combinação fechada de cores, fonte e formato — depois ajuste o que quiser abaixo.</p>
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+          {THEME_PRESETS.map((p) => (
+            <button key={p.id} onClick={() => onApply({ ...p.theme }, p.id)}
+              className={cn('text-left rounded-md border-2 p-1.5 transition-all hover:-translate-y-0.5', match === p.id ? 'border-zinc-900' : 'border-transparent hover:border-zinc-200')}
+              aria-label={`Aplicar modelo ${p.name}`}>
+              <span className="block rounded-lg overflow-hidden border border-black/10" style={{ background: p.theme.background }}>
+                <span className="block p-2">
+                  <span className="flex items-center gap-1.5">
+                    <span className="w-5 h-5 rounded-full shrink-0" style={{ background: `linear-gradient(135deg, ${p.theme.primary}, ${p.theme.secondary})` }} />
+                    <span className="flex-1 space-y-1">
+                      <span className="block h-1.5 rounded-full w-3/4" style={{ background: p.theme.text }} />
+                      <span className="block h-1.5 rounded-full w-1/2" style={{ background: p.theme.muted }} />
+                    </span>
+                  </span>
+                  <span className="block mt-2 h-6" style={{ background: p.theme.primary, borderRadius: Math.min(p.theme.radius, 8) }} />
+                </span>
+              </span>
+              <span className="block text-xs font-bold mt-1.5 px-0.5">{p.name}</span>
+              <span className="block text-[11px] text-zinc-500 px-0.5 leading-tight">{p.hint}</span>
+              {rec === p.id && match !== p.id && niche && (
+                <span className="block mt-1 px-0.5">
+                  <span className="text-[10px] font-extrabold bg-[var(--brand-soft)] text-[var(--brand-fg)] px-2 py-0.5 rounded-full">Recomendado para {NICHE_LABEL[niche]}</span>
+                </span>
+              )}
+            </button>
+          ))}
+        </div>
+      </div>
+  );
+}
+
 function ThemeEditor({ theme, presetId, onChange, onSave, saving }: {
   theme: Theme;
   presetId: string;
@@ -1135,44 +1369,6 @@ function ThemeEditor({ theme, presetId, onChange, onSave, saving }: {
   ];
   return (
     <div className="space-y-4">
-      <div className="bg-white border border-zinc-200 rounded-lg p-5">
-        <div className="flex flex-wrap items-center justify-between gap-2 mb-1">
-          <p className="font-bold text-sm">Modelos prontos</p>
-          {match ? (
-            <span className="text-xs font-bold bg-emerald-100 text-emerald-800 px-3 py-1 rounded-full inline-flex items-center gap-1">
-              {presetById(match).name} aplicado <Icon n="check" size={12} />
-            </span>
-          ) : (
-            <span className="text-xs font-bold bg-amber-100 text-amber-800 px-3 py-1 rounded-full">
-              Personalizado{baseName ? ` (base: ${baseName})` : ''}
-            </span>
-          )}
-        </div>
-        <p className="text-xs text-zinc-500 mb-4">Escolha uma combinação fechada de cores, fonte e formato — depois ajuste o que quiser abaixo.</p>
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-          {THEME_PRESETS.map((p) => (
-            <button key={p.id} onClick={() => onChange({ ...p.theme }, p.id)}
-              className={cn('text-left rounded-md border-2 p-1.5 transition-all hover:-translate-y-0.5', match === p.id ? 'border-zinc-900' : 'border-transparent hover:border-zinc-200')}
-              aria-label={`Aplicar modelo ${p.name}`}>
-              <span className="block rounded-lg overflow-hidden border border-black/10" style={{ background: p.theme.background }}>
-                <span className="block p-2">
-                  <span className="flex items-center gap-1.5">
-                    <span className="w-5 h-5 rounded-full shrink-0" style={{ background: `linear-gradient(135deg, ${p.theme.primary}, ${p.theme.secondary})` }} />
-                    <span className="flex-1 space-y-1">
-                      <span className="block h-1.5 rounded-full w-3/4" style={{ background: p.theme.text }} />
-                      <span className="block h-1.5 rounded-full w-1/2" style={{ background: p.theme.muted }} />
-                    </span>
-                  </span>
-                  <span className="block mt-2 h-6" style={{ background: p.theme.primary, borderRadius: Math.min(p.theme.radius, 8) }} />
-                </span>
-              </span>
-              <span className="block text-xs font-bold mt-1.5 px-0.5">{p.name}</span>
-              <span className="block text-[11px] text-zinc-500 px-0.5 leading-tight">{p.hint}</span>
-            </button>
-          ))}
-        </div>
-      </div>
-
       <div className="space-y-4">
         <details className="bg-white border border-zinc-200 rounded-lg p-5" open={!match}>
           <summary className="font-bold text-sm cursor-pointer">Ajustar cores e detalhes</summary>

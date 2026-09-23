@@ -1,6 +1,7 @@
 'use client';
 import { Fragment, useState } from 'react';
 import { createPortal } from 'react-dom';
+import { Icon } from '@/components/icons';
 import type { ComponentProps } from 'react';
 import type { Business, Page } from '@/lib/types';
 import { BlockView, AboutView } from '@/components/public/ClinicContent';
@@ -25,11 +26,19 @@ export function ClinicPreview({ business, page, catalog }: { business: Business;
   const aboutVisible = isFeatureEnabled(publicBusiness, 'about') && about.enabled && !!(about.title || about.text || about.image);
   return <section className="bg-white border border-[var(--border)] rounded-lg p-4 mt-4">
     <div className="flex flex-wrap items-start justify-between gap-3 mb-3"><div><h2 className="font-semibold text-sm">Prévia das alterações</h2><p className="text-xs text-[var(--text-muted)] mt-1">Conteúdo real em edição, sem salvar ou fazer reservas. Ações desativadas nesta prévia.</p></div>
-      <div className="flex flex-wrap gap-2"><button type="button" aria-pressed={menu} onClick={() => setMenu(!menu)} className="il-control px-3 rounded-md border">Ver menu</button><button type="button" aria-pressed={!wide} onClick={() => setWide(false)} className="il-control px-3 rounded-md border">Celular</button><button type="button" aria-pressed={wide} onClick={() => setWide(true)} className="il-control px-3 rounded-md border">Desktop</button></div>
+      <div className="flex flex-wrap gap-2"><button type="button" aria-pressed={menu} onClick={() => setMenu(!menu)} className="il-control pe-devbtn px-3 rounded-md border">Ver menu</button><button type="button" data-preview-device="mobile" aria-pressed={!wide} onClick={() => setWide(false)} className="il-control pe-devbtn px-3 rounded-md border">Celular</button><button type="button" data-preview-device="desktop" aria-pressed={wide} onClick={() => setWide(true)} className="il-control pe-devbtn px-3 rounded-md border">Desktop</button></div>
     </div>
-    <div className="overflow-x-auto bg-[var(--surface-3)] rounded-lg p-2">
+    <div className="overflow-x-auto bg-[var(--surface-3)] rounded-xl p-4">
+      {/* Moldura de dispositivo: presença de celular no desktop (proporção do
+          mockup). UMA prévia só — o toggle troca o aparelho, não duplica. */}
+      <div className={wide ? 'pe-device pe-device--desktop' : 'pe-device'}>
+      {!wide && (
+        <span className="pe-device__status" aria-hidden="true">
+          <span>9:41</span><i />
+        </span>
+      )}
       <iframe title="Prévia local da página em edição" sandbox="allow-same-origin" srcDoc="<!doctype html><html lang='pt-BR'><head><meta name='viewport' content='width=device-width,initial-scale=1'></head><body></body></html>"
-        style={{ width: wide ? 1000 : 390, maxWidth: wide ? undefined : '100%', height: 600, border: 0, margin: '0 auto', display: 'block' }}
+        style={{ width: '100%', maxWidth: '100%', height: wide ? 620 : 668, border: 0, margin: 0, display: 'block', background: '#fff', borderRadius: wide ? 10 : 30 }}
         onLoad={event => { const doc = event.currentTarget.contentDocument; if (!doc) return;
           doc.documentElement.className = document.documentElement.className;
           document.querySelectorAll('style,link[rel="stylesheet"]').forEach(node => doc.head.appendChild(node.cloneNode(true)));
@@ -46,6 +55,13 @@ export function ClinicPreview({ business, page, catalog }: { business: Business;
         {menu && <aside aria-label="Menu nesta prévia" className="fixed inset-x-3 bottom-20 z-40 il-card p-5"><h2 className="font-bold mb-3">Menu</h2><ul className="space-y-3">{nav.map(item => <li key={item.id}>{item.label}</li>)}</ul>{!nav.length && <p className="il-muted">Nenhuma seção preenchida no menu.</p>}</aside>}
         <BottomBarView items={bottomBarItems({canBook:canBook(publicBusiness,catalog.services),whatsapp:whatsappVisible(publicBusiness)})} menuOpen={menu}/>
       </main>, body)}
+      </div>
+    </div>
+    <div className="mt-3 flex items-start gap-2.5 rounded-lg border border-[var(--success-border)] bg-[var(--success-bg)] px-3 py-2.5">
+      <Icon n="spark" size={15} className="text-[var(--success-fg)] mt-0.5 shrink-0" />
+      <p className="text-[11.5px] leading-relaxed text-[var(--success-fg)]">
+        <strong>Dica:</strong> as alterações aparecem em tempo real nesta prévia, sem salvar nem receber reservas. Quando estiver satisfeito, publique a página.
+      </p>
     </div>
   </section>;
 }

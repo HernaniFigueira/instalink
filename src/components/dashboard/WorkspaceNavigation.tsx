@@ -1,72 +1,252 @@
 'use client';
-import { useEffect, useState } from 'react';
+// ═══════════════════════════════════════════════════════════════
+// SIDEBAR DO APP SHELL — GoDoutor UI Revolution · Etapa A
+// ═══════════════════════════════════════════════════════════════
+// Objetivo: acabar com a sensação de "lista infinita". A arquitetura vem de
+// lib/workspace-navigation.ts (apresentação) sobre o catálogo lib/panel.ts
+// (rotas + permissões + módulos). Nenhuma rota é apagada aqui: item com
+// `sidebar: false` continua existindo por URL e por atalho contextual.
+//
+//   Principal      Início · Agenda · Clientes · Conversas      (links diretos)
+//   Operação       Estrutura da clínica (grupo) · Tarefas
+//   Comercial      Funil
+//   Presença       Página
+//   Inteligência   Automação (grupo)
+//   Administração  Gestão (grupo) · Ajustes (grupo)
+//
+// Grupo abre a SEGUNDA COLUNA CONTEXTUAL — é assim que "Estrutura da clínica"
+// reúne Serviços/Profissionais/Disponibilidade/Equipe sem unificar modelo de
+// dado (Professional e User/Member continuam separados internamente).
+//
+// A busca NÃO mora mais aqui (foi para a topbar) e o seletor de unidade foi
+// para o menu da conta. Aqui ficam: identidade da clínica, menu e recolher.
+import { useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
 import { Icon } from '@/components/icons';
 import { Drawer } from '@/components/ui';
-import { NavSearch } from './NavSearch';
-import { workspaceAreas, routeAreaColor } from '@/lib/workspace-navigation';
-import { buildNavSearchItems } from '@/lib/nav-search';
+import { apiGet } from '@/lib/api-client';
 import type { panelNavigation } from '@/lib/panel';
+import {
+  areaOfRoute, workspaceAreas, workspaceSections, type WorkspaceArea,
+} from '@/lib/workspace-navigation';
 
 type Unit = { id: string; name: string; logo?: string; slug: string; role?: string; organizationId?: string };
-export function WorkspaceNavigation({ nav, activePath, unit, units, onUnit, collapsed, onCollapse, user, onLogout, overview = false }: {
-  nav: ReturnType<typeof panelNavigation>; activePath: string; unit: Unit; units: Unit[];
-  onUnit: (id: string) => void; collapsed: boolean; onCollapse: () => void;
-  user: { name: string }; onLogout: () => void; overview?: boolean;
+type Nav = ReturnType<typeof panelNavigation>;
+type NavItem = Nav['allowed'][number];
+
+export function WorkspaceNavigation({ nav, activePath, unit, collapsed, onCollapse, mobileOpen, onMobileOpen }: {
+  nav: Nav; activePath: string; unit: Unit; collapsed: boolean; onCollapse: () => void;
+  /** Estado do drawer móvel pertence ao shell: é a topbar que abre o menu. */
+  mobileOpen?: boolean; onMobileOpen?: (open: boolean) => void;
 }) {
-  const areas = workspaceAreas(nav.allowed);
-  const groups = areas.filter(a => a.id !== 'operations');
-  const activeGroup = groups.find(g => g.items.some(i => i.href === activePath))?.id || null;
+  const setMobile = (open: boolean) => onMobileOpen?.(open);
+  const mobile = !!mobileOpen;
+  const areas = useMemo(() => workspaceAreas(nav.allowed), [nav.allowed]);
+  const sections = useMemo(() => workspaceSections(areas), [areas]);
+
+  // Mini-card de setup (mockup): MESMO checklist real do /api/overview —
+  // aparece em todas as telas enquanto houver passo pendente.
+  const [setup, setSetup] = useState<{ pct: number; href: string } | null>(null);
+  useEffect(() => {
+    if (!unit.id) return;
+    let on = true;
+    apiGet<{ pct?: number; pendingSetup?: number; checklist?: Array<{ done: boolean; label: string; href: string }> }>(
+      `/api/overview?businessId=${unit.id}&period=7`, { scope: 'area', area: 'Início' },
+    ).then((r) => {
+      if (!on || !r.ok) return;
+      const next = (r.data?.checklist || []).find((c) => !c.done);
+      const pending = r.data?.pendingSetup ?? (r.data?.checklist || []).filter((c) => !c.done).length;
+      setSetup(next && pending ? { pct: r.data?.pct ?? 0, href: next.href } : null);
+    }).catch(() => { if (on) setSetup(null); });
+    return () => { on = false; };
+  }, [unit.id]);
+
+  // Destinos com `sidebar: false` não ocupam linha no menu (régua: frequência),
+  // mas continuam acessíveis por URL/atalho contextual.
+  const visible = (items: NavItem[]) => items.filter((i) => i.sidebar !== false);
+
+  const activeArea = areaOfRoute(activePath, areas);
+  const isGroup = (area: WorkspaceArea) => !sections.some(
+    (s) => s.groups.some((g) => g.flat && g.area.id === area.id),
+  );
+  const activeGroup = activeArea && isGroup(activeArea) ? activeArea.id : null;
+
   const [opened, setOpened] = useState<string | null>(activeGroup);
-  const [mobile, setMobile] = useState(false);
   const [mobileGroup, setMobileGroup] = useState<string | null>(null);
-  useEffect(() => { setOpened(activeGroup); setMobile(false); setMobileGroup(null); }, [activePath, unit.id, activeGroup]);
+
+  useEffect(() => {
+    setOpened(activeGroup);
+    setMobile(false);
+    setMobileGroup(null);
+  }, [activePath, unit.id, activeGroup]);
+
+  // Ao crescer para desktop o drawer móvel não pode ficar aberto por cima.
   useEffect(() => {
     const media = window.matchMedia?.('(min-width:1200px)');
     const close = () => { if (media?.matches) setMobile(false); };
-    media?.addEventListener('change', close); return () => media?.removeEventListener('change', close);
+    media?.addEventListener?.('change', close);
+    return () => media?.removeEventListener?.('change', close);
   }, []);
-  const selected = groups.find(g => g.id === opened);
-  const mobileSelected = groups.find(g => g.id === mobileGroup);
-  const href = (item: typeof nav.allowed[number]) => item.href === '/organizacao' ? `/organizacao?organization=${unit.organizationId || ''}` : item.requiresBusiness === false ? item.href : `${item.href}?b=${unit.id}`;
-  const canOverview = nav.allowed.some(i => i.href === '/organizacao');
-  const identity = <div className="workspace-identity">
-    {unit.logo && <img src={unit.logo} alt="" className="workspace-logo" />}
-    <label className="block"><span className="sr-only">Contexto da clínica</span>
-      <select aria-label="Trocar unidade" value={overview ? '__overview' : unit.id} onChange={e => onUnit(e.target.value)} className="il-field-control w-full mt-2 bg-transparent font-semibold py-2" title={unit.name}>
-        {canOverview && <option value="__overview">Visão geral da organização</option>}
-        {units.map(item => <option key={item.id} value={item.id}>{item.name}</option>)}
-      </select>
-    </label>
-  </div>;
-  const links = (items: typeof nav.allowed, primary = false) => items.map(item => <Link key={item.href} href={href(item)}
-    data-nav-item={item.href} aria-label={item.label} aria-current={activePath === item.href ? 'page' : undefined}
-    onClick={() => { setMobile(false); if (primary) setOpened(null); }} title={item.description} className="workspace-link">
-    <span style={{color: routeAreaColor(item.href)}}><Icon n={item.icon} size={20} /></span><span className="workspace-label">{item.label}</span>
-  </Link>);
-  const groupButtons = (onSelect: (id: string) => void, current: string | null) => groups.map(group => <button key={group.id} type="button" className="workspace-link w-full text-left" aria-label={group.label} aria-expanded={current === group.id} onClick={e => { e.currentTarget.closest('dialog')?.querySelector<HTMLElement>('h2')?.focus(); onSelect(group.id); }}>
-    <span style={{color:group.color}}><Icon n={group.icon} size={20} /></span><span className="workspace-label">{group.label}</span><span aria-hidden="true" className="ml-auto workspace-label">›</span>
-  </button>);
-  const operations = areas.find(a => a.id === 'operations')?.items || [];
-  return <>
-    <aside className={`workspace-sidebar ${collapsed ? 'is-collapsed' : ''}`} aria-label="Navegação da clínica">
-      {!collapsed && identity}
-      <div className="workspace-tools"><NavSearch items={buildNavSearchItems(nav, `?b=${unit.id}`)} collapsed={collapsed} activePath={activePath} />
-        <button type="button" aria-label={collapsed ? 'Expandir navegação' : 'Recolher navegação'} onClick={onCollapse} className="workspace-icon-button"><Icon n="menu" size={20} /></button>
-      </div>
-      <nav aria-label="Menu principal" className="workspace-primary">{links(operations,true)}{groupButtons(id => setOpened(opened === id ? null : id), opened)}</nav>
-      <div className="workspace-account">{!collapsed && <><p className="font-semibold truncate">{user.name}</p><a className="text-sm underline" href={`/${unit.slug}`} target="_blank" rel="noreferrer">Página pública ↗</a></>}
-        <button type="button" className="workspace-icon-button" aria-label="Sair da conta" onClick={onLogout}><Icon n="logout" size={20} /></button>
-      </div>
-    </aside>
-    {selected && <aside className="workspace-secondary" aria-label={`Submenu ${selected.label}`}>
-      <header><h2>{selected.label}</h2><button type="button" className="workspace-icon-button" aria-label="Fechar submenu" onClick={() => setOpened(null)}><Icon n="x" size={20}/></button></header>
-      <nav aria-label={selected.label}>{links(selected.items)}</nav>
-    </aside>}
-    <header className="workspace-mobile"><p className="font-semibold">{nav.allowed.find(i => i.href === activePath)?.label || 'Minha clínica'}</p><button type="button" onClick={() => {setMobile(true);setMobileGroup(activeGroup);}} className="workspace-icon-button" aria-label="Abrir navegação"><Icon n="menu" size={20}/></button></header>
-    <Drawer open={mobile} onClose={() => setMobile(false)} title={mobileSelected?.label || 'Navegar na clínica'} width="max-w-[420px]">
-      {mobileSelected ? <div className="p-3"><button type="button" className="workspace-link" onClick={e => { e.currentTarget.closest('dialog')?.querySelector<HTMLElement>('h2')?.focus(); setMobileGroup(null); }}>← Voltar</button><nav aria-label={mobileSelected.label}>{links(mobileSelected.items)}</nav></div> : <>{identity}<nav aria-label="Menu móvel" className="p-3">{links(operations,true)}{groupButtons(setMobileGroup,mobileGroup)}</nav></>}
-      <div className="workspace-account"><p className="font-semibold truncate">{user.name}</p>{unit.slug&&<a className="text-sm underline" href={`/${unit.slug}`} target="_blank" rel="noreferrer">Página pública ↗</a>}<button type="button" className="workspace-link" onClick={onLogout}><Icon n="logout" size={20}/>Sair da conta</button></div>
-    </Drawer>
-  </>;
+
+  const selected = areas.find((a) => a.id === opened && isGroup(a));
+  const mobileSelected = areas.find((a) => a.id === mobileGroup);
+
+  function hrefFor(item: NavItem) {
+    if (item.href === '/organizacao') return `/organizacao?organization=${unit.organizationId || ''}`;
+    return item.requiresBusiness === false ? item.href : `${item.href}?b=${unit.id}`;
+  }
+
+  const link = (item: NavItem, area?: WorkspaceArea, primary = false) => (
+    <Link
+      key={item.href}
+      href={hrefFor(item)}
+      data-nav-item={item.href}
+      aria-label={item.label}
+      aria-current={activePath === item.href ? 'page' : undefined}
+      title={collapsed ? `${item.label} — ${item.description}` : item.description}
+      onClick={() => { setMobile(false); if (primary) setOpened(null); }}
+      className={`workspace-link${collapsed ? ' il-tip' : ''}`}
+      {...(collapsed ? { 'data-tip': item.label } : {})}
+    >
+      <span className="workspace-link__icon">
+        <Icon n={item.icon} size={19} />
+      </span>
+      <span className="workspace-label">{item.label}</span>
+      {activePath === item.href && <span className="workspace-link__rail" data-nav-rail aria-hidden="true" />}
+    </Link>
+  );
+
+  const groupButton = (area: WorkspaceArea, onSelect: (id: string) => void, current: string | null) => {
+    const items = visible(area.items);
+    if (!items.length) return null;
+    const open = current === area.id;
+    return (
+      <button
+        key={area.id}
+        type="button"
+        className={`workspace-link workspace-link--group${collapsed ? ' il-tip' : ''}`}
+        aria-label={area.label}
+        aria-expanded={open}
+        title={collapsed ? area.label : undefined}
+        {...(collapsed ? { 'data-tip': area.label } : {})}
+        onClick={(e) => {
+          // No drawer móvel o foco volta para o título do diálogo (padrão do
+          // componente), evitando que o foco fique preso no botão que saiu.
+          e.currentTarget.closest('dialog')?.querySelector<HTMLElement>('h2')?.focus();
+          onSelect(open ? '' : area.id);
+        }}
+      >
+        <span className="workspace-link__icon"><Icon n={area.icon} size={19} /></span>
+        <span className="workspace-label">{area.label}</span>
+        {!collapsed && (
+          <Icon n="chevronRight" size={15} className="workspace-link__chevron" aria-hidden="true" />
+        )}
+        {open && <span className="workspace-link__rail" data-nav-rail aria-hidden="true" />}
+      </button>
+    );
+  };
+
+  // Identidade no TOPO com o controle de recolher ao lado (Fidelity Pass 3):
+  // o rodapé antigo ("Página pública / Recolher") não existe mais — o atalho
+  // público virou ação global na topbar.
+  const identity = (withCollapse = true) => (
+    <div className="workspace-identity">
+      {/* Identidade sem redundância: o logo da clínica (quando existe) OU a
+          marca do produto. O NOME da clínica não repete aqui — ele vive uma
+          única vez no seletor de unidade da topbar (troca de unidade incluída). */}
+      {!collapsed && (unit.logo
+        ? <img src={unit.logo} alt={unit.name || 'Clínica'} className="workspace-logo" />
+        : <span className="workspace-wordmark" title={unit.name || 'Minha clínica'}>Insta<span>Link</span></span>)}
+      {withCollapse && (
+        <button
+          type="button"
+          className={`workspace-icon-button workspace-identity__collapse${collapsed ? ' il-tip' : ''}`}
+          aria-label={collapsed ? 'Expandir navegação' : 'Recolher navegação'}
+          title={collapsed ? 'Expandir navegação' : 'Recolher navegação'}
+          {...(collapsed ? { 'data-tip': 'Expandir navegação', 'data-tip-pos': 'right' } : {})}
+          onClick={onCollapse}
+        >
+          <Icon n={collapsed ? 'expand' : 'collapse'} size={16} />
+        </button>
+      )}
+    </div>
+  );
+
+  const menu = (onSelect: (id: string) => void, current: string | null) => (
+    <>
+      {sections.map((section) => {
+        const rows = section.groups.flatMap(({ area, flat }) =>
+          flat ? visible(area.items).map((item) => link(item, area, true)) : [groupButton(area, onSelect, current)],
+        ).filter(Boolean);
+        if (!rows.length) return null;
+        return (
+          <div className="workspace-section" key={section.id}>
+            {!collapsed && <p className="workspace-section__label">{section.label}</p>}
+            {collapsed && <span className="workspace-section__rule" aria-hidden="true" />}
+            {rows}
+          </div>
+        );
+      })}
+    </>
+  );
+
+  return (
+    <>
+      <aside className={`workspace-sidebar${collapsed ? ' is-collapsed' : ''}`} aria-label="Navegação da clínica">
+        {identity(true)}
+        <nav aria-label="Menu principal" className="workspace-primary ws-scroll">
+          {menu((id) => setOpened(id || null), opened)}
+        </nav>
+        {!collapsed && setup && (
+          <div className="ws-setup-mini">
+            <p className="text-[12px] font-extrabold text-[var(--text)] leading-tight">Sua clínica está {setup.pct}% pronta!</p>
+            <p className="text-[10.5px] text-[var(--text-muted)] mt-1 leading-snug">Complete a configuração e comece a receber agendamentos.</p>
+            <div className="h-1.5 rounded-full bg-white overflow-hidden mt-2" aria-hidden="true">
+              <div className="h-full rounded-full bg-[var(--success)]" style={{ width: `${setup.pct}%` }} />
+            </div>
+            <Link href={`${setup.href}${setup.href.includes('?') ? '&' : '?'}b=${unit.id}`}
+              className="mt-2 inline-flex w-full items-center justify-center rounded-md border border-[var(--brand-border)] bg-white px-2 py-1.5 text-[11px] font-bold text-[var(--brand-fg)] hover:bg-[var(--brand-softer)]">
+              Continuar
+            </Link>
+          </div>
+        )}
+      </aside>
+
+      {/* Segunda coluna contextual: só para subáreas (nunca para o conteúdo). */}
+      {selected && (
+        <aside className="workspace-secondary ws-scroll" aria-label={`Submenu ${selected.label}`}>
+          <header>
+            <h2 style={{ color: selected.color }}>{selected.label}</h2>
+            <button type="button" className="workspace-icon-button" aria-label="Fechar submenu" onClick={() => setOpened(null)}>
+              <Icon n="x" size={17} />
+            </button>
+          </header>
+          <nav aria-label={selected.label}>{visible(selected.items).map((item) => link(item, selected))}</nav>
+        </aside>
+      )}
+
+      {/* Mobile: UM diálogo com passo de voltar (nunca duas colunas na tela). */}
+      <Drawer
+        open={mobile}
+        onClose={() => setMobile(false)}
+        title={mobileSelected?.label || 'Navegar na clínica'}
+        width="max-w-[420px]"
+      >
+        {mobileSelected ? (
+          <div className="p-3">
+            <button type="button" className="workspace-link"
+              onClick={(e) => { e.currentTarget.closest('dialog')?.querySelector<HTMLElement>('h2')?.focus(); setMobileGroup(null); }}>
+              <Icon n="collapse" size={18} /> <span className="workspace-label">← Voltar</span>
+            </button>
+            <nav aria-label={mobileSelected.label}>{visible(mobileSelected.items).map((item) => link(item, mobileSelected))}</nav>
+          </div>
+        ) : (
+          <>
+            {identity(false)}
+            <nav aria-label="Menu móvel" className="p-3">{menu(setMobileGroup, mobileGroup)}</nav>
+          </>
+        )}
+      </Drawer>
+    </>
+  );
 }
