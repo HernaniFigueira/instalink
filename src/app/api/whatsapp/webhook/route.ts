@@ -6,6 +6,10 @@ import { upsertContact, findContact } from '@/lib/contacts';
 import { phoneKey, webhookVerifyToken } from '@/lib/whatsapp';
 import { pushAudit } from '@/lib/audit';
 import { agentFor, agentActive } from '@/lib/agent';
+import {
+  aiShouldRespond, buildHandoffSummary, effectiveAgentState, handoffToTeam,
+  receiveInbound, sendOutbound, setAgentState, wantsHuman, looksClinical,
+} from '@/lib/inbox/assistant-ops';
 import { conciergeAnswer } from '@/lib/concierge';
 import { createBookingTx } from '@/lib/booking-create';
 import { findLead, ingestLead } from '@/lib/pipeline';
@@ -291,6 +295,7 @@ export async function POST(req: NextRequest) {
               phone: digits,
               status: 'open',
               mode: 'automation',
+              agentState: 'ai_active',
               unread: 0,
               lastMessageAt: now,
               lastMessagePreview: m.body.slice(0, 120),
@@ -310,63 +315,65 @@ export async function POST(req: NextRequest) {
             conv.contactId = contact?.id || conv.contactId;
             conv.customerId = contact?.customerId || existingCustomer?.id || conv.customerId;
             if (!conv.mode) conv.mode = 'automation';
+            if (!conv.agentState) setAgentState(conv, conv.mode === 'human' ? 'human_active' : 'ai_active');
             if (leadId && (!conv.context || !conv.context.leadId)) {
               conv.context = { ...(conv.context || {}), leadId };
             }
           }
 
-          // Grava mensagem inbound
-          const inMsg: Message = {
-            id: randomUUID(),
+          // Grava mensagem inbound (F3-F: idempotência provider+providerMessageId)
+          const inbound = receiveInbound(d, {
             businessId,
             conversationId: conv.id,
-            direction: 'in',
             body: m.body,
-            status: 'delivered',
-            externalId: m.externalId,
-            by: 'contact',
-            byName: contact?.name || m.name || 'Cliente',
+            provider: 'whatsapp',
+            providerMessageId: String(m.externalId || ''),
             at: now,
-          };
-          d.messages.push(inMsg);
-          emitAutomationEvent(d, {
-            event: 'message.received',
-            businessId,
-            at: now,
-            data: { conversationId: inMsg.conversationId || '', channel: 'whatsapp', phone: digits, externalId: String(inMsg.externalId || '') },
+            channelUserId: conv.channelUserId || '',
+            contactName: contact?.name || m.name || 'Cliente',
           });
-
-          conv.unread = (conv.unread || 0) + 1;
-          conv.lastMessageAt = now;
-          conv.lastMessagePreview = m.body.slice(0, 120);
+          if (inbound.duplicate) {
+            // Duplicata do webhook ≠ segunda resposta de IA nem segundo booking.
+            continue;
+          }
           b.whatsappIntegration.lastInboundAt = now;
 
-          // 3.3. Atendimento Concierge / Agente (Silenciado em modo humano)
-          if (conv.mode === 'human') {
+          // 3.3. Atendimento Concierge / Agente — só quando a IA está ativa
+          // (humano + IA nunca respondem juntos).
+          if (!aiShouldRespond(conv)) {
             continue;
           }
 
-          const wantsHuman = /\b(humano|atendente|falar com (uma )?pessoa|falar com atendente|suporte humano|atendente humano)\b/i.test(m.body);
-          if (wantsHuman) {
-            conv.mode = 'human';
-            const agent = agentFor(d, business);
-            const replyText = agent.handoffMessage || 'Vou transferir seu atendimento para a nossa equipe. Um atendente já vai te responder por aqui!';
-            const outId = randomUUID();
-            d.messages.push({
-              id: outId,
+          if (wantsHuman(m.body) || looksClinical(m.body)) {
+            const reason = looksClinical(m.body) ? 'clinico' : 'pedido_humano';
+            const built = buildHandoffSummary(d, conv, reason);
+            handoffToTeam(d, {
               businessId,
               conversationId: conv.id,
-              direction: 'out',
-              body: replyText,
-              status: 'pending',
-              externalId: '',
-              by: 'automation',
-              byName: 'Automação',
+              summary: built.summary,
+              intent: built.intent,
+              entities: built.entities,
+              actions: built.actions,
+              requestedBy: reason === 'clinico' ? 'sistema' : 'paciente',
               at: now,
             });
-            conv.lastMessageAt = now;
-            conv.lastMessagePreview = replyText.slice(0, 120);
-            newOutboundMessageIds.push(outId);
+            const agent = agentFor(d, business);
+            const replyText = reason === 'clinico'
+              ? 'Vou encaminhar sua mensagem para o nosso profissional. Um atendente já vai te responder por aqui!'
+              : (agent.handoffMessage || 'Vou transferir seu atendimento para a nossa equipe. Um atendente já vai te responder por aqui!');
+            sendOutbound(d, {
+              businessId,
+              conversationId: conv.id,
+              body: replyText,
+              by: 'automation',
+              byName: 'Automação',
+              provider: 'whatsapp',
+              at: now,
+              status: 'pending',
+            });
+            newOutboundMessageIds.push(
+              d.messages[d.messages.length - 1]!.id,
+            );
             continue;
           }
 
@@ -429,10 +436,13 @@ export async function POST(req: NextRequest) {
                   by: 'automation',
                   byName: 'Automação',
                   at: now,
+                  meta: { provider: 'whatsapp' },
                 });
                 conv.lastMessageAt = now;
                 conv.lastMessagePreview = reply.slice(0, 120);
                 newOutboundMessageIds.push(outId);
+                // F3-F: enviou e aguarda o paciente (estado explícito).
+                setAgentState(conv, 'waiting_patient');
               }
 
               conv.context = {

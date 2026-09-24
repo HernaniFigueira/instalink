@@ -28,11 +28,30 @@ import type { WaChannelData } from '@/components/dashboard/WhatsappChannelPanel'
 //     guardada (permissão 'whatsapp', escopo da unidade) — nenhum dado novo é
 //     exposto, por isso é segura. `?q=` sobrevive a refresh e deep-link.
 // ═══════════════════════════════════════════════════════════════
-interface Conversation { id: string; name: string; phone: string; status: string; mode?: 'automation' | 'human'; unread: number; lastMessageAt: string; lastMessagePreview: string; registered: boolean; channel?: 'whatsapp' | 'instagram' | 'agent'; channelUsername?: string; }
+interface Conversation {
+  id: string; name: string; phone: string; status: string;
+  mode?: 'automation' | 'human';
+  agentState?: 'ai_active' | 'waiting_patient' | 'waiting_team' | 'human_active' | 'resolved';
+  agentStateLabel?: string;
+  handoff?: { at: string; summary: string; intent?: string; actions?: string[] } | null;
+  unread: number; lastMessageAt: string; lastMessagePreview: string;
+  registered: boolean; channel?: 'whatsapp' | 'instagram' | 'agent'; channelUsername?: string;
+}
 interface ChannelsView { whatsapp: boolean; instagram: boolean }
 interface InstagramInbox { connected: boolean; label: string; tone: 'ok' | 'pending' | 'error' | 'off'; username: string }
 interface MessageWindow { phase: 'open' | 'human_agent' | 'closed' | 'unknown'; canReply: boolean; reason: string }
-interface Message { id: string; direction: 'in' | 'out'; body: string; status: string; by?: string; byName?: string; error?: string; at: string }
+interface SideContext {
+  tutor: { name: string; phone: string; registered: boolean };
+  pets: Array<{ id: string; name: string; species: string }>;
+  currentPatient?: { id: string; name: string };
+  phone: string;
+  nextAppointment?: { date: string; time: string; service: string };
+  lastService?: string;
+  responsible?: string;
+  lead?: { id: string; stage?: string };
+  channel: string;
+}
+interface Message { id: string; direction: 'in' | 'out'; body: string; status: string; by?: string; byName?: string; error?: string; at: string; meta?: { simulator?: boolean; provider?: string }; }
 
 export function ConversationsView({ unitId, panel = false }: { unitId?: string; panel?: boolean }) {
   const params = useSearchParams();
@@ -56,6 +75,8 @@ export function ConversationsView({ unitId, panel = false }: { unitId?: string; 
   // Conversa de uma conta do Instagram que não é mais a conectada: histórico
   // visível, envio bloqueado (o texto abaixo explica o porquê).
   const [accountMismatch, setAccountMismatch] = useState('');
+  // F3-F — contexto lateral administrativo (nunca prontuário)
+  const [side, setSide] = useState<SideContext | null>(null);
 
   // ── COMPOSER: envio real pelo conector oficial ──
   const [draft, setDraftState] = useState('');
@@ -67,17 +88,27 @@ export function ConversationsView({ unitId, panel = false }: { unitId?: string; 
 
   async function toggleMode() {
     if (!active || switchingMode) return;
-    const targetMode = active.conversation.mode === 'human' ? 'automation' : 'human';
+    const st = active.conversation.agentState || (active.conversation.mode === 'human' ? 'human_active' : 'ai_active');
+    const goingAi = st === 'human_active' || st === 'waiting_team';
+    const targetMode: 'automation' | 'human' = goingAi ? 'automation' : 'human';
     setSwitchingMode(true);
     try {
-      const res = await apiSend<{ mode: 'automation' | 'human' }>(
+      const res = await apiSend<{ mode: 'automation' | 'human'; agentState?: string; agentStateLabel?: string }>(
         '/api/conversations', 'POST',
-        { businessId, conversationId: active.conversation.id, action: 'switch_mode', mode: targetMode },
+        {
+          businessId,
+          conversationId: active.conversation.id,
+          action: goingAi ? 'resume_ai' : 'pause_ai',
+          mode: targetMode,
+        },
         { scope: 'action', area: 'Conversas' },
       );
       if (res.ok) {
-        setActive((prev) => prev ? { ...prev, conversation: { ...prev.conversation, mode: targetMode } } : prev);
-        setConversations((list) => list.map((c) => c.id === active.conversation.id ? { ...c, mode: targetMode } : c));
+        const nextMode = targetMode;
+        const nextAgentState = (res.data?.agentState as Conversation['agentState'])
+          || (goingAi ? 'ai_active' as const : 'human_active' as const);
+        setActive((prev) => prev ? { ...prev, conversation: { ...prev.conversation, mode: nextMode, agentState: nextAgentState, agentStateLabel: res.data?.agentStateLabel } } : prev);
+        setConversations((list) => list.map((c) => c.id === active.conversation.id ? { ...c, mode: nextMode, agentState: nextAgentState, agentStateLabel: res.data?.agentStateLabel } : c));
       }
     } finally {
       setSwitchingMode(false);
@@ -149,6 +180,7 @@ export function ConversationsView({ unitId, panel = false }: { unitId?: string; 
     const res = await apiGet<{
       conversation: Conversation; messages?: Message[]; window?: MessageWindow | null;
       accountMismatch?: boolean; accountMismatchMessage?: string;
+      sideContext?: SideContext | null;
     }>(`/api/conversations?businessId=${businessId}&id=${id}`, { scope: 'action', area: 'Conversas' });
     if (res.ok && res.data) {
       setActive({ conversation: res.data.conversation, messages: res.data.messages || [] });
@@ -156,6 +188,7 @@ export function ConversationsView({ unitId, panel = false }: { unitId?: string; 
       setAccountMismatch(res.data.accountMismatchMessage || '');
       setDraftState(drafts.current[id] || '');
       setSendError('');
+      setSide(res.data.sideContext || null);
     } else if (!res.ok) setError(res.message);
   }
 
@@ -375,14 +408,22 @@ export function ConversationsView({ unitId, panel = false }: { unitId?: string; 
                   <div className="min-w-0">
                     <div className="flex flex-wrap items-center gap-2">
                       <p className="text-sm font-semibold text-[var(--text)] truncate">{active.conversation.name}</p>
-                      {/* Estado do atendimento: quem está respondendo AGORA. */}
+                      {/* F3-F: 3 rótulos compreensíveis — IA / Recepção / Aguardando equipe. */}
                       <span className={cn('text-[11px] font-semibold border rounded-pill px-2 py-0.5 inline-flex items-center gap-1',
-                        active.conversation.mode === 'human'
+                        active.conversation.agentState === 'human_active'
                           ? 'bg-[var(--warning-bg)] border-[var(--warning-border)] text-[var(--warning-fg)]'
-                          : 'bg-[var(--success-bg)] border-[var(--success-border)] text-[var(--success-fg)]'
+                          : active.conversation.agentState === 'waiting_team'
+                            ? 'bg-[var(--surface-hover)] border-[var(--border-strong)] text-[var(--text-muted)]'
+                            : 'bg-[var(--success-bg)] border-[var(--success-border)] text-[var(--success-fg)]'
                       )}>
-                        <span aria-hidden="true" className={cn('w-1.5 h-1.5 rounded-full', active.conversation.mode === 'human' ? 'bg-[var(--warning)]' : 'bg-[var(--success)]')} />
-                        {active.conversation.mode === 'human' ? 'Você está atendendo' : 'Assistente respondendo'}
+                        <span aria-hidden="true" className={cn('w-1.5 h-1.5 rounded-full',
+                          active.conversation.agentState === 'human_active' ? 'bg-[var(--warning)]'
+                            : active.conversation.agentState === 'waiting_team' ? 'bg-[var(--text-muted)]'
+                              : 'bg-[var(--success)]')} />
+                        {active.conversation.agentStateLabel
+                          || (active.conversation.agentState === 'human_active' ? 'Recepção atendendo'
+                            : active.conversation.agentState === 'waiting_team' ? 'Aguardando equipe'
+                              : '✨ IA atendendo')}
                       </span>
                     </div>
                     <p className="text-xs text-[var(--text-muted)] truncate mt-0.5">
@@ -401,8 +442,10 @@ export function ConversationsView({ unitId, panel = false }: { unitId?: string; 
                           ? 'bg-white border-[var(--border-strong)] text-[var(--text)] hover:bg-[var(--surface-hover)]'
                           : 'bg-[var(--warning-bg)] border-[var(--warning-border)] text-[var(--warning-fg)] hover:bg-[var(--attention-bg-hover)]')}
                     >
-                      <Icon n={active.conversation.mode === 'human' ? 'sync' : 'handHeart'} size={13} />
-                      {active.conversation.mode === 'human' ? 'Devolver ao assistente' : 'Assumir atendimento'}
+                      <Icon n={active.conversation.agentState === 'human_active' || active.conversation.agentState === 'waiting_team' ? 'sync' : 'handHeart'} size={13} />
+                      {active.conversation.agentState === 'human_active' || active.conversation.agentState === 'waiting_team'
+                        ? 'Devolver para IA'
+                        : 'Pausar IA'}
                     </button>
                     <Link href={`/clientes?b=${businessId}&q=${encodeURIComponent(active.conversation.phone||'')}`}
                       className="text-xs font-semibold text-[var(--brand-fg)] bg-[var(--brand-soft)] border border-[var(--brand-border)] rounded-md px-2.5 py-1.5 hover:bg-[var(--brand-bg-hover)] inline-flex items-center gap-1.5">
@@ -416,6 +459,9 @@ export function ConversationsView({ unitId, panel = false }: { unitId?: string; 
                       <div className={cn('max-w-[78%] px-3 py-2 rounded-lg text-sm shadow-xs', m.direction === 'out' ? 'bg-[var(--brand)] text-white rounded-br-sm' : 'bg-white border border-[var(--border)] rounded-bl-sm')}>
                         <span className="block text-[11px] font-semibold mb-0.5">
                           {m.byName || (m.direction === 'in' ? 'Cliente' : m.by === 'automation' ? 'Automação' : 'Equipe')}
+                          {m.meta?.simulator && (
+                            <span className="ml-1.5 inline-block text-[10px] font-bold uppercase tracking-wide bg-[var(--surface-3)] border border-[var(--border-strong)] text-[var(--text-muted)] rounded px-1 py-0">SIMULADOR</span>
+                          )}
                         </span>
                         {m.body}
                         <span className="block text-xs mt-1">
@@ -511,6 +557,57 @@ export function ConversationsView({ unitId, panel = false }: { unitId?: string; 
                   <p className="text-[11px] font-semibold tracking-[0.08em] uppercase text-[var(--text-faint)] mb-2">Atalhos</p>
                   <div className="space-y-1.5">
                     <Link href={`/clientes?b=${businessId}&q=${encodeURIComponent(active.conversation.phone || active.conversation.channelUsername || active.conversation.name || '')}`} className="flex items-center gap-1.5 text-xs font-semibold bg-[var(--surface-3)] border border-[var(--border)] rounded-md px-3 py-2 hover:bg-[var(--brand-soft)] hover:text-[var(--brand-fg)] hover:border-[var(--brand-border)]"><Icon n="wallet" size={13} /> Ver no CRM</Link>
+                    {/* F3-F · Contexto lateral — SÓ administrativo (nunca prontuário).
+                        Tutor, pets e paciente corrente quando veterinária. */}
+                    {side && (
+                      <div className="mt-4 rounded-lg border border-[var(--border)] bg-white p-3 space-y-2">
+                        <p className="text-[11px] font-semibold uppercase tracking-wide text-[var(--text-faint)]">Contexto</p>
+                        <div className="text-xs space-y-1">
+                          <p><span className="text-[var(--text-muted)]">Tutor:</span> {side.tutor.name || active.conversation.name || '—'}</p>
+                          {side.tutor.phone && (
+                            <p><span className="text-[var(--text-muted)]">Telefone:</span> {side.tutor.phone}</p>
+                          )}
+                          {side.pets.length > 0 && (
+                            <p>
+                              <span className="text-[var(--text-muted)]">Pets:</span>{' '}
+                              {side.pets.map((p) => p.name).join(', ')}
+                            </p>
+                          )}
+                          {side.currentPatient && (
+                            <p className="font-semibold text-[var(--brand-fg)]">
+                              Paciente: {side.currentPatient.name}
+                            </p>
+                          )}
+                          {side.nextAppointment && (
+                            <p>
+                              <span className="text-[var(--text-muted)]">Próximo:</span>{' '}
+                              {side.nextAppointment.date} {side.nextAppointment.time}
+                              {side.nextAppointment.service ? ` · ${side.nextAppointment.service}` : ''}
+                            </p>
+                          )}
+                          {side.responsible && (
+                            <p><span className="text-[var(--text-muted)]">Responsável:</span> {side.responsible}</p>
+                          )}
+                        </div>
+                        {/* Ações administrativas (atalhos; sem prontuário) */}
+                        <div className="flex flex-wrap gap-1.5 pt-1">
+                          <Link href={`/agenda?b=${businessId}`} className="text-[11px] px-2 py-1 rounded border border-[var(--border)] hover:bg-[var(--surface-hover)]">Agendar</Link>
+                          <Link href={`/tarefas?b=${businessId}`} className="text-[11px] px-2 py-1 rounded border border-[var(--border)] hover:bg-[var(--surface-hover)]">Tarefa</Link>
+                          <Link href={`/clientes?b=${businessId}&q=${encodeURIComponent(active.conversation.phone || '')}`} className="text-[11px] px-2 py-1 rounded border border-[var(--border)] hover:bg-[var(--surface-hover)]">Paciente</Link>
+                        </div>
+                        {active.conversation.handoff?.summary && (
+                          <div className="pt-2 border-t border-[var(--border-soft)]">
+                            <p className="text-[11px] font-semibold text-[var(--text-muted)]">Último handoff</p>
+                            <p className="text-xs text-[var(--text)] mt-0.5">{active.conversation.handoff.summary}</p>
+                            {active.conversation.handoff.actions?.length ? (
+                              <ul className="text-[11px] text-[var(--text-muted)] mt-1 list-disc pl-4">
+                                {active.conversation.handoff.actions.map((a) => <li key={a}>{a}</li>)}
+                              </ul>
+                            ) : null}
+                          </div>
+                        )}
+                      </div>
+                    )}
                     <Link href={`/funil?b=${businessId}`} className="flex items-center gap-1.5 text-xs font-semibold bg-[var(--surface-3)] border border-[var(--border)] rounded-md px-3 py-2 hover:bg-[var(--lilac-bg)] hover:text-[var(--lilac-fg)] hover:border-[var(--lilac-border)]"><Icon n="funnel" size={13} /> Ver no funil</Link>
                     <Link href={`/agenda?b=${businessId}`} className="flex items-center gap-1.5 text-xs font-semibold bg-[var(--surface-3)] border border-[var(--border)] rounded-md px-3 py-2 hover:bg-[var(--brand-soft)] hover:text-[var(--brand-fg)] hover:border-[var(--brand-border)]"><Icon n="calendar" size={13} /> Ver agenda</Link>
                     {active.conversation.channel !== 'instagram' && data.linkFallback && (

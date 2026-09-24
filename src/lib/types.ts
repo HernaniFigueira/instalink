@@ -1634,6 +1634,65 @@ export interface Conversation {
   // Contexto do assistente nesta conversa (fluxo de agendamento, dados já
   // coletados do cliente etc.). Opcional e aditivo — conversas antigas não têm.
   context?: Record<string, any>;
+  /**
+   * F3-F — estado EXPLÍCITO do atendimento (aditivo; legado sem campo deriva
+   * de `mode`). 'ai_active' = IA responde; 'waiting_patient' = enviou e
+   * aguarda o paciente; 'waiting_team' = handoff feito, equipe ainda não
+   * assumiu; 'human_active' = humano responde (IA nunca junto); 'resolved'.
+   */
+  agentState?: ConversationAgentState;
+  /** Resumo estruturado do último handoff (SEM chain-of-thought). */
+  handoff?: ConversationHandoff;
+}
+
+/** Estados explícitos F3-F — UX mostra apenas 3 rótulos compreensíveis. */
+export type ConversationAgentState =
+  | 'ai_active'
+  | 'waiting_patient'
+  | 'waiting_team'
+  | 'human_active'
+  | 'resolved';
+
+/**
+ * Handoff persistido: só o que o humano precisa saber (resumo, intenção,
+ * entidades, ações). NUNCA raciocínio interno/chain-of-thought do modelo.
+ */
+export interface ConversationHandoff {
+  at: string;
+  /** Resumo operacional curto (1–3 frases) — não é pensamento do modelo. */
+  summary: string;
+  /** Intenção declarada pelo paciente (ex.: 'pedir_humano', 'clínico'). */
+  intent?: string;
+  /** Entidades nomeadas (serviço, data, pet…) — dados, não inferências ocultas. */
+  entities?: Record<string, string>;
+  /** Próximos passos sugeridos (checklist operacional). */
+  actions?: string[];
+  /** Quem iniciou o handoff: paciente, sistema ou membro. */
+  requestedBy?: string;
+}
+
+/**
+ * Modelo interno provider-agnostic (F3-F). A camada de canal converte
+ * webhook/Mock → ConversationMessage; o inbox só enxerga este formato.
+ * `providerMessageId` é a chave de idempotência com `provider`
+ * (duplicata do provedor ≠ mensagem/booking/conversa novos).
+ */
+export interface ConversationMessage {
+  id: ID;
+  businessId: ID;
+  conversationId: ID;
+  direction: 'in' | 'out';
+  /** Quem falou no modelo interno (legado Message.by → sender). */
+  sender: 'patient' | 'human' | 'ai' | 'system';
+  body: string;
+  status: MessageStatus;
+  /** Ex.: 'whatsapp' | 'instagram' | 'simulator' | 'agent'. */
+  provider: string;
+  /** ID do provedor (wamid, IG message id, uuid do simulador). */
+  providerMessageId: string;
+  at: string;
+  /** Metadados de exibição (badge SIMULADOR, etc.). Nunca secrets. */
+  meta?: Record<string, any>;
 }
 
 export interface Message {
@@ -2004,7 +2063,10 @@ export type AuditAction =
   | 'pet.created' | 'pet.updated' | 'pet.deleted'
   // F3-D — Tool Registry do Conversation Agent (auditoria sem chain-of-thought)
   | 'booking.rescheduled'
-  | 'agent.tool_called' | 'agent.tool_denied' | 'agent.tool_failed';
+  | 'agent.tool_called' | 'agent.tool_denied' | 'agent.tool_failed'
+  // F3-F — Inbox/Handoff/Takeover (audit SEM chain-of-thought)
+  | 'conversation.handoff' | 'conversation.takeover'
+  | 'conversation.ai_resumed' | 'conversation.ai_paused';
 
 export interface AuditEntry {
   id: ID;

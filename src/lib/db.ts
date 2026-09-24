@@ -347,6 +347,10 @@ export function normalizeDB(raw: unknown): DB {
   }
   for (const c of base.conversations) {
     if (!c.context || typeof c.context !== 'object') (c as any).context = {};
+    // F3-F — estado explícito aditivo: legado sem campo deriva de mode.
+    if (!c.agentState) {
+      (c as any).agentState = c.mode === 'human' ? 'human_active' : 'ai_active';
+    }
   }
   // Identidade visual do painel (P2): campo ADITIVO por Business. Quando
   // ausente, o negócio continua exatamente com o visual atual (sem cor
