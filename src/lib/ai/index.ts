@@ -21,3 +21,7 @@ export { simulatePlan } from './simulate';
 export type { SimulationResult, SimulatedStep } from './simulate';
 export { refinePlan } from './refine';
 export type { RefineResult } from './refine';
+export {
+  blockedAIProvider, composeWithFallback, BLOCKED_AI_PROVIDER_CREDENTIAL,
+} from './provider';
+export type { AIProvider, AIProviderConfig, AIProviderCompleteInput, AIProviderCompleteResult } from './provider';

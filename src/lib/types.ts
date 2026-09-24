@@ -2001,7 +2001,10 @@ export type AuditAction =
   | 'anamnese.template_created' | 'anamnese.template_updated'
   | 'anamnese.template_deleted' | 'anamnese.response_saved'
   // FASE 2 · P6 — pacientes veterinários (tutor ≠ pet)
-  | 'pet.created' | 'pet.updated' | 'pet.deleted';
+  | 'pet.created' | 'pet.updated' | 'pet.deleted'
+  // F3-D — Tool Registry do Conversation Agent (auditoria sem chain-of-thought)
+  | 'booking.rescheduled'
+  | 'agent.tool_called' | 'agent.tool_denied' | 'agent.tool_failed';
 
 export interface AuditEntry {
   id: ID;
