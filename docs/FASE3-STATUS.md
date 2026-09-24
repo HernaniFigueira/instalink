@@ -15,7 +15,7 @@ NÃO force-push/rebase que altere os SHAs abaixo.
 | **F3-C** Composer | **PARCIAL** | `7087b01` | `simulatePlan` aprovado. `refinePlan` = **fallback determinístico** aprovado. **Não é o AI Automation Composer final** — alvo: NL livre → `AIProvider` → AutomationProposal estruturada → schema/policy → preview → testar → aprovar/ativar. Não vender parser determinístico como IA completa. |
 | **F3-D** Tool Registry + Agent Safety | **FEITO** | `8292f85` | 21 tools; guards tenant/permissão/injeção/confirm/idempotência/audit — ver `FASE3-TOOLS.md` |
 | **F3-E** Assistente de agendamento | **FEITO** | `13fd245` | + hotfix vet `e872688` (PET obrigatório em veterinária via clinicType) — ver `FASE3-ASSISTANT.md` |
-| **F3-F** Inbox + Handoff + Takeover | **FEITO** (push pendente neste commit) | (ver git log) | Estados explícitos, handoff sem CoT, simulador, idempotência, 14 testes |
+| **F3-F** Inbox + Handoff + Takeover | **FEITO** | `f40ff31` | Estados explícitos, handoff sem CoT, simulador, idempotência, 14 testes |
 | AIProvider (LLM real) | **BLOCKED_AI_PROVIDER_CREDENTIAL** | — | sem chave/modelo autorizado nesta sessão; interface + mock/test double criados; **não bloqueia** F3-D/F3-E. |
 
 Commits confirmados:
@@ -26,5 +26,8 @@ Commits confirmados:
 - F3-B: `9835909`
 - F3-C: `7087b01`
 - F3-D: `8292f85`
+- F3-E: `13fd245`
+- F3-E hotfix vet: `e872688`
+- F3-F: `f40ff31`
 - F3-E: `13fd245`
 - F3-E hotfix vet: `e872688`
