@@ -210,15 +210,15 @@ export function WhatsappChannelPanel({ businessId }: { businessId: string }) {
           config_id: cfg.configId,
           response_type: 'code',
           override_default_response_type: true,
-          // Deve ser EXATAMENTE o redirect_uri enviado no exchange (Meta 36008 se divergir).
-          redirect_uri: cfg.redirectUri,
+          // SEM redirect_uri nas options: o JS SDK vincula o code a "".
+          // Uma URL explícita aqui derruba o popup com Meta 191 (domínio).
           extras: { setup: {} },
         });
       });
       // O código vale 30 segundos e é de uso único: troca imediata, sem retry.
       const res = await apiSend<{ message?: string }>('/api/whatsapp/onboarding', 'POST', {
         businessId, action: 'exchange', code,
-        // Mesmo valor do FB.login — o servidor valida a igualdade.
+        // Obrigatório e vazio: identidade com o code do FB.login ("" no SDK).
         redirectUri: cfg.redirectUri,
         state: guide?.signupState || '',
         wabaId: signupRef.current.wabaId,

@@ -332,8 +332,6 @@ export function onboardingPlan(args: {
   env: EnvLike;
   business: { whatsappIntegration?: UnitIntegrationView };
   todayISO: string;
-  /** Origem estável da requisição (ex.: host do Preview Vercel). */
-  requestOrigin?: string;
 }): OnboardingPlan {
   const { env, business, todayISO } = args;
   const platform = platformLayer(env);
@@ -347,8 +345,8 @@ export function onboardingPlan(args: {
       appId: String(env.META_APP_ID),
       configId: String(env.META_CONFIG_ID),
       version: currentVersion,
-      // O MESMO redirect_uri vai para o FB.login E para o exchange server-to-server.
-      redirectUri: metaRedirectUri(env, String(args.requestOrigin || '')),
+      // redirect_uri do Embedded Signup via JS SDK = string vazia (idêntica na troca).
+      redirectUri: embeddedSignupRedirectUri,
     }
     : null;
 
@@ -614,25 +612,24 @@ export function graphBase(version: string): string {
 
 /** URLs usadas na troca do código. Separadas para poder testar sem rede. */
 /**
- * redirect_uri do Embedded Signup — idêntico na autorização e na troca.
+ * redirect_uri do Embedded Signup via Facebook JS SDK.
  *
- * O FB.login do JS SDK e o GET /oauth/access_token precisam usar EXATAMENTE o
- * mesmo valor (Meta OAuth 100/36008 caso contrário). Prioridade:
- *   1. `META_REDIRECT_URI` quando a chave existir no env (inclusive vazia —
- *      o JS SDK historicamente associa o code a `redirect_uri=""`);
- *   2. a origem estável da requisição (host do Preview/produção), sem barra final.
- * Nunca chuta URI: o servidor calcula um único valor e o painel o reutiliza.
+ * O SDK associa o `code` do FB.login (sem `redirect_uri` nas options) a
+ * `redirect_uri=""` — e a Meta exige o MESMO valor no GET /oauth/access_token
+ * (OAuth 100/36008 se faltar/divergir). Passar uma URL explícita no FB.login
+ * quebra o popup com 191 ("domain of this URL isn't included in the app's
+ * domains"), mesmo com App Domains/Valid OAuth Redirect URIs preenchidos.
+ *
+ * Por isso este fluxo NÃO usa URL de página nem `META_REDIRECT_URI`: o valor é
+ * fixo e vazio nos DOIS lados (autorização e troca). Não é enfraquecimento —
+ * a validação de igualdade continua no servidor; apenas o valor canônico é "".
  */
-export function metaRedirectUri(env: EnvLike, requestOrigin: string): string {
-  if (Object.prototype.hasOwnProperty.call(env, 'META_REDIRECT_URI')) {
-    return String(env.META_REDIRECT_URI ?? '').trim();
-  }
-  return String(requestOrigin || '').replace(/\/+$/, '');
-}
+export const embeddedSignupRedirectUri = '';
 
 /**
- * URL da troca do código. `redirect_uri` é obrigatório na Meta e DEVE ser o
- * mesmo usado no diálogo OAuth (FB.login).
+ * URL da troca do código. `redirect_uri` DEVE ser o mesmo valor associado ao
+ * code no diálogo OAuth — no Embedded Signup via JS SDK, a string vazia.
+ * O parâmetro é sempre enviado (mesmo vazio) para satisfazer o manual-flow.
  */
 export function exchangeCodeUrl(
   base: string,
