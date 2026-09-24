@@ -161,6 +161,7 @@ export function AutomationsView() {
   const [automations, setAutomations] = useState<AutomationView[]>([]);
   const [templates, setTemplates] = useState<TemplateOffer[]>([]);
   const [runs, setRuns] = useState<RunView[]>([]);
+  const [health, setHealth] = useState<{ active: number; awaitingChannel: number; withError: number; executedToday: number } | null>(null);
   const [options, setOptions] = useState<Options>({ stages: [], services: [], members: [] });
   const [limits, setLimits] = useState<any>(null);
   const [capabilities, setCapabilities] = useState<Record<string, boolean>>({});
@@ -178,6 +179,7 @@ export function AutomationsView() {
     setAutomations(res.data?.automations || []);
     setTemplates(res.data?.templates || []);
     setRuns(res.data?.recentRuns || []);
+    setHealth(res.data?.health || null);
     setOptions(res.data?.options || { stages: [], services: [], members: [] });
     setLimits(res.data?.limits || null);
     setCapabilities(res.data?.capabilities || {});
@@ -242,6 +244,22 @@ export function AutomationsView() {
   if (loadError) return <AreaLoadError area="Automações" message={loadError} onRetry={load} />;
   return (
     <div className="space-y-4">
+      {health && (
+        <div className="flex flex-wrap gap-2 text-xs">
+          <span className="rounded-md border border-[var(--border)] bg-[var(--surface)] px-2 py-1">
+            Ativas · <strong>{health.active}</strong>
+          </span>
+          <span className="rounded-md border border-[var(--border)] bg-[var(--surface)] px-2 py-1">
+            Aguardando canal · <strong>{health.awaitingChannel}</strong>
+          </span>
+          <span className="rounded-md border border-[var(--border)] bg-[var(--surface)] px-2 py-1">
+            Com erro · <strong>{health.withError}</strong>
+          </span>
+          <span className="rounded-md border border-[var(--border)] bg-[var(--surface)] px-2 py-1">
+            Executadas hoje · <strong>{health.executedToday}</strong>
+          </span>
+        </div>
+      )}
       <PageHeader
         title="Automações"
         hint="Quando acontecer X, se Y, faça Z. O sistema trabalha sozinho nos bastidores — nada aqui envia mensagem por conta própria."

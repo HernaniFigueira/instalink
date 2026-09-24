@@ -388,8 +388,17 @@ export function ConversationsView({ unitId, panel = false }: { unitId?: string; 
                         {c.unread > 0 && <span className="text-[11px] font-semibold bg-[var(--brand)] text-white min-w-[18px] text-center px-1 py-0.5 rounded-pill shrink-0 tabular-nums">{c.unread}</span>}
                       </span>
                       <span className="text-xs text-[var(--text-muted)] truncate">
-                        {c.outreachOrigin ? (
-                          <span className="mr-1 inline-flex items-center gap-1 rounded bg-[var(--brand-soft)] px-1 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-[var(--text)]">
+                                                {c.agentState === 'waiting_team' && (
+                          <span className="mr-1 inline-flex items-center rounded bg-[var(--warning)]/20 px-1 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-[var(--text)]">
+                            Aguardando equipe
+                          </span>
+                        )}
+                        {c.agentState === 'human_active' && (
+                          <span className="mr-1 inline-flex items-center rounded bg-[var(--brand-soft)] px-1 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-[var(--text)]">
+                            Recepção
+                          </span>
+                        )}
+                        {c.outreachOrigin ? (   <span className="mr-1 inline-flex items-center gap-1 rounded bg-[var(--brand-soft)] px-1 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-[var(--text)]">
                             Origem: {c.outreachOrigin}
                           </span>
                         ) : null}

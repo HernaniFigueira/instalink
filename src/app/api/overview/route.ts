@@ -16,6 +16,7 @@ import { timeToMin } from '@/lib/utils';
 import { parsePeriodParam, periodWindows, resolvePeriodSpec } from '@/lib/periods';
 import { collectResults, resultsSummary } from '@/lib/insights';
 import { isFeatureEnabled } from '@/lib/features';
+import { automationHealthSummary, computeIntelligenceMetrics, intelligenceHealth } from '@/lib/intelligence-metrics';
 
 // GET ?businessId=&period=7|30|90|365|0 — dados da Dashboard.
 // (0 = todo o período; fonte única dos períodos: lib/periods.ts.)
@@ -341,8 +342,14 @@ export async function GET(req: NextRequest) {
     })()
     : null;
 
+  // ── F3-I · GoDoutor Intelligence (métricas derivadas, honestas) ──
+  const intelligence = computeIntelligenceMetrics(db, bId, { from, to: win.to || undefined });
+  const intelligenceHealthView = intelligenceHealth(db, bId);
+
   return NextResponse.json({
     user: { name: guard.ctx.user.name },
+    intelligence,
+    intelligenceHealth: intelligenceHealthView,
     business: {
       id: business.id, name: business.name, slug: business.slug,
       logo: business.logo || '', published: business.published,

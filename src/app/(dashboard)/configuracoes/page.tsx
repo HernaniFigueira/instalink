@@ -172,6 +172,8 @@ export default function ConfigPage() {
   const [biz, setBiz] = useState<Business | null>(null);
   const [msg, setMsg] = useState('');
   const [saving, setSaving] = useState(false);
+  // F3-I · saúde honesta da inteligência (sem termos técnicos na UI).
+  const [health, setHealth] = useState<Record<string, { state: string; reason: string }> | null>(null);
   // Aba = URL: derivada do parâmetro a cada render, então refresh, botão
   // voltar e deep-link funcionam sem estado paralelo.
   const tabParam = params.get('tab') || '';
@@ -204,6 +206,12 @@ export default function ConfigPage() {
     const res = await apiGet<{ business: Business }>(`/api/pages?businessId=${businessId}`, { scope: 'area', area: 'Configurações' });
     if (!report(res) || !res.data) return;
     setBiz(res.data.business);
+    // Saúde da inteligência: MESMO payload de /api/overview (nada inventado).
+    const ov = await apiGet<{ intelligenceHealth?: Record<string, { state: string; reason: string }> | null }>(
+      `/api/overview?businessId=${businessId}&period=7`,
+      { scope: 'area', area: 'Configurações' },
+    );
+    if (ov.ok) setHealth(ov.data?.intelligenceHealth || null);
   }, [businessId, report]);
   useEffect(() => { load(); }, [load]);
 
@@ -250,6 +258,45 @@ export default function ConfigPage() {
         hint="As informações do seu negócio e as regras de reserva. A página pública se constrói no editor de Página."
       />
       {msg && <p role="status" className="mb-3 text-sm font-semibold bg-[var(--success-bg)] border border-[var(--success-border)] text-[var(--success-fg)] rounded-md px-3 py-2">{msg}</p>}
+
+      {/* F3-I · Saúde da inteligência — linguagem de secretária, sem código/credencial. */}
+      {health && (
+        <section className="bg-white border border-zinc-200 p-4 mb-3" aria-label="Saúde da inteligência">
+          <div className="flex items-center gap-2 mb-2">
+            <Icon n="spark" size={14} />
+            <h3 className="text-sm font-semibold">Como está a inteligência</h3>
+          </div>
+          <ul className="space-y-1.5">
+            {([
+              ['whatsapp', 'WhatsApp'],
+              ['automation', 'Automações'],
+              ['messaging', 'Mensagens'],
+              ['inbox', 'Atendimento'],
+              ['aiProvider', 'Assistente'],
+            ] as const).map(([key, label]) => {
+              const b = health[key];
+              if (!b) return null;
+              const tone =
+                b.state === 'ok' ? 'bg-emerald-50 text-emerald-800 border-emerald-200'
+                : b.state === 'degraded' ? 'bg-amber-50 text-amber-800 border-amber-200'
+                : b.state === 'blocked' ? 'bg-zinc-100 text-zinc-700 border-zinc-200'
+                : 'bg-red-50 text-red-800 border-red-200';
+              const statusWord =
+                b.state === 'ok' ? 'OK'
+                : b.state === 'degraded' ? 'Parcial'
+                : b.state === 'blocked' ? 'Aguardando'
+                : 'Erro';
+              return (
+                <li key={key} className="flex flex-wrap items-center gap-2 text-sm">
+                  <span className="font-medium w-28 shrink-0">{label}</span>
+                  <span className={`inline-flex items-center rounded-full border px-2 py-0.5 text-[11px] font-semibold ${tone}`}>{statusWord}</span>
+                  <span className="text-xs text-zinc-500">{b.reason}</span>
+                </li>
+              );
+            })}
+          </ul>
+        </section>
+      )}
 
       <div className="mb-4">
         <Tabs

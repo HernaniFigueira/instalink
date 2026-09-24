@@ -30,6 +30,7 @@ import { cancelRunsOfAutomation, sanitizeAutomationRunForDisplay } from '@/lib/a
 import { capabilityStateFor, limitsFor } from '@/lib/automation/capabilities';
 import { applyTemplate, templateOffers } from '@/lib/automation/templates';
 import { taskAssigneeOptions } from '@/lib/automation/tasks';
+import { automationHealthSummary } from '@/lib/intelligence-metrics';
 
 function fail(message: string, status = 400): NextResponse {
   return NextResponse.json({ ok: false, error: message }, { status });
@@ -97,6 +98,7 @@ export async function GET(req: NextRequest) {
     templates: templateOffers(db, businessId),
     capabilities: capabilityStateFor(business),
     limits: limitsFor(business),
+    health: automationHealthSummary(db, businessId),
     counts: {
       automations: automations.length,
       openTasks: (db.tasks || []).filter((t) => t.businessId === businessId && t.status === 'open').length,

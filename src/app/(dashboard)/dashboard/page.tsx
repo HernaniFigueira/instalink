@@ -83,6 +83,13 @@ interface Overview {
   crm?: { contacts: number; newContacts: number; registered: number; withConsent: number; leads: number; leadsNew: number; customers: number };
   pageStats?: { views: number; clicks: number; bookings: number; conversions: number; published: boolean; slug: string };
   whatsapp?: { status: string; open: number; unread: number; pendingMessages: number; link: string } | null;
+  intelligence?: {
+    automation: { completed: number };
+    conversations: { waitingTeam: number; attendedByAi: number };
+    followUp: { rescheduled: number };
+    reactivation: { reactivated: number };
+  } | null;
+  intelligenceHealth?: Record<string, { state: string; reason: string }> | null;
   hasBookingsModule?: boolean;
   upcoming: Array<{ id: string; customerName: string; date: string; time: string; status: string; service: string; professional: string }>;
   checklist: Array<{ done: boolean; label: string; href: string; id?: string; optional?: boolean }>;
@@ -645,7 +652,41 @@ export default function DashboardPage() {
             ) : (
               <p className="text-[12.5px] text-[var(--text-muted)] rounded-lg border border-dashed border-[var(--border)] px-2.5 py-2">Nenhuma tarefa pendente.</p>
             )}
-            {attention.length === 0 && !whatsapp && !taskSum && (
+            {/* F3-I · GoDoutor Intelligence — só métricas reais; vazio honesto. */}
+      {(() => {
+        const intel = data.intelligence;
+        if (!intel) return null;
+        const cards = [
+          { label: 'conversas atendidas', value: intel.conversations.attendedByAi },
+          { label: 'automações concluídas', value: intel.automation.completed },
+          { label: 'retornos recuperados', value: intel.followUp.rescheduled + intel.reactivation.reactivated },
+          { label: 'aguardando equipe', value: intel.conversations.waitingTeam },
+        ];
+        const empty = cards.every((c) => !c.value);
+        return (
+          <section className="mb-6 rounded-xl border border-[var(--border)] bg-[var(--surface)] p-4">
+            <div className="flex items-center gap-2 mb-1">
+              <Icon n="spark" size={14} />
+              <h3 className="text-sm font-semibold">GoDoutor Intelligence</h3>
+            </div>
+            {empty ? (
+              <p className="text-xs text-[var(--text-muted)]">
+                Ainda não há atividade registrada. Quando automações e conversas rodarem, os números aparecem aqui — sem estimativas.
+              </p>
+            ) : (
+              <ul className="grid grid-cols-2 sm:grid-cols-4 gap-3 mt-2">
+                {cards.map((c) => (
+                  <li key={c.label} className="rounded-lg bg-[var(--bg)] p-2 border border-[var(--border)]">
+                    <div className="text-lg font-semibold tabular-nums text-[var(--text)]">{c.value || '—'}</div>
+                    <div className="text-[11px] text-[var(--text-muted)]">{c.label}</div>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </section>
+        );
+      })()}
+      {attention.length === 0 && !whatsapp && !taskSum && (
               <p className="text-[12.5px] text-[var(--text-muted)] text-center py-4">Nada pendente por aqui.</p>
             )}
           </div>
