@@ -1,0 +1,67 @@
+name: WhatsApp Preview Probe
+# Probe de rede externa p/ Preview WhatsApp — SEM imprimir segredos.
+on:
+  push:
+    branches: [arena/01a0ce4e-instalink]
+    paths:
+      - '.github/workflows/whatsapp-preview-probe.yml'
+      - 'scripts/whatsapp-preview-probe.sh'
+  workflow_dispatch:
+    inputs:
+      base_url:
+        description: 'Base URL do preview'
+        required: false
+        default: 'https://godoutor-git-arena-01a0ce4e-88a586-hernanicross-3509s-projects.vercel.app'
+permissions:
+  contents: write
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Presença de secrets do repo (só nomes/set|unset)
+        env:
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+          VERCEL_ACCESS_TOKEN: ${{ secrets.VERCEL_ACCESS_TOKEN }}
+        run: |
+          {
+            echo '### Presença de secrets (boolean)'
+            [ -n "$VERCEL_TOKEN" ] && echo 'VERCEL_TOKEN=set' || echo 'VERCEL_TOKEN=unset'
+            [ -n "$VERCEL_ACCESS_TOKEN" ] && echo 'VERCEL_ACCESS_TOKEN=set' || echo 'VERCEL_ACCESS_TOKEN=unset'
+          } >> "$GITHUB_STEP_SUMMARY"
+      - name: Probe Preview (webhook + env names + graph + auth)
+        env:
+          BASE_URL: ${{ inputs.base_url || 'https://godoutor-git-arena-01a0ce4e-88a586-hernanicross-3509s-projects.vercel.app' }}
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+          VERCEL_ACCESS_TOKEN: ${{ secrets.VERCEL_ACCESS_TOKEN }}
+          GITHUB_SHA: ${{ github.sha }}
+          TEST_PHONE_NUMBER_ID: '1311304095400435'
+          TEST_WABA_ID: '1802366907680005'
+        run: |
+          chmod +x scripts/whatsapp-preview-probe.sh
+          bash scripts/whatsapp-preview-probe.sh | tee /tmp/probe-result.txt
+          {
+            echo '### WhatsApp Preview Probe'
+            echo '```'
+            cat /tmp/probe-result.txt
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+      - name: Publicar resultado (validation/whatsapp-probe.txt)
+        if: always()
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          git config user.name 'validation-bot'
+          git config user.email 'actions@users.noreply.github.com'
+          mkdir -p validation
+          if [ -f /tmp/probe-result.txt ]; then
+            cp /tmp/probe-result.txt validation/whatsapp-probe.txt
+          else
+            echo 'SEM_RESULTADO' > validation/whatsapp-probe.txt
+          fi
+          git add validation/whatsapp-probe.txt
+          git commit -m 'ci: probe whatsapp preview [skip ci]' || echo 'nada a commitar'
+          git push origin "HEAD:${GITHUB_REF_NAME}" || echo 'push falhou'
