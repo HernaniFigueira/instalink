@@ -116,6 +116,12 @@ export async function GET(req: NextRequest) {
       registered: !!c.customerId,
       lastMessageAt: c.lastMessageAt,
       channelLabel: c.channel === 'instagram' ? 'Instagram' : c.channel === 'whatsapp' ? 'WhatsApp' : 'Site',
+      // F3-H — Origem: Retorno|Reativação (sem payload técnico)
+      outreachOrigin: (() => {
+        const row = (db.followUpOutreach || []).find((o) => o.businessId === businessId && o.conversationId === c.id);
+        if (!row) return undefined;
+        return row.origin === 'return' ? 'Retorno' : 'Reativação';
+      })(),
     }));
 
   return NextResponse.json({

@@ -35,6 +35,7 @@ interface Conversation {
   agentStateLabel?: string;
   handoff?: { at: string; summary: string; intent?: string; actions?: string[] } | null;
   unread: number; lastMessageAt: string; lastMessagePreview: string;
+  outreachOrigin?: string;
   registered: boolean; channel?: 'whatsapp' | 'instagram' | 'agent'; channelUsername?: string;
 }
 interface ChannelsView { whatsapp: boolean; instagram: boolean }
@@ -386,7 +387,14 @@ export function ConversationsView({ unitId, panel = false }: { unitId?: string; 
                         </span>
                         {c.unread > 0 && <span className="text-[11px] font-semibold bg-[var(--brand)] text-white min-w-[18px] text-center px-1 py-0.5 rounded-pill shrink-0 tabular-nums">{c.unread}</span>}
                       </span>
-                      <span className="text-xs text-[var(--text-muted)] truncate">{c.lastMessagePreview || c.phone || c.channelUsername || ''}</span>
+                      <span className="text-xs text-[var(--text-muted)] truncate">
+                        {c.outreachOrigin ? (
+                          <span className="mr-1 inline-flex items-center gap-1 rounded bg-[var(--brand-soft)] px-1 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-[var(--text)]">
+                            Origem: {c.outreachOrigin}
+                          </span>
+                        ) : null}
+                        {c.lastMessagePreview || c.phone || c.channelUsername || ''}
+                      </span>
                       <span className="text-[11px] text-[var(--text-faint)]">
                         {c.channel === 'instagram' ? `Instagram${c.channelUsername ? ` · @${c.channelUsername}` : ''}` : (c.phone || 'WhatsApp')}
                         {c.registered ? ' · cliente' : ''}

@@ -21,6 +21,7 @@ import {
   verifyMetaWebhookSignature,
 } from '@/lib/whatsapp-cloud-api';
 import { normalizeInboundMessage, interactiveIntent } from '@/lib/messaging/normalize';
+import { applyOutreachReply } from '@/lib/follow-up-outreach';
 import { shouldAdvanceStatus } from '@/lib/messaging/status';
 import type { Message, Conversation, Business, DB } from '@/lib/types';
 
@@ -346,6 +347,13 @@ export async function POST(req: NextRequest) {
           if (inbound.duplicate) {
             continue;
           }
+          // F3-H — resposta do paciente num outreach de retorno/reativação
+          applyOutreachReply(d, {
+            businessId,
+            conversationId: conv.id,
+            body: m.body,
+            now,
+          });
           {
             const storedIn = d.messages.find((x) => x.id === inbound.messageId);
             if (storedIn && (m.msgType || m.interactiveId)) {

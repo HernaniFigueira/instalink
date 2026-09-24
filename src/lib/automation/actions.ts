@@ -578,6 +578,10 @@ export function executeAction(input: ActionInput): ActionResult {
       }
 
       const msgId = randomUUID();
+      // F3-H — se o run veio de outreach, marca a Message com a chave lógica
+      // (MessagingService/retry não cria segundo envio com a mesma chave).
+      const outreachKey = String(input.run.context?.event?.idempotencyKey
+        || input.run.context?.outreach?.idempotencyKey || '');
       db.messages.push({
         id: msgId,
         businessId: business.id,
@@ -592,8 +596,20 @@ export function executeAction(input: ActionInput): ActionResult {
         meta: {
           templateName: templateName || undefined,
           originRunId: input.run.id,
+          ...(outreachKey ? { idempotencyKey: outreachKey } : {}),
         },
       });
+      // Liga conversationId no outreach (resposta futura encontra o registro)
+      if (outreachKey && Array.isArray(db.followUpOutreach)) {
+        const row = db.followUpOutreach.find((o) => o.businessId === business.id && o.idempotencyKey === outreachKey);
+        if (row) {
+          row.conversationId = conv.id;
+          row.messageId = msgId;
+          row.status = 'mensagem_enviada';
+          row.statusLabel = 'Mensagem enviada';
+          row.updatedAt = input.now;
+        }
+      }
       // F3 — mensagem aceita na fila do canal (não confirma leitura/recebimento).
       emitAutomationEvent(db, {
         event: 'message.sent',

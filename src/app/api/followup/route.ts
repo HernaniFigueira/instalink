@@ -43,6 +43,7 @@ export async function GET(req: NextRequest) {
     channel: followUpChannelState(business),
     candidates,
     seeded: rules.length > 0,
+    outreach: (db.followUpOutreach || []).filter((o) => o.businessId === businessId),
   });
 }
 

@@ -212,6 +212,8 @@ export interface Business {
    * com todo dado legado; nada é migrado nem adivinhado).
    */
   clinicType?: ClinicType;
+  /** Fuso IANA da unidade p/ quiet hours/datas de comunicação (aditivo). */
+  timezone?: string;
   modes: BusinessMode[];
   // Módulos opcionais (avaliações, FAQ, galeria, localização, WhatsApp,
   // Sobre, agente). Preenchido de forma defensiva na leitura (migração
@@ -1056,6 +1058,8 @@ export interface DB {
   anamneseResponses: AnamneseResponse[]; // P4 — respostas do paciente
   financeEntries: FinanceEntry[]; // P7 — financeiro básico (não é ERP)
   followUpRules: FollowUpRule[]; // P10/11 — fundação de follow-up
+  // F3-H — outreach idempotente de retorno/reativação (anti-duplo-envio)
+  followUpOutreach: FollowUpOutreach[];
 }
 
 // ═══════════════════════════════════════════════════════════════
@@ -1434,6 +1438,8 @@ export interface AutomationRun {
   history: AutomationRunStep[];
   /** Chave de idempotência do gatilho (mesma chave ⇒ no máximo 1 execução). */
   eventKey: string;
+  /** Origem do run p/ métricas F3-I (aditivo): retorno, reativação, confirmação… */
+  triggerSource?: string;
   /** Nó/entidade que originou (anti-loop: evento gerado por automação). */
   emittedByRunId: string;
   steps: number;
@@ -2073,7 +2079,9 @@ export type AuditAction =
   | 'agent.tool_called' | 'agent.tool_denied' | 'agent.tool_failed'
   // F3-F — Inbox/Handoff/Takeover (audit SEM chain-of-thought)
   | 'conversation.handoff' | 'conversation.takeover'
-  | 'conversation.ai_resumed' | 'conversation.ai_paused';
+  | 'conversation.ai_resumed' | 'conversation.ai_paused'
+  // F3-H — follow-up/reativação (resultado lógico, sem payload sensível)
+  | 'followup.outreach_evaluated' | 'followup.outreach_replied';
 
 export interface AuditEntry {
   id: ID;
@@ -2237,6 +2245,85 @@ export interface FollowUpRule {
   channel: 'whatsapp' | 'interno' | 'email';
   /** Descrição do público (ex.: "todos os pacientes ativos"). */
   audience: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+// ── F3-H · Outreach de follow-up/reativação (anti-duplo-envio) ──
+/** Estado operacional (UI mostra statusLabel legível; nada técnico). */
+export type FollowUpOutreachStatus =
+  | 'programado'        // due no futuro / aguardando janela
+  | 'aguardando_canal'  // WhatsApp desconectado
+  | 'mensagem_enviada'  // aceito pelo provider/fila
+  | 'paciente_respondeu'
+  | 'agendamento_realizado'
+  | 'ignorado'          // quiet hours / sem regra
+  | 'recusado'
+  | 'falha'
+  | 'ja_agendado'       // skipped_already_scheduled
+  | 'superado'          // skipped_superseded
+  | 'cancelado'         // cancelled_by_context
+  | 'sem_telefone'
+  | 'sem_consentimento';
+
+export type FollowUpOutreachKind = 'return' | 'reactivation';
+
+/** Rótulos humanos (nunca eventId/webhook/runner na UI). */
+export const FOLLOW_UP_OUTREACH_LABELS: Record<FollowUpOutreachStatus, string> = {
+  programado: 'Retorno previsto',
+  aguardando_canal: 'Aguardando WhatsApp',
+  mensagem_enviada: 'Mensagem enviada',
+  paciente_respondeu: 'Paciente respondeu',
+  agendamento_realizado: 'Agendamento realizado',
+  ignorado: 'Ignorado',
+  recusado: 'Recusado',
+  falha: 'Falha',
+  ja_agendado: 'Já agendado',
+  superado: 'Superado',
+  cancelado: 'Cancelado',
+  sem_telefone: 'Sem telefone',
+  sem_consentimento: 'Sem consentimento',
+};
+
+/**
+ * Registro lógico de 1 outreach (retorno OU reativação).
+ * Chave: businessId + kind + ruleId + subjectId + dueDate — nunca 2 envios.
+ */
+export interface FollowUpOutreach {
+  id: ID;
+  businessId: ID;
+  kind: FollowUpOutreachKind;
+  ruleId: ID;
+  /** Encounter (retorno) ou contact/patient (reativação). */
+  encounterId?: ID;
+  contactId?: ID;
+  customerId?: ID;
+  petId?: ID;
+  bookingId?: ID;
+  /** YYYY-MM-DD no fuso do negócio — parte da chave lógica. */
+  dueDate: string;
+  /** followup:${businessId}:${kind}:${ruleId}:${subject}:${dueDate} */
+  idempotencyKey: string;
+  status: FollowUpOutreachStatus;
+  /** Rótulo para UI/histórico. */
+  statusLabel: string;
+  /** eventKey explícito para emitAutomationEvent (1x lógico). */
+  eventKey: string;
+  phone: string;
+  /** Paciente (pet na vet; pessoa na clínica). */
+  patientName: string;
+  /** Destino da mensagem (tutor na vet; o próprio paciente). */
+  destName: string;
+  /** Origem no inbox: 'return' | 'reactivation'. */
+  origin: FollowUpOutreachKind;
+  attempt: number;
+  /** Próxima tentativa (quiet hours / 2ª tentativa). '' = sem fila. */
+  nextAttemptAt: string;
+  conversationId?: ID;
+  messageId?: ID;
+  automationRunId?: ID;
+  /** Métricas F3-I: última ação confiável. */
+  lastResult?: string;
   createdAt: string;
   updatedAt: string;
 }

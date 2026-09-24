@@ -70,7 +70,7 @@ export function emptyDB(): DB {
     encounters: [],
     // FASE 2 · Product Revolution (aditivas — documento antigo ganha []).
     pets: [], anamneseTemplates: [], anamneseResponses: [],
-    financeEntries: [], followUpRules: [],
+    financeEntries: [], followUpRules: [], followUpOutreach: [],
   };
 }
 
@@ -87,7 +87,7 @@ export function normalizeDB(raw: unknown): DB {
     'automations', 'automationRuns', 'tasks', 'aiProposals',
     'integrations', 'integrationEvents', 'queue', 'encounters',
     // FASE 2 · Product Revolution
-    'pets', 'anamneseTemplates', 'anamneseResponses', 'financeEntries', 'followUpRules',
+    'pets', 'anamneseTemplates', 'anamneseResponses', 'financeEntries', 'followUpRules', 'followUpOutreach',
   ] as const) {
     if (!Array.isArray((base as any)[key])) (base as any)[key] = [];
   }

@@ -340,8 +340,8 @@ export const AUTOMATION_TEMPLATES: AutomationTemplate[] = [
   },
   {
     id: 'followup_return_msg',
-    name: 'Retorno previsto → avisar',
-    description: 'Quando o follow-up de retorno vence (data ou intervalo do atendimento), a equipe recebe tarefa e o paciente é avisado.',
+    name: 'Lembrar retornos',
+    description: 'Entra em contato quando chegar a data de retorno definida pelo profissional.',
     event: 'followup.due',
     tags: ['Retorno', 'Receita'],
     requires: 'automation.advanced',
@@ -366,7 +366,7 @@ export const AUTOMATION_TEMPLATES: AutomationTemplate[] = [
           type: 'send_channel_message',
           params: {
             channel: 'whatsapp',
-            message: 'Olá! Estamos avisando que seu retorno está previsto. Se quiser agendar um novo horário, é só responder por aqui.',
+            message: 'Olá. Está chegando o momento do seu retorno. Gostaria de agendar?',
           },
         },
       },
@@ -374,8 +374,8 @@ export const AUTOMATION_TEMPLATES: AutomationTemplate[] = [
   },
   {
     id: 'patient_inactive_reengage',
-    name: 'Paciente inativo → reengajar',
-    description: 'Sem atendimento há tempo demais: tarefa para a equipe e mensagem de reativação (só com consentimento de marketing elegível).',
+    name: 'Reativar pacientes',
+    description: 'Fala com pacientes que não voltam há algum tempo (só com consentimento de marketing).',
     event: 'patient.inactive',
     tags: ['Relacionamento', 'Receita'],
     requires: 'automation.advanced',
@@ -400,7 +400,7 @@ export const AUTOMATION_TEMPLATES: AutomationTemplate[] = [
           type: 'send_channel_message',
           params: {
             channel: 'whatsapp',
-            message: 'Olá! Sentimos sua falta por aqui. Se quiser voltar a agendar, é só responder que a gente ajuda com o horário.',
+            message: 'Olá. Faz um tempo que você não passa por aqui. Se quiser, posso verificar horários.',
           },
         },
       },

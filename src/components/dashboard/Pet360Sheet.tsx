@@ -14,6 +14,7 @@ import { EncounterList, type EncounterRow } from '@/components/dashboard/Encount
 import { apiGet } from '@/lib/api-client';
 import { PET_SPECIES_LABELS, petAge, petLabel } from '@/lib/pets';
 import { formatDateBR } from '@/lib/tz';
+import { followUpDueDate } from '@/lib/encounters';
 import type { AnamneseResponse, AnamneseTemplate, Booking, Pet } from '@/lib/types';
 
 type PetTab = 'resumo' | 'encounters' | 'agenda' | 'anamnese' | 'files' | 'notes';
@@ -71,6 +72,15 @@ export function Pet360Sheet({ open, onClose, businessId, pet, tutorName, tutorPh
   }, [open, pet?.id, pet?.tutorId, businessId]);
 
   const age = pet ? petAge(pet.birthDate) : null;
+  // F3-H · Pet 360: retorno previsto DO PET (não do tutor como "paciente")
+  const upcomingReturn = useMemo(() => {
+    const rows = encounters
+      .filter((e) => e.status === 'finalized' && (e.followUpMode === 'date' || e.followUpMode === 'interval'))
+      .map((e) => ({ e, due: followUpDueDate(e) }))
+      .filter((r) => r.due)
+      .sort((a, b) => (a.due < b.due ? 1 : -1));
+    return rows[0] || null;
+  }, [encounters]);
   const files = useMemo(
     () => encounters.flatMap((e) => (e.files || []).map((f) => ({ ...f, encounterDate: e.date, encounterId: e.id }))),
     [encounters],
@@ -114,6 +124,11 @@ export function Pet360Sheet({ open, onClose, businessId, pet, tutorName, tutorPh
               Tutor: <strong className="text-[var(--text)]">{tutorName || '—'}</strong>
               {tutorPhone ? ` · ${tutorPhone}` : ''}
             </p>
+            {upcomingReturn && (
+              <p className="text-xs text-[var(--text)] mt-1" data-pet360-return="true">
+                Retorno previsto: {formatDateBR(upcomingReturn.due)}
+              </p>
+            )}
           </div>
           {pet.sex && <Badge tone="zinc">{pet.sex === 'M' ? 'Macho' : 'Fêmea'}</Badge>}
         </div>

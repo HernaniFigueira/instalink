@@ -38,6 +38,8 @@ export interface SendConversationMessageInput {
   /** Template quando política exigir (ou force). */
   template?: { name: string; language?: string; components?: unknown[] };
   at?: string;
+  /** Anti-duplo-envio lógico (F3-H): retry não cria 2ª Message. */
+  idempotencyKey?: string;
 }
 
 export interface SendConversationMessageOutcome extends MessagingResult {
@@ -80,6 +82,27 @@ export async function sendConversationMessage(
   const to = String(input.to || conv.phone || '').replace(/\D/g, '');
   const body = String(input.body || '').slice(0, 4000);
   const now = input.at || new Date().toISOString();
+
+  if (input.idempotencyKey) {
+    const prior = db.messages.find(
+      (m) => m.businessId === input.businessId
+        && m.conversationId === input.conversationId
+        && m.direction === 'out'
+        && (m.meta as any)?.idempotencyKey === input.idempotencyKey,
+    );
+    if (prior) {
+      const okPrior = prior.status !== 'failed';
+      return {
+        ok: okPrior,
+        provider: String((prior.meta as any)?.provider || 'unknown'),
+        providerMessageId: prior.externalId || '',
+        status: okPrior ? 'sent' : 'failed',
+        messageId: prior.id,
+        ...(okPrior ? {} : { errorMessage: prior.error || 'Envio anterior falhou.' }),
+      };
+    }
+  }
+
   const provider = pickProvider(input.useSimulator);
 
   // ── Política de marketing ──
@@ -120,6 +143,7 @@ export async function sendConversationMessage(
     provider: provider.id,
     by: input.by,
     ...(isSim ? { simulator: true } : {}),
+    ...(input.idempotencyKey ? { idempotencyKey: input.idempotencyKey } : {}),
   };
   const draft: Message = {
     id: msgId,
