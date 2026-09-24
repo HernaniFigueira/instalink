@@ -27,12 +27,19 @@ jobs:
         env:
           VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
           VERCEL_ACCESS_TOKEN: ${{ secrets.VERCEL_ACCESS_TOKEN }}
+          VERCEL_API_TOKEN: ${{ secrets.VERCEL_API_TOKEN }}
         run: |
           {
             echo '### Presença de secrets (boolean)'
             [ -n "$VERCEL_TOKEN" ] && echo 'VERCEL_TOKEN=set' || echo 'VERCEL_TOKEN=unset'
             [ -n "$VERCEL_ACCESS_TOKEN" ] && echo 'VERCEL_ACCESS_TOKEN=set' || echo 'VERCEL_ACCESS_TOKEN=unset'
+            [ -n "$VERCEL_API_TOKEN" ] && echo 'VERCEL_API_TOKEN=set' || echo 'VERCEL_API_TOKEN=unset'
           } >> "$GITHUB_STEP_SUMMARY"
+          # also emit into probe file prefix
+          mkdir -p /tmp
+          {
+            [ -n "$VERCEL_TOKEN$VERCEL_ACCESS_TOKEN$VERCEL_API_TOKEN" ] && echo 'SECRETS|vercel|set' || echo 'SECRETS|vercel|unset'
+          } > /tmp/secrets-prefix.txt
       - name: Probe Preview (webhook + env names + graph + auth)
         env:
           BASE_URL: ${{ inputs.base_url || 'https://godoutor-git-arena-01a0ce4e-88a586-hernanicross-3509s-projects.vercel.app' }}
@@ -43,7 +50,10 @@ jobs:
           TEST_WABA_ID: '1802366907680005'
         run: |
           chmod +x scripts/whatsapp-preview-probe.sh
-          bash scripts/whatsapp-preview-probe.sh | tee /tmp/probe-result.txt
+          {
+            [ -f /tmp/secrets-prefix.txt ] && cat /tmp/secrets-prefix.txt
+            bash scripts/whatsapp-preview-probe.sh
+          } | tee /tmp/probe-result.txt
           {
             echo '### WhatsApp Preview Probe'
             echo '```'

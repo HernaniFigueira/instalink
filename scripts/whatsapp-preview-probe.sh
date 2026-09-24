@@ -125,8 +125,11 @@ G1=$(curl -sS -m 30 -o /tmp/wh_g1.json -w '%{http_code}' "$BASE/api/whatsapp/web
 G1B=$(head -c 250 /tmp/wh_g1.json 2>/dev/null || true)
 if [ "$G1" = "403" ]; then
   say 4-get-rota PASS "GET sem params → 403 (rota pública; corpo=Verificação inválida)"
+  # 403 (e não 503) ⇒ WHATSAPP_VERIFY_TOKEN presente no servidor (fail-closed do GET)
+  say 1-env-infer-WHATSAPP_VERIFY_TOKEN PASS "inferido presente (GET não retornou 503 de token ausente)"
 elif [ "$G1" = "503" ]; then
   say 4-get-rota FAIL "GET → 503 WHATSAPP_VERIFY_TOKEN ausente no servidor"
+  say 1-env-infer-WHATSAPP_VERIFY_TOKEN BLOCKED_MISSING_SECRET "WHATSAPP_VERIFY_TOKEN"
 else
   say 4-get-rota FAIL "GET sem params → $G1 corpo=$(printf '%s' "$G1B" | head -c 120)"
 fi
@@ -160,8 +163,11 @@ P1=$(curl -sS -m 30 -o /tmp/wh_p1.json -w '%{http_code}' \
 P1B=$(head -c 250 /tmp/wh_p1.json 2>/dev/null || true)
 if [ "$P1" = "403" ]; then
   say 4-post-sem-assinatura PASS "POST sem X-Hub-Signature-256 → 403 assinatura inválida (fail-closed)"
+  # 403 (e não 503) ⇒ WHATSAPP_APP_SECRET ou META_APP_SECRET presente
+  say 1-env-infer-APP_SECRET PASS "inferido presente (POST não retornou 503 de secret ausente)"
 elif [ "$P1" = "503" ]; then
   say 4-post-sem-assinatura FAIL "POST → 503 APP secret ausente no servidor (fail-closed sem secret)"
+  say 1-env-infer-APP_SECRET BLOCKED_MISSING_SECRET "WHATSAPP_APP_SECRET / META_APP_SECRET"
 else
   say 4-post-sem-assinatura FAIL "POST sem assinatura → $P1 corpo=$(printf '%s' "$P1B" | head -c 140)"
 fi
