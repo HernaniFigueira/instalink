@@ -66,15 +66,26 @@ describe('Event Layer · emissões nos serviços oficiais', () => {
   });
 
   it('conversation.handoff só em takeover para humano', () => {
+    // F3-F: emissão centralizada em assistant-ops.handoffToTeam (única fonte).
+    const ops = read('src/lib/inbox/assistant-ops.ts');
+    expect(ops).toContain("event: 'conversation.handoff'");
+    expect(ops).toContain("setAgentState(conv, 'waiting_team')");
+    // rota de conversas delega ao handoffToTeam no caminho de humano
     const t = read('src/app/api/conversations/route.ts');
-    expect(t).toContain("event: 'conversation.handoff'");
-    expect(t).toMatch(/newMode === 'human' && prev !== 'human'/);
+    expect(t).toContain('handoffToTeam');
+    expect(t).toMatch(/newMode === 'human' && prev !== 'human'|wantHuman/);
+    // emite UMA vez por takeover (fonte única, não duplica na rota)
+    expect((ops.match(/event: 'conversation\.handoff'/g) || []).length).toBe(1);
   });
 
   it('webhook emite conversation.started e message.received', () => {
     const t = read('src/app/api/whatsapp/webhook/route.ts');
     expect(t).toContain("event: 'conversation.started'");
-    expect(t).toContain("event: 'message.received'");
+    // F3-F: message.received migrou para receiveInbound (assistant-ops)
+    expect(t).toContain('receiveInbound');
+    const ops = read('src/lib/inbox/assistant-ops.ts');
+    expect(ops).toContain("event: 'message.received'");
+    expect(ops).toContain("event: 'conversation.started'");
   });
 
   it('message.sent emitido ao enfileirar outbound de automação', () => {
