@@ -325,13 +325,15 @@ export interface OnboardingPlan {
   /** Código estável para automação/relatório (BLOCKED_EXTERNAL quando é o caso). */
   code: 'OK' | 'BLOCKED_EXTERNAL' | 'UNIT_PENDING' | 'DEGRADED';
   /** Config que o navegador PODE ver (sem segredo nenhum). */
-  clientConfig: { appId: string; configId: string; version: string } | null;
+  clientConfig: { appId: string; configId: string; version: string; redirectUri: string } | null;
 }
 
 export function onboardingPlan(args: {
   env: EnvLike;
   business: { whatsappIntegration?: UnitIntegrationView };
   todayISO: string;
+  /** Origem estável da requisição (ex.: host do Preview Vercel). */
+  requestOrigin?: string;
 }): OnboardingPlan {
   const { env, business, todayISO } = args;
   const platform = platformLayer(env);
@@ -341,7 +343,13 @@ export function onboardingPlan(args: {
   const version = { current: currentVersion, ...graphVersionAdvice(currentVersion, todayISO) };
   const wi = business.whatsappIntegration || {};
   const clientConfig = platform.ready
-    ? { appId: String(env.META_APP_ID), configId: String(env.META_CONFIG_ID), version: currentVersion }
+    ? {
+      appId: String(env.META_APP_ID),
+      configId: String(env.META_CONFIG_ID),
+      version: currentVersion,
+      // O MESMO redirect_uri vai para o FB.login E para o exchange server-to-server.
+      redirectUri: metaRedirectUri(env, String(args.requestOrigin || '')),
+    }
     : null;
 
   const authorized = !!wi.encryptedAccessToken;
@@ -605,8 +613,40 @@ export function graphBase(version: string): string {
 }
 
 /** URLs usadas na troca do código. Separadas para poder testar sem rede. */
-export function exchangeCodeUrl(base: string, appId: string, appSecret: string, code: string): string {
-  const qs = new URLSearchParams({ client_id: appId, client_secret: appSecret, code });
+/**
+ * redirect_uri do Embedded Signup — idêntico na autorização e na troca.
+ *
+ * O FB.login do JS SDK e o GET /oauth/access_token precisam usar EXATAMENTE o
+ * mesmo valor (Meta OAuth 100/36008 caso contrário). Prioridade:
+ *   1. `META_REDIRECT_URI` quando a chave existir no env (inclusive vazia —
+ *      o JS SDK historicamente associa o code a `redirect_uri=""`);
+ *   2. a origem estável da requisição (host do Preview/produção), sem barra final.
+ * Nunca chuta URI: o servidor calcula um único valor e o painel o reutiliza.
+ */
+export function metaRedirectUri(env: EnvLike, requestOrigin: string): string {
+  if (Object.prototype.hasOwnProperty.call(env, 'META_REDIRECT_URI')) {
+    return String(env.META_REDIRECT_URI ?? '').trim();
+  }
+  return String(requestOrigin || '').replace(/\/+$/, '');
+}
+
+/**
+ * URL da troca do código. `redirect_uri` é obrigatório na Meta e DEVE ser o
+ * mesmo usado no diálogo OAuth (FB.login).
+ */
+export function exchangeCodeUrl(
+  base: string,
+  appId: string,
+  appSecret: string,
+  code: string,
+  redirectUri: string,
+): string {
+  const qs = new URLSearchParams({
+    client_id: appId,
+    client_secret: appSecret,
+    code,
+    redirect_uri: redirectUri,
+  });
   return `${base}/oauth/access_token?${qs.toString()}`;
 }
 export function debugTokenUrl(base: string, token: string): string {

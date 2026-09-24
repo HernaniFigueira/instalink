@@ -26,8 +26,8 @@ import { createSession } from '../auth';
 import { GET as onboardingGET, POST as onboardingPOST } from '@/app/api/whatsapp/onboarding/route';
 import { DEFAULT_META_GRAPH_VERSION } from '../whatsapp-cloud-api';
 import {
-  GRAPH_RELEASES, LATEST_VERIFIED_GRAPH_VERSION, graphVersionAdvice, onboardingPlan, onboardingSteps,
-  parseSignupMessage, platformLayer, unitLayer, waMeTestLink, WA_ME_TEST_DISCLAIMER,
+  GRAPH_RELEASES, LATEST_VERIFIED_GRAPH_VERSION, exchangeCodeUrl, graphVersionAdvice, metaRedirectUri,
+  onboardingPlan, onboardingSteps, parseSignupMessage, platformLayer, unitLayer, waMeTestLink, WA_ME_TEST_DISCLAIMER,
 } from '../whatsapp-onboarding';
 import { appsecretProof, issueSignupState, verifySignupState } from '../whatsapp-onboarding-server';
 import type { Business, DB } from '../types';
@@ -88,6 +88,7 @@ function setEnv(values: Record<string, string>) {
 function clearPlatformEnv() {
   for (const k of Object.keys(PLATFORM_ENV)) delete process.env[k];
   delete process.env.META_GRAPH_VERSION;
+  delete process.env.META_REDIRECT_URI;
 }
 
 beforeEach(async () => {
@@ -144,8 +145,18 @@ describe('A3.4 · B8 — diagnóstico em duas camadas', () => {
     const plan = onboardingPlan({ env: PLATFORM_ENV, business: business(BIZ), todayISO: '2026-09-19' });
     expect(plan.state).toBe('ready_for_signup');
     expect(plan.nextAction.kind).toBe('embedded_signup');
-    expect(plan.clientConfig).toEqual({ appId: '1234567890', configId: '9876543210', version: LATEST_VERIFIED_GRAPH_VERSION });
+    // Sem requestOrigin e sem META_REDIRECT_URI, redirectUri é string vazia (padrão do JS SDK).
+    expect(plan.clientConfig).toEqual({
+      appId: '1234567890', configId: '9876543210', version: LATEST_VERIFIED_GRAPH_VERSION, redirectUri: '',
+    });
     expect(JSON.stringify(plan.clientConfig)).not.toContain(PLATFORM_ENV.META_APP_SECRET);
+
+    // Com origem do Preview, o clientConfig carrega o MESMO redirect_uri que irá no exchange.
+    const previewOrigin = 'https://godoutor-git-arena-01a0ce4e-88a586-hernanicross-3509s-projects.vercel.app';
+    const previewPlan = onboardingPlan({
+      env: PLATFORM_ENV, business: business(BIZ), todayISO: '2026-09-19', requestOrigin: previewOrigin,
+    });
+    expect(previewPlan.clientConfig?.redirectUri).toBe(previewOrigin);
   });
 
   it('sem REGISTRO do número a unidade fica pendente — nunca "conectado" nem "aguardando evento"', () => {
@@ -314,6 +325,8 @@ describe('A3.4 · B8 — rota de onboarding (com a Meta simulada)', () => {
     const body = await json(res);
     expect(body.plan.state).toBe('ready_for_signup');
     expect(body.signupState).toBeTruthy();
+    // O clientConfig entrega o redirect_uri que o painel usará no FB.login (igual ao exchange).
+    expect(body.plan.clientConfig.redirectUri).toBe('http://localhost:3000');
     const text = JSON.stringify(body);
     expect(text).not.toContain(PLATFORM_ENV.META_APP_SECRET);
     expect(text).not.toContain(KEY);
@@ -380,6 +393,9 @@ describe('A3.4 · B8 — rota de onboarding (com a Meta simulada)', () => {
     const exchange = calls.find((c) => c.path === '/oauth/access_token')!;
     expect(exchange.url.searchParams.get('client_secret')).toBe(PLATFORM_ENV.META_APP_SECRET);
     expect(exchange.url.searchParams.get('code')).toBe('CODIGO-CURTO');
+    // Identidade obrigatória: o redirect_uri do exchange é SEMPRE o expected do servidor
+    // (origem da requisição), presente no GET /oauth/access_token — Meta 36008 se ausente/divergente.
+    expect(exchange.url.searchParams.get('redirect_uri')).toBe('http://localhost:3000');
 
     // Auditoria com o que importa (e sem segredo nenhum).
     const audit = db.audit.find((a) => a.action === 'whatsapp.connected')!;
@@ -644,6 +660,37 @@ describe('A3.4 · B8 — rota de onboarding (com a Meta simulada)', () => {
     expect((await json(bad)).error).toMatch(/6 dígitos/);
   });
 
+  it('redirectUri no body divergente do esperado falha 400 e NÃO chama a Graph', async () => {
+    setEnv(PLATFORM_ENV);
+    const state = issueSignupState(KEY, { businessId: BIZ, userId: OWNER });
+    const calls = mockMeta(OK_META);
+    const res = await onboardingPOST(jsonReq('/api/whatsapp/onboarding', {
+      businessId: BIZ, action: 'exchange', code: 'CODIGO-CURTO', state,
+      redirectUri: 'https://evil.example/callback',
+      pin: '123456', signup: { event: 'FINISH' },
+    }, token));
+    expect(res.status).toBe(400);
+    const body = await json(res);
+    expect(String(body.error)).toContain('redirect_uri');
+    expect(calls.find((c) => c.path === '/oauth/access_token')).toBeUndefined();
+    const db = await readDB();
+    expect(db.businesses.find((b) => b.id === BIZ)!.whatsappIntegration?.encryptedAccessToken).toBeUndefined();
+  });
+
+  it('redirectUri correto no body bate com o expected do servidor (localhost:3000)', async () => {
+    setEnv(PLATFORM_ENV);
+    const state = issueSignupState(KEY, { businessId: BIZ, userId: OWNER });
+    const calls = mockMeta(OK_META);
+    const res = await onboardingPOST(jsonReq('/api/whatsapp/onboarding', {
+      businessId: BIZ, action: 'exchange', code: 'CODIGO-CURTO', state,
+      redirectUri: 'http://localhost:3000',
+      pin: '123456', signup: { event: 'FINISH', waba_id: 'WABA-1', phone_number_id: 'PN-1' },
+    }, token));
+    expect(res.status).toBe(200);
+    const exchange = calls.find((c) => c.path === '/oauth/access_token')!;
+    expect(exchange.url.searchParams.get('redirect_uri')).toBe('http://localhost:3000');
+  });
+
   it('a unidade de OUTRO negócio não conecta por aqui (isolamento)', async () => {
     setEnv(PLATFORM_ENV);
     const res = await onboardingPOST(jsonReq('/api/whatsapp/onboarding', {
@@ -668,6 +715,8 @@ describe('A3.4 · B8 — a tela (prova no código-fonte)', () => {
     expect(src).toMatch(/config_id: cfg\.configId/);
     expect(src).toMatch(/response_type: 'code'/);
     expect(src).toMatch(/override_default_response_type: true/);
+    expect(src).toMatch(/redirect_uri: cfg\.redirectUri/);
+    expect(src).toMatch(/redirectUri: cfg\.redirectUri/);
     expect(src).toMatch(/event\.origin !== SIGNUP_MESSAGE_ORIGIN/);
     expect(src).toMatch(/\/api\/whatsapp\/onboarding/);
     expect(src).toMatch(/action: 'exchange'/);
@@ -680,5 +729,48 @@ describe('A3.4 · B8 — a tela (prova no código-fonte)', () => {
     expect(src).toMatch(/Graph API \{guide\?\.plan\.version\.current/);
     expect(src).toMatch(/WA_ME_TEST_DISCLAIMER/);
     expect(src).toMatch(/Conectar com a Meta/);
+  });
+});
+
+
+// ═══════════════════════════════════════════════════════════════
+// redirect_uri da Meta: identidade obrigatória autorização ↔ exchange
+// (OAuthException 100/36008 se divergir ou faltar)
+// ═══════════════════════════════════════════════════════════════
+describe('metaRedirectUri / exchangeCodeUrl — redirect_uri idêntico', () => {
+  const PREVIEW = 'https://godoutor-git-arena-01a0ce4e-88a586-hernanicross-3509s-projects.vercel.app';
+
+  it('sem META_REDIRECT_URI usa a origem estável da requisição (sem barra final)', () => {
+    expect(metaRedirectUri({}, PREVIEW)).toBe(PREVIEW);
+    expect(metaRedirectUri({} as Record<string, string>, `${PREVIEW}/`)).toBe(PREVIEW);
+  });
+
+  it('META_REDIRECT_URI definida (inclusive vazia) tem prioridade sobre a origem', () => {
+    expect(metaRedirectUri({ META_REDIRECT_URI: PREVIEW }, 'http://other')).toBe(PREVIEW);
+    // Chave presente e vazia = JS SDK com redirect_uri="" — valor explícito, não chute.
+    expect(metaRedirectUri({ META_REDIRECT_URI: '' }, PREVIEW)).toBe('');
+    expect(metaRedirectUri({ META_REDIRECT_URI: '  ' }, PREVIEW)).toBe('');
+  });
+
+  it('exchangeCodeUrl SEMPRE envia redirect_uri (mesmo vazio) junto do code', () => {
+    const url = new URL(exchangeCodeUrl('https://graph.facebook.com', 'app', 'secret', 'CODIGO', PREVIEW));
+    expect(url.pathname).toBe('/oauth/access_token');
+    expect(url.searchParams.get('redirect_uri')).toBe(PREVIEW);
+    expect(url.searchParams.get('code')).toBe('CODIGO');
+    expect(url.searchParams.get('client_id')).toBe('app');
+    expect(url.searchParams.get('client_secret')).toBe('secret');
+
+    const empty = new URL(exchangeCodeUrl('https://graph.facebook.com', 'a', 's', 'c', ''));
+    expect(empty.searchParams.has('redirect_uri')).toBe(true);
+    expect(empty.searchParams.get('redirect_uri')).toBe('');
+  });
+
+  it('o plano com origem expõe no clientConfig o MESMO redirect_uri do exchange', () => {
+    const plan = onboardingPlan({
+      env: PLATFORM_ENV, business: business(BIZ), todayISO: '2026-09-19', requestOrigin: PREVIEW,
+    });
+    expect(plan.clientConfig?.redirectUri).toBe(PREVIEW);
+    const exchanged = new URL(exchangeCodeUrl('https://graph.facebook.com', 'app', 's', 'c', plan.clientConfig!.redirectUri));
+    expect(exchanged.searchParams.get('redirect_uri')).toBe(plan.clientConfig!.redirectUri);
   });
 });

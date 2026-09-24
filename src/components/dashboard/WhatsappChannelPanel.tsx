@@ -30,7 +30,7 @@ export interface WaOnboardingView {
     steps: OnboardingStepView[];
     nextAction: { kind: string; label: string; detail: string };
     version: { current: string; level: string; message: string };
-    clientConfig: { appId: string; configId: string; version: string } | null;
+    clientConfig: { appId: string; configId: string; version: string; redirectUri: string } | null;
   };
   masterRouteAvailable: boolean;
   webhookPath: string;
@@ -210,12 +210,16 @@ export function WhatsappChannelPanel({ businessId }: { businessId: string }) {
           config_id: cfg.configId,
           response_type: 'code',
           override_default_response_type: true,
+          // Deve ser EXATAMENTE o redirect_uri enviado no exchange (Meta 36008 se divergir).
+          redirect_uri: cfg.redirectUri,
           extras: { setup: {} },
         });
       });
       // O código vale 30 segundos e é de uso único: troca imediata, sem retry.
       const res = await apiSend<{ message?: string }>('/api/whatsapp/onboarding', 'POST', {
         businessId, action: 'exchange', code,
+        // Mesmo valor do FB.login — o servidor valida a igualdade.
+        redirectUri: cfg.redirectUri,
         state: guide?.signupState || '',
         wabaId: signupRef.current.wabaId,
         phoneNumberId: signupRef.current.phoneNumberId,
