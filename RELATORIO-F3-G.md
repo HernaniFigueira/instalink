@@ -7,7 +7,7 @@
 | Bloco | SHA |
 |---|---|
 | Base F2–F3-F | `e3ab058` … `f40ff31` / docs `43c1229` |
-| **F3-G** | `3aa4e38` |
+| **F3-G** | `3aa4e38` + docs `b1298f0` + test fix `d37f2e3` |
 
 ## Arquitetura entregue
 
@@ -91,7 +91,7 @@ Inbound: Meta Webhook → assinatura → normalização → dedupe → `receiveI
 | F3-F | **14/14** |
 | F3-E | **16/16** |
 | F3-D | **13/13** |
-| Suíte completa | 6 falhas **pré-existentes** (instagram×3, audit poda, pipeline passado, p61 invariant); F3-G incluído |
+| Suíte completa | 6 falhas **pré-existentes** (instagram×3, audit poda, pipeline passado, p61 invariant); event-layer 2 corrigidos no gate; F3-G incluído |
 | build | **0** |
 | Vercel | (poll após push) |
 | merge | **NÃO** |
