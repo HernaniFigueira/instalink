@@ -300,6 +300,13 @@ export interface WhatsappIntegration {
   // Credencial criptografada por Business (AES-256-GCM via WHATSAPP_CREDENTIALS_KEY)
   encryptedAccessToken?: string;
   keyFingerprint?: string;
+  /**
+   * F3-G — referência a cofre seguro multi-tenant (futuro). O SEGREDO nunca
+   * fica no Business; só o ref. Enquanto não houver cofre, usa-se env
+   * server-side mono-tenant documentado como PILOT_ONLY_SINGLE_CREDENTIAL
+   * ou encryptedAccessToken AES-GCM existente.
+   */
+  credentialRef?: string;
   verifiedName?: string;
   lastInboundAt?: string;
   lastOutboundAt?: string;

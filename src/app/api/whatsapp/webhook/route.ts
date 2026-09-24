@@ -20,6 +20,8 @@ import {
   resolveTenantForChange,
   verifyMetaWebhookSignature,
 } from '@/lib/whatsapp-cloud-api';
+import { normalizeInboundMessage, interactiveIntent } from '@/lib/messaging/normalize';
+import { shouldAdvanceStatus } from '@/lib/messaging/status';
 import type { Message, Conversation, Business, DB } from '@/lib/types';
 
 // WEBHOOK do WhatsApp oficial (provedor → InstaLink).
@@ -46,6 +48,9 @@ interface IncomingMessage {
   phone: string;
   name: string;
   body: string;
+  msgType?: string;
+  interactiveId?: string;
+  interactiveTitle?: string;
 }
 
 interface IncomingStatus {
@@ -86,15 +91,19 @@ function parseWebhookBatches(payload: any): WebhookChangeBatch[] {
       if (Array.isArray(val?.messages)) {
         for (const m of val.messages) {
           const phone = String(m?.from || m?.phone || '');
-          const body = String(m?.text?.body ?? m?.body ?? '').slice(0, 4000);
-          const externalId = String(m?.id || m?.externalId || '');
-          if (!phone && !externalId) continue;
           const mappedName = contactMap.get(phone) || String(m?.profile?.name || m?.name || '').slice(0, 80);
+          const norm = normalizeInboundMessage(m, mappedName);
+          if (!norm) continue;
+          const externalId = norm.providerMessageId || String(m?.externalId || '');
+          if (!phone && !externalId) continue;
           messages.push({
             externalId,
             phone,
             name: mappedName,
-            body,
+            body: (norm.text || '').slice(0, 4000),
+            msgType: norm.type,
+            interactiveId: norm.interactiveReply?.id || '',
+            interactiveTitle: norm.interactiveReply?.title || '',
           });
         }
       }
@@ -210,8 +219,10 @@ export async function POST(req: NextRequest) {
         for (const st of batch.statuses) {
           const target = d.messages.find((m) => m.externalId === st.id && m.businessId === businessId);
           if (target) {
-            target.status = st.status;
-            if (st.status === 'failed') {
+            if (shouldAdvanceStatus(target.status, st.status)) {
+              target.status = st.status as typeof target.status;
+            }
+            if (st.status === 'failed' && target.status === 'failed') {
               const errDetail = st.errors?.[0]?.message || st.errors?.[0]?.title || 'Mensagem rejeitada pela Meta.';
               target.error = errDetail;
               b.whatsappIntegration.lastError = errDetail;
@@ -333,8 +344,22 @@ export async function POST(req: NextRequest) {
             contactName: contact?.name || m.name || 'Cliente',
           });
           if (inbound.duplicate) {
-            // Duplicata do webhook ≠ segunda resposta de IA nem segundo booking.
             continue;
+          }
+          {
+            const storedIn = d.messages.find((x) => x.id === inbound.messageId);
+            if (storedIn && (m.msgType || m.interactiveId)) {
+              storedIn.meta = {
+                ...(storedIn.meta || {}),
+                provider: 'whatsapp',
+                msgType: m.msgType || 'text',
+                ...(m.interactiveId ? { interactiveId: m.interactiveId } : {}),
+                ...(m.interactiveTitle ? { interactiveTitle: m.interactiveTitle } : {}),
+                ...(m.interactiveId || m.interactiveTitle
+                  ? { intent: interactiveIntent({ id: m.interactiveId, title: m.interactiveTitle }) }
+                  : {}),
+              };
+            }
           }
           b.whatsappIntegration.lastInboundAt = now;
 
