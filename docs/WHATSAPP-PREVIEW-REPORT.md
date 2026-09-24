@@ -120,7 +120,7 @@ Handshake GET positivo **já validado pela Meta** (fato do usuário); o probe co
    - `WHATSAPP_WABA_ID` = `1802366907680005`
    - `WHATSAPP_CREDENTIALS_KEY` (segredo forte separado AES-256-GCM)
    - `META_GRAPH_VERSION` (opcional; default `v26.0`)
-2. **Opcional p/ automação deste repo:** criar secret GitHub `VERCEL_TOKEN` (repo ou environment `Preview`) para o probe listar/pullar envs sem价值观 no log.
+2. **Opcional p/ automação deste repo:** criar secret GitHub `VERCEL_TOKEN` (repo ou environment `Preview`) para o probe listar/pullar envs sem valores no log.
 3. Ação humana no dashboard Preview (ou Master): fluxo **oficial** de conexão/mapeamento da unidade **Andrioni Veterinária** com o phoneNumberId de teste (sem JSON manual).
 4. Reexecutar `WhatsApp Preview Probe` (push nos paths do workflow ou `workflow_dispatch`).
 5. Classificar novamente os itens 2 (HMAC positivo), 3, 4, 5, 6 com evidência nova.
