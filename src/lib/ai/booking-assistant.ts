@@ -25,6 +25,7 @@ export type BookingStep =
   | 'need_time'
   | 'need_person'
   | 'need_pet'
+  | 'need_new_pet'
   | 'confirm'
   | 'done'
   | 'cancelled';
@@ -63,13 +64,20 @@ export interface BookingSession {
   slots: string[];
   /** Pets do tutor (quando houver) para o passo need_pet. */
   pets: Array<{ id: string; name: string; label: string }>;
+  /** true quando clinicType === 'veterinaria' (PET = paciente). */
+  isVeterinary: boolean;
+  /** Rascunho do novo pet (need_new_pet): nome + espécie mínimos. */
+  newPet: { name: string; species: string };
   turn: number;
 }
 
 const MAX_TURNS = 24;
 
 export function newBookingSession(): BookingSession {
-  return { step: 'idle', draft: {}, slots: [], pets: [], turn: 0 };
+  return {
+    step: 'idle', draft: {}, slots: [], pets: [],
+    isVeterinary: false, newPet: { name: '', species: '' }, turn: 0,
+  };
 }
 
 // ── parsing determinístico (fallback sem LLM) ──────────────────
@@ -294,8 +302,46 @@ function askPerson(session: BookingSession): AssistantReply {
   };
 }
 
-/** Após coletar o tutor: se houver pets, pergunta o paciente (vet = pet). */
+/** clinicType da unidade via tool (conhecimento só da clínica). */
+function detectVeterinary(ctx: ToolCallContext): boolean {
+  const out = callTool('getClinicInfo', {}, ctx);
+  if (!out.ok || !out.data) return false;
+  const type = String((out.data as { clinicType?: string }).clinicType || '').toLowerCase();
+  return type === 'veterinaria';
+}
+
+/** Resumo de confirmação com pet (quando veterinária). */
+function goToConfirm(session: BookingSession): AssistantReply {
+  session.step = 'confirm';
+  return {
+    ok: true,
+    step: 'confirm',
+    message: confirmationMessage(session.draft, session.pets),
+    draft: session.draft,
+    needsConfirm: true,
+  };
+}
+
+/** Entra no cadastro mínimo do paciente (nome → espécie → createPet). */
+function askNewPetName(session: BookingSession): AssistantReply {
+  session.step = 'need_new_pet';
+  session.newPet = { name: '', species: '' };
+  const tutor = session.draft.customerName || 'o tutor';
+  return {
+    ok: true,
+    step: 'need_new_pet',
+    message: `Ainda não encontrei um pet cadastrado para ${tutor}. Vamos cadastrar o paciente primeiro. Qual é o nome do pet?`,
+    draft: session.draft,
+  };
+}
+
+/**
+ * Após coletar o tutor:
+ * - veterinária: PET é obrigatório (auto 1 pet · seleção N · cadastro se 0);
+ * - demais: segue sem exigir pet.
+ */
 function afterPerson(ctx: ToolCallContext, session: BookingSession): AssistantReply {
+  session.isVeterinary = detectVeterinary(ctx);
   const out = callTool(
     'listTutorPets',
     { phone: String(session.draft.customerPhone || '') },
@@ -305,33 +351,24 @@ function afterPerson(ctx: ToolCallContext, session: BookingSession): AssistantRe
     ? (out.data as Array<{ id: string; name: string; label: string }>)
     : [];
   session.pets = pets;
+
+  if (!session.isVeterinary) {
+    // Clínica humana/estética/etc: pet não é paciente deste agendamento.
+    return goToConfirm(session);
+  }
+
   if (pets.length === 0) {
-    // Sem pets (clínica humana ou tutor novo) — vai direto à confirmação.
-    session.step = 'confirm';
-    return {
-      ok: true,
-      step: 'confirm',
-      message: confirmationMessage(session.draft, session.pets),
-      draft: session.draft,
-      needsConfirm: true,
-    };
+    return askNewPetName(session);
   }
   if (pets.length === 1) {
     session.draft = { ...session.draft, petId: pets[0].id };
-    session.step = 'confirm';
-    return {
-      ok: true,
-      step: 'confirm',
-      message: confirmationMessage(session.draft, session.pets),
-      draft: session.draft,
-      needsConfirm: true,
-    };
+    return goToConfirm(session);
   }
   session.step = 'need_pet';
   return {
     ok: true,
     step: 'need_pet',
-    message: `Para qual pet? ${pets.map((p) => p.label || p.name).join(', ')} — ou "sem pet".`,
+    message: `Para qual pet é o atendimento? ${pets.map((p) => p.label || p.name).join(', ')}.`,
     options: pets.map((p) => ({ id: p.id, label: p.label || p.name })),
     draft: session.draft,
   };
@@ -414,6 +451,8 @@ export function handleBookingMessage(
     session.draft = {};
     session.slots = [];
     session.pets = [];
+    session.isVeterinary = false;
+    session.newPet = { name: '', species: '' };
     const boot = askService(ctx);
     if (boot.step === 'need_service' || boot.step === 'need_date') {
       const svc = matchService(ctx, text);
@@ -538,16 +577,20 @@ export function handleBookingMessage(
   // ── need_pet: escolha o paciente veterinário ──
   if (session.step === 'need_pet') {
     const t = text.trim().toLowerCase();
-    if (/^(sem pet|nenhum|nenhuma|so eu|só eu|nao tem|não tem)\b/.test(t)) {
-      delete session.draft.petId;
-      session.step = 'confirm';
+    // Veterinária: PET é paciente — "sem pet" não é opção.
+    if (session.isVeterinary && /^(sem pet|nenhum|nenhuma|so eu|só eu|nao tem|não tem)\b/.test(t)) {
       return {
-        ok: true,
-        step: 'confirm',
-        message: confirmationMessage(session.draft, session.pets),
+        ok: false,
+        step: 'need_pet',
+        message: 'Numa consulta veterinária o paciente é o pet. Escolha um dos pets abaixo:',
+        options: session.pets.map((p) => ({ id: p.id, label: p.label || p.name })),
         draft: session.draft,
-        needsConfirm: true,
+        error: 'pet_required',
       };
+    }
+    if (!session.isVeterinary && /^(sem pet|nenhum|nenhuma|so eu|só eu|nao tem|não tem)\b/.test(t)) {
+      delete session.draft.petId;
+      return goToConfirm(session);
     }
     const pet =
       session.pets.find((p) => p.id === text.trim())
@@ -557,21 +600,87 @@ export function handleBookingMessage(
       return {
         ok: false,
         step: 'need_pet',
-        message: `Não encontrei esse pet. Escolha: ${session.pets.map((p) => p.label || p.name).join(', ')} — ou "sem pet".`,
+        message: `Não encontrei esse pet. Escolha: ${session.pets.map((p) => p.label || p.name).join(', ')}.`,
         options: session.pets.map((p) => ({ id: p.id, label: p.label || p.name })),
         draft: session.draft,
         error: 'pet_not_found',
       };
     }
     session.draft = { ...session.draft, petId: pet.id };
-    session.step = 'confirm';
-    return {
-      ok: true,
-      step: 'confirm',
-      message: confirmationMessage(session.draft, session.pets),
-      draft: session.draft,
-      needsConfirm: true,
-    };
+    return goToConfirm(session);
+  }
+
+  // ── need_new_pet: cadastro mínimo (nome → espécie → createPet) ──
+  if (session.step === 'need_new_pet') {
+    const t = text.trim();
+    if (!session.newPet.name) {
+      if (t.length < 1 || t.length > 80) {
+        return {
+          ok: false,
+          step: 'need_new_pet',
+          message: 'Qual é o nome do pet? (até 80 caracteres)',
+          draft: session.draft,
+          error: 'pet_name_invalid',
+        };
+      }
+      session.newPet = { name: t.slice(0, 80), species: '' };
+      return {
+        ok: true,
+        step: 'need_new_pet',
+        message: `Certo — **${session.newPet.name}**. Qual a espécie? (cachorro, gato, ave, roedor, réptil, outro)`,
+        draft: session.draft,
+      };
+    }
+    // segunda fala = espécie
+    const species = t.toLowerCase().replace(/[ãáàâ]/g, 'a').replace(/[éê]/g, 'e').replace(/[í]/g, 'i').replace(/[óô]/g, 'o').replace(/[ú]/g, 'u').replace(/ç/g, 'c');
+    const known = ['cachorro', 'gato', 'ave', 'roedor', 'reptil', 'outro'];
+    let sp = known.find((k) => species.includes(k) || k.includes(species) || species.startsWith(k.slice(0, 4)));
+    if (!sp) {
+      // aceita sinônimos comuns
+      if (/cach|cao|dog/.test(species)) sp = 'cachorro';
+      else if (/gat|cat/.test(species)) sp = 'gato';
+      else sp = 'outro';
+    }
+    // resolve tutorId pelo telefone do draft
+    const found = callTool('findClient', { phone: String(session.draft.customerPhone || '') }, ctx);
+    let tutorId = '';
+    if (found.ok && Array.isArray(found.data) && found.data.length > 0) {
+      tutorId = String((found.data as Array<{ id: string }>)[0].id);
+    }
+    if (!tutorId) {
+      const created = callTool('createClient', {
+        name: String(session.draft.customerName || 'Tutor'),
+        phone: String(session.draft.customerPhone || ''),
+      }, ctx);
+      if (created.ok && created.data) tutorId = String((created.data as { id: string }).id);
+    }
+    if (!tutorId) {
+      return {
+        ok: false,
+        step: 'need_new_pet',
+        message: 'Não consegui localizar o tutor para cadastrar o pet. Pode repetir o WhatsApp?',
+        draft: session.draft,
+        error: 'tutor_missing',
+      };
+    }
+    const create = callTool('createPet', {
+      tutorId,
+      name: session.newPet.name,
+      species: sp,
+    }, { ...ctx, confirmed: true });
+    if (!create.ok || !create.data) {
+      return {
+        ok: false,
+        step: 'need_new_pet',
+        message: `Não consegui cadastrar o pet: ${(create as ToolResult).error || 'erro'}. Pode tentar de novo?`,
+        draft: session.draft,
+        error: (create as ToolResult).code || 'create_pet_failed',
+      };
+    }
+    const pet = create.data as { id: string; name: string };
+    session.draft = { ...session.draft, petId: pet.id };
+    session.pets = [{ id: pet.id, name: pet.name, label: `${pet.name} · ${sp}` }];
+    return goToConfirm(session);
   }
 
   if (session.step === 'confirm') {
@@ -644,5 +753,7 @@ export function handleBookingMessage(
   session.draft = {};
   session.slots = [];
   session.pets = [];
+  session.isVeterinary = false;
+  session.newPet = { name: '', species: '' };
   return askService(ctx);
 }

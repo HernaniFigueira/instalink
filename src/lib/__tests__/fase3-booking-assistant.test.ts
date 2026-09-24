@@ -200,66 +200,128 @@ describe('F3-E · fluxo passo-a-passo', () => {
   });
 });
 
-describe('F3-E · vet = pet como paciente', () => {
+/** Até o passo de confirmação (serviço → data → hora → pessoa). */
+function toAfterPerson(session: BookingSession, ctx: ToolCallContext, person = 'Tutor 11912340000'): ReturnType<typeof handleBookingMessage> {
+  handleBookingMessage(session, 'agendar', ctx);
+  handleBookingMessage(session, '2026-10-10', ctx);
+  handleBookingMessage(session, '09:30', ctx);
+  return handleBookingMessage(session, person, ctx);
+}
+
+describe('F3-E · HOTFIX veterinária: PET paciente obrigatório', () => {
   let db: DB;
   let ctx: ToolCallContext;
   let session: BookingSession;
 
+  function seedPet(id: string, name: string) {
+    db.pets.push(
+      {
+        id, businessId: 'b1', tutorId: 'tutor-1', name,
+        photo: '', species: 'cachorro', breed: '', sex: 'M', birthDate: '',
+        weightKg: 10, notes: '', active: true, createdAt: FIXED_NOW, updatedAt: FIXED_NOW,
+      } as never,
+    );
+  }
+
   beforeEach(() => {
     db = automationFixtures();
     seedAvailability(db);
+    // decisão de veterinária VIA clinicType — nunca pets.length
+    db.businesses.find((b) => b.id === 'b1')!.clinicType = 'veterinaria';
     addContact(db, { id: 'tutor-1', name: 'Tutor', phone: '11912340000' });
-    db.pets.push(
-      {
-        id: 'pet-1', businessId: 'b1', tutorId: 'tutor-1', name: 'Thor',
-        photo: '', species: 'cachorro', breed: 'SRD', sex: 'M', birthDate: '',
-        weightKg: 10, notes: '', active: true, createdAt: FIXED_NOW, updatedAt: FIXED_NOW,
-      } as never,
-      {
-        id: 'pet-2', businessId: 'b1', tutorId: 'tutor-1', name: 'Luna',
-        photo: '', species: 'gata', breed: 'SRD', sex: 'F', birthDate: '',
-        weightKg: 4, notes: '', active: true, createdAt: FIXED_NOW, updatedAt: FIXED_NOW,
-      } as never,
-    );
     ctx = ctxFor(db, 'b1', 'OWNER');
     session = newBookingSession();
   });
 
-  it('dois pets → pergunta paciente; escolha grava petId no booking', () => {
-    handleBookingMessage(session, 'agendar', ctx);
-    handleBookingMessage(session, '2026-10-10', ctx);
-    handleBookingMessage(session, '09:30', ctx);
-    const ask = handleBookingMessage(session, 'Tutor 11912340000', ctx);
+  it('vet + tutor SEM pets → pede cadastro (need_new_pet), NÃO cria booking', () => {
+    const ask = toAfterPerson(session, ctx);
+    expect(ask.step).toBe('need_new_pet');
+    expect(session.isVeterinary).toBe(true);
+    // sem criar pet não há booking
+    const no = handleBookingMessage(session, 'não', ctx);
+    expect(no.ok).toBe(true);
+    expect(db.bookings.length).toBe(0);
+    expect(db.pets.length).toBe(0);
+  });
+
+  it('vet + cadastro de pet Greg (nome+espécie) → createPet → confirma → createBooking com petId', () => {
+    toAfterPerson(session, ctx);
+    const name = handleBookingMessage(session, 'Greg', ctx);
+    expect(name.ok).toBe(true);
+    expect(name.step).toBe('need_new_pet');
+    const sp = handleBookingMessage(session, 'cachorro', ctx);
+    expect(sp.step).toBe('confirm');
+    expect(session.draft.petId).toBeTruthy();
+    expect(sp.message).toContain('Greg');
+
+    const done = handleBookingMessage(session, 'sim', ctx);
+    expect(done.ok).toBe(true);
+    const created = db.bookings.find((b) => b.id === done.bookingId);
+    expect(created?.petId).toBe(session.draft.petId);
+    const pet = db.pets.find((p) => p.id === created?.petId);
+    expect(pet?.name).toBe('Greg');
+    expect(pet?.species).toBe('cachorro');
+    expect(pet?.tutorId).toBe('tutor-1');
+  });
+
+  it('vet + exatamente 1 pet → auto-seleciona e confirma sem perguntar', () => {
+    seedPet('pet-1', 'Thor');
+    const ask = toAfterPerson(session, ctx);
+    expect(ask.step).toBe('confirm');
+    expect(session.draft.petId).toBe('pet-1');
+    expect(ask.message).toContain('Thor');
+    expect(db.bookings.length).toBe(0); // ainda sem SIM
+
+    const done = handleBookingMessage(session, 'sim', ctx);
+    expect(done.ok).toBe(true);
+    expect(db.bookings.find((b) => b.id === done.bookingId)?.petId).toBe('pet-1');
+  });
+
+  it('vet + vários pets → exige seleção (sem opção "sem pet")', () => {
+    seedPet('pet-1', 'Thor');
+    seedPet('pet-2', 'Luna');
+    const ask = toAfterPerson(session, ctx);
     expect(ask.step).toBe('need_pet');
     expect(ask.options?.length).toBe(2);
+    expect(ask.message).not.toMatch(/sem pet/i);
 
     const pick = handleBookingMessage(session, 'Luna', ctx);
     expect(pick.step).toBe('confirm');
     expect(session.draft.petId).toBe('pet-2');
-    expect(pick.message).toContain('Luna');
 
     const done = handleBookingMessage(session, 'sim', ctx);
     expect(done.ok).toBe(true);
-    const created = db.bookings.find((b) => b.id === done.bookingId);
-    expect(created?.petId).toBe('pet-2');
+    expect(db.bookings.find((b) => b.id === done.bookingId)?.petId).toBe('pet-2');
   });
 
-  it('pet desconhecido não passa; "sem pet" segue sem petId', () => {
-    handleBookingMessage(session, 'agendar', ctx);
-    handleBookingMessage(session, '2026-10-10', ctx);
-    handleBookingMessage(session, '09:30', ctx);
-    handleBookingMessage(session, 'Tutor 11912340000', ctx);
-    const bad = handleBookingMessage(session, 'Rex', ctx);
-    expect(bad.ok).toBe(false);
-    expect(bad.error).toBe('pet_not_found');
-
+  it('vet + "sem pet" → rejeitado; nunca cria booking sem paciente', () => {
+    seedPet('pet-1', 'Thor');
+    seedPet('pet-2', 'Luna');
+    toAfterPerson(session, ctx);
     const none = handleBookingMessage(session, 'sem pet', ctx);
-    expect(none.step).toBe('confirm');
+    expect(none.ok).toBe(false);
+    expect(none.error).toBe('pet_required');
+    expect(none.step).toBe('need_pet');
     expect(session.draft.petId).toBeUndefined();
+
+    // "sim" no need_pet não confirma (ainda não há escolha de paciente)
+    const notConfirm = handleBookingMessage(session, 'sim', ctx);
+    expect(notConfirm.ok).toBe(false);
+    expect(db.bookings.length).toBe(0);
+  });
+
+  it('clínica médica + zero pets → fluxo humano segue direto à confirmação', () => {
+    db.businesses.find((b) => b.id === 'b1')!.clinicType = 'medica';
+    const ask = toAfterPerson(session, ctx, 'Ana 11912340000');
+    expect(ask.step).toBe('confirm');
+    expect(session.isVeterinary).toBe(false);
+    expect(session.draft.petId).toBeUndefined();
+    expect(ask.message).not.toMatch(/pet/i);
 
     const done = handleBookingMessage(session, 'sim', ctx);
     expect(done.ok).toBe(true);
     const created = db.bookings.find((b) => b.id === done.bookingId);
+    expect(created?.customerName).toBe('Ana');
     expect(created?.petId || '').toBe('');
   });
 });
