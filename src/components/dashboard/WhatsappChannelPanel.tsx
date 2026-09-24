@@ -9,14 +9,10 @@ import { Button, PageSkeleton } from '@/components/ui';
 import { apiGet, apiSend } from '@/lib/api-client';
 import { humanDateTime } from '@/lib/tz';
 import {
-  EMBEDDED_SIGNUP_SDK_SRC, SIGNUP_CODE_TTL_SECONDS, SIGNUP_MESSAGE_ORIGIN, SIGNUP_MESSAGE_TYPE,
+  SIGNUP_CODE_TTL_SECONDS, SIGNUP_MESSAGE_ORIGIN, SIGNUP_MESSAGE_TYPE,
   WA_ME_TEST_DISCLAIMER, parseSignupMessage,
 } from '@/lib/whatsapp-onboarding';
 
-// ── SDK do Facebook (só carrega quando alguém vai conectar) ──
-declare global {
-  interface Window { FB?: any; fbAsyncInit?: () => void }
-}
 
 interface OnboardingItemView { key: string; label: string; why: string; ok: boolean; secret: boolean; required: boolean }
 interface OnboardingLayerView {
@@ -35,6 +31,8 @@ export interface WaOnboardingView {
   masterRouteAvailable: boolean;
   webhookPath: string;
   signupState?: string;
+  /** dialog/oauth manual — redirect_uri idêntico ao exchange. */
+  authorizeUrl?: string;
 }
 
 export interface WaChannelData {
@@ -65,42 +63,6 @@ export interface WaChannelData {
   server?: { configured: boolean; missingEnv: string[]; envVars: readonly string[] };
   inbox: { conversations: number; open: number; unread: number };
   linkFallback: string;
-}
-
-/**
- * Carrega o SDK do Facebook uma única vez e inicializa com o App ID da
- * plataforma. Sem `window.FB` não existe popup oficial — e aí a tela diz isso,
- * em vez de fingir uma conexão.
- */
-let fbSdkPromise: Promise<any> | null = null;
-function loadFacebookSdk(appId: string, version: string): Promise<any> {
-  if (typeof window === 'undefined') return Promise.reject(new Error('Sem navegador para abrir o popup da Meta.'));
-  if (window.FB) return Promise.resolve(window.FB);
-  if (fbSdkPromise) return fbSdkPromise;
-  fbSdkPromise = new Promise((resolve, reject) => {
-    const existing = document.getElementById('facebook-jssdk');
-    const init = () => {
-      try {
-        window.FB.init({ appId, version, xfbml: false, cookie: false });
-        resolve(window.FB);
-      } catch (e) {
-        reject(e instanceof Error ? e : new Error('Falha ao inicializar o SDK da Meta.'));
-      }
-    };
-    if (existing) { init(); return; }
-    window.fbAsyncInit = init;
-    const script = document.createElement('script');
-    script.id = 'facebook-jssdk';
-    script.src = EMBEDDED_SIGNUP_SDK_SRC;
-    script.async = true;
-    script.defer = true;
-    script.crossOrigin = 'anonymous';
-    script.onerror = () => reject(new Error('Não consegui carregar o SDK da Meta. Verifique se o painel não está bloqueando connect.facebook.net.'));
-    document.body.appendChild(script);
-    // Se o SDK travar (bloqueio de rede/adblock), não deixamos a tela em "abrindo…".
-    setTimeout(() => { if (!window.FB) reject(new Error('O SDK da Meta demorou demais para carregar. Verifique bloqueadores de conteúdo e tente de novo.')); }, 15000);
-  });
-  return fbSdkPromise;
 }
 
 function LayerCard({ layer, tone }: { layer: OnboardingLayerView; tone: 'platform' | 'unit' }) {
@@ -181,46 +143,61 @@ export function WhatsappChannelPanel({ businessId }: { businessId: string }) {
    */
   async function connectWithMeta() {
     const cfg = guide?.plan.clientConfig;
-    if (!cfg) {
+    const authorizeUrl = guide?.authorizeUrl;
+    if (!cfg || !authorizeUrl) {
       setError('A conexão oficial ainda não está habilitada nesta instalação. Veja o que falta na camada "Plataforma".');
       return;
     }
     setSigning(true); setMsg(''); setError('');
     signupRef.current = { wabaId: '', phoneNumberId: '' };
 
+    let codeResolve: (v: { code: string; state: string }) => void = () => {};
+    let codeReject: (e: Error) => void = () => {};
+    const oauth = new Promise<{ code: string; state: string }>((resolve, reject) => {
+      codeResolve = resolve;
+      codeReject = reject;
+      setTimeout(() => reject(new Error('O popup da Meta foi fechado antes de autorizar. Nada foi alterado.')), 120_000);
+    });
+
+    // 1) postMessage do Embedded Signup (WABA/número) — origem facebook.com.
+    // 2) postMessage do NOSSO callback com o code (manual-flow, origem própria).
     const onMessage = (event: MessageEvent) => {
-      if (event.origin !== SIGNUP_MESSAGE_ORIGIN) return;
-      const parsed = parseSignupMessage(event.data);
-      if (String((event.data as any)?.type || '') !== SIGNUP_MESSAGE_TYPE) return;
-      signupRef.current = { wabaId: parsed.wabaId, phoneNumberId: parsed.phoneNumberId };
-      if (parsed.event && parsed.event.startsWith('CANCEL')) {
-        setError('Conexão cancelada no popup da Meta. Nada foi alterado.');
+      if (event.origin === SIGNUP_MESSAGE_ORIGIN) {
+        const parsed = parseSignupMessage(event.data);
+        if (String((event.data as any)?.type || '') !== SIGNUP_MESSAGE_TYPE) return;
+        signupRef.current = { wabaId: parsed.wabaId, phoneNumberId: parsed.phoneNumberId };
+        if (parsed.event && parsed.event.startsWith('CANCEL')) {
+          setError('Conexão cancelada no popup da Meta. Nada foi alterado.');
+        }
+        return;
       }
+      if (event.origin !== window.location.origin) return;
+      const data = event.data as { type?: string; ok?: string; code?: string; state?: string; reason?: string };
+      if (data?.type !== 'WA_OAUTH_RESULT') return;
+      if (data.ok !== '1' || !data.code) {
+        codeReject(new Error(
+          data.reason === 'cancelled'
+            ? 'Conexão cancelada no popup da Meta. Nada foi alterado.'
+            : 'O callback da Meta não devolveu o código. Recomece a conexão.',
+        ));
+        return;
+      }
+      codeResolve({ code: String(data.code), state: String(data.state || guide?.signupState || '') });
     };
     window.addEventListener('message', onMessage);
 
     try {
-      const FB = await loadFacebookSdk(cfg.appId, cfg.version);
-      const code = await new Promise<string>((resolve, reject) => {
-        FB.login((response: any) => {
-          const auth = response?.authResponse?.code;
-          if (auth) return resolve(String(auth));
-          reject(new Error('O popup foi fechado antes de autorizar. Nada foi alterado.'));
-        }, {
-          config_id: cfg.configId,
-          response_type: 'code',
-          override_default_response_type: true,
-          // SEM redirect_uri nas options: o JS SDK vincula o code a "".
-          // Uma URL explícita aqui derruba o popup com Meta 191 (domínio).
-          extras: { setup: {} },
-        });
-      });
+      // Manual OAuth: diálogo COM redirect_uri nosso (callback dedicado).
+      // window.open síncrono no gesto do usuário (sem await antes).
+      const popup = window.open(authorizeUrl, 'wa-meta-signup', 'width=540,height=720,noopener=no');
+      if (!popup) throw new Error('O navegador bloqueou o popup da Meta. Libere popups e tente de novo.');
+      const { code, state } = await oauth;
       // O código vale 30 segundos e é de uso único: troca imediata, sem retry.
       const res = await apiSend<{ message?: string }>('/api/whatsapp/onboarding', 'POST', {
         businessId, action: 'exchange', code,
-        // Obrigatório e vazio: identidade com o code do FB.login ("" no SDK).
+        // MESMO redirect_uri do dialog/oauth (identity — Meta 36008 se divergir).
         redirectUri: cfg.redirectUri,
-        state: guide?.signupState || '',
+        state: state || guide?.signupState || '',
         wabaId: signupRef.current.wabaId,
         phoneNumberId: signupRef.current.phoneNumberId,
         pin: pin.trim() || undefined,

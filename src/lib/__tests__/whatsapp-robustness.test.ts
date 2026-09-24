@@ -22,6 +22,9 @@ import { GET as masterWhatsappGET } from '@/app/api/master/units/[id]/whatsapp/r
 import type { Business, DB } from '../types';
 import { TEMP_DB_FILE } from './helpers/temp-db';
 
+/** redirect_uri canônico do manual OAuth nos testes (origin localhost:3000). */
+const CB = 'http://localhost:3000/api/whatsapp/onboarding/callback';
+
 const NOW = '2026-09-20T12:00:00.000Z';
 const BIZ_A = 'biz-unit-a';
 const BIZ_B = 'biz-unit-b';
@@ -147,7 +150,7 @@ describe('Meta WhatsApp Cloud API — Onboarding Coexistence e Standard', () => 
     // 1. Sem PIN: troca código, assina webhook, mas fica pendente de registro
     const resNoPin = await onboardingPOST(jsonReq('/api/whatsapp/onboarding', {
       businessId: BIZ_A,
-      action: 'exchange',
+      action: 'exchange', redirectUri: CB,
       code: 'CODE-STANDARD-1',
       state,
       wabaId: 'WABA-STD',
@@ -218,7 +221,7 @@ describe('Meta WhatsApp Cloud API — Onboarding Coexistence e Standard', () => 
 
     const res = await onboardingPOST(jsonReq('/api/whatsapp/onboarding', {
       businessId: BIZ_A,
-      action: 'exchange',
+      action: 'exchange', redirectUri: CB,
       code: 'CODE-COEX-1',
       state,
       wabaId: 'WABA-COEX',
@@ -280,7 +283,7 @@ describe('Meta WhatsApp Cloud API — Onboarding Coexistence e Standard', () => 
 
     const res = await onboardingPOST(jsonReq('/api/whatsapp/onboarding', {
       businessId: BIZ_A,
-      action: 'exchange',
+      action: 'exchange', redirectUri: CB,
       code: 'CODE-GATE-FORGED',
       state,
       wabaId: 'WABA-GATE',
@@ -559,7 +562,7 @@ describe('Meta WhatsApp Cloud API — Onboarding Coexistence e Standard', () => 
     const state = issueSignupState(KEY, { businessId: BIZ_A, userId: OWNER_A });
     const res = await onboardingPOST(jsonReq('/api/whatsapp/onboarding', {
       businessId: BIZ_A,
-      action: 'exchange',
+      action: 'exchange', redirectUri: CB,
       code: 'CODE-INVALID-TOKEN',
       state,
       wabaId: 'WABA-1',
@@ -592,7 +595,7 @@ describe('Meta WhatsApp Cloud API — Onboarding Coexistence e Standard', () => 
     const state = issueSignupState(KEY, { businessId: BIZ_A, userId: OWNER_A });
     const res = await onboardingPOST(jsonReq('/api/whatsapp/onboarding', {
       businessId: BIZ_A,
-      action: 'exchange',
+      action: 'exchange', redirectUri: CB,
       code: 'CODE-PARTIAL-FAIL',
       state,
       wabaId: 'WABA-1',
@@ -647,7 +650,7 @@ describe('Meta WhatsApp Cloud API — Onboarding Coexistence e Standard', () => 
     const state = issueSignupState(KEY, { businessId: BIZ_A, userId: OWNER_A });
     const res = await onboardingPOST(jsonReq('/api/whatsapp/onboarding', {
       businessId: BIZ_A,
-      action: 'exchange',
+      action: 'exchange', redirectUri: CB,
       code: 'CODE-RECONNECT',
       state,
       pin: '123456',

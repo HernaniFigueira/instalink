@@ -26,8 +26,9 @@ import { createSession } from '../auth';
 import { GET as onboardingGET, POST as onboardingPOST } from '@/app/api/whatsapp/onboarding/route';
 import { DEFAULT_META_GRAPH_VERSION } from '../whatsapp-cloud-api';
 import {
-  GRAPH_RELEASES, LATEST_VERIFIED_GRAPH_VERSION, embeddedSignupRedirectUri, exchangeCodeUrl, graphVersionAdvice,
+  GRAPH_RELEASES, LATEST_VERIFIED_GRAPH_VERSION, WHATSAPP_OAUTH_CALLBACK_PATH, exchangeCodeUrl, graphVersionAdvice,
   onboardingPlan, onboardingSteps, parseSignupMessage, platformLayer, unitLayer, waMeTestLink, WA_ME_TEST_DISCLAIMER,
+  whatsappAuthorizeUrl, whatsappRedirectUri,
 } from '../whatsapp-onboarding';
 import { appsecretProof, issueSignupState, verifySignupState } from '../whatsapp-onboarding-server';
 import type { Business, DB } from '../types';
@@ -78,6 +79,8 @@ function jsonReq(path: string, body: unknown, token?: string, method = 'POST'): 
   });
 }
 const json = (res: Response) => res.json() as Promise<any>;
+/** redirect_uri canônico nos testes (origem do jsonReq + callback dedicado). */
+const CB = 'http://localhost:3000/api/whatsapp/onboarding/callback';
 
 let token = '';
 let envBackup: Record<string, string | undefined> = {};
@@ -142,20 +145,18 @@ describe('A3.4 · B8 — diagnóstico em duas camadas', () => {
   });
 
   it('com a plataforma pronta, o plano pede o popup e entrega só config pública', () => {
-    const plan = onboardingPlan({ env: PLATFORM_ENV, business: business(BIZ), todayISO: '2026-09-19' });
+    const plan = onboardingPlan({
+      env: PLATFORM_ENV, business: business(BIZ), todayISO: '2026-09-19',
+      requestOrigin: 'https://app.exemplo.test',
+    });
     expect(plan.state).toBe('ready_for_signup');
     expect(plan.nextAction.kind).toBe('embedded_signup');
-    // Embedded Signup via JS SDK: redirectUri é SEMPRE "" (code do FB.login → "").
+    // Manual OAuth: redirectUri = callback dedicado na origem estável.
     expect(plan.clientConfig).toEqual({
-      appId: '1234567890', configId: '9876543210', version: LATEST_VERIFIED_GRAPH_VERSION, redirectUri: '',
+      appId: '1234567890', configId: '9876543210', version: LATEST_VERIFIED_GRAPH_VERSION,
+      redirectUri: `https://app.exemplo.test${WHATSAPP_OAUTH_CALLBACK_PATH}`,
     });
     expect(JSON.stringify(plan.clientConfig)).not.toContain(PLATFORM_ENV.META_APP_SECRET);
-    // META_REDIRECT_URI (se existir no env) NÃO muda o valor canônico deste fluxo.
-    const withEnv = onboardingPlan({
-      env: { ...PLATFORM_ENV, META_REDIRECT_URI: 'https://evil.example/cb' },
-      business: business(BIZ), todayISO: '2026-09-19',
-    });
-    expect(withEnv.clientConfig?.redirectUri).toBe('');
   });
 
   it('sem REGISTRO do número a unidade fica pendente — nunca "conectado" nem "aguardando evento"', () => {
@@ -324,8 +325,13 @@ describe('A3.4 · B8 — rota de onboarding (com a Meta simulada)', () => {
     const body = await json(res);
     expect(body.plan.state).toBe('ready_for_signup');
     expect(body.signupState).toBeTruthy();
-    // redirect_uri canônico do fluxo JS SDK = string vazia (igual ao exchange).
-    expect(body.plan.clientConfig.redirectUri).toBe('');
+    // Manual OAuth: redirect_uri = callback dedicado; authorizeUrl usa o MESMO valor.
+    expect(body.plan.clientConfig.redirectUri).toBe(`http://localhost:3000${WHATSAPP_OAUTH_CALLBACK_PATH}`);
+    expect(body.authorizeUrl).toContain(`redirect_uri=${encodeURIComponent(`http://localhost:3000${WHATSAPP_OAUTH_CALLBACK_PATH}`)}`);
+    expect(body.authorizeUrl).toContain('dialog/oauth');
+    expect(body.authorizeUrl).toContain('response_type=code');
+    expect(body.authorizeUrl).toContain('config_id=9876543210');
+    expect(body.authorizeUrl).toContain(`state=${encodeURIComponent(body.signupState)}`);
     const text = JSON.stringify(body);
     expect(text).not.toContain(PLATFORM_ENV.META_APP_SECRET);
     expect(text).not.toContain(KEY);
@@ -334,7 +340,7 @@ describe('A3.4 · B8 — rota de onboarding (com a Meta simulada)', () => {
 
   it('SEM plataforma: 503 BLOCKED_EXTERNAL, nada gravado e nada de conexão fingida', async () => {
     const res = await onboardingPOST(jsonReq('/api/whatsapp/onboarding', {
-      businessId: BIZ, action: 'exchange', code: 'CODIGO', state: 'irrelevante',
+      businessId: BIZ, action: 'exchange', redirectUri: CB, code: 'CODIGO', state: 'irrelevante',
     }, token));
     expect(res.status).toBe(503);
     const body = await json(res);
@@ -359,7 +365,7 @@ describe('A3.4 · B8 — rota de onboarding (com a Meta simulada)', () => {
     const state = issueSignupState(KEY, { businessId: BIZ, userId: OWNER });
     const calls = mockMeta(OK_META);
     const res = await onboardingPOST(jsonReq('/api/whatsapp/onboarding', {
-      businessId: BIZ, action: 'exchange', code: 'CODIGO-CURTO', state, pin: '123456',
+      businessId: BIZ, action: 'exchange', redirectUri: CB, code: 'CODIGO-CURTO', state, pin: '123456',
       signup: { event: 'FINISH', waba_id: 'WABA-1', phone_number_id: 'PN-1' },
     }, token));
     expect(res.status).toBe(200);
@@ -392,9 +398,8 @@ describe('A3.4 · B8 — rota de onboarding (com a Meta simulada)', () => {
     const exchange = calls.find((c) => c.path === '/oauth/access_token')!;
     expect(exchange.url.searchParams.get('client_secret')).toBe(PLATFORM_ENV.META_APP_SECRET);
     expect(exchange.url.searchParams.get('code')).toBe('CODIGO-CURTO');
-    // Identidade obrigatória: o exchange SEMPRE envia redirect_uri (vazio = code do JS SDK).
-    expect(exchange.url.searchParams.has('redirect_uri')).toBe(true);
-    expect(exchange.url.searchParams.get('redirect_uri')).toBe('');
+    // Identidade obrigatória: o exchange envia EXATAMENTE o redirect_uri do authorize.
+    expect(exchange.url.searchParams.get('redirect_uri')).toBe(`http://localhost:3000${WHATSAPP_OAUTH_CALLBACK_PATH}`);
 
     // Auditoria com o que importa (e sem segredo nenhum).
     const audit = db.audit.find((a) => a.action === 'whatsapp.connected')!;
@@ -407,7 +412,7 @@ describe('A3.4 · B8 — rota de onboarding (com a Meta simulada)', () => {
     const state = issueSignupState(KEY, { businessId: BIZ, userId: OWNER });
     mockMeta(OK_META);
     const res = await onboardingPOST(jsonReq('/api/whatsapp/onboarding', {
-      businessId: BIZ, action: 'exchange', code: 'CODIGO', state, pin: '123456', signup: { event: 'FINISH' },
+      businessId: BIZ, action: 'exchange', redirectUri: CB, code: 'CODIGO', state, pin: '123456', signup: { event: 'FINISH' },
     }, token));
     expect(res.status).toBe(200);
     const wi = (await readDB()).businesses.find((b) => b.id === BIZ)!.whatsappIntegration!;
@@ -423,7 +428,7 @@ describe('A3.4 · B8 — rota de onboarding (com a Meta simulada)', () => {
       'GET /oauth/access_token': () => ({ __status: 400, error: { message: 'This authorization code has been used.', code: 100 } }),
     });
     const res = await onboardingPOST(jsonReq('/api/whatsapp/onboarding', {
-      businessId: BIZ, action: 'exchange', code: 'CODIGO-JA-USADO', state,
+      businessId: BIZ, action: 'exchange', redirectUri: CB, code: 'CODIGO-JA-USADO', state,
     }, token));
     expect(res.status).toBe(400);
     const body = await json(res);
@@ -441,7 +446,7 @@ describe('A3.4 · B8 — rota de onboarding (com a Meta simulada)', () => {
     setEnv(PLATFORM_ENV);
     const calls = mockMeta(OK_META);
     const res = await onboardingPOST(jsonReq('/api/whatsapp/onboarding', {
-      businessId: BIZ, action: 'exchange', code: 'CODIGO', state: issueSignupState(KEY, { businessId: BIZ, userId: OWNER }),
+      businessId: BIZ, action: 'exchange', redirectUri: CB, code: 'CODIGO', state: issueSignupState(KEY, { businessId: BIZ, userId: OWNER }),
       wabaId: 'WABA-1', phoneNumberId: 'PN-1',
     }, token));
     expect(res.status).toBe(200);
@@ -468,7 +473,7 @@ describe('A3.4 · B8 — rota de onboarding (com a Meta simulada)', () => {
     setEnv(PLATFORM_ENV);
     mockMeta(OK_META);
     await onboardingPOST(jsonReq('/api/whatsapp/onboarding', {
-      businessId: BIZ, action: 'exchange', code: 'CODIGO', state: issueSignupState(KEY, { businessId: BIZ, userId: OWNER }),
+      businessId: BIZ, action: 'exchange', redirectUri: CB, code: 'CODIGO', state: issueSignupState(KEY, { businessId: BIZ, userId: OWNER }),
       wabaId: 'WABA-1', phoneNumberId: 'PN-1',
     }, token));
     expect((await readDB()).businesses.find((b) => b.id === BIZ)!.whatsappIntegration!.status).toBe('pending');
@@ -488,7 +493,7 @@ describe('A3.4 · B8 — rota de onboarding (com a Meta simulada)', () => {
     setEnv(PLATFORM_ENV);
     mockMeta({ ...OK_META, 'POST /PN-1/register': () => ({ __status: 400, error: { message: 'Invalid PIN', code: 133008 } }) });
     const res = await onboardingPOST(jsonReq('/api/whatsapp/onboarding', {
-      businessId: BIZ, action: 'exchange', code: 'CODIGO', state: issueSignupState(KEY, { businessId: BIZ, userId: OWNER }),
+      businessId: BIZ, action: 'exchange', redirectUri: CB, code: 'CODIGO', state: issueSignupState(KEY, { businessId: BIZ, userId: OWNER }),
       wabaId: 'WABA-1', phoneNumberId: 'PN-1', pin: '999999',
     }, token));
     expect(res.status).toBe(200);
@@ -506,7 +511,7 @@ describe('A3.4 · B8 — rota de onboarding (com a Meta simulada)', () => {
     setEnv(PLATFORM_ENV);
     mockMeta({ ...OK_META, 'GET /debug_token': () => ({ data: { is_valid: false } }) });
     const res = await onboardingPOST(jsonReq('/api/whatsapp/onboarding', {
-      businessId: BIZ, action: 'exchange', code: 'CODIGO', state: issueSignupState(KEY, { businessId: BIZ, userId: OWNER }),
+      businessId: BIZ, action: 'exchange', redirectUri: CB, code: 'CODIGO', state: issueSignupState(KEY, { businessId: BIZ, userId: OWNER }),
       wabaId: 'WABA-1', phoneNumberId: 'PN-1', pin: '123456',
     }, token));
     expect(res.status).toBe(400);
@@ -518,7 +523,7 @@ describe('A3.4 · B8 — rota de onboarding (com a Meta simulada)', () => {
     setEnv(PLATFORM_ENV);
     mockMeta({ ...OK_META, 'GET /debug_token': () => ({ data: { ...DEBUG_OK.data, app_id: '999999' } }) });
     const res = await onboardingPOST(jsonReq('/api/whatsapp/onboarding', {
-      businessId: BIZ, action: 'exchange', code: 'CODIGO', state: issueSignupState(KEY, { businessId: BIZ, userId: OWNER }),
+      businessId: BIZ, action: 'exchange', redirectUri: CB, code: 'CODIGO', state: issueSignupState(KEY, { businessId: BIZ, userId: OWNER }),
     }, token));
     expect(res.status).toBe(400);
     expect((await json(res)).error).toMatch(/outro aplicativo/i);
@@ -531,7 +536,7 @@ describe('A3.4 · B8 — rota de onboarding (com a Meta simulada)', () => {
       'GET /debug_token': () => ({ data: { ...DEBUG_OK.data, scopes: ['whatsapp_business_management'] } }),
     });
     const res = await onboardingPOST(jsonReq('/api/whatsapp/onboarding', {
-      businessId: BIZ, action: 'exchange', code: 'CODIGO', state: issueSignupState(KEY, { businessId: BIZ, userId: OWNER }),
+      businessId: BIZ, action: 'exchange', redirectUri: CB, code: 'CODIGO', state: issueSignupState(KEY, { businessId: BIZ, userId: OWNER }),
     }, token));
     expect(res.status).toBe(400);
     expect((await json(res)).error).toMatch(/whatsapp_business_messaging/);
@@ -541,7 +546,7 @@ describe('A3.4 · B8 — rota de onboarding (com a Meta simulada)', () => {
     setEnv(PLATFORM_ENV);
     mockMeta(OK_META);
     const res = await onboardingPOST(jsonReq('/api/whatsapp/onboarding', {
-      businessId: BIZ, action: 'exchange', code: 'CODIGO', state: issueSignupState(KEY, { businessId: BIZ, userId: OWNER }),
+      businessId: BIZ, action: 'exchange', redirectUri: CB, code: 'CODIGO', state: issueSignupState(KEY, { businessId: BIZ, userId: OWNER }),
       wabaId: 'WABA-DE-OUTRA-EMPRESA', phoneNumberId: 'PN-1', pin: '123456',
     }, token));
     expect(res.status).toBe(400);
@@ -553,7 +558,7 @@ describe('A3.4 · B8 — rota de onboarding (com a Meta simulada)', () => {
     setEnv(PLATFORM_ENV);
     const calls = mockMeta(OK_META);
     const res = await onboardingPOST(jsonReq('/api/whatsapp/onboarding', {
-      businessId: BIZ, action: 'exchange', code: 'CODIGO', state: issueSignupState(KEY, { businessId: BIZ, userId: OWNER }),
+      businessId: BIZ, action: 'exchange', redirectUri: CB, code: 'CODIGO', state: issueSignupState(KEY, { businessId: BIZ, userId: OWNER }),
       wabaId: 'WABA-1', phoneNumberId: 'PN-DE-OUTRA-WABA', pin: '123456',
     }, token));
     expect(res.status).toBe(400);
@@ -572,7 +577,7 @@ describe('A3.4 · B8 — rota de onboarding (com a Meta simulada)', () => {
       'POST /PN-9/register': () => ({ success: true }),
     });
     const res = await onboardingPOST(jsonReq('/api/whatsapp/onboarding', {
-      businessId: BIZ, action: 'exchange', code: 'CODIGO', state: issueSignupState(KEY, { businessId: BIZ, userId: OWNER }),
+      businessId: BIZ, action: 'exchange', redirectUri: CB, code: 'CODIGO', state: issueSignupState(KEY, { businessId: BIZ, userId: OWNER }),
       wabaId: 'WABA-1', pin: '123456',
     }, token));
     expect(res.status).toBe(200);
@@ -589,7 +594,7 @@ describe('A3.4 · B8 — rota de onboarding (com a Meta simulada)', () => {
     const fetchSpy1 = vi.fn();
     vi.stubGlobal('fetch', fetchSpy1);
     const r1 = await onboardingPOST(jsonReq('/api/whatsapp/onboarding', {
-      businessId: BIZ, action: 'exchange', code: 'CODIGO', state: deOutraUnidade,
+      businessId: BIZ, action: 'exchange', redirectUri: CB, code: 'CODIGO', state: deOutraUnidade,
     }, token));
     expect(r1.status).toBe(400);
     expect((await json(r1)).code).toBe('signup_state_invalid');
@@ -599,7 +604,7 @@ describe('A3.4 · B8 — rota de onboarding (com a Meta simulada)', () => {
     const fetchSpy2 = vi.fn();
     vi.stubGlobal('fetch', fetchSpy2);
     const r2 = await onboardingPOST(jsonReq('/api/whatsapp/onboarding', {
-      businessId: BIZ, action: 'exchange', code: 'CODIGO', state: deOutroUsuario,
+      businessId: BIZ, action: 'exchange', redirectUri: CB, code: 'CODIGO', state: deOutroUsuario,
     }, token));
     expect(r2.status).toBe(400);
     expect(fetchSpy2).not.toHaveBeenCalled();
@@ -610,7 +615,7 @@ describe('A3.4 · B8 — rota de onboarding (com a Meta simulada)', () => {
     const fetchSpy = vi.fn();
     vi.stubGlobal('fetch', fetchSpy);
     const res = await onboardingPOST(jsonReq('/api/whatsapp/onboarding', {
-      businessId: BIZ, action: 'exchange', code: 'CODIGO', state: 'de-outra-sessao',
+      businessId: BIZ, action: 'exchange', redirectUri: CB, code: 'CODIGO', state: 'de-outra-sessao',
     }, token));
     expect(res.status).toBe(400);
     expect((await json(res)).code).toBe('signup_state_invalid');
@@ -625,7 +630,7 @@ describe('A3.4 · B8 — rota de onboarding (com a Meta simulada)', () => {
       'POST /WABA-1/subscribed_apps': () => ({ __status: 400, error: { message: 'Permission denied', code: 200 } }),
     });
     const res = await onboardingPOST(jsonReq('/api/whatsapp/onboarding', {
-      businessId: BIZ, action: 'exchange', code: 'CODIGO', state, wabaId: 'WABA-1', phoneNumberId: 'PN-1',
+      businessId: BIZ, action: 'exchange', redirectUri: CB, code: 'CODIGO', state, wabaId: 'WABA-1', phoneNumberId: 'PN-1',
     }, token));
     expect(res.status).toBe(400);
     expect((await json(res)).code).toBe('subscribe_failed');
@@ -641,7 +646,7 @@ describe('A3.4 · B8 — rota de onboarding (com a Meta simulada)', () => {
     const state = issueSignupState(KEY, { businessId: BIZ, userId: OWNER });
     const calls = mockMeta({ ...OK_META, 'POST /PN-1/register': () => ({ success: true }) });
     const ok = await onboardingPOST(jsonReq('/api/whatsapp/onboarding', {
-      businessId: BIZ, action: 'exchange', code: 'CODIGO', state, wabaId: 'WABA-1', phoneNumberId: 'PN-1', pin: '123456',
+      businessId: BIZ, action: 'exchange', redirectUri: CB, code: 'CODIGO', state, wabaId: 'WABA-1', phoneNumberId: 'PN-1', pin: '123456',
     }, token));
     expect(ok.status).toBe(200);
     const body = await json(ok);
@@ -653,7 +658,7 @@ describe('A3.4 · B8 — rota de onboarding (com a Meta simulada)', () => {
     const state2 = issueSignupState(KEY, { businessId: BIZ, userId: OWNER });
     mockMeta(OK_META);
     const bad = await onboardingPOST(jsonReq('/api/whatsapp/onboarding', {
-      businessId: BIZ, action: 'exchange', code: 'CODIGO', state: state2, wabaId: 'WABA-1', phoneNumberId: 'PN-1', pin: '12',
+      businessId: BIZ, action: 'exchange', redirectUri: CB, code: 'CODIGO', state: state2, wabaId: 'WABA-1', phoneNumberId: 'PN-1', pin: '12',
     }, token));
     expect(bad.status).toBe(400);
     expect((await json(bad)).error).toMatch(/6 dígitos/);
@@ -676,37 +681,40 @@ describe('A3.4 · B8 — rota de onboarding (com a Meta simulada)', () => {
     expect(db.businesses.find((b) => b.id === BIZ)!.whatsappIntegration?.encryptedAccessToken).toBeUndefined();
   });
 
-  it('redirectUri vazio no body bate com o expected do servidor (code do JS SDK)', async () => {
+  it('redirectUri correto (callback dedicado) bate com o expected e vai ao exchange', async () => {
     setEnv(PLATFORM_ENV);
     const state = issueSignupState(KEY, { businessId: BIZ, userId: OWNER });
     const calls = mockMeta(OK_META);
     const res = await onboardingPOST(jsonReq('/api/whatsapp/onboarding', {
       businessId: BIZ, action: 'exchange', code: 'CODIGO-CURTO', state,
-      redirectUri: '',
+      redirectUri: `http://localhost:3000${WHATSAPP_OAUTH_CALLBACK_PATH}`,
       pin: '123456', signup: { event: 'FINISH', waba_id: 'WABA-1', phone_number_id: 'PN-1' },
     }, token));
     expect(res.status).toBe(200);
     const exchange = calls.find((c) => c.path === '/oauth/access_token')!;
-    expect(exchange.url.searchParams.get('redirect_uri')).toBe('');
+    expect(exchange.url.searchParams.get('redirect_uri')).toBe(`http://localhost:3000${WHATSAPP_OAUTH_CALLBACK_PATH}`);
   });
 
-  it('redirectUri com URL de Preview no body falha 400 (não é o code do JS SDK)', async () => {
+  it('redirectUri vazio OU de origem errada no body falha 400 e NÃO chama a Graph (reproduz 36008)', async () => {
     setEnv(PLATFORM_ENV);
     const state = issueSignupState(KEY, { businessId: BIZ, userId: OWNER });
-    const calls = mockMeta(OK_META);
-    const res = await onboardingPOST(jsonReq('/api/whatsapp/onboarding', {
-      businessId: BIZ, action: 'exchange', code: 'CODIGO-CURTO', state,
-      redirectUri: 'https://godoutor-git-arena-01a0ce4e-88a586-hernanicross-3509s-projects.vercel.app',
-      pin: '123456', signup: { event: 'FINISH' },
-    }, token));
-    expect(res.status).toBe(400);
-    expect(calls.find((c) => c.path === '/oauth/access_token')).toBeUndefined();
+    for (const bad of ['', 'https://evil.example/cb', 'http://localhost:3000/', 'http://localhost:3000']) {
+      const calls = mockMeta(OK_META);
+      const res = await onboardingPOST(jsonReq('/api/whatsapp/onboarding', {
+        businessId: BIZ, action: 'exchange', code: 'CODIGO-CURTO', state,
+        redirectUri: bad,
+        pin: '123456', signup: { event: 'FINISH' },
+      }, token));
+      expect(res.status, `bad=${JSON.stringify(bad)}`).toBe(400);
+      expect(String((await json(res)).error)).toContain('redirect_uri');
+      expect(calls.find((c) => c.path === '/oauth/access_token')).toBeUndefined();
+    }
   });
 
   it('a unidade de OUTRO negócio não conecta por aqui (isolamento)', async () => {
     setEnv(PLATFORM_ENV);
     const res = await onboardingPOST(jsonReq('/api/whatsapp/onboarding', {
-      businessId: OTHER, action: 'exchange', code: 'CODIGO', state: issueSignupState(KEY, { businessId: BIZ, userId: OWNER }),
+      businessId: OTHER, action: 'exchange', redirectUri: CB, code: 'CODIGO', state: issueSignupState(KEY, { businessId: BIZ, userId: OWNER }),
     }, token));
     expect([403, 404]).toContain(res.status);
     const db = await readDB();
@@ -720,17 +728,16 @@ describe('A3.4 · B8 — a tela (prova no código-fonte)', () => {
     src.replace(/\/\*[\s\S]*?\*\//g, '').replace(/(^|[^:])\/\/[^\n]*/g, '$1');
   const panel = () => stripComments(fs.readFileSync('src/components/dashboard/WhatsappChannelPanel.tsx', 'utf8'));
 
-  it('usa o popup oficial, confere a origem da mensagem e troca o código no servidor', () => {
+  it('usa o manual OAuth (authorizeUrl em popup), confere origens e troca no servidor', () => {
     const src = panel();
-    expect(src).toMatch(/loadFacebookSdk/);
-    expect(src).toMatch(/FB\.login/);
-    expect(src).toMatch(/config_id: cfg\.configId/);
-    expect(src).toMatch(/response_type: 'code'/);
-    expect(src).toMatch(/override_default_response_type: true/);
-    // FB.login NÃO recebe redirect_uri (URL → Meta 191); o code fica vinculado a "".
-    expect(src).not.toMatch(/redirect_uri:\s*cfg\.redirectUri/);
+    // Manual-flow: window.open(authorizeUrl) — SEM FB.login (redirect interno instável).
+    expect(src).toMatch(/window\.open\(authorizeUrl/);
+    expect(src).not.toMatch(/FB\.login\(/);
+    expect(src).toMatch(/guide\?\.authorizeUrl/);
+    expect(src).toMatch(/WA_OAUTH_RESULT/);
     expect(src).toMatch(/redirectUri: cfg\.redirectUri/);
-    expect(src).toMatch(/event\.origin !== SIGNUP_MESSAGE_ORIGIN/);
+    expect(src).toMatch(/event\.origin === SIGNUP_MESSAGE_ORIGIN/);
+    expect(src).toMatch(/event\.origin !== window\.location\.origin/);
     expect(src).toMatch(/\/api\/whatsapp\/onboarding/);
     expect(src).toMatch(/action: 'exchange'/);
   });
@@ -747,39 +754,54 @@ describe('A3.4 · B8 — a tela (prova no código-fonte)', () => {
 
 
 // ═══════════════════════════════════════════════════════════════
-// redirect_uri da Meta: identidade obrigatória autorização ↔ exchange
-// (OAuthException 100/36008 se divergir; 191 se FB.login levar URL)
+// Manual OAuth: authorize e exchange compartilham o MESMO redirect_uri
+// (OAuthException 100/36008 se divergir; o FB.login não expõe o real)
 // ═══════════════════════════════════════════════════════════════
-describe('embeddedSignupRedirectUri / exchangeCodeUrl — redirect_uri idêntico', () => {
-  it('o valor canônico do fluxo JS SDK é string vazia (nunca URL de página)', () => {
-    expect(embeddedSignupRedirectUri).toBe('');
+describe('whatsappAuthorizeUrl / exchangeCodeUrl — redirect_uri idêntico (manual-flow)', () => {
+  const ORIGIN = 'https://godoutor-git-arena-01a0ce4e-88a586-hernanicross-3509s-projects.vercel.app';
+
+  it('whatsappRedirectUri = origem estável + callback dedicado (sem barra extra)', () => {
+    expect(whatsappRedirectUri(ORIGIN)).toBe(`${ORIGIN}${WHATSAPP_OAUTH_CALLBACK_PATH}`);
+    expect(whatsappRedirectUri(`${ORIGIN}/`)).toBe(`${ORIGIN}${WHATSAPP_OAUTH_CALLBACK_PATH}`);
   });
 
-  it('META_REDIRECT_URI no env NÃO altera o redirect_uri deste fluxo', () => {
+  it('authorize URL carrega dialog/oauth com config_id, response_type=code, state e redirect_uri', () => {
+    const redirectUri = whatsappRedirectUri(ORIGIN);
+    const url = new URL(whatsappAuthorizeUrl({
+      appId: '1234567890', configId: '9876543210', version: LATEST_VERIFIED_GRAPH_VERSION,
+      redirectUri, state: 'biz.user.ts.nonce.sig',
+    }));
+    expect(url.origin).toBe('https://www.facebook.com');
+    expect(url.pathname).toBe(`/${LATEST_VERIFIED_GRAPH_VERSION}/dialog/oauth`);
+    expect(url.searchParams.get('client_id')).toBe('1234567890');
+    expect(url.searchParams.get('redirect_uri')).toBe(redirectUri);
+    expect(url.searchParams.get('response_type')).toBe('code');
+    expect(url.searchParams.get('config_id')).toBe('9876543210');
+    expect(url.searchParams.get('state')).toBe('biz.user.ts.nonce.sig');
+    expect(url.searchParams.get('display')).toBe('popup');
+  });
+
+  it('exchangeCodeUrl envia EXATAMENTE o redirect_uri do authorize (identidade 36008)', () => {
+    const redirectUri = whatsappRedirectUri(ORIGIN);
+    const authorize = new URL(whatsappAuthorizeUrl({
+      appId: 'app', configId: 'cfg', version: LATEST_VERIFIED_GRAPH_VERSION, redirectUri, state: 's',
+    }));
+    const exchange = new URL(exchangeCodeUrl('https://graph.facebook.com', 'app', 'secret', 'CODIGO', redirectUri));
+    expect(exchange.pathname).toBe('/oauth/access_token');
+    expect(exchange.searchParams.get('redirect_uri')).toBe(authorize.searchParams.get('redirect_uri'));
+    expect(exchange.searchParams.get('redirect_uri')).toBe(redirectUri);
+    expect(exchange.searchParams.get('code')).toBe('CODIGO');
+    expect(exchange.searchParams.get('client_secret')).toBe('secret');
+  });
+
+  it('clientConfig.redirectUri é a MESMA usada no authorize e no exchange', () => {
     const plan = onboardingPlan({
-      env: { ...PLATFORM_ENV, META_REDIRECT_URI: 'https://godoutor-git-arena-01a0ce4e-88a586-hernanicross-3509s-projects.vercel.app' },
-      business: business(BIZ), todayISO: '2026-09-19',
+      env: PLATFORM_ENV, business: business(BIZ), todayISO: '2026-09-19', requestOrigin: ORIGIN,
     });
-    expect(plan.clientConfig?.redirectUri).toBe('');
-  });
-
-  it('exchangeCodeUrl SEMPRE envia redirect_uri (vazio) junto do code', () => {
-    const url = new URL(exchangeCodeUrl('https://graph.facebook.com', 'app', 'secret', 'CODIGO', embeddedSignupRedirectUri));
-    expect(url.pathname).toBe('/oauth/access_token');
-    expect(url.searchParams.has('redirect_uri')).toBe(true);
-    expect(url.searchParams.get('redirect_uri')).toBe('');
-    expect(url.searchParams.get('code')).toBe('CODIGO');
-    expect(url.searchParams.get('client_id')).toBe('app');
-    expect(url.searchParams.get('client_secret')).toBe('secret');
-  });
-
-  it('o clientConfig expõe o MESMO redirect_uri do exchange ("" nos dois)', () => {
-    const plan = onboardingPlan({ env: PLATFORM_ENV, business: business(BIZ), todayISO: '2026-09-19' });
-    expect(plan.clientConfig?.redirectUri).toBe('');
+    expect(plan.clientConfig?.redirectUri).toBe(`${ORIGIN}${WHATSAPP_OAUTH_CALLBACK_PATH}`);
     const exchanged = new URL(exchangeCodeUrl(
       'https://graph.facebook.com', 'app', 's', 'c', plan.clientConfig!.redirectUri,
     ));
     expect(exchanged.searchParams.get('redirect_uri')).toBe(plan.clientConfig!.redirectUri);
-    expect(exchanged.searchParams.get('redirect_uri')).toBe('');
   });
 });
