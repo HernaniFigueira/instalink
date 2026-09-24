@@ -11,15 +11,25 @@ import type { ToolCallContext, ToolDef, ToolErrorCode } from './types';
  */
 const INJECTION_PATTERNS: RegExp[] = [
   /\b(ignore (all |previous |above )?instructions?)\b/i,
+  // PT: ignore/desconsidere + regras/instruções — sem \b após acento (\b é ASCII-only em JS)
+  /\b(ignore|ignor[ea]|desconsidere|desconsider[ea])\s.{0,40}\b(regras?|instru[cç][õo]es?|rules?|instructions?|permissions?|permiss[õo]es?)\b/i,
   /\b(disregard|override)\b.{0,40}\b(rules?|instructions?|permissions?)\b/i,
   /\b(system prompt|developer mode|jailbreak)\b/i,
-  /\b(access|show|open|read)\b.{0,30}\b(another|other|all|every)\b.{0,20}\b(patient|prontuario|prontuário|chart|record|ficha)\b/i,
+  /\b(access|show|open|read|mostre|mostrar|exiba|exibir|abra|ler)\b.{0,40}\b(another|other|all|every|outros?|todas?|tod[oa]s?)\b.{0,25}\b(patient|pacientes|prontuario|prontuário|chart|record|ficha|clientes?)\b/i,
   /\b(troque|altere|mude)\b.{0,30}\b(businessid|business_id|empresa|unidade|tenant)\b/i,
-  /\b(grant|concede|libere)\b.{0,20}\b(permission|permissão|admin|owner)\b/i,
+  // "use businessId da outra clínica/unidade"
+  /\buse\b.{0,20}\bbusinessid\b.{0,30}\b(outra|outro|other)\b/i,
+  // "dê/libere + admin/permissão/acesso"
+  /\b(grant|concede|libere|d[êe])\s.{0,25}\b(permission|permiss[ãa]o|admin\w*|owner|acesso)\b/i,
+  /\bme d[êe] acesso\s.{0,20}\b(admin\w*|root|superuser)\b/i,
+  /\bacesso\s.{0,15}\b(admin\w*|root|superuser)\b/i,
+  /\b(execute|executar|rode|rodar)\b.{0,15}\bsql\b/i,
   /\bsql\b|\bselect \* from\b|\bdrop table\b|\binsert into\b/i,
   /\beval\s*\(|\bnew Function\s*\(/,
   /\byou are (now )?(admin|root|superuser)\b/i,
-  /\bmeu businessid (é|e|eh)\b/i,
+  /\bmeu businessid\s+(?:e|é|eh)\b/i,
+  // trocar unidade/tenant em PT
+  /\b(troque|altere|mude|mudar|trocar)\b.{0,25}\b(o )?(tenant|organiza[cç][ãa]o|unidade)\b/i,
 ];
 
 export function looksLikeInjection(text: unknown): boolean {
