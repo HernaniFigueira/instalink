@@ -76,6 +76,17 @@ async function jsonBody(res: Response): Promise<any> {
   }
 }
 
+/**
+ * Próxima terça-feira com folga de pelo menos 7 dias — a grade da suíte é
+ * terça 08–18 e o createBookingTx recusa passado. Data fixa vira data podre
+ * (falhou em 2026-09-24 com '2026-09-22'); esta não podre.
+ */
+function nextSuiteBookingDate(): string {
+  const d = new Date(Date.now() + 7 * 86400000);
+  while (d.getUTCDay() !== 2) d.setUTCDate(d.getUTCDate() + 1);
+  return d.toISOString().slice(0, 10);
+}
+
 const OWNER_A = 'owner-clinic-a';
 const OWNER_B = 'owner-clinic-b';
 const MASTER_USER_ID = 'master-admin-1';
@@ -609,7 +620,7 @@ describe('P6.1 — WhatsApp Cloud API E2E', () => {
           business: b,
           service: s,
           professionalId: 'prof-orlando',
-          date: '2026-09-22',
+          date: nextSuiteBookingDate(),
           time: '10:00',
           customer: {
             id: '',

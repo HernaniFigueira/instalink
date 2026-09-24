@@ -28,6 +28,11 @@ import type { Message, Conversation, Business, DB } from '@/lib/types';
 // WEBHOOK do WhatsApp oficial (provedor → InstaLink).
 // GET  ?hub.mode=subscribe&hub.verify_token=… → handshake de verificação.
 // POST → recebe mensagens e atualizações de status da Meta com fail-closed.
+//
+// DIAGNÓSTICO: TODA decisão desta rota emite um log com o marcador
+// `[WA-WEBHOOK]` (Vercel → Functions → Logs). Contagens e IDs de recurso
+// (WABA/phone_number_id) nunca corpo/segredo — permitem responder “a Meta
+// chamou? com qual status?” sem ler payload nem expor nada sensível.
 export async function GET(req: NextRequest) {
   const q = req.nextUrl.searchParams;
   const mode = q.get('hub.mode');
@@ -36,11 +41,15 @@ export async function GET(req: NextRequest) {
   const expected = webhookVerifyToken();
 
   if (!expected) {
+    console.warn('[WA-WEBHOOK] GET verify status=503 reason=verify_token_env_missing');
     return NextResponse.json({ error: 'Webhook não configurado (WHATSAPP_VERIFY_TOKEN ausente).' }, { status: 503 });
   }
-  if (mode === 'subscribe' && token === expected) {
+  const tokenMatch = token === expected;
+  if (mode === 'subscribe' && tokenMatch) {
+    console.log('[WA-WEBHOOK] GET verify status=200 mode=subscribe challenge_len=' + String(challenge.length));
     return new NextResponse(challenge, { status: 200, headers: { 'Content-Type': 'text/plain' } });
   }
+  console.warn(`[WA-WEBHOOK] GET verify status=403 mode=${mode || 'absent'} token_match=${tokenMatch}`);
   return NextResponse.json({ error: 'Verificação inválida.' }, { status: 403 });
 }
 
@@ -67,6 +76,23 @@ interface WebhookChangeBatch {
   wabaId: string;
   messages: IncomingMessage[];
   statuses: IncomingStatus[];
+}
+
+/** Alvos (phone_number_id / waba) citados num payload bruto — só para diagnóstico. */
+function rawWebhookTargets(payload: any): Array<{ pId: string; wabaId: string }> {
+  const targets: Array<{ pId: string; wabaId: string }> = [];
+  const seen = new Set<string>();
+  for (const entry of payload?.entry || []) {
+    const wabaId = String(entry?.id || '');
+    for (const change of entry?.changes || []) {
+      const pId = String(change?.value?.metadata?.phone_number_id || '');
+      const key = `${pId}|${wabaId}`;
+      if (seen.has(key)) continue;
+      seen.add(key);
+      targets.push({ pId, wabaId });
+    }
+  }
+  return targets;
 }
 
 function parseWebhookBatches(payload: any): WebhookChangeBatch[] {
@@ -174,12 +200,16 @@ export async function POST(req: NextRequest) {
     // 1. FAIL-CLOSED: segredo ausente rejeita imediatamente com 503
     const appSecret = process.env.WHATSAPP_APP_SECRET || process.env.META_APP_SECRET;
     if (!appSecret || appSecret.trim().length === 0) {
-      console.warn('[WHATSAPP WEBHOOK] Falha fechada: WHATSAPP_APP_SECRET não configurado.');
+      console.warn('[WA-WEBHOOK] POST status=503 reason=app_secret_env_missing bytes=' + String(rawBody.length));
       return NextResponse.json({ error: 'Configuração do App Secret ausente no servidor.' }, { status: 503 });
     }
 
     // 2. Validação criptográfica de assinatura (HMAC SHA-256)
     if (!verifyMetaWebhookSignature(rawBody, signature, appSecret)) {
+      // Nunca loga corpo/segredo: só o fato (distingue 403 nosso de 403 do proxy).
+      console.warn(
+        `[WA-WEBHOOK] POST status=403 reason=signature_invalid bytes=${String(rawBody.length)} header=${signature ? 'present' : 'absent'}`,
+      );
       return NextResponse.json({ error: 'Assinatura do webhook inválida.' }, { status: 403 });
     }
 
@@ -187,6 +217,37 @@ export async function POST(req: NextRequest) {
     const batches = parseWebhookBatches(payload);
 
     if (batches.length === 0) {
+      // Assinatura VÁLIDA mas nada utilizável: registrar a CHEGADA para o
+      // painel (“último webhook”) quando o tenant resolver — sem isso o
+      // descarte fica indistinguível de “Meta nunca enviou”.
+      const targets = rawWebhookTargets(payload);
+      console.warn(
+        `[WA-WEBHOOK] POST status=200 reason=parsed_empty entries=${String(payload?.entry?.length ?? 0)} targets=${targets.length ? targets.map((t) => `${t.pId || '-'}/${t.wabaId || '-'}`).join(',') : 'none'}`,
+      );
+      try {
+        const arrivalDb = await readDB();
+        const found = new Map<string, true>();
+        for (const t of targets) {
+          const b = resolveTenantForChange(arrivalDb, t.pId, t.wabaId);
+          if (b && !found.has(b.id)) {
+            found.set(b.id, true);
+            const at = new Date().toISOString();
+            await updateDB((d) => {
+              const dbiz = d.businesses.find((x) => x.id === b.id);
+              if (dbiz?.whatsappIntegration) dbiz.whatsappIntegration.lastWebhookAt = at;
+              pushAudit(d, {
+                action: 'whatsapp.webhook_received',
+                actor: { id: 'system', email: 'webhook@instalink.app', role: 'system' },
+                businessId: b.id,
+                meta: { messages: 0, statuses: 0, stage: 'parsed_empty' },
+              });
+            });
+            console.warn(`[WA-WEBHOOK] POST arrival_marked business=${b.id} stage=parsed_empty`);
+          }
+        }
+      } catch (markErr) {
+        console.warn('[WA-WEBHOOK] POST arrival_mark_failed err=' + (markErr instanceof Error ? markErr.name : 'unknown'));
+      }
       return NextResponse.json({ ok: true, received: 0 });
     }
 
@@ -198,7 +259,11 @@ export async function POST(req: NextRequest) {
     for (const batch of batches) {
       const business = resolveTenantForChange(db, batch.phoneNumberId, batch.wabaId);
       if (!business) {
-        // Unidade não mapeada: ignora para não vazar dados entre negócios
+        // Unidade não mapeada: ignora para não vazar dados entre negócios.
+        // Log explícito: era o único descarte 100% silencioso do caminho.
+        console.warn(
+          `[WA-WEBHOOK] POST status=200 reason=tenant_missing phone_number_id=${batch.phoneNumberId || 'absent'} waba_id=${batch.wabaId || 'absent'} messages=${batch.messages.length} statuses=${batch.statuses.length}`,
+        );
         continue;
       }
 
@@ -497,6 +562,9 @@ export async function POST(req: NextRequest) {
       });
 
       totalProcessed += batch.messages.length + batch.statuses.length;
+      console.log(
+        `[WA-WEBHOOK] POST status=200 persisted business=${businessId} messages=${batch.messages.length} statuses=${batch.statuses.length}`,
+      );
       for (const msgId of newOutboundMessageIds) {
         postCommitOutbound.push({ businessId, messageId: msgId });
       }
@@ -517,7 +585,7 @@ export async function POST(req: NextRequest) {
       mapped: totalProcessed > 0,
     });
   } catch (err) {
-    console.error('[WHATSAPP WEBHOOK POST ERROR]', err);
+    console.error('[WA-WEBHOOK] POST status=500 reason=handler_error name=' + (err instanceof Error ? err.name : 'unknown'));
     return NextResponse.json({ error: 'Falha ao processar o webhook.' }, { status: 500 });
   }
 }
