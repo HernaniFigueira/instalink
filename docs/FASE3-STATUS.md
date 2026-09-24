@@ -16,7 +16,7 @@ NÃO force-push/rebase que altere os SHAs abaixo.
 | **F3-D** Tool Registry + Agent Safety | **FEITO** | `8292f85` | 21 tools; guards tenant/permissão/injeção/confirm/idempotência/audit — ver `FASE3-TOOLS.md` |
 | **F3-E** Assistente de agendamento | **FEITO** | `13fd245` | + hotfix vet `e872688` (PET obrigatório em veterinária via clinicType) — ver `FASE3-ASSISTANT.md` |
 | **F3-F** Inbox + Handoff + Takeover | **FEITO** | `f40ff31` | Estados explícitos, handoff sem CoT, simulador, idempotência, 14 testes |
-| **F3-G** WhatsApp Cloud provider + webhook + messaging service | **FEITO** | (commit atual) | MessagingProvider{sendText,sendTemplate,sendInteractive}; SimulatorProvider; política 24h; idempotência; credentialRef; **BLOCKED_META_CREDENTIAL** sem env real — ver `RELATORIO-F3-G.md` |
+| **F3-G** WhatsApp Cloud provider + webhook + messaging service | **FEITO** | `3aa4e38` | MessagingProvider{sendText,sendTemplate,sendInteractive}; SimulatorProvider; política 24h; idempotência; credentialRef; **BLOCKED_META_CREDENTIAL** sem env real — ver `RELATORIO-F3-G.md` |
 | AIProvider (LLM real) | **BLOCKED_AI_PROVIDER_CREDENTIAL** | — | sem chave/modelo autorizado nesta sessão; interface + mock/test double criados; **não bloqueia** F3-D/F3-E. |
 
 Commits confirmados:
