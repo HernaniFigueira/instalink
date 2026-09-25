@@ -405,7 +405,7 @@ export function EsteiraView() {
     }
   }
 
-  // Ação: Criar lead manual
+  // Ação: criar oportunidade manual
   async function handleCreateManualLead(e: React.FormEvent) {
     e.preventDefault();
     const digits = onlyDigits(newLeadPhone);
@@ -569,7 +569,7 @@ export function EsteiraView() {
             onClick={() => setShowNewLeadModal(true)}
             className="px-3.5 py-2 bg-[var(--brand)] text-white text-xs font-semibold rounded-md border border-[var(--brand-strong)]/40 shadow-brand hover:bg-[var(--brand-strong)] transition flex items-center gap-1.5"
           >
-            <span className="text-sm leading-none">+</span> Novo lead
+            <span className="text-sm leading-none">+</span> Nova oportunidade
           </button>
         </div>
       </div>
@@ -612,7 +612,7 @@ export function EsteiraView() {
                 <div className="space-y-2.5 overflow-y-auto pr-1 flex-1">
                   {stageLeads.length === 0 ? (
                     <div className="py-6 text-center text-[var(--text-faint)] text-xs font-medium">
-                      Nenhum lead nesta etapa
+                      Nenhuma oportunidade nesta etapa
                     </div>
                   ) : (
                     stageLeads.map((lead) => {
@@ -918,7 +918,7 @@ export function EsteiraView() {
                   <p className="text-xs text-zinc-500">Nenhum agendamento vinculado.</p>
                 )}
                 <div className="space-y-1.5">
-                    <p className="text-xs font-semibold text-zinc-700">Tarefas ({leadTasks.length})</p>
+                    <p className="text-xs font-semibold text-zinc-700">Pendências ({leadTasks.length})</p>
                     {leadTasks.length>0 ? leadTasks.map((tt:any)=> (
                       <div key={tt.id} className="text-xs p-2 bg-white border border-zinc-200 rounded-lg flex items-center justify-between">
                         <span className="font-medium">{tt.title} · {tt.status}</span>
@@ -927,7 +927,7 @@ export function EsteiraView() {
                     )) : <p className="text-xs text-zinc-400">Nenhuma tarefa vinculada.</p>}
                     {/* Nova tarefa contextual (sem digitar leadId) */}
                     <div className="bg-zinc-50 border border-zinc-200 rounded-lg p-2.5 space-y-2">
-                      <p className="text-xs font-semibold text-zinc-700">Nova tarefa para este lead</p>
+                      <p className="text-xs font-semibold text-zinc-700">Nova pendência para esta oportunidade</p>
                       <input value={ctxTaskTitle} onChange={(e)=> setCtxTaskTitle(e.target.value)} placeholder="Título (ex: Retornar ligação)" className="w-full text-xs p-2 rounded-lg border border-zinc-300" />
                       <div className="flex gap-2">
                         <input value={ctxTaskDueAt} onChange={(e)=> setCtxTaskDueAt(e.target.value)} placeholder="Prazo YYYY-MM-DD" className="flex-1 text-xs p-2 rounded-lg border border-zinc-300" />

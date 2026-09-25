@@ -83,7 +83,11 @@ export function WorkspaceNavigation({ nav, activePath, unit, units = [], multiUn
   const visible = (items: NavItem[]) => items.filter((i) => i.sidebar !== false);
 
   const activeArea = areaOfRoute(activePath, areas);
-  const isGroup = (area: WorkspaceArea) => !sections.some(
+  // Uma porta SÓ abre a segunda coluna se tiver LINHA para mostrar. Destinos
+  // com `sidebar: false` (Meu perfil, Pendências, Execuções, Recursos) vivem de
+  // atalho contextual e caem na área de segurança "Mais": sem esta condição, ao
+  // abrir /perfil a sidebar exibia uma segunda coluna vazia intitulada "Mais".
+  const isGroup = (area: WorkspaceArea) => visible(area.items).length > 0 && !sections.some(
     (s) => s.groups.some((g) => g.flat && g.area.id === area.id),
   );
   const activeGroup = activeArea && isGroup(activeArea) ? activeArea.id : null;

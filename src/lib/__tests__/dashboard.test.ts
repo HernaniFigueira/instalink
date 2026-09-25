@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
-  DASHBOARD_PANELS, dashboardContext, dashboardModules,
+  DASHBOARD_PANELS, dashboardAttention, dashboardContext, dashboardModules,
   dashboardPanelVisible, dashboardRevenueSources, recentActivityLists,
   visibleDashboardKpis, visibleDashboardPanels,
 } from '../dashboard';
@@ -171,5 +171,35 @@ describe('dashboard — vocabulário e contexto', () => {
     expect(recentActivityLists(dashboardModules(CLINICA))).toEqual({ orders: false, bookings: true, leads: true });
     expect(recentActivityLists(dashboardModules(VAREJO))).toEqual({ orders: true, bookings: false, leads: true });
     expect(recentActivityLists(dashboardModules(HIBRIDO))).toEqual({ orders: true, bookings: true, leads: true });
+  });
+});
+
+// ═══════════════════════════════════════════════════════════════
+// GODOUTOR 2.0 — COPY DO AVISO DE ATENÇÃO (§G: consistência global)
+// ═══════════════════════════════════════════════════════════════
+// O aviso é composto por `${count} ${label}`. Com 1 unidade o texto
+// "1 oportunidades sem contato" (e "1 atendimentos para fechar") era lido como
+// erro de escrita na primeira dobra da tela. A regra agora é a MESMA que
+// `returnsDue` já usava: singular quando count === 1.
+describe('visão geral — o aviso de atenção concorda com o número', () => {
+  const base = {
+    closures: 0, leadsNew: 0, tasksOverdue: 0, queueWaiting: 0, arrivalsPending: 0, returnsDue: 0,
+    permissions: { agenda: true, leads: true, tasks: true },
+  };
+  const text = (item: { count: number; label: string }) => `${item.count} ${item.label}`;
+
+  it('singular com 1, plural com 2+', () => {
+    expect(dashboardAttention({ ...base, closures: 1 }).map(text)).toEqual(['1 atendimento para fechar']);
+    expect(dashboardAttention({ ...base, closures: 3 }).map(text)).toEqual(['3 atendimentos para fechar']);
+    expect(dashboardAttention({ ...base, leadsNew: 1 }).map(text)).toEqual(['1 oportunidade sem contato']);
+    expect(dashboardAttention({ ...base, leadsNew: 2 }).map(text)).toEqual(['2 oportunidades sem contato']);
+    expect(dashboardAttention({ ...base, tasksOverdue: 1 }).map(text)).toEqual(['1 pendência vencida']);
+    expect(dashboardAttention({ ...base, tasksOverdue: 4 }).map(text)).toEqual(['4 pendências vencidas']);
+    expect(dashboardAttention({ ...base, returnsDue: 1 }).map(text)).toEqual(['1 retorno pendente']);
+  });
+
+  it('vocabulário 2.0: nenhum aviso chama oportunidade de "lead"', () => {
+    const items = dashboardAttention({ ...base, leadsNew: 5, tasksOverdue: 2 });
+    expect(items.every((i) => !/\bleads?\b/i.test(i.label))).toBe(true);
   });
 });

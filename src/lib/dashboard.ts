@@ -204,7 +204,10 @@ export function dashboardAttention(input: DashboardAttentionInput): DashboardAtt
   const out: DashboardAttentionItem[] = [];
   if (input.closures > 0) {
     out.push({
-      id: 'closures', count: input.closures, label: 'atendimentos para fechar',
+      // Singular/plural na hora de compor a frase do aviso: "1 atendimento
+      // para fechar" ≠ "1 atendimentos para fechar" (regra de copy 2.0).
+      id: 'closures', count: input.closures,
+      label: input.closures === 1 ? 'atendimento para fechar' : 'atendimentos para fechar',
       href: input.permissions.agenda ? '/agenda' : null,
     });
   }
@@ -212,13 +215,15 @@ export function dashboardAttention(input: DashboardAttentionInput): DashboardAtt
     out.push({
       // 2.0 — linguagem do dono da clínica: "lead" é jargão de marketing;
       // no produto a mesma coisa se chama OPORTUNIDADE (seção Clientes).
-      id: 'leadsNew', count: input.leadsNew, label: 'oportunidades sem contato',
+      id: 'leadsNew', count: input.leadsNew,
+      label: input.leadsNew === 1 ? 'oportunidade sem contato' : 'oportunidades sem contato',
       href: input.permissions.leads ? '/funil' : null,
     });
   }
   if (input.tasksOverdue > 0) {
     out.push({
-      id: 'tasksOverdue', count: input.tasksOverdue, label: 'pendências vencidas',
+      id: 'tasksOverdue', count: input.tasksOverdue,
+      label: input.tasksOverdue === 1 ? 'pendência vencida' : 'pendências vencidas',
       href: input.permissions.tasks ? '/tarefas' : null,
     });
   }
