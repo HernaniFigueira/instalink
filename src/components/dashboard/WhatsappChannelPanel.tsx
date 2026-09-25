@@ -35,6 +35,27 @@ export interface WaOnboardingView {
   authorizeUrl?: string;
 }
 
+interface WabaDiagnosticResponse {
+  ok: boolean;
+  error?: string;
+  reassigned: boolean;
+  postHttpStatus?: number;
+  subscription: {
+    wabaSubscribed: boolean;
+    appIdFound: boolean;
+    httpStatus: number;
+    error: string;
+  } | null;
+  phone: {
+    httpStatus: number;
+    status: string;
+    accountMode: string;
+    platformType: string;
+    webhookApplication: string;
+    error: string;
+  } | null;
+}
+
 export interface WaChannelData {
   status: 'not_connected' | 'pending' | 'connected' | 'error';
   label: { state: string; label: string; detail: string };
@@ -50,6 +71,7 @@ export interface WaChannelData {
     wabaId?: string;
   };
   canViewDiagnostics?: boolean;
+  canRunWabaDiagnostic?: boolean;
   diagnostics?: {
     credentialsConfigured: boolean;
     credentialSource: string;
@@ -114,6 +136,9 @@ export function WhatsappChannelPanel({ businessId }: { businessId: string }) {
   const [busy, setBusy] = useState(false);
   const [signing, setSigning] = useState(false);
   const [testing, setTesting] = useState(false);
+  const [wabaDiagnostic, setWabaDiagnostic] = useState<WabaDiagnosticResponse | null>(null);
+  const [wabaChecking, setWabaChecking] = useState(false);
+  const [wabaResubscribing, setWabaResubscribing] = useState(false);
   const [msg, setMsg] = useState('');
   const [error, setError] = useState('');
   // O popup devolve o WABA (e às vezes o número) por postMessage, ANTES do
@@ -265,6 +290,25 @@ export function WhatsappChannelPanel({ businessId }: { businessId: string }) {
       load();
     } catch (e) { setError(e instanceof Error ? e.message : 'Falha ao testar conexão.'); }
     finally { setTesting(false); }
+  }
+
+  async function runWabaDiagnostic(resubscribe = false) {
+    if (resubscribe && !confirm('Reassinar o webhook desta WABA na Meta? Esta é a única ação que altera a assinatura externa.')) return;
+    setWabaChecking(!resubscribe); setWabaResubscribing(resubscribe); setMsg(''); setError('');
+    try {
+      const res = await apiSend<WabaDiagnosticResponse>('/api/whatsapp', 'POST', {
+        businessId,
+        action: resubscribe ? 'resubscribe_waba' : 'verify_waba_subscription',
+      }, { scope: 'action', area: 'Canais' });
+      if (!res.ok || !res.data) throw new Error(res.message || 'Não foi possível concluir o diagnóstico da WABA.');
+      setWabaDiagnostic(res.data);
+      if (res.data.error) setError(res.data.error);
+      else if (resubscribe && res.data.reassigned) setMsg('WABA reassinada. O estado final foi consultado novamente na Meta.');
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Não foi possível concluir o diagnóstico da WABA.');
+    } finally {
+      setWabaChecking(false); setWabaResubscribing(false);
+    }
   }
 
   async function disconnect() {
@@ -543,6 +587,57 @@ export function WhatsappChannelPanel({ businessId }: { businessId: string }) {
                   : (data.integration as any).source === 'master' ? 'suporte Master' : 'não registrado'}
               </span>
             </p>
+
+            {data.canRunWabaDiagnostic && (
+              <div className="mt-3 border-t border-zinc-200 pt-3" aria-live="polite">
+                <p className="text-xs font-semibold text-zinc-700">Verificar assinatura da WABA</p>
+                <p className="text-[11px] text-zinc-500 mt-1">
+                  Consulta a Graph API no servidor com a credencial criptografada da unidade. Token, App Secret e appsecret_proof nunca aparecem aqui.
+                </p>
+                <div className="flex flex-wrap gap-2 mt-2">
+                  <button
+                    type="button"
+                    onClick={() => runWabaDiagnostic(false)}
+                    disabled={wabaChecking || wabaResubscribing}
+                    className="text-xs font-medium bg-white border border-zinc-300 text-zinc-700 rounded-md px-3 py-1.5 hover:bg-zinc-100 disabled:opacity-50"
+                  >
+                    {wabaChecking ? 'Consultando Meta…' : 'Verificar assinatura da WABA'}
+                  </button>
+                  {wabaDiagnostic?.subscription && wabaDiagnostic.subscription.httpStatus === 200 && !wabaDiagnostic.subscription.appIdFound && (
+                    <button
+                      type="button"
+                      onClick={() => runWabaDiagnostic(true)}
+                      disabled={wabaChecking || wabaResubscribing}
+                      className="text-xs font-medium bg-amber-50 border border-amber-300 text-amber-900 rounded-md px-3 py-1.5 hover:bg-amber-100 disabled:opacity-50"
+                    >
+                      {wabaResubscribing ? 'Reassinado…' : 'Reassinar webhook da WABA'}
+                    </button>
+                  )}
+                </div>
+                {wabaDiagnostic && (
+                  <div className="grid sm:grid-cols-2 gap-x-5 gap-y-1 mt-3 text-xs">
+                    <p>WABA inscrita no app: <strong>{wabaDiagnostic.subscription ? (wabaDiagnostic.subscription.wabaSubscribed ? 'SIM' : 'NÃO') : '—'}</strong></p>
+                    <p>App ID encontrado: <strong>{wabaDiagnostic.subscription ? (wabaDiagnostic.subscription.appIdFound ? 'SIM' : 'NÃO') : '—'}</strong></p>
+                    <p>Graph GET HTTP: <strong>{wabaDiagnostic.subscription?.httpStatus || '—'}</strong></p>
+                    {wabaDiagnostic.postHttpStatus !== undefined && <p>Graph POST HTTP: <strong>{wabaDiagnostic.postHttpStatus || '—'}</strong></p>}
+                    {wabaDiagnostic.subscription?.error && <p className="sm:col-span-2 text-amber-800">Erro: {wabaDiagnostic.subscription.error}</p>}
+                    {wabaDiagnostic.error && !wabaDiagnostic.subscription?.error && <p className="sm:col-span-2 text-amber-800">Erro: {wabaDiagnostic.error}</p>}
+                  </div>
+                )}
+                {wabaDiagnostic?.phone && (
+                  <div className="mt-3 rounded-md border border-emerald-200 bg-emerald-50 p-2.5 text-xs text-emerald-950">
+                    <p className="font-semibold">Phone Number ID · campos seguros retornados pela Meta</p>
+                    <div className="grid sm:grid-cols-2 gap-x-5 gap-y-1 mt-1">
+                      <p>status: <strong>{wabaDiagnostic.phone.status || '—'}</strong></p>
+                      <p>account_mode: <strong>{wabaDiagnostic.phone.accountMode || '—'}</strong></p>
+                      <p>platform_type: <strong>{wabaDiagnostic.phone.platformType || '—'}</strong></p>
+                      <p className="sm:col-span-2 break-all">webhook_configuration.application: <strong>{wabaDiagnostic.phone.webhookApplication || '—'}</strong></p>
+                      {wabaDiagnostic.phone.error && <p className="sm:col-span-2 text-amber-800">Erro: {wabaDiagnostic.phone.error}</p>}
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
           </details>
         )}
       </div>
