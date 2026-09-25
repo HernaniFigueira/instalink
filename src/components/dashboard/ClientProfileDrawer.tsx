@@ -254,8 +254,8 @@ export function ClientProfileDrawer({ person, businessId, pipeline, canFunil, on
   }
 
   async function setLead(id: string, stageId: string) {
-    if (!pipeline) { setNotice({ tone: 'error', text: 'Aguarde carregar as etapas do funil.' }); return; }
-    if (!pipeline.stages.some((s) => s.id === stageId)) { setNotice({ tone: 'error', text: 'Etapa inválida para este funil.' }); return; }
+    if (!pipeline) { setNotice({ tone: 'error', text: 'Aguarde carregar as etapas de oportunidades.' }); return; }
+    if (!pipeline.stages.some((s) => s.id === stageId)) { setNotice({ tone: 'error', text: 'Etapa inválida para estas oportunidades.' }); return; }
     setSaving(true);
     const res = await apiSend('/api/leads', 'PATCH', { businessId, id, stageId }, { scope: 'action', area: 'Clientes' });
     setSaving(false);
@@ -346,7 +346,7 @@ export function ClientProfileDrawer({ person, businessId, pipeline, canFunil, on
               <Button size="xs" variant="soft" onClick={() => onNewBooking(person)}>Agendar atendimento</Button>
             )}
             {canLose && <Button size="xs" variant="quiet" onClick={() => setLead(l.id, lostId!)} disabled={saving}>Marcar perdido</Button>}
-            {canFunil && <Link href={`/funil?b=${businessId}#${l.id}`} className="il-chip">Ver no funil</Link>}
+            {canFunil && <Link href={`/funil?b=${businessId}#${l.id}`} className="il-chip">Ver oportunidade</Link>}
           </div>
         ),
       });
@@ -361,7 +361,7 @@ export function ClientProfileDrawer({ person, businessId, pipeline, canFunil, on
         tone: t.status === 'done' ? 'emerald' : t.status === 'cancelled' ? 'zinc' : 'amber',
         body: (
           <div className="flex flex-wrap gap-1.5">
-            {t.leadId && canFunil && <Link href={`/funil?b=${businessId}#${t.leadId}`} className="il-chip">Ver no funil</Link>}
+            {t.leadId && canFunil && <Link href={`/funil?b=${businessId}#${t.leadId}`} className="il-chip">Ver oportunidade</Link>}
             {t.bookingId && <Link href={`/agenda?b=${businessId}`} className="il-chip">Ver agenda</Link>}
           </div>
         ),
@@ -1114,7 +1114,7 @@ export function ClientProfileDrawer({ person, businessId, pipeline, canFunil, on
                           {nextId === 'scheduled' && canFunil && (
                             <Button size="xs" variant="soft" onClick={() => onNewBooking(person)}>Agendar atendimento</Button>
                           )}
-                          {canFunil && <Link href={`/funil?b=${businessId}#${l.id}`} className="il-chip">Ver no funil</Link>}
+                          {canFunil && <Link href={`/funil?b=${businessId}#${l.id}`} className="il-chip">Ver oportunidade</Link>}
                         </div>
                       </li>
                     );

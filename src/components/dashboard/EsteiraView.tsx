@@ -576,7 +576,7 @@ export function EsteiraView() {
 
       {/* Quadro Kanban do Funil */}
       {loading ? (
-        <div className="p-12 text-center text-[var(--text-muted)] text-sm font-semibold">Carregando funil…</div>
+        <div className="p-12 text-center text-[var(--text-muted)] text-sm font-semibold">Carregando oportunidades…</div>
       ) : (
         <div className="grid grid-flow-col auto-cols-[280px] sm:auto-cols-[300px] gap-3.5 overflow-x-auto pb-4 scrollbar-none items-start">
           {visibleStages.map((stage) => {

@@ -220,6 +220,10 @@ export function ConversationsView({ unitId, panel = false }: { unitId?: string; 
   const draftBytes = igComposer ? instagramTextBytes(draft) : 0;
   // Um canal é mostrado quando existe conexão OU conversa dele (histórico
   // antigo continua visível mesmo se a conta foi desconectada).
+  // §F — o canal DESTA conversa está conectado? Um canal conectado em outra
+  // conta não responde por esta: a régua é sempre a da conversa aberta.
+  const channelOff = (c: Conversation) => (c.channel === 'instagram' ? !channels.instagram : !channels.whatsapp);
+
   const hasInstagram = channels.instagram || conversations.some((c) => c.channel === 'instagram');
   const hasWhatsapp = channels.whatsapp || conversations.some((c) => c.channel === 'whatsapp');
   const anyChannel = channels.whatsapp || channels.instagram;
@@ -531,19 +535,35 @@ export function ConversationsView({ unitId, panel = false }: { unitId?: string; 
                         {draftBytes > INSTAGRAM_TEXT_MAX_BYTES ? ' — reduza para enviar.' : ''}
                       </p>
                     )}
-                    {(active.conversation.channel === 'instagram' ? !channels.instagram : !channels.whatsapp) && <p className="text-sm text-[var(--text-muted)] mb-2">Canal desconectado. Seu rascunho fica aqui; o envio exige uma conexão ativa.</p>}
+                    {/* §F — CANAL DESCONECTADO: o compositor fica DESABILITADO de
+                        verdade (um campo que aceita texto com um botão que recusa
+                        o envio é promessa falsa). O HISTÓRICO continua inteiro na
+                        tela: o que para é responder, não ler. */}
+                    {channelOff(active.conversation) && (
+                      <div role="status" className="mb-2 rounded-md border border-[var(--border)] bg-[var(--surface-2)] px-2.5 py-1.5">
+                        <p className="text-xs font-semibold text-[var(--text)]">Conecte um canal para responder por aqui.</p>
+                        <p className="text-[11px] text-[var(--text-muted)] mt-0.5">
+                          O histórico desta conversa continua aqui — nada foi perdido.
+                          <Link href={channelsHref} className="ml-1 font-semibold text-[var(--brand-fg)] underline">Conectar canal</Link>
+                        </p>
+                      </div>
+                    )}
                     <form onSubmit={sendMessage} className="flex gap-2">
                       <input
                         value={draft}
                         onChange={(e) => setDraft(e.target.value)}
-                        placeholder={active.conversation.channel === 'instagram' ? 'Responder no Instagram…' : 'Escreva uma mensagem…'}
+                        disabled={channelOff(active.conversation)}
+                        aria-disabled={channelOff(active.conversation)}
+                        placeholder={channelOff(active.conversation)
+                          ? 'Conecte um canal para responder por aqui.'
+                          : active.conversation.channel === 'instagram' ? 'Responder no Instagram…' : 'Escreva uma mensagem…'}
                         aria-label="Mensagem"
-                        className="min-w-0 flex-1 rounded-md border border-[var(--border-strong)] px-3 py-2 text-sm shadow-xs focus:outline-none focus:shadow-focus focus:border-[var(--brand)]"
+                        className="min-w-0 flex-1 rounded-md border border-[var(--border-strong)] px-3 py-2 text-sm shadow-xs focus:outline-none focus:shadow-focus focus:border-[var(--brand)] disabled:bg-[var(--surface-2)] disabled:text-[var(--text-muted)] disabled:cursor-not-allowed"
                       />
                       {/* O botão só parece funcional quando é: desabilitado sem
-                          texto e durante o envio — nunca um "Enviar" de mentira. */}
+                          texto, sem canal e durante o envio — nunca um "Enviar" de mentira. */}
                       <button type="submit"
-                        disabled={sending || !draft.trim() || (active.conversation.channel === 'instagram' ? !channels.instagram : !channels.whatsapp)}
+                        disabled={sending || !draft.trim() || channelOff(active.conversation)}
                         className="text-sm font-semibold bg-[var(--brand)] text-white px-4 py-2 rounded-md border border-[var(--brand-strong)]/40 shadow-brand hover:bg-[var(--brand-strong)] disabled:opacity-50 disabled:cursor-not-allowed disabled:shadow-none inline-flex items-center gap-1.5">
                         <Icon n="send" size={14} /> {sending ? 'Enviando…' : 'Enviar'}
                       </button>
@@ -584,7 +604,7 @@ export function ConversationsView({ unitId, panel = false }: { unitId?: string; 
                       ? 'bg-[var(--brand-soft)] border-[var(--brand-border)] text-[var(--brand-fg)]'
                       : 'bg-[var(--lilac-bg)] border-[var(--lilac-border)] text-[var(--lilac-fg)]')}>
                     <Icon n={active.conversation.registered ? 'wallet' : 'spark'} size={11} />
-                    {active.conversation.registered ? 'Cliente cadastrado' : 'Lead (sem cadastro)'}
+                    {active.conversation.registered ? 'Cliente cadastrado' : 'Contato sem cadastro'}
                   </span>
                 </div>
                 <div className="bg-white border border-[var(--border)] rounded-lg p-3 shadow-xs">
@@ -642,7 +662,7 @@ export function ConversationsView({ unitId, panel = false }: { unitId?: string; 
                         )}
                       </div>
                     )}
-                    <Link href={`/funil?b=${businessId}`} className="flex items-center gap-1.5 text-xs font-semibold bg-[var(--surface-3)] border border-[var(--border)] rounded-md px-3 py-2 hover:bg-[var(--lilac-bg)] hover:text-[var(--lilac-fg)] hover:border-[var(--lilac-border)]"><Icon n="funnel" size={13} /> Ver no funil</Link>
+                    <Link href={`/funil?b=${businessId}`} className="flex items-center gap-1.5 text-xs font-semibold bg-[var(--surface-3)] border border-[var(--border)] rounded-md px-3 py-2 hover:bg-[var(--surface-hover)] hover:text-[var(--text)]"><Icon n="funnel" size={13} /> Ver oportunidade</Link>
                     <Link href={`/agenda?b=${businessId}`} className="flex items-center gap-1.5 text-xs font-semibold bg-[var(--surface-3)] border border-[var(--border)] rounded-md px-3 py-2 hover:bg-[var(--brand-soft)] hover:text-[var(--brand-fg)] hover:border-[var(--brand-border)]"><Icon n="calendar" size={13} /> Ver agenda</Link>
                     {active.conversation.channel !== 'instagram' && data.linkFallback && (
                       <a href={`https://wa.me/${(active.conversation.phone || '').replace(/\D/g, '')}`} target="_blank" rel="noreferrer" className="flex items-center gap-1.5 text-xs font-semibold bg-[var(--success-bg)] text-[var(--success-fg)] border border-[var(--success-border)] rounded-md px-3 py-2 hover:bg-[var(--success-bg-hover)]">
