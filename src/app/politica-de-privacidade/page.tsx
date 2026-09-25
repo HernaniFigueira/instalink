@@ -187,7 +187,7 @@ export default function PrivacyPolicyPage() {
       <footer className="border-t border-[#e7e6e0] bg-white/45">
         <div className="mx-auto flex max-w-6xl flex-col gap-3 px-5 py-8 text-sm text-[#777684] sm:flex-row sm:items-center sm:justify-between sm:px-8">
           <p><span className="font-display font-bold text-[#29283a]">GoDoutor</span> · organização para clínicas e equipes.</p>
-          <div className="flex gap-5"><Link href="/" className="hover:text-[#5c4ec2]">Início</Link><Link href="/login" className="hover:text-[#5c4ec2]">Acesso da equipe</Link></div>
+          <nav className="flex flex-wrap gap-x-5 gap-y-2" aria-label="Documentos legais"><Link href="/" className="hover:text-[#5c4ec2]">Início</Link><Link href="/login" className="hover:text-[#5c4ec2]">Acesso da equipe</Link><Link href="/termos-de-servico" className="hover:text-[#5c4ec2]">Termos</Link><Link href="/exclusao-de-dados" className="hover:text-[#5c4ec2]">Exclusão de dados</Link></nav>
         </div>
       </footer>
     </main>
