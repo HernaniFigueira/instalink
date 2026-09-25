@@ -11,7 +11,7 @@ import type { PermissionId } from '@/lib/types';
 import {
   REVENUE_HINTS, REVENUE_LABELS, REVENUE_UNIT_LABELS, bookingRevenue, orderRevenue,
 } from '@/lib/revenue';
-import { nowHM, todayISO } from '@/lib/tz';
+import { addDaysISO, nowHM, todayISO } from '@/lib/tz';
 import { timeToMin } from '@/lib/utils';
 import { parsePeriodParam, periodWindows, resolvePeriodSpec } from '@/lib/periods';
 import { collectResults, resultsSummary } from '@/lib/insights';
@@ -155,6 +155,12 @@ export async function GET(req: NextRequest) {
 
   // ── Operação de HOJE + pendências de fechamento ──
   const todaySummary = m.bookings ? summarizeDay(bookings, today, servicesById, today, nowHM()) : null;
+  // ONTEM (comparação dos KPIs do dia): mesma função, mesma fonte de dados, já
+  // em memória. Aditivo — quem só lê `today` não muda nada.
+  const yesterdayISO = addDaysISO(today, -1);
+  const yesterdaySummary = m.bookings
+    ? summarizeDay(bookings, yesterdayISO, servicesById, today, nowHM())
+    : null;
   const closures = m.bookings
     ? pendingClosures(bookings, servicesById, today, nowHM()).map((b) => ({
       id: b.id, customerName: b.customerName, date: b.date, time: b.time, status: b.status,
@@ -391,6 +397,7 @@ export async function GET(req: NextRequest) {
     revenueDetail: revenuePayload,
     showMoney,
     today: todaySummary,
+    yesterday: yesterdaySummary,
     needsClosure: closures,
     ordersPanel,
     productsPanel,

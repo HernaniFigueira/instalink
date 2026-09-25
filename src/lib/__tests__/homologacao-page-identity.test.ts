@@ -60,19 +60,27 @@ describe('P1 · Página — Modelo/Seções/Aparência/Prévia', () => {
 });
 
 describe('P1 · Identidade e marca estável', () => {
-  it('sidebar = GoDoutor (nunca logo da clínica nem InstaLink)', () => {
+  it('GODOUTOR 2.0 — cabeçalho da sidebar = CLÍNICA; GoDoutor discreto no rodapé', () => {
     const nav = read('src/components/dashboard/WorkspaceNavigation.tsx');
-    expect(nav).toContain('Go<span>Doutor</span>');
+    // §C (clinic-first / co-branded): o nome e o logo da clínica dominam a
+    // interface do tenant. A marca do PRODUTO continua presente — nunca vira
+    // white-label — mas discreta, no rodapé da navegação.
+    expect(nav).toContain('workspace-clinic-head');
+    expect(nav).toContain('unit.logo');
+    expect(nav).toContain('powered by <strong>GoDoutor</strong>');
+    // E nenhum resquício do nome antigo da plataforma.
     expect(nav).not.toMatch(/Insta<span>Link<\/span>/);
-    // sem logo da clínica na identidade da sidebar
-    const identity = nav.slice(nav.indexOf('const identity'), nav.indexOf('const identity') + 800);
-    expect(identity).not.toContain('unit.logo');
+    expect(nav).not.toContain('InstaLink');
   });
 
-  it('topbar seletor de unidade mostra logo pequena da clínica', () => {
+  it('a identidade da clínica NÃO é duplicada na topbar (uma vez só, na sidebar)', () => {
     const top = read('src/components/dashboard/WorkspaceTopbar.tsx');
-    expect(top).toContain('ws-unitpill__logo');
-    expect(top).toContain('unit.logo');
+    // Regra 2.0: a topbar carrega busca, ações e a conta — a unidade vive na
+    // sidebar (e a troca de unidade no menu da conta).
+    expect(top).not.toContain('unit.logo');
+    const menu = read('src/components/dashboard/AccountMenu.tsx');
+    expect(menu).toContain('Clínica atual');
+    expect(menu).toMatch(/units\.map/);
   });
 
   it('Configurações → Identidade = nome+logo SEM capa', () => {
@@ -92,15 +100,20 @@ describe('P1 · sidebar contínua + colapso', () => {
   const nav = read('src/components/dashboard/WorkspaceNavigation.tsx');
   const css = read('src/app/globals.css');
 
-  it('botão colapsar = icon button quadrado arredondado, sem texto «<<»', () => {
-    expect(nav).toContain('workspace-collapse-btn');
+  it('botão colapsar = item de rodapé icônico, sem texto «<<»', () => {
+    // 2.0: o controle de recolher vive no RODAPÉ da navegação, como os demais
+    // itens utilitários (Ajuda) — quadrado, rotulado e acessível por teclado.
+    expect(nav).toContain('workspace-foot__item--collapse');
+    expect(nav).toMatch(/aria-label=\{collapsed \? 'Expandir navegação' : 'Recolher navegação'\}/);
     expect(nav).not.toContain('«');
-    expect(css).toContain('.workspace-collapse-btn {');
-    expect(css).toMatch(/\.workspace-collapse-btn\s*\{[^}]*border-radius:\s*8px/);
+    expect(css).toContain('.workspace-foot__item--collapse');
   });
 
-  it('sem linha horizontal sob o logo (superfície contínua)', () => {
-    expect(css).toMatch(/\.workspace-identity\s*\{[^}]*border-bottom:\s*0/);
+  it('o cabeçalho da clínica é superfície contínua (sem régua horizontal)', () => {
+    // A régua do cabeçalho saiu: uma linha a mais entre a marca e o menu
+    // criava um degrau visual sem função. O que separa é o espaçamento.
+    const head = css.slice(css.indexOf('.workspace-clinic-head {'));
+    expect(head.slice(0, 400)).not.toMatch(/border-bottom:\s*1px/);
   });
 });
 

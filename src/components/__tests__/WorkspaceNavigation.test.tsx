@@ -49,21 +49,25 @@ describe('Etapa A — sidebar por seções', () => {
   it('mostra os destinos principais como link e exatamente quatro grupos', () => {
     setup();
     const main = screen.getByRole('navigation', { name: 'Menu principal' });
-    // Principal + Operação/Comercial/Presença planos: links diretos.
-    for (const name of ['Início', 'Agenda', 'Clientes', 'Conversas', 'Tarefas', 'Funil', 'Página']) {
+    // 2.0 — Operação é link direto: o dia a dia cabe na primeira coluna.
+    for (const name of ['Visão geral', 'Agenda', 'Conversas', 'Clientes', 'Página']) {
       expect(within(main).getByRole('link', { name })).toBeTruthy();
+    }
+    // Pendências/Oportunidades saíram da linha do menu (contexto, não porta).
+    for (const name of ['Pendências', 'Oportunidades']) {
+      expect(within(main).queryByRole('link', { name })).toBeNull();
     }
     // Só 4 grupos abrem a segunda coluna — é isso que acaba com a lista infinita.
     expect(within(main).getAllByRole('button').map((b) => b.getAttribute('aria-label')))
-      .toEqual(['Estrutura da clínica', 'Automação', 'Gestão', 'Ajustes']);
+      .toEqual(['Clínica', 'Automação', 'Gestão', 'Configurações']);
     expect(screen.queryByLabelText('Fechar submenu')).toBeNull();
   });
 
-  it('agrupa Serviços/Profissionais/Disponibilidade/Equipe em "Estrutura da clínica"', async () => {
+  it('agrupa Serviços/Profissionais/Disponibilidade/Equipe em "Clínica"', async () => {
     const u = userEvent.setup();
     setup();
-    await u.click(screen.getByRole('button', { name: 'Estrutura da clínica' }));
-    const rail = screen.getByRole('navigation', { name: 'Estrutura da clínica' });
+    await u.click(screen.getByRole('button', { name: 'Clínica' }));
+    const rail = screen.getByRole('navigation', { name: 'Clínica' });
     // A UX agrupa; o modelo de dados NÃO foi unificado ( Professional ≠ Member ):
     // são quatro destinos distintos, cada um com a própria rota.
     for (const name of ['Serviços', 'Profissionais', 'Disponibilidade', 'Equipe']) {
@@ -76,10 +80,10 @@ describe('Etapa A — sidebar por seções', () => {
     const { onCollapse } = setup();
     await u.click(screen.getByRole('button', { name: 'Gestão' }));
     expect(screen.getByRole('navigation', { name: 'Gestão' })).toBeTruthy();
-    await u.click(screen.getByRole('button', { name: 'Ajustes' }));
+    await u.click(screen.getByRole('button', { name: 'Configurações' }));
     expect(screen.queryByRole('navigation', { name: 'Gestão' })).toBeNull();
-    await u.click(screen.getByRole('button', { name: 'Ajustes' }));
-    expect(screen.queryByRole('navigation', { name: 'Ajustes' })).toBeNull();
+    await u.click(screen.getByRole('button', { name: 'Configurações' }));
+    expect(screen.queryByRole('navigation', { name: 'Configurações' })).toBeNull();
     await u.click(screen.getByRole('button', { name: 'Gestão' }));
     await u.click(screen.getByRole('button', { name: 'Fechar submenu' }));
     expect(screen.queryByRole('navigation', { name: 'Gestão' })).toBeNull();
@@ -88,18 +92,20 @@ describe('Etapa A — sidebar por seções', () => {
 
   it('abre o grupo dono da rota em deep-link e troca junto com a rota', () => {
     const { rerender, props } = setup({ activePath: '/configuracoes' });
-    expect(screen.getByRole('navigation', { name: 'Ajustes' })).toBeTruthy();
+    expect(screen.getByRole('navigation', { name: 'Configurações' })).toBeTruthy();
     rerender(<WorkspaceNavigation {...props} activePath="/agenda" />);
-    expect(screen.queryByRole('navigation', { name: 'Ajustes' })).toBeNull();
+    expect(screen.queryByRole('navigation', { name: 'Configurações' })).toBeNull();
   });
 
-  it('marca estável na sidebar: GoDoutor (sem logo da clínica)', () => {
-    // HOMOLOGAÇÃO · P1 — painel é GoDoutor; logo/nome da clínica vivem no seletor da topbar.
+  it('marca 2.0: a CLÍNICA identifica a navegação, GoDoutor assina no rodapé', () => {
+    // §C — clinic-first: o topo da sidebar é a clínica (nome + logo). A marca
+    // do produto NÃO some (nada de white-label): ela assina discretamente.
     setup();
     const side = screen.getByRole('complementary', { name: 'Navegação da clínica' });
-    expect(side.querySelectorAll('img')).toHaveLength(0);
+    expect(side.querySelector('.workspace-clinic-head__logo')).toBeTruthy();
+    expect(side.textContent).toContain(unit.name);
     expect(side.textContent).toContain('GoDoutor');
-    expect(side.textContent).not.toContain(unit.name);
+    expect(side.textContent).not.toContain('InstaLink');
   });
 
   it('só recolhe no botão explícito', async () => {
@@ -132,7 +138,7 @@ describe('Etapa A — sidebar por seções', () => {
   it('nunca introduz rota ou grupo sem autorização', () => {
     setup({ nav: panelNavigation({ permissions: { agenda: true }, modes: ['bookings'], features: {} }) });
     expect(screen.queryByRole('button', { name: 'Gestão' })).toBeNull();
-    expect(screen.queryByRole('button', { name: 'Estrutura da clínica' })).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Clínica' })).toBeNull();
     expect(screen.queryByRole('link', { name: 'Clientes' })).toBeNull();
     expect(screen.getByRole('link', { name: 'Agenda' })).toBeTruthy();
   });

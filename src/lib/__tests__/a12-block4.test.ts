@@ -66,12 +66,15 @@ describe('B4.1/B4.2 — estrutura canônica e sem duplicações', () => {
   // Atenção → Hoje (KPIs) → Onde agir + Período → Próximos/Conversas → Recentes.
   // A intenção do guard continua a mesma: uma ordem canônica única, sem blocos
   // soltos competindo — só os marcadores acompanharam o layout aprovado.
+  // GoDoutor 2.0 (§11/§12): "Hoje" continua vindo antes do painel de período,
+  // mas o painel analítico só existe para quem tem Gestão — para os demais o
+  // lugar dele é "O que resolver agora", na MESMA posição da grade.
   it('ordem canônica: Atenção → Hoje → Onde agir/Período → Próximos → Recentes', () => {
     // Marcadores do JSX renderizado (não dos comentários de cabeçalho).
     const atencao = page.indexOf('aria-label="Itens que precisam de atenção"');
     const hoje = page.indexOf('>Hoje</h3>');
     const ondeAgir = page.indexOf('{hasWhereToAct ? (');
-    const periodo = page.indexOf('>Período <span');
+    const periodo = page.indexOf('Período <span');
     const proximos = page.indexOf('>Próximos atendimentos</h3>');
     const recentes = page.indexOf('>Atividade recente</h3>');
     for (const [k, v] of Object.entries({ atencao, hoje, ondeAgir, periodo, proximos, recentes })) {

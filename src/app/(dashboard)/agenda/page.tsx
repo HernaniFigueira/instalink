@@ -140,6 +140,8 @@ interface ColumnVM {
   key: string;
   label: string;
   sub: string;
+  /** Foto real do profissional (fallback: iniciais no Avatar). */
+  photo?: string;
   date: string;
   professionalId: string;
   isProfessional: boolean;
@@ -596,7 +598,7 @@ export default function AgendaPage() {
   // Filtros compactos (status + profissional) só escondem blocos/colunas da
   // grade — dados, drag e ações continuam sobre os mesmos agendamentos.
   const columns = useMemo<ColumnVM[]>(() => {
-    const base: Array<{ key: string; label: string; sub: string; date: string; professionalId: string; isProfessional: boolean }> = [];
+    const base: Array<{ key: string; label: string; sub: string; photo?: string; date: string; professionalId: string; isProfessional: boolean }> = [];
     if (view === 'week') {
       for (const d of weekDays) {
         base.push({
@@ -614,7 +616,7 @@ export default function AgendaPage() {
       const filtering = proFilter ? specPros.some((x) => x.id === proFilter) : false;
       const shown = filtering ? specPros.filter((x) => x.id === proFilter) : specPros;
       for (const p of shown) {
-        base.push({ key: p.id, label: p.name, sub: p.role || '', date: focus, professionalId: p.id, isProfessional: true });
+        base.push({ key: p.id, label: p.name, sub: p.role || '', photo: (p as { photo?: string }).photo, date: focus, professionalId: p.id, isProfessional: true });
       }
       // Com especialidade ativa não existe coluna "sem profissional".
       if (!filtering && !specFilter && bookings.some((b) => b.date === focus && !b.professionalId)) {
@@ -685,7 +687,7 @@ export default function AgendaPage() {
   // Colunas usadas pelo cálculo de destino (mesma ordem da renderização).
   useEffect(() => {
     columnsRef.current = columns.map((c) => ({
-      key: c.key, label: c.label, date: c.date, professionalId: c.professionalId, isProfessional: c.isProfessional,
+      key: c.key, label: c.label, sub: c.sub, photo: c.photo, date: c.date, professionalId: c.professionalId, isProfessional: c.isProfessional,
     }));
   }, [columns]);
 
@@ -1131,216 +1133,155 @@ export default function AgendaPage() {
 
   return (
     <div>
-      {/* Cabeçalho compacto: a grade é o conteúdo — o título não compete. */}
-      <div className="flex flex-wrap items-center justify-between gap-3 mb-4">
-        {/* HOMOLOGAÇÃO · P1 — cabeçalho enxuto: título + controles.
-            A ajuda fica na Legenda (tooltip/popover), não em frase permanente. */}
-        <div className="flex items-center gap-2 min-w-0">
-          {/* Título limpo (fechamento): sem "?" — ajuda real mora na Legenda. */}
-          <h1 className="text-lg font-semibold tracking-tight text-[var(--text)] leading-tight">Agenda</h1>
+      {/* CABEÇALHO (§13): título + o que a tela faz + as DUAS ações que
+          importam. Nada de legenda permanente, nada de card de fila disputando
+          o título: a semântica de estado já está nos próprios blocos da grade
+          e a fila vive no rail ao lado (ou no drawer, em tela pequena). */}
+      <header className="flex flex-wrap items-start justify-between gap-x-4 gap-y-2 mb-3.5">
+        <div className="min-w-0">
+          <h1 className="text-[22px] font-semibold tracking-tight text-[var(--text-primary)] leading-tight">Agenda</h1>
+          <p className="text-[13px] text-[var(--text-secondary)] mt-1">
+            Gerencie os atendimentos da sua clínica.
+          </p>
         </div>
-        <div className="flex flex-wrap items-center justify-end gap-1.5 ml-auto">
-          {loaded && (
-            <div className="dsh-card flex items-center gap-3 pl-2.5 pr-2 py-2">
-              <span className="dsh-kpi__icon" style={{ background: 'var(--brand-soft)', color: 'var(--brand-fg)' }}>
-                <Icon n="users" size={18} />
-              </span>
-              <span className="leading-tight mr-1">
-                <span className="block text-[12.5px] font-semibold text-[var(--text)]">Fila de atendimento</span>
-                <span className="block text-[11px] text-[var(--text-muted)]">
-                  {(queueInfo.waiting + queueInfo.called + queueInfo.inService) > 0
-                    ? <><strong className="text-[var(--warning-fg)] font-semibold">{queueInfo.waiting + queueInfo.called} aguardando</strong>{' · '}<strong className="text-[var(--success-fg)] font-semibold">{queueInfo.inService} em atendimento</strong></>
-                    : 'ninguém aguardando agora'}
-                </span>
-              </span>
-              <button type="button" aria-expanded={showQueue}
-                aria-label="Fila de atendimento"
-                onClick={() => setShowQueue((v) => !v)}
-                title={showQueue ? 'Fechar fila de atendimento' : 'Abrir fila de atendimento'}
-                className="inline-flex items-center gap-1 text-[12.5px] font-semibold text-[var(--brand-fg)] hover:underline px-2 py-1.5">
-                Ver fila <Icon n="chevronRight" size={13} />
-              </button>
-            </div>
-          )}
-              {/* P1.1 — UM botão de filtro (contador quando ativo). O popover
-                  agrupa Status + Especialidade + Profissional pesquisável:
-                  escala para 10/20/50 profissionais sem poluir a toolbar. */}
-              <div className="relative lg:hidden" ref={filterWrapRef}>
-                <Button variant="secondary" size="sm" onClick={() => { setFilterOpen((o) => !o); setProSearch(''); }}
-                  aria-expanded={filterOpen} aria-haspopup="dialog" title="Filtros">
-                  <Icon n="filter" size={13} />
-                  {activeFilterCount > 0 ? `Filtro · ${activeFilterCount}` : 'Filtro'}
-                  <Icon n="chevD" size={12} className={`transition-transform ${filterOpen ? 'rotate-180' : ''}`} />
-                </Button>
+        <div className="flex flex-wrap items-center gap-2">
+          {/* Filtros: UM botão, UM popover (Status · Serviços · Profissional) e
+              contador quando há filtro ativo. Nada de três selects enormes
+              fixos acima da grade. */}
+          <div className="relative" ref={filterWrapRef}>
+            <Button variant="secondary" size="sm" onClick={() => { setFilterOpen((o) => !o); setProSearch(''); }}
+              aria-expanded={filterOpen} aria-haspopup="dialog" title="Filtros da agenda">
+              <Icon n="filter" size={14} />
+              {activeFilterCount > 0 ? `Filtros · ${activeFilterCount}` : 'Filtros'}
+              <Icon n="chevD" size={12} className={`transition-transform ${filterOpen ? 'rotate-180' : ''}`} />
+            </Button>
 
-                {filterOpen && (
-                  <div role="dialog" aria-label="Filtros da agenda"
-                    className="absolute right-0 top-full mt-1.5 z-30 w-[300px] max-w-[calc(100vw-1.25rem)] bg-white border border-zinc-200 rounded-lg shadow-lg text-left">
-                    <div className="px-3 pt-2.5 pb-1.5 flex items-center justify-between gap-2">
-                      <p className="text-[11px] font-semibold uppercase tracking-wider text-zinc-400">Filtros</p>
-                      {activeFilterCount > 0 && (
-                        <button type="button" onClick={clearFilters}
-                          className="text-xs font-semibold text-[var(--danger)] hover:text-[var(--danger-strong)]">
-                          Limpar filtros
+            {filterOpen && (
+              <div role="dialog" aria-label="Filtros da agenda"
+                className="absolute right-0 top-[calc(100%+6px)] z-50 w-[310px] max-w-[calc(100vw-1.25rem)] bg-[var(--surface)] border border-[var(--border)] rounded-[var(--radius-xl)] shadow-lg text-left">
+                <div className="px-3 pt-2.5 pb-1.5 flex items-center justify-between gap-2">
+                  <p className="text-[11px] font-semibold uppercase tracking-wider text-[var(--text-muted)]">Filtros</p>
+                  {activeFilterCount > 0 && (
+                    <button type="button" onClick={clearFilters}
+                      className="text-[12px] font-semibold text-[var(--danger-fg)] hover:underline">
+                      Limpar filtros
+                    </button>
+                  )}
+                </div>
+
+                <div className="px-3 pb-2.5">
+                  <p className="text-[11px] font-semibold text-[var(--text-secondary)] mb-1.5">Status</p>
+                  <div className="flex flex-wrap gap-1">
+                    <FilterChip active={!statusFilter} onClick={() => setStatusFilter('')}>Todos</FilterChip>
+                    {statusOptions.map((st) => (
+                      <FilterChip key={st} active={statusFilter === st} onClick={() => setStatusFilter(statusFilter === st ? '' : st)}>
+                        {BOOKING_STATUS[st].panel}
+                      </FilterChip>
+                    ))}
+                  </div>
+                </div>
+
+                {specialties.length > 0 && (
+                  <div className="px-3 pb-2.5 border-t border-[var(--border-soft)] pt-2.5">
+                    <p className="text-[11px] font-semibold text-[var(--text-secondary)] mb-1.5">Serviços</p>
+                    <div className="flex flex-wrap gap-1">
+                      <FilterChip active={!specFilter} onClick={() => pickSpec('')}>Todos</FilterChip>
+                      {specialties.map((r) => (
+                        <FilterChip key={r} active={specFilter === r} onClick={() => pickSpec(specFilter === r ? '' : r)}>
+                          {r}
+                        </FilterChip>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {activePros.length > 0 && (
+                  <div className="px-3 pb-3 border-t border-[var(--border-soft)] pt-2.5">
+                    <p className="text-[11px] font-semibold text-[var(--text-secondary)] mb-1.5">Profissional</p>
+                    <div className="relative">
+                      <Icon n="search" size={13} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-[var(--text-muted)]" />
+                      <input value={proSearch} onChange={(e) => setProSearch(e.target.value)}
+                        placeholder="Pesquisar profissional…" aria-label="Pesquisar profissional"
+                        className="w-full text-[12.5px] bg-[var(--surface-subtle)] border border-[var(--border)] rounded-[var(--radius-sm)] pl-8 pr-2 py-1.5 focus:outline-none focus:border-[var(--brand)] focus:bg-white" />
+                    </div>
+                    <div className="mt-1.5 max-h-44 overflow-y-auto ws-scroll space-y-0.5">
+                      <button type="button" onClick={() => pickPro('')}
+                        className={cn('w-full flex items-center gap-2 px-2 py-1.5 rounded-[var(--radius-sm)] text-left text-[12.5px] font-medium',
+                          !proFilter ? 'bg-[var(--surface-hover)]' : 'hover:bg-[var(--surface-subtle)]')}>
+                        <span className="flex-1">Todos</span>
+                        {!proFilter && <Icon n="check" size={13} className="text-[var(--success-fg)] shrink-0" />}
+                      </button>
+                      {prosInFilter.map((p) => (
+                        <button key={p.id} type="button" onClick={() => pickPro(proFilter === p.id ? '' : p.id)}
+                          className={cn('w-full flex items-center gap-2 px-2 py-1.5 rounded-[var(--radius-sm)] text-left text-[12.5px]',
+                            proFilter === p.id ? 'bg-[var(--surface-hover)]' : 'hover:bg-[var(--surface-subtle)]')}>
+                          <Avatar name={p.name} src={p.photo} size={20} />
+                          <span className="flex-1 min-w-0 truncate">
+                            <span className="font-semibold text-[var(--text-primary)]">{p.name}</span>
+                            {p.role && <span className="text-[var(--text-muted)]"> · {p.role}</span>}
+                          </span>
+                          {proFilter === p.id && <Icon n="check" size={13} className="text-[var(--success-fg)] shrink-0" />}
                         </button>
+                      ))}
+                      {prosInFilter.length === 0 && (
+                        <p className="text-[12.5px] text-[var(--text-muted)] px-2 py-1.5">Nenhum profissional encontrado.</p>
                       )}
                     </div>
-
-                    <div className="px-3 pb-2.5">
-                      <p className="text-[11px] font-semibold text-zinc-500 mb-1.5">Status</p>
-                      <div className="flex flex-wrap gap-1">
-                        <FilterChip active={!statusFilter} onClick={() => setStatusFilter('')}>Todos</FilterChip>
-                        {statusOptions.map((s) => (
-                          <FilterChip key={s} active={statusFilter === s} onClick={() => setStatusFilter(statusFilter === s ? '' : s)}>
-                            {BOOKING_STATUS[s].panel}
-                          </FilterChip>
-                        ))}
-                      </div>
-                    </div>
-
-                    {specialties.length > 0 && (
-                      <div className="px-3 pb-2.5 border-t border-zinc-100 pt-2.5">
-                        <p className="text-[11px] font-semibold text-zinc-500 mb-1.5">Especialidade</p>
-                        <div className="flex flex-wrap gap-1">
-                          <FilterChip active={!specFilter} onClick={() => pickSpec('')}>Todas</FilterChip>
-                          {specialties.map((r) => (
-                            <FilterChip key={r} active={specFilter === r} onClick={() => pickSpec(specFilter === r ? '' : r)}>
-                              {r}
-                            </FilterChip>
-                          ))}
-                        </div>
-                      </div>
-                    )}
-
-                    {activePros.length > 0 && (
-                      <div className="px-3 pb-3 border-t border-zinc-100 pt-2.5">
-                        <p className="text-[11px] font-semibold text-zinc-500 mb-1.5">Profissional</p>
-                        <div className="relative">
-                          <Icon n="search" size={13} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-zinc-400" />
-                          <input value={proSearch} onChange={(e) => setProSearch(e.target.value)}
-                            placeholder="Pesquisar profissional..." aria-label="Pesquisar profissional"
-                            className="w-full text-xs bg-zinc-50 border border-zinc-200 rounded-md pl-8 pr-2 py-1.5 focus:outline-none focus:ring-1 focus:ring-[var(--action)] focus:bg-white" />
-                        </div>
-                        <div className="mt-1.5 max-h-44 overflow-y-auto ws-scroll space-y-0.5">
-                          <button type="button" onClick={() => pickPro('')}
-                            className={cn('w-full flex items-center gap-2 px-2 py-1.5 rounded-md text-left text-xs font-medium',
-                              !proFilter ? 'bg-zinc-100' : 'hover:bg-zinc-50')}>
-                            <span className="flex-1">Todos</span>
-                            {!proFilter && <Icon n="check" size={13} className="text-emerald-600 shrink-0" />}
-                          </button>
-                          {prosInFilter.map((p) => (
-                            <button key={p.id} type="button" onClick={() => pickPro(proFilter === p.id ? '' : p.id)}
-                              className={cn('w-full flex items-center gap-2 px-2 py-1.5 rounded-md text-left text-xs',
-                                proFilter === p.id ? 'bg-zinc-100' : 'hover:bg-zinc-50')}>
-                              <span className="flex-1 min-w-0 truncate">
-                                <span className="font-semibold text-zinc-800">{p.name}</span>
-                                {p.role && <span className="text-zinc-400"> · {p.role}</span>}
-                              </span>
-                              {proFilter === p.id && <Icon n="check" size={13} className="text-emerald-600 shrink-0" />}
-                            </button>
-                          ))}
-                          {prosInFilter.length === 0 && (
-                            <p className="text-xs text-zinc-400 px-2 py-1.5">Nenhum profissional encontrado.</p>
-                          )}
-                        </div>
-                      </div>
-                    )}
                   </div>
                 )}
               </div>
-              <div ref={helpWrapRef} className="relative lg:hidden">
-                <Button type="button" variant="secondary" size="sm" aria-expanded={helpOpen} aria-haspopup="dialog"
-                  onClick={() => setHelpOpen((v) => !v)} title="Legenda e como usar a grade">
-                  <Icon n="eye" size={14} />
-                  <span className="hidden sm:inline">Legenda</span>
-                </Button>
-                {helpOpen && (
-                  <div role="dialog" aria-label="Legenda e ajuda da agenda"
-                    className="absolute right-0 top-[calc(100%+6px)] z-50 w-[min(22rem,calc(100vw-2rem))] rounded-lg border border-[var(--border)] bg-[var(--surface)] shadow-lg p-3 space-y-2.5">
-                    <p className="text-xs text-[var(--text-muted)] mb-2">Clique num atendimento para detalhes e ações; arraste para reagendar.</p>
-                    <div className="flex flex-wrap items-center gap-x-3 gap-y-1" aria-label="Legenda dos estados">
-                      {statusOptions.map((s) => (
-                        <span key={s} className="inline-flex items-center gap-1 text-[11px] font-medium text-zinc-500">
-                          <span className={`w-2 h-2 rounded-sm ${BOOKING_DOT[s]}`} aria-hidden="true" />
-                          {BOOKING_STATUS[s].panel}
-                        </span>
-                      ))}
-                      <span className="text-[11px] font-medium text-zinc-500 inline-flex items-center gap-1">
-                        <span className={`w-3.5 h-3.5 rounded-full text-[9px] font-semibold leading-[14px] text-center ${ATTENTION_MARK_CLS}`} aria-hidden="true">!</span>
-                        precisa de fechamento
-                      </span>
-                    </div>
-                    <p className="text-xs text-[var(--text-muted)]">Branco: horário livre para algum serviço · Cinza: {bookings.length>=500?'disponibilidade não calculada':'indisponível'} · Cartão: agendamento com estado. A reserva é confirmada pelo servidor.{bookings.length>=500?' Limite de leitura atingido: consulte disponibilidade no formulário.':''}</p>
-                    <p className="text-xs text-[var(--text-muted)] inline-flex items-center gap-1">
-                      <Icon n="calendarPlus" size={12} />
-                      clique num horário vago para agendar · arraste um cartão para remarcar
-                    </p>
-                  </div>
-                )}
-              </div>
-        </div>
-        </div>
-
-        {/* Filtros + legenda INLINE no desktop (hierarquia do mockup): em telas
-            menores os mesmos controles vivem nos popovers Filtro/Legenda. */}
-        <div className="hidden lg:flex flex-wrap items-center gap-x-5 gap-y-2 mb-2">
-          {activePros.length > 0 && (
-            <label className="flex items-center gap-2 text-[12px] font-semibold text-[var(--text-muted)]">
-              Profissionais:
-              <span className="flex -space-x-1.5" aria-hidden="true">
-                {activePros.slice(0, 4).map((p) => <Avatar key={p.id} name={p.name} size={22} />)}
-              </span>
-              <select value={proFilter} onChange={(e) => pickPro(e.target.value)}
-                aria-label="Filtrar por profissional"
-                className="text-[12px] font-semibold text-[var(--text)] bg-[var(--surface)] border border-[var(--border)] rounded-md px-2 py-1.5 max-w-[180px]">
-                <option value="">Todos</option>
-                {prosInFilter.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
-              </select>
-            </label>
-          )}
-          {specialties.length > 0 && (
-            <label className="flex items-center gap-2 text-[12px] font-semibold text-[var(--text-muted)]">
-              Serviços:
-              <select value={specFilter} onChange={(e) => pickSpec(e.target.value)}
-                aria-label="Filtrar por especialidade"
-                className="text-[12px] font-semibold text-[var(--text)] bg-[var(--surface)] border border-[var(--border)] rounded-md px-2 py-1.5 max-w-[180px]">
-                <option value="">Todas</option>
-                {specialties.map((r) => <option key={r} value={r}>{r}</option>)}
-              </select>
-            </label>
-          )}
-          <label className="flex items-center gap-2 text-[12px] font-semibold text-[var(--text-muted)]">
-            Status:
-            <select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value as BookingStatus | '')}
-              aria-label="Filtrar por status"
-              className="text-[12px] font-semibold text-[var(--text)] bg-[var(--surface)] border border-[var(--border)] rounded-md px-2 py-1.5 max-w-[160px]">
-              <option value="">Todos</option>
-              {statusOptions.map((st) => <option key={st} value={st}>{BOOKING_STATUS[st].panel}</option>)}
-            </select>
-          </label>
-          {activeFilterCount > 0 && (
-            <button type="button" onClick={clearFilters}
-              className="text-[12px] font-semibold text-[var(--danger)] hover:text-[var(--danger-strong)]">
-              Limpar filtros
-            </button>
-          )}
-        </div>
-        <div className="hidden lg:flex flex-wrap items-center gap-x-4 gap-y-1 mb-2.5" aria-label="Legenda dos estados">
-            {statusOptions.map((st) => (
-              <span key={st} className="inline-flex items-center gap-1.5 text-[11px] font-medium text-[var(--text-muted)]">
-                <span className={`w-2 h-2 rounded-full ${BOOKING_DOT[st]}`} aria-hidden="true" />
-                {BOOKING_STATUS[st].panel}
-              </span>
-            ))}
-            <span className="inline-flex items-center gap-1.5 text-[11px] font-medium text-[var(--text-muted)]">
-              <span className={`w-3 h-3 rounded-full text-[8px] font-semibold leading-3 text-center ${ATTENTION_MARK_CLS}`} aria-hidden="true">!</span>
-              Precisa de fechamento
-            </span>
-            <span className="inline-flex items-center gap-1.5 text-[11px] font-medium text-[var(--text-muted)]">
-              <span className="w-2 h-2 rounded-full bg-zinc-300" aria-hidden="true" />
-              Indisponível
-            </span>
+            )}
           </div>
+
+          {/* Legenda: ajuda sob demanda (popover), nunca uma faixa fixa. */}
+          <div ref={helpWrapRef} className="relative">
+            <Button type="button" variant="ghost" size="sm" aria-expanded={helpOpen} aria-haspopup="dialog"
+              onClick={() => setHelpOpen((v) => !v)} title="Legenda e como usar a grade">
+              <Icon n="help" size={15} />
+              <span className="hidden sm:inline">Legenda</span>
+            </Button>
+            {helpOpen && (
+              <div role="dialog" aria-label="Legenda e ajuda da agenda"
+                className="absolute right-0 top-[calc(100%+6px)] z-50 w-[min(24rem,calc(100vw-2rem))] rounded-[var(--radius-xl)] border border-[var(--border)] bg-[var(--surface)] shadow-lg p-3.5 space-y-2.5">
+                <p className="text-[12.5px] text-[var(--text-secondary)]">Clique num atendimento para detalhes e ações; arraste para reagendar.</p>
+                <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5" aria-label="Legenda dos estados">
+                  {statusOptions.map((st) => (
+                    <span key={st} className="inline-flex items-center gap-1.5 text-[11.5px] font-medium text-[var(--text-secondary)]">
+                      <span className={`w-2.5 h-2.5 rounded-full ${BOOKING_DOT[st]}`} aria-hidden="true" />
+                      {BOOKING_STATUS[st].panel}
+                    </span>
+                  ))}
+                  <span className="text-[11.5px] font-medium text-[var(--text-secondary)] inline-flex items-center gap-1.5">
+                    <span className={`w-3.5 h-3.5 rounded-full text-[9px] font-semibold leading-[14px] text-center ${ATTENTION_MARK_CLS}`} aria-hidden="true">!</span>
+                    precisa de fechamento
+                  </span>
+                </div>
+                <p className="text-[12px] text-[var(--text-muted)]">Branco: horário livre · Cinza: indisponível. A reserva é confirmada pelo servidor.</p>
+                <p className="text-[12px] text-[var(--text-muted)] inline-flex items-center gap-1.5">
+                  <Icon n="calendarPlus" size={12} /> clique num horário vago para agendar · arraste um cartão para remarcar
+                </p>
+              </div>
+            )}
+          </div>
+
+          {loaded && (
+            <Button variant="secondary" size="sm" onClick={() => setShowQueue((v) => !v)}
+              aria-expanded={showQueue} aria-pressed={showQueue} title="Fila de atendimento">
+              <Icon n="users" size={14} />
+              Fila
+              {(queueInfo.waiting + queueInfo.called + queueInfo.inService) > 0 && (
+                <span className="ml-0.5 inline-flex items-center justify-center min-w-[18px] h-[18px] px-1 rounded-pill text-[10.5px] font-bold tabular-nums bg-[var(--warning-bg)] text-[var(--warning-fg)] border border-[var(--warning-border)]">
+                  {queueInfo.waiting + queueInfo.called}
+                </span>
+              )}
+            </Button>
+          )}
+
+          <Button onClick={() => setCreating({ date: focus, time: '', professionalId: '' })} variant="primary" size="sm">
+            <Icon n="calendarPlus" size={15} /> Novo agendamento
+          </Button>
+        </div>
+      </header>
 
       <PermissionNotice message={notice?.title} hint={notice?.hint} onDismiss={dismiss} />
 
@@ -1404,7 +1345,7 @@ export default function AgendaPage() {
           relative z-40: o popover de filtros abre sobre a grade e precisa
           ficar acima dos cabeçalhos sticky (z-20/30) das colunas. */}
       <div className="relative z-40 ws-panel mt-3 mb-4">
-        <div className="flex flex-wrap items-center gap-x-3 gap-y-2.5 px-3 py-2.5"><Button onClick={() => setCreating({ date: focus, time: '', professionalId: '' })} variant="primary"><Icon n="calendarPlus" size={15} /> Novo agendamento</Button>
+        <div className="flex flex-wrap items-center gap-x-3 gap-y-2.5 px-3 py-2.5">
           {/* Navegação no tempo (A3.4): [◀] [Hoje] [▶] + título da data ao lado.
               O "Hoje" fica SEMPRE no mesmo lugar, entre as setas — antes ele
               aparecia e desaparecia conforme a data, então o botão se movia
@@ -1563,14 +1504,14 @@ export default function AgendaPage() {
                     <div key={c.key} className="shrink-0 px-3 flex items-center gap-2 border-r border-zinc-100 last:border-r-0" style={{ minWidth: COL_MIN, width: `${100 / Math.max(1, columns.length)}%`, height: HEADER_H }}>
                       {view === 'day' && (
                         c.isProfessional ? (
-                          <Avatar name={c.label} size={20} />
+                          <Avatar name={c.label} src={c.photo} size={22} />
                         ) : (
                           <span className="w-5 h-5 rounded-md bg-[var(--surface-2)] text-[var(--text-muted)] text-[10px] font-semibold flex items-center justify-center shrink-0">—</span>
                         )
                       )}
                       <span className="min-w-0">
-                        <span className={`block text-sm font-semibold truncate ${c.isToday ? 'text-[var(--brand-fg)]' : 'text-zinc-800'}`}>{c.label}</span>
-                        {c.sub && <span className="block text-[10px] text-zinc-400 truncate">{c.sub}</span>}
+                        <span className={`block text-[13px] font-semibold truncate ${c.isToday ? 'text-[var(--brand-fg)]' : 'text-[var(--text-primary)]'}`}>{c.label}</span>
+                        {c.sub && <span className="block text-[11px] text-[var(--text-muted)] truncate">{c.sub}</span>}
                       </span>
                     </div>
                   ))}

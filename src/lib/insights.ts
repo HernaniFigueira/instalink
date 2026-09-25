@@ -444,14 +444,14 @@ export function buildResults(input: ResultsInput): ResultsPayload {
       comparable: false,
     }),
     metric({
-      id: 'leads', label: 'Leads', unit: 'count', value: leadsCur.length, prev: leadsPrev ? leadsPrev.length : null,
+      id: 'leads', label: 'Oportunidades', unit: 'count', value: leadsCur.length, prev: leadsPrev ? leadsPrev.length : null,
       hint: 'Contatos interessados registrados no período (pela data de criação).',
       hasData: leadsCur.length > 0 || (leadsPrev || []).length > 0,
       noDataHint: 'Nenhum lead registrado neste período — nem no período anterior.',
     }),
     metric({
-      id: 'lead_conversion', label: 'Conversão de leads', unit: 'percent', value: leadRate, prev: leadRatePrev,
-      hint: 'Leads do período que viraram cliente/agendamento ÷ leads do período.',
+      id: 'lead_conversion', label: 'Conversão de oportunidades', unit: 'percent', value: leadRate, prev: leadRatePrev,
+      hint: 'Oportunidades do período que viraram cliente/agendamento ÷ oportunidades do período.',
       hasData: leadsCur.length > 0,
       noDataHint: 'Sem leads no período não há conversão para calcular.',
     }),
@@ -494,16 +494,16 @@ export function buildResults(input: ResultsInput): ResultsPayload {
 
   const steps: FunnelStep[] = hasBookings
     ? [
-      step('leads', 'Leads', leadsCur.length, 'Interessados registrados no período.', 'lead'),
-      step('lead_converted', 'Leads convertidos', convertedCur, 'Leads do período marcados como convertidos.', 'lead'),
+      step('leads', 'Oportunidades', leadsCur.length, 'Interessados registrados no período.', 'lead'),
+      step('lead_converted', 'Oportunidades convertidas', convertedCur, 'Oportunidades do período marcadas como convertidas.', 'lead'),
       step('bookings', 'Agendamentos', bookingsCur, 'Atendimentos marcados para o período.', 'booking'),
       step('confirmed', 'Confirmados', confirmedCur, 'Agendamentos confirmados (ou já concluídos) no período.', 'booking'),
       step('arrived', 'Chegou', 0, 'O sistema ainda não registra a chegada do cliente.', 'booking', false),
       step('completed', 'Concluídos', completedCur, 'Atendimentos realizados no período.', 'booking'),
     ]
     : [
-      step('leads', 'Leads', leadsCur.length, 'Interessados registrados no período.', 'lead'),
-      step('lead_converted', 'Leads convertidos', convertedCur, 'Leads do período marcados como convertidos.', 'lead'),
+      step('leads', 'Oportunidades', leadsCur.length, 'Interessados registrados no período.', 'lead'),
+      step('lead_converted', 'Oportunidades convertidas', convertedCur, 'Oportunidades do período marcadas como convertidas.', 'lead'),
     ];
 
   // Taxa etapa-a-etapa DENTRO do mesmo grupo (não inventamos elo entre lead e
@@ -519,7 +519,7 @@ export function buildResults(input: ResultsInput): ResultsPayload {
   const losses: Array<{ id: string; label: string; value: number; hint: string }> = [];
   const notConverted = leadsCur.length - convertedCur;
   if (leadsCur.length > 0) {
-    losses.push({ id: 'lead_lost', label: 'Leads não convertidos', value: notConverted, hint: 'Leads do período que não viraram cliente/agendamento.' });
+    losses.push({ id: 'lead_lost', label: 'Oportunidades não convertidas', value: notConverted, hint: 'Oportunidades do período que não viraram cliente/agendamento.' });
   }
   if (hasBookings) {
     losses.push(

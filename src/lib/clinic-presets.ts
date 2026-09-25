@@ -101,6 +101,19 @@ export function clinicTerms(type: ClinicType | undefined | null): ClinicTerms {
 }
 
 /** A clínica opera no modo veterinário (tutor ≠ pet)? */
+/** Rótulo humano do TIPO da clínica — usado na identidade da sidebar
+ *  ("Clínica veterinária") e em qualquer lugar que precise nomear a casa.
+ *  Não confundir com `preset.label` ("Veterinária"), que é o tipo seco. */
+export function clinicTypeLabel(type: ClinicType | undefined | null): string {
+  switch (type) {
+    case 'veterinaria': return 'Clínica veterinária';
+    case 'medica': return 'Clínica médica';
+    case 'odontologica': return 'Clínica odontológica';
+    case 'estetica': return 'Clínica de estética';
+    default: return 'Clínica';
+  }
+}
+
 export function isVetClinic(type: ClinicType | undefined | null): boolean {
   return clinicPreset(type).vetMode;
 }

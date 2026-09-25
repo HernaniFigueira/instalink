@@ -16,6 +16,7 @@ import { useRouter } from 'next/navigation';
 import { Icon } from '@/components/icons';
 import { mayLeaveEditor } from './useUnsavedChanges';
 import { buildWorkspaceAlerts, bellLabel, type AlertsSource, type WorkspaceAlerts } from '@/lib/workspace-alerts';
+import { loadOverview } from '@/lib/overview';
 
 const REFRESH_MS = 120_000;
 
@@ -27,14 +28,16 @@ export function useWorkspaceAlerts(businessId: string, unitQuery: string): Works
   const load = useCallback(() => {
     if (!businessId) { setStatus('unavailable'); setSource(null); return; }
     let cancelled = false;
-    fetch(`/api/overview?businessId=${encodeURIComponent(businessId)}&period=7`)
-      .then(async (r) => {
-        if (!r.ok) { if (!cancelled) { setSource(null); setStatus('unavailable'); } return; }
-        const d = await r.json();
+    // Mesmo payload do shell/tela — o loader compartilhado divide a chamada em
+    // vez de baixar o overview uma TERCEIRA vez por navegação.
+    loadOverview(businessId, 7, { scope: 'area', area: 'Visão geral' })
+      .then((res) => {
         if (cancelled) return;
+        if (!res.ok) { setSource(null); setStatus('unavailable'); return; }
+        const d = res.data || {};
         setSource({
           attention: d.attention || [],
-          whatsapp: d.whatsapp || null,
+          whatsapp: (d.whatsapp as AlertsSource['whatsapp']) || null,
           pendingSetup: typeof d.pendingSetup === 'number' ? d.pendingSetup : 0,
           checklist: d.checklist || [],
         });

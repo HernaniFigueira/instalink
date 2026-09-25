@@ -67,6 +67,15 @@ export function ConversationsView({ unitId, panel = false }: { unitId?: string; 
   const [conversations, setConversations] = useState<Conversation[]>([]);
   const [active, setActive] = useState<{ conversation: Conversation; messages: Message[] } | null>(null);
   const [error, setError] = useState('');
+  /**
+   * ESTADO MÍNIMO COERENTE (correção do flicker real):
+   * a tela precisa do STATUS DO CANAL e da LISTA DE CONVERSAS para decidir o
+   * que mostrar. Enquanto as duas não chegarem, ela mostra ESQUELETO — nunca
+   * um "Nenhuma conversa / conecte um canal" que pode virar inbox um instante
+   * depois. Antes o status era publicado sozinho (fetch sequencial) e o vazio
+   * aparecia por um frame: UX mentirosa, mesmo com dado correto.
+   */
+  const [loaded, setLoaded] = useState(false);
   const [filter, setFilter] = useState<'all' | 'unread' | 'open'>('all');
   // BLOCO 9 — o inbox é de CANAIS: o filtro por canal vive na URL (?canal=),
   // como a busca, para deep-link e refresh preservarem a visão.
@@ -160,19 +169,24 @@ export function ConversationsView({ unitId, panel = false }: { unitId?: string; 
 
   const load = useCallback(async () => {
     if (!businessId) return;
-    const res = await apiGet<WaChannelData>(`/api/whatsapp?businessId=${businessId}`, { scope: 'area', area: 'Conversas' });
-    if (!report(res)) return;
+    setLoaded(false);
+    // AS DUAS REQUISIÇÕES SÃO INDEPENDENTES → saem juntas. Em série, a segunda
+    // só começava depois da primeira responder (o dobro do tempo de rede).
+    // A lista é do INBOX (todos os canais): a pergunta certa é "existe algum
+    // canal conectado?", não "o WhatsApp está conectado?".
+    const [res, conv] = await Promise.all([
+      apiGet<WaChannelData>(`/api/whatsapp?businessId=${businessId}`, { scope: 'area', area: 'Conversas' }),
+      apiGet<{ conversations?: Conversation[]; channels?: ChannelsView; instagram?: InstagramInbox }>(
+        `/api/conversations?businessId=${businessId}`, { scope: 'area', area: 'Conversas' },
+      ),
+    ]);
+    if (!report(res)) { setLoaded(true); return; }
     setData(res.data || null);
-    // A lista é do INBOX (todos os canais). Antes desta entrega o inbox só
-    // existia se o WhatsApp estivesse conectado; agora a pergunta certa é
-    // "existe algum canal conectado?".
-    const conv = await apiGet<{
-      conversations?: Conversation[]; channels?: ChannelsView; instagram?: InstagramInbox;
-    }>(`/api/conversations?businessId=${businessId}`, { scope: 'area', area: 'Conversas' });
-    if (!conv.ok || !conv.data) { report(conv); return; }
+    if (!conv.ok || !conv.data) { report(conv); setLoaded(true); return; }
     setConversations(conv.data.conversations || []);
     setChannels(conv.data.channels || { whatsapp: false, instagram: false });
     setIgInfo(conv.data.instagram || null);
+    setLoaded(true);
   }, [businessId, report]);
 
   useEffect(() => { load(); }, [load]);
@@ -195,7 +209,8 @@ export function ConversationsView({ unitId, panel = false }: { unitId?: string; 
 
   if (denied) return <AccessDenied area="Conversas" />;
   if (failed) return <AreaLoadError area="Conversas" message={failed} onRetry={load} />;
-  if (!data) return <PageSkeleton />;
+  // Esqueleto enquanto o estado mínimo não está resolvido (canal + lista).
+  if (!data || !loaded) return <PageSkeleton />;
   const clientesQ = `?b=${businessId}`;
   // Link para o canal: mantém a unidade ativa (?b=) e abre já na aba Canais.
   const channelsHref = `/canais?tab=canais${businessId ? `&b=${businessId}` : ''}`;
@@ -232,7 +247,9 @@ export function ConversationsView({ unitId, panel = false }: { unitId?: string; 
     router.replace(`/conversas?${qs.toString()}`, { scroll: false });
   }
 
-  // ── NENHUM CANAL CONECTADO: inbox vazio honesto + a porta certa ──
+  // ── NENHUM CANAL CONECTADO **E** SEM HISTÓRICO: vazio honesto + a porta
+  //    certa. Com histórico, a tela segue sendo inbox (nunca escondemos
+  //    conversa antiga só porque a conexão caiu).
   if (!anyChannel && conversations.length === 0) {
     return (
       <div className="conversation-view" data-panel={panel} data-active={false}>

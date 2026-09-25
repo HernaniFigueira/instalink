@@ -210,13 +210,15 @@ export function dashboardAttention(input: DashboardAttentionInput): DashboardAtt
   }
   if (input.leadsNew > 0) {
     out.push({
-      id: 'leadsNew', count: input.leadsNew, label: 'leads sem tratamento',
+      // 2.0 — linguagem do dono da clínica: "lead" é jargão de marketing;
+      // no produto a mesma coisa se chama OPORTUNIDADE (seção Clientes).
+      id: 'leadsNew', count: input.leadsNew, label: 'oportunidades sem contato',
       href: input.permissions.leads ? '/funil' : null,
     });
   }
   if (input.tasksOverdue > 0) {
     out.push({
-      id: 'tasksOverdue', count: input.tasksOverdue, label: 'tarefas vencidas',
+      id: 'tasksOverdue', count: input.tasksOverdue, label: 'pendências vencidas',
       href: input.permissions.tasks ? '/tarefas' : null,
     });
   }

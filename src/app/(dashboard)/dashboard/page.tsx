@@ -36,6 +36,7 @@ import { Button, DashboardSkeleton, EmptyState, PageSkeleton, StatusBadge } from
 import { Icon } from '@/components/icons';
 import { AccessDenied, PermissionNotice, useForbiddenNotice } from '@/components/dashboard/AccessNotice';
 import { PeriodSelector } from '@/components/dashboard/PeriodSelector';
+import { loadOverview } from '@/lib/overview';
 import { apiGet } from '@/lib/api-client';
 import { money } from '@/lib/utils';
 import { humanDay } from '@/lib/tz';
@@ -78,6 +79,15 @@ interface Overview {
     date: string; total: number; confirmed: number; pending: number; completed: number;
     cancelled: number; noShow: number; upcoming: number; needsClosure: number;
   } | null;
+  /** Mesmo resumo, um dia antes — usado SÓ para a variação do dia. */
+  yesterday?: {
+    date: string; total: number; confirmed: number; pending: number; completed: number;
+    cancelled: number; noShow: number; needsClosure: number;
+  } | null;
+  /** Registros de atendimento pendentes (fechamento/registro do serviço). */
+  needsClosure?: Array<{ id: string; customerName: string; date: string; time: string; status: string; service: string }>;
+  /** Pendências da equipe (mesma fonte do /api/tasks) — resumo, nunca lista. */
+  tasksSummary?: { open: number; overdue: number; dueToday: number; mine: number } | null;
   ordersPanel?: { total: number; new: number; open: number; inWindow: number } | null;
   productsPanel?: { total: number; active: number } | null;
   crm?: { contacts: number; newContacts: number; registered: number; withConsent: number; leads: number; leadsNew: number; customers: number };
@@ -164,11 +174,9 @@ export default function DashboardPage() {
 
   // Tarefas abertas (resumo real do /api/tasks) para o bloco de atividade.
   const [taskSum, setTaskSum] = useState<{ open: number; overdue: number; dueToday: number; mine: number } | null>(null);
-  // Série diária de agendamentos do período (contagem REAL vinda da mesma API
-  // que a Agenda usa — nenhuma fórmula nova, nenhum dado inventado).
-  const [series, setSeries] = useState<Array<{ date: string; count: number }> | null>(null);
-  const [yday, setYday] = useState<{ total: number; byStatus: Record<string, number> } | null>(null);
-  const [periodMix, setPeriodMix] = useState<Record<string, number> | null>(null);
+  // Nada de série/gráfico próprio: a Visão geral responde "como está HOJE" com
+  // os dados do /api/overview (today + yesterday). A leitura analítica do
+  // período vive em GESTÃO → Resultados, com a API dela.
   const [openTasks, setOpenTasks] = useState<Array<{ id: string; title: string; dueAt: string }> | null>(null);
   useEffect(() => {
     if (!businessId) return;
@@ -183,39 +191,12 @@ export default function DashboardPage() {
     }).catch(() => { if (on) { setTaskSum(null); setOpenTasks(null); } });
     return () => { on = false; };
   }, [businessId]);
-  useEffect(() => {
-    if (!businessId) return;
-    let on = true;
-    const iso = (d: Date) => d.toISOString().slice(0, 10);
-    const from = new Date(Date.now() - (period - 1) * 86400000);
-    const to = new Date();
-    apiGet<{ bookings?: Array<{ date: string; status: string }> }>(
-      `/api/bookings?businessId=${businessId}&mode=manage&from=${iso(from)}&to=${iso(to)}&limit=500`,
-      { scope: 'area', area: 'Início' },
-    ).then((r) => {
-      if (!on) return;
-      if (!r.ok || !Array.isArray(r.data?.bookings)) { setSeries(null); setYday(null); setPeriodMix(null); return; }
-      const map = new Map<string, number>();
-      for (let i = 0; i < period; i++) map.set(iso(new Date(from.getTime() + i * 86400000)), 0);
-      for (const b of r.data.bookings) if (map.has(b.date)) map.set(b.date, (map.get(b.date) || 0) + 1);
-      setSeries([...map.entries()].map(([date, count]) => ({ date, count })));
-      // Ontem (comparação REAL dos KPIs) e mix de status do período (donut).
-      const y = iso(new Date(Date.now() - 86400000));
-      const yb = r.data.bookings.filter((b) => b.date === y);
-      const bySt: Record<string, number> = {};
-      for (const b of yb) bySt[b.status] = (bySt[b.status] || 0) + 1;
-      setYday({ total: yb.length, byStatus: bySt });
-      const mix: Record<string, number> = {};
-      for (const b of r.data.bookings) mix[b.status] = (mix[b.status] || 0) + 1;
-      setPeriodMix(mix);
-    }).catch(() => { if (on) { setSeries(null); setYday(null); setPeriodMix(null); } });
-    return () => { on = false; };
-  }, [businessId, period]);
-
   const load = useCallback(() => {
     if (!businessId) return;
     setFailed('');
-    apiGet<Overview>(`/api/overview?businessId=${businessId}&period=${period}`, { scope: 'area', area: 'Início' })
+    // §i — o MESMO payload já é pedido pelo shell (mini-card + sino): o loader
+    // compartilhado divide a requisição em vez de repetir o trabalho de banco.
+    loadOverview(businessId, period, { scope: 'area', area: 'Visão geral' })
       .then((res) => {
         // 403 → aviso amigável na tela; o usuário NÃO é deslogado.
         // 401 → o wrapper de fetch já iniciou o fluxo de login.
@@ -225,7 +206,7 @@ export default function DashboardPage() {
           return;
         }
         setDenied(false);
-        setData(res.data);
+        setData(res.data as Overview | null);
       });
   }, [businessId, period, retry]);
 
@@ -260,8 +241,28 @@ export default function DashboardPage() {
   const modules = context.modules;
   const results = data.results;
   const showMoney = data.showMoney === true;
+  // Comparação com ONTEM: vem do MESMO /api/overview (campo `yesterday`).
+  // Antes a tela buscava até 500 agendamentos em /api/bookings só para
+  // reconstruir este número — requisição pesada e duplicada.
+  const yday = data.yesterday
+    ? {
+        total: data.yesterday.total,
+        byStatus: {
+          confirmed: data.yesterday.confirmed, pending: data.yesterday.pending,
+          completed: data.yesterday.completed, no_show: data.yesterday.noShow,
+          cancelled: data.yesterday.cancelled,
+        } as Record<string, number>,
+      }
+    : null;
   const operational = !showMoney;
+  // TRÊS VISÕES, UM SÓ DASHBOARD (§11):
+  //   • profissional (agendaScope 'own'/'none' ou papel PROFISSIONAL) → o SEU dia;
+  //   • operação (sem acesso financeiro: recepção/atendente) → o que resolver agora;
+  //   • gestão (OWNER/ADMIN com financeiro) → o dia + um resumo compacto do período.
+  // Nada de receita global para quem atende ou recebe: o número que não serve
+  // para decidir não ocupa a tela.
   const ownAgenda = workspace.agendaScope === 'own' || workspace.role === 'PROFISSIONAL';
+  const proView = ownAgenda;
   const revenueDetail = data.revenueDetail;
   const bookingRevenue = revenueDetail?.bookings || null;
   const orderRevenue = revenueDetail?.orders || null;
@@ -306,8 +307,8 @@ export default function DashboardPage() {
       {/* ── Saudação + resumo curto (hierarquia do mockup) ── */}
       <header className="mb-5 flex flex-wrap items-start justify-between gap-3">
         <div className="min-w-0">
-        <h1 className="text-[26px] leading-tight font-semibold tracking-tight text-[var(--text)]">
-          {greeting()}, {user.name.split(' ')[0]}!
+        <h1 className="text-[24px] leading-tight font-semibold tracking-tight text-[var(--text)]">
+          {proView ? `Meu dia, ${user.name.split(' ')[0]}` : `${greeting()}, ${user.name.split(' ')[0]}!`}
         </h1>
         <p className="text-sm text-[var(--text-muted)] mt-1">
           {modules.bookings && today
@@ -482,9 +483,17 @@ export default function DashboardPage() {
         </section>
         )}
 
+        {showMoney ? (
         <section className="lg:col-span-7 dsh-card min-w-0">
           <div className="dsh-card__head">
-            <h3 className="dsh-card__title">Período <span className="text-[var(--text-muted)] font-semibold">· indicadores e atividade</span></h3>
+            <h3 className="dsh-card__title">
+              Período <span className="text-[var(--text-muted)] font-semibold">· resumo</span>
+            </h3>
+            {links.resultados === true && (
+              <Link href={`/resultados${q}`} className="text-[12px] font-semibold text-[var(--brand-fg)] hover:underline">
+                Ver resultados →
+              </Link>
+            )}
             <PeriodSelector value={period} onChange={setPeriod} />
           </div>
           <div className="dsh-card__body">
@@ -523,34 +532,68 @@ export default function DashboardPage() {
               </div>
             )}
 
-            <div className="grid sm:grid-cols-2 gap-4">
-              <div>
-                <p className="text-[11px] font-semibold uppercase tracking-wider text-[var(--text-faint)] mb-2">Agendamentos por dia · {period}d</p>
-                {series && series.some((d) => d.count > 0) ? (
-                  <BarsChart data={series} />
-                ) : (
-                  <p className="text-[12px] text-[var(--text-muted)] bg-[var(--surface-2)] rounded-lg px-3 py-6 text-center">
-                    {series ? 'Sem agendamentos no período ainda.' : 'Sem dados de agenda para este período.'}
-                  </p>
-                )}
+            {/* GRÁFICOS NÃO MORAM AQUI (§11/§12): Visão geral responde
+                "como está HOJE"; a leitura analítica (série por dia, mix de
+                status, comparação) vive em GESTÃO → Resultados, com o mesmo
+                dado real e navegação própria. Aqui fica só o atalho. */}
+            {links.resultados === true ? (
+              <div className="flex flex-wrap items-center justify-between gap-3 rounded-[var(--radius-md)] border border-[var(--border)] bg-[var(--surface-subtle)] px-3.5 py-3">
+                <p className="text-[12.5px] text-[var(--text-secondary)]">
+                  Comparecimento, serviços, profissionais e evolução histórica ficam em Resultados.
+                </p>
+                <Link href={`/resultados${q}`}
+                  className="inline-flex items-center gap-1.5 h-[var(--control-h-sm)] px-3 rounded-[var(--radius-sm)] border border-[var(--border-strong)] bg-white text-[12.5px] font-semibold text-[var(--text-primary)] hover:bg-[var(--surface-hover)]">
+                  Ver resultados <Icon n="chevronRight" size={13} />
+                </Link>
               </div>
-              <div>
-                <p className="text-[11px] font-semibold uppercase tracking-wider text-[var(--text-faint)] mb-2">Status dos atendimentos · período</p>
-                {periodMix && Object.values(periodMix).some((v) => v > 0) ? (
-                  <DonutChart parts={[
-                    { label: 'Confirmados', value: periodMix.confirmed || 0, color: 'var(--success)' },
-                    { label: 'Concluídos', value: periodMix.completed || 0, color: 'var(--ops)' },
-                    { label: 'Aguardando', value: periodMix.pending || 0, color: 'var(--warning)' },
-                    { label: 'Faltas', value: periodMix.no_show || 0, color: 'var(--danger)' },
-                    { label: 'Cancelados', value: periodMix.cancelled || 0, color: 'var(--text-faint)' },
-                  ].filter((p) => p.value > 0)} />
-                ) : (
-                  <p className="text-[12px] text-[var(--text-muted)] bg-[var(--surface-2)] rounded-lg px-3 py-6 text-center">Nenhum atendimento no período ainda.</p>
-                )}
-              </div>
-            </div>
+            ) : null}
           </div>
         </section>
+        ) : (
+        <section className="lg:col-span-5 dsh-card min-w-0">
+          <div className="dsh-card__head">
+            <h3 className="dsh-card__title">O que resolver agora</h3>
+            {links.agenda === true && (
+              <Link href={`/agenda${q}`} className="text-[12px] font-semibold text-[var(--brand-fg)] hover:underline">Ver agenda →</Link>
+            )}
+          </div>
+          <div className="dsh-card__body pt-2 space-y-3">
+            <div className="grid grid-cols-2 gap-2">
+              <div className="rounded-[var(--radius-md)] border border-[var(--border)] bg-[var(--surface-subtle)] px-3 py-2.5">
+                <p className="dsh-kpi__num text-[20px]">{today?.pending ?? 0}</p>
+                <p className="text-[11.5px] font-semibold text-[var(--text-secondary)]">aguardando confirmação</p>
+              </div>
+              <div className="rounded-[var(--radius-md)] border border-[var(--border)] bg-[var(--surface-subtle)] px-3 py-2.5">
+                <p className="dsh-kpi__num text-[20px]">{today?.needsClosure ?? 0}</p>
+                <p className="text-[11.5px] font-semibold text-[var(--text-secondary)]">precisam de registro</p>
+              </div>
+            </div>
+            {(data.needsClosure || []).length > 0 ? (
+              <ul className="space-y-1.5">
+                {(data.needsClosure || []).slice(0, 5).map((b) => (
+                  <li key={b.id}>
+                    <ListRow allowed={links.agenda === true} href={`/agenda${q}&data=${b.date}`}
+                      className="flex items-center gap-2.5 rounded-[var(--radius-md)] border border-[var(--border)] px-2.5 py-2 text-[12.5px]">
+                      <span className="text-[11px] font-semibold text-[var(--text-muted)] w-[68px] shrink-0 tabular-nums">{humanDay(b.date)} {b.time}</span>
+                      <span className="flex-1 min-w-0 truncate font-semibold text-[var(--text-primary)]">
+                        {b.customerName} <span className="font-normal text-[var(--text-muted)]">· {b.service}</span>
+                      </span>
+                      <Icon n="chevronRight" size={14} className="text-[var(--text-faint)]" />
+                    </ListRow>
+                  </li>
+                ))}
+              </ul>
+            ) : (
+              <p className="text-[12.5px] text-[var(--text-muted)] text-center py-4">Nada pendente de registro. Tudo em ordem.</p>
+            )}
+            {typeof data.tasksSummary?.open === 'number' && data.tasksSummary.open > 0 && (
+              <p className="text-[12.5px] text-[var(--text-secondary)]">
+                <strong className="text-[var(--text-primary)]">{data.tasksSummary?.open}</strong> pendências abertas da equipe.
+              </p>
+            )}
+          </div>
+        </section>
+        )}
       </div>
 
       {/* ── 4 · Próximos · Conversas/tarefas · Atividade recente ── */}
@@ -816,62 +859,5 @@ function greeting(): string {
 }
 
 /* ── Gráfico de barras SVG (série real de agendamentos/dia) ── */
-function BarsChart({ data }: { data: Array<{ date: string; count: number }> }) {
-  const W = 320, H = 96, pad = 4;
-  const max = Math.max(1, ...data.map((d) => d.count));
-  const bw = (W - pad * 2) / Math.max(1, data.length);
-  const todayISO = new Date().toISOString().slice(0, 10);
-  return (
-    <svg viewBox={`0 0 ${W} ${H}`} className="w-full h-[96px]" role="img" aria-label={`Agendamentos por dia, máximo ${max} em um dia`}>
-      <line x1={pad} y1={H - 14} x2={W - pad} y2={H - 14} stroke="var(--surface-3)" strokeWidth={1} />
-      {(() => {
-        const pts = data.map((d, i) => [pad + i * bw + bw / 2, H - 14 - (d.count / max) * (H - 26)] as const);
-        const line = pts.map(([x, y]) => `${x.toFixed(1)},${y.toFixed(1)}`).join(' ');
-        const area = `${pad},${H - 14} ${line} ${(W - pad)},${H - 14}`;
-        const last = pts[pts.length - 1];
-        return (
-          <>
-            <polygon points={area} fill="var(--brand-soft)" />
-            <polyline points={line} fill="none" stroke="var(--brand)" strokeWidth={2} strokeLinejoin="round" strokeLinecap="round" />
-            {last && <circle cx={last[0]} cy={last[1]} r={3.5} fill="var(--brand)" stroke="var(--surface)" strokeWidth={1.5} />}
-          </>
-        );
-      })()}
-      <text x={pad} y={H - 2} fontSize={9} fill="var(--text-faint)">{data[0]?.date.slice(8, 10)}/{data[0]?.date.slice(5, 7)}</text>
-      <text x={W - pad} y={H - 2} fontSize={9} textAnchor="end" fill="var(--text-faint)">{data[data.length - 1]?.date.slice(8, 10)}/{data[data.length - 1]?.date.slice(5, 7)}</text>
-    </svg>
-  );
-}
 
 /* ── Donut SVG (contagens reais de hoje por status) ── */
-function DonutChart({ parts }: { parts: Array<{ label: string; value: number; color: string }> }) {
-  const total = parts.reduce((a, p) => a + p.value, 0);
-  const R = 34, C = 2 * Math.PI * R;
-  let acc = 0;
-  return (
-    <div className="flex items-center gap-4">
-      <svg viewBox="0 0 90 90" className="w-[104px] h-[104px] shrink-0" role="img" aria-label={`Distribuição de ${total} atendimentos de hoje por status`}>
-        <circle cx={45} cy={45} r={R} fill="none" stroke="var(--surface-3)" strokeWidth={12} />
-        {parts.map((p) => {
-          const frac = p.value / total;
-          const dash = `${frac * C} ${C}`;
-          const off = -acc * C;
-          acc += frac;
-          return <circle key={p.label} cx={45} cy={45} r={R} fill="none" stroke={p.color} strokeWidth={12}
-            strokeDasharray={dash} strokeDashoffset={off} transform="rotate(-90 45 45)" />;
-        })}
-        <text x={45} y={42} textAnchor="middle" fontSize={17} fontWeight={800} fill="var(--text)">{total}</text>
-        <text x={45} y={55} textAnchor="middle" fontSize={8} fill="var(--text-faint)">hoje</text>
-      </svg>
-      <ul className="space-y-1 min-w-0">
-        {parts.map((p) => (
-          <li key={p.label} className="flex items-center gap-2 text-[11.5px] font-semibold text-[var(--text-soft)]">
-            <span className="w-2 h-2 rounded-full shrink-0" style={{ background: p.color }} aria-hidden="true" />
-            <span className="flex-1 truncate">{p.label}</span>
-            <span className="tabular-nums text-[var(--text)]">{p.value} ({Math.round((p.value / total) * 100)}%)</span>
-          </li>
-        ))}
-      </ul>
-    </div>
-  );
-}

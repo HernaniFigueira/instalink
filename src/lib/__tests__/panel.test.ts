@@ -144,10 +144,14 @@ describe('catálogo — completude (por qual porta se chega até mim?)', () => {
 // ═══════════════════════════════════════════════════════════════
 describe('catálogo — seções', () => {
   it('as 8 seções canônicas, na ordem de uso, todas no menu principal (A3.4)', () => {
-    // A3.4: "Início" virou SEÇÃO de uma porta (`/dashboard`). Antes o item
-    // primário flutuava sem título; com o menu maior ele ficava sem contexto.
+    // GODOUTOR 2.0: os rótulos passaram a descrever o que o usuário ENCONTRA,
+    // não o organograma interno ("Início" → "Visão geral", "Oferta" → "Clínica",
+    // "Crescimento" → "Automação", "Resultados" → "Gestão", "Presença" →
+    // "Página", "Administração" → "Configurações"). Os IDs das seções e as
+    // ROTAS seguem iguais de propósito: renomear rota/permissão por causa de
+    // rótulo quebraria links, permissões gravadas e integrações.
     expect(PANEL_SECTIONS.map((s) => s.label)).toEqual([
-      'Início', 'Operação', 'Pessoas', 'Oferta', 'Crescimento', 'Resultados', 'Presença', 'Administração',
+      'Visão geral', 'Operação', 'Pessoas', 'Clínica', 'Automação', 'Gestão', 'Página', 'Configurações',
     ]);
     // NENHUMA seção fica presa no rodapé: a barra tem um comportamento só.
     // Configurações é porta do menu como qualquer outra (decisão A3.3).
@@ -176,15 +180,22 @@ describe('catálogo — seções', () => {
     expect(panelRoutesIn('presenca').map((r) => r.href)).toEqual(['/pagina']);
   });
 
-  it('Oferta é o que eu ofereço e vendo (catálogo), não a operação da equipe', () => {
+  it('Clínica (ex-Oferta) é o que eu ofereço e vendo, não a operação da equipe', () => {
     // A3.4: Profissionais e Disponibilidade SAÍRAM daqui — a régua é quem usa
     // a tela no dia a dia (quem atende), não a semelhança de assunto.
+    // GODOUTOR 2.0: a seção ganhou o rótulo "Clínica" (a palavra que o dono da
+    // clínica usa), mas o conteúdo continua sendo CATÁLOGO/OFERTA — quem atende
+    // e quando atende seguem em Operação.
     expect(panelRoutesIn('oferta').map((r) => r.href)).toEqual(['/servicos', '/produtos']);
   });
 
-  it('Operação é o dia a dia; Administração é ajuste raro', () => {
+  it('Operação é o dia a dia; Configurações é ajuste raro', () => {
     // A3.4: Profissionais, Disponibilidade e Pedidos entraram em Operação.
     // Pedidos só existe com o módulo ativo (modes: ['orders']).
+    // GODOUTOR 2.0: Pendências (/tarefas) continua DECLARADA em Operação — o
+    // histórico fica no catálogo — mas sai da linha do menu (`sidebar: false`):
+    // pendência se resolve contextualizada (Visão geral do dia, ficha do
+    // cliente, conversa), não abrindo uma tela técnica de tarefas.
     expect(panelRoutesIn('operacao').map((r) => r.href)).toEqual([
       '/estrutura', '/agenda', '/profissionais', '/disponibilidade', '/conversas', '/agente', '/tarefas', '/pedidos',
     ]);
@@ -201,7 +212,7 @@ describe('sidebar — projeção (permissão ∩ módulos, ordem do catálogo)',
     // A3.4: Início é seção de uma porta; `primary` (item sem seção) fica vazio.
     expect(nav.primary).toBeNull();
     expect(nav.sections.map((s) => s.label)).toEqual([
-      'Início', 'Operação', 'Pessoas', 'Oferta', 'Crescimento', 'Resultados', 'Presença', 'Administração',
+      'Visão geral', 'Operação', 'Pessoas', 'Clínica', 'Automação', 'Gestão', 'Página', 'Configurações',
     ]);
     // Administração agora é a última seção do MENU (não do rodapé fixo).
     expect(nav.footerSections).toEqual([]);
@@ -211,13 +222,13 @@ describe('sidebar — projeção (permissão ∩ módulos, ordem do catálogo)',
       // (Pedidos/Produtos exigem os módulos correspondentes: entram no teste
       // seguinte, com o contexto de quem os tem.)
       '/estrutura', '/agenda', '/profissionais', '/disponibilidade',
-      '/conversas', '/agente', '/tarefas',
-      '/clientes', '/funil',
+      '/conversas', '/agente',
+      '/clientes',
       '/servicos',
       '/campanhas', '/automacoes', '/followup', '/canais',
       '/resultados', '/financeiro', '/organizacao',
       '/pagina',
-      '/equipe', '/recursos', '/configuracoes',
+      '/equipe', '/configuracoes',
     ]);
     expect(nav.all).toEqual(nav.allowed);
   });
@@ -226,9 +237,9 @@ describe('sidebar — projeção (permissão ∩ módulos, ordem do catálogo)',
     const labels = new Map(PANEL_ROUTES.map((r) => [r.href, r.label]));
     expect(labels.get('/disponibilidade')).toBe('Disponibilidade');
     expect(labels.get('/conversas')).toBe('Conversas');
-    expect(labels.get('/funil')).toBe('Funil');
+    expect(labels.get('/funil')).toBe('Oportunidades');
     expect(labels.get('/canais')).toBe('Canais & Integrações');
-    expect(labels.get('/tarefas')).toBe('Tarefas');
+    expect(labels.get('/tarefas')).toBe('Pendências');
     expect(labels.get('/execucoes')).toBe('Execuções');
     expect(labels.get('/organizacao')).toBe('Organização');
     expect(labels.get('/agente')).toBe('Assistente');
@@ -277,15 +288,20 @@ describe('sidebar — projeção (permissão ∩ módulos, ordem do catálogo)',
 
     const nav = panelNavigation(ctx());
     expect(nav.sidebar.map((r) => r.href)).not.toContain('/execucoes');
-    expect(nav.more.map((r) => r.href)).toEqual(['/execucoes', '/perfil']);
+    // GODOUTOR 2.0 — o que sai da LINHA do menu e continua acessível por
+    // atalho contextual: Pendências, Oportunidades, Recursos (capacidades
+    // dentro de Configurações), Execuções (diagnóstico dentro de Automações)
+    // e Meu perfil (menu da conta, para QUALQUER usuário autenticado).
+    expect(nav.more.map((r) => r.href)).toEqual(['/tarefas', '/funil', '/execucoes', '/perfil', '/recursos']);
     expect(panelAccess('/execucoes', ctx()).state).toBe('allow');
   });
 
   it('sem permissão a porta some do menu (esconder é UX; a segurança é no servidor)', () => {
     const c = ctx({ permissions: { dashboard: true, agenda: true } });
-    // Tarefas entra junto porque aceita a permissão de agenda (array = qualquer
-    // uma satisfaz): quem opera a agenda precisa ver o que ficou combinado.
-    expect(visiblePanelRoutes(c).map((r) => r.href)).toEqual(['/dashboard', '/agenda', '/tarefas']);
+    // Pendências aceita a permissão de agenda (array = qualquer uma satisfaz) e
+    // por isso CONTINUA acessível — mas fora da linha do menu.
+    expect(visiblePanelRoutes(c).map((r) => r.href)).toEqual(['/dashboard', '/agenda']);
+    expect(panelNavigation(c).more.map((r) => r.href)).toContain('/tarefas');
     expect(hasPermission('equipe', c)).toBe(false);
     expect(isPanelRouteVisible(panelRouteFor('/equipe')!, c)).toBe(false);
     expect(isPanelRouteAllowed(panelRouteFor('/equipe')!, c)).toBe(false);
@@ -386,9 +402,9 @@ describe('acesso — 403 amigável, nunca logout', () => {
   it('áreas novas rotulam o 403 com o nome da porta', () => {
     expect(panelAccess('/disponibilidade', ctx({ permissions: {} })).area).toBe('Disponibilidade');
     expect(panelAccess('/conversas', ctx({ permissions: {} })).area).toBe('Conversas');
-    expect(panelAccess('/funil', ctx({ permissions: {} })).area).toBe('Funil');
+    expect(panelAccess('/funil', ctx({ permissions: {} })).area).toBe('Oportunidades');
     expect(panelAccess('/canais', ctx({ permissions: {} })).area).toBe('Canais & Integrações');
-    expect(panelAccess('/tarefas', ctx({ permissions: {} })).area).toBe('Tarefas');
+    expect(panelAccess('/tarefas', ctx({ permissions: {} })).area).toBe('Pendências');
     expect(panelAccess('/execucoes', ctx({ permissions: {} })).area).toBe('Execuções');
     expect(panelAccess('/organizacao', ctx({ permissions: {} })).area).toBe('Organização');
   });
@@ -643,11 +659,14 @@ describe('uma porta por conceito', () => {
       ...walk(path.join(root, 'src/app/(dashboard)')),
       ...walk(path.join(root, 'src/components')),
     ];
-    // A3.4: só Execuções segue fora do menu; Pedidos passou a ser porta de
-    // Operação (com gate de módulo). Destino fora do menu SEM atalho vira
-    // porta fantasma — por isso a lista abaixo é curta de propósito.
+    // GODOUTOR 2.0: a régua do menu é FREQUÊNCIA + contexto. Continua declarado
+    // e acessível tudo que não é porta do dia a dia — Pendências (contextual na
+    // Visão geral/cliente/conversa), Oportunidades (aba de Clientes), Recursos
+    // (capacidades de Configurações), Execuções (diagnóstico de Automações) e
+    // Meu perfil (menu da conta, para TODO usuário autenticado). Destino fora do
+    // menu SEM atalho vira porta fantasma — por isso cada um é verificado.
     const offMenu = PANEL_ROUTES.filter((r) => r.sidebar === false);
-    expect(offMenu.map((r) => r.href).sort()).toEqual(['/execucoes', '/perfil']);
+    expect(offMenu.map((r) => r.href).sort()).toEqual(['/execucoes', '/funil', '/perfil', '/recursos', '/tarefas']);
     for (const route of offMenu) {
       const own = path.join(root, `src/app/(dashboard)${route.href}`);
       const re = new RegExp('href=\\{[`\'"]' + route.href.replace(/\//g, '\\/'));

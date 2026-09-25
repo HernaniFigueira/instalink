@@ -68,14 +68,14 @@ export interface PanelSectionDef {
  *     Módulo desligado = porta inexistente para quem não tem o módulo.
  */
 export const PANEL_SECTIONS: PanelSectionDef[] = [
-  { id: 'inicio', label: 'Início' },
+  { id: 'inicio', label: 'Visão geral' },
   { id: 'operacao', label: 'Operação' },
   { id: 'pessoas', label: 'Pessoas' },
-  { id: 'oferta', label: 'Oferta' },
-  { id: 'crescimento', label: 'Crescimento' },
-  { id: 'resultados', label: 'Resultados' },
-  { id: 'presenca', label: 'Presença' },
-  { id: 'administracao', label: 'Administração' },
+  { id: 'oferta', label: 'Clínica' },
+  { id: 'crescimento', label: 'Automação' },
+  { id: 'resultados', label: 'Gestão' },
+  { id: 'presenca', label: 'Página' },
+  { id: 'administracao', label: 'Configurações' },
 ];
 
 /**
@@ -116,23 +116,20 @@ export interface SectionTheme {
 }
 
 export const SECTION_THEME: Record<PanelSectionId, SectionTheme> = {
-  // Início/Operação/Presença: azul da marca (o "agora" do dia).
+  // OPERAÇÃO DO DIA (Visão geral, Agenda, Clínica) — a cor da marca.
   inicio: { accent: 'var(--brand)', activeBg: 'var(--brand-soft)', activeFg: 'var(--brand-fg)' },
   operacao: { accent: 'var(--brand)', activeBg: 'var(--brand-soft)', activeFg: 'var(--brand-fg)' },
-  // Pessoas: teal (gente).
-  pessoas: { accent: 'var(--teal)', activeBg: 'var(--teal-bg)', activeFg: 'var(--teal-fg)' },
-  // Oferta: lilás (catálogo/vitrine).
-  oferta: { accent: 'var(--lilac)', activeBg: 'var(--lilac-bg)', activeFg: 'var(--lilac-fg)' },
-  // Crescimento: âmbar (campanhas/automação) — atenção, não alarme.
-  crescimento: { accent: 'var(--warning)', activeBg: 'var(--warning-bg)', activeFg: 'var(--warning-fg)' },
-  // Resultados: verde (números que fecham).
-  resultados: { accent: 'var(--success)', activeBg: 'var(--success-bg)', activeFg: 'var(--success-fg)' },
+  pessoas: { accent: 'var(--brand)', activeBg: 'var(--brand-soft)', activeFg: 'var(--brand-fg)' },
+  crescimento: { accent: 'var(--brand)', activeBg: 'var(--brand-soft)', activeFg: 'var(--brand-fg)' },
+  resultados: { accent: 'var(--brand)', activeBg: 'var(--brand-soft)', activeFg: 'var(--brand-fg)' },
   presenca: { accent: 'var(--brand)', activeBg: 'var(--brand-soft)', activeFg: 'var(--brand-fg)' },
-  // Administração: azul frio/neutro de propósito (ajuste raro, sem destaque).
-  administracao: { accent: 'var(--text-muted)', activeBg: 'var(--surface-3)', activeFg: 'var(--text)' },
+  // CONFIGURAÇÃO/CATÁLOGO — neutro de propósito: ajuste raro não disputa
+  // atenção com o dia a dia, e nunca vira uma "família de cor" própria.
+  oferta: { accent: 'var(--text-muted)', activeBg: 'var(--surface-hover)', activeFg: 'var(--text)' },
+  administracao: { accent: 'var(--text-muted)', activeBg: 'var(--surface-hover)', activeFg: 'var(--text)' },
 };
 
-/** Acento de contexto de uma seção (compatibilidade: usado em ícones/atalhos). */
+/** Acento de contexto de uma seção (ícone/detalhe). Mantido como projeção. */
 export const SECTION_ACCENT: Record<PanelSectionId, string> = Object.fromEntries(
   (Object.keys(SECTION_THEME) as PanelSectionId[]).map((id) => [id, SECTION_THEME[id].accent]),
 ) as Record<PanelSectionId, string>;
@@ -222,9 +219,9 @@ export const PANEL_ROUTES: PanelRouteDef[] = [
     // `dashboard`: renomear rota/API/schema por causa de linguagem de interface
     // quebraria links salvos, permissões gravadas e integrações, sem entregar
     // nada a quem opera. O que o lojista lê é o que mudou.
-    href: '/dashboard', label: 'Início', icon: 'home', section: 'inicio',
+    href: '/dashboard', label: 'Visão geral', icon: 'home', section: 'inicio',
     permission: 'dashboard', area: 'dashboard',
-    description: 'Visão do dia: o que precisa de atenção, o que está marcado e os números do período.',
+    description: 'O dia de hoje: o que precisa de atenção agora, o que está marcado e quem está esperando.',
     width: 'full',
   },
 
@@ -278,8 +275,11 @@ export const PANEL_ROUTES: PanelRouteDef[] = [
   {
     // Era a 5ª aba de /automacoes. Tarefa é fila de trabalho da equipe — uso
     // diário, portanto Operação. O motor que CRIA tarefas continua em Automações.
-    href: '/tarefas', label: 'Tarefas', icon: 'tasks', section: 'operacao',
-    permission: ['clientes', 'agenda', 'leads', 'config'], area: 'tarefas',
+    // Conceito visível = PENDÊNCIAS. Saiu do menu cotidiano (a pendência é
+    // mostrada ONDE ela importa: Visão geral, cliente, conversa, automação) e
+    // continua inteira em /tarefas para quem quiser a lista completa.
+    href: '/tarefas', label: 'Pendências', icon: 'tasks', section: 'operacao',
+    permission: ['clientes', 'agenda', 'leads', 'config'], area: 'tarefas', sidebar: false,
     description: 'O que ficou combinado, com quem e com qual prazo — inclusive o que já venceu.',
   },
   {
@@ -303,8 +303,10 @@ export const PANEL_ROUTES: PanelRouteDef[] = [
   {
     // Era "/esteira" (rota sem porta no menu) e também uma visão dentro de
     // /clientes. Uma porta só: o funil de oportunidades.
-    href: '/funil', label: 'Funil', icon: 'funnel', section: 'pessoas',
-    permission: 'leads', area: 'funil',
+    // Kanban continua existindo como FERRAMENTA opcional, não como a definição
+    // do produto: a porta vive em Clientes ("Oportunidades"), não no menu.
+    href: '/funil', label: 'Oportunidades', icon: 'funnel', section: 'pessoas',
+    permission: 'leads', area: 'funil', sidebar: false,
     description: 'As oportunidades por etapa, do primeiro contato ao atendimento agendado.',
     width: 'full',
   },
@@ -417,8 +419,10 @@ export const PANEL_ROUTES: PanelRouteDef[] = [
     width: 'full',
   },
   {
+    // Recursos = capacidades internas/plano. Continua existindo e acessível,
+    // mas a partir de Configurações (não como conceito de primeiro nível).
     href: '/recursos', label: 'Recursos', icon: 'toggle', section: 'administracao',
-    permission: 'config', area: 'recursos',
+    permission: 'config', area: 'recursos', sidebar: false,
     description: 'Quais módulos da empresa estão ligados. Desativar oculta na hora e não apaga nada.',
   },
   {

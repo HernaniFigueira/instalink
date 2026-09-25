@@ -19,6 +19,7 @@ import { WorkspaceContext } from '@/components/dashboard/WorkspaceContext';
 import { ConversationsDock } from '@/components/dashboard/ConversationsDock';
 import { WorkspaceNavigation } from '@/components/dashboard/WorkspaceNavigation';
 import { WorkspaceTopbar } from '@/components/dashboard/WorkspaceTopbar';
+import { HelpCenter } from '@/components/dashboard/HelpCenter';
 import { useWorkspaceAlerts } from '@/components/dashboard/NotificationsBell';
 import { buildNavSearchItems } from '@/lib/nav-search';
 import { roleLabel } from '@/lib/role-labels';
@@ -40,6 +41,8 @@ interface Biz {
   permissions?: Record<PermissionId, boolean>;
   readOnly?: boolean;
   organizationId?: string;
+  /** Tipo da clínica (identidade: "Clínica veterinária"). Aditivo e opcional. */
+  clinicType?: import('@/lib/types').ClinicType;
   /** Escopo do profissional: preenchido ⇒ este login vê só a própria agenda. */
   professionalId?: string;
   professionalName?: string;
@@ -78,6 +81,9 @@ export function DashboardShell({ children }: { children: React.ReactNode }) {
   // Etapa A: o drawer de navegação móvel pertence ao shell porque quem o abre
   // é o botão de menu da TOPBAR (a busca e o menu saíram da sidebar).
   const [mobileNav, setMobileNav] = useState(false);
+  // Central de ajuda: UMA instância no shell, aberta pela sidebar, pela topbar
+  // e pelo menu da conta. Nada de três ajudas diferentes.
+  const [helpOpen, setHelpOpen] = useState(false);
   const mainRef = useRef<HTMLElement | null>(null);
 
   const loadContext = useCallback(() => {
@@ -234,7 +240,10 @@ export function DashboardShell({ children }: { children: React.ReactNode }) {
   // ── Breadcrumb + notificações (Etapa A) ─────────────────────────────────
   // O breadcrumb é projeção da MESMA partição que monta o menu: nunca cita área
   // que o usuário não alcança. As notificações vêm de /api/overview (dado real).
-  const areas = workspaceAreas(nav.allowed);
+  // Multiunidade REAL: só quando existe mais de uma unidade na conta. Sem isso
+  // "Organização" não ocupa linha no menu (a porta continua acessível por URL).
+  const multiUnit = businesses.length > 1;
+  const areas = workspaceAreas(nav.allowed, { multiUnit });
   const crumb = routeBreadcrumb(activePath, areas);
   const unitRole = business.role && business.role !== 'OWNER'
     ? `${roleLabel(business.role)}${business.readOnly ? ' · somente leitura' : ''}`
@@ -290,13 +299,14 @@ export function DashboardShell({ children }: { children: React.ReactNode }) {
           ocupa top:0→bottom:0 e a topbar vive na coluna da direita. */}
       <WorkspaceNavigation nav={nav}
         activePath={activePath} unit={business}
+        units={businesses} multiUnit={multiUnit} onUnit={switchBiz}
         collapsed={collapsed} onCollapse={toggle}
         mobileOpen={mobileNav} onMobileOpen={setMobileNav}
+        onHelp={() => setHelpOpen(true)}
       />
 
       <div className="workspace-main-col">
       <WorkspaceTopbar
-        group={crumb.group}
         page={activeRoute?.label || 'Painel'}
         query={q}
         searchItems={buildNavSearchItems(nav, q)}
@@ -307,13 +317,21 @@ export function DashboardShell({ children }: { children: React.ReactNode }) {
         units={businesses}
         overview={activePath === '/organizacao'}
         canOverview={nav.allowed.some((i) => i.href === '/organizacao')}
-        canTeam={nav.allowed.some((i) => i.href === '/equipe')}
         canConfig={nav.allowed.some((i) => i.href === '/configuracoes')}
         isMaster={isMaster}
         onUnit={switchBiz}
         onLogout={logout}
         onOpenNav={() => setMobileNav(true)}
+        onOpenHelp={() => setHelpOpen(true)}
         canCreate={nav.allowed.map((i) => i.href).filter((h) => ['/agenda', '/clientes', '/tarefas', '/servicos', '/profissionais', '/financeiro'].includes(h))}
+      />
+
+      <HelpCenter
+        open={helpOpen}
+        onClose={() => setHelpOpen(false)}
+        query={q}
+        nav={nav}
+        businessId={business.id}
       />
 
       {nav.allowed.some(i => i.href === '/conversas') && activePath !== '/conversas' && activePath !== '/organizacao' && <ConversationsDock key={business.id} businessId={business.id}/>}
@@ -334,11 +352,11 @@ export function DashboardShell({ children }: { children: React.ReactNode }) {
           {/* Breadcrumb de CONTEXTO no conteúdo (o branding vive na sidebar e o
               nome da clínica, uma vez, no seletor de unidade da topbar). */}
           {/* Breadcrumb só em páginas PROFUNDAS (grupo/estrutura). Páginas de
-              1º nível (Agenda, Pacientes…) ficam sem "Início >" — o título da
+              1º nível (Agenda, Pacientes…) ficam sem "Visão geral >" — o título da
               própria tela é o cabeçalho. */}
           {crumb.group && homeHref && (
             <nav aria-label="Breadcrumb" className="ws-crumbs--content">
-              <Link href={homeHref}>Início</Link>
+              <Link href={homeHref}>Visão geral</Link>
               <I n="chevronRight" size={12} aria-hidden="true" />
               {crumb.group && (
                 <>

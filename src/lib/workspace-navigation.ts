@@ -1,84 +1,98 @@
 import type { PanelRouteDef } from './panel';
 
 // ═══════════════════════════════════════════════════════════════
-// WORKSPACE NAVIGATION — GoDoutor UI Revolution · Etapa A
+// WORKSPACE NAVIGATION — GoDoutor Product/UX Revolution 2.0
 // ═══════════════════════════════════════════════════════════════
 // APRESENTAÇÃO ONLY. Rotas, permissões, módulos e ordem canônica continuam
-// sendo propriedade exclusiva de `lib/panel.ts`. Este arquivo apenas projeta o
+// sendo propriedade exclusiva de `lib/panel.ts`. Este arquivo projeta o
 // catálogo em uma arquitetura de informação compreensível.
 //
-// DOIS níveis, e só dois:
-//   • WORKSPACE_AREAS  → PARTIÇÃO total dos destinos (todo destino aparece
-//                        exatamente uma vez). É o que os testes de autorização
-//                        verificam: a navegação nunca expande nem perde rota.
-//   • WORKSPACE_SECTIONS → como a sidebar EXIBE essas áreas (seção + entradas).
+// PROBLEMA QUE ESTE ARQUIVO RESOLVE
+//   O painel tinha 22 destinos técnicos distribuídos em 8 seções com 4 grupos,
+//   cada grupo com uma cor diferente. Quem abre o sistema pela primeira vez não
+//   sabe por onde começar, e quem usa todo dia atravessa o menu inteiro para
+//   chegar na Agenda. O objetivo aqui é o oposto: POUCAS PORTAS, DOIS NÍVEIS.
 //
-// Uma área com `flat: true` vira links diretos na sidebar. Sem `flat`, vira um
-// botão de grupo que abre a SEGUNDA COLUNA CONTEXTUAL — é assim que "Estrutura
-// da clínica" reúne Serviços/Profissionais/Disponibilidade/Equipe sem unificar
-// NENHUM modelo de dados (Professional e User/Member continuam separados).
+//   Antes: 22 portas em 8 seções coloridas.
+//   Agora: 4 portas do dia a dia + 4 portas estruturais (+ Página), e a cor
+//   deixa de dizer "qual área" para significar só ESTADO (sucesso, atenção…).
 //
-// COR TEM SIGNIFICADO (nunca decorativa). Cada área declara o token da família
-// que a descreve; nenhum hex é escrito aqui:
-//   azul vivo (--brand)     → operação do dia (Início, Agenda, Estrutura)
-//   cyan (--cyan)           → relacionamento/comunicação (Clientes, Conversas)
-//   cyan profundo           → presença pública (Página)
-//   verde-limão (--lime-fg) → comercial (Funil, Pedidos)
-//   laranja profundo        → atenção/prazos (Tarefas)
-//   roxo elétrico (--violet)→ inteligência/automação
-//   verde estado (--success)→ resultados (Gestão)
-//   neutro (--text-muted)   → administração rara (Ajustes)
-//   coral (--danger)        → perigo/cancelamento (reservado; nunca em nav)
+// A PARTIÇÃO CONTINUA TOTAL E AUDITÁVEL
+//   • WORKSPACE_AREAS     → todo destino do catálogo aparece exatamente UMA
+//                           vez. É o invariante que os testes de autorização
+//                           verificam: a navegação nunca expande nem perde
+//                           rota, e nunca revela o que o usuário não alcança.
+//   • WORKSPACE_SECTIONS  → como a sidebar EXIBE as áreas (rótulo + entradas).
+//
+// Uma área `flat: true` vira links diretos na sidebar. Sem `flat`, vira um
+// botão de grupo que abre a SEGUNDA COLUNA CONTEXTUAL — é assim que "Clínica"
+// reúne Serviços/Profissionais/Disponibilidade/Equipe sem unificar NENHUM
+// modelo de dados (Professional e User/Member continuam separados).
+//
+// O menu NÃO é decidido por papel: é decidido pelas PERMISSÕES EFETIVAS. Uma
+// secretária sem `catalogo`/`equipe`/`config` simplesmente não alcança o grupo
+// "Clínica" e o grupo "Configurações" — o grupo inteiro desaparece, sem lista
+// paralela de "o que a secretária pode ver".
+//
+// ITENS QUE SAÍRAM DA SIDEBAR (sem serem apagados — ver lib/panel.ts):
+//   /funil      → Clientes → Oportunidades (aba de /clientes + porta própria)
+//   /tarefas    → Pendências contextualizadas (Visão geral, cliente, conversa)
+//   /execucoes  → diagnóstico dentro de Automações
+//   /recursos   → capacidades dentro de Configurações
+//   /perfil     → menu da conta ("Meu perfil", para TODO usuário autenticado)
+//   /organizacao→ só existe quando há MULTIUNIDADE de verdade.
 
 export type WorkspaceAreaId =
-  | 'principal' | 'estrutura' | 'operacao' | 'comercial'
-  | 'presenca' | 'inteligencia' | 'gestao' | 'ajustes' | 'mais';
+  | 'principal' | 'clinica' | 'presenca' | 'automacao' | 'gestao' | 'ajustes' | 'mais';
 
 export interface WorkspaceAreaDef {
   id: WorkspaceAreaId;
-  /** Rótulo do grupo (é o título da segunda coluna contextual). */
+  /** Rótulo do grupo (título da segunda coluna contextual). */
   label: string;
   icon: string;
-  /** Token de cor da família — resolvido por CSS, nunca hex aqui. */
+  /**
+   * Cor de contexto — token CSS, nunca hex. Na 2.0 existe UMA cor de
+   * identidade (a marca) e o neutro: grupo estrutural não compete com o
+   * conteúdo por atenção.
+   */
   color: string;
   routes: readonly string[];
 }
 
 export const WORKSPACE_AREAS: WorkspaceAreaDef[] = [
   {
-    id: 'principal', label: 'Principal', icon: 'home', color: 'var(--brand)',
-    routes: ['/dashboard', '/agenda', '/clientes', '/conversas'],
+    // As quatro portas do dia a dia: o que se abre TODA vez que se liga o
+    // computador. São links diretos, sem segundo nível.
+    id: 'principal', label: 'Operação', icon: 'home', color: 'var(--brand)',
+    routes: ['/dashboard', '/agenda', '/conversas', '/clientes'],
   },
   {
-    // Serviços, Profissionais, Horários/Disponibilidade e Equipe/acessos são a
-    // MESMA pergunta do usuário ("quem atende o quê, quando, com qual acesso")
-    // — agrupados na experiência, separados no modelo.
-    id: 'estrutura', label: 'Estrutura da clínica', icon: 'grid', color: 'var(--brand)',
-    routes: ['/estrutura', '/servicos', '/profissionais', '/disponibilidade', '/equipe', '/produtos'],
+    // Quem a clínica é por dentro: o que oferece, quem atende, quando atende e
+    // quem entra no sistema. Perguntas que se respondem UMA vez (e se ajustam
+    // de vez em quando) — por isso vivem atrás de uma porta, não soltas no
+    // menu. `/produtos` e `/pedidos` só existem quando o módulo está ativo.
+    id: 'clinica', label: 'Clínica', icon: 'grid', color: 'var(--brand)',
+    routes: ['/estrutura', '/servicos', '/profissionais', '/disponibilidade', '/equipe', '/produtos', '/pedidos'],
   },
   {
-    id: 'operacao', label: 'Operação', icon: 'tasks', color: 'var(--orange-deep)',
-    routes: ['/tarefas', '/pedidos'],
-  },
-  {
-    id: 'comercial', label: 'Comercial', icon: 'funnel', color: 'var(--lime-fg)',
-    routes: ['/funil'],
-  },
-  {
-    id: 'presenca', label: 'Presença', icon: 'link', color: 'var(--cyan-strong)',
+    id: 'presenca', label: 'Página', icon: 'link', color: 'var(--brand)',
     routes: ['/pagina'],
   },
   {
-    id: 'inteligencia', label: 'Automação', icon: 'spark', color: 'var(--violet)',
-    routes: ['/automacoes', '/followup', '/agente', '/campanhas', '/execucoes'],
+    // O que trabalha sozinho: assistente, automações, follow-up e campanhas.
+    // Execuções NÃO está aqui (é diagnóstico, vive dentro de Automações).
+    id: 'automacao', label: 'Automação', icon: 'spark', color: 'var(--brand)',
+    routes: ['/agente', '/automacoes', '/followup', '/campanhas'],
   },
   {
-    id: 'gestao', label: 'Gestão', icon: 'chart', color: 'var(--success)',
-    routes: ['/resultados', '/financeiro', '/organizacao'],
+    // Como está indo: números, dinheiro e alcance comercial.
+    id: 'gestao', label: 'Gestão', icon: 'chart', color: 'var(--brand)',
+    routes: ['/resultados', '/financeiro', '/funil'],
   },
   {
-    id: 'ajustes', label: 'Ajustes', icon: 'settings', color: 'var(--text-muted)',
-    routes: ['/configuracoes', '/recursos', '/canais', '/perfil'],
+    // Configuração da casa e conexões técnicas (WhatsApp, integrações).
+    id: 'ajustes', label: 'Configurações', icon: 'settings', color: 'var(--text-muted)',
+    routes: ['/configuracoes', '/canais', '/recursos', '/organizacao'],
   },
 ];
 
@@ -95,14 +109,21 @@ export interface WorkspaceArea extends WorkspaceAreaDef {
  * PROJEÇÃO AUTORIZADA: recebe os destinos já filtrados por permissão/módulo e
  * devolve a partição por área. Não decide o que existe — apenas agrupa.
  * Todo item de `allowed` aparece exatamente uma vez (contrato testado).
+ *
+ * `multiUnit` é uma decisão de APRESENTAÇÃO (a loja tem mais de uma unidade?).
+ * Ela nunca esconde um destino ACESSÍVEL por URL: só decide se "Organização"
+ * ocupa uma linha no menu. Unidade única não precisa pensar em organização.
  */
-export function workspaceAreas(allowed: PanelRouteDef[]): WorkspaceArea[] {
+export function workspaceAreas(allowed: PanelRouteDef[], opts: { multiUnit?: boolean } = {}): WorkspaceArea[] {
+  const pool = opts.multiUnit
+    ? allowed
+    : allowed.filter((route) => route.href !== '/organizacao');
   const areas: WorkspaceArea[] = WORKSPACE_AREAS.map((area) => ({
     ...area,
-    items: allowed.filter((route) => area.routes.includes(route.href)),
+    items: pool.filter((route) => area.routes.includes(route.href)),
   }));
   const grouped = new Set(areas.flatMap((a) => a.items.map((i) => i.href)));
-  const rest = allowed.filter((i) => !grouped.has(i.href));
+  const rest = pool.filter((i) => !grouped.has(i.href));
   if (rest.length) areas.push({ ...FALLBACK_AREA, items: rest });
   return areas.filter((area) => area.items.length > 0);
 }
@@ -122,18 +143,22 @@ export interface WorkspaceSectionDef {
 
 /**
  * Arquitetura de informação da sidebar (a que o usuário lê):
- *   Principal · Operação · Comercial · Presença · Inteligência · Administração
  *
- * Regra anti-"lista infinita": só 4 grupos abrem segunda coluna (Estrutura da
- * clínica, Automação, Gestão, Ajustes). O resto é link direto.
+ *   OPERAÇÃO         Visão geral · Agenda · Conversas · Clientes        (links)
+ *   CLÍNICA          Clínica (grupo) · Página                            (portas)
+ *   ADMINISTRAÇÃO    Automação (grupo) · Gestão (grupo) · Configurações (grupo)
+ *
+ * Exatamente QUATRO grupos abrem a segunda coluna. O resto é link direto.
+ * Nenhuma seção vazia é renderizada, e nenhuma porta existe se o usuário não
+ * tem permissão para NADA dentro dela.
  */
 export const WORKSPACE_SECTIONS: WorkspaceSectionDef[] = [
-  { id: 'sec-principal', label: 'Principal', entries: [{ area: 'principal', flat: true }] },
-  { id: 'sec-operacao', label: 'Operação', entries: [{ area: 'estrutura' }, { area: 'operacao', flat: true }] },
-  { id: 'sec-comercial', label: 'Comercial', entries: [{ area: 'comercial', flat: true }] },
-  { id: 'sec-presenca', label: 'Presença', entries: [{ area: 'presenca', flat: true }] },
-  { id: 'sec-inteligencia', label: 'Inteligência', entries: [{ area: 'inteligencia' }] },
-  { id: 'sec-administracao', label: 'Administração', entries: [{ area: 'gestao' }, { area: 'ajustes' }] },
+  { id: 'sec-operacao', label: 'Operação', entries: [{ area: 'principal', flat: true }] },
+  { id: 'sec-clinica', label: 'Clínica', entries: [{ area: 'clinica' }, { area: 'presenca', flat: true }] },
+  {
+    id: 'sec-administracao', label: 'Administração',
+    entries: [{ area: 'automacao' }, { area: 'gestao' }, { area: 'ajustes' }],
+  },
 ];
 
 export interface WorkspaceSection extends WorkspaceSectionDef {
@@ -181,9 +206,8 @@ export interface RouteBreadcrumb {
   area?: WorkspaceArea;
   /**
    * Nível intermediário do breadcrumb. Existe SOMENTE quando a área é um grupo
-   * (segunda coluna): `/agenda` → "Clínica / Agenda"; `/servicos` →
-   * "Clínica / Estrutura da clínica / Serviços". Área plana não repete o próprio
-   * nome como nível extra — senão o breadcrumb vira ruído.
+   * (segunda coluna): `/servicos` → "Clínica / Serviços". Área plana não repete
+   * o próprio nome como nível extra — senão o breadcrumb vira ruído.
    */
   group?: string;
 }
@@ -200,8 +224,9 @@ export function routeBreadcrumb(activePath: string, areas: WorkspaceArea[]): Rou
 
 /**
  * Cor de contexto de uma rota → token da família (fonte única: WORKSPACE_AREAS).
- * O shell injeta o resultado em `--area-color`, e é dele que saem o rail do item
- * ativo, o ícone do cabeçalho da página e o marcador do breadcrumb.
+ * O shell injeta o resultado em `--area-color`. Na 2.0 todas as áreas apontam
+ * para a marca ou para o neutro: a cor do contexto é UM realce discreto, não um
+ * arco-íris — quem carrega significado é o estado (verde/âmbar/vermelho).
  */
 export function routeAreaColor(path: string, areas?: WorkspaceArea[]): string {
   const pool = areas || WORKSPACE_AREAS.map((a) => ({ ...a, items: [] as PanelRouteDef[] }));

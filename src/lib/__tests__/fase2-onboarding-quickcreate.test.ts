@@ -43,7 +43,7 @@ describe('FASE 2 · P8 — checklist operacional', () => {
 describe('FASE 2 · P9 — Quick Create global', () => {
   it('menu + Novo tem as 6 criações e é filtrado pelo papel (canCreate do catálogo)', () => {
     const topbar = read('src/components/dashboard/WorkspaceTopbar.tsx');
-    for (const label of ['Novo agendamento', 'Novo paciente', 'Novo profissional', 'Novo serviço', 'Nova tarefa', 'Recebimento']) {
+    for (const label of ['Novo agendamento', 'Novo paciente', 'Novo profissional', 'Novo serviço', 'Nova pendência', 'Recebimento']) {
       expect(topbar, label).toContain(label);
     }
     expect(topbar).toMatch(/\.filter\(\(i\) => canCreate\.includes\(i\.href\)\)/);

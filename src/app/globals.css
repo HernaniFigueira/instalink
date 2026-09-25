@@ -51,19 +51,21 @@
   --text-soft: #7680a0;
 
   /* ── Ação (marca do produto) ────────────────────────────────── */
-  --brand: #7c3aed;
+  /* GODOUTOR 2.0 — azul de ação. O roxo saiu como identidade (ver o bloco
+     `.il-platform` para a fonte de verdade do painel). */
+  --brand: #2563eb;
   /* HOMOLOGAÇÃO · P0-5 — skeleton com contraste real (não branco sobre cinza). */
   --skeleton-base: #e4e8f0;
   --skeleton-highlight: #f1f4f9;
-  --brand-strong: #6d28d9;
-  --brand-soft: #f3e8ff;
-  --brand-softer: #faf7ff;
-  --brand-border: #ddc9fa;
-  --brand-fg: #6d28d9;
-  --brand-ring: rgba(47, 107, 239, 0.22);
+  --brand-strong: #1d4ed8;
+  --brand-soft: #eff6ff;
+  --brand-softer: #f8fbff;
+  --brand-border: #dbeafe;
+  --brand-fg: #1d4ed8;
+  --brand-ring: rgba(37, 99, 235, 0.24);
   /* Estado hover das superfícies TINTED (botão soft, chip, pílula). Existe
      para que nenhum componente escreva hex próprio: o hover é token. */
-  --brand-bg-hover: #dde9fe;
+  --brand-bg-hover: #dbeafe;
 
   /* Nomes legados (consumidos por ui.tsx e telas) → apontam para a marca.
      Uma futura identidade por negócio só precisa REATRIBUIR estes valores. */
@@ -208,10 +210,10 @@ body {
   @apply subpixel-antialiased;
   background: var(--bg);
   color: var(--text);
-  font-family: var(--font-inter), system-ui, -apple-system, sans-serif;
+  font-family: var(--font-geist-sans), var(--font-inter), system-ui, -apple-system, sans-serif;
   font-feature-settings: 'cv11', 'ss01';
 }
-.font-display { font-family: var(--font-sora), var(--font-inter), system-ui, sans-serif; }
+.font-display { font-family: var(--font-geist-sans), var(--font-inter), system-ui, sans-serif; letter-spacing: -.015em; }
 ::selection { background: var(--brand); color: #fff; }
 
 /* Foco visível em QUALQUER elemento interativo do painel — coerente e
@@ -517,7 +519,7 @@ input[type='color'] { @apply cursor-pointer; }
 
   /* ── Métrica do shell (fonte única da geometria) ─────────────── */
   --topbar-h: 62px;
-  --sidebar-w: 240px;
+  --sidebar-w: 224px;
   --sidebar-w-mini: 68px;
   --rail-w: 220px;
   --sheet-gap: 14px;
@@ -535,80 +537,117 @@ input[type='color'] { @apply cursor-pointer; }
   --control-h-touch: 44px;
 
   /* ── Estrutura: superfícies claras para o conteúdo respirar ──── */
-  --bg: #f5f6fa;
-  --bg-tint: #eef0f7;
-  --surface: #ffffff;
-  --surface-2: #fbfcfe;
-  --surface-3: #f2f4f9;
-  --surface-hover: #eceff7;
-  --border: #e2e6f0;
-  --border-soft: #edf0f7;
-  --border-strong: #838ca1;
-  --border-2: #d8deea;
-  --agenda-unavailable: #eceef4;
+  /* GODOUTOR 2.0 — paleta única (slate). Estes são os nomes canônicos; os
+     apelidos legados (--text, --border-soft…) apontam para eles. */
+  --brand-600: #2563eb;
+  --brand-700: #1d4ed8;
+  --brand-500: #3b82f6;
+  --brand-300: #93c5fd;
+  --brand-100: #dbeafe;
+  --brand-50: #eff6ff;
 
-  /* ── Texto ──────────────────────────────────────────────────── */
-  --text: #161b2c;
-  --text-strong: #0d1220;
-  --text-muted: #525e7c;
-  --text-faint: #626c86;
-  --text-soft: #5c6784;
+  --text-primary: #0f172a;
+  --text-secondary: #334155;
+  --text-muted: #475569;
+  /* `--text-soft`/`--text-faint` são os degraus MAIS CLAROS que ainda passam
+     AA (≥4.5:1) sobre a superfície mais escura usada como fundo (--surface-hover
+     #f1f5f9). Antes o "#94a3b8" parecia elegante e reprovava em contraste. */
+  --text-soft: #556377;
+  --text-faint: #5b6b80;
 
-  /* ── ROXO ASSINATURA · ação de produto (GoDoutor) ──────────────
-     Azul continua existindo como cor OPERACIONAL (agenda/concluído/info). */
-  --brand: #7c3aed;
-  --brand-strong: #6d28d9;
-  --brand-soft: #f3e8ff;
-  --brand-softer: #faf7ff;
-  --brand-border: #ddc9fa;
-  --brand-fg: #6d28d9;
-  --brand-ring: rgba(124, 58, 237, 0.28);
-  --brand-bg-hover: #ece1fd;
-  --ops: #2563eb;
-  --ops-soft: #e8efff;
-  --ops-fg: #1b44b0;
+  --surface-base: #ffffff;
+  --surface-subtle: #f8fafc;
+  --surface-hover: #f1f5f9;
+  --border-base: #e2e8f0;
+  /* `--border-strong` é a borda de CONTROLE (input/select/botão secundário) e
+     por isso precisa de 3:1 — é o tom mais claro possível que ainda cumpre. */
+  --border-strong-base: #7d8ca3;
+  --border-soft-base: #eef2f6;
+  --border-2-base: #dbe3ec;
+  --bg-base: #f8fafc;
+  --bg-tint-base: #f1f5f9;
+  --text-strong-base: #020617;
+  --text-muted-base: #475569;
+  --text-soft-base: #556377;
+  --text-faint-base: #5b6b80;
 
-  /* ── ROXO ELÉTRICO · IA / automação ──────────────────────────── */
-  --violet: #7c3aed;
-  --violet-strong: #6d28d9;
-  --violet-bg: #f1eaff;
-  --violet-bg-hover: #e7dbff;
-  --violet-border: #d9c8fc;
-  --violet-fg: #5b21b6;
+  /* Apelidos que o restante do produto consome (páginas, componentes, auth). */
+  --surface: var(--surface-base);
+  --surface-2: var(--surface-subtle);
+  --surface-3: var(--surface-hover);
+  --border: var(--border-base);
+  --border-soft: var(--border-soft-base);
+  --border-strong: var(--border-strong-base);
+  --border-2: var(--border-2-base);
 
-  /* ── CYAN / TURQUESA · comunicação ───────────────────────────── */
-  --cyan: #0b7f9e;
-  --cyan-strong: #0a6a85;
-  --cyan-bg: #e2f7fc;
-  --cyan-bg-hover: #d2f1f9;
-  --cyan-border: #b0e6f1;
-  --cyan-fg: #0a6a82;
-  --decoration-cyan: #22c3e6;
+  /* Fundo do app: branco levemente aquecido no canto inferior direito —
+     o suficiente para a superfície não parecer "cinza de sistema", sem virar
+     degradê chamativo. Base sólida primeiro (leitura), gradiente por cima. */
+  --bg: var(--bg-base);
+  --bg-tint: var(--bg-tint-base);
+  --bg-gradient: linear-gradient(135deg, #f8fbff 0%, #f7f9fc 60%, #fff9f7 100%);
+  --agenda-unavailable: var(--surface-hover);
 
-  /* ── VERDE-LIMÃO · destaque positivo / CTA especial ──────────── */
-  --lime: #a3e635;
-  --lime-strong: #84cc16;
-  --lime-bg: #f4fbe6;
-  --lime-bg-hover: #ebf7d5;
-  --lime-border: #ddf0b6;
-  --lime-fg: #4c7a0f;
-  /* Texto sobre limão sólido: escuro o bastante para AA. */
-  --lime-contrast: #1a2e05;
+  /* ── Texto (apelidos → nomes canônicos) ─────────────────────── */
+  --text: var(--text-primary);
+  --text-strong: var(--text-strong-base);
+  --text-soft: var(--text-soft-base);
 
-  /* ── Alias legados → famílias novas (consumidores herdam sem remendo) ── */
-  /* `lilac` era o apoio de catálogo/automação; agora É o roxo elétrico. */
+  /* ── Stacks ─────────────────────────────────────────────────── */
+  --brand: var(--brand-600);
+  --brand-strong: var(--brand-700);
+  --brand-soft: var(--brand-50);
+  --brand-softer: var(--brand-50);
+  --brand-border: var(--brand-100);
+  --brand-fg: var(--brand-700);
+  --brand-ring: rgba(37, 99, 235, 0.26);
+  --brand-bg-hover: var(--brand-100);
+  --ops: var(--brand);
+  --ops-soft: var(--brand-soft);
+  --ops-fg: var(--brand-fg);
+
+  /* ── FAMÍLIAS DE APOIO — NEUTRALIZADAS (GoDoutor 2.0) ─────────────
+     Existia uma família de cor por área (roxo para IA, cyan para conversas,
+     lima para comercial, coral/laranja para atenção…). Na prática o resultado
+     era um menu arco-íris: a cor dizia "qual área", não "o que significa".
+     Aqui os NOMES dos tokens continuam (nenhum componente precisa mudar) mas
+     os valores passam a ser neutros frios ou o próprio azul da marca. Cor
+     volta a significar ESTADO (sucesso, atenção, perigo) — nunca decoração. */
+  --violet: var(--text-secondary);
+  --violet-strong: var(--text-primary);
+  --violet-bg: var(--surface-hover);
+  --violet-bg-hover: var(--border);
+  --violet-border: var(--border);
+  --violet-fg: var(--text-secondary);
+
+  --cyan: var(--text-secondary);
+  --cyan-strong: var(--text-primary);
+  --cyan-bg: var(--surface-hover);
+  --cyan-bg-hover: var(--border);
+  --cyan-border: var(--border);
+  --cyan-fg: var(--text-secondary);
+  --decoration-cyan: var(--brand-300);
+
+  --lime: var(--brand);
+  --lime-strong: var(--brand-strong);
+  --lime-bg: var(--brand-soft);
+  --lime-bg-hover: var(--brand-bg-hover);
+  --lime-border: var(--brand-border);
+  --lime-fg: var(--brand-fg);
+  --lime-contrast: #ffffff;
+
   --lilac: var(--violet);
   --lilac-strong: var(--violet-strong);
   --lilac-bg: var(--violet-bg);
   --lilac-bg-hover: var(--violet-bg-hover);
   --lilac-border: var(--violet-border);
   --lilac-fg: var(--violet-fg);
-  /* `teal` era o apoio de pessoas; agora É o cyan de comunicação. */
-  --teal: var(--cyan);
-  --teal-strong: var(--cyan-strong);
-  --teal-bg: var(--cyan-bg);
-  --teal-border: var(--cyan-border);
-  --teal-fg: var(--cyan-fg);
+
+  --teal: var(--violet);
+  --teal-strong: var(--violet-strong);
+  --teal-bg: var(--violet-bg);
+  --teal-border: var(--violet-border);
+  --teal-fg: var(--violet-fg);
 
   /* ── Nomes legados de ação → apontam para a marca ────────────── */
   --area-color: var(--brand);
@@ -621,50 +660,50 @@ input[type='color'] { @apply cursor-pointer; }
   --accent-contrast: #ffffff;
 
   /* ── VERDE DE ESTADO · concluído/confirmado ──────────────────── */
-  --success: #0d7d5a;
-  --success-strong: #0a6247;
-  --success-bg: #e4f7ef;
-  --success-bg-hover: #d4f1e5;
-  --success-border: #b4e4cf;
-  --success-fg: #0a6a4c;
+  --success: #15803d;
+  --success-strong: #166534;
+  --success-bg: #ecfdf5;
+  --success-bg-hover: #dcfce7;
+  --success-border: #bbf7d0;
+  --success-fg: #15803d;
 
-  /* ── INFO · sinônimo semântico de comunicação (cyan) ─────────── */
-  --info: var(--cyan);
-  --info-strong: var(--cyan-strong);
-  --info-bg: var(--cyan-bg);
-  --info-border: var(--cyan-border);
-  --info-fg: var(--cyan-fg);
+  /* ── INFO · sinônimo semântico de comunicação ────────────────── */
+  --info: #0369a1;
+  --info-strong: #075985;
+  --info-bg: #f0f9ff;
+  --info-border: #bae6fd;
+  --info-fg: #075985;
 
   /* ── LARANJA · atenção operacional ───────────────────────────── */
   --warning: #b45309;
-  --warning-strong: #8f4107;  /* laranja atenção: AA com branco (badge do sino) */
-  --warning-bg: #fff3e5;
-  --warning-bg-hover: #ffe9cf;
-  --warning-border: #ffd6a6;
-  --warning-fg: #8a4708;
+  --warning-strong: #92400e;  /* laranja atenção: AA com branco (badge do sino) */
+  --warning-bg: #fffbeb;
+  --warning-bg-hover: #fef3c7;
+  --warning-border: #fde68a;
+  --warning-fg: #92400e;
   --attention: var(--warning-fg);
   --attention-bg: var(--warning-bg);
   --attention-bg-hover: var(--warning-bg-hover);
   --attention-border: var(--warning-border);
   --attention-fg: var(--warning-fg);
-  --attention-mark: #ffb020;
-  --attention-mark-fg: #5c3800;
+  --attention-mark: #f59e0b;
+  --attention-mark-fg: #78350f;
   /* Laranja com contraste ≥ 3:1 sobre branco: é o tom usado em ÍCONE/rail de
      "atenção" (Tarefas). O `--warning` puro continua sendo a cor de estado. */
-  --orange-deep: #c2570a;
+  --orange-deep: #b45309;
 
   /* ── CORAL/VERMELHO · perigo, cancelamento ───────────────────── */
-  --danger: #d92b45;
-  --danger-strong: #b32036;
-  --danger-bg: #fdedef;
-  --danger-bg-hover: #fbdfe3;
-  --danger-border: #f8c5ce;
-  --danger-fg: #b32036;
+  --danger: #dc2626;
+  --danger-strong: #b91c1c;
+  --danger-bg: #fef2f2;
+  --danger-bg-hover: #fee2e2;
+  --danger-border: #fecaca;
+  --danger-fg: #b91c1c;
 
   /* Linha do horário atual na Agenda: coral, fina, com bolinha na origem.
      Token dedicado para a Agenda nunca hardcodar hex. */
-  --now: #ef4056;
-  --now-dot: #ef4056;
+  --now: #ef4444;
+  --now-dot: #ef4444;
 
   /* ── Véu de modal/sheet ──────────────────────────────────────── */
   --overlay: rgba(13, 18, 32, 0.42);
@@ -672,23 +711,25 @@ input[type='color'] { @apply cursor-pointer; }
 
   /* ── Raio (escala única; nada de raio avulso por tela) ────────── */
   --radius-xs: 6px;
-  --radius-sm: 8px;
-  --radius-md: 10px;
-  --radius-lg: 14px;
-  --radius-xl: 18px;
-  --radius-2xl: 24px;
+  --radius-sm: 9px;    /* input e botão */
+  --radius-md: 10px;   /* item de menu, controle interno */
+  --radius-lg: 12px;   /* cartão, painel */
+  --radius-xl: 14px;   /* popover, sheet */
+  --radius-2xl: 18px;
   --radius-pill: 999px;
 
-  /* ── Sombra (camadas suaves e elegantes; profundidade real) ───── */
-  --shadow-xs: 0 1px 2px rgba(15, 23, 42, 0.05);
-  --shadow-sm: 0 1px 2px rgba(15, 23, 42, 0.05), 0 2px 6px -2px rgba(15, 23, 42, 0.07);
-  --shadow-md: 0 4px 10px -4px rgba(15, 23, 42, 0.10), 0 12px 24px -12px rgba(15, 23, 42, 0.14);
-  --shadow-lg: 0 10px 20px -8px rgba(15, 23, 42, 0.14), 0 28px 48px -20px rgba(15, 23, 42, 0.22);
-  --shadow-xl: 0 18px 36px -12px rgba(15, 23, 42, 0.18), 0 40px 72px -28px rgba(15, 23, 42, 0.28);
-  --shadow-brand: 0 6px 16px -8px rgba(37, 99, 235, 0.55);
+  /* ── Sombra (o painel é plano; sombra só cria profundidade real) ─
+     Cartão normal: praticamente sem sombra. Popover/modal: sombra maior
+     porque há empilhamento de camadas de verdade. */
+  --shadow-xs: 0 1px 2px rgba(15, 23, 42, 0.04);
+  --shadow-sm: 0 1px 2px rgba(15, 23, 42, 0.04);
+  --shadow-md: 0 4px 12px -4px rgba(15, 23, 42, 0.10), 0 12px 24px -12px rgba(15, 23, 42, 0.12);
+  --shadow-lg: 0 10px 20px -8px rgba(15, 23, 42, 0.12), 0 28px 48px -20px rgba(15, 23, 42, 0.18);
+  --shadow-xl: 0 18px 36px -12px rgba(15, 23, 42, 0.16), 0 40px 72px -28px rgba(15, 23, 42, 0.24);
+  --shadow-brand: 0 1px 2px rgba(37, 99, 235, 0.20);
   --shadow-inset: inset 0 1px 2px rgba(15, 23, 42, 0.06);
-  /* Sombra do Workspace Sheet: a mais elegante do sistema (camada alta). */
-  --shadow-sheet: 0 24px 60px -18px rgba(15, 23, 42, 0.34), 0 4px 12px -4px rgba(15, 23, 42, 0.14);
+  /* Sombra do Workspace Sheet: a mais alta do sistema (camada flutuante). */
+  --shadow-sheet: 0 24px 60px -18px rgba(15, 23, 42, 0.30), 0 4px 12px -4px rgba(15, 23, 42, 0.12);
 
   /* ── Foco visível ────────────────────────────────────────────── */
   --focus-ring: 0 0 0 3px var(--brand-ring);
@@ -727,23 +768,21 @@ input[type='color'] { @apply cursor-pointer; }
   color: var(--area-color, var(--brand-fg));
   box-shadow: var(--shadow-xs);
 }
-/* Avatar do painel: gradiente da marca (azul → roxo). É identidade, não estado. */
+/* Avatar do painel: cor sólida da marca. Identidade não precisa de degradê. */
 .il-platform .il-avatar {
-  background: linear-gradient(140deg, var(--brand), var(--violet));
+  background: var(--brand);
   color: #fff;
-  box-shadow: var(--shadow-sm);
+  box-shadow: none;
 }
-/* Carteirinha do cliente volta a ter profundidade (faixa suave da marca). */
+/* Carteirinha do cliente: faixa suave da marca (uma família só). */
 .il-platform .il-idcard {
-  background:
-    linear-gradient(135deg,
-      color-mix(in srgb, var(--brand) 9%, var(--surface)),
-      color-mix(in srgb, var(--violet) 7%, var(--surface)) 48%,
-      var(--surface) 80%);
+  background: linear-gradient(135deg,
+    color-mix(in srgb, var(--brand) 6%, var(--surface)),
+    var(--surface) 62%);
 }
 .il-platform .il-idcard::after {
   background: radial-gradient(circle at 30% 30%,
-    color-mix(in srgb, var(--brand) 14%, transparent), transparent 65%);
+    color-mix(in srgb, var(--brand) 8%, transparent), transparent 65%);
 }
 .il-platform .il-actionbar { background: var(--surface); backdrop-filter: none; }
 .il-platform .il-tabbar--sm { transform: none; }
@@ -758,7 +797,7 @@ input[type='color'] { @apply cursor-pointer; }
   color: var(--nav-active-fg, var(--il-nav-active-fg)) !important;
   box-shadow: none;
 }
-.il-platform [data-nav-rail] { background-color: var(--area-color, var(--brand)) !important; }
+.il-platform [data-nav-rail] { background-color: transparent !important; }
 
 /* ── Alturas de controle: UMA escala (tokens), não 44px solto por regra ── */
 .il-platform .il-control { min-height: var(--control-h); }
@@ -1168,11 +1207,11 @@ button.ws-bell__item:hover { background: var(--surface-hover); }
 }
 .workspace-link__icon { display: flex; align-items: center; justify-content: center; width: 20px; flex-shrink: 0; }
 .workspace-link__chevron { margin-left: auto; color: var(--text-faint); flex-shrink: 0; }
-/* Rail do item ativo: o estado nunca depende só da cor de fundo. */
-.workspace-link__rail {
-  position: absolute; left: 0; top: 7px; bottom: 7px; width: 3px;
-  border-radius: 0 3px 3px 0; background: var(--area-color, var(--brand));
-}
+/* O rail/traço vertical do item ativo foi REMOVIDO (GoDoutor 2.0): o estado
+   ativo é fundo suave + texto/cor de marca + `aria-current`. O elemento segue
+   no DOM como marcador (data-nav-rail) para acessibilidade e testes, sem
+   desenhar traço nenhum. */
+.workspace-link__rail { display: none; }
 .workspace-label { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .is-collapsed .workspace-link { justify-content: center; padding: 0; }
 .is-collapsed .workspace-link__chevron,
@@ -1180,9 +1219,60 @@ button.ws-bell__item:hover { background: var(--surface-hover); }
 
 .ws-setup-mini {
   margin: 0 10px 10px; padding: 12px;
-  border-radius: 12px;
-  background: var(--brand-soft); border: 1px solid var(--brand-border);
+  border-radius: var(--radius-lg);
+  background: var(--brand-50); border: 1px solid var(--brand-100);
 }
+
+/* ── Cabeçalho da sidebar: a CLÍNICA é a identidade principal ──────
+   GoDoutor continua sendo a plataforma (login, Master, suporte, rodapé
+   discreto), mas dentro da operação quem identifica é a clínica. */
+.workspace-clinic-head-wrap { position: relative; }
+.workspace-clinic-head {
+  display: flex; align-items: center; gap: 10px; width: 100%;
+  padding: 12px 12px 10px; border-radius: var(--radius-md);
+}
+button.workspace-clinic-head:hover { background: var(--surface-hover); }
+.workspace-foot__item--collapse { color: var(--text-muted); }
+.workspace-clinic-head__logo {
+  width: 34px; height: 34px; border-radius: var(--radius-md);
+  object-fit: cover; flex-shrink: 0; background: var(--surface-hover);
+  border: 1px solid var(--border);
+}
+.workspace-clinic-head__mark {
+  width: 34px; height: 34px; border-radius: var(--radius-md); flex-shrink: 0;
+  display: inline-flex; align-items: center; justify-content: center;
+  background: var(--brand-soft); color: var(--brand-fg);
+  font-size: 13px; font-weight: 700; letter-spacing: -.01em;
+}
+.workspace-clinic-head__text { min-width: 0; flex: 1; text-align: left; }
+.workspace-clinic-head__name {
+  display: block; font-size: 13.5px; font-weight: 650; letter-spacing: -.01em;
+  color: var(--text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.workspace-clinic-head__meta {
+  display: block; font-size: 11px; font-weight: 500; color: var(--text-muted);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.workspace-clinic-head__unit {
+  display: inline-flex; align-items: center; gap: 6px; margin-top: 2px;
+  font-size: 11px; font-weight: 600; color: var(--brand-fg);
+}
+.is-collapsed .workspace-clinic-head { padding: 10px 0 8px; justify-content: center; }
+
+/* Rodapé fixo: ajuda e suporte — discreto, sempre no mesmo lugar. */
+.workspace-foot { border-top: 1px solid var(--border-soft); padding: 8px; }
+.workspace-foot__item {
+  display: flex; align-items: center; gap: 10px; width: 100%;
+  min-height: 36px; padding: 0 10px; border-radius: var(--radius-md);
+  font-size: 13px; font-weight: 500; color: var(--text-secondary); text-align: left;
+}
+.workspace-foot__item:hover { background: var(--surface-hover); color: var(--text); }
+.workspace-foot__brand {
+  display: block; padding: 6px 10px 2px; font-size: 10.5px; font-weight: 500;
+  color: var(--text-faint); letter-spacing: .01em;
+}
+.workspace-foot__brand strong { font-weight: 700; color: var(--text-muted); }
+.is-collapsed .workspace-foot__item { justify-content: center; padding: 0; }
 .workspace-icon-button {
   display: flex; align-items: center; gap: 9px;
   min-height: 36px; min-width: 36px; padding: 0 10px;
@@ -1341,6 +1431,8 @@ button.ws-bell__item:hover { background: var(--surface-hover); }
 .auth-form-side { display:flex; flex-direction:column; justify-content:center; padding:60px clamp(24px,6vw,110px); }
 .auth-wordmark { font-size:27px; letter-spacing:-1px; font-weight:700; margin-bottom:50px; }
 .auth-wordmark span { font-size:12px; color:#5c626b; font-weight:400; letter-spacing:0; }
+.auth-wordmark__d { color: var(--brand-600); }
+.auth-link { color: var(--brand-700); }
 .auth-form-card { width:100%; max-width:420px; }
 .auth-patient-note { font-size:12px; line-height:1.7; max-width:380px; color:#5c626b; margin-top:36px; border-top:1px solid #dde0dd; padding-top:20px; }
 .auth-story { background:#edf1f2; padding:clamp(40px,8vw,120px) clamp(30px,5vw,90px); display:flex; flex-direction:column; justify-content:center; }

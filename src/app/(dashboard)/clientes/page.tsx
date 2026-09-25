@@ -250,10 +250,13 @@ export default function ClientesPage() {
         title="Clientes"
         action={
           <>
+            {/* OPORTUNIDADES (§6): o kanban deixou de ser a identidade do
+                produto e virou uma ferramenta DENTRO de Clientes — aparece só
+                quando a capacidade está ativa e o usuário tem a permissão. */}
             {canFunil && (
               <Link href={`/funil?b=${businessId}`}
-                className="inline-flex items-center justify-center gap-1.5 text-xs font-semibold rounded-md px-3 py-2 bg-[var(--lilac-bg)] text-[var(--lilac-fg)] border border-[var(--lilac-border)] hover:bg-[var(--lilac-bg-hover)]">
-                <Icon n="funnel" size={14} /> Funil de oportunidades
+                className="inline-flex items-center justify-center gap-1.5 text-xs font-semibold rounded-[var(--radius-sm)] px-3 py-2 bg-white text-[var(--text-primary)] border border-[var(--border-strong)] hover:bg-[var(--surface-hover)]">
+                <Icon n="funnel" size={14} /> Oportunidades
               </Link>
             )}
             <Button variant="secondary" onClick={() => setImportOpen(true)} title="Trazer a base de outro sistema (CSV)">
@@ -351,7 +354,7 @@ export default function ClientesPage() {
                               <span className="inline-flex items-center gap-1"><Icon n="calendar" size={11} /> {p.bookings.length} agend.</span>
                             )}
                             {p.leads.length > 0 && (
-                              <span className="inline-flex items-center gap-1"><Icon n="funnel" size={11} /> {p.leads.length} no funil</span>
+                              <span className="inline-flex items-center gap-1"><Icon n="funnel" size={11} /> {p.leads.length} em oportunidades</span>
                             )}
                             {p.orders > 0 && <span className="font-semibold text-[var(--text)] tabular-nums">{money(p.spent)}</span>}
                           </span>

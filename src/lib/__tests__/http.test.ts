@@ -126,7 +126,7 @@ describe('http — áreas', () => {
     expect(areaLabel('config')).toBe('Configurações');
     // A3.4: a interface chama a porta de "Início" (a chave/permissão segue
     // `dashboard` — renomear id quebraria permissões gravadas por unidade).
-    expect(AREA_LABELS.dashboard).toBe('Início');
+    expect(AREA_LABELS.dashboard).toBe('Visão geral');
   });
 
   it('sem rótulo conhecido, devolve o que recebeu (e vazio quando não há área)', () => {

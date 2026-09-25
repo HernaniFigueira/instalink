@@ -393,7 +393,7 @@ export function ClientProfileDrawer({ person, businessId, pipeline, canFunil, on
     { id: 'files', label: 'Arquivos', icon: 'upload', count: encounters.reduce((n, e) => n + ((e.files || []).length), 0) },
     ...(canFinance ? [{ id: 'finance' as const, label: 'Financeiro', icon: 'wallet', count: financeEntries.length }] : []),
     { id: 'timeline', label: 'Histórico', icon: 'history', count: timeline.length },
-    { id: 'leads', label: 'Leads', icon: 'spark', count: person.leads.length },
+    { id: 'leads', label: 'Oportunidades', icon: 'spark', count: person.leads.length },
     { id: 'tasks', label: 'Tarefas', icon: 'tasks', count: (person.tasks || []).length },
     { id: 'notes', label: 'Observações administrativas', icon: 'receipt', count: (person.notes || []).length },
   ];
@@ -1092,7 +1092,7 @@ export function ClientProfileDrawer({ person, businessId, pipeline, canFunil, on
 
           {tab === 'leads' && (
             person.leads.length === 0
-              ? <Empty hint="Nenhuma oportunidade no funil para esta pessoa." action={canFunil ? <Link href={`/funil?b=${businessId}`} className="il-chip">Abrir funil</Link> : undefined} />
+              ? <Empty hint="Nenhuma oportunidade aberta para esta pessoa." action={canFunil ? <Link href={`/funil?b=${businessId}`} className="il-chip">Abrir oportunidades</Link> : undefined} />
               : (
                 <ul className="divide-y divide-[var(--border-soft)]">
                   {person.leads.map((l) => {

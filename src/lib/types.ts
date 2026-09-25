@@ -1776,7 +1776,7 @@ export const CAMPAIGN_SEGMENTS: Array<{ id: CampaignSegment; label: string; hint
   { id: 'never_booked', label: 'Nunca agendaram', hint: 'Sem nenhum agendamento' },
   { id: 'inactive', label: 'Sem atendimento recente', hint: 'Último contato há mais de 90 dias' },
   { id: 'by_service', label: 'Por serviço', hint: 'Já agendaram um serviço específico' },
-  { id: 'leads', label: 'Leads', hint: 'Contatos com interesse registrado (com consentimento)' },
+  { id: 'leads', label: 'Oportunidades', hint: 'Contatos com interesse registrado (com consentimento)' },
 ];
 
 export interface CampaignCounts {
