@@ -261,7 +261,7 @@ export function resultsSummary(payload: ResultsPayload, ids: string[] = SUMMARY_
 export const NO_DATA = 'Sem dados suficientes';
 
 const NO_REGISTERED_REVENUE_REASON =
-  'Este negócio não registra recebimentos no InstaLink: o sistema conhece o valor previsto dos atendimentos, mas não o pagamento. '
+  'Este negócio não registra recebimentos no GoDoutor: o sistema conhece o valor previsto dos atendimentos, mas não o pagamento. '
   + 'Por isso não exibimos “receita realizada”.';
 
 export const ARRIVAL_NOTE =

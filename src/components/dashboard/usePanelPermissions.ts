@@ -5,8 +5,9 @@
 // Para a UI concordar com os guards (nunca oferecer uma porta que o servidor
 // vai negar com 403), algumas telas precisam saber as permissões do usuário
 // na unidade ativa ANTES de renderizar um atalho. A fonte é a MESMA do
-// DashboardShell (/api/auth/me) — com cache curto em nível de módulo para a
-// mesma informação não ser buscada duas vezes na mesma navegação.
+// DashboardShell (/api/auth/me) — pelo MESMO loader compartilhado
+// (`lib/session-me`), para a mesma informação não ser buscada duas vezes na
+// mesma navegação por consumidores diferentes (shell, unidade ativa, este).
 //
 // REGRA DE SEGURANÇA: isto é APENAS apresentação. Esconder um link sem
 // permissão é UX; a autorização de verdade continua no servidor
@@ -14,6 +15,7 @@
 import { useEffect, useState } from 'react';
 import { useSearchParams } from 'next/navigation';
 import { resolveActiveBusinessId } from '@/lib/business-context';
+import { loadMe } from '@/lib/session-me';
 import type { PermissionId } from '@/lib/types';
 
 interface MePayload {
@@ -24,23 +26,9 @@ interface MePayload {
   }>;
 }
 
-const CACHE_TTL_MS = 5000; // mesma régua de revalidação do DashboardShell
-let cache: { at: number; data: MePayload } | null = null;
-let inflight: Promise<MePayload | null> | null = null;
-
 async function fetchMe(): Promise<MePayload | null> {
-  if (cache && Date.now() - cache.at < CACHE_TTL_MS) return cache.data;
-  if (!inflight) {
-    inflight = fetch('/api/auth/me')
-      .then(async (r) => (r.ok ? ((await r.json()) as MePayload) : null))
-      .catch(() => null)
-      .then((data) => {
-        cache = { at: Date.now(), data: data || {} };
-        return data;
-      })
-      .finally(() => { inflight = null; });
-  }
-  return inflight;
+  const res = await loadMe();
+  return res.ok ? (res.data as MePayload | null) : null;
 }
 
 export interface PanelPermissions {

@@ -123,8 +123,7 @@ export default function CreateBusinessPage() {
     <main className="min-h-screen bg-zinc-50 flex items-center justify-center px-4 py-10">
       <div className="w-full max-w-md">
         <div className="flex items-center justify-center gap-2 mb-6">
-          <div className="w-9 h-9 rounded-xl bg-zinc-900 flex items-center justify-center font-black text-white">IL</div>
-          <span className="font-bold text-lg">InstaLink<span className="text-emerald-600">.app</span></span>
+          <span className="font-bold text-lg">Go<span className="text-[var(--brand-600)]">Doutor</span><span className="text-xs font-normal text-zinc-500"> / clínicas</span></span>
         </div>
 
         <form onSubmit={finish} className="bg-white border border-zinc-200 rounded-lg p-6 shadow-sm">

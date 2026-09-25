@@ -21,7 +21,7 @@ export const metadata: Metadata = {
   },
   twitter: {
     card: 'summary',
-    title: 'InstaLink — Sua clínica organizada',
+    title: 'GoDoutor — Sua clínica organizada',
     description: 'Página da clínica, agenda, pacientes e equipe em um só lugar.',
   },
 };

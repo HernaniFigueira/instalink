@@ -25,7 +25,7 @@ import { applyOutreachReply } from '@/lib/follow-up-outreach';
 import { shouldAdvanceStatus } from '@/lib/messaging/status';
 import type { Message, Conversation, Business, DB } from '@/lib/types';
 
-// WEBHOOK do WhatsApp oficial (provedor → InstaLink).
+// WEBHOOK do WhatsApp oficial (provedor → GoDoutor).
 // GET  ?hub.mode=subscribe&hub.verify_token=… → handshake de verificação.
 // POST → recebe mensagens e atualizações de status da Meta com fail-closed.
 //

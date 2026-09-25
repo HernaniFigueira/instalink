@@ -267,7 +267,7 @@ export function BookingDetailSheet({ booking, service, pro, businessId, timezone
             <div className="px-4 py-2.5 bg-amber-50/60 border-b border-amber-200/60">
               <p className="text-xs font-semibold text-amber-900 flex items-center gap-1.5"><Icon n="alert" size={13} /> Este atendimento precisa de fechamento</p>
               <p className="text-[11px] text-amber-800/80 mt-0.5 leading-snug">
-                O horário já passou e o status continua “{def.panel}”. O InstaLink não conclui atendimento sozinho — escolha o que aconteceu.
+                O horário já passou e o status continua “{def.panel}”. O GoDoutor não conclui atendimento sozinho — escolha o que aconteceu.
               </p>
             </div>
           )}

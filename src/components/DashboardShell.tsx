@@ -2,6 +2,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
+import { loadMe } from '@/lib/session-me';
 import { clearToken } from '@/lib/client-auth';
 import { cn } from '@/lib/utils';
 import { Icon } from '@/components/icons';
@@ -86,21 +87,35 @@ export function DashboardShell({ children }: { children: React.ReactNode }) {
   const [helpOpen, setHelpOpen] = useState(false);
   const mainRef = useRef<HTMLElement | null>(null);
 
-  const loadContext = useCallback(() => {
+  const loadContext = useCallback((fresh = false) => {
     setContextError(false);
     // SOMENTE 401 (sessão inexistente/expirada/inválida) inicia o fluxo de
     // login. Qualquer outro status mantém o usuário dentro do painel.
-    fetch('/api/auth/me')
-      .then(async (r) => {
+    // `fresh` fura o TTL de 5s do loader compartilhado: é o sinal explícito de
+    // "módulos/permissões mudaram agora" (toggle em Recursos/Equipe).
+    loadMe({ fresh })
+      .then((r) => {
         if (!r.ok) {
           if (isSessionExpired(r.status)) router.replace('/login?session=expired');
           else setContextError(true);
           return null;
         }
-        return r.json();
+        return r.data;
       })
-      .then((d) => {
-        if (!d) return;
+      .then((raw) => {
+        // Corpo ilegível (parse) não é sessão expirada: mantém o usuário e
+        // oferece "Tentar novamente", como antes.
+        if (!raw) { setContextError(true); return; }
+        // O loader é compartilhado (shell, unidade ativa, permissões) e devolve
+        // o payload de forma genérica; aqui ele é lido com o contrato que o
+        // shell realmente consome.
+        const d = (raw || {}) as {
+          user?: { id: string; name: string; email?: string; role?: string; photo?: string } | null;
+          businesses?: Biz[];
+          organizations?: Array<{ id: string; name: string; canManage: boolean }>;
+          isMaster?: boolean;
+          support?: SupportInfo | null;
+        };
         if (!d.user) { router.replace('/login?session=expired'); return; }
         setIsMaster(!!d.isMaster);
         setSupport(d.support || null);
@@ -110,11 +125,11 @@ export function DashboardShell({ children }: { children: React.ReactNode }) {
           router.replace('/master');
           return;
         }
-        if (!d.businesses?.length && !d.organizations?.some((o: {canManage:boolean})=>o.canManage)) { router.replace('/onboarding'); return; }
+        if (!d.businesses?.length && !d.organizations?.some((o) => o.canManage)) { router.replace('/onboarding'); return; }
         setOrganizations(d.organizations || []);
-        if (!d.businesses?.length && pathname !== '/organizacao') router.replace(`/organizacao?organization=${d.organizations[0].id}`);
-        setUser(d.user);
-        setBusinesses(d.businesses);
+        if (!d.businesses?.length && pathname !== '/organizacao') router.replace(`/organizacao?organization=${d.organizations![0].id}`);
+        setUser(d.user || null);
+        setBusinesses(d.businesses || []);
         setReady(true);
         lastContextAt.current = Date.now();
       })
@@ -139,7 +154,7 @@ export function DashboardShell({ children }: { children: React.ReactNode }) {
     if (Date.now() - lastContextAt.current > 5000) loadContext();
   }, [ready, pathname, loadContext]);
   useEffect(() => {
-    const fn = () => loadContext();
+    const fn = () => loadContext(true);
     window.addEventListener('il:business-refresh', fn);
     return () => window.removeEventListener('il:business-refresh', fn);
   }, [loadContext]);
@@ -209,7 +224,7 @@ export function DashboardShell({ children }: { children: React.ReactNode }) {
     window.location.assign('/login');
   }
 
-  if (contextError && !ready) return <div className="il-platform p-8" role="alert"><h1>Não foi possível carregar sua clínica</h1><p>Confira sua conexão e tente novamente. Sua sessão foi preservada.</p><button className="il-control mt-4" onClick={loadContext}>Tentar novamente</button></div>;
+  if (contextError && !ready) return <div className="il-platform p-8" role="alert"><h1>Não foi possível carregar sua clínica</h1><p>Confira sua conexão e tente novamente. Sua sessão foi preservada.</p><button className="il-control mt-4" onClick={() => loadContext(true)}>Tentar novamente</button></div>;
   if (!ready || !user) {
     return (
       <div className="min-h-screen bg-[var(--bg)] lg:flex" aria-label="Carregando painel">

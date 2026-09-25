@@ -212,7 +212,7 @@ export function CanaisIntegracoesView({ only }: { only?: 'channel' | 'source' | 
       <section className="bg-white border border-zinc-200 p-4">
         <h3 className="font-semibold text-sm">Canais e integrações</h3>
         <p className="text-xs text-zinc-500 mt-0.5">
-          O InstaLink recebe eventos de fora, transforma em <strong>evento interno</strong> e entrega ao motor de automações
+          O GoDoutor recebe eventos de fora, transforma em <strong>evento interno</strong> e entrega ao motor de automações
           (e o contrário também: uma automação pode falar com um sistema externo). Cada conexão pertence só a esta empresa.
         </p>
         {(data?.summary.total || 0) > 0 && (
@@ -318,7 +318,7 @@ export function CanaisIntegracoesView({ only }: { only?: 'channel' | 'source' | 
       <section className="bg-white border border-zinc-200 p-4">
         <h3 className="font-semibold text-sm">Webhooks de saída</h3>
         <p className="text-xs text-zinc-500 mt-0.5">
-          Para o InstaLink <strong>avisar</strong> seu sistema (lead criado, agendamento…), o destino é configurado na aba
+          Para o GoDoutor <strong>avisar</strong> seu sistema (lead criado, agendamento…), o destino é configurado na aba
           <strong> Integrações</strong>, com assinatura HMAC e reenvio automático — o mesmo canal que as automações usam.
         </p>
       </section>
@@ -326,7 +326,7 @@ export function CanaisIntegracoesView({ only }: { only?: 'channel' | 'source' | 
       <section className="bg-white border border-zinc-200">
         <div className="px-4 py-3 border-b border-zinc-100">
           <h3 className="font-semibold text-sm">Eventos recebidos</h3>
-          <p className="text-xs text-zinc-500 mt-0.5">O que chegou de fora, o que o InstaLink fez com cada evento e por quê.</p>
+          <p className="text-xs text-zinc-500 mt-0.5">O que chegou de fora, o que o GoDoutor fez com cada evento e por quê.</p>
         </div>
         {(data?.events || []).length === 0 ? (
           <p className="px-4 py-6 text-xs text-zinc-500">Nenhum evento recebido ainda.</p>

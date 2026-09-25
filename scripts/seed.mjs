@@ -57,10 +57,14 @@ function blocksFor(cta, extra, target) {
 
 const db = {
   users: [
-    { id: 'user-demo', name: 'Demo InstaLink', email: 'demo@instalink.app', passwordHash: hash('demo1234'), createdAt: now, role: 'owner', lastLoginAt: '' },
+    { id: 'user-demo', name: 'Demo GoDoutor', email: 'demo@instalink.app', passwordHash: hash('demo1234'), createdAt: now, role: 'owner', lastLoginAt: '' },
     // Logins de EQUIPE (FASE 3): testam papéis/permissões de verdade.
     { id: 'user-secretaria', name: 'Sofia (secretária)', email: 'secretaria@instalink.app', passwordHash: hash('demo1234'), createdAt: now, role: 'owner', lastLoginAt: '' },
     { id: 'user-vendedor', name: 'Vitor (vendedor)', email: 'vendedor@instalink.app', passwordHash: hash('demo1234'), createdAt: now, role: 'owner', lastLoginAt: '' },
+    // PROFISSIONAL (quem ATENDE): vinculado ao profissional 'pro-orlando' via
+    // `professionals.userId` — é esse vínculo que produz o escopo "own" da
+    // agenda e a Visão geral "Meu dia". Sem ele não dá para verificar o papel.
+    { id: 'user-profissional', name: 'Orlando (dentista)', email: 'profissional@instalink.app', passwordHash: hash('demo1234'), createdAt: now, role: 'owner', lastLoginAt: '' },
     // MASTER da PLATAFORMA: papel no banco (não é dono de nada; entra em
     // empresa só por sessão de suporte explícita e auditada).
     { id: 'user-master', name: 'Suporte InstaLink', email: 'master@instalink.app', passwordHash: hash('master1234'), createdAt: now, role: 'master', lastLoginAt: '' },
@@ -161,7 +165,7 @@ const db = {
     { id: 'svc-cardio', businessId: B3, categoryId: 'cat-consulta', name: 'Consulta Cardiológica', description: 'Check-up do coração.', image: '', price: 25000, durationMin: 45, professionalIds: ['pro-joao-cardio'], active: true, featured: true, bookable: true },
   ],
   professionals: [
-    { id: 'pro-orlando', businessId: B3, name: 'Dr. Orlando', role: 'Dentista', photo: '', active: true },
+    { id: 'pro-orlando', businessId: B3, name: 'Dr. Orlando', role: 'Dentista', photo: '', active: true, userId: 'user-profissional' },
     { id: 'pro-joao-cardio', businessId: B3, name: 'Dr. João', role: 'Cardiologista', photo: '', active: true },
     { id: 'pro-ana', businessId: B3, name: 'Dra. Ana', role: 'Fisioterapeuta', photo: '', active: false },
     { id: 'pro-joao', businessId: B2, name: 'João', role: 'Barbeiro master', photo: '', active: true },
@@ -201,6 +205,7 @@ const db = {
   members: [
     { id: 'mem-secretaria', businessId: B3, userId: 'user-secretaria', role: 'SECRETARIA', permissions: {}, active: true, note: 'Recepção da clínica', createdAt: now, updatedAt: now },
     { id: 'mem-vendedor', businessId: B1, userId: 'user-vendedor', role: 'VENDEDOR', permissions: { agenda: false }, active: true, note: 'Balcão', createdAt: now, updatedAt: now },
+    { id: 'mem-profissional', businessId: B3, userId: 'user-profissional', role: 'PROFISSIONAL', permissions: { dashboard: true, agenda: true, clientes: true, whatsapp: true }, active: true, note: 'Atende na cadeira 1', createdAt: now, updatedAt: now },
   ],
   agents: [
     {

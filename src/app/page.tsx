@@ -7,7 +7,7 @@ const journeys = [
   { n: '03', title: 'Uma visão clara da sua clínica.', role: 'PARA A GESTÃO', text: 'Organize serviços, equipe e unidades. Acompanhe os indicadores disponíveis e configure a página que apresenta sua clínica ao paciente.', items: ['Equipe com permissões por unidade', 'Serviços e disponibilidade', 'Resultados com origem e período definidos'] },
 ];
 const questions = [
-  ['Para quais clínicas o InstaLink foi pensado?', 'Clínicas médicas, odontológicas, veterinárias e de estética. Você organiza os serviços e os profissionais conforme sua operação. O sistema não substitui sistemas clínicos especializados nem representa um prontuário veterinário de pets.'],
+  ['Para quais clínicas o GoDoutor foi pensado?', 'Clínicas médicas, odontológicas, veterinárias e de estética. Você organiza os serviços e os profissionais conforme sua operação. O sistema não substitui sistemas clínicos especializados nem representa um prontuário veterinário de pets.'],
   ['O paciente precisa instalar um aplicativo?', 'Não. A página da clínica, o agendamento e a área da conta abrem no navegador. As opções de acompanhamento, cancelamento e remarcação seguem as regras configuradas pela clínica.'],
   ['Posso manter a identidade da minha clínica?', 'Sim. Sua página pública tem logo, conteúdo, cores e aparência próprios. O painel da equipe mantém uma interface consistente para o trabalho diário.'],
   ['Toda a equipe vê as mesmas informações?', 'Não. O acesso depende do papel, das permissões e das unidades às quais cada pessoa está vinculada. O profissional pode ter a agenda limitada ao seu próprio vínculo.'],

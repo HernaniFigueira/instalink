@@ -1,12 +1,12 @@
 // ═══════════════════════════════════════════════════════════════
-// InstaLink.app — Domínio universal (INSTA LINK ENGINE)
+// instalink.app — Domínio universal (INSTA LINK ENGINE)
 // Nenhuma entidade aqui é específica de nicho. Nichos são apenas
 // configurações iniciais (templates) sobre este motor genérico.
 // ═══════════════════════════════════════════════════════════════
 
 export type ID = string;
 
-// Papel de PLATAFORMA (InstaLink). 'master' = superadmin da plataforma,
+// Papel de PLATAFORMA (GoDoutor). 'master' = superadmin da plataforma,
 // separado de qualquer empresa. Promovido por env MASTER_EMAILS ou script
 // (nunca senha secreta no código).
 export type UserRole = 'owner' | 'admin' | 'master';
