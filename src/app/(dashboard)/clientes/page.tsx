@@ -327,7 +327,12 @@ export default function ClientesPage() {
                 const minor = p.tags?.some((t) => t.id === 'menor');
                 return (
                   <article key={p.key} className="group hover:bg-[var(--surface-hover)] transition-colors">
-                    <div className="flex flex-wrap items-center gap-3 px-4 py-3">
+                    {/* 2.0 · §H (responsividade): em telas estreitas a linha vira
+                        DUAS: identidade em cima (com espaço para o nome e os
+                        selos) e as ações alinhadas à direita embaixo. Antes o
+                        grupo de botões `shrink-0` comia o nome ("Marlen…") e
+                        quebrava o telefone em várias linhas. */}
+                    <div className="flex flex-col gap-2 px-4 py-3 sm:flex-row sm:flex-wrap sm:items-center sm:gap-3">
                       <button
                         type="button"
                         onClick={() => setOpenKey(p.key)}
@@ -360,7 +365,7 @@ export default function ClientesPage() {
                           </span>
                         </span>
                       </button>
-                      <div className="flex items-center gap-1.5 shrink-0">
+                      <div className="flex items-center gap-1.5 shrink-0 self-end sm:self-auto">
                         <Button size="sm" variant="primary" onClick={() => setOpenKey(p.key)}>
                           <Icon n="wallet" size={14} /> Ver perfil
                         </Button>

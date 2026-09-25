@@ -37,6 +37,7 @@ import { Icon } from '@/components/icons';
 import { AccessDenied, PermissionNotice, useForbiddenNotice } from '@/components/dashboard/AccessNotice';
 import { PeriodSelector } from '@/components/dashboard/PeriodSelector';
 import { loadOverview } from '@/lib/overview';
+import { firstName } from '@/lib/greeting';
 import { apiGet } from '@/lib/api-client';
 import { money } from '@/lib/utils';
 import { humanDay } from '@/lib/tz';
@@ -297,7 +298,7 @@ export default function DashboardPage() {
         <div className="mb-4 bg-[var(--brand-soft)] border-l-[3px] border-l-[var(--brand)] rounded-r-md px-4 py-3 flex items-start gap-3">
           <span className="w-8 h-8 rounded-md bg-white text-[var(--brand-fg)] flex items-center justify-center shrink-0"><Icon n="checkCircle" size={18} /></span>
           <div>
-            <p className="text-sm font-semibold text-[var(--text)]">{business.name} está criado, {user.name.split(' ')[0]}!</p>
+            <p className="text-sm font-semibold text-[var(--text)]">{business.name} está criado, {firstName(user.name)}!</p>
             <p className="text-xs text-[var(--text-muted)] mt-0.5">Agenda, serviços e página já estão ativos. Siga o “Comece por aqui” abaixo — ou ignore e use o que precisa primeiro.</p>
           </div>
         </div>
@@ -308,7 +309,7 @@ export default function DashboardPage() {
       <header className="mb-5 flex flex-wrap items-start justify-between gap-3">
         <div className="min-w-0">
         <h1 className="text-[24px] leading-tight font-semibold tracking-tight text-[var(--text)]">
-          {proView ? `Meu dia, ${user.name.split(' ')[0]}` : `${greeting()}, ${user.name.split(' ')[0]}!`}
+          {proView ? `Meu dia, ${firstName(user.name)}` : `${greeting()}, ${firstName(user.name)}!`}
         </h1>
         <p className="text-sm text-[var(--text-muted)] mt-1">
           {modules.bookings && today
