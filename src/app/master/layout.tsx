@@ -90,6 +90,9 @@ export default function MasterLayout({ children }: { children: React.ReactNode }
               </span>
             )}
             <span className="text-zinc-400 hidden sm:inline">{email}</span>
+            <Link href="/alterar-senha" className="font-bold bg-white/10 hover:bg-white/20 px-3 py-2 rounded-lg" aria-label="Alterar senha">
+              <Icon n="lock" size={15} /> <span className="hidden sm:inline">Alterar senha</span>
+            </Link>
             <Link href="/login" onClick={async (e) => {
               e.preventDefault();
               try { await fetch('/api/auth/logout', { method: 'POST' }); } catch {}

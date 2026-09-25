@@ -146,6 +146,9 @@ export function AccountMenu({ user, unit, units, overview, canOverview, canTeam,
                 <Icon n="settings" size={16} /> Configurações
               </Link>
             )}
+            <Link className="ws-menu__item" href={`/alterar-senha${q}`} onClick={() => setOpen(false)}>
+              <Icon n="lock" size={16} /> Alterar senha
+            </Link>
 
             <div className="ws-menu__separator" />
             <button type="button" className="ws-menu__item ws-menu__item--danger"
