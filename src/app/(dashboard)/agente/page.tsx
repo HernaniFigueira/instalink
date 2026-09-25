@@ -100,7 +100,7 @@ export default function AgentePage() {
             <span className={cn('w-2 h-2 rounded-full', preview?.moduleEnabled ? 'bg-[var(--success)]' : 'bg-[var(--border-strong)]')} />
             {preview?.moduleEnabled ? 'Módulo ativo na página' : 'Módulo desativado'}
           </span>
-          <Link href={`/recursos${q}`}><Button variant="secondary" size="sm">Recursos</Button></Link>
+          <Link href={`/recursos${q}`}><Button variant="secondary" size="sm">Capacidades</Button></Link>
         </span>
         }
       />
@@ -108,7 +108,7 @@ export default function AgentePage() {
       {!preview?.moduleEnabled && (
         <Notice tone="warning" className="mb-4">
           O recurso <strong>Assistente</strong> está desativado na empresa. Configure aqui e ligue em{' '}
-          <Link href={`/recursos${q}`} className="underline font-semibold">Recursos</Link> para ele aparecer na página.
+          <Link href={`/recursos${q}`} className="underline font-semibold">Capacidades do sistema</Link> para ele aparecer na página.
         </Notice>
       )}
 

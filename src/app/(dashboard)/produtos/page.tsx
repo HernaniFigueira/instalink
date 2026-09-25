@@ -171,7 +171,7 @@ export default function ProdutosPage() {
 
       <p className="text-xs text-zinc-400 mt-4">
         A vitrine aparece na página pública enquanto o módulo <strong>Produtos</strong> estiver ativo em{' '}
-        <Link href={`/recursos?b=${businessId}`} className="underline hover:text-zinc-600">Recursos da empresa</Link>.
+        <Link href={`/recursos?b=${businessId}`} className="underline hover:text-zinc-600">Capacidades do sistema</Link>.
         Desativar não apaga nada.
       </p>
 

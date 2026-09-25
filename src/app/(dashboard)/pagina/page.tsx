@@ -988,7 +988,7 @@ function BlockSettings({ block, businessId, business, onChange, onSave, onRefres
                   {activating === 'products' && <span className="w-3 h-3 border-2 border-white/40 border-t-white rounded-full animate-spin" />}
                   Ativar Produtos agora
                 </button>
-                <Link href={`/recursos?b=${businessId}`} className="font-semibold text-zinc-900 underline">ou abrir Recursos →</Link>
+                <Link href={`/recursos?b=${businessId}`} className="font-semibold text-zinc-900 underline">ou abrir as capacidades do sistema →</Link>
               </p>
               {activateError && <p className="text-red-700 font-semibold">{activateError}</p>}
             </div>
