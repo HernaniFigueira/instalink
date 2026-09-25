@@ -64,7 +64,12 @@ export const WORKSPACE_AREAS: WorkspaceAreaDef[] = [
     // As quatro portas do dia a dia: o que se abre TODA vez que se liga o
     // computador. São links diretos, sem segundo nível.
     id: 'principal', label: 'Operação', icon: 'home', color: 'var(--brand)',
-    routes: ['/dashboard', '/agenda', '/conversas', '/clientes'],
+    // `/tarefas` (Pendências) e `/perfil` (Meu perfil) vivem AQUI porque
+    // pertencem ao dia a dia de quem usa — não a um grupo estrutural. Os dois
+    // continuam `sidebar: false` (não ocupam linha no menu), mas ter dono
+    // evita que caiam na rede de segurança "Mais": era ela que fazia o
+    // breadcrumb mentir ("Visão geral > Mais > Pendências").
+    routes: ['/dashboard', '/agenda', '/conversas', '/clientes', '/tarefas', '/perfil'],
   },
   {
     // Quem a clínica é por dentro: o que oferece, quem atende, quando atende e
@@ -82,7 +87,10 @@ export const WORKSPACE_AREAS: WorkspaceAreaDef[] = [
     // O que trabalha sozinho: assistente, automações, follow-up e campanhas.
     // Execuções NÃO está aqui (é diagnóstico, vive dentro de Automações).
     id: 'automacao', label: 'Automação', icon: 'spark', color: 'var(--brand)',
-    routes: ['/agente', '/automacoes', '/followup', '/campanhas'],
+    // O mesmo vale para `/execucoes`: é o diagnóstico DENTRO de Automações,
+    // por isso a área dona é esta (breadcrumb "Visão geral > Automação >
+    // Execuções") e não a rede de segurança.
+    routes: ['/agente', '/automacoes', '/followup', '/campanhas', '/execucoes'],
   },
   {
     // Como está indo: números, dinheiro e alcance comercial.
@@ -216,6 +224,11 @@ export interface RouteBreadcrumb {
 export function routeBreadcrumb(activePath: string, areas: WorkspaceArea[]): RouteBreadcrumb {
   const area = areaOfRoute(activePath, areas);
   if (!area) return {};
+  // A rede de segurança "Mais" NUNCA aparece como nível de breadcrumb: ela é
+  // um detalhe de implementação (destino novo ainda sem área), não um lugar
+  // que o usuário reconheça no menu. Sem isso, uma rota esquecida lia
+  // "Visão geral > Mais > …" — um degrau que não existe em lugar nenhum.
+  if (area.id === 'mais') return { area };
   const flat = workspaceSections(areas).some(
     (section) => section.groups.some((g) => g.flat && g.area.id === area.id),
   );

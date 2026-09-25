@@ -39,7 +39,12 @@ describe('360 navigation is an authorized projection', () => {
     // (destinos fora do menu: Pendências, Execuções, Meu perfil) — ela é DADOS,
     // nunca uma seção visível, porque todos os seus itens são `sidebar: false`
     // e o menu descarta seção sem linha (WorkspaceNavigation.menu).
-    expect(sections.map((s) => s.label)).toEqual(['Operação', 'Clínica', 'Administração', 'Mais']);
+    // Com o catálogo COBERTO (cada destino fora do menu tem área dona:
+    // Pendências e Meu perfil em Operação, Execuções em Automação, Recursos em
+    // Configurações), a rede de segurança "Mais" não é necessária — ela existe
+    // no catálogo de áreas, mas não ocupa seção nenhuma.
+    expect(sections.map((s) => s.label)).toEqual(['Operação', 'Clínica', 'Administração']);
+    expect(areas.some((a) => a.id === 'mais')).toBe(false);
     const groups = sections.flatMap((s) => s.groups.filter((g) => !g.flat).map((g) => g.area.label));
     // Exatamente QUATRO portas abrem a segunda coluna.
     expect(groups.slice(0, 4)).toEqual(['Clínica', 'Automação', 'Gestão', 'Configurações']);
@@ -47,9 +52,7 @@ describe('360 navigation is an authorized projection', () => {
     const flat = sections.flatMap((s) => s.groups.filter((g) => g.flat).map((g) => g.area.id));
     expect(flat).toEqual(['principal', 'presenca']);
 
-    // Nenhuma porta do fallback ocupa linha no menu.
-    const fallback = areas.find((a) => a.id === 'mais')!;
-    expect(fallback.items.every((i) => i.sidebar === false)).toBe(true);
+    // Nenhuma porta fora do menu ocupa linha no menu.
     const rendered = sections.flatMap((s) => s.groups.flatMap(({ area, flat: isFlat }) =>
       (isFlat ? area.items : []).filter((i) => i.sidebar !== false).map((i) => i.href)));
     expect(rendered).not.toContain('/execucoes');
@@ -74,6 +77,11 @@ describe('360 navigation is an authorized projection', () => {
     expect(routeBreadcrumb('/equipe', areas).group).toBe('Clínica');
     expect(routeBreadcrumb('/resultados', areas).group).toBe('Gestão');
     expect(routeBreadcrumb('/configuracoes', areas).group).toBe('Configurações');
+    // Rotas fora do MENU também têm dono — e o breadcrumb não inventa degrau.
+    expect(routeBreadcrumb('/tarefas', areas).group).toBeUndefined();   // Operação
+    expect(routeBreadcrumb('/perfil', areas).group).toBeUndefined();    // Operação
+    expect(routeBreadcrumb('/execucoes', areas).group).toBe('Automação');
+    expect(routeBreadcrumb('/recursos', areas).group).toBe('Configurações');
     // Rota desconhecida não inventa área.
     expect(routeBreadcrumb('/inexistente', areas)).toEqual({});
   });

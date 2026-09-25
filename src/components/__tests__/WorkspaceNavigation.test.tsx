@@ -115,23 +115,27 @@ describe('Etapa A — sidebar por seções', () => {
     expect(onCollapse).toHaveBeenCalledOnce();
   });
 
-  it('destino fora do menu não abre segunda coluna vazia (regressão de /perfil)', () => {
-    // /perfil, /tarefas, /execucoes e /recursos caem na área de segurança
-    // "Mais" (nenhuma porta os contém). Antes, abrir essas rotas deixava uma
-    // segunda coluna VAZIA rotulada "Mais" ao lado do conteúdo.
-    // Rotas que NÃO pertencem a nenhuma porta (área de segurança "Mais").
-    for (const activePath of ['/perfil', '/tarefas', '/execucoes']) {
+  it('destino fora do menu NUNCA deixa segunda coluna vazia', () => {
+    // A regressão original: abrir uma rota fora do menu (/perfil, /tarefas,
+    // /execucoes, /recursos) deixava uma segunda coluna VAZIA ao lado do
+    // conteúdo, porque todas caíam na rede de segurança "Mais".
+    // Hoje cada uma dessas rotas tem ÁREA DONA (Operação para /perfil e
+    // /tarefas; Automação para /execucoes; Configurações para /recursos) —
+    // então o invariante que se testa é este: ou não há segunda coluna, ou a
+    // que existe tem conteúdo de verdade.
+    for (const activePath of ['/perfil', '/tarefas']) {
       cleanup();
       setup({ activePath });
       expect(screen.queryByLabelText('Fechar submenu'), `coluna vazia em ${activePath}`).toBeNull();
     }
-    // Já uma rota fora do MENU mas dentro de uma porta (Recursos → Configurações)
-    // abre a coluna com os irmãos dela — nunca vazia.
-    cleanup();
-    setup({ activePath: '/recursos' });
-    const rail = screen.getByRole('navigation', { name: 'Configurações' });
-    expect(within(rail).getByRole('link', { name: 'Configurações' })).toBeTruthy();
-    expect(within(rail).queryByRole('link', { name: 'Recursos' })).toBeNull();
+    for (const [activePath, group] of [['/execucoes', 'Automação'], ['/recursos', 'Configurações']] as const) {
+      cleanup();
+      setup({ activePath });
+      const rail = screen.getByRole('navigation', { name: group });
+      expect(within(rail).getAllByRole('link').length, `coluna vazia em ${activePath}`).toBeGreaterThan(0);
+      // O próprio destino fora do menu não é promovido a linha (régua do menu).
+      expect(within(rail).queryByRole('link', { name: activePath === '/execucoes' ? 'Execuções' : 'Recursos' })).toBeNull();
+    }
   });
 
   it('não promove destino fora do menu (sidebar:false) a linha de menu', () => {
