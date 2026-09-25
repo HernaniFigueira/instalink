@@ -441,10 +441,37 @@ function getPool(): Pool {
   return pool;
 }
 
+/**
+ * GARANTIA DA TABELA — uma vez por processO, não uma vez por requisição (§i).
+ *
+ * Antes, CADA leitura e CADA escrita abriam a transação com
+ * `CREATE TABLE IF NOT EXISTS instalink_doc ...`. O Postgres resolve o "IF NOT
+ * EXISTS" no catálogo, mas ainda assim é um comando a mais por requisição:
+ * em Postgres gerenciado (Supabase/Neon/Vercel) ele custa um round-trip e,
+ * sob escrita concorrente, disputa lock de catálogo — em um banco onde cada
+ * requisição já faz uma leitura de documento inteiro.
+ *
+ * Agora o resultado é guardado em memória por instância:
+ *   • SUCESSO → nunca mais emite o DDL nesta instância (quente ou fria);
+ *   • FALHA   → o erro continua propagando (fail-closed intacto) e o cache é
+ *               limpo, para que a próxima requisição tente de novo em vez de
+ *               herdar uma falha transitória de rede.
+ */
+let pgReady: Promise<void> | null = null;
+
 async function pgInit(): Promise<void> {
-  await getPool().query(
-    'CREATE TABLE IF NOT EXISTS instalink_doc (id SMALLINT PRIMARY KEY, data JSONB NOT NULL)',
-  );
+  if (!pgReady) {
+    pgReady = getPool()
+      .query('CREATE TABLE IF NOT EXISTS instalink_doc (id SMALLINT PRIMARY KEY, data JSONB NOT NULL)')
+      .then(() => undefined)
+      .catch((err) => { pgReady = null; throw err; });
+  }
+  return pgReady;
+}
+
+/** Só para teste: esquece a garantia (simula instância nova). */
+export function __resetPgInitForTests(): void {
+  pgReady = null;
 }
 
 async function pgRead(): Promise<DB> {
