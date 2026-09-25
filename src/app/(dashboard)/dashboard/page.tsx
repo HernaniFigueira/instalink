@@ -34,6 +34,7 @@ import Link from 'next/link';
 import { useWorkspace } from '@/components/dashboard/WorkspaceContext';
 import { Button, DashboardSkeleton, EmptyState, PageSkeleton, StatusBadge } from '@/components/ui';
 import { Icon } from '@/components/icons';
+import { cn } from '@/lib/utils';
 import { AccessDenied, PermissionNotice, useForbiddenNotice } from '@/components/dashboard/AccessNotice';
 import { PeriodSelector } from '@/components/dashboard/PeriodSelector';
 import { loadOverview } from '@/lib/overview';
@@ -288,7 +289,11 @@ export default function DashboardPage() {
   }
 
   // 6 · ONDE AGIR — só ações que EXISTEM: checklist real + conectar canal.
-  const showSetup = hasSetupPending && !setupHidden;
+  // §11 — o checklist é o ONBOARDING DA CLÍNICA (dados, serviços, horários,
+  // página, canal): quem só atende não configura a clínica. Mostrá-lo ao
+  // profissional criava uma lista de afazeres que não são dele — e cujos
+  // links ele nem sempre pode abrir.
+  const showSetup = hasSetupPending && !setupHidden && !proView;
   const showConnectChannel = !!whatsapp && !canalConnected && links.canais === true;
   const hasWhereToAct = showSetup || showConnectChannel;
 
@@ -391,7 +396,13 @@ export default function DashboardPage() {
         </div>
       )}
 
-      {/* ── 3 · Setup real + Indicadores do período (5 + 7, como o mockup) ── */}
+      {/* ── 3 · Setup real + Indicadores do período (5 + 7, como o mockup) ──
+          §11 — para quem ATENDE esta linha não existe: o checklist é da
+          clínica (não dele), a presença online é de quem cuida da página e
+          "aguardando confirmação/precisam de registro" são tarefas de
+          recepção — os dois números já aparecem nos KPIs do dia logo acima.
+          "Meu dia" fica com o que é DELE: agenda, próximos e atividade. */}
+      {!proView && (
       <div className="grid items-start gap-4 lg:grid-cols-12 mb-4">
         {hasWhereToAct ? (
         <section className="lg:col-span-5 dsh-card min-w-0">
@@ -485,7 +496,7 @@ export default function DashboardPage() {
         )}
 
         {showMoney ? (
-        <section className="lg:col-span-7 dsh-card min-w-0">
+        <section className={cn('dsh-card min-w-0', hasWhereToAct ? 'lg:col-span-7' : 'lg:col-span-12')}>
           <div className="dsh-card__head">
             <h3 className="dsh-card__title">
               Período <span className="text-[var(--text-muted)] font-semibold">· resumo</span>
@@ -551,7 +562,7 @@ export default function DashboardPage() {
           </div>
         </section>
         ) : (
-        <section className="lg:col-span-5 dsh-card min-w-0">
+        <section className={cn('dsh-card min-w-0', hasWhereToAct ? 'lg:col-span-7' : 'lg:col-span-12')}>
           <div className="dsh-card__head">
             <h3 className="dsh-card__title">O que resolver agora</h3>
             {links.agenda === true && (
@@ -596,6 +607,7 @@ export default function DashboardPage() {
         </section>
         )}
       </div>
+      )}
 
       {/* ── 4 · Próximos · Conversas/tarefas · Atividade recente ── */}
       <div className="grid items-start gap-4 lg:grid-cols-3 mb-4">
