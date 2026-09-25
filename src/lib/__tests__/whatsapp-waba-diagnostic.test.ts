@@ -127,6 +127,30 @@ describe('diagnóstico temporário da assinatura WABA', () => {
     expect(fetchMock).toHaveBeenCalledTimes(2);
   });
 
+  it('reconhece o formato oficial whatsapp_business_api_data.id da Meta', async () => {
+    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url.includes('/subscribed_apps')) {
+        return new Response(JSON.stringify({
+          data: [{
+            whatsapp_business_api_data: {
+              id: APP_ID,
+              name: 'App oficial da Meta',
+              link: 'https://www.facebook.com/apps/' + APP_ID,
+            },
+          }],
+        }), { status: 200 });
+      }
+      return new Response(JSON.stringify({ status: 'CONNECTED' }), { status: 200 });
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    const body = await json(await whatsappPOST(req({ businessId: BIZ, action: 'verify_waba_subscription' }, adminSession)));
+    expect(body.ok).toBe(true);
+    expect(body.subscription).toMatchObject({ wabaSubscribed: true, appIdFound: true, httpStatus: 200 });
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
+
   it('reassina somente com ação explícita e faz GET final', async () => {
     let subscribed = false;
     const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {

@@ -62,7 +62,9 @@ async function graphDiagnosticRequest(
 function subscribedAppsResult(result: GraphDiagnosticResult) {
   const valid = Array.isArray(result.data?.data);
   const apps = valid ? result.data.data : [];
-  const appIdFound = apps.some((app: any) => String(app?.id || app?.app_id || app?.appId || '') === WABA_DIAGNOSTIC_APP_ID);
+  const appIdFound = apps.some((app: any) => String(
+    app?.whatsapp_business_api_data?.id || app?.id || app?.app_id || app?.appId || '',
+  ) === WABA_DIAGNOSTIC_APP_ID);
   return {
     wabaSubscribed: apps.length > 0,
     appIdFound,
