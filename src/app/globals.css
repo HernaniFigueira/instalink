@@ -51,21 +51,32 @@
   --text-soft: #7680a0;
 
   /* ── Ação (marca do produto) ────────────────────────────────── */
-  /* GODOUTOR 2.0 — azul de ação. O roxo saiu como identidade (ver o bloco
-     `.il-platform` para a fonte de verdade do painel). */
-  --brand: #2563eb;
+  /* GODOUTOR 2.0 — índigo-violeta de ação (paleta da identidade visual:
+     sidebar forte + amarelo quente de destaque). Contraste AA checado em
+     design-360-tokens.test.ts. */
+  --brand: #4f46e5;
   /* HOMOLOGAÇÃO · P0-5 — skeleton com contraste real (não branco sobre cinza). */
   --skeleton-base: #e4e8f0;
   --skeleton-highlight: #f1f4f9;
-  --brand-strong: #1d4ed8;
-  --brand-soft: #eff6ff;
-  --brand-softer: #f8fbff;
-  --brand-border: #dbeafe;
-  --brand-fg: #1d4ed8;
-  --brand-ring: rgba(37, 99, 235, 0.24);
+  --brand-strong: #4338ca;
+  --brand-soft: #eef2ff;
+  --brand-softer: #f6f7ff;
+  --brand-border: #c7d2fe;
+  --brand-fg: #3730a3;
+  --brand-ring: rgba(79, 70, 229, 0.28);
   /* Estado hover das superfícies TINTED (botão soft, chip, pílula). Existe
      para que nenhum componente escreva hex próprio: o hover é token. */
-  --brand-bg-hover: #dbeafe;
+  --brand-bg-hover: #e0e7ff;
+
+  /* ── Amarelo quente “sun” (Visão geral / ênfases pontuais) ───── */
+  /* Destaque de boas-vindas e blocos de atenção. Usado com parcimônia:
+     superfícies suaves + texto `--sun-fg` (AA sobre `--sun-bg`). */
+  --sun: #f7c948;
+  --sun-strong: #e0a800;
+  --sun-bg: #fff7e0;
+  --sun-bg-strong: #ffefc2;
+  --sun-border: #f0e0b0;
+  --sun-fg: #7a5800;
 
   /* Nomes legados (consumidos por ui.tsx e telas) → apontam para a marca.
      Uma futura identidade por negócio só precisa REATRIBUIR estes valores. */
@@ -163,7 +174,7 @@
   --shadow-md: 0 2px 6px -2px rgba(19, 26, 54, 0.08), 0 8px 20px -10px rgba(19, 26, 54, 0.12);
   --shadow-lg: 0 6px 14px -6px rgba(19, 26, 54, 0.12), 0 20px 40px -20px rgba(19, 26, 54, 0.22);
   --shadow-xl: 0 12px 24px -10px rgba(19, 26, 54, 0.16), 0 32px 64px -28px rgba(19, 26, 54, 0.30);
-  --shadow-brand: 0 6px 16px -8px rgba(47, 107, 239, 0.55);
+  --shadow-brand: 0 6px 16px -8px rgba(79, 70, 229, 0.55);
   --shadow-inset: inset 0 1px 2px rgba(19, 26, 54, 0.06);
 
   /* ── Espaçamento (escala do sistema; Tailwind continua valendo) ─ */
@@ -204,15 +215,15 @@
    * sem migração destrutiva) — apenas não é mais aplicado ao painel.
    * Os derivadores legados seguem em lib/appearance.ts para sanitizar dado
    * antigo, não como feature ativa. */
-  --il-nav: #ffffff;
-  --il-nav-fg: #2a3145;
-  --il-nav-muted: #79829c;
-  --il-nav-hover: #f1f4fb;
-  --il-nav-active: #e9f0fe;
-  --il-nav-active-fg: #1749b3;
-  --il-nav-border: #e4e8f3;
-  --il-nav-cta: #2f6bef;
-  --il-nav-cta-fg: #ffffff;
+  --il-nav: #3f37c9;
+  --il-nav-fg: #f2f3ff;
+  --il-nav-muted: #d3dafc;
+  --il-nav-hover: #4c43d1;
+  --il-nav-active: #5b4fe2;
+  --il-nav-active-fg: #ffffff;
+  --il-nav-border: rgba(255, 255, 255, 0.16);
+  --il-nav-cta: #ffd166;
+  --il-nav-cta-fg: #3b2f00;
 }
 
 html { scroll-behavior: smooth; }
@@ -277,7 +288,7 @@ body {
   white-space: nowrap;
   transition: background 0.15s ease, color 0.15s ease, box-shadow 0.15s ease;
 }
-.il-tab:hover { color: var(--text); background: rgba(47, 107, 239, 0.08); }
+.il-tab:hover { color: var(--text); background: rgba(79, 70, 229, 0.08); }
 .il-tab[aria-selected='true'] {
   background: var(--surface);
   color: var(--brand-fg);
@@ -409,7 +420,7 @@ body {
   position: relative;
   overflow: hidden;
   background:
-    linear-gradient(135deg, rgba(47, 107, 239, 0.14), rgba(122, 92, 208, 0.10) 46%, transparent 78%),
+    linear-gradient(135deg, rgba(79, 70, 229, 0.14), rgba(129, 116, 246, 0.12) 46%, transparent 78%),
     var(--surface);
 }
 .il-idcard::after {
@@ -419,7 +430,7 @@ body {
   width: 190px;
   height: 190px;
   border-radius: 50%;
-  background: radial-gradient(circle at 30% 30%, rgba(47, 107, 239, 0.16), transparent 65%);
+  background: radial-gradient(circle at 30% 30%, rgba(79, 70, 229, 0.16), transparent 65%);
   pointer-events: none;
 }
 
@@ -593,14 +604,14 @@ input[type='color'] { @apply cursor-pointer; }
   --control-h-touch: 44px;
 
   /* ── Estrutura: superfícies claras para o conteúdo respirar ──── */
-  /* GODOUTOR 2.0 — paleta única (slate). Estes são os nomes canônicos; os
-     apelidos legados (--text, --border-soft…) apontam para eles. */
-  --brand-600: #2563eb;
-  --brand-700: #1d4ed8;
-  --brand-500: #3b82f6;
-  --brand-300: #93c5fd;
-  --brand-100: #dbeafe;
-  --brand-50: #eff6ff;
+  /* GODOUTOR 2.0 — paleta única (índigo-violeta). Estes são os nomes
+     canônicos; os apelidos legados (--text, --border-soft…) apontam para eles. */
+  --brand-600: #4f46e5;
+  --brand-700: #4338ca;
+  --brand-500: #6366f1;
+  --brand-300: #a5b4fc;
+  --brand-100: #c7d2fe;
+  --brand-50: #eef2ff;
 
   --text-primary: #0f172a;
   --text-secondary: #334155;
@@ -656,7 +667,7 @@ input[type='color'] { @apply cursor-pointer; }
   --brand-softer: var(--brand-50);
   --brand-border: var(--brand-100);
   --brand-fg: var(--brand-700);
-  --brand-ring: rgba(37, 99, 235, 0.26);
+  --brand-ring: rgba(79, 70, 229, 0.26);
   --brand-bg-hover: var(--brand-100);
   --ops: var(--brand);
   --ops-soft: var(--brand-soft);
@@ -782,7 +793,7 @@ input[type='color'] { @apply cursor-pointer; }
   --shadow-md: 0 4px 12px -4px rgba(15, 23, 42, 0.10), 0 12px 24px -12px rgba(15, 23, 42, 0.12);
   --shadow-lg: 0 10px 20px -8px rgba(15, 23, 42, 0.12), 0 28px 48px -20px rgba(15, 23, 42, 0.18);
   --shadow-xl: 0 18px 36px -12px rgba(15, 23, 42, 0.16), 0 40px 72px -28px rgba(15, 23, 42, 0.24);
-  --shadow-brand: 0 1px 2px rgba(37, 99, 235, 0.20);
+  --shadow-brand: 0 1px 2px rgba(79, 70, 229, 0.20);
   --shadow-inset: inset 0 1px 2px rgba(15, 23, 42, 0.06);
   /* Sombra do Workspace Sheet: a mais alta do sistema (camada flutuante). */
   --shadow-sheet: 0 24px 60px -18px rgba(15, 23, 42, 0.30), 0 4px 12px -4px rgba(15, 23, 42, 0.12);
@@ -792,17 +803,19 @@ input[type='color'] { @apply cursor-pointer; }
   --focus-outline: 2px solid var(--brand);
 
   /* ── Navegação do painel ─────────────────────────────────────── */
-  --il-nav: var(--surface);
-  --il-nav-fg: var(--text);
-  --il-nav-muted: var(--text-muted);
-  --il-nav-hover: var(--surface-hover);
-  /* Missão sidebar final (Meta-like): item ativo/grupo aberto = azul MUITO
-     claro + texto azul — nunca marca em cheio, nunca texto branco. */
-  --il-nav-active: #e9f0fe;
-  --il-nav-active-fg: #1749b3;
-  --il-nav-border: var(--border);
-  --il-nav-cta: var(--brand);
-  --il-nav-cta-fg: var(--action-contrast);
+  /* Identidade GODOUTOR 2.0: sidebar índigo-violeta forte. O item em
+     `aria-current` ganha variação visível da cor + ícone em superfície
+     branca circular (tratamento em `.workspace-link`). Contraste AA checado
+     em design-360-tokens.test.ts. */
+  --il-nav: #3f37c9;
+  --il-nav-fg: #f2f3ff;
+  --il-nav-muted: #d3dafc;
+  --il-nav-hover: #4c43d1;
+  --il-nav-active: #5b4fe2;
+  --il-nav-active-fg: #ffffff;
+  --il-nav-border: rgba(255, 255, 255, 0.16);
+  --il-nav-cta: #ffd166;
+  --il-nav-cta-fg: #3b2f00;
 
   color: var(--text);
 }
@@ -1254,7 +1267,7 @@ button.ws-bell__item:hover { background: var(--surface-hover); }
   display: none; flex-direction: column; flex-shrink: 0;
   position: sticky; top: 0;
   width: var(--sidebar-w); height: 100dvh;
-  background: var(--il-nav); border-right: 1px solid var(--border);
+  background: var(--il-nav); border-right: 1px solid var(--il-nav-border);
 }
 .il-platform .workspace-sidebar.is-collapsed { width: var(--sidebar-w-mini); }
 .is-collapsed .workspace-label { display: none; }
@@ -1264,25 +1277,25 @@ button.ws-bell__item:hover { background: var(--surface-hover); }
 .workspace-collapse-btn {
   display: inline-flex; align-items: center; justify-content: center;
   width: 30px; height: 30px; flex-shrink: 0;
-  border-radius: 8px; border: 1px solid var(--border);
-  background: var(--surface); color: var(--text-muted);
+  border-radius: 8px; border: 1px solid rgba(255, 255, 255, 0.22);
+  background: rgba(255, 255, 255, 0.10); color: var(--il-nav-fg);
   transition: background-color .12s ease, color .12s ease, border-color .12s ease;
 }
-.workspace-collapse-btn:hover { background: var(--surface-hover); color: var(--text); border-color: var(--border-strong); }
+.workspace-collapse-btn:hover { background: rgba(255, 255, 255, 0.20); color: var(--il-nav-active-fg); border-color: rgba(255, 255, 255, 0.34); }
 .workspace-collapse-btn.is-mini { width: 28px; height: 28px; border-color: transparent; background: transparent; }
-.workspace-collapse-btn.is-mini:hover { background: var(--surface-hover); border-color: var(--border); }
-.workspace-wordmark--product { color: var(--text); }
+.workspace-collapse-btn.is-mini:hover { background: rgba(255, 255, 255, 0.18); border-color: transparent; }
+.workspace-wordmark--product { color: var(--il-nav-fg); }
 .is-collapsed .workspace-wordmark--product { font-size: 12px; letter-spacing: -.04em; }
 .ws-unitpill__logo { width: 18px; height: 18px; border-radius: 50%; object-fit: cover; flex-shrink: 0; }
-.workspace-identity__collapse { color: var(--text-faint); border-radius: 8px; flex-shrink: 0; }
-.workspace-identity__collapse:hover { color: var(--text); background: var(--surface-hover); }
+.workspace-identity__collapse { color: rgba(255, 255, 255, 0.62); border-radius: 8px; flex-shrink: 0; }
+.workspace-identity__collapse:hover { color: var(--il-nav-active-fg); background: rgba(255, 255, 255, 0.16); }
 .is-collapsed .workspace-identity { padding: 12px 8px; justify-content: center; }
 .workspace-logo { display: block; width: 100%; max-height: 52px; object-fit: contain; object-position: left center; }
-.workspace-wordmark { font-size: 17px; font-weight: 700; letter-spacing: -.02em; color: var(--text); }
-.workspace-wordmark span { color: var(--brand); }
+.workspace-wordmark { font-size: 17px; font-weight: 700; letter-spacing: -.02em; color: var(--il-nav-active-fg); }
+.workspace-wordmark span { color: var(--il-nav-cta); }
 .is-collapsed .workspace-wordmark { font-size: 13px; text-align: center; }
 .workspace-clinic {
-  margin: 7px 0 0; font-size: 11.5px; font-weight: 600; color: var(--text-muted);
+  margin: 7px 0 0; font-size: 11.5px; font-weight: 600; color: var(--il-nav-muted);
   overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
 
@@ -1299,27 +1312,37 @@ button.ws-bell__item:hover { background: var(--surface-hover); }
    só por espaçamento vertical sutil. No rail recolhido, um fio discreto. */
 .workspace-section { display: flex; flex-direction: column; gap: 2px; margin-bottom: 10px; }
 .workspace-section:last-child { margin-bottom: 0; }
-.workspace-section__rule { display: block; height: 1px; background: var(--border); margin: 8px 10px; }
+.workspace-section__rule { display: block; height: 1px; background: var(--il-nav-border); margin: 8px 10px; }
 
-/* ── Itens — disciplina visual Meta-like (missão §3) ──────────────
-   Normal: transparente, texto escuro, ícone neutro, sem card/pill/sombra.
-   Hover: fundo azul muito claro, texto ligeiramente mais azul.
-   Ativo: fundo azul MUITO claro + texto/ícone azuis + peso 600 — nunca
-   botão azul sólido, nunca texto branco, nunca sombra. */
-.workspace-link__icon { color: var(--il-nav-muted); transition: color var(--motion-fast) var(--ease-standard); }
+/* ── Itens — identidade GODOUTOR 2.0 ────────────────────────────
+   Normal: transparente, texto claro, ícone em tom suave da superfície.
+   Hover: variação mais clara da cor da sidebar.
+   Ativo (aria-current) / grupo aberto: fundo em variação VISÍVEL da cor
+   + ÍCONE dentro de superfície branca circular (a referência visual).
+   O estado continua sendo sempre aria-current — nunca só cor. */
+.workspace-link__icon {
+  display: flex; align-items: center; justify-content: center;
+  width: 28px; height: 28px; flex-shrink: 0; border-radius: 50%;
+  background: rgba(255, 255, 255, 0.12); color: var(--il-nav-muted);
+  transition: color var(--motion-fast) var(--ease-standard),
+              background-color var(--motion-fast) var(--ease-standard);
+}
 .workspace-link[aria-current="page"] .workspace-link__icon,
-.workspace-link--group[aria-expanded="true"] .workspace-link__icon { color: inherit; }
+.workspace-link--group[aria-expanded="true"] .workspace-link__icon {
+  background: var(--il-nav-active-fg); color: var(--brand-strong);
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.16);
+}
 .workspace-link {
   position: relative; display: flex; align-items: center; gap: 10px; width: 100%;
   min-height: var(--control-h); padding: 0 10px;
   font-size: 13.5px; font-weight: 500; line-height: 1.3; text-align: left;
-  border-radius: 6px; color: var(--il-nav-fg);
+  border-radius: 8px; color: var(--il-nav-fg);
   transition: background-color var(--motion-fast) var(--ease-standard),
               color var(--motion-fast) var(--ease-standard);
 }
 .workspace-link:hover {
   background: var(--il-nav-hover);
-  color: color-mix(in srgb, var(--il-nav-active-fg) 45%, var(--il-nav-fg));
+  color: var(--il-nav-active-fg);
 }
 .workspace-link[aria-current='page'] {
   background: var(--il-nav-active); color: var(--il-nav-active-fg); font-weight: 600;
@@ -1335,9 +1358,8 @@ button.ws-bell__item:hover { background: var(--surface-hover); }
 }
 .workspace-link[aria-current='page'] .workspace-link__chevron,
 .workspace-link--group[aria-expanded='true'] .workspace-link__chevron { color: inherit; }
-.workspace-link__icon { display: flex; align-items: center; justify-content: center; width: 20px; flex-shrink: 0; }
 .workspace-link__chevron {
-  margin-left: auto; color: var(--text-faint); flex-shrink: 0;
+  margin-left: auto; color: rgba(255, 255, 255, 0.55); flex-shrink: 0;
   transition: transform var(--motion-base) var(--ease-standard),
               color var(--motion-fast) var(--ease-standard);
 }
@@ -1355,7 +1377,7 @@ button.ws-bell__item:hover { background: var(--surface-hover); }
 .ws-setup-mini {
   margin: 0 10px 10px; padding: 12px;
   border-radius: var(--radius-lg);
-  background: var(--brand-50); border: 1px solid var(--brand-100);
+  background: rgba(255, 255, 255, 0.12); border: 1px solid rgba(255, 255, 255, 0.18);
 }
 
 /* ── Cabeçalho da sidebar: a CLÍNICA é a identidade principal ──────
@@ -1366,31 +1388,31 @@ button.ws-bell__item:hover { background: var(--surface-hover); }
   display: flex; align-items: center; gap: 10px; width: 100%;
   padding: 12px 12px 10px; border-radius: var(--radius-md);
 }
-button.workspace-clinic-head:hover { background: var(--surface-hover); }
-.workspace-foot__item--collapse { color: var(--text-muted); }
+button.workspace-clinic-head:hover { background: rgba(255, 255, 255, 0.12); }
+.workspace-foot__item--collapse { color: var(--il-nav-muted); }
 .workspace-clinic-head__logo {
   width: 34px; height: 34px; border-radius: var(--radius-md);
-  object-fit: cover; flex-shrink: 0; background: var(--surface-hover);
-  border: 1px solid var(--border);
+  object-fit: cover; flex-shrink: 0; background: rgba(255, 255, 255, 0.14);
+  border: 1px solid rgba(255, 255, 255, 0.24);
 }
 .workspace-clinic-head__mark {
   width: 34px; height: 34px; border-radius: var(--radius-md); flex-shrink: 0;
   display: inline-flex; align-items: center; justify-content: center;
-  background: var(--brand-soft); color: var(--brand-fg);
+  background: var(--il-nav-active-fg); color: var(--brand-strong);
   font-size: 13px; font-weight: 700; letter-spacing: -.01em;
 }
 .workspace-clinic-head__text { min-width: 0; flex: 1; text-align: left; }
 .workspace-clinic-head__name {
   display: block; font-size: 13.5px; font-weight: 650; letter-spacing: -.01em;
-  color: var(--text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  color: var(--il-nav-active-fg); overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
 .workspace-clinic-head__meta {
-  display: block; font-size: 11px; font-weight: 500; color: var(--text-muted);
+  display: block; font-size: 11px; font-weight: 500; color: var(--il-nav-muted);
   overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
 .workspace-clinic-head__unit {
   display: inline-flex; align-items: center; gap: 6px; margin-top: 2px;
-  font-size: 11px; font-weight: 600; color: var(--brand-fg);
+  font-size: 11px; font-weight: 600; color: var(--il-nav-cta);
 }
 /* Missão §7 — RAIL RECOLHIDO: só a logo, centralizada. Nome e tipo NÃO são
    renderizados (o componente já não os desenha; o display:none abaixo é a
@@ -1415,25 +1437,25 @@ button.workspace-clinic-head:hover { background: var(--surface-hover); }
 }
 
 /* Rodapé fixo: ajuda e suporte — discreto, sempre no mesmo lugar. */
-.workspace-foot { border-top: 1px solid var(--border-soft); padding: 8px; }
+.workspace-foot { border-top: 1px solid var(--il-nav-border); padding: 8px; }
 .workspace-foot__item {
   display: flex; align-items: center; gap: 10px; width: 100%;
-  min-height: 36px; padding: 0 10px; border-radius: 6px;
-  font-size: 13px; font-weight: 500; color: var(--text-secondary); text-align: left;
+  min-height: 36px; padding: 0 10px; border-radius: 8px;
+  font-size: 13px; font-weight: 500; color: var(--il-nav-muted); text-align: left;
 }
-.workspace-foot__item:hover { background: var(--surface-hover); color: var(--text); }
+.workspace-foot__item:hover { background: var(--il-nav-hover); color: var(--il-nav-active-fg); }
 .workspace-foot__brand {
   display: block; padding: 6px 10px 2px; font-size: 10.5px; font-weight: 500;
-  color: var(--text-faint); letter-spacing: .01em;
+  color: rgba(255, 255, 255, 0.55); letter-spacing: .01em;
 }
-.workspace-foot__brand strong { font-weight: 700; color: var(--text-muted); }
+.workspace-foot__brand strong { font-weight: 700; color: var(--il-nav-fg); }
 .is-collapsed .workspace-foot__item { justify-content: center; padding: 0; }
 .workspace-icon-button {
   display: flex; align-items: center; gap: 9px;
   min-height: 36px; min-width: 36px; padding: 0 10px;
-  font-size: 12.5px; font-weight: 600; color: var(--text-muted); border-radius: var(--radius-md);
+  font-size: 12.5px; font-weight: 600; color: var(--il-nav-muted); border-radius: var(--radius-md);
 }
-.workspace-icon-button:hover { background: var(--surface-hover); color: var(--text); }
+.workspace-icon-button:hover { background: var(--il-nav-hover); color: var(--il-nav-active-fg); }
 .is-collapsed .workspace-icon-button { justify-content: center; padding: 0; }
 
 /* ── Acordeão do submenu (FASE D: UMA coluna, expande para BAIXO) ──
@@ -1458,8 +1480,8 @@ button.workspace-clinic-head:hover { background: var(--surface-hover); }
   display: flex; flex-direction: column; gap: 2px;
   margin: 2px 0 6px; padding-left: 10px;
 }
-.workspace-link--sub { min-height: 36px; font-size: 13px; padding-left: 30px; }
-.workspace-link--sub .workspace-link__icon { width: 16px; }
+.workspace-link--sub { min-height: 36px; font-size: 13px; padding-left: 22px; }
+.workspace-link--sub .workspace-link__icon { width: 22px; height: 22px; }
 /* Missão §7/§8 — no rail recolhido o submenu NÃO existe inline: o clique no
    ícone do grupo expande a sidebar e abre o grupo. */
 .is-collapsed .workspace-submenu { display: none; }
@@ -1693,14 +1715,16 @@ dialog.il-customer-dialog::backdrop { background:transparent; }
   .workspace-shell--fill .ag-page [data-agenda-main] { display: flex; flex-direction: column; min-height: 0; }
   .workspace-shell--fill .ag-mode-panel { overflow: hidden; }
 }
-/* Fundo externo do workspace da Agenda: branco + azul frio claríssimo, com
-   névoa verde/azulada muito discreta na base (~3%). Só o EXTERNO muda — os
-   cartões e painéis continuam brancos. (Referência conceitual: área externa
-   do Meta Business — disciplina visual, sem copiar marca/assets.) */
+/* Fundo externo do workspace da Agenda: neutro levemente índigo com névoa
+   amarela (“sun”) muito discreta na base (~7%) — conversa com a nova paleta
+   sem tocar em estrutura. Só o EXTERNO muda — cartões e painéis continuam
+   brancos. (Referência conceitual: área externa do Meta Business — disciplina
+   visual, sem copiar marca/assets.) */
 .il-platform .agenda-page-gutter {
   background:
-    radial-gradient(120% 55% at 50% 112%, rgba(16, 185, 129, 0.045), transparent 62%),
-    linear-gradient(180deg, #f7f9fd 0%, #eef2fa 100%);
+    radial-gradient(120% 55% at 50% 112%, rgba(247, 201, 72, 0.07), transparent 62%),
+    radial-gradient(90% 40% at 8% -10%, rgba(79, 70, 229, 0.05), transparent 60%),
+    linear-gradient(180deg, #f7f8fe 0%, #eef0fb 100%);
 }
 /* Grade clínica: separação levemente mais nítida de horários/colunas/cabeçalho
    (bordas #E5EAF1 família dos tokens), sem zebra e sem escurecer. */
@@ -1709,21 +1733,67 @@ dialog.il-customer-dialog::backdrop { background:transparent; }
 .il-platform [data-agenda-main] .ag-grid-surface .border-zinc-200 { border-color: var(--border); }
 
 /* ── DASHBOARD operacional (fideliade ao mockup) ─────────────── */
-.dsh-kpi {
-  display: flex; gap: 12px; align-items: flex-start; min-width: 0;
-  padding: 14px 16px;
-  background: var(--surface); border: 1px solid var(--border-soft);
-  border-radius: var(--radius-lg); box-shadow: var(--shadow-xs);
+/* Saudação em bloco quente “sun”: o amarelo suave da identidade entra UMA
+   vez, no topo da Visão geral — não pinta o resto do painel. */
+.dsh-hero {
+  display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between;
+  gap: 12px; margin-bottom: 16px; padding: 18px 20px;
+  background: linear-gradient(135deg, var(--sun-bg) 0%, var(--sun-bg-strong) 100%);
+  border: 1px solid var(--sun-border); border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-xs);
 }
+.dsh-hero__title {
+  margin: 0; font-size: 24px; line-height: 1.2; font-weight: 700;
+  letter-spacing: -.02em; color: var(--text);
+}
+.dsh-hero__sub { margin: 4px 0 0; font-size: 13.5px; color: var(--text-muted); }
+.dsh-hero__date {
+  display: inline-flex; align-items: center; gap: 6px;
+  padding: 6px 11px; border-radius: 999px;
+  background: rgba(255, 255, 255, 0.72); border: 1px solid var(--sun-border);
+  font-size: 12px; font-weight: 600; color: var(--sun-fg);
+}
+/* Métricas do topo = UM card único horizontal, com divisórias verticais
+   sutis entre as seis leituras (sem “6 cards soltos”, sem tabela dura). */
+.dsh-metrics {
+  display: grid; grid-template-columns: repeat(2, minmax(0, 1fr));
+  margin-bottom: 16px; overflow: hidden;
+  background: linear-gradient(180deg, var(--sun-bg) 0, var(--surface) 110px);
+  border: 1px solid var(--border-soft); border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-xs);
+}
+.dsh-metric {
+  display: flex; gap: 10px; align-items: flex-start; min-width: 0;
+  padding: 14px 16px; border-left: 1px solid var(--border-soft);
+}
+.dsh-metric:first-child, .dsh-metric:nth-child(2n + 1) { border-left: 0; }
+.dsh-metric:nth-child(n + 3) { border-top: 1px solid var(--border-soft); }
+.dsh-metric > span { min-width: 0; }
+.dsh-metric__icon,
 .dsh-kpi__icon {
   display: flex; align-items: center; justify-content: center;
   width: 40px; height: 40px; flex-shrink: 0; border-radius: 12px;
+  box-shadow: var(--shadow-inset);
 }
+.dsh-metric__num,
 .dsh-kpi__num { font-size: 25px; font-weight: 700; letter-spacing: -.025em; line-height: 1.15; color: var(--text); font-variant-numeric: tabular-nums; }
+.dsh-metric__label,
 .dsh-kpi__label { font-size: 12px; font-weight: 600; color: var(--text-muted); margin-top: 1px; }
+@media (min-width: 768px) {
+  .dsh-metrics { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .dsh-metric:nth-child(2n + 1) { border-left: 1px solid var(--border-soft); }
+  .dsh-metric:nth-child(3n + 1) { border-left: 0; }
+  .dsh-metric:nth-child(n + 3) { border-top: 0; }
+  .dsh-metric:nth-child(n + 4) { border-top: 1px solid var(--border-soft); }
+}
+@media (min-width: 1280px) {
+  .dsh-metrics { grid-template-columns: repeat(6, minmax(0, 1fr)); }
+  .dsh-metric:nth-child(3n + 1) { border-left: 1px solid var(--border-soft); }
+  .dsh-metric:first-child { border-left: 0; }
+  .dsh-metric:nth-child(n + 4) { border-top: 0; }
+}
 .dsh-card { background: var(--surface); border: 1px solid var(--border-soft); border-radius: var(--radius-lg); box-shadow: var(--shadow-xs); }
 .dsh-card__head { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 10px; padding: 14px 16px 0; }
-.dsh-kpi > span { min-width: 0; }
 .dsh-card__title { margin: 0; font-size: 14px; font-weight: 600; letter-spacing: -.01em; color: var(--text); }
 .dsh-card__body { padding: 12px 16px 16px; }
 .dsh-check { display: flex; align-items: center; gap: 10px; padding: 9px 10px; border: 1px solid var(--border-soft); border-radius: var(--radius-md); background: var(--surface); font-size: 12.5px; font-weight: 600; color: var(--text-soft); }

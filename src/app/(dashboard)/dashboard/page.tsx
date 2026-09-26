@@ -331,13 +331,13 @@ export default function DashboardPage() {
       )}
       <PermissionNotice message={notice?.title} hint={notice?.hint} onDismiss={dismiss} />
 
-      {/* ── Saudação + resumo curto (hierarquia do mockup) ── */}
-      <header className="mb-5 flex flex-wrap items-start justify-between gap-3">
+      {/* ── Saudação + resumo curto — bloco quente “sun” da identidade ── */}
+      <header className="dsh-hero">
         <div className="min-w-0">
-        <h1 className="text-[24px] leading-tight font-semibold tracking-tight text-[var(--text)]">
+        <h1 className="dsh-hero__title">
           {proView ? `Meu dia, ${firstName(user.name)}` : `${greeting()}, ${firstName(user.name)}!`}
         </h1>
-        <p className="text-sm text-[var(--text-muted)] mt-1">
+        <p className="dsh-hero__sub">
           {modules.bookings && today
             ? `${today.total} ${today.total === 1 ? 'atendimento' : 'atendimentos'} hoje · ${upcoming.length} próximo${upcoming.length === 1 ? '' : 's'} na agenda${showMoney && bookingRevenue ? ` · ${money(bookingRevenue.total)} previstos no período` : ''}.`
             : operational
@@ -345,9 +345,9 @@ export default function DashboardPage() {
               : 'Acompanhe o dia e os resultados disponíveis da operação.'}
         </p>
         </div>
-        <div className="dsh-card flex items-center gap-2.5 px-3.5 py-2.5" title="Data de hoje">
-          <Icon n="calendar" size={16} className="text-[var(--brand-fg)]" />
-          <span className="text-[12.5px] font-semibold text-[var(--text)]">
+        <div className="dsh-hero__date" title="Data de hoje">
+          <Icon n="calendar" size={15} />
+          <span>
             Hoje, {new Date().toLocaleDateString('pt-BR', { day: '2-digit', month: 'long', year: 'numeric' })}
           </span>
         </div>
@@ -369,46 +369,48 @@ export default function DashboardPage() {
         </div>
       )}
 
-      {/* ── 2 · KPIs DO DIA (cards com ícone, cor contextual e número grande) ── */}
+      {/* ── 2 · KPIs DO DIA — UM card único horizontal, divisórias sutis ── */}
       {modules.bookings && today && (
-        <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-6 gap-3 mb-4">
-          <h3 className="sr-only">Hoje</h3>
-          <div className="dsh-kpi">
-            <span className="dsh-kpi__icon" style={{ background: 'var(--brand-soft)', color: 'var(--brand-fg)' }}><Icon n="calendar" size={19} /></span>
-            <span><span className="dsh-kpi__num">{today.total}</span><span className="dsh-kpi__label block">Atendimentos hoje</span>
+        <>
+        <h3 className="sr-only">Hoje</h3>
+        {/* colunas 2/3/6 nas mesmas faixas do card `.dsh-metrics` (contrato mobile de a12-block4) */}
+        <div className="dsh-metrics grid grid-cols-2 md:grid-cols-3 xl:grid-cols-6">
+          <div className="dsh-metric">
+            <span className="dsh-metric__icon" style={{ background: 'var(--brand-soft)', color: 'var(--brand-fg)' }}><Icon n="calendar" size={19} /></span>
+            <span><span className="dsh-metric__num">{today.total}</span><span className="dsh-metric__label block">Atendimentos hoje</span>
               <KpiDelta now={today.total} prev={yday?.total ?? 0} has={yday !== null} />
             </span>
           </div>
-          <div className="dsh-kpi">
-            <span className="dsh-kpi__icon" style={{ background: 'var(--success-bg)', color: 'var(--success-fg)' }}><Icon n="checkCircle" size={19} /></span>
-            <span><span className="dsh-kpi__num">{today.confirmed}</span><span className="dsh-kpi__label block">Confirmados</span>
+          <div className="dsh-metric">
+            <span className="dsh-metric__icon" style={{ background: 'var(--success-bg)', color: 'var(--success-fg)' }}><Icon n="checkCircle" size={19} /></span>
+            <span><span className="dsh-metric__num">{today.confirmed}</span><span className="dsh-metric__label block">Confirmados</span>
               <KpiDelta now={today.confirmed} prev={yday?.byStatus['confirmed'] ?? 0} has={yday !== null} />
             </span>
           </div>
-          <div className="dsh-kpi">
-            <span className="dsh-kpi__icon" style={{ background: 'var(--warning-bg)', color: 'var(--warning-fg)' }}><Icon n="clock" size={19} /></span>
-            <span><span className="dsh-kpi__num">{today.pending}</span><span className="dsh-kpi__label block">Aguardando</span>
+          <div className="dsh-metric">
+            <span className="dsh-metric__icon" style={{ background: 'var(--warning-bg)', color: 'var(--warning-fg)' }}><Icon n="clock" size={19} /></span>
+            <span><span className="dsh-metric__num">{today.pending}</span><span className="dsh-metric__label block">Aguardando</span>
               <KpiDelta now={today.pending} prev={yday?.byStatus['pending'] ?? 0} has={yday !== null} />
             </span>
           </div>
-          <div className="dsh-kpi">
-            <span className="dsh-kpi__icon" style={{ background: 'var(--ops-soft)', color: 'var(--ops-fg)' }}><Icon n="tasks" size={19} /></span>
-            <span><span className="dsh-kpi__num">{today.completed}</span><span className="dsh-kpi__label block">Concluídos</span>
+          <div className="dsh-metric">
+            <span className="dsh-metric__icon" style={{ background: 'var(--ops-soft)', color: 'var(--ops-fg)' }}><Icon n="tasks" size={19} /></span>
+            <span><span className="dsh-metric__num">{today.completed}</span><span className="dsh-metric__label block">Concluídos</span>
               <KpiDelta now={today.completed} prev={yday?.byStatus['completed'] ?? 0} has={yday !== null} />
             </span>
           </div>
-          <div className="dsh-kpi">
-            <span className="dsh-kpi__icon" style={{ background: 'var(--danger-bg)', color: 'var(--danger-fg)' }}><Icon n="alert" size={19} /></span>
-            <span><span className="dsh-kpi__num">{today.noShow}</span><span className="dsh-kpi__label block">Faltas</span>
+          <div className="dsh-metric">
+            <span className="dsh-metric__icon" style={{ background: 'var(--danger-bg)', color: 'var(--danger-fg)' }}><Icon n="alert" size={19} /></span>
+            <span><span className="dsh-metric__num">{today.noShow}</span><span className="dsh-metric__label block">Faltas</span>
               <KpiDelta now={today.noShow} prev={yday?.byStatus['no_show'] ?? 0} has={yday !== null} />
             </span>
           </div>
           {showMoney && bookingRevenue ? (
-            <div className="dsh-kpi">
-              <span className="dsh-kpi__icon" style={{ background: 'var(--success-bg)', color: 'var(--success-fg)' }}><Icon n="cash" size={19} /></span>
+            <div className="dsh-metric">
+              <span className="dsh-metric__icon" style={{ background: 'var(--success-bg)', color: 'var(--success-fg)' }}><Icon n="cash" size={19} /></span>
               <span>
-                <span className="dsh-kpi__num" style={{ fontSize: 21 }}>{moneyKpi(moneySemantics ? moneySemantics.agendado : bookingRevenue.total)}</span>
-                <span className="dsh-kpi__label block" title={`Período: ${results?.periodLabel || periodLabel(period)}`}>
+                <span className="dsh-metric__num" style={{ fontSize: 21 }}>{moneyKpi(moneySemantics ? moneySemantics.agendado : bookingRevenue.total)}</span>
+                <span className="dsh-metric__label block" title={`Período: ${results?.periodLabel || periodLabel(period)}`}>
                   Agendado no período
                 </span>
                 {/* §6 — os quatro conceitos, um do lado do outro, com o MESMO
@@ -421,12 +423,13 @@ export default function DashboardPage() {
               </span>
             </div>
           ) : (
-            <div className="dsh-kpi">
-              <span className="dsh-kpi__icon" style={{ background: today.needsClosure ? 'var(--warning-bg)' : 'var(--surface-2)', color: today.needsClosure ? 'var(--warning-fg)' : 'var(--text-muted)' }}><Icon n="shield" size={19} /></span>
-              <span><span className="dsh-kpi__num">{today.needsClosure}</span><span className="dsh-kpi__label block">Precisam de fechamento</span></span>
+            <div className="dsh-metric">
+              <span className="dsh-metric__icon" style={{ background: today.needsClosure ? 'var(--warning-bg)' : 'var(--surface-2)', color: today.needsClosure ? 'var(--warning-fg)' : 'var(--text-muted)' }}><Icon n="shield" size={19} /></span>
+              <span><span className="dsh-metric__num">{today.needsClosure}</span><span className="dsh-metric__label block">Precisam de fechamento</span></span>
             </div>
           )}
         </div>
+        </>
       )}
 
       {/* ── 3 · Setup real + Indicadores do período (5 + 7, como o mockup) ──

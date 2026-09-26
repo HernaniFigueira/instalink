@@ -392,17 +392,17 @@ export function WorkspaceNavigation({ nav, activePath, unit, units = [], multiUn
     <div className="workspace-foot">
       {setup && !mini && (
         <div className="ws-setup-mini">
-          <p className="text-[12px] font-semibold text-[var(--text-primary)] leading-tight">
+          <p className="text-[12px] font-semibold text-white leading-tight">
             Sua clínica está {setup.pct}% pronta
           </p>
-          <p className="text-[11px] text-[var(--text-secondary)] mt-1 leading-snug">
+          <p className="text-[11px] text-[var(--il-nav-muted)] mt-1 leading-snug">
             Complete a configuração para receber agendamentos.
           </p>
-          <div className="h-1.5 rounded-full bg-white overflow-hidden mt-2" aria-hidden="true">
-            <div className="h-full rounded-full bg-[var(--brand)]" style={{ width: `${setup.pct}%` }} />
+          <div className="h-1.5 rounded-full bg-white/20 overflow-hidden mt-2" aria-hidden="true">
+            <div className="h-full rounded-full bg-[var(--sun)]" style={{ width: `${setup.pct}%` }} />
           </div>
           <Link href={`${setup.href}${setup.href.includes('?') ? '&' : '?'}b=${unit.id}`}
-            className="mt-2 inline-flex w-full items-center justify-center rounded-[var(--radius-sm)] border border-[var(--brand-100)] bg-white px-2 py-1.5 text-[11.5px] font-semibold text-[var(--brand-fg)] hover:bg-[var(--brand-50)]">
+            className="mt-2 inline-flex w-full items-center justify-center rounded-[var(--radius-sm)] border border-white/25 bg-white px-2 py-1.5 text-[11.5px] font-semibold text-[var(--brand-strong)] hover:bg-white/90">
             Continuar configuração
           </Link>
         </div>
