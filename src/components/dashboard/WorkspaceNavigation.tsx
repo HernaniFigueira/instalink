@@ -1,27 +1,36 @@
 'use client';
 // ═══════════════════════════════════════════════════════════════
-// SIDEBAR DO APP SHELL — GoDoutor Product/UX Revolution 2.0
+// SIDEBAR DO APP SHELL — GoDoutor final (disciplina visual Meta-like)
 // ═══════════════════════════════════════════════════════════════
 // Objetivo: POUCAS PORTAS. A arquitetura vem de
 // lib/workspace-navigation.ts (apresentação) sobre o catálogo lib/panel.ts
 // (rotas + permissões + módulos). Nenhuma rota é apagada aqui: item com
 // `sidebar: false` continua existindo por URL e por atalho contextual.
 //
-//   OPERAÇÃO        Visão geral · Agenda · Conversas · Clientes   (links)
-//   CLÍNICA         Clínica (grupo) · Página                      (portas)
-//   ADMINISTRAÇÃO   Automação (grupo) · Gestão (grupo) · Configurações (grupo)
+//   Visão geral · Agenda · Conversas · Pendências · Clientes     (links)
+//   Clínica ▾ (grupo) · Página                                    (porta)
+//   Automação ▾ · Gestão ▾ · Configurações ▾                      (grupos)
 //
-// GODOUTOR final (FASE D): cada grupo expande PARA BAIXO, no acordeão da
-// PRÓPRIA coluna — uma coluna só (~256px), sem segunda coluna. A rota ativa
-// abre o grupo dono; um grupo por vez; subitens com recuo e linha-guia.
-// "Clínica" continua reunindo Serviços/Profissionais/Disponibilidade/Equipe
-// sem unificar modelo de dado (Professional e User/Member seguem separados).
+// MISSÃO SIDEBAR FINAL (Meta-like):
+//   • SEM títulos de seção (nada de OPERAÇÃO/CLÍNICA/ADMINISTRAÇÃO) — a
+//     hierarquia vem do alinhamento, do recuo e do espaçamento entre blocos;
+//   • acordeão: SEMPRE exatamente UM grupo aberto quando expandida. Rotas
+//     planas abrem "Clínica" por padrão; deep-link abre o grupo dono; clicar
+//     noutro grupo troca; clicar no aberto NÃO fecha;
+//   • item ativo/grupo aberto = fundo azul MUITO claro + texto azul (nunca
+//     botão azul sólido, nunca texto branco);
+//   • recolhida (~68px): SÓ ícones centralizados com tooltip (renderizado no
+//     nível do <aside>, fora do container rolável — é isso que elimina a
+//     scrollbar horizontal que os ::after do .il-tip causavam), sem nome de
+//     clínica, sem submenu inline; clicar num grupo EXPANDE e abre o grupo;
+//   • submenu abre PARA BAIXO na própria coluna, com recuo limpo (a linha-guia
+//     saiu — hierarquia percebida pelo recuo).
 //
 // IDENTIDADE (co-branding): dentro da operação a identidade principal é a da
 // CLÍNICA — logo, nome e tipo. GoDoutor é a plataforma e aparece discretamente
 // ("Powered by") e na central de ajuda. Nada de duas marcas disputando o mesmo
 // espaço: uma identidade principal por região.
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import Link from 'next/link';
 import { Icon } from '@/components/icons';
 import { Drawer } from '@/components/ui';
@@ -111,16 +120,28 @@ export function WorkspaceNavigation({ nav, activePath, unit, units = [], multiUn
   );
   const activeGroup = activeArea && isGroup(activeArea) ? activeArea.id : null;
 
-  // Acordeão: UM grupo aberto por vez. A rota ativa SEMPRE abre o grupo dono
-  // (deep-link cai com o submenu certo aberto); clicar noutro grupo troca;
-  // clicar de novo fecha. Nada de dois painéis empilhados.
-  const [opened, setOpened] = useState<string | null>(activeGroup);
+  // ACORDEÃO META-LIKE: SEMPRE exatamente UM grupo aberto quando a sidebar
+  // está expandida — não existe estado "nenhum grupo aberto".
+  //   • padrão: "Clínica" (rotas planas como /dashboard e /agenda);
+  //   • deep-link: a rota ativa ABRE o grupo dono (autoridade do catálogo);
+  //   • clicar noutro grupo TROCA (um por vez, nunca dois);
+  //   • clicar no grupo ABERTO não fecha — ele permanece aberto.
+  // `openedByUser` distingue "o usuário escolheu" (persiste ao navegar em
+  // rotas planas) de "a rota abriu" (rota plana volta ao padrão Clínica).
+  const groups = useMemo(
+    () => sections.flatMap((s) => s.groups.filter((g) => !g.flat).map((g) => g.area)),
+    [sections],
+  );
+  const defaultGroup = groups.some((a) => a.id === 'clinica') ? 'clinica' : (groups[0]?.id ?? null);
+  const [opened, setOpened] = useState<string | null>(activeGroup ?? defaultGroup);
+  const openedByUser = useRef(false);
   const [unitOpen, setUnitOpen] = useState(false);
 
   useEffect(() => {
-    setOpened(activeGroup);
+    if (activeGroup) { setOpened(activeGroup); openedByUser.current = false; }
+    else if (!openedByUser.current) { setOpened(defaultGroup); }
     setMobile(false);
-  }, [activePath, unit.id, activeGroup]);
+  }, [activePath, unit.id, activeGroup, defaultGroup]);
 
   // Ao crescer para desktop o drawer móvel não pode ficar aberto por cima.
   useEffect(() => {
@@ -130,22 +151,64 @@ export function WorkspaceNavigation({ nav, activePath, unit, units = [], multiUn
     return () => media?.removeEventListener?.('change', close);
   }, []);
 
+  // ── TOOLTIP do modo recolhido ────────────────────────────────
+  // O tooltip é renderizado como FILHO DO <aside>, fora do container rolável
+  // (.workspace-primary). Os tooltips antigos (.il-tip::after) ficavam DENTRO
+  // do container com overflow-y:auto — invisíveis (opacity:0) mas ainda no
+  // layout, esticando a largura de scroll e criando a scrollbar horizontal da
+  // sidebar recolhida. Aqui o <aside> não rola e não corta: o tooltip escapa
+  // para cima do conteúdo sem aumentar largura física de nada.
+  const asideRef = useRef<HTMLElement | null>(null);
+  const [tip, setTip] = useState<{ text: string; top: number } | null>(null);
+  useEffect(() => {
+    if (!collapsed) { setTip(null); return; }
+    const root = asideRef.current;
+    if (!root) return;
+    const tipOf = (el: Element) => el.closest('[data-tip]');
+    const show = (e: Event) => {
+      const el = tipOf(e.target as Element);
+      const text = el?.getAttribute('data-tip');
+      if (!el || !text) { setTip(null); return; }
+      const elRect = el.getBoundingClientRect();
+      const rootRect = root.getBoundingClientRect();
+      setTip({ text, top: elRect.top - rootRect.top + elRect.height / 2 });
+    };
+    const hide = (e: Event) => {
+      // Mudança de elemento DENTRO do mesmo alvo não desmonta o tooltip.
+      const rel = (e as MouseEvent).relatedTarget as Element | null;
+      if (rel && tipOf(e.target as Element) === tipOf(rel)) return;
+      setTip(null);
+    };
+    root.addEventListener('mouseover', show);
+    root.addEventListener('mouseout', hide);
+    root.addEventListener('focusin', show);
+    root.addEventListener('focusout', hide);
+    return () => {
+      root.removeEventListener('mouseover', show);
+      root.removeEventListener('mouseout', hide);
+      root.removeEventListener('focusin', show);
+      root.removeEventListener('focusout', hide);
+    };
+  }, [collapsed]);
+
   function hrefFor(item: NavItem) {
     if (item.href === '/organizacao') return `/organizacao?organization=${unit.organizationId || ''}`;
     return item.requiresBusiness === false ? item.href : `${item.href}?b=${unit.id}`;
   }
 
-  const link = (item: NavItem, area?: WorkspaceArea, sub = false) => (
+  // `mini` = este destino está sendo desenhado para o RAIL recolhido (só
+  // ícone + tooltip). O drawer móvel sempre usa o modo expandido.
+  const link = (item: NavItem, sub = false, mini = collapsed) => (
     <Link
       key={item.href}
       href={hrefFor(item)}
       data-nav-item={item.href}
       aria-label={item.label}
       aria-current={activePath === item.href ? 'page' : undefined}
-      title={collapsed ? `${item.label} — ${item.description}` : item.description}
+      title={mini ? undefined : item.description}
       onClick={() => { setMobile(false); }}
-      className={`workspace-link${sub ? ' workspace-link--sub' : ''}${collapsed ? ' il-tip' : ''}`}
-      {...(collapsed ? { 'data-tip': item.label } : {})}
+      className={`workspace-link${sub ? ' workspace-link--sub' : ''}`}
+      {...(mini ? { 'data-tip': item.label } : {})}
     >
       <span className="workspace-link__icon">
         <Icon n={item.icon} size={18} />
@@ -154,37 +217,47 @@ export function WorkspaceNavigation({ nav, activePath, unit, units = [], multiUn
     </Link>
   );
 
-  const groupButton = (area: WorkspaceArea) => {
+  const groupButton = (area: WorkspaceArea, mini = collapsed) => {
     const items = visible(area.items);
     if (!items.length) return null;
     const open = opened === area.id;
     return (
-      <div key={area.id} className={`workspace-group${open ? ' is-open' : ''}${activeGroup === area.id ? ' is-active' : ''}`}>
+      <div key={area.id} className={`workspace-group${open && !mini ? ' is-open' : ''}${activeGroup === area.id ? ' is-active' : ''}`}>
         <button
           type="button"
-          className={`workspace-link workspace-link--group${collapsed ? ' il-tip' : ''}`}
+          className="workspace-link workspace-link--group"
           aria-label={area.label}
-          aria-expanded={open}
-          aria-controls={`submenu-${area.id}`}
-          title={collapsed ? area.label : undefined}
-          {...(collapsed ? { 'data-tip': area.label } : {})}
-          onClick={() => setOpened(open ? null : area.id)}
+          aria-expanded={mini ? false : open}
+          aria-controls={mini ? undefined : `submenu-${area.id}`}
+          data-tip={area.label}
+          onClick={() => {
+            // Recolhida: o clique EXPANDE a sidebar e abre o grupo escolhido.
+            // Expandida: abre ESTE grupo — clicar no grupo aberto NÃO fecha
+            // (nunca existe estado "nenhum grupo aberto").
+            if (mini) onCollapse?.();
+            setOpened(area.id);
+            openedByUser.current = true;
+          }}
         >
           <span className="workspace-link__icon"><Icon n={area.icon} size={18} /></span>
           <span className="workspace-label">{area.label}</span>
-          {!collapsed && (
+          {!mini && (
             <Icon n="chevronRight" size={15} className="workspace-link__chevron" aria-hidden="true" />
           )}
         </button>
         {/* Acordeão: expande PARA BAIXO (altura+opacidade+translateY), com
-            linha-guia e recuo — nunca uma segunda coluna. */}
-        <div id={`submenu-${area.id}`} className="workspace-submenu">
-          <div className="workspace-submenu__clip">
-            <div className="workspace-submenu__guide">
-              {items.map((item) => link(item, area, true))}
+            recuo limpo — nunca uma segunda coluna. No modo recolhido o
+            submenu NÃO é renderizado: o clique no ícone do grupo expande a
+            sidebar e abre o grupo. */}
+        {!mini && (
+          <div id={`submenu-${area.id}`} className="workspace-submenu">
+            <div className="workspace-submenu__clip">
+              <div className="workspace-submenu__guide">
+                {items.map((item) => link(item, true, false))}
+              </div>
             </div>
           </div>
-        </div>
+        )}
       </div>
     );
   };
@@ -193,11 +266,56 @@ export function WorkspaceNavigation({ nav, activePath, unit, units = [], multiUn
    * CABEÇALHO — a clínica é a identidade principal desta região.
    * Com mais de uma unidade o nome vira botão (troca real de contexto);
    * com uma unidade só, é texto — sem controle que não faz nada.
+   * RECOLHIDO: SÓ a logo (ou monograma), centralizada — nome e tipo não são
+   * renderizados (nada de "A…"/"Cl…" truncado); o tooltip carrega
+   * "Nome · Tipo" para quem precisar do contexto.
    */
-  const header = (interactive = true) => {
+  const header = (mini = collapsed, interactive = true) => {
     const label = unit.name || 'Clínica';
     const kind = clinicTypeLabel(unit.clinicType);
     const canSwitch = interactive && !!onUnit && units.length > 1;
+    if (mini) {
+      const mark = unit.logo
+        ? <img src={unit.logo} alt="" className="workspace-clinic-head__logo workspace-clinic-head__logo--mini" />
+        : <span className="workspace-clinic-head__mark workspace-clinic-head__mark--mini" aria-hidden="true">{initials(label)}</span>;
+      const tipText = `${label} · ${kind || 'Clínica'}`;
+      return (
+        <div className="workspace-clinic-head-wrap">
+          {canSwitch ? (
+            <button
+              type="button"
+              className="workspace-clinic-head workspace-clinic-head--collapsed"
+              aria-haspopup="menu"
+              aria-expanded={unitOpen}
+              aria-label={`Unidade atual: ${label}. Trocar de unidade`}
+              data-tip={tipText}
+              onClick={() => setUnitOpen((v) => !v)}
+            >
+              {mark}
+            </button>
+          ) : (
+            <div className="workspace-clinic-head workspace-clinic-head--collapsed" data-tip={tipText}>
+              {mark}
+            </div>
+          )}
+          {canSwitch && unitOpen && (
+            <div className="ws-pop ws-pop--left" role="menu" aria-label="Trocar de unidade">
+              <p className="ws-pop__label">Unidades</p>
+              {units.map((u) => (
+                <button key={u.id} type="button" role="menuitem" className="ws-pop__item"
+                  onClick={() => { setUnitOpen(false); if (u.id !== unit.id) onUnit?.(u.id); }}>
+                  {u.logo
+                    ? <img src={u.logo} alt="" aria-hidden="true" className="ws-unitpill__logo" />
+                    : <span className="ws-unitpill__dot" aria-hidden="true">{initials(u.name || 'Clínica')}</span>}
+                  <span className="flex-1 truncate">{u.name || 'Clínica'}</span>
+                  {u.id === unit.id && <Icon n="check" size={14} className="text-[var(--success-fg)]" />}
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
+      );
+    }
     const inner = (
       <>
         {unit.logo
@@ -249,17 +367,20 @@ export function WorkspaceNavigation({ nav, activePath, unit, units = [], multiUn
     );
   };
 
-  const menu = () => (
+  // SEM TÍTULOS DE SEÇÃO (missão §2): a sidebar é uma sequência contínua de
+  // destinos e grupos. As seções continuam existindo como AGRUPAMENTO/ORDEM
+  // (e fonte do breadcrumb), mas não desenham rótulo nenhum — a separação é
+  // só espaçamento vertical; no rail recolhido, um fio discreto entre blocos.
+  const menu = (mini = collapsed) => (
     <>
       {sections.map((section) => {
         const rows = section.groups.flatMap(({ area, flat }) =>
-          flat ? visible(area.items).map((item) => link(item, area, true)) : [groupButton(area)],
+          flat ? visible(area.items).map((item) => link(item, false, mini)) : [groupButton(area, mini)],
         ).filter(Boolean);
         if (!rows.length) return null;
         return (
           <div className="workspace-section" key={section.id}>
-            {!collapsed && <p className="workspace-section__label">{section.label}</p>}
-            {collapsed && <span className="workspace-section__rule" aria-hidden="true" />}
+            {mini && <span className="workspace-section__rule" aria-hidden="true" />}
             {rows}
           </div>
         );
@@ -267,9 +388,9 @@ export function WorkspaceNavigation({ nav, activePath, unit, units = [], multiUn
     </>
   );
 
-  const footer = (withCollapse: boolean) => (
+  const footer = (withCollapse: boolean, mini = collapsed) => (
     <div className="workspace-foot">
-      {setup && !collapsed && (
+      {setup && !mini && (
         <div className="ws-setup-mini">
           <p className="text-[12px] font-semibold text-[var(--text-primary)] leading-tight">
             Sua clínica está {setup.pct}% pronta
@@ -288,10 +409,10 @@ export function WorkspaceNavigation({ nav, activePath, unit, units = [], multiUn
       )}
       <button
         type="button"
-        className={`workspace-foot__item${collapsed ? ' il-tip' : ''}`}
+        className="workspace-foot__item"
         onClick={() => { setMobile(false); onHelp?.(); }}
         aria-label="Ajuda e suporte"
-        {...(collapsed ? { 'data-tip': 'Ajuda e suporte', 'data-tip-pos': 'right' } : {})}
+        {...(mini ? { 'data-tip': 'Ajuda e suporte' } : {})}
       >
         <Icon n="help" size={18} />
         <span className="workspace-label">Ajuda e suporte</span>
@@ -299,16 +420,16 @@ export function WorkspaceNavigation({ nav, activePath, unit, units = [], multiUn
       {withCollapse && (
         <button
           type="button"
-          className={`workspace-foot__item workspace-foot__item--collapse${collapsed ? ' il-tip' : ''}`}
-          aria-label={collapsed ? 'Expandir navegação' : 'Recolher navegação'}
-          {...(collapsed ? { 'data-tip': 'Expandir navegação', 'data-tip-pos': 'right' } : {})}
+          className="workspace-foot__item workspace-foot__item--collapse"
+          aria-label={mini ? 'Expandir navegação' : 'Recolher navegação'}
+          {...(mini ? { 'data-tip': 'Expandir navegação' } : {})}
           onClick={onCollapse}
         >
           <Icon n="panel" size={18} />
-          <span className="workspace-label">Recolher menu</span>
+          <span className="workspace-label">{mini ? 'Expandir navegação' : 'Recolher menu'}</span>
         </button>
       )}
-      {!collapsed && (
+      {!mini && (
         <p className="workspace-foot__brand">
           powered by <strong>GoDoutor</strong>
         </p>
@@ -318,24 +439,31 @@ export function WorkspaceNavigation({ nav, activePath, unit, units = [], multiUn
 
   return (
     <>
-      <aside className={`workspace-sidebar${collapsed ? ' is-collapsed' : ''}`} aria-label="Navegação da clínica">
-        {header(true)}
+      <aside ref={asideRef} className={`workspace-sidebar${collapsed ? ' is-collapsed' : ''}`} aria-label="Navegação da clínica">
+        {header(collapsed)}
         <nav aria-label="Menu principal" className="workspace-primary ws-scroll">
-          {menu()}
+          {menu(collapsed)}
         </nav>
-        {footer(true)}
+        {footer(true, collapsed)}
+        {/* Tooltip do rail recolhido: filho do <aside> (fora do container
+            rolável) — não gera scrollbar horizontal e escapa sobre o conteúdo. */}
+        {collapsed && tip && (
+          <div className="ws-nav-tip" role="tooltip" style={{ top: `${tip.top}px` }}>{tip.text}</div>
+        )}
       </aside>
 
-      {/* Mobile: UM diálogo, o MESMO acordeão (nunca duas colunas na tela). */}
+      {/* Mobile: UM diálogo, o MESMO acordeão (nunca duas colunas na tela).
+          O drawer sempre usa o modo EXPANDIDO — mesmo que a sidebar desktop
+          esteja recolhida. */}
       <Drawer
         open={mobile}
         onClose={() => setMobile(false)}
         title="Navegar na clínica"
         width="max-w-[420px]"
       >
-        {header(true)}
-        <nav aria-label="Menu móvel" className="p-3">{menu()}</nav>
-        {footer(false)}
+        {header(false)}
+        <nav aria-label="Menu móvel" className="p-3">{menu(false)}</nav>
+        {footer(false, false)}
       </Drawer>
     </>
   );

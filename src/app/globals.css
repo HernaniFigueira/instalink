@@ -793,8 +793,10 @@ input[type='color'] { @apply cursor-pointer; }
   --il-nav-fg: var(--text);
   --il-nav-muted: var(--text-muted);
   --il-nav-hover: var(--surface-hover);
-  --il-nav-active: var(--brand);   /* §7: item ativo = marca em cheio */
-  --il-nav-active-fg: #ffffff;     /* hex de 6 dígitos: contrato dos tokens */
+  /* Missão sidebar final (Meta-like): item ativo/grupo aberto = azul MUITO
+     claro + texto azul — nunca marca em cheio, nunca texto branco. */
+  --il-nav-active: #e9f0fe;
+  --il-nav-active-fg: #1749b3;
   --il-nav-border: var(--border);
   --il-nav-cta: var(--brand);
   --il-nav-cta-fg: var(--action-contrast);
@@ -849,17 +851,13 @@ input[type='color'] { @apply cursor-pointer; }
 .il-platform .il-actionbar { background: var(--surface); backdrop-filter: none; }
 .il-platform .il-tabbar--sm { transform: none; }
 
-/* Navegação: o catálogo continua dono de rotas/permissões/ordem. Aqui só a
-   APARÊNCIA do nó ativo — o rail fino + aria-current garantem que o estado
-   nunca dependa apenas de cor. */
+/* Navegação: o catálogo continua dono de rotas/permissões/ordem. O estado
+   ativo é marcado por aria-current (nunca só por cor). A APARÊNCIA do nó
+   ativo — disciplina Meta-like: azul muito claro + texto azul — vive nas
+   regras .workspace-link[aria-current='page'] abaixo. (A regra legada com
+   !important + --brand sólido foi REMOVIDA na missão sidebar final: era ela
+   quem pintava o item ativo de botão azul com texto branco.) */
 .il-platform [data-nav-item] { color: var(--il-nav-fg); }
-.il-platform [data-nav-item][aria-current='page'],
-.il-platform #mobile-nav-more a[aria-current='page'] {
-  background-color: var(--nav-active-bg, var(--brand)) !important;
-  color: var(--nav-active-fg, #fff) !important;
-  box-shadow: 0 1px 2px rgba(37, 99, 235, 0.28);
-}
-.il-platform [data-nav-rail] { background-color: transparent !important; }
 
 /* ── Alturas de controle: UMA escala (tokens), não 44px solto por regra ── */
 .il-platform .il-control { min-height: var(--control-h); }
@@ -1281,45 +1279,55 @@ button.ws-bell__item:hover { background: var(--surface-hover); }
   overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
 
-.workspace-primary { flex: 1; min-height: 0; overflow-y: auto; padding: 8px; }
-.workspace-section { margin-bottom: 8px; }
-.workspace-section__label {
-  margin: 0; padding: 9px 10px 5px;
-  font-size: 9.5px; font-weight: 800; letter-spacing: .1em; text-transform: uppercase;
-  color: var(--text-faint);
+.workspace-primary {
+  flex: 1; min-height: 0; overflow-y: auto;
+  /* Missão §9 — proteção: nenhum elemento interno pode aumentar a largura
+     física da sidebar. A CAUSA da scrollbar horizontal era o ::after do
+     .il-tip (tooltip invisível esticando o scrollWidth); o tooltip do rail
+     agora vive no <aside>, fora deste container. */
+  overflow-x: hidden; padding: 8px;
 }
+/* Missão §2 — SEM títulos de seção (nada de OPERAÇÃO/CLÍNICA/ADMINISTRAÇÃO):
+   a sidebar é uma sequência contínua de destinos e grupos; blocos separados
+   só por espaçamento vertical sutil. No rail recolhido, um fio discreto. */
+.workspace-section { display: flex; flex-direction: column; gap: 2px; margin-bottom: 10px; }
+.workspace-section:last-child { margin-bottom: 0; }
 .workspace-section__rule { display: block; height: 1px; background: var(--border); margin: 8px 10px; }
 
-.workspace-link__icon { color: var(--text-muted); transition: color var(--motion-fast) var(--ease-standard); }
+/* ── Itens — disciplina visual Meta-like (missão §3) ──────────────
+   Normal: transparente, texto escuro, ícone neutro, sem card/pill/sombra.
+   Hover: fundo azul muito claro, texto ligeiramente mais azul.
+   Ativo: fundo azul MUITO claro + texto/ícone azuis + peso 600 — nunca
+   botão azul sólido, nunca texto branco, nunca sombra. */
+.workspace-link__icon { color: var(--il-nav-muted); transition: color var(--motion-fast) var(--ease-standard); }
 .workspace-link[aria-current="page"] .workspace-link__icon,
 .workspace-link--group[aria-expanded="true"] .workspace-link__icon { color: inherit; }
 .workspace-link {
   position: relative; display: flex; align-items: center; gap: 10px; width: 100%;
   min-height: var(--control-h); padding: 0 10px;
   font-size: 13.5px; font-weight: 500; line-height: 1.3; text-align: left;
-  border-radius: var(--radius-md); color: var(--il-nav-fg);
+  border-radius: 6px; color: var(--il-nav-fg);
   transition: background-color var(--motion-fast) var(--ease-standard),
               color var(--motion-fast) var(--ease-standard);
 }
-.workspace-link:hover { background: var(--il-nav-hover); }
-/* §7 — SELEÇÃO: o item ativo é o único com peso no menu. O fundo azul suave
-   anterior era discreto demais: em uma lista de 12 linhas não se achava onde
-   se estava. Agora o selecionado usa a marca em cheio com texto e ícone
-   brancos — contraste 5.2:1 (AA), e `aria-current` continua marcando o estado
-   para quem não distingue cor. Nenhum outro item vira botão saturado. */
-/* GODOUTOR final (FASE D): no acordeão de coluna única, o peso cheio da marca
-   é do ITEM ATIVO (rota). O grupo ABERTO é só contexto: tinta suave. */
+.workspace-link:hover {
+  background: var(--il-nav-hover);
+  color: color-mix(in srgb, var(--il-nav-active-fg) 45%, var(--il-nav-fg));
+}
 .workspace-link[aria-current='page'] {
-  background: var(--brand); color: #fff; font-weight: 600;
-  box-shadow: 0 1px 2px rgba(37, 99, 235, 0.28);
+  background: var(--il-nav-active); color: var(--il-nav-active-fg); font-weight: 600;
+}
+.workspace-link[aria-current='page']:hover {
+  background: var(--il-nav-active); color: var(--il-nav-active-fg);
 }
 .workspace-link--group[aria-expanded='true'] {
-  background: var(--brand-soft); color: var(--brand-fg); font-weight: 600;
+  background: var(--il-nav-active); color: var(--il-nav-active-fg); font-weight: 600;
+}
+.workspace-link--group[aria-expanded='true']:hover {
+  background: var(--il-nav-active); color: var(--il-nav-active-fg);
 }
 .workspace-link[aria-current='page'] .workspace-link__chevron,
 .workspace-link--group[aria-expanded='true'] .workspace-link__chevron { color: inherit; }
-.workspace-link[aria-current='page']:hover { background: var(--brand-strong); }
-.workspace-link--group[aria-expanded='true']:hover { background: var(--brand-100, var(--brand-soft)); }
 .workspace-link__icon { display: flex; align-items: center; justify-content: center; width: 20px; flex-shrink: 0; }
 .workspace-link__chevron {
   margin-left: auto; color: var(--text-faint); flex-shrink: 0;
@@ -1377,13 +1385,33 @@ button.workspace-clinic-head:hover { background: var(--surface-hover); }
   display: inline-flex; align-items: center; gap: 6px; margin-top: 2px;
   font-size: 11px; font-weight: 600; color: var(--brand-fg);
 }
-.is-collapsed .workspace-clinic-head { padding: 10px 0 8px; justify-content: center; }
+/* Missão §7 — RAIL RECOLHIDO: só a logo, centralizada. Nome e tipo NÃO são
+   renderizados (o componente já não os desenha; o display:none abaixo é a
+   trava de segurança) — era isso que produzia "A…"/"Cl…" truncado. */
+.workspace-clinic-head--collapsed { padding: 12px 0 10px; justify-content: center; }
+.is-collapsed .workspace-clinic-head { padding: 12px 0 10px; justify-content: center; }
+.is-collapsed .workspace-clinic-head__text { display: none; }
+.workspace-clinic-head__logo--mini,
+.workspace-clinic-head__mark--mini { width: 36px; height: 36px; }
+
+/* ── Tooltip do rail recolhido (missão §7/§9) ────────────────────
+   Filho do <aside> (position:sticky ⇒ posicionado), FORA do container
+   rolável: escapa sobre o conteúdo sem esticar a largura de scroll de nada —
+   é a correção da CAUSA da scrollbar horizontal (o ::after do .il-tip antigo
+   vivia dentro de .workspace-primary). */
+.ws-nav-tip {
+  position: absolute; left: calc(100% + 10px); transform: translateY(-50%);
+  padding: 5px 9px; border-radius: var(--radius-sm);
+  background: #232a44; color: #fff;
+  font-size: 11px; font-weight: 600; white-space: nowrap;
+  z-index: 60; box-shadow: var(--shadow-md); pointer-events: none;
+}
 
 /* Rodapé fixo: ajuda e suporte — discreto, sempre no mesmo lugar. */
 .workspace-foot { border-top: 1px solid var(--border-soft); padding: 8px; }
 .workspace-foot__item {
   display: flex; align-items: center; gap: 10px; width: 100%;
-  min-height: 36px; padding: 0 10px; border-radius: var(--radius-md);
+  min-height: 36px; padding: 0 10px; border-radius: 6px;
   font-size: 13px; font-weight: 500; color: var(--text-secondary); text-align: left;
 }
 .workspace-foot__item:hover { background: var(--surface-hover); color: var(--text); }
@@ -1417,14 +1445,17 @@ button.workspace-clinic-head:hover { background: var(--surface-hover); }
   transition: opacity 200ms var(--ease-standard), transform 200ms var(--ease-standard);
 }
 .workspace-group.is-open > .workspace-submenu > .workspace-submenu__clip { opacity: 1; transform: none; }
+/* Missão §5 — subitens com RECUO limpo: a linha-guia saiu, a hierarquia é
+   percebida pelo recuo (como no mockup Meta-like). */
 .workspace-submenu__guide {
   display: flex; flex-direction: column; gap: 2px;
-  margin: 2px 0 6px 19px; padding-left: 11px;
-  border-left: 1px solid var(--border);
+  margin: 2px 0 6px; padding-left: 10px;
 }
-.workspace-link--sub { min-height: 34px; font-size: 13px; }
+.workspace-link--sub { min-height: 36px; font-size: 13px; padding-left: 30px; }
 .workspace-link--sub .workspace-link__icon { width: 16px; }
-.is-collapsed .workspace-submenu__guide { margin-left: 6px; border-left: 0; padding-left: 0; }
+/* Missão §7/§8 — no rail recolhido o submenu NÃO existe inline: o clique no
+   ícone do grupo expande a sidebar e abre o grupo. */
+.is-collapsed .workspace-submenu { display: none; }
 
 /* ── Skip link ──────────────────────────────────────────────── */
 .workspace-skip {

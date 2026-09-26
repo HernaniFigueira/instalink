@@ -104,7 +104,9 @@ describe('P1 · sidebar contínua + colapso', () => {
     // 2.0: o controle de recolher vive no RODAPÉ da navegação, como os demais
     // itens utilitários (Ajuda) — quadrado, rotulado e acessível por teclado.
     expect(nav).toContain('workspace-foot__item--collapse');
-    expect(nav).toMatch(/aria-label=\{collapsed \? 'Expandir navegação' : 'Recolher navegação'\}/);
+    // (missão sidebar final: o rodapé recebe `mini` — no drawer móvel o modo
+    // é sempre o expandido — mas o rótulo dinâmico continua o mesmo contrato)
+    expect(nav).toMatch(/aria-label=\{(collapsed|mini) \? 'Expandir navegação' : 'Recolher navegação'\}/);
     expect(nav).not.toContain('«');
     expect(css).toContain('.workspace-foot__item--collapse');
   });
