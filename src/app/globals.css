@@ -795,7 +795,7 @@ input[type='color'] { @apply cursor-pointer; }
   --il-nav-muted: var(--text-muted);
   --il-nav-hover: var(--surface-hover);
   --il-nav-active: var(--brand);   /* §7: item ativo = marca em cheio */
-  --il-nav-active-fg: #fff;
+  --il-nav-active-fg: #ffffff;     /* hex de 6 dígitos: contrato dos tokens */
   --il-nav-border: var(--border);
   --il-nav-cta: var(--brand);
   --il-nav-cta-fg: var(--action-contrast);
