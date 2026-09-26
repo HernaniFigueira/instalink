@@ -179,6 +179,16 @@
   /* ── Foco visível ───────────────────────────────────────────── */
   --focus-ring: 0 0 0 3px var(--brand-ring);
 
+  /* ── MOTION (linguagem única — §15) ──────────────────────────────
+   * Um sistema clínico é calmo: 180–220ms, uma curva só, sem bounce e sem
+   * spring. Todo popover/accordion/segmented control/hover que anima usa
+   * ESTES tokens — nenhum componente inventa a própria duração.
+   * `prefers-reduced-motion` zera tudo no final do arquivo. */
+  --motion-fast: 180ms;
+  --motion-base: 200ms;
+  --motion-slow: 220ms;
+  --ease-standard: cubic-bezier(0.2, 0.8, 0.2, 1);
+
   /* ── Navegação do painel ───────────────────────────────────────
    * A3.3 CONVERGÊNCIA: estes são os ÚNICOS tokens de aparência da navegação e
    * valem para TODO o painel administrativo — um padrão só, igual para qualquer
@@ -210,10 +220,10 @@ body {
   @apply subpixel-antialiased;
   background: var(--bg);
   color: var(--text);
-  font-family: var(--font-geist-sans), var(--font-inter), system-ui, -apple-system, sans-serif;
+  font-family: var(--font-geist-sans), system-ui, -apple-system, sans-serif;
   font-feature-settings: 'cv11', 'ss01';
 }
-.font-display { font-family: var(--font-geist-sans), var(--font-inter), system-ui, sans-serif; letter-spacing: -.015em; }
+.font-display { font-family: var(--font-geist-sans), system-ui, -apple-system, sans-serif; letter-spacing: -.015em; }
 ::selection { background: var(--brand); color: #fff; }
 
 /* Foco visível em QUALQUER elemento interativo do painel — coerente e
@@ -274,6 +284,50 @@ body {
   box-shadow: var(--shadow-sm);
 }
 .il-tab:disabled { opacity: 0.45; pointer-events: none; }
+
+/* ── Segmented control (§8) ──────────────────────────────────────
+   Um controle, quatro modos. O indicador é um elemento só que se MOVE
+   (transform medido do botão real) — trocar Dia→Semana parece deslizar uma
+   peça, não trocar de página. Sem sublinhado de aba. */
+.il-segmented {
+  position: relative; display: inline-flex; align-items: center; gap: 2px;
+  padding: 3px; background: var(--surface-3);
+  border: 1px solid var(--border); border-radius: var(--radius-md);
+}
+.il-segmented__thumb {
+  position: absolute; top: 3px; left: 0; height: calc(100% - 6px); z-index: 0;
+  border-radius: calc(var(--radius-md) - 3px);
+  background: var(--brand);
+  box-shadow: 0 1px 2px rgba(37, 99, 235, 0.30);
+  transition: transform var(--motion-base) var(--ease-standard),
+              width var(--motion-base) var(--ease-standard);
+  pointer-events: none;
+}
+.il-segmented__item {
+  position: relative; z-index: 1;
+  display: inline-flex; align-items: center; gap: 6px;
+  height: 32px; padding: 0 12px; border-radius: calc(var(--radius-md) - 3px);
+  font-size: 13px; font-weight: 500; line-height: 1.1; white-space: nowrap;
+  color: var(--text-soft);
+  transition: color var(--motion-fast) var(--ease-standard);
+}
+.il-segmented__item:hover { color: var(--text); }
+.il-segmented__item[aria-selected='true'] { color: #fff; font-weight: 600; }
+.il-segmented__item:disabled { opacity: .45; pointer-events: none; }
+.il-segmented__count {
+  min-width: 18px; height: 18px; padding: 0 5px; border-radius: var(--radius-pill);
+  display: inline-flex; align-items: center; justify-content: center;
+  font-size: 10.5px; font-weight: 700; font-variant-numeric: tabular-nums;
+  background: var(--surface-hover); color: var(--text-muted);
+}
+.il-segmented__item[aria-selected='true'] .il-segmented__count { background: rgba(255,255,255,.22); color: #fff; }
+.il-segmented--sm .il-segmented__item { height: 28px; padding: 0 10px; font-size: 12.5px; }
+/* Em telas estreitas o ícone sai e só o rótulo fica: o controle continua
+   legível e as quatro opções cabem sem rolar a faixa (§19). */
+@media (max-width: 640px) {
+  .il-segmented__item { padding: 0 9px; gap: 0; }
+  .il-segmented__item svg { display: none; }
+}
 
 /* Chips de filtro (agenda, listas): pill suave, ativo = azul. */
 .il-chip {
@@ -740,13 +794,22 @@ input[type='color'] { @apply cursor-pointer; }
   --il-nav-fg: var(--text);
   --il-nav-muted: var(--text-muted);
   --il-nav-hover: var(--surface-hover);
-  --il-nav-active: var(--brand-soft);
-  --il-nav-active-fg: var(--brand-fg);
+  --il-nav-active: var(--brand);   /* §7: item ativo = marca em cheio */
+  --il-nav-active-fg: #fff;
   --il-nav-border: var(--border);
   --il-nav-cta: var(--brand);
   --il-nav-cta-fg: var(--action-contrast);
 
   color: var(--text);
+}
+
+/* §16 — fundo do painel: degradê de 135° quase imperceptível (frio → levemente
+   quente). Dava para ver o #f3f5fb chapado porque a variável --bg-gradient era
+   declarada e NUNCA usada; agora ela é o fundo real do workspace, com o tom
+   chapado por baixo para telas que não aplicam a imagem. */
+.il-platform {
+  background-color: var(--bg);
+  background-image: var(--bg-gradient);
 }
 
 /* More specific than utility outline-none; no global recoloring. */
@@ -793,9 +856,9 @@ input[type='color'] { @apply cursor-pointer; }
 .il-platform [data-nav-item] { color: var(--il-nav-fg); }
 .il-platform [data-nav-item][aria-current='page'],
 .il-platform #mobile-nav-more a[aria-current='page'] {
-  background-color: var(--nav-active-bg, var(--il-nav-active)) !important;
-  color: var(--nav-active-fg, var(--il-nav-active-fg)) !important;
-  box-shadow: none;
+  background-color: var(--nav-active-bg, var(--brand)) !important;
+  color: var(--nav-active-fg, #fff) !important;
+  box-shadow: 0 1px 2px rgba(37, 99, 235, 0.28);
 }
 .il-platform [data-nav-rail] { background-color: transparent !important; }
 
@@ -957,15 +1020,26 @@ dialog.il-drawer::backdrop { background: transparent; }
 
 /* ── Busca global (centro da topbar) ────────────────────────── */
 .global-search { position: relative; width: 100%; max-width: 520px; }
+/* §5 — a busca era uma cápsula (`--radius-pill`) com anel duplo no foco:
+   parecia "um círculo dentro do outro" e mudava de forma ao focar. Agora é um
+   campo reto de 40px com raio 9px, borda simples e UM anel de foco — a mesma
+   linguagem de qualquer input do sistema. Nada de segunda borda oval. */
 .global-search__field {
   display: flex; align-items: center; gap: 8px;
-  height: var(--control-h); padding: 0 6px 0 12px;
-  background: var(--surface-3); border: 1px solid var(--border);
-  border-radius: var(--radius-pill);
-  transition: background-color .15s ease, border-color .15s ease, box-shadow .15s ease;
+  height: 40px; padding: 0 6px 0 11px;
+  background: var(--surface); border: 1px solid var(--border-strong);
+  border-radius: var(--radius-sm);
+  transition: border-color var(--motion-fast) var(--ease-standard),
+              background-color var(--motion-fast) var(--ease-standard),
+              box-shadow var(--motion-fast) var(--ease-standard);
 }
-.global-search__field:hover { background: var(--surface); border-color: var(--border-strong); }
-.global-search__field:focus-within { background: var(--surface); border-color: var(--brand); box-shadow: var(--focus-ring); }
+.global-search__field:hover { border-color: var(--brand-border); background: var(--surface); }
+/* Foco: UMA cor de borda + UM anel suave. Sem wrapper oval, sem mudança de
+   tamanho (o campo não "cresce" ao ser focado). */
+.global-search__field:focus-within {
+  border-color: var(--brand); background: var(--surface);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--brand) 14%, transparent);
+}
 .global-search__icon { color: var(--text-faint); }
 .global-search__input {
   flex: 1; min-width: 0; height: 100%;
@@ -1021,10 +1095,18 @@ dialog.il-drawer::backdrop { background: transparent; }
 
 /* ── Popover compartilhado (sino e conta) ───────────────────── */
 .ws-popover {
-  position: absolute; top: calc(100% + 10px); right: 0; z-index: 70;
+  position: absolute; top: calc(100% + 8px); right: 0; z-index: 70;
   width: min(330px, calc(100vw - 24px));
   background: var(--surface); border: 1px solid var(--border);
-  border-radius: var(--radius-lg); box-shadow: var(--shadow-lg); overflow: hidden;
+  border-radius: 12px; box-shadow: var(--shadow-md); overflow: hidden;
+  animation: ws-pop-in var(--motion-fast) var(--ease-standard);
+  transform-origin: top right;
+}
+/* Entrada do popover: 6px de deslocamento e opacidade. Nada de escala
+   exagerada nem bounce — o movimento só confirma de onde o painel saiu. */
+@keyframes ws-pop-in {
+  from { opacity: 0; transform: translateY(-4px) scale(.985); }
+  to { opacity: 1; transform: none; }
 }
 .ws-popover__header {
   display: flex; align-items: center; gap: 8px;
@@ -1039,15 +1121,18 @@ dialog.il-drawer::backdrop { background: transparent; }
 
 /* ── Notificações ───────────────────────────────────────────── */
 .ws-bell { position: relative; }
-/* Badge: laranja de ATENÇÃO (significado da cor) com branco AA (4.9:1).
-   Só existe com contador real — ver lib/workspace-alerts.ts. */
+/* Badge de CONTAGEM: vermelho de notificação (§17), branco por cima (AA 4.8:1).
+   Antes usava o token de aviso (#92400e), que na tela lia como marrom/vinho —
+   errado para "você tem N coisas esperando". Aviso continua sendo âmbar nos
+   estados do sistema; a contagem do sino é ALERTA. Só existe com número real
+   (ver lib/workspace-alerts.ts) — nunca um ponto decorativo. */
 .ws-bell__badge {
-  position: absolute; top: 1px; right: 0;
-  min-width: 18px; height: 18px; padding: 0 5px;
+  position: absolute; top: -1px; right: -1px;
+  min-width: 17px; height: 17px; padding: 0 5px;
   display: flex; align-items: center; justify-content: center;
   border-radius: var(--radius-pill); border: 2px solid var(--surface);
-  background: var(--warning-strong); color: #fff;
-  font-size: 10px; font-weight: 800; line-height: 1;
+  background: var(--danger); color: #fff;
+  font-size: 10px; font-weight: 700; line-height: 1; font-variant-numeric: tabular-nums;
 }
 .ws-bell__count {
   margin-left: auto; min-width: 20px; height: 20px; padding: 0 6px;
@@ -1085,30 +1170,30 @@ button.ws-bell__item:hover { background: var(--surface-hover); }
 
 /* ── Menu da conta ──────────────────────────────────────────── */
 .ws-account { position: relative; }
+/* §5 — a topbar mostra [sino] [?] [avatar], como as ferramentas que o time já
+   usa no dia a dia. Nome e papel NÃO ficam permanentes ao lado da foto (é
+   ruído que não muda de tela para tela): eles aparecem no menu ABERTO.
+   O alvo clicável continua com 40px de altura — nada de ícone minúsculo. */
 .ws-account__trigger {
-  display: flex; align-items: center; gap: 9px;
-  height: 46px; padding: 4px 8px 4px 4px;
-  border-radius: var(--radius-pill); border: 1px solid transparent;
-  transition: background-color .15s ease, border-color .15s ease;
+  display: inline-flex; align-items: center; justify-content: center;
+  width: var(--control-h); height: var(--control-h); padding: 0;
+  border-radius: var(--radius-md); border: 1px solid transparent;
+  transition: background-color var(--motion-fast) var(--ease-standard),
+              border-color var(--motion-fast) var(--ease-standard);
 }
 .ws-account__trigger:hover { background: var(--surface-hover); border-color: var(--border); }
-.ws-account__who { display: flex; flex-direction: column; align-items: flex-start; line-height: 1.2; min-width: 0; }
-.ws-account__name {
-  font-size: 12.5px; font-weight: 700; color: var(--text);
-  max-width: 17ch; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
-}
-.ws-account__role {
-  font-size: 10.5px; font-weight: 600; color: var(--text-muted);
-  max-width: 20ch; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
-}
-.ws-account__chevron { color: var(--text-faint); }
+.ws-account__trigger[aria-expanded="true"] { background: var(--surface-hover); border-color: var(--border); }
+/* O painel da conta é o mais denso dos popovers (unidades + ações): ganha
+   largura própria para nenhum rótulo quebrar em duas linhas. */
+.ws-account__panel { width: min(320px, calc(100vw - 20px)); }
+/* §6/§16 — o cabeçalho do menu tinha gradiente AZUL→VIOLETA. Roxo não é cor de
+   identidade deste produto e a faixa colorida competia com o conteúdo do menu.
+   Fica superfície branca com a foto, o nome, o e-mail e o papel — hierarquia
+   por tipografia, não por tinta. */
 .ws-account__header {
   display: flex; align-items: center; gap: 11px; padding: 14px;
-  border-bottom: 1px solid var(--border-soft);
-  background: linear-gradient(135deg,
-    color-mix(in srgb, var(--brand) 9%, var(--surface)),
-    color-mix(in srgb, var(--violet) 8%, var(--surface)) 58%,
-    var(--surface));
+  border-bottom: 1px solid var(--border);
+  background: var(--surface);
 }
 .ws-account__identity { min-width: 0; }
 .ws-account__identity-name { margin: 0; font-size: 13.5px; font-weight: 600; color: var(--text); }
@@ -1190,23 +1275,39 @@ button.ws-bell__item:hover { background: var(--surface-hover); }
 }
 .workspace-section__rule { display: block; height: 1px; background: var(--border); margin: 8px 10px; }
 
-.workspace-link__icon { color: var(--text-muted); transition: color .15s ease; }
+.workspace-link__icon { color: var(--text-muted); transition: color var(--motion-fast) var(--ease-standard); }
 .workspace-link[aria-current="page"] .workspace-link__icon,
-.workspace-link--group[aria-expanded="true"] .workspace-link__icon { color: var(--brand-fg); }
+.workspace-link--group[aria-expanded="true"] .workspace-link__icon { color: inherit; }
 .workspace-link {
   position: relative; display: flex; align-items: center; gap: 10px; width: 100%;
   min-height: var(--control-h); padding: 0 10px;
   font-size: 13.5px; font-weight: 500; line-height: 1.3; text-align: left;
   border-radius: var(--radius-md); color: var(--il-nav-fg);
-  transition: background-color .13s ease, color .13s ease;
+  transition: background-color var(--motion-fast) var(--ease-standard),
+              color var(--motion-fast) var(--ease-standard);
 }
 .workspace-link:hover { background: var(--il-nav-hover); }
+/* §7 — SELEÇÃO: o item ativo é o único com peso no menu. O fundo azul suave
+   anterior era discreto demais: em uma lista de 12 linhas não se achava onde
+   se estava. Agora o selecionado usa a marca em cheio com texto e ícone
+   brancos — contraste 5.2:1 (AA), e `aria-current` continua marcando o estado
+   para quem não distingue cor. Nenhum outro item vira botão saturado. */
 .workspace-link[aria-current='page'],
 .workspace-link[aria-expanded='true'] {
-  background: var(--il-nav-active); color: var(--il-nav-active-fg); font-weight: 600;
+  background: var(--brand); color: #fff; font-weight: 600;
+  box-shadow: 0 1px 2px rgba(37, 99, 235, 0.28);
 }
+.workspace-link[aria-current='page'] .workspace-link__chevron,
+.workspace-link--group[aria-expanded='true'] .workspace-link__chevron { color: #fff; }
+.workspace-link[aria-current='page']:hover,
+.workspace-link--group[aria-expanded='true']:hover { background: var(--brand-strong); }
 .workspace-link__icon { display: flex; align-items: center; justify-content: center; width: 20px; flex-shrink: 0; }
-.workspace-link__chevron { margin-left: auto; color: var(--text-faint); flex-shrink: 0; }
+.workspace-link__chevron {
+  margin-left: auto; color: var(--text-faint); flex-shrink: 0;
+  transition: transform var(--motion-base) var(--ease-standard),
+              color var(--motion-fast) var(--ease-standard);
+}
+.workspace-link--group[aria-expanded='true'] .workspace-link__chevron { transform: rotate(90deg); }
 /* O rail/traço vertical do item ativo foi REMOVIDO (GoDoutor 2.0): o estado
    ativo é fundo suave + texto/cor de marca + `aria-current`. O elemento segue
    no DOM como marcador (data-nav-rail) para acessibilidade e testes, sem
@@ -1288,7 +1389,12 @@ button.workspace-clinic-head:hover { background: var(--surface-hover); }
   width: var(--rail-w); height: 100dvh;
   padding: 12px 8px; overflow-y: auto;
   background: var(--surface-2); border-right: 1px solid var(--border);
+  /* §7 — a segunda coluna contextual entra deslizando da esquerda (de onde
+     ela nasce: o item do menu que foi clicado). É a mesma duração/curva de
+     todo o sistema; nada de bounce. */
+  animation: ws-rail-in var(--motion-base) var(--ease-standard);
 }
+@keyframes ws-rail-in { from { opacity: 0; transform: translateX(-6px); } to { opacity: 1; transform: none; } }
 .workspace-secondary header {
   display: flex; align-items: center; justify-content: space-between; gap: 6px;
   padding: 0 6px 10px; margin-bottom: 6px; border-bottom: 1px solid var(--border-soft);
@@ -1316,7 +1422,6 @@ button.workspace-clinic-head:hover { background: var(--surface-hover); }
   .ws-crumbs__group { display: none; }
 }
 @media (max-width: 1023px) {
-  .ws-account__who { display: none; }
   .ws-account__trigger { padding: 4px; }
 }
 @media (max-width: 767px) {

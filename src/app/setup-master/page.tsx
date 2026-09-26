@@ -93,7 +93,7 @@ export default function SetupMasterPage() {
     <main className="min-h-screen bg-zinc-950 px-4 py-10 text-white">
       <div className="mx-auto w-full max-w-lg">
         <Link href="/login" className="text-sm text-zinc-400 hover:text-white">← Voltar ao login</Link>
-        <section className="mt-6 rounded-3xl border border-zinc-800 bg-zinc-900 p-6 shadow-2xl sm:p-8">
+        <section className="mt-6 rounded-xl border border-zinc-800 bg-zinc-900 p-6 shadow-2xl sm:p-8">
           <div className="flex items-start gap-3">
             <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-amber-400 text-amber-950">
               <Icon n="shield" size={20} />

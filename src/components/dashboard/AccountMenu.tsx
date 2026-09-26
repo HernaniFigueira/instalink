@@ -83,12 +83,7 @@ export function AccountMenu({ user, unit, units = [], overview, canOverview, can
         aria-haspopup="dialog"
         onClick={() => setOpen((v) => !v)}
       >
-        <Avatar name={user.name} src={user.photo || undefined} size={32} />
-        <span className="ws-account__who">
-          <span className="ws-account__name">{user.name}</span>
-          <span className="ws-account__role">{roleLabel(role) || 'Equipe'}</span>
-        </span>
-        <Icon n="chevron" size={15} className="ws-account__chevron" />
+        <Avatar name={user.name} src={user.photo || undefined} size={30} />
       </button>
 
       {open && (
@@ -100,7 +95,7 @@ export function AccountMenu({ user, unit, units = [], overview, canOverview, can
               {user.email && <p className="ws-account__identity-email">{user.email}</p>}
               <p className="ws-account__identity-role">
                 {roleLabel(role) || 'Equipe'}
-                {multiUnit && unit.name && <> · {overview ? 'visão da organização' : unit.name}</>}
+                {overview && multiUnit && <> · visão da organização</>}
               </p>
             </div>
           </header>

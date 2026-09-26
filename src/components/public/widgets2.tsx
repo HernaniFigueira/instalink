@@ -333,19 +333,6 @@ export function BookingIsland({ business, services, professionals, title, initia
           </div>
         )}
 
-        {time && service && (
-          <div className="rounded-2xl p-3.5" style={{ background: 'color-mix(in srgb, var(--il-primary) 10%, transparent)', border: '1px solid color-mix(in srgb, var(--il-primary) 28%, transparent)' }}>
-            <p className="font-extrabold text-sm">Resumo</p>
-            <p className="text-sm mt-1 font-bold">{service.name}</p>
-            {/* Resumo público: dia e horário de início + preço. Sem duração e
-                sem intervalo "14:00–15:00" (regra de lib/pricing). */}
-            <p className="il-muted text-xs mt-0.5">
-              {date.split('-').reverse().join('/')} às {time}
-            </p>
-            <p className="font-extrabold il-accent text-sm mt-1">{publicPriceLabel(service.price)}</p>
-          </div>
-        )}
-
         {time && (
           <div className="space-y-2.5">
             {form.logged ? (
@@ -387,7 +374,16 @@ export function BookingIsland({ business, services, professionals, title, initia
           </div>
         )}
 
-        {time && service && <section className="il-card p-4 text-sm" aria-label="Resumo do agendamento"><h4 className="font-bold mb-2">Confira seu atendimento</h4><p>{business.name}</p><p className="font-semibold">{service.name} · {date.split('-').reverse().join('/')} às {time}</p><p className="il-muted text-xs mt-1">Profissional definido pela disponibilidade da clínica.</p>{form.logged && <p className="mt-2">Paciente: {form.customer?.name}</p>}</section>}
+        {time && service && (
+          <section className="il-card p-4 text-sm" aria-label="Resumo do agendamento">
+            <h4 className="font-extrabold text-sm mb-2">Confira seu atendimento</h4>
+            <p className="font-bold">{business.name}</p>
+            <p>{service.name} · {date.split('-').reverse().join('/')} às {time}</p>
+            <p className="il-muted text-xs mt-1">Profissional definido pela disponibilidade da clínica.</p>
+            {form.logged && <p className="mt-2">Paciente: {form.customer?.name}</p>}
+            <p className="font-extrabold il-accent text-sm mt-2 pt-2 border-t border-[var(--il-border,#E2E8F0)]">{publicPriceLabel(service.price)}</p>
+          </section>
+        )}
         {notice && <p role="status" className="il-muted text-sm">{notice}</p>}
         {error && <p role="alert" className="text-sm font-semibold text-red-600">{error}</p>}
         <div className="sticky bottom-0 -mx-1 px-1 pt-2 pb-1" style={{ background: 'var(--il-bg)' }}>

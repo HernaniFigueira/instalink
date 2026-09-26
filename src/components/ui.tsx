@@ -1,5 +1,5 @@
 'use client';
-import { cloneElement, createContext, isValidElement, useContext, useEffect, useId, useRef } from 'react';
+import { cloneElement, createContext, isValidElement, useCallback, useContext, useEffect, useId, useRef, useState } from 'react';
 import { wrapDialogFocus } from '@/lib/dialog-focus';
 import { lockBodyScroll, unlockBodyScroll } from '@/lib/scroll-lock';
 import { cn } from '@/lib/utils';
@@ -457,6 +457,87 @@ export function Tabs<T extends string = string>({ items, value, onChange, ariaLa
               'ml-0.5 min-w-[18px] h-[18px] px-1 rounded-pill text-[10px] font-semibold inline-flex items-center justify-center',
               value === item.id ? 'bg-[var(--brand-soft)] text-[var(--brand-fg)]' : 'bg-[var(--border)] text-[var(--text-muted)]',
             )}>{item.count}</span>
+          )}
+        </button>
+      ))}
+    </div>
+  );
+}
+
+/**
+ * SEGMENTED CONTROL com indicador deslizante (§8).
+ *
+ * Por que não `Tabs`: a régua de "Dia/Semana/Mês/Lista" parecia aba de página
+ * (marcador sublinhado, cada opção um alvo isolado). Aqui as quatro opções são
+ * UM controle só, no mesmo espírito de um seletor de modo de aplicativo:
+ * o indicador desliza por baixo do rótulo em 200ms com a curva padrão do
+ * sistema, então trocar de visão parece mover uma peça — não recarregar tela.
+ *
+ * Acessibilidade preservada dos Tabs: `role="tablist"`, `aria-selected`,
+ * roving tabindex e setas ←/→ (Home/End). Quem usa leitor de tela não perde
+ * nada; quem não distingue cor continua vendo o indicador posicionado.
+ */
+export function Segmented<T extends string = string>({ items, value, onChange, ariaLabel, size = 'md' }: {
+  items: TabItem<T>[]; value: T; onChange: (id: T) => void; ariaLabel: string; size?: 'sm' | 'md';
+}) {
+  const buttons = useRef(new Map<T, HTMLButtonElement>());
+  const listRef = useRef<HTMLDivElement | null>(null);
+  const enabled = items.filter((item) => !item.disabled);
+  const entry = enabled.find((item) => item.id === value) || enabled[0];
+  const [thumb, setThumb] = useState<{ left: number; width: number } | null>(null);
+
+  // O indicador é MEDIDO do botão real: assim ele acompanha rótulo de tamanho
+  // variável (idioma, contador) sem ninguém calcular largura na mão.
+  const measure = useCallback(() => {
+    const node = value ? buttons.current.get(value) : undefined;
+    const list = listRef.current;
+    if (!node || !list) { setThumb(null); return; }
+    setThumb({ left: node.offsetLeft, width: node.offsetWidth });
+  }, [value]);
+
+  useEffect(() => { measure(); }, [measure, items.length]);
+  useEffect(() => {
+    if (typeof ResizeObserver === 'undefined' || !listRef.current) return;
+    const ro = new ResizeObserver(measure);
+    ro.observe(listRef.current);
+    return () => ro.disconnect();
+  }, [measure]);
+
+  function move(event: React.KeyboardEvent<HTMLButtonElement>, current: T) {
+    if (event.altKey || event.ctrlKey || event.metaKey) return;
+    const position = enabled.findIndex((item) => item.id === current);
+    let next: TabItem<T> | undefined;
+    if (event.key === 'ArrowRight') next = enabled[(position + 1) % enabled.length];
+    if (event.key === 'ArrowLeft') next = enabled[(position - 1 + enabled.length) % enabled.length];
+    if (event.key === 'Home') next = enabled[0];
+    if (event.key === 'End') next = enabled[enabled.length - 1];
+    if (!next) return;
+    event.preventDefault();
+    buttons.current.get(next.id)?.focus();
+    onChange(next.id);
+  }
+
+  return (
+    <div ref={listRef} role="tablist" aria-label={ariaLabel}
+      className={cn('il-segmented', size === 'sm' && 'il-segmented--sm')}>
+      {thumb && (
+        <span className="il-segmented__thumb" aria-hidden="true"
+          style={{ transform: `translateX(${thumb.left}px)`, width: thumb.width }} />
+      )}
+      {items.map((item) => (
+        <button key={item.id} type="button" role="tab"
+          ref={(node) => { if (node) buttons.current.set(item.id, node); else buttons.current.delete(item.id); }}
+          aria-selected={value === item.id}
+          tabIndex={entry?.id === item.id ? 0 : -1}
+          title={item.title}
+          disabled={item.disabled}
+          onKeyDown={(event) => move(event, item.id)}
+          onClick={() => onChange(item.id)}
+          className="il-segmented__item">
+          {item.icon && <Icon n={item.icon} size={14} />}
+          {item.label}
+          {typeof item.count === 'number' && (
+            <span className="il-segmented__count">{item.count}</span>
           )}
         </button>
       ))}

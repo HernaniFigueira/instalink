@@ -62,7 +62,7 @@ export function ChangePasswordForm({ standalone = false }: { standalone?: boolea
 
   return (
     <section id="alterar-senha" className={standalone
-      ? 'w-full max-w-lg rounded-2xl border border-zinc-200 bg-white p-6 shadow-sm'
+      ? 'w-full max-w-lg rounded-xl border border-zinc-200 bg-white p-6 shadow-sm'
       : 'rounded-lg border border-[var(--border)] bg-white p-5'}>
       <div className="flex items-start gap-3">
         <span className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-md bg-[var(--brand-soft)] text-[var(--brand-fg)]">

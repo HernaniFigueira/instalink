@@ -89,7 +89,7 @@ export default function MasterMastersPage() {
       {error && <p className="mb-4 text-sm font-semibold bg-red-600 text-white rounded-xl px-4 py-3">{error}</p>}
       {msg && <p className="mb-4 text-sm font-semibold bg-emerald-600 text-white rounded-xl px-4 py-3">{msg}</p>}
 
-      <section className="bg-white border border-zinc-200 rounded-2xl p-5 mb-5 max-w-xl">
+      <section className="bg-white border border-zinc-200 rounded-xl p-5 mb-5 max-w-xl">
         <p className="text-xs font-extrabold uppercase tracking-wider text-zinc-400 mb-3">Adicionar / promover Master</p>
         <form onSubmit={addMaster} className="space-y-3">
           <label className="block">
@@ -115,11 +115,11 @@ export default function MasterMastersPage() {
       </section>
 
       {!rows ? <ListSkeleton rows={3} /> : rows.length === 0 ? (
-        <p className="bg-white border border-zinc-200 rounded-2xl text-center py-12 text-sm text-zinc-500">
+        <p className="bg-white border border-zinc-200 rounded-xl text-center py-12 text-sm text-zinc-500">
           Nenhum Master com <code className="font-mono">role=master</code> no banco. Use o formulário acima ou o bootstrap CLI.
         </p>
       ) : (
-        <div className="bg-white border border-zinc-200 rounded-2xl divide-y divide-zinc-100">
+        <div className="bg-white border border-zinc-200 rounded-xl divide-y divide-zinc-100">
           {rows.map((m) => (
             <div key={m.id} className="px-4 py-3 flex flex-wrap items-center gap-3">
               <div className="min-w-0 flex-1">
@@ -141,7 +141,7 @@ export default function MasterMastersPage() {
       )}
 
       {envOnly.length > 0 && (
-        <section className="bg-amber-50 border border-amber-200 rounded-2xl p-5 mt-5">
+        <section className="bg-amber-50 border border-amber-200 rounded-xl p-5 mt-5">
           <p className="text-xs font-extrabold uppercase tracking-wider text-amber-800 mb-2">
             Fallback MASTER_EMAILS (sem role=master)
           </p>

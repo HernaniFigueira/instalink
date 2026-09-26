@@ -43,8 +43,8 @@ export default function MasterLayout({ children }: { children: React.ReactNode }
   if (state === 'denied') {
     return (
       <main className="min-h-screen flex items-center justify-center p-6 bg-zinc-100">
-        <div className="bg-white rounded-3xl border border-zinc-200 p-8 max-w-md text-center">
-          <span className="w-14 h-14 rounded-2xl bg-red-50 text-red-600 flex items-center justify-center mx-auto"><Icon n="shield" size={26} /></span>
+        <div className="bg-white rounded-xl border border-zinc-200 p-8 max-w-md text-center">
+          <span className="w-14 h-14 rounded-xl bg-red-50 text-red-600 flex items-center justify-center mx-auto"><Icon n="shield" size={26} /></span>
           <h1 className="font-extrabold text-xl mt-4">Área restrita da plataforma</h1>
           <p className="text-sm text-zinc-500 mt-2">
             Esta área é exclusiva da conta Master do GoDoutor. Owner, Admin ou membro de Organization

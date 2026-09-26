@@ -243,7 +243,7 @@ export default function CampanhasPage() {
       {creating && (
         <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4" role="dialog" aria-modal="true">
           <div className="absolute inset-0 bg-[var(--overlay)]" onClick={() => setCreating(false)} />
-          <div className="relative w-full sm:max-w-lg bg-white rounded-t-3xl sm:rounded-3xl max-h-[92vh] overflow-y-auto">
+          <div className="relative w-full sm:max-w-lg bg-white rounded-t-3xl sm:rounded-xl max-h-[92vh] overflow-y-auto">
             <div className="sticky top-0 bg-white/95 backdrop-blur px-5 py-4 flex items-center justify-between border-b border-zinc-100">
               <p className="font-semibold text-lg">Nova campanha</p>
               <button onClick={() => setCreating(false)} className="font-semibold text-zinc-400 p-2 inline-flex" aria-label="Fechar"><Icon n="x" size={16} /></button>

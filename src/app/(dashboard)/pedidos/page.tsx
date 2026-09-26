@@ -69,8 +69,8 @@ export default function PedidosPage() {
       </div>
 
       {denied ? <AccessDenied area="Pedidos" /> : !loaded ? <ListSkeleton rows={4} /> : list.length === 0 ? (
-        <div className="bg-white border border-zinc-200 rounded-2xl text-center py-14 px-6">
-          <div className="mx-auto w-12 h-12 rounded-2xl bg-zinc-100 flex items-center justify-center text-zinc-400"><Icon n="receipt" size={24} /></div>
+        <div className="bg-white border border-zinc-200 rounded-xl text-center py-14 px-6">
+          <div className="mx-auto w-12 h-12 rounded-xl bg-zinc-100 flex items-center justify-center text-zinc-400"><Icon n="receipt" size={24} /></div>
           <h3 className="font-semibold mt-3">Nenhum pedido {filter ? 'neste status' : 'ainda'}</h3>
           <p className="text-sm text-zinc-500 mt-1">Quando um cliente finalizar uma compra, ela aparece aqui.</p>
         </div>
@@ -79,7 +79,7 @@ export default function PedidosPage() {
           {list.map((o) => {
             const def = ORDER_STATUS[o.status];
             return (
-              <div key={o.id} className="bg-white border border-zinc-200 rounded-2xl p-4">
+              <div key={o.id} className="bg-white border border-zinc-200 rounded-xl p-4">
                 <button onClick={() => setOpen(open === o.id ? null : o.id)} className="w-full text-left">
                   <span className="flex flex-wrap items-center gap-2 justify-between">
                     <span>

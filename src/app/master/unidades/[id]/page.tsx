@@ -114,7 +114,7 @@ export default function MasterUnitDetailPage() {
 
       {error && <p className="mb-4 text-sm font-semibold bg-amber-600 text-white rounded-xl px-4 py-3">{error}</p>}
 
-      <div className="bg-white border border-zinc-200 rounded-2xl p-4 mb-4">
+      <div className="bg-white border border-zinc-200 rounded-xl p-4 mb-4">
         <p className="text-xs font-extrabold uppercase tracking-wider text-zinc-400 mb-2">Modo suporte</p>
         <p className="text-xs text-zinc-600 mb-2.5">
           Sessão de 60 minutos, auditada. Em <strong>leitura</strong> nenhuma escrita é permitida.
@@ -131,7 +131,7 @@ export default function MasterUnitDetailPage() {
       </div>
 
       <div className="grid lg:grid-cols-3 gap-4 mb-4">
-        <section className="bg-white border border-zinc-200 rounded-2xl p-4 lg:col-span-2">
+        <section className="bg-white border border-zinc-200 rounded-xl p-4 lg:col-span-2">
           <p className="text-xs font-extrabold uppercase tracking-wider text-zinc-400 mb-3">Números</p>
           <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">
             {TOTALS.map(([k, label]) => (
@@ -142,7 +142,7 @@ export default function MasterUnitDetailPage() {
             ))}
           </div>
         </section>
-        <section className="bg-white border border-zinc-200 rounded-2xl p-4">
+        <section className="bg-white border border-zinc-200 rounded-xl p-4">
           <p className="text-xs font-extrabold uppercase tracking-wider text-zinc-400 mb-3">WhatsApp</p>
           <p className={cn('text-sm font-extrabold', unit.whatsappIntegration.status === 'connected' ? 'text-emerald-700' : 'text-zinc-700')}>
             {unit.whatsappIntegration.label.label}
@@ -153,7 +153,7 @@ export default function MasterUnitDetailPage() {
       </div>
 
       <div className="grid lg:grid-cols-3 gap-4">
-        <section className="bg-white border border-zinc-200 rounded-2xl p-4">
+        <section className="bg-white border border-zinc-200 rounded-xl p-4">
           <p className="text-xs font-extrabold uppercase tracking-wider text-zinc-400 mb-3">Proprietário</p>
           {owner ? (
             <>
@@ -164,7 +164,7 @@ export default function MasterUnitDetailPage() {
             </>
           ) : <p className="text-sm text-zinc-500">Sem proprietário.</p>}
         </section>
-        <section className="bg-white border border-zinc-200 rounded-2xl p-4">
+        <section className="bg-white border border-zinc-200 rounded-xl p-4">
           <p className="text-xs font-extrabold uppercase tracking-wider text-zinc-400 mb-3">Equipe ({team.length})</p>
           {team.length === 0 ? <p className="text-sm text-zinc-500">Só o proprietário.</p> : (
             <ul className="space-y-2">
@@ -178,7 +178,7 @@ export default function MasterUnitDetailPage() {
             </ul>
           )}
         </section>
-        <section className="bg-white border border-zinc-200 rounded-2xl p-4">
+        <section className="bg-white border border-zinc-200 rounded-xl p-4">
           <p className="text-xs font-extrabold uppercase tracking-wider text-zinc-400 mb-3">Módulos</p>
           <div className="flex flex-wrap gap-1.5">
             {modules.map((m) => (
@@ -191,7 +191,7 @@ export default function MasterUnitDetailPage() {
         </section>
       </div>
 
-      <section className="bg-white border border-zinc-200 rounded-2xl p-4 mt-4">
+      <section className="bg-white border border-zinc-200 rounded-xl p-4 mt-4">
         <p className="text-xs font-extrabold uppercase tracking-wider text-zinc-400 mb-3">Auditoria recente</p>
         {recentAudit.length === 0 ? <p className="text-sm text-zinc-500">Nenhum registro.</p> : (
           <ul className="space-y-1.5 text-xs">

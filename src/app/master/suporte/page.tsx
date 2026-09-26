@@ -85,7 +85,7 @@ function SuporteForm() {
       </p>
 
       {current && (
-        <div className="bg-amber-50 border border-amber-200 rounded-2xl p-4 mb-5 text-sm">
+        <div className="bg-amber-50 border border-amber-200 rounded-xl p-4 mb-5 text-sm">
           <p className="font-bold text-amber-900">Sessão ativa</p>
           <p className="text-xs text-amber-800 mt-1">
             Unidade {current.businessId} · modo {current.mode} · expira {(current.expiresAt || '').slice(0, 16).replace('T', ' ')}
@@ -99,7 +99,7 @@ function SuporteForm() {
 
       {error && <p className="mb-4 text-sm font-semibold bg-red-600 text-white rounded-xl px-4 py-3">{error}</p>}
 
-      <div className="bg-white border border-zinc-200 rounded-2xl p-5 space-y-4 max-w-xl">
+      <div className="bg-white border border-zinc-200 rounded-xl p-5 space-y-4 max-w-xl">
         <label className="block">
           <span className="text-[11px] font-bold text-zinc-500">ORGANIZATION</span>
           <select value={orgId} onChange={(e) => { setOrgId(e.target.value); setUnitId(''); }}

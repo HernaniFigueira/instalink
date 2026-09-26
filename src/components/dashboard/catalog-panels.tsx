@@ -27,7 +27,7 @@ export function DeleteSheet({ name, kindLabel, blocked, onDeactivate, onConfirm,
 }) {
   return (
     <Drawer open onClose={onClose} title={`Excluir ${kindLabel}`} width="max-w-md">
-      <div className="relative w-full sm:max-w-md bg-white rounded-t-3xl sm:rounded-3xl p-6 space-y-3">
+      <div className="relative w-full sm:max-w-md bg-white rounded-t-3xl sm:rounded-xl p-6 space-y-3">
         <h3 className="font-semibold text-lg">Excluir {kindLabel} “{name}”?</h3>
         {blocked ? (
           <p className="text-sm text-amber-800 bg-amber-50 border border-amber-200 rounded-md px-4 py-3">

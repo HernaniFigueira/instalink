@@ -101,7 +101,7 @@ const sections: LegalSection[] = [
     content: <>
       <p>Se você não quiser ou não puder pedir exclusão, também pode exercer os direitos de confirmação, acesso, correção, anonimização, bloqueio, portabilidade, informação sobre compartilhamentos, revogação do consentimento e oposição quando cabível, conforme a LGPD e o papel de cada agente.</p>
       <p>Pedidos sobre dados inseridos pela clínica devem ser dirigidos primeiro à clínica responsável. O GoDoutor apoia a clínica quando atua como operador. Se a resposta não for suficiente, o titular pode procurar a Autoridade Nacional de Proteção de Dados (ANPD).</p>
-      <div className="rounded-2xl border border-[#e7e6e0] bg-white px-5 py-5 text-[#555568] shadow-[0_8px_30px_-24px_rgba(23,24,39,0.5)]">
+      <div className="rounded-xl border border-[#e7e6e0] bg-white px-5 py-5 text-[#555568] shadow-[0_8px_30px_-24px_rgba(23,24,39,0.5)]">
         <p className="font-semibold text-[#29283a]">Canal para o pedido</p>
         <p className="mt-2">Use o suporte disponibilizado na conta GoDoutor ou contate a clínica que cadastrou os dados. O e-mail oficial, a razão social, o CNPJ e o endereço jurídico do controlador ainda precisam ser preenchidos antes da publicação jurídica definitiva.</p>
       </div>

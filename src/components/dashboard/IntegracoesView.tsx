@@ -660,7 +660,7 @@ print(res.json())`}</pre>
       {/* ── Modal Gerar Nova Chave ── */}
       {showNewKeyModal && (
         <div className="fixed inset-0 bg-[var(--overlay)] z-50 flex items-center justify-center p-4">
-          <div className="bg-white rounded-2xl max-w-md w-full p-6 space-y-4 shadow-xl animate-scaleUp">
+          <div className="bg-white rounded-xl max-w-md w-full p-6 space-y-4 shadow-xl animate-scaleUp">
             <div className="flex items-start justify-between border-b pb-3">
               <h2 className="text-base font-semibold text-zinc-900">Gerar Chave de Integração</h2>
               <button
@@ -746,7 +746,7 @@ print(res.json())`}</pre>
       {/* ── Modal Adicionar Webhook ── */}
       {showNewWebhookModal && (
         <div className="fixed inset-0 bg-[var(--overlay)] z-50 flex items-center justify-center p-4">
-          <div className="bg-white rounded-2xl max-w-md w-full p-6 space-y-4 shadow-xl animate-scaleUp">
+          <div className="bg-white rounded-xl max-w-md w-full p-6 space-y-4 shadow-xl animate-scaleUp">
             <div className="flex items-start justify-between border-b pb-3">
               <h2 className="text-base font-semibold text-zinc-900">
                 {generatedWebhookSecret ? 'Segredo do Webhook Gerado' : 'Novo Webhook de Saída'}

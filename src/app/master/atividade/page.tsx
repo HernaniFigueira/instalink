@@ -41,9 +41,9 @@ export default function MasterAtividadePage() {
         className="w-full max-w-md bg-white border border-zinc-200 rounded-xl px-4 py-2.5 text-sm mb-4 outline-none focus:border-zinc-400" />
 
       {entries.length === 0 ? (
-        <p className="bg-white border border-zinc-200 rounded-2xl text-center py-12 text-sm text-zinc-500">Nenhum registro.</p>
+        <p className="bg-white border border-zinc-200 rounded-xl text-center py-12 text-sm text-zinc-500">Nenhum registro.</p>
       ) : (
-        <div className="bg-white border border-zinc-200 rounded-2xl divide-y divide-zinc-100">
+        <div className="bg-white border border-zinc-200 rounded-xl divide-y divide-zinc-100">
           {entries.map((e) => (
             <div key={e.id} className="px-4 py-3 flex flex-wrap items-baseline gap-x-3 gap-y-1">
               <span className="text-xs font-extrabold text-zinc-800">{e.label}</span>

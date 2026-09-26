@@ -17,7 +17,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
 import { centsToBR, cn, waLink } from '@/lib/utils';
-import { humanDateTime, formatDateBR, todayISO } from '@/lib/tz';
+import { humanDateTime, humanDay, formatDateBR, todayISO } from '@/lib/tz';
 import { BOOKING_STATUS, LEAD_STATUS, type StatusDef } from '@/lib/status';
 import { leadOriginLabel } from '@/lib/leads';
 import type { BusinessPipeline, ContactProfile, FinanceEntry , Pet } from '@/lib/types';
@@ -28,7 +28,7 @@ import {
   BRAZILIAN_STATES, PROFILE_TAGS_MAX, ageFromBirthDate, clientTags, countAttended, formatCep, formatCpf,
   formatPhoneBR, isValidCpf, normalizeBirthDate, profileOf,
 } from '@/lib/contact-profile';
-import { Avatar, Badge, Button, IconButton, Input, Kpi, Notice, Select, StatusBadge, SubCard, Switch, Tabs, Textarea, type TabItem } from '@/components/ui';
+import { Avatar, Badge, Button, IconButton, Input, Kpi, Notice, Select, StatusBadge, SubCard, Switch, Tabs, Textarea, buttonCls, type TabItem } from '@/components/ui';
 import { Icon } from '@/components/icons';
 import { apiGet, apiSend } from '@/lib/api-client';
 import { cepError, contactFieldErrors, emailError, hasFieldErrors, maskCep, maskCpf, phoneError } from '@/lib/field-quality';
@@ -91,7 +91,21 @@ type HistoryTab =
   | 'overview' | 'bookings' | 'encounters' | 'conversations'
   | 'files' | 'finance' | 'timeline' | 'leads' | 'tasks' | 'notes';
 
-export function ClientProfileDrawer({ person, businessId, pipeline, canFunil, onClose, onChanged, onNewBooking }: {
+/**
+ * A ficha da pessoa tem DOIS modos, mesma fonte de dados (§11):
+ *
+ *   preview → gaveta de passagem: quem é, contato, etiquetas, próximo
+ *             atendimento e últimos movimentos. Serve para responder rápido
+ *             ("é essa pessoa?") sem tirar o usuário da lista.
+ *   page    → rota /clientes/[id]: a ficha COMPLETA (abas, atendimentos,
+ *             arquivos, financeiro, histórico) vivendo na área principal,
+ *             com sidebar e topbar — perfil largo de verdade, não gaveta.
+ *
+ * Nada foi reescrito: o corpo completo é o MESMO deste componente desde
+ * sempre; o que muda é a casca (gaveta ou página) e o quanto carrega
+ * (a gaveta não dispara atendimentos/financeiro à toa).
+ */
+export function ClientProfileDrawer({ person, businessId, pipeline, canFunil, onClose, onChanged, onNewBooking, variant = 'preview' }: {
   person: Person360;
   businessId: string;
   pipeline: BusinessPipeline | null;
@@ -99,6 +113,7 @@ export function ClientProfileDrawer({ person, businessId, pipeline, canFunil, on
   onClose: () => void;
   onChanged: () => void;
   onNewBooking: (p: Person360) => void;
+  variant?: 'preview' | 'page';
 }) {
   const [tab, setTab] = useState<HistoryTab>('overview');
   // FASE 2 · P2/P7 — financeiro do paciente (carga única, escopo do contato).
@@ -169,6 +184,10 @@ export function ClientProfileDrawer({ person, businessId, pipeline, canFunil, on
     || profile.adminNote || profile.tags.length > 0);
 
   const firstName = (person.name || '').split(' ')[0] || 'cliente';
+  // Endereço canônico da ficha completa (§11). A `key` é a identidade estável
+  // usada pelo CRM (contato OU cliente), então o link nunca aponta para a
+  // pessoa errada quando há contato e cliente com o mesmo nome.
+  const profileHref = (query: string) => `/clientes/${encodeURIComponent(person.key)}${query}`;
 
   async function patch(payload: Record<string, unknown>, okText: string) {
     setSaving(true);
@@ -401,6 +420,7 @@ export function ClientProfileDrawer({ person, businessId, pipeline, canFunil, on
   const notes = person.notes || [];
 
   useEffect(() => {
+    if (variant !== 'page') return;
     if (!canEncounter || encountersLoaded) return;
     const q = person.contactId
       ? `contactId=${encodeURIComponent(person.contactId)}`
@@ -416,10 +436,11 @@ export function ClientProfileDrawer({ person, businessId, pipeline, canFunil, on
         setEncountersLoaded(true);
       });
     return () => { cancelled = true; };
-  }, [canEncounter, encountersLoaded, person.contactId, person.customerId, businessId]);
+  }, [canEncounter, encountersLoaded, person.contactId, person.customerId, businessId, variant]);
 
   // FASE 2 · P2/P7 — cobranças do paciente (uma carga; sem permissão = sem chamada).
   useEffect(() => {
+    if (variant !== 'page') return;
     if (!canFinance || financeLoaded || !person.contactId) { if (!canFinance) setFinanceLoaded(true); return; }
     let cancelled = false;
     setFinanceError('');
@@ -433,7 +454,7 @@ export function ClientProfileDrawer({ person, businessId, pipeline, canFunil, on
       setFinanceLoaded(true);
     });
     return () => { cancelled = true; };
-  }, [canFinance, financeLoaded, person.contactId, businessId]);
+  }, [canFinance, financeLoaded, person.contactId, businessId, variant]);
 
   // ── FASE 2 · P2 — Visão geral: só dados reais, derivados do que já está aqui ──
   const today = todayISO();
@@ -481,18 +502,17 @@ export function ClientProfileDrawer({ person, businessId, pipeline, canFunil, on
           onChanged={() => { setEncountersLoaded(false); onChanged(); }}
         />
       )}
-    <WorkspaceSheet
-      open
+    <ProfileShell
+      variant={variant}
       onClose={onClose}
       title={person.name || 'Cliente'}
-      subtitle={person.contactId ? 'Paciente 360 — perfil, agenda, atendimento e financeiro' : 'Pessoa ainda sem cadastro no CRM'}
-      icon="users"
-      width="max-w-[860px]"
-      footer={
+      subtitle={variant === 'page'
+        ? (person.contactId ? 'Paciente 360 — perfil, agenda, atendimentos, arquivos e financeiro' : 'Pessoa ainda sem cadastro no CRM')
+        : (person.contactId ? 'Paciente 360 — prévia rápida do cadastro' : 'Pessoa ainda sem cadastro no CRM')}
+      backHref={profileHref(`?b=${encodeURIComponent(businessId)}`)}
+      footer={variant === 'page' ? (
         <>
-          {person.phone && (
-            <A2 href={waLink(person.phone, `Olá, ${firstName}!`)} label="WhatsApp" icon="whatsapp" />
-          )}
+          {person.phone && <A2 href={waLink(person.phone, `Olá, ${firstName}!`)} label="WhatsApp" icon="whatsapp" />}
           {/* FASE 2 · P2 — ações rápidas: nota e iniciar atendimento (quando aplicável). */}
           <Button variant="quiet" size="sm" onClick={() => setTab('notes')}>
             <Icon n="pencil" size={14} /> Registrar nota
@@ -517,8 +537,20 @@ export function ClientProfileDrawer({ person, businessId, pipeline, canFunil, on
             <Icon n="calendarPlus" size={14} /> Novo agendamento
           </Button>
         </>
-      }
+      ) : (
+        <>
+          {person.phone && <A2 href={waLink(person.phone, `Olá, ${firstName}!`)} label="WhatsApp" icon="whatsapp" />}
+          <Button variant="secondary" size="sm" onClick={() => onNewBooking(person)}>
+            <Icon n="calendarPlus" size={14} /> Novo agendamento
+          </Button>
+          {/* A ficha completa é uma PÁGINA (§11): a gaveta só dá a passagem. */}
+          <Link href={profileHref(`?b=${encodeURIComponent(businessId)}`)} className={buttonCls('primary', 'sm')}>
+            Ver perfil completo <Icon n="chevR" size={14} />
+          </Link>
+        </>
+      )}
     >
+      {variant === 'page' ? (<>
       {/* ═══ QUEM É A PESSOA — carteirinha ═══ */}
       <div className="p-4">
         <div className="il-idcard rounded-xl border border-[var(--border)] shadow-md p-4">
@@ -1194,12 +1226,150 @@ export function ClientProfileDrawer({ person, businessId, pipeline, canFunil, on
           )}
         </div>
       </div>
-    </WorkspaceSheet>
+      </>) : (
+        <ClientQuickPreview person={person} tags={tags} />
+      )}
+    </ProfileShell>
     </>
   );
 }
 
 /** Linha de dado da carteirinha (rótulo + valor, com ação opcional). */
+/**
+ * CASCA da ficha (§11) — a mesma pessoa, dois móveis.
+ *
+ *   preview → `WorkspaceSheet` (gaveta), com link para a página completa;
+ *   page    → conteúdo direto na área principal, com "← Voltar para clientes"
+ *             à esquerda e as ações à direita. Sem gaveta dentro de página,
+ *             sem perder sidebar/topbar.
+ */
+function ProfileShell({ variant, onClose, title, subtitle, backHref, footer, children }: {
+  variant: 'preview' | 'page';
+  onClose: () => void;
+  title: string;
+  subtitle: string;
+  backHref: string;
+  footer: React.ReactNode;
+  children: React.ReactNode;
+}) {
+  if (variant === 'page') {
+    return (
+      <div className="min-w-0 pb-6">
+        <header className="flex flex-wrap items-center gap-x-3 gap-y-2 mb-3">
+          <Link href={backHref}
+            className="-ml-2 inline-flex items-center gap-1.5 h-9 px-2 rounded-md text-[13px] font-semibold text-[var(--text-soft)] hover:bg-[var(--surface-hover)] hover:text-[var(--text)] focus-visible:shadow-focus">
+            <Icon n="chevL" size={14} /> Voltar para clientes
+          </Link>
+          <div className="ml-auto flex flex-wrap items-center gap-2">{footer}</div>
+        </header>
+        <div className="ws-panel overflow-hidden">{children}</div>
+      </div>
+    );
+  }
+  return (
+    <WorkspaceSheet
+      open
+      onClose={onClose}
+      title={title}
+      subtitle={subtitle}
+      icon="users"
+      width="max-w-[560px]"
+      fullPageHref={backHref}
+      fullPageLabel="Ver perfil completo"
+      footer={footer}
+    >
+      {children}
+    </WorkspaceSheet>
+  );
+}
+
+/**
+ * GAVETA-RESUMO (§11) — o que se precisa saber para decidir, não a ficha toda.
+ * Sem abas e sem carregar atendimentos/financeiro: quem quer o histórico
+ * completo segue para a página, e é isso que a ação primária oferece.
+ */
+function ClientQuickPreview({ person, tags }: {
+  person: Person360;
+  tags: { id: string; label: string; tone?: string; hint?: string }[];
+}) {
+  const profile = profileOf(person.profile);
+  const age = person.age ?? ageFromBirthDate(profile.birthDate);
+  const next = [...person.bookings]
+    .filter((b) => b.status !== 'cancelled' && b.status !== 'completed' && b.status !== 'no_show')
+    .sort((a, b) => (a.date + (a.time || '') < b.date + (b.time || '') ? 1 : -1))[0] || null;
+  const recent = person.bookings.slice(0, 3);
+  const lastTalk = (person.conversations || []).slice(0, 1)[0] || null;
+
+  return (
+    <div className="p-4 space-y-3.5">
+      <div className="flex flex-wrap items-start gap-3.5">
+        <Avatar name={person.name} src={person.avatar || undefined} size={56} />
+        <div className="min-w-0 flex-1">
+          <h2 className="text-base font-semibold text-[var(--text)] leading-tight break-words">{person.name || 'Sem nome'}</h2>
+          <p className="text-[13px] text-[var(--text-muted)] mt-0.5">
+            {person.phone ? formatPhoneBR(person.phone) : 'Sem telefone'}
+            {person.email ? ` · ${person.email}` : ''}
+          </p>
+          <p className="text-[12px] text-[var(--text-faint)] mt-0.5">
+            {age !== null ? `${age} anos` : 'Idade não informada'}
+            {person.customerSince ? ` · cliente desde ${person.customerSince.slice(0, 10).split('-').reverse().join('/')}` : ''}
+          </p>
+        </div>
+        <Badge tone={person.accountStatus === 'active' ? 'green' : 'zinc'}>
+          {person.accountStatus === 'active' ? 'Acesso ativo' : 'Sem acesso'}
+        </Badge>
+      </div>
+
+      <div className="flex flex-wrap gap-1.5">
+        {tags.length ? tags.map((t) => (
+          <span key={t.id} title={t.hint}><Badge tone={(t.tone as any) || 'zinc'}>{t.label}</Badge></span>
+        )) : <Badge tone="zinc">Sem etiquetas</Badge>}
+      </div>
+
+      <div className="rounded-[var(--radius-md)] border border-[var(--border)] divide-y divide-[var(--border)]">
+        <div className="px-3.5 py-2.5">
+          <p className="text-[10px] font-semibold uppercase tracking-[0.08em] text-[var(--text-faint)]">Próximo atendimento</p>
+          {next ? (
+            <p className="text-[13px] text-[var(--text)] mt-1">
+              <span className="font-semibold">{humanDay(next.date)}{next.time ? ` às ${next.time}` : ''}</span>
+              {next.service ? <span className="text-[var(--text-muted)]"> · {next.service}</span> : null}
+            </p>
+          ) : (
+            <p className="text-[13px] text-[var(--text-muted)] mt-1">Nada agendado.</p>
+          )}
+        </div>
+        <div className="px-3.5 py-2.5">
+          <p className="text-[10px] font-semibold uppercase tracking-[0.08em] text-[var(--text-faint)]">Últimos atendimentos</p>
+          {recent.length ? (
+            <ul className="mt-1 space-y-1">
+              {recent.map((b) => (
+                <li key={b.id} className="text-[13px] text-[var(--text)] flex items-baseline justify-between gap-3">
+                  <span className="truncate">{b.service || 'Atendimento'}</span>
+                  <span className="shrink-0 text-[12px] text-[var(--text-muted)] tabular-nums">{eventDay(b.date)}</span>
+                </li>
+              ))}
+            </ul>
+          ) : (
+            <p className="text-[13px] text-[var(--text-muted)] mt-1">Sem histórico ainda.</p>
+          )}
+        </div>
+        {lastTalk && (
+          <div className="px-3.5 py-2.5">
+            <p className="text-[10px] font-semibold uppercase tracking-[0.08em] text-[var(--text-faint)]">Última conversa</p>
+            <p className="text-[13px] text-[var(--text-muted)] mt-1">{lastTalk.preview || 'Sem mensagens.'}</p>
+          </div>
+        )}
+      </div>
+
+      <p className="text-[12px] text-[var(--text-faint)]">
+        {person.contactId
+          ? 'A ficha completa (agenda, atendimentos, arquivos e financeiro) abre em página própria — a lista continua onde estava.'
+          : 'Esta pessoa ainda não tem cadastro no CRM.'}
+      </p>
+    </div>
+  );
+}
+
 function Data({ label, value, action, mono }: { label: string; value: string; action?: React.ReactNode; mono?: boolean }) {
   return (
     <div className="min-w-0">

@@ -29,7 +29,7 @@ import { todayISO, addDaysISO, weekdayOf, formatDateBR, nowHM } from '@/lib/tz';
 import { nowLinePlacement } from '@/lib/agenda-nowline';
 import { WEEKDAYS, WEEKDAYS_LONG, timeToMin, minToTime, cn } from '@/lib/utils';
 import type { Availability, AvailabilityException, Booking, BookingConfig, BookingStatus, Professional, Service } from '@/lib/types';
-import { Avatar, Badge, Drawer, AgendaSkeleton, ListSkeleton, Button, IconButton, AttentionStrip, Tabs } from '@/components/ui';
+import { Avatar, Badge, Drawer, AgendaSkeleton, ListSkeleton, Button, IconButton, AttentionStrip, Segmented } from '@/components/ui';
 import { Icon } from '@/components/icons';
 import {
   ATTENTION_MARK_CLS, ATTENTION_RING_CLS, BOOKING_BLOCK, BOOKING_DOT, BOOKING_STATUS,
@@ -1140,9 +1140,6 @@ export default function AgendaPage() {
       <header className="flex flex-wrap items-start justify-between gap-x-4 gap-y-2 mb-3.5">
         <div className="min-w-0">
           <h1 className="text-[22px] font-semibold tracking-tight text-[var(--text-primary)] leading-tight">Agenda</h1>
-          <p className="text-[13px] text-[var(--text-secondary)] mt-1">
-            Gerencie os atendimentos da sua clínica.
-          </p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
           {/* Filtros: UM botão, UM popover (Status · Serviços · Profissional) e
@@ -1233,13 +1230,13 @@ export default function AgendaPage() {
             )}
           </div>
 
-          {/* Legenda: ajuda sob demanda (popover), nunca uma faixa fixa. */}
-          <div ref={helpWrapRef} className="relative">
-            <Button type="button" variant="ghost" size="sm" aria-expanded={helpOpen} aria-haspopup="dialog"
-              onClick={() => setHelpOpen((v) => !v)} title="Legenda e como usar a grade">
-              <Icon n="help" size={15} />
-              <span className="hidden sm:inline">Legenda</span>
-            </Button>
+          {/* Legenda: ajuda sob demanda (popover), nunca uma faixa fixa — e
+              nunca competindo com Filtros/Fila/Novo: aqui é um "?" só ícone,
+              o mesmo affordance de ajuda do topbar. */}
+          <div ref={helpWrapRef} className="relative order-last">
+            <IconButton icon="help" label="Legenda e como usar a grade" tip="Legenda e como usar a grade"
+              variant="ghost" aria-expanded={helpOpen} aria-haspopup="dialog"
+              onClick={() => setHelpOpen((v) => !v)} />
             {helpOpen && (
               <div role="dialog" aria-label="Legenda e ajuda da agenda"
                 className="absolute right-0 top-[calc(100%+6px)] z-50 w-[min(24rem,calc(100vw-2rem))] rounded-[var(--radius-xl)] border border-[var(--border)] bg-[var(--surface)] shadow-lg p-3.5 space-y-2.5">
@@ -1270,7 +1267,7 @@ export default function AgendaPage() {
               <Icon n="users" size={14} />
               Fila
               {(queueInfo.waiting + queueInfo.called + queueInfo.inService) > 0 && (
-                <span className="ml-0.5 inline-flex items-center justify-center min-w-[18px] h-[18px] px-1 rounded-pill text-[10.5px] font-bold tabular-nums bg-[var(--warning-bg)] text-[var(--warning-fg)] border border-[var(--warning-border)]">
+                <span className="ml-0.5 inline-flex items-center justify-center min-w-[18px] h-[18px] px-1 rounded-pill text-[10.5px] font-bold tabular-nums bg-[var(--surface-3)] text-[var(--text-soft)] border border-[var(--border)]">
                   {queueInfo.waiting + queueInfo.called}
                 </span>
               )}
@@ -1345,7 +1342,7 @@ export default function AgendaPage() {
           relative z-40: o popover de filtros abre sobre a grade e precisa
           ficar acima dos cabeçalhos sticky (z-20/30) das colunas. */}
       <div className="relative z-40 ws-panel mt-3 mb-4">
-        <div className="flex flex-wrap items-center gap-x-3 gap-y-2.5 px-3 py-2.5">
+        <div className="flex flex-wrap items-center gap-x-4 gap-y-2.5 px-3 py-2.5">
           {/* Navegação no tempo (A3.4): [◀] [Hoje] [▶] + título da data ao lado.
               O "Hoje" fica SEMPRE no mesmo lugar, entre as setas — antes ele
               aparecia e desaparecia conforme a data, então o botão se movia
@@ -1367,27 +1364,28 @@ export default function AgendaPage() {
               <IconButton icon="chevR" label={navLabel(1)} tip={navLabel(1)} variant="ghost" onClick={() => move(1)}
                 className="w-9 h-9 rounded-none text-[var(--text-muted)]" />
             </span>
-            <label className="relative inline-flex flex-col min-w-0 max-w-[min(26rem,calc(100vw-12rem))] cursor-pointer rounded-md px-1 -mx-1 py-0.5 hover:bg-[var(--surface-hover)] focus-within:shadow-focus" title="Escolher outra data">
+            <label className="relative inline-flex items-center gap-1.5 h-9 min-w-0 max-w-[min(26rem,calc(100vw-9rem))] cursor-pointer rounded-md px-2 -mx-2 hover:bg-[var(--surface-hover)] focus-within:shadow-focus"
+              title={`${focusRange} · clique para escolher a data`}>
+              <Icon n="calendar" size={13} className="shrink-0 text-[var(--text-muted)]" />
               <span className="text-[15px] font-semibold leading-tight text-[var(--text)] capitalize truncate" aria-live="polite">{focusLabel}</span>
-              <span className="text-[11px] font-semibold text-[var(--text-muted)] leading-tight inline-flex items-center gap-1">
-                <Icon n="calendar" size={11} /> {focusRange} · clique para escolher a data
-              </span>
               <input type="date" value={focus} max="2100-12-31" onChange={(e) => { if (/^\d{4}-\d{2}-\d{2}$/.test(e.target.value)) setFocus(e.target.value); }}
-                aria-label="Escolher data" className="absolute inset-0 w-full h-full opacity-0 cursor-pointer" />
+                aria-label={`Escolher data (${focusRange})`} className="absolute inset-0 w-full h-full opacity-0 cursor-pointer" />
             </label>
           </div>
-          <Tabs
-            items={[
-              { id: 'day' as View, label: 'Dia', icon: 'calendar' },
-              { id: 'week' as View, label: 'Semana', icon: 'grid' },
-              { id: 'month' as View, label: 'Mês', icon: 'receipt' },
-              { id: 'list' as View, label: 'Lista', icon: 'tasks' },
-            ]}
-            value={view}
-            onChange={(v) => { endDrag(); setView(v); }}
-            ariaLabel="Visualização da agenda"
-            size="sm"
-          />
+          <div className="sm:ml-auto min-w-0 max-w-full">
+            <Segmented
+              items={[
+                { id: 'day' as View, label: 'Dia', icon: 'calendar' },
+                { id: 'week' as View, label: 'Semana', icon: 'grid' },
+                { id: 'month' as View, label: 'Mês', icon: 'receipt' },
+                { id: 'list' as View, label: 'Lista', icon: 'tasks' },
+              ]}
+              value={view}
+              onChange={(v) => { endDrag(); setView(v); }}
+              ariaLabel="Visualização da agenda"
+              size="sm"
+            />
+          </div>
         </div>
         {isDragging && view !== 'month' && (
           <div

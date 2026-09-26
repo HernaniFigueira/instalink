@@ -729,7 +729,7 @@ export function EsteiraView() {
       {/* ── Modal Detalhes do Lead ── */}
       {selectedLead && (
         <div className="fixed inset-0 bg-[var(--overlay)] z-50 flex items-center justify-center p-4">
-          <div className="bg-white rounded-2xl max-w-xl w-full max-h-[90vh] overflow-y-auto p-6 space-y-5 shadow-xl animate-scaleUp">
+          <div className="bg-white rounded-xl max-w-xl w-full max-h-[90vh] overflow-y-auto p-6 space-y-5 shadow-xl animate-scaleUp">
             <div className="flex items-start justify-between border-b pb-4">
               <div>
                 <h2 className="text-lg font-semibold text-zinc-900">{selectedLead.name || 'Lead sem nome'}</h2>
@@ -958,7 +958,7 @@ export function EsteiraView() {
         <div className="fixed inset-0 bg-[var(--overlay)] z-50 flex items-center justify-center p-4">
           <form
             onSubmit={handleConfirmBooking}
-            className="bg-white rounded-2xl max-w-md w-full p-6 space-y-4 shadow-xl animate-scaleUp"
+            className="bg-white rounded-xl max-w-md w-full p-6 space-y-4 shadow-xl animate-scaleUp"
           >
             <div className="flex items-start justify-between border-b pb-3">
               <div>
@@ -1068,7 +1068,7 @@ export function EsteiraView() {
         <div className="fixed inset-0 bg-[var(--overlay)] z-50 flex items-center justify-center p-4">
           <form
             onSubmit={handleCreateManualLead}
-            className="bg-white rounded-2xl max-w-md w-full p-6 space-y-3.5 shadow-xl animate-scaleUp"
+            className="bg-white rounded-xl max-w-md w-full p-6 space-y-3.5 shadow-xl animate-scaleUp"
           >
             <div className="flex items-start justify-between border-b pb-3">
               <h2 className="text-base font-semibold text-zinc-900">Novo Lead / Oportunidade</h2>

@@ -77,7 +77,7 @@ export default function PrivacyPolicyPage() {
             <p className="mt-6 max-w-2xl text-lg leading-8 text-[#626173]">
               Esta política explica, em linguagem clara, como o GoDoutor trata dados para oferecer uma plataforma de organização para clínicas, equipes e atendimento — incluindo páginas públicas, agenda, contatos, conversas e a integração oficial com WhatsApp e Meta.
             </p>
-            <div className="mt-7 rounded-2xl border border-[#ded9fa] bg-[#f0edff] px-5 py-4 text-sm leading-6 text-[#4f467f]">
+            <div className="mt-7 rounded-xl border border-[#ded9fa] bg-[#f0edff] px-5 py-4 text-sm leading-6 text-[#4f467f]">
               <strong className="font-bold">Importante:</strong> quando uma clínica cadastra dados de seus pacientes, clientes ou responsáveis, ela normalmente define as finalidades do tratamento e atua como controladora. O GoDoutor trata esses dados para prestar o serviço, conforme as instruções e configurações da clínica. A clínica deve apresentar suas próprias informações e avisos de privacidade aos titulares.
             </div>
           </header>
@@ -171,7 +171,7 @@ export default function PrivacyPolicyPage() {
 
             <Section id="alteracoes" number="10" title="Alterações e contato">
               <p>Podemos atualizar esta política para refletir mudanças no produto, na legislação, nos provedores ou nas integrações. A versão vigente ficará disponível nesta mesma URL, com a data de atualização no início da página. Mudanças relevantes poderão ser comunicadas pelo produto ou por outro canal apropriado.</p>
-              <div className="rounded-2xl border border-[#e7e6e0] bg-white px-5 py-5 text-[#555568] shadow-[0_8px_30px_-24px_rgba(23,24,39,0.5)]">
+              <div className="rounded-xl border border-[#e7e6e0] bg-white px-5 py-5 text-[#555568] shadow-[0_8px_30px_-24px_rgba(23,24,39,0.5)]">
                 <p className="font-semibold text-[#29283a]">Canal de privacidade</p>
                 <p className="mt-2">Para dúvidas, solicitações de titulares ou exercício de direitos, use o canal de suporte disponibilizado na conta GoDoutor ou procure a clínica responsável pelo atendimento. O e-mail oficial, a identidade jurídica e o endereço do controlador ainda precisam ser preenchidos nesta política antes da publicação jurídica definitiva.</p>
               </div>

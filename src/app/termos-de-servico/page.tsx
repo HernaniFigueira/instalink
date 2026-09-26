@@ -139,7 +139,7 @@ const sections: LegalSection[] = [
     content: <>
       <p>Podemos atualizar estes Termos para refletir mudanças no produto, na legislação, nos provedores ou nas integrações. A versão vigente permanecerá nesta URL, com sua data de atualização. Mudanças relevantes poderão ser comunicadas no produto ou por outro canal apropriado.</p>
       <p>A eventual invalidade de uma cláusula não prejudica as demais. A ausência de cobrança ou aplicação imediata de uma regra não representa renúncia. Estes Termos devem ser interpretados em conjunto com a Política de Privacidade e com condições específicas aceitas pela clínica.</p>
-      <div className="rounded-2xl border border-[#e7e6e0] bg-white px-5 py-5 text-[#555568] shadow-[0_8px_30px_-24px_rgba(23,24,39,0.5)]">
+      <div className="rounded-xl border border-[#e7e6e0] bg-white px-5 py-5 text-[#555568] shadow-[0_8px_30px_-24px_rgba(23,24,39,0.5)]">
         <p className="font-semibold text-[#29283a]">Contato e identificação jurídica</p>
         <p className="mt-2">Para dúvidas sobre estes Termos, use o canal de suporte disponibilizado na conta GoDoutor ou procure a clínica responsável. A razão social, o CNPJ, o endereço oficial e o e-mail jurídico do controlador ainda precisam ser preenchidos antes da publicação jurídica definitiva; nenhum desses dados foi inventado nesta página.</p>
       </div>
