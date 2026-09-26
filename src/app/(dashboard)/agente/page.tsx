@@ -75,13 +75,18 @@ export default function AgentePage() {
     }
   }
 
+  // §A08 — o atalho para /canais exige 'config': quem não pode abrir a tela
+  // de canais vê o estado do canal como texto, não como link para um 403.
+  // P0 — hook chamado SEMPRE, antes de qualquer early return (Rules of
+  // Hooks): primeiro render é skeleton; hook depois do `if (!agent)` estoura
+  // React #310 quando os dados chegam. A derivação fica onde é consumida.
+  const { permissions: panelPerms, ready: permsReady } = usePanelPermissions();
+
   if (denied) return <AccessDenied area="Agente" />;
   if (failed) return <AreaLoadError area="Agente" message={failed} onRetry={load} />;
   if (!agent || !options) return <PageSkeleton />;
   const pv = preview as Preview | null;
-  // §A08 — o atalho para /canais exige 'config': quem não pode abrir a tela
-  // de canais vê o estado do canal como texto, não como link para um 403.
-  const { permissions: panelPerms, ready: permsReady } = usePanelPermissions();
+  // (derivação do hook já chamado acima — nenhum hook depois de early return)
   const canSeeChannels = !permsReady || panelPerms.config === true;
   const q = `?b=${businessId}`;
 

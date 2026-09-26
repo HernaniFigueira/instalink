@@ -175,6 +175,12 @@ export default function DashboardPage() {
     } finally { setSkipping(''); }
   }
   const { notice, dismiss } = useForbiddenNotice('Início');
+  // §A08/P0 — PERMISSÕES: hook chamado SEMPRE, antes de QUALQUER early return
+  // (Rules of Hooks). O primeiro render acontece com data=null (skeleton);
+  // se este hook ficasse depois do `if (!data)`, o render seguinte passaria a
+  // ter MAIS hooks que o anterior → React error #310 e painel branco após o
+  // login. A DERIVAÇÃO (canAdminUnit) continua onde é consumida, abaixo.
+  const { permissions: panelPerms, ready: permsReady } = usePanelPermissions();
   // Estados completos (auditoria §12, mesma família do bug do /recursos):
   // uma falha de rede nunca pode virar skeleton eterno no Início.
   const [failed, setFailed] = useState('');
@@ -305,8 +311,8 @@ export default function DashboardPage() {
   // §A08 — o checklist "Sua clínica está pronta?" só tem destinos de ADMINISTRAÇÃO
   // (/configuracoes, /servicos, /disponibilidade, /pagina, /canais — permissão
   // 'config'). Quem não administra a unidade não vê os atalhos: nenhum "Fazer →"
-  // pode terminar em "Sem permissão".
-  const { permissions: panelPerms, ready: permsReady } = usePanelPermissions();
+  // pode terminar em "Sem permissão". (O hook já foi chamado lá em cima; aqui
+  // só a derivação — nenhum hook depois de early return.)
   const canAdminUnit = !permsReady || panelPerms.config === true;
   const showSetup = hasSetupPending && !setupHidden && !proView && canAdminUnit;
   const showConnectChannel = !!whatsapp && !canalConnected && links.canais === true;
