@@ -4,13 +4,14 @@ import { can } from '@/lib/access';
 import { summarizeDay, pendingClosures } from '@/lib/booking-ops';
 import { integrationStatus } from '@/lib/whatsapp';
 import { enabledFeatureIds } from '@/lib/features';
-import { dashboardAttention, dashboardContext, dashboardLinks, recentActivityLists, setupChecklist, setupProgress } from '@/lib/dashboard';
+import { dashboardAttention, dashboardContext, dashboardLinks, pageIsCustomized, recentActivityLists, setupChecklist, setupProgress, type PageCustomizationInput } from '@/lib/dashboard';
 import { summarizeTasks } from '@/lib/automation/tasks';
 import { scopeBookings } from '@/lib/access-core';
 import type { PermissionId } from '@/lib/types';
 import {
   REVENUE_HINTS, REVENUE_LABELS, REVENUE_UNIT_LABELS, bookingRevenue, orderRevenue,
 } from '@/lib/revenue';
+import { financeMetrics } from '@/lib/finance-metrics';
 import { addDaysISO, nowHM, todayISO } from '@/lib/tz';
 import { timeToMin } from '@/lib/utils';
 import { parsePeriodParam, periodWindows, resolvePeriodSpec } from '@/lib/periods';
@@ -98,6 +99,17 @@ export async function GET(req: NextRequest) {
   );
 
   const revenueSources = context.revenue;
+  // §6 — QUATRO conceitos reconciliados (Agendado · Realizado · Recebido ·
+  // Em aberto) com a MESMA função de /api/results e /api/finance. A Visão
+  // geral nunca mais mostra um número que o Financeiro contradiz.
+  const financeSemantics = showMoney && revenueSources.includes('bookings')
+    ? financeMetrics({
+      bookings: bookings.map((b) => ({ status: b.status, date: b.date, price: Number((servicesById[b.serviceId] as any)?.price) || 0 })),
+      entries: (db.financeEntries || []).filter((e) => e.businessId === bId),
+      from: win.from,
+      to: win.to,
+    })
+    : null;
   // Payload de receita: só o que o negócio tem módulo para calcular, e só para
   // quem possui a permissão financeira. Sem módulo e sem dados → sem inventar.
   const revenuePayload = showMoney
@@ -109,11 +121,12 @@ export async function GET(req: NextRequest) {
       orders: revenueSources.includes('orders')
         ? { ...orderRevenueResult, hidden: false }
         : null,
+      semantics: financeSemantics,
       labels: REVENUE_LABELS,
       hints: REVENUE_HINTS,
       unitLabels: REVENUE_UNIT_LABELS,
     }
-    : { sources: [], bookings: null, orders: null, labels: REVENUE_LABELS, hints: REVENUE_HINTS, unitLabels: REVENUE_UNIT_LABELS };
+    : { sources: [], bookings: null, orders: null, semantics: null, labels: REVENUE_LABELS, hints: REVENUE_HINTS, unitLabels: REVENUE_UNIT_LABELS };
 
   // Compatibilidade com o formato anterior (a tela nova usa `revenuePayload`,
   // mas manter o campo evita quebrar qualquer consumidor existente).
@@ -290,17 +303,12 @@ export async function GET(req: NextRequest) {
   // Itens calculados a partir de dados existentes (lib/dashboard.ts);
   // nada é pré-marcado como concluído. A área é opcional e some quando
   // não há pendência.
-  // FASE 2 · P8 — personalização REAL da página (nenhum número inventado):
-  // bloco desativado, navegação escolhida, "Sobre" ligado ou ordem manual.
+  // FASE 2 · P8 + §P1.5 — personalização REAL da página (nenhum número
+  // inventado, nenhuma regra artificial). A REGRA mora em lib/dashboard.ts
+  // (pageIsCustomized, pura e testada): Visual salvo, bloco desativado,
+  // navegação escolhida, "Sobre" ligado OU logo/capa definidos.
   const page = db.pages.find((p) => p.businessId === bId);
-  const pageCustomized = !!(
-    page && (
-      (page.blocks || []).some((blk) => blk.enabled === false)
-      || ((business as any).navItems?.length || 0) > 0
-      || (business as any).navCustom === true
-      || business.about?.enabled === true
-    )
-  );
+  const pageCustomized = pageIsCustomized({ page: page as PageCustomizationInput['page'], business });
   const setupItems = setupChecklist({
     business,
     modules: m,

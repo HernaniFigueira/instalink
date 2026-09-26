@@ -35,6 +35,7 @@ import {
   bookingRevenue, orderRevenue, REVENUE_HINTS, REVENUE_LABELS, REVENUE_UNIT_LABELS,
   type OrderRevenueItem, type RevenueResult,
 } from './revenue';
+import { financeMetrics, type FinanceMetrics } from './finance-metrics';
 import { pctChange } from './analytics';
 import { leadOriginLabel, leadOriginRank } from './leads';
 
@@ -64,6 +65,12 @@ export interface ResultsInput {
   professionals?: ProfessionalRow[];
   /** Pedidos (só quando o módulo existe) — base da receita registrada. */
   orders?: OrderRevenueItem[];
+  /**
+   * §6 — movimentações financeiras registradas (receita 'pago' = RECEBIDO).
+   * Sem isso o painel não sabe o que foi efetivamente recebido — e nunca
+   * deve transformar agendamento em dinheiro.
+   */
+  financeEntries?: Array<{ kind: 'receita' | 'despesa'; status: string; amount: number; dueDate: string; paidAt: string }>;
   hasBookingsModule?: boolean;
   hasOrdersModule?: boolean;
 }
@@ -163,6 +170,12 @@ export interface ResultsPayload {
     hints: Record<string, string>;
     unitLabels: Record<string, string>;
   };
+  /**
+   * §6 — os QUATRO conceitos reconciliados (Agendado · Realizado ·
+   * Recebido · Em aberto), com a MESMA função de /api/overview e
+   * /api/finance (lib/finance-metrics.ts). Mesmo indicador = mesmo cálculo.
+   */
+  semantics: FinanceMetrics | null;
   /** Limitações conhecidas, em linguagem simples (mostradas na tela). */
   limitations: string[];
   hasAnyData: boolean;
@@ -220,6 +233,10 @@ export function collectResults(
     orders: db.orders
       .filter((o) => ids.has(o.businessId))
       .map((o) => ({ status: o.status, createdAt: o.createdAt, total: o.total })),
+    // §6 — RECEBIDO vem do que foi registrado em Financeiro (dado real).
+    financeEntries: (db.financeEntries || [])
+      .filter((e) => ids.has(e.businessId))
+      .map((e) => ({ kind: e.kind, status: e.status, amount: e.amount, dueDate: e.dueDate || '', paidAt: e.paidAt || '' })),
     hasBookingsModule: units.some((u) => u.hasBookings),
     hasOrdersModule: units.some((u) => u.hasOrders),
   });
@@ -459,7 +476,9 @@ export function buildResults(input: ResultsInput): ResultsPayload {
   if (forecast) {
     metrics.push(
       metric({
-        id: 'forecast_revenue', label: REVENUE_LABELS.bookings, unit: 'money',
+        // §6 — linguagem reconciliada: é o valor dos atendimentos elegíveis
+        // (agendado + realizado), não "receita" genérica.
+        id: 'forecast_revenue', label: 'Valor dos atendimentos', unit: 'money',
         value: forecast.total, prev: previous ? forecast.prev : null,
         hint: REVENUE_HINTS.bookings,
         hasData: forecast.count > 0 && forecastPriced,
@@ -593,6 +612,16 @@ export function buildResults(input: ResultsInput): ResultsPayload {
 
   const hasAnyData = bookingsCur > 0 || leadsCur.length > 0 || newContactsCur > 0 || contacts.length > 0;
 
+  // ── §6 — quatro conceitos reconciliados (MESMA função de overview/finance) ──
+  const semantics = hasBookings
+    ? financeMetrics({
+      bookings: bookings.map((b) => ({ status: b.status, date: b.date, price: priceOf.get(b.serviceId) || 0 })),
+      entries: input.financeEntries || [],
+      from: window.from,
+      to: window.to,
+    })
+    : null;
+
   const limitations: string[] = [];
   if (!registered.available) limitations.push(NO_REGISTERED_REVENUE_REASON);
   if (hasBookings) limitations.push(ARRIVAL_NOTE);
@@ -639,6 +668,7 @@ export function buildResults(input: ResultsInput): ResultsPayload {
       hints: REVENUE_HINTS as unknown as Record<string, string>,
       unitLabels: REVENUE_UNIT_LABELS as unknown as Record<string, string>,
     },
+    semantics,
     limitations,
     hasAnyData,
     emptyHint: 'Ainda não há movimento neste período. Assim que houver atendimentos, clientes ou leads, os números aparecem aqui.',

@@ -67,7 +67,8 @@ const CONFIG_TAB_ICON: Record<ConfigTab, string> = {
 };
 
 const CONFIG_TABS: Array<[ConfigTab, string]> = [
-  ['negocio', 'Negócio'],
+  // GODOUTOR final: o vocabulário do produto é CLÍNICA (o mesmo da sidebar).
+  ['negocio', 'Clínica'],
   ['agenda', 'Agenda'],
 ];
 
@@ -259,13 +260,17 @@ export default function ConfigPage() {
       />
       {msg && <p role="status" className="mb-3 text-sm font-semibold bg-[var(--success-bg)] border border-[var(--success-border)] text-[var(--success-fg)] rounded-md px-3 py-2">{msg}</p>}
 
-      {/* F3-I · Saúde da inteligência — linguagem de secretária, sem código/credencial. */}
+      {/* F3-I · Saúde da inteligência — linguagem de secretária, sem código/
+          credencial. Diagnóstico técnico: RECOLHIDO por padrão (a página
+          começa pelos dados da clínica, não pelo raio-X do sistema). */}
       {health && (
-        <section className="bg-white border border-zinc-200 p-4 mb-3" aria-label="Saúde da inteligência">
-          <div className="flex items-center gap-2 mb-2">
+        <details className="bg-white border border-zinc-200 rounded-lg mb-3">
+          <summary className="px-4 py-3 flex items-center gap-2 cursor-pointer select-none">
             <Icon n="spark" size={14} />
             <h3 className="text-sm font-semibold">Como está a inteligência</h3>
-          </div>
+            <span className="text-xs text-zinc-400 font-normal">(diagnóstico técnico)</span>
+          </summary>
+          <div className="px-4 pb-4" aria-label="Saúde da inteligência">
           <ul className="space-y-1.5">
             {([
               ['whatsapp', 'WhatsApp'],
@@ -295,7 +300,8 @@ export default function ConfigPage() {
               );
             })}
           </ul>
-        </section>
+          </div>
+        </details>
       )}
 
       <div className="mb-4">

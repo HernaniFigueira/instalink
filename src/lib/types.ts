@@ -460,6 +460,12 @@ export interface Page {
   theme: Theme;
   blocks: Block[];
   updatedAt: string;
+  /**
+   * §P1.5 — quando o Visual (tema/modelo/tipografia) foi salvo por escolha
+   * explícita. Aditivo/legado: páginas antigas não têm e seguem contando as
+   * outras personalizações reais (blocos, navegação, Sobre, logo/capa).
+   */
+  themeSavedAt?: string;
 }
 
 export interface Category {

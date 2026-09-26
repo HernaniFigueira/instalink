@@ -4,6 +4,7 @@ import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { Icon } from '@/components/icons';
 import { saveToken } from '@/lib/client-auth';
+import { landingPathFor } from '@/lib/landing';
 
 export default function LoginPage() {
   return (
@@ -46,12 +47,24 @@ function LoginForm() {
         throw new Error('Entramos na sua conta, mas não conseguimos manter a sessão neste navegador. Tente recarregar a página e entrar de novo.');
       }
       const meData = await me.json().catch(() => null);
-      // Master da plataforma vai para /master; cliente normal para /dashboard.
-      // O servidor também devolve redirectTo — preferimos a resposta de /me
-      // (papel revalidado) e caímos no login.response como fallback.
-      const dest = meData?.isMaster || data.isMaster || data.redirectTo === '/master'
-        ? '/master'
-        : (data.redirectTo || '/dashboard');
+      // §P1.12 — LANDING POR PAPEL: recepção (Atendente/Secretaria) começa na
+      // Agenda, profissional no "Meu dia" (/dashboard recortado) e owner/admin
+      // na Visão geral. O catálogo de permissões (lib/panel.ts) é a autoridade:
+      // ninguém é levado a uma rota que o painel recusaria (403). O fallback
+      // /dashboard só vale para quem TEM a permissão.
+      const primary = meData?.businesses?.[0];
+      const fallback =
+        meData?.isMaster || data.isMaster || data.redirectTo === '/master'
+          ? '/master'
+          : data.redirectTo || '/dashboard';
+      const dest = primary
+        ? landingPathFor({
+            role: primary.role,
+            permissions: primary.permissions || {},
+            modes: primary.modes || [],
+            features: primary.features || {},
+          }) || fallback
+        : fallback;
       router.push(dest);
       router.refresh();
     } catch (err: any) {

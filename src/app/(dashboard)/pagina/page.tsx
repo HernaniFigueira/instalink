@@ -1549,7 +1549,7 @@ function PublishTab({ business, onSlug, onPublish }: { business: Business; busin
               className="flex-1 rounded-md border border-zinc-300 px-3 py-2.5 text-sm font-mono" />
             <button onClick={() => onSlug(slug)} className="text-sm font-semibold bg-[var(--brand)] text-white shadow-brand hover:bg-[var(--brand-strong)] px-4 py-2.5 rounded-md">Salvar</button>
           </div>
-          <p className="text-xs text-zinc-500 mt-1">instalink.app/{slug}</p>
+          <p className="text-xs text-zinc-500 mt-1">godoutor.app/{slug}</p>
         </div>
       </div>
       <div className="bg-white border border-zinc-200 rounded-lg p-5 text-center">

@@ -38,10 +38,13 @@ function sanitizeNavItems(raw: unknown): NavItemConfig[] {
 }
 
 // GET ?businessId= — página + tema + blocos (dono)
-// PUT — salvar blocos/tema/publicação/slug (dono)
+// §5.3.1 — leitura do payload COMPLETO (business + page) é administração da
+// presença: exige 'pagina' (editor) ou 'config' (Configurações). Antes a
+// leitura só validava acesso à unidade — perfis de operação (ex.: secretaria)
+// recebiam 200 com o payload inteiro, embora o PUT já recusasse.
 export async function GET(req: NextRequest) {
   const businessId = req.nextUrl.searchParams.get('businessId') || '';
-  const guard = await requireBusiness(req, businessId);
+  const guard = await requireBusiness(req, businessId, ['pagina', 'config']);
   if (!guard.ok) return guard.res;
   const page = guard.db.pages.find((p) => p.businessId === businessId);
   return NextResponse.json({ business: guard.ctx.business, page });
@@ -114,6 +117,11 @@ export async function PUT(req: NextRequest) {
         const previousBlocks = page.blocks;
         if (body.theme) page.theme = { ...page.theme, ...body.theme };
         if (body.presetId !== undefined) page.presetId = String(body.presetId || '');
+        // §P1.5 — PERSONALIZAÇÃO REAL: salvar o Visual (tema/modelo/tipografia)
+        // é uma ação explícita de personalização e fica registrada. O item
+        // "Personalize a página" do checklist usa isto (e mais conteúdo/
+        // navegação/Sobre/logo/capa) — nunca só o "Sobre".
+        if (body.theme) (page as any).themeSavedAt = new Date().toISOString();
         if (Array.isArray(body.blocks)) {
           page.blocks = body.blocks.map((bl: any, i: number) => ({
             id: String(bl.id), type: bl.type, order: i,

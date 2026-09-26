@@ -36,6 +36,7 @@ import { Button, DashboardSkeleton, EmptyState, PageSkeleton, StatusBadge } from
 import { Icon } from '@/components/icons';
 import { cn } from '@/lib/utils';
 import { AccessDenied, PermissionNotice, useForbiddenNotice } from '@/components/dashboard/AccessNotice';
+import { usePanelPermissions } from '@/components/dashboard/usePanelPermissions';
 import { PeriodSelector } from '@/components/dashboard/PeriodSelector';
 import { loadOverview } from '@/lib/overview';
 import { firstName } from '@/lib/greeting';
@@ -75,6 +76,11 @@ interface Overview {
     sources: Array<'bookings' | 'orders'>;
     bookings: RevenueResult | null;
     orders: RevenueResult | null;
+    /** §6 — Agendado · Realizado · Recebido · Em aberto (mesma função do Financeiro). */
+    semantics?: {
+      agendado: number; realizado: number; recebido: number; emAberto: number;
+      previsto: number; pagamentos: number; hasBookings: boolean;
+    } | null;
   };
   showMoney?: boolean;
   today?: {
@@ -268,6 +274,9 @@ export default function DashboardPage() {
   const revenueDetail = data.revenueDetail;
   const bookingRevenue = revenueDetail?.bookings || null;
   const orderRevenue = revenueDetail?.orders || null;
+  // §6 — os quatro conceitos reconciliados (mesma função do Financeiro):
+  // a Visão geral nunca mais mostra um número que o Financeiro contradiz.
+  const moneySemantics = revenueDetail?.semantics || null;
   const attention = data.attention || [];
   const links = data.links || {};
   const q = `?b=${business.id}`;
@@ -293,7 +302,13 @@ export default function DashboardPage() {
   // página, canal): quem só atende não configura a clínica. Mostrá-lo ao
   // profissional criava uma lista de afazeres que não são dele — e cujos
   // links ele nem sempre pode abrir.
-  const showSetup = hasSetupPending && !setupHidden && !proView;
+  // §A08 — o checklist "Sua clínica está pronta?" só tem destinos de ADMINISTRAÇÃO
+  // (/configuracoes, /servicos, /disponibilidade, /pagina, /canais — permissão
+  // 'config'). Quem não administra a unidade não vê os atalhos: nenhum "Fazer →"
+  // pode terminar em "Sem permissão".
+  const { permissions: panelPerms, ready: permsReady } = usePanelPermissions();
+  const canAdminUnit = !permsReady || panelPerms.config === true;
+  const showSetup = hasSetupPending && !setupHidden && !proView && canAdminUnit;
   const showConnectChannel = !!whatsapp && !canalConnected && links.canais === true;
   const hasWhereToAct = showSetup || showConnectChannel;
 
@@ -385,7 +400,19 @@ export default function DashboardPage() {
           {showMoney && bookingRevenue ? (
             <div className="dsh-kpi">
               <span className="dsh-kpi__icon" style={{ background: 'var(--success-bg)', color: 'var(--success-fg)' }}><Icon n="cash" size={19} /></span>
-              <span><span className="dsh-kpi__num" style={{ fontSize: 21 }}>{moneyKpi(bookingRevenue.total)}</span><span className="dsh-kpi__label block" title={`Período: ${results?.periodLabel || periodLabel(period)}`}>Receita prevista</span></span>
+              <span>
+                <span className="dsh-kpi__num" style={{ fontSize: 21 }}>{moneyKpi(moneySemantics ? moneySemantics.agendado : bookingRevenue.total)}</span>
+                <span className="dsh-kpi__label block" title={`Período: ${results?.periodLabel || periodLabel(period)}`}>
+                  Agendado no período
+                </span>
+                {/* §6 — os quatro conceitos, um do lado do outro, com o MESMO
+                    cálculo do Financeiro. Nada de "receita" genérica. */}
+                {moneySemantics && (
+                  <span className="block text-[11px] font-semibold text-[var(--text-muted)] mt-0.5 tabular-nums">
+                    Realizado {moneyKpi(moneySemantics.realizado)} · Recebido {moneyKpi(moneySemantics.recebido)} · Em aberto {moneyKpi(moneySemantics.emAberto)}
+                  </span>
+                )}
+              </span>
             </div>
           ) : (
             <div className="dsh-kpi">
@@ -683,7 +710,9 @@ export default function DashboardPage() {
               <div className="flex items-center gap-2.5 rounded-lg border border-[var(--success-border)] bg-[var(--success-bg)] px-2.5 py-2">
                 <span className="dsh-kpi__icon !w-7 !h-7" style={{ background: 'var(--success)', color: '#fff' }}><Icon n="chat" size={15} /></span>
                 <span className="flex-1 text-[11.5px] font-semibold text-[var(--success-fg)]">Envie mensagens para seus pacientes</span>
-                <Link href={`/conversas${q}`} className="text-[11.5px] font-semibold text-white bg-[var(--success)] hover:bg-[var(--success-strong)] px-2.5 py-1.5 rounded-md">Abrir conversas</Link>
+                {links.conversas === true && (
+                  <Link href={`/conversas${q}`} className="text-[11.5px] font-semibold text-white bg-[var(--success)] hover:bg-[var(--success-strong)] px-2.5 py-1.5 rounded-md">Abrir conversas</Link>
+                )}
               </div>
             )}
             {taskSum && taskSum.open > 0 ? (

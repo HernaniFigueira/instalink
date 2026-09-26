@@ -559,7 +559,7 @@ export function FilterPill({ active, children, onClick, title }: {
 // KPI compacto — não é card gigante
 export function Kpi({ label, value, hint, tone, icon }: {
   label: string; value: string; hint?: string; icon?: string;
-  tone?: 'default' | 'success' | 'warning' | 'danger' | 'brand';
+  tone?: 'default' | 'success' | 'warning' | 'danger' | 'brand' | 'info';
 }) {
   const toneCls2 = {
     default: 'text-[var(--text)]',
@@ -567,6 +567,7 @@ export function Kpi({ label, value, hint, tone, icon }: {
     warning: 'text-[var(--warning-fg)]',
     danger: 'text-[var(--danger-fg)]',
     brand: 'text-[var(--brand-fg)]',
+    info: 'text-[var(--info-fg)]',
   }[tone || 'default'];
   return (
     <div className="px-4 py-3">

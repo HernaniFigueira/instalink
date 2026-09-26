@@ -326,6 +326,7 @@ export function DashboardShell({ children }: { children: React.ReactNode }) {
         query={q}
         searchItems={buildNavSearchItems(nav, q)}
         activePath={activePath}
+        businessId={business.id}
         alerts={alerts}
         user={{ ...user, role: unitRole || user.role }}
         unit={business}

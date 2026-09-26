@@ -51,8 +51,11 @@ export interface PanelPermissions {
  * que não pertence à conta NUNCA concede nada: cai para unidade própria.
  */
 export function usePanelPermissions(): PanelPermissions {
+  // Null-safe: fora de um provider de router (ex.: render estático de teste,
+  // impressão) `useSearchParams()` devolve null — sem permissão resolvida, a
+  // UI cai no padrão conservador do consumidor (não derruba o render).
   const params = useSearchParams();
-  const requested = params.get('b') || '';
+  const requested = params?.get('b') || '';
   const [state, setState] = useState<PanelPermissions>({ permissions: {}, role: '', ready: false });
 
   useEffect(() => {

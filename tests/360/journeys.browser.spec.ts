@@ -355,18 +355,21 @@ for(const width of [1440,1280,1024,390]) test(`direction acceptance: navigation,
   await page.goto(`/agenda?b=${f.b}&data=${f.date}&view=day`);
   await expect(page.locator('[data-agenda-main]')).toBeVisible();await noOverflow(page);
   if(width>=1200){
-    expect((await page.locator('.workspace-sidebar').boundingBox())!.width).toBe(232);
+    // GODOUTOR final (FASE D): UMA coluna (~256px) com acordeão — o submenu
+    // expande PARA BAIXO e o conteúdo NÃO se move (nada de segunda coluna).
+    expect((await page.locator('.workspace-sidebar').boundingBox())!.width).toBe(256);
     const nav=page.getByRole('navigation',{name:'Menu principal',exact:true});
     await nav.getByRole('button',{name:'Gestão',exact:true}).click();
-    expect((await page.locator('.workspace-secondary').boundingBox())!.width).toBe(216);
+    await expect(nav.getByRole('link',{name:'Resultados',exact:true})).toBeVisible();
     const before=(await page.locator('[data-agenda-main]').boundingBox())!.x;
     await page.screenshot({path:info.outputPath(`menu-${width}.png`)});
     await nav.getByRole('button',{name:'Automação',exact:true}).click();
-    await expect(page.getByRole('navigation',{name:'Gestão',exact:true})).toHaveCount(0);
-    await expect(page.getByRole('navigation',{name:'Automação',exact:true})).toBeVisible();
+    await expect(nav.getByRole('button',{name:'Gestão',exact:true})).toHaveAttribute('aria-expanded','false');
+    await expect(nav.getByRole('button',{name:'Automação',exact:true})).toHaveAttribute('aria-expanded','true');
     await nav.getByRole('button',{name:'Automação',exact:true}).click();
+    await expect(nav.getByRole('button',{name:'Automação',exact:true})).toHaveAttribute('aria-expanded','false');
     await expect(page.locator('.workspace-secondary')).toHaveCount(0);
-    expect(before-(await page.locator('[data-agenda-main]').boundingBox())!.x).toBe(216);
+    expect((await page.locator('[data-agenda-main]').boundingBox())!.x).toBe(before);
     await page.getByRole('button',{name:'Recolher navegação'}).click();
     expect((await page.locator('.workspace-sidebar').boundingBox())!.width).toBe(64);
     await page.getByRole('button',{name:'Expandir navegação'}).click();
@@ -406,10 +409,10 @@ for(const width of [1440,1280,1024,390]) test(`direction acceptance: navigation,
 
 test('direction acceptance: direct grouped route, back-forward and reduced motion',async({page},info)=>{
   await login(page);await page.setViewportSize({width:1440,height:900});
-  await page.goto(`/equipe?b=${f.b}`);await expect(page.getByRole('navigation',{name:'Gestão',exact:true})).toBeVisible();
+  await page.goto(`/equipe?b=${f.b}`);await expect(page.getByRole('button',{name:'Clínica',exact:true})).toHaveAttribute('aria-expanded','true');
   await page.getByRole('navigation',{name:'Menu principal',exact:true}).getByRole('link',{name:'Agenda',exact:true}).click();
   await expect(page).toHaveURL(/\/agenda\?b=/);await expect(page.locator('.workspace-secondary')).toHaveCount(0);await page.goBack();
-  await expect(page.getByRole('navigation',{name:'Gestão',exact:true})).toBeVisible();await page.goForward();
+  await expect(page.getByRole('button',{name:'Clínica',exact:true})).toHaveAttribute('aria-expanded','true');await page.goForward();
   await expect(page.locator('.workspace-secondary')).toHaveCount(0);
   await page.emulateMedia({reducedMotion:'reduce'});await page.getByRole('button',{name:'Abrir painel de Conversas'}).click();
   const d=page.getByRole('dialog',{name:'Conversas',exact:true});

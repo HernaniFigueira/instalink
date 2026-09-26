@@ -8,6 +8,7 @@ import {
   pauseAi, resumeAi, setAgentState, agentStateLabel,
 } from '@/lib/inbox/assistant-ops';
 import { requireBusiness } from '@/lib/access';
+import { resolveConversationContact, conversationRegistered } from '@/lib/conversation-identity';
 import { integrationStatus, serverCredentialsConfigured } from '@/lib/whatsapp';
 import { deliverWhatsappMessage } from '@/lib/whatsapp-cloud-api';
 import {
@@ -59,7 +60,10 @@ export async function GET(req: NextRequest) {
         return { ...m, byName };
       });
 
-    const contact = db.contacts.find((c) => c.id === conv.contactId) || null;
+    // §5 — o detalhe resolve o contato com a MESMA função canônica da lista
+    // (lib/conversation-identity.ts). Se Bernardo está cadastrado, ele é
+    // cadastrado aqui E na lista — as duas telas não podem discordar.
+    const contact = resolveConversationContact(db, businessId, conv) || null;
     return NextResponse.json({
       conversation: {
         ...conv,
@@ -113,7 +117,14 @@ export async function GET(req: NextRequest) {
       mode: c.mode || 'automation',
       agentState: effectiveAgentState(c),
       agentStateLabel: agentStateLabel(effectiveAgentState(c)),
-      registered: !!c.customerId,
+      // §5 — "cadastrado?" é decisão da resolução canônica (contato por
+      // contactId → customerId → telefone normalizado), NÃO de `customerId`
+      // isolado: conversa legado sem o campo continua sendo do cliente.
+      // FASE E — FALHAS por conversa: quantas mensagens da equipe falharam ao
+      // sair. O filtro "Falhas" da lista usa este número (nada de percorrer
+      // mensagens no cliente).
+      failedMessages: db.messages.filter((m) => m.conversationId === c.id && m.status === 'failed' && m.direction === 'out').length,
+      registered: conversationRegistered(db, businessId, c),
       lastMessageAt: c.lastMessageAt,
       channelLabel: c.channel === 'instagram' ? 'Instagram' : c.channel === 'whatsapp' ? 'WhatsApp' : 'Site',
       // F3-H — Origem: Retorno|Reativação (sem payload técnico)

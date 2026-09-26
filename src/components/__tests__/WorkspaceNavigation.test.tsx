@@ -3,7 +3,8 @@
 // SIDEBAR — GoDoutor UI Revolution · Etapa A
 // ═══════════════════════════════════════════════════════════════
 // O que estes testes protegem:
-//   1. a NOVA arquitetura de informação (seções + 4 grupos + segunda coluna);
+//   1. a NOVA arquitetura de informação (seções + 4 grupos + ACORDEÃO de
+//      coluna única — GODOUTOR final/FASE D: sem segunda coluna);
 //   2. o invariante de segurança que já existia: a navegação nunca revela nem
 //      cria destino que o usuário não alcança (a fonte é `nav.allowed`);
 //   3. nada foi apagado: destino com `sidebar: false` não ocupa linha no menu,
@@ -53,48 +54,58 @@ describe('Etapa A — sidebar por seções', () => {
     for (const name of ['Visão geral', 'Agenda', 'Conversas', 'Clientes', 'Página']) {
       expect(within(main).getByRole('link', { name })).toBeTruthy();
     }
-    // Pendências/Oportunidades saíram da linha do menu (contexto, não porta).
-    for (const name of ['Pendências', 'Oportunidades']) {
-      expect(within(main).queryByRole('link', { name })).toBeNull();
-    }
-    // Só 4 grupos abrem a segunda coluna — é isso que acaba com a lista infinita.
+    // GODOUTOR final: Pendências voltou à linha do menu (fila de trabalho da
+    // recepção, permissão real). Oportunidades vive DENTRO do grupo Gestão.
+    expect(within(main).getByRole('link', { name: 'Pendências' })).toBeTruthy();
+    // Só 4 grupos têm acordeão — é isso que acaba com a lista infinita.
     expect(within(main).getAllByRole('button').map((b) => b.getAttribute('aria-label')))
       .toEqual(['Clínica', 'Automação', 'Gestão', 'Configurações']);
+    // FASE D: NÃO existe segunda coluna (nem navegação de submenu fora do menu principal).
+    expect(screen.queryByRole('navigation', { name: 'Clínica' })).toBeNull();
     expect(screen.queryByLabelText('Fechar submenu')).toBeNull();
   });
 
-  it('agrupa Serviços/Profissionais/Disponibilidade/Equipe em "Clínica"', async () => {
+  it('acordeão: o grupo expande PARA BAIXO, na própria coluna (nunca segunda coluna)', async () => {
     const u = userEvent.setup();
     setup();
-    await u.click(screen.getByRole('button', { name: 'Clínica' }));
-    const rail = screen.getByRole('navigation', { name: 'Clínica' });
+    const main = screen.getByRole('navigation', { name: 'Menu principal' });
+    await u.click(within(main).getByRole('button', { name: 'Clínica' }));
     // A UX agrupa; o modelo de dados NÃO foi unificado ( Professional ≠ Member ):
     // são quatro destinos distintos, cada um com a própria rota.
     for (const name of ['Serviços', 'Profissionais', 'Disponibilidade', 'Equipe']) {
-      expect(within(rail).getByRole('link', { name })).toBeTruthy();
+      expect(within(main).getByRole('link', { name })).toBeTruthy();
     }
+    // O submenu do grupo mora DENTRO do menu principal, com linha-guia.
+    expect(within(main).getByText('Serviços').closest('.workspace-submenu')).toBeTruthy();
   });
 
-  it('substitui e fecha a segunda coluna sem recolher a navegação', async () => {
+  it('acordeão: UM grupo aberto por vez; clicar de novo fecha; não recolhe a navegação', async () => {
     const u = userEvent.setup();
     const { onCollapse } = setup();
-    await u.click(screen.getByRole('button', { name: 'Gestão' }));
-    expect(screen.getByRole('navigation', { name: 'Gestão' })).toBeTruthy();
-    await u.click(screen.getByRole('button', { name: 'Configurações' }));
-    expect(screen.queryByRole('navigation', { name: 'Gestão' })).toBeNull();
-    await u.click(screen.getByRole('button', { name: 'Configurações' }));
-    expect(screen.queryByRole('navigation', { name: 'Configurações' })).toBeNull();
-    await u.click(screen.getByRole('button', { name: 'Gestão' }));
-    await u.click(screen.getByRole('button', { name: 'Fechar submenu' }));
-    expect(screen.queryByRole('navigation', { name: 'Gestão' })).toBeNull();
+    const main = screen.getByRole('navigation', { name: 'Menu principal' });
+    // O estado VISUAL do acordeão mora em aria-expanded + .is-open (o submenu
+    // fecha por CSS grid 0fr — altura zero — mantendo o DOM estável).
+    await u.click(within(main).getByRole('button', { name: 'Gestão' }));
+    expect(within(main).getByRole('button', { name: 'Gestão' }).getAttribute('aria-expanded')).toBe('true');
+    expect(document.querySelector('.workspace-group.is-open #submenu-gestao')).toBeTruthy();
+    await u.click(within(main).getByRole('button', { name: 'Configurações' }));
+    expect(within(main).getByRole('button', { name: 'Gestão' }).getAttribute('aria-expanded')).toBe('false');
+    expect(within(main).getByRole('button', { name: 'Configurações' }).getAttribute('aria-expanded')).toBe('true');
+    expect(document.querySelector('.workspace-group.is-open #submenu-ajustes')).toBeTruthy();
+    expect(document.querySelectorAll('.workspace-group.is-open')).toHaveLength(1);
+    await u.click(within(main).getByRole('button', { name: 'Configurações' }));
+    expect(within(main).getByRole('button', { name: 'Configurações' }).getAttribute('aria-expanded')).toBe('false');
+    expect(document.querySelector('.workspace-group.is-open')).toBeNull();
     expect(onCollapse).not.toHaveBeenCalled();
   });
 
-  it('abre o grupo dono da rota em deep-link e troca junto com a rota', () => {
+  it('deep-link abre o grupo dono da rota e a troca de rota atualiza o acordeão', () => {
     const { rerender, props } = setup({ activePath: '/configuracoes' });
-    expect(screen.getByRole('navigation', { name: 'Configurações' })).toBeTruthy();
+    const main = screen.getByRole('navigation', { name: 'Menu principal' });
+    expect(within(main).getByRole('button', { name: 'Configurações' }).getAttribute('aria-expanded')).toBe('true');
+    expect(within(main).getByRole('link', { name: 'Equipe' })).toBeTruthy();
     rerender(<WorkspaceNavigation {...props} activePath="/agenda" />);
-    expect(screen.queryByRole('navigation', { name: 'Configurações' })).toBeNull();
+    expect(within(main).getByRole('button', { name: 'Configurações' }).getAttribute('aria-expanded')).toBe('false');
   });
 
   it('marca 2.0: a CLÍNICA identifica a navegação, GoDoutor assina no rodapé', () => {
@@ -115,26 +126,24 @@ describe('Etapa A — sidebar por seções', () => {
     expect(onCollapse).toHaveBeenCalledOnce();
   });
 
-  it('destino fora do menu NUNCA deixa segunda coluna vazia', () => {
-    // A regressão original: abrir uma rota fora do menu (/perfil, /tarefas,
-    // /execucoes, /recursos) deixava uma segunda coluna VAZIA ao lado do
-    // conteúdo, porque todas caíam na rede de segurança "Mais".
-    // Hoje cada uma dessas rotas tem ÁREA DONA (Operação para /perfil e
-    // /tarefas; Automação para /execucoes; Configurações para /recursos) —
-    // então o invariante que se testa é este: ou não há segunda coluna, ou a
-    // que existe tem conteúdo de verdade.
+  it('destino fora do menu NUNCA deixa painel vazio (invariante da área dona)', () => {
+    // Cada rota fora do menu tem ÁREA DONA (Operação para /perfil e
+    // /tarefas; Automação para /execucoes; Configurações para /recursos):
+    // o acordeão abre o grupo dono COM conteúdo — nunca um painel vazio.
     for (const activePath of ['/perfil', '/tarefas']) {
       cleanup();
       setup({ activePath });
-      expect(screen.queryByLabelText('Fechar submenu'), `coluna vazia em ${activePath}`).toBeNull();
+      expect(screen.queryByLabelText('Fechar submenu'), `painel vazio em ${activePath}`).toBeNull();
     }
     for (const [activePath, group] of [['/execucoes', 'Automação'], ['/recursos', 'Configurações']] as const) {
       cleanup();
       setup({ activePath });
-      const rail = screen.getByRole('navigation', { name: group });
-      expect(within(rail).getAllByRole('link').length, `coluna vazia em ${activePath}`).toBeGreaterThan(0);
+      const main = screen.getByRole('navigation', { name: 'Menu principal' });
+      const btn = within(main).getByRole('button', { name: group });
+      expect(btn.getAttribute('aria-expanded'), `grupo dono aberto em ${activePath}`).toBe('true');
+      expect(within(main).getAllByRole('link').length, `grupo com conteúdo em ${activePath}`).toBeGreaterThan(0);
       // O próprio destino fora do menu não é promovido a linha (régua do menu).
-      expect(within(rail).queryByRole('link', { name: activePath === '/execucoes' ? 'Execuções' : 'Recursos' })).toBeNull();
+      expect(within(main).queryByRole('link', { name: activePath === '/execucoes' ? 'Execuções' : 'Recursos' })).toBeNull();
     }
   });
 
@@ -147,14 +156,14 @@ describe('Etapa A — sidebar por seções', () => {
     expect(within(main).getByRole('button', { name: 'Automação' })).toBeTruthy();
   });
 
-  it('usa UM diálogo móvel com passo de voltar, controlado pelo shell', async () => {
+  it('móvel: UM diálogo com o MESMO acordeão (sem passo de voltar)', async () => {
     const u = userEvent.setup();
     setup({ mobileOpen: true });
     const dialog = screen.getByRole('dialog');
+    // As portas diretas e os grupos convivem no mesmo diálogo.
+    expect(within(dialog).getByRole('link', { name: 'Agenda' })).toBeTruthy();
     await u.click(within(dialog).getByRole('button', { name: 'Gestão' }));
     expect(within(dialog).getByRole('link', { name: 'Resultados' })).toBeTruthy();
-    expect(within(dialog).queryByRole('link', { name: 'Agenda' })).toBeNull();
-    await u.click(within(dialog).getByRole('button', { name: /Voltar/ }));
     expect(within(dialog).getByRole('link', { name: 'Agenda' })).toBeTruthy();
   });
 

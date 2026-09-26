@@ -36,6 +36,8 @@ interface Conversation {
   handoff?: { at: string; summary: string; intent?: string; actions?: string[] } | null;
   unread: number; lastMessageAt: string; lastMessagePreview: string;
   outreachOrigin?: string;
+  /** Mensagens da equipe que FALHARAM ao sair (filtro "Falhas"). */
+  failedMessages?: number;
   registered: boolean; channel?: 'whatsapp' | 'instagram' | 'agent'; channelUsername?: string;
 }
 interface ChannelsView { whatsapp: boolean; instagram: boolean }
@@ -76,7 +78,9 @@ export function ConversationsView({ unitId, panel = false }: { unitId?: string; 
    * aparecia por um frame: UX mentirosa, mesmo com dado correto.
    */
   const [loaded, setLoaded] = useState(false);
-  const [filter, setFilter] = useState<'all' | 'unread' | 'open'>('all');
+  // FASE E — filtros que respondem à pergunta da recepção: o que não li, o
+  // que espera POR MIM e o que FALHOU ao sair.
+  const [filter, setFilter] = useState<'all' | 'unread' | 'waiting' | 'failed'>('all');
   // BLOCO 9 — o inbox é de CANAIS: o filtro por canal vive na URL (?canal=),
   // como a busca, para deep-link e refresh preservarem a visão.
   const [channels, setChannels] = useState<ChannelsView>({ whatsapp: false, instagram: false });
@@ -154,6 +158,18 @@ export function ConversationsView({ unitId, panel = false }: { unitId?: string; 
     setDraft('');
   }
 
+  /** FASE E — mensagem que FALHOU pode ser REENVIADA com um clique: o texto
+   * volta ao compositor e o envio é o MESMO caminho normal (nenhum atalho
+   * paralelo). A mensagem antiga continua no histórico com o erro dela. */
+  async function retryMessage(m: Message) {
+    if (!active || sending) return;
+    setDraft(m.body);
+    setSendError('');
+    // Reusa o sendMessage com o corpo da mensagem falhada.
+    const event = { preventDefault: () => {} } as React.FormEvent;
+    await sendMessage(event);
+  }
+
   /** Escreve o termo de busca na URL (mantendo ?b= e o restante do estado). */
   function setQuery(next: string) {
     if (panel) { setPanelQuery(next); return; }
@@ -190,6 +206,19 @@ export function ConversationsView({ unitId, panel = false }: { unitId?: string; 
   }, [businessId, report]);
 
   useEffect(() => { load(); }, [load]);
+
+  // Deep-link da BUSCA GLOBAL (§FASE C): /conversas?c={id} abre a conversa
+  // direto — o resultado da busca leva ao contexto, não só à lista.
+  const deepLinkId = params.get('c') || '';
+  const openedDeepLink = useRef('');
+  useEffect(() => {
+    if (panel || !deepLinkId || openedDeepLink.current === deepLinkId) return;
+    if (!loaded || conversations.length === 0) return;
+    if (conversations.some((c) => c.id === deepLinkId)) {
+      openedDeepLink.current = deepLinkId;
+      void openConversation(deepLinkId);
+    }
+  }, [deepLinkId, loaded, conversations, panel]);
 
   async function openConversation(id: string) {
     const res = await apiGet<{
@@ -233,7 +262,10 @@ export function ConversationsView({ unitId, panel = false }: { unitId?: string; 
   const filtered = conversations.filter((c) => {
     if (channelFilter !== 'all' && (c.channel || 'whatsapp') !== channelFilter) return false;
     if (filter === 'unread' && c.unread <= 0) return false;
-    if (filter === 'open' && c.status !== 'open') return false;
+    // Aguardando = espera pela EQUIPE (assumida no humano ou pedindo equipe) —
+    // não é "status open", que mistura conversas que a IA cuida sozinha.
+    if (filter === 'waiting' && !(c.mode === 'human' || c.agentState === 'waiting_team')) return false;
+    if (filter === 'failed' && (c.failedMessages || 0) <= 0) return false;
     if (qLower) {
       const hay = `${c.name} ${c.phone} ${c.lastMessagePreview || ''}`.toLowerCase();
       if (!hay.includes(qLower)) return false;
@@ -371,9 +403,9 @@ export function ConversationsView({ unitId, panel = false }: { unitId?: string; 
             </div>
           )}
           <div className="flex gap-1 ml-auto sm:ml-2">
-            {(['all', 'unread', 'open'] as const).map((f) => (
+            {(['all', 'unread', 'waiting', 'failed'] as const).map((f) => (
               <button key={f} onClick={() => setFilter(f)} aria-pressed={filter === f} className="il-chip">
-                {f === 'all' ? 'Todas' : f === 'unread' ? 'Não lidas' : 'Em atendimento'}
+                {f === 'all' ? 'Todas' : f === 'unread' ? 'Não lidas' : f === 'waiting' ? 'Aguardando' : 'Falhas'}
               </button>
             ))}
           </div>
@@ -506,6 +538,12 @@ export function ConversationsView({ unitId, panel = false }: { unitId?: string; 
                           {m.at.slice(11, 16)} · {m.status === 'sent' ? 'enviada' : m.status === 'delivered' ? 'entregue' : m.status === 'read' ? 'lida' : m.status === 'failed' ? 'falhou' : 'pendente'}
                           {m.error ? ` (${m.error})` : ''}
                         </span>
+                        {m.status === 'failed' && m.direction === 'out' && m.by !== 'automation' && (
+                          <button type="button" onClick={() => void retryMessage(m)}
+                            className="mt-1.5 inline-flex items-center gap-1 text-[11px] font-bold uppercase tracking-wide bg-white/15 border border-white/30 rounded px-1.5 py-0.5 hover:bg-white/25">
+                            <Icon n="sync" size={11} /> Tentar novamente
+                          </button>
+                        )}
                       </div>
                     </div>
                   ))}

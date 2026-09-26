@@ -44,6 +44,7 @@ import { formatDateBR } from '@/lib/tz';
 import type { AnamneseTemplate, Encounter, EncounterFile, EncounterFollowUpMode } from '@/lib/types';
 import { AnamneseFiller } from '@/components/dashboard/AnamneseFiller';
 import { RegisterPaymentSheet, type PaymentSeed } from '@/components/dashboard/RegisterPaymentSheet';
+import { usePanelPermissions } from '@/components/dashboard/usePanelPermissions';
 
 export interface EncounterRow extends Encounter {
   professionalName: string;
@@ -143,6 +144,12 @@ export function EncounterSheet({
   const [fileError, setFileError] = useState('');
   const [paymentSeed, setPaymentSeed] = useState<PaymentSeed | null>(null);
   const [paymentDone, setPaymentDone] = useState('');
+  // §P1.13 — REGRA DE HONESTIDADE: "Registrar pagamento" grava em
+  // /api/finance (permissão 'financeiro'). Quem não tem a permissão (ex.:
+  // profissional que atende) NÃO recebe a ação — nenhum botão visível pode
+  // levar previsivelmente a "Sem permissão".
+  const { permissions: panelPerms, ready: permsReady } = usePanelPermissions();
+  const canRegisterPayment = !permsReady || panelPerms.financeiro === true;
 
   /**
    * Espelho SÍNCRONO do estado da tela. É daqui que o autosave, o flush de
@@ -383,14 +390,18 @@ export function EncounterSheet({
       setFollowUpNote('');
       setFollowUpOpen(true);
       // FASE 2 · P7 — recebimento OPCIONAL pré-preenchido (nunca obrigatório).
-      setPaymentSeed({
-        businessId,
-        contactId: finishedRow.contactId, bookingId: finishedRow.bookingId,
-        serviceId: finishedRow.serviceId, professionalId: finishedRow.professionalId,
-        encounterId: finishedRow.id,
-        description: [finishedRow.serviceName || 'Atendimento', finishedRow.customerName].filter(Boolean).join(' — '),
-        dueDate: finishedRow.date || new Date().toISOString().slice(0, 10),
-      });
+      // Só para quem pode GRAVAR no financeiro (a ação não aparece para quem
+      // o servidor recusaria).
+      if (canRegisterPayment) {
+        setPaymentSeed({
+          businessId,
+          contactId: finishedRow.contactId, bookingId: finishedRow.bookingId,
+          serviceId: finishedRow.serviceId, professionalId: finishedRow.professionalId,
+          encounterId: finishedRow.id,
+          description: [finishedRow.serviceName || 'Atendimento', finishedRow.customerName].filter(Boolean).join(' — '),
+          dueDate: finishedRow.date || new Date().toISOString().slice(0, 10),
+        });
+      }
     } else {
       setSaved('Registro reaberto para edição (a reabertura fica na auditoria).');
       setFollowUpOpen(false);
@@ -547,16 +558,18 @@ export function EncounterSheet({
                   <Button size="sm" variant="secondary" disabled={taskBusy} onClick={askReception}>
                     {taskBusy ? 'Pedindo…' : 'Pedir à recepção'}
                   </Button>
-                  <Button size="sm" variant="soft" onClick={() => {
-                    setPaymentSeed({
-                      businessId, contactId: row.contactId, bookingId: row.bookingId,
-                      serviceId: row.serviceId, professionalId: row.professionalId, encounterId: row.id,
-                      description: [row.serviceName || 'Atendimento', row.customerName].filter(Boolean).join(' — '),
-                      dueDate: row.date || new Date().toISOString().slice(0, 10),
-                    });
-                  }}>
-                    <Icon n="wallet" size={13} /> Registrar pagamento
-                  </Button>
+                  {canRegisterPayment && (
+                    <Button size="sm" variant="soft" onClick={() => {
+                      setPaymentSeed({
+                        businessId, contactId: row.contactId, bookingId: row.bookingId,
+                        serviceId: row.serviceId, professionalId: row.professionalId, encounterId: row.id,
+                        description: [row.serviceName || 'Atendimento', row.customerName].filter(Boolean).join(' — '),
+                        dueDate: row.date || new Date().toISOString().slice(0, 10),
+                      });
+                    }}>
+                      <Icon n="wallet" size={13} /> Registrar pagamento
+                    </Button>
+                  )}
                 </div>
                 <Field label="O que a recepção deve fazer" hint="Ex: ligar em 30 dias e marcar o retorno; confirmar por telefone.">
                   <Input value={followUpNote} onChange={(e) => setFollowUpNote(e.target.value)}

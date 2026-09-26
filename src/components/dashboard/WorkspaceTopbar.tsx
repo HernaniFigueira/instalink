@@ -36,12 +36,14 @@ function initials(name: string): string {
   return name.trim().split(/\s+/).slice(0, 2).map((p) => p[0]?.toUpperCase() || '').join('') || '·';
 }
 
-export function WorkspaceTopbar({ page, query, searchItems, activePath, alerts, user, unit, units, overview, canOverview, canConfig, canCreate, onUnit, onLogout, onOpenNav, onOpenHelp, isMaster }: {
+export function WorkspaceTopbar({ page, query, searchItems, activePath, businessId = '', alerts, user, unit, units, overview, canOverview, canConfig, canCreate, onUnit, onLogout, onOpenNav, onOpenHelp, isMaster }: {
   /** Tela atual — usado só no aria e no rótulo do botão de ajuda. */
   page: string;
   query: string;
   searchItems: NavSearchItem[];
   activePath: string;
+  /** Unidade ativa — a busca de ENTIDADES (pessoas/agendamentos/conversas) é da unidade. */
+  businessId?: string;
   alerts: WorkspaceAlerts;
   user: { name: string; email?: string; role?: string; photo?: string };
   /** Unidade atual + unidades da conta: usadas SÓ pelo menu da conta (a
@@ -88,7 +90,7 @@ export function WorkspaceTopbar({ page, query, searchItems, activePath, alerts, 
       </div>
 
       <div className="ws-topbar__center">
-        <GlobalSearch items={searchItems} activePath={activePath} />
+        <GlobalSearch items={searchItems} activePath={activePath} businessId={businessId} />
       </div>
 
       <div className="ws-topbar__right">

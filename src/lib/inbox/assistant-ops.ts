@@ -21,6 +21,7 @@ import { emitAutomationEvent } from '../automation/events';
 import { pushAudit } from '../audit';
 import { petsOfTutor } from '../pets';
 import { onlyDigits } from '../utils';
+import { resolveConversationContact } from '../conversation-identity';
 
 // ── Estado ─────────────────────────────────────────────────────
 
@@ -585,8 +586,10 @@ export interface ConversationSideContext {
  * Proibido: prontuário, anamnese, evolução clínica, notas médicas.
  */
 export function conversationSideContext(db: DB, businessId: string, conv: Conversation): ConversationSideContext {
-  const contact = db.contacts.find((c) => c.id === conv.contactId && c.businessId === businessId)
-    || db.contacts.find((c) => c.businessId === businessId && c.phone && onlyDigits(c.phone) === onlyDigits(conv.phone || ''));
+  // §5 — UMA resolução canônica (lib/conversation-identity.ts): o painel de
+  // contexto laterale, a lista e o detalhe respondem "quem é esta pessoa"
+  // com a MESMA regra. Nada de paralelo com régua própria.
+  const contact = resolveConversationContact(db, businessId, conv);
   const tutorId = contact?.id || '';
   const business = db.businesses.find((b) => b.id === businessId);
   const isVet = String(business?.clinicType || '') === 'veterinaria';
@@ -625,7 +628,8 @@ export function conversationSideContext(db: DB, businessId: string, conv: Conver
     tutor: {
       name: contact?.name || conv.name || '',
       phone: contact?.phone || conv.phone || '',
-      registered: !!contact?.customerId,
+      // Mesma régua da lista/detalhe: contato resolvido = cadastrado.
+      registered: !!contact,
     },
     pets,
     ...(currentPet ? { currentPatient: { id: currentPet.id, name: currentPet.name } } : {}),

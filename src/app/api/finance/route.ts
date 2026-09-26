@@ -4,6 +4,7 @@ import { updateDB } from '@/lib/db';
 import { requireBusiness } from '@/lib/access';
 import { pushAudit } from '@/lib/audit';
 import { filterEntries, summarize, validateEntry, FINANCE_KINDS, FINANCE_STATUSES } from '@/lib/finance';
+import { financeMetrics } from '@/lib/finance-metrics';
 import type { FinanceEntry, FinanceKind, FinanceStatus } from '@/lib/types';
 
 // ═══════════════════════════════════════════════════════════════
@@ -38,9 +39,25 @@ export async function GET(req: NextRequest) {
     .sort((a, b) => (a.dueDate < b.dueDate ? 1 : a.dueDate > b.dueDate ? -1 : a.createdAt < b.createdAt ? 1 : -1));
   // Charts usam SEMPRE o recorte de período (mesmo sem filtros de status etc).
   const period = filterEntries(all, { from: parseFilters(sp).from, to: parseFilters(sp).to });
+  // §6 — os QUATRO conceitos (Agendado · Realizado · Recebido · Em aberto) com
+  // a MESMA função da Visão geral e dos Resultados (lib/finance-metrics.ts):
+  // o Financeiro nunca mais responde um número que o Dashboard contradiz.
+  const filters = parseFilters(sp);
+  const servicesById = new Map(
+    db.services.filter((s) => s.businessId === businessId).map((s) => [s.id, Number(s.price) || 0]),
+  );
+  const semantics = financeMetrics({
+    bookings: db.bookings
+      .filter((b) => b.businessId === businessId)
+      .map((b) => ({ status: b.status, date: b.date, price: servicesById.get(b.serviceId) || 0 })),
+    entries: all,
+    from: filters.from,
+    to: filters.to,
+  });
   return NextResponse.json({
     entries,
     summary: summarize(entries),
+    semantics,
     total: all.length,
     charts: { period, summaryAll: summarize(period) },
   });

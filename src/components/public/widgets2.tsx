@@ -7,7 +7,7 @@ import type { Business, Professional, PublicBusiness, Service } from '@/lib/type
 import { money, trackEvent, waLink } from './widgets';
 // Página pública: preço e descrição são públicos; duração NÃO é exibida
 // (continua existindo internamente para agenda/conflito/buffer).
-import { publicPriceLabel, publicServiceSecondary } from '@/lib/pricing';
+import { priceVisible, publicPriceLabel, publicServiceSecondary } from '@/lib/pricing';
 import { SLOT_STATE_MESSAGE, slotStateView } from '@/lib/slot-states';
 import { effectiveHorizonDays } from '@/lib/booking-ops';
 import { dayAvailabilityMessage, type DayAvailability } from '@/lib/slots';
@@ -240,7 +240,8 @@ export function BookingIsland({ business, services, professionals, title, initia
             <div className="il-chip-active px-4 py-3 flex justify-between items-center gap-2" style={{ borderRadius: 'var(--il-radius)' }}>
               <span><span className="font-bold text-sm block">{service.name}</span>
                 {/* Sem duração: descrição quando existir, senão só o preço. */}
-                <span className="text-xs opacity-80">{publicServiceSecondary(service) || publicPriceLabel(service.price)}</span></span>
+                {/* P1.9 — sem descrição, o preço só aparece se o serviço libera. */}
+                <span className="text-xs opacity-80">{publicServiceSecondary(service) || (priceVisible(service) ? publicPriceLabel(service.price) : '')}</span></span>
               <button onClick={() => selectService('')} className="text-xs font-bold underline shrink-0">trocar</button>
             </div>
           ) : (
@@ -254,7 +255,7 @@ export function BookingIsland({ business, services, professionals, title, initia
                   {publicServiceSecondary(s) && (
                     <span className={`text-xs ${serviceId === s.id ? 'opacity-80' : 'il-muted'}`}>{publicServiceSecondary(s)}</span>
                   )}</span>
-                <span className="font-extrabold text-sm">{money(s.price)}</span>
+                {priceVisible(s) && <span className="font-extrabold text-sm">{money(s.price)}</span>}
               </button>
             ))}
           </div>
@@ -381,7 +382,9 @@ export function BookingIsland({ business, services, professionals, title, initia
             <p>{service.name} · {date.split('-').reverse().join('/')} às {time}</p>
             <p className="il-muted text-xs mt-1">Profissional definido pela disponibilidade da clínica.</p>
             {form.logged && <p className="mt-2">Paciente: {form.customer?.name}</p>}
-            <p className="font-extrabold il-accent text-sm mt-2 pt-2 border-t border-[var(--il-border,#E2E8F0)]">{publicPriceLabel(service.price)}</p>
+            {priceVisible(service) && (
+              <p className="font-extrabold il-accent text-sm mt-2 pt-2 border-t border-[var(--il-border,#E2E8F0)]">{publicPriceLabel(service.price)}</p>
+            )}
           </section>
         )}
         {notice && <p role="status" className="il-muted text-sm">{notice}</p>}

@@ -755,8 +755,9 @@ export default function AgendaPage() {
     return () => obs.disconnect();
   }, [columns.length]);
 
-  // Altura útil da rail da fila (overlay lateral — pode ter scroll interno
-  // sem competir com a página). A GRADE em si não recebe cap de altura.
+  // Altura útil da região do workspace (viewport - topo - folga): é o teto
+  // da rail da fila E da grade (FASE E: scroll interno, a página não rola
+  // junto com a agenda).
   const [railMaxH, setRailMaxH] = useState<number | null>(null);
   useLayoutEffect(() => {
     const fit = () => {
@@ -1475,11 +1476,16 @@ export default function AgendaPage() {
         </div>
       ) : (
         <div className="bg-white border border-zinc-200">
-          {/* Altura NATURAL do conteúdo (sem cap) — a rolagem vertical é a
-              da página. overflow-x só quando as colunas não cabem na largura;
-              como a caixa cresce com o conteúdo, não há scrollbar vertical
-              interna nem caixa fixa competindo com o documento. */}
-          <div ref={scrollRef} className={`overflow-x-auto ws-scroll ${isDragging ? 'select-none' : ''}`}>
+          {/* FASE E — SCROLL INTERNO (a grade domina o workspace): o scroller
+              é limitado à altura útil da viewport (a MESMA medição da rail da
+              fila) e rola por dentro — cabeçalhos de coluna e gutter ficam
+              presos nele e a PÁGINA para de crescer com a grade. A rolagem
+              horizontal continua aqui dentro quando as colunas não cabem. */}
+          <div
+            ref={scrollRef}
+            className={`overflow-auto ws-scroll ${isDragging ? 'select-none' : ''}`}
+            style={railMaxH ? { maxHeight: railMaxH } : undefined}
+          >
             <div className="flex" style={{ minWidth: dayWidth }}>
               {/* Gutter de horas (fixo na horizontal) */}
               <div className="sticky left-0 z-30 bg-white shrink-0 border-r border-zinc-200" style={{ width: GUTTER_W }}>

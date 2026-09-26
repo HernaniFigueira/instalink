@@ -345,7 +345,7 @@ export function PerformanceView({ payload }: { payload: ResultsPayload }) {
                   {tab === 'professionals' && <th className="text-right font-semibold px-3 py-2">Serviços</th>}
                   <th className="text-right font-semibold px-3 py-2">Cancel.</th>
                   <th className="text-right font-semibold px-3 py-2">Faltas</th>
-                  {showRevenue && <th className="text-right font-semibold px-4 py-2">Receita prevista</th>}
+                  {showRevenue && <th className="text-right font-semibold px-4 py-2">Valor dos atendimentos</th>}
                 </tr>
               </thead>
               <tbody className="divide-y divide-zinc-100">
@@ -434,6 +434,37 @@ export function OriginsView({ origins }: { origins: ResultsPayload['origins'] })
   );
 }
 
+/**
+ * §6 — faixa dos quatro conceitos reconciliados (Agendado · Realizado ·
+ * Recebido · Em aberto). MESMA função do Financeiro e da Visão geral
+ * (lib/finance-metrics.ts): nenhum número aqui pode contradizer outra tela.
+ */
+export function FinanceSemanticsStrip({ semantics }: { semantics: ResultsPayload['semantics'] }) {
+  if (!semantics) return null;
+  const cells = [
+    { id: 'agendado', label: 'Agendado', value: semantics.agendado, hint: 'Pendentes + confirmados elegíveis' },
+    { id: 'realizado', label: 'Realizado', value: semantics.realizado, hint: 'Atendimentos concluídos' },
+    { id: 'recebido', label: 'Recebido', value: semantics.recebido, hint: 'Pagamentos registrados' },
+    { id: 'emAberto', label: 'Em aberto', value: semantics.emAberto, hint: 'Realizado ainda não recebido' },
+  ] as const;
+  return (
+    <div className="ws-panel px-4 py-3">
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+        {cells.map((c) => (
+          <div key={c.id}>
+            <p className="text-xs text-zinc-500">{c.label}</p>
+            <p className="text-lg font-semibold tracking-tight tabular-nums mt-0.5">{money(c.value)}</p>
+            <p className="text-[11px] text-zinc-400 mt-0.5 leading-snug">{c.hint}</p>
+          </div>
+        ))}
+      </div>
+      <p className="text-[11px] text-zinc-400 mt-2.5 leading-snug">
+        Agendado não é dinheiro no caixa: o valor só passa a “recebido” quando o pagamento é registrado no Financeiro.
+      </p>
+    </div>
+  );
+}
+
 /** Bloco completo de resultados de um recorte (unidade ou organização). */
 export function ResultsView({ payload, title, subtitle }: {
   payload: ResultsPayload;
@@ -449,6 +480,8 @@ export function ResultsView({ payload, title, subtitle }: {
           {subtitle && <p className="text-xs text-zinc-500 mt-0.5">{subtitle}</p>}
         </div>
       )}
+
+      <FinanceSemanticsStrip semantics={payload.semantics} />
 
       <MetricGrid metrics={payload.metrics} hasPrevious={hasPrevious} />
 

@@ -31,6 +31,15 @@ const EMPTY_SUMMARY: Summary = {
   despesasPagas: 0, despesasProjetadas: 0, saldo: 0, ticketMedio: 0, pagamentosCount: 0,
 };
 
+/** §6 — os quatro conceitos reconciliados (mesma função da Visão geral). */
+interface Semantics {
+  agendado: number; realizado: number; recebido: number; emAberto: number;
+  previsto: number; pagamentos: number; hasBookings: boolean;
+}
+const EMPTY_SEMANTICS: Semantics = {
+  agendado: 0, realizado: 0, recebido: 0, emAberto: 0, previsto: 0, pagamentos: 0, hasBookings: false,
+};
+
 const isoDaysAgo = (n: number) => new Date(Date.now() - n * 86400000).toISOString().slice(0, 10);
 const todayISO = () => new Date().toISOString().slice(0, 10);
 
@@ -52,6 +61,7 @@ export default function FinanceiroPage() {
   const [denied, setDenied] = useState(false);
   const [entries, setEntries] = useState<FinanceEntry[]>([]);
   const [summary, setSummary] = useState<Summary>(EMPTY_SUMMARY);
+  const [semantics, setSemantics] = useState<Semantics>(EMPTY_SEMANTICS);
   const [periodEntries, setPeriodEntries] = useState<FinanceEntry[]>([]);
   const [pros, setPros] = useState<Professional[]>([]);
   const [services, setServices] = useState<Service[]>([]);
@@ -92,6 +102,7 @@ export default function FinanceiroPage() {
     setLoadError('');
     setEntries(res.data?.entries || []);
     setSummary({ ...EMPTY_SUMMARY, ...(res.data?.summary || {}) });
+    setSemantics({ ...EMPTY_SEMANTICS, ...(res.data?.semantics || {}) });
     setPeriodEntries(res.data?.charts?.period || []);
     setLoaded(true);
   }, [businessId, qs]);
@@ -171,11 +182,27 @@ export default function FinanceiroPage() {
 
       {!loaded ? <FinanceSkeleton /> : (
         <>
-          {/* ── Totais ── */}
+          {/* §6 — ATENDIMENTOS × CAIXA reconciliados: os quatro conceitos vêm
+              da MESMA função da Visão geral e dos Resultados
+              (lib/finance-metrics.ts). "Agendado" não é dinheiro no caixa. */}
+          <div className="ws-panel px-4 py-3 mb-3">
+            <p className="text-[11px] font-semibold uppercase tracking-[0.08em] text-[var(--text-faint)] mb-2">Atendimentos no período</p>
+            <div className="grid gap-3 grid-cols-2 lg:grid-cols-4">
+              <Kpi label="Agendado" value={centsToBR(semantics.agendado)} hint="Pendentes + confirmados elegíveis" tone="brand" icon="calendar" />
+              <Kpi label="Realizado" value={centsToBR(semantics.realizado)} hint="Atendimentos concluídos" tone="info" icon="checkCircle" />
+              <Kpi label="Recebido" value={centsToBR(semantics.recebido)} hint={`${semantics.pagamentos} pagamento(s) registrado(s)`} tone="success" icon="wallet" />
+              <Kpi label="Em aberto" value={centsToBR(semantics.emAberto)} hint="Realizado ainda não recebido" tone="warning" icon="clock" />
+            </div>
+            <p className="text-[11px] text-[var(--text-muted)] mt-2.5 leading-snug">
+              Agendado não é dinheiro no caixa: um atendimento só passa a “recebido” quando o pagamento é registrado abaixo.
+            </p>
+          </div>
+
+          {/* ── Caixa (movimentações registradas) ── */}
           <div className="grid gap-3 grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">
-            <Kpi label="Receita prevista" value={centsToBR(summary.receitaPrevista)} hint="A receber no período" tone="brand" icon="calendar" />
-            <Kpi label="Receita recebida" value={centsToBR(summary.receitaRecebida)} hint={`${summary.pagamentosCount} pagamento(s)`} tone="success" icon="checkCircle" />
-            <Kpi label="Pendente" value={centsToBR(summary.receitaPendente)} hint="Receitas em aberto" tone="warning" icon="clock" />
+            <Kpi label="Entradas previstas" value={centsToBR(summary.receitaPrevista)} hint="Registradas como previsto no caixa" tone="brand" icon="calendar" />
+            <Kpi label="Entradas recebidas" value={centsToBR(summary.receitaRecebida)} hint={`${summary.pagamentosCount} pagamento(s)`} tone="success" icon="checkCircle" />
+            <Kpi label="Entradas pendentes" value={centsToBR(summary.receitaPendente)} hint="Registradas e em aberto" tone="warning" icon="clock" />
             <Kpi label="Despesas pagas" value={centsToBR(summary.despesasPagas)} hint="Saída realizada" tone="danger" icon="receipt" />
             <Kpi label="Saldo" value={centsToBR(summary.saldo)} hint="Recebido − despesas pagas" tone={summary.saldo >= 0 ? 'success' : 'danger'} icon="wallet" />
             <Kpi label="Ticket médio" value={centsToBR(summary.ticketMedio)} hint="Por recebimento pago" tone="brand" icon="chart" />

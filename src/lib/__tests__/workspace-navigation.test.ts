@@ -52,11 +52,12 @@ describe('360 navigation is an authorized projection', () => {
     const flat = sections.flatMap((s) => s.groups.filter((g) => g.flat).map((g) => g.area.id));
     expect(flat).toEqual(['principal', 'presenca']);
 
-    // Nenhuma porta fora do menu ocupa linha no menu.
+    // Nenhuma porta fora do menu ocupa linha no menu (GODOUTOR final:
+    // Pendências VOLTOU à linha — é fila de trabalho da recepção).
     const rendered = sections.flatMap((s) => s.groups.flatMap(({ area, flat: isFlat }) =>
       (isFlat ? area.items : []).filter((i) => i.sidebar !== false).map((i) => i.href)));
     expect(rendered).not.toContain('/execucoes');
-    expect(rendered).not.toContain('/tarefas');
+    expect(rendered).toContain('/tarefas');
     expect(rendered).not.toContain('/perfil');
 
     // "Clínica" reúne os conceitos pedidos SEM unir modelos (Professional e

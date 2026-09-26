@@ -275,11 +275,11 @@ export const PANEL_ROUTES: PanelRouteDef[] = [
   {
     // Era a 5ª aba de /automacoes. Tarefa é fila de trabalho da equipe — uso
     // diário, portanto Operação. O motor que CRIA tarefas continua em Automações.
-    // Conceito visível = PENDÊNCIAS. Saiu do menu cotidiano (a pendência é
-    // mostrada ONDE ela importa: Visão geral, cliente, conversa, automação) e
-    // continua inteira em /tarefas para quem quiser a lista completa.
+    // Conceito visível = PENDÊNCIAS. GODOUTOR final: voltou AO MENU para quem
+    // tem permissão real (atendente/secretaria resolvem pendências o dia todo);
+    // os atalhos contextuais (Visão geral, cliente, conversa) continuam.
     href: '/tarefas', label: 'Pendências', icon: 'tasks', section: 'operacao',
-    permission: ['clientes', 'agenda', 'leads', 'config'], area: 'tarefas', sidebar: false,
+    permission: ['clientes', 'agenda', 'leads', 'config'], area: 'tarefas',
     description: 'O que ficou combinado, com quem e com qual prazo — inclusive o que já venceu.',
   },
   {
@@ -303,10 +303,11 @@ export const PANEL_ROUTES: PanelRouteDef[] = [
   {
     // Era "/esteira" (rota sem porta no menu) e também uma visão dentro de
     // /clientes. Uma porta só: o funil de oportunidades.
-    // Kanban continua existindo como FERRAMENTA opcional, não como a definição
-    // do produto: a porta vive em Clientes ("Oportunidades"), não no menu.
+    // GODOUTOR final: com permissão 'leads' a porta aparece no menu (seção
+    // Pessoas) — para atendente/secretaria que trabalham oportunidades. O
+    // Kanban continua sendo FERRAMENTA opcional, nunca o CRM central.
     href: '/funil', label: 'Oportunidades', icon: 'funnel', section: 'pessoas',
-    permission: 'leads', area: 'funil', sidebar: false,
+    permission: 'leads', area: 'funil',
     description: 'As oportunidades por etapa, do primeiro contato ao atendimento agendado.',
     width: 'full',
   },

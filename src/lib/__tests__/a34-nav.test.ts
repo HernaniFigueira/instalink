@@ -114,9 +114,10 @@ describe('A3.4 · NAV — seções e ordem nova', () => {
   it('Execuções NÃO aparece na sidebar — e continua acessível por atalho contextual', () => {
     const nav = panelNavigation(ctx());
     expect(nav.sidebar.map((r) => r.href)).not.toContain('/execucoes');
-    // Fora da LINHA do menu desde a 2.0 (todas com atalho contextual real):
-    // Pendências, Oportunidades, Execuções, Meu perfil e Recursos.
-    expect(nav.more.map((r) => r.href)).toEqual(['/tarefas', '/funil', '/execucoes', '/perfil', '/recursos']);
+    // GODOUTOR final: Pendências e Oportunidades voltaram à LINHA do menu
+    // (permissão real). Continuam fora da linha (com atalho contextual real):
+    // Execuções, Meu perfil e Recursos.
+    expect(nav.more.map((r) => r.href)).toEqual(['/execucoes', '/perfil', '/recursos']);
     // O atalho vive dentro de Automações (fonte: URLs diretas do painel).
     const automations = read('src/components/dashboard/AutomationsView.tsx');
     expect(automations).toMatch(/\/execucoes/);

@@ -387,3 +387,39 @@ export function setupProgress(items: SetupCheckItem[]): number {
   if (items.length === 0) return 100;
   return Math.round((items.filter((i) => i.done).length / items.length) * 100);
 }
+
+// ── §P1.5 — "Personalize a página": personalização REAL, sem regra artificial ──
+// Uma página está personalizada quando existe QUALQUER escolha explícita de
+// quem configurou (nunca só "ativar o Sobre"):
+//   • Visual salvo (tema/modelo/tipografia) — `Page.themeSavedAt`;
+//   • seção desativada ou reordenada nos blocos;
+//   • navegação própria (navItems/navCustom);
+//   • "Sobre" ativado com conteúdo;
+//   • logo ou capa definidos (identidade visual da página pública).
+// Puro e testável: a rota /api/overview usa ESTA função (fonte única).
+export interface PageCustomizationInput {
+  page?: {
+    blocks?: Array<{ enabled?: boolean }>;
+    themeSavedAt?: string;
+  } | null;
+  business?: {
+    logo?: string;
+    cover?: string;
+    navCustom?: boolean;
+    navItems?: unknown[];
+    about?: { enabled?: boolean };
+  } | null;
+}
+
+export function pageIsCustomized(input: PageCustomizationInput): boolean {
+  const { page } = input;
+  const business = input.business || {};
+  if (business.logo || business.cover) return true;
+  if (!page) return false;
+  if (page.themeSavedAt) return true;
+  if ((page.blocks || []).some((blk) => blk.enabled === false)) return true;
+  if ((business.navItems?.length || 0) > 0) return true;
+  if (business.navCustom === true) return true;
+  if (business.about?.enabled === true) return true;
+  return false;
+}

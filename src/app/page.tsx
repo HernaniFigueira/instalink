@@ -18,7 +18,7 @@ export default function Landing() {
   return <main className="il-marketing">
     <a className="marketing-skip" href="#conteudo">Ir para o conteúdo</a>
     <header className="marketing-nav marketing-wrap">
-      <Link href="/" className="marketing-wordmark">instalink<span> / clínicas</span></Link>
+      <Link href="/" className="marketing-wordmark">godoutor<span> / clínicas</span></Link>
       <nav aria-label="Principal"><a href="#produto">O produto</a><a href="#rotina">Na sua rotina</a><a href="#duvidas">Dúvidas</a></nav>
       <Link href="/login" className="marketing-login">Acesso da equipe <span aria-hidden="true">↗</span></Link>
     </header>
@@ -57,6 +57,6 @@ export default function Landing() {
     <section className="marketing-start"><div className="marketing-wrap"><p className="marketing-eyebrow">COMECE COM O QUE JÁ FAZ PARTE DA SUA ROTINA</p><h2>Da configuração<br />ao primeiro agendamento.</h2><ol><li><strong>01 / Configure sua clínica</strong><p>Identidade, equipe, serviços e horários de atendimento.</p></li><li><strong>02 / Revise a experiência</strong><p>Confira sua página e as regras de reserva antes de compartilhar.</p></li><li><strong>03 / Receba e acompanhe</strong><p>Organize a agenda e dê continuidade ao atendimento.</p></li></ol></div></section>
     <section id="duvidas" className="marketing-wrap marketing-faq"><div><p className="marketing-eyebrow">ANTES DE COMEÇAR</p><h2>Perguntas<br />frequentes.</h2></div><div>{questions.map(([q,a]) => <details key={q}><summary>{q}<span aria-hidden="true">+</span></summary><p>{a}</p></details>)}</div></section>
     <section className="marketing-wrap marketing-final"><p className="marketing-eyebrow">UM PRÓXIMO PASSO MAIS SIMPLES</p><h2>Cuide da sua clínica.<br />Organize o caminho até ela.</h2><Link href="/register" className="marketing-cta">Criar meu acesso →</Link><p>Já faz parte da equipe? <Link href="/login">Entrar no painel</Link></p></section>
-    <footer className="marketing-wrap marketing-footer"><Link href="/" className="marketing-wordmark">instalink</Link><p>Organização para clínicas e equipes de atendimento.</p><Link href="/login">Acesso da equipe</Link><Link href="/politica-de-privacidade">Política de privacidade</Link><p>Paciente? Acesse pelo link da sua clínica.</p></footer>
+    <footer className="marketing-wrap marketing-footer"><Link href="/" className="marketing-wordmark">GoDoutor</Link><p>Organização para clínicas e equipes de atendimento.</p><Link href="/login">Acesso da equipe</Link><Link href="/politica-de-privacidade">Política de privacidade</Link><p>Paciente? Acesse pelo link da sua clínica.</p></footer>
   </main>;
 }

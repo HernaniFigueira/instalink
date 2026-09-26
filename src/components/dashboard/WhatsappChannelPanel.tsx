@@ -12,6 +12,7 @@ import {
   SIGNUP_CODE_TTL_SECONDS, SIGNUP_MESSAGE_ORIGIN, SIGNUP_MESSAGE_TYPE,
   WA_ME_TEST_DISCLAIMER, parseSignupMessage,
 } from '@/lib/whatsapp-onboarding';
+import { canonicalStateView } from '@/lib/integration-states';
 
 
 interface OnboardingItemView { key: string; label: string; why: string; ok: boolean; secret: boolean; required: boolean }
@@ -331,6 +332,12 @@ export function WhatsappChannelPanel({ businessId }: { businessId: string }) {
   const q = `?b=${businessId}`;
   const status = data.status;
   const connected = status === 'connected';
+  // Estado canônico do selo. Pending "comum" (validando com a Meta) é Em
+  // teste; pending que exige AÇÃO do usuário (registrar número, confirmar
+  // coexistência) é Atenção — funciona, mas não está saudável.
+  const pendingBlocking = status === 'pending'
+    && data.label.label !== 'Configurando';
+  const stateView = canonicalStateView(status, { blocking: pendingBlocking });
 
   return (
     <div className="space-y-3">
@@ -344,16 +351,19 @@ export function WhatsappChannelPanel({ businessId }: { businessId: string }) {
             <p className="text-xs text-zinc-500 mt-0.5">{data.label.detail}</p>
           </div>
           <div className="flex items-center gap-2">
+            {/* Estados canônicos (uma palavra por estado em toda a interface):
+                Pronto · Em teste · Atenção · Com falha · Precisa configurar.
+                O detalhe específico continua na linha de cima. */}
             <span className={`text-xs font-medium border rounded-full px-2 py-0.5 ${
-              status === 'connected'
+              stateView.tone === 'success'
                 ? 'bg-emerald-50 border-emerald-200 text-emerald-800'
-                : status === 'pending'
+                : stateView.tone === 'warning'
                   ? 'bg-amber-50 border-amber-200 text-amber-800'
-                  : status === 'error'
+                  : stateView.tone === 'danger'
                     ? 'bg-rose-50 border-rose-200 text-rose-800'
                     : 'bg-zinc-100 border-zinc-200 text-zinc-600'
             }`}>
-              {status === 'connected' ? 'Conectado' : status === 'pending' ? 'Configurando' : status === 'error' ? 'Erro' : 'Não conectado'}
+              {stateView.label}
             </span>
             {connected && (
               <Link href={`/conversas${q}`} className="inline-block"><Button variant="secondary" size="xs">Abrir Conversas</Button></Link>

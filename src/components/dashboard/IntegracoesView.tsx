@@ -809,7 +809,7 @@ print(res.json())`}</pre>
                   <input
                     type="url"
                     required
-                    placeholder="https://seusite.com/api/webhooks/instalink"
+                    placeholder="https://seusite.com/api/webhooks/godoutor"
                     value={webhookUrl}
                     onChange={(e) => setWebhookUrl(e.target.value)}
                     className="w-full text-xs p-2.5 rounded-lg border border-zinc-300"

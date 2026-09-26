@@ -573,9 +573,8 @@ input[type='color'] { @apply cursor-pointer; }
 
   /* ── Métrica do shell (fonte única da geometria) ─────────────── */
   --topbar-h: 62px;
-  --sidebar-w: 224px;
+  --sidebar-w: 256px;
   --sidebar-w-mini: 68px;
-  --rail-w: 220px;
   --sheet-gap: 14px;
   --sheet-w: min(1160px, calc((100vw - var(--sheet-left, 0px)) * 0.74));
   /* Borda esquerda disponível para o Workspace Sheet. O shell sobrescreve em
@@ -912,7 +911,7 @@ dialog.il-drawer::backdrop { background: transparent; }
    ═══════════════════════════════════════════════════════════════
    Topbar fixa (breadcrumb · busca global · notificações · conta) + sidebar
    por seções + segunda coluna contextual. Geometria inteira por TOKEN
-   (--topbar-h/--sidebar-w/--rail-w/--sheet-gap): nenhuma tela repete número.
+   (--topbar-h/--sidebar-w/--sheet-gap): nenhuma tela repete número.
    O sheet (Etapa B) é ancorado ABAIXO da topbar e À DIREITA de --sheet-left,
    medido em runtime pelo shell — por isso nunca cobre sidebar nem topbar. */
 .workspace-shell { display: flex; align-items: stretch; }
@@ -1065,6 +1064,13 @@ dialog.il-drawer::backdrop { background: transparent; }
   border-radius: var(--radius-lg); box-shadow: var(--shadow-lg);
 }
 .global-search__empty { padding: 22px 14px; font-size: 12.5px; color: var(--text-muted); text-align: center; }
+/* FASE C — resultados AGRUPADOS (Rotas · Pessoas · Pacientes · Agendamentos ·
+   Conversas): o rótulo do grupo é um título discreto, não um card. */
+.global-search__group + .global-search__group { margin-top: 2px; }
+.global-search__group-label {
+  padding: 7px 10px 4px; font-size: 10px; font-weight: 800;
+  letter-spacing: .08em; text-transform: uppercase; color: var(--text-faint);
+}
 .global-search__option {
   display: flex; align-items: flex-start; gap: 10px; width: 100%;
   padding: 8px; border-radius: var(--radius-md); text-align: left;
@@ -1140,7 +1146,16 @@ dialog.il-drawer::backdrop { background: transparent; }
   border-radius: var(--radius-pill); background: var(--warning-bg); color: var(--warning-fg);
   font-size: 11px; font-weight: 800;
 }
-.ws-bell__list { list-style: none; margin: 0; padding: 6px; max-height: min(380px, 58vh); overflow-y: auto; }
+.ws-bell__list { margin: 0; padding: 6px; max-height: min(380px, 58vh); overflow-y: auto; }
+.ws-bell__list ul { list-style: none; margin: 0; padding: 0; }
+/* P1.14 — grupos FALHAS · PENDÊNCIAS · INFORMAÇÕES (rótulo discreto; falhas
+   com peso de verdade, é o que o badge vermelho anuncia). */
+.ws-bell__group-label {
+  margin: 8px 8px 2px; padding: 0 0 3px;
+  font-size: 10px; font-weight: 800; letter-spacing: .09em; text-transform: uppercase;
+  color: var(--text-faint);
+}
+.ws-bell__group-label--failure { color: var(--danger-fg); }
 .ws-bell__item {
   display: flex; align-items: center; gap: 10px; width: 100%;
   padding: 9px 10px; border-radius: var(--radius-md);
@@ -1292,15 +1307,19 @@ button.ws-bell__item:hover { background: var(--surface-hover); }
    se estava. Agora o selecionado usa a marca em cheio com texto e ícone
    brancos — contraste 5.2:1 (AA), e `aria-current` continua marcando o estado
    para quem não distingue cor. Nenhum outro item vira botão saturado. */
-.workspace-link[aria-current='page'],
-.workspace-link[aria-expanded='true'] {
+/* GODOUTOR final (FASE D): no acordeão de coluna única, o peso cheio da marca
+   é do ITEM ATIVO (rota). O grupo ABERTO é só contexto: tinta suave. */
+.workspace-link[aria-current='page'] {
   background: var(--brand); color: #fff; font-weight: 600;
   box-shadow: 0 1px 2px rgba(37, 99, 235, 0.28);
 }
+.workspace-link--group[aria-expanded='true'] {
+  background: var(--brand-soft); color: var(--brand-fg); font-weight: 600;
+}
 .workspace-link[aria-current='page'] .workspace-link__chevron,
-.workspace-link--group[aria-expanded='true'] .workspace-link__chevron { color: #fff; }
-.workspace-link[aria-current='page']:hover,
-.workspace-link--group[aria-expanded='true']:hover { background: var(--brand-strong); }
+.workspace-link--group[aria-expanded='true'] .workspace-link__chevron { color: inherit; }
+.workspace-link[aria-current='page']:hover { background: var(--brand-strong); }
+.workspace-link--group[aria-expanded='true']:hover { background: var(--brand-100, var(--brand-soft)); }
 .workspace-link__icon { display: flex; align-items: center; justify-content: center; width: 20px; flex-shrink: 0; }
 .workspace-link__chevron {
   margin-left: auto; color: var(--text-faint); flex-shrink: 0;
@@ -1382,25 +1401,30 @@ button.workspace-clinic-head:hover { background: var(--surface-hover); }
 .workspace-icon-button:hover { background: var(--surface-hover); color: var(--text); }
 .is-collapsed .workspace-icon-button { justify-content: center; padding: 0; }
 
-/* ── Segunda coluna contextual (subáreas) ───────────────────── */
-.workspace-secondary {
-  display: none; flex-shrink: 0;
-  position: sticky; top: 0;
-  width: var(--rail-w); height: 100dvh;
-  padding: 12px 8px; overflow-y: auto;
-  background: var(--surface-2); border-right: 1px solid var(--border);
-  /* §7 — a segunda coluna contextual entra deslizando da esquerda (de onde
-     ela nasce: o item do menu que foi clicado). É a mesma duração/curva de
-     todo o sistema; nada de bounce. */
-  animation: ws-rail-in var(--motion-base) var(--ease-standard);
+/* ── Acordeão do submenu (FASE D: UMA coluna, expande para BAIXO) ──
+   Sem segunda coluna: o grupo abre ABAIXO do próprio botão, com altura
+   (grid-template-rows 0fr→1fr) + opacidade + translateY, ~200ms ease — a
+   mesma curva do sistema. Subitem com recuo e LINHA-GUIA (nunca um card em
+   volta do submenu). */
+.workspace-submenu {
+  display: grid; grid-template-rows: 0fr;
+  transition: grid-template-rows 200ms var(--ease-standard);
 }
-@keyframes ws-rail-in { from { opacity: 0; transform: translateX(-6px); } to { opacity: 1; transform: none; } }
-.workspace-secondary header {
-  display: flex; align-items: center; justify-content: space-between; gap: 6px;
-  padding: 0 6px 10px; margin-bottom: 6px; border-bottom: 1px solid var(--border-soft);
+.workspace-group.is-open > .workspace-submenu { grid-template-rows: 1fr; }
+.workspace-submenu__clip {
+  overflow: hidden; min-height: 0;
+  opacity: 0; transform: translateY(-4px);
+  transition: opacity 200ms var(--ease-standard), transform 200ms var(--ease-standard);
 }
-.workspace-secondary header h2 { margin: 0; font-size: 13px; font-weight: 600; }
-.workspace-secondary nav { display: flex; flex-direction: column; gap: 2px; }
+.workspace-group.is-open > .workspace-submenu > .workspace-submenu__clip { opacity: 1; transform: none; }
+.workspace-submenu__guide {
+  display: flex; flex-direction: column; gap: 2px;
+  margin: 2px 0 6px 19px; padding-left: 11px;
+  border-left: 1px solid var(--border);
+}
+.workspace-link--sub { min-height: 34px; font-size: 13px; }
+.workspace-link--sub .workspace-link__icon { width: 16px; }
+.is-collapsed .workspace-submenu__guide { margin-left: 6px; border-left: 0; padding-left: 0; }
 
 /* ── Skip link ──────────────────────────────────────────────── */
 .workspace-skip {
@@ -1414,7 +1438,6 @@ button.workspace-clinic-head:hover { background: var(--surface-hover); }
 @media (min-width: 1200px) {
   .workspace-shell { display: flex; }
   .il-platform .workspace-sidebar { display: flex; }
-  .workspace-secondary { display: block; }
   .ws-topbar__nav-toggle { display: none; }
 }
 @media (max-width: 1199px) {

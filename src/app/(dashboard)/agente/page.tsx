@@ -12,6 +12,7 @@ import { cn } from '@/lib/utils';
 import type { AgentObjective, AgentTone, BusinessAgent } from '@/lib/types';
 import { AccessDenied, AreaLoadError, useAreaLoad } from '@/components/dashboard/AccessNotice';
 import { apiGet, apiSend } from '@/lib/api-client';
+import { usePanelPermissions } from '@/components/dashboard/usePanelPermissions';
 
 interface Options { tones: Array<{ id: AgentTone; label: string; hint: string }>; objectives: Array<{ id: AgentObjective; label: string }> }
 interface Preview {
@@ -78,6 +79,10 @@ export default function AgentePage() {
   if (failed) return <AreaLoadError area="Agente" message={failed} onRetry={load} />;
   if (!agent || !options) return <PageSkeleton />;
   const pv = preview as Preview | null;
+  // §A08 — o atalho para /canais exige 'config': quem não pode abrir a tela
+  // de canais vê o estado do canal como texto, não como link para um 403.
+  const { permissions: panelPerms, ready: permsReady } = usePanelPermissions();
+  const canSeeChannels = !permsReady || panelPerms.config === true;
   const q = `?b=${businessId}`;
 
   function toggleObjective(id: AgentObjective) {
@@ -191,11 +196,18 @@ export default function AgentePage() {
                   className={cn('text-xs font-semibold px-3 py-2 rounded-lg border-2', agent.channels.site ? 'border-[var(--success-border)] bg-[var(--success-bg)] text-[var(--success-fg)]' : 'border-[var(--border)] bg-white text-[var(--text-muted)]')}>
                   Site {agent.channels.site ? '✓' : '—'}
                 </button>
-                <Link href={`/canais?tab=canais${businessId ? `&b=${businessId}` : ''}`}
-                  className="text-xs font-semibold px-3 py-2 rounded-lg border-2 border-zinc-200 text-zinc-500"
-                  title="O canal WhatsApp é conectado em Canais & Integrações; as conversas ficam em Conversas">
-                  WhatsApp {pv?.whatsappStatus === 'connected' ? '✓' : '— (não conectado)'}
-                </Link>
+                {canSeeChannels ? (
+                  <Link href={`/canais?tab=canais${businessId ? `&b=${businessId}` : ''}`}
+                    className="text-xs font-semibold px-3 py-2 rounded-lg border-2 border-zinc-200 text-zinc-500"
+                    title="O canal WhatsApp é conectado em Canais & Integrações; as conversas ficam em Conversas">
+                    WhatsApp {pv?.whatsappStatus === 'connected' ? '✓' : '— (não conectado)'}
+                  </Link>
+                ) : (
+                  <span className="text-xs font-semibold px-3 py-2 rounded-lg border-2 border-zinc-200 text-zinc-500"
+                    title="O canal WhatsApp é conectado em Canais & Integrações">
+                    WhatsApp {pv?.whatsappStatus === 'connected' ? '✓' : '— (não conectado)'}
+                  </span>
+                )}
               </div>
             </div>
           </section>

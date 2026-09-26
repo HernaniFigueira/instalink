@@ -65,10 +65,11 @@ export const WORKSPACE_AREAS: WorkspaceAreaDef[] = [
     // computador. São links diretos, sem segundo nível.
     id: 'principal', label: 'Operação', icon: 'home', color: 'var(--brand)',
     // `/tarefas` (Pendências) e `/perfil` (Meu perfil) vivem AQUI porque
-    // pertencem ao dia a dia de quem usa — não a um grupo estrutural. Os dois
-    // continuam `sidebar: false` (não ocupam linha no menu), mas ter dono
-    // evita que caiam na rede de segurança "Mais": era ela que fazia o
-    // breadcrumb mentir ("Visão geral > Mais > Pendências").
+    // pertencem ao dia a dia de quem usa — não a um grupo estrutural.
+    // GODOUTOR final: Pendências voltou À LINHA do menu (permissão real — a
+    // recepção resolve pendências o dia todo). `/perfil` continua fora da
+    // linha (menu da conta), mas ter dono evita a rede de segurança "Mais"
+    // que fazia o breadcrumb mentir ("Visão geral > Mais > Pendências").
     routes: ['/dashboard', '/agenda', '/conversas', '/clientes', '/tarefas', '/perfil'],
   },
   {
@@ -95,6 +96,8 @@ export const WORKSPACE_AREAS: WorkspaceAreaDef[] = [
   {
     // Como está indo: números, dinheiro e alcance comercial.
     id: 'gestao', label: 'Gestão', icon: 'chart', color: 'var(--brand)',
+    // GODOUTOR final: Oportunidades (/funil) entrou no menu para quem tem
+    // 'leads' — dentro de Gestão, nunca como CRM central.
     routes: ['/resultados', '/financeiro', '/funil'],
   },
   {

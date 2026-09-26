@@ -15,7 +15,9 @@ export function BottomBarView({ items, logged = false, menuOpen = false, onActio
   onAction?: (id: BottomBarItem['id']) => void;
 }) {
   const item = 'flex h-[60px] min-w-0 flex-1 flex-col items-center justify-center gap-[3px] px-1 text-[10.5px] font-bold leading-none transition-transform active:scale-[0.97]';
-  return <nav className="fixed inset-x-0 bottom-0 z-40 border-t" aria-label="Navegação"
+  // P1.10 — barra inferior é SÓ do mobile: em telas ≥768px o cabeçalho já
+  // dá conta (nav + ações) e a barra fixa só rouba altura útil.
+  return <nav className="fixed inset-x-0 bottom-0 z-40 border-t md:hidden" aria-label="Navegação"
     style={{background:'color-mix(in srgb, var(--il-surface) 96%, transparent)',backdropFilter:'blur(14px)',WebkitBackdropFilter:'blur(14px)',borderColor:'color-mix(in srgb, var(--il-muted) 24%, transparent)',paddingBottom:'env(safe-area-inset-bottom)'}}>
     <div className="mx-auto flex w-full max-w-2xl items-stretch">
       {items.map(it => <button key={it.id} type="button" onClick={() => onAction?.(it.id)}

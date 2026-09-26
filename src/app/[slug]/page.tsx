@@ -27,17 +27,17 @@ import type { Block, Business, PublicBusiness, Review } from '@/lib/types';
 
 export async function generateMetadata({ params }: { params: { slug: string } }): Promise<Metadata> {
   const data = await getPublicData(params.slug);
-  if (!data) return { title: 'Página não encontrada — instalink.app' };
+  if (!data) return { title: 'Página não encontrada — GoDoutor' };
   const { business } = data;
   return {
-    title: `${business.name} — instalink.app`,
-    description: business.description || `Visite ${business.name} no instalink.app`,
+    title: `${business.name} — GoDoutor`,
+    description: business.description || `Agende seu atendimento em ${business.name} no GoDoutor`,
     openGraph: {
       title: business.name,
       description: business.description || undefined,
       type: 'website',
       locale: 'pt_BR',
-      siteName: 'instalink.app',
+      siteName: 'GoDoutor',
       ...(business.logo && business.logo.startsWith('http') ? { images: [business.logo] } : {}),
     },
   };
@@ -147,8 +147,7 @@ export default async function PublicPage({ params }: { params: { slug: string } 
       )}
 
       <div
-        className="clinic-content mx-auto w-full max-w-[900px] px-5 sm:px-8 space-y-10"
-        style={{ paddingBottom: 'calc(6.5rem + env(safe-area-inset-bottom, 0px))' }}
+        className="clinic-content mx-auto w-full max-w-[900px] px-5 sm:px-8 space-y-10 max-md:pb-[calc(6.5rem+env(safe-area-inset-bottom,0px))]"
       >
         {blocks.map((block, i) => (
           block.type === 'profile' ? null : (
