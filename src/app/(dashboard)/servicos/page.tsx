@@ -175,10 +175,10 @@ export default function ServicosPage() {
                     {sv.image ? (
                       <img src={sv.image} alt={sv.name} className="w-11 h-11 rounded-md object-cover shrink-0 border border-[var(--border)]" />
                     ) : (
-                      <div className="w-11 h-11 rounded-md bg-[var(--surface-2)] border border-[var(--border)] flex items-center justify-center font-extrabold text-[var(--text-faint)] shrink-0">{sv.name.slice(0, 1)}</div>
+                      <div className="w-11 h-11 rounded-md bg-[var(--surface-2)] border border-[var(--border)] flex items-center justify-center font-semibold text-[var(--text-faint)] shrink-0">{sv.name.slice(0, 1)}</div>
                     )}
                     <div className="flex-1 min-w-0">
-                      <p className="font-bold text-sm">{sv.name} {sv.featured && <Icon n="star" size={13} className="inline -mt-1 text-amber-500" />}</p>
+                      <p className="font-semibold text-sm">{sv.name} {sv.featured && <Icon n="star" size={13} className="inline -mt-1 text-amber-500" />}</p>
                       <p className="text-xs text-zinc-500">
                         R$ {centsToBR(sv.price)}
                         {!pricePublic && <span className="font-semibold text-amber-700"> · preço oculto na página</span>}

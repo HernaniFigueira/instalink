@@ -68,14 +68,14 @@ export default function MasterOverviewPage() {
       <div className="mb-6">
         <h1 className="text-2xl font-extrabold tracking-tight">Visão geral</h1>
         <p className="text-sm text-zinc-500 mt-1">
-          Camada Master do InstaLink — acima de todas as Organizations. Dados reais da plataforma.
+          Camada Master do GoDoutor — acima de todas as Organizations. Dados reais da plataforma.
         </p>
       </div>
 
       <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-3 mb-6">
         {cards.map((c) => {
           const inner = (
-            <div className="bg-white border border-zinc-200 rounded-2xl p-4 h-full hover:border-zinc-300 transition-colors">
+            <div className="bg-white border border-zinc-200 rounded-xl p-4 h-full hover:border-zinc-300 transition-colors">
               <p className="text-2xl font-extrabold tracking-tight">{c.value}</p>
               <p className="text-xs font-bold text-zinc-500 mt-1">{c.label}</p>
             </div>
@@ -84,7 +84,7 @@ export default function MasterOverviewPage() {
         })}
       </div>
 
-      <section className="bg-white border border-zinc-200 rounded-2xl p-5 mb-6">
+      <section className="bg-white border border-zinc-200 rounded-xl p-5 mb-6">
         <p className="text-xs font-extrabold uppercase tracking-wider text-zinc-400 mb-2">{data.platformRevenueLabel}</p>
         <p className="text-3xl font-extrabold">{money(data.platformRevenueCents)}</p>
         <p className="text-xs text-zinc-500 mt-2 max-w-2xl">{data.platformRevenueHint}</p>
@@ -95,7 +95,7 @@ export default function MasterOverviewPage() {
         )}
       </section>
 
-      <section className="bg-white border border-zinc-200 rounded-2xl p-5">
+      <section className="bg-white border border-zinc-200 rounded-xl p-5">
         <div className="flex items-center justify-between mb-3">
           <p className="text-xs font-extrabold uppercase tracking-wider text-zinc-400">Atividade recente</p>
           <Link href="/master/atividade" className="text-xs font-bold text-emerald-700 hover:underline">Ver tudo</Link>

@@ -15,6 +15,7 @@ import { createBookingTx, resolveBookingIdentity } from '@/lib/booking-create';
 import { previewSeries, createSeriesTx, cancelFutureSeriesTx } from '@/lib/booking-series';
 import type { CreateBookingParams } from '@/lib/booking-create';
 import { noteLeadReschedule } from '@/lib/pipeline';
+import { emitAutomationEvent } from '@/lib/automation/events';
 import { enqueueDueReminders } from '@/lib/automations';
 import { upsertContact } from '@/lib/contacts';
 import { todayISO, nowHM, weekdayOf, addDaysISO, effectiveTimezone, isValidDateISO, isValidClockTime } from '@/lib/tz';
@@ -76,8 +77,19 @@ export async function GET(req: NextRequest) {
       const today = todayISO(new Date(), btz);
       const now = nowHM(new Date(), btz);
       const slice = all.slice((page - 1) * limit, page * limit);
+      // FASE 2 · P6 — veterinária: a agenda lê PRIMEIRO o PET (o tutor fica
+      // como contexto). `petName` só existe quando há vínculo — dados legados
+      // e outras clínicas seguem exatamente como antes.
+      const petsById: Record<string, string> = business.clinicType === 'veterinaria'
+        ? Object.fromEntries(
+          guard.db.pets.filter((p) => p.businessId === businessId && p.active !== false).map((p) => [p.id, p.name]),
+        )
+        : {};
+      const withPet = slice.map((b) => (
+        b.petId && petsById[b.petId] ? { ...b, petName: petsById[b.petId] } : b
+      ));
       return NextResponse.json({
-        bookings: slice,
+        bookings: withPet,
         total: all.length, page, limit,
         ...(capped ? { limitCapped: true, requestedLimit: requested } : {}),
         today,
@@ -321,7 +333,27 @@ export async function POST(req: NextRequest) {
       leadId: body.leadId ? String(body.leadId) : undefined,
       bookingKind: body.bookingKind === 'fit_in' ? 'fit_in' : undefined,
       fitInConfirmed: body.confirmFitIn === true,
+      // FASE 2 · P6 / P0-3 — pet escolhido pelo DONO (validado na unidade;
+      // público nunca envia). Veterinária + tutor com pets ativos = OBRIGATÓRIO.
+      petId: (() => {
+        if (!isOwner || !body.petId) return undefined;
+        const pet = db.pets.find((x) => x.id === String(body.petId) && x.businessId === business.id);
+        if (!pet) return undefined;
+        return pet.id;
+      })(),
     };
+    // P0-3 — veterinária: tutor já com pet não agenda "só tutor".
+    if (
+      isOwner
+      && business.clinicType === 'veterinaria'
+      && linkedContact
+      && db.pets.some((x) => x.businessId === business.id && x.tutorId === linkedContact.id && x.active !== false)
+      && !params.petId
+    ) {
+      return NextResponse.json({
+        error: 'Em clínica veterinária, selecione o pet (paciente) deste agendamento.',
+      }, { status: 400 });
+    }
     const scope = guard?.ok ? guard.ctx.professionalScope : '';
     // Encaixe exige CONFIRMAÇÃO EXPLÍCITA: sem `confirmFitIn`, o servidor
     // devolve a lista de conflitos e NÃO grava nada. A tela mostra com quem
@@ -526,6 +558,15 @@ export async function PATCH(req: NextRequest) {
             businessId: business.id, customerId: target.customerId || '',
             name: target.customerName, phone: target.customerPhone, source: 'reagendamento', now,
           });
+          emitAutomationEvent(d, {
+            event: 'booking.rescheduled',
+            businessId: business.id,
+            at: now,
+            bookingId: newId,
+            leadId: target.leadId || undefined,
+            customerId: target.customerId || undefined,
+            data: { previousId: target.id, fromDate: target.date, fromTime: target.time, date, time, kind: 'recreate' },
+          });
           return { created: true, newId };
         }
 
@@ -548,6 +589,15 @@ export async function PATCH(req: NextRequest) {
           businessId: business.id, leadId: target.leadId,
           from: { date: fromDate, time: fromTime }, to: { date, time },
           by: 'owner', now,
+        });
+        emitAutomationEvent(d, {
+          event: 'booking.rescheduled',
+          businessId: business.id,
+          at: now,
+          bookingId: target.id,
+          leadId: target.leadId || undefined,
+          customerId: target.customerId || undefined,
+          data: { previousId: target.id, fromDate, fromTime, date, time, kind: 'move' },
         });
         return { created: false, newId: target.id };
       });

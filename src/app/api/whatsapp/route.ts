@@ -7,8 +7,172 @@ import {
   missingEnvVars, serverCredentialsConfigured, whatsappStateLabel,
 } from '@/lib/whatsapp';
 import { computeConnectionStatus, type UnitIntegrationView } from '@/lib/whatsapp-onboarding';
-import { getWhatsappCredentials, testMetaConnection } from '@/lib/whatsapp-cloud-api';
+import { appsecretProof } from '@/lib/whatsapp-onboarding-server';
+import { decryptSecret, getWhatsappCredentials, testMetaConnection } from '@/lib/whatsapp-cloud-api';
 import { onlyDigits } from '@/lib/utils';
+
+// Diagnóstico temporário, fixado aos ativos de teste da Andrioni.
+// Os IDs são públicos; o token e a prova HMAC ficam exclusivamente no servidor.
+const WABA_DIAGNOSTIC_APP_ID = '1631409148434073';
+const WABA_DIAGNOSTIC_WABA_ID = '1802366907680005';
+const WABA_DIAGNOSTIC_PHONE_ID = '1311304095400435';
+const WABA_DIAGNOSTIC_GRAPH_BASE = 'https://graph.facebook.com/v26.0';
+
+type GraphDiagnosticResult = { ok: boolean; status: number; data: any; error: string };
+
+function sanitizedGraphError(status: number, data: any, operation: string): string {
+  if (status === 0) return `Não foi possível alcançar a Graph API para ${operation}.`;
+  const rawCode = Number(data?.error?.code);
+  const code = Number.isFinite(rawCode) ? ` Código Meta ${rawCode}.` : '';
+  if (status === 401 || status === 403) return `A Meta recusou a credencial ou a permissão para ${operation}.${code}`;
+  if (status === 404) return `A Meta não encontrou o recurso consultado para ${operation}.${code}`;
+  if (status === 429) return `A Meta limitou temporariamente a consulta de ${operation}.${code}`;
+  if (status >= 500) return `A Graph API apresentou indisponibilidade ao executar ${operation}.${code}`;
+  return `A Meta recusou a operação ${operation}.${code}`;
+}
+
+async function graphDiagnosticRequest(
+  resource: string,
+  token: string,
+  proof: string,
+  operation: string,
+  method: 'GET' | 'POST' = 'GET',
+): Promise<GraphDiagnosticResult> {
+  try {
+    const separator = resource.includes('?') ? '&' : '?';
+    const url = `${WABA_DIAGNOSTIC_GRAPH_BASE}/${resource}${separator}appsecret_proof=${encodeURIComponent(proof)}`;
+    const response = await fetch(url, {
+      method,
+      cache: 'no-store',
+      headers: {
+        authorization: `Bearer ${token}`,
+        ...(method === 'POST' ? { 'content-type': 'application/json' } : {}),
+      },
+      ...(method === 'POST' ? { body: JSON.stringify({ appsecret_proof: proof }) } : {}),
+    });
+    let data: any = null;
+    try { data = await response.json(); } catch { data = null; }
+    const ok = response.ok && !data?.error;
+    return { ok, status: response.status, data, error: ok ? '' : sanitizedGraphError(response.status, data, operation) };
+  } catch {
+    return { ok: false, status: 0, data: null, error: sanitizedGraphError(0, null, operation) };
+  }
+}
+
+function subscribedAppsResult(result: GraphDiagnosticResult) {
+  const valid = Array.isArray(result.data?.data);
+  const apps = valid ? result.data.data : [];
+  const appIdFound = apps.some((app: any) => String(
+    app?.whatsapp_business_api_data?.id || app?.id || app?.app_id || app?.appId || '',
+  ) === WABA_DIAGNOSTIC_APP_ID);
+  return {
+    wabaSubscribed: apps.length > 0,
+    appIdFound,
+    httpStatus: result.status,
+    error: result.error || (result.ok && !valid ? 'A Graph API retornou uma resposta inválida para a assinatura da WABA.' : ''),
+  };
+}
+
+function safePhoneResult(result: GraphDiagnosticResult) {
+  const value = result.data && typeof result.data === 'object' ? result.data : {};
+  const webhook = value.webhook_configuration && typeof value.webhook_configuration === 'object'
+    ? value.webhook_configuration : {};
+  return {
+    httpStatus: result.status,
+    status: typeof value.status === 'string' ? value.status : '',
+    accountMode: typeof value.account_mode === 'string' ? value.account_mode : '',
+    platformType: typeof value.platform_type === 'string' ? value.platform_type : '',
+    webhookApplication: typeof webhook.application === 'string' ? webhook.application : '',
+    error: result.error,
+  };
+}
+
+async function runWabaSubscriptionDiagnostic(
+  business: any,
+  resubscribe: boolean,
+) {
+  const integration = business.whatsappIntegration;
+  const encryptedToken = String(integration?.encryptedAccessToken || '');
+  const token = decryptSecret(encryptedToken);
+  const appSecret = String(process.env.META_APP_SECRET || process.env.WHATSAPP_APP_SECRET || '').trim();
+  const configuredAppId = String(process.env.META_APP_ID || '').trim();
+
+  if (String(integration?.wabaId || '') !== WABA_DIAGNOSTIC_WABA_ID || String(integration?.phoneNumberId || '') !== WABA_DIAGNOSTIC_PHONE_ID) {
+    return { ok: false, error: 'A unidade ativa não possui os identificadores do diagnóstico da Andrioni.', subscription: null, phone: null, reassigned: false };
+  }
+  if (!token) {
+    return { ok: false, error: 'A credencial criptografada da unidade não pôde ser aberta no servidor.', subscription: null, phone: null, reassigned: false };
+  }
+  if (!appSecret) {
+    return { ok: false, error: 'O segredo do aplicativo não está configurado no servidor.', subscription: null, phone: null, reassigned: false };
+  }
+  if (configuredAppId !== WABA_DIAGNOSTIC_APP_ID) {
+    return { ok: false, error: 'O App ID configurado no servidor não corresponde ao app deste diagnóstico.', subscription: null, phone: null, reassigned: false };
+  }
+
+  const proof = appsecretProof(token, appSecret);
+  const subscribedAppsResource = `${WABA_DIAGNOSTIC_WABA_ID}/subscribed_apps`;
+  const initialGet = await graphDiagnosticRequest(
+    subscribedAppsResource, token, proof, 'consultar a assinatura da WABA', 'GET',
+  );
+  const initialSubscription = subscribedAppsResult(initialGet);
+
+  // O POST nunca é o primeiro contato: mesmo uma chamada direta à API precisa
+  // provar, no servidor, que o App ID ainda não está inscrito.
+  const initialPayloadValid = Array.isArray(initialGet.data?.data);
+  if (resubscribe && (!initialGet.ok || !initialPayloadValid || initialSubscription.appIdFound)) {
+    const phone = initialSubscription.appIdFound
+      ? safePhoneResult(await graphDiagnosticRequest(
+        `${WABA_DIAGNOSTIC_PHONE_ID}?fields=status,account_mode,platform_type,webhook_configuration`,
+        token,
+        proof,
+        'consultar o Phone Number ID',
+        'GET',
+      ))
+      : null;
+    return {
+      ok: initialGet.ok && initialPayloadValid,
+      error: initialSubscription.error,
+      subscription: initialSubscription,
+      phone,
+      reassigned: false,
+      postHttpStatus: undefined,
+    };
+  }
+
+  let post: GraphDiagnosticResult | null = null;
+  if (resubscribe) {
+    post = await graphDiagnosticRequest(
+      subscribedAppsResource, token, proof, 'reassinar o webhook da WABA', 'POST',
+    );
+  }
+
+  // Depois do POST, confirmar o estado real com um novo GET.
+  const finalGet = resubscribe
+    ? await graphDiagnosticRequest(subscribedAppsResource, token, proof, 'confirmar a assinatura da WABA', 'GET')
+    : initialGet;
+  const subscription = subscribedAppsResult(finalGet);
+  const postError = post && !post.ok ? post.error : '';
+  const error = postError || subscription.error;
+  const phone = subscription.appIdFound
+    ? safePhoneResult(await graphDiagnosticRequest(
+      `${WABA_DIAGNOSTIC_PHONE_ID}?fields=status,account_mode,platform_type,webhook_configuration`,
+      token,
+      proof,
+      'consultar o Phone Number ID',
+      'GET',
+    ))
+    : null;
+
+  return {
+    ok: finalGet.ok && Array.isArray(finalGet.data?.data),
+    error,
+    subscription,
+    phone,
+    reassigned: !!post?.ok,
+    postHttpStatus: post?.status,
+  };
+}
 
 // WHATSAPP — estado REAL da integração (nada de fingir conexão).
 //
@@ -30,6 +194,7 @@ export async function GET(req: NextRequest) {
   const messages = db.messages.filter((m) => m.businessId === businessId);
 
   const canViewDiagnostics = guard.ctx.isMaster || guard.ctx.isOwner || guard.ctx.role === 'ADMIN';
+  const canRunWabaDiagnostic = guard.ctx.isMaster || guard.ctx.role === 'ADMIN';
 
   return NextResponse.json({
     status: integration.status,
@@ -49,6 +214,7 @@ export async function GET(req: NextRequest) {
     },
     // Diagnósticos técnicos reservados para Master/Admin
     canViewDiagnostics,
+    canRunWabaDiagnostic,
     diagnostics: canViewDiagnostics ? {
       credentialsConfigured: !!credentials,
       credentialSource: credentials?.source || 'none',
@@ -87,6 +253,23 @@ export async function POST(req: NextRequest) {
     if (!guard.ok) return guard.res;
     const { user, business } = guard.ctx;
     const action = String(body.action || 'connect');
+
+    // ── DIAGNÓSTICO TEMPORÁRIO DA ASSINATURA WABA ───────────────
+    // Somente Master/Admin. É leitura até o usuário clicar explicitamente em
+    // reassinar; nenhum token, prova, payload ou resposta bruta é devolvido.
+    if (action === 'verify_waba_subscription' || action === 'resubscribe_waba') {
+      const canRun = guard.ctx.isMaster || guard.ctx.role === 'ADMIN';
+      if (!canRun) return NextResponse.json({ error: 'Diagnóstico técnico restrito a Master/Admin.' }, { status: 403 });
+      const result = await runWabaSubscriptionDiagnostic(business, action === 'resubscribe_waba');
+      console.info(
+        `[WA-WABA-DIAG] action=${action} graph_status=${String(result.subscription?.httpStatus ?? result.postHttpStatus ?? 0)} `
+        + `app_found=${result.subscription?.appIdFound ? 'true' : 'false'} reassigned=${result.reassigned ? 'true' : 'false'}`,
+      );
+      if (result.error) {
+        console.warn(`[WA-WABA-DIAG] action=${action} error=redacted`);
+      }
+      return NextResponse.json(result);
+    }
 
     // ── DESCONECTAR ──────────────────────────────────────────────
     if (action === 'disconnect') {

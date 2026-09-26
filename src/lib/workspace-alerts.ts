@@ -18,9 +18,17 @@
 /** Tom semântico → família de cor do design system (nunca hex aqui). */
 export type AlertTone = 'danger' | 'warning' | 'info' | 'violet' | 'success';
 
+/**
+ * P1.14 — GRUPO da notificação. O sino separa o que EXIGE ATENÇÃO agora
+ * (Falhas) do que é fila de trabalho (Pendências) e do que é informação
+ * (Informações). O badge vermelho conta SÓ Falhas.
+ */
+export type AlertSeverity = 'failure' | 'pending' | 'info';
+
 export interface WorkspaceAlert {
   id: string;
   tone: AlertTone;
+  severity: AlertSeverity;
   icon: string;
   count: number;
   /** O que está pendente, na palavra de quem opera. */
@@ -48,10 +56,38 @@ export interface AlertsSource {
 /** Estado honesto da leitura: sem payload não há como afirmar "nada pendente". */
 export type AlertsStatus = 'loading' | 'ready' | 'unavailable';
 
+/** Grupo de notificações com rótulo canônico (ordem de leitura). */
+export interface AlertGroup {
+  id: AlertSeverity;
+  label: string;
+  items: WorkspaceAlert[];
+}
+
 export interface WorkspaceAlerts {
   status: AlertsStatus;
   items: WorkspaceAlert[];
+  /** Tudo somado (painel). */
   total: number;
+  /**
+   * P1.14 — o que o BADGE VERMELHO conta: apenas Falhas (atenção real).
+   * Pendências e informações aparecem no painel, sem gritar no sino.
+   */
+  badgeCount: number;
+  /** Grupos canônicos, na ordem Falhas → Pendências → Informações. */
+  groups: AlertGroup[];
+}
+
+export const ALERT_GROUP_LABELS: Record<AlertSeverity, string> = {
+  failure: 'Falhas',
+  pending: 'Pendências',
+  info: 'Informações',
+};
+
+/** Tom → grupo (a fonte é o tom semântico, já decidido pelo servidor). */
+function severityOf(tone: AlertTone): AlertSeverity {
+  if (tone === 'danger') return 'failure';
+  if (tone === 'info') return 'info';
+  return 'pending';
 }
 
 /** Tom/ícone por tipo de atenção — coerente com o significado da cor. */
@@ -61,6 +97,8 @@ const ATTENTION_PRESENTATION: Record<string, { tone: AlertTone; icon: string }> 
   tasksOverdue: { tone: 'danger', icon: 'tasks' },
   queueWaiting: { tone: 'warning', icon: 'users' },
   arrivalsPending: { tone: 'warning', icon: 'idcard' },
+  // FASE 2 · P10 — retorno vencido (dado real do atendimento).
+  returnsDue: { tone: 'violet', icon: 'history' },
 };
 
 const FALLBACK_PRESENTATION: { tone: AlertTone; icon: string } = { tone: 'warning', icon: 'alert' };
@@ -80,7 +118,7 @@ export function buildWorkspaceAlerts(
   source: AlertsSource | null | undefined,
   unitQuery = '',
 ): WorkspaceAlerts {
-  if (!source) return { status: 'unavailable', items: [], total: 0 };
+  if (!source) return { status: 'unavailable', items: [], total: 0, badgeCount: 0, groups: [] };
 
   const items: WorkspaceAlert[] = [];
 
@@ -91,6 +129,7 @@ export function buildWorkspaceAlerts(
     items.push({
       id: entry.id,
       tone: presentation.tone,
+      severity: severityOf(presentation.tone),
       icon: presentation.icon,
       count,
       label: entry.label,
@@ -101,7 +140,7 @@ export function buildWorkspaceAlerts(
   const unread = Number(source.whatsapp?.unread) || 0;
   if (unread > 0) {
     items.push({
-      id: 'conversationsUnread', tone: 'info', icon: 'inbox', count: unread,
+      id: 'conversationsUnread', tone: 'info', severity: 'info', icon: 'inbox', count: unread,
       label: 'mensagens não lidas', href: withUnit('/conversas', unitQuery),
     });
   }
@@ -109,7 +148,7 @@ export function buildWorkspaceAlerts(
   const pendingMessages = Number(source.whatsapp?.pendingMessages) || 0;
   if (pendingMessages > 0) {
     items.push({
-      id: 'messagesPending', tone: 'warning', icon: 'send', count: pendingMessages,
+      id: 'messagesPending', tone: 'warning', severity: 'pending', icon: 'send', count: pendingMessages,
       label: 'mensagens na fila de envio', href: withUnit('/conversas', unitQuery),
     });
   }
@@ -117,7 +156,7 @@ export function buildWorkspaceAlerts(
   const pendingSetup = Number(source.pendingSetup) || 0;
   if (pendingSetup > 0) {
     items.push({
-      id: 'setupPending', tone: 'success', icon: 'checkCircle', count: pendingSetup,
+      id: 'setupPending', tone: 'success', severity: 'pending', icon: 'checkCircle', count: pendingSetup,
       label: pendingSetup === 1 ? 'item de configuração pendente' : 'itens de configuração pendentes',
       href: withUnit('/dashboard', unitQuery),
     });
@@ -126,7 +165,14 @@ export function buildWorkspaceAlerts(
   const order: Record<AlertTone, number> = { danger: 0, warning: 1, info: 2, violet: 3, success: 4 };
   items.sort((a, b) => order[a.tone] - order[b.tone] || b.count - a.count);
 
-  return { status: 'ready', items, total: items.reduce((sum, i) => sum + i.count, 0) };
+  const badgeCount = items
+    .filter((i) => severityOf(i.tone) === 'failure')
+    .reduce((sum, i) => sum + i.count, 0);
+  const groups: AlertGroup[] = (['failure', 'pending', 'info'] as AlertSeverity[])
+    .map((id) => ({ id, label: ALERT_GROUP_LABELS[id], items: items.filter((i) => severityOf(i.tone) === id) }))
+    .filter((g) => g.items.length > 0);
+
+  return { status: 'ready', items, total: items.reduce((sum, i) => sum + i.count, 0), badgeCount, groups };
 }
 
 /** Rótulo acessível do sino: diz a verdade (número ou ausência de pendência). */
@@ -134,5 +180,9 @@ export function bellLabel(alerts: WorkspaceAlerts): string {
   if (alerts.status === 'loading') return 'Notificações: carregando';
   if (alerts.status === 'unavailable') return 'Notificações: indisponíveis';
   if (alerts.total === 0) return 'Notificações: nenhuma pendência';
+  // P1.14 — o badge vermelho é só das FALHAS; o rótulo explica a diferença.
+  if (alerts.badgeCount > 0) {
+    return `Notificações: ${alerts.badgeCount} ${alerts.badgeCount === 1 ? 'exige atenção' : 'exigem atenção'} · ${alerts.total} no total`;
+  }
   return `Notificações: ${alerts.total} ${alerts.total === 1 ? 'pendência' : 'pendências'}`;
 }

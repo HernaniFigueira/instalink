@@ -68,14 +68,14 @@ export interface PanelSectionDef {
  *     Módulo desligado = porta inexistente para quem não tem o módulo.
  */
 export const PANEL_SECTIONS: PanelSectionDef[] = [
-  { id: 'inicio', label: 'Início' },
+  { id: 'inicio', label: 'Visão geral' },
   { id: 'operacao', label: 'Operação' },
   { id: 'pessoas', label: 'Pessoas' },
-  { id: 'oferta', label: 'Oferta' },
-  { id: 'crescimento', label: 'Crescimento' },
-  { id: 'resultados', label: 'Resultados' },
-  { id: 'presenca', label: 'Presença' },
-  { id: 'administracao', label: 'Administração' },
+  { id: 'oferta', label: 'Clínica' },
+  { id: 'crescimento', label: 'Automação' },
+  { id: 'resultados', label: 'Gestão' },
+  { id: 'presenca', label: 'Página' },
+  { id: 'administracao', label: 'Configurações' },
 ];
 
 /**
@@ -116,23 +116,20 @@ export interface SectionTheme {
 }
 
 export const SECTION_THEME: Record<PanelSectionId, SectionTheme> = {
-  // Início/Operação/Presença: azul da marca (o "agora" do dia).
+  // OPERAÇÃO DO DIA (Visão geral, Agenda, Clínica) — a cor da marca.
   inicio: { accent: 'var(--brand)', activeBg: 'var(--brand-soft)', activeFg: 'var(--brand-fg)' },
   operacao: { accent: 'var(--brand)', activeBg: 'var(--brand-soft)', activeFg: 'var(--brand-fg)' },
-  // Pessoas: teal (gente).
-  pessoas: { accent: 'var(--teal)', activeBg: 'var(--teal-bg)', activeFg: 'var(--teal-fg)' },
-  // Oferta: lilás (catálogo/vitrine).
-  oferta: { accent: 'var(--lilac)', activeBg: 'var(--lilac-bg)', activeFg: 'var(--lilac-fg)' },
-  // Crescimento: âmbar (campanhas/automação) — atenção, não alarme.
-  crescimento: { accent: 'var(--warning)', activeBg: 'var(--warning-bg)', activeFg: 'var(--warning-fg)' },
-  // Resultados: verde (números que fecham).
-  resultados: { accent: 'var(--success)', activeBg: 'var(--success-bg)', activeFg: 'var(--success-fg)' },
+  pessoas: { accent: 'var(--brand)', activeBg: 'var(--brand-soft)', activeFg: 'var(--brand-fg)' },
+  crescimento: { accent: 'var(--brand)', activeBg: 'var(--brand-soft)', activeFg: 'var(--brand-fg)' },
+  resultados: { accent: 'var(--brand)', activeBg: 'var(--brand-soft)', activeFg: 'var(--brand-fg)' },
   presenca: { accent: 'var(--brand)', activeBg: 'var(--brand-soft)', activeFg: 'var(--brand-fg)' },
-  // Administração: azul frio/neutro de propósito (ajuste raro, sem destaque).
-  administracao: { accent: 'var(--text-muted)', activeBg: 'var(--surface-3)', activeFg: 'var(--text)' },
+  // CONFIGURAÇÃO/CATÁLOGO — neutro de propósito: ajuste raro não disputa
+  // atenção com o dia a dia, e nunca vira uma "família de cor" própria.
+  oferta: { accent: 'var(--text-muted)', activeBg: 'var(--surface-hover)', activeFg: 'var(--text)' },
+  administracao: { accent: 'var(--text-muted)', activeBg: 'var(--surface-hover)', activeFg: 'var(--text)' },
 };
 
-/** Acento de contexto de uma seção (compatibilidade: usado em ícones/atalhos). */
+/** Acento de contexto de uma seção (ícone/detalhe). Mantido como projeção. */
 export const SECTION_ACCENT: Record<PanelSectionId, string> = Object.fromEntries(
   (Object.keys(SECTION_THEME) as PanelSectionId[]).map((id) => [id, SECTION_THEME[id].accent]),
 ) as Record<PanelSectionId, string>;
@@ -222,13 +219,23 @@ export const PANEL_ROUTES: PanelRouteDef[] = [
     // `dashboard`: renomear rota/API/schema por causa de linguagem de interface
     // quebraria links salvos, permissões gravadas e integrações, sem entregar
     // nada a quem opera. O que o lojista lê é o que mudou.
-    href: '/dashboard', label: 'Início', icon: 'home', section: 'inicio',
+    href: '/dashboard', label: 'Visão geral', icon: 'home', section: 'inicio',
     permission: 'dashboard', area: 'dashboard',
-    description: 'Visão do dia: o que precisa de atenção, o que está marcado e os números do período.',
+    description: 'O dia de hoje: o que precisa de atenção agora, o que está marcado e quem está esperando.',
     width: 'full',
   },
 
   // ── Operação: onde o dia acontece ──
+  {
+    // FASE 2 · P1 — HUB "Estrutura da clínica". Uma tela que reúne Serviços,
+    // Profissionais, Horários e Acessos (com contagens/status REAIS) sem
+    // unificar os modelos internos (Professional e User/Member seguem
+    // separados). As rotas antigas continuam existindo e alcançáveis daqui.
+    href: '/estrutura', label: 'Estrutura', icon: 'grid', section: 'operacao',
+    modes: ['services', 'bookings'], permission: ['catalogo', 'equipe'], area: 'estrutura',
+    description: 'O que a clínica oferece, quem realiza, quando atende e quem pode entrar no sistema.',
+    width: 'full',
+  },
   {
     href: '/agenda', label: 'Agenda', icon: 'calendar', section: 'operacao',
     modes: ['bookings'], permission: 'agenda', area: 'agenda',
@@ -268,7 +275,10 @@ export const PANEL_ROUTES: PanelRouteDef[] = [
   {
     // Era a 5ª aba de /automacoes. Tarefa é fila de trabalho da equipe — uso
     // diário, portanto Operação. O motor que CRIA tarefas continua em Automações.
-    href: '/tarefas', label: 'Tarefas', icon: 'tasks', section: 'operacao',
+    // Conceito visível = PENDÊNCIAS. GODOUTOR final: voltou AO MENU para quem
+    // tem permissão real (atendente/secretaria resolvem pendências o dia todo);
+    // os atalhos contextuais (Visão geral, cliente, conversa) continuam.
+    href: '/tarefas', label: 'Pendências', icon: 'tasks', section: 'operacao',
     permission: ['clientes', 'agenda', 'leads', 'config'], area: 'tarefas',
     description: 'O que ficou combinado, com quem e com qual prazo — inclusive o que já venceu.',
   },
@@ -293,7 +303,10 @@ export const PANEL_ROUTES: PanelRouteDef[] = [
   {
     // Era "/esteira" (rota sem porta no menu) e também uma visão dentro de
     // /clientes. Uma porta só: o funil de oportunidades.
-    href: '/funil', label: 'Funil', icon: 'funnel', section: 'pessoas',
+    // GODOUTOR final: com permissão 'leads' a porta aparece no menu (seção
+    // Pessoas) — para atendente/secretaria que trabalham oportunidades. O
+    // Kanban continua sendo FERRAMENTA opcional, nunca o CRM central.
+    href: '/funil', label: 'Oportunidades', icon: 'funnel', section: 'pessoas',
     permission: 'leads', area: 'funil',
     description: 'As oportunidades por etapa, do primeiro contato ao atendimento agendado.',
     width: 'full',
@@ -326,6 +339,15 @@ export const PANEL_ROUTES: PanelRouteDef[] = [
     description: 'Quando acontecer X, se Y, o sistema faz Z sozinho — sem ninguém lembrar.',
   },
   {
+    // FASE 2 · P10 — fundação de follow-up: receitas (gatilho/atraso/público/
+    // ação) + prévia de candidatos com dado real. SEM envio nesta fase: o canal
+    // pode não estar operacional e a tela diz "Aguardando conexão do WhatsApp".
+    href: '/followup', label: 'Follow-up', icon: 'send', section: 'crescimento',
+    permission: 'config', area: 'automations',
+    description: 'Receitas de retorno: confirmação, falta, pós-atendimento e paciente inativo — nada sai sem canal conectado.',
+    width: 'full',
+  },
+  {
     // Porta única que substitui três: a rota /integracoes, a aba "Integrações"
     // e a aba "Canais" de Configurações. Três seções nomeadas e exclusivas:
     // CANAIS (por onde se fala) · FONTES (de onde o lead chega) ·
@@ -340,6 +362,14 @@ export const PANEL_ROUTES: PanelRouteDef[] = [
     href: '/resultados', label: 'Resultados', icon: 'chart', section: 'resultados',
     permission: 'financeiro', area: 'resultados',
     description: 'Os números do período com comparação, por serviço, profissional e origem.',
+    width: 'full',
+  },
+  {
+    // FASE 2 · P7 — Financeiro básico (Gestão). Não é ERP: movimentações
+    // registradas (receita/despesa) com filtros, totais e gráficos simples.
+    href: '/financeiro', label: 'Financeiro', icon: 'wallet', section: 'resultados',
+    permission: 'financeiro', area: 'financeiro',
+    description: 'O que foi recebido, o que está pendente e o que sai — com filtros e período.',
     width: 'full',
   },
   {
@@ -376,14 +406,24 @@ export const PANEL_ROUTES: PanelRouteDef[] = [
 
   // ── Administração: rodapé fixo ──
   {
+    // PERFIL DO USUÁRIO (AccountMenu → Meu perfil). Lado a lado com Equipe:
+    // /perfil = esta conta · /equipe = quem tem login na unidade.
+    // sidebar: false → fora do menu; alcançável pelo menu da conta.
+    href: '/perfil', label: 'Meu perfil', icon: 'userCircle', section: 'administracao',
+    permission: 'dashboard', area: 'perfil', sidebar: false, requiresBusiness: false,
+    description: 'Foto, nome, contato, cargo e dados profissionais desta conta.',
+  },
+  {
     href: '/equipe', label: 'Equipe', icon: 'shield', section: 'administracao',
     permission: 'equipe', area: 'equipe',
     description: 'Quem tem login, com qual papel, o que enxerga e o vínculo com o profissional.',
     width: 'full',
   },
   {
+    // Recursos = capacidades internas/plano. Continua existindo e acessível,
+    // mas a partir de Configurações (não como conceito de primeiro nível).
     href: '/recursos', label: 'Recursos', icon: 'toggle', section: 'administracao',
-    permission: 'config', area: 'recursos',
+    permission: 'config', area: 'recursos', sidebar: false,
     description: 'Quais módulos da empresa estão ligados. Desativar oculta na hora e não apaga nada.',
   },
   {
@@ -661,4 +701,12 @@ export const API_GUARDS: Array<{ route: string; file: string; permission: Permis
   { route: '/api/tasks', file: 'src/app/api/tasks/route.ts', permission: ['leads', 'agenda', 'clientes', 'config'], area: 'tarefas' },
   // P5 — propostas de IA (mesma permissão do editor: a IA não publica sozinha).
   { route: '/api/ai/automations', file: 'src/app/api/ai/automations/route.ts', permission: 'config', area: 'automations' },
+  // FASE 2 · P4 — motor de anamnese (templates + respostas do paciente).
+  { route: '/api/anamnese', file: 'src/app/api/anamnese/route.ts', permission: ['atendimento', 'config'], area: 'atendimento' },
+  // FASE 2 · P7 — financeiro básico (mesma permissão da porta).
+  { route: '/api/finance', file: 'src/app/api/finance/route.ts', permission: 'financeiro', area: 'financeiro' },
+  // FASE 2 · P6 — pets (pacientes veterinários; tutor = contato do CRM).
+  { route: '/api/pets', file: 'src/app/api/pets/route.ts', permission: ['clientes', 'atendimento'], area: 'clientes' },
+  // FASE 2 · P10 — fundação de follow-up (mesma permissão da porta).
+  { route: '/api/followup', file: 'src/app/api/followup/route.ts', permission: 'config', area: 'automations' },
 ];

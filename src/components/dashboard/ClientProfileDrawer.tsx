@@ -16,16 +16,19 @@
 //   • etapa de lead só muda via PipelineStage real (nunca LeadStatus legado).
 import { useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
-import { cn, waLink } from '@/lib/utils';
-import { humanDateTime } from '@/lib/tz';
+import { centsToBR, cn, waLink } from '@/lib/utils';
+import { humanDateTime, humanDay, formatDateBR, todayISO } from '@/lib/tz';
 import { BOOKING_STATUS, LEAD_STATUS, type StatusDef } from '@/lib/status';
 import { leadOriginLabel } from '@/lib/leads';
-import type { BusinessPipeline, ContactProfile } from '@/lib/types';
+import type { BusinessPipeline, ContactProfile, FinanceEntry , Pet } from '@/lib/types';
+import { FINANCE_STATUS_LABEL } from '@/lib/finance';
+import { followUpDueDate } from '@/lib/encounters';
+import { WorkspaceSheet } from '@/components/dashboard/WorkspaceSheet';
 import {
   BRAZILIAN_STATES, PROFILE_TAGS_MAX, ageFromBirthDate, clientTags, countAttended, formatCep, formatCpf,
   formatPhoneBR, isValidCpf, normalizeBirthDate, profileOf,
 } from '@/lib/contact-profile';
-import { Avatar, Badge, Button, Drawer, IconButton, Input, Notice, Select, StatusBadge, SubCard, Switch, Tabs, Textarea, type TabItem } from '@/components/ui';
+import { Avatar, Badge, Button, IconButton, Input, Kpi, Notice, Select, StatusBadge, SubCard, Switch, Tabs, Textarea, buttonCls, type TabItem } from '@/components/ui';
 import { Icon } from '@/components/icons';
 import { apiGet, apiSend } from '@/lib/api-client';
 import { cepError, contactFieldErrors, emailError, hasFieldErrors, maskCep, maskCpf, phoneError } from '@/lib/field-quality';
@@ -33,6 +36,8 @@ import { PhoneBRInput } from '@/components/dashboard/PhoneBRInput';
 import { canReopenEncounter } from '@/lib/encounters';
 import { EncounterList, EncounterSheet, type EncounterRow } from '@/components/dashboard/EncounterSheet';
 import { usePanelPermissions } from '@/components/dashboard/usePanelPermissions';
+import { PetsSection } from '@/components/dashboard/PetsSection';
+import { Pet360Sheet } from '@/components/dashboard/Pet360Sheet';
 
 // Observações do cliente (P2): histórico append-only com autor e data.
 // `legacy: true` marca o registro antigo (campo único), preservado como está.
@@ -60,6 +65,8 @@ export interface Person360 {
     id: string; customerName: string; date: string; time: string; status: string; service: string;
     seriesId?: string; seriesIndex?: number; seriesCount?: number;
     professional?: string; rescheduleCount?: number; previousId?: string;
+    // FASE 2 · P2 — "Iniciar atendimento" precisa dos vínculos reais.
+    serviceId?: string; professionalId?: string;
   }>;
   leads: Array<{ id: string; origin: string; status: string; stageId: string; stageName: string; interest: string; action: string; createdAt: string; stageHistory?: any[]; priority?: string; assignedUserId?: string; lastInteraction?: string }>;
   conversations?: Array<{ id: string; channel: string; status: string; at: string; preview: string; unread: number }>;
@@ -78,9 +85,27 @@ function eventDay(iso: string): string {
 const bookDef = (s: string): StatusDef => (BOOKING_STATUS as Record<string, StatusDef>)[s] || { panel: s, tone: 'zinc', consumer: s, desc: '' };
 const leadDef = (s: string): StatusDef => (LEAD_STATUS as Record<string, StatusDef>)[s] || { panel: s, tone: 'zinc', consumer: s, desc: '' };
 
-type HistoryTab = 'timeline' | 'bookings' | 'encounters' | 'conversations' | 'leads' | 'tasks' | 'notes';
+// FASE 2 · P2 — Paciente 360: Visão geral · Agenda · Atendimento · Conversas ·
+// Arquivos · Financeiro · Histórico (+ leads/tarefas/notas que já existiam).
+type HistoryTab =
+  | 'overview' | 'bookings' | 'encounters' | 'conversations'
+  | 'files' | 'finance' | 'timeline' | 'leads' | 'tasks' | 'notes';
 
-export function ClientProfileDrawer({ person, businessId, pipeline, canFunil, onClose, onChanged, onNewBooking }: {
+/**
+ * A ficha da pessoa tem DOIS modos, mesma fonte de dados (§11):
+ *
+ *   preview → gaveta de passagem: quem é, contato, etiquetas, próximo
+ *             atendimento e últimos movimentos. Serve para responder rápido
+ *             ("é essa pessoa?") sem tirar o usuário da lista.
+ *   page    → rota /clientes/[id]: a ficha COMPLETA (abas, atendimentos,
+ *             arquivos, financeiro, histórico) vivendo na área principal,
+ *             com sidebar e topbar — perfil largo de verdade, não gaveta.
+ *
+ * Nada foi reescrito: o corpo completo é o MESMO deste componente desde
+ * sempre; o que muda é a casca (gaveta ou página) e o quanto carrega
+ * (a gaveta não dispara atendimentos/financeiro à toa).
+ */
+export function ClientProfileDrawer({ person, businessId, pipeline, canFunil, onClose, onChanged, onNewBooking, variant = 'preview' }: {
   person: Person360;
   businessId: string;
   pipeline: BusinessPipeline | null;
@@ -88,13 +113,24 @@ export function ClientProfileDrawer({ person, businessId, pipeline, canFunil, on
   onClose: () => void;
   onChanged: () => void;
   onNewBooking: (p: Person360) => void;
+  variant?: 'preview' | 'page';
 }) {
-  const [tab, setTab] = useState<HistoryTab>('timeline');
+  const [tab, setTab] = useState<HistoryTab>('overview');
+  // FASE 2 · P2/P7 — financeiro do paciente (carga única, escopo do contato).
+  const [financeEntries, setFinanceEntries] = useState<FinanceEntry[]>([]);
+  const [financeLoaded, setFinanceLoaded] = useState(false);
+  const [financeError, setFinanceError] = useState('');
+  // FASE 2 · P2 — "Iniciar atendimento" do próximo agendamento futuro.
+  const [startEncounter, setStartEncounter] = useState<{ bookingId: string; seed: Record<string, string> } | null>(null);
   // A3.4 · Bloco 5 — registros de atendimento da pessoa. A permissão é PRÓPRIA
   // (`atendimento`): sem ela, a aba nem aparece e a rota não é chamada.
   const { permissions, role } = usePanelPermissions();
   const canEncounter = permissions.atendimento === true;
+  // FASE 2 · P2 — aba Financeiro só existe com a permissão correspondente.
+  const canFinance = permissions.financeiro === true;
   const [encounters, setEncounters] = useState<EncounterRow[]>([]);
+  // HOMOLOGAÇÃO · P1 — Pet 360 (ficha do animal).
+  const [pet360, setPet360] = useState<Pet | null>(null);
   const [encounterOpen, setEncounterOpen] = useState<EncounterRow | null>(null);
   const [encountersError, setEncountersError] = useState('');
   const [encountersLoaded, setEncountersLoaded] = useState(false);
@@ -148,6 +184,10 @@ export function ClientProfileDrawer({ person, businessId, pipeline, canFunil, on
     || profile.adminNote || profile.tags.length > 0);
 
   const firstName = (person.name || '').split(' ')[0] || 'cliente';
+  // Endereço canônico da ficha completa (§11). A `key` é a identidade estável
+  // usada pelo CRM (contato OU cliente), então o link nunca aponta para a
+  // pessoa errada quando há contato e cliente com o mesmo nome.
+  const profileHref = (query: string) => `/clientes/${encodeURIComponent(person.key)}${query}`;
 
   async function patch(payload: Record<string, unknown>, okText: string) {
     setSaving(true);
@@ -233,8 +273,8 @@ export function ClientProfileDrawer({ person, businessId, pipeline, canFunil, on
   }
 
   async function setLead(id: string, stageId: string) {
-    if (!pipeline) { setNotice({ tone: 'error', text: 'Aguarde carregar as etapas do funil.' }); return; }
-    if (!pipeline.stages.some((s) => s.id === stageId)) { setNotice({ tone: 'error', text: 'Etapa inválida para este funil.' }); return; }
+    if (!pipeline) { setNotice({ tone: 'error', text: 'Aguarde carregar as etapas de oportunidades.' }); return; }
+    if (!pipeline.stages.some((s) => s.id === stageId)) { setNotice({ tone: 'error', text: 'Etapa inválida para estas oportunidades.' }); return; }
     setSaving(true);
     const res = await apiSend('/api/leads', 'PATCH', { businessId, id, stageId }, { scope: 'action', area: 'Clientes' });
     setSaving(false);
@@ -325,7 +365,7 @@ export function ClientProfileDrawer({ person, businessId, pipeline, canFunil, on
               <Button size="xs" variant="soft" onClick={() => onNewBooking(person)}>Agendar atendimento</Button>
             )}
             {canLose && <Button size="xs" variant="quiet" onClick={() => setLead(l.id, lostId!)} disabled={saving}>Marcar perdido</Button>}
-            {canFunil && <Link href={`/funil?b=${businessId}#${l.id}`} className="il-chip">Ver no funil</Link>}
+            {canFunil && <Link href={`/funil?b=${businessId}#${l.id}`} className="il-chip">Ver oportunidade</Link>}
           </div>
         ),
       });
@@ -340,21 +380,39 @@ export function ClientProfileDrawer({ person, businessId, pipeline, canFunil, on
         tone: t.status === 'done' ? 'emerald' : t.status === 'cancelled' ? 'zinc' : 'amber',
         body: (
           <div className="flex flex-wrap gap-1.5">
-            {t.leadId && canFunil && <Link href={`/funil?b=${businessId}#${t.leadId}`} className="il-chip">Ver no funil</Link>}
+            {t.leadId && canFunil && <Link href={`/funil?b=${businessId}#${t.leadId}`} className="il-chip">Ver oportunidade</Link>}
             {t.bookingId && <Link href={`/agenda?b=${businessId}`} className="il-chip">Ver agenda</Link>}
           </div>
         ),
       });
     }
+    // FASE 2 · P2 — pagamentos entram no Histórico (dados reais do financeiro).
+    for (const f of financeEntries) {
+      if (f.status === 'cancelado') continue;
+      out.push({
+        kind: 'finance', id: f.id, sortKey: (f.paidAt || f.dueDate || f.createdAt || '').slice(0, 16),
+        icon: f.kind === 'receita' ? 'wallet' : 'receipt',
+        when: f.paidAt ? eventDay(f.paidAt) : (f.dueDate ? eventDay(f.dueDate) : ''),
+        title: `${f.kind === 'receita' ? 'Recebimento' : 'Despesa'} · ${centsToBR(f.amount)}`,
+        subtitle: f.description,
+        badge: FINANCE_STATUS_LABEL[f.status],
+        tone: f.status === 'pago' ? 'emerald' : 'amber', // cancelados já saíram acima
+      });
+    }
     return out.sort((a, b) => (a.sortKey < b.sortKey ? 1 : -1));
-  }, [person, pipeline, canFunil, businessId, saving]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [person, pipeline, canFunil, businessId, saving, financeEntries]); // eslint-disable-line react-hooks/exhaustive-deps
 
+  // FASE 2 · P2 — ordem da jornada do paciente: visão → agenda → atendimento →
+  // conversa → arquivos → financeiro → histórico (+ as abas operacionais já existentes).
   const tabItems: TabItem<HistoryTab>[] = [
-    { id: 'timeline', label: 'Linha do tempo', icon: 'history', count: timeline.length },
-    { id: 'bookings', label: 'Agendamentos', icon: 'calendar', count: person.bookings.length },
-    { id: 'encounters', label: 'Atendimentos', icon: 'fileText', count: encountersLoaded && !encountersError ? encounters.length : undefined },
+    { id: 'overview', label: 'Visão geral', icon: 'grid' },
+    { id: 'bookings', label: 'Agenda', icon: 'calendar', count: person.bookings.length },
+    { id: 'encounters', label: 'Atendimento', icon: 'fileText', count: encountersLoaded && !encountersError ? encounters.length : undefined },
     { id: 'conversations', label: 'Conversas', icon: 'chat', count: (person.conversations || []).length },
-    { id: 'leads', label: 'Leads', icon: 'spark', count: person.leads.length },
+    { id: 'files', label: 'Arquivos', icon: 'upload', count: encounters.reduce((n, e) => n + ((e.files || []).length), 0) },
+    ...(canFinance ? [{ id: 'finance' as const, label: 'Financeiro', icon: 'wallet', count: financeEntries.length }] : []),
+    { id: 'timeline', label: 'Histórico', icon: 'history', count: timeline.length },
+    { id: 'leads', label: 'Oportunidades', icon: 'spark', count: person.leads.length },
     { id: 'tasks', label: 'Tarefas', icon: 'tasks', count: (person.tasks || []).length },
     { id: 'notes', label: 'Observações administrativas', icon: 'receipt', count: (person.notes || []).length },
   ];
@@ -362,6 +420,7 @@ export function ClientProfileDrawer({ person, businessId, pipeline, canFunil, on
   const notes = person.notes || [];
 
   useEffect(() => {
+    if (variant !== 'page') return;
     if (!canEncounter || encountersLoaded) return;
     const q = person.contactId
       ? `contactId=${encodeURIComponent(person.contactId)}`
@@ -377,7 +436,45 @@ export function ClientProfileDrawer({ person, businessId, pipeline, canFunil, on
         setEncountersLoaded(true);
       });
     return () => { cancelled = true; };
-  }, [canEncounter, encountersLoaded, person.contactId, person.customerId, businessId]);
+  }, [canEncounter, encountersLoaded, person.contactId, person.customerId, businessId, variant]);
+
+  // FASE 2 · P2/P7 — cobranças do paciente (uma carga; sem permissão = sem chamada).
+  useEffect(() => {
+    if (variant !== 'page') return;
+    if (!canFinance || financeLoaded || !person.contactId) { if (!canFinance) setFinanceLoaded(true); return; }
+    let cancelled = false;
+    setFinanceError('');
+    apiGet<{ entries?: FinanceEntry[] }>(
+      `/api/finance?businessId=${encodeURIComponent(businessId)}&contactId=${encodeURIComponent(person.contactId)}`,
+      { scope: 'area', area: 'Financeiro' },
+    ).then((res) => {
+      if (cancelled) return;
+      if (res.ok) setFinanceEntries(res.data?.entries || []);
+      else setFinanceError(res.message || 'Não foi possível carregar o financeiro.');
+      setFinanceLoaded(true);
+    });
+    return () => { cancelled = true; };
+  }, [canFinance, financeLoaded, person.contactId, businessId, variant]);
+
+  // ── FASE 2 · P2 — Visão geral: só dados reais, derivados do que já está aqui ──
+  const today = todayISO();
+  const nextBooking = useMemo(
+    () => [...person.bookings]
+      .filter((b) => b.date >= today && b.status !== 'cancelled' && b.status !== 'completed' && b.status !== 'no_show')
+      .sort((a, b) => (a.date + (a.time || '') < b.date + (b.time || '') ? 1 : -1))[0] || null,
+    [person.bookings, today],
+  );
+  const lastEncounter = encounters[0] || null; // a API devolve mais recente primeiro
+  const lastNote = notes[0] || null;
+  const pendingReturn = [...encounters]
+    .filter((e) => e.status === 'finalized' && (e.followUpMode === 'date' || e.followUpMode === 'interval'))
+    .map((e) => ({ e, due: followUpDueDate(e) }))
+    .filter((x) => x.due)
+    .sort((a, b) => (a.due < b.due ? 1 : -1))[0] || null;
+  const financeReceived = financeEntries.filter((f) => f.kind === 'receita' && f.status === 'pago').reduce((a, f) => a + f.amount, 0);
+  const financePending = financeEntries.filter((f) => f.kind === 'receita' && f.status !== 'pago' && f.status !== 'cancelado').reduce((a, f) => a + f.amount, 0);
+  // Arquivos reais: anexos dos atendimentos desta pessoa (Storage + referência).
+  const files = useMemo(() => encounters.flatMap((e) => (e.files || []).map((f) => ({ ...f, encounterDate: e.date, encounterId: e.id }))), [encounters]);
 
   return (
     <>
@@ -388,19 +485,50 @@ export function ClientProfileDrawer({ person, businessId, pipeline, canFunil, on
           canReopen={canReopenEncounter(role)}
           onScheduleReturn={() => { setEncounterOpen(null); onNewBooking(person); }}
           onClose={() => setEncounterOpen(null)}
+          onSaved={() => { /* silencioso: não recarrega nem fecha */ }}
           onChanged={() => { setEncountersLoaded(false); onChanged(); }}
         />
       )}
-    <Drawer
-      open
+      {/* FASE 2 · P2 — "Iniciar atendimento" do próximo agendamento (quando aplicável). */}
+      {startEncounter && (
+        <EncounterSheet
+          businessId={businessId}
+          bookingId={startEncounter.bookingId}
+          seed={startEncounter.seed as any}
+          canReopen={canReopenEncounter(role)}
+          onScheduleReturn={() => { setStartEncounter(null); onNewBooking(person); }}
+          onClose={() => setStartEncounter(null)}
+          onSaved={() => { /* silencioso: não recarrega nem fecha */ }}
+          onChanged={() => { setEncountersLoaded(false); onChanged(); }}
+        />
+      )}
+    <ProfileShell
+      variant={variant}
       onClose={onClose}
       title={person.name || 'Cliente'}
-      subtitle={person.contactId ? 'Perfil e histórico 360' : 'Pessoa ainda sem cadastro no CRM'}
-      width="max-w-[820px]"
-      footer={
+      subtitle={variant === 'page'
+        ? (person.contactId ? 'Paciente 360 — perfil, agenda, atendimentos, arquivos e financeiro' : 'Pessoa ainda sem cadastro no CRM')
+        : (person.contactId ? 'Paciente 360 — prévia rápida do cadastro' : 'Pessoa ainda sem cadastro no CRM')}
+      backHref={profileHref(`?b=${encodeURIComponent(businessId)}`)}
+      footer={variant === 'page' ? (
         <>
-          {person.phone && (
-            <A2 href={waLink(person.phone, `Olá, ${firstName}!`)} label="WhatsApp" icon="whatsapp" />
+          {person.phone && <A2 href={waLink(person.phone, `Olá, ${firstName}!`)} label="WhatsApp" icon="whatsapp" />}
+          {/* FASE 2 · P2 — ações rápidas: nota e iniciar atendimento (quando aplicável). */}
+          <Button variant="quiet" size="sm" onClick={() => setTab('notes')}>
+            <Icon n="pencil" size={14} /> Registrar nota
+          </Button>
+          {canEncounter && nextBooking && (
+            <Button variant="secondary" size="sm" onClick={() => setStartEncounter({
+              bookingId: nextBooking.id,
+              seed: {
+                customerName: person.name || '',
+                serviceId: nextBooking.serviceId || '', professionalId: nextBooking.professionalId || '',
+                date: nextBooking.date, time: nextBooking.time || '',
+                contactId: person.contactId || '', customerId: person.customerId || '',
+              },
+            })}>
+              <Icon n="fileText" size={14} /> Iniciar atendimento
+            </Button>
           )}
           <Button variant="secondary" size="sm" onClick={() => setEditing((v) => !v)}>
             <Icon n={editing ? 'x' : 'pencil'} size={14} /> {editing ? 'Fechar edição' : 'Editar dados'}
@@ -409,8 +537,20 @@ export function ClientProfileDrawer({ person, businessId, pipeline, canFunil, on
             <Icon n="calendarPlus" size={14} /> Novo agendamento
           </Button>
         </>
-      }
+      ) : (
+        <>
+          {person.phone && <A2 href={waLink(person.phone, `Olá, ${firstName}!`)} label="WhatsApp" icon="whatsapp" />}
+          <Button variant="secondary" size="sm" onClick={() => onNewBooking(person)}>
+            <Icon n="calendarPlus" size={14} /> Novo agendamento
+          </Button>
+          {/* A ficha completa é uma PÁGINA (§11): a gaveta só dá a passagem. */}
+          <Link href={profileHref(`?b=${encodeURIComponent(businessId)}`)} className={buttonCls('primary', 'sm')}>
+            Ver perfil completo <Icon n="chevR" size={14} />
+          </Link>
+        </>
+      )}
     >
+      {variant === 'page' ? (<>
       {/* ═══ QUEM É A PESSOA — carteirinha ═══ */}
       <div className="p-4">
         <div className="il-idcard rounded-xl border border-[var(--border)] shadow-md p-4">
@@ -418,7 +558,7 @@ export function ClientProfileDrawer({ person, businessId, pipeline, canFunil, on
             {/* Ponto 8 — foto real da conta global quando existe; sem ela, iniciais. */}
             <Avatar name={person.name} src={person.avatar || undefined} size={72} />
             <div className="min-w-0 flex-1">
-              <h2 className="text-lg font-bold text-[var(--text)] leading-tight break-words">{person.name || 'Sem nome'}</h2>
+              <h2 className="text-lg font-semibold text-[var(--text)] leading-tight break-words">{person.name || 'Sem nome'}</h2>
               <p className="text-sm text-[var(--text-muted)] mt-0.5">
                 {age !== null ? `${age} anos` : 'Idade não informada'}
                 {profile.birthDate ? ` · nasceu em ${profile.birthDate.split('-').reverse().join('/')}` : ''}
@@ -454,6 +594,11 @@ export function ClientProfileDrawer({ person, businessId, pipeline, canFunil, on
             <Data label="Atendimentos" value={String(person.bookings.length)} />
           </dl>
         </div>
+
+        {/* FASE 2 · P6 — pets do tutor (aparece SOMENTE em clínica veterinária). */}
+        {person.contactId && (
+          <PetsSection businessId={businessId} tutorId={person.contactId} tutorName={person.name} onChanged={onChanged} onOpenPet={setPet360} />
+        )}
 
         {/* Acesso do cliente */}
         <SubCard className="mt-3 p-3.5">
@@ -494,13 +639,13 @@ export function ClientProfileDrawer({ person, businessId, pipeline, canFunil, on
             <dl className="grid sm:grid-cols-2 gap-x-4 gap-y-2.5">
               {addressLine && (
                 <div className="sm:col-span-2">
-                  <dt className="text-[10px] font-bold uppercase tracking-[0.08em] text-[var(--text-faint)]">Endereço</dt>
+                  <dt className="text-[10px] font-semibold uppercase tracking-[0.08em] text-[var(--text-faint)]">Endereço</dt>
                   <dd className="text-xs text-[var(--text)] mt-0.5">{addressLine}</dd>
                 </div>
               )}
               {profile.guardian.name && (
                 <div>
-                  <dt className="text-[10px] font-bold uppercase tracking-[0.08em] text-[var(--text-faint)]">Responsável</dt>
+                  <dt className="text-[10px] font-semibold uppercase tracking-[0.08em] text-[var(--text-faint)]">Responsável</dt>
                   <dd className="text-xs text-[var(--text)] mt-0.5">
                     {profile.guardian.name}
                     {profile.guardian.relationship ? ` · ${profile.guardian.relationship}` : ''}
@@ -509,19 +654,19 @@ export function ClientProfileDrawer({ person, businessId, pipeline, canFunil, on
               )}
               {profile.guardian.phone && (
                 <div>
-                  <dt className="text-[10px] font-bold uppercase tracking-[0.08em] text-[var(--text-faint)]">Contato do responsável</dt>
+                  <dt className="text-[10px] font-semibold uppercase tracking-[0.08em] text-[var(--text-faint)]">Contato do responsável</dt>
                   <dd className="text-xs text-[var(--text)] mt-0.5">{formatPhoneBR(profile.guardian.phone)}</dd>
                 </div>
               )}
               {profile.adminNote && (
                 <div className="sm:col-span-2">
-                  <dt className="text-[10px] font-bold uppercase tracking-[0.08em] text-[var(--text-faint)]">Observação administrativa</dt>
+                  <dt className="text-[10px] font-semibold uppercase tracking-[0.08em] text-[var(--text-faint)]">Observação administrativa</dt>
                   <dd className="text-xs text-[var(--text-muted)] mt-0.5 whitespace-pre-line">{profile.adminNote}</dd>
                 </div>
               )}
               {profile.tags.length > 0 && (
                 <div className="sm:col-span-2">
-                  <dt className="text-[10px] font-bold uppercase tracking-[0.08em] text-[var(--text-faint)] mb-1">Etiquetas do cadastro</dt>
+                  <dt className="text-[10px] font-semibold uppercase tracking-[0.08em] text-[var(--text-faint)] mb-1">Etiquetas do cadastro</dt>
                   <dd className="flex flex-wrap gap-1.5">
                     {profile.tags.map((t) => (
                       <span key={t} className="rounded-md border border-[var(--border-2)] bg-[var(--surface-2)] px-2 py-0.5 text-[11px] font-semibold text-[var(--text-muted)]">{t}</span>
@@ -544,7 +689,7 @@ export function ClientProfileDrawer({ person, businessId, pipeline, canFunil, on
             </p>
           </div>
           <div className="flex items-center gap-2.5">
-            <span className={cn('text-xs font-bold', person.marketingOptIn ? 'text-[var(--success-fg)]' : 'text-[var(--text-muted)]')}>
+            <span className={cn('text-xs font-semibold', person.marketingOptIn ? 'text-[var(--success-fg)]' : 'text-[var(--text-muted)]')}>
               {person.marketingOptIn ? 'Aceitou' : 'Não aceitou'}
             </span>
             <Switch checked={person.marketingOptIn} onChange={setConsent} label="Autoriza receber promoções" disabled={!person.contactId} />
@@ -556,7 +701,7 @@ export function ClientProfileDrawer({ person, businessId, pipeline, canFunil, on
             <Notice tone={notice.tone}>{notice.text}
               {notice.password && (
                 <span className="mt-2 flex items-center gap-2">
-                  <code className="select-all rounded bg-white border border-[var(--success-border)] px-2 py-1 font-bold tracking-wider text-[var(--text)]">{notice.password}</code>
+                  <code className="select-all rounded bg-white border border-[var(--success-border)] px-2 py-1 font-semibold tracking-wider text-[var(--text)]">{notice.password}</code>
                   <Button size="xs" variant="secondary" onClick={() => navigator.clipboard?.writeText(notice.password || '')}>Copiar senha</Button>
                 </span>
               )}
@@ -569,14 +714,14 @@ export function ClientProfileDrawer({ person, businessId, pipeline, canFunil, on
           <div className="mt-3 ws-panel p-4">
             <div className="flex items-center justify-between gap-3 mb-3">
               <div>
-                <h3 className="text-sm font-bold text-[var(--text)]">Dados cadastrais</h3>
+                <h3 className="text-sm font-semibold text-[var(--text)]">Dados cadastrais</h3>
                 <p className="text-xs text-[var(--text-muted)] mt-0.5">Só o que você preencher é salvo. Nenhum campo é obrigatório.</p>
               </div>
               <IconButton icon="x" label="Cancelar edição" size="sm" variant="ghost" onClick={() => { setDraft(profileOf(person.profile)); setEditing(false); }} />
             </div>
 
             <fieldset className="space-y-3">
-              <legend className="text-[11px] font-bold uppercase tracking-[0.08em] text-[var(--text-faint)] mb-2">Dados básicos</legend>
+              <legend className="text-[11px] font-semibold uppercase tracking-[0.08em] text-[var(--text-faint)] mb-2">Dados básicos</legend>
               <div className="grid sm:grid-cols-2 gap-3">
                 <label className="block sm:col-span-2">
                   <span className="block text-xs font-semibold text-[var(--text-muted)] mb-1.5">Nome completo</span>
@@ -634,7 +779,7 @@ export function ClientProfileDrawer({ person, businessId, pipeline, canFunil, on
             )}
 
             <fieldset className="space-y-3 mt-4">
-              <legend className="text-[11px] font-bold uppercase tracking-[0.08em] text-[var(--text-faint)] mb-2">Endereço</legend>
+              <legend className="text-[11px] font-semibold uppercase tracking-[0.08em] text-[var(--text-faint)] mb-2">Endereço</legend>
               <div className="grid sm:grid-cols-6 gap-3">
                 <label className="block sm:col-span-2">
                   <span className="block text-xs font-semibold text-[var(--text-muted)] mb-1.5">CEP</span>
@@ -681,7 +826,7 @@ export function ClientProfileDrawer({ person, businessId, pipeline, canFunil, on
             </fieldset>
 
             <fieldset className="space-y-3 mt-4 rounded-md border border-[var(--warning-border)] bg-[var(--warning-bg)]/60 p-3">
-              <legend className="text-[11px] font-bold uppercase tracking-[0.08em] text-[var(--warning-fg)] mb-1 px-1">Menor de idade / responsável</legend>
+              <legend className="text-[11px] font-semibold uppercase tracking-[0.08em] text-[var(--warning-fg)] mb-1 px-1">Menor de idade / responsável</legend>
               <label className="flex items-center gap-2.5 cursor-pointer select-none">
                 <Switch checked={draft.guardian.isMinor} label="É menor de idade"
                   onChange={(v) => setDraft((d) => ({ ...d, guardian: { ...d.guardian, isMinor: v } }))} />
@@ -707,7 +852,7 @@ export function ClientProfileDrawer({ person, businessId, pipeline, canFunil, on
             </fieldset>
 
             <fieldset className="space-y-3 mt-4">
-              <legend className="text-[11px] font-bold uppercase tracking-[0.08em] text-[var(--text-faint)] mb-2">Etiquetas</legend>
+              <legend className="text-[11px] font-semibold uppercase tracking-[0.08em] text-[var(--text-faint)] mb-2">Etiquetas</legend>
               <div className="flex flex-wrap gap-1.5 mb-2">
                 {draft.tags.map((t) => (
                   <span key={t} className="inline-flex items-center gap-1 rounded-pill bg-[var(--surface-3)] border border-[var(--border)] px-2.5 py-1 text-xs font-semibold text-[var(--text)]">
@@ -742,7 +887,7 @@ export function ClientProfileDrawer({ person, businessId, pipeline, canFunil, on
             </fieldset>
 
             <label className="block mt-4">
-              <span className="text-[11px] font-bold uppercase tracking-[0.08em] text-[var(--text-faint)] mb-2 block">Observação administrativa</span>
+              <span className="text-[11px] font-semibold uppercase tracking-[0.08em] text-[var(--text-faint)] mb-2 block">Observação administrativa</span>
               <Textarea value={draft.adminNote} rows={3} placeholder="Prefere horário da manhã, confirmar por telefone, convênio..."
                 onChange={(e) => setDraft((d) => ({ ...d, adminNote: e.target.value }))} />
             </label>
@@ -757,12 +902,142 @@ export function ClientProfileDrawer({ person, businessId, pipeline, canFunil, on
         )}
       </div>
 
+      {pet360 && (
+        <Pet360Sheet
+          open={!!pet360}
+          onClose={() => setPet360(null)}
+          businessId={businessId}
+          pet={pet360}
+          tutorName={person.name}
+          tutorPhone={person.phone}
+          onOpenEncounter={(row) => { setPet360(null); setEncounterOpen(row); }}
+        />
+      )}
       {/* ═══ O QUE ACONTECEU — histórico ═══ */}
       <div className="px-4 pb-6">
         <div className="il-divider my-4">O que aconteceu com {firstName}</div>
         <Tabs items={tabItems} value={tab} onChange={setTab} ariaLabel="Seções do histórico do cliente" />
 
         <div className="mt-4 ws-panel">
+          {/* ── FASE 2 · P2 — VISÃO GERAL (próximo passo em primeiro) ── */}
+          {tab === 'overview' && (
+            <div className="p-4 space-y-4">
+              <div className="grid gap-3 sm:grid-cols-3">
+                <div className="rounded-lg border border-[var(--border)] p-3">
+                  <p className="text-[11.5px] font-semibold text-[var(--text-muted)] uppercase tracking-wide">Próximo agendamento</p>
+                  {nextBooking ? (
+                    <>
+                      <p className="text-[15px] font-semibold text-[var(--text)] mt-1">{formatDateBR(nextBooking.date)}{nextBooking.time ? ` · ${nextBooking.time}` : ''}</p>
+                      <p className="text-[12px] text-[var(--text-muted)]">{nextBooking.service}{nextBooking.professional ? ` · ${nextBooking.professional}` : ''}</p>
+                      <Link href={`/agenda?b=${businessId}&data=${nextBooking.date}`} className="text-[12px] font-semibold text-[var(--brand-fg)] hover:underline">Ver na agenda</Link>
+                    </>
+                  ) : <p className="text-[13px] text-[var(--text-muted)] mt-1">Nenhum futuro marcado.</p>}
+                </div>
+                <div className="rounded-lg border border-[var(--border)] p-3">
+                  <p className="text-[11.5px] font-semibold text-[var(--text-muted)] uppercase tracking-wide">Último atendimento</p>
+                  {lastEncounter ? (
+                    <>
+                      <p className="text-[15px] font-semibold text-[var(--text)] mt-1">{formatDateBR(lastEncounter.date)}{lastEncounter.time ? ` · ${lastEncounter.time}` : ''}</p>
+                      <p className="text-[12px] text-[var(--text-muted)] line-clamp-2">{lastEncounter.evolution || lastEncounter.complaint || 'Sem descrição'}</p>
+                      <button type="button" className="text-[12px] font-semibold text-[var(--brand-fg)] hover:underline" onClick={() => setEncounterOpen(lastEncounter)}>Abrir registro</button>
+                    </>
+                  ) : <p className="text-[13px] text-[var(--text-muted)] mt-1">Sem registro de atendimento.</p>}
+                </div>
+                <div className="rounded-lg border border-[var(--border)] p-3">
+                  <p className="text-[11.5px] font-semibold text-[var(--text-muted)] uppercase tracking-wide">Retorno previsto</p>
+                  {pendingReturn ? (
+                    <>
+                      <p className="text-[15px] font-semibold text-[var(--text)] mt-1">{formatDateBR(pendingReturn.due)}</p>
+                      <p className="text-[12px] text-[var(--text-muted)]">{pendingReturn.e.followUp || (pendingReturn.e.followUpMode === 'interval' ? `Intervalo de ${pendingReturn.e.followUpDays} dias` : 'Retorno programado')}</p>
+                    </>
+                  ) : <p className="text-[13px] text-[var(--text-muted)] mt-1">Sem retorno estruturado registrado.</p>}
+                </div>
+              </div>
+
+              <div className="grid gap-3 sm:grid-cols-2">
+                <div className="rounded-lg border border-[var(--border)] p-3">
+                  <p className="text-[11.5px] font-semibold text-[var(--text-muted)] uppercase tracking-wide">Observação importante</p>
+                  {lastNote ? (
+                    <p className="text-[13px] text-[var(--text)] mt-1 line-clamp-3">{lastNote.text}</p>
+                  ) : profile.adminNote ? (
+                    <p className="text-[13px] text-[var(--text)] mt-1 line-clamp-3">{profile.adminNote}</p>
+                  ) : <p className="text-[13px] text-[var(--text-muted)] mt-1">Nenhuma observação registrada.</p>}
+                  <button type="button" className="text-[12px] font-semibold text-[var(--brand-fg)] hover:underline mt-1" onClick={() => setTab('notes')}>Ver observações</button>
+                </div>
+                {canFinance ? (
+                  <div className="rounded-lg border border-[var(--border)] p-3">
+                    <p className="text-[11.5px] font-semibold text-[var(--text-muted)] uppercase tracking-wide">Financeiro do paciente</p>
+                    {!financeLoaded ? <p className="text-[13px] text-[var(--text-muted)] mt-1">Carregando…</p> : (
+                      <div className="grid grid-cols-2 gap-2 mt-1">
+                        <Kpi label="Recebido" value={centsToBR(financeReceived)} tone="success" />
+                        <Kpi label="Em aberto" value={centsToBR(financePending)} tone={financePending > 0 ? 'warning' : 'default'} />
+                      </div>
+                    )}
+                    <button type="button" className="text-[12px] font-semibold text-[var(--brand-fg)] hover:underline mt-1" onClick={() => setTab('finance')}>Abrir financeiro</button>
+                  </div>
+                ) : (
+                  <div className="rounded-lg border border-[var(--border)] p-3">
+                    <p className="text-[11.5px] font-semibold text-[var(--text-muted)] uppercase tracking-wide">Status</p>
+                    <div className="flex flex-wrap gap-1.5 mt-2">
+                      {tags.map((t) => <Badge key={t.id} tone={(t.tone as any) || 'zinc'}>{t.label}</Badge>)}
+                      {tags.length === 0 && <Badge tone="zinc">Sem etiquetas</Badge>}
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+
+          {/* ── FASE 2 · P2 — ARQUIVOS (anexos reais dos atendimentos) ── */}
+          {tab === 'files' && (
+            !canEncounter ? <div className="p-4"><Empty hint="Seu perfil não tem a permissão de Atendimento para ver os arquivos do cuidado." /></div>
+              : !encountersLoaded ? <p role="status" className="p-4 text-sm">Carregando arquivos…</p>
+              : files.length === 0 ? <div className="p-4"><Empty hint="Nenhum arquivo anexado — anexos são adicionados dentro do registro do atendimento." /></div>
+              : (
+                <ul className="divide-y divide-[var(--border-soft)]">
+                  {files.map((f) => (
+                    <li key={f.id} className="flex items-center gap-3 px-4 py-3">
+                      <span className="grid place-items-center h-8 w-8 rounded-lg bg-[var(--brand-soft)] text-[var(--brand-fg)] shrink-0"><Icon n="upload" size={15} /></span>
+                      <div className="min-w-0 flex-1">
+                        <a href={f.url} target="_blank" rel="noreferrer" className="text-[13.5px] font-semibold text-[var(--text)] hover:underline truncate block">{f.name}</a>
+                        <p className="text-[11.5px] text-[var(--text-muted)]">Atendimento de {formatDateBR(f.encounterDate)} · {Math.max(1, Math.round(f.size / 1024))} KB</p>
+                      </div>
+                      <button type="button" className="il-chip" onClick={() => { const e = encounters.find((x) => x.id === f.encounterId); if (e) setEncounterOpen(e); }}>Abrir atendimento</button>
+                    </li>
+                  ))}
+                </ul>
+              )
+          )}
+
+          {/* ── FASE 2 · P2/P7 — FINANCEIRO DO PACIENTE ── */}
+          {tab === 'finance' && canFinance && (
+            !financeLoaded ? <p role="status" className="p-4 text-sm">Carregando financeiro…</p>
+              : financeError ? <div role="alert" className="p-4 text-sm"><p>{financeError}</p><Button variant="secondary" size="sm" onClick={() => setFinanceLoaded(false)}>Tentar novamente</Button></div>
+              : financeEntries.length === 0 ? <div className="p-4"><Empty hint="Nenhuma movimentação vinculada a este paciente." /></div>
+              : (
+                <div>
+                  <div className="grid grid-cols-2 gap-2 p-4">
+                    <Kpi label="Recebido" value={centsToBR(financeReceived)} tone="success" />
+                    <Kpi label="Em aberto" value={centsToBR(financePending)} tone={financePending > 0 ? 'warning' : 'default'} />
+                  </div>
+                  <ul className="divide-y divide-[var(--border-soft)]">
+                    {financeEntries.map((f) => (
+                      <li key={f.id} className="flex items-center gap-3 px-4 py-2.5">
+                        <span className="text-[12.5px] text-[var(--text-muted)] tabular-nums w-[92px] shrink-0">{f.dueDate ? f.dueDate.split('-').reverse().join('/') : '—'}</span>
+                        <div className="min-w-0 flex-1">
+                          <p className="text-[13px] font-semibold text-[var(--text)] truncate">{f.description}</p>
+                          <p className="text-[11.5px] text-[var(--text-muted)]">{FINANCE_STATUS_LABEL[f.status]}{f.method ? ` · ${f.method}` : ''}</p>
+                        </div>
+                        <span className={`text-[13.5px] font-semibold tabular-nums ${f.kind === 'receita' ? 'text-[var(--success-fg)]' : 'text-[var(--danger)]'}`}>
+                          {f.kind === 'receita' ? '+' : '−'}{centsToBR(f.amount)}
+                        </span>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )
+          )}
+
           {tab === 'timeline' && (
             timeline.length === 0
               ? <Empty hint="Sem eventos ainda — agendamentos, conversas, leads e tarefas aparecem aqui." />
@@ -849,7 +1124,7 @@ export function ClientProfileDrawer({ person, businessId, pipeline, canFunil, on
 
           {tab === 'leads' && (
             person.leads.length === 0
-              ? <Empty hint="Nenhuma oportunidade no funil para esta pessoa." action={canFunil ? <Link href={`/funil?b=${businessId}`} className="il-chip">Abrir funil</Link> : undefined} />
+              ? <Empty hint="Nenhuma oportunidade aberta para esta pessoa." action={canFunil ? <Link href={`/funil?b=${businessId}`} className="il-chip">Abrir oportunidades</Link> : undefined} />
               : (
                 <ul className="divide-y divide-[var(--border-soft)]">
                   {person.leads.map((l) => {
@@ -871,7 +1146,7 @@ export function ClientProfileDrawer({ person, businessId, pipeline, canFunil, on
                           {nextId === 'scheduled' && canFunil && (
                             <Button size="xs" variant="soft" onClick={() => onNewBooking(person)}>Agendar atendimento</Button>
                           )}
-                          {canFunil && <Link href={`/funil?b=${businessId}#${l.id}`} className="il-chip">Ver no funil</Link>}
+                          {canFunil && <Link href={`/funil?b=${businessId}#${l.id}`} className="il-chip">Ver oportunidade</Link>}
                         </div>
                       </li>
                     );
@@ -951,16 +1226,154 @@ export function ClientProfileDrawer({ person, businessId, pipeline, canFunil, on
           )}
         </div>
       </div>
-    </Drawer>
+      </>) : (
+        <ClientQuickPreview person={person} tags={tags} />
+      )}
+    </ProfileShell>
     </>
   );
 }
 
 /** Linha de dado da carteirinha (rótulo + valor, com ação opcional). */
+/**
+ * CASCA da ficha (§11) — a mesma pessoa, dois móveis.
+ *
+ *   preview → `WorkspaceSheet` (gaveta), com link para a página completa;
+ *   page    → conteúdo direto na área principal, com "← Voltar para clientes"
+ *             à esquerda e as ações à direita. Sem gaveta dentro de página,
+ *             sem perder sidebar/topbar.
+ */
+function ProfileShell({ variant, onClose, title, subtitle, backHref, footer, children }: {
+  variant: 'preview' | 'page';
+  onClose: () => void;
+  title: string;
+  subtitle: string;
+  backHref: string;
+  footer: React.ReactNode;
+  children: React.ReactNode;
+}) {
+  if (variant === 'page') {
+    return (
+      <div className="min-w-0 pb-6">
+        <header className="flex flex-wrap items-center gap-x-3 gap-y-2 mb-3">
+          <Link href={backHref}
+            className="-ml-2 inline-flex items-center gap-1.5 h-9 px-2 rounded-md text-[13px] font-semibold text-[var(--text-soft)] hover:bg-[var(--surface-hover)] hover:text-[var(--text)] focus-visible:shadow-focus">
+            <Icon n="chevL" size={14} /> Voltar para clientes
+          </Link>
+          <div className="ml-auto flex flex-wrap items-center gap-2">{footer}</div>
+        </header>
+        <div className="ws-panel overflow-hidden">{children}</div>
+      </div>
+    );
+  }
+  return (
+    <WorkspaceSheet
+      open
+      onClose={onClose}
+      title={title}
+      subtitle={subtitle}
+      icon="users"
+      width="max-w-[560px]"
+      fullPageHref={backHref}
+      fullPageLabel="Ver perfil completo"
+      footer={footer}
+    >
+      {children}
+    </WorkspaceSheet>
+  );
+}
+
+/**
+ * GAVETA-RESUMO (§11) — o que se precisa saber para decidir, não a ficha toda.
+ * Sem abas e sem carregar atendimentos/financeiro: quem quer o histórico
+ * completo segue para a página, e é isso que a ação primária oferece.
+ */
+function ClientQuickPreview({ person, tags }: {
+  person: Person360;
+  tags: { id: string; label: string; tone?: string; hint?: string }[];
+}) {
+  const profile = profileOf(person.profile);
+  const age = person.age ?? ageFromBirthDate(profile.birthDate);
+  const next = [...person.bookings]
+    .filter((b) => b.status !== 'cancelled' && b.status !== 'completed' && b.status !== 'no_show')
+    .sort((a, b) => (a.date + (a.time || '') < b.date + (b.time || '') ? 1 : -1))[0] || null;
+  const recent = person.bookings.slice(0, 3);
+  const lastTalk = (person.conversations || []).slice(0, 1)[0] || null;
+
+  return (
+    <div className="p-4 space-y-3.5">
+      <div className="flex flex-wrap items-start gap-3.5">
+        <Avatar name={person.name} src={person.avatar || undefined} size={56} />
+        <div className="min-w-0 flex-1">
+          <h2 className="text-base font-semibold text-[var(--text)] leading-tight break-words">{person.name || 'Sem nome'}</h2>
+          <p className="text-[13px] text-[var(--text-muted)] mt-0.5">
+            {person.phone ? formatPhoneBR(person.phone) : 'Sem telefone'}
+            {person.email ? ` · ${person.email}` : ''}
+          </p>
+          <p className="text-[12px] text-[var(--text-faint)] mt-0.5">
+            {age !== null ? `${age} anos` : 'Idade não informada'}
+            {person.customerSince ? ` · cliente desde ${person.customerSince.slice(0, 10).split('-').reverse().join('/')}` : ''}
+          </p>
+        </div>
+        <Badge tone={person.accountStatus === 'active' ? 'green' : 'zinc'}>
+          {person.accountStatus === 'active' ? 'Acesso ativo' : 'Sem acesso'}
+        </Badge>
+      </div>
+
+      <div className="flex flex-wrap gap-1.5">
+        {tags.length ? tags.map((t) => (
+          <span key={t.id} title={t.hint}><Badge tone={(t.tone as any) || 'zinc'}>{t.label}</Badge></span>
+        )) : <Badge tone="zinc">Sem etiquetas</Badge>}
+      </div>
+
+      <div className="rounded-[var(--radius-md)] border border-[var(--border)] divide-y divide-[var(--border)]">
+        <div className="px-3.5 py-2.5">
+          <p className="text-[10px] font-semibold uppercase tracking-[0.08em] text-[var(--text-faint)]">Próximo atendimento</p>
+          {next ? (
+            <p className="text-[13px] text-[var(--text)] mt-1">
+              <span className="font-semibold">{humanDay(next.date)}{next.time ? ` às ${next.time}` : ''}</span>
+              {next.service ? <span className="text-[var(--text-muted)]"> · {next.service}</span> : null}
+            </p>
+          ) : (
+            <p className="text-[13px] text-[var(--text-muted)] mt-1">Nada agendado.</p>
+          )}
+        </div>
+        <div className="px-3.5 py-2.5">
+          <p className="text-[10px] font-semibold uppercase tracking-[0.08em] text-[var(--text-faint)]">Últimos atendimentos</p>
+          {recent.length ? (
+            <ul className="mt-1 space-y-1">
+              {recent.map((b) => (
+                <li key={b.id} className="text-[13px] text-[var(--text)] flex items-baseline justify-between gap-3">
+                  <span className="truncate">{b.service || 'Atendimento'}</span>
+                  <span className="shrink-0 text-[12px] text-[var(--text-muted)] tabular-nums">{eventDay(b.date)}</span>
+                </li>
+              ))}
+            </ul>
+          ) : (
+            <p className="text-[13px] text-[var(--text-muted)] mt-1">Sem histórico ainda.</p>
+          )}
+        </div>
+        {lastTalk && (
+          <div className="px-3.5 py-2.5">
+            <p className="text-[10px] font-semibold uppercase tracking-[0.08em] text-[var(--text-faint)]">Última conversa</p>
+            <p className="text-[13px] text-[var(--text-muted)] mt-1">{lastTalk.preview || 'Sem mensagens.'}</p>
+          </div>
+        )}
+      </div>
+
+      <p className="text-[12px] text-[var(--text-faint)]">
+        {person.contactId
+          ? 'A ficha completa (agenda, atendimentos, arquivos e financeiro) abre em página própria — a lista continua onde estava.'
+          : 'Esta pessoa ainda não tem cadastro no CRM.'}
+      </p>
+    </div>
+  );
+}
+
 function Data({ label, value, action, mono }: { label: string; value: string; action?: React.ReactNode; mono?: boolean }) {
   return (
     <div className="min-w-0">
-      <dt className="text-[10px] font-bold uppercase tracking-[0.08em] text-[var(--text-faint)]">{label}</dt>
+      <dt className="text-[10px] font-semibold uppercase tracking-[0.08em] text-[var(--text-faint)]">{label}</dt>
       <dd className={cn('text-sm font-semibold text-[var(--text)] truncate mt-0.5 flex items-center gap-1.5', mono && 'font-mono text-xs')}>
         <span className="truncate">{value}</span>
         {action}

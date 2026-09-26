@@ -2,6 +2,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
+import { loadMe } from '@/lib/session-me';
 import { clearToken } from '@/lib/client-auth';
 import { cn } from '@/lib/utils';
 import { Icon } from '@/components/icons';
@@ -19,6 +20,7 @@ import { WorkspaceContext } from '@/components/dashboard/WorkspaceContext';
 import { ConversationsDock } from '@/components/dashboard/ConversationsDock';
 import { WorkspaceNavigation } from '@/components/dashboard/WorkspaceNavigation';
 import { WorkspaceTopbar } from '@/components/dashboard/WorkspaceTopbar';
+import { HelpCenter } from '@/components/dashboard/HelpCenter';
 import { useWorkspaceAlerts } from '@/components/dashboard/NotificationsBell';
 import { buildNavSearchItems } from '@/lib/nav-search';
 import { roleLabel } from '@/lib/role-labels';
@@ -40,6 +42,8 @@ interface Biz {
   permissions?: Record<PermissionId, boolean>;
   readOnly?: boolean;
   organizationId?: string;
+  /** Tipo da clínica (identidade: "Clínica veterinária"). Aditivo e opcional. */
+  clinicType?: import('@/lib/types').ClinicType;
   /** Escopo do profissional: preenchido ⇒ este login vê só a própria agenda. */
   professionalId?: string;
   professionalName?: string;
@@ -64,7 +68,7 @@ export function DashboardShell({ children }: { children: React.ReactNode }) {
   const params = useSearchParams();
   const pathname = usePathname();
   const router = useRouter();
-  const [user, setUser] = useState<{ name: string; email?: string; role?: string } | null>(null);
+  const [user, setUser] = useState<{ name: string; email?: string; role?: string; photo?: string } | null>(null);
   const [businesses, setBusinesses] = useState<Biz[]>([]);
   const [organizations,setOrganizations] = useState<Array<{id:string;name:string;canManage:boolean}>>([]);
   const [isMaster, setIsMaster] = useState(false);
@@ -78,23 +82,40 @@ export function DashboardShell({ children }: { children: React.ReactNode }) {
   // Etapa A: o drawer de navegação móvel pertence ao shell porque quem o abre
   // é o botão de menu da TOPBAR (a busca e o menu saíram da sidebar).
   const [mobileNav, setMobileNav] = useState(false);
+  // Central de ajuda: UMA instância no shell, aberta pela sidebar, pela topbar
+  // e pelo menu da conta. Nada de três ajudas diferentes.
+  const [helpOpen, setHelpOpen] = useState(false);
   const mainRef = useRef<HTMLElement | null>(null);
 
-  const loadContext = useCallback(() => {
+  const loadContext = useCallback((fresh = false) => {
     setContextError(false);
     // SOMENTE 401 (sessão inexistente/expirada/inválida) inicia o fluxo de
     // login. Qualquer outro status mantém o usuário dentro do painel.
-    fetch('/api/auth/me')
-      .then(async (r) => {
+    // `fresh` fura o TTL de 5s do loader compartilhado: é o sinal explícito de
+    // "módulos/permissões mudaram agora" (toggle em Recursos/Equipe).
+    loadMe({ fresh })
+      .then((r) => {
         if (!r.ok) {
           if (isSessionExpired(r.status)) router.replace('/login?session=expired');
           else setContextError(true);
           return null;
         }
-        return r.json();
+        return r.data;
       })
-      .then((d) => {
-        if (!d) return;
+      .then((raw) => {
+        // Corpo ilegível (parse) não é sessão expirada: mantém o usuário e
+        // oferece "Tentar novamente", como antes.
+        if (!raw) { setContextError(true); return; }
+        // O loader é compartilhado (shell, unidade ativa, permissões) e devolve
+        // o payload de forma genérica; aqui ele é lido com o contrato que o
+        // shell realmente consome.
+        const d = (raw || {}) as {
+          user?: { id: string; name: string; email?: string; role?: string; photo?: string } | null;
+          businesses?: Biz[];
+          organizations?: Array<{ id: string; name: string; canManage: boolean }>;
+          isMaster?: boolean;
+          support?: SupportInfo | null;
+        };
         if (!d.user) { router.replace('/login?session=expired'); return; }
         setIsMaster(!!d.isMaster);
         setSupport(d.support || null);
@@ -104,11 +125,11 @@ export function DashboardShell({ children }: { children: React.ReactNode }) {
           router.replace('/master');
           return;
         }
-        if (!d.businesses?.length && !d.organizations?.some((o: {canManage:boolean})=>o.canManage)) { router.replace('/onboarding'); return; }
+        if (!d.businesses?.length && !d.organizations?.some((o) => o.canManage)) { router.replace('/onboarding'); return; }
         setOrganizations(d.organizations || []);
-        if (!d.businesses?.length && pathname !== '/organizacao') router.replace(`/organizacao?organization=${d.organizations[0].id}`);
-        setUser(d.user);
-        setBusinesses(d.businesses);
+        if (!d.businesses?.length && pathname !== '/organizacao') router.replace(`/organizacao?organization=${d.organizations![0].id}`);
+        setUser(d.user || null);
+        setBusinesses(d.businesses || []);
         setReady(true);
         lastContextAt.current = Date.now();
       })
@@ -133,7 +154,7 @@ export function DashboardShell({ children }: { children: React.ReactNode }) {
     if (Date.now() - lastContextAt.current > 5000) loadContext();
   }, [ready, pathname, loadContext]);
   useEffect(() => {
-    const fn = () => loadContext();
+    const fn = () => loadContext(true);
     window.addEventListener('il:business-refresh', fn);
     return () => window.removeEventListener('il:business-refresh', fn);
   }, [loadContext]);
@@ -203,7 +224,7 @@ export function DashboardShell({ children }: { children: React.ReactNode }) {
     window.location.assign('/login');
   }
 
-  if (contextError && !ready) return <div className="il-platform p-8" role="alert"><h1>Não foi possível carregar sua clínica</h1><p>Confira sua conexão e tente novamente. Sua sessão foi preservada.</p><button className="il-control mt-4" onClick={loadContext}>Tentar novamente</button></div>;
+  if (contextError && !ready) return <div className="il-platform p-8" role="alert"><h1>Não foi possível carregar sua clínica</h1><p>Confira sua conexão e tente novamente. Sua sessão foi preservada.</p><button className="il-control mt-4" onClick={() => loadContext(true)}>Tentar novamente</button></div>;
   if (!ready || !user) {
     return (
       <div className="min-h-screen bg-[var(--bg)] lg:flex" aria-label="Carregando painel">
@@ -234,7 +255,10 @@ export function DashboardShell({ children }: { children: React.ReactNode }) {
   // ── Breadcrumb + notificações (Etapa A) ─────────────────────────────────
   // O breadcrumb é projeção da MESMA partição que monta o menu: nunca cita área
   // que o usuário não alcança. As notificações vêm de /api/overview (dado real).
-  const areas = workspaceAreas(nav.allowed);
+  // Multiunidade REAL: só quando existe mais de uma unidade na conta. Sem isso
+  // "Organização" não ocupa linha no menu (a porta continua acessível por URL).
+  const multiUnit = businesses.length > 1;
+  const areas = workspaceAreas(nav.allowed, { multiUnit });
   const crumb = routeBreadcrumb(activePath, areas);
   const unitRole = business.role && business.role !== 'OWNER'
     ? `${roleLabel(business.role)}${business.readOnly ? ' · somente leitura' : ''}`
@@ -290,30 +314,40 @@ export function DashboardShell({ children }: { children: React.ReactNode }) {
           ocupa top:0→bottom:0 e a topbar vive na coluna da direita. */}
       <WorkspaceNavigation nav={nav}
         activePath={activePath} unit={business}
+        units={businesses} multiUnit={multiUnit} onUnit={switchBiz}
         collapsed={collapsed} onCollapse={toggle}
         mobileOpen={mobileNav} onMobileOpen={setMobileNav}
+        onHelp={() => setHelpOpen(true)}
       />
 
       <div className="workspace-main-col">
       <WorkspaceTopbar
-        group={crumb.group}
         page={activeRoute?.label || 'Painel'}
         query={q}
         searchItems={buildNavSearchItems(nav, q)}
         activePath={activePath}
+        businessId={business.id}
         alerts={alerts}
         user={{ ...user, role: unitRole || user.role }}
         unit={business}
         units={businesses}
         overview={activePath === '/organizacao'}
         canOverview={nav.allowed.some((i) => i.href === '/organizacao')}
-        canTeam={nav.allowed.some((i) => i.href === '/equipe')}
         canConfig={nav.allowed.some((i) => i.href === '/configuracoes')}
         isMaster={isMaster}
         onUnit={switchBiz}
         onLogout={logout}
         onOpenNav={() => setMobileNav(true)}
-        canCreate={nav.allowed.map((i) => i.href).filter((h) => ['/agenda', '/clientes', '/tarefas', '/servicos'].includes(h))}
+        onOpenHelp={() => setHelpOpen(true)}
+        canCreate={nav.allowed.map((i) => i.href).filter((h) => ['/agenda', '/clientes', '/tarefas', '/servicos', '/profissionais', '/financeiro'].includes(h))}
+      />
+
+      <HelpCenter
+        open={helpOpen}
+        onClose={() => setHelpOpen(false)}
+        query={q}
+        nav={nav}
+        businessId={business.id}
       />
 
       {nav.allowed.some(i => i.href === '/conversas') && activePath !== '/conversas' && activePath !== '/organizacao' && <ConversationsDock key={business.id} businessId={business.id}/>}
@@ -333,21 +367,22 @@ export function DashboardShell({ children }: { children: React.ReactNode }) {
         <div key={business.id} className={cn(isAgenda ? 'agenda-page-gutter' : 'px-4 lg:px-8 py-6', !isFullWidth && 'max-w-[960px]')}>
           {/* Breadcrumb de CONTEXTO no conteúdo (o branding vive na sidebar e o
               nome da clínica, uma vez, no seletor de unidade da topbar). */}
-          <nav aria-label="Breadcrumb" className="ws-crumbs--content">
-            {activePath !== fallbackHref && homeHref && (
-              <>
-                <Link href={homeHref}>Início</Link>
-                <I n="chevronRight" size={12} aria-hidden="true" />
-              </>
-            )}
-            {crumb.group && (
-              <>
-                <span>{crumb.group}</span>
-                <I n="chevronRight" size={12} aria-hidden="true" />
-              </>
-            )}
-            <span aria-current="page">{activeRoute?.label || 'Painel'}</span>
-          </nav>
+          {/* Breadcrumb só em páginas PROFUNDAS (grupo/estrutura). Páginas de
+              1º nível (Agenda, Pacientes…) ficam sem "Visão geral >" — o título da
+              própria tela é o cabeçalho. */}
+          {crumb.group && homeHref && (
+            <nav aria-label="Breadcrumb" className="ws-crumbs--content">
+              <Link href={homeHref}>Visão geral</Link>
+              <I n="chevronRight" size={12} aria-hidden="true" />
+              {crumb.group && (
+                <>
+                  <span>{crumb.group}</span>
+                  <I n="chevronRight" size={12} aria-hidden="true" />
+                </>
+              )}
+              <span aria-current="page">{activeRoute?.label || 'Painel'}</span>
+            </nav>
+          )}
           {isMaster && !support && (
             <p className="mb-4 text-xs font-semibold text-[var(--warning-fg)] bg-[var(--warning-bg)] border border-[var(--warning-border)] rounded-md px-3 py-2 inline-flex items-center gap-2 shadow-xs">
               <I n="shield" size={14} /> Você é master — <Link href="/master" className="underline font-semibold">/master</Link>

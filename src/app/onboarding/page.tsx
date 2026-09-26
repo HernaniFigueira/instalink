@@ -12,6 +12,19 @@ import { useRouter } from 'next/navigation';
 import { slugify } from '@/lib/utils';
 import { Icon } from '@/components/icons';
 import { SERVICE_MODEL_OPTIONS, modesForServiceModel, type ServiceModel } from '@/lib/onboarding';
+import { CLINIC_PRESETS } from '@/lib/clinic-presets';
+import { VALID_CLINIC_TYPES, type ClinicType } from '@/lib/types';
+
+// FASE 2 · P5 — "Qual é o tipo da sua clínica?" (preset, não aplicação
+// separada): define terminologia, ficha de anamnese inicial e sugestões.
+// 'Outro' cobre negócios que não são clínica — ninguém é forçado.
+const CLINIC_TYPE_OPTIONS: Array<{ id: ClinicType; label: string; hint: string }> = [
+  { id: 'medica', label: CLINIC_PRESETS.medica.label, hint: 'Consultas e exames — paciente, consultas, profissionais de saúde.' },
+  { id: 'odontologica', label: CLINIC_PRESETS.odontologica.label, hint: 'Procedimentos odontológicos — pacientes e dentistas.' },
+  { id: 'veterinaria', label: CLINIC_PRESETS.veterinaria.label, hint: 'Tutores e pets — o pet é o paciente da agenda.' },
+  { id: 'estetica', label: CLINIC_PRESETS.estetica.label, hint: 'Procedimentos estéticos — clientes e profissionais.' },
+  { id: 'geral', label: 'Outro tipo de negócio', hint: 'Não é clínica (salão, estúdio, consultório único…) — tudo funciona igual.' },
+];
 
 const WHATSAPP_DRAFT_KEY = 'il-biz-draft';
 
@@ -20,6 +33,8 @@ export default function CreateBusinessPage() {
   const [name, setName] = useState('');
   const [whatsapp, setWhatsapp] = useState('');
   const [model, setModel] = useState<ServiceModel>('agenda');
+  // FASE 2 · P5 — tipo de clínica (preset). 'geral' = não é clínica/sem preset.
+  const [clinicType, setClinicType] = useState<ClinicType>('geral');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
   const [checking, setChecking] = useState(true);
@@ -48,14 +63,18 @@ export default function CreateBusinessPage() {
       if (typeof d.name === 'string') setName(d.name);
       if (typeof d.whatsapp === 'string') setWhatsapp(d.whatsapp);
       if (d.model === 'agenda' || d.model === 'produtos' || d.model === 'ambos') setModel(d.model);
+      if (typeof d.clinicType === 'string' && (VALID_CLINIC_TYPES as string[]).includes(d.clinicType)) {
+        setClinicType(d.clinicType as ClinicType);
+      }
     } catch { /* sem rascunho */ }
   }, []);
   useEffect(() => {
     try {
-      if (name || whatsapp || model !== 'agenda') localStorage.setItem(WHATSAPP_DRAFT_KEY, JSON.stringify({ name, whatsapp, model }));
-      else localStorage.removeItem(WHATSAPP_DRAFT_KEY);
+      if (name || whatsapp || model !== 'agenda' || clinicType !== 'geral') {
+        localStorage.setItem(WHATSAPP_DRAFT_KEY, JSON.stringify({ name, whatsapp, model, clinicType }));
+      } else localStorage.removeItem(WHATSAPP_DRAFT_KEY);
     } catch { /* storage bloqueado: segue sem rascunho */ }
-  }, [name, whatsapp, model]);
+  }, [name, whatsapp, model, clinicType]);
 
   async function finish(e: React.FormEvent) {
     e.preventDefault();
@@ -67,8 +86,13 @@ export default function CreateBusinessPage() {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         // A pergunta "Como sua empresa atende?" define a BASE de módulos
-        // (lib/onboarding.ts). Nada definitivo: Recursos liga/desliga depois.
-        body: JSON.stringify({ name, whatsapp, slug: slugify(name), modes: modesForServiceModel(model) }),
+        // (lib/onboarding.ts). O TIPO DE CLÍNICA é preset (terminologia +
+        // anamnese inicial) — nada definitivo: Recursos/Configurações mudam depois.
+        body: JSON.stringify({
+          name, whatsapp, slug: slugify(name),
+          modes: modesForServiceModel(model),
+          clinicType,
+        }),
       });
       if (res.status === 401) { router.replace('/login?session=expired'); return; }
       const data = await res.json();
@@ -99,8 +123,7 @@ export default function CreateBusinessPage() {
     <main className="min-h-screen bg-zinc-50 flex items-center justify-center px-4 py-10">
       <div className="w-full max-w-md">
         <div className="flex items-center justify-center gap-2 mb-6">
-          <div className="w-9 h-9 rounded-xl bg-zinc-900 flex items-center justify-center font-black text-white">IL</div>
-          <span className="font-bold text-lg">InstaLink<span className="text-emerald-600">.app</span></span>
+          <span className="font-bold text-lg">Go<span className="text-[var(--brand-600)]">Doutor</span><span className="text-xs font-normal text-zinc-500"> / clínicas</span></span>
         </div>
 
         <form onSubmit={finish} className="bg-white border border-zinc-200 rounded-lg p-6 shadow-sm">
@@ -126,6 +149,33 @@ export default function CreateBusinessPage() {
               <input id="wa" value={whatsapp} onChange={(e) => setWhatsapp(e.target.value)} placeholder="(11) 99999-9999" inputMode="tel"
                 className="w-full rounded-md border border-zinc-300 px-3.5 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500" />
             </div>
+
+            {/* FASE 2 · P5 — tipo de clínica: um PRESET (terminologia/anamnese),
+                nunca quatro produtos diferentes. */}
+            <fieldset>
+              <legend className="text-sm font-medium text-zinc-700">Qual é o tipo da sua clínica?</legend>
+              <div className="mt-1.5 grid gap-2" role="radiogroup" aria-label="Qual é o tipo da sua clínica?">
+                {CLINIC_TYPE_OPTIONS.map((opt) => (
+                  <label key={opt.id}
+                    className={`flex items-start gap-2.5 rounded-md border px-3.5 py-2.5 cursor-pointer transition-colors ${
+                      clinicType === opt.id ? 'border-emerald-500 bg-emerald-50/60 ring-1 ring-emerald-500' : 'border-zinc-200 hover:border-zinc-300'
+                    }`}>
+                    <input
+                      type="radio" name="clinic-type" value={opt.id}
+                      checked={clinicType === opt.id} onChange={() => setClinicType(opt.id)}
+                      className="mt-0.5 w-4 h-4 accent-emerald-600"
+                    />
+                    <span className="min-w-0">
+                      <span className="block text-sm font-semibold text-zinc-900">{opt.label}</span>
+                      <span className="block text-xs text-zinc-500 mt-0.5">{opt.hint}</span>
+                    </span>
+                  </label>
+                ))}
+              </div>
+              <p className="text-[11px] text-zinc-400 mt-1.5">
+                Isso define a terminologia, a ficha de anamnese inicial e as sugestões do painel — o produto é o mesmo, só o preset muda.
+              </p>
+            </fieldset>
 
             {/* A base de módulos — uma pergunta, três respostas (lib/onboarding.ts).
                 Nada definitivo: Recursos liga/desliga qualquer módulo depois. */}

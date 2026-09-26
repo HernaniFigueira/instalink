@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
-  DASHBOARD_PANELS, dashboardContext, dashboardModules,
+  DASHBOARD_PANELS, dashboardAttention, dashboardContext, dashboardModules,
   dashboardPanelVisible, dashboardRevenueSources, recentActivityLists,
   visibleDashboardKpis, visibleDashboardPanels,
 } from '../dashboard';
@@ -171,5 +171,108 @@ describe('dashboard — vocabulário e contexto', () => {
     expect(recentActivityLists(dashboardModules(CLINICA))).toEqual({ orders: false, bookings: true, leads: true });
     expect(recentActivityLists(dashboardModules(VAREJO))).toEqual({ orders: true, bookings: false, leads: true });
     expect(recentActivityLists(dashboardModules(HIBRIDO))).toEqual({ orders: true, bookings: true, leads: true });
+  });
+});
+
+// ═══════════════════════════════════════════════════════════════
+// GODOUTOR 2.0 — COPY DO AVISO DE ATENÇÃO (§G: consistência global)
+// ═══════════════════════════════════════════════════════════════
+// O aviso é composto por `${count} ${label}`. Com 1 unidade o texto
+// "1 oportunidades sem contato" (e "1 atendimentos para fechar") era lido como
+// erro de escrita na primeira dobra da tela. A regra agora é a MESMA que
+// `returnsDue` já usava: singular quando count === 1.
+describe('visão geral — o aviso de atenção concorda com o número', () => {
+  const base = {
+    closures: 0, leadsNew: 0, tasksOverdue: 0, queueWaiting: 0, arrivalsPending: 0, returnsDue: 0,
+    permissions: { agenda: true, leads: true, tasks: true },
+  };
+  const text = (item: { count: number; label: string }) => `${item.count} ${item.label}`;
+
+  it('singular com 1, plural com 2+', () => {
+    expect(dashboardAttention({ ...base, closures: 1 }).map(text)).toEqual(['1 atendimento para fechar']);
+    expect(dashboardAttention({ ...base, closures: 3 }).map(text)).toEqual(['3 atendimentos para fechar']);
+    expect(dashboardAttention({ ...base, leadsNew: 1 }).map(text)).toEqual(['1 oportunidade sem contato']);
+    expect(dashboardAttention({ ...base, leadsNew: 2 }).map(text)).toEqual(['2 oportunidades sem contato']);
+    expect(dashboardAttention({ ...base, tasksOverdue: 1 }).map(text)).toEqual(['1 pendência vencida']);
+    expect(dashboardAttention({ ...base, tasksOverdue: 4 }).map(text)).toEqual(['4 pendências vencidas']);
+    expect(dashboardAttention({ ...base, returnsDue: 1 }).map(text)).toEqual(['1 retorno pendente']);
+  });
+
+  it('vocabulário 2.0: nenhum aviso chama oportunidade de "lead"', () => {
+    const items = dashboardAttention({ ...base, leadsNew: 5, tasksOverdue: 2 });
+    expect(items.every((i) => !/\bleads?\b/i.test(i.label))).toBe(true);
+  });
+});
+
+// ═══════════════════════════════════════════════════════════════
+// §P1.4/P1.5 — ONBOARDING: UMA fonte de verdade, personalização REAL
+// ═══════════════════════════════════════════════════════════════
+// A auditoria real mostrou a página dizendo "tudo concluído" e a sidebar
+// dizendo "88% pronta". O contrato agora: o progresso vem SEMPRE do mesmo
+// checklist (setupChecklist + setupProgress) e o item "Personalize a
+// página" aceita QUALQUER personalização real — nunca só o "Sobre".
+import { pageIsCustomized, setupChecklist, setupProgress } from '../dashboard';
+
+describe('pageIsCustomized — personalização real, sem regra artificial', () => {
+  it('página intocada NÃO está personalizada (nada inventado)', () => {
+    expect(pageIsCustomized({
+      page: { blocks: [{ enabled: true }, { enabled: true }] },
+      business: { about: { enabled: false } },
+    })).toBe(false);
+  });
+
+  it('Visual salvo (tema/tipografia) é personalização real', () => {
+    expect(pageIsCustomized({
+      page: { blocks: [], themeSavedAt: '2026-09-26T00:00:00Z' },
+      business: {},
+    })).toBe(true);
+  });
+
+  it('logo ou capa definidos são personalização real', () => {
+    expect(pageIsCustomized({ page: null, business: { logo: 'https://x/y.png' } })).toBe(true);
+    expect(pageIsCustomized({ page: null, business: { cover: 'https://x/c.jpg' } })).toBe(true);
+  });
+
+  it('seção desativada, navegação própria e "Sobre" continuam contando', () => {
+    expect(pageIsCustomized({ page: { blocks: [{ enabled: false }] }, business: {} })).toBe(true);
+    expect(pageIsCustomized({ page: { blocks: [] }, business: { navCustom: true } })).toBe(true);
+    expect(pageIsCustomized({ page: { blocks: [] }, business: { navItems: [{ id: 'a' }] } })).toBe(true);
+    expect(pageIsCustomized({ page: { blocks: [] }, business: { about: { enabled: true } } })).toBe(true);
+  });
+});
+
+describe('setupChecklist/setupProgress — 100% remove o card, sem número duplo', () => {
+  const counts = { services: 1, availability: 1, professionals: 1, products: 0 };
+  const base = {
+    business: {
+      description: 'Clínica', logo: 'l.png', cover: '', whatsapp: '21988887777',
+      phone: '', published: true, setupSkipped: [],
+    } as any,
+    modules: dashboardModules(CLINICA),
+    counts,
+  };
+
+  it('com personalização real e WhatsApp opcional pendente, o progresso chega a 100 SEM gambiarra', () => {
+    // WhatsApp é OPCIONAL: item pulado conta como resolvido (regra existente).
+    const items = setupChecklist({ ...base, pageCustomized: true, whatsappConnected: false });
+    // todos os obrigatórios feitos + opcional pendente ainda não pulado:
+    const beforeSkip = setupProgress(items);
+    expect(beforeSkip).toBeLessThan(100);
+    // mas pular o opcional (ação do usuário) ou conectá-lo fecha 100%:
+    const skipped = setupChecklist({
+      ...base,
+      pageCustomized: true,
+      whatsappConnected: false,
+      business: { ...base.business, setupSkipped: ['whatsapp'] },
+    });
+    expect(setupProgress(skipped)).toBe(100);
+    const connected = setupChecklist({ ...base, pageCustomized: true, whatsappConnected: true });
+    expect(setupProgress(connected)).toBe(100);
+  });
+
+  it('sem personalização real o item continua pendente (não completa "por magic")', () => {
+    const items = setupChecklist({ ...base, pageCustomized: false, whatsappConnected: true });
+    expect(items.some((i) => i.id === 'personalize' && !i.done)).toBe(true);
+    expect(setupProgress(items)).toBeLessThan(100);
   });
 });

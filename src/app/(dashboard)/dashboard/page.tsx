@@ -32,10 +32,14 @@ import { useCallback, useEffect, useState } from 'react';
 import { useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { useWorkspace } from '@/components/dashboard/WorkspaceContext';
-import { Button, EmptyState, PageSkeleton, StatusBadge } from '@/components/ui';
+import { Button, DashboardSkeleton, EmptyState, PageSkeleton, StatusBadge } from '@/components/ui';
 import { Icon } from '@/components/icons';
+import { cn } from '@/lib/utils';
 import { AccessDenied, PermissionNotice, useForbiddenNotice } from '@/components/dashboard/AccessNotice';
+import { usePanelPermissions } from '@/components/dashboard/usePanelPermissions';
 import { PeriodSelector } from '@/components/dashboard/PeriodSelector';
+import { loadOverview } from '@/lib/overview';
+import { firstName } from '@/lib/greeting';
 import { apiGet } from '@/lib/api-client';
 import { money } from '@/lib/utils';
 import { humanDay } from '@/lib/tz';
@@ -72,20 +76,41 @@ interface Overview {
     sources: Array<'bookings' | 'orders'>;
     bookings: RevenueResult | null;
     orders: RevenueResult | null;
+    /** §6 — Agendado · Realizado · Recebido · Em aberto (mesma função do Financeiro). */
+    semantics?: {
+      agendado: number; realizado: number; recebido: number; emAberto: number;
+      previsto: number; pagamentos: number; hasBookings: boolean;
+    } | null;
   };
   showMoney?: boolean;
   today?: {
     date: string; total: number; confirmed: number; pending: number; completed: number;
     cancelled: number; noShow: number; upcoming: number; needsClosure: number;
   } | null;
+  /** Mesmo resumo, um dia antes — usado SÓ para a variação do dia. */
+  yesterday?: {
+    date: string; total: number; confirmed: number; pending: number; completed: number;
+    cancelled: number; noShow: number; needsClosure: number;
+  } | null;
+  /** Registros de atendimento pendentes (fechamento/registro do serviço). */
+  needsClosure?: Array<{ id: string; customerName: string; date: string; time: string; status: string; service: string }>;
+  /** Pendências da equipe (mesma fonte do /api/tasks) — resumo, nunca lista. */
+  tasksSummary?: { open: number; overdue: number; dueToday: number; mine: number } | null;
   ordersPanel?: { total: number; new: number; open: number; inWindow: number } | null;
   productsPanel?: { total: number; active: number } | null;
   crm?: { contacts: number; newContacts: number; registered: number; withConsent: number; leads: number; leadsNew: number; customers: number };
   pageStats?: { views: number; clicks: number; bookings: number; conversions: number; published: boolean; slug: string };
   whatsapp?: { status: string; open: number; unread: number; pendingMessages: number; link: string } | null;
+  intelligence?: {
+    automation: { completed: number };
+    conversations: { waitingTeam: number; attendedByAi: number };
+    followUp: { rescheduled: number };
+    reactivation: { reactivated: number };
+  } | null;
+  intelligenceHealth?: Record<string, { state: string; reason: string }> | null;
   hasBookingsModule?: boolean;
   upcoming: Array<{ id: string; customerName: string; date: string; time: string; status: string; service: string; professional: string }>;
-  checklist: Array<{ done: boolean; label: string; href: string }>;
+  checklist: Array<{ done: boolean; label: string; href: string; id?: string; optional?: boolean }>;
   pct: number;
   pendingSetup?: number;
   period: number;
@@ -131,7 +156,31 @@ export default function DashboardPage() {
     setSetupHidden(true);
     try { localStorage.setItem(`il-setup-hidden-${businessId}`, '1'); } catch { /* noop */ }
   }
+  // FASE 2 · P8 — pular um item OBRIGATÓRIO não existe: só os `optional`
+  // têm este botão, e a gravação é no servidor (reabrir o painel mantém).
+  const [skipping, setSkipping] = useState('');
+  async function skipSetupItem(id: string) {
+    if (!businessId || skipping) return;
+    const current = (data?.checklist || []).filter((c) => c.optional && c.id && !c.done).map((c) => c.id!);
+    const next = Array.from(new Set([...current, id])); // mantém os já pulados que ainda aparecem
+    const already = (data?.checklist || []).filter((c) => c.done && c.optional && c.id).map((c) => c.id!);
+    const payload = Array.from(new Set([...already, ...next]));
+    setSkipping(id);
+    try {
+      const res = await fetch(`/api/businesses/${businessId}`, {
+        method: 'PATCH', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ setupSkipped: payload }),
+      });
+      if (res.ok) setRetry((r) => r + 1); // recarrega o overview com o progresso real
+    } finally { setSkipping(''); }
+  }
   const { notice, dismiss } = useForbiddenNotice('Início');
+  // §A08/P0 — PERMISSÕES: hook chamado SEMPRE, antes de QUALQUER early return
+  // (Rules of Hooks). O primeiro render acontece com data=null (skeleton);
+  // se este hook ficasse depois do `if (!data)`, o render seguinte passaria a
+  // ter MAIS hooks que o anterior → React error #310 e painel branco após o
+  // login. A DERIVAÇÃO (canAdminUnit) continua onde é consumida, abaixo.
+  const { permissions: panelPerms, ready: permsReady } = usePanelPermissions();
   // Estados completos (auditoria §12, mesma família do bug do /recursos):
   // uma falha de rede nunca pode virar skeleton eterno no Início.
   const [failed, setFailed] = useState('');
@@ -139,11 +188,9 @@ export default function DashboardPage() {
 
   // Tarefas abertas (resumo real do /api/tasks) para o bloco de atividade.
   const [taskSum, setTaskSum] = useState<{ open: number; overdue: number; dueToday: number; mine: number } | null>(null);
-  // Série diária de agendamentos do período (contagem REAL vinda da mesma API
-  // que a Agenda usa — nenhuma fórmula nova, nenhum dado inventado).
-  const [series, setSeries] = useState<Array<{ date: string; count: number }> | null>(null);
-  const [yday, setYday] = useState<{ total: number; byStatus: Record<string, number> } | null>(null);
-  const [periodMix, setPeriodMix] = useState<Record<string, number> | null>(null);
+  // Nada de série/gráfico próprio: a Visão geral responde "como está HOJE" com
+  // os dados do /api/overview (today + yesterday). A leitura analítica do
+  // período vive em GESTÃO → Resultados, com a API dela.
   const [openTasks, setOpenTasks] = useState<Array<{ id: string; title: string; dueAt: string }> | null>(null);
   useEffect(() => {
     if (!businessId) return;
@@ -158,39 +205,12 @@ export default function DashboardPage() {
     }).catch(() => { if (on) { setTaskSum(null); setOpenTasks(null); } });
     return () => { on = false; };
   }, [businessId]);
-  useEffect(() => {
-    if (!businessId) return;
-    let on = true;
-    const iso = (d: Date) => d.toISOString().slice(0, 10);
-    const from = new Date(Date.now() - (period - 1) * 86400000);
-    const to = new Date();
-    apiGet<{ bookings?: Array<{ date: string; status: string }> }>(
-      `/api/bookings?businessId=${businessId}&mode=manage&from=${iso(from)}&to=${iso(to)}&limit=500`,
-      { scope: 'area', area: 'Início' },
-    ).then((r) => {
-      if (!on) return;
-      if (!r.ok || !Array.isArray(r.data?.bookings)) { setSeries(null); setYday(null); setPeriodMix(null); return; }
-      const map = new Map<string, number>();
-      for (let i = 0; i < period; i++) map.set(iso(new Date(from.getTime() + i * 86400000)), 0);
-      for (const b of r.data.bookings) if (map.has(b.date)) map.set(b.date, (map.get(b.date) || 0) + 1);
-      setSeries([...map.entries()].map(([date, count]) => ({ date, count })));
-      // Ontem (comparação REAL dos KPIs) e mix de status do período (donut).
-      const y = iso(new Date(Date.now() - 86400000));
-      const yb = r.data.bookings.filter((b) => b.date === y);
-      const bySt: Record<string, number> = {};
-      for (const b of yb) bySt[b.status] = (bySt[b.status] || 0) + 1;
-      setYday({ total: yb.length, byStatus: bySt });
-      const mix: Record<string, number> = {};
-      for (const b of r.data.bookings) mix[b.status] = (mix[b.status] || 0) + 1;
-      setPeriodMix(mix);
-    }).catch(() => { if (on) { setSeries(null); setYday(null); setPeriodMix(null); } });
-    return () => { on = false; };
-  }, [businessId, period]);
-
   const load = useCallback(() => {
     if (!businessId) return;
     setFailed('');
-    apiGet<Overview>(`/api/overview?businessId=${businessId}&period=${period}`, { scope: 'area', area: 'Início' })
+    // §i — o MESMO payload já é pedido pelo shell (mini-card + sino): o loader
+    // compartilhado divide a requisição em vez de repetir o trabalho de banco.
+    loadOverview(businessId, period, { scope: 'area', area: 'Visão geral' })
       .then((res) => {
         // 403 → aviso amigável na tela; o usuário NÃO é deslogado.
         // 401 → o wrapper de fetch já iniciou o fluxo de login.
@@ -200,7 +220,7 @@ export default function DashboardPage() {
           return;
         }
         setDenied(false);
-        setData(res.data);
+        setData(res.data as Overview | null);
       });
   }, [businessId, period, retry]);
 
@@ -229,17 +249,40 @@ export default function DashboardPage() {
     );
   }
 
-  if (!data) return <PageSkeleton />;
+  if (!data) return <DashboardSkeleton />;
 
   const { user, business, totals, upcoming, checklist, pct, recent, today, crm, pageStats, whatsapp, ordersPanel, productsPanel, context } = data;
   const modules = context.modules;
   const results = data.results;
   const showMoney = data.showMoney === true;
+  // Comparação com ONTEM: vem do MESMO /api/overview (campo `yesterday`).
+  // Antes a tela buscava até 500 agendamentos em /api/bookings só para
+  // reconstruir este número — requisição pesada e duplicada.
+  const yday = data.yesterday
+    ? {
+        total: data.yesterday.total,
+        byStatus: {
+          confirmed: data.yesterday.confirmed, pending: data.yesterday.pending,
+          completed: data.yesterday.completed, no_show: data.yesterday.noShow,
+          cancelled: data.yesterday.cancelled,
+        } as Record<string, number>,
+      }
+    : null;
   const operational = !showMoney;
+  // TRÊS VISÕES, UM SÓ DASHBOARD (§11):
+  //   • profissional (agendaScope 'own'/'none' ou papel PROFISSIONAL) → o SEU dia;
+  //   • operação (sem acesso financeiro: recepção/atendente) → o que resolver agora;
+  //   • gestão (OWNER/ADMIN com financeiro) → o dia + um resumo compacto do período.
+  // Nada de receita global para quem atende ou recebe: o número que não serve
+  // para decidir não ocupa a tela.
   const ownAgenda = workspace.agendaScope === 'own' || workspace.role === 'PROFISSIONAL';
+  const proView = ownAgenda;
   const revenueDetail = data.revenueDetail;
   const bookingRevenue = revenueDetail?.bookings || null;
   const orderRevenue = revenueDetail?.orders || null;
+  // §6 — os quatro conceitos reconciliados (mesma função do Financeiro):
+  // a Visão geral nunca mais mostra um número que o Financeiro contradiz.
+  const moneySemantics = revenueDetail?.semantics || null;
   const attention = data.attention || [];
   const links = data.links || {};
   const q = `?b=${business.id}`;
@@ -261,7 +304,17 @@ export default function DashboardPage() {
   }
 
   // 6 · ONDE AGIR — só ações que EXISTEM: checklist real + conectar canal.
-  const showSetup = hasSetupPending && !setupHidden;
+  // §11 — o checklist é o ONBOARDING DA CLÍNICA (dados, serviços, horários,
+  // página, canal): quem só atende não configura a clínica. Mostrá-lo ao
+  // profissional criava uma lista de afazeres que não são dele — e cujos
+  // links ele nem sempre pode abrir.
+  // §A08 — o checklist "Sua clínica está pronta?" só tem destinos de ADMINISTRAÇÃO
+  // (/configuracoes, /servicos, /disponibilidade, /pagina, /canais — permissão
+  // 'config'). Quem não administra a unidade não vê os atalhos: nenhum "Fazer →"
+  // pode terminar em "Sem permissão". (O hook já foi chamado lá em cima; aqui
+  // só a derivação — nenhum hook depois de early return.)
+  const canAdminUnit = !permsReady || panelPerms.config === true;
+  const showSetup = hasSetupPending && !setupHidden && !proView && canAdminUnit;
   const showConnectChannel = !!whatsapp && !canalConnected && links.canais === true;
   const hasWhereToAct = showSetup || showConnectChannel;
 
@@ -271,7 +324,7 @@ export default function DashboardPage() {
         <div className="mb-4 bg-[var(--brand-soft)] border-l-[3px] border-l-[var(--brand)] rounded-r-md px-4 py-3 flex items-start gap-3">
           <span className="w-8 h-8 rounded-md bg-white text-[var(--brand-fg)] flex items-center justify-center shrink-0"><Icon n="checkCircle" size={18} /></span>
           <div>
-            <p className="text-sm font-semibold text-[var(--text)]">{business.name} está criado, {user.name.split(' ')[0]}!</p>
+            <p className="text-sm font-semibold text-[var(--text)]">{business.name} está criado, {firstName(user.name)}!</p>
             <p className="text-xs text-[var(--text-muted)] mt-0.5">Agenda, serviços e página já estão ativos. Siga o “Comece por aqui” abaixo — ou ignore e use o que precisa primeiro.</p>
           </div>
         </div>
@@ -281,8 +334,8 @@ export default function DashboardPage() {
       {/* ── Saudação + resumo curto (hierarquia do mockup) ── */}
       <header className="mb-5 flex flex-wrap items-start justify-between gap-3">
         <div className="min-w-0">
-        <h1 className="text-[26px] leading-tight font-extrabold tracking-tight text-[var(--text)]">
-          {greeting()}, {user.name.split(' ')[0]}!
+        <h1 className="text-[24px] leading-tight font-semibold tracking-tight text-[var(--text)]">
+          {proView ? `Meu dia, ${firstName(user.name)}` : `${greeting()}, ${firstName(user.name)}!`}
         </h1>
         <p className="text-sm text-[var(--text-muted)] mt-1">
           {modules.bookings && today
@@ -294,7 +347,7 @@ export default function DashboardPage() {
         </div>
         <div className="dsh-card flex items-center gap-2.5 px-3.5 py-2.5" title="Data de hoje">
           <Icon n="calendar" size={16} className="text-[var(--brand-fg)]" />
-          <span className="text-[12.5px] font-bold text-[var(--text)]">
+          <span className="text-[12.5px] font-semibold text-[var(--text)]">
             Hoje, {new Date().toLocaleDateString('pt-BR', { day: '2-digit', month: 'long', year: 'numeric' })}
           </span>
         </div>
@@ -303,7 +356,7 @@ export default function DashboardPage() {
       {/* ── 1 · ATENÇÃO (dados do servidor, links só com permissão) ── */}
       {attention.length > 0 && (
         <div className="mb-4 border border-[var(--warning-border)] bg-[var(--warning-bg)] px-3 py-2.5 flex flex-wrap items-center gap-x-3 gap-y-2 rounded-lg" role="status" aria-label="Itens que precisam de atenção">
-          <span className="text-xs font-bold tracking-wide uppercase text-[var(--warning-fg)] inline-flex items-center gap-1.5">
+          <span className="text-xs font-semibold tracking-wide uppercase text-[var(--warning-fg)] inline-flex items-center gap-1.5">
             <Icon n="alert" size={14} /> Atenção
           </span>
           {attention.map((a) => {
@@ -353,7 +406,19 @@ export default function DashboardPage() {
           {showMoney && bookingRevenue ? (
             <div className="dsh-kpi">
               <span className="dsh-kpi__icon" style={{ background: 'var(--success-bg)', color: 'var(--success-fg)' }}><Icon n="cash" size={19} /></span>
-              <span><span className="dsh-kpi__num" style={{ fontSize: 21 }}>{moneyKpi(bookingRevenue.total)}</span><span className="dsh-kpi__label block" title={`Período: ${results?.periodLabel || periodLabel(period)}`}>Receita prevista</span></span>
+              <span>
+                <span className="dsh-kpi__num" style={{ fontSize: 21 }}>{moneyKpi(moneySemantics ? moneySemantics.agendado : bookingRevenue.total)}</span>
+                <span className="dsh-kpi__label block" title={`Período: ${results?.periodLabel || periodLabel(period)}`}>
+                  Agendado no período
+                </span>
+                {/* §6 — os quatro conceitos, um do lado do outro, com o MESMO
+                    cálculo do Financeiro. Nada de "receita" genérica. */}
+                {moneySemantics && (
+                  <span className="block text-[11px] font-semibold text-[var(--text-muted)] mt-0.5 tabular-nums">
+                    Realizado {moneyKpi(moneySemantics.realizado)} · Recebido {moneyKpi(moneySemantics.recebido)} · Em aberto {moneyKpi(moneySemantics.emAberto)}
+                  </span>
+                )}
+              </span>
             </div>
           ) : (
             <div className="dsh-kpi">
@@ -364,7 +429,13 @@ export default function DashboardPage() {
         </div>
       )}
 
-      {/* ── 3 · Setup real + Indicadores do período (5 + 7, como o mockup) ── */}
+      {/* ── 3 · Setup real + Indicadores do período (5 + 7, como o mockup) ──
+          §11 — para quem ATENDE esta linha não existe: o checklist é da
+          clínica (não dele), a presença online é de quem cuida da página e
+          "aguardando confirmação/precisam de registro" são tarefas de
+          recepção — os dois números já aparecem nos KPIs do dia logo acima.
+          "Meu dia" fica com o que é DELE: agenda, próximos e atividade. */}
+      {!proView && (
       <div className="grid items-start gap-4 lg:grid-cols-12 mb-4">
         {hasWhereToAct ? (
         <section className="lg:col-span-5 dsh-card min-w-0">
@@ -372,7 +443,7 @@ export default function DashboardPage() {
             <>
               <div className="dsh-card__head">
                 <h3 className="dsh-card__title">Sua clínica está pronta?</h3>
-                <span className="text-[12px] font-bold text-[var(--brand-fg)]">{pct}%</span>
+                <span className="text-[12px] font-semibold text-[var(--brand-fg)]">{pct}%</span>
               </div>
               <div className="dsh-card__body">
                 <div className="h-2 rounded-full bg-[var(--surface-3)] overflow-hidden mb-3" role="progressbar" aria-valuenow={pct} aria-valuemin={0} aria-valuemax={100}>
@@ -386,11 +457,23 @@ export default function DashboardPage() {
                         <span className="line-through opacity-70 flex-1">{c.label}</span>
                       </div>
                     ) : (
-                      <Link key={c.label} href={`${c.href}${c.href.includes('?') ? '&' : '?'}b=${business.id}`} className="dsh-check hover:border-[var(--brand-border)]">
-                        <span className="dsh-check__mark dsh-check__mark--todo" aria-hidden="true" />
-                        <span className="flex-1">{c.label}</span>
-                        <span className="text-[11.5px] font-bold text-[var(--brand-fg)]">Fazer →</span>
-                      </Link>
+                      <div key={c.label} className="flex gap-1.5 items-stretch">
+                        <Link href={`${c.href}${c.href.includes('?') ? '&' : '?'}b=${business.id}`} className="dsh-check hover:border-[var(--brand-border)] flex-1">
+                          <span className="dsh-check__mark dsh-check__mark--todo" aria-hidden="true" />
+                          <span className="flex-1">{c.label}{c.optional ? ' (opcional)' : ''}</span>
+                          <span className="text-[11.5px] font-semibold text-[var(--brand-fg)]">Fazer →</span>
+                        </Link>
+                        {/* FASE 2 · P8 — pular só o NÃO obrigatório (nunca trava o progresso). */}
+                        {c.optional && c.id && (
+                          <button type="button"
+                            onClick={() => { void skipSetupItem(c.id!); }}
+                            disabled={skipping === c.id}
+                            className="rounded-md border border-[var(--border)] px-2 text-[11px] font-semibold text-[var(--text-muted)] hover:bg-[var(--surface-hover)] disabled:opacity-60"
+                            title="Marcar como resolvido sem conectar agora">
+                            {skipping === c.id ? '…' : 'Pular'}
+                          </button>
+                        )}
+                      </div>
                     )
                   ))}
                 </div>
@@ -419,12 +502,12 @@ export default function DashboardPage() {
           <>
               <div className="dsh-card__head">
                 <h3 className="dsh-card__title">Presença online</h3>
-                {links.pagina === true && <Link href={`/pagina${q}`} className="text-[12px] font-bold text-[var(--brand-fg)] hover:underline">Editar página →</Link>}
+                {links.pagina === true && <Link href={`/pagina${q}`} className="text-[12px] font-semibold text-[var(--brand-fg)] hover:underline">Editar página →</Link>}
               </div>
               <div className="dsh-card__body">
                 {pageStats ? (
                   <>
-                    <p className="text-[11px] font-bold uppercase tracking-wider text-[var(--text-faint)] mb-2">Página · no período</p>
+                    <p className="text-[11px] font-semibold uppercase tracking-wider text-[var(--text-faint)] mb-2">Página · no período</p>
                     <p className="text-[12.5px] font-semibold text-[var(--text-soft)] mb-3">
                       {pageStats.published
                         ? <>Página <strong className="text-[var(--success-fg)]">publicada</strong> em /{pageStats.slug}.</>
@@ -445,16 +528,24 @@ export default function DashboardPage() {
         </section>
         )}
 
-        <section className="lg:col-span-7 dsh-card min-w-0">
+        {showMoney ? (
+        <section className={cn('dsh-card min-w-0', hasWhereToAct ? 'lg:col-span-7' : 'lg:col-span-12')}>
           <div className="dsh-card__head">
-            <h3 className="dsh-card__title">Período <span className="text-[var(--text-muted)] font-semibold">· indicadores e atividade</span></h3>
+            <h3 className="dsh-card__title">
+              Período <span className="text-[var(--text-muted)] font-semibold">· resumo</span>
+            </h3>
+            {links.resultados === true && (
+              <Link href={`/resultados${q}`} className="text-[12px] font-semibold text-[var(--brand-fg)] hover:underline">
+                Ver resultados →
+              </Link>
+            )}
             <PeriodSelector value={period} onChange={setPeriod} />
           </div>
           <div className="dsh-card__body">
             {showMoney && bookingRevenue ? (
               <div className="flex flex-wrap items-end justify-between gap-2 mb-1">
                 <div>
-                  <p className="text-[30px] leading-none font-extrabold tracking-tight text-[var(--text)]">{money(bookingRevenue.total)}</p>
+                  <p className="text-[30px] leading-none font-semibold tracking-tight text-[var(--text)]">{money(bookingRevenue.total)}</p>
                   <p className="text-[12px] text-[var(--text-muted)] mt-1.5">
                     {bookingRevenue.count} atendimentos elegíveis · ticket {money(bookingRevenue.ticket || 0)}
                   </p>
@@ -471,11 +562,11 @@ export default function DashboardPage() {
 
             {results && results.items.length > 0 && (
               <div className="mb-4">
-              <p className="text-[11px] font-bold uppercase tracking-wider text-[var(--text-faint)] mb-2">Resultados · {results.periodLabel}</p>
+              <p className="text-[11px] font-semibold uppercase tracking-wider text-[var(--text-faint)] mb-2">Resultados · {results.periodLabel}</p>
               <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
                 {results.items.slice(0, 4).map((it) => (
                   <div key={it.id} className="rounded-lg border border-[var(--border-soft)] bg-[var(--surface)] px-2.5 py-2">
-                    <p className="text-[17px] font-extrabold leading-tight text-[var(--text)] tabular-nums">
+                    <p className="text-[17px] font-semibold leading-tight text-[var(--text)] tabular-nums">
                       {it.unit === 'money' ? money(it.value) : it.unit === 'percent' ? `${it.value}%` : it.value}
                     </p>
                     <p className="text-[11px] font-semibold text-[var(--text-muted)] truncate">{it.label}</p>
@@ -486,42 +577,77 @@ export default function DashboardPage() {
               </div>
             )}
 
-            <div className="grid sm:grid-cols-2 gap-4">
-              <div>
-                <p className="text-[11px] font-bold uppercase tracking-wider text-[var(--text-faint)] mb-2">Agendamentos por dia · {period}d</p>
-                {series && series.some((d) => d.count > 0) ? (
-                  <BarsChart data={series} />
-                ) : (
-                  <p className="text-[12px] text-[var(--text-muted)] bg-[var(--surface-2)] rounded-lg px-3 py-6 text-center">
-                    {series ? 'Sem agendamentos no período ainda.' : 'Sem dados de agenda para este período.'}
-                  </p>
-                )}
+            {/* GRÁFICOS NÃO MORAM AQUI (§11/§12): Visão geral responde
+                "como está HOJE"; a leitura analítica (série por dia, mix de
+                status, comparação) vive em GESTÃO → Resultados, com o mesmo
+                dado real e navegação própria. Aqui fica só o atalho. */}
+            {links.resultados === true ? (
+              <div className="flex flex-wrap items-center justify-between gap-3 rounded-[var(--radius-md)] border border-[var(--border)] bg-[var(--surface-subtle)] px-3.5 py-3">
+                <p className="text-[12.5px] text-[var(--text-secondary)]">
+                  Comparecimento, serviços, profissionais e evolução histórica ficam em Resultados.
+                </p>
+                <Link href={`/resultados${q}`}
+                  className="inline-flex items-center gap-1.5 h-[var(--control-h-sm)] px-3 rounded-[var(--radius-sm)] border border-[var(--border-strong)] bg-white text-[12.5px] font-semibold text-[var(--text-primary)] hover:bg-[var(--surface-hover)]">
+                  Ver resultados <Icon n="chevronRight" size={13} />
+                </Link>
               </div>
-              <div>
-                <p className="text-[11px] font-bold uppercase tracking-wider text-[var(--text-faint)] mb-2">Status dos atendimentos · período</p>
-                {periodMix && Object.values(periodMix).some((v) => v > 0) ? (
-                  <DonutChart parts={[
-                    { label: 'Confirmados', value: periodMix.confirmed || 0, color: 'var(--success)' },
-                    { label: 'Concluídos', value: periodMix.completed || 0, color: 'var(--ops)' },
-                    { label: 'Aguardando', value: periodMix.pending || 0, color: 'var(--warning)' },
-                    { label: 'Faltas', value: periodMix.no_show || 0, color: 'var(--danger)' },
-                    { label: 'Cancelados', value: periodMix.cancelled || 0, color: 'var(--text-faint)' },
-                  ].filter((p) => p.value > 0)} />
-                ) : (
-                  <p className="text-[12px] text-[var(--text-muted)] bg-[var(--surface-2)] rounded-lg px-3 py-6 text-center">Nenhum atendimento no período ainda.</p>
-                )}
-              </div>
-            </div>
+            ) : null}
           </div>
         </section>
+        ) : (
+        <section className={cn('dsh-card min-w-0', hasWhereToAct ? 'lg:col-span-7' : 'lg:col-span-12')}>
+          <div className="dsh-card__head">
+            <h3 className="dsh-card__title">O que resolver agora</h3>
+            {links.agenda === true && (
+              <Link href={`/agenda${q}`} className="text-[12px] font-semibold text-[var(--brand-fg)] hover:underline">Ver agenda →</Link>
+            )}
+          </div>
+          <div className="dsh-card__body pt-2 space-y-3">
+            <div className="grid grid-cols-2 gap-2">
+              <div className="rounded-[var(--radius-md)] border border-[var(--border)] bg-[var(--surface-subtle)] px-3 py-2.5">
+                <p className="dsh-kpi__num text-[20px]">{today?.pending ?? 0}</p>
+                <p className="text-[11.5px] font-semibold text-[var(--text-secondary)]">aguardando confirmação</p>
+              </div>
+              <div className="rounded-[var(--radius-md)] border border-[var(--border)] bg-[var(--surface-subtle)] px-3 py-2.5">
+                <p className="dsh-kpi__num text-[20px]">{today?.needsClosure ?? 0}</p>
+                <p className="text-[11.5px] font-semibold text-[var(--text-secondary)]">precisam de registro</p>
+              </div>
+            </div>
+            {(data.needsClosure || []).length > 0 ? (
+              <ul className="space-y-1.5">
+                {(data.needsClosure || []).slice(0, 5).map((b) => (
+                  <li key={b.id}>
+                    <ListRow allowed={links.agenda === true} href={`/agenda${q}&data=${b.date}`}
+                      className="flex items-center gap-2.5 rounded-[var(--radius-md)] border border-[var(--border)] px-2.5 py-2 text-[12.5px]">
+                      <span className="text-[11px] font-semibold text-[var(--text-muted)] w-[68px] shrink-0 tabular-nums">{humanDay(b.date)} {b.time}</span>
+                      <span className="flex-1 min-w-0 truncate font-semibold text-[var(--text-primary)]">
+                        {b.customerName} <span className="font-normal text-[var(--text-muted)]">· {b.service}</span>
+                      </span>
+                      <Icon n="chevronRight" size={14} className="text-[var(--text-faint)]" />
+                    </ListRow>
+                  </li>
+                ))}
+              </ul>
+            ) : (
+              <p className="text-[12.5px] text-[var(--text-muted)] text-center py-4">Nada pendente de registro. Tudo em ordem.</p>
+            )}
+            {typeof data.tasksSummary?.open === 'number' && data.tasksSummary.open > 0 && (
+              <p className="text-[12.5px] text-[var(--text-secondary)]">
+                <strong className="text-[var(--text-primary)]">{data.tasksSummary?.open}</strong> pendências abertas da equipe.
+              </p>
+            )}
+          </div>
+        </section>
+        )}
       </div>
+      )}
 
       {/* ── 4 · Próximos · Conversas/tarefas · Atividade recente ── */}
       <div className="grid items-start gap-4 lg:grid-cols-3 mb-4">
         <section className="dsh-card min-w-0">
           <div className="dsh-card__head">
             <h3 className="dsh-card__title">Próximos atendimentos</h3>
-            {links.agenda === true && <Link href={`/agenda${q}`} className="text-[12px] font-bold text-[var(--brand-fg)] hover:underline">Ver agenda →</Link>}
+            {links.agenda === true && <Link href={`/agenda${q}`} className="text-[12px] font-semibold text-[var(--brand-fg)] hover:underline">Ver agenda →</Link>}
           </div>
           <div className="dsh-card__body pt-2">
             {modules.bookings ? (
@@ -533,7 +659,7 @@ export default function DashboardPage() {
                     <ListRow key={b.id} allowed={links.agenda === true} href={`/agenda${q}&data=${b.date}`}
                       className="flex items-center gap-2.5 rounded-lg border border-[var(--border-soft)] px-2.5 py-2 text-[12.5px]"
                       style={{ borderLeft: `3px solid ${STATUS_BAR[b.status] || 'var(--border-strong)'}` }}>
-                      <span className="text-[11px] font-bold text-[var(--text-muted)] w-16 shrink-0 tabular-nums">{humanDay(b.date)} {b.time}</span>
+                      <span className="text-[11px] font-semibold text-[var(--text-muted)] w-16 shrink-0 tabular-nums">{humanDay(b.date)} {b.time}</span>
                       <span className="flex-1 min-w-0 truncate font-semibold text-[var(--text)]">{b.customerName} <span className="font-normal text-[var(--text-muted)]">· {b.service}</span></span>
                       <StatusBadge tone={b.status === 'confirmed' ? 'emerald' : b.status === 'pending' ? 'orange' : 'blue'}>{bookDef(b.status).panel}</StatusBadge>
                     </ListRow>
@@ -548,7 +674,7 @@ export default function DashboardPage() {
                     return (
                       <ListRow key={o.id} allowed={links.pedidos === true} href={`/pedidos${q}`}
                         className="flex items-center gap-2.5 rounded-lg border border-[var(--border-soft)] px-2.5 py-2 text-[12.5px]">
-                        <span className="text-[11px] font-bold text-[var(--text-muted)] w-16 shrink-0">{o.code}</span>
+                        <span className="text-[11px] font-semibold text-[var(--text-muted)] w-16 shrink-0">{o.code}</span>
                         <span className="flex-1 min-w-0 truncate font-semibold text-[var(--text)]">{o.customerName}</span>
                         <span className={`text-[11px] px-1.5 py-0.5 rounded font-medium border ${toneCls(d.tone)}`}>{d.panel}</span>
                       </ListRow>
@@ -565,7 +691,7 @@ export default function DashboardPage() {
         <section className="dsh-card min-w-0">
           <div className="dsh-card__head">
             <h3 className="dsh-card__title">Conversas e tarefas</h3>
-            {links.conversas === true && <Link href={`/conversas${q}`} className="text-[12px] font-bold text-[var(--brand-fg)] hover:underline">Abrir →</Link>}
+            {links.conversas === true && <Link href={`/conversas${q}`} className="text-[12px] font-semibold text-[var(--brand-fg)] hover:underline">Abrir →</Link>}
           </div>
           <div className="dsh-card__body pt-2 space-y-1.5">
             {whatsapp ? (
@@ -573,7 +699,7 @@ export default function DashboardPage() {
                 className="flex items-center gap-2.5 rounded-lg border border-[var(--border-soft)] px-2.5 py-2 text-[12.5px]">
                 <span className="dsh-kpi__icon !w-7 !h-7" style={{ background: 'var(--cyan-bg)', color: 'var(--cyan-fg)' }}><Icon n="chat" size={15} /></span>
                 <span className="flex-1 font-semibold text-[var(--text)]">Conversas não lidas</span>
-                <span className="text-[13px] font-extrabold tabular-nums text-[var(--text)]">{whatsapp.unread}</span>
+                <span className="text-[13px] font-semibold tabular-nums text-[var(--text)]">{whatsapp.unread}</span>
               </ListRow>
             ) : (
               <p className="text-[12.5px] text-[var(--text-muted)] rounded-lg border border-dashed border-[var(--border)] px-2.5 py-2">Canal de conversas não conectado.</p>
@@ -583,14 +709,16 @@ export default function DashboardPage() {
                 className="flex items-center gap-2.5 rounded-lg border border-[var(--border-soft)] px-2.5 py-2 text-[12.5px]">
                 <span className="dsh-kpi__icon !w-7 !h-7" style={{ background: 'var(--warning-bg)', color: 'var(--warning-fg)' }}><Icon n="clock" size={15} /></span>
                 <span className="flex-1 font-semibold text-[var(--text)]">Leads para follow-up</span>
-                <span className="text-[13px] font-extrabold tabular-nums text-[var(--text)]">{totals.leads}</span>
+                <span className="text-[13px] font-semibold tabular-nums text-[var(--text)]">{totals.leads}</span>
               </ListRow>
             )}
             {canalConnected && (
               <div className="flex items-center gap-2.5 rounded-lg border border-[var(--success-border)] bg-[var(--success-bg)] px-2.5 py-2">
                 <span className="dsh-kpi__icon !w-7 !h-7" style={{ background: 'var(--success)', color: '#fff' }}><Icon n="chat" size={15} /></span>
                 <span className="flex-1 text-[11.5px] font-semibold text-[var(--success-fg)]">Envie mensagens para seus pacientes</span>
-                <Link href={`/conversas${q}`} className="text-[11.5px] font-bold text-white bg-[var(--success)] hover:bg-[var(--success-strong)] px-2.5 py-1.5 rounded-md">Abrir conversas</Link>
+                {links.conversas === true && (
+                  <Link href={`/conversas${q}`} className="text-[11.5px] font-semibold text-white bg-[var(--success)] hover:bg-[var(--success-strong)] px-2.5 py-1.5 rounded-md">Abrir conversas</Link>
+                )}
               </div>
             )}
             {taskSum && taskSum.open > 0 ? (
@@ -603,7 +731,7 @@ export default function DashboardPage() {
                       className="flex items-center gap-2.5 rounded-lg border border-[var(--border-soft)] px-2.5 py-2 text-[12.5px]">
                       <span className="w-4 h-4 rounded border-2 shrink-0" style={{ borderColor: tone }} aria-hidden="true" />
                       <span className="flex-1 min-w-0 truncate font-semibold text-[var(--text)]">{t.title}</span>
-                      <span className="text-[10.5px] font-bold" style={{ color: lbl === 'atrasada' ? 'var(--danger-fg)' : lbl === 'hoje' ? 'var(--warning-fg)' : 'var(--text-faint)' }}>{lbl}</span>
+                      <span className="text-[10.5px] font-semibold" style={{ color: lbl === 'atrasada' ? 'var(--danger-fg)' : lbl === 'hoje' ? 'var(--warning-fg)' : 'var(--text-faint)' }}>{lbl}</span>
                     </ListRow>
                   );
                 })}
@@ -615,7 +743,41 @@ export default function DashboardPage() {
             ) : (
               <p className="text-[12.5px] text-[var(--text-muted)] rounded-lg border border-dashed border-[var(--border)] px-2.5 py-2">Nenhuma tarefa pendente.</p>
             )}
-            {attention.length === 0 && !whatsapp && !taskSum && (
+            {/* F3-I · GoDoutor Intelligence — só métricas reais; vazio honesto. */}
+      {(() => {
+        const intel = data.intelligence;
+        if (!intel) return null;
+        const cards = [
+          { label: 'conversas atendidas', value: intel.conversations.attendedByAi },
+          { label: 'automações concluídas', value: intel.automation.completed },
+          { label: 'retornos recuperados', value: intel.followUp.rescheduled + intel.reactivation.reactivated },
+          { label: 'aguardando equipe', value: intel.conversations.waitingTeam },
+        ];
+        const empty = cards.every((c) => !c.value);
+        return (
+          <section className="mb-6 rounded-xl border border-[var(--border)] bg-[var(--surface)] p-4">
+            <div className="flex items-center gap-2 mb-1">
+              <Icon n="spark" size={14} />
+              <h3 className="text-sm font-semibold">GoDoutor Intelligence</h3>
+            </div>
+            {empty ? (
+              <p className="text-xs text-[var(--text-muted)]">
+                Ainda não há atividade registrada. Quando automações e conversas rodarem, os números aparecem aqui — sem estimativas.
+              </p>
+            ) : (
+              <ul className="grid grid-cols-2 sm:grid-cols-4 gap-3 mt-2">
+                {cards.map((c) => (
+                  <li key={c.label} className="rounded-lg bg-[var(--bg)] p-2 border border-[var(--border)]">
+                    <div className="text-lg font-semibold tabular-nums text-[var(--text)]">{c.value || '—'}</div>
+                    <div className="text-[11px] text-[var(--text-muted)]">{c.label}</div>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </section>
+        );
+      })()}
+      {attention.length === 0 && !whatsapp && !taskSum && (
               <p className="text-[12.5px] text-[var(--text-muted)] text-center py-4">Nada pendente por aqui.</p>
             )}
           </div>
@@ -722,7 +884,7 @@ function KpiDelta({ now, prev, has }: { now: number; prev: number; has: boolean 
   const up = pct >= 0;
   return (
     <span className="flex items-center gap-1.5 mt-1">
-      <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded ${up ? 'bg-[var(--success-bg)] text-[var(--success-fg)]' : 'bg-[var(--danger-bg)] text-[var(--danger-fg)]'}`}>
+      <span className={`text-[10px] font-semibold px-1.5 py-0.5 rounded ${up ? 'bg-[var(--success-bg)] text-[var(--success-fg)]' : 'bg-[var(--danger-bg)] text-[var(--danger-fg)]'}`}>
         {up ? '↑' : '↓'} {Math.abs(pct)}%
       </span>
       <span className="text-[10px] text-[var(--text-faint)]">vs. ontem ({prev})</span>
@@ -745,62 +907,5 @@ function greeting(): string {
 }
 
 /* ── Gráfico de barras SVG (série real de agendamentos/dia) ── */
-function BarsChart({ data }: { data: Array<{ date: string; count: number }> }) {
-  const W = 320, H = 96, pad = 4;
-  const max = Math.max(1, ...data.map((d) => d.count));
-  const bw = (W - pad * 2) / Math.max(1, data.length);
-  const todayISO = new Date().toISOString().slice(0, 10);
-  return (
-    <svg viewBox={`0 0 ${W} ${H}`} className="w-full h-[96px]" role="img" aria-label={`Agendamentos por dia, máximo ${max} em um dia`}>
-      <line x1={pad} y1={H - 14} x2={W - pad} y2={H - 14} stroke="var(--surface-3)" strokeWidth={1} />
-      {(() => {
-        const pts = data.map((d, i) => [pad + i * bw + bw / 2, H - 14 - (d.count / max) * (H - 26)] as const);
-        const line = pts.map(([x, y]) => `${x.toFixed(1)},${y.toFixed(1)}`).join(' ');
-        const area = `${pad},${H - 14} ${line} ${(W - pad)},${H - 14}`;
-        const last = pts[pts.length - 1];
-        return (
-          <>
-            <polygon points={area} fill="var(--brand-soft)" />
-            <polyline points={line} fill="none" stroke="var(--brand)" strokeWidth={2} strokeLinejoin="round" strokeLinecap="round" />
-            {last && <circle cx={last[0]} cy={last[1]} r={3.5} fill="var(--brand)" stroke="var(--surface)" strokeWidth={1.5} />}
-          </>
-        );
-      })()}
-      <text x={pad} y={H - 2} fontSize={9} fill="var(--text-faint)">{data[0]?.date.slice(8, 10)}/{data[0]?.date.slice(5, 7)}</text>
-      <text x={W - pad} y={H - 2} fontSize={9} textAnchor="end" fill="var(--text-faint)">{data[data.length - 1]?.date.slice(8, 10)}/{data[data.length - 1]?.date.slice(5, 7)}</text>
-    </svg>
-  );
-}
 
 /* ── Donut SVG (contagens reais de hoje por status) ── */
-function DonutChart({ parts }: { parts: Array<{ label: string; value: number; color: string }> }) {
-  const total = parts.reduce((a, p) => a + p.value, 0);
-  const R = 34, C = 2 * Math.PI * R;
-  let acc = 0;
-  return (
-    <div className="flex items-center gap-4">
-      <svg viewBox="0 0 90 90" className="w-[104px] h-[104px] shrink-0" role="img" aria-label={`Distribuição de ${total} atendimentos de hoje por status`}>
-        <circle cx={45} cy={45} r={R} fill="none" stroke="var(--surface-3)" strokeWidth={12} />
-        {parts.map((p) => {
-          const frac = p.value / total;
-          const dash = `${frac * C} ${C}`;
-          const off = -acc * C;
-          acc += frac;
-          return <circle key={p.label} cx={45} cy={45} r={R} fill="none" stroke={p.color} strokeWidth={12}
-            strokeDasharray={dash} strokeDashoffset={off} transform="rotate(-90 45 45)" />;
-        })}
-        <text x={45} y={42} textAnchor="middle" fontSize={17} fontWeight={800} fill="var(--text)">{total}</text>
-        <text x={45} y={55} textAnchor="middle" fontSize={8} fill="var(--text-faint)">hoje</text>
-      </svg>
-      <ul className="space-y-1 min-w-0">
-        {parts.map((p) => (
-          <li key={p.label} className="flex items-center gap-2 text-[11.5px] font-semibold text-[var(--text-soft)]">
-            <span className="w-2 h-2 rounded-full shrink-0" style={{ background: p.color }} aria-hidden="true" />
-            <span className="flex-1 truncate">{p.label}</span>
-            <span className="tabular-nums text-[var(--text)]">{p.value} ({Math.round((p.value / total) * 100)}%)</span>
-          </li>
-        ))}
-      </ul>
-    </div>
-  );
-}

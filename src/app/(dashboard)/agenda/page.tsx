@@ -29,7 +29,7 @@ import { todayISO, addDaysISO, weekdayOf, formatDateBR, nowHM } from '@/lib/tz';
 import { nowLinePlacement } from '@/lib/agenda-nowline';
 import { WEEKDAYS, WEEKDAYS_LONG, timeToMin, minToTime, cn } from '@/lib/utils';
 import type { Availability, AvailabilityException, Booking, BookingConfig, BookingStatus, Professional, Service } from '@/lib/types';
-import { Avatar, Badge, Drawer, ListSkeleton, Button, IconButton, AttentionStrip, Tabs } from '@/components/ui';
+import { Avatar, Badge, Drawer, AgendaSkeleton, ListSkeleton, Button, IconButton, AttentionStrip, Segmented } from '@/components/ui';
 import { Icon } from '@/components/icons';
 import {
   ATTENTION_MARK_CLS, ATTENTION_RING_CLS, BOOKING_BLOCK, BOOKING_DOT, BOOKING_STATUS,
@@ -140,6 +140,8 @@ interface ColumnVM {
   key: string;
   label: string;
   sub: string;
+  /** Foto real do profissional (fallback: iniciais no Avatar). */
+  photo?: string;
   date: string;
   professionalId: string;
   isProfessional: boolean;
@@ -231,7 +233,7 @@ const GridColumn = memo(function GridColumn({ column, basisPct, variant, highlig
           aria-hidden="true"
         >
           <span className={
-            'text-[10px] font-bold px-1.5 py-0.5 rounded-b-md shadow-xs '
+            'text-[10px] font-semibold px-1.5 py-0.5 rounded-b-md shadow-xs '
             + (highlight.tone === 'free'
               ? 'bg-[var(--success)] text-white'
               : highlight.tone === 'loading'
@@ -278,7 +280,7 @@ const GridColumn = memo(function GridColumn({ column, basisPct, variant, highlig
           {/* quem + quando + o quê + com quem — detalhe fica no drawer.
               Densidade do mockup: nome forte, linhas de apoio discretas. */}
           <span className="block text-[10.5px] font-semibold tabular-nums leading-tight opacity-75">{b.timeRange}</span>
-          <span className="block text-[12.5px] font-bold leading-tight truncate">{b.name}</span>
+          <span className="block text-[12.5px] font-semibold leading-tight truncate">{b.name}</span>
           {b.height > 62 && <span className="block text-[11px] leading-tight truncate opacity-75">{b.service}</span>}
           {b.height > 80 && b.pro && <span className="block text-[11px] leading-tight truncate opacity-70">{b.pro}</span>}
           {b.height > 96 && (
@@ -290,11 +292,11 @@ const GridColumn = memo(function GridColumn({ column, basisPct, variant, highlig
           )}
           {b.checkedInAt && (
             <span title="Cliente já fez check-in" aria-hidden="true"
-              className="absolute bottom-1 right-1 w-4 h-4 rounded-full text-[9px] font-black leading-4 text-center bg-[var(--success)] text-white">✓</span>
+              className="absolute bottom-1 right-1 w-4 h-4 rounded-full text-[9px] font-semibold leading-4 text-center bg-[var(--success)] text-white">✓</span>
           )}
           {b.attention ? (
             <span title="Precisa de fechamento" aria-hidden="true"
-              className={`absolute top-1 right-1 w-4.5 h-4.5 w-[18px] h-[18px] rounded-full text-[10px] font-black leading-[18px] text-center ${ATTENTION_MARK_CLS}`}>
+              className={`absolute top-1 right-1 w-4.5 h-4.5 w-[18px] h-[18px] rounded-full text-[10px] font-semibold leading-[18px] text-center ${ATTENTION_MARK_CLS}`}>
               !
             </span>
           ) : (
@@ -370,6 +372,14 @@ export default function AgendaPage() {
     /** A3.4 fix (revisão B5): "Encaixar na agenda" vem da FILA já preenchido. */
     contactId?: string; name?: string; phone?: string; serviceId?: string;
   } | null>(null);
+  // FASE 2 · P9 — Quick Create global: ?novo=1 abre o sheet de agendamento
+  // direto (uma abertura por visita; SPA não reabre sozinho ao voltar).
+  const [novoHandled, setNovoHandled] = useState(false);
+  useEffect(() => {
+    if (novoHandled || !businessId || params.get('novo') !== '1') return;
+    setNovoHandled(true);
+    setCreating({ date: '', time: '', professionalId: '', name: '', phone: '' });
+  }, [novoHandled, businessId, params]);
   // A3.4 · Bloco 4 — fila do balcão (entidade própria, fora da agenda).
   const [queueRows, setQueueRows] = useState<QueueRow[]>([]);
   // A3.4 fix (revisão B5): o registro do atendimento tem permissão PRÓPRIA —
@@ -479,7 +489,12 @@ export default function AgendaPage() {
   // pela recepção ao VOLTAR para a tela — sem F5 e sem polling.
   useRevalidateOnFocus(load);
 
-  useEffect(() => { bookingsRef.current = new Map(bookings.map((b) => [b.id, b])); }, [bookings]);
+  useEffect(() => {
+    bookingsRef.current = new Map(bookings.map((b) => [b.id, b]));
+    // P0-1: se o detalhe está aberto, atualiza o registro em silêncio com a
+    // lista freca — NUNCA fecha o sheet por causa de autosave/reload.
+    setDetail((d) => (d ? bookings.find((b) => b.id === d.id) || d : d));
+  }, [bookings]);
 
   const activePros = useMemo(() => pros.filter((p) => p.active !== false), [pros]);
   // A2-B3 (F5): enquanto o catálogo chega, o default do produto (60) vale;
@@ -583,7 +598,7 @@ export default function AgendaPage() {
   // Filtros compactos (status + profissional) só escondem blocos/colunas da
   // grade — dados, drag e ações continuam sobre os mesmos agendamentos.
   const columns = useMemo<ColumnVM[]>(() => {
-    const base: Array<{ key: string; label: string; sub: string; date: string; professionalId: string; isProfessional: boolean }> = [];
+    const base: Array<{ key: string; label: string; sub: string; photo?: string; date: string; professionalId: string; isProfessional: boolean }> = [];
     if (view === 'week') {
       for (const d of weekDays) {
         base.push({
@@ -601,7 +616,7 @@ export default function AgendaPage() {
       const filtering = proFilter ? specPros.some((x) => x.id === proFilter) : false;
       const shown = filtering ? specPros.filter((x) => x.id === proFilter) : specPros;
       for (const p of shown) {
-        base.push({ key: p.id, label: p.name, sub: p.role || '', date: focus, professionalId: p.id, isProfessional: true });
+        base.push({ key: p.id, label: p.name, sub: p.role || '', photo: (p as { photo?: string }).photo, date: focus, professionalId: p.id, isProfessional: true });
       }
       // Com especialidade ativa não existe coluna "sem profissional".
       if (!filtering && !specFilter && bookings.some((b) => b.date === focus && !b.professionalId)) {
@@ -639,7 +654,8 @@ export default function AgendaPage() {
           leftPct: l.leftPct,
           widthPct: l.widthPct,
           time: b.time,
-          name: b.customerName,
+          // FASE 2 · P6 — veterinária: PET primeiro; tutor vira contexto.
+          name: b.petName || b.customerName,
           service: serviceName(b.serviceId),
           timeRange: `${b.time}–${endHM}`,
           statusLabel,
@@ -671,7 +687,7 @@ export default function AgendaPage() {
   // Colunas usadas pelo cálculo de destino (mesma ordem da renderização).
   useEffect(() => {
     columnsRef.current = columns.map((c) => ({
-      key: c.key, label: c.label, date: c.date, professionalId: c.professionalId, isProfessional: c.isProfessional,
+      key: c.key, label: c.label, sub: c.sub, photo: c.photo, date: c.date, professionalId: c.professionalId, isProfessional: c.isProfessional,
     }));
   }, [columns]);
 
@@ -693,15 +709,12 @@ export default function AgendaPage() {
     return () => { ro?.disconnect(); window.removeEventListener('resize', measure); };
   }, [columns.length, view, loaded]);
 
-  // ── Altura útil da grade (P1.1 — viewport real, sem scroll fantasma) ──
-  // Medimos a posição REAL do container (header + toolbar + margens +
-  // sidebar + tela cheia já estão embutidos no `top` medido) e usamos o
-  // resto da viewport. A altura final é `min(conteúdo, disponível)`:
-  //   • a grade cabe  → o container fica do tamanho exato do conteúdo e a
-  //                     barra de rolagem NÃO aparece (nem por alguns pixels);
-  //   • não cabe      → scroll SOMENTE interno da grade.
-  // Nenhum min-height arbitrário força overflow; nada é "escondido".
-  const gridContentH = HEADER_H + gridHeight;
+  // ── Altura da grade = altura do CONTEÚDO (a página rola, não a grade) ──
+  // Regra de produto: o painel NÃO é viewport travada. Verticalmente a
+  // agenda cresce no fluxo do documento; html/body é o scroll principal.
+  // Horizontal permanece no próprio scroller (overflow-x) quando há mais
+  // colunas que cabem na largura. Sem caixa de 700px com scrollbar interna
+  // para ver 08h–21h.
   // Conteúdo horizontal REAL da grade: pode estourar a largura no dia com
   // muitos profissionais / na semana em tela estreita. Quando estoura, a
   // barra horizontal entra — e é ELA o gatilho do scroll vertical fantasma
@@ -742,25 +755,17 @@ export default function AgendaPage() {
     return () => obs.disconnect();
   }, [columns.length]);
 
-  const [gridMaxH, setGridMaxH] = useState<number | null>(null);
-  // Altura útil da rail da fila: mesma linha de base da grade. Fechar a
-  // fila não deixa valor velho — o efeito roda de novo quando showQueue muda.
+  // Altura útil da região do workspace (viewport - topo - folga): é o teto
+  // da rail da fila E da grade (FASE E: scroll interno, a página não rola
+  // junto com a agenda).
   const [railMaxH, setRailMaxH] = useState<number | null>(null);
   useLayoutEffect(() => {
     const fit = () => {
       const el = scrollRef.current;
       if (!el) return;
       const top = el.getBoundingClientRect().top;
-      // Reserva a altura da barra horizontal QUANDO ela está visível: é o
-      // que impede `scrollHeight` de passar de `clientHeight` por causa dela
-      // e fabricar a rolagem vertical fantasma de alguns pixels.
-      const reserve = top >= 0 && window.innerHeight - top < VIEWPORT_BOTTOM_PAD
-        ? window.innerHeight - top
-        : hbarReserve;
-      const h = window.innerHeight - top - VIEWPORT_BOTTOM_PAD - reserve;
-      setGridMaxH(Math.max(320, Math.floor(h)));
-      // A rail termina na MESMA linha de base da grade (o topo dela é o topo do
-      // workspace, não o do scroller) — e a lista rola por dentro.
+      // A rail termina perto da base da viewport (o topo dela é o topo do
+      // workspace) — lista rola por dentro; a agenda não.
       const wtop = workspaceRef.current?.getBoundingClientRect().top ?? top;
       setRailMaxH(Math.max(320, Math.floor(window.innerHeight - wtop - VIEWPORT_BOTTOM_PAD)));
     };
@@ -1129,222 +1134,152 @@ export default function AgendaPage() {
 
   return (
     <div>
-      {/* Cabeçalho compacto: a grade é o conteúdo — o título não compete. */}
-      <div className="flex flex-wrap items-center justify-between gap-3 mb-4">
-        <div className="flex items-start gap-2.5 min-w-0">
-          <span className="w-9 h-9 shrink-0 rounded-lg bg-[var(--brand-soft)] text-[var(--brand-fg)] flex items-center justify-center shadow-brand">
-            <Icon n="calendar" size={18} />
-          </span>
-          <div className="min-w-0 flex-1">
-            <h1 className="text-lg font-bold tracking-tight text-[var(--text)] leading-tight">Agenda</h1>
-            {/* Bloco truncável (guarda de mobile): some por corte, nunca por
-                rolagem horizontal. Uma frase só — o resto vive na Legenda. */}
-            <span className="block max-w-full text-xs text-[var(--text-muted)] truncate">
-              Clique num atendimento para detalhes e ações.
-            </span>
-          </div>
+      {/* CABEÇALHO (§13): título + o que a tela faz + as DUAS ações que
+          importam. Nada de legenda permanente, nada de card de fila disputando
+          o título: a semântica de estado já está nos próprios blocos da grade
+          e a fila vive no rail ao lado (ou no drawer, em tela pequena). */}
+      <header className="flex flex-wrap items-start justify-between gap-x-4 gap-y-2 mb-3.5">
+        <div className="min-w-0">
+          <h1 className="text-[22px] font-semibold tracking-tight text-[var(--text-primary)] leading-tight">Agenda</h1>
         </div>
-        <div className="flex flex-wrap items-center justify-end gap-1.5 ml-auto">
-          {loaded && (
-            <div className="dsh-card flex items-center gap-3 pl-2.5 pr-2 py-2">
-              <span className="dsh-kpi__icon" style={{ background: 'var(--brand-soft)', color: 'var(--brand-fg)' }}>
-                <Icon n="users" size={18} />
-              </span>
-              <span className="leading-tight mr-1">
-                <span className="block text-[12.5px] font-bold text-[var(--text)]">Fila de atendimento</span>
-                <span className="block text-[11px] text-[var(--text-muted)]">
-                  {(queueInfo.waiting + queueInfo.called + queueInfo.inService) > 0
-                    ? <><strong className="text-[var(--warning-fg)] font-semibold">{queueInfo.waiting + queueInfo.called} aguardando</strong>{' · '}<strong className="text-[var(--success-fg)] font-semibold">{queueInfo.inService} em atendimento</strong></>
-                    : 'ninguém aguardando agora'}
-                </span>
-              </span>
-              <button type="button" aria-expanded={showQueue}
-                aria-label="Fila de atendimento"
-                onClick={() => setShowQueue((v) => !v)}
-                title={showQueue ? 'Fechar fila de atendimento' : 'Abrir fila de atendimento'}
-                className="inline-flex items-center gap-1 text-[12.5px] font-bold text-[var(--brand-fg)] hover:underline px-2 py-1.5">
-                Ver fila <Icon n="chevronRight" size={13} />
-              </button>
-            </div>
-          )}
-              {/* P1.1 — UM botão de filtro (contador quando ativo). O popover
-                  agrupa Status + Especialidade + Profissional pesquisável:
-                  escala para 10/20/50 profissionais sem poluir a toolbar. */}
-              <div className="relative lg:hidden" ref={filterWrapRef}>
-                <Button variant="secondary" size="sm" onClick={() => { setFilterOpen((o) => !o); setProSearch(''); }}
-                  aria-expanded={filterOpen} aria-haspopup="dialog" title="Filtros">
-                  <Icon n="filter" size={13} />
-                  {activeFilterCount > 0 ? `Filtro · ${activeFilterCount}` : 'Filtro'}
-                  <Icon n="chevD" size={12} className={`transition-transform ${filterOpen ? 'rotate-180' : ''}`} />
-                </Button>
+        <div className="flex flex-wrap items-center gap-2">
+          {/* Filtros: UM botão, UM popover (Status · Serviços · Profissional) e
+              contador quando há filtro ativo. Nada de três selects enormes
+              fixos acima da grade. */}
+          <div className="relative" ref={filterWrapRef}>
+            <Button variant="secondary" size="sm" onClick={() => { setFilterOpen((o) => !o); setProSearch(''); }}
+              aria-expanded={filterOpen} aria-haspopup="dialog" title="Filtros da agenda">
+              <Icon n="filter" size={14} />
+              {activeFilterCount > 0 ? `Filtros · ${activeFilterCount}` : 'Filtros'}
+              <Icon n="chevD" size={12} className={`transition-transform ${filterOpen ? 'rotate-180' : ''}`} />
+            </Button>
 
-                {filterOpen && (
-                  <div role="dialog" aria-label="Filtros da agenda"
-                    className="absolute right-0 top-full mt-1.5 z-30 w-[300px] max-w-[calc(100vw-1.25rem)] bg-white border border-zinc-200 rounded-lg shadow-lg text-left">
-                    <div className="px-3 pt-2.5 pb-1.5 flex items-center justify-between gap-2">
-                      <p className="text-[11px] font-bold uppercase tracking-wider text-zinc-400">Filtros</p>
-                      {activeFilterCount > 0 && (
-                        <button type="button" onClick={clearFilters}
-                          className="text-xs font-semibold text-[var(--danger)] hover:text-[var(--danger-strong)]">
-                          Limpar filtros
+            {filterOpen && (
+              <div role="dialog" aria-label="Filtros da agenda"
+                className="absolute right-0 top-[calc(100%+6px)] z-50 w-[310px] max-w-[calc(100vw-1.25rem)] bg-[var(--surface)] border border-[var(--border)] rounded-[var(--radius-xl)] shadow-lg text-left">
+                <div className="px-3 pt-2.5 pb-1.5 flex items-center justify-between gap-2">
+                  <p className="text-[11px] font-semibold uppercase tracking-wider text-[var(--text-muted)]">Filtros</p>
+                  {activeFilterCount > 0 && (
+                    <button type="button" onClick={clearFilters}
+                      className="text-[12px] font-semibold text-[var(--danger-fg)] hover:underline">
+                      Limpar filtros
+                    </button>
+                  )}
+                </div>
+
+                <div className="px-3 pb-2.5">
+                  <p className="text-[11px] font-semibold text-[var(--text-secondary)] mb-1.5">Status</p>
+                  <div className="flex flex-wrap gap-1">
+                    <FilterChip active={!statusFilter} onClick={() => setStatusFilter('')}>Todos</FilterChip>
+                    {statusOptions.map((st) => (
+                      <FilterChip key={st} active={statusFilter === st} onClick={() => setStatusFilter(statusFilter === st ? '' : st)}>
+                        {BOOKING_STATUS[st].panel}
+                      </FilterChip>
+                    ))}
+                  </div>
+                </div>
+
+                {specialties.length > 0 && (
+                  <div className="px-3 pb-2.5 border-t border-[var(--border-soft)] pt-2.5">
+                    <p className="text-[11px] font-semibold text-[var(--text-secondary)] mb-1.5">Serviços</p>
+                    <div className="flex flex-wrap gap-1">
+                      <FilterChip active={!specFilter} onClick={() => pickSpec('')}>Todos</FilterChip>
+                      {specialties.map((r) => (
+                        <FilterChip key={r} active={specFilter === r} onClick={() => pickSpec(specFilter === r ? '' : r)}>
+                          {r}
+                        </FilterChip>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {activePros.length > 0 && (
+                  <div className="px-3 pb-3 border-t border-[var(--border-soft)] pt-2.5">
+                    <p className="text-[11px] font-semibold text-[var(--text-secondary)] mb-1.5">Profissional</p>
+                    <div className="relative">
+                      <Icon n="search" size={13} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-[var(--text-muted)]" />
+                      <input value={proSearch} onChange={(e) => setProSearch(e.target.value)}
+                        placeholder="Pesquisar profissional…" aria-label="Pesquisar profissional"
+                        className="w-full text-[12.5px] bg-[var(--surface-subtle)] border border-[var(--border)] rounded-[var(--radius-sm)] pl-8 pr-2 py-1.5 focus:outline-none focus:border-[var(--brand)] focus:bg-white" />
+                    </div>
+                    <div className="mt-1.5 max-h-44 overflow-y-auto ws-scroll space-y-0.5">
+                      <button type="button" onClick={() => pickPro('')}
+                        className={cn('w-full flex items-center gap-2 px-2 py-1.5 rounded-[var(--radius-sm)] text-left text-[12.5px] font-medium',
+                          !proFilter ? 'bg-[var(--surface-hover)]' : 'hover:bg-[var(--surface-subtle)]')}>
+                        <span className="flex-1">Todos</span>
+                        {!proFilter && <Icon n="check" size={13} className="text-[var(--success-fg)] shrink-0" />}
+                      </button>
+                      {prosInFilter.map((p) => (
+                        <button key={p.id} type="button" onClick={() => pickPro(proFilter === p.id ? '' : p.id)}
+                          className={cn('w-full flex items-center gap-2 px-2 py-1.5 rounded-[var(--radius-sm)] text-left text-[12.5px]',
+                            proFilter === p.id ? 'bg-[var(--surface-hover)]' : 'hover:bg-[var(--surface-subtle)]')}>
+                          <Avatar name={p.name} src={p.photo} size={20} />
+                          <span className="flex-1 min-w-0 truncate">
+                            <span className="font-semibold text-[var(--text-primary)]">{p.name}</span>
+                            {p.role && <span className="text-[var(--text-muted)]"> · {p.role}</span>}
+                          </span>
+                          {proFilter === p.id && <Icon n="check" size={13} className="text-[var(--success-fg)] shrink-0" />}
                         </button>
+                      ))}
+                      {prosInFilter.length === 0 && (
+                        <p className="text-[12.5px] text-[var(--text-muted)] px-2 py-1.5">Nenhum profissional encontrado.</p>
                       )}
                     </div>
-
-                    <div className="px-3 pb-2.5">
-                      <p className="text-[11px] font-semibold text-zinc-500 mb-1.5">Status</p>
-                      <div className="flex flex-wrap gap-1">
-                        <FilterChip active={!statusFilter} onClick={() => setStatusFilter('')}>Todos</FilterChip>
-                        {statusOptions.map((s) => (
-                          <FilterChip key={s} active={statusFilter === s} onClick={() => setStatusFilter(statusFilter === s ? '' : s)}>
-                            {BOOKING_STATUS[s].panel}
-                          </FilterChip>
-                        ))}
-                      </div>
-                    </div>
-
-                    {specialties.length > 0 && (
-                      <div className="px-3 pb-2.5 border-t border-zinc-100 pt-2.5">
-                        <p className="text-[11px] font-semibold text-zinc-500 mb-1.5">Especialidade</p>
-                        <div className="flex flex-wrap gap-1">
-                          <FilterChip active={!specFilter} onClick={() => pickSpec('')}>Todas</FilterChip>
-                          {specialties.map((r) => (
-                            <FilterChip key={r} active={specFilter === r} onClick={() => pickSpec(specFilter === r ? '' : r)}>
-                              {r}
-                            </FilterChip>
-                          ))}
-                        </div>
-                      </div>
-                    )}
-
-                    {activePros.length > 0 && (
-                      <div className="px-3 pb-3 border-t border-zinc-100 pt-2.5">
-                        <p className="text-[11px] font-semibold text-zinc-500 mb-1.5">Profissional</p>
-                        <div className="relative">
-                          <Icon n="search" size={13} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-zinc-400" />
-                          <input value={proSearch} onChange={(e) => setProSearch(e.target.value)}
-                            placeholder="Pesquisar profissional..." aria-label="Pesquisar profissional"
-                            className="w-full text-xs bg-zinc-50 border border-zinc-200 rounded-md pl-8 pr-2 py-1.5 focus:outline-none focus:ring-1 focus:ring-[var(--action)] focus:bg-white" />
-                        </div>
-                        <div className="mt-1.5 max-h-44 overflow-y-auto ws-scroll space-y-0.5">
-                          <button type="button" onClick={() => pickPro('')}
-                            className={cn('w-full flex items-center gap-2 px-2 py-1.5 rounded-md text-left text-xs font-medium',
-                              !proFilter ? 'bg-zinc-100' : 'hover:bg-zinc-50')}>
-                            <span className="flex-1">Todos</span>
-                            {!proFilter && <Icon n="check" size={13} className="text-emerald-600 shrink-0" />}
-                          </button>
-                          {prosInFilter.map((p) => (
-                            <button key={p.id} type="button" onClick={() => pickPro(proFilter === p.id ? '' : p.id)}
-                              className={cn('w-full flex items-center gap-2 px-2 py-1.5 rounded-md text-left text-xs',
-                                proFilter === p.id ? 'bg-zinc-100' : 'hover:bg-zinc-50')}>
-                              <span className="flex-1 min-w-0 truncate">
-                                <span className="font-semibold text-zinc-800">{p.name}</span>
-                                {p.role && <span className="text-zinc-400"> · {p.role}</span>}
-                              </span>
-                              {proFilter === p.id && <Icon n="check" size={13} className="text-emerald-600 shrink-0" />}
-                            </button>
-                          ))}
-                          {prosInFilter.length === 0 && (
-                            <p className="text-xs text-zinc-400 px-2 py-1.5">Nenhum profissional encontrado.</p>
-                          )}
-                        </div>
-                      </div>
-                    )}
                   </div>
                 )}
               </div>
-              <div ref={helpWrapRef} className="relative lg:hidden">
-                <Button type="button" variant="secondary" size="sm" aria-expanded={helpOpen} aria-haspopup="dialog"
-                  onClick={() => setHelpOpen((v) => !v)} title="Legenda e como usar a grade">
-                  <Icon n="eye" size={14} />
-                  <span className="hidden sm:inline">Legenda</span>
-                </Button>
-                {helpOpen && (
-                  <div role="dialog" aria-label="Legenda e ajuda da agenda"
-                    className="absolute right-0 top-[calc(100%+6px)] z-50 w-[min(22rem,calc(100vw-2rem))] rounded-lg border border-[var(--border)] bg-[var(--surface)] shadow-lg p-3 space-y-2.5">
-                    <div className="flex flex-wrap items-center gap-x-3 gap-y-1" aria-label="Legenda dos estados">
-                      {statusOptions.map((s) => (
-                        <span key={s} className="inline-flex items-center gap-1 text-[11px] font-medium text-zinc-500">
-                          <span className={`w-2 h-2 rounded-sm ${BOOKING_DOT[s]}`} aria-hidden="true" />
-                          {BOOKING_STATUS[s].panel}
-                        </span>
-                      ))}
-                      <span className="text-[11px] font-medium text-zinc-500 inline-flex items-center gap-1">
-                        <span className={`w-3.5 h-3.5 rounded-full text-[9px] font-black leading-[14px] text-center ${ATTENTION_MARK_CLS}`} aria-hidden="true">!</span>
-                        precisa de fechamento
-                      </span>
-                    </div>
-                    <p className="text-xs text-[var(--text-muted)]">Branco: horário livre para algum serviço · Cinza: {bookings.length>=500?'disponibilidade não calculada':'indisponível'} · Cartão: agendamento com estado. A reserva é confirmada pelo servidor.{bookings.length>=500?' Limite de leitura atingido: consulte disponibilidade no formulário.':''}</p>
-                    <p className="text-xs text-[var(--text-muted)] inline-flex items-center gap-1">
-                      <Icon n="calendarPlus" size={12} />
-                      clique num horário vago para agendar · arraste um cartão para remarcar
-                    </p>
-                  </div>
-                )}
-              </div>
-        </div>
-        </div>
-
-        {/* Filtros + legenda INLINE no desktop (hierarquia do mockup): em telas
-            menores os mesmos controles vivem nos popovers Filtro/Legenda. */}
-        <div className="hidden lg:flex flex-wrap items-center gap-x-5 gap-y-2 mb-2">
-          {activePros.length > 0 && (
-            <label className="flex items-center gap-2 text-[12px] font-semibold text-[var(--text-muted)]">
-              Profissionais:
-              <span className="flex -space-x-1.5" aria-hidden="true">
-                {activePros.slice(0, 4).map((p) => <Avatar key={p.id} name={p.name} size={22} />)}
-              </span>
-              <select value={proFilter} onChange={(e) => pickPro(e.target.value)}
-                aria-label="Filtrar por profissional"
-                className="text-[12px] font-semibold text-[var(--text)] bg-[var(--surface)] border border-[var(--border)] rounded-md px-2 py-1.5 max-w-[180px]">
-                <option value="">Todos</option>
-                {prosInFilter.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
-              </select>
-            </label>
-          )}
-          {specialties.length > 0 && (
-            <label className="flex items-center gap-2 text-[12px] font-semibold text-[var(--text-muted)]">
-              Serviços:
-              <select value={specFilter} onChange={(e) => pickSpec(e.target.value)}
-                aria-label="Filtrar por especialidade"
-                className="text-[12px] font-semibold text-[var(--text)] bg-[var(--surface)] border border-[var(--border)] rounded-md px-2 py-1.5 max-w-[180px]">
-                <option value="">Todas</option>
-                {specialties.map((r) => <option key={r} value={r}>{r}</option>)}
-              </select>
-            </label>
-          )}
-          <label className="flex items-center gap-2 text-[12px] font-semibold text-[var(--text-muted)]">
-            Status:
-            <select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value as BookingStatus | '')}
-              aria-label="Filtrar por status"
-              className="text-[12px] font-semibold text-[var(--text)] bg-[var(--surface)] border border-[var(--border)] rounded-md px-2 py-1.5 max-w-[160px]">
-              <option value="">Todos</option>
-              {statusOptions.map((st) => <option key={st} value={st}>{BOOKING_STATUS[st].panel}</option>)}
-            </select>
-          </label>
-          {activeFilterCount > 0 && (
-            <button type="button" onClick={clearFilters}
-              className="text-[12px] font-semibold text-[var(--danger)] hover:text-[var(--danger-strong)]">
-              Limpar filtros
-            </button>
-          )}
-        </div>
-        <div className="hidden lg:flex flex-wrap items-center gap-x-4 gap-y-1 mb-2.5" aria-label="Legenda dos estados">
-            {statusOptions.map((st) => (
-              <span key={st} className="inline-flex items-center gap-1.5 text-[11px] font-medium text-[var(--text-muted)]">
-                <span className={`w-2 h-2 rounded-full ${BOOKING_DOT[st]}`} aria-hidden="true" />
-                {BOOKING_STATUS[st].panel}
-              </span>
-            ))}
-            <span className="inline-flex items-center gap-1.5 text-[11px] font-medium text-[var(--text-muted)]">
-              <span className={`w-3 h-3 rounded-full text-[8px] font-black leading-3 text-center ${ATTENTION_MARK_CLS}`} aria-hidden="true">!</span>
-              Precisa de fechamento
-            </span>
-            <span className="inline-flex items-center gap-1.5 text-[11px] font-medium text-[var(--text-muted)]">
-              <span className="w-2 h-2 rounded-full bg-zinc-300" aria-hidden="true" />
-              Indisponível
-            </span>
+            )}
           </div>
+
+          {/* Legenda: ajuda sob demanda (popover), nunca uma faixa fixa — e
+              nunca competindo com Filtros/Fila/Novo: aqui é um "?" só ícone,
+              o mesmo affordance de ajuda do topbar. */}
+          <div ref={helpWrapRef} className="relative order-last">
+            <IconButton icon="help" label="Legenda e como usar a grade" tip="Legenda e como usar a grade"
+              variant="ghost" aria-expanded={helpOpen} aria-haspopup="dialog"
+              onClick={() => setHelpOpen((v) => !v)} />
+            {helpOpen && (
+              <div role="dialog" aria-label="Legenda e ajuda da agenda"
+                className="absolute right-0 top-[calc(100%+6px)] z-50 w-[min(24rem,calc(100vw-2rem))] rounded-[var(--radius-xl)] border border-[var(--border)] bg-[var(--surface)] shadow-lg p-3.5 space-y-2.5">
+                <p className="text-[12.5px] text-[var(--text-secondary)]">Clique num atendimento para detalhes e ações; arraste para reagendar.</p>
+                <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5" aria-label="Legenda dos estados">
+                  {statusOptions.map((st) => (
+                    <span key={st} className="inline-flex items-center gap-1.5 text-[11.5px] font-medium text-[var(--text-secondary)]">
+                      <span className={`w-2.5 h-2.5 rounded-full ${BOOKING_DOT[st]}`} aria-hidden="true" />
+                      {BOOKING_STATUS[st].panel}
+                    </span>
+                  ))}
+                  <span className="text-[11.5px] font-medium text-[var(--text-secondary)] inline-flex items-center gap-1.5">
+                    <span className={`w-3.5 h-3.5 rounded-full text-[9px] font-semibold leading-[14px] text-center ${ATTENTION_MARK_CLS}`} aria-hidden="true">!</span>
+                    precisa de fechamento
+                  </span>
+                </div>
+                <p className="text-[12px] text-[var(--text-muted)]">Branco: horário livre · Cinza: indisponível. A reserva é confirmada pelo servidor.</p>
+                <p className="text-[12px] text-[var(--text-muted)] inline-flex items-center gap-1.5">
+                  <Icon n="calendarPlus" size={12} /> clique num horário vago para agendar · arraste um cartão para remarcar
+                </p>
+              </div>
+            )}
+          </div>
+
+          {loaded && (
+            <Button variant="secondary" size="sm" onClick={() => setShowQueue((v) => !v)}
+              aria-expanded={showQueue} aria-pressed={showQueue} title="Fila de atendimento">
+              <Icon n="users" size={14} />
+              Fila
+              {(queueInfo.waiting + queueInfo.called + queueInfo.inService) > 0 && (
+                <span className="ml-0.5 inline-flex items-center justify-center min-w-[18px] h-[18px] px-1 rounded-pill text-[10.5px] font-bold tabular-nums bg-[var(--surface-3)] text-[var(--text-soft)] border border-[var(--border)]">
+                  {queueInfo.waiting + queueInfo.called}
+                </span>
+              )}
+            </Button>
+          )}
+
+          <Button onClick={() => setCreating({ date: focus, time: '', professionalId: '' })} variant="primary" size="sm">
+            <Icon n="calendarPlus" size={15} /> Novo agendamento
+          </Button>
+        </div>
+      </header>
 
       <PermissionNotice message={notice?.title} hint={notice?.hint} onDismiss={dismiss} />
 
@@ -1363,7 +1298,7 @@ export default function AgendaPage() {
         >
           <Icon n={flash.tone === 'ok' ? 'checkCircle' : 'alert'} size={15} className="mt-px" />
           <span>{flash.text}</span>
-          <button onClick={() => setFlash(null)} className="ml-auto font-bold underline underline-offset-2 shrink-0">Fechar</button>
+          <button onClick={() => setFlash(null)} className="ml-auto font-semibold underline underline-offset-2 shrink-0">Fechar</button>
         </div>
       )}
 
@@ -1375,7 +1310,7 @@ export default function AgendaPage() {
             <>
               {pendencies.slice(0, 4).map((b) => (
                 <button key={b.id} onClick={() => setDetail(b)} className="text-xs font-medium bg-[var(--surface)] border border-[var(--attention-border)] text-[var(--attention-fg)] px-2.5 py-1 rounded-md hover:bg-[var(--attention-bg-hover)]">
-                  {formatDateBR(b.date)} {b.time} · {b.customerName}
+                  {formatDateBR(b.date)} {b.time} · {b.petName || b.customerName}
                 </button>
               ))}
               {pendencies.length > 4 && <span className="text-xs font-medium text-[var(--attention-fg)] self-center">+{pendencies.length - 4}</span>}
@@ -1408,7 +1343,7 @@ export default function AgendaPage() {
           relative z-40: o popover de filtros abre sobre a grade e precisa
           ficar acima dos cabeçalhos sticky (z-20/30) das colunas. */}
       <div className="relative z-40 ws-panel mt-3 mb-4">
-        <div className="flex flex-wrap items-center gap-x-3 gap-y-2.5 px-3 py-2.5"><Button onClick={() => setCreating({ date: focus, time: '', professionalId: '' })} variant="primary"><Icon n="calendarPlus" size={15} /> Novo agendamento</Button>
+        <div className="flex flex-wrap items-center gap-x-4 gap-y-2.5 px-3 py-2.5">
           {/* Navegação no tempo (A3.4): [◀] [Hoje] [▶] + título da data ao lado.
               O "Hoje" fica SEMPRE no mesmo lugar, entre as setas — antes ele
               aparecia e desaparecia conforme a data, então o botão se movia
@@ -1421,7 +1356,7 @@ export default function AgendaPage() {
               <button type="button" onClick={() => setFocus(today)}
                 aria-pressed={isToday}
                 title={isToday ? 'Você já está em hoje' : 'Ir para hoje'}
-                className={cn('h-9 px-3 rounded-none text-xs font-bold border-r border-[var(--border)] transition-colors',
+                className={cn('h-9 px-3 rounded-none text-xs font-semibold border-r border-[var(--border)] transition-colors',
                   isToday
                     ? 'bg-[var(--brand-soft)] text-[var(--brand-fg)] cursor-default'
                     : 'text-[var(--text)] hover:bg-[var(--surface-hover)]')}>
@@ -1430,27 +1365,28 @@ export default function AgendaPage() {
               <IconButton icon="chevR" label={navLabel(1)} tip={navLabel(1)} variant="ghost" onClick={() => move(1)}
                 className="w-9 h-9 rounded-none text-[var(--text-muted)]" />
             </span>
-            <label className="relative inline-flex flex-col min-w-0 max-w-[min(26rem,calc(100vw-12rem))] cursor-pointer rounded-md px-1 -mx-1 py-0.5 hover:bg-[var(--surface-hover)] focus-within:shadow-focus" title="Escolher outra data">
-              <span className="text-[15px] font-bold leading-tight text-[var(--text)] capitalize truncate" aria-live="polite">{focusLabel}</span>
-              <span className="text-[11px] font-semibold text-[var(--text-muted)] leading-tight inline-flex items-center gap-1">
-                <Icon n="calendar" size={11} /> {focusRange} · clique para escolher a data
-              </span>
+            <label className="relative inline-flex items-center gap-1.5 h-9 min-w-0 max-w-[min(26rem,calc(100vw-9rem))] cursor-pointer rounded-md px-2 -mx-2 hover:bg-[var(--surface-hover)] focus-within:shadow-focus"
+              title={`${focusRange} · clique para escolher a data`}>
+              <Icon n="calendar" size={13} className="shrink-0 text-[var(--text-muted)]" />
+              <span className="text-[15px] font-semibold leading-tight text-[var(--text)] capitalize truncate" aria-live="polite">{focusLabel}</span>
               <input type="date" value={focus} max="2100-12-31" onChange={(e) => { if (/^\d{4}-\d{2}-\d{2}$/.test(e.target.value)) setFocus(e.target.value); }}
-                aria-label="Escolher data" className="absolute inset-0 w-full h-full opacity-0 cursor-pointer" />
+                aria-label={`Escolher data (${focusRange})`} className="absolute inset-0 w-full h-full opacity-0 cursor-pointer" />
             </label>
           </div>
-          <Tabs
-            items={[
-              { id: 'day' as View, label: 'Dia', icon: 'calendar' },
-              { id: 'week' as View, label: 'Semana', icon: 'grid' },
-              { id: 'month' as View, label: 'Mês', icon: 'receipt' },
-              { id: 'list' as View, label: 'Lista', icon: 'tasks' },
-            ]}
-            value={view}
-            onChange={(v) => { endDrag(); setView(v); }}
-            ariaLabel="Visualização da agenda"
-            size="sm"
-          />
+          <div className="sm:ml-auto min-w-0 max-w-full">
+            <Segmented
+              items={[
+                { id: 'day' as View, label: 'Dia', icon: 'calendar' },
+                { id: 'week' as View, label: 'Semana', icon: 'grid' },
+                { id: 'month' as View, label: 'Mês', icon: 'receipt' },
+                { id: 'list' as View, label: 'Lista', icon: 'tasks' },
+              ]}
+              value={view}
+              onChange={(v) => { endDrag(); setView(v); }}
+              ariaLabel="Visualização da agenda"
+              size="sm"
+            />
+          </div>
         </div>
         {isDragging && view !== 'month' && (
           <div
@@ -1474,7 +1410,7 @@ export default function AgendaPage() {
               <Icon n={hover?.time ? 'checkCircle' : 'calendar'} size={14} />
               {hover?.time ? 'Pode soltar aqui' : 'Solte no novo horário'}
               <span className={
-                'font-bold px-2 py-0.5 rounded-pill border bg-white shadow-xs '
+                'font-semibold px-2 py-0.5 rounded-pill border bg-white shadow-xs '
                 + (hover?.time
                   ? 'border-[var(--success-border)] text-[var(--success-fg)]'
                   : slotsState === 'error'
@@ -1496,13 +1432,13 @@ export default function AgendaPage() {
         )}
       </div>
 
-      {denied ? <AccessDenied area="Agenda" /> : failed ? <AreaLoadError area="Agenda" message={failed} onRetry={load}/> : !loaded ? <ListSkeleton rows={4} /> : view === 'list' ? (
+      {denied ? <AccessDenied area="Agenda" /> : failed ? <AreaLoadError area="Agenda" message={failed} onRetry={load}/> : !loaded ? <AgendaSkeleton /> : view === 'list' ? (
         <section className="space-y-3" aria-label="Lista de atendimentos do dia">
           <p className="text-sm text-[var(--text-muted)]">{formatDateBR(focus)} · Toque para abrir o atendimento. Horários livres e intervalos estão na visualização Dia.</p>
           {columns.flatMap(c => c.blocks).length === 0 && <div className="p-8 bg-[var(--surface)] border border-[var(--border)] rounded-lg"><h2 className="font-semibold">Nenhum atendimento nesta seleção</h2><p className="text-sm text-[var(--text-muted)] mt-1">Confira os filtros ou use Novo agendamento para consultar horários disponíveis.</p></div>}
           {[...new Map(columns.flatMap(c => c.blocks).map(b => [b.id,b])).values()].sort((a,b) => a.time.localeCompare(b.time)).map(item => <button key={item.id} type="button" onClick={() => { const booking = bookings.find(b => b.id === item.id); if (booking) setDetail(booking); }} className="w-full flex gap-4 items-start text-left p-4 bg-[var(--surface)] border border-[var(--border)] rounded-lg">
             <span className="font-semibold tabular-nums text-[var(--brand-fg)]">{item.time}</span>
-            <span className="min-w-0 flex-1"><strong className="block text-sm">{bookings.find(b => b.id === item.id)?.customerName}</strong><span className="block text-xs text-[var(--text-muted)] mt-1">{item.service} · {proName(bookings.find(b => b.id === item.id)?.professionalId || '') || 'Sem profissional'}</span><span className="inline-block text-xs mt-2 font-semibold">{item.statusLabel}{bookings.find(b => b.id === item.id)?.bookingKind === 'fit_in' ? ' · Encaixe' : ''}</span></span><Icon n="chevR" size={16} />
+            <span className="min-w-0 flex-1"><strong className="block text-sm">{(() => { const bk = bookings.find(b => b.id === item.id); return bk?.petName || bk?.customerName; })()}</strong><span className="block text-xs text-[var(--text-muted)] mt-1">{(() => { const bk = bookings.find(b => b.id === item.id); return bk?.petName ? `Tutor: ${bk.customerName} · ` : ''; })()}{item.service} · {proName(bookings.find(b => b.id === item.id)?.professionalId || '') || 'Sem profissional'}</span><span className="inline-block text-xs mt-2 font-semibold">{item.statusLabel}{bookings.find(b => b.id === item.id)?.bookingKind === 'fit_in' ? ' · Encaixe' : ''}</span></span><Icon n="chevR" size={16} />
           </button>)}
         </section>
       ) : view === 'month' ? (
@@ -1525,7 +1461,7 @@ export default function AgendaPage() {
                 <button key={d} onClick={() => { setPresentation({data:d,view:'day'}); }} className={`bg-white p-1.5 min-h-[72px] text-left hover:bg-zinc-50 ${d === today ? 'ring-1 ring-inset ring-emerald-500 bg-emerald-50/40' : ''} ${!inMonth ? 'bg-zinc-50 text-zinc-400' : ''}`}>
                   <span className="flex items-center justify-between">
                     <span className={`text-xs font-semibold ${d === today ? 'text-emerald-700' : inMonth ? 'text-zinc-700' : 'text-zinc-400'}`}>{Number(d.slice(8, 10))}</span>
-                    {pend > 0 && <span className="text-[9px] font-bold bg-amber-500 text-white rounded-full px-1">{pend}</span>}
+                    {pend > 0 && <span className="text-[9px] font-semibold bg-amber-500 text-white rounded-full px-1">{pend}</span>}
                   </span>
                   {list.length > 0 && (
                     <>
@@ -1539,11 +1475,17 @@ export default function AgendaPage() {
           </div>
         </div>
       ) : (
-        <div className="bg-white border border-zinc-200 overflow-hidden">
-          {/* Altura EXATA = min(conteúdo, viewport disponível). Se a grade
-              cabe, o container tem o tamanho dela e não há barra alguma. */}
-          <div ref={scrollRef} className={`overflow-auto ws-scroll ${isDragging ? 'select-none' : ''}`}
-            style={{ height: gridMaxH ? Math.min(gridContentH, gridMaxH) : undefined }}>
+        <div className="bg-white border border-zinc-200">
+          {/* FASE E — SCROLL INTERNO (a grade domina o workspace): o scroller
+              é limitado à altura útil da viewport (a MESMA medição da rail da
+              fila) e rola por dentro — cabeçalhos de coluna e gutter ficam
+              presos nele e a PÁGINA para de crescer com a grade. A rolagem
+              horizontal continua aqui dentro quando as colunas não cabem. */}
+          <div
+            ref={scrollRef}
+            className={`overflow-auto ws-scroll ${isDragging ? 'select-none' : ''}`}
+            style={railMaxH ? { maxHeight: railMaxH } : undefined}
+          >
             <div className="flex" style={{ minWidth: dayWidth }}>
               {/* Gutter de horas (fixo na horizontal) */}
               <div className="sticky left-0 z-30 bg-white shrink-0 border-r border-zinc-200" style={{ width: GUTTER_W }}>
@@ -1566,14 +1508,14 @@ export default function AgendaPage() {
                     <div key={c.key} className="shrink-0 px-3 flex items-center gap-2 border-r border-zinc-100 last:border-r-0" style={{ minWidth: COL_MIN, width: `${100 / Math.max(1, columns.length)}%`, height: HEADER_H }}>
                       {view === 'day' && (
                         c.isProfessional ? (
-                          <Avatar name={c.label} size={20} />
+                          <Avatar name={c.label} src={c.photo} size={22} />
                         ) : (
-                          <span className="w-5 h-5 rounded-md bg-[var(--surface-2)] text-[var(--text-muted)] text-[10px] font-bold flex items-center justify-center shrink-0">—</span>
+                          <span className="w-5 h-5 rounded-md bg-[var(--surface-2)] text-[var(--text-muted)] text-[10px] font-semibold flex items-center justify-center shrink-0">—</span>
                         )
                       )}
                       <span className="min-w-0">
-                        <span className={`block text-sm font-semibold truncate ${c.isToday ? 'text-[var(--brand-fg)]' : 'text-zinc-800'}`}>{c.label}</span>
-                        {c.sub && <span className="block text-[10px] text-zinc-400 truncate">{c.sub}</span>}
+                        <span className={`block text-[13px] font-semibold truncate ${c.isToday ? 'text-[var(--brand-fg)]' : 'text-[var(--text-primary)]'}`}>{c.label}</span>
+                        {c.sub && <span className="block text-[11px] text-[var(--text-muted)] truncate">{c.sub}</span>}
                       </span>
                     </div>
                   ))}
@@ -1675,7 +1617,7 @@ export default function AgendaPage() {
       >
         <div className="bg-[var(--text)] text-white rounded-md shadow-lg px-2.5 py-1.5 max-w-[220px]">
           <p className="text-[11px] font-semibold leading-tight truncate">
-            {dragging ? `${dragging.customerName} · ${serviceName(dragging.serviceId)}` : ''}
+            {dragging ? `${dragging.petName || dragging.customerName} · ${serviceName(dragging.serviceId)}` : ''}
           </p>
           <p className={
             'text-[11px] leading-tight mt-0.5 '
@@ -1691,7 +1633,7 @@ export default function AgendaPage() {
         <Drawer open onClose={() => !saving && setDropAsk(null)} title="Confirmar reagendamento" width="max-w-lg">
           <div className="p-5">
             <p className="font-semibold">{dropConfirmQuestion(dropAsk.date, dropAsk.time)}</p>
-            <p className="text-sm text-zinc-600 mt-1.5"><strong>{dropAsk.booking.customerName}</strong> · {serviceName(dropAsk.booking.serviceId)}</p>
+            <p className="text-sm text-zinc-600 mt-1.5"><strong>{dropAsk.booking.petName || dropAsk.booking.customerName}</strong>{dropAsk.booking.petName ? ` (tutor: ${dropAsk.booking.customerName})` : ''} · {serviceName(dropAsk.booking.serviceId)}</p>
             <p className="text-sm mt-1">
               {formatDateBR(dropAsk.booking.date)} {dropAsk.booking.time} → <strong>{formatDateBR(dropAsk.date)} {dropAsk.time}</strong>
             </p>
@@ -1732,7 +1674,12 @@ export default function AgendaPage() {
             });
           }}
           onClose={() => setDetail(null)}
-          onChanged={() => { setDetail(null); load(); }}
+          /* P0-1: save silencioso NÃO fecha o detalhe nem o atendimento —
+             só sincroniza a grade em segundo plano. */
+          onSaved={() => { void load(); }}
+          /* Mudança estrutural (status/finalizar): atualiza dados, mantém
+             sheets abertos — o fechamento é só onClose (ação do usuário). */
+          onChanged={() => { void load(); }}
         />
       )}
 
@@ -1759,6 +1706,7 @@ export default function AgendaPage() {
             });
           }}
           onClose={() => { setQueueEncounter(null); void loadQueue(); }}
+          onSaved={loadQueue}
           onChanged={loadQueue}
         />
       )}

@@ -12,6 +12,7 @@ import {
   routeRequiresBusiness, visiblePanelRoutes,
 } from '../panel';
 import { inPanelPath } from '../client-auth';
+import { permissionsFor } from '../permissions';
 import { requiresActiveBusiness } from '../business-context';
 import type { PanelContext } from '../panel';
 import type { PermissionId } from '../types';
@@ -46,8 +47,8 @@ function dashboardRouteFolders(): string[] {
 // 1. CATÁLOGO — a única lista de destinos
 // ═══════════════════════════════════════════════════════════════
 describe('catálogo — completude (por qual porta se chega até mim?)', () => {
-  it('tem as 22 portas da arquitetura consolidada', () => {
-    expect(PANEL_ROUTES).toHaveLength(22);
+  it('tem as 26 portas da arquitetura consolidada (inclui /perfil)', () => {
+    expect(PANEL_ROUTES).toHaveLength(26);
   });
 
   it('toda porta do catálogo tem uma rota real no disco', () => {
@@ -144,10 +145,14 @@ describe('catálogo — completude (por qual porta se chega até mim?)', () => {
 // ═══════════════════════════════════════════════════════════════
 describe('catálogo — seções', () => {
   it('as 8 seções canônicas, na ordem de uso, todas no menu principal (A3.4)', () => {
-    // A3.4: "Início" virou SEÇÃO de uma porta (`/dashboard`). Antes o item
-    // primário flutuava sem título; com o menu maior ele ficava sem contexto.
+    // GODOUTOR 2.0: os rótulos passaram a descrever o que o usuário ENCONTRA,
+    // não o organograma interno ("Início" → "Visão geral", "Oferta" → "Clínica",
+    // "Crescimento" → "Automação", "Resultados" → "Gestão", "Presença" →
+    // "Página", "Administração" → "Configurações"). Os IDs das seções e as
+    // ROTAS seguem iguais de propósito: renomear rota/permissão por causa de
+    // rótulo quebraria links, permissões gravadas e integrações.
     expect(PANEL_SECTIONS.map((s) => s.label)).toEqual([
-      'Início', 'Operação', 'Pessoas', 'Oferta', 'Crescimento', 'Resultados', 'Presença', 'Administração',
+      'Visão geral', 'Operação', 'Pessoas', 'Clínica', 'Automação', 'Gestão', 'Página', 'Configurações',
     ]);
     // NENHUMA seção fica presa no rodapé: a barra tem um comportamento só.
     // Configurações é porta do menu como qualquer outra (decisão A3.3).
@@ -176,19 +181,25 @@ describe('catálogo — seções', () => {
     expect(panelRoutesIn('presenca').map((r) => r.href)).toEqual(['/pagina']);
   });
 
-  it('Oferta é o que eu ofereço e vendo (catálogo), não a operação da equipe', () => {
+  it('Clínica (ex-Oferta) é o que eu ofereço e vendo, não a operação da equipe', () => {
     // A3.4: Profissionais e Disponibilidade SAÍRAM daqui — a régua é quem usa
     // a tela no dia a dia (quem atende), não a semelhança de assunto.
+    // GODOUTOR 2.0: a seção ganhou o rótulo "Clínica" (a palavra que o dono da
+    // clínica usa), mas o conteúdo continua sendo CATÁLOGO/OFERTA — quem atende
+    // e quando atende seguem em Operação.
     expect(panelRoutesIn('oferta').map((r) => r.href)).toEqual(['/servicos', '/produtos']);
   });
 
-  it('Operação é o dia a dia; Administração é ajuste raro', () => {
+  it('Operação é o dia a dia; Configurações é ajuste raro', () => {
     // A3.4: Profissionais, Disponibilidade e Pedidos entraram em Operação.
     // Pedidos só existe com o módulo ativo (modes: ['orders']).
+    // GODOUTOR final: Pendências (/tarefas) voltou AO MENU de Operação para
+    // quem tem permissão real — a recepção resolve pendências o dia todo e
+    // não pode depender de atalho contextual para chegar na fila.
     expect(panelRoutesIn('operacao').map((r) => r.href)).toEqual([
-      '/agenda', '/profissionais', '/disponibilidade', '/conversas', '/agente', '/tarefas', '/pedidos',
+      '/estrutura', '/agenda', '/profissionais', '/disponibilidade', '/conversas', '/agente', '/tarefas', '/pedidos',
     ]);
-    expect(panelRoutesIn('administracao').map((r) => r.href)).toEqual(['/equipe', '/recursos', '/configuracoes']);
+    expect(panelRoutesIn('administracao').map((r) => r.href)).toEqual(['/perfil', '/equipe', '/recursos', '/configuracoes']);
   });
 });
 
@@ -201,7 +212,7 @@ describe('sidebar — projeção (permissão ∩ módulos, ordem do catálogo)',
     // A3.4: Início é seção de uma porta; `primary` (item sem seção) fica vazio.
     expect(nav.primary).toBeNull();
     expect(nav.sections.map((s) => s.label)).toEqual([
-      'Início', 'Operação', 'Pessoas', 'Oferta', 'Crescimento', 'Resultados', 'Presença', 'Administração',
+      'Visão geral', 'Operação', 'Pessoas', 'Clínica', 'Automação', 'Gestão', 'Página', 'Configurações',
     ]);
     // Administração agora é a última seção do MENU (não do rodapé fixo).
     expect(nav.footerSections).toEqual([]);
@@ -210,14 +221,14 @@ describe('sidebar — projeção (permissão ∩ módulos, ordem do catálogo)',
       // A3.4 — Operação: agenda + quem atende + quando atende + o dia.
       // (Pedidos/Produtos exigem os módulos correspondentes: entram no teste
       // seguinte, com o contexto de quem os tem.)
-      '/agenda', '/profissionais', '/disponibilidade',
+      '/estrutura', '/agenda', '/profissionais', '/disponibilidade',
       '/conversas', '/agente', '/tarefas',
       '/clientes', '/funil',
       '/servicos',
-      '/campanhas', '/automacoes', '/canais',
-      '/resultados', '/organizacao',
+      '/campanhas', '/automacoes', '/followup', '/canais',
+      '/resultados', '/financeiro', '/organizacao',
       '/pagina',
-      '/equipe', '/recursos', '/configuracoes',
+      '/equipe', '/configuracoes',
     ]);
     expect(nav.all).toEqual(nav.allowed);
   });
@@ -226,9 +237,9 @@ describe('sidebar — projeção (permissão ∩ módulos, ordem do catálogo)',
     const labels = new Map(PANEL_ROUTES.map((r) => [r.href, r.label]));
     expect(labels.get('/disponibilidade')).toBe('Disponibilidade');
     expect(labels.get('/conversas')).toBe('Conversas');
-    expect(labels.get('/funil')).toBe('Funil');
+    expect(labels.get('/funil')).toBe('Oportunidades');
     expect(labels.get('/canais')).toBe('Canais & Integrações');
-    expect(labels.get('/tarefas')).toBe('Tarefas');
+    expect(labels.get('/tarefas')).toBe('Pendências');
     expect(labels.get('/execucoes')).toBe('Execuções');
     expect(labels.get('/organizacao')).toBe('Organização');
     expect(labels.get('/agente')).toBe('Assistente');
@@ -277,14 +288,18 @@ describe('sidebar — projeção (permissão ∩ módulos, ordem do catálogo)',
 
     const nav = panelNavigation(ctx());
     expect(nav.sidebar.map((r) => r.href)).not.toContain('/execucoes');
-    expect(nav.more.map((r) => r.href)).toEqual(['/execucoes']);
+    // GODOUTOR final — Pendências e Oportunidades voltaram à LINHA do menu
+    // (permissão real); o que continua acessível só por atalho contextual:
+    // Recursos (capacidades dentro de Configurações), Execuções (diagnóstico
+    // dentro de Automações) e Meu perfil (menu da conta, QUALQUER usuário).
+    expect(nav.more.map((r) => r.href)).toEqual(['/execucoes', '/perfil', '/recursos']);
     expect(panelAccess('/execucoes', ctx()).state).toBe('allow');
   });
 
   it('sem permissão a porta some do menu (esconder é UX; a segurança é no servidor)', () => {
     const c = ctx({ permissions: { dashboard: true, agenda: true } });
-    // Tarefas entra junto porque aceita a permissão de agenda (array = qualquer
-    // uma satisfaz): quem opera a agenda precisa ver o que ficou combinado.
+    // Pendências aceita a permissão de agenda (array = qualquer uma satisfaz)
+    // e, desde o GODOUTOR final, fica NA LINHA do menu para quem opera.
     expect(visiblePanelRoutes(c).map((r) => r.href)).toEqual(['/dashboard', '/agenda', '/tarefas']);
     expect(hasPermission('equipe', c)).toBe(false);
     expect(isPanelRouteVisible(panelRouteFor('/equipe')!, c)).toBe(false);
@@ -301,6 +316,57 @@ describe('sidebar — projeção (permissão ∩ módulos, ordem do catálogo)',
     expect(isPanelRouteAllowed(tarefas, ctx({ permissions: { leads: true } }))).toBe(true);
     expect(isPanelRouteAllowed(tarefas, ctx({ permissions: { pagina: true } }))).toBe(false);
     expect(panelAccess('/tarefas', ctx({ permissions: { agenda: true } })).state).toBe('allow');
+  });
+
+  // ═══════════════════════════════════════════════════════════════
+  // MENU POR PAPEL — GODOUTOR final (§5.2 do audit 360)
+  // O menu é projeção do catálogo: papel nenhum tem lista própria.
+  // ═══════════════════════════════════════════════════════════════
+  it('ATENDENTE: agenda/conversas/clientes/pendências no menu; nada de administração', () => {
+    const c = ctx({ permissions: permissionsFor('ATENDENTE'), features: { whatsapp: true } });
+    const hrefs = panelNavigation(c).sidebar.map((r) => r.href);
+    expect(hrefs).toContain('/dashboard');
+    expect(hrefs).toContain('/agenda');
+    expect(hrefs).toContain('/conversas');
+    expect(hrefs).toContain('/clientes');
+    // Pendências é fila de trabalho da recepção: PRECISA estar no menu.
+    expect(hrefs).toContain('/tarefas');
+    // Sem 'leads' não vê Oportunidades; sem 'config'/'pagina'/'equipe'/
+    // 'financeiro' não vê administração, página, automação nem dinheiro.
+    expect(hrefs).not.toContain('/funil');
+    for (const forbidden of ['/equipe', '/configuracoes', '/pagina', '/automacoes', '/financeiro', '/canais', '/recursos']) {
+      expect(hrefs, `${forbidden} não deve aparecer para ATENDENTE`).not.toContain(forbidden);
+    }
+  });
+
+  it('SECRETARIA: vê Oportunidades (leads) e Pendências; administração segue fora', () => {
+    const c = ctx({ permissions: permissionsFor('SECRETARIA'), features: { whatsapp: true } });
+    const hrefs = panelNavigation(c).sidebar.map((r) => r.href);
+    expect(hrefs).toContain('/funil');
+    expect(hrefs).toContain('/tarefas');
+    expect(hrefs).toContain('/agenda');
+    expect(hrefs).toContain('/conversas');
+    expect(hrefs).not.toContain('/servicos');
+    expect(hrefs).not.toContain('/equipe');
+    expect(hrefs).not.toContain('/configuracoes');
+  });
+
+  it('PROFISSIONAL sem whatsapp não vê Conversas (a porta some, não dá 403)', () => {
+    const c = ctx({ permissions: permissionsFor('PROFISSIONAL'), features: { whatsapp: true } });
+    const hrefs = panelNavigation(c).sidebar.map((r) => r.href);
+    expect(hrefs).toContain('/agenda');
+    expect(hrefs).toContain('/tarefas');
+    expect(hrefs).toContain('/clientes');
+    // Papel de quem ATENDE não tem 'whatsapp' por padrão: sem a permissão a
+    // porta nem existe no menu — nunca um item visível que recusaria.
+    expect(hrefs).not.toContain('/conversas');
+    expect(isPanelRouteAllowed(panelRouteFor('/conversas')!, c)).toBe(false);
+  });
+
+  it('VIEWER sem permissões não ganha menu (nem destino de queda)', () => {
+    const c = ctx({ permissions: permissionsFor('VIEWER') });
+    expect(panelNavigation(c).sidebar).toEqual([]);
+    expect(firstAllowedPath(c)).toBe('');
   });
 
   it('firstAllowedPath nunca deixa o usuário sem destino (e prefere porta do menu)', () => {
@@ -386,9 +452,9 @@ describe('acesso — 403 amigável, nunca logout', () => {
   it('áreas novas rotulam o 403 com o nome da porta', () => {
     expect(panelAccess('/disponibilidade', ctx({ permissions: {} })).area).toBe('Disponibilidade');
     expect(panelAccess('/conversas', ctx({ permissions: {} })).area).toBe('Conversas');
-    expect(panelAccess('/funil', ctx({ permissions: {} })).area).toBe('Funil');
+    expect(panelAccess('/funil', ctx({ permissions: {} })).area).toBe('Oportunidades');
     expect(panelAccess('/canais', ctx({ permissions: {} })).area).toBe('Canais & Integrações');
-    expect(panelAccess('/tarefas', ctx({ permissions: {} })).area).toBe('Tarefas');
+    expect(panelAccess('/tarefas', ctx({ permissions: {} })).area).toBe('Pendências');
     expect(panelAccess('/execucoes', ctx({ permissions: {} })).area).toBe('Execuções');
     expect(panelAccess('/organizacao', ctx({ permissions: {} })).area).toBe('Organização');
   });
@@ -506,7 +572,8 @@ describe('uma porta por conceito', () => {
     const cfgPage = read('src/app/(dashboard)/configuracoes/page.tsx');
     expect(cfgPage).not.toMatch(/CanaisIntegracoesView/);
     expect(cfgPage).not.toMatch(/IntegracoesView/);
-    expect(cfgPage).toMatch(/\['negocio', 'Negócio'\]/);
+    // GODOUTOR final: vocabulário de clínica (a palavra que o dono usa).
+    expect(cfgPage).toMatch(/\['negocio', 'Clínica'\]/);
     expect(cfgPage).toMatch(/\['agenda', 'Agenda'\]/);
     // A3.3 CONVERGÊNCIA (ponto 2): a aba "Aparência" / "Identidade do painel"
     // SAIU da UI. O painel usa o design system padrão — cor de sidebar não é
@@ -620,7 +687,7 @@ describe('uma porta por conceito', () => {
     const nav = panelNavigation(ctx());
     expect(nav.sidebar.map((r) => r.href)).toContain('/organizacao');
     expect(nav.sections.find((s) => s.id === 'resultados')?.items.map((r) => r.href))
-      .toEqual(['/resultados', '/organizacao']);
+      .toEqual(['/resultados', '/financeiro', '/organizacao']);
     const page = read('src/app/(dashboard)/organizacao/page.tsx');
     expect(page).toMatch(/Adicionar filial/);
     expect(page).not.toMatch(/businesses\.length > 1/);
@@ -643,11 +710,14 @@ describe('uma porta por conceito', () => {
       ...walk(path.join(root, 'src/app/(dashboard)')),
       ...walk(path.join(root, 'src/components')),
     ];
-    // A3.4: só Execuções segue fora do menu; Pedidos passou a ser porta de
-    // Operação (com gate de módulo). Destino fora do menu SEM atalho vira
-    // porta fantasma — por isso a lista abaixo é curta de propósito.
+    // GODOUTOR final: a régua do menu é FREQUÊNCIA + contexto. Pendências e
+    // Oportunidades voltaram ao menu (permissão real, recepção trabalha nelas
+    // o dia todo). Continua declarado e acessível fora da linha do menu:
+    // Recursos (capacidades de Configurações), Execuções (diagnóstico de
+    // Automações) e Meu perfil (menu da conta, TODO usuário autenticado).
+    // Destino fora do menu SEM atalho vira porta fantasma — cada um verificado.
     const offMenu = PANEL_ROUTES.filter((r) => r.sidebar === false);
-    expect(offMenu.map((r) => r.href).sort()).toEqual(['/execucoes']);
+    expect(offMenu.map((r) => r.href).sort()).toEqual(['/execucoes', '/perfil', '/recursos']);
     for (const route of offMenu) {
       const own = path.join(root, `src/app/(dashboard)${route.href}`);
       const re = new RegExp('href=\\{[`\'"]' + route.href.replace(/\//g, '\\/'));
@@ -738,13 +808,14 @@ describe('guardas de servidor (regressão)', () => {
     // Regressão de arquitetura: adicionar destino ao painel exige explicar aqui.
     expect(allowedPanelRoutes(ctx()).map((r) => r.href)).toEqual([
       '/dashboard',
-      '/agenda', '/profissionais', '/disponibilidade',
+      '/estrutura', '/agenda', '/profissionais', '/disponibilidade',
       '/conversas', '/agente', '/tarefas',
       '/clientes', '/funil',
       '/servicos',
-      '/campanhas', '/automacoes', '/canais',
-      '/resultados', '/organizacao', '/execucoes',
+      '/campanhas', '/automacoes', '/followup', '/canais',
+      '/resultados', '/financeiro', '/organizacao', '/execucoes',
       '/pagina',
+      '/perfil',
       '/equipe', '/recursos', '/configuracoes',
     ]);
   });

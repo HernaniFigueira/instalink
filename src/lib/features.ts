@@ -13,7 +13,7 @@
 //   • desativar não apaga configuração; reativar restaura o que já existia;
 //   • nenhum componente público decide sozinho que um recurso está ativo.
 //
-// POSICIONAMENTO (2026): o InstaLink é uma plataforma de página, agendamento
+// POSICIONAMENTO (2026): o GoDoutor é uma plataforma de página, agendamento
 // e relacionamento para negócios de atendimento. O eixo do produto é
 // Serviços → Agenda → Cliente → Histórico → WhatsApp. Módulos da antiga fase
 // "universal" (pedidos, orçamentos) NÃO fazem mais parte da experiência: eles

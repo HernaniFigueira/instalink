@@ -18,11 +18,15 @@ import { requireBusiness } from '@/lib/access';
 import { NO_PROFESSIONAL_SCOPE } from '@/lib/access-core';
 import { PROFESSIONAL_NOT_ELIGIBLE_ERROR, professionalServesService, serviceRequiresProfessional } from '@/lib/booking';
 import { pushAudit } from '@/lib/audit';
+import { emitAutomationEvent } from '@/lib/automation/events';
 import {
   ENCOUNTER_TEXT_FIELDS, ENCOUNTER_VERSION_REQUIRED_ERROR, cleanTags, cleanText, canFinalize,
   encounterForBooking, encounterForQueue, encounterInScope, encountersForCustomer,
   hasExpectedVersion, versionConflict,
+  // FASE 2 · P3 — retorno estruturado + arquivos (aditivos).
+  cleanEncounterFiles, isFollowUpMode, validateFollowUp,
 } from '@/lib/encounters';
+import { applyBookingStatusTx } from '@/lib/booking-status';
 import { effectiveTimezone, nowHM, todayISO } from '@/lib/tz';
 import { onlyDigits } from '@/lib/utils';
 import { findContact } from '@/lib/contacts';
@@ -66,12 +70,15 @@ function view(e: Encounter, db: DB) {
   const contact = e.contactId
     ? db.contacts.find((c) => c.id === e.contactId && c.businessId === e.businessId)
     : undefined;
+  const pet = e.petId ? (db.pets || []).find((x) => x.id === e.petId && x.businessId === e.businessId) : undefined;
   return {
     ...e,
     professionalName: pro?.name || '',
     serviceName: svc?.name || '',
     bookingStatus: booking?.status || '',
     customerPhone: contact?.phone || booking?.customerPhone || queue?.customerPhone || '',
+    // P0-3 — no atendimento o PACIENTE é o pet; o tutor fica como contexto.
+    petName: pet?.name || booking?.petName || '',
   };
 }
 
@@ -226,6 +233,10 @@ export async function POST(req: NextRequest) {
       createdAt: now, updatedAt: now,
       createdBy: guard.ctx.user.id, updatedBy: guard.ctx.user.id,
       finalizedAt: '', finalizedBy: '', signedBy: '',
+      // FASE 2 · P6 — pet do agendamento herdado (ou informado e validado na unidade).
+      petId: booking?.petId
+        || (body.petId && db.pets.some((p) => p.id === String(body.petId) && p.businessId === businessId)
+          ? String(body.petId) : ''),
     };
 
     await updateDB((d: DB) => {
@@ -242,6 +253,14 @@ export async function POST(req: NextRequest) {
         action: 'encounter.created', businessId, actor: guard.ctx.user,
         meta: { encounterId: row.id, bookingId: row.bookingId, queueId: row.queueId, professionalId: row.professionalId },
       }, now);
+      emitAutomationEvent(d, {
+        event: 'encounter.started',
+        businessId,
+        at: now,
+        bookingId: row.bookingId || undefined,
+        customerId: row.customerId || undefined,
+        data: { encounterId: row.id, professionalId: row.professionalId, serviceId: row.serviceId },
+      });
     });
     return NextResponse.json({ ok: true, encounter: view(row, await readDB()) });
   } catch (e: any) {
@@ -300,10 +319,39 @@ export async function PATCH(req: NextRequest) {
         target.updatedAt = now;
         target.updatedBy = guard.ctx.user.id;
         target.version = encounterVersionOf(target) + 1;
+        // FASE 2 · P3 — finalizar CONCLUI o agendamento de origem pelo serviço
+        // OFICIAL (histórico + automações + evento P4 + conversão do lead):
+        // Results/Funil leem booking.status — sem isto o ciclo mentiria.
+        // Cancelado/falta ficam intocados (máquina de estados preservada) e o
+        // registro clínico NUNCA é apagado por remarcação/cancelamento.
+        if (target.bookingId) {
+          const bk = d.bookings.find((b) => b.id === target.bookingId && b.businessId === businessId);
+          if (bk && bk.status === 'pending') {
+            // pending → completed é proibido pela máquina (só via confirmed).
+            applyBookingStatusTx(d, {
+              businessId, bookingId: bk.id, to: 'confirmed', by: 'system', now,
+              note: 'Atendimento em andamento (finalização do registro)',
+            });
+          }
+          if (bk && (bk.status === 'confirmed')) {
+            applyBookingStatusTx(d, {
+              businessId, bookingId: bk.id, to: 'completed', by: 'owner', now,
+              note: 'Atendimento finalizado',
+            });
+          }
+        }
         pushAudit(d, {
           action: 'encounter.finalized', businessId, actor: guard.ctx.user,
           meta: { encounterId: target.id, bookingId: target.bookingId, version: target.version },
         }, now);
+        emitAutomationEvent(d, {
+          event: 'encounter.completed',
+          businessId,
+          at: now,
+          bookingId: target.bookingId || undefined,
+          customerId: target.customerId || undefined,
+          data: { encounterId: target.id, professionalId: target.professionalId, serviceId: target.serviceId, version: target.version },
+        });
         return target;
       }
       if (action === 'reopen') {
@@ -336,7 +384,27 @@ export async function PATCH(req: NextRequest) {
         if (body[field] !== undefined) target[field] = cleanText(body[field], field);
       }
       if (body.tags !== undefined) target.tags = cleanTags(body.tags);
-      const changed = (['complaint', 'evolution', 'guidance', 'followUp', 'internalNote', 'tags'] as const)
+      // FASE 2 · P3 — retorno estruturado (validado antes de gravar).
+      if (body.followUpMode !== undefined) {
+        const problem = validateFollowUp({
+          followUpMode: body.followUpMode, followUpDate: body.followUpDate ?? target.followUpDate,
+          followUpDays: body.followUpDays ?? target.followUpDays,
+        });
+        if (problem) throw err(problem, 400);
+        if (!isFollowUpMode(body.followUpMode)) throw err('Forma de retorno inválida.', 400);
+        target.followUpMode = body.followUpMode;
+        if (body.followUpDate !== undefined) target.followUpDate = String(body.followUpDate || '').slice(0, 10);
+        if (body.followUpDays !== undefined) {
+          const n = Math.round(Number(body.followUpDays));
+          target.followUpDays = Number.isFinite(n) && n > 0 ? n : 0;
+        }
+      }
+      // FASE 2 · P3 — arquivos: só referências (o binário fica no Storage).
+      if (body.files !== undefined) target.files = cleanEncounterFiles(body.files);
+      const changed = ([
+        'complaint', 'evolution', 'guidance', 'followUp', 'internalNote', 'tags',
+        'followUpMode', 'followUpDate', 'followUpDays', 'files',
+      ] as const)
         .filter((f) => JSON.stringify((before as any)[f]) !== JSON.stringify((target as any)[f]));
       if (changed.length === 0) {
         // Nada mudou: não inventa versão nova nem suja a auditoria (o autosave

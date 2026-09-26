@@ -40,7 +40,7 @@ export function ImageUpload({ label, value, onChange, businessId, circle = false
 
   return (
     <div>
-      <span className="text-xs font-bold text-zinc-500">{label}</span>
+      <span className="text-xs font-semibold text-zinc-500">{label}</span>
       <div className="mt-1.5 flex items-start gap-3">
         <div
           className={`${circle ? 'w-16 h-16 rounded-full' : `w-20 ${previewH}`} shrink-0 overflow-hidden border border-zinc-200 bg-zinc-50 flex items-center justify-center`}
@@ -56,17 +56,17 @@ export function ImageUpload({ label, value, onChange, businessId, circle = false
             onChange={(e) => { const f = e.target.files?.[0]; if (f) handleFile(f); e.target.value = ''; }} />
           <div className="flex flex-wrap gap-1.5">
             <button type="button" onClick={() => inputRef.current?.click()} disabled={uploading}
-              className="text-xs font-bold bg-[var(--brand)] text-white px-3 py-2 rounded-lg shadow-brand hover:bg-[var(--brand-strong)] disabled:opacity-50">
+              className="text-xs font-semibold bg-[var(--brand)] text-white px-3 py-2 rounded-lg shadow-brand hover:bg-[var(--brand-strong)] disabled:opacity-50">
               {uploading ? 'Enviando…' : value ? 'Alterar' : 'Adicionar imagem'}
             </button>
             {value && (
               <button type="button" onClick={() => { onChange(''); setUrlDraft(''); }}
-                className="text-xs font-bold bg-zinc-100 text-zinc-700 px-3 py-2 rounded-lg hover:bg-red-50 hover:text-red-600">
+                className="text-xs font-semibold bg-zinc-100 text-zinc-700 px-3 py-2 rounded-lg hover:bg-red-50 hover:text-red-600">
                 Remover
               </button>
             )}
             <button type="button" onClick={() => setShowUrl((s) => !s)}
-              className="text-xs font-bold bg-zinc-100 text-zinc-500 px-3 py-2 rounded-lg">
+              className="text-xs font-semibold bg-zinc-100 text-zinc-500 px-3 py-2 rounded-lg">
               Usar URL
             </button>
           </div>
@@ -76,7 +76,7 @@ export function ImageUpload({ label, value, onChange, businessId, circle = false
                 placeholder="https://… (para imagens já hospedadas)"
                 className="flex-1 min-w-0 rounded-lg border border-zinc-300 px-2.5 py-1.5 text-xs" />
               <button type="button" onClick={() => onChange(urlDraft.trim())}
-                className="text-xs font-bold bg-[var(--brand)] text-white px-3 py-2 rounded-lg shadow-brand hover:bg-[var(--brand-strong)]">
+                className="text-xs font-semibold bg-[var(--brand)] text-white px-3 py-2 rounded-lg shadow-brand hover:bg-[var(--brand-strong)]">
                 Aplicar
               </button>
             </div>

@@ -254,11 +254,13 @@ export function publishProposal(
     id: randomUUID(),
     businessId: input.businessId,
     active: input.activate === true, // só liga se o humano pediu
+    status: input.activate === true ? 'active' : 'draft',
     version: 1,
     createdAt: now,
     updatedAt: now,
     createdByUserId: String(input.userId || existing.createdByUserId || ''),
     templateId: 'ai',
+    source: 'ai',
   };
   // Garante que o grafo publicado é o compilado (não o rascunho cru).
   automation.nodes = compiled.nodes;

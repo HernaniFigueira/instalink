@@ -53,6 +53,8 @@ export interface EmitInput {
   fromRunId?: string;
   /** Chave de idempotência explícita (sem ela deriva do assunto). */
   eventKey?: string;
+  /** Origem p/ métricas (F3-I): return | reactivation | confirmation | … */
+  source?: string;
 }
 
 export interface SkippedAutomation {
@@ -347,6 +349,7 @@ export function emitAutomationEvent(db: DB, input: EmitInput): EmitResult {
         detail: runKey.slice(0, 120),
       }],
       eventKey,
+      ...(input.source ? { triggerSource: input.source } : {}),
       emittedByRunId: input.fromRunId || '',
       steps: 0,
       resumes: 0,

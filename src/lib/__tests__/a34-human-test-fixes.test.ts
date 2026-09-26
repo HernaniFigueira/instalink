@@ -444,12 +444,14 @@ describe('A3.4 · LINGUAGEM — sem promessa de assinatura digital', () => {
 
 // ═══════════════════════════════════════════════════════════════
 describe('A3.4 · MOBILE (320–430px) — sem rolagem horizontal da página', () => {
-  it('o subtítulo da Agenda não estica mais a viewport', () => {
-    const trecho = AGENDA.slice(AGENDA.indexOf('Clique num atendimento'));
-    const bloco = trecho.slice(0, trecho.indexOf('</span>'));
-    // Bloco truncável (antes era `span` inline com `truncate` — que não corta).
-    expect(AGENDA).toMatch(/className="block max-w-full text-xs text-\[var\(--text-muted\)\] truncate"/);
-    expect(bloco).not.toMatch(/whitespace-nowrap/);
+  it('cabeçalho da Agenda: só o título (sem "?" nem subtítulo — fechamento item 11)', () => {
+    // Sem frase permanente sob o título; ajuda saiu do "?" inline (legenda).
+    expect(AGENDA).toMatch(/>Agenda<\/h1>/);
+    expect(AGENDA).not.toMatch(/aria-label="Ajuda da agenda"/);
+    expect(AGENDA).not.toMatch(/className="ws-help"/);
+    expect(AGENDA).not.toMatch(/className="block max-w-full text-xs text-\[var\(--text-muted\)\] truncate"/);
+    // Sem largura fixa absurda no cabeçalho.
+    expect(AGENDA.slice(0, AGENDA.indexOf('id="agenda') + 2000)).not.toMatch(/\bw-\[\d{4,}px\]/);
   });
 
   it('na fila as ações descem de linha em vez de espremer nome/serviço', () => {

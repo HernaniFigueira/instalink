@@ -405,7 +405,7 @@ export function EsteiraView() {
     }
   }
 
-  // Ação: Criar lead manual
+  // Ação: criar oportunidade manual
   async function handleCreateManualLead(e: React.FormEvent) {
     e.preventDefault();
     const digits = onlyDigits(newLeadPhone);
@@ -445,8 +445,8 @@ export function EsteiraView() {
 
   const priorityBadge = (priority?: LeadPriority) => {
     switch (priority) {
-      case 'urgent': return <span className="bg-[var(--danger)] text-white text-[10px] px-2 py-0.5 rounded-pill font-bold uppercase tracking-wider shadow-xs">Urgente</span>;
-      case 'high': return <span className="bg-[var(--warning-bg)] text-[var(--warning-fg)] border border-[var(--warning-border)] text-[10px] px-2 py-0.5 rounded-pill font-bold uppercase tracking-wider">Alta</span>;
+      case 'urgent': return <span className="bg-[var(--danger)] text-white text-[10px] px-2 py-0.5 rounded-pill font-semibold uppercase tracking-wider shadow-xs">Urgente</span>;
+      case 'high': return <span className="bg-[var(--warning-bg)] text-[var(--warning-fg)] border border-[var(--warning-border)] text-[10px] px-2 py-0.5 rounded-pill font-semibold uppercase tracking-wider">Alta</span>;
       case 'low': return <span className="bg-[var(--surface-3)] text-[var(--text-muted)] border border-[var(--border)] text-[10px] px-2 py-0.5 rounded-pill font-semibold uppercase tracking-wider">Baixa</span>;
       default: return null;
     }
@@ -567,16 +567,16 @@ export function EsteiraView() {
           <button
             type="button"
             onClick={() => setShowNewLeadModal(true)}
-            className="px-3.5 py-2 bg-[var(--brand)] text-white text-xs font-bold rounded-md border border-[var(--brand-strong)]/40 shadow-brand hover:bg-[var(--brand-strong)] transition flex items-center gap-1.5"
+            className="px-3.5 py-2 bg-[var(--brand)] text-white text-xs font-semibold rounded-md border border-[var(--brand-strong)]/40 shadow-brand hover:bg-[var(--brand-strong)] transition flex items-center gap-1.5"
           >
-            <span className="text-sm leading-none">+</span> Novo lead
+            <span className="text-sm leading-none">+</span> Nova oportunidade
           </button>
         </div>
       </div>
 
       {/* Quadro Kanban do Funil */}
       {loading ? (
-        <div className="p-12 text-center text-[var(--text-muted)] text-sm font-semibold">Carregando funil…</div>
+        <div className="p-12 text-center text-[var(--text-muted)] text-sm font-semibold">Carregando oportunidades…</div>
       ) : (
         <div className="grid grid-flow-col auto-cols-[280px] sm:auto-cols-[300px] gap-3.5 overflow-x-auto pb-4 scrollbar-none items-start">
           {visibleStages.map((stage) => {
@@ -599,10 +599,10 @@ export function EsteiraView() {
                 <div className="flex items-center justify-between pb-2.5 mb-2.5 border-b border-[var(--border)]">
                   <div className="flex items-center gap-2 min-w-0">
                     <span aria-hidden="true" className={cn('w-2.5 h-2.5 rounded-full shrink-0', stageToneDot(stage))} />
-                    <span className="font-bold text-xs text-[var(--text)] uppercase tracking-wide truncate">
+                    <span className="font-semibold text-xs text-[var(--text)] uppercase tracking-wide truncate">
                       {stage.name}
                     </span>
-                    <span className="text-[11px] font-bold px-2 py-0.5 rounded-pill bg-white border border-[var(--border)] text-[var(--text-muted)] tabular-nums">
+                    <span className="text-[11px] font-semibold px-2 py-0.5 rounded-pill bg-white border border-[var(--border)] text-[var(--text-muted)] tabular-nums">
                       {stageLeads.length}
                     </span>
                   </div>
@@ -612,7 +612,7 @@ export function EsteiraView() {
                 <div className="space-y-2.5 overflow-y-auto pr-1 flex-1">
                   {stageLeads.length === 0 ? (
                     <div className="py-6 text-center text-[var(--text-faint)] text-xs font-medium">
-                      Nenhum lead nesta etapa
+                      Nenhuma oportunidade nesta etapa
                     </div>
                   ) : (
                     stageLeads.map((lead) => {
@@ -631,7 +631,7 @@ export function EsteiraView() {
                         >
                           <div className="flex items-start justify-between gap-2">
                             <div>
-                              <p className="font-bold text-sm text-[var(--text)] leading-snug">
+                              <p className="font-semibold text-sm text-[var(--text)] leading-snug">
                                 {lead.name || 'Sem nome informado'}
                               </p>
                               {lead.phone && (
@@ -656,7 +656,7 @@ export function EsteiraView() {
 
                             {assignee ? (
                               <span className="text-[var(--text)] font-semibold inline-flex items-center gap-1" title={`Responsável: ${assignee.name}`}>
-                                <span aria-hidden="true" className="w-4 h-4 rounded-full bg-[var(--brand-soft)] text-[var(--brand-fg)] text-[9px] font-bold inline-flex items-center justify-center">
+                                <span aria-hidden="true" className="w-4 h-4 rounded-full bg-[var(--brand-soft)] text-[var(--brand-fg)] text-[9px] font-semibold inline-flex items-center justify-center">
                                   {assignee.name.trim().slice(0, 1).toUpperCase()}
                                 </span>
                                 {assignee.name}
@@ -683,7 +683,7 @@ export function EsteiraView() {
                                 href={waLink(lead.phone, `Olá ${lead.name || ''}, tudo bem? Sou da equipe da ${businessName || 'empresa'}.`)}
                                 target="_blank"
                                 rel="noopener noreferrer"
-                                className="text-[var(--success-fg)] hover:underline font-bold flex items-center gap-1 px-2 py-1 rounded-md bg-[var(--success-bg)] border border-[var(--success-border)]"
+                                className="text-[var(--success-fg)] hover:underline font-semibold flex items-center gap-1 px-2 py-1 rounded-md bg-[var(--success-bg)] border border-[var(--success-border)]"
                               >
                                 WhatsApp
                               </a>
@@ -709,7 +709,7 @@ export function EsteiraView() {
                                   setBookingLead(lead);
                                   if (services.length > 0) setBookServiceId(services[0].id);
                                 }}
-                                className="text-[11px] px-2.5 py-1 rounded-md bg-[var(--brand)] text-white font-bold shadow-brand hover:bg-[var(--brand-strong)]"
+                                className="text-[11px] px-2.5 py-1 rounded-md bg-[var(--brand)] text-white font-semibold shadow-brand hover:bg-[var(--brand-strong)]"
                               >
                                 Agendar
                               </button>
@@ -729,10 +729,10 @@ export function EsteiraView() {
       {/* ── Modal Detalhes do Lead ── */}
       {selectedLead && (
         <div className="fixed inset-0 bg-[var(--overlay)] z-50 flex items-center justify-center p-4">
-          <div className="bg-white rounded-2xl max-w-xl w-full max-h-[90vh] overflow-y-auto p-6 space-y-5 shadow-xl animate-scaleUp">
+          <div className="bg-white rounded-xl max-w-xl w-full max-h-[90vh] overflow-y-auto p-6 space-y-5 shadow-xl animate-scaleUp">
             <div className="flex items-start justify-between border-b pb-4">
               <div>
-                <h2 className="text-lg font-bold text-zinc-900">{selectedLead.name || 'Lead sem nome'}</h2>
+                <h2 className="text-lg font-semibold text-zinc-900">{selectedLead.name || 'Lead sem nome'}</h2>
                 <div className="flex flex-wrap items-center gap-2 mt-1 text-xs text-zinc-500">
                   <span>Origem: <strong>{leadOriginLabel(selectedLead.origin)}</strong></span>
                   <span>·</span>
@@ -845,7 +845,7 @@ export function EsteiraView() {
 
             {/* Observações / Timeline de notas */}
             <div className="space-y-3 pt-3 border-t border-zinc-200">
-              <h3 className="text-xs font-bold uppercase tracking-wider text-zinc-600">Observações da Equipe</h3>
+              <h3 className="text-xs font-semibold uppercase tracking-wider text-zinc-600">Observações da Equipe</h3>
 
               <div className="space-y-2 max-h-40 overflow-y-auto pr-1">
                 {(!selectedLead.notes || selectedLead.notes.length === 0) ? (
@@ -885,7 +885,7 @@ export function EsteiraView() {
             {/* Histórico de Movimentações */}
             {selectedLead.stageHistory && selectedLead.stageHistory.length > 0 && (
               <div className="space-y-2 pt-3 border-t border-zinc-200">
-                <h3 className="text-xs font-bold uppercase tracking-wider text-zinc-600">Histórico de Movimentação</h3>
+                <h3 className="text-xs font-semibold uppercase tracking-wider text-zinc-600">Histórico de Movimentação</h3>
                 <div className="space-y-1.5 max-h-36 overflow-y-auto pr-1">
                   {selectedLead.stageHistory.map((h) => (
                     <div key={h.id} className="text-[11px] text-zinc-600 flex items-start gap-2">
@@ -903,7 +903,7 @@ export function EsteiraView() {
             )}
             {/* 360 — Agendamentos e tarefas vinculadas */}
             <div className="space-y-3 pt-3 border-t border-zinc-200">
-                <h3 className="text-xs font-bold uppercase tracking-wider text-zinc-600">Visão 360 — atendimentos e tarefas</h3>
+                <h3 className="text-xs font-semibold uppercase tracking-wider text-zinc-600">Visão 360 — atendimentos e tarefas</h3>
                 {leadBookings.length>0 ? (
                   <div className="space-y-1.5">
                     <p className="text-xs font-semibold text-zinc-700">Agendamentos ({leadBookings.length})</p>
@@ -918,7 +918,7 @@ export function EsteiraView() {
                   <p className="text-xs text-zinc-500">Nenhum agendamento vinculado.</p>
                 )}
                 <div className="space-y-1.5">
-                    <p className="text-xs font-semibold text-zinc-700">Tarefas ({leadTasks.length})</p>
+                    <p className="text-xs font-semibold text-zinc-700">Pendências ({leadTasks.length})</p>
                     {leadTasks.length>0 ? leadTasks.map((tt:any)=> (
                       <div key={tt.id} className="text-xs p-2 bg-white border border-zinc-200 rounded-lg flex items-center justify-between">
                         <span className="font-medium">{tt.title} · {tt.status}</span>
@@ -927,7 +927,7 @@ export function EsteiraView() {
                     )) : <p className="text-xs text-zinc-400">Nenhuma tarefa vinculada.</p>}
                     {/* Nova tarefa contextual (sem digitar leadId) */}
                     <div className="bg-zinc-50 border border-zinc-200 rounded-lg p-2.5 space-y-2">
-                      <p className="text-xs font-semibold text-zinc-700">Nova tarefa para este lead</p>
+                      <p className="text-xs font-semibold text-zinc-700">Nova pendência para esta oportunidade</p>
                       <input value={ctxTaskTitle} onChange={(e)=> setCtxTaskTitle(e.target.value)} placeholder="Título (ex: Retornar ligação)" className="w-full text-xs p-2 rounded-lg border border-zinc-300" />
                       <div className="flex gap-2">
                         <input value={ctxTaskDueAt} onChange={(e)=> setCtxTaskDueAt(e.target.value)} placeholder="Prazo YYYY-MM-DD" className="flex-1 text-xs p-2 rounded-lg border border-zinc-300" />
@@ -958,11 +958,11 @@ export function EsteiraView() {
         <div className="fixed inset-0 bg-[var(--overlay)] z-50 flex items-center justify-center p-4">
           <form
             onSubmit={handleConfirmBooking}
-            className="bg-white rounded-2xl max-w-md w-full p-6 space-y-4 shadow-xl animate-scaleUp"
+            className="bg-white rounded-xl max-w-md w-full p-6 space-y-4 shadow-xl animate-scaleUp"
           >
             <div className="flex items-start justify-between border-b pb-3">
               <div>
-                <h2 className="text-base font-bold text-zinc-900">Agendar para {bookingLead.name}</h2>
+                <h2 className="text-base font-semibold text-zinc-900">Agendar para {bookingLead.name}</h2>
                 <p className="text-xs text-zinc-500 font-mono">{bookingLead.phone}</p>
               </div>
               <button
@@ -1068,10 +1068,10 @@ export function EsteiraView() {
         <div className="fixed inset-0 bg-[var(--overlay)] z-50 flex items-center justify-center p-4">
           <form
             onSubmit={handleCreateManualLead}
-            className="bg-white rounded-2xl max-w-md w-full p-6 space-y-3.5 shadow-xl animate-scaleUp"
+            className="bg-white rounded-xl max-w-md w-full p-6 space-y-3.5 shadow-xl animate-scaleUp"
           >
             <div className="flex items-start justify-between border-b pb-3">
-              <h2 className="text-base font-bold text-zinc-900">Novo Lead / Oportunidade</h2>
+              <h2 className="text-base font-semibold text-zinc-900">Novo Lead / Oportunidade</h2>
               <button
                 type="button"
                 onClick={() => setShowNewLeadModal(false)}

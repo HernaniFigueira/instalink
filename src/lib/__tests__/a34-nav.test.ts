@@ -2,9 +2,11 @@
 // A3.4 · BLOCO 1 — NAVEGAÇÃO E COERÊNCIA VISUAL
 // ═══════════════════════════════════════════════════════════════
 // Regressões do que esta entrega MUDA no menu (e do que ela se recusa a mexer):
-//   • "Dashboard" → "Início" na LINGUAGEM, sem tocar em rota/permissão;
-//   • a nova ordem das seções (Início · Operação · Pessoas · Oferta ·
-//     Crescimento · Resultados · Presença · Administração);
+//   • "Dashboard" → rótulo de produto na LINGUAGEM, sem tocar em rota/permissão
+//     (A3.4: "Início"; GODOUTOR 2.0: "Visão geral" — o termo que o dono da
+//     clínica entende sem traduzir);
+//   • a ordem das seções (Visão geral · Operação · Pessoas · Clínica ·
+//     Automação · Gestão · Página · Configurações);
 //   • Profissionais/Disponibilidade em Operação; Pedidos em Operação com gate
 //     de MÓDULO; Execuções fora da sidebar, alcançável por atalho contextual;
 //   • "Outros destinos" não existe mais;
@@ -42,9 +44,10 @@ function ctx(partial: Partial<PanelContext> = {}): PanelContext {
   };
 }
 
-describe('A3.4 · NAV — "Dashboard" virou "Início" na interface', () => {
-  it('a porta /dashboard se chama Início', () => {
-    expect(panelRouteFor('/dashboard')?.label).toBe('Início');
+describe('A3.4 · NAV — "Dashboard" virou rótulo de produto na interface', () => {
+  it('a porta /dashboard se chama Visão geral', () => {
+    // GODOUTOR 2.0: o rótulo é o nome da seção que o usuário lê no menu.
+    expect(panelRouteFor('/dashboard')?.label).toBe('Visão geral');
   });
 
   it('ROTA e PERMISSÃO continuam `dashboard` (nenhuma renomeação desnecessária)', () => {
@@ -57,12 +60,13 @@ describe('A3.4 · NAV — "Dashboard" virou "Início" na interface', () => {
   });
 
   it('o rótulo mudou em TODA a linguagem visível: menu, busca, permissões e áreas', () => {
-    expect(PERMISSIONS.find((p) => p.id === 'dashboard')?.label).toBe('Início');
-    expect(AREA_LABELS.dashboard).toBe('Início');
+    expect(PERMISSIONS.find((p) => p.id === 'dashboard')?.label).toBe('Visão geral');
+    expect(AREA_LABELS.dashboard).toBe('Visão geral');
     const nav = panelNavigation(ctx());
     const item = buildNavSearchItems(nav, '?b=x').find((i) => i.path === '/dashboard');
-    expect(item?.label).toBe('Início');
-    const found = searchNav(buildNavSearchItems(nav, '?b=x'), 'inicio');
+    expect(item?.label).toBe('Visão geral');
+    // A busca continua chegando no mesmo lugar por apelido histórico.
+    const found = searchNav(buildNavSearchItems(nav, '?b=x'), 'visao geral');
     expect(found[0].path).toBe('/dashboard');
   });
 
@@ -85,13 +89,14 @@ describe('A3.4 · NAV — "Dashboard" virou "Início" na interface', () => {
 describe('A3.4 · NAV — seções e ordem nova', () => {
   it('as 8 seções na ordem aprovada', () => {
     expect(PANEL_SECTIONS.map((s) => s.label)).toEqual([
-      'Início', 'Operação', 'Pessoas', 'Oferta', 'Crescimento', 'Resultados', 'Presença', 'Administração',
+      'Visão geral', 'Operação', 'Pessoas', 'Clínica', 'Automação', 'Gestão', 'Página', 'Configurações',
     ]);
   });
 
   it('Profissionais e Disponibilidade estão em OPERAÇÃO (não mais em Oferta)', () => {
     expect(panelRoutesIn('operacao').map((r) => r.href)).toEqual([
-      '/agenda', '/profissionais', '/disponibilidade', '/conversas', '/agente', '/tarefas', '/pedidos',
+      // FASE 2 · P1 — hub Estrutura é a porta de entrada da operação da clínica.
+      '/estrutura', '/agenda', '/profissionais', '/disponibilidade', '/conversas', '/agente', '/tarefas', '/pedidos',
     ]);
     expect(panelRoutesIn('oferta').map((r) => r.href)).toEqual(['/servicos', '/produtos']);
   });
@@ -109,7 +114,10 @@ describe('A3.4 · NAV — seções e ordem nova', () => {
   it('Execuções NÃO aparece na sidebar — e continua acessível por atalho contextual', () => {
     const nav = panelNavigation(ctx());
     expect(nav.sidebar.map((r) => r.href)).not.toContain('/execucoes');
-    expect(nav.more.map((r) => r.href)).toEqual(['/execucoes']);
+    // GODOUTOR final: Pendências e Oportunidades voltaram à LINHA do menu
+    // (permissão real). Continuam fora da linha (com atalho contextual real):
+    // Execuções, Meu perfil e Recursos.
+    expect(nav.more.map((r) => r.href)).toEqual(['/execucoes', '/perfil', '/recursos']);
     // O atalho vive dentro de Automações (fonte: URLs diretas do painel).
     const automations = read('src/components/dashboard/AutomationsView.tsx');
     expect(automations).toMatch(/\/execucoes/);
@@ -126,15 +134,25 @@ describe('A3.4 · NAV — seções e ordem nova', () => {
 describe('A3.4 · NAV — compatibilidade dos temas legados', () => {
 
 
-  it('cada seção tem fundo ativo próprio (não existe "azul para tudo")', () => {
+  it('o item ativo sempre vem do tema da seção — nunca de cor fixa no componente', () => {
+    // GODOUTOR 2.0 (§B — design system): a paleta deixou de ser um arco-íris de
+    // seis famílias. Existem DUAS famílias de contexto: a marca (azul) para o
+    // dia a dia e o NEUTRO para ajuste raro — cor de seção virou realce
+    // discreto, não código de cor. O contrato que continua valendo é o
+    // MECANISMO: cada seção declara o SEU trio (acento/fundo/texto) e o
+    // componente consome `sectionTheme()`, sem hex nem azul hardcoded.
+    for (const sec of PANEL_SECTIONS) {
+      const t = sectionTheme(sec.id);
+      expect(t.activeBg, sec.id).toMatch(/^var\(--[a-z0-9-]+\)$/);
+      expect(t.activeFg, sec.id).toMatch(/^var\(--[a-z0-9-]+\)$/);
+    }
+    // Família operacional = marca; família estrutural = neutro.
+    expect(SECTION_THEME.operacao.activeBg).toBe('var(--brand-soft)');
+    expect(SECTION_THEME.administracao.activeBg).toBe('var(--surface-hover)');
+    expect(SECTION_THEME.administracao.accent).toBe('var(--text-muted)');
+    // Nenhum lilás/roxo de identidade sobrou na navegação (regra 2.0).
     const bags = PANEL_SECTIONS.map((s) => SECTION_THEME[s.id].activeBg);
-    // Pelo menos 5 famílias distintas de fundo: azul, teal, lilás, âmbar,
-    // verde, neutro — a seleção conta a mesma história do ícone.
-    expect(new Set(bags).size).toBeGreaterThanOrEqual(5);
-    expect(SECTION_THEME.pessoas.activeBg).toBe('var(--teal-bg)');
-    expect(SECTION_THEME.oferta.activeBg).toBe('var(--lilac-bg)');
-    expect(SECTION_THEME.crescimento.activeBg).toBe('var(--warning-bg)');
-    expect(SECTION_THEME.resultados.activeBg).toBe('var(--success-bg)');
+    expect(bags.every((b) => !/lilac|violet|purple/.test(b))).toBe(true);
   });
 
   it('seção desconhecida cai em neutro (nunca quebra a renderização)', () => {

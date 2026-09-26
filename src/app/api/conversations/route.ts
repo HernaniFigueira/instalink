@@ -1,7 +1,14 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { randomUUID } from 'node:crypto';
 import { updateDB } from '@/lib/db';
+import { emitAutomationEvent } from '@/lib/automation/events';
+import { pushAudit } from '@/lib/audit';
+import {
+  buildHandoffSummary, conversationSideContext, effectiveAgentState, handoffToTeam,
+  pauseAi, resumeAi, setAgentState, agentStateLabel,
+} from '@/lib/inbox/assistant-ops';
 import { requireBusiness } from '@/lib/access';
+import { resolveConversationContact, conversationRegistered } from '@/lib/conversation-identity';
 import { integrationStatus, serverCredentialsConfigured } from '@/lib/whatsapp';
 import { deliverWhatsappMessage } from '@/lib/whatsapp-cloud-api';
 import {
@@ -18,6 +25,10 @@ import type { Conversation, Message } from '@/lib/types';
 //
 // Regra do Bloco 9: o canal é SEMPRE o da conversa. Nunca existe "responder no
 // Instagram" a partir de uma conversa do WhatsApp (nem o contrário).
+function looksClinicalSafe(t: string): boolean {
+  return /\b(diagn[oó]stico|receita|rem[eé]dio|sintoma|urg[eê]ncia)\b/i.test(t);
+}
+
 export async function GET(req: NextRequest) {
   const businessId = req.nextUrl.searchParams.get('businessId') || '';
   const guard = await requireBusiness(req, businessId, 'whatsapp');
@@ -49,12 +60,20 @@ export async function GET(req: NextRequest) {
         return { ...m, byName };
       });
 
-    const contact = db.contacts.find((c) => c.id === conv.contactId) || null;
+    // §5 — o detalhe resolve o contato com a MESMA função canônica da lista
+    // (lib/conversation-identity.ts). Se Bernardo está cadastrado, ele é
+    // cadastrado aqui E na lista — as duas telas não podem discordar.
+    const contact = resolveConversationContact(db, businessId, conv) || null;
     return NextResponse.json({
       conversation: {
         ...conv,
         mode: conv.mode || 'automation',
+        agentState: effectiveAgentState(conv),
+        agentStateLabel: agentStateLabel(effectiveAgentState(conv)),
+        handoff: conv.handoff || null,
       },
+      // F3-F — contexto lateral administrativo (nunca prontuário/anamnese)
+      sideContext: conversationSideContext(db, businessId, conv),
       messages,
       contact: contact
         ? {
@@ -96,9 +115,24 @@ export async function GET(req: NextRequest) {
     .map((c: Conversation) => ({
       ...c,
       mode: c.mode || 'automation',
-      registered: !!c.customerId,
+      agentState: effectiveAgentState(c),
+      agentStateLabel: agentStateLabel(effectiveAgentState(c)),
+      // §5 — "cadastrado?" é decisão da resolução canônica (contato por
+      // contactId → customerId → telefone normalizado), NÃO de `customerId`
+      // isolado: conversa legado sem o campo continua sendo do cliente.
+      // FASE E — FALHAS por conversa: quantas mensagens da equipe falharam ao
+      // sair. O filtro "Falhas" da lista usa este número (nada de percorrer
+      // mensagens no cliente).
+      failedMessages: db.messages.filter((m) => m.conversationId === c.id && m.status === 'failed' && m.direction === 'out').length,
+      registered: conversationRegistered(db, businessId, c),
       lastMessageAt: c.lastMessageAt,
       channelLabel: c.channel === 'instagram' ? 'Instagram' : c.channel === 'whatsapp' ? 'WhatsApp' : 'Site',
+      // F3-H — Origem: Retorno|Reativação (sem payload técnico)
+      outreachOrigin: (() => {
+        const row = (db.followUpOutreach || []).find((o) => o.businessId === businessId && o.conversationId === c.id);
+        if (!row) return undefined;
+        return row.origin === 'return' ? 'Retorno' : 'Reativação';
+      })(),
     }));
 
   return NextResponse.json({
@@ -131,16 +165,75 @@ export async function POST(req: NextRequest) {
     const conversationId = String(body.conversationId || '');
     const action = String(body.action || '');
 
-    // ── ALTERNAR MODO (Automação ↔ Humano) ─────────────────────────
-    if (action === 'switch_mode' || action === 'takeover' || action === 'release' || action === 'setMode' || body.mode) {
-      const newMode: 'automation' | 'human' =
-        action === 'takeover' || body.mode === 'human' ? 'human' : 'automation';
+    // ── HANDOFF / TAKEOVER / DEVOLVER-IA / PAUSAR (F3-F) ──────────
+    if (action === 'switch_mode' || action === 'takeover' || action === 'release' || action === 'setMode' || body.mode || action === 'resume_ai' || action === 'pause_ai' || action === 'handoff') {
+      const now = new Date().toISOString();
+      // Ações que DEVOLVEM para a IA (audit + sem msg espontânea)
+      const toAi = action === 'release' || action === 'resume_ai'
+        || body.mode === 'automation'
+        || ((action === 'switch_mode' || action === 'setMode') && body.mode === 'automation');
+      // Ações que o humano ASSUME
+      const toHuman = action === 'takeover' || action === 'pause_ai' || action === 'handoff'
+        || body.mode === 'human'
+        || ((action === 'switch_mode' || action === 'setMode') && body.mode === 'human');
+      // Legado: switch_mode sem mode explícito → assumir humano (compat)
+      const legacyTakeover = (action === 'switch_mode' || action === 'takeover') && !toAi && !body.mode;
+      const wantAi = toAi && !toHuman;
+      const wantHuman = toHuman || legacyTakeover;
 
       const updated = await updateDB((db) => {
         const conv = db.conversations.find((c) => c.id === conversationId && c.businessId === businessId);
         if (!conv) return null;
-        conv.mode = newMode;
-        return { id: conv.id, mode: conv.mode };
+        const actor = { id: ctx.user.id, email: ctx.user.email || '', role: ctx.user.role || '' };
+        const prev = effectiveAgentState(conv);
+
+        if (wantAi) {
+          const r = resumeAi(db, {
+            businessId,
+            conversationId: conv.id,
+            actor,
+            at: now,
+          });
+          if (!r.ok && prev !== 'ai_active' && prev !== 'waiting_patient') return null;
+        } else if (action === 'handoff') {
+          const built = buildHandoffSummary(db, conv, looksClinicalSafe(String(body.summary || '')) ? 'clinico' : 'pedido_humano');
+          const hr = handoffToTeam(db, {
+            businessId,
+            conversationId: conv.id,
+            summary: String(body.summary || '').trim() || built.summary,
+            intent: String(body.intent || built.intent),
+            entities: built.entities,
+            actions: built.actions,
+            requestedBy: 'equipe',
+            actor,
+            at: now,
+          });
+          if (!hr.ok) return null;
+        } else if (wantHuman) {
+          const pr = pauseAi(db, {
+            businessId,
+            conversationId: conv.id,
+            actor,
+            at: now,
+          });
+          if (!pr.ok) return null;
+        } else {
+          // setMode com outro valor → assume humano por segurança
+          const pr = pauseAi(db, {
+            businessId,
+            conversationId: conv.id,
+            actor,
+            at: now,
+          });
+          if (!pr.ok) return null;
+        }
+
+        return {
+          id: conv.id,
+          mode: conv.mode || 'automation',
+          agentState: effectiveAgentState(conv),
+          agentStateLabel: agentStateLabel(effectiveAgentState(conv)),
+        };
       });
 
       if (!updated) return NextResponse.json({ error: 'Conversa não encontrada.' }, { status: 404 });
@@ -274,8 +367,9 @@ export async function POST(req: NextRequest) {
       if (!target) return null;
 
       const now = new Date().toISOString();
-      // O membro respondeu manualmente: passa o atendimento para 'human'
+      // O membro respondeu manualmente: humano + IA nunca juntos (F3-F)
       target.mode = 'human';
+      setAgentState(target, 'human_active');
 
       const msg: Message = {
         id: randomUUID(),

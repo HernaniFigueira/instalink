@@ -14,7 +14,10 @@ module.exports = {
   theme: {
     extend: {
       fontFamily: {
-        sans: ["Inter", "system-ui", "-apple-system", "Segoe UI", "Roboto", "sans-serif"],
+        // §4 — a tipografia interna é Geist Sans, e só ela. "Inter" não é
+        // carregada em lugar nenhum: mantê-la aqui fazia `font-sans` cair no
+        // system-ui e a tela trocar de letra sem ninguém perceber.
+        sans: ["var(--font-geist-sans)", "system-ui", "-apple-system", "Segoe UI", "Roboto", "sans-serif"],
       },
       colors: {
         // Neutros do produto (frio, suave, com contraste de estado).

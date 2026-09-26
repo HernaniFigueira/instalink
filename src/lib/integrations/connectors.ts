@@ -116,7 +116,7 @@ function validIso(value: unknown): string {
   return iso;
 }
 
-/** Envelope canônico do InstaLink (ver docs/integracoes-p6.md). */
+/** Envelope canônico do GoDoutor (ver docs/integracoes-p6.md). */
 function isEnvelope(payload: unknown): payload is Record<string, any> {
   return !!payload && typeof payload === 'object' && !Array.isArray(payload)
     && typeof (payload as Record<string, any>).event === 'string';

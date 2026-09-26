@@ -50,11 +50,11 @@ function Funnel({ title, steps }: { title: string; steps: Analytics['funnelOrder
   const max = Math.max(1, steps[0]?.value || 1);
   return (
     <div className="bg-white border border-zinc-200 rounded-lg p-5">
-      <h3 className="font-bold text-sm mb-4">{title}</h3>
+      <h3 className="font-semibold text-sm mb-4">{title}</h3>
       <div className="space-y-2.5">
         {steps.map((s) => (
           <div key={s.id}>
-            <div className="flex justify-between text-xs font-bold mb-1">
+            <div className="flex justify-between text-xs font-semibold mb-1">
               <span>{s.label}</span>
               <span>{s.value} <span className="text-zinc-400 font-semibold">· {s.rate}%</span></span>
             </div>
@@ -178,7 +178,7 @@ export default function ResultadosPage() {
             ].map(([label, value, hint]) => (
               <div key={label} className="bg-white border border-zinc-200 rounded-lg p-3.5">
                 <p className="text-xs text-zinc-500">{label}</p>
-                <p className="text-xl font-extrabold tracking-tight mt-0.5">{value}</p>
+                <p className="text-xl font-semibold tracking-tight mt-0.5">{value}</p>
                 <p className="text-[11px] text-zinc-400 mt-1">{hint}</p>
               </div>
             ))}
@@ -189,7 +189,7 @@ export default function ResultadosPage() {
               ? <Funnel title="Funil de pedidos" steps={page.funnelOrders} />
               : <Funnel title="Funil de agendamentos" steps={page.funnelBookings} />}
             <div className="bg-white border border-zinc-200 rounded-lg p-5">
-              <h3 className="font-bold text-sm mb-3">Movimento recente</h3>
+              <h3 className="font-semibold text-sm mb-3">Movimento recente</h3>
               <div className="flex items-end gap-1 h-28 overflow-x-auto ws-scroll pb-1">
                 {(page.days || []).map((d) => (
                   <div key={d.day} className="flex-1 min-w-[4px] flex flex-col items-center gap-1"
@@ -203,9 +203,9 @@ export default function ResultadosPage() {
                 ))}
               </div>
               <div className="grid grid-cols-3 gap-2 mt-5 pt-4 border-t border-zinc-100 text-center">
-                <div><p className="font-extrabold">{pageTotals.clicks}</p><p className="text-[11px] text-zinc-500">Cliques na página</p></div>
-                <div><p className="font-extrabold">{pageTotals.bookings}</p><p className="text-[11px] text-zinc-500">Reservas criadas</p></div>
-                <div><p className="font-extrabold">{pageTotals.waClicks}</p><p className="text-[11px] text-zinc-500">Cliques WhatsApp</p></div>
+                <div><p className="font-semibold">{pageTotals.clicks}</p><p className="text-[11px] text-zinc-500">Cliques na página</p></div>
+                <div><p className="font-semibold">{pageTotals.bookings}</p><p className="text-[11px] text-zinc-500">Reservas criadas</p></div>
+                <div><p className="font-semibold">{pageTotals.waClicks}</p><p className="text-[11px] text-zinc-500">Cliques WhatsApp</p></div>
               </div>
             </div>
           </div>
@@ -213,13 +213,13 @@ export default function ResultadosPage() {
           <div className="grid lg:grid-cols-2 gap-4">
             {(page.modules.products || page.modules.orders) && (
               <div className="bg-white border border-zinc-200 rounded-lg p-5">
-                <h3 className="font-bold text-sm mb-3">{page.modules.orders ? 'Produtos em destaque' : 'Interesse na vitrine'}</h3>
+                <h3 className="font-semibold text-sm mb-3">{page.modules.orders ? 'Produtos em destaque' : 'Interesse na vitrine'}</h3>
                 {page.topProducts.length === 0 ? <p className="text-xs text-zinc-500">Ainda sem movimento no período.</p> : (
                   <ul className="space-y-1.5">
                     {page.topProducts.map((p) => (
                       <li key={p.name} className="flex justify-between text-sm gap-2">
                         <span className="font-medium truncate">{p.name} <span className="text-zinc-400 font-normal">· {p.views} views{p.adds > 0 ? ` · ${p.adds} adds` : ''}</span></span>
-                        {page.modules.orders && <span className="font-bold shrink-0">{money(p.revenue)}</span>}
+                        {page.modules.orders && <span className="font-semibold shrink-0">{money(p.revenue)}</span>}
                       </li>
                     ))}
                   </ul>
@@ -227,7 +227,7 @@ export default function ResultadosPage() {
               </div>
             )}
             <div className="bg-white border border-zinc-200 rounded-lg p-5">
-              <h3 className="font-bold text-sm mb-3">Botões mais clicados</h3>
+              <h3 className="font-semibold text-sm mb-3">Botões mais clicados</h3>
               {page.topCtas.length === 0 ? <p className="text-xs text-zinc-500">Ainda sem cliques no período.</p> : (
                 <ul className="space-y-1.5">
                   {page.topCtas.map((c) => (

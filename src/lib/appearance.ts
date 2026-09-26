@@ -38,7 +38,7 @@ export interface NavPreset {
 // escuros o suficiente para o texto branco ter contraste garantido.
 // NÃO é mais exposta na UI — mantida por compatibilidade/teste.
 export const NAV_PRESETS: NavPreset[] = [
-  { id: 'azul', label: 'Azul InstaLink', color: '#2f6bef' },
+  { id: 'azul', label: 'Azul GoDoutor', color: '#2f6bef' },
   { id: 'marinho', label: 'Marinho', color: '#33405e' },
   { id: 'verde', label: 'Verde', color: '#0f9f6e' },
   { id: 'petroleo', label: 'Azul-petróleo', color: '#0e86b4' },

@@ -16,7 +16,7 @@ import type { BookingConfig, BusinessPipeline } from '@/lib/types';
 import { money, waLink } from '@/lib/utils';
 import { humanDay } from '@/lib/tz';
 import { formatPhoneBR } from '@/lib/contact-profile';
-import {
+import { SearchListSkeleton,
   Avatar, Badge, Button, EmptyState, ListSkeleton, PageHeader, Tabs, type TabItem,
 } from '@/components/ui';
 import { Icon } from '@/components/icons';
@@ -46,12 +46,17 @@ export default function ClientesPage() {
   const [people, setPeople] = useState<Person360[]>([]);
   const [total, setTotal] = useState(0);
   const [pages, setPages] = useState(1);
-  const [page, setPage] = useState(1);
+  // P1.7 — o estado volta pela URL quando a ficha 360 devolve o usuário
+  // (busca/filtro/página exatamente como estavam).
+  const [page, setPage] = useState(() => Math.max(1, parseInt(params.get('page') || '1', 10) || 1));
   // Busca profunda: /clientes?b=…&q=telefone abre já filtrada (usado pelo
   // "Cliente e histórico" do detalhe do agendamento).
   const [q, setQ] = useState(params.get('q') || '');
   const [search, setSearch] = useState(params.get('q') || '');
-  const [filter, setFilter] = useState<ListFilter>('all');
+  const [filter, setFilter] = useState<ListFilter>(() => {
+    const fromUrl = params.get('filter') || '';
+    return (['access', 'noaccess', 'marketing', 'attended'].includes(fromUrl) ? fromUrl : 'all') as ListFilter;
+  });
   // A1.2 · Bloco 1: a esteira tinha DUAS portas (a rota /esteira e esta visão
   // dentro de Clientes). Agora existe UMA: /funil.
   const legacyEsteira = params.get('view') === 'esteira';
@@ -61,9 +66,31 @@ export default function ClientesPage() {
   }, [legacyEsteira, businessId, router]);
   const [loaded, setLoaded] = useState(false);
   const [openKey, setOpenKey] = useState<string | null>(null);
+  // P1.7 — o clique principal ABRE O 360 (rota própria, endereço
+  // compartilhável). A gaveta vira PRÉVIA (ação secundária). O estado da
+  // lista (busca/filtro/página) viaja na URL para o "Voltar para clientes"
+  // devolver a lista EXATAMENTE como estava.
+  const listStateQuery = () => {
+    const qs = new URLSearchParams();
+    if (businessId) qs.set('b', businessId);
+    if (search.trim()) qs.set('q', search.trim());
+    if (filter !== 'all') qs.set('filter', filter);
+    if (page > 1) qs.set('page', String(page));
+    return qs.toString();
+  };
+  const openFullProfile = (key: string) => {
+    router.push(`/clientes/${encodeURIComponent(key)}?${listStateQuery()}`);
+  };
   const [error, setError] = useState('');
   const [bookingFor, setBookingFor] = useState<Person360 | null>(null);
   const [newClientOpen, setNewClientOpen] = useState(false);
+  // FASE 2 · P9 — Quick Create global: ?novo=1 abre a criação de paciente.
+  const [novoHandled, setNovoHandled] = useState(false);
+  useEffect(() => {
+    if (novoHandled || !businessId || params.get('novo') !== '1') return;
+    setNovoHandled(true);
+    setNewClientOpen(true);
+  }, [novoHandled, businessId, params]);
   // A3.4 · Bloco 7 — a base entra e sai em arquivo (CSV).
   const [importOpen, setImportOpen] = useState(false);
   const [exporting, setExporting] = useState('');
@@ -240,15 +267,16 @@ export default function ClientesPage() {
   return (
     <>
       <PageHeader
-        icon="users"
         title="Clientes"
-        hint={`Base única de pessoas: cadastro, histórico e relacionamento${canFunil ? '. As oportunidades por etapa estão no Funil' : ''}.`}
         action={
           <>
+            {/* OPORTUNIDADES (§6): o kanban deixou de ser a identidade do
+                produto e virou uma ferramenta DENTRO de Clientes — aparece só
+                quando a capacidade está ativa e o usuário tem a permissão. */}
             {canFunil && (
               <Link href={`/funil?b=${businessId}`}
-                className="inline-flex items-center justify-center gap-1.5 text-xs font-semibold rounded-md px-3 py-2 bg-[var(--lilac-bg)] text-[var(--lilac-fg)] border border-[var(--lilac-border)] hover:bg-[var(--lilac-bg-hover)]">
-                <Icon n="funnel" size={14} /> Funil de oportunidades
+                className="inline-flex items-center justify-center gap-1.5 text-xs font-semibold rounded-[var(--radius-sm)] px-3 py-2 bg-white text-[var(--text-primary)] border border-[var(--border-strong)] hover:bg-[var(--surface-hover)]">
+                <Icon n="funnel" size={14} /> Oportunidades
               </Link>
             )}
             <Button variant="secondary" onClick={() => setImportOpen(true)} title="Trazer a base de outro sistema (CSV)">
@@ -302,7 +330,7 @@ export default function ClientesPage() {
             <Tabs items={tabItems} value={filter} onChange={(v) => setFilter(v)} ariaLabel="Filtrar clientes" size="sm" />
           </div>
 
-          {denied ? <AccessDenied area="Clientes" /> : !loaded ? <ListSkeleton rows={5} /> : people.length === 0 ? (
+          {denied ? <AccessDenied area="Clientes" /> : !loaded ? <SearchListSkeleton rows={5} /> : people.length === 0 ? (
             <div className="ws-panel">
               <EmptyState
                 icon={search ? 'search' : 'users'}
@@ -319,17 +347,22 @@ export default function ClientesPage() {
                 const minor = p.tags?.some((t) => t.id === 'menor');
                 return (
                   <article key={p.key} className="group hover:bg-[var(--surface-hover)] transition-colors">
-                    <div className="flex flex-wrap items-center gap-3 px-4 py-3">
+                    {/* 2.0 · §H (responsividade): em telas estreitas a linha vira
+                        DUAS: identidade em cima (com espaço para o nome e os
+                        selos) e as ações alinhadas à direita embaixo. Antes o
+                        grupo de botões `shrink-0` comia o nome ("Marlen…") e
+                        quebrava o telefone em várias linhas. */}
+                    <div className="flex flex-col gap-2 px-4 py-3 sm:flex-row sm:flex-wrap sm:items-center sm:gap-3">
                       <button
                         type="button"
-                        onClick={() => setOpenKey(p.key)}
+                        onClick={() => openFullProfile(p.key)}
                         className="flex items-center gap-3 min-w-0 flex-1 text-left focus-visible:outline-none focus-visible:shadow-focus rounded-md"
                         aria-label={`Abrir perfil de ${p.name || 'cliente'}`}
                       >
                         <Avatar name={p.name} src={p.avatar || undefined} size={42} />
                         <span className="min-w-0 flex-1">
                           <span className="flex flex-wrap items-center gap-1.5">
-                            <span className="text-sm font-bold text-[var(--text)] truncate">{p.name || 'Sem nome'}</span>
+                            <span className="text-sm font-semibold text-[var(--text)] truncate">{p.name || 'Sem nome'}</span>
                             {p.age !== null && p.age !== undefined && (
                               <span className="text-xs text-[var(--text-muted)] tabular-nums">{p.age} anos</span>
                             )}
@@ -346,15 +379,18 @@ export default function ClientesPage() {
                               <span className="inline-flex items-center gap-1"><Icon n="calendar" size={11} /> {p.bookings.length} agend.</span>
                             )}
                             {p.leads.length > 0 && (
-                              <span className="inline-flex items-center gap-1"><Icon n="funnel" size={11} /> {p.leads.length} no funil</span>
+                              <span className="inline-flex items-center gap-1"><Icon n="funnel" size={11} /> {p.leads.length} em oportunidades</span>
                             )}
                             {p.orders > 0 && <span className="font-semibold text-[var(--text)] tabular-nums">{money(p.spent)}</span>}
                           </span>
                         </span>
                       </button>
-                      <div className="flex items-center gap-1.5 shrink-0">
-                        <Button size="sm" variant="primary" onClick={() => setOpenKey(p.key)}>
-                          <Icon n="wallet" size={14} /> Ver perfil
+                      <div className="flex items-center gap-1.5 shrink-0 self-end sm:self-auto">
+                        <Button size="sm" variant="primary" onClick={() => openFullProfile(p.key)}>
+                          <Icon n="userCircle" size={14} /> Ver perfil
+                        </Button>
+                        <Button size="sm" variant="secondary" onClick={() => setOpenKey(p.key)} title="Prévia rápida sem sair da lista">
+                          <Icon n="eye" size={14} /> <span className="hidden md:inline">Prévia</span>
                         </Button>
                         <Button size="sm" variant="secondary" onClick={() => openBooking(p)} title="Novo agendamento para esta pessoa">
                           <Icon n="calendarPlus" size={14} /> <span className="hidden md:inline">Agendar</span>

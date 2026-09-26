@@ -35,6 +35,7 @@ import {
   bookingRevenue, orderRevenue, REVENUE_HINTS, REVENUE_LABELS, REVENUE_UNIT_LABELS,
   type OrderRevenueItem, type RevenueResult,
 } from './revenue';
+import { financeMetrics, type FinanceMetrics } from './finance-metrics';
 import { pctChange } from './analytics';
 import { leadOriginLabel, leadOriginRank } from './leads';
 
@@ -64,6 +65,12 @@ export interface ResultsInput {
   professionals?: ProfessionalRow[];
   /** Pedidos (só quando o módulo existe) — base da receita registrada. */
   orders?: OrderRevenueItem[];
+  /**
+   * §6 — movimentações financeiras registradas (receita 'pago' = RECEBIDO).
+   * Sem isso o painel não sabe o que foi efetivamente recebido — e nunca
+   * deve transformar agendamento em dinheiro.
+   */
+  financeEntries?: Array<{ kind: 'receita' | 'despesa'; status: string; amount: number; dueDate: string; paidAt: string }>;
   hasBookingsModule?: boolean;
   hasOrdersModule?: boolean;
 }
@@ -163,6 +170,12 @@ export interface ResultsPayload {
     hints: Record<string, string>;
     unitLabels: Record<string, string>;
   };
+  /**
+   * §6 — os QUATRO conceitos reconciliados (Agendado · Realizado ·
+   * Recebido · Em aberto), com a MESMA função de /api/overview e
+   * /api/finance (lib/finance-metrics.ts). Mesmo indicador = mesmo cálculo.
+   */
+  semantics: FinanceMetrics | null;
   /** Limitações conhecidas, em linguagem simples (mostradas na tela). */
   limitations: string[];
   hasAnyData: boolean;
@@ -220,6 +233,10 @@ export function collectResults(
     orders: db.orders
       .filter((o) => ids.has(o.businessId))
       .map((o) => ({ status: o.status, createdAt: o.createdAt, total: o.total })),
+    // §6 — RECEBIDO vem do que foi registrado em Financeiro (dado real).
+    financeEntries: (db.financeEntries || [])
+      .filter((e) => ids.has(e.businessId))
+      .map((e) => ({ kind: e.kind, status: e.status, amount: e.amount, dueDate: e.dueDate || '', paidAt: e.paidAt || '' })),
     hasBookingsModule: units.some((u) => u.hasBookings),
     hasOrdersModule: units.some((u) => u.hasOrders),
   });
@@ -261,7 +278,7 @@ export function resultsSummary(payload: ResultsPayload, ids: string[] = SUMMARY_
 export const NO_DATA = 'Sem dados suficientes';
 
 const NO_REGISTERED_REVENUE_REASON =
-  'Este negócio não registra recebimentos no InstaLink: o sistema conhece o valor previsto dos atendimentos, mas não o pagamento. '
+  'Este negócio não registra recebimentos no GoDoutor: o sistema conhece o valor previsto dos atendimentos, mas não o pagamento. '
   + 'Por isso não exibimos “receita realizada”.';
 
 export const ARRIVAL_NOTE =
@@ -444,14 +461,14 @@ export function buildResults(input: ResultsInput): ResultsPayload {
       comparable: false,
     }),
     metric({
-      id: 'leads', label: 'Leads', unit: 'count', value: leadsCur.length, prev: leadsPrev ? leadsPrev.length : null,
+      id: 'leads', label: 'Oportunidades', unit: 'count', value: leadsCur.length, prev: leadsPrev ? leadsPrev.length : null,
       hint: 'Contatos interessados registrados no período (pela data de criação).',
       hasData: leadsCur.length > 0 || (leadsPrev || []).length > 0,
       noDataHint: 'Nenhum lead registrado neste período — nem no período anterior.',
     }),
     metric({
-      id: 'lead_conversion', label: 'Conversão de leads', unit: 'percent', value: leadRate, prev: leadRatePrev,
-      hint: 'Leads do período que viraram cliente/agendamento ÷ leads do período.',
+      id: 'lead_conversion', label: 'Conversão de oportunidades', unit: 'percent', value: leadRate, prev: leadRatePrev,
+      hint: 'Oportunidades do período que viraram cliente/agendamento ÷ oportunidades do período.',
       hasData: leadsCur.length > 0,
       noDataHint: 'Sem leads no período não há conversão para calcular.',
     }),
@@ -459,7 +476,9 @@ export function buildResults(input: ResultsInput): ResultsPayload {
   if (forecast) {
     metrics.push(
       metric({
-        id: 'forecast_revenue', label: REVENUE_LABELS.bookings, unit: 'money',
+        // §6 — linguagem reconciliada: é o valor dos atendimentos elegíveis
+        // (agendado + realizado), não "receita" genérica.
+        id: 'forecast_revenue', label: 'Valor dos atendimentos', unit: 'money',
         value: forecast.total, prev: previous ? forecast.prev : null,
         hint: REVENUE_HINTS.bookings,
         hasData: forecast.count > 0 && forecastPriced,
@@ -494,16 +513,16 @@ export function buildResults(input: ResultsInput): ResultsPayload {
 
   const steps: FunnelStep[] = hasBookings
     ? [
-      step('leads', 'Leads', leadsCur.length, 'Interessados registrados no período.', 'lead'),
-      step('lead_converted', 'Leads convertidos', convertedCur, 'Leads do período marcados como convertidos.', 'lead'),
+      step('leads', 'Oportunidades', leadsCur.length, 'Interessados registrados no período.', 'lead'),
+      step('lead_converted', 'Oportunidades convertidas', convertedCur, 'Oportunidades do período marcadas como convertidas.', 'lead'),
       step('bookings', 'Agendamentos', bookingsCur, 'Atendimentos marcados para o período.', 'booking'),
       step('confirmed', 'Confirmados', confirmedCur, 'Agendamentos confirmados (ou já concluídos) no período.', 'booking'),
       step('arrived', 'Chegou', 0, 'O sistema ainda não registra a chegada do cliente.', 'booking', false),
       step('completed', 'Concluídos', completedCur, 'Atendimentos realizados no período.', 'booking'),
     ]
     : [
-      step('leads', 'Leads', leadsCur.length, 'Interessados registrados no período.', 'lead'),
-      step('lead_converted', 'Leads convertidos', convertedCur, 'Leads do período marcados como convertidos.', 'lead'),
+      step('leads', 'Oportunidades', leadsCur.length, 'Interessados registrados no período.', 'lead'),
+      step('lead_converted', 'Oportunidades convertidas', convertedCur, 'Oportunidades do período marcadas como convertidas.', 'lead'),
     ];
 
   // Taxa etapa-a-etapa DENTRO do mesmo grupo (não inventamos elo entre lead e
@@ -519,7 +538,7 @@ export function buildResults(input: ResultsInput): ResultsPayload {
   const losses: Array<{ id: string; label: string; value: number; hint: string }> = [];
   const notConverted = leadsCur.length - convertedCur;
   if (leadsCur.length > 0) {
-    losses.push({ id: 'lead_lost', label: 'Leads não convertidos', value: notConverted, hint: 'Leads do período que não viraram cliente/agendamento.' });
+    losses.push({ id: 'lead_lost', label: 'Oportunidades não convertidas', value: notConverted, hint: 'Oportunidades do período que não viraram cliente/agendamento.' });
   }
   if (hasBookings) {
     losses.push(
@@ -593,6 +612,16 @@ export function buildResults(input: ResultsInput): ResultsPayload {
 
   const hasAnyData = bookingsCur > 0 || leadsCur.length > 0 || newContactsCur > 0 || contacts.length > 0;
 
+  // ── §6 — quatro conceitos reconciliados (MESMA função de overview/finance) ──
+  const semantics = hasBookings
+    ? financeMetrics({
+      bookings: bookings.map((b) => ({ status: b.status, date: b.date, price: priceOf.get(b.serviceId) || 0 })),
+      entries: input.financeEntries || [],
+      from: window.from,
+      to: window.to,
+    })
+    : null;
+
   const limitations: string[] = [];
   if (!registered.available) limitations.push(NO_REGISTERED_REVENUE_REASON);
   if (hasBookings) limitations.push(ARRIVAL_NOTE);
@@ -639,6 +668,7 @@ export function buildResults(input: ResultsInput): ResultsPayload {
       hints: REVENUE_HINTS as unknown as Record<string, string>,
       unitLabels: REVENUE_UNIT_LABELS as unknown as Record<string, string>,
     },
+    semantics,
     limitations,
     hasAnyData,
     emptyHint: 'Ainda não há movimento neste período. Assim que houver atendimentos, clientes ou leads, os números aparecem aqui.',

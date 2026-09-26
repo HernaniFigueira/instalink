@@ -40,7 +40,7 @@ export default function MasterOrgDetailPage() {
         · {o.units} unidade(s) · {o.users} usuário(s)
       </p>
 
-      <section className="bg-white border border-zinc-200 rounded-2xl p-4 mt-5">
+      <section className="bg-white border border-zinc-200 rounded-xl p-4 mt-5">
         <p className="text-xs font-extrabold uppercase tracking-wider text-zinc-400 mb-3">Unidades</p>
         {o.unitSummaries.length === 0 ? (
           <p className="text-sm text-zinc-500">Nenhuma unidade.</p>
@@ -67,7 +67,7 @@ export default function MasterOrgDetailPage() {
         )}
       </section>
 
-      <section className="bg-white border border-zinc-200 rounded-2xl p-4 mt-4">
+      <section className="bg-white border border-zinc-200 rounded-xl p-4 mt-4">
         <p className="text-xs font-extrabold uppercase tracking-wider text-zinc-400 mb-3">Usuários vinculados ({users.length})</p>
         {users.length === 0 ? <p className="text-sm text-zinc-500">Nenhum.</p> : (
           <ul className="space-y-2">

@@ -325,13 +325,15 @@ export interface OnboardingPlan {
   /** Código estável para automação/relatório (BLOCKED_EXTERNAL quando é o caso). */
   code: 'OK' | 'BLOCKED_EXTERNAL' | 'UNIT_PENDING' | 'DEGRADED';
   /** Config que o navegador PODE ver (sem segredo nenhum). */
-  clientConfig: { appId: string; configId: string; version: string } | null;
+  clientConfig: { appId: string; configId: string; version: string; redirectUri: string } | null;
 }
 
 export function onboardingPlan(args: {
   env: EnvLike;
   business: { whatsappIntegration?: UnitIntegrationView };
   todayISO: string;
+  /** Origem estável do site (Preview/produção) para o redirect_uri manual. */
+  requestOrigin?: string;
 }): OnboardingPlan {
   const { env, business, todayISO } = args;
   const platform = platformLayer(env);
@@ -341,7 +343,13 @@ export function onboardingPlan(args: {
   const version = { current: currentVersion, ...graphVersionAdvice(currentVersion, todayISO) };
   const wi = business.whatsappIntegration || {};
   const clientConfig = platform.ready
-    ? { appId: String(env.META_APP_ID), configId: String(env.META_CONFIG_ID), version: currentVersion }
+    ? {
+      appId: String(env.META_APP_ID),
+      configId: String(env.META_CONFIG_ID),
+      version: currentVersion,
+      // redirect_uri manual (callback dedicado) — idêntico no authorize e no exchange.
+      redirectUri: whatsappRedirectUri(String(args.requestOrigin || '')),
+    }
     : null;
 
   const authorized = !!wi.encryptedAccessToken;
@@ -604,9 +612,65 @@ export function graphBase(version: string): string {
   return `https://graph.facebook.com/${String(version).replace(/^\/+|\/+$/g, '')}`;
 }
 
-/** URLs usadas na troca do código. Separadas para poder testar sem rede. */
-export function exchangeCodeUrl(base: string, appId: string, appSecret: string, code: string): string {
-  const qs = new URLSearchParams({ client_id: appId, client_secret: appSecret, code });
+// ── Manual OAuth (Facebook Login for Business + Embedded Signup) ─────────────
+// O JS SDK (FB.login) NÃO expõe o redirect_uri real do diálogo: o popup usa um
+// valor interno do Facebook (https://staticxx.facebook.com/x/connect/xd_arbiter/?version=…),
+// instável e não configurável — por isso o exchange server-to-server nunca
+// conseguia bater (36008), e uma URL explícita nas options derruba o popup (191).
+// A Meta documenta o manual-flow como caminho oficial: dialog/oauth COM
+// redirect_uri nosso, idêntico no GET /oauth/access_token (ver SO #77555576 e
+// developers.facebook.com/docs/facebook-login/guides/advanced/manual-flow).
+export const WHATSAPP_OAUTH_CALLBACK_PATH = '/api/whatsapp/onboarding/callback';
+export const WHATSAPP_OAUTH_DIALOG_VERSION_PATH = 'dialog/oauth';
+
+/** redirect_uri canônico do fluxo manual: origem estável + callback dedicado. */
+export function whatsappRedirectUri(siteUrl: string): string {
+  const base = String(siteUrl || '').replace(/\/+$/, '');
+  return `${base}${WHATSAPP_OAUTH_CALLBACK_PATH}`;
+}
+
+/**
+ * URL do diálogo OAuth manual com Embedded Signup (config_id preservado).
+ * authorization request e exchange usam EXATAMENTE o mesmo redirect_uri.
+ */
+export function whatsappAuthorizeUrl(args: {
+  appId: string;
+  configId: string;
+  version: string;
+  redirectUri: string;
+  state: string;
+}): string {
+  const ver = String(args.version || LATEST_VERIFIED_GRAPH_VERSION).replace(/^\/+|\/+$/g, '');
+  const url = new URL(`https://www.facebook.com/${ver}/${WHATSAPP_OAUTH_DIALOG_VERSION_PATH}`);
+  url.searchParams.set('client_id', args.appId);
+  url.searchParams.set('redirect_uri', args.redirectUri);
+  url.searchParams.set('response_type', 'code');
+  url.searchParams.set('config_id', args.configId);
+  url.searchParams.set('display', 'popup');
+  url.searchParams.set('override_default_response_type', 'true');
+  // sessionInfoVersion mantém o postMessage WA_EMBEDDED_SIGNUP (WABA/número).
+  url.searchParams.set('extras', JSON.stringify({ setup: {}, sessionInfoVersion: '3' }));
+  if (args.state) url.searchParams.set('state', args.state);
+  return url.toString();
+}
+
+/**
+ * URL da troca do código. `redirect_uri` DEVE ser idêntico ao do diálogo
+ * OAuth (manual-flow) — o parâmetro é sempre enviado.
+ */
+export function exchangeCodeUrl(
+  base: string,
+  appId: string,
+  appSecret: string,
+  code: string,
+  redirectUri: string,
+): string {
+  const qs = new URLSearchParams({
+    client_id: appId,
+    client_secret: appSecret,
+    code,
+    redirect_uri: redirectUri,
+  });
   return `${base}/oauth/access_token?${qs.toString()}`;
 }
 export function debugTokenUrl(base: string, token: string): string {

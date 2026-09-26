@@ -52,12 +52,12 @@ export default function RecursosPage() {
   const toastTimer = useRef<number | null>(null);
 
   // 403 → aviso amigável (sessão preservada), nunca skeleton infinito.
-  const { denied, report } = useAreaLoad('Recursos');
+  const { denied, report } = useAreaLoad('Capacidades do sistema');
 
   const load = useCallback(async () => {
     if (!businessId) return;
     setFailed('');
-    const res = await apiGet<{ features?: FeatureRow[] }>(`/api/businesses/${businessId}/features`, { scope: 'area', area: 'Recursos' });
+    const res = await apiGet<{ features?: FeatureRow[] }>(`/api/businesses/${businessId}/features`, { scope: 'area', area: 'Capacidades do sistema' });
     if (!report(res)) {
       // Falhou (rede/500/400): mostra erro acionável em vez de carregar para sempre.
       setRows([]);
@@ -76,7 +76,7 @@ export default function RecursosPage() {
     try {
       const res = await apiSend<{ effect?: string }>('/api/businesses/' + businessId + '/features', 'PATCH', {
         businessId, feature: row.id, enabled: !row.enabled,
-      }, { scope: 'action', area: 'Recursos' });
+      }, { scope: 'action', area: 'Capacidades do sistema' });
       if (!res.ok) throw new Error(res.message || 'Não foi possível atualizar.');
       // Confirmação pelo servidor (releitura), não só pelo estado local:
       // "salvo" aqui significa relido do banco.
@@ -96,7 +96,12 @@ export default function RecursosPage() {
     }
   }
 
-  if (denied) return <AccessDenied area="Recursos" />;
+  // § missão: "Recursos" deixa de ser um conceito principal do usuário. A tela
+  // continua a MESMA (`capabilityFlags` intactos, nenhuma rota apagada) — o que
+  // muda é como ela se apresenta: capacidades do sistema, dentro de
+  // Configurações. O rótulo da porta no catálogo segue "Recursos" de propósito,
+  // para não quebrar links salvos nem permissões gravadas.
+  if (denied) return <AccessDenied area="Capacidades do sistema" />;
 
   // ── Estados de CONTEXTO (antes de falar de dados) ────────────
   // Sem empresa na conta: não é erro — é um estado com caminho claro.
@@ -148,7 +153,7 @@ export default function RecursosPage() {
     <>
       <PageHeader
         icon="grid"
-        title="Recursos da empresa"
+        title="Capacidades do sistema"
         hint="Ligue e desligue o que existe no seu negócio. A página pública, o menu e os atalhos obedecem na hora."
         action={
           <span className="flex flex-wrap items-center gap-2">
@@ -185,7 +190,7 @@ export default function RecursosPage() {
       {!failed && groups.map((group) => (
         <section key={group} className="mb-6 last:mb-0">
           <div className="flex items-baseline gap-2 mb-2.5">
-            <h2 className="text-xs font-extrabold uppercase tracking-wider text-zinc-400">{group}</h2>
+            <h2 className="text-xs font-semibold uppercase tracking-wider text-zinc-400">{group}</h2>
             <span className="text-xs text-zinc-400">{GROUP_HINT[group] || ''}</span>
           </div>
           <div className="grid sm:grid-cols-2 xl:grid-cols-3 gap-3">

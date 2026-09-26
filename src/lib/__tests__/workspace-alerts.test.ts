@@ -67,8 +67,61 @@ describe('workspace alerts nunca inventam pendência', () => {
   });
 
   it('pluraliza o rótulo do sino de forma honesta', () => {
-    expect(bellLabel({ status: 'loading', items: [], total: 0 })).toBe('Notificações: carregando');
+    expect(bellLabel({ status: 'loading', items: [], total: 0, badgeCount: 0, groups: [] })).toBe('Notificações: carregando');
     expect(bellLabel(buildWorkspaceAlerts({ pendingSetup: 1 }))).toBe('Notificações: 1 pendência');
     expect(bellLabel(buildWorkspaceAlerts({ pendingSetup: 2 }))).toBe('Notificações: 2 pendências');
+  });
+});
+
+// ═══════════════════════════════════════════════════════════════
+// P1.14 — grupos FALHAS · PENDÊNCIAS · INFORMAÇÕES e badge honesto
+// ═══════════════════════════════════════════════════════════════
+describe('P1.14 — sino separado por grupo, badge vermelho só para atenção real', () => {
+  it('badge conta SÓ as Falhas (perigo real), não o total', () => {
+    const alerts = buildWorkspaceAlerts({
+      attention: [
+        { id: 'tasksOverdue', count: 2, label: 'pendências vencidas', href: '/tarefas' },
+        { id: 'queueWaiting', count: 5, label: 'na fila', href: '/agenda' },
+      ],
+      whatsapp: { unread: 7 },
+    });
+    expect(alerts.badgeCount).toBe(2);
+    expect(alerts.total).toBe(14);
+  });
+
+  it('grupos canônicos na ordem Falhas → Pendências → Informações (vazios não aparecem)', () => {
+    const alerts = buildWorkspaceAlerts({
+      attention: [
+        { id: 'tasksOverdue', count: 1, label: 'pendência vencida', href: '/tarefas' },
+        { id: 'closures', count: 3, label: 'fechamentos', href: '/agenda' },
+      ],
+      whatsapp: { unread: 4, pendingMessages: 2 },
+      pendingSetup: 1,
+    });
+    expect(alerts.groups.map((g) => g.label)).toEqual(['Falhas', 'Pendências', 'Informações']);
+    const failures = alerts.groups.find((g) => g.id === 'failure')!;
+    expect(failures.items.map((i) => i.id)).toEqual(['tasksOverdue']);
+    const pending = alerts.groups.find((g) => g.id === 'pending')!;
+    expect(pending.items.map((i) => i.id).sort()).toEqual(['closures', 'messagesPending', 'setupPending']);
+    const info = alerts.groups.find((g) => g.id === 'info')!;
+    expect(info.items.map((i) => i.id)).toEqual(['conversationsUnread']);
+  });
+
+  it('sem Falhas não há badge vermelho — mesmo com pendências e não lidas', () => {
+    const alerts = buildWorkspaceAlerts({
+      attention: [{ id: 'closures', count: 9, label: 'fechamentos', href: '/agenda' }],
+      whatsapp: { unread: 30 },
+    });
+    expect(alerts.badgeCount).toBe(0);
+    expect(alerts.total).toBeGreaterThan(0);
+    expect(alerts.groups.map((g) => g.id)).toEqual(['pending', 'info']);
+  });
+
+  it('rótulo do sino explica a diferença (atenção ≠ volume)', () => {
+    const alerts = buildWorkspaceAlerts({
+      attention: [{ id: 'tasksOverdue', count: 2, label: 'vencidas', href: '/tarefas' }],
+      whatsapp: { unread: 3 },
+    });
+    expect(bellLabel(alerts)).toBe('Notificações: 2 exigem atenção · 5 no total');
   });
 });

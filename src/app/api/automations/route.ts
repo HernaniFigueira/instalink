@@ -30,6 +30,7 @@ import { cancelRunsOfAutomation, sanitizeAutomationRunForDisplay } from '@/lib/a
 import { capabilityStateFor, limitsFor } from '@/lib/automation/capabilities';
 import { applyTemplate, templateOffers } from '@/lib/automation/templates';
 import { taskAssigneeOptions } from '@/lib/automation/tasks';
+import { automationHealthSummary } from '@/lib/intelligence-metrics';
 
 function fail(message: string, status = 400): NextResponse {
   return NextResponse.json({ ok: false, error: message }, { status });
@@ -41,7 +42,7 @@ function businessIdOf(req: NextRequest, body?: Record<string, any>): string {
 
 /** Só os campos que o motor conhece (o resto do corpo é descartado). */
 function pickDraft(body: Record<string, any>): Record<string, any> {
-  const allowed = ['name', 'description', 'active', 'event', 'condition', 'steps', 'elseSteps', 'nodes', 'edges', 'settings', 'templateId'];
+  const allowed = ['name', 'description', 'active', 'status', 'source', 'event', 'condition', 'steps', 'elseSteps', 'nodes', 'edges', 'settings', 'templateId'];
   const out: Record<string, any> = {};
   for (const key of allowed) if (body[key] !== undefined) out[key] = body[key];
   return out;
@@ -97,6 +98,7 @@ export async function GET(req: NextRequest) {
     templates: templateOffers(db, businessId),
     capabilities: capabilityStateFor(business),
     limits: limitsFor(business),
+    health: automationHealthSummary(db, businessId),
     counts: {
       automations: automations.length,
       openTasks: (db.tasks || []).filter((t) => t.businessId === businessId && t.status === 'open').length,
@@ -123,6 +125,9 @@ export async function POST(req: NextRequest) {
         if (!existing) throw Object.assign(new Error('Automação não encontrada.'), { status: 404 });
         const nextActive = typeof body.active === 'boolean' ? body.active : !existing.active;
         existing.active = nextActive;
+        if (existing.status !== 'archived') {
+          existing.status = nextActive ? 'active' : (existing.status === 'draft' ? 'draft' : 'paused');
+        }
         existing.updatedAt = new Date().toISOString();
         // Desativar nunca apaga execuções; só encerra as vivas (não faz mais
         // sentido continuar um fluxo de uma automação desligada).
@@ -164,6 +169,7 @@ export async function POST(req: NextRequest) {
           businessId,
           name: `${fresh.name} (cópia)`.slice(0, 80),
           active: false, // cópia nasce DESLIGADA: nada dispara sem revisão
+          status: 'draft',
           version: (fresh.version || 1) + 1,
           createdAt: now,
           updatedAt: now,
@@ -192,7 +198,8 @@ export async function POST(req: NextRequest) {
       const applied = applyTemplate(db, businessId, templateId, {
         userId: guard.ctx.user.id,
         name: body.name ? String(body.name) : undefined,
-        active: body.active !== false,
+        // Receita nasce em rascunho; ativa só se pedirem active === true.
+        active: body.active === true,
       });
       if (!applied.ok) {
         return NextResponse.json({ ok: false, errors: applied.errors }, { status: 422 });
@@ -207,6 +214,8 @@ export async function POST(req: NextRequest) {
           createdAt: now,
           updatedAt: now,
           createdByUserId: guard.ctx.user.id,
+          status: applied.automation?.status || 'draft',
+          source: 'template',
         };
         d.automations.push(automation);
         pushAudit(d, {
@@ -255,6 +264,8 @@ export async function POST(req: NextRequest) {
         version: 1,
         createdAt: now,
         updatedAt: now,
+        status: validation.automation?.status || (validation.automation?.active ? 'active' : 'draft'),
+        source: 'manual',
       };
       d.automations.push(automation);
       const view = automationView(d, automation);
@@ -304,6 +315,10 @@ export async function PATCH(req: NextRequest) {
         : { nodes: existing.nodes, edges: existing.edges }),
       settings: { ...(existing.settings || {}), ...(body.settings || {}) },
       templateId: existing.templateId,
+      status: typeof body.active === 'boolean'
+        ? (body.active ? 'active' : (existing.status === 'draft' ? 'draft' : 'paused'))
+        : (existing.status || (existing.active ? 'active' : 'paused')),
+      source: existing.source || 'manual',
     };
     const validation = validateForBusiness(db, businessId, draft);
     if (!validation.ok) {

@@ -170,7 +170,7 @@ export function dashboardContext(
 // a rota (permissão do catálogo): ninguém é enviado para porta proibida.
 
 export interface DashboardAttentionItem {
-  id: 'closures' | 'leadsNew' | 'tasksOverdue' | 'queueWaiting' | 'arrivalsPending';
+  id: 'closures' | 'leadsNew' | 'tasksOverdue' | 'queueWaiting' | 'arrivalsPending' | 'returnsDue';
   count: number;
   label: string;
   /** Destino contextual — presente somente com permissão para a rota. */
@@ -188,11 +188,15 @@ export interface DashboardAttentionInput {
   queueWaiting?: number;
   /** A3.4 · Bloco 4 — chegou hoje e o check-in ainda não foi registrado. */
   arrivalsPending?: number;
+  /** FASE 2 · P10 — retornos vencidos/hoje sem novo agendamento (Paciente 360). */
+  returnsDue?: number;
   permissions: {
     agenda: boolean;
     leads: boolean;
     /** Qualquer uma das permissões da porta /tarefas. */
     tasks: boolean;
+    /** FASE 2 · P10 — rota /followup (perfis com config ou clientes). */
+    followUp?: boolean;
   };
 }
 
@@ -200,19 +204,26 @@ export function dashboardAttention(input: DashboardAttentionInput): DashboardAtt
   const out: DashboardAttentionItem[] = [];
   if (input.closures > 0) {
     out.push({
-      id: 'closures', count: input.closures, label: 'atendimentos para fechar',
+      // Singular/plural na hora de compor a frase do aviso: "1 atendimento
+      // para fechar" ≠ "1 atendimentos para fechar" (regra de copy 2.0).
+      id: 'closures', count: input.closures,
+      label: input.closures === 1 ? 'atendimento para fechar' : 'atendimentos para fechar',
       href: input.permissions.agenda ? '/agenda' : null,
     });
   }
   if (input.leadsNew > 0) {
     out.push({
-      id: 'leadsNew', count: input.leadsNew, label: 'leads sem tratamento',
+      // 2.0 — linguagem do dono da clínica: "lead" é jargão de marketing;
+      // no produto a mesma coisa se chama OPORTUNIDADE (seção Clientes).
+      id: 'leadsNew', count: input.leadsNew,
+      label: input.leadsNew === 1 ? 'oportunidade sem contato' : 'oportunidades sem contato',
       href: input.permissions.leads ? '/funil' : null,
     });
   }
   if (input.tasksOverdue > 0) {
     out.push({
-      id: 'tasksOverdue', count: input.tasksOverdue, label: 'tarefas vencidas',
+      id: 'tasksOverdue', count: input.tasksOverdue,
+      label: input.tasksOverdue === 1 ? 'pendência vencida' : 'pendências vencidas',
       href: input.permissions.tasks ? '/tarefas' : null,
     });
   }
@@ -228,6 +239,14 @@ export function dashboardAttention(input: DashboardAttentionInput): DashboardAtt
     out.push({
       id: 'arrivalsPending', count: input.arrivalsPending || 0, label: 'chegaram sem check-in',
       href: input.permissions.agenda ? '/agenda' : null,
+    });
+  }
+  // FASE 2 · P10 — retorno do profissional venceu e o paciente não voltou.
+  if ((input.returnsDue || 0) > 0) {
+    out.push({
+      id: 'returnsDue', count: input.returnsDue || 0,
+      label: input.returnsDue === 1 ? 'retorno pendente' : 'retornos pendentes',
+      href: input.permissions.followUp === false ? null : '/followup',
     });
   }
   return out;
@@ -249,6 +268,8 @@ export interface DashboardLinkFlags {
   resultados: boolean;
   canais: boolean;
   configuracoes: boolean;
+  /** FASE 2 · P10 — porta /followup (mesma permissão de config). */
+  followUp: boolean;
 }
 
 export function dashboardLinks(
@@ -268,6 +289,7 @@ export function dashboardLinks(
     // (config) — catálogo lib/panel.ts.
     canais: has('config'),
     configuracoes: has('config'),
+    followUp: has('config'),
   };
 }
 
@@ -290,9 +312,14 @@ export function recentActivityLists(m: DashboardModules): {
 //   • a área some quando não há pendência; não bloqueia nada;
 //   • nenhum caminho de pedido/checkout aparece aqui.
 export interface SetupCheckInput {
-  business: Pick<Business, 'description' | 'logo' | 'cover' | 'whatsapp' | 'phone' | 'address' | 'published'>;
+  business: Pick<Business, 'description' | 'logo' | 'cover' | 'whatsapp' | 'phone' | 'address' | 'published'>
+    & { setupSkipped?: string[] };
   modules: DashboardModules;
   counts: { services: number; availability: number; professionals: number; products: number };
+  /** FASE 2 · P8 — a página já foi personalizada de verdade (blocos/navegação/sobre). */
+  pageCustomized?: boolean;
+  /** FASE 2 · P8 — WhatsApp oficial conectado (item OPCIONAL do checklist). */
+  whatsappConnected?: boolean;
 }
 
 export interface SetupCheckItem {
@@ -300,30 +327,58 @@ export interface SetupCheckItem {
   done: boolean;
   label: string;
   href: string;
+  /** FASE 2 · P8 — item não obrigatório: pode ser pulado sem travar o progresso. */
+  optional?: boolean;
 }
 
+// FASE 2 · P8 — caminho operacional (ordem do ciclo de abrir a clínica):
+// dados → serviço → profissional → horários → (vitrine) → personalizar →
+// publicar → (opcional) WhatsApp. Progresso REAL; pular só o opcional;
+// "continuar depois" = ocultar o bloco (nada é perdido).
 export function setupChecklist(input: SetupCheckInput): SetupCheckItem[] {
   const { business, modules, counts } = input;
   const items: SetupCheckItem[] = [];
+  const skipped = new Set(Array.isArray(business.setupSkipped) ? business.setupSkipped : []);
   const hasContact = !!(String(business.whatsapp || '').trim() || String(business.phone || '').trim());
   const hasIdentity = !!(String(business.description || '').trim() || business.logo || business.cover);
-  items.push({
+  const push = (item: SetupCheckItem) => {
+    // Só OBRIGATÓRIOS podem ser pulados? Não: apenas `optional` honra o skip —
+    // um id obrigatório em setupSkipped (dado malicioso/legado) é ignorado.
+    // Item pulado conta como resolvido: o opcional nunca trava o 100%.
+    const honored = item.optional === true && skipped.has(item.id);
+    items.push(honored ? { ...item, done: true } : item);
+  };
+  push({
     id: 'profile',
     done: hasIdentity && hasContact,
-    label: 'Crie o perfil do negócio',
+    label: 'Dados da clínica',
     href: '/configuracoes',
   });
   if (modules.services || modules.bookings) {
-    items.push({ id: 'services', done: counts.services > 0, label: 'Cadastre seus serviços', href: '/servicos' });
+    push({ id: 'services', done: counts.services > 0, label: 'Cadastre o primeiro serviço', href: '/servicos' });
   }
   if (modules.bookings) {
-    items.push({ id: 'hours', done: counts.availability > 0, label: 'Defina quando você atende', href: '/disponibilidade' });
-    items.push({ id: 'team', done: counts.professionals > 0, label: 'Adicione profissionais', href: '/profissionais' });
+    // Ordem do ciclo (P8): quem realiza ANTES de quando atende.
+    push({ id: 'team', done: counts.professionals > 0, label: 'Cadastre um profissional', href: '/profissionais' });
+    push({ id: 'hours', done: counts.availability > 0, label: 'Configure os horários', href: '/disponibilidade' });
   }
   if (modules.products) {
-    items.push({ id: 'products', done: counts.products > 0, label: 'Monte sua vitrine de produtos', href: '/produtos' });
+    push({ id: 'products', done: counts.products > 0, label: 'Monte sua vitrine de produtos', href: '/produtos' });
   }
-  items.push({ id: 'publish', done: !!business.published, label: 'Publique sua página', href: '/pagina' });
+  push({
+    id: 'personalize',
+    done: input.pageCustomized === true,
+    label: 'Personalize a página',
+    href: '/pagina',
+  });
+  push({ id: 'publish', done: !!business.published, label: 'Publique a página', href: '/pagina' });
+  push({
+    id: 'whatsapp',
+    done: input.whatsappConnected === true,
+    label: 'Conecte o WhatsApp',
+    href: '/canais',
+    optional: true,
+  });
   return items;
 }
 
@@ -331,4 +386,40 @@ export function setupChecklist(input: SetupCheckInput): SetupCheckItem[] {
 export function setupProgress(items: SetupCheckItem[]): number {
   if (items.length === 0) return 100;
   return Math.round((items.filter((i) => i.done).length / items.length) * 100);
+}
+
+// ── §P1.5 — "Personalize a página": personalização REAL, sem regra artificial ──
+// Uma página está personalizada quando existe QUALQUER escolha explícita de
+// quem configurou (nunca só "ativar o Sobre"):
+//   • Visual salvo (tema/modelo/tipografia) — `Page.themeSavedAt`;
+//   • seção desativada ou reordenada nos blocos;
+//   • navegação própria (navItems/navCustom);
+//   • "Sobre" ativado com conteúdo;
+//   • logo ou capa definidos (identidade visual da página pública).
+// Puro e testável: a rota /api/overview usa ESTA função (fonte única).
+export interface PageCustomizationInput {
+  page?: {
+    blocks?: Array<{ enabled?: boolean }>;
+    themeSavedAt?: string;
+  } | null;
+  business?: {
+    logo?: string;
+    cover?: string;
+    navCustom?: boolean;
+    navItems?: unknown[];
+    about?: { enabled?: boolean };
+  } | null;
+}
+
+export function pageIsCustomized(input: PageCustomizationInput): boolean {
+  const { page } = input;
+  const business = input.business || {};
+  if (business.logo || business.cover) return true;
+  if (!page) return false;
+  if (page.themeSavedAt) return true;
+  if ((page.blocks || []).some((blk) => blk.enabled === false)) return true;
+  if ((business.navItems?.length || 0) > 0) return true;
+  if (business.navCustom === true) return true;
+  if (business.about?.enabled === true) return true;
+  return false;
 }

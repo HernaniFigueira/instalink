@@ -1,6 +1,7 @@
 'use client';
-import { cloneElement, createContext, isValidElement, useContext, useEffect, useId, useRef } from 'react';
+import { cloneElement, createContext, isValidElement, useCallback, useContext, useEffect, useId, useRef, useState } from 'react';
 import { wrapDialogFocus } from '@/lib/dialog-focus';
+import { lockBodyScroll, unlockBodyScroll } from '@/lib/scroll-lock';
 import { cn } from '@/lib/utils';
 import { Icon } from '@/components/icons';
 import { toneCls, type Tone } from '@/lib/status';
@@ -62,7 +63,7 @@ const BTN_SIZE_CLS: Record<ButtonSize, string> = {
  *  elementos de navegação (Link/a) sem duplicar estilo fora do ui.tsx. */
 export function buttonCls(variant: ButtonVariant = 'primary', size: ButtonSize = 'md'): string {
   return cn(
-    'il-control inline-flex items-center justify-center font-semibold rounded-md whitespace-nowrap',
+    'il-control inline-flex items-center justify-center font-medium rounded-md whitespace-nowrap',
     `il-control--${size}`,
     'transition-[background-color,border-color,color,box-shadow,transform] duration-150',
     'focus-visible:outline-none focus-visible:shadow-focus',
@@ -360,7 +361,7 @@ export function AttentionStrip({ title, hint, action }: { title: string; hint?: 
       <span className="w-6 h-6 rounded-md bg-[var(--attention-mark)] text-[var(--attention-mark-fg)] flex items-center justify-center shrink-0">
         <Icon n="alert" size={14} strokeWidth={2.2} />
       </span>
-      <span className="text-xs font-bold text-[var(--text)]">{title}</span>
+      <span className="text-xs font-semibold text-[var(--text)]">{title}</span>
       {hint && <span className="text-xs text-[var(--warning-fg)] hidden sm:inline">· {hint}</span>}
       {action && <span className="flex flex-wrap gap-1.5 ml-auto">{action}</span>}
     </div>
@@ -383,7 +384,7 @@ export function PageHeader({ title, hint, action, icon }: { title: string; hint?
     <div className="flex flex-wrap items-start justify-between gap-3 mb-5">
       <div className="flex items-start gap-3 min-w-0">
         {icon && (
-          <span className="il-page-header__icon w-10 h-10 shrink-0 rounded-lg bg-gradient-to-br from-[var(--brand)] to-[var(--lilac)] text-white flex items-center justify-center shadow-brand">
+          <span className="il-page-header__icon w-10 h-10 shrink-0 rounded-lg bg-[var(--surface-3)] text-[var(--brand-fg)] flex items-center justify-center border border-[var(--border)]">
             <Icon n={icon} size={19} />
           </span>
         )}
@@ -453,9 +454,90 @@ export function Tabs<T extends string = string>({ items, value, onChange, ariaLa
           {item.label}
           {typeof item.count === 'number' && (
             <span className={cn(
-              'ml-0.5 min-w-[18px] h-[18px] px-1 rounded-pill text-[10px] font-bold inline-flex items-center justify-center',
+              'ml-0.5 min-w-[18px] h-[18px] px-1 rounded-pill text-[10px] font-semibold inline-flex items-center justify-center',
               value === item.id ? 'bg-[var(--brand-soft)] text-[var(--brand-fg)]' : 'bg-[var(--border)] text-[var(--text-muted)]',
             )}>{item.count}</span>
+          )}
+        </button>
+      ))}
+    </div>
+  );
+}
+
+/**
+ * SEGMENTED CONTROL com indicador deslizante (§8).
+ *
+ * Por que não `Tabs`: a régua de "Dia/Semana/Mês/Lista" parecia aba de página
+ * (marcador sublinhado, cada opção um alvo isolado). Aqui as quatro opções são
+ * UM controle só, no mesmo espírito de um seletor de modo de aplicativo:
+ * o indicador desliza por baixo do rótulo em 200ms com a curva padrão do
+ * sistema, então trocar de visão parece mover uma peça — não recarregar tela.
+ *
+ * Acessibilidade preservada dos Tabs: `role="tablist"`, `aria-selected`,
+ * roving tabindex e setas ←/→ (Home/End). Quem usa leitor de tela não perde
+ * nada; quem não distingue cor continua vendo o indicador posicionado.
+ */
+export function Segmented<T extends string = string>({ items, value, onChange, ariaLabel, size = 'md' }: {
+  items: TabItem<T>[]; value: T; onChange: (id: T) => void; ariaLabel: string; size?: 'sm' | 'md';
+}) {
+  const buttons = useRef(new Map<T, HTMLButtonElement>());
+  const listRef = useRef<HTMLDivElement | null>(null);
+  const enabled = items.filter((item) => !item.disabled);
+  const entry = enabled.find((item) => item.id === value) || enabled[0];
+  const [thumb, setThumb] = useState<{ left: number; width: number } | null>(null);
+
+  // O indicador é MEDIDO do botão real: assim ele acompanha rótulo de tamanho
+  // variável (idioma, contador) sem ninguém calcular largura na mão.
+  const measure = useCallback(() => {
+    const node = value ? buttons.current.get(value) : undefined;
+    const list = listRef.current;
+    if (!node || !list) { setThumb(null); return; }
+    setThumb({ left: node.offsetLeft, width: node.offsetWidth });
+  }, [value]);
+
+  useEffect(() => { measure(); }, [measure, items.length]);
+  useEffect(() => {
+    if (typeof ResizeObserver === 'undefined' || !listRef.current) return;
+    const ro = new ResizeObserver(measure);
+    ro.observe(listRef.current);
+    return () => ro.disconnect();
+  }, [measure]);
+
+  function move(event: React.KeyboardEvent<HTMLButtonElement>, current: T) {
+    if (event.altKey || event.ctrlKey || event.metaKey) return;
+    const position = enabled.findIndex((item) => item.id === current);
+    let next: TabItem<T> | undefined;
+    if (event.key === 'ArrowRight') next = enabled[(position + 1) % enabled.length];
+    if (event.key === 'ArrowLeft') next = enabled[(position - 1 + enabled.length) % enabled.length];
+    if (event.key === 'Home') next = enabled[0];
+    if (event.key === 'End') next = enabled[enabled.length - 1];
+    if (!next) return;
+    event.preventDefault();
+    buttons.current.get(next.id)?.focus();
+    onChange(next.id);
+  }
+
+  return (
+    <div ref={listRef} role="tablist" aria-label={ariaLabel}
+      className={cn('il-segmented', size === 'sm' && 'il-segmented--sm')}>
+      {thumb && (
+        <span className="il-segmented__thumb" aria-hidden="true"
+          style={{ transform: `translateX(${thumb.left}px)`, width: thumb.width }} />
+      )}
+      {items.map((item) => (
+        <button key={item.id} type="button" role="tab"
+          ref={(node) => { if (node) buttons.current.set(item.id, node); else buttons.current.delete(item.id); }}
+          aria-selected={value === item.id}
+          tabIndex={entry?.id === item.id ? 0 : -1}
+          title={item.title}
+          disabled={item.disabled}
+          onKeyDown={(event) => move(event, item.id)}
+          onClick={() => onChange(item.id)}
+          className="il-segmented__item">
+          {item.icon && <Icon n={item.icon} size={14} />}
+          {item.label}
+          {typeof item.count === 'number' && (
+            <span className="il-segmented__count">{item.count}</span>
           )}
         </button>
       ))}
@@ -477,7 +559,7 @@ export function FilterPill({ active, children, onClick, title }: {
 // KPI compacto — não é card gigante
 export function Kpi({ label, value, hint, tone, icon }: {
   label: string; value: string; hint?: string; icon?: string;
-  tone?: 'default' | 'success' | 'warning' | 'danger' | 'brand';
+  tone?: 'default' | 'success' | 'warning' | 'danger' | 'brand' | 'info';
 }) {
   const toneCls2 = {
     default: 'text-[var(--text)]',
@@ -485,12 +567,13 @@ export function Kpi({ label, value, hint, tone, icon }: {
     warning: 'text-[var(--warning-fg)]',
     danger: 'text-[var(--danger-fg)]',
     brand: 'text-[var(--brand-fg)]',
+    info: 'text-[var(--info-fg)]',
   }[tone || 'default'];
   return (
     <div className="px-4 py-3">
       <div className="flex items-center gap-1.5">
         {icon && <Icon n={icon} size={13} className="text-[var(--text-faint)]" />}
-        <p className="text-[11px] font-bold tracking-wider uppercase text-[var(--text-muted)]">{label}</p>
+        <p className="text-[11px] font-semibold tracking-wider uppercase text-[var(--text-muted)]">{label}</p>
       </div>
       <p className={cn('text-xl font-semibold mt-1 leading-none tabular-nums', toneCls2)}>{value}</p>
       {hint && <p className="text-xs text-[var(--text-muted)] mt-1">{hint}</p>}
@@ -552,8 +635,6 @@ export function Notice({ tone = 'info', children, title, className }: { tone?: '
 // ── Drawer — native modal: focus containment and background inertness are
 // browser responsibilities, including nested dialogs. Kept in its DOM parent
 // (no portal) so platform/public CSS scopes are never copied or leaked.
-const openDrawers = new Set<HTMLDialogElement>();
-let bodyOverflowBeforeDrawer = '';
 
 export function Drawer({ open, onClose, title, subtitle, children, footer, width = 'max-w-[720px]' }: {
   open: boolean; onClose: () => void; title: string; subtitle?: string;
@@ -566,18 +647,13 @@ export function Drawer({ open, onClose, title, subtitle, children, footer, width
     const dialog = dialogRef.current;
     if (!open || !dialog) return;
     const previous = document.activeElement instanceof HTMLElement ? document.activeElement : null;
-    if (!openDrawers.size) {
-      bodyOverflowBeforeDrawer = document.body.style.overflow;
-      document.body.style.overflow = 'hidden';
-    }
-    openDrawers.add(dialog);
+    lockBodyScroll(dialog);
     dialog.showModal();
     // Start at the heading rather than scrolling to a distant form autofocus.
     titleRef.current?.focus({ preventScroll: true });
     return () => {
       dialog.close();
-      openDrawers.delete(dialog);
-      if (!openDrawers.size) document.body.style.overflow = bodyOverflowBeforeDrawer;
+      unlockBodyScroll(dialog);
       if (previous?.isConnected) previous.focus({ preventScroll: true });
     };
   }, [open]);
@@ -670,7 +746,7 @@ export function HoursChips({ days, className, size = 'md' }: {
               : 'bg-[var(--surface)] border-[var(--border-strong)] text-[var(--text)]',
           )}
         >
-          <span className={cn('font-bold tracking-wide', chip.closed ? 'text-[var(--text-faint)]' : 'text-[var(--text-muted)]')}>
+          <span className={cn('font-semibold tracking-wide', chip.closed ? 'text-[var(--text-faint)]' : 'text-[var(--text-muted)]')}>
             {chip.label}
           </span>
           {chip.closed ? (
@@ -692,21 +768,32 @@ export function HoursChips({ days, className, size = 'md' }: {
 }
 
 // ── Skeletons ───────────────────────────────────────────────
+// HOMOLOGAÇÃO · P0-5 — contraste real via tokens --skeleton-* + shimmer.
+// Nunca "branco sobre cinza quase branco"; não esconde lentidão — sinaliza.
 export function Skeleton({ className }: { className?: string }) {
-  return <div aria-hidden="true" className={cn('animate-pulse rounded-md bg-[var(--surface-3)]', className)} />;
+  return <div aria-hidden="true" className={cn('il-skeleton', className)} />;
 }
 
 export function PageSkeleton() {
+  // HOMOLOGAÇÃO · P1 — menu (esq.) + formulário + prévia (dir.) = a forma da tela.
   return (
-    <div className="space-y-4" aria-label="Carregando">
+    <div className="space-y-4" aria-label="Carregando página">
       <Skeleton className="h-6 w-48" />
-      <Skeleton className="h-4 w-72" />
-      <div className="grid sm:grid-cols-3 gap-3">
-        <Skeleton className="h-24" />
-        <Skeleton className="h-24" />
-        <Skeleton className="h-24" />
+      <Skeleton className="h-4 w-72 max-w-full" />
+      <div className="grid lg:grid-cols-[232px_minmax(0,1fr)_minmax(0,430px)] gap-4">
+        <div className="hidden lg:block space-y-2">
+          {Array.from({ length: 8 }).map((_, i) => <Skeleton key={i} className="h-9" />)}
+        </div>
+        <div className="space-y-3">
+          <div className="grid sm:grid-cols-3 gap-3">
+            <Skeleton className="h-24" />
+            <Skeleton className="h-24" />
+            <Skeleton className="h-24" />
+          </div>
+          <Skeleton className="h-64" />
+        </div>
+        <div className="hidden lg:block"><Skeleton className="h-[420px] rounded-[40px]" /></div>
       </div>
-      <Skeleton className="h-64" />
     </div>
   );
 }
@@ -717,6 +804,77 @@ export function ListSkeleton({ rows = 4 }: { rows?: number }) {
       {Array.from({ length: rows }).map((_, i) => (
         <Skeleton key={i} className="h-16" />
       ))}
+    </div>
+  );
+}
+
+// HOMOLOGAÇÃO · P1 — skeletons ESPECÍFicos (KPIs, grade, menu).
+// Sinalizam lentidão com contraste real; nunca escondem o carregamento.
+export function KpiSkeleton({ count = 6 }: { count?: number }) {
+  return (
+    <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-6 gap-3" aria-label="Carregando indicadores">
+      {Array.from({ length: count }).map((_, i) => (
+        <div key={i} className="il-skeleton h-24 rounded-lg" />
+      ))}
+    </div>
+  );
+}
+
+export function DashboardSkeleton() {
+  return (
+    <div className="space-y-4" aria-label="Carregando painel">
+      <div className="space-y-2">
+        <Skeleton className="h-6 w-56" />
+        <Skeleton className="h-4 w-80 max-w-full" />
+      </div>
+      <KpiSkeleton />
+      <div className="grid lg:grid-cols-12 gap-4">
+        <Skeleton className="h-64 lg:col-span-5" />
+        <Skeleton className="h-64 lg:col-span-7" />
+      </div>
+    </div>
+  );
+}
+
+export function AgendaSkeleton() {
+  return (
+    <div className="space-y-3" aria-label="Carregando agenda">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <Skeleton className="h-8 w-36" />
+        <div className="flex gap-2">
+          <Skeleton className="h-8 w-24" />
+          <Skeleton className="h-8 w-24" />
+          <Skeleton className="h-8 w-28" />
+        </div>
+      </div>
+      <div className="grid grid-cols-1 md:grid-cols-5 gap-px bg-[var(--border)] rounded-lg overflow-hidden">
+        {Array.from({ length: 5 }).map((_, c) => (
+          <div key={c} className="bg-[var(--surface)] p-2 space-y-2 min-h-[280px]">
+            <Skeleton className="h-5 w-20 mx-auto" />
+            <Skeleton className="h-14 w-full" />
+            <Skeleton className="h-14 w-full" />
+            <Skeleton className="h-14 w-full" />
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+export function SearchListSkeleton({ rows = 5 }: { rows?: number }) {
+  return (
+    <div className="space-y-3" aria-label="Carregando">
+      <Skeleton className="h-10 w-full max-w-md" />
+      <ListSkeleton rows={rows} />
+    </div>
+  );
+}
+
+export function FinanceSkeleton() {
+  return (
+    <div className="space-y-4" aria-label="Carregando financeiro">
+      <KpiSkeleton count={6} />
+      <Skeleton className="h-48 w-full" />
     </div>
   );
 }

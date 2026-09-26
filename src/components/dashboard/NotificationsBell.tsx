@@ -16,6 +16,7 @@ import { useRouter } from 'next/navigation';
 import { Icon } from '@/components/icons';
 import { mayLeaveEditor } from './useUnsavedChanges';
 import { buildWorkspaceAlerts, bellLabel, type AlertsSource, type WorkspaceAlerts } from '@/lib/workspace-alerts';
+import { loadOverview } from '@/lib/overview';
 
 const REFRESH_MS = 120_000;
 
@@ -27,14 +28,16 @@ export function useWorkspaceAlerts(businessId: string, unitQuery: string): Works
   const load = useCallback(() => {
     if (!businessId) { setStatus('unavailable'); setSource(null); return; }
     let cancelled = false;
-    fetch(`/api/overview?businessId=${encodeURIComponent(businessId)}&period=7`)
-      .then(async (r) => {
-        if (!r.ok) { if (!cancelled) { setSource(null); setStatus('unavailable'); } return; }
-        const d = await r.json();
+    // Mesmo payload do shell/tela — o loader compartilhado divide a chamada em
+    // vez de baixar o overview uma TERCEIRA vez por navegação.
+    loadOverview(businessId, 7, { scope: 'area', area: 'Visão geral' })
+      .then((res) => {
         if (cancelled) return;
+        if (!res.ok) { setSource(null); setStatus('unavailable'); return; }
+        const d = res.data || {};
         setSource({
           attention: d.attention || [],
-          whatsapp: d.whatsapp || null,
+          whatsapp: (d.whatsapp as AlertsSource['whatsapp']) || null,
           pendingSetup: typeof d.pendingSetup === 'number' ? d.pendingSetup : 0,
           checklist: d.checklist || [],
         });
@@ -49,7 +52,9 @@ export function useWorkspaceAlerts(businessId: string, unitQuery: string): Works
     const cancel = load();
     const timer = setInterval(load, REFRESH_MS);
     // Módulos/permissões/agenda mudam sem recarregar a página: o painel avisa.
+    // §P1.4 — escrita concluída em qualquer tela também revalida na hora.
     window.addEventListener('il:business-refresh', load);
+    window.addEventListener('il:overview-refresh', load);
     // Revalida ao voltar para a aba (dado velho de madrugada não ajuda ninguém).
     const onVisible = () => { if (document.visibilityState === 'visible') load(); };
     document.addEventListener('visibilitychange', onVisible);
@@ -57,6 +62,7 @@ export function useWorkspaceAlerts(businessId: string, unitQuery: string): Works
       cancel?.();
       clearInterval(timer);
       window.removeEventListener('il:business-refresh', load);
+      window.removeEventListener('il:overview-refresh', load);
       document.removeEventListener('visibilitychange', onVisible);
     };
   }, [load]);
@@ -89,7 +95,9 @@ export function NotificationsBell({ alerts }: { alerts: WorkspaceAlerts }) {
     router.push(href);
   }
 
-  const hasBadge = alerts.status === 'ready' && alerts.total > 0;
+  // P1.14 — badge vermelho SÓ para atenção real (Falhas). Pendências e
+  // informações vivem no painel, sem grito no sino.
+  const hasBadge = alerts.status === 'ready' && alerts.badgeCount > 0;
 
   return (
     <div ref={boxRef} className="ws-bell">
@@ -104,10 +112,10 @@ export function NotificationsBell({ alerts }: { alerts: WorkspaceAlerts }) {
         onClick={() => setOpen((v) => !v)}
       >
         <Icon n="bell" size={18} />
-        {/* Badge só com contador REAL. Sem fonte ⇒ sem badge. */}
+        {/* Badge só com contador REAL de FALHAS. Sem fonte ⇒ sem badge. */}
         {hasBadge && (
-          <span className="ws-bell__badge" data-count={alerts.total > 99 ? '99+' : alerts.total}>
-            {alerts.total > 99 ? '99+' : alerts.total}
+          <span className="ws-bell__badge" data-count={alerts.badgeCount > 99 ? '99+' : alerts.badgeCount}>
+            {alerts.badgeCount > 99 ? '99+' : alerts.badgeCount}
           </span>
         )}
       </button>
@@ -142,28 +150,39 @@ export function NotificationsBell({ alerts }: { alerts: WorkspaceAlerts }) {
           )}
 
           {alerts.status === 'ready' && alerts.items.length > 0 && (
-            <ul className="ws-bell__list">
-              {alerts.items.map((item) => (
-                <li key={item.id}>
-                  {item.href ? (
-                    <button type="button" className="ws-bell__item" onClick={() => go(item.href)}>
-                      <span className={`ws-bell__dot ws-bell__dot--${item.tone}`}><Icon n={item.icon} size={14} /></span>
-                      <span className="ws-bell__text">{item.label}</span>
-                      <span className="ws-bell__count">{item.count}</span>
-                      <Icon n="chevronRight" size={14} className="ws-bell__chevron" />
-                    </button>
-                  ) : (
-                    // Sem permissão para a rota: a informação é preservada como
-                    // texto (nunca um link que termina em 403).
-                    <span className="ws-bell__item ws-bell__item--static">
-                      <span className={`ws-bell__dot ws-bell__dot--${item.tone}`}><Icon n={item.icon} size={14} /></span>
-                      <span className="ws-bell__text">{item.label}</span>
-                      <span className="ws-bell__count">{item.count}</span>
-                    </span>
-                  )}
-                </li>
+            // P1.14 — grupos canônicos: FALHAS · PENDÊNCIAS · INFORMAÇÕES.
+            // Cada item leva ao DESTINO contextual (href do servidor).
+            <div className="ws-bell__list">
+              {alerts.groups.map((group) => (
+                <section key={group.id} aria-label={group.label}>
+                  <p className={`ws-bell__group-label${group.id === 'failure' ? ' ws-bell__group-label--failure' : ''}`}>
+                    {group.label}
+                  </p>
+                  <ul>
+                    {group.items.map((item) => (
+                      <li key={item.id}>
+                        {item.href ? (
+                          <button type="button" className="ws-bell__item" onClick={() => go(item.href)}>
+                            <span className={`ws-bell__dot ws-bell__dot--${item.tone}`}><Icon n={item.icon} size={14} /></span>
+                            <span className="ws-bell__text">{item.label}</span>
+                            <span className="ws-bell__count">{item.count}</span>
+                            <Icon n="chevronRight" size={14} className="ws-bell__chevron" />
+                          </button>
+                        ) : (
+                          // Sem permissão para a rota: a informação é preservada como
+                          // texto (nunca um link que termina em 403).
+                          <span className="ws-bell__item ws-bell__item--static">
+                            <span className={`ws-bell__dot ws-bell__dot--${item.tone}`}><Icon n={item.icon} size={14} /></span>
+                            <span className="ws-bell__text">{item.label}</span>
+                            <span className="ws-bell__count">{item.count}</span>
+                          </span>
+                        )}
+                      </li>
+                    ))}
+                  </ul>
+                </section>
               ))}
-            </ul>
+            </div>
           )}
         </div>
       )}

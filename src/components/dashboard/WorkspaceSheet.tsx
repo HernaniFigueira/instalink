@@ -18,12 +18,14 @@
 //   • `prefers-reduced-motion` zera a animação (ver CSS).
 //
 // Cabeçalho: título · ação opcional "abrir página completa" · minimizar
-// (quando `minimizable`) · X de fechar. Minimizar NÃO desmonta o conteúdo: o
+// (quando `minimizable`). Fechar = X padrão no canto superior direito
+// (herdado por TODO sheet) + ESC. Minimizar NÃO desmonta o conteúdo: o
 // sheet vira uma pílula ancorada no canto e o estado interno é preservado.
 import { useEffect, useId, useRef, useState } from 'react';
 import Link from 'next/link';
 import { Icon } from '@/components/icons';
 import { wrapDialogFocus } from '@/lib/dialog-focus';
+import { lockBodyScroll, unlockBodyScroll } from '@/lib/scroll-lock';
 
 const MOTION_MS = 200;
 
@@ -61,8 +63,8 @@ export function WorkspaceSheet({ open, onClose, title, subtitle, icon, fullPageH
     if (!open || !dialog.current) return;
     const element = dialog.current;
     const previous = document.activeElement as HTMLElement | null;
-    const overflow = document.body.style.overflow;
-    document.body.style.overflow = 'hidden';
+    // Lock compartilhado: sheets empilhados NÃO guardam overflow próprio.
+    lockBodyScroll(element);
     element.showModal();
     heading.current?.focus({ preventScroll: true });
 
@@ -82,7 +84,7 @@ export function WorkspaceSheet({ open, onClose, title, subtitle, icon, fullPageH
       document.removeEventListener('focusin', contain);
       clearTimeout(timer.current);
       element.close();
-      document.body.style.overflow = overflow;
+      unlockBodyScroll(element);
       if (previous?.isConnected) previous.focus({ preventScroll: true });
     };
   }, [open]);
@@ -145,14 +147,15 @@ export function WorkspaceSheet({ open, onClose, title, subtitle, icon, fullPageH
                 <Icon n={minimized ? 'expand' : 'minimize'} size={16} />
               </button>
             )}
+            {/* X padrão no topo à direita — herdado por TODO WorkspaceSheet. */}
             <button
               type="button"
-              className="ws-sheet__icon-button ws-sheet__close"
+              className="ws-sheet__close"
               aria-label={`Fechar ${title}`}
-              title="Fechar (Esc)"
+              title="Fechar"
               onClick={close}
             >
-              <Icon n="x" size={17} />
+              <Icon n="x" size={16} />
             </button>
           </div>
         </header>

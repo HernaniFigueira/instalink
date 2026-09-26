@@ -122,7 +122,7 @@ export default function ProdutosPage() {
               return (
                 <div key={p.id} className={cn('flex sm:grid sm:grid-cols-[1fr_140px_110px_150px_80px] items-center gap-3 px-4 py-3', !p.active && 'opacity-60')}>
                   <span className="flex items-center gap-3 min-w-0">
-                    <span className="w-10 h-10 rounded-md bg-[var(--surface-2)] flex items-center justify-center font-bold text-[var(--text-faint)] overflow-hidden shrink-0 border border-[var(--border)]">
+                    <span className="w-10 h-10 rounded-md bg-[var(--surface-2)] flex items-center justify-center font-semibold text-[var(--text-faint)] overflow-hidden shrink-0 border border-[var(--border)]">
                       {p.image ? <img src={p.image} alt={p.name} className="w-full h-full object-cover" /> : p.name.slice(0, 1)}
                     </span>
                     <span className="min-w-0">
@@ -171,7 +171,7 @@ export default function ProdutosPage() {
 
       <p className="text-xs text-zinc-400 mt-4">
         A vitrine aparece na página pública enquanto o módulo <strong>Produtos</strong> estiver ativo em{' '}
-        <Link href={`/recursos?b=${businessId}`} className="underline hover:text-zinc-600">Recursos da empresa</Link>.
+        <Link href={`/recursos?b=${businessId}`} className="underline hover:text-zinc-600">Capacidades do sistema</Link>.
         Desativar não apaga nada.
       </p>
 
@@ -230,7 +230,7 @@ function ProductForm({ product, cats, businessId, onClose, onSave }: {
       <form onSubmit={submit} className="relative w-full sm:max-w-md bg-white rounded-t-2xl sm:rounded-lg p-6 max-h-[92vh] overflow-y-auto space-y-3.5">
         <div className="flex items-center justify-between">
           <h3 className="font-semibold text-base">{product ? 'Editar produto' : 'Novo produto da vitrine'}</h3>
-          <button type="button" onClick={onClose} className="font-bold text-zinc-400 px-2 inline-flex" aria-label="Fechar"><Icon n="x" size={16} /></button>
+          <button type="button" onClick={onClose} className="font-semibold text-zinc-400 px-2 inline-flex" aria-label="Fechar"><Icon n="x" size={16} /></button>
         </div>
         <ImageUpload label="FOTO DO PRODUTO" value={image} onChange={(url) => setImage(url)} businessId={businessId} />
         <input value={name} onChange={(e) => setName(e.target.value)} className={input} placeholder="Nome *" autoFocus />

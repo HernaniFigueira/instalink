@@ -165,6 +165,293 @@ export const AUTOMATION_TEMPLATES: AutomationTemplate[] = [
       },
     ],
   },
+
+  // ═══ F3 — RECEITAS PRONTAS (operação do dia a dia, sem jargão) ═══
+  {
+    id: 'booking_confirm_24h',
+    name: 'Confirmação 24 h antes',
+    description: 'Um dia antes do horário, o paciente recebe a confirmação no WhatsApp. Se cancelou ou reagendou, a mensagem NÃO vai.',
+    event: 'booking.created',
+    tags: ['Agenda', 'Receita'],
+    requires: 'automation.advanced',
+    needsBookings: true,
+    steps: [
+      { kind: 'wait', label: 'Esperar até 24 h antes', wait: { mode: 'booking_offset', offsetMinutes: -1440 } },
+      {
+        kind: 'action',
+        label: 'Enviar confirmação',
+        action: {
+          type: 'send_channel_message',
+          params: {
+            channel: 'whatsapp',
+            message: 'Olá! Passando para confirmar seu agendamento: {{service.name}} em {{booking.date}} às {{booking.time}}. Se precisar remarcar ou cancelar, é só responder por aqui.',
+          },
+        },
+      },
+    ],
+  },
+  {
+    id: 'booking_reminder_2h',
+    name: 'Lembrete 2 h antes',
+    description: 'Dois horas antes, um toque no WhatsApp reduz falta. Só sai se o agendamento continuar de pé.',
+    event: 'booking.created',
+    tags: ['Agenda', 'Receita'],
+    requires: 'automation.advanced',
+    needsBookings: true,
+    steps: [
+      { kind: 'wait', label: 'Esperar até 2 h antes', wait: { mode: 'booking_offset', offsetMinutes: -120 } },
+      {
+        kind: 'action',
+        label: 'Enviar lembrete',
+        action: {
+          type: 'send_channel_message',
+          params: {
+            channel: 'whatsapp',
+            message: 'Oi! Lembrete: seu agendamento de {{service.name}} é hoje às {{booking.time}} ({{booking.date}}). Até lá!',
+          },
+        },
+      },
+    ],
+  },
+  {
+    id: 'booking_created_msg',
+    name: 'Agendamento criado → recado no WhatsApp',
+    description: 'Assim que a reserva entra na agenda, o paciente recebe os dados do horário pela mensagem do canal.',
+    event: 'booking.created',
+    tags: ['Agenda', 'Receita'],
+    requires: 'automation.advanced',
+    needsBookings: true,
+    steps: [
+      {
+        kind: 'action',
+        label: 'Enviar dados do agendamento',
+        action: {
+          type: 'send_channel_message',
+          params: {
+            channel: 'whatsapp',
+            message: 'Olá! Registramos seu agendamento: {{service.name}} em {{booking.date}} às {{booking.time}}. Qualquer dúvida, responda por aqui.',
+          },
+        },
+      },
+    ],
+  },
+  {
+    id: 'booking_rescheduled_msg',
+    name: 'Agendamento alterado → avisar',
+    description: 'Quando a data/hora muda, o paciente é avisado com o NOVO horário (foto atualizada do booking).',
+    event: 'booking.rescheduled',
+    tags: ['Agenda', 'Receita'],
+    requires: 'automation.advanced',
+    needsBookings: true,
+    steps: [
+      {
+        kind: 'action',
+        label: 'Avisar nova data',
+        action: {
+          type: 'send_channel_message',
+          params: {
+            channel: 'whatsapp',
+            message: 'Seu agendamento foi atualizado: {{service.name}} agora em {{booking.date}} às {{booking.time}}. Se algo não servir, é só responder.',
+          },
+        },
+      },
+    ],
+  },
+  {
+    id: 'booking_no_show_recovery',
+    name: 'Faltou → recuperar',
+    description: 'Marca falta na agenda e cria tarefa para a equipe reagendar. Também manda um toque educado (sem cobrança clínica).',
+    event: 'booking.no_show',
+    tags: ['Agenda', 'Receita'],
+    requires: 'automation.advanced',
+    needsBookings: true,
+    steps: [
+      {
+        kind: 'action',
+        label: 'Criar tarefa de reagendamento',
+        action: {
+          type: 'create_task',
+          params: {
+            title: 'Reagendar com {{booking.customerName}}',
+            note: 'Não compareceu em {{booking.date}} às {{booking.time}} ({{service.name}}). Entrar em contato para novo horário.',
+            dueInMinutes: 120,
+          },
+        },
+      },
+      {
+        kind: 'action',
+        label: 'Toque no WhatsApp',
+        action: {
+          type: 'send_channel_message',
+          params: {
+            channel: 'whatsapp',
+            forceSendOnNoShow: 'true',
+            message: 'Olá! Não conseguimos realizarmos seu horário de hoje. Se quiser remarcar, é só responder por aqui que a gente organiza.',
+          },
+        },
+      },
+    ],
+  },
+  {
+    id: 'booking_completed_thanks',
+    name: 'Pós-atendimento → agradecer',
+    description: 'Duas horas depois de concluir, um agradecimento operacional (SEM orientação clínica nem diagnóstico).',
+    event: 'booking.completed',
+    tags: ['Continuidade', 'Receita'],
+    requires: 'automation.advanced',
+    needsBookings: true,
+    steps: [
+      { kind: 'wait', label: 'Esperar 2 horas', wait: { mode: 'duration', minutes: 120 } },
+      {
+        kind: 'action',
+        label: 'Enviar agradecimento',
+        action: {
+          type: 'send_channel_message',
+          params: {
+            channel: 'whatsapp',
+            message: 'Obrigado pela visita! Se precisar de qualquer coisa da equipe, é só chamar por aqui.',
+          },
+        },
+      },
+    ],
+  },
+  {
+    id: 'booking_review_request',
+    name: 'Pós-atendimento → pedir avaliação',
+    description: 'Um dia depois, pede a opinião sobre o ATENDIMENTO (nunca resultado clínico). Só com consentimento de mensagens quando aplicável.',
+    event: 'booking.completed',
+    tags: ['Continuidade', 'Receita'],
+    requires: 'automation.advanced',
+    needsBookings: true,
+    steps: [
+      { kind: 'wait', label: 'Esperar 1 dia', wait: { mode: 'duration', minutes: 1440 } },
+      {
+        kind: 'action',
+        label: 'Pedir avaliação',
+        action: {
+          type: 'send_channel_message',
+          params: {
+            channel: 'whatsapp',
+            message: 'Como foi seu atendimento conosco? Sua opinião ajuda a equipe a melhorar — pode responder por aqui.',
+          },
+        },
+      },
+    ],
+  },
+  {
+    id: 'followup_return_msg',
+    name: 'Lembrar retornos',
+    description: 'Entra em contato quando chegar a data de retorno definida pelo profissional.',
+    event: 'followup.due',
+    tags: ['Retorno', 'Receita'],
+    requires: 'automation.advanced',
+    needsBookings: true,
+    steps: [
+      {
+        kind: 'action',
+        label: 'Tarefa de retorno',
+        action: {
+          type: 'create_task',
+          params: {
+            title: 'Retorno vencendo: {{booking.customerName}}',
+            note: 'Follow-up de {{booking.date}} venceu. Confirmar retorno com o paciente.',
+            dueInMinutes: 240,
+          },
+        },
+      },
+      {
+        kind: 'action',
+        label: 'Avisar paciente',
+        action: {
+          type: 'send_channel_message',
+          params: {
+            channel: 'whatsapp',
+            message: 'Olá. Está chegando o momento do seu retorno. Gostaria de agendar?',
+          },
+        },
+      },
+    ],
+  },
+  {
+    id: 'patient_inactive_reengage',
+    name: 'Reativar pacientes',
+    description: 'Fala com pacientes que não voltam há algum tempo (só com consentimento de marketing).',
+    event: 'patient.inactive',
+    tags: ['Relacionamento', 'Receita'],
+    requires: 'automation.advanced',
+    condition: { field: 'customer.marketingOptIn', operator: 'equals', value: 'true' },
+    steps: [
+      {
+        kind: 'action',
+        label: 'Tarefa de recontato',
+        action: {
+          type: 'create_task',
+          params: {
+            title: 'Reativar paciente inativo',
+            note: 'Paciente sem atendimento recente e com consentimento de marketing. Retomar contato.',
+            dueInMinutes: 1440,
+          },
+        },
+      },
+      {
+        kind: 'action',
+        label: 'Mensagem de reativação',
+        action: {
+          type: 'send_channel_message',
+          params: {
+            channel: 'whatsapp',
+            message: 'Olá. Faz um tempo que você não passa por aqui. Se quiser, posso verificar horários.',
+          },
+        },
+      },
+    ],
+  },
+  {
+    id: 'lead_created_welcome',
+    name: 'Lead novo → boas-vindas',
+    description: 'Quem pediu contato recebe um recorde imediato no WhatsApp (sem promessa de preço ou prazo inventado).',
+    event: 'lead.created',
+    tags: ['Esteira', 'Receita'],
+    requires: 'automation.advanced',
+    steps: [
+      {
+        kind: 'action',
+        label: 'Enviar boas-vindas',
+        action: {
+          type: 'send_channel_message',
+          params: {
+            channel: 'whatsapp',
+            message: 'Olá! Recebemos seu contato. Em breve a equipe responde por aqui.',
+          },
+        },
+      },
+    ],
+  },
+  {
+    id: 'booking_cancelled_msg',
+    name: 'Cancelamento → avisar paciente',
+    description: 'Confirma por mensagem que o cancelamento foi registrado (usa o fluxo oficial da agenda).',
+    event: 'booking.cancelled',
+    tags: ['Agenda', 'Receita'],
+    requires: 'automation.advanced',
+    needsBookings: true,
+    steps: [
+      {
+        kind: 'action',
+        label: 'Confirmar cancelamento',
+        action: {
+          type: 'send_channel_message',
+          params: {
+            channel: 'whatsapp',
+            // Aviso do PRÓPRIO cancelamento: única mensagem permitida com status cancelled.
+            forceSendOnCancelled: 'true',
+            message: 'Seu agendamento foi cancelado conforme solicitado. Se quiser um novo horário, é só responder por aqui.',
+          },
+        },
+      },
+    ],
+  },
+
 ];
 
 export function automationTemplateById(id: string): AutomationTemplate | undefined {
@@ -183,7 +470,10 @@ export function templateToDraft(template: AutomationTemplate, businessId: string
     businessId,
     name: template.name,
     description: template.description,
-    active: true,
+    // F3: receita/modelo NUNCA auto-ativa — nasce como rascunho.
+    active: false,
+    status: 'draft' as const,
+    source: 'template' as const,
     event: template.event,
     nodes: graph.nodes,
     edges: graph.edges,
@@ -212,7 +502,16 @@ export interface TemplateOffer {
 }
 
 function stepText(step: LinearStep): string {
-  if (step.kind === 'wait') return `Esperar ${humanDuration(Number(step.wait?.minutes || 0)) || '(tempo)'}`;
+  if (step.kind === 'wait') {
+    const w = step.wait;
+    if (w?.mode === 'booking_offset') {
+      const off = Math.abs(Number(w.offsetMinutes || 0));
+      const dir = Number(w.offsetMinutes) < 0 ? 'antes' : 'depois';
+      return `Esperar ${humanDuration(off)} ${dir} do agendamento`;
+    }
+    if (w?.mode === 'until' && w.at) return `Esperar até ${String(w.at).replace('T', ' ')}`;
+    return `Esperar ${humanDuration(Number(step.wait?.minutes || 0)) || '(tempo)'}`;
+  }
   if (step.kind === 'condition') return `Se ${describeCondition(step.condition, automationFieldLabel)}`;
   const def = automationActionDef(step.action?.type);
   if (!def) return 'Ação';
@@ -283,7 +582,14 @@ export function applyTemplate(
 
   const draft = templateToDraft(template, businessId, opts.userId || '');
   if (opts.name) draft.name = opts.name;
-  if (opts.active === false) draft.active = false;
+  // Só ativa se o chamador pedir explicitamente (active === true).
+  if (opts.active === true) {
+    draft.active = true;
+    (draft as any).status = 'active';
+  } else {
+    draft.active = false;
+    (draft as any).status = 'draft';
+  }
   const pipeline = getBusinessPipeline(db, businessId);
   const validation = validateAutomationDraft(draft, {
     limits: limitsFor(business),

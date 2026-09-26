@@ -1,5 +1,6 @@
 'use client';
 import { createPortal } from 'react-dom';
+import { WorkspaceSheet } from '@/components/dashboard/WorkspaceSheet';
 // ═══════════════════════════════════════════════════════════════
 // A3.4 · BLOCO 5 — REGISTRO DO ATENDIMENTO (painel lateral)
 // ═══════════════════════════════════════════════════════════════
@@ -30,16 +31,20 @@ import { createPortal } from 'react-dom';
 //      leitura POR ID (nunca POST, que criaria outro registro).
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Icon } from '@/components/icons';
-import { Badge, Button, Drawer, Field, Input, Notice, Textarea } from '@/components/ui';
+import { Badge, Button, Field, Input, Notice, Textarea } from '@/components/ui';
 import { apiGet, apiSend } from '@/lib/api-client';
 import {
   ENCOUNTER_AUTOSAVE_LABELS, ENCOUNTER_AUTOSAVE_MS, ENCOUNTER_LABELS, ENCOUNTER_STATUS,
-  ENCOUNTER_VERSION_ERROR, applySaveResult, canEditEncounter, canFinalize, encounterContentPayload,
+  ENCOUNTER_VERSION_ERROR, FOLLOW_UP_MODES, FOLLOW_UP_MODE_LABELS, applySaveResult,
+  canEditEncounter, canFinalize, encounterContentPayload,
   encounterDraftKey, encounterFormPrintBlocks, encounterSignature, encounterSummary,
-  followUpTaskNote, followUpTaskTitle,
+  followUpDueDate, followUpTaskNote, followUpTaskTitle,
 } from '@/lib/encounters';
 import { formatDateBR } from '@/lib/tz';
-import type { Encounter } from '@/lib/types';
+import type { AnamneseTemplate, Encounter, EncounterFile, EncounterFollowUpMode } from '@/lib/types';
+import { AnamneseFiller } from '@/components/dashboard/AnamneseFiller';
+import { RegisterPaymentSheet, type PaymentSeed } from '@/components/dashboard/RegisterPaymentSheet';
+import { usePanelPermissions } from '@/components/dashboard/usePanelPermissions';
 
 export interface EncounterRow extends Encounter {
   professionalName: string;
@@ -51,6 +56,8 @@ export interface EncounterRow extends Encounter {
    * de tela, e é o que deixa "Agendar retorno" pronto para agendar.
    */
   customerPhone: string;
+  /** P0-3 — nome do PET resolvido na leitura (paciente veterinário). */
+  petName?: string;
 }
 
 export interface FollowUpSeed {
@@ -79,12 +86,24 @@ interface Props {
   canReopen?: boolean;
   /** "Agendar retorno": quem sabe abrir o agendamento pré-preenchido é o pai. */
   onScheduleReturn?: (seed: FollowUpSeed) => void;
+  /** SOMENTE fechamento solicitado pelo usuário (ESC, X, Encerrar). */
   onClose: () => void;
+  /**
+   * Sincronização silenciosa após um save (autosave ou Salvar manual).
+   * NUNCA fecha o sheet nem desmonta o formulário — só permite ao pai
+   * atualizar listas/dados em segundo plano.
+   */
+  onSaved?: () => void;
+  /**
+   * Mudança estrutural relevante para o pai (finalizar, reabrir, arquivos,
+   * anamnese). Ainda NÃO fecha este sheet — o pós-atendimento abre aqui.
+   */
   onChanged?: () => void;
 }
 
 const EMPTY = {
   complaint: '', evolution: '', guidance: '', followUp: '', internalNote: '', tags: '',
+  followUpMode: '' as EncounterFollowUpMode | '', followUpDate: '', followUpDays: 0,
 };
 
 type Form = typeof EMPTY;
@@ -92,10 +111,15 @@ type Form = typeof EMPTY;
 const formOf = (e: EncounterRow): Form => ({
   complaint: e.complaint || '', evolution: e.evolution || '', guidance: e.guidance || '',
   followUp: e.followUp || '', internalNote: e.internalNote || '', tags: (e.tags || []).join(', '),
+  followUpMode: (e.followUpMode as EncounterFollowUpMode) || '',
+  followUpDate: e.followUpDate || '', followUpDays: Number(e.followUpDays) || 0,
 });
 
+/** Id estável de arquivo anexado (crypto do navegador). */
+const fileUid = () => (typeof crypto !== 'undefined' && crypto.randomUUID ? crypto.randomUUID() : `f_${Math.random().toString(36).slice(2)}`);
+
 export function EncounterSheet({
-  businessId, bookingId, seed, existing, queueId, canReopen = false, onScheduleReturn, onClose, onChanged,
+  businessId, bookingId, seed, existing, queueId, canReopen = false, onScheduleReturn, onClose, onSaved, onChanged,
 }: Props) {
   const [row, setRow] = useState<EncounterRow | null>(existing || null);
   const [form, setForm] = useState<Form>(() => existing ? formOf(existing) : { ...EMPTY });
@@ -110,6 +134,22 @@ export function EncounterSheet({
   const [followUpNote, setFollowUpNote] = useState('');
   const [taskBusy, setTaskBusy] = useState(false);
   const [taskDone, setTaskDone] = useState('');
+  // FASE 2 · P3/P4/P7 — anamnese, arquivos e pagamento opcional na conclusão.
+  const [anamneseTemplates, setAnamneseTemplates] = useState<AnamneseTemplate[]>([]);
+  const [anamneseOpen, setAnamneseOpen] = useState(false);
+  const [anamneseCount, setAnamneseCount] = useState(0);
+  const [anamneseLast, setAnamneseLast] = useState<{ id: string; createdAt: string; answers: Record<string, unknown> } | null>(null);
+  const [anamneseHistoryOpen, setAnamneseHistoryOpen] = useState(false);
+  const [fileBusy, setFileBusy] = useState(false);
+  const [fileError, setFileError] = useState('');
+  const [paymentSeed, setPaymentSeed] = useState<PaymentSeed | null>(null);
+  const [paymentDone, setPaymentDone] = useState('');
+  // §P1.13 — REGRA DE HONESTIDADE: "Registrar pagamento" grava em
+  // /api/finance (permissão 'financeiro'). Quem não tem a permissão (ex.:
+  // profissional que atende) NÃO recebe a ação — nenhum botão visível pode
+  // levar previsivelmente a "Sem permissão".
+  const { permissions: panelPerms, ready: permsReady } = usePanelPermissions();
+  const canRegisterPayment = !permsReady || panelPerms.financeiro === true;
 
   /**
    * Espelho SÍNCRONO do estado da tela. É daqui que o autosave, o flush de
@@ -163,6 +203,77 @@ export function EncounterSheet({
   }, [apply, bookingId, businessId, existing, queueId, seed]);
 
   useEffect(() => { void open(); }, [open]);
+
+  // FASE 2 · P4 — fichas de anamnese da unidade + respostas DESTE atendimento.
+  // Leitura única por abertura (sem polling); falha não derruba a tela.
+  useEffect(() => {
+    if (!row?.id) return;
+    let on = true;
+    apiGet<{ templates: AnamneseTemplate[]; responses?: Array<{ id: string; encounterId: string; createdAt?: string; answers?: Record<string, unknown> }> }>(
+      `/api/anamnese?businessId=${businessId}${row.contactId ? `&responsesFor=${encodeURIComponent(row.contactId)}` : ''}`,
+      { scope: 'area', area: 'Atendimento' },
+    ).then((r) => {
+      if (!on || !r.ok) return;
+      setAnamneseTemplates((r.data?.templates || []).filter((t) => t.active));
+      const mine = (r.data?.responses || []).filter((x) => x.encounterId === row.id);
+      setAnamneseCount(mine.length);
+      setAnamneseLast(mine[0] ? { id: mine[0].id, createdAt: mine[0].createdAt || '', answers: mine[0].answers || {} } : null);
+      setAnamneseHistoryOpen(false);
+    }).catch(() => { /* segue sem fichas */ });
+    return () => { on = false; };
+  }, [row?.id, row?.contactId, businessId]);
+
+  /** Troca o modo de retorno com um DEFAULT válido (autosave nunca 400). */
+  function setFollowUpMode(mode: EncounterFollowUpMode) {
+    if (!row) return;
+    const next: Form = { ...latest.current.form, followUpMode: mode };
+    if (mode === 'date' && !next.followUpDate) {
+      const base = Date.parse(`${row.date || new Date().toISOString().slice(0, 10)}T00:00:00Z`);
+      next.followUpDate = new Date(base + 7 * 86400000).toISOString().slice(0, 10);
+    }
+    if (mode === 'interval' && !next.followUpDays) next.followUpDays = 30;
+    updateForm(next);
+  }
+
+  /** Anexa um arquivo (Storage) e grava SÓ a referência no registro. */
+  async function uploadFile(file: File) {
+    const current = latest.current.row;
+    if (!current || current.status !== 'draft') return;
+    setFileBusy(true); setFileError('');
+    try {
+      const fd = new FormData();
+      fd.set('businessId', businessId);
+      fd.set('file', file);
+      const res = await fetch('/api/upload', { method: 'POST', body: fd });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok || !data.url) { setFileError(data.error || 'Não foi possível enviar o arquivo.'); return; }
+      const nextFiles: EncounterFile[] = [...(current.files || []), {
+        id: fileUid(), name: (file.name || 'arquivo').slice(0, 160), url: String(data.url),
+        size: file.size, createdAt: new Date().toISOString(), by: '',
+      }];
+      const saveRes = await apiSend<{ encounter: EncounterRow }>('/api/encounters', 'PATCH', {
+        businessId, id: current.id, files: nextFiles, expectedVersion: current.version,
+      }, { scope: 'action', area: 'Atendimento' });
+      if (!saveRes.ok) { setFileError(saveRes.message || 'Arquivo enviado, mas não foi anexado ao registro.'); return; }
+      apply(saveRes.data!.encounter);
+      onChanged?.();
+    } finally { setFileBusy(false); }
+  }
+
+
+  async function removeFile(fileId: string) {
+    const current = latest.current.row;
+    if (!current || current.status !== 'draft') return;
+    setFileBusy(true); setFileError('');
+    const nextFiles = (current.files || []).filter((f) => f.id !== fileId);
+    const saveRes = await apiSend<{ encounter: EncounterRow }>('/api/encounters', 'PATCH', {
+      businessId, id: current.id, files: nextFiles, expectedVersion: current.version,
+    }, { scope: 'action', area: 'Atendimento' });
+    setFileBusy(false);
+    if (!saveRes.ok) { setFileError(saveRes.message || 'Não foi possível remover o arquivo.'); return; }
+    apply(saveRes.data!.encounter);
+    onChanged?.();
+  }
 
   /** Recarrega PELO ID — leitura pura. Nunca cria registro novo. */
   const reload = useCallback(async () => {
@@ -229,9 +340,11 @@ export function EncounterSheet({
     } finally {
       inflight.current = null;
       setBusy((b) => (b === 'save' ? '' : b));
-      onChanged?.();
+      // Save (silencioso ou manual) = sincronização silenciosa. NUNCA fecha
+      // o sheet nem desmonta o pai — só avisa que há dado novo.
+      onSaved?.();
     }
-  }, [businessId, onChanged, updateForm, updateRow]);
+  }, [businessId, onSaved, updateForm, updateRow]);
 
   // Autosave: só em rascunho, só com mudança real, um request por vez e só
   // depois de o dedo parar. `conflict` desliga o automatismo (insistir só
@@ -268,6 +381,7 @@ export function EncounterSheet({
     if (!res.ok) { setConflict(res.status === 409); setError(res.message); return; }
     apply(res.data!.encounter);
     setConflict(false);
+    const finishedRow = res.data!.encounter;
     if (action === 'finalize') {
       setSaved('Atendimento finalizado.');
       // O campo de instrução começa VAZIO: o retorno já anotado aparece como
@@ -275,6 +389,19 @@ export function EncounterSheet({
       // escrever nada diferente — nada de repetir o mesmo texto duas vezes.
       setFollowUpNote('');
       setFollowUpOpen(true);
+      // FASE 2 · P7 — recebimento OPCIONAL pré-preenchido (nunca obrigatório).
+      // Só para quem pode GRAVAR no financeiro (a ação não aparece para quem
+      // o servidor recusaria).
+      if (canRegisterPayment) {
+        setPaymentSeed({
+          businessId,
+          contactId: finishedRow.contactId, bookingId: finishedRow.bookingId,
+          serviceId: finishedRow.serviceId, professionalId: finishedRow.professionalId,
+          encounterId: finishedRow.id,
+          description: [finishedRow.serviceName || 'Atendimento', finishedRow.customerName].filter(Boolean).join(' — '),
+          dueDate: finishedRow.date || new Date().toISOString().slice(0, 10),
+        });
+      }
     } else {
       setSaved('Registro reaberto para edição (a reabertura fica na auditoria).');
       setFollowUpOpen(false);
@@ -339,11 +466,12 @@ export function EncounterSheet({
   const printBlocks = row ? encounterFormPrintBlocks(form) : [];
 
   return (
-    <Drawer
+    <WorkspaceSheet
       open
       onClose={() => { void close(); }}
       title="Atendimento"
-      subtitle={row ? `${formatDateBR(row.date)}${row.time ? ` · ${row.time}` : ''} · ${row.customerName || 'Cliente'}` : 'Registro do atendimento'}
+      subtitle={row ? `${formatDateBR(row.date)}${row.time ? ` · ${row.time}` : ''} · ${row.petName || row.customerName || 'Cliente'}${row.petName && row.customerName ? ` · Tutor: ${row.customerName}` : ''}` : 'Registro do atendimento'}
+      icon="stethoscope"
       width="max-w-[620px]"
       footer={(
         <>
@@ -408,6 +536,14 @@ export function EncounterSheet({
             {followUpOpen && row.status === 'finalized' && (
               <div className="rounded-md border border-[var(--border)] bg-[var(--surface-2)] p-4 space-y-3">
                 <p className="text-sm font-semibold text-[var(--text)]">Atendimento finalizado. Próximo passo:</p>
+                {paymentDone && <Notice tone="success">{paymentDone}</Notice>}
+                {/* FASE 2 · P3 — retorno estruturado: mostra a data-alvo calculada. */}
+                {row.followUpMode && row.followUpMode !== 'none' && row.followUpMode !== 'custom' && (
+                  <p className="text-xs text-[var(--text-muted)]">
+                    Retorno: {FOLLOW_UP_MODE_LABELS[row.followUpMode]}
+                    {followUpDueDate(row) ? ` — ${formatDateBR(followUpDueDate(row))}` : ''}
+                  </p>
+                )}
                 <div className="flex flex-wrap gap-2">
                   <Button size="sm" variant="primary" onClick={() => { setFollowUpOpen(false); onClose(); }}>Encerrar</Button>
                   {onScheduleReturn && (
@@ -422,6 +558,18 @@ export function EncounterSheet({
                   <Button size="sm" variant="secondary" disabled={taskBusy} onClick={askReception}>
                     {taskBusy ? 'Pedindo…' : 'Pedir à recepção'}
                   </Button>
+                  {canRegisterPayment && (
+                    <Button size="sm" variant="soft" onClick={() => {
+                      setPaymentSeed({
+                        businessId, contactId: row.contactId, bookingId: row.bookingId,
+                        serviceId: row.serviceId, professionalId: row.professionalId, encounterId: row.id,
+                        description: [row.serviceName || 'Atendimento', row.customerName].filter(Boolean).join(' — '),
+                        dueDate: row.date || new Date().toISOString().slice(0, 10),
+                      });
+                    }}>
+                      <Icon n="wallet" size={13} /> Registrar pagamento
+                    </Button>
+                  )}
                 </div>
                 <Field label="O que a recepção deve fazer" hint="Ex: ligar em 30 dias e marcar o retorno; confirmar por telefone.">
                   <Input value={followUpNote} onChange={(e) => setFollowUpNote(e.target.value)}
@@ -449,7 +597,8 @@ export function EncounterSheet({
 
             <div className="flex flex-wrap items-center gap-2 text-xs text-[var(--text-muted)]">
               <span className="inline-flex items-center gap-1.5">
-                <Icon n="user" size={13} /> {row.customerName || 'Cliente'}
+                <Icon n="user" size={13} /> {row.petName || row.customerName || 'Cliente'}
+                {row.petName && row.customerName ? <span className="text-[var(--text-faint)]">· Tutor: {row.customerName}</span> : null}
               </span>
               {row.serviceName && <span className="inline-flex items-center gap-1.5"><Icon n="fileText" size={13} /> {row.serviceName}</span>}
               {row.professionalName && <span className="inline-flex items-center gap-1.5"><Icon n="users" size={13} /> {row.professionalName}</span>}
@@ -473,24 +622,147 @@ export function EncounterSheet({
                 onChange={(e) => updateForm({ ...form, guidance: e.target.value })}
                 placeholder="Ex: evitar alimentos muito frios por 24h; escovar com pasta para sensibilidade" />
             </Field>
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              <Field label={ENCOUNTER_LABELS.followUp}>
-                <Input value={form.followUp} disabled={!editable} maxLength={200}
-                  onChange={(e) => updateForm({ ...form, followUp: e.target.value })} placeholder="Ex: retorno em 30 dias" />
-              </Field>
-              <Field label="Etiquetas" hint="Separe por vírgula (procedimento, material, região…).">
-                <Input value={form.tags} disabled={!editable}
-                  onChange={(e) => updateForm({ ...form, tags: e.target.value })} placeholder="Ex: limpeza, flúor" />
-              </Field>
-            </div>
+            {/* ── FASE 2 · P3 — retorno: sem retorno · data · intervalo ── */}
+            <Field label="Retorno" hint="Defina quando este paciente precisa voltar (alimenta o follow-up).">
+              <div className="flex flex-wrap gap-1.5" role="group" aria-label="Como fica o retorno">
+                {FOLLOW_UP_MODES.map((m) => (
+                  <button key={m} type="button" disabled={!editable} onClick={() => setFollowUpMode(m)}
+                    className={`rounded-full border px-3 py-1 text-[12.5px] font-semibold transition-colors disabled:opacity-60 ${
+                      form.followUpMode === m
+                        ? 'border-[var(--brand)] bg-[var(--brand-soft)] text-[var(--brand-fg)]'
+                        : 'border-[var(--border)] text-[var(--text-muted)] hover:bg-[var(--surface-hover)]'}`}
+                    aria-pressed={form.followUpMode === m}>
+                    {FOLLOW_UP_MODE_LABELS[m]}
+                  </button>
+                ))}
+              </div>
+              {form.followUpMode === 'date' && (
+                <div className="mt-2">
+                  <Input type="date" aria-label="Data do retorno" value={form.followUpDate} disabled={!editable}
+                    onChange={(e) => updateForm({ ...form, followUpDate: e.target.value })} className="max-w-[200px]" />
+                </div>
+              )}
+              {form.followUpMode === 'interval' && (
+                <div className="mt-2 flex items-center gap-2">
+                  <Input type="number" aria-label="Intervalo em dias" min={1} max={730} value={form.followUpDays || ''}
+                    disabled={!editable}
+                    onChange={(e) => updateForm({ ...form, followUpDays: Number(e.target.value) || 0 })}
+                    className="max-w-[110px]" />
+                  <span className="text-xs text-[var(--text-muted)]">dias após o atendimento</span>
+                </div>
+              )}
+              <div className="mt-2 grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <Field label={ENCOUNTER_LABELS.followUp} hint="Texto livre que sai na via do cliente.">
+                  <Input value={form.followUp} disabled={!editable} maxLength={200}
+                    onChange={(e) => updateForm({ ...form, followUp: e.target.value })} placeholder="Ex: retorno em 30 dias" />
+                </Field>
+                <Field label="Etiquetas" hint="Separe por vírgula (procedimento, material, região…).">
+                  <Input value={form.tags} disabled={!editable}
+                    onChange={(e) => updateForm({ ...form, tags: e.target.value })} placeholder="Ex: limpeza, flúor" />
+                </Field>
+              </div>
+            </Field>
             <Field label={ENCOUNTER_LABELS.internalNote} hint="Fica só na unidade — não entra na via do cliente.">
               <Textarea value={form.internalNote} disabled={!editable} maxLength={2000}
                 onChange={(e) => updateForm({ ...form, internalNote: e.target.value })}
                 placeholder="Ex: cliente relatou sensibilidade; acompanhar no próximo retorno" />
             </Field>
+
+            {/* ── FASE 2 · P4 — anamnese vinculada a este atendimento ── */}
+            <div className="rounded-md border border-[var(--border)] p-3">
+              <div className="flex items-center justify-between gap-2 flex-wrap">
+                <div>
+                  <p className="text-[13px] font-semibold text-[var(--text)]">Anamnese</p>
+                  <p className="text-[11.5px] text-[var(--text-muted)]">
+                    {anamneseCount > 0
+                      ? <>
+                          Última ficha: {anamneseLast ? formatAnamneseDate(anamneseLast.createdAt) : '—'}
+                          {' · '}
+                          <button type="button" className="font-semibold text-[var(--brand-fg)] hover:underline"
+                            onClick={() => setAnamneseHistoryOpen((v) => !v)} aria-expanded={anamneseHistoryOpen}>
+                            {anamneseHistoryOpen ? 'Ocultar histórico' : 'Ver histórico'}
+                          </button>
+                        </>
+                      : 'Ficha clínica do paciente — episódio atual.'}
+                  </p>
+                </div>
+                {anamneseTemplates.length > 0 && row.contactId ? (
+                  <Button size="sm" variant={anamneseCount > 0 ? 'secondary' : 'primary'} onClick={() => setAnamneseOpen(true)}>
+                    {anamneseCount > 0 ? 'Nova ficha' : 'Preencher anamnese'}
+                  </Button>
+                ) : (
+                  <span className="text-[11.5px] text-[var(--text-muted)]">
+                    {anamneseTemplates.length === 0 ? 'Sem ficha cadastrada — peça ao administrador em Estrutura.' : 'Vincule o paciente para responder.'}
+                  </span>
+                )}
+              </div>
+              {anamneseHistoryOpen && anamneseLast && (
+                <div data-testid="encounter-anamnese-history" className="mt-2 rounded-md border border-[var(--border)] bg-[var(--surface-2)] px-3 py-2 space-y-1 max-h-40 overflow-y-auto">
+                  <p className="text-[11px] font-semibold uppercase tracking-wide text-[var(--text-muted)]">Respostas (só leitura — nada é copiado para a nova ficha)</p>
+                  {Object.entries(anamneseLast.answers || {}).map(([k, v]) => (
+                    <div key={k} className="text-[12px]"><span className="text-[var(--text-muted)]">{k}: </span>{String(v ?? '—')}</div>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            {/* ── FASE 2 · P3 — arquivos (Storage + referência no documento) ── */}
+            <div className="rounded-md border border-[var(--border)] p-3">
+              <p className="text-[13px] font-semibold text-[var(--text)]">Arquivos</p>
+              <p className="text-[11.5px] text-[var(--text-muted)] mt-0.5">Exames, laudos, receitas, imagens ou documentos em PDF.</p>
+              {fileError && <p className="text-[12px] text-[var(--danger-fg)] mt-1">{fileError}</p>}
+              {(row.files || []).length > 0 ? (
+                <ul className="mt-2 space-y-1.5">
+                  {(row.files || []).map((f) => (
+                    <li key={f.id} className="flex items-center gap-2 text-[12.5px]">
+                      <a href={f.url} target="_blank" rel="noreferrer" className="flex-1 truncate text-[var(--brand-fg)] underline-offset-2 hover:underline">
+                        {f.name}
+                      </a>
+                      <span className="text-[11px] text-[var(--text-muted)] tabular-nums">{Math.max(1, Math.round(f.size / 1024))} KB</span>
+                      {editable && (
+                        <button type="button" aria-label={`Remover ${f.name}`} disabled={fileBusy}
+                          onClick={() => { void removeFile(f.id); }}
+                          className="text-[var(--text-muted)] hover:text-[var(--danger-fg)]">✕</button>
+                      )}
+                    </li>
+                  ))}
+                </ul>
+              ) : (
+                <p className="text-[11.5px] text-[var(--text-muted)] mt-1">Nenhum arquivo anexado.</p>
+              )}
+              {editable && (
+                <label className={`mt-2 inline-flex items-center gap-1.5 rounded-md border border-dashed border-[var(--border-strong)] px-3 py-1.5 text-[12px] font-semibold text-[var(--text-muted)] cursor-pointer hover:bg-[var(--surface-hover)] ${fileBusy ? 'opacity-60 pointer-events-none' : ''}`}>
+                  <Icon n="upload" size={13} /> {fileBusy ? 'Enviando…' : 'Anexar arquivo'}
+                  <input type="file" className="sr-only" accept="image/jpeg,image/png,image/webp,image/gif,image/avif,application/pdf"
+                    disabled={fileBusy}
+                    onChange={(e) => { const f = e.target.files?.[0]; if (f) void uploadFile(f); e.currentTarget.value = ''; }} />
+                </label>
+              )}
+            </div>
           </>
         )}
       </div>
+
+      {/* FASE 2 · P4 — preencher ficha de anamnese deste atendimento. */}
+      {row && row.contactId && anamneseOpen && (
+        <AnamneseFiller
+          open={anamneseOpen}
+          onClose={() => { setAnamneseOpen(false); onChanged?.(); }}
+          businessId={businessId}
+          templateId={anamneseTemplates[0]?.id || ''}
+          contactId={row.contactId}
+          petId={row.petId || ''}
+          professionalId={row.professionalId}
+          encounterId={row.id}
+          onSaved={() => setAnamneseCount((n) => n + 1)}
+        />
+      )}
+      {/* FASE 2 · P7 — recebimento opcional pré-preenchido ao concluir. */}
+      <RegisterPaymentSheet
+        seed={paymentSeed}
+        onClose={() => setPaymentSeed(null)}
+        onSaved={() => setPaymentDone('Recebimento registrado no financeiro.')}
+      />
 
       {/* ── VIA DO CLIENTE (única coisa que a impressão enxerga) ── */}
       {row && typeof document !== 'undefined' && createPortal(
@@ -524,7 +796,8 @@ export function EncounterSheet({
           </div>
         </div>, document.body
       )}
-    </Drawer>
+    
+    </WorkspaceSheet>
   );
 }
 
@@ -557,4 +830,12 @@ export function EncounterList({ rows, onOpen, empty }: {
       })}
     </ul>
   );
+}
+
+/** DD/MM/AAAA de um ISO de resposta de anamnese. */
+function formatAnamneseDate(iso: string): string {
+  const d = (iso || '').slice(0, 10);
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(d)) return '—';
+  const [y, m, day] = d.split('-');
+  return `${day}/${m}/${y}`;
 }

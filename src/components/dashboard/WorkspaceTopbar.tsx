@@ -36,42 +36,49 @@ function initials(name: string): string {
   return name.trim().split(/\s+/).slice(0, 2).map((p) => p[0]?.toUpperCase() || '').join('') || '·';
 }
 
-export function WorkspaceTopbar({ group, page, query, searchItems, activePath, alerts, user, unit, units, overview, canOverview, canTeam, canConfig, isMaster, canCreate, onUnit, onLogout, onOpenNav }: {
-  /** Nível intermediário do breadcrumb de conteúdo (ex.: "Estrutura da clínica"). */
-  group?: string;
-  /** Tela atual — usado só no menu de ajuda/atalhos e aria. */
+export function WorkspaceTopbar({ page, query, searchItems, activePath, businessId = '', alerts, user, unit, units, overview, canOverview, canConfig, canCreate, onUnit, onLogout, onOpenNav, onOpenHelp, isMaster }: {
+  /** Tela atual — usado só no aria e no rótulo do botão de ajuda. */
   page: string;
   query: string;
   searchItems: NavSearchItem[];
   activePath: string;
+  /** Unidade ativa — a busca de ENTIDADES (pessoas/agendamentos/conversas) é da unidade. */
+  businessId?: string;
   alerts: WorkspaceAlerts;
-  user: { name: string; email?: string; role?: string };
+  user: { name: string; email?: string; role?: string; photo?: string };
+  /** Unidade atual + unidades da conta: usadas SÓ pelo menu da conta (a
+   *  identidade da clínica vive na sidebar; a topbar não duplica branding). */
   unit: AccountUnit;
-  units: AccountUnit[];
+  units?: AccountUnit[];
   overview?: boolean;
   canOverview?: boolean;
-  canTeam?: boolean;
   canConfig?: boolean;
-  isMaster?: boolean;
-  /** Rotas de criação que este usuário pode abrir (menu + Novo). */
+  /** Troca real de contexto (mesma função da sidebar). */
+  onUnit?: (id: string) => void;
+  /** Rotas de criação que este usuário pode abrir (menu "Novo"). */
   canCreate: string[];
-  onUnit: (id: string) => void;
   onLogout: () => void;
   onOpenNav: () => void;
+  /** Abre a central de ajuda confiável (sheet) do shell. */
+  onOpenHelp?: () => void;
+  isMaster?: boolean;
 }) {
-  const [unitOpen, setUnitOpen] = useState(false);
   const [newOpen, setNewOpen] = useState(false);
-  const [helpOpen, setHelpOpen] = useState(false);
-  const unitRef = useOutside(() => setUnitOpen(false));
   const newRef = useOutside(() => setNewOpen(false));
-  const helpRef = useOutside(() => setHelpOpen(false));
 
+  // Quick Create GLOBAL: as seis criações do produto, somente o que o papel/
+  // módulo deste usuário permite (canCreate vem do catálogo).
+  // `open: 'novo=1'` = a página abre o formulário em Workspace Sheet na hora.
   const createItems = [
-    { href: '/agenda', label: 'Novo agendamento', icon: 'calendarPlus' },
-    { href: '/clientes', label: 'Novo cliente', icon: 'users' },
-    { href: '/tarefas', label: 'Nova tarefa', icon: 'tasks' },
-    { href: '/servicos', label: 'Novo serviço', icon: 'service' },
+    { href: '/agenda', label: 'Novo agendamento', icon: 'calendarPlus', open: 'novo=1' },
+    { href: '/clientes', label: 'Novo paciente', icon: 'users', open: 'novo=1' },
+    { href: '/profissionais', label: 'Novo profissional', icon: 'idcard', open: '' },
+    { href: '/servicos', label: 'Novo serviço', icon: 'service', open: '' },
+    { href: '/tarefas', label: 'Nova pendência', icon: 'tasks', open: '' },
+    { href: '/financeiro', label: 'Recebimento', icon: 'wallet', open: 'novo=1' },
   ].filter((i) => canCreate.includes(i.href));
+  const createHref = (i: { href: string; open: string }) =>
+    `${i.href}${query || '?'}${query ? '&' : ''}${i.open || ''}`;
 
   return (
     <header className="ws-topbar">
@@ -80,42 +87,10 @@ export function WorkspaceTopbar({ group, page, query, searchItems, activePath, a
           aria-label="Abrir navegação" onClick={onOpenNav}>
           <Icon n="menu" size={19} />
         </button>
-
-        {/* Identificação da unidade: UMA vez, discreta, trocável. */}
-        <div className="relative" ref={unitRef}>
-          <button type="button" className="ws-unitpill" aria-haspopup="menu" aria-expanded={unitOpen}
-            title={`Unidade atual: ${unit.name || 'Clínica'} — clique para trocar`}
-            onClick={() => setUnitOpen((v) => !v)}>
-            <span className="ws-unitpill__dot" aria-hidden="true">{initials(unit.name || 'Clínica')}</span>
-            <span className="truncate max-w-[18ch]">{unit.name || 'Clínica'}</span>
-            <Icon n="chevD" size={13} className="text-[var(--text-faint)]" />
-          </button>
-          {unitOpen && (
-            <div className="ws-pop ws-pop--left" role="menu" aria-label="Trocar de unidade">
-              <p className="ws-pop__label">Unidades</p>
-              {units.map((u) => (
-                <button key={u.id} type="button" role="menuitem" className="ws-pop__item"
-                  onClick={() => { setUnitOpen(false); if (u.id !== unit.id) onUnit(u.id); }}>
-                  <span className="ws-unitpill__dot" aria-hidden="true">{initials(u.name || 'Clínica')}</span>
-                  <span className="flex-1 truncate">{u.name || 'Clínica'}</span>
-                  {u.id === unit.id && <Icon n="check" size={14} className="text-[var(--success)]" />}
-                </button>
-              ))}
-            </div>
-          )}
-        </div>
-
-        {/* Atalho global e discreto para a página pública (nova aba). */}
-        {unit.slug && (
-          <a className="ws-topbar__icon-button" href={`/${unit.slug}`} target="_blank" rel="noreferrer"
-            aria-label="Ver página pública (abre em nova aba)" title="Ver página pública">
-            <Icon n="globe" size={17} />
-          </a>
-        )}
       </div>
 
       <div className="ws-topbar__center">
-        <GlobalSearch items={searchItems} activePath={activePath} />
+        <GlobalSearch items={searchItems} activePath={activePath} businessId={businessId} />
       </div>
 
       <div className="ws-topbar__right">
@@ -128,7 +103,7 @@ export function WorkspaceTopbar({ group, page, query, searchItems, activePath, a
             {newOpen && (
               <div className="ws-pop" role="menu" aria-label="Criar novo">
                 {createItems.map((i) => (
-                  <Link key={i.href} href={`${i.href}${query}`} role="menuitem" className="ws-pop__item"
+                  <Link key={i.href + i.label} href={createHref(i)} role="menuitem" className="ws-pop__item"
                     onClick={() => setNewOpen(false)}>
                     <Icon n={i.icon} size={15} className="text-[var(--brand-fg)]" /> {i.label}
                   </Link>
@@ -140,26 +115,15 @@ export function WorkspaceTopbar({ group, page, query, searchItems, activePath, a
 
         <NotificationsBell alerts={alerts} />
 
-        <div className="relative" ref={helpRef}>
-          <button type="button" className="ws-help" aria-haspopup="dialog" aria-expanded={helpOpen}
-            aria-label="Ajuda e atalhos" title="Ajuda e atalhos" onClick={() => setHelpOpen((v) => !v)}>
-            <span aria-hidden="true" className="text-[15px] font-bold leading-none">?</span>
-          </button>
-          {helpOpen && (
-            <div className="ws-pop" role="dialog" aria-label="Ajuda e atalhos">
-              <p className="ws-pop__label">Atalhos</p>
-              <p className="ws-pop__item"><kbd className="ml-auto text-[10px] font-bold bg-[var(--surface-hover)] border border-[var(--border)] rounded px-1.5 py-0.5">Ctrl K</kbd> buscar em tudo</p>
-              <p className="ws-pop__item"><kbd className="ml-auto text-[10px] font-bold bg-[var(--surface-hover)] border border-[var(--border)] rounded px-1.5 py-0.5">Esc</kbd> fechar sheet e popovers</p>
-              <p className="ws-pop__label">Navegação</p>
-              <p className="ws-pop__item">Grupos com seta abrem a segunda coluna com as subáreas — neste momento: {group || page}.</p>
-            </div>
-          )}
-        </div>
+        <button type="button" className="ws-topbar__icon-button"
+          aria-label="Ajuda e suporte" title="Ajuda e suporte" onClick={onOpenHelp}>
+          <Icon n="help" size={18} />
+        </button>
 
         <AccountMenu
           user={user} unit={unit} units={units} overview={overview}
-          canOverview={canOverview} canTeam={canTeam} canConfig={canConfig}
-          isMaster={isMaster} onUnit={onUnit} onLogout={onLogout}
+          canOverview={canOverview} canConfig={canConfig}
+          isMaster={isMaster} onUnit={onUnit} onLogout={onLogout} onOpenHelp={onOpenHelp}
         />
       </div>
     </header>

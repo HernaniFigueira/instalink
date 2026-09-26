@@ -23,7 +23,7 @@ import path from 'node:path';
 import { Pool } from 'pg';
 import { runSyncMutation, type SyncMutation } from './db-transaction';
 import type { DB } from './types';
-import { defaultBookingConfig } from './types';
+import { defaultBookingConfig, isClinicType } from './types';
 import { backfillContacts } from './contacts';
 import { normalizeFeatures } from './features';
 import { sanitizeAppearance } from './appearance';
@@ -68,6 +68,9 @@ export function emptyDB(): DB {
     queue: [],
     // A3.4 · Bloco 5 — registros de atendimento
     encounters: [],
+    // FASE 2 · Product Revolution (aditivas — documento antigo ganha []).
+    pets: [], anamneseTemplates: [], anamneseResponses: [],
+    financeEntries: [], followUpRules: [], followUpOutreach: [],
   };
 }
 
@@ -83,6 +86,8 @@ export function normalizeDB(raw: unknown): DB {
     'pipelines', 'apiKeys', 'webhooks', 'webhookDeliveries', 'idempotencyKeys', 'integrationLogs',
     'automations', 'automationRuns', 'tasks', 'aiProposals',
     'integrations', 'integrationEvents', 'queue', 'encounters',
+    // FASE 2 · Product Revolution
+    'pets', 'anamneseTemplates', 'anamneseResponses', 'financeEntries', 'followUpRules', 'followUpOutreach',
   ] as const) {
     if (!Array.isArray((base as any)[key])) (base as any)[key] = [];
   }
@@ -95,6 +100,13 @@ export function normalizeDB(raw: unknown): DB {
     // Documento criado antes do vínculo com a fila: sem id de entrada, mas
     // SEMPRE string (o resto do código compara direto, nunca `undefined`).
     if (typeof e.queueId !== 'string') e.queueId = '';
+    // FASE 2 · P3 — retorno estruturado + arquivos (aditivos e idempotentes).
+    if (!['none', 'date', 'interval', 'custom'].includes(e.followUpMode)) {
+      e.followUpMode = typeof e.followUp === 'string' && e.followUp.trim() ? 'custom' : 'none';
+    }
+    if (typeof e.followUpDate !== 'string') e.followUpDate = '';
+    if (typeof e.followUpDays !== 'number' || !Number.isFinite(e.followUpDays) || e.followUpDays <= 0) e.followUpDays = 0;
+    if (!Array.isArray(e.files)) e.files = [];
   }
   // P3: Normalização defensiva de entregas de webhooks
   for (const d of base.webhookDeliveries as any[]) {
@@ -282,6 +294,9 @@ export function normalizeDB(raw: unknown): DB {
     // (idempotente; valor explícito do lojista nunca é sobrescrito).
     const page = base.pages.find((p) => p.businessId === b.id);
     b.features = normalizeFeatures(b, page?.blocks || []);
+    // FASE 2 · P5 — tipo de clínica (preset). Default defensivo 'geral':
+    // negócio legado continua genérico; nada é adivinhado a partir do nicho.
+    if (!isClinicType((b as any).clinicType)) (b as any).clinicType = 'geral';
     if (!b.whatsappIntegration || typeof b.whatsappIntegration !== 'object') {
       b.whatsappIntegration = defaultWhatsappIntegration();
     } else {
@@ -324,11 +339,18 @@ export function normalizeDB(raw: unknown): DB {
     }
     if (!Array.isArray((b as any).navItems)) (b as any).navItems = [];
     if (!b.automations || typeof b.automations !== 'object') (b as any).automations = {};
+    // FASE 2 · P8 — itens pulados do checklist (aditivo; só strings curtas).
+    if (!Array.isArray((b as any).setupSkipped)) (b as any).setupSkipped = [];
+    else (b as any).setupSkipped = (b as any).setupSkipped.filter((x: unknown) => typeof x === 'string' && x.length <= 40).slice(0, 20);
     // P4 — capacidades (planos/flags) são aditivas: ausente = padrão do produto.
     if (!b.capabilityFlags || typeof b.capabilityFlags !== 'object') (b as any).capabilityFlags = {};
   }
   for (const c of base.conversations) {
     if (!c.context || typeof c.context !== 'object') (c as any).context = {};
+    // F3-F — estado explícito aditivo: legado sem campo deriva de mode.
+    if (!c.agentState) {
+      (c as any).agentState = c.mode === 'human' ? 'human_active' : 'ai_active';
+    }
   }
   // Identidade visual do painel (P2): campo ADITIVO por Business. Quando
   // ausente, o negócio continua exatamente com o visual atual (sem cor
@@ -419,10 +441,37 @@ function getPool(): Pool {
   return pool;
 }
 
+/**
+ * GARANTIA DA TABELA — uma vez por processO, não uma vez por requisição (§i).
+ *
+ * Antes, CADA leitura e CADA escrita abriam a transação com
+ * `CREATE TABLE IF NOT EXISTS instalink_doc ...`. O Postgres resolve o "IF NOT
+ * EXISTS" no catálogo, mas ainda assim é um comando a mais por requisição:
+ * em Postgres gerenciado (Supabase/Neon/Vercel) ele custa um round-trip e,
+ * sob escrita concorrente, disputa lock de catálogo — em um banco onde cada
+ * requisição já faz uma leitura de documento inteiro.
+ *
+ * Agora o resultado é guardado em memória por instância:
+ *   • SUCESSO → nunca mais emite o DDL nesta instância (quente ou fria);
+ *   • FALHA   → o erro continua propagando (fail-closed intacto) e o cache é
+ *               limpo, para que a próxima requisição tente de novo em vez de
+ *               herdar uma falha transitória de rede.
+ */
+let pgReady: Promise<void> | null = null;
+
 async function pgInit(): Promise<void> {
-  await getPool().query(
-    'CREATE TABLE IF NOT EXISTS instalink_doc (id SMALLINT PRIMARY KEY, data JSONB NOT NULL)',
-  );
+  if (!pgReady) {
+    pgReady = getPool()
+      .query('CREATE TABLE IF NOT EXISTS instalink_doc (id SMALLINT PRIMARY KEY, data JSONB NOT NULL)')
+      .then(() => undefined)
+      .catch((err) => { pgReady = null; throw err; });
+  }
+  return pgReady;
+}
+
+/** Só para teste: esquece a garantia (simula instância nova). */
+export function __resetPgInitForTests(): void {
+  pgReady = null;
 }
 
 async function pgRead(): Promise<DB> {

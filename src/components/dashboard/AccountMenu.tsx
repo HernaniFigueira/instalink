@@ -1,14 +1,20 @@
 'use client';
 // ═══════════════════════════════════════════════════════════════
-// MENU DA CONTA — GoDoutor UI Revolution · Etapa A
+// MENU DA CONTA — GoDoutor Product/UX Revolution 2.0
 // ═══════════════════════════════════════════════════════════════
-// Avatar + nome + papel + dropdown (Meu perfil · clínica/unidade atual ·
-// configurações · sair).
+// Avatar (foto REAL quando existe; iniciais só como fallback) + nome + papel
+// e o menu da própria pessoa.
 //
-// Nada aqui inventa destino: cada item só aparece quando existe rota REAL e
-// permissão para ela. "Meu perfil" resolve o deep-link do próprio acesso em
-// /equipe (rota que já existe) e degrada para a tela /equipe quando o vínculo
-// não é encontrado — nunca para uma tela vazia inventada.
+// O QUE MUDOU (correção de acesso, §17):
+//   • "Meu perfil" aparecia SOMENTE para quem podia administrar Equipe
+//     (`canTeam`). Editar o próprio nome, foto e conselho nunca deveria
+//     depender de administrar outras pessoas: agora a porta existe para TODO
+//     usuário autenticado.
+//   • A troca de unidade veio para cá (era um pill na topbar) — a identidade
+//     da clínica vive na sidebar, então esta é a região de "quem eu sou" e
+//     "onde eu estou".
+//   • Ajuda e suporte é um item de verdade (abre a central), não um popover
+//     decorativo de atalhos.
 import { useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
 import { Icon } from '@/components/icons';
@@ -25,21 +31,21 @@ export interface AccountUnit {
   organizationId?: string;
 }
 
-export function AccountMenu({ user, unit, units, overview, canOverview, canTeam, canConfig, onUnit, onLogout, isMaster }: {
-  user: { name: string; email?: string; role?: string };
+export function AccountMenu({ user, unit, units = [], overview, canOverview, canConfig, onUnit, onLogout, isMaster, onOpenHelp }: {
+  user: { name: string; email?: string; role?: string; photo?: string };
   unit: AccountUnit;
-  units: AccountUnit[];
+  units?: AccountUnit[];
   /** true = o contexto atual é a visão de organização (não uma unidade). */
   overview?: boolean;
   canOverview?: boolean;
-  canTeam?: boolean;
   canConfig?: boolean;
-  onUnit: (id: string) => void;
+  onUnit?: (id: string) => void;
   onLogout: () => void;
   isMaster?: boolean;
+  /** Abre a central de ajuda do shell. */
+  onOpenHelp?: () => void;
 }) {
   const [open, setOpen] = useState(false);
-  const [profileHref, setProfileHref] = useState<string | null>(null);
   const boxRef = useRef<HTMLDivElement | null>(null);
   const buttonRef = useRef<HTMLButtonElement | null>(null);
   const q = unit.id ? `?b=${unit.id}` : '';
@@ -57,31 +63,14 @@ export function AccountMenu({ user, unit, units, overview, canOverview, canTeam,
     return () => { document.removeEventListener('mousedown', onDown); document.removeEventListener('keydown', onKey); };
   }, [open]);
 
-  // Deep-link do MEU acesso: só com permissão de equipe, e só se o servidor
-  // confirmar que existe um membro para este login. Senão, /equipe (tela real).
-  useEffect(() => {
-    if (!open || !canTeam || !unit.id) { return; }
-    let cancelled = false;
-    const base = `/equipe?b=${unit.id}`;
-    fetch(`/api/team?businessId=${encodeURIComponent(unit.id)}`)
-      .then(async (r) => (r.ok ? r.json() : null))
-      .then((d) => {
-        if (cancelled || !d) { if (!cancelled) setProfileHref(base); return; }
-        const me = d.me?.userId;
-        const mine = (d.members || []).find((m: { userId?: string; id: string }) => m.userId && m.userId === me);
-        setProfileHref(mine ? `${base}&member=${encodeURIComponent(mine.id)}` : base);
-      })
-      .catch(() => { if (!cancelled) setProfileHref(base); });
-    return () => { cancelled = true; };
-  }, [open, canTeam, unit.id]);
-
   function pick(id: string) {
     if (!mayLeaveEditor()) return;
     setOpen(false);
-    onUnit(id);
+    onUnit?.(id);
   }
 
   const role = unit.role || (isMaster ? 'MASTER' : user.role);
+  const multiUnit = units.length > 1;
 
   return (
     <div ref={boxRef} className="ws-account">
@@ -94,65 +83,60 @@ export function AccountMenu({ user, unit, units, overview, canOverview, canTeam,
         aria-haspopup="dialog"
         onClick={() => setOpen((v) => !v)}
       >
-        {/* Avatar do USUÁRIO (iniciais). O logo da clínica vive na sidebar e o
-            avatar da página pública é outro contexto — nunca misturar. */}
-        <Avatar name={user.name} size={32} />
-        <span className="ws-account__who">
-          <span className="ws-account__name">{user.name}</span>
-          <span className="ws-account__role">{roleLabel(role) || 'Equipe'}</span>
-        </span>
-        <Icon n="chevron" size={15} className="ws-account__chevron" />
+        <Avatar name={user.name} src={user.photo || undefined} size={30} />
       </button>
 
       {open && (
         <div className="ws-popover ws-account__panel" role="dialog" aria-label="Menu da conta">
           <header className="ws-account__header">
-            <Avatar name={user.name} size={40} />
+            <Avatar name={user.name} src={user.photo || undefined} size={40} />
             <div className="ws-account__identity">
               <p className="ws-account__identity-name">{user.name}</p>
               {user.email && <p className="ws-account__identity-email">{user.email}</p>}
               <p className="ws-account__identity-role">
                 {roleLabel(role) || 'Equipe'}
-                {unit.name && <> · {overview ? 'visão da organização' : unit.name}</>}
+                {overview && multiUnit && <> · visão da organização</>}
               </p>
             </div>
           </header>
 
           <div className="ws-menu">
-            {canTeam && (
-              <Link className="ws-menu__item" href={profileHref || `/equipe${q}`} onClick={() => setOpen(false)}>
-                <Icon n="userCircle" size={16} /> Meu perfil
-              </Link>
-            )}
+            {/* PERFIL — para QUALQUER pessoa autenticada. Editar o próprio
+                nome/foto nunca depende de administrar a equipe. */}
+            <Link className="ws-menu__item" href={`/perfil${q}`} onClick={() => setOpen(false)}>
+              <Icon n="userCircle" size={16} /> Meu perfil
+            </Link>
 
-            {/* Clínica/unidade atual — troca REAL de contexto (mesma função que
-                existia na sidebar; só mudou de lugar). */}
-            <div className="ws-menu__group">
-              <p className="ws-menu__label">Clínica atual</p>
-              {canOverview && (
-                <button type="button" className="ws-menu__item" aria-pressed={!!overview}
-                  onClick={() => pick('__overview')}>
-                  <Icon n="buildings" size={16} />
-                  <span className="ws-menu__item-text">Visão geral da organização</span>
-                  {overview && <Icon n="check" size={14} className="ws-menu__check" />}
-                </button>
-              )}
-              {units.map((item) => (
-                <button type="button" key={item.id} className="ws-menu__item"
-                  aria-pressed={!overview && item.id === unit.id}
-                  onClick={() => pick(item.id)}>
-                  <Icon n="store" size={16} />
-                  <span className="ws-menu__item-text">{item.name}</span>
-                  {item.role && <em className="ws-menu__tag">{roleLabel(item.role)}</em>}
-                  {!overview && item.id === unit.id && <Icon n="check" size={14} className="ws-menu__check" />}
-                </button>
-              ))}
-              {canOverview && (
-                <button type="button" className="ws-menu__item ws-menu__item--muted" onClick={() => pick('__add')}>
-                  <Icon n="plus" size={16} /> <span className="ws-menu__item-text">Nova unidade</span>
-                </button>
-              )}
-            </div>
+            {/* Troca de unidade: só quando há mais de uma (ou visão de
+                organização). Uma unidade só não precisa de seletor. */}
+            {(multiUnit || canOverview) && (
+              <div className="ws-menu__group">
+                <p className="ws-menu__label">Clínica atual</p>
+                {canOverview && (
+                  <button type="button" className="ws-menu__item" aria-pressed={!!overview}
+                    onClick={() => pick('__overview')}>
+                    <Icon n="buildings" size={16} />
+                    <span className="ws-menu__item-text">Visão da organização</span>
+                    {overview && <Icon n="check" size={14} className="ws-menu__check" />}
+                  </button>
+                )}
+                {units.map((item) => (
+                  <button type="button" key={item.id} className="ws-menu__item"
+                    aria-pressed={!overview && item.id === unit.id}
+                    onClick={() => pick(item.id)}>
+                    <Icon n="store" size={16} />
+                    <span className="ws-menu__item-text">{item.name}</span>
+                    {item.role && <em className="ws-menu__tag">{roleLabel(item.role)}</em>}
+                    {!overview && item.id === unit.id && <Icon n="check" size={14} className="ws-menu__check" />}
+                  </button>
+                ))}
+                {canOverview && (
+                  <button type="button" className="ws-menu__item ws-menu__item--muted" onClick={() => pick('__add')}>
+                    <Icon n="plus" size={16} /> <span className="ws-menu__item-text">Nova unidade</span>
+                  </button>
+                )}
+              </div>
+            )}
 
             {unit.slug && (
               <a className="ws-menu__item" href={`/${unit.slug}`} target="_blank" rel="noreferrer">
@@ -164,6 +148,12 @@ export function AccountMenu({ user, unit, units, overview, canOverview, canTeam,
                 <Icon n="settings" size={16} /> Configurações
               </Link>
             )}
+            <button type="button" className="ws-menu__item" onClick={() => { setOpen(false); onOpenHelp?.(); }}>
+              <Icon n="help" size={16} /> Ajuda e suporte
+            </button>
+            <Link className="ws-menu__item" href={`/alterar-senha${q}`} onClick={() => setOpen(false)}>
+              <Icon n="lock" size={16} /> Alterar senha
+            </Link>
 
             <div className="ws-menu__separator" />
             <button type="button" className="ws-menu__item ws-menu__item--danger"

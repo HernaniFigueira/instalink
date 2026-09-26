@@ -155,15 +155,17 @@ export function decideAuthedResponse(
  * Mantido aqui (e não em panel.ts) para que o servidor também possa rotular.
  */
 export const AREA_LABELS: Record<string, string> = {
-  // A3.4: a INTERFACE chama esta porta de "Início". A chave continua
-  // `dashboard` porque é o id da permissão (`dashboard`) gravado por tenant.
-  dashboard: 'Início',
+  // A chave continua `dashboard` porque é o id da permissão gravado por
+  // tenant. O rótulo que o usuário lê é o da 2.0: "Visão geral" (Operação).
+  dashboard: 'Visão geral',
   agenda: 'Agenda',
   clientes: 'Clientes',
-  leads: 'Leads',
+  leads: 'Oportunidades',
   pedidos: 'Pedidos',
   catalogo: 'Catálogo',
   servicos: 'Serviços',
+  // FASE 2 · P1 — hub que reúne Serviços/Profissionais/Horários/Acessos.
+  estrutura: 'Estrutura',
   profissionais: 'Profissionais',
   pagina: 'Página',
   agente: 'Agente',
@@ -171,18 +173,19 @@ export const AREA_LABELS: Record<string, string> = {
   // A1.2 · Bloco 1 — áreas das portas canônicas (nomes que o lojista vê no menu).
   disponibilidade: 'Disponibilidade',
   conversas: 'Conversas',
-  funil: 'Funil',
+  funil: 'Oportunidades',
   canais: 'Canais & Integrações',
-  tarefas: 'Tarefas',
+  tarefas: 'Pendências',
   execucoes: 'Execuções',
   organizacao: 'Organização',
   // Legados: mantidos como chave porque APIs antigas ainda rotulam assim, mas o
   // RÓTULO já é o do destino canônico (nunca duas palavras para a mesma tela).
   horarios: 'Disponibilidade',
   whatsapp: 'Conversas',
-  esteira: 'Funil',
+  esteira: 'Oportunidades',
   integracoes: 'Canais & Integrações',
   equipe: 'Equipe',
+  perfil: 'Meu perfil',
   config: 'Configurações',
   recursos: 'Recursos',
   resultados: 'Resultados',

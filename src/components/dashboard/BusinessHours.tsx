@@ -122,7 +122,7 @@ export function DayHoursList({ initial, onSubmit, saving, submitLabel, footer }:
               onClick={() => toggleDay(i)}
               aria-pressed={days[i].length > 0}
               className={cn(
-                'w-14 shrink-0 text-xs font-bold py-2 rounded-md border',
+                'w-14 shrink-0 text-xs font-semibold py-2 rounded-md border',
                 days[i].length ? 'bg-[var(--brand)] border-[var(--brand)] text-white' : 'bg-[var(--surface)] border-[var(--border)] text-[var(--text-faint)]',
               )}
             >

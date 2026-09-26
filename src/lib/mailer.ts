@@ -37,7 +37,7 @@ export function resetEmailHtml(name: string, link: string, kind: 'lojista' | 'co
   const first = (name || '').split(' ')[0] || 'você';
   return `<!DOCTYPE html><html lang="pt-BR"><body style="font-family:system-ui,sans-serif;color:#18181b;max-width:560px;margin:0 auto;padding:24px">
 <h2 style="margin:0 0 8px">Redefinir sua senha</h2>
-<p>Olá, ${first}! Recebemos um pedido de nova senha para sua conta de ${kind} no InstaLink.</p>
+<p>Olá, ${first}! Recebemos um pedido de nova senha para sua conta de ${kind} no GoDoutor.</p>
 <p><a href="${link}" style="display:inline-block;background:#059669;color:#fff;font-weight:700;text-decoration:none;padding:12px 24px;border-radius:12px">Criar nova senha</a></p>
 <p style="color:#71717a;font-size:13px">O link expira em 1 hora e só pode ser usado uma vez. Se você não pediu, ignore este e-mail.</p>
 </body></html>`;

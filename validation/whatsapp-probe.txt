@@ -1,0 +1,19 @@
+SECRETS|vercel|unset
+CHECK|0-protecao|PASS|Deployment Protection liberado p/ acesso público (HTTP 400)
+CHECK|0a-health|INFO|commit=sem-campo persistence=? sha_run=9d1fd21683a3b9542a77948ab5339e7940cb98e1
+CHECK|1-vercel-env|BLOCKED_MISSING_SECRET|VERCEL_TOKEN (sem acesso à lista de envs do Preview)
+CHECK|4-get-rota|PASS|GET sem params → 403 (rota pública; corpo=Verificação inválida)
+CHECK|1-env-infer-WHATSAPP_VERIFY_TOKEN|PASS|inferido presente (GET não retornou 503 de token ausente)
+CHECK|4-get-token-errado|PASS|GET token inválido → 403
+CHECK|4-get-handshake|BLOCKED_MISSING_SECRET|WHATSAPP_VERIFY_TOKEN (não obtido p/ handshake positivo)
+CHECK|4-post-sem-assinatura|PASS|POST sem X-Hub-Signature-256 → 403 assinatura inválida (fail-closed)
+CHECK|1-env-infer-APP_SECRET|PASS|inferido presente (POST não retornou 503 de secret ausente)
+CHECK|4-post-assinatura-invalida|PASS|POST assinatura errada → 403
+CHECK|4-post-assinatura-valida|BLOCKED_MISSING_SECRET|APP secret para assinar POST (HMAC)
+CHECK|3-tenant-payload|BLOCKED_MISSING_SECRET|APP secret para payload assinado de tenant
+CHECK|6-graph-credential|BLOCKED_MISSING_SECRET|WHATSAPP_API_TOKEN e/ou WHATSAPP_PHONE_NUMBER_ID
+CHECK|9a-register|PASS|register sonda 200
+CHECK|9b-login|PASS|login sonda 200 (token não logado)
+CHECK|9c-session|PASS|auth/me 200
+CHECK|9d-whatsapp-guard|PASS|/api/whatsapp sem dono → 403 (sem vazamento)
+RESUMO|PASS=11|FAIL=0|BLOCK=5

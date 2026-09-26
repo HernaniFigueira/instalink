@@ -27,17 +27,17 @@ import type { Block, Business, PublicBusiness, Review } from '@/lib/types';
 
 export async function generateMetadata({ params }: { params: { slug: string } }): Promise<Metadata> {
   const data = await getPublicData(params.slug);
-  if (!data) return { title: 'Página não encontrada — InstaLink.app' };
+  if (!data) return { title: 'Página não encontrada — GoDoutor' };
   const { business } = data;
   return {
-    title: `${business.name} — InstaLink.app`,
-    description: business.description || `Visite ${business.name} no InstaLink.app`,
+    title: `${business.name} — GoDoutor`,
+    description: business.description || `Agende seu atendimento em ${business.name} no GoDoutor`,
     openGraph: {
       title: business.name,
       description: business.description || undefined,
       type: 'website',
       locale: 'pt_BR',
-      siteName: 'InstaLink.app',
+      siteName: 'GoDoutor',
       ...(business.logo && business.logo.startsWith('http') ? { images: [business.logo] } : {}),
     },
   };
@@ -122,11 +122,35 @@ export default async function PublicPage({ params }: { params: { slug: string } 
         </div>
       )}
 
+      {/* Capa/perfil full-bleed (ZERO margem no hero) — encosta topo+laterais;
+          o card branco e o resto da página ficam no container de leitura. */}
+      {profileIdx >= 0 && (
+        <div className="w-full" data-public-hero="true">
+          <BlockView
+            block={blocks[profileIdx]}
+            business={business}
+            agent={agentOn ? { name: agent.name, greeting: renderGreeting(agent, business.name), enabled: agent.enabled } : null}
+            catalog={{ categories, products, options, optionValues, services, serviceCategories, professionals, reviews }}
+            extras={{
+              canBook, socialLinks, showWhatsapp,
+              openNow,
+              primaryCta: primaryCta
+                ? {
+                    id: primaryCta.id,
+                    label: String(primaryCta.settings?.label || 'Agendar horário'),
+                    target: String(primaryCta.settings?.target || ''),
+                  }
+                : null,
+            }}
+          />
+        </div>
+      )}
+
       <div
-        className="clinic-content mx-auto w-full max-w-[900px] px-5 sm:px-8 pt-6 sm:pt-10 space-y-10"
-        style={{ paddingBottom: 'calc(6.5rem + env(safe-area-inset-bottom, 0px))' }}
+        className="clinic-content mx-auto w-full max-w-[900px] px-5 sm:px-8 space-y-10 max-md:pb-[calc(6.5rem+env(safe-area-inset-bottom,0px))]"
       >
         {blocks.map((block, i) => (
+          block.type === 'profile' ? null : (
           <Fragment key={block.id}>
             <BlockView
               block={block}
@@ -145,17 +169,17 @@ export default async function PublicPage({ params }: { params: { slug: string } 
                   : null,
               }}
             />
-            {i === profileIdx && aboutOk && <AboutView about={business.about} />}
           </Fragment>
+          )
         ))}
-        {profileIdx < 0 && aboutOk && <AboutView about={business.about} />}
+        {aboutOk && <AboutView about={business.about} />}
 
-        {/* White label: a marca do NEGÓCIO manda; o InstaLink fica discreto. */}
+        {/* White label: a marca do NEGÓCIO manda; o GoDoutor fica discreto. */}
         <footer className="text-center pt-2 pb-1">
           {/* A1.2 · Bloco 3: link interno do rodapé via Link (navegação do Next,
               sem reload) — é interno ao app, não link externo. */}
           <Link href="/" className="il-muted text-[10px] font-medium opacity-70 hover:opacity-100 hover:underline">
-            Feito com InstaLink
+            Feito com GoDoutor
           </Link>
         </footer>
       </div>
