@@ -1089,7 +1089,6 @@ export default function AgendaPage() {
     : view === 'week'
       ? '7 dias'
       : 'Um dia';
-  const isToday = focus === today;
   /** Rótulo acessível do botão de navegação (não é só "anterior"). */
   const navLabel = (dir: -1 | 1) => (view === 'month'
     ? (dir < 0 ? 'Mês anterior' : 'Próximo mês')
@@ -1346,30 +1345,20 @@ export default function AgendaPage() {
       <div ref={workspaceRef} data-agenda-workspace="true" className="flex flex-1 items-stretch gap-2.5 min-h-0 min-w-0">
         <main data-agenda-main="true" className="flex-1 min-w-0">
       {/* LINHA 2 — DATA / MODO / AÇÃO PRINCIPAL.
-          Esquerda: [◀][Hoje][▶] + data selecionada (fuso/regras preservados).
-          Direita: [Dia | Semana | Mês | Lista] + CTA "Novo agendamento".
+          Esquerda: [◀][▶] + data selecionada (fuso/regras preservados).
+          Direita: [Dia | Semana | Lista] + CTA "Novo agendamento".
           relative z-40: os popovers abrem sobre a grade e precisam ficar
           acima dos cabeçalhos sticky (z-20/30) das colunas. */}
       <div className="relative z-40 ws-panel mb-2.5">
         <div className="flex flex-wrap items-center gap-x-4 gap-y-2.5 px-3 py-2.5">
-          {/* Navegação no tempo (A3.4): [◀] [Hoje] [▶] + título da data ao lado.
-              O "Hoje" fica SEMPRE no mesmo lugar, entre as setas — antes ele
-              aparecia e desaparecia conforme a data, então o botão se movia
-              justamente quando o usuário mais precisava dele. Estando em hoje,
-              ele continua visível, porém marcado como selecionado. */}
+          {/* Navegação no tempo (correção cirúrgica): [◀] [▶] apenas.
+              O botão “Hoje” saiu da UI — a data/período continua visível ao
+              lado e o seletor nativo de data segue permitindo saltar para
+              qualquer dia. */}
           <div className="flex items-center gap-2 min-w-0">
             <span className="inline-flex rounded-md border border-[var(--border-strong)] bg-[var(--surface)] shadow-xs overflow-hidden">
               <IconButton icon="chevL" label={navLabel(-1)} tip={navLabel(-1)} variant="ghost" onClick={() => move(-1)}
                 className="w-9 h-9 rounded-none text-[var(--text-muted)] border-r border-[var(--border)]" />
-              <button type="button" onClick={() => setFocus(today)}
-                aria-pressed={isToday}
-                title={isToday ? 'Você já está em hoje' : 'Ir para hoje'}
-                className={cn('h-9 px-3 rounded-none text-xs font-semibold border-r border-[var(--border)] transition-colors',
-                  isToday
-                    ? 'bg-[var(--brand-soft)] text-[var(--brand-fg)] cursor-default'
-                    : 'text-[var(--text)] hover:bg-[var(--surface-hover)]')}>
-                Hoje
-              </button>
               <IconButton icon="chevR" label={navLabel(1)} tip={navLabel(1)} variant="ghost" onClick={() => move(1)}
                 className="w-9 h-9 rounded-none text-[var(--text-muted)]" />
             </span>
@@ -1382,11 +1371,13 @@ export default function AgendaPage() {
             </label>
           </div>
           <div className="sm:ml-auto min-w-0 max-w-full flex flex-wrap items-center gap-2">
+            {/* Visualização: Dia | Semana | Lista (correção cirúrgica: “Mês”
+                saiu da UI — a lógica do modo mês segue intacta para links
+                diretos com view=month; nada foi destruído). */}
             <Segmented
               items={[
                 { id: 'day' as View, label: 'Dia', icon: 'calendar' },
                 { id: 'week' as View, label: 'Semana', icon: 'grid' },
-                { id: 'month' as View, label: 'Mês', icon: 'receipt' },
                 { id: 'list' as View, label: 'Lista', icon: 'tasks' },
               ]}
               value={view}
@@ -1394,12 +1385,10 @@ export default function AgendaPage() {
               ariaLabel="Visualização da agenda"
               size="sm"
             />
-            {/* CTA PRINCIPAL da Agenda — na extremidade direita da Linha 2,
-                imediatamente ao lado do seletor de visualização. Mesma lógica
-                estrutural do "Perguntar à IA" do Meta Business: fundo branco,
-                borda de destaque elegante, peso 600 — o botão mais importante
-                da tela sem virar um bloco azul agressivo. O fluxo/sheet de
-                criação continua EXATAMENTE o mesmo. */}
+            {/* CTA PRINCIPAL da Agenda — violeta premium (--cta-bg): acento
+                refinado que conversa com a sidebar índigo-violeta, com
+                contraste AA e hover que escurece. O fluxo/sheet de criação
+                continua EXATAMENTE o mesmo. */}
             <Button variant="cta" size="sm" onClick={() => setCreating({ date: focus, time: '', professionalId: '' })}>
               <Icon n="calendarPlus" size={15} /> Novo agendamento
             </Button>

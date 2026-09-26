@@ -49,12 +49,11 @@ const BTN_VARIANT_CLS: Record<ButtonVariant, string> = {
   quiet:
     'bg-[var(--surface-3)] text-[var(--text-muted)] border border-[var(--border)] hover:bg-[var(--brand-soft)] hover:text-[var(--brand-fg)] hover:border-[var(--brand-border)] active:translate-y-px',
   // CTA contextual PRINCIPAL de uma tela (ex.: "Novo agendamento" na Agenda):
-  // fundo branco + borda de destaque elegante + texto azul (contraste AA).
-  // Importante sem virar bloco azul sólido — mesma lógica estrutural do
-  // "Perguntar à IA" do Meta Business (referência conceitual, sem copiar
-  // marca/assets). Hover perceptível, porém sóbrio.
+  // violeta premium (--cta-bg) — acento refinado que conversa com a sidebar
+  // índigo-violeta, sem ser o azul de ação genérico. Branco sobre violeta =
+  // contraste AA (6.8:1); hover escurece com sombra mais profunda.
   cta:
-    'bg-white text-[var(--brand-fg)] font-semibold border border-[var(--brand-strong)]/55 shadow-xs hover:bg-[var(--brand-soft)] hover:border-[var(--brand-strong)] hover:shadow-sm active:translate-y-px',
+    'bg-[var(--cta-bg)] text-white font-semibold border border-[var(--cta-border)] shadow-[var(--cta-shadow)] hover:bg-[var(--cta-bg-hover)] hover:border-[var(--cta-bg-hover)] hover:shadow-[var(--cta-shadow-hover)] active:translate-y-px',
 };
 
 export type ButtonSize = 'xs' | 'sm' | 'md' | 'lg';

@@ -26,8 +26,11 @@ const read = (rel: string) => readFileSync(path.join(root, rel), 'utf8');
 
 const css = read('src/app/globals.css');
 const dash = read('src/app/(dashboard)/dashboard/page.tsx');
+const agenda = read('src/app/(dashboard)/agenda/page.tsx');
 const icons = read('src/components/icons.tsx');
 const ui = read('src/components/ui.tsx');
+const topbar = read('src/components/dashboard/WorkspaceTopbar.tsx');
+const navTsx = read('src/components/dashboard/WorkspaceNavigation.tsx');
 
 /** Regra CSS de `sel` no globals.css (bloco `{...}` inteiro). */
 function ruleOf(sel: string): string {
@@ -124,25 +127,21 @@ describe('3 · métricas do topo = UM card único com divisórias sutis', () => 
   });
 });
 
-describe('4 · amarelo suave “sun” com inteligência (só no bloco de destaque)', () => {
-  it('família sun definida em tokens', () => {
+describe('4 · amarelo “sun” com moderação (só acento secundário, nunca o topo)', () => {
+  it('família sun definida em tokens (para os acentos pontuais)', () => {
     for (const t of ['--sun:', '--sun-strong:', '--sun-bg:', '--sun-bg-strong:', '--sun-border:', '--sun-fg:']) {
       expect(css, t).toContain(t);
     }
   });
 
-  it('a saudação vira o bloco quente `.dsh-hero`', () => {
-    expect(dash).toContain('className="dsh-hero"');
-    const hero = ruleOf('.dsh-hero {');
-    expect(hero).toContain('var(--sun-bg)');
-    expect(hero).toContain('var(--sun-border)');
-    expect(ruleOf('.dsh-hero__date {')).toContain('var(--sun-fg)');
-  });
-
-  it('o amarelo NÃO toma conta do painel (parcimônia)', () => {
-    // uso do sun em regras de componente é pontual: hero, data-chip, ênfases
-    const sunUses = css.match(/var\(--sun(-[a-z]+)?\)/g) ?? [];
-    expect(sunUses.length).toBeLessThanOrEqual(12);
+  it('CORREÇÃO: o topo da Visão geral NÃO tem card amarelo nem degradê', () => {
+    // O header volta a ser limpo: tipografia + espaçamento, ponto.
+    expect(dash).not.toContain('dsh-hero');
+    expect(css).not.toContain('.dsh-hero');
+    expect(dash).toMatch(/<header className="mb-5 flex flex-wrap/);
+    // e nenhum gradiente "sun" sobra no painel
+    expect(css).not.toMatch(/linear-gradient\([^)]*--sun/);
+    expect(css).not.toMatch(/linear-gradient\([^)]*247, 201, 72/);
   });
 });
 
@@ -160,5 +159,63 @@ describe('5 · botões migrados pela BASE (tokens), sem hex por tela', () => {
     expect(css).toMatch(/--brand-700:\s*#4338ca/);
     // e a sidebar fala a MESMA família (só mais forte)
     expect(css).toMatch(/--il-nav:\s*#3f37c9/);
+  });
+});
+
+// ═══════════════════════════════════════════════════════════════
+// CORREÇÃO CIRÚRGICA — os oito defeitos visuais reportados
+// ═══════════════════════════════════════════════════════════════
+describe('6 · correções cirúrgicas (contrato dos 8 pontos)', () => {
+  it('1 · busca: UM contorno só — input sem outline próprio no foco', () => {
+    expect(css).toMatch(/\.global-search__input:focus-visible\s*\{\s*outline:\s*none/);
+    // o anel visual é só o do wrapper (focus-within)
+    expect(css).toMatch(/\.global-search__field:focus-within\s*\{[^}]*box-shadow:/);
+  });
+
+  it('2 · dashboard: métricas em card único sem degradê', () => {
+    const card = ruleOf('.dsh-metrics {');
+    expect(card).toContain('background: var(--surface)');
+    expect(card).not.toContain('gradient');
+  });
+
+  it('3 · “Agendado no período” segue com ícone (cash)', () => {
+    expect(icons).toMatch(/\n\s*cash:\s*\(/);
+    expect(dash).toContain('<Icon n="cash"');
+  });
+
+  it('4 · tooltip do rail recolhido em portal/fixed (não é cortado pela Agenda)', () => {
+    expect(navTsx).toContain('createPortal(');
+    expect(navTsx).toMatch(/createPortal\(\s*\n?\s*<div className="ws-nav-tip"/);
+    const tip = ruleOf('.ws-nav-tip {');
+    expect(tip).toContain('position: fixed');
+    expect(tip).toContain('z-index: 90');
+  });
+
+  it('5 · botão “Hoje” removido da navegação da Agenda', () => {
+    expect(agenda).not.toMatch(/<button[^>]*>\s*Hoje\s*<\/button>/);
+    expect(agenda).not.toContain("'Você já está em hoje'");
+  });
+
+  it('6 · modo “Mês” removido da UI (lógica profunda preservada)', () => {
+    expect(agenda).not.toContain("label: 'Mês'");
+    // …a lógica do modo mês continua para links diretos (view=month)
+    expect(agenda).toContain("view === 'month'");
+  });
+
+  it('7 · “+ Novo” removido do topo (visual e funcional)', () => {
+    expect(topbar).not.toContain('ws-newbtn');
+    expect(topbar).not.toContain('Criar novo');
+    expect(topbar).not.toContain('Novo agendamento');
+    // os demais itens da topbar permanecem
+    expect(topbar).toContain('<GlobalSearch');
+    expect(topbar).toContain('<NotificationsBell');
+  });
+
+  it('8 · “Novo agendamento” = violeta premium (CTA próprio, AA)', () => {
+    expect(ui).toMatch(/cta:\s*\n?\s*'bg-\[var\(--cta-bg\)\]/);
+    expect(css).toMatch(/--cta-bg:\s*#5b3fd4/);
+    expect(css).toMatch(/--cta-bg-hover:\s*#4a31b8/);
+    // sem degradê no CTA
+    expect(css).not.toMatch(/--cta-[a-z-]*:\s*linear-gradient/);
   });
 });

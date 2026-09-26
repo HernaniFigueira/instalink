@@ -166,19 +166,18 @@ test('evidência C — Linha 1 + Linha 2 compactas (1440×900)', async ({ page }
   expect(tb.y + tb.height - hb.y).toBeLessThan(150);
 });
 
-test('evidência H — “+ Novo” global outline (quick create funcional)', async ({ page }, info) => {
+test('evidência H — topo limpo: SEM “+ Novo” (busca · sino · ajuda · conta)', async ({ page }, info) => {
   await login(page);
   await page.setViewportSize({ width: 1440, height: 900 });
   await page.goto(`/agenda?b=${f.b}&data=${f.date}&view=day`);
   await page.waitForSelector('[data-agenda-main]');
-  const novo = page.getByRole('button', { name: 'Novo', exact: true });
-  // Outline/neutro: fundo branco (superfície), não azul sólido.
-  const bg = await novo.evaluate((el) => getComputedStyle(el).backgroundColor);
-  expect(bg).toBe('rgb(255, 255, 255)');
-  await novo.click();
-  await expect(page.getByRole('menu', { name: 'Criar novo' })).toBeVisible();
-  await expect(page.getByRole('menuitem', { name: /Novo agendamento/ })).toBeVisible();
-  await page.screenshot({ path: info.outputPath('H-novo-outline-1440.png') });
+  // Contrato da correção: o quick create “+ Novo” saiu do topo.
+  await expect(page.getByRole('button', { name: 'Novo', exact: true })).toHaveCount(0);
+  await expect(page.getByRole('menu', { name: 'Criar novo' })).toHaveCount(0);
+  // Os demais itens da topbar permanecem.
+  await expect(page.locator('.global-search')).toBeVisible();
+  await expect(page.locator('.ws-topbar').getByRole('button', { name: 'Ajuda e suporte' })).toBeVisible();
+  await page.screenshot({ path: info.outputPath('H-topbar-limpa-1440.png') });
 });
 
 test('CTA “Novo agendamento” abre o fluxo de criação existente (sem gravar nada)', async ({ page }) => {
@@ -207,11 +206,14 @@ test('Filtros e Fila abrem na Linha 1; modos e data continuam operáveis', async
   await header.getByRole('button', { name: /Fila/ }).click();
   await expect(page.locator('[data-queue-panel="true"]')).toBeVisible();
   await header.getByRole('button', { name: /Fila/ }).click();
-  // Navegação de data + modos.
+  // Navegação de data + modos (correção cirúrgica: sem “Hoje”, sem “Mês”).
   const before = new URL(page.url()).searchParams.get('data');
   await page.getByRole('button', { name: /Próximo dia/ }).click();
   await expect.poll(() => new URL(page.url()).searchParams.get('data')).not.toBe(before);
-  await page.getByRole('button', { name: 'Hoje', exact: true }).click();
+  await page.getByRole('button', { name: /Dia anterior/ }).click();
+  await expect.poll(() => new URL(page.url()).searchParams.get('data')).toBe(before);
+  await expect(page.getByRole('button', { name: 'Hoje', exact: true })).toHaveCount(0);
+  await expect(page.getByRole('tab', { name: /Mês/ })).toHaveCount(0);
   await expect(page.getByRole('tab', { name: /Semana/ })).toBeVisible();
   await page.getByRole('tab', { name: /Semana/ }).click();
   await expect.poll(() => new URL(page.url()).searchParams.get('view')).toBe('week');

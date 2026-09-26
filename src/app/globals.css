@@ -77,6 +77,15 @@
   --sun-bg-strong: #ffefc2;
   --sun-border: #f0e0b0;
   --sun-fg: #7a5800;
+  /* — CTA principal da Agenda (“Novo agendamento”): violeta premium —
+     Acento refinado que conversa com a sidebar índigo-violeta, sem ser o
+     azul de ação genérico. Branco sobre `--cta-bg` = 6.8:1 (AA). */
+  --cta-bg: #5b3fd4;
+  --cta-bg-hover: #4a31b8;
+  --cta-border: #4a31b8;
+  --cta-fg: #ffffff;
+  --cta-shadow: 0 2px 12px -2px rgba(91, 63, 212, 0.45);
+  --cta-shadow-hover: 0 6px 18px -2px rgba(91, 63, 212, 0.55);
 
   /* Nomes legados (consumidos por ui.tsx e telas) → apontam para a marca.
      Uma futura identidade por negócio só precisa REATRIBUIR estes valores. */
@@ -1063,6 +1072,11 @@ dialog.il-drawer::backdrop { background: transparent; }
   background: transparent; border: 0; outline: none;
   font-size: 13.5px; color: var(--text);
 }
+/* CORREÇÃO · dupla borda no foco: o outline global de :focus-visible
+   (.il-platform) desenhava UM SEGUNDO retângulo dentro do anel do campo.
+   O input não desenha contorno próprio — o foco visual é só o do wrapper
+   (.global-search__field:focus-within): UM contorno limpo, ponto. */
+.global-search__input:focus-visible { outline: none; box-shadow: none; }
 .global-search__input::placeholder { color: var(--text-faint); }
 .global-search__input::-webkit-search-cancel-button { display: none; }
 .global-search__kbd {
@@ -1428,12 +1442,17 @@ button.workspace-clinic-head:hover { background: rgba(255, 255, 255, 0.12); }
    rolável: escapa sobre o conteúdo sem esticar a largura de scroll de nada —
    é a correção da CAUSA da scrollbar horizontal (o ::after do .il-tip antigo
    vivia dentro de .workspace-primary). */
+/* CORREÇÃO · tooltip do rail recolhido: renderizado em portal no <body>
+   (position: fixed, coordenadas de viewport vindas do handler) — escapa de
+   QUALQUER stacking context da página (na Agenda, elementos com z-index do
+   conteúdo pintavam por cima do tooltip dentro do <aside>) e nada corta.
+   Continua sem estreitar largura de scroll de container nenhum. */
 .ws-nav-tip {
-  position: absolute; left: calc(100% + 10px); transform: translateY(-50%);
+  position: fixed; transform: translateY(-50%);
   padding: 5px 9px; border-radius: var(--radius-sm);
   background: #232a44; color: #fff;
   font-size: 11px; font-weight: 600; white-space: nowrap;
-  z-index: 60; box-shadow: var(--shadow-md); pointer-events: none;
+  z-index: 90; box-shadow: var(--shadow-md); pointer-events: none;
 }
 
 /* Rodapé fixo: ajuda e suporte — discreto, sempre no mesmo lugar. */
@@ -1733,32 +1752,12 @@ dialog.il-customer-dialog::backdrop { background:transparent; }
 .il-platform [data-agenda-main] .ag-grid-surface .border-zinc-200 { border-color: var(--border); }
 
 /* ── DASHBOARD operacional (fideliade ao mockup) ─────────────── */
-/* Saudação em bloco quente “sun”: o amarelo suave da identidade entra UMA
-   vez, no topo da Visão geral — não pinta o resto do painel. */
-.dsh-hero {
-  display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between;
-  gap: 12px; margin-bottom: 16px; padding: 18px 20px;
-  background: linear-gradient(135deg, var(--sun-bg) 0%, var(--sun-bg-strong) 100%);
-  border: 1px solid var(--sun-border); border-radius: var(--radius-lg);
-  box-shadow: var(--shadow-xs);
-}
-.dsh-hero__title {
-  margin: 0; font-size: 24px; line-height: 1.2; font-weight: 700;
-  letter-spacing: -.02em; color: var(--text);
-}
-.dsh-hero__sub { margin: 4px 0 0; font-size: 13.5px; color: var(--text-muted); }
-.dsh-hero__date {
-  display: inline-flex; align-items: center; gap: 6px;
-  padding: 6px 11px; border-radius: 999px;
-  background: rgba(255, 255, 255, 0.72); border: 1px solid var(--sun-border);
-  font-size: 12px; font-weight: 600; color: var(--sun-fg);
-}
 /* Métricas do topo = UM card único horizontal, com divisórias verticais
    sutis entre as seis leituras (sem “6 cards soltos”, sem tabela dura). */
 .dsh-metrics {
   display: grid; grid-template-columns: repeat(2, minmax(0, 1fr));
   margin-bottom: 16px; overflow: hidden;
-  background: linear-gradient(180deg, var(--sun-bg) 0, var(--surface) 110px);
+  background: var(--surface);
   border: 1px solid var(--border-soft); border-radius: var(--radius-lg);
   box-shadow: var(--shadow-xs);
 }

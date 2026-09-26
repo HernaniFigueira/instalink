@@ -1,15 +1,15 @@
 // @vitest-environment jsdom
 // ═══════════════════════════════════════════════════════════════
-// AGENDA PROTAGONISTA — toolbar de duas linhas, CTA e Quick Create
+// AGENDA PROTAGONISTA — toolbar de duas linhas, CTA e topo limpo
 // ═══════════════════════════════════════════════════════════════
-// Prova em DOM (não só texto de fonte) a hierarquia nova da Agenda:
+// Prova em DOM (não só texto de fonte) a hierarquia da Agenda:
 //   1. título “Agenda” com ícone de calendário (Linha 1);
 //   2. Filtros na Linha 1 · 3. Fila na Linha 1 · “?” de ajuda junto;
 //   4. “Novo agendamento” imediatamente ao lado do seletor (Linha 2);
-//   5. “+ Novo” global continua funcional (6 criações);
-//   6. “+ Novo” usa estilo outline/neutro (não azul sólido);
-//   7. Dia/Semana/Mês/Lista continuam funcionando;
-//   8. anterior / Hoje / próximo continuam funcionando;
+//   5. “+ Novo” global REMOVIDO do topo (correção cirúrgica);
+//   6. topo mantém busca/sino/ajuda/avatar;
+//   7. Dia/Semana/Lista funcionando (Mês fora da UI; lógica preservada);
+//   8. [◀] [▶] funcionando — botão “Hoje” removido;
 //   9. “Novo agendamento” continua abrindo o fluxo existente;
 //  10. Filtros continuam abrindo;  11. Fila continua abrindo;
 //  12. fotos reais de profissionais preservadas (Avatar src=photo);
@@ -23,7 +23,7 @@ import { readFileSync } from 'node:fs';
 import path from 'node:path';
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { useSyncExternalStore } from 'react';
-import { addDaysISO, todayISO } from '@/lib/tz';
+import { addDaysISO } from '@/lib/tz';
 
 // ── next/navigation: useSearchParams sincronizado com history.pushState ──
 const nav = vi.hoisted(() => {
@@ -178,8 +178,8 @@ describe('Agenda — Linha 1 (título/auxiliares) e Linha 2 (data/modo/ação)',
   });
 });
 
-// ═══ 5–6 · Quick Create global (“+ Novo” da topbar) ══════════════════════
-describe('“+ Novo” global — funcional e outline/neutro', () => {
+// ═══ 5–6 · Topo limpo (“+ Novo” removido) ══════════════════════════════
+describe('“+ Novo” global — removido do topo (correção cirúrgica)', () => {
   function topbarProps() {
     return {
       page: 'Agenda', query: '?b=biz-t1', searchItems: [], activePath: '/agenda',
@@ -191,55 +191,35 @@ describe('“+ Novo” global — funcional e outline/neutro', () => {
     };
   }
 
-  it('5. “+ Novo” continua funcional: abre o quick create com as 6 criações', async () => {
-    const user = userEvent.setup();
+  it('5. não existe mais botão “+ Novo” nem o menu de quick create', () => {
     render(<WorkspaceTopbar {...topbarProps()} />);
-    const btn = screen.getByRole('button', { name: 'Novo' });
-    expect(btn.getAttribute('aria-haspopup')).toBe('menu');
-    await user.click(btn);
-    const menu = screen.getByRole('menu', { name: 'Criar novo' });
-    const items = within(menu).getAllByRole('menuitem');
-    expect(items.map((i) => (i.textContent || '').trim())).toEqual([
-      'Novo agendamento', 'Novo paciente', 'Novo profissional', 'Novo serviço', 'Nova pendência', 'Recebimento',
-    ]);
-    // O item “Novo agendamento” continua levando ao sheet via ?novo=1.
-    expect(items[0].getAttribute('href')).toContain('/agenda');
-    expect(items[0].getAttribute('href')).toContain('novo=1');
+    expect(screen.queryByRole('button', { name: 'Novo' })).toBeNull();
+    expect(screen.queryByRole('menu', { name: 'Criar novo' })).toBeNull();
+    expect(document.querySelector('.ws-newbtn')).toBeNull();
   });
 
-  it('6. “+ Novo” usa estilo outline/neutro — sem preenchimento azul sólido', async () => {
+  it('6. os demais itens da topbar permanecem (busca · sino · ajuda · conta)', () => {
     render(<WorkspaceTopbar {...topbarProps()} />);
-    expect(screen.getByRole('button', { name: 'Novo' }).className).toContain('ws-newbtn');
-    const css = read('src/app/globals.css');
-    const block = css.slice(css.indexOf('.ws-newbtn {'));
-    const rule = block.slice(0, block.indexOf('}'));
-    expect(rule).toContain('background: var(--surface)');
-    expect(rule).toContain('border: 1px solid var(--border-strong)');
-    expect(rule).toContain('border-radius: 8px');
-    expect(rule).not.toContain('background: var(--brand);');
-    expect(rule).not.toContain('box-shadow: var(--shadow-brand)');
-    // Hover = azul claríssimo (token), não mais brand-strong sólido.
-    const hoverAt = block.indexOf('.ws-newbtn:hover');
-    expect(hoverAt).toBeGreaterThan(0);
-    const hover = block.slice(hoverAt, block.indexOf('}', hoverAt));
-    expect(hover).toContain('var(--brand-soft)');
+    expect(document.querySelector('.global-search')).toBeTruthy();
+    expect(screen.getByRole('button', { name: /Notifica/ })).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Ajuda e suporte' })).toBeTruthy();
+    expect(screen.getByRole('button', { name: /Dona Unidade/ })).toBeTruthy();
   });
 });
 
 // ═══ 7–8 · Modos e navegação de data ════════════════════════════════════
-describe('Dia/Semana/Mês/Lista e navegação [◀][Hoje][▶]', () => {
-  it('7. os quatro modos continuam funcionando (URL + conteúdo)', async () => {
+describe('Dia/Semana/Lista e navegação [◀][▶] (correção cirúrgica)', () => {
+  it('7. os três modos (Dia/Semana/Lista) funcionam — sem tab “Mês” na UI', async () => {
     const user = userEvent.setup();
     await renderAgenda();
     const tabs = within(screen.getByRole('tablist', { name: 'Visualização da agenda' }));
 
+    // “Mês” saiu da UI (a lógica profunda segue para links view=month).
+    expect(tabs.queryByRole('tab', { name: /Mês/ })).toBeNull();
+
     await user.click(tabs.getByRole('tab', { name: /Semana/ }));
     await waitFor(() => expect(window.location.search).toContain('view=week'));
     expect(tabs.getByRole('tab', { name: /Semana/ }).getAttribute('aria-selected')).toBe('true');
-
-    await user.click(tabs.getByRole('tab', { name: /Mês/ }));
-    await waitFor(() => expect(window.location.search).toContain('view=month'));
-    expect(screen.getAllByText('seg').length).toBeGreaterThan(0);
 
     await user.click(tabs.getByRole('tab', { name: /Lista/ }));
     await waitFor(() => expect(window.location.search).toContain('view=list'));
@@ -250,19 +230,20 @@ describe('Dia/Semana/Mês/Lista e navegação [◀][Hoje][▶]', () => {
     expect(await screen.findByText('Dra. Foto Real')).toBeTruthy();
   });
 
-  it('8. [◀] [Hoje] [▶] continuam funcionando — e “Hoje” não desaparece', async () => {
+  it('8. [◀] [▶] funcionam — e o botão “Hoje” não existe mais', async () => {
     const user = userEvent.setup();
     await renderAgenda();
-    const today = todayISO();
-    // O teste parte de 2026-09-28; navegar para HOJE muda a data na URL.
-    await user.click(screen.getByRole('button', { name: 'Hoje' }));
-    await waitFor(() => expect(window.location.search).toContain(`data=${today}`));
-    // Próximo dia → +1; anterior → volta; “Hoje” continua no mesmo lugar.
+    // Contrato da correção: o botão “Hoje” saiu da navegação de data.
+    expect(screen.queryByRole('button', { name: 'Hoje' })).toBeNull();
+    // Data de partida = o foco atual da agenda (URL da fixture).
+    const before = new URLSearchParams(window.location.search).get('data')!;
+    // Próximo dia → +1; anterior → volta.
     await user.click(screen.getByRole('button', { name: /Próximo dia/ }));
-    await waitFor(() => expect(window.location.search).toContain(`data=${addDaysISO(today, 1)}`));
-    expect(screen.getByRole('button', { name: 'Hoje' })).toBeTruthy();
+    await waitFor(() => expect(window.location.search).toContain(`data=${addDaysISO(before, 1)}`));
     await user.click(screen.getByRole('button', { name: /Dia anterior/ }));
-    await waitFor(() => expect(window.location.search).toContain(`data=${today}`));
+    await waitFor(() => expect(window.location.search).toContain(`data=${before}`));
+    // A data/período continua visível.
+    expect(screen.getByTitle(/clique para escolher a data/)).toBeTruthy();
   });
 });
 

@@ -31,6 +31,7 @@
 // ("Powered by") e na central de ajuda. Nada de duas marcas disputando o mesmo
 // espaço: uma identidade principal por região.
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import Link from 'next/link';
 import { Icon } from '@/components/icons';
 import { Drawer } from '@/components/ui';
@@ -152,14 +153,14 @@ export function WorkspaceNavigation({ nav, activePath, unit, units = [], multiUn
   }, []);
 
   // ── TOOLTIP do modo recolhido ────────────────────────────────
-  // O tooltip é renderizado como FILHO DO <aside>, fora do container rolável
-  // (.workspace-primary). Os tooltips antigos (.il-tip::after) ficavam DENTRO
-  // do container com overflow-y:auto — invisíveis (opacity:0) mas ainda no
-  // layout, esticando a largura de scroll e criando a scrollbar horizontal da
-  // sidebar recolhida. Aqui o <aside> não rola e não corta: o tooltip escapa
-  // para cima do conteúdo sem aumentar largura física de nada.
+  // O tooltip é renderizado em PORTAL no <body> (position: fixed, coordenadas
+  // de viewport). Antes era filho do <aside> — o sticky do aside cria um
+  // stacking context e, em telas com elementos em z-index (ex.: toolbar da
+  // Agenda em z-40), o tooltip ficava ABAIXO do conteúdo, parecendo cortado/
+  // sobreposto. Em portal ele escapa de qualquer contexto e nada o corta —
+  // sem esticar largura de scroll de container nenhum.
   const asideRef = useRef<HTMLElement | null>(null);
-  const [tip, setTip] = useState<{ text: string; top: number } | null>(null);
+  const [tip, setTip] = useState<{ text: string; top: number; left: number } | null>(null);
   useEffect(() => {
     if (!collapsed) { setTip(null); return; }
     const root = asideRef.current;
@@ -171,7 +172,11 @@ export function WorkspaceNavigation({ nav, activePath, unit, units = [], multiUn
       if (!el || !text) { setTip(null); return; }
       const elRect = el.getBoundingClientRect();
       const rootRect = root.getBoundingClientRect();
-      setTip({ text, top: elRect.top - rootRect.top + elRect.height / 2 });
+      setTip({
+        text,
+        top: elRect.top + elRect.height / 2,
+        left: rootRect.right + 10,
+      });
     };
     const hide = (e: Event) => {
       // Mudança de elemento DENTRO do mesmo alvo não desmonta o tooltip.
@@ -445,10 +450,12 @@ export function WorkspaceNavigation({ nav, activePath, unit, units = [], multiUn
           {menu(collapsed)}
         </nav>
         {footer(true, collapsed)}
-        {/* Tooltip do rail recolhido: filho do <aside> (fora do container
-            rolável) — não gera scrollbar horizontal e escapa sobre o conteúdo. */}
-        {collapsed && tip && (
-          <div className="ws-nav-tip" role="tooltip" style={{ top: `${tip.top}px` }}>{tip.text}</div>
+        {/* Tooltip do rail recolhido: portal no <body> (fora de qualquer
+            container rolável/stacking context) — não gera scrollbar horizontal
+            e renderiza ACIMA do conteúdo da página (Agenda incluída). */}
+        {collapsed && tip && typeof document !== 'undefined' && createPortal(
+          <div className="ws-nav-tip" role="tooltip" style={{ top: `${tip.top}px`, left: `${tip.left}px` }}>{tip.text}</div>,
+          document.body,
         )}
       </aside>
 

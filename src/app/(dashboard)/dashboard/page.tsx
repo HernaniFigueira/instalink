@@ -331,13 +331,14 @@ export default function DashboardPage() {
       )}
       <PermissionNotice message={notice?.title} hint={notice?.hint} onDismiss={dismiss} />
 
-      {/* ── Saudação + resumo curto — bloco quente “sun” da identidade ── */}
-      <header className="dsh-hero">
+      {/* ── Saudação + resumo curto — header LIMPO (sem card amarelo, sem
+          degradê): hierarquia só com tipografia e espaçamento ── */}
+      <header className="mb-5 flex flex-wrap items-start justify-between gap-3">
         <div className="min-w-0">
-        <h1 className="dsh-hero__title">
+        <h1 className="text-[24px] leading-tight font-semibold tracking-tight text-[var(--text)]">
           {proView ? `Meu dia, ${firstName(user.name)}` : `${greeting()}, ${firstName(user.name)}!`}
         </h1>
-        <p className="dsh-hero__sub">
+        <p className="text-sm text-[var(--text-muted)] mt-1">
           {modules.bookings && today
             ? `${today.total} ${today.total === 1 ? 'atendimento' : 'atendimentos'} hoje · ${upcoming.length} próximo${upcoming.length === 1 ? '' : 's'} na agenda${showMoney && bookingRevenue ? ` · ${money(bookingRevenue.total)} previstos no período` : ''}.`
             : operational
@@ -345,9 +346,9 @@ export default function DashboardPage() {
               : 'Acompanhe o dia e os resultados disponíveis da operação.'}
         </p>
         </div>
-        <div className="dsh-hero__date" title="Data de hoje">
-          <Icon n="calendar" size={15} />
-          <span>
+        <div className="dsh-card flex items-center gap-2.5 px-3.5 py-2.5" title="Data de hoje">
+          <Icon n="calendar" size={16} className="text-[var(--brand-fg)]" />
+          <span className="text-[12.5px] font-semibold text-[var(--text)]">
             Hoje, {new Date().toLocaleDateString('pt-BR', { day: '2-digit', month: 'long', year: 'numeric' })}
           </span>
         </div>

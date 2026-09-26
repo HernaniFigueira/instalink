@@ -40,18 +40,22 @@ describe('FASE 2 · P8 — checklist operacional', () => {
   });
 });
 
-describe('FASE 2 · P9 — Quick Create global', () => {
-  it('menu + Novo tem as 6 criações e é filtrado pelo papel (canCreate do catálogo)', () => {
+describe('FASE 2 · P9 — topo limpo (quick create removido)', () => {
+  it('o menu “+ Novo” saiu do topo — nenhum resíduo do quick create', () => {
     const topbar = read('src/components/dashboard/WorkspaceTopbar.tsx');
     for (const label of ['Novo agendamento', 'Novo paciente', 'Novo profissional', 'Novo serviço', 'Nova pendência', 'Recebimento']) {
-      expect(topbar, label).toContain(label);
+      expect(topbar, label).not.toContain(label);
     }
-    expect(topbar).toMatch(/\.filter\(\(i\) => canCreate\.includes\(i\.href\)\)/);
-    const shell = read('src/components/DashboardShell.tsx');
-    expect(shell).toContain("'/profissionais', '/financeiro'");
+    expect(topbar).not.toContain('Criar novo');
+    expect(topbar).not.toContain('ws-newbtn');
+    // busca · sino · ajuda · conta permanecem
+    expect(topbar).toContain('<GlobalSearch');
+    expect(topbar).toContain('<NotificationsBell');
+    expect(topbar).toContain('<AccountMenu');
   });
 
-  it('?novo=1 abre o formulário em sheet nas páginas que suportam (agenda/paciente/recebimento)', () => {
+  it('?novo=1 continua abrindo o formulário em sheet nas páginas que suportam', () => {
+    // O deep link é independente do menu removido: segue funcionando.
     const agenda = read('src/app/(dashboard)/agenda/page.tsx');
     expect(agenda).toContain("params.get('novo') !== '1'");
     expect(agenda).toContain('setCreating({ date:');
@@ -61,8 +65,5 @@ describe('FASE 2 · P9 — Quick Create global', () => {
     const fin = read('src/app/(dashboard)/financeiro/page.tsx');
     expect(fin).toContain("params.get('novo') !== '1'");
     expect(fin).toContain('setEditing(blankEntry())');
-    // perfil/profissional/serviço/tarefa continuam com navegação simples (sem sheet pronto)
-    const topbar = read('src/components/dashboard/WorkspaceTopbar.tsx');
-    expect(topbar).toMatch(/open: ''/);
   });
 });
