@@ -112,15 +112,25 @@ export function Pet360Sheet({ open, onClose, businessId, pet, tutorName, tutorPh
       }
     >
       <div className="p-4 space-y-4" data-pet360="true">
-        {/* Cabeçalho do paciente */}
+        {/* Cabeçalho do paciente — missão 4: nome grande + chips claros
+            (espécie · raça · idade · peso), sem perder o tutor como contexto. */}
         <div className="flex items-center gap-3.5">
-          <Avatar name={pet.name} src={pet.photo || undefined} size={56} />
-          <div className="min-w-0">
-            <p className="text-base font-semibold text-[var(--text)]">{pet.name}</p>
-            <p className="text-xs text-[var(--text-muted)]">
-              {petLabel(pet)}{age !== null ? ` · ${age} ano(s)` : ''}{pet.weightKg ? ` · ${pet.weightKg} kg` : ''}
+          <Avatar name={pet.name} src={pet.photo || undefined} size={64} />
+          <div className="min-w-0 flex-1">
+            <p className="text-lg font-semibold text-[var(--text)] leading-tight break-words">{pet.name}</p>
+            <p className="mt-1 flex flex-wrap items-center gap-1">
+              {[
+                PET_SPECIES_LABELS[pet.species] || pet.species,
+                pet.breed,
+                age !== null ? `${age} ano(s)` : '',
+                pet.weightKg ? `${pet.weightKg} kg` : '',
+              ].filter(Boolean).map((chip) => (
+                <span key={chip} className="inline-flex items-center rounded-pill border border-[var(--border)] bg-[var(--surface-3)] px-2 py-0.5 text-[11px] font-semibold text-[var(--text-muted)]">
+                  {chip}
+                </span>
+              ))}
             </p>
-            <p className="text-xs text-[var(--text-muted)] mt-0.5">
+            <p className="text-xs text-[var(--text-muted)] mt-1.5">
               Tutor: <strong className="text-[var(--text)]">{tutorName || '—'}</strong>
               {tutorPhone ? ` · ${tutorPhone}` : ''}
             </p>

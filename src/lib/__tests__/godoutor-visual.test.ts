@@ -134,8 +134,9 @@ describe('4 · amarelo “sun” com moderação (só acento secundário, nunca 
     }
   });
 
-  it('CORREÇÃO: o topo da Visão geral NÃO tem card amarelo nem degradê', () => {
-    // O header volta a ser limpo: tipografia + espaçamento, ponto.
+  it('CORREÇÃO: o topo da Visão geral NÃO tem banner amarelo nem degradê', () => {
+    // O header continua limpo (tipografia + espaçamento). O amarelo vive no
+    // card único de métricas, em SÓLIDO (missão 4) — nunca em banner/degradê.
     expect(dash).not.toContain('dsh-hero');
     expect(css).not.toContain('.dsh-hero');
     expect(dash).toMatch(/<header className="mb-5 flex flex-wrap/);
@@ -152,12 +153,15 @@ describe('5 · botões migrados pela BASE (tokens), sem hex por tela', () => {
     expect(ui).toContain('bg-[var(--surface-3)] text-[var(--brand-fg)]');
   });
 
-  it('a ação saiu do azul antigo para índigo-violeta', () => {
+  it('identidade índigo preservada (logo/sidebar); a ação virou carvão (missão 4)', () => {
     expect(css).not.toContain('#2563eb');
     expect(css).not.toContain('#1d4ed8');
+    // O rampo índigo continua definido — é a IDENTIDADE (logo GoDoutor) —
+    // enquanto a AÇÃO do workspace (--brand) virou carvão premium (missão 4).
     expect(css).toMatch(/--brand-600:\s*#4f46e5/);
     expect(css).toMatch(/--brand-700:\s*#4338ca/);
-    // e a sidebar fala a MESMA família (só mais forte)
+    expect(css).toMatch(/--brand:\s*#45413c/);
+    // e a sidebar fala a família índigo original (só mais forte)
     expect(css).toMatch(/--il-nav:\s*#3f37c9/);
   });
 });
@@ -172,9 +176,11 @@ describe('6 · correções cirúrgicas (contrato dos 8 pontos)', () => {
     expect(css).toMatch(/\.global-search__field:focus-within\s*\{[^}]*box-shadow:/);
   });
 
-  it('2 · dashboard: métricas em card único sem degradê', () => {
+  it('2 · dashboard: métricas em card único sem degradê (missão 4: creme/amarelo SÓLIDO)', () => {
     const card = ruleOf('.dsh-metrics {');
-    expect(card).toContain('background: var(--surface)');
+    // MISSÃO 4 (premium): o amarelo/creme VOLTA como fundo SÓLIDO do único
+    // card de métricas — sem degradê (a proibição de gradiente segue).
+    expect(card).toContain('background: var(--sun-bg)');
     expect(card).not.toContain('gradient');
   });
 

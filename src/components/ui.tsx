@@ -302,15 +302,15 @@ export function Switch({ checked, onChange, label, disabled }: {
       disabled={disabled}
       onClick={() => onChange(!checked)}
       className={cn(
-        'relative inline-flex items-center h-6 w-11 shrink-0 rounded-pill transition-colors',
+        'relative inline-flex items-center h-6 w-11 shrink-0 rounded-pill border transition-colors duration-200',
         'focus-visible:outline-none focus-visible:shadow-focus',
         'disabled:opacity-50 disabled:cursor-not-allowed',
-        checked ? 'bg-[var(--success)]' : 'bg-[var(--border-strong)]',
+        checked ? 'bg-[var(--success)] border-[var(--success)]' : 'bg-[var(--surface-3)] border-[var(--border-strong)]',
       )}
     >
       <span
         className={cn(
-          'absolute top-0.5 left-0.5 w-5 h-5 rounded-full bg-white shadow-sm transition-transform duration-150',
+          'absolute top-0.5 left-0.5 w-5 h-5 rounded-full bg-white shadow-md transition-transform duration-200',
           checked && 'translate-x-5',
         )}
       />

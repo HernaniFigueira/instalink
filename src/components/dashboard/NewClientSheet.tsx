@@ -18,6 +18,7 @@ import { emailError, normalizeEmail, phoneError } from '@/lib/field-quality';
 import { ageFromBirthDate } from '@/lib/contact-profile';
 import { PhoneBRInput } from '@/components/dashboard/PhoneBRInput';
 import { WorkspaceSheet } from '@/components/dashboard/WorkspaceSheet';
+import { Icon } from '@/components/icons';
 import { Button, Field, Input, Notice, Select, Textarea } from '@/components/ui';
 import { PET_SPECIES, PET_SPECIES_LABELS, breedSuggestions, validatePet } from '@/lib/pets';
 import type { Pet } from '@/lib/types';
@@ -182,9 +183,9 @@ export function NewClientSheet({
       subtitle={saved
         ? 'Cadastro salvo na base de clientes.'
         : vetMode
-          ? 'Tutor = contato · Paciente = pet. Tudo no CRM agora — não depende do agendamento.'
+          ? `Tutor: ${name.trim() || '—'} · o pet entra como paciente no mesmo cadastro`
           : 'Cadastro direto no CRM — se abandonar o agendamento, o cliente permanece.'}
-      icon="users"
+      icon={vetMode ? 'paw' : 'users'}
       width="max-w-[520px]"
       footer={!saved ? (
         <div className="flex w-full gap-2 justify-end">
@@ -226,7 +227,7 @@ export function NewClientSheet({
           </div>
         </div>
       ) : (
-        <div className="px-5 py-5 space-y-3.5">
+        <div className="px-5 py-5 space-y-4">
           {vetMode && (
             <p className="text-[11px] font-semibold uppercase tracking-wide text-[var(--brand-fg)]">Tutor (contato)</p>
           )}
@@ -278,19 +279,21 @@ export function NewClientSheet({
 
           {/* ── Veterinária: Paciente (pet) na MESMA experiência ── */}
           {vetMode && (
-            <section data-testid="vet-pet-section" className="rounded-lg border border-[var(--border)] bg-[var(--surface-2)] p-3.5 space-y-2.5">
+            <section data-testid="vet-pet-section" className="rounded-xl border border-[var(--border)] bg-[var(--surface-2)] p-4 space-y-3">
               <div className="flex items-center justify-between gap-2">
-                <p className="text-xs font-semibold uppercase tracking-wide text-[var(--text-muted)]">Paciente (pet)</p>
+                <p className="inline-flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wide text-[var(--text)]">
+                  <Icon n="paw" size={14} className="text-[var(--text-muted)]" /> Paciente (pet)
+                </p>
                 <label className="flex items-center gap-2 text-xs font-semibold text-[var(--text)] cursor-pointer">
-                  <input type="checkbox" checked={petOn} onChange={(e) => setPetOn(e.target.checked)} className="h-4 w-4 accent-zinc-900" />
+                  <input type="checkbox" checked={petOn} onChange={(e) => setPetOn(e.target.checked)} className="il-check" />
                   Adicionar pet
                 </label>
               </div>
               {petOn && (
-                <div className="space-y-2.5 pt-1">
+                <div className="space-y-3 pt-1">
                   <label className="block"><span className={label}>NOME DO PET *</span>
                     <input value={pet.name} onChange={(e) => setPet({ ...pet, name: e.target.value })} className={input + ' mt-1'} placeholder="Ex.: Greg" /></label>
-                  <div className="grid grid-cols-2 gap-2.5">
+                  <div className="grid grid-cols-2 gap-3">
                     <label className="block"><span className={label}>ESPÉCIE</span>
                       <Select value={pet.species} onChange={(e) => setPet({ ...pet, species: e.target.value, breed: '' })} aria-label="Espécie">
                         {PET_SPECIES.map((s) => <option key={s} value={s}>{PET_SPECIES_LABELS[s] || s}</option>)}
@@ -301,7 +304,7 @@ export function NewClientSheet({
                         {breedSuggestions(pet.species).map((b) => <option key={b} value={b} />)}
                       </datalist></label>
                   </div>
-                  <div className="grid grid-cols-3 gap-2.5">
+                  <div className="grid grid-cols-3 gap-3">
                     <label className="block"><span className={label}>SEXO</span>
                       <Select value={pet.sex} onChange={(e) => setPet({ ...pet, sex: e.target.value })} aria-label="Sexo do pet">
                         <option value="">—</option><option value="M">Macho</option><option value="F">Fêmea</option>
@@ -312,20 +315,21 @@ export function NewClientSheet({
                       <input type="number" step="0.01" min="0" max="500" value={pet.weightKg} onChange={(e) => setPet({ ...pet, weightKg: e.target.value })} className={input + ' mt-1'} placeholder="0" /></label>
                   </div>
                   <label className="block"><span className={label}>OBSERVAÇÕES</span>
-                    <textarea value={pet.notes} onChange={(e) => setPet({ ...pet, notes: e.target.value })} rows={2} maxLength={1000} className={input + ' mt-1 resize-none'} placeholder="Alergias, cuidados, comportamento…" /></label>
+                    <textarea value={pet.notes} onChange={(e) => setPet({ ...pet, notes: e.target.value })} rows={3} maxLength={1000}
+                      className={input + ' mt-1 min-h-[84px] resize-none leading-relaxed'} placeholder="Alergias, cuidados, comportamento…" /></label>
                 </div>
               )}
             </section>
           )}
 
-          <label className="flex items-start gap-2.5 rounded-lg border border-zinc-200 bg-zinc-50 px-3 py-2.5 cursor-pointer">
-            <input type="checkbox" checked={marketingOptIn} onChange={(e) => setMarketingOptIn(e.target.checked)} className="mt-0.5 h-4 w-4 accent-zinc-900" />
-            <span><span className="block text-sm font-medium text-zinc-800">Consentimento de marketing</span><span className="block text-xs text-zinc-500 mt-0.5">Não marcado por padrão. Só entra em campanhas se o cliente autorizar.</span></span>
+          <label className="flex items-start gap-3 rounded-xl border border-[var(--border)] bg-[var(--surface-2)] px-3.5 py-3 cursor-pointer transition-colors hover:border-[var(--brand-border)] hover:bg-[var(--brand-soft)]">
+            <input type="checkbox" checked={marketingOptIn} onChange={(e) => setMarketingOptIn(e.target.checked)} className="il-check mt-0.5" />
+            <span><span className="block text-sm font-semibold text-[var(--text)]">Aceita receber promoções?</span><span className="block text-xs text-[var(--text-muted)] mt-0.5">Não marcado por padrão. Só entra em campanhas se a pessoa autorizar.</span></span>
           </label>
 
-          <label className="flex items-start gap-2.5 rounded-lg border border-zinc-200 px-3 py-2.5 cursor-pointer">
-            <input type="checkbox" checked={createAccess} onChange={(e) => setCreateAccess(e.target.checked)} className="mt-0.5 h-4 w-4 accent-zinc-900" />
-            <span><span className="block text-sm font-semibold text-zinc-800">Criar acesso à página</span><span className="block text-xs text-zinc-500 mt-0.5">Vincula uma conta Customer sem duplicar a identidade e gera uma senha temporária segura.</span></span>
+          <label className="flex items-start gap-3 rounded-xl border border-[var(--border)] px-3.5 py-3 cursor-pointer transition-colors hover:border-[var(--brand-border)] hover:bg-[var(--brand-soft)]">
+            <input type="checkbox" checked={createAccess} onChange={(e) => setCreateAccess(e.target.checked)} className="il-check mt-0.5" />
+            <span><span className="block text-sm font-semibold text-[var(--text)]">Criar acesso à página</span><span className="block text-xs text-[var(--text-muted)] mt-0.5">Vincula uma conta Customer sem duplicar a identidade e gera uma senha temporária segura.</span></span>
           </label>
 
           {error && <Notice tone="error">{error}</Notice>}

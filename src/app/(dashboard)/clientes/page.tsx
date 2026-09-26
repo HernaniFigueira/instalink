@@ -17,7 +17,7 @@ import { money, waLink } from '@/lib/utils';
 import { humanDay } from '@/lib/tz';
 import { formatPhoneBR } from '@/lib/contact-profile';
 import { SearchListSkeleton,
-  Avatar, Badge, Button, EmptyState, ListSkeleton, PageHeader, Tabs, type TabItem,
+  Avatar, Badge, Button, EmptyState, ListSkeleton, PageHeader, Tabs, buttonCls, type TabItem,
 } from '@/components/ui';
 import { Icon } from '@/components/icons';
 import { NewBookingSheet } from '@/components/dashboard/NewBookingSheet';
@@ -274,8 +274,7 @@ export default function ClientesPage() {
                 produto e virou uma ferramenta DENTRO de Clientes — aparece só
                 quando a capacidade está ativa e o usuário tem a permissão. */}
             {canFunil && (
-              <Link href={`/funil?b=${businessId}`}
-                className="inline-flex items-center justify-center gap-1.5 text-xs font-semibold rounded-[var(--radius-sm)] px-3 py-2 bg-white text-[var(--text-primary)] border border-[var(--border-strong)] hover:bg-[var(--surface-hover)]">
+              <Link href={`/funil?b=${businessId}`} className={buttonCls('secondary', 'sm')}>
                 <Icon n="funnel" size={14} /> Oportunidades
               </Link>
             )}
@@ -284,7 +283,7 @@ export default function ClientesPage() {
             </Button>
             <Button variant="secondary" disabled={!!exporting} title="Baixar a base em CSV (reimportável)"
               onClick={() => { void downloadExport('csv'); }}>
-              <Icon n="download" size={15} /> {exporting === 'csv' ? 'Gerando…' : 'Exportar CSV'}
+              <Icon n="download" size={15} /> {exporting === 'csv' ? 'Gerando…' : 'Exportar'}
             </Button>
             {canExportFull && (
               <Button variant="secondary" disabled={!!exporting}

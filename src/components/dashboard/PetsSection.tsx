@@ -108,8 +108,16 @@ export function PetsSection({ businessId, tutorId, tutorName, onChanged, onOpenP
                     onClick={() => onOpenPet?.(p)} title={`Abrir ficha de ${p.name}`}>
                     {p.name}{!p.active && <span className="ml-2 text-[11px] font-semibold text-[var(--text-muted)]">(inativo)</span>}
                   </button>
-                  <p className="text-[11.5px] text-[var(--text-muted)] truncate">
-                    {[PET_SPECIES_LABELS[p.species] || p.species, p.breed, age !== null ? `${age} ano(s)` : '', p.weightKg ? `${p.weightKg} kg` : ''].filter(Boolean).join(' · ') || 'Sem detalhes'}
+                  <p className="mt-0.5 flex flex-wrap items-center gap-1">
+                    {([PET_SPECIES_LABELS[p.species] || p.species, p.breed, age !== null ? `${age} ano(s)` : '', p.weightKg ? `${p.weightKg} kg` : ''].filter(Boolean))
+                      .map((chip) => (
+                        <span key={chip} className="inline-flex items-center rounded-pill border border-[var(--border)] bg-[var(--surface-3)] px-1.5 py-px text-[10.5px] font-semibold text-[var(--text-muted)]">
+                          {chip}
+                        </span>
+                      ))}
+                    {[PET_SPECIES_LABELS[p.species] || p.species, p.breed, age !== null ? `${age} ano(s)` : '', p.weightKg ? `${p.weightKg} kg` : ''].filter(Boolean).length === 0 && (
+                      <span className="text-[11.5px] text-[var(--text-muted)]">Sem detalhes</span>
+                    )}
                   </p>
                 </div>
                 {p.sex && <Badge tone="zinc">{p.sex === 'M' ? 'Macho' : 'Fêmea'}</Badge>}
@@ -126,18 +134,17 @@ export function PetsSection({ businessId, tutorId, tutorName, onChanged, onOpenP
         onClose={() => setEditing(null)}
         title={editing?.id ? `Editar ${editing.name || 'pet'}` : 'Novo pet'}
         subtitle={tutorName ? `Tutor: ${tutorName}` : undefined}
-        icon="userCircle"
+        icon="paw"
         width="max-w-[520px]"
         footer={(
-          <>
-            <span className="mr-auto text-xs text-[var(--text-muted)]">O pet aparece na agenda no lugar do tutor.</span>
+          <div className="flex w-full items-center justify-end gap-2">
             <Button variant="secondary" size="sm" onClick={() => setEditing(null)} disabled={busy}>Cancelar</Button>
             <Button variant="primary" size="sm" onClick={() => { void save(); }} disabled={busy}>{busy ? 'Salvando…' : 'Salvar'}</Button>
-          </>
+          </div>
         )}
       >
         {editing && (
-          <div className="p-1 space-y-3">
+          <div className="p-1 space-y-4">
             <Field label="Nome" required htmlFor="pet-name">
               <Input id="pet-name" value={editing.name || ''} onChange={(e) => setEditing({ ...editing, name: e.target.value })} placeholder="Ex.: Thor" />
             </Field>
@@ -172,7 +179,7 @@ export function PetsSection({ businessId, tutorId, tutorName, onChanged, onOpenP
               </Field>
             </div>
             <Field label="Observações" htmlFor="pet-notes" hint="Comportamento, alergias, cuidados.">
-              <Textarea id="pet-notes" rows={3} value={editing.notes || ''} onChange={(e) => setEditing({ ...editing, notes: e.target.value })} />
+              <Textarea id="pet-notes" rows={3} value={editing.notes || ''} onChange={(e) => setEditing({ ...editing, notes: e.target.value })} className="min-h-[84px] resize-none leading-relaxed" />
             </Field>
           </div>
         )}

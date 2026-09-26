@@ -54,19 +54,22 @@
   /* GODOUTOR 2.0 — índigo-violeta de ação (paleta da identidade visual:
      sidebar forte + amarelo quente de destaque). Contraste AA checado em
      design-360-tokens.test.ts. */
-  --brand: #4f46e5;
+  /* MISSÃO 4 (premium) — AÇÃO = carvão quente: botões primários carvão+branco
+     e conteúdo/links em escuro sofisticado (não lilás). Identidade índigo
+     permanece em --brand-600/700 (logo público) e --il-nav* (sidebar). */
+  --brand: #45413c;
   /* HOMOLOGAÇÃO · P0-5 — skeleton com contraste real (não branco sobre cinza). */
   --skeleton-base: #e4e8f0;
   --skeleton-highlight: #f1f4f9;
-  --brand-strong: #4338ca;
-  --brand-soft: #eef2ff;
-  --brand-softer: #f6f7ff;
-  --brand-border: #c7d2fe;
-  --brand-fg: #3730a3;
-  --brand-ring: rgba(79, 70, 229, 0.28);
+  --brand-strong: #322e2a;
+  --brand-soft: #f5f3f0;
+  --brand-softer: #faf9f7;
+  --brand-border: #e4ded6;
+  --brand-fg: #4b443c;
+  --brand-ring: rgba(69, 65, 60, 0.28);
   /* Estado hover das superfícies TINTED (botão soft, chip, pílula). Existe
      para que nenhum componente escreva hex próprio: o hover é token. */
-  --brand-bg-hover: #e0e7ff;
+  --brand-bg-hover: #ede9e3;
 
   /* ── Amarelo quente “sun” (Visão geral / ênfases pontuais) ───── */
   /* Destaque de boas-vindas e blocos de atenção. Usado com parcimônia:
@@ -183,7 +186,7 @@
   --shadow-md: 0 2px 6px -2px rgba(19, 26, 54, 0.08), 0 8px 20px -10px rgba(19, 26, 54, 0.12);
   --shadow-lg: 0 6px 14px -6px rgba(19, 26, 54, 0.12), 0 20px 40px -20px rgba(19, 26, 54, 0.22);
   --shadow-xl: 0 12px 24px -10px rgba(19, 26, 54, 0.16), 0 32px 64px -28px rgba(19, 26, 54, 0.30);
-  --shadow-brand: 0 6px 16px -8px rgba(79, 70, 229, 0.55);
+  --shadow-brand: 0 6px 16px -8px rgba(69, 65, 60, 0.50);
   --shadow-inset: inset 0 1px 2px rgba(19, 26, 54, 0.06);
 
   /* ── Espaçamento (escala do sistema; Tailwind continua valendo) ─ */
@@ -274,6 +277,31 @@ body {
 .ws-section { border-top: 1px solid var(--border-soft); }
 .ws-section:first-child { border-top: 0; }
 
+/* Checkbox premium (missão 4): caixa suave com marca carvão — o mesmo
+   controle em todo o sistema (forms, sheets, toggles de consentimento). */
+.il-check {
+  appearance: none;
+  width: 18px; height: 18px;
+  margin: 0;
+  border-radius: 6px;
+  border: 1.5px solid var(--border-strong);
+  background: var(--surface);
+  cursor: pointer;
+  flex-shrink: 0;
+  transition: background 0.15s ease, border-color 0.15s ease, box-shadow 0.15s ease;
+}
+.il-check:hover { border-color: var(--brand); }
+.il-check:checked {
+  background: var(--brand);
+  border-color: var(--brand);
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='none' stroke='white' stroke-width='2.4' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M3.5 8.5 6.5 11.5 12.5 5'/%3E%3C/svg%3E");
+  background-size: 13px 13px;
+  background-position: center;
+  background-repeat: no-repeat;
+}
+.il-check:focus-visible { outline: none; box-shadow: var(--focus-ring); border-color: var(--brand); }
+.il-check:disabled { opacity: 0.5; cursor: not-allowed; }
+
 /* Abas do painel (pills) — padrão único de navegação interna. */
 .il-tabbar {
   display: inline-flex;
@@ -297,7 +325,7 @@ body {
   white-space: nowrap;
   transition: background 0.15s ease, color 0.15s ease, box-shadow 0.15s ease;
 }
-.il-tab:hover { color: var(--text); background: rgba(79, 70, 229, 0.08); }
+.il-tab:hover { color: var(--text); background: rgba(69, 65, 60, 0.08); }
 .il-tab[aria-selected='true'] {
   background: var(--surface);
   color: var(--brand-fg);
@@ -428,19 +456,9 @@ body {
 .il-idcard {
   position: relative;
   overflow: hidden;
-  background:
-    linear-gradient(135deg, rgba(79, 70, 229, 0.14), rgba(129, 116, 246, 0.12) 46%, transparent 78%),
-    var(--surface);
-}
-.il-idcard::after {
-  content: '';
-  position: absolute;
-  inset: auto -40px -70px auto;
-  width: 190px;
-  height: 190px;
-  border-radius: 50%;
-  background: radial-gradient(circle at 30% 30%, rgba(79, 70, 229, 0.16), transparent 65%);
-  pointer-events: none;
+  /* MISSÃO 4 (premium): topo do Cliente 360 em sólido quente (creme suave) —
+     sem degradê, sem arco, sem efeitos. */
+  background: var(--sun-bg);
 }
 
 /* Avatar com placeholder bonito (iniciais em gradiente suave). */
@@ -670,14 +688,17 @@ input[type='color'] { @apply cursor-pointer; }
   --text-soft: var(--text-soft-base);
 
   /* ── Stacks ─────────────────────────────────────────────────── */
-  --brand: var(--brand-600);
-  --brand-strong: var(--brand-700);
-  --brand-soft: var(--brand-50);
-  --brand-softer: var(--brand-50);
-  --brand-border: var(--brand-100);
-  --brand-fg: var(--brand-700);
-  --brand-ring: rgba(79, 70, 229, 0.26);
-  --brand-bg-hover: var(--brand-100);
+  /* MISSÃO 4 (premium): a AÇÃO do workspace virou carvão (botões carvão+branco,
+     ações/links em escuro sofisticado). O rampo índigo (--brand-50…700) continua
+     definido para a identidade (logo GoDoutor) e acentos de legado. */
+  --brand: #45413c;
+  --brand-strong: #322e2a;
+  --brand-soft: #f5f3f0;
+  --brand-softer: #faf9f7;
+  --brand-border: #e4ded6;
+  --brand-fg: #4b443c;
+  --brand-ring: rgba(69, 65, 60, 0.26);
+  --brand-bg-hover: #ede9e3;
   --ops: var(--brand);
   --ops-soft: var(--brand-soft);
   --ops-fg: var(--brand-fg);
@@ -802,7 +823,7 @@ input[type='color'] { @apply cursor-pointer; }
   --shadow-md: 0 4px 12px -4px rgba(15, 23, 42, 0.10), 0 12px 24px -12px rgba(15, 23, 42, 0.12);
   --shadow-lg: 0 10px 20px -8px rgba(15, 23, 42, 0.12), 0 28px 48px -20px rgba(15, 23, 42, 0.18);
   --shadow-xl: 0 18px 36px -12px rgba(15, 23, 42, 0.16), 0 40px 72px -28px rgba(15, 23, 42, 0.24);
-  --shadow-brand: 0 1px 2px rgba(79, 70, 229, 0.20);
+  --shadow-brand: 0 1px 2px rgba(69, 65, 60, 0.20);
   --shadow-inset: inset 0 1px 2px rgba(15, 23, 42, 0.06);
   /* Sombra do Workspace Sheet: a mais alta do sistema (camada flutuante). */
   --shadow-sheet: 0 24px 60px -18px rgba(15, 23, 42, 0.30), 0 4px 12px -4px rgba(15, 23, 42, 0.12);
@@ -864,15 +885,8 @@ input[type='color'] { @apply cursor-pointer; }
   box-shadow: none;
 }
 /* Carteirinha do cliente: faixa suave da marca (uma família só). */
-.il-platform .il-idcard {
-  background: linear-gradient(135deg,
-    color-mix(in srgb, var(--brand) 6%, var(--surface)),
-    var(--surface) 62%);
-}
-.il-platform .il-idcard::after {
-  background: radial-gradient(circle at 30% 30%,
-    color-mix(in srgb, var(--brand) 8%, transparent), transparent 65%);
-}
+/* MISSÃO 4: o sólido quente do `.il-idcard` vale em todo o sistema — sem
+   override com degradê/arco no workspace. */
 .il-platform .il-actionbar { background: var(--surface); backdrop-filter: none; }
 .il-platform .il-tabbar--sm { transform: none; }
 
@@ -1684,10 +1698,13 @@ dialog.il-customer-dialog::backdrop { background:transparent; }
 .public-booking-flow :is(button,input:not([type=checkbox]),select) { min-height:44px; }
 @media(max-width:767px) { .public-booking-flow input,.public-booking-flow textarea { font-size:16px; } }
 
-/* Direction correction: workspace only, never the public theme or access/landing. */
-.il-platform .il-tabbar { background:transparent; border-radius:0; gap:8px; padding:0; }
-.il-platform .il-tab { min-height:40px; padding:8px 12px; font-size:14px; border-radius:8px 8px 0 0; border:0; border-bottom:3px solid transparent; background:transparent; color:var(--text-muted); }
-.il-platform .il-tab[aria-selected="true"] { color:var(--text); background:var(--brand-soft); border-bottom-color:var(--area-color,var(--brand)); box-shadow:none; }
+/* MISSÃO 4 (premium) — abas SEM sublinhado em todo o sistema: o padrão pill
+   de `.il-tabbar`/`.il-tab` (segmentado, ativo por superfície) é o único.
+   (A antiga "direction correction" transformava as pills em abas com
+   border-bottom — removida por decreto.) */
+/* A altura de toque continua vindo das regras `.il-platform .il-tab` de
+   controle; aqui só se fixa a hierarquia de cor do estado ativo. */
+.il-platform .il-tab[aria-selected="true"] { color: var(--text); }
 .il-platform [class*="backdrop-blur"] { backdrop-filter:none; }
 .il-platform * { text-shadow:none; }
 .il-platform .agenda-page-gutter { padding:8px; }
@@ -1757,7 +1774,9 @@ dialog.il-customer-dialog::backdrop { background:transparent; }
 .dsh-metrics {
   display: grid; grid-template-columns: repeat(2, minmax(0, 1fr));
   margin-bottom: 16px; overflow: hidden;
-  background: var(--surface);
+  /* MISSÃO 4: amarelo/creme VOLTA como UM card de métricas em sólido suave
+     (sem degradê, sem banner): vida no topo sem virar enfeite. */
+  background: var(--sun-bg);
   border: 1px solid var(--border-soft); border-radius: var(--radius-lg);
   box-shadow: var(--shadow-xs);
 }
