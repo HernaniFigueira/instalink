@@ -74,9 +74,9 @@ export default function MasterUsuariosPage() {
 
       {error && <p className="mb-4 text-sm font-semibold bg-red-600 text-white rounded-xl px-4 py-3">{error}</p>}
       {!rows ? <ListSkeleton rows={5} /> : rows.length === 0 ? (
-        <p className="bg-white border border-zinc-200 rounded-2xl text-center py-12 text-sm text-zinc-500">Nenhum usuário.</p>
+        <p className="bg-white border border-zinc-200 rounded-xl text-center py-12 text-sm text-zinc-500">Nenhum usuário.</p>
       ) : (
-        <div className="bg-white border border-zinc-200 rounded-2xl divide-y divide-zinc-100">
+        <div className="bg-white border border-zinc-200 rounded-xl divide-y divide-zinc-100">
           {rows.map((u) => (
             <div key={u.id} className="px-4 py-3 flex flex-wrap items-baseline gap-x-3 gap-y-1">
               <span className={cn('text-[10px] font-extrabold px-2 py-0.5 rounded-full', KIND_TONE[u.kind] || KIND_TONE.member)}>

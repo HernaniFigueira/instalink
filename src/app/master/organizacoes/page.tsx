@@ -47,11 +47,11 @@ export default function MasterOrganizacoesPage() {
 
       {error && <p className="mb-4 text-sm font-semibold bg-red-600 text-white rounded-xl px-4 py-3">{error}</p>}
       {!rows ? <ListSkeleton rows={4} /> : rows.length === 0 ? (
-        <p className="bg-white border border-zinc-200 rounded-2xl text-center py-12 text-sm text-zinc-500">Nenhuma organização.</p>
+        <p className="bg-white border border-zinc-200 rounded-xl text-center py-12 text-sm text-zinc-500">Nenhuma organização.</p>
       ) : (
         <div className="space-y-3">
           {rows.map((o) => (
-            <div key={o.id} className="bg-white border border-zinc-200 rounded-2xl p-4">
+            <div key={o.id} className="bg-white border border-zinc-200 rounded-xl p-4">
               <div className="flex flex-wrap items-start justify-between gap-3">
                 <div className="min-w-0">
                   <p className="font-extrabold text-base">{o.name}</p>

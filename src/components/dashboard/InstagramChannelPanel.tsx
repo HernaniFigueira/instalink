@@ -144,11 +144,20 @@ export function InstagramChannelPanel({ businessId }: { businessId: string }) {
         <div className="px-4 py-3 border-b border-zinc-200 flex flex-wrap items-center justify-between gap-2">
           <div className="min-w-0">
             <p className="text-xs font-semibold tracking-wide uppercase text-zinc-500">Instagram · estado da conexão</p>
-            <p className="text-xs text-zinc-500 mt-0.5">{plan.statusLabel.detail}</p>
+            {/* Detalhe específico + selo CANÔNICO (a mesma palavra em todos os canais). */}
+            <p className="text-xs text-zinc-500 mt-0.5">{plan.statusLabel.label} · {plan.statusLabel.detail}</p>
           </div>
           <div className="flex items-center gap-2">
-            <span className={`text-[11px] font-semibold border rounded-full px-2.5 py-0.5 ${TONE[plan.statusLabel.tone]}`}>
-              {plan.statusLabel.label}
+            <span className={`text-[11px] font-semibold border rounded-full px-2.5 py-0.5 ${
+              plan.statusLabel.canonical.tone === 'success'
+                ? 'bg-emerald-50 text-emerald-800 border-emerald-200'
+                : plan.statusLabel.canonical.tone === 'warning'
+                  ? 'bg-amber-50 text-amber-800 border-amber-200'
+                  : plan.statusLabel.canonical.tone === 'danger'
+                    ? 'bg-rose-50 text-rose-800 border-rose-200'
+                    : 'bg-zinc-100 text-zinc-700 border-zinc-200'
+            }`}>
+              {plan.statusLabel.canonical.label}
             </span>
           </div>
         </div>

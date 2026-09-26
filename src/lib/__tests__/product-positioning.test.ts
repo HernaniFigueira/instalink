@@ -269,10 +269,19 @@ describe('dashboard: checklist "Comece por aqui" com progresso real', () => {
       business: business({ description: 'Clínica de estética', whatsapp: '11988887777', published: true }),
       modules,
       counts: { services: 2, availability: 5, professionals: 1, products: 0 },
+      // FASE 2 · P8 — os dois sinais novos do caminho operacional.
+      pageCustomized: true,
+      whatsappConnected: true,
     });
     expect(done.every((i) => i.done)).toBe(true);
     expect(setupProgress(done)).toBe(100);
     expect(done.map((i) => i.id)).not.toContain('products'); // vitrine desligada não cobra produto
+    // Ordem do ciclo (P8): serviço → profissional → horários → personalizar → publicar → WhatsApp.
+    const ids = done.map((i) => i.id);
+    expect(ids.indexOf('services')).toBeLessThan(ids.indexOf('team'));
+    expect(ids.indexOf('team')).toBeLessThan(ids.indexOf('hours'));
+    expect(ids.indexOf('personalize')).toBeLessThan(ids.indexOf('publish'));
+    expect(done.find((i) => i.id === 'whatsapp')?.optional).toBe(true);
 
     const withProducts = setupChecklist({
       business: business({ description: 'x', whatsapp: '1', published: false }),

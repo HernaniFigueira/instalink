@@ -31,7 +31,11 @@ describe('B3.1 — composer de /conversas executa o envio de verdade', () => {
 
   it('o botão Enviar nunca é decorativo: estado de envio + desabilitado sem texto', () => {
     expect(page).toMatch(/const \[sending, setSending\] = useState\(false\)/);
-    expect(page).toMatch(/disabled=\{sending \|\| !draft\.trim\(\) \|\| \(active\.conversation\.channel === \'instagram\' \? !channels\.instagram : !channels\.whatsapp\)\}/);
+    // O contrato (nunca um botão que promete o que não faz) agora inclui o
+    // CANAL da conversa, via helper com nome — o mesmo que desabilita o campo
+    // e mostra a frase de conexão. A régua continua sendo a conversa ABERTA.
+    expect(page).toMatch(/disabled=\{sending \|\| !draft\.trim\(\) \|\| channelOff\(active\.conversation\)\}/);
+    expect(page).toMatch(/const channelOff = \(c: Conversation\) => \(c\.channel === 'instagram' \? !channels\.instagram : !channels\.whatsapp\)/);
     expect(page).toMatch(/\{sending \? 'Enviando…' : 'Enviar'\}/);
   });
 

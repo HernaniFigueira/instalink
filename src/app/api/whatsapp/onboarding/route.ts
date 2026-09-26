@@ -35,9 +35,10 @@ import { effectiveTimezone, todayISO } from '@/lib/tz';
 import { defaultWhatsappIntegration } from '@/lib/whatsapp';
 import { decryptSecret, encryptSecret, getMetaGraphVersion } from '@/lib/whatsapp-cloud-api';
 import {
-  computeConnectionStatus, debugTokenUrl, exchangeCodeUrl, firstPhoneNumberId, graphBase, metaErrorMessage, onboardingPlan,
-  parseSignupMessage, phoneNumberFieldsUrl, platformLayer, registerNumberUrl, subscribeAppUrl,
-  wabaIdFromDebugToken, wabaPhoneNumbersUrl, type UnitIntegrationView,
+  computeConnectionStatus, debugTokenUrl, exchangeCodeUrl, firstPhoneNumberId, graphBase,
+  metaErrorMessage, onboardingPlan, parseSignupMessage, phoneNumberFieldsUrl, platformLayer, registerNumberUrl,
+  subscribeAppUrl, wabaIdFromDebugToken, wabaPhoneNumbersUrl, whatsappAuthorizeUrl, whatsappRedirectUri,
+  type UnitIntegrationView,
 } from '@/lib/whatsapp-onboarding';
 import { appsecretProof, issueSignupState, verifySignupState } from '@/lib/whatsapp-onboarding-server';
 
@@ -46,11 +47,21 @@ const REQUIRED_SCOPES = ['whatsapp_business_management', 'whatsapp_business_mess
 /** Teto do código do popup (a Meta expira em 30s; isto é só sanidade). */
 const MAX_CODE_LEN = 1024;
 
-function planFor(business: { businessTimezone?: string; whatsappIntegration?: UnitIntegrationView }) {
+/** Origem estável do site — mesma base do authorize e do exchange. */
+function siteUrl(req: NextRequest): string {
+  const configured = String(process.env.NEXT_PUBLIC_SITE_URL || process.env.SITE_URL || '').trim();
+  return (configured || req.nextUrl.origin).replace(/\/+$/, '');
+}
+
+function planFor(
+  business: { businessTimezone?: string; whatsappIntegration?: UnitIntegrationView },
+  requestOrigin = '',
+) {
   return onboardingPlan({
     env: process.env,
     business,
     todayISO: todayISO(new Date(), effectiveTimezone(business.businessTimezone)),
+    requestOrigin,
   });
 }
 
@@ -59,10 +70,10 @@ function planFor(business: { businessTimezone?: string; whatsappIntegration?: Un
  * velho quando a Meta responde — e a tela precisa ver o estado real (senão
  * ela mostra "pronto para conectar" com a conta já autorizada).
  */
-async function freshPlan(businessId: string, fallback: { businessTimezone?: string }) {
+async function freshPlan(businessId: string, fallback: { businessTimezone?: string }, requestOrigin = '') {
   const db = await readDB();
   const fresh = db.businesses.find((b) => b.id === businessId);
-  return fresh ? planFor(fresh) : planFor(fallback);
+  return fresh ? planFor(fresh, requestOrigin) : planFor(fallback, requestOrigin);
 }
 
 async function graphJson(url: string, init?: RequestInit): Promise<{ ok: boolean; status: number; data: any }> {
@@ -81,8 +92,22 @@ export async function GET(req: NextRequest) {
   const guard = await requireBusiness(req, businessId, 'whatsapp');
   if (!guard.ok) return guard.res;
 
-  const plan = planFor(guard.ctx.business);
+  const origin = siteUrl(req);
+  const plan = planFor(guard.ctx.business, origin);
   const credentialsKey = String(process.env.WHATSAPP_CREDENTIALS_KEY || '');
+  const signupState = plan.clientConfig
+    ? issueSignupState(credentialsKey, { businessId: guard.ctx.business.id, userId: guard.ctx.user.id })
+    : '';
+  // Manual OAuth: URL do diálogo com o MESMO redirect_uri que o exchange usará.
+  const authorizeUrl = plan.clientConfig && signupState
+    ? whatsappAuthorizeUrl({
+      appId: plan.clientConfig.appId,
+      configId: plan.clientConfig.configId,
+      version: plan.clientConfig.version,
+      redirectUri: plan.clientConfig.redirectUri,
+      state: signupState,
+    })
+    : '';
   // Camada da plataforma só é detalhada para Master/Admin
   const canViewDiagnostics = guard.ctx.isMaster || guard.ctx.isOwner || guard.ctx.role === 'ADMIN';
 
@@ -94,9 +119,8 @@ export async function GET(req: NextRequest) {
         : plan.layers.filter((l) => l.id !== 'platform'),
     },
     // Estado assinado, ligado À UNIDADE e AO USUÁRIO que pediu o popup.
-    signupState: plan.clientConfig
-      ? issueSignupState(credentialsKey, { businessId: guard.ctx.business.id, userId: guard.ctx.user.id })
-      : '',
+    signupState,
+    authorizeUrl,
     // Caminho assistido continua valendo (o Master cadastra as credenciais).
     masterRouteAvailable: canViewDiagnostics,
     webhookPath: canViewDiagnostics ? '/api/whatsapp/webhook' : undefined,
@@ -114,6 +138,7 @@ export async function POST(req: NextRequest) {
   const guard = await requireBusiness(req, businessId, 'whatsapp');
   if (!guard.ok) return guard.res;
   const { user, business } = guard.ctx;
+  const requestOrigin = siteUrl(req);
 
   const action = String(body.action || 'exchange');
   if (action !== 'exchange' && action !== 'register') {
@@ -136,7 +161,7 @@ export async function POST(req: NextRequest) {
       code: 'platform_not_configured',
       external: 'BLOCKED_EXTERNAL',
       missing: platform.missing,
-      plan: planFor(business),
+      plan: planFor(business, requestOrigin),
       masterRouteAvailable: true,
     }, { status: 503 });
   }
@@ -145,6 +170,8 @@ export async function POST(req: NextRequest) {
   const appSecret = String(process.env.META_APP_SECRET || '');
   const secretKey = String(process.env.WHATSAPP_CREDENTIALS_KEY || '');
   const base = graphBase(getMetaGraphVersion());
+  /** redirect_uri canônico = authorize (manual dialog) — idêntico no exchange. */
+  const expectedRedirectUri = whatsappRedirectUri(requestOrigin);
 
   // ═════════════════════════════════════════════════════════════
   // action: register — concluir o registro do número depois da autorização
@@ -160,7 +187,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({
         error: 'Esta conta foi integrada e comprovada no modo Coexistence oficial: o número já é registrado pelo aplicativo WhatsApp Business e não requer PIN.',
         code: 'coexistence_no_register_needed',
-        plan: planFor(business),
+        plan: planFor(business, requestOrigin),
       }, { status: 400 });
     }
 
@@ -170,7 +197,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({
         error: 'A conta está com verificação de Coexistência pendente junto à Meta. Não é permitido registrar com PIN enquanto o status no aplicativo WhatsApp Business não for resolvido com segurança. Tente verificar o status novamente ou refaça o Embedded Signup.',
         code: 'coexistence_verification_pending',
-        plan: planFor(business),
+        plan: planFor(business, requestOrigin),
       }, { status: 400 });
     }
 
@@ -180,7 +207,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({
         error: 'Esta unidade ainda não tem conta autorizada para registrar um número. Rode o popup da Meta primeiro.',
         code: 'not_authorized',
-        plan: planFor(business),
+        plan: planFor(business, requestOrigin),
       }, { status: 409 });
     }
     const pin = String(body.pin || '').replace(/\D/g, '');
@@ -211,7 +238,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({
         error: `Não consegui registrar o número: ${why}`,
         code: 'register_failed',
-        plan: planFor(business),
+        plan: planFor(business, requestOrigin),
       }, { status: 400 });
     }
     await updateDB((db) => {
@@ -235,7 +262,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({
       ok: true,
       message: 'Número registrado. Mande uma mensagem para ele para confirmar a entrega.',
-      plan: await freshPlan(businessId, business),
+      plan: await freshPlan(businessId, business, requestOrigin),
     });
   }
 
@@ -278,12 +305,20 @@ export async function POST(req: NextRequest) {
       });
     });
     return NextResponse.json({
-      error: reason, code: 'onboarding_failed', plan: planFor(business), ...extra,
+      error: reason, code: 'onboarding_failed', plan: planFor(business, requestOrigin), ...extra,
     }, { status: 400 });
   }
 
   // ── 2. Troca do código pelo token (server-to-server) ───────────
-  const exchanged = await graphJson(exchangeCodeUrl(base, appId, appSecret, code));
+  // O redirect_uri do exchange DEVE ser idêntico ao do dialog/oauth (manual-flow).
+  // Divergência (vazio, outra URL, trailing slash) = Meta 36008 — recusamos ANTES.
+  const bodyRedirectUri = String((body as { redirectUri?: unknown }).redirectUri ?? '').trim();
+  if (bodyRedirectUri !== expectedRedirectUri) {
+    return fail('redirect_uri divergente do esperado pelo servidor (OAuth). Recomece a conexão.');
+  }
+  const exchanged = await graphJson(
+    exchangeCodeUrl(base, appId, appSecret, code, expectedRedirectUri),
+  );
   const token = String(exchanged.data?.access_token || '');
   if (!exchanged.ok || !token) {
     return fail(
@@ -396,7 +431,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({
       error: `Conectei a conta, mas a Meta recusou a assinatura do webhook: ${why}. As mensagens ainda não chegam — tente de novo pelo painel do Master ou refaça o popup.`,
       code: 'subscribe_failed',
-      plan: await freshPlan(businessId, business),
+      plan: await freshPlan(businessId, business, requestOrigin),
     }, { status: 400 });
   }
 
@@ -564,7 +599,7 @@ export async function POST(req: NextRequest) {
       message: pendingMessage,
       integration: { status: 'pending', displayPhone, verifiedName, qualityRating },
       checks: { tokenStored: true, webhookSubscribed: true, phoneResolved: true, registration },
-      plan: await freshPlan(businessId, business),
+      plan: await freshPlan(businessId, business, requestOrigin),
     });
   }
 
@@ -579,6 +614,6 @@ export async function POST(req: NextRequest) {
       registration,
     },
     registration,
-    plan: await freshPlan(businessId, business),
+    plan: await freshPlan(businessId, business, requestOrigin),
   });
 }

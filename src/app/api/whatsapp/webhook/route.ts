@@ -1,10 +1,15 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { randomUUID } from 'node:crypto';
 import { readDB, updateDB } from '@/lib/db';
+import { emitAutomationEvent } from '@/lib/automation/events';
 import { upsertContact, findContact } from '@/lib/contacts';
 import { phoneKey, webhookVerifyToken } from '@/lib/whatsapp';
 import { pushAudit } from '@/lib/audit';
 import { agentFor, agentActive } from '@/lib/agent';
+import {
+  aiShouldRespond, buildHandoffSummary, effectiveAgentState, handoffToTeam,
+  receiveInbound, sendOutbound, setAgentState, wantsHuman, looksClinical,
+} from '@/lib/inbox/assistant-ops';
 import { conciergeAnswer } from '@/lib/concierge';
 import { createBookingTx } from '@/lib/booking-create';
 import { findLead, ingestLead } from '@/lib/pipeline';
@@ -15,11 +20,19 @@ import {
   resolveTenantForChange,
   verifyMetaWebhookSignature,
 } from '@/lib/whatsapp-cloud-api';
+import { normalizeInboundMessage, interactiveIntent } from '@/lib/messaging/normalize';
+import { applyOutreachReply } from '@/lib/follow-up-outreach';
+import { shouldAdvanceStatus } from '@/lib/messaging/status';
 import type { Message, Conversation, Business, DB } from '@/lib/types';
 
-// WEBHOOK do WhatsApp oficial (provedor → InstaLink).
+// WEBHOOK do WhatsApp oficial (provedor → GoDoutor).
 // GET  ?hub.mode=subscribe&hub.verify_token=… → handshake de verificação.
 // POST → recebe mensagens e atualizações de status da Meta com fail-closed.
+//
+// DIAGNÓSTICO: TODA decisão desta rota emite um log com o marcador
+// `[WA-WEBHOOK]` (Vercel → Functions → Logs). Contagens e IDs de recurso
+// (WABA/phone_number_id) nunca corpo/segredo — permitem responder “a Meta
+// chamou? com qual status?” sem ler payload nem expor nada sensível.
 export async function GET(req: NextRequest) {
   const q = req.nextUrl.searchParams;
   const mode = q.get('hub.mode');
@@ -28,11 +41,15 @@ export async function GET(req: NextRequest) {
   const expected = webhookVerifyToken();
 
   if (!expected) {
+    console.warn('[WA-WEBHOOK] GET verify status=503 reason=verify_token_env_missing');
     return NextResponse.json({ error: 'Webhook não configurado (WHATSAPP_VERIFY_TOKEN ausente).' }, { status: 503 });
   }
-  if (mode === 'subscribe' && token === expected) {
+  const tokenMatch = token === expected;
+  if (mode === 'subscribe' && tokenMatch) {
+    console.log('[WA-WEBHOOK] GET verify status=200 mode=subscribe challenge_len=' + String(challenge.length));
     return new NextResponse(challenge, { status: 200, headers: { 'Content-Type': 'text/plain' } });
   }
+  console.warn(`[WA-WEBHOOK] GET verify status=403 mode=${mode || 'absent'} token_match=${tokenMatch}`);
   return NextResponse.json({ error: 'Verificação inválida.' }, { status: 403 });
 }
 
@@ -41,6 +58,9 @@ interface IncomingMessage {
   phone: string;
   name: string;
   body: string;
+  msgType?: string;
+  interactiveId?: string;
+  interactiveTitle?: string;
 }
 
 interface IncomingStatus {
@@ -56,6 +76,23 @@ interface WebhookChangeBatch {
   wabaId: string;
   messages: IncomingMessage[];
   statuses: IncomingStatus[];
+}
+
+/** Alvos (phone_number_id / waba) citados num payload bruto — só para diagnóstico. */
+function rawWebhookTargets(payload: any): Array<{ pId: string; wabaId: string }> {
+  const targets: Array<{ pId: string; wabaId: string }> = [];
+  const seen = new Set<string>();
+  for (const entry of payload?.entry || []) {
+    const wabaId = String(entry?.id || '');
+    for (const change of entry?.changes || []) {
+      const pId = String(change?.value?.metadata?.phone_number_id || '');
+      const key = `${pId}|${wabaId}`;
+      if (seen.has(key)) continue;
+      seen.add(key);
+      targets.push({ pId, wabaId });
+    }
+  }
+  return targets;
 }
 
 function parseWebhookBatches(payload: any): WebhookChangeBatch[] {
@@ -81,15 +118,19 @@ function parseWebhookBatches(payload: any): WebhookChangeBatch[] {
       if (Array.isArray(val?.messages)) {
         for (const m of val.messages) {
           const phone = String(m?.from || m?.phone || '');
-          const body = String(m?.text?.body ?? m?.body ?? '').slice(0, 4000);
-          const externalId = String(m?.id || m?.externalId || '');
-          if (!phone && !externalId) continue;
           const mappedName = contactMap.get(phone) || String(m?.profile?.name || m?.name || '').slice(0, 80);
+          const norm = normalizeInboundMessage(m, mappedName);
+          if (!norm) continue;
+          const externalId = norm.providerMessageId || String(m?.externalId || '');
+          if (!phone && !externalId) continue;
           messages.push({
             externalId,
             phone,
             name: mappedName,
-            body,
+            body: (norm.text || '').slice(0, 4000),
+            msgType: norm.type,
+            interactiveId: norm.interactiveReply?.id || '',
+            interactiveTitle: norm.interactiveReply?.title || '',
           });
         }
       }
@@ -159,12 +200,16 @@ export async function POST(req: NextRequest) {
     // 1. FAIL-CLOSED: segredo ausente rejeita imediatamente com 503
     const appSecret = process.env.WHATSAPP_APP_SECRET || process.env.META_APP_SECRET;
     if (!appSecret || appSecret.trim().length === 0) {
-      console.warn('[WHATSAPP WEBHOOK] Falha fechada: WHATSAPP_APP_SECRET não configurado.');
+      console.warn('[WA-WEBHOOK] POST status=503 reason=app_secret_env_missing bytes=' + String(rawBody.length));
       return NextResponse.json({ error: 'Configuração do App Secret ausente no servidor.' }, { status: 503 });
     }
 
     // 2. Validação criptográfica de assinatura (HMAC SHA-256)
     if (!verifyMetaWebhookSignature(rawBody, signature, appSecret)) {
+      // Nunca loga corpo/segredo: só o fato (distingue 403 nosso de 403 do proxy).
+      console.warn(
+        `[WA-WEBHOOK] POST status=403 reason=signature_invalid bytes=${String(rawBody.length)} header=${signature ? 'present' : 'absent'}`,
+      );
       return NextResponse.json({ error: 'Assinatura do webhook inválida.' }, { status: 403 });
     }
 
@@ -172,6 +217,37 @@ export async function POST(req: NextRequest) {
     const batches = parseWebhookBatches(payload);
 
     if (batches.length === 0) {
+      // Assinatura VÁLIDA mas nada utilizável: registrar a CHEGADA para o
+      // painel (“último webhook”) quando o tenant resolver — sem isso o
+      // descarte fica indistinguível de “Meta nunca enviou”.
+      const targets = rawWebhookTargets(payload);
+      console.warn(
+        `[WA-WEBHOOK] POST status=200 reason=parsed_empty entries=${String(payload?.entry?.length ?? 0)} targets=${targets.length ? targets.map((t) => `${t.pId || '-'}/${t.wabaId || '-'}`).join(',') : 'none'}`,
+      );
+      try {
+        const arrivalDb = await readDB();
+        const found = new Map<string, true>();
+        for (const t of targets) {
+          const b = resolveTenantForChange(arrivalDb, t.pId, t.wabaId);
+          if (b && !found.has(b.id)) {
+            found.set(b.id, true);
+            const at = new Date().toISOString();
+            await updateDB((d) => {
+              const dbiz = d.businesses.find((x) => x.id === b.id);
+              if (dbiz?.whatsappIntegration) dbiz.whatsappIntegration.lastWebhookAt = at;
+              pushAudit(d, {
+                action: 'whatsapp.webhook_received',
+                actor: { id: 'system', email: 'webhook@instalink.app', role: 'system' },
+                businessId: b.id,
+                meta: { messages: 0, statuses: 0, stage: 'parsed_empty' },
+              });
+            });
+            console.warn(`[WA-WEBHOOK] POST arrival_marked business=${b.id} stage=parsed_empty`);
+          }
+        }
+      } catch (markErr) {
+        console.warn('[WA-WEBHOOK] POST arrival_mark_failed err=' + (markErr instanceof Error ? markErr.name : 'unknown'));
+      }
       return NextResponse.json({ ok: true, received: 0 });
     }
 
@@ -183,7 +259,11 @@ export async function POST(req: NextRequest) {
     for (const batch of batches) {
       const business = resolveTenantForChange(db, batch.phoneNumberId, batch.wabaId);
       if (!business) {
-        // Unidade não mapeada: ignora para não vazar dados entre negócios
+        // Unidade não mapeada: ignora para não vazar dados entre negócios.
+        // Log explícito: era o único descarte 100% silencioso do caminho.
+        console.warn(
+          `[WA-WEBHOOK] POST status=200 reason=tenant_missing phone_number_id=${batch.phoneNumberId || 'absent'} waba_id=${batch.wabaId || 'absent'} messages=${batch.messages.length} statuses=${batch.statuses.length}`,
+        );
         continue;
       }
 
@@ -205,8 +285,10 @@ export async function POST(req: NextRequest) {
         for (const st of batch.statuses) {
           const target = d.messages.find((m) => m.externalId === st.id && m.businessId === businessId);
           if (target) {
-            target.status = st.status;
-            if (st.status === 'failed') {
+            if (shouldAdvanceStatus(target.status, st.status)) {
+              target.status = st.status as typeof target.status;
+            }
+            if (st.status === 'failed' && target.status === 'failed') {
               const errDetail = st.errors?.[0]?.message || st.errors?.[0]?.title || 'Mensagem rejeitada pela Meta.';
               target.error = errDetail;
               b.whatsappIntegration.lastError = errDetail;
@@ -290,6 +372,7 @@ export async function POST(req: NextRequest) {
               phone: digits,
               status: 'open',
               mode: 'automation',
+              agentState: 'ai_active',
               unread: 0,
               lastMessageAt: now,
               lastMessagePreview: m.body.slice(0, 120),
@@ -297,63 +380,98 @@ export async function POST(req: NextRequest) {
               context: leadId ? { leadId } : {},
             };
             d.conversations.push(conv);
+            emitAutomationEvent(d, {
+              event: 'conversation.started',
+              businessId,
+              at: now,
+              data: { conversationId: conv.id, channel: 'whatsapp', phone: conv.phone || digits },
+            });
           } else {
             conv = existingConv;
             conv.channelUserId = rawDigits || digits;
             conv.contactId = contact?.id || conv.contactId;
             conv.customerId = contact?.customerId || existingCustomer?.id || conv.customerId;
             if (!conv.mode) conv.mode = 'automation';
+            if (!conv.agentState) setAgentState(conv, conv.mode === 'human' ? 'human_active' : 'ai_active');
             if (leadId && (!conv.context || !conv.context.leadId)) {
               conv.context = { ...(conv.context || {}), leadId };
             }
           }
 
-          // Grava mensagem inbound
-          const inMsg: Message = {
-            id: randomUUID(),
+          // Grava mensagem inbound (F3-F: idempotência provider+providerMessageId)
+          const inbound = receiveInbound(d, {
             businessId,
             conversationId: conv.id,
-            direction: 'in',
             body: m.body,
-            status: 'delivered',
-            externalId: m.externalId,
-            by: 'contact',
-            byName: contact?.name || m.name || 'Cliente',
+            provider: 'whatsapp',
+            providerMessageId: String(m.externalId || ''),
             at: now,
-          };
-          d.messages.push(inMsg);
-
-          conv.unread = (conv.unread || 0) + 1;
-          conv.lastMessageAt = now;
-          conv.lastMessagePreview = m.body.slice(0, 120);
+            channelUserId: conv.channelUserId || '',
+            contactName: contact?.name || m.name || 'Cliente',
+          });
+          if (inbound.duplicate) {
+            continue;
+          }
+          // F3-H — resposta do paciente num outreach de retorno/reativação
+          applyOutreachReply(d, {
+            businessId,
+            conversationId: conv.id,
+            body: m.body,
+            now,
+          });
+          {
+            const storedIn = d.messages.find((x) => x.id === inbound.messageId);
+            if (storedIn && (m.msgType || m.interactiveId)) {
+              storedIn.meta = {
+                ...(storedIn.meta || {}),
+                provider: 'whatsapp',
+                msgType: m.msgType || 'text',
+                ...(m.interactiveId ? { interactiveId: m.interactiveId } : {}),
+                ...(m.interactiveTitle ? { interactiveTitle: m.interactiveTitle } : {}),
+                ...(m.interactiveId || m.interactiveTitle
+                  ? { intent: interactiveIntent({ id: m.interactiveId, title: m.interactiveTitle }) }
+                  : {}),
+              };
+            }
+          }
           b.whatsappIntegration.lastInboundAt = now;
 
-          // 3.3. Atendimento Concierge / Agente (Silenciado em modo humano)
-          if (conv.mode === 'human') {
+          // 3.3. Atendimento Concierge / Agente — só quando a IA está ativa
+          // (humano + IA nunca respondem juntos).
+          if (!aiShouldRespond(conv)) {
             continue;
           }
 
-          const wantsHuman = /\b(humano|atendente|falar com (uma )?pessoa|falar com atendente|suporte humano|atendente humano)\b/i.test(m.body);
-          if (wantsHuman) {
-            conv.mode = 'human';
-            const agent = agentFor(d, business);
-            const replyText = agent.handoffMessage || 'Vou transferir seu atendimento para a nossa equipe. Um atendente já vai te responder por aqui!';
-            const outId = randomUUID();
-            d.messages.push({
-              id: outId,
+          if (wantsHuman(m.body) || looksClinical(m.body)) {
+            const reason = looksClinical(m.body) ? 'clinico' : 'pedido_humano';
+            const built = buildHandoffSummary(d, conv, reason);
+            handoffToTeam(d, {
               businessId,
               conversationId: conv.id,
-              direction: 'out',
-              body: replyText,
-              status: 'pending',
-              externalId: '',
-              by: 'automation',
-              byName: 'Automação',
+              summary: built.summary,
+              intent: built.intent,
+              entities: built.entities,
+              actions: built.actions,
+              requestedBy: reason === 'clinico' ? 'sistema' : 'paciente',
               at: now,
             });
-            conv.lastMessageAt = now;
-            conv.lastMessagePreview = replyText.slice(0, 120);
-            newOutboundMessageIds.push(outId);
+            const agent = agentFor(d, business);
+            const replyText = reason === 'clinico'
+              ? 'Vou encaminhar sua mensagem para o nosso profissional. Um atendente já vai te responder por aqui!'
+              : (agent.handoffMessage || 'Vou transferir seu atendimento para a nossa equipe. Um atendente já vai te responder por aqui!');
+            sendOutbound(d, {
+              businessId,
+              conversationId: conv.id,
+              body: replyText,
+              by: 'automation',
+              byName: 'Automação',
+              provider: 'whatsapp',
+              at: now,
+              status: 'pending',
+            });
+            newOutboundMessageIds.push(
+              d.messages[d.messages.length - 1]!.id,
+            );
             continue;
           }
 
@@ -416,10 +534,13 @@ export async function POST(req: NextRequest) {
                   by: 'automation',
                   byName: 'Automação',
                   at: now,
+                  meta: { provider: 'whatsapp' },
                 });
                 conv.lastMessageAt = now;
                 conv.lastMessagePreview = reply.slice(0, 120);
                 newOutboundMessageIds.push(outId);
+                // F3-F: enviou e aguarda o paciente (estado explícito).
+                setAgentState(conv, 'waiting_patient');
               }
 
               conv.context = {
@@ -441,6 +562,9 @@ export async function POST(req: NextRequest) {
       });
 
       totalProcessed += batch.messages.length + batch.statuses.length;
+      console.log(
+        `[WA-WEBHOOK] POST status=200 persisted business=${businessId} messages=${batch.messages.length} statuses=${batch.statuses.length}`,
+      );
       for (const msgId of newOutboundMessageIds) {
         postCommitOutbound.push({ businessId, messageId: msgId });
       }
@@ -461,7 +585,7 @@ export async function POST(req: NextRequest) {
       mapped: totalProcessed > 0,
     });
   } catch (err) {
-    console.error('[WHATSAPP WEBHOOK POST ERROR]', err);
+    console.error('[WA-WEBHOOK] POST status=500 reason=handler_error name=' + (err instanceof Error ? err.name : 'unknown'));
     return NextResponse.json({ error: 'Falha ao processar o webhook.' }, { status: 500 });
   }
 }

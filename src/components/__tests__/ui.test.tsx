@@ -3,7 +3,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { useState } from 'react';
-import { Field, Input, Select, Tabs, Textarea } from '../ui';
+import { Field, Input, Segmented, Select, Tabs, Textarea } from '../ui';
 import { PhoneBRInput } from '../dashboard/PhoneBRInput';
 
 afterEach(cleanup);
@@ -127,5 +127,52 @@ describe('Field — accessible labeling through existing consumers', () => {
     rerender(<Field label="Busca"><Input aria-label="Busca de contatos" /></Field>);
     expect(screen.getByRole('textbox').hasAttribute('aria-describedby')).toBe(false);
     expect(screen.getByRole('textbox').hasAttribute('aria-invalid')).toBe(false);
+  });
+});
+
+// §8 — o seletor Dia/Semana/Mês/Lista da Agenda. Ele SUBSTITUIU as abas na
+// régua de visões, então o contrato que importava (um só tab stop, setas,
+// aria-selected, sem foco preso) precisa continuar provado.
+function Views() {
+  const [value, setValue] = useState('day');
+  return <Segmented ariaLabel="Visualização da agenda" value={value} onChange={setValue} items={[
+    { id: 'day', label: 'Dia' },
+    { id: 'week', label: 'Semana' },
+    { id: 'month', label: 'Mês' },
+    { id: 'list', label: 'Lista', disabled: true },
+  ]} />;
+}
+
+describe('Segmented — mesma acessibilidade das abas, sem cara de aba', () => {
+  it('expõe um tablist com seleção única e indicador medido do botão real', () => {
+    render(<Views />);
+    expect(screen.getAllByRole('tab')).toHaveLength(4);
+    expect(screen.getByRole('tab', { name: 'Dia', selected: true })).toBeTruthy();
+    // O indicador é UM elemento que se move — não uma barra por opção.
+    const thumb = document.querySelectorAll('.il-segmented__thumb');
+    expect(thumb).toHaveLength(1);
+  });
+
+  it('anda com as setas, ignora a opção desabilitada e não prende o foco', async () => {
+    const user = userEvent.setup();
+    render(<Views />);
+    await user.tab();
+    expect(document.activeElement).toBe(screen.getByRole('tab', { name: 'Dia' }));
+    await user.keyboard('{ArrowRight}');
+    expect(document.activeElement).toBe(screen.getByRole('tab', { name: 'Semana', selected: true }));
+    await user.keyboard('{ArrowLeft}');
+    expect(document.activeElement).toBe(screen.getByRole('tab', { name: 'Dia', selected: true }));
+    await user.keyboard('{End}');
+    // "Lista" está desabilitada: o fim é a última opção ALCANÇÁVEL.
+    expect(document.activeElement).toBe(screen.getByRole('tab', { name: 'Mês', selected: true }));
+    await user.tab();
+    expect(document.activeElement).not.toBe(screen.getByRole('tab', { name: 'Mês' }));
+  });
+
+  it('mantém um único tab stop (roving tabindex)', () => {
+    render(<Views />);
+    const stops = screen.getAllByRole('tab').filter((t) => t.getAttribute('tabindex') === '0');
+    expect(stops).toHaveLength(1);
+    expect(stops[0].getAttribute('aria-selected')).toBe('true');
   });
 });

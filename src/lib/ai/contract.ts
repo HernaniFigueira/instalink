@@ -151,7 +151,7 @@ export function actionKnown(type: unknown): boolean {
   return !!automationActionDef(type);
 }
 
-export function eventEntityOf(event: AutomationEventId): 'lead' | 'customer' | 'booking' | '' {
+export function eventEntityOf(event: AutomationEventId): 'lead' | 'customer' | 'booking' | 'encounter' | 'conversation' | 'message' | 'patient' | '' {
   return automationEventDef(event)?.entity || '';
 }
 

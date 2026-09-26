@@ -9,14 +9,11 @@ import { Button, PageSkeleton } from '@/components/ui';
 import { apiGet, apiSend } from '@/lib/api-client';
 import { humanDateTime } from '@/lib/tz';
 import {
-  EMBEDDED_SIGNUP_SDK_SRC, SIGNUP_CODE_TTL_SECONDS, SIGNUP_MESSAGE_ORIGIN, SIGNUP_MESSAGE_TYPE,
+  SIGNUP_CODE_TTL_SECONDS, SIGNUP_MESSAGE_ORIGIN, SIGNUP_MESSAGE_TYPE,
   WA_ME_TEST_DISCLAIMER, parseSignupMessage,
 } from '@/lib/whatsapp-onboarding';
+import { canonicalStateView } from '@/lib/integration-states';
 
-// ── SDK do Facebook (só carrega quando alguém vai conectar) ──
-declare global {
-  interface Window { FB?: any; fbAsyncInit?: () => void }
-}
 
 interface OnboardingItemView { key: string; label: string; why: string; ok: boolean; secret: boolean; required: boolean }
 interface OnboardingLayerView {
@@ -30,11 +27,34 @@ export interface WaOnboardingView {
     steps: OnboardingStepView[];
     nextAction: { kind: string; label: string; detail: string };
     version: { current: string; level: string; message: string };
-    clientConfig: { appId: string; configId: string; version: string } | null;
+    clientConfig: { appId: string; configId: string; version: string; redirectUri: string } | null;
   };
   masterRouteAvailable: boolean;
   webhookPath: string;
   signupState?: string;
+  /** dialog/oauth manual — redirect_uri idêntico ao exchange. */
+  authorizeUrl?: string;
+}
+
+interface WabaDiagnosticResponse {
+  ok: boolean;
+  error?: string;
+  reassigned: boolean;
+  postHttpStatus?: number;
+  subscription: {
+    wabaSubscribed: boolean;
+    appIdFound: boolean;
+    httpStatus: number;
+    error: string;
+  } | null;
+  phone: {
+    httpStatus: number;
+    status: string;
+    accountMode: string;
+    platformType: string;
+    webhookApplication: string;
+    error: string;
+  } | null;
 }
 
 export interface WaChannelData {
@@ -52,6 +72,7 @@ export interface WaChannelData {
     wabaId?: string;
   };
   canViewDiagnostics?: boolean;
+  canRunWabaDiagnostic?: boolean;
   diagnostics?: {
     credentialsConfigured: boolean;
     credentialSource: string;
@@ -65,42 +86,6 @@ export interface WaChannelData {
   server?: { configured: boolean; missingEnv: string[]; envVars: readonly string[] };
   inbox: { conversations: number; open: number; unread: number };
   linkFallback: string;
-}
-
-/**
- * Carrega o SDK do Facebook uma única vez e inicializa com o App ID da
- * plataforma. Sem `window.FB` não existe popup oficial — e aí a tela diz isso,
- * em vez de fingir uma conexão.
- */
-let fbSdkPromise: Promise<any> | null = null;
-function loadFacebookSdk(appId: string, version: string): Promise<any> {
-  if (typeof window === 'undefined') return Promise.reject(new Error('Sem navegador para abrir o popup da Meta.'));
-  if (window.FB) return Promise.resolve(window.FB);
-  if (fbSdkPromise) return fbSdkPromise;
-  fbSdkPromise = new Promise((resolve, reject) => {
-    const existing = document.getElementById('facebook-jssdk');
-    const init = () => {
-      try {
-        window.FB.init({ appId, version, xfbml: false, cookie: false });
-        resolve(window.FB);
-      } catch (e) {
-        reject(e instanceof Error ? e : new Error('Falha ao inicializar o SDK da Meta.'));
-      }
-    };
-    if (existing) { init(); return; }
-    window.fbAsyncInit = init;
-    const script = document.createElement('script');
-    script.id = 'facebook-jssdk';
-    script.src = EMBEDDED_SIGNUP_SDK_SRC;
-    script.async = true;
-    script.defer = true;
-    script.crossOrigin = 'anonymous';
-    script.onerror = () => reject(new Error('Não consegui carregar o SDK da Meta. Verifique se o painel não está bloqueando connect.facebook.net.'));
-    document.body.appendChild(script);
-    // Se o SDK travar (bloqueio de rede/adblock), não deixamos a tela em "abrindo…".
-    setTimeout(() => { if (!window.FB) reject(new Error('O SDK da Meta demorou demais para carregar. Verifique bloqueadores de conteúdo e tente de novo.')); }, 15000);
-  });
-  return fbSdkPromise;
 }
 
 function LayerCard({ layer, tone }: { layer: OnboardingLayerView; tone: 'platform' | 'unit' }) {
@@ -152,6 +137,9 @@ export function WhatsappChannelPanel({ businessId }: { businessId: string }) {
   const [busy, setBusy] = useState(false);
   const [signing, setSigning] = useState(false);
   const [testing, setTesting] = useState(false);
+  const [wabaDiagnostic, setWabaDiagnostic] = useState<WabaDiagnosticResponse | null>(null);
+  const [wabaChecking, setWabaChecking] = useState(false);
+  const [wabaResubscribing, setWabaResubscribing] = useState(false);
   const [msg, setMsg] = useState('');
   const [error, setError] = useState('');
   // O popup devolve o WABA (e às vezes o número) por postMessage, ANTES do
@@ -181,42 +169,61 @@ export function WhatsappChannelPanel({ businessId }: { businessId: string }) {
    */
   async function connectWithMeta() {
     const cfg = guide?.plan.clientConfig;
-    if (!cfg) {
+    const authorizeUrl = guide?.authorizeUrl;
+    if (!cfg || !authorizeUrl) {
       setError('A conexão oficial ainda não está habilitada nesta instalação. Veja o que falta na camada "Plataforma".');
       return;
     }
     setSigning(true); setMsg(''); setError('');
     signupRef.current = { wabaId: '', phoneNumberId: '' };
 
+    let codeResolve: (v: { code: string; state: string }) => void = () => {};
+    let codeReject: (e: Error) => void = () => {};
+    const oauth = new Promise<{ code: string; state: string }>((resolve, reject) => {
+      codeResolve = resolve;
+      codeReject = reject;
+      setTimeout(() => reject(new Error('O popup da Meta foi fechado antes de autorizar. Nada foi alterado.')), 120_000);
+    });
+
+    // 1) postMessage do Embedded Signup (WABA/número) — origem facebook.com.
+    // 2) postMessage do NOSSO callback com o code (manual-flow, origem própria).
     const onMessage = (event: MessageEvent) => {
-      if (event.origin !== SIGNUP_MESSAGE_ORIGIN) return;
-      const parsed = parseSignupMessage(event.data);
-      if (String((event.data as any)?.type || '') !== SIGNUP_MESSAGE_TYPE) return;
-      signupRef.current = { wabaId: parsed.wabaId, phoneNumberId: parsed.phoneNumberId };
-      if (parsed.event && parsed.event.startsWith('CANCEL')) {
-        setError('Conexão cancelada no popup da Meta. Nada foi alterado.');
+      if (event.origin === SIGNUP_MESSAGE_ORIGIN) {
+        const parsed = parseSignupMessage(event.data);
+        if (String((event.data as any)?.type || '') !== SIGNUP_MESSAGE_TYPE) return;
+        signupRef.current = { wabaId: parsed.wabaId, phoneNumberId: parsed.phoneNumberId };
+        if (parsed.event && parsed.event.startsWith('CANCEL')) {
+          setError('Conexão cancelada no popup da Meta. Nada foi alterado.');
+        }
+        return;
       }
+      if (event.origin !== window.location.origin) return;
+      const data = event.data as { type?: string; ok?: string; code?: string; state?: string; reason?: string };
+      if (data?.type !== 'WA_OAUTH_RESULT') return;
+      if (data.ok !== '1' || !data.code) {
+        codeReject(new Error(
+          data.reason === 'cancelled'
+            ? 'Conexão cancelada no popup da Meta. Nada foi alterado.'
+            : 'O callback da Meta não devolveu o código. Recomece a conexão.',
+        ));
+        return;
+      }
+      codeResolve({ code: String(data.code), state: String(data.state || guide?.signupState || '') });
     };
     window.addEventListener('message', onMessage);
 
     try {
-      const FB = await loadFacebookSdk(cfg.appId, cfg.version);
-      const code = await new Promise<string>((resolve, reject) => {
-        FB.login((response: any) => {
-          const auth = response?.authResponse?.code;
-          if (auth) return resolve(String(auth));
-          reject(new Error('O popup foi fechado antes de autorizar. Nada foi alterado.'));
-        }, {
-          config_id: cfg.configId,
-          response_type: 'code',
-          override_default_response_type: true,
-          extras: { setup: {} },
-        });
-      });
+      // Manual OAuth: diálogo COM redirect_uri nosso (callback dedicado).
+      // window.open síncrono no gesto do usuário (sem await antes).
+      const popup = window.open(authorizeUrl, 'wa-meta-signup', 'width=540,height=720,noopener=no');
+      if (!popup) throw new Error('O navegador bloqueou o popup da Meta. Libere popups e tente de novo.');
+      const { code, state } = await oauth;
       // O código vale 30 segundos e é de uso único: troca imediata, sem retry.
       const res = await apiSend<{ message?: string }>('/api/whatsapp/onboarding', 'POST', {
         businessId, action: 'exchange', code,
-        state: guide?.signupState || '',
+        // MESMO redirect_uri do dialog/oauth (identity — Meta 36008 se divergir).
+        redirectUri: cfg.redirectUri,
+        state: state || guide?.signupState || '',
         wabaId: signupRef.current.wabaId,
         phoneNumberId: signupRef.current.phoneNumberId,
         pin: pin.trim() || undefined,
@@ -286,6 +293,25 @@ export function WhatsappChannelPanel({ businessId }: { businessId: string }) {
     finally { setTesting(false); }
   }
 
+  async function runWabaDiagnostic(resubscribe = false) {
+    if (resubscribe && !confirm('Reassinar o webhook desta WABA na Meta? Esta é a única ação que altera a assinatura externa.')) return;
+    setWabaChecking(!resubscribe); setWabaResubscribing(resubscribe); setMsg(''); setError('');
+    try {
+      const res = await apiSend<WabaDiagnosticResponse>('/api/whatsapp', 'POST', {
+        businessId,
+        action: resubscribe ? 'resubscribe_waba' : 'verify_waba_subscription',
+      }, { scope: 'action', area: 'Canais' });
+      if (!res.ok || !res.data) throw new Error(res.message || 'Não foi possível concluir o diagnóstico da WABA.');
+      setWabaDiagnostic(res.data);
+      if (res.data.error) setError(res.data.error);
+      else if (resubscribe && res.data.reassigned) setMsg('WABA reassinada. O estado final foi consultado novamente na Meta.');
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Não foi possível concluir o diagnóstico da WABA.');
+    } finally {
+      setWabaChecking(false); setWabaResubscribing(false);
+    }
+  }
+
   async function disconnect() {
     if (!confirm('Tem certeza que deseja desconectar a conta do WhatsApp desta unidade?')) return;
     setBusy(true); setMsg(''); setError('');
@@ -306,6 +332,12 @@ export function WhatsappChannelPanel({ businessId }: { businessId: string }) {
   const q = `?b=${businessId}`;
   const status = data.status;
   const connected = status === 'connected';
+  // Estado canônico do selo. Pending "comum" (validando com a Meta) é Em
+  // teste; pending que exige AÇÃO do usuário (registrar número, confirmar
+  // coexistência) é Atenção — funciona, mas não está saudável.
+  const pendingBlocking = status === 'pending'
+    && data.label.label !== 'Configurando';
+  const stateView = canonicalStateView(status, { blocking: pendingBlocking });
 
   return (
     <div className="space-y-3">
@@ -319,16 +351,19 @@ export function WhatsappChannelPanel({ businessId }: { businessId: string }) {
             <p className="text-xs text-zinc-500 mt-0.5">{data.label.detail}</p>
           </div>
           <div className="flex items-center gap-2">
+            {/* Estados canônicos (uma palavra por estado em toda a interface):
+                Pronto · Em teste · Atenção · Com falha · Precisa configurar.
+                O detalhe específico continua na linha de cima. */}
             <span className={`text-xs font-medium border rounded-full px-2 py-0.5 ${
-              status === 'connected'
+              stateView.tone === 'success'
                 ? 'bg-emerald-50 border-emerald-200 text-emerald-800'
-                : status === 'pending'
+                : stateView.tone === 'warning'
                   ? 'bg-amber-50 border-amber-200 text-amber-800'
-                  : status === 'error'
+                  : stateView.tone === 'danger'
                     ? 'bg-rose-50 border-rose-200 text-rose-800'
                     : 'bg-zinc-100 border-zinc-200 text-zinc-600'
             }`}>
-              {status === 'connected' ? 'Conectado' : status === 'pending' ? 'Configurando' : status === 'error' ? 'Erro' : 'Não conectado'}
+              {stateView.label}
             </span>
             {connected && (
               <Link href={`/conversas${q}`} className="inline-block"><Button variant="secondary" size="xs">Abrir Conversas</Button></Link>
@@ -562,6 +597,57 @@ export function WhatsappChannelPanel({ businessId }: { businessId: string }) {
                   : (data.integration as any).source === 'master' ? 'suporte Master' : 'não registrado'}
               </span>
             </p>
+
+            {data.canRunWabaDiagnostic && (
+              <div className="mt-3 border-t border-zinc-200 pt-3" aria-live="polite">
+                <p className="text-xs font-semibold text-zinc-700">Verificar assinatura da WABA</p>
+                <p className="text-[11px] text-zinc-500 mt-1">
+                  Consulta a Graph API no servidor com a credencial criptografada da unidade. Token, App Secret e appsecret_proof nunca aparecem aqui.
+                </p>
+                <div className="flex flex-wrap gap-2 mt-2">
+                  <button
+                    type="button"
+                    onClick={() => runWabaDiagnostic(false)}
+                    disabled={wabaChecking || wabaResubscribing}
+                    className="text-xs font-medium bg-white border border-zinc-300 text-zinc-700 rounded-md px-3 py-1.5 hover:bg-zinc-100 disabled:opacity-50"
+                  >
+                    {wabaChecking ? 'Consultando Meta…' : 'Verificar assinatura da WABA'}
+                  </button>
+                  {wabaDiagnostic?.subscription && wabaDiagnostic.subscription.httpStatus === 200 && !wabaDiagnostic.subscription.appIdFound && (
+                    <button
+                      type="button"
+                      onClick={() => runWabaDiagnostic(true)}
+                      disabled={wabaChecking || wabaResubscribing}
+                      className="text-xs font-medium bg-amber-50 border border-amber-300 text-amber-900 rounded-md px-3 py-1.5 hover:bg-amber-100 disabled:opacity-50"
+                    >
+                      {wabaResubscribing ? 'Reassinado…' : 'Reassinar webhook da WABA'}
+                    </button>
+                  )}
+                </div>
+                {wabaDiagnostic && (
+                  <div className="grid sm:grid-cols-2 gap-x-5 gap-y-1 mt-3 text-xs">
+                    <p>WABA inscrita no app: <strong>{wabaDiagnostic.subscription ? (wabaDiagnostic.subscription.wabaSubscribed ? 'SIM' : 'NÃO') : '—'}</strong></p>
+                    <p>App ID encontrado: <strong>{wabaDiagnostic.subscription ? (wabaDiagnostic.subscription.appIdFound ? 'SIM' : 'NÃO') : '—'}</strong></p>
+                    <p>Graph GET HTTP: <strong>{wabaDiagnostic.subscription?.httpStatus || '—'}</strong></p>
+                    {wabaDiagnostic.postHttpStatus !== undefined && <p>Graph POST HTTP: <strong>{wabaDiagnostic.postHttpStatus || '—'}</strong></p>}
+                    {wabaDiagnostic.subscription?.error && <p className="sm:col-span-2 text-amber-800">Erro: {wabaDiagnostic.subscription.error}</p>}
+                    {wabaDiagnostic.error && !wabaDiagnostic.subscription?.error && <p className="sm:col-span-2 text-amber-800">Erro: {wabaDiagnostic.error}</p>}
+                  </div>
+                )}
+                {wabaDiagnostic?.phone && (
+                  <div className="mt-3 rounded-md border border-emerald-200 bg-emerald-50 p-2.5 text-xs text-emerald-950">
+                    <p className="font-semibold">Phone Number ID · campos seguros retornados pela Meta</p>
+                    <div className="grid sm:grid-cols-2 gap-x-5 gap-y-1 mt-1">
+                      <p>status: <strong>{wabaDiagnostic.phone.status || '—'}</strong></p>
+                      <p>account_mode: <strong>{wabaDiagnostic.phone.accountMode || '—'}</strong></p>
+                      <p>platform_type: <strong>{wabaDiagnostic.phone.platformType || '—'}</strong></p>
+                      <p className="sm:col-span-2 break-all">webhook_configuration.application: <strong>{wabaDiagnostic.phone.webhookApplication || '—'}</strong></p>
+                      {wabaDiagnostic.phone.error && <p className="sm:col-span-2 text-amber-800">Erro: {wabaDiagnostic.phone.error}</p>}
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
           </details>
         )}
       </div>

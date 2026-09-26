@@ -5,7 +5,7 @@ import { requireBusiness } from '@/lib/access';
 import { pushAudit } from '@/lib/audit';
 import { normalizeFeatures } from '@/lib/features';
 import type { BusinessMode, TeamMode } from '@/lib/types';
-import { VALID_MODES, defaultBookingConfig } from '@/lib/types';
+import { VALID_MODES, defaultBookingConfig, isClinicType } from '@/lib/types';
 import { isValidTimezone } from '@/lib/tz';
 import { VALID_NAV } from '@/lib/nav';
 import { sanitizeAppearance } from '@/lib/appearance';
@@ -36,6 +36,18 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
 
     await updateDB((d) => {
       const b = d.businesses.find((x) => x.id === params.id)!;
+      // FASE 2 · P5 — tipo de clínica pode mudar depois (preset; valor inválido
+      // é ignorado em vez de corromper o dado).
+      if (body.clinicType !== undefined && isClinicType(body.clinicType)) {
+        b.clinicType = body.clinicType;
+      }
+      // FASE 2 · P8 — itens pulados do checklist (ids curtos; lista limitada).
+      if (Array.isArray(body.setupSkipped)) {
+        b.setupSkipped = body.setupSkipped
+          .filter((x: unknown) => typeof x === 'string' && x.trim().length > 0 && x.length <= 40)
+          .map((x: string) => x.trim())
+          .slice(0, 20);
+      }
       for (const key of ALLOWED) {
         if (body[key] === undefined) continue;
         if (key === 'modes') {

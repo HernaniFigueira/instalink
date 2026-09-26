@@ -6,7 +6,7 @@ import { BLOCK_DEFS } from '@/lib/templates';
 import { blockModuleGate } from '@/lib/features';
 import { NAV_ANCHORS, availableNavIds } from '@/lib/nav';
 import type { NavItemConfig, Professional, Service, Product } from '@/lib/types';
-import { THEME_PRESETS, matchingPreset, presetById } from '@/lib/themes';
+import { THEME_PRESETS, clinicPresetId, matchingPreset, presetById } from '@/lib/themes';
 import { cn } from '@/lib/utils';
 import type { Block, BlockType, Business, Page, Theme } from '@/lib/types';
 import { PageSkeleton, Tabs } from '@/components/ui';
@@ -14,16 +14,57 @@ import { AccessDenied, useAreaLoad } from '@/components/dashboard/AccessNotice';
 import { apiGet, apiSend } from '@/lib/api-client';
 import { Icon } from '@/components/icons';
 import { ClinicPreview } from '@/components/dashboard/ClinicPreview';
+import { WorkspaceSheet } from '@/components/dashboard/WorkspaceSheet';
 import { useUnsavedChanges } from '@/components/dashboard/useUnsavedChanges';
 import { ImageUpload } from '@/components/dashboard/ImageUpload';
 import { readFaqItems, visibleFaqItems, type FaqItem } from '@/lib/faq';
+
+// ═══════════════════════════════════════════════════════════════
+// EDITOR 2.0 — seções da coluna esquerda. Só entra na lista o que o
+// produto REALMENTE suporta (bloco existente/módulo possível): nenhuma
+// seção vazia promessa. "Modelo" reúne estrutura + menu; as demais abrem o
+// formulário daquela área com a prévia fixa ao lado.
+// ═══════════════════════════════════════════════════════════════
+type PageSection = 'modelo' | 'secoes' | 'perfil' | 'servicos' | 'equipe' | 'contato' | 'avaliacoes' | 'faq' | 'localizacao' | 'aparencia' | 'publicacao';
+const PAGE_SECTIONS: { id: PageSection; label: string; icon: string; available: (blocks: Block[]) => boolean }[] = [
+  { id: 'modelo', label: 'Modelo', icon: 'grid', available: () => true },
+  { id: 'secoes', label: 'Seções da página', icon: 'panel', available: () => true },
+  { id: 'perfil', label: 'Perfil', icon: 'store', available: (b) => b.some((x) => x.type === 'profile') },
+  { id: 'servicos', label: 'Serviços', icon: 'service', available: (b) => b.some((x) => x.type === 'services') },
+  { id: 'equipe', label: 'Equipe', icon: 'users', available: (b) => b.some((x) => x.type === 'professionals') },
+  { id: 'contato', label: 'Botões e contato', icon: 'phone', available: (b) => b.some((x) => x.type === 'buttons' || x.type === 'cta' || x.type === 'whatsapp' || x.type === 'quote') },
+  { id: 'avaliacoes', label: 'Avaliações', icon: 'star', available: (b) => b.some((x) => x.type === 'testimonials') },
+  { id: 'faq', label: 'FAQ', icon: 'chat', available: (b) => b.some((x) => x.type === 'faq') },
+  { id: 'localizacao', label: 'Localização', icon: 'pin', available: (b) => b.some((x) => x.type === 'location') },
+  { id: 'aparencia', label: 'Aparência', icon: 'spark', available: () => true },
+  { id: 'publicacao', label: 'Publicação', icon: 'upload', available: () => true },
+];
 
 export default function PaginaPage() {
   const params = useSearchParams();
   const businessId = params.get('b') || '';
   const [business, setBusiness] = useState<Business | null>(null);
   const [page, setPage] = useState<Page | null>(null);
-  const [tab, setTab] = useState<'blocks' | 'nav' | 'theme' | 'publish'>('blocks');
+  const [section, setSection] = useState<PageSection>(() => {
+    // Deep-link compatível com as abas antigas (?tab=…): editor 2.0 abre já na
+    // seção certa sem quebrar links/fluxos existentes.
+    try {
+      const q = new URLSearchParams(window.location.search).get('tab') as PageSection | null;
+      return q && PAGE_SECTIONS.some((x) => x.id === q) ? q : 'perfil';
+    } catch { return 'perfil'; }
+  });
+  const [previewSheet, setPreviewSheet] = useState(false);
+  // "Próximos passos" usa o MESMO checklist real do /api/overview (nada inventado).
+  const [setup, setSetup] = useState<{ pct: number; checklist: Array<{ done: boolean; label: string; href: string }> } | null>(null);
+  useEffect(() => {
+    if (!businessId) return;
+    let on = true;
+    apiGet<{ pct?: number; checklist?: Array<{ done: boolean; label: string; href: string }> }>(
+      `/api/overview?businessId=${businessId}&period=7`, { scope: 'area', area: 'Página' },
+    ).then((r) => { if (on && r.ok) setSetup({ pct: r.data?.pct ?? 0, checklist: r.data?.checklist || [] }); })
+      .catch(() => { if (on) setSetup(null); });
+    return () => { on = false; };
+  }, [businessId]);
   const [editing, setEditing] = useState<string | null>(null);
   const [msg, setMsg] = useState('');
   const [rvCounts, setRvCounts] = useState({ pending: 0, published: 0 });
@@ -36,7 +77,7 @@ export default function PaginaPage() {
   const [savedPage, setSavedPage] = useState('');
   const [savedAbout, setSavedAbout] = useState('');
   const [navDraft, setNavDraft] = useState<NavItemConfig[] | null>(null);
-  const [previewOpen, setPreviewOpen] = useState(false);
+
   const [catalog, setCatalog] = useState({ categories: [], products: [], options: [], optionValues: [], services: [], serviceCategories: [], professionals: [], reviews: [] });
   const snapshot = (p: Page) => JSON.stringify([p.blocks, p.theme, p.presetId]);
   const dirty = !!page && !!savedPage && (snapshot(page) !== savedPage || JSON.stringify(business?.about) !== savedAbout || navDraft !== null);
@@ -120,7 +161,7 @@ export default function PaginaPage() {
         <span className="mx-auto w-10 h-10 rounded-md bg-red-50 border border-red-200 text-red-600 flex items-center justify-center"><Icon n="alert" size={18} /></span>
         <p className="text-sm font-medium text-zinc-700 mt-3">{failed}</p>
         <button onClick={() => { setBusiness(null); setPage(null); setReloadTick((t) => t + 1); }}
-          className="mt-4 text-xs font-bold bg-[var(--brand)] text-white shadow-brand hover:bg-[var(--brand-strong)] px-4 py-2 rounded-md">Tentar de novo</button>
+          className="mt-4 text-xs font-semibold bg-[var(--brand)] text-white shadow-brand hover:bg-[var(--brand-strong)] px-4 py-2 rounded-md">Tentar de novo</button>
       </div>
     );
   }
@@ -142,19 +183,19 @@ export default function PaginaPage() {
         <span className="w-6 shrink-0" />
         <span className="w-[18px] shrink-0 flex justify-center text-zinc-300"><Icon n="pin" size={11} /></span>
         <div className="flex-1 min-w-0">
-          <p className="font-bold text-sm flex items-center gap-1.5 flex-wrap">
+          <p className="font-semibold text-sm flex items-center gap-1.5 flex-wrap">
             <span className={cn(aboutData.enabled ? 'text-zinc-900' : 'text-zinc-400')}>Sobre a empresa</span>
-            <span className="text-[10px] font-extrabold bg-zinc-100 text-zinc-500 px-2 py-0.5 rounded-full">seção fixa abaixo do Perfil</span>
+            <span className="text-[10px] font-semibold bg-zinc-100 text-zinc-500 px-2 py-0.5 rounded-full">seção fixa abaixo do Perfil</span>
             {!aboutFilled && (
-              <span className="text-[10px] font-extrabold bg-amber-100 text-amber-800 px-2 py-0.5 rounded-full">Falta preencher</span>
+              <span className="text-[10px] font-semibold bg-amber-100 text-amber-800 px-2 py-0.5 rounded-full">Falta preencher</span>
             )}
           </p>
           <p className="text-xs text-zinc-500 truncate">História, diferenciais e imagem do negócio</p>
         </div>
         <button aria-label="Editar Sobre a clínica" aria-expanded={editing === 'about'} onClick={() => setEditing(editing === 'about' ? null : 'about')}
-          className="text-xs font-bold bg-zinc-100 px-3 py-1.5 rounded-lg hover:bg-zinc-200">Editar</button>
+          className="text-xs font-semibold bg-zinc-100 px-3 py-1.5 rounded-lg hover:bg-zinc-200">Editar</button>
         <button onClick={() => setBusiness({ ...business, about: { ...aboutData, enabled: !aboutData.enabled } })}
-          className={cn('text-xs font-bold px-3 py-1.5 rounded-lg min-w-[64px]', aboutData.enabled ? 'bg-emerald-100 text-emerald-800 hover:bg-emerald-200' : 'bg-zinc-100 text-zinc-500 hover:bg-zinc-200')}>
+          className={cn('text-xs font-semibold px-3 py-1.5 rounded-lg min-w-[64px]', aboutData.enabled ? 'bg-emerald-100 text-emerald-800 hover:bg-emerald-200' : 'bg-zinc-100 text-zinc-500 hover:bg-zinc-200')}>
           {aboutData.enabled ? 'Ativo' : 'Oculto'}
         </button>
       </div>
@@ -172,204 +213,366 @@ export default function PaginaPage() {
   );
   const hasProfileBlock = blocks.some((b) => b.type === 'profile');
 
+  const available = PAGE_SECTIONS
+    .map((s) => ({ ...s, ok: s.available(blocks) }))
+    .filter((s) => s.ok);
+  const active = available.find((s) => s.id === section) ? section : 'modelo';
+  const blockOf = (t: BlockType) => blocks.find((b) => b.type === t);
+  const cardFor = (b: Block | undefined, extra?: React.ReactNode) => {
+    if (!b) return null;
+    return (
+      <section className="pe-card" key={b.id}>
+        <header className="pe-card__head">
+          <div className="min-w-0">
+            <p className="pe-card__title">
+              {BLOCK_DEFS[b.type]?.label || b.type}
+              {blockIsEmpty(b, rvCounts) && <span className="pe-tag pe-tag--warn">Falta preencher</span>}
+              {!b.enabled && <span className="pe-tag">oculto na página</span>}
+            </p>
+            <p className="pe-card__hint">{BLOCK_DEFS[b.type]?.hint}</p>
+          </div>
+          <button onClick={() => updateBlocks(blocks.map((x) => (x.id === b.id ? { ...x, enabled: !x.enabled } : x)))}
+            className={cn('pe-toggle', b.enabled && 'pe-toggle--on')}>
+            {b.enabled ? 'Ativo' : 'Oculto'}
+          </button>
+        </header>
+        <div className="pe-card__body">
+          <BlockSettings
+            block={b}
+            businessId={businessId}
+            business={business}
+            onChange={(settings) => {
+              const n = blocks.map((x) => (x.id === b.id ? { ...x, settings } : x));
+              setPage({ ...page, blocks: n });
+            }}
+            onSave={async () => { await save({ blocks: page.blocks }); }}
+            onRefresh={() => setReloadTick((t) => t + 1)}
+          />
+          {extra}
+        </div>
+      </section>
+    );
+  };
+
   return (
     <>
-      <div className="flex flex-wrap items-start justify-between gap-3 mb-6">
+      {/* ══ TOPO DO EDITOR: estado real + ações globais ══ */}
+      <div className="pe-top">
         <div className="min-w-0">
-          {/* Contexto: a página pertence ao negócio — nunca uma ilha isolada. */}
-          <p className="text-[11px] font-semibold tracking-wide uppercase text-zinc-400 mb-1">
-            <Link href={`/dashboard?b=${businessId}`} className="hover:text-zinc-700">{business.name}</Link>
-            <span aria-hidden="true"> · </span> Presença
-          </p>
-          <h1 className="text-2xl font-bold tracking-tight text-[var(--text)]">Minha página</h1>
-          {/* A3.3 — estado da página com cor + rótulo (nunca só o ponto). */}
-          <p className="text-sm text-[var(--text-muted)] mt-1 flex flex-wrap items-center gap-2">
-            <span className={cn('inline-flex items-center gap-1.5 text-xs font-bold rounded-pill px-2 py-0.5 border',
-              business.published
-                ? 'bg-[var(--success-bg)] border-[var(--success-border)] text-[var(--success-fg)]'
-                : 'bg-[var(--warning-bg)] border-[var(--warning-border)] text-[var(--warning-fg)]')}>
-              <span aria-hidden="true" className={cn('w-2 h-2 rounded-full', business.published ? 'bg-[var(--success)]' : 'bg-[var(--warning)]')} />
-              {business.published ? 'Publicada' : 'Não publicada'}
-            </span>
-            <a href={`/${business.slug}`} target="_blank" rel="noreferrer" className="text-[var(--brand-fg)] font-semibold hover:underline inline-flex items-center gap-1">instalink.app/{business.slug} <Icon n="external" size={12} /></a>
-          </p>
+          {/* Sem eyebrow de branding: o breadcrumb do shell já dá o contexto
+              (Início › Página); o nome da clínica vive no seletor de unidade. */}
+          <h1 className="pe-title">Editor da página</h1>
         </div>
-        <div className="flex items-center gap-2 shrink-0">
-          <a href={`/${business.slug}`} target="_blank" rel="noreferrer"
-            className="text-xs font-bold bg-[var(--brand)] text-white px-3.5 py-2 rounded-md border border-[var(--brand-strong)]/40 shadow-brand hover:bg-[var(--brand-strong)] inline-flex items-center gap-1.5">
-            <Icon n="eye" size={13} /> Ver página <Icon n="external" size={12} />
+        <div className="pe-top__actions">
+          <span className={cn('pe-state', business.published ? 'pe-state--on' : 'pe-state--draft')}>
+            <span aria-hidden="true" className="pe-state__dot" />
+            {business.published ? 'Publicado' : 'Rascunho'}
+          </span>
+          <span className="pe-state pe-state--muted" aria-live="polite">
+            {saving ? 'Salvando…' : dirty ? 'Alterações não salvas' : 'Tudo salvo'}
+          </span>
+          <a href={`/${business.slug}`} target="_blank" rel="noreferrer" className="pe-btn">
+            <Icon n="eye" size={13} /> Ver página <Icon n="external" size={11} />
           </a>
-          <Link href={`/dashboard?b=${businessId}`}
-            className="text-xs font-semibold bg-white border border-[var(--border-strong)] text-[var(--text)] px-3.5 py-2 rounded-md shadow-xs hover:bg-[var(--surface-hover)]">
-            Início
-          </Link>
+          <button type="button" disabled={saving} onClick={() => save({ published: true })} className="pe-btn pe-btn--green">
+            <Icon n="upload" size={13} />
+            {saving ? 'Publicando…' : business.published ? 'Atualizar publicação' : 'Publicar'}
+          </button>
+          <button type="button" disabled={saving || !dirty}
+            onClick={() => save({ blocks: page.blocks, theme: page.theme, presetId: page.presetId })}
+            className="pe-btn pe-btn--primary">
+            <Icon n="check" size={13} />
+            {saving ? 'Salvando…' : 'Salvar alterações'}
+          </button>
         </div>
       </div>
+      {msg && <p role={msg.startsWith('Falha') ? 'alert' : 'status'} className={`pe-msg ${msg.startsWith('Falha') ? 'pe-msg--err' : ''}`}>{msg}</p>}
 
-      <div className="editor-savebar" role="region" aria-label="Salvamento da página">
-        <div><p className="font-semibold text-sm">{saving ? 'Salvando…' : dirty ? 'Alterações não salvas' : 'Conteúdo salvo'}</p>
-          <p className="text-xs text-[var(--text-muted)]">{business.published ? 'Ao salvar, suas alterações entram no site público imediatamente.' : 'Salvar mantém o conteúdo. Use Publicação para colocar a página no ar.'} Todo botão salvar aplica as alterações desta tela, incluindo conteúdo, aparência e menu.</p></div>
-        <div className="flex gap-2 flex-wrap"><button type="button" className="il-control border rounded-md px-3" aria-expanded={previewOpen} onClick={() => setPreviewOpen(!previewOpen)}>Prévia das alterações</button>
-          <button type="button" disabled={saving || !dirty} className="il-control px-4 rounded-md bg-[var(--brand)] text-white disabled:opacity-50" onClick={() => save({ blocks: page.blocks, theme: page.theme, presetId: page.presetId })}>Salvar alterações</button></div>
-      </div>
-      {msg && <p role={msg.startsWith('Falha') ? 'alert' : 'status'} className={`mb-4 text-sm rounded-md px-4 py-3 ${msg.startsWith('Falha') ? 'bg-[var(--danger-bg)] text-[var(--danger-fg)]' : 'bg-[var(--success-bg)] text-[var(--success-fg)]'}`}>{msg}</p>}
-      {previewOpen && <ClinicPreview business={previewBusiness} page={page} catalog={catalog} />}
-      <fieldset disabled={saving} className="min-w-0 mt-5">
+      {/* ══ WORKSPACE DO EDITOR: seções · formulário · prévia fixa ══ */}
+      <div className="pe-grid">
+        <nav className="pe-nav" aria-label="Seções do editor da página">
+          {available.map((s) => (
+            <button key={s.id} type="button" aria-current={active === s.id ? 'page' : undefined}
+              onClick={() => setSection(s.id)} className="pe-nav__item">
+              <Icon n={s.icon} size={15} /> <span>{s.label}</span>
+            </button>
+          ))}
+        </nav>
 
-      {/* A3.3 — abas do editor em pill (mesmo padrão das outras telas). */}
-      <div className="mb-5">
-        <Tabs
-          items={[
-            { id: 'blocks' as const, label: 'Conteúdo e blocos', icon: 'grid' },
-            { id: 'nav' as const, label: 'Navegação e ações', icon: 'menu' },
-            { id: 'theme' as const, label: 'Aparência', icon: 'spark' },
-            { id: 'publish' as const, label: 'Publicação', icon: 'upload' },
-          ]}
-          value={tab}
-          onChange={setTab}
-          ariaLabel="Seções do editor da página"
-        />
-      </div>
-
-      {tab === 'nav' && (
-        <PageNavTab
-          business={business}
-          businessId={businessId}
-          blocks={blocks}
-          services={services}
-          products={products}
-          professionals={professionals}
-          reviewCount={rvCounts.published}
-          draft={navDraft} setDraft={setNavDraft}
-          onChangeAbout={about => setBusiness({ ...business, about })}
-          onSaveNav={(navItems) => save({ navItems })}
-          onAbout={(about) => save({ about } as any)}
-        />
-      )}
-
-      {tab === 'blocks' && (
-        <div className="grid lg:grid-cols-[minmax(0,1fr)_280px] gap-4 items-start">
-          <div className="bg-white border border-zinc-200 rounded-lg overflow-hidden">
-            <div className="flex items-center justify-between px-4 py-2.5 border-b border-zinc-100 bg-zinc-50/60">
-              <p className="text-xs font-semibold tracking-wide uppercase text-zinc-500">Ordem na página · {blocks.length} blocos</p>
-              <p className="text-[11px] text-zinc-400 hidden sm:block">as setas definem a ordem de exibição</p>
-            </div>
-            <div className="divide-y divide-zinc-100">
-              {blocks.map((b, i) => {
-                const gate = blockModuleGate(business, b.type);
-                return (
-                  <div key={b.id} data-block-id={b.id}>
-                  <div className={cn('px-3 py-2.5', !b.enabled && 'bg-zinc-50/60')}>
-                    <div className="flex flex-wrap items-center gap-2.5">
-                      <span className="w-6 text-center text-[11px] font-bold text-zinc-400 tabular-nums shrink-0">{i + 1}</span>
-                      <div className="flex flex-col gap-0.5 shrink-0">
-                        <button disabled={i === 0} onClick={() => { const n = [...blocks]; [n[i - 1], n[i]] = [n[i], n[i - 1]]; updateBlocks(n); }}
-                          className="text-zinc-500 hover:text-zinc-900 hover:bg-zinc-100 rounded p-2 disabled:opacity-20 disabled:hover:bg-transparent inline-flex" aria-label={`Mover ${BLOCK_DEFS[b.type]?.label || b.type} para cima`}><Icon n="chevU" size={12} /></button>
-                        <button disabled={i === blocks.length - 1} onClick={() => { const n = [...blocks]; [n[i + 1], n[i]] = [n[i], n[i + 1]]; updateBlocks(n); }}
-                          className="text-zinc-500 hover:text-zinc-900 hover:bg-zinc-100 rounded p-2 disabled:opacity-20 disabled:hover:bg-transparent inline-flex" aria-label={`Mover ${BLOCK_DEFS[b.type]?.label || b.type} para baixo`}><Icon n="chevD" size={12} /></button>
-                      </div>
-                      <div className="flex-1 min-w-0">
-                        <p className="font-bold text-sm flex items-center gap-1.5 flex-wrap">
-                          <span className={cn(b.enabled ? 'text-zinc-900' : 'text-zinc-400')}>{BLOCK_DEFS[b.type]?.label || b.type}</span>
-                          {blockIsEmpty(b, rvCounts) && (
-                            <span className="text-[10px] font-extrabold bg-amber-100 text-amber-800 px-2 py-0.5 rounded-full">Falta preencher</span>
-                          )}
-                          {gate && (
-                            <span className="text-[10px] font-extrabold bg-zinc-100 text-zinc-500 px-2 py-0.5 rounded-full inline-flex items-center gap-1" title={`O módulo ${gate} está desligado — o bloco fica salvo, mas não aparece na página até o módulo voltar em Recursos.`}>
-                              <Icon n="lock" size={9} /> módulo {gate} desligado
-                            </span>
-                          )}
-                          {b.type === 'testimonials' && rvCounts.pending > 0 && (
-                            <span className="text-[10px] font-extrabold bg-blue-100 text-blue-800 px-2 py-0.5 rounded-full">{rvCounts.pending} para aprovar</span>
-                          )}
-                          {b.type === 'testimonials' && rvCounts.published > 0 && (
-                            <span className="text-[10px] font-extrabold bg-emerald-100 text-emerald-800 px-2 py-0.5 rounded-full">{rvCounts.published} no ar</span>
-                          )}
-                        </p>
-                        <p className="text-xs text-zinc-500 truncate">{BLOCK_DEFS[b.type]?.hint}</p>
-                      </div>
-                      <button aria-label={`Editar ${BLOCK_DEFS[b.type]?.label || b.type}`} aria-expanded={editing === b.id} onClick={() => setEditing(editing === b.id ? null : b.id)}
-                        className="text-xs font-bold bg-zinc-100 px-3 py-1.5 rounded-lg hover:bg-zinc-200">Editar</button>
-                      <button onClick={() => updateBlocks(blocks.map((x) => (x.id === b.id ? { ...x, enabled: !x.enabled } : x)))}
-                        className={cn('text-xs font-bold px-3 py-1.5 rounded-lg min-w-[64px]', b.enabled ? 'bg-emerald-100 text-emerald-800 hover:bg-emerald-200' : 'bg-zinc-100 text-zinc-500 hover:bg-zinc-200')}>
-                        {b.enabled ? 'Ativo' : 'Oculto'}
-                      </button>
-                      {b.type !== 'profile' && (
-                        <button onClick={() => { if (confirm('Remover este bloco?')) updateBlocks(blocks.filter((x) => (x.id !== b.id))); }}
-                          className="text-xs font-bold text-red-500 px-2 py-1.5 hover:bg-red-50 rounded-lg inline-flex" aria-label="Remover bloco"><Icon n="x" size={12} /></button>
-                      )}
+        <div className="pe-form min-w-0">
+          <fieldset disabled={saving} className="min-w-0 space-y-4">
+            {active === 'modelo' && (
+              <>
+                {/* HOMOLOGAÇÃO · P1 — Modelo = templates/preset da página. */}
+                <ThemePresetCards
+                  theme={page.theme}
+                  presetId={page.presetId || undefined}
+                  niche={business.niche}
+                  clinicType={business.clinicType}
+                  onApply={(t, id) => setPage({ ...page, theme: t, presetId: id })}
+                />
+                <div className="bg-white border border-zinc-200 rounded-lg p-4">
+                  <p className="font-semibold text-sm mb-1">Itens do menu e blocos da página</p>
+                  <p className="text-xs text-zinc-500 mb-3">Ordem, ativação e conteúdo dos blocos vivem em <strong>Seções da página</strong>. O menu público segue o que está ativo.</p>
+                  <button type="button" onClick={() => setSection('secoes')}
+                    className="text-sm font-semibold bg-[var(--surface-2)] text-[var(--text)] px-4 py-2 rounded-md hover:bg-[var(--brand-soft)] hover:text-[var(--brand-fg)]">
+                    Abrir Seções da página
+                  </button>
+                </div>
+              </>
+            )}
+            {active === 'secoes' && (
+              <>
+                <div className="bg-white border border-zinc-200 rounded-lg p-4">
+                  <p className="font-semibold text-sm mb-1">Menu público e texto de apresentação</p>
+                  <p className="text-xs text-zinc-500 mb-3">Configure os itens de navegação e o “Sobre” — o menu segue os blocos ativos.</p>
+                  <details className="mt-2">
+                    <summary className="cursor-pointer text-xs font-semibold uppercase tracking-wide text-[var(--text-muted)]">Abrir configuração do menu</summary>
+                    <div className="mt-3">
+                      <PageNavTab
+                        business={business}
+                        businessId={businessId}
+                        blocks={blocks}
+                        services={services}
+                        products={products}
+                        professionals={professionals}
+                        reviewCount={rvCounts.published}
+                        draft={navDraft} setDraft={setNavDraft}
+                        onChangeAbout={about => setBusiness({ ...business, about })}
+                        onSaveNav={(navItems) => save({ navItems })}
+                        onAbout={(about) => save({ about } as any)}
+                      />
                     </div>
-                    {editing === b.id && (
-                      <div className="mt-3 pt-3 border-t border-zinc-100">
-                        <BlockSettings
-                          block={b}
-                          businessId={businessId}
-                          business={business}
-                          onChange={(settings) => {
-                            const n = blocks.map((x) => (x.id === b.id ? { ...x, settings } : x));
-                            setPage({ ...page, blocks: n });
-                          }}
-                          onSave={async () => { if (await save({ blocks: page.blocks })) setEditing(null); }}
-                          onRefresh={() => setReloadTick((t) => t + 1)}
-                        />
-                      </div>
-                    )}
+                  </details>
+                </div>
+
+                <div className="space-y-4">
+                  <div className="bg-white border border-zinc-200 rounded-lg overflow-hidden">
+                    <div className="flex items-center justify-between px-4 py-2.5 border-b border-zinc-100 bg-zinc-50/60">
+                      <p className="text-xs font-semibold tracking-wide uppercase text-zinc-500">Seções da página · {blocks.length} blocos</p>
+                      <p className="text-[11px] text-zinc-400 hidden sm:block">ordenar, ativar e editar — Editar abre o bloco</p>
+                    </div>
+                    <div className="divide-y divide-zinc-100">
+                      {blocks.map((b, i) => {
+                        const gate = blockModuleGate(business, b.type);
+                        return (
+                          <div key={b.id} data-block-id={b.id}>
+                          <div className={cn('px-3 py-2.5', !b.enabled && 'bg-zinc-50/60')}>
+                            <div className="flex flex-wrap items-center gap-2.5">
+                              <span className="w-6 text-center text-[11px] font-semibold text-zinc-400 tabular-nums shrink-0">{i + 1}</span>
+                              <div className="flex flex-col gap-0.5 shrink-0">
+                                <button disabled={i === 0} onClick={() => { const n = [...blocks]; [n[i - 1], n[i]] = [n[i], n[i - 1]]; updateBlocks(n); }}
+                                  className="text-zinc-500 hover:text-zinc-900 hover:bg-zinc-100 rounded p-2 disabled:opacity-20 disabled:hover:bg-transparent inline-flex" aria-label={`Mover ${BLOCK_DEFS[b.type]?.label || b.type} para cima`}><Icon n="chevU" size={12} /></button>
+                                <button disabled={i === blocks.length - 1} onClick={() => { const n = [...blocks]; [n[i + 1], n[i]] = [n[i], n[i + 1]]; updateBlocks(n); }}
+                                  className="text-zinc-500 hover:text-zinc-900 hover:bg-zinc-100 rounded p-2 disabled:opacity-20 disabled:hover:bg-transparent inline-flex" aria-label={`Mover ${BLOCK_DEFS[b.type]?.label || b.type} para baixo`}><Icon n="chevD" size={12} /></button>
+                              </div>
+                              <div className="flex-1 min-w-0">
+                                <p className="font-semibold text-sm flex items-center gap-1.5 flex-wrap">
+                                  <span className={cn(b.enabled ? 'text-zinc-900' : 'text-zinc-400')}>{BLOCK_DEFS[b.type]?.label || b.type}</span>
+                                  {blockIsEmpty(b, rvCounts) && (
+                                    <span className="text-[10px] font-semibold bg-amber-100 text-amber-800 px-2 py-0.5 rounded-full">Falta preencher</span>
+                                  )}
+                                  {gate && (
+                                    <span className="text-[10px] font-semibold bg-zinc-100 text-zinc-500 px-2 py-0.5 rounded-full inline-flex items-center gap-1" title={`O módulo ${gate} está desligado — o bloco fica salvo, mas não aparece na página até o módulo voltar em Recursos.`}>
+                                      <Icon n="lock" size={9} /> módulo {gate} desligado
+                                    </span>
+                                  )}
+                                  {b.type === 'testimonials' && rvCounts.pending > 0 && (
+                                    <span className="text-[10px] font-semibold bg-blue-100 text-blue-800 px-2 py-0.5 rounded-full">{rvCounts.pending} para aprovar</span>
+                                  )}
+                                  {b.type === 'testimonials' && rvCounts.published > 0 && (
+                                    <span className="text-[10px] font-semibold bg-emerald-100 text-emerald-800 px-2 py-0.5 rounded-full">{rvCounts.published} no ar</span>
+                                  )}
+                                </p>
+                                <p className="text-xs text-zinc-500 truncate">{BLOCK_DEFS[b.type]?.hint}</p>
+                              </div>
+                              <button aria-label={`Editar ${BLOCK_DEFS[b.type]?.label || b.type}`} aria-expanded={editing === b.id} onClick={() => { setEditing(editing === b.id ? null : b.id); }}
+                                className="text-xs font-semibold bg-zinc-100 px-3 py-1.5 rounded-lg hover:bg-zinc-200">Editar</button>
+                              <button onClick={() => updateBlocks(blocks.map((x) => (x.id === b.id ? { ...x, enabled: !x.enabled } : x)))}
+                                className={cn('text-xs font-semibold px-3 py-1.5 rounded-lg min-w-[64px]', b.enabled ? 'bg-emerald-100 text-emerald-800 hover:bg-emerald-200' : 'bg-zinc-100 text-zinc-500 hover:bg-zinc-200')}>
+                                {b.enabled ? 'Ativo' : 'Oculto'}
+                              </button>
+                              {b.type !== 'profile' && (
+                                <button onClick={() => { if (confirm('Remover este bloco?')) updateBlocks(blocks.filter((x) => (x.id !== b.id))); }}
+                                  className="text-xs font-semibold text-red-500 px-2 py-1.5 hover:bg-red-50 rounded-lg inline-flex" aria-label="Remover bloco"><Icon n="x" size={12} /></button>
+                              )}
+                            </div>
+                            {editing === b.id && (
+                              <div className="mt-3 pt-3 border-t border-zinc-100">
+                                <BlockSettings
+                                  block={b}
+                                  businessId={businessId}
+                                  business={business}
+                                  onChange={(settings) => {
+                                    const n = blocks.map((x) => (x.id === b.id ? { ...x, settings } : x));
+                                    setPage({ ...page, blocks: n });
+                                  }}
+                                  onSave={async () => { if (await save({ blocks: page.blocks })) setEditing(null); }}
+                                  onRefresh={() => setReloadTick((t) => t + 1)}
+                                />
+                              </div>
+                            )}
+                          </div>
+                          {b.type === 'profile' && aboutRow}
+                          </div>
+                        );
+                      })}
+                      {!hasProfileBlock && aboutRow}
+                    </div>
                   </div>
-                  {b.type === 'profile' && aboutRow}
+                  <div className="bg-white border border-zinc-200 rounded-lg p-4 lg:sticky lg:top-4">
+                    <p className="font-semibold text-sm mb-1">Adicionar bloco</p>
+                    <p className="text-xs text-zinc-500 mb-3">Blocos de conversão seguem os módulos da empresa (Recursos).</p>
+                    <div className="flex flex-wrap gap-2">
+                      {(Object.keys(BLOCK_DEFS) as BlockType[])
+                        .filter((t) => t !== 'profile' && t !== 'booking' && t !== 'quote')
+                        .map((t) => {
+                          const gate = blockModuleGate(business, t);
+                          return (
+                            <button key={t} disabled={!!gate}
+                              title={gate ? `Ative o módulo “${gate}” em Recursos para usar este bloco` : undefined}
+                              onClick={() => updateBlocks([...blocks, { id: `b-${Date.now()}-${t}`, type: t, order: blocks.length, enabled: true, settings: {} }])}
+                              className={cn('text-xs font-semibold px-3 py-2 rounded-lg transition-colors',
+                                gate ? 'bg-[var(--surface-2)] text-[var(--text-muted)] cursor-not-allowed' : 'bg-[var(--surface-2)] text-[var(--text)] hover:bg-[var(--brand-soft)] hover:text-[var(--brand-fg)]')}>
+                              + {BLOCK_DEFS[t]?.label}
+                            </button>
+                          );
+                        })}
+                    </div>
                   </div>
-                );
-              })}
-              {/* Página sem bloco de Perfil (raro): o "Sobre" continua visível
-                  na Estrutura — preso ao final, com o aviso de seção fixa. */}
-              {!hasProfileBlock && aboutRow}
-            </div>
-          </div>
-          <div className="bg-white border border-zinc-200 rounded-lg p-4 lg:sticky lg:top-4">
-            <p className="font-bold text-sm mb-1">Adicionar bloco</p>
-            {/* Estrutura = o que existe e em que ordem. Cores/fonte ficam na aba Visual — nunca aqui. */}
-            <p className="text-xs text-zinc-500 mb-3">Blocos de conversão seguem os módulos da empresa (Recursos). Agendamento e CTA já existem na página padrão.</p>
-            <div className="flex flex-wrap gap-2">
-              {(Object.keys(BLOCK_DEFS) as BlockType[])
-                .filter((t) => t !== 'profile' && t !== 'booking' && t !== 'quote')
-                .map((t) => {
-                  const gate = blockModuleGate(business, t);
-                  return (
-                    <button key={t} disabled={!!gate}
-                      title={gate ? `Ative o módulo “${gate}” em Recursos para usar este bloco` : undefined}
-                      onClick={() => updateBlocks([...blocks, { id: `b-${Date.now()}-${t}`, type: t, order: blocks.length, enabled: true, settings: {} }])}
-                      className={cn('text-xs font-bold px-3 py-2 rounded-lg transition-colors',
-                        gate ? 'bg-[var(--surface-2)] text-[var(--text-muted)] cursor-not-allowed' : 'bg-[var(--surface-2)] text-[var(--text)] hover:bg-[var(--brand-soft)] hover:text-[var(--brand-fg)]')}>
-                      + {BLOCK_DEFS[t]?.label}
+                </div>
+              </>
+            )}
+            {active === 'perfil' && (
+              <>
+{/* HOMOLOGAÇÃO · P1 — capa/hero da página pública (mesma fonte institucional). */}
+                <div className="bg-white border border-zinc-200 rounded-lg p-4 space-y-2">
+                  <p className="font-semibold text-sm">Capa da página</p>
+                  <p className="text-xs text-zinc-500">Aparece no topo da página pública. A logo fica em Configurações → Identidade.</p>
+                  <ImageUpload label="CAPA / HERO" value={business.cover || ''} onChange={(url) => setBusiness({ ...business, cover: url })} businessId={businessId} />
+                </div>
+                {cardFor(blockOf('profile'))}
+                <section className="pe-card">
+                  <header className="pe-card__head">
+                    <div className="min-w-0">
+                      <p className="pe-card__title">
+                        Sobre a empresa
+                        <span className="pe-tag">seção fixa abaixo do Perfil</span>
+                        {!aboutFilled && <span className="pe-tag pe-tag--warn">Falta preencher</span>}
+                      </p>
+                      <p className="pe-card__hint">História, diferenciais e imagem do negócio.</p>
+                    </div>
+                    <button onClick={() => setBusiness({ ...business, about: { ...aboutData, enabled: !aboutData.enabled } })}
+                      className={cn('pe-toggle', aboutData.enabled && 'pe-toggle--on')}>
+                      {aboutData.enabled ? 'Ativo' : 'Oculto'}
                     </button>
-                  );
-                })}
+                  </header>
+                  <div className="pe-card__body">
+                    <AboutSectionEditor
+                      about={aboutData}
+                      onChange={about => setBusiness({ ...business, about })}
+                      businessId={businessId}
+                      onSave={async (a) => { await save({ about: a }); }}
+                    />
+                  </div>
+                </section>
+              </>
+            )}
+            {active === 'servicos' && cardFor(blockOf('services'))}
+            {active === 'equipe' && cardFor(blockOf('professionals'))}
+            {active === 'contato' && (
+              <>
+                {cardFor(blockOf('buttons'))}
+                {cardFor(blockOf('cta'))}
+                {cardFor(blockOf('whatsapp'))}
+                {cardFor(blockOf('quote'))}
+              </>
+            )}
+            {active === 'avaliacoes' && (
+              <>
+                {cardFor(blockOf('testimonials'))}
+                <section className="pe-card">
+                  <header className="pe-card__head">
+                    <div className="min-w-0">
+                      <p className="pe-card__title">Moderação das avaliações</p>
+                      <p className="pe-card__hint">O que entra no ar na seção de avaliações.</p>
+                    </div>
+                  </header>
+                  <div className="pe-card__body"><ReviewsEditor businessId={businessId} /></div>
+                </section>
+              </>
+            )}
+            {active === 'faq' && cardFor(blockOf('faq'))}
+            {active === 'localizacao' && (
+              <>
+                <LocationAddressEditor business={business} businessId={businessId}
+                  onSave={(patch) => setBusiness({ ...business, ...patch })} />
+                {cardFor(blockOf('location'))}
+              </>
+            )}
+            {active === 'aparencia' && (
+              <ThemeEditor theme={page.theme} presetId={page.presetId || ''} onChange={(theme, presetId) => { setPage({ ...page, theme, presetId }); }} onSave={() => save({ theme: page.theme, presetId: page.presetId || '' })} saving={saving} />
+            )}
+            {active === 'publicacao' && (
+              <PublishTab business={business} businessId={businessId} onSlug={(slug) => save({ slug })} onPublish={(published) => save({ published })} />
+            )}
+          </fieldset>
+        </div>
+
+        {/* Prévia fixa — acompanha a edição. */}
+        <aside className="pe-preview" aria-label="Prévia">
+          <ClinicPreview business={previewBusiness} page={page} catalog={catalog} />
+        </aside>
+      </div>
+
+      {/* Barra de progresso da configuração (mockup): dados reais do overview. */}
+      {setup && setup.checklist.length > 0 && (
+        <section className="dsh-card mt-4" aria-label="Próximos passos da configuração">
+          <div className="dsh-card__head">
+            <h2 className="dsh-card__title">Próximos passos</h2>
+            <span className="text-[12px] font-semibold text-[var(--text-muted)]">
+              {setup.checklist.filter((c) => c.done).length} de {setup.checklist.length} concluídos
+            </span>
+          </div>
+          <div className="dsh-card__body">
+            <div className="h-2 rounded-full bg-[var(--surface-3)] overflow-hidden mb-3" role="progressbar"
+              aria-valuenow={setup.pct} aria-valuemin={0} aria-valuemax={100}>
+              <div className="h-full rounded-full bg-[var(--brand)] transition-all" style={{ width: `${setup.pct}%` }} />
+            </div>
+            <div className="flex flex-wrap items-center gap-2">
+              {setup.checklist.map((c) => (
+                <span key={c.label} className={`pe-next__chip ${c.done ? 'pe-next__chip--done' : ''}`}>
+                  <span className={`dsh-check__mark ${c.done ? 'dsh-check__mark--done' : 'dsh-check__mark--todo'}`} aria-hidden="true">
+                    {c.done && <Icon n="check" size={12} />}
+                  </span>
+                  {c.label}
+                </span>
+              ))}
+              {(() => {
+                const next = setup.checklist.find((c) => !c.done);
+                return next ? (
+                  <Link href={`${next.href}${next.href.includes('?') ? '&' : '?'}b=${businessId}`} className="ws-newbtn ml-auto">
+                    Continuar configuração <Icon n="chevronRight" size={14} />
+                  </Link>
+                ) : (
+                  <span className="ml-auto text-[12px] font-semibold text-[var(--success-fg)] inline-flex items-center gap-1.5">
+                    <Icon n="checkCircle" size={15} /> Configuração completa
+                  </span>
+                );
+              })()}
             </div>
           </div>
-        </div>
+        </section>
       )}
 
-      {tab === 'theme' && (
-        // Audito §16: a aba Visual usava só a coluna esquerda e empilhava o
-        // preview embaixo. Agora é workspace: CONTROLES à esquerda, PREVIEW
-        // DA PÁGINA REAL à direita (sticky, alto) — no desktop a área branca
-        // deixa de ser desperdiçada. No mobile, o preview vem primeiro e o
-        // controle acompanha, adaptando naturalmente.
-        <div className="grid lg:grid-cols-[minmax(0,1fr)_minmax(360px,420px)] gap-4 items-start">
-          <div className="order-2 lg:order-1 space-y-4">
-            <ThemeEditor theme={page.theme} presetId={page.presetId || ''} onChange={(theme, presetId) => { setPage({ ...page, theme, presetId }); }} onSave={() => save({ theme: page.theme, presetId: page.presetId || '' })} saving={saving} />
-          </div>
-          <div className="order-1 lg:order-2 lg:sticky lg:top-4 space-y-2">
-            {/* Prévia da PÁGINA REAL mora na aba Visual: o lojista vê o
-                resultado de verdade enquanto ajusta tema e cores. */}
-            <ClinicPreview business={previewBusiness} page={page} catalog={catalog} />
-          </div>
-        </div>
-      )}
-
-      {tab === 'publish' && (
-        <PublishTab business={business} businessId={businessId} onSlug={(slug) => save({ slug })} onPublish={(published) => save({ published })} />
-      )}
-      </fieldset>
+      {/* Telas estreitas: a mesma prévia abre em sheet, nunca some. */}
+      <button type="button" className="pe-fab" onClick={() => setPreviewSheet(true)} aria-haspopup="dialog">
+        <Icon n="monitor" size={15} /> Prévia
+      </button>
+      <WorkspaceSheet open={previewSheet} onClose={() => setPreviewSheet(false)} title="Prévia"
+        icon="eye" width="min(560px, 94vw)">
+        <div className="p-3"><ClinicPreview business={previewBusiness} page={page} catalog={catalog} /></div>
+      </WorkspaceSheet>
     </>
   );
 }
@@ -474,7 +677,7 @@ function PageNavTab({ business, businessId, blocks, services, products, professi
       <section className="bg-white border border-zinc-200 rounded-lg p-4">
         <div className="flex flex-wrap items-center justify-between gap-2 mb-1">
           <div>
-            <p className="font-bold text-sm">Itens do menu público</p>
+            <p className="font-semibold text-sm">Itens do menu público</p>
             <p className="text-xs text-zinc-500 mt-0.5">
               {auto
                 ? 'Modo automático: a página monta o menu conforme módulos e conteúdo preenchido. Qualquer ajuste abaixo vira configuração sua.'
@@ -497,7 +700,7 @@ function PageNavTab({ business, businessId, blocks, services, products, professi
             return (
               <div key={item.id}>
                 {showGroupHeader && (
-                  <p className="px-3 pt-2.5 pb-1 text-[10px] font-extrabold uppercase tracking-wider text-zinc-400 bg-zinc-50/60">
+                  <p className="px-3 pt-2.5 pb-1 text-[10px] font-semibold uppercase tracking-wider text-zinc-400 bg-zinc-50/60">
                     {item.type === 'anchor' ? 'Seções da página' : 'Links externos'}
                   </p>
                 )}
@@ -509,7 +712,7 @@ function PageNavTab({ business, businessId, blocks, services, products, professi
                     className="text-zinc-400 hover:text-zinc-900 disabled:opacity-20 px-0.5 inline-flex"><Icon n="chevD" size={11} /></button>
                 </div>
                 <button onClick={() => ok && toggleItem(item)} disabled={!ok}
-                  className={cn('text-[11px] font-bold px-2.5 py-1 rounded-full border shrink-0 transition-colors',
+                  className={cn('text-[11px] font-semibold px-2.5 py-1 rounded-full border shrink-0 transition-colors',
                     !ok ? 'bg-zinc-50 text-zinc-400 border-zinc-200 cursor-not-allowed'
                     : on ? 'bg-[var(--brand-soft)] text-[var(--brand-fg)] border-[var(--brand-border)]'
                     : 'bg-white text-[var(--text-muted)] border-[var(--border-strong)]')}
@@ -519,7 +722,7 @@ function PageNavTab({ business, businessId, blocks, services, products, professi
                 <input aria-label={`Nome no menu: ${NAV_ANCHORS[item.id]?.label || item.id}`} value={item.label} onChange={(e) => rename(item, e.target.value)} disabled={!ok}
                   className="flex-1 min-w-[110px] bg-transparent border-0 focus:border focus:border-zinc-300 rounded-md px-2 py-1 text-sm font-semibold disabled:text-zinc-400"
                   placeholder={NAV_ANCHORS[item.id]?.label || item.id} maxLength={40} />
-                <span className="text-[10px] font-bold text-zinc-400 uppercase shrink-0 w-14 text-right">
+                <span className="text-[10px] font-semibold text-zinc-400 uppercase shrink-0 w-14 text-right">
                   {item.type === 'anchor' ? 'Seção' : 'Link'}
                 </span>
                 </div>
@@ -535,23 +738,23 @@ function PageNavTab({ business, businessId, blocks, services, products, professi
 
         <div className="flex flex-wrap gap-2 mt-3">
           <button disabled={!dirty} onClick={async () => { if (await onSaveNav(draft || []) !== false) setDraft(null); }}
-            className="text-sm font-bold bg-[var(--brand)] text-white shadow-brand hover:bg-[var(--brand-strong)] px-4 py-2.5 rounded-md disabled:opacity-40">
+            className="text-sm font-semibold bg-[var(--brand)] text-white shadow-brand hover:bg-[var(--brand-strong)] px-4 py-2.5 rounded-md disabled:opacity-40">
             Salvar menu
           </button>
           {!auto && (
-            <button onClick={() => setDraft([])} className="text-sm font-bold bg-zinc-100 px-4 py-2.5 rounded-md hover:bg-zinc-200">
+            <button onClick={() => setDraft([])} className="text-sm font-semibold bg-zinc-100 px-4 py-2.5 rounded-md hover:bg-zinc-200">
               Voltar ao automático
             </button>
           )}
           {dirty && (
-            <button onClick={() => setDraft(null)} className="text-sm font-bold text-zinc-500 px-3 py-2.5 rounded-md hover:text-zinc-900">Descartar</button>
+            <button onClick={() => setDraft(null)} className="text-sm font-semibold text-zinc-500 px-3 py-2.5 rounded-md hover:text-zinc-900">Descartar</button>
           )}
         </div>
       </section>
 
       <section className="bg-white border border-zinc-200 rounded-lg p-4 space-y-3">
         <div className="flex items-center justify-between">
-          <p className="font-bold text-sm">Sobre a empresa</p>
+          <p className="font-semibold text-sm">Sobre a empresa</p>
           <button onClick={() => setAboutDraft({ ...aboutDraft, enabled: !about.enabled })}
             className={cn('text-xs font-medium px-3 py-1 rounded-full border', about.enabled ? 'bg-[var(--brand-soft)] text-[var(--brand-fg)] border-[var(--brand-border)]' : 'bg-white border-[var(--border)] text-[var(--text-muted)]')}>
             {about.enabled ? 'Visível' : 'Oculto'}
@@ -561,7 +764,7 @@ function PageNavTab({ business, businessId, blocks, services, products, professi
         <input aria-label="Título sobre a clínica" value={aboutDraft.title} onChange={(e) => setAboutDraft({ ...aboutDraft, title: e.target.value })} className="w-full rounded-md border border-zinc-300 px-3 py-2 text-sm" placeholder="Título (ex: Sobre a clínica)" />
         <textarea aria-label="Texto sobre a clínica" value={aboutDraft.text} onChange={(e) => setAboutDraft({ ...aboutDraft, text: e.target.value })} className="w-full rounded-md border border-zinc-300 px-3 py-2 text-sm" rows={3} placeholder="Ex: Somos uma clínica especializada em…" />
         <ImageUpload label="IMAGEM (OPCIONAL)" value={aboutDraft.image} onChange={(url) => setAboutDraft({ ...aboutDraft, image: url })} businessId={businessId} />
-        <button onClick={() => onAbout(aboutDraft)} className="text-sm font-bold bg-[var(--brand)] text-white shadow-brand hover:bg-[var(--brand-strong)] px-4 py-2 rounded-md">Salvar “Sobre”</button>
+        <button onClick={() => onAbout(aboutDraft)} className="text-sm font-semibold bg-[var(--brand)] text-white shadow-brand hover:bg-[var(--brand-strong)] px-4 py-2 rounded-md">Salvar “Sobre”</button>
       </section>
     </div>
   );
@@ -583,20 +786,20 @@ function AboutSectionEditor({ about, businessId, onSave, onChange }: {
   return (
     <div className="space-y-3">
       <div>
-        <span className="text-xs font-bold text-zinc-500">TÍTULO</span>
+        <span className="text-xs font-semibold text-zinc-500">TÍTULO</span>
         <input aria-label="Título sobre a clínica" value={draft.title} onChange={(e) => set('title', e.target.value)}
           className="mt-1 w-full rounded-md border border-zinc-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500"
           placeholder="Ex: Sobre a clínica" maxLength={80} />
       </div>
       <div>
-        <span className="text-xs font-bold text-zinc-500">TEXTO</span>
+        <span className="text-xs font-semibold text-zinc-500">TEXTO</span>
         <textarea aria-label="Texto sobre a clínica" value={draft.text} onChange={(e) => set('text', e.target.value)}
           className="mt-1 w-full rounded-md border border-zinc-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500"
           rows={4} placeholder="Ex: Somos uma clínica especializada em…" maxLength={1200} />
       </div>
       <ImageUpload label="IMAGEM (OPCIONAL)" value={draft.image} onChange={(url) => set('image', url)} businessId={businessId} />
       <button onClick={() => onSave({ ...draft, enabled: !!draft.enabled })}
-        className="text-sm font-bold bg-[var(--brand)] text-white shadow-brand hover:bg-[var(--brand-strong)] px-4 py-2 rounded-md">
+        className="text-sm font-semibold bg-[var(--brand)] text-white shadow-brand hover:bg-[var(--brand-strong)] px-4 py-2 rounded-md">
         Salvar “Sobre”
       </button>
     </div>
@@ -624,6 +827,63 @@ function blockIsEmpty(b: Block, rvCounts: { pending: number; published: number }
     }
     default: return false;
   }
+}
+
+
+// HOMOLOGAÇÃO · P1 — Localização edita a MESMA fonte institucional do
+// endereço (Business.address/…) que alimenta Configurações e a página.
+function LocationAddressEditor({ business, businessId, onSave }: {
+  business: Business;
+  businessId: string;
+  onSave: (patch: Partial<Business>) => void;
+}) {
+  const [draft, setDraft] = useState({
+    address: business.address || '',
+    mapsUrl: business.mapsUrl || '',
+  });
+  const [saving, setSaving] = useState(false);
+  const [saved, setSaved] = useState(false);
+  const save = async () => {
+    setSaving(true);
+    try {
+      const res = await fetch(`/api/businesses/${businessId}`, {
+        method: 'PATCH', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ address: draft.address, mapsUrl: draft.mapsUrl }),
+      });
+      if (res.ok) {
+        onSave({ address: draft.address, mapsUrl: draft.mapsUrl });
+        setSaved(true);
+        setTimeout(() => setSaved(false), 2000);
+      }
+    } finally { setSaving(false); }
+  };
+  return (
+    <div className="bg-white border border-zinc-200 rounded-lg p-4 space-y-3" data-testid="location-address-editor">
+      <div>
+        <p className="font-semibold text-sm">Endereço da clínica</p>
+        <p className="text-xs text-zinc-500">Mesma fonte de Configurações → Contato — editar aqui atualiza o cadastro institucional.</p>
+      </div>
+      <label className="block">
+        <span className="text-xs font-semibold tracking-wide uppercase text-zinc-500">Endereço completo</span>
+        <input value={draft.address} onChange={(e) => setDraft({ ...draft, address: e.target.value })}
+          className="mt-1 w-full rounded-md border border-zinc-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500"
+          placeholder="Rua, número, bairro, cidade" />
+      </label>
+      <label className="block">
+        <span className="text-xs font-semibold tracking-wide uppercase text-zinc-500">Link do Google Maps</span>
+        <input value={draft.mapsUrl} onChange={(e) => setDraft({ ...draft, mapsUrl: e.target.value })}
+          className="mt-1 w-full rounded-md border border-zinc-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500"
+          placeholder="https://maps.app.goo.gl/…" />
+      </label>
+      <div className="flex items-center gap-3">
+        <button type="button" onClick={save} disabled={saving}
+          className="text-sm font-semibold bg-[var(--brand)] text-white shadow-brand hover:bg-[var(--brand-strong)] px-4 py-2 rounded-md disabled:opacity-60">
+          {saving ? 'Salvando…' : 'Salvar endereço'}
+        </button>
+        {saved && <span className="text-xs font-semibold text-[var(--success)]">Salvo ✓</span>}
+      </div>
+    </div>
+  );
 }
 
 function BlockSettings({ block, businessId, business, onChange, onSave, onRefresh }: {
@@ -671,7 +931,7 @@ function BlockSettings({ block, businessId, business, onChange, onSave, onRefres
     <div className="space-y-3">
       {['cta', 'products', 'services', 'booking', 'contact', 'quote', 'concierge', 'highlights', 'professionals', 'gallery', 'testimonials', 'faq', 'location'].includes(block.type) && (
         <label className="block">
-          <span className="text-xs font-bold text-zinc-500">{block.type === 'cta' ? 'TEXTO DO BOTÃO' : 'TÍTULO'}</span>
+          <span className="text-xs font-semibold text-zinc-500">{block.type === 'cta' ? 'TEXTO DO BOTÃO' : 'TÍTULO'}</span>
           <input value={block.type === 'cta' ? s.label || '' : s.title || ''} onChange={(e) => set(block.type === 'cta' ? 'label' : 'title', e.target.value)}
             className={input + ' mt-1'} placeholder={block.type === 'cta' ? 'Ex: Agendar horário' : 'Título da seção'} />
         </label>
@@ -683,14 +943,14 @@ function BlockSettings({ block, businessId, business, onChange, onSave, onRefres
       )}
       {['products', 'services', 'gallery', 'testimonials', 'faq', 'highlights', 'professionals', 'location'].includes(block.type) && (
         <label className="block">
-          <span className="text-xs font-bold text-zinc-500">SUBTÍTULO (OPCIONAL)</span>
+          <span className="text-xs font-semibold text-zinc-500">SUBTÍTULO (OPCIONAL)</span>
           <input value={s.subtitle || ''} onChange={(e) => set('subtitle', e.target.value.slice(0, 120))}
             className={input + ' mt-1'} placeholder="Uma linha que explica a seção (ex: Toque em um serviço para agendar)" />
         </label>
       )}
       {block.type === 'cta' && (
         <label className="block">
-          <span className="text-xs font-bold text-zinc-500">DESTINO DO BOTÃO</span>
+          <span className="text-xs font-semibold text-zinc-500">DESTINO DO BOTÃO</span>
           <select value={s.target || 'auto'} onChange={(e) => set('target', e.target.value === 'auto' ? '' : e.target.value)}
             className={input + ' mt-1'}>
             <option value="auto">Automático (pelo texto)</option>
@@ -724,11 +984,11 @@ function BlockSettings({ block, businessId, business, onChange, onSave, onRefres
                   type="button"
                   onClick={() => activateModule('products')}
                   disabled={!!activating}
-                  className="inline-flex items-center gap-1.5 text-xs font-bold bg-emerald-600 text-white px-3.5 py-2 rounded-md hover:bg-emerald-700 disabled:opacity-60">
+                  className="inline-flex items-center gap-1.5 text-xs font-semibold pe-btn--green px-3.5 py-2 rounded-md hover:bg-emerald-700 disabled:opacity-60">
                   {activating === 'products' && <span className="w-3 h-3 border-2 border-white/40 border-t-white rounded-full animate-spin" />}
                   Ativar Produtos agora
                 </button>
-                <Link href={`/recursos?b=${businessId}`} className="font-semibold text-zinc-900 underline">ou abrir Recursos →</Link>
+                <Link href={`/recursos?b=${businessId}`} className="font-semibold text-zinc-900 underline">ou abrir as capacidades do sistema →</Link>
               </p>
               {activateError && <p className="text-red-700 font-semibold">{activateError}</p>}
             </div>
@@ -768,7 +1028,7 @@ function BlockSettings({ block, businessId, business, onChange, onSave, onRefres
                         <img src={url} alt={`Foto ${i + 1}`} className="w-full h-20 object-cover rounded-md border border-zinc-200" />
                         <button type="button" onClick={() => set('images', imgs.filter((_, j) => j !== i))}
                           aria-label={`Remover foto ${i + 1}`}
-                          className="absolute -top-1.5 -right-1.5 w-6 h-6 rounded-full bg-[var(--danger)] text-white text-xs font-bold flex items-center justify-center opacity-90 hover:opacity-100">
+                          className="absolute -top-1.5 -right-1.5 w-6 h-6 rounded-full bg-[var(--danger)] text-white text-xs font-semibold flex items-center justify-center opacity-90 hover:opacity-100">
                           ×
                         </button>
                       </div>
@@ -783,7 +1043,7 @@ function BlockSettings({ block, businessId, business, onChange, onSave, onRefres
                   </p>
                 </div>
                 <details>
-                  <summary className="text-[11px] font-bold text-zinc-500 cursor-pointer">ou colar URLs (uma por linha)</summary>
+                  <summary className="text-[11px] font-semibold text-zinc-500 cursor-pointer">ou colar URLs (uma por linha)</summary>
                   <textarea value={imgs.join('\n')} onChange={(e) => set('images', e.target.value.split('\n').map((x) => x.trim()).filter(Boolean))}
                     className={input + ' mt-2'} rows={4} placeholder="https://…" />
                 </details>
@@ -800,7 +1060,7 @@ function BlockSettings({ block, businessId, business, onChange, onSave, onRefres
       {block.type === 'testimonials' && (
         <>
           <ReviewsEditor businessId={businessId} />
-          <p className="text-xs font-bold text-zinc-500 pt-1">DEPOIMENTOS FIXOS (aparecem só se nenhuma avaliação estiver publicada)</p>
+          <p className="text-xs font-semibold text-zinc-500 pt-1">DEPOIMENTOS FIXOS (aparecem só se nenhuma avaliação estiver publicada)</p>
           <input value={s.title || ''} onChange={(e) => set('title', e.target.value)} className={input} placeholder="Título (opcional)" />
           <textarea value={(s.items || []).map((t: any) => `${t.name || ''} | ${t.text || ''}`).join('\n')}
             onChange={(e) => set('items', e.target.value.split('\n').map((line) => { const [name, text] = line.split('|').map((x) => (x || '').trim()); return { name, text }; }).filter((t) => t.text))}
@@ -810,7 +1070,7 @@ function BlockSettings({ block, businessId, business, onChange, onSave, onRefres
       {block.type === 'faq' && (
         <>
           <label className="block">
-            <span className="text-xs font-bold text-zinc-500">TÍTULO DA SEÇÃO (OPCIONAL)</span>
+            <span className="text-xs font-semibold text-zinc-500">TÍTULO DA SEÇÃO (OPCIONAL)</span>
             <input value={s.title || ''} onChange={(e) => set('title', e.target.value)} className={input + ' mt-1'} placeholder="Ex: Dúvidas frequentes" />
           </label>
           <FaqEditor items={s.items} onChange={(items) => set('items', items)} inputClass={input} />
@@ -818,15 +1078,15 @@ function BlockSettings({ block, businessId, business, onChange, onSave, onRefres
       )}
       {block.type === 'highlights' && (
         <div className="space-y-2">
-          <p className="text-xs font-bold text-zinc-500 pt-1">DIFERENCIAIS (UM POR LINHA)</p>
+          <p className="text-xs font-semibold text-zinc-500 pt-1">DIFERENCIAIS (UM POR LINHA)</p>
           <p className="text-[11px] text-zinc-500 -mt-1">Título é obrigatório; texto e ícone são opcionais. Ex.: “Atendimento no dia”, “Primeira avaliação grátis”.</p>
           {((Array.isArray(s.items) ? s.items : [{ icon: '', title: '', text: '' }]) as any[]).map((it, i, arr) => (
             <div key={i} className="rounded-md border border-zinc-200 bg-zinc-50/60 p-3 space-y-2">
               <div className="flex items-center justify-between">
-                <p className="text-xs font-bold text-zinc-600">Item {i + 1}</p>
+                <p className="text-xs font-semibold text-zinc-600">Item {i + 1}</p>
                 {arr.length > 1 && (
                   <button type="button" onClick={() => set('items', arr.filter((_, j) => j !== i))}
-                    className="text-[11px] font-bold text-red-600 px-2 py-1 rounded-lg hover:bg-red-50">Remover</button>
+                    className="text-[11px] font-semibold text-red-600 px-2 py-1 rounded-lg hover:bg-red-50">Remover</button>
                 )}
               </div>
               <div className="grid grid-cols-[1fr_auto] gap-2">
@@ -848,7 +1108,7 @@ function BlockSettings({ block, businessId, business, onChange, onSave, onRefres
             </div>
           ))}
           <button type="button" onClick={() => set('items', [...(Array.isArray(s.items) ? s.items : []), { icon: '', title: '', text: '' }])}
-            className="text-sm font-bold bg-zinc-100 text-zinc-700 px-4 py-2 rounded-md hover:bg-zinc-200">+ Adicionar diferencial</button>
+            className="text-sm font-semibold bg-zinc-100 text-zinc-700 px-4 py-2 rounded-md hover:bg-zinc-200">+ Adicionar diferencial</button>
         </div>
       )}
       {block.type === 'professionals' && (
@@ -871,7 +1131,7 @@ function BlockSettings({ block, businessId, business, onChange, onSave, onRefres
           </p>
         </div>
       )}
-      <button onClick={onSave} className="text-sm font-bold bg-[var(--brand)] text-white shadow-brand hover:bg-[var(--brand-strong)] px-4 py-2 rounded-md">Salvar bloco</button>
+      <button onClick={onSave} className="text-sm font-semibold bg-[var(--brand)] text-white shadow-brand hover:bg-[var(--brand-strong)] px-4 py-2 rounded-md">Salvar bloco</button>
     </div>
   );
 }
@@ -899,12 +1159,12 @@ function FaqEditor({ items: rawItems, onChange, inputClass }: {
       {items.map((item, index) => (
         <div key={index} className="rounded-md border border-zinc-200 bg-zinc-50/60 p-3 sm:p-4 space-y-3">
           <div className="flex items-center justify-between gap-3">
-            <p className="text-sm font-bold text-zinc-700">Pergunta {index + 1}</p>
+            <p className="text-sm font-semibold text-zinc-700">Pergunta {index + 1}</p>
             {savedItems.length > 0 && (
               <button
                 type="button"
                 onClick={() => removeItem(index)}
-                className="text-xs font-bold text-red-600 px-2 py-1 rounded-lg hover:bg-red-50"
+                className="text-xs font-semibold text-red-600 px-2 py-1 rounded-lg hover:bg-red-50"
                 aria-label={`Remover pergunta ${index + 1}`}
               >
                 Remover
@@ -912,7 +1172,7 @@ function FaqEditor({ items: rawItems, onChange, inputClass }: {
             )}
           </div>
           <label className="block">
-            <span className="text-xs font-bold text-zinc-500">PERGUNTA</span>
+            <span className="text-xs font-semibold text-zinc-500">PERGUNTA</span>
             <input
               value={item.q}
               onChange={(event) => updateItem(index, 'q', event.target.value)}
@@ -921,7 +1181,7 @@ function FaqEditor({ items: rawItems, onChange, inputClass }: {
             />
           </label>
           <label className="block">
-            <span className="text-xs font-bold text-zinc-500">RESPOSTA</span>
+            <span className="text-xs font-semibold text-zinc-500">RESPOSTA</span>
             <textarea
               value={item.a}
               onChange={(event) => updateItem(index, 'a', event.target.value)}
@@ -935,7 +1195,7 @@ function FaqEditor({ items: rawItems, onChange, inputClass }: {
       <button
         type="button"
         onClick={() => onChange([...items, { q: '', a: '' }])}
-        className="text-sm font-bold bg-zinc-100 text-zinc-700 px-4 py-2 rounded-md hover:bg-zinc-200"
+        className="text-sm font-semibold bg-zinc-100 text-zinc-700 px-4 py-2 rounded-md hover:bg-zinc-200"
       >
         + Adicionar pergunta
       </button>
@@ -1019,36 +1279,36 @@ function ReviewsEditor({ businessId }: { businessId: string }) {
     return (
       <div key={r.id} className="border border-zinc-200 rounded-md p-3">
         <div className="flex items-center gap-1.5 flex-wrap">
-          <span className="inline-flex items-center gap-1 text-xs font-extrabold text-amber-600">
+          <span className="inline-flex items-center gap-1 text-xs font-semibold text-amber-600">
             <Icon n="star" size={13} /> {r.rating}/5
           </span>
-          <span className="text-xs font-bold">{r.customerName}</span>
+          <span className="text-xs font-semibold">{r.customerName}</span>
           {r.source === 'google' && (
-            <span className="text-[10px] font-extrabold bg-blue-100 text-blue-800 px-2 py-0.5 rounded-full">Google</span>
+            <span className="text-[10px] font-semibold bg-blue-100 text-blue-800 px-2 py-0.5 rounded-full">Google</span>
           )}
         </div>
         {r.text && <p className="text-sm text-zinc-600 mt-1">“{r.text}”</p>}
         <div className="flex gap-2 mt-2">
           {r.status !== 'published' && (
             <button disabled={acting === r.id} onClick={() => setStatus(r.id, 'published')}
-              className="text-xs font-bold bg-emerald-600 text-white px-3 py-1.5 rounded-lg hover:bg-emerald-700 disabled:opacity-50">
+              className="text-xs font-semibold pe-btn--green px-3 py-1.5 rounded-lg hover:bg-emerald-700 disabled:opacity-50">
               Publicar
             </button>
           )}
           {r.status !== 'hidden' && (
             <button disabled={acting === r.id} onClick={() => setStatus(r.id, 'hidden')}
-              className="text-xs font-bold bg-zinc-100 px-3 py-1.5 rounded-lg hover:bg-zinc-200 disabled:opacity-50">
+              className="text-xs font-semibold bg-zinc-100 px-3 py-1.5 rounded-lg hover:bg-zinc-200 disabled:opacity-50">
               Ocultar
             </button>
           )}
           {r.status === 'hidden' && (
             <button disabled={acting === r.id} onClick={() => setStatus(r.id, 'pending')}
-              className="text-xs font-bold bg-zinc-100 px-3 py-1.5 rounded-lg hover:bg-zinc-200 disabled:opacity-50">
+              className="text-xs font-semibold bg-zinc-100 px-3 py-1.5 rounded-lg hover:bg-zinc-200 disabled:opacity-50">
               Reavaliar
             </button>
           )}
           <button onClick={() => remove(r.id)}
-            className="text-xs font-bold text-red-500 px-2 py-1.5 hover:bg-red-50 rounded-lg">
+            className="text-xs font-semibold text-red-500 px-2 py-1.5 hover:bg-red-50 rounded-lg">
             Excluir
           </button>
         </div>
@@ -1058,7 +1318,7 @@ function ReviewsEditor({ businessId }: { businessId: string }) {
 
   return (
     <div className="rounded-lg border border-zinc-200 bg-zinc-50 p-3 space-y-3">
-      <p className="text-xs font-bold text-zinc-500">AVALIAÇÕES DOS CLIENTES (vão para a página ao publicar — máx. 4 no ar)</p>
+      <p className="text-xs font-semibold text-zinc-500">AVALIAÇÕES DOS CLIENTES (vão para a página ao publicar — máx. 4 no ar)</p>
       {loading ? (
         <p className="text-sm text-zinc-500">Carregando…</p>
       ) : reviews.length === 0 ? (
@@ -1069,26 +1329,26 @@ function ReviewsEditor({ businessId }: { businessId: string }) {
         <div className="space-y-2">
           {pending.length > 0 && (
             <div className="space-y-2">
-              <p className="text-xs font-extrabold text-blue-700">AGUARDANDO APROVAÇÃO ({pending.length})</p>
+              <p className="text-xs font-semibold text-blue-700">AGUARDANDO APROVAÇÃO ({pending.length})</p>
               {pending.map(row)}
             </div>
           )}
           {published.length > 0 && (
             <div className="space-y-2">
-              <p className="text-xs font-extrabold text-emerald-700">NO AR ({published.length})</p>
+              <p className="text-xs font-semibold text-emerald-700">NO AR ({published.length})</p>
               {published.map(row)}
             </div>
           )}
           {hidden.length > 0 && (
             <div className="space-y-2">
-              <p className="text-xs font-extrabold text-zinc-500">OCULTAS ({hidden.length})</p>
+              <p className="text-xs font-semibold text-zinc-500">OCULTAS ({hidden.length})</p>
               {hidden.map(row)}
             </div>
           )}
         </div>
       )}
       <div className="pt-1 space-y-2 border-t border-zinc-200">
-        <p className="text-xs font-bold text-zinc-500 pt-2">GOOGLE (opcional)</p>
+        <p className="text-xs font-semibold text-zinc-500 pt-2">GOOGLE (opcional)</p>
         <input value={google.googleUrl} onChange={(e) => setGoogle({ ...google, googleUrl: e.target.value })}
           className={input} placeholder="Link “avaliar no Google” (Perfil da Empresa > Compartilhar)" />
         <div className="grid grid-cols-2 gap-2">
@@ -1099,11 +1359,11 @@ function ReviewsEditor({ businessId }: { businessId: string }) {
         </div>
         <div className="flex gap-2">
           <button disabled={acting === 'google'} onClick={saveGoogle}
-            className="text-xs font-bold bg-[var(--brand)] text-white shadow-brand hover:bg-[var(--brand-strong)] px-3 py-2 rounded-lg disabled:opacity-50">
+            className="text-xs font-semibold bg-[var(--brand)] text-white shadow-brand hover:bg-[var(--brand-strong)] px-3 py-2 rounded-lg disabled:opacity-50">
             Salvar Google
           </button>
           <button disabled={acting === 'import'} onClick={importGoogle}
-            className="text-xs font-bold bg-zinc-100 px-3 py-2 rounded-lg hover:bg-zinc-200 disabled:opacity-50">
+            className="text-xs font-semibold bg-zinc-100 px-3 py-2 rounded-lg hover:bg-zinc-200 disabled:opacity-50">
             {acting === 'import' ? 'Importando…' : 'Importar do Google'}
           </button>
         </div>
@@ -1115,6 +1375,80 @@ function ReviewsEditor({ businessId }: { businessId: string }) {
 
 // ── Prévia da página REAL (aba Visual, §24) ──
 // Mesma origem + sessão do dono: o rascunho aparece (isOwnerPreview).
+/** Cartões VISUAIS de modelo — o ponto de partida da página, como no mockup
+    da seção "Modelo": aparência inicial em miniatura, estado aplicado e
+    recomendação por contexto do negócio (quando o nicho existe). */
+function ThemePresetCards({ theme, presetId, niche, clinicType, onApply }: {
+  theme: Theme; presetId?: string; niche?: string;
+  /** FASE 2 · P9 — tipo da clínica: destaca o modelo do preset (mesmos blocos). */
+  clinicType?: string;
+  onApply: (t: Theme, id: string) => void;
+}) {
+  const match = matchingPreset(theme);
+  const baseName = presetId ? presetById(presetId).name : '';
+  const NICHE_REC: Record<string, string> = { alimentacao: 'pordosol', beleza: 'rose', pet: 'fresh', saude: 'fresh', loja: 'noite', servicos: 'oceano' };
+  const NICHE_LABEL: Record<string, string> = { alimentacao: 'alimentação', beleza: 'beleza', pet: 'pet', saude: 'saúde', loja: 'loja', servicos: 'serviços' };
+  const rec = niche ? NICHE_REC[niche] : undefined;
+  // FASE 2 · P9 — o modelo do tipo da clínica aparece PRIMEIRO, com selo.
+  const clinicLabel: Record<string, string> = {
+    medica: 'médica', odontologica: 'odontológica', veterinaria: 'veterinária',
+    estetica: 'estética', particular: 'profissional particular', geral: 'clínica',
+  };
+  const suggestedId = clinicType ? clinicPresetId(clinicType) : '';
+  const ordered = suggestedId
+    ? [...THEME_PRESETS].sort((a, b) => (a.id === suggestedId ? -1 : b.id === suggestedId ? 1 : 0))
+    : THEME_PRESETS;
+  return (
+      <div className="bg-white border border-zinc-200 rounded-lg p-5">
+        <div className="flex flex-wrap items-center justify-between gap-2 mb-1">
+          <p className="font-semibold text-sm">Modelos prontos</p>
+          {match ? (
+            <span className="text-xs font-semibold bg-emerald-100 text-emerald-800 px-3 py-1 rounded-full inline-flex items-center gap-1">
+              {presetById(match).name} aplicado <Icon n="check" size={12} />
+            </span>
+          ) : (
+            <span className="text-xs font-semibold bg-amber-100 text-amber-800 px-3 py-1 rounded-full">
+              Personalizado{baseName ? ` (base: ${baseName})` : ''}
+            </span>
+          )}
+        </div>
+        <p className="text-xs text-zinc-500 mb-4">Escolha uma combinação fechada de cores, fonte e formato — depois ajuste o que quiser abaixo.</p>
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+          {ordered.map((p) => (
+            <button key={p.id} onClick={() => onApply({ ...p.theme }, p.id)}
+              className={cn('text-left rounded-md border-2 p-1.5 transition-all hover:-translate-y-0.5', match === p.id ? 'border-zinc-900' : 'border-transparent hover:border-zinc-200')}
+              aria-label={`Aplicar modelo ${p.name}`}>
+              <span className="block rounded-lg overflow-hidden border border-black/10" style={{ background: p.theme.background }}>
+                <span className="block p-2">
+                  <span className="flex items-center gap-1.5">
+                    <span className="w-5 h-5 rounded-full shrink-0" style={{ background: `linear-gradient(135deg, ${p.theme.primary}, ${p.theme.secondary})` }} />
+                    <span className="flex-1 space-y-1">
+                      <span className="block h-1.5 rounded-full w-3/4" style={{ background: p.theme.text }} />
+                      <span className="block h-1.5 rounded-full w-1/2" style={{ background: p.theme.muted }} />
+                    </span>
+                  </span>
+                  <span className="block mt-2 h-6" style={{ background: p.theme.primary, borderRadius: Math.min(p.theme.radius, 8) }} />
+                </span>
+              </span>
+              <span className="block text-xs font-semibold mt-1.5 px-0.5">{p.name}</span>
+              <span className="block text-[11px] text-zinc-500 px-0.5 leading-tight">{p.hint}</span>
+              {suggestedId === p.id && match !== p.id && (
+                <span className="block mt-1 px-0.5">
+                  <span className="text-[10px] font-semibold bg-[var(--brand-soft)] text-[var(--brand-fg)] px-2 py-0.5 rounded-full">Sugerido para clínica {clinicLabel[p.clinicType || ''] || ''}</span>
+                </span>
+              )}
+              {!(suggestedId === p.id) && rec === p.id && match !== p.id && niche && (
+                <span className="block mt-1 px-0.5">
+                  <span className="text-[10px] font-semibold bg-[var(--brand-soft)] text-[var(--brand-fg)] px-2 py-0.5 rounded-full">Recomendado para {NICHE_LABEL[niche]}</span>
+                </span>
+              )}
+            </button>
+          ))}
+        </div>
+      </div>
+  );
+}
+
 function ThemeEditor({ theme, presetId, onChange, onSave, saving }: {
   theme: Theme;
   presetId: string;
@@ -1135,51 +1469,13 @@ function ThemeEditor({ theme, presetId, onChange, onSave, saving }: {
   ];
   return (
     <div className="space-y-4">
-      <div className="bg-white border border-zinc-200 rounded-lg p-5">
-        <div className="flex flex-wrap items-center justify-between gap-2 mb-1">
-          <p className="font-bold text-sm">Modelos prontos</p>
-          {match ? (
-            <span className="text-xs font-bold bg-emerald-100 text-emerald-800 px-3 py-1 rounded-full inline-flex items-center gap-1">
-              {presetById(match).name} aplicado <Icon n="check" size={12} />
-            </span>
-          ) : (
-            <span className="text-xs font-bold bg-amber-100 text-amber-800 px-3 py-1 rounded-full">
-              Personalizado{baseName ? ` (base: ${baseName})` : ''}
-            </span>
-          )}
-        </div>
-        <p className="text-xs text-zinc-500 mb-4">Escolha uma combinação fechada de cores, fonte e formato — depois ajuste o que quiser abaixo.</p>
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-          {THEME_PRESETS.map((p) => (
-            <button key={p.id} onClick={() => onChange({ ...p.theme }, p.id)}
-              className={cn('text-left rounded-md border-2 p-1.5 transition-all hover:-translate-y-0.5', match === p.id ? 'border-zinc-900' : 'border-transparent hover:border-zinc-200')}
-              aria-label={`Aplicar modelo ${p.name}`}>
-              <span className="block rounded-lg overflow-hidden border border-black/10" style={{ background: p.theme.background }}>
-                <span className="block p-2">
-                  <span className="flex items-center gap-1.5">
-                    <span className="w-5 h-5 rounded-full shrink-0" style={{ background: `linear-gradient(135deg, ${p.theme.primary}, ${p.theme.secondary})` }} />
-                    <span className="flex-1 space-y-1">
-                      <span className="block h-1.5 rounded-full w-3/4" style={{ background: p.theme.text }} />
-                      <span className="block h-1.5 rounded-full w-1/2" style={{ background: p.theme.muted }} />
-                    </span>
-                  </span>
-                  <span className="block mt-2 h-6" style={{ background: p.theme.primary, borderRadius: Math.min(p.theme.radius, 8) }} />
-                </span>
-              </span>
-              <span className="block text-xs font-bold mt-1.5 px-0.5">{p.name}</span>
-              <span className="block text-[11px] text-zinc-500 px-0.5 leading-tight">{p.hint}</span>
-            </button>
-          ))}
-        </div>
-      </div>
-
       <div className="space-y-4">
-        <details className="bg-white border border-zinc-200 rounded-lg p-5" open={!match}>
-          <summary className="font-bold text-sm cursor-pointer">Ajustar cores e detalhes</summary>
+        <details className="bg-white border border-zinc-200 rounded-lg p-5" open>
+          <summary className="font-semibold text-sm cursor-pointer">Ajustar cores e detalhes</summary>
           <div className="grid grid-cols-2 sm:grid-cols-3 gap-4 mt-4">
             {colors.map(([key, label]) => (
               <label key={key} className="block">
-                <span className="text-xs font-bold text-zinc-500">{label.toUpperCase()}</span>
+                <span className="text-xs font-semibold text-zinc-500">{label.toUpperCase()}</span>
                 <span className="mt-1 flex items-center gap-2">
                   <input type="color" value={theme[key] as string} onChange={(e) => set(key, e.target.value)} className="w-10 h-10 rounded-lg border border-zinc-200 bg-white p-1 shrink-0" />
                   <input value={theme[key] as string} onChange={(e) => set(key, e.target.value)} className="w-full min-w-0 rounded-md border border-zinc-300 px-2.5 py-1.5 text-xs font-mono" />
@@ -1189,18 +1485,18 @@ function ThemeEditor({ theme, presetId, onChange, onSave, saving }: {
           </div>
           <div className="grid grid-cols-3 gap-4 mt-4">
             <label className="block">
-              <span className="text-xs font-bold text-zinc-500">CANTOS</span>
+              <span className="text-xs font-semibold text-zinc-500">CANTOS</span>
               <input type="range" min={0} max={28} value={theme.radius} onChange={(e) => set('radius', Number(e.target.value))} className="w-full mt-2" />
               <span className="text-xs text-zinc-500">{theme.radius}px</span>
             </label>
             <label className="block">
-              <span className="text-xs font-bold text-zinc-500">TIPOGRAFIA</span>
+              <span className="text-xs font-semibold text-zinc-500">TIPOGRAFIA</span>
               <select value={theme.font} onChange={(e) => set('font', e.target.value)} className="mt-1 w-full rounded-md border border-zinc-300 px-2 py-2 text-sm">
                 {fonts.map(([v, l]) => <option key={v} value={v}>{l}</option>)}
               </select>
             </label>
             <label className="block">
-              <span className="text-xs font-bold text-zinc-500">BOTÕES</span>
+              <span className="text-xs font-semibold text-zinc-500">BOTÕES</span>
               <select value={theme.buttonStyle} onChange={(e) => set('buttonStyle', e.target.value)} className="mt-1 w-full rounded-md border border-zinc-300 px-2 py-2 text-sm">
                 <option value="solid">Cheio</option>
                 <option value="soft">Suave</option>
@@ -1208,22 +1504,22 @@ function ThemeEditor({ theme, presetId, onChange, onSave, saving }: {
               </select>
             </label>
           </div>
-          <button onClick={onSave} disabled={saving} className="mt-4 text-sm font-bold bg-[var(--brand)] text-white shadow-brand hover:bg-[var(--brand-strong)] px-5 py-2.5 rounded-md disabled:opacity-50">
+          <button onClick={onSave} disabled={saving} className="mt-4 text-sm font-semibold bg-[var(--brand)] text-white shadow-brand hover:bg-[var(--brand-strong)] px-5 py-2.5 rounded-md disabled:opacity-50">
             {saving ? 'Salvando…' : 'Salvar visual'}
           </button>
         </details>
         <div className="rounded-lg p-5" style={{ background: theme.background, color: theme.text }}>
-          <p className="text-xs font-bold opacity-60 mb-3">PRÉVIA AO VIVO</p>
+          <p className="text-xs font-semibold opacity-60 mb-3">Prévia</p>
           <div className="text-center mb-3">
-            <div className="w-14 h-14 mx-auto rounded-full flex items-center justify-center font-black"
+            <div className="w-14 h-14 mx-auto rounded-full flex items-center justify-center font-semibold"
               style={{ background: `linear-gradient(135deg, ${theme.primary}, ${theme.secondary})`, color: '#fff' }}>SN</div>
-            <p className="font-extrabold mt-2">Seu negócio</p>
-            <p className="text-xs" style={{ color: theme.muted }}>Prévia com as cores escolhidas</p>
+            <p className="font-semibold mt-2">Seu negócio</p>
+            <p className="text-xs" style={{ color: theme.muted }}>Prévia</p>
           </div>
           <div className="p-4" style={{ background: theme.surface, borderRadius: theme.radius, border: '1px solid rgba(0,0,0,0.08)' }}>
-            <p className="font-extrabold text-sm">Card de exemplo</p>
+            <p className="font-semibold text-sm">Card de exemplo</p>
             <p className="text-sm" style={{ color: theme.muted }}>Assim ficam os textos e cards.</p>
-            <div className="mt-3 font-bold text-center py-3 text-sm" style={{ background: theme.buttonStyle === 'solid' ? theme.primary : 'transparent', color: theme.buttonStyle === 'solid' ? '#fff' : theme.primary, borderRadius: theme.radius, border: theme.buttonStyle === 'solid' ? 'none' : `2px solid ${theme.primary}` }}>Botão principal</div>
+            <div className="mt-3 font-semibold text-center py-3 text-sm" style={{ background: theme.buttonStyle === 'solid' ? theme.primary : 'transparent', color: theme.buttonStyle === 'solid' ? '#fff' : theme.primary, borderRadius: theme.radius, border: theme.buttonStyle === 'solid' ? 'none' : `2px solid ${theme.primary}` }}>Botão principal</div>
           </div>
         </div>
       </div>
@@ -1239,30 +1535,30 @@ function PublishTab({ business, onSlug, onPublish }: { business: Business; busin
     <div className="grid lg:grid-cols-2 gap-4 items-start">
       <div className="bg-white border border-zinc-200 rounded-lg p-5 space-y-4">
         <div>
-          <p className="font-bold text-sm">Status</p>
+          <p className="font-semibold text-sm">Status</p>
           <p className="text-sm text-zinc-500 mt-0.5">{business.published ? <><span className="inline-block w-2.5 h-2.5 rounded-full bg-emerald-500 align-middle" /> Sua página está no ar.</> : <><span className="inline-block w-2.5 h-2.5 rounded-full bg-amber-400 align-middle" /> Sua página está como rascunho (só você vê).</>}</p>
           <button onClick={() => onPublish(!business.published)}
-            className={cn('mt-3 text-sm font-bold px-5 py-2.5 rounded-md', business.published ? 'bg-zinc-100 hover:bg-zinc-200' : 'bg-emerald-600 text-white hover:bg-emerald-500')}>
+            className={cn('mt-3 text-sm font-semibold px-5 py-2.5 rounded-md', business.published ? 'bg-zinc-100 hover:bg-zinc-200' : 'pe-btn--green')}>
             {business.published ? 'Despublicar' : 'Publicar página'}
           </button>
         </div>
         <div>
-          <p className="font-bold text-sm">Endereço</p>
+          <p className="font-semibold text-sm">Endereço</p>
           <div className="mt-1.5 flex gap-2">
             <input value={slug} onChange={(e) => setSlug(e.target.value.toLowerCase().replace(/[^a-z0-9]/g, ''))}
               className="flex-1 rounded-md border border-zinc-300 px-3 py-2.5 text-sm font-mono" />
-            <button onClick={() => onSlug(slug)} className="text-sm font-bold bg-[var(--brand)] text-white shadow-brand hover:bg-[var(--brand-strong)] px-4 py-2.5 rounded-md">Salvar</button>
+            <button onClick={() => onSlug(slug)} className="text-sm font-semibold bg-[var(--brand)] text-white shadow-brand hover:bg-[var(--brand-strong)] px-4 py-2.5 rounded-md">Salvar</button>
           </div>
-          <p className="text-xs text-zinc-500 mt-1">instalink.app/{slug}</p>
+          <p className="text-xs text-zinc-500 mt-1">godoutor.app/{slug}</p>
         </div>
       </div>
       <div className="bg-white border border-zinc-200 rounded-lg p-5 text-center">
-        <p className="font-bold text-sm">QR Code da sua página</p>
+        <p className="font-semibold text-sm">QR Code da sua página</p>
         <p className="text-xs text-zinc-500 mb-3">Imprima e cole na recepção ou em materiais da clínica.</p>
         <img src={`/api/qr?text=${encodeURIComponent(`${origin}/${business.slug}`)}`} alt="QR Code da página"
           className="mx-auto w-48 h-48 rounded-lg border border-zinc-200" />
         <a href={`/api/qr?text=${encodeURIComponent(`${origin}/${business.slug}`)}`} download={`qr-${business.slug}.png`}
-          className="inline-block mt-3 text-sm font-bold bg-zinc-100 px-4 py-2 rounded-md hover:bg-zinc-200">Baixar QR</a>
+          className="inline-block mt-3 text-sm font-semibold bg-zinc-100 px-4 py-2 rounded-md hover:bg-zinc-200">Baixar QR</a>
       </div>
     </div>
   );

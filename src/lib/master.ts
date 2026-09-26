@@ -1,7 +1,7 @@
 // ═══════════════════════════════════════════════════════════════
 // MASTER DA PLATAFORMA — domínio puro (sem I/O de rede)
 // ═══════════════════════════════════════════════════════════════
-// A conta Master pertence ao InstaLink, NÃO a uma Organization.
+// A conta Master pertence ao GoDoutor, NÃO a uma Organization.
 // Ela enxerga a plataforma inteira; dados operacionais de unidade
 // só entram via SupportSession (já em access.ts).
 //
@@ -10,7 +10,7 @@
 // mas NÃO entra na contagem/listagem administrativa de Masters e NÃO
 // contorna a proteção do último Master).
 //
-// Receita do InstaLink ≠ receita operacional das Organizations.
+// Receita do GoDoutor ≠ receita operacional das Organizations.
 // Enquanto não houver planos/cobrança reais, platformRevenue = 0.
 import type { DB, User, UserRole, AuditAction } from './types';
 // access-core: puro (sem next/headers) — master.ts também é importável em testes/domínio.
@@ -294,7 +294,7 @@ export interface PlatformOverview {
   members: number;
   publishedUnits: number;
   supportSessionsActive: number;
-  /** Receita do InstaLink (plataforma). Sem billing real = 0. */
+  /** Receita do GoDoutor (plataforma). Sem billing real = 0. */
   platformRevenueCents: number;
   platformRevenueLabel: string;
   platformRevenueHint: string;
@@ -369,9 +369,9 @@ export function platformOverview(db: DB, activityLimit = 20): PlatformOverview {
     supportSessionsActive: activeSupport,
     // Sem planos/cobrança implementados: zero explícito — NÃO inventar.
     platformRevenueCents: 0,
-    platformRevenueLabel: 'Receita do InstaLink',
+    platformRevenueLabel: 'Receita do GoDoutor',
     platformRevenueHint:
-      'Receita da própria plataforma (assinaturas InstaLink). Ainda não há planos/cobrança implementados — valor real = R$ 0,00. Não confunde com a receita operacional das Organizations.',
+      'Receita da própria plataforma (assinaturas GoDoutor). Ainda não há planos/cobrança implementados — valor real = R$ 0,00. Não confunde com a receita operacional das Organizations.',
     billing: {
       implemented: false,
       monthlyRevenueCents: 0,

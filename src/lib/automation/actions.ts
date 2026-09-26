@@ -36,6 +36,7 @@ import { applyBookingStatusTx } from '../booking-status';
 // P6 — conector de saída (a ação não conhece provedor; a camada resolve).
 import { enqueueOutboundWebhooksTx } from '../integrations/outbound';
 import { createTaskTx } from './tasks';
+import { emitAutomationEvent } from './events';
 import { renderParams } from './conditions';
 import { addDaysISO, todayISO } from '../tz';
 import { automationActionDef } from './model';
@@ -429,6 +430,23 @@ export function executeAction(input: ActionInput): ActionResult {
       const booking = subjectBooking(input);
       const contact = subjectContact(input);
 
+      // Revalidação do assunto no MOMENTO do envio (retomada de espera longa):
+      // cancelado ⇒ nunca manda mensagem de agenda. no_show ⇒ não manda
+      // lembrete/confirmação (a menos que a receita peça explicitamente —
+      // recuperação de falta é mensagem QUE QUEREMOS enviar no no_show).
+      if (booking && booking.status === 'cancelled' && String(input.params?.forceSendOnCancelled || '') !== 'true') {
+        return {
+          ok: true, skipped: true,
+          summary: 'agendamento cancelado — mensagem de agenda não enviada',
+        };
+      }
+      if (booking && booking.status === 'no_show' && String(input.params?.forceSendOnNoShow || '') !== 'true') {
+        return {
+          ok: true, skipped: true,
+          summary: 'paciente não compareceu — lembrete de agenda não enviado',
+        };
+      }
+
       const msgText = text(input, 'message', 2000) || text(input, 'body', 2000);
       if (!msgText) return { ok: false, summary: '', error: 'mensagem vazia' };
 
@@ -560,6 +578,10 @@ export function executeAction(input: ActionInput): ActionResult {
       }
 
       const msgId = randomUUID();
+      // F3-H — se o run veio de outreach, marca a Message com a chave lógica
+      // (MessagingService/retry não cria segundo envio com a mesma chave).
+      const outreachKey = String(input.run.context?.event?.idempotencyKey
+        || input.run.context?.outreach?.idempotencyKey || '');
       db.messages.push({
         id: msgId,
         businessId: business.id,
@@ -574,7 +596,28 @@ export function executeAction(input: ActionInput): ActionResult {
         meta: {
           templateName: templateName || undefined,
           originRunId: input.run.id,
+          ...(outreachKey ? { idempotencyKey: outreachKey } : {}),
         },
+      });
+      // Liga conversationId no outreach (resposta futura encontra o registro)
+      if (outreachKey && Array.isArray(db.followUpOutreach)) {
+        const row = db.followUpOutreach.find((o) => o.businessId === business.id && o.idempotencyKey === outreachKey);
+        if (row) {
+          row.conversationId = conv.id;
+          row.messageId = msgId;
+          row.status = 'mensagem_enviada';
+          row.statusLabel = 'Mensagem enviada';
+          row.updatedAt = input.now;
+        }
+      }
+      // F3 — mensagem aceita na fila do canal (não confirma leitura/recebimento).
+      emitAutomationEvent(db, {
+        event: 'message.sent',
+        businessId: business.id,
+        at: input.now,
+        fromRunId: input.run.id,
+        bookingId: input.run.context && (input.run.context as any).booking?.id ? (input.run.context as any).booking.id : undefined,
+        data: { messageId: msgId, channel: 'whatsapp', phone, conversationId: conv.id, status: 'pending', originRunId: input.run.id },
       });
 
       return {

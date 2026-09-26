@@ -29,7 +29,7 @@ export async function POST(req: NextRequest) {
       });
     });
     const link = `${req.nextUrl.origin}/recuperar?kind=user&token=${token}`;
-    const mail = await sendMail(user.email, 'Redefinir sua senha — InstaLink', resetEmailHtml(user.name, link, 'lojista'));
+    const mail = await sendMail(user.email, 'Redefinir sua senha — GoDoutor', resetEmailHtml(user.name, link, 'lojista'));
     return NextResponse.json({ ok: true, sent: mail.sent });
   } catch {
     return NextResponse.json({ error: 'Não foi possível enviar. Tente novamente.' }, { status: 500 });

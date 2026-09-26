@@ -20,8 +20,9 @@
 import { useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
 import { Icon } from '@/components/icons';
-import { StatusBadge, Button, Drawer, buttonCls, type ButtonVariant } from '@/components/ui';
+import { StatusBadge, Button, buttonCls, type ButtonVariant } from '@/components/ui';
 import { EncounterSheet } from '@/components/dashboard/EncounterSheet';
+import { Pet360Sheet } from '@/components/dashboard/Pet360Sheet';
 import { usePanelPermissions } from '@/components/dashboard/usePanelPermissions';
 import { canReopenEncounter } from '@/lib/encounters';
 import type { FollowUpSeed } from '@/components/dashboard/EncounterSheet';
@@ -31,6 +32,7 @@ import { waLink, cn, money } from '@/lib/utils';
 import { adminBookingMaxDate, bookingActions, bookingDuration, needsClosure, rescheduleDecision, type ClosureAction } from '@/lib/booking-ops';
 import { SLOT_STATE_MESSAGE } from '@/lib/slot-states';
 import type { Booking } from '@/lib/types';
+import { WorkspaceSheet } from '@/components/dashboard/WorkspaceSheet';
 
 interface ServiceRef { id: string; name: string; durationMin: number; price?: number; questions?: string[] }
 interface ProRef { id: string; name: string }
@@ -48,7 +50,7 @@ const ROW = 'flex items-baseline justify-between gap-3 py-2';
 const ROW_DT = 'text-xs font-medium text-zinc-500 shrink-0';
 const ROW_DD = 'text-sm text-zinc-900 text-right font-medium';
 
-export function BookingDetailSheet({ booking, service, pro, businessId, timezone, onScheduleReturn, onClose, onChanged }: {
+export function BookingDetailSheet({ booking, service, pro, businessId, timezone, onScheduleReturn, onClose, onSaved, onChanged }: {
   booking: Booking;
   service: ServiceRef | undefined;
   pro: ProRef | undefined;
@@ -56,13 +58,25 @@ export function BookingDetailSheet({ booking, service, pro, businessId, timezone
   timezone?: string;
   /** "Agendar retorno" do pós-atendimento: quem abre o agendamento é o pai. */
   onScheduleReturn?: (info: FollowUpSeed) => void;
+  /** Fechamento pedido pelo usuário (ESC/X) — nunca por autosave. */
   onClose: () => void;
+  /**
+   * Save silencioso do atendimento: sincroniza o pai SEM fechar este sheet
+   * nem o EncounterSheet (P0-1).
+   */
+  onSaved?: () => void;
+  /**
+   * Mudança estrutural (status/check-in/reagendar/finalizar): o pai
+   * atualiza dados. Quem fecha é só `onClose` (após ação explícita).
+   */
   onChanged: () => void;
 }) {
   const [acting, setActing] = useState('');
   // A3.4 · Bloco 5 — registro do atendimento: permissão própria + quem reabre.
   const { permissions, role } = usePanelPermissions();
   const [encounterOpen, setEncounterOpen] = useState(false);
+  // P0-3/P1 — Pet 360 a partir do nome do pet no detalhe.
+  const [pet360Open, setPet360Open] = useState(false);
   const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
   const [rescheduling, setRescheduling] = useState(false);
@@ -177,7 +191,7 @@ export function BookingDetailSheet({ booking, service, pro, businessId, timezone
 
   const waMsg = `Olá, ${(booking.customerName || '').split(' ')[0]}! Sobre seu agendamento de ${service?.name || 'atendimento'} (${formatDateBR(booking.date)} às ${booking.time}):`;
 
-  // Drawer recebe o foco e fecha em ESC (como qualquer painel do workspace).
+  // WorkspaceSheet recebe o foco e fecha em ESC (como qualquer painel).
 
   function showHistory() {
     setHistoryOpen(true);
@@ -191,7 +205,13 @@ export function BookingDetailSheet({ booking, service, pro, businessId, timezone
     : '';
 
   return (
-    <Drawer open onClose={onClose} title="Detalhe do agendamento" width="max-w-[460px]">
+    <WorkspaceSheet
+      open
+      onClose={onClose}
+      title="Detalhe do agendamento"
+      icon="calendar"
+      width="max-w-[620px]"
+      >
         {/* ── Cabeçalho denso ── */}
         <header className="shrink-0 px-4 py-3 flex items-start justify-between gap-3 border-b border-zinc-200">
           <div className="min-w-0">
@@ -207,6 +227,20 @@ export function BookingDetailSheet({ booking, service, pro, businessId, timezone
 
         </header>
 
+        {pet360Open && booking.petId && booking.petName && (
+          <Pet360Sheet
+            open={pet360Open}
+            onClose={() => setPet360Open(false)}
+            businessId={businessId}
+            pet={{
+              id: booking.petId, businessId, tutorId: booking.customerId || '',
+              name: booking.petName, photo: '', species: '', breed: '', sex: '', birthDate: '',
+              weightKg: 0, notes: '', active: true, createdAt: '', updatedAt: '',
+            }}
+            tutorName={booking.customerName}
+            tutorPhone={booking.customerPhone}
+          />
+        )}
         {encounterOpen && (
         <EncounterSheet
           businessId={businessId}
@@ -222,6 +256,7 @@ export function BookingDetailSheet({ booking, service, pro, businessId, timezone
           canReopen={canReopenEncounter(role)}
           onScheduleReturn={onScheduleReturn ? (info: FollowUpSeed) => onScheduleReturn(info) : undefined}
           onClose={() => setEncounterOpen(false)}
+          onSaved={onSaved}
           onChanged={onChanged}
         />
       )}
@@ -232,7 +267,7 @@ export function BookingDetailSheet({ booking, service, pro, businessId, timezone
             <div className="px-4 py-2.5 bg-amber-50/60 border-b border-amber-200/60">
               <p className="text-xs font-semibold text-amber-900 flex items-center gap-1.5"><Icon n="alert" size={13} /> Este atendimento precisa de fechamento</p>
               <p className="text-[11px] text-amber-800/80 mt-0.5 leading-snug">
-                O horário já passou e o status continua “{def.panel}”. O InstaLink não conclui atendimento sozinho — escolha o que aconteceu.
+                O horário já passou e o status continua “{def.panel}”. O GoDoutor não conclui atendimento sozinho — escolha o que aconteceu.
               </p>
             </div>
           )}
@@ -290,10 +325,23 @@ export function BookingDetailSheet({ booking, service, pro, businessId, timezone
           {/* ── Dados do atendimento (linhas com separadores discretos) ── */}
           <dl className="px-4 py-1 divide-y divide-zinc-100">
             <div className={ROW}>
-              <dt className={ROW_DT}>Cliente</dt>
+              <dt className={ROW_DT}>{booking.petName ? 'Pet / Tutor' : 'Cliente'}</dt>
               <dd className={ROW_DD}>
-                {booking.customerName}
-                {booking.customerPhone && <span className="block text-xs text-zinc-500 font-normal">{booking.customerPhone}</span>}
+                {/* FASE 2 · P6 — veterinária: PET em primeiro; tutor identificado.
+                    Clique no pet abre o Pet 360 (HOMOLOGAÇÃO P1). */}
+                {booking.petId && booking.petName ? (
+                  <button type="button" className="font-semibold hover:underline text-[var(--brand-fg)]"
+                    onClick={() => setPet360Open(true)} title={`Abrir ficha de ${booking.petName}`}>
+                    {booking.petName}
+                  </button>
+                ) : (booking.petName || booking.customerName)}
+                {(booking.petName || booking.customerPhone) && (
+                  <span className="block text-xs text-zinc-500 font-normal">
+                    {booking.petName ? `Tutor: ${booking.customerName}` : ''}
+                    {booking.petName && booking.customerPhone ? ' · ' : ''}
+                    {booking.customerPhone || ''}
+                  </span>
+                )}
               </dd>
             </div>
             <div className={ROW}>
@@ -449,6 +497,6 @@ export function BookingDetailSheet({ booking, service, pro, businessId, timezone
             </div>
           )}
         </div>
-    </Drawer>
+        </WorkspaceSheet>
   );
 }

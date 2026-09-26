@@ -28,6 +28,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { verifyCronAuth } from '@/lib/cron-auth';
 import { drainAutomations } from '@/lib/automation/executor';
+import { readDB, updateDB } from '@/lib/db';
+import { scanAllOutreach } from '@/lib/follow-up-outreach';
 
 export const dynamic = 'force-dynamic';
 export const runtime = 'nodejs';
@@ -43,6 +45,27 @@ export async function GET(req: NextRequest) {
 
   const startedAt = Date.now();
   try {
+    // F3-H — varredura de follow-up/reativação ANTES da fila: emite
+    // followup.due / patient.inactive com eventKey estável (idempotente).
+    // Sem timers: quem agenda é este cron (ou o botão do painel).
+    let outreachEmitted = 0;
+    let outreachSkipped = 0;
+    try {
+      const nowISO = new Date().toISOString();
+      const saved = await updateDB((db) => {
+        const results = scanAllOutreach(db, nowISO);
+        return {
+          emitted: results.reduce((s, r) => s + r.emitted, 0),
+          skipped: results.reduce((s, r) => s + r.skipped.length, 0),
+        };
+      });
+      outreachEmitted = saved.emitted;
+      outreachSkipped = saved.skipped;
+    } catch {
+      // varredura não derruba a fila de automações
+      console.error('[cron/automations] falha na varredura de follow-up.');
+    }
+
     // Sem parâmetros de "agora": quem dispara controla QUANDO (o cron), não o
     // relógio das esperas — retomar uma espera antes da hora é decisão do motor.
     const summary = await drainAutomations();
@@ -50,6 +73,8 @@ export async function GET(req: NextRequest) {
       ok: true,
       ranAt: new Date().toISOString(),
       ...summary,
+      outreachEmitted,
+      outreachSkipped,
       durationMs: Date.now() - startedAt,
     }, { status: 200 });
   } catch {

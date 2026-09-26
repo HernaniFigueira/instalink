@@ -10,8 +10,10 @@ import { normalizeFeatures } from '@/lib/features';
 import { defaultWhatsappIntegration } from '@/lib/whatsapp';
 import { rateLimit, ipFrom } from '@/lib/rate-limit';
 import type { BusinessMode, Niche } from '@/lib/types';
-import { VALID_MODES, VALID_NICHES, defaultBookingConfig } from '@/lib/types';
+import { VALID_MODES, VALID_NICHES, defaultBookingConfig, isClinicType } from '@/lib/types';
 import { NEW_BUSINESS_DEFAULTS } from '@/lib/templates';
+import { templateFromPreset } from '@/lib/clinic-presets';
+import { clinicPresetId, presetById } from '@/lib/themes';
 
 // POST = cria negócio + página inicial a partir do template.
 // NOVO FLUXO: o cadastro não pergunta mais "tipo de negócio" nem "forma de
@@ -31,9 +33,12 @@ export async function POST(req: NextRequest) {
     const niche: Niche = VALID_NICHES.includes(body.niche) ? body.niche : NEW_BUSINESS_DEFAULTS.niche;
     const modes = (Array.isArray(body.modes) ? body.modes : NEW_BUSINESS_DEFAULTS.modes)
       .filter((m: string) => VALID_MODES.includes(m as BusinessMode)) as BusinessMode[];
+    // FASE 2 · P5 — tipo de clínica (preset, não aplicação separada). Ausente
+    // ou inválido = 'geral' (compatível com qualquer chamador legado).
+    const clinicType = isClinicType(body.clinicType) ? body.clinicType : 'geral';
     let slug = slugify(body.slug || name);
     if (!name) return NextResponse.json({ error: 'Dê um nome ao seu negócio.' }, { status: 400 });
-    // Lista vazia é permitida de propósito: o InstaLink também serve como
+    // Lista vazia é permitida de propósito: o GoDoutor também serve como
     // página de perfil (link na bio). O painel guia a ativação dos recursos.
     if (!isValidSlug(slug)) return NextResponse.json({ error: 'Esse endereço não é válido. Use ao menos 3 letras/números.' }, { status: 400 });
 
@@ -64,7 +69,7 @@ export async function POST(req: NextRequest) {
       }
       d.businesses.push({
         id: businessId, ownerId: unitOwnerId, organizationId, name, slug, description: '',
-        logo: '', cover: '', niche, modes,
+        logo: '', cover: '', niche, clinicType, modes,
         phone: '', whatsapp: String(body.whatsapp || '').slice(0, 20), email: '', instagram: '', tiktok: '',
         address: String(body.address || '').trim().slice(0, 240), mapsUrl: '', hours: {}, paymentMethods: ['pix'], pixKey: '',
         deliveryFee: 0, minOrder: 0,
@@ -86,8 +91,23 @@ export async function POST(req: NextRequest) {
       if (unitOwnerId !== user.id) {
         d.members.push({ id: randomUUID(), businessId, userId: user.id, role: 'ADMIN', permissions: {}, active: true, note: 'Administrador da organização', invitedBy: unitOwnerId, createdAt: now, updatedAt: now });
       }
-      d.pages.push({ id: randomUUID(), businessId, presetId: defaultPresetId(niche), theme: defaultTheme(niche), blocks, updatedAt: now });
-      pushAudit(d, { action: 'unit.created', actor: user, businessId, meta: { organizationId } });
+      // FASE 2 · P9 — unidade nova nasce com o MODELO do tipo de clínica
+      // (mesmos blocos; só aparência). Sem tipo ⇒ nicho, como sempre.
+      const clinicPreset = clinicType !== 'geral' ? clinicPresetId(clinicType) : '';
+      const initialPreset = clinicPreset || defaultPresetId(niche);
+      d.pages.push({
+        id: randomUUID(), businessId, presetId: initialPreset,
+        theme: clinicPreset ? { ...presetById(clinicPreset).theme } : defaultTheme(niche),
+        blocks, updatedAt: now,
+      });
+      // FASE 2 · P5 — configuração inicial: semeia a ficha de anamnese do
+      // preset do tipo de clínica ('geral' não semeia — o hub pode criar depois).
+      if (clinicType !== 'geral') {
+        const tpl = templateFromPreset(clinicType, () => randomUUID(), now);
+        tpl.businessId = businessId;
+        d.anamneseTemplates.push(tpl);
+      }
+      pushAudit(d, { action: 'unit.created', actor: user, businessId, meta: { organizationId, clinicType } });
     });
     return NextResponse.json({ ok: true, businessId, organizationId, slug });
   } catch (error) {

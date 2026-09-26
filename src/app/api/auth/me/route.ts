@@ -1,5 +1,4 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { authUnavailable } from '@/lib/auth-failure';
 import { userFromRequest } from '@/lib/auth';
 import { readDB } from '@/lib/db';
 import {
@@ -14,10 +13,6 @@ import type { BusinessAppearance } from '@/lib/types';
 // É a fonte do menu do painel: cada tela só aparece quando há permissão real
 // (e a API revalida a mesma coisa no servidor).
 export async function GET(req: NextRequest) {
-  try { return await loadSession(req); } catch { return authUnavailable('session_lookup'); }
-}
-
-async function loadSession(req: NextRequest) {
   const user = await userFromRequest(req);
   if (!user) return NextResponse.json({ user: null }, { status: 401 });
   const db = await readDB();
@@ -61,7 +56,7 @@ async function loadSession(req: NextRequest) {
     canManage: o.ownerId === user.id || db.organizationMembers.some((m) => m.organizationId === o.id && m.userId === user.id && m.active && m.role === 'ADMIN'),
   }));
   return NextResponse.json({
-    user: { id: user.id, name: user.name, email: user.email, role: user.role || 'owner' },
+    user: { id: user.id, name: user.name, email: user.email, role: user.role || 'owner', photo: user.photo || '', phone: user.phone || '', title: user.title || '', conselho: user.conselho || '', professionalBio: user.professionalBio || '' },
     isMaster: isMasterUser(user),
     businesses: list,
     organizations,

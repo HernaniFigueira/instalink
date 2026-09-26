@@ -40,6 +40,8 @@ interface Step {
   params: Record<string, any>;
   waitMinutes: number;
   waitUntil: string;
+  /** booking_offset: negativo = antes do agendamento (min). '' = não usado. */
+  waitOffset: string;
 }
 
 interface AutomationView {
@@ -47,6 +49,8 @@ interface AutomationView {
   name: string;
   description: string;
   active: boolean;
+  status: string;
+  source: string;
   event: string;
   eventLabel: string;
   templateId: string;
@@ -115,6 +119,7 @@ function stepsFromLinear(steps: LinearStep[] = []): Step[] {
         type: '', params: {},
         waitMinutes: Number(s.wait?.minutes || 0),
         waitUntil: s.wait?.mode === 'until' ? String(s.wait.at || '') : '',
+        waitOffset: s.wait?.mode === 'booking_offset' ? String(s.wait.offsetMinutes ?? '') : '',
       };
     }
     const action = (s as any).action || {};
@@ -122,7 +127,7 @@ function stepsFromLinear(steps: LinearStep[] = []): Step[] {
       id: nextStepId(), kind: 'action', label: s.label || '',
       type: String(action.type || ''),
       params: { ...(action.params || {}) },
-      waitMinutes: 0, waitUntil: '',
+      waitMinutes: 0, waitUntil: '', waitOffset: '',
     };
   });
 }
@@ -131,9 +136,11 @@ function linearToApiSteps(steps: Step[]): any[] {
   return steps.map((s) => s.kind === 'wait'
     ? {
       kind: 'wait', label: s.label || 'Esperar',
-      wait: s.waitUntil
-        ? { mode: 'until', at: s.waitUntil.replace(' ', 'T').slice(0, 16) }
-        : { mode: 'duration', minutes: Number(s.waitMinutes) || 0 },
+      wait: s.waitOffset !== '' && s.waitOffset !== undefined && s.waitOffset !== null
+        ? { mode: 'booking_offset', offsetMinutes: Number(s.waitOffset) || 0 }
+        : s.waitUntil
+          ? { mode: 'until', at: s.waitUntil.replace(' ', 'T').slice(0, 16) }
+          : { mode: 'duration', minutes: Number(s.waitMinutes) || 0 },
     }
     : {
       kind: 'action',
@@ -154,6 +161,7 @@ export function AutomationsView() {
   const [automations, setAutomations] = useState<AutomationView[]>([]);
   const [templates, setTemplates] = useState<TemplateOffer[]>([]);
   const [runs, setRuns] = useState<RunView[]>([]);
+  const [health, setHealth] = useState<{ active: number; awaitingChannel: number; withError: number; executedToday: number } | null>(null);
   const [options, setOptions] = useState<Options>({ stages: [], services: [], members: [] });
   const [limits, setLimits] = useState<any>(null);
   const [capabilities, setCapabilities] = useState<Record<string, boolean>>({});
@@ -171,6 +179,7 @@ export function AutomationsView() {
     setAutomations(res.data?.automations || []);
     setTemplates(res.data?.templates || []);
     setRuns(res.data?.recentRuns || []);
+    setHealth(res.data?.health || null);
     setOptions(res.data?.options || { stages: [], services: [], members: [] });
     setLimits(res.data?.limits || null);
     setCapabilities(res.data?.capabilities || {});
@@ -207,7 +216,7 @@ export function AutomationsView() {
     const res = await apiSend('/api/automations', 'POST', { businessId, templateId: t.id });
     setBusy(false);
     if (!res.ok) { setError(res.message || 'Não foi possível criar a automação.'); return; }
-    setNotice(`“${t.name}” criada. Ajuste o que quiser e ative.`);
+    setNotice(`“${t.name}” salva como rascunho. Personalize se precisar e ative quando quiser — nada dispara antes.`);
     setTab('list');
     await load();
   }
@@ -235,6 +244,22 @@ export function AutomationsView() {
   if (loadError) return <AreaLoadError area="Automações" message={loadError} onRetry={load} />;
   return (
     <div className="space-y-4">
+      {health && (
+        <div className="flex flex-wrap gap-2 text-xs">
+          <span className="rounded-md border border-[var(--border)] bg-[var(--surface)] px-2 py-1">
+            Ativas · <strong>{health.active}</strong>
+          </span>
+          <span className="rounded-md border border-[var(--border)] bg-[var(--surface)] px-2 py-1">
+            Aguardando canal · <strong>{health.awaitingChannel}</strong>
+          </span>
+          <span className="rounded-md border border-[var(--border)] bg-[var(--surface)] px-2 py-1">
+            Com erro · <strong>{health.withError}</strong>
+          </span>
+          <span className="rounded-md border border-[var(--border)] bg-[var(--surface)] px-2 py-1">
+            Executadas hoje · <strong>{health.executedToday}</strong>
+          </span>
+        </div>
+      )}
       <PageHeader
         title="Automações"
         hint="Quando acontecer X, se Y, faça Z. O sistema trabalha sozinho nos bastidores — nada aqui envia mensagem por conta própria."
@@ -252,7 +277,7 @@ export function AutomationsView() {
 
       <div className="flex flex-wrap items-center gap-2 text-xs">
         {([['list', 'Minhas automações', automations.length], ['ai', 'Criar com IA', ''],
-          ['templates', 'Começar de um modelo', templates.length]] as const).map(([key, label, count]) => (
+          ['templates', 'Receitas prontas', templates.length]] as const).map(([key, label, count]) => (
           <button key={key} onClick={() => setTab(key as 'list' | 'ai' | 'templates')}
             aria-pressed={tab === key} className="il-chip">
             {label}{typeof count === 'number' && count > 0 ? ` · ${count}` : ''}
@@ -337,8 +362,9 @@ export function AutomationsView() {
               {!t.applicable && <p className="text-[11px] text-amber-800">{t.reason}</p>}
               <div className="mt-auto pt-1">
                 <Button size="sm" variant={t.applicable ? 'primary' : 'secondary'} disabled={!t.applicable || busy} onClick={() => createFromTemplate(t)}>
-                  Usar este modelo
+                  Usar receita
                 </Button>
+                {!t.applicable && null}
               </div>
             </Card>
           ))}
@@ -376,10 +402,20 @@ function AutomationCard({ a, onToggle, onEdit, onDuplicate, onHistory, onDelete 
         <div className="min-w-0 flex-1">
           <div className="flex flex-wrap items-center gap-2">
             <h3 className="text-sm font-semibold text-zinc-900 truncate">{a.name}</h3>
-            {!a.active && <Badge tone="zinc">inativa</Badge>}
+            {a.status === 'draft' && <Badge tone="amber">rascunho</Badge>}
+            {a.status === 'paused' && <Badge tone="zinc">pausada</Badge>}
+            {a.status === 'archived' && <Badge tone="zinc">arquivada</Badge>}
+            {a.status === 'active' && <Badge tone="green">ativa</Badge>}
+            {!a.active && a.status === 'active' && <Badge tone="zinc">inativa</Badge>}
             {a.stats.waiting > 0 && <Badge tone="amber">{a.stats.waiting} aguardando</Badge>}
             {a.stats.failed > 0 && <Badge tone="red">{a.stats.failed} com erro</Badge>}
-            {a.templateId && <Badge tone="blue">modelo</Badge>}
+            {a.source === 'template' && <Badge tone="blue">receita</Badge>}
+            {a.source === 'ai' && <Badge tone="blue">IA</Badge>}
+            {!a.active && a.status === 'draft' && (
+              <span className="text-[11px] text-amber-800 bg-amber-50 border border-amber-200 rounded px-1.5 py-0.5">
+                Pronta — revise e ative
+              </span>
+            )}
           </div>
           <p className="text-xs text-zinc-600 mt-1">{a.summary}</p>
           {a.description && <p className="text-xs text-zinc-400 mt-1">{a.description}</p>}
@@ -546,7 +582,7 @@ function AutomationEditor({ businessId, automationId, automations, options, onCl
 
           <div className="border-t border-zinc-100 pt-3">
             <label className="text-xs font-semibold text-zinc-700 inline-flex items-center gap-2">
-              <input type="checkbox" checked={useElse} onChange={(e) => { setUseElse(e.target.checked); if (e.target.checked && !elseSteps.length) setElseSteps([{ id: nextStepId(), kind: 'action', label: '', type: 'add_lead_note', params: {}, waitMinutes: 0, waitUntil: '' }]); }} />
+              <input type="checkbox" checked={useElse} onChange={(e) => { setUseElse(e.target.checked); if (e.target.checked && !elseSteps.length) setElseSteps([{ id: nextStepId(), kind: 'action', label: '', type: 'add_lead_note', params: {}, waitMinutes: 0, waitUntil: '', waitOffset: '' }]); }} />
               Adicionar caminho “Senão” (ramificação)
             </label>
             {useElse && (
@@ -630,7 +666,7 @@ function ConditionValue({ row, fields, onChange }: {
 function Block({ label, hint, children }: { label: string; hint?: string; children: React.ReactNode }) {
   return (
     <div className="border border-zinc-200 rounded-md p-3">
-      <p className="text-[11px] font-bold uppercase tracking-wide text-zinc-500">{label}</p>
+      <p className="text-[11px] font-semibold uppercase tracking-wide text-zinc-500">{label}</p>
       {hint && <p className="text-[11px] text-zinc-400 mb-2">{hint}</p>}
       <div className={cn(!hint && 'mt-2')}>{children}</div>
     </div>
@@ -644,8 +680,8 @@ function StepList({ label, hint, steps, setSteps, options, event }: {
 }) {
   const add = (kind: Step['kind']) => {
     const next: Step = kind === 'wait'
-      ? { id: nextStepId(), kind: 'wait', label: 'Esperar', type: '', params: {}, waitMinutes: 120, waitUntil: '' }
-      : { id: nextStepId(), kind: 'action', label: '', type: 'add_lead_note', params: {}, waitMinutes: 0, waitUntil: '' };
+      ? { id: nextStepId(), kind: 'wait', label: 'Esperar', type: '', params: {}, waitMinutes: 120, waitUntil: '', waitOffset: '' }
+      : { id: nextStepId(), kind: 'action', label: '', type: 'add_lead_note', params: {}, waitMinutes: 0, waitUntil: '', waitOffset: '' };
     setSteps((prev) => [...prev, next]);
   };
   const patch = (id: string, next: Partial<Step>) => setSteps((prev) => prev.map((s) => (s.id === id ? { ...s, ...next } : s)));
@@ -663,12 +699,12 @@ function StepList({ label, hint, steps, setSteps, options, event }: {
         {steps.map((s, i) => (
           <div key={s.id} className="border border-zinc-200 rounded-md p-2.5 bg-zinc-50/50">
             <div className="flex flex-wrap items-center gap-2">
-              <span className="text-[10px] font-bold uppercase tracking-wide text-zinc-400 w-14">
+              <span className="text-[10px] font-semibold uppercase tracking-wide text-zinc-400 w-14">
                 {i === 0 ? label.toLowerCase() : 'depois'}
               </span>
               <Select className="max-w-[260px]" value={s.kind === 'wait' ? '__wait' : s.type}
                 onChange={(e) => {
-                  if (e.target.value === '__wait') patch(s.id, { kind: 'wait', type: '', params: {}, label: 'Esperar' });
+                  if (e.target.value === '__wait') patch(s.id, { kind: 'wait', type: '', params: {}, label: 'Esperar', waitMinutes: s.waitMinutes || 60, waitUntil: s.waitUntil || '', waitOffset: s.waitOffset || '' });
                   else patch(s.id, { kind: 'action', type: e.target.value, label: automationActionDef(e.target.value)?.short || '', params: {} });
                 }}>
                 <option value="__wait">Esperar (tempo)</option>
@@ -683,23 +719,55 @@ function StepList({ label, hint, steps, setSteps, options, event }: {
 
             {s.kind === 'wait' ? (
               <div className="mt-2 flex flex-wrap items-end gap-2">
-                <Select className="max-w-[200px]" value={String(s.waitMinutes)} onChange={(e) => patch(s.id, { waitMinutes: Number(e.target.value), waitUntil: '' })}>
-                  {WAIT_MINUTE_PRESETS.map((p) => <option key={p.minutes} value={String(p.minutes)}>{p.label}</option>)}
-                  <option value="0">personalizado…</option>
+                <Select className="max-w-[280px]"
+                  value={s.waitOffset !== '' ? 'offset' : (s.waitUntil ? 'until' : 'duration')}
+                  onChange={(e) => {
+                    const mode = e.target.value;
+                    if (mode === 'offset') patch(s.id, { waitOffset: s.waitOffset || '-1440', waitUntil: '', waitMinutes: 0 });
+                    else if (mode === 'until') patch(s.id, { waitUntil: s.waitUntil || '', waitOffset: '', waitMinutes: 0 });
+                    else patch(s.id, { waitOffset: '', waitUntil: '', waitMinutes: s.waitMinutes || 60 });
+                  }}>
+                  <option value="duration">Esperar um tempo…</option>
+                  <option value="until">Esperar até data/hora…</option>
+                  <option value="offset">Relativo ao agendamento…</option>
                 </Select>
-                {!s.waitMinutes && (
-                  <Input className="max-w-[120px]" type="number" min={1} value={String(s.waitMinutes || '')} placeholder="minutos"
-                    onChange={(e) => patch(s.id, { waitMinutes: Math.max(1, Number(e.target.value) || 0) })} />
+                {s.waitOffset === '' && !s.waitUntil && (
+                  <>
+                    <Select className="max-w-[200px]" value={String(s.waitMinutes)} onChange={(e) => patch(s.id, { waitMinutes: Number(e.target.value), waitUntil: '', waitOffset: '' })}>
+                      {WAIT_MINUTE_PRESETS.map((p) => <option key={p.minutes} value={String(p.minutes)}>{p.label}</option>)}
+                      <option value="0">personalizado…</option>
+                    </Select>
+                    {!s.waitMinutes && (
+                      <Input className="max-w-[120px]" type="number" min={1} value={String(s.waitMinutes || '')} placeholder="minutos"
+                        onChange={(e) => patch(s.id, { waitMinutes: Math.max(1, Number(e.target.value) || 0) })} />
+                    )}
+                  </>
                 )}
-                <span className="text-[11px] text-zinc-400">ou até</span>
-                <Input className="max-w-[200px]" type="datetime-local" value={s.waitUntil}
-                  title="Aceita data e hora, ou “amanhã às 09:00”"
-                  placeholder="amanhã às 09:00"
-                  onChange={(e) => patch(s.id, { waitUntil: e.target.value, waitMinutes: 0 })} />
+                {s.waitOffset === '' && (
+                  <>
+                    <span className="text-[11px] text-zinc-400">ou até</span>
+                    <Input className="max-w-[200px]" type="datetime-local" value={s.waitUntil}
+                      title="Aceita data e hora, ou “amanhã às 09:00”"
+                      placeholder="amanhã às 09:00"
+                      onChange={(e) => patch(s.id, { waitUntil: e.target.value, waitMinutes: 0, waitOffset: '' })} />
+                  </>
+                )}
+                {s.waitOffset !== '' && (
+                  <Select className="max-w-[280px]" value={String(s.waitOffset)}
+                    onChange={(e) => patch(s.id, { waitOffset: e.target.value, waitUntil: '', waitMinutes: 0 })}>
+                    <option value="-1440">24 horas antes do agendamento</option>
+                    <option value="-120">2 horas antes do agendamento</option>
+                    <option value="-60">1 hora antes do agendamento</option>
+                    <option value="-30">30 minutos antes do agendamento</option>
+                    <option value="60">1 hora depois do início</option>
+                  </Select>
+                )}
                 <p className="w-full text-[11px] text-zinc-500">
-                  {s.waitUntil
-                    ? `Retoma em ${s.waitUntil.replace('T', ' ')} — a execução fica guardada no banco, sem requisição aberta.`
-                    : `A execução pausa ${humanDuration(s.waitMinutes)} e continua sozinha.`}
+                  {s.waitOffset !== ''
+                    ? 'O alvo é recalculado do agendamento vivo na retomada — cancelou ou reagendou, o lembrete não sai com data morta.'
+                    : s.waitUntil
+                      ? `Retoma em ${s.waitUntil.replace('T', ' ')} — a execução fica guardada no banco, sem requisição aberta.`
+                      : `A execução pausa ${humanDuration(s.waitMinutes)} e continua sozinha.`}
                 </p>
               </div>
             ) : (

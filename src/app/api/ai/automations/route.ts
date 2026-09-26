@@ -6,7 +6,7 @@
 // tenant pelo corpo.
 //
 //   GET    lista propostas desta unidade + observação (falhas/sugestões)
-//   POST   gerar | regenerar | aprovar | publicar | cancelar
+//   POST   gerar | regenerar | aprovar | publicar | cancelar | simulate | refine
 //   PATCH  editar o plano (volta para rascunho)
 //
 // Publicar grava uma Automation do P4 (active só se o humano pediu).
@@ -20,6 +20,8 @@ import {
   editProposal, findProposal, generateProposal, observeBusiness, proposalView,
   proposalsOf, publishProposal, regenerateProposal, tenantContextFor,
 } from '@/lib/ai';
+import { simulatePlan } from '@/lib/ai/simulate';
+import { refinePlan } from '@/lib/ai/refine';
 
 function fail(message: string, status = 400): NextResponse {
   return NextResponse.json({ ok: false, error: message }, { status });
@@ -61,6 +63,71 @@ export async function POST(req: NextRequest) {
     const guard = await requireBusiness(req, businessId, 'config');
     if (!guard.ok) return guard.res;
     const action = String(body.action || 'generate').trim();
+
+    // F3-C — simulação dry-run (sem gravar run nem enviar nada)
+    if (action === 'simulate') {
+      const id = String(body.id || '').trim();
+      const ctx = tenantContextFor(guard.db, businessId);
+      if (!ctx) return fail('Negócio não encontrado.', 404);
+      let plan = body.plan;
+      if (id) {
+        const prop = findProposal(guard.db, businessId, id);
+        if (!prop) return fail('Proposta não encontrada.', 404);
+        plan = prop.plan;
+      }
+      if (!plan || typeof plan !== 'object') return fail('Plano não informado.', 400);
+      const sim = simulatePlan(guard.db, businessId, plan, ctx);
+      return NextResponse.json({ ok: true, simulation: sim });
+    }
+
+    // F3-C — edição conversacional pontual do plano (sem LLM)
+    if (action === 'refine') {
+      const id = String(body.id || '').trim();
+      const instruction = String(body.instruction || body.prompt || '').trim();
+      if (!id) return fail('Proposta não informada.', 400);
+      const existing = findProposal(guard.db, businessId, id);
+      if (!existing) return fail('Proposta não encontrada.', 404);
+      if (existing.status === 'published' || existing.status === 'cancelled') return fail('proposta encerrada não pode ser editada', 422);
+      const ctx = tenantContextFor(guard.db, businessId);
+      if (!ctx) return fail('Negócio não encontrado.', 404);
+      const out = refinePlan(existing.plan, instruction, ctx);
+      if (!out.ok) {
+        return NextResponse.json({ ok: false, errors: out.errors, changes: [] }, { status: 422 });
+      }
+      const updated = await updateDB((d) => {
+        const res = editProposal(d, {
+          businessId,
+          id,
+          plan: {
+            name: out.plan.name,
+            description: out.plan.description,
+            event: out.plan.event,
+            condition: out.plan.condition,
+            steps: out.plan.steps,
+            elseSteps: out.plan.elseSteps,
+            settings: out.plan.settings,
+            confidence: out.plan.confidence,
+            prompt: existing.prompt,
+            assumptions: out.plan.assumptions,
+            unresolved: out.plan.unresolved,
+          },
+        });
+        if (res.ok) pushAudit(d, { action: 'ai.proposal_updated', actor: guard.ctx.user, businessId, meta: { proposalId: id, refine: true } });
+        return res;
+      });
+      if (!updated.ok || !updated.proposal) {
+        return NextResponse.json({ ok: false, errors: updated.errors }, { status: 422 });
+      }
+      const fresh = await readDB();
+      return NextResponse.json({
+        ok: true,
+        proposal: proposalView(fresh, updated.proposal),
+        changes: out.changes,
+        errors: updated.errors,
+        warnings: updated.warnings,
+      });
+    }
+
     const userId = guard.ctx.user.id;
 
     if (action === 'generate' || action === '') {

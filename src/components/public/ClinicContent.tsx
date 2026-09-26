@@ -111,25 +111,20 @@ export function BlockView({ block, business, agent, catalog, extras }: {
       // é mais regra operacional aqui.
       const status = extras.openNow ?? null;
       return (
-        <section>
-          {/* CAPA emoldurada (não banner full-bleed): margem lateral do
-              container, cantos bem arredondados, proporção de mini-site e
-              acabamento sutil de borda — composição premium. */}
+        <section className="pub-hero">
+          {/* HOMOLOGAÇÃO · P1 — geometria padrão aprovada:
+              CAPA full-width → conteúdo branco sobe com cantos superiores
+              arredondados → avatar circular atravessa a transição. */}
           {business.cover ? (
-            <div
-              className="overflow-hidden"
-              style={{
-                borderRadius: 'calc(var(--il-radius) + 8px)',
-                border: '1px solid color-mix(in srgb, var(--il-muted) 16%, transparent)',
-                boxShadow: '0 12px 28px -18px color-mix(in srgb, var(--il-muted) 55%, transparent)',
-              }}
-            >
-              <img src={business.cover} alt={`Foto de ${business.name}`} className="w-full h-48 sm:h-72 object-cover" />
+            <div className="pub-hero__cover">
+              <img src={business.cover} alt={`Foto de ${business.name}`} className="w-full h-52 sm:h-72 object-cover" />
             </div>
           ) : null}
-          <div className={'px-1 pt-2'}>
-            <div className="flex justify-center py-4">
-              {business.logo ? <img src={business.logo} alt="" className="w-full max-w-[240px] max-h-[100px] object-contain" /> : <span className="text-3xl font-semibold" style={{ color: 'var(--il-primary)' }}>{initials(business.name)}</span>}
+          <div className={`pub-hero__sheet${business.cover ? ' pub-hero__sheet--overlap' : ''}`}>
+            <div className={`flex justify-center ${business.cover ? 'relative z-10 -mt-[54px] sm:-mt-[66px]' : 'pt-2'}`}>
+              {business.logo
+                ? <span className="pub-avatar pub-avatar--ring"><img src={business.logo} alt={`Logo de ${business.name}`} /></span>
+                : <span className="pub-avatar pub-avatar--initials pub-avatar--ring" style={{ color: 'var(--il-primary)' }}>{initials(business.name)}</span>}
             </div>
             <div className="text-center mt-2.5">
               <h1 className="text-[30px] sm:text-[40px] leading-tight font-extrabold tracking-tight">{business.name}</h1>

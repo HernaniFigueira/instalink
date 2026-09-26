@@ -10,7 +10,7 @@
 //     impressa na via entregue.
 //
 // Sem I/O e sem relógio global: o servidor passa `now` e o autor.
-import type { Encounter, EncounterStatus } from './types';
+import type { Encounter, EncounterFile, EncounterFollowUpMode, EncounterStatus } from './types';
 
 export interface EncounterStatusDef {
   id: EncounterStatus;
@@ -177,7 +177,9 @@ export function encounterSignature(e: Pick<Encounter, 'signedBy' | 'finalizedBy'
 /** Silêncio depois da última tecla antes do autosave (nem ansioso, nem perdido). */
 export const ENCOUNTER_AUTOSAVE_MS = 1000;
 
-/** Formulário da tela: os campos de texto + etiquetas como TEXTO (vírgula). */
+/** Formulário da tela: os campos de texto + etiquetas como TEXTO (vírgula).
+ * FASE 2 · P3 — retorno estruturado é ADITIVO (opcional): formulários legados
+ * (e testes) sem esses campos continuam válidos. */
 export interface EncounterDraftForm {
   complaint: string;
   evolution: string;
@@ -185,6 +187,81 @@ export interface EncounterDraftForm {
   followUp: string;
   internalNote: string;
   tags: string;
+  /** '' = nenhuma escolha ainda (payload omite e o servidor mantém o default). */
+  followUpMode?: EncounterFollowUpMode | '';
+  followUpDate?: string;
+  followUpDays?: number;
+}
+
+// ── FASE 2 · P3 — retorno estruturado (sem retorno · data · intervalo) ──
+export const FOLLOW_UP_MODES: EncounterFollowUpMode[] = ['none', 'date', 'interval', 'custom'];
+
+export const FOLLOW_UP_MODE_LABELS: Record<EncounterFollowUpMode, string> = {
+  none: 'Sem retorno', date: 'Data específica', interval: 'Intervalo', custom: 'Texto livre',
+};
+
+export function isFollowUpMode(v: unknown): v is EncounterFollowUpMode {
+  return typeof v === 'string' && (FOLLOW_UP_MODES as string[]).includes(v);
+}
+
+/** Valida o trio (mode/date/days) com mensagem amigável. '' = ok. */
+export function validateFollowUp(input: {
+  followUpMode?: unknown; followUpDate?: unknown; followUpDays?: unknown;
+}): string {
+  const mode = input.followUpMode;
+  if (mode === undefined || mode === null || mode === '') return '';
+  if (!isFollowUpMode(mode)) return 'Forma de retorno inválida.';
+  if (mode === 'date') {
+    const d = String(input.followUpDate || '');
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(d)) return 'Informe a data do retorno.';
+    if (Number.isNaN(Date.parse(`${d}T00:00:00Z`))) return 'Data do retorno inválida.';
+  }
+  if (mode === 'interval') {
+    const n = Number(input.followUpDays);
+    if (!Number.isFinite(n) || n < 1 || n > 730) return 'Informe o intervalo em dias (1 a 730).';
+  }
+  return '';
+}
+
+/**
+ * Data-alvo do retorno (YYYY-MM-DD) para agendar/tarefa:
+ *   date → a própria data; interval → data do atendimento + N dias; demais → ''.
+ * Puro: sem relógio global — a data do atendimento vem do registro.
+ */
+export function followUpDueDate(row: Pick<Encounter, 'date' | 'followUpMode' | 'followUpDate' | 'followUpDays'>): string {
+  if (row.followUpMode === 'date' && row.followUpDate) return row.followUpDate;
+  if (row.followUpMode === 'interval' && row.date && Number(row.followUpDays) > 0) {
+    const base = Date.parse(`${row.date}T00:00:00Z`);
+    if (Number.isNaN(base)) return '';
+    return new Date(base + Number(row.followUpDays) * 86400000).toISOString().slice(0, 10);
+  }
+  return '';
+}
+
+/** Higieniza os arquivos do atendimento (só referências; binário fica no Storage). */
+export function cleanEncounterFiles(value: unknown): EncounterFile[] {
+  const list = Array.isArray(value) ? value : [];
+  const out: EncounterFile[] = [];
+  const seen = new Set<string>();
+  for (const raw of list) {
+    if (!raw || typeof raw !== 'object') continue;
+    const f = raw as Partial<EncounterFile>;
+    const id = String(f.id || '').slice(0, 64);
+    const url = String(f.url || '');
+    if (!id || !url || seen.has(id)) continue;
+    if (!/^https?:\/\//i.test(url)) continue;
+    seen.add(id);
+    out.push({
+      id,
+      name: String(f.name || 'arquivo').slice(0, 160),
+      url: url.slice(0, 600),
+      size: Number.isFinite(Number(f.size)) ? Math.max(0, Math.round(Number(f.size))) : 0,
+      createdAt: String(f.createdAt || ''),
+      by: String(f.by || ''),
+    });
+    if (out.length >= 12) break; // teto por registro
+  }
+  return out;
 }
 
 export const ENCOUNTER_AUTOSAVE_LABELS = {
@@ -198,6 +275,9 @@ export function encounterDraftKey(form: EncounterDraftForm): string {
   return JSON.stringify([
     form.complaint ?? '', form.evolution ?? '', form.guidance ?? '',
     form.followUp ?? '', form.internalNote ?? '', form.tags ?? '',
+    // FASE 2 · P3 — retorno estruturado participa da assinatura (sem isso o
+    // autosave ignoraria a troca de modo/data/intervalo).
+    form.followUpMode ?? '', form.followUpDate ?? '', form.followUpDays ?? '',
   ]);
 }
 
@@ -213,6 +293,10 @@ export function encounterContentPayload(
     complaint: form.complaint, evolution: form.evolution, guidance: form.guidance,
     followUp: form.followUp, internalNote: form.internalNote,
     tags: String(form.tags || '').split(',').map((t) => t.trim()).filter(Boolean),
+    // FASE 2 · P3 — retorno estruturado (aditivo: só sai quando a tela tem).
+    ...(form.followUpMode ? { followUpMode: form.followUpMode } : {}),
+    ...(form.followUpMode === 'date' ? { followUpDate: form.followUpDate || '' } : {}),
+    ...(form.followUpMode === 'interval' ? { followUpDays: Number(form.followUpDays) || 0 } : {}),
     ...(expectedVersion === undefined ? {} : { expectedVersion }),
   };
 }

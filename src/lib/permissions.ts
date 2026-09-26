@@ -14,10 +14,10 @@ export interface PermissionDef {
 }
 
 export const PERMISSIONS: PermissionDef[] = [
-  { id: 'dashboard', label: 'Início', hint: 'Visão geral do negócio e indicadores do dia' },
+  { id: 'dashboard', label: 'Visão geral', hint: 'O dia de hoje: o que precisa de atenção agora' },
   { id: 'agenda', label: 'Agenda', hint: 'Ver e operar a agenda (confirmar, concluir, remarcar)' },
   { id: 'clientes', label: 'Clientes', hint: 'CRM de clientes e histórico 360' },
-  { id: 'leads', label: 'Leads', hint: 'Interesses e conversas captadas na página' },
+  { id: 'leads', label: 'Oportunidades', hint: 'Interesses e conversas captadas na página' },
   { id: 'pedidos', label: 'Pedidos', hint: 'Pedidos do catálogo e status' },
   { id: 'catalogo', label: 'Catálogo', hint: 'Produtos, serviços, profissionais e horários' },
   { id: 'pagina', label: 'Página', hint: 'Editor da página, tema e avaliações' },
@@ -56,11 +56,11 @@ export const ROLES: RoleDef[] = [
   },
   {
     id: 'SECRETARIA', label: 'Secretária', hint: 'Agenda, clientes, leads e WhatsApp',
-    permissions: ['dashboard', 'agenda', 'clientes', 'leads', 'pedidos', 'whatsapp', 'agente'],
+    permissions: ['dashboard', 'agenda', 'clientes', 'leads', 'pedidos', 'whatsapp'],
   },
   {
     id: 'ATENDENTE', label: 'Atendente', hint: 'Agenda, clientes e WhatsApp',
-    permissions: ['dashboard', 'agenda', 'clientes', 'whatsapp', 'agente'],
+    permissions: ['dashboard', 'agenda', 'clientes', 'whatsapp'],
   },
   {
     id: 'VENDEDOR', label: 'Vendedor', hint: 'Clientes, leads e campanhas',

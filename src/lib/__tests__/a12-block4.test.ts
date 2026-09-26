@@ -62,22 +62,29 @@ describe('B4 — portas da Dashboard saem do mapa de permissões (nunca chute)',
 describe('B4.1/B4.2 — estrutura canônica e sem duplicações', () => {
   const page = read('src/app/(dashboard)/dashboard/page.tsx');
 
-  it('ordem canônica: Atenção → Hoje → Próximos → Período → Recentes → Onde agir', () => {
+  // Visual Fidelity Pass: a ORDEM de leitura aprovada no mockup é
+  // Atenção → Hoje (KPIs) → Onde agir + Período → Próximos/Conversas → Recentes.
+  // A intenção do guard continua a mesma: uma ordem canônica única, sem blocos
+  // soltos competindo — só os marcadores acompanharam o layout aprovado.
+  // GoDoutor 2.0 (§11/§12): "Hoje" continua vindo antes do painel de período,
+  // mas o painel analítico só existe para quem tem Gestão — para os demais o
+  // lugar dele é "O que resolver agora", na MESMA posição da grade.
+  it('ordem canônica: Atenção → Hoje → Onde agir/Período → Próximos → Recentes', () => {
     // Marcadores do JSX renderizado (não dos comentários de cabeçalho).
     const atencao = page.indexOf('aria-label="Itens que precisam de atenção"');
     const hoje = page.indexOf('>Hoje</h3>');
+    const ondeAgir = page.indexOf('{hasWhereToAct ? (');
+    const periodo = page.indexOf('Período <span');
     const proximos = page.indexOf('>Próximos atendimentos</h3>');
-    const periodo = page.indexOf('>Período <span');
     const recentes = page.indexOf('>Atividade recente</h3>');
-    const ondeAgir = page.indexOf('{hasWhereToAct && (');
-    for (const [k, v] of Object.entries({ atencao, hoje, proximos, periodo, recentes, ondeAgir })) {
+    for (const [k, v] of Object.entries({ atencao, hoje, ondeAgir, periodo, proximos, recentes })) {
       expect(v, `marcador ${k} ausente`).toBeGreaterThan(-1);
     }
     expect(atencao).toBeLessThan(hoje);
-    expect(hoje).toBeLessThan(proximos);
-    expect(proximos).toBeLessThan(periodo);
-    expect(periodo).toBeLessThan(recentes);
-    expect(recentes).toBeLessThan(ondeAgir);
+    expect(hoje).toBeLessThan(ondeAgir);
+    expect(ondeAgir).toBeLessThan(periodo);
+    expect(periodo).toBeLessThan(proximos);
+    expect(proximos).toBeLessThan(recentes);
   });
 
   it('bloco "Próxima ação" foi removido (o checklist segue em Onde agir)', () => {
@@ -115,19 +122,23 @@ describe('B4.1/B4.2 — estrutura canônica e sem duplicações', () => {
 describe('B4.4 — grade coerente de 12 colunas (sem overflow horizontal)', () => {
   const page = read('src/app/(dashboard)/dashboard/page.tsx');
 
-  it('a linha principal usa lg:grid-cols-12 com composição 5 + 7', () => {
+  it('a linha principal usa lg:grid-cols-12 com composição 5 + 7 (ou 12 sozinho)', () => {
     expect(page).toMatch(/lg:grid-cols-12/);
     const spans = [...page.matchAll(/lg:col-span-(\d+)/g)].map((m) => Number(m[1]));
     expect(spans.length).toBeGreaterThan(0);
     for (const s of spans) expect(s, 'nenhum span passa de 12').toBeLessThanOrEqual(12);
-    expect([...new Set(spans)].sort((a, b) => a - b)).toEqual([5, 7]);
+    // 5 + 7 é a composição padrão. O 12 existe para o caso em que só há UM
+    // bloco na linha — perfil que não configura a clínica (§11: o checklist de
+    // setup não é do profissional) ou conta sem bloco "onde agir": o painel
+    // restante ocupa a LINHA INTEIRA em vez de deixar 5 colunas vazias.
+    expect([...new Set(spans)].sort((a, b) => a - b)).toEqual([5, 7, 12]);
     // A tentativa antiga (equivalente a 15 colunas: 4+5+3+3) não volta.
     expect(spans.filter((s) => s === 3).length).toBe(0);
   });
 
   it('seções internas empilham antes do desktop (390px sem espremer texto)', () => {
     expect(page).toMatch(/grid-cols-2 sm:grid-cols-4/); // KPIs de Página/Movimento/Resultados
-    expect(page).toMatch(/grid grid-cols-3 sm:grid-cols-6/); // Hoje
+    expect(page).toMatch(/grid grid-cols-2 md:grid-cols-3 xl:grid-cols-6/); // Hoje (KPIs empilham no mobile)
     expect(page).not.toMatch(/w-\[(?:[89]\d\d|\d{4})px\]/); // nenhuma largura fixa grande
   });
 
@@ -152,7 +163,7 @@ describe('B4.7 — Onde agir: só ações existentes', () => {
 
   it('sem checklist pendente e canal ok, a área não existe (nada inventado)', () => {
     expect(page).toMatch(/const hasWhereToAct = showSetup \|\| showConnectChannel;/);
-    expect(page).toMatch(/\{hasWhereToAct && \(/);
+    expect(page).toMatch(/\{hasWhereToAct \? \(/);
   });
 
   it('não cria Radar/scoring/recomendação por IA', () => {

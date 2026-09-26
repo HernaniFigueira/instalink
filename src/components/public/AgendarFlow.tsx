@@ -13,6 +13,7 @@
 //     horizonte, leadMin) — a UI nunca é a autoridade.
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { money, onlyDigits, cn } from '@/lib/utils';
+import { priceVisible } from '@/lib/pricing';
 import { humanDay } from '@/lib/tz';
 import { upcomingDays, publicHorizonDays, type PublicBookingTarget } from '@/lib/agendar';
 import type { Professional, Service } from '@/lib/types';
@@ -316,9 +317,14 @@ export default function AgendarFlow({ business, services, professionals, today, 
                         {svc.description || '\u00A0'}
                       </p>
                     </div>
-                    <div className="text-right pl-3 font-semibold text-sm">
-                      {svc.price > 0 ? money(svc.price) : 'A combinar'}
-                    </div>
+                    {/* P1.9 — preço público só quando o serviço libera
+                        (showPrice !== false). Sem permissão, sem linha: o
+                        fluxo de agendamento NUNCA vaza valor. */}
+                    {priceVisible(svc) && (
+                      <div className="text-right pl-3 font-semibold text-sm">
+                        {svc.price > 0 ? money(svc.price) : 'A combinar'}
+                      </div>
+                    )}
                   </button>
                 ))}
               </div>
@@ -423,7 +429,7 @@ export default function AgendarFlow({ business, services, professionals, today, 
                   </span>
                   <div className="min-w-0">
                     <p className="text-sm font-bold text-zinc-900 truncate">{me.name}</p>
-                    <p className="text-xs text-emerald-800 truncate">{me.phone}{me.email ? ` · ${me.email}` : ''} · conta InstaLink</p>
+                    <p className="text-xs text-emerald-800 truncate">{me.phone}{me.email ? ` · ${me.email}` : ''} · conta GoDoutor</p>
                   </div>
                 </div>
               ) : (

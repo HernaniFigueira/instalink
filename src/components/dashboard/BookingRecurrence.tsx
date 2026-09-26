@@ -59,13 +59,13 @@ export function BookingRecurrence({ first, rows, preview, pros, min, max, busy, 
 
   return (
     <fieldset disabled={busy} className="space-y-3 rounded-lg border border-[var(--lilac-border)] bg-[var(--lilac-bg)]/55 p-3.5">
-      <legend className="text-sm font-bold text-[var(--lilac-fg)] inline-flex items-center gap-1.5 px-1">
+      <legend className="text-sm font-semibold text-[var(--lilac-fg)] inline-flex items-center gap-1.5 px-1">
         <Icon n="sync" size={14} /> Repetir este atendimento (opcional)
       </legend>
 
       {/* Passo 1 — como repetir */}
       <div className="rounded-md bg-white border border-[var(--border)] p-3 space-y-3 shadow-xs">
-        <p className="text-[11px] font-bold uppercase tracking-[0.08em] text-[var(--text-faint)] inline-flex items-center gap-1.5">
+        <p className="text-[11px] font-semibold uppercase tracking-[0.08em] text-[var(--text-faint)] inline-flex items-center gap-1.5">
           <Step n={1} /> Como repetir
         </p>
         <label className="block text-xs font-semibold text-[var(--text-muted)]">Frequência
@@ -121,11 +121,11 @@ export function BookingRecurrence({ first, rows, preview, pros, min, max, busy, 
       {/* Passo 2 — revisar */}
       {rows.length > 0 && (
         <div className="rounded-md bg-white border border-[var(--border)] p-3 space-y-3 shadow-xs">
-          <p className="text-[11px] font-bold uppercase tracking-[0.08em] text-[var(--text-faint)] inline-flex items-center gap-1.5">
+          <p className="text-[11px] font-semibold uppercase tracking-[0.08em] text-[var(--text-faint)] inline-flex items-center gap-1.5">
             <Step n={2} /> Revisar e validar
           </p>
           <div className="flex flex-wrap items-center gap-2">
-            <span className="text-sm font-bold text-[var(--text)] tabular-nums">
+            <span className="text-sm font-semibold text-[var(--text)] tabular-nums">
               {rows.length} {rows.length === 1 ? 'atendimento será criado' : 'atendimentos serão criados'}
             </span>
             {preview && (
@@ -150,10 +150,10 @@ export function BookingRecurrence({ first, rows, preview, pros, min, max, busy, 
                     : 'border-[var(--border)] bg-[var(--surface-2)]')
                 }>
                   <div className="flex flex-wrap items-center gap-2">
-                    <span className="w-6 h-6 shrink-0 rounded-pill bg-[var(--lilac-bg)] text-[var(--lilac-fg)] text-[11px] font-bold flex items-center justify-center tabular-nums">
+                    <span className="w-6 h-6 shrink-0 rounded-pill bg-[var(--lilac-bg)] text-[var(--lilac-fg)] text-[11px] font-semibold flex items-center justify-center tabular-nums">
                       {String(i + 1).padStart(2, '0')}
                     </span>
-                    <span className="text-xs font-bold text-[var(--text)] tabular-nums">
+                    <span className="text-xs font-semibold text-[var(--text)] tabular-nums">
                       {row.date ? row.date.split('-').reverse().join('/') : 'sem data'}{row.time ? ` · ${row.time}` : ''}
                     </span>
                     <span className="text-xs text-[var(--text-muted)] truncate">
@@ -215,7 +215,7 @@ export function BookingRecurrence({ first, rows, preview, pros, min, max, busy, 
 /** Bolinha numerada do passo (o fluxo é didático para quem nunca repetiu). */
 function Step({ n }: { n: number }) {
   return (
-    <span aria-hidden="true" className="w-4 h-4 rounded-full bg-[var(--lilac)] text-white text-[10px] font-bold inline-flex items-center justify-center">
+    <span aria-hidden="true" className="w-4 h-4 rounded-full bg-[var(--lilac)] text-white text-[10px] font-semibold inline-flex items-center justify-center">
       {n}
     </span>
   );

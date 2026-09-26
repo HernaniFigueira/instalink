@@ -371,7 +371,7 @@ export function QueuePanel({ businessId, date, rows, done = [], loading, canWrit
             return (
               <li key={row.id} className="px-4 py-3 flex flex-wrap items-start gap-x-3 gap-y-2" data-queue-row={row.id}>
                 <span className={cn(
-                  'w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold shrink-0',
+                  'w-8 h-8 rounded-full flex items-center justify-center text-xs font-semibold shrink-0',
                   row.status === 'in_service' ? 'bg-[var(--success-bg)] text-[var(--success-fg)]' : 'bg-[var(--surface-3)] text-[var(--text-muted)]',
                 )}>
                   {row.status === 'in_service' ? <Icon n="check" size={14} strokeWidth={3} /> : (pos || '—')}
@@ -443,7 +443,7 @@ export function QueuePanel({ businessId, date, rows, done = [], loading, canWrit
           <button type="button" onClick={() => setDoneOpen((v) => !v)} aria-expanded={doneOpen}
             className="w-full flex items-center gap-2 px-4 py-2.5 text-left hover:bg-[var(--surface-hover)]">
             <Icon n="check" size={14} className="text-[var(--success-fg)]" />
-            <span className="text-xs font-bold uppercase tracking-wide text-[var(--text-muted)]">Atendidos hoje</span>
+            <span className="text-xs font-semibold uppercase tracking-wide text-[var(--text-muted)]">Atendidos hoje</span>
             <Badge tone="zinc">{doneRows.length}</Badge>
             <Icon n={doneOpen ? 'chevD' : 'chevR'} size={14} className="ml-auto text-[var(--text-faint)]" />
           </button>

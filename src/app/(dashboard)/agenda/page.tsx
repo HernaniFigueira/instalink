@@ -1,8 +1,4 @@
 'use client';
-import { readAgendaBookings } from '@/lib/agenda-read';
-import { agendaEnvelope, agendaScale, type AgendaDensity } from '@/lib/agenda-density';
-import { useAgendaPreferences } from '@/components/dashboard/useAgendaPreferences';
-import { useWorkspace } from '@/components/dashboard/WorkspaceContext';
 import { computeSlots } from '@/lib/slots';
 import { QueueDock } from '@/components/dashboard/QueueDock';
 // ═══════════════════════════════════════════════════════════════
@@ -30,9 +26,10 @@ import { QueueDock } from '@/components/dashboard/QueueDock';
 import { memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties } from 'react';
 import { useSearchParams } from 'next/navigation';
 import { todayISO, addDaysISO, weekdayOf, formatDateBR, nowHM } from '@/lib/tz';
+import { nowLinePlacement } from '@/lib/agenda-nowline';
 import { WEEKDAYS, WEEKDAYS_LONG, timeToMin, minToTime, cn } from '@/lib/utils';
 import type { Availability, AvailabilityException, Booking, BookingConfig, BookingStatus, Professional, Service } from '@/lib/types';
-import { Avatar, Badge, Drawer, ListSkeleton, Button, IconButton, AttentionStrip, Tabs } from '@/components/ui';
+import { Avatar, Badge, Drawer, AgendaSkeleton, ListSkeleton, Button, IconButton, AttentionStrip, Segmented } from '@/components/ui';
 import { Icon } from '@/components/icons';
 import {
   ATTENTION_MARK_CLS, ATTENTION_RING_CLS, BOOKING_BLOCK, BOOKING_DOT, BOOKING_STATUS,
@@ -63,15 +60,16 @@ type View = 'day' | 'week' | 'month' | 'list';
 // grade usam a apresentação SUAVE definida lá (BOOKING_BLOCK) — a semântica
 // permanece, sem o peso da cor sólida na Semana. Nada de mapa local de cor.
 
+const PX_PER_HOUR = 128;
 const GUTTER_W = 56;
-const COL_MIN = 200;
+const COL_MIN = 152;
 const HEADER_H = 48;
 // Passo do clique-em-área-vazia (o horário só é aceito se a grade real o
 // confirmar — caso contrário o sheet abre sem horário escolhido).
 const CLICK_SNAP_MIN = 5;
 /** Folga mínima entre o fim da grade e o fim da tela (não é a causa do
  *  scroll, só respiro visual — a página continua rolando normalmente). */
-const VIEWPORT_BOTTOM_PAD = 64;
+const VIEWPORT_BOTTOM_PAD = 16;
 
 // Espessura REAL da barra de rolagem horizontal (0 quando o SO usa barra
 // overlay). A grade usa a classe `.ws-scroll` (6px custom no Chromium); o
@@ -125,6 +123,10 @@ interface BlockVM {
   timeRange: string;
   statusLabel: string;
   cls: string;
+  /** Profissional (linha discreta do cartão), ponto e ícone de estado. */
+  pro: string;
+  dot: string;
+  ico: string;
   /** Horário passou e continua em aberto: marcador amarelo de atenção. */
   attention: boolean;
   /** A3.4 · Bloco 4: encaixe (fora da grade) e check-in do cliente. */
@@ -138,6 +140,8 @@ interface ColumnVM {
   key: string;
   label: string;
   sub: string;
+  /** Foto real do profissional (fallback: iniciais no Avatar). */
+  photo?: string;
   date: string;
   professionalId: string;
   isProfessional: boolean;
@@ -167,10 +171,8 @@ interface HoverTarget {
 let lastGridPressAt = 0;
 
 // ── Coluna da grade (memoizada: o drag não re-renderiza a grade inteira) ──
-const GridColumn = memo(function GridColumn({ column, basisPct, variant, highlight, onPressStart, onPressMove, onPressEnd, onPressCancel, onBlockClick, onEmptyPress, gridHeight, hours, startMinute, endMinute, pxPerHour, onSummary }: {
+const GridColumn = memo(function GridColumn({ column, basisPct, variant, highlight, onPressStart, onPressMove, onPressEnd, onPressCancel, onBlockClick, onEmptyPress, gridHeight, hours, startMinute, endMinute }: {
   column: ColumnVM;
-  pxPerHour: number;
-  onSummary: (label: string) => void;
   basisPct: number;
   variant: 'day' | 'week';
   highlight: HighlightVM | null;
@@ -203,12 +205,13 @@ const GridColumn = memo(function GridColumn({ column, basisPct, variant, highlig
         if (el.closest('button')) return;
         if (Date.now() - lastGridPressAt < 500) return;
         const rect = e.currentTarget.getBoundingClientRect();
-        const minutes = minuteFromOffsetY(e.clientY - rect.top, { startMinute, endMinute, pxPerHour: pxPerHour }, CLICK_SNAP_MIN);
+        const minutes = minuteFromOffsetY(e.clientY - rect.top, { startMinute, endMinute, pxPerHour: PX_PER_HOUR }, CLICK_SNAP_MIN);
         onEmptyPress(column.key, minToTime(minutes));
       }}>
-      {column.freeRanges.map((r,i)=><span key={i} aria-hidden="true" className="absolute inset-x-0 bg-white pointer-events-none" style={{top:(r.start-startMinute)/60*pxPerHour,height:(r.end-r.start)/60*pxPerHour}}/>)}
+      {column.freeRanges.map((r,i)=><span key={i} aria-hidden="true" className="absolute inset-x-0 bg-white pointer-events-none" style={{top:(r.start-startMinute)/60*PX_PER_HOUR,height:(r.end-r.start)/60*PX_PER_HOUR}}/>)}
+      {column.isToday && <span aria-hidden="true" className="absolute inset-0 bg-[var(--brand-softer)] pointer-events-none" />}
       {Array.from({ length: Math.max(0, hours - 1) }, (_, idx) => idx + 1).map((i) => (
-        <span key={i} className="absolute left-0 right-0 border-t border-zinc-100" style={{ top: i * pxPerHour }} />
+        <span key={i} className="absolute left-0 right-0 border-t border-zinc-100" style={{ top: i * PX_PER_HOUR }} />
       ))}
 
       {/* Célula destino destacada durante o arraste */}
@@ -230,7 +233,7 @@ const GridColumn = memo(function GridColumn({ column, basisPct, variant, highlig
           aria-hidden="true"
         >
           <span className={
-            'text-[10px] font-bold px-1.5 py-0.5 rounded-b-md shadow-xs '
+            'text-[10px] font-semibold px-1.5 py-0.5 rounded-b-md shadow-xs '
             + (highlight.tone === 'free'
               ? 'bg-[var(--success)] text-white'
               : highlight.tone === 'loading'
@@ -246,8 +249,6 @@ const GridColumn = memo(function GridColumn({ column, basisPct, variant, highlig
         <button
           key={b.id}
           type="button"
-          data-agenda-event={b.id}
-          onFocus={()=>onSummary(b.label)} onMouseEnter={()=>onSummary(b.label)} onBlur={()=>onSummary('')} onMouseLeave={()=>onSummary('')}
           aria-label={b.label}
           title={b.label}
           draggable={false}
@@ -257,7 +258,7 @@ const GridColumn = memo(function GridColumn({ column, basisPct, variant, highlig
           onPointerCancel={onPressCancel}
           onClick={() => onBlockClick(b.id)}
           className={
-            'absolute rounded-md border-l-4 px-1 text-left overflow-hidden touch-none select-none agenda-event '
+            'absolute rounded-lg border border-l-4 px-2 py-1 text-left overflow-hidden touch-none select-none shadow-xs '
             + b.cls
             + (b.attention && !b.dragging ? ` ${ATTENTION_RING_CLS}` : '')
             + (b.dragging
@@ -267,6 +268,8 @@ const GridColumn = memo(function GridColumn({ column, basisPct, variant, highlig
           style={{
             top: b.top,
             height: b.height,
+            // Dia com coluna única: o cartão não vira faixa de largura total.
+            ...(basisPct === 100 ? { maxWidth: 380 } : {}),
             left: `calc(${b.leftPct}% + 2px)`,
             width: `calc(${b.widthPct}% - 4px)`,
           }}
@@ -274,14 +277,14 @@ const GridColumn = memo(function GridColumn({ column, basisPct, variant, highlig
           {/* Encaixe = acento (faixa fina no topo), não preenchimento: o fundo
               do bloco continua sendo o do STATUS. Nada de amarelo sobre verde. */}
           {b.fitIn && <span aria-hidden="true" className={FIT_IN_STRIPE_CLS} />}
-          {/* quem + quando + o quê + em que estado — detalhe fica no drawer. */}
-          {b.height < 38 ? <span className="agenda-event-summary"><span className="agenda-event-time">{b.time}</span><span className="min-w-0 flex-1 truncate">{b.name}</span><span className="shrink-0">{b.statusLabel}</span></span> : <span className="block text-sm font-semibold leading-tight truncate">{b.name}</span>}
-          {b.height > 54 && <span className="block text-xs font-medium leading-tight truncate">{b.service}</span>}
-          {b.height >= 38 && (
-            <span className="mt-0.5 flex items-center gap-1 text-xs font-semibold leading-tight">
-              <span className="tabular-nums whitespace-nowrap">{b.timeRange}</span>
-              <span aria-hidden="true" className="opacity-60">·</span>
-              <span className="truncate">{b.statusLabel}</span>
+          {/* quem + quando + o quê + com quem — detalhe fica no drawer.
+              Densidade do mockup: nome forte, linhas de apoio discretas. */}
+          <span className="block text-[10.5px] font-semibold tabular-nums leading-tight opacity-75">{b.timeRange}</span>
+          <span className="block text-[12.5px] font-semibold leading-tight truncate">{b.name}</span>
+          {b.height > 62 && <span className="block text-[11px] leading-tight truncate opacity-75">{b.service}</span>}
+          {b.height > 80 && b.pro && <span className="block text-[11px] leading-tight truncate opacity-70">{b.pro}</span>}
+          {b.height > 96 && (
+            <span className="mt-0.5 flex items-center gap-1 text-[10px] font-semibold leading-tight">
               {/* A3.4 · Bloco 4: o encaixe é visível no cartão — quem olha a
                   grade sabe que aquele horário foi uma decisão da equipe. */}
               {b.fitIn && <span className={`px-1 rounded-sm ${FIT_IN_MARK_CLS}`}>ENCAIXE</span>}
@@ -289,17 +292,32 @@ const GridColumn = memo(function GridColumn({ column, basisPct, variant, highlig
           )}
           {b.checkedInAt && (
             <span title="Cliente já fez check-in" aria-hidden="true"
-              className="absolute top-1 right-1 w-4 h-4 rounded-full text-[9px] font-black leading-4 text-center bg-[var(--success)] text-white">✓</span>
+              className="absolute bottom-1 right-1 w-4 h-4 rounded-full text-[9px] font-semibold leading-4 text-center bg-[var(--success)] text-white">✓</span>
           )}
-          {b.attention && (
+          {b.attention ? (
             <span title="Precisa de fechamento" aria-hidden="true"
-              className={`absolute top-1 right-1 w-4 h-4 rounded-full text-[10px] font-black leading-4 text-center ${ATTENTION_MARK_CLS}`}>
+              className={`absolute top-1 right-1 w-4.5 h-4.5 w-[18px] h-[18px] rounded-full text-[10px] font-semibold leading-[18px] text-center ${ATTENTION_MARK_CLS}`}>
               !
+            </span>
+          ) : (
+            <span title={b.statusLabel} aria-hidden="true"
+              className={`absolute top-1 right-1 w-[18px] h-[18px] rounded-full text-white flex items-center justify-center ${b.dot}`}>
+              <Icon n={b.ico} size={10} />
             </span>
           )}
         </button>
       ))}
-      {variant === 'week' && column.blocks.length === 0 && (
+      {variant === 'week' && column.blocks.length === 0 && column.freeRanges.length === 0 && (
+        <>
+          <span aria-hidden="true" className="ag-hatch absolute inset-0 pointer-events-none" />
+          <span className="absolute inset-x-0 top-24 text-center pointer-events-none">
+            <Icon n="calendar" size={18} className="mx-auto text-zinc-300" />
+            <span className="block text-[11px] font-semibold text-zinc-400 mt-1">Indisponível</span>
+            <span className="block text-[10px] text-zinc-300">Não há atendimento</span>
+          </span>
+        </>
+      )}
+      {variant === 'week' && column.blocks.length === 0 && column.freeRanges.length > 0 && (
         <span className="absolute inset-x-0 top-3 text-center text-[11px] text-zinc-300 pointer-events-none">—</span>
       )}
     </div>
@@ -337,18 +355,11 @@ export default function AgendaPage() {
   const setView = (value: View) => setPresentation({view:value});
   const setFocus = (value: string) => setPresentation({data:value});
   const setStatusFilter = (value: string) => setPresentation({status:value});
-  const {userId}=useWorkspace();
-  const {density,setDensity,showQueue,setShowQueue}=useAgendaPreferences(userId,businessId);
-  const [gridMaxH, setGridMaxH] = useState<number | null>(null);
-  const [hbarReserve, setHbarReserve] = useState(0);
-  const [eventSummary,setEventSummary]=useState('');
-  const loadGeneration=useRef(0);
-  function closeQueue(){setShowQueue(false);const url=new URL(window.location.href);if(url.searchParams.has('fila')){url.searchParams.delete('fila');window.history.replaceState(null,'',url.pathname+url.search);}}
-  useEffect(()=>{if(params.get('fila')==='1')setShowQueue(true);},[params.get('fila'),setShowQueue]);
-  useEffect(()=>{const open=(e:Event)=>{if((e as CustomEvent).detail===businessId)setShowQueue(true);};window.addEventListener('il:queue-open',open);return()=>window.removeEventListener('il:queue-open',open);},[businessId,setShowQueue]);
   const [filterOpen, setFilterOpen] = useState(false);
   const [proSearch, setProSearch] = useState('');
   const filterWrapRef = useRef<HTMLDivElement>(null);
+  const [helpOpen, setHelpOpen] = useState(false);
+  const helpWrapRef = useRef<HTMLDivElement>(null);
   const [bookings, setBookings] = useState<Booking[]>([]);
   const [services, setServices] = useState<Service[]>([]);
   const [pros, setPros] = useState<Professional[]>([]);
@@ -361,6 +372,14 @@ export default function AgendaPage() {
     /** A3.4 fix (revisão B5): "Encaixar na agenda" vem da FILA já preenchido. */
     contactId?: string; name?: string; phone?: string; serviceId?: string;
   } | null>(null);
+  // FASE 2 · P9 — Quick Create global: ?novo=1 abre o sheet de agendamento
+  // direto (uma abertura por visita; SPA não reabre sozinho ao voltar).
+  const [novoHandled, setNovoHandled] = useState(false);
+  useEffect(() => {
+    if (novoHandled || !businessId || params.get('novo') !== '1') return;
+    setNovoHandled(true);
+    setCreating({ date: '', time: '', professionalId: '', name: '', phone: '' });
+  }, [novoHandled, businessId, params]);
   // A3.4 · Bloco 4 — fila do balcão (entidade própria, fora da agenda).
   const [queueRows, setQueueRows] = useState<QueueRow[]>([]);
   // A3.4 fix (revisão B5): o registro do atendimento tem permissão PRÓPRIA —
@@ -374,7 +393,7 @@ export default function AgendaPage() {
   const [queueEncounter, setQueueEncounter] = useState<QueueRow | null>(null);
   const [queueDone, setQueueDone] = useState<QueueRow[]>([]);
   const [queueLoading, setQueueLoading] = useState(false);
-  const [queueError,setQueueError]=useState(false);
+  const [showQueue, setShowQueue] = useState(false);
   const [flash, setFlash] = useState<{ tone: 'ok' | 'warn' | 'error'; text: string } | null>(null);
 
   // ── Drag: estado mínimo (o movimento em si vive em refs, sem re-render) ──
@@ -412,12 +431,6 @@ export default function AgendaPage() {
   const today = todayISO(new Date(), bizTz);
   const nowMin = timeToMin(nowHM(new Date(), bizTz));
 
-  const weekStart = useMemo(() => {
-    const dow = weekdayOf(focus);
-    return addDaysISO(focus, -((dow + 6) % 7));
-  }, [focus]);
-  const weekDays = useMemo(() => Array.from({ length: 7 }, (_, i) => addDaysISO(weekStart, i)), [weekStart]);
-
   const range = useMemo(() => {
     if (view === 'month') {
       const first = focus.slice(0, 8) + '01';
@@ -425,8 +438,8 @@ export default function AgendaPage() {
       const gridStart = addDaysISO(first, -((dow + 6) % 7));
       return { from: gridStart, to: addDaysISO(gridStart, 41) };
     }
-    return view==='week'?{from:weekDays[0],to:weekDays[6]}:{from:focus,to:focus};
-  }, [view, focus, weekDays]);
+    return { from: addDaysISO(focus, -21), to: addDaysISO(focus, 28) };
+  }, [view, focus]);
 
   /** A3.4 · Bloco 4 — a fila do balcão é lida junto com a agenda. */
   const loadQueue = useCallback(async () => {
@@ -436,7 +449,6 @@ export default function AgendaPage() {
       `/api/queue?businessId=${businessId}`, { scope: 'area', area: 'Agenda' },
     );
     setQueueLoading(false);
-    setQueueError(!res.ok);
     if (!res.ok) return;
     setQueueRows(res.data?.entries || []);
     setQueueDone(res.data?.done || []);
@@ -444,18 +456,17 @@ export default function AgendaPage() {
 
   const load = useCallback(async () => {
     if (!businessId) return;
-    const generation=++loadGeneration.current;setLoaded(false);
     const [cat, bk] = await Promise.all([
-      apiGet<any>(`/api/catalog/get?businessId=${businessId}&from=${range.from}&to=${range.to}`, { scope: 'area', area: 'Agenda' }),
-      // Consume all authorized pages within the visible range; keep the server limit at 500.
-      readAgendaBookings(
+      apiGet<any>(`/api/catalog/get?businessId=${businessId}`, { scope: 'area', area: 'Agenda' }),
+      // A2-B3 (F6): pede o teto real do servidor (500) — pedir 1000 só
+      // produzia um corte silencioso; o contrato agora é explícito.
+      apiGet<{ bookings?: Booking[] }>(
         `/api/bookings?businessId=${businessId}&mode=manage&from=${range.from}&to=${range.to}&limit=500`,
-        ()=>generation===loadGeneration.current,
+        { scope: 'area', area: 'Agenda' },
       ),
     ]);
     // Sem permissão (403): mostra o aviso amigável e PARA de carregar — a tela
     // não pode ficar em skeleton para sempre. A sessão continua intacta.
-    if(generation!==loadGeneration.current)return;
     if (!report(cat) || !report(bk)) { setLoaded(true); return; }
     const d = cat.data || {};
     setServices(d.services || []);
@@ -472,13 +483,18 @@ export default function AgendaPage() {
     void loadQueue();
   }, [businessId, range.from, range.to, report, loadQueue]);
 
-  useEffect(() => { void load(); return () => { loadGeneration.current++; }; }, [load]);
+  useEffect(() => { load(); }, [load]);
 
   // Estado real da agenda (P2): quem atende vê a confirmação/chegada registrada
   // pela recepção ao VOLTAR para a tela — sem F5 e sem polling.
   useRevalidateOnFocus(load);
 
-  useEffect(() => { bookingsRef.current = new Map(bookings.map((b) => [b.id, b])); }, [bookings]);
+  useEffect(() => {
+    bookingsRef.current = new Map(bookings.map((b) => [b.id, b]));
+    // P0-1: se o detalhe está aberto, atualiza o registro em silêncio com a
+    // lista freca — NUNCA fecha o sheet por causa de autosave/reload.
+    setDetail((d) => (d ? bookings.find((b) => b.id === d.id) || d : d));
+  }, [bookings]);
 
   const activePros = useMemo(() => pros.filter((p) => p.active !== false), [pros]);
   // A2-B3 (F5): enquanto o catálogo chega, o default do produto (60) vale;
@@ -528,18 +544,35 @@ export default function AgendaPage() {
       .sort((a, b) => a.name.localeCompare(b.name, 'pt-BR'));
   }, [activePros, specFilter, proSearch]);
 
-  // Fecha o popover clicando fora (ESC é tratado junto com drag/tela cheia).
+  // Fecha os popovers clicando fora (ESC é tratado junto com drag/modo foco).
   useEffect(() => {
-    if (!filterOpen) return;
+    if (!filterOpen && !helpOpen) return;
     const onDown = (e: MouseEvent) => {
-      if (filterWrapRef.current && !filterWrapRef.current.contains(e.target as Node)) setFilterOpen(false);
+      const t = e.target as Node;
+      if (filterOpen && filterWrapRef.current && !filterWrapRef.current.contains(t)) setFilterOpen(false);
+      if (helpOpen && helpWrapRef.current && !helpWrapRef.current.contains(t)) setHelpOpen(false);
     };
     document.addEventListener('mousedown', onDown);
     return () => document.removeEventListener('mousedown', onDown);
-  }, [filterOpen]);
+  }, [filterOpen, helpOpen]);
 
-  const grid = useMemo(()=>agendaEnvelope(view==='week'?weekDays:[focus],rules,exceptions,bookings,services),[view,weekDays,focus,rules,exceptions,bookings,services]);
-  const pxPerHour=agendaScale(density,grid.hours,(gridMaxH||500)-HEADER_H-hbarReserve-2);
+  const grid = useMemo(() => {
+    let s = 8 * 60, e = 20 * 60;
+    for (const r of rules) {
+      s = Math.min(s, timeToMin(r.start));
+      e = Math.max(e, timeToMin(r.end));
+    }
+    s = Math.floor(s / 60) * 60;
+    e = Math.ceil(e / 60) * 60;
+    if (e - s < 6 * 60) e = s + 6 * 60;
+    return { start: s, end: e, span: e - s, hours: Math.floor((e - s) / 60) };
+  }, [rules]);
+
+  const weekStart = useMemo(() => {
+    const dow = weekdayOf(focus);
+    return addDaysISO(focus, -((dow + 6) % 7));
+  }, [focus]);
+  const weekDays = useMemo(() => Array.from({ length: 7 }, (_, i) => addDaysISO(weekStart, i)), [weekStart]);
 
   const serviceOf = useCallback((id: string) => services.find((s) => s.id === id), [services]);
   const serviceName = useCallback((id: string) => serviceOf(id)?.name || 'Serviço', [serviceOf]);
@@ -565,7 +598,7 @@ export default function AgendaPage() {
   // Filtros compactos (status + profissional) só escondem blocos/colunas da
   // grade — dados, drag e ações continuam sobre os mesmos agendamentos.
   const columns = useMemo<ColumnVM[]>(() => {
-    const base: Array<{ key: string; label: string; sub: string; date: string; professionalId: string; isProfessional: boolean }> = [];
+    const base: Array<{ key: string; label: string; sub: string; photo?: string; date: string; professionalId: string; isProfessional: boolean }> = [];
     if (view === 'week') {
       for (const d of weekDays) {
         base.push({
@@ -583,7 +616,7 @@ export default function AgendaPage() {
       const filtering = proFilter ? specPros.some((x) => x.id === proFilter) : false;
       const shown = filtering ? specPros.filter((x) => x.id === proFilter) : specPros;
       for (const p of shown) {
-        base.push({ key: p.id, label: p.name, sub: p.role || '', date: focus, professionalId: p.id, isProfessional: true });
+        base.push({ key: p.id, label: p.name, sub: p.role || '', photo: (p as { photo?: string }).photo, date: focus, professionalId: p.id, isProfessional: true });
       }
       // Com especialidade ativa não existe coluna "sem profissional".
       if (!filtering && !specFilter && bookings.some((b) => b.date === focus && !b.professionalId)) {
@@ -603,7 +636,7 @@ export default function AgendaPage() {
         .sort((a, b) => (a.time < b.time ? -1 : 1));
       const layout = layoutBlocks(
         list.map((b) => ({ id: b.id, minute: timeToMin(b.time), durationMin: durationOf(b) })),
-        { startMinute: grid.start, pxPerHour, minHeight: 0 },
+        { startMinute: grid.start, pxPerHour: PX_PER_HOUR },
       );
       const byId = new Map(layout.map((l) => [l.id, l]));
       const blocks: BlockVM[] = list.map((b) => {
@@ -621,11 +654,15 @@ export default function AgendaPage() {
           leftPct: l.leftPct,
           widthPct: l.widthPct,
           time: b.time,
-          name: b.customerName,
-          service: view === 'week' && pro ? `${serviceName(b.serviceId)} · ${pro}` : serviceName(b.serviceId),
+          // FASE 2 · P6 — veterinária: PET primeiro; tutor vira contexto.
+          name: b.petName || b.customerName,
+          service: serviceName(b.serviceId),
           timeRange: `${b.time}–${endHM}`,
           statusLabel,
           cls: BOOKING_BLOCK[b.status],
+          pro: pro || '',
+          dot: BOOKING_DOT[b.status],
+          ico: b.status === 'pending' ? 'clock' : b.status === 'cancelled' || b.status === 'no_show' ? 'x' : 'check',
           attention,
           fitIn: b.bookingKind === 'fit_in',
           checkedInAt: b.checkedInAt || '',
@@ -645,16 +682,16 @@ export default function AgendaPage() {
       for(const r of ranges.sort((a,b)=>a.start-b.start)) {const last=freeRanges[freeRanges.length-1];if(last&&r.start<=last.end)last.end=Math.max(last.end,r.end);else freeRanges.push({...r});}
       return { ...c, isToday: c.date === today, blocks, freeRanges };
     });
-  }, [view, weekDays, activePros, focus, bookings, grid.start, durationOf, proName, serviceName, dragId, today, statusFilter, proFilter, specFilter, proRoleOf, bizTz, rules, exceptions, services, bookingCfg, pxPerHour]);
+  }, [view, weekDays, activePros, focus, bookings, grid.start, durationOf, proName, serviceName, dragId, today, statusFilter, proFilter, specFilter, proRoleOf, bizTz, rules, exceptions, services, bookingCfg]);
 
   // Colunas usadas pelo cálculo de destino (mesma ordem da renderização).
   useEffect(() => {
     columnsRef.current = columns.map((c) => ({
-      key: c.key, label: c.label, date: c.date, professionalId: c.professionalId, isProfessional: c.isProfessional,
+      key: c.key, label: c.label, sub: c.sub, photo: c.photo, date: c.date, professionalId: c.professionalId, isProfessional: c.isProfessional,
     }));
   }, [columns]);
 
-  const gridHeight = (grid.span / 60) * pxPerHour;
+  const gridHeight = Math.max(460, Math.round((grid.span / 60) * PX_PER_HOUR));
   const dayWidth = GUTTER_W + columns.length * COL_MIN;
 
   // ── Geometria (medida, não por pixel de evento) ──
@@ -672,22 +709,19 @@ export default function AgendaPage() {
     return () => { ro?.disconnect(); window.removeEventListener('resize', measure); };
   }, [columns.length, view, loaded]);
 
-  // ── Altura útil da grade (P1.1 — viewport real, sem scroll fantasma) ──
-  // Medimos a posição REAL do container (header + toolbar + margens +
-  // sidebar já estão embutidos no `top` medido) e usamos o
-  // resto da viewport. A altura final é `min(conteúdo, disponível)`:
-  //   • a grade cabe  → o container fica do tamanho exato do conteúdo e a
-  //                     barra de rolagem NÃO aparece (nem por alguns pixels);
-  //   • não cabe      → scroll SOMENTE interno da grade.
-  // Nenhum min-height arbitrário força overflow; nada é "escondido".
-  const gridContentH = HEADER_H + gridHeight;
+  // ── Altura da grade = altura do CONTEÚDO (a página rola, não a grade) ──
+  // Regra de produto: o painel NÃO é viewport travada. Verticalmente a
+  // agenda cresce no fluxo do documento; html/body é o scroll principal.
+  // Horizontal permanece no próprio scroller (overflow-x) quando há mais
+  // colunas que cabem na largura. Sem caixa de 700px com scrollbar interna
+  // para ver 08h–21h.
   // Conteúdo horizontal REAL da grade: pode estourar a largura no dia com
   // muitos profissionais / na semana em tela estreita. Quando estoura, a
   // barra horizontal entra — e é ELA o gatilho do scroll vertical fantasma
   // (consome ~6px de altura de um painel que tinha o tamanho EXATO do
   // conteúdo). Medimos o overflow do próprio scroller e reservamos a
   // espessura da barra só quando ela aparece.
-
+  const [hbarReserve, setHbarReserve] = useState(0);
   useLayoutEffect(() => {
     const bodyEl = document.body;
     const docEl = document.documentElement;
@@ -721,25 +755,17 @@ export default function AgendaPage() {
     return () => obs.disconnect();
   }, [columns.length]);
 
-
-  // Altura útil da rail da fila: mesma linha de base da grade. Fechar a
-  // fila não deixa valor velho — o efeito roda de novo quando showQueue muda.
+  // Altura útil da região do workspace (viewport - topo - folga): é o teto
+  // da rail da fila E da grade (FASE E: scroll interno, a página não rola
+  // junto com a agenda).
   const [railMaxH, setRailMaxH] = useState<number | null>(null);
   useLayoutEffect(() => {
     const fit = () => {
       const el = scrollRef.current;
       if (!el) return;
       const top = el.getBoundingClientRect().top;
-      // Reserva a altura da barra horizontal QUANDO ela está visível: é o
-      // que impede `scrollHeight` de passar de `clientHeight` por causa dela
-      // e fabricar a rolagem vertical fantasma de alguns pixels.
-      const reserve = top >= 0 && window.innerHeight - top < VIEWPORT_BOTTOM_PAD
-        ? window.innerHeight - top
-        : hbarReserve;
-      const h = window.innerHeight - top - VIEWPORT_BOTTOM_PAD - reserve;
-      setGridMaxH(Math.max(100, Math.floor(h)));
-      // A rail termina na MESMA linha de base da grade (o topo dela é o topo do
-      // workspace, não o do scroller) — e a lista rola por dentro.
+      // A rail termina perto da base da viewport (o topo dela é o topo do
+      // workspace) — lista rola por dentro; a agenda não.
       const wtop = workspaceRef.current?.getBoundingClientRect().top ?? top;
       setRailMaxH(Math.max(320, Math.floor(window.innerHeight - wtop - VIEWPORT_BOTTOM_PAD)));
     };
@@ -749,7 +775,7 @@ export default function AgendaPage() {
     if (typeof document !== 'undefined') obs.observe(document.body);
     window.addEventListener('resize', fit);
     return () => { obs.disconnect(); window.removeEventListener('resize', fit); };
-  }, [loaded, view, density, pendencies.length, notice?.title, statusFilter, proFilter, specFilter, hbarReserve, showQueue, flash, grid.hours]);
+  }, [loaded, view, pendencies.length, notice?.title, statusFilter, proFilter, specFilter, hbarReserve, showQueue]);
 
   const readGeometry = useCallback((): { g: GridGeometry; minX: number; minY: number } | null => {
     const scroll = scrollRef.current;
@@ -762,12 +788,12 @@ export default function AgendaPage() {
       {
         gutterWidth: 0, scrollLeft: 0, scrollTop: 0,
         columnWidth: colWidth, columnCount: columns.length,
-        startMinute: grid.start, endMinute: grid.end, pxPerHour: pxPerHour,
+        startMinute: grid.start, endMinute: grid.end, pxPerHour: PX_PER_HOUR,
       },
     );
     // O gutter (horas) e o cabeçalho são fixos: nada de destino atrás deles.
     return { g, minX: scrollRect.left + GUTTER_W, minY: scrollRect.top + HEADER_H };
-  }, [colWidth, columns.length, grid.start, grid.end, pxPerHour]);
+  }, [colWidth, columns.length, grid.start, grid.end]);
 
   useEffect(() => { geometryRef.current = readGeometry(); }, [readGeometry]);
 
@@ -991,17 +1017,20 @@ export default function AgendaPage() {
   }, []);
 
   // ESC cancela o arraste sem salvar nada; fecha o popover de filtros;
-  // Sem nenhum dos dois, não interfere nos outros painéis.
+  // sem nenhum dos dois, sai da tela cheia. (Ordem: mais interno primeiro.)
   useEffect(() => {
-    if (!dragId && !filterOpen) return;
+    if (!dragId && !filterOpen && !helpOpen) return;
     const onKey = (e: KeyboardEvent) => {
       if (e.key !== 'Escape') return;
       if (dragId) endDrag();
-      else if (filterOpen) {setFilterOpen(false);filterWrapRef.current?.querySelector('button')?.focus();}
+      else if (filterOpen) setFilterOpen(false);
+      else if (helpOpen) setHelpOpen(false);
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [dragId, filterOpen, endDrag]);
+  }, [dragId, filterOpen, helpOpen, endDrag]);
+
+
 
   // Cancela o drag se a view mudar no meio do movimento.
   useEffect(() => { endDrag(); /* eslint-disable-next-line react-hooks/exhaustive-deps */ }, [view, focus]);
@@ -1078,19 +1107,19 @@ export default function AgendaPage() {
     if (!hover.time) {
       const minute = Math.max(grid.start, Math.min(grid.end - duration, hover.minute));
       return {
-        top: blockTop(minute, grid.start, pxPerHour),
-        height: blockHeight(duration, pxPerHour, 0),
+        top: blockTop(minute, grid.start, PX_PER_HOUR),
+        height: blockHeight(duration, PX_PER_HOUR),
         label: hover.availability === 'loading' ? 'Carregando horários...' : 'Indisponível',
         tone: hover.availability === 'loading' ? 'loading' : 'busy',
       };
     }
     return {
-      top: blockTop(hover.time, grid.start, pxPerHour),
-      height: blockHeight(duration, pxPerHour, 0),
+      top: blockTop(hover.time, grid.start, PX_PER_HOUR),
+      height: blockHeight(duration, PX_PER_HOUR),
       label: hover.availability === 'free' ? hover.time : 'Indisponível',
       tone: hover.availability === 'free' ? 'free' : 'busy',
     };
-  }, [isDragging, hover, grid.start, grid.end, pxPerHour]);
+  }, [isDragging, hover, grid.start, grid.end]);
 
   const ghostLabel = hover?.time
     ? dragPreviewLabel(hover.date, hover.time)
@@ -1104,7 +1133,154 @@ export default function AgendaPage() {
   const statusOptions = (['pending', 'confirmed', 'completed', 'no_show', 'cancelled'] as BookingStatus[]);
 
   return (
-    <div className="agenda-workspace-page" data-density={density}>
+    <div>
+      {/* CABEÇALHO (§13): título + o que a tela faz + as DUAS ações que
+          importam. Nada de legenda permanente, nada de card de fila disputando
+          o título: a semântica de estado já está nos próprios blocos da grade
+          e a fila vive no rail ao lado (ou no drawer, em tela pequena). */}
+      <header className="flex flex-wrap items-start justify-between gap-x-4 gap-y-2 mb-3.5">
+        <div className="min-w-0">
+          <h1 className="text-[22px] font-semibold tracking-tight text-[var(--text-primary)] leading-tight">Agenda</h1>
+        </div>
+        <div className="flex flex-wrap items-center gap-2">
+          {/* Filtros: UM botão, UM popover (Status · Serviços · Profissional) e
+              contador quando há filtro ativo. Nada de três selects enormes
+              fixos acima da grade. */}
+          <div className="relative" ref={filterWrapRef}>
+            <Button variant="secondary" size="sm" onClick={() => { setFilterOpen((o) => !o); setProSearch(''); }}
+              aria-expanded={filterOpen} aria-haspopup="dialog" title="Filtros da agenda">
+              <Icon n="filter" size={14} />
+              {activeFilterCount > 0 ? `Filtros · ${activeFilterCount}` : 'Filtros'}
+              <Icon n="chevD" size={12} className={`transition-transform ${filterOpen ? 'rotate-180' : ''}`} />
+            </Button>
+
+            {filterOpen && (
+              <div role="dialog" aria-label="Filtros da agenda"
+                className="absolute right-0 top-[calc(100%+6px)] z-50 w-[310px] max-w-[calc(100vw-1.25rem)] bg-[var(--surface)] border border-[var(--border)] rounded-[var(--radius-xl)] shadow-lg text-left">
+                <div className="px-3 pt-2.5 pb-1.5 flex items-center justify-between gap-2">
+                  <p className="text-[11px] font-semibold uppercase tracking-wider text-[var(--text-muted)]">Filtros</p>
+                  {activeFilterCount > 0 && (
+                    <button type="button" onClick={clearFilters}
+                      className="text-[12px] font-semibold text-[var(--danger-fg)] hover:underline">
+                      Limpar filtros
+                    </button>
+                  )}
+                </div>
+
+                <div className="px-3 pb-2.5">
+                  <p className="text-[11px] font-semibold text-[var(--text-secondary)] mb-1.5">Status</p>
+                  <div className="flex flex-wrap gap-1">
+                    <FilterChip active={!statusFilter} onClick={() => setStatusFilter('')}>Todos</FilterChip>
+                    {statusOptions.map((st) => (
+                      <FilterChip key={st} active={statusFilter === st} onClick={() => setStatusFilter(statusFilter === st ? '' : st)}>
+                        {BOOKING_STATUS[st].panel}
+                      </FilterChip>
+                    ))}
+                  </div>
+                </div>
+
+                {specialties.length > 0 && (
+                  <div className="px-3 pb-2.5 border-t border-[var(--border-soft)] pt-2.5">
+                    <p className="text-[11px] font-semibold text-[var(--text-secondary)] mb-1.5">Serviços</p>
+                    <div className="flex flex-wrap gap-1">
+                      <FilterChip active={!specFilter} onClick={() => pickSpec('')}>Todos</FilterChip>
+                      {specialties.map((r) => (
+                        <FilterChip key={r} active={specFilter === r} onClick={() => pickSpec(specFilter === r ? '' : r)}>
+                          {r}
+                        </FilterChip>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {activePros.length > 0 && (
+                  <div className="px-3 pb-3 border-t border-[var(--border-soft)] pt-2.5">
+                    <p className="text-[11px] font-semibold text-[var(--text-secondary)] mb-1.5">Profissional</p>
+                    <div className="relative">
+                      <Icon n="search" size={13} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-[var(--text-muted)]" />
+                      <input value={proSearch} onChange={(e) => setProSearch(e.target.value)}
+                        placeholder="Pesquisar profissional…" aria-label="Pesquisar profissional"
+                        className="w-full text-[12.5px] bg-[var(--surface-subtle)] border border-[var(--border)] rounded-[var(--radius-sm)] pl-8 pr-2 py-1.5 focus:outline-none focus:border-[var(--brand)] focus:bg-white" />
+                    </div>
+                    <div className="mt-1.5 max-h-44 overflow-y-auto ws-scroll space-y-0.5">
+                      <button type="button" onClick={() => pickPro('')}
+                        className={cn('w-full flex items-center gap-2 px-2 py-1.5 rounded-[var(--radius-sm)] text-left text-[12.5px] font-medium',
+                          !proFilter ? 'bg-[var(--surface-hover)]' : 'hover:bg-[var(--surface-subtle)]')}>
+                        <span className="flex-1">Todos</span>
+                        {!proFilter && <Icon n="check" size={13} className="text-[var(--success-fg)] shrink-0" />}
+                      </button>
+                      {prosInFilter.map((p) => (
+                        <button key={p.id} type="button" onClick={() => pickPro(proFilter === p.id ? '' : p.id)}
+                          className={cn('w-full flex items-center gap-2 px-2 py-1.5 rounded-[var(--radius-sm)] text-left text-[12.5px]',
+                            proFilter === p.id ? 'bg-[var(--surface-hover)]' : 'hover:bg-[var(--surface-subtle)]')}>
+                          <Avatar name={p.name} src={p.photo} size={20} />
+                          <span className="flex-1 min-w-0 truncate">
+                            <span className="font-semibold text-[var(--text-primary)]">{p.name}</span>
+                            {p.role && <span className="text-[var(--text-muted)]"> · {p.role}</span>}
+                          </span>
+                          {proFilter === p.id && <Icon n="check" size={13} className="text-[var(--success-fg)] shrink-0" />}
+                        </button>
+                      ))}
+                      {prosInFilter.length === 0 && (
+                        <p className="text-[12.5px] text-[var(--text-muted)] px-2 py-1.5">Nenhum profissional encontrado.</p>
+                      )}
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+
+          {/* Legenda: ajuda sob demanda (popover), nunca uma faixa fixa — e
+              nunca competindo com Filtros/Fila/Novo: aqui é um "?" só ícone,
+              o mesmo affordance de ajuda do topbar. */}
+          <div ref={helpWrapRef} className="relative order-last">
+            <IconButton icon="help" label="Legenda e como usar a grade" tip="Legenda e como usar a grade"
+              variant="ghost" aria-expanded={helpOpen} aria-haspopup="dialog"
+              onClick={() => setHelpOpen((v) => !v)} />
+            {helpOpen && (
+              <div role="dialog" aria-label="Legenda e ajuda da agenda"
+                className="absolute right-0 top-[calc(100%+6px)] z-50 w-[min(24rem,calc(100vw-2rem))] rounded-[var(--radius-xl)] border border-[var(--border)] bg-[var(--surface)] shadow-lg p-3.5 space-y-2.5">
+                <p className="text-[12.5px] text-[var(--text-secondary)]">Clique num atendimento para detalhes e ações; arraste para reagendar.</p>
+                <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5" aria-label="Legenda dos estados">
+                  {statusOptions.map((st) => (
+                    <span key={st} className="inline-flex items-center gap-1.5 text-[11.5px] font-medium text-[var(--text-secondary)]">
+                      <span className={`w-2.5 h-2.5 rounded-full ${BOOKING_DOT[st]}`} aria-hidden="true" />
+                      {BOOKING_STATUS[st].panel}
+                    </span>
+                  ))}
+                  <span className="text-[11.5px] font-medium text-[var(--text-secondary)] inline-flex items-center gap-1.5">
+                    <span className={`w-3.5 h-3.5 rounded-full text-[9px] font-semibold leading-[14px] text-center ${ATTENTION_MARK_CLS}`} aria-hidden="true">!</span>
+                    precisa de fechamento
+                  </span>
+                </div>
+                <p className="text-[12px] text-[var(--text-muted)]">Branco: horário livre · Cinza: indisponível. A reserva é confirmada pelo servidor.</p>
+                <p className="text-[12px] text-[var(--text-muted)] inline-flex items-center gap-1.5">
+                  <Icon n="calendarPlus" size={12} /> clique num horário vago para agendar · arraste um cartão para remarcar
+                </p>
+              </div>
+            )}
+          </div>
+
+          {loaded && (
+            <Button variant="secondary" size="sm" onClick={() => setShowQueue((v) => !v)}
+              aria-expanded={showQueue} aria-pressed={showQueue} title="Fila de atendimento">
+              <Icon n="users" size={14} />
+              Fila
+              {(queueInfo.waiting + queueInfo.called + queueInfo.inService) > 0 && (
+                <span className="ml-0.5 inline-flex items-center justify-center min-w-[18px] h-[18px] px-1 rounded-pill text-[10.5px] font-bold tabular-nums bg-[var(--surface-3)] text-[var(--text-soft)] border border-[var(--border)]">
+                  {queueInfo.waiting + queueInfo.called}
+                </span>
+              )}
+            </Button>
+          )}
+
+          <Button onClick={() => setCreating({ date: focus, time: '', professionalId: '' })} variant="primary" size="sm">
+            <Icon n="calendarPlus" size={15} /> Novo agendamento
+          </Button>
+        </div>
+      </header>
+
       <PermissionNotice message={notice?.title} hint={notice?.hint} onDismiss={dismiss} />
 
       {flash && (
@@ -1122,7 +1298,7 @@ export default function AgendaPage() {
         >
           <Icon n={flash.tone === 'ok' ? 'checkCircle' : 'alert'} size={15} className="mt-px" />
           <span>{flash.text}</span>
-          <button onClick={() => setFlash(null)} className="ml-auto font-bold underline underline-offset-2 shrink-0">Fechar</button>
+          <button onClick={() => setFlash(null)} className="ml-auto font-semibold underline underline-offset-2 shrink-0">Fechar</button>
         </div>
       )}
 
@@ -1134,7 +1310,7 @@ export default function AgendaPage() {
             <>
               {pendencies.slice(0, 4).map((b) => (
                 <button key={b.id} onClick={() => setDetail(b)} className="text-xs font-medium bg-[var(--surface)] border border-[var(--attention-border)] text-[var(--attention-fg)] px-2.5 py-1 rounded-md hover:bg-[var(--attention-bg-hover)]">
-                  {formatDateBR(b.date)} {b.time} · {b.customerName}
+                  {formatDateBR(b.date)} {b.time} · {b.petName || b.customerName}
                 </button>
               ))}
               {pendencies.length > 4 && <span className="text-xs font-medium text-[var(--attention-fg)] self-center">+{pendencies.length - 4}</span>}
@@ -1147,15 +1323,14 @@ export default function AgendaPage() {
           a equipe já está olhando o dia; abrir/fechar é decisão de quem opera
           (o balcão não precisa dela o tempo todo). A faixa de atenção avisa
           quando a espera passa do confortável. */}
-      {loaded && queueInfo.longWait && !showQueue && !queueError && (
-        <div className="space-y-2.5 mb-2.5">
-          {queueInfo.longWait && !showQueue && (
-            <AttentionStrip
-              title={`${queueInfo.waiting + queueInfo.called} na fila — maior espera ${waitLabel(queueInfo.longestWaitMin)}`}
-              hint="o balcão está esperando mais do que o normal"
-              action={<Button size="sm" variant="warning" onClick={() => setShowQueue(true)}>Abrir fila</Button>}
-            />
-          )}
+      {/* Fila: só o alerta REAL de espera ocupa o fluxo; o toggle vive na toolbar. */}
+      {loaded && queueInfo.longWait && !showQueue && (
+        <div className="mb-2.5">
+          <AttentionStrip
+            title={`${queueInfo.waiting + queueInfo.called} na fila — maior espera ${waitLabel(queueInfo.longestWaitMin)}`}
+            hint="o balcão está esperando mais do que o normal"
+            action={<Button size="sm" variant="warning" onClick={() => setShowQueue(true)}>Abrir fila</Button>}
+          />
         </div>
       )}
 
@@ -1164,19 +1339,11 @@ export default function AgendaPage() {
           baixo): ela é coluna ao lado no desktop largo e overlay no resto. */}
       <div ref={workspaceRef} data-agenda-workspace="true" className="flex items-start gap-2.5 min-w-0">
         <main data-agenda-main="true" className="flex-1 min-w-0">
-      {/* Toolbar operacional: navegação · Dia/Semana/Mês · filtros · densidade · fila.
+      {/* Toolbar operacional: navegação · Dia/Semana/Mês · filtros · tela cheia.
           relative z-40: o popover de filtros abre sobre a grade e precisa
           ficar acima dos cabeçalhos sticky (z-20/30) das colunas. */}
-      <div className="relative z-40 ws-panel mb-2.5">
-        <div className="agenda-title-row"><div className="agenda-title-date"><h1 className="text-xl font-semibold">Agenda</h1>            <label className="relative inline-flex flex-col min-w-0 max-w-full cursor-pointer rounded-md px-1 -mx-1 py-0.5 hover:bg-[var(--surface-hover)] focus-within:shadow-focus" title="Escolher outra data">
-              <span className="text-[15px] font-bold leading-tight text-[var(--text)] capitalize truncate" aria-live="polite"><span className="agenda-date-wide">{focusLabel}</span><span className="agenda-date-narrow">{view==='week'?`${formatDateBR(weekDays[0]).slice(0,5)}–${formatDateBR(weekDays[6]).slice(0,5)}`:view==='month'?`${focus.slice(5,7)}/${focus.slice(0,4)}`:formatDateBR(focus)}</span></span>
-              <span className="text-[11px] font-semibold text-[var(--text-muted)] leading-tight inline-flex items-center gap-1">
-                <Icon n="calendar" size={11} /> {focusRange}
-              </span>
-              <input type="date" value={focus} max="2100-12-31" onChange={(e) => { if (/^\d{4}-\d{2}-\d{2}$/.test(e.target.value)) setFocus(e.target.value); }}
-                aria-label="Escolher data" className="absolute inset-0 w-full h-full opacity-0 cursor-pointer" />
-            </label></div><Button onClick={() => setCreating({date:focus,time:'',professionalId:''})} variant="primary"><Icon n="plus" size={18}/>Novo agendamento</Button></div>
-        <div className="agenda-controls-row">
+      <div className="relative z-40 ws-panel mt-3 mb-4">
+        <div className="flex flex-wrap items-center gap-x-4 gap-y-2.5 px-3 py-2.5">
           {/* Navegação no tempo (A3.4): [◀] [Hoje] [▶] + título da data ao lado.
               O "Hoje" fica SEMPRE no mesmo lugar, entre as setas — antes ele
               aparecia e desaparecia conforme a data, então o botão se movia
@@ -1189,7 +1356,7 @@ export default function AgendaPage() {
               <button type="button" onClick={() => setFocus(today)}
                 aria-pressed={isToday}
                 title={isToday ? 'Você já está em hoje' : 'Ir para hoje'}
-                className={cn('h-9 px-3 rounded-none text-xs font-bold border-r border-[var(--border)] transition-colors',
+                className={cn('h-9 px-3 rounded-none text-xs font-semibold border-r border-[var(--border)] transition-colors',
                   isToday
                     ? 'bg-[var(--brand-soft)] text-[var(--brand-fg)] cursor-default'
                     : 'text-[var(--text)] hover:bg-[var(--surface-hover)]')}>
@@ -1198,108 +1365,27 @@ export default function AgendaPage() {
               <IconButton icon="chevR" label={navLabel(1)} tip={navLabel(1)} variant="ghost" onClick={() => move(1)}
                 className="w-9 h-9 rounded-none text-[var(--text-muted)]" />
             </span>
-
+            <label className="relative inline-flex items-center gap-1.5 h-9 min-w-0 max-w-[min(26rem,calc(100vw-9rem))] cursor-pointer rounded-md px-2 -mx-2 hover:bg-[var(--surface-hover)] focus-within:shadow-focus"
+              title={`${focusRange} · clique para escolher a data`}>
+              <Icon n="calendar" size={13} className="shrink-0 text-[var(--text-muted)]" />
+              <span className="text-[15px] font-semibold leading-tight text-[var(--text)] capitalize truncate" aria-live="polite">{focusLabel}</span>
+              <input type="date" value={focus} max="2100-12-31" onChange={(e) => { if (/^\d{4}-\d{2}-\d{2}$/.test(e.target.value)) setFocus(e.target.value); }}
+                aria-label={`Escolher data (${focusRange})`} className="absolute inset-0 w-full h-full opacity-0 cursor-pointer" />
+            </label>
           </div>
-          <Tabs
-            items={[
-              { id: 'day' as View, label: 'Dia', icon: 'calendar' },
-              { id: 'week' as View, label: 'Semana', icon: 'grid' },
-              { id: 'month' as View, label: 'Mês', icon: 'receipt' },
-              { id: 'list' as View, label: 'Lista', icon: 'tasks' },
-            ]}
-            value={view}
-            onChange={(v) => { endDrag(); setView(v); }}
-            ariaLabel="Visualização da agenda"
-          />
-          <div className="agenda-toolbar-actions">
-            {/* P1.1 — UM botão de filtro (contador quando ativo). O popover
-                agrupa Status + Especialidade + Profissional pesquisável:
-                escala para 10/20/50 profissionais sem poluir a toolbar. */}
-            <div className="relative" ref={filterWrapRef}>
-              <Button variant="secondary" size="sm" onClick={() => { setFilterOpen((o) => !o); setProSearch(''); }}
-                aria-expanded={filterOpen} aria-haspopup="dialog" title="Filtros">
-                <Icon n="filter" size={13} />
-                {activeFilterCount > 0 ? `Filtros · ${activeFilterCount}` : 'Filtros'}
-                <Icon n="chevD" size={12} className={`transition-transform ${filterOpen ? 'rotate-180' : ''}`} />
-              </Button>
-
-              {filterOpen && (
-                <div role="dialog" aria-label="Filtros da agenda"
-                  className="absolute right-0 top-full mt-1.5 z-30 w-[300px] max-w-[calc(100vw-1.25rem)] bg-white border border-zinc-200 rounded-lg shadow-lg text-left">
-                  <div className="px-3 pt-2.5 pb-1.5 flex items-center justify-between gap-2">
-                    <p className="text-[11px] font-bold uppercase tracking-wider text-zinc-400">Filtros</p>
-                    {activeFilterCount > 0 && (
-                      <button type="button" onClick={clearFilters}
-                        className="text-xs font-semibold text-[var(--danger)] hover:text-[var(--danger-strong)]">
-                        Limpar filtros
-                      </button>
-                    )}
-                  </div>
-
-                  <div className="px-3 pb-2.5">
-                    <p className="text-[11px] font-semibold text-zinc-500 mb-1.5">Status</p>
-                    <div className="flex flex-wrap gap-1">
-                      <FilterChip active={!statusFilter} onClick={() => setStatusFilter('')}>Todos</FilterChip>
-                      {statusOptions.map((s) => (
-                        <FilterChip key={s} active={statusFilter === s} onClick={() => setStatusFilter(statusFilter === s ? '' : s)}>
-                          {BOOKING_STATUS[s].panel}
-                        </FilterChip>
-                      ))}
-                    </div>
-                  </div>
-
-                  {specialties.length > 0 && (
-                    <div className="px-3 pb-2.5 border-t border-zinc-100 pt-2.5">
-                      <p className="text-[11px] font-semibold text-zinc-500 mb-1.5">Especialidade</p>
-                      <div className="flex flex-wrap gap-1">
-                        <FilterChip active={!specFilter} onClick={() => pickSpec('')}>Todas</FilterChip>
-                        {specialties.map((r) => (
-                          <FilterChip key={r} active={specFilter === r} onClick={() => pickSpec(specFilter === r ? '' : r)}>
-                            {r}
-                          </FilterChip>
-                        ))}
-                      </div>
-                    </div>
-                  )}
-
-                  {activePros.length > 0 && (
-                    <div className="px-3 pb-3 border-t border-zinc-100 pt-2.5">
-                      <p className="text-[11px] font-semibold text-zinc-500 mb-1.5">Profissional</p>
-                      <div className="relative">
-                        <Icon n="search" size={13} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-zinc-400" />
-                        <input value={proSearch} onChange={(e) => setProSearch(e.target.value)}
-                          placeholder="Pesquisar profissional..." aria-label="Pesquisar profissional"
-                          className="w-full text-xs bg-zinc-50 border border-zinc-200 rounded-md pl-8 pr-2 py-1.5 focus:outline-none focus:ring-1 focus:ring-[var(--action)] focus:bg-white" />
-                      </div>
-                      <div className="mt-1.5 max-h-44 overflow-y-auto ws-scroll space-y-0.5">
-                        <button type="button" onClick={() => pickPro('')}
-                          className={cn('w-full flex items-center gap-2 px-2 py-1.5 rounded-md text-left text-xs font-medium',
-                            !proFilter ? 'bg-zinc-100' : 'hover:bg-zinc-50')}>
-                          <span className="flex-1">Todos</span>
-                          {!proFilter && <Icon n="check" size={13} className="text-emerald-600 shrink-0" />}
-                        </button>
-                        {prosInFilter.map((p) => (
-                          <button key={p.id} type="button" onClick={() => pickPro(proFilter === p.id ? '' : p.id)}
-                            className={cn('w-full flex items-center gap-2 px-2 py-1.5 rounded-md text-left text-xs',
-                              proFilter === p.id ? 'bg-zinc-100' : 'hover:bg-zinc-50')}>
-                            <span className="flex-1 min-w-0 truncate">
-                              <span className="font-semibold text-zinc-800">{p.name}</span>
-                              {p.role && <span className="text-zinc-400"> · {p.role}</span>}
-                            </span>
-                            {proFilter === p.id && <Icon n="check" size={13} className="text-emerald-600 shrink-0" />}
-                          </button>
-                        ))}
-                        {prosInFilter.length === 0 && (
-                          <p className="text-xs text-zinc-400 px-2 py-1.5">Nenhum profissional encontrado.</p>
-                        )}
-                      </div>
-                    </div>
-                  )}
-                </div>
-              )}
-            </div>
-            <select aria-label="Densidade da agenda" className="il-field-control agenda-density" value={density} onChange={e=>{endDrag();setDensity(e.target.value as AgendaDensity);}}><option value="compact">Compacta</option><option value="comfortable">Confortável</option></select>
-            <Button variant="secondary" size="sm" aria-label="Fila de atendimento" aria-expanded={showQueue} onClick={()=>showQueue?closeQueue():setShowQueue(true)}><Icon n="clock" size={16}/>Fila <span aria-label="Pessoas na fila">{queueLoading?'…':queueError?'—':queueInfo.waiting+queueInfo.called+queueInfo.inService}</span></Button>
+          <div className="sm:ml-auto min-w-0 max-w-full">
+            <Segmented
+              items={[
+                { id: 'day' as View, label: 'Dia', icon: 'calendar' },
+                { id: 'week' as View, label: 'Semana', icon: 'grid' },
+                { id: 'month' as View, label: 'Mês', icon: 'receipt' },
+                { id: 'list' as View, label: 'Lista', icon: 'tasks' },
+              ]}
+              value={view}
+              onChange={(v) => { endDrag(); setView(v); }}
+              ariaLabel="Visualização da agenda"
+              size="sm"
+            />
           </div>
         </div>
         {isDragging && view !== 'month' && (
@@ -1324,7 +1410,7 @@ export default function AgendaPage() {
               <Icon n={hover?.time ? 'checkCircle' : 'calendar'} size={14} />
               {hover?.time ? 'Pode soltar aqui' : 'Solte no novo horário'}
               <span className={
-                'font-bold px-2 py-0.5 rounded-pill border bg-white shadow-xs '
+                'font-semibold px-2 py-0.5 rounded-pill border bg-white shadow-xs '
                 + (hover?.time
                   ? 'border-[var(--success-border)] text-[var(--success-fg)]'
                   : slotsState === 'error'
@@ -1346,13 +1432,13 @@ export default function AgendaPage() {
         )}
       </div>
 
-      {denied ? <AccessDenied area="Agenda" /> : failed ? <AreaLoadError area="Agenda" message={failed} onRetry={load}/> : !loaded ? <ListSkeleton rows={4} /> : view === 'list' ? (
+      {denied ? <AccessDenied area="Agenda" /> : failed ? <AreaLoadError area="Agenda" message={failed} onRetry={load}/> : !loaded ? <AgendaSkeleton /> : view === 'list' ? (
         <section className="space-y-3" aria-label="Lista de atendimentos do dia">
           <p className="text-sm text-[var(--text-muted)]">{formatDateBR(focus)} · Toque para abrir o atendimento. Horários livres e intervalos estão na visualização Dia.</p>
           {columns.flatMap(c => c.blocks).length === 0 && <div className="p-8 bg-[var(--surface)] border border-[var(--border)] rounded-lg"><h2 className="font-semibold">Nenhum atendimento nesta seleção</h2><p className="text-sm text-[var(--text-muted)] mt-1">Confira os filtros ou use Novo agendamento para consultar horários disponíveis.</p></div>}
           {[...new Map(columns.flatMap(c => c.blocks).map(b => [b.id,b])).values()].sort((a,b) => a.time.localeCompare(b.time)).map(item => <button key={item.id} type="button" onClick={() => { const booking = bookings.find(b => b.id === item.id); if (booking) setDetail(booking); }} className="w-full flex gap-4 items-start text-left p-4 bg-[var(--surface)] border border-[var(--border)] rounded-lg">
             <span className="font-semibold tabular-nums text-[var(--brand-fg)]">{item.time}</span>
-            <span className="min-w-0 flex-1"><strong className="block text-sm">{bookings.find(b => b.id === item.id)?.customerName}</strong><span className="block text-xs text-[var(--text-muted)] mt-1">{item.service} · {proName(bookings.find(b => b.id === item.id)?.professionalId || '') || 'Sem profissional'}</span><span className="inline-block text-xs mt-2 font-semibold">{item.statusLabel}{bookings.find(b => b.id === item.id)?.bookingKind === 'fit_in' ? ' · Encaixe' : ''}</span></span><Icon n="chevR" size={16} />
+            <span className="min-w-0 flex-1"><strong className="block text-sm">{(() => { const bk = bookings.find(b => b.id === item.id); return bk?.petName || bk?.customerName; })()}</strong><span className="block text-xs text-[var(--text-muted)] mt-1">{(() => { const bk = bookings.find(b => b.id === item.id); return bk?.petName ? `Tutor: ${bk.customerName} · ` : ''; })()}{item.service} · {proName(bookings.find(b => b.id === item.id)?.professionalId || '') || 'Sem profissional'}</span><span className="inline-block text-xs mt-2 font-semibold">{item.statusLabel}{bookings.find(b => b.id === item.id)?.bookingKind === 'fit_in' ? ' · Encaixe' : ''}</span></span><Icon n="chevR" size={16} />
           </button>)}
         </section>
       ) : view === 'month' ? (
@@ -1375,7 +1461,7 @@ export default function AgendaPage() {
                 <button key={d} onClick={() => { setPresentation({data:d,view:'day'}); }} className={`bg-white p-1.5 min-h-[72px] text-left hover:bg-zinc-50 ${d === today ? 'ring-1 ring-inset ring-emerald-500 bg-emerald-50/40' : ''} ${!inMonth ? 'bg-zinc-50 text-zinc-400' : ''}`}>
                   <span className="flex items-center justify-between">
                     <span className={`text-xs font-semibold ${d === today ? 'text-emerald-700' : inMonth ? 'text-zinc-700' : 'text-zinc-400'}`}>{Number(d.slice(8, 10))}</span>
-                    {pend > 0 && <span className="text-[9px] font-bold bg-amber-500 text-white rounded-full px-1">{pend}</span>}
+                    {pend > 0 && <span className="text-[9px] font-semibold bg-amber-500 text-white rounded-full px-1">{pend}</span>}
                   </span>
                   {list.length > 0 && (
                     <>
@@ -1389,22 +1475,28 @@ export default function AgendaPage() {
           </div>
         </div>
       ) : (
-        <div className="bg-white border border-zinc-200 overflow-hidden">
-          {/* Altura EXATA = min(conteúdo, viewport disponível). Se a grade
-              cabe, o container tem o tamanho dela e não há barra alguma. */}
-          <div data-agenda-grid data-hour-scale={pxPerHour} data-start-minute={grid.start} data-end-minute={grid.end} ref={scrollRef} className={`overflow-auto ws-scroll ${isDragging ? 'select-none' : ''}`}
-            style={{ height: gridMaxH ? Math.min(gridContentH, gridMaxH) : undefined }}>
+        <div className="bg-white border border-zinc-200">
+          {/* FASE E — SCROLL INTERNO (a grade domina o workspace): o scroller
+              é limitado à altura útil da viewport (a MESMA medição da rail da
+              fila) e rola por dentro — cabeçalhos de coluna e gutter ficam
+              presos nele e a PÁGINA para de crescer com a grade. A rolagem
+              horizontal continua aqui dentro quando as colunas não cabem. */}
+          <div
+            ref={scrollRef}
+            className={`overflow-auto ws-scroll ${isDragging ? 'select-none' : ''}`}
+            style={railMaxH ? { maxHeight: railMaxH } : undefined}
+          >
             <div className="flex" style={{ minWidth: dayWidth }}>
               {/* Gutter de horas (fixo na horizontal) */}
               <div className="sticky left-0 z-30 bg-white shrink-0 border-r border-zinc-200" style={{ width: GUTTER_W }}>
-                <div style={{ height: HEADER_H }} className="sticky top-0 z-30 bg-white border-b border-zinc-200" />
+                <div style={{ height: HEADER_H }} className="border-b border-zinc-200" />
                 {/* O último rótulo ancora ACIMA da linha: nenhum elemento
                     ultrapassa gridHeight (zero scroll fantasma). */}
                 <div className="relative" style={{ height: gridHeight }}>
                   {Array.from({ length: grid.hours + 1 }, (_, i) => (
                     <span key={i}
-                      className={`absolute right-2 text-sm font-medium text-[var(--text-muted)] ${i === grid.hours ? '-translate-y-full' : i === 0 ? '' : '-translate-y-1/2'}`}
-                      style={{ top: i * pxPerHour }}>{minToTime(grid.start + i * 60)}</span>
+                      className={`absolute right-2 text-sm font-medium text-[var(--text-muted)] ${i === grid.hours ? '-translate-y-full' : '-translate-y-1/2'}`}
+                      style={{ top: i * PX_PER_HOUR }}>{minToTime(grid.start + i * 60)}</span>
                   ))}
                 </div>
               </div>
@@ -1416,14 +1508,14 @@ export default function AgendaPage() {
                     <div key={c.key} className="shrink-0 px-3 flex items-center gap-2 border-r border-zinc-100 last:border-r-0" style={{ minWidth: COL_MIN, width: `${100 / Math.max(1, columns.length)}%`, height: HEADER_H }}>
                       {view === 'day' && (
                         c.isProfessional ? (
-                          <Avatar name={c.label} size={20} />
+                          <Avatar name={c.label} src={c.photo} size={22} />
                         ) : (
-                          <span className="w-5 h-5 rounded-md bg-[var(--surface-2)] text-[var(--text-muted)] text-[10px] font-bold flex items-center justify-center shrink-0">—</span>
+                          <span className="w-5 h-5 rounded-md bg-[var(--surface-2)] text-[var(--text-muted)] text-[10px] font-semibold flex items-center justify-center shrink-0">—</span>
                         )
                       )}
                       <span className="min-w-0">
-                        <span className={`block text-sm font-semibold truncate ${c.isToday ? 'text-emerald-700' : 'text-zinc-800'}`}>{c.label}</span>
-                        {c.sub && <span className="block text-[10px] text-zinc-400 truncate">{c.sub}</span>}
+                        <span className={`block text-[13px] font-semibold truncate ${c.isToday ? 'text-[var(--brand-fg)]' : 'text-[var(--text-primary)]'}`}>{c.label}</span>
+                        {c.sub && <span className="block text-[11px] text-[var(--text-muted)] truncate">{c.sub}</span>}
                       </span>
                     </div>
                   ))}
@@ -1431,17 +1523,27 @@ export default function AgendaPage() {
 
                 {/* Corpo da grade */}
                 <div className="flex relative" ref={colsRef}>
-                  {view === 'day' && focus === today && nowMin >= grid.start && nowMin <= grid.end && (
-                    <span className="absolute left-0 right-0 border-t border-red-500 z-10 pointer-events-none" style={{ top: ((nowMin - grid.start) / 60) * pxPerHour }}>
-                      <span className="absolute -left-1 -top-[4px] w-2 h-2 rounded-full bg-red-500" />
-                    </span>
-                  )}
+                  {/* Linha do agora: só quando o dia/hora atual está no recorte
+                      visível (dia focado em hoje, ou coluna de hoje na semana).
+                      Puramente visual — nenhuma regra de tempo muda. */}
+                  {(() => {
+                    const place = nowLinePlacement({
+                      view, focus, today, nowMin,
+                      gridStart: grid.start, gridEnd: grid.end,
+                      columns, pxPerHour: PX_PER_HOUR,
+                    });
+                    if (!place) return null;
+                    return (
+                      <span className="ag-nowline" style={place.left ? { top: place.top, left: place.left, width: place.width } : { top: place.top, left: 0, right: 0 }}>
+                        <span className="ag-nowline__dot" />
+                        <span className="ag-nowline__time">Agora · {nowHM(new Date(), bizTz)}</span>
+                      </span>
+                    );
+                  })()}
                   {columns.map((c, i) => (
                     <GridColumn
                       key={c.key}
                       column={c}
-                      pxPerHour={pxPerHour}
-                      onSummary={setEventSummary}
                       basisPct={100 / Math.max(1, columns.length)}
                       variant={view === 'week' ? 'week' : 'day'}
                       highlight={highlightFor(i)}
@@ -1464,7 +1566,6 @@ export default function AgendaPage() {
         </div>
       )}
 
-        <footer className="agenda-footer"><details className="agenda-legend"><summary>Legenda</summary><div className="agenda-legend-panel" aria-label="Legenda dos estados">{statusOptions.map(status=><span key={status}><i className={BOOKING_DOT[status]} aria-hidden="true"/>{BOOKING_STATUS[status].panel}</span>)}<p>Branco: livre para algum serviço. Cinza: indisponível. A reserva é sempre validada pelo servidor.{bookings.length>=500?' Em agendas extensas, consulte a disponibilidade no formulário.':''}</p></div></details><output aria-live="polite" className="truncate text-xs text-[var(--text-muted)]" title={eventSummary}>{eventSummary}</output></footer>
         </main>
 
         {/* RAIL DA FILA — um só QueuePanel para os dois tamanhos de tela:
@@ -1473,8 +1574,7 @@ export default function AgendaPage() {
             • abaixo de xl: overlay deslizante (a agenda nunca é espremida por
               380px num tablet) — fecha pelo X, pelo botão ou pelo fundo. */}
         {showQueue && (
-          <QueueDock onClose={closeQueue} maxHeight={railMaxH}>
-              {queueError&&<p role="alert" className="p-3 text-sm">Não foi possível atualizar a fila. <button className="underline" onClick={loadQueue}>Tentar novamente</button></p>}
+          <QueueDock onClose={() => setShowQueue(false)} maxHeight={railMaxH}>
               <QueuePanel
                 businessId={businessId}
                 date={today}
@@ -1498,7 +1598,7 @@ export default function AgendaPage() {
                 onOpenBooking={(id) => { const b = bookingsRef.current.get(id); if (b) setDetail(b); }}
                 onEncounter={(row) => setQueueEncounter(row)}
                 onOpenClient={(row) => { window.location.href = `/clientes?c=${encodeURIComponent(row.contactId)}`; }}
-                onClose={closeQueue}
+                onClose={() => setShowQueue(false)}
                 onFitIn={(row) => setCreating({
                   date: today, time: nowHM(), professionalId: row.professionalId,
                   contactId: row.contactId, name: row.customerName, phone: row.customerPhone, serviceId: row.serviceId,
@@ -1517,7 +1617,7 @@ export default function AgendaPage() {
       >
         <div className="bg-[var(--text)] text-white rounded-md shadow-lg px-2.5 py-1.5 max-w-[220px]">
           <p className="text-[11px] font-semibold leading-tight truncate">
-            {dragging ? `${dragging.customerName} · ${serviceName(dragging.serviceId)}` : ''}
+            {dragging ? `${dragging.petName || dragging.customerName} · ${serviceName(dragging.serviceId)}` : ''}
           </p>
           <p className={
             'text-[11px] leading-tight mt-0.5 '
@@ -1533,7 +1633,7 @@ export default function AgendaPage() {
         <Drawer open onClose={() => !saving && setDropAsk(null)} title="Confirmar reagendamento" width="max-w-lg">
           <div className="p-5">
             <p className="font-semibold">{dropConfirmQuestion(dropAsk.date, dropAsk.time)}</p>
-            <p className="text-sm text-zinc-600 mt-1.5"><strong>{dropAsk.booking.customerName}</strong> · {serviceName(dropAsk.booking.serviceId)}</p>
+            <p className="text-sm text-zinc-600 mt-1.5"><strong>{dropAsk.booking.petName || dropAsk.booking.customerName}</strong>{dropAsk.booking.petName ? ` (tutor: ${dropAsk.booking.customerName})` : ''} · {serviceName(dropAsk.booking.serviceId)}</p>
             <p className="text-sm mt-1">
               {formatDateBR(dropAsk.booking.date)} {dropAsk.booking.time} → <strong>{formatDateBR(dropAsk.date)} {dropAsk.time}</strong>
             </p>
@@ -1574,7 +1674,12 @@ export default function AgendaPage() {
             });
           }}
           onClose={() => setDetail(null)}
-          onChanged={() => { setDetail(null); load(); }}
+          /* P0-1: save silencioso NÃO fecha o detalhe nem o atendimento —
+             só sincroniza a grade em segundo plano. */
+          onSaved={() => { void load(); }}
+          /* Mudança estrutural (status/finalizar): atualiza dados, mantém
+             sheets abertos — o fechamento é só onClose (ação do usuário). */
+          onChanged={() => { void load(); }}
         />
       )}
 
@@ -1601,6 +1706,7 @@ export default function AgendaPage() {
             });
           }}
           onClose={() => { setQueueEncounter(null); void loadQueue(); }}
+          onSaved={loadQueue}
           onChanged={loadQueue}
         />
       )}

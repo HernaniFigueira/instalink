@@ -22,6 +22,10 @@ function onlyDigitsOf(v: string): string {
 export async function GET(req: NextRequest) {
   const businessId = req.nextUrl.searchParams.get('businessId') || '';
   const q = (req.nextUrl.searchParams.get('q') || '').trim().toLowerCase();
+  // Rota de PERFIL 360 (`/clientes/[id]`): a página precisa carregar UMA pessoa
+  // por identidade estável (`key`) sem varrer a lista paginada — mesmo guard de
+  // permissão, mesmo payload, nada de endpoint paralelo com regra própria.
+  const keyFilter = (req.nextUrl.searchParams.get('key') || '').trim();
   const page = Math.max(1, parseInt(req.nextUrl.searchParams.get('page') || '1', 10) || 1);
   // A3.3 — filtros da lista de clientes (aplicados ANTES da paginação, então o
   // total e o número de páginas refletem o filtro — nunca "página 1 de 1" falso).
@@ -281,6 +285,7 @@ export async function GET(req: NextRequest) {
       || (qd.length >= 6 && onlyDigitsOf(p.profile.cpf).includes(qd)),
     );
   }
+  if (keyFilter) people = people.filter((p) => p.key === keyFilter);
   if (accessFilter === 'active' || accessFilter === 'none') {
     people = people.filter((p) => p.accountStatus === accessFilter);
   }

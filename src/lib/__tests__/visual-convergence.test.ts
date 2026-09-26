@@ -370,10 +370,13 @@ describe('A3.3/A3.4 — cor por contexto de seção', () => {
     }
   });
 
-  it('A3.4 — o tema da seção governa TAMBÉM o item ativo (nunca azul fixo)', () => {
-    // A regressão que este teste protege: a seleção forçava
-    // `--il-nav-active-fg` (azul) em TODAS as seções, apagando a família de
-    // cor exatamente quando ela orientava o usuário.
+  it('A3.4/2.0 — o tema da seção governa TAMBÉM o item ativo (nunca azul hardcoded)', () => {
+    // A regressão original: a seleção forçava `--il-nav-active-fg` (azul) em
+    // TODAS as seções. O mecanismo segue o mesmo e é o que este teste protege:
+    // o item ativo consome `sectionTheme(secao)`, nunca uma cor fixa.
+    // Na 2.0 a PALETA mudou de propósito (§B): marca azul para a operação e
+    // NEUTRO para ajuste raro — o que morreu foi o arco-íris de seis famílias,
+    // não a fonte única de tema.
     for (const sec of PANEL_SECTIONS) {
       const t = SECTION_THEME[sec.id];
       expect(t, `seção ${sec.id} sem tema`).toBeTruthy();
@@ -381,10 +384,10 @@ describe('A3.3/A3.4 — cor por contexto de seção', () => {
         expect(token, sec.id).toMatch(/^var\(--[a-z0-9-]+\)$/);
       }
     }
-    // Seções de famílias diferentes NÃO compartilham o mesmo fundo ativo.
-    expect(SECTION_THEME.pessoas.activeBg).not.toBe(SECTION_THEME.oferta.activeBg);
-    expect(SECTION_THEME.crescimento.accent).toBe('var(--warning)');
-    expect(SECTION_THEME.resultados.accent).toBe('var(--success)');
+    // Operação (dia a dia) na marca; ajuste raro em neutro — famílias distintas.
+    expect(SECTION_THEME.operacao.activeBg).toBe('var(--brand-soft)');
+    expect(SECTION_THEME.administracao.activeBg).toBe('var(--surface-hover)');
+    expect(SECTION_THEME.operacao.activeBg).not.toBe(SECTION_THEME.administracao.activeBg);
     expect(sectionTheme(undefined).activeBg).toBe('var(--surface-3)');
     expect(sectionTheme('nao-existe' as never).activeFg).toBe('var(--text)');
   });
@@ -396,8 +399,10 @@ describe('A3.3/A3.4 — cor por contexto de seção', () => {
 
 
 
-  it('as famílias de cor de contexto existem como token', () => {
+  it('as famílias de cor de contexto existem como token (marca + semânticos)', () => {
     const css = read('src/app/globals.css');
+    // Os tokens legados continuam DECLARADOS (compatibilidade de telas que
+    // ainda os consomem), mas a navegação só usa marca/neutro.
     for (const token of ['--teal', '--lilac', '--warning', '--success', '--brand']) {
       expect(css, token).toMatch(new RegExp(`${token}:`));
     }

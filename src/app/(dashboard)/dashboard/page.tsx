@@ -32,10 +32,14 @@ import { useCallback, useEffect, useState } from 'react';
 import { useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { useWorkspace } from '@/components/dashboard/WorkspaceContext';
-import { Button, EmptyState, PageSkeleton, StatusBadge } from '@/components/ui';
+import { Button, DashboardSkeleton, EmptyState, PageSkeleton, StatusBadge } from '@/components/ui';
 import { Icon } from '@/components/icons';
+import { cn } from '@/lib/utils';
 import { AccessDenied, PermissionNotice, useForbiddenNotice } from '@/components/dashboard/AccessNotice';
+import { usePanelPermissions } from '@/components/dashboard/usePanelPermissions';
 import { PeriodSelector } from '@/components/dashboard/PeriodSelector';
+import { loadOverview } from '@/lib/overview';
+import { firstName } from '@/lib/greeting';
 import { apiGet } from '@/lib/api-client';
 import { money } from '@/lib/utils';
 import { humanDay } from '@/lib/tz';
@@ -72,20 +76,41 @@ interface Overview {
     sources: Array<'bookings' | 'orders'>;
     bookings: RevenueResult | null;
     orders: RevenueResult | null;
+    /** §6 — Agendado · Realizado · Recebido · Em aberto (mesma função do Financeiro). */
+    semantics?: {
+      agendado: number; realizado: number; recebido: number; emAberto: number;
+      previsto: number; pagamentos: number; hasBookings: boolean;
+    } | null;
   };
   showMoney?: boolean;
   today?: {
     date: string; total: number; confirmed: number; pending: number; completed: number;
     cancelled: number; noShow: number; upcoming: number; needsClosure: number;
   } | null;
+  /** Mesmo resumo, um dia antes — usado SÓ para a variação do dia. */
+  yesterday?: {
+    date: string; total: number; confirmed: number; pending: number; completed: number;
+    cancelled: number; noShow: number; needsClosure: number;
+  } | null;
+  /** Registros de atendimento pendentes (fechamento/registro do serviço). */
+  needsClosure?: Array<{ id: string; customerName: string; date: string; time: string; status: string; service: string }>;
+  /** Pendências da equipe (mesma fonte do /api/tasks) — resumo, nunca lista. */
+  tasksSummary?: { open: number; overdue: number; dueToday: number; mine: number } | null;
   ordersPanel?: { total: number; new: number; open: number; inWindow: number } | null;
   productsPanel?: { total: number; active: number } | null;
   crm?: { contacts: number; newContacts: number; registered: number; withConsent: number; leads: number; leadsNew: number; customers: number };
   pageStats?: { views: number; clicks: number; bookings: number; conversions: number; published: boolean; slug: string };
   whatsapp?: { status: string; open: number; unread: number; pendingMessages: number; link: string } | null;
+  intelligence?: {
+    automation: { completed: number };
+    conversations: { waitingTeam: number; attendedByAi: number };
+    followUp: { rescheduled: number };
+    reactivation: { reactivated: number };
+  } | null;
+  intelligenceHealth?: Record<string, { state: string; reason: string }> | null;
   hasBookingsModule?: boolean;
   upcoming: Array<{ id: string; customerName: string; date: string; time: string; status: string; service: string; professional: string }>;
-  checklist: Array<{ done: boolean; label: string; href: string }>;
+  checklist: Array<{ done: boolean; label: string; href: string; id?: string; optional?: boolean }>;
   pct: number;
   pendingSetup?: number;
   period: number;
@@ -131,16 +156,61 @@ export default function DashboardPage() {
     setSetupHidden(true);
     try { localStorage.setItem(`il-setup-hidden-${businessId}`, '1'); } catch { /* noop */ }
   }
+  // FASE 2 · P8 — pular um item OBRIGATÓRIO não existe: só os `optional`
+  // têm este botão, e a gravação é no servidor (reabrir o painel mantém).
+  const [skipping, setSkipping] = useState('');
+  async function skipSetupItem(id: string) {
+    if (!businessId || skipping) return;
+    const current = (data?.checklist || []).filter((c) => c.optional && c.id && !c.done).map((c) => c.id!);
+    const next = Array.from(new Set([...current, id])); // mantém os já pulados que ainda aparecem
+    const already = (data?.checklist || []).filter((c) => c.done && c.optional && c.id).map((c) => c.id!);
+    const payload = Array.from(new Set([...already, ...next]));
+    setSkipping(id);
+    try {
+      const res = await fetch(`/api/businesses/${businessId}`, {
+        method: 'PATCH', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ setupSkipped: payload }),
+      });
+      if (res.ok) setRetry((r) => r + 1); // recarrega o overview com o progresso real
+    } finally { setSkipping(''); }
+  }
   const { notice, dismiss } = useForbiddenNotice('Início');
+  // §A08/P0 — PERMISSÕES: hook chamado SEMPRE, antes de QUALQUER early return
+  // (Rules of Hooks). O primeiro render acontece com data=null (skeleton);
+  // se este hook ficasse depois do `if (!data)`, o render seguinte passaria a
+  // ter MAIS hooks que o anterior → React error #310 e painel branco após o
+  // login. A DERIVAÇÃO (canAdminUnit) continua onde é consumida, abaixo.
+  const { permissions: panelPerms, ready: permsReady } = usePanelPermissions();
   // Estados completos (auditoria §12, mesma família do bug do /recursos):
   // uma falha de rede nunca pode virar skeleton eterno no Início.
   const [failed, setFailed] = useState('');
   const [retry, setRetry] = useState(0);
 
+  // Tarefas abertas (resumo real do /api/tasks) para o bloco de atividade.
+  const [taskSum, setTaskSum] = useState<{ open: number; overdue: number; dueToday: number; mine: number } | null>(null);
+  // Nada de série/gráfico próprio: a Visão geral responde "como está HOJE" com
+  // os dados do /api/overview (today + yesterday). A leitura analítica do
+  // período vive em GESTÃO → Resultados, com a API dela.
+  const [openTasks, setOpenTasks] = useState<Array<{ id: string; title: string; dueAt: string }> | null>(null);
+  useEffect(() => {
+    if (!businessId) return;
+    let on = true;
+    apiGet<{ summary?: { open: number; overdue: number; dueToday: number; mine: number }; tasks?: Array<{ id: string; title: string; dueAt: string; status?: string }> }>(
+      `/api/tasks?businessId=${businessId}&status=open`, { scope: 'area', area: 'Início' },
+    ).then((r) => {
+      if (!on) return;
+      setTaskSum(r.ok && r.data?.summary ? r.data.summary : null);
+      const list = Array.isArray(r.data?.tasks) ? r.data.tasks : [];
+      setOpenTasks(list.filter((t: { status?: string }) => (t.status || 'open') === 'open').slice(0, 4));
+    }).catch(() => { if (on) { setTaskSum(null); setOpenTasks(null); } });
+    return () => { on = false; };
+  }, [businessId]);
   const load = useCallback(() => {
     if (!businessId) return;
     setFailed('');
-    apiGet<Overview>(`/api/overview?businessId=${businessId}&period=${period}`, { scope: 'area', area: 'Início' })
+    // §i — o MESMO payload já é pedido pelo shell (mini-card + sino): o loader
+    // compartilhado divide a requisição em vez de repetir o trabalho de banco.
+    loadOverview(businessId, period, { scope: 'area', area: 'Visão geral' })
       .then((res) => {
         // 403 → aviso amigável na tela; o usuário NÃO é deslogado.
         // 401 → o wrapper de fetch já iniciou o fluxo de login.
@@ -150,7 +220,7 @@ export default function DashboardPage() {
           return;
         }
         setDenied(false);
-        setData(res.data);
+        setData(res.data as Overview | null);
       });
   }, [businessId, period, retry]);
 
@@ -179,17 +249,40 @@ export default function DashboardPage() {
     );
   }
 
-  if (!data) return <PageSkeleton />;
+  if (!data) return <DashboardSkeleton />;
 
   const { user, business, totals, upcoming, checklist, pct, recent, today, crm, pageStats, whatsapp, ordersPanel, productsPanel, context } = data;
   const modules = context.modules;
   const results = data.results;
   const showMoney = data.showMoney === true;
+  // Comparação com ONTEM: vem do MESMO /api/overview (campo `yesterday`).
+  // Antes a tela buscava até 500 agendamentos em /api/bookings só para
+  // reconstruir este número — requisição pesada e duplicada.
+  const yday = data.yesterday
+    ? {
+        total: data.yesterday.total,
+        byStatus: {
+          confirmed: data.yesterday.confirmed, pending: data.yesterday.pending,
+          completed: data.yesterday.completed, no_show: data.yesterday.noShow,
+          cancelled: data.yesterday.cancelled,
+        } as Record<string, number>,
+      }
+    : null;
   const operational = !showMoney;
+  // TRÊS VISÕES, UM SÓ DASHBOARD (§11):
+  //   • profissional (agendaScope 'own'/'none' ou papel PROFISSIONAL) → o SEU dia;
+  //   • operação (sem acesso financeiro: recepção/atendente) → o que resolver agora;
+  //   • gestão (OWNER/ADMIN com financeiro) → o dia + um resumo compacto do período.
+  // Nada de receita global para quem atende ou recebe: o número que não serve
+  // para decidir não ocupa a tela.
   const ownAgenda = workspace.agendaScope === 'own' || workspace.role === 'PROFISSIONAL';
+  const proView = ownAgenda;
   const revenueDetail = data.revenueDetail;
   const bookingRevenue = revenueDetail?.bookings || null;
   const orderRevenue = revenueDetail?.orders || null;
+  // §6 — os quatro conceitos reconciliados (mesma função do Financeiro):
+  // a Visão geral nunca mais mostra um número que o Financeiro contradiz.
+  const moneySemantics = revenueDetail?.semantics || null;
   const attention = data.attention || [];
   const links = data.links || {};
   const q = `?b=${business.id}`;
@@ -203,15 +296,25 @@ export default function DashboardPage() {
 
   /** Linha de lista: com permissão vira link (linha inteira clicável, com
       indicação visual); sem permissão vira texto — nunca um 403 à toa. */
-  function ListRow({ href, allowed, className, children }: {
-    href: string; allowed: boolean; className: string; children: React.ReactNode;
+  function ListRow({ href, allowed, className, children, style }: {
+    href: string; allowed: boolean; className: string; children: React.ReactNode; style?: React.CSSProperties;
   }) {
-    if (!allowed) return <div className={className}>{children}</div>;
-    return <Link href={href} className={`${className} hover:bg-zinc-50 transition-colors`}>{children}</Link>;
+    if (!allowed) return <div className={className} style={style}>{children}</div>;
+    return <Link href={href} style={style} className={`${className} hover:bg-zinc-50 transition-colors`}>{children}</Link>;
   }
 
   // 6 · ONDE AGIR — só ações que EXISTEM: checklist real + conectar canal.
-  const showSetup = hasSetupPending && !setupHidden;
+  // §11 — o checklist é o ONBOARDING DA CLÍNICA (dados, serviços, horários,
+  // página, canal): quem só atende não configura a clínica. Mostrá-lo ao
+  // profissional criava uma lista de afazeres que não são dele — e cujos
+  // links ele nem sempre pode abrir.
+  // §A08 — o checklist "Sua clínica está pronta?" só tem destinos de ADMINISTRAÇÃO
+  // (/configuracoes, /servicos, /disponibilidade, /pagina, /canais — permissão
+  // 'config'). Quem não administra a unidade não vê os atalhos: nenhum "Fazer →"
+  // pode terminar em "Sem permissão". (O hook já foi chamado lá em cima; aqui
+  // só a derivação — nenhum hook depois de early return.)
+  const canAdminUnit = !permsReady || panelPerms.config === true;
+  const showSetup = hasSetupPending && !setupHidden && !proView && canAdminUnit;
   const showConnectChannel = !!whatsapp && !canalConnected && links.canais === true;
   const hasWhereToAct = showSetup || showConnectChannel;
 
@@ -221,424 +324,588 @@ export default function DashboardPage() {
         <div className="mb-4 bg-[var(--brand-soft)] border-l-[3px] border-l-[var(--brand)] rounded-r-md px-4 py-3 flex items-start gap-3">
           <span className="w-8 h-8 rounded-md bg-white text-[var(--brand-fg)] flex items-center justify-center shrink-0"><Icon n="checkCircle" size={18} /></span>
           <div>
-            <p className="text-sm font-semibold text-[var(--text)]">{business.name} está criado, {user.name.split(' ')[0]}!</p>
+            <p className="text-sm font-semibold text-[var(--text)]">{business.name} está criado, {firstName(user.name)}!</p>
             <p className="text-xs text-[var(--text-muted)] mt-0.5">Agenda, serviços e página já estão ativos. Siga o “Comece por aqui” abaixo — ou ignore e use o que precisa primeiro.</p>
           </div>
         </div>
       )}
-
-      <header className="mb-6 flex flex-wrap items-start justify-between gap-4">
-        <div><p className="text-xs text-[var(--text-muted)] mb-1">Olá, {user.name.split(' ')[0]}</p>
-          <h1 className="text-2xl font-semibold">{ownAgenda ? 'Minha agenda e atendimentos' : operational ? 'Sua operação hoje' : 'Visão geral da clínica'}</h1>
-          <p className="text-sm text-[var(--text-muted)] mt-2">{ownAgenda ? 'Seus próximos horários e o contexto para atender.' : operational ? 'Chegadas, próximos horários e o que precisa de atenção.' : 'Acompanhe o dia e os resultados disponíveis da operação.'}</p>
-        </div>
-        <nav aria-label="Ações frequentes" className="flex flex-wrap gap-2">
-          {links.agenda === true && <Link className="il-control px-4 py-2 rounded-md bg-[var(--brand)] text-white font-semibold" href={`/agenda${q}`}>Abrir agenda e fila</Link>}
-          {links.clientes === true && <Link className="il-control px-4 py-2 rounded-md border border-[var(--border-strong)]" href={`/clientes${q}`}>Pacientes e clientes</Link>}
-          {links.pagina === true && <Link className="il-control px-4 py-2 rounded-md border border-[var(--border-strong)]" href={`/pagina${q}`}>Editar página</Link>}
-        </nav>
-      </header>
       <PermissionNotice message={notice?.title} hint={notice?.hint} onDismiss={dismiss} />
 
-      {/* ── 1 · ATENÇÃO: num único lugar, com dados que JÁ existem. Link
-          contextual só quando o usuário pode abrir a rota (mapa `links`). ── */}
+      {/* ── Saudação + resumo curto (hierarquia do mockup) ── */}
+      <header className="mb-5 flex flex-wrap items-start justify-between gap-3">
+        <div className="min-w-0">
+        <h1 className="text-[24px] leading-tight font-semibold tracking-tight text-[var(--text)]">
+          {proView ? `Meu dia, ${firstName(user.name)}` : `${greeting()}, ${firstName(user.name)}!`}
+        </h1>
+        <p className="text-sm text-[var(--text-muted)] mt-1">
+          {modules.bookings && today
+            ? `${today.total} ${today.total === 1 ? 'atendimento' : 'atendimentos'} hoje · ${upcoming.length} próximo${upcoming.length === 1 ? '' : 's'} na agenda${showMoney && bookingRevenue ? ` · ${money(bookingRevenue.total)} previstos no período` : ''}.`
+            : operational
+              ? 'Chegadas, próximos horários e o que precisa de atenção.'
+              : 'Acompanhe o dia e os resultados disponíveis da operação.'}
+        </p>
+        </div>
+        <div className="dsh-card flex items-center gap-2.5 px-3.5 py-2.5" title="Data de hoje">
+          <Icon n="calendar" size={16} className="text-[var(--brand-fg)]" />
+          <span className="text-[12.5px] font-semibold text-[var(--text)]">
+            Hoje, {new Date().toLocaleDateString('pt-BR', { day: '2-digit', month: 'long', year: 'numeric' })}
+          </span>
+        </div>
+      </header>
+
+      {/* ── 1 · ATENÇÃO (dados do servidor, links só com permissão) ── */}
       {attention.length > 0 && (
-        <div className="mb-3 border border-amber-200 bg-amber-50 px-3 py-2.5 flex flex-wrap items-center gap-x-3 gap-y-2" role="status" aria-label="Itens que precisam de atenção">
-          <span className="text-xs font-bold tracking-wide uppercase text-amber-900 inline-flex items-center gap-1.5">
+        <div className="mb-4 border border-[var(--warning-border)] bg-[var(--warning-bg)] px-3 py-2.5 flex flex-wrap items-center gap-x-3 gap-y-2 rounded-lg" role="status" aria-label="Itens que precisam de atenção">
+          <span className="text-xs font-semibold tracking-wide uppercase text-[var(--warning-fg)] inline-flex items-center gap-1.5">
             <Icon n="alert" size={14} /> Atenção
           </span>
           {attention.map((a) => {
-            const cls = 'text-xs font-medium bg-white border border-amber-200 text-amber-900 px-2.5 py-1 rounded-md inline-flex items-center gap-1';
+            const cls = 'text-xs font-medium bg-white border border-[var(--warning-border)] text-[var(--warning-fg)] px-2.5 py-1 rounded-md inline-flex items-center gap-1';
             const content = (<><strong>{a.count}</strong> {a.label}</>);
             return a.href
-              ? <Link key={a.id} href={`${a.href}${q}`} className={`${cls} hover:bg-amber-100`}>{content}</Link>
+              ? <Link key={a.id} href={`${a.href}${q}`} className={`${cls} hover:bg-[var(--warning-bg)]`}>{content}</Link>
               : <span key={a.id} className={cls}>{content}</span>;
           })}
         </div>
       )}
 
-      {/* ── 2 · HOJE (só para negócio com agenda) ── */}
+      {/* ── 2 · KPIs DO DIA (cards com ícone, cor contextual e número grande) ── */}
       {modules.bookings && today && (
-        <div className="bg-white border border-zinc-200 mb-3">
-          <div className="px-4 py-2.5 border-b border-zinc-100 flex items-center justify-between">
-            <h3 className="text-xs font-semibold tracking-wide uppercase text-zinc-500">Hoje</h3>
-            {links.agenda === true && <Link href={`/agenda${q}`} className="text-xs font-medium text-zinc-600 hover:text-zinc-900">Abrir agenda →</Link>}
+        <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-6 gap-3 mb-4">
+          <h3 className="sr-only">Hoje</h3>
+          <div className="dsh-kpi">
+            <span className="dsh-kpi__icon" style={{ background: 'var(--brand-soft)', color: 'var(--brand-fg)' }}><Icon n="calendar" size={19} /></span>
+            <span><span className="dsh-kpi__num">{today.total}</span><span className="dsh-kpi__label block">Atendimentos hoje</span>
+              <KpiDelta now={today.total} prev={yday?.total ?? 0} has={yday !== null} />
+            </span>
           </div>
-          <div className="grid grid-cols-3 sm:grid-cols-6 divide-x divide-zinc-100 divide-y sm:divide-y-0">
-            <div className="px-4 py-3"><p className="text-lg font-semibold leading-none">{today.total}</p><p className="text-xs text-zinc-500 mt-1">atendimentos</p></div>
-            <div className="px-4 py-3"><p className="text-lg font-semibold leading-none text-emerald-700">{today.confirmed}</p><p className="text-xs text-zinc-500 mt-1">confirmados</p></div>
-            <div className="px-4 py-3"><p className="text-lg font-semibold leading-none text-amber-600">{today.pending}</p><p className="text-xs text-zinc-500 mt-1">aguardando</p></div>
-            <div className="px-4 py-3"><p className="text-lg font-semibold leading-none">{today.completed}</p><p className="text-xs text-zinc-500 mt-1">concluídos</p></div>
-            <div className="px-4 py-3"><p className="text-lg font-semibold leading-none text-zinc-500">{today.noShow}</p><p className="text-xs text-zinc-500 mt-1">faltas</p></div>
-            <div className="px-4 py-3 bg-amber-50/50"><p className={`text-lg font-semibold leading-none ${today.needsClosure ? 'text-amber-700' : ''}`}>{today.needsClosure}</p><p className="text-xs text-zinc-500 mt-1">p/ fechar</p></div>
+          <div className="dsh-kpi">
+            <span className="dsh-kpi__icon" style={{ background: 'var(--success-bg)', color: 'var(--success-fg)' }}><Icon n="checkCircle" size={19} /></span>
+            <span><span className="dsh-kpi__num">{today.confirmed}</span><span className="dsh-kpi__label block">Confirmados</span>
+              <KpiDelta now={today.confirmed} prev={yday?.byStatus['confirmed'] ?? 0} has={yday !== null} />
+            </span>
           </div>
+          <div className="dsh-kpi">
+            <span className="dsh-kpi__icon" style={{ background: 'var(--warning-bg)', color: 'var(--warning-fg)' }}><Icon n="clock" size={19} /></span>
+            <span><span className="dsh-kpi__num">{today.pending}</span><span className="dsh-kpi__label block">Aguardando</span>
+              <KpiDelta now={today.pending} prev={yday?.byStatus['pending'] ?? 0} has={yday !== null} />
+            </span>
+          </div>
+          <div className="dsh-kpi">
+            <span className="dsh-kpi__icon" style={{ background: 'var(--ops-soft)', color: 'var(--ops-fg)' }}><Icon n="tasks" size={19} /></span>
+            <span><span className="dsh-kpi__num">{today.completed}</span><span className="dsh-kpi__label block">Concluídos</span>
+              <KpiDelta now={today.completed} prev={yday?.byStatus['completed'] ?? 0} has={yday !== null} />
+            </span>
+          </div>
+          <div className="dsh-kpi">
+            <span className="dsh-kpi__icon" style={{ background: 'var(--danger-bg)', color: 'var(--danger-fg)' }}><Icon n="alert" size={19} /></span>
+            <span><span className="dsh-kpi__num">{today.noShow}</span><span className="dsh-kpi__label block">Faltas</span>
+              <KpiDelta now={today.noShow} prev={yday?.byStatus['no_show'] ?? 0} has={yday !== null} />
+            </span>
+          </div>
+          {showMoney && bookingRevenue ? (
+            <div className="dsh-kpi">
+              <span className="dsh-kpi__icon" style={{ background: 'var(--success-bg)', color: 'var(--success-fg)' }}><Icon n="cash" size={19} /></span>
+              <span>
+                <span className="dsh-kpi__num" style={{ fontSize: 21 }}>{moneyKpi(moneySemantics ? moneySemantics.agendado : bookingRevenue.total)}</span>
+                <span className="dsh-kpi__label block" title={`Período: ${results?.periodLabel || periodLabel(period)}`}>
+                  Agendado no período
+                </span>
+                {/* §6 — os quatro conceitos, um do lado do outro, com o MESMO
+                    cálculo do Financeiro. Nada de "receita" genérica. */}
+                {moneySemantics && (
+                  <span className="block text-[11px] font-semibold text-[var(--text-muted)] mt-0.5 tabular-nums">
+                    Realizado {moneyKpi(moneySemantics.realizado)} · Recebido {moneyKpi(moneySemantics.recebido)} · Em aberto {moneyKpi(moneySemantics.emAberto)}
+                  </span>
+                )}
+              </span>
+            </div>
+          ) : (
+            <div className="dsh-kpi">
+              <span className="dsh-kpi__icon" style={{ background: today.needsClosure ? 'var(--warning-bg)' : 'var(--surface-2)', color: today.needsClosure ? 'var(--warning-fg)' : 'var(--text-muted)' }}><Icon n="shield" size={19} /></span>
+              <span><span className="dsh-kpi__num">{today.needsClosure}</span><span className="dsh-kpi__label block">Precisam de fechamento</span></span>
+            </div>
+          )}
         </div>
       )}
 
-      {/* ── 3 + 4 · grade coerente de 12 colunas (5 + 7): próximos à esquerda,
-          período consolidado à direita. Em telas menores tudo empilha. ── */}
-      <div className={`grid items-start ${operational ? "grid-cols-1" : "lg:grid-cols-12"} gap-4 mb-4`}>
+      {/* ── 3 · Setup real + Indicadores do período (5 + 7, como o mockup) ──
+          §11 — para quem ATENDE esta linha não existe: o checklist é da
+          clínica (não dele), a presença online é de quem cuida da página e
+          "aguardando confirmação/precisam de registro" são tarefas de
+          recepção — os dois números já aparecem nos KPIs do dia logo acima.
+          "Meu dia" fica com o que é DELE: agenda, próximos e atividade. */}
+      {!proView && (
+      <div className="grid items-start gap-4 lg:grid-cols-12 mb-4">
+        {hasWhereToAct ? (
+        <section className="lg:col-span-5 dsh-card min-w-0">
+          {showSetup ? (
+            <>
+              <div className="dsh-card__head">
+                <h3 className="dsh-card__title">Sua clínica está pronta?</h3>
+                <span className="text-[12px] font-semibold text-[var(--brand-fg)]">{pct}%</span>
+              </div>
+              <div className="dsh-card__body">
+                <div className="h-2 rounded-full bg-[var(--surface-3)] overflow-hidden mb-3" role="progressbar" aria-valuenow={pct} aria-valuemin={0} aria-valuemax={100}>
+                  <div className="h-full rounded-full bg-[var(--brand)] transition-all" style={{ width: `${pct}%` }} />
+                </div>
+                <div className="space-y-2">
+                  {checklist.map((c) => (
+                    c.done ? (
+                      <div key={c.label} className="dsh-check">
+                        <span className="dsh-check__mark dsh-check__mark--done" aria-hidden="true"><Icon n="check" size={12} /></span>
+                        <span className="line-through opacity-70 flex-1">{c.label}</span>
+                      </div>
+                    ) : (
+                      <div key={c.label} className="flex gap-1.5 items-stretch">
+                        <Link href={`${c.href}${c.href.includes('?') ? '&' : '?'}b=${business.id}`} className="dsh-check hover:border-[var(--brand-border)] flex-1">
+                          <span className="dsh-check__mark dsh-check__mark--todo" aria-hidden="true" />
+                          <span className="flex-1">{c.label}{c.optional ? ' (opcional)' : ''}</span>
+                          <span className="text-[11.5px] font-semibold text-[var(--brand-fg)]">Fazer →</span>
+                        </Link>
+                        {/* FASE 2 · P8 — pular só o NÃO obrigatório (nunca trava o progresso). */}
+                        {c.optional && c.id && (
+                          <button type="button"
+                            onClick={() => { void skipSetupItem(c.id!); }}
+                            disabled={skipping === c.id}
+                            className="rounded-md border border-[var(--border)] px-2 text-[11px] font-semibold text-[var(--text-muted)] hover:bg-[var(--surface-hover)] disabled:opacity-60"
+                            title="Marcar como resolvido sem conectar agora">
+                            {skipping === c.id ? '…' : 'Pular'}
+                          </button>
+                        )}
+                      </div>
+                    )
+                  ))}
+                </div>
+                <div className="mt-3 flex items-center justify-between gap-2">
+                  <p className="text-[11px] text-[var(--text-muted)]">Comece por aqui — na ordem que fizer sentido.</p>
+                  <button type="button" onClick={hideSetup} className="text-[11px] font-semibold text-[var(--text-faint)] hover:text-[var(--text-muted)] underline underline-offset-2">Ocultar</button>
+                </div>
+              </div>
+            </>
+          ) : (
+            <>
+              <div className="dsh-card__head">
+                <h3 className="dsh-card__title">Conectar canal de conversas</h3>
+              </div>
+              <div className="dsh-card__body">
+                <p className="text-[12.5px] text-[var(--text-muted)] mb-3">
+                  O WhatsApp ainda não está conectado nesta unidade. Sem canal, as conversas não chegam ao painel.
+                </p>
+                <Link href={`/canais?tab=canais&b=${business.id}`} className="pe-btn pe-btn--green inline-flex">Conectar canal</Link>
+              </div>
+            </>
+          )}
+        </section>
+        ) : (
+        <section className="lg:col-span-5 dsh-card min-w-0">
+          <>
+              <div className="dsh-card__head">
+                <h3 className="dsh-card__title">Presença online</h3>
+                {links.pagina === true && <Link href={`/pagina${q}`} className="text-[12px] font-semibold text-[var(--brand-fg)] hover:underline">Editar página →</Link>}
+              </div>
+              <div className="dsh-card__body">
+                {pageStats ? (
+                  <>
+                    <p className="text-[11px] font-semibold uppercase tracking-wider text-[var(--text-faint)] mb-2">Página · no período</p>
+                    <p className="text-[12.5px] font-semibold text-[var(--text-soft)] mb-3">
+                      {pageStats.published
+                        ? <>Página <strong className="text-[var(--success-fg)]">publicada</strong> em /{pageStats.slug}.</>
+                        : <>Página ainda <strong className="text-[var(--warning-fg)]">não publicada</strong>.</>}
+                    </p>
+                    <div className="grid grid-cols-3 gap-2 text-center">
+                      <div className="rounded-lg bg-[var(--surface-2)] py-2.5"><p className="dsh-kpi__num text-[18px]">{pageStats?.views ?? 0}</p><p className="text-[11px] font-semibold text-[var(--text-muted)]">visitas</p></div>
+                      <div className="rounded-lg bg-[var(--surface-2)] py-2.5"><p className="dsh-kpi__num text-[18px]">{pageStats.clicks}</p><p className="text-[11px] font-semibold text-[var(--text-muted)]">cliques</p></div>
+                      <div className="rounded-lg bg-[var(--surface-2)] py-2.5"><p className="dsh-kpi__num text-[18px]">{pageStats.bookings}</p><p className="text-[11px] font-semibold text-[var(--text-muted)]">reservas</p></div>
+                    </div>
+                    <p className="text-[11px] text-[var(--text-faint)] mt-3">Movimento · desde o início: {totals.uniqueVisitors} visitantes únicos.</p>
+                  </>
+                ) : (
+                  <p className="text-[12.5px] text-[var(--text-muted)]">Sem módulo de página nesta unidade.</p>
+                )}
+              </div>
+          </>
+        </section>
+        )}
 
-        {/* 3 · PRÓXIMOS COMPROMISSOS (varejo: pedidos; sem módulo: clientes) */}
-        {modules.bookings ? (
-          <section className={`${operational ? "" : "lg:col-span-5"} bg-white border border-zinc-200 flex flex-col min-w-0`}>
-            <div className="px-4 py-2.5 border-b border-zinc-100 flex items-center justify-between">
-              <h3 className="text-xs font-semibold tracking-wide uppercase text-zinc-500">Próximos atendimentos</h3>
-              {links.agenda === true && <Link href={`/agenda${q}`} className="text-xs font-medium text-zinc-600 hover:text-zinc-900">Ver agenda →</Link>}
+        {showMoney ? (
+        <section className={cn('dsh-card min-w-0', hasWhereToAct ? 'lg:col-span-7' : 'lg:col-span-12')}>
+          <div className="dsh-card__head">
+            <h3 className="dsh-card__title">
+              Período <span className="text-[var(--text-muted)] font-semibold">· resumo</span>
+            </h3>
+            {links.resultados === true && (
+              <Link href={`/resultados${q}`} className="text-[12px] font-semibold text-[var(--brand-fg)] hover:underline">
+                Ver resultados →
+              </Link>
+            )}
+            <PeriodSelector value={period} onChange={setPeriod} />
+          </div>
+          <div className="dsh-card__body">
+            {showMoney && bookingRevenue ? (
+              <div className="flex flex-wrap items-end justify-between gap-2 mb-1">
+                <div>
+                  <p className="text-[30px] leading-none font-semibold tracking-tight text-[var(--text)]">{money(bookingRevenue.total)}</p>
+                  <p className="text-[12px] text-[var(--text-muted)] mt-1.5">
+                    {bookingRevenue.count} atendimentos elegíveis · ticket {money(bookingRevenue.ticket || 0)}
+                  </p>
+                  {!bookingRevenue.hasData && <p className="text-[11.5px] text-[var(--text-faint)] mt-1">{NO_DATA_MESSAGE}</p>}
+                </div>
+                {results?.hasPrevious && (() => {
+                  const m = results.items.find((it) => it.unit === 'money');
+                  return m ? <ComparisonBadge metric={m} hasPrevious={results.hasPrevious} /> : null;
+                })()}
+              </div>
+            ) : (
+              <p className="text-[12.5px] text-[var(--text-muted)] mb-2">Sem acesso financeiro. O movimento aparece em atendimentos e resultados do período.</p>
+            )}
+
+            {results && results.items.length > 0 && (
+              <div className="mb-4">
+              <p className="text-[11px] font-semibold uppercase tracking-wider text-[var(--text-faint)] mb-2">Resultados · {results.periodLabel}</p>
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                {results.items.slice(0, 4).map((it) => (
+                  <div key={it.id} className="rounded-lg border border-[var(--border-soft)] bg-[var(--surface)] px-2.5 py-2">
+                    <p className="text-[17px] font-semibold leading-tight text-[var(--text)] tabular-nums">
+                      {it.unit === 'money' ? money(it.value) : it.unit === 'percent' ? `${it.value}%` : it.value}
+                    </p>
+                    <p className="text-[11px] font-semibold text-[var(--text-muted)] truncate">{it.label}</p>
+                    {results.hasPrevious && <ComparisonBadge metric={it} hasPrevious={results.hasPrevious} />}
+                  </div>
+                ))}
+              </div>
+              </div>
+            )}
+
+            {/* GRÁFICOS NÃO MORAM AQUI (§11/§12): Visão geral responde
+                "como está HOJE"; a leitura analítica (série por dia, mix de
+                status, comparação) vive em GESTÃO → Resultados, com o mesmo
+                dado real e navegação própria. Aqui fica só o atalho. */}
+            {links.resultados === true ? (
+              <div className="flex flex-wrap items-center justify-between gap-3 rounded-[var(--radius-md)] border border-[var(--border)] bg-[var(--surface-subtle)] px-3.5 py-3">
+                <p className="text-[12.5px] text-[var(--text-secondary)]">
+                  Comparecimento, serviços, profissionais e evolução histórica ficam em Resultados.
+                </p>
+                <Link href={`/resultados${q}`}
+                  className="inline-flex items-center gap-1.5 h-[var(--control-h-sm)] px-3 rounded-[var(--radius-sm)] border border-[var(--border-strong)] bg-white text-[12.5px] font-semibold text-[var(--text-primary)] hover:bg-[var(--surface-hover)]">
+                  Ver resultados <Icon n="chevronRight" size={13} />
+                </Link>
+              </div>
+            ) : null}
+          </div>
+        </section>
+        ) : (
+        <section className={cn('dsh-card min-w-0', hasWhereToAct ? 'lg:col-span-7' : 'lg:col-span-12')}>
+          <div className="dsh-card__head">
+            <h3 className="dsh-card__title">O que resolver agora</h3>
+            {links.agenda === true && (
+              <Link href={`/agenda${q}`} className="text-[12px] font-semibold text-[var(--brand-fg)] hover:underline">Ver agenda →</Link>
+            )}
+          </div>
+          <div className="dsh-card__body pt-2 space-y-3">
+            <div className="grid grid-cols-2 gap-2">
+              <div className="rounded-[var(--radius-md)] border border-[var(--border)] bg-[var(--surface-subtle)] px-3 py-2.5">
+                <p className="dsh-kpi__num text-[20px]">{today?.pending ?? 0}</p>
+                <p className="text-[11.5px] font-semibold text-[var(--text-secondary)]">aguardando confirmação</p>
+              </div>
+              <div className="rounded-[var(--radius-md)] border border-[var(--border)] bg-[var(--surface-subtle)] px-3 py-2.5">
+                <p className="dsh-kpi__num text-[20px]">{today?.needsClosure ?? 0}</p>
+                <p className="text-[11.5px] font-semibold text-[var(--text-secondary)]">precisam de registro</p>
+              </div>
             </div>
-            <div className="flex-1">
-              {upcoming.length === 0 ? <p className="text-sm text-zinc-500 px-4 py-6 text-center">Nenhum atendimento futuro.</p> : (
-                <div className="divide-y divide-zinc-100">
+            {(data.needsClosure || []).length > 0 ? (
+              <ul className="space-y-1.5">
+                {(data.needsClosure || []).slice(0, 5).map((b) => (
+                  <li key={b.id}>
+                    <ListRow allowed={links.agenda === true} href={`/agenda${q}&data=${b.date}`}
+                      className="flex items-center gap-2.5 rounded-[var(--radius-md)] border border-[var(--border)] px-2.5 py-2 text-[12.5px]">
+                      <span className="text-[11px] font-semibold text-[var(--text-muted)] w-[68px] shrink-0 tabular-nums">{humanDay(b.date)} {b.time}</span>
+                      <span className="flex-1 min-w-0 truncate font-semibold text-[var(--text-primary)]">
+                        {b.customerName} <span className="font-normal text-[var(--text-muted)]">· {b.service}</span>
+                      </span>
+                      <Icon n="chevronRight" size={14} className="text-[var(--text-faint)]" />
+                    </ListRow>
+                  </li>
+                ))}
+              </ul>
+            ) : (
+              <p className="text-[12.5px] text-[var(--text-muted)] text-center py-4">Nada pendente de registro. Tudo em ordem.</p>
+            )}
+            {typeof data.tasksSummary?.open === 'number' && data.tasksSummary.open > 0 && (
+              <p className="text-[12.5px] text-[var(--text-secondary)]">
+                <strong className="text-[var(--text-primary)]">{data.tasksSummary?.open}</strong> pendências abertas da equipe.
+              </p>
+            )}
+          </div>
+        </section>
+        )}
+      </div>
+      )}
+
+      {/* ── 4 · Próximos · Conversas/tarefas · Atividade recente ── */}
+      <div className="grid items-start gap-4 lg:grid-cols-3 mb-4">
+        <section className="dsh-card min-w-0">
+          <div className="dsh-card__head">
+            <h3 className="dsh-card__title">Próximos atendimentos</h3>
+            {links.agenda === true && <Link href={`/agenda${q}`} className="text-[12px] font-semibold text-[var(--brand-fg)] hover:underline">Ver agenda →</Link>}
+          </div>
+          <div className="dsh-card__body pt-2">
+            {modules.bookings ? (
+              upcoming.length === 0 ? (
+                <p className="text-[12.5px] text-[var(--text-muted)] text-center py-6">Nenhum atendimento futuro.</p>
+              ) : (
+                <div className="space-y-1.5">
                   {upcoming.slice(0, 5).map((b) => (
                     <ListRow key={b.id} allowed={links.agenda === true} href={`/agenda${q}&data=${b.date}`}
-                      className="flex items-center gap-3 px-4 py-2.5 text-sm">
-                      <span className="text-xs font-medium text-zinc-500 w-14 shrink-0">{humanDay(b.date)} {b.time}</span>
-                      <span className="flex-1 min-w-0 truncate"><strong className="font-medium">{b.customerName}</strong> <span className="text-zinc-500">· {b.service}{b.professional ? ` · ${b.professional}` : ''}</span></span>
-                      <StatusBadge tone={b.status === 'confirmed' ? 'emerald' : 'orange'}>{bookDef(b.status).panel}</StatusBadge>
+                      className="flex items-center gap-2.5 rounded-lg border border-[var(--border-soft)] px-2.5 py-2 text-[12.5px]"
+                      style={{ borderLeft: `3px solid ${STATUS_BAR[b.status] || 'var(--border-strong)'}` }}>
+                      <span className="text-[11px] font-semibold text-[var(--text-muted)] w-16 shrink-0 tabular-nums">{humanDay(b.date)} {b.time}</span>
+                      <span className="flex-1 min-w-0 truncate font-semibold text-[var(--text)]">{b.customerName} <span className="font-normal text-[var(--text-muted)]">· {b.service}</span></span>
+                      <StatusBadge tone={b.status === 'confirmed' ? 'emerald' : b.status === 'pending' ? 'orange' : 'blue'}>{bookDef(b.status).panel}</StatusBadge>
                     </ListRow>
                   ))}
                 </div>
-              )}
-            </div>
-          </section>
-        ) : modules.orders ? (
-          <section className={`${operational ? "" : "lg:col-span-5"} bg-white border border-zinc-200 flex flex-col min-w-0`}>
-            <div className="px-4 py-2.5 border-b border-zinc-100 flex items-center justify-between">
-              <h3 className="text-xs font-semibold tracking-wide uppercase text-zinc-500">Pedidos</h3>
-              {links.pedidos === true && <Link href={`/pedidos${q}`} className="text-xs font-medium text-zinc-600 hover:text-zinc-900">Ver pedidos →</Link>}
-            </div>
-            <div className="flex-1">
-              {recent.orders.length === 0 ? <p className="text-sm text-zinc-500 px-4 py-6 text-center">Nenhum pedido ainda.</p> : (
-                <div className="divide-y divide-zinc-100">
-                  {recent.orders.map((o) => {
+              )
+            ) : modules.orders ? (
+              recent.orders.length === 0 ? <p className="text-[12.5px] text-[var(--text-muted)] text-center py-6">Nenhum pedido ainda.</p> : (
+                <div className="space-y-1.5">
+                  {recent.orders.slice(0, 5).map((o) => {
                     const d = orderDef(o.status);
                     return (
                       <ListRow key={o.id} allowed={links.pedidos === true} href={`/pedidos${q}`}
-                        className="flex items-center gap-3 px-4 py-2.5 text-sm">
-                        <span className="text-xs font-medium text-zinc-500 w-14 shrink-0">{o.code}</span>
-                        <span className="flex-1 min-w-0 truncate"><strong className="font-medium">{o.customerName}</strong></span>
-                        <span className={`text-xs px-1.5 py-0.5 rounded font-medium border ${toneCls(d.tone)}`}>{d.panel}</span>
+                        className="flex items-center gap-2.5 rounded-lg border border-[var(--border-soft)] px-2.5 py-2 text-[12.5px]">
+                        <span className="text-[11px] font-semibold text-[var(--text-muted)] w-16 shrink-0">{o.code}</span>
+                        <span className="flex-1 min-w-0 truncate font-semibold text-[var(--text)]">{o.customerName}</span>
+                        <span className={`text-[11px] px-1.5 py-0.5 rounded font-medium border ${toneCls(d.tone)}`}>{d.panel}</span>
                       </ListRow>
                     );
                   })}
                 </div>
-              )}
-            </div>
-          </section>
-        ) : (
-          <section className={`${operational ? "" : "lg:col-span-5"} bg-white border border-zinc-200 flex flex-col min-w-0`}>
-            <div className="px-4 py-2.5 border-b border-zinc-100">
-              <h3 className="text-xs font-semibold tracking-wide uppercase text-zinc-500">Clientes</h3>
-            </div>
-            <div className="flex-1 px-4 py-6 text-center">
-              <p className="text-sm text-zinc-500">{crm?.contacts ?? 0} contatos na base</p>
-              {links.clientes === true && (
-                <Link href={`/clientes${q}`} className="mt-3 inline-block"><Button variant="soft" size="xs">Abrir clientes</Button></Link>
-              )}
-            </div>
-          </section>
-        )}
-
-        {/* 4 · PERÍODO — receita + resultados + página + movimento num único
-            bloco (B4.3), cada subseção com a JANELA honesta. Nenhuma fórmula
-            nova: mesma origem de dados de antes, só hierarquia. */}
-        <details open={!operational} className="lg:col-span-7 bg-white border border-zinc-200 min-w-0">
-          <summary className="px-4 py-3 cursor-pointer text-sm font-semibold">Indicadores e atividade do período</summary>
-          <div className="px-4 py-2.5 border-b border-zinc-100 flex flex-wrap items-center justify-between gap-2">
-            <h3 className="text-xs font-semibold tracking-wide uppercase text-zinc-500">Período <span className="normal-case font-medium text-zinc-400">· {periodLabel(period)}</span></h3>
-            <div className="flex flex-wrap items-center gap-2 ml-auto">
-              <PeriodSelector value={period} onChange={setPeriod} compact />
-              {results && links.resultados === true && (
-                <Link href={`/resultados${q}&period=${results.periodKey === 'all' ? '0' : results.periodKey}`} className="text-xs font-medium text-zinc-600 hover:text-zinc-900 whitespace-nowrap">
-                  Completo →
-                </Link>
-              )}
-            </div>
-          </div>
-
-          {/* Receita — rótulo e regra dependem dos módulos ativos (intactos). */}
-          <div className="border-b border-zinc-100">
-            {!showMoney ? (
-              <div className="px-4 py-4"><p className="text-sm text-zinc-500">Sem acesso financeiro.</p></div>
-            ) : (revenueDetail?.sources || []).length === 0 ? (
-              <div className="px-4 py-4">
-                <p className="text-xl font-semibold tracking-tight">Sem valores disponíveis</p>
-                <p className="text-xs text-zinc-500 mt-1">{NO_DATA_MESSAGE}</p>
-                <p className="text-[11px] text-zinc-400 mt-2">Ative um módulo comercial (agendamentos/serviços ou produtos/pedidos) em Recursos para acompanhar valores.</p>
-              </div>
+              )
             ) : (
-              <div className="divide-y divide-zinc-100">
-                {/* Valor dos atendimentos (services/bookings) */}
-                {bookingRevenue && (
-                  <div className="px-4 py-4">
-                    <div className="flex items-baseline justify-between gap-2">
-                      <p className="text-2xl font-semibold tracking-tight">{money(bookingRevenue.total)}</p>
-                      {/* Variação só existe com janela anterior comparável. */}
-                      {period !== 0 && (
-                        <span className={`text-xs font-semibold px-1.5 py-0.5 rounded ${bookingRevenue.delta >= 0 ? 'bg-emerald-600 text-white' : 'bg-red-600 text-white'}`}>
-                          {bookingRevenue.delta >= 0 ? '▲' : '▼'} {money(Math.abs(bookingRevenue.delta))}
-                        </span>
-                      )}
-                    </div>
-                    {bookingRevenue.hasData ? (
-                      <p className="text-xs text-zinc-500 mt-1">
-                        {bookingRevenue.count} {bookingRevenue.unitLabel} · tíquete {money(bookingRevenue.ticket)}
-                      </p>
-                    ) : (
-                      <p className="text-xs text-zinc-500 mt-1">{NO_DATA_MESSAGE}</p>
-                    )}
-                    {/* Quebra por status: separa o que é previsão do que não conta */}
-                    {bookingRevenue.breakdown && bookingRevenue.breakdown.length > 0 && (
-                      <ul className="mt-3 pt-3 border-t border-zinc-100 space-y-1 text-xs">
-                        {bookingRevenue.breakdown.map((row) => (
-                          <li key={row.status} className="flex items-center justify-between gap-2">
-                            <span className={row.eligible ? 'text-zinc-600' : 'text-zinc-400'}>
-                              {row.label}
-                              {!row.eligible && <span className="text-[10px] ml-1">(fora da soma)</span>}
-                            </span>
-                            <span className={row.eligible ? 'font-semibold text-zinc-900' : 'text-zinc-400'}>
-                              {row.count > 0 ? `${row.count} · ${money(row.total)}` : '—'}
-                            </span>
-                          </li>
-                        ))}
-                      </ul>
-                    )}
-                    <p className="text-[11px] text-zinc-400 mt-3 leading-snug">{bookingRevenue.hint}</p>
-                  </div>
-                )}
-
-                {/* Receita de pedidos (products/orders) — separada, nunca somada */}
-                {orderRevenue && (
-                  <div className="px-4 py-4">
-                    <div className="flex items-baseline justify-between gap-2">
-                      <div>
-                        <p className="text-[11px] font-semibold tracking-wide uppercase text-zinc-400">Pedidos</p>
-                        <p className="text-xl font-semibold tracking-tight mt-0.5">{money(orderRevenue.total)}</p>
-                      </div>
-                      {period !== 0 && (
-                        <span className={`text-xs font-semibold px-1.5 py-0.5 rounded ${orderRevenue.delta >= 0 ? 'bg-emerald-600 text-white' : 'bg-red-600 text-white'}`}>
-                          {orderRevenue.delta >= 0 ? '▲' : '▼'} {money(Math.abs(orderRevenue.delta))}
-                        </span>
-                      )}
-                    </div>
-                    <p className="text-xs text-zinc-500 mt-1">
-                      {orderRevenue.hasData ? `${orderRevenue.count} pedidos · tíquete ${money(orderRevenue.ticket)}` : NO_DATA_MESSAGE}
-                    </p>
-                    {bookingRevenue && <p className="text-[11px] text-zinc-400 mt-2 leading-snug">{orderRevenue.hint}</p>}
-                  </div>
-                )}
-              </div>
-            )}
-          </div>
-
-          {/* Resultados do período (mesmo motor da tela Resultados — intacto). */}
-          {results && results.items.length > 0 && (
-            <div className="border-b border-zinc-100">
-              <p className="px-4 pt-3 pb-1.5 text-[11px] font-semibold tracking-wide uppercase text-zinc-400">Resultados · {results.periodLabel}</p>
-              <div className="grid grid-cols-2 sm:grid-cols-4 divide-x divide-y divide-zinc-100 border-t border-zinc-100">
-                {results.items.map((it) => (
-                  <div key={it.id} className="px-4 py-3">
-                    <p className="text-lg font-semibold leading-none">
-                      {it.hasData ? (it.unit === 'money' ? money(it.value) : `${it.value}${it.unit === 'percent' ? '%' : ''}`) : <span className="text-zinc-400 text-sm font-medium">{'—'}</span>}
-                    </p>
-                    <p className="text-xs text-zinc-500 mt-1">{it.label}</p>
-                    {it.hasData && <ComparisonBadge metric={it} hasPrevious={results.hasPrevious} />}
-                    {!it.hasData && <p className="text-[11px] text-zinc-400 mt-1">{it.noDataHint}</p>}
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
-
-          {/* Página · no período (mesmos números do painel "Página" de antes). */}
-          <div className="px-4 py-3 border-b border-zinc-100">
-            <div className="flex items-center justify-between gap-2 mb-1.5">
-              <p className="text-[11px] font-semibold tracking-wide uppercase text-zinc-400">Página · no período</p>
-              {links.pagina === true && <Link href={`/pagina${q}`} className="text-xs font-medium text-zinc-600 hover:underline">Editar →</Link>}
-            </div>
-            <div className="grid grid-cols-2 sm:grid-cols-4 gap-x-3 gap-y-2 text-xs">
-              <span className="text-zinc-600"><strong className="text-base text-zinc-900">{pageStats?.views ?? 0}</strong> views</span>
-              <span className="text-zinc-600"><strong className="text-base text-zinc-900">{pageStats?.clicks ?? 0}</strong> cliques</span>
-              <span className="text-zinc-600"><strong className="text-base text-zinc-900">{modules.bookings ? (pageStats?.bookings ?? 0) : 0}</strong> agends</span>
-              <span className="text-zinc-600"><strong className="text-base text-zinc-900">{pageStats?.conversions ?? 0}</strong> convs</span>
-            </div>
-          </div>
-
-          {/* Movimento · desde o início (mesmos totais de antes, janela
-              rotulada — sem competir com o recorte do período). */}
-          <div className="px-4 py-3">
-            <p className="text-[11px] font-semibold tracking-wide uppercase text-zinc-400 mb-1.5">Movimento · desde o início</p>
-            <div className="grid grid-cols-2 sm:grid-cols-4 gap-x-3 gap-y-2 text-xs">
-              <span className="text-zinc-600"><strong className="text-base text-zinc-900">{totals.uniqueVisitors}</strong> visitantes únicos</span>
-              <span className="text-zinc-600"><strong className="text-base text-zinc-900">{totals.clicks}</strong> cliques</span>
-              <span className="text-zinc-600"><strong className="text-base text-zinc-900">{totals.leads}{totals.leadsNew > 0 ? <span className="text-amber-600 text-xs"> +{totals.leadsNew}</span> : null}</strong> leads</span>
-              <span className="text-zinc-600"><strong className="text-base text-zinc-900">{totals.conversions}</strong> conversões</span>
-            </div>
-          </div>
-
-          <div className="px-4 py-2 border-t border-zinc-100 mt-auto">
-            <p className="text-[11px] text-zinc-400 leading-snug">
-              Cada indicador usa a data correta do seu significado (atendimento, cadastro do cliente ou criação do lead).
-              “Receita” é previsão: a plataforma não registra o pagamento.
-            </p>
-          </div>
-        </details>
-      </div>
-
-      {/* ── Pedidos/Produtos: SOMENTE com módulo ativo ── */}
-      {(modules.orders || modules.products) && (
-        <div className="bg-white border border-zinc-200 mb-3">
-          <div className={`grid divide-y divide-zinc-100 ${modules.orders && modules.products ? 'sm:grid-cols-2 sm:divide-y-0 sm:divide-x' : ''}`}>
-            {modules.orders && ordersPanel && (
-              <div className="px-4 py-3">
-                <div className="flex items-center justify-between mb-2">
-                  <p className="text-xs font-semibold tracking-wide uppercase text-zinc-500">Pedidos</p>
-                  {links.pedidos === true && <Link href={`/pedidos${q}`} className="text-xs font-medium text-zinc-600 hover:underline">Ver →</Link>}
-                </div>
-                <p className="text-xl font-semibold leading-none">{ordersPanel.inWindow} <span className="text-xs font-normal text-zinc-500">no período</span></p>
-                <div className="grid grid-cols-3 gap-2 mt-2 text-xs">
-                  <span className="text-zinc-600"><strong className="text-zinc-900">{ordersPanel.new}</strong> novos</span>
-                  <span className="text-zinc-600"><strong className="text-zinc-900">{ordersPanel.open}</strong> abertos</span>
-                  <span className="text-zinc-600"><strong className="text-zinc-900">{ordersPanel.total}</strong> total</span>
-                </div>
-              </div>
-            )}
-            {modules.products && productsPanel && (
-              <div className="px-4 py-3">
-                <div className="flex items-center justify-between mb-2">
-                  <p className="text-xs font-semibold tracking-wide uppercase text-zinc-500">Vitrine de produtos</p>
-                  {links.produtos === true && <Link href={`/produtos${q}`} className="text-xs font-medium text-zinc-600 hover:underline">Gerenciar →</Link>}
-                </div>
-                <p className="text-xl font-semibold leading-none">{productsPanel.active} <span className="text-xs font-normal text-zinc-500">exibidos na página</span></p>
-                <p className="text-xs text-zinc-600 mt-2">Interesse via WhatsApp — sem carrinho nem checkout</p>
-              </div>
-            )}
-          </div>
-        </div>
-      )}
-
-      {/* ── CRM / Conversas — painel único com divisórias (a "Página" do
-          antigo painel triplo virou subseção do bloco Período: mesma origem
-          de dados, sem competir como métrica separada). ── */}
-      <div className="bg-white border border-zinc-200 mb-3">
-        <div className={`grid divide-y divide-zinc-100 ${whatsapp ? 'sm:grid-cols-2 sm:divide-y-0 sm:divide-x' : 'grid-cols-1'}`}>
-          <div className="px-4 py-3">
-            <div className="flex items-center justify-between mb-2"><p className="text-xs font-semibold tracking-wide uppercase text-zinc-500">CRM</p>{links.clientes === true && <Link href={`/clientes${q}`} className="text-xs font-medium text-zinc-600 hover:underline">Ver →</Link>}</div>
-            <p className="text-xl font-semibold leading-none">{crm?.contacts ?? 0} <span className="text-xs font-normal text-zinc-500">contatos</span></p>
-            <div className="grid grid-cols-2 gap-2 mt-2 text-xs leading-tight">
-              <span className="text-zinc-600"><strong className="text-zinc-900">{crm?.customers ?? 0}</strong> cadastrados</span>
-              <span className="text-zinc-600"><strong className="text-zinc-900">{crm?.withConsent ?? 0}</strong> c/ consentimento</span>
-            </div>
-          </div>
-          {whatsapp && (
-            <div className="px-4 py-3">
-              <div className="flex items-center justify-between mb-2"><p className="text-xs font-semibold tracking-wide uppercase text-zinc-500">Conversas</p>{links.conversas === true && <Link href={`/conversas${q}`} className="text-xs font-medium text-zinc-600 hover:underline">Abrir →</Link>}</div>
-              <p className={`text-sm font-semibold ${whatsapp.status === 'connected' ? 'text-emerald-700' : 'text-zinc-600'}`}>{whatsapp.status === 'connected' ? 'Conectado' : 'Não conectado'}</p>
-              <div className="grid grid-cols-3 gap-2 mt-2 text-xs">
-                <span><strong>{whatsapp.open ?? 0}</strong> abertas</span>
-                <span><strong>{whatsapp.unread ?? 0}</strong> não lidas</span>
-                <span><strong>{whatsapp.pendingMessages ?? 0}</strong> fila</span>
-              </div>
-            </div>
-          )}
-        </div>
-      </div>
-
-      {/* ── 5 + 6 · RECENTES + ONDE AGIR ── */}
-      <div className={hasWhereToAct ? 'grid lg:grid-cols-2 gap-3 items-start' : ''}>
-        {/* 5 · RECENTES */}
-        <section className={`bg-white border border-zinc-200 min-w-0 ${hasWhereToAct ? '' : 'mb-3'}`}>
-          <div className="px-4 py-2.5 border-b border-zinc-100"><h3 className="text-sm font-semibold">Atividade recente</h3></div>
-          <div className="px-2 py-2">
-            {!hasActivity ? <p className="text-sm text-zinc-500 px-2 py-4">Nenhuma atividade ainda.</p> : (
-              <ul className="divide-y divide-zinc-100">
-                {/* Pedidos só entram quando o módulo existe (nunca em clínica). */}
-                {modules.orders && recent.orders.map((o) => {
-                  const d = orderDef(o.status);
-                  return (
-                    <li key={o.id}>
-                      <ListRow allowed={links.pedidos === true} href={`/pedidos${q}`} className="flex items-center justify-between gap-2 px-2 py-2 text-sm">
-                        <span className="flex items-center gap-2 min-w-0 truncate"><Icon n="receipt" size={14} className="text-zinc-400 shrink-0" /> Pedido <strong>{o.code}</strong> — {o.customerName}</span>
-                        <span className={`text-xs font-medium px-1.5 py-0.5 rounded border ${toneCls(d.tone)}`}>{d.panel}</span>
-                      </ListRow>
-                    </li>
-                  );
-                })}
-                {modules.bookings && recent.bookings.map((b) => {
-                  const d = bookDef(b.status);
-                  return (
-                    <li key={b.id}>
-                      <ListRow allowed={links.agenda === true} href={`/agenda${q}`} className="flex items-center justify-between gap-2 px-2 py-2 text-sm">
-                        <span className="flex items-center gap-2 truncate"><Icon n="calendar" size={14} className="text-zinc-400 shrink-0" /> {b.customerName} · {humanDay(b.date)} {b.time}</span>
-                        <span className={`text-xs font-medium px-1.5 py-0.5 rounded border ${toneCls(d.tone)}`}>{d.panel}</span>
-                      </ListRow>
-                    </li>
-                  );
-                })}
-                {recent.leads.map((l) => {
-                  const d = leadDef(l.status);
-                  return (
-                    <li key={l.id}>
-                      <ListRow allowed={links.funil === true} href={`/funil${q}`} className="flex items-center justify-between gap-2 px-2 py-2 text-sm">
-                        <span className="flex items-center gap-2 truncate"><Icon n="user" size={14} className="text-zinc-400 shrink-0" /> {l.name || l.phone || 'novo'} <span className="text-zinc-400 text-xs">via {l.origin}</span></span>
-                        <span className={`text-xs font-medium px-1.5 py-0.5 rounded border ${toneCls(d.tone)}`}>{d.panel}</span>
-                      </ListRow>
-                    </li>
-                  );
-                })}
-              </ul>
+              <p className="text-[12.5px] text-[var(--text-muted)] text-center py-6">Sem agenda ou pedidos neste contexto.</p>
             )}
           </div>
         </section>
 
-        {/* 6 · ONDE AGIR — só ações que existem e que este usuário pode abrir:
-            checklist real (progresso calculado de dados, nada inventado) e
-            conectar canal. Sem pendência, a área simplesmente não aparece. */}
-        {hasWhereToAct && (
-          <section className="space-y-3 min-w-0">
-            {showSetup && (
-              <div className="bg-white border border-zinc-200">
-                <div className="px-4 py-2.5 border-b border-zinc-100 flex items-center justify-between">
-                  <h3 className="text-sm font-semibold">Comece por aqui</h3>
-                  <span className="flex items-center gap-2">
-                    <span className="text-xs font-medium text-zinc-500">{doneCount}/{checklist.length}</span>
-                    <button onClick={hideSetup} className="text-xs font-medium text-zinc-400 hover:text-zinc-700 inline-flex items-center gap-1" title="Ocultar checklist">
-                      <Icon n="x" size={12} /> Ocultar
-                    </button>
-                  </span>
-                </div>
-                <div className="px-4 py-3">
-                  <div className="h-1.5 bg-[var(--surface-2)] rounded-pill overflow-hidden mb-3">
-                    <div className="h-full bg-[var(--brand)] rounded-full transition-[width]" style={{ width: `${pct}%` }} />
-                  </div>
-                  <ul className="divide-y divide-zinc-100 -mx-4">
-                    {checklist.map((c) => (
-                      <li key={c.label}>
-                        {/* Linha inteira clicável: um único destino, indicação
-                            visual de interação, sem segundo link duplicado. */}
-                        <Link href={c.href} className={`flex items-center gap-2.5 text-sm px-4 py-2 hover:bg-zinc-50 transition-colors ${c.done ? 'text-zinc-400' : ''}`}>
-                          <span className={`w-4 h-4 rounded-full flex items-center justify-center shrink-0 ${c.done ? 'bg-[var(--success)] text-white' : 'border border-[var(--border-strong)]'}`}>{c.done ? <Icon n="check" size={10} /> : null}</span>
-                          <span className={c.done ? 'line-through' : 'text-zinc-700 font-medium'}>{c.label}</span>
-                          {!c.done && <span className="ml-auto text-xs font-medium text-zinc-900">Fazer →</span>}
-                        </Link>
-                      </li>
-                    ))}
-                  </ul>
-                </div>
+        <section className="dsh-card min-w-0">
+          <div className="dsh-card__head">
+            <h3 className="dsh-card__title">Conversas e tarefas</h3>
+            {links.conversas === true && <Link href={`/conversas${q}`} className="text-[12px] font-semibold text-[var(--brand-fg)] hover:underline">Abrir →</Link>}
+          </div>
+          <div className="dsh-card__body pt-2 space-y-1.5">
+            {whatsapp ? (
+              <ListRow allowed={links.conversas === true} href={`/conversas${q}`}
+                className="flex items-center gap-2.5 rounded-lg border border-[var(--border-soft)] px-2.5 py-2 text-[12.5px]">
+                <span className="dsh-kpi__icon !w-7 !h-7" style={{ background: 'var(--cyan-bg)', color: 'var(--cyan-fg)' }}><Icon n="chat" size={15} /></span>
+                <span className="flex-1 font-semibold text-[var(--text)]">Conversas não lidas</span>
+                <span className="text-[13px] font-semibold tabular-nums text-[var(--text)]">{whatsapp.unread}</span>
+              </ListRow>
+            ) : (
+              <p className="text-[12.5px] text-[var(--text-muted)] rounded-lg border border-dashed border-[var(--border)] px-2.5 py-2">Canal de conversas não conectado.</p>
+            )}
+            {whatsapp && totals.leads > 0 && (
+              <ListRow allowed={links.funil === true} href={`/funil${q}`}
+                className="flex items-center gap-2.5 rounded-lg border border-[var(--border-soft)] px-2.5 py-2 text-[12.5px]">
+                <span className="dsh-kpi__icon !w-7 !h-7" style={{ background: 'var(--warning-bg)', color: 'var(--warning-fg)' }}><Icon n="clock" size={15} /></span>
+                <span className="flex-1 font-semibold text-[var(--text)]">Leads para follow-up</span>
+                <span className="text-[13px] font-semibold tabular-nums text-[var(--text)]">{totals.leads}</span>
+              </ListRow>
+            )}
+            {canalConnected && (
+              <div className="flex items-center gap-2.5 rounded-lg border border-[var(--success-border)] bg-[var(--success-bg)] px-2.5 py-2">
+                <span className="dsh-kpi__icon !w-7 !h-7" style={{ background: 'var(--success)', color: '#fff' }}><Icon n="chat" size={15} /></span>
+                <span className="flex-1 text-[11.5px] font-semibold text-[var(--success-fg)]">Envie mensagens para seus pacientes</span>
+                {links.conversas === true && (
+                  <Link href={`/conversas${q}`} className="text-[11.5px] font-semibold text-white bg-[var(--success)] hover:bg-[var(--success-strong)] px-2.5 py-1.5 rounded-md">Abrir conversas</Link>
+                )}
               </div>
             )}
-            {showConnectChannel && (
-              <div className="bg-white border border-zinc-200 px-4 py-3 flex items-center justify-between gap-3">
-                <div className="min-w-0">
-                  <p className="text-sm font-semibold">Conectar canal de mensagens</p>
-                  <p className="text-xs text-zinc-500 mt-0.5">Para conversar com os seus clientes por aqui.</p>
-                </div>
-                <Link href={`/canais?tab=canais&b=${business.id}`} className="shrink-0"><Button variant="primary" size="xs">Conectar</Button></Link>
-              </div>
+            {taskSum && taskSum.open > 0 ? (
+              <>
+                {(openTasks || []).map((t) => {
+                  const lbl = dueLabel(t.dueAt);
+                  const tone = lbl === 'atrasada' ? 'var(--danger)' : lbl === 'hoje' ? 'var(--warning)' : 'var(--border-strong)';
+                  return (
+                    <ListRow key={t.id} allowed={links.tarefas === true} href={`/tarefas${q}`}
+                      className="flex items-center gap-2.5 rounded-lg border border-[var(--border-soft)] px-2.5 py-2 text-[12.5px]">
+                      <span className="w-4 h-4 rounded border-2 shrink-0" style={{ borderColor: tone }} aria-hidden="true" />
+                      <span className="flex-1 min-w-0 truncate font-semibold text-[var(--text)]">{t.title}</span>
+                      <span className="text-[10.5px] font-semibold" style={{ color: lbl === 'atrasada' ? 'var(--danger-fg)' : lbl === 'hoje' ? 'var(--warning-fg)' : 'var(--text-faint)' }}>{lbl}</span>
+                    </ListRow>
+                  );
+                })}
+                <p className="text-[11px] text-[var(--text-faint)] px-1">
+                  {taskSum.open} aberta{taskSum.open === 1 ? '' : 's'}
+                  {taskSum.overdue > 0 && <> · <span className="text-[var(--danger-fg)] font-semibold">{taskSum.overdue} atrasada{taskSum.overdue === 1 ? '' : 's'}</span></>}
+                </p>
+              </>
+            ) : (
+              <p className="text-[12.5px] text-[var(--text-muted)] rounded-lg border border-dashed border-[var(--border)] px-2.5 py-2">Nenhuma tarefa pendente.</p>
+            )}
+            {/* F3-I · GoDoutor Intelligence — só métricas reais; vazio honesto. */}
+      {(() => {
+        const intel = data.intelligence;
+        if (!intel) return null;
+        const cards = [
+          { label: 'conversas atendidas', value: intel.conversations.attendedByAi },
+          { label: 'automações concluídas', value: intel.automation.completed },
+          { label: 'retornos recuperados', value: intel.followUp.rescheduled + intel.reactivation.reactivated },
+          { label: 'aguardando equipe', value: intel.conversations.waitingTeam },
+        ];
+        const empty = cards.every((c) => !c.value);
+        return (
+          <section className="mb-6 rounded-xl border border-[var(--border)] bg-[var(--surface)] p-4">
+            <div className="flex items-center gap-2 mb-1">
+              <Icon n="spark" size={14} />
+              <h3 className="text-sm font-semibold">GoDoutor Intelligence</h3>
+            </div>
+            {empty ? (
+              <p className="text-xs text-[var(--text-muted)]">
+                Ainda não há atividade registrada. Quando automações e conversas rodarem, os números aparecem aqui — sem estimativas.
+              </p>
+            ) : (
+              <ul className="grid grid-cols-2 sm:grid-cols-4 gap-3 mt-2">
+                {cards.map((c) => (
+                  <li key={c.label} className="rounded-lg bg-[var(--bg)] p-2 border border-[var(--border)]">
+                    <div className="text-lg font-semibold tabular-nums text-[var(--text)]">{c.value || '—'}</div>
+                    <div className="text-[11px] text-[var(--text-muted)]">{c.label}</div>
+                  </li>
+                ))}
+              </ul>
             )}
           </section>
-        )}
+        );
+      })()}
+      {attention.length === 0 && !whatsapp && !taskSum && (
+              <p className="text-[12.5px] text-[var(--text-muted)] text-center py-4">Nada pendente por aqui.</p>
+            )}
+          </div>
+        </section>
+
+        <section className="dsh-card min-w-0">
+          <div className="dsh-card__head"><h3 className="dsh-card__title">Atividade recente</h3></div>
+          <div className="dsh-card__body pt-2">
+            {!hasActivity ? (
+              <p className="text-[12.5px] text-[var(--text-muted)] text-center py-6">Nenhuma atividade ainda.</p>
+            ) : (
+              <div className="space-y-1.5">
+                {recent.bookings.slice(0, 3).map((b) => (
+                  <p key={b.id} className="text-[12px] text-[var(--text-soft)] truncate">
+                    <strong className="font-semibold text-[var(--text)]">{b.customerName}</strong> · {humanDay(b.date)} {b.time} · {bookDef(b.status).panel}
+                  </p>
+                ))}
+                {recent.leads.slice(0, 2).map((l) => (
+                  <ListRow key={l.id} allowed={links.funil === true} href={`/funil${q}`}
+                    className="block text-[12px] text-[var(--text-soft)] truncate rounded-md px-1 -mx-1">
+                    <strong className="font-semibold text-[var(--text)]">{l.name}</strong> · lead {leadDef(l.status).panel.toLowerCase()} · {l.origin}
+                  </ListRow>
+                ))}
+                {recent.orders.slice(0, 2).map((o) => (
+                  <p key={o.id} className="text-[12px] text-[var(--text-soft)] truncate">
+                    <strong className="font-semibold text-[var(--text)]">{o.customerName}</strong> · pedido {o.code}
+                  </p>
+                ))}
+              </div>
+            )}
+          </div>
+        </section>
       </div>
+
+      {/* ── 5 · Ações rápidas (só rotas que este usuário pode abrir) ── */}
+      <section className="dsh-card mb-4">
+        <div className="dsh-card__head"><h3 className="dsh-card__title">Ações rápidas</h3></div>
+        <div className="dsh-card__body">
+          <div className="grid grid-cols-3 sm:grid-cols-6 gap-2.5">
+            {links.agenda === true && (
+              <Link href={`/agenda${q}`} className="dsh-quick">
+                <span className="dsh-quick__icon" style={{ background: 'var(--brand-soft)', color: 'var(--brand-fg)' }}><Icon n="calendarPlus" size={18} /></span>
+                Novo agendamento
+              </Link>
+            )}
+            {links.clientes === true && (
+              <Link href={`/clientes${q}`} className="dsh-quick">
+                <span className="dsh-quick__icon" style={{ background: 'var(--cyan-bg)', color: 'var(--cyan-fg)' }}><Icon n="users" size={18} /></span>
+                Clientes
+              </Link>
+            )}
+            {links.pagina === true && (
+              <Link href={`/pagina${q}`} className="dsh-quick">
+                <span className="dsh-quick__icon" style={{ background: 'var(--brand-soft)', color: 'var(--brand-fg)' }}><Icon n="link" size={18} /></span>
+                Editar página
+              </Link>
+            )}
+            {links.tarefas === true && (
+              <Link href={`/tarefas${q}`} className="dsh-quick">
+                <span className="dsh-quick__icon" style={{ background: 'var(--warning-bg)', color: 'var(--warning-fg)' }}><Icon n="tasks" size={18} /></span>
+                Tarefas
+              </Link>
+            )}
+            {links.resultados === true && (
+              <Link href={`/resultados${q}`} className="dsh-quick">
+                <span className="dsh-quick__icon" style={{ background: 'var(--success-bg)', color: 'var(--success-fg)' }}><Icon n="chart" size={18} /></span>
+                Resultados
+              </Link>
+            )}
+            {links.canais === true && (
+              <Link href={`/canais${q}`} className="dsh-quick">
+                <span className="dsh-quick__icon" style={{ background: 'var(--ops-soft)', color: 'var(--ops-fg)' }}><Icon n="chat" size={18} /></span>
+                {canalConnected ? 'Canais' : 'Conectar canal'}
+              </Link>
+            )}
+          </div>
+        </div>
+      </section>
     </>
   );
 }
+
+/** Rótulo curto de prazo (hoje/atrasada/amanhã/data) — apresentação honesta. */
+function dueLabel(dueAt: string): string {
+  if (!dueAt) return 'sem prazo';
+  const d = dueAt.slice(0, 10);
+  const t = new Date().toISOString().slice(0, 10);
+  if (d < t) return 'atrasada';
+  if (d === t) return 'hoje';
+  if (d === new Date(Date.now() + 86400000).toISOString().slice(0, 10)) return 'amanhã';
+  return d.split('-').reverse().slice(0, 2).join('/');
+}
+
+/** Barra de estado das linhas de "Próximos atendimentos" (mockup). */
+const STATUS_BAR: Record<string, string> = {
+  confirmed: 'var(--success)', pending: 'var(--warning)', completed: 'var(--ops)',
+  cancelled: 'var(--danger)', no_show: 'var(--text-faint)',
+};
+
+/** Delta REAL vs. ontem — só renderiza quando existe base de comparação. */
+function KpiDelta({ now, prev, has }: { now: number; prev: number; has: boolean }) {
+  if (!has || prev <= 0) return null;
+  const pct = Math.round(((now - prev) / prev) * 100);
+  const up = pct >= 0;
+  return (
+    <span className="flex items-center gap-1.5 mt-1">
+      <span className={`text-[10px] font-semibold px-1.5 py-0.5 rounded ${up ? 'bg-[var(--success-bg)] text-[var(--success-fg)]' : 'bg-[var(--danger-bg)] text-[var(--danger-fg)]'}`}>
+        {up ? '↑' : '↓'} {Math.abs(pct)}%
+      </span>
+      <span className="text-[10px] text-[var(--text-faint)]">vs. ontem ({prev})</span>
+    </span>
+  );
+}
+
+/** Moeda compacta para o tile de KPI (sem centavos quando inteiros). */
+function moneyKpi(cents: number): string {
+  const v = cents / 100;
+  return Number.isInteger(v) ? `R$ ${v.toLocaleString('pt-BR')}` : money(cents);
+}
+
+/* ── Apresentação: saudação por horário local (sem dado inventado) ── */
+function greeting(): string {
+  const h = new Date().getHours();
+  if (h < 12) return 'Bom dia';
+  if (h < 18) return 'Boa tarde';
+  return 'Boa noite';
+}
+
+/* ── Gráfico de barras SVG (série real de agendamentos/dia) ── */
+
+/* ── Donut SVG (contagens reais de hoje por status) ── */

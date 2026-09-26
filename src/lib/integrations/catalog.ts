@@ -42,7 +42,7 @@ export const PROVIDERS: ProviderDef[] = [
   // ── CANAIS (conversa) ────────────────────────────────────────
   {
     provider: 'whatsapp', kind: 'channel', label: 'WhatsApp',
-    hint: 'Conversas do WhatsApp na caixa do InstaLink e envio pelo canal oficial.',
+    hint: 'Conversas do WhatsApp na caixa do GoDoutor e envio pelo canal oficial.',
     canConnect: true,
     setupHint: 'Configure o WhatsApp Cloud API no painel do negócio ou via Master.',
     direction: 'both', events: ['message.received'], defaultEvent: '',
@@ -98,23 +98,23 @@ export const PROVIDERS: ProviderDef[] = [
   },
   {
     provider: 'qrcode', kind: 'source', label: 'QR Code',
-    hint: 'QR do InstaLink apontando para a sua página.',
+    hint: 'QR do GoDoutor apontando para a sua página.',
     canConnect: false,
-    unavailableReason: 'O QR Code já é gerado pelo InstaLink e leva à sua página: a origem aparece no CRM quando o visitante se cadastra. Não há nada para conectar aqui.',
+    unavailableReason: 'O QR Code já é gerado pelo GoDoutor e leva à sua página: a origem aparece no CRM quando o visitante se cadastra. Não há nada para conectar aqui.',
     direction: 'in', events: LEAD_EVENTS, defaultEvent: 'lead.created',
   },
   {
-    provider: 'public_page', kind: 'source', label: 'Página pública do InstaLink',
+    provider: 'public_page', kind: 'source', label: 'Página pública do GoDoutor',
     hint: 'A sua página, com formulário e agendamento.',
     canConnect: false,
-    unavailableReason: 'A captação pela sua página já é nativa do InstaLink (CRM + analytics). A lista de origens aqui é informativa.',
+    unavailableReason: 'A captação pela sua página já é nativa do GoDoutor (CRM + analytics). A lista de origens aqui é informativa.',
     direction: 'in', events: LEAD_EVENTS, defaultEvent: 'lead.created',
   },
 
   // ── INTEGRAÇÕES TÉCNICAS (transporte) ────────────────────────
   {
     provider: 'inbound_webhook', kind: 'technical', label: 'Webhook de entrada',
-    hint: 'Um sistema externo envia eventos no formato canônico do InstaLink.',
+    hint: 'Um sistema externo envia eventos no formato canônico do GoDoutor.',
     canConnect: true, direction: 'in',
     events: ['lead.created', 'lead.updated', 'contact.created', 'contact.updated', 'form.submitted'],
     defaultEvent: '',
@@ -122,13 +122,13 @@ export const PROVIDERS: ProviderDef[] = [
   },
   {
     provider: 'n8n', kind: 'technical', label: 'n8n',
-    hint: 'Workflow do n8n manda o lead para o InstaLink.',
+    hint: 'Workflow do n8n manda o lead para o GoDoutor.',
     canConnect: true, direction: 'in', events: LEAD_EVENTS, defaultEvent: 'lead.created',
     setupHint: 'No n8n, use um nó HTTP Request (POST) para o endpoint gerado, com o token no header Authorization.',
   },
   {
     provider: 'external_api', kind: 'technical', label: 'API de sistema externo',
-    hint: 'Seu ERP/CRM/plataforma empurrando dados para o InstaLink.',
+    hint: 'Seu ERP/CRM/plataforma empurrando dados para o GoDoutor.',
     canConnect: true, direction: 'in',
     events: ['lead.created', 'lead.updated', 'contact.created', 'contact.updated'],
     defaultEvent: 'lead.created',

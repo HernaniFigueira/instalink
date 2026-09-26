@@ -18,6 +18,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { useSearchParams } from 'next/navigation';
 import { resolveActiveBusinessId } from '@/lib/business-context';
+import { loadMe } from '@/lib/session-me';
 
 export interface ActiveBusiness {
   /** Id da empresa resolvida ('' enquanto resolve ou quando não há). */
@@ -52,10 +53,13 @@ export function useBusinessId(): ActiveBusiness {
     setContextError(false);
     setNoBusiness(false);
     let cancelled = false;
-    fetch('/api/auth/me')
-      .then(async (r) => {
-        if (!r.ok) return null; // 401: o shell conduz; demais: contextError abaixo
-        const d = await r.json().catch(() => null);
+    // MESMO loader do shell e das permissões (`lib/session-me`): a resposta é
+    // dividida entre os três em vez de baixada uma vez por consumidor.
+    // `attempt > 0` = retry explícito do usuário → busca fresca, sem TTL.
+    loadMe({ fresh: attempt > 0 })
+      .then((res) => {
+        if (!res.ok) return null; // 401: o shell conduz; demais: contextError abaixo
+        const d = res.data;
         if (d && !d.user) return null;
         return d;
       })

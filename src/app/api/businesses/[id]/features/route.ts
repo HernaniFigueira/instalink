@@ -15,7 +15,7 @@ import type { OptionalFeatureId } from '@/lib/types';
 // Módulos legados (pedidos/orçamentos) não entram na lista: continuam
 // resolúveis por isFeatureEnabled (dados e páginas antigas seguem válidos),
 // mas a empresa não é convidada a ligá-los/desligá-los — não fazem mais
-// parte do posicionamento do InstaLink.
+// parte do posicionamento do GoDoutor.
 // PATCH { feature, enabled } — liga/desliga IMEDIATAMENTE (um módulo por
 // chamada: sem "salvar tudo" e sem risco de sobrescrever outras
 // configurações). Desativar nunca apaga dados.

@@ -2,6 +2,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
+import { loadMe } from '@/lib/session-me';
 import { clearToken } from '@/lib/client-auth';
 import { cn } from '@/lib/utils';
 import { Icon } from '@/components/icons';
@@ -18,7 +19,14 @@ import { mayLeaveEditor } from '@/components/dashboard/useUnsavedChanges';
 import { WorkspaceContext } from '@/components/dashboard/WorkspaceContext';
 import { ConversationsDock } from '@/components/dashboard/ConversationsDock';
 import { WorkspaceNavigation } from '@/components/dashboard/WorkspaceNavigation';
-import { routeAreaColor, switchUnitHref } from '@/lib/workspace-navigation';
+import { WorkspaceTopbar } from '@/components/dashboard/WorkspaceTopbar';
+import { HelpCenter } from '@/components/dashboard/HelpCenter';
+import { useWorkspaceAlerts } from '@/components/dashboard/NotificationsBell';
+import { buildNavSearchItems } from '@/lib/nav-search';
+import { roleLabel } from '@/lib/role-labels';
+import {
+  routeAreaColor, routeBreadcrumb, switchUnitHref, workspaceAreas,
+} from '@/lib/workspace-navigation';
 
 interface Biz {
   id: string;
@@ -34,6 +42,8 @@ interface Biz {
   permissions?: Record<PermissionId, boolean>;
   readOnly?: boolean;
   organizationId?: string;
+  /** Tipo da clínica (identidade: "Clínica veterinária"). Aditivo e opcional. */
+  clinicType?: import('@/lib/types').ClinicType;
   /** Escopo do profissional: preenchido ⇒ este login vê só a própria agenda. */
   professionalId?: string;
   professionalName?: string;
@@ -58,7 +68,7 @@ export function DashboardShell({ children }: { children: React.ReactNode }) {
   const params = useSearchParams();
   const pathname = usePathname();
   const router = useRouter();
-  const [user, setUser] = useState<{ id?: string; name: string; email?: string; role?: string } | null>(null);
+  const [user, setUser] = useState<{ name: string; email?: string; role?: string; photo?: string } | null>(null);
   const [businesses, setBusinesses] = useState<Biz[]>([]);
   const [organizations,setOrganizations] = useState<Array<{id:string;name:string;canManage:boolean}>>([]);
   const [isMaster, setIsMaster] = useState(false);
@@ -69,22 +79,43 @@ export function DashboardShell({ children }: { children: React.ReactNode }) {
     try { return localStorage.getItem('il-side-v2') === 'mini'; } catch { return false; }
   });
   const lastContextAt = useRef(0);
+  // Etapa A: o drawer de navegação móvel pertence ao shell porque quem o abre
+  // é o botão de menu da TOPBAR (a busca e o menu saíram da sidebar).
+  const [mobileNav, setMobileNav] = useState(false);
+  // Central de ajuda: UMA instância no shell, aberta pela sidebar, pela topbar
+  // e pelo menu da conta. Nada de três ajudas diferentes.
+  const [helpOpen, setHelpOpen] = useState(false);
+  const mainRef = useRef<HTMLElement | null>(null);
 
-  const loadContext = useCallback(() => {
+  const loadContext = useCallback((fresh = false) => {
     setContextError(false);
     // SOMENTE 401 (sessão inexistente/expirada/inválida) inicia o fluxo de
     // login. Qualquer outro status mantém o usuário dentro do painel.
-    fetch('/api/auth/me')
-      .then(async (r) => {
+    // `fresh` fura o TTL de 5s do loader compartilhado: é o sinal explícito de
+    // "módulos/permissões mudaram agora" (toggle em Recursos/Equipe).
+    loadMe({ fresh })
+      .then((r) => {
         if (!r.ok) {
           if (isSessionExpired(r.status)) router.replace('/login?session=expired');
           else setContextError(true);
           return null;
         }
-        return r.json();
+        return r.data;
       })
-      .then((d) => {
-        if (!d) return;
+      .then((raw) => {
+        // Corpo ilegível (parse) não é sessão expirada: mantém o usuário e
+        // oferece "Tentar novamente", como antes.
+        if (!raw) { setContextError(true); return; }
+        // O loader é compartilhado (shell, unidade ativa, permissões) e devolve
+        // o payload de forma genérica; aqui ele é lido com o contrato que o
+        // shell realmente consome.
+        const d = (raw || {}) as {
+          user?: { id: string; name: string; email?: string; role?: string; photo?: string } | null;
+          businesses?: Biz[];
+          organizations?: Array<{ id: string; name: string; canManage: boolean }>;
+          isMaster?: boolean;
+          support?: SupportInfo | null;
+        };
         if (!d.user) { router.replace('/login?session=expired'); return; }
         setIsMaster(!!d.isMaster);
         setSupport(d.support || null);
@@ -94,11 +125,11 @@ export function DashboardShell({ children }: { children: React.ReactNode }) {
           router.replace('/master');
           return;
         }
-        if (!d.businesses?.length && !d.organizations?.some((o: {canManage:boolean})=>o.canManage)) { router.replace('/onboarding'); return; }
+        if (!d.businesses?.length && !d.organizations?.some((o) => o.canManage)) { router.replace('/onboarding'); return; }
         setOrganizations(d.organizations || []);
-        if (!d.businesses?.length && pathname !== '/organizacao') router.replace(`/organizacao?organization=${d.organizations[0].id}`);
-        setUser(d.user);
-        setBusinesses(d.businesses);
+        if (!d.businesses?.length && pathname !== '/organizacao') router.replace(`/organizacao?organization=${d.organizations![0].id}`);
+        setUser(d.user || null);
+        setBusinesses(d.businesses || []);
         setReady(true);
         lastContextAt.current = Date.now();
       })
@@ -123,7 +154,7 @@ export function DashboardShell({ children }: { children: React.ReactNode }) {
     if (Date.now() - lastContextAt.current > 5000) loadContext();
   }, [ready, pathname, loadContext]);
   useEffect(() => {
-    const fn = () => loadContext();
+    const fn = () => loadContext(true);
     window.addEventListener('il:business-refresh', fn);
     return () => window.removeEventListener('il:business-refresh', fn);
   }, [loadContext]);
@@ -143,6 +174,34 @@ export function DashboardShell({ children }: { children: React.ReactNode }) {
 
   const activePath = activePanelPath(pathname);
   const activeRoute = activePanelRoute(pathname);
+
+  // ── Notificações reais (Etapa A) ────────────────────────────────────────
+  // Hook declarado ANTES de qualquer early return (regra de hooks do React).
+  // O id vem do ?b= válido ou da primeira unidade; na visão de organização o
+  // painel some (não há unidade ativa para ler pendências).
+  const provisionalBiz = params.get('b') && businesses.some((b) => b.id === params.get('b'))
+    ? params.get('b')!
+    : businesses[0]?.id || '';
+  const alertsBiz = activePath === '/organizacao' ? '' : provisionalBiz;
+  const alerts = useWorkspaceAlerts(alertsBiz, alertsBiz ? `?b=${alertsBiz}` : '');
+
+  // ── Geometria do Workspace Sheet (Etapa B consome) ────────────────────────
+  // O sheet NUNCA cobre sidebar/topbar. Em vez de calcular larguras no código
+  // (recolher + segunda coluna contextual mudam isso), medimos onde o conteúdo
+  // realmente começa e publicamos em `--sheet-left`. Sempre verdadeiro.
+  useEffect(() => {
+    const el = mainRef.current;
+    if (!el) return;
+    const apply = () => {
+      const left = Math.max(0, Math.round(el.getBoundingClientRect().left));
+      document.documentElement.style.setProperty('--sheet-left', `${left}px`);
+    };
+    apply();
+    const observer = typeof ResizeObserver !== 'undefined' ? new ResizeObserver(apply) : null;
+    observer?.observe(el);
+    window.addEventListener('resize', apply);
+    return () => { observer?.disconnect(); window.removeEventListener('resize', apply); };
+  });
 
   function switchBiz(id: string) {
     if (!mayLeaveEditor()) return;
@@ -165,7 +224,7 @@ export function DashboardShell({ children }: { children: React.ReactNode }) {
     window.location.assign('/login');
   }
 
-  if (contextError && !ready) return <div className="il-platform p-8" role="alert"><h1>Não foi possível carregar sua clínica</h1><p>Confira sua conexão e tente novamente. Sua sessão foi preservada.</p><button className="il-control mt-4" onClick={loadContext}>Tentar novamente</button></div>;
+  if (contextError && !ready) return <div className="il-platform p-8" role="alert"><h1>Não foi possível carregar sua clínica</h1><p>Confira sua conexão e tente novamente. Sua sessão foi preservada.</p><button className="il-control mt-4" onClick={() => loadContext(true)}>Tentar novamente</button></div>;
   if (!ready || !user) {
     return (
       <div className="min-h-screen bg-[var(--bg)] lg:flex" aria-label="Carregando painel">
@@ -193,11 +252,17 @@ export function DashboardShell({ children }: { children: React.ReactNode }) {
   // permissão que monta o menu. Nenhum destino extra entra aqui, então a busca
   // não tem como revelar (nem levar a) uma tela que o usuário não alcança.
   // A regra de busca fica em lib/nav-search.ts (pura e testada).
-  const ROLE_LABEL: Record<string, string> = {
-    OWNER: 'Proprietário', ADMIN: 'Administrador', SECRETARIA: 'Secretária',
-    ATENDENTE: 'Atendente', VENDEDOR: 'Vendedor', VIEWER: 'Visualizador', MASTER: 'Suporte da plataforma',
-    PROFISSIONAL: 'Profissional',
-  };
+  // ── Breadcrumb + notificações (Etapa A) ─────────────────────────────────
+  // O breadcrumb é projeção da MESMA partição que monta o menu: nunca cita área
+  // que o usuário não alcança. As notificações vêm de /api/overview (dado real).
+  // Multiunidade REAL: só quando existe mais de uma unidade na conta. Sem isso
+  // "Organização" não ocupa linha no menu (a porta continua acessível por URL).
+  const multiUnit = businesses.length > 1;
+  const areas = workspaceAreas(nav.allowed, { multiUnit });
+  const crumb = routeBreadcrumb(activePath, areas);
+  const unitRole = business.role && business.role !== 'OWNER'
+    ? `${roleLabel(business.role)}${business.readOnly ? ' · somente leitura' : ''}`
+    : undefined;
 
   // Dashboard fica sempre no topo, sem seção; demais itens agrupados.
   // A Agenda é o ambiente operacional: chrome mínimo para a grade ocupar a
@@ -234,14 +299,59 @@ export function DashboardShell({ children }: { children: React.ReactNode }) {
     // `PanelHomeProvider` entrega o destino de volta a qualquer 403 do painel
     // sem que cada tela precise calcular (ou chutar) o seu.
     <PanelHomeProvider home={homeHref}>
-    <WorkspaceContext.Provider value={{ userId:user.id, role: business.role, agendaScope: business.agendaScope }}>
-    <div style={{'--area-color': routeAreaColor(activePath)} as React.CSSProperties} className="il-platform workspace-shell min-h-screen bg-[var(--bg)]">
+    <WorkspaceContext.Provider value={{ role: business.role, agendaScope: business.agendaScope }}>
+    <div
+      style={{
+        '--area-color': crumb.area?.color || routeAreaColor(activePath, areas),
+        '--sidebar-w': collapsed ? 'var(--sidebar-w-mini)' : undefined,
+      } as React.CSSProperties}
+      className="il-platform workspace-shell min-h-screen bg-[var(--bg)]"
+    >
       <a href="#workspace-content" className="workspace-skip">Ir para o conteúdo</a>
-      <WorkspaceNavigation nav={nav} activePath={activePath} unit={business} units={businesses}
-        overview={activePath === '/organizacao'} onUnit={switchBiz} collapsed={collapsed} onCollapse={toggle} user={user} onLogout={logout} />
+
+      {/* `nav={nav}`: a navegação continua vindo do catálogo (lib/panel.ts) —
+          o shell não tem lista própria de destinos. Sidebar primeiro: ela
+          ocupa top:0→bottom:0 e a topbar vive na coluna da direita. */}
+      <WorkspaceNavigation nav={nav}
+        activePath={activePath} unit={business}
+        units={businesses} multiUnit={multiUnit} onUnit={switchBiz}
+        collapsed={collapsed} onCollapse={toggle}
+        mobileOpen={mobileNav} onMobileOpen={setMobileNav}
+        onHelp={() => setHelpOpen(true)}
+      />
+
+      <div className="workspace-main-col">
+      <WorkspaceTopbar
+        page={activeRoute?.label || 'Painel'}
+        query={q}
+        searchItems={buildNavSearchItems(nav, q)}
+        activePath={activePath}
+        businessId={business.id}
+        alerts={alerts}
+        user={{ ...user, role: unitRole || user.role }}
+        unit={business}
+        units={businesses}
+        overview={activePath === '/organizacao'}
+        canOverview={nav.allowed.some((i) => i.href === '/organizacao')}
+        canConfig={nav.allowed.some((i) => i.href === '/configuracoes')}
+        isMaster={isMaster}
+        onUnit={switchBiz}
+        onLogout={logout}
+        onOpenNav={() => setMobileNav(true)}
+        onOpenHelp={() => setHelpOpen(true)}
+        canCreate={nav.allowed.map((i) => i.href).filter((h) => ['/agenda', '/clientes', '/tarefas', '/servicos', '/profissionais', '/financeiro'].includes(h))}
+      />
+
+      <HelpCenter
+        open={helpOpen}
+        onClose={() => setHelpOpen(false)}
+        query={q}
+        nav={nav}
+        businessId={business.id}
+      />
 
       {nav.allowed.some(i => i.href === '/conversas') && activePath !== '/conversas' && activePath !== '/organizacao' && <ConversationsDock key={business.id} businessId={business.id}/>}
-      <main id="workspace-content" tabIndex={-1} className="flex-1 min-w-0 bg-[var(--bg)]">
+      <main ref={mainRef} id="workspace-content" tabIndex={-1} className="workspace-content flex-1 min-w-0 bg-[var(--bg)]">
         {support && (
           <div className={cn('px-4 lg:px-8 py-2.5 text-xs font-semibold flex flex-wrap items-center gap-x-3 gap-y-1 border-b',
             support.mode === 'view' ? 'bg-[var(--warning-bg)] text-[var(--warning-fg)] border-[var(--warning-border)]' : 'bg-[var(--danger)] text-white border-[var(--danger-strong)]')}>
@@ -255,11 +365,32 @@ export function DashboardShell({ children }: { children: React.ReactNode }) {
           </div>
         )}
         <div key={business.id} className={cn(isAgenda ? 'agenda-page-gutter' : 'px-4 lg:px-8 py-6', !isFullWidth && 'max-w-[960px]')}>
+          {/* Breadcrumb de CONTEXTO no conteúdo (o branding vive na sidebar e o
+              nome da clínica, uma vez, no seletor de unidade da topbar). */}
+          {/* Breadcrumb só em páginas PROFUNDAS (grupo/estrutura). Páginas de
+              1º nível (Agenda, Pacientes…) ficam sem "Visão geral >" — o título da
+              própria tela é o cabeçalho. */}
+          {crumb.group && homeHref && (
+            <nav aria-label="Breadcrumb" className="ws-crumbs--content">
+              <Link href={homeHref}>Visão geral</Link>
+              <I n="chevronRight" size={12} aria-hidden="true" />
+              {crumb.group && (
+                <>
+                  <span>{crumb.group}</span>
+                  <I n="chevronRight" size={12} aria-hidden="true" />
+                </>
+              )}
+              <span aria-current="page">{activeRoute?.label || 'Painel'}</span>
+            </nav>
+          )}
           {isMaster && !support && (
             <p className="mb-4 text-xs font-semibold text-[var(--warning-fg)] bg-[var(--warning-bg)] border border-[var(--warning-border)] rounded-md px-3 py-2 inline-flex items-center gap-2 shadow-xs">
               <I n="shield" size={14} /> Você é master — <Link href="/master" className="underline font-semibold">/master</Link>
             </p>
           )}
+          {/* Hierarquia (item 4 do briefing): o papel de quem está logado era
+              um parágrafo permanente no miolo de TODA tela. A informação não
+              foi removida — mora na topbar, ao lado do nome, onde pertence. */}
           {business?.agendaScope === 'own' && (
             // Honestidade com quem atende: a agenda mostrada é SÓ a dele.
             // (A restrição é do servidor — aqui só avisamos.)
@@ -294,6 +425,7 @@ export function DashboardShell({ children }: { children: React.ReactNode }) {
           </footer>
         )}
       </main>
+      </div>
 
       {/* 403 de qualquer ação do painel → aviso amigável (sessão preservada). */}
       <ForbiddenToasts context={{ scope: 'action', area: access.area || activeRoute?.label }} />

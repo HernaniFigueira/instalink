@@ -69,6 +69,9 @@ export function AiAutomations({
   const [busy, setBusy] = useState(false);
   const [activate, setActivate] = useState(false);
   const [loading, setLoading] = useState(true);
+  const [sim, setSim] = useState<any>(null);
+  const [instruction, setInstruction] = useState('');
+  const [changes, setChanges] = useState<string[]>([]);
 
   const load = useCallback(async () => {
     if (!businessId) return;
@@ -130,6 +133,32 @@ export function AiAutomations({
     if (!res.ok) { setError(res.message); return; }
     show(res.data?.proposal);
     setNotice('Rascunho atualizado. Aprove de novo se já tinha aprovado.');
+    await load();
+  }
+
+  async function runSimulation() {
+    if (!current) return;
+    setBusy(true); setError(''); setSim(null);
+    const res = await apiSend<any>('/api/ai/automations', 'POST', { businessId, id: current.id, action: 'simulate' });
+    setBusy(false);
+    if (!res.ok) { setError(res.message || (res.data?.errors || []).join(' ')); return; }
+    setSim(res.data?.simulation || null);
+    setNotice('Simulação concluída — nada foi enviado nem criado.');
+  }
+
+  async function refine() {
+    if (!current || !instruction.trim()) return;
+    setBusy(true); setError(''); setChanges([]);
+    const res = await apiSend<any>('/api/ai/automations', 'POST', {
+      businessId, id: current.id, action: 'refine', instruction: instruction.trim(),
+    });
+    setBusy(false);
+    if (!res.ok) { setError((res.data?.errors || [res.message]).filter(Boolean).join(' · ')); return; }
+    show(res.data?.proposal);
+    setChanges(res.data?.changes || []);
+    setInstruction('');
+    setSim(null);
+    setNotice('Ajuste aplicado ao rascunho. Aprove de novo se precisar.');
     await load();
   }
 
@@ -236,6 +265,9 @@ export function AiAutomations({
 
           <div className="flex flex-wrap gap-2">
             <Button size="sm" variant="secondary" disabled={busy} onClick={saveEdits}>Salvar rascunho</Button>
+            <Button size="sm" variant="secondary" disabled={busy} onClick={runSimulation}>
+              {busy && !sim ? 'Testando…' : 'Testar (simulação)'}
+            </Button>
             <Button size="sm" variant="secondary" disabled={busy || current.status !== 'draft' || !current.validation.ok} onClick={() => act('approve')}>
               Aprovar
             </Button>
@@ -246,6 +278,53 @@ export function AiAutomations({
               Cancelar
             </Button>
           </div>
+          {changes.length > 0 && (
+            <p className="text-[11px] text-emerald-800 bg-emerald-50 border border-emerald-200 rounded px-2 py-1">
+              Ajustes: {changes.join(' · ')}
+            </p>
+          )}
+
+          <div className="border-t border-zinc-100 pt-3 space-y-2">
+            <p className="text-xs font-semibold text-zinc-700">Editar com uma frase</p>
+            <div className="flex flex-wrap gap-2">
+              <Input
+                className="flex-1 min-w-[220px]"
+                value={instruction}
+                onChange={(e) => setInstruction(e.target.value)}
+                placeholder='Ex.: "espere 3 horas" ou "mude a etapa para qualificado"'
+                maxLength={400}
+                onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); void refine(); } }}
+              />
+              <Button size="sm" variant="secondary" disabled={busy || !instruction.trim()} onClick={() => refine()}>
+                Aplicar ajuste
+              </Button>
+            </div>
+            <p className="text-[11px] text-zinc-400">Ajuste pontual no rascunho atual (sem LLM). Para trocar o gatilho, use “Gerar novamente”.</p>
+          </div>
+
+          {sim && (
+            <div className="border border-blue-200 bg-blue-50 rounded-md p-3 space-y-2">
+              <div className="flex flex-wrap items-center gap-2">
+                <p className="text-xs font-semibold text-blue-900">Simulação (sem envio real)</p>
+                <span className="text-[10px] font-semibold uppercase text-blue-700 bg-blue-100 rounded px-1.5 py-0.5">dry-run</span>
+              </div>
+              <p className="text-[11px] text-blue-900">{sim.summary}</p>
+              <ol className="text-xs text-blue-950 space-y-1 list-decimal pl-4">
+                {(sim.steps || []).map((s: any) => (
+                  <li key={s.index}>
+                    {s.would}
+                    {s.blockedReason && <span className="text-red-700"> — {s.blockedReason}</span>}
+                    {s.detail && <span className="text-blue-800/70"> ({s.detail})</span>}
+                  </li>
+                ))}
+              </ol>
+              {(sim.notes || []).map((n: string, i: number) => (
+                <p key={i} className="text-[11px] text-blue-900/80">{n}</p>
+              ))}
+              <p className="text-[11px] font-semibold text-blue-900">Nenhuma mensagem saiu. realSend = false.</p>
+            </div>
+          )}
+
           <p className="text-[11px] text-zinc-400">
             Publicar cria a automação no motor do P4. A IA não executa etapa, tarefa nem agendamento — só o motor, depois do seu ok.
           </p>
@@ -280,7 +359,7 @@ export function AiAutomations({
 
       {proposals.filter((p) => p.status === 'draft' || p.status === 'approved').length > 0 && (
         <div className="space-y-2">
-          <h3 className="text-xs font-bold uppercase tracking-wide text-zinc-500">Propostas em aberto</h3>
+          <h3 className="text-xs font-semibold uppercase tracking-wide text-zinc-500">Propostas em aberto</h3>
           {proposals.filter((p) => p.status === 'draft' || p.status === 'approved').map((p) => (
             <button key={p.id} type="button" onClick={() => show(p)}
               className={cn('w-full text-left border rounded-md p-3 hover:bg-zinc-50', current?.id === p.id ? 'border-zinc-900' : 'border-zinc-200')}>
@@ -307,7 +386,7 @@ export function AiAutomations({
 function Row({ kicker, text, detail }: { kicker: string; text: string; detail?: string }) {
   return (
     <div className="px-3 py-2 flex gap-3">
-      <span className="w-16 shrink-0 text-[10px] font-bold uppercase tracking-wide text-zinc-400 pt-0.5">{kicker}</span>
+      <span className="w-16 shrink-0 text-[10px] font-semibold uppercase tracking-wide text-zinc-400 pt-0.5">{kicker}</span>
       <div className="min-w-0">
         <p className="text-sm text-zinc-900">{text}</p>
         {detail && <p className="text-[11px] text-zinc-500 mt-0.5">{detail}</p>}

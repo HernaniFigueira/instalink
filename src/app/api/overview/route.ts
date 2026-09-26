@@ -4,18 +4,20 @@ import { can } from '@/lib/access';
 import { summarizeDay, pendingClosures } from '@/lib/booking-ops';
 import { integrationStatus } from '@/lib/whatsapp';
 import { enabledFeatureIds } from '@/lib/features';
-import { dashboardAttention, dashboardContext, dashboardLinks, recentActivityLists, setupChecklist, setupProgress } from '@/lib/dashboard';
+import { dashboardAttention, dashboardContext, dashboardLinks, pageIsCustomized, recentActivityLists, setupChecklist, setupProgress, type PageCustomizationInput } from '@/lib/dashboard';
 import { summarizeTasks } from '@/lib/automation/tasks';
 import { scopeBookings } from '@/lib/access-core';
 import type { PermissionId } from '@/lib/types';
 import {
   REVENUE_HINTS, REVENUE_LABELS, REVENUE_UNIT_LABELS, bookingRevenue, orderRevenue,
 } from '@/lib/revenue';
-import { nowHM, todayISO } from '@/lib/tz';
+import { financeMetrics } from '@/lib/finance-metrics';
+import { addDaysISO, nowHM, todayISO } from '@/lib/tz';
 import { timeToMin } from '@/lib/utils';
 import { parsePeriodParam, periodWindows, resolvePeriodSpec } from '@/lib/periods';
 import { collectResults, resultsSummary } from '@/lib/insights';
 import { isFeatureEnabled } from '@/lib/features';
+import { automationHealthSummary, computeIntelligenceMetrics, intelligenceHealth } from '@/lib/intelligence-metrics';
 
 // GET ?businessId=&period=7|30|90|365|0 — dados da Dashboard.
 // (0 = todo o período; fonte única dos períodos: lib/periods.ts.)
@@ -97,6 +99,17 @@ export async function GET(req: NextRequest) {
   );
 
   const revenueSources = context.revenue;
+  // §6 — QUATRO conceitos reconciliados (Agendado · Realizado · Recebido ·
+  // Em aberto) com a MESMA função de /api/results e /api/finance. A Visão
+  // geral nunca mais mostra um número que o Financeiro contradiz.
+  const financeSemantics = showMoney && revenueSources.includes('bookings')
+    ? financeMetrics({
+      bookings: bookings.map((b) => ({ status: b.status, date: b.date, price: Number((servicesById[b.serviceId] as any)?.price) || 0 })),
+      entries: (db.financeEntries || []).filter((e) => e.businessId === bId),
+      from: win.from,
+      to: win.to,
+    })
+    : null;
   // Payload de receita: só o que o negócio tem módulo para calcular, e só para
   // quem possui a permissão financeira. Sem módulo e sem dados → sem inventar.
   const revenuePayload = showMoney
@@ -108,11 +121,12 @@ export async function GET(req: NextRequest) {
       orders: revenueSources.includes('orders')
         ? { ...orderRevenueResult, hidden: false }
         : null,
+      semantics: financeSemantics,
       labels: REVENUE_LABELS,
       hints: REVENUE_HINTS,
       unitLabels: REVENUE_UNIT_LABELS,
     }
-    : { sources: [], bookings: null, orders: null, labels: REVENUE_LABELS, hints: REVENUE_HINTS, unitLabels: REVENUE_UNIT_LABELS };
+    : { sources: [], bookings: null, orders: null, semantics: null, labels: REVENUE_LABELS, hints: REVENUE_HINTS, unitLabels: REVENUE_UNIT_LABELS };
 
   // Compatibilidade com o formato anterior (a tela nova usa `revenuePayload`,
   // mas manter o campo evita quebrar qualquer consumidor existente).
@@ -154,6 +168,12 @@ export async function GET(req: NextRequest) {
 
   // ── Operação de HOJE + pendências de fechamento ──
   const todaySummary = m.bookings ? summarizeDay(bookings, today, servicesById, today, nowHM()) : null;
+  // ONTEM (comparação dos KPIs do dia): mesma função, mesma fonte de dados, já
+  // em memória. Aditivo — quem só lê `today` não muda nada.
+  const yesterdayISO = addDaysISO(today, -1);
+  const yesterdaySummary = m.bookings
+    ? summarizeDay(bookings, yesterdayISO, servicesById, today, nowHM())
+    : null;
   const closures = m.bookings
     ? pendingClosures(bookings, servicesById, today, nowHM()).map((b) => ({
       id: b.id, customerName: b.customerName, date: b.date, time: b.time, status: b.status,
@@ -196,13 +216,46 @@ export async function GET(req: NextRequest) {
       b.date === today && b.status === 'confirmed' &&
       !b.checkedInAt && timeToMin(b.time) <= timeToMin(nowHM())).length
     : 0;
+  // FASE 2 · P10 — RETORNOS PENDENTES (dado real): finalizado com retorno
+  // estruturado vencido/até hoje e o paciente SEM futuro agendamento.
+  const returnsDue = (() => {
+    // Booking não guarda contactId: o vínculo com o CRM é pelo TELEFONE.
+    const digitsOf = (v: string) => String(v || '').replace(/\D/g, '');
+    const futurePhones = new Set(
+      allBookings
+        .filter((b) => b.date >= today && b.status !== 'cancelled' && b.status !== 'no_show')
+        .map((b) => digitsOf(b.customerPhone))
+        .filter(Boolean),
+    );
+    const contactById = new Map(db.contacts.filter((c) => c.businessId === bId).map((c) => [c.id, c]));
+    const seen = new Set<string>();
+    let n = 0;
+    for (const e of db.encounters) {
+      if (e.businessId !== bId || e.status !== 'finalized') continue;
+      if (e.followUpMode !== 'date' && e.followUpMode !== 'interval') continue;
+      const due = e.followUpMode === 'date' ? e.followUpDate
+        : (() => {
+          const t = Date.parse(`${e.date}T00:00:00Z`);
+          return Number.isFinite(t) && e.followUpDays ? new Date(t + e.followUpDays * 86400000).toISOString().slice(0, 10) : '';
+        })();
+      if (!due || due > today) continue;
+      const contact = e.contactId ? contactById.get(e.contactId) : undefined;
+      if (contact && futurePhones.has(digitsOf(contact.phone))) continue; // já voltou
+      const key = e.contactId || e.id;
+      if (seen.has(key)) continue;
+      seen.add(key);
+      n += 1;
+    }
+    return n;
+  })();
   const attention = dashboardAttention({
     closures: closures.length,
     leadsNew: crm.leadsNew,
     tasksOverdue: tasksSummary?.overdue ?? 0,
     queueWaiting: queueWaitingNow,
     arrivalsPending: arrivalsPendingNow,
-    permissions: { agenda: links.agenda, leads: links.funil, tasks: canTasks },
+    returnsDue,
+    permissions: { agenda: links.agenda, leads: links.funil, tasks: canTasks, followUp: links.followUp },
   });
 
   // ── Página: o que ela produziu no período ──
@@ -250,6 +303,12 @@ export async function GET(req: NextRequest) {
   // Itens calculados a partir de dados existentes (lib/dashboard.ts);
   // nada é pré-marcado como concluído. A área é opcional e some quando
   // não há pendência.
+  // FASE 2 · P8 + §P1.5 — personalização REAL da página (nenhum número
+  // inventado, nenhuma regra artificial). A REGRA mora em lib/dashboard.ts
+  // (pageIsCustomized, pura e testada): Visual salvo, bloco desativado,
+  // navegação escolhida, "Sobre" ligado OU logo/capa definidos.
+  const page = db.pages.find((p) => p.businessId === bId);
+  const pageCustomized = pageIsCustomized({ page: page as PageCustomizationInput['page'], business });
   const setupItems = setupChecklist({
     business,
     modules: m,
@@ -259,8 +318,13 @@ export async function GET(req: NextRequest) {
       professionals: db.professionals.filter((p) => p.businessId === bId && p.active).length,
       products: db.products.filter((p) => p.businessId === bId && p.active).length,
     },
+    pageCustomized,
+    whatsappConnected: business.whatsappIntegration?.status === 'connected',
   });
-  const checklist = setupItems.map((c) => ({ done: c.done, label: c.label, href: `${c.href}${q}` }));
+  const checklist = setupItems.map((c) => ({
+    done: c.done, label: c.label, href: `${c.href}${q}`,
+    id: c.id, optional: c.optional === true,
+  }));
   const pendingSetup = checklist.filter((c) => !c.done).length;
 
   // ── Resultados do período (P2, Bloco 1) ──
@@ -292,8 +356,14 @@ export async function GET(req: NextRequest) {
     })()
     : null;
 
+  // ── F3-I · GoDoutor Intelligence (métricas derivadas, honestas) ──
+  const intelligence = computeIntelligenceMetrics(db, bId, { from, to: win.to || undefined });
+  const intelligenceHealthView = intelligenceHealth(db, bId);
+
   return NextResponse.json({
     user: { name: guard.ctx.user.name },
+    intelligence,
+    intelligenceHealth: intelligenceHealthView,
     business: {
       id: business.id, name: business.name, slug: business.slug,
       logo: business.logo || '', published: business.published,
@@ -335,6 +405,7 @@ export async function GET(req: NextRequest) {
     revenueDetail: revenuePayload,
     showMoney,
     today: todaySummary,
+    yesterday: yesterdaySummary,
     needsClosure: closures,
     ordersPanel,
     productsPanel,

@@ -67,7 +67,8 @@ const CONFIG_TAB_ICON: Record<ConfigTab, string> = {
 };
 
 const CONFIG_TABS: Array<[ConfigTab, string]> = [
-  ['negocio', 'Negócio'],
+  // GODOUTOR final: o vocabulário do produto é CLÍNICA (o mesmo da sidebar).
+  ['negocio', 'Clínica'],
   ['agenda', 'Agenda'],
 ];
 
@@ -136,7 +137,7 @@ function BookingRules({ businessId, initial, onSaved }: {
                 de funcionamento. A indicação abaixo é explicitamente NÃO
                 interativa. */}
             <div className="rounded-md border border-zinc-200 bg-zinc-50 px-3 py-2.5" aria-label="Distribuição dos agendamentos: automática (fixa)">
-              <p className="text-xs font-bold text-zinc-500">DISTRIBUIÇÃO DOS AGENDAMENTOS</p>
+              <p className="text-xs font-semibold text-zinc-500">DISTRIBUIÇÃO DOS AGENDAMENTOS</p>
               <p className="text-sm font-medium text-zinc-800 mt-1 inline-flex items-center gap-1.5">
                 <Icon n="lock" size={13} className="text-zinc-400" />
                 Automática — equilibra a equipe
@@ -145,16 +146,16 @@ function BookingRules({ businessId, initial, onSaved }: {
             </div>
           </div>
         )}
-        <label className="block"><span className="text-xs font-bold text-zinc-500">ANTECEDÊNCIA MÍNIMA (MIN)</span>
+        <label className="block"><span className="text-xs font-semibold text-zinc-500">ANTECEDÊNCIA MÍNIMA (MIN)</span>
           <input type="number" min={0} max={1440} value={cfg.leadMin} onChange={(e) => setCfg({ ...cfg, leadMin: Number(e.target.value) })} className={num} />
           <span className="text-[11px] text-zinc-500">Ex: 30 = só reserva com 30 min de folga.</span></label>
-        <label className="block"><span className="text-xs font-bold text-zinc-500">CANCELAR ATÉ (MIN ANTES)</span>
+        <label className="block"><span className="text-xs font-semibold text-zinc-500">CANCELAR ATÉ (MIN ANTES)</span>
           <input type="number" min={0} max={10080} value={cfg.cancelUntilMin} onChange={(e) => setCfg({ ...cfg, cancelUntilMin: Number(e.target.value) })} className={num} />
           <span className="text-[11px] text-zinc-500">Depois disso, só falando com você.</span></label>
-        <label className="block"><span className="text-xs font-bold text-zinc-500">AUTOAGENDAMENTO PÚBLICO (DIAS)</span>
+        <label className="block"><span className="text-xs font-semibold text-zinc-500">AUTOAGENDAMENTO PÚBLICO (DIAS)</span>
           <input type="number" min={1} max={365} value={cfg.horizonDays} onChange={(e) => setCfg({ ...cfg, horizonDays: Number(e.target.value) })} className={num} />
           <span className="text-[11px] text-zinc-500">Janela do cliente na página pública. A equipe pode agendar até 5 anos à frente.</span></label>
-        <label className="block"><span className="text-xs font-bold text-zinc-500">INTERVALO ENTRE ATENDIMENTOS (MIN)</span>
+        <label className="block"><span className="text-xs font-semibold text-zinc-500">INTERVALO ENTRE ATENDIMENTOS (MIN)</span>
           <input type="number" min={0} max={240} value={cfg.bufferMin} onChange={(e) => setCfg({ ...cfg, bufferMin: Number(e.target.value) })} className={num} /></label>
       </div>
       {error && <p className="text-sm font-medium text-red-600">{error}</p>}
@@ -172,6 +173,8 @@ export default function ConfigPage() {
   const [biz, setBiz] = useState<Business | null>(null);
   const [msg, setMsg] = useState('');
   const [saving, setSaving] = useState(false);
+  // F3-I · saúde honesta da inteligência (sem termos técnicos na UI).
+  const [health, setHealth] = useState<Record<string, { state: string; reason: string }> | null>(null);
   // Aba = URL: derivada do parâmetro a cada render, então refresh, botão
   // voltar e deep-link funcionam sem estado paralelo.
   const tabParam = params.get('tab') || '';
@@ -204,6 +207,12 @@ export default function ConfigPage() {
     const res = await apiGet<{ business: Business }>(`/api/pages?businessId=${businessId}`, { scope: 'area', area: 'Configurações' });
     if (!report(res) || !res.data) return;
     setBiz(res.data.business);
+    // Saúde da inteligência: MESMO payload de /api/overview (nada inventado).
+    const ov = await apiGet<{ intelligenceHealth?: Record<string, { state: string; reason: string }> | null }>(
+      `/api/overview?businessId=${businessId}&period=7`,
+      { scope: 'area', area: 'Configurações' },
+    );
+    if (ov.ok) setHealth(ov.data?.intelligenceHealth || null);
   }, [businessId, report]);
   useEffect(() => { load(); }, [load]);
 
@@ -251,6 +260,50 @@ export default function ConfigPage() {
       />
       {msg && <p role="status" className="mb-3 text-sm font-semibold bg-[var(--success-bg)] border border-[var(--success-border)] text-[var(--success-fg)] rounded-md px-3 py-2">{msg}</p>}
 
+      {/* F3-I · Saúde da inteligência — linguagem de secretária, sem código/
+          credencial. Diagnóstico técnico: RECOLHIDO por padrão (a página
+          começa pelos dados da clínica, não pelo raio-X do sistema). */}
+      {health && (
+        <details className="bg-white border border-zinc-200 rounded-lg mb-3">
+          <summary className="px-4 py-3 flex items-center gap-2 cursor-pointer select-none">
+            <Icon n="spark" size={14} />
+            <h3 className="text-sm font-semibold">Como está a inteligência</h3>
+            <span className="text-xs text-zinc-400 font-normal">(diagnóstico técnico)</span>
+          </summary>
+          <div className="px-4 pb-4" aria-label="Saúde da inteligência">
+          <ul className="space-y-1.5">
+            {([
+              ['whatsapp', 'WhatsApp'],
+              ['automation', 'Automações'],
+              ['messaging', 'Mensagens'],
+              ['inbox', 'Atendimento'],
+              ['aiProvider', 'Assistente'],
+            ] as const).map(([key, label]) => {
+              const b = health[key];
+              if (!b) return null;
+              const tone =
+                b.state === 'ok' ? 'bg-emerald-50 text-emerald-800 border-emerald-200'
+                : b.state === 'degraded' ? 'bg-amber-50 text-amber-800 border-amber-200'
+                : b.state === 'blocked' ? 'bg-zinc-100 text-zinc-700 border-zinc-200'
+                : 'bg-red-50 text-red-800 border-red-200';
+              const statusWord =
+                b.state === 'ok' ? 'OK'
+                : b.state === 'degraded' ? 'Parcial'
+                : b.state === 'blocked' ? 'Aguardando'
+                : 'Erro';
+              return (
+                <li key={key} className="flex flex-wrap items-center gap-2 text-sm">
+                  <span className="font-medium w-28 shrink-0">{label}</span>
+                  <span className={`inline-flex items-center rounded-full border px-2 py-0.5 text-[11px] font-semibold ${tone}`}>{statusWord}</span>
+                  <span className="text-xs text-zinc-500">{b.reason}</span>
+                </li>
+              );
+            })}
+          </ul>
+          </div>
+        </details>
+      )}
+
       <div className="mb-4">
         <Tabs
           items={CONFIG_TABS.map(([id, label]) => ({ id: id as ConfigTab, label, icon: CONFIG_TAB_ICON[id as ConfigTab] }))}
@@ -273,9 +326,11 @@ export default function ConfigPage() {
                 <label className="block"><span className="text-xs font-semibold tracking-wide uppercase text-zinc-500">E-mail</span><input value={biz.email} onChange={(e) => set('email', e.target.value)} className={input + ' mt-1'} /></label>
               </div>
               <label className="block"><span className="text-xs font-semibold tracking-wide uppercase text-zinc-500">Descrição</span><textarea value={biz.description} onChange={(e) => set('description', e.target.value)} className={input + ' mt-1'} rows={2} placeholder="Ex: Consultas de estética avançada com hora marcada." /></label>
-              <div className="grid sm:grid-cols-2 gap-4">
-                <ImageUpload label="LOGO" value={biz.logo} onChange={(url) => set('logo', url)} businessId={businessId} circle />
-                <ImageUpload label="CAPA / BANNER" value={biz.cover} onChange={(url) => set('cover', url)} businessId={businessId} />
+              {/* HOMOLOGAÇÃO · P1 — Identidade da clínica = nome + logo.
+                  A CAPA da página pública mora SÓ em Página → Perfil. */}
+              <div className="space-y-2">
+                <ImageUpload label="LOGO DA CLÍNICA" value={biz.logo} onChange={(url) => set('logo', url)} businessId={businessId} circle />
+                <p className="text-[11px] text-zinc-500">A capa/hero da página pública é editada em Página → Perfil — não aqui.</p>
               </div>
             </section>
 

@@ -1,6 +1,6 @@
 // Templates = apenas configurações iniciais. Nenhum código duplicado por nicho.
 //
-// POSICIONAMENTO: o InstaLink nasceu como plataforma "universal"; hoje é
+// POSICIONAMENTO: o GoDoutor nasceu como plataforma "universal"; hoje é
 // especializada em negócios de atendimento. Por isso:
 //   • o cadastro NÃO pergunta mais "o que você vende" — todo negócio novo
 //     nasce com o padrão de atendimento (Serviços + Agendamentos ligados,

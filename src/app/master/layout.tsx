@@ -43,11 +43,11 @@ export default function MasterLayout({ children }: { children: React.ReactNode }
   if (state === 'denied') {
     return (
       <main className="min-h-screen flex items-center justify-center p-6 bg-zinc-100">
-        <div className="bg-white rounded-3xl border border-zinc-200 p-8 max-w-md text-center">
-          <span className="w-14 h-14 rounded-2xl bg-red-50 text-red-600 flex items-center justify-center mx-auto"><Icon n="shield" size={26} /></span>
+        <div className="bg-white rounded-xl border border-zinc-200 p-8 max-w-md text-center">
+          <span className="w-14 h-14 rounded-xl bg-red-50 text-red-600 flex items-center justify-center mx-auto"><Icon n="shield" size={26} /></span>
           <h1 className="font-extrabold text-xl mt-4">Área restrita da plataforma</h1>
           <p className="text-sm text-zinc-500 mt-2">
-            Esta área é exclusiva da conta Master do InstaLink. Owner, Admin ou membro de Organization
+            Esta área é exclusiva da conta Master do GoDoutor. Owner, Admin ou membro de Organization
             não têm acesso. O servidor rejeita qualquer chamada às APIs /api/master/*.
           </p>
           <Link href="/dashboard" className="inline-block mt-5 text-sm font-bold bg-zinc-900 text-white px-5 py-3 rounded-xl">Voltar ao painel</Link>
@@ -66,7 +66,7 @@ export default function MasterLayout({ children }: { children: React.ReactNode }
       <header className="bg-zinc-950 text-white">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 py-3.5 flex flex-wrap items-center gap-3">
           <Link href="/master" className="font-extrabold tracking-tight flex items-center gap-2">
-            <Icon n="shield" size={18} /> InstaLink · Master
+            <Icon n="shield" size={18} /> GoDoutor · Master
           </Link>
           <span className="text-[10px] font-extrabold bg-amber-400 text-amber-950 px-2 py-0.5 rounded-full">PLATAFORMA</span>
           <nav className="flex items-center gap-0.5 ml-1 flex-wrap">
@@ -90,6 +90,9 @@ export default function MasterLayout({ children }: { children: React.ReactNode }
               </span>
             )}
             <span className="text-zinc-400 hidden sm:inline">{email}</span>
+            <Link href="/alterar-senha" className="font-bold bg-white/10 hover:bg-white/20 px-3 py-2 rounded-lg" aria-label="Alterar senha">
+              <Icon n="lock" size={15} /> <span className="hidden sm:inline">Alterar senha</span>
+            </Link>
             <Link href="/login" onClick={async (e) => {
               e.preventDefault();
               try { await fetch('/api/auth/logout', { method: 'POST' }); } catch {}

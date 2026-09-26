@@ -109,7 +109,7 @@ export function TaskPanel({ tasks, summary, businessId, members, onChanged }: {
                     {t.assigneeName ? <span>· {t.assigneeName}</span> : null}
                     {t.leadName ? <span>· lead {t.leadName}</span> : null}
                     {t.bookingLabel ? <span>· agendamento {t.bookingLabel}</span> : null}
-                    {t.leadId && <Link href={`/funil?b=${businessId}#${t.leadId}`} className="underline text-zinc-600">Ver no funil</Link>}
+                    {t.leadId && <Link href={`/funil?b=${businessId}#${t.leadId}`} className="underline text-zinc-600">Ver oportunidade</Link>}
                     {t.bookingId && <Link href={`/agenda?b=${businessId}`} className="underline text-zinc-600">Ver agenda</Link>}
                   </p>
                 </>

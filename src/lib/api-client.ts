@@ -72,18 +72,31 @@ export async function apiGet<T = any>(url: string, ctx: DeniedContext = {}): Pro
   return apiRequest<T>(url, { method: 'GET' }, ctx);
 }
 
-/** POST/PATCH/DELETE JSON com corpo serializado. */
+/**
+ * POST/PATCH/DELETE JSON com corpo serializado.
+ *
+ * §P1.4 — ESCRITA CONCLUÍDA AVISA O SHELL: depois de qualquer mutação bem
+ * sucedida, disparamos `il:overview-refresh` na janela. Quem depende do
+ * overview (o mini-card de configuração da sidebar, o sino de notificações)
+ * revalida na hora — o progresso deixa de ficar preso num número velho
+ * ("88%" depois de completar 8/8). O loader compartilhado (lib/overview.ts)
+ * coalesce as chamadas: duas revalidações simultâneas = UMA requisição.
+ */
 export async function apiSend<T = any>(
   url: string,
   method: 'POST' | 'PATCH' | 'PUT' | 'DELETE',
   body?: unknown,
   ctx: DeniedContext = {},
 ): Promise<ApiResult<T>> {
-  return apiRequest<T>(url, {
+  const result = await apiRequest<T>(url, {
     method,
     headers: { 'Content-Type': 'application/json' },
     body: body === undefined ? undefined : JSON.stringify(body),
   }, ctx);
+  if (result.ok && typeof window !== 'undefined') {
+    try { window.dispatchEvent(new Event('il:overview-refresh')); } catch { /* ambiente sem Event */ }
+  }
+  return result;
 }
 
 /** Lança um Error com a mensagem amigável (útil em fluxos try/catch). */

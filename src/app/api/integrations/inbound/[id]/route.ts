@@ -4,7 +4,7 @@ import { MAX_INBOUND_BYTES } from '@/lib/integrations/contract';
 import { receiveInboundRequest } from '@/lib/integrations/inbound';
 
 // ═══════════════════════════════════════════════════════════════
-// P6 — WEBHOOK DE ENTRADA (sistema externo → InstaLink)
+// P6 — WEBHOOK DE ENTRADA (sistema externo → GoDoutor)
 // ═══════════════════════════════════════════════════════════════
 //   POST /api/integrations/inbound/<integrationId>
 //   Authorization: Bearer ilk_live_...   (ou X-Instalink-Token)

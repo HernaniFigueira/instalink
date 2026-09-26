@@ -127,3 +127,46 @@ npm test -- --run src/lib/__tests__/master.test.ts
 npm test -- --run
 npm run typecheck
 ```
+
+
+## Fundação do platform admin (fechamento Fase 2 · item 14)
+
+**Nunca senha master compartilhada.** Não existe "senha mestra" global, credencial
+fixa no código, segundo fator universal nem backdoor de suporte. O acesso Master
+nasce de:
+
+1. **`User.role = 'master'`** — fonte persistente, gerenciada em `/master/masters`;
+2. **`MASTER_EMAILS`** — fallback de bootstrap/emergência (só promove na leitura;
+   não contorna a proteção do último `role=master`);
+3. **`npm run master -- --bootstrap`** — grava hash scrypt na conta do operador
+   (a senha é a DO usuário, nunca uma senha da plataforma).
+
+### Modelo/guard de `platform role`
+
+O papel de plataforma é **`UserRole = 'owner' | 'admin' | 'master'`** em
+`src/lib/types.ts`. O guard é **server-only**:
+
+| Camada | Mecanismo |
+|--------|-----------|
+| Sessão | cookie `il_session` httpOnly + scrypt (`lib/auth.ts`) |
+| Área `/master` | `requireMaster` nas rotas + `isMasterUser` no cliente |
+| APIs `/api/master/*` | `requireMaster` (403 amigável, nunca logout) |
+| Suporte | `SupportSession` com expiração; modo view = escrita bloqueada |
+
+**Sem UI de gestão de platform role nesta fase** — promoção/revogação é por
+script CLI e `/master/masters` (já existe). Uma UI dedicada de "papéis de
+plataforma" ficaria rasa sem o fluxo de aprovação; fica **documentada como
+pendência**, não implementada de propósito.
+
+### Futuro: Control Center
+
+Listado como evolução (NÃO escopo da Fase 2):
+
+- Console unificado de unidades, masters e suporte (além de `/master`);
+- Fila de aprovação para promoção a master;
+- Trilha de auditoria de platform actions com retenção própria;
+- Feature flags de plataforma (rollout por percentual/tenant);
+- SSO/SCIM enterprise (quando houver demanda real).
+
+Enquanto isso, `/master` + CLI + `MASTER_EMAILS` cobrem a operação com as
+mesmas garantias de "nunca senha compartilhada".

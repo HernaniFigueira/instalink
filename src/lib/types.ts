@@ -1,12 +1,12 @@
 // ═══════════════════════════════════════════════════════════════
-// InstaLink.app — Domínio universal (INSTA LINK ENGINE)
+// instalink.app — Domínio universal (INSTA LINK ENGINE)
 // Nenhuma entidade aqui é específica de nicho. Nichos são apenas
 // configurações iniciais (templates) sobre este motor genérico.
 // ═══════════════════════════════════════════════════════════════
 
 export type ID = string;
 
-// Papel de PLATAFORMA (InstaLink). 'master' = superadmin da plataforma,
+// Papel de PLATAFORMA (GoDoutor). 'master' = superadmin da plataforma,
 // separado de qualquer empresa. Promovido por env MASTER_EMAILS ou script
 // (nunca senha secreta no código).
 export type UserRole = 'owner' | 'admin' | 'master';
@@ -20,6 +20,17 @@ export interface User {
   role?: UserRole; // ausente = 'owner' (compatível com dados legados)
   lastLoginAt?: string;
   active?: boolean;
+  // ── PERFIL PESSOAL (aditivo — doc antigo sem estes campos continua válido) ──
+  /** Telefone de contato do usuário (formato livre). */
+  phone?: string;
+  /** Foto de perfil (URL). A topbar passa a usá-la quando presente. */
+  photo?: string;
+  /** Cargo/função na empresa (ex.: "Clínico responsável"). */
+  title?: string;
+  /** Conselho profissional (ex.: "CRM 123456", "CRO 7890"). */
+  conselho?: string;
+  /** Breve apresentação profissional (dados complementares). */
+  professionalBio?: string;
 }
 
 export interface Session {
@@ -193,6 +204,16 @@ export interface Business {
   logo: string;
   cover: string;
   niche: Niche;
+  /**
+   * FASE 2 · P5 — TIPO DE CLÍNICA (preset, NÃO aplicação separada).
+   * Define terminologia, templates de anamnese sugeridos, módulos sugeridos e
+   * configuração inicial. É UM produto com presets — nunca cria dashboards,
+   * rotas ou componentes diferentes. Ausente/'geral' = genérico (compatível
+   * com todo dado legado; nada é migrado nem adivinhado).
+   */
+  clinicType?: ClinicType;
+  /** Fuso IANA da unidade p/ quiet hours/datas de comunicação (aditivo). */
+  timezone?: string;
   modes: BusinessMode[];
   // Módulos opcionais (avaliações, FAQ, galeria, localização, WhatsApp,
   // Sobre, agente). Preenchido de forma defensiva na leitura (migração
@@ -247,6 +268,12 @@ export interface Business {
   // Automações operacionais (confirmação, lembrete, pós-atendimento, avaliação,
   // retorno). Ausente/true = ativa; false = desligada pelo lojista.
   automations?: Record<string, boolean>;
+  /**
+   * FASE 2 · P8 — itens OBRIGATÓRIOS do checklist de onboarding que o usuário
+   * PULOU (ids em lib/dashboard.ts). Aditivo/ausente = nada pulado. Itens não
+   * listados aqui nunca são afetados; só os `optional` podem ser pulados.
+   */
+  setupSkipped?: string[];
   // P4 — bandeiras de CAPACIDADE por unidade (camada única de planos/flags).
   // Nunca é lida fora de lib/automation/capabilities.ts; ausente = padrão do
   // produto (nada de `if plan === ...` espalhado pelo código).
@@ -275,6 +302,13 @@ export interface WhatsappIntegration {
   // Credencial criptografada por Business (AES-256-GCM via WHATSAPP_CREDENTIALS_KEY)
   encryptedAccessToken?: string;
   keyFingerprint?: string;
+  /**
+   * F3-G — referência a cofre seguro multi-tenant (futuro). O SEGREDO nunca
+   * fica no Business; só o ref. Enquanto não houver cofre, usa-se env
+   * server-side mono-tenant documentado como PILOT_ONLY_SINGLE_CREDENTIAL
+   * ou encryptedAccessToken AES-GCM existente.
+   */
+  credentialRef?: string;
   verifiedName?: string;
   lastInboundAt?: string;
   lastOutboundAt?: string;
@@ -426,6 +460,12 @@ export interface Page {
   theme: Theme;
   blocks: Block[];
   updatedAt: string;
+  /**
+   * §P1.5 — quando o Visual (tema/modelo/tipografia) foi salvo por escolha
+   * explícita. Aditivo/legado: páginas antigas não têm e seguem contando as
+   * outras personalizações reais (blocos, navegação, Sobre, logo/capa).
+   */
+  themeSavedAt?: string;
 }
 
 export interface Category {
@@ -619,6 +659,14 @@ export interface Booking {
   /** Quem registrou o check-in (memberId) e o rótulo legível do autor. */
   checkedInBy?: string;
   checkedInByName?: string;
+  /** P6 · veterinária — pet atendido ('' quando não se aplica). Aditivo. */
+  petId?: string;
+  /**
+   * FASE 2 · P6 — CAMPO DERIVADO de leitura (a agenda resolve o pet ativo).
+   * NUNCA é persistido nem aceito na escrita — existe só para a UI mostrar o
+   * PET primeiro na clínica veterinária.
+   */
+  petName?: string;
 }
 
 /** Tipo do agendamento. `standard` é o fluxo normal da grade. */
@@ -715,6 +763,31 @@ export interface Encounter {
   finalizedBy: string;
   /** Quem assina o registro (nome do profissional no momento da finalização). */
   signedBy: string;
+  /** P6 · veterinária — pet atendido ('' quando não se aplica). Aditivo. */
+  petId?: string;
+  // ── FASE 2 · P3 — retorno ESTRUTURADO (aditivo) ──
+  // Ausente em dado legado (normalizeDB deriva: texto ⇒ 'custom', vazio ⇒ 'none').
+  //   none    → sem retorno; date → data específica; interval → após N dias;
+  //   custom  → só o texto livre (`followUp`, que continua imprimível).
+  followUpMode?: EncounterFollowUpMode;
+  followUpDate?: string; // YYYY-MM-DD (modo 'date')
+  followUpDays?: number; // dias (modo 'interval')
+  // Arquivos do atendimento: SÓ referências/metadados — o binário fica no
+  // Storage (Vercel Blob), nunca no documento. Aditivo/ausente = sem arquivos.
+  files?: EncounterFile[];
+}
+
+/** Como fica o acompanhamento depois deste atendimento. */
+export type EncounterFollowUpMode = 'none' | 'date' | 'interval' | 'custom';
+
+/** Referência de um arquivo anexado ao atendimento (Storage + metadados). */
+export interface EncounterFile {
+  id: ID;
+  name: string;
+  url: string;
+  size: number;
+  createdAt: string;
+  by: string;
 }
 
 export type ReviewSource = 'site' | 'google';
@@ -985,6 +1058,14 @@ export interface DB {
   queue: QueueEntry[];
   // ── A3.4 · Bloco 5: registros de atendimento (dado sensível, com dono) ──
   encounters: Encounter[];
+  // ── FASE 2 · Product Revolution (ADITIVAS; defaults em normalizeDB) ──
+  pets: Pet[]; // P6 — veterinária: tutor (contato) ≠ pet (paciente)
+  anamneseTemplates: AnamneseTemplate[]; // P4 — motor único de anamnese
+  anamneseResponses: AnamneseResponse[]; // P4 — respostas do paciente
+  financeEntries: FinanceEntry[]; // P7 — financeiro básico (não é ERP)
+  followUpRules: FollowUpRule[]; // P10/11 — fundação de follow-up
+  // F3-H — outreach idempotente de retorno/reativação (anti-duplo-envio)
+  followUpOutreach: FollowUpOutreach[];
 }
 
 // ═══════════════════════════════════════════════════════════════
@@ -1143,7 +1224,7 @@ export interface IntegrationLog {
 // Multi-tenancy: `businessId` está em TODA entidade e é revalidado em cada
 // passo. Uma execução jamais toca linha de outra empresa.
 
-/** Eventos que LIGAM automações. São os eventos que o sistema já produz. */
+/** Eventos que LIGAM automações (Event Layer da Fase 3). */
 export type AutomationEventId =
   | 'lead.created'
   | 'lead.updated'
@@ -1153,13 +1234,28 @@ export type AutomationEventId =
   | 'customer.updated'
   | 'booking.created'
   | 'booking.confirmed'
+  | 'booking.rescheduled'
   | 'booking.cancelled'
-  | 'booking.completed';
+  | 'booking.no_show'
+  | 'booking.completed'
+  | 'encounter.started'
+  | 'encounter.completed'
+  | 'followup.due'
+  | 'patient.inactive'
+  | 'conversation.started'
+  | 'conversation.handoff'
+  | 'message.received'
+  | 'message.sent';
 
 export const AUTOMATION_EVENTS: AutomationEventId[] = [
   'lead.created', 'lead.updated', 'lead.stage_changed', 'lead.assigned',
   'customer.created', 'customer.updated',
-  'booking.created', 'booking.confirmed', 'booking.cancelled', 'booking.completed',
+  'booking.created', 'booking.confirmed', 'booking.rescheduled',
+  'booking.cancelled', 'booking.no_show', 'booking.completed',
+  'encounter.started', 'encounter.completed',
+  'followup.due', 'patient.inactive',
+  'conversation.started', 'conversation.handoff',
+  'message.received', 'message.sent',
 ];
 
 // ── Condições (P4.3) ─────────────────────────────────────────
@@ -1209,7 +1305,7 @@ export type AutomationActionType =
   | 'send_channel_message';
 
 /** Modo de espera (P4.6). `event` está Preparado, ainda não dispara. */
-export type AutomationWaitMode = 'duration' | 'until' | 'event';
+export type AutomationWaitMode = 'duration' | 'until' | 'event' | 'booking_offset';
 
 export interface AutomationWaitConfig {
   mode: AutomationWaitMode;
@@ -1219,6 +1315,12 @@ export interface AutomationWaitConfig {
   at?: string;
   /** event: (futuro) evento que libera a espera. */
   waitForEvent?: string;
+  /**
+   * booking_offset: minutos em relação ao INÍCIO do agendamento no contexto.
+   * Negativo = antes (−1440 = 24 h antes); positivo = depois.
+   * Recalculado na retomada — remarcação/cancelamento revalidam o alvo.
+   */
+  offsetMinutes?: number;
 }
 
 export interface AutomationBranchConfig {
@@ -1265,12 +1367,25 @@ export interface AutomationSettings {
   dedupeField?: string;
 }
 
+/** Ciclo de vida da automação (F3). `active` espelha `status === 'active'`. */
+export type AutomationStatus = 'draft' | 'active' | 'paused' | 'archived';
+
+/** Quem criou a definição (rastro de origem, nunca interpretado pelo motor). */
+export type AutomationSource = 'manual' | 'template' | 'ai';
+
 export interface Automation {
   id: ID;
   businessId: ID;
   name: string;
   description: string;
   active: boolean;
+  /**
+   * F3: draft (rascunho, nunca auto-ativa) | active | paused | archived.
+   * Ausente em documentos antigos ⇒ derivado de `active` (compat aditiva).
+   */
+  status?: AutomationStatus;
+  /** Origem da definição. Ausente ⇒ 'manual'. */
+  source?: AutomationSource;
   /** Gatilho + condição de entrada (atalho do editor linear). */
   trigger: { event: AutomationEventId; condition?: AutomationCondition };
   nodes: AutomationNode[];
@@ -1329,6 +1444,8 @@ export interface AutomationRun {
   history: AutomationRunStep[];
   /** Chave de idempotência do gatilho (mesma chave ⇒ no máximo 1 execução). */
   eventKey: string;
+  /** Origem do run p/ métricas F3-I (aditivo): retorno, reativação, confirmação… */
+  triggerSource?: string;
   /** Nó/entidade que originou (anti-loop: evento gerado por automação). */
   emittedByRunId: string;
   steps: number;
@@ -1536,6 +1653,65 @@ export interface Conversation {
   // Contexto do assistente nesta conversa (fluxo de agendamento, dados já
   // coletados do cliente etc.). Opcional e aditivo — conversas antigas não têm.
   context?: Record<string, any>;
+  /**
+   * F3-F — estado EXPLÍCITO do atendimento (aditivo; legado sem campo deriva
+   * de `mode`). 'ai_active' = IA responde; 'waiting_patient' = enviou e
+   * aguarda o paciente; 'waiting_team' = handoff feito, equipe ainda não
+   * assumiu; 'human_active' = humano responde (IA nunca junto); 'resolved'.
+   */
+  agentState?: ConversationAgentState;
+  /** Resumo estruturado do último handoff (SEM chain-of-thought). */
+  handoff?: ConversationHandoff;
+}
+
+/** Estados explícitos F3-F — UX mostra apenas 3 rótulos compreensíveis. */
+export type ConversationAgentState =
+  | 'ai_active'
+  | 'waiting_patient'
+  | 'waiting_team'
+  | 'human_active'
+  | 'resolved';
+
+/**
+ * Handoff persistido: só o que o humano precisa saber (resumo, intenção,
+ * entidades, ações). NUNCA raciocínio interno/chain-of-thought do modelo.
+ */
+export interface ConversationHandoff {
+  at: string;
+  /** Resumo operacional curto (1–3 frases) — não é pensamento do modelo. */
+  summary: string;
+  /** Intenção declarada pelo paciente (ex.: 'pedir_humano', 'clínico'). */
+  intent?: string;
+  /** Entidades nomeadas (serviço, data, pet…) — dados, não inferências ocultas. */
+  entities?: Record<string, string>;
+  /** Próximos passos sugeridos (checklist operacional). */
+  actions?: string[];
+  /** Quem iniciou o handoff: paciente, sistema ou membro. */
+  requestedBy?: string;
+}
+
+/**
+ * Modelo interno provider-agnostic (F3-F). A camada de canal converte
+ * webhook/Mock → ConversationMessage; o inbox só enxerga este formato.
+ * `providerMessageId` é a chave de idempotência com `provider`
+ * (duplicata do provedor ≠ mensagem/booking/conversa novos).
+ */
+export interface ConversationMessage {
+  id: ID;
+  businessId: ID;
+  conversationId: ID;
+  direction: 'in' | 'out';
+  /** Quem falou no modelo interno (legado Message.by → sender). */
+  sender: 'patient' | 'human' | 'ai' | 'system';
+  body: string;
+  status: MessageStatus;
+  /** Ex.: 'whatsapp' | 'instagram' | 'simulator' | 'agent'. */
+  provider: string;
+  /** ID do provedor (wamid, IG message id, uuid do simulador). */
+  providerMessageId: string;
+  at: string;
+  /** Metadados de exibição (badge SIMULADOR, etc.). Nunca secrets. */
+  meta?: Record<string, any>;
 }
 
 export interface Message {
@@ -1606,7 +1782,7 @@ export const CAMPAIGN_SEGMENTS: Array<{ id: CampaignSegment; label: string; hint
   { id: 'never_booked', label: 'Nunca agendaram', hint: 'Sem nenhum agendamento' },
   { id: 'inactive', label: 'Sem atendimento recente', hint: 'Último contato há mais de 90 dias' },
   { id: 'by_service', label: 'Por serviço', hint: 'Já agendaram um serviço específico' },
-  { id: 'leads', label: 'Leads', hint: 'Contatos com interesse registrado (com consentimento)' },
+  { id: 'leads', label: 'Oportunidades', hint: 'Contatos com interesse registrado (com consentimento)' },
 ];
 
 export interface CampaignCounts {
@@ -1898,7 +2074,20 @@ export type AuditAction =
   // A3.4 · Bloco 9 — Instagram Direct entra no inbox unificado
   | 'instagram.connected' | 'instagram.disconnected'
   | 'instagram.onboarding_failed' | 'instagram.webhook_received'
-  | 'instagram.token_refreshed' | 'instagram.token_refresh_failed';
+  | 'instagram.token_refreshed' | 'instagram.token_refresh_failed'
+  // FASE 2 · P4 — motor de anamnese (templates administrativos editáveis)
+  | 'anamnese.template_created' | 'anamnese.template_updated'
+  | 'anamnese.template_deleted' | 'anamnese.response_saved'
+  // FASE 2 · P6 — pacientes veterinários (tutor ≠ pet)
+  | 'pet.created' | 'pet.updated' | 'pet.deleted'
+  // F3-D — Tool Registry do Conversation Agent (auditoria sem chain-of-thought)
+  | 'booking.rescheduled'
+  | 'agent.tool_called' | 'agent.tool_denied' | 'agent.tool_failed'
+  // F3-F — Inbox/Handoff/Takeover (audit SEM chain-of-thought)
+  | 'conversation.handoff' | 'conversation.takeover'
+  | 'conversation.ai_resumed' | 'conversation.ai_paused'
+  // F3-H — follow-up/reativação (resultado lógico, sem payload sensível)
+  | 'followup.outreach_evaluated' | 'followup.outreach_replied';
 
 export interface AuditEntry {
   id: ID;
@@ -1910,4 +2099,237 @@ export interface AuditEntry {
   businessId: string;
   supportSessionId: string;
   meta: Record<string, any>;
+}
+
+// ═══════════════════════════════════════════════════════════════
+// FASE 2 — PRODUCT REVOLUTION (GoDoutor)
+// Estruturas ADITIVAS. Nenhum dado legado é migrado nem destruído: arrays e
+// campos novos ganham defaults em normalizeDB (db.ts). Um produto, presets.
+// ═══════════════════════════════════════════════════════════════
+
+// ── P5 · Tipo de clínica (preset, não aplicação separada) ──
+export type ClinicType = 'medica' | 'odontologica' | 'veterinaria' | 'estetica' | 'geral';
+
+export const VALID_CLINIC_TYPES: ClinicType[] = [
+  'medica', 'odontologica', 'veterinaria', 'estetica', 'geral',
+];
+
+export function isClinicType(v: unknown): v is ClinicType {
+  return typeof v === 'string' && (VALID_CLINIC_TYPES as string[]).includes(v);
+}
+
+// ── P6 · Veterinária: TUTOR (contato) ≠ PET (paciente) ──
+// O tutor é um BusinessCustomer normal (pessoa de contato). O Pet é entidade
+// própria ligada a um tutor; um tutor pode ter vários pets. Essa estrutura NÃO
+// se aplica às outras clínicas (petId fica '' — aditivo e opcional).
+export interface Pet {
+  id: ID;
+  businessId: ID;
+  /** Tutor — contato do CRM (BusinessCustomer.id) dono do pet. */
+  tutorId: ID;
+  name: string;
+  photo: string;
+  species: string; // espécie: cachorro, gato, ave…
+  breed: string; // raça
+  sex: 'M' | 'F' | ''; // '' = não informado
+  birthDate: string; // YYYY-MM-DD ('' = não informado); idade é derivada
+  weightKg: number; // 0 = não informado
+  notes: string; // observações (comportamento, alergias, cuidados)
+  active: boolean;
+  createdAt: string;
+  updatedAt: string;
+}
+
+// ── P4 · Motor único de anamnese (template → campos → resposta) ──
+// NÃO é uma tabela hardcoded por clínica: é um motor de formulários clínicos.
+// Templates administrativos editáveis — NÃO são diagnóstico médico.
+export type AnamneseFieldType =
+  | 'text' | 'textarea' | 'boolean' | 'select' | 'multiselect'
+  | 'number' | 'date' | 'scale' | 'note';
+
+export interface AnamneseField {
+  id: ID;
+  label: string;
+  type: AnamneseFieldType;
+  required: boolean;
+  help?: string; // texto de apoio exibido abaixo do rótulo
+  options?: string[]; // select / multiselect
+  scaleMin?: number; // escala
+  scaleMax?: number;
+  scaleMinLabel?: string; // rótulo dos extremos (ex.: "Nenhuma" / "Muita")
+  scaleMaxLabel?: string;
+}
+
+export interface AnamneseTemplate {
+  id: ID;
+  businessId: ID;
+  name: string;
+  description: string;
+  /** Preset de origem. '' = criado/editado pela clínica. */
+  preset: ClinicType | 'custom' | '';
+  fields: AnamneseField[];
+  active: boolean;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface AnamneseResponse {
+  id: ID;
+  businessId: ID;
+  templateId: ID;
+  /** Atendimento de origem ('' = resposta avulsa, sem atendimento). */
+  encounterId: ID;
+  /** Paciente (contato do CRM). */
+  contactId: ID;
+  /** Pet ('' quando não é veterinária). */
+  petId: ID;
+  professionalId: ID;
+  /** fieldId → valor (string | number | boolean | string[] conforme o tipo). */
+  answers: Record<string, unknown>;
+  createdAt: string;
+  updatedAt: string;
+  createdBy: ID;
+}
+
+// ── P7 · Financeiro básico (não é ERP) ──
+export type FinanceKind = 'receita' | 'despesa';
+export type FinanceStatus = 'previsto' | 'pendente' | 'pago' | 'cancelado';
+
+export interface FinanceEntry {
+  id: ID;
+  businessId: ID;
+  kind: FinanceKind;
+  status: FinanceStatus;
+  /** Valor em centavos (sempre positivo; o `kind` define receita/despesa). */
+  amount: number;
+  description: string;
+  dueDate: string; // YYYY-MM-DD — data prevista
+  paidAt: string; // YYYY-MM-DD — data do pagamento ('' = não pago)
+  method: string; // pix | card | cash | … ('' = não informado)
+  // Vínculos opcionais ('' = não vinculado).
+  contactId: ID; // paciente
+  bookingId: ID;
+  serviceId: ID;
+  professionalId: ID;
+  encounterId: ID;
+  note: string;
+  createdAt: string;
+  updatedAt: string;
+  createdBy: ID;
+}
+
+// ── P10/11 · Follow-up: fundação (receitas internas) ──
+// NÃO envia nada sozinho nesta fase. Cada receita descreve gatilho, atraso,
+// público e ação pretendida. Quando o canal (WhatsApp) não estiver operacional,
+// a UI mostra "Aguardando conexão do WhatsApp" — nunca finge envio.
+export type FollowUpTrigger =
+  | 'lead_no_booking' // lead não agendou após X tempo
+  | 'before_appointment' // confirmação antes do atendimento
+  | 'no_show' // após falta
+  | 'after_completion' // pós-atendimento
+  | 'return_due' // retorno na data/intervalo definido
+  | 'inactive_patient'; // sem atendimento há X tempo
+
+export interface FollowUpRule {
+  id: ID;
+  businessId: ID;
+  name: string;
+  trigger: FollowUpTrigger;
+  active: boolean;
+  /** Atraso em relação ao gatilho. */
+  delayValue: number;
+  delayUnit: 'minutes' | 'hours' | 'days';
+  /**
+   * Parâmetros do gatilho:
+   *  - before_appointment: horas antes do atendimento;
+   *  - inactive_patient: dias sem atendimento;
+   *  - return_due: deriva do Encounter.followUp / data de retorno.
+   */
+  params: Record<string, unknown>;
+  /** Ação pretendida (descrição; o canal pode não estar operacional). */
+  action: string;
+  channel: 'whatsapp' | 'interno' | 'email';
+  /** Descrição do público (ex.: "todos os pacientes ativos"). */
+  audience: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+// ── F3-H · Outreach de follow-up/reativação (anti-duplo-envio) ──
+/** Estado operacional (UI mostra statusLabel legível; nada técnico). */
+export type FollowUpOutreachStatus =
+  | 'programado'        // due no futuro / aguardando janela
+  | 'aguardando_canal'  // WhatsApp desconectado
+  | 'mensagem_enviada'  // aceito pelo provider/fila
+  | 'paciente_respondeu'
+  | 'agendamento_realizado'
+  | 'ignorado'          // quiet hours / sem regra
+  | 'recusado'
+  | 'falha'
+  | 'ja_agendado'       // skipped_already_scheduled
+  | 'superado'          // skipped_superseded
+  | 'cancelado'         // cancelled_by_context
+  | 'sem_telefone'
+  | 'sem_consentimento';
+
+export type FollowUpOutreachKind = 'return' | 'reactivation';
+
+/** Rótulos humanos (nunca eventId/webhook/runner na UI). */
+export const FOLLOW_UP_OUTREACH_LABELS: Record<FollowUpOutreachStatus, string> = {
+  programado: 'Retorno previsto',
+  aguardando_canal: 'Aguardando WhatsApp',
+  mensagem_enviada: 'Mensagem enviada',
+  paciente_respondeu: 'Paciente respondeu',
+  agendamento_realizado: 'Agendamento realizado',
+  ignorado: 'Ignorado',
+  recusado: 'Recusado',
+  falha: 'Falha',
+  ja_agendado: 'Já agendado',
+  superado: 'Superado',
+  cancelado: 'Cancelado',
+  sem_telefone: 'Sem telefone',
+  sem_consentimento: 'Sem consentimento',
+};
+
+/**
+ * Registro lógico de 1 outreach (retorno OU reativação).
+ * Chave: businessId + kind + ruleId + subjectId + dueDate — nunca 2 envios.
+ */
+export interface FollowUpOutreach {
+  id: ID;
+  businessId: ID;
+  kind: FollowUpOutreachKind;
+  ruleId: ID;
+  /** Encounter (retorno) ou contact/patient (reativação). */
+  encounterId?: ID;
+  contactId?: ID;
+  customerId?: ID;
+  petId?: ID;
+  bookingId?: ID;
+  /** YYYY-MM-DD no fuso do negócio — parte da chave lógica. */
+  dueDate: string;
+  /** followup:${businessId}:${kind}:${ruleId}:${subject}:${dueDate} */
+  idempotencyKey: string;
+  status: FollowUpOutreachStatus;
+  /** Rótulo para UI/histórico. */
+  statusLabel: string;
+  /** eventKey explícito para emitAutomationEvent (1x lógico). */
+  eventKey: string;
+  phone: string;
+  /** Paciente (pet na vet; pessoa na clínica). */
+  patientName: string;
+  /** Destino da mensagem (tutor na vet; o próprio paciente). */
+  destName: string;
+  /** Origem no inbox: 'return' | 'reactivation'. */
+  origin: FollowUpOutreachKind;
+  attempt: number;
+  /** Próxima tentativa (quiet hours / 2ª tentativa). '' = sem fila. */
+  nextAttemptAt: string;
+  conversationId?: ID;
+  messageId?: ID;
+  automationRunId?: ID;
+  /** Métricas F3-I: última ação confiável. */
+  lastResult?: string;
+  createdAt: string;
+  updatedAt: string;
 }

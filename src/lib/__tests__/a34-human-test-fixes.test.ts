@@ -444,10 +444,14 @@ describe('A3.4 · LINGUAGEM — sem promessa de assinatura digital', () => {
 
 // ═══════════════════════════════════════════════════════════════
 describe('A3.4 · MOBILE (320–430px) — sem rolagem horizontal da página', () => {
-  it('a Agenda não tem mais subtítulo permanente e mantém uma data móvel curta', () => {
-    expect(AGENDA).not.toContain('Abra um atendimento para ver detalhes e ações.');
-    expect(AGENDA).toContain('agenda-date-narrow');
-
+  it('cabeçalho da Agenda: só o título (sem "?" nem subtítulo — fechamento item 11)', () => {
+    // Sem frase permanente sob o título; ajuda saiu do "?" inline (legenda).
+    expect(AGENDA).toMatch(/>Agenda<\/h1>/);
+    expect(AGENDA).not.toMatch(/aria-label="Ajuda da agenda"/);
+    expect(AGENDA).not.toMatch(/className="ws-help"/);
+    expect(AGENDA).not.toMatch(/className="block max-w-full text-xs text-\[var\(--text-muted\)\] truncate"/);
+    // Sem largura fixa absurda no cabeçalho.
+    expect(AGENDA.slice(0, AGENDA.indexOf('id="agenda') + 2000)).not.toMatch(/\bw-\[\d{4,}px\]/);
   });
 
   it('na fila as ações descem de linha em vez de espremer nome/serviço', () => {

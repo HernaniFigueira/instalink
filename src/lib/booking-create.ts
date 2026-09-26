@@ -148,6 +148,12 @@ export interface CreateBookingParams {
    */
   fitInConfirmed?: boolean;
   series?: Pick<import('./types').Booking, 'seriesId' | 'seriesIndex' | 'seriesCount' | 'seriesRequestId' | 'seriesFingerprint'>;
+  /**
+   * FASE 2 · P6 — veterinária: pet atendido (paciente). O DONO escolhe no
+   * painel; o fluxo público nunca envia. A validação de existência é do
+   * chamador (rota) — aqui só persistimos o vínculo aditivo.
+   */
+  petId?: string;
 }
 
 /**
@@ -295,6 +301,8 @@ export function createBookingTx(d: DB, p: CreateBookingParams): {
       ...(fitIn ? { note: 'Encaixe criado fora da grade (conflito reconhecido pela equipe).' } : {}),
     }],
     leadId: p.leadId || undefined,
+    // FASE 2 · P6 — vínculo com o PET (aditivo; só quando informado).
+    ...(p.petId ? { petId: p.petId } : {}),
   });
   d.events.push({
     id: randomUUID(), businessId, type: 'booking_created', path: '',

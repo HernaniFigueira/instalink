@@ -14,6 +14,7 @@ import { ListSkeleton, Notice, PageHeader } from '@/components/ui';
 import { AccessDenied, AreaLoadError, useAreaLoad } from '@/components/dashboard/AccessNotice';
 import { TaskPanel, type TaskSummaryView, type TaskView } from '@/components/dashboard/TaskPanel';
 import { useRevalidateOnFocus } from '@/components/dashboard/use-revalidate';
+import { usePanelPermissions } from '@/components/dashboard/usePanelPermissions';
 
 const EMPTY_SUMMARY: TaskSummaryView = { open: 0, overdue: 0, dueToday: 0, mine: 0 };
 
@@ -23,6 +24,12 @@ export function TasksView() {
   const [summary, setSummary] = useState<TaskSummaryView>(EMPTY_SUMMARY);
   const [members, setMembers] = useState<{ userId: string; name: string }[]>([]);
   const [loading, setLoading] = useState(true);
+
+  // §A08 — o atalho "Automações que criam tarefas" leva a /automacoes
+  // (permissão 'config'). Quem não pode abrir a tela não vê o atalho:
+  // nenhum botão visível termina em "Sem permissão".
+  const { permissions: panelPerms, ready: permsReady } = usePanelPermissions();
+  const canSeeAutomations = !permsReady || panelPerms.config === true;
 
   // 403 → aviso amigável (sessão preservada); nada de skeleton infinito.
   const { denied, failed, report } = useAreaLoad('Tarefas');
@@ -51,11 +58,11 @@ export function TasksView() {
       <PageHeader
         title="Tarefas"
         hint="O que ficou combinado, com quem e com qual prazo. Uma tarefa nunca é apagada ao ser concluída — ela vira histórico."
-        action={(
+        action={canSeeAutomations ? (
           <Link href={`/automacoes${q}`} className="text-xs font-semibold bg-white border border-zinc-200 rounded-md px-3 py-1.5 hover:bg-zinc-50">
             Automações que criam tarefas
           </Link>
-        )}
+        ) : undefined}
       />
 
       {loading ? <ListSkeleton rows={4} /> : (

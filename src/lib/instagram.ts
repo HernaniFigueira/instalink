@@ -20,6 +20,7 @@
 import type { OnboardingItem, OnboardingLayer } from './whatsapp-onboarding';
 import { LATEST_VERIFIED_GRAPH_VERSION } from './whatsapp-onboarding';
 import type { InstagramIntegration } from './types';
+import { canonicalStateView } from './integration-states';
 
 
 export type EnvLike = Record<string, string | undefined>;
@@ -148,37 +149,49 @@ export function instagramIntegrationStatus(status: string | undefined): {
   state: string;
   label: string;
   detail: string;
+  /**
+   * GODOUTOR final — estado CANÔNICO do selo (Pronto/Em teste/Atenção/Com
+   * falha/Precisa configurar). O `label` específico continua como detalhe;
+   * o selo é uma palavra só, a mesma em todos os canais.
+   */
+  canonical: ReturnType<typeof canonicalStateView>;
 } {
   switch (status) {
     case 'connected':
       return {
         status: 'connected', tone: 'ok', state: 'connected', label: 'Conectado',
         detail: 'Mensagens diretas chegam em Conversas e podem ser respondidas por lá.',
+        canonical: canonicalStateView('connected'),
       };
     case 'waiting_first_event':
       return {
         status: 'pending', tone: 'pending', state: 'waiting_first_event', label: 'Aguardando a primeira mensagem',
         detail: 'A conta está autorizada e o webhook assinado; falta a Meta entregar o primeiro evento.',
+        canonical: canonicalStateView('pending'),
       };
     case 'webhook_pending':
       return {
         status: 'pending', tone: 'pending', state: 'webhook_pending', label: 'Falta ativar o webhook',
         detail: 'A conta foi autorizada, mas a Meta ainda não confirmou a assinatura dos eventos.',
+        canonical: canonicalStateView('pending', { blocking: true }),
       };
     case 'authorization_pending':
       return {
         status: 'pending', tone: 'pending', state: 'authorization_pending', label: 'Autorização em andamento',
         detail: 'A autorização no Instagram começou e não foi concluída.',
+        canonical: canonicalStateView('pending'),
       };
     case 'error':
       return {
         status: 'error', tone: 'error', state: 'error', label: 'Erro na conexão',
         detail: 'A última tentativa falhou — veja o motivo e reconecte se precisar.',
+        canonical: canonicalStateView('error'),
       };
     default:
       return {
         status: 'not_connected', tone: 'off', state: 'not_connected', label: 'Não conectado',
         detail: 'Nenhuma conta profissional do Instagram conectada nesta unidade.',
+        canonical: canonicalStateView('not_connected'),
       };
   }
 }

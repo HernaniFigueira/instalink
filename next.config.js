@@ -39,13 +39,24 @@ const LEGACY_REDIRECTS = [
 const nextConfig = {
   reactStrictMode: true,
   poweredByHeader: false,
+  experimental: {
+    instrumentationHook: true,
+  },
   async redirects() {
-    return LEGACY_REDIRECTS.map(({ from, to }) => ({
-      source: from,
-      destination: to,
-      // permanent: true → 308 (preserva método e corpo; 301 poderia virar GET).
-      permanent: true,
-    }));
+    // F3 — home de Automação em `/automacao` (nome do briefing) → tela canônica
+    // `/automacoes`. Alias de URL, não é rota nova do catálogo (sem porta órfã).
+    const aliases = [
+      { source: '/automacao', destination: '/automacoes', permanent: true },
+    ];
+    return [
+      ...aliases,
+      ...LEGACY_REDIRECTS.map(({ from, to }) => ({
+        source: from,
+        destination: to,
+        // permanent: true → 308 (preserva método e corpo; 301 poderia virar GET).
+        permanent: true,
+      })),
+    ];
   },
 };
 module.exports = nextConfig;
