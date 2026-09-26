@@ -29,7 +29,7 @@ export type { HoursChipDay };
 // preenchimento ou peso de botão.
 export type ButtonVariant =
   | 'primary' | 'success' | 'warning' | 'danger' | 'soft'
-  | 'secondary' | 'ghost' | 'quiet';
+  | 'secondary' | 'ghost' | 'quiet' | 'cta';
 
 const BTN_VARIANT_CLS: Record<ButtonVariant, string> = {
   primary:
@@ -48,6 +48,13 @@ const BTN_VARIANT_CLS: Record<ButtonVariant, string> = {
     'text-[var(--text-muted)] hover:bg-[var(--surface-3)] hover:text-[var(--text)] border border-transparent',
   quiet:
     'bg-[var(--surface-3)] text-[var(--text-muted)] border border-[var(--border)] hover:bg-[var(--brand-soft)] hover:text-[var(--brand-fg)] hover:border-[var(--brand-border)] active:translate-y-px',
+  // CTA contextual PRINCIPAL de uma tela (ex.: "Novo agendamento" na Agenda):
+  // fundo branco + borda de destaque elegante + texto azul (contraste AA).
+  // Importante sem virar bloco azul sólido — mesma lógica estrutural do
+  // "Perguntar à IA" do Meta Business (referência conceitual, sem copiar
+  // marca/assets). Hover perceptível, porém sóbrio.
+  cta:
+    'bg-white text-[var(--brand-fg)] font-semibold border border-[var(--brand-strong)]/55 shadow-xs hover:bg-[var(--brand-soft)] hover:border-[var(--brand-strong)] hover:shadow-sm active:translate-y-px',
 };
 
 export type ButtonSize = 'xs' | 'sm' | 'md' | 'lg';

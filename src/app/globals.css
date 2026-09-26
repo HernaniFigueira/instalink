@@ -290,15 +290,18 @@ body {
    (transform medido do botão real) — trocar Dia→Semana parece deslizar uma
    peça, não trocar de página. Sem sublinhado de aba. */
 .il-segmented {
+  /* Seletor de MODO (Agenda): container claro, opções compactas. O estado
+     ativo é azul CLARO (fundo suave + texto/ícone azul) — o azul sólido com
+     texto branco competia com a página inteira. */
   position: relative; display: inline-flex; align-items: center; gap: 2px;
-  padding: 3px; background: var(--surface-3);
-  border: 1px solid var(--border); border-radius: var(--radius-md);
+  padding: 3px; background: var(--surface);
+  border: 1px solid var(--border); border-radius: var(--radius-sm);
 }
 .il-segmented__thumb {
   position: absolute; top: 3px; left: 0; height: calc(100% - 6px); z-index: 0;
-  border-radius: calc(var(--radius-md) - 3px);
-  background: var(--brand);
-  box-shadow: 0 1px 2px rgba(37, 99, 235, 0.30);
+  border-radius: calc(var(--radius-sm) - 3px);
+  background: var(--brand-soft);
+  border: 1px solid var(--brand-border);
   transition: transform var(--motion-base) var(--ease-standard),
               width var(--motion-base) var(--ease-standard);
   pointer-events: none;
@@ -306,13 +309,13 @@ body {
 .il-segmented__item {
   position: relative; z-index: 1;
   display: inline-flex; align-items: center; gap: 6px;
-  height: 32px; padding: 0 12px; border-radius: calc(var(--radius-md) - 3px);
+  height: 30px; padding: 0 11px; border-radius: calc(var(--radius-sm) - 3px);
   font-size: 13px; font-weight: 500; line-height: 1.1; white-space: nowrap;
   color: var(--text-soft);
   transition: color var(--motion-fast) var(--ease-standard);
 }
 .il-segmented__item:hover { color: var(--text); }
-.il-segmented__item[aria-selected='true'] { color: #fff; font-weight: 600; }
+.il-segmented__item[aria-selected='true'] { color: var(--brand-fg); font-weight: 600; }
 .il-segmented__item:disabled { opacity: .45; pointer-events: none; }
 .il-segmented__count {
   min-width: 18px; height: 18px; padding: 0 5px; border-radius: var(--radius-pill);
@@ -944,15 +947,19 @@ dialog.il-drawer::backdrop { background: transparent; }
   color: #fff; font-size: 10px; font-weight: 800; letter-spacing: .02em;
 }
 .ws-newbtn {
+  /* QUICK CREATE GLOBAL (missão Agenda): o “+ Novo” é um atalho de produto,
+     não a ação principal da página — superfície branca, borda discreta e
+     hover azul claríssimo. A ação contextual destacada vive na própria tela
+     (ex.: “Novo agendamento” na Agenda). */
   display: inline-flex; align-items: center; gap: 7px;
-  min-height: 38px; padding: 0 16px;
-  border-radius: var(--radius-md);
-  background: var(--brand); color: #fff;
-  font-size: 13px; font-weight: 800; letter-spacing: -.01em;
-  box-shadow: var(--shadow-brand);
-  transition: background-color .15s ease, transform .12s ease;
+  min-height: 36px; padding: 0 14px;
+  border-radius: 8px;
+  background: var(--surface); color: var(--text);
+  border: 1px solid var(--border-strong);
+  font-size: 13px; font-weight: 600; letter-spacing: -.01em;
+  transition: background-color .15s ease, border-color .15s ease, color .15s ease, transform .12s ease;
 }
-.ws-newbtn:hover { background: var(--brand-strong); }
+.ws-newbtn:hover { background: var(--brand-soft); border-color: var(--brand-border); color: var(--brand-fg); }
 .ws-newbtn:active { transform: translateY(1px); }
 .ws-help {
   display: inline-flex; align-items: center; justify-content: center;
@@ -1647,6 +1654,59 @@ dialog.il-customer-dialog::backdrop { background:transparent; }
 .il-platform [data-queue-rail] { width:280px; flex-shrink:0; align-self:flex-start; max-height:var(--queue-rail-maxh); overflow-y:auto; background:var(--surface); border:1px solid var(--border); border-radius:8px; }
 @media(min-width:1200px) { .il-platform .agenda-page-gutter { padding:16px; } }
 @media(max-width:767px) { .il-platform .il-tab { min-height:44px; } }
+
+/* ═══════════════════════════════════════════════════════════════
+   AGENDA PROTAGONISTA — dono único do scroll (desktop)
+   ═══════════════════════════════════════════════════════════════
+   Arquitetura (cadeia inteira com altura DEFINIDA e overflow contido):
+     .workspace-shell--fill  = 100dvh + overflow:hidden  (página não rola)
+       → .workspace-main-col → .workspace-content (flex column)
+         → .agenda-page-gutter (flex column; notices encolhem a grade)
+           → .ag-page (flex column)
+             → Linha 1 (header)      flex-shrink:0
+             → Linha 2 (toolbar)     flex-shrink:0
+             → workspace             flex:1 + min-height:0
+               → painel do modo      flex:1 + min-height:0
+                 → scroller do modo  overflow-y:auto  ← ÚNICO scroll vertical
+   O documento (html/body) NUNCA ganha scrollbar por causa da Agenda.
+   Somente em telas pequenas (<768px) o fluxo natural do documento volta a
+   existir (mobile: Lista/Dia com rolagem própria do layout). */
+.ag-page { display: flex; flex-direction: column; min-width: 0; }
+.ag-page > * { min-width: 0; }
+/* Painéis de modo (Dia/Semana/Mês/Lista): superfície única rolável do modo.
+   O panel ocupa TODO o resto do viewport (flex:1) e o scroller é o único
+   dono da rolagem vertical daquele modo. min-height trava um piso visual em
+   janelas muito curtas (o shell recorta — o documento nunca rola). */
+.ag-mode-panel { display: flex; flex-direction: column; flex: 1 1 auto; min-height: 0; }
+.ag-mode-scroll { flex: 1 1 auto; min-height: 200px; overflow-y: auto; overscroll-behavior: contain; }
+@media (min-width: 768px) {
+  .il-platform.workspace-shell--fill { height: 100dvh; min-height: 0; overflow: hidden; }
+  .workspace-shell--fill .workspace-main-col { height: 100%; min-height: 0; overflow: hidden; }
+  .workspace-shell--fill .workspace-content { display: flex; flex-direction: column; min-height: 0; overflow: hidden; }
+  .workspace-shell--fill .workspace-content > * { flex-shrink: 0; }
+  .workspace-shell--fill .workspace-content > .agenda-page-gutter {
+    flex: 1 1 auto; min-height: 0; display: flex; flex-direction: column; overflow: hidden;
+  }
+  .workspace-shell--fill .agenda-page-gutter > * { flex-shrink: 0; }
+  .workspace-shell--fill .agenda-page-gutter > .ag-page { flex: 1 1 auto; min-height: 0; overflow: hidden; }
+  .workspace-shell--fill .ag-page [data-agenda-workspace] { min-height: 0; }
+  .workspace-shell--fill .ag-page [data-agenda-main] { display: flex; flex-direction: column; min-height: 0; }
+  .workspace-shell--fill .ag-mode-panel { overflow: hidden; }
+}
+/* Fundo externo do workspace da Agenda: branco + azul frio claríssimo, com
+   névoa verde/azulada muito discreta na base (~3%). Só o EXTERNO muda — os
+   cartões e painéis continuam brancos. (Referência conceitual: área externa
+   do Meta Business — disciplina visual, sem copiar marca/assets.) */
+.il-platform .agenda-page-gutter {
+  background:
+    radial-gradient(120% 55% at 50% 112%, rgba(16, 185, 129, 0.045), transparent 62%),
+    linear-gradient(180deg, #f7f9fd 0%, #eef2fa 100%);
+}
+/* Grade clínica: separação levemente mais nítida de horários/colunas/cabeçalho
+   (bordas #E5EAF1 família dos tokens), sem zebra e sem escurecer. */
+.il-platform [data-agenda-main] .ag-grid-surface { border: 1px solid var(--border); border-radius: 8px; background: var(--surface); }
+.il-platform [data-agenda-main] .ag-grid-surface .border-zinc-100,
+.il-platform [data-agenda-main] .ag-grid-surface .border-zinc-200 { border-color: var(--border); }
 
 /* ── DASHBOARD operacional (fideliade ao mockup) ─────────────── */
 .dsh-kpi {

@@ -305,7 +305,7 @@ export function DashboardShell({ children }: { children: React.ReactNode }) {
         '--area-color': crumb.area?.color || routeAreaColor(activePath, areas),
         '--sidebar-w': collapsed ? 'var(--sidebar-w-mini)' : undefined,
       } as React.CSSProperties}
-      className="il-platform workspace-shell min-h-screen bg-[var(--bg)]"
+      className={cn('il-platform workspace-shell min-h-screen bg-[var(--bg)]', isAgenda && 'workspace-shell--fill')}
     >
       <a href="#workspace-content" className="workspace-skip">Ir para o conteúdo</a>
 
