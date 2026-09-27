@@ -41,6 +41,8 @@ interface Conversation {
   /** Mensagens da equipe que FALHARAM ao sair (filtro "Falhas"). */
   failedMessages?: number;
   registered: boolean; channel?: 'whatsapp' | 'instagram' | 'agent'; channelUsername?: string;
+  /** Vínculo canônico persistido (link_contact / resolve). */
+  contactId?: string; customerId?: string;
 }
 interface ChannelsView { whatsapp: boolean; instagram: boolean }
 interface InstagramInbox { connected: boolean; label: string; tone: 'ok' | 'pending' | 'error' | 'off'; username: string }
@@ -202,11 +204,18 @@ export function ConversationsView({ unitId, panel = false }: { unitId?: string; 
   async function onQuickSaved(contact: SavedContact) {
     if (!active || !contact.id) return;
     const convId = active.conversation.id;
-    await apiSend('/api/conversations', 'POST', {
+    // O vínculo é PERSISTENTE (link_contact grava conversation.contactId).
+    // Só atualizamos o badge local quando o servidor confirma — nunca
+    // maquiar a UI sem o vínculo gravado (F5 não pode regredir).
+    const linked = await apiSend('/api/conversations', 'POST', {
       businessId, conversationId: convId, action: 'link_contact', contactId: contact.id,
     });
+    if (!linked.ok) {
+      setError(linked.message || 'Não foi possível vincular a conversa ao cliente.');
+      return;
+    }
     const patch = (c: Conversation): Conversation => ({
-      ...c, registered: true, name: c.name || contact.name, phone: c.phone || contact.phone,
+      ...c, registered: true, contactId: contact.id, name: c.name || contact.name, phone: c.phone || contact.phone,
     });
     setConversations((list) => list.map((c) => (c.id === convId ? patch(c) : c)));
     setActive((a) => (a && a.conversation.id === convId ? { ...a, conversation: patch(a.conversation) } : a));

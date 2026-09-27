@@ -71,6 +71,12 @@ export async function GET(req: NextRequest) {
         agentState: effectiveAgentState(conv),
         agentStateLabel: agentStateLabel(effectiveAgentState(conv)),
         handoff: conv.handoff || null,
+        // BUG CRÍTICO (identidade): o DETALHE precisa calcular `registered`
+        // com a MESMA autoridade da lista (conversationRegistered →
+        // resolveConversationContact). Sem isto, o badge do painel lia
+        // `undefined` e qualquer pessoa conhecida aparecia como "Contato
+        // novo" ao abrir a conversa (e voltava após F5).
+        registered: conversationRegistered(db, businessId, conv),
       },
       // F3-F — contexto lateral administrativo (nunca prontuário/anamnese)
       sideContext: conversationSideContext(db, businessId, conv),
