@@ -239,7 +239,7 @@ export function DashboardShell({ children }: { children: React.ReactNode }) {
   if (contextError && !ready) return <div className="il-platform p-8" role="alert"><h1>Não foi possível carregar sua clínica</h1><p>Confira sua conexão e tente novamente. Sua sessão foi preservada.</p><button className="il-control mt-4" onClick={() => loadContext(true)}>Tentar novamente</button></div>;
   if (!ready || !user) {
     return (
-      <div className="min-h-screen bg-[var(--bg)] lg:flex" aria-label="Carregando painel">
+      <div className="min-h-screen lg:flex" aria-label="Carregando painel">
         <div className="hidden lg:flex w-[248px] shrink-0 flex-col bg-white border-r border-[var(--border)] p-3 gap-2">
           <div className="h-9 w-32 bg-zinc-100 animate-pulse mb-2" />
           {Array.from({ length: 8 }).map((_, i) => <div key={i} className="h-7 bg-zinc-100 animate-pulse" />)}
@@ -320,7 +320,7 @@ export function DashboardShell({ children }: { children: React.ReactNode }) {
         ...accentVars,
       } as React.CSSProperties}
       data-nav-accent={navAccent}
-      className={cn('il-platform workspace-shell min-h-screen bg-[var(--bg)]', isAgenda && 'workspace-shell--fill')}
+      className={cn('il-platform workspace-shell min-h-screen', isAgenda && 'workspace-shell--fill')}
     >
       <a href="#workspace-content" className="workspace-skip">Ir para o conteúdo</a>
 
@@ -367,7 +367,7 @@ export function DashboardShell({ children }: { children: React.ReactNode }) {
       />
 
       {nav.allowed.some(i => i.href === '/conversas') && activePath !== '/conversas' && activePath !== '/organizacao' && <ConversationsDock key={business.id} businessId={business.id}/>}
-      <main ref={mainRef} id="workspace-content" tabIndex={-1} className="workspace-content flex-1 min-w-0 bg-[var(--bg)]">
+      <main ref={mainRef} id="workspace-content" tabIndex={-1} className="workspace-content flex-1 min-w-0">
         {support && (
           <div className={cn('px-4 lg:px-8 py-2.5 text-xs font-semibold flex flex-wrap items-center gap-x-3 gap-y-1 border-b',
             support.mode === 'view' ? 'bg-[var(--warning-bg)] text-[var(--warning-fg)] border-[var(--warning-border)]' : 'bg-[var(--danger)] text-white border-[var(--danger-strong)]')}>

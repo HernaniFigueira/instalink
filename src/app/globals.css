@@ -1033,8 +1033,16 @@ dialog.il-drawer::backdrop { background: transparent; }
    #F4F6F8 → #F8F9FB. NÃO acompanha o tema da clínica — o mesmo fundo em
    todas as rotas do dashboard (Agenda inclusa: o fundo externo é este; a
    grade interna mantém o tom próprio dela). */
+/* ── FUNDO DO WORKSPACE · UMA fonte de verdade ──────────────────────────
+   `--workspace-bg` é O token do fundo do workspace. O DashboardShell aplica
+   em `.workspace-shell` e TODAS as telas (Agenda inclusa) herdam — nenhuma
+   tela define background externo próprio. Mudou o token aqui, mudou o
+   sistema inteiro (para rosa, degradê, o que for). */
+:root {
+  --workspace-bg: linear-gradient(180deg, var(--bg-top) 0%, var(--bg-bottom) 100%);
+}
 .il-platform.workspace-shell {
-  background: linear-gradient(180deg, var(--bg-top) 0%, var(--bg-bottom) 100%);
+  background: var(--workspace-bg);
 }
 /* Missão 7 · §8 — encaixe estratégico: o painel principal ganha UM canto
    especial no encontro com a lateral (as referências aprovadas). `overflow:
@@ -1043,7 +1051,9 @@ dialog.il-drawer::backdrop { background: transparent; }
 .workspace-main-col {
   flex: 1; min-width: 0; display: flex; flex-direction: column; min-height: 100dvh;
   overflow: clip;
-  border-top-left-radius: var(--radius-xl);
+  /* Encaixe estratégico na PARTE DE BAIXO da junção sidebar/workspace
+     (acabamento no canto inferior — o arredondamento de cima estava errado). */
+  border-bottom-left-radius: var(--radius-xl);
   /* Mesmo fundo universal do shell (contrato D) — transparente deixa o
      gradiente neutro #F4F6F8 → #F8F9FB aparecer sem duplicar tokens. */
   background: transparent;
@@ -1087,17 +1097,19 @@ dialog.il-drawer::backdrop { background: transparent; }
    botão circular na cor da identidade (acompanha o preset da sidebar),
    popover de ações rápidas abaixo. A ação principal da página continua
    vivendo na própria tela (ex.: “Novo agendamento” na Agenda). */
+/* CONTRATO ÚNICO de ações da topbar ("+" e sino): repouso LIMPO (transparent,
+   sem border aparente, sem sombra); card só em hover/focus/active. */
 .ws-quickcreate-btn {
   display: inline-flex; align-items: center; justify-content: center;
   width: var(--control-h); height: var(--control-h);
-  border-radius: var(--radius-pill);
-  background: var(--il-nav-active); color: var(--il-nav-active-fg);
-  border: 1px solid color-mix(in srgb, var(--il-nav) 55%, #000 8%);
-  box-shadow: 0 2px 8px -2px color-mix(in srgb, var(--il-nav) 45%, transparent);
-  transition: background-color .15s ease, transform .12s ease, box-shadow .15s ease;
+  border-radius: var(--radius-md);
+  background: transparent; color: var(--text-muted);
+  border: 1px solid transparent;
+  transition: background-color .15s ease, color .15s ease, border-color .15s ease;
 }
-.ws-quickcreate-btn:hover { background: var(--il-nav-hover); transform: translateY(-1px); box-shadow: 0 4px 12px -2px color-mix(in srgb, var(--il-nav) 55%, transparent); }
-.ws-quickcreate-btn:active { transform: translateY(0); }
+.ws-quickcreate-btn:hover { background: var(--surface-hover); color: var(--text); border-color: var(--border); }
+.ws-quickcreate-btn:active { background: var(--surface-3); }
+.ws-quickcreate-btn:focus-visible { background: var(--surface-hover); }
 .ws-quickcreate-pop { min-width: 262px; padding: 7px; }
 .ws-quickcreate-item {
   display: flex; width: 100%; align-items: center; gap: 10px;
@@ -1446,17 +1458,17 @@ button.ws-bell__item:hover { background: var(--surface-hover); }
   background: rgba(255, 255, 255, 0.10); color: var(--il-nav-fg);
   transition: background-color .12s ease, color .12s ease, border-color .12s ease;
 }
-.workspace-collapse-btn:hover { background: rgba(255, 255, 255, 0.20); color: var(--il-nav-active-fg); border-color: rgba(255, 255, 255, 0.34); }
+.workspace-collapse-btn:hover { background: rgba(255, 255, 255, 0.20); color: var(--il-nav-fg); border-color: rgba(255, 255, 255, 0.34); }
 .workspace-collapse-btn.is-mini { width: 28px; height: 28px; border-color: transparent; background: transparent; }
 .workspace-collapse-btn.is-mini:hover { background: rgba(255, 255, 255, 0.18); border-color: transparent; }
 .workspace-wordmark--product { color: var(--il-nav-fg); }
 .is-collapsed .workspace-wordmark--product { font-size: 12px; letter-spacing: -.04em; }
 .ws-unitpill__logo { width: 18px; height: 18px; border-radius: 50%; object-fit: cover; flex-shrink: 0; }
 .workspace-identity__collapse { color: rgba(255, 255, 255, 0.62); border-radius: 8px; flex-shrink: 0; }
-.workspace-identity__collapse:hover { color: var(--il-nav-active-fg); background: rgba(255, 255, 255, 0.16); }
+.workspace-identity__collapse:hover { color: var(--il-nav-fg); background: rgba(255, 255, 255, 0.16); }
 .is-collapsed .workspace-identity { padding: 12px 8px; justify-content: center; }
 .workspace-logo { display: block; width: 100%; max-height: 52px; object-fit: contain; object-position: left center; }
-.workspace-wordmark { font-size: 17px; font-weight: 700; letter-spacing: -.02em; color: var(--il-nav-active-fg); }
+.workspace-wordmark { font-size: 17px; font-weight: 700; letter-spacing: -.02em; color: var(--il-nav-fg); }
 .workspace-wordmark span { color: var(--il-nav-cta); }
 .is-collapsed .workspace-wordmark { font-size: 13px; text-align: center; }
 .workspace-clinic {
@@ -1494,7 +1506,9 @@ button.ws-bell__item:hover { background: var(--surface-hover); }
 }
 .workspace-link[aria-current="page"] .workspace-link__icon,
 .workspace-link--group[aria-expanded="true"] .workspace-link__icon {
-  background: var(--il-nav-active-fg); color: var(--brand-strong);
+  /* Preenchido accent: fg = token de CONTRASTE do próprio accent (regra
+     estrutural — nunca cor fixa; em qualquer tema o par é AA). */
+  background: var(--accent); color: var(--accent-contrast);
   box-shadow: 0 1px 2px rgba(15, 23, 42, 0.16);
 }
 .workspace-link {
@@ -1563,7 +1577,9 @@ button.workspace-clinic-head:hover { background: rgba(255, 255, 255, 0.12); }
 .workspace-clinic-head__mark {
   width: 34px; height: 34px; border-radius: var(--radius-md); flex-shrink: 0;
   display: inline-flex; align-items: center; justify-content: center;
-  background: var(--il-nav-active-fg); color: var(--brand-strong);
+  /* Preenchido accent: fg = token de CONTRASTE do próprio accent (regra
+     estrutural — nunca cor fixa; em qualquer tema o par é AA). */
+  background: var(--accent); color: var(--accent-contrast);
   font-size: 13px; font-weight: 700; letter-spacing: -.01em;
 }
 .workspace-clinic-head__text { min-width: 0; flex: 1; text-align: left; }
@@ -1720,9 +1736,9 @@ button.workspace-clinic-head:hover { background: rgba(255, 255, 255, 0.12); }
   background: var(--surface);
   border: 1px solid var(--border);
   border-radius: var(--radius-md);
-  /* Flyout premium: sombra MÍNIMA (nada de "cartão flutuante pesado") —
-     o fundo sólido + borda 1px é que dão a separação. */
-  box-shadow: 0 1px 2px rgba(19, 26, 54, 0.06);
+  /* Flyout premium: ZERO sombra — separação só por borda 1px + contraste
+     do fundo sólido (contrato do refino final de consistência). */
+  box-shadow: none;
   animation: ws-peek-in 200ms ease-out;
 }
 .ws-peek__title {

@@ -80,12 +80,12 @@ describe('2 · sidebar colorida com ícone ativo em superfície branca', () => {
     expect(activeHex).not.toBe(navHex);
   });
 
-  it('o ícone do item ativo entra em superfície branca circular', () => {
+  it('o ícone do item ativo é preenchido accent com fg de CONTRASTE (regra estrutural)', () => {
     const icon = ruleOf('.workspace-link__icon {');
     expect(icon).toContain('border-radius: 50%');
     const active = ruleOf('.workspace-link[aria-current="page"] .workspace-link__icon,');
-    expect(active).toContain('background: var(--il-nav-active-fg)'); // branco
-    expect(active).toMatch(/color: var\(--brand-strong\)/); // glifo na cor da marca
+    expect(active).toContain('background: var(--accent)'); // preenchido no tema
+    expect(active).toMatch(/color: var\(--accent-contrast\)/); // fg = token de contraste
   });
 
   it('estado continua sendo aria-current (nunca só cor)', () => {

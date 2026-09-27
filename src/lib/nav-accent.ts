@@ -67,6 +67,16 @@ export function contrastOn(hex: string): string {
 }
 
 /** Ratio de contraste WCAG entre duas cores. */
+/**
+ * REGR ESTRUTURAL DE CONTRASTE (refino final): para QUALQUER fundo, o fg é
+ * escolhido pelo contraste real (AA) — nunca cor fixa. Fundo escuro → fg
+ * claro; fundo claro → fg near-black. Vale para item ativo da sidebar,
+ * chips preenchidos, monograma da clínica e tudo que usar o accent preenchido.
+ */
+export function bestFgOn(bg: string): string {
+  return contrastRatio('#ffffff', bg) >= contrastRatio('#18181b', bg) ? '#ffffff' : '#18181b';
+}
+
 export function contrastRatio(a: string, b: string): number {
   const [hi, lo] = [relativeLuminance(a), relativeLuminance(b)].sort((x, y) => y - x) as [number, number];
   return (hi + 0.05) / (lo + 0.05);
@@ -93,7 +103,9 @@ function preset(
       '--il-nav-muted': navFg === '#18181b' ? mix(nav, '#18181b', 0.42) : mix(nav, '#ffffff', 0.34),
       '--il-nav-hover': darken(nav, 0.12),
       '--il-nav-active': navFg === '#18181b' ? darken(nav, 0.18) : lighten(nav, 0.14),
-      '--il-nav-active-fg': navFg === '#18181b' ? '#18181b' : '#ffffff',
+      // fg do ATIVO calculado do bg ATIVO real (regra estrutural) — nunca cor
+      // fixa: fundo escuro → letra clara; fundo claro → letra near-black.
+      '--il-nav-active-fg': bestFgOn(navFg === '#18181b' ? darken(nav, 0.18) : lighten(nav, 0.14)),
       // ── CTAs principais + acentos (B: tema) ──
       '--accent': accent,
       '--accent-hover': darken(accent, 0.14),

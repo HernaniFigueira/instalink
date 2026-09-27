@@ -1151,7 +1151,7 @@ export default function AgendaPage() {
           <span data-agenda-title-icon="calendar" className="il-page-header__icon inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-lg border border-[var(--border)] bg-[var(--surface-2)] text-[var(--accent)]">
             <Icon n="calendar" size={19} />
           </span>
-          <h1 className="text-xl font-semibold tracking-tight text-[var(--text-primary)] leading-tight">Agenda</h1>
+          <h1 className="text-xl font-semibold tracking-tight text-[var(--text)] leading-tight">Agenda</h1>
         </div>
         <div className="flex flex-wrap items-center gap-2">
           {/* Filtros: UM botão, UM popover (Status · Serviços · Profissional) e

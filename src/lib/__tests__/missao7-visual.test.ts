@@ -139,7 +139,9 @@ describe('missão 7 · 4 — pets: bloco, ação e cards', () => {
 describe('missão 7 · 5 — encaixe estratégico e divisórias', () => {
   it('o painel principal assenta com um canto especial no encontro com a lateral', () => {
     expect(css).toMatch(/\.workspace-main-col \{[\s\S]*?overflow: clip/);
-    expect(css).toMatch(/\.workspace-main-col \{[\s\S]*?border-top-left-radius: var\(--radius-xl\)/);
+    // Refino final: o acabamento da junção é no canto INFERIOR (o de cima
+    // estava errado) — par `overflow: clip` + border-bottom-left-radius.
+    expect(css).toMatch(/\.workspace-main-col \{[\s\S]*?border-bottom-left-radius: var\(--radius-xl\)/);
   });
 
   it('divisórias mais nítidas (sem poluir)', () => {

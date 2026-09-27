@@ -81,8 +81,11 @@ describe('contrato de cor · D — FUNDO do workspace neutro universal', () => {
   it('trava 7: gradiente #F4F6F8 → #F8F9FB; o fundo NÃO depende do tema', () => {
     expect(css).toMatch(/--bg-top:\s*#f4f6f8/);
     expect(css).toMatch(/--bg-bottom:\s*#f8f9fb/);
+    // UMA fonte de verdade: --workspace-bg (gradiente) definido no :root;
+    // o shell aplica o token e todas as telas herdam.
+    expect(css).toMatch(/--workspace-bg:\s*linear-gradient/);
     const shell = css.slice(css.indexOf('.il-platform.workspace-shell {'), css.indexOf('.il-platform.workspace-shell {') + 300);
-    expect(shell).toContain('linear-gradient');
+    expect(shell).toContain('background: var(--workspace-bg)');
     expect(shell).not.toContain('--il-nav'); // neutro: nunca tingido
     for (const a of NAV_ACCENTS) {
       expect(Object.keys(a.vars), a.id).not.toContain('--bg');

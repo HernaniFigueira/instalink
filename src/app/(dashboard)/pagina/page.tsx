@@ -259,8 +259,9 @@ export default function PaginaPage() {
       {/* ══ TOPO DO EDITOR: estado real + ações globais ══ */}
       <div className="pe-top">
         <div className="min-w-0">
-          {/* Sem eyebrow de branding: o breadcrumb do shell já dá o contexto
-              (Início › Página); o nome da clínica vive no seletor de unidade. */}
+          {/* Sem eyebrow de branding: o cabeçalho identifica a tela (o
+              breadcrumb foi removido do workspace); o nome da clínica vive
+              no seletor de unidade. */}
           <h1 className="pe-title">Editor da página</h1>
         </div>
         <div className="pe-top__actions">

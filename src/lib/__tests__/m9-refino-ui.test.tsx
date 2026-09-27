@@ -31,10 +31,9 @@ describe('critério 1 — flyout da sidebar recolhida: sem sombra pesada', () =>
     expect(peek).toMatch(/border:\s*1px solid var\(--border\)/);
     expect(peek).toMatch(/border-radius:\s*var\(--radius-md\)/);
     expect(peek).toMatch(/background:\s*var\(--surface\)/);
-    // sombra MÍNIMA — proibida a pesada (--shadow-lg / grande blur/offset)
+    // ZERO sombra — separação só por borda + contraste (refino final)
+    expect(peek).toMatch(/box-shadow:\s*none/);
     expect(peek).not.toContain('--shadow-lg');
-    expect(peek).not.toMatch(/box-shadow:\s*0 1[0-9]px/);
-    expect(peek).not.toMatch(/box-shadow:\s*0 2[0-9]px/);
   });
 });
 
