@@ -6,21 +6,22 @@
 // mockup aprovado. Regiões:
 //   ESQUERDA → seletor de unidade (identifica a clínica UMA vez)
 //   CENTRO   → busca global (campo de aplicação, Ctrl+K)
-//   DIREITA  → sino com badge real · ajuda · conta (avatar circular + nome
-//              + papel). (CORREÇÃO: o quick create “+ Novo” saiu do topo.)
+//   DIREITA  → quick create “+” (missão 6: voltou como ação global premium)
+//              · sino com badge real · ajuda · conta (avatar + nome + papel).
 // O breadcrumb de CONTEXTO (sem branding) vive no conteúdo, acima do título.
 // Fundo sólido: nenhum blur/filtro em container que contém texto.
 import { Icon } from '@/components/icons';
 import { GlobalSearch, type NavSearchItem } from './GlobalSearch';
 import { NotificationsBell } from './NotificationsBell';
 import { AccountMenu, type AccountUnit } from './AccountMenu';
+import { QuickCreateMenu } from './QuickCreateMenu';
 import type { WorkspaceAlerts } from '@/lib/workspace-alerts';
 
 function initials(name: string): string {
   return name.trim().split(/\s+/).slice(0, 2).map((p) => p[0]?.toUpperCase() || '').join('') || '·';
 }
 
-export function WorkspaceTopbar({ page, query, searchItems, activePath, businessId = '', alerts, user, unit, units, overview, canOverview, canConfig, canCreate, onUnit, onLogout, onOpenNav, onOpenHelp, isMaster }: {
+export function WorkspaceTopbar({ page, query, searchItems, activePath, businessId = '', alerts, user, unit, units, overview, canOverview, canConfig, canCreate, onUnit, onLogout, onOpenNav, onOpenHelp, isMaster, vet }: {
   /** Tela atual — usado só no aria e no rótulo do botão de ajuda. */
   page: string;
   query: string;
@@ -39,9 +40,10 @@ export function WorkspaceTopbar({ page, query, searchItems, activePath, business
   canConfig?: boolean;
   /** Troca real de contexto (mesma função da sidebar). */
   onUnit?: (id: string) => void;
-  /** Rotas de criação — contrato mantido por estabilidade de chamada; o
-   *  quick create “+ Novo” saiu do topo (correção cirúrgica). */
+  /** Hrefs permitidos ao usuário — filtram as ações do quick create. */
   canCreate: string[];
+  /** Clínica veterinária: o quick create oferece o atalho do pet. */
+  vet?: boolean;
   onLogout: () => void;
   onOpenNav: () => void;
   /** Abre a central de ajuda confiável (sheet) do shell. */
@@ -62,8 +64,9 @@ export function WorkspaceTopbar({ page, query, searchItems, activePath, business
       </div>
 
       <div className="ws-topbar__right">
-        {/* CORREÇÃO: “+ Novo” (quick create) removido do topo — visual e
-            funcionalmente. O topo fica: busca · sino · ajuda · conta. */}
+        {/* Missão 6 — o “+” volta como quick create global premium. */}
+        <QuickCreateMenu canCreate={canCreate} businessId={businessId} vet={vet} />
+
         <NotificationsBell alerts={alerts} />
 
         <button type="button" className="ws-topbar__icon-button"

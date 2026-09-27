@@ -40,15 +40,17 @@ describe('FASE 2 · P8 — checklist operacional', () => {
   });
 });
 
-describe('FASE 2 · P9 — topo limpo (quick create removido)', () => {
-  it('o menu “+ Novo” saiu do topo — nenhum resíduo do quick create', () => {
+describe('FASE 2 · P9 — quick create premium (missão 6: o “+” volta)', () => {
+  it('o “+” voltou como ação global premium — as ações vivem no QuickCreateMenu', () => {
     const topbar = read('src/components/dashboard/WorkspaceTopbar.tsx');
-    for (const label of ['Novo agendamento', 'Novo paciente', 'Novo profissional', 'Novo serviço', 'Nova pendência', 'Recebimento']) {
-      expect(topbar, label).not.toContain(label);
+    const quick = read('src/components/dashboard/QuickCreateMenu.tsx');
+    expect(topbar).toContain('<QuickCreateMenu');
+    // O contrato canCreate é finalmente usado: filtra as ações do menu.
+    expect(topbar).toContain('canCreate');
+    for (const label of ['Novo agendamento', 'Nova pendência', 'Novo recebimento']) {
+      expect(quick, label).toContain(label);
     }
-    expect(topbar).not.toContain('Criar novo');
-    expect(topbar).not.toContain('ws-newbtn');
-    // busca · sino · ajuda · conta permanecem
+    // Busca · sino · ajuda · conta permanecem no topo.
     expect(topbar).toContain('<GlobalSearch');
     expect(topbar).toContain('<NotificationsBell');
     expect(topbar).toContain('<AccountMenu');

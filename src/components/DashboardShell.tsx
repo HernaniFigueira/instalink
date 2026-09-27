@@ -18,6 +18,7 @@ import { requiresActiveBusiness } from '@/lib/business-context';
 import { mayLeaveEditor } from '@/components/dashboard/useUnsavedChanges';
 import { WorkspaceContext } from '@/components/dashboard/WorkspaceContext';
 import { ConversationsDock } from '@/components/dashboard/ConversationsDock';
+import { getNavAccent, type NavAccentId } from '@/lib/nav-accent';
 import { WorkspaceNavigation } from '@/components/dashboard/WorkspaceNavigation';
 import { WorkspaceTopbar } from '@/components/dashboard/WorkspaceTopbar';
 import { HelpCenter } from '@/components/dashboard/HelpCenter';
@@ -78,6 +79,14 @@ export function DashboardShell({ children }: { children: React.ReactNode }) {
   const [collapsed, setCollapsed] = useState(() => {
     try { return localStorage.getItem('il-side-v2') === 'mini'; } catch { return false; }
   });
+  /* Missão 6 — cor da navegação (Configurações → Aparência). */
+  const [navAccent, setNavAccent] = useState<NavAccentId>('indigo');
+  useEffect(() => {
+    setNavAccent(getNavAccent());
+    const sync = (e: Event) => setNavAccent((e as CustomEvent<NavAccentId>).detail);
+    window.addEventListener('godoutor:nav-accent', sync);
+    return () => window.removeEventListener('godoutor:nav-accent', sync);
+  }, []);
   const lastContextAt = useRef(0);
   // Etapa A: o drawer de navegação móvel pertence ao shell porque quem o abre
   // é o botão de menu da TOPBAR (a busca e o menu saíram da sidebar).
@@ -305,6 +314,7 @@ export function DashboardShell({ children }: { children: React.ReactNode }) {
         '--area-color': crumb.area?.color || routeAreaColor(activePath, areas),
         '--sidebar-w': collapsed ? 'var(--sidebar-w-mini)' : undefined,
       } as React.CSSProperties}
+      data-nav-accent={navAccent}
       className={cn('il-platform workspace-shell min-h-screen bg-[var(--bg)]', isAgenda && 'workspace-shell--fill')}
     >
       <a href="#workspace-content" className="workspace-skip">Ir para o conteúdo</a>
@@ -340,6 +350,7 @@ export function DashboardShell({ children }: { children: React.ReactNode }) {
         onOpenNav={() => setMobileNav(true)}
         onOpenHelp={() => setHelpOpen(true)}
         canCreate={nav.allowed.map((i) => i.href).filter((h) => ['/agenda', '/clientes', '/tarefas', '/servicos', '/profissionais', '/financeiro'].includes(h))}
+        vet={business.clinicType === 'veterinaria'}
       />
 
       <HelpCenter

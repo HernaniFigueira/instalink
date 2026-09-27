@@ -208,10 +208,12 @@ describe('6 · correções cirúrgicas (contrato dos 8 pontos)', () => {
     expect(agenda).toContain("view === 'month'");
   });
 
-  it('7 · “+ Novo” removido do topo (visual e funcional)', () => {
-    expect(topbar).not.toContain('ws-newbtn');
-    expect(topbar).not.toContain('Criar novo');
-    expect(topbar).not.toContain('Novo agendamento');
+  it('7 · quick create “+” de volta ao topo (missão 6 — premium)', () => {
+    const quick = read('src/components/dashboard/QuickCreateMenu.tsx');
+    expect(topbar).toContain('<QuickCreateMenu');
+    expect(quick).toContain('ws-quickcreate-btn');
+    // menu com ações filtradas pelo canCreate (nunca exposto sem permissão)
+    expect(topbar).toContain('canCreate={canCreate}');
     // os demais itens da topbar permanecem
     expect(topbar).toContain('<GlobalSearch');
     expect(topbar).toContain('<NotificationsBell');

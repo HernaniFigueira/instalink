@@ -32,6 +32,9 @@ export async function GET(req: NextRequest) {
       logo: b.logo || '',
       cover: b.cover || '',
       modes: b.modes,
+      // Missão 6 — tipo de clínica (campo já previsto em SessionBusiness):
+      // o quick create usa para oferecer o atalho do pet em clínica vet.
+      clinicType: b.clinicType || '',
       // Identidade visual do Dashboard (P2): a cor acompanha a UNIDADE ativa.
       appearance: b.appearance || ({ navColor: '' } satisfies BusinessAppearance),
       // Acesso do profissional (P2): `agendaScope` diz à interface o que o

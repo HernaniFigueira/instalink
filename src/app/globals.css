@@ -174,12 +174,15 @@
   --code-fg: #e6e8ee;
 
   /* ── Raio ───────────────────────────────────────────────────── */
-  --radius-xs: 6px;
-  --radius-sm: 9px;
-  --radius-md: 11px;
-  --radius-lg: 14px;
-  --radius-xl: 18px;
-  --radius-2xl: 24px;
+  /* Missão 6 — radius CONTROLADO: menos bolha, mais produto profissional.
+     Encaixes especiais (busca, chips, botão +) continuam pill; popovers e
+     sheets usam xl/2xl moderados. */
+  --radius-xs: 5px;
+  --radius-sm: 7px;
+  --radius-md: 8px;
+  --radius-lg: 10px;
+  --radius-xl: 12px;
+  --radius-2xl: 16px;
   --radius-pill: 999px;
 
   /* ── Sombra (camadas suaves, nunca dura) ────────────────────── */
@@ -810,12 +813,12 @@ input[type='color'] { @apply cursor-pointer; }
   --sheet-backdrop: rgba(13, 18, 32, 0.22);
 
   /* ── Raio (escala única; nada de raio avulso por tela) ────────── */
-  --radius-xs: 6px;
-  --radius-sm: 9px;    /* input e botão */
-  --radius-md: 10px;   /* item de menu, controle interno */
-  --radius-lg: 12px;   /* cartão, painel */
-  --radius-xl: 14px;   /* popover, sheet */
-  --radius-2xl: 18px;
+  --radius-xs: 5px;
+  --radius-sm: 7px;    /* input e botão */
+  --radius-md: 8px;    /* item de menu, controle interno */
+  --radius-lg: 10px;   /* cartão, painel */
+  --radius-xl: 12px;   /* popover, sheet */
+  --radius-2xl: 16px;
   --radius-pill: 999px;
 
   /* ── Sombra (o painel é plano; sombra só cria profundidade real) ─
@@ -967,8 +970,14 @@ dialog.il-drawer::backdrop { background: transparent; }
   height: var(--topbar-h);
   display: flex; align-items: center; gap: 12px;
   padding: 0 16px;
-  background: var(--surface);
-  border-bottom: 1px solid var(--border);
+  /* Missão 6 — fundo colorido SUAVE (mockup aprovado, adaptado): um leve
+     tom da cor da sidebar clareando da esquerda para a direita. Sem blur,
+     sem faixa pesada — a busca continua em superfície branca e legível. */
+  background: linear-gradient(90deg,
+    color-mix(in srgb, var(--il-nav) 13%, var(--surface)) 0%,
+    color-mix(in srgb, var(--il-nav) 5%, var(--surface)) 38%,
+    var(--surface) 100%);
+  border-bottom: 1px solid color-mix(in srgb, var(--il-nav) 10%, var(--border));
 }
 .ws-unitpill {
   display: inline-flex; align-items: center; gap: 8px;
@@ -985,21 +994,37 @@ dialog.il-drawer::backdrop { background: transparent; }
   background: linear-gradient(135deg, var(--cyan), var(--brand));
   color: #fff; font-size: 10px; font-weight: 800; letter-spacing: .02em;
 }
-.ws-newbtn {
-  /* QUICK CREATE GLOBAL (missão Agenda): o “+ Novo” é um atalho de produto,
-     não a ação principal da página — superfície branca, borda discreta e
-     hover azul claríssimo. A ação contextual destacada vive na própria tela
-     (ex.: “Novo agendamento” na Agenda). */
-  display: inline-flex; align-items: center; gap: 7px;
-  min-height: 36px; padding: 0 14px;
-  border-radius: 8px;
-  background: var(--surface); color: var(--text);
-  border: 1px solid var(--border-strong);
-  font-size: 13px; font-weight: 600; letter-spacing: -.01em;
-  transition: background-color .15s ease, border-color .15s ease, color .15s ease, transform .12s ease;
+/* QUICK CREATE GLOBAL (missão 6 — o “+” volta como ação global premium):
+   botão circular na cor da identidade (acompanha o preset da sidebar),
+   popover de ações rápidas abaixo. A ação principal da página continua
+   vivendo na própria tela (ex.: “Novo agendamento” na Agenda). */
+.ws-quickcreate-btn {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: var(--control-h); height: var(--control-h);
+  border-radius: var(--radius-pill);
+  background: var(--il-nav-active); color: var(--il-nav-active-fg);
+  border: 1px solid color-mix(in srgb, var(--il-nav) 55%, #000 8%);
+  box-shadow: 0 2px 8px -2px color-mix(in srgb, var(--il-nav) 45%, transparent);
+  transition: background-color .15s ease, transform .12s ease, box-shadow .15s ease;
 }
-.ws-newbtn:hover { background: var(--brand-soft); border-color: var(--brand-border); color: var(--brand-fg); }
-.ws-newbtn:active { transform: translateY(1px); }
+.ws-quickcreate-btn:hover { background: var(--il-nav-hover); transform: translateY(-1px); box-shadow: 0 4px 12px -2px color-mix(in srgb, var(--il-nav) 55%, transparent); }
+.ws-quickcreate-btn:active { transform: translateY(0); }
+.ws-quickcreate-pop { min-width: 262px; padding: 7px; }
+.ws-quickcreate-item {
+  display: flex; width: 100%; align-items: center; gap: 10px;
+  padding: 8px 9px; border-radius: var(--radius-md); text-align: left;
+  transition: background-color .12s ease;
+}
+.ws-quickcreate-item:hover { background: var(--surface-hover); }
+.ws-quickcreate-item__icon {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 30px; height: 30px; flex-shrink: 0;
+  border-radius: var(--radius-sm);
+  background: var(--brand-soft); color: var(--brand-fg);
+  border: 1px solid var(--border-soft);
+}
+.ws-quickcreate-item__title { display: block; font-size: 12.5px; font-weight: 650; color: var(--text); letter-spacing: -.01em; }
+.ws-quickcreate-item__desc { display: block; margin-top: 1px; font-size: 11px; font-weight: 500; color: var(--text-muted); }
 .ws-help {
   display: inline-flex; align-items: center; justify-content: center;
   width: 34px; height: 34px; border-radius: 50%;
@@ -1299,6 +1324,10 @@ button.ws-bell__item:hover { background: var(--surface-hover); }
   position: sticky; top: 0;
   width: var(--sidebar-w); height: 100dvh;
   background: var(--il-nav); border-right: 1px solid var(--il-nav-border);
+  /* Missão 6 — encaixe especial nº 1: o encontro sidebar × painel principal
+     ganha uma profundidade suave (sem exagero de sombra): o painel parece
+     assentar ao lado da navegação. */
+  box-shadow: 8px 0 20px -12px rgba(23, 19, 16, 0.28);
 }
 .il-platform .workspace-sidebar.is-collapsed { width: var(--sidebar-w-mini); }
 .is-collapsed .workspace-label { display: none; }
@@ -1497,8 +1526,9 @@ button.workspace-clinic-head:hover { background: rgba(255, 255, 255, 0.12); }
 /* ── Acordeão do submenu (FASE D: UMA coluna, expande para BAIXO) ──
    Sem segunda coluna: o grupo abre ABAIXO do próprio botão, com altura
    (grid-template-rows 0fr→1fr) + opacidade + translateY, ~200ms ease — a
-   mesma curva do sistema. Subitem com recuo e LINHA-GUIA (nunca um card em
-   volta do submenu). */
+   mesma curva do sistema. Missão 6: o conteúdo expandido abre DENTRO de um
+   bloco premium (superfície interna encaixada, com recuo e borda suave) —
+   decisão explícita do usuário, que reverte o "nunca um card" da FASE D. */
 .workspace-submenu {
   display: grid; grid-template-rows: 0fr;
   transition: grid-template-rows 200ms var(--ease-standard);
@@ -1510,17 +1540,45 @@ button.workspace-clinic-head:hover { background: rgba(255, 255, 255, 0.12); }
   transition: opacity 200ms var(--ease-standard), transform 200ms var(--ease-standard);
 }
 .workspace-group.is-open > .workspace-submenu > .workspace-submenu__clip { opacity: 1; transform: none; }
-/* Missão §5 — subitens com RECUO limpo: a linha-guia saiu, a hierarquia é
-   percebida pelo recuo (como no mockup Meta-like). */
+/* Missão 6 — o submenu é um painel INTERNO encaixado na sidebar: leve
+   fundo, borda e radius moderado (o "card" que a FASE D proibia). */
 .workspace-submenu__guide {
-  display: flex; flex-direction: column; gap: 2px;
-  margin: 2px 0 6px; padding-left: 10px;
+  display: flex; flex-direction: column; gap: 3px;
+  margin: 3px 0 8px; padding: 6px;
+  background: rgba(255, 255, 255, 0.10);
+  border: 1px solid rgba(255, 255, 255, 0.13);
+  border-radius: var(--radius-md);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.06);
 }
-.workspace-link--sub { min-height: 36px; font-size: 13px; padding-left: 22px; }
+.workspace-link--sub { min-height: 34px; font-size: 13px; padding-left: 14px; border-radius: var(--radius-sm); }
+.workspace-link--sub:hover { background: rgba(255, 255, 255, 0.16); }
+.workspace-link--sub[aria-current='page'] { background: var(--il-nav-active); }
 .workspace-link--sub .workspace-link__icon { width: 22px; height: 22px; }
 /* Missão §7/§8 — no rail recolhido o submenu NÃO existe inline: o clique no
    ícone do grupo expande a sidebar e abre o grupo. */
 .is-collapsed .workspace-submenu { display: none; }
+
+/* ── Aparência do sistema (missão 6) ────────────────────────────
+   Personalização de cor da sidebar: presets SEGUROS escolhidos em
+   Configurações → Aparência (nunca na shell principal). Cada preset
+   sobrescreve os tokens --il-nav*; a topbar acompanha sozinha via
+   color-mix sobre --il-nav. fg/muted com contraste AA validado. */
+.workspace-shell[data-nav-accent='violet'] {
+  --il-nav: #5b21b6; --il-nav-fg: #f5f3ff; --il-nav-muted: #ddd6fe;
+  --il-nav-hover: #6d28d9; --il-nav-active: #7c3aed; --il-nav-active-fg: #ffffff;
+}
+.workspace-shell[data-nav-accent='teal'] {
+  --il-nav: #0f766e; --il-nav-fg: #f0fdfa; --il-nav-muted: #b8e8e0;
+  --il-nav-hover: #0d9488; --il-nav-active: #14b8a6; --il-nav-active-fg: #ffffff;
+}
+.workspace-shell[data-nav-accent='rose'] {
+  --il-nav: #9f1239; --il-nav-fg: #fff1f2; --il-nav-muted: #f7cdd6;
+  --il-nav-hover: #b81a45; --il-nav-active: #be123c; --il-nav-active-fg: #ffffff;
+}
+.workspace-shell[data-nav-accent='graphite'] {
+  --il-nav: #2b2724; --il-nav-fg: #f5f3f0; --il-nav-muted: #c9c2bb;
+  --il-nav-hover: #3a3531; --il-nav-active: #4a443f; --il-nav-active-fg: #ffffff;
+}
 
 /* ── Skip link ──────────────────────────────────────────────── */
 .workspace-skip {
@@ -1555,11 +1613,11 @@ button.workspace-clinic-head:hover { background: rgba(255, 255, 255, 0.12); }
   .global-search__kbd { display: none; }
 }
 @media (max-width: 479px) {
-  .ws-newbtn { font-size: 0; gap: 0; padding: 0 11px; }
+  .ws-quickcreate-btn { width: 34px; height: 34px; }
 }
 @media (prefers-reduced-motion: reduce) {
   .ws-skeleton-line, .il-skeleton { animation: none; background: var(--skeleton-base); }
-  .ws-topbar { backdrop-filter: none; background: var(--surface); }
+  .ws-topbar { backdrop-filter: none; } /* missão 6: o fundo colorido suave permanece */
 }
 /* Consistent reading rhythm without recoloring public clinic themes. */
 .il-platform { font-size:14px; line-height:1.5; -webkit-font-smoothing:subpixel-antialiased; -moz-osx-font-smoothing:auto; text-rendering:optimizeLegibility; }

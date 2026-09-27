@@ -6,8 +6,8 @@
 //   1. título “Agenda” com ícone de calendário (Linha 1);
 //   2. Filtros na Linha 1 · 3. Fila na Linha 1 · “?” de ajuda junto;
 //   4. “Novo agendamento” imediatamente ao lado do seletor (Linha 2);
-//   5. “+ Novo” global REMOVIDO do topo (correção cirúrgica);
-//   6. topo mantém busca/sino/ajuda/avatar;
+//   5–6. quick create “+” NO TOPO (missão 6: o botão volta como ação global
+//        premium — reversão explícita do pedido do usuário);
 //   7. Dia/Semana/Lista funcionando (Mês fora da UI; lógica preservada);
 //   8. [◀] [▶] funcionando — botão “Hoje” removido;
 //   9. “Novo agendamento” continua abrindo o fluxo existente;
@@ -178,8 +178,8 @@ describe('Agenda — Linha 1 (título/auxiliares) e Linha 2 (data/modo/ação)',
   });
 });
 
-// ═══ 5–6 · Topo limpo (“+ Novo” removido) ══════════════════════════════
-describe('“+ Novo” global — removido do topo (correção cirúrgica)', () => {
+// ═══ 5–6 · Quick create “+” de volta (missão 6) ════════════════════════
+describe('quick create “+” — ação global premium no topo (missão 6)', () => {
   function topbarProps() {
     return {
       page: 'Agenda', query: '?b=biz-t1', searchItems: [], activePath: '/agenda',
@@ -191,11 +191,19 @@ describe('“+ Novo” global — removido do topo (correção cirúrgica)', () 
     };
   }
 
-  it('5. não existe mais botão “+ Novo” nem o menu de quick create', () => {
+  it('5. o botão “+” (Criar rápido) existe e abre o menu de ações úteis', async () => {
+    const user = userEvent.setup();
     render(<WorkspaceTopbar {...topbarProps()} />);
-    expect(screen.queryByRole('button', { name: 'Novo' })).toBeNull();
-    expect(screen.queryByRole('menu', { name: 'Criar novo' })).toBeNull();
-    expect(document.querySelector('.ws-newbtn')).toBeNull();
+    const btn = screen.getByRole('button', { name: 'Criar rápido' });
+    expect(document.querySelector('.ws-quickcreate-btn')).toBeTruthy();
+    await user.click(btn);
+    const menu = screen.getByRole('menu', { name: 'Criar rápido' });
+    const labels = within(menu).getAllByRole('menuitem').map((i) => i.textContent || '');
+    // Ações filtradas pelo canCreate do usuário; pet só em clínica vet.
+    expect(labels.join('|')).toContain('Novo agendamento');
+    expect(labels.join('|')).toContain('Nova pendência');
+    expect(labels.join('|')).toContain('Novo recebimento');
+    expect(labels.join('|')).not.toContain('Novo tutor e pet');
   });
 
   it('6. os demais itens da topbar permanecem (busca · sino · ajuda · conta)', () => {

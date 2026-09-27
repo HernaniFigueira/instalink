@@ -166,18 +166,21 @@ test('evidência C — Linha 1 + Linha 2 compactas (1440×900)', async ({ page }
   expect(tb.y + tb.height - hb.y).toBeLessThan(150);
 });
 
-test('evidência H — topo limpo: SEM “+ Novo” (busca · sino · ajuda · conta)', async ({ page }, info) => {
+test('evidência H — topo com quick create “+” premium (missão 6)', async ({ page }, info) => {
   await login(page);
   await page.setViewportSize({ width: 1440, height: 900 });
   await page.goto(`/agenda?b=${f.b}&data=${f.date}&view=day`);
   await page.waitForSelector('[data-agenda-main]');
-  // Contrato da correção: o quick create “+ Novo” saiu do topo.
-  await expect(page.getByRole('button', { name: 'Novo', exact: true })).toHaveCount(0);
-  await expect(page.getByRole('menu', { name: 'Criar novo' })).toHaveCount(0);
+  // Contrato da missão 6: o “+” voltou como ação global; abre o menu rápido.
+  await expect(page.locator('.ws-quickcreate-btn')).toBeVisible();
+  await page.locator('.ws-quickcreate-btn').click();
+  await expect(page.getByRole('menu', { name: 'Criar rápido' })).toBeVisible();
+  await expect(page.getByRole('menuitem', { name: /Novo agendamento/ })).toBeVisible();
+  await page.keyboard.press('Escape');
   // Os demais itens da topbar permanecem.
   await expect(page.locator('.global-search')).toBeVisible();
   await expect(page.locator('.ws-topbar').getByRole('button', { name: 'Ajuda e suporte' })).toBeVisible();
-  await page.screenshot({ path: info.outputPath('H-topbar-limpa-1440.png') });
+  await page.screenshot({ path: info.outputPath('H-topbar-quickcreate-1440.png') });
 });
 
 test('CTA “Novo agendamento” abre o fluxo de criação existente (sem gravar nada)', async ({ page }) => {
