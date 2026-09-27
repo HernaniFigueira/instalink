@@ -160,7 +160,7 @@ describe('5 · botões migrados pela BASE (tokens), sem hex por tela', () => {
     // enquanto a AÇÃO do workspace (--brand) virou carvão premium (missão 4).
     expect(css).toMatch(/--brand-600:\s*#4f46e5/);
     expect(css).toMatch(/--brand-700:\s*#4338ca/);
-    expect(css).toMatch(/--brand:\s*#45413c/);
+    expect(css).toMatch(/--brand:\s*#2b2724/); // MISSÃO 5: espresso/graphite deep
     // e a sidebar fala a família índigo original (só mais forte)
     expect(css).toMatch(/--il-nav:\s*#3f37c9/);
   });

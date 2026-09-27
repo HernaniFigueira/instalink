@@ -267,6 +267,7 @@ export default function ClientesPage() {
   return (
     <>
       <PageHeader
+        icon="users"
         title="Clientes"
         action={
           <>

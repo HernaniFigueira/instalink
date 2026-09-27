@@ -157,6 +157,7 @@ export default function FinanceiroPage() {
 
   const header = (
     <PageHeader
+      icon="wallet"
       title="Financeiro"
       action={loaded && !denied && !loadError ? (
         <Button variant="primary" onClick={() => { setFormError(''); setEditing(blankEntry()); }}>

@@ -553,7 +553,7 @@ export function ClientProfileDrawer({ person, businessId, pipeline, canFunil, on
       {variant === 'page' ? (<>
       {/* ═══ QUEM É A PESSOA — carteirinha ═══ */}
       <div className="p-4">
-        <div className="il-idcard rounded-2xl border border-[var(--sun-border)] shadow-sm p-5">
+        <div className="il-idcard rounded-2xl border border-[var(--border)] shadow-sm p-5">
           <div className="relative flex flex-wrap items-start gap-4">
             {/* Ponto 8 — foto real da conta global quando existe; sem ela, iniciais. */}
             <Avatar name={person.name} src={person.avatar || undefined} size={64} />

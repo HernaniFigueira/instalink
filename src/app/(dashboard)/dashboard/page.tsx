@@ -334,8 +334,14 @@ export default function DashboardPage() {
       {/* ── Saudação + resumo curto — header LIMPO (sem card amarelo, sem
           degradê): hierarquia só com tipografia e espaçamento ── */}
       <header className="mb-5 flex flex-wrap items-start justify-between gap-3">
-        <div className="min-w-0">
-        <h1 className="text-[24px] leading-tight font-semibold tracking-tight text-[var(--text)]">
+        {/* MISSÃO 5 — título no padrão único do produto (chip de ícone + título
+            + subtítulo): mesma linguagem de Agenda, Clientes, Pendências… */}
+        <div className="flex items-start gap-3 min-w-0">
+          <span className="il-page-header__icon flex h-10 w-10 shrink-0 items-center justify-center rounded-lg border border-[var(--border)] bg-[var(--surface-3)] text-[var(--brand-fg)]">
+            <Icon n="home" size={19} />
+          </span>
+          <div className="min-w-0">
+        <h1 className="text-xl leading-tight font-semibold tracking-tight text-[var(--text)]">
           {proView ? `Meu dia, ${firstName(user.name)}` : `${greeting()}, ${firstName(user.name)}!`}
         </h1>
         <p className="text-sm text-[var(--text-muted)] mt-1">
@@ -345,6 +351,7 @@ export default function DashboardPage() {
               ? 'Chegadas, próximos horários e o que precisa de atenção.'
               : 'Acompanhe o dia e os resultados disponíveis da operação.'}
         </p>
+          </div>
         </div>
         <div className="dsh-card flex items-center gap-2.5 px-3.5 py-2.5" title="Data de hoje">
           <Icon n="calendar" size={16} className="text-[var(--brand-fg)]" />

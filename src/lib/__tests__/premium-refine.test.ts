@@ -41,10 +41,17 @@ function ruleOf(sel: string): string {
 }
 
 describe('missão 4 · 1 — ação carvão com identidade preservada', () => {
-  it('a AÇÃO do workspace é carvão quente (root + plataforma)', () => {
-    expect(css).toMatch(/--brand:\s*#45413c/);
-    expect(css).toMatch(/--brand-strong:\s*#322e2a/);
-    expect(css).toMatch(/--brand-fg:\s*#4b443c/);
+  it('a AÇÃO do workspace é espresso/graphite deep (root + plataforma)', () => {
+    // MISSÃO 5: tom mais forte que o carvão da missão 4 — botões com presença
+    // e leitura firme, sem parecer mortos.
+    expect(css).toMatch(/--brand:\s*#2b2724/);
+    expect(css).toMatch(/--brand-strong:\s*#1a1715/);
+    expect(css).toMatch(/--brand-fg:\s*#2e2a26/);
+    // escala INK de tipografia (near-black quente, AA checado em
+    // design-360-tokens)
+    expect(css).toMatch(/--text-primary:\s*#1c1815/);
+    expect(css).toMatch(/--text-muted:\s*#524c46/);
+    expect(css).toMatch(/--text-faint:\s*#6f6862/);
   });
 
   it('identidade índigo e sidebar lilás continuam intactas', () => {
@@ -78,17 +85,23 @@ describe('missão 4 · 2 — abas SEM sublinhado em todo o sistema', () => {
   });
 });
 
-describe('missão 4 · 3 — topo do Cliente 360 sólido e quente', () => {
-  it('.il-idcard é sólido (creme), sem degradê e sem arco', () => {
+describe('missão 5 · 3 — tutor NEUTRO, pet protagonista (hierarquia vet)', () => {
+  it('.il-idcard (tutor) é neutro discreto, sem degradê e sem arco', () => {
     const card = ruleOf('.il-idcard {');
-    expect(card).toContain('background: var(--sun-bg)');
+    expect(card).toContain('background: var(--brand-softer)');
     expect(card).not.toContain('gradient');
     expect(css).not.toContain('.il-idcard::after');
   });
 
-  it('a ficha usa o bloco sem efeitos (sem shadow-md no topo)', () => {
-    expect(drawer).toMatch(/il-idcard rounded-2xl border border-\[var\(--sun-border\)\] shadow-sm/);
+  it('a ficha do tutor é discreta (borda neutra, sem efeitos)', () => {
+    expect(drawer).toMatch(/il-idcard rounded-2xl border border-\[var\(--border\)\] shadow-sm/);
     expect(drawer).not.toMatch(/il-idcard[^"]*shadow-md/);
+  });
+
+  it('o bloco do PET usa o creme quente (o paciente da veterinária)', () => {
+    expect(pets).toMatch(/rounded-xl border border-\[var\(--sun-border\)\] bg-\[var\(--sun-bg\)\]/);
+    expect(pet360).toMatch(/rounded-xl border border-\[var\(--sun-border\)\] bg-\[var\(--sun-bg\)\]/);
+    expect(newClient).toMatch(/data-testid="vet-pet-section" className="rounded-xl border border-\[var\(--sun-border\)\] bg-\[var\(--sun-bg\)\]/);
   });
 });
 
@@ -104,6 +117,7 @@ describe('missão 4 · 5 — pet sheet premium (visual; lógica intacta)', () =>
   it('ícone de PET no modo veterinário (não de pessoa)', () => {
     expect(newClient).toContain("icon={vetMode ? 'paw' : 'users'}");
     expect(pets).toContain('icon="paw"');
+    expect(pet360).toContain('icon="paw"'); // Pet 360 com o ícone pet oficial
   });
 
   it('subtítulo exibe o tutor; rodapé limpo Cancelar/Salvar', () => {
@@ -129,7 +143,7 @@ describe('missão 4 · 5 — pet sheet premium (visual; lógica intacta)', () =>
 describe('missão 4 · 6 — Pet 360 com dados claros + anotações em bloquinho', () => {
   it('Pet 360: nome forte e chips de espécie/raça/idade/peso', () => {
     expect(pet360).toMatch(/text-lg font-semibold text-\[var\(--text\)\] leading-tight/);
-    expect(pet360).toContain('rounded-pill border border-[var(--border)] bg-[var(--surface-3)]');
+    expect(pet360).toContain('rounded-pill border border-[var(--sun-border)] bg-[var(--sun-bg-strong)]');
   });
 
   it('anotações administrativas com visual de bloquinho (sun sólido)', () => {
@@ -149,5 +163,71 @@ describe('missão 4 · 7 — tela Clientes coerente com o novo padrão', () => {
     expect(clientes).toContain("buttonCls('secondary', 'sm')");
     // filtros seguem nas abas pill do design system
     expect(clientes).toContain('<Tabs items={tabItems}');
+  });
+});
+
+describe('missão 5 · 7 — padrão ÚNICO de títulos (chip + título + subtítulo)', () => {
+  const dash = read('src/app/(dashboard)/dashboard/page.tsx');
+  const agenda = read('src/app/(dashboard)/agenda/page.tsx');
+  const conv = read('src/components/dashboard/ConversationsView.tsx');
+  const tasks = read('src/components/dashboard/TasksView.tsx');
+  const fin = read('src/app/(dashboard)/financeiro/page.tsx');
+
+  it('o padrão vive no PageHeader (chip de ícone + título + subtítulo)', () => {
+    expect(ui).toContain('il-page-header__icon');
+    expect(ui).toMatch(/<h1 className="text-xl font-semibold/);
+  });
+
+  it('Visão geral usa o chip do padrão (nunca ícone solto)', () => {
+    expect(dash).toContain('il-page-header__icon');
+    expect(dash).toContain('<Icon n="home" size={19} />');
+    expect(dash).toMatch(/<header className="mb-5 flex flex-wrap/); // topo limpo preservado
+  });
+
+  it('Agenda: ícone no chip do padrão', () => {
+    expect(agenda).toMatch(/data-agenda-title-icon="calendar" className="il-page-header__icon/);
+    expect(agenda).toContain('>Agenda</h1>');
+  });
+
+  it('Conversas: chip do padrão (não mais chip carvão solto)', () => {
+    expect(conv).toContain('il-page-header__icon');
+    expect(conv).not.toContain('bg-[var(--brand)] text-white flex items-center justify-center shadow-md');
+    expect(conv).toContain('>Conversas</h1>');
+  });
+
+  it('Clientes/Financeiro/Pendências com ícone no PageHeader', () => {
+    expect(read('src/app/(dashboard)/clientes/page.tsx')).toMatch(/<PageHeader\s*\n\s*icon="users"/);
+    expect(fin).toMatch(/<PageHeader\s*\n\s*icon="wallet"/);
+    expect(tasks).toContain('icon="tasks"');
+  });
+
+  it('Pendências: título unificado com a navegação', () => {
+    expect(tasks).toContain('title="Pendências"');
+    expect(tasks).not.toContain('title="Tarefas"');
+  });
+});
+
+describe('missão 5 · 8 — pet sheet maduro + Pendências legível', () => {
+  it('sheet com cabeçalho resolvido (título ink firme, ícone em chip)', () => {
+    expect(css).toMatch(/\.ws-sheet__titles h2 \{[^}]*font-size: 16\.5px/);
+    expect(css).toMatch(/\.ws-sheet__icon \{[^}]*width: 38px/);
+    expect(css).toMatch(/\.ws-sheet__footer \{[^}]*display: flex/);
+  });
+
+  it('form do pet agrupado (Identificação · Características · Observações)', () => {
+    expect(pets).toContain('>Identificação<');
+    expect(pets).toContain('>Características<');
+    expect(pets).toContain('>Observações<');
+  });
+
+  it('Pendências com estado da fila em chips e seções claras', () => {
+    const tasksPanel = read('src/components/dashboard/TaskPanel.tsx');
+    expect(tasksPanel).toContain('data-testid="task-summary-chips"');
+    expect(tasksPanel).toContain('Em aberto · {open.length}');
+    expect(tasksPanel).toContain('Encerradas · {done.length}');
+    // sem cinzas soltos (tudo em tokens ink)
+    expect(tasksPanel).not.toContain('text-zinc-400');
+    expect(tasksPanel).not.toContain('text-zinc-500');
+    expect(tasksPanel).not.toContain('text-zinc-900');
   });
 });

@@ -105,16 +105,17 @@ export function Pet360Sheet({ open, onClose, businessId, pet, tutorName, tutorPh
       onClose={onClose}
       title={pet.name}
       subtitle={`Pet 360 — ${petLabel(pet)}`}
-      icon="handHeart"
+      icon="paw"
       width="max-w-[640px]"
       footer={
         <Button variant="secondary" size="sm" onClick={onClose}>Fechar</Button>
       }
     >
       <div className="p-4 space-y-4" data-pet360="true">
-        {/* Cabeçalho do paciente — missão 4: nome grande + chips claros
-            (espécie · raça · idade · peso), sem perder o tutor como contexto. */}
-        <div className="flex items-center gap-3.5">
+        {/* Cabeçalho do paciente — missão 5: bloco creme (o PET é o paciente),
+            nome grande + chips claros (espécie · raça · idade · peso) e o tutor
+            como contexto discreto. */}
+        <div className="flex items-center gap-3.5 rounded-xl border border-[var(--sun-border)] bg-[var(--sun-bg)] p-3.5">
           <Avatar name={pet.name} src={pet.photo || undefined} size={64} />
           <div className="min-w-0 flex-1">
             <p className="text-lg font-semibold text-[var(--text)] leading-tight break-words">{pet.name}</p>
@@ -125,7 +126,7 @@ export function Pet360Sheet({ open, onClose, businessId, pet, tutorName, tutorPh
                 age !== null ? `${age} ano(s)` : '',
                 pet.weightKg ? `${pet.weightKg} kg` : '',
               ].filter(Boolean).map((chip) => (
-                <span key={chip} className="inline-flex items-center rounded-pill border border-[var(--border)] bg-[var(--surface-3)] px-2 py-0.5 text-[11px] font-semibold text-[var(--text-muted)]">
+                <span key={chip} className="inline-flex items-center rounded-pill border border-[var(--sun-border)] bg-[var(--sun-bg-strong)] px-2 py-0.5 text-[11px] font-semibold text-[var(--sun-fg)]">
                   {chip}
                 </span>
               ))}

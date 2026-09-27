@@ -55,9 +55,12 @@ export function TasksView() {
 
   return (
     <div className="space-y-4">
+      {/* MISSÃO 5 — título unificado com a navegação ("Pendências") e hierarquia
+          clara: o que está em aberto, o que atrasa e o que é para hoje. */}
       <PageHeader
-        title="Tarefas"
-        hint="O que ficou combinado, com quem e com qual prazo. Uma tarefa nunca é apagada ao ser concluída — ela vira histórico."
+        icon="tasks"
+        title="Pendências"
+        hint="Tarefas da equipe com responsável e prazo. O que está em aberto aparece primeiro; ao concluir, vira histórico — nada é apagado."
         action={canSeeAutomations ? (
           <Link href={`/automacoes${q}`} className="text-xs font-semibold bg-white border border-zinc-200 rounded-md px-3 py-1.5 hover:bg-zinc-50">
             Automações que criam tarefas

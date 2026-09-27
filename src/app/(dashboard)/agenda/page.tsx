@@ -1139,11 +1139,12 @@ export default function AgendaPage() {
           vivem na Linha 2) e nada de card só para o título. A ação principal
           ("Novo agendamento") também saiu daqui: é o CTA da Linha 2. */}
       <header className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2 mb-2">
-        <div className="min-w-0 flex items-center gap-2">
-          <span data-agenda-title-icon="calendar" className="inline-flex shrink-0 text-[var(--brand-fg)]">
+        <div className="min-w-0 flex items-center gap-3">
+          {/* MISSÃO 5 — ícone no chip do padrão único de títulos (nunca solto). */}
+          <span data-agenda-title-icon="calendar" className="il-page-header__icon inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-lg border border-[var(--border)] bg-[var(--surface-3)] text-[var(--brand-fg)]">
             <Icon n="calendar" size={19} />
           </span>
-          <h1 className="text-[22px] font-semibold tracking-tight text-[var(--text-primary)] leading-tight">Agenda</h1>
+          <h1 className="text-xl font-semibold tracking-tight text-[var(--text-primary)] leading-tight">Agenda</h1>
         </div>
         <div className="flex flex-wrap items-center gap-2">
           {/* Filtros: UM botão, UM popover (Status · Serviços · Profissional) e

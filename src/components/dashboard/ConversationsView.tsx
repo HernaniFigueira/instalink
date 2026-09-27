@@ -290,12 +290,12 @@ export function ConversationsView({ unitId, panel = false }: { unitId?: string; 
     return (
       <div className="conversation-view" data-panel={panel} data-active={false}>
         <div className="flex items-center justify-between gap-3 mb-4">
-          <div className="flex items-start gap-2.5">
-            <span className="w-9 h-9 shrink-0 rounded-lg bg-[var(--brand)] text-white flex items-center justify-center shadow-md">
-              <Icon n="inbox" size={18} />
+          <div className="flex items-start gap-3">
+            <span className="il-page-header__icon flex h-10 w-10 shrink-0 items-center justify-center rounded-lg border border-[var(--border)] bg-[var(--surface-3)] text-[var(--brand-fg)]">
+              <Icon n="inbox" size={19} />
             </span>
             <div>
-              <h1 className="text-base font-semibold text-[var(--text)] leading-tight">Conversas</h1>
+              <h1 className="text-xl font-semibold text-[var(--text)] leading-tight tracking-tight">Conversas</h1>
               <p className="text-sm text-[var(--text-muted)] mt-0.5">As conversas com os seus clientes em um só lugar.</p>
             </div>
           </div>
@@ -333,12 +333,12 @@ export function ConversationsView({ unitId, panel = false }: { unitId?: string; 
   return (
     <div className="conversation-view" data-panel={panel} data-active={!!active}>
       <div className="flex flex-wrap items-center justify-between gap-3 mb-3">
-        <div className="flex items-start gap-2.5 min-w-0">
-          <span className="w-9 h-9 shrink-0 rounded-lg bg-[var(--brand)] text-white flex items-center justify-center shadow-md">
-            <Icon n="inbox" size={18} />
+        <div className="flex items-start gap-3 min-w-0">
+          <span className="il-page-header__icon flex h-10 w-10 shrink-0 items-center justify-center rounded-lg border border-[var(--border)] bg-[var(--surface-3)] text-[var(--brand-fg)]">
+            <Icon n="inbox" size={19} />
           </span>
           <div className="min-w-0">
-            <h1 className="text-base font-semibold text-[var(--text)] leading-tight">Conversas</h1>
+            <h1 className="text-xl font-semibold text-[var(--text)] leading-tight tracking-tight">Conversas</h1>
             <p className="text-xs text-[var(--text-muted)]">
               {data.inbox.open} abertas · {data.inbox.unread} não lidas
               {channels.whatsapp && data.integration.displayPhone && <> · <span className="font-semibold text-[var(--text)]">{data.integration.displayPhone}</span></>}
