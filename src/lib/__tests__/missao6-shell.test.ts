@@ -120,9 +120,12 @@ describe('missão 6 · 5 — personalização da sidebar em Configurações (nã
 });
 
 describe('missão 6 · 6 — encaixe sidebar × painel principal', () => {
-  it('profundidade suave no encontro; popovers com radius moderado', () => {
-    expect(css).toMatch(/\.il-platform \.workspace-sidebar \{[\s\S]*?box-shadow: 8px 0 20px -12px/);
-    // quick create em pill (encaixe especial preservado)
-    expect(css).toMatch(/\.ws-quickcreate-btn \{[\s\S]*?border-radius: var\(--radius-pill\)/);
+  it('divisa sidebar × painel SEM sombra projetada; ações da topbar no contrato comum', () => {
+    // Refino final: a separação é só borda 1px + diferença de fundo.
+    const side = css.slice(css.indexOf('.il-platform .workspace-sidebar {'), css.indexOf('.il-platform .workspace-sidebar.is-collapsed'));
+    expect(side).not.toContain('box-shadow');
+    expect(side).toContain('border-right: 1px solid var(--il-nav-border)');
+    // quick create = ação da topbar (mesmo contrato do sino: repouso limpo)
+    expect(css).toMatch(/\.ws-quickcreate-btn \{[\s\S]*?background: transparent/);
   });
 });

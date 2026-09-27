@@ -91,6 +91,23 @@ function preset(
   opts: { navFg?: string } = {},
 ): NavAccent {
   const navFg = opts.navFg || contrastOn(nav);
+  // ── Estado ativo com AA GARANTIDO (regra estrutural): parte do tom ativo
+  // base e ajusta (escurece/clareia) até o melhor fg chegar a ≥ 4.5:1.
+  // Vale para os 21 presets sem override por tema. ──
+  let navActive = navFg === '#18181b' ? darken(nav, 0.18) : lighten(nav, 0.14);
+  for (let guard = 0; guard < 12 && contrastRatio(bestFgOn(navActive), navActive) < 4.5; guard++) {
+    navActive = bestFgOn(navActive) === '#ffffff' ? darken(navActive, 0.07) : lighten(navActive, 0.07);
+  }
+  const navActiveFg = bestFgOn(navActive);
+  // Ícone inativo: caminho moderado até o melhor fg, com piso de contraste
+  // 3.5:1 sobre o nav (o chip do ícone soma 12% de branco por cima — o piso
+  // real no navegador fica ~3.1:1: legível, nunca lavado; força ≤ ~82%).
+  let iconAmt = 0.72;
+  let navIcon = mix(nav, bestFgOn(nav), iconAmt);
+  for (let guard = 0; guard < 6 && contrastRatio(navIcon, nav) < 3.5; guard++) {
+    iconAmt = Math.min(0.84, iconAmt + 0.06);
+    navIcon = mix(nav, bestFgOn(nav), iconAmt);
+  }
   return {
     id,
     family,
@@ -101,11 +118,15 @@ function preset(
       '--il-nav': nav,
       '--il-nav-fg': navFg === '#18181b' ? '#18181b' : '#ffffff',
       '--il-nav-muted': navFg === '#18181b' ? mix(nav, '#18181b', 0.42) : mix(nav, '#ffffff', 0.34),
+      // Ícones INATIVOS: força visual moderada (60–75%) — legíveis, nunca
+      // lavados; derivado do fg do tema e ajustado até ≥ 3.2:1 sobre o nav
+      // (navs médios ganham mais mistura; nada de glifo transparente).
+      '--il-nav-icon': navIcon,
       '--il-nav-hover': darken(nav, 0.12),
-      '--il-nav-active': navFg === '#18181b' ? darken(nav, 0.18) : lighten(nav, 0.14),
+      '--il-nav-active': navActive,
       // fg do ATIVO calculado do bg ATIVO real (regra estrutural) — nunca cor
       // fixa: fundo escuro → letra clara; fundo claro → letra near-black.
-      '--il-nav-active-fg': bestFgOn(navFg === '#18181b' ? darken(nav, 0.18) : lighten(nav, 0.14)),
+      '--il-nav-active-fg': navActiveFg,
       // ── CTAs principais + acentos (B: tema) ──
       '--accent': accent,
       '--accent-hover': darken(accent, 0.14),

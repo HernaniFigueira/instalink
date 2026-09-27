@@ -245,6 +245,7 @@
   --il-nav: #3f37c9;
   --il-nav-fg: #f2f3ff;
   --il-nav-muted: #d3dafc;
+  --il-nav-icon: #ffffff;
   --il-nav-hover: #4c43d1;
   --il-nav-active: #5b4fe2;
   --il-nav-active-fg: #ffffff;
@@ -862,6 +863,7 @@ input[type='color'] { @apply cursor-pointer; }
   --il-nav: #3f37c9;
   --il-nav-fg: #f2f3ff;
   --il-nav-muted: #d3dafc;
+  --il-nav-icon: #ffffff;
   --il-nav-hover: #4c43d1;
   --il-nav-active: #5b4fe2;
   --il-nav-active-fg: #ffffff;
@@ -1043,6 +1045,10 @@ dialog.il-drawer::backdrop { background: transparent; }
 }
 .il-platform.workspace-shell {
   background: var(--workspace-bg);
+  /* Gradiente ANCORADO na viewport (não na altura do conteúdo): a Agenda
+     (100dvh) e telas de conteúdo longo interpolam o MESMO gradiente nas
+     mesmas coordenadas — o pixel final é idêntico em qualquer rolagem. */
+  background-attachment: fixed;
 }
 /* Missão 7 · §8 — encaixe estratégico: o painel principal ganha UM canto
    especial no encontro com a lateral (as referências aprovadas). `overflow:
@@ -1440,11 +1446,10 @@ button.ws-bell__item:hover { background: var(--surface-hover); }
   display: none; flex-direction: column; flex-shrink: 0;
   position: sticky; top: 0;
   width: var(--sidebar-w); height: 100dvh;
-  background: var(--il-nav); border-right: 1px solid var(--il-nav-border);
-  /* Missão 6 — encaixe especial nº 1: o encontro sidebar × painel principal
-     ganha uma profundidade suave (sem exagero de sombra): o painel parece
-     assentar ao lado da navegação. */
-  box-shadow: 8px 0 20px -12px rgba(23, 19, 16, 0.28);
+  background: var(--il-nav);
+  /* Separação sidebar × workspace SEM sombra projetada: só borda 1px sutil
+     + a diferença natural de fundo (refino final — nenhuma shadow na divisa). */
+  border-right: 1px solid var(--il-nav-border);
 }
 .il-platform .workspace-sidebar.is-collapsed { width: var(--sidebar-w-mini); }
 .is-collapsed .workspace-label { display: none; }
@@ -1500,13 +1505,12 @@ button.ws-bell__item:hover { background: var(--surface-hover); }
 .workspace-link__icon {
   display: flex; align-items: center; justify-content: center;
   width: 28px; height: 28px; flex-shrink: 0; border-radius: 50%;
-  background: rgba(255, 255, 255, 0.12); color: var(--il-nav-muted);
+  background: rgba(255, 255, 255, 0.12); color: var(--il-nav-icon);
   transition: color var(--motion-fast) var(--ease-standard),
               background-color var(--motion-fast) var(--ease-standard);
 }
-.workspace-link[aria-current="page"] .workspace-link__icon,
-.workspace-link--group[aria-expanded="true"] .workspace-link__icon {
-  /* Preenchido accent: fg = token de CONTRASTE do próprio accent (regra
+.workspace-link[aria-current="page"] .workspace-link__icon {
+  /* CURRENT = o mais forte: preenchido accent com fg de CONTRASTE (regra
      estrutural — nunca cor fixa; em qualquer tema o par é AA). */
   background: var(--accent); color: var(--accent-contrast);
   box-shadow: 0 1px 2px rgba(15, 23, 42, 0.16);
@@ -1529,10 +1533,17 @@ button.ws-bell__item:hover { background: var(--surface-hover); }
 .workspace-link[aria-current='page']:hover {
   background: var(--il-nav-active); color: var(--il-nav-active-fg);
 }
+/* ESTADO "OPEN" (grupo expandido) ≠ ESTADO "CURRENT" (rota ativa):
+   open = container sutil (nav-hover) + label forte (nav-fg) + ícone ACESO
+   (par nav-active/nav-active-fg no círculo); current = o container inteiro
+   no par ativo + ícone accent cheio (sempre o mais forte). */
 .workspace-link--group[aria-expanded='true'] {
-  background: var(--il-nav-active); color: var(--il-nav-active-fg); font-weight: 600;
+  background: var(--il-nav-hover); color: var(--il-nav-fg); font-weight: 600;
 }
 .workspace-link--group[aria-expanded='true']:hover {
+  background: var(--il-nav-hover); color: var(--il-nav-fg);
+}
+.workspace-link--group[aria-expanded='true'] .workspace-link__icon {
   background: var(--il-nav-active); color: var(--il-nav-active-fg);
 }
 .workspace-link[aria-current='page'] .workspace-link__chevron,
@@ -1617,9 +1628,12 @@ button.workspace-clinic-head:hover { background: rgba(255, 255, 255, 0.12); }
 .ws-nav-tip {
   position: fixed; transform: translateY(-50%);
   padding: 5px 9px; border-radius: var(--radius-sm);
-  background: #232a44; color: #fff;
+  /* Tooltip acompanha a cor da sidebar/tema ativo (tokens do nav, iguais
+     aos do rail) — fg = o MESMO contraste do tema (AA em claro e escuro). */
+  background: var(--il-nav); color: var(--il-nav-fg);
+  border: 1px solid var(--il-nav-border);
   font-size: 11px; font-weight: 600; white-space: nowrap;
-  z-index: 90; box-shadow: var(--shadow-md); pointer-events: none;
+  z-index: 90; box-shadow: var(--shadow-sm); pointer-events: none;
 }
 
 /* Rodapé fixo: ajuda e suporte — discreto, sempre no mesmo lugar. */
@@ -1987,16 +2001,12 @@ dialog.il-customer-dialog::backdrop { background:transparent; }
   .workspace-shell--fill .ag-page [data-agenda-main] { display: flex; flex-direction: column; min-height: 0; }
   .workspace-shell--fill .ag-mode-panel { overflow: hidden; }
 }
-/* Fundo externo do workspace da Agenda: neutro levemente índigo com névoa
-   amarela (“sun”) muito discreta na base (~7%) — conversa com a nova paleta
-   sem tocar em estrutura. Só o EXTERNO muda — cartões e painéis continuam
-   brancos. (Referência conceitual: área externa do Meta Business — disciplina
-   visual, sem copiar marca/assets.) */
+/* Fundo externo do workspace da Agenda: NENHUM background próprio —
+   transparente herda o `--workspace-bg` do shell (mesma pintura de qualquer
+   outra tela; se o token mudar, a Agenda muda junto). A grade interna do
+   calendário continua com seus tons próprios (grid/cards). */
 .il-platform .agenda-page-gutter {
-  background:
-    radial-gradient(120% 55% at 50% 112%, rgba(247, 201, 72, 0.07), transparent 62%),
-    radial-gradient(90% 40% at 8% -10%, rgba(79, 70, 229, 0.05), transparent 60%),
-    linear-gradient(180deg, #f7f8fe 0%, #eef0fb 100%);
+  background: transparent;
 }
 /* Grade clínica: separação levemente mais nítida de horários/colunas/cabeçalho
    (bordas #E5EAF1 família dos tokens), sem zebra e sem escurecer. */
