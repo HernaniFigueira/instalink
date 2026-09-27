@@ -40,7 +40,7 @@ export interface NewClientResult {
   petId?: string;
 }
 
-export function NewClientSheet({
+export function NewClientForm({
   businessId,
   onClose,
   onSaved,
@@ -51,6 +51,8 @@ export function NewClientSheet({
   initialName = '',
   initialPhone = '',
   title,
+  /** Painel lateral do overlay expansível (§19–25): traz o próprio rodapé. */
+  embedded = false,
 }: {
   businessId: string;
   onClose: () => void;
@@ -60,6 +62,7 @@ export function NewClientSheet({
   initialName?: string;
   initialPhone?: string;
   title?: string;
+  embedded?: boolean;
 }) {
   const [name, setName] = useState(initialName);
   const [phone, setPhone] = useState(initialPhone);
@@ -79,7 +82,9 @@ export function NewClientSheet({
   const [guardian, setGuardian] = useState({ name: '', relationship: '', phone: '', email: '', cpf: '' });
 
   // Pet (só veterinária) — persistido na MESMA experiência do tutor.
-  const [petOn, setPetOn] = useState(false);
+  // §21 — o cadastro rápido (embedded) em veterinária nasce COM o pet rápido
+  // ligado: tutor + pet é o fluxo mínimo do segmento (CTA "Salvar tutor e pet").
+  const [petOn, setPetOn] = useState(vetMode && embedded);
   const [pet, setPet] = useState({ name: '', species: 'cachorro', breed: '', sex: '', birthDate: '', weightKg: '' as string | number, notes: '' });
 
   useEffect(() => {
@@ -175,27 +180,9 @@ export function NewClientSheet({
   const input = 'w-full rounded-lg border border-zinc-300 px-3 py-2.5 text-sm focus:outline-none focus:ring-1 focus:ring-zinc-900 focus:border-zinc-900';
   const label = 'block text-xs font-semibold tracking-[0.06em] uppercase text-[var(--text-muted)]';
 
-  return (
-    <WorkspaceSheet
-      open
-      onClose={() => { if (!saving) onClose(); }}
-      title={title || (vetMode ? 'Cadastrar tutor e paciente' : 'Novo cliente')}
-      subtitle={saved
-        ? 'Cadastro salvo na base de clientes.'
-        : vetMode
-          ? `Tutor: ${name.trim() || '—'} · o pet entra como paciente no mesmo cadastro`
-          : 'Cadastro direto no CRM — se abandonar o agendamento, o cliente permanece.'}
-      icon={vetMode ? 'paw' : 'users'}
-      width="max-w-[520px]"
-      footer={!saved ? (
-        <div className="flex w-full gap-2 justify-end">
-          <Button variant="secondary" onClick={onClose} disabled={saving}>Cancelar</Button>
-          <Button variant="primary" onClick={save} disabled={saving}>
-            {saving ? 'Salvando…' : vetMode && petOn ? 'Salvar tutor e pet' : 'Salvar cliente'}
-          </Button>
-        </div>
-      ) : undefined}
-    >
+  const primaryLabel = saving ? 'Salvando…' : (vetMode && petOn ? 'Salvar tutor e pet' : 'Salvar cliente');
+  const body = (
+    <>
       {saved ? (
         <div className="px-5 py-6 space-y-4">
           <div className="rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-4">
@@ -336,6 +323,57 @@ export function NewClientSheet({
           {error && <Notice tone="error">{error}</Notice>}
         </div>
       )}
+    </>
+  );
+  const actions = (
+    <div className="flex w-full gap-2 justify-end">
+      <Button variant="secondary" onClick={onClose} disabled={saving}>Cancelar</Button>
+      <Button variant="primary" onClick={save} disabled={saving}>{primaryLabel}</Button>
+    </div>
+  );
+  // §19–25 — painel LATERAL do overlay expansível (Novo agendamento →
+  // "Cadastrar novo paciente"): o MESMO form, com rodapé próprio, dentro do
+  // dialog que já está aberto. Nenhum segundo modal/backdrop é criado.
+  if (embedded) {
+    return (
+      <div className="flex flex-col min-h-0">
+        <div className="flex-1 min-h-0">{body}</div>
+        {!saved && <footer className="il-actionbar shrink-0 px-4 py-3 flex flex-wrap items-center justify-end gap-2">{actions}</footer>}
+      </div>
+    );
+  }
+  return (
+    <WorkspaceSheet
+      open
+      onClose={() => { if (!saving) onClose(); }}
+      title={title || (vetMode ? 'Cadastrar tutor e paciente' : 'Novo cliente')}
+      subtitle={saved
+        ? 'Cadastro salvo na base de clientes.'
+        : vetMode
+          ? `Tutor: ${name.trim() || '—'} · o pet entra como paciente no mesmo cadastro`
+          : 'Cadastro direto no CRM — se abandonar o agendamento, o cliente permanece.'}
+      icon={vetMode ? 'paw' : 'users'}
+      width="max-w-[520px]"
+      footer={!saved ? actions : undefined}
+    >
+      {body}
     </WorkspaceSheet>
   );
+}
+
+/**
+ * Wrapper standalone (Quick Create de Clientes): MESMO form em WorkspaceSheet.
+ * Mantém a API pública original; o form vive em `NewClientForm`.
+ */
+export function NewClientSheet(props: {
+  businessId: string;
+  onClose: () => void;
+  onSaved: (contactId: string, extra?: NewClientResult) => void;
+  onView360?: () => void;
+  vetMode?: boolean;
+  initialName?: string;
+  initialPhone?: string;
+  title?: string;
+}) {
+  return <NewClientForm {...props} />;
 }
