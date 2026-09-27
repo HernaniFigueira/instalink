@@ -264,8 +264,9 @@ export function DashboardShell({ children }: { children: React.ReactNode }) {
   // permissão que monta o menu. Nenhum destino extra entra aqui, então a busca
   // não tem como revelar (nem levar a) uma tela que o usuário não alcança.
   // A regra de busca fica em lib/nav-search.ts (pura e testada).
-  // ── Breadcrumb + notificações (Etapa A) ─────────────────────────────────
-  // O breadcrumb é projeção da MESMA partição que monta o menu: nunca cita área
+  // ── Contexto de área + notificações ─────────────────────────────────────
+  // (O breadcrumb foi REMOVIDO do workspace pelo refino final — o cabeçalho da
+  // página identifica a tela. A partição segue valendo para a cor da área.)
   // que o usuário não alcança. As notificações vêm de /api/overview (dado real).
   // Multiunidade REAL: só quando existe mais de uma unidade na conta. Sem isso
   // "Organização" não ocupa linha no menu (a porta continua acessível por URL).
@@ -380,24 +381,9 @@ export function DashboardShell({ children }: { children: React.ReactNode }) {
           </div>
         )}
         <div key={business.id} className={cn(isAgenda ? 'agenda-page-gutter' : 'px-4 lg:px-8 py-6', !isFullWidth && 'max-w-[960px]')}>
-          {/* Breadcrumb de CONTEXTO no conteúdo (o branding vive na sidebar e o
-              nome da clínica, uma vez, no seletor de unidade da topbar). */}
-          {/* Breadcrumb só em páginas PROFUNDAS (grupo/estrutura). Páginas de
-              1º nível (Agenda, Pacientes…) ficam sem "Visão geral >" — o título da
-              própria tela é o cabeçalho. */}
-          {crumb.group && homeHref && (
-            <nav aria-label="Breadcrumb" className="ws-crumbs--content">
-              <Link href={homeHref}>Visão geral</Link>
-              <I n="chevronRight" size={12} aria-hidden="true" />
-              {crumb.group && (
-                <>
-                  <span>{crumb.group}</span>
-                  <I n="chevronRight" size={12} aria-hidden="true" />
-                </>
-              )}
-              <span aria-current="page">{activeRoute?.label || 'Painel'}</span>
-            </nav>
-          )}
+          {/* CONTRATO DO REFINO FINAL — sem breadcrumb em NENHUMA tela do
+              workspace: o cabeçalho da página (chip + título + subtítulo)
+              identifica a tela. O contexto vive na sidebar/topbar. */}
           {isMaster && !support && (
             <p className="mb-4 text-xs font-semibold text-[var(--warning-fg)] bg-[var(--warning-bg)] border border-[var(--warning-border)] rounded-md px-3 py-2 inline-flex items-center gap-2 shadow-xs">
               <I n="shield" size={14} /> Você é master — <Link href="/master" className="underline font-semibold">/master</Link>

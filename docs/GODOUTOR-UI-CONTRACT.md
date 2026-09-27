@@ -38,6 +38,25 @@
 | **Destrutivo** | `--danger` |
 | **Sucesso** | `--success` |
 
+## 3b · Flyout do rail recolhido (refino final)
+- **Fundo sólido** (`--surface`) + **borda 1px** (`--border`) + radius médio + **sombra mínima** (1px) — nada de "cartão flutuante pesado".
+- **Hover em grupo** → flyout temporário (animação 200ms ease-out; fecha 275ms após sair; `prefers-reduced-motion` desliga o movimento).
+- **Clique no grupo** → TRAVA/destrava o flyout (`togglePeek`); **NUNCA expande a sidebar** — o único controle persistente é o botão Recolher/Expandir.
+- Itens SEM submenu: só tooltip + navegação direta.
+- Escape fecha; rota/recolher fecha na hora.
+
+## 3c · Avatares sem foto (refino final)
+- Paleta fixa de **8 cores** (`lib/avatar-palette.ts`): azul, teal, violeta, âmbar, verde, coral suave, carvão, petróleo.
+- **Determinístico** (hash FNV-1a do nome normalizado) — a mesma pessoa tem SEMPRE a mesma cor; nunca aleatório por render.
+- Iniciais até 2 letras com cor AA sobre o fundo. O componente `Avatar` aplica em todo fallback (clientes, profissionais, conversas, conta).
+
+## 3d · Chips de título (refino final)
+- **UM modelo em todas as telas**: chip `40×40`, fundo neutro sutil (`--surface-2`), borda 1px (`--border`), radius lg, **ícone line** na cor do TEMA (`--accent`), título ao lado em near-black (`--text`).
+- Sem ícone "solto"; sem chip tingido por tela. A Agenda usa o MESMO chip.
+
+## 3e · Breadcrumb
+- **Removido de todas as telas do workspace** (decisão do refino final). O cabeçalho (chip + título + subtítulo) identifica a tela; o contexto vive na sidebar/topbar. Nenhuma exceção foi necessária.
+
 ## 4 · Sidebar
 
 - **Padrão (Poppins)**: só no dashboard (`WorkspaceNavigation`). Demais telas usam Inter (TopBar/NavBar) — decisão travada da missão 6.

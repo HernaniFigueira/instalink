@@ -1,6 +1,7 @@
 'use client';
 import { cloneElement, createContext, isValidElement, useCallback, useContext, useEffect, useId, useRef, useState } from 'react';
 import { wrapDialogFocus } from '@/lib/dialog-focus';
+import { avatarColorFor, avatarInitials } from '@/lib/avatar-palette';
 import { lockBodyScroll, unlockBodyScroll } from '@/lib/scroll-lock';
 import { cn } from '@/lib/utils';
 import { Icon } from '@/components/icons';
@@ -389,14 +390,14 @@ export function EmptyState({ title, hint, action, icon = 'spark' }: { title: str
 }
 
 export function PageHeader({ title, hint, action, icon }: { title: string; hint?: string; action?: React.ReactNode; icon?: string }) {
-  // §4 — cabeçalho padronizado em TODAS as telas: [icon-container accent]
-  // Título PRETO. O ícone/acento acompanham o TEMA (nunca o texto — que é
-  // sempre near-black, contrato A de cor).
+  // CONTRATO ÚNICO de cabeçalho (refino final): [chip 40×40 neutro sutil +
+  // borda 1px] + ícone line na cor do TEMA + TÍTULO near-black. Sem breadcrumb
+  // no workspace; sem ícone "solto" — todas as telas usam este chip.
   return (
     <div className="flex flex-wrap items-start justify-between gap-3 mb-5">
       <div className="flex items-start gap-3 min-w-0">
         {icon && (
-          <span className="il-page-header__icon w-10 h-10 shrink-0 rounded-lg bg-[var(--accent-soft)] text-[var(--accent)] flex items-center justify-center border border-[var(--accent-border)]">
+          <span className="il-page-header__icon w-10 h-10 shrink-0 rounded-lg bg-[var(--surface-2)] text-[var(--accent)] flex items-center justify-center border border-[var(--border)]">
             <Icon n={icon} size={19} />
           </span>
         )}
@@ -746,13 +747,10 @@ export function Drawer({ open, onClose, title, subtitle, children, footer, width
 
 /** Avatar com placeholder bonito (iniciais) quando não há foto. */
 export function Avatar({ name, src, size = 44, className }: { name: string; src?: string; size?: number; className?: string }) {
-  const initials = (name || '?')
-    .trim()
-    .split(/\s+/)
-    .filter(Boolean)
-    .slice(0, 2)
-    .map((p) => p[0]?.toUpperCase() || '')
-    .join('');
+  const initials = avatarInitials(name || '?');
+  // Avatar fallback: paleta intercalada DETERMINÍSTICA (mesma pessoa → mesma
+  // cor, sempre), com iniciais AA. Contrato do refino final de UI.
+  const tone = avatarColorFor(name || '?');
   return (
     <span
       className={cn('il-avatar rounded-full', className)}
@@ -762,7 +760,13 @@ export function Avatar({ name, src, size = 44, className }: { name: string; src?
         // eslint-disable-next-line @next/next/no-img-element
         <img src={src} alt={name} className="w-full h-full object-cover" />
       ) : (
-        <span aria-hidden="true">{initials || '?'}</span>
+        <span
+          aria-hidden="true"
+          className="flex items-center justify-center w-full h-full rounded-full font-semibold"
+          style={{ background: tone.bg, color: tone.fg }}
+        >
+          {initials}
+        </span>
       )}
     </span>
   );

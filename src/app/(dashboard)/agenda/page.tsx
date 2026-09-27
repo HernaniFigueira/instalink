@@ -1145,8 +1145,10 @@ export default function AgendaPage() {
           ("Novo agendamento") também saiu daqui: é o CTA da Linha 2. */}
       <header className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2 mb-2">
         <div className="min-w-0 flex items-center gap-3">
-          {/* MISSÃO 5 — ícone no chip do padrão único de títulos (nunca solto). */}
-          <span data-agenda-title-icon="calendar" className="il-page-header__icon inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-lg border border-[var(--border)] bg-[var(--surface-3)] text-[var(--brand-fg)]">
+          {/* CONTRATO ÚNICO de títulos (refino final): chip 40×40 neutro
+              sutil + borda 1px + ícone line na cor do TEMA — igual a todas
+              as outras telas (PageHeader). */}
+          <span data-agenda-title-icon="calendar" className="il-page-header__icon inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-lg border border-[var(--border)] bg-[var(--surface-2)] text-[var(--accent)]">
             <Icon n="calendar" size={19} />
           </span>
           <h1 className="text-xl font-semibold tracking-tight text-[var(--text-primary)] leading-tight">Agenda</h1>
@@ -1391,11 +1393,9 @@ export default function AgendaPage() {
               ariaLabel="Visualização da agenda"
               size="sm"
             />
-            {/* CTA PRINCIPAL da Agenda — violeta premium (--cta-bg): acento
-                refinado que conversa com a sidebar índigo-violeta, com
-                contraste AA e hover que escurece. O fluxo/sheet de criação
-                continua EXATAMENTE o mesmo. */}
-            <Button variant="cta" size="sm" onClick={() => setCreating({ date: focus, time: '', professionalId: '' })}>
+            {/* CTA PRINCIPAL da Agenda segue o TEMA ativo (--accent, contrato
+                universal de cor) — o fluxo/sheet de criação é o mesmo. */}
+            <Button variant="primary" size="sm" onClick={() => setCreating({ date: focus, time: '', professionalId: '' })}>
               <Icon n="calendarPlus" size={15} /> Novo agendamento
             </Button>
           </div>

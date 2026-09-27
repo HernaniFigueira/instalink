@@ -63,11 +63,9 @@ describe('cabeçalhos de 1º nível', () => {
     expect(ag).not.toMatch(/aria-label="Ajuda da agenda"/);
   });
 
-  it('breadcrumb Início só em páginas profundas (grupo); 1º nível sem crumbs', () => {
+  it('breadcrumb REMOVIDO do workspace (refino final — cabeçalho identifica a tela)', () => {
     const shell = read('src/components/DashboardShell.tsx');
-    expect(shell).toContain('crumb.group');
-    // nav condicional
-    // breadcrumb aparece apenas quando há grupo (página profunda)
-    expect(shell).toContain('{crumb.group && homeHref && (');
+    expect(shell).not.toContain('aria-label="Breadcrumb"');
+    expect(shell).not.toContain('ws-crumbs--content');
   });
 });

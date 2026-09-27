@@ -3,7 +3,7 @@ import { useCallback, useEffect, useState, useRef } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { Icon } from '@/components/icons';
-import { PageSkeleton } from '@/components/ui';
+import { Avatar, PageSkeleton } from '@/components/ui';
 import { cn } from '@/lib/utils';
 import { humanDateTime } from '@/lib/tz';
 import { AccessDenied, AreaLoadError, useAreaLoad } from '@/components/dashboard/AccessNotice';
@@ -660,9 +660,7 @@ export function ConversationsView({ unitId, panel = false }: { unitId?: string; 
               <div className="p-3 space-y-3">
                 <div className="il-idcard rounded-lg border border-[var(--border)] p-3 shadow-sm">
                   <div className="relative flex items-center gap-2.5">
-                    <span className="w-10 h-10 shrink-0 rounded-full il-avatar text-sm" aria-hidden="true">
-                      {(active.conversation.name || '?').trim().split(/\s+/).slice(0, 2).map((x) => x[0]?.toUpperCase() || '').join('')}
-                    </span>
+                    <Avatar name={active.conversation.name || '?'} size={40} />
                     <div className="min-w-0">
                       <p className="text-sm font-semibold text-[var(--text)] truncate">{active.conversation.name}</p>
                       <p className="text-xs text-[var(--text-muted)] truncate">
