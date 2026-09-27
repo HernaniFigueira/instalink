@@ -104,12 +104,13 @@
   --action-soft: var(--brand-soft);
   --action-soft-border: var(--brand-border);
   /* ── TEMA (contrato B) — CTAs principais + acentos. Defaults = tema
-     padrão (Azul clínico); a paleta da clínica (lib/nav-accent.ts) aplica
+     padrão NEUTRO (usuário sem preferência inicia em Neutro; nenhum flash
+     roxo/lilás no SSR/hydration); a paleta salva (lib/nav-accent.ts) aplica
      os 5 tokens inline no shell. NUNCA misturar com --text/--il-nav. ── */
-  --accent: #3f37c9;
-  --accent-hover: #322ca6;
-  --accent-soft: #ecebfb;
-  --accent-border: #c3bff0;
+  --accent: #3f4652;
+  --accent-hover: #363c47;
+  --accent-soft: #e4e5e7;
+  --accent-border: #a9acb1;
   --accent-contrast: #ffffff;
 
   /* ── Estado ─────────────────────────────────────────────────── */
@@ -242,14 +243,14 @@
    * sem migração destrutiva) — apenas não é mais aplicado ao painel.
    * Os derivadores legados seguem em lib/appearance.ts para sanitizar dado
    * antigo, não como feature ativa. */
-  --il-nav: #3f37c9;
-  --il-nav-fg: #f2f3ff;
-  --il-nav-muted: #d3dafc;
-  --il-nav-icon: #ffffff;
-  --il-nav-hover: #4c43d1;
-  --il-nav-active: #5b4fe2;
-  --il-nav-active-fg: #ffffff;
-  --il-nav-border: rgba(255, 255, 255, 0.16);
+  --il-nav: #d8dde6;
+  --il-nav-fg: #18181b;
+  --il-nav-muted: #47494f;
+  --il-nav-icon: #4e4f54;
+  --il-nav-hover: #bec2ca;
+  --il-nav-active: #b1b5bd;
+  --il-nav-active-fg: #18181b;
+  --il-nav-border: rgba(18, 22, 33, 0.10);
   --il-nav-cta: #ffd166;
   --il-nav-cta-fg: #3b2f00;
 }
@@ -771,12 +772,13 @@ input[type='color'] { @apply cursor-pointer; }
   --action-soft: var(--brand-soft);
   --action-soft-border: var(--brand-border);
   /* ── TEMA (contrato B) — CTAs principais + acentos. Defaults = tema
-     padrão (Azul clínico); a paleta da clínica (lib/nav-accent.ts) aplica
+     padrão NEUTRO (usuário sem preferência inicia em Neutro; nenhum flash
+     roxo/lilás no SSR/hydration); a paleta salva (lib/nav-accent.ts) aplica
      os 5 tokens inline no shell. NUNCA misturar com --text/--il-nav. ── */
-  --accent: #3f37c9;
-  --accent-hover: #322ca6;
-  --accent-soft: #ecebfb;
-  --accent-border: #c3bff0;
+  --accent: #3f4652;
+  --accent-hover: #363c47;
+  --accent-soft: #e4e5e7;
+  --accent-border: #a9acb1;
   --accent-contrast: #ffffff;
 
   /* ── VERDE DE ESTADO · concluído/confirmado ──────────────────── */
@@ -856,18 +858,17 @@ input[type='color'] { @apply cursor-pointer; }
   --focus-outline: 2px solid var(--brand);
 
   /* ── Navegação do painel ─────────────────────────────────────── */
-  /* Identidade GODOUTOR 2.0: sidebar índigo-violeta forte. O item em
-     `aria-current` ganha variação visível da cor + ícone em superfície
-     branca circular (tratamento em `.workspace-link`). Contraste AA checado
-     em design-360-tokens.test.ts. */
-  --il-nav: #3f37c9;
-  --il-nav-fg: #f2f3ff;
-  --il-nav-muted: #d3dafc;
-  --il-nav-icon: #ffffff;
-  --il-nav-hover: #4c43d1;
-  --il-nav-active: #5b4fe2;
-  --il-nav-active-fg: #ffffff;
-  --il-nav-border: rgba(255, 255, 255, 0.16);
+  /* Sidebar — defaults do tema padrão NEUTRO (sem roxo/lilás): usuário
+     sem preferência salva carrega ESTE estado; preferência válida sobrepõe
+     inline (mesmos tokens). Contraste AA checado em design-360-tokens. */
+  --il-nav: #d8dde6;
+  --il-nav-fg: #18181b;
+  --il-nav-muted: #47494f;
+  --il-nav-icon: #4e4f54;
+  --il-nav-hover: #bec2ca;
+  --il-nav-active: #b1b5bd;
+  --il-nav-active-fg: #18181b;
+  --il-nav-border: rgba(18, 22, 33, 0.10);
   --il-nav-cta: #ffd166;
   --il-nav-cta-fg: #3b2f00;
 
@@ -1628,10 +1629,10 @@ button.workspace-clinic-head:hover { background: rgba(255, 255, 255, 0.12); }
 .ws-nav-tip {
   position: fixed; transform: translateY(-50%);
   padding: 5px 9px; border-radius: var(--radius-sm);
-  /* Tooltip acompanha a cor da sidebar/tema ativo (tokens do nav, iguais
-     aos do rail) — fg = o MESMO contraste do tema (AA em claro e escuro). */
-  background: var(--il-nav); color: var(--il-nav-fg);
-  border: 1px solid var(--il-nav-border);
+  /* Tooltip SEMPRE neutro: fundo grafite/quase preto + texto branco —
+     independe do tema da sidebar (nunca roxo/lilás, nunca cor do tema). */
+  background: #242424; color: #ffffff;
+  border: 1px solid rgba(255, 255, 255, 0.10);
   font-size: 11px; font-weight: 600; white-space: nowrap;
   z-index: 90; box-shadow: var(--shadow-sm); pointer-events: none;
 }

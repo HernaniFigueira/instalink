@@ -158,16 +158,16 @@ describe('5 · botões migrados pela BASE (tokens), sem hex por tela', () => {
     expect(ui).toContain('bg-[var(--surface-2)] text-[var(--accent)]');
   });
 
-  it('identidade índigo preservada (logo/sidebar padrão); a ação é preto premium (missão 7)', () => {
-    // O rampo índigo continua definido — é a IDENTIDADE (logo GoDoutor) —
-    // enquanto a AÇÃO do workspace (--brand) é PRETO sofisticado/ônix (missão 7:
-    // estado normal já forte, sem cinza lavado).
+  it('identidade do logo preservada; sidebar padrão = NEUTRO (sem roxo/lilás)', () => {
+    // O rampo índigo continua definido — IDENTIDADE do logo GoDoutor —
+    // enquanto a AÇÃO do workspace (--brand) é PRETO sofisticado/ônix e o
+    // DEFAULT da sidebar é o tema Neutro (ajuste final: nada de roxo/lilás).
     expect(css).toMatch(/--brand-600:\s*#4f46e5/);
     expect(css).toMatch(/--brand-700:\s*#4338ca/);
     expect(css).toMatch(/--brand:\s*#1c1917/); // missão 7: preto premium
     expect(css).toMatch(/--brand-strong:\s*#0c0a09/);
     // e a sidebar PADRÃO fala a família índigo aprovada
-    expect(css).toMatch(/--il-nav:\s*#3f37c9/);
+    expect(css).toMatch(/--il-nav:\s*#d8dde6/); // default = Neutro
   });
 });
 

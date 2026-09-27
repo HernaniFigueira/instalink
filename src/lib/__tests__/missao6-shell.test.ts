@@ -81,7 +81,7 @@ describe('missão 6 · 4 — quick create “+” premium (volta ao topo)', () =
 describe('missão 6 · 5 — personalização da sidebar em Configurações (não na shell)', () => {
   it('presets seguros de cor (contraste AA: fg claro sobre escuro OU near-black sobre claro)', () => {
     expect(NAV_ACCENTS.length).toBeGreaterThanOrEqual(8); // missão final: 21 presets por famílias
-    expect(NAV_ACCENT_DEFAULT).toBe('azul-clinico');
+    expect(NAV_ACCENT_DEFAULT).toBe('neutro'); // tema padrão = Neutro (sem roxo/lilás)
     for (const a of NAV_ACCENTS) {
       const bg = a.vars['--il-nav'];
       const fg = a.vars['--il-nav-fg'];
@@ -93,7 +93,7 @@ describe('missão 6 · 5 — personalização da sidebar em Configurações (nã
       expect(contrast, a.id).toBeGreaterThan(0.45);
     }
     expect(navAccentById('teal').id).toBe('teal');
-    expect(navAccentById('lixo').id).toBe('azul-clinico'); // fallback seguro
+    expect(navAccentById('lixo').id).toBe('neutro'); // fallback seguro = Neutro
   });
 
   it('os presets vivem em Configurações → Aparência, com preview e persistência local', () => {

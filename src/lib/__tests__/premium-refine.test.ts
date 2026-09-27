@@ -54,10 +54,10 @@ describe('missão 4 · 1 — ação carvão com identidade preservada', () => {
     expect(css).toMatch(/--text-faint:\s*#6f6862/);
   });
 
-  it('identidade índigo e sidebar lilás continuam intactas', () => {
+  it('identidade do logo intacta; sidebar padrão = Neutro (roxo/lilás removido)', () => {
     expect(css).toMatch(/--brand-600:\s*#4f46e5/);
     expect(css).toMatch(/--brand-700:\s*#4338ca/);
-    expect(css).toMatch(/--il-nav:\s*#3f37c9/);
+    expect(css).toMatch(/--il-nav:\s*#d8dde6/); // default = Neutro (ajuste final)
     expect(css).toMatch(/--cta-bg:\s*#5b3fd4/); // CTA violeta aprovado (missão 3)
   });
 

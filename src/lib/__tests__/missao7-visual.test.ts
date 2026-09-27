@@ -40,7 +40,7 @@ describe('missão 7 · 1 — paleta de aparência (atual: 21 presets por famíli
     expect(onix.swatch).toBe('#18181b'); // preto sofisticado (não cinza)
     expect(ids).not.toContain('graphite');
     expect(ids).not.toContain('indigo');
-    expect(NAV_ACCENT_DEFAULT).toBe('azul-clinico');
+    expect(NAV_ACCENT_DEFAULT).toBe('neutro'); // tema padrão = Neutro (sem roxo/lilás)
   });
 
   it('contraste AA real (WCAG): o texto do nav é legível em QUALQUER preset', () => {

@@ -105,20 +105,37 @@ describe('acordeão tradicional (estado do componente)', () => {
   });
 });
 
-describe('tooltip do rail recolhido acompanha o tema', () => {
-  it('ws-nav-tip usa os tokens do nav (bg=nav, fg=nav-fg) — nunca cor fixa', () => {
-    const tip = css.slice(css.indexOf('.ws-nav-tip {'), css.indexOf('.ws-nav-tip {') + 420);
-    expect(tip).toContain('background: var(--il-nav)');
-    expect(tip).toContain('color: var(--il-nav-fg)');
+describe('tooltip do rail recolhido: SEMPRE neutro grafite', () => {
+  it('ws-nav-tip = grafite quase preto + branco — sem cor do tema, sem roxo/lilás', () => {
+    const tip = css.slice(css.indexOf('.ws-nav-tip {'), css.indexOf('.ws-nav-tip {') + 460);
+    expect(tip).toContain('background: #242424');
+    expect(tip).toContain('color: #ffffff');
+    // proibido herdar o tema ou usar o roxo/lilás antigo
+    expect(tip).not.toContain('var(--il-nav)');
     expect(tip).not.toContain('#232a44');
   });
 
-  it('par tooltip AA nos 21 presets (claros e escuros)', () => {
-    for (const a of NAV_ACCENTS) {
-      expect(
-        contrastRatio(a.vars['--il-nav-fg'], a.vars['--il-nav']),
-        a.id,
-      ).toBeGreaterThanOrEqual(4.5);
-    }
+  it('grafite × branco = AA (contraste fixo em qualquer tema)', () => {
+    expect(contrastRatio('#ffffff', '#242424')).toBeGreaterThanOrEqual(4.5);
+  });
+});
+
+describe('tema padrão = NEUTRO (fallback sem preferência)', () => {
+  it('DEFAULT_ACCENT_ID é neutro (nunca mais azul/roxo como fallback)', async () => {
+    const mod = await import('../nav-accent');
+    expect(mod.DEFAULT_ACCENT_ID).toBe('neutro');
+    expect(mod.navAccentById('qualquer-coisa-inexistente').id).toBe('neutro');
+  });
+
+  it('defaults CSS do :root são os do Neutro (nenhum flash roxo no hydration)', () => {
+    expect(css).toContain('--il-nav: #d8dde6');
+    expect(css).toContain('--accent: #3f4652');
+    expect(css).not.toContain('#3f37c9'); // índigo/roxo não é mais default
+    expect(css).not.toContain('#5b4fe2');
+    expect(css).not.toContain('#d3dafc');
+  });
+
+  it('preferência salva continua sendo respeitada (não sobrescreve)', () => {
+    expect(read('src/lib/nav-accent.ts')).toContain('localStorage.getItem(NAV_ACCENT_STORAGE_KEY)');
   });
 });

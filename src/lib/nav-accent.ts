@@ -182,7 +182,10 @@ export function findAccent(id: string): NavAccent | undefined {
   return NAV_ACCENTS.find((a) => a.id === resolved);
 }
 
-export const DEFAULT_ACCENT_ID = 'azul-clinico';
+// TEMA PADRÃO = NEUTRO (usuário sem preferência salva inicia em Neutro;
+// nunca mais o índigo/roxo como fallback). Preferência válida no
+// localStorage é sempre respeitada — nada de sobrescrever escolha do usuário.
+export const DEFAULT_ACCENT_ID = 'neutro';
 // Chave LEGADA (missão 6) — preserva a preferência já persistida do usuário.
 export const NAV_ACCENT_STORAGE_KEY = 'godoutor.nav-accent';
 
