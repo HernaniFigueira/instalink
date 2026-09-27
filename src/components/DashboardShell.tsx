@@ -80,7 +80,7 @@ export function DashboardShell({ children }: { children: React.ReactNode }) {
     try { return localStorage.getItem('il-side-v2') === 'mini'; } catch { return false; }
   });
   /* Missão 6 — cor da navegação (Configurações → Aparência). */
-  const [navAccent, setNavAccent] = useState<NavAccentId>('indigo');
+  const [navAccent, setNavAccent] = useState<NavAccentId>('azul-clinico');
   useEffect(() => {
     setNavAccent(getNavAccent());
     const sync = (e: Event) => setNavAccent((e as CustomEvent<NavAccentId>).detail);

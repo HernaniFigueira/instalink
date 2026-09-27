@@ -79,23 +79,18 @@ export function PetsSection({ businessId, tutorId, tutorName, onChanged, onOpenP
     <div className="mt-3 rounded-xl border border-[var(--sun-border)] bg-[var(--sun-bg)] p-4 shadow-xs">
       {/* MISSÃO 5 — o PET é o paciente: bloco creme quente protagonista;
           o tutor (card acima) ficou neutro e discreto. */}
-      <div className="flex flex-wrap items-center justify-between gap-2">
-        <div className="flex items-center gap-2.5 min-w-0">
-          <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-[var(--sun-border)] bg-[var(--sun-bg-strong)] text-[var(--sun-fg)]">
-            <Icon n="paw" size={17} />
-          </span>
-          <div className="min-w-0">
-            <p className="text-[15px] font-semibold text-[var(--text)] leading-tight">
-              Pets de {tutorName || 'tutor'} <span className="text-[var(--sun-fg)] font-normal">· pacientes</span>
-            </p>
-            <p className="text-xs text-[var(--sun-fg)] mt-0.5">
-              O pet é o paciente da agenda; {tutorName || 'o tutor'} continua sendo o contato.
-            </p>
-          </div>
+      <div className="flex items-center gap-2.5 min-w-0">
+        <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg border border-[var(--sun-border)] bg-[var(--sun-bg-strong)] text-[var(--sun-fg)]">
+          <Icon n="paw" size={18} />
+        </span>
+        <div className="min-w-0">
+          <p className="text-[15.5px] font-semibold text-[var(--text)] leading-tight">
+            Pets de {tutorName || 'tutor'} <span className="text-[var(--sun-fg)] font-normal">· pacientes</span>
+          </p>
+          <p className="text-xs text-[var(--sun-fg)] mt-0.5">
+            O pet é o paciente da agenda; {tutorName || 'o tutor'} continua sendo o contato.
+          </p>
         </div>
-        <Button size="sm" variant="primary" onClick={() => { setError(''); setEditing({ ...EMPTY_PET }); }}>
-          <Icon n="plus" size={14} /> Pet
-        </Button>
       </div>
 
       {error && <Notice tone="error" className="mt-2">{error}</Notice>}
@@ -107,53 +102,62 @@ export function PetsSection({ businessId, tutorId, tutorName, onChanged, onOpenP
         <ul className="mt-3 space-y-2">
           {pets.map((p) => {
             const age = petAge(p.birthDate);
+            const chips = [PET_SPECIES_LABELS[p.species] || p.species, p.breed, age !== null ? `${age} ano(s)` : '', p.weightKg ? `${p.weightKg} kg` : ''].filter(Boolean);
             return (
-              <li key={p.id} className="flex items-center gap-3 rounded-xl border border-[var(--sun-border)] bg-white/70 px-3 py-2.5">
-                <Avatar name={p.name} src={p.photo || undefined} size={40} />
+              <li key={p.id} className="flex items-center gap-3 rounded-xl border border-[var(--sun-border)] bg-white/80 px-3.5 py-3 shadow-xs">
+                <Avatar name={p.name} src={p.photo || undefined} size={44} />
                 <div className="min-w-0 flex-1">
-                  <button type="button" className="text-[15px] font-semibold text-[var(--text)] truncate hover:underline text-left w-full leading-tight"
+                  <button type="button" className="block max-w-full truncate text-left text-[16px] font-semibold leading-tight text-[var(--text-strong)] hover:underline"
                     onClick={() => onOpenPet?.(p)} title={`Abrir ficha de ${p.name}`}>
                     {p.name}{!p.active && <span className="ml-2 text-[11px] font-semibold text-[var(--text-muted)]">(inativo)</span>}
                   </button>
-                  <p className="mt-1 flex flex-wrap items-center gap-1">
-                    {([PET_SPECIES_LABELS[p.species] || p.species, p.breed, age !== null ? `${age} ano(s)` : '', p.weightKg ? `${p.weightKg} kg` : ''].filter(Boolean))
-                      .map((chip) => (
-                        <span key={chip} className="inline-flex items-center rounded-pill border border-[var(--sun-border)] bg-[var(--sun-bg-strong)] px-2 py-0.5 text-[11px] font-semibold text-[var(--sun-fg)]">
-                          {chip}
-                        </span>
-                      ))}
-                    {[PET_SPECIES_LABELS[p.species] || p.species, p.breed, age !== null ? `${age} ano(s)` : '', p.weightKg ? `${p.weightKg} kg` : ''].filter(Boolean).length === 0 && (
-                      <span className="text-xs text-[var(--text-muted)]">Sem detalhes</span>
-                    )}
+                  <p className="mt-1.5 flex flex-wrap items-center gap-1.5">
+                    {chips.map((chip, i) => (
+                      <span key={chip} className={`inline-flex items-center rounded-pill px-2 py-0.5 text-[11px] font-semibold ${i === 0 ? 'bg-[var(--sun-fg)] text-white' : 'border border-[var(--sun-border)] bg-[var(--sun-bg-strong)] text-[var(--sun-fg)]'}`}>
+                        {chip}
+                      </span>
+                    ))}
+                    {chips.length === 0 && <span className="text-xs text-[var(--text-muted)]">Sem detalhes</span>}
                   </p>
                 </div>
                 {p.sex && <Badge tone="zinc">{p.sex === 'M' ? 'Macho' : 'Fêmea'}</Badge>}
-                <IconButton icon="pencil" label={`Editar ${p.name}`} size="sm" onClick={() => { setError(''); setEditing({ ...p }); }} />
-                <IconButton icon="x" label={`Remover ${p.name}`} size="sm" variant="ghost" disabled={busy} onClick={() => { void remove(p); }} />
+                <span className="flex items-center gap-1">
+                  <IconButton icon="pencil" label={`Editar ${p.name}`} size="sm" onClick={() => { setError(''); setEditing({ ...p }); }} />
+                  <IconButton icon="x" label={`Remover ${p.name}`} size="sm" variant="ghost" disabled={busy} onClick={() => { void remove(p); }} />
+                </span>
               </li>
             );
           })}
         </ul>
       )}
 
+      {/* Missão 7 — a ação de cadastro mora EMBAIXO do bloco, à esquerda:
+          o canto superior direito ficou só para o conteúdo (leitura mais
+          natural; hierarquia pet × tutor preservada). */}
+      <div className="mt-3.5">
+        <Button size="sm" variant="primary" onClick={() => { setError(''); setEditing({ ...EMPTY_PET }); }}>
+          <Icon n="plus" size={14} /> Cadastrar pet
+        </Button>
+      </div>
+
       <WorkspaceSheet
         open={!!editing}
         onClose={() => setEditing(null)}
         title={editing?.id ? `Editar ${editing.name || 'pet'}` : 'Novo pet'}
-        subtitle={tutorName ? `Tutor: ${tutorName}` : undefined}
+        subtitle={tutorName ? `Paciente de ${tutorName}` : 'Novo paciente (pet)'}
         icon="paw"
         width="max-w-[520px]"
         footer={(
-          <div className="flex w-full items-center justify-end gap-2">
-            <Button variant="secondary" size="sm" onClick={() => setEditing(null)} disabled={busy}>Cancelar</Button>
-            <Button variant="primary" size="sm" onClick={() => { void save(); }} disabled={busy}>{busy ? 'Salvando…' : 'Salvar'}</Button>
+          <div className="flex w-full items-center justify-end gap-2.5">
+            <Button variant="secondary" onClick={() => setEditing(null)} disabled={busy}>Cancelar</Button>
+            <Button variant="primary" onClick={() => { void save(); }} disabled={busy} className="min-w-[108px]">{busy ? 'Salvando…' : 'Salvar pet'}</Button>
           </div>
         )}
       >
         {editing && (
-          <div className="p-1 space-y-5">
-            <section className="space-y-3">
-              <p className="text-[11px] font-semibold uppercase tracking-[0.08em] text-[var(--text-muted)]">Identificação</p>
+          <div className="p-1 space-y-4">
+            <section className="space-y-3 rounded-[var(--radius-md)] border border-[var(--border-soft)] bg-[var(--surface-subtle)] p-3.5">
+              <p className="text-[10.5px] font-semibold uppercase tracking-[0.09em] text-[var(--text-soft)]">Identificação</p>
               <Field label="Nome" required htmlFor="pet-name">
                 <Input id="pet-name" value={editing.name || ''} onChange={(e) => setEditing({ ...editing, name: e.target.value })} placeholder="Ex.: Thor" />
               </Field>
@@ -172,8 +176,8 @@ export function PetsSection({ businessId, tutorId, tutorName, onChanged, onOpenP
               </Field>
               </div>
             </section>
-            <section className="space-y-3">
-              <p className="text-[11px] font-semibold uppercase tracking-[0.08em] text-[var(--text-muted)]">Características</p>
+            <section className="space-y-3 rounded-[var(--radius-md)] border border-[var(--border-soft)] bg-[var(--surface-subtle)] p-3.5">
+              <p className="text-[10.5px] font-semibold uppercase tracking-[0.09em] text-[var(--text-soft)]">Características</p>
               <div className="grid grid-cols-2 gap-3">
               <Field label="Sexo" htmlFor="pet-sex">
                 <Select id="pet-sex" value={editing.sex || ''} onChange={(e) => setEditing({ ...editing, sex: e.target.value as any })}>
@@ -193,10 +197,12 @@ export function PetsSection({ businessId, tutorId, tutorName, onChanged, onOpenP
               </Field>
               </div>
             </section>
-            <section className="space-y-3">
-              <p className="text-[11px] font-semibold uppercase tracking-[0.08em] text-[var(--text-muted)]">Observações</p>
+            <section className="space-y-3 rounded-[var(--radius-md)] border border-[var(--border-soft)] bg-[var(--surface-subtle)] p-3.5">
+              <p className="text-[10.5px] font-semibold uppercase tracking-[0.09em] text-[var(--text-soft)]">Observações</p>
               <Field label="Observações" htmlFor="pet-notes" hint="Comportamento, alergias, cuidados.">
-                <Textarea id="pet-notes" rows={3} value={editing.notes || ''} onChange={(e) => setEditing({ ...editing, notes: e.target.value })} className="min-h-[84px] resize-none leading-relaxed" />
+                <Textarea id="pet-notes" rows={4} value={editing.notes || ''} onChange={(e) => setEditing({ ...editing, notes: e.target.value })}
+                  placeholder="Ex.: alergia a frango; calmo com crianças; medo de aspirador."
+                  className="min-h-[104px] resize-none leading-relaxed rounded-[var(--radius-sm)]" />
               </Field>
             </section>
           </div>

@@ -40,20 +40,24 @@ function ruleOf(sel: string): string {
   return css.slice(at, css.indexOf('}', open));
 }
 
-describe('1 · “Agendado no período” tem ícone coerente (o que estava faltando)', () => {
-  it('`cash` existe no registro de ícones (banknote)', () => {
+describe('1 · métricas do topo SEM duplicação (missão 7)', () => {
+  it('o card de métricas não repete mais "Agendado no período" (vive só no resumo)', () => {
+    const cells = dash.match(/className="dsh-metric"/g) ?? [];
+    const labelsBlock = dash.slice(dash.indexOf('className="dsh-metrics"'), dash.indexOf('Missão 7 — a 6ª métrica'));
+    expect(labelsBlock).not.toContain('Agendado no período');
+    expect(cells.length).toBeLessThanOrEqual(6);
+  });
+
+  it('a 6ª métrica fecha o quadro do DIA (Cancelados), sem dinheiro repetido', () => {
+    expect(dash).toContain('Cancelados');
+    expect(dash).toContain('today.cancelled');
+    // os quatro conceitos monetários (MESMO cálculo do Financeiro) vivem UMA
+    // vez, dentro do card "Período · resumo".
+    expect(dash).toContain('moneySemantics.realizado');
+  });
+
+  it('`Icon n="cash"` continua desenhando (registro íntegro)', () => {
     expect(icons).toMatch(/\n\s*cash:\s*\(/);
-  });
-
-  it('o KPI de valores renderiza `Icon n="cash"`', () => {
-    expect(dash).toContain('<Icon n="cash"');
-    expect(dash).toContain('Agendado no período');
-    // o ícone vem ANTES do rótulo dentro da mesma célula
-    const cell = dash.slice(dash.indexOf('Agendado no período') - 800, dash.indexOf('Agendado no período'));
-    expect(cell).toContain('<Icon n="cash"');
-  });
-
-  it('`Icon n="cash"` desenha de fato (não renderiza vazio)', () => {
     const svg = renderToStaticMarkup(React.createElement(Icon, { n: 'cash', size: 19 }));
     expect(svg).toContain('<svg');
     expect(svg).toContain('<path');
@@ -97,11 +101,11 @@ describe('3 · métricas do topo = UM card único com divisórias sutis', () => 
     // o contrato responsivo (a12-block4) segue vivo nas mesmas faixas do card
     expect(dash).toContain('grid grid-cols-2 md:grid-cols-3 xl:grid-cols-6');
     // 5 células fixas + a 6ª que é um ternário (valores no período OU
-    // “precisam de fechamento”) = 7 marcações no source, 6 células renderizadas.
+    // Missão 7: 6 células (a 6ª = Cancelados; o fallback de fechamento saiu
+    // junto com a duplicação de período).
     const cells = dash.match(/className="dsh-metric"/g) ?? [];
-    expect(cells).toHaveLength(7);
-    // os seis rótulos seguem presentes, na mesma ordem do painel de dados
-    for (const label of ['Atendimentos hoje', 'Confirmados', 'Aguardando', 'Concluídos', 'Faltas', 'Agendado no período']) {
+    expect(cells).toHaveLength(6);
+    for (const label of ['Atendimentos hoje', 'Confirmados', 'Aguardando', 'Concluídos', 'Faltas', 'Cancelados']) {
       expect(dash, label).toContain(label);
     }
   });
@@ -153,15 +157,15 @@ describe('5 · botões migrados pela BASE (tokens), sem hex por tela', () => {
     expect(ui).toContain('bg-[var(--surface-3)] text-[var(--brand-fg)]');
   });
 
-  it('identidade índigo preservada (logo/sidebar); a ação virou carvão (missão 4)', () => {
-    expect(css).not.toContain('#2563eb');
-    expect(css).not.toContain('#1d4ed8');
+  it('identidade índigo preservada (logo/sidebar padrão); a ação é preto premium (missão 7)', () => {
     // O rampo índigo continua definido — é a IDENTIDADE (logo GoDoutor) —
-    // enquanto a AÇÃO do workspace (--brand) virou carvão premium (missão 4).
+    // enquanto a AÇÃO do workspace (--brand) é PRETO sofisticado/ônix (missão 7:
+    // estado normal já forte, sem cinza lavado).
     expect(css).toMatch(/--brand-600:\s*#4f46e5/);
     expect(css).toMatch(/--brand-700:\s*#4338ca/);
-    expect(css).toMatch(/--brand:\s*#2b2724/); // MISSÃO 5: espresso/graphite deep
-    // e a sidebar fala a família índigo original (só mais forte)
+    expect(css).toMatch(/--brand:\s*#1c1917/); // missão 7: preto premium
+    expect(css).toMatch(/--brand-strong:\s*#0c0a09/);
+    // e a sidebar PADRÃO fala a família índigo aprovada
     expect(css).toMatch(/--il-nav:\s*#3f37c9/);
   });
 });
@@ -184,9 +188,10 @@ describe('6 · correções cirúrgicas (contrato dos 8 pontos)', () => {
     expect(card).not.toContain('gradient');
   });
 
-  it('3 · “Agendado no período” segue com ícone (cash)', () => {
+  it('3 · o card de métricas é do dia inteiro (sem “Agendado no período” repetido)', () => {
     expect(icons).toMatch(/\n\s*cash:\s*\(/);
-    expect(dash).toContain('<Icon n="cash"');
+    const metricsBlock = dash.slice(dash.indexOf('className="dsh-metrics"'), dash.indexOf('Missão 7 — a 6ª métrica'));
+    expect(metricsBlock).not.toContain('Agendado no período');
   });
 
   it('4 · tooltip do rail recolhido em portal/fixed (não é cortado pela Agenda)', () => {

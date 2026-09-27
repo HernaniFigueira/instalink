@@ -7,7 +7,9 @@
 // Persistência local (localStorage) — sem banco/APIs nesta missão.
 'use client';
 
-export type NavAccentId = 'indigo' | 'violet' | 'teal' | 'rose' | 'graphite';
+export type NavAccentId =
+  | 'azul-clinico' | 'azul-amigavel' | 'violeta' | 'teal'
+  | 'verde-salvia' | 'ambar' | 'onix' | 'vinho';
 
 export interface NavAccent {
   id: NavAccentId;
@@ -21,8 +23,8 @@ export interface NavAccent {
 
 export const NAV_ACCENTS: NavAccent[] = [
   {
-    id: 'indigo',
-    label: 'Índigo',
+    id: 'azul-clinico',
+    label: 'Azul clínico',
     swatch: '#3f37c9',
     vars: {
       '--il-nav': '#3f37c9', '--il-nav-fg': '#f2f3ff', '--il-nav-muted': '#d3dafc',
@@ -30,12 +32,21 @@ export const NAV_ACCENTS: NavAccent[] = [
     },
   },
   {
-    id: 'violet',
-    label: 'Violeta',
-    swatch: '#5b21b6',
+    id: 'azul-amigavel',
+    label: 'Azul amigável',
+    swatch: '#2563eb',
     vars: {
-      '--il-nav': '#5b21b6', '--il-nav-fg': '#f5f3ff', '--il-nav-muted': '#ddd6fe',
-      '--il-nav-hover': '#6d28d9', '--il-nav-active': '#7c3aed', '--il-nav-active-fg': '#ffffff',
+      '--il-nav': '#2563eb', '--il-nav-fg': '#eff6ff', '--il-nav-muted': '#bfdbfe',
+      '--il-nav-hover': '#1d4ed8', '--il-nav-active': '#3b82f6', '--il-nav-active-fg': '#ffffff',
+    },
+  },
+  {
+    id: 'violeta',
+    label: 'Violeta',
+    swatch: '#6d28d9',
+    vars: {
+      '--il-nav': '#6d28d9', '--il-nav-fg': '#f5f3ff', '--il-nav-muted': '#ddd6fe',
+      '--il-nav-hover': '#5b21b6', '--il-nav-active': '#7c3aed', '--il-nav-active-fg': '#ffffff',
     },
   },
   {
@@ -44,30 +55,48 @@ export const NAV_ACCENTS: NavAccent[] = [
     swatch: '#0f766e',
     vars: {
       '--il-nav': '#0f766e', '--il-nav-fg': '#f0fdfa', '--il-nav-muted': '#b8e8e0',
-      '--il-nav-hover': '#0d9488', '--il-nav-active': '#14b8a6', '--il-nav-active-fg': '#ffffff',
+      '--il-nav-hover': '#115e59', '--il-nav-active': '#14b8a6', '--il-nav-active-fg': '#ffffff',
     },
   },
   {
-    id: 'rose',
+    id: 'verde-salvia',
+    label: 'Verde sálvia',
+    swatch: '#4d7c5f',
+    vars: {
+      '--il-nav': '#4d7c5f', '--il-nav-fg': '#f4f8f4', '--il-nav-muted': '#cfe3d2',
+      '--il-nav-hover': '#3f6a50', '--il-nav-active': '#5f8d6e', '--il-nav-active-fg': '#ffffff',
+    },
+  },
+  {
+    id: 'ambar',
+    label: 'Âmbar',
+    swatch: '#b45309',
+    vars: {
+      '--il-nav': '#b45309', '--il-nav-fg': '#fff8eb', '--il-nav-muted': '#f5d9a8',
+      '--il-nav-hover': '#92400e', '--il-nav-active': '#d97706', '--il-nav-active-fg': '#ffffff',
+    },
+  },
+  {
+    id: 'onix',
+    label: 'Ônix',
+    swatch: '#18181b',
+    vars: {
+      '--il-nav': '#18181b', '--il-nav-fg': '#fafafa', '--il-nav-muted': '#c4c4c8',
+      '--il-nav-hover': '#27272a', '--il-nav-active': '#3f3f46', '--il-nav-active-fg': '#ffffff',
+    },
+  },
+  {
+    id: 'vinho',
     label: 'Vinho',
     swatch: '#9f1239',
     vars: {
       '--il-nav': '#9f1239', '--il-nav-fg': '#fff1f2', '--il-nav-muted': '#f7cdd6',
-      '--il-nav-hover': '#b81a45', '--il-nav-active': '#be123c', '--il-nav-active-fg': '#ffffff',
-    },
-  },
-  {
-    id: 'graphite',
-    label: 'Grafite',
-    swatch: '#2b2724',
-    vars: {
-      '--il-nav': '#2b2724', '--il-nav-fg': '#f5f3f0', '--il-nav-muted': '#c9c2bb',
-      '--il-nav-hover': '#3a3531', '--il-nav-active': '#4a443f', '--il-nav-active-fg': '#ffffff',
+      '--il-nav-hover': '#881337', '--il-nav-active': '#be123c', '--il-nav-active-fg': '#ffffff',
     },
   },
 ];
 
-export const NAV_ACCENT_DEFAULT: NavAccentId = 'indigo';
+export const NAV_ACCENT_DEFAULT: NavAccentId = 'azul-clinico';
 
 const STORAGE_KEY = 'godoutor.nav-accent';
 

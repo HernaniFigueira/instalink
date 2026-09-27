@@ -180,7 +180,7 @@ function BookingRules({ businessId, initial, onSaved }: {
 // nunca na shell. Presets SEGUROS com contraste AA pré-validado; a topbar
 // acompanha a cor escolhida (color-mix sobre --il-nav).
 function ShellAppearance() {
-  const [accent, setAccent] = useState<NavAccentId>('indigo');
+  const [accent, setAccent] = useState<NavAccentId>('azul-clinico');
   useEffect(() => { setAccent(getNavAccent()); }, []);
   return (
     <section className="bg-white border border-zinc-200 p-4 space-y-3" data-testid="shell-appearance">

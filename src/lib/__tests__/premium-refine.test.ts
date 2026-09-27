@@ -44,9 +44,9 @@ describe('missão 4 · 1 — ação carvão com identidade preservada', () => {
   it('a AÇÃO do workspace é espresso/graphite deep (root + plataforma)', () => {
     // MISSÃO 5: tom mais forte que o carvão da missão 4 — botões com presença
     // e leitura firme, sem parecer mortos.
-    expect(css).toMatch(/--brand:\s*#2b2724/);
-    expect(css).toMatch(/--brand-strong:\s*#1a1715/);
-    expect(css).toMatch(/--brand-fg:\s*#2e2a26/);
+    expect(css).toMatch(/--brand:\s*#1c1917/); // missão 7: preto premium no estado normal
+    expect(css).toMatch(/--brand-strong:\s*#0c0a09/);
+    expect(css).toMatch(/--brand-fg:\s*#262220/);
     // escala INK de tipografia (near-black quente, AA checado em
     // design-360-tokens)
     expect(css).toMatch(/--text-primary:\s*#1c1815/);
@@ -120,10 +120,12 @@ describe('missão 4 · 5 — pet sheet premium (visual; lógica intacta)', () =>
     expect(pet360).toContain('icon="paw"'); // Pet 360 com o ícone pet oficial
   });
 
-  it('subtítulo exibe o tutor; rodapé limpo Cancelar/Salvar', () => {
+  it('subtítulo identifica o paciente (tutor); rodapé limpo Cancelar/Salvar pet', () => {
     expect(newClient).toContain('Tutor: ${');
-    expect(pets).toContain('Tutor: ${tutorName}');
-    expect(pets).toMatch(/footer=\{\(\s*\n\s*<div className="flex w-full items-center justify-end gap-2">/);
+    // missão 7: o sheet do pet fala a língua do paciente
+    expect(pets).toContain('Paciente de ${tutorName}');
+    expect(pets).toMatch(/footer=\{\(\s*\n\s*<div className="flex w-full items-center justify-end gap-2\.5">/);
+    expect(pets).toContain('Salvar pet');
   });
 
   it('checkbox premium e consentimento "Aceita receber promoções?"', () => {

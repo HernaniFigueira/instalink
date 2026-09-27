@@ -12,6 +12,14 @@ const nav = read('src/components/dashboard/WorkspaceNavigation.tsx');
 const shell = read('src/components/DashboardShell.tsx');
 const config = read('src/app/(dashboard)/configuracoes/page.tsx');
 
+/** Luminância relativa (0–1) de um hex — contraste real, não regex. */
+function lum(hex: string): number {
+  const h = hex.replace('#', '');
+  const [r, g, b] = [0, 2, 4].map((i) => parseInt(h.slice(i, i + 2), 16) / 255);
+  return 0.2126 * r + 0.7152 * g + 0.0722 * b;
+}
+
+
 // ═══════════════════════════════════════════════════════════════
 // MISSÃO 6 — nova direção visual premium (mockup aprovado, adaptado)
 // ═══════════════════════════════════════════════════════════════
@@ -72,17 +80,19 @@ describe('missão 6 · 4 — quick create “+” premium (volta ao topo)', () =
 
 describe('missão 6 · 5 — personalização da sidebar em Configurações (não na shell)', () => {
   it('presets seguros de cor (fg/active claros, AA sobre fundo escuro)', () => {
-    expect(NAV_ACCENTS.length).toBeGreaterThanOrEqual(5);
-    expect(NAV_ACCENT_DEFAULT).toBe('indigo');
+    expect(NAV_ACCENTS.length).toBeGreaterThanOrEqual(8); // missão 7: paleta ampliada
+    expect(NAV_ACCENT_DEFAULT).toBe('azul-clinico');
     for (const a of NAV_ACCENTS) {
       const bg = a.vars['--il-nav'];
       const fg = a.vars['--il-nav-fg'];
       expect(bg, a.id).toMatch(/^#[0-9a-f]{6}$/);
-      expect(fg, a.id).toMatch(/^#f[0-9a-f]{5}$|^#ffffff$/); // fg claro sobre fundo escuro
+      // contraste real: fg CLARO sobre fundo ESCURO (luminância)
+      expect(lum(fg), a.id).toBeGreaterThan(0.82);
+      expect(lum(bg), a.id).toBeLessThan(0.45);
       expect(a.vars['--il-nav-active-fg'], a.id).toBe('#ffffff');
     }
     expect(navAccentById('teal').id).toBe('teal');
-    expect(navAccentById('lixo').id).toBe('indigo'); // fallback seguro
+    expect(navAccentById('lixo').id).toBe('azul-clinico'); // fallback seguro
   });
 
   it('os presets vivem em Configurações → Aparência, com preview e persistência local', () => {
@@ -97,8 +107,8 @@ describe('missão 6 · 5 — personalização da sidebar em Configurações (nã
 
   it('a shell APLICA o preset via data-nav-accent; a topbar/sidebar não têm seletor de cor', () => {
     expect(shell).toContain('data-nav-accent={navAccent}');
-    expect(css).toContain(".workspace-shell[data-nav-accent='violet']");
-    expect(css).toContain(".workspace-shell[data-nav-accent='graphite']");
+    expect(css).toContain(".workspace-shell[data-nav-accent='violeta']");
+    expect(css).toContain(".workspace-shell[data-nav-accent='onix']");
     // seletor de cor NÃO exposto na shell principal
     expect(topbar).not.toContain('nav-accent');
     expect(nav).not.toContain('nav-accent');
