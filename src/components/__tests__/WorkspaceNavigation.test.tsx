@@ -100,11 +100,11 @@ describe('Etapa A — sidebar por seções', () => {
     expect(within(main).getByRole('button', { name: 'Configurações' }).getAttribute('aria-expanded')).toBe('true');
     expect(document.querySelector('.workspace-group.is-open #submenu-ajustes')).toBeTruthy();
     expect(document.querySelectorAll('.workspace-group.is-open')).toHaveLength(1);
-    // Missão §4 — NÃO fechar o próprio grupo: clicar de novo em Configurações
-    // (já aberta) mantém o grupo aberto. Não existe "nenhum grupo aberto".
+    // Accordeão TRADICIONAL: clicar no grupo aberto FECHA — zero grupos
+    // abertos é estado VÁLIDO.
     await u.click(within(main).getByRole('button', { name: 'Configurações' }));
-    expect(within(main).getByRole('button', { name: 'Configurações' }).getAttribute('aria-expanded')).toBe('true');
-    expect(document.querySelectorAll('.workspace-group.is-open')).toHaveLength(1);
+    expect(within(main).getByRole('button', { name: 'Configurações' }).getAttribute('aria-expanded')).toBe('false');
+    expect(document.querySelectorAll('.workspace-group.is-open')).toHaveLength(0);
     expect(onCollapse).not.toHaveBeenCalled();
   });
 
@@ -113,10 +113,10 @@ describe('Etapa A — sidebar por seções', () => {
     const main = screen.getByRole('navigation', { name: 'Menu principal' });
     expect(within(main).getByRole('button', { name: 'Configurações' }).getAttribute('aria-expanded')).toBe('true');
     expect(within(main).getByRole('link', { name: 'Equipe' })).toBeTruthy();
+    // Accordeão tradicional: rota plana NÃO força grupo nenhum — o estado
+    // aberto/fechado é do usuário (aqui, Configurações segue como estava).
     rerender(<WorkspaceNavigation {...props} activePath="/agenda" />);
-    expect(within(main).getByRole('button', { name: 'Configurações' }).getAttribute('aria-expanded')).toBe('false');
-    // Rota plana sem escolha explícita do usuário → volta ao PADRÃO Clínica.
-    expect(within(main).getByRole('button', { name: 'Clínica' }).getAttribute('aria-expanded')).toBe('true');
+    expect(within(main).getByRole('button', { name: 'Configurações' }).getAttribute('aria-expanded')).toBe('true');
   });
 
   it('marca 2.0: a CLÍNICA identifica a navegação, GoDoutor assina no rodapé', () => {
@@ -239,14 +239,14 @@ describe('Missão §2 — sem títulos de seção', () => {
   });
 });
 
-describe('Missão §4 — acordeão: sempre exatamente UM grupo aberto', () => {
+describe('acordeão TRADICIONAL — no máximo 1 aberto; ZERO é permitido', () => {
   it.each(['/dashboard', '/agenda', '/conversas', '/tarefas', '/clientes', '/pagina'])(
-    'rota plana %s inicia com Clínica aberta (padrão)',
+    'rota plana %s inicia com ZERO grupos abertos',
     (activePath) => {
       setup({ activePath });
       const main = screen.getByRole('navigation', { name: 'Menu principal' });
-      expect(within(main).getByRole('button', { name: 'Clínica' }).getAttribute('aria-expanded')).toBe('true');
-      expect(document.querySelectorAll('.workspace-group.is-open')).toHaveLength(1);
+      expect(within(main).getByRole('button', { name: 'Clínica' }).getAttribute('aria-expanded')).toBe('false');
+      expect(document.querySelectorAll('.workspace-group.is-open')).toHaveLength(0);
     },
   );
 
@@ -266,35 +266,36 @@ describe('Missão §4 — acordeão: sempre exatamente UM grupo aberto', () => {
     }
   });
 
-  it('clicar Automação fecha Clínica e abre Automação (um grupo por vez)', async () => {
+  it('clicar num grupo fechado ABRE (e fecha o anterior: um por vez)', async () => {
     const u = userEvent.setup();
-    setup();
+    setup({ activePath: '/configuracoes' }); // Configurações aberta (deep-link)
     const main = screen.getByRole('navigation', { name: 'Menu principal' });
     await u.click(within(main).getByRole('button', { name: 'Automação' }));
-    expect(within(main).getByRole('button', { name: 'Clínica' }).getAttribute('aria-expanded')).toBe('false');
+    expect(within(main).getByRole('button', { name: 'Configurações' }).getAttribute('aria-expanded')).toBe('false');
     expect(within(main).getByRole('button', { name: 'Automação' }).getAttribute('aria-expanded')).toBe('true');
     expect(document.querySelectorAll('.workspace-group.is-open')).toHaveLength(1);
   });
 
-  it('clicar novamente em Automação NÃO fecha Automação', async () => {
+  it('clicar novamente no grupo ABERTO fecha (zero grupos abertos = válido)', async () => {
     const u = userEvent.setup();
     setup();
     const main = screen.getByRole('navigation', { name: 'Menu principal' });
     await u.click(within(main).getByRole('button', { name: 'Automação' }));
-    await u.click(within(main).getByRole('button', { name: 'Automação' }));
-    expect(within(main).getByRole('button', { name: 'Automação' }).getAttribute('aria-expanded')).toBe('true');
     expect(document.querySelectorAll('.workspace-group.is-open')).toHaveLength(1);
+    await u.click(within(main).getByRole('button', { name: 'Automação' }));
+    expect(within(main).getByRole('button', { name: 'Automação' }).getAttribute('aria-expanded')).toBe('false');
+    expect(document.querySelectorAll('.workspace-group.is-open')).toHaveLength(0);
   });
 
   it('a escolha EXPLÍCITA persiste em rota plana; deep-link tem autoridade', async () => {
     const u = userEvent.setup();
-    const { rerender, props } = setup(); // /agenda — Clínica (padrão)
+    const { rerender, props } = setup(); // /agenda — ZERO abertos (rota plana)
     const main = screen.getByRole('navigation', { name: 'Menu principal' });
     await u.click(within(main).getByRole('button', { name: 'Automação' }));
     // O usuário ABRIU Automação: navegando para rota plana, Automação segue aberta.
     rerender(<WorkspaceNavigation {...props} activePath="/clientes" />);
     expect(within(main).getByRole('button', { name: 'Automação' }).getAttribute('aria-expanded')).toBe('true');
-    // Deep-link tem autoridade: /servicos reabre o dono (Clínica).
+    // Deep-link tem autoridade: /servicos abre o dono (Clínica) e fecha Automação.
     rerender(<WorkspaceNavigation {...props} activePath="/servicos" />);
     expect(within(main).getByRole('button', { name: 'Clínica' }).getAttribute('aria-expanded')).toBe('true');
     expect(within(main).getByRole('button', { name: 'Automação' }).getAttribute('aria-expanded')).toBe('false');

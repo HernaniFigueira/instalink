@@ -122,28 +122,19 @@ export function WorkspaceNavigation({ nav, activePath, unit, units = [], multiUn
   );
   const activeGroup = activeArea && isGroup(activeArea) ? activeArea.id : null;
 
-  // ACORDEÃO META-LIKE: SEMPRE exatamente UM grupo aberto quando a sidebar
-  // está expandida — não existe estado "nenhum grupo aberto".
-  //   • padrão: "Clínica" (rotas planas como /dashboard e /agenda);
-  //   • deep-link: a rota ativa ABRE o grupo dono (autoridade do catálogo);
-  //   • clicar noutro grupo TROCA (um por vez, nunca dois);
-  //   • clicar no grupo ABERTO não fecha — ele permanece aberto.
-  // `openedByUser` distingue "o usuário escolheu" (persiste ao navegar em
-  // rotas planas) de "a rota abriu" (rota plana volta ao padrão Clínica).
-  const groups = useMemo(
-    () => sections.flatMap((s) => s.groups.filter((g) => !g.flat).map((g) => g.area)),
-    [sections],
-  );
-  const defaultGroup = groups.some((a) => a.id === 'clinica') ? 'clinica' : (groups[0]?.id ?? null);
-  const [opened, setOpened] = useState<string | null>(activeGroup ?? defaultGroup);
-  const openedByUser = useRef(false);
+  // ACCORDEÃO TRADICIONAL (refino final): no máximo UM grupo aberto e
+  // ZERO abertos é estado VÁLIDO (nada de "sempre precisa existir um").
+  // Início: só o grupo da rota atual (se a rota estiver dentro de um grupo).
+  const [opened, setOpened] = useState<string | null>(activeGroup ?? null);
   const [unitOpen, setUnitOpen] = useState(false);
 
   useEffect(() => {
-    if (activeGroup) { setOpened(activeGroup); openedByUser.current = false; }
-    else if (!openedByUser.current) { setOpened(defaultGroup); }
+    // Navegação para rota dentro de um grupo → abre AQUELE grupo (comportamento
+    // necessário de navegação). Fora de grupo: não mexe em nada — nunca força
+    // outro grupo a permanecer aberto.
+    if (activeGroup) setOpened(activeGroup);
     setMobile(false);
-  }, [activePath, unit.id, activeGroup, defaultGroup]);
+  }, [activePath, unit.id, activeGroup]);
 
   // Ao crescer para desktop o drawer móvel não pode ficar aberto por cima.
   useEffect(() => {
@@ -258,10 +249,9 @@ export function WorkspaceNavigation({ nav, activePath, unit, units = [], multiUn
               peekCtl.togglePeek(area.id, e.currentTarget.getBoundingClientRect().top);
               return;
             }
-            // Expandida: abre ESTE grupo — clicar no grupo aberto NÃO fecha
-            // (nunca existe estado "nenhum grupo aberto").
-            setOpened(area.id);
-            openedByUser.current = true;
+            // Accordeão tradicional: clicar abre; clicar no aberto FECHA
+            // (zero grupos abertos é permitido); abrir outro fecha o anterior.
+            setOpened(open ? null : area.id);
           }}
         >
           <span className="workspace-link__icon"><Icon n={area.icon} size={18} /></span>
@@ -481,7 +471,7 @@ export function WorkspaceNavigation({ nav, activePath, unit, units = [], multiUn
             itens do grupo. Abre em ~200ms (ease-out) e recolhe 250–300ms após o
             mouseleave. O estado `collapsed` NUNCA muda aqui. */}
         {collapsed && peekCtl.peekId && typeof document !== 'undefined' && (() => {
-          const area = groups.find((g) => g.id === peekCtl.peekId) || sections.flatMap((s) => s.groups).find((g) => g.area.id === peekCtl.peekId)?.area;
+          const area = sections.flatMap((s) => s.groups).find((g) => g.area.id === peekCtl.peekId)?.area;
           const items = area ? visible(area.items) : [];
           if (!area || !items.length) return null;
           return createPortal(
