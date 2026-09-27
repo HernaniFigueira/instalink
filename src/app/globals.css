@@ -26,7 +26,11 @@
   color-scheme: light;
 
   /* ── Estrutura: fundo, superfícies e bordas ─────────────────── */
-  --bg: #f3f5fb;              /* fundo do painel (limpo, levemente frio) */
+  /* §2 (contrato D) — FUNDO DO WORKSPACE: neutro UNIVERSAL. Não acompanha
+     o tema; gradiente sutil #F4F6F8 → #F8F9FB aplicado no shell. */
+  --bg: #f4f6f8;
+  --bg-top: #f4f6f8;
+  --bg-bottom: #f8f9fb;
   --bg-tint: #eef1fa;         /* faixa/área de apoio */
   --surface: #ffffff;         /* cartão */
   --surface-2: #fbfcff;       /* cartão sobre cartão (profundidade leve) */
@@ -99,7 +103,13 @@
   --action-contrast: #ffffff;
   --action-soft: var(--brand-soft);
   --action-soft-border: var(--brand-border);
-  --accent: var(--brand);
+  /* ── TEMA (contrato B) — CTAs principais + acentos. Defaults = tema
+     padrão (Azul clínico); a paleta da clínica (lib/nav-accent.ts) aplica
+     os 5 tokens inline no shell. NUNCA misturar com --text/--il-nav. ── */
+  --accent: #3f37c9;
+  --accent-hover: #322ca6;
+  --accent-soft: #ecebfb;
+  --accent-border: #c3bff0;
   --accent-contrast: #ffffff;
 
   /* ── Estado ─────────────────────────────────────────────────── */
@@ -759,7 +769,13 @@ input[type='color'] { @apply cursor-pointer; }
   --action-contrast: #ffffff;
   --action-soft: var(--brand-soft);
   --action-soft-border: var(--brand-border);
-  --accent: var(--brand);
+  /* ── TEMA (contrato B) — CTAs principais + acentos. Defaults = tema
+     padrão (Azul clínico); a paleta da clínica (lib/nav-accent.ts) aplica
+     os 5 tokens inline no shell. NUNCA misturar com --text/--il-nav. ── */
+  --accent: #3f37c9;
+  --accent-hover: #322ca6;
+  --accent-soft: #ecebfb;
+  --accent-border: #c3bff0;
   --accent-contrast: #ffffff;
 
   /* ── VERDE DE ESTADO · concluído/confirmado ──────────────────── */
@@ -950,6 +966,61 @@ dialog.il-drawer:not([open]) { display: none; }
 dialog.il-drawer::backdrop { background: transparent; }
 
 /* ═══════════════════════════════════════════════════════════════
+   §19–25 — OVERLAY SYSTEM · faixa que expande lateralmente
+   ═══════════════════════════════════════════════════════════════
+   UM dialog = UM backdrop. "Cadastrar novo paciente" dentro de "Novo
+   agendamento" NÃO abre modal novo: a faixa cresce (base 680–760px →
+   expandida 1000–1120px), o painel base recua/atenua e o secundário entra
+   pela direita. Animações: entrada 200ms, saída 170ms (faixa ~200ms),
+   com prefers-reduced-motion zerando o movimento. */
+
+/* Foco programático (títulos aria-labelledby, tabindex=-1) é para leitores
+   de tela — sem anel visual. Anel real (:focus-visible) fica só em controles. */
+[tabindex='-1']:focus,
+[tabindex='-1']:focus-visible { outline: none !important; box-shadow: none !important; }
+
+.il-drawer__strip { transition: max-width 200ms var(--ease-standard), width 200ms var(--ease-standard); }
+.il-drawer__panel--base {
+  min-width: 0;
+  transition: opacity 200ms var(--ease-standard), transform 200ms var(--ease-standard), filter 200ms var(--ease-standard);
+}
+/* Lado recuado/atenuado: o fluxo atual continua visível e legível, mas o
+   foco do usuário está claramente no painel secundário. */
+.il-drawer__panel--recessed {
+  opacity: .62;
+  transform: translateX(-8px);
+  filter: saturate(.85);
+}
+.il-drawer__panel--side { animation: il-drawer-side-in 200ms var(--ease-standard); }
+@keyframes il-drawer-side-in {
+  from { opacity: 0; transform: translateX(24px); }
+  to { opacity: 1; transform: none; }
+}
+/* Mobile (≤768px): passos num overlay SÓ — transição horizontal, um painel
+   por vez. O base sai pela esquerda quando o secundário assume. */
+@media (max-width: 768px) {
+  .il-drawer__strip[data-expanded='true'] { max-width: none !important; width: 100% !important; }
+  .il-drawer__panel--base[data-recessed-mobile='true'] { display: none; }
+  .il-drawer__strip[data-expanded='true'] .il-drawer__panel--recessed {
+    display: none;
+  }
+  .il-drawer__strip[data-expanded='true'] .il-drawer__panel--side {
+    width: 100% !important; max-width: none !important; border-left: 0 !important;
+  }
+  .il-drawer__panel--side { animation: il-drawer-side-in-mobile 200ms var(--ease-standard); }
+  @keyframes il-drawer-side-in-mobile {
+    from { opacity: 0; transform: translateX(100%); }
+    to { opacity: 1; transform: none; }
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .il-drawer__strip, .il-drawer__panel--base, .il-drawer__panel--side {
+    transition: none !important; animation: none !important;
+  }
+  .il-drawer__panel--recessed { transform: none; }
+}
+
+/* ═══════════════════════════════════════════════════════════════
    APP SHELL — GoDoutor UI Revolution · Etapa A
    ═══════════════════════════════════════════════════════════════
    Topbar fixa (breadcrumb · busca global · notificações · conta) + sidebar
@@ -958,10 +1029,12 @@ dialog.il-drawer::backdrop { background: transparent; }
    O sheet (Etapa B) é ancorado ABAIXO da topbar e À DIREITA de --sheet-left,
    medido em runtime pelo shell — por isso nunca cobre sidebar nem topbar. */
 .workspace-shell { display: flex; align-items: stretch; }
-/* Atrás do canto do encaixe: um tom mínimo da cor do tema (acompanha o
-   preset) — o painel branco parece assentar ao lado da navegação. */
+/* §2 (contrato D) — FUNDO DO WORKSPACE: neutro UNIVERSAL, gradiente sutil
+   #F4F6F8 → #F8F9FB. NÃO acompanha o tema da clínica — o mesmo fundo em
+   todas as rotas do dashboard (Agenda inclusa: o fundo externo é este; a
+   grade interna mantém o tom próprio dela). */
 .il-platform.workspace-shell {
-  background: color-mix(in srgb, var(--il-nav) 8%, var(--bg));
+  background: linear-gradient(180deg, var(--bg-top) 0%, var(--bg-bottom) 100%);
 }
 /* Missão 7 · §8 — encaixe estratégico: o painel principal ganha UM canto
    especial no encontro com a lateral (as referências aprovadas). `overflow:
@@ -971,7 +1044,9 @@ dialog.il-drawer::backdrop { background: transparent; }
   flex: 1; min-width: 0; display: flex; flex-direction: column; min-height: 100dvh;
   overflow: clip;
   border-top-left-radius: var(--radius-xl);
-  background: var(--bg);
+  /* Mesmo fundo universal do shell (contrato D) — transparente deixa o
+     gradiente neutro #F4F6F8 → #F8F9FB aparecer sem duplicar tokens. */
+  background: transparent;
 }
 .workspace-content { min-width: 0; flex: 1; }
 
@@ -1201,6 +1276,22 @@ dialog.il-drawer::backdrop { background: transparent; }
 @keyframes ws-pop-in {
   from { opacity: 0; transform: translateY(-4px) scale(.985); }
   to { opacity: 1; transform: none; }
+}
+/* §17–18 — highlight sutil de foco guiado (Registrar nota / Editar dados):
+   contorno do brand que pulsa uma vez e se apaga em ~1.8s. Sem modal, sem
+   flash: só o campo "acende" por um instante para o usuário enxergar onde
+   o foco pousou. `prefers-reduced-motion` mantém apenas um contorno estático. */
+.il-field-highlight {
+  animation: il-field-glow 1.8s var(--ease-standard);
+  border-color: var(--brand) !important;
+}
+@keyframes il-field-glow {
+  0% { box-shadow: 0 0 0 3px var(--brand-soft); }
+  70% { box-shadow: 0 0 0 3px var(--brand-soft); }
+  100% { box-shadow: none; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .il-field-highlight { animation: none; box-shadow: 0 0 0 2px var(--brand-soft); }
 }
 .ws-popover__header {
   display: flex; align-items: center; gap: 8px;
@@ -1616,6 +1707,43 @@ button.workspace-clinic-head:hover { background: rgba(255, 255, 255, 0.12); }
   background: var(--surface); border-radius: var(--radius-md); box-shadow: var(--shadow-lg);
 }
 .workspace-skip:focus { transform: none; }
+
+/* ── §7 — hover-peek de GRUPOS (rail recolhido) ───────────────
+   Painel TEMPORÁRIO ao lado do rail: abre em 200ms (ease-out, janela
+   180–220ms), recolhe 250–300ms após o mouseleave (o delay vive no JS —
+   lib/sidebar-peek.ts). Nunca altera o estado recolhido/expandido. */
+.ws-peek {
+  position: fixed; z-index: 90;
+  left: calc(var(--sidebar-w-mini, 72px) + 10px);
+  min-width: 210px; max-width: 260px;
+  padding: 8px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-lg);
+  animation: ws-peek-in 200ms ease-out;
+}
+.ws-peek__title {
+  margin: 0 0 6px; padding: 2px 8px;
+  font-size: 11px; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase;
+  color: var(--text-faint);
+}
+.ws-peek__items { display: flex; flex-direction: column; gap: 2px; }
+.ws-peek__item {
+  display: flex; align-items: center; gap: 9px;
+  padding: 7px 9px; border-radius: var(--radius-sm);
+  font-size: 12.5px; font-weight: 600; color: var(--text);
+  text-decoration: none;
+  transition: background-color 120ms ease;
+}
+.ws-peek__item:hover { background: var(--surface-3); }
+@keyframes ws-peek-in {
+  from { opacity: 0; transform: translateX(-6px); }
+  to { opacity: 1; transform: none; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .ws-peek { animation: none; }
+}
 
 /* ── Breakpoints ────────────────────────────────────────────── */
 @media (min-width: 1200px) {

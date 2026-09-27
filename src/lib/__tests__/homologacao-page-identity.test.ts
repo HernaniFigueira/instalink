@@ -123,7 +123,8 @@ describe('P1 · paleta mais neutra', () => {
   it('PageHeader não usa gradiente roxo→lilás', () => {
     const ui = read('src/components/ui.tsx');
     expect(ui).not.toContain('from-[var(--brand)] to-[var(--lilac)]');
-    expect(ui).toContain('bg-[var(--surface-3)] text-[var(--brand-fg)]');
+    // ícone/acento do header segue o TEMA (decreto final): accent-soft + accent
+    expect(ui).toContain('bg-[var(--accent-soft)] text-[var(--accent)]');
   });
 
   it('Publicar usa verde --success (menos saturado que emerald-600 hardcoded)', () => {

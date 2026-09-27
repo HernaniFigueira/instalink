@@ -423,7 +423,7 @@ export default function AgendaPage() {
   const [colWidth, setColWidth] = useState(COL_MIN);
 
   const { notice, dismiss } = useForbiddenNotice('Agenda');
-  const { denied, failed, report } = useAreaLoad('Agenda');
+  const { denied, failed, report, reportFeature } = useAreaLoad('Agenda');
 
   // A2-B5 (F9): '' enquanto carrega = default do produto (America/Sao_Paulo).
   const [bizTz, setBizTz] = useState('');
@@ -449,7 +449,9 @@ export default function AgendaPage() {
       `/api/queue?businessId=${businessId}`, { scope: 'area', area: 'Agenda' },
     );
     setQueueLoading(false);
-    if (!res.ok) return;
+    // §8–10 — FEATURE secundária: sem fila (403 do perfil ou erro), a tela
+    // apenas segue sem o bloco da fila. Nunca "sem permissão" na área inteira.
+    if (!res.ok) { setQueueRows([]); setQueueDone([]); return; }
     setQueueRows(res.data?.entries || []);
     setQueueDone(res.data?.done || []);
   }, [businessId]);
@@ -465,10 +467,13 @@ export default function AgendaPage() {
         { scope: 'area', area: 'Agenda' },
       ),
     ]);
-    // Sem permissão (403): mostra o aviso amigável e PARA de carregar — a tela
-    // não pode ficar em skeleton para sempre. A sessão continua intacta.
-    if (!report(cat) || !report(bk)) { setLoaded(true); return; }
-    const d = cat.data || {};
+    // §8–10 — separação PRINCIPAL × SECUNDÁRIA (causa raiz do falso 403):
+    //   bookings = request PRINCIPAL da Agenda → seu 403 nega a área;
+    //   catalog  = request SECUNDÁRIA (apoio da grade) → seu 403 só limita
+    //              a feature: a agenda permanece na tela com o que puder.
+    if (!report(bk)) { setLoaded(true); return; }
+    const catalogOk = reportFeature(cat);
+    const d = catalogOk ? (cat.data || {}) : {};
     setServices(d.services || []);
     setPros(d.professionals || []);
     // A2-B3 (F5): horizonte real do negócio (1–365) — nunca 60 hardcoded.
@@ -478,10 +483,10 @@ export default function AgendaPage() {
     setBizTz(d.business?.businessTimezone || '');
     setRules(d.availability || []);
     setExceptions(d.exceptions || []);
-    setBookings(bk.ok ? (bk.data?.bookings || []) : []);
+    setBookings(bk.data?.bookings || []);
     setLoaded(true);
     void loadQueue();
-  }, [businessId, range.from, range.to, report, loadQueue]);
+  }, [businessId, range.from, range.to, report, reportFeature, loadQueue]);
 
   useEffect(() => { load(); }, [load]);
 

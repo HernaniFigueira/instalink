@@ -1,127 +1,198 @@
 // ═══════════════════════════════════════════════════════════════
-// APARÊNCIA DO SISTEMA — cor da navegação (missão 6)
+// APARÊNCIA DO SISTEMA — tema da clínica (missão final · §6)
 // ═══════════════════════════════════════════════════════════════
-// A personalização de cor da sidebar mora em Configurações → Aparência
-// (nunca exposta na shell). Presets SEGUROS: cada um traz fg/muted já
-// validados para contraste AA sobre o fundo do preset.
-// Persistência local (localStorage) — sem banco/APIs nesta missão.
+// CONTRATO UNIVERSAL DE COR (4 CATEGORIAS — docs/GODOUTOR-UI-CONTRACT.md):
+//   A) TEXTO        sempre near-black — o tema NUNCA muda o texto;
+//   B) TEMA         (esta paleta) controla: sidebar, topbar suave, ícone e
+//                   acento do page header, item ativo e CTAs PRINCIPAIS;
+//   C) SEMÂNTICAS   verde=ok, vermelho=erro, âmbar=atenção — independentes;
+//   D) FUNDO        do workspace é neutro universal — não acompanha o tema.
+//
+// PALETA POR FAMÍLIAS (21 presets): Neutro/Branco · Azul clínico, amigável,
+// profundo · Verde sálvia, equilibrado, profundo · Teal claro, médio,
+// profundo · Violeta suave, atual, profundo · Amarelo suave, Âmbar, Dourado ·
+// Rosé, Vinho, Bordô · Ônix.
+//
+// Cada preset traz DOIS grupos de tokens (nunca misturados com --text):
+//   --il-nav*   → sidebar (fundo, texto do nav, hover, item ativo);
+//   --accent*   → CTAs PRINCIPAIS + acentos de header (accent, hover, soft,
+//                 border, contrast). O contraste do accent é calculado na
+//                 carga (preto ou branco, nunca "no olho").
+//
+// A personalização mora em Configurações → Aparência (nunca no shell) e
+// NÃO afeta a página pública. Persistência local (localStorage).
 'use client';
 
-export type NavAccentId =
-  | 'azul-clinico' | 'azul-amigavel' | 'violeta' | 'teal'
-  | 'verde-salvia' | 'ambar' | 'onix' | 'vinho';
+export type NavAccentFamily =
+  | 'neutro' | 'azul' | 'verde' | 'teal' | 'violeta' | 'amarelo' | 'rosé' | 'onix';
 
 export interface NavAccent {
-  id: NavAccentId;
+  id: string;
+  family: NavAccentFamily;
   /** Rótulo no seletor. */
   label: string;
-  /** Amostra para o swatch (cor de fundo do preset). */
+  /** Amostra do swatch (cor de fundo do preset). */
   swatch: string;
-  /** Tokens --il-nav* aplicados em .workspace-shell[data-nav-accent=…]. */
+  /** Tokens aplicados em .workspace-shell[data-nav-accent=…]. */
   vars: Record<string, string>;
 }
 
+// ── Derivação determinística de tons (mesma régua para todos) ──
+// Escurece/clareia um hex por fator; usado para hover/soft/border.
+function mix(hex: string, target: string, amount: number): string {
+  const h = hex.replace('#', '');
+  const t = target.replace('#', '');
+  const f = (i: number) => Math.round(
+    parseInt(h.slice(i, i + 2), 16) * (1 - amount) + parseInt(t.slice(i, i + 2), 16) * amount,
+  );
+  return '#' + [f(0), f(2), f(4)].map((v) => v.toString(16).padStart(2, '0')).join('');
+}
+const darken = (hex: string, amount: number) => mix(hex, '#000000', amount);
+const lighten = (hex: string, amount: number) => mix(hex, '#ffffff', amount);
+
+/** Luminância relativa WCAG de um hex (#rrggbb). */
+export function relativeLuminance(hex: string): number {
+  const h = hex.replace('#', '');
+  const chan = (i: number) => {
+    const c = parseInt(h.slice(i, i + 2), 16) / 255;
+    return c <= 0.04045 ? c / 12.92 : Math.pow((c + 0.055) / 1.055, 2.4);
+  };
+  return 0.2126 * chan(0) + 0.7152 * chan(2) + 0.0722 * chan(4);
+}
+
+/** Texto sobre a cor: near-black em fundos claros, branco nos escuros (AA). */
+export function contrastOn(hex: string): string {
+  // Fundo claro → texto quase preto (contrato A: texto sempre near-black).
+  return relativeLuminance(hex) > 0.35 ? '#18181b' : '#ffffff';
+}
+
+/** Ratio de contraste WCAG entre duas cores. */
+export function contrastRatio(a: string, b: string): number {
+  const [hi, lo] = [relativeLuminance(a), relativeLuminance(b)].sort((x, y) => y - x) as [number, number];
+  return (hi + 0.05) / (lo + 0.05);
+}
+
+function preset(
+  id: string,
+  family: NavAccentFamily,
+  label: string,
+  nav: string,
+  accent: string,
+  opts: { navFg?: string } = {},
+): NavAccent {
+  const navFg = opts.navFg || contrastOn(nav);
+  return {
+    id,
+    family,
+    label,
+    swatch: nav,
+    vars: {
+      // ── Sidebar (B: tema) ──
+      '--il-nav': nav,
+      '--il-nav-fg': navFg === '#18181b' ? '#18181b' : '#ffffff',
+      '--il-nav-muted': navFg === '#18181b' ? mix(nav, '#18181b', 0.42) : mix(nav, '#ffffff', 0.34),
+      '--il-nav-hover': darken(nav, 0.12),
+      '--il-nav-active': navFg === '#18181b' ? darken(nav, 0.18) : lighten(nav, 0.14),
+      '--il-nav-active-fg': navFg === '#18181b' ? '#18181b' : '#ffffff',
+      // ── CTAs principais + acentos (B: tema) ──
+      '--accent': accent,
+      '--accent-hover': darken(accent, 0.14),
+      '--accent-soft': lighten(accent, 0.86),
+      '--accent-border': mix(accent, '#ffffff', 0.55),
+      '--accent-contrast': contrastOn(accent),
+    },
+  };
+}
+
+// ═══════════════════════════════════════════════════════════════
+// OS 21 PRESETS, por família (contrato §6: preview + contraste AA)
+// ═══════════════════════════════════════════════════════════════
 export const NAV_ACCENTS: NavAccent[] = [
-  {
-    id: 'azul-clinico',
-    label: 'Azul clínico',
-    swatch: '#3f37c9',
-    vars: {
-      '--il-nav': '#3f37c9', '--il-nav-fg': '#f2f3ff', '--il-nav-muted': '#d3dafc',
-      '--il-nav-hover': '#4c43d1', '--il-nav-active': '#5b4fe2', '--il-nav-active-fg': '#ffffff',
-    },
-  },
-  {
-    id: 'azul-amigavel',
-    label: 'Azul amigável',
-    swatch: '#2563eb',
-    vars: {
-      '--il-nav': '#2563eb', '--il-nav-fg': '#eff6ff', '--il-nav-muted': '#bfdbfe',
-      '--il-nav-hover': '#1d4ed8', '--il-nav-active': '#3b82f6', '--il-nav-active-fg': '#ffffff',
-    },
-  },
-  {
-    id: 'violeta',
-    label: 'Violeta',
-    swatch: '#6d28d9',
-    vars: {
-      '--il-nav': '#6d28d9', '--il-nav-fg': '#f5f3ff', '--il-nav-muted': '#ddd6fe',
-      '--il-nav-hover': '#5b21b6', '--il-nav-active': '#7c3aed', '--il-nav-active-fg': '#ffffff',
-    },
-  },
-  {
-    id: 'teal',
-    label: 'Teal',
-    swatch: '#0f766e',
-    vars: {
-      '--il-nav': '#0f766e', '--il-nav-fg': '#f0fdfa', '--il-nav-muted': '#b8e8e0',
-      '--il-nav-hover': '#115e59', '--il-nav-active': '#14b8a6', '--il-nav-active-fg': '#ffffff',
-    },
-  },
-  {
-    id: 'verde-salvia',
-    label: 'Verde sálvia',
-    swatch: '#4d7c5f',
-    vars: {
-      '--il-nav': '#4d7c5f', '--il-nav-fg': '#f4f8f4', '--il-nav-muted': '#cfe3d2',
-      '--il-nav-hover': '#3f6a50', '--il-nav-active': '#5f8d6e', '--il-nav-active-fg': '#ffffff',
-    },
-  },
-  {
-    id: 'ambar',
-    label: 'Âmbar',
-    swatch: '#b45309',
-    vars: {
-      '--il-nav': '#b45309', '--il-nav-fg': '#fff8eb', '--il-nav-muted': '#f5d9a8',
-      '--il-nav-hover': '#92400e', '--il-nav-active': '#d97706', '--il-nav-active-fg': '#ffffff',
-    },
-  },
-  {
-    id: 'onix',
-    label: 'Ônix',
-    swatch: '#18181b',
-    vars: {
-      '--il-nav': '#18181b', '--il-nav-fg': '#fafafa', '--il-nav-muted': '#c4c4c8',
-      '--il-nav-hover': '#27272a', '--il-nav-active': '#3f3f46', '--il-nav-active-fg': '#ffffff',
-    },
-  },
-  {
-    id: 'vinho',
-    label: 'Vinho',
-    swatch: '#9f1239',
-    vars: {
-      '--il-nav': '#9f1239', '--il-nav-fg': '#fff1f2', '--il-nav-muted': '#f7cdd6',
-      '--il-nav-hover': '#881337', '--il-nav-active': '#be123c', '--il-nav-active-fg': '#ffffff',
-    },
-  },
+  // ── Neutro / Branco ──
+  preset('branco', 'neutro', 'Branco', '#eef1f6', '#4b5563', { navFg: '#18181b' }),
+  preset('neutro', 'neutro', 'Neutro', '#d8dde6', '#3f4652', { navFg: '#18181b' }),
+  // ── Azul ──
+  preset('azul-clinico', 'azul', 'Azul clínico', '#3f37c9', '#3f37c9'),
+  preset('azul-amigavel', 'azul', 'Azul amigável', '#2563eb', '#2563eb'),
+  preset('azul-profundo', 'azul', 'Azul profundo', '#1e3a8a', '#1e40af'),
+  // ── Verde ──
+  preset('verde-salvia', 'verde', 'Verde sálvia', '#4d7c5f', '#4d7c5f'),
+  preset('verde-equilibrado', 'verde', 'Verde equilibrado', '#15803d', '#15803d'),
+  preset('verde-profundo', 'verde', 'Verde profundo', '#14532d', '#166534'),
+  // ── Teal ──
+  preset('teal-claro', 'teal', 'Teal claro', '#0b7d74', '#0b7d74'),
+  preset('teal', 'teal', 'Teal médio', '#0f766e', '#0f766e'),
+  preset('teal-profundo', 'teal', 'Teal profundo', '#134e4a', '#115e59'),
+  // ── Violeta ──
+  preset('violeta-suave', 'violeta', 'Violeta suave', '#6d5fd8', '#6d5fd8'),
+  preset('violeta', 'violeta', 'Violeta', '#6d28d9', '#6d28d9'),
+  preset('violeta-profundo', 'violeta', 'Violeta profundo', '#4c1d95', '#5b21b6'),
+  // ── Amarelo / Âmbar (texto sobre accent é near-black — contrato A) ──
+  preset('amarelo-suave', 'amarelo', 'Amarelo suave', '#e8c96a', '#b45309', { navFg: '#18181b' }),
+  preset('ambar', 'amarelo', 'Âmbar', '#b45309', '#b45309'),
+  preset('dourado', 'amarelo', 'Dourado', '#a16207', '#a16207'),
+  // ── Rosé / Vinho / Bordô ──
+  preset('rose', 'rosé', 'Rosé', '#ad4d64', '#ad4d64'),
+  preset('vinho', 'rosé', 'Vinho', '#7f1d3f', '#861e45'),
+  preset('bordo', 'rosé', 'Bordô', '#5f1230', '#6b1435'),
+  // ── Ônix ──
+  preset('onix', 'onix', 'Ônix', '#18181b', '#27272a'),
 ];
 
-export const NAV_ACCENT_DEFAULT: NavAccentId = 'azul-clinico';
-
-const STORAGE_KEY = 'godoutor.nav-accent';
-
-export function navAccentById(id: string | null | undefined): NavAccent {
-  return NAV_ACCENTS.find((a) => a.id === id) || NAV_ACCENTS[0];
+/** Resolução por id, com aliases das missões anteriores (localStorage legado). */
+const ALIASES: Record<string, string> = {
+  'violeta-atual': 'violeta',
+  'teal-medio': 'teal',
+};
+export function findAccent(id: string): NavAccent | undefined {
+  const resolved = ALIASES[id] || id;
+  return NAV_ACCENTS.find((a) => a.id === resolved);
 }
 
-/** Leitura segura (SSR/hidratação): só o padrão antes do mount. */
+export const DEFAULT_ACCENT_ID = 'azul-clinico';
+// Chave LEGADA (missão 6) — preserva a preferência já persistida do usuário.
+export const NAV_ACCENT_STORAGE_KEY = 'godoutor.nav-accent';
+
+/** Compat: id de preset (string — os 21 ids + aliases legados). */
+export type NavAccentId = string;
+
+/** Compat (missão 7): nome antigo do padrão. */
+export const NAV_ACCENT_DEFAULT = DEFAULT_ACCENT_ID;
+/** Compat (missão 6–7): resolvedor com fallback seguro — nunca undefined. */
+export function navAccentById(id: string): NavAccent {
+  return findAccent(id) || findAccent(DEFAULT_ACCENT_ID)!;
+}
+
+/** Id ativo (localStorage, com fallback seguro para o padrão). */
 export function getNavAccent(): NavAccentId {
-  if (typeof window === 'undefined') return NAV_ACCENT_DEFAULT;
+  if (typeof window === 'undefined') return DEFAULT_ACCENT_ID;
   try {
-    const raw = window.localStorage.getItem(STORAGE_KEY);
-    return (NAV_ACCENTS.some((a) => a.id === raw) ? raw : NAV_ACCENT_DEFAULT) as NavAccentId;
+    const raw = window.localStorage.getItem(NAV_ACCENT_STORAGE_KEY) || '';
+    const found = raw ? findAccent(raw) : undefined;
+    return found ? found.id : DEFAULT_ACCENT_ID;
   } catch {
-    return NAV_ACCENT_DEFAULT;
+    return DEFAULT_ACCENT_ID;
   }
 }
 
+/** Seleciona o tema e avisa o shell (`godoutor:nav-accent`). */
 export function setNavAccent(id: NavAccentId): void {
-  if (typeof window === 'undefined') return;
+  const found = findAccent(id);
+  const next = found ? found.id : DEFAULT_ACCENT_ID;
+  try { window.localStorage.setItem(NAV_ACCENT_STORAGE_KEY, next); } catch { /* storage bloqueado */ }
   try {
-    window.localStorage.setItem(STORAGE_KEY, id);
-    // Sincroniza shell aberta em outra aba/janela.
-    window.dispatchEvent(new CustomEvent('godoutor:nav-accent', { detail: id }));
-  } catch {
-    /* storage indisponível — o preset segue padrão */
-  }
+    window.dispatchEvent(new CustomEvent<NavAccentId>('godoutor:nav-accent', { detail: next }));
+  } catch { /* ambiente sem CustomEvent */ }
 }
+
+/** Famílias na ordem do seletor (Configurações → Aparência). */
+export const NAV_ACCENT_FAMILIES: Array<{ id: NavAccentFamily; label: string }> = [
+  { id: 'neutro', label: 'Neutro / Branco' },
+  { id: 'azul', label: 'Azul' },
+  { id: 'verde', label: 'Verde' },
+  { id: 'teal', label: 'Teal' },
+  { id: 'violeta', label: 'Violeta' },
+  { id: 'amarelo', label: 'Amarelo / Âmbar' },
+  { id: 'rosé', label: 'Rosé / Vinho' },
+  { id: 'onix', label: 'Ônix' },
+];

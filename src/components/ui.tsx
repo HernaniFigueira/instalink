@@ -32,8 +32,11 @@ export type ButtonVariant =
   | 'secondary' | 'ghost' | 'quiet' | 'cta';
 
 const BTN_VARIANT_CLS: Record<ButtonVariant, string> = {
+  // §5 (decreto novo): o CTA PRINCIPAL SEGUE O TEMA — --accent/--accent-hover/
+  // --accent-contrast controlados pela paleta da clínica (Configurações →
+  // Aparência). Nunca --il-nav (sidebar) nem --text (contrato de cor).
   primary:
-    'bg-[var(--brand)] text-white border border-[var(--brand-strong)]/40 shadow-brand hover:bg-[var(--brand-strong)] active:translate-y-px',
+    'bg-[var(--accent)] text-[var(--accent-contrast)] border border-[var(--accent-hover)]/40 shadow-brand hover:bg-[var(--accent-hover)] active:translate-y-px',
   success:
     'bg-[var(--success)] text-white border border-[var(--success-strong)]/40 shadow-sm hover:bg-[var(--success-strong)] active:translate-y-px',
   warning:
@@ -386,11 +389,14 @@ export function EmptyState({ title, hint, action, icon = 'spark' }: { title: str
 }
 
 export function PageHeader({ title, hint, action, icon }: { title: string; hint?: string; action?: React.ReactNode; icon?: string }) {
+  // §4 — cabeçalho padronizado em TODAS as telas: [icon-container accent]
+  // Título PRETO. O ícone/acento acompanham o TEMA (nunca o texto — que é
+  // sempre near-black, contrato A de cor).
   return (
     <div className="flex flex-wrap items-start justify-between gap-3 mb-5">
       <div className="flex items-start gap-3 min-w-0">
         {icon && (
-          <span className="il-page-header__icon w-10 h-10 shrink-0 rounded-lg bg-[var(--surface-3)] text-[var(--brand-fg)] flex items-center justify-center border border-[var(--border)]">
+          <span className="il-page-header__icon w-10 h-10 shrink-0 rounded-lg bg-[var(--accent-soft)] text-[var(--accent)] flex items-center justify-center border border-[var(--accent-border)]">
             <Icon n={icon} size={19} />
           </span>
         )}
@@ -642,13 +648,27 @@ export function Notice({ tone = 'info', children, title, className }: { tone?: '
 // browser responsibilities, including nested dialogs. Kept in its DOM parent
 // (no portal) so platform/public CSS scopes are never copied or leaked.
 
-export function Drawer({ open, onClose, title, subtitle, children, footer, width = 'max-w-[720px]' }: {
+export function Drawer({ open, onClose, title, subtitle, children, footer, width = 'max-w-[720px]', side, sideTitle, sideWidth = 'max-w-[520px]', onSideClose }: {
   open: boolean; onClose: () => void; title: string; subtitle?: string;
   children: React.ReactNode; footer?: React.ReactNode; width?: string;
+  /**
+   * §19–25 — OVERLAY SYSTEM: painel lateral do MESMO overlay (ex.: "Cadastrar
+   * novo paciente" dentro do "Novo agendamento"). Com `side`, o dialog EXPANDE
+   * lateralmente (base ~680–760px → expandido ~1000–1120px), o painel base
+   * recua/fica atenuado e o secundário entra pela direita. NUNCA abre um
+   * segundo modal/backdrop. Mobile: passos num overlay só, com transição
+   * horizontal (um painel por vez).
+   */
+  side?: React.ReactNode;
+  sideTitle?: string;
+  sideWidth?: string;
+  /** Fecha só o painel lateral (voltar ao base). Padrão: fecha o overlay. */
+  onSideClose?: () => void;
 }) {
   const dialogRef = useRef<HTMLDialogElement>(null);
   const titleRef = useRef<HTMLHeadingElement>(null);
   const id = useId();
+  const expanded = !!side;
   useEffect(() => {
     const dialog = dialogRef.current;
     if (!open || !dialog) return;
@@ -668,6 +688,7 @@ export function Drawer({ open, onClose, title, subtitle, children, footer, width
   return (
     <dialog ref={dialogRef} className="il-drawer fixed inset-0 z-50" aria-modal="true"
       aria-labelledby={`${id}-title`} aria-describedby={subtitle ? `${id}-description` : undefined}
+      data-expanded={expanded ? 'true' : undefined}
       onCancel={(event) => { event.preventDefault(); event.stopPropagation(); onClose(); }}
       onKeyDown={(event) => {
         // Native modal inertness prevents focus in the page, but some browsers
@@ -683,16 +704,40 @@ export function Drawer({ open, onClose, title, subtitle, children, footer, width
       }}>
       <div className="flex h-full justify-end">
         <div aria-hidden="true" onClick={onClose} className="absolute inset-0 bg-[var(--overlay)] backdrop-blur-[1px]" />
-        <div className={cn('relative w-full h-full bg-[var(--bg)] shadow-xl flex flex-col', width)}>
-          <header className="shrink-0 flex items-center justify-between gap-3 px-4 py-3 bg-[var(--surface)] border-b border-[var(--border)]">
-            <div className="min-w-0">
-              <h2 ref={titleRef} tabIndex={-1} id={`${id}-title`} className="text-sm font-semibold text-[var(--text)] break-words">{title}</h2>
-              {subtitle && <p id={`${id}-description`} className="text-xs text-[var(--text-muted)] break-words">{subtitle}</p>}
+        {/* §19–25 — a FAIXA do overlay: um dialog, largura que transiciona
+            (entrada 180–220ms). Com `side`, dois painéis lado a lado. */}
+        <div className={cn(
+          'il-drawer__strip relative h-full bg-[var(--bg)] shadow-xl flex flex-col',
+          expanded ? 'w-full max-w-[1120px]' : `w-full ${width}`,
+        )}>
+          <div className="il-drawer__panels flex h-full min-h-0">
+            {/* Painel base (agendamento): recua/atenua quando o secundário abre. */}
+            <div className={cn('il-drawer__panel il-drawer__panel--base flex flex-col min-h-0', expanded && 'il-drawer__panel--recessed', expanded ? 'flex-1' : 'w-full')}>
+              <header className="shrink-0 flex items-center justify-between gap-3 px-4 py-3 bg-[var(--surface)] border-b border-[var(--border)]">
+                <div className="min-w-0">
+                  <h2 ref={titleRef} tabIndex={-1} id={`${id}-title`} className="text-sm font-semibold text-[var(--text)] break-words">{title}</h2>
+                  {subtitle && <p id={`${id}-description`} className="text-xs text-[var(--text-muted)] break-words">{subtitle}</p>}
+                </div>
+                {!expanded && (
+                  <IconButton type="button" icon="x" label="Fechar" size="sm" variant="ghost" onClick={onClose} />
+                )}
+              </header>
+              <div className="flex-1 min-h-0 overflow-y-auto ws-scroll">{children}</div>
+              {footer && !expanded && <footer className="il-actionbar shrink-0 px-4 py-3 flex flex-wrap items-center justify-end gap-2">{footer}</footer>}
             </div>
-            <IconButton type="button" icon="x" label="Fechar" size="sm" variant="ghost" onClick={onClose} />
-          </header>
-          <div className="flex-1 min-h-0 overflow-y-auto ws-scroll">{children}</div>
-          {footer && <footer className="il-actionbar shrink-0 px-4 py-3 flex flex-wrap items-center justify-end gap-2">{footer}</footer>}
+            {/* Painel secundário (cadastro rápido): entra pela direita, único overlay. */}
+            {expanded && (
+              <div className={cn('il-drawer__panel il-drawer__panel--side flex flex-col min-h-0 border-l border-[var(--border)]', sideWidth)}>
+                <header className="shrink-0 flex items-center justify-between gap-3 px-4 py-3 bg-[var(--surface)] border-b border-[var(--border)]">
+                  <div className="min-w-0">
+                    <h3 className="text-sm font-semibold text-[var(--text)] break-words">{sideTitle || 'Cadastrar novo paciente'}</h3>
+                  </div>
+                  <IconButton type="button" icon="x" label="Voltar" size="sm" variant="ghost" onClick={onSideClose || onClose} />
+                </header>
+                <div className="flex-1 min-h-0 overflow-y-auto ws-scroll">{side}</div>
+              </div>
+            )}
+          </div>
         </div>
       </div>
     </dialog>

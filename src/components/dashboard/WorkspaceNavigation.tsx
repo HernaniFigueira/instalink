@@ -34,6 +34,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import Link from 'next/link';
 import { Icon } from '@/components/icons';
+import { useSidebarPeek } from '@/lib/sidebar-peek';
 import { Drawer } from '@/components/ui';
 import { useRevalidateOnFocus } from './use-revalidate';
 import { loadOverview } from '@/lib/overview';
@@ -161,6 +162,9 @@ export function WorkspaceNavigation({ nav, activePath, unit, units = [], multiUn
   // sem esticar largura de scroll de container nenhum.
   const asideRef = useRef<HTMLElement | null>(null);
   const [tip, setTip] = useState<{ text: string; top: number; left: number } | null>(null);
+  // §7 — hover-peek de GRUPOS no rail recolhido (temporário; nunca mexe no
+  // estado `collapsed` persistido).
+  const peekCtl = useSidebarPeek(collapsed);
   useEffect(() => {
     if (!collapsed) { setTip(null); return; }
     const root = asideRef.current;
@@ -234,7 +238,18 @@ export function WorkspaceNavigation({ nav, activePath, unit, units = [], multiUn
           aria-label={area.label}
           aria-expanded={mini ? false : open}
           aria-controls={mini ? undefined : `submenu-${area.id}`}
-          data-tip={area.label}
+          {...(mini ? {
+            'data-peek-group': area.id,
+            onMouseEnter: (e: React.MouseEvent<HTMLButtonElement>) => {
+              const el = e.currentTarget;
+              peekCtl.onGroupEnter(area.id, el.getBoundingClientRect().top);
+            },
+            onMouseLeave: () => peekCtl.onGroupLeave(),
+            onFocus: (e: React.FocusEvent<HTMLButtonElement>) => {
+              peekCtl.onGroupEnter(area.id, e.currentTarget.getBoundingClientRect().top);
+            },
+            onBlur: () => peekCtl.onGroupLeave(),
+          } : {})}
           onClick={() => {
             // Recolhida: o clique EXPANDE a sidebar e abre o grupo escolhido.
             // Expandida: abre ESTE grupo — clicar no grupo aberto NÃO fecha
@@ -457,6 +472,41 @@ export function WorkspaceNavigation({ nav, activePath, unit, units = [], multiUn
           <div className="ws-nav-tip" role="tooltip" style={{ top: `${tip.top}px`, left: `${tip.left}px` }}>{tip.text}</div>,
           document.body,
         )}
+        {/* §7 — hover-peek de GRUPOS (rail recolhido): painel temporário com os
+            itens do grupo. Abre em ~200ms (ease-out) e recolhe 250–300ms após o
+            mouseleave. O estado `collapsed` NUNCA muda aqui. */}
+        {collapsed && peekCtl.peekId && typeof document !== 'undefined' && (() => {
+          const area = groups.find((g) => g.id === peekCtl.peekId) || sections.flatMap((s) => s.groups).find((g) => g.area.id === peekCtl.peekId)?.area;
+          const items = area ? visible(area.items) : [];
+          if (!area || !items.length) return null;
+          return createPortal(
+            <div
+              className="ws-peek"
+              role="menu"
+              aria-label={area.label}
+              style={{ top: `${peekCtl.peekTop}px` }}
+              onMouseEnter={peekCtl.onPeekEnter}
+              onMouseLeave={peekCtl.onPeekLeave}
+            >
+              <p className="ws-peek__title">{area.label}</p>
+              <div className="ws-peek__items">
+                {items.map((item) => (
+                  <Link
+                    key={item.href}
+                    href={hrefFor(item)}
+                    role="menuitem"
+                    className="ws-peek__item"
+                    onClick={() => { peekCtl.closePeek(); setMobile(false); }}
+                  >
+                    <Icon n={item.icon} size={15} />
+                    <span>{item.label}</span>
+                  </Link>
+                ))}
+              </div>
+            </div>,
+            document.body,
+          );
+        })()}
       </aside>
 
       {/* Mobile: UM diálogo, o MESMO acordeão (nunca duas colunas na tela).

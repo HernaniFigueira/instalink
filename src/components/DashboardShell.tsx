@@ -18,7 +18,7 @@ import { requiresActiveBusiness } from '@/lib/business-context';
 import { mayLeaveEditor } from '@/components/dashboard/useUnsavedChanges';
 import { WorkspaceContext } from '@/components/dashboard/WorkspaceContext';
 import { ConversationsDock } from '@/components/dashboard/ConversationsDock';
-import { getNavAccent, type NavAccentId } from '@/lib/nav-accent';
+import { findAccent, getNavAccent, type NavAccentId } from '@/lib/nav-accent';
 import { WorkspaceNavigation } from '@/components/dashboard/WorkspaceNavigation';
 import { WorkspaceTopbar } from '@/components/dashboard/WorkspaceTopbar';
 import { HelpCenter } from '@/components/dashboard/HelpCenter';
@@ -87,6 +87,9 @@ export function DashboardShell({ children }: { children: React.ReactNode }) {
     window.addEventListener('godoutor:nav-accent', sync);
     return () => window.removeEventListener('godoutor:nav-accent', sync);
   }, []);
+  // §5/§6 — tema da clínica: os 5 tokens --accent* + os --il-nav* do preset
+  // entram inline no shell (contrato B). Texto e semânticas não são tocados.
+  const accentVars = findAccent(navAccent)?.vars || {};
   const lastContextAt = useRef(0);
   // Etapa A: o drawer de navegação móvel pertence ao shell porque quem o abre
   // é o botão de menu da TOPBAR (a busca e o menu saíram da sidebar).
@@ -313,6 +316,7 @@ export function DashboardShell({ children }: { children: React.ReactNode }) {
       style={{
         '--area-color': crumb.area?.color || routeAreaColor(activePath, areas),
         '--sidebar-w': collapsed ? 'var(--sidebar-w-mini)' : undefined,
+        ...accentVars,
       } as React.CSSProperties}
       data-nav-accent={navAccent}
       className={cn('il-platform workspace-shell min-h-screen bg-[var(--bg)]', isAgenda && 'workspace-shell--fill')}

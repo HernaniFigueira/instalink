@@ -79,17 +79,18 @@ describe('missão 6 · 4 — quick create “+” premium (volta ao topo)', () =
 });
 
 describe('missão 6 · 5 — personalização da sidebar em Configurações (não na shell)', () => {
-  it('presets seguros de cor (fg/active claros, AA sobre fundo escuro)', () => {
-    expect(NAV_ACCENTS.length).toBeGreaterThanOrEqual(8); // missão 7: paleta ampliada
+  it('presets seguros de cor (contraste AA: fg claro sobre escuro OU near-black sobre claro)', () => {
+    expect(NAV_ACCENTS.length).toBeGreaterThanOrEqual(8); // missão final: 21 presets por famílias
     expect(NAV_ACCENT_DEFAULT).toBe('azul-clinico');
     for (const a of NAV_ACCENTS) {
       const bg = a.vars['--il-nav'];
       const fg = a.vars['--il-nav-fg'];
       expect(bg, a.id).toMatch(/^#[0-9a-f]{6}$/);
-      // contraste real: fg CLARO sobre fundo ESCURO (luminância)
-      expect(lum(fg), a.id).toBeGreaterThan(0.82);
-      expect(lum(bg), a.id).toBeLessThan(0.45);
-      expect(a.vars['--il-nav-active-fg'], a.id).toBe('#ffffff');
+      // CONTRATO DE COR (missão final, categoria A/B): o texto do nav é
+      // legível em QUALQUER preset — claro sobre escuro, near-black sobre
+      // claro. O contraste real decide, nunca "no olho".
+      const contrast = lum(fg) > 0.5 ? lum(fg) - lum(bg) : lum(bg) - lum(fg);
+      expect(contrast, a.id).toBeGreaterThan(0.45);
     }
     expect(navAccentById('teal').id).toBe('teal');
     expect(navAccentById('lixo').id).toBe('azul-clinico'); // fallback seguro

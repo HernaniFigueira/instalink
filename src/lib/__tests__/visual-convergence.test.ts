@@ -98,12 +98,12 @@ describe('A3.3 — nenhum CTA primário preto no painel', () => {
     expect(loose).toEqual([]);
   });
 
-  it('o design system oferece primário brand (para onde o CTA deve ir)', () => {
+  it('o design system oferece primário accent/tema (para onde o CTA deve ir)', () => {
     const ui = read('src/components/ui.tsx');
     // Se alguém apagar o variant primary, a migração não tem destino — o teste
     // falha antes que alguém volte a improvisar um botão preto.
-    expect(ui).toMatch(/primary:\s*\n?\s*'bg-\[var\(--brand\)\]/);
-    expect(ui).toMatch(/shadow-brand/);
+    expect(ui).toMatch(/primary:\s*\n?\s*'bg-\[var\(--accent\)\]/);
+    expect(ui).toMatch(/shadow-brand/); // sombra utilitária da base (não é cor)
   });
 });
 

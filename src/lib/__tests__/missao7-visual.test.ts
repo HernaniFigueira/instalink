@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { readFileSync } from 'node:fs';
 import path from 'node:path';
-import { NAV_ACCENTS, NAV_ACCENT_DEFAULT, navAccentById } from '../nav-accent';
+import { NAV_ACCENTS, NAV_ACCENT_DEFAULT, navAccentById, contrastRatio, relativeLuminance } from '../nav-accent';
 
 const root = path.resolve(__dirname, '../../..');
 const read = (rel: string) => readFileSync(path.join(root, rel), 'utf8');
@@ -20,14 +20,22 @@ function lum(hex: string): number {
 
 // ═══════════════════════════════════════════════════════════════
 // MISSÃO 7 — refino visual premium final (aparência · dashboard · pets)
+// NOTA (missão final §5): o DECRETO NOVO substitui "primary preto" —
+// o CTA PRINCIPAL agora SEGUE O TEMA (--accent). As travas de paleta
+// abaixo foram atualizadas para o contrato universal de cor (4 categorias);
+// Ônix preto, dashboard sem duplicação e pets continuam intocados.
 // ═══════════════════════════════════════════════════════════════
-describe('missão 7 · 1 — paleta de aparência ampliada e refinada', () => {
-  it('os 8 presets aprovados existem; Ônix é preto de verdade; grafite saiu', () => {
+describe('missão 7 · 1 — paleta de aparência (atual: 21 presets por famílias)', () => {
+  it('os 8 ids aprovados continuam resolvendo (aliases legados); Ônix é preto de verdade', () => {
     const ids = NAV_ACCENTS.map((a) => a.id);
-    expect(ids).toEqual([
-      'azul-clinico', 'azul-amigavel', 'violeta', 'teal',
-      'verde-salvia', 'ambar', 'onix', 'vinho',
-    ]);
+    // missão final: paleta por famílias (21 presets)
+    expect(ids).toHaveLength(21);
+    for (const legacy of ['azul-clinico', 'azul-amigavel', 'verde-salvia', 'ambar', 'onix', 'vinho', 'violeta', 'teal']) {
+      expect(ids, legacy).toContain(legacy);
+    }
+    // nomes intermediários das missões anteriores continuam válidos (alias)
+    expect(navAccentById('violeta-atual').id).toBe('violeta');
+    expect(navAccentById('teal-medio').id).toBe('teal');
     const onix = navAccentById('onix');
     expect(onix.swatch).toBe('#18181b'); // preto sofisticado (não cinza)
     expect(ids).not.toContain('graphite');
@@ -35,12 +43,20 @@ describe('missão 7 · 1 — paleta de aparência ampliada e refinada', () => {
     expect(NAV_ACCENT_DEFAULT).toBe('azul-clinico');
   });
 
-  it('contraste automático: fg claro sobre fundo escuro em todos os presets', () => {
+  it('contraste AA real (WCAG): o texto do nav é legível em QUALQUER preset', () => {
+    // A régua é a do módulo (lib/nav-accent.ts: relativeLuminance/contrastRatio
+    // — WCAG), não uma fórmula paralela. Limiar AA para texto normal = 4.5.
     for (const a of NAV_ACCENTS) {
-      // contraste real por luminância: fg claro, fundo escuro
-      expect(lum(a.vars['--il-nav-fg']), a.id).toBeGreaterThan(0.82);
-      expect(lum(a.vars['--il-nav']), a.id).toBeLessThan(0.45);
-      expect(a.vars['--il-nav-active-fg'], a.id).toBe('#ffffff');
+      const bg = a.vars['--il-nav'];
+      const fg = a.vars['--il-nav-fg'];
+      expect(contrastRatio(fg, bg), a.id).toBeGreaterThanOrEqual(4.5);
+      // contrato A: em preset CLARO, o texto do nav é near-black; em escuro, claro
+      const navIsDark = relativeLuminance(bg) < 0.35;
+      if (navIsDark) {
+        expect(relativeLuminance(fg), a.id).toBeGreaterThan(0.7);
+      } else {
+        expect(relativeLuminance(fg), a.id).toBeLessThan(0.1);
+      }
     }
   });
 
@@ -50,20 +66,31 @@ describe('missão 7 · 1 — paleta de aparência ampliada e refinada', () => {
   });
 });
 
-describe('missão 7 · 2 — botões primary em preto premium (estado normal forte)', () => {
-  it('o primary nasce preto/ônix; hover ainda mais forte; texto branco AA', () => {
-    expect(css).toMatch(/--brand:\s*#1c1917/);
-    expect(css).toMatch(/--brand-strong:\s*#0c0a09/);
-    // sem cinza lavado
-    expect(css).not.toMatch(/--brand:\s*#[4-7][0-9a-f]{5}/);
+describe('missão 7 · 2 — primary PRETO supersedo: CTA principal segue o TEMA (§5)', () => {
+  it('os tokens --accent* existem e o primary usa --accent (nunca --il-nav)', () => {
+    expect(css).toMatch(/--accent:/);
+    expect(css).toMatch(/--accent-contrast:/);
+    const ui = read('src/components/ui.tsx');
+    const primary = ui.slice(ui.indexOf('primary:'), ui.indexOf('primary:') + 240);
+    expect(primary).toContain('var(--accent)');
+    expect(primary).not.toContain('--il-nav');
   });
 
-  it('a cor do tema NÃO tinge a família de botões (acento ≠ tinta)', () => {
+  it('secondary/ghost/quiet continuam NEUTROS (o tema só tinge o CTA principal)', () => {
     const ui = read('src/components/ui.tsx');
-    // primary usa os tokens escuros da marca — nunca --il-nav
-    const primary = ui.slice(ui.indexOf('primary:'), ui.indexOf('primary:') + 240);
-    expect(primary).toContain('var(--brand)');
-    expect(primary).not.toContain('--il-nav');
+    const secondary = ui.slice(ui.indexOf('secondary:'), ui.indexOf('secondary:') + 240);
+    expect(secondary).not.toContain('--accent');
+    expect(secondary).not.toContain('--il-nav');
+  });
+
+  it('semânticas nunca tingidas: success/danger usam tokens próprios', () => {
+    const ui = read('src/components/ui.tsx');
+    const success = ui.slice(ui.indexOf('success:'), ui.indexOf('success:') + 200);
+    const danger = ui.slice(ui.indexOf('danger:'), ui.indexOf('danger:') + 200);
+    expect(success).toContain('var(--success)');
+    expect(success).not.toContain('--accent');
+    expect(danger).toContain('var(--danger)');
+    expect(danger).not.toContain('--accent');
   });
 });
 

@@ -152,9 +152,10 @@ describe('4 · amarelo “sun” com moderação (só acento secundário, nunca 
 
 describe('5 · botões migrados pela BASE (tokens), sem hex por tela', () => {
   it('a base continua token-driven na cor da marca', () => {
-    expect(ui).toMatch(/primary:\s*\n?\s*'bg-\[var\(--brand\)\]/);
-    expect(ui).toMatch(/shadow-brand/);
-    expect(ui).toContain('bg-[var(--surface-3)] text-[var(--brand-fg)]');
+    // DECRETO FINAL: CTA primário e acento do header seguem o TEMA (--accent)
+    expect(ui).toMatch(/primary:\s*\n?\s*'bg-\[var\(--accent\)\]/);
+    expect(ui).toMatch(/shadow-brand/); // sombra utilitária da base (não é cor)
+    expect(ui).toContain('bg-[var(--accent-soft)] text-[var(--accent)]');
   });
 
   it('identidade índigo preservada (logo/sidebar padrão); a ação é preto premium (missão 7)', () => {

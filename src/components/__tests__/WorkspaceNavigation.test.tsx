@@ -337,7 +337,9 @@ describe('Missão §7/§8 — rail recolhido (só ícones, tooltip, sem submenu 
     const side = screen.getByRole('complementary', { name: 'Navegação da clínica' });
     const agenda = screen.getByRole('link', { name: 'Agenda' });
     expect(agenda.getAttribute('data-tip')).toBe('Agenda');
-    expect(screen.getByRole('button', { name: 'Automação' }).getAttribute('data-tip')).toBe('Automação');
+    // GRUPOS no rail: SEM data-tip — o hover-peek (§7) assume este papel
+    // (cobre o nome + itens); o tooltip é só para rotas diretas.
+    expect(screen.getByRole('button', { name: 'Automação' }).getAttribute('data-tip')).toBeNull();
     expect(screen.getByRole('button', { name: 'Ajuda e suporte' }).getAttribute('data-tip')).toBe('Ajuda e suporte');
     expect(side.querySelector('.ws-nav-tip')).toBeNull();
     fireEvent.mouseOver(agenda);
