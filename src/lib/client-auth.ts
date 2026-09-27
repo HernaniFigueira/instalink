@@ -105,6 +105,26 @@ export function notifyForbidden(detail: ForbiddenDetail): void {
   }
 }
 
+// ── Dedupe de avisos de 403 (§8–10 · "loop de toasts") ──────────
+// O MESMO caminho repetindo (retry, clique duplo, fila de mutações) não pode
+// criar uma enxurrada de avisos: o primeiro aviso passa; repetições em 30s
+// são absorvidas na fonte — nenhum consumidor (toast, notice) recebe spam.
+const FORBIDDEN_DEDUPE_MS = 30000;
+const forbiddenSeenAt = new Map<string, number>();
+
+/** Exportado para os testes — reseta a janela de dedupe. */
+export function __resetForbiddenDedupe(): void {
+  forbiddenSeenAt.clear();
+}
+
+function shouldNotifyForbidden(path: string): boolean {
+  const now = Date.now();
+  const last = forbiddenSeenAt.get(path) || 0;
+  if (now - last < FORBIDDEN_DEDUPE_MS) return false;
+  forbiddenSeenAt.set(path, now);
+  return true;
+}
+
 /** Assina o aviso global de 403. Devolve a função de cancelamento. */
 export function onForbidden(handler: (detail: ForbiddenDetail) => void): () => void {
   if (typeof window === 'undefined') return () => {};
@@ -198,15 +218,28 @@ export function installFetchWrapper(): void {
           if (res.status === 401) {
             startLoginFlow('expired');
           } else {
-            // Clone: o corpo original continua disponível para a tela.
-            let message = '';
-            try {
-              const data = await res.clone().json();
-              message = String(data?.error || '');
-            } catch {
-              message = '';
+            // REGRA FINAL (missão de consolidação §8–10): o 403 de CARREGAMENTO
+            // (GET) NUNCA vira toast. Quem decide o que fazer com ele é o
+            // corpo da tela (`useAreaLoad.report` → área negada quando é a
+            // request PRINCIPAL; `reportFeature` → só a feature some). Toast
+            // de 403 é exclusivo de AÇÕES (POST/PATCH/PUT/DELETE): o usuário
+            // clicou em algo e precisa de feedback. Assim, revalidação em
+            // foco e polling jamais entram em "loop de toasts".
+            const method = (init?.method || (init as any)?.method || 'GET').toUpperCase();
+            if (method !== 'GET' && method !== 'HEAD') {
+              // Dedupe na fonte: mesmo caminho em 30s não repete o aviso.
+              if (shouldNotifyForbidden(path)) {
+                // Clone: o corpo original continua disponível para a tela.
+                let message = '';
+                try {
+                  const data = await res.clone().json();
+                  message = String(data?.error || '');
+                } catch {
+                  message = '';
+                }
+                notifyForbidden({ path, message, status: 403 });
+              }
             }
-            notifyForbidden({ path, message, status: 403 });
           }
         }
       }

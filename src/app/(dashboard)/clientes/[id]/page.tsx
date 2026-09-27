@@ -21,6 +21,7 @@ import { usePanelPermissions } from '@/components/dashboard/usePanelPermissions'
 import { useBusinessId } from '@/components/dashboard/useBusinessId';
 import { AccessDenied, AreaLoadError, useAreaLoad } from '@/components/dashboard/AccessNotice';
 import { effectiveHorizonDays } from '@/lib/booking-ops';
+import { clientListReturnHref } from '@/lib/client-return';
 import { Button, Skeleton } from '@/components/ui';
 import { Icon } from '@/components/icons';
 
@@ -32,15 +33,10 @@ export default function ClientePerfilPage() {
   const { businessId, resolving, noBusiness } = useBusinessId();
   const key = decodeURIComponent(params?.id || '');
   const b = search.get('b') || '';
-  // P1.7 — o "Voltar para clientes" devolve a lista COMO ESTAVA: a busca, o
-  // filtro e a página viajam na URL da ficha e voltam inteiras.
-  const listState = new URLSearchParams();
-  if (b) listState.set('b', b);
-  for (const key of ['q', 'filter', 'page', 'tab']) {
-    const v = search.get(key);
-    if (v) listState.set(key, v);
-  }
-  const listHref = `/clientes${listState.toString() ? `?${listState.toString()}` : ''}`;
+  // P1.7/§16 — o "Voltar para clientes" devolve a lista COMO ESTAVA: a busca,
+  // o filtro e a página viajam na URL da ficha e voltam inteiras. O contrato
+  // (fallback seguro incluso) vive em lib/client-return.ts — o mesmo da lista.
+  const listHref = clientListReturnHref(search);
 
   const [person, setPerson] = useState<Person360 | null>(null);
   const [pipeline, setPipeline] = useState<BusinessPipeline | null>(null);

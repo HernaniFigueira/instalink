@@ -17,6 +17,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
 import { centsToBR, cn, waLink } from '@/lib/utils';
+import { focusFieldSoon } from '@/lib/focus-highlight';
 import { humanDateTime, humanDay, formatDateBR, todayISO } from '@/lib/tz';
 import { BOOKING_STATUS, LEAD_STATUS, type StatusDef } from '@/lib/status';
 import { leadOriginLabel } from '@/lib/leads';
@@ -514,7 +515,9 @@ export function ClientProfileDrawer({ person, businessId, pipeline, canFunil, on
         <>
           {person.phone && <A2 href={waLink(person.phone, `Olá, ${firstName}!`)} label="WhatsApp" icon="whatsapp" />}
           {/* FASE 2 · P2 — ações rápidas: nota e iniciar atendimento (quando aplicável). */}
-          <Button variant="quiet" size="sm" onClick={() => setTab('notes')}>
+          {/* §17–18 — "Registrar nota" conduz ao campo: troca a aba, rola até o
+              textarea e o foca com highlight sutil (sem modal novo). */}
+          <Button variant="quiet" size="sm" onClick={() => { setTab('notes'); focusFieldSoon('client-note-draft'); }}>
             <Icon n="pencil" size={14} /> Registrar nota
           </Button>
           {canEncounter && nextBooking && (
@@ -530,7 +533,13 @@ export function ClientProfileDrawer({ person, businessId, pipeline, canFunil, on
               <Icon n="fileText" size={14} /> Iniciar atendimento
             </Button>
           )}
-          <Button variant="secondary" size="sm" onClick={() => setEditing((v) => !v)}>
+          <Button variant="secondary" size="sm" onClick={() => {
+            const opening = !editing;
+            setEditing((v) => !v);
+            // §17–18 — ao abrir a edição: scroll suave + foco no primeiro
+            // campo + highlight sutil (1–2s). Fechar não mexe no foco.
+            if (opening) focusFieldSoon('client-edit-name');
+          }}>
             <Icon n={editing ? 'x' : 'pencil'} size={14} /> {editing ? 'Fechar edição' : 'Editar dados'}
           </Button>
           <Button variant="primary" size="sm" onClick={() => onNewBooking(person)}>
@@ -725,7 +734,7 @@ export function ClientProfileDrawer({ person, businessId, pipeline, canFunil, on
               <div className="grid sm:grid-cols-2 gap-3">
                 <label className="block sm:col-span-2">
                   <span className="block text-xs font-semibold text-[var(--text-muted)] mb-1.5">Nome completo</span>
-                  <Input value={identityDraft.name} placeholder="Nome do cliente"
+                  <Input id="client-edit-name" value={identityDraft.name} placeholder="Nome do cliente"
                     onChange={(e) => setIdentityDraft((d) => ({ ...d, name: e.target.value }))} />
                 </label>
                 <label className="block">

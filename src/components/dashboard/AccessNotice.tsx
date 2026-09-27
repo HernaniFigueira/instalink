@@ -10,7 +10,7 @@
 //   useForbiddenNotice() → mensagem inline dentro de uma tela específica.
 //
 // O erro cru da API nunca é exibido: o texto vem das mensagens canônicas.
-import { createContext, useCallback, useContext, useEffect, useState } from 'react';
+import { createContext, useCallback, useContext, useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
 import { Icon } from '@/components/icons';
 import { onForbidden, type ForbiddenDetail } from '@/lib/client-auth';
@@ -101,12 +101,21 @@ let toastSeq = 0;
  */
 export function ForbiddenToasts({ context }: { context?: DeniedContext }) {
   const [toasts, setToasts] = useState<Toast[]>([]);
+  // §8–10 — barreira extra contra "loop de toasts": o mesmo caminho não
+  // repete aviso em 30s (revalidação/polling/múltiplos cliques). O disparo
+  // principal já é só de AÇÕES (lib/client-auth.ts).
+  const seenRef = useRef<Map<string, number>>(new Map());
 
   const push = useCallback((detail: ForbiddenDetail) => {
+    const now = Date.now();
+    const key = detail.path || 'unknown';
+    const last = seenRef.current.get(key) || 0;
+    if (now - last < 30000) return;
+    seenRef.current.set(key, now);
     const info = deniedInfo(context || {}, detail.message);
-    const key = ++toastSeq;
-    setToasts((list) => [...list.slice(-2), { ...detail, key, title: info.title, hint: info.hint }]);
-    window.setTimeout(() => setToasts((list) => list.filter((t) => t.key !== key)), 6000);
+    const toastKey = ++toastSeq;
+    setToasts((list) => [...list.slice(-2), { ...detail, key: toastKey, title: info.title, hint: info.hint }]);
+    window.setTimeout(() => setToasts((list) => list.filter((t) => t.key !== toastKey)), 6000);
   }, [context]);
 
   useEffect(() => onForbidden(push), [push]);
@@ -152,8 +161,18 @@ export function useForbiddenNotice(area?: string) {
  * quando o usuário não tem permissão (o caso clássico: a API responde 403, a
  * tela não recebe dados e continua carregando para sempre).
  *
+ * REGRA FINAL (missão de consolidação §8–10) — dois papéis, nunca misturados:
+ *
+ *   report(res)         → request PRINCIPAL da área. Um 403 aqui PROMOVE a
+ *                         negação da tela inteira (`denied`), porque a página
+ *                         realmente não tem como mostrar nada.
+ *   reportFeature(res)  → request SECUNDÁRIA (apoio a uma feature). Um 403
+ *                         aqui NUNCA promove a negação da área: a tela apenas
+ *                         esconde ou desabilita a feature correspondente. A
+ *                         página permitida continua mostrando o que pode.
+ *
  * Uso:
- *   const { denied, failed, report } = useAreaLoad('Equipe');
+ *   const { denied, failed, report, reportFeature } = useAreaLoad('Equipe');
  *   const res = await apiGet(url, { scope: 'area', area: 'Equipe' });
  *   if (!report(res)) return;            // 403/falha → nada de setar dados
  *   setData(res.data);
@@ -178,9 +197,18 @@ export function useAreaLoad(area: string) {
     return false;
   }, [area]);
 
+  /**
+   * Request SECUNDÁRIA: o retorno diz se a feature recebeu dados, mas o
+   * estado da ÁREA não muda — um 403 aqui é "só esta feature não está
+   * disponível para o seu perfil", nunca "você não tem acesso a esta área".
+   * Erros de rede/500 de apoio também não derrubam a página (a feature
+   * aparece vazia/oculta; o dado principal continua de pé).
+   */
+  const reportFeature = useCallback((res: { ok: boolean }) => res.ok, []);
+
   const reset = useCallback(() => { setDenied(false); setFailed(''); }, []);
 
-  return { denied, failed, report, reset, area };
+  return { denied, failed, report, reportFeature, reset, area };
 }
 
 export { PERMISSION_MESSAGES };

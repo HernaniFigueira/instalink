@@ -26,6 +26,7 @@ import { ImportClientsSheet } from '@/components/dashboard/ImportClientsSheet';
 import { usePanelPermissions } from '@/components/dashboard/usePanelPermissions';
 import { ClientProfileDrawer, type Person360 } from '@/components/dashboard/ClientProfileDrawer';
 import { effectiveHorizonDays } from '@/lib/booking-ops';
+import { buildClientListReturnQuery } from '@/lib/client-return';
 import { AccessDenied, useAreaLoad } from '@/components/dashboard/AccessNotice';
 import { apiGet } from '@/lib/api-client';
 
@@ -71,12 +72,9 @@ export default function ClientesPage() {
   // lista (busca/filtro/página) viaja na URL para o "Voltar para clientes"
   // devolver a lista EXATAMENTE como estava.
   const listStateQuery = () => {
-    const qs = new URLSearchParams();
-    if (businessId) qs.set('b', businessId);
-    if (search.trim()) qs.set('q', search.trim());
-    if (filter !== 'all') qs.set('filter', filter);
-    if (page > 1) qs.set('page', String(page));
-    return qs.toString();
+    // §16 — contrato único em lib/client-return.ts: a ficha reconstrói este
+    // estado no "Voltar para clientes" (busca, filtro e página preservados).
+    return buildClientListReturnQuery({ b: businessId, q: search, filter, page });
   };
   const openFullProfile = (key: string) => {
     router.push(`/clientes/${encodeURIComponent(key)}?${listStateQuery()}`);

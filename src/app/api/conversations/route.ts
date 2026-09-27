@@ -16,7 +16,7 @@ import {
   deliverInstagramMessage, getInstagramCredentials, instagramAccountMismatch, instagramConversationWindow,
 } from '@/lib/instagram-api';
 import { INSTAGRAM_TEXT_MAX_BYTES, instagramIntegrationStatus, instagramTextBytes, instagramTextLimitError } from '@/lib/instagram';
-import type { Conversation, Message } from '@/lib/types';
+import type { Conversation, DB, Message } from '@/lib/types';
 
 // INBOX unificado (WhatsApp + Instagram) dentro do CRM.
 // GET  ?businessId=&channel=&id=  → lista de conversas OU uma conversa + mensagens.
@@ -164,6 +164,25 @@ export async function POST(req: NextRequest) {
     const { db, ctx } = guard;
     const conversationId = String(body.conversationId || '');
     const action = String(body.action || '');
+
+    // ── LINK_CONTACT (§11–15 · cadastro rápido de "Contato novo") ──
+    // Vínculo EXPLÍCITO conversa ↔ contato existente da MESMA unidade.
+    // Usado pelo CTA "Cadastrar cliente" de Conversas depois que o cadastro
+    // rápido salva o contato. Nunca cria contato; nunca vincula de outra
+    // unidade; idempotente (repetir o mesmo vínculo é um no-op).
+    if (action === 'link_contact') {
+      const contactId = String(body.contactId || '');
+      const updated = await updateDB((d: DB) => {
+        const conv = d.conversations.find((c) => c.id === conversationId && c.businessId === businessId);
+        const contact = d.contacts.find((c) => c.id === contactId && c.businessId === businessId);
+        if (!conv || !contact) return null;
+        conv.contactId = contact.id;
+        if (!conv.customerId && contact.customerId) conv.customerId = contact.customerId;
+        return { conversation: conv, contact };
+      });
+      if (!updated) return NextResponse.json({ error: 'Conversa ou contato não encontrado nesta unidade.' }, { status: 404 });
+      return NextResponse.json({ ok: true, conversationId, contactId: updated.contact.id });
+    }
 
     // ── HANDOFF / TAKEOVER / DEVOLVER-IA / PAUSAR (F3-F) ──────────
     if (action === 'switch_mode' || action === 'takeover' || action === 'release' || action === 'setMode' || body.mode || action === 'resume_ai' || action === 'pause_ai' || action === 'handoff') {
