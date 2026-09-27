@@ -35,10 +35,19 @@ export interface SidebarPeekState {
   onPeekLeave: () => void;
   /** Fecha na hora (clique/foco/Escape). */
   closePeek: () => void;
+  /**
+   * Clique no grupo (mini): TRAVA/destrava o flyout — NUNCA expande a sidebar
+   * (o único controle persistente é o botão Recolher/Expandir).
+   *   • fechado → abre e trava (fica mesmo com mouseleave);
+   *   • aberto solto (hover) → trava;
+   *   • aberto e travaado → fecha.
+   */
+  togglePeek: (id: string, top: number) => void;
 }
 
 export function useSidebarPeek(collapsed: boolean): SidebarPeekState {
-  const [peek, setPeek] = useState<{ id: string; top: number } | null>(null);
+  // `pinned` = flyout travado pelo CLIQUE (sobrevive a mouseleave).
+  const [peek, setPeek] = useState<{ id: string; top: number; pinned: boolean } | null>(null);
   const timer = useRef<number | null>(null);
 
   const clear = useCallback(() => {
@@ -51,13 +60,15 @@ export function useSidebarPeek(collapsed: boolean): SidebarPeekState {
   const onGroupEnter = useCallback((id: string, top: number) => {
     if (!collapsed) return; // expandida = acordeão; nunca peek
     clear();
-    setPeek({ id, top });
+    // hover mantém/abre SOLTO; nunca destrava um flyout travado pelo clique.
+    setPeek((prev) => (prev?.id === id ? prev : { id, top, pinned: false }));
   }, [collapsed, clear]);
 
   const scheduleClose = useCallback(() => {
     clear();
     timer.current = window.setTimeout(() => {
-      setPeek(null);
+      // flyout travado pelo clique NÃO fecha no mouseleave.
+      setPeek((prev) => (prev?.pinned ? prev : null));
       timer.current = null;
     }, PEEK_CLOSE_MS);
   }, [clear]);
@@ -75,9 +86,22 @@ export function useSidebarPeek(collapsed: boolean): SidebarPeekState {
   // Nunca vaza timer entre desmontagens.
   useEffect(() => clear, [clear]);
 
+  const togglePeek = useCallback((id: string, top: number) => {
+    if (!collapsed) return;
+    clear();
+    setPeek((prev) => {
+      if (prev?.id === id) {
+        // solto → trava; travaado → fecha.
+        return prev.pinned ? null : { id, top, pinned: true };
+      }
+      return { id, top, pinned: true };
+    });
+  }, [collapsed, clear]);
+
   return {
     peekId: peek?.id ?? null,
     peekTop: peek?.top ?? 0,
+    togglePeek,
     onGroupEnter,
     onGroupLeave: scheduleClose,
     onPeekEnter: clear,

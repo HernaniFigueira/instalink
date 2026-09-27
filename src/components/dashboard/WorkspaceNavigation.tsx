@@ -236,7 +236,7 @@ export function WorkspaceNavigation({ nav, activePath, unit, units = [], multiUn
           type="button"
           className="workspace-link workspace-link--group"
           aria-label={area.label}
-          aria-expanded={mini ? false : open}
+          aria-expanded={mini ? peekCtl.peekId === area.id : open}
           aria-controls={mini ? undefined : `submenu-${area.id}`}
           {...(mini ? {
             'data-peek-group': area.id,
@@ -250,11 +250,16 @@ export function WorkspaceNavigation({ nav, activePath, unit, units = [], multiUn
             },
             onBlur: () => peekCtl.onGroupLeave(),
           } : {})}
-          onClick={() => {
-            // Recolhida: o clique EXPANDE a sidebar e abre o grupo escolhido.
+          onClick={(e: React.MouseEvent<HTMLButtonElement>) => {
+            // RECOLHIDA: o clique SÓ abre/fecha o flyout temporário — a sidebar
+            // NUNCA expande por clique de grupo (contrato do refino final; o
+            // controle persistente é o botão Recolher/Expandir).
+            if (mini) {
+              peekCtl.togglePeek(area.id, e.currentTarget.getBoundingClientRect().top);
+              return;
+            }
             // Expandida: abre ESTE grupo — clicar no grupo aberto NÃO fecha
             // (nunca existe estado "nenhum grupo aberto").
-            if (mini) onCollapse?.();
             setOpened(area.id);
             openedByUser.current = true;
           }}

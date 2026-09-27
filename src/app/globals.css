@@ -1720,7 +1720,9 @@ button.workspace-clinic-head:hover { background: rgba(255, 255, 255, 0.12); }
   background: var(--surface);
   border: 1px solid var(--border);
   border-radius: var(--radius-md);
-  box-shadow: var(--shadow-lg);
+  /* Flyout premium: sombra MÍNIMA (nada de "cartão flutuante pesado") —
+     o fundo sólido + borda 1px é que dão a separação. */
+  box-shadow: 0 1px 2px rgba(19, 26, 54, 0.06);
   animation: ws-peek-in 200ms ease-out;
 }
 .ws-peek__title {

@@ -360,15 +360,21 @@ describe('Missão §7/§8 — rail recolhido (só ícones, tooltip, sem submenu 
     expect(screen.queryByRole('tooltip')).toBeNull();
   });
 
-  it('clicar num grupo no modo recolhido EXPANDE a sidebar e abre o grupo', async () => {
+  it('clicar num grupo no modo recolhido NÃO expande a sidebar — só abre o flyout', async () => {
     const u = userEvent.setup();
     const view = setup({ collapsed: true });
     const main = screen.getByRole('navigation', { name: 'Menu principal' });
-    await u.click(within(main).getByRole('button', { name: 'Automação' }));
-    expect(view.onCollapse).toHaveBeenCalledTimes(1);
-    // O shell inverte `collapsed`; ao expandir, Automação está aberto.
-    view.rerender(<WorkspaceNavigation {...view.props} collapsed={false} />);
-    expect(within(main).getByRole('button', { name: 'Automação' }).getAttribute('aria-expanded')).toBe('true');
-    expect(document.querySelectorAll('.workspace-group.is-open')).toHaveLength(1);
+    const btn = within(main).getByRole('button', { name: 'Automação' });
+    await u.click(btn);
+    // CONTRATO do refino final: o clique de grupo NUNCA expande a sidebar.
+    expect(view.onCollapse).not.toHaveBeenCalled();
+    // O flyout do grupo abre (aria-expanded acompanha o peek).
+    expect(btn.getAttribute('aria-expanded')).toBe('true');
+    // Clique de novo fecha o flyout — sidebar continua recolhida.
+    await u.click(btn);
+    expect(view.onCollapse).not.toHaveBeenCalled();
+    expect(btn.getAttribute('aria-expanded')).toBe('false');
+    // Nenhum submenu inline aparece no rail.
+    expect(document.querySelectorAll('.workspace-group.is-open')).toHaveLength(0);
   });
 });
