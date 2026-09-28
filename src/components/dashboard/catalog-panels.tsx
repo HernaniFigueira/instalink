@@ -10,7 +10,7 @@
 // A1.2 · Bloco 2: as REGRAS DE RESERVA (BookingSettings) saíram daqui —
 // "como o cliente reserva" é configuração do negócio e mora em Configurações
 // → aba Agenda. Disponibilidade ficou só com "quando atende".
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import Link from 'next/link';
 import { cn, parseMoneyToCents, centsToBR } from '@/lib/utils';
 import type { Availability, AvailabilityException, Category, Professional, Service } from '@/lib/types';
@@ -18,6 +18,7 @@ import { Icon } from '@/components/icons';
 import { Avatar, Badge, Button, Drawer } from '@/components/ui';
 import { ImageUpload } from '@/components/dashboard/ImageUpload';
 import { followsBusinessHours } from '@/lib/schedule';
+import { useOverlayDismissGuard } from '@/components/dashboard/OverlayDismissGuard';
 import { panelRoutesIn } from '@/lib/panel';
 
 // ── Confirmação de exclusão (em sheet, nunca confirm() nativo) ──
@@ -74,6 +75,19 @@ export function ServiceForm({ businessId, service, cats, pros, onClose, onSave }
   const [questions, setQuestions] = useState<string[]>(service?.questions || []);
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
+  const initialSnapshot = useRef(JSON.stringify({
+    name: service?.name || '', description: service?.description || '', image: service?.image || '',
+    price: service ? centsToBR(service.price) : '', showPrice: service ? service.showPrice !== false : true,
+    durationMin: service?.durationMin || 45, categoryId: service?.categoryId || '',
+    proIds: service?.professionalIds || [], active: service?.active !== false,
+    featured: !!service?.featured, bookable: service?.bookable !== false, questions: service?.questions || [],
+  }));
+  const dirty = JSON.stringify({ name, description, image, price, showPrice, durationMin, categoryId, proIds, active, featured, bookable, questions }) !== initialSnapshot.current;
+  const dismissState = {
+    dirty, saving: loading, context: 'edit' as const,
+    title: service ? 'Descartar alterações do serviço?' : 'Descartar novo serviço?',
+    description: 'As informações preenchidas ainda não foram salvas.',
+  };
   const input = 'w-full rounded-md border border-zinc-300 px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500';
 
   function togglePro(id: string) {
@@ -81,7 +95,7 @@ export function ServiceForm({ businessId, service, cats, pros, onClose, onSave }
   }
 
   return (
-    <Drawer open onClose={() => { if (!loading) onClose(); }} title={service ? 'Editar serviço' : 'Novo serviço'} width="max-w-lg">
+    <Drawer open onClose={() => { if (!loading) onClose(); }} dismissGuard={dismissState} title={service ? 'Editar serviço' : 'Novo serviço'} width="max-w-lg">
       <form onSubmit={(e) => { e.preventDefault(); setError(''); setLoading(true); onSave({ id: service?.id, name, description, image, price: parseMoneyToCents(price), showPrice, durationMin, professionalIds: proIds, categoryId, active, featured, bookable, questions }).catch((err) => setError(err.message)).finally(() => setLoading(false)); }}
         className="p-5 space-y-3.5">
         <input aria-label="Nome do serviço" value={name} onChange={(e) => setName(e.target.value)} className={input} placeholder="Nome * (ex: Consulta inicial)" autoFocus />

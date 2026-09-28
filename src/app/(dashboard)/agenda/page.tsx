@@ -208,7 +208,7 @@ const GridColumn = memo(function GridColumn({ column, basisPct, variant, highlig
         const minutes = minuteFromOffsetY(e.clientY - rect.top, { startMinute, endMinute, pxPerHour: PX_PER_HOUR }, CLICK_SNAP_MIN);
         onEmptyPress(column.key, minToTime(minutes));
       }}>
-      {column.freeRanges.map((r,i)=><span key={i} aria-hidden="true" className="absolute inset-x-0 bg-white pointer-events-none" style={{top:(r.start-startMinute)/60*PX_PER_HOUR,height:(r.end-r.start)/60*PX_PER_HOUR}}/>)}
+      {column.freeRanges.map((r,i)=><span key={i} aria-hidden="true" className="ag-free-range absolute inset-x-0 bg-white transition-colors" style={{top:(r.start-startMinute)/60*PX_PER_HOUR,height:(r.end-r.start)/60*PX_PER_HOUR}}/>)}
       {column.isToday && <span aria-hidden="true" className="absolute inset-0 bg-[var(--brand-softer)] pointer-events-none" />}
       {Array.from({ length: Math.max(0, hours - 1) }, (_, idx) => idx + 1).map((i) => (
         <span key={i} className="absolute left-0 right-0 border-t border-zinc-100" style={{ top: i * PX_PER_HOUR }} />

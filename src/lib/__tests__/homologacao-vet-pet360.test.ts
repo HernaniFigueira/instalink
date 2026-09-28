@@ -82,8 +82,9 @@ describe('P0-4 · campos do pet persistem sem troca de conteúdo', () => {
       expect(section).toContain(`id="${id}"`);
       expect(section).toContain(`htmlFor="${id}"`);
     }
-    // edição clona o objeto do pet (sem referência compartilhada com a lista)
-    expect(section).toMatch(/setEditing\(\{ \.\.\.p \}\)/);
+    // abertura clona o objeto do pet uma vez e captura baseline isolada da lista
+    expect(section).toMatch(/const startPetForm = \(pet: Partial<Pet>\) => \{[\s\S]*?const initial = \{ \.\.\.pet \};[\s\S]*?setEditing\(initial\);[\s\S]*?setEditingBaseline\(initial\);/);
+    expect(section).toContain('onClick={() => startPetForm(p)}');
     expect(section).toMatch(/setEditing\(\{ \.\.\.editing,/);
     // abrir novo zera o rascunho
     expect(section).toContain('EMPTY_PET');

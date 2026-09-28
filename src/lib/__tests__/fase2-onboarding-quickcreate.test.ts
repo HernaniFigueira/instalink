@@ -66,6 +66,7 @@ describe('FASE 2 · P9 — quick create premium (missão 6: o “+” volta)', (
     expect(clientes).toContain('setNewClientOpen(true)');
     const fin = read('src/app/(dashboard)/financeiro/page.tsx');
     expect(fin).toContain("params.get('novo') !== '1'");
-    expect(fin).toContain('setEditing(blankEntry())');
+    expect(fin).toContain('startEditing(blankEntry())');
+    expect(fin).toContain('const startEditing = (entry: FinanceEntry) => { setEditing(entry); setEditingBaseline(JSON.stringify(entry)); };');
   });
 });

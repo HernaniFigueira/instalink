@@ -62,6 +62,12 @@ export function ImportClientsSheet({ businessId, onClose, onImported }: {
   );
   const pending = useMemo(() => (plan ? plan.create + plan.fill : 0), [plan]);
   const failedRows = useMemo(() => (plan ? plan.rows.filter((r) => r.action === 'error') : []), [plan]);
+  const dismissGuard = {
+    dirty: !result && (!!file || csv.trim().length > 0 || !!plan),
+    saving: busy === 'commit', context: 'edit' as const,
+    title: 'Descartar importação?',
+    description: 'O arquivo e as escolhas de mapeamento ainda não foram importados.',
+  };
   // Colunas de histórico do nosso próprio export são reconhecidas e ignoradas
   // de propósito — não pedem mapeamento (elas não voltam na importação).
   const unmappedColumns = useMemo(
@@ -222,6 +228,7 @@ export function ImportClientsSheet({ businessId, onClose, onImported }: {
     <Drawer
       open
       onClose={onClose}
+      dismissGuard={dismissGuard}
       title="Importar clientes"
       subtitle="CSV ou planilha .xlsx — nada é gravado antes de você conferir."
       width="max-w-[920px]"

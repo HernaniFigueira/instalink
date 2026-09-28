@@ -61,7 +61,7 @@ export function buttonCls(variant: ButtonVariant = 'primary', size: ButtonSize =
     `il-control--${size}`,
     'transition-[background-color,border-color,color] duration-150',
     'focus-visible:outline-none focus-visible:shadow-focus',
-    'disabled:opacity-50 disabled:pointer-events-none disabled:shadow-none',
+    'disabled:opacity-60 disabled:cursor-not-allowed disabled:shadow-none',
     BTN_SIZE_CLS[size],
     BTN_VARIANT_CLS[BUTTON_VARIANT_ALIAS[variant] || (variant as CanonicalButtonVariant)],
   );
@@ -695,7 +695,7 @@ export function Drawer({ open, onClose, title, subtitle, children, footer, width
         }
       }}>
       <div className="flex h-full justify-end">
-        <div aria-hidden="true" onClick={() => requestClose('backdrop')} className="absolute inset-0 bg-[var(--overlay)] backdrop-blur-[1px]" />
+        <div aria-hidden="true" onClick={() => requestClose('backdrop')} className="absolute inset-0 bg-transparent" />
         {/* §19–25 — a FAIXA do overlay: um dialog, largura que transiciona
             (entrada 180–220ms). Com `side`, dois painéis lado a lado. */}
         <div className={cn(
@@ -705,28 +705,28 @@ export function Drawer({ open, onClose, title, subtitle, children, footer, width
           <div className="il-drawer__panels flex h-full min-h-0">
             {/* Painel base (agendamento): recua/atenua quando o secundário abre. */}
             <div className={cn('il-drawer__panel il-drawer__panel--base flex flex-col min-h-0', expanded && 'il-drawer__panel--recessed', expanded ? 'flex-1' : 'w-full')}>
-              <header className="shrink-0 flex items-center justify-between gap-3 px-4 py-3 bg-[var(--surface)] border-b border-[var(--border)]">
-                <div className="min-w-0">
-                  <h2 ref={titleRef} tabIndex={-1} id={`${id}-title`} className="text-sm font-semibold text-[var(--text)] break-words">{title}</h2>
-                  {subtitle && <p id={`${id}-description`} className="text-xs text-[var(--text-muted)] break-words">{subtitle}</p>}
+              <header className="ws-sheet__header shrink-0">
+                <div className="ws-sheet__titles">
+                  <h2 ref={titleRef} tabIndex={-1} id={`${id}-title`}>{title}</h2>
+                  {subtitle && <p className="ws-sheet__sub" id={`${id}-description`}>{subtitle}</p>}
                 </div>
                 {!expanded && (
-                  <IconButton type="button" icon="x" label="Fechar" size="sm" variant="ghost" onClick={() => requestClose('close-button')} />
+                  <IconButton type="button" icon="x" label="Fechar" size="sm" variant="secondary" className="ws-sheet__close" onClick={() => requestClose('close-button')} />
                 )}
               </header>
-              <div className="flex-1 min-h-0 overflow-y-auto ws-scroll">{children}</div>
-              {footer && !expanded && <footer className="il-actionbar shrink-0 px-4 py-3 flex flex-wrap items-center justify-end gap-2">{footer}</footer>}
+              <div className="ws-sheet__body flex-1 min-h-0 overflow-y-auto ws-scroll">{children}</div>
+              {footer && !expanded && <footer className="ws-sheet__footer il-actionbar shrink-0 flex flex-wrap items-center justify-end gap-2">{footer}</footer>}
             </div>
             {/* Painel secundário (cadastro rápido): entra pela direita, único overlay. */}
             {expanded && (
               <div className={cn('il-drawer__panel il-drawer__panel--side flex flex-col min-h-0 border-l border-[var(--border)]', sideWidth)}>
-                <header className="shrink-0 flex items-center justify-between gap-3 px-4 py-3 bg-[var(--surface)] border-b border-[var(--border)]">
-                  <div className="min-w-0">
-                    <h3 className="text-sm font-semibold text-[var(--text)] break-words">{sideTitle || 'Cadastrar novo paciente'}</h3>
+                <header className="ws-sheet__header shrink-0">
+                  <div className="ws-sheet__titles">
+                    <h2>{sideTitle || 'Cadastrar novo paciente'}</h2>
                   </div>
-                  <IconButton type="button" icon="x" label="Voltar" size="sm" variant="ghost" onClick={() => requestSideClose('close-button')} />
+                  <IconButton type="button" icon="x" label="Voltar" size="sm" variant="secondary" className="ws-sheet__close" onClick={() => requestSideClose('close-button')} />
                 </header>
-                <div className="flex-1 min-h-0 overflow-y-auto ws-scroll">{side}</div>
+                <div className="ws-sheet__body flex-1 min-h-0 overflow-y-auto ws-scroll">{side}</div>
               </div>
             )}
           </div>

@@ -8,6 +8,7 @@ import { FinanceSkeleton,
   Notice, PageHeader, Select, EmptyState, Tabs, Textarea,
 } from '@/components/ui';
 import { WorkspaceSheet } from '@/components/dashboard/WorkspaceSheet';
+import { useOverlayDismissGuard } from '@/components/dashboard/OverlayDismissGuard';
 import { AccessDenied, AreaLoadError } from '@/components/dashboard/AccessNotice';
 import { apiGet, apiSend } from '@/lib/api-client';
 import {
@@ -75,8 +76,19 @@ export default function FinanceiroPage() {
   const [method, setMethod] = useState('');
 
   const [editing, setEditing] = useState<FinanceEntry | null>(null);
+  const [editingBaseline, setEditingBaseline] = useState('');
   const [saving, setSaving] = useState(false);
   const [formError, setFormError] = useState('');
+  const formDismiss = useOverlayDismissGuard();
+  const editingDirty = !!editing && JSON.stringify(editing) !== editingBaseline;
+  const formDismissState = {
+    dirty: editingDirty, saving, context: 'edit' as const,
+    title: editing?.id ? 'Descartar alterações da movimentação?' : 'Descartar nova movimentação?',
+    description: 'Os dados preenchidos ainda não foram salvos.',
+  };
+  const startEditing = (entry: FinanceEntry) => { setEditing(entry); setEditingBaseline(JSON.stringify(entry)); };
+  const closeEditing = () => { setEditing(null); setEditingBaseline(''); };
+  const requestCloseEditing = () => formDismiss.requestClose('close-button', formDismissState, closeEditing);
   const [flash, setFlash] = useState('');
 
   const qs = useMemo(() => {
@@ -125,7 +137,7 @@ export default function FinanceiroPage() {
   useEffect(() => {
     if (novoHandled || !businessId || params.get('novo') !== '1') return;
     setNovoHandled(true);
-    setEditing(blankEntry());
+    startEditing(blankEntry());
   }, [novoHandled, businessId, params]);
 
   async function save() {
@@ -136,7 +148,7 @@ export default function FinanceiroPage() {
     }, { scope: 'area', area: 'Financeiro' });
     setSaving(false);
     if (!res.ok) { setFormError(res.message || 'Não foi possível salvar.'); return; }
-    setEditing(null);
+    closeEditing();
     setFlash('Movimentação salva.');
     load();
   }
@@ -160,7 +172,7 @@ export default function FinanceiroPage() {
       icon="wallet"
       title="Financeiro"
       action={loaded && !denied && !loadError ? (
-        <Button variant="primary" onClick={() => { setFormError(''); setEditing(blankEntry()); }}>
+        <Button variant="primary" onClick={() => { setFormError(''); startEditing(blankEntry()); }}>
           <Icon n="plus" size={14} /> Movimentação
         </Button>
       ) : undefined}
@@ -307,7 +319,7 @@ export default function FinanceiroPage() {
               <div className="p-4">
                 <EmptyState icon="wallet" title="Nenhuma movimentação no recorte"
                   hint="Registre um recebimento ao concluir um atendimento ou lance uma despesa."
-                  action={<Button variant="primary" onClick={() => { setFormError(''); setEditing(blankEntry()); }}><Icon n="plus" size={14} /> Movimentação</Button>} />
+                  action={<Button variant="primary" onClick={() => { setFormError(''); startEditing(blankEntry()); }}><Icon n="plus" size={14} /> Movimentação</Button>} />
               </div>
             ) : (
               <div className="divide-y divide-[var(--border)]">
@@ -329,7 +341,7 @@ export default function FinanceiroPage() {
                     <span className={cn('text-[14px] font-semibold tabular-nums w-[110px] text-right', e.kind === 'receita' ? 'text-[var(--success-fg)]' : 'text-[var(--danger)]')}>
                       {e.kind === 'receita' ? '+' : '−'}{centsToBR(e.amount)}
                     </span>
-                    <IconButton icon="pencil" label="Editar movimentação" size="sm" onClick={() => { setFormError(''); setEditing({ ...e }); }} />
+                    <IconButton icon="pencil" label="Editar movimentação" size="sm" onClick={() => { setFormError(''); startEditing({ ...e }); }} />
                     <IconButton icon="x" label="Excluir movimentação" size="sm" variant="ghost" onClick={() => remove(e.id)} />
                   </div>
                 ))}
@@ -342,18 +354,20 @@ export default function FinanceiroPage() {
       {/* ── Sheet de criar/editar ── */}
       <WorkspaceSheet
         open={!!editing}
-        onClose={() => setEditing(null)}
+        onClose={closeEditing}
+        dismissGuard={formDismissState}
         title={editing?.id ? 'Editar movimentação' : 'Nova movimentação'}
         subtitle="Registro de caixa — não há cobrança automática nesta fase."
         icon="wallet"
         width="max-w-[560px]"
         footer={
           <div className="flex gap-2 justify-end w-full">
-            <Button variant="secondary" onClick={() => setEditing(null)} disabled={saving}>Cancelar</Button>
+            <Button variant="secondary" onClick={requestCloseEditing} disabled={saving}>Cancelar</Button>
             <Button variant="primary" onClick={save} disabled={saving}>{saving ? 'Salvando…' : 'Salvar'}</Button>
           </div>
         }
       >
+        {formDismiss.dialog}
         {editing && (
           <div className="p-1 space-y-3">
             {formError ? <Notice tone="error">{formError}</Notice> : null}

@@ -2,6 +2,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { Icon } from '@/components/icons';
 import { WorkspaceSheet } from '@/components/dashboard/WorkspaceSheet';
+import { useOverlayDismissGuard } from '@/components/dashboard/OverlayDismissGuard';
 import { Button, IconButton, Input, Textarea, Select, Field, Switch, Badge, Notice, EmptyState, ListSkeleton } from '@/components/ui';
 import { apiGet, apiSend } from '@/lib/api-client';
 import type { AnamneseField, AnamneseFieldType, AnamneseTemplate, ClinicType } from '@/lib/types';
@@ -36,7 +37,22 @@ export function AnamneseManager({ open, onClose, businessId, clinicType }: {
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
   const [editing, setEditing] = useState<AnamneseTemplate | null>(null);
+  const [editingBaseline, setEditingBaseline] = useState('');
   const [msg, setMsg] = useState('');
+  const formDismiss = useOverlayDismissGuard();
+  const editingDirty = !!editing && JSON.stringify(editing) !== editingBaseline;
+  const dismissState = {
+    dirty: editingDirty, saving: busy, context: 'edit' as const,
+    title: editing?.id ? 'Descartar alterações da ficha?' : 'Descartar nova ficha?',
+    description: 'As alterações ainda não foram salvas.',
+  };
+  const startEditing = (template: AnamneseTemplate) => {
+    const copy = structuredClone(template);
+    setEditing(copy);
+    setEditingBaseline(JSON.stringify(copy));
+  };
+  const clearEditing = () => { setEditing(null); setEditingBaseline(''); };
+  const requestCancelEditing = () => formDismiss.requestClose('close-button', dismissState, clearEditing);
 
   const load = useCallback(async () => {
     if (!businessId) return;
@@ -81,7 +97,7 @@ export function AnamneseManager({ open, onClose, businessId, clinicType }: {
     const res = await apiSend('/api/anamnese', 'POST', { action: 'template.save', businessId, template: { ...editing, fields } }, { scope: 'area', area: 'Atendimento' });
     setBusy(false);
     if (!res.ok) { setMsg(res.message || 'Não foi possível salvar.'); return; }
-    setEditing(null);
+    clearEditing();
     load();
   }
 
@@ -103,11 +119,13 @@ export function AnamneseManager({ open, onClose, businessId, clinicType }: {
     <WorkspaceSheet
       open={open}
       onClose={onClose}
+      dismissGuard={dismissState}
       title="Fichas de anamnese"
       subtitle="Modelos administrativos editáveis — preenchidos no atendimento."
       icon="fileText"
       width="max-w-[720px]"
     >
+      {formDismiss.dialog}
       {error ? <Notice tone="error">{error}</Notice> : null}
       {msg ? <Notice tone="info">{msg}</Notice> : null}
 
@@ -159,7 +177,7 @@ export function AnamneseManager({ open, onClose, businessId, clinicType }: {
           </div>
 
           <div className="flex gap-2 justify-end pt-2">
-            <Button variant="secondary" onClick={() => setEditing(null)} disabled={busy}>Cancelar</Button>
+            <Button variant="secondary" onClick={requestCancelEditing} disabled={busy}>Cancelar</Button>
             <Button variant="primary" onClick={save} disabled={busy}>{busy ? 'Salvando…' : 'Salvar ficha'}</Button>
           </div>
         </div>
@@ -168,14 +186,14 @@ export function AnamneseManager({ open, onClose, businessId, clinicType }: {
           icon="fileText"
           title="Nenhuma ficha ainda"
           hint={clinicType && clinicType !== 'geral' ? 'Crie a partir do preset da sua clínica ou monte do zero.' : 'Monte uma ficha do zero ou use um preset.'}
-          action={<div className="flex gap-2"><Button variant="primary" onClick={seed} disabled={busy}><Icon n="spark" size={14} /> Usar preset</Button><Button variant="secondary" onClick={() => setEditing({ id: '', businessId, name: '', description: '', preset: 'custom', fields: [emptyField()], active: true, createdAt: '', updatedAt: '' })}><Icon n="plus" size={14} /> Nova ficha</Button></div>}
+          action={<div className="flex gap-2"><Button variant="primary" onClick={seed} disabled={busy}><Icon n="spark" size={14} /> Usar preset</Button><Button variant="secondary" onClick={() => startEditing({ id: '', businessId, name: '', description: '', preset: 'custom', fields: [emptyField()], active: true, createdAt: '', updatedAt: '' })}><Icon n="plus" size={14} /> Nova ficha</Button></div>}
         />
       ) : (
         <div className="p-1 space-y-2">
           {msg && <Notice tone="info">{msg}</Notice>}
           <div className="flex gap-2 flex-wrap">
             <Button variant="secondary" size="sm" onClick={seed} disabled={busy}><Icon n="spark" size={14} /> Do preset</Button>
-            <Button variant="secondary" size="sm" onClick={() => setEditing({ id: '', businessId, name: '', description: '', preset: 'custom', fields: [emptyField()], active: true, createdAt: '', updatedAt: '' })}><Icon n="plus" size={14} /> Nova ficha</Button>
+            <Button variant="secondary" size="sm" onClick={() => startEditing({ id: '', businessId, name: '', description: '', preset: 'custom', fields: [emptyField()], active: true, createdAt: '', updatedAt: '' })}><Icon n="plus" size={14} /> Nova ficha</Button>
           </div>
           {templates.map((t) => (
             <div key={t.id} className="flex items-center gap-3 rounded-xl border border-[var(--border)] p-3">
@@ -188,7 +206,7 @@ export function AnamneseManager({ open, onClose, businessId, clinicType }: {
               {t.preset && t.preset !== 'custom' && (
                 <IconButton icon="sync" label="Atualizar do preset (mantém campos customizados)" size="sm" variant="ghost" onClick={() => upgrade(t.id)} />
               )}
-              <IconButton icon="pencil" label="Editar ficha" size="sm" onClick={() => setEditing({ ...t })} />
+              <IconButton icon="pencil" label="Editar ficha" size="sm" onClick={() => startEditing(t)} />
               <IconButton icon="x" label="Excluir ficha" size="sm" variant="ghost" onClick={() => remove(t.id)} />
             </div>
           ))}

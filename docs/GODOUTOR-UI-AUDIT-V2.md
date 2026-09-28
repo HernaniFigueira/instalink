@@ -12,8 +12,8 @@
 - [x] Testes visuais legados que exigiam fundo gradiente, topbar colorida, default neutro, cards creme ou CTA violeta foram atualizados para o contrato aprovado. Comportamento/negócio não foi alvo dessas alterações.
 - [x] Acentos históricos de pet/paciente, anotação administrativa, métrica, “hoje” e setup foram neutralizados ou ligados ao accent; contextos antes lilás convergem para info ou accent. Estados da agenda foram levados a tokens semânticos.
 - [x] Proteção de descarte compartilhada, rota clínica full-page e refinamentos estáticos de hierarquia/cores/superfícies concluídos; APIs e domínio clínico permaneceram no contrato existente.
-- [x] Suíte focada final: **218/218 testes aprovados** (13 arquivos).
-- [x] Suíte completa: **2.485 aprovados / 6 falhas / 2.491 testes**. Cinco falhas são a baseline conhecida (`a34-instagram` ×3, `automation-audit-p4`, `pipeline`). A sexta, `whatsapp-robustness.test.ts` (fluxo de agendamento), foi executada na main `23619f2399249bc62eadccebbf3da0be41248c83` e no HEAD anterior da PR `3ba53553ea9dc8f404d69e82c686d7aa8f71f025`: o mesmo caso falha em ambos (11 passam, 1 falha), portanto é reproduzível nas duas baselines.
+- [x] Suíte focada desta rodada: **101/101 testes aprovados** (10 arquivos), incluindo regressões clínicas e overlays.
+- [x] Suíte completa nesta rodada: **2.505 aprovados / 6 falhas / 2.511 testes**. Cinco falhas são a baseline conhecida (`a34-instagram` ×3, `automation-audit-p4`, `pipeline`). A sexta, `whatsapp-robustness.test.ts` (fluxo de agendamento), também foi reproduzida na main e no HEAD anterior da PR, como registrado na comparação histórica abaixo; é independente deste escopo.
 - [x] `npm run typecheck` aprovado; `npm run build` aprovado, com 132/132 páginas geradas.
 - [ ] Browser/render/capturas de todas as rotas em desktop e mobile: **não realizado nesta etapa**. Nenhuma rota abaixo está marcada como visualmente homologada. Playwright não encontrou Chromium instalado; `npx playwright install chromium` falhou com `ECONNRESET` ao baixar de `cdn.playwright.dev`. Portanto não há screenshots e nenhuma rota foi declarada visualmente aprovada.
 - [ ] Homologação visual pós-implementação pelo usuário: temas verde/neutro/vinho, reload F5 e viewports críticos; nenhuma evidência de browser foi declarada.
@@ -66,7 +66,7 @@ A segunda passagem de fonte foi executada nos componentes/rotas do dashboard aut
 - **Hexes:** 7 correspondências de regex incluíram um fragmento de comentário de erro React; as declarações visuais restantes pertencem a preview/editor público ou tratamento de impressão e não foram redesenhadas neste escopo. A lista de exceções precisa ser anexada por arquivo na rodada final.
 - **Ações globais:** não foi encontrado FAB global concorrente de Conversas. O atalho de Conversas permanece integrado à topbar; posição fixa encontrada é tooltip, aviso/toast e preview/editor legado. O teste v2 trava a ausência da shortcut fixa.
 
-Ainda falta fechar/classificar integralmente cada ocorrência inline e verificar os efeitos em tela real. A compatibilidade por token não substitui a reauditoria visual.
+A classificação estática individual das 84 ocorrências está concluída e vinculada ao inventário acima. Ainda falta verificar em tela real os efeitos dos casos dinâmicos e reabrir as rotas; a compatibilidade por token e o inventário não substituem a reauditoria visual.
 
 - [x] Segunda busca de classes de cor + normalização semântica com escopo e guarda de regressão.
 - [x] Busca de radius/shadow/FAB e substituição das declarações estruturais avulsas encontradas nos seletores do workspace.
@@ -88,6 +88,37 @@ Ainda falta fechar/classificar integralmente cada ocorrência inline e verificar
 
 - Fonte: `src/lib/__tests__/godoutor-ui-contract-v2.test.ts` — default, 21 presets, contraste de nav/ativo/acento/texto sobre superfície suave, ausência de tema paralelo, controles e shell.
 - Suítes visuais existentes atualizadas de forma seletiva: `m8-contrato-cor`, `missao6-shell`, `missao7-visual`, `m10-identidade-persistente`, `m11-preview-sidebar`, `premium-refine`, `godoutor-visual`, `visual-convergence` e `status`.
-- Execução focada final: 13 arquivos, **218 testes aprovados**. `npm run typecheck` e `npm run build` aprovados.
-- Execução full final: **2.485/2.491 aprovados**. Falhas: `a34-instagram` ×3, `automation-audit-p4`, `pipeline` (cinco casos da baseline conhecida) e um caso de `whatsapp-robustness.test.ts`, confirmado também na main e no HEAD anterior da PR.
+- Execução focada anterior: 13 arquivos, 218 testes aprovados. Nesta rodada, execução focal de 10 arquivos / **100 testes aprovados**, mais typecheck e build aprovados.
+- Execução full desta rodada: **2.505/2.511 aprovados**. Falhas: `a34-instagram` ×3, `automation-audit-p4`, `pipeline` (cinco falhas conhecidas da baseline) e um caso de `whatsapp-robustness.test.ts`, confirmado também na main e no HEAD anterior da PR. Os testes de Encounter, Pet 360 e deep-link impactados por helpers foram atualizados para o contrato atual e passaram.
 - Browser e screenshots continuam pendentes. A tentativa de instalar Chromium via Playwright falhou por `ECONNRESET` em `cdn.playwright.dev`, sem navegador de sistema disponível; nenhum render, F5 ou viewport foi inspecionado visualmente.
+
+## Fechamento complementar: overlays, anamnese e itens diferidos
+
+### Segunda varredura de superfícies editáveis
+
+Foi feita leitura estática dos usos de `Drawer`, `WorkspaceSheet` e equivalentes no dashboard, incluindo caminhos de fechamento por botão X, Cancelar, Escape, backdrop e navegação. `Drawer` e `WorkspaceSheet` encaminham dismissals para a primitiva compartilhada `OverlayDismissGuard`: estados pristine fecham sem confirmação; estado saving bloqueia o descarte; alterações dirty pedem decisão e mantêm o formulário ao escolher continuar editando. Confirmação fica reservada às ações pequenas de descarte, não às superfícies informativas.
+
+- **Protegidos com estado sujo/salvando:** Novo pet (`PetsSection`), Novo Agendamento e criação de cliente aninhada (`NewBookingSheet`/`NewClientSheet`), edição de cliente (`ClientProfileDrawer`), acesso de membro, quick-register, importação, formulários de catálogo, etapas do funil, pagamento, automações, editor de anamnese e reagendamento de booking. `EncounterSheet` mantém o autosave e a concorrência otimista existentes, com proteção de navegação/fechamento quando há edição não persistida ou erro.
+- **Anamnese:** continua sheet contextual. Campos booleanos distinguem “Não informado”, “Sim” e “Não”; respostas persistidas antigas `true/false` são formatadas como “Sim”/“Não”. Após salvar, a resposta é enviada ao estado pai antes do fechamento; o histórico abre com labels humanos e é somente leitura.
+- **Check-in:** a ação atualiza o booking no detalhe e não fecha `BookingDetailSheet`; o estado “Chegou” e a possibilidade existente de desfazer permanecem associados à lógica atual, sem refazer papéis/estados.
+- **Superfícies sem formulário sujo:** sheets informativas/de leitura, seletores sem dados digitados e detalhes sem edição permanecem livres de confirmação. Isso evita modal de descarte em uso pristine/informativo.
+- **Novo Agendamento:** preservado como sheet lateral à direita; a mudança de primitiva não o converte em modal central. Anamnese permanece contextual; confirmação central é apenas confirmação.
+- **Cobertura nesta rodada:** `manual-homologation-overlays.test.tsx` exercita Novo pet e Anamnese em dirty + backdrop/Escape/X, Novo pet pristine + backdrop, booleano não informado, callback/ordem do save e histórico legado `false`. `WorkspaceSheet.test.tsx`, `overlay-dismiss-guard.test.tsx`, `fase2-ws-sheet-close.test.ts` e `post-homologation-ui.test.ts` cobrem normalização/contrato comum e invariantes adicionais. A cobertura de alguns componentes foi estática/compartilhada; não declarar como execução browser.
+- **Contraste e linguagem de anexos:** controles secundários, histórico, slots e disabled usam superfície/borda/texto sem tornar todos os controles primários. Quando upload não está configurado, a interface deve comunicar indisponibilidade de anexos em linguagem de produto; token, env var, stack e provider não são conteúdo para usuário. Nenhuma arquitetura de Storage foi criada.
+- **Limite da verificação:** análise foi de fonte e testes automatizados executados abaixo; não houve inspeção visual própria nem browser nesta rodada.
+
+### Diferimentos clínico-operacionais A–M (somente registro)
+
+Todos os itens clínico-operacionais A–M da solicitação permanecem explicitamente fora desta PR de Design System 2.0. Eles não foram implementados, nem usados para alterar domínio, APIs, banco, autenticação, autorização ou regras clínicas. Para manter o limite de escopo rastreável, ficam registrados como trilhas futuras: **A)** F1 / evolução do modelo de atendimento clínico; **B)** matriz de acesso por papel e vínculo profissional; **C)** estados operacionais detalhados de agenda, fila e atendimento; **D)** triagem/priorização clínica; **E)** prontuário especializado e histórico longitudinal; **F)** diagnósticos e codificação clínica; **G)** prescrição/receituário; **H)** vacinas e medicina preventiva; **I)** odontograma e fluxos por especialidade; **J)** internação, cirurgia e procedimentos; **K)** assinatura/documentos clínicos e requisitos regulatórios; **L)** convênios/faturamento clínico; **M)** arquitetura própria de armazenamento/fluxo de anexos. A lista é registro de diferimento, não aprovação de desenho, requisito clínico validado ou autorização para iniciar esses trabalhos. Check-in e ajustes de apresentação pedidos para esta PR são as exceções expressas já limitadas acima; não redesenham máquina de estados nem matriz de permissões.
+
+### Inventário inline — classificação concluída, validação visual pendente
+
+A segunda busca documenta **84 ocorrências atuais**, uma por linha, em `GODOUTOR-UI-AUDIT-V2-INLINE-INVENTORY.md`: geometria/layout calculado; dimensões ou cores semânticas derivadas de dados; previews/temas já existentes; posicionamento de tooltip/rail; impressão; estilos isolados do editor/renderer legado. Um valor fixo de ícone em `AutomationsView` foi removido em favor de utilitários CSS. A classificação por finalidade está feita; não se promete equivalência visual dos casos dinâmicos até a conferência browser. Isso substitui a nota antiga que dizia simultaneamente que faltava classificar as 84 ocorrências.
+
+### Validação complementar desta rodada
+
+- Testes focais: **7 arquivos / 67 testes aprovados**, incluindo 10 testes interativos de Novo pet/Anamnese.
+- `npm run typecheck`: aprovado após as últimas alterações de código.
+- `npm run build`: aprovado; 132/132 páginas estáticas geradas.
+- `npm test`: 2.505/2.511 aprovados; apenas as cinco falhas da baseline conhecida e a falha WhatsApp previamente reproduzida ficaram vermelhas.
+- PR #43 segue OPEN/DRAFT; não houve merge. Browser/render/capturas permanecem pendentes e não foram alegados.

@@ -12,12 +12,13 @@
 //
 // Estruturas legadas (options/optionValues) continuam no banco para
 // compatibilidade de dados; elas apenas não são mais apresentadas aqui.
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { centsToBR, cn, parseMoneyToCents } from '@/lib/utils';
 import type { Category, Product } from '@/lib/types';
-import { Button, EmptyState, ListSkeleton, Notice, PageHeader, Switch } from '@/components/ui';
+import { Button, Drawer, EmptyState, Field, Input, ListSkeleton, Notice, PageHeader, Select, Switch, Textarea } from '@/components/ui';
+import { useOverlayDismissGuard } from '@/components/dashboard/OverlayDismissGuard';
 import { AccessDenied, useAreaLoad } from '@/components/dashboard/AccessNotice';
 import { apiGet, apiSend } from '@/lib/api-client';
 import { Icon } from '@/components/icons';
@@ -204,7 +205,19 @@ function ProductForm({ product, cats, businessId, onClose, onSave }: {
   const [featured, setFeatured] = useState(!!product?.featured);
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
-  const input = 'w-full rounded-md border border-zinc-300 px-3 py-2.5 text-sm focus:outline-none focus:ring-1 focus:ring-zinc-900';
+  const initialSnapshot = useRef(JSON.stringify({
+    name: product?.name || '', description: product?.description || '', image: product?.image || '',
+    price: product ? reais(product.price) : '', categoryId: product?.categoryId || '',
+    active: product?.active !== false, featured: !!product?.featured,
+  }));
+  const dirty = JSON.stringify({ name, description, image, price, categoryId, active, featured }) !== initialSnapshot.current;
+  const dismiss = useOverlayDismissGuard();
+  const dismissState = {
+    dirty, saving: loading, context: 'edit' as const,
+    title: product ? 'Descartar alterações do produto?' : 'Descartar novo produto?',
+    description: 'As informações preenchidas ainda não foram salvas.',
+  };
+  const requestClose = () => dismiss.requestClose('close-button', dismissState, onClose);
 
   async function submit(e: React.FormEvent) {
     e.preventDefault();
@@ -225,33 +238,49 @@ function ProductForm({ product, cats, businessId, onClose, onSave }: {
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4">
-      <div className="absolute inset-0 bg-[var(--overlay)]" onClick={onClose} />
-      <form onSubmit={submit} className="relative w-full sm:max-w-md bg-white rounded-t-2xl sm:rounded-lg p-6 max-h-[92vh] overflow-y-auto space-y-3.5">
-        <div className="flex items-center justify-between">
-          <h3 className="font-semibold text-base">{product ? 'Editar produto' : 'Novo produto da vitrine'}</h3>
-          <button type="button" onClick={onClose} className="font-semibold text-zinc-400 px-2 inline-flex" aria-label="Fechar"><Icon n="x" size={16} /></button>
-        </div>
-        <ImageUpload label="FOTO DO PRODUTO" value={image} onChange={(url) => setImage(url)} businessId={businessId} />
-        <input value={name} onChange={(e) => setName(e.target.value)} className={input} placeholder="Nome *" autoFocus />
-        <textarea value={description} onChange={(e) => setDescription(e.target.value)} className={input} rows={2} placeholder="Descrição (opcional)" />
-        <div className="grid grid-cols-2 gap-3">
-          <label className="block"><span className="text-xs font-semibold text-zinc-500">PREÇO (R$)</span>
-            <input value={price} onChange={(e) => setPrice(e.target.value)} className={input + ' mt-1'} placeholder="89,90" inputMode="decimal" /></label>
-          <label className="block"><span className="text-xs font-semibold text-zinc-500">CATEGORIA</span>
-            <select value={categoryId} onChange={(e) => setCategoryId(e.target.value)} className={input + ' mt-1'}>
+    <Drawer
+      open
+      onClose={onClose}
+      dismissGuard={dismissState}
+      title={product ? 'Editar produto' : 'Novo produto da vitrine'}
+      subtitle="Informações que aparecem na página pública."
+      width="max-w-md"
+      footer={(
+        <>
+          <Button variant="secondary" onClick={requestClose} disabled={loading}>Cancelar</Button>
+          <Button variant="primary" type="submit" form="product-form" disabled={loading || !name.trim()}>
+            {loading ? 'Salvando…' : 'Salvar produto'}
+          </Button>
+        </>
+      )}
+    >
+      {dismiss.dialog}
+      <form id="product-form" onSubmit={submit} className="p-5 sm:p-6 space-y-4">
+        <ImageUpload label="Foto do produto" value={image} onChange={setImage} businessId={businessId} />
+        <Field label="Nome" required>
+          <Input value={name} onChange={(e) => setName(e.target.value)} placeholder="Nome do produto" autoFocus />
+        </Field>
+        <Field label="Descrição">
+          <Textarea value={description} onChange={(e) => setDescription(e.target.value)} rows={3} placeholder="Descreva o produto" />
+        </Field>
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          <Field label="Preço (R$)">
+            <Input value={price} onChange={(e) => setPrice(e.target.value)} placeholder="89,90" inputMode="decimal" />
+          </Field>
+          <Field label="Categoria">
+            <Select value={categoryId} onChange={(e) => setCategoryId(e.target.value)}>
               <option value="">Sem categoria</option>
               {cats.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
-            </select></label>
+            </Select>
+          </Field>
         </div>
-        <div className="flex gap-4">
-          <span className="flex items-center gap-2 text-sm font-medium"><Switch checked={active} onChange={setActive} label="Visível na vitrine" /> Visível na vitrine</span>
-          <span className="flex items-center gap-2 text-sm font-medium"><Switch checked={featured} onChange={setFeatured} label="Destaque na vitrine" /> Destaque <Icon n="star" size={14} className="text-amber-500" /></span>
+        <div className="flex flex-wrap gap-4">
+          <label className="inline-flex items-center gap-2 text-sm font-medium"><Switch checked={active} onChange={setActive} label="Visível na vitrine" /> Visível na vitrine</label>
+          <label className="inline-flex items-center gap-2 text-sm font-medium"><Switch checked={featured} onChange={setFeatured} label="Destaque na vitrine" /> Destaque</label>
         </div>
-        <p className="text-[11px] text-zinc-400 leading-snug">Na página pública, o visitante toca em “Tenho interesse” e abre o WhatsApp do negócio com o nome (e o preço, se houver) já escritos. Nenhum pedido é gerado.</p>
-        {error && <p className="text-sm font-medium text-red-600">{error}</p>}
-        <Button type="submit" variant="primary" size="lg" className="w-full" disabled={loading || !name.trim()}>{loading ? 'Salvando…' : 'Salvar produto'}</Button>
+        <p className="text-xs text-[var(--text-muted)] leading-relaxed">Na página pública, o visitante pode demonstrar interesse pelo WhatsApp do negócio. Nenhum pedido é gerado.</p>
+        {error && <Notice tone="error">{error}</Notice>}
       </form>
-    </div>
+    </Drawer>
   );
 }

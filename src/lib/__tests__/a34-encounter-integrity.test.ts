@@ -342,7 +342,7 @@ describe('A3.4 · 2ª revisão — fila 1:1, reload por id e pós-atendimento (r
   it('o campo da recepção começa VAZIO (o retorno é contexto, não texto digitado)', () => {
     expect(SHEET).toMatch(/setFollowUpNote\(''\);/);
     expect(SHEET).not.toMatch(/setFollowUpNote\(res\.data!\.encounter\.followUp/);
-    expect(SHEET).toMatch(/placeholder=\{row\.followUp \|\| 'Ex: ligar e marcar o retorno em 30 dias'\}/);
+    expect(SHEET).toMatch(/placeholder=\{row\.followUp \|\| 'Registre como organizar o retorno'\}/);
   });
 
   it('a fila oferece a porta de volta ao registro, sem mexer no status', () => {

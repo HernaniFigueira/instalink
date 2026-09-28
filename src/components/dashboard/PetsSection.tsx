@@ -3,6 +3,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { Icon } from '@/components/icons';
 import { Avatar, Badge, Button, Field, IconButton, Input, Notice, Select, Textarea } from '@/components/ui';
 import { WorkspaceSheet } from '@/components/dashboard/WorkspaceSheet';
+import { useOverlayDismissGuard } from '@/components/dashboard/OverlayDismissGuard';
 import { apiGet, apiSend } from '@/lib/api-client';
 import { PET_SPECIES, PET_SPECIES_LABELS, breedSuggestions, petAge, petLabel, validatePet } from '@/lib/pets';
 import type { Pet } from '@/lib/types';
@@ -14,6 +15,8 @@ import type { Pet } from '@/lib/types';
 const EMPTY_PET: Partial<Pet> = {
   name: '', species: 'cachorro', breed: '', sex: '', birthDate: '', weightKg: 0, notes: '', photo: '',
 };
+const PET_FORM_KEYS: Array<keyof Pet> = ['id', 'name', 'species', 'breed', 'sex', 'birthDate', 'weightKg', 'notes', 'photo'];
+const petFormKey = (pet: Partial<Pet>) => JSON.stringify(PET_FORM_KEYS.map((key) => pet[key] ?? ''));
 
 export function PetsSection({ businessId, tutorId, tutorName, onChanged, onOpenPet }: {
   businessId: string; tutorId: string; tutorName: string; onChanged?: () => void;
@@ -23,6 +26,8 @@ export function PetsSection({ businessId, tutorId, tutorName, onChanged, onOpenP
   const [vet, setVet] = useState<boolean | null>(null); // null = ainda não perguntou
   const [pets, setPets] = useState<Pet[]>([]);
   const [editing, setEditing] = useState<Partial<Pet> | null>(null);
+  const [editingBaseline, setEditingBaseline] = useState<Partial<Pet> | null>(null);
+  const petDismiss = useOverlayDismissGuard();
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
   const [flash, setFlash] = useState('');
@@ -40,6 +45,21 @@ export function PetsSection({ businessId, tutorId, tutorName, onChanged, onOpenP
 
   useEffect(() => { void load(); }, [load]);
 
+  const petDirty = !!editing && !!editingBaseline && petFormKey(editing) !== petFormKey(editingBaseline);
+  const petDismissState = {
+    dirty: petDirty, saving: busy, context: 'edit' as const,
+    title: editing?.id ? 'Descartar alterações do pet?' : 'Descartar cadastro do pet?',
+    description: editing?.id ? 'As alterações feitas no cadastro serão perdidas.' : 'Os dados preenchidos serão perdidos.',
+  };
+  const closePetForm = () => { setEditing(null); setEditingBaseline(null); };
+  const requestPetClose = () => petDismiss.requestClose('close-button', petDismissState, closePetForm);
+  const startPetForm = (pet: Partial<Pet>) => {
+    const initial = { ...pet };
+    setError('');
+    setEditing(initial);
+    setEditingBaseline(initial);
+  };
+
   async function save() {
     if (!editing) return;
     const problem = validatePet(editing);
@@ -52,7 +72,7 @@ export function PetsSection({ businessId, tutorId, tutorName, onChanged, onOpenP
     }, { scope: 'action', area: 'Clientes' });
     setBusy(false);
     if (!res.ok) { setError(res.message || 'Não foi possível salvar o pet.'); return; }
-    setEditing(null);
+    closePetForm();
     setFlash('Pet salvo.');
     void load();
     onChanged?.();
@@ -122,7 +142,7 @@ export function PetsSection({ businessId, tutorId, tutorName, onChanged, onOpenP
                 </div>
                 {p.sex && <Badge tone="zinc">{p.sex === 'M' ? 'Macho' : 'Fêmea'}</Badge>}
                 <span className="flex items-center gap-1">
-                  <IconButton icon="pencil" label={`Editar ${p.name}`} size="sm" onClick={() => { setError(''); setEditing({ ...p }); }} />
+                  <IconButton icon="pencil" label={`Editar ${p.name}`} size="sm" onClick={() => startPetForm(p)} />
                   <IconButton icon="x" label={`Remover ${p.name}`} size="sm" variant="ghost" disabled={busy} onClick={() => { void remove(p); }} />
                 </span>
               </li>
@@ -135,25 +155,27 @@ export function PetsSection({ businessId, tutorId, tutorName, onChanged, onOpenP
           o canto superior direito ficou só para o conteúdo (leitura mais
           natural; hierarquia pet × tutor preservada). */}
       <div className="mt-3.5">
-        <Button size="sm" variant="primary" onClick={() => { setError(''); setEditing({ ...EMPTY_PET }); }}>
+        <Button size="sm" variant="primary" onClick={() => startPetForm(EMPTY_PET)}>
           <Icon n="plus" size={14} /> Cadastrar pet
         </Button>
       </div>
 
       <WorkspaceSheet
         open={!!editing}
-        onClose={() => setEditing(null)}
+        onClose={closePetForm}
+        dismissGuard={petDismissState}
         title={editing?.id ? `Editar ${editing.name || 'pet'}` : 'Novo pet'}
         subtitle={tutorName ? `Paciente de ${tutorName}` : 'Novo paciente (pet)'}
         icon="paw"
         width="max-w-[520px]"
         footer={(
           <div className="flex w-full items-center justify-end gap-2.5">
-            <Button variant="secondary" onClick={() => setEditing(null)} disabled={busy}>Cancelar</Button>
+            <Button variant="secondary" onClick={requestPetClose} disabled={busy}>Cancelar</Button>
             <Button variant="primary" onClick={() => { void save(); }} disabled={busy} className="min-w-[108px]">{busy ? 'Salvando…' : 'Salvar pet'}</Button>
           </div>
         )}
       >
+        {petDismiss.dialog}
         {editing && (
           <div className="p-1 space-y-4">
             <section className="space-y-3 rounded-[var(--radius-md)] border border-[var(--border-soft)] bg-[var(--surface-subtle)] p-3.5">

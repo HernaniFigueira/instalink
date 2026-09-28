@@ -129,7 +129,7 @@ export function TaskPanel({ tasks, summary, businessId, members, onChanged }: {
                     {t.leadName ? <span>· lead {t.leadName}</span> : null}
                     {t.bookingLabel ? <span>· agendamento {t.bookingLabel}</span> : null}
                     {t.leadId && <Link href={`/funil?b=${businessId}#${t.leadId}`} className="underline text-[var(--brand-fg)] font-semibold">Ver oportunidade</Link>}
-                    {t.bookingId && <Link href={`/agenda?b=${businessId}`} className="underline text-[var(--brand-fg)] font-semibold">Ver agenda</Link>}
+                    {t.bookingId && <Link href={`/agenda?b=${businessId}`} className="inline-flex min-h-8 items-center rounded-sm border border-[var(--border-strong)] bg-[var(--surface)] px-2.5 py-1 font-semibold text-[var(--text)] hover:border-[var(--accent-border)] hover:bg-[var(--surface-hover)] focus-visible:outline-none focus-visible:shadow-focus">Ver agenda</Link>}
                   </p>
                 </>
               )}

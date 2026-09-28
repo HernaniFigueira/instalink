@@ -40,7 +40,7 @@ export async function POST(req: NextRequest) {
     }
     if (!process.env.BLOB_READ_WRITE_TOKEN) {
       return NextResponse.json(
-        { error: 'Upload de imagens ainda não configurado. Adicione BLOB_READ_WRITE_TOKEN (Vercel Blob) e tente de novo.' },
+        { error: 'Anexos indisponíveis neste ambiente.' },
         { status: 503 },
       );
     }

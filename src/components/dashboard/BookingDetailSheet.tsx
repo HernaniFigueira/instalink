@@ -151,8 +151,11 @@ export function BookingDetailSheet({ booking, service, pro, businessId, timezone
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error);
+      // Registrar/desfazer chegada atualiza o agendamento, sem retirar o
+      // detalhe da tela: recepção segue para o próximo passo no mesmo contexto.
       onChanged();
-      onClose();
+      setNotice(undo ? 'Check-in desfeito.' : 'Chegada registrada.');
+      setActing('');
     } catch (e: any) {
       setError(e.message);
       setActing('');

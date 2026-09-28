@@ -19,6 +19,14 @@ import type { AnamneseResponse, AnamneseTemplate, Booking, Pet } from '@/lib/typ
 
 type PetTab = 'resumo' | 'encounters' | 'agenda' | 'anamnese' | 'files' | 'notes';
 
+function responseHistoryRows(response: AnamneseResponse, templates: AnamneseTemplate[]) {
+  const template = templates.find((candidate) => candidate.id === response.templateId);
+  if (template) return template.fields.filter((field) => field.type !== 'note').map((field) => ({
+    id: field.id, label: field.label, type: field.type, value: response.answers?.[field.id],
+  }));
+  return Object.entries(response.answers || {}).map(([id, value]) => ({ id, label: id, type: '', value }));
+}
+
 export function Pet360Sheet({ open, onClose, businessId, pet, tutorName, tutorPhone, onOpenEncounter }: {
   open: boolean;
   onClose: () => void;
@@ -225,24 +233,28 @@ export function Pet360Sheet({ open, onClose, businessId, pet, tutorName, tutorPh
                   <p className="text-xs text-[var(--text-muted)] tabular-nums">
                     Última ficha: {formatDateBR((lastResponse.createdAt || '').slice(0, 10))} · {templateName(lastResponse.templateId)}
                     {' '}·{' '}
-                    <button type="button" className="font-semibold text-[var(--brand-fg)] hover:underline"
-                      onClick={() => setHistoryOpen((v) => !v)} aria-expanded={historyOpen}>
+                    <Button type="button" variant="secondary" size="sm" className="ml-1"
+                      onClick={() => setHistoryOpen((v) => !v)} aria-expanded={historyOpen} aria-controls="pet360-anamnese-history">
+                      <Icon n={historyOpen ? 'chevU' : 'history'} size={13} />
                       {historyOpen ? 'Ocultar histórico' : 'Ver histórico'}
-                    </button>
+                    </Button>
                   </p>
                 )}
                 {responses.length === 0
                   ? <p className="text-sm text-[var(--text-muted)]">Nenhuma anamnese respondida para este pet.</p>
                   : (
-                    <ul className="space-y-2">
+                    <ul id="pet360-anamnese-history" className="space-y-2">
                       {(historyOpen ? responses : responses.slice(0, 1)).map((r) => (
                         <li key={r.id} className="rounded-md border border-[var(--border)] px-3 py-2" data-testid={historyOpen ? 'pet360-history-item' : undefined}>
                           <p className="text-xs font-semibold text-[var(--text-muted)] tabular-nums">
                             {formatDateBR((r.createdAt || '').slice(0, 10))} · {templateName(r.templateId)}
                           </p>
                           <dl className="mt-1 space-y-0.5">
-                            {Object.entries(r.answers || {}).slice(0, historyOpen ? 40 : 6).map(([k, v]) => (
-                              <div key={k} className="text-xs"><span className="text-[var(--text-muted)]">{k}: </span>{String(v ?? '—')}</div>
+                            {responseHistoryRows(r, templates).slice(0, historyOpen ? 40 : 6).map(({ id, label, type, value }) => (
+                              <div key={id} className="grid grid-cols-[minmax(0,1fr)_minmax(0,1.4fr)] gap-3 text-xs">
+                                <dt className="text-[var(--text-muted)]">{label}</dt>
+                                <dd className="text-[var(--text)] break-words">{type === 'boolean' ? (value === null || value === undefined ? 'Não informado' : value ? 'Sim' : 'Não') : Array.isArray(value) ? value.join(', ') : String(value ?? '—')}</dd>
+                              </div>
                             ))}
                           </dl>
                         </li>

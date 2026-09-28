@@ -10,7 +10,7 @@
 // O que a tela mostra é sempre o que o motor FEZ: estatísticas por automação,
 // histórico de execuções passo a passo com o veredito de cada condição e as
 // tarefas que nasceram delas. Nenhum número é decorativo.
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import Link from 'next/link';
 import { AreaLoadError } from './AccessNotice';
 import { apiGet, apiSend } from '@/lib/api-client';
@@ -480,6 +480,18 @@ function AutomationEditor({ businessId, automationId, automations, options, onCl
   const [errors, setErrors] = useState<string[]>([]);
   const [saving, setSaving] = useState(false);
   const graphOnly = !!current && !current.linear;
+  const initialSnapshot = useRef(JSON.stringify({
+    name: current?.name || '', description: current?.description || '', active: current ? current.active : true,
+    event: current?.event || 'lead.created', group: groupFromCondition(current?.linear?.condition),
+    steps: stepsFromLinear(current?.linear?.steps), elseSteps: stepsFromLinear(current?.linear?.elseSteps || []),
+    useElse: (current?.linear?.elseSteps?.length || 0) > 0, allowReentry: current?.settings?.allowReentry === true,
+  }));
+  const dirty = JSON.stringify({ name, description, active, event, group, steps, elseSteps, useElse, allowReentry }) !== initialSnapshot.current;
+  const dismissState = {
+    dirty, saving, context: 'edit' as const,
+    title: current ? 'Descartar alterações da automação?' : 'Descartar nova automação?',
+    description: 'As alterações ainda não foram salvas.',
+  };
 
   const fields = useMemo(() => fieldsForEvent(event as any), [event]);
 
@@ -517,7 +529,7 @@ function AutomationEditor({ businessId, automationId, automations, options, onCl
   }
 
   return (
-    <Drawer open onClose={onClose} title={current ? 'Editar automação' : 'Nova automação'} subtitle="Quando acontecer X, se Y, faça Z." width="max-w-3xl">
+    <Drawer open onClose={onClose} dismissGuard={dismissState} title={current ? 'Editar automação' : 'Nova automação'} subtitle="Quando acontecer X, se Y, faça Z." width="max-w-3xl">
         <div className="p-4 space-y-4">
           {graphOnly && (
             <Notice tone="info">Esta automação tem um grafo livre (criada por modelo avançado). A edição linear não consegue representá-la sem simplificar — use a API/grafo para alterá-la.</Notice>

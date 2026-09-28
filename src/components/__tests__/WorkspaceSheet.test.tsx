@@ -104,6 +104,14 @@ describe('WorkspaceSheet', () => {
     expect(screen.getByRole('dialog').getAttribute('data-minimized')).toBeNull();
   });
 
+  it('normaliza larguras Tailwind legadas em valores CSS válidos no sheet', () => {
+    const { unmount } = sheet({ width: 'max-w-[820px]' });
+    expect(screen.getByRole('dialog').getAttribute('style')).toContain('--sheet-w: 820px');
+    unmount();
+    sheet({ width: 'max-w-xl' });
+    expect(screen.getByRole('dialog').getAttribute('style')).toContain('--sheet-w: 36rem');
+  });
+
   it('sem `minimizable` não oferece minimizar', () => {
     sheet();
     expect(screen.queryByRole('button', { name: /Minimizar|Restaurar/ })).toBeNull();
