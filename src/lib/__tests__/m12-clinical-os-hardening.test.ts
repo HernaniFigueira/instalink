@@ -78,9 +78,13 @@ describe('F0 hardening · runtime não é autoridade de DDL', () => {
       expect(/\b(FROM|INTO)\s+domain_event\b/.test(src)).toBe(false);
       expect(/\b(FROM|INTO)\s+ai_usage\b/.test(src)).toBe(false);
     }
-    // ninguém altera search_path em nenhum módulo F0
+    // ninguém ALTERA search_path em nenhum módulo F0. (A trava é sobre
+    // MUTAÇÃO, não sobre a palavra: a sonda de boot de lib/pg.ts APENAS LÊ
+    // current_setting('search_path') para diagnóstico — não altera nada.)
     for (const file of F0_STORE_FILES) {
-      expect(stripComments(read(file))).not.toMatch(/search_path/i);
+      const code = stripComments(read(file));
+      expect(code).not.toMatch(/\bSET\s+(SESSION\s+|LOCAL\s+)?search_path\b/i);
+      expect(code).not.toMatch(/ALTER\s+(ROLE|DATABASE)\b[^;]*\bsearch_path\b/i);
     }
   });
 

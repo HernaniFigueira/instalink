@@ -435,11 +435,14 @@ function getPool(): Pool {
  * GARANTIA DA TABELA — REATIVA, nunca especulativa (P0-login).
  *
  * História: `pgInit` emitia `CREATE TABLE IF NOT EXISTS instalink_doc`
- * ANTES da primeira leitura/escrita de cada instância. Em produção real com
- * papel de menor privilégio (Supabase: o papel da aplicação tem USAGE+DML no
- * schema mas NÃO CREATE), esse DDL falha com 42501 *mesmo com a tabela
+ * ANTES da primeira leitura/escrita de cada instância. Qualquer erosão de
+ * grants no schema (endurecimento, mudança de papel, ambiente espelho com
+ * menor privilégio) faz esse DDL falhar com 42501 *mesmo com a tabela
  * existindo* — e derrubava toda leitura (login ⇒ 500 "Não foi possível
- * entrar"), sem a tabela estar ausente.
+ * entrar"), sem a tabela estar ausente. Nota factual (auditoria
+ * 2026-09-28, docs §6.2): o papel do backend no Supabase real HOJE TEM
+ * `CREATE` no schema — a remoção do DDL especulativo é DECISÃO ARQUITETURAL
+ * (runtime nunca depende de CREATE), não alegação de estado do banco.
  *
  * Regra nova (mesma filosofia do hardening F0 — migration é a autoridade
  * estrutural): o runtime executa SOMENTE SELECT/INSERT/UPDATE. A DDL de boot
