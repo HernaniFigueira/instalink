@@ -567,7 +567,7 @@ async function pgCasWrite(hash: string | null, db: DB): Promise<boolean> {
 function fileRead(): DB {
   if (!fs.existsSync(FILE)) return emptyDB();
   const raw = fs.readFileSync(FILE, 'utf8');
-  if (!raw.trim()) return emptyDB();
+  if (!raw.trim()) throw new Error('Banco local vazio: leitura interrompida para preservar os dados.');
   // FAIL-CLOSED também em dev: JSON corrompido lança, não vira vazio.
   return normalizeDB(JSON.parse(raw));
 }
