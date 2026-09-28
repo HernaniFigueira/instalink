@@ -78,7 +78,11 @@ conexões; qualificar é o único jeito seguro). Migration ausente ⇒ falha
 000N"), nunca DDL silencioso no boot. As tabelas novas **nascem fechadas**
 contra acesso client-side (REVOKE de `PUBLIC`/`anon`/`authenticated`/
 `service_role` na tabela e `USAGE` no schema — ver `db/migrations/README.md`).
-**Nenhuma migração é aplicada em produção nesta fundação.**
+**Status de aplicação no Supabase real (2026-09-28):** `0001` **aplicada** ·
+`0002` **aplicada** (DDL manual, fora do runtime, como manda a política) ·
+`0003` **pendente** (grants do papel do backend — ver §6.3). Nenhuma alteração
+destrutiva foi ou será feita; `instalink_doc` (users/sessions) **não é
+migrado**.
 
 ```ts
 DomainEvent {
@@ -225,7 +229,8 @@ revenue/…). TO-BE (sem big-bang):
    `CREATE TABLE`/`CREATE INDEX`/`ALTER TABLE` em hipótese alguma; migration
    ausente derruba a operação com erro explícito que aponta o arquivo.
    Aplicação em produção é manual, revisada e validada contra o alvo — a
-   fundação apenas versiona o DDL (zero migration aplicada nesta PR).
+   fundação apenas versiona o DDL. Status: `0001`/`0002` já aplicadas no
+   Supabase real (manualmente, fora do runtime); `0003` pendente de aplicação.
 
 ## 5. Agent-ready (ToolRegistry — preservado)
 
@@ -295,8 +300,12 @@ exposição como fato enquanto essa auditoria não fechar.
 4. **RLS/grants apropriados** definidos por tabela e por papel, com revisão
    humana;
 5. **Validação antes de qualquer alteração em produção** — auditoria no alvo,
-   plano de rollback e verificação pós-aplicação; nada disso foi executado
-   nesta fundação (zero mudança de RLS/grants, zero migration aplicada).
+   plano de rollback e verificação pós-aplicação. Foi esse o caminho das
+   migrations estruturais: `0001`/`0002` **já aplicadas** no Supabase real,
+   manual e fora do runtime; `0003` **pendente** de aplicação (grants do
+   papel do backend, §6.3). Nenhuma alteração destrutiva; `instalink_doc`
+   (users/sessions) permanece **sem migração** — o runtime segue lendo e
+   escrevendo o documento exatamente como estava.
 
 ### 6.2 `instalink_doc` e search_path (P0-login — dependência explícita)
 
@@ -407,4 +416,8 @@ Cada fase = PR pequena, segura e cumulativa; nada de reescrita.
     intactos.
 - `tsc --noEmit` + `build` + suíte completa (baseline 2403/5 pré-existentes).
 - Validação local com fixtures/mocks — **nunca produção**; zero escrita
-  remota para testar; nenhuma migration aplicada em produção.
+  remota para testar. As migrations `0001`/`0002` foram aplicadas ao
+  Supabase real **fora das missões de código** (DDL manual pelo owner, com
+  auditoria de grants no alvo — a auditoria de 2026-09-28 que abriu o gap da
+  `godoutor_internal` é justamente a verificação pós-aplicação que motivou a
+  `0003`, esta ainda **pendente**).
