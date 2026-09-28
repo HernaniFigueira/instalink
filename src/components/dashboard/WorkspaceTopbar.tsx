@@ -21,7 +21,7 @@ function initials(name: string): string {
   return name.trim().split(/\s+/).slice(0, 2).map((p) => p[0]?.toUpperCase() || '').join('') || '·';
 }
 
-export function WorkspaceTopbar({ page, query, searchItems, activePath, businessId = '', alerts, user, unit, units, overview, canOverview, canConfig, canCreate, onUnit, onLogout, onOpenNav, onOpenHelp, isMaster, vet }: {
+export function WorkspaceTopbar({ page, query, searchItems, activePath, businessId = '', alerts, user, unit, units, overview, canOverview, canConfig, canCreate, onUnit, onLogout, onOpenNav, onOpenHelp, isMaster, vet, canOpenConversations }: {
   /** Tela atual — usado só no aria e no rótulo do botão de ajuda. */
   page: string;
   query: string;
@@ -44,6 +44,8 @@ export function WorkspaceTopbar({ page, query, searchItems, activePath, business
   canCreate: string[];
   /** Clínica veterinária: o quick create oferece o atalho do pet. */
   vet?: boolean;
+  /** Acesso contextual ao sheet de conversas, somente com permissão efetiva. */
+  canOpenConversations?: boolean;
   onLogout: () => void;
   onOpenNav: () => void;
   /** Abre a central de ajuda confiável (sheet) do shell. */
@@ -68,6 +70,14 @@ export function WorkspaceTopbar({ page, query, searchItems, activePath, business
         <QuickCreateMenu canCreate={canCreate} businessId={businessId} vet={vet} />
 
         <NotificationsBell alerts={alerts} />
+
+        {canOpenConversations && (
+          <button type="button" className="ws-topbar__icon-button"
+            aria-label="Abrir Conversas" title="Conversas"
+            onClick={() => window.dispatchEvent(new Event('godoutor:open-conversations'))}>
+            <Icon n="inbox" size={18} />
+          </button>
+        )}
 
         <button type="button" className="ws-topbar__icon-button"
           aria-label="Ajuda e suporte" title="Ajuda e suporte" onClick={onOpenHelp}>

@@ -3,20 +3,14 @@
 @tailwind utilities;
 
 /* ═══════════════════════════════════════════════════════════════
-   DESIGN SYSTEM INSTALINK — A3.3 (painel premium)
+   DESIGN SYSTEM INSTALINK — contrato do workspace GoDoutor v2
    ═══════════════════════════════════════════════════════════════
-   UMA fonte de verdade para o painel. Nenhuma tela inventa cor, raio,
-   sombra ou espaçamento: tudo sai dos tokens abaixo e é consumido pelos
-   componentes compartilhados (components/ui.tsx) ou por classes utilitárias
-   do Tailwind mapeadas em tailwind.config.js (bg-brand, text-ink, …).
+   `.il-platform`/`.workspace-shell` são a fonte ativa do workspace autenticado.
+   `:root` e `.il-page` conservam compatibilidade/public legacy; a ponte de
+   utilitários abaixo é scoped e nunca retematiza renderer ou página pública.
 
-   Camadas de cor:
-     ESTRUTURA  → neutros frios (--bg / --surface* / --border* / --text*).
-     AÇÃO       → --brand (azul amigável) = ação principal do produto.
-     ESTADO     → --success / --info.
-     ATENÇÃO    → --warning / --attention (âmbar quente, legível).
-     DESTRUTIVO → --danger (vermelho, SÓ para perigo).
-     APOIO      → --lilac (roxo leve: marketing, qualificado, automação).
+   Camadas: estrutura neutra · accent de identidade · sucesso/info/aviso/perigo
+   semânticos fixos · geometria/tipografia/motion fixos.
 
    Regra de contraste: todo token *-fg foi escolhido para atingir ≥ 4.5:1
    sobre o seu próprio *-bg. Estado nunca depende só de cor (selos têm
@@ -26,8 +20,8 @@
   color-scheme: light;
 
   /* ── Estrutura: fundo, superfícies e bordas ─────────────────── */
-  /* §2 (contrato D) — FUNDO DO WORKSPACE: neutro UNIVERSAL. Não acompanha
-     o tema; gradiente sutil #F4F6F8 → #F8F9FB aplicado no shell. */
+  /* Neutro base compatível. No workspace, `--workspace-bg` é sólido `--bg`;
+     estes aliases antigos não aplicam gradiente ao shell. */
   --bg: #f4f6f8;
   --bg-top: #f4f6f8;
   --bg-bottom: #f8f9fb;
@@ -56,13 +50,8 @@
      existir. Fica entre `--text-muted` e `--text-faint`. */
   --text-soft: #665f59;
 
-  /* ── Ação (marca do produto) ────────────────────────────────── */
-  /* GODOUTOR 2.0 — índigo-violeta de ação (paleta da identidade visual:
-     sidebar forte + amarelo quente de destaque). Contraste AA checado em
-     design-360-tokens.test.ts. */
-  /* MISSÃO 5 — AÇÃO = espresso/graphite deep: botões primários com presença
-     (branco = contraste excelente), sem parecer morto. Identidade índigo
-     permanece em --brand-600/700 (logo) e --il-nav* (sidebar). */
+  /* Tokens de compatibilidade fora da raiz do workspace. Ações autenticadas
+     consomem `--accent`; semânticas continuam nos seus próprios tokens. */
   --brand: #1c1917;
   /* HOMOLOGAÇÃO · P0-5 — skeleton com contraste real (não branco sobre cinza). */
   --skeleton-base: #e4e8f0;
@@ -77,25 +66,14 @@
      para que nenhum componente escreva hex próprio: o hover é token. */
   --brand-bg-hover: #ede9e3;
 
-  /* ── Amarelo quente “sun” (Visão geral / ênfases pontuais) ───── */
-  /* Destaque de boas-vindas e blocos de atenção. Usado com parcimônia:
-     superfícies suaves + texto `--sun-fg` (AA sobre `--sun-bg`). */
+  /* Aliases sun históricos. Em `.il-platform` apontam para warning semântico;
+     superfícies decorativas amarelas não fazem parte do contrato ativo. */
   --sun: #f7c948;
   --sun-strong: #e0a800;
   --sun-bg: #fff7e0;
   --sun-bg-strong: #ffefc2;
   --sun-border: #f0e0b0;
   --sun-fg: #7a5800;
-  /* — CTA principal da Agenda (“Novo agendamento”): violeta premium —
-     Acento refinado que conversa com a sidebar índigo-violeta, sem ser o
-     azul de ação genérico. Branco sobre `--cta-bg` = 6.8:1 (AA). */
-  --cta-bg: #5b3fd4;
-  --cta-bg-hover: #4a31b8;
-  --cta-border: #4a31b8;
-  --cta-fg: #ffffff;
-  --cta-shadow: 0 2px 12px -2px rgba(91, 63, 212, 0.45);
-  --cta-shadow-hover: 0 6px 18px -2px rgba(91, 63, 212, 0.55);
-
   /* Nomes legados (consumidos por ui.tsx e telas) → apontam para a marca.
      Uma futura identidade por negócio só precisa REATRIBUIR estes valores. */
   --action: var(--brand);
@@ -103,14 +81,13 @@
   --action-contrast: #ffffff;
   --action-soft: var(--brand-soft);
   --action-soft-border: var(--brand-border);
-  /* ── TEMA (contrato B) — CTAs principais + acentos. Defaults = tema
-     padrão NEUTRO (usuário sem preferência inicia em Neutro; nenhum flash
-     roxo/lilás no SSR/hydration); a paleta salva (lib/nav-accent.ts) aplica
-     os 5 tokens inline no shell. NUNCA misturar com --text/--il-nav. ── */
-  --accent: #3f4652;
-  --accent-hover: #363c47;
-  --accent-soft: #e4e5e7;
-  --accent-border: #a9acb1;
+  /* Default de identidade Deep Blue. A preferência pessoal salva aplica os
+     tokens de accent/nav no shell; estrutura e semânticas permanecem fixas. */
+  --accent: #2563eb;
+  --accent-fg: #1d4ed8;
+  --accent-hover: #1d4ed8;
+  --accent-soft: #eff6ff;
+  --accent-border: #bfdbfe;
   --accent-contrast: #ffffff;
 
   /* ── Estado ─────────────────────────────────────────────────── */
@@ -243,16 +220,16 @@
    * sem migração destrutiva) — apenas não é mais aplicado ao painel.
    * Os derivadores legados seguem em lib/appearance.ts para sanitizar dado
    * antigo, não como feature ativa. */
-  --il-nav: #d8dde6;
-  --il-nav-fg: #18181b;
-  --il-nav-muted: #47494f;
-  --il-nav-icon: #4e4f54;
-  --il-nav-hover: #bec2ca;
-  --il-nav-active: #b1b5bd;
-  --il-nav-active-fg: #18181b;
-  --il-nav-border: rgba(18, 22, 33, 0.10);
-  --il-nav-cta: #ffd166;
-  --il-nav-cta-fg: #3b2f00;
+  --il-nav: #071a33;
+  --il-nav-fg: #f8fafc;
+  --il-nav-muted: #9aaec8;
+  --il-nav-icon: #9aaec8;
+  --il-nav-hover: #102d52;
+  --il-nav-active: #123b68;
+  --il-nav-active-fg: #93c5fd;
+  --il-nav-border: rgba(255, 255, 255, 0.12);
+  --il-nav-cta: #93c5fd;
+  --il-nav-cta-fg: #071a33;
 }
 
 html { scroll-behavior: smooth; }
@@ -278,18 +255,17 @@ body {
    PRIMITIVAS DO PAINEL — classes reutilizáveis (não espalhar estilo)
    ═══════════════════════════════════════════════════════════════ */
 
-/* Cartão base: branco, borda suave, sombra de uma camada. */
+/* Agrupamento operacional: superfície + borda; elevação só em overlays. */
 .ws-panel {
   background: var(--surface);
   border: 1px solid var(--border);
-  border-radius: var(--radius-lg);
-  box-shadow: var(--shadow-sm);
+  border-radius: var(--radius-md);
+  box-shadow: none;
 }
-/* Cartão sobre cartão: profundidade leve sem virar "caixa dentro de caixa". */
-.ws-panel--raised { box-shadow: var(--shadow-md); }
+.ws-panel--raised { box-shadow: none; }
 .ws-panel--inset {
   background: var(--surface-2);
-  box-shadow: var(--shadow-inset);
+  box-shadow: none;
 }
 .ws-section { border-top: 1px solid var(--border-soft); }
 .ws-section:first-child { border-top: 0; }
@@ -300,7 +276,7 @@ body {
   appearance: none;
   width: 18px; height: 18px;
   margin: 0;
-  border-radius: 6px;
+  border-radius: var(--radius-xs);
   border: 1.5px solid var(--border-strong);
   background: var(--surface);
   cursor: pointer;
@@ -319,22 +295,22 @@ body {
 .il-check:focus-visible { outline: none; box-shadow: var(--focus-ring); border-color: var(--brand); }
 .il-check:disabled { opacity: 0.5; cursor: not-allowed; }
 
-/* Abas do painel (pills) — padrão único de navegação interna. */
+/* Abas compactas: agrupamento retangular, sem cápsula decorativa. */
 .il-tabbar {
   display: inline-flex;
   align-items: center;
-  gap: var(--space-1);
-  padding: 4px;
+  gap: 2px;
+  padding: 3px;
   background: var(--surface-3);
   border: 1px solid var(--border-soft);
-  border-radius: var(--radius-pill);
+  border-radius: var(--radius-md);
 }
 .il-tab {
   display: inline-flex;
   align-items: center;
   gap: 6px;
   padding: 7px 14px;
-  border-radius: var(--radius-pill);
+  border-radius: var(--radius-sm);
   font-size: 13px;
   font-weight: 600;
   line-height: 1.1;
@@ -342,11 +318,12 @@ body {
   white-space: nowrap;
   transition: background 0.15s ease, color 0.15s ease, box-shadow 0.15s ease;
 }
-.il-tab:hover { color: var(--text); background: rgba(43, 39, 36, 0.08); }
+.il-tab:hover { color: var(--text); background: var(--surface-hover); }
 .il-tab[aria-selected='true'] {
   background: var(--surface);
-  color: var(--brand-fg);
-  box-shadow: var(--shadow-sm);
+  color: var(--accent);
+  box-shadow: none;
+  outline: 1px solid var(--border-soft);
 }
 .il-tab:disabled { opacity: 0.45; pointer-events: none; }
 
@@ -473,8 +450,8 @@ body {
 .il-idcard {
   position: relative;
   overflow: hidden;
-  /* MISSÃO 5: o tutor fica NEUTRO e discreto (creme quase branco) — quem
-     ganha o amarelo/creme quente é o PET (o paciente da veterinária). */
+  /* Superfície discreta de identidade; pets e tutores usam estrutura neutra,
+     não cores de aviso. */
   background: var(--brand-softer);
 }
 
@@ -609,18 +586,12 @@ input[type='color'] { @apply cursor-pointer; }
    UMA fonte de verdade para o painel. Nenhuma tela inventa cor, raio,
    sombra, altura de controle ou espaçamento.
 
-   A COR TEM SIGNIFICADO (nunca decorativa, nunca aleatória):
-     AZUL VIVO      → ação principal do produto + Agenda (o "agora").
-     ROXO ELÉTRICO  → Inteligência: IA, automação, assistente.
-     CYAN/TURQUESA  → Comunicação: conversas, canais, mensagens.
-     VERDE-LIMÃO    → destaque positivo e CTA especial (nunca texto longo).
-     VERDE ESTADO   → concluído/confirmado (legível, distinto do limão).
-     LARANJA        → atenção operacional (pendência, aguardando).
-     CORAL/VERMELHO → perigo, cancelamento e a linha do horário atual.
+   Accent identifica o workspace e colore ações primárias; semânticas são fixas:
+   sucesso (verde), aviso (âmbar), perigo (vermelho), informação (azul).
+   Estrutura, texto, radius, spacing, sombras e tipografia são independentes.
 
-   Regra de contraste: todo `*-fg` atinge ≥ 4.5:1 sobre o próprio `*-bg`.
-   Sobre cor sólida saturada (limão) o texto é `--lime-contrast` (escuro).
-   Estado nunca depende SÓ de cor: selos têm rótulo e o item ativo tem rail.
+   Regra de contraste: tokens `*-fg` atingem AA sobre seus fundos; estado
+   nunca depende só da cor (selos têm rótulo e a navegação usa aria-current).
 
    ESCOPO: este bloco vale APENAS para `.il-platform` (painel). A página
    pública (`.il-page`), autenticação (`.il-auth`) e landing (`.il-marketing`)
@@ -629,7 +600,7 @@ input[type='color'] { @apply cursor-pointer; }
 .il-platform {
   color-scheme: light;
 
-  /* ── Métrica do shell (fonte única da geometria) ─────────────── */
+  /* Geometria e tokens próprios do workspace autenticado. */
   --topbar-h: 62px;
   --sidebar-w: 256px;
   --sidebar-w-mini: 68px;
@@ -647,9 +618,7 @@ input[type='color'] { @apply cursor-pointer; }
   --control-h-xs: 28px;
   --control-h-touch: 44px;
 
-  /* ── Estrutura: superfícies claras para o conteúdo respirar ──── */
-  /* GODOUTOR 2.0 — paleta única (índigo-violeta). Estes são os nomes
-     canônicos; os apelidos legados (--text, --border-soft…) apontam para eles. */
+  /* Identidade GoDoutor fica separada dos tokens estruturais abaixo. */
   --brand-600: #4f46e5;
   --brand-700: #4338ca;
   --brand-500: #6366f1;
@@ -692,12 +661,10 @@ input[type='color'] { @apply cursor-pointer; }
   --border-strong: var(--border-strong-base);
   --border-2: var(--border-2-base);
 
-  /* Fundo do app: branco levemente aquecido no canto inferior direito —
-     o suficiente para a superfície não parecer "cinza de sistema", sem virar
-     degradê chamativo. Base sólida primeiro (leitura), gradiente por cima. */
+  /* Fundo estrutural sólido e neutro. Presets não o sobrescrevem. */
   --bg: var(--bg-base);
   --bg-tint: var(--bg-tint-base);
-  --bg-gradient: linear-gradient(135deg, #f8fbff 0%, #f7f9fc 60%, #fff9f7 100%);
+  --bg-gradient: none;
   --agenda-unavailable: var(--surface-hover);
 
   /* ── Texto (apelidos → nomes canônicos) ─────────────────────── */
@@ -705,29 +672,22 @@ input[type='color'] { @apply cursor-pointer; }
   --text-strong: var(--text-strong-base);
   --text-soft: var(--text-soft-base);
 
-  /* ── Stacks ─────────────────────────────────────────────────── */
-  /* MISSÃO 5: a AÇÃO do workspace em espresso/graphite deep (botões com
-     presença e leitura firme). O rampo índigo (--brand-50…700) continua
-     definido para a identidade (logo GoDoutor) e acentos de legado. */
-  --brand: #1c1917;
-  --brand-strong: #0c0a09;
-  --brand-soft: #f5f3f0;
-  --brand-softer: #faf9f7;
-  --brand-border: #e4ded6;
-  --brand-fg: #262220;
-  --brand-ring: rgba(28, 25, 23, 0.26);
-  --brand-bg-hover: #ede9e3;
+  /* Ponte legada de ação → tema. Tokens semânticos ficam fora desta ponte. */
+  --brand: #2563eb;
+  --brand-strong: #1d4ed8;
+  --brand-soft: #eff6ff;
+  --brand-softer: #f8fbff;
+  --brand-border: #bfdbfe;
+  --brand-fg: #1d4ed8;
+  --brand-ring: rgba(37, 99, 235, 0.28);
+  --brand-bg-hover: #dbeafe;
   --ops: var(--brand);
   --ops-soft: var(--brand-soft);
   --ops-fg: var(--brand-fg);
 
-  /* ── FAMÍLIAS DE APOIO — NEUTRALIZADAS (GoDoutor 2.0) ─────────────
-     Existia uma família de cor por área (roxo para IA, cyan para conversas,
-     lima para comercial, coral/laranja para atenção…). Na prática o resultado
-     era um menu arco-íris: a cor dizia "qual área", não "o que significa".
-     Aqui os NOMES dos tokens continuam (nenhum componente precisa mudar) mas
-     os valores passam a ser neutros frios ou o próprio azul da marca. Cor
-     volta a significar ESTADO (sucesso, atenção, perigo) — nunca decoração. */
+  /* Aliases de famílias históricas convergem para semântica fixa ou neutro.
+     Não recriar uma paleta por módulo; identidades de canais ficam restritas
+     ao próprio símbolo. */
   --violet: var(--text-secondary);
   --violet-strong: var(--text-primary);
   --violet-bg: var(--surface-hover);
@@ -735,66 +695,72 @@ input[type='color'] { @apply cursor-pointer; }
   --violet-border: var(--border);
   --violet-fg: var(--text-secondary);
 
-  --cyan: var(--text-secondary);
-  --cyan-strong: var(--text-primary);
-  --cyan-bg: var(--surface-hover);
-  --cyan-bg-hover: var(--border);
-  --cyan-border: var(--border);
-  --cyan-fg: var(--text-secondary);
+  --cyan: var(--info);
+  --cyan-strong: var(--info-strong);
+  --cyan-bg: var(--info-bg);
+  --cyan-bg-hover: color-mix(in srgb, var(--info) 12%, white);
+  --cyan-border: var(--info-border);
+  --cyan-fg: var(--info-fg);
   --decoration-cyan: var(--brand-300);
 
-  --lime: var(--brand);
-  --lime-strong: var(--brand-strong);
-  --lime-bg: var(--brand-soft);
-  --lime-bg-hover: var(--brand-bg-hover);
-  --lime-border: var(--brand-border);
-  --lime-fg: var(--brand-fg);
+  --lime: var(--success);
+  --lime-strong: var(--success-strong);
+  --lime-bg: var(--success-bg);
+  --lime-bg-hover: var(--success-bg-hover);
+  --lime-border: var(--success-border);
+  --lime-fg: var(--success-fg);
   --lime-contrast: #ffffff;
 
-  --lilac: var(--violet);
-  --lilac-strong: var(--violet-strong);
-  --lilac-bg: var(--violet-bg);
-  --lilac-bg-hover: var(--violet-bg-hover);
-  --lilac-border: var(--violet-border);
-  --lilac-fg: var(--violet-fg);
+  /* Compatibilidade visual temporária: tons históricos de estado/contexto
+     convergem para neutro ou info; status real usa tokens semânticos. */
+  --lilac: var(--info);
+  --lilac-strong: var(--info-strong);
+  --lilac-bg: var(--info-bg);
+  --lilac-bg-hover: color-mix(in srgb, var(--info) 12%, white);
+  --lilac-border: var(--info-border);
+  --lilac-fg: var(--info-fg);
 
-  --teal: var(--violet);
-  --teal-strong: var(--violet-strong);
-  --teal-bg: var(--violet-bg);
-  --teal-border: var(--violet-border);
-  --teal-fg: var(--violet-fg);
+  --teal: var(--info);
+  --teal-strong: var(--info-strong);
+  --teal-bg: var(--info-bg);
+  --teal-border: var(--info-border);
+  --teal-fg: var(--info-fg);
+  --sun: var(--warning);
+  --sun-strong: var(--warning-strong);
+  --sun-bg: var(--warning-bg);
+  --sun-bg-strong: var(--warning-bg-hover);
+  --sun-border: var(--warning-border);
+  --sun-fg: var(--warning-fg);
 
   /* ── Nomes legados de ação → apontam para a marca ────────────── */
-  --area-color: var(--brand);
   --action: var(--brand);
   --action-strong: var(--brand-strong);
   --action-contrast: #ffffff;
   --action-soft: var(--brand-soft);
   --action-soft-border: var(--brand-border);
-  /* ── TEMA (contrato B) — CTAs principais + acentos. Defaults = tema
-     padrão NEUTRO (usuário sem preferência inicia em Neutro; nenhum flash
-     roxo/lilás no SSR/hydration); a paleta salva (lib/nav-accent.ts) aplica
-     os 5 tokens inline no shell. NUNCA misturar com --text/--il-nav. ── */
-  --accent: #3f4652;
-  --accent-hover: #363c47;
-  --accent-soft: #e4e5e7;
-  --accent-border: #a9acb1;
+  /* Default de identidade Deep Blue. A preferência pessoal salva aplica os
+     tokens de accent/nav no shell; estrutura e semânticas permanecem fixas. */
+  --accent: #2563eb;
+  --accent-fg: #1d4ed8;
+  --accent-hover: #1d4ed8;
+  --accent-soft: #eff6ff;
+  --accent-border: #bfdbfe;
   --accent-contrast: #ffffff;
 
   /* ── VERDE DE ESTADO · concluído/confirmado ──────────────────── */
   --success: #15803d;
   --success-strong: #166534;
-  --success-bg: #ecfdf5;
+  --success-bg: #f0fdf4;
   --success-bg-hover: #dcfce7;
   --success-border: #bbf7d0;
-  --success-fg: #15803d;
+  --success-fg: #166534;
 
   /* ── INFO · sinônimo semântico de comunicação ────────────────── */
-  --info: #0369a1;
-  --info-strong: #075985;
-  --info-bg: #f0f9ff;
-  --info-border: #bae6fd;
-  --info-fg: #075985;
+  --info: #2563eb;
+  --info-strong: #1d4ed8;
+  --info-bg: #eff6ff;
+  --info-border: #bfdbfe;
+  --info-fg: #1d4ed8;
 
   /* ── LARANJA · atenção operacional ───────────────────────────── */
   --warning: #b45309;
@@ -832,57 +798,75 @@ input[type='color'] { @apply cursor-pointer; }
   --sheet-backdrop: rgba(13, 18, 32, 0.22);
 
   /* ── Raio (escala única; nada de raio avulso por tela) ────────── */
-  --radius-xs: 5px;
-  --radius-sm: 7px;    /* input e botão */
-  --radius-md: 8px;    /* item de menu, controle interno */
-  --radius-lg: 10px;   /* cartão, painel */
-  --radius-xl: 12px;   /* popover, sheet */
-  --radius-2xl: 16px;
+  --radius-xs: 4px;
+  --radius-sm: 6px;    /* controles e ações */
+  --radius-md: 8px;    /* agrupamentos e overlays */
+  --radius-lg: 8px;
+  --radius-xl: 8px;
+  --radius-2xl: 8px;
   --radius-pill: 999px;
 
   /* ── Sombra (o painel é plano; sombra só cria profundidade real) ─
      Cartão normal: praticamente sem sombra. Popover/modal: sombra maior
      porque há empilhamento de camadas de verdade. */
-  --shadow-xs: 0 1px 2px rgba(15, 23, 42, 0.04);
-  --shadow-sm: 0 1px 2px rgba(15, 23, 42, 0.04);
-  --shadow-md: 0 4px 12px -4px rgba(15, 23, 42, 0.10), 0 12px 24px -12px rgba(15, 23, 42, 0.12);
-  --shadow-lg: 0 10px 20px -8px rgba(15, 23, 42, 0.12), 0 28px 48px -20px rgba(15, 23, 42, 0.18);
-  --shadow-xl: 0 18px 36px -12px rgba(15, 23, 42, 0.16), 0 40px 72px -28px rgba(15, 23, 42, 0.24);
-  --shadow-brand: 0 1px 2px rgba(26, 23, 21, 0.20);
+  --shadow-xs: none;
+  --shadow-sm: none;
+  --shadow-md: 0 4px 12px -4px rgba(15, 23, 42, 0.12), 0 12px 24px -12px rgba(15, 23, 42, 0.14);
+  --shadow-lg: 0 10px 24px -8px rgba(15, 23, 42, 0.16), 0 28px 48px -20px rgba(15, 23, 42, 0.20);
+  --shadow-xl: 0 18px 36px -12px rgba(15, 23, 42, 0.18), 0 40px 72px -28px rgba(15, 23, 42, 0.24);
+  --shadow-brand: none;
   --shadow-inset: inset 0 1px 2px rgba(15, 23, 42, 0.06);
   /* Sombra do Workspace Sheet: a mais alta do sistema (camada flutuante). */
   --shadow-sheet: 0 24px 60px -18px rgba(15, 23, 42, 0.30), 0 4px 12px -4px rgba(15, 23, 42, 0.12);
 
   /* ── Foco visível ────────────────────────────────────────────── */
   --focus-ring: 0 0 0 3px var(--brand-ring);
-  --focus-outline: 2px solid var(--brand);
+  --focus-outline: 2px solid var(--accent);
 
   /* ── Navegação do painel ─────────────────────────────────────── */
-  /* Sidebar — defaults do tema padrão NEUTRO (sem roxo/lilás): usuário
-     sem preferência salva carrega ESTE estado; preferência válida sobrepõe
-     inline (mesmos tokens). Contraste AA checado em design-360-tokens. */
-  --il-nav: #d8dde6;
-  --il-nav-fg: #18181b;
-  --il-nav-muted: #47494f;
-  --il-nav-icon: #4e4f54;
-  --il-nav-hover: #bec2ca;
-  --il-nav-active: #b1b5bd;
-  --il-nav-active-fg: #18181b;
-  --il-nav-border: rgba(18, 22, 33, 0.10);
-  --il-nav-cta: #ffd166;
-  --il-nav-cta-fg: #3b2f00;
+  /* Sidebar — default Deep Blue; preferência válida sobrepõe estes tokens
+     inline sem alterar estrutural, semânticas ou geometria. */
+  --il-nav: #071a33;
+  --il-nav-fg: #f8fafc;
+  --il-nav-muted: #9aaec8;
+  --il-nav-icon: #9aaec8;
+  --il-nav-hover: #102d52;
+  --il-nav-active: #123b68;
+  --il-nav-active-fg: #93c5fd;
+  --il-nav-border: rgba(255, 255, 255, 0.12);
+  --il-nav-cta: #93c5fd;
+  --il-nav-cta-fg: #071a33;
 
   color: var(--text);
 }
 
-/* §16 — fundo do painel: degradê de 135° quase imperceptível (frio → levemente
-   quente). Dava para ver o #f3f5fb chapado porque a variável --bg-gradient era
-   declarada e NUNCA usada; agora ela é o fundo real do workspace, com o tom
-   chapado por baixo para telas que não aplicam a imagem. */
+/* O fundo do workspace é sólido; tokens e gradientes legados não o reativam. */
+
+/* Uma ponte: aliases antigos de ação seguem o accent; tokens semânticos,
+   superfícies e geometria permanecem independentes do preset. */
+.workspace-shell {
+  --brand: var(--accent);
+  --brand-strong: var(--accent-hover);
+  --brand-soft: var(--accent-soft);
+  --brand-border: var(--accent-border);
+  --brand-fg: var(--accent-contrast);
+  --brand-ring: color-mix(in srgb, var(--accent) 30%, transparent);
+  --brand-bg-hover: color-mix(in srgb, var(--accent) 12%, white);
+  --focus-ring: 0 0 0 3px var(--brand-ring);
+  --focus-outline: 2px solid var(--accent);
+  --il-nav-cta: var(--il-nav-active-fg);
+  --workspace-bg: var(--bg);
+  --bg-gradient: none;
+}
+
 .il-platform {
   background-color: var(--bg);
-  background-image: var(--bg-gradient);
+  background-image: none;
 }
+
+/* Large Tailwind radii were historical card decoration; workspace geometry is
+   intentionally compact. Full radius remains only for semantic pills/avatars. */
+.il-platform :is(.rounded-xl,.rounded-2xl,.rounded-3xl) { border-radius: var(--radius-md); }
 
 /* More specific than utility outline-none; no global recoloring. */
 .il-platform :focus-visible {
@@ -894,14 +878,12 @@ input[type='color'] { @apply cursor-pointer; }
   outline: var(--focus-outline);
   outline-offset: 2px;
 }
-/* Etapa A — hierarquia visual: o ícone do cabeçalho de página herda a cor da
-   ÁREA (fonte única: --area-color, definido pelo shell a partir da rota).
-   Nunca um hex por tela. */
+/* One page-header treatment across modules: neutral surface, theme accent icon. */
 .il-platform .il-page-header__icon {
   background-image: none;
-  background-color: color-mix(in srgb, var(--area-color, var(--brand)) 13%, var(--surface));
-  color: var(--area-color, var(--brand-fg));
-  box-shadow: var(--shadow-xs);
+  background-color: var(--surface-2);
+  color: var(--accent);
+  box-shadow: none;
 }
 /* Avatar do painel: cor sólida da marca. Identidade não precisa de degradê. */
 .il-platform .il-avatar {
@@ -1024,32 +1006,23 @@ dialog.il-drawer::backdrop { background: transparent; }
 }
 
 /* ═══════════════════════════════════════════════════════════════
-   APP SHELL — GoDoutor UI Revolution · Etapa A
+   APP SHELL — topbar, navegação por seções e conteúdo contextual
    ═══════════════════════════════════════════════════════════════
-   Topbar fixa (breadcrumb · busca global · notificações · conta) + sidebar
-   por seções + segunda coluna contextual. Geometria inteira por TOKEN
-   (--topbar-h/--sidebar-w/--sheet-gap): nenhuma tela repete número.
-   O sheet (Etapa B) é ancorado ABAIXO da topbar e À DIREITA de --sheet-left,
-   medido em runtime pelo shell — por isso nunca cobre sidebar nem topbar. */
+   Geometria por token. O Workspace Sheet mede sua borda inicial no shell para
+   respeitar a sidebar/topbar sem alterar o comportamento já homologado. */
 .workspace-shell { display: flex; align-items: stretch; }
-/* §2 (contrato D) — FUNDO DO WORKSPACE: neutro UNIVERSAL, gradiente sutil
-   #F4F6F8 → #F8F9FB. NÃO acompanha o tema da clínica — o mesmo fundo em
-   todas as rotas do dashboard (Agenda inclusa: o fundo externo é este; a
-   grade interna mantém o tom próprio dela). */
-/* ── FUNDO DO WORKSPACE · UMA fonte de verdade ──────────────────────────
-   `--workspace-bg` é O token do fundo do workspace. O DashboardShell aplica
-   em `.workspace-shell` e TODAS as telas (Agenda inclusa) herdam — nenhuma
-   tela define background externo próprio. Mudou o token aqui, mudou o
-   sistema inteiro (para rosa, degradê, o que for). */
+/* Fundo de workspace: sólido, neutro e único para todas as rotas. O token
+   não acompanha o tema; a grade interna da Agenda preserva seu próprio
+   tratamento de estado, sem tingir o fundo externo. */
+/* `--workspace-bg` é aplicado pelo DashboardShell; telas autenticadas herdam
+   o mesmo fundo e não definem background externo próprio. */
 :root {
-  --workspace-bg: linear-gradient(180deg, var(--bg-top) 0%, var(--bg-bottom) 100%);
+  --workspace-bg: var(--bg);
 }
 .il-platform.workspace-shell {
   background: var(--workspace-bg);
-  /* Gradiente ANCORADO na viewport (não na altura do conteúdo): a Agenda
-     (100dvh) e telas de conteúdo longo interpolam o MESMO gradiente nas
-     mesmas coordenadas — o pixel final é idêntico em qualquer rolagem. */
-  background-attachment: fixed;
+  /* Fundo estrutural, independente da altura da tela e do preset. */
+  background-attachment: initial;
 }
 /* Missão 7 · §8 — encaixe estratégico: o painel principal ganha UM canto
    especial no encontro com a lateral (as referências aprovadas). `overflow:
@@ -1061,8 +1034,7 @@ dialog.il-drawer::backdrop { background: transparent; }
   /* Encaixe estratégico na PARTE DE BAIXO da junção sidebar/workspace
      (acabamento no canto inferior — o arredondamento de cima estava errado). */
   border-bottom-left-radius: var(--radius-xl);
-  /* Mesmo fundo universal do shell (contrato D) — transparente deixa o
-     gradiente neutro #F4F6F8 → #F8F9FB aparecer sem duplicar tokens. */
+  /* Fundo transparente para herdar a superfície neutra sólida do shell. */
   background: transparent;
 }
 .workspace-content { min-width: 0; flex: 1; }
@@ -1076,14 +1048,8 @@ dialog.il-drawer::backdrop { background: transparent; }
   height: var(--topbar-h);
   display: flex; align-items: center; gap: 12px;
   padding: 0 16px;
-  /* Missão 6 — fundo colorido SUAVE (mockup aprovado, adaptado): um leve
-     tom da cor da sidebar clareando da esquerda para a direita. Sem blur,
-     sem faixa pesada — a busca continua em superfície branca e legível. */
-  background: linear-gradient(90deg,
-    color-mix(in srgb, var(--il-nav) 13%, var(--surface)) 0%,
-    color-mix(in srgb, var(--il-nav) 5%, var(--surface)) 38%,
-    var(--surface) 100%);
-  border-bottom: 1px solid color-mix(in srgb, var(--il-nav) 10%, var(--border));
+  background: var(--surface);
+  border-bottom: 1px solid var(--border-soft);
 }
 .ws-unitpill {
   display: inline-flex; align-items: center; gap: 8px;
@@ -1097,7 +1063,7 @@ dialog.il-drawer::backdrop { background: transparent; }
 .ws-unitpill__dot {
   display: flex; align-items: center; justify-content: center;
   width: 24px; height: 24px; border-radius: 50%;
-  background: linear-gradient(135deg, var(--cyan), var(--brand));
+  background: var(--accent);
   color: #fff; font-size: 10px; font-weight: 800; letter-spacing: .02em;
 }
 /* QUICK CREATE GLOBAL (missão 6 — o “+” volta como ação global premium):
@@ -1184,11 +1150,11 @@ dialog.il-drawer::backdrop { background: transparent; }
   font-size: 13px; font-weight: 700; color: var(--text);
   max-width: 24ch; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
-/* Marca de contexto: a cor da ÁREA atual, com halo suave. Cor com significado. */
+/* Indicador de contexto neutro (sem cor por módulo). */
 .ws-crumbs__mark {
-  width: 8px; height: 8px; border-radius: 3px; flex-shrink: 0;
-  background: var(--area-color, var(--brand));
-  box-shadow: 0 0 0 3px color-mix(in srgb, var(--area-color, var(--brand)) 16%, transparent);
+  width: 8px; height: 8px; border-radius: var(--radius-xs); flex-shrink: 0;
+  background: var(--accent);
+  box-shadow: none;
 }
 .ws-crumbs__group { font-size: 12.5px; font-weight: 600; color: var(--text-muted); white-space: nowrap; }
 .ws-crumbs__current { font-size: 13px; font-weight: 600; color: var(--text); white-space: nowrap; }
@@ -1231,7 +1197,7 @@ dialog.il-drawer::backdrop { background: transparent; }
 .global-search__input::-webkit-search-cancel-button { display: none; }
 .global-search__kbd {
   font-size: 10px; font-weight: 800; letter-spacing: .02em; color: var(--text-faint);
-  border: 1px solid var(--border-strong); border-radius: 5px; padding: 2px 5px;
+  border: 1px solid var(--border-strong); border-radius: var(--radius-xs); padding: 2px 5px;
   background: var(--surface); white-space: nowrap;
 }
 .global-search__clear {
@@ -1286,7 +1252,7 @@ dialog.il-drawer::backdrop { background: transparent; }
   position: absolute; top: calc(100% + 8px); right: 0; z-index: 70;
   width: min(330px, calc(100vw - 24px));
   background: var(--surface); border: 1px solid var(--border);
-  border-radius: 12px; box-shadow: var(--shadow-md); overflow: hidden;
+  border-radius: var(--radius-lg); box-shadow: var(--shadow-md); overflow: hidden;
   animation: ws-pop-in var(--motion-fast) var(--ease-standard);
   transform-origin: top right;
 }
@@ -1368,8 +1334,8 @@ button.ws-bell__item:hover { background: var(--surface-hover); }
 }
 .ws-bell__dot--danger { background: var(--danger-bg); color: var(--danger-fg); }
 .ws-bell__dot--warning { background: var(--warning-bg); color: var(--warning-fg); }
-.ws-bell__dot--info { background: var(--cyan-bg); color: var(--cyan-fg); }
-.ws-bell__dot--violet { background: var(--violet-bg); color: var(--violet-fg); }
+.ws-bell__dot--info { background: var(--info-bg); color: var(--info-fg); }
+.ws-bell__dot--violet { background: var(--info-bg); color: var(--info-fg); }
 .ws-bell__dot--success { background: var(--success-bg); color: var(--success-fg); }
 .ws-bell__text { flex: 1; min-width: 0; }
 .ws-bell__text strong { font-weight: 800; }
@@ -1460,7 +1426,7 @@ button.ws-bell__item:hover { background: var(--surface-hover); }
 .workspace-collapse-btn {
   display: inline-flex; align-items: center; justify-content: center;
   width: 30px; height: 30px; flex-shrink: 0;
-  border-radius: 8px; border: 1px solid rgba(255, 255, 255, 0.22);
+  border-radius: var(--radius-md); border: 1px solid rgba(255, 255, 255, 0.22);
   background: rgba(255, 255, 255, 0.10); color: var(--il-nav-fg);
   transition: background-color .12s ease, color .12s ease, border-color .12s ease;
 }
@@ -1470,7 +1436,7 @@ button.ws-bell__item:hover { background: var(--surface-hover); }
 .workspace-wordmark--product { color: var(--il-nav-fg); }
 .is-collapsed .workspace-wordmark--product { font-size: 12px; letter-spacing: -.04em; }
 .ws-unitpill__logo { width: 18px; height: 18px; border-radius: 50%; object-fit: cover; flex-shrink: 0; }
-.workspace-identity__collapse { color: rgba(255, 255, 255, 0.62); border-radius: 8px; flex-shrink: 0; }
+.workspace-identity__collapse { color: rgba(255, 255, 255, 0.62); border-radius: var(--radius-md); flex-shrink: 0; }
 .workspace-identity__collapse:hover { color: var(--il-nav-fg); background: rgba(255, 255, 255, 0.16); }
 .is-collapsed .workspace-identity { padding: 12px 8px; justify-content: center; }
 .workspace-logo { display: block; width: 100%; max-height: 52px; object-fit: contain; object-position: left center; }
@@ -1505,22 +1471,22 @@ button.ws-bell__item:hover { background: var(--surface-hover); }
    O estado continua sendo sempre aria-current — nunca só cor. */
 .workspace-link__icon {
   display: flex; align-items: center; justify-content: center;
-  width: 28px; height: 28px; flex-shrink: 0; border-radius: 50%;
-  background: rgba(255, 255, 255, 0.12); color: var(--il-nav-icon);
+  width: 24px; height: 24px; flex-shrink: 0; border-radius: var(--radius-xs);
+  background: transparent; color: var(--il-nav-icon);
   transition: color var(--motion-fast) var(--ease-standard),
               background-color var(--motion-fast) var(--ease-standard);
 }
 .workspace-link[aria-current="page"] .workspace-link__icon {
-  /* CURRENT = o mais forte: preenchido accent com fg de CONTRASTE (regra
-     estrutural — nunca cor fixa; em qualquer tema o par é AA). */
-  background: var(--accent); color: var(--accent-contrast);
-  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.16);
+  /* O fundo do item já comunica seleção; o glifo fica claro sem um segundo
+     bloco concorrente. */
+  background: transparent; color: var(--il-nav-active-fg);
+  box-shadow: none;
 }
 .workspace-link {
   position: relative; display: flex; align-items: center; gap: 10px; width: 100%;
   min-height: var(--control-h); padding: 0 10px;
   font-size: 13.5px; font-weight: 500; line-height: 1.3; text-align: left;
-  border-radius: 8px; color: var(--il-nav-fg);
+  border-radius: var(--radius-md); color: var(--il-nav-fg);
   transition: background-color var(--motion-fast) var(--ease-standard),
               color var(--motion-fast) var(--ease-standard);
 }
@@ -1545,7 +1511,7 @@ button.ws-bell__item:hover { background: var(--surface-hover); }
   background: var(--il-nav-hover); color: var(--il-nav-fg);
 }
 .workspace-link--group[aria-expanded='true'] .workspace-link__icon {
-  background: var(--il-nav-active); color: var(--il-nav-active-fg);
+  background: transparent; color: var(--il-nav-active-fg);
 }
 .workspace-link[aria-current='page'] .workspace-link__chevron,
 .workspace-link--group[aria-expanded='true'] .workspace-link__chevron { color: inherit; }
@@ -1641,7 +1607,7 @@ button.workspace-clinic-head:hover { background: rgba(255, 255, 255, 0.12); }
 .workspace-foot { border-top: 1px solid var(--il-nav-border); padding: 8px; }
 .workspace-foot__item {
   display: flex; align-items: center; gap: 10px; width: 100%;
-  min-height: 36px; padding: 0 10px; border-radius: 8px;
+  min-height: 36px; padding: 0 10px; border-radius: var(--radius-md);
   font-size: 13px; font-weight: 500; color: var(--il-nav-muted); text-align: left;
 }
 .workspace-foot__item:hover { background: var(--il-nav-hover); color: var(--il-nav-active-fg); }
@@ -1702,34 +1668,7 @@ button.workspace-clinic-head:hover { background: rgba(255, 255, 255, 0.12); }
    Missão 7 — paleta refinada: Azul clínico (padrão aprovado), Azul
    amigável, Violeta, Teal, Verde sálvia, Âmbar, Ônix (preto de
    verdade) e Vinho. */
-.workspace-shell[data-nav-accent='azul-amigavel'] {
-  --il-nav: #2563eb; --il-nav-fg: #eff6ff; --il-nav-muted: #bfdbfe;
-  --il-nav-hover: #1d4ed8; --il-nav-active: #3b82f6; --il-nav-active-fg: #ffffff;
-}
-.workspace-shell[data-nav-accent='violeta'] {
-  --il-nav: #6d28d9; --il-nav-fg: #f5f3ff; --il-nav-muted: #ddd6fe;
-  --il-nav-hover: #5b21b6; --il-nav-active: #7c3aed; --il-nav-active-fg: #ffffff;
-}
-.workspace-shell[data-nav-accent='teal'] {
-  --il-nav: #0f766e; --il-nav-fg: #f0fdfa; --il-nav-muted: #b8e8e0;
-  --il-nav-hover: #115e59; --il-nav-active: #14b8a6; --il-nav-active-fg: #ffffff;
-}
-.workspace-shell[data-nav-accent='verde-salvia'] {
-  --il-nav: #4d7c5f; --il-nav-fg: #f4f8f4; --il-nav-muted: #cfe3d2;
-  --il-nav-hover: #3f6a50; --il-nav-active: #5f8d6e; --il-nav-active-fg: #ffffff;
-}
-.workspace-shell[data-nav-accent='ambar'] {
-  --il-nav: #b45309; --il-nav-fg: #fff8eb; --il-nav-muted: #f5d9a8;
-  --il-nav-hover: #92400e; --il-nav-active: #d97706; --il-nav-active-fg: #ffffff;
-}
-.workspace-shell[data-nav-accent='onix'] {
-  --il-nav: #18181b; --il-nav-fg: #fafafa; --il-nav-muted: #c4c4c8;
-  --il-nav-hover: #27272a; --il-nav-active: #3f3f46; --il-nav-active-fg: #ffffff;
-}
-.workspace-shell[data-nav-accent='vinho'] {
-  --il-nav: #9f1239; --il-nav-fg: #fff1f2; --il-nav-muted: #f7cdd6;
-  --il-nav-hover: #881337; --il-nav-active: #be123c; --il-nav-active-fg: #ffffff;
-}
+/* Theme values come exclusively from nav-accent.ts on the workspace shell. */
 
 /* ── Skip link ──────────────────────────────────────────────── */
 .workspace-skip {
@@ -1807,7 +1746,7 @@ button.workspace-clinic-head:hover { background: rgba(255, 255, 255, 0.12); }
 }
 @media (prefers-reduced-motion: reduce) {
   .ws-skeleton-line, .il-skeleton { animation: none; background: var(--skeleton-base); }
-  .ws-topbar { backdrop-filter: none; } /* missão 6: o fundo colorido suave permanece */
+  .ws-topbar { backdrop-filter: none; } /* mantém a superfície sólida no modo reduced-motion */
 }
 /* Consistent reading rhythm without recoloring public clinic themes. */
 .il-platform { font-size:14px; line-height:1.5; -webkit-font-smoothing:subpixel-antialiased; -moz-osx-font-smoothing:auto; text-rendering:optimizeLegibility; }
@@ -1817,7 +1756,7 @@ button.workspace-clinic-head:hover { background: rgba(255, 255, 255, 0.12); }
 .il-platform table { border-collapse:collapse; }
 .il-platform :is(.text-zinc-400,.text-slate-400,.text-gray-400) { color:var(--text-faint); }
 .il-platform :is(.text-zinc-500,.text-slate-500,.text-gray-500) { color:var(--text-muted); }
-.il-platform :is(.shadow-xl,.shadow-lg) { box-shadow:var(--shadow-md); }
+.il-platform :is(.shadow-xl,.shadow-lg) { box-shadow:var(--shadow-lg); }
 
 /* Marketing is independently scoped: no public clinic theme overrides. */
 .il-marketing { --ink:#252a31; --quiet:#5c626b; --blue:#2459a6; color:var(--ink); background:#f7f7f4; font-size:15px; line-height:1.7; }
@@ -1939,7 +1878,7 @@ button.workspace-clinic-head:hover { background: rgba(255, 255, 255, 0.12); }
 .il-page :focus-visible { outline:2px solid var(--il-primary); outline-offset:3px; }
 .il-page button, .il-page input, .il-page select { min-height:44px; }
 @media(prefers-reduced-motion:reduce) { .il-page *, .il-page *::before, .il-page *::after { animation:none!important; transition:none!important; scroll-behavior:auto!important; } }
-.il-platform .editor-savebar { display:flex; flex-wrap:wrap; align-items:center; justify-content:space-between; gap:16px; padding:16px; border:1px solid var(--brand-border); border-radius:8px; background:var(--surface); margin-bottom:16px; }
+.il-platform .editor-savebar { display:flex; flex-wrap:wrap; align-items:center; justify-content:space-between; gap:16px; padding:16px; border:1px solid var(--brand-border); border-radius:var(--radius-md); background:var(--surface); margin-bottom:16px; }
 .il-platform .editor-savebar > div:first-child { flex:1; min-width:220px; }
 dialog.il-customer-dialog { margin:0; padding:0; width:100%; height:100dvh; max-width:none; max-height:none; border:0; background:transparent; color:inherit; }
 dialog.il-customer-dialog:not([open]) { display:none; }
@@ -1959,8 +1898,8 @@ dialog.il-customer-dialog::backdrop { background:transparent; }
 .il-platform [class*="backdrop-blur"] { backdrop-filter:none; }
 .il-platform * { text-shadow:none; }
 .il-platform .agenda-page-gutter { padding:8px; }
-.il-platform [data-agenda-main] > div { border-radius:8px; box-shadow:none; }
-.il-platform [data-queue-rail] { width:280px; flex-shrink:0; align-self:flex-start; max-height:var(--queue-rail-maxh); overflow-y:auto; background:var(--surface); border:1px solid var(--border); border-radius:8px; }
+.il-platform [data-agenda-main] > div { border-radius:var(--radius-md); box-shadow:none; }
+.il-platform [data-queue-rail] { width:280px; flex-shrink:0; align-self:flex-start; max-height:var(--queue-rail-maxh); overflow-y:auto; background:var(--surface); border:1px solid var(--border); border-radius:var(--radius-md); }
 @media(min-width:1200px) { .il-platform .agenda-page-gutter { padding:16px; } }
 @media(max-width:767px) { .il-platform .il-tab { min-height:44px; } }
 
@@ -2011,7 +1950,7 @@ dialog.il-customer-dialog::backdrop { background:transparent; }
 }
 /* Grade clínica: separação levemente mais nítida de horários/colunas/cabeçalho
    (bordas #E5EAF1 família dos tokens), sem zebra e sem escurecer. */
-.il-platform [data-agenda-main] .ag-grid-surface { border: 1px solid var(--border); border-radius: 8px; background: var(--surface); }
+.il-platform [data-agenda-main] .ag-grid-surface { border: 1px solid var(--border); border-radius: var(--radius-md); background: var(--surface); }
 .il-platform [data-agenda-main] .ag-grid-surface .border-zinc-100,
 .il-platform [data-agenda-main] .ag-grid-surface .border-zinc-200 { border-color: var(--border); }
 
@@ -2021,11 +1960,9 @@ dialog.il-customer-dialog::backdrop { background:transparent; }
 .dsh-metrics {
   display: grid; grid-template-columns: repeat(2, minmax(0, 1fr));
   margin-bottom: 16px; overflow: hidden;
-  /* MISSÃO 4: amarelo/creme VOLTA como UM card de métricas em sólido suave
-     (sem degradê, sem banner): vida no topo sem virar enfeite. */
-  background: var(--sun-bg);
-  border: 1px solid var(--border-soft); border-radius: var(--radius-lg);
-  box-shadow: var(--shadow-xs);
+  background: var(--surface);
+  border: 1px solid var(--border-soft); border-radius: var(--radius-md);
+  box-shadow: none;
 }
 .dsh-metric {
   display: flex; gap: 10px; align-items: flex-start; min-width: 0;
@@ -2037,8 +1974,8 @@ dialog.il-customer-dialog::backdrop { background:transparent; }
 .dsh-metric__icon,
 .dsh-kpi__icon {
   display: flex; align-items: center; justify-content: center;
-  width: 40px; height: 40px; flex-shrink: 0; border-radius: 12px;
-  box-shadow: var(--shadow-inset);
+  width: 40px; height: 40px; flex-shrink: 0; border-radius: var(--radius-sm);
+  box-shadow: none;
 }
 .dsh-metric__num,
 .dsh-kpi__num { font-size: 25px; font-weight: 700; letter-spacing: -.025em; line-height: 1.15; color: var(--text); font-variant-numeric: tabular-nums; }
@@ -2057,7 +1994,7 @@ dialog.il-customer-dialog::backdrop { background:transparent; }
   .dsh-metric:first-child { border-left: 0; }
   .dsh-metric:nth-child(n + 4) { border-top: 0; }
 }
-.dsh-card { background: var(--surface); border: 1px solid var(--border-soft); border-radius: var(--radius-lg); box-shadow: var(--shadow-xs); }
+.dsh-card { background: var(--surface); border: 1px solid var(--border-soft); border-radius: var(--radius-md); box-shadow: none; }
 .dsh-card__head { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 10px; padding: 14px 16px 0; }
 .dsh-card__title { margin: 0; font-size: 14px; font-weight: 600; letter-spacing: -.01em; color: var(--text); }
 .dsh-card__body { padding: 12px 16px 16px; }
@@ -2070,10 +2007,10 @@ dialog.il-customer-dialog::backdrop { background:transparent; }
   padding: 14px 8px; border-radius: var(--radius-lg);
   border: 1px solid var(--border-soft); background: var(--surface);
   font-size: 11.5px; font-weight: 700; color: var(--text-soft); text-align: center;
-  transition: border-color .15s ease, box-shadow .15s ease, transform .12s ease;
+  transition: border-color .15s ease, background-color .15s ease;
 }
-.dsh-quick:hover { border-color: var(--brand-border); box-shadow: var(--shadow-xs); transform: translateY(-1px); }
-.dsh-quick__icon { display: flex; align-items: center; justify-content: center; width: 38px; height: 38px; border-radius: 12px; }
+.dsh-quick:hover { border-color: var(--accent-border); background: var(--surface-2); }
+.dsh-quick__icon { display: flex; align-items: center; justify-content: center; width: 38px; height: 38px; border-radius: var(--radius-sm); }
 
 /* ═══════════════════════════════════════════════════════════════
    CAMADA DE CONSISTÊNCIA — Etapa E
@@ -2083,11 +2020,7 @@ dialog.il-customer-dialog::backdrop { background:transparent; }
    de texto ficam iguais em todo o painel, sem reescrever telas.
    ═══════════════════════════════════════════════════════════════ */
 .il-platform :where(div, section).border-zinc-200 {
-  background: var(--surface);
   border-color: var(--border-soft);
-  border-radius: var(--radius-lg);
-  box-shadow: var(--shadow-xs);
-  overflow: hidden;
 }
 .il-platform :where(.border-zinc-100) { border-color: var(--border-soft); }
 .il-platform :where(.divide-zinc-100) > :not([hidden]) ~ :not([hidden]) { border-color: var(--border-soft); }
@@ -2100,6 +2033,41 @@ dialog.il-customer-dialog::backdrop { background:transparent; }
 .il-platform :where(.hover\:bg-zinc-50:hover) { background: var(--surface-2); }
 .il-platform :where(.hover\:bg-zinc-100:hover) { background: var(--surface-hover); }
 .il-platform :where(.hover\:bg-zinc-200:hover) { background: var(--surface-hover); }
+
+/*
+ * Authenticated workspace compatibility bridge.
+ * Legacy Tailwind palette utilities resolve to fixed semantic tokens here.
+ * Every selector is scoped to the workspace shell; public/editor/renderer
+ * legacy styles remain untouched. The source classes can migrate incrementally.
+ */
+.il-platform.workspace-shell :where(.ring-emerald-500) { --tw-ring-color: var(--success); }
+.il-platform.workspace-shell :where(.bg-emerald-500\/30) { background-color: color-mix(in srgb, var(--success) 30%, transparent); }
+.il-platform.workspace-shell :where(.bg-emerald-50\/40) { background-color: color-mix(in srgb, var(--success-bg) 40%, transparent); }
+.il-platform.workspace-shell :where(.bg-amber-50\/60) { background-color: color-mix(in srgb, var(--warning-bg) 60%, transparent); }
+.il-platform.workspace-shell :where(.bg-red-500), .il-platform.workspace-shell :where(.bg-rose-700) { background-color: var(--danger); }
+.il-platform.workspace-shell :where(.bg-red-100), .il-platform.workspace-shell :where(.bg-red-50), .il-platform.workspace-shell :where(.bg-rose-50) { background-color: var(--danger-bg); }
+.il-platform.workspace-shell :where(.hover\:bg-red-50):hover, .il-platform.workspace-shell :where(.hover\:bg-rose-100):hover, .il-platform.workspace-shell :where(.hover\:bg-rose-50):hover { background-color: var(--danger-bg); }
+.il-platform.workspace-shell :where(.bg-blue-100), .il-platform.workspace-shell :where(.bg-blue-50) { background-color: var(--info-bg); }
+.il-platform.workspace-shell :where(.bg-emerald-500), .il-platform.workspace-shell :where(.bg-emerald-600), .il-platform.workspace-shell :where(.bg-emerald-700) { background-color: var(--success); }
+.il-platform.workspace-shell :where(.hover\:bg-emerald-700):hover { background-color: var(--success); }
+.il-platform.workspace-shell :where(.bg-emerald-100), .il-platform.workspace-shell :where(.bg-emerald-50) { background-color: var(--success-bg); }
+.il-platform.workspace-shell :where(.hover\:bg-emerald-200):hover { background-color: var(--success-bg); }
+.il-platform.workspace-shell :where(.bg-amber-400), .il-platform.workspace-shell :where(.bg-amber-500), .il-platform.workspace-shell :where(.bg-amber-600) { background-color: var(--warning); }
+.il-platform.workspace-shell :where(.bg-amber-100), .il-platform.workspace-shell :where(.bg-amber-50), .il-platform.workspace-shell :where(.bg-orange-100), .il-platform.workspace-shell :where(.bg-orange-50) { background-color: var(--warning-bg); }
+.il-platform.workspace-shell :where(.hover\:bg-amber-100):hover, .il-platform.workspace-shell :where(.hover\:bg-orange-100):hover { background-color: var(--warning-bg); }
+.il-platform.workspace-shell :where(.border-red-200), .il-platform.workspace-shell :where(.border-rose-200) { border-color: var(--danger-border); }
+.il-platform.workspace-shell :where(.border-blue-200) { border-color: var(--info-border); }
+.il-platform.workspace-shell :where(.border-emerald-100), .il-platform.workspace-shell :where(.border-emerald-200), .il-platform.workspace-shell :where(.border-emerald-500), .il-platform.workspace-shell :where(.border-emerald-700) { border-color: var(--success-border); }
+.il-platform.workspace-shell :where(.border-amber-200), .il-platform.workspace-shell :where(.border-amber-200\/60), .il-platform.workspace-shell :where(.border-amber-200\/70), .il-platform.workspace-shell :where(.border-amber-300), .il-platform.workspace-shell :where(.border-orange-200) { border-color: var(--warning-border); }
+.il-platform.workspace-shell :where(.text-blue-800\/70) { color: color-mix(in srgb, var(--info-fg) 70%, transparent); }
+.il-platform.workspace-shell :where(.text-blue-900\/80) { color: color-mix(in srgb, var(--info-fg) 80%, transparent); }
+.il-platform.workspace-shell :where(.text-amber-800\/80), .il-platform.workspace-shell :where(.text-amber-900\/80) { color: color-mix(in srgb, var(--warning-fg) 80%, transparent); }
+.il-platform.workspace-shell :where(.text-red-300), .il-platform.workspace-shell :where(.text-red-400), .il-platform.workspace-shell :where(.text-red-500), .il-platform.workspace-shell :where(.text-red-600), .il-platform.workspace-shell :where(.text-red-700), .il-platform.workspace-shell :where(.text-red-800), .il-platform.workspace-shell :where(.text-red-900), .il-platform.workspace-shell :where(.text-rose-700), .il-platform.workspace-shell :where(.text-rose-800) { color: var(--danger-fg); }
+.il-platform.workspace-shell :where(.hover\:text-red-600):hover, .il-platform.workspace-shell :where(.hover\:text-red-700):hover { color: var(--danger-fg); }
+.il-platform.workspace-shell :where(.text-blue-600), .il-platform.workspace-shell :where(.text-blue-700), .il-platform.workspace-shell :where(.text-blue-800), .il-platform.workspace-shell :where(.text-blue-900), .il-platform.workspace-shell :where(.text-blue-950) { color: var(--info-fg); }
+.il-platform.workspace-shell :where(.text-emerald-300), .il-platform.workspace-shell :where(.text-emerald-600), .il-platform.workspace-shell :where(.text-emerald-700), .il-platform.workspace-shell :where(.text-emerald-800), .il-platform.workspace-shell :where(.text-emerald-900), .il-platform.workspace-shell :where(.text-emerald-950) { color: var(--success-fg); }
+.il-platform.workspace-shell :where(.text-amber-500), .il-platform.workspace-shell :where(.text-amber-600), .il-platform.workspace-shell :where(.text-amber-700), .il-platform.workspace-shell :where(.text-amber-800), .il-platform.workspace-shell :where(.text-amber-900), .il-platform.workspace-shell :where(.text-amber-950), .il-platform.workspace-shell :where(.text-orange-700), .il-platform.workspace-shell :where(.text-orange-800) { color: var(--warning-fg); }
+.il-platform.workspace-shell :where(.hover\:text-amber-900):hover { color: var(--warning-fg); }
 
 /* ── Página pública: o avatar/logo SOBREPÕE a capa (identidade, não rodapé) ── */
 .il-page .pub-avatar {
@@ -2394,30 +2362,7 @@ dialog.ws-sheet[data-minimized]::backdrop { background: transparent; }
   dialog.ws-sheet[data-minimized] { width: min(344px, calc(100vw - 16px)); }
 }
 
-/* ── Dock refinado de Conversas (era o botão flutuante colado na borda) ── */
-.conversation-shortcut {
-  position: fixed; right: var(--sheet-gap); bottom: var(--sheet-gap); z-index: 34;
-  display: inline-flex; align-items: center; gap: 9px;
-  min-height: 44px; padding: 0 16px;
-  background: var(--surface); color: var(--cyan-fg);
-  border: 1px solid var(--cyan-border);
-  border-radius: var(--radius-pill);
-  box-shadow: var(--shadow-md);
-  font-size: 13px; font-weight: 700;
-  transition: transform .15s ease, box-shadow .15s ease, background-color .15s ease;
-}
-.conversation-shortcut:hover {
-  background: var(--cyan-bg);
-  box-shadow: var(--shadow-lg);
-  transform: translateY(-1px);
-}
-.conversation-shortcut:active { transform: translateY(0); }
-.conversation-shortcut .conversation-shortcut__icon {
-  display: inline-flex; align-items: center; justify-content: center;
-  width: 26px; height: 26px; border-radius: var(--radius-pill);
-  background: var(--cyan-bg); color: var(--cyan-fg);
-}
-.conversation-shortcut:hover .conversation-shortcut__icon { background: var(--surface); }
+/* Conversations is now a compact topbar action; its contextual sheet remains. */
 /* Conversations is intentionally overlaid; the left submenu never is. */
 .conversation-view[data-panel="true"] .inbox-layout { grid-template-columns:260px minmax(0,1fr); }
 /* No sheet o título/ícone são do próprio Workspace Sheet: o view não repete;

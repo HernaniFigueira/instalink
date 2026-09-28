@@ -360,12 +360,12 @@ export function ClientProfileDrawer({ person, businessId, pipeline, canFunil, on
         body: (
           <div className="flex flex-wrap gap-1.5">
             {nextId && canFunil && l.stageId !== 'scheduled' && (
-              <Button size="xs" variant="soft" onClick={() => setLead(l.id, nextId)} disabled={saving}>{nextStageLabel(l as any)}</Button>
+              <Button size="xs" variant="secondary" onClick={() => setLead(l.id, nextId)} disabled={saving}>{nextStageLabel(l as any)}</Button>
             )}
             {nextId === 'scheduled' && canFunil && (
-              <Button size="xs" variant="soft" onClick={() => onNewBooking(person)}>Agendar atendimento</Button>
+              <Button size="xs" variant="secondary" onClick={() => onNewBooking(person)}>Agendar atendimento</Button>
             )}
-            {canLose && <Button size="xs" variant="quiet" onClick={() => setLead(l.id, lostId!)} disabled={saving}>Marcar perdido</Button>}
+            {canLose && <Button size="xs" variant="ghost" onClick={() => setLead(l.id, lostId!)} disabled={saving}>Marcar perdido</Button>}
             {canFunil && <Link href={`/funil?b=${businessId}#${l.id}`} className="il-chip">Ver oportunidade</Link>}
           </div>
         ),
@@ -517,7 +517,7 @@ export function ClientProfileDrawer({ person, businessId, pipeline, canFunil, on
           {/* FASE 2 · P2 — ações rápidas: nota e iniciar atendimento (quando aplicável). */}
           {/* §17–18 — "Registrar nota" conduz ao campo: troca a aba, rola até o
               textarea e o foca com highlight sutil (sem modal novo). */}
-          <Button variant="quiet" size="sm" onClick={() => { setTab('notes'); focusFieldSoon('client-note-draft'); }}>
+          <Button variant="ghost" size="sm" onClick={() => { setTab('notes'); focusFieldSoon('client-note-draft'); }}>
             <Icon n="pencil" size={14} /> Registrar nota
           </Button>
           {canEncounter && nextBooking && (
@@ -623,7 +623,7 @@ export function ClientProfileDrawer({ person, businessId, pipeline, canFunil, on
               </p>
             </div>
             {person.accountStatus === 'none' && (
-              <Button size="sm" variant="soft" onClick={createAccess} disabled={accessSaving || !person.contactId}>
+              <Button size="sm" variant="secondary" onClick={createAccess} disabled={accessSaving || !person.contactId}>
                 <Icon n="userCircle" size={14} /> {accessSaving ? 'Criando acesso…' : 'Criar acesso'}
               </Button>
             )}
@@ -641,7 +641,7 @@ export function ClientProfileDrawer({ person, businessId, pipeline, canFunil, on
               <p className="text-sm font-semibold text-[var(--text)] inline-flex items-center gap-1.5">
                 <Icon n="idcard" size={14} className="text-[var(--text-muted)]" /> Cadastro
               </p>
-              <Button size="xs" variant="quiet" onClick={() => setEditing(true)}>
+              <Button size="xs" variant="ghost" onClick={() => setEditing(true)}>
                 <Icon n="pencil" size={12} /> Editar
               </Button>
             </div>
@@ -1150,10 +1150,10 @@ export function ClientProfileDrawer({ person, businessId, pipeline, canFunil, on
                         <p className="text-xs text-[var(--text-muted)] mt-0.5">{[l.interest, l.action].filter(Boolean).join(' · ') || 'Sem detalhe'}</p>
                         <div className="flex flex-wrap gap-1.5 mt-2">
                           {nextId && canFunil && l.stageId !== 'scheduled' && (
-                            <Button size="xs" variant="soft" onClick={() => setLead(l.id, nextId)} disabled={saving}>{nextStageLabel(l as any)}</Button>
+                            <Button size="xs" variant="secondary" onClick={() => setLead(l.id, nextId)} disabled={saving}>{nextStageLabel(l as any)}</Button>
                           )}
                           {nextId === 'scheduled' && canFunil && (
-                            <Button size="xs" variant="soft" onClick={() => onNewBooking(person)}>Agendar atendimento</Button>
+                            <Button size="xs" variant="secondary" onClick={() => onNewBooking(person)}>Agendar atendimento</Button>
                           )}
                           {canFunil && <Link href={`/funil?b=${businessId}#${l.id}`} className="il-chip">Ver oportunidade</Link>}
                         </div>
@@ -1193,8 +1193,8 @@ export function ClientProfileDrawer({ person, businessId, pipeline, canFunil, on
                   BLOQUINHO (creme sólido, cantos suaves) — nada de prontuário.
                   A persistência continua a mesma: cada observação é gravada por
                   ação explícita (botão/⌘Ctrl+Enter), sem autosave novo. */}
-              <div className="rounded-xl border border-[var(--sun-border)] bg-[var(--sun-bg)] p-3.5 shadow-xs">
-                <label htmlFor="client-note-draft" className="block text-[11px] font-semibold uppercase tracking-[0.08em] text-[var(--sun-fg)]">
+              <div className="rounded-md border border-[var(--border)] bg-[var(--surface-2)] p-3.5">
+                <label htmlFor="client-note-draft" className="block text-[11px] font-semibold uppercase tracking-[0.08em] text-[var(--text-muted)]">
                   Nova observação
                 </label>
                 <textarea
@@ -1205,10 +1205,10 @@ export function ClientProfileDrawer({ person, businessId, pipeline, canFunil, on
                   rows={3}
                   maxLength={1000}
                   placeholder="O que ajuda a operar o atendimento (ex.: prefere horário da manhã, avisar antes…)"
-                  className="mt-1.5 w-full rounded-lg border border-[var(--sun-border)] bg-white/80 px-3 py-2.5 text-sm text-[var(--text)] placeholder:text-[var(--text-faint)] shadow-none resize-none focus:outline-none focus:shadow-focus focus:border-[var(--brand)]"
+                  className="mt-1.5 w-full rounded-sm border border-[var(--border-strong)] bg-[var(--surface)] px-3 py-2.5 text-sm text-[var(--text)] placeholder:text-[var(--text-faint)] shadow-none resize-none focus:outline-none focus:shadow-focus focus:border-[var(--accent)]"
                 />
                 <div className="mt-2 flex flex-wrap items-center justify-between gap-2">
-                  <p className="text-[11px] text-[var(--sun-fg)]">⌘/Ctrl + Enter salva · o histórico nunca é apagado.</p>
+                  <p className="text-[11px] text-[var(--text-muted)]">⌘/Ctrl + Enter salva · o histórico nunca é apagado.</p>
                   <Button variant="primary" size="sm" onClick={addNote} disabled={!noteDraft.trim() || saving}>
                     <Icon n="plus" size={14} /> {saving ? 'Salvando…' : 'Salvar anotação'}
                   </Button>
@@ -1224,9 +1224,9 @@ export function ClientProfileDrawer({ person, businessId, pipeline, canFunil, on
               ) : (
                 <ul className="space-y-2">
                   {notes.map((n) => (
-                    <li key={n.id} className="rounded-xl border border-[var(--sun-border)] bg-[var(--sun-bg)] px-3.5 py-3 shadow-xs">
+                    <li key={n.id} className="rounded-md border border-[var(--border)] bg-[var(--surface)] px-3.5 py-3">
                       <p className="text-sm text-[var(--text)] whitespace-pre-wrap break-words">{n.text}</p>
-                      <p className="text-[11px] text-[var(--sun-fg)] mt-1.5">
+                      <p className="text-[11px] text-[var(--text-muted)] mt-1.5">
                         {n.legacy
                           ? 'Registro anterior (sem autor/data)'
                           : <>{n.byName || 'Equipe'}{n.at ? ` · ${humanDateTime(n.at.slice(0, 10), n.at.slice(11, 16))}` : ''}{n.bookingId ? ' · sobre um agendamento' : ''}</>}

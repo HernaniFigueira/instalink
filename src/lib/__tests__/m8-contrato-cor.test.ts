@@ -57,17 +57,18 @@ describe('contrato de cor · B — TEMA controla sidebar/topbar/acento/CTAs', ()
     }
   });
 
-  it('trava 5: topbar suave acompanha SÓ o nav (color-mix sobre --il-nav), sem cor de botão', () => {
+  it('trava 5: topbar permanece neutra e independente do tema', () => {
     const topbar = css.slice(css.indexOf('.ws-topbar {'), css.indexOf('.ws-unitpill'));
-    expect(topbar).toContain('color-mix(in srgb, var(--il-nav)');
+    expect(topbar).toContain('background: var(--surface)');
+    expect(topbar).not.toContain('--il-nav');
     expect(topbar).not.toContain('--accent');
   });
 });
 
 describe('contrato de cor · C — SEMÂNTICAS independentes (nunca tingidas)', () => {
   it('trava 6: success/danger/attention usam tokens próprios; preset não os toca', () => {
-    const success = ui.slice(ui.indexOf('success:'), ui.indexOf('success:') + 200);
-    const danger = ui.slice(ui.indexOf('danger:'), ui.indexOf('danger:') + 200);
+    const success = ui.slice(ui.indexOf('  success:\n'), ui.indexOf('  success:\n') + 220);
+    const danger = ui.slice(ui.indexOf('  destructive:\n'), ui.indexOf('  destructive:\n') + 220);
     expect(success).toContain('var(--success)');
     expect(danger).toContain('var(--danger)');
     for (const a of NAV_ACCENTS) {
@@ -78,12 +79,11 @@ describe('contrato de cor · C — SEMÂNTICAS independentes (nunca tingidas)', 
 });
 
 describe('contrato de cor · D — FUNDO do workspace neutro universal', () => {
-  it('trava 7: gradiente #F4F6F8 → #F8F9FB; o fundo NÃO depende do tema', () => {
+  it('trava 7: fundo sólido neutro; não depende do tema', () => {
     expect(css).toMatch(/--bg-top:\s*#f4f6f8/);
     expect(css).toMatch(/--bg-bottom:\s*#f8f9fb/);
-    // UMA fonte de verdade: --workspace-bg (gradiente) definido no :root;
-    // o shell aplica o token e todas as telas herdam.
-    expect(css).toMatch(/--workspace-bg:\s*linear-gradient/);
+    // UMA fonte de verdade: --workspace-bg herda o neutro sólido.
+    expect(css).toMatch(/--workspace-bg:\s*var\(--bg\)/);
     const shell = css.slice(css.indexOf('.il-platform.workspace-shell {'), css.indexOf('.il-platform.workspace-shell {') + 300);
     expect(shell).toContain('background: var(--workspace-bg)');
     expect(shell).not.toContain('--il-nav'); // neutro: nunca tingido

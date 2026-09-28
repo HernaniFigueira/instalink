@@ -56,7 +56,7 @@ export const ORDER_STATUS: Record<OrderStatus, StatusDef> = {
   preparing: { consumer: 'Em preparo', panel: 'Em preparo', desc: 'Sendo preparado.', tone: 'purple' },
   ready: { consumer: 'Pronto', panel: 'Pronto', desc: 'Pronto para entrega/retirada.', tone: 'emerald' },
   completed: { consumer: 'Entregue', panel: 'Entregue', desc: 'Entregue/concluído.', tone: 'emerald' },
-  cancelled: { consumer: 'Cancelado', panel: 'Cancelado', desc: 'Cancelado.', tone: 'zinc' },
+  cancelled: { consumer: 'Cancelado', panel: 'Cancelado', desc: 'Cancelado.', tone: 'red' },
 };
 
 export const ORDER_FLOW: Record<OrderStatus, OrderStatus[]> = {
@@ -74,7 +74,7 @@ export const LEAD_STATUS: Record<LeadStatus, StatusDef> = {
   contacted: { consumer: 'Contatado', panel: 'Contatado', desc: 'Já houve contato.', tone: 'amber' },
   qualified: { consumer: 'Qualificado', panel: 'Qualificado', desc: 'Interesse qualificado.', tone: 'purple' },
   converted: { consumer: 'Cliente', panel: 'Convertido', desc: 'Virou pedido/agendamento.', tone: 'emerald' },
-  lost: { consumer: 'Perdido', panel: 'Perdido', desc: 'Não converteu.', tone: 'zinc' },
+  lost: { consumer: 'Perdido', panel: 'Perdido', desc: 'Não converteu.', tone: 'red' },
 };
 
 export const LEAD_FLOW: Record<LeadStatus, LeadStatus[]> = {
@@ -125,9 +125,9 @@ export function toneCls(tone: Tone): string {
     // Cancelado → vermelho/rosa claro, texto vermelho moderado.
     case 'red':
       return 'bg-[var(--danger-bg)] text-[var(--danger-fg)] border-[var(--danger-border)]';
-    // Lead / qualificado → lilás claro.
+    // Estados históricos purple convergem para o azul informativo.
     case 'purple':
-      return 'bg-[var(--lilac-bg)] text-[var(--lilac-fg)] border-[var(--lilac-border)]';
+      return 'bg-[var(--info-bg)] text-[var(--info-fg)] border-[var(--info-border)]';
     // Faltou / neutro → cinza frio muito claro.
     default:
       return 'bg-[var(--surface-2)] text-[var(--text-muted)] border-[var(--border-2)]';
@@ -140,20 +140,20 @@ export function toneCls(tone: Tone): string {
 // (a página usa `border-l-4`). O estado nunca depende SÓ da cor — cada
 // bloco também exibe o rótulo do status, agora na própria tonalidade.
 export const BOOKING_BLOCK: Record<BookingStatus, string> = {
-  pending: 'border-orange-200 border-l-orange-500 bg-orange-50 text-orange-950',
-  confirmed: 'border-emerald-200 border-l-emerald-500 bg-emerald-50 text-emerald-950',
-  completed: 'border-blue-200 border-l-blue-500 bg-blue-50 text-blue-950',
-  cancelled: 'border-red-200 border-l-red-400 bg-red-50 text-red-900',
-  no_show: 'border-zinc-200 border-l-zinc-400 bg-zinc-100 text-zinc-600',
+  pending: 'border-[var(--warning-border)] border-l-[var(--warning)] bg-[var(--warning-bg)] text-[var(--warning-fg)]',
+  confirmed: 'border-[var(--success-border)] border-l-[var(--success)] bg-[var(--success-bg)] text-[var(--success-fg)]',
+  completed: 'border-[var(--info-border)] border-l-[var(--info)] bg-[var(--info-bg)] text-[var(--info-fg)]',
+  cancelled: 'border-[var(--danger-border)] border-l-[var(--danger)] bg-[var(--danger-bg)] text-[var(--danger-fg)]',
+  no_show: 'border-[var(--border)] border-l-[var(--border-strong)] bg-[var(--surface-2)] text-[var(--text-muted)]',
 };
 
 // ── Agenda (visão mês): ponto de cor por estado ──
 export const BOOKING_DOT: Record<BookingStatus, string> = {
-  pending: 'bg-orange-500',
-  confirmed: 'bg-emerald-500',
-  completed: 'bg-blue-500',
-  cancelled: 'bg-red-500',
-  no_show: 'bg-zinc-400',
+  pending: 'bg-[var(--warning)]',
+  confirmed: 'bg-[var(--success)]',
+  completed: 'bg-[var(--info)]',
+  cancelled: 'bg-[var(--danger)]',
+  no_show: 'bg-[var(--text-faint)]',
 };
 
 // ── Atenção operacional (pendência de fechamento — NÃO é um status) ──

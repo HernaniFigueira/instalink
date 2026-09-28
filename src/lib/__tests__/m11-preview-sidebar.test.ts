@@ -75,10 +75,10 @@ describe('sidebar · grupo ABERTO aceso, distinto da rota ativa', () => {
     expect(open).toContain('background: var(--il-nav-hover)');
     expect(open).toContain('color: var(--il-nav-fg)');
     // ícone ACESO no par ativo (contraste AA entre si)
-    expect(open).toContain('background: var(--il-nav-active); color: var(--il-nav-active-fg)');
+    expect(open).toContain('background: transparent; color: var(--il-nav-active-fg)');
     // current continua o mais forte (accent preenchido)
     const cur = css.slice(css.indexOf('.workspace-link[aria-current="page"] .workspace-link__icon {'), css.indexOf('.workspace-link[aria-current="page"] .workspace-link__icon {') + 300);
-    expect(cur).toContain('background: var(--accent); color: var(--accent-contrast)');
+    expect(cur).toContain('background: transparent; color: var(--il-nav-active-fg)');
   });
 
   it('par do ícone aceso é AA em todos os presets', () => {
@@ -120,19 +120,17 @@ describe('tooltip do rail recolhido: SEMPRE neutro grafite', () => {
   });
 });
 
-describe('tema padrão = NEUTRO (fallback sem preferência)', () => {
-  it('DEFAULT_ACCENT_ID é neutro (nunca mais azul/roxo como fallback)', async () => {
+describe('tema padrão = Deep Blue (fallback sem preferência)', () => {
+  it('DEFAULT_ACCENT_ID é azul-profundo; escolhas válidas têm prioridade', async () => {
     const mod = await import('../nav-accent');
-    expect(mod.DEFAULT_ACCENT_ID).toBe('neutro');
-    expect(mod.navAccentById('qualquer-coisa-inexistente').id).toBe('neutro');
+    expect(mod.DEFAULT_ACCENT_ID).toBe('azul-profundo');
+    expect(mod.navAccentById('qualquer-coisa-inexistente').id).toBe('azul-profundo');
   });
 
-  it('defaults CSS do :root são os do Neutro (nenhum flash roxo no hydration)', () => {
-    expect(css).toContain('--il-nav: #d8dde6');
-    expect(css).toContain('--accent: #3f4652');
-    expect(css).not.toContain('#3f37c9'); // índigo/roxo não é mais default
-    expect(css).not.toContain('#5b4fe2');
-    expect(css).not.toContain('#d3dafc');
+  it('defaults CSS são os do Deep Blue, sem alterar tokens estruturais', () => {
+    expect(css).toContain('--il-nav: #071a33');
+    expect(css).toContain('--accent: #2563eb');
+    expect(css).toContain('--il-nav-active-fg: #93c5fd');
   });
 
   it('preferência salva continua sendo respeitada (não sobrescreve)', () => {

@@ -288,7 +288,7 @@ export function BookingDetailSheet({ booking, service, pro, businessId, timezone
                 {/* A3.4 · Bloco 4 — chegada do cliente. Fica junto das ações
                     porque é decisão do balcão, e é REVERSÍVEL (engano acontece). */}
                 {permissions.atendimento && (
-                  <Button size="sm" variant="soft" onClick={() => setEncounterOpen(true)} disabled={!!acting}>
+                  <Button size="sm" variant="secondary" onClick={() => setEncounterOpen(true)} disabled={!!acting}>
                     <Icon n="fileText" size={13} /> Atendimento
                   </Button>
                 )}
@@ -298,7 +298,7 @@ export function BookingDetailSheet({ booking, service, pro, businessId, timezone
                     <Icon n="check" size={13} /> Chegou às {checkedInHM}
                   </Button>
                 ) : (
-                  <Button size="sm" variant="soft" onClick={() => checkIn(false)} disabled={!!acting}>
+                  <Button size="sm" variant="secondary" onClick={() => checkIn(false)} disabled={!!acting}>
                     <Icon n="check" size={13} /> {acting === 'checkin' ? 'Registrando…' : 'Registrar chegada'}
                   </Button>
                 )}
@@ -316,7 +316,7 @@ export function BookingDetailSheet({ booking, service, pro, businessId, timezone
             {!cancelSeries ? <Button size="sm" variant="secondary" disabled={!!acting} onClick={() => setCancelSeries(true)}>Cancelar ocorrências futuras da série</Button> : <div className="space-y-2 rounded-md border border-red-200 bg-red-50 p-3">
               <p className="text-xs text-red-900">Cancelar todos os atendimentos futuros ainda pendentes ou confirmados desta série, incluindo este se estiver no futuro? Atendimentos passados e encerrados serão preservados.</p>
               <div className="flex gap-2">
-                <Button size="sm" variant="danger" disabled={!!acting} onClick={() => act('cancelled', { action: 'cancel-series-future' })}>Confirmar cancelamento</Button>
+                <Button size="sm" variant="destructive" disabled={!!acting} onClick={() => act('cancelled', { action: 'cancel-series-future' })}>Confirmar cancelamento</Button>
                 <Button size="sm" variant="secondary" disabled={!!acting} onClick={() => setCancelSeries(false)}>Voltar</Button>
               </div>
             </div>}

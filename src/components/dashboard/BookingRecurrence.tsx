@@ -58,8 +58,8 @@ export function BookingRecurrence({ first, rows, preview, pros, min, max, busy, 
   const pendingCount = rows.length - availableCount;
 
   return (
-    <fieldset disabled={busy} className="space-y-3 rounded-lg border border-[var(--lilac-border)] bg-[var(--lilac-bg)]/55 p-3.5">
-      <legend className="text-sm font-semibold text-[var(--lilac-fg)] inline-flex items-center gap-1.5 px-1">
+    <fieldset disabled={busy} className="space-y-3 rounded-lg border border-[var(--accent-border)] bg-[var(--accent-soft)]/55 p-3.5">
+      <legend className="text-sm font-semibold text-[var(--accent-fg)] inline-flex items-center gap-1.5 px-1">
         <Icon n="sync" size={14} /> Repetir este atendimento (opcional)
       </legend>
 
@@ -150,7 +150,7 @@ export function BookingRecurrence({ first, rows, preview, pros, min, max, busy, 
                     : 'border-[var(--border)] bg-[var(--surface-2)]')
                 }>
                   <div className="flex flex-wrap items-center gap-2">
-                    <span className="w-6 h-6 shrink-0 rounded-pill bg-[var(--lilac-bg)] text-[var(--lilac-fg)] text-[11px] font-semibold flex items-center justify-center tabular-nums">
+                    <span className="w-6 h-6 shrink-0 rounded-pill bg-[var(--accent-soft)] text-[var(--accent-fg)] text-[11px] font-semibold flex items-center justify-center tabular-nums">
                       {String(i + 1).padStart(2, '0')}
                     </span>
                     <span className="text-xs font-semibold text-[var(--text)] tabular-nums">
@@ -188,7 +188,7 @@ export function BookingRecurrence({ first, rows, preview, pros, min, max, busy, 
           </ol>
 
           <div className="flex flex-wrap items-center gap-2 pt-1 border-t border-[var(--border-soft)]">
-            <Button type="button" variant="soft" size="sm" disabled={rows.length >= MAX_SERIES_OCCURRENCES}
+            <Button type="button" variant="secondary" size="sm" disabled={rows.length >= MAX_SERIES_OCCURRENCES}
               onClick={() => onChange([...rows, { ...first, date: '' }])}>
               <Icon n="plus" size={14} /> Adicionar data
             </Button>
@@ -215,7 +215,7 @@ export function BookingRecurrence({ first, rows, preview, pros, min, max, busy, 
 /** Bolinha numerada do passo (o fluxo é didático para quem nunca repetiu). */
 function Step({ n }: { n: number }) {
   return (
-    <span aria-hidden="true" className="w-4 h-4 rounded-full bg-[var(--lilac)] text-white text-[10px] font-semibold inline-flex items-center justify-center">
+    <span aria-hidden="true" className="w-4 h-4 rounded-full bg-[var(--accent)] text-white text-[10px] font-semibold inline-flex items-center justify-center">
       {n}
     </span>
   );

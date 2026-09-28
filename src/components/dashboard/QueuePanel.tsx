@@ -300,7 +300,7 @@ export function QueuePanel({ businessId, date, rows, done = [], loading, canWrit
                 </ul>
               )}
               {canSearchContacts && !searching && term.trim().length >= 2 && hits.length === 0 && (
-                <Button type="button" variant="soft" size="sm" onClick={() => setVisitor(true)} className="w-full justify-start">
+                <Button type="button" variant="secondary" size="sm" onClick={() => setVisitor(true)} className="w-full justify-start">
                   + Novo cliente / visitante “{term.trim()}”
                 </Button>
               )}

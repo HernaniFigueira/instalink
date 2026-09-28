@@ -414,7 +414,7 @@ export function WorkspaceNavigation({ nav, activePath, unit, units = [], multiUn
             Complete a configuração para receber agendamentos.
           </p>
           <div className="h-1.5 rounded-full bg-white/20 overflow-hidden mt-2" aria-hidden="true">
-            <div className="h-full rounded-full bg-[var(--sun)]" style={{ width: `${setup.pct}%` }} />
+            <div className="h-full rounded-full bg-[var(--accent)]" style={{ width: `${setup.pct}%` }} />
           </div>
           <Link href={`${setup.href}${setup.href.includes('?') ? '&' : '?'}b=${unit.id}`}
             className="mt-2 inline-flex w-full items-center justify-center rounded-[var(--radius-sm)] border border-white/25 bg-white px-2 py-1.5 text-[11.5px] font-semibold text-[var(--brand-strong)] hover:bg-white/90">

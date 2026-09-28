@@ -452,7 +452,7 @@ function ConfirmDelete({ name, onCancel, onConfirm }: { name: string; onCancel: 
         e tudo o que ela já fez (leads, tarefas, agendamentos) continua intacto.
       </p>
       <div className="flex gap-2 mt-3">
-        <Button size="sm" variant="danger" onClick={onConfirm}>Sim, excluir</Button>
+        <Button size="sm" variant="destructive" onClick={onConfirm}>Sim, excluir</Button>
         <Button size="sm" variant="secondary" onClick={onCancel}>Cancelar</Button>
       </div>
     </div>

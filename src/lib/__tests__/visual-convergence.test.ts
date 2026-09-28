@@ -103,7 +103,8 @@ describe('A3.3 — nenhum CTA primário preto no painel', () => {
     // Se alguém apagar o variant primary, a migração não tem destino — o teste
     // falha antes que alguém volte a improvisar um botão preto.
     expect(ui).toMatch(/primary:\s*\n?\s*'bg-\[var\(--accent\)\]/);
-    expect(ui).toMatch(/shadow-brand/); // sombra utilitária da base (não é cor)
+    expect(ui).toContain('border border-[var(--accent)]');
+    expect(ui).not.toContain('shadow-brand'); // ações planas por contrato
   });
 });
 
@@ -353,7 +354,7 @@ describe('A3.3 — seleção não é estado de sucesso', () => {
   it('personalidade e objetivo do Assistente usam lilac, não verde', () => {
     const agente = read('src/app/(dashboard)/agente/page.tsx');
     // Verde fica reservado a ativo/conectado/concluído; preferência é lilac.
-    expect(agente).toMatch(/agent\.tone === t\.id \? '[^']*--lilac/);
+    expect(agente).toMatch(/agent\.tone === t\.id \? '[^']*--accent-soft/);
     expect(agente).not.toMatch(/agent\.tone === t\.id \? '[^']*emerald/);
     expect(agente).not.toMatch(/on \? '[^']*emerald/);
   });

@@ -479,7 +479,7 @@ export function ConversationsView({ unitId, panel = false }: { unitId?: string; 
                       <span className="flex items-center justify-between gap-2">
                         <span className="flex items-center gap-1.5 min-w-0">
                           <Icon n={c.channel === 'instagram' ? 'instagram' : c.channel === 'whatsapp' ? 'whatsapp' : 'chat'} size={12}
-                            className={c.channel === 'instagram' ? 'shrink-0 text-[var(--lilac-fg)]' : 'shrink-0 text-[var(--success-fg)]'} />
+                            className={c.channel === 'instagram' ? 'shrink-0 text-[var(--info-fg)]' : 'shrink-0 text-[var(--success-fg)]'} />
                           <span className={cn('text-sm truncate', isActive ? 'font-semibold text-[var(--brand-fg)]' : 'font-semibold text-[var(--text)]')}>{c.name}</span>
                         </span>
                         {c.unread > 0 && <span className="text-[11px] font-semibold bg-[var(--brand)] text-white min-w-[18px] text-center px-1 py-0.5 rounded-pill shrink-0 tabular-nums">{c.unread}</span>}
@@ -682,7 +682,7 @@ export function ConversationsView({ unitId, panel = false }: { unitId?: string; 
                   <span className={cn('relative inline-flex items-center gap-1 mt-2.5 text-[11px] font-semibold px-2 py-0.5 rounded-pill border',
                     active.conversation.registered
                       ? 'bg-[var(--brand-soft)] border-[var(--brand-border)] text-[var(--brand-fg)]'
-                      : 'bg-[var(--lilac-bg)] border-[var(--lilac-border)] text-[var(--lilac-fg)]')}>
+                      : 'bg-[var(--info-bg)] border-[var(--info-border)] text-[var(--info-fg)]')}>
                     <Icon n={active.conversation.registered ? 'wallet' : 'spark'} size={11} />
                     {active.conversation.registered ? 'Na base da clínica' : 'Contato novo'}
                   </span>

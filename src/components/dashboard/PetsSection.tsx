@@ -76,18 +76,18 @@ export function PetsSection({ businessId, tutorId, tutorName, onChanged, onOpenP
   if (!vet) return null;
 
   return (
-    <div className="mt-3 rounded-xl border border-[var(--sun-border)] bg-[var(--sun-bg)] p-4 shadow-xs">
+    <div className="mt-3 rounded-md border border-[var(--border)] bg-[var(--surface)] p-4">
       {/* MISSÃO 5 — o PET é o paciente: bloco creme quente protagonista;
           o tutor (card acima) ficou neutro e discreto. */}
       <div className="flex items-center gap-2.5 min-w-0">
-        <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg border border-[var(--sun-border)] bg-[var(--sun-bg-strong)] text-[var(--sun-fg)]">
+        <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-sm border border-[var(--border)] bg-[var(--surface-3)] text-[var(--accent)]">
           <Icon n="paw" size={18} />
         </span>
         <div className="min-w-0">
           <p className="text-[15.5px] font-semibold text-[var(--text)] leading-tight">
-            Pets de {tutorName || 'tutor'} <span className="text-[var(--sun-fg)] font-normal">· pacientes</span>
+            Pets de {tutorName || 'tutor'} <span className="text-[var(--text-muted)] font-normal">· pacientes</span>
           </p>
-          <p className="text-xs text-[var(--sun-fg)] mt-0.5">
+          <p className="text-xs text-[var(--text-muted)] mt-0.5">
             O pet é o paciente da agenda; {tutorName || 'o tutor'} continua sendo o contato.
           </p>
         </div>
@@ -104,7 +104,7 @@ export function PetsSection({ businessId, tutorId, tutorName, onChanged, onOpenP
             const age = petAge(p.birthDate);
             const chips = [PET_SPECIES_LABELS[p.species] || p.species, p.breed, age !== null ? `${age} ano(s)` : '', p.weightKg ? `${p.weightKg} kg` : ''].filter(Boolean);
             return (
-              <li key={p.id} className="flex items-center gap-3 rounded-xl border border-[var(--sun-border)] bg-white/80 px-3.5 py-3 shadow-xs">
+              <li key={p.id} className="flex items-center gap-3 rounded-md border border-[var(--border)] bg-[var(--surface)] px-3.5 py-3">
                 <Avatar name={p.name} src={p.photo || undefined} size={44} />
                 <div className="min-w-0 flex-1">
                   <button type="button" className="block max-w-full truncate text-left text-[16px] font-semibold leading-tight text-[var(--text-strong)] hover:underline"
@@ -112,8 +112,8 @@ export function PetsSection({ businessId, tutorId, tutorName, onChanged, onOpenP
                     {p.name}{!p.active && <span className="ml-2 text-[11px] font-semibold text-[var(--text-muted)]">(inativo)</span>}
                   </button>
                   <p className="mt-1.5 flex flex-wrap items-center gap-1.5">
-                    {chips.map((chip, i) => (
-                      <span key={chip} className={`inline-flex items-center rounded-pill px-2 py-0.5 text-[11px] font-semibold ${i === 0 ? 'bg-[var(--sun-fg)] text-white' : 'border border-[var(--sun-border)] bg-[var(--sun-bg-strong)] text-[var(--sun-fg)]'}`}>
+                    {chips.map((chip) => (
+                      <span key={chip} className="inline-flex items-center rounded-pill border border-[var(--border)] bg-[var(--surface-3)] px-2 py-0.5 text-[11px] font-semibold text-[var(--text-muted)]">
                         {chip}
                       </span>
                     ))}

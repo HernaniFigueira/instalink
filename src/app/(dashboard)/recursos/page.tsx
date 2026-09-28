@@ -172,7 +172,7 @@ export default function RecursosPage() {
       {failed && (
         <div className="mb-4 bg-red-50 border border-red-200 rounded-md px-4 py-3 flex flex-wrap items-center gap-3" role="alert">
           <p className="text-sm font-medium text-red-800 inline-flex items-center gap-2"><Icon n="alert" size={15} /> {failed}</p>
-          <Button variant="danger" size="xs" className="ml-auto" onClick={() => { setRows(null); setAttempt((a) => a + 1); }}>
+          <Button variant="destructive" size="xs" className="ml-auto" onClick={() => { setRows(null); setAttempt((a) => a + 1); }}>
             Tentar de novo
           </Button>
         </div>

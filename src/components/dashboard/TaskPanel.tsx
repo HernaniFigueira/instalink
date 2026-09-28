@@ -58,10 +58,10 @@ export function TaskPanel({ tasks, summary, businessId, members, onChanged }: {
         <span className="inline-flex items-center rounded-pill border border-[var(--border)] bg-[var(--surface-3)] px-2.5 py-1 text-xs font-semibold text-[var(--text)] tabular-nums">
           {summary.open} em aberto
         </span>
-        <span className="inline-flex items-center rounded-pill border border-[var(--warning-border)] bg-[var(--warning-bg)] px-2.5 py-1 text-xs font-semibold text-[var(--warning-fg)] tabular-nums">
+        <span className="inline-flex items-center rounded-pill border border-[var(--danger-border)] bg-[var(--danger-bg)] px-2.5 py-1 text-xs font-semibold text-[var(--danger-fg)] tabular-nums">
           {summary.overdue} atrasada{summary.overdue === 1 ? '' : 's'}
         </span>
-        <span className="inline-flex items-center rounded-pill border border-[var(--sun-border)] bg-[var(--sun-bg)] px-2.5 py-1 text-xs font-semibold text-[var(--sun-fg)] tabular-nums">
+        <span className="inline-flex items-center rounded-pill border border-[var(--border)] bg-[var(--surface-3)] px-2.5 py-1 text-xs font-semibold text-[var(--text-muted)] tabular-nums">
           {summary.dueToday} para hoje
         </span>
         {summary.mine ? (

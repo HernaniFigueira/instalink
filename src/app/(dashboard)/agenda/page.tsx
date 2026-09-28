@@ -1340,7 +1340,7 @@ export default function AgendaPage() {
           <AttentionStrip
             title={`${queueInfo.waiting + queueInfo.called} na fila — maior espera ${waitLabel(queueInfo.longestWaitMin)}`}
             hint="o balcão está esperando mais do que o normal"
-            action={<Button size="sm" variant="warning" onClick={() => setShowQueue(true)}>Abrir fila</Button>}
+            action={<Button size="sm" variant="secondary" onClick={() => setShowQueue(true)}>Abrir fila</Button>}
           />
         </div>
       )}

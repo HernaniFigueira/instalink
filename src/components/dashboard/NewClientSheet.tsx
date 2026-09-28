@@ -266,10 +266,10 @@ export function NewClientForm({
 
           {/* ── Veterinária: Paciente (pet) na MESMA experiência ── */}
           {vetMode && (
-            <section data-testid="vet-pet-section" className="rounded-xl border border-[var(--sun-border)] bg-[var(--sun-bg)] p-4 space-y-3">
+            <section data-testid="vet-pet-section" className="rounded-md border border-[var(--border)] bg-[var(--surface)] p-4 space-y-3">
               {/* MISSÃO 5 — o PET é o paciente: bloco creme protagonista. */}
               <div className="flex items-center justify-between gap-2">
-                <p className="inline-flex items-center gap-1.5 text-xs font-semibold uppercase tracking-[0.06em] text-[var(--sun-fg)]">
+                <p className="inline-flex items-center gap-1.5 text-xs font-semibold uppercase tracking-[0.06em] text-[var(--text)]">
                   <Icon n="paw" size={14} /> Paciente (pet)
                 </p>
                 <label className="flex items-center gap-2 text-xs font-semibold text-[var(--text)] cursor-pointer">

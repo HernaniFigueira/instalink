@@ -23,10 +23,12 @@ function lum(hex: string): number {
 // ═══════════════════════════════════════════════════════════════
 // MISSÃO 6 — nova direção visual premium (mockup aprovado, adaptado)
 // ═══════════════════════════════════════════════════════════════
-describe('missão 6 · 1 — topbar com fundo colorido suave', () => {
-  it('usa tom suave da cor da navegação (color-mix) clareando para a direita', () => {
-    expect(css).toMatch(/\.ws-topbar \{[\s\S]*?background: linear-gradient\(90deg/);
-    expect(css).toContain('color-mix(in srgb, var(--il-nav) 13%, var(--surface))');
+describe('shell · topbar neutra', () => {
+  it('permanece estruturalmente neutra e não reage ao tema', () => {
+    expect(css).toMatch(/\.ws-topbar \{[\s\S]*?background: var\(--surface\)/);
+    const topbar = css.slice(css.indexOf('.ws-topbar {'), css.indexOf('.ws-unitpill'));
+    expect(topbar).not.toContain('--il-nav');
+    expect(topbar).not.toContain('--accent');
     // sem blur/filtro REAL em container com texto (backdrop-filter: none é a
     // proteção; só se proíbe blur ativo)
     expect(css).not.toMatch(/\.ws-topbar \{[^}]*backdrop-filter:\s*blur/);
@@ -81,7 +83,7 @@ describe('missão 6 · 4 — quick create “+” premium (volta ao topo)', () =
 describe('missão 6 · 5 — personalização da sidebar em Configurações (não na shell)', () => {
   it('presets seguros de cor (contraste AA: fg claro sobre escuro OU near-black sobre claro)', () => {
     expect(NAV_ACCENTS.length).toBeGreaterThanOrEqual(8); // missão final: 21 presets por famílias
-    expect(NAV_ACCENT_DEFAULT).toBe('neutro'); // tema padrão = Neutro (sem roxo/lilás)
+    expect(NAV_ACCENT_DEFAULT).toBe('azul-profundo'); // default aprovado, preferences override
     for (const a of NAV_ACCENTS) {
       const bg = a.vars['--il-nav'];
       const fg = a.vars['--il-nav-fg'];
@@ -93,7 +95,7 @@ describe('missão 6 · 5 — personalização da sidebar em Configurações (nã
       expect(contrast, a.id).toBeGreaterThan(0.45);
     }
     expect(navAccentById('teal').id).toBe('teal');
-    expect(navAccentById('lixo').id).toBe('neutro'); // fallback seguro = Neutro
+    expect(navAccentById('lixo').id).toBe('azul-profundo'); // fallback seguro
   });
 
   it('os presets vivem em Configurações → Aparência, com preview e persistência local', () => {
@@ -108,8 +110,11 @@ describe('missão 6 · 5 — personalização da sidebar em Configurações (nã
 
   it('a shell APLICA o preset via data-nav-accent; a topbar/sidebar não têm seletor de cor', () => {
     expect(shell).toContain('data-nav-accent={navAccent}');
-    expect(css).toContain(".workspace-shell[data-nav-accent='violeta']");
-    expect(css).toContain(".workspace-shell[data-nav-accent='onix']");
+    // Each saved preset is applied as variables on the workspace shell; CSS
+    // does not hard-code theme-specific overrides of structural tokens.
+    expect(shell).toContain('data-nav-accent={navAccent}');
+    expect(shell).toContain('...accentVars');
+    expect(read('src/lib/nav-accent.ts')).toContain("preset('onix'");
     // seletor de cor NÃO exposto na shell principal
     expect(topbar).not.toContain('nav-accent');
     expect(nav).not.toContain('nav-accent');

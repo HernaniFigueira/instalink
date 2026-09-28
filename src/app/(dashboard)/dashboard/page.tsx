@@ -766,7 +766,7 @@ export default function DashboardPage() {
             {whatsapp ? (
               <ListRow allowed={links.conversas === true} href={`/conversas${q}`}
                 className="flex items-center gap-2.5 rounded-lg border border-[var(--border-soft)] px-2.5 py-2 text-[12.5px]">
-                <span className="dsh-kpi__icon !w-7 !h-7" style={{ background: 'var(--cyan-bg)', color: 'var(--cyan-fg)' }}><Icon n="chat" size={15} /></span>
+                <span className="dsh-kpi__icon !w-7 !h-7" style={{ background: 'var(--accent-soft)', color: 'var(--accent)' }}><Icon n="chat" size={15} /></span>
                 <span className="flex-1 font-semibold text-[var(--text)]">Conversas não lidas</span>
                 <span className="text-[13px] font-semibold tabular-nums text-[var(--text)]">{whatsapp.unread}</span>
               </ListRow>
@@ -897,7 +897,7 @@ export default function DashboardPage() {
             )}
             {links.clientes === true && (
               <Link href={`/clientes${q}`} className="dsh-quick">
-                <span className="dsh-quick__icon" style={{ background: 'var(--cyan-bg)', color: 'var(--cyan-fg)' }}><Icon n="users" size={18} /></span>
+                <span className="dsh-quick__icon" style={{ background: 'var(--accent-soft)', color: 'var(--accent)' }}><Icon n="users" size={18} /></span>
                 Clientes
               </Link>
             )}

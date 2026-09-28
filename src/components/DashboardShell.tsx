@@ -18,16 +18,14 @@ import { requiresActiveBusiness } from '@/lib/business-context';
 import { mayLeaveEditor } from '@/components/dashboard/useUnsavedChanges';
 import { WorkspaceContext } from '@/components/dashboard/WorkspaceContext';
 import { ConversationsDock } from '@/components/dashboard/ConversationsDock';
-import { findAccent, getNavAccent, type NavAccentId } from '@/lib/nav-accent';
+import { DEFAULT_ACCENT_ID, findAccent, getNavAccent, type NavAccentId } from '@/lib/nav-accent';
 import { WorkspaceNavigation } from '@/components/dashboard/WorkspaceNavigation';
 import { WorkspaceTopbar } from '@/components/dashboard/WorkspaceTopbar';
 import { HelpCenter } from '@/components/dashboard/HelpCenter';
 import { useWorkspaceAlerts } from '@/components/dashboard/NotificationsBell';
 import { buildNavSearchItems } from '@/lib/nav-search';
 import { roleLabel } from '@/lib/role-labels';
-import {
-  routeAreaColor, routeBreadcrumb, switchUnitHref, workspaceAreas,
-} from '@/lib/workspace-navigation';
+import { switchUnitHref } from '@/lib/workspace-navigation';
 
 interface Biz {
   id: string;
@@ -80,7 +78,7 @@ export function DashboardShell({ children }: { children: React.ReactNode }) {
     try { return localStorage.getItem('il-side-v2') === 'mini'; } catch { return false; }
   });
   /* Missão 6 — cor da navegação (Configurações → Aparência). */
-  const [navAccent, setNavAccent] = useState<NavAccentId>('azul-clinico');
+  const [navAccent, setNavAccent] = useState<NavAccentId>(DEFAULT_ACCENT_ID);
   useEffect(() => {
     setNavAccent(getNavAccent());
     const sync = (e: Event) => setNavAccent((e as CustomEvent<NavAccentId>).detail);
@@ -271,8 +269,6 @@ export function DashboardShell({ children }: { children: React.ReactNode }) {
   // Multiunidade REAL: só quando existe mais de uma unidade na conta. Sem isso
   // "Organização" não ocupa linha no menu (a porta continua acessível por URL).
   const multiUnit = businesses.length > 1;
-  const areas = workspaceAreas(nav.allowed, { multiUnit });
-  const crumb = routeBreadcrumb(activePath, areas);
   const unitRole = business.role && business.role !== 'OWNER'
     ? `${roleLabel(business.role)}${business.readOnly ? ' · somente leitura' : ''}`
     : undefined;
@@ -315,7 +311,6 @@ export function DashboardShell({ children }: { children: React.ReactNode }) {
     <WorkspaceContext.Provider value={{ role: business.role, agendaScope: business.agendaScope }}>
     <div
       style={{
-        '--area-color': crumb.area?.color || routeAreaColor(activePath, areas),
         '--sidebar-w': collapsed ? 'var(--sidebar-w-mini)' : undefined,
         ...accentVars,
       } as React.CSSProperties}
@@ -355,6 +350,7 @@ export function DashboardShell({ children }: { children: React.ReactNode }) {
         onOpenNav={() => setMobileNav(true)}
         onOpenHelp={() => setHelpOpen(true)}
         canCreate={nav.allowed.map((i) => i.href).filter((h) => ['/agenda', '/clientes', '/tarefas', '/servicos', '/profissionais', '/financeiro'].includes(h))}
+        canOpenConversations={nav.allowed.some((i) => i.href === '/conversas') && activePath !== '/conversas' && activePath !== '/organizacao'}
         vet={business.clinicType === 'veterinaria'}
       />
 

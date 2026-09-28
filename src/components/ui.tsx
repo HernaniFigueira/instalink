@@ -11,53 +11,36 @@ import { buildHoursChips, type HoursChipDay } from '@/lib/hours-chips';
 export type { HoursChipDay };
 
 // ═══════════════════════════════════════════════════════════════
-// DESIGN SYSTEM INSTALINK (A3.3) — componentes compartilhados
+// GODOUTOR WORKSPACE UI — primitives oficiais
 // ═══════════════════════════════════════════════════════════════
-// Toda a linguagem visual do painel vive AQUI + nos tokens de
-// src/app/globals.css. Telas não inventam estilo: importam destes
-// componentes (ou usam as classes utilitárias mapeadas no Tailwind).
-//
-// Hierarquia de AÇÃO — status do atendimento ≠ cor de botão:
-//   primary  → a ação principal da tela (azul da marca, com peso real)
-//   success  → conclusão/avanço (verde)
-//   warning  → atenção operacional (âmbar suave, nunca gritante)
-//   danger   → ação destrutiva (vermelho — SÓ para perigo)
-//   soft     → ação relacionada à marca sem competir com a principal
-//   secondary→ neutro com borda e sombra leve (reagendar, filtros, voltar)
-//   ghost    → discreto (fechar, alternar)
-//   quiet    → texto com ícone, mas AINDA com cara de botão (contorno suave)
-// Nada de "é texto ou é botão?": todo elemento acionável tem contorno,
-// preenchimento ou peso de botão.
-export type ButtonVariant =
-  | 'primary' | 'success' | 'warning' | 'danger' | 'soft'
-  | 'secondary' | 'ghost' | 'quiet' | 'cta';
+// Componentes existentes são a única fonte de apresentação operacional.
+// A cor primária vem do tema ativo; semânticas ficam reservadas a estados.
+export type CanonicalButtonVariant = 'primary' | 'secondary' | 'ghost' | 'destructive' | 'link' | 'success' | 'warning';
+/** Aliases temporários mantidos para compatibilidade de chamadas existentes. */
+export type ButtonVariant = CanonicalButtonVariant | 'success' | 'warning' | 'danger' | 'soft' | 'quiet' | 'cta';
 
-const BTN_VARIANT_CLS: Record<ButtonVariant, string> = {
-  // §5 (decreto novo): o CTA PRINCIPAL SEGUE O TEMA — --accent/--accent-hover/
-  // --accent-contrast controlados pela paleta da clínica (Configurações →
-  // Aparência). Nunca --il-nav (sidebar) nem --text (contrato de cor).
+const BUTTON_VARIANT_ALIAS: Partial<Record<ButtonVariant, CanonicalButtonVariant>> = {
+  danger: 'destructive',
+  soft: 'secondary',
+  quiet: 'ghost',
+  cta: 'primary',
+};
+
+const BTN_VARIANT_CLS: Record<CanonicalButtonVariant, string> = {
   primary:
-    'bg-[var(--accent)] text-[var(--accent-contrast)] border border-[var(--accent-hover)]/40 shadow-brand hover:bg-[var(--accent-hover)] active:translate-y-px',
-  success:
-    'bg-[var(--success)] text-white border border-[var(--success-strong)]/40 shadow-sm hover:bg-[var(--success-strong)] active:translate-y-px',
-  warning:
-    'bg-[var(--attention-bg)] text-[var(--attention)] border border-[var(--attention-border)] hover:bg-[var(--attention-bg-hover)] active:translate-y-px',
-  danger:
-    'bg-[var(--danger)] text-white border border-[var(--danger-strong)]/40 shadow-sm hover:bg-[var(--danger-strong)] active:translate-y-px',
-  soft:
-    'bg-[var(--brand-soft)] text-[var(--brand-fg)] border border-[var(--brand-border)] hover:bg-[var(--brand-bg-hover)] active:translate-y-px',
+    'bg-[var(--accent)] text-[var(--accent-contrast)] border border-[var(--accent)] hover:bg-[var(--accent-hover)] hover:border-[var(--accent-hover)]',
   secondary:
-    'bg-white text-[var(--text)] border border-[var(--border-strong)] shadow-xs hover:bg-[var(--surface-hover)] hover:border-[var(--brand-border)] active:translate-y-px',
+    'bg-[var(--surface)] text-[var(--text)] border border-[var(--border-strong)] hover:bg-[var(--surface-hover)]',
   ghost:
-    'text-[var(--text-muted)] hover:bg-[var(--surface-3)] hover:text-[var(--text)] border border-transparent',
-  quiet:
-    'bg-[var(--surface-3)] text-[var(--text-muted)] border border-[var(--border)] hover:bg-[var(--brand-soft)] hover:text-[var(--brand-fg)] hover:border-[var(--brand-border)] active:translate-y-px',
-  // CTA contextual PRINCIPAL de uma tela (ex.: "Novo agendamento" na Agenda):
-  // violeta premium (--cta-bg) — acento refinado que conversa com a sidebar
-  // índigo-violeta, sem ser o azul de ação genérico. Branco sobre violeta =
-  // contraste AA (6.8:1); hover escurece com sombra mais profunda.
-  cta:
-    'bg-[var(--cta-bg)] text-white font-semibold border border-[var(--cta-border)] shadow-[var(--cta-shadow)] hover:bg-[var(--cta-bg-hover)] hover:border-[var(--cta-bg-hover)] hover:shadow-[var(--cta-shadow-hover)] active:translate-y-px',
+    'bg-transparent text-[var(--text-muted)] border border-transparent hover:bg-[var(--surface-3)] hover:text-[var(--text)]',
+  destructive:
+    'bg-[var(--danger)] text-white border border-[var(--danger)] hover:bg-[var(--danger-strong)] hover:border-[var(--danger-strong)]',
+  link:
+    'bg-transparent text-[var(--accent)] border border-transparent underline-offset-4 hover:underline',
+  success:
+    'bg-[var(--success)] text-white border border-[var(--success)] hover:bg-[var(--success-strong)] hover:border-[var(--success-strong)]',
+  warning:
+    'bg-[var(--warning-bg)] text-[var(--warning-fg)] border border-[var(--warning-border)] hover:bg-[var(--warning-bg-hover)]',
 };
 
 export type ButtonSize = 'xs' | 'sm' | 'md' | 'lg';
@@ -73,13 +56,13 @@ const BTN_SIZE_CLS: Record<ButtonSize, string> = {
  *  elementos de navegação (Link/a) sem duplicar estilo fora do ui.tsx. */
 export function buttonCls(variant: ButtonVariant = 'primary', size: ButtonSize = 'md'): string {
   return cn(
-    'il-control inline-flex items-center justify-center font-medium rounded-md whitespace-nowrap',
+    'il-control inline-flex items-center justify-center font-medium rounded-sm whitespace-nowrap',
     `il-control--${size}`,
-    'transition-[background-color,border-color,color,box-shadow,transform] duration-150',
+    'transition-[background-color,border-color,color] duration-150',
     'focus-visible:outline-none focus-visible:shadow-focus',
     'disabled:opacity-50 disabled:pointer-events-none disabled:shadow-none',
     BTN_SIZE_CLS[size],
-    BTN_VARIANT_CLS[variant],
+    BTN_VARIANT_CLS[BUTTON_VARIANT_ALIAS[variant] || (variant as CanonicalButtonVariant)],
   );
 }
 
@@ -117,10 +100,10 @@ export function IconButton(props: React.ButtonHTMLAttributes<HTMLButtonElement> 
 
 export function Card(props: React.HTMLAttributes<HTMLDivElement>) {
   const { className, ...rest } = props;
-  return <div className={cn('bg-[var(--surface)] border border-[var(--border)] rounded-lg shadow-sm', className)} {...rest} />;
+  return <div className={cn('bg-[var(--surface)] border border-[var(--border)] rounded-md', className)} {...rest} />;
 }
 
-// Painel workspace — cartão base do painel, com sombra de uma camada.
+// Painel workspace — agrupamento neutro, sem sombra decorativa.
 export function Panel({ className, ...rest }: React.HTMLAttributes<HTMLDivElement>) {
   return <div className={cn('ws-panel', className)} {...rest} />;
 }
@@ -129,7 +112,7 @@ export function Panel({ className, ...rest }: React.HTMLAttributes<HTMLDivElemen
 export function SubCard({ className, ...rest }: React.HTMLAttributes<HTMLDivElement>) {
   return (
     <div
-      className={cn('bg-[var(--surface-2)] border border-[var(--border-soft)] rounded-md shadow-xs', className)}
+      className={cn('bg-[var(--surface-2)] border border-[var(--border-soft)] rounded-sm', className)}
       {...rest}
     />
   );
@@ -165,9 +148,9 @@ export function SectionHeader({ title, hint, action, icon }: { title: string; hi
 
 // ── Formulários ────────────────────────────────────────────────
 const FIELD_CLS =
-  'il-field-control w-full rounded-md border border-[var(--border-strong)] bg-white px-3 py-2 text-sm text-[var(--text)] ' +
-  'placeholder:text-[var(--text-faint)] shadow-xs transition-[border-color,box-shadow] ' +
-  'focus:outline-none focus:shadow-focus focus:border-[var(--brand)] ' +
+  'il-field-control w-full rounded-sm border border-[var(--border-strong)] bg-white px-3 py-2 text-sm text-[var(--text)] ' +
+  'placeholder:text-[var(--text-faint)] transition-[border-color,box-shadow] ' +
+  'focus:outline-none focus:shadow-focus focus:border-[var(--accent)] ' +
   'disabled:bg-[var(--surface-3)] disabled:text-[var(--text-muted)] disabled:cursor-not-allowed';
 
 interface FieldContextValue {
@@ -309,12 +292,12 @@ export function Switch({ checked, onChange, label, disabled }: {
         'relative inline-flex items-center h-6 w-11 shrink-0 rounded-pill border transition-colors duration-200',
         'focus-visible:outline-none focus-visible:shadow-focus',
         'disabled:opacity-50 disabled:cursor-not-allowed',
-        checked ? 'bg-[var(--success)] border-[var(--success)]' : 'bg-[var(--surface-3)] border-[var(--border-strong)]',
+        checked ? 'bg-[var(--accent)] border-[var(--accent)]' : 'bg-[var(--surface-3)] border-[var(--border-strong)]',
       )}
     >
       <span
         className={cn(
-          'absolute top-0.5 left-0.5 w-5 h-5 rounded-full bg-white shadow-md transition-transform duration-200',
+          'absolute top-0.5 left-0.5 w-5 h-5 rounded-full bg-white transition-transform duration-200',
           checked && 'translate-x-5',
         )}
       />
@@ -332,7 +315,7 @@ export function Badge({ tone = 'zinc', children, icon, className, title }: { ton
     amber: 'bg-[var(--warning-bg)] text-[var(--warning-fg)] border-[var(--warning-border)]',
     red: 'bg-[var(--danger-bg)] text-[var(--danger-fg)] border-[var(--danger-border)]',
     blue: 'bg-[var(--info-bg)] text-[var(--info-fg)] border-[var(--info-border)]',
-    pink: 'bg-pink-50 text-pink-700 border-pink-200',
+    pink: 'bg-[var(--info-bg)] text-[var(--info-fg)] border-[var(--info-border)]',
     lilac: 'bg-[var(--lilac-bg)] text-[var(--lilac-fg)] border-[var(--lilac-border)]',
   };
   return (
@@ -356,7 +339,7 @@ export function StatusBadge({ tone = 'zinc', className, children }: { tone?: Ton
 
 // Faixa de atenção operacional (pendências que pedem decisão): mesma
 // apresentação na Dashboard e na Agenda — um componente, não dois estilos.
-// A3.3: âmbar quente com ícone presente (o amarelo apagado sumiu).
+// Atenção é semântica: âmbar tokenizado, nunca cor decorativa.
 /**
  * Faixa de atenção operacional (ponto 6 da convergência).
  *
@@ -397,7 +380,7 @@ export function PageHeader({ title, hint, action, icon }: { title: string; hint?
     <div className="flex flex-wrap items-start justify-between gap-3 mb-5">
       <div className="flex items-start gap-3 min-w-0">
         {icon && (
-          <span className="il-page-header__icon w-10 h-10 shrink-0 rounded-lg bg-[var(--surface-2)] text-[var(--accent)] flex items-center justify-center border border-[var(--border)]">
+          <span className="il-page-header__icon w-10 h-10 shrink-0 rounded-sm bg-[var(--surface-2)] text-[var(--accent)] flex items-center justify-center border border-[var(--border)]">
             <Icon n={icon} size={19} />
           </span>
         )}
@@ -468,7 +451,7 @@ export function Tabs<T extends string = string>({ items, value, onChange, ariaLa
           {typeof item.count === 'number' && (
             <span className={cn(
               'ml-0.5 min-w-[18px] h-[18px] px-1 rounded-pill text-[10px] font-semibold inline-flex items-center justify-center',
-              value === item.id ? 'bg-[var(--brand-soft)] text-[var(--brand-fg)]' : 'bg-[var(--border)] text-[var(--text-muted)]',
+              value === item.id ? 'bg-[var(--accent-soft)] text-[var(--accent)]' : 'bg-[var(--border)] text-[var(--text-muted)]',
             )}>{item.count}</span>
           )}
         </button>
@@ -608,7 +591,7 @@ export function Stat({ label, value, hint, tone = 'brand', icon }: {
   };
   const c = map[tone] || map.brand;
   return (
-    <div className="bg-[var(--surface)] border border-[var(--border)] rounded-lg p-4 shadow-sm flex items-start gap-3">
+    <div className="bg-[var(--surface)] border border-[var(--border)] rounded-md p-4 flex items-start gap-3">
       {icon && (
         <span
           className="w-9 h-9 shrink-0 rounded-md flex items-center justify-center"

@@ -187,7 +187,7 @@ export default function ServicosPage() {
                       {pros.length > 0 && <p className="text-xs text-zinc-400">Realizado por: {who}</p>}
                     </div>
                     <Button variant="secondary" size="xs" onClick={() => { setEditing(sv); setShowForm(true); }}>Editar</Button>
-                    <IconButton icon="x" label={`Excluir ${sv.name}`} tip={`Excluir ${sv.name}`} variant="danger" size="sm" onClick={() => ask('service', sv)} />
+                    <IconButton icon="x" label={`Excluir ${sv.name}`} tip={`Excluir ${sv.name}`} variant="destructive" size="sm" onClick={() => ask('service', sv)} />
                   </div>
                 );
               })}

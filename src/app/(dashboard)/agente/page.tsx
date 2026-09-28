@@ -161,7 +161,7 @@ export default function AgentePage() {
               <div className="flex flex-wrap gap-2 mt-1.5">
                 {options.tones.map((t) => (
                   <button key={t.id} onClick={() => set('tone', t.id)} title={t.hint}
-                    className={cn('text-sm font-semibold px-3.5 py-2 rounded-md border-2', agent.tone === t.id ? 'border-[var(--lilac-border)] bg-[var(--lilac-bg)] text-[var(--lilac-fg)]' : 'border-[var(--border)] bg-white text-[var(--text-muted)]')}>
+                    className={cn('text-sm font-semibold px-3.5 py-2 rounded-md border-2', agent.tone === t.id ? 'border-[var(--accent-border)] bg-[var(--accent-soft)] text-[var(--accent-fg)]' : 'border-[var(--border)] bg-white text-[var(--text-muted)]')}>
                     {t.label}
                   </button>
                 ))}
@@ -174,7 +174,7 @@ export default function AgentePage() {
                   const on = agent.objectives.includes(o.id);
                   return (
                     <button key={o.id} onClick={() => toggleObjective(o.id)}
-                      className={cn('text-sm font-semibold px-3.5 py-2 rounded-md border-2', on ? 'border-[var(--lilac-border)] bg-[var(--lilac-bg)] text-[var(--lilac-fg)]' : 'border-[var(--border)] bg-white text-[var(--text-muted)]')}>
+                      className={cn('text-sm font-semibold px-3.5 py-2 rounded-md border-2', on ? 'border-[var(--accent-border)] bg-[var(--accent-soft)] text-[var(--accent-fg)]' : 'border-[var(--border)] bg-white text-[var(--text-muted)]')}>
                       {on && <Icon n="check" size={13} className="inline -mt-0.5 mr-1" />}{o.label}
                     </button>
                   );

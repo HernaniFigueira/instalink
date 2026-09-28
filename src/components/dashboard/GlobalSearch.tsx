@@ -209,7 +209,6 @@ export function GlobalSearch({ items, activePath, businessId = '', compact = fal
                     onMouseEnter={() => setCursor(i)}
                     onClick={() => (isEntity ? goEntity(item as EntityHit) : goNav(item as NavSearchItem))}
                     className={`global-search__option${isCursor ? ' is-cursor' : ''}`}
-                    style={{ '--area-color': 'var(--brand)' } as React.CSSProperties}
                   >
                     <span className="global-search__option-icon">
                       <Icon n={icon} size={15} />

@@ -40,7 +40,7 @@ describe('missão 7 · 1 — paleta de aparência (atual: 21 presets por famíli
     expect(onix.swatch).toBe('#18181b'); // preto sofisticado (não cinza)
     expect(ids).not.toContain('graphite');
     expect(ids).not.toContain('indigo');
-    expect(NAV_ACCENT_DEFAULT).toBe('neutro'); // tema padrão = Neutro (sem roxo/lilás)
+    expect(NAV_ACCENT_DEFAULT).toBe('azul-profundo'); // default aprovado; preferência salva preservada
   });
 
   it('contraste AA real (WCAG): o texto do nav é legível em QUALQUER preset', () => {
@@ -85,8 +85,8 @@ describe('missão 7 · 2 — primary PRETO supersedo: CTA principal segue o TEMA
 
   it('semânticas nunca tingidas: success/danger usam tokens próprios', () => {
     const ui = read('src/components/ui.tsx');
-    const success = ui.slice(ui.indexOf('success:'), ui.indexOf('success:') + 200);
-    const danger = ui.slice(ui.indexOf('danger:'), ui.indexOf('danger:') + 200);
+    const success = ui.slice(ui.indexOf('  success:\n'), ui.indexOf('  success:\n') + 220);
+    const danger = ui.match(/  destructive:\n\s*'([^']+)'/)?.[1] ?? '';
     expect(success).toContain('var(--success)');
     expect(success).not.toContain('--accent');
     expect(danger).toContain('var(--danger)');

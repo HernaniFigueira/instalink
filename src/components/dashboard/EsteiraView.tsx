@@ -462,9 +462,9 @@ export function EsteiraView() {
     switch (stage.id) {
       case 'new': return 'bg-[var(--info)]';
       case 'in_progress': return 'bg-[var(--warning)]';
-      case 'qualifying': return 'bg-[var(--lilac)]';
+      case 'qualifying': return 'bg-[var(--info)]';
       case 'qualified': return 'bg-[var(--success)]';
-      case 'waiting_secretary': return 'bg-orange-500';
+      case 'waiting_secretary': return 'bg-[var(--warning)]';
       case 'scheduled': return 'bg-[var(--brand)]';
       case 'converted': return 'bg-[var(--success-strong)]';
       case 'lost': return 'bg-[var(--danger)]';
@@ -474,14 +474,14 @@ export function EsteiraView() {
 
   const stageColorBadge = (stageId: string) => {
     switch (stageId) {
-      case 'new': return 'border-blue-300 text-blue-700 bg-blue-50';
-      case 'in_progress': return 'border-amber-300 text-amber-700 bg-amber-50';
-      case 'qualifying': return 'border-purple-300 text-purple-700 bg-purple-50';
-      case 'qualified': return 'border-emerald-300 text-emerald-700 bg-emerald-50';
-      case 'waiting_secretary': return 'border-orange-300 text-orange-700 bg-orange-50';
-      case 'scheduled': return 'border-emerald-300 text-emerald-700 bg-emerald-50';
-      case 'converted': return 'border-emerald-400 text-emerald-800 bg-emerald-100';
-      case 'lost': return 'border-red-300 text-red-700 bg-red-50';
+      case 'new': return 'border-[var(--info-border)] text-[var(--info-fg)] bg-[var(--info-bg)]';
+      case 'in_progress': return 'border-[var(--warning-border)] text-[var(--warning-fg)] bg-[var(--warning-bg)]';
+      case 'qualifying': return 'border-[var(--info-border)] text-[var(--info-fg)] bg-[var(--info-bg)]';
+      case 'qualified': return 'border-[var(--success-border)] text-[var(--success-fg)] bg-[var(--success-bg)]';
+      case 'waiting_secretary': return 'border-[var(--warning-border)] text-[var(--warning-fg)] bg-[var(--warning-bg)]';
+      case 'scheduled': return 'border-[var(--info-border)] text-[var(--info-fg)] bg-[var(--info-bg)]';
+      case 'converted': return 'border-[var(--success-border)] text-[var(--success-fg)] bg-[var(--success-bg)]';
+      case 'lost': return 'border-[var(--danger-border)] text-[var(--danger-fg)] bg-[var(--danger-bg)]';
       default: return 'border-zinc-300 text-zinc-700 bg-zinc-50';
     }
   };

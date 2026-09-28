@@ -433,7 +433,7 @@ export function NewBookingSheet({ businessId, services, pros, timezone, initial,
                 </p>
                 {searching && <p className="text-xs text-[var(--text-faint)] mt-1.5">Buscando…</p>}
                 {!searching && query.trim().length >= 2 && results.length === 0 && (
-                  <Button type="button" variant="soft" onClick={startNew} className="mt-2 w-full justify-start" data-new-client-trigger="true">
+                  <Button type="button" variant="secondary" onClick={startNew} className="mt-2 w-full justify-start" data-new-client-trigger="true">
                     + Cadastrar paciente {vetMode ? '(tutor e pet)' : `“${query.trim()}”`}
                   </Button>
                 )}
@@ -559,7 +559,7 @@ export function NewBookingSheet({ businessId, services, pros, timezone, initial,
                     <Field label="Horário do encaixe">
                       <Input type="time" value={fitInTime} onChange={(e) => { setFitInTime(e.target.value); setFitInConflicts([]); setFitInMessage(''); }} className="w-32" />
                     </Field>
-                    <Button type="button" variant="warning" size="sm" disabled={saving || !fitInTime || !!fitInPast}
+                    <Button type="button" variant="secondary" size="sm" disabled={saving || !fitInTime || !!fitInPast}
                       title={fitInPast || undefined}
                       onClick={() => save({ fitIn: true, confirmFitIn: false, timeOverride: fitInTime })}>
                       {saving ? 'Verificando…' : 'Verificar e encaixar'}
@@ -579,7 +579,7 @@ export function NewBookingSheet({ businessId, services, pros, timezone, initial,
                         ))}
                       </span>
                       <span className="mt-2 flex flex-wrap gap-2">
-                        <Button type="button" variant="warning" size="sm" disabled={saving}
+                        <Button type="button" variant="secondary" size="sm" disabled={saving}
                           onClick={() => save({ fitIn: true, confirmFitIn: true, timeOverride: fitInTime })}>
                           {saving ? 'Encaixando…' : 'Encaixar mesmo assim'}
                         </Button>
