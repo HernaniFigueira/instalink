@@ -648,8 +648,10 @@ export function Notice({ tone = 'info', children, title, className }: { tone?: '
 // browser responsibilities, including nested dialogs. Kept in its DOM parent
 // (no portal) so platform/public CSS scopes are never copied or leaked.
 
-export function Drawer({ open, onClose, title, subtitle, children, footer, width = 'max-w-[720px]', side, sideTitle, sideWidth = 'max-w-[520px]', onSideClose, dismissGuard, sideDismissGuard }: {
+export function Drawer({ open, onClose, title, subtitle, children, footer, width = 'max-w-[720px]', side, sideTitle, sideWidth = 'max-w-[520px]', onSideClose, dismissGuard, sideDismissGuard, dialogClassName }: {
   open: boolean; onClose: () => void; title: string; subtitle?: string;
+  /** Optional root class for a single, explicitly scoped Drawer surface. */
+  dialogClassName?: string;
   /** Dirty/saving contract. Omitted on read-only surfaces, which remain freely dismissible. */
   dismissGuard?: DismissGuardState;
   /** Independent guard for an expanded side-form; parent guard still covers the whole overlay. */
@@ -693,7 +695,7 @@ export function Drawer({ open, onClose, title, subtitle, children, footer, width
 
   if (!open) return null;
   return (
-    <dialog ref={dialogRef} className="il-drawer fixed inset-0 z-50" aria-modal="true"
+    <dialog ref={dialogRef} className={cn("il-drawer fixed inset-0 z-50", dialogClassName)} aria-modal="true"
       aria-labelledby={`${id}-title`} aria-describedby={subtitle ? `${id}-description` : undefined}
       data-expanded={expanded ? 'true' : undefined}
       onCancel={(event) => { event.preventDefault(); event.stopPropagation(); requestClose('escape'); }}

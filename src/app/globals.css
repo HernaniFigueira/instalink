@@ -2394,6 +2394,69 @@ dialog.ws-sheet[data-closing] { animation: ws-sheet-out 200ms ease-in forwards; 
   border-radius: 0 0 var(--radius-xl) var(--radius-xl);
 }
 
+/* Mobile navigation is the ONLY Drawer surface that follows sidebar tokens.
+   Keep the generic Drawer and every other overlay on workspace surfaces. */
+dialog.workspace-nav-drawer .il-drawer__strip {
+  background: var(--il-nav);
+  color: var(--il-nav-fg);
+  border-color: var(--il-nav-border);
+}
+dialog.workspace-nav-drawer .ws-sheet__header,
+dialog.workspace-nav-drawer .ws-sheet__body,
+dialog.workspace-nav-drawer .ws-sheet__footer {
+  background: var(--il-nav);
+  color: var(--il-nav-fg);
+  border-color: var(--il-nav-border);
+}
+dialog.workspace-nav-drawer .ws-sheet__titles h2,
+dialog.workspace-nav-drawer .ws-sheet__sub {
+  color: var(--il-nav-fg);
+}
+dialog.workspace-nav-drawer .ws-sheet__close {
+  color: var(--il-nav-fg);
+  background: var(--il-nav-hover);
+  border-color: var(--il-nav-border);
+}
+dialog.workspace-nav-drawer .ws-sheet__close:hover,
+dialog.workspace-nav-drawer .ws-sheet__close:active {
+  color: var(--il-nav-active-fg);
+  background: var(--il-nav-active);
+  border-color: var(--il-nav-active);
+}
+dialog.workspace-nav-drawer .ws-sheet__close:focus-visible {
+  outline: 2px solid var(--il-nav-fg);
+  outline-offset: 2px;
+}
+.workspace-nav-drawer .workspace-link__chevron {
+  color: var(--il-nav-fg);
+}
+.workspace-nav-drawer .workspace-clinic-head__name,
+.workspace-nav-drawer .workspace-clinic-head__meta,
+.workspace-nav-drawer .workspace-clinic-head__unit,
+.workspace-nav-drawer .workspace-foot__item,
+.workspace-nav-drawer .workspace-foot__brand,
+.workspace-nav-drawer .workspace-foot__brand strong,
+.workspace-nav-drawer .ws-setup-mini p {
+  color: var(--il-nav-fg);
+}
+.workspace-nav-drawer .ws-setup-mini {
+  background: var(--il-nav-hover);
+  border-color: var(--il-nav-border);
+}
+.workspace-nav-drawer .ws-setup-mini .bg-white\/20 {
+  background: var(--il-nav-border);
+}
+.workspace-nav-drawer .ws-setup-mini a {
+  color: var(--il-nav-active-fg);
+  background: var(--il-nav-active);
+  border-color: var(--il-nav-active);
+}
+.workspace-nav-drawer .ws-setup-mini a:hover {
+  color: var(--il-nav-fg);
+  background: var(--il-nav-hover);
+  border-color: var(--il-nav-border);
+}
+
 /* ── Minimizado: pílula ancorada no canto; o conteúdo NÃO desmonta ── */
 dialog.ws-sheet[data-minimized] {
   top: auto;

@@ -37,6 +37,9 @@ const LEGACY_REDIRECTS = [
 
 /** @type {import('next').NextConfig} */
 const nextConfig = {
+  // Produto legacy flag is intentionally non-secret; compile it for client UI
+  // so isLegacyPagesEnabled() has the same value in server and browser bundles.
+  env: { GODOUTOR_LEGACY_PAGES: process.env.GODOUTOR_LEGACY_PAGES || '' },
   reactStrictMode: true,
   poweredByHeader: false,
   experimental: {

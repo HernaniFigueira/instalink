@@ -20,6 +20,7 @@ import Link from 'next/link';
 import { Icon } from '@/components/icons';
 import { Drawer } from '@/components/ui';
 import { apiGet } from '@/lib/api-client';
+import { isLegacyPagesEnabled } from '@/lib/product';
 import type { panelNavigation } from '@/lib/panel';
 
 type Nav = ReturnType<typeof panelNavigation>;
@@ -48,24 +49,29 @@ export function HelpCenter({ open, onClose, query, nav, businessId }: {
 }) {
   const [q, setQ] = useState('');
   const [checklist, setChecklist] = useState<ChecklistItem[]>([]);
+  const legacyPagesEnabled = isLegacyPagesEnabled();
 
   useEffect(() => {
     if (!open || !businessId) return;
     let on = true;
     apiGet<{ checklist?: ChecklistItem[] }>(`/api/overview?businessId=${businessId}&period=7`)
-      .then((r) => { if (on && r.ok) setChecklist((r.data?.checklist || []).filter((c) => !c.done)); })
+      .then((r) => {
+        if (on && r.ok) setChecklist((r.data?.checklist || []).filter((c) =>
+          !c.done && (legacyPagesEnabled || c.href.split('?')[0] !== '/pagina'),
+        ));
+      })
       .catch(() => { /* ajuda não pode quebrar a tela */ });
     return () => { on = false; };
-  }, [open, businessId]);
+  }, [open, businessId, legacyPagesEnabled]);
 
   // Só aparece caminho que o usuário ALCANÇA (fonte: o catálogo autorizado).
   const allowed = useMemo(() => new Set(nav.allowed.map((r) => r.href)), [nav.allowed]);
   const paths = useMemo(() => {
     const term = q.trim().toLowerCase();
     return PATHS
-      .filter((p) => allowed.has(p.href))
+      .filter((p) => allowed.has(p.href) && (legacyPagesEnabled || p.href !== '/pagina'))
       .filter((p) => !term || `${p.title} ${p.hint}`.toLowerCase().includes(term));
-  }, [allowed, q]);
+  }, [allowed, legacyPagesEnabled, q]);
 
   const steps = useMemo(() => {
     const term = q.trim().toLowerCase();

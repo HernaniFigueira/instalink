@@ -40,6 +40,7 @@ import { useRevalidateOnFocus } from './use-revalidate';
 import { loadOverview } from '@/lib/overview';
 import { apiGet } from '@/lib/api-client';
 import { clinicTypeLabel } from '@/lib/clinic-presets';
+import { isLegacyPagesEnabled } from '@/lib/product';
 import type { panelNavigation } from '@/lib/panel';
 import {
   areaOfRoute, workspaceAreas, workspaceSections, type WorkspaceArea,
@@ -71,6 +72,7 @@ export function WorkspaceNavigation({ nav, activePath, unit, units = [], multiUn
 }) {
   const setMobile = (open: boolean) => onMobileOpen?.(open);
   const mobile = !!mobileOpen;
+  const legacyPagesEnabled = isLegacyPagesEnabled();
   const areas = useMemo(() => workspaceAreas(nav.allowed, { multiUnit }), [nav.allowed, multiUnit]);
   const sections = useMemo(() => workspaceSections(areas), [areas]);
 
@@ -90,13 +92,19 @@ export function WorkspaceNavigation({ nav, activePath, unit, units = [], multiUn
     loadOverview(businessId, 7, { scope: 'area', area: 'Visão geral' })
       .then((r) => {
         if (!on || !r.ok) return;
-        const next = (r.data?.checklist || []).find((c) => !c.done);
-        const pending = r.data?.pendingSetup ?? (r.data?.checklist || []).filter((c) => !c.done).length;
-        const pct = r.data?.pct ?? 0;
+        const checklist = r.data?.checklist || [];
+        const visibleChecklist = legacyPagesEnabled ? checklist : checklist.filter((c) => c.href.split('?')[0] !== '/pagina');
+        const next = visibleChecklist.find((c) => !c.done);
+        const pending = visibleChecklist.filter((c) => !c.done).length;
+        const pct = legacyPagesEnabled
+          ? (r.data?.pct ?? 0)
+          : visibleChecklist.length
+            ? Math.round((visibleChecklist.filter((c) => c.done).length / visibleChecklist.length) * 100)
+            : 100;
         setSetup(next && pending && pct < 100 ? { pct, href: next.href } : null);
       }).catch(() => { if (on) setSetup(null); });
     return () => { on = false; };
-  }, []);
+  }, [legacyPagesEnabled]);
   useEffect(() => loadSetup(unit.id), [unit.id, loadSetup]);
   useEffect(() => {
     const refresh = () => loadSetup(unit.id);
@@ -512,6 +520,7 @@ export function WorkspaceNavigation({ nav, activePath, unit, units = [], multiUn
         onClose={() => setMobile(false)}
         title="Navegar na clínica"
         width="max-w-[420px]"
+        dialogClassName="workspace-nav-drawer"
       >
         {header(false)}
         <nav aria-label="Menu móvel" className="p-3">{menu(false)}</nav>

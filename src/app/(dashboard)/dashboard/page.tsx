@@ -34,6 +34,7 @@ import Link from 'next/link';
 import { useWorkspace } from '@/components/dashboard/WorkspaceContext';
 import { Button, DashboardSkeleton, EmptyState, PageSkeleton, StatusBadge } from '@/components/ui';
 import { Icon } from '@/components/icons';
+import { isLegacyPagesEnabled } from '@/lib/product';
 import { cn } from '@/lib/utils';
 import { AccessDenied, PermissionNotice, useForbiddenNotice } from '@/components/dashboard/AccessNotice';
 import { usePanelPermissions } from '@/components/dashboard/usePanelPermissions';
@@ -307,6 +308,13 @@ export default function DashboardPage() {
   if (!data) return <DashboardSkeleton />;
 
   const { user, business, totals, upcoming, checklist, pct, recent, today, crm, pageStats, whatsapp, ordersPanel, productsPanel, context } = data;
+  const legacyPagesEnabled = isLegacyPagesEnabled();
+  const operationalChecklist = legacyPagesEnabled ? checklist : checklist.filter((item) => item.href.split('?')[0] !== '/pagina');
+  const operationalSetupPct = legacyPagesEnabled
+    ? pct
+    : operationalChecklist.length
+      ? Math.round((operationalChecklist.filter((item) => item.done).length / operationalChecklist.length) * 100)
+      : 100;
   const modules = context.modules;
   const results = data.results;
   const showMoney = data.showMoney === true;
@@ -341,8 +349,7 @@ export default function DashboardPage() {
   const attention = data.attention || [];
   const links = data.links || {};
   const q = `?b=${business.id}`;
-  const doneCount = checklist.filter((c) => c.done).length;
-  const hasSetupPending = (data.pendingSetup ?? checklist.filter((c) => !c.done).length) > 0;
+  const hasSetupPending = operationalChecklist.some((c) => !c.done);
   const hasActivity = recent.orders.length + recent.bookings.length + recent.leads.length > 0;
   const canalConnected = whatsapp?.status === 'connected';
   const orderDef = (s: string): StatusDef => (ORDER_STATUS as Record<string, StatusDef>)[s] || { panel: s, tone: 'zinc' } as StatusDef;
@@ -495,14 +502,14 @@ export default function DashboardPage() {
             <>
               <div className="dsh-card__head">
                 <h3 className="dsh-card__title">Sua clínica está pronta?</h3>
-                <span className="text-[12px] font-semibold text-[var(--brand-fg)]">{pct}%</span>
+                <span className="text-[12px] font-semibold text-[var(--brand-fg)]">{operationalSetupPct}%</span>
               </div>
               <div className="dsh-card__body">
-                <div className="h-2 rounded-full bg-[var(--surface-3)] overflow-hidden mb-3" role="progressbar" aria-valuenow={pct} aria-valuemin={0} aria-valuemax={100}>
-                  <div className="h-full rounded-full bg-[var(--brand)] transition-all" style={{ width: `${pct}%` }} />
+                <div className="h-2 rounded-full bg-[var(--surface-3)] overflow-hidden mb-3" role="progressbar" aria-valuenow={operationalSetupPct} aria-valuemin={0} aria-valuemax={100}>
+                  <div className="h-full rounded-full bg-[var(--brand)] transition-all" style={{ width: `${operationalSetupPct}%` }} />
                 </div>
                 <div className="space-y-2">
-                  {checklist.map((c) => (
+                  {operationalChecklist.map((c) => (
                     c.done ? (
                       <div key={c.label} className="dsh-check">
                         <span className="dsh-check__mark dsh-check__mark--done" aria-hidden="true"><Icon n="check" size={12} /></span>
@@ -554,7 +561,7 @@ export default function DashboardPage() {
           <>
               <div className="dsh-card__head">
                 <h3 className="dsh-card__title">Presença online</h3>
-                {links.pagina === true && <Link href={`/pagina${q}`} className="text-[12px] font-semibold text-[var(--brand-fg)] hover:underline">Editar página →</Link>}
+                {legacyPagesEnabled && links.pagina === true && <Link href={`/pagina${q}`} className="text-[12px] font-semibold text-[var(--brand-fg)] hover:underline">Editar página →</Link>}
               </div>
               <div className="dsh-card__body">
                 {pageStats ? (
@@ -901,7 +908,7 @@ export default function DashboardPage() {
                 Clientes
               </Link>
             )}
-            {links.pagina === true && (
+            {legacyPagesEnabled && links.pagina === true && (
               <Link href={`/pagina${q}`} className="dsh-quick">
                 <span className="dsh-quick__icon"><Icon n="link" size={18} /></span>
                 Editar página

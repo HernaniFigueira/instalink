@@ -26,6 +26,7 @@ import { useWorkspaceAlerts } from '@/components/dashboard/NotificationsBell';
 import { buildNavSearchItems } from '@/lib/nav-search';
 import { roleLabel } from '@/lib/role-labels';
 import { switchUnitHref } from '@/lib/workspace-navigation';
+import { isLegacyPagesEnabled } from '@/lib/product';
 
 interface Biz {
   id: string;
@@ -248,6 +249,7 @@ export function DashboardShell({ children }: { children: React.ReactNode }) {
   }
 
   const organization = organizations.find(o=>o.id === params.get('organization')) || organizations.find(o=>o.id === businesses.find(b=>b.id===params.get('b'))?.organizationId) || organizations[0];
+  const legacyPagesEnabled = isLegacyPagesEnabled();
   const business: Biz = (activePath === '/organizacao' ? businesses.find(b=>b.organizationId===organization?.id) : businesses.find(b=>b.id===params.get('b')) || businesses[0]) || {id:'',slug:'',name:organization?.name || 'Organização',organizationId:organization?.id,modes:[],features:{},published:false};
   const modes = business?.modes || [];
   const features = business?.features || {};
@@ -256,6 +258,9 @@ export function DashboardShell({ children }: { children: React.ReactNode }) {
   const panelCtx = { permissions, modes, features: features as Partial<Record<FeatureId, boolean>> };
   const nav = panelNavigation(panelCtx);
   if (!business.id) nav.allowed = organization?.canManage ? PANEL_ROUTES.filter(r=>r.href==='/organizacao') : [];
+  const operationalNav = legacyPagesEnabled
+    ? nav
+    : { ...nav, allowed: nav.allowed.filter((route) => route.href !== '/pagina') };
   const access = panelAccess(pathname, panelCtx);
   const q = business ? `?b=${business.id}` : '';
   // BUSCA DE NAVEGAÇÃO (ponto 2): a fonte é `nav.allowed` — o MESMO cálculo de
@@ -337,7 +342,7 @@ export function DashboardShell({ children }: { children: React.ReactNode }) {
       {!conversationFocus && <WorkspaceTopbar
         page={activeRoute?.label || 'Painel'}
         query={q}
-        searchItems={buildNavSearchItems(nav, q)}
+        searchItems={buildNavSearchItems(operationalNav, q)}
         activePath={activePath}
         businessId={business.id}
         alerts={alerts}
@@ -421,7 +426,7 @@ export function DashboardShell({ children }: { children: React.ReactNode }) {
         </div>
         {!isAgenda && !isConversations && business.id && (
           <footer className="px-4 lg:px-8 py-4 border-t border-[var(--border)] mt-8">
-            <p className="text-[11px] text-[var(--text-faint)] text-center">{business.name} · <a href={`/${business.slug}`} target="_blank" rel="noreferrer" className="underline font-semibold text-[var(--text-muted)]">página pública /{business.slug}</a></p>
+            <p className="text-[11px] text-[var(--text-faint)] text-center">{business.name}{legacyPagesEnabled && <> · <a href={`/${business.slug}`} target="_blank" rel="noreferrer" className="underline font-semibold text-[var(--text-muted)]">página pública /{business.slug}</a></>}</p>
           </footer>
         )}
       </main>

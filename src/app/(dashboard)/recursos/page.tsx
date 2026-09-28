@@ -19,6 +19,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
 import { Icon } from '@/components/icons';
+import { isLegacyPagesEnabled } from '@/lib/product';
 import { Badge, Button, EmptyState, Notice, PageHeader, PageSkeleton, SubCard, Switch } from '@/components/ui';
 import { AccessDenied, useAreaLoad } from '@/components/dashboard/AccessNotice';
 import { useBusinessId } from '@/components/dashboard/useBusinessId';
@@ -43,6 +44,7 @@ const GROUP_HINT: Record<string, string> = {
 };
 
 export default function RecursosPage() {
+  const legacyPagesEnabled = isLegacyPagesEnabled();
   const { businessId, resolving, noBusiness, contextError, retry } = useBusinessId();
   const [rows, setRows] = useState<FeatureRow[] | null>(null);
   const [busy, setBusy] = useState('');
@@ -158,7 +160,7 @@ export default function RecursosPage() {
         action={
           <span className="flex flex-wrap items-center gap-2">
             <Badge tone={activeCount === rows.length ? 'green' : 'zinc'}>{activeCount} de {rows.length} ativos</Badge>
-            <Link href={`/pagina${q}`}><Button variant="secondary" size="sm">Página</Button></Link>
+            {legacyPagesEnabled && <Link href={`/pagina${q}`}><Button variant="secondary" size="sm">Página</Button></Link>}
           </span>
         }
       />

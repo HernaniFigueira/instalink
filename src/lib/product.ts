@@ -21,7 +21,7 @@ export interface ProductLimitsEnv {
 }
 
 /** A Página legada aparece na navegação operacional? */
-export function isLegacyPagesEnabled(env: ProductLimitsEnv | Record<string, string | undefined> = process.env): boolean {
+export function isLegacyPagesEnabled(env: ProductLimitsEnv | Record<string, string | undefined> = { GODOUTOR_LEGACY_PAGES: process.env.GODOUTOR_LEGACY_PAGES }): boolean {
   const v = String(env.GODOUTOR_LEGACY_PAGES || '').toLowerCase();
   return v === '1' || v === 'true' || v === 'on';
 }

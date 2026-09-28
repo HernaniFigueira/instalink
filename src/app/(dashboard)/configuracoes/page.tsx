@@ -42,6 +42,7 @@ import type { BookingConfig, Business } from '@/lib/types';
 import { defaultBookingConfig } from '@/lib/types';
 import { Button, PageHeader, PageSkeleton, Tabs } from '@/components/ui';
 import { Icon } from '@/components/icons';
+import { isLegacyPagesEnabled } from '@/lib/product';
 import { ImageUpload } from '@/components/dashboard/ImageUpload';
 import { AccessDenied, AreaLoadError, useAreaLoad } from '@/components/dashboard/AccessNotice';
 import { apiGet, apiSend } from '@/lib/api-client';
@@ -278,6 +279,7 @@ function ShellAppearance() {
   );
 }
 export default function ConfigPage() {
+  const legacyPagesEnabled = isLegacyPagesEnabled();
   const router = useRouter();
   const params = useSearchParams();
   const businessId = params.get('b') || '';
@@ -469,7 +471,7 @@ export default function ConfigPage() {
               <label className="block"><span className="text-xs font-semibold tracking-wide uppercase text-zinc-500">Link do mapa</span><input value={biz.mapsUrl} onChange={(e) => set('mapsUrl', e.target.value)} className={input + ' mt-1'} placeholder="Cole o link do Google Maps" /><span className="text-xs text-zinc-500">Com o link salvo, o bloco Localização da página mostra o mapa.</span></label>
             </section>
 
-            <section className="bg-white border border-zinc-200 p-4">
+            {legacyPagesEnabled && <section className="bg-white border border-zinc-200 p-4">
               <div className="flex items-center justify-between gap-3">
                 <div>
                   <h3 className="font-semibold text-sm">Página pública</h3>
@@ -477,7 +479,7 @@ export default function ConfigPage() {
                 </div>
                 <Link href={`/pagina?b=${businessId}`} className="shrink-0"><Button variant="secondary" size="sm">Editar página pública</Button></Link>
               </div>
-            </section>
+            </section>}
 
             <Button variant="primary" onClick={save} disabled={saving}>{saving ? 'Salvando…' : 'Salvar informações'}</Button>
           </>
