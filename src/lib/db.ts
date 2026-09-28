@@ -71,10 +71,6 @@ export function emptyDB(): DB {
     // FASE 2 · Product Revolution (aditivas — documento antigo ganha []).
     pets: [], anamneseTemplates: [], anamneseResponses: [],
     financeEntries: [], followUpRules: [], followUpOutreach: [],
-    // Clinical OS · F0 — Event Log (aditivo; documento antigo ganha [])
-    domainEvents: [],
-    // Clinical OS · F0 — telemetria de IA (aditiva; custo por clínica)
-    aiUsage: [],
   };
 }
 
@@ -92,7 +88,6 @@ export function normalizeDB(raw: unknown): DB {
     'integrations', 'integrationEvents', 'queue', 'encounters',
     // FASE 2 · Product Revolution
     'pets', 'anamneseTemplates', 'anamneseResponses', 'financeEntries', 'followUpRules', 'followUpOutreach',
-    'domainEvents', 'aiUsage',
   ] as const) {
     if (!Array.isArray((base as any)[key])) (base as any)[key] = [];
   }

@@ -42,8 +42,6 @@ import type { PanelRouteDef } from './panel';
 //   /perfil     → menu da conta ("Meu perfil", para TODO usuário autenticado)
 //   /organizacao→ só existe quando há MULTIUNIDADE de verdade.
 
-import { isLegacyPagesEnabled } from './product';
-
 export type WorkspaceAreaId =
   | 'principal' | 'clinica' | 'presenca' | 'automacao' | 'gestao' | 'ajustes' | 'mais';
 
@@ -127,15 +125,10 @@ export interface WorkspaceArea extends WorkspaceAreaDef {
  * Ela nunca esconde um destino ACESSÍVEL por URL: só decide se "Organização"
  * ocupa uma linha no menu. Unidade única não precisa pensar em organização.
  */
-export function workspaceAreas(allowed: PanelRouteDef[], opts: { multiUnit?: boolean; legacyPages?: boolean } = {}): WorkspaceArea[] {
-  const withUnits = opts.multiUnit
+export function workspaceAreas(allowed: PanelRouteDef[], opts: { multiUnit?: boolean } = {}): WorkspaceArea[] {
+  const pool = opts.multiUnit
     ? allowed
     : allowed.filter((route) => route.href !== '/organizacao');
-  // Clinical OS · F0: a Página legada sai da navegação operacional por padrão
-  // (GODOUTOR_LEGACY_PAGES=1 reativa). A rota /pagina continua ACESSÍVEL por
-  // URL (deep link, widget, APIs) — só a linha do menu é que some.
-  const legacyPages = opts.legacyPages ?? isLegacyPagesEnabled();
-  const pool = legacyPages ? withUnits : withUnits.filter((route) => route.href !== '/pagina');
   const areas: WorkspaceArea[] = WORKSPACE_AREAS.map((area) => ({
     ...area,
     items: pool.filter((route) => area.routes.includes(route.href)),

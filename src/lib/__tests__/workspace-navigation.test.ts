@@ -6,24 +6,16 @@ describe('360 navigation is an authorized projection', () => {
   it('keeps every destination exactly once, including contextual/legacy routes', () => {
     // PARTIÇÃO TOTAL — o invariante que protege contra "rota que sumiu do menu
     // e virou porta fantasma". Com MAIS DE UMA unidade a partição cobre o
-    // catálogo inteiro MENOS a Página legada (Clinical OS F0: fora da
-    // navegação operacional por padrão; GODOUTOR_LEGACY_PAGES reativa). Com
-    // uma unidade só, soma-se a supressão de "Organização" (quem tem uma
-    // unidade não precisa pensar em organização). TODA rota suprimida segue
-    // acessível por URL — supressão é apresentação, nunca bloqueio.
+    // catálogo inteiro; com uma unidade só, a ÚNICA supressão de apresentação
+    // é "Organização" (decisão de produto: quem tem uma unidade não precisa
+    // pensar em organização). A rota continua acessível por URL.
     const all = workspaceAreas(PANEL_ROUTES, { multiUnit: true }).flatMap(a => a.items.map(i => i.href));
-    expect(all.sort()).toEqual(PANEL_ROUTES.filter(i => i.href !== '/pagina').map(i => i.href).sort());
+    expect(all.sort()).toEqual(PANEL_ROUTES.map(i => i.href).sort());
     expect(new Set(all).size).toBe(all.length);
 
     const single = workspaceAreas(PANEL_ROUTES).flatMap(a => a.items.map(i => i.href));
-    expect(single.sort()).toEqual(PANEL_ROUTES.filter(i => i.href !== '/organizacao' && i.href !== '/pagina').map(i => i.href).sort());
+    expect(single.sort()).toEqual(PANEL_ROUTES.filter(i => i.href !== '/organizacao').map(i => i.href).sort());
     expect(new Set(single).size).toBe(single.length);
-
-    // Contrato da flag: GODOUTOR_LEGACY_PAGES=1 restaura a Página na
-    // partição total (sem migração, sem perda).
-    const legacy = workspaceAreas(PANEL_ROUTES, { multiUnit: true, legacyPages: true }).flatMap(a => a.items.map(i => i.href));
-    expect(legacy.sort()).toEqual(PANEL_ROUTES.map(i => i.href).sort());
-    expect(new Set(legacy).size).toBe(legacy.length);
   });
   for (const permissions of [{}, { agenda: true, clientes: true }, { dashboard: true, atendimento: true }, { equipe: true, config: true }]) {
     it(`never expands authorized routes: ${JSON.stringify(permissions)}`, () => {
@@ -57,13 +49,8 @@ describe('360 navigation is an authorized projection', () => {
     // Exatamente QUATRO portas abrem a segunda coluna.
     expect(groups.slice(0, 4)).toEqual(['Clínica', 'Automação', 'Gestão', 'Configurações']);
     // O resto da primeira coluna é LINK DIRETO (sem segundo nível).
-    // Clinical OS F0: a Página legada está FORA por padrão — só "principal".
     const flat = sections.flatMap((s) => s.groups.filter((g) => g.flat).map((g) => g.area.id));
-    expect(flat).toEqual(['principal']);
-    // E com a flag reativada, a Página volta como link direto.
-    const legacyAreas = workspaceAreas(PANEL_ROUTES, { multiUnit: true, legacyPages: true });
-    const legacyFlat = workspaceSections(legacyAreas).flatMap((s) => s.groups.filter((g) => g.flat).map((g) => g.area.id));
-    expect(legacyFlat).toEqual(['principal', 'presenca']);
+    expect(flat).toEqual(['principal', 'presenca']);
 
     // Nenhuma porta fora do menu ocupa linha no menu (GODOUTOR final:
     // Pendências VOLTOU à linha — é fila de trabalho da recepção).

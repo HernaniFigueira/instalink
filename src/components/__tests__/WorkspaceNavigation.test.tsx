@@ -57,12 +57,9 @@ describe('Etapa A — sidebar por seções', () => {
     setup();
     const main = screen.getByRole('navigation', { name: 'Menu principal' });
     // 2.0 — Operação é link direto: o dia a dia cabe na primeira coluna.
-    // Clinical OS F0: "Página" é LEGADO — fora da navegação operacional
-    // padrão (GODOUTOR_LEGACY_PAGES reativa; rotas/APIs preservadas).
-    for (const name of ['Visão geral', 'Agenda', 'Conversas', 'Clientes']) {
+    for (const name of ['Visão geral', 'Agenda', 'Conversas', 'Clientes', 'Página']) {
       expect(within(main).getByRole('link', { name })).toBeTruthy();
     }
-    expect(within(main).queryByRole('link', { name: 'Página' })).toBeNull();
     // GODOUTOR final: Pendências voltou à linha do menu (fila de trabalho da
     // recepção, permissão real). Oportunidades vive DENTRO do grupo Gestão.
     expect(within(main).getByRole('link', { name: 'Pendências' })).toBeTruthy();
@@ -191,7 +188,7 @@ describe('Etapa A — sidebar por seções', () => {
     setup();
     const main = screen.getByRole('navigation', { name: 'Menu principal' });
     const labels = [
-      'Visão geral', 'Agenda', 'Conversas', 'Pendências', 'Clientes',
+      'Visão geral', 'Agenda', 'Conversas', 'Pendências', 'Clientes', 'Página',
       'Estrutura', 'Serviços', 'Profissionais', 'Disponibilidade', 'Equipe',
       'Automações', 'Follow-up', 'Campanhas',
       'Resultados', 'Financeiro', 'Oportunidades',
