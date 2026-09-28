@@ -158,9 +158,9 @@ function BookingRules({ businessId, initial, onSaved }: {
         <label className="block"><span className="text-xs font-semibold text-zinc-500">CANCELAR ATÉ (MIN ANTES)</span>
           <input type="number" min={0} max={10080} value={cfg.cancelUntilMin} onChange={(e) => setCfg({ ...cfg, cancelUntilMin: Number(e.target.value) })} className={num} />
           <span className="text-[11px] text-zinc-500">Depois disso, só falando com você.</span></label>
-        <label className="block"><span className="text-xs font-semibold text-zinc-500">AUTOAGENDAMENTO PÚBLICO (DIAS)</span>
+        <label className="block"><span className="text-xs font-semibold text-zinc-500">{isLegacyPagesEnabled() ? 'AUTOAGENDAMENTO PÚBLICO (DIAS)' : 'JANELA DE AGENDAMENTO (DIAS)'}</span>
           <input type="number" min={1} max={365} value={cfg.horizonDays} onChange={(e) => setCfg({ ...cfg, horizonDays: Number(e.target.value) })} className={num} />
-          <span className="text-[11px] text-zinc-500">Janela do cliente na página pública. A equipe pode agendar até 5 anos à frente.</span></label>
+          <span className="text-[11px] text-zinc-500">{isLegacyPagesEnabled() ? 'Janela do cliente na página pública. A equipe pode agendar até 5 anos à frente.' : 'Antecedência disponível para novos agendamentos. A equipe pode agendar até 5 anos à frente.'}</span></label>
         <label className="block"><span className="text-xs font-semibold text-zinc-500">INTERVALO ENTRE ATENDIMENTOS (MIN)</span>
           <input type="number" min={0} max={240} value={cfg.bufferMin} onChange={(e) => setCfg({ ...cfg, bufferMin: Number(e.target.value) })} className={num} /></label>
       </div>
@@ -181,6 +181,7 @@ function BookingRules({ businessId, initial, onSaved }: {
 // nunca na shell. Presets SEGUROS com contraste AA pré-validado; a topbar
 // acompanha a cor escolhida (color-mix sobre --il-nav).
 function ShellAppearance() {
+  const legacyPagesEnabled = isLegacyPagesEnabled();
   const [accent, setAccent] = useState<NavAccentId>('azul-clinico');
   useEffect(() => { setAccent(getNavAccent()); }, []);
   const selected = NAV_ACCENTS.find((x) => x.id === accent) || NAV_ACCENTS[0];
@@ -273,7 +274,7 @@ function ShellAppearance() {
         <span className="inline-flex items-center rounded-full bg-emerald-50 border border-emerald-200 px-2 py-0.5 text-[10px] font-semibold text-emerald-800">
           Contraste AA {aa.toFixed(1)}:1
         </span>
-        {selected.label} · a escolha vale só para você neste navegador; as demais pessoas veem o padrão do produto. A página pública não é afetada.
+        {selected.label} · a escolha vale só para você neste navegador; as demais pessoas veem o padrão do produto.{legacyPagesEnabled ? ' A página pública não é afetada.' : ''}
       </p>
     </section>
   );
@@ -369,7 +370,7 @@ export default function ConfigPage() {
       <PageHeader
         icon="settings"
         title="Configurações"
-        hint="As informações do seu negócio e as regras de reserva. A página pública se constrói no editor de Página."
+        hint={legacyPagesEnabled ? 'As informações do seu negócio e as regras de reserva. A página pública se constrói no editor de Página.' : 'Informações da clínica e regras de agendamento.'}
       />
       {msg && <p role="status" className="mb-3 text-sm font-semibold bg-[var(--success-bg)] border border-[var(--success-border)] text-[var(--success-fg)] rounded-md px-3 py-2">{msg}</p>}
 
@@ -432,7 +433,7 @@ export default function ConfigPage() {
             <section className="bg-white border border-zinc-200 p-4 space-y-3">
               <div>
                 <h3 className="font-semibold text-sm">Informações do negócio</h3>
-                <p className="text-xs text-zinc-500 mt-0.5">Esta é a fonte de verdade do perfil: a página pública lê estes dados automaticamente.</p>
+                <p className="text-xs text-zinc-500 mt-0.5">{legacyPagesEnabled ? 'Esta é a fonte de verdade do perfil: a página pública lê estes dados automaticamente.' : 'Dados de identificação e contato da clínica.'}</p>
               </div>
               <div className="grid sm:grid-cols-2 gap-3">
                 <label className="block"><span className="text-xs font-semibold tracking-wide uppercase text-zinc-500">Nome *</span><input value={biz.name} onChange={(e) => set('name', e.target.value)} className={input + ' mt-1'} /></label>
@@ -443,7 +444,7 @@ export default function ConfigPage() {
                   A CAPA da página pública mora SÓ em Página → Perfil. */}
               <div className="space-y-2">
                 <ImageUpload label="LOGO DA CLÍNICA" value={biz.logo} onChange={(url) => set('logo', url)} businessId={businessId} circle />
-                <p className="text-[11px] text-zinc-500">A capa/hero da página pública é editada em Página → Perfil — não aqui.</p>
+                {legacyPagesEnabled && <p className="text-[11px] text-zinc-500">A capa/hero da página pública é editada em Página → Perfil — não aqui.</p>}
               </div>
             </section>
 
@@ -455,20 +456,20 @@ export default function ConfigPage() {
                 <label className="block"><span className="text-xs font-semibold tracking-wide uppercase text-zinc-500">Instagram</span><input value={biz.instagram} onChange={(e) => set('instagram', e.target.value)} className={input + ' mt-1'} placeholder="@seuperfil" /></label>
                 <label className="block"><span className="text-xs font-semibold tracking-wide uppercase text-zinc-500">TikTok</span><input value={biz.tiktok} onChange={(e) => set('tiktok', e.target.value)} className={input + ' mt-1'} placeholder="@seuperfil" /></label>
               </div>
-              <p className="text-[11px] text-zinc-500 -mt-1">Instagram e TikTok aceitam @usuário — a página completa o link. As redes abaixo pedem o endereço completo.</p>
+              <p className="text-[11px] text-zinc-500 -mt-1">{legacyPagesEnabled ? 'Instagram e TikTok aceitam @usuário — a página completa o link. As redes abaixo pedem o endereço completo.' : 'Instagram e TikTok aceitam @usuário; as demais redes pedem o endereço completo.'}</p>
               <div className="grid sm:grid-cols-2 gap-3">
                 {([['facebook', 'Facebook', 'https://facebook.com/suanegocio'], ['youtube', 'YouTube', 'https://youtube.com/@seucanal'], ['linkedin', 'LinkedIn', 'https://linkedin.com/company/suanegocio'], ['site', 'Meu site', 'https://seusite.com.br']] as const).map(([key, label, ph]) => (
                   <label key={key} className="block"><span className="text-xs font-semibold tracking-wide uppercase text-zinc-500">{label}</span>
                     <input value={(biz.socials || {})[key] || ''} onChange={(e) => set('socials', { ...(biz.socials || {}), [key]: e.target.value })} className={input + ' mt-1'} placeholder={ph} /></label>
                 ))}
               </div>
-              <p className="text-[11px] text-zinc-500">Cada rede preenchida aparece no perfil da página pública e pode entrar no menu (editor da Página → Navegação).</p>
+              {legacyPagesEnabled && <p className="text-[11px] text-zinc-500">Cada rede preenchida aparece no perfil da página pública e pode entrar no menu (editor da Página → Navegação).</p>}
             </section>
 
             <section className="bg-white border border-zinc-200 p-4 space-y-3">
               <h3 className="font-semibold text-sm">Endereço</h3>
               <label className="block"><span className="text-xs font-semibold tracking-wide uppercase text-zinc-500">Endereço</span><input value={biz.address} onChange={(e) => set('address', e.target.value)} className={input + ' mt-1'} placeholder="Rua, número, bairro, cidade" /></label>
-              <label className="block"><span className="text-xs font-semibold tracking-wide uppercase text-zinc-500">Link do mapa</span><input value={biz.mapsUrl} onChange={(e) => set('mapsUrl', e.target.value)} className={input + ' mt-1'} placeholder="Cole o link do Google Maps" /><span className="text-xs text-zinc-500">Com o link salvo, o bloco Localização da página mostra o mapa.</span></label>
+              <label className="block"><span className="text-xs font-semibold tracking-wide uppercase text-zinc-500">Link do mapa</span><input value={biz.mapsUrl} onChange={(e) => set('mapsUrl', e.target.value)} className={input + ' mt-1'} placeholder="Cole o link do Google Maps" />{legacyPagesEnabled && <span className="text-xs text-zinc-500">Com o link salvo, o bloco Localização da página mostra o mapa.</span>}</label>
             </section>
 
             {legacyPagesEnabled && <section className="bg-white border border-zinc-200 p-4">

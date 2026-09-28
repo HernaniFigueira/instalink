@@ -5,7 +5,7 @@ import Link from 'next/link';
 import { Icon } from '@/components/icons';
 import { Avatar, PageSkeleton } from '@/components/ui';
 import { cn } from '@/lib/utils';
-import { humanDateTime } from '@/lib/tz';
+import { formatDateTimeBR } from '@/lib/tz';
 import { AccessDenied, AreaLoadError, useAreaLoad } from '@/components/dashboard/AccessNotice';
 import { apiGet, apiSend } from '@/lib/api-client';
 import { QuickRegisterSheet, type SavedContact } from '@/components/dashboard/QuickRegisterSheet';
@@ -467,7 +467,7 @@ export function ConversationsView({ unitId, panel = false }: { unitId?: string; 
       <section className="conversation-context-section" aria-labelledby="conversation-details-heading">
         <h3 id="conversation-details-heading">Atendimento</h3>
         {side?.nextAppointment ? (
-          <div className="conversation-context-row"><span>Próximo agendamento</span><strong>{side.nextAppointment.date} · {side.nextAppointment.time}</strong>
+          <div className="conversation-context-row"><span>Próximo agendamento</span><strong>{formatDateTimeBR(side.nextAppointment.date, side.nextAppointment.time)}</strong>
             {side.nextAppointment.service && <small>{side.nextAppointment.service}</small>}</div>
         ) : <p className="conversation-context-muted">Nenhum próximo agendamento encontrado.</p>}
         {side?.responsible && <div className="conversation-context-row"><span>Responsável</span><strong>{side.responsible}</strong></div>}
@@ -569,7 +569,7 @@ export function ConversationsView({ unitId, panel = false }: { unitId?: string; 
                       aria-label={`${conversation.name}${conversation.unread ? `, ${conversation.unread} não lidas` : ''}`}>
                       <span className="inbox-conversation__avatar"><Avatar name={conversation.name || '?'} size={40} /></span>
                       <span className="inbox-conversation__body">
-                        <span className="inbox-conversation__top"><strong>{conversation.name || 'Contato'}</strong><time>{conversation.lastMessageAt ? humanDateTime(conversation.lastMessageAt.slice(0, 10), conversation.lastMessageAt.slice(11, 16)) : ''}</time></span>
+                        <span className="inbox-conversation__top"><strong>{conversation.name || 'Contato'}</strong><time>{conversation.lastMessageAt ? formatDateTimeBR(conversation.lastMessageAt) : ''}</time></span>
                         <span className="inbox-conversation__preview">{conversation.lastMessagePreview || conversation.phone || conversation.channelUsername || 'Sem mensagens'}</span>
                         <span className="inbox-conversation__meta">
                           <span><Icon n={conversation.channel === 'instagram' ? 'instagram' : 'whatsapp'} size={11} /> {conversation.channel === 'instagram' ? 'Instagram' : 'WhatsApp'}</span>

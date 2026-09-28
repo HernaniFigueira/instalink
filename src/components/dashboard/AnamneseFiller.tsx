@@ -7,6 +7,7 @@ import { Button, Input, Textarea, Select, Field, Notice, ListSkeleton } from '@/
 import { apiGet, apiSend } from '@/lib/api-client';
 import type { AnamneseField, AnamneseResponse, AnamneseTemplate, Pet } from '@/lib/types';
 import { PET_SPECIES_LABELS, petAge } from '@/lib/pets';
+import { formatDateBR } from '@/lib/tz';
 
 // ═══════════════════════════════════════════════════════════════
 // FASE 2 · P4 — preencher uma ficha de anamnese e salvar a resposta.
@@ -184,7 +185,7 @@ export function AnamneseFiller({
           <div className="flex flex-wrap items-center justify-between gap-2">
             {lastResponse ? (
               <p className="text-[12px] text-[var(--text-muted)] tabular-nums">
-                Última ficha: {formatDateShort(lastResponse.createdAt)}
+                Última ficha: {formatDateBR(lastResponse.createdAt.slice(0, 10))}
               </p>
             ) : <span />}
             {lastResponse && (
@@ -224,12 +225,4 @@ export function AnamneseFiller({
       )}
     </WorkspaceSheet>
   );
-}
-
-/** Data curta BR (DD/MM/AAAA) a partir de ISO. */
-function formatDateShort(iso: string): string {
-  const d = (iso || '').slice(0, 10);
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(d)) return '—';
-  const [y, m, day] = d.split('-');
-  return `${day}/${m}/${y}`;
 }

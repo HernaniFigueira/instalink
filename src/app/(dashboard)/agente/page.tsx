@@ -12,6 +12,7 @@ import { cn } from '@/lib/utils';
 import type { AgentObjective, AgentTone, BusinessAgent } from '@/lib/types';
 import { AccessDenied, AreaLoadError, useAreaLoad } from '@/components/dashboard/AccessNotice';
 import { apiGet, apiSend } from '@/lib/api-client';
+import { isLegacyPagesEnabled } from '@/lib/product';
 import { usePanelPermissions } from '@/components/dashboard/usePanelPermissions';
 
 interface Options { tones: Array<{ id: AgentTone; label: string; hint: string }>; objectives: Array<{ id: AgentObjective; label: string }> }
@@ -32,6 +33,7 @@ const money = (c: number) => (c / 100).toLocaleString('pt-BR', { style: 'currenc
 export default function AgentePage() {
   const params = useSearchParams();
   const businessId = params.get('b') || '';
+  const legacyPagesEnabled = isLegacyPagesEnabled();
   const [agent, setAgent] = useState<BusinessAgent | null>(null);
   const [options, setOptions] = useState<Options | null>(null);
   const [preview, setPreview] = useState<Preview | null>(null);
@@ -65,7 +67,7 @@ export default function AgentePage() {
     try {
       const res = await apiSend('/api/agent', 'PUT', { ...agent, businessId }, { scope: 'action', area: 'Agente' });
       if (!res.ok) throw new Error(res.message);
-      setMsg('Agente salvo. A página pública já usa esta configuração.');
+      setMsg(legacyPagesEnabled ? 'Agente salvo. A página pública já usa esta configuração.' : 'Configuração do agente salva.');
       load();
     } catch (e: any) {
       setError(e.message);
@@ -100,7 +102,7 @@ export default function AgentePage() {
       <PageHeader
         icon="spark"
         title="Agente de atendimento"
-        hint="O assistente que responde na sua página usando os dados reais do negócio — sem inventar e sem mexer na sua agenda."
+        hint={legacyPagesEnabled ? 'O assistente que responde na sua página usando os dados reais do negócio — sem inventar e sem mexer na sua agenda.' : 'O assistente que orienta clientes com dados reais do negócio — sem inventar e sem alterar sua agenda.'}
         action={
         <span className="flex items-center gap-2">
           <span className={cn(
@@ -108,7 +110,7 @@ export default function AgentePage() {
             preview?.moduleEnabled ? 'bg-[var(--success-bg)] border-[var(--success-border)] text-[var(--success-fg)]' : 'bg-[var(--surface-2)] border-[var(--border)] text-[var(--text-muted)]',
           )}>
             <span className={cn('w-2 h-2 rounded-full', preview?.moduleEnabled ? 'bg-[var(--success)]' : 'bg-[var(--border-strong)]')} />
-            {preview?.moduleEnabled ? 'Módulo ativo na página' : 'Módulo desativado'}
+            {preview?.moduleEnabled ? (legacyPagesEnabled ? 'Módulo ativo na página' : 'Agente ativo') : 'Módulo desativado'}
           </span>
           <Link href={`/recursos${q}`}><Button variant="secondary" size="sm">Capacidades</Button></Link>
         </span>
@@ -118,7 +120,7 @@ export default function AgentePage() {
       {!preview?.moduleEnabled && (
         <Notice tone="warning" className="mb-4">
           O recurso <strong>Assistente</strong> está desativado na empresa. Configure aqui e ligue em{' '}
-          <Link href={`/recursos${q}`} className="underline font-semibold">Capacidades do sistema</Link> para ele aparecer na página.
+          <Link href={`/recursos${q}`} className="underline font-semibold">Capacidades do sistema</Link> para habilitá-lo.
         </Notice>
       )}
 
@@ -197,10 +199,10 @@ export default function AgentePage() {
             <div className="rounded-md bg-[var(--surface-2)] border border-[var(--border)] p-3.5">
               <p className="text-xs font-semibold text-[var(--text-muted)] mb-2">CANAIS</p>
               <div className="flex flex-wrap gap-2">
-                <button type="button" onClick={() => set('channels', { ...agent.channels, site: !agent.channels.site })}
+                {legacyPagesEnabled && <button type="button" onClick={() => set('channels', { ...agent.channels, site: !agent.channels.site })}
                   className="il-option-choice" aria-pressed={agent.channels.site}>
                   Site {agent.channels.site ? '✓' : '—'}
-                </button>
+                </button>}
                 {canSeeChannels ? (
                   <Link href={`/canais?tab=canais${businessId ? `&b=${businessId}` : ''}`}
                     className={buttonCls('secondary', 'sm')}
@@ -222,10 +224,10 @@ export default function AgentePage() {
             <p className="text-xs text-[var(--text-muted)]">Uma linha por assunto, no formato <strong>Tema: resposta</strong>. Ex: <em>Estacionamento: temos convênio ao lado.</em></p>
             <textarea value={agent.knowledgeOverride} onChange={(e) => set('knowledgeOverride', e.target.value)} rows={5} className={input}
               placeholder={'Estacionamento: temos convênio com o estacionamento ao lado.\nFormas de pagamento: PIX, cartão e dinheiro.'} />
-            <p className="text-xs text-[var(--text-muted)]">Além disso, o agente usa: nome, descrição, serviços, preços públicos, duração, horários, endereço, FAQ e a seção Sobre.</p>
+            <p className="text-xs text-[var(--text-muted)]">{legacyPagesEnabled ? 'Além disso, o agente usa: nome, descrição, serviços, preços públicos, duração, horários, endereço, FAQ e a seção Sobre.' : 'Além disso, o agente usa: nome, descrição, serviços, preços, duração, horários e endereço.'}</p>
           </section>
 
-          <div className="sticky bottom-4">
+          <div className="pt-2">
             <Button variant="primary" size="lg" className="w-full sm:w-auto" onClick={save} disabled={saving}>
               {saving ? 'Salvando…' : 'Salvar agente'}
             </Button>
@@ -243,7 +245,7 @@ export default function AgentePage() {
               <div className="flex justify-between gap-3"><dt className="text-[var(--text-muted)] font-semibold">Empresa</dt><dd className="font-semibold text-right">{pv?.knowledge.businessName}</dd></div>
               <div className="flex justify-between gap-3"><dt className="text-[var(--text-muted)] font-semibold">Serviços</dt><dd className="font-semibold text-right">{pv?.knowledge.services.length || 0}</dd></div>
               <div className="flex justify-between gap-3"><dt className="text-[var(--text-muted)] font-semibold">Agendamento</dt><dd className="font-semibold text-right">{pv?.canBook ? 'disponível' : 'indisponível'}</dd></div>
-              <div className="flex justify-between gap-3"><dt className="text-[var(--text-muted)] font-semibold">FAQ publicado</dt><dd className="font-semibold text-right">{pv?.knowledge.faq.length || 0} item(ns)</dd></div>
+              <div className="flex justify-between gap-3"><dt className="text-[var(--text-muted)] font-semibold">{legacyPagesEnabled ? 'FAQ publicado' : 'Itens no FAQ'}</dt><dd className="font-semibold text-right">{pv?.knowledge.faq.length || 0} item(ns)</dd></div>
               <div className="flex justify-between gap-3"><dt className="text-[var(--text-muted)] font-semibold">Conhecimento extra</dt><dd className="font-semibold text-right">{pv?.knowledge.extra.length || 0} linha(s)</dd></div>
               <div className="flex justify-between gap-3"><dt className="text-[var(--text-muted)] font-semibold">Horários</dt><dd className="font-semibold text-right max-w-[60%]">{pv?.knowledge.hours || '—'}</dd></div>
             </dl>

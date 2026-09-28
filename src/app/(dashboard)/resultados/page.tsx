@@ -21,6 +21,7 @@ import { apiGet } from '@/lib/api-client';
 import { money } from '@/lib/utils';
 import { resolvePeriodSpec, type PeriodKey } from '@/lib/periods';
 import { todayISO } from '@/lib/tz';
+import { isLegacyPagesEnabled } from '@/lib/product';
 import type { ResultsPayload } from '@/lib/insights';
 
 interface Analytics {
@@ -72,6 +73,7 @@ export default function ResultadosPage() {
   const params = useSearchParams();
   const router = useRouter();
   const businessId = params.get('b') || '';
+  const legacyPagesEnabled = isLegacyPagesEnabled();
   const periodParam = params.get('period');
   const fromParam = params.get('from');
   const toParam = params.get('to');
@@ -118,13 +120,17 @@ export default function ResultadosPage() {
         : spec.key === 'all' ? '0'
           : spec.key;
   useEffect(() => {
+    if (!legacyPagesEnabled) {
+      setPage(null); setAnalyticsError(''); setAnalyticsLoading(false);
+      return;
+    }
     if (!businessId) return;
     let alive = true;
     setPage(null); setAnalyticsError(''); setAnalyticsLoading(true);
     apiGet<Analytics>(`/api/analytics?businessId=${businessId}&period=${analyticsPeriod}`, { scope: 'area', area: 'Resultados' })
       .then(res => { if (!alive) return; if (res.ok && res.data) setPage(res.data); else setAnalyticsError(res.message || 'Falha de conexão.'); setAnalyticsLoading(false); });
     return () => { alive = false; };
-  }, [businessId, analyticsPeriod, analyticsRetry]);
+  }, [businessId, analyticsPeriod, analyticsRetry, legacyPagesEnabled]);
 
   function changePeriod(next: { key: PeriodKey; from: string; to: string }) {
     const sp = new URLSearchParams(params.toString());
@@ -160,9 +166,9 @@ export default function ResultadosPage() {
       <ResultsView payload={data.results} />
 
       {/* ── Camada 2: o que a PÁGINA PÚBLICA produziu (endpoint preservado) ── */}
-      {analyticsLoading && <p role="status" className="text-sm mt-6">Carregando estatísticas da página pública…</p>}
-      {analyticsError && <AreaLoadError area="estatísticas da página pública" message={analyticsError} onRetry={() => setAnalyticsRetry(n => n+1)} />}
-      {pageTotals && (
+      {legacyPagesEnabled && analyticsLoading && <p role="status" className="text-sm mt-6">Carregando estatísticas da página pública…</p>}
+      {legacyPagesEnabled && analyticsError && <AreaLoadError area="estatísticas da página pública" message={analyticsError} onRetry={() => setAnalyticsRetry(n => n+1)} />}
+      {legacyPagesEnabled && pageTotals && (
         <section className="mt-6 space-y-4">
           <div className="pt-4 border-t border-zinc-200">
             <h2 className="text-sm font-semibold text-zinc-900">Página pública</h2>

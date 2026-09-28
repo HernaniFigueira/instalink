@@ -176,3 +176,34 @@ A busca conjunta por `text-white`, `text-zinc-*`, `bg-white`, `bg-zinc-*`, `opac
 - `npm run build`: aprovado; **132/132** páginas estáticas geradas.
 - `npm test -- --reporter=dot`: **2.524 aprovados / 6 falhas / 2.530 testes**. Falhas reproduzidas fora deste escopo: três em `a34-instagram.test.ts`, uma em `automation-audit-p4.test.ts`, uma em `pipeline.test.ts` (agendamento no passado) e uma em `whatsapp-robustness.test.ts`. A falha de contrato antigo do submenu provocada pelo uso correto de `--il-nav-*` foi atualizada; não há falha focal pendente desta rodada.
 - `git diff --check`: aprovado. Preview de desenvolvimento disponível em `:3001`; nenhuma inspeção/captura de browser foi realizada pelo agente nesta etapa.
+
+## Aditivo — correções reproduzidas V01–V10 e superfícies da Página legada
+
+Este aditivo registra a correção estática dos dez itens da auditoria e a limpeza de copy/indicadores atrás da flag existente. Não é redesign nem homologação visual. Os testes desta rodada validam regras de apresentação e condições de renderização; a checagem final em Preview continua pendente.
+
+| ID | Superfície | Correção aplicada / evidência automatizada | Estado visual |
+|---|---|---|---|
+| V01 | Visão geral · Intelligence | Grid 2×2 por padrão; `@container` só passa a quatro colunas quando o próprio card mede 560px ou mais. Rótulos quebram naturalmente e valores não são truncados. Coberto por `ui-audit-v01-v10.test.ts`. | Preview pendente |
+| V02 | Próximos atendimentos | Nome ocupa a primeira linha sem truncamento; data/hora, serviço e status fluem na linha de detalhes sem competir com a identificação do cliente. Teste de contrato estático incluído. | Preview pendente |
+| V03 | Cliente 360 · mobile | Identificação vira grade própria (avatar + coluna de nome), badge desce para uma linha separada; dados passam a uma coluna e valores deixam de ser truncados no mobile. As regras novas ficam limitadas até 767px; desktop mantém o layout original. | Preview pendente |
+| V04 | Pendências · mobile | Corpo textual fica acima da região de ações, que pode quebrar linha; Editar/Cancelar mantêm alvo mínimo de 44px em telas estreitas. Badge de automação permanece visível. | Preview pendente |
+| V05 | Agente | “Salvar agente” saiu do sticky sobreposto e está no fluxo normal após os campos da configuração. Nenhuma lógica ou payload de agente foi alterado. | Preview pendente |
+| V06 | Sidebar | Chevron fechado usa `--il-nav-fg`; estados ativo/expandido continuam herdando o foreground do respectivo token. Testes checam contraste AA em Branco, Azul profundo, Verde sálvia e Ônix. | Preview pendente |
+| V07 | Financeiro · WorkspaceSheet | Formulário de Nova/Editar movimentação usa padding `p-4` no body, acompanhando os 16px do footer do contrato compartilhado. Domínio financeiro não foi alterado. | Preview pendente |
+| V08 | Agenda · Dia mobile | Eventos Dia recebem apresentação compacta: hora e nome permanecem, nome pode ocupar até duas linhas e somente serviço/profissional são ocultados em viewport estreita; estado continua no ícone/label acessível e os detalhes seguem no evento acionável. Dia/Lista e o scroller existente permanecem. | Preview pendente |
+| V09 | Atendimento mobile | A confirmação de autosave “Salvo agora” fica em um único lugar na página full-page; ações secundárias foram agrupadas e mantêm alvo de toque, com “Finalizar atendimento” como ação destacada. Safe-area e fluxo clínico continuam existentes. | Preview pendente |
+| V10 | Datas | `formatDateTimeBR` compartilhado padroniza `DD/MM/AAAA` e, quando há hora, `DD/MM/AAAA HH:mm` em Pendências, Anamnese, conversas/contexto e superfícies diretamente relacionadas. Apenas apresentação mudou; persistência e APIs não. | Preview pendente |
+
+### Flag da Página legada
+
+- Com `GODOUTOR_LEGACY_PAGES` desligada, o card Presença online e a série/métricas de Página no Dashboard deixam de renderizar; Resultados não solicita nem apresenta analytics, funis ou vitrine exclusivos da Página; Agente e Configurações usam copy operacional neutra e escondem instruções/controles exclusivos do editor; Novo Agendamento deixa de dizer que o cliente tem conta “na sua página”.
+- Com a flag ligada, os caminhos e conteúdo legados suportados continuam condicionados ao mesmo contrato `isLegacyPagesEnabled()`. Nenhum dado, endpoint, `/pagina`, `/{slug}`, agendamento público, deep link, canal ou nome do domínio Produtos foi removido/renomeado. O estado salvo de canal não é alterado ao esconder o controle de Site com a flag OFF.
+- Cobertura: `src/lib/__tests__/ui-audit-v01-v10.test.ts` verifica os dez contratos, formato de data e estados da flag OFF/ON; `legacy-page-operational-surfaces.test.ts` continua cobrindo as rotas/entradas preservadas.
+
+### Validação desta rodada
+
+- `npm run typecheck`: aprovado.
+- Testes focais: **7 arquivos / 107 testes aprovados** (UI audit, flag legada, timezone, conversas, atendimento e regressões relacionadas).
+- `npm run build`: aprovado; **132/132** páginas estáticas geradas.
+- `npm test -- --reporter=dot`: **2.547 aprovados / 5 falhas / 2.552 testes**. Falhas atuais fora do escopo: três em `a34-instagram.test.ts`, uma em `automation-audit-p4.test.ts` e uma em `pipeline.test.ts` (fixture agenda no passado). A sexta falha baseline documentada em `whatsapp-robustness.test.ts` não se reproduziu nesta execução; não foi alterada nem mascarada.
+- `git diff --check`: aprovado. Inspeção de browser/capturas e confirmação nos viewports 1440/1366/390 **não foram realizadas**; os dez itens continuam pendentes de conferência visual no Preview e nenhum foi chamado de homologado visualmente.

@@ -369,7 +369,7 @@ export default function FinanceiroPage() {
       >
         {formDismiss.dialog}
         {editing && (
-          <div className="p-1 space-y-3">
+          <div className="p-4 space-y-3">
             {formError ? <Notice tone="error">{formError}</Notice> : null}
             <div className="flex gap-2">
               <FilterPill active={editing.kind === 'receita'} onClick={() => setEditing({ ...editing, kind: 'receita' })}>Receita</FilterPill>

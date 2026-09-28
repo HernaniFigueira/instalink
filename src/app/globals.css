@@ -454,6 +454,25 @@ body {
      não cores de aviso. */
   background: var(--brand-softer);
 }
+@media (max-width: 767px) {
+  .client360-idcard__identity {
+    display: grid;
+    grid-template-columns: 64px minmax(0, 1fr);
+    align-items: start;
+    column-gap: 12px;
+    row-gap: 8px;
+  }
+  .client360-idcard__primary { grid-column: 2; grid-row: 1; width: 100%; }
+  .client360-idcard__primary h2 { word-break: normal; overflow-wrap: break-word; }
+  .client360-idcard__access { grid-column: 2; grid-row: 2; justify-self: start; text-align: left; }
+  .client360-idcard__tags { margin-top: 2px; }
+  .client360-idcard__data { grid-template-columns: minmax(0, 1fr); }
+  .client360-idcard__data dd { align-items: flex-start; overflow: visible; }
+  .client360-idcard__data dd > span {
+    min-width: 0; white-space: normal; overflow: visible; text-overflow: clip;
+    overflow-wrap: anywhere;
+  }
+}
 
 /* Avatar com placeholder bonito (iniciais em gradiente suave). */
 .il-avatar {
@@ -1575,7 +1594,7 @@ button.ws-bell__item:hover { background: var(--surface-hover); }
 .workspace-link[aria-current='page'] .workspace-link__chevron,
 .workspace-link--group[aria-expanded='true'] .workspace-link__chevron { color: inherit; }
 .workspace-link__chevron {
-  margin-left: auto; color: rgba(255, 255, 255, 0.55); flex-shrink: 0;
+  margin-left: auto; color: var(--il-nav-fg); flex-shrink: 0;
   transition: transform var(--motion-base) var(--ease-standard),
               color var(--motion-fast) var(--ease-standard);
 }
@@ -2906,4 +2925,31 @@ dialog.ws-sheet[data-minimized]::backdrop { background: transparent; }
   .conversation-view[data-panel="true"] .conversation-workspace { grid-template-columns:minmax(230px,260px) minmax(0,1fr); }
   .conversation-view[data-panel="true"] .inbox-context { display:none; }
   .conversation-view[data-panel="true"] .inbox-context-trigger { display:none; }
+}
+
+/* Auditoria visual V01: quatro KPIs só quando a própria superfície tem espaço. */
+.dashboard-intelligence { container: intelligence / inline-size; }
+.dashboard-intelligence__grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+@container intelligence (min-width: 560px) {
+  .dashboard-intelligence__grid { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+}
+
+/* Auditoria visual V08: Dia no mobile mantém hora, nome e estado do evento;
+   serviço/profissional permanecem no detalhe acionável do cartão. */
+@media (max-width: 767px) {
+  .ag-event--day { padding: 2px 21px 2px 5px; }
+  .ag-event--day .ag-event__time { font-size: 9.5px; }
+  .ag-event--day .ag-event__name {
+    display: -webkit-box;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 2;
+    white-space: normal;
+    overflow-wrap: break-word;
+    overflow: hidden;
+  }
+  .ag-event--day .ag-event__secondary { display: none; }
 }

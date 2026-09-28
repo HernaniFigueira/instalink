@@ -19,7 +19,7 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { centsToBR, cn, waLink } from '@/lib/utils';
 import { focusFieldSoon } from '@/lib/focus-highlight';
-import { humanDateTime, humanDay, formatDateBR, todayISO } from '@/lib/tz';
+import { humanDateTime, humanDay, formatDateBR, formatDateTimeBR, todayISO } from '@/lib/tz';
 import { BOOKING_STATUS, LEAD_STATUS, type StatusDef } from '@/lib/status';
 import { leadOriginLabel } from '@/lib/leads';
 import type { BusinessPipeline, ContactProfile, FinanceEntry , Pet } from '@/lib/types';
@@ -77,12 +77,9 @@ export interface Person360 {
   lastSeen: string;
 }
 
-// Data curta do evento ("14 SET · 10:00") — leitura rápida no histórico.
+// Data civil completa em toda linha do histórico do Cliente 360.
 function eventDay(iso: string): string {
-  const [, m, d] = (iso || '').slice(0, 10).split('-');
-  if (!d) return '';
-  const MES = ['JAN', 'FEV', 'MAR', 'ABR', 'MAI', 'JUN', 'JUL', 'AGO', 'SET', 'OUT', 'NOV', 'DEZ'];
-  return `${Number(d)} ${MES[Number(m) - 1] || m}`;
+  return formatDateBR((iso || '').slice(0, 10));
 }
 
 const bookDef = (s: string): StatusDef => (BOOKING_STATUS as Record<string, StatusDef>)[s] || { panel: s, tone: 'zinc', consumer: s, desc: '' };
@@ -390,7 +387,7 @@ export function ClientProfileDrawer({ person, businessId, pipeline, canFunil, on
         kind: 'task', id: t.id, sortKey: t.dueAt || t.title, icon: 'tasks',
         when: t.dueAt ? eventDay(t.dueAt.slice(0, 10)) : '',
         title: `Tarefa: ${t.title}`,
-        subtitle: [t.assigneeName ? `Resp.: ${t.assigneeName}` : '', t.dueLabel || ''].filter(Boolean).join(' · ') || undefined,
+        subtitle: [t.assigneeName ? `Resp.: ${t.assigneeName}` : '', t.dueAt ? formatDateTimeBR(t.dueAt) : t.dueLabel || ''].filter(Boolean).join(' · ') || undefined,
         badge: t.status === 'done' ? 'concluída' : t.status === 'cancelled' ? 'cancelada' : 'aberta',
         tone: t.status === 'done' ? 'emerald' : t.status === 'cancelled' ? 'zinc' : 'amber',
         body: (
@@ -547,17 +544,17 @@ export function ClientProfileDrawer({ person, businessId, pipeline, canFunil, on
       {variant === 'page' ? (<>
       {/* ═══ QUEM É A PESSOA — carteirinha ═══ */}
       <div className="p-4">
-        <div className="il-idcard rounded-2xl border border-[var(--border)] shadow-sm p-5">
-          <div className="relative flex flex-wrap items-start gap-4">
+        <div className="il-idcard rounded-2xl border border-[var(--border)] shadow-sm p-5 client360-idcard">
+          <div className="client360-idcard__identity relative flex flex-wrap items-start gap-4">
             {/* Ponto 8 — foto real da conta global quando existe; sem ela, iniciais. */}
             <Avatar name={person.name} src={person.avatar || undefined} size={64} />
-            <div className="min-w-0 flex-1">
+            <div className="client360-idcard__primary min-w-0 flex-1">
               <h2 className="text-xl font-semibold text-[var(--text)] leading-tight break-words">{person.name || 'Sem nome'}</h2>
               <p className="text-sm text-[var(--text-muted)] mt-0.5">
                 {age !== null ? `${age} anos` : 'Idade não informada'}
                 {profile.birthDate ? ` · nasceu em ${profile.birthDate.split('-').reverse().join('/')}` : ''}
               </p>
-              <div className="flex flex-wrap items-center gap-1.5 mt-2.5">
+              <div className="client360-idcard__tags flex flex-wrap items-center gap-1.5 mt-2.5">
                 {tags.map((t) => (
                   <span key={t.id} title={t.hint}>
                     <Badge tone={(t.tone as any) || 'zinc'}>{t.label}</Badge>
@@ -567,7 +564,7 @@ export function ClientProfileDrawer({ person, businessId, pipeline, canFunil, on
               </div>
             </div>
             {/* Status de acesso — estado claro, nunca só cor. */}
-            <div className="shrink-0 text-right">
+            <div className="client360-idcard__access shrink-0 text-right">
               <Badge tone={person.accountStatus === 'active' ? 'green' : 'zinc'} icon={person.accountStatus === 'active' ? 'lock' : 'user'}>
                 {person.accountStatus === 'active' ? 'Acesso ativo' : 'Sem acesso'}
               </Badge>
@@ -575,7 +572,7 @@ export function ClientProfileDrawer({ person, businessId, pipeline, canFunil, on
           </div>
 
           {/* Grade de dados — sempre legível, mesmo com campos vazios. */}
-          <dl className="relative grid grid-cols-2 sm:grid-cols-3 gap-x-4 gap-y-3 mt-4 pt-4 border-t border-[var(--border)]">
+          <dl className="client360-idcard__data relative grid grid-cols-2 sm:grid-cols-3 gap-x-4 gap-y-3 mt-4 pt-4 border-t border-[var(--border)]">
             <Data label="Telefone / WhatsApp" value={person.phone ? formatPhoneBR(person.phone) : '—'}
               action={person.phone ? <CopyChip value={person.phone} /> : undefined} />
             <Data label="E-mail" value={person.email || '—'} />
@@ -1161,7 +1158,7 @@ export function ClientProfileDrawer({ person, businessId, pipeline, canFunil, on
                       </span>
                       <div className="min-w-0 flex-1">
                         <p className="text-sm font-semibold text-[var(--text)]">{t.title}</p>
-                        <p className="text-xs text-[var(--text-muted)] mt-0.5">{[t.assigneeName ? `Resp.: ${t.assigneeName}` : '', t.dueLabel].filter(Boolean).join(' · ')}</p>
+                        <p className="text-xs text-[var(--text-muted)] mt-0.5">{[t.assigneeName ? `Resp.: ${t.assigneeName}` : '', t.dueAt ? formatDateTimeBR(t.dueAt) : t.dueLabel].filter(Boolean).join(' · ')}</p>
                       </div>
                       <Badge tone={t.status === 'done' ? 'green' : t.status === 'cancelled' ? 'zinc' : 'amber'}>
                         {t.status === 'done' ? 'Concluída' : t.status === 'cancelled' ? 'Cancelada' : 'Aberta'}

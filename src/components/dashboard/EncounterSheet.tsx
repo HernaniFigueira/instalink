@@ -41,7 +41,7 @@ import {
   encounterDraftKey, encounterFormPrintBlocks, encounterSignature, encounterSummary,
   followUpDueDate, followUpTaskNote, followUpTaskTitle,
 } from '@/lib/encounters';
-import { formatDateBR } from '@/lib/tz';
+import { formatDateBR, formatDateTimeBR } from '@/lib/tz';
 import type { AnamneseResponse, AnamneseTemplate, Encounter, EncounterFile, EncounterFollowUpMode } from '@/lib/types';
 import { AnamneseFiller } from '@/components/dashboard/AnamneseFiller';
 import { RegisterPaymentSheet, type PaymentSeed } from '@/components/dashboard/RegisterPaymentSheet';
@@ -514,19 +514,21 @@ export function EncounterSheet({
               {row.status === 'finalized' && <span>Finalizado por {encounterSignature(row)}</span>}
               {/* Indicador do autosave: discreto, no lugar onde a pessoa olha. */}
               {isDraft && autoState === 'saving' && <span>{ENCOUNTER_AUTOSAVE_LABELS.saving}</span>}
-              {isDraft && autoState === 'saved' && !dirty && <span>{ENCOUNTER_AUTOSAVE_LABELS.saved}</span>}
+              {layout !== 'page' && isDraft && autoState === 'saved' && !dirty && <span>{ENCOUNTER_AUTOSAVE_LABELS.saved}</span>}
               {isDraft && autoState === 'error'
                 && <span className="text-[var(--danger-fg)]">{ENCOUNTER_AUTOSAVE_LABELS.error}</span>}
             </span>
           )}
-          <Button variant="secondary" size="sm" onClick={print} disabled={!row} className="w-full sm:w-auto">
-            <Icon n="printer" size={13} /> Imprimir via do cliente
-          </Button>
-          {editable && (
-            <Button variant="secondary" size="sm" onClick={() => { void save(); }} disabled={!!busy || !dirty} className="w-full sm:w-auto">
-              {busy === 'save' ? 'Salvando…' : 'Salvar'}
+          <div className="flex flex-wrap items-center gap-2">
+            <Button variant="secondary" size="sm" onClick={print} disabled={!row} className="min-h-11 w-auto sm:min-h-0">
+              <Icon n="printer" size={13} /> Imprimir via do cliente
             </Button>
-          )}
+            {editable && (
+              <Button variant="secondary" size="sm" onClick={() => { void save(); }} disabled={!!busy || !dirty} className="min-h-11 w-auto sm:min-h-0">
+                {busy === 'save' ? 'Salvando…' : 'Salvar'}
+              </Button>
+            )}
+          </div>
           {row && isDraft && (
             <Button variant="primary" size="sm" onClick={finalize} disabled={!!busy} className="w-full sm:w-auto">
               {busy === 'finalize' ? 'Finalizando…' : 'Finalizar atendimento'}
@@ -707,7 +709,7 @@ export function EncounterSheet({
                   {anamneseCount > 0 ? (
                     <div className="mt-1 flex flex-wrap items-center gap-2">
                       <span className="text-[11.5px] font-medium text-[var(--success-fg)]">
-                        Ficha deste atendimento salva · {anamneseLast ? formatAnamneseDate(anamneseLast.createdAt) : '—'}
+                        Ficha deste atendimento salva · {anamneseLast ? formatDateBR(anamneseLast.createdAt.slice(0, 10)) : '—'}
                       </span>
                       <Button type="button" variant="secondary" size="sm"
                         onClick={() => setAnamneseHistoryOpen((v) => !v)} aria-expanded={anamneseHistoryOpen} aria-controls="encounter-anamnese-history">
@@ -829,7 +831,7 @@ export function EncounterSheet({
             {row.status === 'finalized' && (
               <p style={{ fontSize: 11, marginTop: 28 }}>
                 Finalizado por {encounterSignature(row)}
-                {row.finalizedAt ? ` em ${new Date(row.finalizedAt).toLocaleString('pt-BR')}` : ''}
+                {row.finalizedAt ? ` em ${formatDateTimeBR(row.finalizedAt)}` : ''}
               </p>
             )}
           </div>
@@ -918,11 +920,4 @@ function anamneseHistoryRows(template: AnamneseTemplate | undefined, answers: Re
     }));
   }
   return Object.entries(answers).map(([id, value]) => ({ id, label: id, type: '', value }));
-}
-
-function formatAnamneseDate(iso: string): string {
-  const d = (iso || '').slice(0, 10);
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(d)) return '—';
-  const [y, m, day] = d.split('-');
-  return `${day}/${m}/${y}`;
 }

@@ -258,7 +258,7 @@ const GridColumn = memo(function GridColumn({ column, basisPct, variant, highlig
           onPointerCancel={onPressCancel}
           onClick={() => onBlockClick(b.id)}
           className={
-            'absolute rounded-lg border border-l-4 px-2 py-1 text-left overflow-hidden touch-none select-none shadow-xs '
+            'ag-event absolute rounded-lg border border-l-4 px-2 py-1 text-left overflow-hidden touch-none select-none shadow-xs ' + (variant === 'day' ? 'ag-event--day ' : 'ag-event--week ')
             + b.cls
             + (b.attention && !b.dragging ? ` ${ATTENTION_RING_CLS}` : '')
             + (b.dragging
@@ -279,10 +279,10 @@ const GridColumn = memo(function GridColumn({ column, basisPct, variant, highlig
           {b.fitIn && <span aria-hidden="true" className={FIT_IN_STRIPE_CLS} />}
           {/* quem + quando + o quê + com quem — detalhe fica no drawer.
               Densidade do mockup: nome forte, linhas de apoio discretas. */}
-          <span className="block text-[10.5px] font-semibold tabular-nums leading-tight opacity-75">{b.timeRange}</span>
-          <span className="block text-[12.5px] font-semibold leading-tight truncate">{b.name}</span>
-          {b.height > 62 && <span className="block text-[11px] leading-tight truncate opacity-75">{b.service}</span>}
-          {b.height > 80 && b.pro && <span className="block text-[11px] leading-tight truncate opacity-70">{b.pro}</span>}
+          <span className="ag-event__time block text-[10.5px] font-semibold tabular-nums leading-tight opacity-75">{b.timeRange}</span>
+          <span className="ag-event__name block text-[12.5px] font-semibold leading-tight truncate">{b.name}</span>
+          {b.height > 62 && <span className="ag-event__secondary block text-[11px] leading-tight truncate opacity-75">{b.service}</span>}
+          {b.height > 80 && b.pro && <span className="ag-event__secondary block text-[11px] leading-tight truncate opacity-70">{b.pro}</span>}
           {b.height > 96 && (
             <span className="mt-0.5 flex items-center gap-1 text-[10px] font-semibold leading-tight">
               {/* A3.4 · Bloco 4: o encaixe é visível no cartão — quem olha a

@@ -460,10 +460,12 @@ describe('A3.4 · MOBILE (320–430px) — sem rolagem horizontal da página', (
     expect(QUEUE).not.toMatch(/whitespace-nowrap/);
   });
 
-  it('o rodapé do registro empilha: botões em largura total no celular', () => {
-    const wFull = SHEET.match(/className="w-full sm:w-auto"/g) || [];
-    expect(wFull.length).toBeGreaterThanOrEqual(4);      // imprimir, salvar, finalizar, reabrir
+  it('o rodapé do registro agrupa ações secundárias e mantém Finalizar em destaque no celular', () => {
+    expect(SHEET).toContain('flex flex-wrap items-center gap-2');
+    expect(SHEET.match(/min-h-11 w-auto/g)?.length).toBeGreaterThanOrEqual(2);
+    expect(SHEET).toContain('className="w-full sm:w-auto"'); // Finalizar/Reabrir
     expect(SHEET).toMatch(/mr-auto flex w-full min-w-0 flex-wrap items-center gap-2 text-xs/);
+    expect(SHEET).toContain("layout !== 'page' && isDraft && autoState === 'saved'");
   });
 
   it('nenhuma largura fixa acima da viewport nos três arquivos', () => {
