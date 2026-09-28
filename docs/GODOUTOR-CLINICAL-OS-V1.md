@@ -298,6 +298,35 @@ exposição como fato enquanto essa auditoria não fechar.
    plano de rollback e verificação pós-aplicação; nada disso foi executado
    nesta fundação (zero mudança de RLS/grants, zero migration aplicada).
 
+### 6.2 `instalink_doc` e search_path (P0-login — dependência explícita)
+
+O ledger legado (`db.ts`) referencia `instalink_doc` **sem qualificação de
+schema**, de propósito: o schema do documento é **por ambiente** — `public`
+em Neon/Vercel Postgres, `godoutor_app` no Supabase atual. Quem resolve é o
+`search_path` do papel da conexão (no Supabase: `ALTER ROLE … SET
+search_path = godoutor_app, public`, ou `options=-csearch_path=…` na string
+do pooler), **não** o código. Consequências registradas:
+
+- **A garantia de tabela não pode ser especulativa.** O antigo `pgInit`
+  emitia `CREATE TABLE IF NOT EXISTS instalink_doc` antes da primeira
+  leitura/escrita de cada instância. Com papel de **menor privilégio** (sem
+  `CREATE` no schema — estado atual do endurecimento do Supabase), esse DDL
+  falha com `42501` *mesmo com a tabela existindo* e derrubava todo o
+  produto (login → 500 genérico). **Corrigido:** a DDL agora só roda
+  reativamente quando o Postgres responde `42P01` (tabela genuinamente
+  ausente — primeiro boot em Neon/Vercel); papel sem `CREATE` + tabela
+  existente = **zero DDL**, leituras/escritas seguem; tabela ausente **e**
+  sem `CREATE` = erro explícito apontando o provisionamento (nunca 500
+  silencioso). Ver `src/lib/__tests__/db-pg-init.test.ts`.
+- **Diagnóstico sem máscara:** o `catch` de `/api/auth/login` passa o erro
+  real (código Postgres + mensagem) para o log do runtime do servidor
+  (`console.error('[auth/login] …')`); o cliente continua recebendo só a
+  mensagem genérica. Um 500 de banco nunca mais é confundido com 401 de
+  credencial.
+- **Regra para F1+:** tabelas novas usam `godoutor_internal.*` totalmente
+  qualificado (§6.1/§4). A não-qualificação de `instalink_doc` é um artefato
+  do legado que morre com o corte de cada domínio — não é precedente.
+
 ## 7. Configurações (planejamento — sem UI nova neste estágio)
 
 Clínica (identidade, unidades) · Fiscal · Documentos (templates) · Agenda

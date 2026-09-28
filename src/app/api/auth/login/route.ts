@@ -36,7 +36,11 @@ export async function POST(req: NextRequest) {
     });
     setSessionOn(res, sessionId);
     return res;
-  } catch {
+  } catch (e) {
+    // P0-login: o response continua genérico (não vaza internals), mas o
+    // erro REAL é logged no runtime do servidor — nunca mascarado.
+    const err = e as { code?: string; name?: string; message?: string };
+    console.error('[auth/login] falha interna', { code: err?.code, name: err?.name, message: String(err?.message || '').slice(0, 240) });
     return NextResponse.json({ error: 'Não foi possível entrar. Tente novamente.' }, { status: 500 });
   }
 }
