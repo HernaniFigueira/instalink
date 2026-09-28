@@ -26,6 +26,7 @@ import Link from 'next/link';
 import { Icon } from '@/components/icons';
 import { wrapDialogFocus } from '@/lib/dialog-focus';
 import { lockBodyScroll, unlockBodyScroll } from '@/lib/scroll-lock';
+import { useOverlayDismissGuard, type DismissGuardState, type DismissReason } from './OverlayDismissGuard';
 
 const MOTION_MS = 200;
 
@@ -35,7 +36,7 @@ function motionMs(): number {
   } catch { return MOTION_MS; }
 }
 
-export function WorkspaceSheet({ open, onClose, title, subtitle, icon, fullPageHref, fullPageLabel = 'Abrir página completa', minimizable = false, minimized = false, onMinimizedChange, width, children, footer }: {
+export function WorkspaceSheet({ open, onClose, title, subtitle, icon, fullPageHref, fullPageLabel = 'Abrir página completa', minimizable = false, minimized = false, onMinimizedChange, width, children, footer, dismissGuard }: {
   open: boolean;
   onClose: () => void;
   title: string;
@@ -51,12 +52,16 @@ export function WorkspaceSheet({ open, onClose, title, subtitle, icon, fullPageH
   width?: string;
   children?: React.ReactNode;
   footer?: React.ReactNode;
+  /** Optional unsaved/saving contract; read-only sheets retain ordinary dismiss. */
+  dismissGuard?: DismissGuardState;
 }) {
   const dialog = useRef<HTMLDialogElement>(null);
   const heading = useRef<HTMLHeadingElement>(null);
   const timer = useRef<ReturnType<typeof setTimeout>>();
   const [closing, setClosing] = useState(false);
   const titleId = useId();
+  const dismiss = useOverlayDismissGuard();
+  const requestClose = (reason: DismissReason) => dismiss.requestClose(reason, dismissGuard, closeNow);
 
   // Abre/fecha com animação de saída; preserva e devolve o foco.
   useEffect(() => {
@@ -89,7 +94,7 @@ export function WorkspaceSheet({ open, onClose, title, subtitle, icon, fullPageH
     };
   }, [open]);
 
-  function close() {
+  function closeNow() {
     if (closing) return;
     setClosing(true);
     timer.current = setTimeout(() => {
@@ -113,11 +118,11 @@ export function WorkspaceSheet({ open, onClose, title, subtitle, icon, fullPageH
       style={width ? ({ '--sheet-w': width } as React.CSSProperties) : undefined}
       aria-modal="true"
       aria-labelledby={titleId}
-      onCancel={(e) => { e.preventDefault(); close(); }}
-      onClick={(e) => { if (e.target === e.currentTarget) close(); }}
+      onCancel={(e) => { e.preventDefault(); requestClose('escape'); }}
+      onClick={(e) => { if (e.target === e.currentTarget) requestClose('backdrop'); }}
       onKeyDown={(e) => {
         wrapDialogFocus(e, e.currentTarget, heading.current);
-        if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); close(); }
+        if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); requestClose('escape'); }
       }}
     >
       <div className="ws-sheet__inner">
@@ -153,7 +158,7 @@ export function WorkspaceSheet({ open, onClose, title, subtitle, icon, fullPageH
               className="ws-sheet__close"
               aria-label={`Fechar ${title}`}
               title="Fechar"
-              onClick={close}
+              onClick={() => requestClose('close-button')}
             >
               <Icon n="x" size={16} />
             </button>
@@ -163,6 +168,7 @@ export function WorkspaceSheet({ open, onClose, title, subtitle, icon, fullPageH
         <div className="ws-sheet__body ws-scroll">{children}</div>
         {footer && !minimized && <div className="ws-sheet__footer">{footer}</div>}
       </div>
+      {dismiss.dialog}
     </dialog>
   );
 }

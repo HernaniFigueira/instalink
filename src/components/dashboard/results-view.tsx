@@ -143,15 +143,20 @@ export function ComparisonBadge({ metric, hasPrevious }: { metric: Metric; hasPr
 
 export function MetricGrid({ metrics, hasPrevious }: { metrics: Metric[]; hasPrevious: boolean }) {
   return (
-    <div className="grid grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-2.5">
-      {metrics.map((m) => (
-        <div key={m.id} className={cn('bg-white border border-zinc-200 rounded-lg p-3.5', !m.hasData && 'bg-zinc-50/60')}>
-          <p className="text-xs text-zinc-500">{m.label}</p>
-          <p className={cn('text-xl font-semibold tracking-tight mt-0.5', !m.hasData && 'text-zinc-300')}>{fmt(m)}</p>
-          <div className="mt-1 min-h-[16px]"><ComparisonBadge metric={m} hasPrevious={hasPrevious} /></div>
-          <p className="text-[11px] text-zinc-400 mt-1 leading-snug">{m.hasData ? m.hint : (m.noDataHint || m.hint)}</p>
-        </div>
-      ))}
+    <div className="ws-panel overflow-hidden">
+      <div className="grid grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+        {metrics.map((m) => (
+          <div key={m.id} className={cn(
+            'min-w-0 px-3.5 py-3.5 border-b border-[var(--border-soft)]',
+            !m.hasData && 'bg-[var(--surface-3)]',
+          )}>
+            <p className="text-xs text-[var(--text-muted)]">{m.label}</p>
+            <p className={cn('text-xl font-semibold tracking-tight mt-0.5 text-[var(--text)]', !m.hasData && 'text-[var(--text-faint)]')}>{fmt(m)}</p>
+            <div className="mt-1 min-h-[16px]"><ComparisonBadge metric={m} hasPrevious={hasPrevious} /></div>
+            <p className="text-[11px] text-[var(--text-muted)] mt-1 leading-snug">{m.hasData ? m.hint : (m.noDataHint || m.hint)}</p>
+          </div>
+        ))}
+      </div>
     </div>
   );
 }

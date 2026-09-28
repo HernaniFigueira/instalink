@@ -396,8 +396,7 @@ function AutomationCard({ a, onToggle, onEdit, onDuplicate, onHistory, onDelete 
         <button onClick={onToggle} role="switch" aria-checked={a.active} aria-label={a.active ? 'Desativar automação' : 'Ativar automação'}
           className={cn('mt-0.5 w-10 h-6 rounded-full transition shrink-0 border',
             a.active ? 'bg-emerald-600 border-emerald-700' : 'bg-zinc-200 border-zinc-300')}>
-          <span className={cn('block w-4.5 h-4.5 rounded-full bg-white shadow transition-transform', a.active ? 'translate-x-[22px]' : 'translate-x-[3px]')}
-            style={{ width: 18, height: 18 }} />
+          <span className={cn('block w-[18px] h-[18px] rounded-full bg-white shadow transition-transform', a.active ? 'translate-x-[22px]' : 'translate-x-[3px]')} />
         </button>
         <div className="min-w-0 flex-1">
           <div className="flex flex-wrap items-center gap-2">

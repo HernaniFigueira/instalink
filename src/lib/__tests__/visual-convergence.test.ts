@@ -64,7 +64,7 @@ function routeSource(rel: string): string {
  * combate é `<h1>` com classe ad-hoc convivendo com PageHeader, e isso não é
  * o caso aqui.
  */
-const OWN_HEADER_ROUTES = ['/dashboard', '/organizacao', '/agenda', '/conversas', '/pagina'];
+const OWN_HEADER_ROUTES = ['/dashboard', '/organizacao', '/agenda', '/conversas', '/pagina', '/atendimento'];
 
 /** Componentes compartilhados do painel (tudo que as rotas importam daqui). */
 const COMPONENT_FILES = readdirSync(path.join(root, 'src/components/dashboard'))

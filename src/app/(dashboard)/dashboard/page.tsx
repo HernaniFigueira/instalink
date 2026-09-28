@@ -891,37 +891,37 @@ export default function DashboardPage() {
           <div className="grid grid-cols-3 sm:grid-cols-6 gap-2.5">
             {links.agenda === true && (
               <Link href={`/agenda${q}`} className="dsh-quick">
-                <span className="dsh-quick__icon" style={{ background: 'var(--brand-soft)', color: 'var(--brand-fg)' }}><Icon n="calendarPlus" size={18} /></span>
+                <span className="dsh-quick__icon"><Icon n="calendarPlus" size={18} /></span>
                 Novo agendamento
               </Link>
             )}
             {links.clientes === true && (
               <Link href={`/clientes${q}`} className="dsh-quick">
-                <span className="dsh-quick__icon" style={{ background: 'var(--accent-soft)', color: 'var(--accent)' }}><Icon n="users" size={18} /></span>
+                <span className="dsh-quick__icon"><Icon n="users" size={18} /></span>
                 Clientes
               </Link>
             )}
             {links.pagina === true && (
               <Link href={`/pagina${q}`} className="dsh-quick">
-                <span className="dsh-quick__icon" style={{ background: 'var(--brand-soft)', color: 'var(--brand-fg)' }}><Icon n="link" size={18} /></span>
+                <span className="dsh-quick__icon"><Icon n="link" size={18} /></span>
                 Editar página
               </Link>
             )}
             {links.tarefas === true && (
               <Link href={`/tarefas${q}`} className="dsh-quick">
-                <span className="dsh-quick__icon" style={{ background: 'var(--warning-bg)', color: 'var(--warning-fg)' }}><Icon n="tasks" size={18} /></span>
+                <span className="dsh-quick__icon"><Icon n="tasks" size={18} /></span>
                 Tarefas
               </Link>
             )}
             {links.resultados === true && (
               <Link href={`/resultados${q}`} className="dsh-quick">
-                <span className="dsh-quick__icon" style={{ background: 'var(--success-bg)', color: 'var(--success-fg)' }}><Icon n="chart" size={18} /></span>
+                <span className="dsh-quick__icon"><Icon n="chart" size={18} /></span>
                 Resultados
               </Link>
             )}
             {links.canais === true && (
               <Link href={`/canais${q}`} className="dsh-quick">
-                <span className="dsh-quick__icon" style={{ background: 'var(--ops-soft)', color: 'var(--ops-fg)' }}><Icon n="chat" size={18} /></span>
+                <span className="dsh-quick__icon"><Icon n="chat" size={18} /></span>
                 {canalConnected ? 'Canais' : 'Conectar canal'}
               </Link>
             )}

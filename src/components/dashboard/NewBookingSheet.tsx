@@ -59,6 +59,7 @@ export function NewBookingSheet({ businessId, services, pros, timezone, initial,
   // CADASTRO REAL (NewClientSheet) que grava no CRM na hora. Abandonar o
   // agendamento depois NÃO apaga o paciente.
   const [registerOpen, setRegisterOpen] = useState(false);
+  const [clientPersistence, setClientPersistence] = useState({ dirty: false, saving: false, error: '' });
   const [vetMode, setVetMode] = useState(false);
   const [serviceId, setServiceId] = useState(initial?.serviceId || '');
   const [proId, setProId] = useState(initial?.professionalId || '');
@@ -103,6 +104,18 @@ export function NewBookingSheet({ businessId, services, pros, timezone, initial,
   const slotSeq = useRef(0);
   /** Horário pedido de fora (clique na agenda) — só vale se a grade confirmar. */
   const intendedTime = useRef(initial?.time || '');
+  const initialBookingSnapshot = useRef(JSON.stringify({
+    query: '', contactId: initial?.contactId || '', name: initial?.name || '', phone: initial?.phone || '', email: initial?.email || '',
+    serviceId: initial?.serviceId || '', proId: initial?.professionalId || '', date: initial?.date || '', time: initial?.time || '',
+    note: '', petId: '', fitInOpen: false, fitInTime: initial?.time || '', repeat: false, occurrences: [],
+  }));
+  const bookingSnapshot = JSON.stringify({ query, contactId, name, phone, email, serviceId, proId, date, time, note, petId, fitInOpen, fitInTime, repeat, occurrences });
+  const bookingDirty = !created && bookingSnapshot !== initialBookingSnapshot.current;
+  const wholeOverlayDirty = bookingDirty || clientPersistence.dirty;
+  const overlayGuard = {
+    dirty: wholeOverlayDirty, saving: saving || clientPersistence.saving,
+    context: bookingDirty && clientPersistence.dirty ? 'combined' as const : clientPersistence.dirty ? 'new-client' as const : 'new-booking' as const,
+  };
 
   // A2-B5 (F9): "hoje" no fuso do negócio (o servidor continua validando).
   const today = todayISO(new Date(), timezone || undefined);
@@ -356,6 +369,8 @@ export function NewBookingSheet({ businessId, services, pros, timezone, initial,
     <Drawer
       open
       onClose={() => { if (!saving && !reviewing) onClose(); }}
+      dismissGuard={overlayGuard}
+      sideDismissGuard={{ ...clientPersistence, context: 'new-client' }}
       title="Novo agendamento"
       subtitle="Paciente → serviço → data e horário → confirmação"
       width="max-w-[720px]"
@@ -370,7 +385,8 @@ export function NewBookingSheet({ businessId, services, pros, timezone, initial,
           initialName={onlyDigits(query).length >= 10 ? '' : query.trim()}
           initialPhone={onlyDigits(query).length >= 10 ? query.trim() : ''}
           onClose={() => setRegisterOpen(false)}
-          onSaved={(cid, extra) => onClientRegistered(cid, extra)}
+          onPersistenceChange={setClientPersistence}
+          onSaved={(cid, extra) => { setClientPersistence({ dirty: false, saving: false, error: '' }); onClientRegistered(cid, extra); }}
         />
       ) : undefined}
       sideTitle="Cadastrar novo paciente"

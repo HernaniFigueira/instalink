@@ -35,6 +35,7 @@ const stripComments = (s: string) => s.replace(/\/\*[\s\S]*?\*\//g, '').replace(
 const SHEET = stripComments(read('src/components/dashboard/EncounterSheet.tsx'));
 const QUEUE = stripComments(read('src/components/dashboard/QueuePanel.tsx'));
 const AGENDA = stripComments(read('src/app/(dashboard)/agenda/page.tsx'));
+const ATENDIMENTO = stripComments(read('src/app/(dashboard)/atendimento/page.tsx'));
 const PROVIDER = stripComments(read('src/components/dashboard/PhoneBRInput.tsx'));
 const DRAWER = stripComments(read('src/components/dashboard/ClientProfileDrawer.tsx'));
 
@@ -92,11 +93,14 @@ describe('A3.4 fix · autosave do registro (contrato da tela)', () => {
     expect(SHEET).toMatch(/Recarregar registro/);
   });
 
-  it('fechar com alteração pendente tenta salvar e, se falhar, AVISA em vez de perder', () => {
-    expect(SHEET).toMatch(/const close = useCallback\(async \(\) => \{/);
+  it('fechar/navegar com alteração tenta flush e, se falhar, exige decisão explícita', () => {
+    expect(SHEET).toMatch(/async function requestClose\(reason: DismissReason/);
+    expect(SHEET).toMatch(/await inflight\.current/);
     expect(SHEET).toMatch(/await save\(\{ silent: true \}\)/);
-    expect(SHEET).toMatch(/window\.confirm\(/);
-    expect(SHEET).toMatch(/onClose=\{\(\) => \{ void close\(\); \}\}/);
+    expect(SHEET).toMatch(/O salvamento falhou; os dados continuam nesta tela\./);
+    expect(SHEET).toMatch(/closeDismiss\.requestClose\(reason, \{ dirty: true, error:/);
+    expect(SHEET).toContain("layout = 'page'");
+    expect(SHEET).not.toContain('window.confirm');
   });
 
   it('a tela finalizada explica a porta da reabertura (não some com a ação)', () => {
@@ -113,11 +117,12 @@ describe('A3.4 fix · fila → atendimento (sem agendamento)', () => {
     expect(QUEUE).not.toMatch(/onClick=\{\(\) => move\(row, action\.to\)\}[\s\S]{0,80}disabled=\{!canEncounter\}/);
   });
 
-  it('o painel do registro aceita nascer da fila e a agenda passa a entrada', () => {
+  it('a fila abre a página completa com a origem queueId e a permissão existente', () => {
     expect(SHEET).toMatch(/queueId\?: string/);
     expect(SHEET).toMatch(/queueId: queueId \|\| ''/);
-    expect(AGENDA).toMatch(/onEncounter=\{\(row\) => setQueueEncounter\(row\)\}/);
-    expect(AGENDA).toMatch(/queueId=\{queueEncounter\.id\}/);
+    expect(AGENDA).toMatch(/onEncounter=\{\(row\) => router\.push\(encounterWorkspaceHref\(\{ businessId, queueId: row\.id/);
+    expect(ATENDIMENTO).toMatch(/queueId=\{queueId \|\| undefined\}/);
+    expect(ATENDIMENTO).toMatch(/permissions\.atendimento !== true/);
     expect(AGENDA).toMatch(/canEncounter=\{!denied && canEncounter\}/);
     expect(AGENDA).toMatch(/permissions\.atendimento === true/);
   });

@@ -16,6 +16,7 @@
 //   • etapa de lead só muda via PipelineStage real (nunca LeadStatus legado).
 import { useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 import { centsToBR, cn, waLink } from '@/lib/utils';
 import { focusFieldSoon } from '@/lib/focus-highlight';
 import { humanDateTime, humanDay, formatDateBR, todayISO } from '@/lib/tz';
@@ -34,11 +35,12 @@ import { Icon } from '@/components/icons';
 import { apiGet, apiSend } from '@/lib/api-client';
 import { cepError, contactFieldErrors, emailError, hasFieldErrors, maskCep, maskCpf, phoneError } from '@/lib/field-quality';
 import { PhoneBRInput } from '@/components/dashboard/PhoneBRInput';
-import { canReopenEncounter } from '@/lib/encounters';
-import { EncounterList, EncounterSheet, type EncounterRow } from '@/components/dashboard/EncounterSheet';
+import { EncounterList, type EncounterRow } from '@/components/dashboard/EncounterSheet';
+import { encounterWorkspaceHref } from '@/lib/encounter-workspace';
 import { usePanelPermissions } from '@/components/dashboard/usePanelPermissions';
 import { PetsSection } from '@/components/dashboard/PetsSection';
 import { Pet360Sheet } from '@/components/dashboard/Pet360Sheet';
+import { useOverlayDismissGuard, useUnsavedChangesGuard } from './OverlayDismissGuard';
 
 // Observações do cliente (P2): histórico append-only com autor e data.
 // `legacy: true` marca o registro antigo (campo único), preservado como está.
@@ -116,23 +118,22 @@ export function ClientProfileDrawer({ person, businessId, pipeline, canFunil, on
   onNewBooking: (p: Person360) => void;
   variant?: 'preview' | 'page';
 }) {
+  const router = useRouter();
   const [tab, setTab] = useState<HistoryTab>('overview');
   // FASE 2 · P2/P7 — financeiro do paciente (carga única, escopo do contato).
   const [financeEntries, setFinanceEntries] = useState<FinanceEntry[]>([]);
   const [financeLoaded, setFinanceLoaded] = useState(false);
   const [financeError, setFinanceError] = useState('');
   // FASE 2 · P2 — "Iniciar atendimento" do próximo agendamento futuro.
-  const [startEncounter, setStartEncounter] = useState<{ bookingId: string; seed: Record<string, string> } | null>(null);
   // A3.4 · Bloco 5 — registros de atendimento da pessoa. A permissão é PRÓPRIA
   // (`atendimento`): sem ela, a aba nem aparece e a rota não é chamada.
-  const { permissions, role } = usePanelPermissions();
+  const { permissions } = usePanelPermissions();
   const canEncounter = permissions.atendimento === true;
   // FASE 2 · P2 — aba Financeiro só existe com a permissão correspondente.
   const canFinance = permissions.financeiro === true;
   const [encounters, setEncounters] = useState<EncounterRow[]>([]);
   // HOMOLOGAÇÃO · P1 — Pet 360 (ficha do animal).
   const [pet360, setPet360] = useState<Pet | null>(null);
-  const [encounterOpen, setEncounterOpen] = useState<EncounterRow | null>(null);
   const [encountersError, setEncountersError] = useState('');
   const [encountersLoaded, setEncountersLoaded] = useState(false);
   const [editing, setEditing] = useState(false);
@@ -149,7 +150,6 @@ export function ClientProfileDrawer({ person, businessId, pipeline, canFunil, on
   const [editingLegacy, setEditingLegacy] = useState(false);
   const [accessSaving, setAccessSaving] = useState(false);
   const [tagDraft, setTagDraft] = useState('');
-
   const profile = profileOf(person.profile);
   const age = person.age ?? ageFromBirthDate(profile.birthDate);
   const tags = useMemo(() => (person.tags && person.tags.length
@@ -168,6 +168,15 @@ export function ClientProfileDrawer({ person, businessId, pipeline, canFunil, on
     () => JSON.stringify(draft) !== JSON.stringify(profileOf(person.profile)),
     [draft, person.profile],
   );
+
+  const identityDirty = identityDraft.name !== (person.name || '') || identityDraft.phone !== (person.phone || '') || identityDraft.email !== (person.email || '');
+  const editDirty = editing && (draftChanged || identityDirty);
+  const editState = { dirty: editDirty, saving, error: saving ? '' : (notice?.tone === 'error' ? notice.text : ''), context: 'edit' as const };
+  const editDismiss = useOverlayDismissGuard();
+  const routeDismiss = useUnsavedChangesGuard(editState);
+  const discardEdit = () => { setDraft(profileOf(person.profile)); setIdentityDraft({ name: person.name || '', phone: person.phone || '', email: person.email || '' }); setEditing(false); };
+  const requestCloseEdit = () => editDismiss.requestClose('close-button', editState, discardEdit);
+
 
   // Endereço em UMA linha legível (ponto 10): rua, número, complemento —
   // bairro, cidade/UF. Só as partes preenchidas entram, sem vírgula sobrando.
@@ -189,6 +198,9 @@ export function ClientProfileDrawer({ person, businessId, pipeline, canFunil, on
   // usada pelo CRM (contato OU cliente), então o link nunca aponta para a
   // pessoa errada quando há contato e cliente com o mesmo nome.
   const profileHref = (query: string) => `/clientes/${encodeURIComponent(person.key)}${query}`;
+  const openEncounter = (target: { id?: string; bookingId?: string }) => router.push(encounterWorkspaceHref({
+    businessId, ...target, returnTo: `${window.location.pathname}${window.location.search}`,
+  }));
 
   async function patch(payload: Record<string, unknown>, okText: string) {
     setSaving(true);
@@ -479,33 +491,10 @@ export function ClientProfileDrawer({ person, businessId, pipeline, canFunil, on
 
   return (
     <>
-      {encounterOpen && (
-        <EncounterSheet
-          businessId={businessId}
-          existing={encounterOpen}
-          canReopen={canReopenEncounter(role)}
-          onScheduleReturn={() => { setEncounterOpen(null); onNewBooking(person); }}
-          onClose={() => setEncounterOpen(null)}
-          onSaved={() => { /* silencioso: não recarrega nem fecha */ }}
-          onChanged={() => { setEncountersLoaded(false); onChanged(); }}
-        />
-      )}
-      {/* FASE 2 · P2 — "Iniciar atendimento" do próximo agendamento (quando aplicável). */}
-      {startEncounter && (
-        <EncounterSheet
-          businessId={businessId}
-          bookingId={startEncounter.bookingId}
-          seed={startEncounter.seed as any}
-          canReopen={canReopenEncounter(role)}
-          onScheduleReturn={() => { setStartEncounter(null); onNewBooking(person); }}
-          onClose={() => setStartEncounter(null)}
-          onSaved={() => { /* silencioso: não recarrega nem fecha */ }}
-          onChanged={() => { setEncountersLoaded(false); onChanged(); }}
-        />
-      )}
     <ProfileShell
       variant={variant}
       onClose={onClose}
+      dismissGuard={editState}
       title={person.name || 'Cliente'}
       subtitle={variant === 'page'
         ? (person.contactId ? 'Paciente 360 — perfil, agenda, atendimentos, arquivos e financeiro' : 'Pessoa ainda sem cadastro no CRM')
@@ -521,21 +510,13 @@ export function ClientProfileDrawer({ person, businessId, pipeline, canFunil, on
             <Icon n="pencil" size={14} /> Registrar nota
           </Button>
           {canEncounter && nextBooking && (
-            <Button variant="secondary" size="sm" onClick={() => setStartEncounter({
-              bookingId: nextBooking.id,
-              seed: {
-                customerName: person.name || '',
-                serviceId: nextBooking.serviceId || '', professionalId: nextBooking.professionalId || '',
-                date: nextBooking.date, time: nextBooking.time || '',
-                contactId: person.contactId || '', customerId: person.customerId || '',
-              },
-            })}>
+            <Button variant="secondary" size="sm" onClick={() => openEncounter({ bookingId: nextBooking.id })}>
               <Icon n="fileText" size={14} /> Iniciar atendimento
             </Button>
           )}
-          <Button variant="secondary" size="sm" onClick={() => {
+          <Button variant="ghost" size="sm" onClick={() => {
             const opening = !editing;
-            setEditing((v) => !v);
+            if (editing) requestCloseEdit(); else setEditing(true);
             // §17–18 — ao abrir a edição: scroll suave + foco no primeiro
             // campo + highlight sutil (1–2s). Fechar não mexe no foco.
             if (opening) focusFieldSoon('client-edit-name');
@@ -559,6 +540,8 @@ export function ClientProfileDrawer({ person, businessId, pipeline, canFunil, on
         </>
       )}
     >
+      {routeDismiss.dialog}
+      {editDismiss.dialog}
       {variant === 'page' ? (<>
       {/* ═══ QUEM É A PESSOA — carteirinha ═══ */}
       <div className="p-4">
@@ -726,7 +709,7 @@ export function ClientProfileDrawer({ person, businessId, pipeline, canFunil, on
                 <h3 className="text-sm font-semibold text-[var(--text)]">Dados cadastrais</h3>
                 <p className="text-xs text-[var(--text-muted)] mt-0.5">Só o que você preencher é salvo. Nenhum campo é obrigatório.</p>
               </div>
-              <IconButton icon="x" label="Cancelar edição" size="sm" variant="ghost" onClick={() => { setDraft(profileOf(person.profile)); setEditing(false); }} />
+              <IconButton icon="x" label="Cancelar edição" size="sm" variant="ghost" onClick={requestCloseEdit} />
             </div>
 
             <fieldset className="space-y-3">
@@ -902,7 +885,7 @@ export function ClientProfileDrawer({ person, businessId, pipeline, canFunil, on
             </label>
 
             <div className="flex flex-wrap items-center justify-end gap-2 mt-4 pt-3 border-t border-[var(--border-soft)]">
-              <Button variant="ghost" size="sm" onClick={() => { setDraft(profileOf(person.profile)); setEditing(false); }}>Cancelar</Button>
+              <Button variant="ghost" size="sm" onClick={requestCloseEdit}>Cancelar</Button>
               <Button variant="primary" size="sm" onClick={saveProfile} disabled={saving}>
                 <Icon n="check" size={14} /> {saving ? 'Salvando…' : 'Salvar dados'}
               </Button>
@@ -919,7 +902,7 @@ export function ClientProfileDrawer({ person, businessId, pipeline, canFunil, on
           pet={pet360}
           tutorName={person.name}
           tutorPhone={person.phone}
-          onOpenEncounter={(row) => { setPet360(null); setEncounterOpen(row); }}
+          onOpenEncounter={(row) => { setPet360(null); openEncounter({ id: row.id }); }}
         />
       )}
       {/* ═══ O QUE ACONTECEU — histórico ═══ */}
@@ -948,7 +931,7 @@ export function ClientProfileDrawer({ person, businessId, pipeline, canFunil, on
                     <>
                       <p className="text-[15px] font-semibold text-[var(--text)] mt-1">{formatDateBR(lastEncounter.date)}{lastEncounter.time ? ` · ${lastEncounter.time}` : ''}</p>
                       <p className="text-[12px] text-[var(--text-muted)] line-clamp-2">{lastEncounter.evolution || lastEncounter.complaint || 'Sem descrição'}</p>
-                      <button type="button" className="text-[12px] font-semibold text-[var(--brand-fg)] hover:underline" onClick={() => setEncounterOpen(lastEncounter)}>Abrir registro</button>
+                      <button type="button" className="text-[12px] font-semibold text-[var(--brand-fg)] hover:underline" onClick={() => openEncounter({ id: lastEncounter.id })}>Abrir registro</button>
                     </>
                   ) : <p className="text-[13px] text-[var(--text-muted)] mt-1">Sem registro de atendimento.</p>}
                 </div>
@@ -1011,7 +994,7 @@ export function ClientProfileDrawer({ person, businessId, pipeline, canFunil, on
                         <a href={f.url} target="_blank" rel="noreferrer" className="text-[13.5px] font-semibold text-[var(--text)] hover:underline truncate block">{f.name}</a>
                         <p className="text-[11.5px] text-[var(--text-muted)]">Atendimento de {formatDateBR(f.encounterDate)} · {Math.max(1, Math.round(f.size / 1024))} KB</p>
                       </div>
-                      <button type="button" className="il-chip" onClick={() => { const e = encounters.find((x) => x.id === f.encounterId); if (e) setEncounterOpen(e); }}>Abrir atendimento</button>
+                      <button type="button" className="il-chip" onClick={() => { const e = encounters.find((x) => x.id === f.encounterId); if (e) openEncounter({ id: e.id }); }}>Abrir atendimento</button>
                     </li>
                   ))}
                 </ul>
@@ -1107,7 +1090,7 @@ export function ClientProfileDrawer({ person, businessId, pipeline, canFunil, on
             : encountersError ? <div role="alert" className="p-4 text-sm"><p>{encountersError}</p><Button variant="secondary" onClick={() => setEncountersLoaded(false)}>Tentar novamente</Button></div>
             : encounters.length === 0
               ? <Empty hint="Nenhum registro de atendimento para esta pessoa ainda. Abra um agendamento e use “Atendimento” para registrar o que foi feito." />
-              : <div className="px-4 py-3"><EncounterList rows={encounters} onOpen={setEncounterOpen} empty="" /></div>
+              : <div className="px-4 py-3"><EncounterList rows={encounters} onOpen={(row) => openEncounter({ id: row.id })} empty="" /></div>
           )}
 
           {tab === 'conversations' && (
@@ -1269,7 +1252,7 @@ export function ClientProfileDrawer({ person, businessId, pipeline, canFunil, on
  *             à esquerda e as ações à direita. Sem gaveta dentro de página,
  *             sem perder sidebar/topbar.
  */
-function ProfileShell({ variant, onClose, title, subtitle, backHref, footer, children }: {
+function ProfileShell({ variant, onClose, title, subtitle, backHref, footer, children, dismissGuard }: {
   variant: 'preview' | 'page';
   onClose: () => void;
   title: string;
@@ -1277,10 +1260,11 @@ function ProfileShell({ variant, onClose, title, subtitle, backHref, footer, chi
   backHref: string;
   footer: React.ReactNode;
   children: React.ReactNode;
+  dismissGuard?: import('./OverlayDismissGuard').DismissGuardState;
 }) {
   if (variant === 'page') {
     return (
-      <div className="min-w-0 pb-6">
+      <div className="client-profile-page min-w-0 pb-6">
         <header className="flex flex-wrap items-center gap-x-3 gap-y-2 mb-3">
           <Link href={backHref}
             className="-ml-2 inline-flex items-center gap-1.5 h-9 px-2 rounded-md text-[13px] font-semibold text-[var(--text-soft)] hover:bg-[var(--surface-hover)] hover:text-[var(--text)] focus-visible:shadow-focus">
@@ -1296,6 +1280,7 @@ function ProfileShell({ variant, onClose, title, subtitle, backHref, footer, chi
     <WorkspaceSheet
       open
       onClose={onClose}
+      dismissGuard={dismissGuard}
       title={title}
       subtitle={subtitle}
       icon="users"
@@ -1422,7 +1407,7 @@ function CopyChip({ value }: { value: string }) {
 function A2({ href, label, icon }: { href: string; label: string; icon: string }) {
   return (
     <a href={href} target="_blank" rel="noreferrer"
-      className="inline-flex items-center justify-center gap-1.5 text-xs font-semibold rounded-md px-2.5 py-1.5 bg-[var(--success-bg)] text-[var(--success-fg)] border border-[var(--success-border)] hover:bg-[var(--success-bg-hover)]">
+      className="inline-flex items-center justify-center gap-1.5 text-xs font-semibold rounded-md px-2.5 py-1.5 text-[var(--text-muted)] hover:bg-[var(--surface-hover)] hover:text-[var(--brand-fg)]">
       <Icon n={icon} size={14} /> {label}
     </a>
   );

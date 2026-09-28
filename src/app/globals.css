@@ -2010,7 +2010,7 @@ dialog.il-customer-dialog::backdrop { background:transparent; }
   transition: border-color .15s ease, background-color .15s ease;
 }
 .dsh-quick:hover { border-color: var(--accent-border); background: var(--surface-2); }
-.dsh-quick__icon { display: flex; align-items: center; justify-content: center; width: 38px; height: 38px; border-radius: var(--radius-sm); }
+.dsh-quick__icon { display: flex; align-items: center; justify-content: center; width: 38px; height: 38px; border: 1px solid var(--brand-border); border-radius: var(--radius-sm); background: var(--brand-soft); color: var(--brand-fg); }
 
 /* ═══════════════════════════════════════════════════════════════
    CAMADA DE CONSISTÊNCIA — Etapa E
@@ -2380,3 +2380,104 @@ dialog.ws-sheet[data-minimized]::backdrop { background: transparent; }
 
 .il-platform .conversation-view :is(button,input), .il-platform .conversation-view a.inline-flex { min-height:40px; }
 @media(max-width:767px) { .il-platform .conversation-view :is(button,input), .il-platform .conversation-view a.inline-flex { min-height:44px; } }
+
+/* Shared inline alert dialog used by guarded overlays (no second native modal/backdrop). */
+.overlay-confirm-layer {
+  position: absolute;
+  inset: 0;
+  z-index: 100;
+  display: grid;
+  place-items: center;
+  padding: 20px;
+  /* Covers the existing dialog surface to keep controls underneath from
+     opening a second close request while this decision is pending. No extra backdrop. */
+  pointer-events: auto;
+}
+.overlay-confirm {
+  width: min(100%, 420px);
+  padding: 20px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--surface);
+  box-shadow: var(--shadow-lg);
+  pointer-events: auto;
+}
+@media (prefers-reduced-motion: reduce) {
+  .overlay-confirm { animation: none !important; transition: none !important; }
+}
+
+/* Full-page clinical workspace: broad, content-led, and responsive (not a modal form). */
+.encounter-route-loading { width: min(100% - 32px, 1160px); margin: 28px auto; display: grid; gap: 18px; }
+.encounter-page {
+  --encounter-page-gutter: clamp(16px, 3vw, 40px);
+  min-height: calc(100dvh - 64px);
+  display: flex;
+  flex-direction: column;
+  background: var(--surface, #fff);
+  color: var(--text, #1c2822);
+  margin: -1px auto 0;
+}
+.encounter-page__header {
+  position: sticky;
+  top: 0;
+  z-index: 20;
+  display: flex;
+  align-items: center;
+  gap: 24px;
+  padding: 14px var(--encounter-page-gutter);
+  border-bottom: 1px solid var(--border, #e3e9e5);
+  background: color-mix(in srgb, var(--surface, #fff) 94%, transparent);
+  backdrop-filter: blur(12px);
+}
+.encounter-page__back {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 40px;
+  padding: 0 12px;
+  border: 1px solid var(--border, #e3e9e5);
+  border-radius: var(--radius-md, 10px);
+  color: var(--text, #1c2822);
+  font-size: 13px;
+  font-weight: 600;
+}
+.encounter-page__back:hover { background: var(--surface-muted, #f5f8f6); }
+.encounter-page__heading { min-width: 0; flex: 1; display: flex; align-items: center; justify-content: space-between; gap: 16px; }
+.encounter-page__heading h1 { margin: 0; font-size: clamp(20px, 2vw, 26px); line-height: 1.2; font-weight: 700; letter-spacing: -.025em; }
+.encounter-page__patient { margin: 3px 0 0; color: var(--text, #1c2822); font-size: 14px; font-weight: 600; }
+.encounter-page__meta { margin: 2px 0 0; color: var(--text-muted, #66736c); font-size: 12px; }
+.encounter-page__content { width: min(100%, 1280px); flex: 1; margin: 0 auto; padding: 24px var(--encounter-page-gutter) 32px; }
+.encounter-page__footer {
+  position: sticky;
+  bottom: 0;
+  z-index: 20;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 20px;
+  padding: 12px var(--encounter-page-gutter);
+  border-top: 1px solid var(--border, #e3e9e5);
+  background: color-mix(in srgb, var(--surface, #fff) 96%, transparent);
+  backdrop-filter: blur(12px);
+}
+.encounter-page__save-state { flex: none; color: var(--text-muted, #66736c); font-size: 12px; font-weight: 600; }
+.encounter-page__save-state--saving { color: var(--brand-fg, #276347); }
+.encounter-page__save-state--error { color: var(--danger, #b42318); }
+.encounter-page__save-state--dirty { color: var(--warning-fg, #8a5b00); }
+.encounter-page > .overlay-confirm-layer { position: fixed; z-index: 1200; inset: 0; background: rgb(10 22 16 / 30%); pointer-events: auto; }
+@media (max-width: 767px) {
+  .encounter-page { min-height: calc(100dvh - 56px); margin-inline: -16px; }
+  .encounter-page__header { align-items: flex-start; gap: 10px; padding: 12px 16px; }
+  .encounter-page__back { min-height: 40px; padding-inline: 9px; }
+  .encounter-page__heading { align-items: flex-start; gap: 8px; }
+  .encounter-page__heading h1 { font-size: 20px; }
+  .encounter-page__patient { font-size: 13px; }
+  .encounter-page__meta { font-size: 11px; }
+  .encounter-page__content { padding: 18px 16px 24px; }
+  .encounter-page__footer { align-items: stretch; flex-direction: column; gap: 8px; padding: 10px 16px max(10px, env(safe-area-inset-bottom)); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .encounter-page__header, .encounter-page__footer { scroll-behavior: auto; }
+}
+.client-profile-page .overlay-confirm-layer { position: fixed; z-index: 1200; inset: 0; background: rgb(10 22 16 / 30%); pointer-events: auto; }

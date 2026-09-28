@@ -24,7 +24,7 @@ import { QueueDock } from '@/components/dashboard/QueueDock';
 //   completed/no_show/cancelled  → cria NOVO agendamento 'pending'
 //   preservando previousId, rescheduleCount e histórico.
 import { memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties } from 'react';
-import { useSearchParams } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { todayISO, addDaysISO, weekdayOf, formatDateBR, nowHM } from '@/lib/tz';
 import { nowLinePlacement } from '@/lib/agenda-nowline';
 import { WEEKDAYS, WEEKDAYS_LONG, timeToMin, minToTime, cn } from '@/lib/utils';
@@ -38,7 +38,7 @@ import {
 import { BookingDetailSheet } from '@/components/dashboard/BookingDetailSheet';
 import { NewBookingSheet } from '@/components/dashboard/NewBookingSheet';
 import { QueuePanel, type QueueRow } from '@/components/dashboard/QueuePanel';
-import { EncounterSheet } from '@/components/dashboard/EncounterSheet';
+import { encounterWorkspaceHref } from '@/lib/encounter-workspace';
 import { usePanelPermissions } from '@/components/dashboard/usePanelPermissions';
 import { canReopenEncounter } from '@/lib/encounters';
 import { AccessDenied, AreaLoadError, PermissionNotice, useAreaLoad, useForbiddenNotice } from '@/components/dashboard/AccessNotice';
@@ -336,6 +336,7 @@ function FilterChip({ active, onClick, children }: { active: boolean; onClick: (
 
 export default function AgendaPage() {
   const params = useSearchParams();
+  const router = useRouter();
   const businessId = params.get('b') || '';
   const [defaultView, setDefaultView] = useState<View>('day');
   useEffect(() => { if (window.matchMedia('(max-width: 767px)').matches) setDefaultView('list'); }, []);
@@ -375,6 +376,21 @@ export default function AgendaPage() {
   // FASE 2 · P9 — Quick Create global: ?novo=1 abre o sheet de agendamento
   // direto (uma abertura por visita; SPA não reabre sozinho ao voltar).
   const [novoHandled, setNovoHandled] = useState(false);
+  const [returnBookingHandled, setReturnBookingHandled] = useState(false);
+  useEffect(() => {
+    if (returnBookingHandled || !businessId || params.get('retornoAtendimento') !== '1') return;
+    setReturnBookingHandled(true);
+    try {
+      const raw = sessionStorage.getItem('godoutor:encounter-return-booking:v1');
+      sessionStorage.removeItem('godoutor:encounter-return-booking:v1');
+      const seed = raw ? JSON.parse(raw) : null;
+      if (!seed || seed.businessId !== businessId) return;
+      setCreating({
+        date: '', time: '', professionalId: seed.professionalId || '',
+        contactId: seed.contactId || '', name: seed.customerName || '', phone: seed.customerPhone || '', serviceId: seed.serviceId || '',
+      });
+    } catch { /* cadastro/retorno seguem disponíveis pela Agenda, sem seed corrompido */ }
+  }, [returnBookingHandled, businessId, params]);
   useEffect(() => {
     if (novoHandled || !businessId || params.get('novo') !== '1') return;
     setNovoHandled(true);
@@ -390,7 +406,6 @@ export default function AgendaPage() {
   // mostrar um botão que o servidor vai recusar). Ter a permissão de
   // atendimento não dá poder de reabrir.
   const canReopen = canReopenEncounter(role);
-  const [queueEncounter, setQueueEncounter] = useState<QueueRow | null>(null);
   const [queueDone, setQueueDone] = useState<QueueRow[]>([]);
   const [queueLoading, setQueueLoading] = useState(false);
   const [showQueue, setShowQueue] = useState(false);
@@ -1611,7 +1626,7 @@ export default function AgendaPage() {
                    oferece quem ATENDE o serviço escolhido. */
                 services={services.map((x) => ({ id: x.id, name: x.name, professionalIds: x.professionalIds || [] }))}
                 onOpenBooking={(id) => { const b = bookingsRef.current.get(id); if (b) setDetail(b); }}
-                onEncounter={(row) => setQueueEncounter(row)}
+                onEncounter={(row) => router.push(encounterWorkspaceHref({ businessId, queueId: row.id, returnTo: `${window.location.pathname}${window.location.search}` }))}
                 onOpenClient={(row) => { window.location.href = `/clientes?c=${encodeURIComponent(row.contactId)}`; }}
                 onClose={() => setShowQueue(false)}
                 onFitIn={(row) => setCreating({
@@ -1680,51 +1695,13 @@ export default function AgendaPage() {
           service={serviceOf(detail.serviceId)}
           pro={detail.professionalId ? pros.find((p) => p.id === detail.professionalId) : undefined}
           businessId={businessId}
-          onScheduleReturn={(info) => {
-            setDetail(null);
-            setCreating({
-              date: today, time: '', professionalId: info.professionalId,
-              contactId: info.contactId, name: info.customerName,
-              phone: info.customerPhone || '', serviceId: info.serviceId,
-            });
-          }}
           onClose={() => setDetail(null)}
-          /* P0-1: save silencioso NÃO fecha o detalhe nem o atendimento —
-             só sincroniza a grade em segundo plano. */
-          onSaved={() => { void load(); }}
           /* Mudança estrutural (status/finalizar): atualiza dados, mantém
              sheets abertos — o fechamento é só onClose (ação do usuário). */
           onChanged={() => { void load(); }}
         />
       )}
 
-      {queueEncounter && (
-        <EncounterSheet
-          businessId={businessId}
-          queueId={queueEncounter.id}
-          seed={{
-            customerName: queueEncounter.customerName, serviceId: queueEncounter.serviceId,
-            professionalId: queueEncounter.professionalId, date: queueEncounter.date,
-            contactId: queueEncounter.contactId,
-          }}
-          canReopen={canReopen}
-          onScheduleReturn={(info) => {
-            setQueueEncounter(null);
-            setCreating({
-              date: today, time: '', professionalId: info.professionalId,
-              contactId: info.contactId || queueEncounter.contactId,
-              name: info.customerName || queueEncounter.customerName,
-              // Telefone vem resolvido do servidor (contato/agendamento/fila):
-              // o formulário nasce pronto para agendar, sem nova busca.
-              phone: info.customerPhone || queueEncounter.customerPhone || '',
-              serviceId: info.serviceId || queueEncounter.serviceId,
-            });
-          }}
-          onClose={() => { setQueueEncounter(null); void loadQueue(); }}
-          onSaved={loadQueue}
-          onChanged={loadQueue}
-        />
-      )}
 
       {creating && (
         <NewBookingSheet

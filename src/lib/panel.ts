@@ -243,6 +243,12 @@ export const PANEL_ROUTES: PanelRouteDef[] = [
     width: 'full',
   },
   {
+    // Fluxo clínico longo: destino contextual da Agenda/Cliente, fora do menu principal.
+    href: '/atendimento', label: 'Atendimento', icon: 'fileText', section: 'operacao',
+    permission: 'atendimento', area: 'atendimento', sidebar: false, width: 'full',
+    description: 'Registro clínico vinculado a um agendamento ou à fila.',
+  },
+  {
     // A3.4: entrou em Operação. Quem ATENDE ajusta quem atende no dia a dia —
     // profissional e agenda são a mesma conversa, não catálogo de vitrine.
     href: '/profissionais', label: 'Profissionais', icon: 'idcard', section: 'operacao',

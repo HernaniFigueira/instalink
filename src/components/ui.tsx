@@ -3,6 +3,7 @@ import { cloneElement, createContext, isValidElement, useCallback, useContext, u
 import { wrapDialogFocus } from '@/lib/dialog-focus';
 import { avatarColorFor, avatarInitials } from '@/lib/avatar-palette';
 import { lockBodyScroll, unlockBodyScroll } from '@/lib/scroll-lock';
+import { useOverlayDismissGuard, type DismissGuardState, type DismissReason } from '@/components/dashboard/OverlayDismissGuard';
 import { cn } from '@/lib/utils';
 import { Icon } from '@/components/icons';
 import { toneCls, type Tone } from '@/lib/status';
@@ -632,8 +633,12 @@ export function Notice({ tone = 'info', children, title, className }: { tone?: '
 // browser responsibilities, including nested dialogs. Kept in its DOM parent
 // (no portal) so platform/public CSS scopes are never copied or leaked.
 
-export function Drawer({ open, onClose, title, subtitle, children, footer, width = 'max-w-[720px]', side, sideTitle, sideWidth = 'max-w-[520px]', onSideClose }: {
+export function Drawer({ open, onClose, title, subtitle, children, footer, width = 'max-w-[720px]', side, sideTitle, sideWidth = 'max-w-[520px]', onSideClose, dismissGuard, sideDismissGuard }: {
   open: boolean; onClose: () => void; title: string; subtitle?: string;
+  /** Dirty/saving contract. Omitted on read-only surfaces, which remain freely dismissible. */
+  dismissGuard?: DismissGuardState;
+  /** Independent guard for an expanded side-form; parent guard still covers the whole overlay. */
+  sideDismissGuard?: DismissGuardState;
   children: React.ReactNode; footer?: React.ReactNode; width?: string;
   /**
    * §19–25 — OVERLAY SYSTEM: painel lateral do MESMO overlay (ex.: "Cadastrar
@@ -653,6 +658,9 @@ export function Drawer({ open, onClose, title, subtitle, children, footer, width
   const titleRef = useRef<HTMLHeadingElement>(null);
   const id = useId();
   const expanded = !!side;
+  const dismiss = useOverlayDismissGuard();
+  const requestClose = (reason: DismissReason) => dismiss.requestClose(reason, dismissGuard, onClose);
+  const requestSideClose = (reason: DismissReason) => dismiss.requestClose(reason, sideDismissGuard, onSideClose || onClose);
   useEffect(() => {
     const dialog = dialogRef.current;
     if (!open || !dialog) return;
@@ -673,7 +681,7 @@ export function Drawer({ open, onClose, title, subtitle, children, footer, width
     <dialog ref={dialogRef} className="il-drawer fixed inset-0 z-50" aria-modal="true"
       aria-labelledby={`${id}-title`} aria-describedby={subtitle ? `${id}-description` : undefined}
       data-expanded={expanded ? 'true' : undefined}
-      onCancel={(event) => { event.preventDefault(); event.stopPropagation(); onClose(); }}
+      onCancel={(event) => { event.preventDefault(); event.stopPropagation(); requestClose('escape'); }}
       onKeyDown={(event) => {
         // Native modal inertness prevents focus in the page, but some browsers
         // Tab from the final control into browser chrome. Wrap the boundaries
@@ -683,11 +691,11 @@ export function Drawer({ open, onClose, title, subtitle, children, footer, width
         // An inner widget may preventDefault to consume Escape itself.
         if (event.key === 'Escape') {
           event.stopPropagation();
-          if (!event.defaultPrevented) { event.preventDefault(); onClose(); }
+          if (!event.defaultPrevented) { event.preventDefault(); requestClose('escape'); }
         }
       }}>
       <div className="flex h-full justify-end">
-        <div aria-hidden="true" onClick={onClose} className="absolute inset-0 bg-[var(--overlay)] backdrop-blur-[1px]" />
+        <div aria-hidden="true" onClick={() => requestClose('backdrop')} className="absolute inset-0 bg-[var(--overlay)] backdrop-blur-[1px]" />
         {/* §19–25 — a FAIXA do overlay: um dialog, largura que transiciona
             (entrada 180–220ms). Com `side`, dois painéis lado a lado. */}
         <div className={cn(
@@ -703,7 +711,7 @@ export function Drawer({ open, onClose, title, subtitle, children, footer, width
                   {subtitle && <p id={`${id}-description`} className="text-xs text-[var(--text-muted)] break-words">{subtitle}</p>}
                 </div>
                 {!expanded && (
-                  <IconButton type="button" icon="x" label="Fechar" size="sm" variant="ghost" onClick={onClose} />
+                  <IconButton type="button" icon="x" label="Fechar" size="sm" variant="ghost" onClick={() => requestClose('close-button')} />
                 )}
               </header>
               <div className="flex-1 min-h-0 overflow-y-auto ws-scroll">{children}</div>
@@ -716,7 +724,7 @@ export function Drawer({ open, onClose, title, subtitle, children, footer, width
                   <div className="min-w-0">
                     <h3 className="text-sm font-semibold text-[var(--text)] break-words">{sideTitle || 'Cadastrar novo paciente'}</h3>
                   </div>
-                  <IconButton type="button" icon="x" label="Voltar" size="sm" variant="ghost" onClick={onSideClose || onClose} />
+                  <IconButton type="button" icon="x" label="Voltar" size="sm" variant="ghost" onClick={() => requestSideClose('close-button')} />
                 </header>
                 <div className="flex-1 min-h-0 overflow-y-auto ws-scroll">{side}</div>
               </div>
@@ -724,6 +732,7 @@ export function Drawer({ open, onClose, title, subtitle, children, footer, width
           </div>
         </div>
       </div>
+      {dismiss.dialog}
     </dialog>
   );
 }

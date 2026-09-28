@@ -2,7 +2,7 @@
 
 > **Objetivo:** registrar a revisão do contrato existente, rota a rota, sem declarar inspeção visual que não aconteceu. Esta matriz separa evidência de fonte/teste de evidência de browser. As colunas de viewport permanecem **PENDENTES** até capturas reais em 1440, 1366 e 390 px.
 >
-> **Escopo autenticado:** catálogo de `src/lib/panel.ts` mais a rota de detalhe `/clientes/[id]`. A página pública, renderer e booking público continuam fora do redesign.
+> **Escopo autenticado:** catálogo de `src/lib/panel.ts`, rota de detalhe `/clientes/[id]` e destino contextual `/atendimento`. A página pública, renderer e booking público continuam fora do redesign.
 
 ## Resultado resumido e evidência disponível
 
@@ -11,12 +11,12 @@
 - [x] Guardas de fonte/token/contraste e regressão adicionadas em `src/lib/__tests__/godoutor-ui-contract-v2.test.ts`; a cobertura inclui todos os 21 presets, persistência simulada, invariantes do shell/primitivas, escopo do bridge semântico e sincronização da matriz com o catálogo de rotas.
 - [x] Testes visuais legados que exigiam fundo gradiente, topbar colorida, default neutro, cards creme ou CTA violeta foram atualizados para o contrato aprovado. Comportamento/negócio não foi alvo dessas alterações.
 - [x] Acentos históricos de pet/paciente, anotação administrativa, métrica, “hoje” e setup foram neutralizados ou ligados ao accent; contextos antes lilás convergem para info ou accent. Estados da agenda foram levados a tokens semânticos.
-- [x] Suíte focada visual + novo contrato + status: **181/181 testes aprovados**.
-- [x] Suíte completa: **2.463 aprovados / 6 falhas / 2.469 testes**. Cinco falhas coincidem com a baseline conhecida (`a34-instagram` ×3, `automation-audit-p4`, `pipeline`). Uma sexta falha apareceu em `whatsapp-robustness.test.ts` (fluxo de agendamento) e foi reproduzida isoladamente; esse teste e as rotas/serviços WhatsApp não foram alterados neste patch. Não a rotulo como preexistente sem evidência de baseline; fica registrada como divergência não visual, a investigar separadamente. O delta de onze testes é o contrato v2.
-- [x] Suíte focada visual/contrato/status: **181/181 aprovados**.
-- [x] `npm run typecheck` aprovado depois das últimas edições; `npm run build` (Next.js production) também aprovado.
+- [x] Proteção de descarte compartilhada, rota clínica full-page e refinamentos estáticos de hierarquia/cores/superfícies concluídos; APIs e domínio clínico permaneceram no contrato existente.
+- [x] Suíte focada final: **218/218 testes aprovados** (13 arquivos).
+- [x] Suíte completa: **2.485 aprovados / 6 falhas / 2.491 testes**. Cinco falhas são a baseline conhecida (`a34-instagram` ×3, `automation-audit-p4`, `pipeline`). A sexta, `whatsapp-robustness.test.ts` (fluxo de agendamento), foi executada na main `23619f2399249bc62eadccebbf3da0be41248c83` e no HEAD anterior da PR `3ba53553ea9dc8f404d69e82c686d7aa8f71f025`: o mesmo caso falha em ambos (11 passam, 1 falha), portanto é reproduzível nas duas baselines.
+- [x] `npm run typecheck` aprovado; `npm run build` aprovado, com 132/132 páginas geradas.
 - [ ] Browser/render/capturas de todas as rotas em desktop e mobile: **não realizado nesta etapa**. Nenhuma rota abaixo está marcada como visualmente homologada. Playwright não encontrou Chromium instalado; `npx playwright install chromium` falhou com `ECONNRESET` ao baixar de `cdn.playwright.dev`. Portanto não há screenshots e nenhuma rota foi declarada visualmente aprovada.
-- [ ] Temas críticos verde/neutro/vinho, reload F5 e segunda varredura: pendentes.
+- [ ] Homologação visual pós-implementação pelo usuário: temas verde/neutro/vinho, reload F5 e viewports críticos; nenhuma evidência de browser foi declarada.
 
 ## Matriz de rotas autenticadas
 
@@ -27,6 +27,7 @@
 | `/dashboard` | Visão geral — `app/(dashboard)/dashboard/page.tsx` | Header de identidade do workspace, 6 métricas em superfície neutra, listas/gráficos, quick actions | Parcial: métricas deixaram creme; chips contextuais preservados | Pendente | Pendente | Pendente | Pendente |
 | `/estrutura` | Estrutura — `app/(dashboard)/estrutura/page.tsx` | Hub de serviços, profissionais, horários e acessos; cards/atalhos | Pendente | Pendente | Pendente | Pendente | Pendente |
 | `/agenda` | Agenda — `app/(dashboard)/agenda/page.tsx` | Toolbar densa, grade, status semânticos, fila lateral, drawers e quick-create | Parcial: fundo externo neutro; `BOOKING_BLOCK`/pontos usam tokens semânticos | Pendente | Pendente | Pendente | Pendente |
+| `/atendimento` | Atendimento clínico contextual — `app/(dashboard)/atendimento/page.tsx` + `EncounterSheet.tsx` | Página completa desktop/mobile; autosave, versão/conflitos, finalização/reabertura, impressão, retorno, tarefas e pagamento opcional | Parcial: shell de página e navegação integrados; APIs/permissão existente preservadas por inspeção de fonte e testes focados; layout ainda sem homologação browser | Pendente | Pendente | Pendente | Pendente |
 | `/profissionais` | Profissionais — `app/(dashboard)/profissionais/page.tsx` | Lista, ficha, permissões/atalhos e catálogo | Pendente | Pendente | Pendente | Pendente | Pendente |
 | `/disponibilidade` | Disponibilidade — `app/(dashboard)/disponibilidade/page.tsx` | Regras semanais, exceções, forms e seletor de profissional | Pendente | Pendente | Pendente | Pendente | Pendente |
 | `/conversas` | Conversas — `app/(dashboard)/conversas/page.tsx` + `ConversationsView.tsx` | Lista + conversa, badge de contato, composer, quick action global e sheet multilocal | Parcial: badge “contato novo” agora é info; atalho permanece na topbar | Pendente | Pendente | Pendente | Pendente |
@@ -61,7 +62,7 @@ A segunda passagem de fonte foi executada nos componentes/rotas do dashboard aut
 - **Cores:** 1.469 usos de classes Tailwind com cor semântica em **77 variantes distintas**. Elas foram classificadas em warning/success/danger/info e ligadas a tokens por 28 regras de compatibilidade limitadas a `.il-platform.workspace-shell`; teste assegura que nenhum seletor vaze para a página pública.
 - **Radii:** 40 ocorrências de `rounded-xl/2xl/3xl` são normalizadas para `--radius-md` no workspace; radius grande continua apenas onde tem significado (pills/avatars/controles circulares). Valores radius soltos dentro das regras estruturais encontradas foram substituídos por tokens; os valores globais `:root` permanecem separados para preservar superfícies públicas legadas.
 - **Sombras:** 41 usos legados de `shadow-brand` foram encontrados; o token no workspace é `none`. `shadow-xs/sm` também é `none` no conteúdo normal e sombras maiores ficam reservadas a overlays/menus flutuantes.
-- **Inline styles:** 91 atributos `style={...}` foram encontrados. A maior parte é largura/altura/posição derivada de dados (agenda/gráficos/rail) ou cores via tokens; restam itens para classificação manual, em especial preview do preset e casos dinâmicos de gráficos.
+- **Inline styles:** a varredura atual linha a linha encontrou **84 atributos** nas rotas/componentes autenticados de `(dashboard)` e `components/dashboard`; cada ocorrência está classificada em [`GODOUTOR-UI-AUDIT-V2-INLINE-INVENTORY.md`](./GODOUTOR-UI-AUDIT-V2-INLINE-INVENTORY.md). Predominam geometria calculada de agenda/gráficos, preview de tema existente, tokens semânticos, coordenadas de tooltip/rail e estilos de impressão. Um tamanho fixo de ícone em `AutomationsView` foi convertido para utilitários CSS. A inspeção visual dos casos permanece pendente.
 - **Hexes:** 7 correspondências de regex incluíram um fragmento de comentário de erro React; as declarações visuais restantes pertencem a preview/editor público ou tratamento de impressão e não foram redesenhadas neste escopo. A lista de exceções precisa ser anexada por arquivo na rodada final.
 - **Ações globais:** não foi encontrado FAB global concorrente de Conversas. O atalho de Conversas permanece integrado à topbar; posição fixa encontrada é tooltip, aviso/toast e preview/editor legado. O teste v2 trava a ausência da shortcut fixa.
 
@@ -69,23 +70,24 @@ Ainda falta fechar/classificar integralmente cada ocorrência inline e verificar
 
 - [x] Segunda busca de classes de cor + normalização semântica com escopo e guarda de regressão.
 - [x] Busca de radius/shadow/FAB e substituição das declarações estruturais avulsas encontradas nos seletores do workspace.
-- [ ] Classificar as 91 ocorrências inline uma a uma e publicar exceções por arquivo; conferir gráficos, editor e estados variáveis.
+- [x] Classificar as 84 ocorrências inline da varredura atual uma a uma no inventário vinculado; separar geometria/dados, tokens semânticos, previews legados, tether e impressão. Uma dimensão estática saiu do inline.
+- [ ] Revisar em browser os casos dinâmicos (gráficos, agenda, tema) e verificar os previews/impressão sem alterar renderer/page-builder legado.
 - [ ] Conferir em browser que tokens escopados não afetam renderer/editor/booking público nem login homologado.
 - [ ] Reexecutar e arquivar a busca final depois da auditoria inline e visual.
 
 ### Regressão e browser
 
-- [x] `npm run typecheck` passou; `npm test` executou 2.469 testes (2.463 aprovados, 6 falhas: as cinco da baseline informada + uma falha WhatsApp fora dos arquivos alterados, reproduzida isoladamente; sem atribuí-la como preexistente).
+- [x] `npm run typecheck` passou; `npm test` executou 2.491 testes (2.485 aprovados, 6 falhas). As cinco falhas conhecidas de baseline continuam; a falha WhatsApp foi comparada e reproduzida tanto na main quanto no HEAD anterior da PR.
 - [x] Contraste AA automatizado dos tokens para os 21 presets (`--accent-fg × --accent-soft`, `--accent-contrast × --accent` e pares de sidebar/ativo). Isso não é renderização dos componentes em browser.
 - [ ] Carregar e renderizar todas as rotas da matriz a 1440, 1366 e 390 px; capturar screenshot por viewport/rota e anotar overflow, recorte, contraste e interação.
 - [ ] Em `/dashboard`, `/agenda`, `/conversas`, `/clientes`, `/funil` e `/configuracoes`, repetir em `azul-profundo`, verde, neutro e vinho; fazer F5 em cada preferência salva válida.
 - [ ] Reabrir as seis rotas críticas após a segunda varredura. Registrar links/arquivos das capturas antes de declarar homologação.
-- [x] `npm run build` concluído com sucesso; o build de produção compilou e gerou 131 páginas estáticas.
+- [x] `npm run build` concluído com sucesso; o build de produção compilou e gerou 132 páginas.
 
 ## Testes/evidências atuais
 
 - Fonte: `src/lib/__tests__/godoutor-ui-contract-v2.test.ts` — default, 21 presets, contraste de nav/ativo/acento/texto sobre superfície suave, ausência de tema paralelo, controles e shell.
 - Suítes visuais existentes atualizadas de forma seletiva: `m8-contrato-cor`, `missao6-shell`, `missao7-visual`, `m10-identidade-persistente`, `m11-preview-sidebar`, `premium-refine`, `godoutor-visual`, `visual-convergence` e `status`.
-- Execução focada final: 11 arquivos, **181 testes aprovados**. `npm run typecheck` e `npm run build` aprovados.
-- Execução full final: **2.463/2.469 aprovados**. Falhas: `a34-instagram` ×3, `automation-audit-p4`, `pipeline` (baseline documentada) e o caso de agendamento em `whatsapp-robustness.test.ts` (falha reproduzida isoladamente, não atribuída como baseline nem como efeito visual deste patch).
+- Execução focada final: 13 arquivos, **218 testes aprovados**. `npm run typecheck` e `npm run build` aprovados.
+- Execução full final: **2.485/2.491 aprovados**. Falhas: `a34-instagram` ×3, `automation-audit-p4`, `pipeline` (cinco casos da baseline conhecida) e um caso de `whatsapp-robustness.test.ts`, confirmado também na main e no HEAD anterior da PR.
 - Browser e screenshots continuam pendentes. A tentativa de instalar Chromium via Playwright falhou por `ECONNRESET` em `cdn.playwright.dev`, sem navegador de sistema disponível; nenhum render, F5 ou viewport foi inspecionado visualmente.

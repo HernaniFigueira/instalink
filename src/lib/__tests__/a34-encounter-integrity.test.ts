@@ -91,6 +91,7 @@ const stripComments = (s: string) => s.replace(/\/\*[\s\S]*?\*\//g, '').replace(
 const SHEET = stripComments(read('src/components/dashboard/EncounterSheet.tsx'));
 const QUEUE = stripComments(read('src/components/dashboard/QueuePanel.tsx'));
 const AGENDA = stripComments(read('src/app/(dashboard)/agenda/page.tsx'));
+const ATENDIMENTO = stripComments(read('src/app/(dashboard)/atendimento/page.tsx'));
 
 let token = '';
 beforeEach(async () => {
@@ -246,11 +247,12 @@ describe('A3.4 · 2ª revisão — fila 1:1, reload por id e pós-atendimento (r
     const e = await createWalkIn();
     const k = await readDB();
     expect(k.bookings).toHaveLength(0);
-    // O contrato da tela: o pai recebe a semente e abre o formulário; quem cria
-    // agendamento é o NewBookingSheet, com confirmação humana.
+    // A página persiste a semente só na sessão e devolve à Agenda; quem cria
+    // o agendamento é o NewBookingSheet, com confirmação humana.
     expect(SHEET).toMatch(/onScheduleReturn\(\{/);
     expect(SHEET).toMatch(/Agendar retorno abre o agendamento já preenchido — nada é marcado sem você confirmar/);
-    expect(AGENDA).toMatch(/onScheduleReturn=\{\(info\) => \{\s*setQueueEncounter\(null\);\s*setCreating\(\{/);
+    expect(ATENDIMENTO).toContain('sessionStorage.setItem(RETURN_BOOKING_KEY');
+    expect(AGENDA).toContain("params.get('retornoAtendimento') !== '1'");
     expect(AGENDA).toMatch(/initial=\{\{\s*name: creating\.name/);
     expect((await readDB()).bookings).toHaveLength(0);
   });
@@ -317,15 +319,14 @@ describe('A3.4 · 2ª revisão — fila 1:1, reload por id e pós-atendimento (r
     expect('customerPhone' in db.encounters[0]).toBe(false);
   });
 
-  it('"Agendar retorno" leva o telefone até o formulário (sem nova busca do cliente)', () => {
+  it('"Agendar retorno" leva o telefone até o formulário sem nova busca do cliente', () => {
     expect(SHEET).toMatch(/customerPhone: row\.customerPhone \|\| ''/);
     expect(SHEET).toMatch(/customerPhone: string;/);
-    expect(AGENDA).toMatch(/phone: info\.customerPhone \|\| queueEncounter\.customerPhone \|\| ''/);
-    expect(AGENDA).toMatch(/phone: info\.customerPhone \|\| ''/);
-    // O formulário nasce com contato, nome, telefone, serviço e profissional.
-    expect(AGENDA).toMatch(/contactId: info\.contactId, name: info\.customerName,/);
-    expect(AGENDA).toMatch(/serviceId: info\.serviceId/);
-    expect(AGENDA).toMatch(/professionalId: info\.professionalId/);
+    expect(ATENDIMENTO).toMatch(/sessionStorage\.setItem\(RETURN_BOOKING_KEY, JSON\.stringify\(\{ \.\.\.seed, businessId \}\)\)/);
+    // A volta da rota restaura contato, nome, telefone, serviço e profissional.
+    expect(AGENDA).toMatch(/contactId: seed\.contactId \|\| '', name: seed\.customerName \|\| '', phone: seed\.customerPhone \|\| ''/);
+    expect(AGENDA).toMatch(/serviceId: seed\.serviceId \|\| ''/);
+    expect(AGENDA).toMatch(/professionalId: seed\.professionalId \|\| ''/);
   });
 
   it('o texto do retorno NÃO aparece duplicado na nota da tarefa', () => {
@@ -354,8 +355,9 @@ describe('A3.4 · 2ª revisão — fila 1:1, reload por id e pós-atendimento (r
 
   it('quem reabre é quem administra — e a fila usa a régua real do papel', () => {
     expect(AGENDA).toMatch(/const canReopen = canReopenEncounter\(role\);/);
-    expect(AGENDA).toMatch(/canReopen=\{canReopen\}/);
-    // Nada de canReopen chumbado no fluxo da fila.
-    expect(AGENDA).not.toMatch(/QueueEncounter[\s\S]{0,400}canReopen=\{false\}/);
+    expect(ATENDIMENTO).toMatch(/const canReopen = canReopenEncounter\(role\);/);
+    expect(ATENDIMENTO).toMatch(/canReopen=\{canReopen\}/);
+    // A tela completa mantém a mesma régua por papel do registro original.
+    expect(ATENDIMENTO).not.toContain('canReopen={true}');
   });
 });

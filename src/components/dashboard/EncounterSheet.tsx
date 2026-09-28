@@ -1,6 +1,7 @@
 'use client';
 import { createPortal } from 'react-dom';
 import { WorkspaceSheet } from '@/components/dashboard/WorkspaceSheet';
+import { persistenceState, useOverlayDismissGuard, useUnsavedChangesGuard, type DismissReason } from './OverlayDismissGuard';
 // ═══════════════════════════════════════════════════════════════
 // A3.4 · BLOCO 5 — REGISTRO DO ATENDIMENTO (painel lateral)
 // ═══════════════════════════════════════════════════════════════
@@ -99,6 +100,8 @@ interface Props {
    * anamnese). Ainda NÃO fecha este sheet — o pós-atendimento abre aqui.
    */
   onChanged?: () => void;
+  /** `page` is the canonical clinical workspace; `sheet` is retained only for compatibility tests. */
+  layout?: 'page' | 'sheet';
 }
 
 const EMPTY = {
@@ -119,7 +122,7 @@ const formOf = (e: EncounterRow): Form => ({
 const fileUid = () => (typeof crypto !== 'undefined' && crypto.randomUUID ? crypto.randomUUID() : `f_${Math.random().toString(36).slice(2)}`);
 
 export function EncounterSheet({
-  businessId, bookingId, seed, existing, queueId, canReopen = false, onScheduleReturn, onClose, onSaved, onChanged,
+  businessId, bookingId, seed, existing, queueId, canReopen = false, onScheduleReturn, onClose, onSaved, onChanged, layout = 'page',
 }: Props) {
   const [row, setRow] = useState<EncounterRow | null>(existing || null);
   const [form, setForm] = useState<Form>(() => existing ? formOf(existing) : { ...EMPTY });
@@ -356,18 +359,47 @@ export function EncounterSheet({
     return () => clearTimeout(t);
   }, [form, row, conflict, save]);
 
-  /** Fecha com alteração pendente: tenta salvar; se falhar, avisa (não engole). */
-  const close = useCallback(async () => {
+  const closeDismiss = useOverlayDismissGuard();
+  const busyRef = useRef(busy);
+  busyRef.current = busy;
+  const savingNow = !!busy || autoState === 'saving';
+  const persistence = persistenceState({ dirty, saving: savingNow, error: autoState === 'error' ? error : '', hasPersisted: !!row });
+
+  /** Flush any in-flight/current text before a page exit. A failed flush asks explicitly. */
+  async function requestClose(reason: DismissReason = 'close-button', proceed: () => void = onClose) {
+    if (busyRef.current && busyRef.current !== 'save') {
+      // A structural action (finalize/reopen/task/payment) already in flight
+      // is allowed to settle before evaluating persisted versus unsaved state.
+      await new Promise<void>((resolve) => {
+        const timer = window.setInterval(() => {
+          if (!busyRef.current || busyRef.current === 'save') { window.clearInterval(timer); resolve(); }
+        }, 40);
+      });
+      return requestClose(reason, proceed);
+    }
     const current = latest.current.row;
-    if (current && current.status === 'draft' && encounterDraftKey(latest.current.form) !== lastSaved.current) {
-      const ok = await save({ silent: true });
-      if (!ok) {
-        const keep = window.confirm('Não foi possível salvar o atendimento agora. Fechar mesmo assim e perder o que foi digitado?');
-        if (!keep) return;
+    if (!current || current.status !== 'draft') { proceed(); return; }
+    if (inflight.current) {
+      const inFlightOk = await inflight.current;
+      if (!inFlightOk) {
+        closeDismiss.requestClose(reason, { dirty: true, error: error || 'O salvamento falhou.', context: 'edit' }, proceed);
+        return;
       }
     }
-    onClose();
-  }, [save, onClose]);
+    let flushed = encounterDraftKey(latest.current.form) === lastSaved.current;
+    for (let attempt = 0; !flushed && attempt < 4; attempt++) {
+      const ok = await save({ silent: true });
+      if (!ok) break;
+      flushed = encounterDraftKey(latest.current.form) === lastSaved.current;
+    }
+    if (flushed) { proceed(); return; }
+    closeDismiss.requestClose(reason, { dirty: true, error: error || 'O salvamento falhou; os dados continuam nesta tela.', context: 'edit' }, proceed);
+  }
+
+  const routeDismiss = useUnsavedChangesGuard(
+    { dirty, saving: savingNow, error: autoState === 'error' ? error : '', context: 'edit' },
+    { beforeNavigate: (reason, proceed) => { void requestClose(reason, proceed); } },
+  );
 
   /** Toda escrita de estado manda a revisão FRESCA do ref (nunca a do render). */
   async function transition(action: 'finalize' | 'reopen') {
@@ -465,15 +497,7 @@ export function EncounterSheet({
   // do último payload que o autosave confirmou. Metadados seguem do registro.
   const printBlocks = row ? encounterFormPrintBlocks(form) : [];
 
-  return (
-    <WorkspaceSheet
-      open
-      onClose={() => { void close(); }}
-      title="Atendimento"
-      subtitle={row ? `${formatDateBR(row.date)}${row.time ? ` · ${row.time}` : ''} · ${row.petName || row.customerName || 'Cliente'}${row.petName && row.customerName ? ` · Tutor: ${row.customerName}` : ''}` : 'Registro do atendimento'}
-      icon="stethoscope"
-      width="max-w-[620px]"
-      footer={(
+  const encounterFooter = (
         <>
           {row && (
             <span className="mr-auto flex w-full min-w-0 flex-wrap items-center gap-2 text-xs text-[var(--text-muted)] sm:w-auto">
@@ -505,8 +529,9 @@ export function EncounterSheet({
             </Button>
           )}
         </>
-      )}
-    >
+      );
+  const encounterContent = (
+    <>
       <div className="px-5 py-4 space-y-4">
         {error && <Notice tone="error">{error}</Notice>}
         {saved && !error && <Notice tone="success">{saved}</Notice>}
@@ -545,7 +570,7 @@ export function EncounterSheet({
                   </p>
                 )}
                 <div className="flex flex-wrap gap-2">
-                  <Button size="sm" variant="primary" onClick={() => { setFollowUpOpen(false); onClose(); }}>Encerrar</Button>
+                  <Button size="sm" variant="primary" onClick={() => { setFollowUpOpen(false); void requestClose('programmatic'); }}>Encerrar</Button>
                   {onScheduleReturn && (
                     <Button size="sm" variant="secondary" onClick={() => {
                       onScheduleReturn({
@@ -797,6 +822,47 @@ export function EncounterSheet({
         </div>, document.body
       )}
     
+    </>
+  );
+  const patientContext = row
+    ? `${row.petName || row.customerName || 'Cliente'}${row.petName && row.customerName ? ` · Tutor: ${row.customerName}` : ''}`
+    : seed?.customerName || 'Identificando paciente…';
+  const encounterMeta = row
+    ? `${formatDateBR(row.date)}${row.time ? ` · ${row.time}` : ''} · ${row.serviceName || 'Atendimento'}${row.professionalName ? ` · ${row.professionalName}` : ''}`
+    : 'Registro clínico do atendimento';
+
+  return layout === 'page' ? (
+    <main className="encounter-page" data-persistence-state={persistence}>
+      <header className="encounter-page__header">
+        <button type="button" className="encounter-page__back" onClick={() => { void requestClose('navigation'); }}>
+          <Icon n="chevL" size={15} /> Voltar
+        </button>
+        <div className="encounter-page__heading">
+          <div>
+            <h1>Atendimento</h1>
+            <p className="encounter-page__patient">{patientContext}</p>
+            <p className="encounter-page__meta">{encounterMeta}</p>
+          </div>
+          {row && <Badge tone={statusDef!.tone}>{statusDef!.label}</Badge>}
+        </div>
+      </header>
+      <section className="encounter-page__content">{encounterContent}</section>
+      <footer className="encounter-page__footer">
+        <span className={`encounter-page__save-state encounter-page__save-state--${persistence}`} role="status" aria-live="polite">
+          {persistence === 'saving' ? ENCOUNTER_AUTOSAVE_LABELS.saving : persistence === 'error' ? ENCOUNTER_AUTOSAVE_LABELS.error : persistence === 'saved' ? ENCOUNTER_AUTOSAVE_LABELS.saved : 'Rascunho'}
+        </span>
+        {encounterFooter}
+      </footer>
+      {routeDismiss.dialog}
+      {closeDismiss.dialog}
+    </main>
+  ) : (
+    <WorkspaceSheet open onClose={() => { void requestClose('close-button'); }} title="Atendimento"
+      subtitle={row ? `${formatDateBR(row.date)}${row.time ? ` · ${row.time}` : ''} · ${patientContext}` : 'Registro do atendimento'}
+      icon="stethoscope" width="max-w-[620px]" footer={encounterFooter}>
+      {encounterContent}
+      {routeDismiss.dialog}
+      {closeDismiss.dialog}
     </WorkspaceSheet>
   );
 }
