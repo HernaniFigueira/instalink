@@ -20,7 +20,8 @@
 // eventos antigos) para o documento não crescer sem teto.
 import fs from 'node:fs';
 import path from 'node:path';
-import { Pool } from 'pg';
+import type { Pool } from 'pg';
+import { getPgPool, isPgConfigured } from './pg';
 import { runSyncMutation, type SyncMutation } from './db-transaction';
 import type { DB } from './types';
 import { defaultBookingConfig, isClinicType } from './types';
@@ -420,25 +421,14 @@ export function normalizeDB(raw: unknown): DB {
 }
 
 // ── Postgres ────────────────────────────────────────────────
-let pool: Pool | null = null;
-
+// Pool compartilhado com os domínios normalizados novos (lib/pg.ts):
+// uma única conexão/configuração por processo para todo acesso Postgres.
 function usePg(): boolean {
-  return !!process.env.DATABASE_URL;
+  return isPgConfigured();
 }
 
 function getPool(): Pool {
-  if (!pool) {
-    pool = new Pool({
-      connectionString: process.env.DATABASE_URL,
-      // Neon/Vercel Postgres/Supabase exigem SSL. PGSSLMODE=disable só
-      // para Postgres local sem SSL.
-      ssl: process.env.PGSSLMODE === 'disable' ? false : { rejectUnauthorized: false },
-      max: 5,
-      connectionTimeoutMillis: 8000,
-      idleTimeoutMillis: 30000,
-    });
-  }
-  return pool;
+  return getPgPool();
 }
 
 /**

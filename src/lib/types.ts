@@ -4,6 +4,7 @@
 // configurações iniciais (templates) sobre este motor genérico.
 // ═══════════════════════════════════════════════════════════════
 
+
 export type ID = string;
 
 // Papel de PLATAFORMA (GoDoutor). 'master' = superadmin da plataforma,
@@ -1066,6 +1067,10 @@ export interface DB {
   followUpRules: FollowUpRule[]; // P10/11 — fundação de follow-up
   // F3-H — outreach idempotente de retorno/reativação (anti-duplo-envio)
   followUpOutreach: FollowUpOutreach[];
+  // Clinical OS · F0: EventLog (domainEvents) e telemetria de IA (aiUsage)
+  // NÃO vivem aqui — nascem NORMALIZADOS em Postgres (tabelas
+  // `godoutor_internal.domain_event` e `godoutor_internal.ai_usage`;
+  // ver db/migrations/ e lib/domain-events, lib/ai/usage-store).
 }
 
 // ═══════════════════════════════════════════════════════════════
