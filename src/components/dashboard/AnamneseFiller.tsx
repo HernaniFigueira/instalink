@@ -125,7 +125,7 @@ export function AnamneseFiller({
               const on = arr.includes(o);
               return (
                 <button type="button" key={o} onClick={() => setAns(f, on ? arr.filter((x) => x !== o) : [...arr, o])}
-                  className={`rounded-full border px-3 py-1 text-[12.5px] ${on ? 'border-[var(--brand)] bg-[var(--brand-soft)] text-[var(--brand-fg)]' : 'border-[var(--border)] text-[var(--text-muted)]'}`}>
+                  className="il-option-choice" aria-pressed={on}>
                   {o}
                 </button>
               );

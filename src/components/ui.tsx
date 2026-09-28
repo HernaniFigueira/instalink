@@ -1,4 +1,5 @@
 'use client';
+import Link from 'next/link';
 import { cloneElement, createContext, isValidElement, useCallback, useContext, useEffect, useId, useRef, useState } from 'react';
 import { wrapDialogFocus } from '@/lib/dialog-focus';
 import { avatarColorFor, avatarInitials } from '@/lib/avatar-palette';
@@ -75,6 +76,20 @@ export function Button(props: React.ButtonHTMLAttributes<HTMLButtonElement> & { 
 export function A(props: React.AnchorHTMLAttributes<HTMLAnchorElement> & { variant?: ButtonVariant; size?: ButtonSize }) {
   const { variant = 'primary', size = 'md', className, ...rest } = props;
   return <a className={cn(buttonCls(variant, size), className)} {...rest} />;
+}
+
+/** Ação única de retorno para páginas full-page (link ou saída protegida). */
+export function PageBackAction({ href, onClick, label = 'Voltar', className }: {
+  href?: string;
+  onClick?: () => void;
+  label?: string;
+  className?: string;
+}) {
+  const classes = cn('il-page-back', className);
+  const content = <><Icon n="chevL" size={15} />{label}</>;
+  return href
+    ? <Link href={href} className={classes}>{content}</Link>
+    : <button type="button" onClick={onClick} className={classes}>{content}</button>;
 }
 
 /** Botão só de ícone (com rótulo acessível obrigatório via aria-label). */

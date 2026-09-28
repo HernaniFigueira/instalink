@@ -379,7 +379,7 @@ export function DashboardShell({ children }: { children: React.ReactNode }) {
             }} className="ml-auto underline underline-offset-2">Sair do modo suporte</button>
           </div>
         )}
-        <div key={business.id} className={cn(isAgenda ? 'agenda-page-gutter' : isConversations ? 'conversation-page-wrap' : 'px-4 lg:px-8 py-6', !isFullWidth && !isConversations && 'max-w-[960px]')}>
+        <div key={business.id} className={cn(isAgenda ? 'agenda-page-gutter' : isConversations ? 'conversation-page-wrap' : 'px-4 lg:px-8 py-6', !isFullWidth && !isAgenda && !isConversations && 'w-full max-w-[960px] mx-auto')}>
           {/* CONTRATO DO REFINO FINAL — sem breadcrumb em NENHUMA tela do
               workspace: o cabeçalho da página (chip + título + subtítulo)
               identifica a tela. O contexto vive na sidebar/topbar. */}

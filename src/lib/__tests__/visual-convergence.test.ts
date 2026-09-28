@@ -351,18 +351,19 @@ describe('A3.3 — páginas migradas usam os primitivos compartilhados', () => {
 });
 
 describe('A3.3 — seleção não é estado de sucesso', () => {
-  it('personalidade e objetivo do Assistente usam lilac, não verde', () => {
+  it('personalidade e objetivo do Assistente usam o contrato comum de option chips', () => {
     const agente = read('src/app/(dashboard)/agente/page.tsx');
-    // Verde fica reservado a ativo/conectado/concluído; preferência é lilac.
-    expect(agente).toMatch(/agent\.tone === t\.id \? '[^']*--accent-soft/);
+    expect(agente).toContain('className="il-option-choice" aria-pressed={agent.tone === t.id}');
+    expect(agente).toContain('className="il-option-choice" aria-pressed={on}');
     expect(agente).not.toMatch(/agent\.tone === t\.id \? '[^']*emerald/);
     expect(agente).not.toMatch(/on \? '[^']*emerald/);
   });
 
-  it('papel de membro e chip selecionado usam brand-soft, não preto', () => {
+  it('papel selecionável do membro segue o contrato comum sem mudança de fluxo', () => {
     const equipe = read('src/app/(dashboard)/equipe/page.tsx');
-    expect(equipe).toMatch(/drawer\.role === r\.id \? '[^']*--brand-soft/);
-    expect(equipe).not.toMatch(/drawer\.role === r\.id \? '[^']*bg-zinc-900/);
+    expect(equipe).toContain('className="il-option-choice il-option-choice--compact text-left"');
+    expect(equipe).toContain('aria-pressed={drawer.role === r.id}');
+    expect(equipe).toContain('saveMember(drawer, { role: r.id })');
   });
 });
 

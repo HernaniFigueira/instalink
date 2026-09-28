@@ -27,7 +27,11 @@ describe('2.0 refinement pass — lower action and surface competition', () => {
     expect(profile).toMatch(/variant="primary" size="sm" onClick=\{\(\) => onNewBooking\(person\)\}/);
     expect(profile).toMatch(/variant="ghost" size="sm" onClick=\{\(\) => \{ setTab\('notes'\)/);
     expect(profile).toMatch(/variant="ghost" size="sm" onClick=\{\(\) => \{\s*const opening = !editing/);
-    expect(profile).toContain('text-[var(--text-muted)] hover:bg-[var(--surface-hover)] hover:text-[var(--brand-fg)]');
+    const whatsapp = profile.slice(profile.indexOf('function A2'), profile.indexOf('function Empty', profile.indexOf('function A2')));
+    expect(whatsapp).toContain("className={buttonCls('secondary', 'sm')}");
+    expect(whatsapp).not.toContain('hover:text-[var(--brand-fg)]');
+    const ui = read('src/components/ui.tsx');
+    expect(ui).toContain("secondary:\n    'bg-[var(--surface)] text-[var(--text)] border border-[var(--border-strong)] hover:bg-[var(--surface-hover)]'");
   });
 
   it('conversation workspace fills the column and outgoing bubbles stay muted', () => {
@@ -92,5 +96,48 @@ describe('2.0 refinement pass — lower action and surface competition', () => {
     expect(metricGrid).toContain('className="ws-panel overflow-hidden"');
     expect(metricGrid).not.toContain('rounded-lg p-3.5');
     expect(metricGrid).not.toContain('bg-white border border-zinc-200');
+  });
+
+  it('reading/form routes center within a bounded width; catalog full-width workspaces stay exempt', () => {
+    const shell = read('src/components/DashboardShell.tsx');
+    const routes = read('src/lib/panel.ts');
+    expect(shell).toContain("const isFullWidth = activeRoute?.width === 'full'");
+    expect(shell).toContain("!isFullWidth && !isAgenda && !isConversations && 'w-full max-w-[960px] mx-auto'");
+    for (const route of ['/agenda', '/conversas']) {
+      const index = routes.indexOf(`href: '${route}'`);
+      expect(index, route).toBeGreaterThanOrEqual(0);
+      expect(routes.slice(index, index + 420)).toContain("width: 'full'");
+    }
+  });
+
+  it('full-page Client 360 returns to the real list URL with state and a business fallback', () => {
+    const page = read('src/app/(dashboard)/clientes/[id]/page.tsx');
+    const profile = read('src/components/dashboard/ClientProfileDrawer.tsx');
+    const helper = read('src/lib/client-return.ts');
+    expect(page).toContain('clientListReturnHref(search.toString(), businessId)');
+    expect(page).toContain('pageBackHref={listHref}');
+    expect(profile).toContain('pageBackHref?: string');
+    expect(profile).toContain('pageBackHref || `/clientes?b=${encodeURIComponent(businessId)}`');
+    expect(helper).toContain('b: params.get(\'b\') || fallbackBusinessId || \'\'');
+    expect(profile).not.toContain('history.back');
+    const ui = read('src/components/ui.tsx');
+    expect(ui).toContain('export function PageBackAction');
+    expect(page).toContain('<PageBackAction href={listHref} label="Voltar para clientes" />');
+    expect(read('src/components/dashboard/EncounterSheet.tsx')).toContain('<PageBackAction className="encounter-page__back"');
+  });
+
+  it('agent visual-only migration and selected controls share tokens without changing agent calls', () => {
+    const agent = read('src/app/(dashboard)/agente/page.tsx');
+    expect(agent).toContain('il-field-control');
+    expect(agent).toContain("buttonCls('secondary', 'sm')");
+    expect(agent).toContain('aria-pressed={agent.tone === t.id}');
+    expect(agent).toContain('aria-pressed={on}');
+    expect(agent).not.toMatch(/text-zinc-|bg-white|border-2/);
+    const encounter = read('src/components/dashboard/EncounterSheet.tsx');
+    const anamnese = read('src/components/dashboard/AnamneseFiller.tsx');
+    expect(encounter).toContain('className="il-option-choice"');
+    expect(anamnese).toContain('className="il-option-choice" aria-pressed={on}');
+    expect(encounter).toContain('FOLLOW_UP_MODES');
+    expect(anamnese).toContain('history');
   });
 });

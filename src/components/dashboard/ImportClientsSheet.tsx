@@ -339,8 +339,8 @@ export function ImportClientsSheet({ businessId, onClose, onImported }: {
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
               {(['skip', 'fill_empty'] as ExistingMode[]).map((m) => (
                 <label key={m} className={cn(
-                  'flex items-start gap-2.5 rounded-md border px-3 py-2.5 cursor-pointer',
-                  existingMode === m ? 'border-[var(--brand)] bg-[var(--brand-soft)]' : 'border-[var(--border)] bg-[var(--surface)]',
+                  'il-selectable-card flex items-start gap-2.5 px-3 py-2.5 cursor-pointer',
+                  existingMode === m && 'is-selected',
                 )}>
                   <input type="radio" name="existing-mode" className="mt-0.5" checked={existingMode === m}
                     onChange={() => { setExistingMode(m); void preview(); }} />

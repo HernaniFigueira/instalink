@@ -78,6 +78,43 @@ describe('contrato de cor · C — SEMÂNTICAS independentes (nunca tingidas)', 
   });
 });
 
+describe('homologação PR #43 — foreground de ícones e superfícies suaves', () => {
+  it('usa --accent-fg como foreground legível em soft/surface, sem reutilizar o contraste de CTA sólido', () => {
+    const bridgeIndex = css.indexOf('.workspace-shell {\n  --brand: var(--accent);');
+    const shell = css.slice(bridgeIndex, bridgeIndex + 360);
+    expect(shell).toContain('--brand-fg: var(--accent-fg)');
+    expect(css).toContain('.dsh-quick__icon');
+    expect(css).toContain('background: var(--surface-2); color: var(--accent-fg)');
+    for (const id of ['azul-profundo', 'verde-salvia', 'neutro', 'vinho']) {
+      const a = findAccent(id);
+      expect(a, id).toBeTruthy();
+      expect(contrastRatio(a!.vars['--accent-fg'], a!.vars['--accent-soft']), id).toBeGreaterThanOrEqual(4.5);
+      expect(contrastRatio(a!.vars['--accent-fg'], '#ffffff'), `${id} on white surface`).toBeGreaterThanOrEqual(4.5);
+    }
+  });
+
+  it('hover da sidebar preserva o foreground normal; background e active continuam separados', () => {
+    const item = css.slice(css.indexOf('.workspace-link:hover {'), css.indexOf('.workspace-link:hover {') + 140);
+    const footer = css.slice(css.indexOf('.workspace-foot__item:hover'), css.indexOf('.workspace-foot__item:hover') + 120);
+    const active = css.slice(css.indexOf(".workspace-link[aria-current='page'] {"), css.indexOf(".workspace-link[aria-current='page'] {") + 260);
+    expect(item).toContain('color: var(--il-nav-fg)');
+    expect(item).not.toContain('color: var(--il-nav-active-fg)');
+    expect(footer).toContain('color: var(--il-nav-fg)');
+    expect(active).toContain('color: var(--il-nav-active-fg)');
+  });
+
+  it('selectables usam surface neutra, borda/accent-fg, hover discreto e semântica aria-pressed', () => {
+    expect(css).toContain('.il-platform .il-option-choice[aria-pressed=\'true\']');
+    expect(css).toContain('.il-option-choice:hover:not([aria-pressed=\'true\']):not(:disabled)');
+    expect(css).toContain('.il-platform :focus-visible');
+    const agent = read('src/app/(dashboard)/agente/page.tsx');
+    expect(agent).toContain('className="il-option-choice" aria-pressed={agent.tone === t.id}');
+    expect(agent).toContain('className="il-option-choice" aria-pressed={on}');
+    expect(agent).not.toContain('text-zinc-');
+    expect(agent).not.toContain('bg-white');
+  });
+});
+
 describe('contrato de cor · D — FUNDO do workspace neutro universal', () => {
   it('trava 7: fundo sólido neutro; não depende do tema', () => {
     expect(css).toMatch(/--bg-top:\s*#f4f6f8/);

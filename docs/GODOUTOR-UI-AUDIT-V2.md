@@ -31,11 +31,11 @@
 | `/profissionais` | Profissionais — `app/(dashboard)/profissionais/page.tsx` | Lista, ficha, permissões/atalhos e catálogo | Pendente | Pendente | Pendente | Pendente | Pendente |
 | `/disponibilidade` | Disponibilidade — `app/(dashboard)/disponibilidade/page.tsx` | Regras semanais, exceções, forms e seletor de profissional | Pendente | Pendente | Pendente | Pendente | Pendente |
 | `/conversas` | Conversas — `app/(dashboard)/conversas/page.tsx` + `ConversationsView.tsx` | Workspace operacional full-height: inbox independente, timeline/composer, contexto administrativo recolhível e responsivo, filtros e deep-link | Parcial: contrato do workspace e preservação de fluxos revisados em fonte/testes; visual segue pendente | Pendente | Pendente | Pendente | Pendente |
-| `/agente` | Assistente — `app/(dashboard)/agente/page.tsx` | Preferências de tom/objetivo, formulários, prévia e estados | Parcial: seleções usam accent-soft/accent-fg em vez de lilás decorativo | Pendente | Pendente | Pendente | Pendente |
+| `/agente` | Assistente — `app/(dashboard)/agente/page.tsx` | Preferências de tom/objetivo, formulários, prévia e estados | Parcial: apresentação migrou para tokens/option chips; comportamento e configuração preservados | Pendente | Pendente | Pendente | Pendente |
 | `/tarefas` | Pendências — `app/(dashboard)/tarefas/page.tsx` + `TaskPanel.tsx` | Resumo de fila, atrasos reais, itens/ações, empty/error state | Parcial: “para hoje” não usa cor de warning | Pendente | Pendente | Pendente | Pendente |
 | `/pedidos` | Pedidos — `app/(dashboard)/pedidos/page.tsx` | Tabela/lista e ciclo de status, filtros e detalhe | Pendente | Pendente | Pendente | Pendente | Pendente |
 | `/clientes` | Clientes — `app/(dashboard)/clientes/page.tsx` | Lista, filtros, paginação, seleção, consentimento e cadastro | Pendente | Pendente | Pendente | Pendente | Pendente |
-| `/clientes/[id]` | Detalhe 360 — `app/(dashboard)/clientes/[id]/page.tsx` + `ClientProfileDrawer.tsx` | Identidade, anotações administrativas neutras, ficha/pets e sheets | Parcial: anotações saíram de amarelo sem semântica; preservados handlers de persistência | Pendente | Pendente | Pendente | Pendente |
+| `/clientes/[id]` | Detalhe 360 — `app/(dashboard)/clientes/[id]/page.tsx` + `ClientProfileDrawer.tsx` | Identidade, anotações administrativas neutras, ficha/pets, toolbar e retorno à lista | Parcial: retorno contextual com fallback real e ações seguem a hierarquia; browser pendente | Pendente | Pendente | Pendente | Pendente |
 | `/funil` | Oportunidades — `app/(dashboard)/funil/page.tsx` + `EsteiraView.tsx` | Kanban, badges e transições de etapa | Parcial: status agora usa info/warning/success/danger; rever estados em browser | Pendente | Pendente | Pendente | Pendente |
 | `/servicos` | Serviços — `app/(dashboard)/servicos/page.tsx` + `catalog-panels.tsx` | Catálogo, formulários, seleção, exclusão e mensagens | Pendente | Pendente | Pendente | Pendente | Pendente |
 | `/produtos` | Produtos — `app/(dashboard)/produtos/page.tsx` | Catálogo público administrado, estoque, forms e status | Pendente; renderer público fora do redesign | Pendente | Pendente | Pendente | Pendente |
@@ -137,3 +137,42 @@ A segunda busca documenta **84 ocorrências atuais**, uma por linha, em `GODOUTO
 - **Limite:** os itens acima foram revisados por fonte e testes automatizados. A inspeção de layout/overflow/interação em browser, capturas e temas é responsabilidade da homologação visual no Preview; 1440/1366/390 e temas seguem pendentes.
 - **Validação após o workspace:** typecheck passou; os testes focais passaram (**6 arquivos / 78 testes**); `npm run build` passou com **132/132** páginas; `git diff --check` passou.
 - **Suíte completa:** `npm test -- --reporter=dot` resultou em **2.513 aprovados / 6 falhas / 2.519 testes**. As falhas observadas são as três existentes em `a34-instagram`, `automation-audit-p4`, `pipeline` (datas de agendamento passadas) e `whatsapp-robustness`; a baseline desta PR já registrava as mesmas seis falhas, sem relação com o workspace.
+
+## Aditivo de homologação global — PR #43 (contrato de apresentação; browser pendente)
+
+Este aditivo registra as correções estáticas feitas para a rodada de contraste/seleção sem declarar homologação visual. O catálogo de rotas continua autoridade da largura; comportamento de domínio, APIs, agente, clínica e canais não foi redesenhado.
+
+### Alterações e limites
+
+- **Foreground de soft/icons:** no workspace, `--brand-fg` agora referencia `--accent-fg`, foreground validado contra `--accent-soft` e superfícies claras. Preenchimentos sólidos continuam usando o contrato próprio de CTA (`--accent-contrast`); mensagens success/warning/danger com texto branco sobre fundos semânticos fortes permanecem exceções válidas. Deep Blue, Verde, Neutro e Vinho ganharam asserts de contraste.
+- **Sidebar:** hover de links, ícones de colapso, cabeçalho de grupo e submenu usam `--il-nav-hover`/`--il-nav-fg` sem inverter o foreground normal. A rota ativa preserva o par independente `--il-nav-active`/`--il-nav-active-fg`; accordion aberto, rail recolhido e focus-visible mantêm contratos próprios.
+- **Largura:** rotas `contained` recebem `w-full max-w-[960px] mx-auto`; rotas `full`, Agenda, Conversas e demais workspaces catalogados não recebem esse limite editorial. Não estreitar listas densas, Agenda, Conversas, kanban ou workspaces operacionais.
+- **Controles selecionáveis:** foi criado `il-option-choice` (surface neutra, contorno accent, `--accent-fg`, hover discreto e focus ring oficial). Aplicação restrita a opções/seleções — Assistente, modos de retorno, histórico multiselect, períodos, papéis, dias e horários selecionáveis. Tabs, badges, sidebar, estados de canal e CTAs não são convertidos por conveniência. Atendimento/anamnese mantêm estrutura, autosave, histórico, read-only e vínculos; aqui muda apenas apresentação.
+- **Cliente 360:** a variante page recebe o destino da lista. `clientListReturnHref(search, fallbackBusinessId)` preserva `b`, `q`, `filter`, `page` e `tab` suportada e usa o business resolvido como fallback de deep-link sem estado; o retorno é um link real, não `history.back()`.
+- **Toolbar Cliente 360:** a ação WhatsApp usa a primitiva visual `secondary` (surface/borda neutras, foreground constante e hover oficial), sem cor de CTA em hover. Reserva de ação primária para agendamento permanece.
+- **Página `/agente`:** apresentação migrou para panels, fields, tokens e option chips. Contratos de fetch/save e conteúdo/configuração foram mantidos; não houve mudança de IA, APIs, canais ou comportamento.
+- **Ações rápidas:** ícones têm contêiner neutro com foreground `--accent-fg`; hover do conjunto é neutro/discreto, sem semântica success/warning ornamental.
+- **Back action:** Atendimento full-page e Cliente 360 usam `PageBackAction` compartilhada. A ação clínica continua passando pelo guard de fechamento existente.
+
+### Classificação da varredura de paleta/utilitários
+
+A busca conjunta por `text-white`, `text-zinc-*`, `bg-white`, `bg-zinc-*`, `opacity-*`, `border-2`, `accent-soft`, `brand-soft`, `hover:text-*` e `hover:bg-*` produziu 873 linhas de correspondência (algumas linhas têm mais de uma classe; não é uma contagem de defeitos).
+
+1. **Válidos — manter:** texto branco em CTAs sobre fills de contraste, feedback semântico, blocos/status de agenda, bolhas/elementos de canal; dimensões/contornos de spinner, overlays e ícones decorativos; `border-2` em focos/handles/pontos que têm propósito geométrico.
+2. **Migráveis — corrigidos nesta rodada:** alias de foreground soft; hover sidebar; estilos legado-zinc e campos/panels da apresentação `/agente`; quick actions; seleções de período, modo de retorno, histórico, papéis, dias e horários; hover WhatsApp; destino de retorno do Cliente 360.
+3. **Exceções semânticas/de canal:** sucesso, aviso, erro, status de conectado e ações primárias continuam com cores semânticas/foreground próprio; a identidade do WhatsApp/Instagram fica restrita à identificação do canal, nunca ao foreground genérico de hover. Não aplicar option-chip a tabs/badges.
+4. **Fora do redesign desta PR:** renderer público, page-builder/editor e previews que precisam conservar identidade própria, estilos dinâmicos gerados por dados e superfícies de impressão existentes. `text-white`/`bg-white` em artefatos de exportação ou apresentação são avaliados pelo contexto, não removidos globalmente.
+
+### Diferimentos explícitos
+
+- Nenhum documento/PDF, assinatura, compartilhamento, envio de documento por WhatsApp ou melhoria de impressão foi implementado. Esses itens permanecem **deferred** para outra iniciativa; a busca encontrou superfícies/ações de impressão já existentes, que ficam fora de alteração nesta PR.
+- Workflow Clínico/F1 permanece fora de escopo; APIs/backend/webhooks e política de canal não foram alterados.
+- A leitura de fonte e testes não substitui inspeção de browser. Capturas/checagem visual em 1440, 1366 e 390 px e inspeção final do usuário continuam **pendentes**; PR #43 permanece aberta/em draft, sem merge.
+
+### Validação executada nesta rodada
+
+- `npm run typecheck`: aprovado.
+- Testes focais: **8 arquivos / 133 testes aprovados**, incluindo retorno Cliente 360, catálogo de width, foreground nos temas, seleção, sidebar, Atendimento/Anamnese e toolbar.
+- `npm run build`: aprovado; **132/132** páginas estáticas geradas.
+- `npm test -- --reporter=dot`: **2.524 aprovados / 6 falhas / 2.530 testes**. Falhas reproduzidas fora deste escopo: três em `a34-instagram.test.ts`, uma em `automation-audit-p4.test.ts`, uma em `pipeline.test.ts` (agendamento no passado) e uma em `whatsapp-robustness.test.ts`. A falha de contrato antigo do submenu provocada pelo uso correto de `--il-nav-*` foi atualizada; não há falha focal pendente desta rodada.
+- `git diff --check`: aprovado. Preview de desenvolvimento disponível em `:3001`; nenhuma inspeção/captura de browser foi realizada pelo agente nesta etapa.

@@ -44,10 +44,7 @@ export function PeriodPicker({ value, onChange, label = 'Período dos resultados
       type="button"
       onClick={() => { setCustom(false); onChange({ key: k, from: '', to: '' }); }}
       aria-pressed={isKey(k)}
-      className={cn(
-        'text-xs font-medium px-2.5 py-1 rounded whitespace-nowrap transition-colors',
-        isKey(k) ? 'bg-[var(--brand-soft)] text-[var(--brand-fg)] border border-[var(--brand-border)]' : 'text-[var(--text-muted)] border border-transparent hover:text-[var(--text)] hover:bg-[var(--surface-2)]',
-      )}
+      className="il-option-choice il-option-choice--compact whitespace-nowrap"
     >
       {periodKeyLabel(k)}
     </button>
@@ -55,16 +52,13 @@ export function PeriodPicker({ value, onChange, label = 'Período dos resultados
 
   return (
     <div className="min-w-0 max-w-full">
-      <div role="group" aria-label={label} className="inline-flex flex-wrap items-center bg-white border border-zinc-200 rounded-md p-0.5 gap-0.5 max-w-full overflow-x-auto no-scrollbar">
+      <div role="group" aria-label={label} className="inline-flex flex-wrap items-center bg-[var(--surface)] border border-[var(--border)] rounded-md p-0.5 gap-1 max-w-full overflow-x-auto no-scrollbar">
         {MAIN_PERIOD_KEYS.map(chip)}
         <button
           type="button"
           onClick={() => setCustom((c) => !c)}
           aria-pressed={value.key === 'custom'}
-          className={cn(
-            'text-xs font-medium px-2.5 py-1 rounded whitespace-nowrap transition-colors inline-flex items-center gap-1',
-            value.key === 'custom' ? 'bg-[var(--brand-soft)] text-[var(--brand-fg)] border border-[var(--brand-border)]' : 'text-[var(--text-muted)] border border-transparent hover:text-[var(--text)] hover:bg-[var(--surface-2)]',
-          )}
+          className="il-option-choice il-option-choice--compact whitespace-nowrap"
         >
           <Icon n="calendar" size={12} /> Personalizado
         </button>

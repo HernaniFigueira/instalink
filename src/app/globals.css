@@ -849,7 +849,8 @@ input[type='color'] { @apply cursor-pointer; }
   --brand-strong: var(--accent-hover);
   --brand-soft: var(--accent-soft);
   --brand-border: var(--accent-border);
-  --brand-fg: var(--accent-contrast);
+  /* fg universal for soft surfaces/icons/text links; solid CTAs use accent-contrast. */
+  --brand-fg: var(--accent-fg);
   --brand-ring: color-mix(in srgb, var(--accent) 30%, transparent);
   --brand-bg-hover: color-mix(in srgb, var(--accent) 12%, white);
   --focus-ring: 0 0 0 3px var(--brand-ring);
@@ -904,6 +905,36 @@ input[type='color'] { @apply cursor-pointer; }
    !important + --brand sólido foi REMOVIDA na missão sidebar final: era ela
    quem pintava o item ativo de botão azul com texto branco.) */
 .il-platform [data-nav-item] { color: var(--il-nav-fg); }
+
+/* Option chips / escolhas múltiplas — selecionado por contorno e foreground,
+   não preenchimento principal. Tabs, badges e CTAs têm contratos separados. */
+.il-platform .il-option-choice {
+  display:inline-flex; min-height:36px; align-items:center; justify-content:center; gap:6px;
+  padding:0 12px; border:1px solid var(--border-strong); border-radius:var(--radius-pill);
+  background:var(--surface); color:var(--text-muted); font:inherit; font-size:12.5px; font-weight:600;
+  line-height:1.25; cursor:pointer; transition:background-color 140ms ease,border-color 140ms ease,color 140ms ease;
+}
+.il-platform .il-option-choice:hover:not([aria-pressed='true']):not(:disabled) {
+  border-color:var(--border-strong); background:var(--surface-hover); color:var(--text);
+}
+.il-platform .il-option-choice[aria-pressed='true'] {
+  border-color:var(--accent); background:var(--surface); color:var(--accent-fg);
+  box-shadow:inset 0 0 0 1px color-mix(in srgb,var(--accent) 16%,transparent);
+}
+.il-platform .il-option-choice[aria-pressed='true']:hover:not(:disabled) {
+  border-color:var(--accent); background:var(--surface); color:var(--accent-fg);
+}
+.il-platform .il-option-choice:disabled { opacity:1; cursor:not-allowed; }
+.il-platform .il-option-choice--compact { min-height:30px; padding:0 9px; border-radius:var(--radius-sm); font-size:12px; }
+.il-platform .il-selectable-card {
+  border:1px solid var(--border); border-radius:var(--radius-md); background:var(--surface);
+  color:var(--text); transition:background-color 140ms ease,border-color 140ms ease,box-shadow 140ms ease;
+}
+.il-platform .il-selectable-card:hover:not(.is-selected) { border-color:var(--border-strong); background:var(--surface-hover); }
+.il-platform .il-selectable-card.is-selected {
+  border-color:var(--accent); background:var(--surface);
+  box-shadow:inset 0 0 0 1px color-mix(in srgb,var(--accent) 16%,transparent);
+}
 
 /* ── Alturas de controle: UMA escala (tokens), não 44px solto por regra ── */
 .il-platform .il-control { min-height: var(--control-h); }
@@ -1458,14 +1489,14 @@ button.ws-bell__item:hover { background: var(--surface-hover); }
   background: rgba(255, 255, 255, 0.10); color: var(--il-nav-fg);
   transition: background-color .12s ease, color .12s ease, border-color .12s ease;
 }
-.workspace-collapse-btn:hover { background: rgba(255, 255, 255, 0.20); color: var(--il-nav-fg); border-color: rgba(255, 255, 255, 0.34); }
+.workspace-collapse-btn:hover { background: var(--il-nav-hover); color: var(--il-nav-fg); border-color: var(--il-nav-border); }
 .workspace-collapse-btn.is-mini { width: 28px; height: 28px; border-color: transparent; background: transparent; }
-.workspace-collapse-btn.is-mini:hover { background: rgba(255, 255, 255, 0.18); border-color: transparent; }
+.workspace-collapse-btn.is-mini:hover { background: var(--il-nav-hover); border-color: var(--il-nav-border); }
 .workspace-wordmark--product { color: var(--il-nav-fg); }
 .is-collapsed .workspace-wordmark--product { font-size: 12px; letter-spacing: -.04em; }
 .ws-unitpill__logo { width: 18px; height: 18px; border-radius: 50%; object-fit: cover; flex-shrink: 0; }
-.workspace-identity__collapse { color: rgba(255, 255, 255, 0.62); border-radius: var(--radius-md); flex-shrink: 0; }
-.workspace-identity__collapse:hover { color: var(--il-nav-fg); background: rgba(255, 255, 255, 0.16); }
+.workspace-identity__collapse { color: var(--il-nav-icon); border-radius: var(--radius-md); flex-shrink: 0; }
+.workspace-identity__collapse:hover { color: var(--il-nav-fg); background: var(--il-nav-hover); }
 .is-collapsed .workspace-identity { padding: 12px 8px; justify-content: center; }
 .workspace-logo { display: block; width: 100%; max-height: 52px; object-fit: contain; object-position: left center; }
 .workspace-wordmark { font-size: 17px; font-weight: 700; letter-spacing: -.02em; color: var(--il-nav-fg); }
@@ -1520,7 +1551,7 @@ button.ws-bell__item:hover { background: var(--surface-hover); }
 }
 .workspace-link:hover {
   background: var(--il-nav-hover);
-  color: var(--il-nav-active-fg);
+  color: var(--il-nav-fg);
 }
 .workspace-link[aria-current='page'] {
   background: var(--il-nav-active); color: var(--il-nav-active-fg); font-weight: 600;
@@ -1573,7 +1604,7 @@ button.ws-bell__item:hover { background: var(--surface-hover); }
   display: flex; align-items: center; gap: 10px; width: 100%;
   padding: 12px 12px 10px; border-radius: var(--radius-md);
 }
-button.workspace-clinic-head:hover { background: rgba(255, 255, 255, 0.12); }
+button.workspace-clinic-head:hover { background: var(--il-nav-hover); }
 .workspace-foot__item--collapse { color: var(--il-nav-muted); }
 .workspace-clinic-head__logo {
   width: 34px; height: 34px; border-radius: var(--radius-md);
@@ -1638,7 +1669,7 @@ button.workspace-clinic-head:hover { background: rgba(255, 255, 255, 0.12); }
   min-height: 36px; padding: 0 10px; border-radius: var(--radius-md);
   font-size: 13px; font-weight: 500; color: var(--il-nav-muted); text-align: left;
 }
-.workspace-foot__item:hover { background: var(--il-nav-hover); color: var(--il-nav-active-fg); }
+.workspace-foot__item:hover { background: var(--il-nav-hover); color: var(--il-nav-fg); }
 .workspace-foot__brand {
   display: block; padding: 6px 10px 2px; font-size: 10.5px; font-weight: 500;
   color: rgba(255, 255, 255, 0.55); letter-spacing: .01em;
@@ -1650,7 +1681,7 @@ button.workspace-clinic-head:hover { background: rgba(255, 255, 255, 0.12); }
   min-height: 36px; min-width: 36px; padding: 0 10px;
   font-size: 12.5px; font-weight: 600; color: var(--il-nav-muted); border-radius: var(--radius-md);
 }
-.workspace-icon-button:hover { background: var(--il-nav-hover); color: var(--il-nav-active-fg); }
+.workspace-icon-button:hover { background: var(--il-nav-hover); color: var(--il-nav-fg); }
 .is-collapsed .workspace-icon-button { justify-content: center; padding: 0; }
 
 /* ── Acordeão do submenu (FASE D: UMA coluna, expande para BAIXO) ──
@@ -1675,13 +1706,13 @@ button.workspace-clinic-head:hover { background: rgba(255, 255, 255, 0.12); }
 .workspace-submenu__guide {
   display: flex; flex-direction: column; gap: 3px;
   margin: 3px 0 8px; padding: 6px;
-  background: rgba(255, 255, 255, 0.10);
-  border: 1px solid rgba(255, 255, 255, 0.13);
+  background: var(--il-nav-hover);
+  border: 1px solid var(--il-nav-border);
   border-radius: var(--radius-md);
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.06);
+  box-shadow: none;
 }
 .workspace-link--sub { min-height: 34px; font-size: 13px; padding-left: 14px; border-radius: var(--radius-sm); }
-.workspace-link--sub:hover { background: rgba(255, 255, 255, 0.16); }
+.workspace-link--sub:hover { background: var(--il-nav-hover); color: var(--il-nav-fg); }
 .workspace-link--sub[aria-current='page'] { background: var(--il-nav-active); }
 .workspace-link--sub .workspace-link__icon { width: 22px; height: 22px; }
 /* Missão §7/§8 — no rail recolhido o submenu NÃO existe inline: o clique no
@@ -2041,8 +2072,8 @@ dialog.il-customer-dialog::backdrop { background:transparent; }
   font-size: 11.5px; font-weight: 700; color: var(--text-soft); text-align: center;
   transition: border-color .15s ease, background-color .15s ease;
 }
-.dsh-quick:hover { border-color: var(--accent-border); background: var(--surface-2); }
-.dsh-quick__icon { display: flex; align-items: center; justify-content: center; width: 38px; height: 38px; border: 1px solid var(--brand-border); border-radius: var(--radius-sm); background: var(--brand-soft); color: var(--brand-fg); }
+.dsh-quick:hover { border-color: var(--border-strong); background: var(--surface-hover); }
+.dsh-quick__icon { display: flex; align-items: center; justify-content: center; width: 38px; height: 38px; border: 1px solid var(--border); border-radius: var(--radius-sm); background: var(--surface-2); color: var(--accent-fg); }
 
 /* ═══════════════════════════════════════════════════════════════
    CAMADA DE CONSISTÊNCIA — Etapa E
@@ -2493,20 +2524,15 @@ dialog.ws-sheet[data-minimized]::backdrop { background: transparent; }
   background: color-mix(in srgb, var(--surface, #fff) 94%, transparent);
   backdrop-filter: blur(12px);
 }
-.encounter-page__back {
-  flex: none;
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  min-height: 40px;
-  padding: 0 12px;
-  border: 1px solid var(--border, #e3e9e5);
-  border-radius: var(--radius-md, 10px);
-  color: var(--text, #1c2822);
-  font-size: 13px;
-  font-weight: 600;
+.il-page-back {
+  display:inline-flex; flex:none; align-items:center; justify-content:center; gap:8px;
+  min-height:40px; padding:0 12px; border:1px solid var(--border-strong);
+  border-radius:var(--radius-md); background:var(--surface); color:var(--text);
+  font:inherit; font-size:13px; font-weight:600; line-height:1.2; text-decoration:none;
+  cursor:pointer; transition:background-color 140ms ease,border-color 140ms ease;
 }
-.encounter-page__back:hover { background: var(--surface-muted, #f5f8f6); }
+.il-page-back:hover { border-color:var(--border-strong); background:var(--surface-hover); color:var(--text); }
+.encounter-page__back { align-self:flex-start; }
 .encounter-page__heading { min-width: 0; flex: 1; display: flex; align-items: center; justify-content: space-between; gap: 16px; }
 .encounter-page__heading h1 { margin: 0; font-size: clamp(20px, 2vw, 26px); line-height: 1.2; font-weight: 700; letter-spacing: -.025em; }
 .encounter-page__patient { margin: 3px 0 0; color: var(--text, #1c2822); font-size: 14px; font-weight: 600; }
@@ -2533,7 +2559,7 @@ dialog.ws-sheet[data-minimized]::backdrop { background: transparent; }
 @media (max-width: 767px) {
   .encounter-page { min-height: calc(100dvh - 56px); margin-inline: -16px; }
   .encounter-page__header { align-items: flex-start; gap: 10px; padding: 12px 16px; }
-  .encounter-page__back { min-height: 40px; padding-inline: 9px; }
+  .encounter-page__back { min-height: 40px; }
   .encounter-page__heading { align-items: flex-start; gap: 8px; }
   .encounter-page__heading h1 { font-size: 20px; }
   .encounter-page__patient { font-size: 13px; }

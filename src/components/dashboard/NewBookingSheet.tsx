@@ -542,10 +542,7 @@ export function NewBookingSheet({ businessId, services, pros, timezone, initial,
                   {slots.map((t) => (
                     <button key={t} type="button" disabled={saving || reviewing} onClick={() => setTime(t)}
                       aria-pressed={time === t}
-                      className={cn('text-xs font-semibold px-3 py-1.5 rounded-md border tabular-nums transition-colors',
-                        time === t
-                          ? 'bg-[var(--brand)] text-white border-[var(--brand)] shadow-brand'
-                          : 'bg-[var(--surface)] text-[var(--text)] border-[var(--border)] hover:border-[var(--brand-border)] hover:text-[var(--brand-fg)]')}>
+                      className="il-option-choice il-option-choice--compact tabular-nums">
                       {t}
                     </button>
                   ))}

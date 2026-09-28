@@ -227,7 +227,7 @@ export default function EquipePage() {
                 <p className="text-xs font-semibold tracking-wide uppercase text-zinc-500 mb-2">Papel</p>
                 <div className="grid grid-cols-2 gap-1.5">
                   {data.roles.filter((r) => r.id !== 'OWNER').map((r) => (
-                    <button key={r.id} onClick={() => { saveMember(drawer, { role: r.id }); setDrawer({ ...drawer, role: r.id }); }} className={cn('text-xs font-medium px-3 py-2 rounded-md border text-left', drawer.role === r.id ? 'bg-[var(--brand-soft)] border-[var(--brand-border)] text-[var(--brand-fg)]' : 'bg-white border-[var(--border)] text-[var(--text)] hover:bg-[var(--surface-2)]')}>
+                    <button type="button" key={r.id} aria-pressed={drawer.role === r.id} onClick={() => { saveMember(drawer, { role: r.id }); setDrawer({ ...drawer, role: r.id }); }} className="il-option-choice il-option-choice--compact text-left">
                       {r.label}
                     </button>
                   ))}

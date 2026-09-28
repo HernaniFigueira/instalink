@@ -51,7 +51,8 @@ describe('missão 6 · 2 — radius controlado (menos bolha)', () => {
 
 describe('missão 6 · 3 — submenu expansível em bloco premium', () => {
   it('o conteúdo do grupo aberto abre dentro de uma superfície encaixada', () => {
-    expect(css).toMatch(/\.workspace-submenu__guide \{[\s\S]*?background: rgba\(255, 255, 255, 0\.10\)/);
+    expect(css).toMatch(/\.workspace-submenu__guide \{[\s\S]*?background: var\(--il-nav-hover\)/);
+    expect(css).toMatch(/\.workspace-submenu__guide \{[\s\S]*?border: 1px solid var\(--il-nav-border\)/);
     expect(css).toMatch(/\.workspace-submenu__guide \{[\s\S]*?border-radius: var\(--radius-md\)/);
     // subitem com radius próprio dentro do bloco
     expect(css).toContain('.workspace-link--sub { min-height: 34px; font-size: 13px; padding-left: 14px; border-radius: var(--radius-sm); }');

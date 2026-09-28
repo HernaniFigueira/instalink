@@ -32,7 +32,7 @@ import { persistenceState, useOverlayDismissGuard, useUnsavedChangesGuard, type 
 //      leitura POR ID (nunca POST, que criaria outro registro).
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Icon } from '@/components/icons';
-import { Badge, Button, Field, Input, Notice, Textarea } from '@/components/ui';
+import { Badge, Button, Field, Input, Notice, PageBackAction, Textarea } from '@/components/ui';
 import { apiGet, apiSend } from '@/lib/api-client';
 import {
   ENCOUNTER_AUTOSAVE_LABELS, ENCOUNTER_AUTOSAVE_MS, ENCOUNTER_LABELS, ENCOUNTER_STATUS,
@@ -661,10 +661,7 @@ export function EncounterSheet({
               <div className="flex flex-wrap gap-1.5" role="group" aria-label="Como fica o retorno">
                 {FOLLOW_UP_MODES.map((m) => (
                   <button key={m} type="button" disabled={!editable} onClick={() => setFollowUpMode(m)}
-                    className={`rounded-full border px-3 py-1 text-[12.5px] font-semibold transition-colors disabled:opacity-60 ${
-                      form.followUpMode === m
-                        ? 'border-[var(--brand)] bg-[var(--brand-soft)] text-[var(--brand-fg)]'
-                        : 'border-[var(--border)] text-[var(--text-muted)] hover:bg-[var(--surface-hover)]'}`}
+                    className="il-option-choice"
                     aria-pressed={form.followUpMode === m}>
                     {FOLLOW_UP_MODE_LABELS[m]}
                   </button>
@@ -851,9 +848,7 @@ export function EncounterSheet({
   return layout === 'page' ? (
     <main className="encounter-page" data-persistence-state={persistence}>
       <header className="encounter-page__header">
-        <button type="button" className="encounter-page__back" onClick={() => { void requestClose('navigation'); }}>
-          <Icon n="chevL" size={15} /> Voltar
-        </button>
+        <PageBackAction className="encounter-page__back" onClick={() => { void requestClose('navigation'); }} label="Voltar" />
         <div className="encounter-page__heading">
           <div>
             <h1>Atendimento</h1>

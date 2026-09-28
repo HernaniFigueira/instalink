@@ -30,7 +30,7 @@ import {
   BRAZILIAN_STATES, PROFILE_TAGS_MAX, ageFromBirthDate, clientTags, countAttended, formatCep, formatCpf,
   formatPhoneBR, isValidCpf, normalizeBirthDate, profileOf,
 } from '@/lib/contact-profile';
-import { Avatar, Badge, Button, IconButton, Input, Kpi, Notice, Select, StatusBadge, SubCard, Switch, Tabs, Textarea, buttonCls, type TabItem } from '@/components/ui';
+import { Avatar, Badge, Button, IconButton, Input, Kpi, Notice, Select, StatusBadge, SubCard, Switch, Tabs, Textarea, buttonCls, PageBackAction, type TabItem } from '@/components/ui';
 import { Icon } from '@/components/icons';
 import { apiGet, apiSend } from '@/lib/api-client';
 import { cepError, contactFieldErrors, emailError, hasFieldErrors, maskCep, maskCpf, phoneError } from '@/lib/field-quality';
@@ -108,7 +108,7 @@ type HistoryTab =
  * sempre; o que muda é a casca (gaveta ou página) e o quanto carrega
  * (a gaveta não dispara atendimentos/financeiro à toa).
  */
-export function ClientProfileDrawer({ person, businessId, pipeline, canFunil, onClose, onChanged, onNewBooking, variant = 'preview' }: {
+export function ClientProfileDrawer({ person, businessId, pipeline, canFunil, onClose, onChanged, onNewBooking, variant = 'preview', pageBackHref }: {
   person: Person360;
   businessId: string;
   pipeline: BusinessPipeline | null;
@@ -117,6 +117,8 @@ export function ClientProfileDrawer({ person, businessId, pipeline, canFunil, on
   onChanged: () => void;
   onNewBooking: (p: Person360) => void;
   variant?: 'preview' | 'page';
+  /** Destino real da lista ao renderizar a ficha como página. */
+  pageBackHref?: string;
 }) {
   const router = useRouter();
   const [tab, setTab] = useState<HistoryTab>('overview');
@@ -499,7 +501,7 @@ export function ClientProfileDrawer({ person, businessId, pipeline, canFunil, on
       subtitle={variant === 'page'
         ? (person.contactId ? 'Paciente 360 — perfil, agenda, atendimentos, arquivos e financeiro' : 'Pessoa ainda sem cadastro no CRM')
         : (person.contactId ? 'Paciente 360 — prévia rápida do cadastro' : 'Pessoa ainda sem cadastro no CRM')}
-      backHref={profileHref(`?b=${encodeURIComponent(businessId)}`)}
+      backHref={variant === 'page' ? (pageBackHref || `/clientes?b=${encodeURIComponent(businessId)}`) : profileHref(`?b=${encodeURIComponent(businessId)}`)}
       footer={variant === 'page' ? (
         <>
           {person.phone && <A2 href={waLink(person.phone, `Olá, ${firstName}!`)} label="WhatsApp" icon="whatsapp" />}
@@ -1266,10 +1268,7 @@ function ProfileShell({ variant, onClose, title, subtitle, backHref, footer, chi
     return (
       <div className="client-profile-page min-w-0 pb-6">
         <header className="flex flex-wrap items-center gap-x-3 gap-y-2 mb-3">
-          <Link href={backHref}
-            className="-ml-2 inline-flex items-center gap-1.5 h-9 px-2 rounded-md text-[13px] font-semibold text-[var(--text-soft)] hover:bg-[var(--surface-hover)] hover:text-[var(--text)] focus-visible:shadow-focus">
-            <Icon n="chevL" size={14} /> Voltar para clientes
-          </Link>
+          <PageBackAction href={backHref} label="Voltar para clientes" />
           <div className="ml-auto flex flex-wrap items-center gap-2">{footer}</div>
         </header>
         <div className="ws-panel overflow-hidden">{children}</div>
@@ -1406,8 +1405,7 @@ function CopyChip({ value }: { value: string }) {
 
 function A2({ href, label, icon }: { href: string; label: string; icon: string }) {
   return (
-    <a href={href} target="_blank" rel="noreferrer"
-      className="inline-flex items-center justify-center gap-1.5 text-xs font-semibold rounded-md px-2.5 py-1.5 text-[var(--text-muted)] hover:bg-[var(--surface-hover)] hover:text-[var(--brand-fg)]">
+    <a href={href} target="_blank" rel="noreferrer" className={buttonCls('secondary', 'sm')}>
       <Icon n={icon} size={14} /> {label}
     </a>
   );
