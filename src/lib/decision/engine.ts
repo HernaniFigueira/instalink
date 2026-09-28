@@ -108,7 +108,11 @@ export class TypeSafeDecisionEngine implements DecisionEngine {
 /**
  * Ponto ÚNICO de saída de rede (TypeSafe HTTP API). Mantida isolada para a
  * integração real ser plugada/testada num commit próprio (F8) sem tocar o
- * domínio. Formato conforme docs (system_one / questions tipadas).
+ * domínio.
+ *
+ * ⚠️ PROVISÓRIO: endpoint/header abaixo são estimativa de integração até
+ * validação contra as docs live com a chave real (podem mudar sem breaking
+ * change — o contrato estável é a porta DecisionEngine, não este HTTP).
  */
 async function callSystemOne(
   apiKey: string,

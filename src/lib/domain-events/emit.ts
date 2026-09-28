@@ -1,17 +1,11 @@
 // ═══════════════════════════════════════════════════════════════
-// GODOUTOR CLINICAL OS · F0 — EVENT LOG: emissor + persistência
+// GODOUTOR CLINICAL OS · F0 — EVENT LOG: emissor puro (contrato)
 // ═══════════════════════════════════════════════════════════════
 // `emitDomainEvent` valida e CONSTRÓI o evento (puro — testável isolado).
-// `recordDomainEvent` persiste no store atual (JSONB/arquivo) com
-// idempotência (businessId + idempotencyKey). O payload passa por `redact`
-// (chaves sensíveis são cortadas) — prontuário/prompt clínico NUNCA entram.
-//
-// MIGRAÇÃO: esta coleção é ADITIVA (`domainEvents: []` com default em
-// normalizeDB). Não migra, não apaga e não altera instalink_doc existente.
-// O schema SQL normalizado (tabela `domain_event`) vive no documento de
-// arquitetura como plano de corte F1+ — nada de big-bang aqui.
+// A PERSISTÊNCIA vive em ./store (DomainEventStore: Postgres normalizado em
+// produção; memória em testes/dev). Nada de gravar eventos dentro de
+// instalink_doc: o EventLog já nasce normalizado (tabela `domain_event`).
 import { randomUUID } from 'node:crypto';
-import type { DB } from '../types';
 import { redactSensitive } from '../redact';
 import type {
   DomainEvent, DomainEventPayload, EmitDomainEventInput,
@@ -89,41 +83,4 @@ export function emitDomainEvent(input: EmitDomainEventInput): DomainEvent {
     payload: safePayload,
     ...(input.idempotencyKey ? { idempotencyKey: String(input.idempotencyKey) } : {}),
   };
-}
-
-/**
- * Persiste o evento. Idempotência: mesma (businessId + idempotencyKey)
- * devolve o PRIMEIRO evento gravado e não duplica. Retorna o evento
- * persistido (o original no caso de repetição).
- */
-export function recordDomainEvent(db: DB, input: EmitDomainEventInput): DomainEvent {
-  const event = emitDomainEvent(input);
-  if (!Array.isArray(db.domainEvents)) db.domainEvents = [];
-  if (event.idempotencyKey) {
-    const existing = db.domainEvents.find(
-      (e) => e.businessId === event.businessId && e.idempotencyKey === event.idempotencyKey,
-    );
-    if (existing) return existing;
-  }
-  db.domainEvents.push(event);
-  return event;
-}
-
-/** Consulta por tenant (sempre com businessId — isolamento na leitura). */
-export function listDomainEvents(db: DB, businessId: string, opts?: {
-  type?: DomainEvent['type'];
-  entityType?: DomainEvent['entityType'];
-  entityId?: string;
-  since?: string;
-  limit?: number;
-}): DomainEvent[] {
-  const limit = Math.max(1, Math.min(500, opts?.limit || 100));
-  return db.domainEvents
-    .filter((e) => e.businessId === businessId)
-    .filter((e) => (!opts?.type || e.type === opts.type))
-    .filter((e) => (!opts?.entityType || e.entityType === opts.entityType))
-    .filter((e) => (!opts?.entityId || e.entityId === opts.entityId))
-    .filter((e) => (!opts?.since || e.occurredAt >= opts.since))
-    .slice(-limit)
-    .reverse();
 }

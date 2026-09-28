@@ -4,19 +4,20 @@
 //
 // Contratos travados:
 //   1) EventLog: businessId obrigatório · catálogo fechado · actor/origin ·
-//      entityType/entityId · payload SEMPRE redigido · idempotência;
+//      entityType/entityId · payload SEMPRE redigido · idempotência por
+//      tenant · persistência via DomainEventStore (NUNCA instalink_doc);
 //   2) DecisionEngine: Disabled é o padrão (sem chave) · Mock determinístico ·
 //      TypeSafe bloqueado sem TYPESAFE_API_KEY (fail-closed) · confidence;
 //   3) GenerativeAIProvider: desativado sem fornecedor · mock em testes ·
-//      telemetria por clínica SEM prompt clínico;
+//      telemetria por clínica SEM prompt clínico (AiUsageStore);
 //   4) Página legada: fora da navegação por padrão, flag reativa, rotas e
 //      APIs preservadas.
 // ═══════════════════════════════════════════════════════════════
 import { describe, expect, it } from 'vitest';
 import {
-  DOMAIN_EVENT_TYPES, DomainEventError, emitDomainEvent, listDomainEvents,
-  recordDomainEvent,
+  DOMAIN_EVENT_TYPES, DomainEventError, emitDomainEvent,
 } from '../domain-events';
+import { MemoryDomainEventStore } from '../domain-events/store';
 import {
   DisabledDecisionEngine, MockDecisionEngine, TypeSafeDecisionEngine,
   getDecisionEngine,
@@ -25,9 +26,9 @@ import type { DecisionRequest } from '../decision';
 import {
   MockGenerativeProvider, getGenerativeProvider, trackGenerativeUsage,
 } from '../ai/generative';
-import { estimateAiCost, recordAiUsage, aiUsageTotals } from '../ai/usage';
+import { buildAiUsageRecord, estimateAiCost } from '../ai/usage';
+import { MemoryAiUsageStore, getAiUsageStore } from '../ai/usage-store';
 import { filterNavAreas, isLegacyPagesEnabled } from '../product';
-import { emptyDB } from '../db';
 
 // ── 1) EventLog ────────────────────────────────────────────────────────────
 describe('F0 · EventLog (eventos de domínio)', () => {
@@ -92,39 +93,42 @@ describe('F0 · EventLog (eventos de domínio)', () => {
     expect(JSON.stringify(event.payload)).not.toContain('resuma o prontuário');
   });
 
-  it('idempotência: (businessId + idempotencyKey) repetido é NO-OP', () => {
-    const db = emptyDB();
-    const first = recordDomainEvent(db, {
+  it('idempotência por tenant: (businessId + idempotencyKey) repetido é NO-OP', async () => {
+    const store = new MemoryDomainEventStore();
+    const first = await store.record({
       businessId: 'b', type: 'payment.received', entityType: 'payment', entityId: 'p1',
       actor: { kind: 'system' }, origin: 'api', idempotencyKey: 'pay:p1',
     });
-    const again = recordDomainEvent(db, {
+    const again = await store.record({
       businessId: 'b', type: 'payment.received', entityType: 'payment', entityId: 'p1',
       actor: { kind: 'system' }, origin: 'api', idempotencyKey: 'pay:p1',
     });
     expect(again.id).toBe(first.id);
-    expect(db.domainEvents).toHaveLength(1);
+    expect(await store.list('b')).toHaveLength(1);
     // tenant diferente com a MESMA key não colide (isolamento)
-    recordDomainEvent(db, {
+    await store.record({
       businessId: 'other', type: 'payment.received', entityType: 'payment', entityId: 'p1',
       actor: { kind: 'system' }, origin: 'api', idempotencyKey: 'pay:p1',
     });
-    expect(db.domainEvents).toHaveLength(2);
+    expect(await store.list('other')).toHaveLength(1);
+    expect(await store.list('b')).toHaveLength(1);
   });
 
-  it('leitura é sempre escopada por tenant e por tipo/entidade', () => {
-    const db = emptyDB();
+  it('tenant A nunca lista tenant B (mesmo com filtros de tipo/entidade)', async () => {
+    const store = new MemoryDomainEventStore();
     for (const [biz, type] of [
       ['a', 'encounter.started'], ['a', 'encounter.finalized'], ['b', 'encounter.started'],
     ] as const) {
-      recordDomainEvent(db, {
+      await store.record({
         businessId: biz, type, entityType: 'encounter', entityId: 'e1',
         actor: { kind: 'user' }, origin: 'ui',
       });
     }
-    expect(listDomainEvents(db, 'a')).toHaveLength(2);
-    expect(listDomainEvents(db, 'b')).toHaveLength(1);
-    expect(listDomainEvents(db, 'a', { type: 'encounter.finalized' })).toHaveLength(1);
+    expect(await store.list('a')).toHaveLength(2);
+    expect(await store.list('b')).toHaveLength(1);
+    expect(await store.list('a', { type: 'encounter.finalized' })).toHaveLength(1);
+    expect((await store.list('a')).map((e) => e.businessId).every((id) => id === 'a')).toBe(true);
+    expect((await store.list('b')).map((e) => e.businessId).every((id) => id === 'b')).toBe(true);
   });
 });
 
@@ -213,8 +217,8 @@ describe('F0 · GenerativeAIProvider + telemetria de IA', () => {
     expect(result.outputTokens).toBe(0);
   });
 
-  it('mock gera texto e a telemetria registra custo por clínica (sem prompt)', () => {
-    const db = emptyDB();
+  it('telemetria via store: custo por clínica, SEM prompt/transcrição', async () => {
+    const store = new MemoryAiUsageStore();
     const request = {
       businessId: 'biz-1', feature: 'report', task: 'report' as const,
       prompt: 'Resumo clínico do atendimento do paciente Rex', agentId: 'agent-1',
@@ -223,28 +227,34 @@ describe('F0 · GenerativeAIProvider + telemetria de IA', () => {
       ok: true, text: 'Texto', via: 'mock' as const, provider: 'mock', model: 'mock-generative-v1',
       inputTokens: 100, outputTokens: 50, latencyMs: 12,
     };
-    const rec = trackGenerativeUsage(db, request, result);
-    expect(db.aiUsage).toHaveLength(1);
+    const rec = await trackGenerativeUsage(store, request, result);
     expect(rec.businessId).toBe('biz-1');
     expect(rec.inputTokens).toBe(100);
     expect(rec.outputTokens).toBe(50);
     expect(rec.estimatedCost).toBe(0); // sem preço na tabela → 0 (não inventa)
     // PRIVACIDADE: o prompt clínico NUNCA é persistido
-    expect(JSON.stringify(db.aiUsage)).not.toContain('Resumo clínico');
-    // custo agregado por clínica
-    expect(aiUsageTotals(db, 'biz-1').calls).toBe(1);
-    expect(aiUsageTotals(db, 'biz-2').calls).toBe(0);
+    const rows = await store.list('biz-1');
+    expect(rows).toHaveLength(1);
+    expect(JSON.stringify(rows)).not.toContain('Resumo clínico');
+    // custo agregado por clínica (tenant A não vê tenant B)
+    await store.record({
+      businessId: 'biz-2', agentId: 'a', feature: 'f', provider: 'p', model: 'm',
+      inputTokens: 1, outputTokens: 1, latencyMs: 1,
+    });
+    expect((await store.totals('biz-1')).calls).toBe(1);
+    expect((await store.totals('biz-2')).calls).toBe(1);
+    expect((await store.totals('biz-1')).inputTokens).toBe(100);
   });
 
-  it('estimateAiCost usa a tabela (0 sem entrada) e o record nunca guarda prompt', () => {
+  it('estimateAiCost usa a tabela (0 sem entrada) e o registro nunca guarda prompt', () => {
     expect(estimateAiCost('unknown', 'm', 1000, 1000)).toBe(0);
-    const db = emptyDB();
-    const rec = recordAiUsage(db, {
+    const rec = buildAiUsageRecord({
       businessId: 'b', agentId: 'a', feature: 'f', provider: 'p', model: 'm',
       inputTokens: 10, outputTokens: 5, latencyMs: 1,
     });
     expect(rec.decisionType).toBeUndefined();
-    expect(db.aiUsage[0].id).toBe(rec.id);
+    expect(rec.id).toMatch(/^aiu-/);
+    expect(JSON.stringify(rec)).not.toContain('prompt');
   });
 
   it('mock do provider devolve texto canônico via env de teste', async () => {
@@ -256,6 +266,11 @@ describe('F0 · GenerativeAIProvider + telemetria de IA', () => {
     });
     expect(result.ok).toBe(true);
     expect(result.text).toContain('[mock:summary]');
+  });
+
+  it('factory de store: sem DATABASE_URL → memória (dev/testes, sem rede)', async () => {
+    const store = await getAiUsageStore();
+    expect(store).toBeInstanceOf(MemoryAiUsageStore);
   });
 });
 

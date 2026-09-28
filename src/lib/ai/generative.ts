@@ -14,8 +14,7 @@
 //   • ações clínicas finais continuam de responsabilidade humana — geração
 //     de texto NUNCA assina prontuário/prescrição.
 import type { AiUsageRecord } from './usage';
-import { recordAiUsage } from './usage';
-import type { DB } from '../types';
+import type { AiUsageStore } from './usage-store';
 
 export type GenerativeTask =
   | 'reply_suggestion'   // sugestão de resposta natural
@@ -94,11 +93,17 @@ export class MockGenerativeProvider implements GenerativeAIProvider {
 }
 
 /**
- * Registra a telemetria de uma chamada (custo por clínica). Chamado pelos
- * providers e pelo orquestrador; NUNCA guarda prompt clínico — só números.
+ * Registra a telemetria de uma chamada (custo por clínica) via AiUsageStore
+ * (Postgres normalizado em produção; memória em testes/dev). NUNCA guarda
+ * prompt clínico — só números. Fail-open: telemetria nunca derruba o fluxo.
  */
-export function trackGenerativeUsage(db: DB, request: GenerativeRequest, result: GenerativeResult, extra?: Partial<AiUsageRecord>): AiUsageRecord {
-  return recordAiUsage(db, {
+export async function trackGenerativeUsage(
+  store: AiUsageStore,
+  request: GenerativeRequest,
+  result: GenerativeResult,
+  extra?: Partial<AiUsageRecord>,
+): Promise<AiUsageRecord> {
+  return store.record({
     businessId: request.businessId,
     agentId: request.agentId || request.feature,
     feature: request.feature,

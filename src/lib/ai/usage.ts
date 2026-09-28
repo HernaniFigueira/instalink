@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════
-// GODOUTOR CLINICAL OS · F0 — TELEMETRIA DE IA (custo por clínica)
+// GODOUTOR CLINICAL OS · F0 — TELEMETRIA DE IA (contrato)
 // ═══════════════════════════════════════════════════════════════
 // Registra o CONSUMO de IA (decisões Jev + LLM generativa) para calcular
 // custo por clínica. Campos do contrato da fundação:
@@ -9,8 +9,10 @@
 //
 // PRIVACIDADE: NUNCA armazena prompts clínicos completos — só números e
 // identificadores. Dado sensível continua no prontuário/audit trail.
-import type { DB } from '../types';
-
+//
+// PERSISTÊNCIA (F0/J): este é o SEGUNDO domínio que já nasce NORMALIZADO
+// (tabela `ai_usage` — migration 0002). Nada de aiUsage dentro de
+// instalink_doc. A porta de persistência é AiUsageStore (./usage-store).
 export interface AiUsageRecord {
   id: string;
   businessId: string;
@@ -47,6 +49,13 @@ export interface RecordAiUsageInput {
   id?: string;
 }
 
+export interface AiUsageTotals {
+  calls: number;
+  inputTokens: number;
+  outputTokens: number;
+  estimatedCost: number;
+}
+
 /**
  * Tabela de preços (USD por 1M tokens) por (provider, model). Sem entrada
  * → custo 0 (não inventamos preço). Só servidor; nunca chave/segredo.
@@ -62,19 +71,15 @@ export function estimateAiCost(provider: string, model: string, inputTokens: num
 }
 
 let seq = 0;
-function usageId(now: string): string {
+export function usageId(now: string): string {
   seq = (seq + 1) % 1_000_000;
   return `aiu-${now.slice(0, 10)}-${seq.toString(36).padStart(4, '0')}`;
 }
 
-/**
- * Persiste o registro de consumo (coleção aditiva `aiUsage`). Fail-open:
- * telemetria NUNCA derruba o fluxo clínico (se gravar falhar, a decisão já
- * foi tomada — só o número se perde e é logado).
- */
-export function recordAiUsage(db: DB, input: RecordAiUsageInput): AiUsageRecord {
+/** Normaliza o input em um registro completo (PURO — sem I/O). */
+export function buildAiUsageRecord(input: RecordAiUsageInput): AiUsageRecord {
   const now = input.now || new Date().toISOString();
-  const record: AiUsageRecord = {
+  return {
     id: input.id || usageId(now),
     businessId: input.businessId,
     agentId: input.agentId,
@@ -90,20 +95,4 @@ export function recordAiUsage(db: DB, input: RecordAiUsageInput): AiUsageRecord 
     ...(input.confidence != null ? { confidence: input.confidence } : {}),
     createdAt: now,
   };
-  if (!Array.isArray(db.aiUsage)) db.aiUsage = [];
-  db.aiUsage.push(record);
-  return record;
-}
-
-/** Agregado de custo por clínica (para o Financeiro/Configurações futuro). */
-export function aiUsageTotals(db: DB, businessId: string, opts?: { since?: string }): {
-  calls: number; inputTokens: number; outputTokens: number; estimatedCost: number;
-} {
-  const rows = db.aiUsage.filter((r) => r.businessId === businessId && (!opts?.since || r.createdAt >= opts.since));
-  return rows.reduce((acc, r) => ({
-    calls: acc.calls + 1,
-    inputTokens: acc.inputTokens + r.inputTokens,
-    outputTokens: acc.outputTokens + r.outputTokens,
-    estimatedCost: acc.estimatedCost + r.estimatedCost,
-  }), { calls: 0, inputTokens: 0, outputTokens: 0, estimatedCost: 0 });
 }

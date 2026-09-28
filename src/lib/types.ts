@@ -4,8 +4,6 @@
 // configurações iniciais (templates) sobre este motor genérico.
 // ═══════════════════════════════════════════════════════════════
 
-import type { DomainEvent } from './domain-events/types';
-import type { AiUsageRecord } from './ai/usage';
 
 export type ID = string;
 
@@ -1069,13 +1067,9 @@ export interface DB {
   followUpRules: FollowUpRule[]; // P10/11 — fundação de follow-up
   // F3-H — outreach idempotente de retorno/reativação (anti-duplo-envio)
   followUpOutreach: FollowUpOutreach[];
-  // ── Clinical OS · F0 — Event Log (eventos de domínio / OAAS) ──
-  // Coleção ADITIVA (default [] em normalizeDB): não migra nem altera
-  // instalink_doc existente. Contrato em lib/domain-events/.
-  domainEvents: DomainEvent[];
-  // ── Clinical OS · F0 — Telemetria de IA (custo por clínica) ──
-  // Aditiva; só números/identificadores (NUNCA prompts clínicos).
-  aiUsage: AiUsageRecord[];
+  // Clinical OS · F0: EventLog (domainEvents) e telemetria de IA (aiUsage)
+  // NÃO vivem aqui — nascem NORMALIZADOS em Postgres (tabelas `domain_event`
+  // e `ai_usage`; ver db/migrations/ e lib/domain-events, lib/ai/usage-store).
 }
 
 // ═══════════════════════════════════════════════════════════════

@@ -20,7 +20,8 @@
 // eventos antigos) para o documento não crescer sem teto.
 import fs from 'node:fs';
 import path from 'node:path';
-import { Pool } from 'pg';
+import type { Pool } from 'pg';
+import { getPgPool, isPgConfigured } from './pg';
 import { runSyncMutation, type SyncMutation } from './db-transaction';
 import type { DB } from './types';
 import { defaultBookingConfig, isClinicType } from './types';
@@ -71,10 +72,6 @@ export function emptyDB(): DB {
     // FASE 2 · Product Revolution (aditivas — documento antigo ganha []).
     pets: [], anamneseTemplates: [], anamneseResponses: [],
     financeEntries: [], followUpRules: [], followUpOutreach: [],
-    // Clinical OS · F0 — Event Log (aditivo; documento antigo ganha [])
-    domainEvents: [],
-    // Clinical OS · F0 — telemetria de IA (aditiva; custo por clínica)
-    aiUsage: [],
   };
 }
 
@@ -92,7 +89,6 @@ export function normalizeDB(raw: unknown): DB {
     'integrations', 'integrationEvents', 'queue', 'encounters',
     // FASE 2 · Product Revolution
     'pets', 'anamneseTemplates', 'anamneseResponses', 'financeEntries', 'followUpRules', 'followUpOutreach',
-    'domainEvents', 'aiUsage',
   ] as const) {
     if (!Array.isArray((base as any)[key])) (base as any)[key] = [];
   }
@@ -425,25 +421,14 @@ export function normalizeDB(raw: unknown): DB {
 }
 
 // ── Postgres ────────────────────────────────────────────────
-let pool: Pool | null = null;
-
+// Pool compartilhado com os domínios normalizados novos (lib/pg.ts):
+// uma única conexão/configuração por processo para todo acesso Postgres.
 function usePg(): boolean {
-  return !!process.env.DATABASE_URL;
+  return isPgConfigured();
 }
 
 function getPool(): Pool {
-  if (!pool) {
-    pool = new Pool({
-      connectionString: process.env.DATABASE_URL,
-      // Neon/Vercel Postgres/Supabase exigem SSL. PGSSLMODE=disable só
-      // para Postgres local sem SSL.
-      ssl: process.env.PGSSLMODE === 'disable' ? false : { rejectUnauthorized: false },
-      max: 5,
-      connectionTimeoutMillis: 8000,
-      idleTimeoutMillis: 30000,
-    });
-  }
-  return pool;
+  return getPgPool();
 }
 
 /**
