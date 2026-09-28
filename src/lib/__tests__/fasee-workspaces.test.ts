@@ -38,8 +38,8 @@ describe('Conversas — filtros e falhas que dizem a verdade', () => {
   const api = read('src/app/api/conversations/route.ts');
 
   it('filtros: Todas · Não lidas · Aguardando · Falhas', () => {
-    expect(view).toMatch(/f === 'waiting' \? 'Aguardando' : 'Falhas'/);
-    expect(view).toMatch(/f === 'unread' \? 'Não lidas'/);
+    expect(view).toContain("key === 'waiting' ? 'Aguardando' : 'Falhas'");
+    expect(view).toContain("key === 'unread' ? 'Não lidas'");
   });
 
   it('Aguardando = espera da EQUIPE (modo humano ou pedindo equipe), não status open', () => {

@@ -30,10 +30,26 @@ describe('2.0 refinement pass — lower action and surface competition', () => {
     expect(profile).toContain('text-[var(--text-muted)] hover:bg-[var(--surface-hover)] hover:text-[var(--brand-fg)]');
   });
 
-  it('outgoing conversation bubbles are muted and retain text/border distinction', () => {
+  it('conversation workspace fills the column and outgoing bubbles stay muted', () => {
     const conversations = read('src/components/dashboard/ConversationsView.tsx');
-    expect(conversations).toMatch(/m\.direction === 'out' \? 'bg-\[var\(--brand-soft\)\] text-\[var\(--text\)\] border border-\[var\(--brand-border\)\]/);
-    expect(conversations).not.toMatch(/m\.direction === 'out' \? 'bg-\[var\(--brand\)\] text-white/);
+    const css = read('src/app/globals.css');
+    expect(conversations).toContain('conversation-message-scroll');
+    expect(conversations).not.toMatch(/max-h-\[(360|420)px\]/);
+    expect(css).toContain('.conversation-message.is-outgoing {');
+    expect(css).toContain('background:var(--accent-soft)');
+    expect(css).not.toContain('.conversation-message.is-outgoing { border-color:var(--accent-border); border-bottom-right-radius:3px; background:var(--accent); color:#fff');
+  });
+
+  it('conversation workspace keeps its three responsive modes and an accessible, unbounded timeline', () => {
+    const css = read('src/app/globals.css');
+    expect(css).toContain('grid-template-columns:minmax(280px,300px) minmax(0,1fr) minmax(280px,310px)');
+    expect(css).toContain('@media (max-width:1199px)');
+    expect(css).toContain('@media (max-width:767px)');
+    expect(css).toContain('.conversation-view[data-active="true"] .inbox-list { display:none; }');
+    expect(css).toContain('.conversation-view[data-active="true"] .inbox-detail { display:flex; }');
+    expect(css).toContain('.conversation-view[data-context-open="false"] .conversation-workspace');
+    expect(css).toContain('grid-template-columns:minmax(270px,340px) minmax(0,1fr)');
+    expect(css).toContain('.il-platform .conversation-view .inbox-filter { min-height:44px; }');
   });
 
   it('Results metrics share one panel instead of a grid of individually rounded cards', () => {

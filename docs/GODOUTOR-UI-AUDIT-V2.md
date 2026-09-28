@@ -12,8 +12,8 @@
 - [x] Testes visuais legados que exigiam fundo gradiente, topbar colorida, default neutro, cards creme ou CTA violeta foram atualizados para o contrato aprovado. Comportamento/negócio não foi alvo dessas alterações.
 - [x] Acentos históricos de pet/paciente, anotação administrativa, métrica, “hoje” e setup foram neutralizados ou ligados ao accent; contextos antes lilás convergem para info ou accent. Estados da agenda foram levados a tokens semânticos.
 - [x] Proteção de descarte compartilhada, rota clínica full-page e refinamentos estáticos de hierarquia/cores/superfícies concluídos; APIs e domínio clínico permaneceram no contrato existente.
-- [x] Suíte focada desta rodada: **101/101 testes aprovados** (10 arquivos), incluindo regressões clínicas e overlays.
-- [x] Suíte completa nesta rodada: **2.505 aprovados / 6 falhas / 2.511 testes**. Cinco falhas são a baseline conhecida (`a34-instagram` ×3, `automation-audit-p4`, `pipeline`). A sexta, `whatsapp-robustness.test.ts` (fluxo de agendamento), também foi reproduzida na main e no HEAD anterior da PR, como registrado na comparação histórica abaixo; é independente deste escopo.
+- [x] Validação anterior à ampliação do workspace `/conversas`: **101/101 testes focais** (10 arquivos), incluindo regressões clínicas e overlays.
+- [x] Validação completa anterior à ampliação do workspace: **2.505 aprovados / 6 falhas / 2.511 testes**. As seis falhas atuais continuam descritas na seção de validação do workspace abaixo.
 - [x] `npm run typecheck` aprovado; `npm run build` aprovado, com 132/132 páginas geradas.
 - [ ] Browser/render/capturas de todas as rotas em desktop e mobile: **não realizado nesta etapa**. Nenhuma rota abaixo está marcada como visualmente homologada. Playwright não encontrou Chromium instalado; `npx playwright install chromium` falhou com `ECONNRESET` ao baixar de `cdn.playwright.dev`. Portanto não há screenshots e nenhuma rota foi declarada visualmente aprovada.
 - [ ] Homologação visual pós-implementação pelo usuário: temas verde/neutro/vinho, reload F5 e viewports críticos; nenhuma evidência de browser foi declarada.
@@ -30,7 +30,7 @@
 | `/atendimento` | Atendimento clínico contextual — `app/(dashboard)/atendimento/page.tsx` + `EncounterSheet.tsx` | Página completa desktop/mobile; autosave, versão/conflitos, finalização/reabertura, impressão, retorno, tarefas e pagamento opcional | Parcial: shell de página e navegação integrados; APIs/permissão existente preservadas por inspeção de fonte e testes focados; layout ainda sem homologação browser | Pendente | Pendente | Pendente | Pendente |
 | `/profissionais` | Profissionais — `app/(dashboard)/profissionais/page.tsx` | Lista, ficha, permissões/atalhos e catálogo | Pendente | Pendente | Pendente | Pendente | Pendente |
 | `/disponibilidade` | Disponibilidade — `app/(dashboard)/disponibilidade/page.tsx` | Regras semanais, exceções, forms e seletor de profissional | Pendente | Pendente | Pendente | Pendente | Pendente |
-| `/conversas` | Conversas — `app/(dashboard)/conversas/page.tsx` + `ConversationsView.tsx` | Lista + conversa, badge de contato, composer, quick action global e sheet multilocal | Parcial: badge “contato novo” agora é info; atalho permanece na topbar | Pendente | Pendente | Pendente | Pendente |
+| `/conversas` | Conversas — `app/(dashboard)/conversas/page.tsx` + `ConversationsView.tsx` | Workspace operacional full-height: inbox independente, timeline/composer, contexto administrativo recolhível e responsivo, filtros e deep-link | Parcial: contrato do workspace e preservação de fluxos revisados em fonte/testes; visual segue pendente | Pendente | Pendente | Pendente | Pendente |
 | `/agente` | Assistente — `app/(dashboard)/agente/page.tsx` | Preferências de tom/objetivo, formulários, prévia e estados | Parcial: seleções usam accent-soft/accent-fg em vez de lilás decorativo | Pendente | Pendente | Pendente | Pendente |
 | `/tarefas` | Pendências — `app/(dashboard)/tarefas/page.tsx` + `TaskPanel.tsx` | Resumo de fila, atrasos reais, itens/ações, empty/error state | Parcial: “para hoje” não usa cor de warning | Pendente | Pendente | Pendente | Pendente |
 | `/pedidos` | Pedidos — `app/(dashboard)/pedidos/page.tsx` | Tabela/lista e ciclo de status, filtros e detalhe | Pendente | Pendente | Pendente | Pendente | Pendente |
@@ -77,7 +77,7 @@ A classificação estática individual das 84 ocorrências está concluída e vi
 
 ### Regressão e browser
 
-- [x] `npm run typecheck` passou; `npm test` executou 2.511 testes (2.505 aprovados, 6 falhas). As cinco falhas conhecidas de baseline continuam; a falha WhatsApp foi comparada e reproduzida tanto na main quanto no HEAD anterior da PR.
+- [x] Baseline antes da ampliação `/conversas`: `npm run typecheck` passou; `npm test` executou 2.511 testes (2.505 aprovados, 6 falhas). O resultado atualizado pós-workspace está documentado na seção final.
 - [x] Contraste AA automatizado dos tokens para os 21 presets (`--accent-fg × --accent-soft`, `--accent-contrast × --accent` e pares de sidebar/ativo). Isso não é renderização dos componentes em browser.
 - [ ] Carregar e renderizar todas as rotas da matriz a 1440, 1366 e 390 px; capturar screenshot por viewport/rota e anotar overflow, recorte, contraste e interação.
 - [ ] Em `/dashboard`, `/agenda`, `/conversas`, `/clientes`, `/funil` e `/configuracoes`, repetir em `azul-profundo`, verde, neutro e vinho; fazer F5 em cada preferência salva válida.
@@ -88,8 +88,8 @@ A classificação estática individual das 84 ocorrências está concluída e vi
 
 - Fonte: `src/lib/__tests__/godoutor-ui-contract-v2.test.ts` — default, 21 presets, contraste de nav/ativo/acento/texto sobre superfície suave, ausência de tema paralelo, controles e shell.
 - Suítes visuais existentes atualizadas de forma seletiva: `m8-contrato-cor`, `missao6-shell`, `missao7-visual`, `m10-identidade-persistente`, `m11-preview-sidebar`, `premium-refine`, `godoutor-visual`, `visual-convergence` e `status`.
-- Execução focada anterior: 13 arquivos, 218 testes aprovados. Nesta rodada, execução focal de 10 arquivos / **101 testes aprovados**, mais typecheck e build aprovados.
-- Execução full desta rodada: **2.505/2.511 aprovados**. Falhas: `a34-instagram` ×3, `automation-audit-p4`, `pipeline` (cinco falhas conhecidas da baseline) e um caso de `whatsapp-robustness.test.ts`, confirmado também na main e no HEAD anterior da PR. Os testes de Encounter, Pet 360 e deep-link impactados por helpers foram atualizados para o contrato atual e passaram.
+- Execução focada anterior: 13 arquivos, 218 testes aprovados. Na validação imediatamente anterior ao workspace, 10 arquivos / **101 testes aprovados**, mais typecheck e build aprovados.
+- Execução full imediatamente anterior ao workspace: **2.505/2.511 aprovados**. Falhas: `a34-instagram` ×3, `automation-audit-p4`, `pipeline` e um caso de `whatsapp-robustness.test.ts`. A execução atual está registrada ao final. Os testes de Encounter, Pet 360 e deep-link impactados por helpers passaram naquela etapa.
 - Browser e screenshots continuam pendentes. A tentativa de instalar Chromium via Playwright falhou por `ECONNRESET` em `cdn.playwright.dev`, sem navegador de sistema disponível; nenhum render, F5 ou viewport foi inspecionado visualmente.
 
 ## Fechamento complementar: overlays, anamnese e itens diferidos
@@ -122,3 +122,18 @@ A segunda busca documenta **84 ocorrências atuais**, uma por linha, em `GODOUTO
 - `npm run build`: aprovado; 132/132 páginas estáticas geradas.
 - `npm test`: 2.505/2.511 aprovados; apenas as cinco falhas da baseline conhecida e a falha WhatsApp previamente reproduzida ficaram vermelhas.
 - PR #43 segue OPEN/DRAFT; não houve merge. Browser/render/capturas permanecem pendentes e não foram alegados.
+
+## Continuação — `/conversas` como workspace de atendimento
+
+### Contrato implementado (fonte e testes; não é homologação visual)
+
+- **Desktop:** o shell da rota ocupa o espaço abaixo da topbar até o fim da viewport; rodapé e max-width editorial não competem com o workspace. A grade prevê inbox de ~280–340 px, conversa central flexível e contexto de ~280–310 px. A timeline usa o espaço vertical restante sem max-height artificial; o composer permanece no rodapé da coluna. O contexto administrativo pode ser recolhido, liberando a largura para a conversa.
+- **Tablet:** inbox e conversa permanecem lado a lado; o contexto usa sheet sob demanda, sem terceira coluna estreita.
+- **Mobile:** CSS alterna inbox e conversa full-screen com `data-active`; o botão Voltar retorna à lista, o composer respeita safe-area inferior e o contexto é um `WorkspaceSheet`. Os atalhos de contexto não são duplicados entre toolbar e cabeçalho do chat em telas compactas.
+- **Contexto:** mostra tutor, pets e paciente corrente quando veterinária, além de agendamento/responsável/oportunidade e atalhos administrativos. Não inclui prontuário. Agendar, tarefa, paciente, CRM e oportunidade/agenda continuam acessíveis sem duplicar a mesma ação na mesma região.
+- **Comportamentos mantidos:** WhatsApp/Instagram, busca e filtros de canal/unread/aguardando/falhas, seleção, `?c=`, `?q=` e `?canal=`, drafts por conversa, timeline/status/retry, composer e restrições de canal, IA↔humano/handoff, cadastro/vínculo de contato e `QuickRegisterSheet`, estado de desconexão e incompatibilidade de conta. Nenhuma API, backend, webhook, autenticação ou política de canal foi alterada.
+- **Baixo risco:** modo foco e nova janela foram mantidos como ações reversíveis; a URL completa (unidade, conversa e filtros) é copiada para a nova janela. A sidebar permanece em seu modo normal para evitar impacto transversal sem benefício seguro nesta missão.
+- **Cobertura da missão:** `src/components/__tests__/ConversationsWorkspace.test.tsx` cobre estado vazio sem seleção, filtros, seleção/status IA-humano, contexto veterinário, timeline/composer/envio, draft por conversa, deep-link/URL e comportamento mobile/sheet. `src/lib/__tests__/ui-refinement-v2.test.ts` também verifica o contrato responsivo e a timeline sem limite artificial.
+- **Limite:** os itens acima foram revisados por fonte e testes automatizados. A inspeção de layout/overflow/interação em browser, capturas e temas é responsabilidade da homologação visual no Preview; 1440/1366/390 e temas seguem pendentes.
+- **Validação após o workspace:** typecheck passou; os testes focais passaram (**6 arquivos / 78 testes**); `npm run build` passou com **132/132** páginas; `git diff --check` passou.
+- **Suíte completa:** `npm test -- --reporter=dot` resultou em **2.513 aprovados / 6 falhas / 2.519 testes**. As falhas observadas são as três existentes em `a34-instagram`, `automation-audit-p4`, `pipeline` (datas de agendamento passadas) e `whatsapp-robustness`; a baseline desta PR já registrava as mesmas seis falhas, sem relação com o workspace.

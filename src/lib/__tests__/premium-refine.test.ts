@@ -192,10 +192,11 @@ describe('missão 5 · 7 — padrão ÚNICO de títulos (chip + título + subtí
     expect(agenda).toContain('>Agenda</h1>');
   });
 
-  it('Conversas: chip do padrão (não mais chip carvão solto)', () => {
-    expect(conv).toContain('il-page-header__icon');
+  it('Conversas: marca discreta no cabeçalho do workspace full-height', () => {
+    expect(conv).toContain('conversation-mark');
+    expect(conv).toContain('conversation-pagebar__heading');
     expect(conv).not.toContain('bg-[var(--brand)] text-white flex items-center justify-center shadow-md');
-    expect(conv).toContain('>Conversas</h1>');
+    expect(conv).toContain('<h1>Conversas</h1>');
   });
 
   it('Clientes/Financeiro/Pendências com ícone no PageHeader', () => {

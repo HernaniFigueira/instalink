@@ -277,6 +277,7 @@ export function DashboardShell({ children }: { children: React.ReactNode }) {
   // A Agenda é o ambiente operacional: chrome mínimo para a grade ocupar a
   // viewport (menos padding, sem rodapé). As demais telas não mudam.
   const isAgenda = activePath === '/agenda';
+  const isConversations = activePath === '/conversas';
   // Largura é política do CATÁLOGO (campo `width`), não uma lista à parte:
   // telas densas (grade, kanban, tabela, colunas) usam a largura toda;
   // formulários e listas de coluna única ficam em 960px de leitura.
@@ -315,7 +316,7 @@ export function DashboardShell({ children }: { children: React.ReactNode }) {
         ...accentVars,
       } as React.CSSProperties}
       data-nav-accent={navAccent}
-      className={cn('il-platform workspace-shell min-h-screen', isAgenda && 'workspace-shell--fill')}
+      className={cn('il-platform workspace-shell min-h-screen', isAgenda && 'workspace-shell--fill', isConversations && 'workspace-shell--conversations')}
     >
       <a href="#workspace-content" className="workspace-skip">Ir para o conteúdo</a>
 
@@ -376,7 +377,7 @@ export function DashboardShell({ children }: { children: React.ReactNode }) {
             }} className="ml-auto underline underline-offset-2">Sair do modo suporte</button>
           </div>
         )}
-        <div key={business.id} className={cn(isAgenda ? 'agenda-page-gutter' : 'px-4 lg:px-8 py-6', !isFullWidth && 'max-w-[960px]')}>
+        <div key={business.id} className={cn(isAgenda ? 'agenda-page-gutter' : isConversations ? 'conversation-page-wrap' : 'px-4 lg:px-8 py-6', !isFullWidth && !isConversations && 'max-w-[960px]')}>
           {/* CONTRATO DO REFINO FINAL — sem breadcrumb em NENHUMA tela do
               workspace: o cabeçalho da página (chip + título + subtítulo)
               identifica a tela. O contexto vive na sidebar/topbar. */}
@@ -416,7 +417,7 @@ export function DashboardShell({ children }: { children: React.ReactNode }) {
             />
           ) : children}
         </div>
-        {!isAgenda && business.id && (
+        {!isAgenda && !isConversations && business.id && (
           <footer className="px-4 lg:px-8 py-4 border-t border-[var(--border)] mt-8">
             <p className="text-[11px] text-[var(--text-faint)] text-center">{business.name} · <a href={`/${business.slug}`} target="_blank" rel="noreferrer" className="underline font-semibold text-[var(--text-muted)]">página pública /{business.slug}</a></p>
           </footer>
