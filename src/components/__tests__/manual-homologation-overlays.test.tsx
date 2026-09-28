@@ -3,6 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { apiGet, apiSend } from '@/lib/api-client';
 import { PetsSection } from '../dashboard/PetsSection';
+import { NewBookingSheet } from '../dashboard/NewBookingSheet';
 import { AnamneseFiller } from '../dashboard/AnamneseFiller';
 import type { AnamneseResponse, AnamneseTemplate, Pet } from '@/lib/types';
 
@@ -59,8 +60,11 @@ describe('homologação manual — Novo pet protege trabalho dirty', () => {
   it.each(['backdrop', 'escape', 'x'] as const)('DIRTY + %s pede decisão e mantém os dados ao continuar', async (reason) => {
     const dialog = await openNewPet();
     requestPetDismiss(dialog, reason);
-    expect(await screen.findByRole('alertdialog')).toBeTruthy();
+    const confirm = await screen.findByRole('alertdialog');
+    expect(confirm.getAttribute('aria-modal')).toBe('true');
     expect(screen.getByText('Descartar cadastro do pet?')).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Continuar editando' }).className).toContain('il-control--secondary');
+    expect(screen.getByRole('button', { name: 'Descartar' }).className).toContain('il-control--destructive');
     fireEvent.click(screen.getByRole('button', { name: 'Continuar editando' }));
     expect(screen.queryByRole('alertdialog')).toBeNull();
     expect((document.getElementById('pet-name') as HTMLInputElement).value).toBe('Pipoca');
@@ -80,6 +84,25 @@ describe('homologação manual — Novo pet protege trabalho dirty', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Salvar pet' }));
     await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
     expect(screen.queryByRole('alertdialog')).toBeNull();
+  });
+});
+
+describe('homologação manual — Novo agendamento mantém o guard dirty e a faixa ampliada', () => {
+  it('dirty + backdrop mantém o sheet e oferece continuar editando ou descartar', async () => {
+    const onClose = vi.fn();
+    render(<NewBookingSheet businessId="biz-1" services={[]} pros={[]} horizonDays={30} onClose={onClose} onCreated={vi.fn()} />);
+    const dialog = await screen.findByRole('dialog', { name: 'Novo agendamento' });
+    expect(document.querySelector('.il-drawer__strip')?.className).toContain('max-w-[840px]');
+    fireEvent.change(screen.getByRole('textbox', { name: 'Buscar cliente' }), { target: { value: 'Alex' } });
+    fireEvent.click(dialog.querySelector('[aria-hidden="true"]')!);
+    const confirmation = await screen.findByRole('alertdialog');
+    expect(confirmation).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Continuar editando' })).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Descartar' })).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: 'Continuar editando' }));
+    expect(screen.queryByRole('alertdialog')).toBeNull();
+    expect((screen.getByRole('textbox', { name: 'Buscar cliente' }) as HTMLInputElement).value).toBe('Alex');
+    expect(onClose).not.toHaveBeenCalled();
   });
 });
 

@@ -98,8 +98,11 @@ export function ConversationsView({ unitId, panel = false }: { unitId?: string; 
   const [side, setSide] = useState<SideContext | null>(null);
   const [contextOpen, setContextOpen] = useState(true);
   const [contextSheetOpen, setContextSheetOpen] = useState(false);
+  const focusContextRestore = useRef<boolean | null>(null);
   const [compactLayout, setCompactLayout] = useState(false);
-  const [focusMode, setFocusMode] = useState(false);
+  const [focusMode, setFocusMode] = useState(() => params.get('focus') === '1' || params.get('standalone') === '1');
+  const queryFocusMode = params.get('focus') === '1' || params.get('standalone') === '1';
+  useEffect(() => { setFocusMode(queryFocusMode); }, [queryFocusMode]);
   const messagesRef = useRef<HTMLDivElement | null>(null);
   const detailHeadingRef = useRef<HTMLHeadingElement | null>(null);
   // §11–15 — identidade: cadastro rápido do "Contato novo" + a clínica é vet?
@@ -185,8 +188,10 @@ export function ConversationsView({ unitId, panel = false }: { unitId?: string; 
       return;
     }
     const sent = res.data.message;
-    setActive((prev) => prev ? { conversation: { ...prev.conversation, lastMessagePreview: sent.body.slice(0, 120) }, messages: [...prev.messages, sent] } : prev);
-    setConversations((list) => list.map((c) => c.id === active.conversation.id ? { ...c, lastMessagePreview: sent.body.slice(0, 120), lastMessageAt: sent.at } : c));
+    // The server already takes over on manual send. Reflect that same invariant
+    // immediately: one owner at a time, and no stale AI badge after success.
+    setActive((prev) => prev ? { conversation: { ...prev.conversation, mode: 'human', agentState: 'human_active', agentStateLabel: 'Equipe atendendo', lastMessagePreview: sent.body.slice(0, 120) }, messages: [...prev.messages, sent] } : prev);
+    setConversations((list) => list.map((c) => c.id === active.conversation.id ? { ...c, mode: 'human', agentState: 'human_active', agentStateLabel: 'Equipe atendendo', lastMessagePreview: sent.body.slice(0, 120), lastMessageAt: sent.at } : c));
     setDraft('');
   }
 
@@ -210,6 +215,23 @@ export function ConversationsView({ unitId, panel = false }: { unitId?: string; 
     else qs.delete('q');
     if (businessId) qs.set('b', businessId);
     router.replace(`/conversas?${qs.toString()}`, { scroll: false });
+  }
+
+  function changeFocusMode(next: boolean) {
+    setFocusMode(next);
+    if (next) {
+      focusContextRestore.current = contextOpen;
+      setContextOpen(false);
+      setContextSheetOpen(false);
+    } else if (focusContextRestore.current !== null) {
+      setContextOpen(focusContextRestore.current);
+      focusContextRestore.current = null;
+    }
+    const query = new URLSearchParams(params.toString());
+    if (businessId) query.set('b', businessId);
+    if (next) query.set('focus', '1');
+    else { query.delete('focus'); query.delete('standalone'); }
+    router.replace(`/conversas?${query.toString()}`, { scroll: false });
   }
 
   /**
@@ -438,7 +460,7 @@ export function ConversationsView({ unitId, panel = false }: { unitId?: string; 
           ) : <p className="conversation-context-muted">Nenhum pet associado no contexto desta conversa.</p>}
           {side?.currentPatient ? (
             <div className="conversation-current-patient"><span>Paciente atual</span><strong>{side.currentPatient.name}</strong></div>
-          ) : <p className="conversation-context-muted">Paciente atual não identificado.</p>}
+          ) : null}
         </section>
       )}
 
@@ -491,18 +513,15 @@ export function ConversationsView({ unitId, panel = false }: { unitId?: string; 
             aria-expanded={contextOpen} aria-controls="conversation-context-panel">
             {contextOpen ? 'Ocultar contexto' : 'Mostrar contexto'}
           </button>}
-          <button type="button" className="conversation-action conversation-focus-toggle" onClick={() => {
-            setFocusMode((focus) => {
-              const next = !focus;
-              if (next) { setContextOpen(false); setContextSheetOpen(false); }
-              return next;
-            });
-          }} aria-pressed={focusMode}>{focusMode ? 'Sair do modo foco' : 'Modo foco'}</button>
+          <button type="button" className="conversation-action conversation-focus-toggle" onClick={() => changeFocusMode(!focusMode)} aria-pressed={focusMode}>{focusMode ? 'Sair do modo foco' : 'Modo foco'}</button>
           <button type="button" className="conversation-action conversation-new-window" onClick={() => {
             const query = new URLSearchParams(params.toString());
             if (businessId) query.set('b', businessId);
+            if (!query.has('canal') && panelChannel !== 'all') query.set('canal', panelChannel);
+            query.set('focus', '1');
+            query.set('standalone', '1');
             globalThis.window.open(`/conversas?${query.toString()}`, '_blank', 'noopener,noreferrer');
-          }} aria-label="Abrir em nova janela"><Icon n="external" size={13} /> <span>Abrir em nova janela</span></button>
+          }} aria-label="Abrir separado"><Icon n="external" size={13} /> <span>Abrir separado</span></button>
         </div>
       </header>
       {error && <p role="alert" className="conversation-alert">{error}</p>}
@@ -588,6 +607,7 @@ export function ConversationsView({ unitId, panel = false }: { unitId?: string; 
                         : active.conversation.agentState === 'resolved' ? 'Resolvido' : 'IA atendendo')}
                 </span>
                 <div className="inbox-detail-actions">
+                  {focusMode && <button type="button" className="conversation-action conversation-focus-exit-mobile" onClick={() => changeFocusMode(false)}>Sair do modo foco</button>}
                   <button type="button" onClick={toggleMode} disabled={switchingMode} className="conversation-action conversation-mode-action">
                     {active.conversation.agentState === 'human_active' || active.conversation.agentState === 'waiting_team' || active.conversation.mode === 'human' ? 'Devolver para IA' : 'Pausar IA'}
                   </button>
@@ -627,6 +647,9 @@ export function ConversationsView({ unitId, panel = false }: { unitId?: string; 
               </div>
 
               <footer className="conversation-composer">
+                {active.conversation.mode !== 'human' && active.conversation.agentState !== 'human_active' && active.conversation.agentState !== 'waiting_team' && active.conversation.agentState !== 'resolved' && (
+                  <p className="conversation-ai-takeover-note">IA atendendo · ao enviar uma resposta, você assume a conversa</p>
+                )}
                 {sendError && <p role="alert" className="conversation-channel-alert is-error">{sendError}</p>}
                 {active.conversation.channel === 'instagram' && draftBytes >= 800 && <p className={cn('conversation-byte-count', draftBytes > INSTAGRAM_TEXT_MAX_BYTES && 'is-over-limit')}>{draftBytes} de {INSTAGRAM_TEXT_MAX_BYTES} bytes do Instagram{draftBytes > INSTAGRAM_TEXT_MAX_BYTES ? ' — reduza para enviar.' : ''}</p>}
                 {channelOff(active.conversation) ? (

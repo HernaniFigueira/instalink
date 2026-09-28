@@ -52,6 +52,40 @@ describe('2.0 refinement pass — lower action and surface competition', () => {
     expect(css).toContain('.il-platform .conversation-view .inbox-filter { min-height:44px; }');
   });
 
+  it('conversation focus is query-backed and removes global shell chrome without rebuilding the workspace', () => {
+    const shell = read('src/components/DashboardShell.tsx');
+    const css = read('src/app/globals.css');
+    expect(shell).toContain("params.get('focus') === '1'");
+    expect(shell).toContain("params.get('standalone') === '1'");
+    expect(shell).toContain('{!conversationFocus && <WorkspaceNavigation');
+    expect(shell).toContain('{!conversationFocus && <WorkspaceTopbar');
+    expect(shell).toContain("conversationFocus && 'workspace-shell--conversation-focus'");
+    expect(css).toContain('.workspace-shell--conversation-focus .workspace-main-col');
+    expect(css).toContain('height: 100dvh');
+  });
+
+  it('booking sheet expands responsively while retaining the shared sheet and side panel', () => {
+    const booking = read('src/components/dashboard/NewBookingSheet.tsx');
+    const drawer = read('src/components/ui.tsx');
+    const css = read('src/app/globals.css');
+    expect(booking).toContain('width="max-w-[840px]"');
+    expect(booking).toContain('sideWidth="max-w-[400px]"');
+    expect(drawer).toContain("expanded ? 'w-full max-w-[1280px]'");
+    expect(drawer).toContain('data-expanded={expanded ? \'true\' : undefined}');
+    expect(css).toContain(".il-drawer__strip[data-expanded='true'] { width:100%; max-width:1280px; }");
+  });
+
+  it('shared discard confirmation distinguishes safe and destructive decisions', () => {
+    const dialog = read('src/components/dashboard/OverlayDismissGuard.tsx');
+    const css = read('src/app/globals.css');
+    expect(dialog).toContain('data-safe-action');
+    expect(dialog).toContain('il-control--secondary overlay-confirm__action');
+    expect(dialog).toContain('il-control--destructive overlay-confirm__action');
+    expect(dialog).toContain("event.key === 'Escape'");
+    expect(css).toContain('.overlay-confirm .il-control--secondary');
+    expect(css).toContain('.overlay-confirm .il-control--destructive { border: 1px solid var(--danger); background: var(--danger); color: #fff; }');
+  });
+
   it('Results metrics share one panel instead of a grid of individually rounded cards', () => {
     const results = read('src/components/dashboard/results-view.tsx');
     const metricGrid = results.slice(results.indexOf('export function MetricGrid'), results.indexOf('export function FunnelView'));

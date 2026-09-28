@@ -49,6 +49,7 @@ function installMatchMedia(matches: boolean) {
 }
 
 beforeEach(() => {
+  vi.clearAllMocks();
   navigationState.query = 'b=biz-1';
   navigationState.replacements = [];
   installMatchMedia(false);
@@ -109,7 +110,7 @@ describe('workspace operacional de Conversas', () => {
     expect(screen.getByRole('status').textContent).toContain('Equipe atendendo');
   });
 
-  it('rascunho fica por conversa, timeline/composer permanecem disponíveis e envio usa API atual', async () => {
+  it('rascunho fica por conversa e envio manual otimista assume equipe, sem pausar ao digitar', async () => {
     await renderWorkspace();
     await openConversation('alpha', 'Beatriz Lima');
     const composer = screen.getByRole('textbox', { name: 'Mensagem' }) as HTMLInputElement;
@@ -117,6 +118,9 @@ describe('workspace operacional de Conversas', () => {
     expect(screen.getByRole('log', { name: /Mensagens com Beatriz/ })).toBeTruthy();
     expect(within(screen.getByRole('log')).getByText('Olá, tudo bem?')).toBeTruthy();
     fireEvent.change(composer, { target: { value: 'rascunho da Beatriz' } });
+    expect(screen.getByText(/IA atendendo · ao enviar uma resposta, você assume a conversa/)).toBeTruthy();
+    expect(screen.getByRole('status').textContent).toContain('IA atendendo');
+    expect(apiSend).not.toHaveBeenCalled();
     await openConversation('beta', 'Caio Souza');
     expect((screen.getByRole('textbox', { name: 'Mensagem' }) as HTMLInputElement).value).toBe('');
     await openConversation('alpha', 'Beatriz Lima');
@@ -124,6 +128,27 @@ describe('workspace operacional de Conversas', () => {
     expect(restored.value).toBe('rascunho da Beatriz');
     fireEvent.click(screen.getByRole('button', { name: 'Enviar' }));
     await waitFor(() => expect(apiSend).toHaveBeenCalledWith('/api/conversations', 'POST', expect.objectContaining({ conversationId: 'alpha', body: 'rascunho da Beatriz' }), expect.anything()));
+    await waitFor(() => expect(screen.getByRole('status').textContent).toContain('Equipe atendendo'));
+    expect(screen.getByRole('button', { name: 'Devolver para IA' })).toBeTruthy();
+    expect(screen.queryByText(/ao enviar uma resposta, você assume/)).toBeNull();
+    expect(screen.queryByText('IA atendendo', { exact: true })).toBeNull();
+  });
+
+  it('não inventa paciente quando currentPatient não veio vinculado no contexto', async () => {
+    vi.mocked(apiGet).mockImplementation(async (url: string) => {
+      if (url.startsWith('/api/whatsapp')) return { ok: true, status: 200, data: waData } as any;
+      if (url.includes('&id=')) {
+        const id = new URL(url, 'https://test.invalid').searchParams.get('id')!;
+        const conversation = rows.find((row) => row.id === id)!;
+        return { ok: true, status: 200, data: { conversation, messages, sideContext: { ...sideContext, currentPatient: undefined }, window: null } } as any;
+      }
+      return { ok: true, status: 200, data: { conversations: rows, channels: { whatsapp: true, instagram: true }, instagram: { connected: true, label: '', tone: 'ok', username: 'clinic' } } } as any;
+    });
+    await renderWorkspace();
+    await openConversation('alpha', 'Beatriz Lima');
+    expect(screen.getByText('Tico')).toBeTruthy();
+    expect(screen.queryByText('Paciente atual')).toBeNull();
+    expect(screen.queryByText('Paciente atual não identificado.')).toBeNull();
   });
 
   it('contexto desktop recolhe e restaura sem perder a conversa selecionada', async () => {
@@ -163,15 +188,25 @@ describe('workspace operacional de Conversas', () => {
     expect(screen.getByRole('region', { name: 'Inbox de conversas' })).toBeTruthy();
   });
 
-  it('nova janela preserva unidade e deep-link; modo foco é reversível', async () => {
+  it('abrir separado preserva unidade, deep-link e canal; modo foco é reversível sem Escape', async () => {
+    navigationState.query = 'b=biz-1&c=alpha&q=beatriz&canal=whatsapp';
     await renderWorkspace();
     const open = vi.spyOn(globalThis.window, 'open').mockImplementation(() => null);
-    fireEvent.click(screen.getByRole('button', { name: /Abrir em nova janela/ }));
-    expect(open).toHaveBeenCalledWith('/conversas?b=biz-1', '_blank', 'noopener,noreferrer');
+    fireEvent.click(screen.getByRole('button', { name: 'Abrir separado' }));
+    const openedUrl = new URL(open.mock.calls[0][0] as string, 'https://test.invalid');
+    expect(open.mock.calls[0].slice(1)).toEqual(['_blank', 'noopener,noreferrer']);
+    expect(openedUrl.pathname).toBe('/conversas');
+    expect(Object.fromEntries(openedUrl.searchParams)).toEqual({ b: 'biz-1', c: 'alpha', q: 'beatriz', canal: 'whatsapp', focus: '1', standalone: '1' });
     const view = document.querySelector('.conversation-view')!;
     fireEvent.click(screen.getByRole('button', { name: 'Modo foco' }));
     expect(view.getAttribute('data-focus')).toBe('true');
-    fireEvent.click(screen.getByRole('button', { name: 'Sair do modo foco' }));
+    expect(view.getAttribute('data-context-open')).toBe('false');
+    expect(new URLSearchParams(navigationState.query).get('focus')).toBe('1');
+    fireEvent.keyDown(document, { key: 'Escape' });
+    expect(view.getAttribute('data-focus')).toBe('true');
+    fireEvent.click(document.querySelector<HTMLButtonElement>('.conversation-pagebar .conversation-focus-toggle')!);
     expect(view.getAttribute('data-focus')).toBe('false');
+    expect(view.getAttribute('data-context-open')).toBe('true');
+    expect(new URLSearchParams(navigationState.query).has('focus')).toBe(false);
   });
 });

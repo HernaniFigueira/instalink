@@ -643,7 +643,7 @@ export function Drawer({ open, onClose, title, subtitle, children, footer, width
   /**
    * §19–25 — OVERLAY SYSTEM: painel lateral do MESMO overlay (ex.: "Cadastrar
    * novo paciente" dentro do "Novo agendamento"). Com `side`, o dialog EXPANDE
-   * lateralmente (base ~680–760px → expandido ~1000–1120px), o painel base
+   * lateralmente (base ~760–840px → expandido até ~1280px), o painel base
    * recua/fica atenuado e o secundário entra pela direita. NUNCA abre um
    * segundo modal/backdrop. Mobile: passos num overlay só, com transição
    * horizontal (um painel por vez).
@@ -700,8 +700,8 @@ export function Drawer({ open, onClose, title, subtitle, children, footer, width
             (entrada 180–220ms). Com `side`, dois painéis lado a lado. */}
         <div className={cn(
           'il-drawer__strip relative h-full bg-[var(--bg)] shadow-xl flex flex-col',
-          expanded ? 'w-full max-w-[1120px]' : `w-full ${width}`,
-        )}>
+          expanded ? 'w-full max-w-[1280px]' : `w-full ${width}`,
+        )} data-expanded={expanded ? 'true' : undefined}>
           <div className="il-drawer__panels flex h-full min-h-0">
             {/* Painel base (agendamento): recua/atenua quando o secundário abre. */}
             <div className={cn('il-drawer__panel il-drawer__panel--base flex flex-col min-h-0', expanded && 'il-drawer__panel--recessed', expanded ? 'flex-1' : 'w-full')}>

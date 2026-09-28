@@ -278,6 +278,8 @@ export function DashboardShell({ children }: { children: React.ReactNode }) {
   // viewport (menos padding, sem rodapé). As demais telas não mudam.
   const isAgenda = activePath === '/agenda';
   const isConversations = activePath === '/conversas';
+  const standaloneConversation = isConversations && params.get('standalone') === '1';
+  const conversationFocus = isConversations && (standaloneConversation || params.get('focus') === '1');
   // Largura é política do CATÁLOGO (campo `width`), não uma lista à parte:
   // telas densas (grade, kanban, tabela, colunas) usam a largura toda;
   // formulários e listas de coluna única ficam em 960px de leitura.
@@ -316,23 +318,23 @@ export function DashboardShell({ children }: { children: React.ReactNode }) {
         ...accentVars,
       } as React.CSSProperties}
       data-nav-accent={navAccent}
-      className={cn('il-platform workspace-shell min-h-screen', isAgenda && 'workspace-shell--fill', isConversations && 'workspace-shell--conversations')}
+      className={cn('il-platform workspace-shell min-h-screen', isAgenda && 'workspace-shell--fill', isConversations && 'workspace-shell--conversations', conversationFocus && 'workspace-shell--conversation-focus', standaloneConversation && 'workspace-shell--standalone')}
     >
       <a href="#workspace-content" className="workspace-skip">Ir para o conteúdo</a>
 
       {/* `nav={nav}`: a navegação continua vindo do catálogo (lib/panel.ts) —
           o shell não tem lista própria de destinos. Sidebar primeiro: ela
           ocupa top:0→bottom:0 e a topbar vive na coluna da direita. */}
-      <WorkspaceNavigation nav={nav}
+      {!conversationFocus && <WorkspaceNavigation nav={nav}
         activePath={activePath} unit={business}
         units={businesses} multiUnit={multiUnit} onUnit={switchBiz}
         collapsed={collapsed} onCollapse={toggle}
         mobileOpen={mobileNav} onMobileOpen={setMobileNav}
         onHelp={() => setHelpOpen(true)}
-      />
+      />}
 
       <div className="workspace-main-col">
-      <WorkspaceTopbar
+      {!conversationFocus && <WorkspaceTopbar
         page={activeRoute?.label || 'Painel'}
         query={q}
         searchItems={buildNavSearchItems(nav, q)}
@@ -353,18 +355,18 @@ export function DashboardShell({ children }: { children: React.ReactNode }) {
         canCreate={nav.allowed.map((i) => i.href).filter((h) => ['/agenda', '/clientes', '/tarefas', '/servicos', '/profissionais', '/financeiro'].includes(h))}
         canOpenConversations={nav.allowed.some((i) => i.href === '/conversas') && activePath !== '/conversas' && activePath !== '/organizacao'}
         vet={business.clinicType === 'veterinaria'}
-      />
+      />}
 
-      <HelpCenter
+      {!conversationFocus && <HelpCenter
         open={helpOpen}
         onClose={() => setHelpOpen(false)}
         query={q}
         nav={nav}
         businessId={business.id}
-      />
+      />}
 
       {nav.allowed.some(i => i.href === '/conversas') && activePath !== '/conversas' && activePath !== '/organizacao' && <ConversationsDock key={business.id} businessId={business.id}/>}
-      <main ref={mainRef} id="workspace-content" tabIndex={-1} className="workspace-content flex-1 min-w-0">
+      <main ref={mainRef} id="workspace-content" tabIndex={-1} className={cn('workspace-content flex-1 min-w-0', conversationFocus && 'workspace-content--focus')}>
         {support && (
           <div className={cn('px-4 lg:px-8 py-2.5 text-xs font-semibold flex flex-wrap items-center gap-x-3 gap-y-1 border-b',
             support.mode === 'view' ? 'bg-[var(--warning-bg)] text-[var(--warning-fg)] border-[var(--warning-border)]' : 'bg-[var(--danger)] text-white border-[var(--danger-strong)]')}>
@@ -381,7 +383,7 @@ export function DashboardShell({ children }: { children: React.ReactNode }) {
           {/* CONTRATO DO REFINO FINAL — sem breadcrumb em NENHUMA tela do
               workspace: o cabeçalho da página (chip + título + subtítulo)
               identifica a tela. O contexto vive na sidebar/topbar. */}
-          {isMaster && !support && (
+          {!conversationFocus && isMaster && !support && (
             <p className="mb-4 text-xs font-semibold text-[var(--warning-fg)] bg-[var(--warning-bg)] border border-[var(--warning-border)] rounded-md px-3 py-2 inline-flex items-center gap-2 shadow-xs">
               <I n="shield" size={14} /> Você é master — <Link href="/master" className="underline font-semibold">/master</Link>
             </p>
@@ -389,7 +391,7 @@ export function DashboardShell({ children }: { children: React.ReactNode }) {
           {/* Hierarquia (item 4 do briefing): o papel de quem está logado era
               um parágrafo permanente no miolo de TODA tela. A informação não
               foi removida — mora na topbar, ao lado do nome, onde pertence. */}
-          {business?.agendaScope === 'own' && (
+          {!conversationFocus && business?.agendaScope === 'own' && (
             // Honestidade com quem atende: a agenda mostrada é SÓ a dele.
             // (A restrição é do servidor — aqui só avisamos.)
             <p className="mb-4 text-xs font-semibold text-[var(--text)] bg-white border border-[var(--border)] rounded-md px-3 py-2 inline-flex items-center gap-2 shadow-xs">
@@ -397,7 +399,7 @@ export function DashboardShell({ children }: { children: React.ReactNode }) {
               Você vê <strong>somente a sua agenda</strong>{business.professionalName ? ` (${business.professionalName})` : ''}. Os clientes da unidade continuam disponíveis em Clientes.
             </p>
           )}
-          {business?.agendaScope === 'none' && (
+          {!conversationFocus && business?.agendaScope === 'none' && (
             // Vínculo ainda não configurado: a agenda fica vazia por segurança
             // (nunca a de todo mundo). O caminho para resolver é o Equipe.
             <p className="mb-4 text-xs font-semibold text-[var(--warning-fg)] bg-[var(--warning-bg)] border border-[var(--warning-border)] rounded-md px-3 py-2 inline-flex flex-wrap items-center gap-2 shadow-xs" role="status">

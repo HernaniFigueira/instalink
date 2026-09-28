@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { wrapDialogFocus } from '@/lib/dialog-focus';
+import { Icon } from '@/components/icons';
 
 export type DismissReason = 'backdrop' | 'escape' | 'close-button' | 'navigation' | 'programmatic';
 export type DismissContext = 'new-booking' | 'new-client' | 'edit' | 'combined' | 'generic';
@@ -69,15 +70,18 @@ export function ConfirmDialog({ pending, onContinue, onDiscard }: {
           wrapDialogFocus(event, event.currentTarget, null);
           if (event.key === 'Escape') { event.preventDefault(); onContinue(); }
         }}>
-        <h2 id="overlay-confirm-title" className="text-base font-semibold text-[var(--text)]">{title}</h2>
-        <p id="overlay-confirm-description" className="mt-1.5 text-sm text-[var(--text-muted)]">
-          {description}{!saving && pending.state.error ? ` Último salvamento: ${pending.state.error}` : ''}
-        </p>
-        <div className="mt-5 flex flex-wrap justify-end gap-2">
-          <button type="button" data-safe-action className="il-control il-control--secondary" onClick={onContinue}>
+        <span className="overlay-confirm__icon" aria-hidden="true"><Icon n={saving ? 'clock' : 'alert'} size={18} /></span>
+        <div className="overlay-confirm__copy">
+          <h2 id="overlay-confirm-title">{title}</h2>
+          <p id="overlay-confirm-description">
+            {description}{!saving && pending.state.error ? ` Último salvamento: ${pending.state.error}` : ''}
+          </p>
+        </div>
+        <div className="overlay-confirm__actions">
+          <button type="button" data-safe-action className="il-control il-control--secondary overlay-confirm__action" onClick={onContinue}>
             {saving ? 'Continuar salvando' : 'Continuar editando'}
           </button>
-          {!saving && <button type="button" className="il-control il-control--destructive" onClick={onDiscard}>Descartar</button>}
+          {!saving && <button type="button" className="il-control il-control--destructive overlay-confirm__action" onClick={onDiscard}>Descartar</button>}
         </div>
       </div>
     </div>

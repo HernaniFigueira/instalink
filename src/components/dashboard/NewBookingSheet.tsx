@@ -373,9 +373,9 @@ export function NewBookingSheet({ businessId, services, pros, timezone, initial,
       sideDismissGuard={{ ...clientPersistence, context: 'new-client' }}
       title="Novo agendamento"
       subtitle="Paciente → serviço → data e horário → confirmação"
-      width="max-w-[720px]"
+      width="max-w-[840px]"
       /* §19–25 — MESMO overlay que expande: "+ Cadastrar paciente" abre o
-         painel lateral (base 720px → expandida ~1120px), com o lado do
+         painel lateral (base até 840px → expandida até 1280px), com o lado do
          agendamento recuado/atenuado. Nenhum modal empilhado. */
       side={registerOpen ? (
         <NewClientForm
