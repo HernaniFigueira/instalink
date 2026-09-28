@@ -77,7 +77,7 @@ A classificação estática individual das 84 ocorrências está concluída e vi
 
 ### Regressão e browser
 
-- [x] `npm run typecheck` passou; `npm test` executou 2.491 testes (2.485 aprovados, 6 falhas). As cinco falhas conhecidas de baseline continuam; a falha WhatsApp foi comparada e reproduzida tanto na main quanto no HEAD anterior da PR.
+- [x] `npm run typecheck` passou; `npm test` executou 2.511 testes (2.505 aprovados, 6 falhas). As cinco falhas conhecidas de baseline continuam; a falha WhatsApp foi comparada e reproduzida tanto na main quanto no HEAD anterior da PR.
 - [x] Contraste AA automatizado dos tokens para os 21 presets (`--accent-fg × --accent-soft`, `--accent-contrast × --accent` e pares de sidebar/ativo). Isso não é renderização dos componentes em browser.
 - [ ] Carregar e renderizar todas as rotas da matriz a 1440, 1366 e 390 px; capturar screenshot por viewport/rota e anotar overflow, recorte, contraste e interação.
 - [ ] Em `/dashboard`, `/agenda`, `/conversas`, `/clientes`, `/funil` e `/configuracoes`, repetir em `azul-profundo`, verde, neutro e vinho; fazer F5 em cada preferência salva válida.
@@ -88,7 +88,7 @@ A classificação estática individual das 84 ocorrências está concluída e vi
 
 - Fonte: `src/lib/__tests__/godoutor-ui-contract-v2.test.ts` — default, 21 presets, contraste de nav/ativo/acento/texto sobre superfície suave, ausência de tema paralelo, controles e shell.
 - Suítes visuais existentes atualizadas de forma seletiva: `m8-contrato-cor`, `missao6-shell`, `missao7-visual`, `m10-identidade-persistente`, `m11-preview-sidebar`, `premium-refine`, `godoutor-visual`, `visual-convergence` e `status`.
-- Execução focada anterior: 13 arquivos, 218 testes aprovados. Nesta rodada, execução focal de 10 arquivos / **100 testes aprovados**, mais typecheck e build aprovados.
+- Execução focada anterior: 13 arquivos, 218 testes aprovados. Nesta rodada, execução focal de 10 arquivos / **101 testes aprovados**, mais typecheck e build aprovados.
 - Execução full desta rodada: **2.505/2.511 aprovados**. Falhas: `a34-instagram` ×3, `automation-audit-p4`, `pipeline` (cinco falhas conhecidas da baseline) e um caso de `whatsapp-robustness.test.ts`, confirmado também na main e no HEAD anterior da PR. Os testes de Encounter, Pet 360 e deep-link impactados por helpers foram atualizados para o contrato atual e passaram.
 - Browser e screenshots continuam pendentes. A tentativa de instalar Chromium via Playwright falhou por `ECONNRESET` em `cdn.playwright.dev`, sem navegador de sistema disponível; nenhum render, F5 ou viewport foi inspecionado visualmente.
 
@@ -117,7 +117,7 @@ A segunda busca documenta **84 ocorrências atuais**, uma por linha, em `GODOUTO
 
 ### Validação complementar desta rodada
 
-- Testes focais: **7 arquivos / 67 testes aprovados**, incluindo 10 testes interativos de Novo pet/Anamnese.
+- Testes focais: **10 arquivos / 101 testes aprovados**, incluindo 11 testes interativos de Novo pet/Anamnese.
 - `npm run typecheck`: aprovado após as últimas alterações de código.
 - `npm run build`: aprovado; 132/132 páginas estáticas geradas.
 - `npm test`: 2.505/2.511 aprovados; apenas as cinco falhas da baseline conhecida e a falha WhatsApp previamente reproduzida ficaram vermelhas.
