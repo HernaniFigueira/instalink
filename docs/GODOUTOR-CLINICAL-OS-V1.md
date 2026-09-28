@@ -63,16 +63,22 @@ operacional padrão, APIs intactas).
 > **F0/J (correção estrutural):** EventLog **NÃO** é mais um array em
 > `instalink_doc`. Versão anterior (superseded) gravava `domainEvents` no
 > documento JSONB monolítico — decisão corrigida antes de F1: o EventLog já
-> nasce **normalizado em Postgres**, na tabela `domain_event`
+> nasce **normalizado em Postgres**, na tabela `godoutor_internal.domain_event`
 > (`db/migrations/0001_domain_event.sql`), acessado exclusivamente pela porta
 > `DomainEventStore` (`lib/domain-events/store.ts`).
 
-**Escolha de schema** (auditoria FASE F): schema `public` (padrão do projeto —
-`instalink_doc` já vive em `public`; nada de schema novo), naming `snake_case`,
-IDs `TEXT`, timestamps `TIMESTAMPTZ`. O DDL é versionado em
-`db/migrations/` (fonte de verdade auditável) e aplicado de forma idempotente
-uma vez por processo (padrão `pgInit` do projeto). **Nenhuma migração é
-aplicada em produção nesta fundação.**
+**Escolha de schema** (hardening F0): schema interno **`godoutor_internal`**
+(tabelas `godoutor_internal.domain_event` e `godoutor_internal.ai_usage`),
+naming `snake_case`, IDs `TEXT` (UUID v4), timestamps `TIMESTAMPTZ`. **As
+migrations em `db/migrations/` são a ÚNICA autoridade de DDL**: os stores de
+runtime executam apenas `SELECT`/`INSERT` e todo SQL é **totalmente
+qualificado** — nada depende de `search_path` (pool serverless reaproveita
+conexões; qualificar é o único jeito seguro). Migration ausente ⇒ falha
+**explícita** (erro `42P01`/`3F000` traduzido para "aplique a migration
+000N"), nunca DDL silencioso no boot. As tabelas novas **nascem fechadas**
+contra acesso client-side (REVOKE de `PUBLIC`/`anon`/`authenticated`/
+`service_role` na tabela e `USAGE` no schema — ver `db/migrations/README.md`).
+**Nenhuma migração é aplicada em produção nesta fundação.**
 
 ```ts
 DomainEvent {
@@ -93,7 +99,7 @@ Catálogo v1: `appointment.created|confirmed|cancelled|completed|no_show`,
 `document.generated`, `invoice.created`, `payment.received`,
 `inventory.low|movement`, `followup.due|completed`.
 
-Persistência (`domain_event`): `business_id NOT NULL`, catálogo em `type`,
+Persistência (`godoutor_internal.domain_event`): `business_id NOT NULL`, catálogo em `type`,
 `entity_type`/`entity_id`, `actor_kind|id|name`, `origin`, `occurred_at`/
 `recorded_at`, `payload JSONB` sempre redigido, `idempotency_key` opcional.
 
@@ -157,15 +163,20 @@ GenerativeAIProvider { id; isAvailable(); generate(req): GenerativeResult }
 - `DisabledGenerativeProvider` (padrão) / `MockGenerativeProvider` (testes).
 - Futuro: OpenAI / OpenRouter / Gemini / outro — **plugados aqui**, o domínio
   nunca importa fornecedor. **Sempre no servidor**; nada no frontend.
-- Telemetria (`AiUsageRecord`, tabela normalizada `ai_usage` —
-  `db/migrations/0002_ai_usage.sql`; **não** vive em `instalink_doc`):
+- Telemetria (`AiUsageRecord`, tabela normalizada
+  `godoutor_internal.ai_usage` — `db/migrations/0002_ai_usage.sql`; **não**
+  vive em `instalink_doc`):
   `businessId · agentId · feature · provider · model · inputTokens ·
   outputTokens · audioSeconds · estimatedCost · latencyMs · decisionType ·
-  confidence · createdAt`. Índices `(business_id, created_at DESC)` e
+  confidence · createdAt`. **`id` é UUID v4** (`crypto.randomUUID()` — sem
+  contador global/em memória; `RecordAiUsageInput.id` aceita id explícito
+  para fixtures/testes, e a unicidade é segura entre instâncias serverless).
+  Índices `(business_id, created_at DESC)` e
   `(business_id, agent_id, created_at DESC)`; CHECKs de sanidade (tokens/
-  latência/ confidence 0..1). **Nunca armazena prompts clínicos completos,
-  transcrição ou prontuário** — só números. Custo de IA por clínica nasce
-  aqui (`AiUsageStore.totals`).
+  latência/confidence 0..1); **`estimated_cost` é `NUMERIC(18,8)`** (decimal
+  exato — nunca `DOUBLE PRECISION` para custo). **Nunca armazena prompts
+  clínicos completos, transcrição ou prontuário** — só números. Custo de IA
+  por clínica nasce aqui (`AiUsageStore.totals`).
 
 ### 3.4 Página pública → legado (desativação segura)
 
@@ -187,9 +198,10 @@ AS-IS: `instalink_doc` (JSONB, uma linha) + `tenant_current` + ficheiros de
 arquivo; diversos domínios já têm módulos próprios (agenda/queue/encounters/
 revenue/…). TO-BE (sem big-bang):
 
-0. **Correção F0 (antes de qualquer integração):** EventLog (`domain_event`) e
-   telemetria de IA (`ai_usage`) **nascem normalizados em Postgres** — nunca em
-   `instalink_doc`. Foi a primeira versão (arrays aditivos no documento) foi
+0. **Correção F0 (antes de qualquer integração):** EventLog
+   (`godoutor_internal.domain_event`) e telemetria de IA
+   (`godoutor_internal.ai_usage`) **nascem normalizados em Postgres** — nunca
+   em `instalink_doc`. A primeira versão (arrays aditivos no documento) foi
    abandonada ainda em F0, exatamente para não alimentar o JSONB que queremos
    desligar como runtime. Portas de acesso: `DomainEventStore` / `AiUsageStore`
    (Postgres em produção; adapter de memória em testes/dev — sem rede).
@@ -197,7 +209,7 @@ revenue/…). TO-BE (sem big-bang):
    legados permanecem no documento até seus cortes; nada de big-bang.
 2. **Plano de corte por domínio** (fases F1+): cada domínio que precisar de
    tabela normalizada migra com dual-read/dual-write **controlado**, na ordem:
-   ~~`domain_event`~~ (F0 — já normalizado) → `clinical_encounter` →
+   ~~`godoutor_internal.domain_event`/`ai_usage`~~ (F0 — já normalizado) → `clinical_encounter` →
    `prescription/order` → `invoice/payment` → `inventory` — cada corte é um PR
    próprio, com paridade testada antes do flip. `instalink_doc` vira,
    gradualmente, o ledger legado lido até a última migração.
@@ -209,9 +221,11 @@ revenue/…). TO-BE (sem big-bang):
    `prescription→encounter`, `order→encounter`, `invoice→encounter`,
    `payment→invoice`, `inventory_movement→lot`, `domain_event→entidade`.
 5. **Versionamento de schema**: `db/migrations/NNNN_tabela.sql` (1 arquivo por
-   migração, fonte auditável do DDL) + aplicação idempotente no runtime
-   (`CREATE … IF NOT EXISTS`, uma vez por processo). Aplicação em produção é
-   manual e revisada — a fundação apenas versiona o DDL.
+   migração) é a **ÚNICA autoridade de DDL** — o runtime não executa
+   `CREATE TABLE`/`CREATE INDEX`/`ALTER TABLE` em hipótese alguma; migration
+   ausente derruba a operação com erro explícito que aponta o arquivo.
+   Aplicação em produção é manual, revisada e validada contra o alvo — a
+   fundação apenas versiona o DDL (zero migration aplicada nesta PR).
 
 ## 5. Agent-ready (ToolRegistry — preservado)
 
@@ -248,6 +262,42 @@ autonomamente.**
   prompt clínico; prontuário só no Encounter (dado sensível, com dono).
 - Ações importantes exigem confirmação humana (ToolRegistry `confirmed`).
 
+### 6.1 Exposição do banco (Supabase) — constatação factual da auditoria
+
+Estado medido **hoje**, reportado como fato, sem extrapolação:
+
+- a tabela legado é `godoutor_app.instalink_doc` (schema `godoutor_app`,
+  owner `postgres`);
+- `godoutor_app.instalink_doc` está atualmente com **RLS desabilitado**;
+- na auditoria atual, `anon` e `authenticated` **não apresentaram USAGE no
+  schema** `godoutor_app` **nem grants explícitos** sobre `instalink_doc`
+  (para `anon`, `authenticated` e `service_role`);
+- `service_role` também não apresentou USAGE no schema `godoutor_app`.
+
+**O que isso NÃO prova:** NÃO está comprovado que `instalink_doc` seja
+exposto/alcançável por `anon`/`authenticated` via client-side — a RLS
+desabilitada remove uma barreira, mas sem `USAGE` no schema nem grants na
+tabela não há caminho demonstrado pela Data API. **A política de exposição
+via Data API (schemas expostos), grants e RLS deve permanecer auditada antes
+da expansão do banco clínico** — nenhum texto deste documento trata
+exposição como fato enquanto essa auditoria não fechar.
+
+**Plano de hardening (sequência, sem atalhos):**
+
+1. **Menor privilégio** nos papéis do gateway (`anon`/`authenticated`/
+   `service_role`) — nada de grants amplos em schemas com dados clínicos;
+2. **Schema interno** (`godoutor_internal`) para todo domínio novo — fora de
+   qualquer lista de schemas expostos na Data API;
+3. **Tabelas novas nunca acessíveis diretamente por client-side** — cada
+   migration nasce com `REVOKE` de `PUBLIC`/`anon`/`authenticated` e sem
+   `USAGE` de schema para os papéis do gateway (defesa em profundidade já
+   aplicada em `0001`/`0002`);
+4. **RLS/grants apropriados** definidos por tabela e por papel, com revisão
+   humana;
+5. **Validação antes de qualquer alteração em produção** — auditoria no alvo,
+   plano de rollback e verificação pós-aplicação; nada disso foi executado
+   nesta fundação (zero mudança de RLS/grants, zero migration aplicada).
+
 ## 7. Configurações (planejamento — sem UI nova neste estágio)
 
 Clínica (identidade, unidades) · Fiscal · Documentos (templates) · Agenda
@@ -279,9 +329,19 @@ Cada fase = PR pequena, segura e cumulativa; nada de reescrita.
     redigação/tenant; DecisionEngine Disabled/Mock/TypeSafe-blocked;
     GenerativeAIProvider; telemetria sem prompt; flag da Página;
   - `m12-clinical-os-stores.test.ts` — stores NORMALIZADOS com Pool falso:
-    DDL idempotente das migrations 0001/0002, INSERT em `domain_event`/
-    `ai_usage`, ON CONFLICT de idempotência, tenant isolation em toda query,
-    adapters de memória com o mesmo contrato.
+    INSERT em `godoutor_internal.domain_event`/`godoutor_internal.ai_usage`
+    SEM qualquer DDL no runtime, ON CONFLICT de idempotência, tenant
+    isolation em toda query, falha explícita quando a migration não existe
+    (42P01 → "aplique a migration 000N"), adapters de memória com o mesmo
+    contrato;
+  - `m12-clinical-os-hardening.test.ts` — auditoria estática do hardening:
+    `id` de `ai_usage` é UUID v4 gerado por `crypto.randomUUID()` (sem
+    contador global; `id` explícito de fixture respeitado), stores e
+    migrations só referenciam `godoutor_internal.*` com SQL qualificado,
+    `estimated_cost` é `NUMERIC(18,8)`, migrations nascem fechadas (REVOKE
+    `PUBLIC`/`anon`/`authenticated`/`service_role` + schema sem `USAGE`),
+    nenhuma instrução DDL em `src/lib/` e DecisionEngine/Página legada
+    intactos.
 - `tsc --noEmit` + `build` + suíte completa (baseline 2403/5 pré-existentes).
 - Validação local com fixtures/mocks — **nunca produção**; zero escrita
   remota para testar; nenhuma migration aplicada em produção.

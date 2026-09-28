@@ -253,7 +253,8 @@ describe('F0 · GenerativeAIProvider + telemetria de IA', () => {
       inputTokens: 10, outputTokens: 5, latencyMs: 1,
     });
     expect(rec.decisionType).toBeUndefined();
-    expect(rec.id).toMatch(/^aiu-/);
+    // F0 hardening: id é UUID v4 (crypto.randomUUID), não mais `aiu-<data>-<seq>`
+    expect(rec.id).toMatch(/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i);
     expect(JSON.stringify(rec)).not.toContain('prompt');
   });
 

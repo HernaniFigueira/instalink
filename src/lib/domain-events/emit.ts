@@ -4,7 +4,7 @@
 // `emitDomainEvent` valida e CONSTRÓI o evento (puro — testável isolado).
 // A PERSISTÊNCIA vive em ./store (DomainEventStore: Postgres normalizado em
 // produção; memória em testes/dev). Nada de gravar eventos dentro de
-// instalink_doc: o EventLog já nasce normalizado (tabela `domain_event`).
+// instalink_doc: o EventLog já nasce normalizado (tabela `godoutor_internal.domain_event`).
 import { randomUUID } from 'node:crypto';
 import { redactSensitive } from '../redact';
 import type {

@@ -1,58 +1,46 @@
 // ═══════════════════════════════════════════════════════════════
 // GODOUTOR CLINICAL OS · F0 — PostgresAiUsageStore (produção)
 // ═══════════════════════════════════════════════════════════════
-// Persistência NORMALIZADA da telemetria de IA: tabela `ai_usage`
-// (fonte de verdade do DDL: db/migrations/0002_ai_usage.sql).
+// Persistência NORMALIZADA da telemetria de IA: tabela
+// `godoutor_internal.ai_usage`.
 //
 //   • NUNCA escreve em instalink_doc;
 //   • tenant isolation: toda query passa por business_id;
-//   • nunca guarda prompt clínico/transcrição — só números.
+//   • nunca guarda prompt clínico/transcrição — só números;
+//   • SEM DDL AQUI. A única autoridade estrutural é
+//     db/migrations/0002_ai_usage.sql; o runtime só SELECT/INSERT.
+//     Migration ausente ⇒ falha EXPLÍCITA (42P01 traduzido).
+//   • Todo SQL QUALIFICADO com `godoutor_internal.` — zero confiança em
+//     search_path de conexão compartilhada.
+//   • `estimated_cost` é NUMERIC(18,8) no banco: o driver devolve STRING
+//     decimal — convertemos com Number() na leitura; nunca DOUBLE no DDL.
 import { buildAiUsageRecord } from './usage';
 import type { AiUsageRecord, AiUsageTotals, RecordAiUsageInput } from './usage';
 import type { AiUsageStore } from './usage-store';
 import { getPgPool } from '../pg';
 
-/** Mesmo DDL de db/migrations/0002_ai_usage.sql (idempotente). */
-const DDL = `
-CREATE TABLE IF NOT EXISTS ai_usage (
-  id              TEXT           PRIMARY KEY,
-  business_id     TEXT           NOT NULL,
-  agent_id        TEXT           NOT NULL,
-  feature         TEXT           NOT NULL,
-  provider        TEXT           NOT NULL,
-  model           TEXT           NOT NULL,
-  input_tokens    INTEGER        NOT NULL DEFAULT 0,
-  output_tokens   INTEGER        NOT NULL DEFAULT 0,
-  audio_seconds   DOUBLE PRECISION NULL,
-  estimated_cost  DOUBLE PRECISION NOT NULL DEFAULT 0,
-  latency_ms      INTEGER        NOT NULL DEFAULT 0,
-  decision_type   TEXT           NULL,
-  confidence      DOUBLE PRECISION NULL,
-  created_at      TIMESTAMPTZ    NOT NULL,
-  CONSTRAINT ai_usage_tokens_ck   CHECK (input_tokens >= 0 AND output_tokens >= 0),
-  CONSTRAINT ai_usage_latency_ck  CHECK (latency_ms >= 0),
-  CONSTRAINT ai_usage_confidence_ck CHECK (confidence IS NULL OR (confidence >= 0 AND confidence <= 1))
-);
-CREATE INDEX IF NOT EXISTS ai_usage_business_created_idx
-  ON ai_usage (business_id, created_at DESC);
-CREATE INDEX IF NOT EXISTS ai_usage_business_agent_created_idx
-  ON ai_usage (business_id, agent_id, created_at DESC);
-`;
+/** Tabela SEMPRE qualificada — única forma de referenciá-la no runtime. */
+export const AI_USAGE_TABLE = 'godoutor_internal.ai_usage';
 
-let ready: Promise<void> | null = null;
-
-export function __resetAiUsageInitForTests(): void {
-  ready = null;
+/** Migration ausente ⇒ erro acionável que aponta o DDL canônico (0002). */
+export function assertMigrationApplied(err: unknown): never {
+  const code = (err as { code?: string } | null)?.code;
+  if (code === '42P01' || code === '3F000') {
+    throw new Error(
+      `Migration ausente: ${AI_USAGE_TABLE} não existe. ` +
+      'Aplique db/migrations/0002_ai_usage.sql (a única autoridade de DDL — o runtime não cria tabelas).',
+    );
+  }
+  throw err;
 }
 
-async function ensureSchema(): Promise<void> {
-  if (!ready) {
-    ready = getPgPool().query(DDL).then(() => undefined).catch((err) => {
-      ready = null;
-      throw err;
-    });
+async function runQuery(sql: string, params?: unknown[]): Promise<unknown[]> {
+  try {
+    const res = await getPgPool().query(sql, params);
+    return res.rows as unknown[];
+  } catch (err) {
+    assertMigrationApplied(err);
   }
-  return ready;
 }
 
 interface Row {
@@ -65,6 +53,7 @@ interface Row {
   input_tokens: number;
   output_tokens: number;
   audio_seconds: number | null;
+  /** NUMERIC(18,8) chega como string decimal do driver pg. */
   estimated_cost: number | string;
   latency_ms: number;
   decision_type: string | null;
@@ -98,9 +87,8 @@ function rowToRecord(row: Row): AiUsageRecord {
 export class PostgresAiUsageStore implements AiUsageStore {
   async record(input: RecordAiUsageInput): Promise<AiUsageRecord> {
     const record = buildAiUsageRecord(input);
-    await ensureSchema();
-    await getPgPool().query(
-      `INSERT INTO ai_usage (
+    await runQuery(
+      `INSERT INTO ${AI_USAGE_TABLE} (
          id, business_id, agent_id, feature, provider, model,
          input_tokens, output_tokens, audio_seconds, estimated_cost,
          latency_ms, decision_type, confidence, created_at
@@ -116,37 +104,37 @@ export class PostgresAiUsageStore implements AiUsageStore {
 
   async list(businessId: string, opts: { agentId?: string; since?: string; limit?: number } = {}): Promise<AiUsageRecord[]> {
     if (!businessId) throw new Error('businessId é obrigatório para listar ai_usage.');
-    await ensureSchema();
     const limit = Math.max(1, Math.min(1000, opts.limit || 200));
     const where: string[] = ['business_id = $1'];
     const params: unknown[] = [businessId];
     if (opts.agentId) { params.push(opts.agentId); where.push(`agent_id = $${params.length}`); }
     if (opts.since) { params.push(opts.since); where.push(`created_at >= $${params.length}`); }
     params.push(limit);
-    const res = await getPgPool().query(
-      `SELECT * FROM ai_usage WHERE ${where.join(' AND ')}
+    const res = (await runQuery(
+      `SELECT * FROM ${AI_USAGE_TABLE} WHERE ${where.join(' AND ')}
        ORDER BY created_at DESC
        LIMIT $${params.length}`,
       params,
-    );
-    return (res.rows as Row[]).map(rowToRecord);
+    )) as Row[];
+    return res.map(rowToRecord);
   }
 
   async totals(businessId: string, opts: { since?: string } = {}): Promise<AiUsageTotals> {
     if (!businessId) throw new Error('businessId é obrigatório para agregar ai_usage.');
-    await ensureSchema();
     const params: unknown[] = [businessId];
     let sinceClause = '';
     if (opts.since) { params.push(opts.since); sinceClause = `AND created_at >= $${params.length}`; }
-    const res = await getPgPool().query(
+    // SUM de NUMERIC devolve decimal EXATO como string — mantemos NUMERIC
+    // (cast ::numeric), nunca ::float: precisão binária não entra em dinheiro.
+    const res = (await runQuery(
       `SELECT COUNT(*)::int AS calls,
               COALESCE(SUM(input_tokens), 0)::bigint AS input_tokens,
               COALESCE(SUM(output_tokens), 0)::bigint AS output_tokens,
-              COALESCE(SUM(estimated_cost), 0)::float AS estimated_cost
-       FROM ai_usage WHERE business_id = $1 ${sinceClause}`,
+              COALESCE(SUM(estimated_cost), 0)::numeric AS estimated_cost
+       FROM ${AI_USAGE_TABLE} WHERE business_id = $1 ${sinceClause}`,
       params,
-    );
-    const row = res.rows[0] || {};
+    )) as Partial<Record<'calls' | 'input_tokens' | 'output_tokens' | 'estimated_cost', unknown>>[];
+    const row = res[0] || {};
     return {
       calls: Number(row.calls || 0),
       inputTokens: Number(row.input_tokens || 0),

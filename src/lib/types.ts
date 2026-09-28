@@ -1068,8 +1068,9 @@ export interface DB {
   // F3-H — outreach idempotente de retorno/reativação (anti-duplo-envio)
   followUpOutreach: FollowUpOutreach[];
   // Clinical OS · F0: EventLog (domainEvents) e telemetria de IA (aiUsage)
-  // NÃO vivem aqui — nascem NORMALIZADOS em Postgres (tabelas `domain_event`
-  // e `ai_usage`; ver db/migrations/ e lib/domain-events, lib/ai/usage-store).
+  // NÃO vivem aqui — nascem NORMALIZADOS em Postgres (tabelas
+  // `godoutor_internal.domain_event` e `godoutor_internal.ai_usage`;
+  // ver db/migrations/ e lib/domain-events, lib/ai/usage-store).
 }
 
 // ═══════════════════════════════════════════════════════════════

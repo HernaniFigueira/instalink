@@ -11,8 +11,12 @@
 // identificadores. Dado sensível continua no prontuário/audit trail.
 //
 // PERSISTÊNCIA (F0/J): este é o SEGUNDO domínio que já nasce NORMALIZADO
-// (tabela `ai_usage` — migration 0002). Nada de aiUsage dentro de
-// instalink_doc. A porta de persistência é AiUsageStore (./usage-store).
+// (tabela `godoutor_internal.ai_usage` — migration 0002, ÚNICA autoridade de
+// DDL). Nada de aiUsage dentro de instalink_doc. A porta de persistência é
+// AiUsageStore (./usage-store). ID é UUID v4 (crypto.randomUUID) — seguro em
+// instâncias serverless concorrentes; fixtures podem fixar `id` explícito.
+import { randomUUID } from 'node:crypto';
+
 export interface AiUsageRecord {
   id: string;
   businessId: string;
@@ -70,17 +74,25 @@ export function estimateAiCost(provider: string, model: string, inputTokens: num
   return (inputTokens / 1_000_000) * price.inputPerMillion + (outputTokens / 1_000_000) * price.outputPerMillion;
 }
 
-let seq = 0;
-export function usageId(now: string): string {
-  seq = (seq + 1) % 1_000_000;
-  return `aiu-${now.slice(0, 10)}-${seq.toString(36).padStart(4, '0')}`;
+/**
+ * ID de telemetria: UUID v4 via `crypto.randomUUID()`.
+ *
+ * Por que não um contador sequencial (`aiu-<data>-<seq>`): instâncias
+ * serverless (Vercel) iniciam concorrentes com seq partindo de zero — o
+ * colisor global renasce a cada cold start e duplicata na PK derrubaria a
+ * telemetria. UUID não coordenado é único por construção e nunca depende de
+ * estado de processo. `RecordAiUsageInput.id` continua aceitando id explícito
+ * (fixtures/testes determinísticos).
+ */
+export function usageId(): string {
+  return randomUUID();
 }
 
 /** Normaliza o input em um registro completo (PURO — sem I/O). */
 export function buildAiUsageRecord(input: RecordAiUsageInput): AiUsageRecord {
   const now = input.now || new Date().toISOString();
   return {
-    id: input.id || usageId(now),
+    id: input.id || usageId(),
     businessId: input.businessId,
     agentId: input.agentId,
     feature: input.feature,

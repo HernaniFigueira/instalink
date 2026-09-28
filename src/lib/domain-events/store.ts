@@ -4,7 +4,7 @@
 // O domínio depende DESTA porta — nunca de SQL nem de instalink_doc.
 //
 //   • PostgresDomainEventStore (./pg-store) → produção (DATABASE_URL):
-//     tabela normalizada `domain_event` (migration 0001).
+//     tabela normalizada `godoutor_internal.domain_event` (migration 0001 — única autoridade de DDL).
 //   • MemoryDomainEventStore (aqui)       → testes/dev local (sem rede).
 //
 // REGRA (F0/J): EventLog NÃO é armazenado em instalink_doc — é o primeiro

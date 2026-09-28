@@ -4,7 +4,7 @@
 // O domínio depende DESTA porta — nunca de SQL nem de instalink_doc.
 //
 //   • PostgresAiUsageStore (./usage-pg-store) → produção (DATABASE_URL):
-//     tabela normalizada `ai_usage` (migration 0002).
+//     tabela normalizada `godoutor_internal.ai_usage` (migration 0002 — única autoridade de DDL).
 //   • MemoryAiUsageStore (aqui)             → testes/dev local (sem rede).
 //
 // REGRA (F0/J): telemetria de IA NÃO é armazenada em instalink_doc.
