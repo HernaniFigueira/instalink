@@ -17,6 +17,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
 import { centsToBR, cn, waLink } from '@/lib/utils';
+import { focusFieldSoon } from '@/lib/focus-highlight';
 import { humanDateTime, humanDay, formatDateBR, todayISO } from '@/lib/tz';
 import { BOOKING_STATUS, LEAD_STATUS, type StatusDef } from '@/lib/status';
 import { leadOriginLabel } from '@/lib/leads';
@@ -514,7 +515,9 @@ export function ClientProfileDrawer({ person, businessId, pipeline, canFunil, on
         <>
           {person.phone && <A2 href={waLink(person.phone, `Olá, ${firstName}!`)} label="WhatsApp" icon="whatsapp" />}
           {/* FASE 2 · P2 — ações rápidas: nota e iniciar atendimento (quando aplicável). */}
-          <Button variant="quiet" size="sm" onClick={() => setTab('notes')}>
+          {/* §17–18 — "Registrar nota" conduz ao campo: troca a aba, rola até o
+              textarea e o foca com highlight sutil (sem modal novo). */}
+          <Button variant="quiet" size="sm" onClick={() => { setTab('notes'); focusFieldSoon('client-note-draft'); }}>
             <Icon n="pencil" size={14} /> Registrar nota
           </Button>
           {canEncounter && nextBooking && (
@@ -530,7 +533,13 @@ export function ClientProfileDrawer({ person, businessId, pipeline, canFunil, on
               <Icon n="fileText" size={14} /> Iniciar atendimento
             </Button>
           )}
-          <Button variant="secondary" size="sm" onClick={() => setEditing((v) => !v)}>
+          <Button variant="secondary" size="sm" onClick={() => {
+            const opening = !editing;
+            setEditing((v) => !v);
+            // §17–18 — ao abrir a edição: scroll suave + foco no primeiro
+            // campo + highlight sutil (1–2s). Fechar não mexe no foco.
+            if (opening) focusFieldSoon('client-edit-name');
+          }}>
             <Icon n={editing ? 'x' : 'pencil'} size={14} /> {editing ? 'Fechar edição' : 'Editar dados'}
           </Button>
           <Button variant="primary" size="sm" onClick={() => onNewBooking(person)}>
@@ -553,12 +562,12 @@ export function ClientProfileDrawer({ person, businessId, pipeline, canFunil, on
       {variant === 'page' ? (<>
       {/* ═══ QUEM É A PESSOA — carteirinha ═══ */}
       <div className="p-4">
-        <div className="il-idcard rounded-xl border border-[var(--border)] shadow-md p-4">
+        <div className="il-idcard rounded-2xl border border-[var(--border)] shadow-sm p-5">
           <div className="relative flex flex-wrap items-start gap-4">
             {/* Ponto 8 — foto real da conta global quando existe; sem ela, iniciais. */}
-            <Avatar name={person.name} src={person.avatar || undefined} size={72} />
+            <Avatar name={person.name} src={person.avatar || undefined} size={64} />
             <div className="min-w-0 flex-1">
-              <h2 className="text-lg font-semibold text-[var(--text)] leading-tight break-words">{person.name || 'Sem nome'}</h2>
+              <h2 className="text-xl font-semibold text-[var(--text)] leading-tight break-words">{person.name || 'Sem nome'}</h2>
               <p className="text-sm text-[var(--text-muted)] mt-0.5">
                 {age !== null ? `${age} anos` : 'Idade não informada'}
                 {profile.birthDate ? ` · nasceu em ${profile.birthDate.split('-').reverse().join('/')}` : ''}
@@ -725,7 +734,7 @@ export function ClientProfileDrawer({ person, businessId, pipeline, canFunil, on
               <div className="grid sm:grid-cols-2 gap-3">
                 <label className="block sm:col-span-2">
                   <span className="block text-xs font-semibold text-[var(--text-muted)] mb-1.5">Nome completo</span>
-                  <Input value={identityDraft.name} placeholder="Nome do cliente"
+                  <Input id="client-edit-name" value={identityDraft.name} placeholder="Nome do cliente"
                     onChange={(e) => setIdentityDraft((d) => ({ ...d, name: e.target.value }))} />
                 </label>
                 <label className="block">
@@ -1180,8 +1189,33 @@ export function ClientProfileDrawer({ person, businessId, pipeline, canFunil, on
 
           {tab === 'notes' && (
             <div className="p-4 space-y-3">
+              {/* MISSÃO 4 (premium): anotações administrativas com visual de
+                  BLOQUINHO (creme sólido, cantos suaves) — nada de prontuário.
+                  A persistência continua a mesma: cada observação é gravada por
+                  ação explícita (botão/⌘Ctrl+Enter), sem autosave novo. */}
+              <div className="rounded-xl border border-[var(--sun-border)] bg-[var(--sun-bg)] p-3.5 shadow-xs">
+                <label htmlFor="client-note-draft" className="block text-[11px] font-semibold uppercase tracking-[0.08em] text-[var(--sun-fg)]">
+                  Nova observação
+                </label>
+                <textarea
+                  id="client-note-draft"
+                  value={noteDraft}
+                  onChange={(e) => setNoteDraft(e.target.value)}
+                  onKeyDown={(e) => { if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) { e.preventDefault(); addNote(); } }}
+                  rows={3}
+                  maxLength={1000}
+                  placeholder="O que ajuda a operar o atendimento (ex.: prefere horário da manhã, avisar antes…)"
+                  className="mt-1.5 w-full rounded-lg border border-[var(--sun-border)] bg-white/80 px-3 py-2.5 text-sm text-[var(--text)] placeholder:text-[var(--text-faint)] shadow-none resize-none focus:outline-none focus:shadow-focus focus:border-[var(--brand)]"
+                />
+                <div className="mt-2 flex flex-wrap items-center justify-between gap-2">
+                  <p className="text-[11px] text-[var(--sun-fg)]">⌘/Ctrl + Enter salva · o histórico nunca é apagado.</p>
+                  <Button variant="primary" size="sm" onClick={addNote} disabled={!noteDraft.trim() || saving}>
+                    <Icon n="plus" size={14} /> {saving ? 'Salvando…' : 'Salvar anotação'}
+                  </Button>
+                </div>
+              </div>
               {notes.length === 0 ? (
-                <p className="text-sm text-[var(--text-muted)] bg-[var(--surface-3)] border border-[var(--border)] rounded-md px-3 py-2.5">
+                <p className="text-sm text-[var(--text-muted)] bg-[var(--surface-3)] border border-[var(--border)] rounded-lg px-3.5 py-3">
                   Nenhuma observação administrativa ainda. Aqui vai o que ajuda a OPERAR o atendimento —
                   preferência de horário, quem confirmar, convênio, combinados do dia a dia.
                   {' '}<strong className="font-semibold text-[var(--text)]">O que aconteceu no atendimento fica em Atendimentos</strong>,
@@ -1190,9 +1224,9 @@ export function ClientProfileDrawer({ person, businessId, pipeline, canFunil, on
               ) : (
                 <ul className="space-y-2">
                   {notes.map((n) => (
-                    <li key={n.id} className="bg-[var(--surface-2)] border border-[var(--border-soft)] rounded-md px-3 py-2.5">
+                    <li key={n.id} className="rounded-xl border border-[var(--sun-border)] bg-[var(--sun-bg)] px-3.5 py-3 shadow-xs">
                       <p className="text-sm text-[var(--text)] whitespace-pre-wrap break-words">{n.text}</p>
-                      <p className="text-[11px] text-[var(--text-faint)] mt-1">
+                      <p className="text-[11px] text-[var(--sun-fg)] mt-1.5">
                         {n.legacy
                           ? 'Registro anterior (sem autor/data)'
                           : <>{n.byName || 'Equipe'}{n.at ? ` · ${humanDateTime(n.at.slice(0, 10), n.at.slice(11, 16))}` : ''}{n.bookingId ? ' · sobre um agendamento' : ''}</>}
@@ -1213,14 +1247,6 @@ export function ClientProfileDrawer({ person, businessId, pipeline, canFunil, on
                   ))}
                 </ul>
               )}
-              <div className="flex gap-2">
-                <Input value={noteDraft} onChange={(e) => setNoteDraft(e.target.value)}
-                  onKeyDown={(e) => { if (e.key === 'Enter') addNote(); }}
-                  placeholder="Nova observação (ex.: prefere horário da manhã, avisa antes…)" />
-                <Button variant="primary" size="sm" onClick={addNote} disabled={!noteDraft.trim() || saving}>
-                  <Icon n="plus" size={14} /> Adicionar
-                </Button>
-              </div>
               <p className="text-[11px] text-[var(--text-faint)]">As observações anteriores nunca são apagadas — o histórico é preservado.</p>
             </div>
           )}

@@ -93,3 +93,56 @@ export function resolveConversationContact<T extends ConversationLike>(
 export function conversationRegistered(db: ContactDb, businessId: string, conversation: ConversationLike): boolean {
   return !!resolveConversationContact(db, businessId, conversation);
 }
+
+// ═══════════════════════════════════════════════════════════════
+// RECONCILIAÇÃO LEGADA — explícita, idempotente, por unidade
+// ═══════════════════════════════════════════════════════════════
+// Conversas antigas nasceram sem `contactId` (a escrita antiga não gravava o
+// vínculo). A resolução de LEITURA já encontra o contato certo, mas a
+// reconciliação torna o vínculo PERMANENTE e explícito no dado.
+//
+// REGRAS (§11–13 da missão de consolidação):
+//   • NUNCA roda em leitura: é uma AÇÃO própria (endpoint/teste invocam);
+//   • idempotente — rodar de novo não muda nada (outcome zero);
+//   • só vincula conversa ↔ contato JÁ EXISTENTE (resolveConversationContact);
+//     nunca cria contato novo, nunca transforma número desconhecido em
+//     cliente, nunca reescreve nome/telefone;
+//   • tenant-scoped: só conversas e contatos da MESMA unidade.
+export interface ReconcileOutcome {
+  /** Conversas que ganharam vínculo permanente com um contato existente. */
+  linked: number;
+  /** Conversas que já estavam vinculadas corretamente. */
+  already: number;
+  /** Conversas que continuam sem cadastro (contato novo de verdade). */
+  unresolved: number;
+  /** Ids das conversas vinculadas nesta rodada (auditoria/testes). */
+  linkedIds: string[];
+}
+
+export function reconcileConversations(
+  db: Pick<DB, 'contacts' | 'conversations'>,
+  businessId: string,
+): ReconcileOutcome {
+  const outcome: ReconcileOutcome = { linked: 0, already: 0, unresolved: 0, linkedIds: [] };
+  for (const conv of db.conversations) {
+    if (conv.businessId !== businessId) continue;
+    const directId = String(conv.contactId || '');
+    const already = !!directId && db.contacts.some((c) => c.id === directId && c.businessId === businessId);
+    if (already) {
+      outcome.already += 1;
+      continue;
+    }
+    const contact = resolveConversationContact(db, businessId, conv);
+    if (!contact) {
+      outcome.unresolved += 1;
+      continue;
+    }
+    // Vínculo permanente. customerId da conversa também é completado quando
+    // faltar (o contato é que é a referência local; a conta global é a mesma).
+    conv.contactId = contact.id;
+    if (!conv.customerId && contact.customerId) conv.customerId = contact.customerId;
+    outcome.linked += 1;
+    outcome.linkedIds.push(conv.id);
+  }
+  return outcome;
+}

@@ -18,6 +18,7 @@ import { requiresActiveBusiness } from '@/lib/business-context';
 import { mayLeaveEditor } from '@/components/dashboard/useUnsavedChanges';
 import { WorkspaceContext } from '@/components/dashboard/WorkspaceContext';
 import { ConversationsDock } from '@/components/dashboard/ConversationsDock';
+import { findAccent, getNavAccent, type NavAccentId } from '@/lib/nav-accent';
 import { WorkspaceNavigation } from '@/components/dashboard/WorkspaceNavigation';
 import { WorkspaceTopbar } from '@/components/dashboard/WorkspaceTopbar';
 import { HelpCenter } from '@/components/dashboard/HelpCenter';
@@ -78,6 +79,17 @@ export function DashboardShell({ children }: { children: React.ReactNode }) {
   const [collapsed, setCollapsed] = useState(() => {
     try { return localStorage.getItem('il-side-v2') === 'mini'; } catch { return false; }
   });
+  /* Missão 6 — cor da navegação (Configurações → Aparência). */
+  const [navAccent, setNavAccent] = useState<NavAccentId>('azul-clinico');
+  useEffect(() => {
+    setNavAccent(getNavAccent());
+    const sync = (e: Event) => setNavAccent((e as CustomEvent<NavAccentId>).detail);
+    window.addEventListener('godoutor:nav-accent', sync);
+    return () => window.removeEventListener('godoutor:nav-accent', sync);
+  }, []);
+  // §5/§6 — tema da clínica: os 5 tokens --accent* + os --il-nav* do preset
+  // entram inline no shell (contrato B). Texto e semânticas não são tocados.
+  const accentVars = findAccent(navAccent)?.vars || {};
   const lastContextAt = useRef(0);
   // Etapa A: o drawer de navegação móvel pertence ao shell porque quem o abre
   // é o botão de menu da TOPBAR (a busca e o menu saíram da sidebar).
@@ -227,7 +239,7 @@ export function DashboardShell({ children }: { children: React.ReactNode }) {
   if (contextError && !ready) return <div className="il-platform p-8" role="alert"><h1>Não foi possível carregar sua clínica</h1><p>Confira sua conexão e tente novamente. Sua sessão foi preservada.</p><button className="il-control mt-4" onClick={() => loadContext(true)}>Tentar novamente</button></div>;
   if (!ready || !user) {
     return (
-      <div className="min-h-screen bg-[var(--bg)] lg:flex" aria-label="Carregando painel">
+      <div className="min-h-screen lg:flex" aria-label="Carregando painel">
         <div className="hidden lg:flex w-[248px] shrink-0 flex-col bg-white border-r border-[var(--border)] p-3 gap-2">
           <div className="h-9 w-32 bg-zinc-100 animate-pulse mb-2" />
           {Array.from({ length: 8 }).map((_, i) => <div key={i} className="h-7 bg-zinc-100 animate-pulse" />)}
@@ -252,8 +264,9 @@ export function DashboardShell({ children }: { children: React.ReactNode }) {
   // permissão que monta o menu. Nenhum destino extra entra aqui, então a busca
   // não tem como revelar (nem levar a) uma tela que o usuário não alcança.
   // A regra de busca fica em lib/nav-search.ts (pura e testada).
-  // ── Breadcrumb + notificações (Etapa A) ─────────────────────────────────
-  // O breadcrumb é projeção da MESMA partição que monta o menu: nunca cita área
+  // ── Contexto de área + notificações ─────────────────────────────────────
+  // (O breadcrumb foi REMOVIDO do workspace pelo refino final — o cabeçalho da
+  // página identifica a tela. A partição segue valendo para a cor da área.)
   // que o usuário não alcança. As notificações vêm de /api/overview (dado real).
   // Multiunidade REAL: só quando existe mais de uma unidade na conta. Sem isso
   // "Organização" não ocupa linha no menu (a porta continua acessível por URL).
@@ -304,8 +317,10 @@ export function DashboardShell({ children }: { children: React.ReactNode }) {
       style={{
         '--area-color': crumb.area?.color || routeAreaColor(activePath, areas),
         '--sidebar-w': collapsed ? 'var(--sidebar-w-mini)' : undefined,
+        ...accentVars,
       } as React.CSSProperties}
-      className="il-platform workspace-shell min-h-screen bg-[var(--bg)]"
+      data-nav-accent={navAccent}
+      className={cn('il-platform workspace-shell min-h-screen', isAgenda && 'workspace-shell--fill')}
     >
       <a href="#workspace-content" className="workspace-skip">Ir para o conteúdo</a>
 
@@ -340,6 +355,7 @@ export function DashboardShell({ children }: { children: React.ReactNode }) {
         onOpenNav={() => setMobileNav(true)}
         onOpenHelp={() => setHelpOpen(true)}
         canCreate={nav.allowed.map((i) => i.href).filter((h) => ['/agenda', '/clientes', '/tarefas', '/servicos', '/profissionais', '/financeiro'].includes(h))}
+        vet={business.clinicType === 'veterinaria'}
       />
 
       <HelpCenter
@@ -351,7 +367,7 @@ export function DashboardShell({ children }: { children: React.ReactNode }) {
       />
 
       {nav.allowed.some(i => i.href === '/conversas') && activePath !== '/conversas' && activePath !== '/organizacao' && <ConversationsDock key={business.id} businessId={business.id}/>}
-      <main ref={mainRef} id="workspace-content" tabIndex={-1} className="workspace-content flex-1 min-w-0 bg-[var(--bg)]">
+      <main ref={mainRef} id="workspace-content" tabIndex={-1} className="workspace-content flex-1 min-w-0">
         {support && (
           <div className={cn('px-4 lg:px-8 py-2.5 text-xs font-semibold flex flex-wrap items-center gap-x-3 gap-y-1 border-b',
             support.mode === 'view' ? 'bg-[var(--warning-bg)] text-[var(--warning-fg)] border-[var(--warning-border)]' : 'bg-[var(--danger)] text-white border-[var(--danger-strong)]')}>
@@ -365,24 +381,9 @@ export function DashboardShell({ children }: { children: React.ReactNode }) {
           </div>
         )}
         <div key={business.id} className={cn(isAgenda ? 'agenda-page-gutter' : 'px-4 lg:px-8 py-6', !isFullWidth && 'max-w-[960px]')}>
-          {/* Breadcrumb de CONTEXTO no conteúdo (o branding vive na sidebar e o
-              nome da clínica, uma vez, no seletor de unidade da topbar). */}
-          {/* Breadcrumb só em páginas PROFUNDAS (grupo/estrutura). Páginas de
-              1º nível (Agenda, Pacientes…) ficam sem "Visão geral >" — o título da
-              própria tela é o cabeçalho. */}
-          {crumb.group && homeHref && (
-            <nav aria-label="Breadcrumb" className="ws-crumbs--content">
-              <Link href={homeHref}>Visão geral</Link>
-              <I n="chevronRight" size={12} aria-hidden="true" />
-              {crumb.group && (
-                <>
-                  <span>{crumb.group}</span>
-                  <I n="chevronRight" size={12} aria-hidden="true" />
-                </>
-              )}
-              <span aria-current="page">{activeRoute?.label || 'Painel'}</span>
-            </nav>
-          )}
+          {/* CONTRATO DO REFINO FINAL — sem breadcrumb em NENHUMA tela do
+              workspace: o cabeçalho da página (chip + título + subtítulo)
+              identifica a tela. O contexto vive na sidebar/topbar. */}
           {isMaster && !support && (
             <p className="mb-4 text-xs font-semibold text-[var(--warning-fg)] bg-[var(--warning-bg)] border border-[var(--warning-border)] rounded-md px-3 py-2 inline-flex items-center gap-2 shadow-xs">
               <I n="shield" size={14} /> Você é master — <Link href="/master" className="underline font-semibold">/master</Link>

@@ -40,18 +40,24 @@ describe('FASE 2 · P8 — checklist operacional', () => {
   });
 });
 
-describe('FASE 2 · P9 — Quick Create global', () => {
-  it('menu + Novo tem as 6 criações e é filtrado pelo papel (canCreate do catálogo)', () => {
+describe('FASE 2 · P9 — quick create premium (missão 6: o “+” volta)', () => {
+  it('o “+” voltou como ação global premium — as ações vivem no QuickCreateMenu', () => {
     const topbar = read('src/components/dashboard/WorkspaceTopbar.tsx');
-    for (const label of ['Novo agendamento', 'Novo paciente', 'Novo profissional', 'Novo serviço', 'Nova pendência', 'Recebimento']) {
-      expect(topbar, label).toContain(label);
+    const quick = read('src/components/dashboard/QuickCreateMenu.tsx');
+    expect(topbar).toContain('<QuickCreateMenu');
+    // O contrato canCreate é finalmente usado: filtra as ações do menu.
+    expect(topbar).toContain('canCreate');
+    for (const label of ['Novo agendamento', 'Nova pendência', 'Novo recebimento']) {
+      expect(quick, label).toContain(label);
     }
-    expect(topbar).toMatch(/\.filter\(\(i\) => canCreate\.includes\(i\.href\)\)/);
-    const shell = read('src/components/DashboardShell.tsx');
-    expect(shell).toContain("'/profissionais', '/financeiro'");
+    // Busca · sino · ajuda · conta permanecem no topo.
+    expect(topbar).toContain('<GlobalSearch');
+    expect(topbar).toContain('<NotificationsBell');
+    expect(topbar).toContain('<AccountMenu');
   });
 
-  it('?novo=1 abre o formulário em sheet nas páginas que suportam (agenda/paciente/recebimento)', () => {
+  it('?novo=1 continua abrindo o formulário em sheet nas páginas que suportam', () => {
+    // O deep link é independente do menu removido: segue funcionando.
     const agenda = read('src/app/(dashboard)/agenda/page.tsx');
     expect(agenda).toContain("params.get('novo') !== '1'");
     expect(agenda).toContain('setCreating({ date:');
@@ -61,8 +67,5 @@ describe('FASE 2 · P9 — Quick Create global', () => {
     const fin = read('src/app/(dashboard)/financeiro/page.tsx');
     expect(fin).toContain("params.get('novo') !== '1'");
     expect(fin).toContain('setEditing(blankEntry())');
-    // perfil/profissional/serviço/tarefa continuam com navegação simples (sem sheet pronto)
-    const topbar = read('src/components/dashboard/WorkspaceTopbar.tsx');
-    expect(topbar).toMatch(/open: ''/);
   });
 });

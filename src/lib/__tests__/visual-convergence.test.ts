@@ -98,12 +98,12 @@ describe('A3.3 — nenhum CTA primário preto no painel', () => {
     expect(loose).toEqual([]);
   });
 
-  it('o design system oferece primário brand (para onde o CTA deve ir)', () => {
+  it('o design system oferece primário accent/tema (para onde o CTA deve ir)', () => {
     const ui = read('src/components/ui.tsx');
     // Se alguém apagar o variant primary, a migração não tem destino — o teste
     // falha antes que alguém volte a improvisar um botão preto.
-    expect(ui).toMatch(/primary:\s*\n?\s*'bg-\[var\(--brand\)\]/);
-    expect(ui).toMatch(/shadow-brand/);
+    expect(ui).toMatch(/primary:\s*\n?\s*'bg-\[var\(--accent\)\]/);
+    expect(ui).toMatch(/shadow-brand/); // sombra utilitária da base (não é cor)
   });
 });
 
@@ -189,10 +189,14 @@ describe('A3.3 — white label no painel autenticado', () => {
   });
 });
 
-describe('A3.3 — personalização de cor do painel saiu da UI', () => {
-  it('Configurações não oferece mais "Aparência" nem "Identidade do painel"', () => {
+describe('A3.3 — cor da EMPRESA não pinta o painel (missão 6: aparência pessoal sim)', () => {
+  it('Configurações oferece "Aparência" como preferência PESSOAL — nunca navColor da empresa', () => {
+    // Reversão explícita do usuário (missão 6): a personalização de cor da
+    // sidebar VOLTOU, mas como preferência pessoal de interface (localStorage,
+    // NAV_ACCENTS) — não como identidade da empresa no banco (appearance.navColor).
     const cfg = read('src/app/(dashboard)/configuracoes/page.tsx');
-    expect(cfg).not.toMatch(/\['aparencia', 'Aparência'\]/);
+    expect(cfg).toMatch(/\['aparencia', 'Aparência'\]/);
+    expect(cfg).toMatch(/NAV_ACCENTS/);
     expect(cfg).not.toMatch(/Identidade do painel/i);
     expect(cfg).not.toMatch(/NAV_PRESETS/);
     expect(cfg).not.toMatch(/navColor/);

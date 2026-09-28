@@ -575,11 +575,13 @@ describe('uma porta por conceito', () => {
     // GODOUTOR final: vocabulário de clínica (a palavra que o dono usa).
     expect(cfgPage).toMatch(/\['negocio', 'Clínica'\]/);
     expect(cfgPage).toMatch(/\['agenda', 'Agenda'\]/);
-    // A3.3 CONVERGÊNCIA (ponto 2): a aba "Aparência" / "Identidade do painel"
-    // SAIU da UI. O painel usa o design system padrão — cor de sidebar não é
-    // mais uma escolha do lojista. `appearance.navColor` continua aceito nos
-    // dados (sem migração destrutiva), mas nada na tela o edita.
-    expect(cfgPage).not.toMatch(/\['aparencia', 'Aparência'\]/);
+    // Missão 6 (reversão do A3.3 ponto 2, pedido do usuário): a aba
+    // "Aparência" VOLTOU como preferência PESSOAL de interface (presets de
+    // cor da sidebar, NAV_ACCENTS, localStorage). A cor da EMPRESA no banco
+    // (appearance.navColor) continua sem editor — "Identidade do painel" não
+    // retorna. Cada aba edita algo real: Clínica, Agenda, Aparência.
+    expect(cfgPage).toMatch(/\['aparencia', 'Aparência'\]/);
+    expect(cfgPage).toMatch(/NAV_ACCENTS/);
     expect(cfgPage).not.toMatch(/NAV_PRESETS/);
     expect(cfgPage).not.toMatch(/Identidade do painel/i);
     expect(cfgPage).not.toMatch(/aparência do painel/i);

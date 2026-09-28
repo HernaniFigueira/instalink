@@ -21,7 +21,9 @@
     "test:d1a:browser": "playwright test --config tests/d1a/playwright.config.ts",
     "test:d1a:serve": "vite --config tests/d1a/vite.config.ts",
     "test:360:setup": "node tests/360/setup.mjs",
-    "test:360:browser": "playwright test --config tests/360/playwright.config.ts"
+    "test:360:browser": "playwright test --config tests/360/playwright.config.ts",
+    "test:agenda:setup": "node tests/agenda-viewport/setup.mjs",
+    "test:agenda:browser": "playwright test --config tests/agenda-viewport/playwright.config.ts"
   },
   "dependencies": {
     "@vercel/blob": "^2.8.0",

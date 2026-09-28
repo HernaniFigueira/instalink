@@ -5,7 +5,7 @@
 //   • o horário é lido em CHIPS por dia (não mais numa frase corrida), e os
 //     chips saem SEMPRE da tabela de horários real (lib/schedule.ts), nunca de
 //     um resumo paralelo inventado na tela;
-//   • "Hoje" fica SEMPRE entre as setas (antes ele aparecia/desaparecia);
+//   • navegação de data = [◀][▶] (o botão "Hoje" saiu na correção cirúrgica);
 //   • clicar num horário vago da grade abre o agendamento JÁ naquele dia/hora/
 //     profissional — e o horário sugerido só vale se a grade real confirmar;
 //   • o motor continua sendo o do servidor: nenhuma disponibilidade é
@@ -29,75 +29,24 @@ const rule = (weekday: number, start: string, end: string, professionalId = ''):
 const WEEK = (weekday: number, ...pairs: Array<[string, string]>): Availability[] =>
   pairs.map(([start, end]) => rule(weekday, start, end));
 
-describe('A3.4 · Bloco 3 — horário em chips (Disponibilidade)', () => {
-  it('um chip por dia, na ordem da semana brasileira (segunda primeiro)', () => {
-    const rules = [...WEEK(0, ['09:00', '13:00']), ...WEEK(1, ['08:00', '20:00']), ...WEEK(2, ['08:00', '20:00']), ...WEEK(3, ['09:00', '18:00'])];
-    const chips = buildHoursChips(businessHoursTable(rules));
-    expect(chips.map((c) => c.label)).toEqual(['SEG', 'TER', 'QUA', 'QUI', 'SEX', 'SÁB', 'DOM']);
-    expect(chips.map((c) => c.closed)).toEqual([false, false, false, true, true, true, false]);
-    expect(chips[0].text).toBe('SEG 08:00 → 20:00');
-    expect(chips[2].text).toBe('QUA 09:00 → 18:00');
-    expect(chips[6].text).toBe('DOM 09:00 → 13:00');
-  });
-
-  it('dia sem regra é fechado — nunca um horário inventado', () => {
-    const chips = buildHoursChips(businessHoursTable(WEEK(1, ['09:00', '18:00'])));
-    expect(chips.filter((c) => c.closed)).toHaveLength(6);
-    expect(chips[6].text).toBe('DOM fechado');
-    expect(chips.every((c) => c.closed || c.windows.length > 0)).toBe(true);
-    expect(JSON.stringify(chips)).not.toContain('00:00');
-  });
-
-  it('o chip mostra TODAS as janelas do dia (turno duplo não vira meia-verdade)', () => {
-    const chips = buildHoursChips(hoursTable(WEEK(1, ['09:00', '12:00'], ['14:00', '19:00'])));
-    const seg = chips.find((c) => c.weekday === 1)!;
-    expect(seg.windows.map((w) => `${w.start}-${w.end}`)).toEqual(['09:00-12:00', '14:00-19:00']);
-    expect(seg.text).toBe('SEG 09:00 → 12:00 · 14:00 → 19:00');
-  });
-
-  it('horário do profissional usa a MESMA tabela do motor (follow vs personalizado)', () => {
-    const rules: Availability[] = [...WEEK(1, ['08:00', '20:00']), rule(1, '10:00', '16:00', 'p1')];
-    const follows = { id: 'p2', followBusinessHours: true } as Pick<Professional, 'id' | 'followBusinessHours'>;
-    const custom = { id: 'p1', followBusinessHours: false } as Pick<Professional, 'id' | 'followBusinessHours'>;
-    const followsChips = buildHoursChips(professionalHoursTable(follows, rules));
-    const customChips = buildHoursChips(professionalHoursTable(custom, rules));
-    // Quem segue a empresa herda 08:00–20:00; quem tem regra própria, 10:00–16:00.
-    expect(followsChips.find((c) => c.weekday === 1)!.text).toBe('SEG 08:00 → 20:00');
-    expect(customChips.find((c) => c.weekday === 1)!.text).toBe('SEG 10:00 → 16:00');
-  });
-
-  it('a Disponibilidade mostra os chips e não voltou para a linha corrida', () => {
-    const src = stripComments(read('src/components/dashboard/BusinessHours.tsx'));
-    expect(src).toContain('HoursChips');
-    expect(src).toContain('businessHoursTable(');
-    expect(src).toContain('professionalHoursTable(');
-    // A antiga frase única não pode voltar como RESUMO da tela: ela só pode
-    // sobrar dentro da frase explicativa do diálogo "seguir a empresa".
-    const occurrences = src.split('hoursSummaryLine(general)').length - 1;
-    expect(occurrences).toBe(1);
-    expect(src).toContain('passa a atender no horário geral');
-    expect(src).toContain('<HoursChips');
-  });
-});
-
-describe('A3.4 · Bloco 3 — Agenda: "Hoje" sempre no lugar, clique cria', () => {
+describe('A3.4 · Bloco 3 — Agenda: navegação [◀][▶] e clique cria', () => {
   const agenda = stripComments(read('src/app/(dashboard)/agenda/page.tsx'));
 
-  it('as setas e o "Hoje" formam um grupo fixo, nesta ordem', () => {
+  it('as setas formam um grupo fixo, nesta ordem — sem botão “Hoje”', () => {
     const group = agenda.slice(agenda.indexOf('inline-flex rounded-md border border-[var(--border-strong)]'), agenda.indexOf('Escolher outra data'));
     expect(group).toBeTruthy();
     const prev = group.indexOf('chevL');
-    const today = group.indexOf('Hoje');
     const next = group.indexOf('chevR');
     expect(prev).toBeGreaterThan(-1);
-    expect(today).toBeGreaterThan(prev);
-    expect(next).toBeGreaterThan(today);
+    expect(next).toBeGreaterThan(prev);
+    // contrato da correção cirúrgica: o “Hoje” saiu do grupo
+    expect(group).not.toContain('Hoje');
   });
 
-  it('"Hoje" não desaparece quando já estamos em hoje (sem render condicional)', () => {
-    expect(agenda).not.toMatch(/\{!isToday && \(/);
-    expect(agenda).toContain('aria-pressed={isToday}');
-    expect(agenda).toContain('setFocus(today)');
+  it('o botão “Hoje” não existe mais em lugar nenhum da tela', () => {
+    expect(agenda).not.toContain('setFocus(today)');
+    expect(agenda).not.toContain('aria-pressed={isToday}');
+    expect(agenda).not.toContain("'Você já está em hoje'");
   });
 
   it('clicar num horário vago abre o agendamento com dia, hora e profissional', () => {

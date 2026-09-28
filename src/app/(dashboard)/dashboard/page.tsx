@@ -149,6 +149,13 @@ export default function DashboardPage() {
   // "Comece por aqui" é descartável: ocultar some com o checklist (por
   // negócio) e pode voltar a qualquer momento — nada é perdido.
   const [setupHidden, setSetupHidden] = useState(false);
+  /* Missão 7 — tendência da página (série real do /api/analytics) e painel de
+     pacientes (pets da clínica vet). Só consumo de APIs existentes. */
+  const [trend, setTrend] = useState<Array<{ day: string; label: string; visitors: number }>>([]);
+  const [petsPanel, setPetsPanel] = useState<{
+    vet: boolean; total: number; newThisMonth: number; newLastMonth: number;
+    bySpecies: Array<{ key: string; label: string; count: number }>;
+  } | null>(null);
   useEffect(() => {
     try { setSetupHidden(localStorage.getItem(`il-setup-hidden-${businessId}`) === '1'); } catch { /* noop */ }
   }, [businessId]);
@@ -225,6 +232,54 @@ export default function DashboardPage() {
   }, [businessId, period, retry]);
 
   useEffect(() => { load(); }, [load]);
+
+  // Missão 7 — série da página (linha do card Presença online). Quem não tem
+  // permissão financeira recebe 403: o gráfico simplesmente não aparece.
+  useEffect(() => {
+    if (!businessId || !data?.showMoney) return;
+    let cancelled = false;
+    apiGet<{ days?: Array<{ day: string; label: string; visitors: number }> }>(
+      `/api/analytics?businessId=${businessId}&period=${period}`,
+      { scope: 'area', area: 'Visão geral' },
+    ).then((res) => {
+      if (!cancelled && res.ok && Array.isArray(res.data?.days)) {
+        setTrend(res.data.days.map((d) => ({ day: d.day, label: d.label, visitors: d.visitors })));
+      }
+    }).catch(() => {});
+    return () => { cancelled = true; };
+  }, [businessId, period, data?.showMoney]);
+
+  // Missão 7 — "Nossos pacientes" (clínica vet): total, movimento do mês e
+  // divisão por espécies, a partir do /api/pets existente.
+  useEffect(() => {
+    if (!businessId) return;
+    let cancelled = false;
+    apiGet<{ vet: boolean; pets: Array<{ active: boolean; species: string; createdAt: string }> }>(
+      `/api/pets?businessId=${businessId}`,
+      { scope: 'area', area: 'Visão geral' },
+    ).then((res) => {
+      if (cancelled || !res.ok || !res.data?.vet) return;
+      const pets = (res.data.pets || []).filter((x) => x.active);
+      const now = new Date();
+      const monthKey = now.toISOString().slice(0, 7);
+      const last = new Date(now.getFullYear(), now.getMonth() - 1, 1).toISOString().slice(0, 7);
+      const SPECIES: Record<string, string> = { cachorro: 'Cães', gato: 'Gatos' };
+      const by: Record<string, number> = {};
+      for (const x of pets) by[x.species] = (by[x.species] || 0) + 1;
+      const bySpecies = [
+        ...Object.keys(SPECIES).filter((k) => by[k]).map((k) => ({ key: k, label: SPECIES[k], count: by[k] })),
+        { key: 'outros', label: 'Outros', count: Object.entries(by).filter(([k]) => !(k in SPECIES)).reduce((t, [, c]) => t + c, 0) },
+      ].filter((x) => x.count > 0);
+      setPetsPanel({
+        vet: true,
+        total: pets.length,
+        newThisMonth: pets.filter((x) => (x.createdAt || '').slice(0, 7) === monthKey).length,
+        newLastMonth: pets.filter((x) => (x.createdAt || '').slice(0, 7) === last).length,
+        bySpecies,
+      });
+    }).catch(() => {});
+    return () => { cancelled = true; };
+  }, [businessId]);
   // Ao voltar para a tela, o painel se atualiza sozinho (sem polling).
   useRevalidateOnFocus(load);
 
@@ -331,10 +386,17 @@ export default function DashboardPage() {
       )}
       <PermissionNotice message={notice?.title} hint={notice?.hint} onDismiss={dismiss} />
 
-      {/* ── Saudação + resumo curto (hierarquia do mockup) ── */}
+      {/* ── Saudação + resumo curto — header LIMPO (sem card amarelo, sem
+          degradê): hierarquia só com tipografia e espaçamento ── */}
       <header className="mb-5 flex flex-wrap items-start justify-between gap-3">
-        <div className="min-w-0">
-        <h1 className="text-[24px] leading-tight font-semibold tracking-tight text-[var(--text)]">
+        {/* MISSÃO 5 — título no padrão único do produto (chip de ícone + título
+            + subtítulo): mesma linguagem de Agenda, Clientes, Pendências… */}
+        <div className="flex items-start gap-3 min-w-0">
+          <span className="il-page-header__icon flex h-10 w-10 shrink-0 items-center justify-center rounded-lg border border-[var(--border)] bg-[var(--surface-3)] text-[var(--brand-fg)]">
+            <Icon n="home" size={19} />
+          </span>
+          <div className="min-w-0">
+        <h1 className="text-xl leading-tight font-semibold tracking-tight text-[var(--text)]">
           {proView ? `Meu dia, ${firstName(user.name)}` : `${greeting()}, ${firstName(user.name)}!`}
         </h1>
         <p className="text-sm text-[var(--text-muted)] mt-1">
@@ -344,6 +406,7 @@ export default function DashboardPage() {
               ? 'Chegadas, próximos horários e o que precisa de atenção.'
               : 'Acompanhe o dia e os resultados disponíveis da operação.'}
         </p>
+          </div>
         </div>
         <div className="dsh-card flex items-center gap-2.5 px-3.5 py-2.5" title="Data de hoje">
           <Icon n="calendar" size={16} className="text-[var(--brand-fg)]" />
@@ -369,64 +432,53 @@ export default function DashboardPage() {
         </div>
       )}
 
-      {/* ── 2 · KPIs DO DIA (cards com ícone, cor contextual e número grande) ── */}
+      {/* ── 2 · KPIs DO DIA — UM card único horizontal, divisórias sutis ── */}
       {modules.bookings && today && (
-        <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-6 gap-3 mb-4">
-          <h3 className="sr-only">Hoje</h3>
-          <div className="dsh-kpi">
-            <span className="dsh-kpi__icon" style={{ background: 'var(--brand-soft)', color: 'var(--brand-fg)' }}><Icon n="calendar" size={19} /></span>
-            <span><span className="dsh-kpi__num">{today.total}</span><span className="dsh-kpi__label block">Atendimentos hoje</span>
+        <>
+        <h3 className="sr-only">Hoje</h3>
+        {/* colunas 2/3/6 nas mesmas faixas do card `.dsh-metrics` (contrato mobile de a12-block4) */}
+        <div className="dsh-metrics grid grid-cols-2 md:grid-cols-3 xl:grid-cols-6">
+          <div className="dsh-metric">
+            <span className="dsh-metric__icon" style={{ background: 'var(--brand-soft)', color: 'var(--brand-fg)' }}><Icon n="calendar" size={19} /></span>
+            <span><span className="dsh-metric__num">{today.total}</span><span className="dsh-metric__label block">Atendimentos hoje</span>
               <KpiDelta now={today.total} prev={yday?.total ?? 0} has={yday !== null} />
             </span>
           </div>
-          <div className="dsh-kpi">
-            <span className="dsh-kpi__icon" style={{ background: 'var(--success-bg)', color: 'var(--success-fg)' }}><Icon n="checkCircle" size={19} /></span>
-            <span><span className="dsh-kpi__num">{today.confirmed}</span><span className="dsh-kpi__label block">Confirmados</span>
+          <div className="dsh-metric">
+            <span className="dsh-metric__icon" style={{ background: 'var(--success-bg)', color: 'var(--success-fg)' }}><Icon n="checkCircle" size={19} /></span>
+            <span><span className="dsh-metric__num">{today.confirmed}</span><span className="dsh-metric__label block">Confirmados</span>
               <KpiDelta now={today.confirmed} prev={yday?.byStatus['confirmed'] ?? 0} has={yday !== null} />
             </span>
           </div>
-          <div className="dsh-kpi">
-            <span className="dsh-kpi__icon" style={{ background: 'var(--warning-bg)', color: 'var(--warning-fg)' }}><Icon n="clock" size={19} /></span>
-            <span><span className="dsh-kpi__num">{today.pending}</span><span className="dsh-kpi__label block">Aguardando</span>
+          <div className="dsh-metric">
+            <span className="dsh-metric__icon" style={{ background: 'var(--warning-bg)', color: 'var(--warning-fg)' }}><Icon n="clock" size={19} /></span>
+            <span><span className="dsh-metric__num">{today.pending}</span><span className="dsh-metric__label block">Aguardando</span>
               <KpiDelta now={today.pending} prev={yday?.byStatus['pending'] ?? 0} has={yday !== null} />
             </span>
           </div>
-          <div className="dsh-kpi">
-            <span className="dsh-kpi__icon" style={{ background: 'var(--ops-soft)', color: 'var(--ops-fg)' }}><Icon n="tasks" size={19} /></span>
-            <span><span className="dsh-kpi__num">{today.completed}</span><span className="dsh-kpi__label block">Concluídos</span>
+          <div className="dsh-metric">
+            <span className="dsh-metric__icon" style={{ background: 'var(--ops-soft)', color: 'var(--ops-fg)' }}><Icon n="tasks" size={19} /></span>
+            <span><span className="dsh-metric__num">{today.completed}</span><span className="dsh-metric__label block">Concluídos</span>
               <KpiDelta now={today.completed} prev={yday?.byStatus['completed'] ?? 0} has={yday !== null} />
             </span>
           </div>
-          <div className="dsh-kpi">
-            <span className="dsh-kpi__icon" style={{ background: 'var(--danger-bg)', color: 'var(--danger-fg)' }}><Icon n="alert" size={19} /></span>
-            <span><span className="dsh-kpi__num">{today.noShow}</span><span className="dsh-kpi__label block">Faltas</span>
+          <div className="dsh-metric">
+            <span className="dsh-metric__icon" style={{ background: 'var(--danger-bg)', color: 'var(--danger-fg)' }}><Icon n="alert" size={19} /></span>
+            <span><span className="dsh-metric__num">{today.noShow}</span><span className="dsh-metric__label block">Faltas</span>
               <KpiDelta now={today.noShow} prev={yday?.byStatus['no_show'] ?? 0} has={yday !== null} />
             </span>
           </div>
-          {showMoney && bookingRevenue ? (
-            <div className="dsh-kpi">
-              <span className="dsh-kpi__icon" style={{ background: 'var(--success-bg)', color: 'var(--success-fg)' }}><Icon n="cash" size={19} /></span>
-              <span>
-                <span className="dsh-kpi__num" style={{ fontSize: 21 }}>{moneyKpi(moneySemantics ? moneySemantics.agendado : bookingRevenue.total)}</span>
-                <span className="dsh-kpi__label block" title={`Período: ${results?.periodLabel || periodLabel(period)}`}>
-                  Agendado no período
-                </span>
-                {/* §6 — os quatro conceitos, um do lado do outro, com o MESMO
-                    cálculo do Financeiro. Nada de "receita" genérica. */}
-                {moneySemantics && (
-                  <span className="block text-[11px] font-semibold text-[var(--text-muted)] mt-0.5 tabular-nums">
-                    Realizado {moneyKpi(moneySemantics.realizado)} · Recebido {moneyKpi(moneySemantics.recebido)} · Em aberto {moneyKpi(moneySemantics.emAberto)}
-                  </span>
-                )}
-              </span>
-            </div>
-          ) : (
-            <div className="dsh-kpi">
-              <span className="dsh-kpi__icon" style={{ background: today.needsClosure ? 'var(--warning-bg)' : 'var(--surface-2)', color: today.needsClosure ? 'var(--warning-fg)' : 'var(--text-muted)' }}><Icon n="shield" size={19} /></span>
-              <span><span className="dsh-kpi__num">{today.needsClosure}</span><span className="dsh-kpi__label block">Precisam de fechamento</span></span>
-            </div>
-          )}
+          {/* Missão 7 — a 6ª métrica era "Agendado no período", Duplicata do
+              card "Período · resumo" logo abaixo. Agora fecha o quadro do DIA
+              (cancelados), mantendo o card único coerente. */}
+          <div className="dsh-metric">
+            <span className="dsh-metric__icon" style={{ background: 'var(--surface-2)', color: 'var(--text-muted)' }}><Icon n="x" size={19} /></span>
+            <span><span className="dsh-metric__num">{today.cancelled}</span><span className="dsh-metric__label block">Cancelados</span>
+              <KpiDelta now={today.cancelled} prev={yday?.byStatus['cancelled'] ?? 0} has={yday !== null} invert />
+            </span>
+          </div>
         </div>
+        </>
       )}
 
       {/* ── 3 · Setup real + Indicadores do período (5 + 7, como o mockup) ──
@@ -549,6 +601,13 @@ export default function DashboardPage() {
                   <p className="text-[12px] text-[var(--text-muted)] mt-1.5">
                     {bookingRevenue.count} atendimentos elegíveis · ticket {money(bookingRevenue.ticket || 0)}
                   </p>
+                  {/* Missão 7 — os quatro conceitos (MESMO cálculo do Financeiro)
+                      saíram do card de métricas e vivem UMA vez aqui. */}
+                  {moneySemantics && (
+                    <p className="text-[11px] font-semibold text-[var(--text-muted)] mt-1 tabular-nums">
+                      Realizado {moneyKpi(moneySemantics.realizado)} · Recebido {moneyKpi(moneySemantics.recebido)} · Em aberto {moneyKpi(moneySemantics.emAberto)}
+                    </p>
+                  )}
                   {!bookingRevenue.hasData && <p className="text-[11.5px] text-[var(--text-faint)] mt-1">{NO_DATA_MESSAGE}</p>}
                 </div>
                 {results?.hasPrevious && (() => {
@@ -558,6 +617,15 @@ export default function DashboardPage() {
               </div>
             ) : (
               <p className="text-[12.5px] text-[var(--text-muted)] mb-2">Sem acesso financeiro. O movimento aparece em atendimentos e resultados do período.</p>
+            )}
+
+            {/* Missão 7 — o espaço vazio do resumo ganha a linha de tendência
+                (visitas à página por dia, série real do /api/analytics). */}
+            {trend.length >= 2 && (
+              <div className="mt-3">
+                <p className="text-[11px] font-semibold uppercase tracking-wider text-[var(--text-faint)] mb-1">Presença online · visitas por dia</p>
+                <MiniTrendChart points={trend.map((t) => t.visitors)} labels={trend.map((t) => t.label)} />
+              </div>
             )}
 
             {results && results.items.length > 0 && (
@@ -642,8 +710,9 @@ export default function DashboardPage() {
       </div>
       )}
 
-      {/* ── 4 · Próximos · Conversas/tarefas · Atividade recente ── */}
-      <div className="grid items-start gap-4 lg:grid-cols-3 mb-4">
+      {/* ── 4 · Próximos · Conversas/tarefas · Atividade recente ·
+             Nossos pacientes (vet, missão 7) ── */}
+      <div className={`grid items-start gap-4 mb-4 ${petsPanel ? 'lg:grid-cols-2 xl:grid-cols-4' : 'lg:grid-cols-3'}`}>
         <section className="dsh-card min-w-0">
           <div className="dsh-card__head">
             <h3 className="dsh-card__title">Próximos atendimentos</h3>
@@ -810,6 +879,9 @@ export default function DashboardPage() {
             )}
           </div>
         </section>
+        {petsPanel && (
+          <PetsPatientsCard panel={petsPanel} q={q} allowed={links.clientes === true} />
+        )}
       </div>
 
       {/* ── 5 · Ações rápidas (só rotas que este usuário pode abrir) ── */}
@@ -878,10 +950,104 @@ const STATUS_BAR: Record<string, string> = {
 };
 
 /** Delta REAL vs. ontem — só renderiza quando existe base de comparação. */
-function KpiDelta({ now, prev, has }: { now: number; prev: number; has: boolean }) {
+/* ── Missão 7 · gráfico de linha elegante (SVG puro, sem libs) ──
+   Série real do /api/analytics: visitas à página por dia. Área suave +
+   linha + ponto final, na cor da identidade. */
+function MiniTrendChart({ points, labels }: { points: number[]; labels: string[] }) {
+  if (points.length < 2) return null;
+  const W = 320, H = 74, PAD = 6;
+  const max = Math.max(...points, 1);
+  const step = (W - PAD * 2) / (points.length - 1);
+  const xy = points.map((v, i) => [PAD + i * step, H - PAD - (v / max) * (H - PAD * 2)] as const);
+  const line = xy.map(([x, y], i) => `${i ? 'L' : 'M'}${x.toFixed(1)},${y.toFixed(1)}`).join(' ');
+  const area = `${line} L${xy[xy.length - 1][0].toFixed(1)},${H - PAD} L${PAD},${H - PAD} Z`;
+  return (
+    <div className="mt-3">
+      <svg viewBox={`0 0 ${W} ${H}`} className="w-full h-[74px]" role="img" aria-label="Visitas à página por dia">
+        <defs>
+          <linearGradient id="dshTrendFill" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0%" stopColor="var(--brand)" stopOpacity="0.18" />
+            <stop offset="100%" stopColor="var(--brand)" stopOpacity="0.02" />
+          </linearGradient>
+        </defs>
+        <path d={area} fill="url(#dshTrendFill)" />
+        <path d={line} fill="none" stroke="var(--brand)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+        <circle cx={xy[xy.length - 1][0]} cy={xy[xy.length - 1][1]} r="3.5" fill="var(--brand)" />
+        <circle cx={xy[xy.length - 1][0]} cy={xy[xy.length - 1][1]} r="6.5" fill="var(--brand)" opacity="0.18" />
+      </svg>
+      <div className="mt-1 flex items-center justify-between text-[10px] font-semibold text-[var(--text-faint)]">
+        <span>{labels[0]}</span>
+        <span>{labels[labels.length - 1]}</span>
+      </div>
+    </div>
+  );
+}
+
+/* ── Missão 7 · "Nossos pacientes" (clínica vet) ──
+   O pet é o paciente: total de pacientes, movimento do mês e divisão por
+   espécies, com ilustração acolhedora. Dados do /api/pets. */
+function PetsPatientsCard({ panel, q, allowed }: {
+  panel: { total: number; newThisMonth: number; newLastMonth: number; bySpecies: Array<{ key: string; label: string; count: number }> };
+  q: string;
+  allowed: boolean;
+}) {
+  const delta = panel.newLastMonth > 0
+    ? Math.round(((panel.newThisMonth - panel.newLastMonth) / panel.newLastMonth) * 100)
+    : null;
+  const maxSpecies = Math.max(...panel.bySpecies.map((x) => x.count), 1);
+  return (
+    <section className="dsh-card min-w-0">
+      <div className="dsh-card__head">
+        <h3 className="dsh-card__title">Nossos pacientes</h3>
+        {allowed && <Link href={`/clientes${q}`} className="text-[12px] font-semibold text-[var(--brand-fg)] hover:underline">Ver todos →</Link>}
+      </div>
+      <div className="dsh-card__body pt-2">
+        <div className="flex items-start gap-3">
+          <div className="min-w-0 flex-1">
+            <p className="dsh-kpi__num text-[30px] leading-none">{panel.total}</p>
+            <p className="text-[11.5px] font-semibold text-[var(--text-muted)] mt-1">pacientes cadastrados</p>
+            <p className="mt-2 flex items-center gap-1.5 text-[11px] font-semibold">
+              {delta === null ? (
+                <span className="text-[var(--text-faint)]">+{panel.newThisMonth} este mês</span>
+              ) : (
+                <span className={`px-1.5 py-0.5 rounded ${delta >= 0 ? 'bg-[var(--success-bg)] text-[var(--success-fg)]' : 'bg-[var(--danger-bg)] text-[var(--danger-fg)]'}`}>
+                  {delta >= 0 ? '↑' : '↓'} {Math.abs(delta)}%
+                </span>
+              )}
+              {delta !== null && <span className="text-[var(--text-faint)]">+{panel.newThisMonth} este mês</span>}
+            </p>
+          </div>
+          <img
+            src="/img/pacientes-pets.png" alt="" aria-hidden="true"
+            className="h-[86px] w-[128px] shrink-0 rounded-[var(--radius-lg)] object-cover"
+          />
+        </div>
+        {panel.bySpecies.length > 0 && (
+          <div className="mt-3 space-y-1.5">
+            <p className="text-[10px] font-semibold uppercase tracking-[0.08em] text-[var(--text-faint)]">Espécies</p>
+            {panel.bySpecies.map((x) => (
+              <div key={x.key} className="flex items-center gap-2">
+                <span className="w-12 shrink-0 text-[11px] font-semibold text-[var(--text-secondary)]">{x.label}</span>
+                <span className="h-1.5 flex-1 rounded-full bg-[var(--surface-3)] overflow-hidden">
+                  <span className="block h-full rounded-full bg-[var(--brand)]" style={{ width: `${Math.round((x.count / maxSpecies) * 100)}%` }} />
+                </span>
+                <span className="w-16 text-right text-[11px] font-semibold text-[var(--text)] tabular-nums">
+                  {x.count} <span className="text-[var(--text-faint)]">({Math.round((x.count / Math.max(panel.total, 1)) * 100)}%)</span>
+                </span>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+    </section>
+  );
+}
+
+function KpiDelta({ now, prev, has, invert }: { now: number; prev: number; has: boolean; invert?: boolean }) {
   if (!has || prev <= 0) return null;
   const pct = Math.round(((now - prev) / prev) * 100);
-  const up = pct >= 0;
+  // `invert`: queda é boa (ex.: cancelados) — as cores acompanham a semântica.
+  const up = invert ? pct <= 0 : pct >= 0;
   return (
     <span className="flex items-center gap-1.5 mt-1">
       <span className={`text-[10px] font-semibold px-1.5 py-0.5 rounded ${up ? 'bg-[var(--success-bg)] text-[var(--success-fg)]' : 'bg-[var(--danger-bg)] text-[var(--danger-fg)]'}`}>

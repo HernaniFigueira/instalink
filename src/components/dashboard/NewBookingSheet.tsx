@@ -19,7 +19,7 @@ import type { Pet, Professional, Service } from '@/lib/types';
 import { apiGet, apiSend } from '@/lib/api-client';
 import { breedSuggestions, PET_SPECIES, PET_SPECIES_LABELS, validatePet } from '@/lib/pets';
 import { Drawer, Avatar, Badge, Button, Checkbox, Field, IconButton, Input, Notice, Select } from '@/components/ui';
-import { NewClientSheet } from '@/components/dashboard/NewClientSheet';
+import { NewClientForm } from '@/components/dashboard/NewClientSheet';
 
 interface Contact {
   id: string;
@@ -353,7 +353,30 @@ export function NewBookingSheet({ businessId, services, pros, timezone, initial,
   }
 
   return (
-    <Drawer open onClose={() => { if (!saving && !reviewing) onClose(); }} title="Novo agendamento" subtitle="Paciente → serviço → data e horário → confirmação" width="max-w-xl">
+    <Drawer
+      open
+      onClose={() => { if (!saving && !reviewing) onClose(); }}
+      title="Novo agendamento"
+      subtitle="Paciente → serviço → data e horário → confirmação"
+      width="max-w-[720px]"
+      /* §19–25 — MESMO overlay que expande: "+ Cadastrar paciente" abre o
+         painel lateral (base 720px → expandida ~1120px), com o lado do
+         agendamento recuado/atenuado. Nenhum modal empilhado. */
+      side={registerOpen ? (
+        <NewClientForm
+          embedded
+          businessId={businessId}
+          vetMode={vetMode || isVet}
+          initialName={onlyDigits(query).length >= 10 ? '' : query.trim()}
+          initialPhone={onlyDigits(query).length >= 10 ? query.trim() : ''}
+          onClose={() => setRegisterOpen(false)}
+          onSaved={(cid, extra) => onClientRegistered(cid, extra)}
+        />
+      ) : undefined}
+      sideTitle="Cadastrar novo paciente"
+      sideWidth="max-w-[400px]"
+      onSideClose={() => setRegisterOpen(false)}
+    >
         <div className="px-5 py-4 space-y-3.5">
           {created ? (
             <div className="space-y-4" data-booking-created="true">
@@ -599,17 +622,6 @@ export function NewBookingSheet({ businessId, services, pros, timezone, initial,
         </div>
       )}
         </div>
-      {/* Cadastro REAL no CRM — mesma experiência de Clientes; fecha e seleciona. */}
-      {registerOpen && (
-        <NewClientSheet
-          businessId={businessId}
-          vetMode={vetMode || isVet}
-          initialName={onlyDigits(query).length >= 10 ? '' : query.trim()}
-          initialPhone={onlyDigits(query).length >= 10 ? query.trim() : ''}
-          onClose={() => setRegisterOpen(false)}
-          onSaved={(cid, extra) => onClientRegistered(cid, extra)}
-        />
-      )}
     </Drawer>
   );
 }

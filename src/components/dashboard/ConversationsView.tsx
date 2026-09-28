@@ -3,11 +3,13 @@ import { useCallback, useEffect, useState, useRef } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { Icon } from '@/components/icons';
-import { PageSkeleton } from '@/components/ui';
+import { Avatar, PageSkeleton } from '@/components/ui';
 import { cn } from '@/lib/utils';
 import { humanDateTime } from '@/lib/tz';
 import { AccessDenied, AreaLoadError, useAreaLoad } from '@/components/dashboard/AccessNotice';
 import { apiGet, apiSend } from '@/lib/api-client';
+import { QuickRegisterSheet, type SavedContact } from '@/components/dashboard/QuickRegisterSheet';
+import { loadMe } from '@/lib/session-me';
 import { INSTAGRAM_TEXT_MAX_BYTES, instagramTextBytes, instagramTextFits, instagramTextLimitError } from '@/lib/instagram';
 import type { WaChannelData } from '@/components/dashboard/WhatsappChannelPanel';
 
@@ -39,6 +41,8 @@ interface Conversation {
   /** Mensagens da equipe que FALHARAM ao sair (filtro "Falhas"). */
   failedMessages?: number;
   registered: boolean; channel?: 'whatsapp' | 'instagram' | 'agent'; channelUsername?: string;
+  /** Vínculo canônico persistido (link_contact / resolve). */
+  contactId?: string; customerId?: string;
 }
 interface ChannelsView { whatsapp: boolean; instagram: boolean }
 interface InstagramInbox { connected: boolean; label: string; tone: 'ok' | 'pending' | 'error' | 'off'; username: string }
@@ -91,6 +95,17 @@ export function ConversationsView({ unitId, panel = false }: { unitId?: string; 
   const [accountMismatch, setAccountMismatch] = useState('');
   // F3-F — contexto lateral administrativo (nunca prontuário)
   const [side, setSide] = useState<SideContext | null>(null);
+  // §11–15 — identidade: cadastro rápido do "Contato novo" + a clínica é vet?
+  const [quickOpen, setQuickOpen] = useState(false);
+  const [vetClinic, setVetClinic] = useState(false);
+  useEffect(() => {
+    let on = true;
+    loadMe().then((m) => {
+      const biz = m?.data?.businesses?.find((b) => b.id === businessId) || m?.data?.businesses?.[0];
+      if (on && biz?.clinicType === 'veterinaria') setVetClinic(true);
+    }).catch(() => {});
+    return () => { on = false; };
+  }, [businessId]);
 
   // ── COMPOSER: envio real pelo conector oficial ──
   const [draft, setDraftState] = useState('');
@@ -180,8 +195,34 @@ export function ConversationsView({ unitId, panel = false }: { unitId?: string; 
     router.replace(`/conversas?${qs.toString()}`, { scroll: false });
   }
 
+  /**
+   * §11–15 — cadastro rápido concluído: vincula a conversa ao contato novo e
+   * atualiza o badge para "Na base da clínica". O vínculo é explícito (ação
+   * link_contact); a lista local é atualizada em seguida para a tela inteira
+   * (lista + detalhe) concordarem na hora.
+   */
+  async function onQuickSaved(contact: SavedContact) {
+    if (!active || !contact.id) return;
+    const convId = active.conversation.id;
+    // O vínculo é PERSISTENTE (link_contact grava conversation.contactId).
+    // Só atualizamos o badge local quando o servidor confirma — nunca
+    // maquiar a UI sem o vínculo gravado (F5 não pode regredir).
+    const linked = await apiSend('/api/conversations', 'POST', {
+      businessId, conversationId: convId, action: 'link_contact', contactId: contact.id,
+    });
+    if (!linked.ok) {
+      setError(linked.message || 'Não foi possível vincular a conversa ao cliente.');
+      return;
+    }
+    const patch = (c: Conversation): Conversation => ({
+      ...c, registered: true, contactId: contact.id, name: c.name || contact.name, phone: c.phone || contact.phone,
+    });
+    setConversations((list) => list.map((c) => (c.id === convId ? patch(c) : c)));
+    setActive((a) => (a && a.conversation.id === convId ? { ...a, conversation: patch(a.conversation) } : a));
+  }
+
   // 403 → aviso amigável (a sessão continua); nada de skeleton infinito.
-  const { denied, failed, report } = useAreaLoad('Conversas');
+  const { denied, failed, report, reportFeature } = useAreaLoad('Conversas');
 
   const load = useCallback(async () => {
     if (!businessId) return;
@@ -196,14 +237,17 @@ export function ConversationsView({ unitId, panel = false }: { unitId?: string; 
         `/api/conversations?businessId=${businessId}`, { scope: 'area', area: 'Conversas' },
       ),
     ]);
-    if (!report(res)) { setLoaded(true); return; }
-    setData(res.data || null);
-    if (!conv.ok || !conv.data) { report(conv); setLoaded(true); return; }
-    setConversations(conv.data.conversations || []);
-    setChannels(conv.data.channels || { whatsapp: false, instagram: false });
-    setIgInfo(conv.data.instagram || null);
+    // §8–10 — PRINCIPAL × SECUNDÁRIA (causa raiz do falso 403 do painel):
+    //   /api/conversations (o INBOX) é a request PRINCIPAL da área;
+    //   /api/whatsapp (status do canal) é apoio SECUNDÁRIO — seu 403 só
+    //   esconde o card de status do canal. NUNCA nega a tela de Conversas.
+    if (!report(conv)) { setLoaded(true); return; }
+    setConversations(conv.data?.conversations || []);
+    setChannels(conv.data?.channels || { whatsapp: false, instagram: false });
+    setIgInfo(conv.data?.instagram || null);
+    setData(reportFeature(res) ? (res.data || null) : null);
     setLoaded(true);
-  }, [businessId, report]);
+  }, [businessId, report, reportFeature]);
 
   useEffect(() => { load(); }, [load]);
 
@@ -290,12 +334,12 @@ export function ConversationsView({ unitId, panel = false }: { unitId?: string; 
     return (
       <div className="conversation-view" data-panel={panel} data-active={false}>
         <div className="flex items-center justify-between gap-3 mb-4">
-          <div className="flex items-start gap-2.5">
-            <span className="w-9 h-9 shrink-0 rounded-lg bg-[var(--brand)] text-white flex items-center justify-center shadow-md">
-              <Icon n="inbox" size={18} />
+          <div className="flex items-start gap-3">
+            <span className="il-page-header__icon flex h-10 w-10 shrink-0 items-center justify-center rounded-lg border border-[var(--border)] bg-[var(--surface-3)] text-[var(--brand-fg)]">
+              <Icon n="inbox" size={19} />
             </span>
             <div>
-              <h1 className="text-base font-semibold text-[var(--text)] leading-tight">Conversas</h1>
+              <h1 className="text-xl font-semibold text-[var(--text)] leading-tight tracking-tight">Conversas</h1>
               <p className="text-sm text-[var(--text-muted)] mt-0.5">As conversas com os seus clientes em um só lugar.</p>
             </div>
           </div>
@@ -333,12 +377,12 @@ export function ConversationsView({ unitId, panel = false }: { unitId?: string; 
   return (
     <div className="conversation-view" data-panel={panel} data-active={!!active}>
       <div className="flex flex-wrap items-center justify-between gap-3 mb-3">
-        <div className="flex items-start gap-2.5 min-w-0">
-          <span className="w-9 h-9 shrink-0 rounded-lg bg-[var(--brand)] text-white flex items-center justify-center shadow-md">
-            <Icon n="inbox" size={18} />
+        <div className="flex items-start gap-3 min-w-0">
+          <span className="il-page-header__icon flex h-10 w-10 shrink-0 items-center justify-center rounded-lg border border-[var(--border)] bg-[var(--surface-3)] text-[var(--brand-fg)]">
+            <Icon n="inbox" size={19} />
           </span>
           <div className="min-w-0">
-            <h1 className="text-base font-semibold text-[var(--text)] leading-tight">Conversas</h1>
+            <h1 className="text-xl font-semibold text-[var(--text)] leading-tight tracking-tight">Conversas</h1>
             <p className="text-xs text-[var(--text-muted)]">
               {data.inbox.open} abertas · {data.inbox.unread} não lidas
               {channels.whatsapp && data.integration.displayPhone && <> · <span className="font-semibold text-[var(--text)]">{data.integration.displayPhone}</span></>}
@@ -500,7 +544,7 @@ export function ConversationsView({ unitId, panel = false }: { unitId?: string; 
                       {active.conversation.channel === 'instagram'
                         ? (active.conversation.channelUsername ? `Instagram · @${active.conversation.channelUsername}` : 'Instagram · Direct')
                         : active.conversation.phone}
-                      {active.conversation.registered ? ' · cliente cadastrado' : ' · ainda sem cadastro'}
+                      {active.conversation.registered ? ' · na base da clínica' : ' · contato novo'}
                     </p>
                   </div>
                   <div className="flex flex-wrap items-center gap-2 shrink-0">
@@ -625,9 +669,7 @@ export function ConversationsView({ unitId, panel = false }: { unitId?: string; 
               <div className="p-3 space-y-3">
                 <div className="il-idcard rounded-lg border border-[var(--border)] p-3 shadow-sm">
                   <div className="relative flex items-center gap-2.5">
-                    <span className="w-10 h-10 shrink-0 rounded-full il-avatar text-sm" aria-hidden="true">
-                      {(active.conversation.name || '?').trim().split(/\s+/).slice(0, 2).map((x) => x[0]?.toUpperCase() || '').join('')}
-                    </span>
+                    <Avatar name={active.conversation.name || '?'} size={40} />
                     <div className="min-w-0">
                       <p className="text-sm font-semibold text-[var(--text)] truncate">{active.conversation.name}</p>
                       <p className="text-xs text-[var(--text-muted)] truncate">
@@ -642,8 +684,24 @@ export function ConversationsView({ unitId, panel = false }: { unitId?: string; 
                       ? 'bg-[var(--brand-soft)] border-[var(--brand-border)] text-[var(--brand-fg)]'
                       : 'bg-[var(--lilac-bg)] border-[var(--lilac-border)] text-[var(--lilac-fg)]')}>
                     <Icon n={active.conversation.registered ? 'wallet' : 'spark'} size={11} />
-                    {active.conversation.registered ? 'Cliente cadastrado' : 'Contato sem cadastro'}
+                    {active.conversation.registered ? 'Na base da clínica' : 'Contato novo'}
                   </span>
+                  {/* §11–15 — identidade em Conversas: pessoa nova de verdade é
+                      "Contato novo" (nunca "sem cadastro" de quem JÁ existe) e
+                      ganha o CTA de cadastro rápido pré-preenchido. Ao salvar,
+                      a conversa é vinculada e o badge vira "Na base da clínica". */}
+                  {!active.conversation.registered && (
+                    <div className="mt-2 space-y-1.5">
+                      <p className="text-[11px] text-[var(--text-muted)]">
+                        Ainda não está na base desta clínica.
+                      </p>
+                      <button type="button"
+                        onClick={() => setQuickOpen(true)}
+                        className="w-full text-xs font-semibold bg-[var(--brand)] text-white rounded-md px-3 py-2 border border-[var(--brand-strong)]/40 shadow-brand hover:bg-[var(--brand-strong)] inline-flex items-center justify-center gap-1.5">
+                        <Icon n="wallet" size={13} /> Cadastrar cliente
+                      </button>
+                    </div>
+                  )}
                 </div>
                 <div className="bg-white border border-[var(--border)] rounded-lg p-3 shadow-xs">
                   <p className="text-[11px] font-semibold tracking-[0.08em] uppercase text-[var(--text-faint)] mb-2">Atalhos</p>
@@ -729,6 +787,20 @@ export function ConversationsView({ unitId, panel = false }: { unitId?: string; 
           </div>
         </div>
       </div>
+      {/* §11–15 — cadastro rápido do "Contato novo" (pré-preenchido pela conversa). */}
+      <QuickRegisterSheet
+        open={quickOpen}
+        onClose={() => setQuickOpen(false)}
+        businessId={businessId}
+        vet={vetClinic}
+        source="conversa"
+        initial={active ? {
+          name: active.conversation.name || '',
+          phone: active.conversation.phone || '',
+          email: '',
+        } : undefined}
+        onSaved={onQuickSaved}
+      />
     </div>
   );
 }

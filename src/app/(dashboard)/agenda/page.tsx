@@ -423,7 +423,7 @@ export default function AgendaPage() {
   const [colWidth, setColWidth] = useState(COL_MIN);
 
   const { notice, dismiss } = useForbiddenNotice('Agenda');
-  const { denied, failed, report } = useAreaLoad('Agenda');
+  const { denied, failed, report, reportFeature } = useAreaLoad('Agenda');
 
   // A2-B5 (F9): '' enquanto carrega = default do produto (America/Sao_Paulo).
   const [bizTz, setBizTz] = useState('');
@@ -449,7 +449,9 @@ export default function AgendaPage() {
       `/api/queue?businessId=${businessId}`, { scope: 'area', area: 'Agenda' },
     );
     setQueueLoading(false);
-    if (!res.ok) return;
+    // §8–10 — FEATURE secundária: sem fila (403 do perfil ou erro), a tela
+    // apenas segue sem o bloco da fila. Nunca "sem permissão" na área inteira.
+    if (!res.ok) { setQueueRows([]); setQueueDone([]); return; }
     setQueueRows(res.data?.entries || []);
     setQueueDone(res.data?.done || []);
   }, [businessId]);
@@ -465,10 +467,13 @@ export default function AgendaPage() {
         { scope: 'area', area: 'Agenda' },
       ),
     ]);
-    // Sem permissão (403): mostra o aviso amigável e PARA de carregar — a tela
-    // não pode ficar em skeleton para sempre. A sessão continua intacta.
-    if (!report(cat) || !report(bk)) { setLoaded(true); return; }
-    const d = cat.data || {};
+    // §8–10 — separação PRINCIPAL × SECUNDÁRIA (causa raiz do falso 403):
+    //   bookings = request PRINCIPAL da Agenda → seu 403 nega a área;
+    //   catalog  = request SECUNDÁRIA (apoio da grade) → seu 403 só limita
+    //              a feature: a agenda permanece na tela com o que puder.
+    if (!report(bk)) { setLoaded(true); return; }
+    const catalogOk = reportFeature(cat);
+    const d = catalogOk ? (cat.data || {}) : {};
     setServices(d.services || []);
     setPros(d.professionals || []);
     // A2-B3 (F5): horizonte real do negócio (1–365) — nunca 60 hardcoded.
@@ -478,10 +483,10 @@ export default function AgendaPage() {
     setBizTz(d.business?.businessTimezone || '');
     setRules(d.availability || []);
     setExceptions(d.exceptions || []);
-    setBookings(bk.ok ? (bk.data?.bookings || []) : []);
+    setBookings(bk.data?.bookings || []);
     setLoaded(true);
     void loadQueue();
-  }, [businessId, range.from, range.to, report, loadQueue]);
+  }, [businessId, range.from, range.to, report, reportFeature, loadQueue]);
 
   useEffect(() => { load(); }, [load]);
 
@@ -1089,7 +1094,6 @@ export default function AgendaPage() {
     : view === 'week'
       ? '7 dias'
       : 'Um dia';
-  const isToday = focus === today;
   /** Rótulo acessível do botão de navegação (não é só "anterior"). */
   const navLabel = (dir: -1 | 1) => (view === 'month'
     ? (dir < 0 ? 'Mês anterior' : 'Próximo mês')
@@ -1133,14 +1137,21 @@ export default function AgendaPage() {
   const statusOptions = (['pending', 'confirmed', 'completed', 'no_show', 'cancelled'] as BookingStatus[]);
 
   return (
-    <div>
-      {/* CABEÇALHO (§13): título + o que a tela faz + as DUAS ações que
-          importam. Nada de legenda permanente, nada de card de fila disputando
-          o título: a semântica de estado já está nos próprios blocos da grade
-          e a fila vive no rail ao lado (ou no drawer, em tela pequena). */}
-      <header className="flex flex-wrap items-start justify-between gap-x-4 gap-y-2 mb-3.5">
-        <div className="min-w-0">
-          <h1 className="text-[22px] font-semibold tracking-tight text-[var(--text-primary)] leading-tight">Agenda</h1>
+    <div data-agenda-page="true" className="ag-page">
+      {/* LINHA 1 — TÍTULO / CONTROLES AUXILIARES (Agenda protagonista):
+          [ícone calendário] Agenda · à direita Filtros | Fila | ?.
+          São controles AUXILIARES — nada de Dia/Semana/Mês/Lista aqui (eles
+          vivem na Linha 2) e nada de card só para o título. A ação principal
+          ("Novo agendamento") também saiu daqui: é o CTA da Linha 2. */}
+      <header className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2 mb-2">
+        <div className="min-w-0 flex items-center gap-3">
+          {/* CONTRATO ÚNICO de títulos (refino final): chip 40×40 neutro
+              sutil + borda 1px + ícone line na cor do TEMA — igual a todas
+              as outras telas (PageHeader). */}
+          <span data-agenda-title-icon="calendar" className="il-page-header__icon inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-lg border border-[var(--border)] bg-[var(--surface-2)] text-[var(--accent)]">
+            <Icon n="calendar" size={19} />
+          </span>
+          <h1 className="text-xl font-semibold tracking-tight text-[var(--text)] leading-tight">Agenda</h1>
         </div>
         <div className="flex flex-wrap items-center gap-2">
           {/* Filtros: UM botão, UM popover (Status · Serviços · Profissional) e
@@ -1231,10 +1242,26 @@ export default function AgendaPage() {
             )}
           </div>
 
+          {/* Fila do balcão — controle auxiliar da Linha 1 (mesma família
+              visual de Filtros). Abrir/fechar decide quem opera; a rail lateral
+              continua sendo a superfície dela. */}
+          {loaded && (
+            <Button variant="secondary" size="sm" onClick={() => setShowQueue((v) => !v)}
+              aria-expanded={showQueue} aria-pressed={showQueue} title="Fila de atendimento">
+              <Icon n="users" size={14} />
+              Fila
+              {(queueInfo.waiting + queueInfo.called + queueInfo.inService) > 0 && (
+                <span className="ml-0.5 inline-flex items-center justify-center min-w-[18px] h-[18px] px-1 rounded-pill text-[10.5px] font-bold tabular-nums bg-[var(--surface-3)] text-[var(--text-soft)] border border-[var(--border)]">
+                  {queueInfo.waiting + queueInfo.called}
+                </span>
+              )}
+            </Button>
+          )}
+
           {/* Legenda: ajuda sob demanda (popover), nunca uma faixa fixa — e
-              nunca competindo com Filtros/Fila/Novo: aqui é um "?" só ícone,
+              nunca competindo com Filtros/Fila: aqui é um "?" só ícone,
               o mesmo affordance de ajuda do topbar. */}
-          <div ref={helpWrapRef} className="relative order-last">
+          <div ref={helpWrapRef} className="relative">
             <IconButton icon="help" label="Legenda e como usar a grade" tip="Legenda e como usar a grade"
               variant="ghost" aria-expanded={helpOpen} aria-haspopup="dialog"
               onClick={() => setHelpOpen((v) => !v)} />
@@ -1262,22 +1289,6 @@ export default function AgendaPage() {
             )}
           </div>
 
-          {loaded && (
-            <Button variant="secondary" size="sm" onClick={() => setShowQueue((v) => !v)}
-              aria-expanded={showQueue} aria-pressed={showQueue} title="Fila de atendimento">
-              <Icon n="users" size={14} />
-              Fila
-              {(queueInfo.waiting + queueInfo.called + queueInfo.inService) > 0 && (
-                <span className="ml-0.5 inline-flex items-center justify-center min-w-[18px] h-[18px] px-1 rounded-pill text-[10.5px] font-bold tabular-nums bg-[var(--surface-3)] text-[var(--text-soft)] border border-[var(--border)]">
-                  {queueInfo.waiting + queueInfo.called}
-                </span>
-              )}
-            </Button>
-          )}
-
-          <Button onClick={() => setCreating({ date: focus, time: '', professionalId: '' })} variant="primary" size="sm">
-            <Icon n="calendarPlus" size={15} /> Novo agendamento
-          </Button>
         </div>
       </header>
 
@@ -1336,32 +1347,26 @@ export default function AgendaPage() {
 
       {/* A3.4 final UX — WORKSPACE da agenda: [Agenda (flex-1) | Fila (rail)].
           A fila NÃO entra mais no fluxo vertical (não empurra a grade para
-          baixo): ela é coluna ao lado no desktop largo e overlay no resto. */}
-      <div ref={workspaceRef} data-agenda-workspace="true" className="flex items-start gap-2.5 min-w-0">
+          baixo): ela é coluna ao lado no desktop largo e overlay no resto.
+          Agenda protagonista: o workspace cresce até o fim do viewport e a
+          rolagem vertical fica SÓ no painel do modo (ver .ag-page no CSS). */}
+      <div ref={workspaceRef} data-agenda-workspace="true" className="flex flex-1 items-stretch gap-2.5 min-h-0 min-w-0">
         <main data-agenda-main="true" className="flex-1 min-w-0">
-      {/* Toolbar operacional: navegação · Dia/Semana/Mês · filtros · tela cheia.
-          relative z-40: o popover de filtros abre sobre a grade e precisa
-          ficar acima dos cabeçalhos sticky (z-20/30) das colunas. */}
-      <div className="relative z-40 ws-panel mt-3 mb-4">
+      {/* LINHA 2 — DATA / MODO / AÇÃO PRINCIPAL.
+          Esquerda: [◀][▶] + data selecionada (fuso/regras preservados).
+          Direita: [Dia | Semana | Lista] + CTA "Novo agendamento".
+          relative z-40: os popovers abrem sobre a grade e precisam ficar
+          acima dos cabeçalhos sticky (z-20/30) das colunas. */}
+      <div className="relative z-40 ws-panel mb-2.5">
         <div className="flex flex-wrap items-center gap-x-4 gap-y-2.5 px-3 py-2.5">
-          {/* Navegação no tempo (A3.4): [◀] [Hoje] [▶] + título da data ao lado.
-              O "Hoje" fica SEMPRE no mesmo lugar, entre as setas — antes ele
-              aparecia e desaparecia conforme a data, então o botão se movia
-              justamente quando o usuário mais precisava dele. Estando em hoje,
-              ele continua visível, porém marcado como selecionado. */}
+          {/* Navegação no tempo (correção cirúrgica): [◀] [▶] apenas.
+              O botão “Hoje” saiu da UI — a data/período continua visível ao
+              lado e o seletor nativo de data segue permitindo saltar para
+              qualquer dia. */}
           <div className="flex items-center gap-2 min-w-0">
             <span className="inline-flex rounded-md border border-[var(--border-strong)] bg-[var(--surface)] shadow-xs overflow-hidden">
               <IconButton icon="chevL" label={navLabel(-1)} tip={navLabel(-1)} variant="ghost" onClick={() => move(-1)}
                 className="w-9 h-9 rounded-none text-[var(--text-muted)] border-r border-[var(--border)]" />
-              <button type="button" onClick={() => setFocus(today)}
-                aria-pressed={isToday}
-                title={isToday ? 'Você já está em hoje' : 'Ir para hoje'}
-                className={cn('h-9 px-3 rounded-none text-xs font-semibold border-r border-[var(--border)] transition-colors',
-                  isToday
-                    ? 'bg-[var(--brand-soft)] text-[var(--brand-fg)] cursor-default'
-                    : 'text-[var(--text)] hover:bg-[var(--surface-hover)]')}>
-                Hoje
-              </button>
               <IconButton icon="chevR" label={navLabel(1)} tip={navLabel(1)} variant="ghost" onClick={() => move(1)}
                 className="w-9 h-9 rounded-none text-[var(--text-muted)]" />
             </span>
@@ -1373,12 +1378,14 @@ export default function AgendaPage() {
                 aria-label={`Escolher data (${focusRange})`} className="absolute inset-0 w-full h-full opacity-0 cursor-pointer" />
             </label>
           </div>
-          <div className="sm:ml-auto min-w-0 max-w-full">
+          <div className="sm:ml-auto min-w-0 max-w-full flex flex-wrap items-center gap-2">
+            {/* Visualização: Dia | Semana | Lista (correção cirúrgica: “Mês”
+                saiu da UI — a lógica do modo mês segue intacta para links
+                diretos com view=month; nada foi destruído). */}
             <Segmented
               items={[
                 { id: 'day' as View, label: 'Dia', icon: 'calendar' },
                 { id: 'week' as View, label: 'Semana', icon: 'grid' },
-                { id: 'month' as View, label: 'Mês', icon: 'receipt' },
                 { id: 'list' as View, label: 'Lista', icon: 'tasks' },
               ]}
               value={view}
@@ -1386,6 +1393,11 @@ export default function AgendaPage() {
               ariaLabel="Visualização da agenda"
               size="sm"
             />
+            {/* CTA PRINCIPAL da Agenda segue o TEMA ativo (--accent, contrato
+                universal de cor) — o fluxo/sheet de criação é o mesmo. */}
+            <Button variant="primary" size="sm" onClick={() => setCreating({ date: focus, time: '', professionalId: '' })}>
+              <Icon n="calendarPlus" size={15} /> Novo agendamento
+            </Button>
           </div>
         </div>
         {isDragging && view !== 'month' && (
@@ -1433,7 +1445,7 @@ export default function AgendaPage() {
       </div>
 
       {denied ? <AccessDenied area="Agenda" /> : failed ? <AreaLoadError area="Agenda" message={failed} onRetry={load}/> : !loaded ? <AgendaSkeleton /> : view === 'list' ? (
-        <section className="space-y-3" aria-label="Lista de atendimentos do dia">
+        <section className="ag-mode-scroll space-y-3" aria-label="Lista de atendimentos do dia">
           <p className="text-sm text-[var(--text-muted)]">{formatDateBR(focus)} · Toque para abrir o atendimento. Horários livres e intervalos estão na visualização Dia.</p>
           {columns.flatMap(c => c.blocks).length === 0 && <div className="p-8 bg-[var(--surface)] border border-[var(--border)] rounded-lg"><h2 className="font-semibold">Nenhum atendimento nesta seleção</h2><p className="text-sm text-[var(--text-muted)] mt-1">Confira os filtros ou use Novo agendamento para consultar horários disponíveis.</p></div>}
           {[...new Map(columns.flatMap(c => c.blocks).map(b => [b.id,b])).values()].sort((a,b) => a.time.localeCompare(b.time)).map(item => <button key={item.id} type="button" onClick={() => { const booking = bookings.find(b => b.id === item.id); if (booking) setDetail(booking); }} className="w-full flex gap-4 items-start text-left p-4 bg-[var(--surface)] border border-[var(--border)] rounded-lg">
@@ -1442,7 +1454,7 @@ export default function AgendaPage() {
           </button>)}
         </section>
       ) : view === 'month' ? (
-        <div className="bg-white border border-zinc-200 overflow-hidden p-2">
+        <div className="ag-mode-scroll ag-grid-surface overflow-hidden p-2">
           <div className="grid grid-cols-7 gap-px mb-1">
             {['seg', 'ter', 'qua', 'qui', 'sex', 'sáb', 'dom'].map((d) => (
               <span key={d} className="text-[10px] font-semibold tracking-wider uppercase text-zinc-400 text-center py-1">{d}</span>
@@ -1475,15 +1487,18 @@ export default function AgendaPage() {
           </div>
         </div>
       ) : (
-        <div className="bg-white border border-zinc-200">
-          {/* FASE E — SCROLL INTERNO (a grade domina o workspace): o scroller
-              é limitado à altura útil da viewport (a MESMA medição da rail da
-              fila) e rola por dentro — cabeçalhos de coluna e gutter ficam
-              presos nele e a PÁGINA para de crescer com a grade. A rolagem
-              horizontal continua aqui dentro quando as colunas não cabem. */}
+        <div className="ag-mode-panel ag-grid-surface">
+          {/* AGENDA PROTAGONISTA — SCROLL INTERNO com dono único (Dia/Semana):
+              o scroller é o ÚNICO dono da rolagem vertical — ele ocupa todo o
+              resto do viewport (flex:1/min-height:0 na cadeia .ag-page) e rola
+              por dentro; cabeçalhos de coluna e gutter ficam presos nele e a
+              PÁGINA nunca cresce com a grade. `railMaxH` permanece como teto
+              de segurança (medida real da viewport — sem altura chutada) e a
+              rolagem horizontal continua aqui dentro quando as colunas não
+              cabem. */}
           <div
             ref={scrollRef}
-            className={`overflow-auto ws-scroll ${isDragging ? 'select-none' : ''}`}
+            className={`ag-mode-scroll overflow-auto ws-scroll ${isDragging ? 'select-none' : ''}`}
             style={railMaxH ? { maxHeight: railMaxH } : undefined}
           >
             <div className="flex" style={{ minWidth: dayWidth }}>

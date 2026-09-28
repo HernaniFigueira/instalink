@@ -17,7 +17,7 @@ import { money, waLink } from '@/lib/utils';
 import { humanDay } from '@/lib/tz';
 import { formatPhoneBR } from '@/lib/contact-profile';
 import { SearchListSkeleton,
-  Avatar, Badge, Button, EmptyState, ListSkeleton, PageHeader, Tabs, type TabItem,
+  Avatar, Badge, Button, EmptyState, ListSkeleton, PageHeader, Tabs, buttonCls, type TabItem,
 } from '@/components/ui';
 import { Icon } from '@/components/icons';
 import { NewBookingSheet } from '@/components/dashboard/NewBookingSheet';
@@ -26,6 +26,7 @@ import { ImportClientsSheet } from '@/components/dashboard/ImportClientsSheet';
 import { usePanelPermissions } from '@/components/dashboard/usePanelPermissions';
 import { ClientProfileDrawer, type Person360 } from '@/components/dashboard/ClientProfileDrawer';
 import { effectiveHorizonDays } from '@/lib/booking-ops';
+import { buildClientListReturnQuery } from '@/lib/client-return';
 import { AccessDenied, useAreaLoad } from '@/components/dashboard/AccessNotice';
 import { apiGet } from '@/lib/api-client';
 
@@ -71,12 +72,9 @@ export default function ClientesPage() {
   // lista (busca/filtro/página) viaja na URL para o "Voltar para clientes"
   // devolver a lista EXATAMENTE como estava.
   const listStateQuery = () => {
-    const qs = new URLSearchParams();
-    if (businessId) qs.set('b', businessId);
-    if (search.trim()) qs.set('q', search.trim());
-    if (filter !== 'all') qs.set('filter', filter);
-    if (page > 1) qs.set('page', String(page));
-    return qs.toString();
+    // §16 — contrato único em lib/client-return.ts: a ficha reconstrói este
+    // estado no "Voltar para clientes" (busca, filtro e página preservados).
+    return buildClientListReturnQuery({ b: businessId, q: search, filter, page });
   };
   const openFullProfile = (key: string) => {
     router.push(`/clientes/${encodeURIComponent(key)}?${listStateQuery()}`);
@@ -267,6 +265,7 @@ export default function ClientesPage() {
   return (
     <>
       <PageHeader
+        icon="users"
         title="Clientes"
         action={
           <>
@@ -274,8 +273,7 @@ export default function ClientesPage() {
                 produto e virou uma ferramenta DENTRO de Clientes — aparece só
                 quando a capacidade está ativa e o usuário tem a permissão. */}
             {canFunil && (
-              <Link href={`/funil?b=${businessId}`}
-                className="inline-flex items-center justify-center gap-1.5 text-xs font-semibold rounded-[var(--radius-sm)] px-3 py-2 bg-white text-[var(--text-primary)] border border-[var(--border-strong)] hover:bg-[var(--surface-hover)]">
+              <Link href={`/funil?b=${businessId}`} className={buttonCls('secondary', 'sm')}>
                 <Icon n="funnel" size={14} /> Oportunidades
               </Link>
             )}
@@ -284,7 +282,7 @@ export default function ClientesPage() {
             </Button>
             <Button variant="secondary" disabled={!!exporting} title="Baixar a base em CSV (reimportável)"
               onClick={() => { void downloadExport('csv'); }}>
-              <Icon n="download" size={15} /> {exporting === 'csv' ? 'Gerando…' : 'Exportar CSV'}
+              <Icon n="download" size={15} /> {exporting === 'csv' ? 'Gerando…' : 'Exportar'}
             </Button>
             {canExportFull && (
               <Button variant="secondary" disabled={!!exporting}

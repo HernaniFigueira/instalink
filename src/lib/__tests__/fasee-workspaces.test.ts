@@ -70,6 +70,7 @@ describe('Conversas — filtros e falhas que dizem a verdade', () => {
 describe('Clientes → Perfil 360 (P1.7)', () => {
   const list = read('src/app/(dashboard)/clientes/page.tsx');
   const profile = read('src/app/(dashboard)/clientes/[id]/page.tsx');
+  const ret = read('src/lib/client-return.ts'); // §16 — contrato único de retorno
 
   it('clique principal ABRE O 360 (rota própria), não a gaveta', () => {
     expect(list).toMatch(/onClick=\{\(\) => openFullProfile\(p\.key\)\}/);
@@ -82,14 +83,20 @@ describe('Clientes → Perfil 360 (P1.7)', () => {
   });
 
   it('o estado da lista (busca/filtro/página) viaja na URL para a ficha', () => {
-    expect(list).toMatch(/qs\.set\('q', search\.trim\(\)\)/);
-    expect(list).toMatch(/qs\.set\('filter', filter\)/);
-    expect(list).toMatch(/qs\.set\('page', String\(page\)\)/);
+    // §16 — a lista e a ficha usam o MESMO contrato (lib/client-return.ts)
+    expect(list).toMatch(/buildClientListReturnQuery\(\{ b: businessId, q: search, filter, page \}\)/);
+    expect(ret).toMatch(/qs\.set\('q', parts\.q\.trim\(\)\)/);
+    expect(ret).toMatch(/qs\.set\('filter', parts\.filter\)/);
+    expect(ret).toMatch(/qs\.set\('page', String\(parts\.page\)\)/);
   });
 
   it('"Voltar para clientes" devolve busca/filtro/página/aba intactos', () => {
-    expect(profile).toMatch(/for \(const key of \['q', 'filter', 'page', 'tab'\]\)/);
+    expect(profile).toMatch(/clientListReturnHref/);
     expect(profile).toMatch(/Voltar para clientes/);
+    // as 4 chaves do estado viajam (busca, filtro, página e aba)
+    for (const key of ['q', 'filter', 'page', 'tab']) {
+      expect(ret, key).toContain(`'${key}'`);
+    }
   });
 
   it('a lista RELÊ o estado da URL ao voltar (nada de página 1 fantasma)', () => {

@@ -45,8 +45,9 @@ import { Icon } from '@/components/icons';
 import { ImageUpload } from '@/components/dashboard/ImageUpload';
 import { AccessDenied, AreaLoadError, useAreaLoad } from '@/components/dashboard/AccessNotice';
 import { apiGet, apiSend } from '@/lib/api-client';
+import { NAV_ACCENTS, NAV_ACCENT_FAMILIES, contrastRatio, getNavAccent, setNavAccent, type NavAccentId } from '@/lib/nav-accent';
 
-type ConfigTab = 'negocio' | 'agenda';
+type ConfigTab = 'negocio' | 'agenda' | 'aparencia';
 
 /**
  * Abas REAIS de configuração desta empresa: cada uma EDITA algo aqui.
@@ -64,12 +65,16 @@ type ConfigTab = 'negocio' | 'agenda';
 const CONFIG_TAB_ICON: Record<ConfigTab, string> = {
   negocio: 'store',
   agenda: 'calendar',
+  aparencia: 'sliders',
 };
 
 const CONFIG_TABS: Array<[ConfigTab, string]> = [
   // GODOUTOR final: o vocabulário do produto é CLÍNICA (o mesmo da sidebar).
   ['negocio', 'Clínica'],
   ['agenda', 'Agenda'],
+  // Missão 6 — personalização do sistema (cor da navegação): preferência
+  // pessoal de interface, morando FORA da shell.
+  ['aparencia', 'Aparência'],
 ];
 
 /** Aba antiga → porta canônica (links antigos continuam chegando no lugar). */
@@ -166,6 +171,112 @@ function BookingRules({ businessId, initial, onSaved }: {
   );
 }
 
+
+// ── Aparência do sistema (missão 6) ────────────────────────────
+// A cor da navegação é PREFERÊNCIA PESSOAL de interface (localStorage),
+// não identidade da empresa: o A3.3 continua valendo — a empresa é
+// identificada por logo/nome (white label), nunca pintando o painel com a
+// cor dela. Por isso o controle mora AQUI (Configurações → Aparência) e
+// nunca na shell. Presets SEGUROS com contraste AA pré-validado; a topbar
+// acompanha a cor escolhida (color-mix sobre --il-nav).
+function ShellAppearance() {
+  const [accent, setAccent] = useState<NavAccentId>('azul-clinico');
+  useEffect(() => { setAccent(getNavAccent()); }, []);
+  const selected = NAV_ACCENTS.find((x) => x.id === accent) || NAV_ACCENTS[0];
+  // Preview ao vivo (§6): sidebar + topbar suave + CTA principal (accent) +
+  // texto near-black — as 4 categorias do contrato de cor em miniatura.
+  const navVars = selected.vars;
+  const aa = contrastRatio(navVars['--il-nav-fg'], navVars['--il-nav']);
+  return (
+    <section className="bg-white border border-zinc-200 p-4 space-y-3" data-testid="shell-appearance">
+      <div>
+        <h3 className="font-semibold text-sm">Aparência do sistema</h3>
+        <p className="text-xs text-zinc-500 mt-0.5">
+          Tema da clínica: cor da barra lateral, da topo suave e dos CTAs principais.
+          O texto e as cores de erro/sucesso não mudam. É uma preferência pessoal deste navegador —
+          a identidade da clínica no painel continua sendo o logo e o nome.
+        </p>
+      </div>
+      <div role="group" aria-label="Cor da navegação" className="space-y-3">
+        {NAV_ACCENT_FAMILIES.map((fam) => (
+          <div key={fam.id} className="space-y-1.5">
+            <p className="text-[11px] font-semibold uppercase tracking-[0.08em] text-zinc-400">{fam.label}</p>
+            <div className="flex flex-wrap gap-2.5">
+              {NAV_ACCENTS.filter((a) => a.family === fam.id).map((a) => (
+                <button
+                  key={a.id}
+                  type="button"
+                  aria-pressed={accent === a.id}
+                  data-testid={`nav-accent-${a.id}`}
+                  onClick={() => { setAccent(a.id); setNavAccent(a.id); }}
+                  className="flex items-center gap-2 rounded-lg border px-3 py-2 text-sm font-semibold transition-colors"
+                  style={{
+                    borderColor: accent === a.id ? 'var(--brand)' : 'var(--border)',
+                    boxShadow: accent === a.id ? '0 0 0 1px var(--brand)' : 'none',
+                  }}
+                >
+                  <span
+                    aria-hidden="true"
+                    className="inline-block h-5 w-5 rounded-full border border-black/10"
+                    style={{ background: a.swatch }}
+                  />
+                  {a.label}
+                </button>
+              ))}
+            </div>
+          </div>
+        ))}
+      </div>
+      {/* preview ao vivo: sidebar + topo suave + CTA accent + texto near-black */}
+      <div
+        data-testid="nav-accent-preview"
+        className="flex h-28 overflow-hidden rounded-lg border border-zinc-200"
+        style={{ background: 'var(--bg)' }}
+      >
+        <div
+          className="w-28 p-2.5 flex flex-col gap-1.5"
+          style={{ background: navVars['--il-nav'] }}
+        >
+          <div className="h-3 w-14 rounded" style={{ background: navVars['--il-nav-fg'], opacity: 0.9 }} />
+          <div className="h-4 rounded" style={{ background: navVars['--il-nav-active'] }} />
+          <div className="mt-1 h-4 w-4/5 rounded" style={{ background: navVars['--il-nav-muted'] } as React.CSSProperties} />
+          <div className="h-4 w-3/5 rounded" style={{ background: navVars['--il-nav-muted'], opacity: 0.6 }} />
+        </div>
+        <div className="flex-1">
+          <div
+            className="h-8 border-b border-zinc-200"
+            style={{
+              background: `linear-gradient(90deg, ${navVars['--il-nav']}22, transparent)`,
+            }}
+          />
+          <div className="space-y-2 p-2.5">
+            <div className="flex items-center gap-2">
+              <div className="h-5 w-5 rounded" style={{ background: navVars['--accent-soft'], border: `1px solid ${navVars['--accent-border']}` }} />
+              {/* título sempre near-black (contrato A — o tema não muda texto) */}
+              <div className="h-3 w-2/5 rounded" style={{ background: 'var(--text)' }} />
+            </div>
+            <div className="h-3 w-3/5 rounded bg-zinc-200" />
+            <div className="flex items-center gap-1.5 pt-0.5">
+              {/* CTA principal segue o TEMA (contrato B) */}
+              <div
+                className="h-5 w-16 rounded"
+                style={{ background: navVars['--accent'], color: navVars['--accent-contrast'] }}
+              />
+              {/* secondary é neutro; semânticas nunca tingidas */}
+              <div className="h-5 w-12 rounded border border-zinc-300 bg-white" />
+            </div>
+          </div>
+        </div>
+      </div>
+      <p className="text-[11px] flex items-center gap-2 text-zinc-500">
+        <span className="inline-flex items-center rounded-full bg-emerald-50 border border-emerald-200 px-2 py-0.5 text-[10px] font-semibold text-emerald-800">
+          Contraste AA {aa.toFixed(1)}:1
+        </span>
+        {selected.label} · a escolha vale só para você neste navegador; as demais pessoas veem o padrão do produto. A página pública não é afetada.
+      </p>
+    </section>
+  );
+}
 export default function ConfigPage() {
   const router = useRouter();
   const params = useSearchParams();
@@ -383,6 +494,9 @@ export default function ConfigPage() {
             onSaved={() => { setMsg('Regras de reserva salvas.'); setTimeout(() => setMsg(''), 3000); }}
           />
         )}
+
+        {/* Missão 6 — personalização do sistema (preferência pessoal). */}
+        {tab === 'aparencia' && <ShellAppearance />}
 
 
       </div>

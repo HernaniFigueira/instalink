@@ -26,14 +26,18 @@
   color-scheme: light;
 
   /* ── Estrutura: fundo, superfícies e bordas ─────────────────── */
-  --bg: #f3f5fb;              /* fundo do painel (limpo, levemente frio) */
+  /* §2 (contrato D) — FUNDO DO WORKSPACE: neutro UNIVERSAL. Não acompanha
+     o tema; gradiente sutil #F4F6F8 → #F8F9FB aplicado no shell. */
+  --bg: #f4f6f8;
+  --bg-top: #f4f6f8;
+  --bg-bottom: #f8f9fb;
   --bg-tint: #eef1fa;         /* faixa/área de apoio */
   --surface: #ffffff;         /* cartão */
   --surface-2: #fbfcff;       /* cartão sobre cartão (profundidade leve) */
   --surface-3: #f4f6fc;       /* área rebaixada (inset) */
   --surface-hover: #f2f5fc;
   --border: #e4e8f3;
-  --border-soft: #eef1f8;
+  --border-soft: #e6eaf3;
   --border-strong: #d3daea;
   /* A3.3 CONVERGÊNCIA: `--border-2` já era USADO por ClientProfileDrawer,
      NavSearch e DashboardShell mas nunca foi definido aqui — a declaração
@@ -42,30 +46,55 @@
   --border-2: #dbe1ef;
 
   /* ── Texto ──────────────────────────────────────────────────── */
-  --text: #161b2e;
-  --text-strong: #0d1122;
-  --text-muted: #5a6480;
-  --text-faint: #9099b3;
+  /* MISSÃO 5 — escala INK (near-black quente, não preto puro nem lavado):
+     títulos firmes, body com contraste, metadados discretos mas legíveis. */
+  --text: #262220;
+  --text-strong: #171310;
+  --text-muted: #524c46;
+  --text-faint: #6f6862;
   /* Idem: `--text-soft` era usado no placeholder/descrição do NavSearch sem
      existir. Fica entre `--text-muted` e `--text-faint`. */
-  --text-soft: #7680a0;
+  --text-soft: #665f59;
 
   /* ── Ação (marca do produto) ────────────────────────────────── */
-  /* GODOUTOR 2.0 — azul de ação. O roxo saiu como identidade (ver o bloco
-     `.il-platform` para a fonte de verdade do painel). */
-  --brand: #2563eb;
+  /* GODOUTOR 2.0 — índigo-violeta de ação (paleta da identidade visual:
+     sidebar forte + amarelo quente de destaque). Contraste AA checado em
+     design-360-tokens.test.ts. */
+  /* MISSÃO 5 — AÇÃO = espresso/graphite deep: botões primários com presença
+     (branco = contraste excelente), sem parecer morto. Identidade índigo
+     permanece em --brand-600/700 (logo) e --il-nav* (sidebar). */
+  --brand: #1c1917;
   /* HOMOLOGAÇÃO · P0-5 — skeleton com contraste real (não branco sobre cinza). */
   --skeleton-base: #e4e8f0;
   --skeleton-highlight: #f1f4f9;
-  --brand-strong: #1d4ed8;
-  --brand-soft: #eff6ff;
-  --brand-softer: #f8fbff;
-  --brand-border: #dbeafe;
-  --brand-fg: #1d4ed8;
-  --brand-ring: rgba(37, 99, 235, 0.24);
+  --brand-strong: #0c0a09;
+  --brand-soft: #f5f3f0;
+  --brand-softer: #faf9f7;
+  --brand-border: #e4ded6;
+  --brand-fg: #262220;
+  --brand-ring: rgba(28, 25, 23, 0.28);
   /* Estado hover das superfícies TINTED (botão soft, chip, pílula). Existe
      para que nenhum componente escreva hex próprio: o hover é token. */
-  --brand-bg-hover: #dbeafe;
+  --brand-bg-hover: #ede9e3;
+
+  /* ── Amarelo quente “sun” (Visão geral / ênfases pontuais) ───── */
+  /* Destaque de boas-vindas e blocos de atenção. Usado com parcimônia:
+     superfícies suaves + texto `--sun-fg` (AA sobre `--sun-bg`). */
+  --sun: #f7c948;
+  --sun-strong: #e0a800;
+  --sun-bg: #fff7e0;
+  --sun-bg-strong: #ffefc2;
+  --sun-border: #f0e0b0;
+  --sun-fg: #7a5800;
+  /* — CTA principal da Agenda (“Novo agendamento”): violeta premium —
+     Acento refinado que conversa com a sidebar índigo-violeta, sem ser o
+     azul de ação genérico. Branco sobre `--cta-bg` = 6.8:1 (AA). */
+  --cta-bg: #5b3fd4;
+  --cta-bg-hover: #4a31b8;
+  --cta-border: #4a31b8;
+  --cta-fg: #ffffff;
+  --cta-shadow: 0 2px 12px -2px rgba(91, 63, 212, 0.45);
+  --cta-shadow-hover: 0 6px 18px -2px rgba(91, 63, 212, 0.55);
 
   /* Nomes legados (consumidos por ui.tsx e telas) → apontam para a marca.
      Uma futura identidade por negócio só precisa REATRIBUIR estes valores. */
@@ -74,7 +103,14 @@
   --action-contrast: #ffffff;
   --action-soft: var(--brand-soft);
   --action-soft-border: var(--brand-border);
-  --accent: var(--brand);
+  /* ── TEMA (contrato B) — CTAs principais + acentos. Defaults = tema
+     padrão NEUTRO (usuário sem preferência inicia em Neutro; nenhum flash
+     roxo/lilás no SSR/hydration); a paleta salva (lib/nav-accent.ts) aplica
+     os 5 tokens inline no shell. NUNCA misturar com --text/--il-nav. ── */
+  --accent: #3f4652;
+  --accent-hover: #363c47;
+  --accent-soft: #e4e5e7;
+  --accent-border: #a9acb1;
   --accent-contrast: #ffffff;
 
   /* ── Estado ─────────────────────────────────────────────────── */
@@ -149,12 +185,15 @@
   --code-fg: #e6e8ee;
 
   /* ── Raio ───────────────────────────────────────────────────── */
-  --radius-xs: 6px;
-  --radius-sm: 9px;
-  --radius-md: 11px;
-  --radius-lg: 14px;
-  --radius-xl: 18px;
-  --radius-2xl: 24px;
+  /* Missão 6 — radius CONTROLADO: menos bolha, mais produto profissional.
+     Encaixes especiais (busca, chips, botão +) continuam pill; popovers e
+     sheets usam xl/2xl moderados. */
+  --radius-xs: 5px;
+  --radius-sm: 7px;
+  --radius-md: 8px;
+  --radius-lg: 10px;
+  --radius-xl: 12px;
+  --radius-2xl: 16px;
   --radius-pill: 999px;
 
   /* ── Sombra (camadas suaves, nunca dura) ────────────────────── */
@@ -163,7 +202,7 @@
   --shadow-md: 0 2px 6px -2px rgba(19, 26, 54, 0.08), 0 8px 20px -10px rgba(19, 26, 54, 0.12);
   --shadow-lg: 0 6px 14px -6px rgba(19, 26, 54, 0.12), 0 20px 40px -20px rgba(19, 26, 54, 0.22);
   --shadow-xl: 0 12px 24px -10px rgba(19, 26, 54, 0.16), 0 32px 64px -28px rgba(19, 26, 54, 0.30);
-  --shadow-brand: 0 6px 16px -8px rgba(47, 107, 239, 0.55);
+  --shadow-brand: 0 6px 16px -8px rgba(26, 23, 21, 0.50);
   --shadow-inset: inset 0 1px 2px rgba(19, 26, 54, 0.06);
 
   /* ── Espaçamento (escala do sistema; Tailwind continua valendo) ─ */
@@ -204,15 +243,16 @@
    * sem migração destrutiva) — apenas não é mais aplicado ao painel.
    * Os derivadores legados seguem em lib/appearance.ts para sanitizar dado
    * antigo, não como feature ativa. */
-  --il-nav: #ffffff;
-  --il-nav-fg: #2a3145;
-  --il-nav-muted: #79829c;
-  --il-nav-hover: #f1f4fb;
-  --il-nav-active: #e9f0fe;
-  --il-nav-active-fg: #1749b3;
-  --il-nav-border: #e4e8f3;
-  --il-nav-cta: #2f6bef;
-  --il-nav-cta-fg: #ffffff;
+  --il-nav: #d8dde6;
+  --il-nav-fg: #18181b;
+  --il-nav-muted: #47494f;
+  --il-nav-icon: #4e4f54;
+  --il-nav-hover: #bec2ca;
+  --il-nav-active: #b1b5bd;
+  --il-nav-active-fg: #18181b;
+  --il-nav-border: rgba(18, 22, 33, 0.10);
+  --il-nav-cta: #ffd166;
+  --il-nav-cta-fg: #3b2f00;
 }
 
 html { scroll-behavior: smooth; }
@@ -254,6 +294,31 @@ body {
 .ws-section { border-top: 1px solid var(--border-soft); }
 .ws-section:first-child { border-top: 0; }
 
+/* Checkbox premium (missão 4): caixa suave com marca carvão — o mesmo
+   controle em todo o sistema (forms, sheets, toggles de consentimento). */
+.il-check {
+  appearance: none;
+  width: 18px; height: 18px;
+  margin: 0;
+  border-radius: 6px;
+  border: 1.5px solid var(--border-strong);
+  background: var(--surface);
+  cursor: pointer;
+  flex-shrink: 0;
+  transition: background 0.15s ease, border-color 0.15s ease, box-shadow 0.15s ease;
+}
+.il-check:hover { border-color: var(--brand); }
+.il-check:checked {
+  background: var(--brand);
+  border-color: var(--brand);
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='none' stroke='white' stroke-width='2.4' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M3.5 8.5 6.5 11.5 12.5 5'/%3E%3C/svg%3E");
+  background-size: 13px 13px;
+  background-position: center;
+  background-repeat: no-repeat;
+}
+.il-check:focus-visible { outline: none; box-shadow: var(--focus-ring); border-color: var(--brand); }
+.il-check:disabled { opacity: 0.5; cursor: not-allowed; }
+
 /* Abas do painel (pills) — padrão único de navegação interna. */
 .il-tabbar {
   display: inline-flex;
@@ -277,7 +342,7 @@ body {
   white-space: nowrap;
   transition: background 0.15s ease, color 0.15s ease, box-shadow 0.15s ease;
 }
-.il-tab:hover { color: var(--text); background: rgba(47, 107, 239, 0.08); }
+.il-tab:hover { color: var(--text); background: rgba(43, 39, 36, 0.08); }
 .il-tab[aria-selected='true'] {
   background: var(--surface);
   color: var(--brand-fg);
@@ -290,15 +355,18 @@ body {
    (transform medido do botão real) — trocar Dia→Semana parece deslizar uma
    peça, não trocar de página. Sem sublinhado de aba. */
 .il-segmented {
+  /* Seletor de MODO (Agenda): container claro, opções compactas. O estado
+     ativo é azul CLARO (fundo suave + texto/ícone azul) — o azul sólido com
+     texto branco competia com a página inteira. */
   position: relative; display: inline-flex; align-items: center; gap: 2px;
-  padding: 3px; background: var(--surface-3);
-  border: 1px solid var(--border); border-radius: var(--radius-md);
+  padding: 3px; background: var(--surface);
+  border: 1px solid var(--border); border-radius: var(--radius-sm);
 }
 .il-segmented__thumb {
   position: absolute; top: 3px; left: 0; height: calc(100% - 6px); z-index: 0;
-  border-radius: calc(var(--radius-md) - 3px);
-  background: var(--brand);
-  box-shadow: 0 1px 2px rgba(37, 99, 235, 0.30);
+  border-radius: calc(var(--radius-sm) - 3px);
+  background: var(--brand-soft);
+  border: 1px solid var(--brand-border);
   transition: transform var(--motion-base) var(--ease-standard),
               width var(--motion-base) var(--ease-standard);
   pointer-events: none;
@@ -306,13 +374,13 @@ body {
 .il-segmented__item {
   position: relative; z-index: 1;
   display: inline-flex; align-items: center; gap: 6px;
-  height: 32px; padding: 0 12px; border-radius: calc(var(--radius-md) - 3px);
+  height: 30px; padding: 0 11px; border-radius: calc(var(--radius-sm) - 3px);
   font-size: 13px; font-weight: 500; line-height: 1.1; white-space: nowrap;
   color: var(--text-soft);
   transition: color var(--motion-fast) var(--ease-standard);
 }
 .il-segmented__item:hover { color: var(--text); }
-.il-segmented__item[aria-selected='true'] { color: #fff; font-weight: 600; }
+.il-segmented__item[aria-selected='true'] { color: var(--brand-fg); font-weight: 600; }
 .il-segmented__item:disabled { opacity: .45; pointer-events: none; }
 .il-segmented__count {
   min-width: 18px; height: 18px; padding: 0 5px; border-radius: var(--radius-pill);
@@ -405,19 +473,9 @@ body {
 .il-idcard {
   position: relative;
   overflow: hidden;
-  background:
-    linear-gradient(135deg, rgba(47, 107, 239, 0.14), rgba(122, 92, 208, 0.10) 46%, transparent 78%),
-    var(--surface);
-}
-.il-idcard::after {
-  content: '';
-  position: absolute;
-  inset: auto -40px -70px auto;
-  width: 190px;
-  height: 190px;
-  border-radius: 50%;
-  background: radial-gradient(circle at 30% 30%, rgba(47, 107, 239, 0.16), transparent 65%);
-  pointer-events: none;
+  /* MISSÃO 5: o tutor fica NEUTRO e discreto (creme quase branco) — quem
+     ganha o amarelo/creme quente é o PET (o paciente da veterinária). */
+  background: var(--brand-softer);
 }
 
 /* Avatar com placeholder bonito (iniciais em gradiente suave). */
@@ -590,23 +648,24 @@ input[type='color'] { @apply cursor-pointer; }
   --control-h-touch: 44px;
 
   /* ── Estrutura: superfícies claras para o conteúdo respirar ──── */
-  /* GODOUTOR 2.0 — paleta única (slate). Estes são os nomes canônicos; os
-     apelidos legados (--text, --border-soft…) apontam para eles. */
-  --brand-600: #2563eb;
-  --brand-700: #1d4ed8;
-  --brand-500: #3b82f6;
-  --brand-300: #93c5fd;
-  --brand-100: #dbeafe;
-  --brand-50: #eff6ff;
+  /* GODOUTOR 2.0 — paleta única (índigo-violeta). Estes são os nomes
+     canônicos; os apelidos legados (--text, --border-soft…) apontam para eles. */
+  --brand-600: #4f46e5;
+  --brand-700: #4338ca;
+  --brand-500: #6366f1;
+  --brand-300: #a5b4fc;
+  --brand-100: #c7d2fe;
+  --brand-50: #eef2ff;
 
-  --text-primary: #0f172a;
-  --text-secondary: #334155;
-  --text-muted: #475569;
+  /* MISSÃO 5 — escala INK do workspace (near-black quente). */
+  --text-primary: #1c1815;
+  --text-secondary: #3d3833;
+  --text-muted: #524c46;
   /* `--text-soft`/`--text-faint` são os degraus MAIS CLAROS que ainda passam
      AA (≥4.5:1) sobre a superfície mais escura usada como fundo (--surface-hover
      #f1f5f9). Antes o "#94a3b8" parecia elegante e reprovava em contraste. */
-  --text-soft: #556377;
-  --text-faint: #5b6b80;
+  --text-soft: #665f59;
+  --text-faint: #6f6862;
 
   --surface-base: #ffffff;
   --surface-subtle: #f8fafc;
@@ -647,14 +706,17 @@ input[type='color'] { @apply cursor-pointer; }
   --text-soft: var(--text-soft-base);
 
   /* ── Stacks ─────────────────────────────────────────────────── */
-  --brand: var(--brand-600);
-  --brand-strong: var(--brand-700);
-  --brand-soft: var(--brand-50);
-  --brand-softer: var(--brand-50);
-  --brand-border: var(--brand-100);
-  --brand-fg: var(--brand-700);
-  --brand-ring: rgba(37, 99, 235, 0.26);
-  --brand-bg-hover: var(--brand-100);
+  /* MISSÃO 5: a AÇÃO do workspace em espresso/graphite deep (botões com
+     presença e leitura firme). O rampo índigo (--brand-50…700) continua
+     definido para a identidade (logo GoDoutor) e acentos de legado. */
+  --brand: #1c1917;
+  --brand-strong: #0c0a09;
+  --brand-soft: #f5f3f0;
+  --brand-softer: #faf9f7;
+  --brand-border: #e4ded6;
+  --brand-fg: #262220;
+  --brand-ring: rgba(28, 25, 23, 0.26);
+  --brand-bg-hover: #ede9e3;
   --ops: var(--brand);
   --ops-soft: var(--brand-soft);
   --ops-fg: var(--brand-fg);
@@ -709,7 +771,14 @@ input[type='color'] { @apply cursor-pointer; }
   --action-contrast: #ffffff;
   --action-soft: var(--brand-soft);
   --action-soft-border: var(--brand-border);
-  --accent: var(--brand);
+  /* ── TEMA (contrato B) — CTAs principais + acentos. Defaults = tema
+     padrão NEUTRO (usuário sem preferência inicia em Neutro; nenhum flash
+     roxo/lilás no SSR/hydration); a paleta salva (lib/nav-accent.ts) aplica
+     os 5 tokens inline no shell. NUNCA misturar com --text/--il-nav. ── */
+  --accent: #3f4652;
+  --accent-hover: #363c47;
+  --accent-soft: #e4e5e7;
+  --accent-border: #a9acb1;
   --accent-contrast: #ffffff;
 
   /* ── VERDE DE ESTADO · concluído/confirmado ──────────────────── */
@@ -763,12 +832,12 @@ input[type='color'] { @apply cursor-pointer; }
   --sheet-backdrop: rgba(13, 18, 32, 0.22);
 
   /* ── Raio (escala única; nada de raio avulso por tela) ────────── */
-  --radius-xs: 6px;
-  --radius-sm: 9px;    /* input e botão */
-  --radius-md: 10px;   /* item de menu, controle interno */
-  --radius-lg: 12px;   /* cartão, painel */
-  --radius-xl: 14px;   /* popover, sheet */
-  --radius-2xl: 18px;
+  --radius-xs: 5px;
+  --radius-sm: 7px;    /* input e botão */
+  --radius-md: 8px;    /* item de menu, controle interno */
+  --radius-lg: 10px;   /* cartão, painel */
+  --radius-xl: 12px;   /* popover, sheet */
+  --radius-2xl: 16px;
   --radius-pill: 999px;
 
   /* ── Sombra (o painel é plano; sombra só cria profundidade real) ─
@@ -779,7 +848,7 @@ input[type='color'] { @apply cursor-pointer; }
   --shadow-md: 0 4px 12px -4px rgba(15, 23, 42, 0.10), 0 12px 24px -12px rgba(15, 23, 42, 0.12);
   --shadow-lg: 0 10px 20px -8px rgba(15, 23, 42, 0.12), 0 28px 48px -20px rgba(15, 23, 42, 0.18);
   --shadow-xl: 0 18px 36px -12px rgba(15, 23, 42, 0.16), 0 40px 72px -28px rgba(15, 23, 42, 0.24);
-  --shadow-brand: 0 1px 2px rgba(37, 99, 235, 0.20);
+  --shadow-brand: 0 1px 2px rgba(26, 23, 21, 0.20);
   --shadow-inset: inset 0 1px 2px rgba(15, 23, 42, 0.06);
   /* Sombra do Workspace Sheet: a mais alta do sistema (camada flutuante). */
   --shadow-sheet: 0 24px 60px -18px rgba(15, 23, 42, 0.30), 0 4px 12px -4px rgba(15, 23, 42, 0.12);
@@ -789,17 +858,19 @@ input[type='color'] { @apply cursor-pointer; }
   --focus-outline: 2px solid var(--brand);
 
   /* ── Navegação do painel ─────────────────────────────────────── */
-  --il-nav: var(--surface);
-  --il-nav-fg: var(--text);
-  --il-nav-muted: var(--text-muted);
-  --il-nav-hover: var(--surface-hover);
-  /* Missão sidebar final (Meta-like): item ativo/grupo aberto = azul MUITO
-     claro + texto azul — nunca marca em cheio, nunca texto branco. */
-  --il-nav-active: #e9f0fe;
-  --il-nav-active-fg: #1749b3;
-  --il-nav-border: var(--border);
-  --il-nav-cta: var(--brand);
-  --il-nav-cta-fg: var(--action-contrast);
+  /* Sidebar — defaults do tema padrão NEUTRO (sem roxo/lilás): usuário
+     sem preferência salva carrega ESTE estado; preferência válida sobrepõe
+     inline (mesmos tokens). Contraste AA checado em design-360-tokens. */
+  --il-nav: #d8dde6;
+  --il-nav-fg: #18181b;
+  --il-nav-muted: #47494f;
+  --il-nav-icon: #4e4f54;
+  --il-nav-hover: #bec2ca;
+  --il-nav-active: #b1b5bd;
+  --il-nav-active-fg: #18181b;
+  --il-nav-border: rgba(18, 22, 33, 0.10);
+  --il-nav-cta: #ffd166;
+  --il-nav-cta-fg: #3b2f00;
 
   color: var(--text);
 }
@@ -839,15 +910,8 @@ input[type='color'] { @apply cursor-pointer; }
   box-shadow: none;
 }
 /* Carteirinha do cliente: faixa suave da marca (uma família só). */
-.il-platform .il-idcard {
-  background: linear-gradient(135deg,
-    color-mix(in srgb, var(--brand) 6%, var(--surface)),
-    var(--surface) 62%);
-}
-.il-platform .il-idcard::after {
-  background: radial-gradient(circle at 30% 30%,
-    color-mix(in srgb, var(--brand) 8%, transparent), transparent 65%);
-}
+/* MISSÃO 4: o sólido quente do `.il-idcard` vale em todo o sistema — sem
+   override com degradê/arco no workspace. */
 .il-platform .il-actionbar { background: var(--surface); backdrop-filter: none; }
 .il-platform .il-tabbar--sm { transform: none; }
 
@@ -905,6 +969,61 @@ dialog.il-drawer:not([open]) { display: none; }
 dialog.il-drawer::backdrop { background: transparent; }
 
 /* ═══════════════════════════════════════════════════════════════
+   §19–25 — OVERLAY SYSTEM · faixa que expande lateralmente
+   ═══════════════════════════════════════════════════════════════
+   UM dialog = UM backdrop. "Cadastrar novo paciente" dentro de "Novo
+   agendamento" NÃO abre modal novo: a faixa cresce (base 680–760px →
+   expandida 1000–1120px), o painel base recua/atenua e o secundário entra
+   pela direita. Animações: entrada 200ms, saída 170ms (faixa ~200ms),
+   com prefers-reduced-motion zerando o movimento. */
+
+/* Foco programático (títulos aria-labelledby, tabindex=-1) é para leitores
+   de tela — sem anel visual. Anel real (:focus-visible) fica só em controles. */
+[tabindex='-1']:focus,
+[tabindex='-1']:focus-visible { outline: none !important; box-shadow: none !important; }
+
+.il-drawer__strip { transition: max-width 200ms var(--ease-standard), width 200ms var(--ease-standard); }
+.il-drawer__panel--base {
+  min-width: 0;
+  transition: opacity 200ms var(--ease-standard), transform 200ms var(--ease-standard), filter 200ms var(--ease-standard);
+}
+/* Lado recuado/atenuado: o fluxo atual continua visível e legível, mas o
+   foco do usuário está claramente no painel secundário. */
+.il-drawer__panel--recessed {
+  opacity: .62;
+  transform: translateX(-8px);
+  filter: saturate(.85);
+}
+.il-drawer__panel--side { animation: il-drawer-side-in 200ms var(--ease-standard); }
+@keyframes il-drawer-side-in {
+  from { opacity: 0; transform: translateX(24px); }
+  to { opacity: 1; transform: none; }
+}
+/* Mobile (≤768px): passos num overlay SÓ — transição horizontal, um painel
+   por vez. O base sai pela esquerda quando o secundário assume. */
+@media (max-width: 768px) {
+  .il-drawer__strip[data-expanded='true'] { max-width: none !important; width: 100% !important; }
+  .il-drawer__panel--base[data-recessed-mobile='true'] { display: none; }
+  .il-drawer__strip[data-expanded='true'] .il-drawer__panel--recessed {
+    display: none;
+  }
+  .il-drawer__strip[data-expanded='true'] .il-drawer__panel--side {
+    width: 100% !important; max-width: none !important; border-left: 0 !important;
+  }
+  .il-drawer__panel--side { animation: il-drawer-side-in-mobile 200ms var(--ease-standard); }
+  @keyframes il-drawer-side-in-mobile {
+    from { opacity: 0; transform: translateX(100%); }
+    to { opacity: 1; transform: none; }
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .il-drawer__strip, .il-drawer__panel--base, .il-drawer__panel--side {
+    transition: none !important; animation: none !important;
+  }
+  .il-drawer__panel--recessed { transform: none; }
+}
+
+/* ═══════════════════════════════════════════════════════════════
    APP SHELL — GoDoutor UI Revolution · Etapa A
    ═══════════════════════════════════════════════════════════════
    Topbar fixa (breadcrumb · busca global · notificações · conta) + sidebar
@@ -913,7 +1032,39 @@ dialog.il-drawer::backdrop { background: transparent; }
    O sheet (Etapa B) é ancorado ABAIXO da topbar e À DIREITA de --sheet-left,
    medido em runtime pelo shell — por isso nunca cobre sidebar nem topbar. */
 .workspace-shell { display: flex; align-items: stretch; }
-.workspace-main-col { flex: 1; min-width: 0; display: flex; flex-direction: column; min-height: 100dvh; }
+/* §2 (contrato D) — FUNDO DO WORKSPACE: neutro UNIVERSAL, gradiente sutil
+   #F4F6F8 → #F8F9FB. NÃO acompanha o tema da clínica — o mesmo fundo em
+   todas as rotas do dashboard (Agenda inclusa: o fundo externo é este; a
+   grade interna mantém o tom próprio dela). */
+/* ── FUNDO DO WORKSPACE · UMA fonte de verdade ──────────────────────────
+   `--workspace-bg` é O token do fundo do workspace. O DashboardShell aplica
+   em `.workspace-shell` e TODAS as telas (Agenda inclusa) herdam — nenhuma
+   tela define background externo próprio. Mudou o token aqui, mudou o
+   sistema inteiro (para rosa, degradê, o que for). */
+:root {
+  --workspace-bg: linear-gradient(180deg, var(--bg-top) 0%, var(--bg-bottom) 100%);
+}
+.il-platform.workspace-shell {
+  background: var(--workspace-bg);
+  /* Gradiente ANCORADO na viewport (não na altura do conteúdo): a Agenda
+     (100dvh) e telas de conteúdo longo interpolam o MESMO gradiente nas
+     mesmas coordenadas — o pixel final é idêntico em qualquer rolagem. */
+  background-attachment: fixed;
+}
+/* Missão 7 · §8 — encaixe estratégico: o painel principal ganha UM canto
+   especial no encontro com a lateral (as referências aprovadas). `overflow:
+   clip` recorta sem criar contexto de rolagem (o sticky da topbar segue
+   vivo). Fora daqui o layout permanece limpo — nada de arredondar tudo. */
+.workspace-main-col {
+  flex: 1; min-width: 0; display: flex; flex-direction: column; min-height: 100dvh;
+  overflow: clip;
+  /* Encaixe estratégico na PARTE DE BAIXO da junção sidebar/workspace
+     (acabamento no canto inferior — o arredondamento de cima estava errado). */
+  border-bottom-left-radius: var(--radius-xl);
+  /* Mesmo fundo universal do shell (contrato D) — transparente deixa o
+     gradiente neutro #F4F6F8 → #F8F9FB aparecer sem duplicar tokens. */
+  background: transparent;
+}
 .workspace-content { min-width: 0; flex: 1; }
 
 /* ── Topbar ─────────────────────────────────────────────────── */
@@ -925,8 +1076,14 @@ dialog.il-drawer::backdrop { background: transparent; }
   height: var(--topbar-h);
   display: flex; align-items: center; gap: 12px;
   padding: 0 16px;
-  background: var(--surface);
-  border-bottom: 1px solid var(--border);
+  /* Missão 6 — fundo colorido SUAVE (mockup aprovado, adaptado): um leve
+     tom da cor da sidebar clareando da esquerda para a direita. Sem blur,
+     sem faixa pesada — a busca continua em superfície branca e legível. */
+  background: linear-gradient(90deg,
+    color-mix(in srgb, var(--il-nav) 13%, var(--surface)) 0%,
+    color-mix(in srgb, var(--il-nav) 5%, var(--surface)) 38%,
+    var(--surface) 100%);
+  border-bottom: 1px solid color-mix(in srgb, var(--il-nav) 10%, var(--border));
 }
 .ws-unitpill {
   display: inline-flex; align-items: center; gap: 8px;
@@ -943,17 +1100,39 @@ dialog.il-drawer::backdrop { background: transparent; }
   background: linear-gradient(135deg, var(--cyan), var(--brand));
   color: #fff; font-size: 10px; font-weight: 800; letter-spacing: .02em;
 }
-.ws-newbtn {
-  display: inline-flex; align-items: center; gap: 7px;
-  min-height: 38px; padding: 0 16px;
+/* QUICK CREATE GLOBAL (missão 6 — o “+” volta como ação global premium):
+   botão circular na cor da identidade (acompanha o preset da sidebar),
+   popover de ações rápidas abaixo. A ação principal da página continua
+   vivendo na própria tela (ex.: “Novo agendamento” na Agenda). */
+/* CONTRATO ÚNICO de ações da topbar ("+" e sino): repouso LIMPO (transparent,
+   sem border aparente, sem sombra); card só em hover/focus/active. */
+.ws-quickcreate-btn {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: var(--control-h); height: var(--control-h);
   border-radius: var(--radius-md);
-  background: var(--brand); color: #fff;
-  font-size: 13px; font-weight: 800; letter-spacing: -.01em;
-  box-shadow: var(--shadow-brand);
-  transition: background-color .15s ease, transform .12s ease;
+  background: transparent; color: var(--text-muted);
+  border: 1px solid transparent;
+  transition: background-color .15s ease, color .15s ease, border-color .15s ease;
 }
-.ws-newbtn:hover { background: var(--brand-strong); }
-.ws-newbtn:active { transform: translateY(1px); }
+.ws-quickcreate-btn:hover { background: var(--surface-hover); color: var(--text); border-color: var(--border); }
+.ws-quickcreate-btn:active { background: var(--surface-3); }
+.ws-quickcreate-btn:focus-visible { background: var(--surface-hover); }
+.ws-quickcreate-pop { min-width: 262px; padding: 7px; }
+.ws-quickcreate-item {
+  display: flex; width: 100%; align-items: center; gap: 10px;
+  padding: 8px 9px; border-radius: var(--radius-md); text-align: left;
+  transition: background-color .12s ease;
+}
+.ws-quickcreate-item:hover { background: var(--surface-hover); }
+.ws-quickcreate-item__icon {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 30px; height: 30px; flex-shrink: 0;
+  border-radius: var(--radius-sm);
+  background: var(--brand-soft); color: var(--brand-fg);
+  border: 1px solid var(--border-soft);
+}
+.ws-quickcreate-item__title { display: block; font-size: 12.5px; font-weight: 650; color: var(--text); letter-spacing: -.01em; }
+.ws-quickcreate-item__desc { display: block; margin-top: 1px; font-size: 11px; font-weight: 500; color: var(--text-muted); }
 .ws-help {
   display: inline-flex; align-items: center; justify-content: center;
   width: 34px; height: 34px; border-radius: 50%;
@@ -1043,6 +1222,11 @@ dialog.il-drawer::backdrop { background: transparent; }
   background: transparent; border: 0; outline: none;
   font-size: 13.5px; color: var(--text);
 }
+/* CORREÇÃO · dupla borda no foco: o outline global de :focus-visible
+   (.il-platform) desenhava UM SEGUNDO retângulo dentro do anel do campo.
+   O input não desenha contorno próprio — o foco visual é só o do wrapper
+   (.global-search__field:focus-within): UM contorno limpo, ponto. */
+.global-search__input:focus-visible { outline: none; box-shadow: none; }
 .global-search__input::placeholder { color: var(--text-faint); }
 .global-search__input::-webkit-search-cancel-button { display: none; }
 .global-search__kbd {
@@ -1111,6 +1295,22 @@ dialog.il-drawer::backdrop { background: transparent; }
 @keyframes ws-pop-in {
   from { opacity: 0; transform: translateY(-4px) scale(.985); }
   to { opacity: 1; transform: none; }
+}
+/* §17–18 — highlight sutil de foco guiado (Registrar nota / Editar dados):
+   contorno do brand que pulsa uma vez e se apaga em ~1.8s. Sem modal, sem
+   flash: só o campo "acende" por um instante para o usuário enxergar onde
+   o foco pousou. `prefers-reduced-motion` mantém apenas um contorno estático. */
+.il-field-highlight {
+  animation: il-field-glow 1.8s var(--ease-standard);
+  border-color: var(--brand) !important;
+}
+@keyframes il-field-glow {
+  0% { box-shadow: 0 0 0 3px var(--brand-soft); }
+  70% { box-shadow: 0 0 0 3px var(--brand-soft); }
+  100% { box-shadow: none; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .il-field-highlight { animation: none; box-shadow: 0 0 0 2px var(--brand-soft); }
 }
 .ws-popover__header {
   display: flex; align-items: center; gap: 8px;
@@ -1247,7 +1447,10 @@ button.ws-bell__item:hover { background: var(--surface-hover); }
   display: none; flex-direction: column; flex-shrink: 0;
   position: sticky; top: 0;
   width: var(--sidebar-w); height: 100dvh;
-  background: var(--il-nav); border-right: 1px solid var(--border);
+  background: var(--il-nav);
+  /* Separação sidebar × workspace SEM sombra projetada: só borda 1px sutil
+     + a diferença natural de fundo (refino final — nenhuma shadow na divisa). */
+  border-right: 1px solid var(--il-nav-border);
 }
 .il-platform .workspace-sidebar.is-collapsed { width: var(--sidebar-w-mini); }
 .is-collapsed .workspace-label { display: none; }
@@ -1257,25 +1460,25 @@ button.ws-bell__item:hover { background: var(--surface-hover); }
 .workspace-collapse-btn {
   display: inline-flex; align-items: center; justify-content: center;
   width: 30px; height: 30px; flex-shrink: 0;
-  border-radius: 8px; border: 1px solid var(--border);
-  background: var(--surface); color: var(--text-muted);
+  border-radius: 8px; border: 1px solid rgba(255, 255, 255, 0.22);
+  background: rgba(255, 255, 255, 0.10); color: var(--il-nav-fg);
   transition: background-color .12s ease, color .12s ease, border-color .12s ease;
 }
-.workspace-collapse-btn:hover { background: var(--surface-hover); color: var(--text); border-color: var(--border-strong); }
+.workspace-collapse-btn:hover { background: rgba(255, 255, 255, 0.20); color: var(--il-nav-fg); border-color: rgba(255, 255, 255, 0.34); }
 .workspace-collapse-btn.is-mini { width: 28px; height: 28px; border-color: transparent; background: transparent; }
-.workspace-collapse-btn.is-mini:hover { background: var(--surface-hover); border-color: var(--border); }
-.workspace-wordmark--product { color: var(--text); }
+.workspace-collapse-btn.is-mini:hover { background: rgba(255, 255, 255, 0.18); border-color: transparent; }
+.workspace-wordmark--product { color: var(--il-nav-fg); }
 .is-collapsed .workspace-wordmark--product { font-size: 12px; letter-spacing: -.04em; }
 .ws-unitpill__logo { width: 18px; height: 18px; border-radius: 50%; object-fit: cover; flex-shrink: 0; }
-.workspace-identity__collapse { color: var(--text-faint); border-radius: 8px; flex-shrink: 0; }
-.workspace-identity__collapse:hover { color: var(--text); background: var(--surface-hover); }
+.workspace-identity__collapse { color: rgba(255, 255, 255, 0.62); border-radius: 8px; flex-shrink: 0; }
+.workspace-identity__collapse:hover { color: var(--il-nav-fg); background: rgba(255, 255, 255, 0.16); }
 .is-collapsed .workspace-identity { padding: 12px 8px; justify-content: center; }
 .workspace-logo { display: block; width: 100%; max-height: 52px; object-fit: contain; object-position: left center; }
-.workspace-wordmark { font-size: 17px; font-weight: 700; letter-spacing: -.02em; color: var(--text); }
-.workspace-wordmark span { color: var(--brand); }
+.workspace-wordmark { font-size: 17px; font-weight: 700; letter-spacing: -.02em; color: var(--il-nav-fg); }
+.workspace-wordmark span { color: var(--il-nav-cta); }
 .is-collapsed .workspace-wordmark { font-size: 13px; text-align: center; }
 .workspace-clinic {
-  margin: 7px 0 0; font-size: 11.5px; font-weight: 600; color: var(--text-muted);
+  margin: 7px 0 0; font-size: 11.5px; font-weight: 600; color: var(--il-nav-muted);
   overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
 
@@ -1292,27 +1495,38 @@ button.ws-bell__item:hover { background: var(--surface-hover); }
    só por espaçamento vertical sutil. No rail recolhido, um fio discreto. */
 .workspace-section { display: flex; flex-direction: column; gap: 2px; margin-bottom: 10px; }
 .workspace-section:last-child { margin-bottom: 0; }
-.workspace-section__rule { display: block; height: 1px; background: var(--border); margin: 8px 10px; }
+.workspace-section__rule { display: block; height: 1px; background: var(--il-nav-border); margin: 8px 10px; }
 
-/* ── Itens — disciplina visual Meta-like (missão §3) ──────────────
-   Normal: transparente, texto escuro, ícone neutro, sem card/pill/sombra.
-   Hover: fundo azul muito claro, texto ligeiramente mais azul.
-   Ativo: fundo azul MUITO claro + texto/ícone azuis + peso 600 — nunca
-   botão azul sólido, nunca texto branco, nunca sombra. */
-.workspace-link__icon { color: var(--il-nav-muted); transition: color var(--motion-fast) var(--ease-standard); }
-.workspace-link[aria-current="page"] .workspace-link__icon,
-.workspace-link--group[aria-expanded="true"] .workspace-link__icon { color: inherit; }
+/* ── Itens — identidade GODOUTOR 2.0 ────────────────────────────
+   Normal: transparente, texto claro, ícone em tom suave da superfície.
+   Hover: variação mais clara da cor da sidebar.
+   Ativo (aria-current) / grupo aberto: fundo em variação VISÍVEL da cor
+   + ÍCONE dentro de superfície branca circular (a referência visual).
+   O estado continua sendo sempre aria-current — nunca só cor. */
+.workspace-link__icon {
+  display: flex; align-items: center; justify-content: center;
+  width: 28px; height: 28px; flex-shrink: 0; border-radius: 50%;
+  background: rgba(255, 255, 255, 0.12); color: var(--il-nav-icon);
+  transition: color var(--motion-fast) var(--ease-standard),
+              background-color var(--motion-fast) var(--ease-standard);
+}
+.workspace-link[aria-current="page"] .workspace-link__icon {
+  /* CURRENT = o mais forte: preenchido accent com fg de CONTRASTE (regra
+     estrutural — nunca cor fixa; em qualquer tema o par é AA). */
+  background: var(--accent); color: var(--accent-contrast);
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.16);
+}
 .workspace-link {
   position: relative; display: flex; align-items: center; gap: 10px; width: 100%;
   min-height: var(--control-h); padding: 0 10px;
   font-size: 13.5px; font-weight: 500; line-height: 1.3; text-align: left;
-  border-radius: 6px; color: var(--il-nav-fg);
+  border-radius: 8px; color: var(--il-nav-fg);
   transition: background-color var(--motion-fast) var(--ease-standard),
               color var(--motion-fast) var(--ease-standard);
 }
 .workspace-link:hover {
   background: var(--il-nav-hover);
-  color: color-mix(in srgb, var(--il-nav-active-fg) 45%, var(--il-nav-fg));
+  color: var(--il-nav-active-fg);
 }
 .workspace-link[aria-current='page'] {
   background: var(--il-nav-active); color: var(--il-nav-active-fg); font-weight: 600;
@@ -1320,17 +1534,23 @@ button.ws-bell__item:hover { background: var(--surface-hover); }
 .workspace-link[aria-current='page']:hover {
   background: var(--il-nav-active); color: var(--il-nav-active-fg);
 }
+/* ESTADO "OPEN" (grupo expandido) ≠ ESTADO "CURRENT" (rota ativa):
+   open = container sutil (nav-hover) + label forte (nav-fg) + ícone ACESO
+   (par nav-active/nav-active-fg no círculo); current = o container inteiro
+   no par ativo + ícone accent cheio (sempre o mais forte). */
 .workspace-link--group[aria-expanded='true'] {
-  background: var(--il-nav-active); color: var(--il-nav-active-fg); font-weight: 600;
+  background: var(--il-nav-hover); color: var(--il-nav-fg); font-weight: 600;
 }
 .workspace-link--group[aria-expanded='true']:hover {
+  background: var(--il-nav-hover); color: var(--il-nav-fg);
+}
+.workspace-link--group[aria-expanded='true'] .workspace-link__icon {
   background: var(--il-nav-active); color: var(--il-nav-active-fg);
 }
 .workspace-link[aria-current='page'] .workspace-link__chevron,
 .workspace-link--group[aria-expanded='true'] .workspace-link__chevron { color: inherit; }
-.workspace-link__icon { display: flex; align-items: center; justify-content: center; width: 20px; flex-shrink: 0; }
 .workspace-link__chevron {
-  margin-left: auto; color: var(--text-faint); flex-shrink: 0;
+  margin-left: auto; color: rgba(255, 255, 255, 0.55); flex-shrink: 0;
   transition: transform var(--motion-base) var(--ease-standard),
               color var(--motion-fast) var(--ease-standard);
 }
@@ -1348,7 +1568,7 @@ button.ws-bell__item:hover { background: var(--surface-hover); }
 .ws-setup-mini {
   margin: 0 10px 10px; padding: 12px;
   border-radius: var(--radius-lg);
-  background: var(--brand-50); border: 1px solid var(--brand-100);
+  background: rgba(255, 255, 255, 0.12); border: 1px solid rgba(255, 255, 255, 0.18);
 }
 
 /* ── Cabeçalho da sidebar: a CLÍNICA é a identidade principal ──────
@@ -1359,31 +1579,33 @@ button.ws-bell__item:hover { background: var(--surface-hover); }
   display: flex; align-items: center; gap: 10px; width: 100%;
   padding: 12px 12px 10px; border-radius: var(--radius-md);
 }
-button.workspace-clinic-head:hover { background: var(--surface-hover); }
-.workspace-foot__item--collapse { color: var(--text-muted); }
+button.workspace-clinic-head:hover { background: rgba(255, 255, 255, 0.12); }
+.workspace-foot__item--collapse { color: var(--il-nav-muted); }
 .workspace-clinic-head__logo {
   width: 34px; height: 34px; border-radius: var(--radius-md);
-  object-fit: cover; flex-shrink: 0; background: var(--surface-hover);
-  border: 1px solid var(--border);
+  object-fit: cover; flex-shrink: 0; background: rgba(255, 255, 255, 0.14);
+  border: 1px solid rgba(255, 255, 255, 0.24);
 }
 .workspace-clinic-head__mark {
   width: 34px; height: 34px; border-radius: var(--radius-md); flex-shrink: 0;
   display: inline-flex; align-items: center; justify-content: center;
-  background: var(--brand-soft); color: var(--brand-fg);
+  /* Preenchido accent: fg = token de CONTRASTE do próprio accent (regra
+     estrutural — nunca cor fixa; em qualquer tema o par é AA). */
+  background: var(--accent); color: var(--accent-contrast);
   font-size: 13px; font-weight: 700; letter-spacing: -.01em;
 }
 .workspace-clinic-head__text { min-width: 0; flex: 1; text-align: left; }
 .workspace-clinic-head__name {
   display: block; font-size: 13.5px; font-weight: 650; letter-spacing: -.01em;
-  color: var(--text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  color: var(--il-nav-active-fg); overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
 .workspace-clinic-head__meta {
-  display: block; font-size: 11px; font-weight: 500; color: var(--text-muted);
+  display: block; font-size: 11px; font-weight: 500; color: var(--il-nav-muted);
   overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
 .workspace-clinic-head__unit {
   display: inline-flex; align-items: center; gap: 6px; margin-top: 2px;
-  font-size: 11px; font-weight: 600; color: var(--brand-fg);
+  font-size: 11px; font-weight: 600; color: var(--il-nav-cta);
 }
 /* Missão §7 — RAIL RECOLHIDO: só a logo, centralizada. Nome e tipo NÃO são
    renderizados (o componente já não os desenha; o display:none abaixo é a
@@ -1399,41 +1621,50 @@ button.workspace-clinic-head:hover { background: var(--surface-hover); }
    rolável: escapa sobre o conteúdo sem esticar a largura de scroll de nada —
    é a correção da CAUSA da scrollbar horizontal (o ::after do .il-tip antigo
    vivia dentro de .workspace-primary). */
+/* CORREÇÃO · tooltip do rail recolhido: renderizado em portal no <body>
+   (position: fixed, coordenadas de viewport vindas do handler) — escapa de
+   QUALQUER stacking context da página (na Agenda, elementos com z-index do
+   conteúdo pintavam por cima do tooltip dentro do <aside>) e nada corta.
+   Continua sem estreitar largura de scroll de container nenhum. */
 .ws-nav-tip {
-  position: absolute; left: calc(100% + 10px); transform: translateY(-50%);
+  position: fixed; transform: translateY(-50%);
   padding: 5px 9px; border-radius: var(--radius-sm);
-  background: #232a44; color: #fff;
+  /* Tooltip SEMPRE neutro: fundo grafite/quase preto + texto branco —
+     independe do tema da sidebar (nunca roxo/lilás, nunca cor do tema). */
+  background: #242424; color: #ffffff;
+  border: 1px solid rgba(255, 255, 255, 0.10);
   font-size: 11px; font-weight: 600; white-space: nowrap;
-  z-index: 60; box-shadow: var(--shadow-md); pointer-events: none;
+  z-index: 90; box-shadow: var(--shadow-sm); pointer-events: none;
 }
 
 /* Rodapé fixo: ajuda e suporte — discreto, sempre no mesmo lugar. */
-.workspace-foot { border-top: 1px solid var(--border-soft); padding: 8px; }
+.workspace-foot { border-top: 1px solid var(--il-nav-border); padding: 8px; }
 .workspace-foot__item {
   display: flex; align-items: center; gap: 10px; width: 100%;
-  min-height: 36px; padding: 0 10px; border-radius: 6px;
-  font-size: 13px; font-weight: 500; color: var(--text-secondary); text-align: left;
+  min-height: 36px; padding: 0 10px; border-radius: 8px;
+  font-size: 13px; font-weight: 500; color: var(--il-nav-muted); text-align: left;
 }
-.workspace-foot__item:hover { background: var(--surface-hover); color: var(--text); }
+.workspace-foot__item:hover { background: var(--il-nav-hover); color: var(--il-nav-active-fg); }
 .workspace-foot__brand {
   display: block; padding: 6px 10px 2px; font-size: 10.5px; font-weight: 500;
-  color: var(--text-faint); letter-spacing: .01em;
+  color: rgba(255, 255, 255, 0.55); letter-spacing: .01em;
 }
-.workspace-foot__brand strong { font-weight: 700; color: var(--text-muted); }
+.workspace-foot__brand strong { font-weight: 700; color: var(--il-nav-fg); }
 .is-collapsed .workspace-foot__item { justify-content: center; padding: 0; }
 .workspace-icon-button {
   display: flex; align-items: center; gap: 9px;
   min-height: 36px; min-width: 36px; padding: 0 10px;
-  font-size: 12.5px; font-weight: 600; color: var(--text-muted); border-radius: var(--radius-md);
+  font-size: 12.5px; font-weight: 600; color: var(--il-nav-muted); border-radius: var(--radius-md);
 }
-.workspace-icon-button:hover { background: var(--surface-hover); color: var(--text); }
+.workspace-icon-button:hover { background: var(--il-nav-hover); color: var(--il-nav-active-fg); }
 .is-collapsed .workspace-icon-button { justify-content: center; padding: 0; }
 
 /* ── Acordeão do submenu (FASE D: UMA coluna, expande para BAIXO) ──
    Sem segunda coluna: o grupo abre ABAIXO do próprio botão, com altura
    (grid-template-rows 0fr→1fr) + opacidade + translateY, ~200ms ease — a
-   mesma curva do sistema. Subitem com recuo e LINHA-GUIA (nunca um card em
-   volta do submenu). */
+   mesma curva do sistema. Missão 6: o conteúdo expandido abre DENTRO de um
+   bloco premium (superfície interna encaixada, com recuo e borda suave) —
+   decisão explícita do usuário, que reverte o "nunca um card" da FASE D. */
 .workspace-submenu {
   display: grid; grid-template-rows: 0fr;
   transition: grid-template-rows 200ms var(--ease-standard);
@@ -1445,17 +1676,60 @@ button.workspace-clinic-head:hover { background: var(--surface-hover); }
   transition: opacity 200ms var(--ease-standard), transform 200ms var(--ease-standard);
 }
 .workspace-group.is-open > .workspace-submenu > .workspace-submenu__clip { opacity: 1; transform: none; }
-/* Missão §5 — subitens com RECUO limpo: a linha-guia saiu, a hierarquia é
-   percebida pelo recuo (como no mockup Meta-like). */
+/* Missão 6 — o submenu é um painel INTERNO encaixado na sidebar: leve
+   fundo, borda e radius moderado (o "card" que a FASE D proibia). */
 .workspace-submenu__guide {
-  display: flex; flex-direction: column; gap: 2px;
-  margin: 2px 0 6px; padding-left: 10px;
+  display: flex; flex-direction: column; gap: 3px;
+  margin: 3px 0 8px; padding: 6px;
+  background: rgba(255, 255, 255, 0.10);
+  border: 1px solid rgba(255, 255, 255, 0.13);
+  border-radius: var(--radius-md);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.06);
 }
-.workspace-link--sub { min-height: 36px; font-size: 13px; padding-left: 30px; }
-.workspace-link--sub .workspace-link__icon { width: 16px; }
+.workspace-link--sub { min-height: 34px; font-size: 13px; padding-left: 14px; border-radius: var(--radius-sm); }
+.workspace-link--sub:hover { background: rgba(255, 255, 255, 0.16); }
+.workspace-link--sub[aria-current='page'] { background: var(--il-nav-active); }
+.workspace-link--sub .workspace-link__icon { width: 22px; height: 22px; }
 /* Missão §7/§8 — no rail recolhido o submenu NÃO existe inline: o clique no
    ícone do grupo expande a sidebar e abre o grupo. */
 .is-collapsed .workspace-submenu { display: none; }
+
+/* ── Aparência do sistema (missões 6–7) ─────────────────────────
+   Personalização de cor da sidebar: presets SEGUROS escolhidos em
+   Configurações → Aparência (nunca na shell principal). Cada preset
+   sobrescreve os tokens --il-nav*; a topbar acompanha sozinha via
+   color-mix sobre --il-nav. fg/muted com contraste AA validado.
+   Missão 7 — paleta refinada: Azul clínico (padrão aprovado), Azul
+   amigável, Violeta, Teal, Verde sálvia, Âmbar, Ônix (preto de
+   verdade) e Vinho. */
+.workspace-shell[data-nav-accent='azul-amigavel'] {
+  --il-nav: #2563eb; --il-nav-fg: #eff6ff; --il-nav-muted: #bfdbfe;
+  --il-nav-hover: #1d4ed8; --il-nav-active: #3b82f6; --il-nav-active-fg: #ffffff;
+}
+.workspace-shell[data-nav-accent='violeta'] {
+  --il-nav: #6d28d9; --il-nav-fg: #f5f3ff; --il-nav-muted: #ddd6fe;
+  --il-nav-hover: #5b21b6; --il-nav-active: #7c3aed; --il-nav-active-fg: #ffffff;
+}
+.workspace-shell[data-nav-accent='teal'] {
+  --il-nav: #0f766e; --il-nav-fg: #f0fdfa; --il-nav-muted: #b8e8e0;
+  --il-nav-hover: #115e59; --il-nav-active: #14b8a6; --il-nav-active-fg: #ffffff;
+}
+.workspace-shell[data-nav-accent='verde-salvia'] {
+  --il-nav: #4d7c5f; --il-nav-fg: #f4f8f4; --il-nav-muted: #cfe3d2;
+  --il-nav-hover: #3f6a50; --il-nav-active: #5f8d6e; --il-nav-active-fg: #ffffff;
+}
+.workspace-shell[data-nav-accent='ambar'] {
+  --il-nav: #b45309; --il-nav-fg: #fff8eb; --il-nav-muted: #f5d9a8;
+  --il-nav-hover: #92400e; --il-nav-active: #d97706; --il-nav-active-fg: #ffffff;
+}
+.workspace-shell[data-nav-accent='onix'] {
+  --il-nav: #18181b; --il-nav-fg: #fafafa; --il-nav-muted: #c4c4c8;
+  --il-nav-hover: #27272a; --il-nav-active: #3f3f46; --il-nav-active-fg: #ffffff;
+}
+.workspace-shell[data-nav-accent='vinho'] {
+  --il-nav: #9f1239; --il-nav-fg: #fff1f2; --il-nav-muted: #f7cdd6;
+  --il-nav-hover: #881337; --il-nav-active: #be123c; --il-nav-active-fg: #ffffff;
+}
 
 /* ── Skip link ──────────────────────────────────────────────── */
 .workspace-skip {
@@ -1464,6 +1738,45 @@ button.workspace-clinic-head:hover { background: var(--surface-hover); }
   background: var(--surface); border-radius: var(--radius-md); box-shadow: var(--shadow-lg);
 }
 .workspace-skip:focus { transform: none; }
+
+/* ── §7 — hover-peek de GRUPOS (rail recolhido) ───────────────
+   Painel TEMPORÁRIO ao lado do rail: abre em 200ms (ease-out, janela
+   180–220ms), recolhe 250–300ms após o mouseleave (o delay vive no JS —
+   lib/sidebar-peek.ts). Nunca altera o estado recolhido/expandido. */
+.ws-peek {
+  position: fixed; z-index: 90;
+  left: calc(var(--sidebar-w-mini, 72px) + 10px);
+  min-width: 210px; max-width: 260px;
+  padding: 8px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  /* Flyout premium: ZERO sombra — separação só por borda 1px + contraste
+     do fundo sólido (contrato do refino final de consistência). */
+  box-shadow: none;
+  animation: ws-peek-in 200ms ease-out;
+}
+.ws-peek__title {
+  margin: 0 0 6px; padding: 2px 8px;
+  font-size: 11px; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase;
+  color: var(--text-faint);
+}
+.ws-peek__items { display: flex; flex-direction: column; gap: 2px; }
+.ws-peek__item {
+  display: flex; align-items: center; gap: 9px;
+  padding: 7px 9px; border-radius: var(--radius-sm);
+  font-size: 12.5px; font-weight: 600; color: var(--text);
+  text-decoration: none;
+  transition: background-color 120ms ease;
+}
+.ws-peek__item:hover { background: var(--surface-3); }
+@keyframes ws-peek-in {
+  from { opacity: 0; transform: translateX(-6px); }
+  to { opacity: 1; transform: none; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .ws-peek { animation: none; }
+}
 
 /* ── Breakpoints ────────────────────────────────────────────── */
 @media (min-width: 1200px) {
@@ -1490,11 +1803,11 @@ button.workspace-clinic-head:hover { background: var(--surface-hover); }
   .global-search__kbd { display: none; }
 }
 @media (max-width: 479px) {
-  .ws-newbtn { font-size: 0; gap: 0; padding: 0 11px; }
+  .ws-quickcreate-btn { width: 34px; height: 34px; }
 }
 @media (prefers-reduced-motion: reduce) {
   .ws-skeleton-line, .il-skeleton { animation: none; background: var(--skeleton-base); }
-  .ws-topbar { backdrop-filter: none; background: var(--surface); }
+  .ws-topbar { backdrop-filter: none; } /* missão 6: o fundo colorido suave permanece */
 }
 /* Consistent reading rhythm without recoloring public clinic themes. */
 .il-platform { font-size:14px; line-height:1.5; -webkit-font-smoothing:subpixel-antialiased; -moz-osx-font-smoothing:auto; text-rendering:optimizeLegibility; }
@@ -1636,10 +1949,13 @@ dialog.il-customer-dialog::backdrop { background:transparent; }
 .public-booking-flow :is(button,input:not([type=checkbox]),select) { min-height:44px; }
 @media(max-width:767px) { .public-booking-flow input,.public-booking-flow textarea { font-size:16px; } }
 
-/* Direction correction: workspace only, never the public theme or access/landing. */
-.il-platform .il-tabbar { background:transparent; border-radius:0; gap:8px; padding:0; }
-.il-platform .il-tab { min-height:40px; padding:8px 12px; font-size:14px; border-radius:8px 8px 0 0; border:0; border-bottom:3px solid transparent; background:transparent; color:var(--text-muted); }
-.il-platform .il-tab[aria-selected="true"] { color:var(--text); background:var(--brand-soft); border-bottom-color:var(--area-color,var(--brand)); box-shadow:none; }
+/* MISSÃO 4 (premium) — abas SEM sublinhado em todo o sistema: o padrão pill
+   de `.il-tabbar`/`.il-tab` (segmentado, ativo por superfície) é o único.
+   (A antiga "direction correction" transformava as pills em abas com
+   border-bottom — removida por decreto.) */
+/* A altura de toque continua vindo das regras `.il-platform .il-tab` de
+   controle; aqui só se fixa a hierarquia de cor do estado ativo. */
+.il-platform .il-tab[aria-selected="true"] { color: var(--text); }
 .il-platform [class*="backdrop-blur"] { backdrop-filter:none; }
 .il-platform * { text-shadow:none; }
 .il-platform .agenda-page-gutter { padding:8px; }
@@ -1648,22 +1964,101 @@ dialog.il-customer-dialog::backdrop { background:transparent; }
 @media(min-width:1200px) { .il-platform .agenda-page-gutter { padding:16px; } }
 @media(max-width:767px) { .il-platform .il-tab { min-height:44px; } }
 
-/* ── DASHBOARD operacional (fideliade ao mockup) ─────────────── */
-.dsh-kpi {
-  display: flex; gap: 12px; align-items: flex-start; min-width: 0;
-  padding: 14px 16px;
-  background: var(--surface); border: 1px solid var(--border-soft);
-  border-radius: var(--radius-lg); box-shadow: var(--shadow-xs);
+/* ═══════════════════════════════════════════════════════════════
+   AGENDA PROTAGONISTA — dono único do scroll (desktop)
+   ═══════════════════════════════════════════════════════════════
+   Arquitetura (cadeia inteira com altura DEFINIDA e overflow contido):
+     .workspace-shell--fill  = 100dvh + overflow:hidden  (página não rola)
+       → .workspace-main-col → .workspace-content (flex column)
+         → .agenda-page-gutter (flex column; notices encolhem a grade)
+           → .ag-page (flex column)
+             → Linha 1 (header)      flex-shrink:0
+             → Linha 2 (toolbar)     flex-shrink:0
+             → workspace             flex:1 + min-height:0
+               → painel do modo      flex:1 + min-height:0
+                 → scroller do modo  overflow-y:auto  ← ÚNICO scroll vertical
+   O documento (html/body) NUNCA ganha scrollbar por causa da Agenda.
+   Somente em telas pequenas (<768px) o fluxo natural do documento volta a
+   existir (mobile: Lista/Dia com rolagem própria do layout). */
+.ag-page { display: flex; flex-direction: column; min-width: 0; }
+.ag-page > * { min-width: 0; }
+/* Painéis de modo (Dia/Semana/Mês/Lista): superfície única rolável do modo.
+   O panel ocupa TODO o resto do viewport (flex:1) e o scroller é o único
+   dono da rolagem vertical daquele modo. min-height trava um piso visual em
+   janelas muito curtas (o shell recorta — o documento nunca rola). */
+.ag-mode-panel { display: flex; flex-direction: column; flex: 1 1 auto; min-height: 0; }
+.ag-mode-scroll { flex: 1 1 auto; min-height: 200px; overflow-y: auto; overscroll-behavior: contain; }
+@media (min-width: 768px) {
+  .il-platform.workspace-shell--fill { height: 100dvh; min-height: 0; overflow: hidden; }
+  .workspace-shell--fill .workspace-main-col { height: 100%; min-height: 0; overflow: hidden; }
+  .workspace-shell--fill .workspace-content { display: flex; flex-direction: column; min-height: 0; overflow: hidden; }
+  .workspace-shell--fill .workspace-content > * { flex-shrink: 0; }
+  .workspace-shell--fill .workspace-content > .agenda-page-gutter {
+    flex: 1 1 auto; min-height: 0; display: flex; flex-direction: column; overflow: hidden;
+  }
+  .workspace-shell--fill .agenda-page-gutter > * { flex-shrink: 0; }
+  .workspace-shell--fill .agenda-page-gutter > .ag-page { flex: 1 1 auto; min-height: 0; overflow: hidden; }
+  .workspace-shell--fill .ag-page [data-agenda-workspace] { min-height: 0; }
+  .workspace-shell--fill .ag-page [data-agenda-main] { display: flex; flex-direction: column; min-height: 0; }
+  .workspace-shell--fill .ag-mode-panel { overflow: hidden; }
 }
+/* Fundo externo do workspace da Agenda: NENHUM background próprio —
+   transparente herda o `--workspace-bg` do shell (mesma pintura de qualquer
+   outra tela; se o token mudar, a Agenda muda junto). A grade interna do
+   calendário continua com seus tons próprios (grid/cards). */
+.il-platform .agenda-page-gutter {
+  background: transparent;
+}
+/* Grade clínica: separação levemente mais nítida de horários/colunas/cabeçalho
+   (bordas #E5EAF1 família dos tokens), sem zebra e sem escurecer. */
+.il-platform [data-agenda-main] .ag-grid-surface { border: 1px solid var(--border); border-radius: 8px; background: var(--surface); }
+.il-platform [data-agenda-main] .ag-grid-surface .border-zinc-100,
+.il-platform [data-agenda-main] .ag-grid-surface .border-zinc-200 { border-color: var(--border); }
+
+/* ── DASHBOARD operacional (fideliade ao mockup) ─────────────── */
+/* Métricas do topo = UM card único horizontal, com divisórias verticais
+   sutis entre as seis leituras (sem “6 cards soltos”, sem tabela dura). */
+.dsh-metrics {
+  display: grid; grid-template-columns: repeat(2, minmax(0, 1fr));
+  margin-bottom: 16px; overflow: hidden;
+  /* MISSÃO 4: amarelo/creme VOLTA como UM card de métricas em sólido suave
+     (sem degradê, sem banner): vida no topo sem virar enfeite. */
+  background: var(--sun-bg);
+  border: 1px solid var(--border-soft); border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-xs);
+}
+.dsh-metric {
+  display: flex; gap: 10px; align-items: flex-start; min-width: 0;
+  padding: 14px 16px; border-left: 1px solid var(--border-soft);
+}
+.dsh-metric:first-child, .dsh-metric:nth-child(2n + 1) { border-left: 0; }
+.dsh-metric:nth-child(n + 3) { border-top: 1px solid var(--border-soft); }
+.dsh-metric > span { min-width: 0; }
+.dsh-metric__icon,
 .dsh-kpi__icon {
   display: flex; align-items: center; justify-content: center;
   width: 40px; height: 40px; flex-shrink: 0; border-radius: 12px;
+  box-shadow: var(--shadow-inset);
 }
+.dsh-metric__num,
 .dsh-kpi__num { font-size: 25px; font-weight: 700; letter-spacing: -.025em; line-height: 1.15; color: var(--text); font-variant-numeric: tabular-nums; }
+.dsh-metric__label,
 .dsh-kpi__label { font-size: 12px; font-weight: 600; color: var(--text-muted); margin-top: 1px; }
+@media (min-width: 768px) {
+  .dsh-metrics { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .dsh-metric:nth-child(2n + 1) { border-left: 1px solid var(--border-soft); }
+  .dsh-metric:nth-child(3n + 1) { border-left: 0; }
+  .dsh-metric:nth-child(n + 3) { border-top: 0; }
+  .dsh-metric:nth-child(n + 4) { border-top: 1px solid var(--border-soft); }
+}
+@media (min-width: 1280px) {
+  .dsh-metrics { grid-template-columns: repeat(6, minmax(0, 1fr)); }
+  .dsh-metric:nth-child(3n + 1) { border-left: 1px solid var(--border-soft); }
+  .dsh-metric:first-child { border-left: 0; }
+  .dsh-metric:nth-child(n + 4) { border-top: 0; }
+}
 .dsh-card { background: var(--surface); border: 1px solid var(--border-soft); border-radius: var(--radius-lg); box-shadow: var(--shadow-xs); }
 .dsh-card__head { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 10px; padding: 14px 16px 0; }
-.dsh-kpi > span { min-width: 0; }
 .dsh-card__title { margin: 0; font-size: 14px; font-weight: 600; letter-spacing: -.01em; color: var(--text); }
 .dsh-card__body { padding: 12px 16px 16px; }
 .dsh-check { display: flex; align-items: center; gap: 10px; padding: 9px 10px; border: 1px solid var(--border-soft); border-radius: var(--radius-md); background: var(--surface); font-size: 12.5px; font-weight: 600; color: var(--text-soft); }
@@ -1888,27 +2283,30 @@ dialog.ws-sheet[data-closing] { animation: ws-sheet-out 200ms ease-in forwards; 
 
 .ws-sheet__inner { display: flex; flex-direction: column; height: 100%; min-height: 0; }
 
+/* MISSÃO 5 — cabeçalho de sheet com cara de produto maduro: ícone em chip
+   com presença, título firme (ink) e subtítulo discreto e legível. */
 .ws-sheet__header {
-  display: flex; align-items: center; gap: 10px;
-  padding: 12px 12px 12px 16px;
+  display: flex; align-items: center; gap: 12px;
+  padding: 14px 14px 14px 16px;
   border-bottom: 1px solid var(--border-soft);
-  background: linear-gradient(180deg, var(--surface-2), var(--surface));
+  background: var(--surface-2);
   border-radius: var(--radius-xl) var(--radius-xl) 0 0;
 }
 .ws-sheet__icon {
   display: flex; align-items: center; justify-content: center;
-  width: 32px; height: 32px; flex-shrink: 0;
-  border-radius: var(--radius-sm);
-  background: color-mix(in srgb, var(--area-color, var(--brand)) 12%, var(--surface));
-  color: var(--area-color, var(--brand-fg));
+  width: 38px; height: 38px; flex-shrink: 0;
+  border-radius: 10px;
+  border: 1px solid color-mix(in srgb, var(--brand) 14%, var(--border));
+  background: color-mix(in srgb, var(--brand) 8%, var(--surface));
+  color: var(--brand-fg);
 }
 .ws-sheet__titles { flex: 1; min-width: 0; }
 .ws-sheet__titles h2 {
-  margin: 0; font-size: 15px; font-weight: 600; letter-spacing: -.01em; color: var(--text);
+  margin: 0; font-size: 16.5px; font-weight: 650; letter-spacing: -.012em; color: var(--text-strong);
   outline: none; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
 .ws-sheet__sub {
-  margin: 2px 0 0; font-size: 11.5px; color: var(--text-muted);
+  margin: 3px 0 0; font-size: 12px; color: var(--text-muted);
   overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
 .ws-sheet__actions { display: flex; align-items: center; gap: 6px; flex-shrink: 0; border-left: 1px solid var(--border-soft); padding-left: 10px; margin-left: 6px; }
@@ -1958,7 +2356,8 @@ dialog.ws-sheet[data-closing] { animation: ws-sheet-out 200ms ease-in forwards; 
 
 .ws-sheet__body { flex: 1; min-height: 0; overflow-y: auto; }
 .ws-sheet__footer {
-  padding: 10px 16px;
+  display: flex; align-items: center; gap: 8px;
+  padding: 12px 16px;
   border-top: 1px solid var(--border-soft);
   background: var(--surface-2);
   border-radius: 0 0 var(--radius-xl) var(--radius-xl);

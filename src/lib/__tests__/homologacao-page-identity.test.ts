@@ -123,7 +123,9 @@ describe('P1 · paleta mais neutra', () => {
   it('PageHeader não usa gradiente roxo→lilás', () => {
     const ui = read('src/components/ui.tsx');
     expect(ui).not.toContain('from-[var(--brand)] to-[var(--lilac)]');
-    expect(ui).toContain('bg-[var(--surface-3)] text-[var(--brand-fg)]');
+    // CONTRATO do refino final: chip 40×40 NEUTRO sutil + borda 1px + ícone
+    // line na cor do TEMA (accent) — mesmo modelo em todas as telas.
+    expect(ui).toContain('bg-[var(--surface-2)] text-[var(--accent)]');
   });
 
   it('Publicar usa verde --success (menos saturado que emerald-600 hardcoded)', () => {

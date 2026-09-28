@@ -31,8 +31,10 @@
 // ("Powered by") e na central de ajuda. Nada de duas marcas disputando o mesmo
 // espaço: uma identidade principal por região.
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import Link from 'next/link';
 import { Icon } from '@/components/icons';
+import { useSidebarPeek } from '@/lib/sidebar-peek';
 import { Drawer } from '@/components/ui';
 import { useRevalidateOnFocus } from './use-revalidate';
 import { loadOverview } from '@/lib/overview';
@@ -120,28 +122,19 @@ export function WorkspaceNavigation({ nav, activePath, unit, units = [], multiUn
   );
   const activeGroup = activeArea && isGroup(activeArea) ? activeArea.id : null;
 
-  // ACORDEÃO META-LIKE: SEMPRE exatamente UM grupo aberto quando a sidebar
-  // está expandida — não existe estado "nenhum grupo aberto".
-  //   • padrão: "Clínica" (rotas planas como /dashboard e /agenda);
-  //   • deep-link: a rota ativa ABRE o grupo dono (autoridade do catálogo);
-  //   • clicar noutro grupo TROCA (um por vez, nunca dois);
-  //   • clicar no grupo ABERTO não fecha — ele permanece aberto.
-  // `openedByUser` distingue "o usuário escolheu" (persiste ao navegar em
-  // rotas planas) de "a rota abriu" (rota plana volta ao padrão Clínica).
-  const groups = useMemo(
-    () => sections.flatMap((s) => s.groups.filter((g) => !g.flat).map((g) => g.area)),
-    [sections],
-  );
-  const defaultGroup = groups.some((a) => a.id === 'clinica') ? 'clinica' : (groups[0]?.id ?? null);
-  const [opened, setOpened] = useState<string | null>(activeGroup ?? defaultGroup);
-  const openedByUser = useRef(false);
+  // ACCORDEÃO TRADICIONAL (refino final): no máximo UM grupo aberto e
+  // ZERO abertos é estado VÁLIDO (nada de "sempre precisa existir um").
+  // Início: só o grupo da rota atual (se a rota estiver dentro de um grupo).
+  const [opened, setOpened] = useState<string | null>(activeGroup ?? null);
   const [unitOpen, setUnitOpen] = useState(false);
 
   useEffect(() => {
-    if (activeGroup) { setOpened(activeGroup); openedByUser.current = false; }
-    else if (!openedByUser.current) { setOpened(defaultGroup); }
+    // Navegação para rota dentro de um grupo → abre AQUELE grupo (comportamento
+    // necessário de navegação). Fora de grupo: não mexe em nada — nunca força
+    // outro grupo a permanecer aberto.
+    if (activeGroup) setOpened(activeGroup);
     setMobile(false);
-  }, [activePath, unit.id, activeGroup, defaultGroup]);
+  }, [activePath, unit.id, activeGroup]);
 
   // Ao crescer para desktop o drawer móvel não pode ficar aberto por cima.
   useEffect(() => {
@@ -152,14 +145,17 @@ export function WorkspaceNavigation({ nav, activePath, unit, units = [], multiUn
   }, []);
 
   // ── TOOLTIP do modo recolhido ────────────────────────────────
-  // O tooltip é renderizado como FILHO DO <aside>, fora do container rolável
-  // (.workspace-primary). Os tooltips antigos (.il-tip::after) ficavam DENTRO
-  // do container com overflow-y:auto — invisíveis (opacity:0) mas ainda no
-  // layout, esticando a largura de scroll e criando a scrollbar horizontal da
-  // sidebar recolhida. Aqui o <aside> não rola e não corta: o tooltip escapa
-  // para cima do conteúdo sem aumentar largura física de nada.
+  // O tooltip é renderizado em PORTAL no <body> (position: fixed, coordenadas
+  // de viewport). Antes era filho do <aside> — o sticky do aside cria um
+  // stacking context e, em telas com elementos em z-index (ex.: toolbar da
+  // Agenda em z-40), o tooltip ficava ABAIXO do conteúdo, parecendo cortado/
+  // sobreposto. Em portal ele escapa de qualquer contexto e nada o corta —
+  // sem esticar largura de scroll de container nenhum.
   const asideRef = useRef<HTMLElement | null>(null);
-  const [tip, setTip] = useState<{ text: string; top: number } | null>(null);
+  const [tip, setTip] = useState<{ text: string; top: number; left: number } | null>(null);
+  // §7 — hover-peek de GRUPOS no rail recolhido (temporário; nunca mexe no
+  // estado `collapsed` persistido).
+  const peekCtl = useSidebarPeek(collapsed);
   useEffect(() => {
     if (!collapsed) { setTip(null); return; }
     const root = asideRef.current;
@@ -171,7 +167,11 @@ export function WorkspaceNavigation({ nav, activePath, unit, units = [], multiUn
       if (!el || !text) { setTip(null); return; }
       const elRect = el.getBoundingClientRect();
       const rootRect = root.getBoundingClientRect();
-      setTip({ text, top: elRect.top - rootRect.top + elRect.height / 2 });
+      setTip({
+        text,
+        top: elRect.top + elRect.height / 2,
+        left: rootRect.right + 10,
+      });
     };
     const hide = (e: Event) => {
       // Mudança de elemento DENTRO do mesmo alvo não desmonta o tooltip.
@@ -227,16 +227,31 @@ export function WorkspaceNavigation({ nav, activePath, unit, units = [], multiUn
           type="button"
           className="workspace-link workspace-link--group"
           aria-label={area.label}
-          aria-expanded={mini ? false : open}
+          aria-expanded={mini ? peekCtl.peekId === area.id : open}
           aria-controls={mini ? undefined : `submenu-${area.id}`}
-          data-tip={area.label}
-          onClick={() => {
-            // Recolhida: o clique EXPANDE a sidebar e abre o grupo escolhido.
-            // Expandida: abre ESTE grupo — clicar no grupo aberto NÃO fecha
-            // (nunca existe estado "nenhum grupo aberto").
-            if (mini) onCollapse?.();
-            setOpened(area.id);
-            openedByUser.current = true;
+          {...(mini ? {
+            'data-peek-group': area.id,
+            onMouseEnter: (e: React.MouseEvent<HTMLButtonElement>) => {
+              const el = e.currentTarget;
+              peekCtl.onGroupEnter(area.id, el.getBoundingClientRect().top);
+            },
+            onMouseLeave: () => peekCtl.onGroupLeave(),
+            onFocus: (e: React.FocusEvent<HTMLButtonElement>) => {
+              peekCtl.onGroupEnter(area.id, e.currentTarget.getBoundingClientRect().top);
+            },
+            onBlur: () => peekCtl.onGroupLeave(),
+          } : {})}
+          onClick={(e: React.MouseEvent<HTMLButtonElement>) => {
+            // RECOLHIDA: o clique SÓ abre/fecha o flyout temporário — a sidebar
+            // NUNCA expande por clique de grupo (contrato do refino final; o
+            // controle persistente é o botão Recolher/Expandir).
+            if (mini) {
+              peekCtl.togglePeek(area.id, e.currentTarget.getBoundingClientRect().top);
+              return;
+            }
+            // Accordeão tradicional: clicar abre; clicar no aberto FECHA
+            // (zero grupos abertos é permitido); abrir outro fecha o anterior.
+            setOpened(open ? null : area.id);
           }}
         >
           <span className="workspace-link__icon"><Icon n={area.icon} size={18} /></span>
@@ -392,17 +407,17 @@ export function WorkspaceNavigation({ nav, activePath, unit, units = [], multiUn
     <div className="workspace-foot">
       {setup && !mini && (
         <div className="ws-setup-mini">
-          <p className="text-[12px] font-semibold text-[var(--text-primary)] leading-tight">
+          <p className="text-[12px] font-semibold text-white leading-tight">
             Sua clínica está {setup.pct}% pronta
           </p>
-          <p className="text-[11px] text-[var(--text-secondary)] mt-1 leading-snug">
+          <p className="text-[11px] text-[var(--il-nav-muted)] mt-1 leading-snug">
             Complete a configuração para receber agendamentos.
           </p>
-          <div className="h-1.5 rounded-full bg-white overflow-hidden mt-2" aria-hidden="true">
-            <div className="h-full rounded-full bg-[var(--brand)]" style={{ width: `${setup.pct}%` }} />
+          <div className="h-1.5 rounded-full bg-white/20 overflow-hidden mt-2" aria-hidden="true">
+            <div className="h-full rounded-full bg-[var(--sun)]" style={{ width: `${setup.pct}%` }} />
           </div>
           <Link href={`${setup.href}${setup.href.includes('?') ? '&' : '?'}b=${unit.id}`}
-            className="mt-2 inline-flex w-full items-center justify-center rounded-[var(--radius-sm)] border border-[var(--brand-100)] bg-white px-2 py-1.5 text-[11.5px] font-semibold text-[var(--brand-fg)] hover:bg-[var(--brand-50)]">
+            className="mt-2 inline-flex w-full items-center justify-center rounded-[var(--radius-sm)] border border-white/25 bg-white px-2 py-1.5 text-[11.5px] font-semibold text-[var(--brand-strong)] hover:bg-white/90">
             Continuar configuração
           </Link>
         </div>
@@ -445,11 +460,48 @@ export function WorkspaceNavigation({ nav, activePath, unit, units = [], multiUn
           {menu(collapsed)}
         </nav>
         {footer(true, collapsed)}
-        {/* Tooltip do rail recolhido: filho do <aside> (fora do container
-            rolável) — não gera scrollbar horizontal e escapa sobre o conteúdo. */}
-        {collapsed && tip && (
-          <div className="ws-nav-tip" role="tooltip" style={{ top: `${tip.top}px` }}>{tip.text}</div>
+        {/* Tooltip do rail recolhido: portal no <body> (fora de qualquer
+            container rolável/stacking context) — não gera scrollbar horizontal
+            e renderiza ACIMA do conteúdo da página (Agenda incluída). */}
+        {collapsed && tip && typeof document !== 'undefined' && createPortal(
+          <div className="ws-nav-tip" role="tooltip" style={{ top: `${tip.top}px`, left: `${tip.left}px` }}>{tip.text}</div>,
+          document.body,
         )}
+        {/* §7 — hover-peek de GRUPOS (rail recolhido): painel temporário com os
+            itens do grupo. Abre em ~200ms (ease-out) e recolhe 250–300ms após o
+            mouseleave. O estado `collapsed` NUNCA muda aqui. */}
+        {collapsed && peekCtl.peekId && typeof document !== 'undefined' && (() => {
+          const area = sections.flatMap((s) => s.groups).find((g) => g.area.id === peekCtl.peekId)?.area;
+          const items = area ? visible(area.items) : [];
+          if (!area || !items.length) return null;
+          return createPortal(
+            <div
+              className="ws-peek"
+              role="menu"
+              aria-label={area.label}
+              style={{ top: `${peekCtl.peekTop}px` }}
+              onMouseEnter={peekCtl.onPeekEnter}
+              onMouseLeave={peekCtl.onPeekLeave}
+            >
+              <p className="ws-peek__title">{area.label}</p>
+              <div className="ws-peek__items">
+                {items.map((item) => (
+                  <Link
+                    key={item.href}
+                    href={hrefFor(item)}
+                    role="menuitem"
+                    className="ws-peek__item"
+                    onClick={() => { peekCtl.closePeek(); setMobile(false); }}
+                  >
+                    <Icon n={item.icon} size={15} />
+                    <span>{item.label}</span>
+                  </Link>
+                ))}
+              </div>
+            </div>,
+            document.body,
+          );
+        })()}
       </aside>
 
       {/* Mobile: UM diálogo, o MESMO acordeão (nunca duas colunas na tela).
