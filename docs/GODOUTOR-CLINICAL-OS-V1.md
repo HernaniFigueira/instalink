@@ -307,25 +307,59 @@ em Neon/Vercel Postgres, `godoutor_app` no Supabase atual. Quem resolve é o
 search_path = godoutor_app, public`, ou `options=-csearch_path=…` na string
 do pooler), **não** o código. Consequências registradas:
 
-- **A garantia de tabela não pode ser especulativa.** O antigo `pgInit`
-  emitia `CREATE TABLE IF NOT EXISTS instalink_doc` antes da primeira
-  leitura/escrita de cada instância. Com papel de **menor privilégio** (sem
-  `CREATE` no schema — estado atual do endurecimento do Supabase), esse DDL
-  falha com `42501` *mesmo com a tabela existindo* e derrubava todo o
-  produto (login → 500 genérico). **Corrigido:** a DDL agora só roda
-  reativamente quando o Postgres responde `42P01` (tabela genuinamente
-  ausente — primeiro boot em Neon/Vercel); papel sem `CREATE` + tabela
-  existente = **zero DDL**, leituras/escritas seguem; tabela ausente **e**
-  sem `CREATE` = erro explícito apontando o provisionamento (nunca 500
-  silencioso). Ver `src/lib/__tests__/db-pg-init.test.ts`.
+- **A garantia de tabela não pode ser especulativa (decisão arquitetural —
+  não alegação sobre o estado do papel).** O antigo `pgInit` emitia
+  `CREATE TABLE IF NOT EXISTS instalink_doc` antes da primeira leitura/
+  escrita de cada instância. Auditoria direta ao Supabase REAL (2026-09-28)
+  confirma que o papel do backend **possui** hoje `CREATE` no schema
+  `godoutor_app` (`has_schema_privilege(...,'CREATE') = TRUE`; DML completo
+  em `instalink_doc`; `rolconfig = NULL`, logo sem `search_path` fixado por
+  role — a resolução vem do default `"$user", public` ou de `options=` na
+  string de conexão do deploy). Ainda assim **o runtime NÃO DEVE depender de
+  CREATE**: um DDL de boot é (a) round-trip extra por instância, (b) ponto
+  único de falha que transforma indisponibilidade/erosão de grants em 500 de
+  login para *qualquer* credencial, (c) violação da política "migration é a
+  única autoridade DDL". **Corrigido por design:** a DDL só roda reativamente
+  quando o Postgres responde `42P01` (tabela genuinamente ausente — primeiro
+  boot em Neon/Vercel); papel sem `CREATE` + tabela existente = **zero DDL**;
+  tabela ausente **e** sem `CREATE` = erro explícito apontando o
+  provisionamento (nunca 500 silencioso). Ver
+  `src/lib/__tests__/db-pg-init.test.ts`.
 - **Diagnóstico sem máscara:** o `catch` de `/api/auth/login` passa o erro
   real (código Postgres + mensagem) para o log do runtime do servidor
   (`console.error('[auth/login] …')`); o cliente continua recebendo só a
   mensagem genérica. Um 500 de banco nunca mais é confundido com 401 de
-  credencial.
+  credencial. `lib/pg.ts` registra **uma sonda de boot** por processo
+  (`[db/boot]`: `current_user` + `search_path` efetivo + fonte da URL de
+  conexão, sem segredos) — o log de runtime de QUALQUER deploy passa a
+  responder "quem somos nós no banco", que é exatamente o dado que faltou no
+  incidente do login de 2026-09-28.
 - **Regra para F1+:** tabelas novas usam `godoutor_internal.*` totalmente
   qualificado (§6.1/§4). A não-qualificação de `instalink_doc` é um artefato
   do legado que morre com o corte de cada domínio — não é precedente.
+
+### 6.3 Grants do papel do backend nos stores internos (`0003`)
+
+As migrações 0001/0002 criaram `godoutor_internal` **fechada** assumindo que
+o papel dono da conexão do backend seria o próprio owner do schema. No
+Supabase real não é: o backend conecta como papel dedicado (`godoutor_app`),
+que **não recebeu** `USAGE` no schema nem `SELECT/INSERT` nas tabelas — e
+todo uso futuro dos stores F0 (emissão de domínio, telemetria de IA) falharia
+com `42501`. Isso foi corrigido por `db/migrations/0003_internal_backend_grants.sql`:
+
+| Concessão a `godoutor_app` | Valor | Por quê |
+|---|---|---|
+| `USAGE ON SCHEMA godoutor_internal` | GRANT | sem atravessar o schema, a permissão de tabela não vale nada |
+| `SELECT, INSERT` em `domain_event` / `ai_usage` | GRANT | é TODO o SQL dos stores: `SELECT`/`INSERT`/`ON CONFLICT DO NOTHING`/`COUNT`/`SUM` — verificado em `src/lib/domain-events/pg-store.ts` e `src/lib/ai/usage-pg-store.ts` |
+| `UPDATE`, `DELETE`, `TRUNCATE`, `REFERENCES` | **não concedido** | nenhum caminho de código os usa; append-only é contrato do ledger |
+| `CREATE ON SCHEMA godoutor_internal` | **não concedido** | autoridade estrutural é a migração, nunca o runtime |
+| `anon` / `authenticated` / `service_role` | **nada** | fechamento client-side de 0001/0002 permanece intacto; a 0003 não toca esses papéis |
+
+Portabilidade: a 0003 é guardada por `to_regrole('godoutor_app')` — em
+ambientes sem papel de backend dedicado (Neon puro, onde a conexão usa o
+owner) é NO-OP; se o papel existe mas as tabelas não (aplicação fora de
+ordem), falha explícita `42P01`. Grants **sempre** evoluem em migração nova;
+0001/0002 nunca são editadas (já aplicadas).
 
 ## 7. Configurações (planejamento — sem UI nova neste estágio)
 
