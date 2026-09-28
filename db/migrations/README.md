@@ -53,6 +53,7 @@ nascem inacessíveis ao client-side.
 |---|---|---|---|
 | `0001` | `godoutor_internal.domain_event` | EventLog (OAAS) | F0 — normalizado desde o nascimento |
 | `0002` | `godoutor_internal.ai_usage` | Telemetria de IA | F0 — normalizado desde o nascimento |
+| `0003` | — (grants) | Acesso do papel do backend (`godoutor_app`) aos stores F0: `USAGE` no schema + `SELECT, INSERT` nas tabelas; nada a `anon`/`authenticated`/`service_role`; guarda `to_regrole` p/ portabilidade | pós-F0 — corrige premissa de 0001/0002 (conexão ≠ owner do schema) |
 | futuro | `clinical_encounter` | F1 | nasce normalizado e fechado |
 | futuro | `prescription` / `clinical_document` | F2 | nasce normalizado e fechado |
 | futuro | `clinical_order` / `lab_result` | F3 | nasce normalizado e fechado |

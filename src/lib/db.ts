@@ -432,54 +432,96 @@ function getPool(): Pool {
 }
 
 /**
- * GARANTIA DA TABELA — uma vez por processO, não uma vez por requisição (§i).
+ * GARANTIA DA TABELA — REATIVA, nunca especulativa (P0-login).
  *
- * Antes, CADA leitura e CADA escrita abriam a transação com
- * `CREATE TABLE IF NOT EXISTS instalink_doc ...`. O Postgres resolve o "IF NOT
- * EXISTS" no catálogo, mas ainda assim é um comando a mais por requisição:
- * em Postgres gerenciado (Supabase/Neon/Vercel) ele custa um round-trip e,
- * sob escrita concorrente, disputa lock de catálogo — em um banco onde cada
- * requisição já faz uma leitura de documento inteiro.
+ * História: `pgInit` emitia `CREATE TABLE IF NOT EXISTS instalink_doc`
+ * ANTES da primeira leitura/escrita de cada instância. Qualquer erosão de
+ * grants no schema (endurecimento, mudança de papel, ambiente espelho com
+ * menor privilégio) faz esse DDL falhar com 42501 *mesmo com a tabela
+ * existindo* — e derrubava toda leitura (login ⇒ 500 "Não foi possível
+ * entrar"), sem a tabela estar ausente. Nota factual (auditoria
+ * 2026-09-28, docs §6.2): o papel do backend no Supabase real HOJE TEM
+ * `CREATE` no schema — a remoção do DDL especulativo é DECISÃO ARQUITETURAL
+ * (runtime nunca depende de CREATE), não alegação de estado do banco.
  *
- * Agora o resultado é guardado em memória por instância:
- *   • SUCESSO → nunca mais emite o DDL nesta instância (quente ou fria);
- *   • FALHA   → o erro continua propagando (fail-closed intacto) e o cache é
- *               limpo, para que a próxima requisição tente de novo em vez de
- *               herdar uma falha transitória de rede.
+ * Regra nova (mesma filosofia do hardening F0 — migration é a autoridade
+ * estrutural): o runtime executa SOMENTE SELECT/INSERT/UPDATE. A DDL de boot
+ * só acontece REATIVAMENTE quando o Postgres responde 42P01
+ * (undefined_table), i.e. a tabela genuinamente não existe (primeiro boot em
+ * Neon/Vercel Postgres). Se nem a tabela existe nem o papel pode criá-la, o
+ * erro vira EXPLÍCITO e acionável — nunca 500 silencioso.
+ *
+ * search_path: o nome `instalink_doc` é não qualificado de propósito — em
+ * produção ele resolve pelo search_path do papel da conexão (auditoria:
+ * papel `godoutor_app` resolve para `godoutor_app.instalink_doc`). NÃO
+ * qualificamos aqui porque o schema do documento é por ambiente (public no
+ * Neon/Vercel, godoutor_app no Supabase) e quem resolve é a CONFIG do
+ * deploy, não o código. Dependência documentada em
+ * docs/GODOUTOR-CLINICAL-OS-V1.md §6.2.
  */
-let pgReady: Promise<void> | null = null;
+function isMissingRelation(err: unknown): boolean {
+  return (err as { code?: string } | null)?.code === '42P01';
+}
+function isPermissionDenied(err: unknown): boolean {
+  return (err as { code?: string } | null)?.code === '42501';
+}
 
-async function pgInit(): Promise<void> {
-  if (!pgReady) {
-    pgReady = getPool()
-      .query('CREATE TABLE IF NOT EXISTS instalink_doc (id SMALLINT PRIMARY KEY, data JSONB NOT NULL)')
-      .then(() => undefined)
-      .catch((err) => { pgReady = null; throw err; });
+let docReady: Promise<void> | null = null;
+
+async function createDocTableOnce(): Promise<void> {
+  if (!docReady) {
+    docReady = (async () => {
+      try {
+        await getPool().query('CREATE TABLE IF NOT EXISTS instalink_doc (id SMALLINT PRIMARY KEY, data JSONB NOT NULL)');
+      } catch (err) {
+        docReady = null; // nunca cachear garantia falha
+        if (isPermissionDenied(err)) {
+          throw new Error(
+            'instalink_doc não existe e o papel da conexão não tem CREATE no schema. ' +
+            'Provisione a tabela pela administração do banco/migração (o runtime não força DDL alheio).',
+          );
+        }
+        throw err;
+      }
+    })();
   }
-  return pgReady;
+  return docReady;
+}
+
+/** Roda a operação; se faltar estrutura (42P01), garante a tabela e tenta de novo. */
+async function withDocGuarantee<T>(run: () => Promise<T>): Promise<T> {
+  try {
+    return await run();
+  } catch (err) {
+    if (!isMissingRelation(err)) throw err;
+    await createDocTableOnce();
+    return run();
+  }
 }
 
 /** Só para teste: esquece a garantia (simula instância nova). */
 export function __resetPgInitForTests(): void {
-  pgReady = null;
+  docReady = null;
 }
 
 async function pgRead(): Promise<DB> {
   // FAIL-CLOSED: qualquer erro (timeout, TLS, conexão, resposta inválida)
   // propaga como exceção. emptyDB SOMENTE quando a linha não existe.
-  await pgInit();
-  const res = await getPool().query('SELECT data FROM instalink_doc WHERE id = 1');
-  if (res.rows.length === 0) return emptyDB();
-  return normalizeDB(res.rows[0].data);
+  return withDocGuarantee(async () => {
+    const res = await getPool().query('SELECT data FROM instalink_doc WHERE id = 1');
+    if (res.rows.length === 0) return emptyDB();
+    return normalizeDB(res.rows[0].data);
+  });
 }
 
 async function pgWrite(db: DB): Promise<void> {
-  await pgInit();
-  await getPool().query(
-    `INSERT INTO instalink_doc (id, data) VALUES (1, $1)
-     ON CONFLICT (id) DO UPDATE SET data = EXCLUDED.data`,
-    [JSON.stringify(db)],
-  );
+  await withDocGuarantee(async () => {
+    await getPool().query(
+      `INSERT INTO instalink_doc (id, data) VALUES (1, $1)
+       ON CONFLICT (id) DO UPDATE SET data = EXCLUDED.data`,
+      [JSON.stringify(db)],
+    );
+  });
 }
 
 // ── Escrita condicional (CAS) — concorrência ENTRE instâncias ──
@@ -496,27 +538,29 @@ async function pgWrite(db: DB): Promise<void> {
 // (poucas tentativas). Nada de Redis/lock externo: o próprio Postgres é o
 // árbitro e o modo arquivo usa o mesmo mutex de `updateDB`.
 async function pgReadCas(): Promise<{ db: DB; hash: string | null }> {
-  await pgInit();
-  const res = await getPool().query('SELECT data, md5(data::text) AS hash FROM instalink_doc WHERE id = 1');
-  if (res.rows.length === 0) return { db: emptyDB(), hash: null };
-  return { db: normalizeDB(res.rows[0].data), hash: res.rows[0].hash as string };
+  return withDocGuarantee(async () => {
+    const res = await getPool().query('SELECT data, md5(data::text) AS hash FROM instalink_doc WHERE id = 1');
+    if (res.rows.length === 0) return { db: emptyDB(), hash: null };
+    return { db: normalizeDB(res.rows[0].data), hash: res.rows[0].hash as string };
+  });
 }
 
 async function pgCasWrite(hash: string | null, db: DB): Promise<boolean> {
-  await pgInit();
-  if (hash === null) {
-    // Primeira gravação: cria a linha apenas se ela ainda não existir.
-    const ins = await getPool().query(
-      'INSERT INTO instalink_doc (id, data) VALUES (1, $1) ON CONFLICT (id) DO NOTHING',
-      [JSON.stringify(db)],
+  return withDocGuarantee(async () => {
+    if (hash === null) {
+      // Primeira gravação: cria a linha apenas se ela ainda não existir.
+      const ins = await getPool().query(
+        'INSERT INTO instalink_doc (id, data) VALUES (1, $1) ON CONFLICT (id) DO NOTHING',
+        [JSON.stringify(db)],
+      );
+      return ins.rowCount === 1;
+    }
+    const upd = await getPool().query(
+      'UPDATE instalink_doc SET data = $2 WHERE id = 1 AND md5(data::text) = $1',
+      [hash, JSON.stringify(db)],
     );
-    return ins.rowCount === 1;
-  }
-  const upd = await getPool().query(
-    'UPDATE instalink_doc SET data = $2 WHERE id = 1 AND md5(data::text) = $1',
-    [hash, JSON.stringify(db)],
-  );
-  return upd.rowCount === 1;
+    return upd.rowCount === 1;
+  });
 }
 
 // ── Arquivo JSON (dev local) ───────────────────────────────
@@ -684,24 +728,27 @@ function withWriteLock<T>(run: () => Promise<T>): Promise<T> {
 export async function updateDB<T>(fn: SyncMutation<T>): Promise<T> {
   const run = async (): Promise<T> => {
     if (usePg()) {
-      await pgInit();
-      const client = await getPool().connect();
-      try {
-        await client.query('BEGIN');
-        // Inicialização concorrente segura; operações CAS também disputam esta linha.
-        await client.query('INSERT INTO instalink_doc (id, data) VALUES (1, $1) ON CONFLICT (id) DO NOTHING', [JSON.stringify(emptyDB())]);
-        const snapshot = await client.query('SELECT data FROM instalink_doc WHERE id = 1 FOR UPDATE');
-        const db = normalizeDB(snapshot.rows[0].data);
-        const result = runSyncMutation(fn, db);
-        prune(db);
-        await client.query('UPDATE instalink_doc SET data = $1 WHERE id = 1', [JSON.stringify(db)]);
-        await client.query('COMMIT');
-        if (hasDueAutomationWork(db)) maybeRunAutomations();
-        return result;
-      } catch (e) {
-        await client.query('ROLLBACK');
-        throw e;
-      } finally { client.release(); }
+      // Garantia REATIVA (P0-login): nenhum DDL antes de um 42P01 real —
+      // com a tabela existindo, o papel da conexão nunca precisa de CREATE.
+      return withDocGuarantee(async () => {
+        const client = await getPool().connect();
+        try {
+          await client.query('BEGIN');
+          // Inicialização concorrente segura; operações CAS também disputam esta linha.
+          await client.query('INSERT INTO instalink_doc (id, data) VALUES (1, $1) ON CONFLICT (id) DO NOTHING', [JSON.stringify(emptyDB())]);
+          const snapshot = await client.query('SELECT data FROM instalink_doc WHERE id = 1 FOR UPDATE');
+          const db = normalizeDB(snapshot.rows[0].data);
+          const result = runSyncMutation(fn, db);
+          prune(db);
+          await client.query('UPDATE instalink_doc SET data = $1 WHERE id = 1', [JSON.stringify(db)]);
+          await client.query('COMMIT');
+          if (hasDueAutomationWork(db)) maybeRunAutomations();
+          return result;
+        } catch (e) {
+          await client.query('ROLLBACK');
+          throw e;
+        } finally { client.release(); }
+      });
     }
     const db = await readDB(); // falhou? lança — NADA é escrito
     // Callback estritamente síncrono: validação + mutação, nunca HTTP.
