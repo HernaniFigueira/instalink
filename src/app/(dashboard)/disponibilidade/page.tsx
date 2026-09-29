@@ -80,7 +80,7 @@ export default function DisponibilidadePage() {
     <PageHeader
       icon="clock"
       title="Disponibilidade"
-      hint="Quando a casa e cada profissional podem atender — a base de tudo. Profissionais podem seguir a janela da casa ou ter a sua."
+      hint="Quando a clínica e cada profissional podem atender — base da agenda. Profissionais podem seguir o horário da clínica ou ter agenda própria."
     />
   );
 

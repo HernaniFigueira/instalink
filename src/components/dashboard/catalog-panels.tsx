@@ -138,7 +138,7 @@ export function ServiceForm({ businessId, service, cats, pros, onClose, onSave }
         {pros.length > 0 && (
           <div>
             <span className="text-xs font-semibold text-zinc-500">QUEM REALIZA ESTE ATENDIMENTO?</span>
-            <p className="text-[11px] text-zinc-500 mt-0.5">Sem seleção = todos os profissionais elegíveis. O cliente não escolhe — a distribuição é automática.</p>
+            <p className="text-[11px] text-zinc-500 mt-0.5">Sem seleção = todos os profissionais elegíveis. O vínculo serviço↔profissional define quem pode realizar este serviço.</p>
             <div className="flex flex-wrap gap-2 mt-1.5">
               {pros.filter((p) => p.active !== false).map((p) => (
                 <button type="button" key={p.id} onClick={() => togglePro(p.id)}
@@ -150,8 +150,10 @@ export function ServiceForm({ businessId, service, cats, pros, onClose, onSave }
           </div>
         )}
         <div className="flex flex-wrap gap-4">
-          <label className="flex items-center gap-2 text-sm font-medium"><input type="checkbox" checked={active} onChange={(e) => setActive(e.target.checked)} className="w-4 h-4 accent-emerald-600" /> Ativo</label>
-          <label className="flex items-center gap-2 text-sm font-medium"><input type="checkbox" checked={featured} onChange={(e) => setFeatured(e.target.checked)} className="w-4 h-4 accent-emerald-600" /> Destaque</label>
+          <label className="flex items-center gap-2 text-sm font-medium"><input type="checkbox" checked={active} onChange={(e) => setActive(e.target.checked)} className="w-4 h-4 accent-emerald-600" /> Ativo na clínica</label>
+          {legacyPagesEnabled && (
+            <label className="flex items-center gap-2 text-sm font-medium"><input type="checkbox" checked={featured} onChange={(e) => setFeatured(e.target.checked)} className="w-4 h-4 accent-emerald-600" /> Destaque</label>
+          )}
           <label className="flex items-center gap-2 text-sm font-medium"><input type="checkbox" checked={bookable} onChange={(e) => setBookable(e.target.checked)} className="w-4 h-4 accent-emerald-600" /> Aceita agendamento</label>
         </div>
         {error && <p className="text-sm font-medium text-red-600">{error}</p>}
@@ -204,9 +206,9 @@ export function TeamEditor({ businessId, pros, rules, onSave, onAskDelete, onCre
           className="mb-4 bg-white border border-zinc-200 rounded-lg p-4 space-y-2.5">
           <p className="font-semibold text-sm">{editing ? 'Editar profissional' : 'Novo profissional'}</p>
           <input value={name} onChange={(e) => setName(e.target.value)} placeholder="Nome * (ex: Dra. Ana)" className="w-full rounded-md border border-zinc-300 px-3 py-2.5 text-sm" autoFocus />
-          <input value={role} onChange={(e) => setRole(e.target.value)} placeholder="Função (ex: Dentista)" className="w-full rounded-md border border-zinc-300 px-3 py-2.5 text-sm" />
+          <input value={role} onChange={(e) => setRole(e.target.value)} placeholder="Função / especialidade (ex: Veterinário, Cirurgião, Anestesista)" className="w-full rounded-md border border-zinc-300 px-3 py-2.5 text-sm" />
           <ImageUpload label="FOTO DO PROFISSIONAL" value={photo} onChange={setPhoto} businessId={businessId} circle />
-          <label className="flex items-center gap-2 text-sm font-medium"><input type="checkbox" checked={active} onChange={(e) => setActive(e.target.checked)} className="w-4 h-4 accent-emerald-600" /> Ativo (aparece na agenda e na página)</label>
+          <label className="flex items-center gap-2 text-sm font-medium"><input type="checkbox" checked={active} onChange={(e) => setActive(e.target.checked)} className="w-4 h-4 accent-emerald-600" /> Ativo (disponível para agenda)</label>
           <label className="flex items-start gap-2 text-sm font-medium">
             <input type="checkbox" checked={follow} onChange={(e) => setFollow(e.target.checked)} className="w-4 h-4 accent-emerald-600 mt-0.5" />
             <span>

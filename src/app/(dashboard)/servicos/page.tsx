@@ -8,6 +8,7 @@ import { Icon } from '@/components/icons';
 import { AccessDenied, AreaLoadError } from '@/components/dashboard/AccessNotice';
 import { apiGet, apiSend } from '@/lib/api-client';
 import { DeleteSheet, ServiceForm, CatalogCrossLinks } from '@/components/dashboard/catalog-panels';
+import { isLegacyPagesEnabled } from '@/lib/product';
 
 interface DeleteAsk {
   kind: 'service' | 'professional';
@@ -18,9 +19,9 @@ interface DeleteAsk {
 }
 
 // ═══════════════════════════════════════════════════════════════
-// SERVIÇOS — "o que eu ofereço"
-// Uma pergunta só. Equipe e horários têm telas próprias (profissionais/
-// horarios) — esta tela não mistura os conceitos.
+// SERVIÇOS — o que a clínica realiza e pode registrar/agendar/cobrar
+// Cada serviço tem nome, descrição, preço, duração, categoria e
+// profissionais elegíveis. Equipe e disponibilidade têm telas próprias.
 // ═══════════════════════════════════════════════════════════════
 export default function ServicosPage() {
   const params = useSearchParams();
@@ -112,7 +113,7 @@ export default function ServicosPage() {
     <PageHeader
       icon="service"
       title="Serviços"
-      hint="O que o seu negócio oferece — nomes, preços e detalhes."
+      hint="O que a clínica realiza — procedimentos e atendimentos com preço, duração e profissionais elegíveis."
       action={loaded ? (
         <span className="flex flex-wrap gap-2">
           <Button variant="secondary" onClick={() => setShowCat(!showCat)}>
@@ -151,7 +152,7 @@ export default function ServicosPage() {
           {showCat && (
             <form onSubmit={(e) => { e.preventDefault(); call('category.save', { name: catName, kind: 'service' }).then(() => { setCatName(''); setShowCat(false); }).catch((err) => setMsg(err.message)); }}
               className="mb-4 ws-panel p-4 flex flex-wrap gap-2">
-              <input value={catName} onChange={(e) => setCatName(e.target.value)} placeholder="Nome da categoria (ex: Cabelo)"
+              <input value={catName} onChange={(e) => setCatName(e.target.value)} placeholder="Nome da categoria (ex: Consulta, Vacina, Exame)"
                 className="flex-1 min-w-[200px] rounded-md border border-[var(--border-strong)] bg-white px-3 py-2 text-sm focus:outline-none focus:shadow-focus" autoFocus />
               <Button type="submit" variant="primary">Salvar</Button>
             </form>
@@ -160,7 +161,7 @@ export default function ServicosPage() {
             <EmptyState
               icon="service"
               title="Nenhum serviço ainda"
-              hint="Cadastre o primeiro para exibir na página e receber agendamentos."
+              hint={isLegacyPagesEnabled() ? "Cadastre o primeiro para exibir na página e receber agendamentos." : "Cadastre o primeiro para organizar a agenda e o atendimento."}
               action={<Button variant="primary" onClick={() => { setEditing(null); setShowForm(true); }}><Icon n="plus" size={14} /> Adicionar serviço</Button>}
             />
           ) : (
@@ -178,11 +179,11 @@ export default function ServicosPage() {
                       <div className="w-11 h-11 rounded-md bg-[var(--surface-2)] border border-[var(--border)] flex items-center justify-center font-semibold text-[var(--text-faint)] shrink-0">{sv.name.slice(0, 1)}</div>
                     )}
                     <div className="flex-1 min-w-0">
-                      <p className="font-semibold text-sm">{sv.name} {sv.featured && <Icon n="star" size={13} className="inline -mt-1 text-amber-500" />}</p>
+                      <p className="font-semibold text-sm">{sv.name} {isLegacyPagesEnabled() && sv.featured && <Icon n="star" size={13} className="inline -mt-1 text-amber-500" />}</p>
                       <p className="text-xs text-zinc-500">
                         R$ {centsToBR(sv.price)}
-                        {!pricePublic && <span className="font-semibold text-amber-700"> · preço oculto na página</span>}
-                        {' · '}{sv.bookable ? 'agendável' : 'somente exibição'}
+                        {isLegacyPagesEnabled() && !pricePublic && <span className="font-semibold text-amber-700"> · preço oculto na página</span>}
+                        {' · '}{sv.bookable ? 'agendável' : (isLegacyPagesEnabled() ? 'somente exibição' : 'não agendável')}
                       </p>
                       {pros.length > 0 && <p className="text-xs text-zinc-400">Realizado por: {who}</p>}
                     </div>

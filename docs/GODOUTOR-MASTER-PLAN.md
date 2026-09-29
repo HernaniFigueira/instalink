@@ -892,9 +892,13 @@ CONCLUÍDA pela PR #43.
 
 ### Fase B — Clinical Convergence / De-InstaLink
 
-PRÓXIMA PRIORIDADE.
+**EM ANDAMENTO** — branch `arena/01a0eda6-instalink` (2026-09-29) · PR aberta (não mergear).
 
-Limpar semântica e regras herdadas em módulos estruturais.
+Objetivo desta fase: fazer o sistema parar de parecer "InstaLink transformado" e passar a ser GoDoutor Clinical OS por dentro e fora, removendo semântica e regras antigas da experiência clínica padrão e preservando compatibilidade técnica atrás de `GODOUTOR_LEGACY_PAGES`.
+
+Escopo: Profissionais · Serviços · Produtos · Disponibilidade · Estrutura · Equipe · Configurações · Recursos · Dashboard/Resultados · onboarding · componentes e copies compartilhadas — ver `docs/GODOUTOR-CLINICAL-CONVERGENCE-AUDIT.md`.
+
+Ao concluir: atualizar este documento para **CONCLUÍDA** e registrar removido/preservado/deferido + impactos.
 
 ### Fase C — Workflow + Permissões
 

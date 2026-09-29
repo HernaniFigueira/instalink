@@ -134,21 +134,18 @@ function BookingRules({ businessId, initial, onSaved }: {
       <div className="grid sm:grid-cols-2 gap-3.5">
         {hasTeam === true && (
           <div className="sm:col-span-2">
-            {/* A1.2 · Bloco 3 — SEM CONTROLE FALSO: a distribuição automática
-                é regra do produto (quem atende é resolvido pela engine, com
-                profissionais ativos, vínculo serviço → profissional, horários,
-                buffers e exceções). Não existe configuração alternativa
-                persistida/consumida, então não há <select> aqui — um controle
-                aparentemente editável que não salva nada criava expectativa
-                de funcionamento. A indicação abaixo é explicitamente NÃO
-                interativa. */}
-            <div className="rounded-md border border-zinc-200 bg-zinc-50 px-3 py-2.5" aria-label="Distribuição dos agendamentos: automática (fixa)">
-              <p className="text-xs font-semibold text-zinc-500">DISTRIBUIÇÃO DOS AGENDAMENTOS</p>
-              <p className="text-sm font-medium text-zinc-800 mt-1 inline-flex items-center gap-1.5">
-                <Icon n="lock" size={13} className="text-zinc-400" />
-                Automática — equilibra a equipe
+            {/* CLINICAL CONVERGENCE — atribuição de profissional é política
+                da agenda (atualmente: elegibilidade + disponibilidade; balanceamento
+                é implementação atual, não promessa universal). Não existe seletor
+                aqui porque não há configuração alternativa persistida nesta fase —
+                um <select> que não salva criaria falsa expectativa. Workflow futuro
+                definirá políticas por clínica/canal. Indicação abaixo é informativa. */}
+            <div className="rounded-md border border-zinc-200 bg-zinc-50 px-3 py-2.5" aria-label="Atribuição de profissional — política da agenda">
+              <p className="text-xs font-semibold text-zinc-500">ATRIBUIÇÃO DE PROFISSIONAL</p>
+              <p className="text-sm font-medium text-zinc-800 mt-1">
+                Política da agenda
               </p>
-              <span className="block text-[11px] text-zinc-500 mt-0.5">O cliente nunca escolhe o profissional — a regra é interna do negócio. Quem atende é resolvido automaticamente, respeitando profissionais ativos, vínculo serviço → profissional, horários, buffers e exceções.</span>
+              <span className="block text-[11px] text-zinc-500 mt-0.5">A atribuição de profissional é resolvida pela agenda conforme profissionais ativos, vínculos serviço↔profissional, horários e buffers. Políticas por canal serão configuráveis no Workflow futuro — sem regra universal fixa nesta tela.</span>
             </div>
           </div>
         )}
