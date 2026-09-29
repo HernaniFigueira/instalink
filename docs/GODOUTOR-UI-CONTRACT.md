@@ -1,123 +1,104 @@
-# Contrato Universal de UI — GoDoutor
+# Contrato de UI GoDoutor — revisão definitiva v2
 
-> Congelado após a última missão de consolidação (PR #39).
-> Próxima fase: WhatsApp + automações — **fora** deste contrato visual.
-> Qualquer tela nova (painel ou mobile) DEVE seguir este documento.
+> **Escopo:** workspace autenticado GoDoutor. Esta revisão consolida o contrato visual existente; não é um redesign do zero. Ela preserva navegação, permissões, fluxos, dados e comportamento já homologados.
+>
+> **Fora de escopo:** login homologado no PR #42; banco, migrações, sessão/cookies, isolamento de tenant, permissões e regras de negócio; F1 Clinical Encounter; renderizador, booking público e tema publicado do page-builder. Essas áreas não podem regredir por efeito colateral.
+>
+> **Estado da homologação nesta revisão:** contrato e guardas de código estão em atualização. Uma verificação de fonte ou teste de tokens não equivale a inspeção visual no browser. Consulte `GODOUTOR-UI-AUDIT-V2.md` para evidências e itens ainda pendentes.
 
----
+## 1. Princípios e fronteiras do tema
 
-## 1 · Categorias de cor (as 4 travas do sistema)
+O workspace tem uma única linguagem visual compartilhada. Tema é identidade — nunca uma licença para trocar a semântica, a hierarquia ou a anatomia de componentes.
 
-| Categoria | O que é | Regra |
+| Camada | Tokens/uso | Invariante |
 |---|---|---|
-| **A · TEXTO** | Títulos, corpo, labels | Sempre near-black (`--text` = `#18181b`). **O tema NUNCA muda texto.** |
-| **B · TEMA** | Cor da clínica (Aparência) | Controla: sidebar, topbar suave, ícone+acento do page header, item ativo e **CTAs principais**. Tokens: `--accent` / `--accent-hover` / `--accent-soft` / `--accent-border` / `--accent-contrast`. |
-| **C · SEMÂNTICAS** | Estado de saúde do sistema | Verde = sucesso, Vermelho = erro/destrutivo, Âmbar = atenção. **Nunca tingidas pelo tema** (`--success` / `--danger` / `--warning` fixos). |
-| **D · FUNDO** | Área de trabalho | Neutro universal `#F4F6F8 → #F8F9FB` (`--bg-top`/`--bg-bottom`). **Não acompanha o tema.** Nenhuma tela do painel pode impor fundo próprio (a Agenda mantém apenas o tom da *grade* interna; o shell externo é o gradiente). |
+| **Identidade / acento** | `--accent`, `--accent-hover`, `--accent-soft`, `--accent-border`, `--accent-contrast`, `--accent-fg`; `--il-nav-*` | Pode variar pelo preset pessoal salvo. Não altera status, texto estrutural, fundo, geometria ou layout. |
+| **Texto** | `--text`, `--text-strong`, `--text-muted`, `--text-faint`, `--text-soft` | Não acompanha o preset. Texto normal deve permanecer legível; rótulos de estado continuam textuais. |
+| **Estrutura** | `--bg`, `--workspace-bg`, `--surface*`, `--border*` | Neutros fixos e iguais em todas as rotas autenticadas. Fundo externo sem gradiente e sem cor de seção. |
+| **Semântica** | `--success*`, `--warning*`, `--danger*`, `--info*`; neutros para estado neutro | Verde = sucesso; âmbar = atenção/aviso; vermelho = perigo/erro/destrutivo; azul = informação. Nunca são sobrescritos pelo preset. |
+| **Geometria e percepção** | `--radius-*`, `--space-*`, `--control-h*`, `--shadow-*`, tipografia e motion | Únicos no workspace. Tema não pode alterá-los. Elevação é reservada a camadas que realmente flutuam. |
 
-**Proibições:** misturar `--brand`, `--il-nav` e `--text` em CTA; usar cor de tema em texto; usar semântica como cor de marca; aplicar o tema na página pública.
+### Presets e persistência
 
-### Paletas do tema (21 presets, por famílias)
+- Os **21 presets existentes** continuam sendo a paleta pessoal em `src/lib/nav-accent.ts`; não criar ids duplicados nem um segundo sistema de tema.
+- Default de instalação/fallback: preset existente **`azul-profundo`**. Não há migração de banco.
+- Uma preferência válida em `localStorage` sob `godoutor.nav-accent` tem precedência sobre o default e **não pode ser regravada/sobrescrita** pela troca do default. Uma chave antiga desconhecida usa o fallback atual; ids legados continuam resolvidos pelos aliases já existentes.
+- O shell aplica somente os tokens permitidos de navegação/acento. `src/lib/appearance.ts` permanece compatibilidade legada; `Business.appearance.navColor` não é uma fonte ativa de tema.
+- O tema não controla `--text*`, superfícies/fundo, status, radius, spacing, shadows, tipografia, anatomia ou largura/posição de componentes.
+- Os pares de contraste do menu, ícone inativo, item ativo, CTA e texto em `--accent-soft` precisam alcançar **WCAG AA 4.5:1** em cada preset. Ícone não substitui rótulo, estado nem indicador de foco.
 
-`Neutro` branco · `Azul` clínico/amigável/profundo · `Verde` sálvia/equilibrado/profundo · `Teal` claro/médio/profundo · `Violeta` suave/atual/profundo · `Amarelo` suave/âmbar/dourado · `Rosé`/rosa queimado/vinho/bordô · `Ônix` (preto).
+## 2. Cores semânticas e estrutura
 
-- Contraste **AA ≥ 4.5:1** validado por teste (`m8-contrato-cor`, `missao7-visual`) para nav-fg×nav e accent-contrast×accent em **todos** os presets.
-- Ids legados `violeta`/`teal` = aliases de `violeta-atual`/`teal-medio` (preservam a escolha salva).
-- Ícone/acento do page header: semântico por domínio (estrutura `--accent`, agenda `--info`, clínico `--success`, comercial `--warning`, comunicação `--accent`).
+- Sucesso/confirmado/concluído usa a família verde; aviso/atenção/pendência que requer decisão usa âmbar; perigo/cancelamento/erro/destrutivo usa vermelho; informação usa azul; estados sem significado semântico adicional ficam neutros.
+- Aliases históricos como `purple`, `lilac`, `cyan`, `teal` e `sun` devem convergir para uma categoria semântica ou para neutro no workspace. Não podem recriar uma cor por módulo.
+- Identidade de serviços externos (por exemplo, o logotipo de um canal) é uma exceção restrita ao próprio símbolo/identificador, não à superfície, status ou CTA do módulo.
+- O fundo de workspace é sólido e neutro (`--workspace-bg: var(--bg)`). Painéis usam superfície e borda neutras; não há gradiente ou painel creme/lilás por decoração.
+- Os estados da agenda, do funil, de pedidos, de execução, de pendência e os feedbacks de formulário consomem os tokens semânticos. Estado deve ter rótulo e nunca depender exclusivamente da cor.
 
-## 2 · Título de tela (page header)
+## 3. Anatomia dos componentes
 
-`[icon-container accent] Título PRETO [Ações (CTA tema + neutros)]` — em TODAS as telas.
+### PageHeader
 
-## 3 · CTAs
+Título, descrição contextual opcional, ícone em chip neutro/acento e área de ações. Títulos usam a escala fixa de texto; ação principal segue o preset; ações secundárias são neutras; ações destrutivas e feedbacks usam seus tokens semânticos. Exceções estruturais homologadas (agenda densa, inbox dividido, dashboard/organização com identidade do workspace e editor da página) devem manter hierarquia equivalente, sem duplicar heading nem inventar paleta.
 
-| Tipo | Cores |
-|---|---|
-| **Principal** | `--accent` bg / `--accent-hover` / `--accent-contrast` texto (segue o TEMA) |
-| **Secondary / outline / ghost** | Neutros (cinza) |
-| **Destrutivo** | `--danger` |
-| **Sucesso** | `--success` |
+### Botões e controles
 
-## 3b · Flyout do rail recolhido (refino final)
-- **Fundo sólido** (`--surface`) + **borda 1px** (`--border`) + radius médio + **sombra mínima** (1px) — nada de "cartão flutuante pesado".
-- **Hover em grupo** → flyout temporário (animação 200ms ease-out; fecha 275ms após sair; `prefers-reduced-motion` desliga o movimento).
-- **Clique no grupo** → TRAVA/destrava o flyout (`togglePeek`); **NUNCA expande a sidebar** — o único controle persistente é o botão Recolher/Expandir.
-- Itens SEM submenu: só tooltip + navegação direta.
-- Escape fecha; rota/recolher fecha na hora.
+- Todos os botões mantêm anatomia compartilhada por `buttonCls`/`Button`: altura por tamanho, alinhamento, padding, radius compacto, foco visível e estados disabled/loading coerentes.
+- Variações de intenção: primário temático; secundário contornado neutro; ghost; destrutivo; link. `success` e `warning` legados, quando necessários, mantêm tokens semânticos fixos; aliases históricos não devem criar uma segunda implementação.
+- Sem CTA primário preto, gradiente, halo de marca ou sombra decorativa. A exceção de cores é a ação semântica, não uma tela/módulo.
+- Inputs/selects/textareas compartilham altura, fundo, borda e radius; foco tem um único indicador acessível, sem contorno duplicado. Labels e mensagens de validação permanecem associados ao campo.
 
-## 3c · Avatares sem foto (refino final)
-- Paleta fixa de **8 cores** (`lib/avatar-palette.ts`): azul, teal, violeta, âmbar, verde, coral suave, carvão, petróleo.
-- **Determinístico** (hash FNV-1a do nome normalizado) — a mesma pessoa tem SEMPRE a mesma cor; nunca aleatório por render.
-- Iniciais até 2 letras com cor AA sobre o fundo. O componente `Avatar` aplica em todo fallback (clientes, profissionais, conversas, conta).
+### Superfícies, listas e dados
 
-## 3d · Chips de título (refino final)
-- **UM modelo em todas as telas**: chip `40×40`, fundo neutro sutil (`--surface-2`), borda 1px (`--border`), radius lg, **ícone line** na cor do TEMA (`--accent`), título ao lado em near-black (`--text`).
-- Sem ícone "solto"; sem chip tingido por tela. A Agenda usa o MESMO chip.
+- Card/painel: superfície neutra + borda leve + radius compacto; cartões comuns sem sombra. Evitar “card dentro de card” sem necessidade estrutural.
+- Tabela/lista mantém cabeçalho legível, divisórias discretas, hover neutro, densidade consistente e ações alinhadas. Chips de filtro não se confundem com badges de status.
+- Badges de status usam `StatusBadge`/`toneCls` ou os tokens semânticos equivalentes. Métrica não é alerta; metadado não é status; dados de paciente/cliente não recebem amarelo como decoração.
+- Avatares usam o componente compartilhado; não redesenhar fallback por rota.
 
-## 3e · Breadcrumb
-- **Removido de todas as telas do workspace** (decisão do refino final). O cabeçalho (chip + título + subtítulo) identifica a tela; o contexto vive na sidebar/topbar. Nenhuma exceção foi necessária.
+### Overlays, sidebar e topbar
 
-## 4 · Sidebar
+- Dialog, sheet, menu e tooltip compartilham overlay/foco/fechamento já homologados. Sombras ficam nas camadas flutuantes; a sidebar não projeta sombra sobre o conteúdo.
+- Sidebar/topbar são estrutura. O default de sidebar é Deep Blue; presets podem alterar somente identidade/acento permitidos. Item ativo e grupo aberto mantêm semântica acessível (`aria-current`, `aria-expanded`) e contraste AA.
+- Topbar tem superfície neutra sólida independente do preset e continua sendo o espaço de ações globais já existentes (busca, criar, notificações, ajuda e conta). O atalho global de Conversas conserva sua sheet e comportamento em múltiplas rotas; não introduzir FAB concorrente.
+- Breadcrumb, navegação contextual, catálogos e permissões existentes não devem ser removidos como simplificação estética.
 
-- **Padrão (Poppins)**: só no dashboard (`WorkspaceNavigation`). Demais telas usam Inter (TopBar/NavBar) — decisão travada da missão 6.
-- **Recolhida (rail 76px)**:
-  - rota direta → **só tooltip**;
-  - **grupo expansível** (Clínica/Automação/Gestão/Configurações) → **hover-peek** temporário (§7).
-- **Hover-peek (§7)**: abre na hora com animação **200ms ease-out**; fecha **275ms** após o mouse sair; grupo↔peek sem flicker; **nunca altera o estado recolhido persistido**; o único toggle persistente é o botão Recolher/Expandir; `Escape` fecha; foco abre/blur fecha (teclado); `prefers-reduced-motion` desliga a animação. API: `useSidebarPeek(collapsed)` em `src/lib/sidebar-peek.ts`.
-- **Topbar suave**: `color-mix(in srgb, var(--il-nav) ~12%, #fff)` — acompanha só o nav; sem cor de botão embutida.
+## 4. Geometria, tipografia, motion e responsividade
 
-## 5 · Aparência (Configurações)
+- Dentro de `.il-platform`, usar os tokens de radius e espaçamento do workspace; regras globais legadas ficam fora do escopo para não alterar páginas públicas.
+- Tipografia do workspace permanece fixa (Geist Sans e escala já carregada pelo produto); preset não muda fonte, peso ou escala. Evitar tamanho/cor avulsa sem função de hierarquia.
+- Motion curto e calmo, sem bounce; `prefers-reduced-motion` reduz/anula movimento. Hover/press/focus precisam de estado equivalente em teclado.
+- Desktop de referência: **1440 px e 1366 px**. Mobile de referência: **390 px** (e conferir breakpoint menor quando houver overflow relevante). Conteúdo denso usa o Page Architecture; formulários mantêm largura contida do arquétipo `form`.
+- Em mobile: sidebar vira o diálogo/drawer já existente, ações não podem ser cortadas, tabelas devem ter estratégia de overflow/colunas, sheets não podem ultrapassar viewport e o conteúdo não pode gerar rolagem horizontal global.
+- Contraste, foco visível, teclado, `aria-current`, `aria-expanded`, rótulos acessíveis e `prefers-reduced-motion` são requisitos de aceitação, não polimento opcional.
 
-- Seletor por **famílias** com **preview ao vivo** (sidebar + topo suave + CTA tema + texto near-black) e selo de contraste AA.
-- Preferência **pessoal/local** (`godoutor.nav-accent`); evento `godoutor:nav-accent`; não mexe na página pública; identidade da clínica = logo + nome.
-- Testids travados: `shell-appearance`, `nav-accent-preview`, `aria-label="Cor da navegação"`, `nav-accent-<id>`.
+### Page Architecture — arquétipos oficiais
 
-## 6 · Permissões (matrizes preservadas)
+`PANEL_ROUTES.pageType` é obrigatório e alimenta o `PageFrame` do shell. Nova rota autenticada do workspace deve declarar exatamente um arquétipo e ter teste de contrato; não usar width opcional, condição de página em página ou exceção Tailwind para escolher geometria. Rotas filhas devem declarar a classe de detalhe no resolver (por exemplo `/clientes/[id]`).
 
-| Papel | Permissões |
-|---|---|
-| **OWNER** | todas |
-| **SECRETARIA** | dashboard, agenda, clientes, leads, pedidos, whatsapp |
-| **ATENDENTE** | dashboard, agenda, clientes, whatsapp |
-| **PROFISSIONAL** | dashboard, agenda, clientes, **atendimento** (evolução clínica) |
+| Arquétipo | Largura máxima | Gutter / uso oficial |
+|---|---:|---|
+| `workspace` | sem limite | Conteúdo operacional denso em largura disponível: agenda, conversas, tabelas, kanban e resultados. Não estreitar Agenda/Conversas. |
+| `record` | `80rem` (1280px) | Um registro de operação, mantendo área útil para formulário clínico, histórico e ações; `/atendimento` preserva o layout de registro já existente. |
+| `detail` | `90rem` (1440px) | Ficha 360, com navegação de retorno e módulos relacionados; `/clientes/[id]` herda permissão de Clientes, mas recebe este frame. |
+| `form` | `60rem` (960px) | Dados de leitura/edição centralizados: Perfil, Configurações e Assistente. |
+| `hub` | `80rem` (1280px) | Administração estrutural expansível em seções e listas: Estrutura, Equipe, Serviços, Profissionais, Disponibilidade e capacidades. |
 
-- **NUNCA** conceder `atendimento` à Secretária.
-- Menu = **projeção** das permissões efetivas (`panelNavigation`/`visiblePanelRoutes`) — nada de menu decorativo.
-- Ações visíveis respeitam a permissão: **esconder** ou `disabled` + tooltip explicando (§10).
-- Área permitida NUNCA mostra "você não tem permissão" (§8–9): request 403 secundária vira feature indisponível (`report`/`reportFeature` em `lib/client-auth`), nunca negação da área.
+O `PageFrame` fixa `width`, `min-width`, centralização, padding e gutters através de tokens CSS (`--page-width-*`, `--page-gutter-*`). Seu tipo é o único seletor de max-width. `flush` só é permitido para manter a composição já homologada de Agenda e Conversas: essas telas operacionais mantêm gutter próprio e nunca recebem o frame estreito de formulário. A rota `/pagina` é `workspace` pela necessidade técnica de suas três colunas, mas editor/renderer legado permanece fora de redesign. `/alterar-senha` é uma tela autenticada `form` em rota independente; console `/master/*` conserva shell administrativo próprio (`max-w-7xl`) e não é módulo do `DashboardShell`; aliases `/admin/*` redirecionam para esse console. Essas fronteiras devem ser registradas como exceções, sem alterar autenticação.
 
-## 7 · Overlays (dialog × sheet)
+Unidades estruturais reutilizáveis: `PageFrame` contém o frame; `PageHeader` identifica página e ação principal; `Toolbar` agrupa filtros/controles operacionais; `SectionHeader` nomeia subseções; `FormSection` agrupa campos; `ActionBar` concentra submissão/ações finais. Prefira esses componentes e tokens a wrappers/margens independentes. Em formulários, ação **Primary** é a submissão principal; **Secondary** altera contexto ou navega; **Ghost** é auxiliar; **Destructive** remove/cancela. Não igualar as intenções visualmente.
 
-| Padrão | Uso |
-|---|---|
-| **Dialog** (Card central, ~520–680px) | ação focal curta (Pedido comprovante, Editar equipe…) |
-| **Sheet** (Drawer lateral) | edição extensa (Novo cliente, Novo agendamento…) |
+Role de acesso e cargo/função profissional são dados separados: role usa os rótulos oficiais (`roleLabel`/`Badge`); cargo permanece identidade profissional. Perfil preserva User → Professional como vínculo, sem unir entidades nem duplicar autenticação.
 
-- **UM `dialog` = UM backdrop** (nunca empilhados).
-- **Novo agendamento + cadastro rápido = MESMO overlay que expande** (base 680–760px → 1000–1120px; lado recuado atenuado `--recessed`, × fecha o lado). Mobile: passos num overlay só.
-- Após salvar o cadastro rápido: volta ao painel com o **paciente selecionado** e os dados do agendamento preservados.
-- Animações: entrada 180–220ms / saída 150–200ms + `prefers-reduced-motion`.
-- Sem `EditSection` genérico nos 3 lugares-critérios — editores customizados mantidos.
+## 5. Arquitetura e fronteira de migração
 
-## 8 · Identidade de conversa (Conversas ↔ Clientes)
+- Fonte ativa de presets: `src/lib/nav-accent.ts`. Compatibilidade antiga: `src/lib/appearance.ts`. Não ressuscitar `Business.appearance.navColor` nem criar um terceiro tema.
+- Primitivas compartilhadas existentes vivem em `src/components/ui.tsx`; devem ser reutilizadas, não recriadas por página.
+- Tokens do workspace e correções de compatibilidade devem ser escopados em `.il-platform` sempre que necessário. Não mudar `:root` para reestilizar sem querer a página pública ou o editor legado.
+- Preservar funcionalidade homologada, requisições, ações, dados, regras, rotas e permissões. Uma migração visual não muda fluxo nem remove controles.
+- Página pública, booking e renderer/page-builder legado ficam fora do redesign. Testes devem assegurar que não foram afetados por seletores globais.
 
-- Canônico em `lib/conversation-identity.ts`: `contactId ↔ customerId ↔ telefone normalizado ↔ BusinessCustomer` (função única — nunca paralela).
-- Pessoa desconhecida/spam **nunca** vira cliente automaticamente: badge **"Contato novo"** + CTA **"Cadastrar cliente"** (ou "Enviar para oportunidades").
-- Reconciliação legada (`reconcileConversations` + `POST /api/conversations/reconcile`) é idempotente e roda no servidor; **nunca há escrita em leitura** no cliente.
-- "Voltar para clientes" preserva busca/filtro/página (`lib/client-return.ts`).
-- "Registrar nota"/"Editar dados" = `scrollIntoView` + foco + highlight ~1.8s (`lib/focus-highlight.ts`).
+## 6. Critério de conclusão
 
-## 9 · Foco, hover, press, ativo, carregando, vazio, erro, sucesso
+A revisão só pode ser declarada concluída depois de: (1) auditoria de fonte por rota e segunda varredura; (2) testes de tokens, contraste e persistência para os 21 presets; (3) inspeção real em browser/render de cada rota autenticada em 1440/1366/390; (4) rotas críticas em Deep Blue, verde, neutro e vinho, com reload F5 confirmando persistência; (5) reabertura das telas críticas e registro de capturas; (6) execução da suíte completa com separação explícita do baseline conhecido de cinco falhas preexistentes. Teste de JSX/CSS não substitui inspeção visual.
 
-Sempre os tokens acima; estados de loading nunca dependem só de cor; erros de request nunca são silenciosos nem transformados em permissão negada.
-
-## 10 · Mobile
-
-- Ações em overflow "Mais opções"; peek e popovers desativados ≤768px (tooltip simples).
-- Sheets em página própria ou overlay único; sem backdrops empilhados.
-
----
-
-### Testes que travam o contrato
-
-`m8-contrato-cor` (9 travas + 6 paletas) · `m8-permissoes` (matrizes + projeção do menu) · `m8-sidebar-peek` (7 cenários + 2 bônus) · `m8-falso-403` (20) · `m8-identidade` (10) · `m8-cliente360` (3) · `m8-agendamento` (4) · `missao7-visual` / `missao6-shell` (tema/acento).
+O estado, a matriz de rotas, os artefatos e as pendências ficam em [`GODOUTOR-UI-AUDIT-V2.md`](./GODOUTOR-UI-AUDIT-V2.md). As auditorias históricas DESIGN-360 não são reescritas por esta revisão.

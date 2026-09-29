@@ -11,7 +11,7 @@
 //   • nascimento <18 (humano) → Responsável legal (contato vinculado,
 //     aditivo em profile.guardian — nunca um "segundo paciente").
 // ═══════════════════════════════════════════════════════════════
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { apiSend } from '@/lib/api-client';
 import { onlyDigits } from '@/lib/utils';
 import { emailError, normalizeEmail, phoneError } from '@/lib/field-quality';
@@ -21,6 +21,7 @@ import { WorkspaceSheet } from '@/components/dashboard/WorkspaceSheet';
 import { Icon } from '@/components/icons';
 import { Button, Field, Input, Notice, Select, Textarea } from '@/components/ui';
 import { PET_SPECIES, PET_SPECIES_LABELS, breedSuggestions, validatePet } from '@/lib/pets';
+import { useOverlayDismissGuard } from './OverlayDismissGuard';
 import type { Pet } from '@/lib/types';
 
 interface SavedContact {
@@ -53,6 +54,7 @@ export function NewClientForm({
   title,
   /** Painel lateral do overlay expansível (§19–25): traz o próprio rodapé. */
   embedded = false,
+  onPersistenceChange,
 }: {
   businessId: string;
   onClose: () => void;
@@ -63,6 +65,7 @@ export function NewClientForm({
   initialPhone?: string;
   title?: string;
   embedded?: boolean;
+  onPersistenceChange?: (state: { dirty: boolean; saving: boolean; error: string }) => void;
 }) {
   const [name, setName] = useState(initialName);
   const [phone, setPhone] = useState(initialPhone);
@@ -86,6 +89,17 @@ export function NewClientForm({
   // ligado: tutor + pet é o fluxo mínimo do segmento (CTA "Salvar tutor e pet").
   const [petOn, setPetOn] = useState(vetMode && embedded);
   const [pet, setPet] = useState({ name: '', species: 'cachorro', breed: '', sex: '', birthDate: '', weightKg: '' as string | number, notes: '' });
+  const initialSnapshot = useRef(JSON.stringify({
+    name: initialName, phone: initialPhone, email: '', note: '', birthDate: '', marketingOptIn: false, createAccess: false,
+    guardian: { name: '', relationship: '', phone: '', email: '', cpf: '' }, petOn: vetMode && embedded,
+    pet: { name: '', species: 'cachorro', breed: '', sex: '', birthDate: '', weightKg: '', notes: '' },
+  }));
+  const currentSnapshot = JSON.stringify({ name, phone, email, note, birthDate, marketingOptIn, createAccess, guardian, petOn, pet });
+  const dirty = !saved && currentSnapshot !== initialSnapshot.current;
+  const closeGuard = useOverlayDismissGuard();
+  const dismissState = { dirty, saving, error, context: 'new-client' as const };
+  const requestFormClose = () => closeGuard.requestClose('close-button', dismissState, onClose);
+  useEffect(() => { onPersistenceChange?.({ dirty, saving, error }); }, [dirty, saving, error, onPersistenceChange]);
 
   useEffect(() => {
     if (initialName && !name) setName(initialName);
@@ -207,9 +221,9 @@ export function NewClientForm({
             </div>
           ) : null}
           <div className="flex flex-wrap gap-2 pt-1">
-            <Button type="button" variant="primary" className="flex-1 min-w-[110px]" onClick={onClose}>Voltar</Button>
+            <Button type="button" variant="primary" className="flex-1 min-w-[110px]" onClick={requestFormClose}>Voltar</Button>
             {onView360 && (
-              <button type="button" onClick={() => { onView360(); onClose(); }} className="flex-1 min-w-[140px] rounded-lg border border-zinc-300 bg-white px-3 py-2.5 text-sm font-semibold text-zinc-800">Ver Cliente 360</button>
+              <button type="button" onClick={() => closeGuard.requestClose('navigation', dismissState, () => { onView360(); onClose(); })} className="flex-1 min-w-[140px] rounded-lg border border-zinc-300 bg-white px-3 py-2.5 text-sm font-semibold text-zinc-800">Ver Cliente 360</button>
             )}
           </div>
         </div>
@@ -266,10 +280,10 @@ export function NewClientForm({
 
           {/* ── Veterinária: Paciente (pet) na MESMA experiência ── */}
           {vetMode && (
-            <section data-testid="vet-pet-section" className="rounded-xl border border-[var(--sun-border)] bg-[var(--sun-bg)] p-4 space-y-3">
+            <section data-testid="vet-pet-section" className="rounded-md border border-[var(--border)] bg-[var(--surface)] p-4 space-y-3">
               {/* MISSÃO 5 — o PET é o paciente: bloco creme protagonista. */}
               <div className="flex items-center justify-between gap-2">
-                <p className="inline-flex items-center gap-1.5 text-xs font-semibold uppercase tracking-[0.06em] text-[var(--sun-fg)]">
+                <p className="inline-flex items-center gap-1.5 text-xs font-semibold uppercase tracking-[0.06em] text-[var(--text)]">
                   <Icon n="paw" size={14} /> Paciente (pet)
                 </p>
                 <label className="flex items-center gap-2 text-xs font-semibold text-[var(--text)] cursor-pointer">
@@ -317,7 +331,7 @@ export function NewClientForm({
 
           <label className="flex items-start gap-3 rounded-xl border border-[var(--border)] px-3.5 py-3 cursor-pointer transition-colors hover:border-[var(--brand-border)] hover:bg-[var(--brand-soft)]">
             <input type="checkbox" checked={createAccess} onChange={(e) => setCreateAccess(e.target.checked)} className="il-check mt-0.5" />
-            <span><span className="block text-sm font-semibold text-[var(--text)]">Criar acesso à página</span><span className="block text-xs text-[var(--text-muted)] mt-0.5">Vincula uma conta Customer sem duplicar a identidade e gera uma senha temporária segura.</span></span>
+            <span><span className="block text-sm font-semibold text-[var(--text)]">Criar acesso do cliente</span><span className="block text-xs text-[var(--text-muted)] mt-0.5">Cria ou vincula a conta usada pelo cliente para acessar consultas e pedidos. Uma senha temporária é exibida somente quando uma nova credencial é criada.</span></span>
           </label>
 
           {error && <Notice tone="error">{error}</Notice>}
@@ -327,7 +341,7 @@ export function NewClientForm({
   );
   const actions = (
     <div className="flex w-full gap-2 justify-end">
-      <Button variant="secondary" onClick={onClose} disabled={saving}>Cancelar</Button>
+      <Button variant="secondary" onClick={requestFormClose} disabled={saving}>Cancelar</Button>
       <Button variant="primary" onClick={save} disabled={saving}>{primaryLabel}</Button>
     </div>
   );
@@ -336,16 +350,20 @@ export function NewClientForm({
   // dialog que já está aberto. Nenhum segundo modal/backdrop é criado.
   if (embedded) {
     return (
-      <div className="flex flex-col min-h-0">
-        <div className="flex-1 min-h-0">{body}</div>
-        {!saved && <footer className="il-actionbar shrink-0 px-4 py-3 flex flex-wrap items-center justify-end gap-2">{actions}</footer>}
-      </div>
+      <>
+        <div className="flex flex-col min-h-0">
+          <div className="flex-1 min-h-0">{body}</div>
+          {!saved && <footer className="il-actionbar shrink-0 px-4 py-3 flex flex-wrap items-center justify-end gap-2">{actions}</footer>}
+        </div>
+        {closeGuard.dialog}
+      </>
     );
   }
   return (
     <WorkspaceSheet
       open
       onClose={() => { if (!saving) onClose(); }}
+      dismissGuard={dismissState}
       title={title || (vetMode ? 'Cadastrar tutor e paciente' : 'Novo cliente')}
       subtitle={saved
         ? 'Cadastro salvo na base de clientes.'
@@ -357,6 +375,7 @@ export function NewClientForm({
       footer={!saved ? actions : undefined}
     >
       {body}
+      {closeGuard.dialog}
     </WorkspaceSheet>
   );
 }

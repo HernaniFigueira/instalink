@@ -14,6 +14,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { Icon } from '@/components/icons';
+import { ViewportPopover } from './ViewportPopover';
 import { mayLeaveEditor } from './useUnsavedChanges';
 import { buildWorkspaceAlerts, bellLabel, type AlertsSource, type WorkspaceAlerts } from '@/lib/workspace-alerts';
 import { loadOverview } from '@/lib/overview';
@@ -73,13 +74,16 @@ export function useWorkspaceAlerts(businessId: string, unitQuery: string): Works
 export function NotificationsBell({ alerts }: { alerts: WorkspaceAlerts }) {
   const router = useRouter();
   const [open, setOpen] = useState(false);
+  const [anchor, setAnchor] = useState<HTMLElement | null>(null);
   const boxRef = useRef<HTMLDivElement | null>(null);
+  const panelRef = useRef<HTMLDivElement | null>(null);
   const buttonRef = useRef<HTMLButtonElement | null>(null);
 
   useEffect(() => {
     if (!open) return;
     function onDown(e: MouseEvent) {
-      if (!boxRef.current?.contains(e.target as Node)) setOpen(false);
+      const target = e.target as Node;
+      if (!boxRef.current?.contains(target) && !panelRef.current?.contains(target)) setOpen(false);
     }
     function onKey(e: KeyboardEvent) {
       if (e.key === 'Escape') { setOpen(false); buttonRef.current?.focus(); }
@@ -109,7 +113,10 @@ export function NotificationsBell({ alerts }: { alerts: WorkspaceAlerts }) {
         aria-expanded={open}
         aria-haspopup="dialog"
         title={bellLabel(alerts)}
-        onClick={() => setOpen((v) => !v)}
+        onClick={(event) => {
+          if (open) setOpen(false);
+          else { setAnchor(event.currentTarget); setOpen(true); }
+        }}
       >
         <Icon n="bell" size={18} />
         {/* Badge só com contador REAL de FALHAS. Sem fonte ⇒ sem badge. */}
@@ -120,8 +127,14 @@ export function NotificationsBell({ alerts }: { alerts: WorkspaceAlerts }) {
         )}
       </button>
 
-      {open && (
-        <div className="ws-popover ws-bell__panel" role="dialog" aria-label="Notificações">
+      <ViewportPopover
+        open={open}
+        anchor={anchor}
+        className="ws-popover ws-bell__panel"
+        role="dialog"
+        ariaLabel="Notificações"
+        panelRef={panelRef}
+      >
           <header className="ws-popover__header">
             <h2>Pendências</h2>
             {alerts.status === 'ready' && alerts.total > 0 && (
@@ -184,8 +197,7 @@ export function NotificationsBell({ alerts }: { alerts: WorkspaceAlerts }) {
               ))}
             </div>
           )}
-        </div>
-      )}
+      </ViewportPopover>
     </div>
   );
 }

@@ -34,6 +34,7 @@ import Link from 'next/link';
 import { useWorkspace } from '@/components/dashboard/WorkspaceContext';
 import { Button, DashboardSkeleton, EmptyState, PageSkeleton, StatusBadge } from '@/components/ui';
 import { Icon } from '@/components/icons';
+import { isLegacyPagesEnabled } from '@/lib/product';
 import { cn } from '@/lib/utils';
 import { AccessDenied, PermissionNotice, useForbiddenNotice } from '@/components/dashboard/AccessNotice';
 import { usePanelPermissions } from '@/components/dashboard/usePanelPermissions';
@@ -42,7 +43,7 @@ import { loadOverview } from '@/lib/overview';
 import { firstName } from '@/lib/greeting';
 import { apiGet } from '@/lib/api-client';
 import { money } from '@/lib/utils';
-import { humanDay } from '@/lib/tz';
+import { formatDateTimeBR, humanDay } from '@/lib/tz';
 import { NO_DATA_MESSAGE, type RevenueResult } from '@/lib/revenue';
 import { periodLabel } from '@/lib/periods';
 import { ComparisonBadge } from '@/components/dashboard/results-view';
@@ -236,7 +237,7 @@ export default function DashboardPage() {
   // Missão 7 — série da página (linha do card Presença online). Quem não tem
   // permissão financeira recebe 403: o gráfico simplesmente não aparece.
   useEffect(() => {
-    if (!businessId || !data?.showMoney) return;
+    if (!businessId || !data?.showMoney || !isLegacyPagesEnabled()) return;
     let cancelled = false;
     apiGet<{ days?: Array<{ day: string; label: string; visitors: number }> }>(
       `/api/analytics?businessId=${businessId}&period=${period}`,
@@ -307,6 +308,17 @@ export default function DashboardPage() {
   if (!data) return <DashboardSkeleton />;
 
   const { user, business, totals, upcoming, checklist, pct, recent, today, crm, pageStats, whatsapp, ordersPanel, productsPanel, context } = data;
+  const legacyPagesEnabled = isLegacyPagesEnabled();
+  const operationalChecklist = legacyPagesEnabled
+    ? checklist
+    : checklist
+      .filter((item) => item.href.split('?')[0] !== '/pagina')
+      .map((item) => item.id === 'products' ? { ...item, label: 'Revise dados legados de produtos' } : item);
+  const operationalSetupPct = legacyPagesEnabled
+    ? pct
+    : operationalChecklist.length
+      ? Math.round((operationalChecklist.filter((item) => item.done).length / operationalChecklist.length) * 100)
+      : 100;
   const modules = context.modules;
   const results = data.results;
   const showMoney = data.showMoney === true;
@@ -341,8 +353,7 @@ export default function DashboardPage() {
   const attention = data.attention || [];
   const links = data.links || {};
   const q = `?b=${business.id}`;
-  const doneCount = checklist.filter((c) => c.done).length;
-  const hasSetupPending = (data.pendingSetup ?? checklist.filter((c) => !c.done).length) > 0;
+  const hasSetupPending = operationalChecklist.some((c) => !c.done);
   const hasActivity = recent.orders.length + recent.bookings.length + recent.leads.length > 0;
   const canalConnected = whatsapp?.status === 'connected';
   const orderDef = (s: string): StatusDef => (ORDER_STATUS as Record<string, StatusDef>)[s] || { panel: s, tone: 'zinc' } as StatusDef;
@@ -380,7 +391,7 @@ export default function DashboardPage() {
           <span className="w-8 h-8 rounded-md bg-white text-[var(--brand-fg)] flex items-center justify-center shrink-0"><Icon n="checkCircle" size={18} /></span>
           <div>
             <p className="text-sm font-semibold text-[var(--text)]">{business.name} está criado, {firstName(user.name)}!</p>
-            <p className="text-xs text-[var(--text-muted)] mt-0.5">Agenda, serviços e página já estão ativos. Siga o “Comece por aqui” abaixo — ou ignore e use o que precisa primeiro.</p>
+            <p className="text-xs text-[var(--text-muted)] mt-0.5">{legacyPagesEnabled ? 'Agenda, serviços e página já estão ativos.' : 'Agenda e serviços já estão ativos.'} Siga o “Comece por aqui” abaixo — ou ignore e use o que precisa primeiro.</p>
           </div>
         </div>
       )}
@@ -495,14 +506,14 @@ export default function DashboardPage() {
             <>
               <div className="dsh-card__head">
                 <h3 className="dsh-card__title">Sua clínica está pronta?</h3>
-                <span className="text-[12px] font-semibold text-[var(--brand-fg)]">{pct}%</span>
+                <span className="text-[12px] font-semibold text-[var(--brand-fg)]">{operationalSetupPct}%</span>
               </div>
               <div className="dsh-card__body">
-                <div className="h-2 rounded-full bg-[var(--surface-3)] overflow-hidden mb-3" role="progressbar" aria-valuenow={pct} aria-valuemin={0} aria-valuemax={100}>
-                  <div className="h-full rounded-full bg-[var(--brand)] transition-all" style={{ width: `${pct}%` }} />
+                <div className="h-2 rounded-full bg-[var(--surface-3)] overflow-hidden mb-3" role="progressbar" aria-valuenow={operationalSetupPct} aria-valuemin={0} aria-valuemax={100}>
+                  <div className="h-full rounded-full bg-[var(--brand)] transition-all" style={{ width: `${operationalSetupPct}%` }} />
                 </div>
                 <div className="space-y-2">
-                  {checklist.map((c) => (
+                  {operationalChecklist.map((c) => (
                     c.done ? (
                       <div key={c.label} className="dsh-check">
                         <span className="dsh-check__mark dsh-check__mark--done" aria-hidden="true"><Icon n="check" size={12} /></span>
@@ -549,12 +560,12 @@ export default function DashboardPage() {
             </>
           )}
         </section>
-        ) : (
+        ) : legacyPagesEnabled ? (
         <section className="lg:col-span-5 dsh-card min-w-0">
           <>
               <div className="dsh-card__head">
                 <h3 className="dsh-card__title">Presença online</h3>
-                {links.pagina === true && <Link href={`/pagina${q}`} className="text-[12px] font-semibold text-[var(--brand-fg)] hover:underline">Editar página →</Link>}
+                {legacyPagesEnabled && links.pagina === true && <Link href={`/pagina${q}`} className="text-[12px] font-semibold text-[var(--brand-fg)] hover:underline">Editar página →</Link>}
               </div>
               <div className="dsh-card__body">
                 {pageStats ? (
@@ -578,7 +589,7 @@ export default function DashboardPage() {
               </div>
           </>
         </section>
-        )}
+        ) : null}
 
         {showMoney ? (
         <section className={cn('dsh-card min-w-0', hasWhereToAct ? 'lg:col-span-7' : 'lg:col-span-12')}>
@@ -621,7 +632,7 @@ export default function DashboardPage() {
 
             {/* Missão 7 — o espaço vazio do resumo ganha a linha de tendência
                 (visitas à página por dia, série real do /api/analytics). */}
-            {trend.length >= 2 && (
+            {legacyPagesEnabled && trend.length >= 2 && (
               <div className="mt-3">
                 <p className="text-[11px] font-semibold uppercase tracking-wider text-[var(--text-faint)] mb-1">Presença online · visitas por dia</p>
                 <MiniTrendChart points={trend.map((t) => t.visitors)} labels={trend.map((t) => t.label)} />
@@ -726,11 +737,14 @@ export default function DashboardPage() {
                 <div className="space-y-1.5">
                   {upcoming.slice(0, 5).map((b) => (
                     <ListRow key={b.id} allowed={links.agenda === true} href={`/agenda${q}&data=${b.date}`}
-                      className="flex items-center gap-2.5 rounded-lg border border-[var(--border-soft)] px-2.5 py-2 text-[12.5px]"
+                      className="flex flex-col items-stretch gap-1.5 rounded-lg border border-[var(--border-soft)] px-2.5 py-2 text-[12.5px]"
                       style={{ borderLeft: `3px solid ${STATUS_BAR[b.status] || 'var(--border-strong)'}` }}>
-                      <span className="text-[11px] font-semibold text-[var(--text-muted)] w-16 shrink-0 tabular-nums">{humanDay(b.date)} {b.time}</span>
-                      <span className="flex-1 min-w-0 truncate font-semibold text-[var(--text)]">{b.customerName} <span className="font-normal text-[var(--text-muted)]">· {b.service}</span></span>
-                      <StatusBadge tone={b.status === 'confirmed' ? 'emerald' : b.status === 'pending' ? 'orange' : 'blue'}>{bookDef(b.status).panel}</StatusBadge>
+                      <strong className="min-w-0 font-semibold leading-snug text-[var(--text)] break-words">{b.customerName}</strong>
+                      <span className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1 text-[11.5px] leading-snug text-[var(--text-muted)]">
+                        <span className="shrink-0 tabular-nums">{humanDay(b.date)} {b.time}</span>
+                        {b.service && <span className="min-w-0 break-words">{b.service}</span>}
+                        <span className="inline-flex shrink-0"><StatusBadge tone={b.status === 'confirmed' ? 'emerald' : b.status === 'pending' ? 'orange' : 'blue'}>{bookDef(b.status).panel}</StatusBadge></span>
+                      </span>
                     </ListRow>
                   ))}
                 </div>
@@ -766,7 +780,7 @@ export default function DashboardPage() {
             {whatsapp ? (
               <ListRow allowed={links.conversas === true} href={`/conversas${q}`}
                 className="flex items-center gap-2.5 rounded-lg border border-[var(--border-soft)] px-2.5 py-2 text-[12.5px]">
-                <span className="dsh-kpi__icon !w-7 !h-7" style={{ background: 'var(--cyan-bg)', color: 'var(--cyan-fg)' }}><Icon n="chat" size={15} /></span>
+                <span className="dsh-kpi__icon !w-7 !h-7" style={{ background: 'var(--accent-soft)', color: 'var(--accent)' }}><Icon n="chat" size={15} /></span>
                 <span className="flex-1 font-semibold text-[var(--text)]">Conversas não lidas</span>
                 <span className="text-[13px] font-semibold tabular-nums text-[var(--text)]">{whatsapp.unread}</span>
               </ListRow>
@@ -800,7 +814,7 @@ export default function DashboardPage() {
                       className="flex items-center gap-2.5 rounded-lg border border-[var(--border-soft)] px-2.5 py-2 text-[12.5px]">
                       <span className="w-4 h-4 rounded border-2 shrink-0" style={{ borderColor: tone }} aria-hidden="true" />
                       <span className="flex-1 min-w-0 truncate font-semibold text-[var(--text)]">{t.title}</span>
-                      <span className="text-[10.5px] font-semibold" style={{ color: lbl === 'atrasada' ? 'var(--danger-fg)' : lbl === 'hoje' ? 'var(--warning-fg)' : 'var(--text-faint)' }}>{lbl}</span>
+                      <span className="shrink-0 text-[10.5px] font-semibold tabular-nums" aria-label={lbl === 'atrasada' ? `Atrasada: ${formatDateTimeBR(t.dueAt)}` : formatDateTimeBR(t.dueAt)} style={{ color: lbl === 'atrasada' ? 'var(--danger-fg)' : lbl === 'hoje' ? 'var(--warning-fg)' : 'var(--text-faint)' }}>{t.dueAt ? formatDateTimeBR(t.dueAt) : lbl}</span>
                     </ListRow>
                   );
                 })}
@@ -824,7 +838,7 @@ export default function DashboardPage() {
         ];
         const empty = cards.every((c) => !c.value);
         return (
-          <section className="mb-6 rounded-xl border border-[var(--border)] bg-[var(--surface)] p-4">
+          <section className="dashboard-intelligence mb-6 rounded-xl border border-[var(--border)] bg-[var(--surface)] p-4">
             <div className="flex items-center gap-2 mb-1">
               <Icon n="spark" size={14} />
               <h3 className="text-sm font-semibold">GoDoutor Intelligence</h3>
@@ -834,11 +848,11 @@ export default function DashboardPage() {
                 Ainda não há atividade registrada. Quando automações e conversas rodarem, os números aparecem aqui — sem estimativas.
               </p>
             ) : (
-              <ul className="grid grid-cols-2 sm:grid-cols-4 gap-3 mt-2">
+              <ul className="dashboard-intelligence__grid mt-2">
                 {cards.map((c) => (
-                  <li key={c.label} className="rounded-lg bg-[var(--bg)] p-2 border border-[var(--border)]">
+                  <li key={c.label} className="min-w-0 rounded-lg bg-[var(--bg)] p-2 border border-[var(--border)]">
                     <div className="text-lg font-semibold tabular-nums text-[var(--text)]">{c.value || '—'}</div>
-                    <div className="text-[11px] text-[var(--text-muted)]">{c.label}</div>
+                    <div className="text-[11px] leading-snug text-[var(--text-muted)]">{c.label}</div>
                   </li>
                 ))}
               </ul>
@@ -891,37 +905,37 @@ export default function DashboardPage() {
           <div className="grid grid-cols-3 sm:grid-cols-6 gap-2.5">
             {links.agenda === true && (
               <Link href={`/agenda${q}`} className="dsh-quick">
-                <span className="dsh-quick__icon" style={{ background: 'var(--brand-soft)', color: 'var(--brand-fg)' }}><Icon n="calendarPlus" size={18} /></span>
+                <span className="dsh-quick__icon"><Icon n="calendarPlus" size={18} /></span>
                 Novo agendamento
               </Link>
             )}
             {links.clientes === true && (
               <Link href={`/clientes${q}`} className="dsh-quick">
-                <span className="dsh-quick__icon" style={{ background: 'var(--cyan-bg)', color: 'var(--cyan-fg)' }}><Icon n="users" size={18} /></span>
+                <span className="dsh-quick__icon"><Icon n="users" size={18} /></span>
                 Clientes
               </Link>
             )}
-            {links.pagina === true && (
+            {legacyPagesEnabled && links.pagina === true && (
               <Link href={`/pagina${q}`} className="dsh-quick">
-                <span className="dsh-quick__icon" style={{ background: 'var(--brand-soft)', color: 'var(--brand-fg)' }}><Icon n="link" size={18} /></span>
+                <span className="dsh-quick__icon"><Icon n="link" size={18} /></span>
                 Editar página
               </Link>
             )}
             {links.tarefas === true && (
               <Link href={`/tarefas${q}`} className="dsh-quick">
-                <span className="dsh-quick__icon" style={{ background: 'var(--warning-bg)', color: 'var(--warning-fg)' }}><Icon n="tasks" size={18} /></span>
+                <span className="dsh-quick__icon"><Icon n="tasks" size={18} /></span>
                 Tarefas
               </Link>
             )}
             {links.resultados === true && (
               <Link href={`/resultados${q}`} className="dsh-quick">
-                <span className="dsh-quick__icon" style={{ background: 'var(--success-bg)', color: 'var(--success-fg)' }}><Icon n="chart" size={18} /></span>
+                <span className="dsh-quick__icon"><Icon n="chart" size={18} /></span>
                 Resultados
               </Link>
             )}
             {links.canais === true && (
               <Link href={`/canais${q}`} className="dsh-quick">
-                <span className="dsh-quick__icon" style={{ background: 'var(--ops-soft)', color: 'var(--ops-fg)' }}><Icon n="chat" size={18} /></span>
+                <span className="dsh-quick__icon"><Icon n="chat" size={18} /></span>
                 {canalConnected ? 'Canais' : 'Conectar canal'}
               </Link>
             )}

@@ -22,7 +22,7 @@
 //     ser removidas daqui);
 //   • nada aqui altera lead: leads de uma etapa removida são normalizados na
 //     leitura (F3) — o histórico permanece íntegro.
-import { useMemo, useState } from 'react';
+import { useMemo, useRef, useState } from 'react';
 import type { BusinessPipeline, PipelineStage } from '@/lib/types';
 // Módulo PURO (sem node:crypto) — seguro para componente de cliente.
 import { stagesInOrder } from '@/lib/pipeline-stages';
@@ -30,6 +30,7 @@ import { apiSend } from '@/lib/api-client';
 import { Icon } from '@/components/icons';
 import { cn } from '@/lib/utils';
 import { Badge, Button, Drawer } from '@/components/ui';
+import { useOverlayDismissGuard } from '@/components/dashboard/OverlayDismissGuard';
 
 interface StageDraft {
   id: string;
@@ -67,6 +68,15 @@ export function PipelineStagesPanel({ businessId, pipeline, onClose, onSaved }: 
   );
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
+  const initialSnapshot = useRef(JSON.stringify(stages));
+  const dirty = JSON.stringify(stages) !== initialSnapshot.current;
+  const formDismiss = useOverlayDismissGuard();
+  const dismissState = {
+    dirty, saving, context: 'edit' as const,
+    title: 'Descartar alterações das etapas?',
+    description: 'A ordem e os nomes ainda não foram salvos.',
+  };
+  const requestClose = () => formDismiss.requestClose('close-button', dismissState, onClose);
 
   const takenIds = useMemo(() => new Set(stages.map((s) => s.id)), [stages]);
   // A3: etapas estruturais new/scheduled/converted não podem ser removidas; scheduled é de sistema
@@ -125,7 +135,8 @@ export function PipelineStagesPanel({ businessId, pipeline, onClose, onSaved }: 
   }
 
   return (
-    <Drawer open onClose={onClose} title="Etapas das oportunidades" width="max-w-lg">
+    <Drawer open onClose={onClose} dismissGuard={dismissState} title="Etapas das oportunidades" width="max-w-lg">
+      {formDismiss.dialog}
       <div className="p-5 space-y-4">
         <p className="text-sm text-[var(--text-muted)]">Renomeie, reordene, marque etapas finais ou crie novas. As mudanças valem para todas as oportunidades.</p>
         <ol className="space-y-2">
@@ -174,10 +185,9 @@ export function PipelineStagesPanel({ businessId, pipeline, onClose, onSaved }: 
           <Button type="button" variant="primary" className="flex-1" onClick={save} disabled={saving}>
             {saving ? 'Salvando…' : 'Salvar etapas'}
           </Button>
-          <button type="button" onClick={onClose}
-            className="px-4 py-2.5 bg-zinc-100 text-zinc-700 text-xs font-semibold rounded-lg">
+          <Button type="button" variant="secondary" onClick={requestClose}>
             Cancelar
-          </button>
+          </Button>
         </div>
       </div>
     </Drawer>

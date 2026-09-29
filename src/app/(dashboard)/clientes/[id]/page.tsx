@@ -22,8 +22,7 @@ import { useBusinessId } from '@/components/dashboard/useBusinessId';
 import { AccessDenied, AreaLoadError, useAreaLoad } from '@/components/dashboard/AccessNotice';
 import { effectiveHorizonDays } from '@/lib/booking-ops';
 import { clientListReturnHref } from '@/lib/client-return';
-import { Button, Skeleton } from '@/components/ui';
-import { Icon } from '@/components/icons';
+import { Button, PageBackAction, Skeleton } from '@/components/ui';
 
 export default function ClientePerfilPage() {
   const params = useParams<{ id: string }>();
@@ -36,7 +35,7 @@ export default function ClientePerfilPage() {
   // P1.7/§16 — o "Voltar para clientes" devolve a lista COMO ESTAVA: a busca,
   // o filtro e a página viajam na URL da ficha e voltam inteiras. O contrato
   // (fallback seguro incluso) vive em lib/client-return.ts — o mesmo da lista.
-  const listHref = clientListReturnHref(search);
+  const listHref = clientListReturnHref(search.toString(), businessId);
 
   const [person, setPerson] = useState<Person360 | null>(null);
   const [pipeline, setPipeline] = useState<BusinessPipeline | null>(null);
@@ -91,12 +90,7 @@ export default function ClientePerfilPage() {
     setBooking({ cfg: res.data?.business?.booking || null, tz: res.data?.business?.businessTimezone || '' });
   }
 
-  const backLink = (
-    <Link href={listHref}
-      className="-ml-2 inline-flex items-center gap-1.5 h-9 px-2 rounded-md text-[13px] font-semibold text-[var(--text-soft)] hover:bg-[var(--surface-hover)] hover:text-[var(--text)] focus-visible:shadow-focus">
-      <Icon n="chevL" size={14} /> Voltar para clientes
-    </Link>
-  );
+  const backLink = businessId || b ? <PageBackAction href={listHref} label="Voltar para clientes" /> : null;
 
   if (denied) return <AccessDenied area="Clientes" homeHref={b ? `/dashboard?b=${b}` : '/dashboard'} />;
 
@@ -145,6 +139,7 @@ export default function ClientePerfilPage() {
     <>
       <ClientProfileDrawer
         variant="page"
+        pageBackHref={listHref}
         person={person}
         businessId={businessId}
         pipeline={pipeline}

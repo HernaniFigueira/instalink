@@ -12,6 +12,7 @@ import Link from 'next/link';
 import { Badge, Button, Card, Input, Select } from '@/components/ui';
 import { Icon } from '@/components/icons';
 import { apiSend } from '@/lib/api-client';
+import { formatDateTimeBR } from '@/lib/tz';
 
 export interface TaskView {
   id: string; title: string; note: string; status: string; dueAt: string; dueLabel: string;
@@ -21,6 +22,12 @@ export interface TaskView {
 }
 
 export interface TaskSummaryView { open: number; overdue: number; dueToday: number; mine: number }
+
+function formatTaskDue(dueAt: string, dueLabel: string): string {
+  if (!dueAt) return dueLabel || 'Sem prazo';
+  const status = dueLabel.startsWith('atrasada') ? 'Atrasada · ' : dueLabel.startsWith('hoje') ? 'Hoje · ' : '';
+  return `${status}${formatDateTimeBR(dueAt)}`;
+}
 
 // ── tarefas geradas (por automação ou pela equipe) ──────────
 export function TaskPanel({ tasks, summary, businessId, members, onChanged }: {
@@ -58,10 +65,10 @@ export function TaskPanel({ tasks, summary, businessId, members, onChanged }: {
         <span className="inline-flex items-center rounded-pill border border-[var(--border)] bg-[var(--surface-3)] px-2.5 py-1 text-xs font-semibold text-[var(--text)] tabular-nums">
           {summary.open} em aberto
         </span>
-        <span className="inline-flex items-center rounded-pill border border-[var(--warning-border)] bg-[var(--warning-bg)] px-2.5 py-1 text-xs font-semibold text-[var(--warning-fg)] tabular-nums">
+        <span className="inline-flex items-center rounded-pill border border-[var(--danger-border)] bg-[var(--danger-bg)] px-2.5 py-1 text-xs font-semibold text-[var(--danger-fg)] tabular-nums">
           {summary.overdue} atrasada{summary.overdue === 1 ? '' : 's'}
         </span>
-        <span className="inline-flex items-center rounded-pill border border-[var(--sun-border)] bg-[var(--sun-bg)] px-2.5 py-1 text-xs font-semibold text-[var(--sun-fg)] tabular-nums">
+        <span className="inline-flex items-center rounded-pill border border-[var(--border)] bg-[var(--surface-3)] px-2.5 py-1 text-xs font-semibold text-[var(--text-muted)] tabular-nums">
           {summary.dueToday} para hoje
         </span>
         {summary.mine ? (
@@ -98,11 +105,11 @@ export function TaskPanel({ tasks, summary, businessId, members, onChanged }: {
         <Card className="divide-y divide-[var(--border-soft)]">
         {!open.length && !done.length && <p className="p-4 text-sm text-[var(--text-muted)]">Nenhuma tarefa ainda. Automações que “criam tarefa” enchem esta lista.</p>}
         {open.map((t) => (
-          <div key={t.id} className="p-3 flex items-start gap-3">
+          <div key={t.id} className="p-3 flex flex-col items-start gap-3 sm:flex-row">
             <button onClick={async () => { await apiSend('/api/tasks', 'PATCH', { businessId, id: t.id, status: 'done' }); onChanged(); }}
               className="mt-0.5 h-[18px] w-[18px] shrink-0 rounded-md border-[1.5px] border-[var(--border-strong)] bg-white transition-colors hover:border-[var(--brand)] focus-visible:outline-none focus-visible:shadow-focus"
               aria-label={`Concluir tarefa: ${t.title}`} title="Concluir" />
-            <div className="min-w-0 flex-1">
+            <div className="w-full min-w-0 flex-1 sm:w-auto">
               {editingId===t.id ? (
                 <div className="space-y-2">
                   <Input value={editTitle} onChange={(e)=> setEditTitle(e.target.value)} placeholder="Título" />
@@ -124,20 +131,20 @@ export function TaskPanel({ tasks, summary, businessId, members, onChanged }: {
                   <p className="text-sm font-semibold text-[var(--text)] leading-snug">{t.title}</p>
                   {t.note && <p className="text-xs text-[var(--text-muted)] mt-1">{t.note}</p>}
                   <p className="text-[11.5px] text-[var(--text-muted)] mt-1.5 flex flex-wrap gap-x-2 gap-y-1 items-center">
-                    <span>{t.dueLabel}</span>
+                    <span>{formatTaskDue(t.dueAt, t.dueLabel)}</span>
                     {t.assigneeName ? <span>· {t.assigneeName}</span> : null}
                     {t.leadName ? <span>· lead {t.leadName}</span> : null}
                     {t.bookingLabel ? <span>· agendamento {t.bookingLabel}</span> : null}
                     {t.leadId && <Link href={`/funil?b=${businessId}#${t.leadId}`} className="underline text-[var(--brand-fg)] font-semibold">Ver oportunidade</Link>}
-                    {t.bookingId && <Link href={`/agenda?b=${businessId}`} className="underline text-[var(--brand-fg)] font-semibold">Ver agenda</Link>}
+                    {t.bookingId && <Link href={`/agenda?b=${businessId}`} className="inline-flex min-h-8 items-center rounded-sm border border-[var(--border-strong)] bg-[var(--surface)] px-2.5 py-1 font-semibold text-[var(--text)] hover:border-[var(--accent-border)] hover:bg-[var(--surface-hover)] focus-visible:outline-none focus-visible:shadow-focus">Ver agenda</Link>}
                   </p>
                 </>
               )}
             </div>
-            <div className="flex items-center gap-1.5 shrink-0">
+            <div className="flex w-full flex-wrap items-center gap-1.5 sm:w-auto sm:shrink-0 sm:justify-end">
               {t.fromAutomation && <Badge tone="blue">automação</Badge>}
-              {editingId!==t.id && <button onClick={()=>{setEditingId(t.id); setEditTitle(t.title); setEditNote(t.note||''); setEditDueAt(t.dueAt||''); setEditAssignee(t.assignedUserId||'');}} className="rounded-[var(--radius-xs)] border border-[var(--border)] px-2 py-1 text-[11px] font-semibold text-[var(--text-muted)] transition-colors hover:bg-[var(--surface-hover)] hover:text-[var(--text)]">Editar</button>}
-              {editingId!==t.id && <button onClick={async()=>{ if(confirm('Cancelar esta tarefa?')) { await apiSend('/api/tasks','PATCH',{businessId, id:t.id, status:'cancelled'}); onChanged(); } }} className="rounded-[var(--radius-xs)] border border-[var(--border)] px-2 py-1 text-[11px] font-semibold text-[var(--text-muted)] transition-colors hover:bg-[var(--surface-hover)] hover:text-[var(--text)]">Cancelar</button>}
+              {editingId!==t.id && <button onClick={()=>{setEditingId(t.id); setEditTitle(t.title); setEditNote(t.note||''); setEditDueAt(t.dueAt||''); setEditAssignee(t.assignedUserId||'');}} className="inline-flex min-h-11 items-center rounded-[var(--radius-xs)] border border-[var(--border)] px-3 py-1 text-[11px] font-semibold text-[var(--text-muted)] transition-colors hover:bg-[var(--surface-hover)] hover:text-[var(--text)] sm:min-h-0">Editar</button>}
+              {editingId!==t.id && <button onClick={async()=>{ if(confirm('Cancelar esta tarefa?')) { await apiSend('/api/tasks','PATCH',{businessId, id:t.id, status:'cancelled'}); onChanged(); } }} className="inline-flex min-h-11 items-center rounded-[var(--radius-xs)] border border-[var(--border)] px-3 py-1 text-[11px] font-semibold text-[var(--text-muted)] transition-colors hover:bg-[var(--surface-hover)] hover:text-[var(--text)] sm:min-h-0">Cancelar</button>}
             </div>
           </div>
         ))}

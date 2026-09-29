@@ -41,10 +41,10 @@ export function buildClientListReturnQuery(parts: ClientListReturnParts): string
  * Destino de volta para a lista a partir da URL atual da ficha.
  * Sempre `/clientes` + estado preservado; `b` é obrigatório no fallback.
  */
-export function clientListReturnHref(search: URLSearchParams | string): string {
+export function clientListReturnHref(search: URLSearchParams | string, fallbackBusinessId: string): string {
   const params = typeof search === 'string' ? new URLSearchParams(search) : search;
   const qs = buildClientListReturnQuery({
-    b: params.get('b') || '',
+    b: params.get('b') || fallbackBusinessId || '',
     q: params.get('q') || '',
     filter: params.get('filter') || '',
     page: Number(params.get('page') || '') || 1,

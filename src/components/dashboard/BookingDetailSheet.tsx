@@ -18,14 +18,12 @@
 //    histórico/timeline real — nada de fileira de links sem contexto.
 // A lógica de ações e transições é exatamente a mesma do P1.
 import { useEffect, useRef, useState } from 'react';
+import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { Icon } from '@/components/icons';
 import { StatusBadge, Button, buttonCls, type ButtonVariant } from '@/components/ui';
-import { EncounterSheet } from '@/components/dashboard/EncounterSheet';
 import { Pet360Sheet } from '@/components/dashboard/Pet360Sheet';
 import { usePanelPermissions } from '@/components/dashboard/usePanelPermissions';
-import { canReopenEncounter } from '@/lib/encounters';
-import type { FollowUpSeed } from '@/components/dashboard/EncounterSheet';
 import { BOOKING_STATUS } from '@/lib/status';
 import { todayISO, nowHM, formatDateBR, humanDay } from '@/lib/tz';
 import { waLink, cn, money } from '@/lib/utils';
@@ -33,6 +31,8 @@ import { adminBookingMaxDate, bookingActions, bookingDuration, needsClosure, res
 import { SLOT_STATE_MESSAGE } from '@/lib/slot-states';
 import type { Booking } from '@/lib/types';
 import { WorkspaceSheet } from '@/components/dashboard/WorkspaceSheet';
+import { encounterWorkspaceHref } from '@/lib/encounter-workspace';
+import { useOverlayDismissGuard } from './OverlayDismissGuard';
 
 interface ServiceRef { id: string; name: string; durationMin: number; price?: number; questions?: string[] }
 interface ProRef { id: string; name: string }
@@ -50,21 +50,14 @@ const ROW = 'flex items-baseline justify-between gap-3 py-2';
 const ROW_DT = 'text-xs font-medium text-zinc-500 shrink-0';
 const ROW_DD = 'text-sm text-zinc-900 text-right font-medium';
 
-export function BookingDetailSheet({ booking, service, pro, businessId, timezone, onScheduleReturn, onClose, onSaved, onChanged }: {
+export function BookingDetailSheet({ booking, service, pro, businessId, timezone, onClose, onChanged }: {
   booking: Booking;
   service: ServiceRef | undefined;
   pro: ProRef | undefined;
   businessId: string;
   timezone?: string;
-  /** "Agendar retorno" do pós-atendimento: quem abre o agendamento é o pai. */
-  onScheduleReturn?: (info: FollowUpSeed) => void;
   /** Fechamento pedido pelo usuário (ESC/X) — nunca por autosave. */
   onClose: () => void;
-  /**
-   * Save silencioso do atendimento: sincroniza o pai SEM fechar este sheet
-   * nem o EncounterSheet (P0-1).
-   */
-  onSaved?: () => void;
   /**
    * Mudança estrutural (status/check-in/reagendar/finalizar): o pai
    * atualiza dados. Quem fecha é só `onClose` (após ação explícita).
@@ -73,13 +66,14 @@ export function BookingDetailSheet({ booking, service, pro, businessId, timezone
 }) {
   const [acting, setActing] = useState('');
   // A3.4 · Bloco 5 — registro do atendimento: permissão própria + quem reabre.
-  const { permissions, role } = usePanelPermissions();
-  const [encounterOpen, setEncounterOpen] = useState(false);
+  const { permissions } = usePanelPermissions();
+  const router = useRouter();
   // P0-3/P1 — Pet 360 a partir do nome do pet no detalhe.
   const [pet360Open, setPet360Open] = useState(false);
   const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
   const [rescheduling, setRescheduling] = useState(false);
+  const rescheduleDismiss = useOverlayDismissGuard();
   const [confirming, setConfirming] = useState(false);
   const [cancelSeries, setCancelSeries] = useState(false);
   const [serverToday, setServerToday] = useState('');
@@ -99,6 +93,10 @@ export function BookingDetailSheet({ booking, service, pro, businessId, timezone
   const late = needsClosure(booking, dur, today, nowHM(new Date(), timezone || undefined));
   const decision = rescheduleDecision(booking.status);
   const actions = bookingActions(booking.status);
+  const rescheduleDirty = rescheduling && (date !== booking.date || time !== '' || cancelSeries);
+  const dismissReschedule = () => rescheduleDismiss.requestClose('close-button', { dirty: rescheduleDirty, saving: !!acting, context: 'edit' }, () => {
+    setRescheduling(false); setConfirming(false); setCancelSeries(false); setDate(booking.date); setTime(''); setError('');
+  });
   const [h, m] = booking.time.split(':').map(Number);
   const end = h * 60 + m + dur;
   const endHM = `${String(Math.floor(end / 60) % 24).padStart(2, '0')}:${String(end % 60).padStart(2, '0')}`;
@@ -153,8 +151,11 @@ export function BookingDetailSheet({ booking, service, pro, businessId, timezone
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error);
+      // Registrar/desfazer chegada atualiza o agendamento, sem retirar o
+      // detalhe da tela: recepção segue para o próximo passo no mesmo contexto.
       onChanged();
-      onClose();
+      setNotice(undo ? 'Check-in desfeito.' : 'Chegada registrada.');
+      setActing('');
     } catch (e: any) {
       setError(e.message);
       setActing('');
@@ -208,6 +209,7 @@ export function BookingDetailSheet({ booking, service, pro, businessId, timezone
     <WorkspaceSheet
       open
       onClose={onClose}
+      dismissGuard={{ dirty: rescheduleDirty, saving: !!acting, context: 'edit' }}
       title="Detalhe do agendamento"
       icon="calendar"
       width="max-w-[620px]"
@@ -241,36 +243,6 @@ export function BookingDetailSheet({ booking, service, pro, businessId, timezone
             tutorPhone={booking.customerPhone}
           />
         )}
-        {encounterOpen && (
-        <EncounterSheet
-          businessId={businessId}
-          bookingId={booking.id}
-          seed={{
-            customerName: booking.customerName,
-            serviceId: booking.serviceId,
-            professionalId: booking.professionalId,
-            date: booking.date,
-            time: booking.time,
-            customerId: booking.customerId,
-          }}
-          canReopen={canReopenEncounter(role)}
-          onScheduleReturn={onScheduleReturn ? (info: FollowUpSeed) => onScheduleReturn(info) : undefined}
-          onClose={() => setEncounterOpen(false)}
-          onSaved={onSaved}
-          onChanged={onChanged}
-        />
-      )}
-
-      <div className="flex-1 min-h-0 ws-scroll">
-          {/* ── Pendência: passado e ainda aberto (aviso, decisão fica nas ações) ── */}
-          {late && !rescheduling && (
-            <div className="px-4 py-2.5 bg-amber-50/60 border-b border-amber-200/60">
-              <p className="text-xs font-semibold text-amber-900 flex items-center gap-1.5"><Icon n="alert" size={13} /> Este atendimento precisa de fechamento</p>
-              <p className="text-[11px] text-amber-800/80 mt-0.5 leading-snug">
-                O horário já passou e o status continua “{def.panel}”. O GoDoutor não conclui atendimento sozinho — escolha o que aconteceu.
-              </p>
-            </div>
-          )}
 
           {/* ── Ações principais do atendimento (hierarquia, não cor de status) ── */}
           {!rescheduling && (
@@ -288,7 +260,7 @@ export function BookingDetailSheet({ booking, service, pro, businessId, timezone
                 {/* A3.4 · Bloco 4 — chegada do cliente. Fica junto das ações
                     porque é decisão do balcão, e é REVERSÍVEL (engano acontece). */}
                 {permissions.atendimento && (
-                  <Button size="sm" variant="soft" onClick={() => setEncounterOpen(true)} disabled={!!acting}>
+                  <Button size="sm" variant="secondary" onClick={() => router.push(encounterWorkspaceHref({ businessId, bookingId: booking.id, returnTo: `${window.location.pathname}${window.location.search}` }))} disabled={!!acting}>
                     <Icon n="fileText" size={13} /> Atendimento
                   </Button>
                 )}
@@ -298,7 +270,7 @@ export function BookingDetailSheet({ booking, service, pro, businessId, timezone
                     <Icon n="check" size={13} /> Chegou às {checkedInHM}
                   </Button>
                 ) : (
-                  <Button size="sm" variant="soft" onClick={() => checkIn(false)} disabled={!!acting}>
+                  <Button size="sm" variant="secondary" onClick={() => checkIn(false)} disabled={!!acting}>
                     <Icon n="check" size={13} /> {acting === 'checkin' ? 'Registrando…' : 'Registrar chegada'}
                   </Button>
                 )}
@@ -316,7 +288,7 @@ export function BookingDetailSheet({ booking, service, pro, businessId, timezone
             {!cancelSeries ? <Button size="sm" variant="secondary" disabled={!!acting} onClick={() => setCancelSeries(true)}>Cancelar ocorrências futuras da série</Button> : <div className="space-y-2 rounded-md border border-red-200 bg-red-50 p-3">
               <p className="text-xs text-red-900">Cancelar todos os atendimentos futuros ainda pendentes ou confirmados desta série, incluindo este se estiver no futuro? Atendimentos passados e encerrados serão preservados.</p>
               <div className="flex gap-2">
-                <Button size="sm" variant="danger" disabled={!!acting} onClick={() => act('cancelled', { action: 'cancel-series-future' })}>Confirmar cancelamento</Button>
+                <Button size="sm" variant="destructive" disabled={!!acting} onClick={() => act('cancelled', { action: 'cancel-series-future' })}>Confirmar cancelamento</Button>
                 <Button size="sm" variant="secondary" disabled={!!acting} onClick={() => setCancelSeries(false)}>Voltar</Button>
               </div>
             </div>}
@@ -461,7 +433,7 @@ export function BookingDetailSheet({ booking, service, pro, businessId, timezone
                   <Button size="sm" className="flex-1" onClick={() => setConfirming(true)} disabled={!date || !time || !!acting}>
                     Revisar e confirmar
                   </Button>
-                  <Button size="sm" variant="secondary" onClick={() => { setRescheduling(false); setError(''); }}>Cancelar</Button>
+                  <Button size="sm" variant="secondary" onClick={dismissReschedule}>Cancelar</Button>
                 </div>
               )}
             </div>
@@ -496,7 +468,7 @@ export function BookingDetailSheet({ booking, service, pro, businessId, timezone
               )}
             </div>
           )}
-        </div>
+        {rescheduleDismiss.dialog}
         </WorkspaceSheet>
   );
 }

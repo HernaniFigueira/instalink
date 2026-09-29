@@ -17,7 +17,7 @@ describe('WorkspaceSheet · X padrão de fechar (sem linguinha)', () => {
     expect(ws).toContain('ws-sheet__close');
     expect(ws).toContain('aria-label={`Fechar ${title}`}');
     expect(ws).toContain('title="Fechar"');
-    expect(ws).toContain('onClick={close}');
+    expect(ws).toContain("requestClose('close-button')");
     // X fica no header actions (topo à direita), não como aba externa
     expect(ws).toMatch(/ws-sheet__actions[\s\S]*ws-sheet__close/);
   });
@@ -68,7 +68,8 @@ describe('Overlays operacionais usam WorkspaceSheet', () => {
     expect(s).not.toContain('<Drawer');
     expect(s).toContain('Detalhe do agendamento');
     expect(s).toContain('Pet360Sheet');
-    expect(s).toContain('onSaved');
+    expect(s).toContain('encounterWorkspaceHref');
+    expect(s).not.toContain('<EncounterSheet');
   });
 
   it('EncounterSheet migrado de Drawer sem reimplementar lógica', () => {

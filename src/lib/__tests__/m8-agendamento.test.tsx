@@ -4,6 +4,7 @@ import { render, screen, fireEvent, cleanup } from '@testing-library/react';
 import { useState } from 'react';
 import { Drawer } from '@/components/ui';
 import { NewClientForm } from '@/components/dashboard/NewClientSheet';
+import { WORKSPACE_NESTED_PANEL } from '@/lib/workspace-sheet-sizes';
 
 // ═══════════════════════════════════════════════════════════════
 // REGRESSÃO · OVERLAY SYSTEM (§19–25)
@@ -64,7 +65,13 @@ describe('§19–25 · overlay único que expande', () => {
     // lado com o título do cadastro
     expect(screen.getByText('Cadastrar novo paciente')).toBeTruthy();
     const side = document.querySelector('.il-drawer__panel--side')!;
-    expect(side.classList.contains('max-w-[400px]')).toBe(true);
+    // Composição 50/50: base e lado usam o MESMO preset compartilhado (a
+    // simetria é o contrato — nada de base esticado + auxiliar estreito).
+    for (const cls of WORKSPACE_NESTED_PANEL.split(' ')) {
+      expect(side.classList.contains(cls)).toBe(true);
+      expect(base.classList.contains(cls)).toBe(true);
+    }
+    expect(side.classList.contains('max-w-[400px]')).toBe(false);
   });
 
   it('UM backdrop apenas (não há overlay empilhado)', () => {

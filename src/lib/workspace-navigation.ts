@@ -72,7 +72,9 @@ export const WORKSPACE_AREAS: WorkspaceAreaDef[] = [
     // recepção resolve pendências o dia todo). `/perfil` continua fora da
     // linha (menu da conta), mas ter dono evita a rede de segurança "Mais"
     // que fazia o breadcrumb mentir ("Visão geral > Mais > Pendências").
-    routes: ['/dashboard', '/agenda', '/conversas', '/clientes', '/tarefas', '/perfil'],
+    // Atendimento clínico é uma porta contextual da operação, mas sidebar:false
+    // mantém a página fora da linha de navegação.
+    routes: ['/dashboard', '/agenda', '/atendimento', '/conversas', '/clientes', '/tarefas', '/perfil'],
   },
   {
     // Quem a clínica é por dentro: o que oferece, quem atende, quando atende e

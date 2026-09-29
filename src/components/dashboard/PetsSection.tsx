@@ -3,6 +3,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { Icon } from '@/components/icons';
 import { Avatar, Badge, Button, Field, IconButton, Input, Notice, Select, Textarea } from '@/components/ui';
 import { WorkspaceSheet } from '@/components/dashboard/WorkspaceSheet';
+import { useOverlayDismissGuard } from '@/components/dashboard/OverlayDismissGuard';
 import { apiGet, apiSend } from '@/lib/api-client';
 import { PET_SPECIES, PET_SPECIES_LABELS, breedSuggestions, petAge, petLabel, validatePet } from '@/lib/pets';
 import type { Pet } from '@/lib/types';
@@ -14,6 +15,8 @@ import type { Pet } from '@/lib/types';
 const EMPTY_PET: Partial<Pet> = {
   name: '', species: 'cachorro', breed: '', sex: '', birthDate: '', weightKg: 0, notes: '', photo: '',
 };
+const PET_FORM_KEYS: Array<keyof Pet> = ['id', 'name', 'species', 'breed', 'sex', 'birthDate', 'weightKg', 'notes', 'photo'];
+const petFormKey = (pet: Partial<Pet>) => JSON.stringify(PET_FORM_KEYS.map((key) => pet[key] ?? ''));
 
 export function PetsSection({ businessId, tutorId, tutorName, onChanged, onOpenPet }: {
   businessId: string; tutorId: string; tutorName: string; onChanged?: () => void;
@@ -23,6 +26,8 @@ export function PetsSection({ businessId, tutorId, tutorName, onChanged, onOpenP
   const [vet, setVet] = useState<boolean | null>(null); // null = ainda não perguntou
   const [pets, setPets] = useState<Pet[]>([]);
   const [editing, setEditing] = useState<Partial<Pet> | null>(null);
+  const [editingBaseline, setEditingBaseline] = useState<Partial<Pet> | null>(null);
+  const petDismiss = useOverlayDismissGuard();
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
   const [flash, setFlash] = useState('');
@@ -40,6 +45,21 @@ export function PetsSection({ businessId, tutorId, tutorName, onChanged, onOpenP
 
   useEffect(() => { void load(); }, [load]);
 
+  const petDirty = !!editing && !!editingBaseline && petFormKey(editing) !== petFormKey(editingBaseline);
+  const petDismissState = {
+    dirty: petDirty, saving: busy, context: 'edit' as const,
+    title: editing?.id ? 'Descartar alterações do pet?' : 'Descartar cadastro do pet?',
+    description: editing?.id ? 'As alterações feitas no cadastro serão perdidas.' : 'Os dados preenchidos serão perdidos.',
+  };
+  const closePetForm = () => { setEditing(null); setEditingBaseline(null); };
+  const requestPetClose = () => petDismiss.requestClose('close-button', petDismissState, closePetForm);
+  const startPetForm = (pet: Partial<Pet>) => {
+    const initial = { ...pet };
+    setError('');
+    setEditing(initial);
+    setEditingBaseline(initial);
+  };
+
   async function save() {
     if (!editing) return;
     const problem = validatePet(editing);
@@ -52,7 +72,7 @@ export function PetsSection({ businessId, tutorId, tutorName, onChanged, onOpenP
     }, { scope: 'action', area: 'Clientes' });
     setBusy(false);
     if (!res.ok) { setError(res.message || 'Não foi possível salvar o pet.'); return; }
-    setEditing(null);
+    closePetForm();
     setFlash('Pet salvo.');
     void load();
     onChanged?.();
@@ -76,18 +96,18 @@ export function PetsSection({ businessId, tutorId, tutorName, onChanged, onOpenP
   if (!vet) return null;
 
   return (
-    <div className="mt-3 rounded-xl border border-[var(--sun-border)] bg-[var(--sun-bg)] p-4 shadow-xs">
+    <div className="mt-3 rounded-md border border-[var(--border)] bg-[var(--surface)] p-4">
       {/* MISSÃO 5 — o PET é o paciente: bloco creme quente protagonista;
           o tutor (card acima) ficou neutro e discreto. */}
       <div className="flex items-center gap-2.5 min-w-0">
-        <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg border border-[var(--sun-border)] bg-[var(--sun-bg-strong)] text-[var(--sun-fg)]">
+        <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-sm border border-[var(--border)] bg-[var(--surface-3)] text-[var(--accent)]">
           <Icon n="paw" size={18} />
         </span>
         <div className="min-w-0">
           <p className="text-[15.5px] font-semibold text-[var(--text)] leading-tight">
-            Pets de {tutorName || 'tutor'} <span className="text-[var(--sun-fg)] font-normal">· pacientes</span>
+            Pets de {tutorName || 'tutor'} <span className="text-[var(--text-muted)] font-normal">· pacientes</span>
           </p>
-          <p className="text-xs text-[var(--sun-fg)] mt-0.5">
+          <p className="text-xs text-[var(--text-muted)] mt-0.5">
             O pet é o paciente da agenda; {tutorName || 'o tutor'} continua sendo o contato.
           </p>
         </div>
@@ -99,12 +119,12 @@ export function PetsSection({ businessId, tutorId, tutorName, onChanged, onOpenP
       {pets.length === 0 ? (
         <p className="text-xs text-[var(--text-muted)] mt-3">Nenhum pet cadastrado ainda.</p>
       ) : (
-        <ul className="mt-3 space-y-2">
+        <ul className="client360-pets-list mt-3 space-y-2">
           {pets.map((p) => {
             const age = petAge(p.birthDate);
             const chips = [PET_SPECIES_LABELS[p.species] || p.species, p.breed, age !== null ? `${age} ano(s)` : '', p.weightKg ? `${p.weightKg} kg` : ''].filter(Boolean);
             return (
-              <li key={p.id} className="flex items-center gap-3 rounded-xl border border-[var(--sun-border)] bg-white/80 px-3.5 py-3 shadow-xs">
+              <li key={p.id} className="client360-pet-card flex items-center gap-3 rounded-md border border-[var(--border)] bg-[var(--surface)] px-3.5 py-3">
                 <Avatar name={p.name} src={p.photo || undefined} size={44} />
                 <div className="min-w-0 flex-1">
                   <button type="button" className="block max-w-full truncate text-left text-[16px] font-semibold leading-tight text-[var(--text-strong)] hover:underline"
@@ -112,17 +132,17 @@ export function PetsSection({ businessId, tutorId, tutorName, onChanged, onOpenP
                     {p.name}{!p.active && <span className="ml-2 text-[11px] font-semibold text-[var(--text-muted)]">(inativo)</span>}
                   </button>
                   <p className="mt-1.5 flex flex-wrap items-center gap-1.5">
-                    {chips.map((chip, i) => (
-                      <span key={chip} className={`inline-flex items-center rounded-pill px-2 py-0.5 text-[11px] font-semibold ${i === 0 ? 'bg-[var(--sun-fg)] text-white' : 'border border-[var(--sun-border)] bg-[var(--sun-bg-strong)] text-[var(--sun-fg)]'}`}>
+                    {chips.map((chip) => (
+                      <span key={chip} className="inline-flex items-center rounded-pill border border-[var(--border)] bg-[var(--surface-3)] px-2 py-0.5 text-[11px] font-semibold text-[var(--text-muted)]">
                         {chip}
                       </span>
                     ))}
                     {chips.length === 0 && <span className="text-xs text-[var(--text-muted)]">Sem detalhes</span>}
                   </p>
                 </div>
-                {p.sex && <Badge tone="zinc">{p.sex === 'M' ? 'Macho' : 'Fêmea'}</Badge>}
-                <span className="flex items-center gap-1">
-                  <IconButton icon="pencil" label={`Editar ${p.name}`} size="sm" onClick={() => { setError(''); setEditing({ ...p }); }} />
+                {p.sex && <span className="client360-pet-card__sex"><Badge tone="zinc">{p.sex === 'M' ? 'Macho' : 'Fêmea'}</Badge></span>}
+                <span className="client360-pet-card__actions flex items-center gap-1">
+                  <IconButton icon="pencil" label={`Editar ${p.name}`} size="sm" onClick={() => startPetForm(p)} />
                   <IconButton icon="x" label={`Remover ${p.name}`} size="sm" variant="ghost" disabled={busy} onClick={() => { void remove(p); }} />
                 </span>
               </li>
@@ -135,25 +155,27 @@ export function PetsSection({ businessId, tutorId, tutorName, onChanged, onOpenP
           o canto superior direito ficou só para o conteúdo (leitura mais
           natural; hierarquia pet × tutor preservada). */}
       <div className="mt-3.5">
-        <Button size="sm" variant="primary" onClick={() => { setError(''); setEditing({ ...EMPTY_PET }); }}>
+        <Button size="sm" variant="primary" onClick={() => startPetForm(EMPTY_PET)}>
           <Icon n="plus" size={14} /> Cadastrar pet
         </Button>
       </div>
 
       <WorkspaceSheet
         open={!!editing}
-        onClose={() => setEditing(null)}
+        onClose={closePetForm}
+        dismissGuard={petDismissState}
         title={editing?.id ? `Editar ${editing.name || 'pet'}` : 'Novo pet'}
         subtitle={tutorName ? `Paciente de ${tutorName}` : 'Novo paciente (pet)'}
         icon="paw"
         width="max-w-[520px]"
         footer={(
           <div className="flex w-full items-center justify-end gap-2.5">
-            <Button variant="secondary" onClick={() => setEditing(null)} disabled={busy}>Cancelar</Button>
+            <Button variant="secondary" onClick={requestPetClose} disabled={busy}>Cancelar</Button>
             <Button variant="primary" onClick={() => { void save(); }} disabled={busy} className="min-w-[108px]">{busy ? 'Salvando…' : 'Salvar pet'}</Button>
           </div>
         )}
       >
+        {petDismiss.dialog}
         {editing && (
           <div className="p-1 space-y-4">
             <section className="space-y-3 rounded-[var(--radius-md)] border border-[var(--border-soft)] bg-[var(--surface-subtle)] p-3.5">

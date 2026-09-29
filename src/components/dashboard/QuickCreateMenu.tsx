@@ -9,6 +9,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { Icon } from '@/components/icons';
+import { ViewportPopover } from './ViewportPopover';
 
 interface QuickItem {
   href: string;
@@ -58,13 +59,16 @@ export function QuickCreateMenu({ canCreate, businessId, vet = false }: {
   vet?: boolean;
 }) {
   const [open, setOpen] = useState(false);
+  const [anchor, setAnchor] = useState<HTMLElement | null>(null);
   const wrap = useRef<HTMLDivElement>(null);
+  const popover = useRef<HTMLDivElement>(null);
   const router = useRouter();
 
   useEffect(() => {
     if (!open) return;
     const onDown = (e: MouseEvent) => {
-      if (wrap.current && !wrap.current.contains(e.target as Node)) setOpen(false);
+      const target = e.target as Node;
+      if (!wrap.current?.contains(target) && !popover.current?.contains(target)) setOpen(false);
     };
     const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') setOpen(false); };
     document.addEventListener('mousedown', onDown);
@@ -90,36 +94,44 @@ export function QuickCreateMenu({ canCreate, businessId, vet = false }: {
         aria-haspopup="menu"
         aria-expanded={open}
         data-testid="quick-create-btn"
-        onClick={() => setOpen((v) => !v)}
+        onClick={(event) => {
+          if (open) setOpen(false);
+          else { setAnchor(event.currentTarget); setOpen(true); }
+        }}
       >
         <Icon n="plus" size={19} />
       </button>
-      {open && (
-        <div className="ws-pop ws-quickcreate-pop" role="menu" aria-label="Criar rápido">
-          <p className="ws-pop__label">Criar rápido</p>
-          {items.map((i) => (
-            <button
-              key={i.href}
-              type="button"
-              role="menuitem"
-              className="ws-quickcreate-item"
-              data-testid="quick-create-item"
-              onClick={() => {
-                setOpen(false);
-                router.push(i.go(businessId));
-              }}
-            >
-              <span className="ws-quickcreate-item__icon" aria-hidden="true">
-                <Icon n={i.icon} size={16} />
-              </span>
-              <span>
-                <span className="ws-quickcreate-item__title">{i.title}</span>
-                <span className="ws-quickcreate-item__desc">{i.desc}</span>
-              </span>
-            </button>
-          ))}
-        </div>
-      )}
+      <ViewportPopover
+        open={open}
+        anchor={anchor}
+        className="ws-pop ws-quickcreate-pop"
+        role="menu"
+        ariaLabel="Criar rápido"
+        panelRef={popover}
+      >
+        <p className="ws-pop__label">Criar rápido</p>
+        {items.map((i) => (
+          <button
+            key={i.href}
+            type="button"
+            role="menuitem"
+            className="ws-quickcreate-item"
+            data-testid="quick-create-item"
+            onClick={() => {
+              setOpen(false);
+              router.push(i.go(businessId));
+            }}
+          >
+            <span className="ws-quickcreate-item__icon" aria-hidden="true">
+              <Icon n={i.icon} size={16} />
+            </span>
+            <span>
+              <span className="ws-quickcreate-item__title">{i.title}</span>
+              <span className="ws-quickcreate-item__desc">{i.desc}</span>
+            </span>
+          </button>
+        ))}
+      </ViewportPopover>
     </div>
   );
 }

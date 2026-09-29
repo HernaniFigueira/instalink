@@ -17,6 +17,7 @@
 //     paciente, atualizar badge, voltar para o painel com dados preservados).
 import { useEffect, useState } from 'react';
 import { Button, Drawer, Field, Input, Select, Notice } from '@/components/ui';
+import { useOverlayDismissGuard } from '@/components/dashboard/OverlayDismissGuard';
 import { apiSend } from '@/lib/api-client';
 
 export interface QuickRegisterInitial {
@@ -46,6 +47,9 @@ export interface QuickRegisterSheetProps {
   onSaved?: (contact: SavedContact, petName: string) => void | Promise<void>;
 }
 
+type QuickRegisterSnapshot = { name: string; phone: string; email: string; petName: string; petSpecies: string; petBreed: string };
+const quickRegisterKey = (value: QuickRegisterSnapshot) => JSON.stringify(value);
+
 export function QuickRegisterSheet({
   open, onClose, businessId, initial, vet = false, source = 'manual', onSaved,
 }: QuickRegisterSheetProps) {
@@ -57,16 +61,28 @@ export function QuickRegisterSheet({
   const [petBreed, setPetBreed] = useState('');
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
+  const [baseline, setBaseline] = useState('');
+  const dismiss = useOverlayDismissGuard();
+  const currentValues = { name, phone, email, petName, petSpecies, petBreed };
+  const dirty = baseline !== '' && quickRegisterKey(currentValues) !== baseline;
+  const dismissState = {
+    dirty, saving, context: 'new-client' as const,
+    title: 'Descartar cadastro do cliente?',
+    description: 'Os dados preenchidos serão perdidos.',
+  };
+  const requestClose = () => dismiss.requestClose('close-button', dismissState, onClose);
 
   // Pré-preenchimento a cada abertura (a conversa pode mudar).
   useEffect(() => {
     if (!open) return;
-    setName(initial?.name || '');
-    setPhone(initial?.phone || '');
-    setEmail(initial?.email || '');
-    setPetName('');
-    setPetSpecies('cachorro');
-    setPetBreed('');
+    const seed = { name: initial?.name || '', phone: initial?.phone || '', email: initial?.email || '', petName: '', petSpecies: 'cachorro', petBreed: '' };
+    setBaseline(quickRegisterKey(seed));
+    setName(seed.name);
+    setPhone(seed.phone);
+    setEmail(seed.email);
+    setPetName(seed.petName);
+    setPetSpecies(seed.petSpecies);
+    setPetBreed(seed.petBreed);
     setError('');
   }, [open, initial?.name, initial?.phone, initial?.email]);
 
@@ -115,16 +131,18 @@ export function QuickRegisterSheet({
     <Drawer
       open={open}
       onClose={onClose}
+      dismissGuard={dismissState}
       title="Cadastrar cliente"
       subtitle="Nome, telefone e e-mail já bastam para colocar esta pessoa na base."
       width="max-w-[440px]"
       footer={
         <>
-          <Button variant="secondary" onClick={onClose} disabled={saving}>Cancelar</Button>
+          <Button variant="secondary" onClick={requestClose} disabled={saving}>Cancelar</Button>
           <Button onClick={save} disabled={saving}>{saving ? 'Salvando…' : 'Salvar tutor e pet'}</Button>
         </>
       }
     >
+      {dismiss.dialog}
       <div className="p-4 space-y-3">
         {error && <Notice tone="error" title="Não foi possível salvar">{error}</Notice>}
         <Field label="Nome" htmlFor="qr-name">

@@ -8,7 +8,7 @@ import {
   API_GUARDS, FOOTER_SECTIONS, FULL_WIDTH_PATHS, LEGACY_ROUTES, PANEL_ROUTES, PANEL_SECTIONS,
   allowedPanelRoutes, activePanelPath, activePanelRoute, emptyPanelContext, firstAllowedPath,
   hasAnyPermission, hasPermission, isPanelRouteAllowed, isPanelRouteVisible, panelAccess,
-  panelNavigation, panelRouteFor, panelRoutesIn, permissionForPath, permissionsForRoute,
+  panelNavigation, panelRouteFor, panelRoutesIn, pageTypeForPath, permissionForPath, permissionsForRoute,
   routeRequiresBusiness, visiblePanelRoutes,
 } from '../panel';
 import { inPanelPath } from '../client-auth';
@@ -22,7 +22,7 @@ const read = (rel: string) => readFileSync(path.join(root, rel), 'utf8');
 
 const ALL_PERMISSIONS: PermissionId[] = [
   'dashboard', 'agenda', 'clientes', 'leads', 'pedidos', 'catalogo', 'pagina',
-  'agente', 'whatsapp', 'campanhas', 'equipe', 'config', 'financeiro', 'admin',
+  'agente', 'whatsapp', 'campanhas', 'equipe', 'config', 'financeiro', 'admin', 'atendimento',
 ];
 
 function ctx(partial: Partial<PanelContext> = {}): PanelContext {
@@ -47,8 +47,8 @@ function dashboardRouteFolders(): string[] {
 // 1. CATÁLOGO — a única lista de destinos
 // ═══════════════════════════════════════════════════════════════
 describe('catálogo — completude (por qual porta se chega até mim?)', () => {
-  it('tem as 26 portas da arquitetura consolidada (inclui /perfil)', () => {
-    expect(PANEL_ROUTES).toHaveLength(26);
+  it('tem as 27 portas da arquitetura consolidada (inclui o destino clínico contextual)', () => {
+    expect(PANEL_ROUTES).toHaveLength(27);
   });
 
   it('toda porta do catálogo tem uma rota real no disco', () => {
@@ -98,18 +98,16 @@ describe('catálogo — completude (por qual porta se chega até mim?)', () => {
     }
   });
 
-  it('largura é política declarada (full = tela densa · contained = formulário/lista)', () => {
-    for (const r of PANEL_ROUTES) {
-      if (r.width !== undefined) expect(['full', 'contained']).toContain(r.width);
-    }
-    // telas densas aproveitam a largura; formulários ficam em coluna de leitura
-    expect(panelRouteFor('/agenda')?.width).toBe('full');
-    expect(panelRouteFor('/funil')?.width).toBe('full');
-    expect(panelRouteFor('/conversas')?.width).toBe('full');
-    expect(panelRouteFor('/configuracoes')?.width ?? 'contained').toBe('contained');
-    // Fidelity Pass 3: o Editor 2.0 tem três colunas (seções · formulário ·
-    // prévia) e precisa do workspace inteiro — política declarada no catálogo.
-    expect(panelRouteFor('/pagina')?.width).toBe('full');
+  it('todas as rotas declaram arquétipo oficial e respeitam o tipo de tela', () => {
+    const valid = ['workspace', 'record', 'detail', 'form', 'hub'];
+    for (const r of PANEL_ROUTES) expect(valid, `${r.href} sem pageType válido`).toContain(r.pageType);
+    expect(panelRouteFor('/agenda')?.pageType).toBe('workspace');
+    expect(panelRouteFor('/funil')?.pageType).toBe('workspace');
+    expect(panelRouteFor('/conversas')?.pageType).toBe('workspace');
+    expect(panelRouteFor('/configuracoes')?.pageType).toBe('form');
+    expect(panelRouteFor('/atendimento')?.pageType).toBe('record');
+    expect(pageTypeForPath('/clientes/123')).toBe('detail');
+    expect(pageTypeForPath('/nao-existe')).toBeUndefined();
   });
 
   it('todo ícone do catálogo renderiza um glifo real, não SVG vazio', () => {
@@ -119,7 +117,7 @@ describe('catálogo — completude (por qual porta se chega até mim?)', () => {
   });
 
   it('FULL_WIDTH_PATHS é derivado do catálogo (sem lista paralela)', () => {
-    expect(FULL_WIDTH_PATHS).toEqual(PANEL_ROUTES.filter((r) => r.width === 'full').map((r) => r.href));
+    expect(FULL_WIDTH_PATHS).toEqual(PANEL_ROUTES.filter((r) => r.pageType === 'workspace').map((r) => r.href));
     for (const p of FULL_WIDTH_PATHS) expect(panelRouteFor(p)).toBeDefined();
     expect(FULL_WIDTH_PATHS).toContain('/agenda');
     expect(FULL_WIDTH_PATHS).not.toContain('/configuracoes');
@@ -197,7 +195,7 @@ describe('catálogo — seções', () => {
     // quem tem permissão real — a recepção resolve pendências o dia todo e
     // não pode depender de atalho contextual para chegar na fila.
     expect(panelRoutesIn('operacao').map((r) => r.href)).toEqual([
-      '/estrutura', '/agenda', '/profissionais', '/disponibilidade', '/conversas', '/agente', '/tarefas', '/pedidos',
+      '/estrutura', '/agenda', '/atendimento', '/profissionais', '/disponibilidade', '/conversas', '/agente', '/tarefas', '/pedidos',
     ]);
     expect(panelRoutesIn('administracao').map((r) => r.href)).toEqual(['/perfil', '/equipe', '/recursos', '/configuracoes']);
   });
@@ -292,7 +290,7 @@ describe('sidebar — projeção (permissão ∩ módulos, ordem do catálogo)',
     // (permissão real); o que continua acessível só por atalho contextual:
     // Recursos (capacidades dentro de Configurações), Execuções (diagnóstico
     // dentro de Automações) e Meu perfil (menu da conta, QUALQUER usuário).
-    expect(nav.more.map((r) => r.href)).toEqual(['/execucoes', '/perfil', '/recursos']);
+    expect(nav.more.map((r) => r.href)).toEqual(['/atendimento', '/execucoes', '/perfil', '/recursos']);
     expect(panelAccess('/execucoes', ctx()).state).toBe('allow');
   });
 
@@ -388,7 +386,8 @@ describe('sidebar — projeção (permissão ∩ módulos, ordem do catálogo)',
     const shell = read('src/components/DashboardShell.tsx');
     expect(shell).toMatch(/panelNavigation\(panelCtx\)/);
     expect(shell).toMatch(/activePanelPath\(pathname\)/);
-    expect(shell).toMatch(/activeRoute\?\.width === 'full'/);
+    expect(shell).toMatch(/pageTypeForPath\(pathname\)/);
+    expect(shell).toMatch(/<PageFrame key=\{business\.id\} type=\{pageType\}/);
     expect(shell).toMatch(/<WorkspaceNavigation nav=\{nav\}/);
     // nenhum href de porta escrito à mão no shell (só /master, fora do catálogo)
     expect(shell).not.toMatch(/href="\/(dashboard|agenda|clientes|servicos|configuracoes|conversas|funil|canais)"/);
@@ -719,11 +718,12 @@ describe('uma porta por conceito', () => {
     // Automações) e Meu perfil (menu da conta, TODO usuário autenticado).
     // Destino fora do menu SEM atalho vira porta fantasma — cada um verificado.
     const offMenu = PANEL_ROUTES.filter((r) => r.sidebar === false);
-    expect(offMenu.map((r) => r.href).sort()).toEqual(['/execucoes', '/perfil', '/recursos']);
+    expect(offMenu.map((r) => r.href).sort()).toEqual(['/atendimento', '/execucoes', '/perfil', '/recursos']);
     for (const route of offMenu) {
       const own = path.join(root, `src/app/(dashboard)${route.href}`);
       const re = new RegExp('href=\\{[`\'"]' + route.href.replace(/\//g, '\\/'));
-      const linked = files.some((f) => !f.startsWith(own) && re.test(readFileSync(f, 'utf8')));
+      const linked = files.some((f) => !f.startsWith(own) && re.test(readFileSync(f, 'utf8')))
+        || (route.href === '/atendimento' && read('src/lib/encounter-workspace.ts').includes('return `/atendimento?'));
       expect(linked, `${route.href} não tem nenhum atalho contextual`).toBe(true);
     }
   });
@@ -810,7 +810,7 @@ describe('guardas de servidor (regressão)', () => {
     // Regressão de arquitetura: adicionar destino ao painel exige explicar aqui.
     expect(allowedPanelRoutes(ctx()).map((r) => r.href)).toEqual([
       '/dashboard',
-      '/estrutura', '/agenda', '/profissionais', '/disponibilidade',
+      '/estrutura', '/agenda', '/atendimento', '/profissionais', '/disponibilidade',
       '/conversas', '/agente', '/tarefas',
       '/clientes', '/funil',
       '/servicos',

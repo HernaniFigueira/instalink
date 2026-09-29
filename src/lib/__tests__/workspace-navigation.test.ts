@@ -13,6 +13,7 @@ describe('360 navigation is an authorized projection', () => {
     // acessível por URL — supressão é apresentação, nunca bloqueio.
     const all = workspaceAreas(PANEL_ROUTES, { multiUnit: true }).flatMap(a => a.items.map(i => i.href));
     expect(all.sort()).toEqual(PANEL_ROUTES.filter(i => i.href !== '/pagina').map(i => i.href).sort());
+    expect(all).toContain('/atendimento');
     expect(new Set(all).size).toBe(all.length);
 
     const single = workspaceAreas(PANEL_ROUTES).flatMap(a => a.items.map(i => i.href));
@@ -32,6 +33,15 @@ describe('360 navigation is an authorized projection', () => {
       expect(projected.map(r => r.href).sort()).toEqual(nav.allowed.map(r => r.href).sort());
     });
   }
+  it('keeps /atendimento authorized and directly reachable, but out of navigation', () => {
+    const nav = panelNavigation({ permissions: { atendimento: true }, modes: ['services', 'bookings'], features: {} });
+    expect(nav.allowed.some((r) => r.href === '/atendimento')).toBe(true);
+    expect(nav.sidebar.some((r) => r.href === '/atendimento')).toBe(false);
+    expect(nav.more.some((r) => r.href === '/atendimento')).toBe(true);
+    expect(workspaceAreas(nav.allowed, { multiUnit: true }).flatMap((a) => a.items).some((r) => r.href === '/atendimento')).toBe(true);
+    expect(routeBreadcrumb('/atendimento', workspaceAreas(nav.allowed, { multiUnit: true })).group).toBeUndefined();
+  });
+
   it('preserves presentation filters, strips entity IDs/searches on unit change', () => {
     const old = new URLSearchParams('b=old&data=2026-09-21&view=week&professionalId=private&member=private&booking=private&q=patient&customerId=private');
     expect(switchUnitHref('/agenda', old, 'new')).toBe('/agenda?b=new&data=2026-09-21&view=week');

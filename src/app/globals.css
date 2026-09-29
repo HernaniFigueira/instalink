@@ -3,20 +3,14 @@
 @tailwind utilities;
 
 /* ═══════════════════════════════════════════════════════════════
-   DESIGN SYSTEM INSTALINK — A3.3 (painel premium)
+   DESIGN SYSTEM INSTALINK — contrato do workspace GoDoutor v2
    ═══════════════════════════════════════════════════════════════
-   UMA fonte de verdade para o painel. Nenhuma tela inventa cor, raio,
-   sombra ou espaçamento: tudo sai dos tokens abaixo e é consumido pelos
-   componentes compartilhados (components/ui.tsx) ou por classes utilitárias
-   do Tailwind mapeadas em tailwind.config.js (bg-brand, text-ink, …).
+   `.il-platform`/`.workspace-shell` são a fonte ativa do workspace autenticado.
+   `:root` e `.il-page` conservam compatibilidade/public legacy; a ponte de
+   utilitários abaixo é scoped e nunca retematiza renderer ou página pública.
 
-   Camadas de cor:
-     ESTRUTURA  → neutros frios (--bg / --surface* / --border* / --text*).
-     AÇÃO       → --brand (azul amigável) = ação principal do produto.
-     ESTADO     → --success / --info.
-     ATENÇÃO    → --warning / --attention (âmbar quente, legível).
-     DESTRUTIVO → --danger (vermelho, SÓ para perigo).
-     APOIO      → --lilac (roxo leve: marketing, qualificado, automação).
+   Camadas: estrutura neutra · accent de identidade · sucesso/info/aviso/perigo
+   semânticos fixos · geometria/tipografia/motion fixos.
 
    Regra de contraste: todo token *-fg foi escolhido para atingir ≥ 4.5:1
    sobre o seu próprio *-bg. Estado nunca depende só de cor (selos têm
@@ -26,8 +20,8 @@
   color-scheme: light;
 
   /* ── Estrutura: fundo, superfícies e bordas ─────────────────── */
-  /* §2 (contrato D) — FUNDO DO WORKSPACE: neutro UNIVERSAL. Não acompanha
-     o tema; gradiente sutil #F4F6F8 → #F8F9FB aplicado no shell. */
+  /* Neutro base compatível. No workspace, `--workspace-bg` é sólido `--bg`;
+     estes aliases antigos não aplicam gradiente ao shell. */
   --bg: #f4f6f8;
   --bg-top: #f4f6f8;
   --bg-bottom: #f8f9fb;
@@ -56,13 +50,8 @@
      existir. Fica entre `--text-muted` e `--text-faint`. */
   --text-soft: #665f59;
 
-  /* ── Ação (marca do produto) ────────────────────────────────── */
-  /* GODOUTOR 2.0 — índigo-violeta de ação (paleta da identidade visual:
-     sidebar forte + amarelo quente de destaque). Contraste AA checado em
-     design-360-tokens.test.ts. */
-  /* MISSÃO 5 — AÇÃO = espresso/graphite deep: botões primários com presença
-     (branco = contraste excelente), sem parecer morto. Identidade índigo
-     permanece em --brand-600/700 (logo) e --il-nav* (sidebar). */
+  /* Tokens de compatibilidade fora da raiz do workspace. Ações autenticadas
+     consomem `--accent`; semânticas continuam nos seus próprios tokens. */
   --brand: #1c1917;
   /* HOMOLOGAÇÃO · P0-5 — skeleton com contraste real (não branco sobre cinza). */
   --skeleton-base: #e4e8f0;
@@ -77,25 +66,14 @@
      para que nenhum componente escreva hex próprio: o hover é token. */
   --brand-bg-hover: #ede9e3;
 
-  /* ── Amarelo quente “sun” (Visão geral / ênfases pontuais) ───── */
-  /* Destaque de boas-vindas e blocos de atenção. Usado com parcimônia:
-     superfícies suaves + texto `--sun-fg` (AA sobre `--sun-bg`). */
+  /* Aliases sun históricos. Em `.il-platform` apontam para warning semântico;
+     superfícies decorativas amarelas não fazem parte do contrato ativo. */
   --sun: #f7c948;
   --sun-strong: #e0a800;
   --sun-bg: #fff7e0;
   --sun-bg-strong: #ffefc2;
   --sun-border: #f0e0b0;
   --sun-fg: #7a5800;
-  /* — CTA principal da Agenda (“Novo agendamento”): violeta premium —
-     Acento refinado que conversa com a sidebar índigo-violeta, sem ser o
-     azul de ação genérico. Branco sobre `--cta-bg` = 6.8:1 (AA). */
-  --cta-bg: #5b3fd4;
-  --cta-bg-hover: #4a31b8;
-  --cta-border: #4a31b8;
-  --cta-fg: #ffffff;
-  --cta-shadow: 0 2px 12px -2px rgba(91, 63, 212, 0.45);
-  --cta-shadow-hover: 0 6px 18px -2px rgba(91, 63, 212, 0.55);
-
   /* Nomes legados (consumidos por ui.tsx e telas) → apontam para a marca.
      Uma futura identidade por negócio só precisa REATRIBUIR estes valores. */
   --action: var(--brand);
@@ -103,14 +81,13 @@
   --action-contrast: #ffffff;
   --action-soft: var(--brand-soft);
   --action-soft-border: var(--brand-border);
-  /* ── TEMA (contrato B) — CTAs principais + acentos. Defaults = tema
-     padrão NEUTRO (usuário sem preferência inicia em Neutro; nenhum flash
-     roxo/lilás no SSR/hydration); a paleta salva (lib/nav-accent.ts) aplica
-     os 5 tokens inline no shell. NUNCA misturar com --text/--il-nav. ── */
-  --accent: #3f4652;
-  --accent-hover: #363c47;
-  --accent-soft: #e4e5e7;
-  --accent-border: #a9acb1;
+  /* Default de identidade Deep Blue. A preferência pessoal salva aplica os
+     tokens de accent/nav no shell; estrutura e semânticas permanecem fixas. */
+  --accent: #2563eb;
+  --accent-fg: #1d4ed8;
+  --accent-hover: #1d4ed8;
+  --accent-soft: #eff6ff;
+  --accent-border: #bfdbfe;
   --accent-contrast: #ffffff;
 
   /* ── Estado ─────────────────────────────────────────────────── */
@@ -243,16 +220,16 @@
    * sem migração destrutiva) — apenas não é mais aplicado ao painel.
    * Os derivadores legados seguem em lib/appearance.ts para sanitizar dado
    * antigo, não como feature ativa. */
-  --il-nav: #d8dde6;
-  --il-nav-fg: #18181b;
-  --il-nav-muted: #47494f;
-  --il-nav-icon: #4e4f54;
-  --il-nav-hover: #bec2ca;
-  --il-nav-active: #b1b5bd;
-  --il-nav-active-fg: #18181b;
-  --il-nav-border: rgba(18, 22, 33, 0.10);
-  --il-nav-cta: #ffd166;
-  --il-nav-cta-fg: #3b2f00;
+  --il-nav: #071a33;
+  --il-nav-fg: #f8fafc;
+  --il-nav-muted: #9aaec8;
+  --il-nav-icon: #9aaec8;
+  --il-nav-hover: #102d52;
+  --il-nav-active: #123b68;
+  --il-nav-active-fg: #93c5fd;
+  --il-nav-border: rgba(255, 255, 255, 0.12);
+  --il-nav-cta: #93c5fd;
+  --il-nav-cta-fg: #071a33;
 }
 
 html { scroll-behavior: smooth; }
@@ -278,18 +255,17 @@ body {
    PRIMITIVAS DO PAINEL — classes reutilizáveis (não espalhar estilo)
    ═══════════════════════════════════════════════════════════════ */
 
-/* Cartão base: branco, borda suave, sombra de uma camada. */
+/* Agrupamento operacional: superfície + borda; elevação só em overlays. */
 .ws-panel {
   background: var(--surface);
   border: 1px solid var(--border);
-  border-radius: var(--radius-lg);
-  box-shadow: var(--shadow-sm);
+  border-radius: var(--radius-md);
+  box-shadow: none;
 }
-/* Cartão sobre cartão: profundidade leve sem virar "caixa dentro de caixa". */
-.ws-panel--raised { box-shadow: var(--shadow-md); }
+.ws-panel--raised { box-shadow: none; }
 .ws-panel--inset {
   background: var(--surface-2);
-  box-shadow: var(--shadow-inset);
+  box-shadow: none;
 }
 .ws-section { border-top: 1px solid var(--border-soft); }
 .ws-section:first-child { border-top: 0; }
@@ -300,7 +276,7 @@ body {
   appearance: none;
   width: 18px; height: 18px;
   margin: 0;
-  border-radius: 6px;
+  border-radius: var(--radius-xs);
   border: 1.5px solid var(--border-strong);
   background: var(--surface);
   cursor: pointer;
@@ -319,22 +295,22 @@ body {
 .il-check:focus-visible { outline: none; box-shadow: var(--focus-ring); border-color: var(--brand); }
 .il-check:disabled { opacity: 0.5; cursor: not-allowed; }
 
-/* Abas do painel (pills) — padrão único de navegação interna. */
+/* Abas compactas: agrupamento retangular, sem cápsula decorativa. */
 .il-tabbar {
   display: inline-flex;
   align-items: center;
-  gap: var(--space-1);
-  padding: 4px;
+  gap: 2px;
+  padding: 3px;
   background: var(--surface-3);
   border: 1px solid var(--border-soft);
-  border-radius: var(--radius-pill);
+  border-radius: var(--radius-md);
 }
 .il-tab {
   display: inline-flex;
   align-items: center;
   gap: 6px;
   padding: 7px 14px;
-  border-radius: var(--radius-pill);
+  border-radius: var(--radius-sm);
   font-size: 13px;
   font-weight: 600;
   line-height: 1.1;
@@ -342,11 +318,12 @@ body {
   white-space: nowrap;
   transition: background 0.15s ease, color 0.15s ease, box-shadow 0.15s ease;
 }
-.il-tab:hover { color: var(--text); background: rgba(43, 39, 36, 0.08); }
+.il-tab:hover { color: var(--text); background: var(--surface-hover); }
 .il-tab[aria-selected='true'] {
   background: var(--surface);
-  color: var(--brand-fg);
-  box-shadow: var(--shadow-sm);
+  color: var(--accent);
+  box-shadow: none;
+  outline: 1px solid var(--border-soft);
 }
 .il-tab:disabled { opacity: 0.45; pointer-events: none; }
 
@@ -473,10 +450,64 @@ body {
 .il-idcard {
   position: relative;
   overflow: hidden;
-  /* MISSÃO 5: o tutor fica NEUTRO e discreto (creme quase branco) — quem
-     ganha o amarelo/creme quente é o PET (o paciente da veterinária). */
+  /* Superfície discreta de identidade; pets e tutores usam estrutura neutra,
+     não cores de aviso. */
   background: var(--brand-softer);
 }
+@media (max-width: 767px) {
+  .client-profile-page__toolbar { align-items: flex-start; }
+  .client-profile-page__actions { width: 100%; min-width: 0; margin-left: 0; justify-content: flex-start; }
+  .client-profile-page__actions > * { flex: 0 1 auto; max-width: 100%; white-space: normal; }
+  .client360-idcard__identity {
+    display: grid;
+    grid-template-columns: 64px minmax(0, 1fr);
+    align-items: start;
+    column-gap: 12px;
+    row-gap: 8px;
+  }
+  .client360-idcard__primary { grid-column: 2; grid-row: 1; width: 100%; }
+  .client360-idcard__primary h2 { word-break: normal; overflow-wrap: anywhere; }
+  .client360-idcard__access { grid-column: 2; grid-row: 2; justify-self: start; text-align: left; }
+  .client360-idcard__tags { margin-top: 2px; }
+  .client360-idcard__data { grid-template-columns: minmax(0, 1fr); }
+  .client360-idcard__data dd { align-items: flex-start; overflow: visible; }
+  .client360-idcard__data dd > span {
+    min-width: 0; white-space: normal; overflow: visible; text-overflow: clip;
+    overflow-wrap: anywhere;
+  }
+  .client360-pet-card { align-items: flex-start; flex-wrap: wrap; }
+  .client360-pet-card > .min-w-0.flex-1 { flex-basis: calc(100% - 64px); }
+  .client360-pet-card__sex { margin-left: auto; }
+  .client360-pet-card__actions { margin-left: auto; }
+}
+@media (max-width: 480px) {
+  .client360-idcard__identity { display: flex; flex-direction: column; align-items: flex-start; gap: 8px; }
+  .client360-idcard__primary, .client360-idcard__access { width: 100%; text-align: left; }
+  .client360-idcard__tags { max-width: 100%; }
+  .client360-pet-card {
+    display: grid;
+    grid-template-columns: 44px minmax(0, 1fr);
+    grid-template-areas: 'avatar info' 'sex sex' 'actions actions';
+    align-items: start;
+    gap: 8px 12px;
+    width: 100%;
+  }
+  .client360-pet-card > .il-avatar { grid-area: avatar; }
+  .client360-pet-card > .min-w-0.flex-1 { grid-area: info; width: auto; min-width: 0; }
+  .client360-pet-card__sex { grid-area: sex; margin-left: 56px; }
+  .client360-pet-card__actions { grid-area: actions; justify-self: end; margin-left: 0; }
+}
+
+.client360-tabs-wrap { position: relative; min-width: 0; max-width: 100%; }
+.client360-tabs-wrap::after {
+  content: ''; position: absolute; z-index: 2; inset-block: 1px; right: 0; width: 24px;
+  pointer-events: none; opacity: 0; transition: opacity 120ms ease;
+  background: linear-gradient(90deg, transparent, var(--surface) 90%);
+}
+.client360-tabs-wrap[data-overflow-right='true']::after { opacity: .92; }
+.client360-tabs { display: flex; flex-wrap: nowrap; width: max-content; max-width: 100%; min-width: 0; scroll-behavior: smooth; overscroll-behavior-x: contain; touch-action: pan-x; }
+.client360-tabs > .il-tab { flex: 0 0 auto; }
+@media (prefers-reduced-motion: reduce) { .client360-tabs, .client360-tabs-wrap::after { scroll-behavior: auto; transition: none; } }
 
 /* Avatar com placeholder bonito (iniciais em gradiente suave). */
 .il-avatar {
@@ -609,18 +640,12 @@ input[type='color'] { @apply cursor-pointer; }
    UMA fonte de verdade para o painel. Nenhuma tela inventa cor, raio,
    sombra, altura de controle ou espaçamento.
 
-   A COR TEM SIGNIFICADO (nunca decorativa, nunca aleatória):
-     AZUL VIVO      → ação principal do produto + Agenda (o "agora").
-     ROXO ELÉTRICO  → Inteligência: IA, automação, assistente.
-     CYAN/TURQUESA  → Comunicação: conversas, canais, mensagens.
-     VERDE-LIMÃO    → destaque positivo e CTA especial (nunca texto longo).
-     VERDE ESTADO   → concluído/confirmado (legível, distinto do limão).
-     LARANJA        → atenção operacional (pendência, aguardando).
-     CORAL/VERMELHO → perigo, cancelamento e a linha do horário atual.
+   Accent identifica o workspace e colore ações primárias; semânticas são fixas:
+   sucesso (verde), aviso (âmbar), perigo (vermelho), informação (azul).
+   Estrutura, texto, radius, spacing, sombras e tipografia são independentes.
 
-   Regra de contraste: todo `*-fg` atinge ≥ 4.5:1 sobre o próprio `*-bg`.
-   Sobre cor sólida saturada (limão) o texto é `--lime-contrast` (escuro).
-   Estado nunca depende SÓ de cor: selos têm rótulo e o item ativo tem rail.
+   Regra de contraste: tokens `*-fg` atingem AA sobre seus fundos; estado
+   nunca depende só da cor (selos têm rótulo e a navegação usa aria-current).
 
    ESCOPO: este bloco vale APENAS para `.il-platform` (painel). A página
    pública (`.il-page`), autenticação (`.il-auth`) e landing (`.il-marketing`)
@@ -629,7 +654,7 @@ input[type='color'] { @apply cursor-pointer; }
 .il-platform {
   color-scheme: light;
 
-  /* ── Métrica do shell (fonte única da geometria) ─────────────── */
+  /* Geometria e tokens próprios do workspace autenticado. */
   --topbar-h: 62px;
   --sidebar-w: 256px;
   --sidebar-w-mini: 68px;
@@ -647,9 +672,7 @@ input[type='color'] { @apply cursor-pointer; }
   --control-h-xs: 28px;
   --control-h-touch: 44px;
 
-  /* ── Estrutura: superfícies claras para o conteúdo respirar ──── */
-  /* GODOUTOR 2.0 — paleta única (índigo-violeta). Estes são os nomes
-     canônicos; os apelidos legados (--text, --border-soft…) apontam para eles. */
+  /* Identidade GoDoutor fica separada dos tokens estruturais abaixo. */
   --brand-600: #4f46e5;
   --brand-700: #4338ca;
   --brand-500: #6366f1;
@@ -692,12 +715,10 @@ input[type='color'] { @apply cursor-pointer; }
   --border-strong: var(--border-strong-base);
   --border-2: var(--border-2-base);
 
-  /* Fundo do app: branco levemente aquecido no canto inferior direito —
-     o suficiente para a superfície não parecer "cinza de sistema", sem virar
-     degradê chamativo. Base sólida primeiro (leitura), gradiente por cima. */
+  /* Fundo estrutural sólido e neutro. Presets não o sobrescrevem. */
   --bg: var(--bg-base);
   --bg-tint: var(--bg-tint-base);
-  --bg-gradient: linear-gradient(135deg, #f8fbff 0%, #f7f9fc 60%, #fff9f7 100%);
+  --bg-gradient: none;
   --agenda-unavailable: var(--surface-hover);
 
   /* ── Texto (apelidos → nomes canônicos) ─────────────────────── */
@@ -705,29 +726,22 @@ input[type='color'] { @apply cursor-pointer; }
   --text-strong: var(--text-strong-base);
   --text-soft: var(--text-soft-base);
 
-  /* ── Stacks ─────────────────────────────────────────────────── */
-  /* MISSÃO 5: a AÇÃO do workspace em espresso/graphite deep (botões com
-     presença e leitura firme). O rampo índigo (--brand-50…700) continua
-     definido para a identidade (logo GoDoutor) e acentos de legado. */
-  --brand: #1c1917;
-  --brand-strong: #0c0a09;
-  --brand-soft: #f5f3f0;
-  --brand-softer: #faf9f7;
-  --brand-border: #e4ded6;
-  --brand-fg: #262220;
-  --brand-ring: rgba(28, 25, 23, 0.26);
-  --brand-bg-hover: #ede9e3;
+  /* Ponte legada de ação → tema. Tokens semânticos ficam fora desta ponte. */
+  --brand: #2563eb;
+  --brand-strong: #1d4ed8;
+  --brand-soft: #eff6ff;
+  --brand-softer: #f8fbff;
+  --brand-border: #bfdbfe;
+  --brand-fg: #1d4ed8;
+  --brand-ring: rgba(37, 99, 235, 0.28);
+  --brand-bg-hover: #dbeafe;
   --ops: var(--brand);
   --ops-soft: var(--brand-soft);
   --ops-fg: var(--brand-fg);
 
-  /* ── FAMÍLIAS DE APOIO — NEUTRALIZADAS (GoDoutor 2.0) ─────────────
-     Existia uma família de cor por área (roxo para IA, cyan para conversas,
-     lima para comercial, coral/laranja para atenção…). Na prática o resultado
-     era um menu arco-íris: a cor dizia "qual área", não "o que significa".
-     Aqui os NOMES dos tokens continuam (nenhum componente precisa mudar) mas
-     os valores passam a ser neutros frios ou o próprio azul da marca. Cor
-     volta a significar ESTADO (sucesso, atenção, perigo) — nunca decoração. */
+  /* Aliases de famílias históricas convergem para semântica fixa ou neutro.
+     Não recriar uma paleta por módulo; identidades de canais ficam restritas
+     ao próprio símbolo. */
   --violet: var(--text-secondary);
   --violet-strong: var(--text-primary);
   --violet-bg: var(--surface-hover);
@@ -735,66 +749,72 @@ input[type='color'] { @apply cursor-pointer; }
   --violet-border: var(--border);
   --violet-fg: var(--text-secondary);
 
-  --cyan: var(--text-secondary);
-  --cyan-strong: var(--text-primary);
-  --cyan-bg: var(--surface-hover);
-  --cyan-bg-hover: var(--border);
-  --cyan-border: var(--border);
-  --cyan-fg: var(--text-secondary);
+  --cyan: var(--info);
+  --cyan-strong: var(--info-strong);
+  --cyan-bg: var(--info-bg);
+  --cyan-bg-hover: color-mix(in srgb, var(--info) 12%, white);
+  --cyan-border: var(--info-border);
+  --cyan-fg: var(--info-fg);
   --decoration-cyan: var(--brand-300);
 
-  --lime: var(--brand);
-  --lime-strong: var(--brand-strong);
-  --lime-bg: var(--brand-soft);
-  --lime-bg-hover: var(--brand-bg-hover);
-  --lime-border: var(--brand-border);
-  --lime-fg: var(--brand-fg);
+  --lime: var(--success);
+  --lime-strong: var(--success-strong);
+  --lime-bg: var(--success-bg);
+  --lime-bg-hover: var(--success-bg-hover);
+  --lime-border: var(--success-border);
+  --lime-fg: var(--success-fg);
   --lime-contrast: #ffffff;
 
-  --lilac: var(--violet);
-  --lilac-strong: var(--violet-strong);
-  --lilac-bg: var(--violet-bg);
-  --lilac-bg-hover: var(--violet-bg-hover);
-  --lilac-border: var(--violet-border);
-  --lilac-fg: var(--violet-fg);
+  /* Compatibilidade visual temporária: tons históricos de estado/contexto
+     convergem para neutro ou info; status real usa tokens semânticos. */
+  --lilac: var(--info);
+  --lilac-strong: var(--info-strong);
+  --lilac-bg: var(--info-bg);
+  --lilac-bg-hover: color-mix(in srgb, var(--info) 12%, white);
+  --lilac-border: var(--info-border);
+  --lilac-fg: var(--info-fg);
 
-  --teal: var(--violet);
-  --teal-strong: var(--violet-strong);
-  --teal-bg: var(--violet-bg);
-  --teal-border: var(--violet-border);
-  --teal-fg: var(--violet-fg);
+  --teal: var(--info);
+  --teal-strong: var(--info-strong);
+  --teal-bg: var(--info-bg);
+  --teal-border: var(--info-border);
+  --teal-fg: var(--info-fg);
+  --sun: var(--warning);
+  --sun-strong: var(--warning-strong);
+  --sun-bg: var(--warning-bg);
+  --sun-bg-strong: var(--warning-bg-hover);
+  --sun-border: var(--warning-border);
+  --sun-fg: var(--warning-fg);
 
   /* ── Nomes legados de ação → apontam para a marca ────────────── */
-  --area-color: var(--brand);
   --action: var(--brand);
   --action-strong: var(--brand-strong);
   --action-contrast: #ffffff;
   --action-soft: var(--brand-soft);
   --action-soft-border: var(--brand-border);
-  /* ── TEMA (contrato B) — CTAs principais + acentos. Defaults = tema
-     padrão NEUTRO (usuário sem preferência inicia em Neutro; nenhum flash
-     roxo/lilás no SSR/hydration); a paleta salva (lib/nav-accent.ts) aplica
-     os 5 tokens inline no shell. NUNCA misturar com --text/--il-nav. ── */
-  --accent: #3f4652;
-  --accent-hover: #363c47;
-  --accent-soft: #e4e5e7;
-  --accent-border: #a9acb1;
+  /* Default de identidade Deep Blue. A preferência pessoal salva aplica os
+     tokens de accent/nav no shell; estrutura e semânticas permanecem fixas. */
+  --accent: #2563eb;
+  --accent-fg: #1d4ed8;
+  --accent-hover: #1d4ed8;
+  --accent-soft: #eff6ff;
+  --accent-border: #bfdbfe;
   --accent-contrast: #ffffff;
 
   /* ── VERDE DE ESTADO · concluído/confirmado ──────────────────── */
   --success: #15803d;
   --success-strong: #166534;
-  --success-bg: #ecfdf5;
+  --success-bg: #f0fdf4;
   --success-bg-hover: #dcfce7;
   --success-border: #bbf7d0;
-  --success-fg: #15803d;
+  --success-fg: #166534;
 
   /* ── INFO · sinônimo semântico de comunicação ────────────────── */
-  --info: #0369a1;
-  --info-strong: #075985;
-  --info-bg: #f0f9ff;
-  --info-border: #bae6fd;
-  --info-fg: #075985;
+  --info: #2563eb;
+  --info-strong: #1d4ed8;
+  --info-bg: #eff6ff;
+  --info-border: #bfdbfe;
+  --info-fg: #1d4ed8;
 
   /* ── LARANJA · atenção operacional ───────────────────────────── */
   --warning: #b45309;
@@ -832,57 +852,76 @@ input[type='color'] { @apply cursor-pointer; }
   --sheet-backdrop: rgba(13, 18, 32, 0.22);
 
   /* ── Raio (escala única; nada de raio avulso por tela) ────────── */
-  --radius-xs: 5px;
-  --radius-sm: 7px;    /* input e botão */
-  --radius-md: 8px;    /* item de menu, controle interno */
-  --radius-lg: 10px;   /* cartão, painel */
-  --radius-xl: 12px;   /* popover, sheet */
-  --radius-2xl: 16px;
+  --radius-xs: 4px;
+  --radius-sm: 6px;    /* controles e ações */
+  --radius-md: 8px;    /* agrupamentos e overlays */
+  --radius-lg: 8px;
+  --radius-xl: 8px;
+  --radius-2xl: 8px;
   --radius-pill: 999px;
 
   /* ── Sombra (o painel é plano; sombra só cria profundidade real) ─
      Cartão normal: praticamente sem sombra. Popover/modal: sombra maior
      porque há empilhamento de camadas de verdade. */
-  --shadow-xs: 0 1px 2px rgba(15, 23, 42, 0.04);
-  --shadow-sm: 0 1px 2px rgba(15, 23, 42, 0.04);
-  --shadow-md: 0 4px 12px -4px rgba(15, 23, 42, 0.10), 0 12px 24px -12px rgba(15, 23, 42, 0.12);
-  --shadow-lg: 0 10px 20px -8px rgba(15, 23, 42, 0.12), 0 28px 48px -20px rgba(15, 23, 42, 0.18);
-  --shadow-xl: 0 18px 36px -12px rgba(15, 23, 42, 0.16), 0 40px 72px -28px rgba(15, 23, 42, 0.24);
-  --shadow-brand: 0 1px 2px rgba(26, 23, 21, 0.20);
+  --shadow-xs: none;
+  --shadow-sm: none;
+  --shadow-md: 0 4px 12px -4px rgba(15, 23, 42, 0.12), 0 12px 24px -12px rgba(15, 23, 42, 0.14);
+  --shadow-lg: 0 10px 24px -8px rgba(15, 23, 42, 0.16), 0 28px 48px -20px rgba(15, 23, 42, 0.20);
+  --shadow-xl: 0 18px 36px -12px rgba(15, 23, 42, 0.18), 0 40px 72px -28px rgba(15, 23, 42, 0.24);
+  --shadow-brand: none;
   --shadow-inset: inset 0 1px 2px rgba(15, 23, 42, 0.06);
   /* Sombra do Workspace Sheet: a mais alta do sistema (camada flutuante). */
   --shadow-sheet: 0 24px 60px -18px rgba(15, 23, 42, 0.30), 0 4px 12px -4px rgba(15, 23, 42, 0.12);
 
   /* ── Foco visível ────────────────────────────────────────────── */
   --focus-ring: 0 0 0 3px var(--brand-ring);
-  --focus-outline: 2px solid var(--brand);
+  --focus-outline: 2px solid var(--accent);
 
   /* ── Navegação do painel ─────────────────────────────────────── */
-  /* Sidebar — defaults do tema padrão NEUTRO (sem roxo/lilás): usuário
-     sem preferência salva carrega ESTE estado; preferência válida sobrepõe
-     inline (mesmos tokens). Contraste AA checado em design-360-tokens. */
-  --il-nav: #d8dde6;
-  --il-nav-fg: #18181b;
-  --il-nav-muted: #47494f;
-  --il-nav-icon: #4e4f54;
-  --il-nav-hover: #bec2ca;
-  --il-nav-active: #b1b5bd;
-  --il-nav-active-fg: #18181b;
-  --il-nav-border: rgba(18, 22, 33, 0.10);
-  --il-nav-cta: #ffd166;
-  --il-nav-cta-fg: #3b2f00;
+  /* Sidebar — default Deep Blue; preferência válida sobrepõe estes tokens
+     inline sem alterar estrutural, semânticas ou geometria. */
+  --il-nav: #071a33;
+  --il-nav-fg: #f8fafc;
+  --il-nav-muted: #9aaec8;
+  --il-nav-icon: #9aaec8;
+  --il-nav-hover: #102d52;
+  --il-nav-active: #123b68;
+  --il-nav-active-fg: #93c5fd;
+  --il-nav-border: rgba(255, 255, 255, 0.12);
+  --il-nav-cta: #93c5fd;
+  --il-nav-cta-fg: #071a33;
 
   color: var(--text);
 }
 
-/* §16 — fundo do painel: degradê de 135° quase imperceptível (frio → levemente
-   quente). Dava para ver o #f3f5fb chapado porque a variável --bg-gradient era
-   declarada e NUNCA usada; agora ela é o fundo real do workspace, com o tom
-   chapado por baixo para telas que não aplicam a imagem. */
+/* O fundo do workspace é sólido; tokens e gradientes legados não o reativam. */
+
+/* Uma ponte: aliases antigos de ação seguem o accent; tokens semânticos,
+   superfícies e geometria permanecem independentes do preset. */
+.workspace-shell {
+  --brand: var(--accent);
+  --brand-strong: var(--accent-hover);
+  --brand-soft: var(--accent-soft);
+  --brand-border: var(--accent-border);
+  /* fg universal for soft surfaces/icons/text links; solid CTAs use accent-contrast. */
+  --brand-fg: var(--accent-fg);
+  --brand-ring: color-mix(in srgb, var(--accent) 30%, transparent);
+  --brand-bg-hover: color-mix(in srgb, var(--accent) 12%, white);
+  --focus-ring: 0 0 0 3px var(--brand-ring);
+  --focus-outline: 2px solid var(--accent);
+  --il-nav-cta: var(--il-nav-active-fg);
+  --workspace-bg: var(--bg);
+  --bg-gradient: none;
+}
+
 .il-platform {
   background-color: var(--bg);
-  background-image: var(--bg-gradient);
+  background-image: none;
 }
+
+/* Large Tailwind radii were historical card decoration; workspace geometry is
+   intentionally compact. Full radius remains only for semantic pills/avatars. */
+.il-platform :is(.rounded-xl,.rounded-2xl,.rounded-3xl) { border-radius: var(--radius-md); }
 
 /* More specific than utility outline-none; no global recoloring. */
 .il-platform :focus-visible {
@@ -894,14 +933,12 @@ input[type='color'] { @apply cursor-pointer; }
   outline: var(--focus-outline);
   outline-offset: 2px;
 }
-/* Etapa A — hierarquia visual: o ícone do cabeçalho de página herda a cor da
-   ÁREA (fonte única: --area-color, definido pelo shell a partir da rota).
-   Nunca um hex por tela. */
+/* One page-header treatment across modules: neutral surface, theme accent icon. */
 .il-platform .il-page-header__icon {
   background-image: none;
-  background-color: color-mix(in srgb, var(--area-color, var(--brand)) 13%, var(--surface));
-  color: var(--area-color, var(--brand-fg));
-  box-shadow: var(--shadow-xs);
+  background-color: var(--surface-2);
+  color: var(--accent);
+  box-shadow: none;
 }
 /* Avatar do painel: cor sólida da marca. Identidade não precisa de degradê. */
 .il-platform .il-avatar {
@@ -922,6 +959,36 @@ input[type='color'] { @apply cursor-pointer; }
    !important + --brand sólido foi REMOVIDA na missão sidebar final: era ela
    quem pintava o item ativo de botão azul com texto branco.) */
 .il-platform [data-nav-item] { color: var(--il-nav-fg); }
+
+/* Option chips / escolhas múltiplas — selecionado por contorno e foreground,
+   não preenchimento principal. Tabs, badges e CTAs têm contratos separados. */
+.il-platform .il-option-choice {
+  display:inline-flex; min-height:36px; align-items:center; justify-content:center; gap:6px;
+  padding:0 12px; border:1px solid var(--border-strong); border-radius:var(--radius-pill);
+  background:var(--surface); color:var(--text-muted); font:inherit; font-size:12.5px; font-weight:600;
+  line-height:1.25; cursor:pointer; transition:background-color 140ms ease,border-color 140ms ease,color 140ms ease;
+}
+.il-platform .il-option-choice:hover:not([aria-pressed='true']):not(:disabled) {
+  border-color:var(--border-strong); background:var(--surface-hover); color:var(--text);
+}
+.il-platform .il-option-choice[aria-pressed='true'] {
+  border-color:var(--accent); background:var(--surface); color:var(--accent-fg);
+  box-shadow:inset 0 0 0 1px color-mix(in srgb,var(--accent) 16%,transparent);
+}
+.il-platform .il-option-choice[aria-pressed='true']:hover:not(:disabled) {
+  border-color:var(--accent); background:var(--surface); color:var(--accent-fg);
+}
+.il-platform .il-option-choice:disabled { opacity:1; cursor:not-allowed; }
+.il-platform .il-option-choice--compact { min-height:30px; padding:0 9px; border-radius:var(--radius-sm); font-size:12px; }
+.il-platform .il-selectable-card {
+  border:1px solid var(--border); border-radius:var(--radius-md); background:var(--surface);
+  color:var(--text); transition:background-color 140ms ease,border-color 140ms ease,box-shadow 140ms ease;
+}
+.il-platform .il-selectable-card:hover:not(.is-selected) { border-color:var(--border-strong); background:var(--surface-hover); }
+.il-platform .il-selectable-card.is-selected {
+  border-color:var(--accent); background:var(--surface);
+  box-shadow:inset 0 0 0 1px color-mix(in srgb,var(--accent) 16%,transparent);
+}
 
 /* ── Alturas de controle: UMA escala (tokens), não 44px solto por regra ── */
 .il-platform .il-control { min-height: var(--control-h); }
@@ -953,12 +1020,17 @@ input[type='color'] { @apply cursor-pointer; }
 /* Native Drawer geometry only; inherits the caller's theme. This is not a
    global dialog reset. Native showModal supplies inertness and tab containment. */
 dialog.il-drawer {
-  /* A top-layer modal must not inherit a parent space-y-* sibling margin. */
+  /* Mesma geometria lateral, gap e limite da sidebar do WorkspaceSheet. */
+  position: fixed;
+  top: calc(var(--topbar-h, 56px) + var(--sheet-gap, 14px));
+  right: var(--sheet-gap, 14px);
+  bottom: var(--sheet-gap, 14px);
+  left: var(--sheet-left, 0px);
   margin: 0 !important;
   padding: 0;
   border: 0;
-  width: 100%;
-  height: 100dvh;
+  width: auto;
+  height: auto;
   max-width: none;
   max-height: none;
   background: transparent;
@@ -966,14 +1038,14 @@ dialog.il-drawer {
   overflow: hidden;
 }
 dialog.il-drawer:not([open]) { display: none; }
-dialog.il-drawer::backdrop { background: transparent; }
+dialog.il-drawer::backdrop { background: var(--overlay); }
 
 /* ═══════════════════════════════════════════════════════════════
    §19–25 — OVERLAY SYSTEM · faixa que expande lateralmente
    ═══════════════════════════════════════════════════════════════
    UM dialog = UM backdrop. "Cadastrar novo paciente" dentro de "Novo
-   agendamento" NÃO abre modal novo: a faixa cresce (base 680–760px →
-   expandida 1000–1120px), o painel base recua/atenua e o secundário entra
+   agendamento" NÃO abre modal novo: a faixa cresce (base 760–840px →
+   expandida até 1280px conforme a viewport), o painel base recua/atenua e o secundário entra
    pela direita. Animações: entrada 200ms, saída 170ms (faixa ~200ms),
    com prefers-reduced-motion zerando o movimento. */
 
@@ -982,7 +1054,35 @@ dialog.il-drawer::backdrop { background: transparent; }
 [tabindex='-1']:focus,
 [tabindex='-1']:focus-visible { outline: none !important; box-shadow: none !important; }
 
-.il-drawer__strip { transition: max-width 200ms var(--ease-standard), width 200ms var(--ease-standard); }
+.il-drawer__strip {
+  border: 1px solid var(--border);
+  border-radius: 20px;
+  background: var(--surface);
+  color: var(--text);
+  box-shadow: 0 32px 64px -24px rgba(15, 23, 42, .38), 0 8px 24px -12px rgba(15, 23, 42, .16);
+  overflow: hidden;
+  transition: max-width 200ms var(--ease-standard), width 200ms var(--ease-standard);
+}
+.il-drawer__strip[data-expanded='true'] { width:100%; max-width:1280px; }
+/* Composição aninhada 50/50: DUAS colunas exatamente iguais. Os dois painéis
+   recebem o mesmo preset (WORKSPACE_NESTED_PANEL) e o grid garante a simetria
+   — mesma largura, mesma altura, headers alinhados e UMA linha divisória.
+   Não é "sheet dentro de sheet": é um overlay só, com dois painéis. */
+.il-drawer__strip[data-expanded='true'] .il-drawer__panels {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+}
+.il-drawer__strip[data-expanded='true'] .il-drawer__panel {
+  width: auto !important;
+  max-width: none !important;
+  min-width: 0;
+}
+dialog.il-drawer .il-actionbar {
+  padding: 12px 16px;
+  background: var(--surface-2);
+  border-top: 1px solid var(--border-soft);
+  border-radius: 0 0 var(--radius-xl) var(--radius-xl);
+}
 .il-drawer__panel--base {
   min-width: 0;
   transition: opacity 200ms var(--ease-standard), transform 200ms var(--ease-standard), filter 200ms var(--ease-standard);
@@ -999,18 +1099,28 @@ dialog.il-drawer::backdrop { background: transparent; }
   from { opacity: 0; transform: translateX(24px); }
   to { opacity: 1; transform: none; }
 }
-/* Mobile (≤768px): passos num overlay SÓ — transição horizontal, um painel
-   por vez. O base sai pela esquerda quando o secundário assume. */
-@media (max-width: 768px) {
-  .il-drawer__strip[data-expanded='true'] { max-width: none !important; width: 100% !important; }
-  .il-drawer__panel--base[data-recessed-mobile='true'] { display: none; }
-  .il-drawer__strip[data-expanded='true'] .il-drawer__panel--recessed {
-    display: none;
+/* Em viewport sem largura para dois painéis (≤1359px), o cadastro assume a
+   faixa inteira. O agendamento permanece montado e volta ao fechar o secundário;
+   nenhum painel é comprimido nem abre modal central. */
+@media (max-width: 767px) {
+  dialog.il-drawer {
+    top: calc(var(--topbar-h, 56px) + 8px);
+    right: 8px;
+    bottom: 8px;
+    left: 8px;
   }
+}
+@media (max-width: 1359px) {
+  .il-drawer__strip[data-expanded='true'] { max-width: none !important; width: 100% !important; }
+  /* Sem largura confortável para os DOIS formulários, o par desmancha: o
+     cadastro assume a faixa inteira e o agendamento volta depois — montado,
+     com o estado preservado (nada é comprimido, nada vira segundo dialog). */
+  .il-drawer__strip[data-expanded='true'] .il-drawer__panels { grid-template-columns: minmax(0, 1fr); }
+  .il-drawer__strip[data-expanded='true'] .il-drawer__panel--recessed { display: none; }
   .il-drawer__strip[data-expanded='true'] .il-drawer__panel--side {
     width: 100% !important; max-width: none !important; border-left: 0 !important;
+    animation: il-drawer-side-in-mobile 200ms var(--ease-standard);
   }
-  .il-drawer__panel--side { animation: il-drawer-side-in-mobile 200ms var(--ease-standard); }
   @keyframes il-drawer-side-in-mobile {
     from { opacity: 0; transform: translateX(100%); }
     to { opacity: 1; transform: none; }
@@ -1024,32 +1134,23 @@ dialog.il-drawer::backdrop { background: transparent; }
 }
 
 /* ═══════════════════════════════════════════════════════════════
-   APP SHELL — GoDoutor UI Revolution · Etapa A
+   APP SHELL — topbar, navegação por seções e conteúdo contextual
    ═══════════════════════════════════════════════════════════════
-   Topbar fixa (breadcrumb · busca global · notificações · conta) + sidebar
-   por seções + segunda coluna contextual. Geometria inteira por TOKEN
-   (--topbar-h/--sidebar-w/--sheet-gap): nenhuma tela repete número.
-   O sheet (Etapa B) é ancorado ABAIXO da topbar e À DIREITA de --sheet-left,
-   medido em runtime pelo shell — por isso nunca cobre sidebar nem topbar. */
+   Geometria por token. O Workspace Sheet mede sua borda inicial no shell para
+   respeitar a sidebar/topbar sem alterar o comportamento já homologado. */
 .workspace-shell { display: flex; align-items: stretch; }
-/* §2 (contrato D) — FUNDO DO WORKSPACE: neutro UNIVERSAL, gradiente sutil
-   #F4F6F8 → #F8F9FB. NÃO acompanha o tema da clínica — o mesmo fundo em
-   todas as rotas do dashboard (Agenda inclusa: o fundo externo é este; a
-   grade interna mantém o tom próprio dela). */
-/* ── FUNDO DO WORKSPACE · UMA fonte de verdade ──────────────────────────
-   `--workspace-bg` é O token do fundo do workspace. O DashboardShell aplica
-   em `.workspace-shell` e TODAS as telas (Agenda inclusa) herdam — nenhuma
-   tela define background externo próprio. Mudou o token aqui, mudou o
-   sistema inteiro (para rosa, degradê, o que for). */
+/* Fundo de workspace: sólido, neutro e único para todas as rotas. O token
+   não acompanha o tema; a grade interna da Agenda preserva seu próprio
+   tratamento de estado, sem tingir o fundo externo. */
+/* `--workspace-bg` é aplicado pelo DashboardShell; telas autenticadas herdam
+   o mesmo fundo e não definem background externo próprio. */
 :root {
-  --workspace-bg: linear-gradient(180deg, var(--bg-top) 0%, var(--bg-bottom) 100%);
+  --workspace-bg: var(--bg);
 }
 .il-platform.workspace-shell {
   background: var(--workspace-bg);
-  /* Gradiente ANCORADO na viewport (não na altura do conteúdo): a Agenda
-     (100dvh) e telas de conteúdo longo interpolam o MESMO gradiente nas
-     mesmas coordenadas — o pixel final é idêntico em qualquer rolagem. */
-  background-attachment: fixed;
+  /* Fundo estrutural, independente da altura da tela e do preset. */
+  background-attachment: initial;
 }
 /* Missão 7 · §8 — encaixe estratégico: o painel principal ganha UM canto
    especial no encontro com a lateral (as referências aprovadas). `overflow:
@@ -1061,8 +1162,7 @@ dialog.il-drawer::backdrop { background: transparent; }
   /* Encaixe estratégico na PARTE DE BAIXO da junção sidebar/workspace
      (acabamento no canto inferior — o arredondamento de cima estava errado). */
   border-bottom-left-radius: var(--radius-xl);
-  /* Mesmo fundo universal do shell (contrato D) — transparente deixa o
-     gradiente neutro #F4F6F8 → #F8F9FB aparecer sem duplicar tokens. */
+  /* Fundo transparente para herdar a superfície neutra sólida do shell. */
   background: transparent;
 }
 .workspace-content { min-width: 0; flex: 1; }
@@ -1076,14 +1176,8 @@ dialog.il-drawer::backdrop { background: transparent; }
   height: var(--topbar-h);
   display: flex; align-items: center; gap: 12px;
   padding: 0 16px;
-  /* Missão 6 — fundo colorido SUAVE (mockup aprovado, adaptado): um leve
-     tom da cor da sidebar clareando da esquerda para a direita. Sem blur,
-     sem faixa pesada — a busca continua em superfície branca e legível. */
-  background: linear-gradient(90deg,
-    color-mix(in srgb, var(--il-nav) 13%, var(--surface)) 0%,
-    color-mix(in srgb, var(--il-nav) 5%, var(--surface)) 38%,
-    var(--surface) 100%);
-  border-bottom: 1px solid color-mix(in srgb, var(--il-nav) 10%, var(--border));
+  background: var(--surface);
+  border-bottom: 1px solid var(--border-soft);
 }
 .ws-unitpill {
   display: inline-flex; align-items: center; gap: 8px;
@@ -1097,7 +1191,7 @@ dialog.il-drawer::backdrop { background: transparent; }
 .ws-unitpill__dot {
   display: flex; align-items: center; justify-content: center;
   width: 24px; height: 24px; border-radius: 50%;
-  background: linear-gradient(135deg, var(--cyan), var(--brand));
+  background: var(--accent);
   color: #fff; font-size: 10px; font-weight: 800; letter-spacing: .02em;
 }
 /* QUICK CREATE GLOBAL (missão 6 — o “+” volta como ação global premium):
@@ -1117,7 +1211,11 @@ dialog.il-drawer::backdrop { background: transparent; }
 .ws-quickcreate-btn:hover { background: var(--surface-hover); color: var(--text); border-color: var(--border); }
 .ws-quickcreate-btn:active { background: var(--surface-3); }
 .ws-quickcreate-btn:focus-visible { background: var(--surface-hover); }
-.ws-quickcreate-pop { min-width: 262px; padding: 7px; }
+.ws-quickcreate-pop {
+  min-width: min(262px, calc(100vw - 20px)); padding: 7px;
+  background: var(--surface); border: 1px solid var(--border);
+  border-radius: var(--radius-lg); box-shadow: var(--shadow-lg);
+}
 .ws-quickcreate-item {
   display: flex; width: 100%; align-items: center; gap: 10px;
   padding: 8px 9px; border-radius: var(--radius-md); text-align: left;
@@ -1140,13 +1238,13 @@ dialog.il-drawer::backdrop { background: transparent; }
   transition: background-color .15s ease, color .15s ease;
 }
 .ws-help:hover { background: var(--surface-hover); color: var(--text); }
-.ws-pop {
+.ws-pop:not(.viewport-popover) {
   position: absolute; top: calc(100% + 8px); right: 0; min-width: 232px;
   background: var(--surface); border: 1px solid var(--border);
   border-radius: var(--radius-lg); box-shadow: var(--shadow-lg);
   padding: 6px; z-index: 60;
 }
-.ws-pop--left { right: auto; left: 0; }
+.ws-pop--left:not(.viewport-popover) { right: auto; left: 0; }
 .ws-pop__item {
   display: flex; width: 100%; align-items: center; gap: 9px;
   padding: 8px 10px; border-radius: var(--radius-md);
@@ -1184,11 +1282,11 @@ dialog.il-drawer::backdrop { background: transparent; }
   font-size: 13px; font-weight: 700; color: var(--text);
   max-width: 24ch; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
-/* Marca de contexto: a cor da ÁREA atual, com halo suave. Cor com significado. */
+/* Indicador de contexto neutro (sem cor por módulo). */
 .ws-crumbs__mark {
-  width: 8px; height: 8px; border-radius: 3px; flex-shrink: 0;
-  background: var(--area-color, var(--brand));
-  box-shadow: 0 0 0 3px color-mix(in srgb, var(--area-color, var(--brand)) 16%, transparent);
+  width: 8px; height: 8px; border-radius: var(--radius-xs); flex-shrink: 0;
+  background: var(--accent);
+  box-shadow: none;
 }
 .ws-crumbs__group { font-size: 12.5px; font-weight: 600; color: var(--text-muted); white-space: nowrap; }
 .ws-crumbs__current { font-size: 13px; font-weight: 600; color: var(--text); white-space: nowrap; }
@@ -1231,7 +1329,7 @@ dialog.il-drawer::backdrop { background: transparent; }
 .global-search__input::-webkit-search-cancel-button { display: none; }
 .global-search__kbd {
   font-size: 10px; font-weight: 800; letter-spacing: .02em; color: var(--text-faint);
-  border: 1px solid var(--border-strong); border-radius: 5px; padding: 2px 5px;
+  border: 1px solid var(--border-strong); border-radius: var(--radius-xs); padding: 2px 5px;
   background: var(--surface); white-space: nowrap;
 }
 .global-search__clear {
@@ -1240,8 +1338,7 @@ dialog.il-drawer::backdrop { background: transparent; }
 }
 .global-search__clear:hover { background: var(--surface-hover); color: var(--text); }
 .global-search__panel {
-  position: absolute; top: calc(100% + 8px); left: 0; right: 0; z-index: 70;
-  padding: 6px; max-height: min(440px, 62vh); overflow-y: auto;
+  width: 100%; padding: 6px; max-height: min(440px, 62vh); overflow-y: auto;
   background: var(--surface); border: 1px solid var(--border);
   border-radius: var(--radius-lg); box-shadow: var(--shadow-lg);
 }
@@ -1281,12 +1378,18 @@ dialog.il-drawer::backdrop { background: transparent; }
   color: var(--text-faint); white-space: nowrap; padding-top: 3px;
 }
 
+/* Posição fixa compartilhada: o componente calcula alinhamento, margem e
+   inversão para todos os menus ancorados; nenhum é recortado pelo topbar. */
+.viewport-popover {
+  box-sizing: border-box; max-width: calc(100vw - 20px); max-height: calc(100dvh - 20px);
+  overflow-x: hidden; overflow-y: auto; overscroll-behavior: contain; scrollbar-gutter: stable;
+}
+
 /* ── Popover compartilhado (sino e conta) ───────────────────── */
 .ws-popover {
-  position: absolute; top: calc(100% + 8px); right: 0; z-index: 70;
-  width: min(330px, calc(100vw - 24px));
+  width: min(330px, calc(100vw - 20px));
   background: var(--surface); border: 1px solid var(--border);
-  border-radius: 12px; box-shadow: var(--shadow-md); overflow: hidden;
+  border-radius: var(--radius-lg); box-shadow: var(--shadow-md);
   animation: ws-pop-in var(--motion-fast) var(--ease-standard);
   transform-origin: top right;
 }
@@ -1368,8 +1471,8 @@ button.ws-bell__item:hover { background: var(--surface-hover); }
 }
 .ws-bell__dot--danger { background: var(--danger-bg); color: var(--danger-fg); }
 .ws-bell__dot--warning { background: var(--warning-bg); color: var(--warning-fg); }
-.ws-bell__dot--info { background: var(--cyan-bg); color: var(--cyan-fg); }
-.ws-bell__dot--violet { background: var(--violet-bg); color: var(--violet-fg); }
+.ws-bell__dot--info { background: var(--info-bg); color: var(--info-fg); }
+.ws-bell__dot--violet { background: var(--info-bg); color: var(--info-fg); }
 .ws-bell__dot--success { background: var(--success-bg); color: var(--success-fg); }
 .ws-bell__text { flex: 1; min-width: 0; }
 .ws-bell__text strong { font-weight: 800; }
@@ -1460,18 +1563,18 @@ button.ws-bell__item:hover { background: var(--surface-hover); }
 .workspace-collapse-btn {
   display: inline-flex; align-items: center; justify-content: center;
   width: 30px; height: 30px; flex-shrink: 0;
-  border-radius: 8px; border: 1px solid rgba(255, 255, 255, 0.22);
+  border-radius: var(--radius-md); border: 1px solid rgba(255, 255, 255, 0.22);
   background: rgba(255, 255, 255, 0.10); color: var(--il-nav-fg);
   transition: background-color .12s ease, color .12s ease, border-color .12s ease;
 }
-.workspace-collapse-btn:hover { background: rgba(255, 255, 255, 0.20); color: var(--il-nav-fg); border-color: rgba(255, 255, 255, 0.34); }
+.workspace-collapse-btn:hover { background: var(--il-nav-hover); color: var(--il-nav-fg); border-color: var(--il-nav-border); }
 .workspace-collapse-btn.is-mini { width: 28px; height: 28px; border-color: transparent; background: transparent; }
-.workspace-collapse-btn.is-mini:hover { background: rgba(255, 255, 255, 0.18); border-color: transparent; }
+.workspace-collapse-btn.is-mini:hover { background: var(--il-nav-hover); border-color: var(--il-nav-border); }
 .workspace-wordmark--product { color: var(--il-nav-fg); }
 .is-collapsed .workspace-wordmark--product { font-size: 12px; letter-spacing: -.04em; }
 .ws-unitpill__logo { width: 18px; height: 18px; border-radius: 50%; object-fit: cover; flex-shrink: 0; }
-.workspace-identity__collapse { color: rgba(255, 255, 255, 0.62); border-radius: 8px; flex-shrink: 0; }
-.workspace-identity__collapse:hover { color: var(--il-nav-fg); background: rgba(255, 255, 255, 0.16); }
+.workspace-identity__collapse { color: var(--il-nav-icon); border-radius: var(--radius-md); flex-shrink: 0; }
+.workspace-identity__collapse:hover { color: var(--il-nav-fg); background: var(--il-nav-hover); }
 .is-collapsed .workspace-identity { padding: 12px 8px; justify-content: center; }
 .workspace-logo { display: block; width: 100%; max-height: 52px; object-fit: contain; object-position: left center; }
 .workspace-wordmark { font-size: 17px; font-weight: 700; letter-spacing: -.02em; color: var(--il-nav-fg); }
@@ -1488,7 +1591,10 @@ button.ws-bell__item:hover { background: var(--surface-hover); }
      física da sidebar. A CAUSA da scrollbar horizontal era o ::after do
      .il-tip (tooltip invisível esticando o scrollWidth); o tooltip do rail
      agora vive no <aside>, fora deste container. */
-  overflow-x: hidden; padding: 8px;
+  /* Scrollbar clássica altera a largura útil durante o scroll; como o rail
+     centraliza ícones recolhidos, isso os deslocava alguns pixels. Reserve o
+     gutter desde o repouso para manter a geometria constante. */
+  overflow-x: hidden; padding: 8px; scrollbar-gutter: stable;
 }
 /* Missão §2 — SEM títulos de seção (nada de OPERAÇÃO/CLÍNICA/ADMINISTRAÇÃO):
    a sidebar é uma sequência contínua de destinos e grupos; blocos separados
@@ -1505,28 +1611,28 @@ button.ws-bell__item:hover { background: var(--surface-hover); }
    O estado continua sendo sempre aria-current — nunca só cor. */
 .workspace-link__icon {
   display: flex; align-items: center; justify-content: center;
-  width: 28px; height: 28px; flex-shrink: 0; border-radius: 50%;
-  background: rgba(255, 255, 255, 0.12); color: var(--il-nav-icon);
+  width: 24px; height: 24px; flex-shrink: 0; border-radius: var(--radius-xs);
+  background: transparent; color: var(--il-nav-icon);
   transition: color var(--motion-fast) var(--ease-standard),
               background-color var(--motion-fast) var(--ease-standard);
 }
 .workspace-link[aria-current="page"] .workspace-link__icon {
-  /* CURRENT = o mais forte: preenchido accent com fg de CONTRASTE (regra
-     estrutural — nunca cor fixa; em qualquer tema o par é AA). */
-  background: var(--accent); color: var(--accent-contrast);
-  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.16);
+  /* O fundo do item já comunica seleção; o glifo fica claro sem um segundo
+     bloco concorrente. */
+  background: transparent; color: var(--il-nav-active-fg);
+  box-shadow: none;
 }
 .workspace-link {
   position: relative; display: flex; align-items: center; gap: 10px; width: 100%;
   min-height: var(--control-h); padding: 0 10px;
   font-size: 13.5px; font-weight: 500; line-height: 1.3; text-align: left;
-  border-radius: 8px; color: var(--il-nav-fg);
+  border-radius: var(--radius-md); color: var(--il-nav-fg);
   transition: background-color var(--motion-fast) var(--ease-standard),
               color var(--motion-fast) var(--ease-standard);
 }
 .workspace-link:hover {
   background: var(--il-nav-hover);
-  color: var(--il-nav-active-fg);
+  color: var(--il-nav-fg);
 }
 .workspace-link[aria-current='page'] {
   background: var(--il-nav-active); color: var(--il-nav-active-fg); font-weight: 600;
@@ -1545,12 +1651,12 @@ button.ws-bell__item:hover { background: var(--surface-hover); }
   background: var(--il-nav-hover); color: var(--il-nav-fg);
 }
 .workspace-link--group[aria-expanded='true'] .workspace-link__icon {
-  background: var(--il-nav-active); color: var(--il-nav-active-fg);
+  background: transparent; color: var(--il-nav-active-fg);
 }
 .workspace-link[aria-current='page'] .workspace-link__chevron,
 .workspace-link--group[aria-expanded='true'] .workspace-link__chevron { color: inherit; }
 .workspace-link__chevron {
-  margin-left: auto; color: rgba(255, 255, 255, 0.55); flex-shrink: 0;
+  margin-left: auto; color: var(--il-nav-fg); flex-shrink: 0;
   transition: transform var(--motion-base) var(--ease-standard),
               color var(--motion-fast) var(--ease-standard);
 }
@@ -1579,7 +1685,7 @@ button.ws-bell__item:hover { background: var(--surface-hover); }
   display: flex; align-items: center; gap: 10px; width: 100%;
   padding: 12px 12px 10px; border-radius: var(--radius-md);
 }
-button.workspace-clinic-head:hover { background: rgba(255, 255, 255, 0.12); }
+button.workspace-clinic-head:hover { background: var(--il-nav-hover); }
 .workspace-foot__item--collapse { color: var(--il-nav-muted); }
 .workspace-clinic-head__logo {
   width: 34px; height: 34px; border-radius: var(--radius-md);
@@ -1641,10 +1747,10 @@ button.workspace-clinic-head:hover { background: rgba(255, 255, 255, 0.12); }
 .workspace-foot { border-top: 1px solid var(--il-nav-border); padding: 8px; }
 .workspace-foot__item {
   display: flex; align-items: center; gap: 10px; width: 100%;
-  min-height: 36px; padding: 0 10px; border-radius: 8px;
+  min-height: 36px; padding: 0 10px; border-radius: var(--radius-md);
   font-size: 13px; font-weight: 500; color: var(--il-nav-muted); text-align: left;
 }
-.workspace-foot__item:hover { background: var(--il-nav-hover); color: var(--il-nav-active-fg); }
+.workspace-foot__item:hover { background: var(--il-nav-hover); color: var(--il-nav-fg); }
 .workspace-foot__brand {
   display: block; padding: 6px 10px 2px; font-size: 10.5px; font-weight: 500;
   color: rgba(255, 255, 255, 0.55); letter-spacing: .01em;
@@ -1656,7 +1762,7 @@ button.workspace-clinic-head:hover { background: rgba(255, 255, 255, 0.12); }
   min-height: 36px; min-width: 36px; padding: 0 10px;
   font-size: 12.5px; font-weight: 600; color: var(--il-nav-muted); border-radius: var(--radius-md);
 }
-.workspace-icon-button:hover { background: var(--il-nav-hover); color: var(--il-nav-active-fg); }
+.workspace-icon-button:hover { background: var(--il-nav-hover); color: var(--il-nav-fg); }
 .is-collapsed .workspace-icon-button { justify-content: center; padding: 0; }
 
 /* ── Acordeão do submenu (FASE D: UMA coluna, expande para BAIXO) ──
@@ -1681,13 +1787,13 @@ button.workspace-clinic-head:hover { background: rgba(255, 255, 255, 0.12); }
 .workspace-submenu__guide {
   display: flex; flex-direction: column; gap: 3px;
   margin: 3px 0 8px; padding: 6px;
-  background: rgba(255, 255, 255, 0.10);
-  border: 1px solid rgba(255, 255, 255, 0.13);
+  background: var(--il-nav-hover);
+  border: 1px solid var(--il-nav-border);
   border-radius: var(--radius-md);
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.06);
+  box-shadow: none;
 }
 .workspace-link--sub { min-height: 34px; font-size: 13px; padding-left: 14px; border-radius: var(--radius-sm); }
-.workspace-link--sub:hover { background: rgba(255, 255, 255, 0.16); }
+.workspace-link--sub:hover { background: var(--il-nav-hover); color: var(--il-nav-fg); }
 .workspace-link--sub[aria-current='page'] { background: var(--il-nav-active); }
 .workspace-link--sub .workspace-link__icon { width: 22px; height: 22px; }
 /* Missão §7/§8 — no rail recolhido o submenu NÃO existe inline: o clique no
@@ -1702,34 +1808,7 @@ button.workspace-clinic-head:hover { background: rgba(255, 255, 255, 0.12); }
    Missão 7 — paleta refinada: Azul clínico (padrão aprovado), Azul
    amigável, Violeta, Teal, Verde sálvia, Âmbar, Ônix (preto de
    verdade) e Vinho. */
-.workspace-shell[data-nav-accent='azul-amigavel'] {
-  --il-nav: #2563eb; --il-nav-fg: #eff6ff; --il-nav-muted: #bfdbfe;
-  --il-nav-hover: #1d4ed8; --il-nav-active: #3b82f6; --il-nav-active-fg: #ffffff;
-}
-.workspace-shell[data-nav-accent='violeta'] {
-  --il-nav: #6d28d9; --il-nav-fg: #f5f3ff; --il-nav-muted: #ddd6fe;
-  --il-nav-hover: #5b21b6; --il-nav-active: #7c3aed; --il-nav-active-fg: #ffffff;
-}
-.workspace-shell[data-nav-accent='teal'] {
-  --il-nav: #0f766e; --il-nav-fg: #f0fdfa; --il-nav-muted: #b8e8e0;
-  --il-nav-hover: #115e59; --il-nav-active: #14b8a6; --il-nav-active-fg: #ffffff;
-}
-.workspace-shell[data-nav-accent='verde-salvia'] {
-  --il-nav: #4d7c5f; --il-nav-fg: #f4f8f4; --il-nav-muted: #cfe3d2;
-  --il-nav-hover: #3f6a50; --il-nav-active: #5f8d6e; --il-nav-active-fg: #ffffff;
-}
-.workspace-shell[data-nav-accent='ambar'] {
-  --il-nav: #b45309; --il-nav-fg: #fff8eb; --il-nav-muted: #f5d9a8;
-  --il-nav-hover: #92400e; --il-nav-active: #d97706; --il-nav-active-fg: #ffffff;
-}
-.workspace-shell[data-nav-accent='onix'] {
-  --il-nav: #18181b; --il-nav-fg: #fafafa; --il-nav-muted: #c4c4c8;
-  --il-nav-hover: #27272a; --il-nav-active: #3f3f46; --il-nav-active-fg: #ffffff;
-}
-.workspace-shell[data-nav-accent='vinho'] {
-  --il-nav: #9f1239; --il-nav-fg: #fff1f2; --il-nav-muted: #f7cdd6;
-  --il-nav-hover: #881337; --il-nav-active: #be123c; --il-nav-active-fg: #ffffff;
-}
+/* Theme values come exclusively from nav-accent.ts on the workspace shell. */
 
 /* ── Skip link ──────────────────────────────────────────────── */
 .workspace-skip {
@@ -1807,9 +1886,27 @@ button.workspace-clinic-head:hover { background: rgba(255, 255, 255, 0.12); }
 }
 @media (prefers-reduced-motion: reduce) {
   .ws-skeleton-line, .il-skeleton { animation: none; background: var(--skeleton-base); }
-  .ws-topbar { backdrop-filter: none; } /* missão 6: o fundo colorido suave permanece */
+  .ws-topbar { backdrop-filter: none; } /* mantém a superfície sólida no modo reduced-motion */
 }
 /* Consistent reading rhythm without recoloring public clinic themes. */
+/* Page Architecture — geometria única alimentada por PANEL_ROUTES.pageType. */
+.il-platform .il-page-frame {
+  --page-width-wide:80rem; --page-width-detail:90rem; --page-width-form:60rem;
+  --page-gutter-x:1rem; --page-gutter-x-wide:2rem; --page-gutter-y:1.5rem;
+  box-sizing:border-box; width:100%; min-width:0; margin-inline:auto;
+  padding:var(--page-gutter-y) var(--page-gutter-x);
+}
+.il-platform .il-page-frame--workspace { max-width:none; }
+.il-platform .il-page-frame--record,
+.il-platform .il-page-frame--hub { max-width:var(--page-width-wide); }
+.il-platform .il-page-frame--detail { max-width:var(--page-width-detail); }
+.il-platform .il-page-frame--form { max-width:var(--page-width-form); }
+.il-platform .il-page-frame--flush { padding:0; }
+@media(min-width:1024px) {
+  .il-platform .il-page-frame { padding-inline:var(--page-gutter-x-wide); }
+  .il-platform .il-page-frame--flush { padding:0; }
+}
+
 .il-platform { font-size:14px; line-height:1.5; -webkit-font-smoothing:subpixel-antialiased; -moz-osx-font-smoothing:auto; text-rendering:optimizeLegibility; }
 .il-platform h1 { letter-spacing:-.035em; }
 .il-platform th { color:var(--text-muted); font-size:11px; letter-spacing:.04em; text-align:left; }
@@ -1817,7 +1914,7 @@ button.workspace-clinic-head:hover { background: rgba(255, 255, 255, 0.12); }
 .il-platform table { border-collapse:collapse; }
 .il-platform :is(.text-zinc-400,.text-slate-400,.text-gray-400) { color:var(--text-faint); }
 .il-platform :is(.text-zinc-500,.text-slate-500,.text-gray-500) { color:var(--text-muted); }
-.il-platform :is(.shadow-xl,.shadow-lg) { box-shadow:var(--shadow-md); }
+.il-platform :is(.shadow-xl,.shadow-lg) { box-shadow:var(--shadow-lg); }
 
 /* Marketing is independently scoped: no public clinic theme overrides. */
 .il-marketing { --ink:#252a31; --quiet:#5c626b; --blue:#2459a6; color:var(--ink); background:#f7f7f4; font-size:15px; line-height:1.7; }
@@ -1939,7 +2036,7 @@ button.workspace-clinic-head:hover { background: rgba(255, 255, 255, 0.12); }
 .il-page :focus-visible { outline:2px solid var(--il-primary); outline-offset:3px; }
 .il-page button, .il-page input, .il-page select { min-height:44px; }
 @media(prefers-reduced-motion:reduce) { .il-page *, .il-page *::before, .il-page *::after { animation:none!important; transition:none!important; scroll-behavior:auto!important; } }
-.il-platform .editor-savebar { display:flex; flex-wrap:wrap; align-items:center; justify-content:space-between; gap:16px; padding:16px; border:1px solid var(--brand-border); border-radius:8px; background:var(--surface); margin-bottom:16px; }
+.il-platform .editor-savebar { display:flex; flex-wrap:wrap; align-items:center; justify-content:space-between; gap:16px; padding:16px; border:1px solid var(--brand-border); border-radius:var(--radius-md); background:var(--surface); margin-bottom:16px; }
 .il-platform .editor-savebar > div:first-child { flex:1; min-width:220px; }
 dialog.il-customer-dialog { margin:0; padding:0; width:100%; height:100dvh; max-width:none; max-height:none; border:0; background:transparent; color:inherit; }
 dialog.il-customer-dialog:not([open]) { display:none; }
@@ -1959,8 +2056,8 @@ dialog.il-customer-dialog::backdrop { background:transparent; }
 .il-platform [class*="backdrop-blur"] { backdrop-filter:none; }
 .il-platform * { text-shadow:none; }
 .il-platform .agenda-page-gutter { padding:8px; }
-.il-platform [data-agenda-main] > div { border-radius:8px; box-shadow:none; }
-.il-platform [data-queue-rail] { width:280px; flex-shrink:0; align-self:flex-start; max-height:var(--queue-rail-maxh); overflow-y:auto; background:var(--surface); border:1px solid var(--border); border-radius:8px; }
+.il-platform [data-agenda-main] > div { border-radius:var(--radius-md); box-shadow:none; }
+.il-platform [data-queue-rail] { width:280px; flex-shrink:0; align-self:flex-start; max-height:var(--queue-rail-maxh); overflow-y:auto; background:var(--surface); border:1px solid var(--border); border-radius:var(--radius-md); }
 @media(min-width:1200px) { .il-platform .agenda-page-gutter { padding:16px; } }
 @media(max-width:767px) { .il-platform .il-tab { min-height:44px; } }
 
@@ -1982,6 +2079,10 @@ dialog.il-customer-dialog::backdrop { background:transparent; }
    existir (mobile: Lista/Dia com rolagem própria do layout). */
 .ag-page { display: flex; flex-direction: column; min-width: 0; }
 .ag-page > * { min-width: 0; }
+.ag-free-range:hover {
+  background: var(--surface-hover);
+  box-shadow: inset 0 0 0 1px var(--accent-border);
+}
 /* Painéis de modo (Dia/Semana/Mês/Lista): superfície única rolável do modo.
    O panel ocupa TODO o resto do viewport (flex:1) e o scroller é o único
    dono da rolagem vertical daquele modo. min-height trava um piso visual em
@@ -2011,7 +2112,7 @@ dialog.il-customer-dialog::backdrop { background:transparent; }
 }
 /* Grade clínica: separação levemente mais nítida de horários/colunas/cabeçalho
    (bordas #E5EAF1 família dos tokens), sem zebra e sem escurecer. */
-.il-platform [data-agenda-main] .ag-grid-surface { border: 1px solid var(--border); border-radius: 8px; background: var(--surface); }
+.il-platform [data-agenda-main] .ag-grid-surface { border: 1px solid var(--border); border-radius: var(--radius-md); background: var(--surface); }
 .il-platform [data-agenda-main] .ag-grid-surface .border-zinc-100,
 .il-platform [data-agenda-main] .ag-grid-surface .border-zinc-200 { border-color: var(--border); }
 
@@ -2021,11 +2122,9 @@ dialog.il-customer-dialog::backdrop { background:transparent; }
 .dsh-metrics {
   display: grid; grid-template-columns: repeat(2, minmax(0, 1fr));
   margin-bottom: 16px; overflow: hidden;
-  /* MISSÃO 4: amarelo/creme VOLTA como UM card de métricas em sólido suave
-     (sem degradê, sem banner): vida no topo sem virar enfeite. */
-  background: var(--sun-bg);
-  border: 1px solid var(--border-soft); border-radius: var(--radius-lg);
-  box-shadow: var(--shadow-xs);
+  background: var(--surface);
+  border: 1px solid var(--border-soft); border-radius: var(--radius-md);
+  box-shadow: none;
 }
 .dsh-metric {
   display: flex; gap: 10px; align-items: flex-start; min-width: 0;
@@ -2037,8 +2136,8 @@ dialog.il-customer-dialog::backdrop { background:transparent; }
 .dsh-metric__icon,
 .dsh-kpi__icon {
   display: flex; align-items: center; justify-content: center;
-  width: 40px; height: 40px; flex-shrink: 0; border-radius: 12px;
-  box-shadow: var(--shadow-inset);
+  width: 40px; height: 40px; flex-shrink: 0; border-radius: var(--radius-sm);
+  box-shadow: none;
 }
 .dsh-metric__num,
 .dsh-kpi__num { font-size: 25px; font-weight: 700; letter-spacing: -.025em; line-height: 1.15; color: var(--text); font-variant-numeric: tabular-nums; }
@@ -2057,7 +2156,7 @@ dialog.il-customer-dialog::backdrop { background:transparent; }
   .dsh-metric:first-child { border-left: 0; }
   .dsh-metric:nth-child(n + 4) { border-top: 0; }
 }
-.dsh-card { background: var(--surface); border: 1px solid var(--border-soft); border-radius: var(--radius-lg); box-shadow: var(--shadow-xs); }
+.dsh-card { background: var(--surface); border: 1px solid var(--border-soft); border-radius: var(--radius-md); box-shadow: none; }
 .dsh-card__head { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 10px; padding: 14px 16px 0; }
 .dsh-card__title { margin: 0; font-size: 14px; font-weight: 600; letter-spacing: -.01em; color: var(--text); }
 .dsh-card__body { padding: 12px 16px 16px; }
@@ -2070,10 +2169,10 @@ dialog.il-customer-dialog::backdrop { background:transparent; }
   padding: 14px 8px; border-radius: var(--radius-lg);
   border: 1px solid var(--border-soft); background: var(--surface);
   font-size: 11.5px; font-weight: 700; color: var(--text-soft); text-align: center;
-  transition: border-color .15s ease, box-shadow .15s ease, transform .12s ease;
+  transition: border-color .15s ease, background-color .15s ease;
 }
-.dsh-quick:hover { border-color: var(--brand-border); box-shadow: var(--shadow-xs); transform: translateY(-1px); }
-.dsh-quick__icon { display: flex; align-items: center; justify-content: center; width: 38px; height: 38px; border-radius: 12px; }
+.dsh-quick:hover { border-color: var(--border-strong); background: var(--surface-hover); }
+.dsh-quick__icon { display: flex; align-items: center; justify-content: center; width: 38px; height: 38px; border: 1px solid var(--border); border-radius: var(--radius-sm); background: var(--surface-2); color: var(--accent-fg); }
 
 /* ═══════════════════════════════════════════════════════════════
    CAMADA DE CONSISTÊNCIA — Etapa E
@@ -2083,11 +2182,7 @@ dialog.il-customer-dialog::backdrop { background:transparent; }
    de texto ficam iguais em todo o painel, sem reescrever telas.
    ═══════════════════════════════════════════════════════════════ */
 .il-platform :where(div, section).border-zinc-200 {
-  background: var(--surface);
   border-color: var(--border-soft);
-  border-radius: var(--radius-lg);
-  box-shadow: var(--shadow-xs);
-  overflow: hidden;
 }
 .il-platform :where(.border-zinc-100) { border-color: var(--border-soft); }
 .il-platform :where(.divide-zinc-100) > :not([hidden]) ~ :not([hidden]) { border-color: var(--border-soft); }
@@ -2100,6 +2195,41 @@ dialog.il-customer-dialog::backdrop { background:transparent; }
 .il-platform :where(.hover\:bg-zinc-50:hover) { background: var(--surface-2); }
 .il-platform :where(.hover\:bg-zinc-100:hover) { background: var(--surface-hover); }
 .il-platform :where(.hover\:bg-zinc-200:hover) { background: var(--surface-hover); }
+
+/*
+ * Authenticated workspace compatibility bridge.
+ * Legacy Tailwind palette utilities resolve to fixed semantic tokens here.
+ * Every selector is scoped to the workspace shell; public/editor/renderer
+ * legacy styles remain untouched. The source classes can migrate incrementally.
+ */
+.il-platform.workspace-shell :where(.ring-emerald-500) { --tw-ring-color: var(--success); }
+.il-platform.workspace-shell :where(.bg-emerald-500\/30) { background-color: color-mix(in srgb, var(--success) 30%, transparent); }
+.il-platform.workspace-shell :where(.bg-emerald-50\/40) { background-color: color-mix(in srgb, var(--success-bg) 40%, transparent); }
+.il-platform.workspace-shell :where(.bg-amber-50\/60) { background-color: color-mix(in srgb, var(--warning-bg) 60%, transparent); }
+.il-platform.workspace-shell :where(.bg-red-500), .il-platform.workspace-shell :where(.bg-rose-700) { background-color: var(--danger); }
+.il-platform.workspace-shell :where(.bg-red-100), .il-platform.workspace-shell :where(.bg-red-50), .il-platform.workspace-shell :where(.bg-rose-50) { background-color: var(--danger-bg); }
+.il-platform.workspace-shell :where(.hover\:bg-red-50):hover, .il-platform.workspace-shell :where(.hover\:bg-rose-100):hover, .il-platform.workspace-shell :where(.hover\:bg-rose-50):hover { background-color: var(--danger-bg); }
+.il-platform.workspace-shell :where(.bg-blue-100), .il-platform.workspace-shell :where(.bg-blue-50) { background-color: var(--info-bg); }
+.il-platform.workspace-shell :where(.bg-emerald-500), .il-platform.workspace-shell :where(.bg-emerald-600), .il-platform.workspace-shell :where(.bg-emerald-700) { background-color: var(--success); }
+.il-platform.workspace-shell :where(.hover\:bg-emerald-700):hover { background-color: var(--success); }
+.il-platform.workspace-shell :where(.bg-emerald-100), .il-platform.workspace-shell :where(.bg-emerald-50) { background-color: var(--success-bg); }
+.il-platform.workspace-shell :where(.hover\:bg-emerald-200):hover { background-color: var(--success-bg); }
+.il-platform.workspace-shell :where(.bg-amber-400), .il-platform.workspace-shell :where(.bg-amber-500), .il-platform.workspace-shell :where(.bg-amber-600) { background-color: var(--warning); }
+.il-platform.workspace-shell :where(.bg-amber-100), .il-platform.workspace-shell :where(.bg-amber-50), .il-platform.workspace-shell :where(.bg-orange-100), .il-platform.workspace-shell :where(.bg-orange-50) { background-color: var(--warning-bg); }
+.il-platform.workspace-shell :where(.hover\:bg-amber-100):hover, .il-platform.workspace-shell :where(.hover\:bg-orange-100):hover { background-color: var(--warning-bg); }
+.il-platform.workspace-shell :where(.border-red-200), .il-platform.workspace-shell :where(.border-rose-200) { border-color: var(--danger-border); }
+.il-platform.workspace-shell :where(.border-blue-200) { border-color: var(--info-border); }
+.il-platform.workspace-shell :where(.border-emerald-100), .il-platform.workspace-shell :where(.border-emerald-200), .il-platform.workspace-shell :where(.border-emerald-500), .il-platform.workspace-shell :where(.border-emerald-700) { border-color: var(--success-border); }
+.il-platform.workspace-shell :where(.border-amber-200), .il-platform.workspace-shell :where(.border-amber-200\/60), .il-platform.workspace-shell :where(.border-amber-200\/70), .il-platform.workspace-shell :where(.border-amber-300), .il-platform.workspace-shell :where(.border-orange-200) { border-color: var(--warning-border); }
+.il-platform.workspace-shell :where(.text-blue-800\/70) { color: color-mix(in srgb, var(--info-fg) 70%, transparent); }
+.il-platform.workspace-shell :where(.text-blue-900\/80) { color: color-mix(in srgb, var(--info-fg) 80%, transparent); }
+.il-platform.workspace-shell :where(.text-amber-800\/80), .il-platform.workspace-shell :where(.text-amber-900\/80) { color: color-mix(in srgb, var(--warning-fg) 80%, transparent); }
+.il-platform.workspace-shell :where(.text-red-300), .il-platform.workspace-shell :where(.text-red-400), .il-platform.workspace-shell :where(.text-red-500), .il-platform.workspace-shell :where(.text-red-600), .il-platform.workspace-shell :where(.text-red-700), .il-platform.workspace-shell :where(.text-red-800), .il-platform.workspace-shell :where(.text-red-900), .il-platform.workspace-shell :where(.text-rose-700), .il-platform.workspace-shell :where(.text-rose-800) { color: var(--danger-fg); }
+.il-platform.workspace-shell :where(.hover\:text-red-600):hover, .il-platform.workspace-shell :where(.hover\:text-red-700):hover { color: var(--danger-fg); }
+.il-platform.workspace-shell :where(.text-blue-600), .il-platform.workspace-shell :where(.text-blue-700), .il-platform.workspace-shell :where(.text-blue-800), .il-platform.workspace-shell :where(.text-blue-900), .il-platform.workspace-shell :where(.text-blue-950) { color: var(--info-fg); }
+.il-platform.workspace-shell :where(.text-emerald-300), .il-platform.workspace-shell :where(.text-emerald-600), .il-platform.workspace-shell :where(.text-emerald-700), .il-platform.workspace-shell :where(.text-emerald-800), .il-platform.workspace-shell :where(.text-emerald-900), .il-platform.workspace-shell :where(.text-emerald-950) { color: var(--success-fg); }
+.il-platform.workspace-shell :where(.text-amber-500), .il-platform.workspace-shell :where(.text-amber-600), .il-platform.workspace-shell :where(.text-amber-700), .il-platform.workspace-shell :where(.text-amber-800), .il-platform.workspace-shell :where(.text-amber-900), .il-platform.workspace-shell :where(.text-amber-950), .il-platform.workspace-shell :where(.text-orange-700), .il-platform.workspace-shell :where(.text-orange-800) { color: var(--warning-fg); }
+.il-platform.workspace-shell :where(.hover\:text-amber-900):hover { color: var(--warning-fg); }
 
 /* ── Página pública: o avatar/logo SOBREPÕE a capa (identidade, não rodapé) ── */
 .il-page .pub-avatar {
@@ -2270,7 +2400,7 @@ dialog.ws-sheet {
     border-radius .2s ease;
 }
 dialog.ws-sheet:not([open]) { display: none; }
-dialog.ws-sheet::backdrop { background: rgba(15, 23, 42, .34); }
+dialog.ws-sheet::backdrop { background: var(--overlay); }
 dialog.ws-sheet[open] { animation: ws-sheet-in 200ms cubic-bezier(.32,.72,.28,1); }
 dialog.ws-sheet[data-closing] { animation: ws-sheet-out 200ms ease-in forwards; }
 @keyframes ws-sheet-in {
@@ -2363,6 +2493,69 @@ dialog.ws-sheet[data-closing] { animation: ws-sheet-out 200ms ease-in forwards; 
   border-radius: 0 0 var(--radius-xl) var(--radius-xl);
 }
 
+/* Mobile navigation is the ONLY Drawer surface that follows sidebar tokens.
+   Keep the generic Drawer and every other overlay on workspace surfaces. */
+dialog.workspace-nav-drawer .il-drawer__strip {
+  background: var(--il-nav);
+  color: var(--il-nav-fg);
+  border-color: var(--il-nav-border);
+}
+dialog.workspace-nav-drawer .ws-sheet__header,
+dialog.workspace-nav-drawer .ws-sheet__body,
+dialog.workspace-nav-drawer .ws-sheet__footer {
+  background: var(--il-nav);
+  color: var(--il-nav-fg);
+  border-color: var(--il-nav-border);
+}
+dialog.workspace-nav-drawer .ws-sheet__titles h2,
+dialog.workspace-nav-drawer .ws-sheet__sub {
+  color: var(--il-nav-fg);
+}
+dialog.workspace-nav-drawer .ws-sheet__close {
+  color: var(--il-nav-fg);
+  background: var(--il-nav-hover);
+  border-color: var(--il-nav-border);
+}
+dialog.workspace-nav-drawer .ws-sheet__close:hover,
+dialog.workspace-nav-drawer .ws-sheet__close:active {
+  color: var(--il-nav-active-fg);
+  background: var(--il-nav-active);
+  border-color: var(--il-nav-active);
+}
+dialog.workspace-nav-drawer .ws-sheet__close:focus-visible {
+  outline: 2px solid var(--il-nav-fg);
+  outline-offset: 2px;
+}
+.workspace-nav-drawer .workspace-link__chevron {
+  color: var(--il-nav-fg);
+}
+.workspace-nav-drawer .workspace-clinic-head__name,
+.workspace-nav-drawer .workspace-clinic-head__meta,
+.workspace-nav-drawer .workspace-clinic-head__unit,
+.workspace-nav-drawer .workspace-foot__item,
+.workspace-nav-drawer .workspace-foot__brand,
+.workspace-nav-drawer .workspace-foot__brand strong,
+.workspace-nav-drawer .ws-setup-mini p {
+  color: var(--il-nav-fg);
+}
+.workspace-nav-drawer .ws-setup-mini {
+  background: var(--il-nav-hover);
+  border-color: var(--il-nav-border);
+}
+.workspace-nav-drawer .ws-setup-mini .bg-white\/20 {
+  background: var(--il-nav-border);
+}
+.workspace-nav-drawer .ws-setup-mini a {
+  color: var(--il-nav-active-fg);
+  background: var(--il-nav-active);
+  border-color: var(--il-nav-active);
+}
+.workspace-nav-drawer .ws-setup-mini a:hover {
+  color: var(--il-nav-fg);
+  background: var(--il-nav-hover);
+  border-color: var(--il-nav-border);
+}
+
 /* ── Minimizado: pílula ancorada no canto; o conteúdo NÃO desmonta ── */
 dialog.ws-sheet[data-minimized] {
   top: auto;
@@ -2394,30 +2587,7 @@ dialog.ws-sheet[data-minimized]::backdrop { background: transparent; }
   dialog.ws-sheet[data-minimized] { width: min(344px, calc(100vw - 16px)); }
 }
 
-/* ── Dock refinado de Conversas (era o botão flutuante colado na borda) ── */
-.conversation-shortcut {
-  position: fixed; right: var(--sheet-gap); bottom: var(--sheet-gap); z-index: 34;
-  display: inline-flex; align-items: center; gap: 9px;
-  min-height: 44px; padding: 0 16px;
-  background: var(--surface); color: var(--cyan-fg);
-  border: 1px solid var(--cyan-border);
-  border-radius: var(--radius-pill);
-  box-shadow: var(--shadow-md);
-  font-size: 13px; font-weight: 700;
-  transition: transform .15s ease, box-shadow .15s ease, background-color .15s ease;
-}
-.conversation-shortcut:hover {
-  background: var(--cyan-bg);
-  box-shadow: var(--shadow-lg);
-  transform: translateY(-1px);
-}
-.conversation-shortcut:active { transform: translateY(0); }
-.conversation-shortcut .conversation-shortcut__icon {
-  display: inline-flex; align-items: center; justify-content: center;
-  width: 26px; height: 26px; border-radius: var(--radius-pill);
-  background: var(--cyan-bg); color: var(--cyan-fg);
-}
-.conversation-shortcut:hover .conversation-shortcut__icon { background: var(--surface); }
+/* Conversations is now a compact topbar action; its contextual sheet remains. */
 /* Conversations is intentionally overlaid; the left submenu never is. */
 .conversation-view[data-panel="true"] .inbox-layout { grid-template-columns:260px minmax(0,1fr); }
 /* No sheet o título/ícone são do próprio Workspace Sheet: o view não repete;
@@ -2435,3 +2605,444 @@ dialog.ws-sheet[data-minimized]::backdrop { background: transparent; }
 
 .il-platform .conversation-view :is(button,input), .il-platform .conversation-view a.inline-flex { min-height:40px; }
 @media(max-width:767px) { .il-platform .conversation-view :is(button,input), .il-platform .conversation-view a.inline-flex { min-height:44px; } }
+
+/* Shared inline alert dialog used by guarded overlays (no second native modal/backdrop). */
+.overlay-confirm-layer {
+  position: absolute;
+  inset: 0;
+  z-index: 100;
+  display: grid;
+  place-items: center;
+  padding: 20px;
+  background: color-mix(in srgb, var(--text) 10%, transparent);
+  backdrop-filter: blur(1px);
+  /* Covers the existing dialog surface to keep controls underneath from
+     opening a second close request while this decision is pending. */
+  pointer-events: auto;
+}
+.overlay-confirm {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+  width: min(100%, 400px);
+  padding: 22px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  background: var(--surface);
+  color: var(--text);
+  box-shadow: var(--shadow-lg);
+  text-align: center;
+  pointer-events: auto;
+}
+.overlay-confirm__icon {
+  display: inline-flex;
+  width: 34px;
+  height: 34px;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid var(--warning-border);
+  border-radius: var(--radius-sm);
+  background: var(--warning-bg);
+  color: var(--warning-fg);
+}
+.overlay-confirm__copy { width: 100%; }
+.overlay-confirm__copy h2 { margin: 1px 0 0; color: var(--text); font-size: 15px; font-weight: 700; line-height: 1.35; }
+.overlay-confirm__copy p { margin: 5px 0 0; color: var(--text-muted); font-size: 12.5px; line-height: 1.5; }
+.overlay-confirm__actions { display: flex; justify-content: center; flex-wrap: wrap; gap: 8px; width: 100%; margin-top: 6px; }
+.overlay-confirm__action { min-height: 42px; padding: 0 15px; border-radius: var(--radius-sm); font-size: 12px; font-weight: 650; cursor: pointer; white-space: nowrap; }
+.overlay-confirm .il-control--secondary { border: 1px solid var(--border-strong); background: var(--surface); color: var(--text); }
+.overlay-confirm .il-control--secondary:hover { background: var(--surface-hover); }
+.overlay-confirm .il-control--destructive { border: 1px solid var(--danger); background: var(--danger); color: #fff; }
+.overlay-confirm .il-control--destructive:hover { border-color: var(--danger-strong); background: var(--danger-strong); }
+@media (max-width: 480px) {
+  .overlay-confirm-layer { padding: 12px; }
+  .overlay-confirm { gap: 9px; padding: 16px; }
+  .overlay-confirm__actions { flex-direction: row; gap: 8px; }
+  .overlay-confirm__action { width: auto; min-height: 44px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .overlay-confirm { animation: none !important; transition: none !important; }
+}
+
+/* Full-page clinical workspace: broad, content-led, and responsive (not a modal form). */
+.encounter-route-loading { width: min(100% - 32px, 1160px); margin: 28px auto; display: grid; gap: 18px; }
+.encounter-page {
+  --encounter-page-gutter: clamp(16px, 3vw, 40px);
+  min-height: calc(100dvh - 64px);
+  display: flex;
+  flex-direction: column;
+  background: var(--surface, #fff);
+  color: var(--text, #1c2822);
+  margin: -1px auto 0;
+}
+.encounter-page__sticky-sentinel { display: block; height: 1px; margin-bottom: -1px; pointer-events: none; }
+.encounter-page__header {
+  position: sticky;
+  top: var(--topbar-h, 64px);
+  z-index: 30;
+  display: flex;
+  align-items: center;
+  gap: 24px;
+  padding: 14px var(--encounter-page-gutter);
+  border-bottom: 1px solid var(--border, #e3e9e5);
+  background: color-mix(in srgb, var(--surface, #fff) 94%, transparent);
+  backdrop-filter: blur(12px);
+  transition: padding 180ms ease, gap 180ms ease, background-color 180ms ease;
+}
+.il-page-back {
+  display:inline-flex; flex:none; align-items:center; justify-content:center; gap:8px;
+  min-height:40px; padding:0 12px; border:1px solid var(--border-strong);
+  border-radius:var(--radius-md); background:var(--surface); color:var(--text);
+  font:inherit; font-size:13px; font-weight:600; line-height:1.2; text-decoration:none;
+  cursor:pointer; transition:background-color 140ms ease,border-color 140ms ease;
+}
+.il-page-back:hover { border-color:var(--border-strong); background:var(--surface-hover); color:var(--text); }
+.encounter-page__back { align-self:flex-start; }
+.encounter-page__heading { min-width: 0; flex: 1; display: flex; align-items: center; justify-content: space-between; gap: 16px; }
+.encounter-page__heading-copy { min-width: 0; }
+.encounter-page__heading h1 { margin: 0; font-size: clamp(20px, 2vw, 26px); line-height: 1.2; font-weight: 700; letter-spacing: -.025em; }
+.encounter-page__patient { margin: 3px 0 0; color: var(--text, #1c2822); font-size: 14px; font-weight: 600; }
+.encounter-page__meta { margin: 2px 0 0; color: var(--text-muted, #66736c); font-size: 12px; }
+.encounter-page__meta--compact { display: none; }
+.encounter-page__header[data-compact='true'] { gap: 12px; padding-block: 8px; background: var(--surface, #fff); }
+.encounter-page__header[data-compact='true'] .encounter-page__back { width: 0; min-width: 0; min-height: 0; margin: 0; padding-inline: 0; overflow: hidden; border-width: 0; opacity: 0; visibility: hidden; }
+.encounter-page__header[data-compact='true'] .encounter-page__heading { gap: 8px; }
+.encounter-page__header[data-compact='true'] .encounter-page__heading h1 { font-size: 16px; }
+.encounter-page__header[data-compact='true'] .encounter-page__patient { margin-top: 1px; font-size: 12px; line-height: 1.25; }
+.encounter-page__header[data-compact='true'] .encounter-page__meta--normal { display: none; }
+.encounter-page__header[data-compact='true'] .encounter-page__meta--compact { display: block; font-size: 11px; line-height: 1.25; }
+.encounter-page__content { width: min(100%, 1280px); flex: 1; margin: 0 auto; padding: 24px var(--encounter-page-gutter) 32px; }
+.encounter-page__footer {
+  position: sticky;
+  bottom: 0;
+  z-index: 20;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 20px;
+  padding: 12px var(--encounter-page-gutter);
+  border-top: 1px solid var(--border, #e3e9e5);
+  background: color-mix(in srgb, var(--surface, #fff) 96%, transparent);
+  backdrop-filter: blur(12px);
+}
+.encounter-page__save-state { flex: none; color: var(--text-muted, #66736c); font-size: 12px; font-weight: 600; }
+.encounter-page__save-state--saving { color: var(--brand-fg, #276347); }
+.encounter-page__save-state--error { color: var(--danger, #b42318); }
+.encounter-page__save-state--dirty { color: var(--warning-fg, #8a5b00); }
+.encounter-page > .overlay-confirm-layer { position: fixed; z-index: 1200; inset: 0; background: rgb(10 22 16 / 30%); pointer-events: auto; }
+@media (max-width: 767px) {
+  .encounter-page { min-height: calc(100dvh - 56px); margin-inline: -16px; }
+  .encounter-page__header { align-items: flex-start; gap: 10px; padding: 12px 16px; }
+  .encounter-page__back { min-height: 40px; }
+  .encounter-page__heading { align-items: flex-start; gap: 8px; }
+  .encounter-page__heading h1 { font-size: 20px; }
+  .encounter-page__patient { font-size: 13px; }
+  .encounter-page__meta { font-size: 11px; }
+  .encounter-page__content { padding: 18px 16px 24px; }
+  .encounter-page__footer { align-items: stretch; flex-direction: column; gap: 8px; padding: 10px 16px max(10px, env(safe-area-inset-bottom)); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .encounter-page__header, .encounter-page__footer { scroll-behavior: auto; }
+}
+.client-profile-page .overlay-confirm-layer { position: fixed; z-index: 1200; inset: 0; background: rgb(10 22 16 / 30%); pointer-events: auto; }
+
+/* ═══════════════════════════════════════════════════════════════
+   CONVERSAS — workspace operacional full-height
+   ═══════════════════════════════════════════════════════════════ */
+.workspace-shell--conversations { height: 100dvh; min-height: 0 !important; overflow: hidden; }
+.workspace-shell--conversation-focus { height: 100dvh; min-height: 0 !important; overflow: hidden; }
+.workspace-shell--conversation-focus .workspace-main-col { width: 100%; height: 100dvh; min-height: 0; border-radius: 0; overflow: hidden; }
+.workspace-shell--conversation-focus .workspace-content--focus { display: flex; flex-direction: column; min-height: 0; overflow: hidden; }
+.workspace-shell--conversation-focus .conversation-page-wrap { flex: 1 1 auto; min-height: 0; height: 100%; padding: 0; }
+.workspace-shell--conversation-focus .conversation-view { padding: 10px 12px; }
+.workspace-shell--conversation-focus .conversation-workspace { border-radius: 0; }
+.workspace-shell--standalone .workspace-main-col { flex: 1 1 100%; }
+.workspace-shell--conversations .workspace-main-col { height: 100%; min-height: 0; overflow: hidden; }
+.workspace-shell--conversations .workspace-content { display: flex; flex-direction: column; min-height: 0; overflow: hidden; }
+.workspace-shell--conversations .workspace-content > * { flex-shrink: 0; }
+.workspace-shell--conversations .conversation-page-wrap {
+  display: flex; flex: 1 1 auto; min-height: 0; min-width: 0; max-width: none; padding: 0; overflow: hidden;
+}
+.workspace-shell--conversations .conversation-view { flex: 1 1 auto; min-height: 0; }
+.workspace-shell--conversations .workspace-content > footer { display: none; }
+.conversation-view {
+  display: flex; flex-direction: column; gap: 10px; width: 100%; height: 100%; min-height: 0;
+  padding: 14px 16px 12px; overflow: hidden; color: var(--text);
+}
+.conversation-pagebar { display: flex; align-items: center; justify-content: space-between; gap: 14px; min-height: 42px; flex: 0 0 auto; }
+.conversation-pagebar__title,.conversation-pagebar__actions { display:flex; align-items:center; min-width:0; gap:10px; }
+.conversation-pagebar__title { flex:1; }
+.conversation-pagebar__heading { min-width:0; }
+.conversation-pagebar__heading h1 { margin:0; color:var(--text); font-size:17px; font-weight:650; line-height:1.2; letter-spacing:-.02em; }
+.conversation-pagebar__heading p { margin:3px 0 0; color:var(--text-muted); font-size:11.5px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.conversation-mark { display:inline-flex; width:34px; height:34px; flex:0 0 auto; align-items:center; justify-content:center; border:1px solid var(--border); border-radius:var(--radius-md); background:var(--surface); color:var(--accent-fg); }
+.conversation-action {
+  display:inline-flex; min-height:34px; align-items:center; justify-content:center; gap:6px; padding:0 10px;
+  border:1px solid var(--border); border-radius:var(--radius-sm); background:var(--surface); color:var(--text);
+  font:inherit; font-size:11.5px; font-weight:600; line-height:1.2; text-decoration:none; white-space:nowrap; cursor:pointer;
+  transition:background-color 140ms ease,border-color 140ms ease,color 140ms ease;
+}
+.conversation-action:hover { background:var(--surface-hover); border-color:var(--border-strong); }
+.conversation-action:focus-visible,.inbox-filter:focus-visible,.inbox-conversation:focus-visible,.inbox-back:focus-visible,
+.conversation-context-links a:focus-visible,.conversation-context-primary:focus-visible { outline:2px solid var(--accent); outline-offset:2px; }
+.conversation-action:disabled { cursor:not-allowed; opacity:.6; }
+.conversation-alert { flex:0 0 auto; margin:0; border:1px solid var(--danger-border); border-radius:var(--radius-sm); background:var(--danger-bg); color:var(--danger-fg); padding:8px 10px; font-size:12px; }
+.conversation-workspace {
+  display:grid; grid-template-columns:minmax(280px,300px) minmax(0,1fr) minmax(280px,310px);
+  flex:1 1 auto; min-width:0; min-height:0; overflow:hidden; border:1px solid var(--border); border-radius:var(--radius-md); background:var(--surface);
+}
+@media (min-width:1200px) {
+  .conversation-view[data-context-open="false"] .conversation-workspace { grid-template-columns:minmax(280px,300px) minmax(0,1fr) 0; }
+  .conversation-view[data-context-open="false"] .inbox-context { display:none; }
+}
+.inbox-list,.inbox-detail,.inbox-context { min-width:0; min-height:0; overflow:hidden; }
+.inbox-list { display:flex; flex-direction:column; border-right:1px solid var(--border); background:var(--surface); }
+.inbox-controls { flex:0 0 auto; display:flex; flex-direction:column; gap:9px; padding:12px; border-bottom:1px solid var(--border); background:var(--surface); }
+.inbox-controls__heading { display:flex; align-items:center; justify-content:space-between; }
+.inbox-controls__heading h2 { margin:0; color:var(--text); font-size:12px; font-weight:700; }
+.inbox-controls__heading > span { display:inline-flex; min-width:23px; justify-content:center; padding:2px 6px; border-radius:var(--radius-pill); background:var(--surface-3); color:var(--text-muted); font-size:10px; font-weight:650; font-variant-numeric:tabular-nums; }
+.inbox-search { display:flex; align-items:center; gap:7px; min-height:36px; padding:0 9px; border:1px solid var(--border-strong); border-radius:var(--radius-sm); background:var(--surface); color:var(--text-muted); }
+.inbox-search:focus-within { border-color:var(--accent); box-shadow:var(--shadow-focus); }
+.inbox-search input { width:100%; min-width:0; min-height:34px; border:0; outline:0; background:transparent; color:var(--text); font-size:11.5px; }
+.inbox-search input::placeholder { color:var(--text-faint); }
+.inbox-filter-group { display:flex; flex-wrap:wrap; gap:4px; }
+.inbox-filter {
+  min-height:30px; padding:0 8px; border:1px solid transparent; border-radius:var(--radius-sm); background:transparent;
+  color:var(--text-muted); font-size:10.5px; font-weight:600; white-space:nowrap; cursor:pointer;
+}
+.inbox-filter:hover { background:var(--surface-hover); color:var(--text); }
+.inbox-filter[aria-pressed="true"] { border-color:var(--border); background:var(--surface-3); color:var(--text); }
+.inbox-filter-group--status { padding-top:1px; border-top:1px solid var(--border-soft); }
+.inbox-channel-status { display:flex; flex-wrap:wrap; gap:5px 10px; color:var(--text-muted); font-size:10px; }
+.inbox-channel-status span { display:inline-flex; align-items:center; gap:4px; }
+.inbox-channel-status .is-connected { color:var(--success-fg); }
+.inbox-channel-status .is-disconnected { color:var(--text-faint); }
+.inbox-list-scroll { flex:1 1 auto; min-height:0; overflow-y:auto; overscroll-behavior:contain; scrollbar-gutter:stable; }
+.inbox-list-empty { margin:0; padding:32px 16px; color:var(--text-muted); font-size:12px; line-height:1.5; text-align:center; }
+.inbox-conversation-list { display:flex; flex-direction:column; }
+.inbox-conversation {
+  position:relative; display:flex; align-items:flex-start; gap:10px; width:100%; min-height:76px; padding:11px 11px;
+  border:0; border-bottom:1px solid var(--border-soft); background:var(--surface); color:var(--text); text-align:left; cursor:pointer;
+  transition:background-color 120ms ease;
+}
+.inbox-conversation:hover { background:var(--surface-2); }
+.inbox-conversation[data-selected="true"] { background:var(--accent-soft); }
+.inbox-conversation[data-selected="true"]::before { position:absolute; inset:9px auto 9px 0; width:3px; border-radius:var(--radius-pill); background:var(--accent); content:""; }
+.inbox-conversation__avatar { flex:0 0 auto; }
+.inbox-conversation__body { display:flex; flex:1; flex-direction:column; min-width:0; gap:3px; }
+.inbox-conversation__top { display:flex; align-items:center; justify-content:space-between; min-width:0; gap:7px; }
+.inbox-conversation__top strong { overflow:hidden; color:var(--text); font-size:12px; font-weight:650; text-overflow:ellipsis; white-space:nowrap; }
+.inbox-conversation[data-selected="true"] .inbox-conversation__top strong { color:var(--accent-fg); }
+.inbox-conversation__top time { flex:0 0 auto; color:var(--text-faint); font-size:9.5px; font-variant-numeric:tabular-nums; }
+.inbox-conversation__preview { overflow:hidden; color:var(--text-muted); font-size:10.5px; text-overflow:ellipsis; white-space:nowrap; }
+.inbox-conversation__meta { display:flex; flex-wrap:wrap; align-items:center; gap:2px 7px; color:var(--text-faint); font-size:9px; line-height:1.35; }
+.inbox-conversation__meta > span { display:inline-flex; align-items:center; gap:3px; }
+.inbox-failure-count { color:var(--danger-fg); font-weight:700; }
+.inbox-unread { flex:0 0 auto; min-width:19px; margin-top:3px; padding:2px 5px; border-radius:var(--radius-pill); background:var(--accent); color:var(--accent-contrast); font-size:10px; font-weight:700; line-height:1.2; text-align:center; font-variant-numeric:tabular-nums; }
+.inbox-detail { display:flex; flex-direction:column; background:var(--surface); }
+.inbox-detail-header { display:flex; flex:0 0 auto; align-items:center; gap:9px; min-height:62px; padding:8px 12px; border-bottom:1px solid var(--border); background:var(--surface); }
+.inbox-detail-header__identity { flex:1; min-width:0; }
+.inbox-detail-header__identity h2 { overflow:hidden; margin:0; color:var(--text); font-size:13px; font-weight:700; text-overflow:ellipsis; white-space:nowrap; }
+.inbox-detail-header__identity h2:focus { outline:0; }
+.inbox-detail-header__identity p { overflow:hidden; margin:3px 0 0; color:var(--text-muted); font-size:10px; text-overflow:ellipsis; white-space:nowrap; }
+.inbox-agent-state { display:inline-flex; flex:0 0 auto; align-items:center; gap:5px; color:var(--text-muted); font-size:10px; font-weight:650; white-space:nowrap; }
+.inbox-agent-state > span { width:7px; height:7px; border-radius:50%; background:var(--info); }
+.inbox-agent-state.is-human_active > span,.inbox-agent-state.is-human > span { background:var(--warning); }
+.inbox-agent-state.is-waiting_team > span { background:var(--warning); }
+.inbox-agent-state.is-waiting_patient > span { background:var(--info); }
+.inbox-agent-state.is-resolved > span { background:var(--success); }
+.inbox-detail-actions { display:flex; flex:0 0 auto; align-items:center; gap:5px; }
+.inbox-detail-actions .conversation-action { min-height:32px; padding:0 8px; font-size:10px; }
+.inbox-context-trigger,.inbox-back { display:none; }
+.inbox-back { align-items:center; gap:2px; border:0; background:transparent; color:var(--text); font-size:12px; font-weight:650; cursor:pointer; }
+.conversation-message-scroll { display:flex; flex:1 1 auto; flex-direction:column; gap:8px; min-height:0; overflow-y:auto; padding:14px clamp(14px,3vw,32px); background:var(--bg-tint); overscroll-behavior:contain; scrollbar-gutter:stable; }
+.conversation-no-messages { align-self:center; margin:auto; color:var(--text-muted); font-size:12px; }
+.conversation-message-row { display:flex; width:100%; }
+.conversation-message-row.is-incoming { justify-content:flex-start; }
+.conversation-message-row.is-outgoing { justify-content:flex-end; }
+.conversation-message { max-width:min(70%,720px); min-width:90px; padding:9px 11px; border:1px solid var(--border); border-radius:14px; background:var(--surface); color:var(--text); overflow-wrap:anywhere; }
+.conversation-message.is-incoming { border-bottom-left-radius:3px; }
+.conversation-message.is-outgoing { border-color:var(--accent-border); border-bottom-right-radius:3px; background:var(--accent-soft); }
+.conversation-message.has-failed { border-color:var(--danger-border); }
+.conversation-message__meta,.conversation-message__footer { display:flex; align-items:center; gap:6px; color:var(--text-faint); font-size:9.5px; }
+.conversation-message__meta strong { color:var(--text-muted); font-size:10px; font-weight:650; }
+.conversation-message__tag { padding:1px 4px; border:1px solid var(--border); border-radius:var(--radius-xs); color:var(--text-muted); font-size:8px; font-weight:700; text-transform:uppercase; }
+.conversation-message > p { margin:3px 0 0; color:var(--text); font-size:12px; line-height:1.5; white-space:pre-wrap; }
+.conversation-message__footer { justify-content:flex-end; margin-top:4px; font-size:9px; }
+.conversation-message__failure { display:flex; flex-wrap:wrap; align-items:center; justify-content:space-between; gap:6px; margin-top:7px; padding-top:6px; border-top:1px solid var(--danger-border); color:var(--danger-fg); font-size:10px; }
+.conversation-message__failure button { min-height:28px; border:1px solid var(--danger-border); border-radius:var(--radius-sm); padding:0 7px; background:var(--surface); color:var(--danger-fg); font-size:10px; font-weight:700; cursor:pointer; }
+.conversation-composer { flex:0 0 auto; padding:9px 12px; border-top:1px solid var(--border); background:var(--surface); }
+.conversation-ai-takeover-note { margin:0 0 7px; color:var(--text-muted); font-size:10px; line-height:1.35; }
+.conversation-ai-takeover-note::before { display:inline-block; width:6px; height:6px; margin:0 6px 1px 1px; border-radius:50%; background:var(--accent); content:""; }
+.conversation-composer__form { display:flex; align-items:center; gap:8px; }
+.conversation-composer__form input { flex:1; min-width:0; min-height:42px; border:1px solid var(--border-strong); border-radius:var(--radius-sm); padding:0 12px; background:var(--surface); color:var(--text); font-size:12px; }
+.conversation-composer__form input:focus { outline:0; border-color:var(--accent); box-shadow:var(--shadow-focus); }
+.conversation-composer__form button { display:inline-flex; align-items:center; justify-content:center; gap:6px; min-width:80px; min-height:42px; padding:0 12px; border:1px solid var(--accent); border-radius:var(--radius-sm); background:var(--accent); color:var(--accent-contrast); font-size:11px; font-weight:700; cursor:pointer; }
+.conversation-composer__form button:hover { background:var(--accent-hover); }
+.conversation-composer__form button:disabled { opacity:.58; cursor:not-allowed; }
+.conversation-byte-count { margin:0 0 6px; color:var(--text-muted); font-size:10px; text-align:right; }
+.conversation-byte-count.is-over-limit { color:var(--danger-fg); }
+.conversation-channel-alert { display:flex; flex:0 0 auto; align-items:center; justify-content:space-between; gap:8px; margin:8px 12px 0; padding:7px 9px; border:1px solid var(--border); border-radius:var(--radius-sm); font-size:10px; line-height:1.4; }
+.conversation-channel-alert.is-error { border-color:var(--danger-border); background:var(--danger-bg); color:var(--danger-fg); }
+.conversation-channel-alert.is-warning { border-color:var(--warning-border); background:var(--warning-bg); color:var(--warning-fg); }
+.conversation-channel-alert.is-neutral { margin:0; background:var(--surface-2); color:var(--text-muted); }
+.conversation-channel-alert a { flex:0 0 auto; color:var(--accent-fg); font-weight:700; text-decoration:underline; }
+.conversation-selection-empty { display:flex; flex:1; flex-direction:column; align-items:center; justify-content:center; padding:24px; text-align:center; }
+.conversation-selection-empty > span { display:grid; width:42px; height:42px; place-items:center; margin-bottom:11px; border:1px solid var(--border); border-radius:var(--radius-md); background:var(--surface-2); color:var(--text-muted); }
+.conversation-selection-empty h2 { margin:0; color:var(--text); font-size:13px; font-weight:700; }
+.conversation-selection-empty p { max-width:300px; margin:5px 0 0; color:var(--text-muted); font-size:11px; line-height:1.5; }
+.inbox-context { border-left:1px solid var(--border); background:var(--surface); overflow-y:auto; overscroll-behavior:contain; scrollbar-gutter:stable; }
+.conversation-context-content { display:flex; flex-direction:column; gap:0; }
+.conversation-context-identity,.conversation-context-section { padding:14px; border-bottom:1px solid var(--border-soft); }
+.conversation-context-person { display:flex; align-items:center; gap:9px; }
+.conversation-context-person > div { min-width:0; }
+.conversation-context-person h3 { overflow:hidden; margin:1px 0; color:var(--text); font-size:12px; font-weight:700; text-overflow:ellipsis; white-space:nowrap; }
+.conversation-context-person p:last-child { margin:0; overflow:hidden; color:var(--text-muted); font-size:10px; text-overflow:ellipsis; white-space:nowrap; }
+.conversation-context-eyebrow,.conversation-context-section > h3 { margin:0; color:var(--text-faint); font-size:9px; font-weight:700; letter-spacing:.07em; text-transform:uppercase; }
+.conversation-contact-status { display:inline-flex; margin-top:10px; padding:3px 7px; border:1px solid var(--border); border-radius:var(--radius-pill); font-size:9.5px; font-weight:650; }
+.conversation-contact-status.is-linked { border-color:var(--success-border); background:var(--success-bg); color:var(--success-fg); }
+.conversation-contact-status.is-new { border-color:var(--info-border); background:var(--info-bg); color:var(--info-fg); }
+.conversation-context-primary { display:block; width:100%; min-height:36px; margin-top:8px; border:1px solid var(--accent); border-radius:var(--radius-sm); background:var(--accent); color:var(--accent-contrast); font-size:10.5px; font-weight:700; cursor:pointer; }
+.conversation-context-section > h3 { margin-bottom:9px; }
+.conversation-pet-list { display:flex; flex-direction:column; gap:5px; margin:0; padding:0; list-style:none; }
+.conversation-pet-list li { display:flex; align-items:center; justify-content:space-between; gap:8px; color:var(--text); font-size:11px; font-weight:650; }
+.conversation-pet-list li span { color:var(--text-muted); font-size:9.5px; font-weight:500; }
+.conversation-current-patient { display:flex; flex-direction:column; gap:3px; margin-top:9px; padding:8px 9px; border-left:3px solid var(--accent); background:var(--accent-soft); }
+.conversation-current-patient span { color:var(--accent-fg); font-size:9px; font-weight:700; text-transform:uppercase; letter-spacing:.05em; }
+.conversation-current-patient strong { color:var(--text); font-size:12px; }
+.conversation-context-muted { margin:0; color:var(--text-muted); font-size:10px; line-height:1.5; }
+.conversation-context-row { display:flex; flex-direction:column; gap:2px; margin-top:8px; }
+.conversation-context-row span { color:var(--text-muted); font-size:9.5px; }
+.conversation-context-row strong { color:var(--text); font-size:10.5px; font-weight:650; }
+.conversation-context-row small { color:var(--text-muted); font-size:9.5px; }
+.conversation-handoff { margin-top:10px; padding-top:9px; border-top:1px solid var(--border-soft); }
+.conversation-handoff > span { color:var(--text-muted); font-size:9.5px; font-weight:700; }
+.conversation-handoff p,.conversation-handoff li { color:var(--text); font-size:10px; line-height:1.45; }
+.conversation-handoff p { margin:3px 0; }
+.conversation-handoff ul { margin:4px 0 0; padding-left:16px; }
+.conversation-context-links { display:flex; flex-direction:column; gap:5px; }
+.conversation-context-links a { display:flex; align-items:center; gap:7px; min-height:34px; padding:0 7px; border-radius:var(--radius-sm); color:var(--text-muted); font-size:10.5px; font-weight:600; text-decoration:none; }
+.conversation-context-links a:hover { background:var(--surface-hover); color:var(--text); }
+.conversation-context-empty { margin:0; padding:22px 16px; color:var(--text-muted); font-size:10.5px; line-height:1.5; }
+.conversation-empty-workspace { display:flex; flex:1 1 auto; min-height:0; align-items:center; justify-content:center; border:1px solid var(--border); border-radius:var(--radius-md); background:var(--surface); }
+.conversation-empty-copy { max-width:440px; padding:28px; text-align:center; }
+.conversation-empty-icon { display:grid; width:44px; height:44px; place-items:center; margin:0 auto 12px; border:1px solid var(--border); border-radius:var(--radius-md); background:var(--surface-2); color:var(--text-muted); }
+.conversation-empty-copy h2 { margin:0; color:var(--text); font-size:14px; font-weight:700; }
+.conversation-empty-copy p { margin:6px 0 0; color:var(--text-muted); font-size:11.5px; line-height:1.55; }
+.conversation-empty-actions { display:flex; flex-wrap:wrap; justify-content:center; gap:8px; margin-top:16px; }
+.conversation-empty-note { color:var(--text-faint) !important; font-size:10px !important; }
+.conversation-view[data-focus="true"] .conversation-pagebar__heading { display:none; }
+.conversation-focus-exit-mobile { display:none; }
+.conversation-view[data-focus="true"] { padding-top:8px; }
+.conversation-view[data-focus="true"] .conversation-mark { display:none; }
+.conversation-view[data-focus="true"] .conversation-pagebar { min-height:34px; }
+@media (max-width: 1399px) and (min-width:1200px) {
+  .conversation-workspace { grid-template-columns:minmax(270px,290px) minmax(0,1fr) minmax(270px,290px); }
+  .inbox-detail-header { gap:7px; padding-inline:9px; }
+  .inbox-detail-actions { gap:4px; }
+  .inbox-detail-actions .conversation-action { padding-inline:6px; }
+}
+@media (max-width:1199px) {
+  .conversation-workspace { grid-template-columns:minmax(270px,340px) minmax(0,1fr); }
+  .inbox-context { display:none; }
+  .inbox-context-trigger { display:inline-flex; }
+  .conversation-view[data-panel="true"] .conversation-workspace { grid-template-columns:minmax(230px,260px) minmax(0,1fr); }
+  .conversation-view[data-panel="true"] .inbox-context { display:none; }
+}
+@media (max-width:767px) {
+  .workspace-shell--conversations .conversation-page-wrap { padding:0; }
+  .conversation-view { gap:0; padding:0; }
+  .conversation-pagebar { min-height:48px; padding:6px 10px; border-bottom:1px solid var(--border); }
+  .conversation-pagebar__heading h1 { font-size:15px; }
+  .conversation-pagebar__heading p { max-width:56vw; font-size:9.5px; }
+  .conversation-mark { width:30px; height:30px; }
+  .conversation-pagebar__actions { gap:4px; }
+  .conversation-pagebar__actions .conversation-action { min-height:34px; padding:0 7px; font-size:10px; }
+  .conversation-view[data-active="true"] .conversation-pagebar { display:none; }
+  .conversation-view[data-focus="true"] .conversation-focus-exit-mobile { display:inline-flex; min-height:38px; padding:0 7px; font-size:9px; }
+  .conversation-workspace,.conversation-view[data-panel="true"] .conversation-workspace { display:grid; grid-template-columns:minmax(0,1fr); border:0; border-radius:0; }
+  .inbox-list { display:flex; min-height:0; border-right:0; }
+  .inbox-detail { display:none; min-height:0; }
+  .conversation-view[data-active="true"] .inbox-list { display:none; }
+  .conversation-view[data-active="true"] .inbox-detail { display:flex; }
+  .conversation-view[data-panel="true"] .inbox-detail { display:none; }
+  .conversation-view[data-panel="true"][data-active="true"] .inbox-detail { display:flex; }
+  .inbox-controls { gap:7px; padding:9px 10px; }
+  .inbox-controls__heading { display:none; }
+  .inbox-filter-group--status { flex-wrap:nowrap; overflow-x:auto; padding-top:4px; scrollbar-width:none; }
+  .inbox-filter-group--status::-webkit-scrollbar { display:none; }
+  .inbox-filter { min-height:34px; flex:0 0 auto; font-size:10px; }
+  .inbox-channel-status { display:none; }
+  .inbox-list-scroll { flex:1; }
+  .inbox-conversation { min-height:72px; padding:10px 12px; }
+  .inbox-back { display:inline-flex; flex:0 0 auto; width:36px; height:40px; min-height:44px; justify-content:center; margin-right:2px; font-size:0; }
+  .inbox-back span { position:absolute; width:1px; height:1px; overflow:hidden; clip:rect(0,0,0,0); white-space:nowrap; }
+  .inbox-detail-header { min-height:58px; gap:7px; padding:6px 8px; }
+  .inbox-detail-header__identity h2 { font-size:12px; }
+  .inbox-detail-header__identity p { max-width:43vw; font-size:9px; }
+  .inbox-agent-state { display:none; }
+  .inbox-detail-actions { gap:4px; }
+  .inbox-detail-actions .conversation-action { min-height:38px; padding:0 6px; font-size:9px; }
+  .inbox-detail-actions .inbox-crm-link { display:none; }
+  .conversation-mode-action { max-width:102px; overflow:hidden; text-overflow:ellipsis; }
+  .inbox-context-trigger { display:inline-flex !important; }
+  .conversation-message-scroll { padding:12px 10px; }
+  .conversation-message { max-width:88%; padding:8px 9px; }
+  .conversation-message > p { font-size:12px; }
+  .conversation-composer { padding:8px 8px calc(8px + env(safe-area-inset-bottom)); }
+  .conversation-composer__form { gap:6px; }
+  .conversation-composer__form input { min-height:44px; font-size:16px; }
+  .conversation-composer__form button { min-width:46px; min-height:44px; padding:0 10px; }
+  .conversation-composer__form button span { display:none; }
+  .conversation-channel-alert { margin-inline:8px; }
+  .conversation-composer .conversation-channel-alert { margin:0; }
+  .conversation-empty-workspace { margin:10px; }
+  .conversation-empty-copy { padding:20px 14px; }
+  .conversation-pagebar__actions .conversation-focus-toggle { display:none; }
+  .conversation-view[data-focus="true"] .conversation-pagebar__actions .conversation-focus-toggle { display:inline-flex; }
+  .conversation-new-window span { display:none; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .conversation-action,.inbox-conversation { transition:none; }
+  .conversation-message-scroll { scroll-behavior:auto; }
+}
+/* The legacy global tap-target rule predates the workspace filters. Keep its
+   generous targets everywhere except desktop filter chips; mobile remains 44px. */
+.il-platform .conversation-view .inbox-filter { min-height:30px; }
+@media (max-width:767px) {
+  .il-platform .conversation-view .inbox-filter { min-height:44px; }
+}
+@media (min-width:768px) {
+  .conversation-view[data-panel="true"] .conversation-pagebar { display:none; }
+  .conversation-view[data-panel="true"] .conversation-workspace { grid-template-columns:minmax(230px,260px) minmax(0,1fr); }
+  .conversation-view[data-panel="true"] .inbox-context { display:none; }
+  .conversation-view[data-panel="true"] .inbox-context-trigger { display:none; }
+}
+
+/* Auditoria visual V01: quatro KPIs só quando a própria superfície tem espaço. */
+.dashboard-intelligence { container: intelligence / inline-size; }
+.dashboard-intelligence__grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+@container intelligence (min-width: 560px) {
+  .dashboard-intelligence__grid { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+}
+
+/* Auditoria visual V08: Dia no mobile mantém hora, nome e estado do evento;
+   serviço/profissional permanecem no detalhe acionável do cartão. */
+@media (max-width: 767px) {
+  .ag-event--day { padding: 2px 21px 2px 5px; }
+  .ag-event--day .ag-event__time { font-size: 9.5px; }
+  .ag-event--day .ag-event__name {
+    display: -webkit-box;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 2;
+    white-space: normal;
+    overflow-wrap: break-word;
+    overflow: hidden;
+  }
+  .ag-event--day .ag-event__secondary { display: none; }
+}

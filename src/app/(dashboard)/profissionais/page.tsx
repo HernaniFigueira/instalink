@@ -112,7 +112,7 @@ export default function ProfissionaisPage() {
     <PageHeader
       icon="users"
       title="Profissionais"
-      hint="Quem atende no seu negócio. Cada um tem agenda própria e aparece na página pública."
+      hint="Quem atende no seu negócio. Cada pessoa pode ter agenda própria."
     />
   );
 

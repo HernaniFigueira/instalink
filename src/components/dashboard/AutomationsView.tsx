@@ -10,7 +10,7 @@
 // O que a tela mostra é sempre o que o motor FEZ: estatísticas por automação,
 // histórico de execuções passo a passo com o veredito de cada condição e as
 // tarefas que nasceram delas. Nenhum número é decorativo.
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import Link from 'next/link';
 import { AreaLoadError } from './AccessNotice';
 import { apiGet, apiSend } from '@/lib/api-client';
@@ -396,8 +396,7 @@ function AutomationCard({ a, onToggle, onEdit, onDuplicate, onHistory, onDelete 
         <button onClick={onToggle} role="switch" aria-checked={a.active} aria-label={a.active ? 'Desativar automação' : 'Ativar automação'}
           className={cn('mt-0.5 w-10 h-6 rounded-full transition shrink-0 border',
             a.active ? 'bg-emerald-600 border-emerald-700' : 'bg-zinc-200 border-zinc-300')}>
-          <span className={cn('block w-4.5 h-4.5 rounded-full bg-white shadow transition-transform', a.active ? 'translate-x-[22px]' : 'translate-x-[3px]')}
-            style={{ width: 18, height: 18 }} />
+          <span className={cn('block w-[18px] h-[18px] rounded-full bg-white shadow transition-transform', a.active ? 'translate-x-[22px]' : 'translate-x-[3px]')} />
         </button>
         <div className="min-w-0 flex-1">
           <div className="flex flex-wrap items-center gap-2">
@@ -452,7 +451,7 @@ function ConfirmDelete({ name, onCancel, onConfirm }: { name: string; onCancel: 
         e tudo o que ela já fez (leads, tarefas, agendamentos) continua intacto.
       </p>
       <div className="flex gap-2 mt-3">
-        <Button size="sm" variant="danger" onClick={onConfirm}>Sim, excluir</Button>
+        <Button size="sm" variant="destructive" onClick={onConfirm}>Sim, excluir</Button>
         <Button size="sm" variant="secondary" onClick={onCancel}>Cancelar</Button>
       </div>
     </div>
@@ -481,6 +480,18 @@ function AutomationEditor({ businessId, automationId, automations, options, onCl
   const [errors, setErrors] = useState<string[]>([]);
   const [saving, setSaving] = useState(false);
   const graphOnly = !!current && !current.linear;
+  const initialSnapshot = useRef(JSON.stringify({
+    name: current?.name || '', description: current?.description || '', active: current ? current.active : true,
+    event: current?.event || 'lead.created', group: groupFromCondition(current?.linear?.condition),
+    steps: stepsFromLinear(current?.linear?.steps), elseSteps: stepsFromLinear(current?.linear?.elseSteps || []),
+    useElse: (current?.linear?.elseSteps?.length || 0) > 0, allowReentry: current?.settings?.allowReentry === true,
+  }));
+  const dirty = JSON.stringify({ name, description, active, event, group, steps, elseSteps, useElse, allowReentry }) !== initialSnapshot.current;
+  const dismissState = {
+    dirty, saving, context: 'edit' as const,
+    title: current ? 'Descartar alterações da automação?' : 'Descartar nova automação?',
+    description: 'As alterações ainda não foram salvas.',
+  };
 
   const fields = useMemo(() => fieldsForEvent(event as any), [event]);
 
@@ -518,7 +529,7 @@ function AutomationEditor({ businessId, automationId, automations, options, onCl
   }
 
   return (
-    <Drawer open onClose={onClose} title={current ? 'Editar automação' : 'Nova automação'} subtitle="Quando acontecer X, se Y, faça Z." width="max-w-3xl">
+    <Drawer open onClose={onClose} dismissGuard={dismissState} title={current ? 'Editar automação' : 'Nova automação'} subtitle="Quando acontecer X, se Y, faça Z." width="max-w-3xl">
         <div className="p-4 space-y-4">
           {graphOnly && (
             <Notice tone="info">Esta automação tem um grafo livre (criada por modelo avançado). A edição linear não consegue representá-la sem simplificar — use a API/grafo para alterá-la.</Notice>

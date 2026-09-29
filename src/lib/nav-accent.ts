@@ -88,9 +88,17 @@ function preset(
   label: string,
   nav: string,
   accent: string,
-  opts: { navFg?: string } = {},
+  opts: {
+    navFg?: string; navMuted?: string; navIcon?: string; navHover?: string;
+    navActive?: string; navActiveFg?: string;
+  } = {},
 ): NavAccent {
   const navFg = opts.navFg || contrastOn(nav);
+  const accentSoft = lighten(accent, 0.86);
+  let accentFg = accent;
+  for (let guard = 0; guard < 12 && contrastRatio(accentFg, accentSoft) < 4.5; guard++) {
+    accentFg = darken(accentFg, 0.08);
+  }
   // ── Estado ativo com AA GARANTIDO (regra estrutural): parte do tom ativo
   // base e ajusta (escurece/clareia) até o melhor fg chegar a ≥ 4.5:1.
   // Vale para os 21 presets sem override por tema. ──
@@ -98,7 +106,9 @@ function preset(
   for (let guard = 0; guard < 12 && contrastRatio(bestFgOn(navActive), navActive) < 4.5; guard++) {
     navActive = bestFgOn(navActive) === '#ffffff' ? darken(navActive, 0.07) : lighten(navActive, 0.07);
   }
-  const navActiveFg = bestFgOn(navActive);
+  const computedNavActiveFg = bestFgOn(navActive);
+  const resolvedNavActive = opts.navActive || navActive;
+  const navActiveFg = opts.navActiveFg || (opts.navActive ? bestFgOn(resolvedNavActive) : computedNavActiveFg);
   // Ícone inativo: caminho moderado até o melhor fg, com piso de contraste
   // 3.5:1 sobre o nav (o chip do ícone soma 12% de branco por cima — o piso
   // real no navegador fica ~3.1:1: legível, nunca lavado; força ≤ ~82%).
@@ -117,20 +127,21 @@ function preset(
       // ── Sidebar (B: tema) ──
       '--il-nav': nav,
       '--il-nav-fg': navFg === '#18181b' ? '#18181b' : '#ffffff',
-      '--il-nav-muted': navFg === '#18181b' ? mix(nav, '#18181b', 0.42) : mix(nav, '#ffffff', 0.34),
+      '--il-nav-muted': opts.navMuted || (navFg === '#18181b' ? mix(nav, '#18181b', 0.42) : mix(nav, '#ffffff', 0.34)),
       // Ícones INATIVOS: força visual moderada (60–75%) — legíveis, nunca
       // lavados; derivado do fg do tema e ajustado até ≥ 3.2:1 sobre o nav
       // (navs médios ganham mais mistura; nada de glifo transparente).
-      '--il-nav-icon': navIcon,
-      '--il-nav-hover': darken(nav, 0.12),
-      '--il-nav-active': navActive,
+      '--il-nav-icon': opts.navIcon || navIcon,
+      '--il-nav-hover': opts.navHover || darken(nav, 0.12),
+      '--il-nav-active': resolvedNavActive,
       // fg do ATIVO calculado do bg ATIVO real (regra estrutural) — nunca cor
       // fixa: fundo escuro → letra clara; fundo claro → letra near-black.
       '--il-nav-active-fg': navActiveFg,
       // ── CTAs principais + acentos (B: tema) ──
       '--accent': accent,
       '--accent-hover': darken(accent, 0.14),
-      '--accent-soft': lighten(accent, 0.86),
+      '--accent-soft': accentSoft,
+      '--accent-fg': accentFg,
       '--accent-border': mix(accent, '#ffffff', 0.55),
       '--accent-contrast': contrastOn(accent),
     },
@@ -147,7 +158,10 @@ export const NAV_ACCENTS: NavAccent[] = [
   // ── Azul ──
   preset('azul-clinico', 'azul', 'Azul clínico', '#3f37c9', '#3f37c9'),
   preset('azul-amigavel', 'azul', 'Azul amigável', '#2563eb', '#2563eb'),
-  preset('azul-profundo', 'azul', 'Azul profundo', '#1e3a8a', '#1e40af'),
+  preset('azul-profundo', 'azul', 'Azul profundo', '#071a33', '#2563eb', {
+    navFg: '#f8fafc', navMuted: '#9aaec8', navIcon: '#9aaec8',
+    navHover: '#102d52', navActive: '#123b68', navActiveFg: '#93c5fd',
+  }),
   // ── Verde ──
   preset('verde-salvia', 'verde', 'Verde sálvia', '#4d7c5f', '#4d7c5f'),
   preset('verde-equilibrado', 'verde', 'Verde equilibrado', '#15803d', '#15803d'),
@@ -182,10 +196,9 @@ export function findAccent(id: string): NavAccent | undefined {
   return NAV_ACCENTS.find((a) => a.id === resolved);
 }
 
-// TEMA PADRÃO = NEUTRO (usuário sem preferência salva inicia em Neutro;
-// nunca mais o índigo/roxo como fallback). Preferência válida no
-// localStorage é sempre respeitada — nada de sobrescrever escolha do usuário.
-export const DEFAULT_ACCENT_ID = 'neutro';
+// TEMA PADRÃO = DEEP BLUE. A escolha explícita válida no localStorage tem
+// precedência e nunca é regravada ao atualizar o default do produto.
+export const DEFAULT_ACCENT_ID = 'azul-profundo';
 // Chave LEGADA (missão 6) — preserva a preferência já persistida do usuário.
 export const NAV_ACCENT_STORAGE_KEY = 'godoutor.nav-accent';
 

@@ -14,11 +14,12 @@
 //
 // Quem grava é /api/team (o vínculo User→Professional mora lá, com as guardas
 // de 1:1 por unidade). Este componente não cria uma segunda rota de verdade.
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
 import { Avatar, Button, Checkbox, Drawer, Field, Input, Notice, Select, SubCard } from '@/components/ui';
 import { apiSend } from '@/lib/api-client';
 import { useForbiddenNotice } from '@/components/dashboard/AccessNotice';
+import { useOverlayDismissGuard } from '@/components/dashboard/OverlayDismissGuard';
 import type { MemberRole } from '@/lib/types';
 
 export interface ProfessionalOption {
@@ -79,6 +80,27 @@ export function MemberAccessSheet({
   const [grantEncounter, setGrantEncounter] = useState(false);
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
+  const [baseline, setBaseline] = useState('');
+  const overlayDismiss = useOverlayDismissGuard();
+  const currentSnapshot = JSON.stringify({ role, professionalId, name, email, password, note, grantEncounter });
+  const dirty = baseline !== '' && currentSnapshot !== baseline;
+  const dismissState = {
+    dirty, saving: busy, context: 'edit' as const,
+    title: 'Descartar criação de acesso?',
+    description: 'Os dados preenchidos para a nova conta serão perdidos.',
+  };
+  const requestClose = () => overlayDismiss.requestClose('close-button', dismissState, onClose);
+
+  useEffect(() => {
+    if (!open) return;
+    const initial = {
+      role: initialRole || (presetProfessionalId ? 'PROFISSIONAL' : 'SECRETARIA') as MemberRole,
+      professionalId: presetProfessionalId, name: initialName, email: '', password: '', note: '', grantEncounter: false,
+    };
+    setRole(initial.role); setProfessionalId(initial.professionalId); setName(initial.name);
+    setEmail(initial.email); setPassword(initial.password); setNote(initial.note); setGrantEncounter(initial.grantEncounter);
+    setBaseline(JSON.stringify(initial)); setError('');
+  }, [open, initialName, initialRole, presetProfessionalId]);
 
   // Só profissionais SEM acesso entram na lista: oferecer alguém que já tem
   // login levaria a um segundo acesso apontando para a mesma pessoa.
@@ -117,9 +139,10 @@ export function MemberAccessSheet({
   }
 
   return (
-    <Drawer open={open} onClose={onClose} title="Criar acesso ao sistema"
+    <Drawer open={open} onClose={onClose} dismissGuard={dismissState} title="Criar acesso ao sistema"
       subtitle={presetProfessional ? `Profissional: ${presetProfessional.name}` : 'Quem entra no painel — não é a mesma lista de quem atende'}
       width="max-w-[560px]">
+      {overlayDismiss.dialog}
       <div className="p-4 space-y-4">
         {forbidden && <Notice tone="warning" title={forbidden.title}>{forbidden.hint}</Notice>}
         {forbidden && <button type="button" onClick={dismiss} className="text-xs font-semibold underline text-[var(--text-muted)]">Fechar aviso</button>}
@@ -197,7 +220,7 @@ export function MemberAccessSheet({
       </div>
 
       <div className="px-4 pb-4 flex items-center justify-end gap-2">
-        <Button variant="secondary" size="sm" onClick={onClose} disabled={busy}>Cancelar</Button>
+        <Button variant="secondary" size="sm" onClick={requestClose} disabled={busy}>Cancelar</Button>
         <Button variant="primary" size="sm" onClick={save} disabled={busy}>
           {busy ? 'Criando acesso…' : 'Criar acesso'}
         </Button>

@@ -18,23 +18,23 @@ import {
 describe('§16 · retorno à lista de clientes', () => {
   it('busca, filtro e página viajam na URL e voltam inteiros', () => {
     const query = buildClientListReturnQuery({ b: 'biz-1', q: 'bernardo', filter: 'pets', page: 3, tab: 'notes' });
-    const href = clientListReturnHref(query);
+    const href = clientListReturnHref(query, 'biz-1');
     expect(href).toBe('/clientes?b=biz-1&q=bernardo&filter=pets&page=3&tab=notes');
   });
 
   it('estado padrão não polui a URL (filter=all e page=1 ficam de fora)', () => {
-    const href = clientListReturnHref(buildClientListReturnQuery({ b: 'biz-1', q: '  ana  ', filter: 'all', page: 1 }));
+    const href = clientListReturnHref(buildClientListReturnQuery({ b: 'biz-1', q: '  ana  ', filter: 'all', page: 1 }), 'biz-1');
     expect(href).toBe('/clientes?b=biz-1&q=ana');
   });
 
   it('fallback SEMPRE preserva a unidade: sem estado → /clientes?b=…', () => {
-    expect(clientListReturnHref('')).toBe('/clientes');
-    expect(clientListReturnHref('b=biz-1')).toBe('/clientes?b=biz-1');
+    expect(clientListReturnHref('', 'biz-1')).toBe('/clientes?b=biz-1');
+    expect(clientListReturnHref('b=biz-1', 'fallback-ignored')).toBe('/clientes?b=biz-1');
   });
 
   it('deep-link com estado parcial volta exatamente com o que tem', () => {
-    expect(clientListReturnHref('b=biz-1&page=2')).toBe('/clientes?b=biz-1&page=2');
-    expect(clientListReturnHref('b=biz-1&q=sofia&filter=pets')).toBe('/clientes?b=biz-1&q=sofia&filter=pets');
+    expect(clientListReturnHref('b=biz-1&page=2', 'fallback-ignored')).toBe('/clientes?b=biz-1&page=2');
+    expect(clientListReturnHref('b=biz-1&q=sofia&filter=pets', 'fallback-ignored')).toBe('/clientes?b=biz-1&q=sofia&filter=pets');
   });
 });
 

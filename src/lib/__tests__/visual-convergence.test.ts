@@ -64,7 +64,7 @@ function routeSource(rel: string): string {
  * combate é `<h1>` com classe ad-hoc convivendo com PageHeader, e isso não é
  * o caso aqui.
  */
-const OWN_HEADER_ROUTES = ['/dashboard', '/organizacao', '/agenda', '/conversas', '/pagina'];
+const OWN_HEADER_ROUTES = ['/dashboard', '/organizacao', '/agenda', '/conversas', '/pagina', '/atendimento'];
 
 /** Componentes compartilhados do painel (tudo que as rotas importam daqui). */
 const COMPONENT_FILES = readdirSync(path.join(root, 'src/components/dashboard'))
@@ -103,7 +103,8 @@ describe('A3.3 — nenhum CTA primário preto no painel', () => {
     // Se alguém apagar o variant primary, a migração não tem destino — o teste
     // falha antes que alguém volte a improvisar um botão preto.
     expect(ui).toMatch(/primary:\s*\n?\s*'bg-\[var\(--accent\)\]/);
-    expect(ui).toMatch(/shadow-brand/); // sombra utilitária da base (não é cor)
+    expect(ui).toContain('border border-[var(--accent)]');
+    expect(ui).not.toContain('shadow-brand'); // ações planas por contrato
   });
 });
 
@@ -350,18 +351,19 @@ describe('A3.3 — páginas migradas usam os primitivos compartilhados', () => {
 });
 
 describe('A3.3 — seleção não é estado de sucesso', () => {
-  it('personalidade e objetivo do Assistente usam lilac, não verde', () => {
+  it('personalidade e objetivo do Assistente usam o contrato comum de option chips', () => {
     const agente = read('src/app/(dashboard)/agente/page.tsx');
-    // Verde fica reservado a ativo/conectado/concluído; preferência é lilac.
-    expect(agente).toMatch(/agent\.tone === t\.id \? '[^']*--lilac/);
+    expect(agente).toContain('className="il-option-choice" aria-pressed={agent.tone === t.id}');
+    expect(agente).toContain('className="il-option-choice" aria-pressed={on}');
     expect(agente).not.toMatch(/agent\.tone === t\.id \? '[^']*emerald/);
     expect(agente).not.toMatch(/on \? '[^']*emerald/);
   });
 
-  it('papel de membro e chip selecionado usam brand-soft, não preto', () => {
+  it('papel selecionável do membro segue o contrato comum sem mudança de fluxo', () => {
     const equipe = read('src/app/(dashboard)/equipe/page.tsx');
-    expect(equipe).toMatch(/drawer\.role === r\.id \? '[^']*--brand-soft/);
-    expect(equipe).not.toMatch(/drawer\.role === r\.id \? '[^']*bg-zinc-900/);
+    expect(equipe).toContain('className="il-option-choice il-option-choice--compact text-left"');
+    expect(equipe).toContain('aria-pressed={drawer.role === r.id}');
+    expect(equipe).toContain('saveMember(drawer, { role: r.id })');
   });
 });
 

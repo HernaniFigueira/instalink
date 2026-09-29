@@ -1,6 +1,7 @@
 'use client';
 import { createPortal } from 'react-dom';
 import { WorkspaceSheet } from '@/components/dashboard/WorkspaceSheet';
+import { persistenceState, useOverlayDismissGuard, useUnsavedChangesGuard, type DismissReason } from './OverlayDismissGuard';
 // ═══════════════════════════════════════════════════════════════
 // A3.4 · BLOCO 5 — REGISTRO DO ATENDIMENTO (painel lateral)
 // ═══════════════════════════════════════════════════════════════
@@ -31,7 +32,7 @@ import { WorkspaceSheet } from '@/components/dashboard/WorkspaceSheet';
 //      leitura POR ID (nunca POST, que criaria outro registro).
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Icon } from '@/components/icons';
-import { Badge, Button, Field, Input, Notice, Textarea } from '@/components/ui';
+import { Badge, Button, Field, Input, Notice, PageBackAction, Textarea } from '@/components/ui';
 import { apiGet, apiSend } from '@/lib/api-client';
 import {
   ENCOUNTER_AUTOSAVE_LABELS, ENCOUNTER_AUTOSAVE_MS, ENCOUNTER_LABELS, ENCOUNTER_STATUS,
@@ -40,8 +41,8 @@ import {
   encounterDraftKey, encounterFormPrintBlocks, encounterSignature, encounterSummary,
   followUpDueDate, followUpTaskNote, followUpTaskTitle,
 } from '@/lib/encounters';
-import { formatDateBR } from '@/lib/tz';
-import type { AnamneseTemplate, Encounter, EncounterFile, EncounterFollowUpMode } from '@/lib/types';
+import { formatDateBR, formatDateTimeBR } from '@/lib/tz';
+import type { AnamneseResponse, AnamneseTemplate, Encounter, EncounterFile, EncounterFollowUpMode } from '@/lib/types';
 import { AnamneseFiller } from '@/components/dashboard/AnamneseFiller';
 import { RegisterPaymentSheet, type PaymentSeed } from '@/components/dashboard/RegisterPaymentSheet';
 import { usePanelPermissions } from '@/components/dashboard/usePanelPermissions';
@@ -99,6 +100,8 @@ interface Props {
    * anamnese). Ainda NÃO fecha este sheet — o pós-atendimento abre aqui.
    */
   onChanged?: () => void;
+  /** `page` is the canonical clinical workspace; `sheet` is retained only for compatibility tests. */
+  layout?: 'page' | 'sheet';
 }
 
 const EMPTY = {
@@ -119,9 +122,11 @@ const formOf = (e: EncounterRow): Form => ({
 const fileUid = () => (typeof crypto !== 'undefined' && crypto.randomUUID ? crypto.randomUUID() : `f_${Math.random().toString(36).slice(2)}`);
 
 export function EncounterSheet({
-  businessId, bookingId, seed, existing, queueId, canReopen = false, onScheduleReturn, onClose, onSaved, onChanged,
+  businessId, bookingId, seed, existing, queueId, canReopen = false, onScheduleReturn, onClose, onSaved, onChanged, layout = 'page',
 }: Props) {
   const [row, setRow] = useState<EncounterRow | null>(existing || null);
+  const [compactHeader, setCompactHeader] = useState(false);
+  const compactSentinel = useRef<HTMLSpanElement>(null);
   const [form, setForm] = useState<Form>(() => existing ? formOf(existing) : { ...EMPTY });
   const [loading, setLoading] = useState(!existing);
   const [busy, setBusy] = useState('');
@@ -138,10 +143,11 @@ export function EncounterSheet({
   const [anamneseTemplates, setAnamneseTemplates] = useState<AnamneseTemplate[]>([]);
   const [anamneseOpen, setAnamneseOpen] = useState(false);
   const [anamneseCount, setAnamneseCount] = useState(0);
-  const [anamneseLast, setAnamneseLast] = useState<{ id: string; createdAt: string; answers: Record<string, unknown> } | null>(null);
+  const [anamneseLast, setAnamneseLast] = useState<Pick<AnamneseResponse, 'id' | 'templateId' | 'createdAt' | 'answers'> | null>(null);
   const [anamneseHistoryOpen, setAnamneseHistoryOpen] = useState(false);
   const [fileBusy, setFileBusy] = useState(false);
   const [fileError, setFileError] = useState('');
+  const [filesUnavailable, setFilesUnavailable] = useState(false);
   const [paymentSeed, setPaymentSeed] = useState<PaymentSeed | null>(null);
   const [paymentDone, setPaymentDone] = useState('');
   // §P1.13 — REGRA DE HONESTIDADE: "Registrar pagamento" grava em
@@ -150,6 +156,26 @@ export function EncounterSheet({
   // levar previsivelmente a "Sem permissão".
   const { permissions: panelPerms, ready: permsReady } = usePanelPermissions();
   const canRegisterPayment = !permsReady || panelPerms.financeiro === true;
+
+  // Um marcador antes do header troca o contexto inteiro para o modo compacto
+  // quando ele cruza a topbar. O header continua sticky: nenhum conteúdo fica
+  // escondido sob a topbar durante a transição.
+  useEffect(() => {
+    if (layout !== 'page') { setCompactHeader(false); return; }
+    const marker = compactSentinel.current;
+    if (!marker) return;
+    const update = () => {
+      const topbarBottom = document.querySelector('.ws-topbar')?.getBoundingClientRect().bottom || 0;
+      setCompactHeader(marker.getBoundingClientRect().bottom < topbarBottom - 2);
+    };
+    update();
+    document.addEventListener('scroll', update, true);
+    window.addEventListener('resize', update);
+    return () => {
+      document.removeEventListener('scroll', update, true);
+      window.removeEventListener('resize', update);
+    };
+  }, [layout]);
 
   /**
    * Espelho SÍNCRONO do estado da tela. É daqui que o autosave, o flush de
@@ -209,15 +235,16 @@ export function EncounterSheet({
   useEffect(() => {
     if (!row?.id) return;
     let on = true;
-    apiGet<{ templates: AnamneseTemplate[]; responses?: Array<{ id: string; encounterId: string; createdAt?: string; answers?: Record<string, unknown> }> }>(
+    apiGet<{ templates: AnamneseTemplate[]; responses?: Array<Pick<AnamneseResponse, 'id' | 'templateId' | 'encounterId' | 'createdAt' | 'answers'>> }>(
       `/api/anamnese?businessId=${businessId}${row.contactId ? `&responsesFor=${encodeURIComponent(row.contactId)}` : ''}`,
       { scope: 'area', area: 'Atendimento' },
     ).then((r) => {
       if (!on || !r.ok) return;
-      setAnamneseTemplates((r.data?.templates || []).filter((t) => t.active));
+      const templates = (r.data?.templates || []).filter((t) => t.active);
+      setAnamneseTemplates(templates);
       const mine = (r.data?.responses || []).filter((x) => x.encounterId === row.id);
       setAnamneseCount(mine.length);
-      setAnamneseLast(mine[0] ? { id: mine[0].id, createdAt: mine[0].createdAt || '', answers: mine[0].answers || {} } : null);
+      setAnamneseLast(mine[0] ? { id: mine[0].id, templateId: mine[0].templateId, createdAt: mine[0].createdAt || '', answers: mine[0].answers || {} } : null);
       setAnamneseHistoryOpen(false);
     }).catch(() => { /* segue sem fichas */ });
     return () => { on = false; };
@@ -246,7 +273,12 @@ export function EncounterSheet({
       fd.set('file', file);
       const res = await fetch('/api/upload', { method: 'POST', body: fd });
       const data = await res.json().catch(() => ({}));
+      if (res.status === 503) {
+        setFilesUnavailable(true);
+        return;
+      }
       if (!res.ok || !data.url) { setFileError(data.error || 'Não foi possível enviar o arquivo.'); return; }
+      setFilesUnavailable(false);
       const nextFiles: EncounterFile[] = [...(current.files || []), {
         id: fileUid(), name: (file.name || 'arquivo').slice(0, 160), url: String(data.url),
         size: file.size, createdAt: new Date().toISOString(), by: '',
@@ -257,6 +289,8 @@ export function EncounterSheet({
       if (!saveRes.ok) { setFileError(saveRes.message || 'Arquivo enviado, mas não foi anexado ao registro.'); return; }
       apply(saveRes.data!.encounter);
       onChanged?.();
+    } catch {
+      setFileError('Não foi possível anexar o arquivo. Tente novamente.');
     } finally { setFileBusy(false); }
   }
 
@@ -356,18 +390,47 @@ export function EncounterSheet({
     return () => clearTimeout(t);
   }, [form, row, conflict, save]);
 
-  /** Fecha com alteração pendente: tenta salvar; se falhar, avisa (não engole). */
-  const close = useCallback(async () => {
+  const closeDismiss = useOverlayDismissGuard();
+  const busyRef = useRef(busy);
+  busyRef.current = busy;
+  const savingNow = !!busy || autoState === 'saving';
+  const persistence = persistenceState({ dirty, saving: savingNow, error: autoState === 'error' ? error : '', hasPersisted: !!row });
+
+  /** Flush any in-flight/current text before a page exit. A failed flush asks explicitly. */
+  async function requestClose(reason: DismissReason = 'close-button', proceed: () => void = onClose) {
+    if (busyRef.current && busyRef.current !== 'save') {
+      // A structural action (finalize/reopen/task/payment) already in flight
+      // is allowed to settle before evaluating persisted versus unsaved state.
+      await new Promise<void>((resolve) => {
+        const timer = window.setInterval(() => {
+          if (!busyRef.current || busyRef.current === 'save') { window.clearInterval(timer); resolve(); }
+        }, 40);
+      });
+      return requestClose(reason, proceed);
+    }
     const current = latest.current.row;
-    if (current && current.status === 'draft' && encounterDraftKey(latest.current.form) !== lastSaved.current) {
-      const ok = await save({ silent: true });
-      if (!ok) {
-        const keep = window.confirm('Não foi possível salvar o atendimento agora. Fechar mesmo assim e perder o que foi digitado?');
-        if (!keep) return;
+    if (!current || current.status !== 'draft') { proceed(); return; }
+    if (inflight.current) {
+      const inFlightOk = await inflight.current;
+      if (!inFlightOk) {
+        closeDismiss.requestClose(reason, { dirty: true, error: error || 'O salvamento falhou.', context: 'edit' }, proceed);
+        return;
       }
     }
-    onClose();
-  }, [save, onClose]);
+    let flushed = encounterDraftKey(latest.current.form) === lastSaved.current;
+    for (let attempt = 0; !flushed && attempt < 4; attempt++) {
+      const ok = await save({ silent: true });
+      if (!ok) break;
+      flushed = encounterDraftKey(latest.current.form) === lastSaved.current;
+    }
+    if (flushed) { proceed(); return; }
+    closeDismiss.requestClose(reason, { dirty: true, error: error || 'O salvamento falhou; os dados continuam nesta tela.', context: 'edit' }, proceed);
+  }
+
+  const routeDismiss = useUnsavedChangesGuard(
+    { dirty, saving: savingNow, error: autoState === 'error' ? error : '', context: 'edit' },
+    { beforeNavigate: (reason, proceed) => { void requestClose(reason, proceed); } },
+  );
 
   /** Toda escrita de estado manda a revisão FRESCA do ref (nunca a do render). */
   async function transition(action: 'finalize' | 'reopen') {
@@ -465,15 +528,7 @@ export function EncounterSheet({
   // do último payload que o autosave confirmou. Metadados seguem do registro.
   const printBlocks = row ? encounterFormPrintBlocks(form) : [];
 
-  return (
-    <WorkspaceSheet
-      open
-      onClose={() => { void close(); }}
-      title="Atendimento"
-      subtitle={row ? `${formatDateBR(row.date)}${row.time ? ` · ${row.time}` : ''} · ${row.petName || row.customerName || 'Cliente'}${row.petName && row.customerName ? ` · Tutor: ${row.customerName}` : ''}` : 'Registro do atendimento'}
-      icon="stethoscope"
-      width="max-w-[620px]"
-      footer={(
+  const encounterFooter = (
         <>
           {row && (
             <span className="mr-auto flex w-full min-w-0 flex-wrap items-center gap-2 text-xs text-[var(--text-muted)] sm:w-auto">
@@ -481,19 +536,21 @@ export function EncounterSheet({
               {row.status === 'finalized' && <span>Finalizado por {encounterSignature(row)}</span>}
               {/* Indicador do autosave: discreto, no lugar onde a pessoa olha. */}
               {isDraft && autoState === 'saving' && <span>{ENCOUNTER_AUTOSAVE_LABELS.saving}</span>}
-              {isDraft && autoState === 'saved' && !dirty && <span>{ENCOUNTER_AUTOSAVE_LABELS.saved}</span>}
+              {layout !== 'page' && isDraft && autoState === 'saved' && !dirty && <span>{ENCOUNTER_AUTOSAVE_LABELS.saved}</span>}
               {isDraft && autoState === 'error'
                 && <span className="text-[var(--danger-fg)]">{ENCOUNTER_AUTOSAVE_LABELS.error}</span>}
             </span>
           )}
-          <Button variant="secondary" size="sm" onClick={print} disabled={!row} className="w-full sm:w-auto">
-            <Icon n="printer" size={13} /> Imprimir via do cliente
-          </Button>
-          {editable && (
-            <Button variant="secondary" size="sm" onClick={() => { void save(); }} disabled={!!busy || !dirty} className="w-full sm:w-auto">
-              {busy === 'save' ? 'Salvando…' : 'Salvar'}
+          <div className="flex flex-wrap items-center gap-2">
+            <Button variant="secondary" size="sm" onClick={print} disabled={!row} className="min-h-11 w-auto sm:min-h-0">
+              <Icon n="printer" size={13} /> Imprimir via do cliente
             </Button>
-          )}
+            {editable && (
+              <Button variant="secondary" size="sm" onClick={() => { void save(); }} disabled={!!busy || !dirty} className="min-h-11 w-auto sm:min-h-0">
+                {busy === 'save' ? 'Salvando…' : 'Salvar'}
+              </Button>
+            )}
+          </div>
           {row && isDraft && (
             <Button variant="primary" size="sm" onClick={finalize} disabled={!!busy} className="w-full sm:w-auto">
               {busy === 'finalize' ? 'Finalizando…' : 'Finalizar atendimento'}
@@ -505,8 +562,9 @@ export function EncounterSheet({
             </Button>
           )}
         </>
-      )}
-    >
+      );
+  const encounterContent = (
+    <>
       <div className="px-5 py-4 space-y-4">
         {error && <Notice tone="error">{error}</Notice>}
         {saved && !error && <Notice tone="success">{saved}</Notice>}
@@ -545,7 +603,7 @@ export function EncounterSheet({
                   </p>
                 )}
                 <div className="flex flex-wrap gap-2">
-                  <Button size="sm" variant="primary" onClick={() => { setFollowUpOpen(false); onClose(); }}>Encerrar</Button>
+                  <Button size="sm" variant="primary" onClick={() => { setFollowUpOpen(false); void requestClose('programmatic'); }}>Encerrar</Button>
                   {onScheduleReturn && (
                     <Button size="sm" variant="secondary" onClick={() => {
                       onScheduleReturn({
@@ -573,7 +631,7 @@ export function EncounterSheet({
                 </div>
                 <Field label="O que a recepção deve fazer" hint="Ex: ligar em 30 dias e marcar o retorno; confirmar por telefone.">
                   <Input value={followUpNote} onChange={(e) => setFollowUpNote(e.target.value)}
-                    placeholder={row.followUp || 'Ex: ligar e marcar o retorno em 30 dias'} maxLength={200} />
+                    placeholder={row.followUp || 'Registre como organizar o retorno'} maxLength={200} />
                 </Field>
                 <p className="text-xs text-[var(--text-muted)]">
                   Agendar retorno abre o agendamento já preenchido — nada é marcado sem você confirmar.
@@ -610,27 +668,24 @@ export function EncounterSheet({
             <Field label={ENCOUNTER_LABELS.complaint}>
               <Textarea value={form.complaint} disabled={!editable} maxLength={600}
                 onChange={(e) => updateForm({ ...form, complaint: e.target.value })}
-                placeholder="Ex: dor no dente do fundo do lado direito há dois dias" />
+                placeholder="Descreva o motivo do atendimento" />
             </Field>
             <Field label={ENCOUNTER_LABELS.evolution} hint="O que foi feito neste atendimento — é o coração do registro.">
               <Textarea value={form.evolution} disabled={!editable} maxLength={4000}
                 onChange={(e) => updateForm({ ...form, evolution: e.target.value })}
-                placeholder="Ex: limpeza completa, aplicação de flúor; sem intercorrências" />
+                placeholder="Registre o que foi realizado neste atendimento" />
             </Field>
             <Field label={ENCOUNTER_LABELS.guidance} hint="Sai na via impressa que o cliente leva.">
               <Textarea value={form.guidance} disabled={!editable} maxLength={2000}
                 onChange={(e) => updateForm({ ...form, guidance: e.target.value })}
-                placeholder="Ex: evitar alimentos muito frios por 24h; escovar com pasta para sensibilidade" />
+                placeholder="Registre as orientações fornecidas" />
             </Field>
             {/* ── FASE 2 · P3 — retorno: sem retorno · data · intervalo ── */}
             <Field label="Retorno" hint="Defina quando este paciente precisa voltar (alimenta o follow-up).">
               <div className="flex flex-wrap gap-1.5" role="group" aria-label="Como fica o retorno">
                 {FOLLOW_UP_MODES.map((m) => (
                   <button key={m} type="button" disabled={!editable} onClick={() => setFollowUpMode(m)}
-                    className={`rounded-full border px-3 py-1 text-[12.5px] font-semibold transition-colors disabled:opacity-60 ${
-                      form.followUpMode === m
-                        ? 'border-[var(--brand)] bg-[var(--brand-soft)] text-[var(--brand-fg)]'
-                        : 'border-[var(--border)] text-[var(--text-muted)] hover:bg-[var(--surface-hover)]'}`}
+                    className="il-option-choice"
                     aria-pressed={form.followUpMode === m}>
                     {FOLLOW_UP_MODE_LABELS[m]}
                   </button>
@@ -658,7 +713,7 @@ export function EncounterSheet({
                 </Field>
                 <Field label="Etiquetas" hint="Separe por vírgula (procedimento, material, região…).">
                   <Input value={form.tags} disabled={!editable}
-                    onChange={(e) => updateForm({ ...form, tags: e.target.value })} placeholder="Ex: limpeza, flúor" />
+                    onChange={(e) => updateForm({ ...form, tags: e.target.value })} placeholder="Ex.: procedimentos, materiais" />
                 </Field>
               </div>
             </Field>
@@ -673,22 +728,22 @@ export function EncounterSheet({
               <div className="flex items-center justify-between gap-2 flex-wrap">
                 <div>
                   <p className="text-[13px] font-semibold text-[var(--text)]">Anamnese</p>
-                  <p className="text-[11.5px] text-[var(--text-muted)]">
-                    {anamneseCount > 0
-                      ? <>
-                          Última ficha: {anamneseLast ? formatAnamneseDate(anamneseLast.createdAt) : '—'}
-                          {' · '}
-                          <button type="button" className="font-semibold text-[var(--brand-fg)] hover:underline"
-                            onClick={() => setAnamneseHistoryOpen((v) => !v)} aria-expanded={anamneseHistoryOpen}>
-                            {anamneseHistoryOpen ? 'Ocultar histórico' : 'Ver histórico'}
-                          </button>
-                        </>
-                      : 'Ficha clínica do paciente — episódio atual.'}
-                  </p>
+                  {anamneseCount > 0 ? (
+                    <div className="mt-1 flex flex-wrap items-center gap-2">
+                      <span className="text-[11.5px] font-medium text-[var(--success-fg)]">
+                        Ficha deste atendimento salva · {anamneseLast ? formatDateBR(anamneseLast.createdAt.slice(0, 10)) : '—'}
+                      </span>
+                      <Button type="button" variant="secondary" size="sm"
+                        onClick={() => setAnamneseHistoryOpen((v) => !v)} aria-expanded={anamneseHistoryOpen} aria-controls="encounter-anamnese-history">
+                        <Icon n={anamneseHistoryOpen ? 'chevU' : 'history'} size={13} />
+                        {anamneseHistoryOpen ? 'Ocultar histórico' : 'Ver histórico'}
+                      </Button>
+                    </div>
+                  ) : <p className="text-[11.5px] text-[var(--text-muted)]">Ainda não há ficha neste atendimento.</p>}
                 </div>
                 {anamneseTemplates.length > 0 && row.contactId ? (
                   <Button size="sm" variant={anamneseCount > 0 ? 'secondary' : 'primary'} onClick={() => setAnamneseOpen(true)}>
-                    {anamneseCount > 0 ? 'Nova ficha' : 'Preencher anamnese'}
+                    {anamneseCount > 0 ? 'Preencher outra ficha' : 'Preencher anamnese'}
                   </Button>
                 ) : (
                   <span className="text-[11.5px] text-[var(--text-muted)]">
@@ -697,10 +752,13 @@ export function EncounterSheet({
                 )}
               </div>
               {anamneseHistoryOpen && anamneseLast && (
-                <div data-testid="encounter-anamnese-history" className="mt-2 rounded-md border border-[var(--border)] bg-[var(--surface-2)] px-3 py-2 space-y-1 max-h-40 overflow-y-auto">
-                  <p className="text-[11px] font-semibold uppercase tracking-wide text-[var(--text-muted)]">Respostas (só leitura — nada é copiado para a nova ficha)</p>
-                  {Object.entries(anamneseLast.answers || {}).map(([k, v]) => (
-                    <div key={k} className="text-[12px]"><span className="text-[var(--text-muted)]">{k}: </span>{String(v ?? '—')}</div>
+                <div id="encounter-anamnese-history" data-testid="encounter-anamnese-history" className="mt-2 rounded-md border border-[var(--border)] bg-[var(--surface-2)] px-4 py-3 space-y-1 max-h-56 overflow-y-auto">
+                  <p className="text-[11px] font-semibold uppercase tracking-wide text-[var(--text-muted)]">Respostas deste atendimento · só leitura</p>
+                  {anamneseHistoryRows(anamneseTemplates.find((t) => t.id === anamneseLast.templateId), anamneseLast.answers).map(({ id, label, type, value }) => (
+                    <div key={id} className="grid grid-cols-[minmax(0,1fr)_minmax(0,1.4fr)] gap-3 border-b border-[var(--border-soft)] last:border-0 py-1.5 text-[12px]">
+                      <span className="font-medium text-[var(--text-muted)]">{label}</span>
+                      <span className="text-[var(--text)] break-words">{type === 'boolean' ? (value === null || value === undefined ? 'Não informado' : value ? 'Sim' : 'Não') : Array.isArray(value) ? value.join(', ') : String(value ?? '—')}</span>
+                    </div>
                   ))}
                 </div>
               )}
@@ -730,7 +788,8 @@ export function EncounterSheet({
               ) : (
                 <p className="text-[11.5px] text-[var(--text-muted)] mt-1">Nenhum arquivo anexado.</p>
               )}
-              {editable && (
+              {filesUnavailable && <p className="mt-2 text-[12px] text-[var(--text-muted)]">Anexos indisponíveis neste ambiente.</p>}
+              {editable && !filesUnavailable && (
                 <label className={`mt-2 inline-flex items-center gap-1.5 rounded-md border border-dashed border-[var(--border-strong)] px-3 py-1.5 text-[12px] font-semibold text-[var(--text-muted)] cursor-pointer hover:bg-[var(--surface-hover)] ${fileBusy ? 'opacity-60 pointer-events-none' : ''}`}>
                   <Icon n="upload" size={13} /> {fileBusy ? 'Enviando…' : 'Anexar arquivo'}
                   <input type="file" className="sr-only" accept="image/jpeg,image/png,image/webp,image/gif,image/avif,application/pdf"
@@ -754,7 +813,11 @@ export function EncounterSheet({
           petId={row.petId || ''}
           professionalId={row.professionalId}
           encounterId={row.id}
-          onSaved={() => setAnamneseCount((n) => n + 1)}
+          onSaved={(savedResponse) => {
+            setAnamneseLast({ id: savedResponse.id, templateId: savedResponse.templateId, createdAt: savedResponse.createdAt, answers: savedResponse.answers });
+            setAnamneseCount((n) => n + 1);
+            setAnamneseHistoryOpen(true);
+          }}
         />
       )}
       {/* FASE 2 · P7 — recebimento opcional pré-preenchido ao concluir. */}
@@ -790,13 +853,57 @@ export function EncounterSheet({
             {row.status === 'finalized' && (
               <p style={{ fontSize: 11, marginTop: 28 }}>
                 Finalizado por {encounterSignature(row)}
-                {row.finalizedAt ? ` em ${new Date(row.finalizedAt).toLocaleString('pt-BR')}` : ''}
+                {row.finalizedAt ? ` em ${formatDateTimeBR(row.finalizedAt)}` : ''}
               </p>
             )}
           </div>
         </div>, document.body
       )}
     
+    </>
+  );
+  const patientContext = row
+    ? `${row.petName || row.customerName || 'Cliente'}${row.petName && row.customerName ? ` · Tutor: ${row.customerName}` : ''}`
+    : seed?.customerName || 'Identificando paciente…';
+  const encounterMeta = row
+    ? `${formatDateBR(row.date)}${row.time ? ` · ${row.time}` : ''} · ${row.serviceName || 'Atendimento'}${row.professionalName ? ` · ${row.professionalName}` : ''}`
+    : 'Registro clínico do atendimento';
+  const compactEncounterMeta = row
+    ? `${formatDateBR(row.date)}${row.time ? ` · ${row.time}` : ''}${row.professionalName ? ` · ${row.professionalName}` : ''}`
+    : 'Registro clínico do atendimento';
+
+  return layout === 'page' ? (
+    <main className="encounter-page" data-persistence-state={persistence}>
+      <span ref={compactSentinel} className="encounter-page__sticky-sentinel" aria-hidden="true" />
+      <header className="encounter-page__header" data-compact={compactHeader || undefined}>
+        <PageBackAction className="encounter-page__back" onClick={() => { void requestClose('navigation'); }} label="Voltar" />
+        <div className="encounter-page__heading">
+          <div className="encounter-page__heading-copy">
+            <h1>Atendimento</h1>
+            <p className="encounter-page__patient">{patientContext}</p>
+            <p className="encounter-page__meta encounter-page__meta--normal">{encounterMeta}</p>
+            <p className="encounter-page__meta encounter-page__meta--compact">{compactEncounterMeta}</p>
+          </div>
+          {row && <Badge tone={statusDef!.tone}>{statusDef!.label}</Badge>}
+        </div>
+      </header>
+      <section className="encounter-page__content">{encounterContent}</section>
+      <footer className="encounter-page__footer">
+        <span className={`encounter-page__save-state encounter-page__save-state--${persistence}`} role="status" aria-live="polite">
+          {persistence === 'saving' ? ENCOUNTER_AUTOSAVE_LABELS.saving : persistence === 'error' ? ENCOUNTER_AUTOSAVE_LABELS.error : persistence === 'saved' ? ENCOUNTER_AUTOSAVE_LABELS.saved : 'Rascunho'}
+        </span>
+        {encounterFooter}
+      </footer>
+      {routeDismiss.dialog}
+      {closeDismiss.dialog}
+    </main>
+  ) : (
+    <WorkspaceSheet open onClose={() => { void requestClose('close-button'); }} title="Atendimento"
+      subtitle={row ? `${formatDateBR(row.date)}${row.time ? ` · ${row.time}` : ''} · ${patientContext}` : 'Registro do atendimento'}
+      icon="stethoscope" width="max-w-[620px]" footer={encounterFooter}>
+      {encounterContent}
+      {routeDismiss.dialog}
+      {closeDismiss.dialog}
     </WorkspaceSheet>
   );
 }
@@ -833,9 +940,11 @@ export function EncounterList({ rows, onOpen, empty }: {
 }
 
 /** DD/MM/AAAA de um ISO de resposta de anamnese. */
-function formatAnamneseDate(iso: string): string {
-  const d = (iso || '').slice(0, 10);
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(d)) return '—';
-  const [y, m, day] = d.split('-');
-  return `${day}/${m}/${y}`;
+function anamneseHistoryRows(template: AnamneseTemplate | undefined, answers: Record<string, unknown>) {
+  if (template) {
+    return template.fields.filter((field) => field.type !== 'note').map((field) => ({
+      id: field.id, label: field.label, type: field.type, value: answers[field.id],
+    }));
+  }
+  return Object.entries(answers).map(([id, value]) => ({ id, label: id, type: '', value }));
 }

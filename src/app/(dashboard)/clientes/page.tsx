@@ -387,7 +387,7 @@ export default function ClientesPage() {
                         <Button size="sm" variant="primary" onClick={() => openFullProfile(p.key)}>
                           <Icon n="userCircle" size={14} /> Ver perfil
                         </Button>
-                        <Button size="sm" variant="secondary" onClick={() => setOpenKey(p.key)} title="Prévia rápida sem sair da lista">
+                        <Button size="sm" variant="ghost" onClick={() => setOpenKey(p.key)} title="Prévia rápida sem sair da lista">
                           <Icon n="eye" size={14} /> <span className="hidden md:inline">Prévia</span>
                         </Button>
                         <Button size="sm" variant="secondary" onClick={() => openBooking(p)} title="Novo agendamento para esta pessoa">
@@ -395,7 +395,7 @@ export default function ClientesPage() {
                         </Button>
                         {p.phone && (
                           <a href={waLink(p.phone, `Olá, ${(p.name || '').split(' ')[0]}!`)} target="_blank" rel="noreferrer"
-                            className="inline-flex items-center justify-center gap-1.5 text-xs font-semibold rounded-md px-2.5 py-1.5 bg-[var(--success-bg)] text-[var(--success-fg)] border border-[var(--success-border)] hover:bg-[var(--success-bg-hover)]"
+                            className="inline-flex items-center justify-center gap-1.5 text-xs font-semibold rounded-md px-2.5 py-1.5 text-[var(--text-muted)] hover:bg-[var(--surface-hover)] hover:text-[var(--brand-fg)]"
                             title="Abrir WhatsApp">
                             <Icon n="whatsapp" size={14} />
                           </a>

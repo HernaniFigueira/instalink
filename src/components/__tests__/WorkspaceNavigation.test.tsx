@@ -22,6 +22,8 @@ import userEvent from '@testing-library/user-event';
 import fs from 'node:fs';
 import path from 'node:path';
 import { WorkspaceNavigation } from '../dashboard/WorkspaceNavigation';
+import { Drawer } from '../ui';
+import { navAccentById, contrastRatio } from '@/lib/nav-accent';
 import { panelNavigation } from '@/lib/panel';
 
 vi.mock('next/navigation', () => ({ useRouter: () => ({ push: vi.fn() }) }));
@@ -33,7 +35,7 @@ beforeAll(() => {
   HTMLDialogElement.prototype.showModal = function () { this.setAttribute('open', ''); };
   HTMLDialogElement.prototype.close = function () { this.removeAttribute('open'); };
 });
-afterEach(() => { cleanup(); vi.clearAllMocks(); });
+afterEach(() => { cleanup(); vi.clearAllMocks(); vi.unstubAllEnvs(); });
 
 const unit = { id: 'one', name: 'Clínica sintética', logo: '/demo/clinic.svg', slug: 'demo-one' };
 const FULL_PERMISSIONS = {
@@ -51,6 +53,73 @@ function setup(overrides: any = {}) {
   const view = render(<WorkspaceNavigation {...props} />);
   return { ...view, ...callbacks, props };
 }
+
+describe('Drawer de navegação mobile — superfície isolada', () => {
+  it('usa o contexto nav apenas no Drawer mobile, preservando scroll e fechamento', async () => {
+    const u = userEvent.setup();
+    const { onMobileOpen } = setup({ mobileOpen: true });
+    const dialog = screen.getByRole('dialog');
+    expect(dialog.className).toContain('workspace-nav-drawer');
+    expect(dialog.querySelector('.il-drawer__strip')?.className).toContain('w-full');
+    expect(dialog.querySelector('.il-drawer__strip')?.className).toContain('max-w-[420px]');
+    expect(dialog.contains(document.activeElement)).toBe(true);
+    expect(dialog.querySelector('.ws-sheet__body')?.className).toContain('ws-scroll');
+    expect(dialog.querySelector('.ws-sheet__body')?.className).toContain('overflow-y-auto');
+    const close = within(dialog).getByRole('button', { name: 'Fechar' });
+
+    const css = fs.readFileSync(path.join(process.cwd(), 'src/app/globals.css'), 'utf8');
+    expect(css).toMatch(/dialog\.workspace-nav-drawer \.il-drawer__strip\s*\{[\s\S]*?background:\s*var\(--il-nav\)/);
+    expect(css).toMatch(/dialog\.workspace-nav-drawer \.ws-sheet__close:focus-visible\s*\{[\s\S]*?outline:/);
+    const genericStrip = css.match(/\.il-drawer__strip\s*\{([^}]*)\}/)?.[1] || '';
+    const genericHeader = css.match(/\.ws-sheet__header\s*\{([^}]*)\}/)?.[1] || '';
+    expect(genericStrip).not.toContain('--il-nav');
+    expect(genericHeader).not.toContain('--il-nav');
+    expect(css).toMatch(/\.workspace-nav-drawer \.workspace-foot__item\s*,[\s\S]*?color: var\(--il-nav-fg\)/);
+    expect(css).toMatch(/\.workspace-link:hover\s*\{\s*background: var\(--il-nav-hover\)/);
+    expect(css).toMatch(/\.workspace-link\[aria-current='page'\]\s*\{\s*background: var\(--il-nav-active\)/);
+    expect(css).toMatch(/\.workspace-link--group\[aria-expanded='true'\][\s\S]*?background: var\(--il-nav-hover\)/);
+    expect(css).toMatch(/\.workspace-submenu__guide[\s\S]*?background: var\(--il-nav-hover\)/);
+    // O tema nunca é aplicado ao seletor genérico: overlays como Novo
+    // Agendamento continuam usando a superfície neutra do Workspace.
+    await u.click(close);
+    expect(onMobileOpen).toHaveBeenCalledWith(false);
+    cleanup();
+    render(<Drawer open onClose={vi.fn()} title="Novo agendamento"><p>Conteúdo</p></Drawer>);
+    const generic = screen.getByRole('dialog');
+    expect(generic.className).toContain('il-drawer');
+    expect(generic.className).not.toContain('workspace-nav-drawer');
+  });
+
+  it('no menu móvel o toque abre o grupo, mantém a rota ativa e revela o submenu', async () => {
+    const u = userEvent.setup();
+    setup({ mobileOpen: true, activePath: '/agenda' });
+    const dialog = screen.getByRole('dialog');
+    const mobileNav = within(dialog).getByRole('navigation', { name: 'Menu móvel' });
+    expect(within(mobileNav).getByRole('link', { name: 'Agenda' }).getAttribute('aria-current')).toBe('page');
+
+    const clinic = within(mobileNav).getByRole('button', { name: 'Clínica' });
+    await u.click(clinic);
+    expect(clinic.getAttribute('aria-expanded')).toBe('true');
+    expect(within(mobileNav).getByRole('link', { name: 'Serviços' })).toBeTruthy();
+    expect(within(mobileNav).getByRole('link', { name: 'Serviços' }).className).toContain('workspace-link--sub');
+  });
+
+  it.each(['azul-profundo', 'verde-salvia', 'neutro', 'vinho', 'branco'])(
+    'mantém contraste AA para texto normal e ativo no preset %s', (id) => {
+      const vars = navAccentById(id).vars;
+      expect(contrastRatio(vars['--il-nav-fg'], vars['--il-nav'])).toBeGreaterThanOrEqual(4.5);
+      expect(contrastRatio(vars['--il-nav-fg'], vars['--il-nav-hover'])).toBeGreaterThanOrEqual(4.5);
+      expect(contrastRatio(vars['--il-nav-active-fg'], vars['--il-nav-active'])).toBeGreaterThanOrEqual(4.5);
+    },
+  );
+
+  it('a flag legada continua restaurando a rota Página na navegação mobile', () => {
+    vi.stubEnv('GODOUTOR_LEGACY_PAGES', '1');
+    setup({ mobileOpen: true });
+    const dialog = screen.getByRole('dialog');
+    expect(within(dialog).getByRole('link', { name: 'Página' })).toBeTruthy();
+  });
+});
 
 describe('Etapa A — sidebar por seções', () => {
   it('mostra os destinos principais como link e exatamente quatro grupos', () => {

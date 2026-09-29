@@ -4,7 +4,7 @@
 //   2. seleciona a pessoa → nome/WhatsApp/e-mail preenchidos e vinculados;
 //   3. só oferece "+ Novo cliente" quando a busca não encontra ninguém;
 //   4. serviço → data → horário (grade real da agenda) → observação.
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Icon } from '@/components/icons';
 import { PhoneBRInput } from '@/components/dashboard/PhoneBRInput';
 import { nowHM, todayISO } from '@/lib/tz';
@@ -14,11 +14,14 @@ import { BookingRecurrence } from './BookingRecurrence';
 import type { BookingOccurrence } from '@/lib/booking-recurrence';
 import type { OccurrencePreview } from '@/lib/booking-series';
 import { onlyDigits } from '@/lib/utils';
+import { isLegacyPagesEnabled } from '@/lib/product';
 import { cn } from '@/lib/utils';
 import type { Pet, Professional, Service } from '@/lib/types';
 import { apiGet, apiSend } from '@/lib/api-client';
 import { breedSuggestions, PET_SPECIES, PET_SPECIES_LABELS, validatePet } from '@/lib/pets';
 import { Drawer, Avatar, Badge, Button, Checkbox, Field, IconButton, Input, Notice, Select } from '@/components/ui';
+import { WORKSPACE_SHEET_SIZES } from '@/lib/workspace-sheet-sizes';
+import { uniqueEligibleServiceId } from '@/lib/agenda-cell-prefill';
 import { NewClientForm } from '@/components/dashboard/NewClientSheet';
 
 interface Contact {
@@ -48,6 +51,16 @@ export function NewBookingSheet({ businessId, services, pros, timezone, initial,
   onCreated: () => void;
 }) {
   const bookable = useMemo(() => services.filter((s) => s.bookable && s.active !== false), [services]);
+  /**
+   * Clique na grade (modo DIA): a coluna identifica o profissional. Quando o
+   * catálogo só oferece UM serviço elegível para ele, esse serviço entra
+   * pré-selecionado como conveniência — sem isso o bloco de horários (que só
+   * existe com `date && serviceId`) nem aparecia e a intenção do clique ficava
+   * invisível. Com 0 ou 2+ elegíveis nada é escolhido. Sem profissional
+   * (colunas de DIA na Semana) nunca se inventa vínculo.
+   * Decisão pelos vínculos reais (`professionalIds`) — nunca por nome/cargo.
+   */
+  const presetServiceId = initial?.serviceId || uniqueEligibleServiceId(bookable, initial?.professionalId || '');
   const [query, setQuery] = useState('');
   const [results, setResults] = useState<Contact[]>([]);
   const [searching, setSearching] = useState(false);
@@ -59,8 +72,9 @@ export function NewBookingSheet({ businessId, services, pros, timezone, initial,
   // CADASTRO REAL (NewClientSheet) que grava no CRM na hora. Abandonar o
   // agendamento depois NÃO apaga o paciente.
   const [registerOpen, setRegisterOpen] = useState(false);
+  const [clientPersistence, setClientPersistence] = useState({ dirty: false, saving: false, error: '' });
   const [vetMode, setVetMode] = useState(false);
-  const [serviceId, setServiceId] = useState(initial?.serviceId || '');
+  const [serviceId, setServiceId] = useState(presetServiceId);
   const [proId, setProId] = useState(initial?.professionalId || '');
   const [date, setDate] = useState(initial?.date || '');
   const [time, setTime] = useState(initial?.time || '');
@@ -103,6 +117,18 @@ export function NewBookingSheet({ businessId, services, pros, timezone, initial,
   const slotSeq = useRef(0);
   /** Horário pedido de fora (clique na agenda) — só vale se a grade confirmar. */
   const intendedTime = useRef(initial?.time || '');
+  const initialBookingSnapshot = useRef(JSON.stringify({
+    query: '', contactId: initial?.contactId || '', name: initial?.name || '', phone: initial?.phone || '', email: initial?.email || '',
+    serviceId: presetServiceId, proId: initial?.professionalId || '', date: initial?.date || '', time: initial?.time || '',
+    note: '', petId: '', fitInOpen: false, fitInTime: initial?.time || '', repeat: false, occurrences: [],
+  }));
+  const bookingSnapshot = JSON.stringify({ query, contactId, name, phone, email, serviceId, proId, date, time, note, petId, fitInOpen, fitInTime, repeat, occurrences });
+  const bookingDirty = !created && bookingSnapshot !== initialBookingSnapshot.current;
+  const wholeOverlayDirty = bookingDirty || clientPersistence.dirty;
+  const overlayGuard = {
+    dirty: wholeOverlayDirty, saving: saving || clientPersistence.saving,
+    context: bookingDirty && clientPersistence.dirty ? 'combined' as const : clientPersistence.dirty ? 'new-client' as const : 'new-booking' as const,
+  };
 
   // A2-B5 (F9): "hoje" no fuso do negócio (o servidor continua validando).
   const today = todayISO(new Date(), timezone || undefined);
@@ -115,12 +141,49 @@ export function NewBookingSheet({ businessId, services, pros, timezone, initial,
     ? pros.filter((p) => p.active !== false && service.professionalIds.includes(p.id))
     : pros.filter((p) => p.active !== false);
 
-  // Trocar o serviço invalida o profissional escolhido (a lista de elegíveis
-  // muda) — mas a PRIMEIRA montagem não conta como troca: o pré-preenchimento
-  // vindo da agenda precisa sobreviver.
-  const firstService = useRef(true);
+  /**
+   * Um profissional só continua selecionado se o serviço escolhido o aceitar.
+   * Serviço sem lista própria aceita qualquer profissional ativo — a MESMA
+   * régua de `eligiblePros` (nada de combinação inválida sobreviver).
+   */
+  const proCanPerform = useCallback((svcId: string, professionalId: string) => {
+    if (!professionalId) return true;
+    const svc = bookable.find((s) => s.id === svcId);
+    const ids = svc?.professionalIds;
+    if (!ids || ids.length === 0) return true;
+    return ids.includes(professionalId);
+  }, [bookable]);
+
+  /**
+   * Profissional EFETIVO da combinação: o pré-selecionado só vale enquanto o
+   * serviço o aceitar. É este valor — e nunca `proId` cru — que vai para a
+   * consulta de disponibilidade e para a criação, para que uma combinação
+   * inválida não seja sequer perguntada ao servidor.
+   */
+  const activeProId = proId && proCanPerform(serviceId, proId) ? proId : '';
+
+  // Escolher o serviço DEPOIS de abrir pela grade NÃO é "trocar de serviço":
+  // o sheet já chegou com data/hora/profissional pré-preenchidos e a seleção do
+  // serviço é o passo seguinte do mesmo fluxo — o prefill precisa sobreviver.
+  // Quem confirma (ou derruba) o horário é a disponibilidade REAL, no efeito de
+  // slots abaixo; nunca uma reserva silenciosa. Trocar um serviço JÁ escolhido
+  // continua limpando horário e profissional, como antes.
+  // CAUSA RAIZ do bug #43: este efeito limpava proId/time na primeira seleção
+  // (só a montagem era preservada), então hora e profissional da coluna
+  // clicada nunca chegavam ao fim do fluxo.
+  const previousServiceId = useRef(serviceId);
   useEffect(() => {
-    if (firstService.current) { firstService.current = false; return; }
+    const previous = previousServiceId.current;
+    previousServiceId.current = serviceId;
+    if (previous === serviceId) return; // montagem: nada a preservar nem limpar
+    if (!previous) {
+      // Primeira escolha (veio do prefill): mantém data/hora/profissional.
+      // Sai apenas o profissional que não pode realizar este serviço.
+      setProId((current) => (current && !proCanPerform(serviceId, current) ? '' : current));
+      return;
+    }
+    // Troca real: a intenção anterior (horário clicado) não vale mais.
+    intendedTime.current = '';
     setProId(''); setTime(''); setSlots([]); setSlotsError('');
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [serviceId]);
@@ -134,7 +197,7 @@ export function NewBookingSheet({ businessId, services, pros, timezone, initial,
     // pré-preenchido pela agenda) existe na grade real deste dia/ serviço /
     // profissional, ele permanece selecionado; se não existe, sai.
     const intended = intendedTime.current;
-    const professionalQuery = proId ? `&professionalId=${encodeURIComponent(proId)}` : '';
+    const professionalQuery = activeProId ? `&professionalId=${encodeURIComponent(activeProId)}` : '';
     fetch(`/api/bookings?mode=slots-admin&businessId=${businessId}&serviceId=${serviceId}&date=${date}${professionalQuery}`)
       .then(async (r) => {
         const d = await r.json();
@@ -158,7 +221,7 @@ export function NewBookingSheet({ businessId, services, pros, timezone, initial,
         if (mySeq !== slotSeq.current) return;
         setLoadingSlots(false);
       });
-  }, [businessId, serviceId, date, proId]);
+  }, [businessId, serviceId, date, activeProId]);
 
   // Busca no CRM (nome OU WhatsApp) com debounce.
   useEffect(() => {
@@ -269,7 +332,7 @@ export function NewBookingSheet({ businessId, services, pros, timezone, initial,
     if (!requestId.current) requestId.current = crypto.randomUUID();
     return {
       businessId, asOwner: true, customerName: name, customerPhone: phone, customerEmail: email,
-      contactId: contactId || undefined, serviceId, professionalId: proId, date, time, note,
+      contactId: contactId || undefined, serviceId, professionalId: activeProId, date, time, note,
       // FASE 2 · P6 — pet escolhido (o servidor revalida na unidade).
       ...(isVet && petId ? { petId } : {}),
       ...(repeat ? { series: { requestId: requestId.current, occurrences: rows } } : {}),
@@ -340,7 +403,7 @@ export function NewBookingSheet({ businessId, services, pros, timezone, initial,
         occurrences: data.occurrences,
         customer: name,
         service: service?.name || 'Serviço',
-        professional: data.occurrences ? 'Veja as ocorrências abaixo' : data.professionalName || eligiblePros.find((p) => p.id === proId)?.name || 'Definido pela agenda',
+        professional: data.occurrences ? 'Veja as ocorrências abaixo' : data.professionalName || eligiblePros.find((p) => p.id === activeProId)?.name || 'Definido pela agenda',
         date: data.occurrences?.[0]?.date || date,
         time: data.occurrences?.[0]?.time || when,
         fitIn: opts.fitIn === true,
@@ -356,12 +419,13 @@ export function NewBookingSheet({ businessId, services, pros, timezone, initial,
     <Drawer
       open
       onClose={() => { if (!saving && !reviewing) onClose(); }}
+      dismissGuard={overlayGuard}
+      sideDismissGuard={{ ...clientPersistence, context: 'new-client' }}
       title="Novo agendamento"
       subtitle="Paciente → serviço → data e horário → confirmação"
-      width="max-w-[720px]"
-      /* §19–25 — MESMO overlay que expande: "+ Cadastrar paciente" abre o
-         painel lateral (base 720px → expandida ~1120px), com o lado do
-         agendamento recuado/atenuado. Nenhum modal empilhado. */
+      width={WORKSPACE_SHEET_SIZES.standard}
+      /* §19–25 — mesmo overlay: os dois painéis usam presets oficiais; em
+         viewport estreita o cadastro ocupa a faixa sem comprimir agendamento. */
       side={registerOpen ? (
         <NewClientForm
           embedded
@@ -370,11 +434,13 @@ export function NewBookingSheet({ businessId, services, pros, timezone, initial,
           initialName={onlyDigits(query).length >= 10 ? '' : query.trim()}
           initialPhone={onlyDigits(query).length >= 10 ? query.trim() : ''}
           onClose={() => setRegisterOpen(false)}
-          onSaved={(cid, extra) => onClientRegistered(cid, extra)}
+          onPersistenceChange={setClientPersistence}
+          onSaved={(cid, extra) => { setClientPersistence({ dirty: false, saving: false, error: '' }); onClientRegistered(cid, extra); }}
         />
       ) : undefined}
       sideTitle="Cadastrar novo paciente"
-      sideWidth="max-w-[400px]"
+      sideSubtitle="Dados do tutor e do paciente"
+      sideWidth={WORKSPACE_SHEET_SIZES.nestedForm}
       onSideClose={() => setRegisterOpen(false)}
     >
         <div className="px-5 py-4 space-y-3.5">
@@ -429,11 +495,11 @@ export function NewBookingSheet({ businessId, services, pros, timezone, initial,
                 <Input value={query} onChange={(e) => setQuery(e.target.value)} autoFocus
                   placeholder="Buscar cliente por nome ou WhatsApp…" aria-label="Buscar cliente" />
                 <p className="text-xs text-[var(--text-muted)] mt-1.5">
-                  Buscamos no CRM para não duplicar cadastro — o cliente pode já ter conta na sua página.
+                  Buscamos no CRM para não duplicar cadastro — {isLegacyPagesEnabled() ? 'o cliente pode já ter conta na sua página.' : 'o cliente pode já ter uma conta.'}
                 </p>
                 {searching && <p className="text-xs text-[var(--text-faint)] mt-1.5">Buscando…</p>}
                 {!searching && query.trim().length >= 2 && results.length === 0 && (
-                  <Button type="button" variant="soft" onClick={startNew} className="mt-2 w-full justify-start" data-new-client-trigger="true">
+                  <Button type="button" variant="secondary" onClick={startNew} className="mt-2 w-full justify-start" data-new-client-trigger="true">
                     + Cadastrar paciente {vetMode ? '(tutor e pet)' : `“${query.trim()}”`}
                   </Button>
                 )}
@@ -493,7 +559,7 @@ export function NewBookingSheet({ businessId, services, pros, timezone, initial,
 
           {service && eligiblePros.length > 1 && (
             <Field label="Profissional" hint="Opcional — em branco a agenda equilibra a equipe automaticamente">
-              <Select value={proId} disabled={saving || reviewing} onChange={(e) => setProId(e.target.value)}>
+              <Select value={activeProId} disabled={saving || reviewing} onChange={(e) => setProId(e.target.value)}>
                 <option value="">Automático (equilibrar equipe)</option>
                 {eligiblePros.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
               </Select>
@@ -526,10 +592,7 @@ export function NewBookingSheet({ businessId, services, pros, timezone, initial,
                   {slots.map((t) => (
                     <button key={t} type="button" disabled={saving || reviewing} onClick={() => setTime(t)}
                       aria-pressed={time === t}
-                      className={cn('text-xs font-semibold px-3 py-1.5 rounded-md border tabular-nums transition-colors',
-                        time === t
-                          ? 'bg-[var(--brand)] text-white border-[var(--brand)] shadow-brand'
-                          : 'bg-[var(--surface)] text-[var(--text)] border-[var(--border)] hover:border-[var(--brand-border)] hover:text-[var(--brand-fg)]')}>
+                      className="il-option-choice il-option-choice--compact tabular-nums">
                       {t}
                     </button>
                   ))}
@@ -559,7 +622,7 @@ export function NewBookingSheet({ businessId, services, pros, timezone, initial,
                     <Field label="Horário do encaixe">
                       <Input type="time" value={fitInTime} onChange={(e) => { setFitInTime(e.target.value); setFitInConflicts([]); setFitInMessage(''); }} className="w-32" />
                     </Field>
-                    <Button type="button" variant="warning" size="sm" disabled={saving || !fitInTime || !!fitInPast}
+                    <Button type="button" variant="secondary" size="sm" disabled={saving || !fitInTime || !!fitInPast}
                       title={fitInPast || undefined}
                       onClick={() => save({ fitIn: true, confirmFitIn: false, timeOverride: fitInTime })}>
                       {saving ? 'Verificando…' : 'Verificar e encaixar'}
@@ -579,7 +642,7 @@ export function NewBookingSheet({ businessId, services, pros, timezone, initial,
                         ))}
                       </span>
                       <span className="mt-2 flex flex-wrap gap-2">
-                        <Button type="button" variant="warning" size="sm" disabled={saving}
+                        <Button type="button" variant="secondary" size="sm" disabled={saving}
                           onClick={() => save({ fitIn: true, confirmFitIn: true, timeOverride: fitInTime })}>
                           {saving ? 'Encaixando…' : 'Encaixar mesmo assim'}
                         </Button>
@@ -602,7 +665,7 @@ export function NewBookingSheet({ businessId, services, pros, timezone, initial,
 
           <Checkbox label="Repetir este agendamento" hint="Séries (semanal, quinzenal…) com conferência ocorrência por ocorrência."
             checked={repeat} disabled={saving || reviewing} onChange={setRepeat} />
-          {repeat && <BookingRecurrence first={{ date, time, professionalId: proId }} rows={occurrences} preview={preview}
+          {repeat && <BookingRecurrence first={{ date, time, professionalId: activeProId }} rows={occurrences} preview={preview}
             pros={eligiblePros} min={today} max={maxDate} busy={saving || reviewing}
             onChange={changeOccurrences} onReview={review} onDisable={() => setRepeat(false)} />}
 
@@ -611,7 +674,7 @@ export function NewBookingSheet({ businessId, services, pros, timezone, initial,
           </Field>
 
           {service && date && (time || repeat) && <section aria-label="Revise o agendamento" className="rounded-lg bg-[var(--surface-3)] p-4 text-sm space-y-1">
-            <h3 className="font-semibold">Confira antes de confirmar</h3><p>{name || 'Cadastro selecionado'} · {service.name}</p><p>{date.split('-').reverse().join('/')} às {time || 'Horários da recorrência'}</p><p className="text-xs text-[var(--text-muted)]">{eligiblePros.find(p => p.id === proId)?.name || 'Distribuição automática entre profissionais elegíveis'}{repeat ? ` · ${occurrences.length} ocorrências` : ''}</p>
+            <h3 className="font-semibold">Confira antes de confirmar</h3><p>{name || 'Cadastro selecionado'} · {service.name}</p><p>{date.split('-').reverse().join('/')} às {time || 'Horários da recorrência'}</p><p className="text-xs text-[var(--text-muted)]">{eligiblePros.find(p => p.id === activeProId)?.name || 'Distribuição automática entre profissionais elegíveis'}{repeat ? ` · ${occurrences.length} ocorrências` : ''}</p>
           </section>}
           {error && <Notice tone="error">{error}</Notice>}
           <Button type="button" variant="primary" size="lg" onClick={() => save()}

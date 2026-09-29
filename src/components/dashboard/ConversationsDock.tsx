@@ -17,7 +17,6 @@
 // à pílula minimizada (comportamento de slider de aplicação, não de modal).
 import { useEffect, useState } from 'react';
 import { usePathname } from 'next/navigation';
-import { Icon } from '@/components/icons';
 import { ConversationsView } from './ConversationsView';
 import { WorkspaceSheet } from './WorkspaceSheet';
 
@@ -30,25 +29,21 @@ export function ConversationsDock({ businessId }: { businessId: string }) {
   // Navegar troca o contexto de operação: o sheet sai junto.
   useEffect(() => { setOpen(false); setMinimized(false); }, [path]);
 
+  // O atalho vive na topbar (sem FAB global). A página completa continua
+  // disponível no menu de navegação e o sheet preserva o contexto da rota.
+  useEffect(() => {
+    const openFromTopbar = () => {
+      if (document.querySelector('dialog[open], [role="dialog"][aria-modal="true"]')) return;
+      setVisited(true);
+      setMinimized(false);
+      setOpen(true);
+    };
+    window.addEventListener('godoutor:open-conversations', openFromTopbar);
+    return () => window.removeEventListener('godoutor:open-conversations', openFromTopbar);
+  }, []);
+
   return (
     <>
-      <button
-        type="button"
-        data-conversations-open
-        className="conversation-shortcut"
-        aria-label="Abrir painel de Conversas"
-        aria-expanded={open}
-        onClick={() => {
-          if (document.querySelector('dialog[open], [role="dialog"][aria-modal="true"]')) return;
-          setVisited(true);
-          setMinimized(false);
-          setOpen(true);
-        }}
-      >
-        <span className="conversation-shortcut__icon" aria-hidden="true"><Icon n="inbox" size={16} /></span>
-        <span>Conversas</span>
-      </button>
-
       <WorkspaceSheet
         open={open}
         onClose={() => { setOpen(false); setMinimized(false); }}

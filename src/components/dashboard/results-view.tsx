@@ -44,10 +44,7 @@ export function PeriodPicker({ value, onChange, label = 'Período dos resultados
       type="button"
       onClick={() => { setCustom(false); onChange({ key: k, from: '', to: '' }); }}
       aria-pressed={isKey(k)}
-      className={cn(
-        'text-xs font-medium px-2.5 py-1 rounded whitespace-nowrap transition-colors',
-        isKey(k) ? 'bg-[var(--brand-soft)] text-[var(--brand-fg)] border border-[var(--brand-border)]' : 'text-[var(--text-muted)] border border-transparent hover:text-[var(--text)] hover:bg-[var(--surface-2)]',
-      )}
+      className="il-option-choice il-option-choice--compact whitespace-nowrap"
     >
       {periodKeyLabel(k)}
     </button>
@@ -55,16 +52,13 @@ export function PeriodPicker({ value, onChange, label = 'Período dos resultados
 
   return (
     <div className="min-w-0 max-w-full">
-      <div role="group" aria-label={label} className="inline-flex flex-wrap items-center bg-white border border-zinc-200 rounded-md p-0.5 gap-0.5 max-w-full overflow-x-auto no-scrollbar">
+      <div role="group" aria-label={label} className="inline-flex flex-wrap items-center bg-[var(--surface)] border border-[var(--border)] rounded-md p-0.5 gap-1 max-w-full overflow-x-auto no-scrollbar">
         {MAIN_PERIOD_KEYS.map(chip)}
         <button
           type="button"
           onClick={() => setCustom((c) => !c)}
           aria-pressed={value.key === 'custom'}
-          className={cn(
-            'text-xs font-medium px-2.5 py-1 rounded whitespace-nowrap transition-colors inline-flex items-center gap-1',
-            value.key === 'custom' ? 'bg-[var(--brand-soft)] text-[var(--brand-fg)] border border-[var(--brand-border)]' : 'text-[var(--text-muted)] border border-transparent hover:text-[var(--text)] hover:bg-[var(--surface-2)]',
-          )}
+          className="il-option-choice il-option-choice--compact whitespace-nowrap"
         >
           <Icon n="calendar" size={12} /> Personalizado
         </button>
@@ -143,15 +137,20 @@ export function ComparisonBadge({ metric, hasPrevious }: { metric: Metric; hasPr
 
 export function MetricGrid({ metrics, hasPrevious }: { metrics: Metric[]; hasPrevious: boolean }) {
   return (
-    <div className="grid grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-2.5">
-      {metrics.map((m) => (
-        <div key={m.id} className={cn('bg-white border border-zinc-200 rounded-lg p-3.5', !m.hasData && 'bg-zinc-50/60')}>
-          <p className="text-xs text-zinc-500">{m.label}</p>
-          <p className={cn('text-xl font-semibold tracking-tight mt-0.5', !m.hasData && 'text-zinc-300')}>{fmt(m)}</p>
-          <div className="mt-1 min-h-[16px]"><ComparisonBadge metric={m} hasPrevious={hasPrevious} /></div>
-          <p className="text-[11px] text-zinc-400 mt-1 leading-snug">{m.hasData ? m.hint : (m.noDataHint || m.hint)}</p>
-        </div>
-      ))}
+    <div className="ws-panel overflow-hidden">
+      <div className="grid grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+        {metrics.map((m) => (
+          <div key={m.id} className={cn(
+            'min-w-0 px-3.5 py-3.5 border-b border-[var(--border-soft)]',
+            !m.hasData && 'bg-[var(--surface-3)]',
+          )}>
+            <p className="text-xs text-[var(--text-muted)]">{m.label}</p>
+            <p className={cn('text-xl font-semibold tracking-tight mt-0.5 text-[var(--text)]', !m.hasData && 'text-[var(--text-faint)]')}>{fmt(m)}</p>
+            <div className="mt-1 min-h-[16px]"><ComparisonBadge metric={m} hasPrevious={hasPrevious} /></div>
+            <p className="text-[11px] text-[var(--text-muted)] mt-1 leading-snug">{m.hasData ? m.hint : (m.noDataHint || m.hint)}</p>
+          </div>
+        ))}
+      </div>
     </div>
   );
 }

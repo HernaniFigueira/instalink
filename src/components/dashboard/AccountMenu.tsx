@@ -18,8 +18,10 @@
 import { useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
 import { Icon } from '@/components/icons';
+import { ViewportPopover } from './ViewportPopover';
 import { Avatar } from '@/components/ui';
 import { roleLabel } from '@/lib/role-labels';
+import { canShowPublicPageLink } from '@/lib/product';
 import { mayLeaveEditor } from './useUnsavedChanges';
 
 export interface AccountUnit {
@@ -31,7 +33,7 @@ export interface AccountUnit {
   organizationId?: string;
 }
 
-export function AccountMenu({ user, unit, units = [], overview, canOverview, canConfig, onUnit, onLogout, isMaster, onOpenHelp }: {
+export function AccountMenu({ user, unit, units = [], overview, canOverview, canConfig, onUnit, onLogout, isMaster, onOpenHelp, legacyPagesEnabled = false }: {
   user: { name: string; email?: string; role?: string; photo?: string };
   unit: AccountUnit;
   units?: AccountUnit[];
@@ -39,6 +41,7 @@ export function AccountMenu({ user, unit, units = [], overview, canOverview, can
   overview?: boolean;
   canOverview?: boolean;
   canConfig?: boolean;
+  legacyPagesEnabled?: boolean;
   onUnit?: (id: string) => void;
   onLogout: () => void;
   isMaster?: boolean;
@@ -46,14 +49,17 @@ export function AccountMenu({ user, unit, units = [], overview, canOverview, can
   onOpenHelp?: () => void;
 }) {
   const [open, setOpen] = useState(false);
+  const [anchor, setAnchor] = useState<HTMLElement | null>(null);
   const boxRef = useRef<HTMLDivElement | null>(null);
+  const panelRef = useRef<HTMLDivElement | null>(null);
   const buttonRef = useRef<HTMLButtonElement | null>(null);
   const q = unit.id ? `?b=${unit.id}` : '';
 
   useEffect(() => {
     if (!open) return;
     function onDown(e: MouseEvent) {
-      if (!boxRef.current?.contains(e.target as Node)) setOpen(false);
+      const target = e.target as Node;
+      if (!boxRef.current?.contains(target) && !panelRef.current?.contains(target)) setOpen(false);
     }
     function onKey(e: KeyboardEvent) {
       if (e.key === 'Escape') { setOpen(false); buttonRef.current?.focus(); }
@@ -81,18 +87,26 @@ export function AccountMenu({ user, unit, units = [], overview, canOverview, can
         aria-label={`Menu da conta — ${user.name}`}
         aria-expanded={open}
         aria-haspopup="dialog"
-        onClick={() => setOpen((v) => !v)}
+        onClick={(event) => {
+          if (open) setOpen(false);
+          else { setAnchor(event.currentTarget); setOpen(true); }
+        }}
       >
         <Avatar name={user.name} src={user.photo || undefined} size={30} />
       </button>
 
-      {open && (
-        <div className="ws-popover ws-account__panel" role="dialog" aria-label="Menu da conta">
+      <ViewportPopover
+        open={open}
+        anchor={anchor}
+        className="ws-popover ws-account__panel"
+        role="dialog"
+        ariaLabel="Menu da conta"
+        panelRef={panelRef}
+      >
           <header className="ws-account__header">
             <Avatar name={user.name} src={user.photo || undefined} size={40} />
             <div className="ws-account__identity">
               <p className="ws-account__identity-name">{user.name}</p>
-              {user.email && <p className="ws-account__identity-email">{user.email}</p>}
               <p className="ws-account__identity-role">
                 {roleLabel(role) || 'Equipe'}
                 {overview && multiUnit && <> · visão da organização</>}
@@ -138,7 +152,7 @@ export function AccountMenu({ user, unit, units = [], overview, canOverview, can
               </div>
             )}
 
-            {unit.slug && (
+            {canShowPublicPageLink(legacyPagesEnabled, unit.slug) && (
               <a className="ws-menu__item" href={`/${unit.slug}`} target="_blank" rel="noreferrer">
                 <Icon n="external" size={16} /> Ver página pública
               </a>
@@ -161,8 +175,7 @@ export function AccountMenu({ user, unit, units = [], overview, canOverview, can
               <Icon n="logout" size={16} /> Sair
             </button>
           </div>
-        </div>
-      )}
+      </ViewportPopover>
     </div>
   );
 }

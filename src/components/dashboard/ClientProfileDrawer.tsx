@@ -14,11 +14,12 @@
 //   • consentimento de marketing nunca é presumido;
 //   • criar acesso continua opcional e a senha temporária aparece UMA vez;
 //   • etapa de lead só muda via PipelineStage real (nunca LeadStatus legado).
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 import { centsToBR, cn, waLink } from '@/lib/utils';
 import { focusFieldSoon } from '@/lib/focus-highlight';
-import { humanDateTime, humanDay, formatDateBR, todayISO } from '@/lib/tz';
+import { humanDateTime, humanDay, formatDateBR, formatDateTimeBR, todayISO } from '@/lib/tz';
 import { BOOKING_STATUS, LEAD_STATUS, type StatusDef } from '@/lib/status';
 import { leadOriginLabel } from '@/lib/leads';
 import type { BusinessPipeline, ContactProfile, FinanceEntry , Pet } from '@/lib/types';
@@ -29,16 +30,17 @@ import {
   BRAZILIAN_STATES, PROFILE_TAGS_MAX, ageFromBirthDate, clientTags, countAttended, formatCep, formatCpf,
   formatPhoneBR, isValidCpf, normalizeBirthDate, profileOf,
 } from '@/lib/contact-profile';
-import { Avatar, Badge, Button, IconButton, Input, Kpi, Notice, Select, StatusBadge, SubCard, Switch, Tabs, Textarea, buttonCls, type TabItem } from '@/components/ui';
+import { Avatar, Badge, Button, IconButton, Input, Kpi, Notice, Select, StatusBadge, SubCard, Switch, Tabs, Textarea, buttonCls, PageBackAction, type TabItem } from '@/components/ui';
 import { Icon } from '@/components/icons';
 import { apiGet, apiSend } from '@/lib/api-client';
 import { cepError, contactFieldErrors, emailError, hasFieldErrors, maskCep, maskCpf, phoneError } from '@/lib/field-quality';
 import { PhoneBRInput } from '@/components/dashboard/PhoneBRInput';
-import { canReopenEncounter } from '@/lib/encounters';
-import { EncounterList, EncounterSheet, type EncounterRow } from '@/components/dashboard/EncounterSheet';
+import { EncounterList, type EncounterRow } from '@/components/dashboard/EncounterSheet';
+import { encounterWorkspaceHref } from '@/lib/encounter-workspace';
 import { usePanelPermissions } from '@/components/dashboard/usePanelPermissions';
 import { PetsSection } from '@/components/dashboard/PetsSection';
 import { Pet360Sheet } from '@/components/dashboard/Pet360Sheet';
+import { useOverlayDismissGuard, useUnsavedChangesGuard } from './OverlayDismissGuard';
 
 // Observações do cliente (P2): histórico append-only com autor e data.
 // `legacy: true` marca o registro antigo (campo único), preservado como está.
@@ -75,12 +77,9 @@ export interface Person360 {
   lastSeen: string;
 }
 
-// Data curta do evento ("14 SET · 10:00") — leitura rápida no histórico.
+// Data civil completa em toda linha do histórico do Cliente 360.
 function eventDay(iso: string): string {
-  const [, m, d] = (iso || '').slice(0, 10).split('-');
-  if (!d) return '';
-  const MES = ['JAN', 'FEV', 'MAR', 'ABR', 'MAI', 'JUN', 'JUL', 'AGO', 'SET', 'OUT', 'NOV', 'DEZ'];
-  return `${Number(d)} ${MES[Number(m) - 1] || m}`;
+  return formatDateBR((iso || '').slice(0, 10));
 }
 
 const bookDef = (s: string): StatusDef => (BOOKING_STATUS as Record<string, StatusDef>)[s] || { panel: s, tone: 'zinc', consumer: s, desc: '' };
@@ -106,7 +105,7 @@ type HistoryTab =
  * sempre; o que muda é a casca (gaveta ou página) e o quanto carrega
  * (a gaveta não dispara atendimentos/financeiro à toa).
  */
-export function ClientProfileDrawer({ person, businessId, pipeline, canFunil, onClose, onChanged, onNewBooking, variant = 'preview' }: {
+export function ClientProfileDrawer({ person, businessId, pipeline, canFunil, onClose, onChanged, onNewBooking, variant = 'preview', pageBackHref }: {
   person: Person360;
   businessId: string;
   pipeline: BusinessPipeline | null;
@@ -115,24 +114,27 @@ export function ClientProfileDrawer({ person, businessId, pipeline, canFunil, on
   onChanged: () => void;
   onNewBooking: (p: Person360) => void;
   variant?: 'preview' | 'page';
+  /** Destino real da lista ao renderizar a ficha como página. */
+  pageBackHref?: string;
 }) {
+  const router = useRouter();
   const [tab, setTab] = useState<HistoryTab>('overview');
+  const tabsViewportRef = useRef<HTMLDivElement>(null);
+  const [tabsOverflowRight, setTabsOverflowRight] = useState(false);
   // FASE 2 · P2/P7 — financeiro do paciente (carga única, escopo do contato).
   const [financeEntries, setFinanceEntries] = useState<FinanceEntry[]>([]);
   const [financeLoaded, setFinanceLoaded] = useState(false);
   const [financeError, setFinanceError] = useState('');
   // FASE 2 · P2 — "Iniciar atendimento" do próximo agendamento futuro.
-  const [startEncounter, setStartEncounter] = useState<{ bookingId: string; seed: Record<string, string> } | null>(null);
   // A3.4 · Bloco 5 — registros de atendimento da pessoa. A permissão é PRÓPRIA
   // (`atendimento`): sem ela, a aba nem aparece e a rota não é chamada.
-  const { permissions, role } = usePanelPermissions();
+  const { permissions } = usePanelPermissions();
   const canEncounter = permissions.atendimento === true;
   // FASE 2 · P2 — aba Financeiro só existe com a permissão correspondente.
   const canFinance = permissions.financeiro === true;
   const [encounters, setEncounters] = useState<EncounterRow[]>([]);
   // HOMOLOGAÇÃO · P1 — Pet 360 (ficha do animal).
   const [pet360, setPet360] = useState<Pet | null>(null);
-  const [encounterOpen, setEncounterOpen] = useState<EncounterRow | null>(null);
   const [encountersError, setEncountersError] = useState('');
   const [encountersLoaded, setEncountersLoaded] = useState(false);
   const [editing, setEditing] = useState(false);
@@ -149,7 +151,6 @@ export function ClientProfileDrawer({ person, businessId, pipeline, canFunil, on
   const [editingLegacy, setEditingLegacy] = useState(false);
   const [accessSaving, setAccessSaving] = useState(false);
   const [tagDraft, setTagDraft] = useState('');
-
   const profile = profileOf(person.profile);
   const age = person.age ?? ageFromBirthDate(profile.birthDate);
   const tags = useMemo(() => (person.tags && person.tags.length
@@ -168,6 +169,15 @@ export function ClientProfileDrawer({ person, businessId, pipeline, canFunil, on
     () => JSON.stringify(draft) !== JSON.stringify(profileOf(person.profile)),
     [draft, person.profile],
   );
+
+  const identityDirty = identityDraft.name !== (person.name || '') || identityDraft.phone !== (person.phone || '') || identityDraft.email !== (person.email || '');
+  const editDirty = editing && (draftChanged || identityDirty);
+  const editState = { dirty: editDirty, saving, error: saving ? '' : (notice?.tone === 'error' ? notice.text : ''), context: 'edit' as const };
+  const editDismiss = useOverlayDismissGuard();
+  const routeDismiss = useUnsavedChangesGuard(editState);
+  const discardEdit = () => { setDraft(profileOf(person.profile)); setIdentityDraft({ name: person.name || '', phone: person.phone || '', email: person.email || '' }); setEditing(false); };
+  const requestCloseEdit = () => editDismiss.requestClose('close-button', editState, discardEdit);
+
 
   // Endereço em UMA linha legível (ponto 10): rua, número, complemento —
   // bairro, cidade/UF. Só as partes preenchidas entram, sem vírgula sobrando.
@@ -189,6 +199,9 @@ export function ClientProfileDrawer({ person, businessId, pipeline, canFunil, on
   // usada pelo CRM (contato OU cliente), então o link nunca aponta para a
   // pessoa errada quando há contato e cliente com o mesmo nome.
   const profileHref = (query: string) => `/clientes/${encodeURIComponent(person.key)}${query}`;
+  const openEncounter = (target: { id?: string; bookingId?: string }) => router.push(encounterWorkspaceHref({
+    businessId, ...target, returnTo: `${window.location.pathname}${window.location.search}`,
+  }));
 
   async function patch(payload: Record<string, unknown>, okText: string) {
     setSaving(true);
@@ -360,12 +373,12 @@ export function ClientProfileDrawer({ person, businessId, pipeline, canFunil, on
         body: (
           <div className="flex flex-wrap gap-1.5">
             {nextId && canFunil && l.stageId !== 'scheduled' && (
-              <Button size="xs" variant="soft" onClick={() => setLead(l.id, nextId)} disabled={saving}>{nextStageLabel(l as any)}</Button>
+              <Button size="xs" variant="secondary" onClick={() => setLead(l.id, nextId)} disabled={saving}>{nextStageLabel(l as any)}</Button>
             )}
             {nextId === 'scheduled' && canFunil && (
-              <Button size="xs" variant="soft" onClick={() => onNewBooking(person)}>Agendar atendimento</Button>
+              <Button size="xs" variant="secondary" onClick={() => onNewBooking(person)}>Agendar atendimento</Button>
             )}
-            {canLose && <Button size="xs" variant="quiet" onClick={() => setLead(l.id, lostId!)} disabled={saving}>Marcar perdido</Button>}
+            {canLose && <Button size="xs" variant="ghost" onClick={() => setLead(l.id, lostId!)} disabled={saving}>Marcar perdido</Button>}
             {canFunil && <Link href={`/funil?b=${businessId}#${l.id}`} className="il-chip">Ver oportunidade</Link>}
           </div>
         ),
@@ -376,7 +389,7 @@ export function ClientProfileDrawer({ person, businessId, pipeline, canFunil, on
         kind: 'task', id: t.id, sortKey: t.dueAt || t.title, icon: 'tasks',
         when: t.dueAt ? eventDay(t.dueAt.slice(0, 10)) : '',
         title: `Tarefa: ${t.title}`,
-        subtitle: [t.assigneeName ? `Resp.: ${t.assigneeName}` : '', t.dueLabel || ''].filter(Boolean).join(' · ') || undefined,
+        subtitle: [t.assigneeName ? `Resp.: ${t.assigneeName}` : '', t.dueAt ? formatDateTimeBR(t.dueAt) : t.dueLabel || ''].filter(Boolean).join(' · ') || undefined,
         badge: t.status === 'done' ? 'concluída' : t.status === 'cancelled' ? 'cancelada' : 'aberta',
         tone: t.status === 'done' ? 'emerald' : t.status === 'cancelled' ? 'zinc' : 'amber',
         body: (
@@ -417,6 +430,25 @@ export function ClientProfileDrawer({ person, businessId, pipeline, canFunil, on
     { id: 'tasks', label: 'Tarefas', icon: 'tasks', count: (person.tasks || []).length },
     { id: 'notes', label: 'Observações administrativas', icon: 'receipt', count: (person.notes || []).length },
   ];
+
+  useEffect(() => {
+    const host = tabsViewportRef.current;
+    const tabs = host?.querySelector<HTMLElement>('[role="tablist"]');
+    if (!host || !tabs) return;
+    const measure = () => setTabsOverflowRight(tabs.scrollWidth > tabs.clientWidth + 1
+      && tabs.scrollLeft + tabs.clientWidth < tabs.scrollWidth - 2);
+    measure();
+    tabs.addEventListener('scroll', measure, { passive: true });
+    const observer = typeof ResizeObserver === 'undefined' ? null : new ResizeObserver(measure);
+    observer?.observe(host);
+    observer?.observe(tabs);
+    window.addEventListener('resize', measure);
+    return () => {
+      tabs.removeEventListener('scroll', measure);
+      observer?.disconnect();
+      window.removeEventListener('resize', measure);
+    };
+  }, [tabItems.length, canFinance, canEncounter]);
 
   const notes = person.notes || [];
 
@@ -479,63 +511,32 @@ export function ClientProfileDrawer({ person, businessId, pipeline, canFunil, on
 
   return (
     <>
-      {encounterOpen && (
-        <EncounterSheet
-          businessId={businessId}
-          existing={encounterOpen}
-          canReopen={canReopenEncounter(role)}
-          onScheduleReturn={() => { setEncounterOpen(null); onNewBooking(person); }}
-          onClose={() => setEncounterOpen(null)}
-          onSaved={() => { /* silencioso: não recarrega nem fecha */ }}
-          onChanged={() => { setEncountersLoaded(false); onChanged(); }}
-        />
-      )}
-      {/* FASE 2 · P2 — "Iniciar atendimento" do próximo agendamento (quando aplicável). */}
-      {startEncounter && (
-        <EncounterSheet
-          businessId={businessId}
-          bookingId={startEncounter.bookingId}
-          seed={startEncounter.seed as any}
-          canReopen={canReopenEncounter(role)}
-          onScheduleReturn={() => { setStartEncounter(null); onNewBooking(person); }}
-          onClose={() => setStartEncounter(null)}
-          onSaved={() => { /* silencioso: não recarrega nem fecha */ }}
-          onChanged={() => { setEncountersLoaded(false); onChanged(); }}
-        />
-      )}
     <ProfileShell
       variant={variant}
       onClose={onClose}
+      dismissGuard={editState}
       title={person.name || 'Cliente'}
       subtitle={variant === 'page'
         ? (person.contactId ? 'Paciente 360 — perfil, agenda, atendimentos, arquivos e financeiro' : 'Pessoa ainda sem cadastro no CRM')
         : (person.contactId ? 'Paciente 360 — prévia rápida do cadastro' : 'Pessoa ainda sem cadastro no CRM')}
-      backHref={profileHref(`?b=${encodeURIComponent(businessId)}`)}
+      backHref={variant === 'page' ? (pageBackHref || `/clientes?b=${encodeURIComponent(businessId)}`) : profileHref(`?b=${encodeURIComponent(businessId)}`)}
       footer={variant === 'page' ? (
         <>
           {person.phone && <A2 href={waLink(person.phone, `Olá, ${firstName}!`)} label="WhatsApp" icon="whatsapp" />}
           {/* FASE 2 · P2 — ações rápidas: nota e iniciar atendimento (quando aplicável). */}
           {/* §17–18 — "Registrar nota" conduz ao campo: troca a aba, rola até o
               textarea e o foca com highlight sutil (sem modal novo). */}
-          <Button variant="quiet" size="sm" onClick={() => { setTab('notes'); focusFieldSoon('client-note-draft'); }}>
+          <Button variant="ghost" size="sm" onClick={() => { setTab('notes'); focusFieldSoon('client-note-draft'); }}>
             <Icon n="pencil" size={14} /> Registrar nota
           </Button>
           {canEncounter && nextBooking && (
-            <Button variant="secondary" size="sm" onClick={() => setStartEncounter({
-              bookingId: nextBooking.id,
-              seed: {
-                customerName: person.name || '',
-                serviceId: nextBooking.serviceId || '', professionalId: nextBooking.professionalId || '',
-                date: nextBooking.date, time: nextBooking.time || '',
-                contactId: person.contactId || '', customerId: person.customerId || '',
-              },
-            })}>
+            <Button variant="secondary" size="sm" onClick={() => openEncounter({ bookingId: nextBooking.id })}>
               <Icon n="fileText" size={14} /> Iniciar atendimento
             </Button>
           )}
-          <Button variant="secondary" size="sm" onClick={() => {
+          <Button variant="ghost" size="sm" onClick={() => {
             const opening = !editing;
-            setEditing((v) => !v);
+            if (editing) requestCloseEdit(); else setEditing(true);
             // §17–18 — ao abrir a edição: scroll suave + foco no primeiro
             // campo + highlight sutil (1–2s). Fechar não mexe no foco.
             if (opening) focusFieldSoon('client-edit-name');
@@ -559,20 +560,22 @@ export function ClientProfileDrawer({ person, businessId, pipeline, canFunil, on
         </>
       )}
     >
+      {routeDismiss.dialog}
+      {editDismiss.dialog}
       {variant === 'page' ? (<>
       {/* ═══ QUEM É A PESSOA — carteirinha ═══ */}
       <div className="p-4">
-        <div className="il-idcard rounded-2xl border border-[var(--border)] shadow-sm p-5">
-          <div className="relative flex flex-wrap items-start gap-4">
+        <div className="il-idcard rounded-2xl border border-[var(--border)] shadow-sm p-5 client360-idcard">
+          <div className="client360-idcard__identity relative flex flex-wrap items-start gap-4">
             {/* Ponto 8 — foto real da conta global quando existe; sem ela, iniciais. */}
             <Avatar name={person.name} src={person.avatar || undefined} size={64} />
-            <div className="min-w-0 flex-1">
+            <div className="client360-idcard__primary min-w-0 flex-1">
               <h2 className="text-xl font-semibold text-[var(--text)] leading-tight break-words">{person.name || 'Sem nome'}</h2>
               <p className="text-sm text-[var(--text-muted)] mt-0.5">
                 {age !== null ? `${age} anos` : 'Idade não informada'}
                 {profile.birthDate ? ` · nasceu em ${profile.birthDate.split('-').reverse().join('/')}` : ''}
               </p>
-              <div className="flex flex-wrap items-center gap-1.5 mt-2.5">
+              <div className="client360-idcard__tags flex flex-wrap items-center gap-1.5 mt-2.5">
                 {tags.map((t) => (
                   <span key={t.id} title={t.hint}>
                     <Badge tone={(t.tone as any) || 'zinc'}>{t.label}</Badge>
@@ -582,7 +585,7 @@ export function ClientProfileDrawer({ person, businessId, pipeline, canFunil, on
               </div>
             </div>
             {/* Status de acesso — estado claro, nunca só cor. */}
-            <div className="shrink-0 text-right">
+            <div className="client360-idcard__access shrink-0 text-right">
               <Badge tone={person.accountStatus === 'active' ? 'green' : 'zinc'} icon={person.accountStatus === 'active' ? 'lock' : 'user'}>
                 {person.accountStatus === 'active' ? 'Acesso ativo' : 'Sem acesso'}
               </Badge>
@@ -590,7 +593,7 @@ export function ClientProfileDrawer({ person, businessId, pipeline, canFunil, on
           </div>
 
           {/* Grade de dados — sempre legível, mesmo com campos vazios. */}
-          <dl className="relative grid grid-cols-2 sm:grid-cols-3 gap-x-4 gap-y-3 mt-4 pt-4 border-t border-[var(--border)]">
+          <dl className="client360-idcard__data relative grid grid-cols-2 sm:grid-cols-3 gap-x-4 gap-y-3 mt-4 pt-4 border-t border-[var(--border)]">
             <Data label="Telefone / WhatsApp" value={person.phone ? formatPhoneBR(person.phone) : '—'}
               action={person.phone ? <CopyChip value={person.phone} /> : undefined} />
             <Data label="E-mail" value={person.email || '—'} />
@@ -623,7 +626,7 @@ export function ClientProfileDrawer({ person, businessId, pipeline, canFunil, on
               </p>
             </div>
             {person.accountStatus === 'none' && (
-              <Button size="sm" variant="soft" onClick={createAccess} disabled={accessSaving || !person.contactId}>
+              <Button size="sm" variant="secondary" onClick={createAccess} disabled={accessSaving || !person.contactId}>
                 <Icon n="userCircle" size={14} /> {accessSaving ? 'Criando acesso…' : 'Criar acesso'}
               </Button>
             )}
@@ -641,7 +644,7 @@ export function ClientProfileDrawer({ person, businessId, pipeline, canFunil, on
               <p className="text-sm font-semibold text-[var(--text)] inline-flex items-center gap-1.5">
                 <Icon n="idcard" size={14} className="text-[var(--text-muted)]" /> Cadastro
               </p>
-              <Button size="xs" variant="quiet" onClick={() => setEditing(true)}>
+              <Button size="xs" variant="ghost" onClick={() => setEditing(true)}>
                 <Icon n="pencil" size={12} /> Editar
               </Button>
             </div>
@@ -726,7 +729,7 @@ export function ClientProfileDrawer({ person, businessId, pipeline, canFunil, on
                 <h3 className="text-sm font-semibold text-[var(--text)]">Dados cadastrais</h3>
                 <p className="text-xs text-[var(--text-muted)] mt-0.5">Só o que você preencher é salvo. Nenhum campo é obrigatório.</p>
               </div>
-              <IconButton icon="x" label="Cancelar edição" size="sm" variant="ghost" onClick={() => { setDraft(profileOf(person.profile)); setEditing(false); }} />
+              <IconButton icon="x" label="Cancelar edição" size="sm" variant="ghost" onClick={requestCloseEdit} />
             </div>
 
             <fieldset className="space-y-3">
@@ -902,7 +905,7 @@ export function ClientProfileDrawer({ person, businessId, pipeline, canFunil, on
             </label>
 
             <div className="flex flex-wrap items-center justify-end gap-2 mt-4 pt-3 border-t border-[var(--border-soft)]">
-              <Button variant="ghost" size="sm" onClick={() => { setDraft(profileOf(person.profile)); setEditing(false); }}>Cancelar</Button>
+              <Button variant="ghost" size="sm" onClick={requestCloseEdit}>Cancelar</Button>
               <Button variant="primary" size="sm" onClick={saveProfile} disabled={saving}>
                 <Icon n="check" size={14} /> {saving ? 'Salvando…' : 'Salvar dados'}
               </Button>
@@ -919,13 +922,15 @@ export function ClientProfileDrawer({ person, businessId, pipeline, canFunil, on
           pet={pet360}
           tutorName={person.name}
           tutorPhone={person.phone}
-          onOpenEncounter={(row) => { setPet360(null); setEncounterOpen(row); }}
+          onOpenEncounter={(row) => { setPet360(null); openEncounter({ id: row.id }); }}
         />
       )}
       {/* ═══ O QUE ACONTECEU — histórico ═══ */}
       <div className="px-4 pb-6">
         <div className="il-divider my-4">O que aconteceu com {firstName}</div>
-        <Tabs items={tabItems} value={tab} onChange={setTab} ariaLabel="Seções do histórico do cliente" />
+        <div ref={tabsViewportRef} className="client360-tabs-wrap" data-overflow-right={tabsOverflowRight || undefined}>
+          <Tabs items={tabItems} value={tab} onChange={setTab} ariaLabel="Seções do histórico do cliente" className="client360-tabs" />
+        </div>
 
         <div className="mt-4 ws-panel">
           {/* ── FASE 2 · P2 — VISÃO GERAL (próximo passo em primeiro) ── */}
@@ -948,7 +953,7 @@ export function ClientProfileDrawer({ person, businessId, pipeline, canFunil, on
                     <>
                       <p className="text-[15px] font-semibold text-[var(--text)] mt-1">{formatDateBR(lastEncounter.date)}{lastEncounter.time ? ` · ${lastEncounter.time}` : ''}</p>
                       <p className="text-[12px] text-[var(--text-muted)] line-clamp-2">{lastEncounter.evolution || lastEncounter.complaint || 'Sem descrição'}</p>
-                      <button type="button" className="text-[12px] font-semibold text-[var(--brand-fg)] hover:underline" onClick={() => setEncounterOpen(lastEncounter)}>Abrir registro</button>
+                      <button type="button" className="text-[12px] font-semibold text-[var(--brand-fg)] hover:underline" onClick={() => openEncounter({ id: lastEncounter.id })}>Abrir registro</button>
                     </>
                   ) : <p className="text-[13px] text-[var(--text-muted)] mt-1">Sem registro de atendimento.</p>}
                 </div>
@@ -1011,7 +1016,7 @@ export function ClientProfileDrawer({ person, businessId, pipeline, canFunil, on
                         <a href={f.url} target="_blank" rel="noreferrer" className="text-[13.5px] font-semibold text-[var(--text)] hover:underline truncate block">{f.name}</a>
                         <p className="text-[11.5px] text-[var(--text-muted)]">Atendimento de {formatDateBR(f.encounterDate)} · {Math.max(1, Math.round(f.size / 1024))} KB</p>
                       </div>
-                      <button type="button" className="il-chip" onClick={() => { const e = encounters.find((x) => x.id === f.encounterId); if (e) setEncounterOpen(e); }}>Abrir atendimento</button>
+                      <button type="button" className="il-chip" onClick={() => { const e = encounters.find((x) => x.id === f.encounterId); if (e) openEncounter({ id: e.id }); }}>Abrir atendimento</button>
                     </li>
                   ))}
                 </ul>
@@ -1107,7 +1112,7 @@ export function ClientProfileDrawer({ person, businessId, pipeline, canFunil, on
             : encountersError ? <div role="alert" className="p-4 text-sm"><p>{encountersError}</p><Button variant="secondary" onClick={() => setEncountersLoaded(false)}>Tentar novamente</Button></div>
             : encounters.length === 0
               ? <Empty hint="Nenhum registro de atendimento para esta pessoa ainda. Abra um agendamento e use “Atendimento” para registrar o que foi feito." />
-              : <div className="px-4 py-3"><EncounterList rows={encounters} onOpen={setEncounterOpen} empty="" /></div>
+              : <div className="px-4 py-3"><EncounterList rows={encounters} onOpen={(row) => openEncounter({ id: row.id })} empty="" /></div>
           )}
 
           {tab === 'conversations' && (
@@ -1150,10 +1155,10 @@ export function ClientProfileDrawer({ person, businessId, pipeline, canFunil, on
                         <p className="text-xs text-[var(--text-muted)] mt-0.5">{[l.interest, l.action].filter(Boolean).join(' · ') || 'Sem detalhe'}</p>
                         <div className="flex flex-wrap gap-1.5 mt-2">
                           {nextId && canFunil && l.stageId !== 'scheduled' && (
-                            <Button size="xs" variant="soft" onClick={() => setLead(l.id, nextId)} disabled={saving}>{nextStageLabel(l as any)}</Button>
+                            <Button size="xs" variant="secondary" onClick={() => setLead(l.id, nextId)} disabled={saving}>{nextStageLabel(l as any)}</Button>
                           )}
                           {nextId === 'scheduled' && canFunil && (
-                            <Button size="xs" variant="soft" onClick={() => onNewBooking(person)}>Agendar atendimento</Button>
+                            <Button size="xs" variant="secondary" onClick={() => onNewBooking(person)}>Agendar atendimento</Button>
                           )}
                           {canFunil && <Link href={`/funil?b=${businessId}#${l.id}`} className="il-chip">Ver oportunidade</Link>}
                         </div>
@@ -1176,7 +1181,7 @@ export function ClientProfileDrawer({ person, businessId, pipeline, canFunil, on
                       </span>
                       <div className="min-w-0 flex-1">
                         <p className="text-sm font-semibold text-[var(--text)]">{t.title}</p>
-                        <p className="text-xs text-[var(--text-muted)] mt-0.5">{[t.assigneeName ? `Resp.: ${t.assigneeName}` : '', t.dueLabel].filter(Boolean).join(' · ')}</p>
+                        <p className="text-xs text-[var(--text-muted)] mt-0.5">{[t.assigneeName ? `Resp.: ${t.assigneeName}` : '', t.dueAt ? formatDateTimeBR(t.dueAt) : t.dueLabel].filter(Boolean).join(' · ')}</p>
                       </div>
                       <Badge tone={t.status === 'done' ? 'green' : t.status === 'cancelled' ? 'zinc' : 'amber'}>
                         {t.status === 'done' ? 'Concluída' : t.status === 'cancelled' ? 'Cancelada' : 'Aberta'}
@@ -1193,8 +1198,8 @@ export function ClientProfileDrawer({ person, businessId, pipeline, canFunil, on
                   BLOQUINHO (creme sólido, cantos suaves) — nada de prontuário.
                   A persistência continua a mesma: cada observação é gravada por
                   ação explícita (botão/⌘Ctrl+Enter), sem autosave novo. */}
-              <div className="rounded-xl border border-[var(--sun-border)] bg-[var(--sun-bg)] p-3.5 shadow-xs">
-                <label htmlFor="client-note-draft" className="block text-[11px] font-semibold uppercase tracking-[0.08em] text-[var(--sun-fg)]">
+              <div className="rounded-md border border-[var(--border)] bg-[var(--surface-2)] p-3.5">
+                <label htmlFor="client-note-draft" className="block text-[11px] font-semibold uppercase tracking-[0.08em] text-[var(--text-muted)]">
                   Nova observação
                 </label>
                 <textarea
@@ -1205,10 +1210,10 @@ export function ClientProfileDrawer({ person, businessId, pipeline, canFunil, on
                   rows={3}
                   maxLength={1000}
                   placeholder="O que ajuda a operar o atendimento (ex.: prefere horário da manhã, avisar antes…)"
-                  className="mt-1.5 w-full rounded-lg border border-[var(--sun-border)] bg-white/80 px-3 py-2.5 text-sm text-[var(--text)] placeholder:text-[var(--text-faint)] shadow-none resize-none focus:outline-none focus:shadow-focus focus:border-[var(--brand)]"
+                  className="mt-1.5 w-full rounded-sm border border-[var(--border-strong)] bg-[var(--surface)] px-3 py-2.5 text-sm text-[var(--text)] placeholder:text-[var(--text-faint)] shadow-none resize-none focus:outline-none focus:shadow-focus focus:border-[var(--accent)]"
                 />
                 <div className="mt-2 flex flex-wrap items-center justify-between gap-2">
-                  <p className="text-[11px] text-[var(--sun-fg)]">⌘/Ctrl + Enter salva · o histórico nunca é apagado.</p>
+                  <p className="text-[11px] text-[var(--text-muted)]">⌘/Ctrl + Enter salva · o histórico nunca é apagado.</p>
                   <Button variant="primary" size="sm" onClick={addNote} disabled={!noteDraft.trim() || saving}>
                     <Icon n="plus" size={14} /> {saving ? 'Salvando…' : 'Salvar anotação'}
                   </Button>
@@ -1224,9 +1229,9 @@ export function ClientProfileDrawer({ person, businessId, pipeline, canFunil, on
               ) : (
                 <ul className="space-y-2">
                   {notes.map((n) => (
-                    <li key={n.id} className="rounded-xl border border-[var(--sun-border)] bg-[var(--sun-bg)] px-3.5 py-3 shadow-xs">
+                    <li key={n.id} className="rounded-md border border-[var(--border)] bg-[var(--surface)] px-3.5 py-3">
                       <p className="text-sm text-[var(--text)] whitespace-pre-wrap break-words">{n.text}</p>
-                      <p className="text-[11px] text-[var(--sun-fg)] mt-1.5">
+                      <p className="text-[11px] text-[var(--text-muted)] mt-1.5">
                         {n.legacy
                           ? 'Registro anterior (sem autor/data)'
                           : <>{n.byName || 'Equipe'}{n.at ? ` · ${humanDateTime(n.at.slice(0, 10), n.at.slice(11, 16))}` : ''}{n.bookingId ? ' · sobre um agendamento' : ''}</>}
@@ -1269,7 +1274,7 @@ export function ClientProfileDrawer({ person, businessId, pipeline, canFunil, on
  *             à esquerda e as ações à direita. Sem gaveta dentro de página,
  *             sem perder sidebar/topbar.
  */
-function ProfileShell({ variant, onClose, title, subtitle, backHref, footer, children }: {
+function ProfileShell({ variant, onClose, title, subtitle, backHref, footer, children, dismissGuard }: {
   variant: 'preview' | 'page';
   onClose: () => void;
   title: string;
@@ -1277,16 +1282,14 @@ function ProfileShell({ variant, onClose, title, subtitle, backHref, footer, chi
   backHref: string;
   footer: React.ReactNode;
   children: React.ReactNode;
+  dismissGuard?: import('./OverlayDismissGuard').DismissGuardState;
 }) {
   if (variant === 'page') {
     return (
-      <div className="min-w-0 pb-6">
-        <header className="flex flex-wrap items-center gap-x-3 gap-y-2 mb-3">
-          <Link href={backHref}
-            className="-ml-2 inline-flex items-center gap-1.5 h-9 px-2 rounded-md text-[13px] font-semibold text-[var(--text-soft)] hover:bg-[var(--surface-hover)] hover:text-[var(--text)] focus-visible:shadow-focus">
-            <Icon n="chevL" size={14} /> Voltar para clientes
-          </Link>
-          <div className="ml-auto flex flex-wrap items-center gap-2">{footer}</div>
+      <div className="client-profile-page min-w-0 pb-6">
+        <header className="client-profile-page__toolbar flex flex-wrap items-center gap-x-3 gap-y-2 mb-3">
+          <PageBackAction href={backHref} label="Voltar para clientes" />
+          <div className="client-profile-page__actions ml-auto flex flex-wrap items-center gap-2">{footer}</div>
         </header>
         <div className="ws-panel overflow-hidden">{children}</div>
       </div>
@@ -1296,6 +1299,7 @@ function ProfileShell({ variant, onClose, title, subtitle, backHref, footer, chi
     <WorkspaceSheet
       open
       onClose={onClose}
+      dismissGuard={dismissGuard}
       title={title}
       subtitle={subtitle}
       icon="users"
@@ -1421,8 +1425,7 @@ function CopyChip({ value }: { value: string }) {
 
 function A2({ href, label, icon }: { href: string; label: string; icon: string }) {
   return (
-    <a href={href} target="_blank" rel="noreferrer"
-      className="inline-flex items-center justify-center gap-1.5 text-xs font-semibold rounded-md px-2.5 py-1.5 bg-[var(--success-bg)] text-[var(--success-fg)] border border-[var(--success-border)] hover:bg-[var(--success-bg-hover)]">
+    <a href={href} target="_blank" rel="noreferrer" className={buttonCls('secondary', 'sm')}>
       <Icon n={icon} size={14} /> {label}
     </a>
   );

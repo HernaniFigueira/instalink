@@ -5,10 +5,11 @@ import Link from 'next/link';
 import { Icon } from '@/components/icons';
 import { Avatar, PageSkeleton } from '@/components/ui';
 import { cn } from '@/lib/utils';
-import { humanDateTime } from '@/lib/tz';
+import { formatDateTimeBR } from '@/lib/tz';
 import { AccessDenied, AreaLoadError, useAreaLoad } from '@/components/dashboard/AccessNotice';
 import { apiGet, apiSend } from '@/lib/api-client';
 import { QuickRegisterSheet, type SavedContact } from '@/components/dashboard/QuickRegisterSheet';
+import { WorkspaceSheet } from '@/components/dashboard/WorkspaceSheet';
 import { loadMe } from '@/lib/session-me';
 import { INSTAGRAM_TEXT_MAX_BYTES, instagramTextBytes, instagramTextFits, instagramTextLimitError } from '@/lib/instagram';
 import type { WaChannelData } from '@/components/dashboard/WhatsappChannelPanel';
@@ -95,6 +96,15 @@ export function ConversationsView({ unitId, panel = false }: { unitId?: string; 
   const [accountMismatch, setAccountMismatch] = useState('');
   // F3-F — contexto lateral administrativo (nunca prontuário)
   const [side, setSide] = useState<SideContext | null>(null);
+  const [contextOpen, setContextOpen] = useState(true);
+  const [contextSheetOpen, setContextSheetOpen] = useState(false);
+  const focusContextRestore = useRef<boolean | null>(null);
+  const [compactLayout, setCompactLayout] = useState(false);
+  const [focusMode, setFocusMode] = useState(() => params.get('focus') === '1' || params.get('standalone') === '1');
+  const queryFocusMode = params.get('focus') === '1' || params.get('standalone') === '1';
+  useEffect(() => { setFocusMode(queryFocusMode); }, [queryFocusMode]);
+  const messagesRef = useRef<HTMLDivElement | null>(null);
+  const detailHeadingRef = useRef<HTMLHeadingElement | null>(null);
   // §11–15 — identidade: cadastro rápido do "Contato novo" + a clínica é vet?
   const [quickOpen, setQuickOpen] = useState(false);
   const [vetClinic, setVetClinic] = useState(false);
@@ -106,6 +116,16 @@ export function ConversationsView({ unitId, panel = false }: { unitId?: string; 
     }).catch(() => {});
     return () => { on = false; };
   }, [businessId]);
+
+  useEffect(() => {
+    const media = globalThis.window.matchMedia?.('(max-width: 1199px)');
+    if (!media) return;
+    const update = () => setCompactLayout(media.matches);
+    update();
+    media.addEventListener?.('change', update);
+    return () => media.removeEventListener?.('change', update);
+  }, []);
+  useEffect(() => { if (!compactLayout) setContextSheetOpen(false); }, [compactLayout]);
 
   // ── COMPOSER: envio real pelo conector oficial ──
   const [draft, setDraftState] = useState('');
@@ -144,10 +164,10 @@ export function ConversationsView({ unitId, panel = false }: { unitId?: string; 
     }
   }
 
-  async function sendMessage(e?: React.FormEvent) {
+  async function sendMessage(e?: React.FormEvent, overrideText?: string) {
     e?.preventDefault();
     if (!active || sending || !(active.conversation.channel === 'instagram' ? channels.instagram : channels.whatsapp)) return;
-    const text = draft.trim();
+    const text = (overrideText ?? draft).trim();
     if (!text) return;
     // Limite oficial do Instagram medido em BYTES: recusa aqui (e no servidor)
     // para o histórico nunca mostrar um texto diferente do que saiu.
@@ -168,8 +188,10 @@ export function ConversationsView({ unitId, panel = false }: { unitId?: string; 
       return;
     }
     const sent = res.data.message;
-    setActive((prev) => prev ? { conversation: { ...prev.conversation, lastMessagePreview: sent.body.slice(0, 120) }, messages: [...prev.messages, sent] } : prev);
-    setConversations((list) => list.map((c) => c.id === active.conversation.id ? { ...c, lastMessagePreview: sent.body.slice(0, 120), lastMessageAt: sent.at } : c));
+    // The server already takes over on manual send. Reflect that same invariant
+    // immediately: one owner at a time, and no stale AI badge after success.
+    setActive((prev) => prev ? { conversation: { ...prev.conversation, mode: 'human', agentState: 'human_active', agentStateLabel: 'Equipe atendendo', lastMessagePreview: sent.body.slice(0, 120) }, messages: [...prev.messages, sent] } : prev);
+    setConversations((list) => list.map((c) => c.id === active.conversation.id ? { ...c, mode: 'human', agentState: 'human_active', agentStateLabel: 'Equipe atendendo', lastMessagePreview: sent.body.slice(0, 120), lastMessageAt: sent.at } : c));
     setDraft('');
   }
 
@@ -180,9 +202,9 @@ export function ConversationsView({ unitId, panel = false }: { unitId?: string; 
     if (!active || sending) return;
     setDraft(m.body);
     setSendError('');
-    // Reusa o sendMessage com o corpo da mensagem falhada.
+    // Reusa o mesmo caminho de envio sem depender do próximo render do draft.
     const event = { preventDefault: () => {} } as React.FormEvent;
-    await sendMessage(event);
+    await sendMessage(event, m.body);
   }
 
   /** Escreve o termo de busca na URL (mantendo ?b= e o restante do estado). */
@@ -193,6 +215,23 @@ export function ConversationsView({ unitId, panel = false }: { unitId?: string; 
     else qs.delete('q');
     if (businessId) qs.set('b', businessId);
     router.replace(`/conversas?${qs.toString()}`, { scroll: false });
+  }
+
+  function changeFocusMode(next: boolean) {
+    setFocusMode(next);
+    if (next) {
+      focusContextRestore.current = contextOpen;
+      setContextOpen(false);
+      setContextSheetOpen(false);
+    } else if (focusContextRestore.current !== null) {
+      setContextOpen(focusContextRestore.current);
+      focusContextRestore.current = null;
+    }
+    const query = new URLSearchParams(params.toString());
+    if (businessId) query.set('b', businessId);
+    if (next) query.set('focus', '1');
+    else { query.delete('focus'); query.delete('standalone'); }
+    router.replace(`/conversas?${query.toString()}`, { scroll: false });
   }
 
   /**
@@ -277,7 +316,40 @@ export function ConversationsView({ unitId, panel = false }: { unitId?: string; 
       setDraftState(drafts.current[id] || '');
       setSendError('');
       setSide(res.data.sideContext || null);
+      if (!panel) {
+        const qs = new URLSearchParams(params.toString());
+        qs.set('c', id);
+        if (businessId) qs.set('b', businessId);
+        router.replace(`/conversas?${qs.toString()}`, { scroll: false });
+      }
     } else if (!res.ok) setError(res.message);
+  }
+
+  useEffect(() => {
+    if (!active) return;
+    detailHeadingRef.current?.focus({ preventScroll: true });
+    const frame = requestAnimationFrame(() => {
+      const scroller = messagesRef.current;
+      if (scroller) scroller.scrollTop = scroller.scrollHeight;
+    });
+    return () => cancelAnimationFrame(frame);
+  }, [active?.conversation.id]);
+
+  function closeActiveConversation() {
+    setActive(null);
+    setSide(null);
+    setContextSheetOpen(false);
+    requestAnimationFrame(() => document.querySelector<HTMLButtonElement>('.inbox-conversation[aria-current="true"]')?.focus({ preventScroll: true }));
+    if (!panel) {
+      const qs = new URLSearchParams(params.toString());
+      qs.delete('c');
+      router.replace(`/conversas${qs.size ? `?${qs.toString()}` : ''}`, { scroll: false });
+    }
+  }
+
+  function toggleContext() {
+    if (compactLayout) setContextSheetOpen(true);
+    else setContextOpen((open) => !open);
   }
 
   if (denied) return <AccessDenied area="Conversas" />;
@@ -327,480 +399,296 @@ export function ConversationsView({ unitId, panel = false }: { unitId?: string; 
     router.replace(`/conversas?${qs.toString()}`, { scroll: false });
   }
 
-  // ── NENHUM CANAL CONECTADO **E** SEM HISTÓRICO: vazio honesto + a porta
-  //    certa. Com histórico, a tela segue sendo inbox (nunca escondemos
-  //    conversa antiga só porque a conexão caiu).
+  // ── NENHUM CANAL CONECTADO E SEM HISTÓRICO: vazio honesto + a porta certa ──
   if (!anyChannel && conversations.length === 0) {
     return (
-      <div className="conversation-view" data-panel={panel} data-active={false}>
-        <div className="flex items-center justify-between gap-3 mb-4">
-          <div className="flex items-start gap-3">
-            <span className="il-page-header__icon flex h-10 w-10 shrink-0 items-center justify-center rounded-lg border border-[var(--border)] bg-[var(--surface-3)] text-[var(--brand-fg)]">
-              <Icon n="inbox" size={19} />
-            </span>
-            <div>
-              <h1 className="text-xl font-semibold text-[var(--text)] leading-tight tracking-tight">Conversas</h1>
-              <p className="text-sm text-[var(--text-muted)] mt-0.5">As conversas com os seus clientes em um só lugar.</p>
-            </div>
+      <div className="conversation-view" data-panel={panel} data-active="false">
+        <header className="conversation-pagebar">
+          <div className="conversation-pagebar__title">
+            <span className="conversation-mark"><Icon n="inbox" size={18} /></span>
+            <div><h1>Conversas</h1><p>Central de atendimento · {businessId ? 'unidade atual' : 'selecione uma clínica'}</p></div>
           </div>
-          <Link href={`/clientes${clientesQ}`} className="text-xs font-semibold bg-white border border-[var(--border-strong)] text-[var(--text)] rounded-md px-3 py-1.5 shadow-xs hover:bg-[var(--surface-hover)]">Ver clientes</Link>
-        </div>
-        {error && <p role="alert" className="mb-3 text-sm font-semibold bg-[var(--warning-bg)] border border-[var(--warning-border)] text-[var(--warning-fg)] rounded-md px-3 py-2">{error}</p>}
-
-        <div className="ws-panel">
-          <div className="il-empty max-w-lg mx-auto">
-            <div className="il-empty__icon"><Icon n="chat" size={24} /></div>
-            <h2 className="font-semibold text-[var(--text)]">Nenhuma conversa ainda</h2>
-            <p className="text-sm text-[var(--text-muted)] mt-1">
-              Para receber e responder por aqui é preciso conectar um canal. {data.label.detail}
-            </p>
-            <div className="mt-5 flex flex-col sm:flex-row items-center justify-center gap-2">
-              <Link href={channelsHref} className="inline-flex items-center justify-center gap-1.5 text-sm font-semibold bg-[var(--brand)] text-white px-4 py-2 rounded-md border border-[var(--brand-strong)]/40 shadow-brand hover:bg-[var(--brand-strong)]">
-                <Icon n="plugs" size={15} /> Conectar canal
-              </Link>
-              {data.linkFallback && (
-                <a href={data.linkFallback} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1.5 text-xs font-semibold text-[var(--text-muted)] hover:text-[var(--brand-fg)] underline underline-offset-2">
-                  Abrir WhatsApp (link externo) <Icon n="external" size={12} />
-                </a>
-              )}
+          <Link href={`/clientes${clientesQ}`} className="conversation-action">Ver clientes</Link>
+        </header>
+        {error && <p role="alert" className="conversation-alert">{error}</p>}
+        <section className="conversation-empty-workspace">
+          <div className="conversation-empty-copy">
+            <span className="conversation-empty-icon"><Icon n="chat" size={22} /></span>
+            <h2>Nenhuma conversa ainda</h2>
+            <p>Conecte um canal para receber e responder mensagens por aqui. {data.label.detail}</p>
+            <div className="conversation-empty-actions">
+              <Link href={channelsHref} className="il-control il-control--primary"><Icon n="external" size={14} /> Conectar canal</Link>
+              {data.linkFallback && <a href={data.linkFallback} target="_blank" rel="noreferrer" className="il-control il-control--secondary">Abrir WhatsApp externo <Icon n="external" size={13} /></a>}
             </div>
-            <p className="text-xs text-[var(--text-faint)] mt-4">
-              Nada é perdido enquanto o canal não está conectado: cadastros, agendamentos e leads continuam chegando normalmente.
-            </p>
+            <p className="conversation-empty-note">Cadastros, agendamentos e oportunidades continuam disponíveis nas demais áreas.</p>
           </div>
-        </div>
+        </section>
       </div>
     );
   }
 
-  // ── CONECTADO: workspace 3 colunas ──
-  return (
-    <div className="conversation-view" data-panel={panel} data-active={!!active}>
-      <div className="flex flex-wrap items-center justify-between gap-3 mb-3">
-        <div className="flex items-start gap-3 min-w-0">
-          <span className="il-page-header__icon flex h-10 w-10 shrink-0 items-center justify-center rounded-lg border border-[var(--border)] bg-[var(--surface-3)] text-[var(--brand-fg)]">
-            <Icon n="inbox" size={19} />
-          </span>
+  const contextContent = active ? (
+    <div className="conversation-context-content">
+      <section className="conversation-context-identity">
+        <div className="conversation-context-person">
+          <Avatar name={side?.tutor.name || active.conversation.name || '?'} size={42} />
           <div className="min-w-0">
-            <h1 className="text-xl font-semibold text-[var(--text)] leading-tight tracking-tight">Conversas</h1>
-            <p className="text-xs text-[var(--text-muted)]">
-              {data.inbox.open} abertas · {data.inbox.unread} não lidas
-              {channels.whatsapp && data.integration.displayPhone && <> · <span className="font-semibold text-[var(--text)]">{data.integration.displayPhone}</span></>}
-              {channels.instagram && igInfo?.username && <> · <span className="font-semibold text-[var(--text)]">@{igInfo.username}</span></>}
+            <p className="conversation-context-eyebrow">{vetClinic ? 'Tutor' : 'Contato'}</p>
+            <h3>{side?.tutor.name || active.conversation.name || 'Contato'}</h3>
+            <p>{active.conversation.channel === 'instagram'
+              ? (active.conversation.channelUsername ? `Instagram · @${active.conversation.channelUsername}` : 'Instagram Direct')
+              : side?.tutor.phone || active.conversation.phone || 'Telefone não informado'}</p>
+          </div>
+        </div>
+        <span className={cn('conversation-contact-status', active.conversation.registered ? 'is-linked' : 'is-new')}>
+          {active.conversation.registered ? 'Na base da clínica' : 'Contato novo'}
+        </span>
+        {!active.conversation.registered && (
+          <button type="button" className="conversation-context-primary" onClick={() => setQuickOpen(true)}>
+            Cadastrar cliente
+          </button>
+        )}
+      </section>
+
+      {vetClinic && (
+        <section className="conversation-context-section" aria-labelledby="conversation-pets-heading">
+          <h3 id="conversation-pets-heading">Pets e paciente</h3>
+          {side?.pets.length ? (
+            <ul className="conversation-pet-list">
+              {side.pets.map((pet) => <li key={pet.id}>{pet.name}<span>{pet.species || 'Espécie não informada'}</span></li>)}
+            </ul>
+          ) : <p className="conversation-context-muted">Nenhum pet associado no contexto desta conversa.</p>}
+          {side?.currentPatient ? (
+            <div className="conversation-current-patient"><span>Paciente atual</span><strong>{side.currentPatient.name}</strong></div>
+          ) : null}
+        </section>
+      )}
+
+      <section className="conversation-context-section" aria-labelledby="conversation-details-heading">
+        <h3 id="conversation-details-heading">Atendimento</h3>
+        {side?.nextAppointment ? (
+          <div className="conversation-context-row"><span>Próximo agendamento</span><strong>{formatDateTimeBR(side.nextAppointment.date, side.nextAppointment.time)}</strong>
+            {side.nextAppointment.service && <small>{side.nextAppointment.service}</small>}</div>
+        ) : <p className="conversation-context-muted">Nenhum próximo agendamento encontrado.</p>}
+        {side?.responsible && <div className="conversation-context-row"><span>Responsável</span><strong>{side.responsible}</strong></div>}
+        {side?.lead && <div className="conversation-context-row"><span>Oportunidade</span><strong>{side.lead.stage || 'Em acompanhamento'}</strong></div>}
+        {active.conversation.handoff?.summary && (
+          <div className="conversation-handoff">
+            <span>Último handoff</span><p>{active.conversation.handoff.summary}</p>
+            {active.conversation.handoff.actions?.length ? <ul>{active.conversation.handoff.actions.map((action) => <li key={action}>{action}</li>)}</ul> : null}
+          </div>
+        )}
+      </section>
+
+      <section className="conversation-context-section conversation-context-links" aria-label="Atalhos administrativos">
+        <h3>Ações</h3>
+        <Link href={`/agenda?b=${businessId}`}><Icon n="calendar" size={14} /> Agendar</Link>
+        <Link href={`/tarefas?b=${businessId}`}><Icon n="check" size={14} /> Criar tarefa</Link>
+        {vetClinic && side?.currentPatient && <Link href={`/clientes?b=${businessId}&q=${encodeURIComponent(active.conversation.phone || '')}`}><Icon n="user" size={14} /> Paciente</Link>}
+        {side?.lead && <Link href={`/funil?b=${businessId}`}><Icon n="funnel" size={14} /> Oportunidade</Link>}
+        {!side?.lead && <Link href={`/funil?b=${businessId}`}><Icon n="funnel" size={14} /> Ver oportunidades</Link>}
+        {active.conversation.channel !== 'instagram' && data.linkFallback && (
+          <a href={`https://wa.me/${(active.conversation.phone || '').replace(/\D/g, '')}`} target="_blank" rel="noreferrer"><Icon n="whatsapp" size={14} /> WhatsApp externo <Icon n="external" size={11} /></a>
+        )}
+      </section>
+      {active.conversation.channel === 'instagram' && <p className="conversation-context-muted">No Direct, o perfil é a identidade do canal; telefone e e-mail podem não estar disponíveis.</p>}
+    </div>
+  ) : <p className="conversation-context-empty">O contexto administrativo aparecerá aqui quando você selecionar uma conversa.</p>;
+
+  return (
+    <div className="conversation-view" data-panel={panel} data-active={!!active} data-context-open={contextOpen} data-focus={focusMode}>
+      <header className="conversation-pagebar">
+        <div className="conversation-pagebar__title">
+          <span className="conversation-mark"><Icon n="inbox" size={18} /></span>
+          <div className="conversation-pagebar__heading">
+            <h1>Conversas</h1>
+            <p>{data.inbox.open} abertas · {data.inbox.unread} não lidas
+              {channels.whatsapp && data.integration.displayPhone && <> · WhatsApp {data.integration.displayPhone}</>}
+              {channels.instagram && igInfo?.username && <> · Instagram @{igInfo.username}</>}
             </p>
           </div>
         </div>
-        <div className="flex items-center gap-2">
-          {channels.whatsapp && (
-            <Link href={channelsHref} className="hidden sm:inline-flex items-center gap-1.5 text-xs font-semibold bg-[var(--success-bg)] border border-[var(--success-border)] text-[var(--success-fg)] rounded-pill px-2.5 py-1 shadow-xs">
-              <Icon n="whatsapp" size={12} /> WhatsApp conectado
-            </Link>
-          )}
-          {channels.instagram && (
-            <Link href={channelsHref} className="hidden sm:inline-flex items-center gap-1.5 text-xs font-semibold bg-[var(--success-bg)] border border-[var(--success-border)] text-[var(--success-fg)] rounded-pill px-2.5 py-1 shadow-xs">
-              <Icon n="instagram" size={12} /> Instagram conectado
-            </Link>
-          )}
-          {!channels.whatsapp && hasInstagram && (
-            <Link href={channelsHref} className="hidden sm:inline-flex items-center gap-1.5 text-xs font-semibold bg-[var(--warning-bg)] border border-[var(--warning-border)] text-[var(--warning-fg)] rounded-pill px-2.5 py-1 shadow-xs">
-              <Icon n="whatsapp" size={12} /> WhatsApp não conectado
-            </Link>
-          )}
-          <Link href={`/clientes${clientesQ}`} className="text-xs font-semibold bg-white border border-[var(--border-strong)] text-[var(--text)] rounded-md px-3 py-1.5 shadow-xs hover:bg-[var(--surface-hover)]">
-            Ver clientes
-          </Link>
+        <div className="conversation-pagebar__actions">
+          {!compactLayout && <button type="button" className="conversation-action" onClick={toggleContext}
+            aria-expanded={contextOpen} aria-controls="conversation-context-panel">
+            {contextOpen ? 'Ocultar contexto' : 'Mostrar contexto'}
+          </button>}
+          <button type="button" className="conversation-action conversation-focus-toggle" onClick={() => changeFocusMode(!focusMode)} aria-pressed={focusMode}>{focusMode ? 'Sair do modo foco' : 'Modo foco'}</button>
+          <button type="button" className="conversation-action conversation-new-window" onClick={() => {
+            const query = new URLSearchParams(params.toString());
+            if (businessId) query.set('b', businessId);
+            if (!query.has('canal') && panelChannel !== 'all') query.set('canal', panelChannel);
+            query.set('focus', '1');
+            query.set('standalone', '1');
+            globalThis.window.open(`/conversas?${query.toString()}`, '_blank', 'noopener,noreferrer');
+          }} aria-label="Abrir separado"><Icon n="external" size={13} /> <span>Abrir separado</span></button>
         </div>
-      </div>
-      {error && <p role="alert" className="mb-3 text-sm font-semibold bg-[var(--warning-bg)] border border-[var(--warning-border)] text-[var(--warning-fg)] rounded-md px-3 py-2">{error}</p>}
+      </header>
+      {error && <p role="alert" className="conversation-alert">{error}</p>}
 
-      <div className="ws-panel overflow-hidden">
-        {/* Toolbar compacta */}
-        <div className="flex flex-wrap items-center gap-2 px-3 py-2.5 border-b border-[var(--border)] bg-[var(--surface-2)]">
-          <span className="text-[11px] font-semibold tracking-[0.08em] uppercase text-[var(--text-faint)] hidden sm:inline">Inbox</span>
-          {/* Busca contextual (A1.2 · Bloco 2): estado na URL (?q=), filtro
-              client-side sobre a lista já autorizada — deep-link e refresh
-              preservam o termo. */}
-          <div className="relative flex-1 min-w-[160px] max-w-xs">
-            <Icon n="search" size={13} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-[var(--text-faint)]" />
-            <input
-              value={q}
-              onChange={(e) => setQuery(e.target.value)}
-              placeholder="Buscar por nome ou telefone…"
-              aria-label="Buscar conversas"
-              className="w-full bg-white border border-[var(--border-strong)] rounded-md pl-7 pr-3 py-1.5 text-xs shadow-xs focus:outline-none focus:shadow-focus focus:border-[var(--brand)]"
-            />
-          </div>
-          {/* Filtro por CANAL (chip): aparece só para quem tem mais de um canal
-              ou tem histórico do segundo — nada de chip vazio. */}
-          {(hasWhatsapp && hasInstagram) && (
-            <div className="flex gap-1" role="group" aria-label="Filtrar por canal">
-              {([
-                { id: 'all', label: 'Todos' },
-                { id: 'whatsapp', label: 'WhatsApp' },
-                { id: 'instagram', label: 'Instagram' },
-              ] as const).map((c) => (
-                <button key={c.id} onClick={() => setChannelFilter(c.id)} aria-pressed={channelFilter === c.id}
-                  className="il-chip">
-                  {c.label}
+      <div className="conversation-workspace">
+        <section className="inbox-list" aria-label="Inbox de conversas">
+          <div className="inbox-controls">
+            <div className="inbox-controls__heading"><h2>Inbox</h2><span>{filtered.length}</span></div>
+            <label className="inbox-search">
+              <Icon n="search" size={14} />
+              <input value={q} onChange={(e) => setQuery(e.target.value)} placeholder="Buscar nome, telefone ou mensagem" aria-label="Buscar conversas" />
+            </label>
+            {(hasWhatsapp && hasInstagram) && (
+              <div className="inbox-filter-group" role="group" aria-label="Filtrar por canal">
+                {([{ id: 'all', label: 'Todos' }, { id: 'whatsapp', label: 'WhatsApp' }, { id: 'instagram', label: 'Instagram' }] as const).map((channel) => (
+                  <button key={channel.id} type="button" className="inbox-filter" onClick={() => setChannelFilter(channel.id)} aria-pressed={channelFilter === channel.id}>{channel.label}</button>
+                ))}
+              </div>
+            )}
+            <div className="inbox-filter-group inbox-filter-group--status" role="group" aria-label="Filtrar conversas">
+              {(['all', 'unread', 'waiting', 'failed'] as const).map((key) => (
+                <button key={key} type="button" className="inbox-filter" onClick={() => setFilter(key)} aria-pressed={filter === key}>
+                  {key === 'all' ? 'Todas' : key === 'unread' ? 'Não lidas' : key === 'waiting' ? 'Aguardando' : 'Falhas'}
                 </button>
               ))}
             </div>
+            <div className="inbox-channel-status" aria-label="Estado dos canais">
+              <span className={channels.whatsapp ? 'is-connected' : 'is-disconnected'}><Icon n="whatsapp" size={12} /> WhatsApp {channels.whatsapp ? 'conectado' : 'desconectado'}</span>
+              {hasInstagram && <span className={channels.instagram ? 'is-connected' : 'is-disconnected'}><Icon n="instagram" size={12} /> Instagram {channels.instagram ? 'conectado' : 'desconectado'}</span>}
+            </div>
+          </div>
+          <div className="inbox-list-scroll">
+            {filtered.length === 0 ? <p className="inbox-list-empty">{q ? `Nenhuma conversa para “${q}”.` : 'Nenhuma conversa neste filtro.'}</p> : (
+              <div className="inbox-conversation-list">
+                {filtered.map((conversation) => {
+                  const isActive = active?.conversation.id === conversation.id;
+                  const agentLabel = conversation.agentStateLabel || (conversation.agentState === 'waiting_team' ? 'Aguardando equipe'
+                    : conversation.agentState === 'human_active' ? 'Equipe atendendo'
+                      : conversation.agentState === 'waiting_patient' ? 'Esperando paciente'
+                        : conversation.agentState === 'resolved' ? 'Resolvido'
+                          : conversation.mode === 'human' ? 'Equipe atendendo' : 'IA atendendo');
+                  return (
+                    <button key={conversation.id} type="button" onClick={() => { void openConversation(conversation.id); }}
+                      className="inbox-conversation" data-selected={isActive} aria-current={isActive ? 'true' : undefined}
+                      aria-label={`${conversation.name}${conversation.unread ? `, ${conversation.unread} não lidas` : ''}`}>
+                      <span className="inbox-conversation__avatar"><Avatar name={conversation.name || '?'} size={40} /></span>
+                      <span className="inbox-conversation__body">
+                        <span className="inbox-conversation__top"><strong>{conversation.name || 'Contato'}</strong><time>{conversation.lastMessageAt ? formatDateTimeBR(conversation.lastMessageAt) : ''}</time></span>
+                        <span className="inbox-conversation__preview">{conversation.lastMessagePreview || conversation.phone || conversation.channelUsername || 'Sem mensagens'}</span>
+                        <span className="inbox-conversation__meta">
+                          <span><Icon n={conversation.channel === 'instagram' ? 'instagram' : 'whatsapp'} size={11} /> {conversation.channel === 'instagram' ? 'Instagram' : 'WhatsApp'}</span>
+                          <span>{agentLabel}</span>
+                          {conversation.registered && <span>Na base</span>}
+                          {(conversation.failedMessages || 0) > 0 && <span className="inbox-failure-count">{conversation.failedMessages} falha{conversation.failedMessages === 1 ? '' : 's'}</span>}
+                        </span>
+                      </span>
+                      {conversation.unread > 0 && <span className="inbox-unread" aria-label={`${conversation.unread} mensagens não lidas`}>{conversation.unread}</span>}
+                    </button>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        </section>
+
+        <section className="inbox-detail" aria-label="Conversa selecionada">
+          {active ? (
+            <>
+              <header className="inbox-detail-header">
+                <button type="button" className="inbox-back" onClick={closeActiveConversation} aria-label="Voltar à lista de conversas"><Icon n="chevL" size={18} /><span>Conversas</span></button>
+                <Avatar name={active.conversation.name || '?'} size={38} />
+                <div className="inbox-detail-header__identity">
+                  <h2 ref={detailHeadingRef} tabIndex={-1}>{active.conversation.name || 'Contato'}</h2>
+                  <p>{active.conversation.channel === 'instagram'
+                    ? (active.conversation.channelUsername ? `Instagram · @${active.conversation.channelUsername}` : 'Instagram Direct')
+                    : active.conversation.phone || 'WhatsApp'} · {active.conversation.registered ? 'na base da clínica' : 'contato novo'}</p>
+                </div>
+                <span className={cn('inbox-agent-state', `is-${active.conversation.agentState || active.conversation.mode || 'automation'}`)} role="status">
+                  <span aria-hidden="true" />
+                  {active.conversation.agentStateLabel || (active.conversation.agentState === 'waiting_team' ? 'Aguardando equipe'
+                    : active.conversation.agentState === 'human_active' || active.conversation.mode === 'human' ? 'Equipe atendendo'
+                      : active.conversation.agentState === 'waiting_patient' ? 'Esperando paciente'
+                        : active.conversation.agentState === 'resolved' ? 'Resolvido' : 'IA atendendo')}
+                </span>
+                <div className="inbox-detail-actions">
+                  {focusMode && <button type="button" className="conversation-action conversation-focus-exit-mobile" onClick={() => changeFocusMode(false)}>Sair do modo foco</button>}
+                  <button type="button" onClick={toggleMode} disabled={switchingMode} className="conversation-action conversation-mode-action">
+                    {active.conversation.agentState === 'human_active' || active.conversation.agentState === 'waiting_team' || active.conversation.mode === 'human' ? 'Devolver para IA' : 'Pausar IA'}
+                  </button>
+                  <Link href={`/clientes?b=${businessId}&q=${encodeURIComponent(active.conversation.phone || active.conversation.channelUsername || active.conversation.name || '')}`} className="conversation-action inbox-crm-link">Ver no CRM</Link>
+                  <button type="button" className="conversation-action inbox-context-trigger" onClick={toggleContext}
+                    aria-expanded={compactLayout ? contextSheetOpen : contextOpen}
+                    aria-controls={compactLayout ? 'conversation-context-sheet' : 'conversation-context-panel'}>Contexto</button>
+                </div>
+              </header>
+
+              {accountMismatch && <p role="status" className="conversation-channel-alert is-error">{accountMismatch}</p>}
+              {active.conversation.channel === 'instagram' && window && !window.canReply && !accountMismatch && <p role="status" className="conversation-channel-alert is-warning">{window.reason} A resposta volta a ficar disponível quando a pessoa escrever novamente.</p>}
+
+              <div className="conversation-message-scroll" role="log" aria-label={`Mensagens com ${active.conversation.name || 'contato'}`} aria-live="off" ref={messagesRef}>
+                {active.messages.length === 0 && <p className="conversation-no-messages">Ainda não há mensagens nesta conversa.</p>}
+                {active.messages.map((message) => (
+                  <div key={message.id} className={cn('conversation-message-row', message.direction === 'out' ? 'is-outgoing' : 'is-incoming')}>
+                    <article className={cn('conversation-message', message.direction === 'out' ? 'is-outgoing' : 'is-incoming', message.status === 'failed' && 'has-failed')}>
+                      <div className="conversation-message__meta">
+                        <strong>{message.byName || (message.direction === 'in' ? 'Cliente' : message.by === 'automation' ? 'Automação' : 'Equipe')}</strong>
+                        {message.meta?.simulator && <span className="conversation-message__tag">Simulador</span>}
+                      </div>
+                      <p>{message.body}</p>
+                      <div className="conversation-message__footer">
+                        <time>{message.at.slice(11, 16)}</time>
+                        <span>{message.status === 'sent' ? 'Enviada' : message.status === 'delivered' ? 'Entregue' : message.status === 'read' ? 'Lida' : message.status === 'failed' ? 'Falhou' : 'Pendente'}</span>
+                      </div>
+                      {message.status === 'failed' && message.direction === 'out' && message.by !== 'automation' && (
+                        <div className="conversation-message__failure" role="status">
+                          <span>{message.error || 'Não foi possível enviar esta mensagem.'}</span>
+                          <button type="button" onClick={() => void retryMessage(message)}>Tentar novamente</button>
+                        </div>
+                      )}
+                    </article>
+                  </div>
+                ))}
+              </div>
+
+              <footer className="conversation-composer">
+                {active.conversation.mode !== 'human' && active.conversation.agentState !== 'human_active' && active.conversation.agentState !== 'waiting_team' && active.conversation.agentState !== 'resolved' && (
+                  <p className="conversation-ai-takeover-note">IA atendendo · ao enviar uma resposta, você assume a conversa</p>
+                )}
+                {sendError && <p role="alert" className="conversation-channel-alert is-error">{sendError}</p>}
+                {active.conversation.channel === 'instagram' && draftBytes >= 800 && <p className={cn('conversation-byte-count', draftBytes > INSTAGRAM_TEXT_MAX_BYTES && 'is-over-limit')}>{draftBytes} de {INSTAGRAM_TEXT_MAX_BYTES} bytes do Instagram{draftBytes > INSTAGRAM_TEXT_MAX_BYTES ? ' — reduza para enviar.' : ''}</p>}
+                {channelOff(active.conversation) ? (
+                  <div role="status" className="conversation-channel-alert is-neutral">
+                    <span>Canal desconectado. O histórico continua disponível; conecte o canal para responder.</span><Link href={channelsHref}>Conectar</Link>
+                  </div>
+                ) : active.conversation.channel === 'instagram' && window && !window.canReply ? null : (
+                  <form onSubmit={sendMessage} className="conversation-composer__form">
+                    <label className="sr-only" htmlFor="conversation-message">Mensagem</label>
+                    <input id="conversation-message" value={draft} onChange={(event) => setDraft(event.target.value)} disabled={channelOff(active.conversation)}
+                      placeholder={active.conversation.channel === 'instagram' ? 'Responder no Instagram…' : 'Escreva uma mensagem…'} aria-label="Mensagem" />
+                    <button type="submit" aria-label={sending ? 'Enviando…' : 'Enviar'} disabled={sending || !draft.trim() || channelOff(active.conversation)}><Icon n="send" size={15} /><span>{sending ? 'Enviando…' : 'Enviar'}</span></button>
+                  </form>
+                )}
+              </footer>
+            </>
+          ) : (
+            <div className="conversation-selection-empty">
+              <span><Icon n="chat" size={21} /></span>
+              <h2>Escolha uma conversa</h2>
+              <p>Selecione uma pessoa na inbox para ler e responder. O contexto da clínica aparece ao lado.</p>
+            </div>
           )}
-          <div className="flex gap-1 ml-auto sm:ml-2">
-            {(['all', 'unread', 'waiting', 'failed'] as const).map((f) => (
-              <button key={f} onClick={() => setFilter(f)} aria-pressed={filter === f} className="il-chip">
-                {f === 'all' ? 'Todas' : f === 'unread' ? 'Não lidas' : f === 'waiting' ? 'Aguardando' : 'Falhas'}
-              </button>
-            ))}
-          </div>
-        </div>
+        </section>
 
-        <div className="inbox-layout grid lg:grid-cols-[280px_1fr_250px] min-h-[480px] divide-y lg:divide-y-0 lg:divide-x divide-[var(--border)]">
-          {/* Col 1: Conversas */}
-          <div className="inbox-list flex flex-col min-h-[280px] lg:min-h-0">
-            <div className="px-3 py-2 border-b border-[var(--border-soft)] bg-white">
-              <p className="text-[11px] font-semibold tracking-[0.08em] uppercase text-[var(--text-faint)]">Conversas · {filtered.length}</p>
-            </div>
-            <div className="flex-1 overflow-y-auto max-h-[320px] lg:max-h-[520px]">
-              {filtered.length === 0 ? (
-                <p className="text-sm text-[var(--text-muted)] px-3 py-8 text-center">
-                  {q ? `Nenhuma conversa para “${q}”.` : 'Nenhuma conversa neste filtro.'}
-                </p>
-              ) : (
-                <div className="divide-y divide-[var(--border-soft)]">
-                  {filtered.map((c) => {
-                    const isActive = active?.conversation.id === c.id;
-                    return (
-                    <button key={c.id} onClick={() => openConversation(c.id)}
-                      className={cn('relative w-full text-left px-3 py-2.5 flex flex-col gap-0.5 transition-colors',
-                        isActive ? 'bg-[var(--brand-soft)]' : 'hover:bg-[var(--surface-hover)]')}
-                      aria-current={isActive}>
-                      {isActive && <span aria-hidden="true" className="absolute left-0 top-2 bottom-2 w-[3px] rounded-pill bg-[var(--brand)]" />}
-                      <span className="flex items-center justify-between gap-2">
-                        <span className="flex items-center gap-1.5 min-w-0">
-                          <Icon n={c.channel === 'instagram' ? 'instagram' : c.channel === 'whatsapp' ? 'whatsapp' : 'chat'} size={12}
-                            className={c.channel === 'instagram' ? 'shrink-0 text-[var(--lilac-fg)]' : 'shrink-0 text-[var(--success-fg)]'} />
-                          <span className={cn('text-sm truncate', isActive ? 'font-semibold text-[var(--brand-fg)]' : 'font-semibold text-[var(--text)]')}>{c.name}</span>
-                        </span>
-                        {c.unread > 0 && <span className="text-[11px] font-semibold bg-[var(--brand)] text-white min-w-[18px] text-center px-1 py-0.5 rounded-pill shrink-0 tabular-nums">{c.unread}</span>}
-                      </span>
-                      <span className="text-xs text-[var(--text-muted)] truncate">
-                                                {c.agentState === 'waiting_team' && (
-                          <span className="mr-1 inline-flex items-center rounded bg-[var(--warning)]/20 px-1 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-[var(--text)]">
-                            Aguardando equipe
-                          </span>
-                        )}
-                        {c.agentState === 'human_active' && (
-                          <span className="mr-1 inline-flex items-center rounded bg-[var(--brand-soft)] px-1 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-[var(--text)]">
-                            Recepção
-                          </span>
-                        )}
-                        {c.outreachOrigin ? (   <span className="mr-1 inline-flex items-center gap-1 rounded bg-[var(--brand-soft)] px-1 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-[var(--text)]">
-                            Origem: {c.outreachOrigin}
-                          </span>
-                        ) : null}
-                        {c.lastMessagePreview || c.phone || c.channelUsername || ''}
-                      </span>
-                      <span className="text-[11px] text-[var(--text-faint)]">
-                        {c.channel === 'instagram' ? `Instagram${c.channelUsername ? ` · @${c.channelUsername}` : ''}` : (c.phone || 'WhatsApp')}
-                        {c.registered ? ' · cliente' : ''}
-                      </span>
-                    </button>
-                    );
-                  })}
-                </div>
-              )}
-            </div>
-          </div>
-
-          {/* Col 2: Conversa */}
-          <div className="inbox-detail flex flex-col min-h-[320px]">
-            {active ? (
-              <>
-                <button type="button" className="inbox-back workspace-link" onClick={() => setActive(null)}>← Voltar às conversas</button>
-                <div className="px-3 py-2.5 border-b border-[var(--border-soft)] flex flex-wrap items-center justify-between gap-2 bg-white">
-                  <div className="min-w-0">
-                    <div className="flex flex-wrap items-center gap-2">
-                      <p className="text-sm font-semibold text-[var(--text)] truncate">{active.conversation.name}</p>
-                      {/* F3-F: 3 rótulos compreensíveis — IA / Recepção / Aguardando equipe. */}
-                      <span className={cn('text-[11px] font-semibold border rounded-pill px-2 py-0.5 inline-flex items-center gap-1',
-                        active.conversation.agentState === 'human_active'
-                          ? 'bg-[var(--warning-bg)] border-[var(--warning-border)] text-[var(--warning-fg)]'
-                          : active.conversation.agentState === 'waiting_team'
-                            ? 'bg-[var(--surface-hover)] border-[var(--border-strong)] text-[var(--text-muted)]'
-                            : 'bg-[var(--success-bg)] border-[var(--success-border)] text-[var(--success-fg)]'
-                      )}>
-                        <span aria-hidden="true" className={cn('w-1.5 h-1.5 rounded-full',
-                          active.conversation.agentState === 'human_active' ? 'bg-[var(--warning)]'
-                            : active.conversation.agentState === 'waiting_team' ? 'bg-[var(--text-muted)]'
-                              : 'bg-[var(--success)]')} />
-                        {active.conversation.agentStateLabel
-                          || (active.conversation.agentState === 'human_active' ? 'Recepção atendendo'
-                            : active.conversation.agentState === 'waiting_team' ? 'Aguardando equipe'
-                              : '✨ IA atendendo')}
-                      </span>
-                    </div>
-                    <p className="text-xs text-[var(--text-muted)] truncate mt-0.5">
-                      {active.conversation.channel === 'instagram'
-                        ? (active.conversation.channelUsername ? `Instagram · @${active.conversation.channelUsername}` : 'Instagram · Direct')
-                        : active.conversation.phone}
-                      {active.conversation.registered ? ' · na base da clínica' : ' · contato novo'}
-                    </p>
-                  </div>
-                  <div className="flex flex-wrap items-center gap-2 shrink-0">
-                    <button
-                      onClick={toggleMode}
-                      disabled={switchingMode}
-                      className={cn('text-xs font-semibold rounded-md px-2.5 py-1.5 border shadow-xs disabled:opacity-50 inline-flex items-center gap-1.5',
-                        active.conversation.mode === 'human'
-                          ? 'bg-white border-[var(--border-strong)] text-[var(--text)] hover:bg-[var(--surface-hover)]'
-                          : 'bg-[var(--warning-bg)] border-[var(--warning-border)] text-[var(--warning-fg)] hover:bg-[var(--attention-bg-hover)]')}
-                    >
-                      <Icon n={active.conversation.agentState === 'human_active' || active.conversation.agentState === 'waiting_team' ? 'sync' : 'handHeart'} size={13} />
-                      {active.conversation.agentState === 'human_active' || active.conversation.agentState === 'waiting_team'
-                        ? 'Devolver para IA'
-                        : 'Pausar IA'}
-                    </button>
-                    <Link href={`/clientes?b=${businessId}&q=${encodeURIComponent(active.conversation.phone||'')}`}
-                      className="text-xs font-semibold text-[var(--brand-fg)] bg-[var(--brand-soft)] border border-[var(--brand-border)] rounded-md px-2.5 py-1.5 hover:bg-[var(--brand-bg-hover)] inline-flex items-center gap-1.5">
-                      <Icon n="wallet" size={13} /> Ver no CRM
-                    </Link>
-                  </div>
-                </div>
-                <div className="flex-1 overflow-y-auto p-3 space-y-2 bg-[var(--bg-tint)] max-h-[360px] lg:max-h-[420px]">
-                  {active.messages.map((m) => (
-                    <div key={m.id} className={m.direction === 'out' ? 'flex justify-end' : 'flex justify-start'}>
-                      <div className={cn('max-w-[78%] px-3 py-2 rounded-lg text-sm shadow-xs', m.direction === 'out' ? 'bg-[var(--brand)] text-white rounded-br-sm' : 'bg-white border border-[var(--border)] rounded-bl-sm')}>
-                        <span className="block text-[11px] font-semibold mb-0.5">
-                          {m.byName || (m.direction === 'in' ? 'Cliente' : m.by === 'automation' ? 'Automação' : 'Equipe')}
-                          {m.meta?.simulator && (
-                            <span className="ml-1.5 inline-block text-[10px] font-bold uppercase tracking-wide bg-[var(--surface-3)] border border-[var(--border-strong)] text-[var(--text-muted)] rounded px-1 py-0">SIMULADOR</span>
-                          )}
-                        </span>
-                        {m.body}
-                        <span className="block text-xs mt-1">
-                          {m.at.slice(11, 16)} · {m.status === 'sent' ? 'enviada' : m.status === 'delivered' ? 'entregue' : m.status === 'read' ? 'lida' : m.status === 'failed' ? 'falhou' : 'pendente'}
-                          {m.error ? ` (${m.error})` : ''}
-                        </span>
-                        {m.status === 'failed' && m.direction === 'out' && m.by !== 'automation' && (
-                          <button type="button" onClick={() => void retryMessage(m)}
-                            className="mt-1.5 inline-flex items-center gap-1 text-[11px] font-bold uppercase tracking-wide bg-white/15 border border-white/30 rounded px-1.5 py-0.5 hover:bg-white/25">
-                            <Icon n="sync" size={11} /> Tentar novamente
-                          </button>
-                        )}
-                      </div>
-                    </div>
-                  ))}
-                </div>
-                <div className="p-2.5 border-t border-[var(--border)] bg-white">
-                  {sendError && <p role="alert" className="mb-2 text-xs font-semibold bg-[var(--danger-bg)] border border-[var(--danger-border)] text-[var(--danger-fg)] rounded-md px-2.5 py-1.5">{sendError}</p>}
-                  {/* Conta trocada: esta conversa é de uma conta que não está
-                      mais conectada. O histórico fica em leitura. */}
-                  {active.conversation.channel === 'instagram' && accountMismatch ? (
-                    <p role="status" className="text-xs font-semibold bg-[var(--danger-bg)] border border-[var(--danger-border)] text-[var(--danger-fg)] rounded-md px-2.5 py-1.5">
-                      {accountMismatch}
-                    </p>
-                  ) : active.conversation.channel === 'instagram' && window && !window.canReply ? (
-                    /* Política do Instagram: fora da janela de 24 h a Meta recusa
-                       o envio. A tela TROCA o compositor por um aviso — nada de
-                       botão que promete o que a política não permite. */
-                    <p role="status" className="text-xs font-semibold bg-[var(--warning-bg)] border border-[var(--warning-border)] text-[var(--warning-fg)] rounded-md px-2.5 py-1.5">
-                      {window.reason} Você ainda pode responder no Direct do Instagram; aqui o compositor reabre quando a pessoa escrever de novo.
-                    </p>
-                  ) : (
-                    <>
-                    {/* Limite oficial do Instagram (1000 bytes): aviso discreto
-                        antes do teto; acima dele o envio é recusado. */}
-                    {igComposer && draftBytes >= 800 && (
-                      <p className={`mb-2 text-[11px] font-semibold ${draftBytes > INSTAGRAM_TEXT_MAX_BYTES ? 'text-[var(--danger-fg)]' : 'text-[var(--text-muted)]'}`}>
-                        {draftBytes} de {INSTAGRAM_TEXT_MAX_BYTES} bytes do Instagram
-                        {draftBytes > INSTAGRAM_TEXT_MAX_BYTES ? ' — reduza para enviar.' : ''}
-                      </p>
-                    )}
-                    {/* §F — CANAL DESCONECTADO: o compositor fica DESABILITADO de
-                        verdade (um campo que aceita texto com um botão que recusa
-                        o envio é promessa falsa). O HISTÓRICO continua inteiro na
-                        tela: o que para é responder, não ler. */}
-                    {channelOff(active.conversation) && (
-                      <div role="status" className="mb-2 rounded-md border border-[var(--border)] bg-[var(--surface-2)] px-2.5 py-1.5">
-                        <p className="text-xs font-semibold text-[var(--text)]">Conecte um canal para responder por aqui.</p>
-                        <p className="text-[11px] text-[var(--text-muted)] mt-0.5">
-                          O histórico desta conversa continua aqui — nada foi perdido.
-                          <Link href={channelsHref} className="ml-1 font-semibold text-[var(--brand-fg)] underline">Conectar canal</Link>
-                        </p>
-                      </div>
-                    )}
-                    <form onSubmit={sendMessage} className="flex gap-2">
-                      <input
-                        value={draft}
-                        onChange={(e) => setDraft(e.target.value)}
-                        disabled={channelOff(active.conversation)}
-                        aria-disabled={channelOff(active.conversation)}
-                        placeholder={channelOff(active.conversation)
-                          ? 'Conecte um canal para responder por aqui.'
-                          : active.conversation.channel === 'instagram' ? 'Responder no Instagram…' : 'Escreva uma mensagem…'}
-                        aria-label="Mensagem"
-                        className="min-w-0 flex-1 rounded-md border border-[var(--border-strong)] px-3 py-2 text-sm shadow-xs focus:outline-none focus:shadow-focus focus:border-[var(--brand)] disabled:bg-[var(--surface-2)] disabled:text-[var(--text-muted)] disabled:cursor-not-allowed"
-                      />
-                      {/* O botão só parece funcional quando é: desabilitado sem
-                          texto, sem canal e durante o envio — nunca um "Enviar" de mentira. */}
-                      <button type="submit"
-                        disabled={sending || !draft.trim() || channelOff(active.conversation)}
-                        className="text-sm font-semibold bg-[var(--brand)] text-white px-4 py-2 rounded-md border border-[var(--brand-strong)]/40 shadow-brand hover:bg-[var(--brand-strong)] disabled:opacity-50 disabled:cursor-not-allowed disabled:shadow-none inline-flex items-center gap-1.5">
-                        <Icon n="send" size={14} /> {sending ? 'Enviando…' : 'Enviar'}
-                      </button>
-                    </form>
-                    </>
-                  )}
-                </div>
-              </>
-            ) : (
-              <div className="flex-1 flex flex-col items-center justify-center text-center px-6 py-12">
-                <div className="il-empty__icon"><Icon n="chat" size={22} /></div>
-                <p className="text-sm font-semibold text-[var(--text)]">Escolha uma conversa</p>
-                <p className="text-xs text-[var(--text-muted)] mt-1 max-w-sm">Cada mensagem vira histórico do cliente. O assistente pode responder com os dados do negócio.</p>
-              </div>
-            )}
-          </div>
-
-          {/* Col 3: Contato */}
-          <div className="inbox-contact bg-[var(--surface-2)]">
-            {active ? (
-              <div className="p-3 space-y-3">
-                <div className="il-idcard rounded-lg border border-[var(--border)] p-3 shadow-sm">
-                  <div className="relative flex items-center gap-2.5">
-                    <Avatar name={active.conversation.name || '?'} size={40} />
-                    <div className="min-w-0">
-                      <p className="text-sm font-semibold text-[var(--text)] truncate">{active.conversation.name}</p>
-                      <p className="text-xs text-[var(--text-muted)] truncate">
-                        {active.conversation.channel === 'instagram'
-                          ? (active.conversation.channelUsername ? `@${active.conversation.channelUsername}` : 'Contato do Instagram')
-                          : active.conversation.phone}
-                      </p>
-                    </div>
-                  </div>
-                  <span className={cn('relative inline-flex items-center gap-1 mt-2.5 text-[11px] font-semibold px-2 py-0.5 rounded-pill border',
-                    active.conversation.registered
-                      ? 'bg-[var(--brand-soft)] border-[var(--brand-border)] text-[var(--brand-fg)]'
-                      : 'bg-[var(--lilac-bg)] border-[var(--lilac-border)] text-[var(--lilac-fg)]')}>
-                    <Icon n={active.conversation.registered ? 'wallet' : 'spark'} size={11} />
-                    {active.conversation.registered ? 'Na base da clínica' : 'Contato novo'}
-                  </span>
-                  {/* §11–15 — identidade em Conversas: pessoa nova de verdade é
-                      "Contato novo" (nunca "sem cadastro" de quem JÁ existe) e
-                      ganha o CTA de cadastro rápido pré-preenchido. Ao salvar,
-                      a conversa é vinculada e o badge vira "Na base da clínica". */}
-                  {!active.conversation.registered && (
-                    <div className="mt-2 space-y-1.5">
-                      <p className="text-[11px] text-[var(--text-muted)]">
-                        Ainda não está na base desta clínica.
-                      </p>
-                      <button type="button"
-                        onClick={() => setQuickOpen(true)}
-                        className="w-full text-xs font-semibold bg-[var(--brand)] text-white rounded-md px-3 py-2 border border-[var(--brand-strong)]/40 shadow-brand hover:bg-[var(--brand-strong)] inline-flex items-center justify-center gap-1.5">
-                        <Icon n="wallet" size={13} /> Cadastrar cliente
-                      </button>
-                    </div>
-                  )}
-                </div>
-                <div className="bg-white border border-[var(--border)] rounded-lg p-3 shadow-xs">
-                  <p className="text-[11px] font-semibold tracking-[0.08em] uppercase text-[var(--text-faint)] mb-2">Atalhos</p>
-                  <div className="space-y-1.5">
-                    <Link href={`/clientes?b=${businessId}&q=${encodeURIComponent(active.conversation.phone || active.conversation.channelUsername || active.conversation.name || '')}`} className="flex items-center gap-1.5 text-xs font-semibold bg-[var(--surface-3)] border border-[var(--border)] rounded-md px-3 py-2 hover:bg-[var(--brand-soft)] hover:text-[var(--brand-fg)] hover:border-[var(--brand-border)]"><Icon n="wallet" size={13} /> Ver no CRM</Link>
-                    {/* F3-F · Contexto lateral — SÓ administrativo (nunca prontuário).
-                        Tutor, pets e paciente corrente quando veterinária. */}
-                    {side && (
-                      <div className="mt-4 rounded-lg border border-[var(--border)] bg-white p-3 space-y-2">
-                        <p className="text-[11px] font-semibold uppercase tracking-wide text-[var(--text-faint)]">Contexto</p>
-                        <div className="text-xs space-y-1">
-                          <p><span className="text-[var(--text-muted)]">Tutor:</span> {side.tutor.name || active.conversation.name || '—'}</p>
-                          {side.tutor.phone && (
-                            <p><span className="text-[var(--text-muted)]">Telefone:</span> {side.tutor.phone}</p>
-                          )}
-                          {side.pets.length > 0 && (
-                            <p>
-                              <span className="text-[var(--text-muted)]">Pets:</span>{' '}
-                              {side.pets.map((p) => p.name).join(', ')}
-                            </p>
-                          )}
-                          {side.currentPatient && (
-                            <p className="font-semibold text-[var(--brand-fg)]">
-                              Paciente: {side.currentPatient.name}
-                            </p>
-                          )}
-                          {side.nextAppointment && (
-                            <p>
-                              <span className="text-[var(--text-muted)]">Próximo:</span>{' '}
-                              {side.nextAppointment.date} {side.nextAppointment.time}
-                              {side.nextAppointment.service ? ` · ${side.nextAppointment.service}` : ''}
-                            </p>
-                          )}
-                          {side.responsible && (
-                            <p><span className="text-[var(--text-muted)]">Responsável:</span> {side.responsible}</p>
-                          )}
-                        </div>
-                        {/* Ações administrativas (atalhos; sem prontuário) */}
-                        <div className="flex flex-wrap gap-1.5 pt-1">
-                          <Link href={`/agenda?b=${businessId}`} className="text-[11px] px-2 py-1 rounded border border-[var(--border)] hover:bg-[var(--surface-hover)]">Agendar</Link>
-                          <Link href={`/tarefas?b=${businessId}`} className="text-[11px] px-2 py-1 rounded border border-[var(--border)] hover:bg-[var(--surface-hover)]">Tarefa</Link>
-                          <Link href={`/clientes?b=${businessId}&q=${encodeURIComponent(active.conversation.phone || '')}`} className="text-[11px] px-2 py-1 rounded border border-[var(--border)] hover:bg-[var(--surface-hover)]">Paciente</Link>
-                        </div>
-                        {active.conversation.handoff?.summary && (
-                          <div className="pt-2 border-t border-[var(--border-soft)]">
-                            <p className="text-[11px] font-semibold text-[var(--text-muted)]">Último handoff</p>
-                            <p className="text-xs text-[var(--text)] mt-0.5">{active.conversation.handoff.summary}</p>
-                            {active.conversation.handoff.actions?.length ? (
-                              <ul className="text-[11px] text-[var(--text-muted)] mt-1 list-disc pl-4">
-                                {active.conversation.handoff.actions.map((a) => <li key={a}>{a}</li>)}
-                              </ul>
-                            ) : null}
-                          </div>
-                        )}
-                      </div>
-                    )}
-                    <Link href={`/funil?b=${businessId}`} className="flex items-center gap-1.5 text-xs font-semibold bg-[var(--surface-3)] border border-[var(--border)] rounded-md px-3 py-2 hover:bg-[var(--surface-hover)] hover:text-[var(--text)]"><Icon n="funnel" size={13} /> Ver oportunidade</Link>
-                    <Link href={`/agenda?b=${businessId}`} className="flex items-center gap-1.5 text-xs font-semibold bg-[var(--surface-3)] border border-[var(--border)] rounded-md px-3 py-2 hover:bg-[var(--brand-soft)] hover:text-[var(--brand-fg)] hover:border-[var(--brand-border)]"><Icon n="calendar" size={13} /> Ver agenda</Link>
-                    {active.conversation.channel !== 'instagram' && data.linkFallback && (
-                      <a href={`https://wa.me/${(active.conversation.phone || '').replace(/\D/g, '')}`} target="_blank" rel="noreferrer" className="flex items-center gap-1.5 text-xs font-semibold bg-[var(--success-bg)] text-[var(--success-fg)] border border-[var(--success-border)] rounded-md px-3 py-2 hover:bg-[var(--success-bg-hover)]">
-                        <Icon n="whatsapp" size={13} /> Abrir no WhatsApp <Icon n="external" size={11} />
-                      </a>
-                    )}
-                    {active.conversation.channel === 'instagram' && (
-                      <p className="text-[11px] text-[var(--text-muted)] px-1">
-                        Conversa do Instagram Direct. O Instagram não informa telefone nem e-mail — o vínculo é o perfil.
-                      </p>
-                    )}
-                  </div>
-                </div>
-                <div className="text-xs text-[var(--text-muted)] px-1">
-                  <p>Última mensagem: {active.conversation.lastMessageAt ? humanDateTime(active.conversation.lastMessageAt.slice(0, 10), active.conversation.lastMessageAt.slice(11, 16)) : '—'}</p>
-                  {active.conversation.channel === 'instagram' && window && (
-                    <p className="mt-1">{window.reason}</p>
-                  )}
-                </div>
-              </div>
-            ) : (
-              <div className="p-6 text-center">
-                <p className="text-xs text-zinc-500">Escolha uma conversa para ver o contato.</p>
-              </div>
-            )}
-          </div>
-        </div>
+        <aside className="inbox-context" id="conversation-context-panel" aria-label="Contexto da conversa" aria-hidden={compactLayout || !contextOpen}>
+          {contextOpen && !compactLayout ? contextContent : null}
+        </aside>
       </div>
-      {/* §11–15 — cadastro rápido do "Contato novo" (pré-preenchido pela conversa). */}
-      <QuickRegisterSheet
-        open={quickOpen}
-        onClose={() => setQuickOpen(false)}
-        businessId={businessId}
-        vet={vetClinic}
-        source="conversa"
-        initial={active ? {
-          name: active.conversation.name || '',
-          phone: active.conversation.phone || '',
-          email: '',
-        } : undefined}
-        onSaved={onQuickSaved}
-      />
+
+      <WorkspaceSheet open={contextSheetOpen && compactLayout && !!active && !panel} onClose={() => setContextSheetOpen(false)}
+        title={vetClinic ? 'Tutor e paciente' : 'Contexto do cliente'} subtitle="Informações administrativas da conversa" icon="inbox"
+        width="max-w-sm">
+        <div id="conversation-context-sheet" className="p-4">{contextContent}</div>
+      </WorkspaceSheet>
+
+      <QuickRegisterSheet open={quickOpen} onClose={() => setQuickOpen(false)} businessId={businessId} vet={vetClinic} source="conversa"
+        initial={active ? { name: active.conversation.name || '', phone: active.conversation.phone || '', email: '' } : undefined}
+        onSaved={onQuickSaved} />
     </div>
   );
 }

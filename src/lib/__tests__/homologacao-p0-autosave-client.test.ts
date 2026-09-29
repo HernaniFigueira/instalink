@@ -31,26 +31,49 @@ describe('P0-1 · autosave não fecha EncounterSheet/BookingDetailSheet', () => 
     expect(ENCOUNTER).toMatch(/action: 'finalize'/);
   });
 
-  it('BookingDetailSheet repassa onSaved ao EncounterSheet e só fecha em onClose', () => {
-    expect(BOOKING_DETAIL).toMatch(/onSaved\?:/);
-    expect(BOOKING_DETAIL).toMatch(/onSaved=\{onSaved\}/);
+  it('BookingDetailSheet continua contextual; o atendimento abre em rota completa protegida', () => {
+    expect(BOOKING_DETAIL).toContain('WorkspaceSheet');
+    expect(BOOKING_DETAIL).toContain('encounterWorkspaceHref');
+    expect(BOOKING_DETAIL).toMatch(/bookingId: booking\.id/);
+    expect(BOOKING_DETAIL).not.toContain('<EncounterSheet');
     // Ações explícitas (act/check-in) podem fechar — é decisão do usuário
     expect(BOOKING_DETAIL).toMatch(/onChanged\(\);\s*onClose\(\);/);
   });
 
-  it('Agenda: onSaved/onChanged do detalhe NÃO fazem setDetail(null)', () => {
-    // O bloco do BookingDetailSheet não pode fechar o detalhe em onChanged
+  it('Agenda: detalhe permanece contextual e a fila navega para a página clínica', () => {
     const detailBlock = AGENDA.match(/<BookingDetailSheet[\s\S]*?\/>/);
     expect(detailBlock).toBeTruthy();
     const block = detailBlock![0];
-    expect(block).toMatch(/onSaved=/);
     expect(block).toMatch(/onChanged=\{\(\) => \{ void load\(\); \}\}/);
     expect(block).not.toMatch(/setDetail\(null\).*load/);
-    expect(block).not.toMatch(/onChanged=\{\(\) => \{ setDetail\(/);
+    expect(AGENDA).toContain('encounterWorkspaceHref({ businessId, queueId: row.id');
+    expect(AGENDA).not.toContain('<EncounterSheet');
+    expect(AGENDA).toContain('retornoAtendimento');
   });
 
   it('Agenda: detail aberto é atualizado em silêncio quando a lista recarrega', () => {
     expect(AGENDA).toMatch(/setDetail\(\(d\) => \(d \? bookings\.find/);
+  });
+
+  it('detalhe limpo fecha sem subfluxo; reagendamento dirty é protegido pelo primitive', () => {
+    expect(BOOKING_DETAIL).toMatch(/const rescheduleDirty = rescheduling &&/);
+    expect(BOOKING_DETAIL).toMatch(/dismissGuard=\{\{ dirty: rescheduleDirty/);
+    expect(BOOKING_DETAIL).not.toContain('window.confirm');
+  });
+
+  it('Cliente 360 calcula dirty real, restaura ao descartar e protege a navegação', () => {
+    const CLIENT = read('src/components/dashboard/ClientProfileDrawer.tsx');
+    expect(CLIENT).toMatch(/const editState = \{ dirty: editDirty/);
+    expect(CLIENT).toContain('discardEdit');
+    expect(CLIENT).toContain('useUnsavedChangesGuard(editState)');
+    expect(CLIENT).toMatch(/const editDirty =/);
+  });
+
+  it('Encounter aguarda o request em curso, tenta flush e só deixa saída explícita após erro', () => {
+    expect(ENCOUNTER).toContain('await inflight.current');
+    expect(ENCOUNTER).toContain('for (let attempt = 0; !flushed && attempt < 4; attempt++)');
+    expect(ENCOUNTER).toContain('O salvamento falhou; os dados continuam nesta tela.');
+    expect(ENCOUNTER).toContain("layout = 'page'");
   });
 });
 

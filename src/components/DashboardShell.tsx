@@ -6,10 +6,10 @@ import { loadMe } from '@/lib/session-me';
 import { clearToken } from '@/lib/client-auth';
 import { cn } from '@/lib/utils';
 import { Icon } from '@/components/icons';
-import { PageSkeleton } from '@/components/ui';
+import { PageFrame, PageSkeleton } from '@/components/ui';
 import { AccessDenied, ForbiddenToasts, PanelHomeProvider } from '@/components/dashboard/AccessNotice';
 import {
-  activePanelPath, activePanelRoute, firstAllowedPath, panelAccess, panelNavigation,
+  activePanelPath, activePanelRoute, firstAllowedPath, panelAccess, panelNavigation, pageTypeForPath,
   routeRequiresBusiness, PANEL_ROUTES, type PanelRouteDef,
 } from '@/lib/panel';
 import { isSessionExpired } from '@/lib/http';
@@ -18,16 +18,15 @@ import { requiresActiveBusiness } from '@/lib/business-context';
 import { mayLeaveEditor } from '@/components/dashboard/useUnsavedChanges';
 import { WorkspaceContext } from '@/components/dashboard/WorkspaceContext';
 import { ConversationsDock } from '@/components/dashboard/ConversationsDock';
-import { findAccent, getNavAccent, type NavAccentId } from '@/lib/nav-accent';
+import { DEFAULT_ACCENT_ID, findAccent, getNavAccent, type NavAccentId } from '@/lib/nav-accent';
 import { WorkspaceNavigation } from '@/components/dashboard/WorkspaceNavigation';
 import { WorkspaceTopbar } from '@/components/dashboard/WorkspaceTopbar';
 import { HelpCenter } from '@/components/dashboard/HelpCenter';
 import { useWorkspaceAlerts } from '@/components/dashboard/NotificationsBell';
 import { buildNavSearchItems } from '@/lib/nav-search';
 import { roleLabel } from '@/lib/role-labels';
-import {
-  routeAreaColor, routeBreadcrumb, switchUnitHref, workspaceAreas,
-} from '@/lib/workspace-navigation';
+import { switchUnitHref } from '@/lib/workspace-navigation';
+import { isLegacyPagesEnabled } from '@/lib/product';
 
 interface Biz {
   id: string;
@@ -80,7 +79,7 @@ export function DashboardShell({ children }: { children: React.ReactNode }) {
     try { return localStorage.getItem('il-side-v2') === 'mini'; } catch { return false; }
   });
   /* Missão 6 — cor da navegação (Configurações → Aparência). */
-  const [navAccent, setNavAccent] = useState<NavAccentId>('azul-clinico');
+  const [navAccent, setNavAccent] = useState<NavAccentId>(DEFAULT_ACCENT_ID);
   useEffect(() => {
     setNavAccent(getNavAccent());
     const sync = (e: Event) => setNavAccent((e as CustomEvent<NavAccentId>).detail);
@@ -250,6 +249,7 @@ export function DashboardShell({ children }: { children: React.ReactNode }) {
   }
 
   const organization = organizations.find(o=>o.id === params.get('organization')) || organizations.find(o=>o.id === businesses.find(b=>b.id===params.get('b'))?.organizationId) || organizations[0];
+  const legacyPagesEnabled = isLegacyPagesEnabled();
   const business: Biz = (activePath === '/organizacao' ? businesses.find(b=>b.organizationId===organization?.id) : businesses.find(b=>b.id===params.get('b')) || businesses[0]) || {id:'',slug:'',name:organization?.name || 'Organização',organizationId:organization?.id,modes:[],features:{},published:false};
   const modes = business?.modes || [];
   const features = business?.features || {};
@@ -258,6 +258,9 @@ export function DashboardShell({ children }: { children: React.ReactNode }) {
   const panelCtx = { permissions, modes, features: features as Partial<Record<FeatureId, boolean>> };
   const nav = panelNavigation(panelCtx);
   if (!business.id) nav.allowed = organization?.canManage ? PANEL_ROUTES.filter(r=>r.href==='/organizacao') : [];
+  const operationalNav = legacyPagesEnabled
+    ? nav
+    : { ...nav, allowed: nav.allowed.filter((route) => route.href !== '/pagina') };
   const access = panelAccess(pathname, panelCtx);
   const q = business ? `?b=${business.id}` : '';
   // BUSCA DE NAVEGAÇÃO (ponto 2): a fonte é `nav.allowed` — o MESMO cálculo de
@@ -271,8 +274,6 @@ export function DashboardShell({ children }: { children: React.ReactNode }) {
   // Multiunidade REAL: só quando existe mais de uma unidade na conta. Sem isso
   // "Organização" não ocupa linha no menu (a porta continua acessível por URL).
   const multiUnit = businesses.length > 1;
-  const areas = workspaceAreas(nav.allowed, { multiUnit });
-  const crumb = routeBreadcrumb(activePath, areas);
   const unitRole = business.role && business.role !== 'OWNER'
     ? `${roleLabel(business.role)}${business.readOnly ? ' · somente leitura' : ''}`
     : undefined;
@@ -281,10 +282,12 @@ export function DashboardShell({ children }: { children: React.ReactNode }) {
   // A Agenda é o ambiente operacional: chrome mínimo para a grade ocupar a
   // viewport (menos padding, sem rodapé). As demais telas não mudam.
   const isAgenda = activePath === '/agenda';
-  // Largura é política do CATÁLOGO (campo `width`), não uma lista à parte:
-  // telas densas (grade, kanban, tabela, colunas) usam a largura toda;
-  // formulários e listas de coluna única ficam em 960px de leitura.
-  const isFullWidth = activeRoute?.width === 'full';
+  const isConversations = activePath === '/conversas';
+  const standaloneConversation = isConversations && params.get('standalone') === '1';
+  const conversationFocus = isConversations && (standaloneConversation || params.get('focus') === '1');
+  // PageFrame recebe o contrato obrigatório do catálogo, inclusive detalhes
+  // aninhados em /clientes/[id]. Largura e gutters não são escolhidos pela tela.
+  const pageType = pageTypeForPath(pathname) || activeRoute?.pageType || 'workspace';
   // Sem permissão de dashboard (ex.: VIEWER com agenda liberada) o usuário
   // ainda precisa de um destino válido ao clicar em "Início" — e TODO 403
   // precisa de uma porta de volta (fornecida por contexto às telas).
@@ -315,33 +318,33 @@ export function DashboardShell({ children }: { children: React.ReactNode }) {
     <WorkspaceContext.Provider value={{ role: business.role, agendaScope: business.agendaScope }}>
     <div
       style={{
-        '--area-color': crumb.area?.color || routeAreaColor(activePath, areas),
         '--sidebar-w': collapsed ? 'var(--sidebar-w-mini)' : undefined,
         ...accentVars,
       } as React.CSSProperties}
       data-nav-accent={navAccent}
-      className={cn('il-platform workspace-shell min-h-screen', isAgenda && 'workspace-shell--fill')}
+      className={cn('il-platform workspace-shell min-h-screen', isAgenda && 'workspace-shell--fill', isConversations && 'workspace-shell--conversations', conversationFocus && 'workspace-shell--conversation-focus', standaloneConversation && 'workspace-shell--standalone')}
     >
       <a href="#workspace-content" className="workspace-skip">Ir para o conteúdo</a>
 
       {/* `nav={nav}`: a navegação continua vindo do catálogo (lib/panel.ts) —
           o shell não tem lista própria de destinos. Sidebar primeiro: ela
           ocupa top:0→bottom:0 e a topbar vive na coluna da direita. */}
-      <WorkspaceNavigation nav={nav}
+      {!conversationFocus && <WorkspaceNavigation nav={nav}
         activePath={activePath} unit={business}
         units={businesses} multiUnit={multiUnit} onUnit={switchBiz}
         collapsed={collapsed} onCollapse={toggle}
         mobileOpen={mobileNav} onMobileOpen={setMobileNav}
         onHelp={() => setHelpOpen(true)}
-      />
+      />}
 
       <div className="workspace-main-col">
-      <WorkspaceTopbar
+      {!conversationFocus && <WorkspaceTopbar
         page={activeRoute?.label || 'Painel'}
         query={q}
-        searchItems={buildNavSearchItems(nav, q)}
+        searchItems={buildNavSearchItems(operationalNav, q)}
         activePath={activePath}
         businessId={business.id}
+        legacyPagesEnabled={legacyPagesEnabled}
         alerts={alerts}
         user={{ ...user, role: unitRole || user.role }}
         unit={business}
@@ -355,19 +358,20 @@ export function DashboardShell({ children }: { children: React.ReactNode }) {
         onOpenNav={() => setMobileNav(true)}
         onOpenHelp={() => setHelpOpen(true)}
         canCreate={nav.allowed.map((i) => i.href).filter((h) => ['/agenda', '/clientes', '/tarefas', '/servicos', '/profissionais', '/financeiro'].includes(h))}
+        canOpenConversations={nav.allowed.some((i) => i.href === '/conversas') && activePath !== '/conversas' && activePath !== '/organizacao'}
         vet={business.clinicType === 'veterinaria'}
-      />
+      />}
 
-      <HelpCenter
+      {!conversationFocus && <HelpCenter
         open={helpOpen}
         onClose={() => setHelpOpen(false)}
         query={q}
         nav={nav}
         businessId={business.id}
-      />
+      />}
 
       {nav.allowed.some(i => i.href === '/conversas') && activePath !== '/conversas' && activePath !== '/organizacao' && <ConversationsDock key={business.id} businessId={business.id}/>}
-      <main ref={mainRef} id="workspace-content" tabIndex={-1} className="workspace-content flex-1 min-w-0">
+      <main ref={mainRef} id="workspace-content" tabIndex={-1} className={cn('workspace-content flex-1 min-w-0', conversationFocus && 'workspace-content--focus')}>
         {support && (
           <div className={cn('px-4 lg:px-8 py-2.5 text-xs font-semibold flex flex-wrap items-center gap-x-3 gap-y-1 border-b',
             support.mode === 'view' ? 'bg-[var(--warning-bg)] text-[var(--warning-fg)] border-[var(--warning-border)]' : 'bg-[var(--danger)] text-white border-[var(--danger-strong)]')}>
@@ -380,11 +384,12 @@ export function DashboardShell({ children }: { children: React.ReactNode }) {
             }} className="ml-auto underline underline-offset-2">Sair do modo suporte</button>
           </div>
         )}
-        <div key={business.id} className={cn(isAgenda ? 'agenda-page-gutter' : 'px-4 lg:px-8 py-6', !isFullWidth && 'max-w-[960px]')}>
+        <PageFrame key={business.id} type={pageType} flush={isAgenda || isConversations}
+          className={cn(isAgenda && 'agenda-page-gutter', isConversations && 'conversation-page-wrap')}>
           {/* CONTRATO DO REFINO FINAL — sem breadcrumb em NENHUMA tela do
               workspace: o cabeçalho da página (chip + título + subtítulo)
               identifica a tela. O contexto vive na sidebar/topbar. */}
-          {isMaster && !support && (
+          {!conversationFocus && isMaster && !support && (
             <p className="mb-4 text-xs font-semibold text-[var(--warning-fg)] bg-[var(--warning-bg)] border border-[var(--warning-border)] rounded-md px-3 py-2 inline-flex items-center gap-2 shadow-xs">
               <I n="shield" size={14} /> Você é master — <Link href="/master" className="underline font-semibold">/master</Link>
             </p>
@@ -392,7 +397,7 @@ export function DashboardShell({ children }: { children: React.ReactNode }) {
           {/* Hierarquia (item 4 do briefing): o papel de quem está logado era
               um parágrafo permanente no miolo de TODA tela. A informação não
               foi removida — mora na topbar, ao lado do nome, onde pertence. */}
-          {business?.agendaScope === 'own' && (
+          {!conversationFocus && business?.agendaScope === 'own' && (
             // Honestidade com quem atende: a agenda mostrada é SÓ a dele.
             // (A restrição é do servidor — aqui só avisamos.)
             <p className="mb-4 text-xs font-semibold text-[var(--text)] bg-white border border-[var(--border)] rounded-md px-3 py-2 inline-flex items-center gap-2 shadow-xs">
@@ -400,7 +405,7 @@ export function DashboardShell({ children }: { children: React.ReactNode }) {
               Você vê <strong>somente a sua agenda</strong>{business.professionalName ? ` (${business.professionalName})` : ''}. Os clientes da unidade continuam disponíveis em Clientes.
             </p>
           )}
-          {business?.agendaScope === 'none' && (
+          {!conversationFocus && business?.agendaScope === 'none' && (
             // Vínculo ainda não configurado: a agenda fica vazia por segurança
             // (nunca a de todo mundo). O caminho para resolver é o Equipe.
             <p className="mb-4 text-xs font-semibold text-[var(--warning-fg)] bg-[var(--warning-bg)] border border-[var(--warning-border)] rounded-md px-3 py-2 inline-flex flex-wrap items-center gap-2 shadow-xs" role="status">
@@ -419,10 +424,10 @@ export function DashboardShell({ children }: { children: React.ReactNode }) {
                 : undefined}
             />
           ) : children}
-        </div>
-        {!isAgenda && business.id && (
+        </PageFrame>
+        {!isAgenda && !isConversations && business.id && (
           <footer className="px-4 lg:px-8 py-4 border-t border-[var(--border)] mt-8">
-            <p className="text-[11px] text-[var(--text-faint)] text-center">{business.name} · <a href={`/${business.slug}`} target="_blank" rel="noreferrer" className="underline font-semibold text-[var(--text-muted)]">página pública /{business.slug}</a></p>
+            <p className="text-[11px] text-[var(--text-faint)] text-center">{business.name}{legacyPagesEnabled && <> · <a href={`/${business.slug}`} target="_blank" rel="noreferrer" className="underline font-semibold text-[var(--text-muted)]">página pública /{business.slug}</a></>}</p>
           </footer>
         )}
       </main>

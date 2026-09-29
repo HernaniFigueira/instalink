@@ -10,7 +10,7 @@
 // A1.2 · Bloco 2: as REGRAS DE RESERVA (BookingSettings) saíram daqui —
 // "como o cliente reserva" é configuração do negócio e mora em Configurações
 // → aba Agenda. Disponibilidade ficou só com "quando atende".
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import Link from 'next/link';
 import { cn, parseMoneyToCents, centsToBR } from '@/lib/utils';
 import type { Availability, AvailabilityException, Category, Professional, Service } from '@/lib/types';
@@ -18,7 +18,9 @@ import { Icon } from '@/components/icons';
 import { Avatar, Badge, Button, Drawer } from '@/components/ui';
 import { ImageUpload } from '@/components/dashboard/ImageUpload';
 import { followsBusinessHours } from '@/lib/schedule';
+import { useOverlayDismissGuard } from '@/components/dashboard/OverlayDismissGuard';
 import { panelRoutesIn } from '@/lib/panel';
+import { isLegacyPagesEnabled } from '@/lib/product';
 
 // ── Confirmação de exclusão (em sheet, nunca confirm() nativo) ──
 export function DeleteSheet({ name, kindLabel, blocked, onDeactivate, onConfirm, onClose }: {
@@ -58,6 +60,7 @@ export function ServiceForm({ businessId, service, cats, pros, onClose, onSave }
   onClose: () => void;
   onSave: (p: Record<string, any>) => Promise<void>;
 }) {
+  const legacyPagesEnabled = isLegacyPagesEnabled();
   const [name, setName] = useState(service?.name || '');
   const [description, setDescription] = useState(service?.description || '');
   const [image, setImage] = useState(service?.image || '');
@@ -74,6 +77,19 @@ export function ServiceForm({ businessId, service, cats, pros, onClose, onSave }
   const [questions, setQuestions] = useState<string[]>(service?.questions || []);
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
+  const initialSnapshot = useRef(JSON.stringify({
+    name: service?.name || '', description: service?.description || '', image: service?.image || '',
+    price: service ? centsToBR(service.price) : '', showPrice: service ? service.showPrice !== false : true,
+    durationMin: service?.durationMin || 45, categoryId: service?.categoryId || '',
+    proIds: service?.professionalIds || [], active: service?.active !== false,
+    featured: !!service?.featured, bookable: service?.bookable !== false, questions: service?.questions || [],
+  }));
+  const dirty = JSON.stringify({ name, description, image, price, showPrice, durationMin, categoryId, proIds, active, featured, bookable, questions }) !== initialSnapshot.current;
+  const dismissState = {
+    dirty, saving: loading, context: 'edit' as const,
+    title: service ? 'Descartar alterações do serviço?' : 'Descartar novo serviço?',
+    description: 'As informações preenchidas ainda não foram salvas.',
+  };
   const input = 'w-full rounded-md border border-zinc-300 px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500';
 
   function togglePro(id: string) {
@@ -81,7 +97,7 @@ export function ServiceForm({ businessId, service, cats, pros, onClose, onSave }
   }
 
   return (
-    <Drawer open onClose={() => { if (!loading) onClose(); }} title={service ? 'Editar serviço' : 'Novo serviço'} width="max-w-lg">
+    <Drawer open onClose={() => { if (!loading) onClose(); }} dismissGuard={dismissState} title={service ? 'Editar serviço' : 'Novo serviço'} width="max-w-lg">
       <form onSubmit={(e) => { e.preventDefault(); setError(''); setLoading(true); onSave({ id: service?.id, name, description, image, price: parseMoneyToCents(price), showPrice, durationMin, professionalIds: proIds, categoryId, active, featured, bookable, questions }).catch((err) => setError(err.message)).finally(() => setLoading(false)); }}
         className="p-5 space-y-3.5">
         <input aria-label="Nome do serviço" value={name} onChange={(e) => setName(e.target.value)} className={input} placeholder="Nome * (ex: Consulta inicial)" autoFocus />
@@ -94,17 +110,19 @@ export function ServiceForm({ businessId, service, cats, pros, onClose, onSave }
             <input type="number" min={5} step={5} value={durationMin} onChange={(e) => setDurationMin(Number(e.target.value))} className={input + ' mt-1'} />
             <span className="text-[11px] text-zinc-500">Interna — usada pela agenda (conflito, buffer).</span></label>
         </div>
-        <label className="flex items-start gap-2.5 bg-zinc-50 border border-zinc-200 rounded-md px-3.5 py-3 cursor-pointer select-none">
-          <input type="checkbox" checked={showPrice} onChange={(e) => setShowPrice(e.target.checked)} className="mt-0.5 w-4 h-4 accent-emerald-600 shrink-0" />
-          <span className="text-sm">
-            <span className="font-semibold">Mostrar preço na página pública</span>
-            <span className="block text-xs text-zinc-500 mt-0.5">
-              {showPrice
-                ? 'O visitante vê o preço deste serviço na página e no assistente.'
-                : 'O preço continua salvo e visível aqui e na agenda — apenas some da página pública.'}
+        {legacyPagesEnabled && (
+          <label className="flex items-start gap-2.5 bg-zinc-50 border border-zinc-200 rounded-md px-3.5 py-3 cursor-pointer select-none">
+            <input type="checkbox" checked={showPrice} onChange={(e) => setShowPrice(e.target.checked)} className="mt-0.5 w-4 h-4 accent-emerald-600 shrink-0" />
+            <span className="text-sm">
+              <span className="font-semibold">Mostrar preço na página pública</span>
+              <span className="block text-xs text-zinc-500 mt-0.5">
+                {showPrice
+                  ? 'O visitante vê o preço deste serviço na página e no assistente.'
+                  : 'O preço continua salvo e visível aqui e na agenda — apenas some da página pública.'}
+              </span>
             </span>
-          </span>
-        </label>
+          </label>
+        )}
         <label className="block"><span className="text-xs font-semibold text-zinc-500">CATEGORIA</span>
           <select value={categoryId} onChange={(e) => setCategoryId(e.target.value)} className={input + ' mt-1'}>
             <option value="">Sem categoria</option>

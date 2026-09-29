@@ -67,10 +67,12 @@ describe('apresentação dos estados (P1 — cor = estado)', () => {
     }
   });
 
-  it('tons diferentes não renderizam o mesmo selo', () => {
+  it('aliases visuais convergem semânticas equivalentes; estados distintos permanecem distintos', () => {
     const tons = ['amber', 'emerald', 'blue', 'red', 'purple', 'zinc'] as const;
     const classes = tons.map((t) => toneCls(t));
-    expect(new Set(classes).size).toBe(tons.length);
+    expect(new Set(classes).size).toBe(5);
+    expect(toneCls('purple')).toBe(toneCls('blue'));
+    expect(toneCls('orange')).toBe(toneCls('amber'));
   });
 
   it('o anel de atenção é discreto (1px, token) — não contorno grosso', () => {

@@ -32,7 +32,7 @@ const stripComments = (src: string) =>
 
 const ALL_PERMISSIONS: PermissionId[] = [
   'dashboard', 'agenda', 'clientes', 'leads', 'pedidos', 'catalogo', 'pagina',
-  'agente', 'whatsapp', 'campanhas', 'equipe', 'config', 'financeiro', 'admin',
+  'agente', 'whatsapp', 'campanhas', 'equipe', 'config', 'financeiro', 'admin', 'atendimento',
 ];
 
 function ctx(partial: Partial<PanelContext> = {}): PanelContext {
@@ -96,7 +96,7 @@ describe('A3.4 · NAV — seções e ordem nova', () => {
   it('Profissionais e Disponibilidade estão em OPERAÇÃO (não mais em Oferta)', () => {
     expect(panelRoutesIn('operacao').map((r) => r.href)).toEqual([
       // FASE 2 · P1 — hub Estrutura é a porta de entrada da operação da clínica.
-      '/estrutura', '/agenda', '/profissionais', '/disponibilidade', '/conversas', '/agente', '/tarefas', '/pedidos',
+      '/estrutura', '/agenda', '/atendimento', '/profissionais', '/disponibilidade', '/conversas', '/agente', '/tarefas', '/pedidos',
     ]);
     expect(panelRoutesIn('oferta').map((r) => r.href)).toEqual(['/servicos', '/produtos']);
   });
@@ -117,7 +117,7 @@ describe('A3.4 · NAV — seções e ordem nova', () => {
     // GODOUTOR final: Pendências e Oportunidades voltaram à LINHA do menu
     // (permissão real). Continuam fora da linha (com atalho contextual real):
     // Execuções, Meu perfil e Recursos.
-    expect(nav.more.map((r) => r.href)).toEqual(['/execucoes', '/perfil', '/recursos']);
+    expect(nav.more.map((r) => r.href)).toEqual(['/atendimento', '/execucoes', '/perfil', '/recursos']);
     // O atalho vive dentro de Automações (fonte: URLs diretas do painel).
     const automations = read('src/components/dashboard/AutomationsView.tsx');
     expect(automations).toMatch(/\/execucoes/);

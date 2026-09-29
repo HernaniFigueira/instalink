@@ -7,11 +7,12 @@ import { useCallback, useEffect, useState } from 'react';
 import { useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { Icon } from '@/components/icons';
-import { Button, Notice, PageHeader, PageSkeleton, Tabs } from '@/components/ui';
+import { Button, buttonCls, Notice, PageHeader, PageSkeleton, Tabs } from '@/components/ui';
 import { cn } from '@/lib/utils';
 import type { AgentObjective, AgentTone, BusinessAgent } from '@/lib/types';
 import { AccessDenied, AreaLoadError, useAreaLoad } from '@/components/dashboard/AccessNotice';
 import { apiGet, apiSend } from '@/lib/api-client';
+import { isLegacyPagesEnabled } from '@/lib/product';
 import { usePanelPermissions } from '@/components/dashboard/usePanelPermissions';
 
 interface Options { tones: Array<{ id: AgentTone; label: string; hint: string }>; objectives: Array<{ id: AgentObjective; label: string }> }
@@ -26,12 +27,13 @@ interface Preview {
   moduleEnabled: boolean; canBook: boolean; whatsapp: boolean; whatsappStatus: string;
 }
 
-const input = 'w-full rounded-md border border-[var(--border-strong)] px-3.5 py-2.5 text-sm focus:outline-none focus:shadow-focus';
+const input = 'il-field-control w-full rounded-md border border-[var(--border-strong)] bg-[var(--surface)] px-3.5 py-2.5 text-sm text-[var(--text)] placeholder:text-[var(--text-faint)] focus:outline-none focus:shadow-focus';
 const money = (c: number) => (c / 100).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
 
 export default function AgentePage() {
   const params = useSearchParams();
   const businessId = params.get('b') || '';
+  const legacyPagesEnabled = isLegacyPagesEnabled();
   const [agent, setAgent] = useState<BusinessAgent | null>(null);
   const [options, setOptions] = useState<Options | null>(null);
   const [preview, setPreview] = useState<Preview | null>(null);
@@ -65,7 +67,7 @@ export default function AgentePage() {
     try {
       const res = await apiSend('/api/agent', 'PUT', { ...agent, businessId }, { scope: 'action', area: 'Agente' });
       if (!res.ok) throw new Error(res.message);
-      setMsg('Agente salvo. A página pública já usa esta configuração.');
+      setMsg(legacyPagesEnabled ? 'Agente salvo. A página pública já usa esta configuração.' : 'Configuração do agente salva.');
       load();
     } catch (e: any) {
       setError(e.message);
@@ -100,7 +102,7 @@ export default function AgentePage() {
       <PageHeader
         icon="spark"
         title="Agente de atendimento"
-        hint="O assistente que responde na sua página usando os dados reais do negócio — sem inventar e sem mexer na sua agenda."
+        hint={legacyPagesEnabled ? 'O assistente que responde na sua página usando os dados reais do negócio — sem inventar e sem mexer na sua agenda.' : 'O assistente que orienta clientes com dados reais do negócio — sem inventar e sem alterar sua agenda.'}
         action={
         <span className="flex items-center gap-2">
           <span className={cn(
@@ -108,7 +110,7 @@ export default function AgentePage() {
             preview?.moduleEnabled ? 'bg-[var(--success-bg)] border-[var(--success-border)] text-[var(--success-fg)]' : 'bg-[var(--surface-2)] border-[var(--border)] text-[var(--text-muted)]',
           )}>
             <span className={cn('w-2 h-2 rounded-full', preview?.moduleEnabled ? 'bg-[var(--success)]' : 'bg-[var(--border-strong)]')} />
-            {preview?.moduleEnabled ? 'Módulo ativo na página' : 'Módulo desativado'}
+            {preview?.moduleEnabled ? (legacyPagesEnabled ? 'Módulo ativo na página' : 'Agente ativo') : 'Módulo desativado'}
           </span>
           <Link href={`/recursos${q}`}><Button variant="secondary" size="sm">Capacidades</Button></Link>
         </span>
@@ -118,7 +120,7 @@ export default function AgentePage() {
       {!preview?.moduleEnabled && (
         <Notice tone="warning" className="mb-4">
           O recurso <strong>Assistente</strong> está desativado na empresa. Configure aqui e ligue em{' '}
-          <Link href={`/recursos${q}`} className="underline font-semibold">Capacidades do sistema</Link> para ele aparecer na página.
+          <Link href={`/recursos${q}`} className="underline font-semibold">Capacidades do sistema</Link> para habilitá-lo.
         </Notice>
       )}
 
@@ -139,42 +141,42 @@ export default function AgentePage() {
 
       {tab === 'config' ? (
         <div className="space-y-4">
-          <section className="bg-white border border-zinc-200 rounded-lg p-5 space-y-4">
+          <section className="ws-panel p-5 space-y-4">
             <div className="flex items-center justify-between gap-3">
               <div>
-                <h3 className="font-semibold text-sm flex items-center gap-2"><Icon n="spark" size={16} className="text-zinc-400" /> Identidade</h3>
-                <p className="text-xs text-zinc-500 mt-1">Como o agente se apresenta e se comporta.</p>
+                <h3 className="font-semibold text-sm flex items-center gap-2"><Icon n="spark" size={16} className="text-[var(--text-faint)]" /> Identidade</h3>
+                <p className="text-xs text-[var(--text-muted)] mt-1">Como o agente se apresenta e se comporta.</p>
               </div>
               <button onClick={() => set('enabled', !agent.enabled)} role="switch" aria-checked={agent.enabled}
-                className={cn('text-xs font-semibold px-3.5 py-2 rounded-full border-2', agent.enabled ? 'border-[var(--success-border)] bg-[var(--success-bg)] text-[var(--success-fg)]' : 'border-[var(--border)] bg-white text-[var(--text-muted)]')}>
+                className={cn('text-xs font-semibold px-3.5 py-2 rounded-full border', agent.enabled ? 'border-[var(--success-border)] bg-[var(--success-bg)] text-[var(--success-fg)]' : 'border-[var(--border)] bg-[var(--surface)] text-[var(--text-muted)]')}>
                 {agent.enabled ? 'Ativo' : 'Desativado'}
               </button>
             </div>
-            <label className="block"><span className="text-xs font-semibold text-zinc-500">NOME DO AGENTE</span>
+            <label className="block"><span className="text-xs font-semibold text-[var(--text-muted)]">NOME DO AGENTE</span>
               <input value={agent.name} onChange={(e) => set('name', e.target.value)} className={input + ' mt-1'} placeholder="Ex: Assistente Odonto" /></label>
-            <label className="block"><span className="text-xs font-semibold text-zinc-500">SAUDAÇÃO</span>
+            <label className="block"><span className="text-xs font-semibold text-[var(--text-muted)]">SAUDAÇÃO</span>
               <textarea value={agent.greeting} onChange={(e) => set('greeting', e.target.value)} rows={2} className={input + ' mt-1'}
                 placeholder="Olá! Sou o assistente virtual da {empresa}. Como posso ajudar?" />
-              <span className="text-[11px] text-zinc-500">Use <code>{'{empresa}'}</code> para o nome do negócio aparecer automaticamente.</span></label>
+              <span className="text-[11px] text-[var(--text-muted)]">Use <code>{'{empresa}'}</code> para o nome do negócio aparecer automaticamente.</span></label>
             <div>
-              <span className="text-xs font-semibold text-zinc-500">PERSONALIDADE / TOM</span>
+              <span className="text-xs font-semibold text-[var(--text-muted)]">PERSONALIDADE / TOM</span>
               <div className="flex flex-wrap gap-2 mt-1.5">
                 {options.tones.map((t) => (
-                  <button key={t.id} onClick={() => set('tone', t.id)} title={t.hint}
-                    className={cn('text-sm font-semibold px-3.5 py-2 rounded-md border-2', agent.tone === t.id ? 'border-[var(--lilac-border)] bg-[var(--lilac-bg)] text-[var(--lilac-fg)]' : 'border-[var(--border)] bg-white text-[var(--text-muted)]')}>
+                  <button type="button" key={t.id} onClick={() => set('tone', t.id)} title={t.hint}
+                    className="il-option-choice" aria-pressed={agent.tone === t.id}>
                     {t.label}
                   </button>
                 ))}
               </div>
             </div>
             <div>
-              <span className="text-xs font-semibold text-zinc-500">OBJETIVO</span>
+              <span className="text-xs font-semibold text-[var(--text-muted)]">OBJETIVO</span>
               <div className="flex flex-wrap gap-2 mt-1.5">
                 {options.objectives.map((o) => {
                   const on = agent.objectives.includes(o.id);
                   return (
-                    <button key={o.id} onClick={() => toggleObjective(o.id)}
-                      className={cn('text-sm font-semibold px-3.5 py-2 rounded-md border-2', on ? 'border-[var(--lilac-border)] bg-[var(--lilac-bg)] text-[var(--lilac-fg)]' : 'border-[var(--border)] bg-white text-[var(--text-muted)]')}>
+                    <button type="button" key={o.id} onClick={() => toggleObjective(o.id)}
+                      className="il-option-choice" aria-pressed={on}>
                       {on && <Icon n="check" size={13} className="inline -mt-0.5 mr-1" />}{o.label}
                     </button>
                   );
@@ -183,32 +185,32 @@ export default function AgentePage() {
             </div>
           </section>
 
-          <section className="bg-white border border-zinc-200 rounded-lg p-5 space-y-3.5">
-            <h3 className="font-semibold text-sm flex items-center gap-2"><Icon n="shield" size={16} className="text-zinc-400" /> Regras e limites</h3>
-            <label className="block"><span className="text-xs font-semibold text-zinc-500">ORIENTAÇÕES DO AGENTE</span>
+          <section className="ws-panel p-5 space-y-3.5">
+            <h3 className="font-semibold text-sm flex items-center gap-2"><Icon n="shield" size={16} className="text-[var(--text-faint)]" /> Regras e limites</h3>
+            <label className="block"><span className="text-xs font-semibold text-[var(--text-muted)]">ORIENTAÇÕES DO AGENTE</span>
               <textarea value={agent.instructions} onChange={(e) => set('instructions', e.target.value)} rows={4} className={input + ' mt-1'}
                 placeholder={'Ex: Não informar diagnóstico.\nNão prometer resultados.\nQuando o cliente pedir algo que exija atendimento humano, encaminhar para a equipe.'} /></label>
-            <label className="block"><span className="text-xs font-semibold text-zinc-500">REGRAS / LIMITAÇÕES</span>
+            <label className="block"><span className="text-xs font-semibold text-[var(--text-muted)]">REGRAS / LIMITAÇÕES</span>
               <textarea value={agent.restrictions} onChange={(e) => set('restrictions', e.target.value)} rows={3} className={input + ' mt-1'}
                 placeholder={'Ex: Nunca criar, cancelar ou remarcar agendamento.\nNunca citar valores que não estejam no cadastro.'} /></label>
-            <label className="block"><span className="text-xs font-semibold text-zinc-500">ESCALADA PARA HUMANO</span>
+            <label className="block"><span className="text-xs font-semibold text-[var(--text-muted)]">ESCALADA PARA HUMANO</span>
               <textarea value={agent.handoffMessage} onChange={(e) => set('handoffMessage', e.target.value)} rows={2} className={input + ' mt-1'}
                 placeholder="Quando não souber responder, encaminhar para o WhatsApp." /></label>
-            <div className="rounded-md bg-zinc-50 border border-zinc-200 p-3.5">
-              <p className="text-xs font-semibold text-zinc-600 mb-2">CANAIS</p>
+            <div className="rounded-md bg-[var(--surface-2)] border border-[var(--border)] p-3.5">
+              <p className="text-xs font-semibold text-[var(--text-muted)] mb-2">CANAIS</p>
               <div className="flex flex-wrap gap-2">
-                <button onClick={() => set('channels', { ...agent.channels, site: !agent.channels.site })}
-                  className={cn('text-xs font-semibold px-3 py-2 rounded-lg border-2', agent.channels.site ? 'border-[var(--success-border)] bg-[var(--success-bg)] text-[var(--success-fg)]' : 'border-[var(--border)] bg-white text-[var(--text-muted)]')}>
+                {legacyPagesEnabled && <button type="button" onClick={() => set('channels', { ...agent.channels, site: !agent.channels.site })}
+                  className="il-option-choice" aria-pressed={agent.channels.site}>
                   Site {agent.channels.site ? '✓' : '—'}
-                </button>
+                </button>}
                 {canSeeChannels ? (
                   <Link href={`/canais?tab=canais${businessId ? `&b=${businessId}` : ''}`}
-                    className="text-xs font-semibold px-3 py-2 rounded-lg border-2 border-zinc-200 text-zinc-500"
+                    className={buttonCls('secondary', 'sm')}
                     title="O canal WhatsApp é conectado em Canais & Integrações; as conversas ficam em Conversas">
                     WhatsApp {pv?.whatsappStatus === 'connected' ? '✓' : '— (não conectado)'}
                   </Link>
                 ) : (
-                  <span className="text-xs font-semibold px-3 py-2 rounded-lg border-2 border-zinc-200 text-zinc-500"
+                  <span className="text-xs font-semibold px-3 py-2 rounded-lg border border-[var(--border)] text-[var(--text-muted)]"
                     title="O canal WhatsApp é conectado em Canais & Integrações">
                     WhatsApp {pv?.whatsappStatus === 'connected' ? '✓' : '— (não conectado)'}
                   </span>
@@ -217,15 +219,15 @@ export default function AgentePage() {
             </div>
           </section>
 
-          <section className="bg-white border border-zinc-200 rounded-lg p-5 space-y-3">
-            <h3 className="font-semibold text-sm flex items-center gap-2"><Icon n="chat" size={16} className="text-zinc-400" /> Conhecimento adicional</h3>
-            <p className="text-xs text-zinc-500">Uma linha por assunto, no formato <strong>Tema: resposta</strong>. Ex: <em>Estacionamento: temos convênio ao lado.</em></p>
+          <section className="ws-panel p-5 space-y-3">
+            <h3 className="font-semibold text-sm flex items-center gap-2"><Icon n="chat" size={16} className="text-[var(--text-faint)]" /> Conhecimento adicional</h3>
+            <p className="text-xs text-[var(--text-muted)]">Uma linha por assunto, no formato <strong>Tema: resposta</strong>. Ex: <em>Estacionamento: temos convênio ao lado.</em></p>
             <textarea value={agent.knowledgeOverride} onChange={(e) => set('knowledgeOverride', e.target.value)} rows={5} className={input}
               placeholder={'Estacionamento: temos convênio com o estacionamento ao lado.\nFormas de pagamento: PIX, cartão e dinheiro.'} />
-            <p className="text-xs text-zinc-500">Além disso, o agente usa: nome, descrição, serviços, preços públicos, duração, horários, endereço, FAQ e a seção Sobre.</p>
+            <p className="text-xs text-[var(--text-muted)]">{legacyPagesEnabled ? 'Além disso, o agente usa: nome, descrição, serviços, preços públicos, duração, horários, endereço, FAQ e a seção Sobre.' : 'Além disso, o agente usa: nome, descrição, serviços, preços, duração, horários e endereço.'}</p>
           </section>
 
-          <div className="sticky bottom-4">
+          <div className="pt-2">
             <Button variant="primary" size="lg" className="w-full sm:w-auto" onClick={save} disabled={saving}>
               {saving ? 'Salvando…' : 'Salvar agente'}
             </Button>
@@ -233,35 +235,35 @@ export default function AgentePage() {
         </div>
       ) : (
         <div className="space-y-4">
-          <section className="bg-white border border-zinc-200 rounded-lg p-5">
+          <section className="ws-panel p-5">
             <h3 className="font-semibold text-sm mb-2">Prévia da saudação</h3>
-            <p className="text-sm bg-zinc-50 border border-zinc-200 rounded-md p-3.5">{pv?.greeting}</p>
+            <p className="text-sm bg-[var(--surface-2)] border border-[var(--border)] rounded-md p-3.5">{pv?.greeting}</p>
           </section>
-          <section className="bg-white border border-zinc-200 rounded-lg p-5">
+          <section className="ws-panel p-5">
             <h3 className="font-semibold text-sm mb-3">O que o agente pode usar agora</h3>
             <dl className="text-sm space-y-2">
-              <div className="flex justify-between gap-3"><dt className="text-zinc-500 font-semibold">Empresa</dt><dd className="font-semibold text-right">{pv?.knowledge.businessName}</dd></div>
-              <div className="flex justify-between gap-3"><dt className="text-zinc-500 font-semibold">Serviços</dt><dd className="font-semibold text-right">{pv?.knowledge.services.length || 0}</dd></div>
-              <div className="flex justify-between gap-3"><dt className="text-zinc-500 font-semibold">Agendamento</dt><dd className="font-semibold text-right">{pv?.canBook ? 'disponível' : 'indisponível'}</dd></div>
-              <div className="flex justify-between gap-3"><dt className="text-zinc-500 font-semibold">FAQ publicado</dt><dd className="font-semibold text-right">{pv?.knowledge.faq.length || 0} item(ns)</dd></div>
-              <div className="flex justify-between gap-3"><dt className="text-zinc-500 font-semibold">Conhecimento extra</dt><dd className="font-semibold text-right">{pv?.knowledge.extra.length || 0} linha(s)</dd></div>
-              <div className="flex justify-between gap-3"><dt className="text-zinc-500 font-semibold">Horários</dt><dd className="font-semibold text-right max-w-[60%]">{pv?.knowledge.hours || '—'}</dd></div>
+              <div className="flex justify-between gap-3"><dt className="text-[var(--text-muted)] font-semibold">Empresa</dt><dd className="font-semibold text-right">{pv?.knowledge.businessName}</dd></div>
+              <div className="flex justify-between gap-3"><dt className="text-[var(--text-muted)] font-semibold">Serviços</dt><dd className="font-semibold text-right">{pv?.knowledge.services.length || 0}</dd></div>
+              <div className="flex justify-between gap-3"><dt className="text-[var(--text-muted)] font-semibold">Agendamento</dt><dd className="font-semibold text-right">{pv?.canBook ? 'disponível' : 'indisponível'}</dd></div>
+              <div className="flex justify-between gap-3"><dt className="text-[var(--text-muted)] font-semibold">{legacyPagesEnabled ? 'FAQ publicado' : 'Itens no FAQ'}</dt><dd className="font-semibold text-right">{pv?.knowledge.faq.length || 0} item(ns)</dd></div>
+              <div className="flex justify-between gap-3"><dt className="text-[var(--text-muted)] font-semibold">Conhecimento extra</dt><dd className="font-semibold text-right">{pv?.knowledge.extra.length || 0} linha(s)</dd></div>
+              <div className="flex justify-between gap-3"><dt className="text-[var(--text-muted)] font-semibold">Horários</dt><dd className="font-semibold text-right max-w-[60%]">{pv?.knowledge.hours || '—'}</dd></div>
             </dl>
           </section>
           {(pv?.knowledge.services.length || 0) > 0 && (
-            <section className="bg-white border border-zinc-200 rounded-lg p-5">
+            <section className="ws-panel p-5">
               <h3 className="font-semibold text-sm mb-2">Serviços que ele conhece</h3>
               <ul className="text-sm space-y-1.5">
                 {pv!.knowledge.services.map((s) => (
                   <li key={s.name} className="flex justify-between gap-3">
-                    <span>{s.name} <span className="text-zinc-400 text-xs">· {s.durationMin} min</span></span>
+                    <span>{s.name} <span className="text-[var(--text-faint)] text-xs">· {s.durationMin} min</span></span>
                     <span className="font-semibold">{money(s.price)}</span>
                   </li>
                 ))}
               </ul>
             </section>
           )}
-          <p className="text-xs text-zinc-500">
+          <p className="text-xs text-[var(--text-muted)]">
             O agente <strong>não cria, não cancela e não remarca</strong> agendamentos, e não promete condições que
             não estejam cadastradas — ele orienta e encaminha para a equipe.
           </p>

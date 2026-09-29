@@ -21,9 +21,14 @@ export interface ProductLimitsEnv {
 }
 
 /** A Página legada aparece na navegação operacional? */
-export function isLegacyPagesEnabled(env: ProductLimitsEnv | Record<string, string | undefined> = process.env): boolean {
+export function isLegacyPagesEnabled(env: ProductLimitsEnv | Record<string, string | undefined> = { GODOUTOR_LEGACY_PAGES: process.env.GODOUTOR_LEGACY_PAGES }): boolean {
   const v = String(env.GODOUTOR_LEGACY_PAGES || '').toLowerCase();
   return v === '1' || v === 'true' || v === 'on';
+}
+
+/** Public-page account action exists only while the legacy surface is enabled. */
+export function canShowPublicPageLink(legacyPagesEnabled: boolean, slug?: string | null): boolean {
+  return legacyPagesEnabled && Boolean(slug?.trim());
 }
 
 /** Áreas da navegação filtradas pelo limite de produto. */

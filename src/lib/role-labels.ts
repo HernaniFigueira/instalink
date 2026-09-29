@@ -22,5 +22,6 @@ export const ROLE_LABEL: Record<string, string> = {
 /** Rótulo legível do papel; devolve o código quando ele não tem tradução. */
 export function roleLabel(role?: string | null): string {
   if (!role) return '';
-  return ROLE_LABEL[role] || role;
+  const normalized = role.trim().toUpperCase();
+  return ROLE_LABEL[normalized] || role;
 }

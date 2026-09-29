@@ -133,7 +133,7 @@ describe('contraste ESTRUTURAL (temas claros/escuros) — fg sempre pelo bg real
 
 describe('fundo do workspace · UMA fonte de verdade', () => {
   it('token --workspace-bg único; shell aplica; Agenda sem bg externo', () => {
-    expect(css).toContain('--workspace-bg: linear-gradient(180deg, var(--bg-top)');
+    expect(css).toContain('--workspace-bg: var(--bg)');
     expect(css).toContain('background: var(--workspace-bg)');
     const shell = read('src/components/DashboardShell.tsx');
     expect(shell).not.toContain("bg-[var(--bg)]"); // segunda fonte removida

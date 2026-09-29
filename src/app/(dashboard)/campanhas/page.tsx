@@ -121,8 +121,8 @@ export default function CampanhasPage() {
 
       {/* A3.3 — consentimento explicado: quem autorizou entra, quem não
           autorizou fica de fora. Verde/laranja com ícone, não texto corrido. */}
-      <div className="mb-5 rounded-lg border border-[var(--lilac-border)] bg-[var(--lilac-bg)]/60 p-4">
-        <p className="text-sm font-semibold text-[var(--lilac-fg)] inline-flex items-center gap-2">
+      <div className="mb-5 rounded-lg border border-[var(--accent-border)] bg-[var(--accent-soft)]/60 p-4">
+        <p className="text-sm font-semibold text-[var(--accent-fg)] inline-flex items-center gap-2">
           <Icon n="shield" size={16} /> Quem pode receber promoção?
         </p>
         <ul className="mt-2.5 grid sm:grid-cols-2 gap-2">
@@ -141,7 +141,7 @@ export default function CampanhasPage() {
             </span>
           </li>
         </ul>
-        <p className="text-xs text-[var(--lilac-fg)]/90 mt-2.5">
+        <p className="text-xs text-[var(--accent-fg)]/90 mt-2.5">
           <strong>Regra de consentimento:</strong> {data.consent.rule} O sistema nunca presume autorização — promoções por
           WhatsApp/E-mail só vão para quem marcou a autorização no cadastro do cliente.
         </p>

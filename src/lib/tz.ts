@@ -102,6 +102,27 @@ export function formatDateBR(dateISO: string): string {
   return `${d}/${m}/${y}`;
 }
 
+/** Apresentação pt-BR completa para datas clínicas e seus horários. */
+export function formatDateTimeBR(dateISO: string, hm?: string, tz = DEFAULT_TIMEZONE): string {
+  if (!dateISO) return '';
+  // Timestamps absolutos são convertidos ao fuso do produto; datas civis
+  // (YYYY-MM-DD) preservam o dia enviado pela agenda, sem shift de UTC.
+  if (dateISO.includes('T')) {
+    const parsed = new Date(dateISO);
+    if (!Number.isNaN(parsed.getTime())) {
+      const p = new Intl.DateTimeFormat('en-CA', {
+        timeZone: effectiveTimezone(tz), year: 'numeric', month: '2-digit', day: '2-digit',
+        hour: '2-digit', minute: '2-digit', hourCycle: 'h23',
+      }).formatToParts(parsed);
+      const get = (type: string) => p.find((part) => part.type === type)?.value || '';
+      return `${get('day')}/${get('month')}/${get('year')} ${get('hour')}:${get('minute')}`;
+    }
+  }
+  const day = formatDateBR(dateISO.slice(0, 10));
+  const clock = hm || (dateISO.length > 10 ? dateISO.slice(11, 16) : '');
+  return `${day}${clock ? ` ${clock.slice(0, 5)}` : ''}`;
+}
+
 export function formatDateShort(dateISO: string): string {
   if (!isValidDateISO(dateISO)) return dateISO || '';
   const [, m, d] = dateISO.split('-');

@@ -72,20 +72,20 @@ describe('2 · sidebar colorida com ícone ativo em superfície branca', () => {
     expect(css).not.toMatch(/--il-nav:\s*#ffffff/);
   });
 
-  it('item ativo = variação VISÍVEL da cor (bg próprio + fg branca)', () => {
+  it('item ativo = variação VISÍVEL da cor (bg próprio + fg legível)', () => {
     expect(css).toMatch(/--il-nav-active:\s*#[0-9a-f]{6}/);
-    expect(css).toMatch(/--il-nav-active-fg:\s*#ffffff/);
+    expect(css).toMatch(/--il-nav-active-fg:\s*#[0-9a-f]{6}/i);
     const navHex = css.match(/--il-nav:\s*(#[0-9a-f]{6})/)![1];
     const activeHex = css.match(/--il-nav-active:\s*(#[0-9a-f]{6})/)![1];
     expect(activeHex).not.toBe(navHex);
   });
 
-  it('o ícone do item ativo é preenchido accent com fg de CONTRASTE (regra estrutural)', () => {
+  it('o ícone ativo não repete um chip preenchido (estado comunicado pelo item)', () => {
     const icon = ruleOf('.workspace-link__icon {');
-    expect(icon).toContain('border-radius: 50%');
+    expect(icon).toContain('border-radius: var(--radius-xs)');
     const active = ruleOf('.workspace-link[aria-current="page"] .workspace-link__icon {');
-    expect(active).toContain('background: var(--accent)'); // preenchido no tema
-    expect(active).toMatch(/color: var\(--accent-contrast\)/); // fg = token de contraste
+    expect(active).toContain('background: transparent');
+    expect(active).toContain('color: var(--il-nav-active-fg)');
   });
 
   it('estado continua sendo aria-current (nunca só cor)', () => {
@@ -154,20 +154,19 @@ describe('5 · botões migrados pela BASE (tokens), sem hex por tela', () => {
   it('a base continua token-driven na cor da marca', () => {
     // DECRETO FINAL: CTA primário e acento do header seguem o TEMA (--accent)
     expect(ui).toMatch(/primary:\s*\n?\s*'bg-\[var\(--accent\)\]/);
-    expect(ui).toMatch(/shadow-brand/); // sombra utilitária da base (não é cor)
+    expect(ui).not.toContain('shadow-brand'); // nenhum halo decorativo em CTA
     expect(ui).toContain('bg-[var(--surface-2)] text-[var(--accent)]');
   });
 
-  it('identidade do logo preservada; sidebar padrão = NEUTRO (sem roxo/lilás)', () => {
-    // O rampo índigo continua definido — IDENTIDADE do logo GoDoutor —
-    // enquanto a AÇÃO do workspace (--brand) é PRETO sofisticado/ônix e o
-    // DEFAULT da sidebar é o tema Neutro (ajuste final: nada de roxo/lilás).
+  it('identidade do logo preservada; default de navegação = Deep Blue', () => {
+    // A marca do produto permanece; o default operacional é Deep Blue e
+    // as preferências válidas salvas continuam prevalecendo.
     expect(css).toMatch(/--brand-600:\s*#4f46e5/);
     expect(css).toMatch(/--brand-700:\s*#4338ca/);
-    expect(css).toMatch(/--brand:\s*#1c1917/); // missão 7: preto premium
-    expect(css).toMatch(/--brand-strong:\s*#0c0a09/);
+    expect(css).toMatch(/--brand:\s*#2563eb/); // fallback do accent Deep Blue
+    expect(css).toMatch(/--brand-strong:\s*#1d4ed8/);
     // e a sidebar PADRÃO fala a família índigo aprovada
-    expect(css).toMatch(/--il-nav:\s*#d8dde6/); // default = Neutro
+    expect(css).toMatch(/--il-nav:\s*#071a33/); // default = azul-profundo
   });
 });
 
@@ -181,11 +180,10 @@ describe('6 · correções cirúrgicas (contrato dos 8 pontos)', () => {
     expect(css).toMatch(/\.global-search__field:focus-within\s*\{[^}]*box-shadow:/);
   });
 
-  it('2 · dashboard: métricas em card único sem degradê (missão 4: creme/amarelo SÓLIDO)', () => {
+  it('2 · dashboard: métricas em card único neutro sem degradê', () => {
     const card = ruleOf('.dsh-metrics {');
-    // MISSÃO 4 (premium): o amarelo/creme VOLTA como fundo SÓLIDO do único
-    // card de métricas — sem degradê (a proibição de gradiente segue).
-    expect(card).toContain('background: var(--sun-bg)');
+    // O cartão de métricas não é um estado: usa superfície estrutural.
+    expect(card).toContain('background: var(--surface)');
     expect(card).not.toContain('gradient');
   });
 
@@ -225,10 +223,9 @@ describe('6 · correções cirúrgicas (contrato dos 8 pontos)', () => {
     expect(topbar).toContain('<NotificationsBell');
   });
 
-  it('8 · “Novo agendamento” = violeta premium (CTA próprio, AA)', () => {
-    expect(ui).toMatch(/cta:\s*\n?\s*'bg-\[var\(--cta-bg\)\]/);
-    expect(css).toMatch(/--cta-bg:\s*#5b3fd4/);
-    expect(css).toMatch(/--cta-bg-hover:\s*#4a31b8/);
+  it('8 · “Novo agendamento” usa CTA principal temático (AA)', () => {
+    expect(ui).toMatch(/cta:\s*'primary'/);
+    expect(ui).toMatch(/primary:[\s\S]*?bg-\[var\(--accent\)\]/);
     // sem degradê no CTA
     expect(css).not.toMatch(/--cta-[a-z-]*:\s*linear-gradient/);
   });

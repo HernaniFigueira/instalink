@@ -54,19 +54,19 @@ describe('missão 4 · 1 — ação carvão com identidade preservada', () => {
     expect(css).toMatch(/--text-faint:\s*#6f6862/);
   });
 
-  it('identidade do logo intacta; sidebar padrão = Neutro (roxo/lilás removido)', () => {
+  it('identidade do logo intacta; sidebar padrão = Deep Blue', () => {
     expect(css).toMatch(/--brand-600:\s*#4f46e5/);
     expect(css).toMatch(/--brand-700:\s*#4338ca/);
-    expect(css).toMatch(/--il-nav:\s*#d8dde6/); // default = Neutro (ajuste final)
-    expect(css).toMatch(/--cta-bg:\s*#5b3fd4/); // CTA violeta aprovado (missão 3)
+    expect(css).toMatch(/--il-nav:\s*#071a33/); // default = azul-profundo
+    expect(css).toMatch(/--accent:\s*#2563eb/);
   });
 
   it('botões seguem token-driven: primary segue o TEMA (accent), secondary contornado', () => {
     // DECRETO FINAL: o CTA principal acompanha o tema da clínica (--accent)
     expect(ui).toMatch(/primary:\s*\n?\s*'bg-\[var\(--accent\)\]/);
     expect(ui).toMatch(/primary:[^}]*text-\[var\(--accent-contrast\)\]/);
-    expect(ui).toMatch(/secondary:\s*\n?\s*'bg-white text-\[var\(--text\)\] border/);
-    expect(ui).toMatch(/danger:\s*\n?\s*'bg-\[var\(--danger\)\]/); // destrutivo = vermelho mantido
+    expect(ui).toMatch(/secondary:\s*\n?\s*'bg-\[var\(--surface\)\] text-\[var\(--text\)\] border/);
+    expect(ui).toMatch(/destructive:\s*\n?\s*'bg-\[var\(--danger\)\]/); // destrutivo = vermelho mantido
   });
 });
 
@@ -76,11 +76,11 @@ describe('missão 4 · 2 — abas SEM sublinhado em todo o sistema', () => {
     expect(css).not.toContain('border-bottom-color');
   });
 
-  it('o padrão pill (ativo por superfície) é o único', () => {
+  it('as abas usam raio compacto e seleção por superfície', () => {
     const bar = ruleOf('.il-tabbar {');
-    expect(bar).toContain('border-radius: var(--radius-pill)');
+    expect(bar).toContain('border-radius: var(--radius-md)');
     const tab = ruleOf('.il-tab {');
-    expect(tab).toContain('border-radius: var(--radius-pill)');
+    expect(tab).toContain('border-radius: var(--radius-sm)');
     const active = ruleOf(".il-tab[aria-selected='true'] {");
     expect(active).toContain('background: var(--surface)');
   });
@@ -99,17 +99,17 @@ describe('missão 5 · 3 — tutor NEUTRO, pet protagonista (hierarquia vet)', (
     expect(drawer).not.toMatch(/il-idcard[^"]*shadow-md/);
   });
 
-  it('o bloco do PET usa o creme quente (o paciente da veterinária)', () => {
-    expect(pets).toMatch(/rounded-xl border border-\[var\(--sun-border\)\] bg-\[var\(--sun-bg\)\]/);
-    expect(pet360).toMatch(/rounded-xl border border-\[var\(--sun-border\)\] bg-\[var\(--sun-bg\)\]/);
-    expect(newClient).toMatch(/data-testid="vet-pet-section" className="rounded-xl border border-\[var\(--sun-border\)\] bg-\[var\(--sun-bg\)\]/);
+  it('o bloco do PET usa superfície neutra (identidade não significa warning)', () => {
+    expect(pets).toContain('border border-[var(--border)] bg-[var(--surface)]');
+    expect(pet360).toContain('border border-[var(--border)] bg-[var(--surface)]');
+    expect(newClient).toContain('data-testid="vet-pet-section" className="rounded-md border border-[var(--border)] bg-[var(--surface)]');
   });
 });
 
 describe('missão 4 · 4 — métricas do Dashboard em amarelo/creme SÓLIDO', () => {
-  it('card único com fundo sun sólido (sem degradê)', () => {
+  it('card único com superfície neutra (sem degradê)', () => {
     const card = ruleOf('.dsh-metrics {');
-    expect(card).toContain('background: var(--sun-bg)');
+    expect(card).toContain('background: var(--surface)');
     expect(card).not.toContain('gradient');
   });
 });
@@ -146,12 +146,12 @@ describe('missão 4 · 5 — pet sheet premium (visual; lógica intacta)', () =>
 describe('missão 4 · 6 — Pet 360 com dados claros + anotações em bloquinho', () => {
   it('Pet 360: nome forte e chips de espécie/raça/idade/peso', () => {
     expect(pet360).toMatch(/text-lg font-semibold text-\[var\(--text\)\] leading-tight/);
-    expect(pet360).toContain('rounded-pill border border-[var(--sun-border)] bg-[var(--sun-bg-strong)]');
+    expect(pet360).toContain('rounded-pill border border-[var(--border)] bg-[var(--surface-3)]');
   });
 
-  it('anotações administrativas com visual de bloquinho (sun sólido)', () => {
+  it('anotações administrativas em superfície neutra', () => {
     expect(drawer).toContain('Salvar anotação');
-    expect(drawer).toMatch(/rounded-xl border border-\[var\(--sun-border\)\] bg-\[var\(--sun-bg\)\]/);
+    expect(drawer).toMatch(/rounded-md border border-\[var\(--border\)\] bg-\[var\(--surface-2\)\]/);
     // persistência INTACTA: gravação continua sendo ação explícita (addNote)
     expect(drawer).toContain('async function addNote()');
   });
@@ -192,10 +192,11 @@ describe('missão 5 · 7 — padrão ÚNICO de títulos (chip + título + subtí
     expect(agenda).toContain('>Agenda</h1>');
   });
 
-  it('Conversas: chip do padrão (não mais chip carvão solto)', () => {
-    expect(conv).toContain('il-page-header__icon');
+  it('Conversas: marca discreta no cabeçalho do workspace full-height', () => {
+    expect(conv).toContain('conversation-mark');
+    expect(conv).toContain('conversation-pagebar__heading');
     expect(conv).not.toContain('bg-[var(--brand)] text-white flex items-center justify-center shadow-md');
-    expect(conv).toContain('>Conversas</h1>');
+    expect(conv).toContain('<h1>Conversas</h1>');
   });
 
   it('Clientes/Financeiro/Pendências com ícone no PageHeader', () => {
