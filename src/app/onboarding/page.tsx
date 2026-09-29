@@ -10,6 +10,7 @@
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { slugify } from '@/lib/utils';
+import { isLegacyPagesEnabled } from '@/lib/product';
 import { Icon } from '@/components/icons';
 import { SERVICE_MODEL_OPTIONS, modesForServiceModel, type ServiceModel } from '@/lib/onboarding';
 import { CLINIC_PRESETS } from '@/lib/clinic-presets';
@@ -30,6 +31,7 @@ const WHATSAPP_DRAFT_KEY = 'il-biz-draft';
 
 export default function CreateBusinessPage() {
   const router = useRouter();
+  const legacyPagesEnabled = isLegacyPagesEnabled();
   const [name, setName] = useState('');
   const [whatsapp, setWhatsapp] = useState('');
   const [model, setModel] = useState<ServiceModel>('agenda');
@@ -194,7 +196,15 @@ export default function CreateBusinessPage() {
                     />
                     <span className="min-w-0">
                       <span className="block text-sm font-semibold text-zinc-900">{opt.label}</span>
-                      <span className="block text-xs text-zinc-500 mt-0.5">{opt.hint}</span>
+                      <span className="block text-xs text-zinc-500 mt-0.5">
+                        {legacyPagesEnabled
+                          ? opt.hint
+                          : opt.id === 'produtos'
+                            ? 'Cadastro legado de dados de produtos; sem estoque, vendas ou dispensação. O uso clínico será decidido separadamente.'
+                            : opt.id === 'ambos'
+                              ? 'Agenda de atendimentos e cadastro legado de produtos; uso clínico definido separadamente.'
+                              : opt.hint}
+                      </span>
                     </span>
                   </label>
                 ))}
@@ -212,11 +222,11 @@ export default function CreateBusinessPage() {
                 </>
               )}
               {(model === 'produtos' || model === 'ambos') && (
-                <li className="flex items-center gap-1.5"><Icon n="check" size={12} className="text-emerald-600" /> Vitrine de produtos com CTA no WhatsApp</li>
+                <li className="flex items-center gap-1.5"><Icon n="check" size={12} className="text-emerald-600" /> {legacyPagesEnabled ? 'Vitrine de produtos com CTA no WhatsApp' : 'Cadastro legado de produtos (sem estoque, vendas ou dispensação; uso clínico definido separadamente)'}</li>
               )}
-              <li className="flex items-center gap-1.5"><Icon n="check" size={12} className="text-emerald-600" /> Página pública pronta para publicar</li>
+              <li className="flex items-center gap-1.5"><Icon n="check" size={12} className="text-emerald-600" /> {legacyPagesEnabled ? 'Página pública pronta para publicar' : 'Painel pronto para uso'}</li>
               {model === 'agenda' && (
-                <li className="flex items-center gap-1.5 text-zinc-400"><Icon n="x" size={12} /> Vitrine de produtos (opcional — ative em Recursos)</li>
+                <li className="flex items-center gap-1.5 text-zinc-400"><Icon n="x" size={12} /> {legacyPagesEnabled ? 'Vitrine de produtos (opcional — ative em Recursos)' : 'Cadastro legado de produtos (opcional — uso clínico definido separadamente)'}</li>
               )}
               {model === 'produtos' && (
                 <li className="flex items-center gap-1.5 text-zinc-400"><Icon n="x" size={12} /> Agenda e serviços (opcionais — ative em Recursos)</li>

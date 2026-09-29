@@ -20,6 +20,7 @@ import { ImageUpload } from '@/components/dashboard/ImageUpload';
 import { followsBusinessHours } from '@/lib/schedule';
 import { useOverlayDismissGuard } from '@/components/dashboard/OverlayDismissGuard';
 import { panelRoutesIn } from '@/lib/panel';
+import { isLegacyPagesEnabled } from '@/lib/product';
 
 // ── Confirmação de exclusão (em sheet, nunca confirm() nativo) ──
 export function DeleteSheet({ name, kindLabel, blocked, onDeactivate, onConfirm, onClose }: {
@@ -59,6 +60,7 @@ export function ServiceForm({ businessId, service, cats, pros, onClose, onSave }
   onClose: () => void;
   onSave: (p: Record<string, any>) => Promise<void>;
 }) {
+  const legacyPagesEnabled = isLegacyPagesEnabled();
   const [name, setName] = useState(service?.name || '');
   const [description, setDescription] = useState(service?.description || '');
   const [image, setImage] = useState(service?.image || '');
@@ -108,17 +110,19 @@ export function ServiceForm({ businessId, service, cats, pros, onClose, onSave }
             <input type="number" min={5} step={5} value={durationMin} onChange={(e) => setDurationMin(Number(e.target.value))} className={input + ' mt-1'} />
             <span className="text-[11px] text-zinc-500">Interna — usada pela agenda (conflito, buffer).</span></label>
         </div>
-        <label className="flex items-start gap-2.5 bg-zinc-50 border border-zinc-200 rounded-md px-3.5 py-3 cursor-pointer select-none">
-          <input type="checkbox" checked={showPrice} onChange={(e) => setShowPrice(e.target.checked)} className="mt-0.5 w-4 h-4 accent-emerald-600 shrink-0" />
-          <span className="text-sm">
-            <span className="font-semibold">Mostrar preço na página pública</span>
-            <span className="block text-xs text-zinc-500 mt-0.5">
-              {showPrice
-                ? 'O visitante vê o preço deste serviço na página e no assistente.'
-                : 'O preço continua salvo e visível aqui e na agenda — apenas some da página pública.'}
+        {legacyPagesEnabled && (
+          <label className="flex items-start gap-2.5 bg-zinc-50 border border-zinc-200 rounded-md px-3.5 py-3 cursor-pointer select-none">
+            <input type="checkbox" checked={showPrice} onChange={(e) => setShowPrice(e.target.checked)} className="mt-0.5 w-4 h-4 accent-emerald-600 shrink-0" />
+            <span className="text-sm">
+              <span className="font-semibold">Mostrar preço na página pública</span>
+              <span className="block text-xs text-zinc-500 mt-0.5">
+                {showPrice
+                  ? 'O visitante vê o preço deste serviço na página e no assistente.'
+                  : 'O preço continua salvo e visível aqui e na agenda — apenas some da página pública.'}
+              </span>
             </span>
-          </span>
-        </label>
+          </label>
+        )}
         <label className="block"><span className="text-xs font-semibold text-zinc-500">CATEGORIA</span>
           <select value={categoryId} onChange={(e) => setCategoryId(e.target.value)} className={input + ' mt-1'}>
             <option value="">Sem categoria</option>

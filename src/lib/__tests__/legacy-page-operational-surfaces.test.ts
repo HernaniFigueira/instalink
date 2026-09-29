@@ -50,6 +50,25 @@ describe('Clinical OS · superfícies operacionais da Página legada', () => {
     expect(legacyPaths).toContain('/pagina');
   });
 
+  it('neutraliza copy de páginas e vitrine quando a experiência legada está desligada', () => {
+    const resources = read('src/app/(dashboard)/recursos/page.tsx');
+    const professionals = read('src/app/(dashboard)/profissionais/page.tsx');
+    const dashboard = read('src/app/(dashboard)/dashboard/page.tsx');
+    const onboarding = read('src/app/onboarding/page.tsx');
+    const catalogPanels = read('src/components/dashboard/catalog-panels.tsx');
+
+    expect(resources).toMatch(/legacyPagesEnabled\s*\?\s*'Ligue e desligue o que existe no seu negócio\.[\s\S]*?\n\s*:\s*'Ligue e desligue recursos opcionais da unidade/);
+    expect(resources).toContain("hint: 'Cadastro legado de dados de apresentação; não controla estoque ou dispensação. A utilidade clínica será decidida separadamente.'");
+    expect(resources).toContain("'Ative para acessar o cadastro. Os dados preservados não controlam estoque ou dispensação.'");
+    expect(resources).toMatch(/legacyPagesEnabled\s*&&\s*<li>[\s\S]*?Configuração da página/);
+    expect(professionals).not.toContain('aparece na página pública');
+    expect(dashboard).toContain("item.id === 'products' ? { ...item, label: 'Revise dados legados de produtos' }");
+    expect(onboarding).toContain("opt.id === 'produtos'");
+    expect(onboarding).toContain('Cadastro legado de produtos (sem estoque, vendas ou dispensação; uso clínico definido separadamente)');
+    expect(onboarding).toContain("legacyPagesEnabled ? 'Página pública pronta para publicar' : 'Painel pronto para uso'");
+    expect(catalogPanels).toMatch(/legacyPagesEnabled\s*&&\s*\(\s*<label[\s\S]*?Mostrar preço na página pública/);
+  });
+
   it('preserva editor, slug público, APIs de página e rotas consumidas por widgets/agendamento', () => {
     expect(PANEL_ROUTES.some((route) => route.href === '/pagina')).toBe(true);
     expect(panelRouteFor('/pagina')).toBeTruthy();

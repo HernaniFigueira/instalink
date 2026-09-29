@@ -309,7 +309,11 @@ export default function DashboardPage() {
 
   const { user, business, totals, upcoming, checklist, pct, recent, today, crm, pageStats, whatsapp, ordersPanel, productsPanel, context } = data;
   const legacyPagesEnabled = isLegacyPagesEnabled();
-  const operationalChecklist = legacyPagesEnabled ? checklist : checklist.filter((item) => item.href.split('?')[0] !== '/pagina');
+  const operationalChecklist = legacyPagesEnabled
+    ? checklist
+    : checklist
+      .filter((item) => item.href.split('?')[0] !== '/pagina')
+      .map((item) => item.id === 'products' ? { ...item, label: 'Revise dados legados de produtos' } : item);
   const operationalSetupPct = legacyPagesEnabled
     ? pct
     : operationalChecklist.length

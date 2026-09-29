@@ -43,6 +43,58 @@ const GROUP_HINT: Record<string, string> = {
   Canais: 'Onde a conversa acontece',
 };
 
+// O catálogo de módulos também serve às páginas públicas legadas. Quando a
+// experiência legada está oculta, Recursos descreve apenas a função disponível
+// no painel — sem prometer uma vitrine ou outra superfície pública.
+function resourceCopy(row: FeatureRow, legacyPagesEnabled: boolean) {
+  if (legacyPagesEnabled) return { hint: row.hint, disabledHint: row.disabledHint };
+
+  const operationalCopy: Record<string, { hint: string; disabledHint: string }> = {
+    bookings: {
+      hint: 'Agendamentos organizados pela equipe na agenda da unidade.',
+      disabledHint: 'Novos agendamentos ficam indisponíveis enquanto o recurso estiver desligado.',
+    },
+    services: {
+      hint: 'Cadastro de serviços com preço e duração.',
+      disabledHint: 'Os serviços cadastrados são preservados enquanto o recurso estiver desligado.',
+    },
+    products: {
+      hint: 'Cadastro legado de dados de apresentação; não controla estoque ou dispensação. A utilidade clínica será decidida separadamente.',
+      disabledHint: 'O cadastro fica indisponível; os dados existentes permanecem preservados.',
+    },
+    reviews: {
+      hint: 'Avaliações e feedback associados ao negócio.',
+      disabledHint: 'As avaliações existentes permanecem preservadas.',
+    },
+    faq: {
+      hint: 'Perguntas frequentes cadastradas para consulta.',
+      disabledHint: 'As respostas cadastradas permanecem preservadas.',
+    },
+    gallery: {
+      hint: 'Imagens organizadas para apresentação do negócio.',
+      disabledHint: 'As imagens existentes permanecem preservadas.',
+    },
+    location: {
+      hint: 'Endereço e informações de localização do negócio.',
+      disabledHint: 'Os dados de localização permanecem preservados.',
+    },
+    about: {
+      hint: 'Informações institucionais do negócio.',
+      disabledHint: 'As informações existentes permanecem preservadas.',
+    },
+    agent: {
+      hint: 'Assistente que orienta com dados cadastrados do negócio.',
+      disabledHint: 'A configuração do assistente permanece preservada.',
+    },
+    whatsapp: {
+      hint: 'Atalho de contato por WhatsApp associado ao negócio.',
+      disabledHint: 'O atalho fica indisponível enquanto o recurso estiver desligado.',
+    },
+  };
+
+  return operationalCopy[row.id] || { hint: row.hint, disabledHint: row.disabledHint };
+}
+
 export default function RecursosPage() {
   const legacyPagesEnabled = isLegacyPagesEnabled();
   const { businessId, resolving, noBusiness, contextError, retry } = useBusinessId();
@@ -156,7 +208,9 @@ export default function RecursosPage() {
       <PageHeader
         icon="grid"
         title="Capacidades do sistema"
-        hint="Ligue e desligue o que existe no seu negócio. A página pública, o menu e os atalhos obedecem na hora."
+        hint={legacyPagesEnabled
+          ? 'Ligue e desligue o que existe no seu negócio. A página pública, o menu e os atalhos obedecem na hora.'
+          : 'Ligue e desligue recursos opcionais da unidade. Os registros existentes são preservados.'}
         action={
           <span className="flex flex-wrap items-center gap-2">
             <Badge tone={activeCount === rows.length ? 'green' : 'zinc'}>{activeCount} de {rows.length} ativos</Badge>
@@ -223,15 +277,17 @@ export default function RecursosPage() {
                     {row.label}
                     <Badge tone={row.enabled ? 'green' : 'zinc'}>{row.enabled ? 'Ativo' : 'Desativado'}</Badge>
                   </p>
-                  <p className="text-xs text-[var(--text-muted)] mt-1">{row.hint}</p>
+                  <p className="text-xs text-[var(--text-muted)] mt-1">{resourceCopy(row, legacyPagesEnabled).hint}</p>
                   {!row.enabled && (
-                    <p className="text-[11px] text-[var(--warning-fg)] mt-2 leading-snug">{row.disabledHint}</p>
+                    <p className="text-[11px] text-[var(--warning-fg)] mt-2 leading-snug">{resourceCopy(row, legacyPagesEnabled).disabledHint}</p>
                   )}
-                  {/* Produtos desligado: o caminho claro para cadastrar nunca
-                      some — a ativação é aqui em Recursos (regra do produto). */}
+                  {/* Produtos desligado: o caminho para abrir o cadastro nunca
+                      some — a ativação é aqui em Recursos. */}
                   {!row.enabled && row.id === 'products' && (
                     <p className="text-[11px] text-[var(--text-muted)] mt-2 leading-snug">
-                      Ative para cadastrar e exibir a vitrine. Produtos salvos continuam guardados.
+                      {legacyPagesEnabled
+                        ? 'Ative para cadastrar e exibir a vitrine. Produtos salvos continuam guardados.'
+                        : 'Ative para acessar o cadastro. Os dados preservados não controlam estoque ou dispensação.'}
                     </p>
                   )}
                 </div>
@@ -246,10 +302,10 @@ export default function RecursosPage() {
           <Icon n="shield" size={15} className="text-[var(--text-muted)]" /> Como funciona
         </p>
         <ul className="text-sm text-[var(--text-muted)] space-y-1.5">
-          <li>• <strong className="text-[var(--text)]">Módulo da empresa</strong> decide se o recurso existe (é o que você liga aqui).</li>
-          <li>• <strong className="text-[var(--text)]">Configuração da página</strong> decide aparência, ordem e conteúdo.</li>
-          <li>• Desativar oculta na hora — e <strong className="text-[var(--text)]">não apaga nada</strong>: textos, fotos, serviços e histórico ficam salvos.</li>
-          <li>• Reativar devolve o recurso exatamente como estava configurado.</li>
+          <li>• <strong className="text-[var(--text)]">Módulo da empresa</strong> decide se o recurso fica disponível (é o que você liga aqui).</li>
+          {legacyPagesEnabled && <li>• <strong className="text-[var(--text)]">Configuração da página</strong> decide aparência, ordem e conteúdo.</li>}
+          <li>• Desativar não apaga dados nem histórico já salvo.</li>
+          <li>• Reativar mantém as configurações existentes.</li>
         </ul>
       </SubCard>
     </>
