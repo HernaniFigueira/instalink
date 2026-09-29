@@ -1,7 +1,8 @@
-// Regra central de atribuição de profissional.
-// O cliente NUNCA escolhe; o servidor resolve. Política atual: "equilibrar
-// equipe" (menor carga no dia) — implementada pelo motor de slots (assign).
-// Arquitetado para futuros modos de distribuição plugarem aqui.
+// Atribuição de profissional — política interna da agenda.
+// O payload público nunca escolhe profissional (segurança: servidor resolve).
+// Política atual: menor carga no dia (slots/assign). Futuros modos de
+// distribuição (opcional por clínica/canal) plugam aqui. Não há promessa
+// de balanceamento automático universal na experiência clínica padrão.
 import type { Professional, Service } from './types';
 
 /** Profissionais ativos e elegíveis para o serviço ([] = todos). */

@@ -63,7 +63,7 @@ function resourceCopy(row: FeatureRow, legacyPagesEnabled: boolean) {
       disabledHint: 'O cadastro fica indisponível; os dados existentes permanecem preservados.',
     },
     reviews: {
-      hint: 'Avaliações e feedback associados ao negócio.',
+      hint: 'Avaliações e feedback associados à clínica.',
       disabledHint: 'As avaliações existentes permanecem preservadas.',
     },
     faq: {
@@ -71,23 +71,23 @@ function resourceCopy(row: FeatureRow, legacyPagesEnabled: boolean) {
       disabledHint: 'As respostas cadastradas permanecem preservadas.',
     },
     gallery: {
-      hint: 'Imagens organizadas para apresentação do negócio.',
+      hint: 'Imagens organizadas para apresentação da clínica.',
       disabledHint: 'As imagens existentes permanecem preservadas.',
     },
     location: {
-      hint: 'Endereço e informações de localização do negócio.',
+      hint: 'Endereço e informações de localização da clínica.',
       disabledHint: 'Os dados de localização permanecem preservados.',
     },
     about: {
-      hint: 'Informações institucionais do negócio.',
+      hint: 'Informações institucionais da clínica.',
       disabledHint: 'As informações existentes permanecem preservadas.',
     },
     agent: {
-      hint: 'Assistente que orienta com dados cadastrados do negócio.',
+      hint: 'Assistente que orienta com dados cadastrados da clínica.',
       disabledHint: 'A configuração do assistente permanece preservada.',
     },
     whatsapp: {
-      hint: 'Atalho de contato por WhatsApp associado ao negócio.',
+      hint: 'Atalho de contato por WhatsApp associado à clínica.',
       disabledHint: 'O atalho fica indisponível enquanto o recurso estiver desligado.',
     },
   };
@@ -160,14 +160,15 @@ export default function RecursosPage() {
   // ── Estados de CONTEXTO (antes de falar de dados) ────────────
   // Sem empresa na conta: não é erro — é um estado com caminho claro.
   if (noBusiness) {
+    const legacy = legacyPagesEnabled;
     return (
       <div className="bg-white border border-zinc-200 rounded-lg text-center py-12 px-6">
         <span className="mx-auto w-10 h-10 rounded-md bg-zinc-100 flex items-center justify-center text-zinc-400"><Icon n="store" size={20} /></span>
-        <h2 className="font-semibold text-sm mt-3">Nenhuma empresa nesta conta ainda</h2>
+        <h2 className="font-semibold text-sm mt-3">{legacy ? 'Nenhuma empresa nesta conta ainda' : 'Nenhuma clínica nesta conta ainda'}</h2>
         <p className="text-sm text-zinc-500 mt-1 max-w-sm mx-auto">
-          Os recursos (agendamentos, serviços, produtos…) pertencem a uma empresa. Crie a sua para ativar o que você precisa.
+          {legacy ? 'Os recursos (agendamentos, serviços, produtos…) pertencem a uma empresa. Crie a sua para ativar o que você precisa.' : 'Os recursos (agendamentos, serviços, produtos…) pertencem a uma clínica. Crie a sua para ativar o que você precisa.'}
         </p>
-        <Link href="/onboarding" className="mt-4 inline-block"><Button variant="primary" size="sm">Criar meu negócio</Button></Link>
+        <Link href="/onboarding" className="mt-4 inline-block"><Button variant="primary" size="sm">{legacy ? 'Criar meu negócio' : 'Criar minha clínica'}</Button></Link>
       </div>
     );
   }

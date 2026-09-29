@@ -18,10 +18,11 @@ interface DeleteAsk {
 }
 
 // ═══════════════════════════════════════════════════════════════
-// PROFISSIONAIS — "quem atende"
-// Cada profissional tem nome, foto, vínculo com serviços e horário
-// (herdado da empresa ou próprio). A distribuição dos agendamentos é
-// automática: aqui o dono só diz QUEM existe e QUANDO atende.
+// PROFISSIONAIS — quem realiza atendimento clínico
+// Cada profissional tem nome, foto, vínculo com serviços e disponibilidade
+// (herdada da clínica ou própria). A atribuição de profissional a um
+// atendimento é política interna da agenda; não há regra universal fixa
+// nesta tela — Workflow futuro definirá políticas por clínica/canal.
 // ═══════════════════════════════════════════════════════════════
 export default function ProfissionaisPage() {
   const params = useSearchParams();
@@ -112,7 +113,7 @@ export default function ProfissionaisPage() {
     <PageHeader
       icon="users"
       title="Profissionais"
-      hint="Quem atende no seu negócio. Cada pessoa pode ter agenda própria."
+      hint="Quem realiza os atendimentos da clínica. Cada profissional pode ter agenda própria."
     />
   );
 
@@ -148,9 +149,8 @@ export default function ProfissionaisPage() {
 
       {loaded && (
         <SubCard className="mb-4 p-4 text-sm text-[var(--text-muted)]">
-          <strong className="text-[var(--text)]">A distribuição dos agendamentos é automática:</strong>{' '}
-          o cliente nunca escolhe profissional. Você só cadastra quem atende; a agenda equilibra a equipe
-          sozinha, respeitando horários, vínculos com serviços e pausas.
+          Os atendimentos são vinculados a profissionais conforme disponibilidade, vínculos com serviços e agenda.
+          A política de escolha por canal será configurável no Workflow futuro — sem regra universal fixa nesta tela.
         </SubCard>
       )}
 
