@@ -328,11 +328,15 @@ A classificação abaixo distingue homologação reportada anteriormente pelo us
   bloqueios; snap; recursos; disponibilidade**. Nada disso foi antecipado aqui. Componentes atuais relevantes: `GridColumn` e o handler `onEmptyPress` em `src/app/(dashboard)/agenda/page.tsx`; movimento de reserva existente passa por `onPressStart`/`onPressMove`/`onPressEnd` e pelos helpers de `src/lib/agenda-drag.ts`. Riscos: confundir seleção de horário vazio com arraste de reserva/drop; disparar clique/criação após um gesto; diferenças de pointer capture/toque e acessibilidade por teclado; cobrir status de indisponibilidade sem sugerir confirmação válida. Evolução sugerida: selecionar somente em célula vazia, mostrar overlay provisório durante o gesto, cancelar sem seed/reserva em Escape/cancelamento ou em conflito com interação de bloco, e abrir `NewBookingSheet` com data/hora (e duração sugerida) ao soltar; disponibilidade e validação continuam pertencendo ao fluxo de booking existente. **Propriedade:** o snap deve ser controlado pela geometria/configuração da grade (reutilizando `minuteFromOffsetY`/passo da Agenda, sem criar um segundo passo); a duração sugerida deve ser controlada pela interação de seleção da Agenda (intervalo inicial/final quantizado pelo mesmo snap), enquanto serviço, disponibilidade e aceitação final permanecem sob `NewBookingSheet`/validações existentes. Refinar limiares, touch/teclado e confirmação em missão própria antes de codificar.
 - Homologação em browser destas correções: pendente, com prioridade 1366 e 1024; sanity check em 1440 e 390. Sem browser disponível, registrar fonte/testes e manter o estado visual pendente.
 - **Fechamento da #43 (esta rodada), somente duas pendências confirmadas em vídeo:**
-  - *Prefill da grade:* a causa raiz era o efeito de troca de serviço em `NewBookingSheet`, que apagava `proId`/`time`
-    na PRIMEIRA seleção de serviço (só a montagem era preservada) — a data chegava, hora e profissional não.
-    Agora a primeira escolha de serviço preserva o trio e só sai o profissional inelegível; quem confirma o horário
-    é a disponibilidade real (slots), sem reserva silenciosa. Coberto por teste focal que reproduz o clique REAL na
-    grade (`src/components/__tests__/agenda-cell-prefill-flow.test.tsx`).
+  - *Prefill da grade:* duas causas somadas. (1) O efeito de troca de serviço em `NewBookingSheet` apagava `proId`/`time`
+    na PRIMEIRA seleção de serviço (só a montagem era preservada). (2) Mesmo corrigido, nada aparecia: no catálogo real
+    cada serviço está ligado a UM profissional, então o campo "Profissional" não é renderizado (`eligiblePros.length > 1`)
+    e o bloco de horários exige `date && serviceId` — sem serviço escolhido, só a Data ficava visível.
+    Agora: a primeira escolha de serviço preserva o trio; o profissional só sai se for inelegível; e, existindo
+    EXATAMENTE UM serviço ativo/agendável elegível para a coluna clicada (vínculo real `professionalIds`, nunca
+    nome/cargo), ele entra pré-selecionado — aí data, hora e profissional aparecem no fluxo. Com 0 ou 2+ elegíveis
+    nada é escolhido. Semana nunca inventa profissional. Coberto por teste focal que espia as PROPS recebidas pelo
+    `NewBookingSheet` após o clique real na grade (`src/components/__tests__/agenda-cell-prefill-flow.test.tsx`).
   - *Geometria:* Novo agendamento sozinho usa `WORKSPACE_SHEET_SIZES.standard`; com o cadastro aninhado a faixa usa
     `WORKSPACE_SHEET_SIZES.expanded` e os DOIS painéis recebem o mesmo preset compartilhado
     (`WORKSPACE_NESTED_PANEL`) em um grid 50/50. Em viewport sem largura confortável o cadastro assume a faixa e o

@@ -1,47 +1,55 @@
 // @vitest-environment jsdom
 // ═══════════════════════════════════════════════════════════════
-// AGENDA → NOVO AGENDAMENTO · PREFILL COMPLETO (data + hora + profissional)
+// AGENDA (modo DIA) → NOVO AGENDAMENTO · CONTEXTO REAL DA CÉLULA
 // ═══════════════════════════════════════════════════════════════
-// Este teste NÃO instancia o NewBookingSheet à mão com `initial` já pronto.
-// Ele reproduz a INTERAÇÃO REAL da grade:
+// Este arquivo existe porque a versão anterior PASSAVA e o browser continuava
+// quebrado. O catálogo daquele teste era irreal: todo serviço aceitava todos
+// os profissionais, então `eligiblePros.length > 1` e o campo "Profissional"
+// aparecia — situação que NÃO EXISTE no catálogo real (clinicavitta), onde
+// cada serviço está ligado a UM profissional (`professionalIds`) e o campo nem
+// é renderizado. Além disso, o teste inferia o seed pelo DOM em vez de provar
+// as PROPS recebidas pelo NewBookingSheet.
 //
-//   render da AgendaPage (dia, colunas por profissional)
-//     → click/pointer numa célula vazia com geometria real (rect medido)
-//     → cálculo da célula (minuteFromOffsetY)
-//     → setCreating(seed)
-//     → NewBookingSheet(initial)
-//     → estado local (date/time/professionalId)
-//     → seleção do serviço
-//     → carregamento dos slots
+// Aqui o fluxo é o REAL e o catálogo é o REAL:
+//   AgendaPage (Dia, colunas por profissional)
+//     → click numa coordenada vertical conhecida (rect medido)
+//     → GridColumn → minuteFromOffsetY → newBookingSeedFromAgendaCell
+//     → setCreating → NewBookingSheet(initial)  [PROPS ESPIADAS]
+//     → serviço / slots / preservação
 //
-// Cobertura exigida pelo fechamento da #43:
-//   1. click real da grade → date + time + professionalId;
-//   2. preservação do prefill após abertura (e após escolher o serviço);
-//   3. profissional incompatível com o serviço NÃO permanece inválido;
-//   4. horário indisponível NÃO vira booking (só prefill, nunca criação).
-//
-// Dados SINTÉTICOS em memória (api-client + fetch mockados) — zero escrita
-// em banco/remoto. Nenhuma regra clínica/backend é alterada.
+// Provas exigidas:
+//   1. o seed recebido contém date + time + professionalId;
+//   2. a intenção é preservada (e aparece no fluxo);
+//   3. profissional elegível fica; inelegível sai, mantendo as opções válidas;
+//   4. serviço só é pré-escolhido quando existe EXATAMENTE UM elegível;
+//   5. Semana não inventa profissional;
+//   6. nenhum booking é criado automaticamente.
 import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { useSyncExternalStore } from 'react';
+import { addDaysISO, todayISO } from '@/lib/tz';
 
-// ── Constantes da grade (espelham lib/agenda-drag + agenda/page) ──────────
 const PX_PER_HOUR = 128;
-const GRID_START = 8 * 60; // 08:00
-const COL_RECT_TOP = 312;  // topo real da coluna (rect medido no browser)
-const COL_RECT_HEIGHT = 12 * PX_PER_HOUR; // 08:00 → 20:00
+const COL_RECT_TOP = 312;
+const COL_RECT_HEIGHT = 12 * PX_PER_HOUR;
+const COL_RECT_WIDTH = 400;
 
-const BUSINESS = 'biz-t1';
-const PRO_A = 'pro-a';
-const PRO_B = 'pro-b';
-const PRO_C = 'pro-c';
-const SVC = 'svc-1';      // aceita os três profissionais
-const SVC_RESTRICT = 'svc-2'; // aceita pro-b e pro-c (pro-a NÃO realiza)
-const DATE = '2026-10-01'; // 01/10/2026
+const BUSINESS = 'biz-clinica';
+// Catálogo REAL (padrão clinicavitta): 1 serviço ↔ 1 profissional.
+const ORLANDO = 'pro-orlando';
+const MICHELLE = 'pro-michelle';
+const HERNANI = 'pro-hernani';
+const SVC_ODONTO = 'svc-odonto';   // só Orlando  → Orlando tem 1 elegível
+const SVC_CARDIO = 'svc-cardio';   // só Hernani  → Hernani tem 1 elegível
+const SVC_ESTETICA = 'svc-estetica'; // só Michelle
+const SVC_LIMPEZA = 'svc-limpeza';   // só Michelle → Michelle tem 2 elegíveis
+const SVC_INATIVO = 'svc-inativo';   // inativo/não agendável: nunca conta
 
-// ── next/navigation: useSearchParams sincronizado com history.pushState ──
+const TZ = 'America/Sao_Paulo';
+const DATE = addDaysISO(todayISO(new Date(), TZ), 2);
+
+// ── next/navigation ──────────────────────────────────────────────────────
 const nav = vi.hoisted(() => {
   const listeners = new Set<() => void>();
   return {
@@ -56,26 +64,55 @@ vi.mock('next/navigation', () => ({
   usePathname: () => '/agenda',
 }));
 
-// ── Fixtures sintéticas ──────────────────────────────────────────────────
-const FIXTURE = vi.hoisted(() => ({
-  services: [
-    // Aceita os TRÊS profissionais (campo "Profissional" fica visível).
-    { id: 'svc-1', businessId: 'biz-t1', name: 'Consulta', durationMin: 30, price: 0, active: true, bookable: true, professionalIds: ['pro-a', 'pro-b', 'pro-c'] },
-    // pro-a NÃO realiza: serve para provar que a combinação inválida sai.
-    { id: 'svc-2', businessId: 'biz-t1', name: 'Cirurgia', durationMin: 60, price: 0, active: true, bookable: true, professionalIds: ['pro-b', 'pro-c'] },
-  ],
-  professionals: [
-    { id: 'pro-a', businessId: 'biz-t1', name: 'Dra. Ana', role: 'Clínica geral', photo: '', active: true, createdAt: '2026-01-01' },
-    { id: 'pro-b', businessId: 'biz-t1', name: 'Dr. Bruno', role: 'Cirurgião', photo: '', active: true, createdAt: '2026-01-01' },
-    { id: 'pro-c', businessId: 'biz-t1', name: 'Dra. Carla', role: 'Cirurgiã', photo: '', active: true, createdAt: '2026-01-01' },
-  ],
-  availability: Array.from({ length: 7 }, (_, wd) => ({
-    id: `av-${wd}`, businessId: 'biz-t1', professionalId: '', serviceId: '',
-    weekday: wd, start: '08:00', end: '18:00', slotMin: 30,
-  })),
-  exceptions: [],
-  bookings: [] as any[],
-}));
+// ── ESPiÃO do NewBookingSheet: prova as PROPS (não o DOM) ─────────────────
+const spy = vi.hoisted(() => ({ props: [] as any[] }));
+vi.mock('@/components/dashboard/NewBookingSheet', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@/components/dashboard/NewBookingSheet')>();
+  return {
+    ...actual,
+    NewBookingSheet: (props: any) => {
+      spy.props.push(props);
+      return actual.NewBookingSheet(props);
+    },
+  };
+});
+
+const FIXTURE = vi.hoisted(() => {
+  const defaults = () => ({
+    services: [
+      { id: 'svc-odonto', businessId: 'biz-clinica', name: 'Consulta Odontológica', durationMin: 60, price: 0, active: true, bookable: true, professionalIds: ['pro-orlando'] },
+      { id: 'svc-cardio', businessId: 'biz-clinica', name: 'Consulta Cardiológica', durationMin: 45, price: 0, active: true, bookable: true, professionalIds: ['pro-hernani'] },
+      { id: 'svc-estetica', businessId: 'biz-clinica', name: 'Estética', durationMin: 30, price: 0, active: true, bookable: true, professionalIds: ['pro-michelle'] },
+      { id: 'svc-limpeza', businessId: 'biz-clinica', name: 'Limpeza de pele', durationMin: 30, price: 0, active: true, bookable: true, professionalIds: ['pro-michelle'] },
+      { id: 'svc-inativo', businessId: 'biz-clinica', name: 'Serviço inativo', durationMin: 30, price: 0, active: false, bookable: false, professionalIds: ['pro-michelle'] },
+    ],
+    professionals: [
+      { id: 'pro-orlando', businessId: 'biz-clinica', name: 'Orlando', role: 'Dentista', photo: '', active: true, createdAt: '2026-01-01' },
+      { id: 'pro-michelle', businessId: 'biz-clinica', name: 'Michelle', role: 'Esteticista', photo: '', active: true, createdAt: '2026-01-01' },
+      { id: 'pro-hernani', businessId: 'biz-clinica', name: 'Hernani', role: 'Cardiologista', photo: '', active: true, createdAt: '2026-01-01' },
+    ],
+    // Regras POR PROFISSIONAL (como no catálogo real).
+    availability: Array.from({ length: 7 }, (_, wd) => [
+      { id: `av-o-${wd}`, businessId: 'biz-clinica', professionalId: 'pro-orlando', serviceId: '', weekday: wd, start: '09:00', end: '18:00', slotMin: 30 },
+      { id: `av-m-${wd}`, businessId: 'biz-clinica', professionalId: 'pro-michelle', serviceId: '', weekday: wd, start: '09:00', end: '18:00', slotMin: 30 },
+      { id: `av-h-${wd}`, businessId: 'biz-clinica', professionalId: 'pro-hernani', serviceId: '', weekday: wd, start: '09:00', end: '18:00', slotMin: 30 },
+    ]).flat(),
+    exceptions: [] as any[],
+    bookings: [] as any[],
+  });
+  const state = defaults();
+  return {
+    state,
+    reset() {
+      const d = defaults();
+      state.services = d.services;
+      state.professionals = d.professionals;
+      state.availability = d.availability;
+      state.exceptions = d.exceptions;
+      state.bookings = d.bookings;
+    },
+  };
+});
 
 vi.mock('@/lib/api-client', () => ({
   apiGet: vi.fn(async (url: string) => {
@@ -83,8 +120,8 @@ vi.mock('@/lib/api-client', () => ({
       return {
         ok: true, status: 200,
         data: {
-          services: FIXTURE.services, professionals: FIXTURE.professionals,
-          availability: FIXTURE.availability, exceptions: FIXTURE.exceptions,
+          services: FIXTURE.state.services, professionals: FIXTURE.state.professionals,
+          availability: FIXTURE.state.availability, exceptions: FIXTURE.state.exceptions,
           business: {
             booking: { leadMin: 0, bufferMin: 0, horizonDays: 60, teamMode: 'team', cancelUntilMin: 60 },
             businessTimezone: 'America/Sao_Paulo',
@@ -92,7 +129,7 @@ vi.mock('@/lib/api-client', () => ({
         },
       };
     }
-    if (url.includes('/api/bookings')) return { ok: true, status: 200, data: { bookings: FIXTURE.bookings } };
+    if (url.includes('/api/bookings')) return { ok: true, status: 200, data: { bookings: FIXTURE.state.bookings } };
     if (url.includes('/api/queue')) return { ok: true, status: 200, data: { entries: [], done: [] } };
     return { ok: true, status: 200, data: {} };
   }),
@@ -105,9 +142,8 @@ vi.mock('@/components/dashboard/use-revalidate', () => ({ useRevalidateOnFocus: 
 
 import AgendaPage from '@/app/(dashboard)/agenda/page';
 
-// ── Controle do que a API de slots devolve ───────────────────────────────
 const slotsApi = vi.hoisted(() => ({
-  slots: ['08:00', '08:30', '09:00', '09:30', '10:00', '10:30', '11:00'],
+  slots: ['09:00', '09:30', '10:00', '10:30', '11:00', '11:30'],
   calls: [] as string[],
   posts: 0,
 }));
@@ -134,15 +170,15 @@ beforeAll(() => {
 
 beforeEach(() => {
   document.body.innerHTML = '';
-  window.history.replaceState(null, '', `/agenda?b=${BUSINESS}&view=day&data=${DATE}`);
-  slotsApi.slots = ['08:00', '08:30', '09:00', '09:30', '10:00', '10:30', '11:00'];
+  FIXTURE.reset();
+  spy.props.length = 0;
+  slotsApi.slots = ['09:00', '09:30', '10:00', '10:30', '11:00', '11:30'];
   slotsApi.calls = [];
   slotsApi.posts = 0;
-  // NewBookingSheet usa `fetch` nativo para /api/bookings?mode=slots-admin.
   global.fetch = vi.fn(async (input: any, init?: any) => {
     const url = String(input?.url || input);
-    if (init?.method === 'POST' || init?.body) slotsApi.posts += 1;
-    slotsApi.calls.push(url);
+    if (init?.method === 'POST') slotsApi.posts += 1;
+    if (url.includes('mode=slots-admin')) slotsApi.calls.push(url);
     if (url.includes('mode=slots-admin')) {
       return {
         ok: true, status: 200,
@@ -155,190 +191,230 @@ beforeEach(() => {
 
 afterEach(cleanup);
 
-/** Coluna da grade do profissional (elemento real que recebe o click). */
-function gridColumn(professionalId: string): HTMLElement {
-  const el = document.querySelector<HTMLElement>(`[data-agenda-column="${professionalId}"]`);
-  if (!el) throw new Error(`coluna da grade não encontrada: ${professionalId}`);
-  return el;
-}
-
-/** Geometria REAL da coluna (jsdom devolve zeros — medimos como o browser). */
-function measureColumn(el: HTMLElement) {
+// ── helpers de geometria REAL (nada de chutar constantes) ─────────────────
+function gridColumn(selector: string): HTMLElement {
+  const el = document.querySelector<HTMLElement>(selector);
+  if (!el) throw new Error(`coluna da grade não encontrada: ${selector}`);
   Object.defineProperty(el, 'getBoundingClientRect', {
     configurable: true,
     value: () => ({
-      x: 0, y: COL_RECT_TOP, top: COL_RECT_TOP, left: 0, right: 400, bottom: COL_RECT_TOP + COL_RECT_HEIGHT,
-      width: 400, height: COL_RECT_HEIGHT, toJSON: () => ({}),
+      x: 0, y: COL_RECT_TOP, top: COL_RECT_TOP, left: 0, right: COL_RECT_WIDTH,
+      bottom: COL_RECT_TOP + COL_RECT_HEIGHT, width: COL_RECT_WIDTH, height: COL_RECT_HEIGHT,
+      toJSON: () => ({}),
     }) as DOMRect,
   });
-}
-
-/** clientY, em px de viewport, do instante `hh:mm` dentro da coluna. */
-function clientYFor(time: string): number {
-  const [h, m] = time.split(':').map(Number);
-  const minutes = h * 60 + m;
-  return COL_RECT_TOP + ((minutes - GRID_START) / 60) * PX_PER_HOUR;
-}
-
-async function renderAgenda() {
-  const utils = render(<AgendaPage />);
-  await screen.findByText('Dra. Ana', {}, { timeout: 8000 });
-  await waitFor(() => expect(gridColumn(PRO_A)).toBeTruthy());
-  return utils;
-}
-
-/** O overlay real do "Novo agendamento" (dialog do Drawer). */
-function sheet(): HTMLElement {
-  const el = document.querySelector<HTMLElement>('dialog.il-drawer');
-  if (!el) throw new Error('overlay "Novo agendamento" não está aberto');
   return el;
 }
 
-/** Abre o "Novo agendamento" clicando de verdade numa célula vazia. */
+/** Primeiro rótulo do gutter de horas = início real da grade (medido do DOM). */
+function gridStartMinute(): number {
+  const first = Array.from(document.querySelectorAll('span'))
+    .map((el) => el.textContent?.trim() || '')
+    .find((t) => /^\d{2}:\d{2}$/.test(t));
+  if (!first) throw new Error('gutter de horas não encontrado');
+  const [h, m] = first.split(':').map(Number);
+  return h * 60 + m;
+}
+
+function clientYFor(time: string): number {
+  const [h, m] = time.split(':').map(Number);
+  return COL_RECT_TOP + (((h * 60 + m) - gridStartMinute()) / 60) * PX_PER_HOUR;
+}
+
+async function renderAgenda(search = `?b=${BUSINESS}&view=day&data=${DATE}`) {
+  window.history.replaceState(null, '', `/agenda${search}`);
+  render(<AgendaPage />);
+  // Na SEMANA as colunas são dias (não profissionais): esperar por coluna.
+  await waitFor(() => expect(document.querySelector('[data-agenda-column]')).toBeTruthy(), { timeout: 5000 });
+}
+
+/** Clique REAL numa coordenada vertical conhecida da coluna. */
 async function clickEmptyCell(professionalId: string, time: string) {
-  const col = gridColumn(professionalId);
-  measureColumn(col);
+  const start = gridStartMinute();
+  const col = gridColumn(`[data-agenda-column-professional="${professionalId}"]`);
   fireEvent.click(col, { clientX: 120, clientY: clientYFor(time) });
   await waitFor(() => expect(document.querySelector('dialog.il-drawer')).toBeTruthy(), { timeout: 5000 });
-  await waitFor(() => expect(screen.getByRole('heading', { name: 'Novo agendamento' })).toBeTruthy(), { timeout: 5000 });
+  return start;
 }
 
-function dateInput(): HTMLInputElement {
-  return within(sheet()).getByLabelText(/^3\. Data/) as HTMLInputElement;
-}
-function serviceSelect(): HTMLSelectElement {
-  return within(sheet()).getByLabelText(/^2\. Serviço/) as HTMLSelectElement;
-}
-function proSelect(): HTMLSelectElement | null {
-  return within(sheet()).queryByLabelText(/^Profissional/) as HTMLSelectElement | null;
-}
-function slotButton(time: string): HTMLElement | null {
-  const btn = Array.from(sheet().querySelectorAll('button'))
-    .find((b) => b.textContent?.trim() === time && b.className.includes('il-option-choice'));
-  return (btn as HTMLElement) || null;
-}
+const sheet = () => document.querySelector<HTMLElement>('dialog.il-drawer')!;
+const dateInput = () => within(sheet()).getByLabelText(/^3\. Data/) as HTMLInputElement;
+const serviceSelect = () => within(sheet()).getByLabelText(/^2\. Serviço/) as HTMLSelectElement;
+const proSelect = () => within(sheet()).queryByLabelText(/^Profissional/) as HTMLSelectElement | null;
+const slotButton = (time: string) =>
+  (Array.from(sheet().querySelectorAll('button'))
+    .find((b) => b.textContent?.trim() === time && b.className.includes('il-option-choice')) as HTMLElement) || null;
+/** Últimas props entregues ao NewBookingSheet (o seed do clique). */
+const seed = () => spy.props[spy.props.length - 1];
 
 // ═════════════════════════════════════════════════════════════════════════
-describe('1 · click real da grade → date + time + professionalId', () => {
-  it('o clique numa célula vazia entrega data, hora E profissional da coluna', async () => {
+describe('1 · o clique entrega date + time + professionalId ao NewBookingSheet', () => {
+  it('clique na coluna do Hernani às 10:00 entrega o trio completo (prova por PROPS)', async () => {
     await renderAgenda();
-    await clickEmptyCell(PRO_A, '09:30');
+    await clickEmptyCell(HERNANI, '10:00');
 
-    // Data = dia da coluna clicada.
+    // PROVA: o seed recebido pelo componente, não inferência pelo DOM.
+    expect(seed().initial).toMatchObject({
+      date: DATE,
+      time: '10:00',
+      professionalId: HERNANI,
+    });
+    // E o campo de data reflete a data da coluna.
     expect(dateInput().value).toBe(DATE);
-    // O horário clicado chega como intenção inicial preservada no estado.
-    expect(screen.queryByText(/Nenhum horário disponível/)).toBeNull();
-    // O profissional da coluna chega (e é visível assim que o serviço entra).
-    await userEvent.selectOptions(serviceSelect(), SVC);
-    await waitFor(() => expect(proSelect()).toBeTruthy());
-    expect(proSelect()!.value).toBe(PRO_A);
-    // E o horário 09:30 permanece selecionado porque existe nos slots reais.
-    await waitFor(() => expect(slotButton('09:30')).toBeTruthy());
-    expect(slotButton('09:30')!.getAttribute('aria-pressed')).toBe('true');
+  });
+
+  it('o horário vem da posição vertical (snap de 5 min, medido na grade real)', async () => {
+    await renderAgenda();
+    const start = gridStartMinute();
+    const col = gridColumn(`[data-agenda-column-professional="${ORLANDO}"]`);
+    // 07 minutos após 10:00 → snap para 10:05.
+    const [h, m] = '10:00'.split(':').map(Number);
+    const y = COL_RECT_TOP + (((h * 60 + m + 7) - start) / 60) * PX_PER_HOUR;
+    fireEvent.click(col, { clientX: 120, clientY: y });
+    await waitFor(() => expect(document.querySelector('dialog.il-drawer')).toBeTruthy(), { timeout: 5000 });
+    expect(seed().initial.time).toBe('10:05');
+  });
+
+  it('cada coluna entrega o SEU profissional', async () => {
+    await renderAgenda();
+    await clickEmptyCell(MICHELLE, '11:00');
+    expect(seed().initial.professionalId).toBe(MICHELLE);
+    expect(seed().initial.time).toBe('11:00');
   });
 
   it('o clique é só prefill: nenhum booking é criado', async () => {
     await renderAgenda();
-    await clickEmptyCell(PRO_A, '09:30');
-    await userEvent.selectOptions(serviceSelect(), SVC);
-    await waitFor(() => expect(slotButton('09:30')).toBeTruthy());
+    await clickEmptyCell(HERNANI, '10:00');
+    await waitFor(() => expect(slotButton('10:00')).toBeTruthy());
     expect(slotsApi.posts).toBe(0);
     expect(document.querySelector('[data-booking-created="true"]')).toBeNull();
-  });
-
-  it('o horário batido na grade é o horário que chega (snap de 5 min)', async () => {
-    await renderAgenda();
-    await clickEmptyCell(PRO_B, '14:00');
-    expect(dateInput().value).toBe(DATE);
-    await userEvent.selectOptions(serviceSelect(), SVC);
-    await waitFor(() => expect(proSelect()).toBeTruthy());
-    expect(proSelect()!.value).toBe(PRO_B);
   });
 });
 
 // ═════════════════════════════════════════════════════════════════════════
-describe('2 · preservação do prefill após abertura (e após escolher o serviço)', () => {
-  it('data, hora e profissional sobrevivem à seleção do serviço', async () => {
+describe('2–3 · a intenção é preservada: serviço único, profissional elegível e horário válido', () => {
+  it('Hernani tem EXATAMENTE UM serviço elegível → entra pré-selecionado e o horário aparece', async () => {
     await renderAgenda();
-    await clickEmptyCell(PRO_A, '09:30');
-    await userEvent.selectOptions(serviceSelect(), SVC);
+    await clickEmptyCell(HERNANI, '10:00');
 
-    await waitFor(() => expect(proSelect()).toBeTruthy());
+    // catálogo real: svc-cardio é o único de Hernani (o inativo não conta).
+    expect(serviceSelect().value).toBe(SVC_CARDIO);
+    // Com serviço escolhido o bloco de horários existe e a intenção aparece.
+    await waitFor(() => expect(slotButton('10:00')).toBeTruthy());
+    expect(slotButton('10:00')!.getAttribute('aria-pressed')).toBe('true');
+    // A disponibilidade é consultada para o profissional da coluna.
+    expect(slotsApi.calls.some((u) => u.includes(`serviceId=${SVC_CARDIO}`) && u.includes(`professionalId=${HERNANI}`))).toBe(true);
     expect(dateInput().value).toBe(DATE);
-    expect(proSelect()!.value).toBe(PRO_A);
-    await waitFor(() => expect(slotButton('09:30')).toBeTruthy());
-    expect(slotButton('09:30')!.getAttribute('aria-pressed')).toBe('true');
-    // A consulta de disponibilidade usa o profissional pré-selecionado.
-    expect(slotsApi.calls.some((u) => u.includes(SVC) && u.includes(`professionalId=${PRO_A}`))).toBe(true);
+    expect(slotsApi.posts).toBe(0);
   });
 
-  it('clique num dia/hora sem profissional (semana) preenche data e hora', async () => {
-    window.history.replaceState(null, '', `/agenda?b=${BUSINESS}&view=week&data=${DATE}`);
-    render(<AgendaPage />);
-    // Na semana as colunas são DIAS (não profissionais): a coluna 01/10
-    // existe por data e o clique entrega data + hora, sem profissional.
+  it('Orlando (1 elegível) também abre com o serviço e a hora já visíveis', async () => {
+    await renderAgenda();
+    await clickEmptyCell(ORLANDO, '09:30');
+    expect(serviceSelect().value).toBe(SVC_ODONTO);
+    await waitFor(() => expect(slotButton('09:30')).toBeTruthy());
+    expect(slotButton('09:30')!.getAttribute('aria-pressed')).toBe('true');
+  });
+
+  it('o formulário NÃO nasce sujo por causa do prefill (abrir e fechar não pede confirmação)', async () => {
+    await renderAgenda();
+    await clickEmptyCell(HERNANI, '10:00');
+    await waitFor(() => expect(slotButton('10:00')).toBeTruthy());
+    fireEvent.click(sheet().querySelector('[aria-hidden="true"]')!);
+    await new Promise((r) => setTimeout(r, 0));
+    expect(document.querySelector('[role="alertdialog"]')).toBeNull();
+  });
+});
+
+// ═════════════════════════════════════════════════════════════════════════
+describe('4 · serviço só é pré-escolhido com EXATAMENTE UM elegível (sem vínculo textual)', () => {
+  it('Michelle tem DOIS elegíveis → serviço fica sem seleção', async () => {
+    await renderAgenda();
+    await clickEmptyCell(MICHELLE, '11:00');
+
+    expect(seed().initial.professionalId).toBe(MICHELLE);
+    expect(serviceSelect().value).toBe('');
+    // Sem serviço, o bloco de horários ainda não aparece (comportamento atual).
+    expect(screen.queryByText(/Carregando horários/)).toBeNull();
+
+    // Escolhendo um serviço elegível, profissional E horário permanecem.
+    await userEvent.selectOptions(serviceSelect(), SVC_ESTETICA);
+    await waitFor(() => expect(slotButton('11:00')).toBeTruthy());
+    expect(slotButton('11:00')!.getAttribute('aria-pressed')).toBe('true');
+    expect(slotsApi.calls.some((u) => u.includes(`serviceId=${SVC_ESTETICA}`) && u.includes(`professionalId=${MICHELLE}`))).toBe(true);
+    expect(dateInput().value).toBe(DATE);
+    expect(slotsApi.posts).toBe(0);
+  });
+
+  it('serviço inativo/desativado NÃO é considerado elegível', async () => {
+    await renderAgenda();
+    await clickEmptyCell(MICHELLE, '11:00');
+    const options = Array.from(serviceSelect().options).map((o) => o.value);
+    // svc-inativo existe no catálogo mas não é agendável: não conta como
+    // elegível (senão Michelle teria 3 e, se contasse, poderia ser escolhido).
+    expect(options).not.toContain(SVC_INATIVO);
+    expect(options).toContain(SVC_ESTETICA);
+    expect(options).toContain(SVC_LIMPEZA);
+    expect(options).toContain(SVC_CARDIO);
+  });
+
+  it('com UM ÚNICO serviço sem vínculo no catálogo, ele entra pré-selecionado', async () => {
+    // Serviço sem `professionalIds` aceita todos — e, sendo o único agendável,
+    // é o elegível único de qualquer coluna (conveniência, não palpite).
+    FIXTURE.state.services = [
+      { id: 'svc-unico', businessId: 'biz-clinica', name: 'Atendimento', durationMin: 30, price: 0, active: true, bookable: true, professionalIds: [] },
+    ];
+    await renderAgenda();
+    await clickEmptyCell(HERNANI, '10:00');
+    expect(serviceSelect().value).toBe('svc-unico');
+    await waitFor(() => expect(slotButton('10:00')).toBeTruthy());
+    expect(slotButton('10:00')!.getAttribute('aria-pressed')).toBe('true');
+  });
+});
+
+// ═════════════════════════════════════════════════════════════════════════
+describe('3 · combinação inválida: limpa SÓ o valor inválido e mostra as opções válidas', () => {
+  it('serviço que a profissional NÃO realiza: ela sai e os horários válidos aparecem', async () => {
+    await renderAgenda();
+    await clickEmptyCell(MICHELLE, '11:00');
+    // svc-cardio é só do Hernani.
+    await userEvent.selectOptions(serviceSelect(), SVC_CARDIO);
+
+    await waitFor(() => expect(slotButton('11:00')).toBeTruthy());
+    // Nenhuma combinação inválida é consultada nem enviada.
+    expect(slotsApi.calls.some((u) => u.includes(SVC_CARDIO) && u.includes(`professionalId=${MICHELLE}`))).toBe(false);
+    // O horário válido permanece; a data continua; nada foi criado.
+    expect(slotButton('11:00')!.getAttribute('aria-pressed')).toBe('true');
+    expect(dateInput().value).toBe(DATE);
+    expect(slotsApi.posts).toBe(0);
+  });
+
+  it('horário indisponível é limpo (nunca reserva silenciosa) e as opções válidas aparecem', async () => {
+    slotsApi.slots = ['14:00', '14:30'];
+    await renderAgenda();
+    await clickEmptyCell(HERNANI, '10:00');
+    await waitFor(() => expect(slotButton('14:00')).toBeTruthy());
+    expect(slotButton('10:00')).toBeNull();
+    expect(slotsApi.posts).toBe(0);
+  });
+});
+
+// ═════════════════════════════════════════════════════════════════════════
+describe('5 · Semana: coluna é dia — não inventa profissional', () => {
+  it('clique na coluna do dia entrega data + hora e NENHUM profissional', async () => {
+    await renderAgenda(`?b=${BUSINESS}&view=week&data=${DATE}`);
     await waitFor(
       () => expect(document.querySelector(`[data-agenda-column-date="${DATE}"]`)).toBeTruthy(),
       { timeout: 5000 },
     );
-    const col = document.querySelector<HTMLElement>(`[data-agenda-column-date="${DATE}"]`);
-    expect(col).toBeTruthy();
-    measureColumn(col!);
-    fireEvent.click(col!, { clientX: 40, clientY: clientYFor('10:30') });
+    const col = gridColumn(`[data-agenda-column-date="${DATE}"]`);
+    fireEvent.click(col, { clientX: 40, clientY: clientYFor('10:30') });
     await waitFor(() => expect(document.querySelector('dialog.il-drawer')).toBeTruthy(), { timeout: 5000 });
-    expect(dateInput().value).toBe(DATE);
-    await userEvent.selectOptions(serviceSelect(), SVC);
-    await waitFor(() => expect(slotButton('10:30')).toBeTruthy());
-    expect(slotButton('10:30')!.getAttribute('aria-pressed')).toBe('true');
-  });
-});
 
-// ═════════════════════════════════════════════════════════════════════════
-describe('3 · profissional incompatível com o serviço não permanece inválido', () => {
-  it('ao escolher um serviço que a profissional NÃO realiza, ela sai da seleção', async () => {
-    await renderAgenda();
-    await clickEmptyCell(PRO_A, '09:30');
-    // svc-2 não pode ser feito por pro-a (a coluna clicada).
-    await userEvent.selectOptions(serviceSelect(), SVC_RESTRICT);
-
-    await waitFor(() => expect(proSelect()).toBeTruthy());
-    expect(proSelect()!.value).toBe('');
-    // Nenhuma combinação inválida segue para a consulta de disponibilidade.
-    await waitFor(() => expect(slotsApi.calls.some((u) => u.includes('mode=slots-admin'))).toBe(true));
-    expect(slotsApi.calls.some((u) => u.includes(SVC_RESTRICT) && u.includes(`professionalId=${PRO_A}`))).toBe(false);
-    // E a data segue preservada.
-    expect(dateInput().value).toBe(DATE);
-  });
-
-  it('um profissional elegível da coluna permanece selecionado (não é limpo por padrão)', async () => {
-    await renderAgenda();
-    await clickEmptyCell(PRO_B, '09:30');
-    await userEvent.selectOptions(serviceSelect(), SVC_RESTRICT);
-    await waitFor(() => expect(proSelect()).toBeTruthy());
-    expect(proSelect()!.value).toBe(PRO_B);
-  });
-});
-
-// ═════════════════════════════════════════════════════════════════════════
-describe('4 · horário indisponível não vira booking', () => {
-  it('hora clicada fora dos slots válidos é limpa (nunca reserva silenciosa)', async () => {
-    slotsApi.slots = ['14:00', '14:30', '15:00'];
-    await renderAgenda();
-    await clickEmptyCell(PRO_A, '09:30');
-    await userEvent.selectOptions(serviceSelect(), SVC);
-
-    await waitFor(() => expect(slotButton('14:00')).toBeTruthy());
-    expect(slotButton('09:30')).toBeNull();
-    expect(slotsApi.posts).toBe(0);
-    expect(document.querySelector('[data-booking-created="true"]')).toBeNull();
-  });
-
-  it('dia sem nenhum slot avisa e não cria agendamento', async () => {
-    slotsApi.slots = [];
-    await renderAgenda();
-    await clickEmptyCell(PRO_A, '09:30');
-    await userEvent.selectOptions(serviceSelect(), SVC);
-    await waitFor(() => expect(screen.getByText(/Nenhum horário disponível|Fechado neste dia/)).toBeTruthy());
-    expect(slotsApi.posts).toBe(0);
+    expect(seed().initial.date).toBe(DATE);
+    expect(seed().initial.time).toBe('10:30');
+    expect(seed().initial.professionalId).toBe('');
+    // Sem profissional, não há pré-seleção de serviço.
+    expect(serviceSelect().value).toBe('');
   });
 });

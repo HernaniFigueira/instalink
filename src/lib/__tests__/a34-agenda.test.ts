@@ -104,7 +104,10 @@ describe('A3.4 · Bloco 3 — Novo agendamento no design system', () => {
     expect(sheet).toContain("useState(initial?.date || '')");
     expect(sheet).toContain("useState(initial?.time || '')");
     expect(sheet).toContain("useState(initial?.professionalId || '')");
-    expect(sheet).toContain("useState(initial?.serviceId || '')");
+    // Serviço: o valor inicial vem do preset (escolha única do catálogo),
+    // nunca de um palpite por nome/cargo.
+    expect(sheet).toContain('useState(presetServiceId)');
+    expect(sheet).toContain('uniqueEligibleServiceId');
     // A PRIMEIRA escolha de serviço não pode ser tratada como "troca"
     // (causa raiz do bug de prefill da #43): só a troca REAL limpa.
     expect(sheet).toContain('previousServiceId');

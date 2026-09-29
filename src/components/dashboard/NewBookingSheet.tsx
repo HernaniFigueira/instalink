@@ -21,6 +21,7 @@ import { apiGet, apiSend } from '@/lib/api-client';
 import { breedSuggestions, PET_SPECIES, PET_SPECIES_LABELS, validatePet } from '@/lib/pets';
 import { Drawer, Avatar, Badge, Button, Checkbox, Field, IconButton, Input, Notice, Select } from '@/components/ui';
 import { WORKSPACE_SHEET_SIZES } from '@/lib/workspace-sheet-sizes';
+import { uniqueEligibleServiceId } from '@/lib/agenda-cell-prefill';
 import { NewClientForm } from '@/components/dashboard/NewClientSheet';
 
 interface Contact {
@@ -50,6 +51,16 @@ export function NewBookingSheet({ businessId, services, pros, timezone, initial,
   onCreated: () => void;
 }) {
   const bookable = useMemo(() => services.filter((s) => s.bookable && s.active !== false), [services]);
+  /**
+   * Clique na grade (modo DIA): a coluna identifica o profissional. Quando o
+   * catálogo só oferece UM serviço elegível para ele, esse serviço entra
+   * pré-selecionado como conveniência — sem isso o bloco de horários (que só
+   * existe com `date && serviceId`) nem aparecia e a intenção do clique ficava
+   * invisível. Com 0 ou 2+ elegíveis nada é escolhido. Sem profissional
+   * (colunas de DIA na Semana) nunca se inventa vínculo.
+   * Decisão pelos vínculos reais (`professionalIds`) — nunca por nome/cargo.
+   */
+  const presetServiceId = initial?.serviceId || uniqueEligibleServiceId(bookable, initial?.professionalId || '');
   const [query, setQuery] = useState('');
   const [results, setResults] = useState<Contact[]>([]);
   const [searching, setSearching] = useState(false);
@@ -63,7 +74,7 @@ export function NewBookingSheet({ businessId, services, pros, timezone, initial,
   const [registerOpen, setRegisterOpen] = useState(false);
   const [clientPersistence, setClientPersistence] = useState({ dirty: false, saving: false, error: '' });
   const [vetMode, setVetMode] = useState(false);
-  const [serviceId, setServiceId] = useState(initial?.serviceId || '');
+  const [serviceId, setServiceId] = useState(presetServiceId);
   const [proId, setProId] = useState(initial?.professionalId || '');
   const [date, setDate] = useState(initial?.date || '');
   const [time, setTime] = useState(initial?.time || '');
@@ -108,7 +119,7 @@ export function NewBookingSheet({ businessId, services, pros, timezone, initial,
   const intendedTime = useRef(initial?.time || '');
   const initialBookingSnapshot = useRef(JSON.stringify({
     query: '', contactId: initial?.contactId || '', name: initial?.name || '', phone: initial?.phone || '', email: initial?.email || '',
-    serviceId: initial?.serviceId || '', proId: initial?.professionalId || '', date: initial?.date || '', time: initial?.time || '',
+    serviceId: presetServiceId, proId: initial?.professionalId || '', date: initial?.date || '', time: initial?.time || '',
     note: '', petId: '', fitInOpen: false, fitInTime: initial?.time || '', repeat: false, occurrences: [],
   }));
   const bookingSnapshot = JSON.stringify({ query, contactId, name, phone, email, serviceId, proId, date, time, note, petId, fitInOpen, fitInTime, repeat, occurrences });
