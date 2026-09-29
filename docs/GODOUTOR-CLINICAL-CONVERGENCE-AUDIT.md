@@ -1,7 +1,7 @@
 # GODOUTOR CLINICAL CONVERGENCE — Auditoria Completa
 
 > Data: 2026-09-29
-> Branch: arena/01a0eda6-instalink (partindo de d20ed48)
+> Branch: arena/godoutor-clinical-convergence (partindo de d20ed48)
 > Flag: GODOUTOR_LEGACY_PAGES (OFF = Clinical OS padrão, ON = compatibilidade)
 > Objetivo: transformar a experiência autenticada em Clinical OS veterinário e remover resíduos InstaLink/link-na-bio/site-builder que contaminam UI/copy/regras/defaults.
 
