@@ -9,6 +9,7 @@ import { cn } from '@/lib/utils';
 import { Icon } from '@/components/icons';
 import { toneCls, type Tone } from '@/lib/status';
 import { buildHoursChips, type HoursChipDay } from '@/lib/hours-chips';
+import { WORKSPACE_NESTED_PANEL, WORKSPACE_SHEET_SIZES } from '@/lib/workspace-sheet-sizes';
 import type { PageType } from '@/lib/panel';
 
 export type { HoursChipDay };
@@ -711,6 +712,12 @@ export function Drawer({ open, onClose, title, subtitle, children, footer, width
   side?: React.ReactNode;
   sideTitle?: string;
   sideSubtitle?: string;
+  /**
+   * Largura do painel auxiliar quando ele ocupa a faixa SOZINHO (viewport sem
+   * espaço para o par — ver `@media (max-width: 1359px)` em globals.css). No
+   * par 50/50 o grid de `.il-drawer__panels` é quem define as duas colunas:
+   * os dois painéis usam `WORKSPACE_NESTED_PANEL` e têm a MESMA largura.
+   */
   sideWidth?: string;
   /** Fecha só o painel lateral (voltar ao base). Padrão: fecha o overlay. */
   onSideClose?: () => void;
@@ -761,11 +768,12 @@ export function Drawer({ open, onClose, title, subtitle, children, footer, width
             (entrada 180–220ms). Com `side`, dois painéis lado a lado. */}
         <div className={cn(
           'il-drawer__strip relative h-full bg-[var(--bg)] shadow-xl flex flex-col',
-          expanded ? 'w-full max-w-[1280px]' : `w-full ${width}`,
+          expanded ? `w-full ${WORKSPACE_SHEET_SIZES.expanded}` : `w-full ${width}`,
         )} data-expanded={expanded ? 'true' : undefined}>
           <div className="il-drawer__panels flex h-full min-h-0">
-            {/* Painel base (agendamento): recua/atenua quando o secundário abre. */}
-            <div className={cn('il-drawer__panel il-drawer__panel--base flex flex-col min-h-0', expanded && 'il-drawer__panel--recessed', expanded ? 'flex-1' : 'w-full')}>
+            {/* Painel base (agendamento): recua/atenua quando o secundário abre.
+                No par, usa o MESMO preset do secundário — 50/50 exato. */}
+            <div className={cn('il-drawer__panel il-drawer__panel--base flex flex-col min-h-0', expanded && 'il-drawer__panel--recessed', expanded ? WORKSPACE_NESTED_PANEL : 'w-full')}>
               <header className="ws-sheet__header shrink-0">
                 <div className="ws-sheet__titles">
                   <h2 ref={titleRef} tabIndex={-1} id={`${id}-title`}>{title}</h2>
@@ -780,7 +788,7 @@ export function Drawer({ open, onClose, title, subtitle, children, footer, width
             </div>
             {/* Painel secundário (cadastro rápido): entra pela direita, único overlay. */}
             {expanded && (
-              <div className={cn('il-drawer__panel il-drawer__panel--side flex w-full shrink-0 flex-col min-h-0 border-l border-[var(--border)]', sideWidth)}>
+              <div className={cn('il-drawer__panel il-drawer__panel--side flex min-h-0 flex-col border-l border-[var(--border)]', WORKSPACE_NESTED_PANEL)}>
                 <header className="ws-sheet__header shrink-0">
                   <div className="ws-sheet__titles">
                     <h2>{sideTitle || 'Cadastrar novo paciente'}</h2>

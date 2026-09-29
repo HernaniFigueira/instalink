@@ -72,11 +72,15 @@ describe('2.0 refinement pass — lower action and surface competition', () => {
     const booking = read('src/components/dashboard/NewBookingSheet.tsx');
     const drawer = read('src/components/ui.tsx');
     const css = read('src/app/globals.css');
-    expect(booking).toContain('WORKSPACE_SHEET_SIZES.wide');
+    // Sozinho: preset operacional compartilhado. Aninhado: a faixa expande.
+    expect(booking).toContain('WORKSPACE_SHEET_SIZES.standard');
     expect(booking).toContain('WORKSPACE_SHEET_SIZES.nestedForm');
     expect(booking).toContain('sideTitle="Cadastrar novo paciente"');
     expect(css).toContain('@media (max-width: 1359px)');
-    expect(drawer).toContain("expanded ? 'w-full max-w-[1280px]'");
+    // Composição 50/50: os DOIS painéis usam o mesmo preset compartilhado.
+    expect(drawer).toContain('WORKSPACE_NESTED_PANEL');
+    expect(drawer).toContain('WORKSPACE_SHEET_SIZES.expanded');
+    expect(css).toContain('grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);');
     expect(drawer).toContain('data-expanded={expanded ? \'true\' : undefined}');
     expect(css).toContain(".il-drawer__strip[data-expanded='true'] { width:100%; max-width:1280px; }");
   });

@@ -198,6 +198,9 @@ const GridColumn = memo(function GridColumn({ column, basisPct, variant, highlig
     // fabrique overflow nas bordas.
     <div className="relative shrink-0 border-r border-b border-zinc-100 last:border-r-0 bg-[var(--agenda-unavailable)]"
       style={{ minWidth: COL_MIN, width: `${basisPct}%`, height: gridHeight }}
+      data-agenda-column={column.key}
+      data-agenda-column-date={column.date}
+      data-agenda-column-professional={column.professionalId || ''}
       onClick={(e) => {
         // Clique em área VAZIA = criar naquele horário. Cliques em atendimento
         // (button), no destaque de arraste e o clique que sobra de um drop são

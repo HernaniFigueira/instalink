@@ -105,9 +105,12 @@ describe('A3.4 · Bloco 3 — Novo agendamento no design system', () => {
     expect(sheet).toContain("useState(initial?.time || '')");
     expect(sheet).toContain("useState(initial?.professionalId || '')");
     expect(sheet).toContain("useState(initial?.serviceId || '')");
-    // A primeira montagem não pode ser tratada como "troca de serviço", senão
-    // o pré-preenchimento era apagado antes de aparecer.
-    expect(sheet).toContain('firstService');
+    // A PRIMEIRA escolha de serviço não pode ser tratada como "troca"
+    // (causa raiz do bug de prefill da #43): só a troca REAL limpa.
+    expect(sheet).toContain('previousServiceId');
+    // E o profissional da coluna só fica se o serviço o aceitar.
+    expect(sheet).toContain('proCanPerform');
+    expect(sheet).toContain('activeProId');
     // E o horário pedido de fora só sobrevive se a grade real o oferecer.
     expect(sheet).toContain('intendedTime');
     expect(sheet).toContain('want && list.includes(want) ? want : \'\'');

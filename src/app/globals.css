@@ -1064,6 +1064,19 @@ dialog.il-drawer::backdrop { background: var(--overlay); }
   transition: max-width 200ms var(--ease-standard), width 200ms var(--ease-standard);
 }
 .il-drawer__strip[data-expanded='true'] { width:100%; max-width:1280px; }
+/* Composição aninhada 50/50: DUAS colunas exatamente iguais. Os dois painéis
+   recebem o mesmo preset (WORKSPACE_NESTED_PANEL) e o grid garante a simetria
+   — mesma largura, mesma altura, headers alinhados e UMA linha divisória.
+   Não é "sheet dentro de sheet": é um overlay só, com dois painéis. */
+.il-drawer__strip[data-expanded='true'] .il-drawer__panels {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+}
+.il-drawer__strip[data-expanded='true'] .il-drawer__panel {
+  width: auto !important;
+  max-width: none !important;
+  min-width: 0;
+}
 dialog.il-drawer .il-actionbar {
   padding: 12px 16px;
   background: var(--surface-2);
@@ -1099,6 +1112,10 @@ dialog.il-drawer .il-actionbar {
 }
 @media (max-width: 1359px) {
   .il-drawer__strip[data-expanded='true'] { max-width: none !important; width: 100% !important; }
+  /* Sem largura confortável para os DOIS formulários, o par desmancha: o
+     cadastro assume a faixa inteira e o agendamento volta depois — montado,
+     com o estado preservado (nada é comprimido, nada vira segundo dialog). */
+  .il-drawer__strip[data-expanded='true'] .il-drawer__panels { grid-template-columns: minmax(0, 1fr); }
   .il-drawer__strip[data-expanded='true'] .il-drawer__panel--recessed { display: none; }
   .il-drawer__strip[data-expanded='true'] .il-drawer__panel--side {
     width: 100% !important; max-width: none !important; border-left: 0 !important;

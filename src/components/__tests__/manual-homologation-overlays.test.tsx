@@ -92,7 +92,8 @@ describe('homologação manual — Novo agendamento mantém o guard dirty e a fa
     const onClose = vi.fn();
     render(<NewBookingSheet businessId="biz-1" services={[]} pros={[]} horizonDays={30} onClose={onClose} onCreated={vi.fn()} />);
     const dialog = await screen.findByRole('dialog', { name: 'Novo agendamento' });
-    expect(document.querySelector('.il-drawer__strip')?.className).toContain('max-w-4xl');
+    // Largura operacional compartilhada (nem esticado, nem estreito).
+    expect(document.querySelector('.il-drawer__strip')?.className).toContain('max-w-2xl');
     fireEvent.change(screen.getByRole('textbox', { name: 'Buscar cliente' }), { target: { value: 'Alex' } });
     fireEvent.click(dialog.querySelector('[aria-hidden="true"]')!);
     const confirmation = await screen.findByRole('alertdialog');

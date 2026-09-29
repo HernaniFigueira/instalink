@@ -322,8 +322,24 @@ A classificação abaixo distingue homologação reportada anteriormente pelo us
 
 ### DEFERIDO (fora da implementação da #43)
 
-- **Seleção de duração por arraste estilo Google Calendar:** nenhum drag-selection novo foi implementado nesta PR. Componentes atuais relevantes: `GridColumn` e o handler `onEmptyPress` em `src/app/(dashboard)/agenda/page.tsx`; movimento de reserva existente passa por `onPressStart`/`onPressMove`/`onPressEnd` e pelos helpers de `src/lib/agenda-drag.ts`. Riscos: confundir seleção de horário vazio com arraste de reserva/drop; disparar clique/criação após um gesto; diferenças de pointer capture/toque e acessibilidade por teclado; cobrir status de indisponibilidade sem sugerir confirmação válida. Evolução sugerida: selecionar somente em célula vazia, mostrar overlay provisório durante o gesto, cancelar sem seed/reserva em Escape/cancelamento ou em conflito com interação de bloco, e abrir `NewBookingSheet` com data/hora (e duração sugerida) ao soltar; disponibilidade e validação continuam pertencendo ao fluxo de booking existente. **Propriedade:** o snap deve ser controlado pela geometria/configuração da grade (reutilizando `minuteFromOffsetY`/passo da Agenda, sem criar um segundo passo); a duração sugerida deve ser controlada pela interação de seleção da Agenda (intervalo inicial/final quantizado pelo mesmo snap), enquanto serviço, disponibilidade e aceitação final permanecem sob `NewBookingSheet`/validações existentes. Refinar limiares, touch/teclado e confirmação em missão própria antes de codificar.
+- **AGENDA TEMPORAL 2.0 (seleção de duração por arraste estilo Google Calendar):** nenhum drag-selection novo foi
+  implementado nesta PR — e nenhum será enquanto a #43 não for homologada. Missão própria, POSTERIOR à #43,
+  que tratará de uma só vez: **início/fim da seleção; duração; seleção por arraste; cirurgia/procedimento longo;
+  bloqueios; snap; recursos; disponibilidade**. Nada disso foi antecipado aqui. Componentes atuais relevantes: `GridColumn` e o handler `onEmptyPress` em `src/app/(dashboard)/agenda/page.tsx`; movimento de reserva existente passa por `onPressStart`/`onPressMove`/`onPressEnd` e pelos helpers de `src/lib/agenda-drag.ts`. Riscos: confundir seleção de horário vazio com arraste de reserva/drop; disparar clique/criação após um gesto; diferenças de pointer capture/toque e acessibilidade por teclado; cobrir status de indisponibilidade sem sugerir confirmação válida. Evolução sugerida: selecionar somente em célula vazia, mostrar overlay provisório durante o gesto, cancelar sem seed/reserva em Escape/cancelamento ou em conflito com interação de bloco, e abrir `NewBookingSheet` com data/hora (e duração sugerida) ao soltar; disponibilidade e validação continuam pertencendo ao fluxo de booking existente. **Propriedade:** o snap deve ser controlado pela geometria/configuração da grade (reutilizando `minuteFromOffsetY`/passo da Agenda, sem criar um segundo passo); a duração sugerida deve ser controlada pela interação de seleção da Agenda (intervalo inicial/final quantizado pelo mesmo snap), enquanto serviço, disponibilidade e aceitação final permanecem sob `NewBookingSheet`/validações existentes. Refinar limiares, touch/teclado e confirmação em missão própria antes de codificar.
 - Homologação em browser destas correções: pendente, com prioridade 1366 e 1024; sanity check em 1440 e 390. Sem browser disponível, registrar fonte/testes e manter o estado visual pendente.
+- **Fechamento da #43 (esta rodada), somente duas pendências confirmadas em vídeo:**
+  - *Prefill da grade:* a causa raiz era o efeito de troca de serviço em `NewBookingSheet`, que apagava `proId`/`time`
+    na PRIMEIRA seleção de serviço (só a montagem era preservada) — a data chegava, hora e profissional não.
+    Agora a primeira escolha de serviço preserva o trio e só sai o profissional inelegível; quem confirma o horário
+    é a disponibilidade real (slots), sem reserva silenciosa. Coberto por teste focal que reproduz o clique REAL na
+    grade (`src/components/__tests__/agenda-cell-prefill-flow.test.tsx`).
+  - *Geometria:* Novo agendamento sozinho usa `WORKSPACE_SHEET_SIZES.standard`; com o cadastro aninhado a faixa usa
+    `WORKSPACE_SHEET_SIZES.expanded` e os DOIS painéis recebem o mesmo preset compartilhado
+    (`WORKSPACE_NESTED_PANEL`) em um grid 50/50. Em viewport sem largura confortável o cadastro assume a faixa e o
+    agendamento volta preservado (`src/components/__tests__/booking-nested-geometry.test.tsx`).
+  - Fora de escopo e intocado: Dashboard, Perfil, AccountMenu, Configurações, Produtos, Estrutura, Clientes desktop,
+    Cliente 360, Busca global, ConfirmDialog, Conversas, Atendimento (sticky→compacto homologado), sidebar, temas,
+    mobile navigation e design tokens.
 
 ### Validação da missão final de polimento
 

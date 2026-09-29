@@ -96,10 +96,10 @@ describe('ViewportPopover · alinhamento compartilhado', () => {
     const sheet = read('src/components/dashboard/WorkspaceSheet.tsx');
     const ui = read('src/components/ui.tsx');
     const css = read('src/app/globals.css');
-    expect(booking).toContain('WORKSPACE_SHEET_SIZES.wide');
+    expect(booking).toContain('WORKSPACE_SHEET_SIZES.standard');
     expect(booking).toContain('WORKSPACE_SHEET_SIZES.nestedForm');
     expect(sheet).toContain('WORKSPACE_SHEET_SIZES.nestedForm');
-    expect(ui).toContain('flex w-full shrink-0 flex-col');
+    expect(ui).toContain('WORKSPACE_NESTED_PANEL');
     expect(css).toContain('@media (max-width: 1359px)');
     expect(css).toContain('.il-drawer__strip[data-expanded=\'true\'] .il-drawer__panel--recessed { display: none; }');
   });
