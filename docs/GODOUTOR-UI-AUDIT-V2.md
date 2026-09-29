@@ -302,3 +302,35 @@ O usuário informou que no HEAD `ff9b2db` aprovou manualmente Dashboard, Agenda,
 - `npm run build`: aprovado; **132/132** páginas estáticas geradas.
 - `npm test -- --reporter=dot`: **2.556 aprovados / 5 falhas / 2.561 testes** (177 arquivos aprovados, 3 com falha). Restaram as três falhas de `a34-instagram.test.ts`, uma de `automation-audit-p4.test.ts` e uma de `pipeline.test.ts`; a fixture de pipeline agenda no passado. As duas expectativas antigas do painel de agendamento foram atualizadas para os novos presets e passaram focadas. `whatsapp-robustness.test.ts` não falhou nesta execução. Nenhuma falha foi mascarada nem alterada fora do escopo.
 - `git diff --check`: aprovado. Conferência visual deste novo HEAD ainda pendente; usar Preview priorizando 1440, 1366 e 1024, com 390 como sanity check.
+
+## Missão final de polimento da PR #43 — classificação e evidências
+
+A classificação abaixo distingue homologação reportada anteriormente pelo usuário de correção estática desta missão. As mudanças de código desta missão não foram consideradas visualmente homologadas: é necessário abrir as rotas reais nos viewports indicados.
+
+### HOMOLOGADO (reportado anteriormente pelo usuário)
+
+- Agenda desktop, Conversas, Cliente 360 desktop, Dashboard, Atendimento desktop, além das telas desktop aprovadas enumeradas no escopo da PR. A aprovação reportada é referência para não regressão; não implica revalidação deste HEAD.
+
+### CORRIGIDO nesta missão (implementação em fonte; homologação visual pendente)
+
+- **Atendimento:** header sticky mantém estado normal com Voltar/contexto e troca para compacto após o marcador cruzar a topbar; no compacto mantém paciente/tutor, data/hora, profissional e status. A ActionBar continua sticky e os fluxos clínicos não foram alterados.
+- **Cliente 360 estreito:** identidade/badges/ações reorganizados sem depender de compressão; cards de pets usam a largura disponível; tabs mantêm uma linha com rolagem horizontal, indicador de continuidade, suporte a teclado e `scrollIntoView` para revelar a tab focada. Desktop não recebeu regra de layout nova.
+- **Busca global:** `ViewportPopover` continua sendo a solução compartilhada; em viewport estreita o resultado ganha largura preferencial (clampado às margens da viewport), sem herdar a largura reduzida do trigger.
+- **ConfirmDialog:** composição centralizada/compacta, com ações centradas e distinção secondary/outline para continuar editando e destructive para descartar.
+- **Cadastro de paciente dentro do novo agendamento:** preserva o painel aninhado, usa presets compartilhados de largura e recebe subtítulo no cabeçalho do painel. O estado de cadastro substitui a área do booking quando não há largura para composição lado a lado; o retorno e seleção do paciente recém-criado permanecem no fluxo existente.
+- **Agenda:** clique em célula vazia com horário determinável transforma somente data, hora e profissional em seed inicial de `NewBookingSheet`; a ausência de profissional continua vazia. Não cria reserva nem altera validações. Adicionado teste focal de mapeamento/wiring.
+
+### DEFERIDO (fora da implementação da #43)
+
+- **Seleção de duração por arraste estilo Google Calendar:** nenhum drag-selection novo foi implementado nesta PR. Componentes atuais relevantes: `GridColumn` e o handler `onEmptyPress` em `src/app/(dashboard)/agenda/page.tsx`; movimento de reserva existente passa por `onPressStart`/`onPressMove`/`onPressEnd` e pelos helpers de `src/lib/agenda-drag.ts`. Riscos: confundir seleção de horário vazio com arraste de reserva/drop; disparar clique/criação após um gesto; diferenças de pointer capture/toque e acessibilidade por teclado; cobrir status de indisponibilidade sem sugerir confirmação válida. Evolução sugerida: selecionar somente em célula vazia, mostrar overlay provisório durante o gesto, cancelar sem seed/reserva em Escape/cancelamento ou em conflito com interação de bloco, e abrir `NewBookingSheet` com data/hora (e duração sugerida) ao soltar; disponibilidade e validação continuam pertencendo ao fluxo de booking existente. **Propriedade:** o snap deve ser controlado pela geometria/configuração da grade (reutilizando `minuteFromOffsetY`/passo da Agenda, sem criar um segundo passo); a duração sugerida deve ser controlada pela interação de seleção da Agenda (intervalo inicial/final quantizado pelo mesmo snap), enquanto serviço, disponibilidade e aceitação final permanecem sob `NewBookingSheet`/validações existentes. Refinar limiares, touch/teclado e confirmação em missão própria antes de codificar.
+- Homologação em browser destas correções: pendente, com prioridade 1366 e 1024; sanity check em 1440 e 390. Sem browser disponível, registrar fonte/testes e manter o estado visual pendente.
+
+### Validação da missão final de polimento
+
+- `npm ci`: dependências instaladas sem alterar manifests/lockfile; o npm reportou 2 vulnerabilidades na árvore de dependências (1 alta, 1 crítica), não corrigidas nesta missão.
+- `npm run typecheck`: aprovado.
+- Testes focais: **4 arquivos / 31 testes aprovados** (`ui.test.tsx`, `a34-agenda.test.ts`, `agenda-cell-prefill.test.ts`, `viewport-popover.test.ts`). O teste do clique de célula também confere o wiring do seed para as props iniciais de data/hora de `NewBookingSheet`.
+- `npm run build`: aprovado; **132/132** páginas estáticas geradas.
+- `npm test -- --reporter=dot`: **2.567 aprovados / 5 falhas / 2.572 testes** (179 arquivos aprovados, 3 com falhas). Falhas atuais: três em `a34-instagram.test.ts`, uma em `automation-audit-p4.test.ts` e uma em `pipeline.test.ts` (fixture tenta agendar no passado). Coincidem com o conjunto de falhas preexistentes registrado no fechamento anterior; nenhuma foi ocultada ou alterada nesta missão.
+- `git diff --check`: aprovado.
+- **Browser/homologação visual:** não realizada; não havia Chromium/browser instalado no ambiente (`~/.cache/ms-playwright` sem executáveis e nenhum Chromium/Chrome no PATH). Não afirmar aprovação visual para estas correções. Conferir Atendimento, Cliente 360, Busca, Novo agendamento e ConfirmDialog em 1366 e 1024 primeiro; sanity check em 1440 e 390.

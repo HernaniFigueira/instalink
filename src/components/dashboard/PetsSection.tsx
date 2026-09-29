@@ -119,12 +119,12 @@ export function PetsSection({ businessId, tutorId, tutorName, onChanged, onOpenP
       {pets.length === 0 ? (
         <p className="text-xs text-[var(--text-muted)] mt-3">Nenhum pet cadastrado ainda.</p>
       ) : (
-        <ul className="mt-3 space-y-2">
+        <ul className="client360-pets-list mt-3 space-y-2">
           {pets.map((p) => {
             const age = petAge(p.birthDate);
             const chips = [PET_SPECIES_LABELS[p.species] || p.species, p.breed, age !== null ? `${age} ano(s)` : '', p.weightKg ? `${p.weightKg} kg` : ''].filter(Boolean);
             return (
-              <li key={p.id} className="flex items-center gap-3 rounded-md border border-[var(--border)] bg-[var(--surface)] px-3.5 py-3">
+              <li key={p.id} className="client360-pet-card flex items-center gap-3 rounded-md border border-[var(--border)] bg-[var(--surface)] px-3.5 py-3">
                 <Avatar name={p.name} src={p.photo || undefined} size={44} />
                 <div className="min-w-0 flex-1">
                   <button type="button" className="block max-w-full truncate text-left text-[16px] font-semibold leading-tight text-[var(--text-strong)] hover:underline"
@@ -140,8 +140,8 @@ export function PetsSection({ businessId, tutorId, tutorName, onChanged, onOpenP
                     {chips.length === 0 && <span className="text-xs text-[var(--text-muted)]">Sem detalhes</span>}
                   </p>
                 </div>
-                {p.sex && <Badge tone="zinc">{p.sex === 'M' ? 'Macho' : 'Fêmea'}</Badge>}
-                <span className="flex items-center gap-1">
+                {p.sex && <span className="client360-pet-card__sex"><Badge tone="zinc">{p.sex === 'M' ? 'Macho' : 'Fêmea'}</Badge></span>}
+                <span className="client360-pet-card__actions flex items-center gap-1">
                   <IconButton icon="pencil" label={`Editar ${p.name}`} size="sm" onClick={() => startPetForm(p)} />
                   <IconButton icon="x" label={`Remover ${p.name}`} size="sm" variant="ghost" disabled={busy} onClick={() => { void remove(p); }} />
                 </span>

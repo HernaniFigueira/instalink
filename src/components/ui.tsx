@@ -465,9 +465,9 @@ export interface TabItem<T extends string = string> {
 }
 
 /** Abas/pills de navegação interna. `role="tablist"` + setas do teclado. */
-export function Tabs<T extends string = string>({ items, value, onChange, ariaLabel, size = 'md', idPrefix }: {
+export function Tabs<T extends string = string>({ items, value, onChange, ariaLabel, size = 'md', idPrefix, className }: {
   items: TabItem<T>[]; value: T; onChange: (id: T) => void; ariaLabel: string; size?: 'sm' | 'md';
-  idPrefix?: string;
+  idPrefix?: string; className?: string;
 }) {
   const generatedId = useId();
   const prefix = idPrefix || generatedId;
@@ -484,12 +484,14 @@ export function Tabs<T extends string = string>({ items, value, onChange, ariaLa
     if (event.key === 'End') next = enabled[enabled.length - 1];
     if (!next) return;
     event.preventDefault();
-    buttons.current.get(next.id)?.focus();
+    const target = buttons.current.get(next.id);
+    target?.focus();
+    target?.scrollIntoView?.({ block: 'nearest', inline: 'nearest' });
     onChange(next.id);
   }
   return (
     <div role="tablist" aria-label={ariaLabel}
-      className={cn('il-tabbar max-w-full overflow-x-auto no-scrollbar', size === 'sm' && 'il-tabbar--sm scale-95 origin-left')}>
+      className={cn('il-tabbar max-w-full overflow-x-auto no-scrollbar', size === 'sm' && 'il-tabbar--sm scale-95 origin-left', className)}>
       {items.map((item) => (
         <button key={item.id} type="button" role="tab"
           ref={(node) => { if (node) buttons.current.set(item.id, node); else buttons.current.delete(item.id); }}
@@ -689,7 +691,7 @@ export function Notice({ tone = 'info', children, title, className }: { tone?: '
 // browser responsibilities, including nested dialogs. Kept in its DOM parent
 // (no portal) so platform/public CSS scopes are never copied or leaked.
 
-export function Drawer({ open, onClose, title, subtitle, children, footer, width = 'max-w-[720px]', side, sideTitle, sideWidth = 'max-w-[520px]', onSideClose, dismissGuard, sideDismissGuard, dialogClassName }: {
+export function Drawer({ open, onClose, title, subtitle, children, footer, width = 'max-w-[720px]', side, sideTitle, sideSubtitle, sideWidth = 'max-w-[520px]', onSideClose, dismissGuard, sideDismissGuard, dialogClassName }: {
   open: boolean; onClose: () => void; title: string; subtitle?: string;
   /** Optional root class for a single, explicitly scoped Drawer surface. */
   dialogClassName?: string;
@@ -708,6 +710,7 @@ export function Drawer({ open, onClose, title, subtitle, children, footer, width
    */
   side?: React.ReactNode;
   sideTitle?: string;
+  sideSubtitle?: string;
   sideWidth?: string;
   /** Fecha só o painel lateral (voltar ao base). Padrão: fecha o overlay. */
   onSideClose?: () => void;
@@ -781,6 +784,7 @@ export function Drawer({ open, onClose, title, subtitle, children, footer, width
                 <header className="ws-sheet__header shrink-0">
                   <div className="ws-sheet__titles">
                     <h2>{sideTitle || 'Cadastrar novo paciente'}</h2>
+                    {sideSubtitle && <p className="ws-sheet__sub">{sideSubtitle}</p>}
                   </div>
                   <IconButton type="button" icon="x" label="Voltar" size="sm" variant="secondary" className="ws-sheet__close" onClick={() => requestSideClose('close-button')} />
                 </header>

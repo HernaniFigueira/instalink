@@ -10,6 +10,8 @@ type ViewportPopoverProps = {
   anchor: HTMLElement | null;
   align?: 'start' | 'end';
   matchAnchorWidth?: boolean;
+  /** On narrow viewports, use a useful panel width instead of the trigger width. */
+  narrowWidth?: { maxViewport: number; width: number; margin?: number };
   className: string;
   role?: string;
   ariaLabel?: string;
@@ -25,6 +27,7 @@ export function ViewportPopover({
   anchor,
   align = 'end',
   matchAnchorWidth = false,
+  narrowWidth,
   className,
   role,
   ariaLabel,
@@ -53,13 +56,16 @@ export function ViewportPopover({
       if (naturalHeight === undefined || !panel.style.maxHeight) {
         naturalHeight = panelRect.height;
       }
+      const useNarrowWidth = !!narrowWidth && window.innerWidth <= narrowWidth.maxViewport;
       const next = positionViewportPopover({
         anchor: anchorRect,
         panel: { width: panelRect.width, height: naturalHeight },
         viewportWidth: window.innerWidth,
         viewportHeight: window.innerHeight,
         align,
-        matchAnchorWidth,
+        matchAnchorWidth: useNarrowWidth ? false : matchAnchorWidth,
+        preferredWidth: useNarrowWidth ? narrowWidth.width : undefined,
+        margin: useNarrowWidth ? narrowWidth.margin ?? 12 : 10,
       });
       setPlacement((previous) => previous
         && previous.left === next.left
@@ -88,7 +94,7 @@ export function ViewportPopover({
       window.visualViewport?.removeEventListener('scroll', update);
       setPlacement(null);
     };
-  }, [open, anchor, align, matchAnchorWidth]);
+  }, [open, anchor, align, matchAnchorWidth, narrowWidth]);
 
   if (!open || !anchor || typeof document === 'undefined') return null;
   const style: CSSProperties = {

@@ -391,6 +391,7 @@ export function NewBookingSheet({ businessId, services, pros, timezone, initial,
         />
       ) : undefined}
       sideTitle="Cadastrar novo paciente"
+      sideSubtitle="Dados do tutor e do paciente"
       sideWidth={WORKSPACE_SHEET_SIZES.nestedForm}
       onSideClose={() => setRegisterOpen(false)}
     >

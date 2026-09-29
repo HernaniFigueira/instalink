@@ -14,7 +14,7 @@
 //   • consentimento de marketing nunca é presumido;
 //   • criar acesso continua opcional e a senha temporária aparece UMA vez;
 //   • etapa de lead só muda via PipelineStage real (nunca LeadStatus legado).
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { centsToBR, cn, waLink } from '@/lib/utils';
@@ -119,6 +119,8 @@ export function ClientProfileDrawer({ person, businessId, pipeline, canFunil, on
 }) {
   const router = useRouter();
   const [tab, setTab] = useState<HistoryTab>('overview');
+  const tabsViewportRef = useRef<HTMLDivElement>(null);
+  const [tabsOverflowRight, setTabsOverflowRight] = useState(false);
   // FASE 2 · P2/P7 — financeiro do paciente (carga única, escopo do contato).
   const [financeEntries, setFinanceEntries] = useState<FinanceEntry[]>([]);
   const [financeLoaded, setFinanceLoaded] = useState(false);
@@ -428,6 +430,25 @@ export function ClientProfileDrawer({ person, businessId, pipeline, canFunil, on
     { id: 'tasks', label: 'Tarefas', icon: 'tasks', count: (person.tasks || []).length },
     { id: 'notes', label: 'Observações administrativas', icon: 'receipt', count: (person.notes || []).length },
   ];
+
+  useEffect(() => {
+    const host = tabsViewportRef.current;
+    const tabs = host?.querySelector<HTMLElement>('[role="tablist"]');
+    if (!host || !tabs) return;
+    const measure = () => setTabsOverflowRight(tabs.scrollWidth > tabs.clientWidth + 1
+      && tabs.scrollLeft + tabs.clientWidth < tabs.scrollWidth - 2);
+    measure();
+    tabs.addEventListener('scroll', measure, { passive: true });
+    const observer = typeof ResizeObserver === 'undefined' ? null : new ResizeObserver(measure);
+    observer?.observe(host);
+    observer?.observe(tabs);
+    window.addEventListener('resize', measure);
+    return () => {
+      tabs.removeEventListener('scroll', measure);
+      observer?.disconnect();
+      window.removeEventListener('resize', measure);
+    };
+  }, [tabItems.length, canFinance, canEncounter]);
 
   const notes = person.notes || [];
 
@@ -907,7 +928,9 @@ export function ClientProfileDrawer({ person, businessId, pipeline, canFunil, on
       {/* ═══ O QUE ACONTECEU — histórico ═══ */}
       <div className="px-4 pb-6">
         <div className="il-divider my-4">O que aconteceu com {firstName}</div>
-        <Tabs items={tabItems} value={tab} onChange={setTab} ariaLabel="Seções do histórico do cliente" />
+        <div ref={tabsViewportRef} className="client360-tabs-wrap" data-overflow-right={tabsOverflowRight || undefined}>
+          <Tabs items={tabItems} value={tab} onChange={setTab} ariaLabel="Seções do histórico do cliente" className="client360-tabs" />
+        </div>
 
         <div className="mt-4 ws-panel">
           {/* ── FASE 2 · P2 — VISÃO GERAL (próximo passo em primeiro) ── */}
@@ -1264,9 +1287,9 @@ function ProfileShell({ variant, onClose, title, subtitle, backHref, footer, chi
   if (variant === 'page') {
     return (
       <div className="client-profile-page min-w-0 pb-6">
-        <header className="flex flex-wrap items-center gap-x-3 gap-y-2 mb-3">
+        <header className="client-profile-page__toolbar flex flex-wrap items-center gap-x-3 gap-y-2 mb-3">
           <PageBackAction href={backHref} label="Voltar para clientes" />
-          <div className="ml-auto flex flex-wrap items-center gap-2">{footer}</div>
+          <div className="client-profile-page__actions ml-auto flex flex-wrap items-center gap-2">{footer}</div>
         </header>
         <div className="ws-panel overflow-hidden">{children}</div>
       </div>

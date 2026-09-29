@@ -47,6 +47,7 @@ import { bookingDuration, effectiveHorizonDays, needsClosure, rescheduleDecision
 import { queueSummary, waitLabel } from '@/lib/queue';
 import { apiGet, apiSend } from '@/lib/api-client';
 import { SLOT_STATE_MESSAGE, slotState } from '@/lib/slot-states';
+import { newBookingSeedFromAgendaCell } from '@/lib/agenda-cell-prefill';
 import {
   IDLE_INTERACTION, blockHeight, blockTop, dragPreviewLabel, dragSlotUrls, dropConfirmQuestion,
   emptyDragSlots, geometryFromRect, layoutBlocks, minuteFromOffsetY, planDrop, reduceInteraction, withOwnSlot,
@@ -937,7 +938,7 @@ export default function AgendaPage() {
     const col = columnsRef.current.find((c) => c.key === columnKey);
     if (!col) return;
     setDetail(null);
-    setCreating({ date: col.date, time, professionalId: col.professionalId || '' });
+    setCreating(newBookingSeedFromAgendaCell(col, time));
   }, []);
 
   const onPressStart = useCallback((id: string, e: React.PointerEvent) => {

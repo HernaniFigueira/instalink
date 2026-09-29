@@ -38,6 +38,8 @@ type Section =
 /** Item achatado para o cursor do teclado (rotas e entidades na mesma fila). */
 type FlatItem = { kind: 'nav'; item: NavSearchItem } | { kind: 'entity'; item: EntityHit };
 
+const SEARCH_NARROW_WIDTH = { maxViewport: 767, width: 440, margin: 12 } as const;
+
 export function GlobalSearch({ items, activePath, businessId = '', compact = false }: {
   items: NavSearchItem[]; activePath: string; businessId?: string; compact?: boolean;
 }) {
@@ -185,6 +187,7 @@ export function GlobalSearch({ items, activePath, businessId = '', compact = fal
         anchor={anchor}
         align="start"
         matchAnchorWidth
+        narrowWidth={SEARCH_NARROW_WIDTH}
         id="global-search-results"
         role="listbox"
         ariaLabel="Resultados da busca"

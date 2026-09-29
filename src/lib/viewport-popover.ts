@@ -29,6 +29,7 @@ export function positionViewportPopover({
   viewportHeight,
   align = 'end',
   matchAnchorWidth = false,
+  preferredWidth,
   margin = 10,
   gap = 8,
 }: {
@@ -38,12 +39,15 @@ export function positionViewportPopover({
   viewportHeight: number;
   align?: 'start' | 'end';
   matchAnchorWidth?: boolean;
+  /** Explicit comfortable width for surfaces that must outgrow a narrow trigger. */
+  preferredWidth?: number;
   margin?: number;
   gap?: number;
 }): ViewportPopoverPlacement {
   const maxWidth = Math.max(0, viewportWidth - margin * 2);
-  const width = Math.min(maxWidth, matchAnchorWidth ? anchor.width : panel.width);
-  const widthOverride = matchAnchorWidth || panel.width > maxWidth ? width : undefined;
+  const desiredWidth = preferredWidth ?? (matchAnchorWidth ? anchor.width : panel.width);
+  const width = Math.min(maxWidth, desiredWidth);
+  const widthOverride = preferredWidth !== undefined || matchAnchorWidth || panel.width > maxWidth ? width : undefined;
   const leftEdge = align === 'start' ? anchor.left : anchor.right - width;
   const left = Math.min(Math.max(leftEdge, margin), Math.max(margin, viewportWidth - margin - width));
 

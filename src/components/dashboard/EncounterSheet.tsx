@@ -125,6 +125,8 @@ export function EncounterSheet({
   businessId, bookingId, seed, existing, queueId, canReopen = false, onScheduleReturn, onClose, onSaved, onChanged, layout = 'page',
 }: Props) {
   const [row, setRow] = useState<EncounterRow | null>(existing || null);
+  const [compactHeader, setCompactHeader] = useState(false);
+  const compactSentinel = useRef<HTMLSpanElement>(null);
   const [form, setForm] = useState<Form>(() => existing ? formOf(existing) : { ...EMPTY });
   const [loading, setLoading] = useState(!existing);
   const [busy, setBusy] = useState('');
@@ -154,6 +156,26 @@ export function EncounterSheet({
   // levar previsivelmente a "Sem permissão".
   const { permissions: panelPerms, ready: permsReady } = usePanelPermissions();
   const canRegisterPayment = !permsReady || panelPerms.financeiro === true;
+
+  // Um marcador antes do header troca o contexto inteiro para o modo compacto
+  // quando ele cruza a topbar. O header continua sticky: nenhum conteúdo fica
+  // escondido sob a topbar durante a transição.
+  useEffect(() => {
+    if (layout !== 'page') { setCompactHeader(false); return; }
+    const marker = compactSentinel.current;
+    if (!marker) return;
+    const update = () => {
+      const topbarBottom = document.querySelector('.ws-topbar')?.getBoundingClientRect().bottom || 0;
+      setCompactHeader(marker.getBoundingClientRect().bottom < topbarBottom - 2);
+    };
+    update();
+    document.addEventListener('scroll', update, true);
+    window.addEventListener('resize', update);
+    return () => {
+      document.removeEventListener('scroll', update, true);
+      window.removeEventListener('resize', update);
+    };
+  }, [layout]);
 
   /**
    * Espelho SÍNCRONO do estado da tela. É daqui que o autosave, o flush de
@@ -846,16 +868,21 @@ export function EncounterSheet({
   const encounterMeta = row
     ? `${formatDateBR(row.date)}${row.time ? ` · ${row.time}` : ''} · ${row.serviceName || 'Atendimento'}${row.professionalName ? ` · ${row.professionalName}` : ''}`
     : 'Registro clínico do atendimento';
+  const compactEncounterMeta = row
+    ? `${formatDateBR(row.date)}${row.time ? ` · ${row.time}` : ''}${row.professionalName ? ` · ${row.professionalName}` : ''}`
+    : 'Registro clínico do atendimento';
 
   return layout === 'page' ? (
     <main className="encounter-page" data-persistence-state={persistence}>
-      <header className="encounter-page__header">
+      <span ref={compactSentinel} className="encounter-page__sticky-sentinel" aria-hidden="true" />
+      <header className="encounter-page__header" data-compact={compactHeader || undefined}>
         <PageBackAction className="encounter-page__back" onClick={() => { void requestClose('navigation'); }} label="Voltar" />
         <div className="encounter-page__heading">
-          <div>
+          <div className="encounter-page__heading-copy">
             <h1>Atendimento</h1>
             <p className="encounter-page__patient">{patientContext}</p>
-            <p className="encounter-page__meta">{encounterMeta}</p>
+            <p className="encounter-page__meta encounter-page__meta--normal">{encounterMeta}</p>
+            <p className="encounter-page__meta encounter-page__meta--compact">{compactEncounterMeta}</p>
           </div>
           {row && <Badge tone={statusDef!.tone}>{statusDef!.label}</Badge>}
         </div>
