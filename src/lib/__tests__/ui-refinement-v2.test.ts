@@ -100,15 +100,20 @@ describe('2.0 refinement pass — lower action and surface competition', () => {
     expect(metricGrid).not.toContain('bg-white border border-zinc-200');
   });
 
-  it('reading/form routes center within a bounded width; catalog full-width workspaces stay exempt', () => {
+  it('PageFrame aplica largura por arquétipo; workspaces operacionais não ficam estreitos', () => {
     const shell = read('src/components/DashboardShell.tsx');
     const routes = read('src/lib/panel.ts');
-    expect(shell).toContain("const isFullWidth = activeRoute?.width === 'full'");
-    expect(shell).toContain("!isFullWidth && !isAgenda && !isConversations && 'w-full max-w-[960px] mx-auto'");
-    for (const route of ['/agenda', '/conversas']) {
+    const css = read('src/app/globals.css');
+    expect(shell).toContain('pageTypeForPath(pathname)');
+    expect(shell).toContain('<PageFrame key={business.id} type={pageType}');
+    expect(css).toContain('.il-page-frame--workspace { max-width:none; }');
+    expect(css).toContain('.il-page-frame--form { max-width:var(--page-width-form); }');
+    expect(css).toContain('--page-width-form:60rem');
+    expect(css).toContain('margin-inline:auto');
+    for (const [route, type] of [['/agenda', 'workspace'], ['/conversas', 'workspace'], ['/atendimento', 'record'], ['/configuracoes', 'form']]) {
       const index = routes.indexOf(`href: '${route}'`);
       expect(index, route).toBeGreaterThanOrEqual(0);
-      expect(routes.slice(index, index + 420)).toContain("width: 'full'");
+      expect(routes.slice(index, index + 240)).toContain(`pageType: '${type}'`);
     }
   });
 

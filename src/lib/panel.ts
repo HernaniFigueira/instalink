@@ -2,7 +2,7 @@
 // PAINEL — CATÁLOGO ÚNICO DE DESTINOS · permissões · visibilidade
 // ═══════════════════════════════════════════════════════════════
 // A1.2 · Bloco 1. Este arquivo é a ÚNICA lista de destinos do painel.
-// Sidebar (desktop e mobile), largura do conteúdo, guarda de rota no
+// Sidebar (desktop e mobile), arquitetura de página, guarda de rota no
 // cliente, rótulos de 403, requisito de unidade ativa e o mapa de rotas
 // legadas são PROJEÇÕES daqui — nenhum deles decide o que existe.
 //
@@ -153,6 +153,34 @@ export function panelRoutesIn(section: PanelSectionId): PanelRouteDef[] {
 }
 
 // ── Definição de destino ───────────────────────────────────────
+export type PageType = 'workspace' | 'record' | 'detail' | 'form' | 'hub';
+
+/**
+ * Rotas autenticadas que usam um shell diferente de DashboardShell ou são
+ * aliases de redirect. Permanecem tipadas no mesmo contrato de arquétipos.
+ */
+export const AUTHENTICATED_AUXILIARY_ROUTES: Array<{
+  href: string;
+  pageType: PageType;
+  shell: 'standalone' | 'master' | 'redirect';
+  redirectTo?: string;
+}> = [
+  { href: '/alterar-senha', pageType: 'form', shell: 'standalone' },
+  { href: '/setup-master', pageType: 'form', shell: 'standalone' },
+  { href: '/master', pageType: 'hub', shell: 'master' },
+  { href: '/master/atividade', pageType: 'workspace', shell: 'master' },
+  { href: '/master/masters', pageType: 'hub', shell: 'master' },
+  { href: '/master/organizacoes', pageType: 'hub', shell: 'master' },
+  { href: '/master/organizacoes/[id]', pageType: 'detail', shell: 'master' },
+  { href: '/master/suporte', pageType: 'workspace', shell: 'master' },
+  { href: '/master/unidades', pageType: 'hub', shell: 'master' },
+  { href: '/master/unidades/[id]', pageType: 'detail', shell: 'master' },
+  { href: '/master/usuarios', pageType: 'hub', shell: 'master' },
+  { href: '/admin', pageType: 'hub', shell: 'redirect', redirectTo: '/master' },
+  { href: '/admin/auditoria', pageType: 'workspace', shell: 'redirect', redirectTo: '/master/atividade' },
+  { href: '/admin/empresas/[id]', pageType: 'detail', shell: 'redirect', redirectTo: '/master/unidades/[id]' },
+];
+
 export interface PanelRouteDef {
   href: string;
   label: string;
@@ -182,13 +210,8 @@ export interface PanelRouteDef {
    * Default: true.
    */
   sidebar?: boolean;
-  /**
-   * 'full'     = telas densas (grade, calendário, kanban, tabela, colunas
-   *              múltiplas) — aproveitam a largura disponível;
-   * 'contained'= formulários e listas de coluna única — 960px de leitura.
-   * Default: 'contained'.
-   */
-  width?: 'full' | 'contained';
+  /** Arquétipo obrigatório: determina largura máxima, gutters e padding do PageFrame. */
+  pageType: PageType;
   /**
    * false = a rota não exige unidade ativa no `?b=` (visão de organização).
    * Default: true.
@@ -220,9 +243,9 @@ export const PANEL_ROUTES: PanelRouteDef[] = [
     // quebraria links salvos, permissões gravadas e integrações, sem entregar
     // nada a quem opera. O que o lojista lê é o que mudou.
     href: '/dashboard', label: 'Visão geral', icon: 'home', section: 'inicio',
+    pageType: 'workspace',
     permission: 'dashboard', area: 'dashboard',
     description: 'O dia de hoje: o que precisa de atenção agora, o que está marcado e quem está esperando.',
-    width: 'full',
   },
 
   // ── Operação: onde o dia acontece ──
@@ -232,51 +255,53 @@ export const PANEL_ROUTES: PanelRouteDef[] = [
     // unificar os modelos internos (Professional e User/Member seguem
     // separados). As rotas antigas continuam existindo e alcançáveis daqui.
     href: '/estrutura', label: 'Estrutura', icon: 'grid', section: 'operacao',
+    pageType: 'hub',
     modes: ['services', 'bookings'], permission: ['catalogo', 'equipe'], area: 'estrutura',
     description: 'O que a clínica oferece, quem realiza, quando atende e quem pode entrar no sistema.',
-    width: 'full',
   },
   {
     href: '/agenda', label: 'Agenda', icon: 'calendar', section: 'operacao',
+    pageType: 'workspace',
     modes: ['bookings'], permission: 'agenda', area: 'agenda',
     description: 'O que está marcado, com quem, e o que ainda precisa ser fechado.',
-    width: 'full',
   },
   {
     // Fluxo clínico longo: destino contextual da Agenda/Cliente, fora do menu principal.
     href: '/atendimento', label: 'Atendimento', icon: 'fileText', section: 'operacao',
-    permission: 'atendimento', area: 'atendimento', sidebar: false, width: 'full',
+    pageType: 'record',
+    permission: 'atendimento', area: 'atendimento', sidebar: false,
     description: 'Registro clínico vinculado a um agendamento ou à fila.',
   },
   {
     // A3.4: entrou em Operação. Quem ATENDE ajusta quem atende no dia a dia —
     // profissional e agenda são a mesma conversa, não catálogo de vitrine.
     href: '/profissionais', label: 'Profissionais', icon: 'idcard', section: 'operacao',
+    pageType: 'hub',
     modes: ['services', 'bookings'], permission: 'catalogo', area: 'profissionais',
     description: 'Quem realiza os atendimentos, com quais serviços, acesso ao sistema e agenda própria.',
-    width: 'full',
   },
   {
     // A3.4: entrou em Operação, junto de Agenda e Profissionais.
     // Era "/horarios". "Disponibilidade" é o que a tela É: quando a casa e cada
     // profissional podem atender (janela semanal + dias especiais).
     href: '/disponibilidade', label: 'Disponibilidade', icon: 'clock', section: 'operacao',
+    pageType: 'hub',
     modes: ['services', 'bookings'], permission: 'catalogo', area: 'disponibilidade',
     description: 'Quando a casa e cada profissional podem atender, inclusive dias especiais.',
-    width: 'full',
   },
   {
     // Era "/whatsapp". Renomeado porque a tela é o INBOX (operação diária); a
     // conexão do canal é outra tarefa e mora em Canais & Integrações.
     href: '/conversas', label: 'Conversas', icon: 'inbox', section: 'operacao',
+    pageType: 'workspace',
     permission: 'whatsapp', area: 'conversas',
     description: 'As conversas com os seus clientes em um só lugar, com o histórico de cada um.',
-    width: 'full',
   },
   {
     href: '/agente', label: 'Assistente', icon: 'spark', section: 'operacao',
+    pageType: 'form',
     permission: 'agente', area: 'agente',
-    description: 'O assistente que responde por você no site e no WhatsApp, com os dados do negócio.',
+    description: 'O assistente que orienta clientes pelos canais conectados, com os dados reais do negócio.'
   },
   {
     // Era a 5ª aba de /automacoes. Tarefa é fila de trabalho da equipe — uso
@@ -285,6 +310,7 @@ export const PANEL_ROUTES: PanelRouteDef[] = [
     // tem permissão real (atendente/secretaria resolvem pendências o dia todo);
     // os atalhos contextuais (Visão geral, cliente, conversa) continuam.
     href: '/tarefas', label: 'Pendências', icon: 'tasks', section: 'operacao',
+    pageType: 'workspace',
     permission: ['clientes', 'agenda', 'leads', 'config'], area: 'tarefas',
     description: 'O que ficou combinado, com quem e com qual prazo — inclusive o que já venceu.',
   },
@@ -294,17 +320,17 @@ export const PANEL_ROUTES: PanelRouteDef[] = [
     // Continua aparecendo SOMENTE quando o módulo de pedidos existe
     // (`modes: ['orders']`): sem o módulo, a porta não existe para o usuário.
     href: '/pedidos', label: 'Pedidos', icon: 'receipt', section: 'operacao',
+    pageType: 'workspace',
     modes: ['orders'], permission: 'pedidos', area: 'pedidos',
-    description: 'Pedidos recebidos pela página, com status, itens e histórico de cada cliente.',
-    width: 'full',
+    description: 'Pedidos registrados, com status, itens e histórico de cada cliente.'
   },
 
   // ── Pessoas: quem está do outro lado ──
   {
     href: '/clientes', label: 'Clientes', icon: 'users', section: 'pessoas',
+    pageType: 'workspace',
     permission: 'clientes', area: 'clientes',
     description: 'As pessoas do outro lado: histórico 360, notas, consentimento e novo atendimento.',
-    width: 'full',
   },
   {
     // Era "/esteira" (rota sem porta no menu) e também uma visão dentro de
@@ -313,34 +339,35 @@ export const PANEL_ROUTES: PanelRouteDef[] = [
     // Pessoas) — para atendente/secretaria que trabalham oportunidades. O
     // Kanban continua sendo FERRAMENTA opcional, nunca o CRM central.
     href: '/funil', label: 'Oportunidades', icon: 'funnel', section: 'pessoas',
+    pageType: 'workspace',
     permission: 'leads', area: 'funil',
     description: 'As oportunidades por etapa, do primeiro contato ao atendimento agendado.',
-    width: 'full',
   },
 
   // ── Oferta: o que eu ofereço e vendo ──
   {
     href: '/servicos', label: 'Serviços', icon: 'service', section: 'oferta',
+    pageType: 'hub',
     modes: ['services', 'bookings'], permission: 'catalogo', area: 'servicos',
     description: 'O que você oferece, com preço, duração e quem realiza.',
-    width: 'full',
   },
   {
     href: '/produtos', label: 'Produtos', icon: 'bag', section: 'oferta',
+    pageType: 'hub',
     modes: ['products', 'orders'], permission: 'catalogo', area: 'catalogo',
-    description: 'A vitrine de produtos exibida na sua página pública, com preço e foto.',
-    width: 'full',
+    description: 'Cadastro de produtos com preço, categoria e apresentação; não controla estoque, pedidos ou dispensação.',
   },
 
   // ── Crescimento: de onde vem gente e o que trabalha sozinho ──
   {
     href: '/campanhas', label: 'Campanhas', icon: 'megaphone', section: 'crescimento',
+    pageType: 'workspace',
     permission: 'campanhas', area: 'campanhas',
     description: 'Mensagens para quem deu consentimento, com público e histórico de envio.',
-    width: 'full',
   },
   {
     href: '/automacoes', label: 'Automações', icon: 'bolt', section: 'crescimento',
+    pageType: 'hub',
     permission: 'config', area: 'automations',
     description: 'Quando acontecer X, se Y, o sistema faz Z sozinho — sem ninguém lembrar.',
   },
@@ -349,9 +376,9 @@ export const PANEL_ROUTES: PanelRouteDef[] = [
     // ação) + prévia de candidatos com dado real. SEM envio nesta fase: o canal
     // pode não estar operacional e a tela diz "Aguardando conexão do WhatsApp".
     href: '/followup', label: 'Follow-up', icon: 'send', section: 'crescimento',
+    pageType: 'workspace',
     permission: 'config', area: 'automations',
     description: 'Receitas de retorno: confirmação, falta, pós-atendimento e paciente inativo — nada sai sem canal conectado.',
-    width: 'full',
   },
   {
     // Porta única que substitui três: a rota /integracoes, a aba "Integrações"
@@ -359,6 +386,7 @@ export const PANEL_ROUTES: PanelRouteDef[] = [
     // CANAIS (por onde se fala) · FONTES (de onde o lead chega) ·
     // INTEGRAÇÕES (por onde os dados viajam, com direção declarada).
     href: '/canais', label: 'Canais & Integrações', icon: 'plugs', section: 'crescimento',
+    pageType: 'hub',
     permission: 'config', area: 'canais',
     description: 'Por onde o cliente fala com você (WhatsApp, redes sociais), de onde ele chega e como outros sistemas se conectam.',
   },
@@ -366,25 +394,25 @@ export const PANEL_ROUTES: PanelRouteDef[] = [
   // ── Resultados: como está indo ──
   {
     href: '/resultados', label: 'Resultados', icon: 'chart', section: 'resultados',
+    pageType: 'workspace',
     permission: 'financeiro', area: 'resultados',
     description: 'Os números do período com comparação, por serviço, profissional e origem.',
-    width: 'full',
   },
   {
     // FASE 2 · P7 — Financeiro básico (Gestão). Não é ERP: movimentações
     // registradas (receita/despesa) com filtros, totais e gráficos simples.
     href: '/financeiro', label: 'Financeiro', icon: 'wallet', section: 'resultados',
+    pageType: 'workspace',
     permission: 'financeiro', area: 'financeiro',
     description: 'O que foi recebido, o que está pendente e o que sai — com filtros e período.',
-    width: 'full',
   },
   {
     // Antes só existia atrás do seletor de unidade — e o seletor só aparece com
     // 2+ unidades, o que tornava impossível criar a segunda. Porta real.
     href: '/organizacao', label: 'Organização', icon: 'buildings', section: 'resultados',
+    pageType: 'hub',
     permission: 'config', area: 'organizacao', requiresBusiness: false,
     description: 'As suas unidades juntas: consolidado do período, troca de unidade e criação de nova.',
-    width: 'full',
   },
   {
     // Era a 4ª aba de /automacoes. Observar o sistema funcionando é visita
@@ -396,6 +424,7 @@ export const PANEL_ROUTES: PanelRouteDef[] = [
     // `sidebar: false` vive do atalho contextual de quem o usa, não de uma
     // segunda lista com comportamento diferente dentro do mesmo menu.
     href: '/execucoes', label: 'Execuções', icon: 'history', section: 'resultados',
+    pageType: 'workspace',
     permission: 'config', area: 'execucoes', sidebar: false,
     description: 'O que as automações fizeram — e, quando falharam, o que aconteceu e o que fazer.',
   },
@@ -403,10 +432,10 @@ export const PANEL_ROUTES: PanelRouteDef[] = [
   // ── Presença: a porta pública ──
   {
     href: '/pagina', label: 'Página', icon: 'link', section: 'presenca',
+    pageType: 'workspace',
     permission: 'pagina', area: 'pagina',
     // Editor 2.0: três colunas (seções · formulário · prévia) precisam do
-    // workspace inteiro — contained/960px espremia o editor (Fidelity Pass 3).
-    width: 'full',
+    // workspace inteiro — arquétipo form (960px) espremia as três colunas do editor.
     description: 'O editor da sua página pública: blocos, navegação, visual, avaliações e publicação.',
   },
 
@@ -416,24 +445,27 @@ export const PANEL_ROUTES: PanelRouteDef[] = [
     // /perfil = esta conta · /equipe = quem tem login na unidade.
     // sidebar: false → fora do menu; alcançável pelo menu da conta.
     href: '/perfil', label: 'Meu perfil', icon: 'userCircle', section: 'administracao',
+    pageType: 'form',
     permission: 'dashboard', area: 'perfil', sidebar: false, requiresBusiness: false,
     description: 'Foto, nome, contato, cargo e dados profissionais desta conta.',
   },
   {
     href: '/equipe', label: 'Equipe', icon: 'shield', section: 'administracao',
+    pageType: 'hub',
     permission: 'equipe', area: 'equipe',
     description: 'Quem tem login, com qual papel, o que enxerga e o vínculo com o profissional.',
-    width: 'full',
   },
   {
     // Recursos = capacidades internas/plano. Continua existindo e acessível,
     // mas a partir de Configurações (não como conceito de primeiro nível).
     href: '/recursos', label: 'Recursos', icon: 'toggle', section: 'administracao',
+    pageType: 'hub',
     permission: 'config', area: 'recursos', sidebar: false,
     description: 'Quais módulos da empresa estão ligados. Desativar oculta na hora e não apaga nada.',
   },
   {
     href: '/configuracoes', label: 'Configurações', icon: 'settings', section: 'administracao',
+    pageType: 'form',
     permission: 'config', area: 'config',
     description: 'Dados do negócio, regras de reserva e aparência do painel.',
   },
@@ -450,10 +482,17 @@ export const LEGACY_ROUTES: Array<{ from: string; to: string }> = [
   { from: '/integracoes', to: '/canais?tab=integracoes' },
 ];
 
-/** Rotas que usam a largura toda — derivado do catálogo (sem lista paralela). */
+/** Workspaces sem max-width — projeção do arquétipo, não uma regra paralela. */
 export const FULL_WIDTH_PATHS = PANEL_ROUTES
-  .filter((r) => r.width === 'full')
+  .filter((r) => r.pageType === 'workspace')
   .map((r) => r.href);
+
+/** Arquétipo da rota ativa, incluindo a ficha filha /clientes/[id]. */
+export function pageTypeForPath(pathname: string): PageType | undefined {
+  const clean = normalizePanelPath(pathname);
+  if (clean.startsWith('/clientes/')) return 'detail';
+  return activePanelRoute(clean)?.pageType;
+}
 
 export interface PanelContext {
   permissions: Partial<Record<PermissionId, boolean>>;

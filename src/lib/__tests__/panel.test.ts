@@ -8,7 +8,7 @@ import {
   API_GUARDS, FOOTER_SECTIONS, FULL_WIDTH_PATHS, LEGACY_ROUTES, PANEL_ROUTES, PANEL_SECTIONS,
   allowedPanelRoutes, activePanelPath, activePanelRoute, emptyPanelContext, firstAllowedPath,
   hasAnyPermission, hasPermission, isPanelRouteAllowed, isPanelRouteVisible, panelAccess,
-  panelNavigation, panelRouteFor, panelRoutesIn, permissionForPath, permissionsForRoute,
+  panelNavigation, panelRouteFor, panelRoutesIn, pageTypeForPath, permissionForPath, permissionsForRoute,
   routeRequiresBusiness, visiblePanelRoutes,
 } from '../panel';
 import { inPanelPath } from '../client-auth';
@@ -98,18 +98,16 @@ describe('catálogo — completude (por qual porta se chega até mim?)', () => {
     }
   });
 
-  it('largura é política declarada (full = tela densa · contained = formulário/lista)', () => {
-    for (const r of PANEL_ROUTES) {
-      if (r.width !== undefined) expect(['full', 'contained']).toContain(r.width);
-    }
-    // telas densas aproveitam a largura; formulários ficam em coluna de leitura
-    expect(panelRouteFor('/agenda')?.width).toBe('full');
-    expect(panelRouteFor('/funil')?.width).toBe('full');
-    expect(panelRouteFor('/conversas')?.width).toBe('full');
-    expect(panelRouteFor('/configuracoes')?.width ?? 'contained').toBe('contained');
-    // Fidelity Pass 3: o Editor 2.0 tem três colunas (seções · formulário ·
-    // prévia) e precisa do workspace inteiro — política declarada no catálogo.
-    expect(panelRouteFor('/pagina')?.width).toBe('full');
+  it('todas as rotas declaram arquétipo oficial e respeitam o tipo de tela', () => {
+    const valid = ['workspace', 'record', 'detail', 'form', 'hub'];
+    for (const r of PANEL_ROUTES) expect(valid, `${r.href} sem pageType válido`).toContain(r.pageType);
+    expect(panelRouteFor('/agenda')?.pageType).toBe('workspace');
+    expect(panelRouteFor('/funil')?.pageType).toBe('workspace');
+    expect(panelRouteFor('/conversas')?.pageType).toBe('workspace');
+    expect(panelRouteFor('/configuracoes')?.pageType).toBe('form');
+    expect(panelRouteFor('/atendimento')?.pageType).toBe('record');
+    expect(pageTypeForPath('/clientes/123')).toBe('detail');
+    expect(pageTypeForPath('/nao-existe')).toBeUndefined();
   });
 
   it('todo ícone do catálogo renderiza um glifo real, não SVG vazio', () => {
@@ -119,7 +117,7 @@ describe('catálogo — completude (por qual porta se chega até mim?)', () => {
   });
 
   it('FULL_WIDTH_PATHS é derivado do catálogo (sem lista paralela)', () => {
-    expect(FULL_WIDTH_PATHS).toEqual(PANEL_ROUTES.filter((r) => r.width === 'full').map((r) => r.href));
+    expect(FULL_WIDTH_PATHS).toEqual(PANEL_ROUTES.filter((r) => r.pageType === 'workspace').map((r) => r.href));
     for (const p of FULL_WIDTH_PATHS) expect(panelRouteFor(p)).toBeDefined();
     expect(FULL_WIDTH_PATHS).toContain('/agenda');
     expect(FULL_WIDTH_PATHS).not.toContain('/configuracoes');
@@ -388,7 +386,8 @@ describe('sidebar — projeção (permissão ∩ módulos, ordem do catálogo)',
     const shell = read('src/components/DashboardShell.tsx');
     expect(shell).toMatch(/panelNavigation\(panelCtx\)/);
     expect(shell).toMatch(/activePanelPath\(pathname\)/);
-    expect(shell).toMatch(/activeRoute\?\.width === 'full'/);
+    expect(shell).toMatch(/pageTypeForPath\(pathname\)/);
+    expect(shell).toMatch(/<PageFrame key=\{business\.id\} type=\{pageType\}/);
     expect(shell).toMatch(/<WorkspaceNavigation nav=\{nav\}/);
     // nenhum href de porta escrito à mão no shell (só /master, fora do catálogo)
     expect(shell).not.toMatch(/href="\/(dashboard|agenda|clientes|servicos|configuracoes|conversas|funil|canais)"/);

@@ -6,10 +6,10 @@ import { loadMe } from '@/lib/session-me';
 import { clearToken } from '@/lib/client-auth';
 import { cn } from '@/lib/utils';
 import { Icon } from '@/components/icons';
-import { PageSkeleton } from '@/components/ui';
+import { PageFrame, PageSkeleton } from '@/components/ui';
 import { AccessDenied, ForbiddenToasts, PanelHomeProvider } from '@/components/dashboard/AccessNotice';
 import {
-  activePanelPath, activePanelRoute, firstAllowedPath, panelAccess, panelNavigation,
+  activePanelPath, activePanelRoute, firstAllowedPath, panelAccess, panelNavigation, pageTypeForPath,
   routeRequiresBusiness, PANEL_ROUTES, type PanelRouteDef,
 } from '@/lib/panel';
 import { isSessionExpired } from '@/lib/http';
@@ -285,10 +285,9 @@ export function DashboardShell({ children }: { children: React.ReactNode }) {
   const isConversations = activePath === '/conversas';
   const standaloneConversation = isConversations && params.get('standalone') === '1';
   const conversationFocus = isConversations && (standaloneConversation || params.get('focus') === '1');
-  // Largura é política do CATÁLOGO (campo `width`), não uma lista à parte:
-  // telas densas (grade, kanban, tabela, colunas) usam a largura toda;
-  // formulários e listas de coluna única ficam em 960px de leitura.
-  const isFullWidth = activeRoute?.width === 'full';
+  // PageFrame recebe o contrato obrigatório do catálogo, inclusive detalhes
+  // aninhados em /clientes/[id]. Largura e gutters não são escolhidos pela tela.
+  const pageType = pageTypeForPath(pathname) || activeRoute?.pageType || 'workspace';
   // Sem permissão de dashboard (ex.: VIEWER com agenda liberada) o usuário
   // ainda precisa de um destino válido ao clicar em "Início" — e TODO 403
   // precisa de uma porta de volta (fornecida por contexto às telas).
@@ -345,6 +344,7 @@ export function DashboardShell({ children }: { children: React.ReactNode }) {
         searchItems={buildNavSearchItems(operationalNav, q)}
         activePath={activePath}
         businessId={business.id}
+        legacyPagesEnabled={legacyPagesEnabled}
         alerts={alerts}
         user={{ ...user, role: unitRole || user.role }}
         unit={business}
@@ -384,7 +384,8 @@ export function DashboardShell({ children }: { children: React.ReactNode }) {
             }} className="ml-auto underline underline-offset-2">Sair do modo suporte</button>
           </div>
         )}
-        <div key={business.id} className={cn(isAgenda ? 'agenda-page-gutter' : isConversations ? 'conversation-page-wrap' : 'px-4 lg:px-8 py-6', !isFullWidth && !isAgenda && !isConversations && 'w-full max-w-[960px] mx-auto')}>
+        <PageFrame key={business.id} type={pageType} flush={isAgenda || isConversations}
+          className={cn(isAgenda && 'agenda-page-gutter', isConversations && 'conversation-page-wrap')}>
           {/* CONTRATO DO REFINO FINAL — sem breadcrumb em NENHUMA tela do
               workspace: o cabeçalho da página (chip + título + subtítulo)
               identifica a tela. O contexto vive na sidebar/topbar. */}
@@ -423,7 +424,7 @@ export function DashboardShell({ children }: { children: React.ReactNode }) {
                 : undefined}
             />
           ) : children}
-        </div>
+        </PageFrame>
         {!isAgenda && !isConversations && business.id && (
           <footer className="px-4 lg:px-8 py-4 border-t border-[var(--border)] mt-8">
             <p className="text-[11px] text-[var(--text-faint)] text-center">{business.name}{legacyPagesEnabled && <> · <a href={`/${business.slug}`} target="_blank" rel="noreferrer" className="underline font-semibold text-[var(--text-muted)]">página pública /{business.slug}</a></>}</p>

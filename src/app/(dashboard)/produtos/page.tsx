@@ -21,6 +21,7 @@ import { Button, Drawer, EmptyState, Field, Input, ListSkeleton, Notice, PageHea
 import { useOverlayDismissGuard } from '@/components/dashboard/OverlayDismissGuard';
 import { AccessDenied, useAreaLoad } from '@/components/dashboard/AccessNotice';
 import { apiGet, apiSend } from '@/lib/api-client';
+import { isLegacyPagesEnabled } from '@/lib/product';
 import { Icon } from '@/components/icons';
 import { ImageUpload } from '@/components/dashboard/ImageUpload';
 import { showcasePriceCents } from '@/lib/showcase';
@@ -31,6 +32,7 @@ const cents = parseMoneyToCents;
 const reais = centsToBR;
 
 export default function ProdutosPage() {
+  const legacyPagesEnabled = isLegacyPagesEnabled();
   const params = useSearchParams();
   const businessId = params.get('b') || '';
   const [cats, setCats] = useState<Category[]>([]);
@@ -81,8 +83,10 @@ export default function ProdutosPage() {
     <>
       <PageHeader
         icon="bag"
-        title="Vitrine de produtos"
-        hint="Produtos exibidos na sua página com CTA “Tenho interesse” direto no WhatsApp. Sem carrinho, sem checkout."
+        title={legacyPagesEnabled ? "Vitrine de produtos" : "Produtos"}
+        hint={legacyPagesEnabled
+          ? "Produtos exibidos na sua página com CTA “Tenho interesse” direto no WhatsApp. Sem carrinho, sem checkout."
+          : "Cadastro de produtos existente. Este módulo não movimenta estoque, registra vendas ou controla dispensação; sua continuidade operacional será decidida separadamente."}
         action={
           <span className="flex flex-wrap gap-2">
             <Button variant="secondary" onClick={() => setShowCat(!showCat)}><Icon n="plus" size={14} /> Categoria</Button>
@@ -104,12 +108,14 @@ export default function ProdutosPage() {
 
       {denied ? <AccessDenied area="Produtos" /> : failed ? (
         <div role="alert">
-          <EmptyState icon="alert" title="Não foi possível carregar a vitrine" hint={failed}
+          <EmptyState icon="alert" title={legacyPagesEnabled ? "Não foi possível carregar a vitrine" : "Não foi possível carregar produtos"} hint={failed}
             action={<Button variant="primary" size="sm" onClick={() => setReloadTick((t) => t + 1)}>Tentar de novo</Button>} />
         </div>
       ) : !loaded ? <ListSkeleton rows={4} /> : products.length === 0 ? (
-        <EmptyState icon="bag" title="Sua vitrine está vazia"
-          hint="Cadastre um produto (ex: pomada, sérum, kit de cuidados). Quem se interessar fala com você no WhatsApp."
+        <EmptyState icon="bag" title={legacyPagesEnabled ? "Sua vitrine está vazia" : "Nenhum produto cadastrado"}
+          hint={legacyPagesEnabled
+            ? "Cadastre um produto (ex: pomada, sérum, kit de cuidados). Quem se interessar fala com você no WhatsApp."
+            : "O cadastro legado guarda dados de apresentação, sem estoque, venda, pedidos ou dispensação. A utilidade no fluxo da clínica será decidida à parte; não representa um módulo de Farmácia."}
           action={<Button variant="primary" onClick={() => { setEditing(null); setShowForm(true); }}><Icon n="plus" size={14} /> Adicionar produto</Button>} />
       ) : (
         <div className="bg-white border border-zinc-200">
@@ -140,7 +146,7 @@ export default function ProdutosPage() {
                   <span className="hidden sm:flex items-center gap-1.5">
                     <button onClick={() => toggleActive(p)} role="switch" aria-checked={p.active}
                       className={cn('text-xs font-medium px-2 py-1 rounded-md border', p.active ? 'bg-emerald-50 text-emerald-700 border-emerald-200' : 'bg-zinc-50 text-zinc-500 border-zinc-200')}>
-                      {p.active ? 'Visível na página' : 'Oculto'}
+                      {legacyPagesEnabled ? (p.active ? 'Visível na página' : 'Oculto') : (p.active ? 'Ativo' : 'Inativo')}
                     </button>
                   </span>
                   <span className="flex justify-end items-center gap-1.5 text-xs shrink-0">
@@ -170,15 +176,19 @@ export default function ProdutosPage() {
         </div>
       )}
 
-      <p className="text-xs text-zinc-400 mt-4">
-        A vitrine aparece na página pública enquanto o módulo <strong>Produtos</strong> estiver ativo em{' '}
-        <Link href={`/recursos?b=${businessId}`} className="underline hover:text-zinc-600">Capacidades do sistema</Link>.
-        Desativar não apaga nada.
-      </p>
+      {legacyPagesEnabled ? (
+        <p className="text-xs text-zinc-400 mt-4">
+          A vitrine aparece na página pública enquanto o módulo <strong>Produtos</strong> estiver ativo em{' '}
+          <Link href={`/recursos?b=${businessId}`} className="underline hover:text-zinc-600">Capacidades do sistema</Link>.
+          Desativar não apaga nada.
+        </p>
+      ) : (
+        <p className="text-xs text-zinc-400 mt-4">Os dados existentes permanecem preservados; este cadastro não deve ser usado como controle de estoque.</p>
+      )}
 
       {showForm && (
         <ProductForm
-          product={editing} cats={cats} businessId={businessId}
+          product={editing} cats={cats} businessId={businessId} legacyPagesEnabled={legacyPagesEnabled}
           onClose={() => { setShowForm(false); setEditing(null); }}
           onSave={async (payload) => { await call('product.save', payload); setShowForm(false); setEditing(null); }}
         />
@@ -189,10 +199,11 @@ export default function ProdutosPage() {
 
 // Cadastro MÍNIMO da vitrine: foto, nome, descrição, preço, categoria,
 // ativo/oculto e destaque. Nada de opções/adicionais/variações.
-function ProductForm({ product, cats, businessId, onClose, onSave }: {
+function ProductForm({ product, cats, businessId, legacyPagesEnabled, onClose, onSave }: {
   product: Product | null;
   cats: Category[];
   businessId: string;
+  legacyPagesEnabled: boolean;
   onClose: () => void;
   onSave: (p: Record<string, any>) => Promise<void>;
 }) {
@@ -242,8 +253,8 @@ function ProductForm({ product, cats, businessId, onClose, onSave }: {
       open
       onClose={onClose}
       dismissGuard={dismissState}
-      title={product ? 'Editar produto' : 'Novo produto da vitrine'}
-      subtitle="Informações que aparecem na página pública."
+      title={product ? 'Editar produto' : legacyPagesEnabled ? 'Novo produto da vitrine' : 'Novo produto'}
+      subtitle={legacyPagesEnabled ? "Informações que aparecem na página pública." : "Dados básicos preservados; este cadastro não controla estoque, venda ou dispensação."}
       width="max-w-md"
       footer={(
         <>
@@ -275,10 +286,12 @@ function ProductForm({ product, cats, businessId, onClose, onSave }: {
           </Field>
         </div>
         <div className="flex flex-wrap gap-4">
-          <label className="inline-flex items-center gap-2 text-sm font-medium"><Switch checked={active} onChange={setActive} label="Visível na vitrine" /> Visível na vitrine</label>
-          <label className="inline-flex items-center gap-2 text-sm font-medium"><Switch checked={featured} onChange={setFeatured} label="Destaque na vitrine" /> Destaque</label>
+          <label className="inline-flex items-center gap-2 text-sm font-medium"><Switch checked={active} onChange={setActive} label={legacyPagesEnabled ? "Visível na vitrine" : "Produto ativo"} /> {legacyPagesEnabled ? "Visível na vitrine" : "Produto ativo"}</label>
+          <label className="inline-flex items-center gap-2 text-sm font-medium"><Switch checked={featured} onChange={setFeatured} label={legacyPagesEnabled ? "Destaque na vitrine" : "Produto em destaque"} /> {legacyPagesEnabled ? "Destaque na vitrine" : "Produto em destaque"}</label>
         </div>
-        <p className="text-xs text-[var(--text-muted)] leading-relaxed">Na página pública, o visitante pode demonstrar interesse pelo WhatsApp do negócio. Nenhum pedido é gerado.</p>
+        <p className="text-xs text-[var(--text-muted)] leading-relaxed">{legacyPagesEnabled
+          ? 'Na página pública, o visitante pode demonstrar interesse pelo WhatsApp do negócio. Nenhum pedido é gerado.'
+          : 'Os campos de apresentação permanecem preservados para uma decisão futura; não representam controle de estoque, venda ou Farmácia.'}</p>
         {error && <Notice tone="error">{error}</Notice>}
       </form>
     </Drawer>

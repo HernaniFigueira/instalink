@@ -7,10 +7,11 @@
 import { useEffect, useState } from 'react';
 import { useSearchParams } from 'next/navigation';
 import Link from 'next/link';
-import { Avatar, Button, Field, Input, Notice, PageHeader, PageSkeleton, Textarea } from '@/components/ui';
-import { Icon } from '@/components/icons';
+import { ActionBar, Badge, Button, buttonCls, Field, FormSection, Input, Notice, PageHeader, PageSkeleton, Textarea } from '@/components/ui';
 import { ImageUpload } from '@/components/dashboard/ImageUpload';
 import { apiGet, apiSend } from '@/lib/api-client';
+import { Icon } from '@/components/icons';
+import { roleLabel as accessRoleLabel } from '@/lib/role-labels';
 
 interface MeProfile {
   id: string; name: string; email: string; role: string;
@@ -92,94 +93,96 @@ export default function MeuPerfilPage() {
 
   if (!loaded) return <PageSkeleton />;
 
-  const roleLabel = me?.role === 'master' ? 'Master' : me?.role === 'admin' ? 'Admin' : 'Proprietário';
+  const officialRole = accessRoleLabel(me?.role);
 
   return (
-    <div className="max-w-[720px] mx-auto pb-10">
+    <div className="space-y-4 pb-10">
       <PageHeader icon="userCircle" title="Meu perfil"
-        hint="Dados da sua conta de acesso — a topbar usa a foto quando presente." />
+        hint="Sua conta de acesso e sua identidade profissional na clínica." />
 
       {msg && <Notice tone="success" className="mb-4">{msg}</Notice>}
       {err && <Notice tone="warning" className="mb-4">{err}</Notice>}
 
-      <form onSubmit={save} className="bg-white border border-[var(--border)] rounded-lg p-5 space-y-4">
-        <div className="flex items-center gap-4">
-          <Avatar name={form.name || me?.name || '?'} src={form.photo || undefined} size={72} />
-          <div className="flex-1 min-w-0">
-            <p className="text-sm font-semibold">{form.name || me?.name}</p>
-            <p className="text-xs text-[var(--text-muted)]">{roleLabel} · {me?.email}</p>
+      <form onSubmit={save} className="space-y-4">
+        <FormSection title="Dados pessoais" hint="Informações da sua conta de acesso.">
+          {businessId ? (
+            <ImageUpload label="FOTO DE PERFIL" value={form.photo} onChange={(url) => set('photo', url)}
+              businessId={businessId} circle previewH="h-24" />
+          ) : (
+            <Field label="Foto de perfil — URL" htmlFor="pf-photo">
+              <Input id="pf-photo" value={form.photo} onChange={(e) => set('photo', e.target.value)} placeholder="https://…" />
+            </Field>
+          )}
+
+          <div className="grid sm:grid-cols-2 gap-3">
+            <Field label="Nome" htmlFor="pf-name">
+              <Input id="pf-name" required value={form.name} onChange={(e) => set('name', e.target.value)} />
+            </Field>
+            <Field label="E-mail da conta" htmlFor="pf-email">
+              <Input id="pf-email" type="email" required value={form.email} onChange={(e) => set('email', e.target.value)} />
+            </Field>
+            <Field label="Telefone / WhatsApp" htmlFor="pf-phone">
+              <Input id="pf-phone" value={form.phone} onChange={(e) => set('phone', e.target.value)} placeholder="(21) 99999-0000" />
+            </Field>
+            <div className="space-y-1.5">
+              <span className="block text-xs font-semibold text-[var(--text-muted)]">Papel de acesso</span>
+              <Badge tone="blue" title="Papel de acesso à unidade — não é o cargo profissional">
+                {officialRole || 'Equipe'}
+              </Badge>
+              <p className="text-xs text-[var(--text-muted)]">Define o que esta conta pode acessar; não é um cargo clínico.</p>
+            </div>
           </div>
-        </div>
+        </FormSection>
 
-        {businessId && (
-          <ImageUpload label="FOTO DE PERFIL" value={form.photo} onChange={(url) => set('photo', url)}
-            businessId={businessId} circle previewH="h-24" />
-        )}
-        {!businessId && (
-          <Field label="URL da foto" htmlFor="pf-photo">
-            <Input id="pf-photo" value={form.photo} onChange={(e) => set('photo', e.target.value)}
-              placeholder="https://…" />
+        <FormSection title="Identidade profissional" hint="Cargo e credenciais profissionais são diferentes do papel de acesso.">
+          <div className="grid sm:grid-cols-2 gap-3">
+            <Field label="Cargo / função" htmlFor="pf-title" hint="Opcional">
+              <Input id="pf-title" value={form.title} onChange={(e) => set('title', e.target.value)} placeholder="Ex.: Médica veterinária responsável" />
+            </Field>
+            <Field label="Conselho profissional" htmlFor="pf-conselho" hint="Opcional">
+              <Input id="pf-conselho" value={form.conselho} onChange={(e) => set('conselho', e.target.value)} placeholder="Ex.: CRMV 123456" />
+            </Field>
+          </div>
+          <Field label="Formação e especialidades" htmlFor="pf-bio" hint="Identificação profissional. Não altera permissões de acesso.">
+            <Textarea id="pf-bio" rows={3} value={form.professionalBio} onChange={(e) => set('professionalBio', e.target.value)} />
           </Field>
-        )}
 
-        <div className="grid sm:grid-cols-2 gap-3">
-          <Field label="Nome" htmlFor="pf-name">
-            <Input id="pf-name" required value={form.name} onChange={(e) => set('name', e.target.value)} />
-          </Field>
-          <Field label="E-mail" htmlFor="pf-email">
-            <Input id="pf-email" type="email" required value={form.email} onChange={(e) => set('email', e.target.value)} />
-          </Field>
-          <Field label="Telefone / WhatsApp" htmlFor="pf-phone">
-            <Input id="pf-phone" value={form.phone} onChange={(e) => set('phone', e.target.value)}
-              placeholder="(21) 99999-0000" />
-          </Field>
-          <Field label="Cargo" htmlFor="pf-title">
-            <Input id="pf-title" value={form.title} onChange={(e) => set('title', e.target.value)}
-              placeholder="Ex.: Clínico responsável" />
-          </Field>
-          <Field label="Conselho (CRM, CRO…)" htmlFor="pf-conselho" hint="Opcional">
-            <Input id="pf-conselho" value={form.conselho} onChange={(e) => set('conselho', e.target.value)}
-              placeholder="CRM 123456" />
-          </Field>
-        </div>
+          <div className="rounded-md border border-[var(--border)] bg-[var(--surface-2)] p-4">
+            <h3 className="text-sm font-semibold">Também atende pacientes</h3>
+            <p className="text-xs text-[var(--text-muted)] mt-1.5 leading-relaxed">
+              Cria (ou reutiliza) um <strong>Profissional</strong> vinculado ao <strong>seu login</strong> nesta unidade.
+              As entidades continuam separadas: seu acesso é o User; quem atende na agenda é o Professional.
+            </p>
+            {linkedPro && (
+              <p className="text-xs mt-2 text-[var(--success-fg)]">
+                Vinculado: <strong>{linkedPro.name}</strong> ·{' '}
+                <Link href={`/profissionais?b=${businessId}`} className="underline">abrir Profissionais</Link>
+              </p>
+            )}
+            <div className="mt-3">
+              <Button type="button" variant="secondary" disabled={linking || !businessId} onClick={linkAsProfessional}>
+                {linking ? 'Vinculando…' : linkedPro ? 'Gerenciar em Profissionais' : 'Também atende pacientes'}
+              </Button>
+              {!businessId && <p className="text-[11px] text-[var(--text-muted)] mt-1.5">Abra o perfil a partir de uma unidade para vincular.</p>}
+            </div>
+          </div>
+        </FormSection>
 
-        <Field label="Dados profissionais" htmlFor="pf-bio" hint="Formação, especialidades — aparece na sua identificação.">
-          <Textarea id="pf-bio" rows={3} value={form.professionalBio} onChange={(e) => set('professionalBio', e.target.value)} />
-        </Field>
-
-        <div className="flex justify-end gap-2 pt-1">
+        <ActionBar>
           <Button type="submit" variant="primary" disabled={saving}>
-            {saving ? 'Salvando…' : 'Salvar perfil'}
+            {saving ? 'Salvando…' : 'Salvar alterações'}
           </Button>
-        </div>
+        </ActionBar>
       </form>
 
-      {/* Também atende — vínculo User → Professional, sem unir entidades */}
-      <section className="bg-white border border-[var(--border)] rounded-lg p-5 mt-5">
-        <h2 className="text-sm font-semibold flex items-center gap-2">
-          <Icon n="idcard" size={16} /> Também atende pacientes
-        </h2>
-        <p className="text-xs text-[var(--text-muted)] mt-1.5 leading-relaxed">
-          Cria (ou reutiliza) um <strong>Profissional</strong> vinculado ao <strong>seu login</strong> nesta unidade.
-          As duas entidades continuam separadas: seu acesso é o User; quem atende na agenda é o Professional.
-        </p>
-        {linkedPro && (
-          <p className="text-xs mt-2 text-[var(--success-fg)]">
-            Vinculado: <strong>{linkedPro.name}</strong> ·{' '}
-            <Link href={`/profissionais?b=${businessId}`} className="underline">abrir Profissionais</Link>
-          </p>
-        )}
-        <div className="mt-3">
-          <Button type="button" variant="secondary" disabled={linking || !businessId} onClick={linkAsProfessional}>
-            {linking ? 'Vinculando…' : linkedPro ? 'Gerenciar em Profissionais' : 'Também atende pacientes'}
-          </Button>
-          {!businessId && (
-            <p className="text-[11px] text-[var(--text-muted)] mt-1.5">
-              Abra o perfil a partir de uma unidade para vincular.
-            </p>
-          )}
+      <FormSection title="Segurança" hint="A senha continua sendo gerenciada pela autenticação existente da sua conta.">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <p className="text-sm text-[var(--text-muted)]">Altere a senha da mesma conta de acesso.</p>
+          <Link href={`/alterar-senha${businessId ? `?b=${encodeURIComponent(businessId)}` : ''}`} className={buttonCls('secondary')}>
+            <Icon n="lock" size={15} /> Alterar senha
+          </Link>
         </div>
-      </section>
+      </FormSection>
     </div>
   );
 }

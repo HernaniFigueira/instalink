@@ -67,9 +67,27 @@ Título, descrição contextual opcional, ícone em chip neutro/acento e área d
 - Dentro de `.il-platform`, usar os tokens de radius e espaçamento do workspace; regras globais legadas ficam fora do escopo para não alterar páginas públicas.
 - Tipografia do workspace permanece fixa (Geist Sans e escala já carregada pelo produto); preset não muda fonte, peso ou escala. Evitar tamanho/cor avulsa sem função de hierarquia.
 - Motion curto e calmo, sem bounce; `prefers-reduced-motion` reduz/anula movimento. Hover/press/focus precisam de estado equivalente em teclado.
-- Desktop de referência: **1440 px e 1366 px**. Mobile de referência: **390 px** (e conferir breakpoint menor quando houver overflow relevante). Conteúdo denso pode usar largura full do catálogo; formulários e listas de leitura única preservam a largura contida definida pelo catálogo.
+- Desktop de referência: **1440 px e 1366 px**. Mobile de referência: **390 px** (e conferir breakpoint menor quando houver overflow relevante). Conteúdo denso usa o Page Architecture; formulários mantêm largura contida do arquétipo `form`.
 - Em mobile: sidebar vira o diálogo/drawer já existente, ações não podem ser cortadas, tabelas devem ter estratégia de overflow/colunas, sheets não podem ultrapassar viewport e o conteúdo não pode gerar rolagem horizontal global.
 - Contraste, foco visível, teclado, `aria-current`, `aria-expanded`, rótulos acessíveis e `prefers-reduced-motion` são requisitos de aceitação, não polimento opcional.
+
+### Page Architecture — arquétipos oficiais
+
+`PANEL_ROUTES.pageType` é obrigatório e alimenta o `PageFrame` do shell. Nova rota autenticada do workspace deve declarar exatamente um arquétipo e ter teste de contrato; não usar width opcional, condição de página em página ou exceção Tailwind para escolher geometria. Rotas filhas devem declarar a classe de detalhe no resolver (por exemplo `/clientes/[id]`).
+
+| Arquétipo | Largura máxima | Gutter / uso oficial |
+|---|---:|---|
+| `workspace` | sem limite | Conteúdo operacional denso em largura disponível: agenda, conversas, tabelas, kanban e resultados. Não estreitar Agenda/Conversas. |
+| `record` | `80rem` (1280px) | Um registro de operação, mantendo área útil para formulário clínico, histórico e ações; `/atendimento` preserva o layout de registro já existente. |
+| `detail` | `90rem` (1440px) | Ficha 360, com navegação de retorno e módulos relacionados; `/clientes/[id]` herda permissão de Clientes, mas recebe este frame. |
+| `form` | `60rem` (960px) | Dados de leitura/edição centralizados: Perfil, Configurações e Assistente. |
+| `hub` | `80rem` (1280px) | Administração estrutural expansível em seções e listas: Estrutura, Equipe, Serviços, Profissionais, Disponibilidade e capacidades. |
+
+O `PageFrame` fixa `width`, `min-width`, centralização, padding e gutters através de tokens CSS (`--page-width-*`, `--page-gutter-*`). Seu tipo é o único seletor de max-width. `flush` só é permitido para manter a composição já homologada de Agenda e Conversas: essas telas operacionais mantêm gutter próprio e nunca recebem o frame estreito de formulário. A rota `/pagina` é `workspace` pela necessidade técnica de suas três colunas, mas editor/renderer legado permanece fora de redesign. `/alterar-senha` é uma tela autenticada `form` em rota independente; console `/master/*` conserva shell administrativo próprio (`max-w-7xl`) e não é módulo do `DashboardShell`; aliases `/admin/*` redirecionam para esse console. Essas fronteiras devem ser registradas como exceções, sem alterar autenticação.
+
+Unidades estruturais reutilizáveis: `PageFrame` contém o frame; `PageHeader` identifica página e ação principal; `Toolbar` agrupa filtros/controles operacionais; `SectionHeader` nomeia subseções; `FormSection` agrupa campos; `ActionBar` concentra submissão/ações finais. Prefira esses componentes e tokens a wrappers/margens independentes. Em formulários, ação **Primary** é a submissão principal; **Secondary** altera contexto ou navega; **Ghost** é auxiliar; **Destructive** remove/cancela. Não igualar as intenções visualmente.
+
+Role de acesso e cargo/função profissional são dados separados: role usa os rótulos oficiais (`roleLabel`/`Badge`); cargo permanece identidade profissional. Perfil preserva User → Professional como vínculo, sem unir entidades nem duplicar autenticação.
 
 ## 5. Arquitetura e fronteira de migração
 

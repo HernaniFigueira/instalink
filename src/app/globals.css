@@ -1837,6 +1837,24 @@ button.workspace-clinic-head:hover { background: var(--il-nav-hover); }
   .ws-topbar { backdrop-filter: none; } /* mantém a superfície sólida no modo reduced-motion */
 }
 /* Consistent reading rhythm without recoloring public clinic themes. */
+/* Page Architecture — geometria única alimentada por PANEL_ROUTES.pageType. */
+.il-platform .il-page-frame {
+  --page-width-wide:80rem; --page-width-detail:90rem; --page-width-form:60rem;
+  --page-gutter-x:1rem; --page-gutter-x-wide:2rem; --page-gutter-y:1.5rem;
+  box-sizing:border-box; width:100%; min-width:0; margin-inline:auto;
+  padding:var(--page-gutter-y) var(--page-gutter-x);
+}
+.il-platform .il-page-frame--workspace { max-width:none; }
+.il-platform .il-page-frame--record,
+.il-platform .il-page-frame--hub { max-width:var(--page-width-wide); }
+.il-platform .il-page-frame--detail { max-width:var(--page-width-detail); }
+.il-platform .il-page-frame--form { max-width:var(--page-width-form); }
+.il-platform .il-page-frame--flush { padding:0; }
+@media(min-width:1024px) {
+  .il-platform .il-page-frame { padding-inline:var(--page-gutter-x-wide); }
+  .il-platform .il-page-frame--flush { padding:0; }
+}
+
 .il-platform { font-size:14px; line-height:1.5; -webkit-font-smoothing:subpixel-antialiased; -moz-osx-font-smoothing:auto; text-rendering:optimizeLegibility; }
 .il-platform h1 { letter-spacing:-.035em; }
 .il-platform th { color:var(--text-muted); font-size:11px; letter-spacing:.04em; text-align:left; }

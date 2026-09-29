@@ -12,6 +12,7 @@
 - [x] Testes visuais legados que exigiam fundo gradiente, topbar colorida, default neutro, cards creme ou CTA violeta foram atualizados para o contrato aprovado. Comportamento/negócio não foi alvo dessas alterações.
 - [x] Acentos históricos de pet/paciente, anotação administrativa, métrica, “hoje” e setup foram neutralizados ou ligados ao accent; contextos antes lilás convergem para info ou accent. Estados da agenda foram levados a tokens semânticos.
 - [x] Proteção de descarte compartilhada, rota clínica full-page e refinamentos estáticos de hierarquia/cores/superfícies concluídos; APIs e domínio clínico permaneceram no contrato existente.
+- [x] **Page Architecture:** `pageType` obrigatório por rota autenticada, `PageFrame` e tokens de width/gutter; Perfil, AccountMenu e copy de Produtos atualizados sem redesign. Matrizes estrutural e de exceções adicionadas abaixo.
 - [x] Validação anterior à ampliação do workspace `/conversas`: **101/101 testes focais** (10 arquivos), incluindo regressões clínicas e overlays.
 - [x] Validação completa anterior à ampliação do workspace: **2.505 aprovados / 6 falhas / 2.511 testes**. As seis falhas atuais continuam descritas na seção de validação do workspace abaixo.
 - [x] `npm run typecheck` aprovado; `npm run build` aprovado, com 132/132 páginas geradas.
@@ -38,7 +39,7 @@
 | `/clientes/[id]` | Detalhe 360 — `app/(dashboard)/clientes/[id]/page.tsx` + `ClientProfileDrawer.tsx` | Identidade, anotações administrativas neutras, ficha/pets, toolbar e retorno à lista | Parcial: retorno contextual com fallback real e ações seguem a hierarquia; browser pendente | Pendente | Pendente | Pendente | Pendente |
 | `/funil` | Oportunidades — `app/(dashboard)/funil/page.tsx` + `EsteiraView.tsx` | Kanban, badges e transições de etapa | Parcial: status agora usa info/warning/success/danger; rever estados em browser | Pendente | Pendente | Pendente | Pendente |
 | `/servicos` | Serviços — `app/(dashboard)/servicos/page.tsx` + `catalog-panels.tsx` | Catálogo, formulários, seleção, exclusão e mensagens | Pendente | Pendente | Pendente | Pendente | Pendente |
-| `/produtos` | Produtos — `app/(dashboard)/produtos/page.tsx` | Catálogo público administrado, estoque, forms e status | Pendente; renderer público fora do redesign | Pendente | Pendente | Pendente | Pendente |
+| `/produtos` | Produtos — `app/(dashboard)/produtos/page.tsx` | Cadastro legado de catálogo, estado e formulários; não é estoque | Copy sem vitrine quando flag OFF; renderer público fica fora do redesign | Pendente | Pendente | Pendente | Pendente |
 | `/campanhas` | Campanhas — `app/(dashboard)/campanhas/page.tsx` | Consentimento, estados de envio, métricas e comunicação | Parcial: explicação antes lilás agora accent suave; cartões de consentimento permanecem semânticos | Pendente | Pendente | Pendente | Pendente |
 | `/automacoes` | Automações — `app/(dashboard)/automacoes/page.tsx` + `AutomationsView.tsx` | Receitas, status de execução, filtros e histórico | Pendente | Pendente | Pendente | Pendente | Pendente |
 | `/followup` | Follow-up — `app/(dashboard)/followup/page.tsx` | Receita de retorno, elegibilidade e estados do canal | Pendente | Pendente | Pendente | Pendente | Pendente |
@@ -48,10 +49,84 @@
 | `/organizacao` | Organização — `app/(dashboard)/organizacao/page.tsx` | Unidades, troca/criação de unidade, agregados | Parcial: componente usa superfície neutra e acento comum; validar identificação visual em browser | Pendente | Pendente | Pendente | Pendente |
 | `/execucoes` | Execuções — `app/(dashboard)/execucoes/page.tsx` | Histórico, detalhes de execução, success/failure e mensagens | Pendente | Pendente | Pendente | Pendente | Pendente |
 | `/pagina` | Editor da página — `app/(dashboard)/pagina/page.tsx` | Shell autenticado, editor e prévia | **Exceção**: editor/page-builder legado não é redesenhado; apenas não pode sofrer regressão de seletor global | Pendente | Pendente | Pendente | Fora do redesign; não regredir |
-| `/perfil` | Meu perfil — `app/(dashboard)/perfil/page.tsx` | Form pessoal, avatar, foco e feedback | Pendente | Pendente | Pendente | Pendente | Pendente |
+| `/perfil` | Meu perfil — `app/(dashboard)/perfil/page.tsx` | Dados pessoais, badge role oficial, identidade profissional separada, vínculo User → Professional e Segurança | PageFrame `form`; testes de contrato adicionados | Pendente | Pendente | Pendente | Pendente |
 | `/equipe` | Equipe — `app/(dashboard)/equipe/page.tsx` | Tabela/lista, papéis, convite, permissões e confirmação | Pendente | Pendente | Pendente | Pendente | Pendente |
 | `/recursos` | Recursos — `app/(dashboard)/recursos/page.tsx` | Disponibilidade de módulos, switch, descrições e restrições | Parcial: containers do dashboard neutralizados | Pendente | Pendente | Pendente | Pendente |
 | `/configuracoes` | Configurações — `app/(dashboard)/configuracoes/page.tsx` | Abas, aparência, preview/persistência, forms e preferências | Parcial: default e preferência cobertos por testes; preview precisa conferência visual e F5 | Pendente | Pendente | Pendente | Pendente |
+
+## Matriz Page Architecture — rotas autenticadas
+
+Esta matriz é o contrato estrutural pedido para `rota | arquétipo | largura | header | toolbar/actionbar | observação/exceção`. A topbar do `DashboardShell` permanece global nas rotas do workspace (exceto focus mode já existente). Larguras: `workspace` = sem max-width; `record` = 1280px; `detail` = 1440px; `form` = 960px; `hub` = 1280px. Base da classificação: `PANEL_ROUTES.pageType` + resolver explícito de `/clientes/[id]` e `AUTHENTICATED_AUXILIARY_ROUTES` para rotas autenticadas standalone, Master e aliases de redirect. Header especial/toolbar específico permanece somente onde já há composição operacional homologada; novos módulos devem usar os componentes compartilhados.
+
+| Rota | Arquétipo | Largura | Header | Toolbar / ActionBar | Observação / exceção |
+|---|---|---:|---|---|---|
+| `/dashboard` | workspace | full | Cabeçalho próprio de visão geral | atalhos globais e ações nos módulos | Dados/resumo operacional |
+| `/estrutura` | hub | 1280px | PageHeader | atalhos/seções estruturais | Serviços, profissionais, disponibilidade e acessos não se fundem |
+| `/agenda` | workspace | full | PageHeader operacional | Toolbar de filtros e ações da grade | flush intencional; gutter próprio, não estreitar |
+| `/atendimento` | record | 1280px | Cabeçalho clínico próprio | ActionBar clínico existente | Preservar layout/ações e regras clínicas; sem mudança de workflow |
+| `/profissionais` | hub | 1280px | PageHeader | ações do catálogo/ficha | Professional continua entidade distinta de User |
+| `/disponibilidade` | hub | 1280px | PageHeader | controles de agenda semanal | Administração estrutural, largura ampla |
+| `/conversas` | workspace | full | Cabeçalho próprio do inbox | filtros e controles da inbox/composer | flush/full-height intencional; gutter próprio |
+| `/agente` | form | 960px | PageHeader | abas de configuração + ação salvar | Conteúdo centralizado; copy operacional sem Página quando flag OFF |
+| `/tarefas` | workspace | full | Cabeçalho operacional próprio | filtros/ações contextuais | Não alterar regras de workflow |
+| `/pedidos` | workspace | full | PageHeader | filtros e ações por pedido | Sem estreitamento de tabela/estado |
+| `/clientes` | workspace | full | PageHeader | busca, filtros e cadastro | Diretório denso |
+| `/clientes/[id]` | detail | 1440px | PageBackAction + identidade da ficha | ações da ficha/abas | Herdado de Clientes; classe detail explícita |
+| `/funil` | workspace | full | PageHeader | filtros e ações do kanban | Kanban preservado |
+| `/servicos` | hub | 1280px | PageHeader | toolbar/ações do catálogo | Mesmo arquétipo structural de catálogo |
+| `/produtos` | hub | 1280px | PageHeader | categoria/produto + status | Flag OFF remove copy de vitrine; cadastro preservado e não é estoque/Farmácia |
+| `/campanhas` | workspace | full | PageHeader | público, filtro e ações de envio | Tabela/estados de operação mantidos |
+| `/automacoes` | hub | 1280px | Cabeçalho composto existente | controles de receitas e histórico | Expansível/configurável; não reduzido a formulário estreito |
+| `/followup` | workspace | full | PageHeader | filtros/ações de receitas existentes | Estrutura não altera workflow nem regra temporal |
+| `/canais` | hub | 1280px | PageHeader | abas/controles de integração | Grupos extensíveis de canais e integrações |
+| `/resultados` | workspace | full | PageHeader | período/filtros | Gráficos/tabelas preservam largura operacional |
+| `/financeiro` | workspace | full | PageHeader | período/filtros + lançamentos | Tabelas/gráficos; dialogs seguem intenção de ação |
+| `/organizacao` | hub | 1280px | Cabeçalho próprio do workspace | troca/criação permitida de unidade | Organização/unidades; não criar organização nova |
+| `/execucoes` | workspace | full | Cabeçalho próprio da lista | filtros/detalhe de execução | Destino contextual fora do menu continua por deep link |
+| `/pagina` | workspace | full | Editor/header próprio | savebar do editor | Exceção legacy: editor/page-builder não redesenhado; full-width preservado |
+| `/perfil` | form | 960px | PageHeader | ActionBar com Primary salvar; Secondary em segurança | Uma edição de foto; role ≠ cargo; `/alterar-senha` existente |
+| `/equipe` | hub | 1280px | PageHeader | convite, busca e ações de membros | Papel de acesso oficial, sem confundir com cargo |
+| `/recursos` | hub | 1280px | PageHeader | switches por módulo | Dados preservados; grupos expansíveis |
+| `/configuracoes` | form | 960px | PageHeader | abas Clínica, Agenda e Aparência + salvar | Logo, nome, email, WhatsApp/telefone, redes, site externo, endereço/mapa, Agenda e Aparência preservados; sem copy de Página quando OFF |
+
+Rotas autenticadas fora de `DashboardShell` (outras arquiteturas/exceções nomeadas; continuam classificadas):
+
+| Rota | Arquétipo | Largura | Header | Toolbar / ActionBar | Observação / exceção |
+|---|---|---:|---|---|---|
+| `/alterar-senha` | form | max 512px (tela independente) | Cabeçalho de segurança próprio | ação de alteração de senha existente | Mesma autenticação; destino também do AccountMenu |
+| `/setup-master` | form | max 512px (tela independente) | Cabeçalho de bootstrap | ações de setup existentes | Fluxo autenticado condicionado a bootstrap; não faz parte do shell clínico |
+| `/master` | hub | max 1280px (`max-w-7xl`) | Header Master próprio | navegação Master | Console isolado do cliente; guarda `requireMaster` |
+| `/master/atividade` | workspace | max 1280px (`max-w-7xl`) | Header Master + heading de atividade | filtro/busca de log | Console da plataforma, não `PANEL_ROUTES` |
+| `/master/masters` | hub | max 1280px (`max-w-7xl`) | Header Master + heading | gestão de masters | Guarda Master |
+| `/master/organizacoes` | hub | max 1280px (`max-w-7xl`) | Header Master + heading | busca/lista | Administração da plataforma |
+| `/master/organizacoes/[id]` | detail | max 1280px (`max-w-7xl`) | Header Master + heading da organização | ações da ficha | Mantém shell Master próprio |
+| `/master/suporte` | workspace | max 1280px (`max-w-7xl`) | Header Master + heading | ações de suporte | Acesso/impersonation existente, fora do redesign |
+| `/master/unidades` | hub | max 1280px (`max-w-7xl`) | Header Master + heading | busca/lista | Administração da plataforma |
+| `/master/unidades/[id]` | detail | max 1280px (`max-w-7xl`) | Header Master + heading da unidade | ações da ficha | Mantém shell Master próprio |
+| `/master/usuarios` | hub | max 1280px (`max-w-7xl`) | Header Master + heading | busca/lista | Administração da plataforma |
+| `/admin` → `/master` | hub | destino: max 1280px | redirect, sem header próprio | redirect | Alias legado, sem tela persistente |
+| `/admin/auditoria` → `/master/atividade` | workspace | destino: max 1280px | redirect, sem header próprio | redirect | Alias legado, sem tela persistente |
+| `/admin/empresas/[id]` → `/master/unidades/[id]` | detail | destino: max 1280px | redirect, sem header próprio | redirect | Alias legado, sem tela persistente |
+
+`/login`, páginas públicas `/{slug}` e `/agendar` não são rotas autenticadas e permanecem fora desta classificação estrutural do workspace. Não há rota autenticada catalogada sem arquétipo; exceções têm destino, shell e razão explícitos.
+
+### Alterações desta missão (Page Architecture)
+
+- `PanelRouteDef.width?` foi substituído por `pageType` obrigatório (`workspace | record | detail | form | hub`) em todas as entradas; o shell resolve a ficha filha `/clientes/[id]` como `detail` e monta `PageFrame` com max-width/gutters tokens.
+- Criados os primitivos `PageFrame`, `FormSection` e `ActionBar`; `PageHeader`, `Toolbar` e `SectionHeader` continuam fonte compartilhada. Agenda e Conversas mantêm full-width/gutters específicos; Atendimento usa `record` sem redesign.
+- Perfil foi reorganizado nas seções Dados pessoais, Identidade profissional e Segurança; foto editável única, badge de role oficial, cargo como identidade profissional, vínculo User → Professional e link para `/alterar-senha` preservados.
+- AccountMenu esconde “Ver página pública” somente com a flag legacy OFF; mantém o legado com flag ON, nome/role acessíveis, perfil, visão/troca de unidade, nova unidade permitida, configurações, ajuda, senha e saída. Email deixa de competir no cabeçalho do menu.
+- Produtos permanece Produtos/rota/dados: descrição e formulário deixam de anunciar vitrine/página pública com flag OFF e informam claramente a ausência de estoque/vendas/Farmácia. A utilidade operacional segue decisão futura; nenhum módulo de estoque foi inventado. Copy de Configurações permanece condicional em Clínica/Agenda/Aparência e conserva campos.
+- Testes de contrato cobrem arquétipos válidos por rota, workspace não estreito, form centralizado, record Atendimento, AccountMenu legacy OFF/ON, Perfil sem preview duplicado, Alterar senha e separação role/cargo.
+
+### Validação desta missão — Page Architecture
+
+- `npm run typecheck`: aprovado.
+- Testes focais: **8 arquivos / 147 aprovados** (arquitetura, catálogo, Perfil, menu, flag Produtos/Configurações e regressões de navegação).
+- `npm run build`: aprovado; compilação de produção e **132/132 páginas** geradas.
+- `npm test -- --reporter=dot`: **2.564 aprovados / 5 falhas / 2.569 testes**. As falhas permanecem nas mesmas suítes fora desta missão: `a34-instagram.test.ts` (3), `automation-audit-p4.test.ts` (1) e `pipeline.test.ts` (1; fixture tenta agendar no passado). Nenhuma foi mascarada ou alterada.
+- `git diff --check`: aprovado após a implementação.
+- Conferência visual/browser em 1440/1366/390: **pendente**; nenhuma homologação visual é declarada por esta rodada.
 
 ## Trilhas de auditoria que faltam fechar
 
@@ -146,7 +221,7 @@ Este aditivo registra as correções estáticas feitas para a rodada de contrast
 
 - **Foreground de soft/icons:** no workspace, `--brand-fg` agora referencia `--accent-fg`, foreground validado contra `--accent-soft` e superfícies claras. Preenchimentos sólidos continuam usando o contrato próprio de CTA (`--accent-contrast`); mensagens success/warning/danger com texto branco sobre fundos semânticos fortes permanecem exceções válidas. Deep Blue, Verde, Neutro e Vinho ganharam asserts de contraste.
 - **Sidebar:** hover de links, ícones de colapso, cabeçalho de grupo e submenu usam `--il-nav-hover`/`--il-nav-fg` sem inverter o foreground normal. A rota ativa preserva o par independente `--il-nav-active`/`--il-nav-active-fg`; accordion aberto, rail recolhido e focus-visible mantêm contratos próprios.
-- **Largura:** rotas `contained` recebem `w-full max-w-[960px] mx-auto`; rotas `full`, Agenda, Conversas e demais workspaces catalogados não recebem esse limite editorial. Não estreitar listas densas, Agenda, Conversas, kanban ou workspaces operacionais.
+- **Page Architecture:** a largura agora deriva de `pageType` e `PageFrame` com tokens: workspace sem limite, record/hub 1280px, detail 1440px e form 960px. Agenda e Conversas mantêm flush/gutter próprios; não estreitar essas telas, kanban ou workspaces operacionais. Ver a matriz completa acima.
 - **Controles selecionáveis:** foi criado `il-option-choice` (surface neutra, contorno accent, `--accent-fg`, hover discreto e focus ring oficial). Aplicação restrita a opções/seleções — Assistente, modos de retorno, histórico multiselect, períodos, papéis, dias e horários selecionáveis. Tabs, badges, sidebar, estados de canal e CTAs não são convertidos por conveniência. Atendimento/anamnese mantêm estrutura, autosave, histórico, read-only e vínculos; aqui muda apenas apresentação.
 - **Cliente 360:** a variante page recebe o destino da lista. `clientListReturnHref(search, fallbackBusinessId)` preserva `b`, `q`, `filter`, `page` e `tab` suportada e usa o business resolvido como fallback de deep-link sem estado; o retorno é um link real, não `history.back()`.
 - **Toolbar Cliente 360:** a ação WhatsApp usa a primitiva visual `secondary` (surface/borda neutras, foreground constante e hover oficial), sem cor de CTA em hover. Reserva de ação primária para agendamento permanece.

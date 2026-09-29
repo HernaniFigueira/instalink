@@ -21,6 +21,7 @@ import { Icon } from '@/components/icons';
 import { ViewportPopover } from './ViewportPopover';
 import { Avatar } from '@/components/ui';
 import { roleLabel } from '@/lib/role-labels';
+import { canShowPublicPageLink } from '@/lib/product';
 import { mayLeaveEditor } from './useUnsavedChanges';
 
 export interface AccountUnit {
@@ -32,7 +33,7 @@ export interface AccountUnit {
   organizationId?: string;
 }
 
-export function AccountMenu({ user, unit, units = [], overview, canOverview, canConfig, onUnit, onLogout, isMaster, onOpenHelp }: {
+export function AccountMenu({ user, unit, units = [], overview, canOverview, canConfig, onUnit, onLogout, isMaster, onOpenHelp, legacyPagesEnabled = false }: {
   user: { name: string; email?: string; role?: string; photo?: string };
   unit: AccountUnit;
   units?: AccountUnit[];
@@ -40,6 +41,7 @@ export function AccountMenu({ user, unit, units = [], overview, canOverview, can
   overview?: boolean;
   canOverview?: boolean;
   canConfig?: boolean;
+  legacyPagesEnabled?: boolean;
   onUnit?: (id: string) => void;
   onLogout: () => void;
   isMaster?: boolean;
@@ -105,7 +107,6 @@ export function AccountMenu({ user, unit, units = [], overview, canOverview, can
             <Avatar name={user.name} src={user.photo || undefined} size={40} />
             <div className="ws-account__identity">
               <p className="ws-account__identity-name">{user.name}</p>
-              {user.email && <p className="ws-account__identity-email">{user.email}</p>}
               <p className="ws-account__identity-role">
                 {roleLabel(role) || 'Equipe'}
                 {overview && multiUnit && <> · visão da organização</>}
@@ -151,7 +152,7 @@ export function AccountMenu({ user, unit, units = [], overview, canOverview, can
               </div>
             )}
 
-            {unit.slug && (
+            {canShowPublicPageLink(legacyPagesEnabled, unit.slug) && (
               <a className="ws-menu__item" href={`/${unit.slug}`} target="_blank" rel="noreferrer">
                 <Icon n="external" size={16} /> Ver página pública
               </a>

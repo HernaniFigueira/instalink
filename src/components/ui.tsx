@@ -9,6 +9,7 @@ import { cn } from '@/lib/utils';
 import { Icon } from '@/components/icons';
 import { toneCls, type Tone } from '@/lib/status';
 import { buildHoursChips, type HoursChipDay } from '@/lib/hours-chips';
+import type { PageType } from '@/lib/panel';
 
 export type { HoursChipDay };
 
@@ -114,6 +115,23 @@ export function IconButton(props: React.ButtonHTMLAttributes<HTMLButtonElement> 
   );
 }
 
+/**
+ * Moldura única do conteúdo autenticado. A largura e os gutters vêm do
+ * arquétipo obrigatório declarado no catálogo de rotas, não da página filha.
+ */
+export function PageFrame({ type, flush = false, className, children, ...rest }: React.HTMLAttributes<HTMLDivElement> & {
+  type: PageType;
+  flush?: boolean;
+}) {
+  return (
+    <div data-page-type={type}
+      className={cn('il-page-frame', `il-page-frame--${type}`, flush && 'il-page-frame--flush', className)}
+      {...rest}>
+      {children}
+    </div>
+  );
+}
+
 export function Card(props: React.HTMLAttributes<HTMLDivElement>) {
   const { className, ...rest } = props;
   return <div className={cn('bg-[var(--surface)] border border-[var(--border)] rounded-md', className)} {...rest} />;
@@ -158,6 +176,29 @@ export function SectionHeader({ title, hint, action, icon }: { title: string; hi
         </div>
       </div>
       {action}
+    </div>
+  );
+}
+
+/** Agrupamento oficial de campos de um formulário de negócio. */
+export function FormSection({ title, hint, action, className, children, ...rest }: React.HTMLAttributes<HTMLElement> & {
+  title: string;
+  hint?: string;
+  action?: React.ReactNode;
+}) {
+  return (
+    <section className={cn('il-form-section bg-[var(--surface)] border border-[var(--border)] rounded-md overflow-hidden', className)} {...rest}>
+      <SectionHeader title={title} hint={hint} action={action} />
+      <div className="p-4 space-y-4">{children}</div>
+    </section>
+  );
+}
+
+/** Faixa de ações do formulário: primary fica na submissão, sem igualar intenções. */
+export function ActionBar({ className, children, ...rest }: React.HTMLAttributes<HTMLDivElement>) {
+  return (
+    <div className={cn('il-actionbar flex flex-wrap items-center justify-end gap-2 border-t border-[var(--border)] pt-4', className)} {...rest}>
+      {children}
     </div>
   );
 }

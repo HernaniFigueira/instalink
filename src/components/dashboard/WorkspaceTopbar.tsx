@@ -21,7 +21,7 @@ function initials(name: string): string {
   return name.trim().split(/\s+/).slice(0, 2).map((p) => p[0]?.toUpperCase() || '').join('') || '·';
 }
 
-export function WorkspaceTopbar({ page, query, searchItems, activePath, businessId = '', alerts, user, unit, units, overview, canOverview, canConfig, canCreate, onUnit, onLogout, onOpenNav, onOpenHelp, isMaster, vet, canOpenConversations }: {
+export function WorkspaceTopbar({ page, query, searchItems, activePath, businessId = '', alerts, user, unit, units, overview, canOverview, canConfig, canCreate, onUnit, onLogout, onOpenNav, onOpenHelp, isMaster, vet, canOpenConversations, legacyPagesEnabled }: {
   /** Tela atual — usado só no aria e no rótulo do botão de ajuda. */
   page: string;
   query: string;
@@ -51,6 +51,7 @@ export function WorkspaceTopbar({ page, query, searchItems, activePath, business
   /** Abre a central de ajuda confiável (sheet) do shell. */
   onOpenHelp?: () => void;
   isMaster?: boolean;
+  legacyPagesEnabled?: boolean;
 }) {
   return (
     <header className="ws-topbar">
@@ -87,6 +88,7 @@ export function WorkspaceTopbar({ page, query, searchItems, activePath, business
         <AccountMenu
           user={user} unit={unit} units={units} overview={overview}
           canOverview={canOverview} canConfig={canConfig}
+          legacyPagesEnabled={legacyPagesEnabled}
           isMaster={isMaster} onUnit={onUnit} onLogout={onLogout} onOpenHelp={onOpenHelp}
         />
       </div>
