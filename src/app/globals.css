@@ -1051,8 +1051,9 @@ dialog.il-drawer .il-actionbar {
   from { opacity: 0; transform: translateX(24px); }
   to { opacity: 1; transform: none; }
 }
-/* Mobile (≤768px): passos num overlay SÓ — transição horizontal, um painel
-   por vez. O base sai pela esquerda quando o secundário assume. */
+/* Em viewport sem largura para dois painéis (≤1359px), o cadastro assume a
+   faixa inteira. O agendamento permanece montado e volta ao fechar o secundário;
+   nenhum painel é comprimido nem abre modal central. */
 @media (max-width: 767px) {
   dialog.il-drawer {
     top: calc(var(--topbar-h, 56px) + 8px);
@@ -1061,16 +1062,13 @@ dialog.il-drawer .il-actionbar {
     left: 8px;
   }
 }
-@media (max-width: 768px) {
+@media (max-width: 1359px) {
   .il-drawer__strip[data-expanded='true'] { max-width: none !important; width: 100% !important; }
-  .il-drawer__panel--base[data-recessed-mobile='true'] { display: none; }
-  .il-drawer__strip[data-expanded='true'] .il-drawer__panel--recessed {
-    display: none;
-  }
+  .il-drawer__strip[data-expanded='true'] .il-drawer__panel--recessed { display: none; }
   .il-drawer__strip[data-expanded='true'] .il-drawer__panel--side {
     width: 100% !important; max-width: none !important; border-left: 0 !important;
+    animation: il-drawer-side-in-mobile 200ms var(--ease-standard);
   }
-  .il-drawer__panel--side { animation: il-drawer-side-in-mobile 200ms var(--ease-standard); }
   @keyframes il-drawer-side-in-mobile {
     from { opacity: 0; transform: translateX(100%); }
     to { opacity: 1; transform: none; }
@@ -1161,7 +1159,11 @@ dialog.il-drawer .il-actionbar {
 .ws-quickcreate-btn:hover { background: var(--surface-hover); color: var(--text); border-color: var(--border); }
 .ws-quickcreate-btn:active { background: var(--surface-3); }
 .ws-quickcreate-btn:focus-visible { background: var(--surface-hover); }
-.ws-quickcreate-pop { min-width: 262px; padding: 7px; }
+.ws-quickcreate-pop {
+  min-width: min(262px, calc(100vw - 20px)); padding: 7px;
+  background: var(--surface); border: 1px solid var(--border);
+  border-radius: var(--radius-lg); box-shadow: var(--shadow-lg);
+}
 .ws-quickcreate-item {
   display: flex; width: 100%; align-items: center; gap: 10px;
   padding: 8px 9px; border-radius: var(--radius-md); text-align: left;
@@ -1184,13 +1186,13 @@ dialog.il-drawer .il-actionbar {
   transition: background-color .15s ease, color .15s ease;
 }
 .ws-help:hover { background: var(--surface-hover); color: var(--text); }
-.ws-pop {
+.ws-pop:not(.viewport-popover) {
   position: absolute; top: calc(100% + 8px); right: 0; min-width: 232px;
   background: var(--surface); border: 1px solid var(--border);
   border-radius: var(--radius-lg); box-shadow: var(--shadow-lg);
   padding: 6px; z-index: 60;
 }
-.ws-pop--left { right: auto; left: 0; }
+.ws-pop--left:not(.viewport-popover) { right: auto; left: 0; }
 .ws-pop__item {
   display: flex; width: 100%; align-items: center; gap: 9px;
   padding: 8px 10px; border-radius: var(--radius-md);
@@ -1284,8 +1286,7 @@ dialog.il-drawer .il-actionbar {
 }
 .global-search__clear:hover { background: var(--surface-hover); color: var(--text); }
 .global-search__panel {
-  position: absolute; top: calc(100% + 8px); left: 0; right: 0; z-index: 70;
-  padding: 6px; max-height: min(440px, 62vh); overflow-y: auto;
+  width: 100%; padding: 6px; max-height: min(440px, 62vh); overflow-y: auto;
   background: var(--surface); border: 1px solid var(--border);
   border-radius: var(--radius-lg); box-shadow: var(--shadow-lg);
 }
@@ -1325,12 +1326,18 @@ dialog.il-drawer .il-actionbar {
   color: var(--text-faint); white-space: nowrap; padding-top: 3px;
 }
 
+/* Posição fixa compartilhada: o componente calcula alinhamento, margem e
+   inversão para todos os menus ancorados; nenhum é recortado pelo topbar. */
+.viewport-popover {
+  box-sizing: border-box; max-width: calc(100vw - 20px); max-height: calc(100dvh - 20px);
+  overflow-x: hidden; overflow-y: auto; overscroll-behavior: contain; scrollbar-gutter: stable;
+}
+
 /* ── Popover compartilhado (sino e conta) ───────────────────── */
 .ws-popover {
-  position: absolute; top: calc(100% + 8px); right: 0; z-index: 70;
-  width: min(330px, calc(100vw - 24px));
+  width: min(330px, calc(100vw - 20px));
   background: var(--surface); border: 1px solid var(--border);
-  border-radius: var(--radius-lg); box-shadow: var(--shadow-md); overflow: hidden;
+  border-radius: var(--radius-lg); box-shadow: var(--shadow-md);
   animation: ws-pop-in var(--motion-fast) var(--ease-standard);
   transform-origin: top right;
 }
@@ -1532,7 +1539,10 @@ button.ws-bell__item:hover { background: var(--surface-hover); }
      física da sidebar. A CAUSA da scrollbar horizontal era o ::after do
      .il-tip (tooltip invisível esticando o scrollWidth); o tooltip do rail
      agora vive no <aside>, fora deste container. */
-  overflow-x: hidden; padding: 8px;
+  /* Scrollbar clássica altera a largura útil durante o scroll; como o rail
+     centraliza ícones recolhidos, isso os deslocava alguns pixels. Reserve o
+     gutter desde o repouso para manter a geometria constante. */
+  overflow-x: hidden; padding: 8px; scrollbar-gutter: stable;
 }
 /* Missão §2 — SEM títulos de seção (nada de OPERAÇÃO/CLÍNICA/ADMINISTRAÇÃO):
    a sidebar é uma sequência contínua de destinos e grupos; blocos separados

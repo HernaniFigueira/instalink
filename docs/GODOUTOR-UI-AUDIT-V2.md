@@ -207,3 +207,23 @@ Este aditivo registra a correção estática dos dez itens da auditoria e a limp
 - `npm run build`: aprovado; **132/132** páginas estáticas geradas.
 - `npm test -- --reporter=dot`: **2.547 aprovados / 5 falhas / 2.552 testes**. Falhas atuais fora do escopo: três em `a34-instagram.test.ts`, uma em `automation-audit-p4.test.ts` e uma em `pipeline.test.ts` (fixture agenda no passado). A sexta falha baseline documentada em `whatsapp-robustness.test.ts` não se reproduziu nesta execução; não foi alterada nem mascarada.
 - `git diff --check`: aprovado. Inspeção de browser/capturas e confirmação nos viewports 1440/1366/390 **não foram realizadas**; os dez itens continuam pendentes de conferência visual no Preview e nenhum foi chamado de homologado visualmente.
+
+## Aditivo — convergência final reportada após HEAD `ff9b2db`
+
+O usuário informou que no HEAD `ff9b2db` aprovou manualmente Dashboard, Agenda, Conversas, Cliente 360 desktop, Pendências desktop/tablet, centralização e chevrons. Este aditivo registra somente os pontos restantes da rodada de fechamento; aprovação reportada não equivale à inspeção visual deste novo HEAD.
+
+- **Topbar/popovers:** `ViewportPopover` compartilhado posiciona “+”, sino, busca e perfil com margem segura, limite pela viewport, alinhamento/clamp horizontal e inversão vertical. A pesquisa de Busca usa largura do campo. A primitiva reavalia scroll/resize/ResizeObserver e mantém tokens do workspace ao escapar dos containers de clipping. Help abre WorkspaceSheet, não usa popover.
+- **Novo agendamento + cadastro:** presets semânticos compartilhados de WorkspaceSheet substituem larguras ad hoc; cadastro lateral tem 512px máximos e não encolhe. A partir de 1360px há dois painéis; abaixo disso o cadastro ocupa a faixa quando a largura útil não comporta ambos, sem modal central/compressão.
+- **Acesso do cliente:** investigação de `/api/contacts` confirmou que `createAccount` cria/vincula identidade Customer genérica, também consumida por autenticação e pelos endpoints de consultas/pedidos do portal do cliente. Preservada a funcionalidade e identidade; rótulo passou a “Criar acesso do cliente”, sem referência à Página.
+- **Jitter da sidebar:** causa identificada no `.workspace-primary`: scrollbar vertical clássica alterava a largura útil do nav rolável, deslocando alguns pixels os ícones centralizados no rail recolhido. `scrollbar-gutter: stable` mantém a geometria. O rail/sidebar têm largura fixa/flex-shrink zero; o `ResizeObserver` do shell só publica `--sheet-left` para sheets, sem medir ou redimensionar ícones.
+- **Configurações:** convergência apenas de “Informações do negócio” para “Dados da clínica”; campos de contato, redes/site externo, endereço/mapa, Agenda e Aparência foram preservados.
+- **Escopo encaminhado para #44 Workflow + Permissões (não iniciado nesta PR):** lógica temporal de Pendências; criação prematura de “Preparar atendimento”; regras recepção x veterinário; conclusão clínica; retorno/follow-up; novas permissões.
+- **Validação visual pendente deste novo HEAD:** conferir primeiro 1440, 1366 e 1024; 390 como sanity check. Não declarar homologação visual até essa conferência.
+
+### Validação — fechamento final da convergência
+
+- `npm run typecheck`: aprovado.
+- Testes focais: **8 arquivos / 103 testes aprovados**, incluindo geometria/clamping do popover, cadastro Customer, presets do sheet e regressões do fluxo de agendamento.
+- `npm run build`: aprovado; **132/132** páginas estáticas geradas.
+- `npm test -- --reporter=dot`: **2.556 aprovados / 5 falhas / 2.561 testes** (177 arquivos aprovados, 3 com falha). Restaram as três falhas de `a34-instagram.test.ts`, uma de `automation-audit-p4.test.ts` e uma de `pipeline.test.ts`; a fixture de pipeline agenda no passado. As duas expectativas antigas do painel de agendamento foram atualizadas para os novos presets e passaram focadas. `whatsapp-robustness.test.ts` não falhou nesta execução. Nenhuma falha foi mascarada nem alterada fora do escopo.
+- `git diff --check`: aprovado. Conferência visual deste novo HEAD ainda pendente; usar Preview priorizando 1440, 1366 e 1024, com 390 como sanity check.

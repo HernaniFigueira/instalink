@@ -24,6 +24,7 @@
 import { useEffect, useId, useRef, useState } from 'react';
 import Link from 'next/link';
 import { Icon } from '@/components/icons';
+import { WORKSPACE_SHEET_SIZES } from '@/lib/workspace-sheet-sizes';
 import { wrapDialogFocus } from '@/lib/dialog-focus';
 import { lockBodyScroll, unlockBodyScroll } from '@/lib/scroll-lock';
 import { useOverlayDismissGuard, type DismissGuardState, type DismissReason } from './OverlayDismissGuard';
@@ -31,9 +32,12 @@ import { useOverlayDismissGuard, type DismissGuardState, type DismissReason } fr
 const MOTION_MS = 200;
 
 const SHEET_WIDTH_PRESETS: Record<string, string> = {
-  'max-w-xs': '20rem', 'max-w-sm': '24rem', 'max-w-md': '28rem',
-  'max-w-lg': '32rem', 'max-w-xl': '36rem', 'max-w-2xl': '42rem',
-  'max-w-3xl': '48rem', 'max-w-4xl': '56rem', 'max-w-5xl': '64rem',
+  'max-w-xs': '20rem', 'max-w-sm': '24rem',
+  [WORKSPACE_SHEET_SIZES.compact]: '28rem',
+  [WORKSPACE_SHEET_SIZES.nestedForm]: '32rem', 'max-w-xl': '36rem',
+  [WORKSPACE_SHEET_SIZES.standard]: '42rem',
+  'max-w-3xl': '48rem', [WORKSPACE_SHEET_SIZES.wide]: '56rem',
+  'max-w-5xl': '64rem',
 };
 
 function sheetWidthValue(width?: string): string {

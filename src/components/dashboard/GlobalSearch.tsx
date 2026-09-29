@@ -21,6 +21,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { mayLeaveEditor } from './useUnsavedChanges';
 import { Icon } from '@/components/icons';
+import { ViewportPopover } from './ViewportPopover';
 import { apiGet } from '@/lib/api-client';
 import { searchNav, type NavSearchItem } from '@/lib/nav-search';
 import {
@@ -42,11 +43,14 @@ export function GlobalSearch({ items, activePath, businessId = '', compact = fal
 }) {
   const router = useRouter();
   const [open, setOpen] = useState(false);
+  const [anchor, setAnchor] = useState<HTMLElement | null>(null);
   const [query, setQuery] = useState('');
   const [cursor, setCursor] = useState(0);
   const [entities, setEntities] = useState<EntityHit[]>([]);
   const [searching, setSearching] = useState(false);
   const boxRef = useRef<HTMLDivElement | null>(null);
+  const fieldRef = useRef<HTMLDivElement | null>(null);
+  const panelRef = useRef<HTMLDivElement | null>(null);
   const inputRef = useRef<HTMLInputElement | null>(null);
 
   const navResults = useMemo(() => searchNav(items, query, activePath), [items, query, activePath]);
@@ -108,7 +112,8 @@ export function GlobalSearch({ items, activePath, businessId = '', compact = fal
   useEffect(() => {
     if (!open) return;
     function onDown(e: MouseEvent) {
-      if (!boxRef.current?.contains(e.target as Node)) setOpen(false);
+      const target = e.target as Node;
+      if (!boxRef.current?.contains(target) && !panelRef.current?.contains(target)) setOpen(false);
     }
     document.addEventListener('mousedown', onDown);
     return () => document.removeEventListener('mousedown', onDown);
@@ -147,13 +152,13 @@ export function GlobalSearch({ items, activePath, businessId = '', compact = fal
 
   return (
     <div ref={boxRef} className="global-search">
-      <div className="global-search__field">
+      <div ref={fieldRef} className="global-search__field">
         <Icon n="search" size={16} className="global-search__icon" />
         <input
           ref={inputRef}
           value={query}
           onChange={(e) => { setQuery(e.target.value); setOpen(true); }}
-          onFocus={() => setOpen(true)}
+          onFocus={() => { setAnchor(fieldRef.current); setOpen(true); }}
           onKeyDown={onInputKey}
           type="search"
           role="combobox"
@@ -175,9 +180,17 @@ export function GlobalSearch({ items, activePath, businessId = '', compact = fal
         )}
       </div>
 
-      {open && (
-        <div id="global-search-results" role="listbox" aria-label="Resultados da busca"
-          className="global-search__panel">
+      <ViewportPopover
+        open={open}
+        anchor={anchor}
+        align="start"
+        matchAnchorWidth
+        id="global-search-results"
+        role="listbox"
+        ariaLabel="Resultados da busca"
+        className="global-search__panel"
+        panelRef={panelRef}
+      >
           {total === 0 ? (
             <p className="global-search__empty">
               {searching
@@ -223,8 +236,7 @@ export function GlobalSearch({ items, activePath, businessId = '', compact = fal
               })}
             </div>
           ))}
-        </div>
-      )}
+      </ViewportPopover>
     </div>
   );
 }

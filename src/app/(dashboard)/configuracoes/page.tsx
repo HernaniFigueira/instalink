@@ -432,7 +432,7 @@ export default function ConfigPage() {
           <>
             <section className="bg-white border border-zinc-200 p-4 space-y-3">
               <div>
-                <h3 className="font-semibold text-sm">Informações do negócio</h3>
+                <h3 className="font-semibold text-sm">Dados da clínica</h3>
                 <p className="text-xs text-zinc-500 mt-0.5">{legacyPagesEnabled ? 'Esta é a fonte de verdade do perfil: a página pública lê estes dados automaticamente.' : 'Dados de identificação e contato da clínica.'}</p>
               </div>
               <div className="grid sm:grid-cols-2 gap-3">

@@ -20,6 +20,7 @@ import type { Pet, Professional, Service } from '@/lib/types';
 import { apiGet, apiSend } from '@/lib/api-client';
 import { breedSuggestions, PET_SPECIES, PET_SPECIES_LABELS, validatePet } from '@/lib/pets';
 import { Drawer, Avatar, Badge, Button, Checkbox, Field, IconButton, Input, Notice, Select } from '@/components/ui';
+import { WORKSPACE_SHEET_SIZES } from '@/lib/workspace-sheet-sizes';
 import { NewClientForm } from '@/components/dashboard/NewClientSheet';
 
 interface Contact {
@@ -374,10 +375,9 @@ export function NewBookingSheet({ businessId, services, pros, timezone, initial,
       sideDismissGuard={{ ...clientPersistence, context: 'new-client' }}
       title="Novo agendamento"
       subtitle="Paciente → serviço → data e horário → confirmação"
-      width="max-w-[840px]"
-      /* §19–25 — MESMO overlay que expande: "+ Cadastrar paciente" abre o
-         painel lateral (base até 840px → expandida até 1280px), com o lado do
-         agendamento recuado/atenuado. Nenhum modal empilhado. */
+      width={WORKSPACE_SHEET_SIZES.wide}
+      /* §19–25 — mesmo overlay: os dois painéis usam presets oficiais; em
+         viewport estreita o cadastro ocupa a faixa sem comprimir agendamento. */
       side={registerOpen ? (
         <NewClientForm
           embedded
@@ -391,7 +391,7 @@ export function NewBookingSheet({ businessId, services, pros, timezone, initial,
         />
       ) : undefined}
       sideTitle="Cadastrar novo paciente"
-      sideWidth="max-w-[400px]"
+      sideWidth={WORKSPACE_SHEET_SIZES.nestedForm}
       onSideClose={() => setRegisterOpen(false)}
     >
         <div className="px-5 py-4 space-y-3.5">

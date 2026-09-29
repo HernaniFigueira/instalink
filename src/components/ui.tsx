@@ -660,10 +660,10 @@ export function Drawer({ open, onClose, title, subtitle, children, footer, width
   /**
    * §19–25 — OVERLAY SYSTEM: painel lateral do MESMO overlay (ex.: "Cadastrar
    * novo paciente" dentro do "Novo agendamento"). Com `side`, o dialog EXPANDE
-   * lateralmente (base ~760–840px → expandido até ~1280px), o painel base
-   * recua/fica atenuado e o secundário entra pela direita. NUNCA abre um
-   * segundo modal/backdrop. Mobile: passos num overlay só, com transição
-   * horizontal (um painel por vez).
+   * lateralmente (até ~1280px), o painel base recua/fica atenuado e o
+   * secundário entra pela direita. NUNCA abre outro modal/backdrop. Em
+   * viewports sem largura útil para ambos, o secundário assume a faixa inteira
+   * no mesmo overlay e o painel base volta ao fechar.
    */
   side?: React.ReactNode;
   sideTitle?: string;
@@ -736,7 +736,7 @@ export function Drawer({ open, onClose, title, subtitle, children, footer, width
             </div>
             {/* Painel secundário (cadastro rápido): entra pela direita, único overlay. */}
             {expanded && (
-              <div className={cn('il-drawer__panel il-drawer__panel--side flex flex-col min-h-0 border-l border-[var(--border)]', sideWidth)}>
+              <div className={cn('il-drawer__panel il-drawer__panel--side flex w-full shrink-0 flex-col min-h-0 border-l border-[var(--border)]', sideWidth)}>
                 <header className="ws-sheet__header shrink-0">
                   <div className="ws-sheet__titles">
                     <h2>{sideTitle || 'Cadastrar novo paciente'}</h2>

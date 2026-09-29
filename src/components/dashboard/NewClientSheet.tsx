@@ -331,7 +331,7 @@ export function NewClientForm({
 
           <label className="flex items-start gap-3 rounded-xl border border-[var(--border)] px-3.5 py-3 cursor-pointer transition-colors hover:border-[var(--brand-border)] hover:bg-[var(--brand-soft)]">
             <input type="checkbox" checked={createAccess} onChange={(e) => setCreateAccess(e.target.checked)} className="il-check mt-0.5" />
-            <span><span className="block text-sm font-semibold text-[var(--text)]">Criar acesso à página</span><span className="block text-xs text-[var(--text-muted)] mt-0.5">Vincula uma conta Customer sem duplicar a identidade e gera uma senha temporária segura.</span></span>
+            <span><span className="block text-sm font-semibold text-[var(--text)]">Criar acesso do cliente</span><span className="block text-xs text-[var(--text-muted)] mt-0.5">Cria ou vincula a conta usada pelo cliente para acessar consultas e pedidos. Uma senha temporária é exibida somente quando uma nova credencial é criada.</span></span>
           </label>
 
           {error && <Notice tone="error">{error}</Notice>}

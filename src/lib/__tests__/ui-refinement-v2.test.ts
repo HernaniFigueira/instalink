@@ -72,8 +72,10 @@ describe('2.0 refinement pass — lower action and surface competition', () => {
     const booking = read('src/components/dashboard/NewBookingSheet.tsx');
     const drawer = read('src/components/ui.tsx');
     const css = read('src/app/globals.css');
-    expect(booking).toContain('width="max-w-[840px]"');
-    expect(booking).toContain('sideWidth="max-w-[400px]"');
+    expect(booking).toContain('WORKSPACE_SHEET_SIZES.wide');
+    expect(booking).toContain('WORKSPACE_SHEET_SIZES.nestedForm');
+    expect(booking).toContain('sideTitle="Cadastrar novo paciente"');
+    expect(css).toContain('@media (max-width: 1359px)');
     expect(drawer).toContain("expanded ? 'w-full max-w-[1280px]'");
     expect(drawer).toContain('data-expanded={expanded ? \'true\' : undefined}');
     expect(css).toContain(".il-drawer__strip[data-expanded='true'] { width:100%; max-width:1280px; }");
