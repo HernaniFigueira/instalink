@@ -148,11 +148,13 @@ describe('Etapa A — sidebar por seções', () => {
     setup();
     const main = screen.getByRole('navigation', { name: 'Menu principal' });
     await u.click(within(main).getByRole('button', { name: 'Clínica' }));
-    // A UX agrupa; o modelo de dados NÃO foi unificado ( Professional ≠ Member ):
-    // são quatro destinos distintos, cada um com a própria rota.
-    for (const name of ['Serviços', 'Profissionais', 'Disponibilidade', 'Equipe']) {
+    // CLINICAL STRUCTURE CONSOLIDATION (B1): Profissionais unificado em Equipe — apenas Serviços permanece no grupo Clínica.
+    // Disponibilidade e Equipe vivem em seções próprias (Operação/Configurações). O modelo não foi unificado (Professional ≠ Member).
+    for (const name of ['Serviços']) {
       expect(within(main).getByRole('link', { name })).toBeTruthy();
     }
+    expect(within(main).queryByRole('link', { name: 'Profissionais' })).toBeNull(); // redirect para Equipe
+    // Equipe e Disponibilidade não estão neste grupo
     // O submenu do grupo mora DENTRO do menu principal, com recuo.
     expect(within(main).getByText('Serviços').closest('.workspace-submenu')).toBeTruthy();
   });
@@ -259,9 +261,10 @@ describe('Etapa A — sidebar por seções', () => {
   it('nenhuma rota autorizada desapareceu do menu', () => {
     setup();
     const main = screen.getByRole('navigation', { name: 'Menu principal' });
+    // CLINICAL STRUCTURE CONSOLIDATION (B1): Profissionais saiu do menu (unificado em Equipe, redirect compatível)
     const labels = [
       'Visão geral', 'Agenda', 'Conversas', 'Pendências', 'Clientes',
-      'Estrutura', 'Serviços', 'Profissionais', 'Disponibilidade', 'Equipe',
+      'Estrutura', 'Serviços', 'Disponibilidade', 'Equipe',
       'Automações', 'Follow-up', 'Campanhas',
       'Resultados', 'Financeiro', 'Oportunidades',
       'Canais & Integrações', 'Configurações',

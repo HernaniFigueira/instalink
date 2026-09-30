@@ -10,7 +10,7 @@ import {
 } from '@/lib/booking-ops';
 import { applyBookingStatusTx } from '@/lib/booking-status';
 import { computeSlots, dayAvailability } from '@/lib/slots';
-import { bookingMode } from '@/lib/booking';
+import { bookingMode, eligibleProfessionalIds as eligibleIdsForService, slotEligibleProfessionalIds, serviceProfessionalMode } from '@/lib/booking';
 import { createBookingTx, resolveBookingIdentity } from '@/lib/booking-create';
 import { previewSeries, createSeriesTx, cancelFutureSeriesTx } from '@/lib/booking-series';
 import type { CreateBookingParams } from '@/lib/booking-create';
@@ -109,9 +109,7 @@ export async function GET(req: NextRequest) {
     }
     const requestedProfessionalId = scope || String(q.get('professionalId') || '');
     const activeProsForService = db.professionals.filter((p) => p.businessId === businessId && p.active !== false);
-    const eligibleProfessionalIds = (service.professionalIds || []).length > 0
-      ? activeProsForService.filter((p) => service.professionalIds.includes(p.id)).map((p) => p.id)
-      : activeProsForService.map((p) => p.id);
+    const eligibleProfessionalIds = eligibleIdsForService(service as any, activeProsForService);
     if (requestedProfessionalId && !eligibleProfessionalIds.includes(requestedProfessionalId)) {
       return NextResponse.json({ error: 'Profissional indisponível para este serviço.' }, { status: 400 });
     }
@@ -137,7 +135,7 @@ export async function GET(req: NextRequest) {
       // A consulta administrativa pode restringir a coluna escolhida; sem
       // filtro a resposta continua sendo a união da equipe.
       professionalId: requestedProfessionalId,
-      eligibleProIds: service.professionalIds || [],
+      eligibleProIds: slotEligibleProfessionalIds(service as any, activeProsForService),
       leadMin: cfg.leadMin || 0,
       bufferMin: cfg.bufferMin || 0,
     };
@@ -366,7 +364,7 @@ export async function POST(req: NextRequest) {
       }, {
         date, time, durationMin: service.durationMin,
         professionalId: (guard?.ok ? guard.ctx.professionalScope : '') || String(body.professionalId || ''),
-        eligibleProIds: service.professionalIds || [],
+        eligibleProIds: eligibleIdsForService(service as any, db.professionals.filter((p) => p.businessId === business.id && p.active !== false)),
       });
       if (conflicts.length > 0) {
         return NextResponse.json({
@@ -481,9 +479,7 @@ export async function PATCH(req: NextRequest) {
       }
       const proId = guard.ctx.professionalScope || String(body.professionalId || '');
       const activePros = db.professionals.filter((p) => p.businessId === business.id && p.active !== false);
-      const eligible = (service.professionalIds || []).length > 0
-        ? activePros.filter((p) => (service.professionalIds || []).includes(p.id))
-        : activePros;
+      const eligible = eligibleIdsForService(service as any, activePros).map(id => activePros.find(p=>p.id===id)!).filter(Boolean);
       if (proId && !eligible.some((p) => p.id === proId)) {
         return NextResponse.json({ error: 'Profissional indisponível para este serviço.' }, { status: 400 });
       }
@@ -511,7 +507,7 @@ export async function PATCH(req: NextRequest) {
           dateISO: date, weekday: weekdayOf(date),
           serviceId: freshService.id, durationMin: freshService.durationMin,
           professionalId: proId,
-          eligibleProIds: freshService.professionalIds || [],
+          eligibleProIds: eligibleIdsForService(freshService as any, d.professionals.filter((p) => p.businessId === business.id)),
           nowHM: date === freshToday ? nowHM(new Date(), freshTz) : '',
           leadMin: freshBusiness.booking?.leadMin || 0,
           bufferMin: freshBusiness.booking?.bufferMin || 0,

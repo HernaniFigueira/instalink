@@ -8,33 +8,69 @@
 
 ## 0. Regra de leitura
 
-Este documento é o mapa mestre de produto, arquitetura e execução do GoDoutor.
+Este documento é o mapa mestre de produto, arquitetura e execução do GoDoutor. É a **autoridade de estado atual e fila de execução** — sempre valide contra o Git antes de agir.
 
 Antes de iniciar qualquer missão relevante, leia também:
 
-- docs/GODOUTOR-CLINICAL-OS-V1.md
+- docs/GODOUTOR-CLINICAL-OS-V1.md — especificação de arquitetura clínica (roadmap operacional vigente está neste Master Plan)
 - docs/GODOUTOR-UI-CONTRACT.md
-- docs/GODOUTOR-UI-AUDIT-V2.md
+- docs/GODOUTOR-UI-AUDIT-V2.md quando a missão envolver UI/homologação
 
 Quando uma decisão histórica do antigo InstaLink conflitar com este documento, a direção atual do GoDoutor prevalece, salvo se uma decisão técnica posterior documentada no repositório a substituir explicitamente.
 
 Não recomeçar o produto do zero. Não criar novo repositório por impulso. Não ressuscitar o InstaLink como proposta principal.
 
+**Regra de autoridade:** nunca confiar em "próxima missão" de documentação histórica ou de `AGENTS.md` desatualizado. A autoridade é a seção **Estado atual / Fila de execução** deste Master Plan, validada contra Git.
+
+---
+
 ## 1. Estado atual
 
-A PR #43 foi mergeada em 2026-09-29.
+**Implementação atual:**
+Clinical Architecture Closure — PR #46
+Branch: `arena/01a0eda6-instalink` · PR #46 — validar estado real no Git (`git log --oneline -5`, `gh pr view 46`)
 
-Merge commit da main:
+**Status:**
+CONCLUÍDA EM CÓDIGO / AGUARDANDO HOMOLOGAÇÃO E MERGE
 
-    85154c851ba5bfe00aac2fbc4c55cde690815704
+**O que já está em código (B3 + Modelo Operacional — PR #46 final):**
+- Equipe: painel único **ADICIONAR PESSOA** (sem chooser) com seções **IDENTIFICAÇÃO** (NOME*, FOTO, E-MAIL, TELEFONE, CPF com máscaras `maskPhoneBR/maskCpf` e normalização `onlyDigits`) e **DADOS ADICIONAIS** minimizados; toggles **Tem acesso / Realiza atendimentos** (combinações livres); quando ACESSO expande **E-MAIL/PAPEL/PERMISSÕES + senha** (eye/autocomplete, hash `hashPassword`, nunca logada/retornada); quando ATENDIMENTO expande **FUNÇÃO/ESPECIALIDADE + REGISTRO CRMV default + UF + NÚMERO** (`CRMV-RJ nº 12345`, `BRAZILIAN_STATES`, CPF≠CRMV, não obriga para não-vet), **SERVIÇOS QUE REALIZA** searchable multiselect de `Service` reais + `+ Criar '<nome>'` inline (NOME*, GRUPO, DURAÇÃO, PREÇO opcional) já vinculado sem duplicar, **DISPONIBILIDADE** radio **Seguir clínica / Usar próprio** + CTA deep-link `/disponibilidade?b=&professionalId=`
+- Lista **Pessoas da clínica** com AÇÕES apenas **GERENCIAR** (mesmo drawer condicional) e **AGENDA** como texto clicável → `/disponibilidade?b=&professionalId=`; distinção **FUNÇÃO ≠ PAPEL** preservada
+- Serviços: **Categoria→Grupo** (UI apenas, sem migration), grupo opcional, **Ativo vs Pode ser agendado** com helper; `ServiceForm` com biblioteca sugestiva `src/lib/vet-service-catalog.ts` (ezyVet Booking Groups/CFMV 1475/2022) — preenche Nome/Grupo/Duração sem auto-criar; `TeamEditor`/`ServiceForm` com `WORKSPACE_SHEET_SIZES.clinical` (40-50% token, não hardcode 50vw)
+- Máscaras brasileiras testáveis `src/lib/masks.ts` (CPF/CNPJ/CEP/telefone/UF/CRMV, `maskCpf/maskCnpj/maskCep/maskPhoneBR/maskUf/formatCrmvDisplay/parseCrmvDisplay/isValidCnpj` etc., reuso `field-quality`/`contact-profile`)
+- Produtos: fora da navegação Clinical OS quando `GODOUTOR_LEGACY_PAGES` OFF (guard em `WorkspaceNavigation.visible`, rota/API/dados preservados)
+- Disponibilidade preservada como domínio separado QUEM × QUANDO (copy clínica)
+- Configurações com DTO seguro `GET /api/businesses/[id]` (`BUSINESS_CONFIG_DTO_FIELDS`, nunca segredos)
+- Validação: `tsc --noEmit` 0 erros, `next build` OK, `vitest` 2627 passed / 4 failed (baseline 5 → pipeline data fix), `git diff --check` 0
 
-A #43 consolidou o Design System 2.0, arquétipos de página, Atendimento full-page, Cliente 360, Conversas workspace, overlays, sheets, Perfil, Configurações, temas, navegação mobile, limpeza visual do legado de Página e vários ajustes de Agenda.
+**Detalhes históricos completos:** ver `docs/GODOUTOR-HISTORY.md` e `docs/GODOUTOR-CLINICAL-CONVERGENCE-AUDIT.md`.
 
-A geometria 50/50 dos sheets de Novo Agendamento + cadastro aninhado foi homologada manualmente.
+---
 
-Detalhes finos de interação da Agenda não devem bloquear o avanço. Eles ficam para Agenda Temporal 2.0.
+## 2. Fila de execução
 
-## 2. Visão do produto
+**Fila oficial — única fonte vigente.** Não duplicar esta sequência em outras partes do documento. Quando uma fase terminar: remover da fila ativa, atualizar Estado atual, registrar conclusão resumida no histórico/audit, próxima fase sobe para posição 1.
+
+1. **Workflow + Permissões** — papéis, capabilities, máquina de estados do agendamento (scheduled→arrived→in_care→finalized), check-in/falta/cancelamento/reagendamento, finalização e Pendências (EventLog → Pendência → Agenda Operational Strip)
+2. **Agenda Temporal 2.0** — start/end, duração, drag-selection, bloqueios, procedimento longo, snap 5min, buffers, recursos (sala/equipamento), política interna vs pública
+3. **Clinical Encounter F1** — prontuário estruturado sobre Atendimento (queixa, anamnese, sinais, problemas/hipóteses/diagnósticos, achados, evolução, plano, procedimentos, retorno, assinatura, versionamento; autosave, rascunho, finalização bloqueia edição, reabertura auditada)
+4. **Cobertura / Modalidade do Atendimento** — Particular vs Convênio/Plano (futuro): cadastro de operadora/convênio e plano, vínculo Tutor/Pet, identificação do beneficiário, cobertura por serviço, elegibilidade/autorização, coparticipação, registro da modalidade no atendimento, pagador (tutor/convênio/ambos), preparação para repasse/faturamento/glosa — veterinária primeiro, sem SUS/TISS/medicina humana antecipada — posicionado após F1 e antes de fechar Conta/Financeiro
+5. **Prescrição + Exames + Document Engine** — medicamento/apresentação/dose/via/frequência, ordens/solicitações, template/versão/instância de documentos
+6. **Estoque / Farmácia** — item/lote/validade/fornecedor/custo/movimento, integração prescrição→administração→baixa→conta
+7. **Cirurgia + Internação** — indicação→orçamento→consentimento→checklist→cirurgia→recuperação→alta, leito/evolução/handoff
+8. **Conta do Atendimento + Financeiro avançado** — serviços/procedimentos/medicamentos/materiais → conta → pagamento/parcelas → contas a receber
+9. **Fiscal / integrações** — NFS-e, exportações, fechamento mensal, conciliação
+10. **Agentes + Jev + LLM + OAAS sobre os domínios estabilizados** — consolidação EventLog em OAAS, agentes clínicos/operacionais consumindo domínios estáveis (não antes)
+
+**Após #46, a próxima missão de código é Workflow + Permissões. Depois: Agenda Temporal 2.0 → Clinical Encounter F1.**
+
+**Notas de referência (não implementar nesta PR):**
+- **Agenda Temporal 2.0 — referências para decisão futura:** Google Calendar como referência **VISUAL/INTERACIONAL** (interação de grade, drag-selection, bloqueios). Para análise arquitetural comparar agenda própria vs bibliotecas: `fullcalendar/fullcalendar`, `schedule-x/schedule-x`, `bigcalendar/react-big-calendar` (GitHub). Decisão futura: evoluir implementação própria vs adotar biblioteca vs reutilizar padrões/algoritmos — sem instalar agora.
+- **Clinical Encounter F1 — biblioteca de anamnese:** evolução do motor atual de fichas (`AnamneseManager`) para biblioteca de modelos por especialidade, após pesquisa veterinária séria e revisão humana. Nesta PR o motor permanece como está; apenas copy/hub ajustados.
+
+---
+
+## 3. O que é o GoDoutor
 
 GoDoutor = sistema operacional da clínica.
 
@@ -58,7 +94,7 @@ Fluxo-alvo:
 
 O produto antigo de Página Pública é legado preservado, não o centro do Clinical OS.
 
-## 3. Vertical inicial
+### Vertical inicial
 
 Primeira vertical: clínica veterinária.
 
@@ -66,12 +102,15 @@ Vocabulário:
 
 - Tutor = cliente/responsável humano
 - Pet = paciente
-- Profissional = quem presta atendimento clínico
-- Equipe = quem possui acesso ao sistema
+- Profissional = pessoa que realiza atendimentos
+- Equipe = pessoas da clínica
+- Acesso = capacidade de entrar no sistema com papel/permissões
+
+> `BusinessMember` e `Professional` continuam entidades internas distintas — Equipe é a experiência unificada de pessoas, não um sinônimo de acesso.
 
 Não construir medicina humana, odontologia e veterinária em paralelo. A arquitetura pode ser extensível, mas a UX e as regras devem ser coerentes com veterinária primeiro.
 
-## 4. O que o GoDoutor não deve voltar a ser
+### O que o GoDoutor não deve voltar a ser
 
 Não voltar a parecer:
 
@@ -83,9 +122,9 @@ Não voltar a parecer:
 
 A linguagem do produto deve ser clínica e operacional: tutor, paciente, serviço, profissional, disponibilidade, agenda, atendimento, prontuário, retorno, documento, cobrança, estoque, cirurgia e internação.
 
-## 5. Legado InstaLink
+### Legado InstaLink
 
-A Página Pública permanece preservada por compatibilidade por meio da flag GODOUTOR_LEGACY_PAGES.
+A Página Pública permanece preservada por compatibilidade por meio da flag `GODOUTOR_LEGACY_PAGES`.
 
 Com a flag desligada:
 
@@ -97,855 +136,49 @@ Com a flag desligada:
 
 Compatibilidade técnica não deve virar linguagem de produto.
 
-## 6. Próxima prioridade: Clinical Convergence / De-InstaLink
+---
 
-Esta é a próxima missão de produto após o fechamento do Design System.
+## 4. Decisões arquiteturais congeladas
 
-Objetivo:
+Estas decisões não se discutem novamente sem PR própria e justificativa técnica comprovada:
 
-Fazer o sistema parar de parecer “InstaLink transformado” e passar a ser GoDoutor por dentro e por fora.
+- **Design System 2.0 congelado (#43):** não criar por módulo nova paleta, radius, botão paralelo, shadow, container arbitrário, modal próprio, layout incompatível. Arquétipos oficiais: `workspace` (Agenda, Conversas, Clientes), `record` (Atendimento), `detail` (Cliente 360/Pet 360), `form` (Perfil, Configurações, Agente), `hub` (Estrutura, Profissionais, Disponibilidade, Serviços, Produtos, Equipe).
+- **Hierarquia de ações:** PRIMARY (1 por contexto), SECONDARY, GHOST, DESTRUCTIVE (só destrutiva).
+- **Temas:** default azul-profundo; temas alteram identidade/accent/sidebar/CTA, nunca sucesso/warning/perigo/radius/spacing/shadows/anatomia.
+- **Viewports prioritários:** 1440 → 1366 → 1024 → 390 sanity check. Desktop/tablet têm prioridade (sistema de operação clínica).
+- **Banco:** `instalink_doc` JSONB é legado sem big-bang; novos domínios importantes nascem normalizados e multi-tenant com `business_id` obrigatório. Migration é única autoridade DDL, runtime nunca cria tabela. Ordem de corte: EventLog/AI usage (F0 já normalizado) → Clinical Encounter → Prescription/Orders → Finance → Inventory.
+- **Segurança:** RBAC + tenant isolation na raiz de toda leitura/escrita/evento; audit trail + EventLog; nenhuma API key no frontend; payload redigido; confirmação humana para ações sensíveis; permissões aplicadas no servidor.
+- **Exposição banco:** `godoutor_internal` fora da Data API, tabelas novas nascem REVOKE de `PUBLIC/anon/authenticated/service_role`, RLS/grants por tabela; `instalink_doc` referência sem qualificação depende de `search_path` do papel (Supabase: `godoutor_app, public`).
+- **Fluxo operacional principal:** Tutor → Pet → Agendamento → Confirmação → Chegada → Fila → Atendimento → Finalização clínica → Orientações → Retorno → Pendência quando necessário → Pagamento → Follow-up.
+- **Papéis e operação:** Recepção (cadastra tutor/pet, agenda, fila, retorno, sem concluir atendimento/editar evolução), Profissional (agenda, atendimento, anamnese, evolução, retorno; reagendar/bloquear/cancelar configurável por clínica), Owner/Admin (estrutura, equipe, permissões, agenda, financeiro).
+- **Pendências:** ação humana acionável agora/janela curta; tarefas futuras com `dueAt` futuro não emergem na strip até janela acionável; concluídas vão para histórico filtrado.
+- **Atendimento:** referência arquétipo `record` — full-page, header compacto sticky, action bar, autosave, rascunho, finalização, histórico, read-only após finalização, reabertura auditada. Não reimplementar do zero.
+- **Estratégia Enterprise:** sem fork — feature flags, configuração, papéis, módulos, limites, integrações.
 
-Varredura obrigatória em:
+---
 
-- Estrutura
-- Profissionais
-- Disponibilidade
-- Serviços
-- Produtos
-- Equipe
-- Configurações
-- Recursos
-- Dashboard
-- onboarding
-- componentes e copies compartilhadas
+## 5. Histórico resumido
 
-Cada ocorrência deve ser classificada como:
+Fases concluídas viraram resumo curto. Detalhes de implementação movidos para histórico.
 
-A. conceito válido do Clinical OS → manter
-B. compatibilidade técnica do legado → preservar escondida
-C. copy/UX do InstaLink → remover ou reescrever
-D. regra de negócio antiga → redesenhar
-E. módulo legado sem utilidade clínica → ocultar ou deferir
+- **Design System 2.0 — CONCLUÍDO (#43)** — mergeado 2026-09-29 (`85154c8`). Detalhes: arquétipos, Atendimento full-page, Cliente 360, temas, navegação.
+- **Clinical Convergence / Architecture Closure — CONCLUÍDO (#46)** — `arena/01a0eda6-instalink` · CONCLUÍDA EM CÓDIGO / AGUARDANDO HOMOLOGAÇÃO E MERGE. Unificação Equipe×Profissionais, Serviços clínico sem vitrine, Configurações cadastro centralizado, DTO seguro, porta única Equipe, Disponibilidade clínica, Estrutura hub, Agenda classificada. Validação: tsc 0, build OK, vitest 2623/5.
 
-### Resíduos já confirmados
+**Detalhes:** ver `docs/GODOUTOR-HISTORY.md` (B2/B3 completos com Alterado/Testes) e `docs/GODOUTOR-CLINICAL-CONVERGENCE-AUDIT.md` (matriz 57 itens + decisões B1–B6, B3-01–B3-10).
 
-Profissionais ainda contém linguagem como:
+---
 
-- distribuição dos agendamentos é automática
-- cliente nunca escolhe profissional
+## 6. Regras de operação
 
-Isso não pode ser regra universal.
-
-Serviços ainda carrega semântica como:
-
-- preço oculto na página
-- somente exibição
-- mostrar preço na página pública
-- distribuição automática obrigatória
-- destaque
-
-Profissional ainda pode carregar copy como “aparece na agenda e na página”.
-
-Produtos ainda possui herança de catálogo/vitrine.
-
-Regra: não renomear Produtos para Estoque. Estoque/Farmácia é domínio próprio.
-
-## 7. Design System congelado
-
-A partir da #43, novas features devem seguir o contrato existente.
-
-Não criar por módulo:
-
-- nova paleta
-- radius diferente
-- botão paralelo
-- shadow paralela
-- container arbitrário
-- modal próprio
-- layout incompatível
-
-Arquétipos oficiais:
-
-### workspace
-
-Operação ampla/densa.
-
-Exemplos: Agenda, Conversas, Clientes, Pendências, Financeiro, Resultados, Funil.
-
-### record
-
-Registro/documento clínico.
-
-Referência: Atendimento.
-
-Futuro: prontuário, prescrição, pedido de exame, alta, documentos, cirurgia e internação.
-
-### detail
-
-Entidade 360.
-
-Exemplos: Cliente 360 e Pet 360.
-
-### form
-
-Configuração administrativa.
-
-Exemplos: Perfil, Configurações, Agente.
-
-### hub
-
-Gestão estrutural.
-
-Exemplos: Estrutura, Profissionais, Disponibilidade, Serviços, Produtos, Equipe, Organização e Recursos.
-
-## 8. Hierarquia de ações
-
-- PRIMARY: uma ação principal por contexto
-- SECONDARY: ação operacional importante
-- GHOST: manutenção/edição auxiliar
-- DESTRUCTIVE: somente ação realmente destrutiva
-
-Padronização não significa pintar todos os botões do mesmo jeito.
-
-## 9. Temas
-
-Default de referência: azul-profundo.
-
-Temas podem alterar identidade/accent/sidebar/CTA principal.
-
-Temas não podem alterar:
-
-- sucesso
-- warning
-- perigo
-- radius
-- spacing
-- shadows
-- anatomia
-- hierarquia
-
-## 10. Viewports prioritários
-
-Ordem de homologação:
-
-1. 1440 desktop
-2. 1366 desktop
-3. 1024 tablet/desktop compacto
-4. 390 mobile como sanity check
-
-GoDoutor é sistema de operação clínica. Desktop/tablet têm prioridade.
-
-## 11. Fluxo operacional principal
-
-    Tutor/Contato
-    → Pet
-    → Agendamento
-    → Confirmação
-    → Chegada
-    → Fila
-    → Atendimento
-    → Finalização clínica
-    → Orientações
-    → Retorno
-    → Pendência operacional quando necessário
-    → Pagamento
-    → Follow-up
-
-## 12. Papéis e operação
-
-### Recepção/Secretaria
-
-Pode:
-
-- cadastrar tutor e pet
-- criar/reagendar/cancelar agendamento
-- marcar chegada
-- registrar falta
-- operar fila
-- receber tarefas
-- marcar retorno
-- acessar dados administrativos
-
-Não deve:
-
-- concluir atendimento clínico
-- editar evolução médica
-- assinar prontuário
-- prescrever
-
-### Profissional
-
-Pode:
-
-- ver agenda
-- abrir atendimento
-- consultar histórico necessário
-- preencher anamnese
-- registrar evolução
-- orientar
-- solicitar retorno
-- futuramente prescrever, solicitar exames e emitir documentos
-
-Capacidades como reagendar, bloquear horário e cancelar devem ser configuráveis por clínica/role, não pressupostas universalmente.
-
-### Owner/Admin
-
-Administra estrutura, equipe, profissionais, permissões, agenda, financeiro, automações, relatórios e configurações.
-
-## 13. Workflow + Permissões
-
-Depois da Clinical Convergence, fazer missão própria.
-
-Não resolver tudo com role fixa.
-
-Modelo desejado:
-
-    papel padrão
-    +
-    capabilities
-    +
-    overrides controlados por clínica quando necessário
-
-Princípio: permissão deve ser aplicada no servidor, não apenas escondendo botões.
-
-Máquina de estados de agendamento deve distinguir transições legais:
-
-    scheduled/pending/confirmed
-    → arrived/check-in
-    → in care
-    → finalized
-
-cancelamento, falta e reagendamento só podem ocorrer em estados coerentes.
-
-“Concluir” operacional não pode substituir a finalização clínica do Atendimento.
-
-## 14. Pendências
-
-Pendência = ação humana que exige atenção agora ou dentro de janela operacional próxima.
-
-Não transformar Pendências em depósito de tarefas futuras.
-
-Exemplo errado:
-
-“Preparar atendimento” de consulta daqui a 30 dias aparecendo hoje.
-
-Tarefas futuras podem existir no banco, mas só devem emergir quando realmente acionáveis.
-
-Concluídas saem da fila principal e permanecem em histórico com filtro/paginação.
-
-## 15. Atendimento
-
-A tela atual de Atendimento é referência do arquétipo record.
-
-Preservar:
-
-- full-page
-- header normal → compacto sticky
-- action bar
-- autosave
-- rascunho
-- finalização
-- histórico
-- anamnese
-- orientações
-- retorno
-- nota interna
-- vínculo booking/queue
-- profissional responsável
-- read-only após finalização
-- reabertura auditada
-
-Não reimplementar do zero.
-
-## 16. F1 — Clinical Encounter estruturado
-
-Evoluir o Atendimento existente com estrutura clínica:
-
-- queixa principal
-- anamnese
-- sinais vitais
-- problemas/hipóteses/diagnósticos
-- achados
-- evolução
-- plano/conduta
-- procedimentos
-- orientações
-- retorno
-- nota interna
-- profissional
-- assinatura/finalização
-- versionamento/histórico
-
-Regras:
-
-- rascunho editável
-- autosave
-- finalização bloqueia edição comum
-- reabertura somente por permissão e auditoria
-- histórico preservado
-- concorrência otimista
-- IA nunca assina autonomamente
-
-## 17. Anamnese
-
-Estado atual já possui sheet contextual e histórico.
-
-Futuro:
-
-- templates por consulta
-- templates por espécie
-- voz/transcrição
-- estrutura inteligente
-- comparação longitudinal
-- destaque de alterações relevantes
-
-## 18. Voz clínica
-
-Fluxo desejado:
-
-    microfone
-    → STT
-    → texto estruturado
-    → sugestão de preenchimento
-    → revisão humana
-    → confirmação
-    → prontuário
-
-Nunca:
-
-    voz → assinatura automática
-
-Precisará de consentimento, indicador de gravação, segurança, auditoria e política de retenção.
-
-## 19. F2 — Prescrição, Exames e Document Engine
-
-Prescrição futura:
-
-- medicamento
-- apresentação
-- dose
-- via
-- frequência
-- duração
-- quantidade
-- orientação
-- profissional
-- assinatura
-
-Exames:
-
-- solicitado
-- coletado
-- processando
-- resultado disponível
-- revisado
-
-Document Engine comum para:
-
-- receita
-- atestado
-- relatório
-- encaminhamento
-- pedido de exame
-- alta
-- consentimento
-- anestesia
-- cirurgia
-- procedimento
-- eutanásia
-- óbito
-- vacinação
-
-Modelo de documentos:
-
-- template
-- versão
-- instância
-- signatário
-- auditoria
-- anexos
-
-## 20. PDF, impressão e compartilhamento
-
-Futuro documento clínico deve suportar:
-
-- logo
-- cabeçalho
-- paciente/tutor
-- profissional/conselho quando aplicável
-- rodapé sem sobreposição
-- paginação
-- PDF
-- imprimir
-- baixar
-- compartilhar
-- WhatsApp
-
-Não misturar isso com Design System.
-
-## 21. Agenda Temporal 2.0
-
-Missão própria, posterior à Clinical Convergence/Workflow.
-
-Unidade temporal correta:
-
-- startAt
-- endAt
-- duration
-
-Tipos:
-
-### Atendimento
-
-Paciente/tutor + serviço.
-
-### Procedimento
-
-Paciente, duração potencialmente longa.
-
-### Bloqueio
-
-Sem paciente: almoço, reunião, indisponibilidade, treinamento, sala reservada.
-
-## 22. Agenda estilo Google Calendar
-
-Direção futura:
-
-- hover em célula vazia com affordance clara
-- cursor/ícone de criação
-- clique contextual
-- seleção por arraste
-- preview de intervalo
-- bloqueios
-- procedimentos longos
-- snap
-- buffers
-- recursos
-
-Exemplo de drag:
-
-    08:00
-    → 15:00
-    = 7h
-
-Ao soltar, abrir Novo Agendamento com data/início/fim/duração.
-
-Snap interno sugerido: 5 minutos.
-
-Agenda interna e booking público são políticas diferentes.
-
-## 23. Serviço como inteligência da Agenda
-
-Cada serviço deverá evoluir para suportar:
-
-- nome
-- duração padrão
-- público sim/não
-- intervalo público
-- buffer antes/depois
-- profissionais elegíveis
-- duração editável internamente
-- categoria
-- recursos necessários
-
-Não usar nome/cargo/especialidade textual para inferir vínculo.
-
-O vínculo real serviço ↔ profissional é a autoridade.
-
-## 24. Recursos da Agenda
-
-Arquitetura futura deve permitir:
-
-- profissional
-- sala
-- equipamento
-- assistente/equipe
-
-Exemplo cirurgia:
-
-    cirurgião
-    + anestesista
-    + sala cirúrgica
-    + equipamento
-
-Não implementar tudo agora; apenas não bloquear essa evolução.
-
-## 25. Estoque / Farmácia
-
-É domínio próprio.
-
-Modelo futuro:
-
-- item
-- medicamento
-- lote
-- validade
-- fornecedor
-- custo
-- estoque mínimo
-- entrada
-- saída
-- perda
-- vencimento
-- ajuste
-- transferência
-- administração
-- venda
-
-Integração clínica desejada:
-
-    prescrição
-    → administração
-    → baixa de estoque
-    → lançamento na conta do atendimento
-
-Evitar redigitação.
-
-## 26. Cirurgia
-
-Fluxo futuro:
-
-    indicação
-    → orçamento
-    → consentimento
-    → pré-operatório
-    → exames
-    → checklist
-    → anestesia
-    → cirurgia
-    → recuperação
-    → internação ou alta
-    → pós-operatório
-    → retorno
-
-Agenda Temporal 2.0 deve existir antes ou em paralelo às primeiras features de cirurgia.
-
-## 27. Internação
-
-Domínio próprio:
-
-- admissão
-- leito
-- responsável
-- diagnóstico
-- tratamento
-- medicações programadas
-- administrações
-- fluidoterapia
-- alimentação
-- sinais vitais
-- ocorrências
-- exames
-- evolução
-- handoff
-- alta
-
-Não improvisar internação dentro de Atendimento normal.
-
-## 28. Financeiro
-
-Hoje é básico e operacional.
-
-Futuro:
-
-    Conta do atendimento
-    → serviços realizados
-    → procedimentos
-    → medicamentos
-    → materiais
-    → descontos
-    → parcelas
-    → pagamento
-    → reembolso
-    → contas a receber
-    → fechamento
-
-O financeiro deve nascer do que ocorreu na operação.
-
-Evitar cadastrar novamente aquilo que já foi executado no atendimento.
-
-## 29. Resultados x Financeiro
-
-Financeiro = operação financeira.
-
-Resultados = BI/gestão.
-
-Resultados poderá consolidar agenda, produção, receita, retenção, faltas, conversão, ocupação e desempenho.
-
-## 30. Fiscal e contabilidade
-
-GoDoutor não deve virar software contábil completo.
-
-Futuro:
-
-- NFS-e
-- exportações
-- fechamento mensal
-- relatórios
-- conciliação
-- integração com contador
-
-## 31. Conversas
-
-Preservar o workspace atual:
-
-- inbox
-- timeline
-- composer
-- tutor
-- pets
-- próximo agendamento
-- responsável
-- IA ↔ humano
-- drafts
-- retry
-- filtros
-
-Sem canal conectado, o sistema deve ser honesto. Nunca simular envio real.
-
-## 32. WhatsApp oficial
-
-Existe implementação relevante de Meta Cloud API. Não recomeçar.
-
-Já há trabalho em:
-
-- credenciais
-- webhook
-- envio
-- retry
-- status
-- Embedded Signup
-- Standard
-- Coexistence
-- WABA
-- phone number
-- subscription
-- register
-- inbound
-- dedupe
-- CRM/conversation
-- automação
-- handoff
-
-Antes de produção, revisar documentação oficial Meta atual.
-
-Nunca testar primeiro no número histórico principal de uma clínica. Usar linha/chip de teste e homologar o ciclo completo.
-
-## 33. Inteligência
-
-Arquitetura conceitual:
-
-    CRM = memória
-    Automation = motor
-    Jev = decisão
-    LLM = linguagem
-    Canais = comunicação
-    Agenda = capacidade
-    GoDoutor = execução, regra e dados
-    Humano = supervisão e exceção
-
-## 34. Jev / TypeSafe
-
-Jev não é chatbot.
-
-Uso:
-
-- classificação
-- score
-- escolha
-- roteamento
-- priorização
-- decisão estruturada
-
-Contrato F0:
-
-- Choice
-- Noul
-- Score
-- confidence
-
-Antes de integração real, validar endpoint/header/créditos atuais com documentação oficial e testar com dados fictícios.
-
-Segredo nunca vai ao frontend.
-
-## 35. LLM generativa
-
-LLM escreve:
-
-- resposta
-- resumo
-- relatório
-- documento
-- estrutura → linguagem
-
-Princípio:
-
-Jev decide.
-LLM verbaliza.
-GoDoutor executa.
-
-## 36. Agentes
-
-### Recepção/Bia
-
-Responder, informar, agendar, reagendar, confirmar e coletar dados.
-
-Não diagnostica, prescreve nem altera prontuário clínico.
-
-### Clínico
-
-Resume histórico, estrutura consulta, sugere preenchimento, prepara documentos e auxilia prescrição/exames sob revisão humana.
-
-### Financeiro
-
-Cobrança e pendências financeiras sem acesso clínico desnecessário.
-
-### Operacional
-
-Estoque, exames, internação, tarefas e alertas.
-
-### Relacionamento
-
-Retorno, vacinação, no-show, reativação e follow-up.
-
-### Gestão
-
-Indicadores, alertas e resumo operacional.
-
-## 37. ToolRegistry
-
-Agentes não acessam banco cru.
-
-Fluxo:
-
-    IA
-    → ToolRegistry
-    → tenant guard
-    → permission check
-    → confirmação
-    → domain service
-    → persistence
-    → audit
-    → EventLog
-    → AI telemetry
-
-Nunca confiar em businessId vindo do prompt.
-
-Mensagem do paciente nunca concede autorização.
-
-## 38. EventLog / Outcome-as-a-Service
-
-F0 já criou a fundação de eventos de domínio.
-
-Exemplos:
-
-- appointment.created
-- appointment.confirmed
-- patient.checked_in
-- encounter.started
-- encounter.finalized
-- prescription.created
-- exam.ordered
-- exam.resulted
-- inventory.low
-- invoice.created
-- payment.received
-- followup.due
-
-Automação futura deve consumir esse EventLog, não criar trilha paralela.
-
-## 39. Banco
-
-Legado ainda possui godoutor_app.instalink_doc em JSONB.
-
-Não repetir migração big-bang.
-
-Novos domínios importantes nascem normalizados.
-
-Ordem recomendada de corte:
-
-1. EventLog / AI usage — fundação existente
-2. Clinical Encounter
-3. Prescription / Orders
-4. Finance / Invoice / Payment
-5. Inventory
-6. Hospitalization
-
-Cada corte deve possuir migration própria, adapter, teste de paridade, validação e flip controlado.
-
-## 40. Segurança de banco
-
-- migration é autoridade DDL
-- runtime não cria tabela
-- SQL novo qualificado
-- tenant explícito
-- menor privilégio
-- tabelas internas não expostas à Data API sem decisão consciente
-- logs sem segredo
-- erros internos não vazam detalhes
-
-## 41. Roadmap recomendado
-
-### Fase A — Design System 2.0
-
-CONCLUÍDA pela PR #43.
-
-### Fase B — Clinical Convergence / De-InstaLink
-
-PRÓXIMA PRIORIDADE.
-
-Limpar semântica e regras herdadas em módulos estruturais.
-
-### Fase C — Workflow + Permissões
-
-Papéis, capabilities, máquina de estados, check-in, falta, cancelamento, reagendamento, finalização e Pendências.
-
-### Fase D — Agenda Temporal 2.0
-
-Start/end, duração, drag-selection, bloqueios, procedimento longo, snap, buffers, recursos e política interna x pública.
-
-### F1 — Clinical Encounter
-
-Evoluir Atendimento em prontuário estruturado.
-
-### F2 — Prescrição + Exames + Document Engine
-
-Núcleo documental clínico.
-
-### F3 — Estoque/Farmácia
-
-Movimentação real conectada ao atendimento.
-
-### F4 — Cirurgia + Internação
-
-Operação clínica avançada.
-
-### F5 — Conta do Atendimento + Financeiro avançado
-
-Cobrança conectada ao que foi executado.
-
-### F6 — Fiscal / fechamento / integrações
-
-NFS-e e exportações.
-
-### F7 — Agentes clínicos e operacionais
-
-Usar domínios já estáveis.
-
-### F8 — Automação visual + OAAS
-
-Event-driven + Jev + LLM + workflows.
-
-## 42. O que não fazer
+### O que não fazer
 
 Não:
 
 - criar repositório novo agora
 - reescrever tudo
-- apagar instalink_doc em big-bang
+- apagar `instalink_doc` em big-bang
 - chamar Produtos de Estoque sem domínio real
-- transformar tudo em full-width
-- transformar tudo em sheet
+- transformar tudo em full-width ou sheet
 - misturar role de acesso com cargo profissional
 - usar cor como único status
 - permitir IA assinar prontuário
@@ -953,122 +186,49 @@ Não:
 - criar fork por cliente Enterprise
 - criar ferramentas paralelas ao ToolRegistry
 
-## 43. Critério obrigatório antes de novas features
+### Critério obrigatório antes de novas features
 
 Perguntar:
 
-- qual é o caso simples?
-- qual é o caso real?
-- qual é o caso extremo?
-- qual é o caso multiusuário?
-- qual é o caso de erro?
-- qual é o caso de permissão?
-- qual é o impacto em tenant?
-- qual é o impacto em auditoria?
-- qual é o impacto em automação?
-- qual é a consequência futura?
+- qual é o caso simples? / real? / extremo? / multiusuário? / erro? / permissão? / tenant? / auditoria? / automação? / consequência futura?
 
-Exemplo Agenda:
+Exemplo Agenda: consulta 30min, retorno 15min, cirurgia 7h, bloqueio, encaixe, médico ocupado, sala ocupada, recepção interna, booking público.
 
-- consulta 30 min
-- retorno 15 min
-- cirurgia 7h
-- bloqueio
-- encaixe
-- médico ocupado
-- sala ocupada
-- recepção interna
-- booking público
-
-## 44. Processo de implementação
+### Processo de implementação
 
 Preferir:
 
-    auditar
-    → entender
-    → decidir
-    → modelar
-    → implementar
-    → testar
-    → homologar
+    auditar → entender → decidir → modelar → implementar → testar → homologar
 
 Evitar:
 
-    inventar
-    → codificar
-    → descobrir depois que o domínio estava errado
+    inventar → codificar → descobrir depois que o domínio estava errado
 
-## 45. Estratégia Enterprise
+### Enterprise / Design partners / Métricas
 
-Enterprise não significa fork.
+- Enterprise sem fork — flags, papéis, módulos.
+- Validar com 2–3 clínicas piloto (Andrioni referência para agenda/cirurgia/recepção/WhatsApp).
+- Métricas futuras: ocupação, faltas, reagendamentos, tempo espera/atendimento, retornos, conversas IA, handoffs, receita, ticket, inadimplência, estoque crítico, custo IA por clínica.
 
-Usar:
+---
 
-- feature flags
-- configuração
-- papéis
-- módulos
-- limites
-- integrações
-
-Pode haver taxa de implementação/customização sem entregar propriedade do código.
-
-## 46. Design partners
-
-Validar com clínicas reais.
-
-Ideal: 2–3 clínicas piloto para evitar overfit.
-
-Clínica Veterinária Andrioni é uma referência potencial de operação real, especialmente para agenda, cirurgia, recepção e WhatsApp.
-
-## 47. Métricas futuras
-
-- ocupação da agenda
-- faltas
-- reagendamentos
-- tempo de espera
-- tempo de atendimento
-- retornos marcados/recuperados
-- conversas resolvidas por IA
-- handoffs
-- receita realizada
-- receita recebida
-- ticket
-- inadimplência
-- estoque crítico
-- adesão a follow-up
-- custo de IA por clínica
-
-## 48. Regra para novos chats/agentes
+## 7. Regra para novos chats/agentes
 
 Ao iniciar nova sessão:
 
-1. leia AGENTS.md
-2. leia este arquivo
+1. leia `AGENTS.md`
+2. leia este arquivo (Master Plan — Estado atual / Fila)
 3. leia os documentos técnicos apontados no topo
-4. valide o estado atual do Git antes de agir
+4. valide o estado atual do Git antes de agir (`git log --oneline -5`, `git status`, PR #46)
 5. não trate decisões históricas do InstaLink como direção atual
 6. não faça merge sem autorização explícita
 7. não altere domínio apenas para melhorar uma tela
 8. preserve Design System e contratos já homologados
+9. roadmap operacional vigente está neste Master Plan — `GODOUTOR-CLINICAL-OS-V1.md` é especificação de arquitetura, não autoridade de fila
 
-## 49. Próximo passo imediato
+---
 
-Próxima missão recomendada:
-
-    GODOUTOR CLINICAL CONVERGENCE
-
-Objetivo:
-
-Fazer o produto deixar definitivamente de carregar a semântica do InstaLink nas áreas estruturais, preservando apenas compatibilidade técnica necessária.
-
-Depois:
-
-    Workflow + Permissões
-    → Agenda Temporal 2.0
-    → F1 Clinical Encounter
-
-## 50. Definição final
+## 8. Definição final
 
 GoDoutor é o sistema operacional da clínica.
 

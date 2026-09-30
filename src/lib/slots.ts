@@ -24,7 +24,7 @@ export interface SlotQuery {
   serviceId: string;
   durationMin: number;
   professionalId: string; // escolhido ('') = qualquer um
-  eligibleProIds: string[]; // vínculo do serviço ([] = todos)
+  eligibleProIds?: string[]; // vínculo do serviço: [] = ninguém, undefined = compat (todos), [ids] = final
   nowHM: string; // HH:MM atual quando dateISO é hoje ('' = outro dia)
   leadMin: number; // antecedência mínima (min)
   bufferMin: number; // intervalo entre atendimentos (min)
@@ -60,11 +60,25 @@ export function computeSlots(q: SlotQuery): SlotResult {
   if (exc?.closed) return { slots: [], occupied: [], closed: true, closedReason: 'exception', assign: {}, byProfessional: {} };
 
   const activePros = q.professionals.filter((p) => p.active !== false);
+  // Diferencia legacy solo (sem professionalMode e sem ids e sem profissionais) de explicit empty.
+  // Legacy solo preserva compatibilidade: [] + zero ativos + serviço sem modo → undefined (solo).
+  // Explicit empty (selected[] , all+0 , selected+0) → [] bloqueia.
+  const svcForEligibility = q.services.find((s) => s.id === q.serviceId) as any;
+  const isLegacySolo =
+    !svcForEligibility?.professionalMode &&
+    !((svcForEligibility?.professionalIds as string[] | undefined)?.length) &&
+    activePros.length === 0;
   const eligible = new Set(
-    q.eligibleProIds.length > 0
-      ? activePros.filter((p) => q.eligibleProIds.includes(p.id)).map((p) => p.id)
-      : activePros.map((p) => p.id),
+    q.eligibleProIds === undefined
+      ? activePros.map((p) => p.id)
+      : q.eligibleProIds.length > 0
+        ? activePros.filter((p) => q.eligibleProIds!.includes(p.id)).map((p) => p.id)
+        : [],
   );
+  // Elegibilidade explicitamente vazia → nenhum horário, não fabricar solo (exceto legacy solo)
+  if (!isLegacySolo && q.eligibleProIds !== undefined && q.eligibleProIds.length === 0) {
+    return { slots: [], occupied: [], closed: true, closedReason: 'no_windows', assign: {}, byProfessional: {} };
+  }
   // Negócio sem equipe: opera como "profissional único" (id '').
   const soloMode = activePros.length === 0;
   if (q.professionalId && (soloMode || !eligible.has(q.professionalId))) {

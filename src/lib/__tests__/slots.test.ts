@@ -92,7 +92,7 @@ describe('herança do horário da empresa', () => {
     return {
       rules, exceptions: [], bookings: [], services: [svcGeral], professionals,
       dateISO: '2026-09-09', weekday: 3, serviceId: 'svc-geral', durationMin: 60,
-      professionalId, eligibleProIds: [], nowHM: '', leadMin: 0, bufferMin: 0,
+      professionalId, eligibleProIds: professionals.filter((x:any)=> x.active!==false).map((x:any)=> x.id), nowHM: '', leadMin: 0, bufferMin: 0,
     };
   }
 

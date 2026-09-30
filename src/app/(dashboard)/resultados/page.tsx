@@ -157,7 +157,7 @@ export default function ResultadosPage() {
       <PageHeader
         icon="chart"
         title="Resultados"
-        hint="Como está o negócio no período — números reais dos atendimentos, clientes e leads."
+        hint={isLegacyPagesEnabled() ? "Como está o negócio no período — números reais dos atendimentos, clientes e leads." : "Como está a clínica no período — números reais dos atendimentos, tutores e pacientes."}
         action={<PeriodPicker value={spec} onChange={changePeriod} />}
       />
 

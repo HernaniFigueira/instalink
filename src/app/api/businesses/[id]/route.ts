@@ -9,12 +9,20 @@ import { VALID_MODES, defaultBookingConfig, isClinicType } from '@/lib/types';
 import { isValidTimezone } from '@/lib/tz';
 import { VALID_NAV } from '@/lib/nav';
 import { sanitizeAppearance } from '@/lib/appearance';
+import { toBusinessConfigDTO } from '@/lib/business-config-dto';
 
 // PATCH — atualiza perfil do negócio (dono). Campos permitidos explícitos,
 // com whitelist e sanitização por tipo.
-const ALLOWED = ['name', 'description', 'logo', 'cover', 'modes', 'phone', 'whatsapp', 'email', 'instagram', 'tiktok', 'address', 'mapsUrl', 'hours', 'paymentMethods', 'pixKey', 'deliveryFee', 'minOrder', 'googleUrl', 'googlePlaceId', 'googleApiKey', 'businessTimezone'] as const;
+const ALLOWED = ['name', 'description', 'logo', 'cover', 'modes', 'phone', 'whatsapp', 'email', 'instagram', 'tiktok', 'address', 'mapsUrl', 'hours', 'paymentMethods', 'pixKey', 'deliveryFee', 'minOrder', 'googleUrl', 'googlePlaceId', 'googleApiKey', 'businessTimezone', 'fantasyName', 'document', 'city', 'state', 'zip', 'responsibleName', 'responsibleDocument', 'responsibleRegistry', 'responsibleRole'] as const;
 const PAY_METHODS = ['pix', 'card', 'cash', 'on_delivery'];
 const TEAM_MODES: TeamMode[] = ['solo', 'choosable', 'auto'];
+
+export async function GET(req: NextRequest, { params }: { params: { id: string } }) {
+  const guard = await requireBusiness(req, params.id, 'config');
+  if (!guard.ok) return guard.res;
+  const dto = toBusinessConfigDTO(guard.ctx.business as any);
+  return NextResponse.json({ business: dto });
+}
 
 const str = (v: unknown, max: number): string => String((v as string) || '').slice(0, max);
 

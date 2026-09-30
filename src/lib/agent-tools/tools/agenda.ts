@@ -3,6 +3,7 @@ import type { ToolDef } from '../types';
 import { createBookingTx } from '../../booking-create';
 import { applyBookingStatusTx } from '../../booking-status';
 import { computeSlots } from '../../slots';
+import { eligibleProfessionalIds, slotEligibleProfessionalIds } from '../../booking';
 import { weekdayOf, todayISO } from '../../tz';
 import { onlyDigits } from '../../utils';
 import { pushAudit } from '../../audit';
@@ -55,7 +56,7 @@ export const findAvailableSlots: ToolDef<{ date: string; serviceId: string; prof
       serviceId: service.id,
       durationMin: service.durationMin,
       professionalId: String(input.professionalId || ''),
-      eligibleProIds: service.professionalIds || [],
+      eligibleProIds: slotEligibleProfessionalIds(service as any, professionals as any),
       nowHM: input.date === today ? now.toTimeString().slice(0, 5) : '',
       leadMin: business.booking?.leadMin || 0,
       bufferMin: business.booking?.bufferMin || 0,
@@ -228,7 +229,7 @@ export const rescheduleBooking: ToolDef<{ bookingId: string; date: string; time:
       serviceId: target.serviceId,
       durationMin: service?.durationMin || 30,
       professionalId: target.professionalId || '',
-      eligibleProIds: service?.professionalIds || [],
+      eligibleProIds: service ? eligibleProfessionalIds(service as any, professionals as any) : [],
       nowHM: '',
       leadMin: 0,
       bufferMin: business.booking?.bufferMin || 0,

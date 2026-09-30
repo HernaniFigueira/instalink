@@ -248,6 +248,16 @@ export interface Business {
   socials?: Partial<Record<SocialNetworkId, string>>;
   address: string;
   mapsUrl: string;
+  // ── Cadastro institucional da clínica (Clinical Structure Consolidation — aditivos opcionais) ──
+  fantasyName?: string; // nome fantasia
+  document?: string; // CNPJ/CPF da clínica
+  city?: string;
+  state?: string;
+  zip?: string; // CEP
+  responsibleName?: string;
+  responsibleDocument?: string; // CPF/RG do responsável
+  responsibleRegistry?: string; // registro profissional ex: CRMV/CRM/CRO
+  responsibleRole?: string; // função/cargo do responsável
   hours: Record<string, DayHours | null>; // 0=dom .. 6=sab
   // A2-B5 (F9): fuso IANA do negócio para TODAS as regras de agenda
   // (disponibilidade, exceções, horizonte, "hoje"). Ausente/inválido ⇒
@@ -525,7 +535,9 @@ export interface Service {
   // (painel, agenda, CRM), mas NÃO aparece na página pública nem no assistente.
   showPrice?: boolean;
   durationMin: number; // interna: agenda/conflitos/buffer (nunca pública)
-  professionalIds: string[]; // [] = todos os profissionais
+  professionalIds: string[]; // when professionalMode='selected' = explicit list; when 'all' or legacy [] = all active
+  /** Modo de elegibilidade: 'all' = todos os ativos; 'selected' = somente professionalIds. Legado sem campo = []→all, [ids]→selected */
+  professionalMode?: 'all' | 'selected';
   active: boolean;
   featured: boolean;
   bookable: boolean;

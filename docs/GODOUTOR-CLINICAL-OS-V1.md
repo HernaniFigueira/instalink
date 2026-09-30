@@ -5,6 +5,9 @@
 > Design System **aprovado e congelado** — este documento não muda telas nem
 > identidade visual.
 
+> **Especificação de arquitetura clínica — não é autoridade de roadmap.**
+> O roadmap operacional vigente está em `docs/GODOUTOR-MASTER-PLAN.md` (seções Estado atual / Fila de execução). Este documento preserva a fundação técnica F0 e a visão de domínios.
+
 ---
 
 ## 1. Visão
@@ -378,7 +381,9 @@ Clínica (identidade, unidades) · Fiscal · Documentos (templates) · Agenda
 (Features × Limites × Custos — telemetria já existe) · Segurança e auditoria.
 Aparência do painel (logo, tema) permanece como está.
 
-## 8. Roadmap incremental
+## 8. Roadmap incremental — referência histórica F0
+
+> **Nota:** este roadmap reflete a fundação F0. A fila de execução vigente e o estado atual estão em `docs/GODOUTOR-MASTER-PLAN.md`.
 
 | Fase | Entrega | Observação |
 |---|---|---|

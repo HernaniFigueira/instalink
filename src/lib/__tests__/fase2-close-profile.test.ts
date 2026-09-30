@@ -15,7 +15,7 @@ describe('Meu perfil', () => {
     const page = read('src/app/(dashboard)/perfil/page.tsx');
     expect(page).toContain('Meu perfil');
     expect(page).toContain('conselho');
-    expect(page).toContain('Também atende pacientes');
+    expect(page).toContain('Também realiza atendimentos');
   });
 
   it('API /api/account: PATCH de perfil + link_as_professional (User ≠ Professional)', () => {

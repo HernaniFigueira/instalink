@@ -489,8 +489,8 @@ describe('P3 Saída da Esteira para Agendamento', () => {
       interest: 'Corte de Cabelo',
     });
 
-    // Próxima segunda-feira futura garantida
-    const nextMonday = '2026-09-21'; // 2026-09-21 é segunda-feira
+    // Próxima segunda-feira futura garantida (2026-10-05 é segunda, após 2026-09-29)
+    const nextMonday = '2026-10-05'; // 2026-10-05 é segunda-feira
 
     const { booking, lead: updatedLead } = bookLead(db, {
       business: biz,

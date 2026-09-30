@@ -10,9 +10,10 @@
 // A1.2 · Bloco 2: as REGRAS DE RESERVA (BookingSettings) saíram daqui —
 // "como o cliente reserva" é configuração do negócio e mora em Configurações
 // → aba Agenda. Disponibilidade ficou só com "quando atende".
-import { useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
 import { cn, parseMoneyToCents, centsToBR } from '@/lib/utils';
+import { apiSend } from '@/lib/api-client';
 import type { Availability, AvailabilityException, Category, Professional, Service } from '@/lib/types';
 import { Icon } from '@/components/icons';
 import { Avatar, Badge, Button, Drawer } from '@/components/ui';
@@ -20,7 +21,8 @@ import { ImageUpload } from '@/components/dashboard/ImageUpload';
 import { followsBusinessHours } from '@/lib/schedule';
 import { useOverlayDismissGuard } from '@/components/dashboard/OverlayDismissGuard';
 import { panelRoutesIn } from '@/lib/panel';
-import { isLegacyPagesEnabled } from '@/lib/product';
+import { searchVetCatalog, VET_CATALOG } from '@/lib/vet-service-catalog';
+import { serviceProfessionalMode } from '@/lib/booking';
 
 // ── Confirmação de exclusão (em sheet, nunca confirm() nativo) ──
 export function DeleteSheet({ name, kindLabel, blocked, onDeactivate, onConfirm, onClose }: {
@@ -33,18 +35,19 @@ export function DeleteSheet({ name, kindLabel, blocked, onDeactivate, onConfirm,
         <h3 className="font-semibold text-lg">Excluir {kindLabel} “{name}”?</h3>
         {blocked ? (
           <p className="text-sm text-amber-800 bg-amber-50 border border-amber-200 rounded-md px-4 py-3">
-            Existem agendamentos futuros vinculados. Excluir vai deixá-los sem {kindLabel === 'serviço' ? 'serviço' : 'profissional'}.
-            Recomendamos <strong>desativar</strong>: some da página, mas o histórico continua íntegro.
+            Este registro possui histórico e não pode ser excluído. Desative-o para removê-lo da agenda, mas o histórico permanece íntegro.
           </p>
         ) : (
-          <p className="text-sm text-zinc-500">Sem agendamentos futuros vinculados. A exclusão não afeta o histórico passado.</p>
+          <p className="text-sm text-zinc-500">Sem agendamentos vinculados. A exclusão não afeta o histórico.</p>
         )}
         <div className="space-y-2 pt-1">
           {blocked && (
-            <Button variant="primary" size="lg" className="w-full" onClick={onDeactivate}>Desativar (recomendado)</Button>
+            <Button variant="primary" size="lg" className="w-full" onClick={onDeactivate}>Desativar</Button>
           )}
-          <button onClick={onConfirm} className="w-full font-semibold bg-red-50 text-red-600 py-3 rounded-md">Excluir mesmo assim</button>
-          <button onClick={onClose} className="w-full font-semibold bg-zinc-100 py-3 rounded-md">Voltar</button>
+          {!blocked && (
+            <button onClick={onConfirm} className="w-full font-semibold bg-red-50 text-red-600 py-3 rounded-md">Excluir</button>
+          )}
+          <button onClick={onClose} className="w-full font-semibold bg-zinc-100 py-3 rounded-md">Cancelar</button>
         </div>
       </div>
     </Drawer>
@@ -60,31 +63,33 @@ export function ServiceForm({ businessId, service, cats, pros, onClose, onSave }
   onClose: () => void;
   onSave: (p: Record<string, any>) => Promise<void>;
 }) {
-  const legacyPagesEnabled = isLegacyPagesEnabled();
   const [name, setName] = useState(service?.name || '');
   const [description, setDescription] = useState(service?.description || '');
-  const [image, setImage] = useState(service?.image || '');
+  // Foto removida (Clinical Structure Consolidation): campo image permanece no DB por compatibilidade,
+  // mas não é exposto nem editado na UI clínica — serviço é operacional, não exposição pública.
+  const image = service?.image || '';
   const [price, setPrice] = useState(service ? centsToBR(service.price) : '');
-  // Preço público (§ Serviços): desmarcado, o preço continua salvo/interno —
-  // só sai da página pública e do assistente.
-  const [showPrice, setShowPrice] = useState(service ? service.showPrice !== false : true);
   const [durationMin, setDurationMin] = useState(service?.durationMin || 45);
   const [categoryId, setCategoryId] = useState(service?.categoryId || '');
+  const [suggestedGroupName, setSuggestedGroupName] = useState('');
+  const [professionalMode, setProfessionalMode] = useState<'all' | 'selected'>(service ? serviceProfessionalMode(service as any) : 'all');
   const [proIds, setProIds] = useState<string[]>(service?.professionalIds || []);
   const [active, setActive] = useState(service?.active !== false);
-  const [featured, setFeatured] = useState(!!service?.featured);
   const [bookable, setBookable] = useState(service?.bookable !== false);
-  const [questions, setQuestions] = useState<string[]>(service?.questions || []);
+  // questions removidas da UI clínica — preservadas no banco por compatibilidade (não enviadas daqui)
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
+  const [showSug, setShowSug] = useState(false);
   const initialSnapshot = useRef(JSON.stringify({
-    name: service?.name || '', description: service?.description || '', image: service?.image || '',
-    price: service ? centsToBR(service.price) : '', showPrice: service ? service.showPrice !== false : true,
+    name: service?.name || '', description: service?.description || '',
+    price: service ? centsToBR(service.price) : '',
     durationMin: service?.durationMin || 45, categoryId: service?.categoryId || '',
+    professionalMode: service ? serviceProfessionalMode(service as any) : 'all',
     proIds: service?.professionalIds || [], active: service?.active !== false,
-    featured: !!service?.featured, bookable: service?.bookable !== false, questions: service?.questions || [],
+    bookable: service?.bookable !== false,
   }));
-  const dirty = JSON.stringify({ name, description, image, price, showPrice, durationMin, categoryId, proIds, active, featured, bookable, questions }) !== initialSnapshot.current;
+  const dirty = JSON.stringify({ name, description, price, durationMin, categoryId, suggestedGroupName, professionalMode, proIds, active, bookable }) !== initialSnapshot.current;
+  const sugList = name.trim().length >= 2 ? searchVetCatalog(name, 6) : [];
   const dismissState = {
     dirty, saving: loading, context: 'edit' as const,
     title: service ? 'Descartar alterações do serviço?' : 'Descartar novo serviço?',
@@ -98,61 +103,72 @@ export function ServiceForm({ businessId, service, cats, pros, onClose, onSave }
 
   return (
     <Drawer open onClose={() => { if (!loading) onClose(); }} dismissGuard={dismissState} title={service ? 'Editar serviço' : 'Novo serviço'} width="max-w-lg">
-      <form onSubmit={(e) => { e.preventDefault(); setError(''); setLoading(true); onSave({ id: service?.id, name, description, image, price: parseMoneyToCents(price), showPrice, durationMin, professionalIds: proIds, categoryId, active, featured, bookable, questions }).catch((err) => setError(err.message)).finally(() => setLoading(false)); }}
+      <form onSubmit={async (e) => { e.preventDefault(); setError(''); setLoading(true); try { let resolvedCategoryId: string | undefined = categoryId || undefined; if (!resolvedCategoryId && suggestedGroupName) { const r:any = await apiSend('/api/catalog','POST',{ businessId, action:'category.save', kind:'service', name: suggestedGroupName.trim() },{ scope:'action', area:'Serviços' }); if (r.ok && r.data?.categoryId) resolvedCategoryId = r.data.categoryId; } await onSave({ id: service?.id, name, description, image, price: parseMoneyToCents(price), durationMin, professionalMode, professionalIds: professionalMode === 'all' ? [] : proIds, categoryId: resolvedCategoryId, active, bookable }); } catch (err:any) { setError(err.message || 'Falha ao salvar.'); } finally { setLoading(false); } }}
         className="p-5 space-y-3.5">
-        <input aria-label="Nome do serviço" value={name} onChange={(e) => setName(e.target.value)} className={input} placeholder="Nome * (ex: Consulta inicial)" autoFocus />
-        <textarea aria-label="Descrição do serviço" value={description} onChange={(e) => setDescription(e.target.value)} className={input} rows={2} placeholder="Descrição (opcional)" />
-        <ImageUpload label="FOTO DO SERVIÇO" value={image} onChange={setImage} businessId={businessId} />
+        <div className="relative">
+          <input aria-label="Nome do serviço" value={name} onChange={(e) => { setName(e.target.value); setShowSug(true); }} onFocus={()=>setShowSug(true)} onBlur={()=>setTimeout(()=>setShowSug(false),150)} className={input} placeholder="Nome * (ex: Consulta veterinária)" autoFocus />
+          {showSug && sugList.length > 0 && (
+            <div className="absolute z-10 mt-1 w-full bg-white border border-zinc-200 rounded-md shadow-lg max-h-48 overflow-auto">
+              <p className="px-3 py-1 text-[11px] font-semibold tracking-wide uppercase text-zinc-500 border-b">Sugestões clínicas (biblioteca) — toque para preencher</p>
+              {sugList.map(s => (
+                <button key={s.id} type="button" onMouseDown={(e)=>e.preventDefault()} onClick={()=>{ setName(s.name); if(s.duracaoMin) setDurationMin(s.duracaoMin); const m = cats.find(c=>c.name.toLowerCase().trim()===s.grupo.toLowerCase().trim()); if(m) { setCategoryId(m.id); setSuggestedGroupName(''); } else { setCategoryId(''); setSuggestedGroupName(s.grupo); } setShowSug(false); }} className="w-full text-left px-3 py-2 hover:bg-zinc-50 flex items-center justify-between gap-2">
+                  <span className="text-sm font-medium truncate">{s.name}</span>
+                  <span className="text-xs text-zinc-500 shrink-0">{s.grupo}{s.duracaoMin ? ` · ${s.duracaoMin} min` : ''}</span>
+                </button>
+              ))}
+              <p className="px-3 py-1 text-[11px] text-zinc-400 border-t">Não cria automaticamente — só sugere Nome/Grupo/Duração.</p>
+            </div>
+          )}
+        </div>
+        <textarea aria-label="Descrição do serviço" value={description} onChange={(e) => setDescription(e.target.value)} className={input} rows={2} placeholder="Descrição clínica/interna (opcional)" />
         <div className="grid grid-cols-2 gap-3">
-          <label className="block"><span className="text-xs font-semibold text-zinc-500">PREÇO (R$) *</span>
-            <input value={price} onChange={(e) => setPrice(e.target.value)} className={input + ' mt-1'} placeholder="45,00" inputMode="decimal" /></label>
-          <label className="block"><span className="text-xs font-semibold text-zinc-500">DURAÇÃO (MIN)</span>
+          <label className="block"><span className="text-xs font-semibold text-zinc-500">PREÇO BASE (R$)</span>
+            <input value={price} onChange={(e) => setPrice(e.target.value)} className={input + ' mt-1'} placeholder="Opcional — ex: 120,00" inputMode="decimal" />
+            <span className="text-[11px] text-zinc-500">Valor operacional — referência para financeiro/relatórios e futura comissão.</span></label>
+          <label className="block"><span className="text-xs font-semibold text-zinc-500">DURAÇÃO BASE (MIN)</span>
             <input type="number" min={5} step={5} value={durationMin} onChange={(e) => setDurationMin(Number(e.target.value))} className={input + ' mt-1'} />
-            <span className="text-[11px] text-zinc-500">Interna — usada pela agenda (conflito, buffer).</span></label>
+            <span className="text-[11px] text-zinc-500">Sugestão da agenda — não trava encaixe, ordem de chegada ou cirurgia longa.</span></label>
         </div>
-        {legacyPagesEnabled && (
-          <label className="flex items-start gap-2.5 bg-zinc-50 border border-zinc-200 rounded-md px-3.5 py-3 cursor-pointer select-none">
-            <input type="checkbox" checked={showPrice} onChange={(e) => setShowPrice(e.target.checked)} className="mt-0.5 w-4 h-4 accent-emerald-600 shrink-0" />
-            <span className="text-sm">
-              <span className="font-semibold">Mostrar preço na página pública</span>
-              <span className="block text-xs text-zinc-500 mt-0.5">
-                {showPrice
-                  ? 'O visitante vê o preço deste serviço na página e no assistente.'
-                  : 'O preço continua salvo e visível aqui e na agenda — apenas some da página pública.'}
-              </span>
-            </span>
-          </label>
-        )}
-        <label className="block"><span className="text-xs font-semibold text-zinc-500">CATEGORIA</span>
-          <select value={categoryId} onChange={(e) => setCategoryId(e.target.value)} className={input + ' mt-1'}>
-            <option value="">Sem categoria</option>
+        <label className="block"><span className="text-xs font-semibold text-zinc-500">GRUPO</span>
+          <select value={categoryId} onChange={(e) => { setCategoryId(e.target.value); setSuggestedGroupName(''); }} className={input + ' mt-1'}>
+            <option value="">Sem grupo (opcional)</option>
             {cats.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
-          </select></label>
-        <div>
-          <span className="text-xs font-semibold text-zinc-500">PERGUNTAS NA RESERVA (OPCIONAL, ATÉ 3)</span>
-          {[0, 1, 2].map((i) => (
-            <input key={i} value={questions[i] || ''} onChange={(e) => setQuestions((v) => { const n = [...v]; n[i] = e.target.value; return n; })}
-              className={input + ' mt-1.5'} placeholder={i === 0 ? 'Ex: Possui convênio? Qual?' : `Pergunta ${i + 1}`} maxLength={120} />
-          ))}
-        </div>
+          </select>
+          {suggestedGroupName && <p className="text-[11px] text-amber-700 mt-1">Grupo sugerido: {suggestedGroupName} — Será criado ao salvar</p>}
+          <span className="text-[11px] text-zinc-500">Grupo interno da clínica (ex: Consultas, Vacinas, Cirurgias). Opcional — sem migração.</span></label>
+        {/* Perguntas no agendamento removidas do cadastro básico de Serviço — ver GODOUTOR-MASTER-PLAN.md (futuro motor de intake). Questões legadas preservadas no banco/API. */}
         {pros.length > 0 && (
           <div>
             <span className="text-xs font-semibold text-zinc-500">QUEM REALIZA ESTE ATENDIMENTO?</span>
-            <p className="text-[11px] text-zinc-500 mt-0.5">Sem seleção = todos os profissionais elegíveis. O cliente não escolhe — a distribuição é automática.</p>
-            <div className="flex flex-wrap gap-2 mt-1.5">
-              {pros.filter((p) => p.active !== false).map((p) => (
-                <button type="button" key={p.id} onClick={() => togglePro(p.id)}
-                  className={cn('text-sm font-semibold px-4 py-2 rounded-md border-2', proIds.includes(p.id) ? 'border-emerald-500 bg-emerald-50 text-emerald-800' : 'border-zinc-200 text-zinc-500')}>
-                  {p.name}
-                </button>
-              ))}
+            <p className="text-[11px] text-zinc-500 mt-0.5">Defina se todos os profissionais ativos podem realizar este serviço ou apenas os selecionados. O vínculo serviço↔profissional define quem pode realizar este serviço.</p>
+            <div className="mt-2 space-y-2">
+              <label className="flex items-center gap-2 cursor-pointer">
+                <input type="radio" name="professionalMode" checked={professionalMode==='all'} onChange={()=> setProfessionalMode('all')} className="accent-emerald-600" />
+                <span className="text-sm">Todos os profissionais ativos</span>
+              </label>
+              <label className="flex items-center gap-2 cursor-pointer">
+                <input type="radio" name="professionalMode" checked={professionalMode==='selected'} onChange={()=> setProfessionalMode('selected')} className="accent-emerald-600" />
+                <span className="text-sm">Somente profissionais selecionados</span>
+              </label>
             </div>
+            {professionalMode==='selected' && (
+              <>
+                <div className="flex flex-wrap gap-2 mt-2">
+                  {pros.filter((p) => p.active !== false).map((p) => (
+                    <button type="button" key={p.id} onClick={() => togglePro(p.id)}
+                      className={cn('text-sm font-semibold px-4 py-2 rounded-md border-2', proIds.includes(p.id) ? 'border-emerald-500 bg-emerald-50 text-emerald-800' : 'border-zinc-200 text-zinc-500')}>
+                      {p.name}
+                    </button>
+                  ))}
+                </div>
+                {proIds.length===0 && <p className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded px-2 py-1.5 mt-2">Nenhum profissional está vinculado; este serviço não terá profissional elegível.</p>}
+              </>
+            )}
           </div>
         )}
         <div className="flex flex-wrap gap-4">
-          <label className="flex items-center gap-2 text-sm font-medium"><input type="checkbox" checked={active} onChange={(e) => setActive(e.target.checked)} className="w-4 h-4 accent-emerald-600" /> Ativo</label>
-          <label className="flex items-center gap-2 text-sm font-medium"><input type="checkbox" checked={featured} onChange={(e) => setFeatured(e.target.checked)} className="w-4 h-4 accent-emerald-600" /> Destaque</label>
-          <label className="flex items-center gap-2 text-sm font-medium"><input type="checkbox" checked={bookable} onChange={(e) => setBookable(e.target.checked)} className="w-4 h-4 accent-emerald-600" /> Aceita agendamento</label>
+          <label className="flex items-center gap-2 text-sm font-medium"><input type="checkbox" checked={active} onChange={(e) => setActive(e.target.checked)} className="w-4 h-4 accent-emerald-600" /> Ativo na clínica</label>
+          <label className="flex flex-col gap-0.5 text-sm font-medium"><span className="flex items-center gap-2"><input type="checkbox" checked={bookable} onChange={(e) => setBookable(e.target.checked)} className="w-4 h-4 accent-emerald-600" /> Pode ser agendado</span><span className="text-[11px] font-normal text-zinc-500 ml-6">Ativo = disponível para uso na clínica. Pode ser agendado = pode gerar um compromisso próprio na agenda.</span></label>
         </div>
         {error && <p className="text-sm font-medium text-red-600">{error}</p>}
         <Button type="submit" variant="primary" size="lg" className="w-full" disabled={loading}>{loading ? 'Salvando…' : 'Salvar serviço'}</Button>
@@ -162,7 +178,7 @@ export function ServiceForm({ businessId, service, cats, pros, onClose, onSave }
 }
 
 // ── Profissionais (quem REALIZA os atendimentos) ──
-export function TeamEditor({ businessId, pros, rules, onSave, onAskDelete, onCreated, onManageAccess }: {
+export function TeamEditor({ businessId, pros, rules, onSave, onAskDelete, onCreated, onManageAccess, hideList, hideTrigger }: {
   businessId: string;
   pros: Professional[];
   /** Regras de disponibilidade — para saber quem herda o horário da empresa. */
@@ -174,6 +190,10 @@ export function TeamEditor({ businessId, pros, rules, onSave, onAskDelete, onCre
   onCreated?: (professionalId: string, name: string) => void;
   /** A3.4: abrir o fluxo de acesso (Criar) ou o membro já vinculado (Gerenciar). */
   onManageAccess?: (p: Professional) => void;
+  /** Clinical Closure: quando true, não renderiza lista interna (usado pela Equipe unificada) */
+  hideList?: boolean;
+  /** Quando true, não mostra o botão primário "Profissional" — criação vem pelo chooser único de Equipe */
+  hideTrigger?: boolean;
 }) {
   const [show, setShow] = useState(false);
   const [editing, setEditing] = useState<Professional | null>(null);
@@ -184,6 +204,16 @@ export function TeamEditor({ businessId, pros, rules, onSave, onAskDelete, onCre
   // Padrão do produto: profissional novo SEGUE o horário da empresa.
   const [follow, setFollow] = useState(true);
   const [error, setError] = useState('');
+  useEffect(() => {
+    function onEdit(e: any) { open(e.detail as Professional); }
+    function onCreate() { open(null); }
+    window.addEventListener('equipe:edit-professional', onEdit as any);
+    window.addEventListener('equipe:create-professional', onCreate as any);
+    return () => {
+      window.removeEventListener('equipe:edit-professional', onEdit as any);
+      window.removeEventListener('equipe:create-professional', onCreate as any);
+    };
+  }, [rules]);
 
   function open(p: Professional | null) {
     setEditing(p);
@@ -198,19 +228,18 @@ export function TeamEditor({ businessId, pros, rules, onSave, onAskDelete, onCre
 
   return (
     <>
-      <Button variant="primary" className="mb-4" onClick={() => open(null)}><Icon n="plus" size={14} /> Profissional</Button>
-      {show && (
+      {!hideTrigger && <Button variant="primary" className="mb-4" onClick={() => open(null)}><Icon n="plus" size={14} /> Profissional</Button>}
+      <Drawer open={show} onClose={() => setShow(false)} title={editing ? 'Editar profissional' : 'Novo profissional'} subtitle={editing ? 'Atualize os dados de quem realiza atendimentos' : 'Quem vai realizar atendimentos na clínica'} width="max-w-md">
         <form onSubmit={(e) => { e.preventDefault(); setError(''); onSave('professional.save', { id: editing?.id, name, role, photo, active, followBusinessHours: follow }).then((data: any) => { setShow(false); if (!editing) onCreated?.(String(data?.professionalId || ''), name); }).catch((err) => setError(err.message)); }}
-          className="mb-4 bg-white border border-zinc-200 rounded-lg p-4 space-y-2.5">
-          <p className="font-semibold text-sm">{editing ? 'Editar profissional' : 'Novo profissional'}</p>
+          className="p-4 space-y-3">
           <input value={name} onChange={(e) => setName(e.target.value)} placeholder="Nome * (ex: Dra. Ana)" className="w-full rounded-md border border-zinc-300 px-3 py-2.5 text-sm" autoFocus />
-          <input value={role} onChange={(e) => setRole(e.target.value)} placeholder="Função (ex: Dentista)" className="w-full rounded-md border border-zinc-300 px-3 py-2.5 text-sm" />
+          <input value={role} onChange={(e) => setRole(e.target.value)} placeholder="Função / especialidade (ex: Veterinário, Cirurgião, Anestesista)" className="w-full rounded-md border border-zinc-300 px-3 py-2.5 text-sm" />
           <ImageUpload label="FOTO DO PROFISSIONAL" value={photo} onChange={setPhoto} businessId={businessId} circle />
-          <label className="flex items-center gap-2 text-sm font-medium"><input type="checkbox" checked={active} onChange={(e) => setActive(e.target.checked)} className="w-4 h-4 accent-emerald-600" /> Ativo (aparece na agenda e na página)</label>
+          <label className="flex items-center gap-2 text-sm font-medium"><input type="checkbox" checked={active} onChange={(e) => setActive(e.target.checked)} className="w-4 h-4 accent-emerald-600" /> Ativo (disponível para agenda)</label>
           <label className="flex items-start gap-2 text-sm font-medium">
             <input type="checkbox" checked={follow} onChange={(e) => setFollow(e.target.checked)} className="w-4 h-4 accent-emerald-600 mt-0.5" />
             <span>
-              Seguir horário da empresa
+              Seguir horário da clínica
               <span className="block text-xs font-normal text-zinc-500">
                 {follow
                   ? 'Atende nos horários gerais — mudanças lá valem automaticamente aqui.'
@@ -219,57 +248,57 @@ export function TeamEditor({ businessId, pros, rules, onSave, onAskDelete, onCre
             </span>
           </label>
           {error && <p className="text-sm font-medium text-red-600">{error}</p>}
-          <div className="flex gap-2">
-            <Button type="submit" variant="primary">Salvar</Button>
-            <Button type="button" variant="secondary" onClick={() => setShow(false)}>Voltar</Button>
+          <div className="flex gap-2 pt-2">
+            <Button type="submit" variant="primary" className="flex-1">Salvar</Button>
+            <Button type="button" variant="secondary" onClick={() => setShow(false)} className="flex-1">Cancelar</Button>
           </div>
         </form>
-      )}
-      {pros.length === 0 ? (
+      </Drawer>
+      {hideList ? null : (pros.length === 0 ? (
         <div className="bg-white border border-zinc-200 rounded-lg text-center py-12 px-6">
           <p className="font-semibold">Só você por aqui? Sem problema.</p>
           <p className="text-sm text-zinc-500 mt-1">A agenda funciona sem equipe. Adicione profissionais se precisar.</p>
         </div>
       ) : (
-        <div className="space-y-2.5">
-          {pros.map((p) => (
-            <div key={p.id} className={cn('bg-white border border-zinc-200 rounded-lg p-4 flex flex-wrap items-center gap-3', !p.active && 'opacity-60')}>
-              {/* Ponto 9 — o MESMO Avatar de Clientes: rounded-square suave,
-                  foto real quando existe, iniciais como fallback. */}
-              <Avatar name={p.name} src={p.photo || undefined} size={40} />
-              <div className="flex-1 min-w-0 basis-[180px]">
-                <p className="font-semibold text-sm flex flex-wrap items-center gap-2">
-                  {p.name}
-                  <span className={cn('text-[11px] font-semibold px-2 py-0.5 rounded-full border', followsBusinessHours(p, rules) ? 'border-zinc-200 bg-zinc-50 text-zinc-600' : 'border-blue-200 bg-blue-50 text-blue-700')}>
-                    {followsBusinessHours(p, rules) ? 'Segue a empresa' : 'Horário próprio'}
+        <div className="bg-white border border-zinc-200">
+          <div className="hidden sm:grid grid-cols-[1fr_130px_90px_160px] gap-3 px-4 py-2 border-b border-zinc-200 bg-zinc-50 text-xs font-semibold tracking-wide uppercase text-zinc-500">
+            <span>Profissional</span><span>Agenda</span><span>Acesso</span><span className="text-right">Ações</span>
+          </div>
+          <div className="divide-y divide-zinc-100">
+            {pros.map((p) => (
+              <div key={p.id} className={cn('px-4 py-3 flex sm:grid sm:grid-cols-[1fr_130px_90px_160px] gap-3 items-center hover:bg-zinc-50', !p.active && 'opacity-60')}>
+                <span className="flex items-center gap-3 min-w-0 flex-1">
+                  <Avatar name={p.name} src={p.photo || undefined} size={36} />
+                  <span className="min-w-0">
+                    <span className="text-sm font-medium truncate block">{p.name}</span>
+                    <span className="text-xs text-zinc-500 truncate block">{p.role || '—'}{!p.active && ' · inativo'}</span>
                   </span>
-                </p>
-                <p className="text-xs text-zinc-500">
-                  {p.role || '—'}{!p.active && ' · inativo'}
-                </p>
-                {/* A3.4 — ACESSO AO SISTEMA é o outro conceito. Aqui ele aparece
-                    no lugar em que a dúvida nasce: "essa pessoa entra no
-                    painel?". Nunca criamos login em silêncio. */}
-                <p className="mt-1">
+                </span>
+                <span className={cn('hidden sm:block text-[11px] font-semibold px-2 py-1 rounded-full border w-fit', followsBusinessHours(p, rules) ? 'border-zinc-200 bg-zinc-50 text-zinc-600' : 'border-blue-200 bg-blue-50 text-blue-700')}>
+                  {followsBusinessHours(p, rules) ? 'Segue a clínica' : 'Horário próprio'}
+                </span>
+                <span className="hidden sm:block">
                   {p.userId ? (
                     <Badge tone="green" icon="shield">Acesso ativo</Badge>
                   ) : (
-                    <Badge tone="zinc" icon="lock">Sem acesso ao sistema</Badge>
+                    <Badge tone="zinc" icon="lock">Sem acesso</Badge>
                   )}
-                </p>
+                </span>
+                <span className="flex items-center gap-1.5 justify-end shrink-0">
+                  {onManageAccess && (
+                    <button onClick={() => onManageAccess(p)} className="text-xs font-semibold bg-white border border-zinc-200 px-3 py-1.5 rounded-md hover:bg-zinc-50">
+                      {p.userId ? 'Gerenciar acesso' : 'Criar acesso'}
+                    </button>
+                  )}
+                  <button onClick={() => open(p)} className="text-xs font-semibold bg-zinc-100 px-3 py-1.5 rounded-md hover:bg-zinc-200">Editar</button>
+                  <button onClick={() => onAskDelete(p)} aria-label={`Excluir ${p.name}`}
+                    className="text-xs font-semibold text-red-500 px-2 py-1.5 hover:bg-red-50 rounded-md inline-flex"><Icon n="x" size={13} /></button>
+                </span>
               </div>
-              {onManageAccess && (
-                <button onClick={() => onManageAccess(p)} className="text-xs font-semibold bg-white border border-zinc-200 px-3 py-2 rounded-lg hover:bg-zinc-50">
-                  {p.userId ? 'Gerenciar acesso' : 'Criar acesso'}
-                </button>
-              )}
-              <button onClick={() => open(p)} className="text-xs font-semibold bg-zinc-100 px-3 py-2 rounded-lg">Editar</button>
-              <button onClick={() => onAskDelete(p)} aria-label={`Excluir ${p.name}`}
-                className="text-xs font-semibold text-red-500 px-2 py-2 hover:bg-red-50 rounded-lg inline-flex"><Icon n="x" size={13} /></button>
-            </div>
-          ))}
+            ))}
+          </div>
         </div>
-      )}
+      ))}
     </>
   );
 }
@@ -364,10 +393,17 @@ export function CatalogCrossLinks({ businessId, current }: { businessId: string;
   const items = panelRoutesIn('oferta').filter(
     (r) => r.sidebar !== false && (r.modes || []).includes('services') && r.href !== current,
   );
-  if (items.length === 0) return null;
+  // Fallback: quando /profissionais saiu do menu (consolidação), ainda mostrar atalho contextual
+  // para quem navega de Serviços/Disponibilidade — link leva ao redirect que cai em Equipe.
+  const fallback: Array<{ href: string; label: string; icon: string; description: string }> =
+    current !== '/profissionais' && panelRoutesIn('oferta').length <= 1
+      ? [{ href: '/profissionais', label: 'Profissionais', icon: 'idcard', description: 'quem atende' }]
+      : [];
+  const display = items.length > 0 ? items : fallback;
+  if (display.length === 0) return null;
   return (
     <div className="flex flex-wrap gap-2 mb-4">
-      {items.map((r) => (
+      {display.map((r: any) => (
         <Link key={r.href} href={`${r.href}?b=${businessId}`} title={r.description}
           className="text-xs font-semibold bg-white border border-zinc-200 px-3.5 py-2 rounded-md hover:border-zinc-400 inline-flex items-center gap-1.5">
           <Icon n={CROSS_ICONS[r.href] || r.icon} size={13} />

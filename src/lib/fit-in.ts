@@ -40,7 +40,7 @@ export interface FitInQuery {
   durationMin: number;
   /** Profissional escolhido ('' = qualquer um da equipe). */
   professionalId: string;
-  /** Profissionais elegíveis para o serviço (ids). Vazio = toda a equipe. */
+  /** Profissionais elegíveis para o serviço (ids). undefined = toda a equipe, [] = ninguém. */
   eligibleProIds?: string[];
 }
 
@@ -64,14 +64,15 @@ export function fitInConflicts(
   if (!Number.isFinite(start)) return [];
   const end = start + Math.max(1, q.durationMin);
   const nameOf = (id: string) => professionals.find((p) => p.id === id)?.name || 'Sem profissional';
-  const eligible = q.eligibleProIds && q.eligibleProIds.length > 0 ? q.eligibleProIds : null;
+  const eligible = q.eligibleProIds === undefined ? null : q.eligibleProIds;
+  // eligible === null -> toda a equipe (sem restrição); [] -> ninguém
 
   const out: FitInConflict[] = [];
   for (const b of bookings) {
     if (b.date !== q.date || !occupiesGrid(b.status)) continue;
     if (q.professionalId) {
       if ((b.professionalId || '') !== q.professionalId) continue;
-    } else if (eligible && b.professionalId && !eligible.includes(b.professionalId)) {
+    } else if (eligible !== null && b.professionalId && !eligible.includes(b.professionalId)) {
       continue;
     }
     const bStart = timeToMin(b.time);

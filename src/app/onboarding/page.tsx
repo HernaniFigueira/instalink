@@ -81,7 +81,7 @@ export default function CreateBusinessPage() {
   async function finish(e: React.FormEvent) {
     e.preventDefault();
     setError('');
-    if (!name.trim()) { setError('Dê um nome ao seu negócio para continuar.'); return; }
+    if (!name.trim()) { setError(legacyPagesEnabled ? 'Dê um nome ao seu negócio para continuar.' : 'Dê um nome à sua clínica para continuar.'); return; }
     setLoading(true);
     try {
       const res = await fetch('/api/businesses', {
@@ -129,15 +129,16 @@ export default function CreateBusinessPage() {
         </div>
 
         <form onSubmit={finish} className="bg-white border border-zinc-200 rounded-lg p-6 shadow-sm">
-          <h1 className="text-lg font-semibold tracking-tight">Crie o seu negócio</h1>
+          <h1 className="text-lg font-semibold tracking-tight">{legacyPagesEnabled ? 'Crie o seu negócio' : 'Crie sua clínica'}</h1>
           <p className="text-sm text-zinc-500 mt-1">
-            Nome e como você atende — só isso. Sua página e módulos nascem prontos,
-            e você ajusta tudo depois em Recursos.
+            {legacyPagesEnabled
+              ? 'Nome e como você atende — só isso. Sua página e módulos nascem prontos, e você ajusta tudo depois em Recursos.'
+              : 'Nome e como sua clínica atende — só isso. Agenda e serviços nascem prontos e você ajusta tudo depois em Recursos.'}
           </p>
 
           <div className="mt-5 space-y-4">
             <div>
-              <label className="block text-sm font-medium text-zinc-700 mb-1.5" htmlFor="biz">Nome do negócio *</label>
+              <label className="block text-sm font-medium text-zinc-700 mb-1.5" htmlFor="biz">{legacyPagesEnabled ? 'Nome do negócio *' : 'Nome da clínica *'}</label>
               <input id="biz" autoFocus value={name} onChange={(e) => setName(e.target.value)} placeholder="Ex: Studio Bela Vida, Clínica Odonto Sorriso, Estúdio Pilates Fluxo"
                 className="w-full rounded-md border border-zinc-300 px-3.5 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500" />
               {name.trim() && (
@@ -182,7 +183,7 @@ export default function CreateBusinessPage() {
             {/* A base de módulos — uma pergunta, três respostas (lib/onboarding.ts).
                 Nada definitivo: Recursos liga/desliga qualquer módulo depois. */}
             <fieldset>
-              <legend className="text-sm font-medium text-zinc-700">Como sua empresa atende?</legend>
+              <legend className="text-sm font-medium text-zinc-700">{legacyPagesEnabled ? 'Como sua empresa atende?' : 'Como sua clínica atende?'}</legend>
               <div className="mt-1.5 grid gap-2" role="radiogroup" aria-label="Como sua empresa atende?">
                 {SERVICE_MODEL_OPTIONS.map((opt) => (
                   <label key={opt.id}
@@ -238,7 +239,7 @@ export default function CreateBusinessPage() {
 
           <button type="submit" disabled={loading || !name.trim()}
             className="mt-5 w-full font-bold bg-zinc-900 text-white py-3 rounded-md hover:bg-zinc-700 disabled:opacity-50">
-            {loading ? 'Criando seu negócio…' : 'Criar e ir para o painel'}
+            {loading ? (legacyPagesEnabled ? 'Criando seu negócio…' : 'Criando sua clínica…') : 'Criar e ir para o painel'}
           </button>
           <p className="text-[11px] text-zinc-400 mt-3 text-center">Nada para configurar agora — o painel traz um checklist curto para os primeiros passos.</p>
         </form>

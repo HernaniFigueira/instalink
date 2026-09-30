@@ -216,10 +216,9 @@ describe('sidebar — projeção (permissão ∩ módulos, ordem do catálogo)',
     expect(nav.footerSections).toEqual([]);
     expect(nav.sidebar.map((r) => r.href)).toEqual([
       '/dashboard',
-      // A3.4 — Operação: agenda + quem atende + quando atende + o dia.
-      // (Pedidos/Produtos exigem os módulos correspondentes: entram no teste
-      // seguinte, com o contexto de quem os tem.)
-      '/estrutura', '/agenda', '/profissionais', '/disponibilidade',
+      // CLINICAL STRUCTURE CONSOLIDATION (B1): Profissionais unificado em Equipe — redirect fora do menu.
+      // Disponibilidade permanece separada nesta missão.
+      '/estrutura', '/agenda', '/disponibilidade',
       '/conversas', '/agente', '/tarefas',
       '/clientes', '/funil',
       '/servicos',
@@ -290,7 +289,7 @@ describe('sidebar — projeção (permissão ∩ módulos, ordem do catálogo)',
     // (permissão real); o que continua acessível só por atalho contextual:
     // Recursos (capacidades dentro de Configurações), Execuções (diagnóstico
     // dentro de Automações) e Meu perfil (menu da conta, QUALQUER usuário).
-    expect(nav.more.map((r) => r.href)).toEqual(['/atendimento', '/execucoes', '/perfil', '/recursos']);
+    expect(nav.more.map((r) => r.href).sort()).toEqual(['/atendimento', '/execucoes', '/perfil', '/profissionais', '/recursos'].sort());
     expect(panelAccess('/execucoes', ctx()).state).toBe('allow');
   });
 
@@ -574,13 +573,13 @@ describe('uma porta por conceito', () => {
     // GODOUTOR final: vocabulário de clínica (a palavra que o dono usa).
     expect(cfgPage).toMatch(/\['negocio', 'Clínica'\]/);
     expect(cfgPage).toMatch(/\['agenda', 'Agenda'\]/);
-    // Missão 6 (reversão do A3.3 ponto 2, pedido do usuário): a aba
-    // "Aparência" VOLTOU como preferência PESSOAL de interface (presets de
-    // cor da sidebar, NAV_ACCENTS, localStorage). A cor da EMPRESA no banco
-    // (appearance.navColor) continua sem editor — "Identidade do painel" não
-    // retorna. Cada aba edita algo real: Clínica, Agenda, Aparência.
-    expect(cfgPage).toMatch(/\['aparencia', 'Aparência'\]/);
-    expect(cfgPage).toMatch(/NAV_ACCENTS/);
+    // Homologação PR #46 — Aparência movida de Configurações para Perfil (preferência pessoal do navegador, não tenant)
+    // Configurações agora tem só Clínica + Agenda; Aparência vive em Meu Perfil → Preferências (ShellAppearance)
+    expect(cfgPage).not.toMatch(/\['aparencia', 'Aparência'\]/);
+    expect(cfgPage).not.toMatch(/NAV_ACCENTS/);
+    const perfilPage = read('src/app/(dashboard)/perfil/page.tsx');
+    expect(perfilPage).toMatch(/ShellAppearance/);
+    expect(perfilPage).toMatch(/Preferências/);
     expect(cfgPage).not.toMatch(/NAV_PRESETS/);
     expect(cfgPage).not.toMatch(/Identidade do painel/i);
     expect(cfgPage).not.toMatch(/aparência do painel/i);
@@ -591,10 +590,11 @@ describe('uma porta por conceito', () => {
     expect(cfgPage).not.toMatch(/\['crm', 'CRM'\]/);
   });
 
-  it('A1.2 B2 — Regras de reserva moram em Configurações; Disponibilidade ficou com "quando atende"', () => {
+  it('A1.2 B2 — Regras da agenda moram em Configurações; Disponibilidade ficou com "quando atende"', () => {
     const cfgPage = read('src/app/(dashboard)/configuracoes/page.tsx');
-    // A aba Agenda EDITA a BookingConfig (mesma API de antes — nenhuma engine nova).
-    expect(cfgPage).toMatch(/Regras de reserva/);
+    // A aba Agenda EDITA a BookingConfig. Quando legacy OFF, título é Regras da agenda (operacional); quando ON, Regras de reserva (legado público) — ambos válidos.
+    expect(cfgPage).toMatch(/Regras da agenda/);
+    expect(cfgPage).toMatch(/legacyPagesEnabled \? 'Regras de reserva' : 'Regras da agenda'/);
     expect(cfgPage).toMatch(/leadMin/);
     expect(cfgPage).toMatch(/cancelUntilMin/);
     expect(cfgPage).toMatch(/horizonDays/);
@@ -718,7 +718,7 @@ describe('uma porta por conceito', () => {
     // Automações) e Meu perfil (menu da conta, TODO usuário autenticado).
     // Destino fora do menu SEM atalho vira porta fantasma — cada um verificado.
     const offMenu = PANEL_ROUTES.filter((r) => r.sidebar === false);
-    expect(offMenu.map((r) => r.href).sort()).toEqual(['/atendimento', '/execucoes', '/perfil', '/recursos']);
+    expect(offMenu.map((r) => r.href).sort()).toEqual(['/atendimento', '/execucoes', '/perfil', '/profissionais', '/recursos']);
     for (const route of offMenu) {
       const own = path.join(root, `src/app/(dashboard)${route.href}`);
       const re = new RegExp('href=\\{[`\'"]' + route.href.replace(/\//g, '\\/'));

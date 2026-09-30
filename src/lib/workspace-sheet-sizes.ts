@@ -4,6 +4,9 @@ export const WORKSPACE_SHEET_SIZES = {
   /** Largura operacional padrão de um formulário em sheet (nem estreito, nem esticado). */
   standard: 'max-w-2xl',
   wide: 'max-w-4xl',
+  /** Clinical OS — painel contextual 40-50% da viewport (equipe/serviços). Token do Design System; nunca hardcodar 50vw no componente. */
+  clinical: 'max-w-[min(46vw,760px)]',
+  equipe: 'max-w-[min(46vw,760px)]',
   /**
    * Faixa do overlay quando um painel auxiliar é ANINHADO (§19–25): um só
    * dialog que expande e se divide em duas metades exatas.

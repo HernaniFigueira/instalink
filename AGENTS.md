@@ -6,17 +6,19 @@ Este repositório contém o GoDoutor, atualmente direcionado como Clinical OS pa
 
 Antes de propor ou implementar mudanças relevantes, leia:
 
-1. docs/GODOUTOR-MASTER-PLAN.md
-2. docs/GODOUTOR-CLINICAL-OS-V1.md
+1. docs/GODOUTOR-MASTER-PLAN.md — **autoridade de Estado atual e Fila de execução** (sempre validar contra Git)
+2. docs/GODOUTOR-CLINICAL-OS-V1.md — especificação de arquitetura clínica (roadmap operacional vigente está no Master Plan)
 3. docs/GODOUTOR-UI-CONTRACT.md
 4. docs/GODOUTOR-UI-AUDIT-V2.md quando a missão envolver UI/homologação
+5. docs/GODOUTOR-HISTORY.md e docs/GODOUTOR-CLINICAL-CONVERGENCE-AUDIT.md para contexto histórico
 
 ## Regras de continuidade
 
-- GODOUTOR-MASTER-PLAN.md é a direção atual de produto e roadmap.
+- GODOUTOR-MASTER-PLAN.md é a direção atual de produto e roadmap — seção **Estado atual / Fila de execução** é a autoridade.
+- NUNCA confiar em "próxima missão" de documentação histórica. Validar no Master Plan e no Git (`git log --oneline -5`, `gh pr view 46`) antes de agir.
 - Não recomece o produto nem proponha novo repositório sem requisito técnico comprovado.
 - Não trate o antigo InstaLink/link-na-bio/page-builder como direção principal.
-- Página Pública é legado preservado por compatibilidade; não deve contaminar o Clinical OS.
+- Página Pública é legado preservado por compatibilidade (`GODOUTOR_LEGACY_PAGES`); não deve contaminar o Clinical OS.
 - Preserve o Design System e os arquétipos de página definidos no contrato de UI.
 - Audite antes de criar: reutilize domínios, serviços e fluxos existentes.
 - Não faça migração big-bang de instalink_doc.
@@ -25,24 +27,59 @@ Antes de propor ou implementar mudanças relevantes, leia:
 - IA nunca acessa SQL cru, nunca ganha permissão pelo prompt e nunca assina decisão clínica autonomamente.
 - Não faça merge de PR sem autorização explícita do responsável pelo projeto.
 - Não declare homologação visual se não houve renderização/validação real.
-- Ao concluir uma fase relevante, atualize GODOUTOR-MASTER-PLAN.md para manter CONCLUÍDO / EM ANDAMENTO / PRÓXIMO / DEFERIDO coerentes.
+- Quando a missão permitir execução local, não limitar validação a typecheck + testes + leitura estática. Antes de concluir uma feature relevante, executar auto-homologação funcional local sempre que tecnicamente possível: subir aplicação local, criar/reutilizar tenant descartável, criar contas/personas de teste, fazer login real, navegar pelos fluxos alterados, testar happy path + erros previsíveis, observar console/network quando necessário, usar browser/render real quando disponível, nunca declarar homologação visual sem renderização real, nunca usar produção ou dados reais para testes destrutivos. Para missões envolvendo permissões: testar com múltiplos papéis reais. Para missões envolvendo UX: validar desktop/tablet prioritários. Não substituir testes automatizados; complementar.
+- Ao concluir uma fase relevante, atualize GODOUTOR-MASTER-PLAN.md para manter CONCLUÍDO / EM ANDAMENTO / PRÓXIMO / DEFERIDO coerentes e mova detalhes para GODOUTOR-HISTORY.md.
 
-## Próxima prioridade no snapshot atual
+## Estado atual (2026-09-29)
 
-Design System 2.0 foi concluído pela PR #43.
+**Clinical Convergence / Clinical Architecture Closure implementada na PR #46 — `arena/01a0eda6-instalink` · CONCLUÍDA EM CÓDIGO / AGUARDANDO HOMOLOGAÇÃO E MERGE.**
 
-A próxima missão é GODOUTOR CLINICAL CONVERGENCE / De-InstaLink:
+- Equipe unificada (lista única sem duplicação owner, porta única `+ Adicionar pessoa`)
+- Disponibilidade separada QUEM × QUANDO (copy clínica)
+- Configurações com DTO seguro `GET /api/businesses/[id]` (nunca segredos)
+- Agenda classificada, Estrutura hub — ver Master Plan §1 e `docs/GODOUTOR-HISTORY.md`.
 
-- Profissionais
-- Serviços
-- Produtos
-- Disponibilidade
-- Estrutura
-- Equipe
-- Configurações
-- Recursos
-- onboarding/copies compartilhadas
+## Próximas missões de código após #46
 
-Objetivo: remover semântica e regras antigas do InstaLink da experiência clínica, preservando apenas compatibilidade técnica necessária.
+**Fila oficial — autoridade no Master Plan §2:**
 
-Depois: Workflow + Permissões → Agenda Temporal 2.0 → F1 Clinical Encounter.
+1. **Workflow + Permissões** — próxima missão de código após merge de #46
+2. Agenda Temporal 2.0
+3. Clinical Encounter F1
+4. Prescrição + Exames + Document Engine
+5. Estoque/Farmácia
+6. Cirurgia + Internação
+7. Conta do Atendimento + Financeiro avançado
+8. Fiscal / integrações
+9. Agentes + Jev + LLM + OAAS sobre os domínios estabilizados
+
+Não iniciar nova fase sem homologação/merge de #46 e sem atualizar Estado atual no Master Plan.
+
+## Referências externas / repositórios
+
+Quando uma feature importante puder se beneficiar de implementação madura existente, pesquisar/analisar referências concretas antes de reinventar.
+
+O agente pode receber:
+- URL de produto
+- documentação
+- repositório GitHub
+- implementação open source
+- screenshot/mockup
+
+Classificar a referência como:
+
+**VISUAL** — estudar layout/interação, sem copiar domínio. Inspiração de UX, não de regra clínica.
+
+**ARQUITETURAL** — estudar estado, componentes, fluxos e separação de responsabilidades. Adaptar padrão à arquitetura GoDoutor, não transplantar.
+
+**IMPLEMENTAÇÃO** — reutilização/adaptação técnica permitida quando licença e compatibilidade permitirem. Validar licença (MIT/Apache etc), manutenção, bundle size, segurança, compatibilidade com Design System e multi-tenant.
+
+Nunca copiar cegamente.
+
+Antes de reutilizar, validar compatibilidade com:
+- domínio clínico GoDoutor (veterinária, Tutor/Pet, Profissional/Equipe)
+- multi-tenant (`businessId` obrigatório, tenant isolation)
+- permissões (RBAC + capabilities, guard no servidor)
+- segurança (sem segredo no frontend, payload redigido, audit/EventLog)
+- Design System (workspace/record/detail/form/hub, hierarquia PRIMARY/SECONDARY/GHOST/DESTRUCTIVE, temas, viewports)
+- arquitetura atual (instalink_doc legado vs tabelas normalizadas, `godoutor_internal`, migrations como única autoridade DDL, fluxo Auditar→Entender→Decidir→Modelar→Implementar)

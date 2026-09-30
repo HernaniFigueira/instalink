@@ -5,6 +5,7 @@ import { isFeatureEnabled } from '@/lib/features';
 import { onlyDigits, timeToMin } from '@/lib/utils';
 import { todayISO, nowHM, weekdayOf, addDaysISO, effectiveTimezone, isValidDateISO } from '@/lib/tz';
 import { computeSlots } from '@/lib/slots';
+import { eligibleProfessionalIds, slotEligibleProfessionalIds } from '@/lib/booking';
 import { applyBookingStatusTx } from '@/lib/booking-status';
 import { effectiveHorizonDays } from '@/lib/booking-ops';
 import { noteLeadReschedule } from '@/lib/pipeline';
@@ -112,7 +113,7 @@ export async function PATCH(req: NextRequest) {
           dateISO: date, weekday: weekdayOf(date),
           serviceId: service.id, durationMin: service.durationMin,
           professionalId: '',
-          eligibleProIds: service.professionalIds || [],
+          eligibleProIds: slotEligibleProfessionalIds(service as any, d.professionals.filter((p) => p.businessId === business.id && p.active !== false)),
           nowHM: date === today ? nowHM(new Date(), btz) : '',
           leadMin: cfg?.leadMin || 0,
           bufferMin: cfg?.bufferMin || 0,

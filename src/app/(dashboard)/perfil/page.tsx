@@ -12,6 +12,7 @@ import { ImageUpload } from '@/components/dashboard/ImageUpload';
 import { apiGet, apiSend } from '@/lib/api-client';
 import { Icon } from '@/components/icons';
 import { roleLabel as accessRoleLabel } from '@/lib/role-labels';
+import { ShellAppearance } from '@/components/dashboard/ShellAppearance';
 
 interface MeProfile {
   id: string; name: string; email: string; role: string;
@@ -148,20 +149,19 @@ export default function MeuPerfilPage() {
           </Field>
 
           <div className="rounded-md border border-[var(--border)] bg-[var(--surface-2)] p-4">
-            <h3 className="text-sm font-semibold">Também atende pacientes</h3>
+            <h3 className="text-sm font-semibold">Também realiza atendimentos</h3>
             <p className="text-xs text-[var(--text-muted)] mt-1.5 leading-relaxed">
-              Cria (ou reutiliza) um <strong>Profissional</strong> vinculado ao <strong>seu login</strong> nesta unidade.
-              As entidades continuam separadas: seu acesso é o User; quem atende na agenda é o Professional.
+              Vincule seu perfil à equipe clínica para aparecer na agenda. Você poderá ter serviços vinculados e horário de atendimento configurado em Disponibilidade.
             </p>
             {linkedPro && (
               <p className="text-xs mt-2 text-[var(--success-fg)]">
                 Vinculado: <strong>{linkedPro.name}</strong> ·{' '}
-                <Link href={`/profissionais?b=${businessId}`} className="underline">abrir Profissionais</Link>
+                <Link href={`/equipe?b=${businessId}`} className="underline">gerenciar na Equipe</Link>
               </p>
             )}
             <div className="mt-3">
               <Button type="button" variant="secondary" disabled={linking || !businessId} onClick={linkAsProfessional}>
-                {linking ? 'Vinculando…' : linkedPro ? 'Gerenciar em Profissionais' : 'Também atende pacientes'}
+                {linking ? 'Vinculando…' : linkedPro ? 'Gerenciar na Equipe' : 'Vincular à equipe clínica'}
               </Button>
               {!businessId && <p className="text-[11px] text-[var(--text-muted)] mt-1.5">Abra o perfil a partir de uma unidade para vincular.</p>}
             </div>
@@ -174,6 +174,11 @@ export default function MeuPerfilPage() {
           </Button>
         </ActionBar>
       </form>
+
+      <FormSection title="Preferências" hint="Aparência pessoal deste navegador — não afeta a clínica.">
+        <ShellAppearance />
+        <p className="text-xs text-[var(--text-muted)] mt-2">A escolha de cor e contraste vale apenas para você neste navegador; outras pessoas veem o padrão do produto.</p>
+      </FormSection>
 
       <FormSection title="Segurança" hint="A senha continua sendo gerenciada pela autenticação existente da sua conta.">
         <div className="flex flex-wrap items-center justify-between gap-3">

@@ -29,6 +29,7 @@ import { PhoneBRInput } from '@/components/dashboard/PhoneBRInput';
 import { Avatar, Badge, Button, EmptyState, Field, IconButton, Input, Notice } from '@/components/ui';
 import { apiSend } from '@/lib/api-client';
 import { QUEUE_LONG_WAIT_MIN, QUEUE_STATUS, queuePosition, queueTransitionAllowed, waitLabel, waitMinutes } from '@/lib/queue';
+import { eligibleProfessionalIds, serviceProfessionalMode } from '@/lib/booking';
 import { nowHM } from '@/lib/tz';
 import { cn } from '@/lib/utils';
 import type { QueueEntry, QueueStatus } from '@/lib/types';
@@ -78,7 +79,7 @@ export function QueuePanel({ businessId, date, rows, done = [], loading, canWrit
   onChanged: () => void;
   professionals: Array<{ id: string; name: string }>;
   /** Serviços ATIVOS com a régua de profissionais de cada um (pode ser vazia). */
-  services: Array<{ id: string; name: string; professionalIds?: string[] }>;
+  services: Array<{ id: string; name: string; professionalIds?: string[]; professionalMode?: 'all' | 'selected' }>;
   /** Abre o agendamento de origem (quando a entrada veio de um horário marcado). */
   onOpenBooking?: (bookingId: string) => void;
   /** "Iniciar atendimento" com permissão: a fila avança E o registro abre. */
@@ -123,21 +124,20 @@ export function QueuePanel({ businessId, date, rows, done = [], loading, canWrit
   // A regra do serviço (`professionalIds`) é a MESMA que o servidor cobra ao
   // iniciar o atendimento: aqui ela só evita oferecer o que seria recusado.
   const service = services.find((s) => s.id === form.serviceId);
-  const requiredProIds = service?.professionalIds || [];
-  const eligiblePros = requiredProIds.length
-    ? professionals.filter((p) => requiredProIds.includes(p.id))
-    : professionals;
+  const mode = service ? serviceProfessionalMode(service as any) : 'all';
+  const eligibleIds = service ? eligibleProfessionalIds(service as any, professionals as any) : professionals.map((p) => p.id);
+  const eligiblePros = professionals.filter((p) => eligibleIds.includes(p.id));
 
   // Serviço sem exigência: "quem estiver livre" continua qualquer ativo.
   function chooseService(id: string) {
     const chosen = services.find((s) => s.id === id);
-    const req = chosen?.professionalIds || [];
-    const next = req.length ? professionals.filter((p) => req.includes(p.id)) : professionals;
+    const eligibleIds = chosen ? eligibleProfessionalIds(chosen as any, professionals as any) : professionals.map((p) => p.id);
+    const next = professionals.filter((p) => eligibleIds.includes(p.id));
     setForm((f) => ({
       ...f,
       serviceId: id,
       // Um único elegível já vem escolhido; com dois ou mais, o balcão decide.
-      professionalId: req.length === 1 && next[0]
+      professionalId: eligibleIds.length === 1 && next[0]
         ? next[0].id
         : (f.professionalId && next.some((p) => p.id === f.professionalId) ? f.professionalId : ''),
     }));
@@ -321,7 +321,7 @@ export function QueuePanel({ businessId, date, rows, done = [], loading, canWrit
                 {services.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
               </select>
             </Field>
-            <Field label="Profissional" hint={requiredProIds.length > 0 && eligiblePros.length > 1
+            <Field label="Profissional" hint={mode === 'selected' && eligiblePros.length > 1
               ? 'Só quem atende este serviço'
               : undefined}>
               <select value={form.professionalId} onChange={(e) => setForm({ ...form, professionalId: e.target.value })}
@@ -331,7 +331,7 @@ export function QueuePanel({ businessId, date, rows, done = [], loading, canWrit
               </select>
             </Field>
           </div>
-          {requiredProIds.length > 0 && eligiblePros.length === 0 && (
+          {mode === 'selected' && eligiblePros.length === 0 && (
             <Notice tone="warning">
               Este serviço ainda não tem profissional vinculado. Vincule em Catálogo → Serviços antes de encaixar alguém na fila.
             </Notice>

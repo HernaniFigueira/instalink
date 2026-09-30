@@ -23,7 +23,7 @@
 import type { Availability, Professional } from './types';
 import { WEEKDAYS_LONG, timeToMin } from './utils';
 
-/** Escopo do horário geral da empresa. */
+/** Escopo do horário geral da clínica (technical constant BUSINESS_SCOPE). */
 export const BUSINESS_SCOPE = '';
 
 export type HoursOrigin = 'inherited' | 'custom';

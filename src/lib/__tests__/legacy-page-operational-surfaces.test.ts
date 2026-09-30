@@ -66,7 +66,12 @@ describe('Clinical OS · superfícies operacionais da Página legada', () => {
     expect(onboarding).toContain("opt.id === 'produtos'");
     expect(onboarding).toContain('Cadastro legado de produtos (sem estoque, vendas ou dispensação; uso clínico definido separadamente)');
     expect(onboarding).toContain("legacyPagesEnabled ? 'Página pública pronta para publicar' : 'Painel pronto para uso'");
-    expect(catalogPanels).toMatch(/legacyPagesEnabled\s*&&\s*\(\s*<label[\s\S]*?Mostrar preço na página pública/);
+    // Clinical Structure Consolidation: Serviços vitrine (Mostrar preço) removido da UI clínica — nem mesmo gated (produtos ainda guarda). Ver godoutor-clinical-convergence.
+    expect(catalogPanels).not.toContain('FOTO DO SERVIÇO');
+    // Se por compatibilidade futura houver o label, deve estar gated
+    if (catalogPanels.includes('Mostrar preço na página pública')) {
+      expect(catalogPanels).toMatch(/legacyPagesEnabled\\s*&&/);
+    }
   });
 
   it('preserva editor, slug público, APIs de página e rotas consumidas por widgets/agendamento', () => {

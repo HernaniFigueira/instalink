@@ -205,6 +205,7 @@ export async function PATCH(req: NextRequest) {
         const nextService = (d.services || []).find((x) => x.id === nextServiceId && x.businessId === businessId);
         const assignment = resolveQueueAssignment({
           serviceProfessionalIds: nextService?.professionalIds || [],
+          serviceProfessionalMode: (nextService as any)?.professionalMode,
           activeProfessionalIds: (d.professionals || [])
             .filter((p) => p.businessId === businessId && p.active !== false).map((p) => p.id),
           // Troca explícita de profissional vale como "quem estiver livre" se vier vazia.

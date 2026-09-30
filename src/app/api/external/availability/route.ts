@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { requireApiKey } from '@/lib/api-keys';
 import { computeSlots } from '@/lib/slots';
+import { eligibleProfessionalIds, slotEligibleProfessionalIds } from '@/lib/booking';
 import { todayISO, nowHM, weekdayOf, effectiveTimezone, isValidDateISO, addDaysISO } from '@/lib/tz';
 import { effectiveHorizonDays } from '@/lib/booking-ops';
 import { pushIntegrationLog } from '@/lib/integration-logs';
@@ -48,7 +49,7 @@ export async function GET(req: NextRequest) {
     serviceId: service.id,
     durationMin: service.durationMin,
     professionalId,
-    eligibleProIds: service.professionalIds || [],
+    eligibleProIds: slotEligibleProfessionalIds(service as any, db.professionals.filter((p) => p.businessId === business.id && p.active !== false)),
     nowHM: date === today ? nowHM(new Date(), btz) : '',
     leadMin: business.booking?.leadMin || 0,
     bufferMin: business.booking?.bufferMin || 0,

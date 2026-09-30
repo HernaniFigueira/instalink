@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { readDB } from '@/lib/db';
 import { requireBusiness, scopeInfo, scopeProfessionals } from '@/lib/access';
 import { todayISO } from '@/lib/tz';
+import { historyRefsForBusiness } from '@/lib/history';
 
 // GET ?businessId= — todo o catálogo do negócio (dono) + exceções +
 // referências de agendamentos futuros (para exclusão segura).
@@ -19,9 +20,15 @@ export async function GET(req: NextRequest) {
   const scope = guard.ctx.professionalScope;
   const optIds = new Set(db.options.filter((o) => o.businessId === businessId).map((o) => o.id));
   const today = todayISO();
-  const future = db.bookings.filter(
-    (b) => b.businessId === businessId && b.status !== 'cancelled' && b.date >= today,
-  );
+  const allBookings = db.bookings.filter((b) => b.businessId === businessId);
+  const future = allBookings.filter((b) => b.status !== 'cancelled' && b.date >= today);
+  const historyServices = [...new Set(allBookings.map((b) => b.serviceId).filter(Boolean))];
+  const historyProfessionals = [...new Set(allBookings.map((b) => b.professionalId).filter(Boolean).filter((id) => !scope || id === scope))];
+  const history = historyRefsForBusiness(db as any, businessId);
+  // aplica escopo profissional à lista de profissionais do histórico
+  if (scope) {
+    history.professionals = history.professionals.filter((id) => id === scope);
+  }
   return NextResponse.json({
     business: guard.ctx.business,
     categories: db.categories.filter((c) => c.businessId === businessId),
@@ -40,6 +47,11 @@ export async function GET(req: NextRequest) {
       .sort((a, b) => (a.date < b.date ? -1 : 1)),
     scope: scopeInfo(guard.ctx),
     bookingRefs: {
+      services: historyServices,
+      professionals: historyProfessionals,
+    },
+    historyRefs: history,
+    futureBookingRefs: {
       services: [...new Set(future.map((b) => b.serviceId))],
       professionals: [...new Set(future
         .filter((b) => !scope || (b.professionalId || '') === scope)

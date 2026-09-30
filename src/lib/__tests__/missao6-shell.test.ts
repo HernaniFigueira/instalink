@@ -99,11 +99,14 @@ describe('missão 6 · 5 — personalização da sidebar em Configurações (nã
     expect(navAccentById('lixo').id).toBe('azul-profundo'); // fallback seguro
   });
 
-  it('os presets vivem em Configurações → Aparência, com preview e persistência local', () => {
-    expect(config).toContain('data-testid="shell-appearance"');
-    expect(config).toContain('nav-accent-preview');
-    expect(config).toContain('aria-label="Cor da navegação"');
-    expect(config).toContain("setNavAccent(a.id)");
+  it('os presets vivem em Perfil → Preferências (Aparência), com preview e persistência local', () => {
+    const perfil = read('src/app/(dashboard)/perfil/page.tsx');
+    const shellComp = read('src/components/dashboard/ShellAppearance.tsx');
+    expect(perfil).toContain('ShellAppearance');
+    expect(shellComp).toContain('data-testid="shell-appearance"');
+    expect(shellComp).toContain('nav-accent-preview');
+    expect(shellComp).toContain('aria-label="Cor da navegação"');
+    expect(shellComp).toContain("setNavAccent(a.id)");
     // preferência pessoal (localStorage) — sem banco/API (decisão documentada)
     expect(read('src/lib/nav-accent.ts')).toContain('localStorage');
     expect(read('src/lib/nav-accent.ts')).toContain('godoutor.nav-accent');

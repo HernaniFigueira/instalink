@@ -1,5 +1,6 @@
 'use client';
 import { computeSlots } from '@/lib/slots';
+import { eligibleProfessionalIds, slotEligibleProfessionalIds } from '@/lib/booking';
 import { QueueDock } from '@/components/dashboard/QueueDock';
 // ═══════════════════════════════════════════════════════════════
 // AGENDA — clique abre detalhe, arraste move o atendimento
@@ -698,7 +699,7 @@ export default function AgendaPage() {
       const ranges: Array<{start:number;end:number}> = [];
       if(bookingCfg && c.date>=today && c.date<=addDaysISO(today,effectiveHorizonDays(bookingCfg)) && bookings.length<500) {
         for(const service of services.filter(s=>s.active!==false && s.bookable!==false)) {
-          const result=computeSlots({rules,exceptions,bookings,services,professionals:activePros.filter(p=>!specFilter||(p.role||'').trim()===specFilter),dateISO:c.date,weekday:weekdayOf(c.date),serviceId:service.id,durationMin:service.durationMin,professionalId:c.professionalId||proFilter,eligibleProIds:service.professionalIds||[],nowHM:c.date===today?nowHM(new Date(),bizTz):'',leadMin:bookingCfg.leadMin,bufferMin:bookingCfg.bufferMin});
+          const result=computeSlots({rules,exceptions,bookings,services,professionals:activePros.filter(p=>!specFilter||(p.role||'').trim()===specFilter),dateISO:c.date,weekday:weekdayOf(c.date),serviceId:service.id,durationMin:service.durationMin,professionalId:c.professionalId||proFilter,eligibleProIds:slotEligibleProfessionalIds(service as any, activePros),nowHM:c.date===today?nowHM(new Date(),bizTz):'',leadMin:bookingCfg.leadMin,bufferMin:bookingCfg.bufferMin});
           for(const time of result.slots) ranges.push({start:timeToMin(time),end:timeToMin(time)+service.durationMin});
         }
       }
@@ -1628,7 +1629,7 @@ export default function AgendaPage() {
                 professionals={activePros.map((p) => ({ id: p.id, name: p.name }))}
                 /* A regra do serviço (`professionalIds`) vai junto: a fila só
                    oferece quem ATENDE o serviço escolhido. */
-                services={services.map((x) => ({ id: x.id, name: x.name, professionalIds: x.professionalIds || [] }))}
+                services={services.map((x) => ({ id: x.id, name: x.name, professionalIds: x.professionalIds || [], professionalMode: (x as any).professionalMode }))}
                 onOpenBooking={(id) => { const b = bookingsRef.current.get(id); if (b) setDetail(b); }}
                 onEncounter={(row) => router.push(encounterWorkspaceHref({ businessId, queueId: row.id, returnTo: `${window.location.pathname}${window.location.search}` }))}
                 onOpenClient={(row) => { window.location.href = `/clientes?c=${encodeURIComponent(row.contactId)}`; }}
