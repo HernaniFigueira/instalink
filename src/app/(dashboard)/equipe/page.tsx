@@ -1,5 +1,5 @@
 'use client';
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { Icon } from '@/components/icons';
@@ -18,7 +18,12 @@ import { ImageUpload } from '@/components/dashboard/ImageUpload';
 import { maskCpf, maskPhoneBR, maskCnpj, maskCpfCnpj, formatCrmvDisplay, UF_LIST as BRAZILIAN_STATES, isValidCpf } from '@/lib/masks';
 import { maskCpf as mqCpf } from '@/lib/field-quality';
 import { WORKSPACE_SHEET_SIZES } from '@/lib/workspace-sheet-sizes';
-import { searchVetCatalog } from '@/lib/vet-service-catalog';
+import { searchVetCatalog, durationSuggestionLabel } from '@/lib/vet-service-catalog';
+import {
+  applyRolePreset, editorPermissions, hasRealAdjustments, humanizePersonError, minimalOverrides,
+  overridesForOpenMember, presetSummary, splitRolesForEditor,
+} from '@/lib/equipe-access';
+import { isLegacyPagesEnabled } from '@/lib/product';
 // P0-compat: legacy client inline service flow (now server-side pendingServices) — keep strings for p0-finalissimo/integridade
 // action:'category.save', kind:'service'
 // categoryId: catId
@@ -79,7 +84,11 @@ export default function EquipePage() {
   const [fHasAccess, setFHasAccess] = useState(false);
   const [fHasClinical, setFHasClinical] = useState(false);
   // ACESSO expandido
-  const [fRole, setFRole] = useState<MemberRole>('ATENDENTE');
+  const [fRole, setFRole] = useState<MemberRole>('SECRETARIA');
+  // Papel → acesso padrão. "Personalizar acesso" fica RECOLHIDO por padrão.
+  const [fCustomize, setFCustomize] = useState(false);
+  const [fPendingRole, setFPendingRole] = useState<MemberRole | null>(null);
+  const legacyPages = isLegacyPagesEnabled();
   const [fPassword, setFPassword] = useState('');
   const [fShowPass, setFShowPass] = useState(false);
   const [fPermissions, setFPermissions] = useState<Record<string, boolean>>({});
@@ -95,13 +104,19 @@ export default function EquipePage() {
   const [fNewSvcName, setFNewSvcName] = useState('');
   const [fNewSvcGrupo, setFNewSvcGrupo] = useState('');
   const [fSuggestedGroupName, setFSuggestedGroupName] = useState('');
-  const [fNewSvcDur, setFNewSvcDur] = useState(45);
+  // Duração: texto editável. Da biblioteca vem só como SUGESTÃO (fNewSvcDurSuggested);
+  // manual começa vazio (sem número arbitrário escondido).
+  const [fNewSvcDur, setFNewSvcDur] = useState('');
+  const [fNewSvcDurSuggested, setFNewSvcDurSuggested] = useState(0);
   const [fNewSvcPrice, setFNewSvcPrice] = useState('');
   const [fPendingServices, setFPendingServices] = useState<Array<{tempId:string, name:string, groupId?:string, suggestedGroupName?:string, durationMin:number, price:string}>>([]);
   const [fDispMode, setFDispMode] = useState<'follow'|'own'>('follow');
   const [fShowMore, setFShowMore] = useState(false);
   const [fSaving, setFSaving] = useState(false);
   const [fError, setFError] = useState('');
+  const [fErrorField, setFErrorField] = useState('');
+  const [fErrorTick, setFErrorTick] = useState(0);
+  const fErrorRef = useRef<HTMLDivElement | null>(null);
   const [fSuccessProfessionalId, setFSuccessProfessionalId] = useState<string | null>(null);
   const [showRemoveConfirm, setShowRemoveConfirm] = useState(false);
   const [services, setServices] = useState<Service[]>([]);
@@ -116,7 +131,9 @@ export default function EquipePage() {
     setFCpf('');
     setFHasAccess(false);
     setFHasClinical(false);
-    setFRole('ATENDENTE');
+    setFRole('SECRETARIA');
+    setFCustomize(false);
+    setFPendingRole(null);
     setFPassword('');
     setFShowPass(false);
     setFPermissions({});
@@ -133,12 +150,14 @@ export default function EquipePage() {
     setFNewSvcName('');
     setFNewSvcGrupo('');
     setFSuggestedGroupName('');
-    setFNewSvcDur(45);
+    setFNewSvcDur('');
+    setFNewSvcDurSuggested(0);
     setFNewSvcPrice('');
     setFPendingServices([]);
     setFDispMode('follow');
     setFShowMore(false);
     setFError('');
+    setFErrorField('');
     setFSuccessProfessionalId(null);
     setShowRemoveConfirm(false);
     setEditEntry(null);
@@ -162,22 +181,13 @@ export default function EquipePage() {
     const hasClinical = !!pro && pro.active !== false;
     setFHasAccess(hasAccess);
     setFHasClinical(hasClinical);
+    setFCustomize(false);
+    setFPendingRole(null);
     if (mem) {
-      setFRole(mem.role || 'ATENDENTE');
-      // Carregar overrides crus, não efetivas — UI calcula efetivas via permissionsFor
-      setFPermissions({ ...(mem.permissionOverrides || mem.permissions || {}) });
-      // Mas para compatibilidade, se permissionOverrides não existir, usar m.permissions como fallback e depois limpar?
-      // Melhor: se tem permissionOverrides, usar; senão, derivar overrides mínimos
-      if (!mem.permissionOverrides && mem.permissions) {
-        // Derivar overrides mínimos: apenas onde efetiva difere do base
-        const base = permissionsFor(mem.role as MemberRole);
-        const eff = mem.permissions;
-        const derived: Record<string, boolean> = {};
-        for (const k of Object.keys(eff)) {
-          if (eff[k as PermissionId] !== base[k as PermissionId]) derived[k] = eff[k as PermissionId];
-        }
-        setFPermissions(derived);
-      }
+      setFRole(mem.role || 'SECRETARIA');
+      // Overrides MÍNIMOS contra permissionsFor(role): legado idêntico ao preset
+      // não vira "ajuste"; só diferença REAL e intencional é exibida.
+      setFPermissions({ ...overridesForOpenMember(mem) });
     } else if (entry.kind === 'owner') {
       setFRole('OWNER');
       setFPermissions({});
@@ -199,20 +209,42 @@ export default function EquipePage() {
     setFDispMode(pro && !followsBusinessHours(pro as Professional, rules) ? 'own' : 'follow');
     setFShowMore(false);
     setFError('');
+    setFErrorField('');
     setFSuccessProfessionalId(null);
     setEditEntry(entry);
     setShowAdd(true);
   }
+  // Erro de formulário: mensagem humana DENTRO do drawer + scroll/foco no bloco de erro
+  // (o botão Salvar fica no rodapé — sem isto o usuário clicava e "nada acontecia").
+  function showError(message: string, field = '') {
+    setFError(message);
+    setFErrorField(field);
+    setFErrorTick((t) => t + 1);
+  }
+  function requestRoleChange(next: MemberRole) {
+    if (next === fRole) return;
+    // Personalização REAL → confirmação clara antes de descartar.
+    if (hasRealAdjustments(fRole, fPermissions)) { setFPendingRole(next); return; }
+    commitRoleChange(next);
+  }
+  function commitRoleChange(next: MemberRole) {
+    const preset = applyRolePreset(next); // preset limpo: overrides antigos NÃO contaminam o novo papel
+    setFRole(preset.role);
+    setFPermissions({ ...preset.overrides });
+    setFPendingRole(null);
+  }
   async function handleAddSave() {
     setFError('');
-    if (!fName.trim()) { setFError('Informe o NOME.'); return; }
+    setFErrorField('');
+    if (!fName.trim()) { showError('Informe o nome da pessoa.', 'pessoa-nome'); return; }
     const phoneDigits = onlyDigits(fPhone);
     const cpfDigits = onlyDigits(fCpf);
+    if (fPhone && phoneDigits && phoneDigits.length < 10) { showError('Telefone inválido. Informe DDD + número.', 'pessoa-telefone'); return; }
     if (fCpf && cpfDigits) {
-      if (cpfDigits.length !== 11 || !isValidCpf(cpfDigits)) { setFError('CPF inválido.'); return; }
+      if (cpfDigits.length !== 11 || !isValidCpf(cpfDigits)) { showError('CPF inválido. Confira os 11 dígitos.', 'pessoa-cpf'); return; }
     }
-    if (fHasAccess && !fEmail.includes('@')) { setFError('Informe um E-MAIL válido para o acesso.'); return; }
-    if (fHasAccess && fPassword && fPassword.length > 0 && fPassword.length < 6) { setFError('A senha precisa ter ao menos 6 caracteres.'); return; }
+    if (fHasAccess && editEntry?.kind !== 'owner' && !fEmail.includes('@')) { showError('Informe um e-mail válido para o acesso.', 'pessoa-email'); return; }
+    if (fHasAccess && editEntry?.kind !== 'owner' && fPassword && fPassword.length > 0 && fPassword.length < 6) { showError('A senha precisa ter ao menos 6 caracteres.', 'pessoa-senha'); return; }
     setFSaving(true);
     try {
       const isUpdate = !!editEntry;
@@ -232,7 +264,8 @@ export default function EquipePage() {
         hasAccess: fHasAccess,
         hasClinical: fHasClinical,
         role: fRole,
-        permissionOverrides: fPermissions,
+        // Só diferença REAL contra o preset do papel (nunca overrides redundantes).
+        permissionOverrides: minimalOverrides(fRole, fPermissions),
         password: fPassword,
         funcao: fFuncao.trim(),
         conselho: fConselho,
@@ -244,12 +277,19 @@ export default function EquipePage() {
         pendingServices: fPendingServices,
       };
       const res = await apiSend('/api/team','POST', payload, { scope: 'action', area: 'Equipe' });
-      if (!res.ok) throw new Error(res.message || 'Não foi possível salvar pessoa.');
+      if (!res.ok) {
+        // detalhe técnico só no log; usuário vê linguagem de produto
+        console.warn('[equipe] person.save falhou', res.status, res.message);
+        showError(humanizePersonError(res.message, res.status));
+        return;
+      }
       const professionalId = res.data?.professionalId || editEntry?.professional?.id;
-      const wasNewWithOwn = !editEntry && fHasClinical && fDispMode === 'own' && professionalId;
+      // Horário próprio escolhido mas sem regras próprias: não fingir que está configurado.
+      const ownRulesCount = professionalId ? rules.filter((r) => r.professionalId === professionalId).length : 0;
+      const wasNewWithOwn = fHasClinical && fDispMode === 'own' && professionalId && (!editEntry || ownRulesCount === 0);
       if (wasNewWithOwn) {
         setFSuccessProfessionalId(professionalId);
-        setMsg('Pessoa adicionada.');
+        setMsg(editEntry ? 'Pessoa atualizada.' : 'Pessoa adicionada.');
         setTimeout(()=>setMsg(''),3000);
         await load();
         setFSaving(false);
@@ -261,9 +301,19 @@ export default function EquipePage() {
       setTimeout(()=>setMsg(''),3000);
       await load();
     } catch (e:any) {
-      setFError(e.message || 'Não foi possível salvar.');
+      console.warn('[equipe] person.save exceção', e);
+      showError(humanizePersonError(e?.message));
     } finally { setFSaving(false); }
   }
+
+  // Scroll + foco no bloco de erro a cada falha (mesmo texto repetido → tick novo).
+  useEffect(() => {
+    if (!fError) return;
+    const el = fErrorRef.current;
+    if (!el) return;
+    if (typeof el.scrollIntoView === 'function') el.scrollIntoView({ block: 'center', behavior: 'smooth' });
+    el.focus({ preventScroll: true });
+  }, [fErrorTick]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const { denied, failed, report } = useAreaLoad('Equipe');
 
@@ -550,17 +600,21 @@ export default function EquipePage() {
               <div className="p-4 space-y-5">
                 <div className="space-y-4 py-6 text-center">
                   <div className="mx-auto w-12 h-12 rounded-full bg-emerald-100 flex items-center justify-center"><Icon n="check" size={20} /></div>
-                  <h3 className="text-base font-semibold">Pessoa adicionada com sucesso.</h3>
-                  <p className="text-sm text-zinc-500">Configure a disponibilidade para este profissional ou feche.</p>
+                  <h3 className="text-base font-semibold">{editEntry ? 'Pessoa atualizada com sucesso.' : 'Pessoa adicionada com sucesso.'}</h3>
+                  <p className="text-sm text-zinc-500">Horário próprio ainda não configurado. Configure os horários desta pessoa para que ela apareça livre na agenda — ou feche e faça depois.</p>
                   <div className="flex justify-center gap-2 pt-2">
-                    <Link href={`/disponibilidade?b=${businessId}&professionalId=${fSuccessProfessionalId}`} className={buttonCls('primary','sm')}>Configurar disponibilidade</Link>
+                    <Link href={`/disponibilidade?b=${businessId}&professionalId=${fSuccessProfessionalId}`} className={buttonCls('primary','sm')}>Configurar horários</Link>
                     <Button variant="ghost" size="sm" onClick={()=> { setShowAdd(false); resetAddForm(); }}>Fechar</Button>
                   </div>
                 </div>
               </div>
             ) : (
               <div className="p-4 space-y-5">
-                {fError && <Notice tone="error">{fError}</Notice>}
+                {fError && (
+                  <div ref={fErrorRef} tabIndex={-1} role="alert" aria-live="assertive" data-testid="person-form-error" className="outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent)] rounded-md">
+                    <Notice tone="error">{fError}</Notice>
+                  </div>
+                )}
                 {/* IDENTIFICAÇÃO */}
             <div>
               <p className="text-xs font-semibold tracking-wide uppercase text-zinc-500 mb-2">Identificação</p>
@@ -579,17 +633,17 @@ export default function EquipePage() {
               ) : (
                 <div className="space-y-3">
                   <Field label="Nome" required>
-                    <Input value={fName} onChange={(e)=> setFName(e.target.value)} placeholder="Ex.: Dra. Ana Souza" />
+                    <Input id="pessoa-nome" value={fName} onChange={(e)=> setFName(e.target.value)} placeholder="Ex.: Dra. Ana Souza" aria-invalid={fErrorField === 'pessoa-nome' || undefined} />
                   </Field>
                   <Field label="E-mail" hint="Usado para login quando 'Tem acesso' estiver marcado.">
-                    <Input type="email" value={fEmail} onChange={(e)=> setFEmail(e.target.value)} placeholder="ana@clinica.com.br" autoComplete="email" />
+                    <Input id="pessoa-email" type="email" value={fEmail} onChange={(e)=> setFEmail(e.target.value)} placeholder="ana@clinica.com.br" autoComplete="email" aria-invalid={fErrorField === 'pessoa-email' || undefined} />
                   </Field>
                   <div className="grid grid-cols-2 gap-3">
                     <Field label="Telefone">
-                      <Input value={fPhone} onChange={(e)=> setFPhone(maskPhoneBR(e.target.value))} placeholder="(11) 99999-9999" inputMode="numeric" />
+                      <Input id="pessoa-telefone" value={fPhone} onChange={(e)=> setFPhone(maskPhoneBR(e.target.value))} placeholder="(11) 99999-9999" inputMode="numeric" aria-invalid={fErrorField === 'pessoa-telefone' || undefined} />
                     </Field>
                     <Field label="CPF" hint="CPF é pessoal — diferente do registro profissional.">
-                      <Input value={fCpf} onChange={(e)=> setFCpf(maskCpf(e.target.value))} placeholder="000.000.000-00" inputMode="numeric" />
+                      <Input id="pessoa-cpf" value={fCpf} onChange={(e)=> setFCpf(maskCpf(e.target.value))} placeholder="000.000.000-00" inputMode="numeric" aria-invalid={fErrorField === 'pessoa-cpf' || undefined} />
                     </Field>
                   </div>
                   <p className="text-[11px] text-zinc-400">Os campos são formatados automaticamente durante a digitação.</p>
@@ -666,56 +720,111 @@ export default function EquipePage() {
             })()}
 
             {/* ACESSO expandido */}
-            {fHasAccess && (
+            {fHasAccess && editEntry?.kind === 'owner' && (
+              <div className="space-y-2 bg-zinc-50 border border-zinc-200 rounded-md p-3" data-testid="owner-access-summary">
+                <p className="text-xs font-semibold tracking-wide uppercase text-zinc-600">Acesso ao sistema</p>
+                <p className="text-sm font-semibold text-[var(--text)]">Proprietário · acesso total</p>
+                <p className="text-xs text-zinc-500">O proprietário sempre tem acesso a tudo. O papel e as permissões dele não são editáveis e ele não pode ser rebaixado por aqui.</p>
+              </div>
+            )}
+            {fHasAccess && editEntry?.kind !== 'owner' && (
               <div className="space-y-4 bg-zinc-50 border border-zinc-200 rounded-md p-3">
                 <p className="text-xs font-semibold tracking-wide uppercase text-zinc-600">Acesso ao sistema</p>
                 <Field label="E-mail de acesso" required hint="O mesmo da identificação — confirmado aqui para acesso.">
-                  <Input type="email" value={fEmail} onChange={(e)=> setFEmail(e.target.value)} placeholder="ana@clinica.com.br" autoComplete="email" />
+                  <Input id="pessoa-email-acesso" type="email" value={fEmail} onChange={(e)=> setFEmail(e.target.value)} placeholder="ana@clinica.com.br" autoComplete="email" aria-invalid={fErrorField === 'pessoa-email' || undefined} />
                 </Field>
-                <div>
-                  <p className="text-xs font-semibold tracking-wide uppercase text-zinc-500 mb-2">Papel</p>
-                  <div className="grid grid-cols-2 gap-1.5">
-                    {data.roles.filter((r)=> r.id !== 'OWNER').map((r)=> (
-                      <button type="button" key={r.id} aria-pressed={drawer.role === r.id} onClick={()=> { saveMember(drawer, { role: r.id }); setFRole(r.id); }} className="il-option-choice il-option-choice--compact text-left">
-                        <span className="block text-sm font-medium">{r.label}</span>
-                        <span className="block text-xs text-zinc-500">{r.hint}</span>
-                      </button>
-                    ))}
-                  </div>
-                </div>
-                <div>
-                  <p className="text-xs font-semibold tracking-wide uppercase text-zinc-500 mb-2">Permissões <span className="font-normal normal-case text-[11px] text-zinc-400">— efetivas do papel + ajustes</span></p>
-                  <div className="space-y-1.5">
-                    {data.permissions.map((perm)=> {
-                      const base = permissionsFor(fRole as MemberRole)[perm.id as PermissionId];
-                      const override = fPermissions[perm.id as PermissionId];
-                      const effective = typeof override === 'boolean' ? override : base;
-                      const isOverridden = typeof override === 'boolean' && override !== base;
-                      return (
-                        <label key={perm.id} className={cn('flex items-center justify-between gap-3 px-3 py-2 rounded-md border cursor-pointer', effective ? 'bg-white border-zinc-300' : 'bg-zinc-50 border-zinc-200', isOverridden && 'ring-1 ring-amber-200')}>
-                          <span>
-                            <span className="block text-sm font-medium">{perm.label} {isOverridden && <span className="text-[10px] font-semibold text-amber-700 bg-amber-50 border border-amber-200 px-1 py-0.5 rounded ml-1">ajuste</span>}</span>
-                            <span className="block text-xs text-zinc-500">{perm.hint}</span>
-                          </span>
-                          <input type="checkbox" checked={effective} onChange={(e)=> {
-                            const desired = e.target.checked;
-                            setFPermissions((prev: any) => {
-                              const next = { ...prev };
-                              if (desired === base) delete next[perm.id as PermissionId];
-                              else next[perm.id as PermissionId] = desired;
-                              return next;
-                            });
-                          }} className="w-4 h-4 accent-zinc-900" />
-                        </label>
-                      );
-                    })}
-                  </div>
-                  <p className="text-[11px] text-zinc-400 mt-1">Desmarcar/marcar cria um ajuste específico para esta pessoa; trocar de Papel recalcula as efetivas.</p>
-                </div>
+                {(() => {
+                  const { primary, other, openOther } = splitRolesForEditor(data.roles.filter((r)=> r.id !== 'OWNER'), fRole);
+                  const summary = presetSummary(fRole, { legacyPages });
+                  const adjustments = Object.keys(minimalOverrides(fRole, fPermissions)).length;
+                  const eds = editorPermissions(data.permissions as any[], { legacyPages });
+                  const renderPerm = (perm: PermDef) => {
+                    const base = permissionsFor(fRole as MemberRole)[perm.id as PermissionId];
+                    const override = fPermissions[perm.id as PermissionId];
+                    const effective = typeof override === 'boolean' ? override : base;
+                    const isOverridden = typeof override === 'boolean' && override !== base; // `ajuste` = diferença REAL do preset
+                    return (
+                      <label key={perm.id} className={cn('flex items-center justify-between gap-3 px-3 py-2 rounded-md border cursor-pointer', effective ? 'bg-white border-zinc-300' : 'bg-zinc-50 border-zinc-200', isOverridden && 'ring-1 ring-amber-200')}>
+                        <span>
+                          <span className="block text-sm font-medium">{perm.label} {isOverridden && <span className="text-[10px] font-semibold text-amber-700 bg-amber-50 border border-amber-200 px-1 py-0.5 rounded ml-1">ajuste</span>}</span>
+                          <span className="block text-xs text-zinc-500">{perm.hint}</span>
+                        </span>
+                        <input type="checkbox" checked={effective} onChange={(e)=> {
+                          const desired = e.target.checked;
+                          setFPermissions((prev: any) => {
+                            const next = { ...prev };
+                            if (desired === base) delete next[perm.id as PermissionId];
+                            else next[perm.id as PermissionId] = desired;
+                            return next;
+                          });
+                        }} className="w-4 h-4 accent-zinc-900" />
+                      </label>
+                    );
+                  };
+                  return (
+                    <>
+                      <div>
+                        <p className="text-xs font-semibold tracking-wide uppercase text-zinc-500 mb-2">Papel</p>
+                        <div className="grid grid-cols-1 sm:grid-cols-3 gap-1.5" role="group" aria-label="Papel de acesso">
+                          {primary.map((r)=> (
+                            <button type="button" key={r.id} aria-pressed={fRole === r.id} onClick={()=> requestRoleChange(r.id)} className="il-option-choice il-option-choice--compact text-left">
+                              <span className="block text-sm font-medium">{r.label}</span>
+                              <span className="block text-xs text-zinc-500">{r.hint}</span>
+                            </button>
+                          ))}
+                        </div>
+                        {other.length > 0 && (
+                          <details className="mt-2" open={openOther}>
+                            <summary className="text-xs font-semibold text-zinc-500 cursor-pointer select-none">Outros papéis / avançado</summary>
+                            <div className="grid grid-cols-1 sm:grid-cols-3 gap-1.5 mt-2" role="group" aria-label="Outros papéis">
+                              {other.map((r)=> (
+                                <button type="button" key={r.id} aria-pressed={fRole === r.id} onClick={()=> requestRoleChange(r.id)} className="il-option-choice il-option-choice--compact text-left">
+                                  <span className="block text-sm font-medium">{r.label}</span>
+                                  <span className="block text-xs text-zinc-500">{r.hint}</span>
+                                </button>
+                              ))}
+                            </div>
+                          </details>
+                        )}
+                      </div>
+                      {fPendingRole && (
+                        <Notice tone="warning">
+                          <p className="text-sm font-medium">Trocar para {roleLabel(fPendingRole)} descarta a personalização atual de acesso ({adjustments} {adjustments === 1 ? 'ajuste' : 'ajustes'}) e aplica o acesso padrão do novo papel.</p>
+                          <div className="flex gap-2 mt-2">
+                            <Button variant="secondary" size="sm" onClick={()=> commitRoleChange(fPendingRole)}>Trocar e descartar ajustes</Button>
+                            <Button variant="ghost" size="sm" onClick={()=> setFPendingRole(null)}>Manter papel atual</Button>
+                          </div>
+                        </Notice>
+                      )}
+                      <div data-testid="preset-summary">
+                        <p className="text-xs font-semibold tracking-wide uppercase text-zinc-500 mb-1">Acesso padrão do papel</p>
+                        <p className="text-sm text-[var(--text)]">{summary.length ? summary.join(' · ') : 'Somente leitura do resumo'}</p>
+                        <div className="mt-2 flex items-center gap-2">
+                          <button type="button" aria-expanded={fCustomize} aria-controls="personalizar-acesso" onClick={()=> setFCustomize((v)=> !v)} className="text-xs font-semibold text-[var(--accent)] hover:underline">
+                            {fCustomize ? 'Ocultar personalização' : 'Personalizar acesso'}
+                          </button>
+                          {adjustments > 0 && <span className="text-[10px] font-semibold text-amber-700 bg-amber-50 border border-amber-200 px-1.5 py-0.5 rounded">{adjustments} {adjustments === 1 ? 'ajuste' : 'ajustes'}</span>}
+                        </div>
+                      </div>
+                      {fCustomize && (
+                        <div id="personalizar-acesso" className="space-y-3" data-testid="personalizar-acesso">
+                          <p className="text-[11px] text-zinc-500">Ajustes individuais sobre o acesso padrão de {roleLabel(fRole)}. Marque ou desmarque só o que for realmente diferente; trocar de papel volta ao padrão.</p>
+                          <div className="space-y-1.5">{eds.core.map((perm)=> renderPerm(perm as PermDef))}</div>
+                          {eds.advanced.length > 0 && (
+                            <details open={eds.advanced.some((perm)=> typeof fPermissions[perm.id as PermissionId] === 'boolean')}>
+                              <summary className="text-xs font-semibold text-zinc-500 cursor-pointer select-none">Capacidades avançadas</summary>
+                              <div className="space-y-1.5 mt-2">{eds.advanced.map((perm)=> renderPerm(perm as PermDef))}</div>
+                            </details>
+                          )}
+                        </div>
+                      )}
+                    </>
+                  );
+                })()}
                 {(!editEntry || editEntry.kind === 'professional') && (
                   <Field label="Senha inicial" required hint="Necessária somente se este e-mail ainda não possuir uma conta GoDoutor.">
                     <div className="relative">
-                      <Input type={fShowPass ? 'text' : 'password'} value={fPassword} onChange={(e)=> setFPassword(e.target.value)} placeholder="••••••••" autoComplete="new-password" />
+                      <Input id="pessoa-senha" type={fShowPass ? 'text' : 'password'} value={fPassword} onChange={(e)=> setFPassword(e.target.value)} placeholder="••••••••" autoComplete="new-password" aria-invalid={fErrorField === 'pessoa-senha' || undefined} />
                       <button type="button" onClick={()=> setFShowPass(s=>!s)} className="absolute right-2 top-1/2 -translate-y-1/2 text-xs font-semibold text-zinc-600 px-2 py-1 hover:bg-zinc-100 rounded" aria-label={fShowPass ? 'Ocultar senha' : 'Mostrar senha'}>
                         {fShowPass ? 'Ocultar' : 'Mostrar'}
                       </button>
@@ -787,16 +896,18 @@ export default function EquipePage() {
                   )}
                   {/* sugestões biblioteca vet */}
                   {fServiceQuery && (()=> {
-                    const sug = searchVetCatalog(fServiceQuery).slice(0,3);
+                    // Só sugere o que AINDA NÃO existe na clínica (nem está pendente) — nunca duplica Service.
+                    const taken = new Set([...services.map((x)=> x.name), ...fPendingServices.map((x)=> x.name)].map((n)=> n.trim().toLowerCase()));
+                    const sug = searchVetCatalog(fServiceQuery).filter((x)=> !taken.has(x.name.trim().toLowerCase())).slice(0,3);
                     if (!sug.length) return null;
                     return (
                       <div className="mt-2 space-y-1">
-                        <p className="text-[11px] font-semibold text-zinc-500 uppercase">Sugestões catálogo vet</p>
+                        <p className="text-[11px] font-semibold text-zinc-500 uppercase">Sugestões da biblioteca (ainda não existem na clínica)</p>
                         {sug.map((s)=> {
                           const existingCat = cats.find(c => c.name.toLowerCase().trim() === s.grupo.toLowerCase().trim() && c.kind === 'service');
                           return (
-                            <button key={s.name} type="button" onClick={()=> { setFNewSvcName(s.name); if (existingCat) { setFNewSvcGrupo(existingCat.id); setFSuggestedGroupName(''); } else { setFNewSvcGrupo(''); setFSuggestedGroupName(s.grupo); } setFNewSvcDur(s.duracaoMin || 30); setFShowServiceCreate(true); setFServiceQuery(s.name); }} className="block w-full text-left text-xs bg-zinc-50 border border-zinc-200 rounded px-2 py-1.5 hover:bg-white">
-                              <span className="font-medium">{s.name}</span> <span className="text-zinc-500">· {s.grupo} · {s.duracaoMin}min</span>
+                            <button key={s.name} type="button" onClick={()=> { setFNewSvcName(s.name); if (existingCat) { setFNewSvcGrupo(existingCat.id); setFSuggestedGroupName(''); } else { setFNewSvcGrupo(''); setFSuggestedGroupName(s.grupo); } setFNewSvcDur(s.duracaoMin ? String(s.duracaoMin) : ''); setFNewSvcDurSuggested(s.duracaoMin || 0); setFShowServiceCreate(true); setFServiceQuery(s.name); }} className="block w-full text-left text-xs bg-zinc-50 border border-zinc-200 rounded px-2 py-1.5 hover:bg-white">
+                              <span className="font-medium">{s.name}</span> <span className="text-zinc-500">· {s.grupo} · {durationSuggestionLabel(s.duracaoMin)}</span>
                             </button>
                           );
                         })}
@@ -810,18 +921,20 @@ export default function EquipePage() {
                       <Field label="Grupo"><Select value={fNewSvcGrupo} onChange={(e)=> { setFNewSvcGrupo(e.target.value); setFSuggestedGroupName(''); }}><option value="">Selecione</option>{cats.map(c=> <option key={c.id} value={c.id}>{c.name}</option>)}</Select>
                         {fSuggestedGroupName && <p className="text-[11px] text-amber-700 mt-1">Grupo sugerido: {fSuggestedGroupName} — Será criado ao salvar</p>}</Field>
                       <div className="grid grid-cols-2 gap-2">
-                        <Field label="Duração (min)"><Input type="number" value={String(fNewSvcDur)} onChange={(e)=> setFNewSvcDur(parseInt(e.target.value)||45)} /></Field>
+                        <Field label="Duração (min)" hint={fNewSvcDurSuggested ? `${durationSuggestionLabel(fNewSvcDurSuggested)} — ajuste conforme a rotina da clínica.` : 'Duração padrão para novos agendamentos.'}><Input id="novo-servico-duracao" type="number" min={5} step={5} inputMode="numeric" value={fNewSvcDur} onChange={(e)=> setFNewSvcDur(e.target.value)} placeholder="Ex.: 30" /></Field>
                         <Field label="Preço (opcional)"><Input value={fNewSvcPrice} onChange={(e)=> setFNewSvcPrice(e.target.value)} placeholder="0,00" inputMode="decimal" /></Field>
                       </div>
                       <div className="flex justify-end gap-2">
                         <Button variant="ghost" size="sm" onClick={()=> setFShowServiceCreate(false)}>Cancelar</Button>
                         <Button variant="secondary" size="sm" onClick={()=> {
                           if (!fNewSvcName.trim()) return;
+                          const durNum = parseInt(fNewSvcDur, 10);
+                          if (!Number.isFinite(durNum) || durNum < 5) { showError('Informe a duração do serviço (mínimo 5 minutos).', 'novo-servico-duracao'); return; }
                           const tempId = `pending-${Date.now()}-${Math.random().toString(36).slice(2,6)}`;
-                          setFPendingServices(prev=> [...prev, { tempId, name: fNewSvcName.trim(), groupId: fNewSvcGrupo || undefined, suggestedGroupName: fSuggestedGroupName || undefined, durationMin: fNewSvcDur, price: fNewSvcPrice }]);
+                          setFPendingServices(prev=> [...prev, { tempId, name: fNewSvcName.trim(), groupId: fNewSvcGrupo || undefined, suggestedGroupName: fSuggestedGroupName || undefined, durationMin: durNum, price: fNewSvcPrice }]);
                           // Pendente já conta como selecionado — marca explicit
                           setFServiceSelectionTouched(true);
-                          setFShowServiceCreate(false); setFNewSvcName(''); setFServiceQuery(''); setFSuggestedGroupName(''); setFNewSvcGrupo('');
+                          setFShowServiceCreate(false); setFNewSvcName(''); setFServiceQuery(''); setFSuggestedGroupName(''); setFNewSvcGrupo(''); setFNewSvcDur(''); setFNewSvcDurSuggested(0);
                         }}>Criar e vincular</Button>
                       </div>
                     </div>
@@ -840,17 +953,40 @@ export default function EquipePage() {
                     </label>
                   </div>
                   {(() => {
-                    const isNew = !editEntry?.professional?.id;
-                    if (isNew) {
-                      if (fDispMode === 'own') {
-                        return <p className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded px-2 py-1.5 mt-2">Salve a pessoa para configurar os horários próprios.</p>;
+                    const proId = editEntry?.professional?.id as string | undefined;
+                    const isNew = !proId;
+                    const ownCount = proId ? rules.filter((r) => r.professionalId === proId).length : 0;
+                    const deepLink = proId ? `/disponibilidade?b=${businessId}&professionalId=${editEntry.professional.id}` : '';
+                    if (fDispMode === 'own') {
+                      if (isNew) {
+                        return <p className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded px-2 py-1.5 mt-2" data-testid="own-hours-pending">Horário próprio ainda não configurado. Salve a pessoa para configurar os horários próprios.</p>;
                       }
-                      return null;
+                      if (ownCount === 0) {
+                        return (
+                          <div className="mt-2 rounded border border-amber-200 bg-amber-50 px-2 py-1.5" data-testid="own-hours-empty">
+                            <p className="text-xs text-amber-800">Horário próprio ainda não configurado. Enquanto estiver vazio, esta pessoa não terá horários livres na agenda.</p>
+                            <Link href={deepLink} className="inline-flex items-center gap-1 mt-1 text-xs font-semibold text-[var(--accent)] hover:underline">
+                              Configurar horários <Icon n="arrowRight" size={12} />
+                            </Link>
+                          </div>
+                        );
+                      }
+                      return (
+                        <div className="mt-2" data-testid="own-hours-configured">
+                          <p className="text-xs text-zinc-500">Horário próprio configurado ({ownCount} {ownCount === 1 ? 'janela' : 'janelas'} por dia da semana).</p>
+                          <Link href={deepLink} className="inline-flex items-center gap-1 mt-1 text-xs font-semibold text-[var(--accent)] hover:underline">
+                            Configurar horários <Icon n="arrowRight" size={12} />
+                          </Link>
+                        </div>
+                      );
                     }
                     return (
-                      <Link href={`/disponibilidade?b=${businessId}&professionalId=${editEntry.professional.id}`} className="inline-flex items-center gap-1 mt-2 text-xs font-semibold text-[var(--accent)] hover:underline">
-                        Configurar disponibilidade <Icon n="arrowRight" size={12} />
-                      </Link>
+                      <div className="mt-2">
+                        {!isNew && ownCount > 0 && <p className="text-xs text-zinc-500" data-testid="own-hours-preserved">O horário próprio já configurado fica guardado e volta a valer se você escolher “Usar horário próprio”.</p>}
+                        {!isNew && <Link href={deepLink} className="inline-flex items-center gap-1 mt-1 text-xs font-semibold text-[var(--accent)] hover:underline">
+                          Configurar horários <Icon n="arrowRight" size={12} />
+                        </Link>}
+                      </div>
                     );
                   })()}
                 </div>

@@ -22,7 +22,7 @@ import { Avatar, Button, HoursChips, IconButton, Notice, buttonCls } from '@/com
 import { apiSend } from '@/lib/api-client';
 import { PermissionNotice } from './AccessNotice';
 import {
-  businessHoursChangeImpact, businessHoursTable, businessRules, customRulesFor, followTogglePatch,
+  businessHoursChangeImpact, businessHoursTable, businessRules, customRulesFor, followTogglePatch, followsBusinessHours,
   hoursTable, planApplyBusinessHoursToAll, professionalHoursSummary, professionalHoursTable,
   sanitizeWindows,
 } from '@/lib/schedule';
@@ -162,8 +162,10 @@ export function DayHoursList({ initial, onSubmit, saving, submitLabel, footer }:
 }
 
 // ── Painel completo (horário geral + por profissional) ──
-export function BusinessHoursPanel({ businessId, professionals, rules, onChanged }: {
+export function BusinessHoursPanel({ businessId, professionals, rules, onChanged, focusProfessionalId = '' }: {
   businessId: string;
+  /** Deep-link (`?professionalId=`): abre o editor deste profissional já no carregamento. */
+  focusProfessionalId?: string;
   professionals: Professional[];
   rules: Availability[];
   /** Recarrega os dados da tela após qualquer mutação bem-sucedida. */
@@ -171,7 +173,11 @@ export function BusinessHoursPanel({ businessId, professionals, rules, onChanged
 }) {
   const [notice, setNotice] = useState<NoticeInfo | null>(null);
   const [busy, setBusy] = useState('');
-  const [editing, setEditing] = useState(''); // '' | 'business' | professionalId
+  // Deep-link abre o editor só de quem usa horário PRÓPRIO (quem segue a clínica não abre sozinho).
+  const [editing, setEditing] = useState(() => {
+    const fp = focusProfessionalId ? professionals.find((p) => p.id === focusProfessionalId) : undefined;
+    return fp && !followsBusinessHours(fp, rules) ? fp.id : '';
+  }); // '' | 'business' | professionalId
   const [applyAsk, setApplyAsk] = useState(false);
   const [inheritAsk, setInheritAsk] = useState<Professional | null>(null);
 
@@ -337,6 +343,9 @@ export function BusinessHoursPanel({ businessId, professionals, rules, onChanged
               // Ponto de partida da personalização: cópia do horário atual
               // (nunca uma agenda vazia, que derrubaria todos os horários).
               const seed = followTogglePatch({ follow: false, rules, professionalId: s.id }).rules;
+              const ownCount = customRulesFor(s.id, rules).length;
+              // Horário próprio escolhido mas sem regra própria: NÃO fingir que está configurado.
+              const unconfigured = !inherited && ownCount === 0;
               return (
                 <li key={s.id} className={cn('px-5 py-3.5', pro.active === false && 'opacity-60')}>
                   <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
@@ -345,7 +354,7 @@ export function BusinessHoursPanel({ businessId, professionals, rules, onChanged
                       <p className="text-sm font-semibold text-[var(--text)] flex flex-wrap items-center gap-2">
                         {s.name}
                         <span className={cn('text-[11px] font-semibold px-2 py-0.5 rounded-full border', inherited ? 'border-[var(--border)] bg-[var(--surface-3)] text-[var(--text-muted)]' : 'border-[var(--brand-border)] bg-[var(--brand-soft)] text-[var(--brand-fg)]')}>
-                          {inherited ? 'Segue a clínica' : 'Personalizado'}
+                          {inherited ? 'Segue a clínica' : unconfigured ? 'Horário próprio ainda não configurado' : 'Personalizado'}
                         </span>
                         {pro.active === false && <span className="text-[11px] font-medium text-[var(--text-faint)]">inativo</span>}
                       </p>
@@ -359,7 +368,7 @@ export function BusinessHoursPanel({ businessId, professionals, rules, onChanged
                     </div>
                     <div className="flex gap-2 shrink-0">
                       <button type="button" onClick={() => { setEditing(isOpen ? '' : s.id); setNotice(null); }} className={btnGhost} disabled={busy === s.id}>
-                        {isOpen ? 'Fechar' : s.actionLabel}
+                        {isOpen ? 'Fechar' : unconfigured ? 'Configurar horários' : s.actionLabel}
                       </button>
                       {!inherited && (
                         <button type="button" onClick={() => { setInheritAsk(pro); setNotice(null); }} className={btnGhost} disabled={busy === `follow-${s.id}`}>
@@ -373,8 +382,10 @@ export function BusinessHoursPanel({ businessId, professionals, rules, onChanged
                     <div className="mt-3 border-t border-[var(--border)] pt-4">
                       <p className="text-xs text-[var(--text-muted)] mb-3">
                         {inherited
-                          ? <>Salvar cria um <strong className="font-semibold">horário personalizado</strong> para {s.name} a partir do horário da clínica. Ele deixa de acompanhar as alterações gerais.</>
-                          : <>Você está editando o horário personalizado de {s.name}. Para voltar ao horário da clínica, use “Seguir a clínica”.</>}
+                          ? <>{ownCount > 0 ? <>O horário próprio de {s.name} está guardado e volta ao salvar aqui. </> : null}Salvar cria um <strong className="font-semibold">horário personalizado</strong> para {s.name}{ownCount > 0 ? ' a partir do horário guardado' : ' a partir do horário da clínica'}. Ele deixa de acompanhar as alterações gerais.</>
+                          : unconfigured
+                            ? <><strong className="font-semibold">Começar copiando o horário da clínica:</strong> os dias abaixo são uma cópia do horário da clínica para você ajustar. Nada é gravado até você clicar em “Salvar horário personalizado”.</>
+                            : <>Você está editando o horário personalizado de {s.name}. Para voltar ao horário da clínica, use “Seguir a clínica” — o horário próprio fica guardado.</>}
                       </p>
                       <DayHoursList
                         key={`${s.id}-${seed.length}-${customRulesFor(s.id, rules).length}`}
@@ -399,7 +410,7 @@ export function BusinessHoursPanel({ businessId, professionals, rules, onChanged
           <div className="relative w-full sm:max-w-sm bg-[var(--surface)] rounded-lg border border-[var(--border)] p-5 shadow-xl">
             <p className="font-semibold text-sm">{inheritAsk.name} vai seguir o horário da clínica?</p>
             <p className="text-xs text-[var(--text-muted)] mt-1.5">
-              O horário personalizado dele será removido e ele passa a atender no horário geral ({hoursSummaryLine(general)}), incluindo as próximas alterações que você fizer lá.
+              O horário personalizado dele fica guardado (sem uso enquanto seguir a clínica) e ele passa a atender no horário geral ({hoursSummaryLine(general)}), incluindo as próximas alterações que você fizer lá.
             </p>
             <div className="flex gap-2 mt-4">
               <button type="button" onClick={() => followBusiness(inheritAsk)} disabled={busy === `follow-${inheritAsk.id}`} className={cn(btnDark, 'flex-1')}>

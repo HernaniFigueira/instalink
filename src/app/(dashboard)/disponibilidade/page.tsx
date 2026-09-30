@@ -115,6 +115,8 @@ export default function DisponibilidadePage() {
             ) : null;
           })()}
           <BusinessHoursPanel
+            key={`${businessId}-${focusProfessionalId}-${loaded ? 'ready' : 'loading'}`}
+            focusProfessionalId={focusProfessionalId}
             businessId={businessId}
             professionals={(focusProfessionalId ? pros.filter((p) => p.id === focusProfessionalId) : pros).filter((p) => p.active !== false)}
             rules={rules}

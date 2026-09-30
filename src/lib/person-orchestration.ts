@@ -8,7 +8,7 @@ import { onlyDigits, clampCents, parseMoneyToCents } from './utils';
 import { serviceProfessionalMode } from './booking';
 import { isValidRole, isValidPermission, permissionsFor, PERMISSION_IDS } from './permissions';
 import { pushAudit } from './audit';
-import { followsBusinessHours } from './schedule';
+import { minimalOverrides } from './equipe-access';
 import type { DB, MemberRole, PermissionId } from './types';
 
 function normPhone(v: any): string {
@@ -177,6 +177,9 @@ export function validatePrivilegeEscalation(
   if (input.role) {
     const roleUp = String(input.role).toUpperCase();
     if (isValidRole(roleUp)) {
+      // Trocar de papel aplica o preset LIMPO do novo papel — overrides do papel
+      // anterior não são herdados (mesma regra de personSaveTx).
+      if (roleUp !== targetRole) targetOverrides = {};
       targetRole = roleUp as MemberRole;
     }
   }
@@ -400,7 +403,7 @@ export function personSaveTx(db: DB, input: PersonSaveInput, ctx?: { user: any; 
       if (ctx?.user) pushAudit(db, { action: 'professional.created' as any, actor: { ...ctx.user, role: ctx.role }, businessId, supportSessionId: ctx.support?.id, meta: { professionalId: targetProfessionalId } });
     } else {
       professional = db.professionals.find((p) => p.id === targetProfessionalId && p.businessId === businessId);
-      if (!professional) throw Object.assign(new Error('Profissional não encontrado.'), { status: 404 });
+      if (!professional) throw Object.assign(new Error('Não encontramos o perfil de atendimento desta pessoa. Recarregue a Equipe e tente novamente.'), { status: 404 });
       const prevRole = professional.role;
       const prevActive = professional.active;
       if (!isTargetOwner) {
@@ -451,16 +454,11 @@ export function personSaveTx(db: DB, input: PersonSaveInput, ctx?: { user: any; 
       }
     }
 
-    if (!isNewProfessional && input.dispMode) {
-      const wantFollow = input.dispMode === 'follow';
-      const currentlyFollow = followsBusinessHours(professional, (db as any).availability || (db as any).availabilityRules || []);
-      if (wantFollow !== currentlyFollow) {
-        if (wantFollow) {
-          (db as any).availability = ((db as any).availability || (db as any).availabilityRules || []).filter((a: any) => !(a.businessId === businessId && a.professionalId === targetProfessionalId));
-          if ((db as any).availabilityRules) (db as any).availabilityRules = (db as any).availability;
-        }
-      }
-    }
+    // DISPONIBILIDADE — follow/own é SÓ a flag `followBusinessHours` (definida acima).
+    // As Availability rules próprias do profissional NUNCA são apagadas ao voltar
+    // para "Seguir horário da clínica": ficam persistidas e inativas (a agenda usa
+    // `rulesForProfessional`, que ignora regras próprias enquanto ele herda) e
+    // reaparecem ao escolher "Usar horário próprio" novamente.
   } else {
     if (input.existingProfessionalId) {
       const pro = db.professionals.find((p) => p.id === input.existingProfessionalId && p.businessId === businessId);
@@ -487,7 +485,7 @@ export function personSaveTx(db: DB, input: PersonSaveInput, ctx?: { user: any; 
     } else if (memberId) {
       // update existente member
       const member = getMembers(db).find((m) => m.id === memberId && m.businessId === businessId);
-      if (!member) throw Object.assign(new Error('Membro não encontrado.'), { status: 404 });
+      if (!member) throw Object.assign(new Error('Não encontramos o acesso desta pessoa. Recarregue a Equipe e tente novamente.'), { status: 404 });
       if (member.role === 'OWNER') throw Object.assign(new Error('O proprietário não pode ser editado.'), { status: 403 });
       if (member.role === 'ADMIN' && !ctx?.isOwner && ctx?.role !== 'ADMIN') {
         throw Object.assign(new Error('Sem permissão para editar administradores.'), { status: 403 });
@@ -509,7 +507,12 @@ export function personSaveTx(db: DB, input: PersonSaveInput, ctx?: { user: any; 
       const prevPerms = JSON.stringify(member.permissions);
       if (input.role) {
         const roleUp = String(input.role).toUpperCase() as any;
-        if (isValidRole(roleUp) && roleUp !== 'OWNER') member.role = roleUp;
+        if (isValidRole(roleUp) && roleUp !== 'OWNER') {
+          // Troca de papel = preset limpo do novo papel (sem overrides herdados).
+          // Se o cliente enviou overrides explícitos, eles são aplicados abaixo.
+          if (roleUp !== member.role) member.permissions = {};
+          member.role = roleUp;
+        }
       }
       if (input.permissionOverrides !== undefined) {
         // já validado em validatePersonInput — sanitizado
@@ -519,6 +522,9 @@ export function personSaveTx(db: DB, input: PersonSaveInput, ctx?: { user: any; 
         }
         member.permissions = next;
       }
+      // Normaliza: override idêntico ao preset do papel NÃO é personalização.
+      // Permissões efetivas permanecem exatamente as mesmas (só remove redundância).
+      member.permissions = minimalOverrides(member.role, member.permissions || {}) as any;
       member.updatedAt = now;
       if (targetProfessionalId) {
         for (const p of db.professionals) {
@@ -581,15 +587,7 @@ export function personSaveTx(db: DB, input: PersonSaveInput, ctx?: { user: any; 
         businessId,
         userId,
         role: input.role ? String(input.role).toUpperCase() as any : 'ATENDENTE',
-        permissions: (() => {
-          const next: Record<string, boolean> = {};
-          if (input.permissionOverrides) {
-            for (const [k, v] of Object.entries(input.permissionOverrides as Record<string, any>)) {
-              if (isValidPermission(k) && typeof v === 'boolean') next[k] = v;
-            }
-          }
-          return next;
-        })(),
+        permissions: {},
         active: true,
         note: '',
         invitedBy: ctx?.user?.id || 'system',
@@ -599,6 +597,15 @@ export function personSaveTx(db: DB, input: PersonSaveInput, ctx?: { user: any; 
         cpf: cpfDigits,
       };
       if (!isValidRole(member.role)) throw Object.assign(new Error(`Papel inválido: ${member.role}`), { status: 400 });
+      {
+        const next: Record<string, boolean> = {};
+        if (input.permissionOverrides) {
+          for (const [k, v] of Object.entries(input.permissionOverrides as Record<string, any>)) {
+            if (isValidPermission(k) && typeof v === 'boolean') next[k] = v;
+          }
+        }
+        member.permissions = minimalOverrides(member.role, next) as any;
+      }
       if (member.role === 'OWNER') throw Object.assign(new Error('O proprietário é único. Use Administrador.'), { status: 400 });
       if (member.role === 'ADMIN' && !ctx?.isOwner && ctx?.role !== 'ADMIN') {
         throw Object.assign(new Error('Só o proprietário/administrador pode criar administradores.'), { status: 403 });

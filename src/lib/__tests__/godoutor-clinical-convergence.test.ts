@@ -65,7 +65,7 @@ describe('Clinical Convergence — GODOUTOR_LEGACY_PAGES OFF: limpeza da experi�
     // perguntas removidas da UI (preservadas no banco quando payload omite)
     expect(src).not.toContain('PERGUNTAS NO AGENDAMENTO');
     expect(src).toContain('questions removidas da UI');
-    expect(src).toContain('Sugestão da agenda');
+    expect(src).toContain('Duração padrão para novos agendamentos');
     // TeamEditor ativo não menciona página
     expect(src).not.toContain('aparece na agenda e na página');
     expect(src).toContain('Ativo (disponível para agenda)');

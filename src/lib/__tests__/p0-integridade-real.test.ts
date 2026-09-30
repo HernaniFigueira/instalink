@@ -159,7 +159,7 @@ describe('P0 integridade real — chamada de comportamento', () => {
     const equipe = read('src/app/(dashboard)/equipe/page.tsx');
     expect(equipe).toContain('{fSuccessProfessionalId ? (');
     expect(equipe).toContain('Pessoa adicionada com sucesso.');
-    expect(equipe).toContain('Configurar disponibilidade');
+    expect(equipe).toContain('Configurar horários');
     expect(equipe).toContain('Fechar');
     // O footer "Adicionar pessoa" deve estar dentro do : (else) e não visível quando success
     expect(equipe).toContain('handleAddSave');

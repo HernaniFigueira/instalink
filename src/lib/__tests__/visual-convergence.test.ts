@@ -368,8 +368,8 @@ describe('A3.3 — seleção não é estado de sucesso', () => {
   it('papel selecionável do membro segue o contrato comum sem mudança de fluxo', () => {
     const equipe = read('src/app/(dashboard)/equipe/page.tsx');
     expect(equipe).toContain('className="il-option-choice il-option-choice--compact text-left"');
-    expect(equipe).toContain('aria-pressed={drawer.role === r.id}');
-    expect(equipe).toContain('saveMember(drawer, { role: r.id })');
+    expect(equipe).toContain('aria-pressed={fRole === r.id}');
+    expect(equipe).toContain('requestRoleChange(r.id)');
   });
 });
 

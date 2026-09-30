@@ -43,12 +43,12 @@ export interface MemberAccessSheetProps {
   professionalId?: string;
   /** Nome inicial (vem do Professional quando há vínculo declarado). */
   initialName?: string;
-  /** Papel inicial. Sem profissional escolhido, o padrão é Secretária. */
+  /** Papel inicial. Sem profissional escolhido, o padrão é Recepção. */
   initialRole?: MemberRole;
 }
 
 const ROLE_OPTIONS: Array<{ id: MemberRole; label: string; hint: string }> = [
-  { id: 'SECRETARIA', label: 'Secretária', hint: 'Agenda, clientes, leads e WhatsApp' },
+  { id: 'SECRETARIA', label: 'Recepção', hint: 'Agenda, clientes, oportunidades e conversas' },
   { id: 'ATENDENTE', label: 'Atendente', hint: 'Agenda, clientes e WhatsApp' },
   { id: 'ADMIN', label: 'Administrador', hint: 'Acesso total, exceto administração da plataforma' },
   { id: 'PROFISSIONAL', label: 'Profissional', hint: 'Vê somente a própria agenda e os clientes da unidade' },
@@ -58,10 +58,10 @@ const ROLE_OPTIONS: Array<{ id: MemberRole; label: string; hint: string }> = [
 
 /** Permissões padrão de cada papel (espelho do catálogo do servidor — rótulo). */
 const ROLE_PERMISSION_LABEL: Record<string, string> = {
-  SECRETARIA: 'Início · Agenda · Clientes · Leads · Pedidos · WhatsApp · Assistente',
+  SECRETARIA: 'Agenda · Clientes · Oportunidades · Conversas',
   ATENDENTE: 'Início · Agenda · Clientes · WhatsApp · Assistente',
   ADMIN: 'todas, exceto administração da plataforma',
-  PROFISSIONAL: 'Início · Agenda · Clientes',
+  PROFISSIONAL: 'Início · Agenda · Clientes · Atendimento',
   VENDEDOR: 'Início · Clientes · Leads · WhatsApp · Campanhas',
   VIEWER: 'somente leitura do resumo',
 };

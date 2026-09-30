@@ -1,8 +1,15 @@
 // Vet Service Catalog — sugestões iniciais pesquisáveis (não cria registros automaticamente)
-// Fonte: pesquisa Arena — ezyVet Appointment Types / Booking Groups, CFMV 1475/2022, terminologia brasileira veterinária
 // Cada sugestão vira Service real da clínica apenas quando selecionada/confirmada pelo usuário.
-// Referências: docs.ezyvet.com (Appointment Types, Booking Groups), CFMV Resolução 1475/2022 (CRMV/UF), sistemas vet brasileiros
-// Licença: taxonomia própria GoDoutor, não cópia proprietária
+//
+// IMPORTANTE — `duracaoMin` é SOMENTE SUGESTÃO DE PRODUTO (ponto de partida
+// editável). NÃO é regra clínica, regulatória nem norma do CFMV/CRMV: a clínica
+// é a autoridade sobre a duração padrão dos seus serviços (Service.durationMin
+// = duração PADRÃO para novos agendamentos). A UI deve apresentar o número como
+// "Duração sugerida" e permitir alterá-lo antes de criar o Service.
+//
+// Inspiração de estrutura (VISUAL/ARQUITETURAL, sem cópia de conteúdo): conceito
+// de "tipos de atendimento" com duração padrão e grupos, comum em sistemas de
+// gestão veterinária. Taxonomia e nomes são próprios do GoDoutor.
 export interface VetCatalogSuggestion {
   id: string;
   name: string;
@@ -87,17 +94,40 @@ export const VET_CATALOG: VetCatalogSuggestion[] = [
   { id: 'adestramento', name: 'Avaliação comportamental', grupo: 'Pet care', duracaoMin: 30, keywords: ['comportamento'] },
 ];
 
+const fold = (v: string) => (v || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+
+/** Tamanho do prefixo em comum (raiz da palavra): "cardiologista" ~ "cardiologica". */
+function commonPrefix(a: string, b: string): number {
+  let i = 0;
+  while (i < a.length && i < b.length && a[i] === b[i]) i++;
+  return i;
+}
+
+/** Palavra de busca casa com a palavra do catálogo por raiz (mín. 6 letras ou a palavra inteira). */
+function stemMatch(token: string, word: string): boolean {
+  if (token.length < 4 || word.length < 4) return false;
+  return commonPrefix(token, word) >= Math.min(6, word.length, token.length);
+}
+
 export function searchVetCatalog(query: string, limit = 8): VetCatalogSuggestion[] {
-  const q = (query || '').trim().toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+  const q = fold((query || '').trim());
   if (!q) return [];
+  const tokens = q.split(/\s+/).filter(Boolean);
   const scored = VET_CATALOG.map(s => {
-    const name = s.name.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
-    const grupo = s.grupo.toLowerCase();
+    const name = fold(s.name);
+    const grupo = fold(s.grupo);
+    const words = [...name.split(/[^a-z0-9]+/), ...grupo.split(/[^a-z0-9]+/)].filter(Boolean);
+    const kws = (s.keywords || []).map(fold);
     let score = 0;
     if (name.startsWith(q)) score += 10;
     else if (name.includes(q)) score += 5;
     if (grupo.includes(q)) score += 2;
-    if (s.keywords?.some(k => k.includes(q))) score += 3;
+    if (kws.some(k => k.includes(q))) score += 3;
+    if (score === 0) {
+      // Busca por raiz: "cardiologista" encontra "Consulta cardiológica".
+      const hit = tokens.length > 0 && tokens.every(t => words.some(w => stemMatch(t, w)) || kws.some(k => stemMatch(t, k)));
+      if (hit) score += 4;
+    }
     return { s, score };
   }).filter(x => x.score > 0).sort((a,b)=>b.score-a.score).slice(0, limit).map(x=>x.s);
   return scored;
@@ -105,4 +135,12 @@ export function searchVetCatalog(query: string, limit = 8): VetCatalogSuggestion
 
 export function findVetSuggestionById(id: string): VetCatalogSuggestion | undefined {
   return VET_CATALOG.find(s=>s.id===id);
+}
+
+/**
+ * Rótulo de duração vinda da biblioteca — SEMPRE como sugestão (nunca como
+ * regra clínica). `0`/ausente = sem duração sugerida (ex.: internação, hospedagem).
+ */
+export function durationSuggestionLabel(min?: number): string {
+  return min && min > 0 ? `Duração sugerida · ${min} min` : 'Sem duração sugerida';
 }

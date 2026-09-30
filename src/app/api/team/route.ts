@@ -8,6 +8,7 @@ import type { BusinessMember, MemberRole, PermissionId } from '@/lib/types';
 import { professionalForUser } from '@/lib/access';
 import { isValidCpf } from '@/lib/contact-profile';
 import { onlyDigits } from '@/lib/utils';
+import { minimalOverrides } from '@/lib/equipe-access';
 
 // EQUIPE — logins internos da empresa (permissões por papel + individuais).
 // Regras de governança:
@@ -57,7 +58,8 @@ export async function GET(req: NextRequest) {
       return {
         id: m.id, userId: m.userId, name: u?.name || 'Usuário', email: u?.email || '',
         role: m.role, permissions: permissionsFor(m.role, m.permissions),
-        permissionOverrides: { ...(m.permissions || {}) },
+        // Overrides MÍNIMOS: legado idêntico ao preset do papel não vira "ajuste".
+        permissionOverrides: { ...minimalOverrides(m.role, m.permissions || {}) },
         phone, cpf,
         active: m.active !== false, note: m.note || '', createdAt: m.createdAt,
         lastLoginAt: u?.lastLoginAt || '',

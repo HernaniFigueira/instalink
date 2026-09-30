@@ -467,7 +467,7 @@ describe('P0 person orchestration atômica', () => {
       businessId: BIZ, action: 'person.save', mode: 'update',
       existingMemberId: memberId, existingProfessionalId: professionalId, existingUserId: userId,
       name: 'Dra Edit Renomeada', email: 'edit@biz.com', hasAccess: true, hasClinical: true,
-      role: 'ADMIN', permissionOverrides: { leads: true },
+      role: 'ADMIN', permissionOverrides: { financeiro: false },
       funcao: 'Dermatologia', crmvUf: 'SP', crmvNumero: '33333', serviceIds: [], pendingServices: [], dispMode: 'follow',
     }, ownerToken));
     expect(res.status).toBe(200);
@@ -484,7 +484,7 @@ describe('P0 person orchestration atômica', () => {
     const pro = db.professionals.find(p => p.id === professionalId)!;
     expect(user.name).toBe('Dra Edit Renomeada');
     expect(member.role).toBe('ADMIN');
-    expect((member.permissions as any).leads).toBe(true);
+    expect((member.permissions as any).financeiro).toBe(false);
     expect(pro.name).toBe('Dra Edit Renomeada');
     expect(pro.role).toBe('Dermatologia');
     // sem duplicação

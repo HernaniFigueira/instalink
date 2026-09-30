@@ -280,9 +280,11 @@ export async function POST(req: NextRequest) {
           return { ok: true, professionalId: existing?.id || id };
         }
         // ── Vínculo do profissional com o horário da empresa ──
-        // follow=true  → herda por referência (regras próprias são removidas);
-        // follow=false → horário personalizado (copia o horário da empresa como
-        //                ponto de partida, ou grava as janelas enviadas).
+        // follow=true  → herda por referência. As regras próprias são PRESERVADAS
+        //                (persistidas e inativas enquanto ele herda) — nunca apagadas;
+        // follow=false → horário próprio: grava as janelas enviadas; sem janelas
+        //                enviadas mantém as regras próprias existentes; sem regras
+        //                existentes copia o horário da empresa como ponto de partida.
         // professional.services.set removido — fonte única via professional.save + Service.professionalIds (evita duas autoridades).
         case 'professional.hours': {
           const pro = db.professionals.find((p) => p.id === body.id && p.businessId === businessId);
@@ -291,8 +293,6 @@ export async function POST(req: NextRequest) {
           const all = db.availability.filter((a) => a.businessId === businessId);
           const patch = followTogglePatch({ follow: body.follow, rules: all, professionalId: pro.id });
           pro.followBusinessHours = patch.followBusinessHours;
-          // Remove o horário próprio anterior em qualquer um dos dois casos.
-          db.availability = db.availability.filter((a) => !(a.businessId === businessId && a.professionalId === pro.id));
           if (!patch.followBusinessHours) {
             const raw = Array.isArray(body.rules) ? body.rules : null;
             const sent = sanitizeWindows(raw ?? []);
@@ -302,13 +302,25 @@ export async function POST(req: NextRequest) {
             if (raw && raw.length > 0 && sent.length !== raw.length) {
               throw new Error('Horário inválido: o fim do atendimento precisa ser depois do início.');
             }
-            const windows = sent.length > 0 ? sent : patch.rules;
-            if (windows.length === 0) throw new Error('Defina ao menos um dia de atendimento.');
-            for (const w of windows) {
-              db.availability.push({
-                id: randomUUID(), businessId, professionalId: pro.id, serviceId: '',
-                weekday: w.weekday, start: w.start, end: w.end, slotMin: w.slotMin,
-              });
+            const hadOwn = all.some((a) => a.professionalId === pro.id);
+            if (sent.length > 0) {
+              // Substitui SOMENTE quando o usuário enviou janelas explícitas.
+              db.availability = db.availability.filter((a) => !(a.businessId === businessId && a.professionalId === pro.id));
+              for (const w of sent) {
+                db.availability.push({
+                  id: randomUUID(), businessId, professionalId: pro.id, serviceId: '',
+                  weekday: w.weekday, start: w.start, end: w.end, slotMin: w.slotMin,
+                });
+              }
+            } else if (!hadOwn) {
+              const windows = patch.rules;
+              if (windows.length === 0) throw new Error('Defina ao menos um dia de atendimento.');
+              for (const w of windows) {
+                db.availability.push({
+                  id: randomUUID(), businessId, professionalId: pro.id, serviceId: '',
+                  weekday: w.weekday, start: w.start, end: w.end, slotMin: w.slotMin,
+                });
+              }
             }
           }
           return { ok: true, followBusinessHours: pro.followBusinessHours };
@@ -359,8 +371,8 @@ export async function POST(req: NextRequest) {
           const pros = db.professionals.filter((p) => p.businessId === businessId);
           const plan = planApplyBusinessHoursToAll(pros, all);
           const update = new Set(plan.update);
-          // Herança é por referência: basta remover regras próprias residuais.
-          db.availability = db.availability.filter((a) => !(a.businessId === businessId && a.professionalId && update.has(a.professionalId)));
+          // Herança é por referência: nada é copiado nem apagado. Regras próprias
+          // residuais de quem já segue a clínica ficam PRESERVADAS (inativas).
           for (const p of pros) if (update.has(p.id)) p.followBusinessHours = true;
           return { ok: true, updated: plan.update.length, skipped: plan.skip.length, message: applyToAllResultMessage(plan) };
         }

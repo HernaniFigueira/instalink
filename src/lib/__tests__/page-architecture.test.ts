@@ -87,7 +87,7 @@ describe('Perfil, role e cargo profissional', () => {
   it('official role labels are normalized and never inferred from professional title', () => {
     expect(roleLabel('owner')).toBe('Proprietário');
     expect(roleLabel('ADMIN')).toBe('Administrador');
-    expect(roleLabel('secretaria')).toBe('Secretária');
+    expect(roleLabel('secretaria')).toBe('Recepção');
     expect(roleLabel('PROFISSIONAL')).toBe('Profissional');
     const profile = read('src/app/(dashboard)/perfil/page.tsx');
     expect(profile).toContain('form.title');

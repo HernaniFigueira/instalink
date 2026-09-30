@@ -21,7 +21,7 @@ import { ImageUpload } from '@/components/dashboard/ImageUpload';
 import { followsBusinessHours } from '@/lib/schedule';
 import { useOverlayDismissGuard } from '@/components/dashboard/OverlayDismissGuard';
 import { panelRoutesIn } from '@/lib/panel';
-import { searchVetCatalog, VET_CATALOG } from '@/lib/vet-service-catalog';
+import { searchVetCatalog, VET_CATALOG, durationSuggestionLabel } from '@/lib/vet-service-catalog';
 import { serviceProfessionalMode } from '@/lib/booking';
 
 // ── Confirmação de exclusão (em sheet, nunca confirm() nativo) ──
@@ -69,7 +69,11 @@ export function ServiceForm({ businessId, service, cats, pros, onClose, onSave }
   // mas não é exposto nem editado na UI clínica — serviço é operacional, não exposição pública.
   const image = service?.image || '';
   const [price, setPrice] = useState(service ? centsToBR(service.price) : '');
-  const [durationMin, setDurationMin] = useState(service?.durationMin || 45);
+  // Duração padrão: texto editável. Serviço novo começa VAZIO (nenhum número arbitrário
+  // escondido); a biblioteca só SUGERE (durSuggested) e a clínica decide.
+  const [durationText, setDurationText] = useState(service ? String(service.durationMin || '') : '');
+  const [durSuggested, setDurSuggested] = useState(0);
+  const durationMin = parseInt(durationText, 10) || 0;
   const [categoryId, setCategoryId] = useState(service?.categoryId || '');
   const [suggestedGroupName, setSuggestedGroupName] = useState('');
   const [professionalMode, setProfessionalMode] = useState<'all' | 'selected'>(service ? serviceProfessionalMode(service as any) : 'all');
@@ -83,7 +87,7 @@ export function ServiceForm({ businessId, service, cats, pros, onClose, onSave }
   const initialSnapshot = useRef(JSON.stringify({
     name: service?.name || '', description: service?.description || '',
     price: service ? centsToBR(service.price) : '',
-    durationMin: service?.durationMin || 45, categoryId: service?.categoryId || '',
+    durationMin: service ? (service.durationMin || 0) : 0, categoryId: service?.categoryId || '',
     professionalMode: service ? serviceProfessionalMode(service as any) : 'all',
     proIds: service?.professionalIds || [], active: service?.active !== false,
     bookable: service?.bookable !== false,
@@ -103,7 +107,7 @@ export function ServiceForm({ businessId, service, cats, pros, onClose, onSave }
 
   return (
     <Drawer open onClose={() => { if (!loading) onClose(); }} dismissGuard={dismissState} title={service ? 'Editar serviço' : 'Novo serviço'} width="max-w-lg">
-      <form onSubmit={async (e) => { e.preventDefault(); setError(''); setLoading(true); try { let resolvedCategoryId: string | undefined = categoryId || undefined; if (!resolvedCategoryId && suggestedGroupName) { const r:any = await apiSend('/api/catalog','POST',{ businessId, action:'category.save', kind:'service', name: suggestedGroupName.trim() },{ scope:'action', area:'Serviços' }); if (r.ok && r.data?.categoryId) resolvedCategoryId = r.data.categoryId; } await onSave({ id: service?.id, name, description, image, price: parseMoneyToCents(price), durationMin, professionalMode, professionalIds: professionalMode === 'all' ? [] : proIds, categoryId: resolvedCategoryId, active, bookable }); } catch (err:any) { setError(err.message || 'Falha ao salvar.'); } finally { setLoading(false); } }}
+      <form onSubmit={async (e) => { e.preventDefault(); setError(''); if (durationMin < 5) { setError('Informe a duração padrão do serviço (mínimo 5 minutos).'); return; } setLoading(true); try { let resolvedCategoryId: string | undefined = categoryId || undefined; if (!resolvedCategoryId && suggestedGroupName) { const r:any = await apiSend('/api/catalog','POST',{ businessId, action:'category.save', kind:'service', name: suggestedGroupName.trim() },{ scope:'action', area:'Serviços' }); if (r.ok && r.data?.categoryId) resolvedCategoryId = r.data.categoryId; } await onSave({ id: service?.id, name, description, image, price: parseMoneyToCents(price), durationMin, professionalMode, professionalIds: professionalMode === 'all' ? [] : proIds, categoryId: resolvedCategoryId, active, bookable }); } catch (err:any) { setError(err.message || 'Falha ao salvar.'); } finally { setLoading(false); } }}
         className="p-5 space-y-3.5">
         <div className="relative">
           <input aria-label="Nome do serviço" value={name} onChange={(e) => { setName(e.target.value); setShowSug(true); }} onFocus={()=>setShowSug(true)} onBlur={()=>setTimeout(()=>setShowSug(false),150)} className={input} placeholder="Nome * (ex: Consulta veterinária)" autoFocus />
@@ -111,12 +115,12 @@ export function ServiceForm({ businessId, service, cats, pros, onClose, onSave }
             <div className="absolute z-10 mt-1 w-full bg-white border border-zinc-200 rounded-md shadow-lg max-h-48 overflow-auto">
               <p className="px-3 py-1 text-[11px] font-semibold tracking-wide uppercase text-zinc-500 border-b">Sugestões clínicas (biblioteca) — toque para preencher</p>
               {sugList.map(s => (
-                <button key={s.id} type="button" onMouseDown={(e)=>e.preventDefault()} onClick={()=>{ setName(s.name); if(s.duracaoMin) setDurationMin(s.duracaoMin); const m = cats.find(c=>c.name.toLowerCase().trim()===s.grupo.toLowerCase().trim()); if(m) { setCategoryId(m.id); setSuggestedGroupName(''); } else { setCategoryId(''); setSuggestedGroupName(s.grupo); } setShowSug(false); }} className="w-full text-left px-3 py-2 hover:bg-zinc-50 flex items-center justify-between gap-2">
+                <button key={s.id} type="button" onMouseDown={(e)=>e.preventDefault()} onClick={()=>{ setName(s.name); setDurationText(s.duracaoMin ? String(s.duracaoMin) : ''); setDurSuggested(s.duracaoMin || 0); const m = cats.find(c=>c.name.toLowerCase().trim()===s.grupo.toLowerCase().trim()); if(m) { setCategoryId(m.id); setSuggestedGroupName(''); } else { setCategoryId(''); setSuggestedGroupName(s.grupo); } setShowSug(false); }} className="w-full text-left px-3 py-2 hover:bg-zinc-50 flex items-center justify-between gap-2">
                   <span className="text-sm font-medium truncate">{s.name}</span>
-                  <span className="text-xs text-zinc-500 shrink-0">{s.grupo}{s.duracaoMin ? ` · ${s.duracaoMin} min` : ''}</span>
+                  <span className="text-xs text-zinc-500 shrink-0">{s.grupo} · {durationSuggestionLabel(s.duracaoMin)}</span>
                 </button>
               ))}
-              <p className="px-3 py-1 text-[11px] text-zinc-400 border-t">Não cria automaticamente — só sugere Nome/Grupo/Duração.</p>
+              <p className="px-3 py-1 text-[11px] text-zinc-400 border-t">Não cria automaticamente — só sugere Nome/Grupo/Duração (a duração é sugestão e pode ser alterada).</p>
             </div>
           )}
         </div>
@@ -125,9 +129,10 @@ export function ServiceForm({ businessId, service, cats, pros, onClose, onSave }
           <label className="block"><span className="text-xs font-semibold text-zinc-500">PREÇO BASE (R$)</span>
             <input value={price} onChange={(e) => setPrice(e.target.value)} className={input + ' mt-1'} placeholder="Opcional — ex: 120,00" inputMode="decimal" />
             <span className="text-[11px] text-zinc-500">Valor operacional — referência para financeiro/relatórios e futura comissão.</span></label>
-          <label className="block"><span className="text-xs font-semibold text-zinc-500">DURAÇÃO BASE (MIN)</span>
-            <input type="number" min={5} step={5} value={durationMin} onChange={(e) => setDurationMin(Number(e.target.value))} className={input + ' mt-1'} />
-            <span className="text-[11px] text-zinc-500">Sugestão da agenda — não trava encaixe, ordem de chegada ou cirurgia longa.</span></label>
+          <label className="block"><span className="text-xs font-semibold text-zinc-500">DURAÇÃO PADRÃO (MIN)</span>
+            <input aria-label="Duração padrão em minutos" type="number" min={5} step={5} inputMode="numeric" placeholder="Ex.: 30" value={durationText} onChange={(e) => { setDurationText(e.target.value); setDurSuggested(0); }} className={input + ' mt-1'} />
+            {durSuggested > 0 && <span className="block text-[11px] text-amber-700">{durationSuggestionLabel(durSuggested)} — ajuste conforme a rotina da clínica.</span>}
+            <span className="text-[11px] text-zinc-500">Duração padrão para novos agendamentos — não trava encaixe, ordem de chegada ou cirurgia longa.</span></label>
         </div>
         <label className="block"><span className="text-xs font-semibold text-zinc-500">GRUPO</span>
           <select value={categoryId} onChange={(e) => { setCategoryId(e.target.value); setSuggestedGroupName(''); }} className={input + ' mt-1'}>
