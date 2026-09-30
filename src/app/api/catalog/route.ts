@@ -168,7 +168,7 @@ export async function POST(req: NextRequest) {
         }
         case 'service.delete': {
           // Proteção histórica canônica: Booking OU Queue OU Encounter (qualquer estado, inclusive sem Booking)
-          if (serviceHasHistory(db as any, businessId, body.id)) throw new Error('Este serviço possui histórico e não pode ser excluído. Desative-o.');
+          if (serviceHasHistory(db as any, businessId, body.id)) throw Object.assign(new Error('Este serviço possui histórico e não pode ser excluído. Desative-o.'), { status: 409 });
           // Cleanup seguro quando nunca referenciado
           db.availability = db.availability.filter((a) => !(a.businessId === businessId && a.serviceId === body.id));
           db.services = db.services.filter((s) => !(s.id === body.id && s.businessId === businessId));
@@ -314,7 +314,7 @@ export async function POST(req: NextRequest) {
           return { ok: true, followBusinessHours: pro.followBusinessHours };
         }
         case 'professional.delete': {
-          if (professionalHasHistory(db as any, businessId, body.id)) throw new Error('Este profissional possui histórico e não pode ser excluído. Desative-o.');
+          if (professionalHasHistory(db as any, businessId, body.id)) throw Object.assign(new Error('Este profissional possui histórico e não pode ser excluído. Desative-o.'), { status: 409 });
           // Cleanup seguro quando nunca referenciado
           for (const svc of db.services) {
             if (svc.businessId === businessId) svc.professionalIds = (svc.professionalIds || []).filter((pid) => pid !== body.id);
@@ -407,6 +407,6 @@ export async function POST(req: NextRequest) {
     });
     return NextResponse.json(result);
   } catch (err: any) {
-    return NextResponse.json({ error: err.message || 'Não foi possível salvar.' }, { status: 400 });
+    return NextResponse.json({ error: err.message || 'Não foi possível salvar.' }, { status: err?.status || 400 });
   }
 }

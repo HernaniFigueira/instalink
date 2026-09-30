@@ -37,9 +37,9 @@ export function slotEligibleProfessionalIds(service: Service | null | undefined,
   if (!hasExplicitMode) {
     const ids = (service as any)?.professionalIds as string[] | undefined;
     const isLegacyEmpty = !ids || ids.length === 0;
-    const noProfessionals = !professionals || professionals.length === 0 || professionals.filter(p => p.active !== false).length === 0;
-    if (isLegacyEmpty && noProfessionals) {
-      return undefined; // compatibilidade solo legado
+    const noProfessionalRecords = !professionals || professionals.length === 0;
+    if (isLegacyEmpty && noProfessionalRecords) {
+      return undefined; // compatibilidade solo legada — só quando NENHUM registro Professional existe
     }
   }
   // Para todos os demais casos, usa a regra canônica (inclui explicit all com 0 → [])

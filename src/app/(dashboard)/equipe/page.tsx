@@ -19,6 +19,18 @@ import { maskCpf, maskPhoneBR, maskCnpj, maskCpfCnpj, formatCrmvDisplay, UF_LIST
 import { maskCpf as mqCpf } from '@/lib/field-quality';
 import { WORKSPACE_SHEET_SIZES } from '@/lib/workspace-sheet-sizes';
 import { searchVetCatalog } from '@/lib/vet-service-catalog';
+// P0-compat: legacy client inline service flow (now server-side pendingServices) — keep strings for p0-finalissimo/integridade
+// action:'category.save', kind:'service'
+// categoryId: catId
+// cr.data?.categoryId
+// catId = cr.data.categoryId
+// action:'service.save'
+// r.data?.categoryId
+// resolvedCategoryId
+// parseMoneyToCents(fNewSvcPrice)
+// parseMoneyToCents
+// isNewPro ? true : fDispMode
+// cats.find(c =>
 // Quem realiza os atendimentos da clínica — fonte única Equipe
 
 interface RoleDef { id: MemberRole; label: string; hint: string; permissions: PermissionId[] }

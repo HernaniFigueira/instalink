@@ -81,14 +81,13 @@ export async function POST(req: NextRequest) {
     // Person orchestration atômica — "Adicionar pessoa" / "Gerenciar pessoa"
     if (body.action === 'person.save') {
       const { validatePersonInput, personSaveTx } = await import('@/lib/person-orchestration');
-      // Normaliza input para o domínio (reutiliza validações canônicas)
+      // isOwner NUNCA confiado do cliente — derivado server-side dentro de personSaveTx via business.ownerId
       const input: any = {
         businessId,
         mode: body.mode === 'update' ? 'update' : 'create',
         existingMemberId: body.existingMemberId || body.memberId || '',
         existingProfessionalId: body.existingProfessionalId || body.professionalId || '',
         existingUserId: body.existingUserId || body.userId || '',
-        isOwner: !!body.isOwner,
         name: body.name,
         email: body.email,
         phone: body.phone,
@@ -108,6 +107,12 @@ export async function POST(req: NextRequest) {
         dispMode: body.dispMode,
         pendingServices: Array.isArray(body.pendingServices) ? body.pendingServices : [],
       };
+      // Boundary equipe/catalogo: mutação clínica exige catalogo além de equipe
+      // Só considera clínico se hasClinical true ou pendingServices ou desativação de professional
+      const isClinicalMutation = !!input.hasClinical || (Array.isArray(input.pendingServices) && input.pendingServices.length > 0) || (!!input.existingProfessionalId && !input.hasClinical);
+      if (isClinicalMutation && !ctx.permissions.catalogo && !ctx.isOwner) {
+        return NextResponse.json({ error: 'Sem permissão para alterar dados clínicos (catalogo).' }, { status: 403 });
+      }
       // Pré-validação (fora da transação) para feedback rápido, mas a transação revalida com DB fresco
       const db0 = await readDB();
       try {

@@ -60,14 +60,6 @@ export function computeSlots(q: SlotQuery): SlotResult {
   if (exc?.closed) return { slots: [], occupied: [], closed: true, closedReason: 'exception', assign: {}, byProfessional: {} };
 
   const activePros = q.professionals.filter((p) => p.active !== false);
-  // Diferencia legacy solo (sem professionalMode e sem ids e sem profissionais) de explicit empty.
-  // Legacy solo preserva compatibilidade: [] + zero ativos + serviço sem modo → undefined (solo).
-  // Explicit empty (selected[] , all+0 , selected+0) → [] bloqueia.
-  const svcForEligibility = q.services.find((s) => s.id === q.serviceId) as any;
-  const isLegacySolo =
-    !svcForEligibility?.professionalMode &&
-    !((svcForEligibility?.professionalIds as string[] | undefined)?.length) &&
-    activePros.length === 0;
   const eligible = new Set(
     q.eligibleProIds === undefined
       ? activePros.map((p) => p.id)
@@ -75,8 +67,9 @@ export function computeSlots(q: SlotQuery): SlotResult {
         ? activePros.filter((p) => q.eligibleProIds!.includes(p.id)).map((p) => p.id)
         : [],
   );
-  // Elegibilidade explicitamente vazia → nenhum horário, não fabricar solo (exceto legacy solo)
-  if (!isLegacySolo && q.eligibleProIds !== undefined && q.eligibleProIds.length === 0) {
+  // Autoridade única: eligibleProIds === [] → zero elegíveis → sem janelas, sempre.
+  // Fallback solo legado só quando eligibleProIds === undefined (decisão pertence a slotEligibleProfessionalIds).
+  if (q.eligibleProIds !== undefined && q.eligibleProIds.length === 0) {
     return { slots: [], occupied: [], closed: true, closedReason: 'no_windows', assign: {}, byProfessional: {} };
   }
   // Negócio sem equipe: opera como "profissional único" (id '').
