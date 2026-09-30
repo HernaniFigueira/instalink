@@ -358,12 +358,17 @@ Itens da auditoria tratados nesta etapa (mesma PR; sem merge):
 | Overrides legados virando `ajuste` | Overrides mínimos vs `permissionsFor(role)`; troca de papel limpa; confirmação só com personalização real | ✅ |
 | Permissões sem sentido clínico (Página/Pedidos) | Ocultas do editor com `GODOUTOR_LEGACY_PAGES` OFF; avançadas só em modo personalizar | ✅ |
 | Seguir clínica apagava horário próprio | Preservação em `professional.hours`, `applyToAll`, `person.save`; aviso + CTA + deep link | ✅ |
+| Criação de Professional ignorava `dispMode` (sempre follow) | `followBusinessHours = dispMode==='own' ? false : true` na criação; zero regras automáticas | ✅ corrigido + teste direto + browser |
 | `Membro não encontrado` / erros fora da vista | Mensagens humanas no drawer com scroll/foco | ✅ |
 | Serviço da biblioteca com duração fixa | `Duração sugerida · N min` editável; manual exige duração; sem duplicar | ✅ |
 | Escopo de dados do Profissional | **NÃO resolvido**: Clientes/Oportunidades/Conversas sem escopo por profissional → registrado para Workflow + Permissões (Master Plan §2.1) | ⏳ deferido |
 | Contrato de duração / slot / recursos / Agenda 2.0 | Documentado (Master Plan §2.2–§2.5); sem tabela/join/instalação | ⏳ deferido |
 
 ### Testes desta etapa
-- `pr46-equipe-ux.test.ts` (19), `equipe-ux.test.tsx` (12), `business-hours-focus.test.tsx` (4).
-- Suite completa: 2751 passed / 4 failed (baseline: 3 Instagram + 1 automation audit; intocados). `tsc` 0 · `build` OK · `git diff --check` 0.
-- Homologação HTTP real 33/33; **sem browser disponível → sem homologação visual**.
+- `pr46-equipe-ux.test.ts` (22), `equipe-ux.test.tsx` (12), `business-hours-focus.test.tsx` (4).
+- Suite completa: 2754 passed / 4 failed (baseline: 3 Instagram + 1 automation audit; intocados). `tsc` 0 · `build` OK · `git diff --check` 0.
+- Browser real (Chromium headless, login real): 47/47 em 1366 e em 1024; sanity 1440/390.
+
+### Observações da renderização real (NÃO corrigidas — fora do escopo desta etapa)
+- Lista da Equipe: a linha do Proprietário mostra o enum cru `OWNER` na coluna FUNÇÃO / PAPEL.
+- 390px: o drawer fica estreito (título truncado e botão “Salvar alterações” cortado). Desktop/tablet são a prioridade; mobile é só sanity.

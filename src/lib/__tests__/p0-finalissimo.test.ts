@@ -42,7 +42,8 @@ describe('P0 FINALISSIMO - Integridade PR #46', () => {
     const equipe = read('src/app/(dashboard)/equipe/page.tsx');
     expect(equipe).not.toContain("professionalId=${editEntry?.professional?.id || 'novo'}");
     expect(equipe).toContain('Salve a pessoa para configurar os horários próprios.');
-    expect(equipe).toContain('isNewPro ? true : fDispMode');
+    expect(equipe).toContain('dispMode: fDispMode');
+    expect(equipe).not.toContain('isNewPro ? true : fDispMode');
     // deve usar professionalId real
     expect(equipe).toContain('professionalId=${editEntry.professional.id}');
   });

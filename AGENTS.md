@@ -32,7 +32,7 @@ Antes de propor ou implementar mudanças relevantes, leia:
 
 ## Estado atual (2026-09-30)
 
-**PR #46 — `P0 ESTRUTURAL CONCLUÍDO / EQUIPE UX CLOSURE + HOMOLOGAÇÃO EM ANDAMENTO / NÃO MERGEAR`** (branch de trabalho `arena/01a0f3d3-instalink`). Não mergear sem autorização explícita e sem homologação visual real (não feita: sem browser no ambiente).
+**PR #46 — `P0 ESTRUTURAL CONCLUÍDO / EQUIPE UX CLOSURE + HOMOLOGAÇÃO EM ANDAMENTO / NÃO MERGEAR`** (branch de trabalho `arena/01a0f3d3-instalink`). Não mergear sem autorização explícita. Homologação em Chromium headless (login real) feita em 1366/1024 + sanity 1440/390 — ver `docs/AUTO-HOMOLOGACAO-PR46-MODELO-OPERACIONAL.md`.
 
 - **P0.1 (Slots & Elegibilidade):** todos os chamadores de `slotEligibleProfessionalIds` passam a equipe completa do tenant; o helper decide elegibilidade (`undefined` legado solo / `[]` / `[ids]`).
 - **P0.2 (Privilege Escalation):** `person.save` valida server-side e atomicamente as permissões efetivas do alvo contra as do ator (403 sem mutação parcial).

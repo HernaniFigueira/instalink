@@ -111,21 +111,23 @@
 
 ---
 
-## Equipe UX Closure — homologação funcional local (2026-09-30)
+## Equipe UX Closure — homologação em browser real (2026-09-30)
 
-**Ambiente:** `npm run build` + `npm run start` com banco de arquivo descartável (`INSTALINK_DB_FILE=/tmp/...`, seed `demo@instalink.app`, tenant `clinicavitta`), login real por HTTP, `DATABASE_URL` desativada. Nada de produção/dados reais. Script descartável fora do repositório.
+**Ambiente:** `npm run build` + `npm run start` com banco de arquivo descartável (`INSTALINK_DB_FILE=/tmp/...`, seed `demo@instalink.app`, tenant `clinicavitta`, `DATABASE_URL` desativada), **login real pela tela `/login`**, **Chromium headless** (153.0.8010; binário obtido via pacote npm fora do repositório, em `/tmp`, porque o CDN do Playwright estava inacessível — nada foi adicionado ao `package.json`). Sem produção/dados reais. Scripts descartáveis fora do repositório. Screenshots: `docs/homologacao-pr46-screenshots/` (sufixo = largura da viewport).
 
-**Limite:** o ambiente NÃO tem browser (nenhum binário do Playwright/Chromium) → **nenhuma validação visual/render em 1440/1366/1024 foi feita**. Comportamento de UI coberto apenas por testes jsdom (`equipe-ux.test.tsx`, `business-hours-focus.test.tsx`). Homologação visual permanece **pendente** para o responsável.
+**Resultado:** fluxo completo **47/47 em 1366×900** e **47/47 em 1024×768** (banco recriado entre as duas execuções); sanity em **1440** e **390** (abrir Maria, erro com foco, Disponibilidade; sem overflow horizontal e sem `pageerror`).
 
-| Caso | Verificações (todas OK) |
+| Caso | O que foi feito na UI e confirmado |
 | --- | --- |
-| MARIA / Recepção | criada como `SECRETARIA`; sem overrides (nenhum `ajuste`); tem Agenda/Clientes/Oportunidades/WhatsApp; NÃO tem Visão geral, Pedidos, Página, Assistente, Atendimento, Catálogo, Financeiro, Equipe, Config, Admin, Campanhas; persiste após login e reabertura; `/api/team` e `/api/overview` → 403; label `Recepção` |
-| OWNER | presente na lista; tentativa de rebaixar não cria Member nem altera papel; segue com acesso total |
-| ORLANDO / Profissional | criado com serviço sugerido; seguir → próprio salva sem `Membro não encontrado`; `followBusinessHours=false` persiste; próprio sem regras fica vazio (aviso + CTA na UI); regra configurada; voltar a seguir MANTÉM as 2 regras no banco; voltar ao próprio RESTAURA as 2; escopo da agenda `own`; sem config/página/pedidos/agente/admin |
-| SERVIÇO cardiologista | `Consulta cardiológica` criada 1× com duração editada (50, não os 40 sugeridos); Orlando a realiza; reabrir/salvar não duplica; duração persiste |
-| ERRO | CPF inválido → 400 “CPF inválido.”; e-mail inválido → 400; API 404 → “Não encontramos o acesso desta pessoa…” (sem Member/User/Professional); e-mail duplicado → “Esta pessoa já faz parte da equipe.” |
+| MARIA / Recepção | abrir; papel Recepção; `Agenda · Clientes · Oportunidades · WhatsApp`; sem chips `ajuste`; sem Visão geral/Pedidos/Página/Assistente/Atendimento; salvar; fechar; reabrir → persistiu; banco `SECRETARIA` + overrides vazios |
+| OWNER | `Proprietário · acesso total`; sem seletor de papel; sem editor de permissões |
+| ORLANDO (seed “Orlando (dentista)”) | Profissional + serviço marcado; Horário próprio → Segue a clínica → salvar (sem “Membro não encontrado”) → reabrir = Segue; banco mantém 5 regras; → Horário próprio → salvar → reabrir = Horário próprio configurado, 5 regras restauradas |
+| NOVO profissional (blocker) | criado com `Usar horário próprio` na própria criação; painel de sucesso com `Horário próprio ainda não configurado` + `Configurar horários`; banco `followBusinessHours=false` e 0 regras; reabrir = continua Horário próprio + aviso + CTA com deep link; CTA abre `/disponibilidade?b=…&professionalId=…` com `Começar copiando o horário da clínica` (nada gravado antes de salvar); configurado Seg/Qua 10:00–15:00; voltar = configurado; → Segue a clínica (persistiu, regras mantidas) → Horário próprio (regras anteriores restauradas) |
+| ERRO | CPF inválido: mensagem visível, bloco dentro da viewport depois de rolar o formulário até o fim e com foco; e-mail duplicado (resposta real da API): “Esta pessoa já faz parte da equipe.”, visível, com foco e sem jargão; nada gravado |
 
-**Resultado: 33/33 verificações.** O foco/scroll no bloco de erro é validado em jsdom (`scrollIntoView` + `document.activeElement`), não em browser.
+**Achado corrigido na homologação visual:** os cards de papel (Administrador/Recepção/Profissional) saíam com rótulo e descrição lado a lado e texto espremido; agora empilhados, mantendo o contrato `il-option-choice`.
+
+**Observações NÃO corrigidas (fora do escopo):** a linha do Proprietário na lista mostra o enum cru `OWNER`; em 390px o drawer fica estreito (título truncado, botão “Salvar alterações” cortado).
 
 ---
 
@@ -135,7 +137,7 @@
 git diff --check  # ✓ 0
 npm run build     # ✓ Compiled successfully
 npm run typecheck # ✓ 0 erros (rodar DEPOIS do build, nunca em paralelo)
-npx vitest run    # 2751 passed / 4 failed (2755) — 199/201 arquivos
+npx vitest run    # 2754 passed / 4 failed (2758) — 199/201 arquivos
                   # 4 falhas = baseline pré-existente, não corrigida:
                   #   3× a34-instagram (B9) + 1× automation-audit-p4 (poda)
 ```

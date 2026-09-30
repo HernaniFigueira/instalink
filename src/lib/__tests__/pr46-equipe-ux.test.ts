@@ -298,6 +298,47 @@ describe('PR46 · Equipe — rotas reais (person.save / team GET / catalog)', ()
     expect(rulesForProfessional(pro, db.availability)).toEqual([]);
   });
 
+  it('CRIAÇÃO direta: novo Professional + dispMode=own → followBusinessHours=false, zero Availability própria, persiste', async () => {
+    const created = await createPerson({ name: 'Dr Own Direto', hasAccess: false, email: '', dispMode: 'own' }); // sem passar por follow
+    const reloaded = await readDB(); // releitura do banco (persistência)
+    const pro = reloaded.professionals.find((p) => p.id === created.professionalId)!;
+    expect(pro.followBusinessHours).toBe(false);
+    expect(followsBusinessHours(pro, reloaded.availability)).toBe(false);
+    expect(reloaded.availability.filter((a) => a.professionalId === pro.id)).toHaveLength(0);
+    expect(hasOwnRules(pro.id, reloaded.availability)).toBe(false);
+    expect(rulesForProfessional(pro, reloaded.availability)).toEqual([]); // sem slots próprios, nada copiado
+    // a clínica continua com suas regras intactas (nenhuma regra criada automaticamente)
+    expect(reloaded.availability.every((a) => !!a.professionalId === false || a.professionalId !== pro.id)).toBe(true);
+    // GET do catálogo/Equipe enxerga o mesmo estado (UI: aviso + Configurar horários)
+    const team = await (await teamGET(getTeam(ownerToken))).json() as any;
+    expect(team.professionals.some((p: any) => p.id === pro.id)).toBe(true);
+  });
+
+  it('CRIAÇÃO direta: novo Professional + dispMode=follow → followBusinessHours=true (e sem dispMode herda a clínica)', async () => {
+    const f = await createPerson({ name: 'Dr Follow Direto', hasAccess: false, email: '', dispMode: 'follow' });
+    const g = await createPerson({ name: 'Dr Sem Modo', hasAccess: false, email: '' });
+    const db = await readDB();
+    expect(db.professionals.find((p) => p.id === f.professionalId)!.followBusinessHours).toBe(true);
+    expect(db.professionals.find((p) => p.id === g.professionalId)!.followBusinessHours).toBe(true);
+  });
+
+  it('CRIAÇÃO own → configurar horário → seguir → próprio: regras preservadas', async () => {
+    const created = await createPerson({ name: 'Dr Ciclo', hasAccess: false, email: '', dispMode: 'own' });
+    const proId = created.professionalId as string;
+    let res = await catalog({ action: 'professional.hours', id: proId, follow: false, rules: [{ weekday: 2, start: '08:00', end: '12:00', slotMin: 30 }] }, ownerToken);
+    expect(res.status).toBe(200);
+    const upd = (dispMode: 'follow' | 'own') => team({ action: 'person.save', mode: 'update', hasAccess: false, hasClinical: true, name: 'Dr Ciclo', email: '', existingProfessionalId: proId, funcao: 'Veterinário', crmvUf: 'SP', crmvNumero: '12345', serviceIds: [], pendingServices: [], dispMode }, ownerToken);
+    expect((await upd('follow')).status).toBe(200);
+    let db = await readDB();
+    expect(db.professionals.find((p) => p.id === proId)!.followBusinessHours).toBe(true);
+    expect(db.availability.filter((a) => a.professionalId === proId)).toHaveLength(1);
+    expect((await upd('own')).status).toBe(200);
+    db = await readDB();
+    const pro = db.professionals.find((p) => p.id === proId)!;
+    expect(pro.followBusinessHours).toBe(false);
+    expect(rulesForProfessional(pro, db.availability)).toHaveLength(1);
+  });
+
   it('Serviço sugerido: duração da biblioteca é sugestão — a clínica altera antes de criar; sem duplicar Service', async () => {
     const sug = searchVetCatalog('cardiologista')[0];
     expect(sug.name).toBe('Consulta cardiológica');

@@ -387,7 +387,9 @@ export function personSaveTx(db: DB, input: PersonSaveInput, ctx?: { user: any; 
         role: String(input.funcao || '').trim(),
         photo: String(input.photo || ''),
         active: true,
-        followBusinessHours: true,
+        // `dispMode` manda também na CRIAÇÃO: 'own' → false (sem regras próprias = sem slots
+        // próprios + aviso na UI; nada é copiado da clínica). Sem `dispMode` (API legada) → herda a clínica.
+        followBusinessHours: input.dispMode === 'own' ? false : true,
         phone: phoneDigits,
         cpf: cpfDigits,
         email: emailNorm,

@@ -34,7 +34,7 @@ import { isLegacyPagesEnabled } from '@/lib/product';
 // resolvedCategoryId
 // parseMoneyToCents(fNewSvcPrice)
 // parseMoneyToCents
-// isNewPro ? true : fDispMode
+// dispMode: fDispMode (criação e edição enviam a escolha; o servidor respeita nos dois casos)
 // cats.find(c =>
 // Quem realiza os atendimentos da clínica — fonte única Equipe
 
@@ -768,8 +768,10 @@ export default function EquipePage() {
                         <div className="grid grid-cols-1 sm:grid-cols-3 gap-1.5" role="group" aria-label="Papel de acesso">
                           {primary.map((r)=> (
                             <button type="button" key={r.id} aria-pressed={fRole === r.id} onClick={()=> requestRoleChange(r.id)} className="il-option-choice il-option-choice--compact text-left">
-                              <span className="block text-sm font-medium">{r.label}</span>
-                              <span className="block text-xs text-zinc-500">{r.hint}</span>
+                              <span className="flex flex-col items-start gap-0.5 py-1.5 text-left">
+                                <span className="block text-sm font-medium">{r.label}</span>
+                                <span className="block text-xs font-normal text-zinc-500">{r.hint}</span>
+                              </span>
                             </button>
                           ))}
                         </div>
@@ -779,8 +781,10 @@ export default function EquipePage() {
                             <div className="grid grid-cols-1 sm:grid-cols-3 gap-1.5 mt-2" role="group" aria-label="Outros papéis">
                               {other.map((r)=> (
                                 <button type="button" key={r.id} aria-pressed={fRole === r.id} onClick={()=> requestRoleChange(r.id)} className="il-option-choice il-option-choice--compact text-left">
-                                  <span className="block text-sm font-medium">{r.label}</span>
-                                  <span className="block text-xs text-zinc-500">{r.hint}</span>
+                                  <span className="flex flex-col items-start gap-0.5 py-1.5 text-left">
+                                    <span className="block text-sm font-medium">{r.label}</span>
+                                    <span className="block text-xs font-normal text-zinc-500">{r.hint}</span>
+                                  </span>
                                 </button>
                               ))}
                             </div>
