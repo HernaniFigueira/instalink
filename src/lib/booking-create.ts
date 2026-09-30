@@ -254,7 +254,7 @@ export function createBookingTx(d: DB, p: CreateBookingParams): {
       professionals: eligible.map((x) => ({ id: x.id, name: x.name })),
     }, {
       date: p.date, time: p.time, durationMin: service.durationMin,
-      professionalId: ownerPro, eligibleProIds: eligibleProfessionalIds(service as any, d.professionals.filter((x) => x.businessId === businessId)),
+      professionalId: ownerPro, eligibleProIds: slotEligibleProfessionalIds(service as any, d.professionals.filter((x) => x.businessId === businessId)),
     });
     if (conflicts.length > 0 && !p.fitInConfirmed) {
       throw Object.assign(txError(fitInWarning(conflicts), 409), { conflicts });

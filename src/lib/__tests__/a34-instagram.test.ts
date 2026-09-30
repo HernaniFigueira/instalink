@@ -58,7 +58,7 @@ import { GET as cronInstagramGET } from '@/app/api/cron/instagram/route';
 import type { Business, DB, Message } from '../types';
 import { TEMP_DB_FILE } from './helpers/temp-db';
 
-const NOW = '2026-09-19T12:00:00.000Z';
+const NOW = new Date().toISOString();
 const BIZ_A = 'biz-ig-a';
 const BIZ_B = 'biz-ig-b';
 const OWNER_A = 'owner-ig-a';
@@ -1225,7 +1225,7 @@ describe('B9 fix · TEMPO DO EVENTO — segundos, milissegundos e valores absurd
 
 describe('B9 fix · JANELA POR CONVERSA — a mensagem de A não abre (nem renova) a de B', () => {
   it('A escreveu agora e B há 2 dias: A pode responder, B não', async () => {
-    const twoDaysAgo = '2026-09-17T12:00:00.000Z';
+    const twoDaysAgo = new Date(Date.now() - 2 * 86400 * 1000).toISOString();
     await seedInstagramConversation({ conversationId: 'conv-a', participantId: 'igsid-a' });
     await seedInstagramConversation({ conversationId: 'conv-b', participantId: 'igsid-b', lastInboundAt: twoDaysAgo, inboundAt: twoDaysAgo });
     const db = await readDB();
@@ -1238,7 +1238,7 @@ describe('B9 fix · JANELA POR CONVERSA — a mensagem de A não abre (nem renov
   });
 
   it('mensagem de OUTRO participante não renova a janela desta conversa', async () => {
-    const old = '2026-09-17T12:00:00.000Z';
+    const old = new Date(Date.now() - 2 * 86400 * 1000).toISOString();
     await seedInstagramConversation({ conversationId: 'conv-b2', participantId: 'igsid-b', lastInboundAt: old, inboundAt: old });
     await seedInstagramConversation({ conversationId: 'conv-a2', participantId: 'igsid-a' });
     stubGraph();

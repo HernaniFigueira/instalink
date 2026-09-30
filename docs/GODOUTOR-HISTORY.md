@@ -1,5 +1,16 @@
 # GoDoutor — Histórico
 
+## 2026-09-30 — PR #46 Fechamento de Bloqueadores P0 (P0.1, P0.2, P0.3)
+
+> Fechamento dos bloqueadores P0 na branch `arena/01a0eda6-instalink` para homologação final da PR #46.
+
+### Fechamentos de Segurança e Slots P0:
+- **P0.1 (`slotEligibleProfessionalIds`):** Correção de todos os chamadores para passarem a lista completa de profissionais do tenant (`db.professionals.filter(p => p.businessId === businessId)`), sem pré-filtrar por `active !== false`. A helper `slotEligibleProfessionalIds` encapsula a distinção de semântica: `undefined` (legado solo real), `[]` (zero elegíveis), e `[ids]` (elegíveis ativos).
+- **P0.2 (Privilege Escalation em `person.save`):** Validação atômica e server-side em `personSaveTx` e `validatePersonInput` via `validatePrivilegeEscalation`. Para qualquer ator não-OWNER, o conjunto de permissões efetivas do alvo (`permissionsFor(role, overrides)`) é validado contra o conjunto de permissões do próprio ator. Bloqueia autoescalada e atribuição de capacidades ausentes no perfil do ator com HTTP 403 e zero mutação parcial.
+- **P0.3 (Segurança Tenant-Safe em `deriveIsTargetOwner`):** Remoção completa da heurística insegura por e-mail enviada pelo cliente. Validação exclusiva por IDs e vínculos reais salvos no DB (`existingUserId === ownerId`, `member.userId === ownerId && member.businessId === input.businessId`, `professional.userId === ownerId && professional.businessId === input.businessId`).
+
+---
+
 ## 2026-09-29 — PR #46 Homologação Clinical UX Closure (0410e49 → próximo) de Implementação
 
 > Documento de histórico — detalhes de fases concluídas movidos do Master Plan para manter o Master como fonte de estado atual.

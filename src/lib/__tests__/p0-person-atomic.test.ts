@@ -359,8 +359,8 @@ describe('P0 person orchestration atômica', () => {
       isOwner: true, // spoof
       name: 'Alvo Spoof', email: 'alvo@biz.com', hasAccess: true, hasClinical: false, role: 'OWNER',
     }, adminToken));
-    // deve falhar, não transformar em OWNER
-    expect(res.status).toBe(400);
+    // deve falhar com 400 ou 403, não transformar em OWNER
+    expect([400, 403]).toContain(res.status);
     const db = await readDB();
     const mem = db.members.find(m => m.id === memberId)!;
     expect(mem.role).not.toBe('OWNER');

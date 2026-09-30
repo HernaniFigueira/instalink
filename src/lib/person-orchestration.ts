@@ -6,10 +6,10 @@ import { hashPassword } from './auth';
 import { isValidCpf, BRAZILIAN_STATES } from './contact-profile';
 import { onlyDigits, clampCents, parseMoneyToCents } from './utils';
 import { serviceProfessionalMode } from './booking';
-import { isValidRole, isValidPermission } from './permissions';
+import { isValidRole, isValidPermission, permissionsFor, PERMISSION_IDS } from './permissions';
 import { pushAudit } from './audit';
 import { followsBusinessHours } from './schedule';
-import type { DB } from './types';
+import type { DB, MemberRole, PermissionId } from './types';
 
 function normPhone(v: any): string {
   return String(v || '').replace(/\D/g, '').slice(0, 13);
@@ -104,45 +104,106 @@ export interface PersonSaveInput {
   }>;
 }
 
-function getMembers(db: any) { return (db.businessMembers || db.members || db.businessMembers === undefined && db.members === undefined ? [] : (db.businessMembers || db.members)) as any[]; }
-// helper robusto: retorna array real que existe no DB (para push)
+function getMembers(db: any) { return (Array.isArray(db.members) ? db.members : Array.isArray(db.businessMembers) ? db.businessMembers : []) as any[]; }
 function getMembersArray(db: any) {
-  if (Array.isArray((db as any).businessMembers)) return (db as any).businessMembers;
   if (Array.isArray((db as any).members)) return (db as any).members;
-  // fallback: cria businessMembers se nenhum existir (para testes)
-  (db as any).businessMembers = [];
-  return (db as any).businessMembers;
+  if (Array.isArray((db as any).businessMembers)) return (db as any).businessMembers;
+  (db as any).members = [];
+  return (db as any).members;
 }
 function getServices(db: any) { return (db.services || []) as any[]; }
 
 // Deriva se o ALVO é Owner a partir do DB, nunca do cliente
-function deriveIsTargetOwner(db: DB, input: PersonSaveInput): boolean {
+// Vínculos persistidos e tenant-safe — sem heurística de email
+export function deriveIsTargetOwner(db: DB, input: PersonSaveInput): boolean {
   const business = (db as any).businesses?.find((b: any) => b.id === input.businessId) || (db as any).business;
   const ownerId = business?.ownerId || '';
   if (!ownerId) return false;
-  // verifica por existingUserId
+  // 1. por existingUserId — совпада de ID do usuário do Owner
   if (input.existingUserId && input.existingUserId === ownerId) return true;
-  // por Member
+  // 2. por Member: ID correto + businessId correto + userId === ownerId
   if (input.existingMemberId) {
-    const m = getMembers(db).find((x: any) => x.id === input.existingMemberId);
+    const m = getMembers(db).find((x: any) => x.id === input.existingMemberId && x.businessId === input.businessId);
     if (m && m.userId === ownerId) return true;
-    if (m && m.role === 'OWNER') return true;
   }
-  // por Professional
+  // 3. por Professional: ID correto + businessId correto + userId === ownerId
   if (input.existingProfessionalId) {
-    const p = (db.professionals || []).find((x: any) => x.id === input.existingProfessionalId);
+    const p = (db.professionals || []).find((x: any) => x.id === input.existingProfessionalId && x.businessId === input.businessId);
     if (p && (p as any).userId === ownerId) return true;
   }
-  // se input traz email que é do owner, também considera? Para update com email do owner
-  if (input.email) {
-    const em = normEmail(input.email);
-    const ownerUser = (db.users || []).find((u: any) => u.id === ownerId);
-    if (ownerUser && ownerUser.email.toLowerCase() === em) return true;
-  }
+  // REMOVIDO: reconhecer Owner por email do input (não é prova de identidade e vulnerável)
   return false;
 }
 
-export function validatePersonInput(input: PersonSaveInput, db: DB) {
+export function validatePrivilegeEscalation(
+  input: PersonSaveInput,
+  db: DB,
+  ctx?: any,
+) {
+  if (!ctx || !input.hasAccess) return;
+
+  const business = (db as any).businesses?.find((b: any) => b.id === input.businessId) || (db as any).business;
+  const ownerId = business?.ownerId || '';
+  const isActorOwner = ctx.isOwner === true || ctx.user?.id === ownerId || ctx.role === 'OWNER' || ctx.role === 'MASTER';
+  if (isActorOwner) return;
+
+  // Descobrir permissões efetivas do ATOR
+  let actorPermissions: Record<PermissionId, boolean> = ctx.permissions;
+  if (ctx.user?.id) {
+    const actorMember = getMembers(db).find((m: any) => m.userId === ctx.user.id && m.businessId === input.businessId);
+    if (actorMember) {
+      actorPermissions = permissionsFor(actorMember.role, actorMember.permissions);
+    }
+  }
+
+  if (!actorPermissions) {
+    actorPermissions = permissionsFor((ctx.role as MemberRole) || 'VIEWER');
+  }
+
+  // Determinar papel e overrides do ALVO
+  let targetRole: MemberRole = 'ATENDENTE';
+  let targetOverrides: Partial<Record<PermissionId, boolean>> = {};
+
+  if (input.existingMemberId) {
+    const existingMember = getMembers(db).find((m: any) => m.id === input.existingMemberId && m.businessId === input.businessId);
+    if (existingMember) {
+      targetRole = existingMember.role;
+      if (existingMember.permissions) {
+        targetOverrides = { ...existingMember.permissions };
+      }
+    }
+  }
+
+  if (input.role) {
+    const roleUp = String(input.role).toUpperCase();
+    if (isValidRole(roleUp)) {
+      targetRole = roleUp as MemberRole;
+    }
+  }
+
+  if (input.permissionOverrides !== undefined && input.permissionOverrides !== null) {
+    const sanitized: Partial<Record<PermissionId, boolean>> = {};
+    for (const [k, v] of Object.entries(input.permissionOverrides as Record<string, any>)) {
+      if (isValidPermission(k) && typeof v === 'boolean') {
+        sanitized[k as PermissionId] = v;
+      }
+    }
+    targetOverrides = sanitized;
+  }
+
+  const targetEffective = permissionsFor(targetRole, targetOverrides);
+
+  for (const permId of PERMISSION_IDS) {
+    if (targetEffective[permId] === true && actorPermissions?.[permId] !== true) {
+      throw Object.assign(
+        new Error(`Sem permissão para conceder permissões que você não possui.`),
+        { status: 403 },
+      );
+    }
+  }
+}
+
+export function validatePersonInput(input: PersonSaveInput, db: DB, ctx?: any) {
   // nome obrigatório sempre
   if (!normName(input.name)) throw Object.assign(new Error('Informe o NOME.'), { status: 400 });
   const phoneDigits = normPhone(input.phone);
@@ -152,6 +213,7 @@ export function validatePersonInput(input: PersonSaveInput, db: DB) {
   const emailNorm = input.email ? normEmail(input.email) : '';
   const isTargetOwner = deriveIsTargetOwner(db, input);
   if (input.hasAccess) {
+    validatePrivilegeEscalation(input, db, ctx);
     if (!emailNorm || !emailNorm.includes('@')) throw Object.assign(new Error('Informe um E-MAIL válido para o acesso.'), { status: 400 });
     if (input.mode === 'create') {
       const existingUser = db.users.find((u) => u.email.toLowerCase() === emailNorm.toLowerCase());
@@ -241,7 +303,7 @@ export function validatePersonInput(input: PersonSaveInput, db: DB) {
 
 export function personSaveTx(db: DB, input: PersonSaveInput, ctx?: { user: any; role: string; isOwner: boolean; support?: any; permissions?: any; business?: any }): { professionalId?: string; memberId?: string; userId?: string } {
   // Validação já feita antes, mas reforça dentro da transação com DB fresco
-  validatePersonInput(input, db);
+  validatePersonInput(input, db, ctx);
 
   const now = new Date().toISOString();
   const businessId = input.businessId;

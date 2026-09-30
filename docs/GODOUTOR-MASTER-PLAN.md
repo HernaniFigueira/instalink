@@ -1,6 +1,6 @@
 # GoDoutor — Master Plan, Roadmap e Handoff
 
-> Snapshot: 2026-09-29
+> Snapshot: 2026-09-30
 > Repositório: HernaniFigueira/instalink
 > Produto: GoDoutor / Clinical OS
 > Vertical inicial: clínica veterinária
@@ -27,17 +27,19 @@ Não recomeçar o produto do zero. Não criar novo repositório por impulso. Nã
 ## 1. Estado atual
 
 **Implementação atual:**
-Clinical Architecture Closure — PR #46
+Clinical Architecture Closure & PR #46 P0 Blockers Fixes
 Branch: `arena/01a0eda6-instalink` · PR #46 — validar estado real no Git (`git log --oneline -5`, `gh pr view 46`)
 
 **Status:**
-CONCLUÍDA EM CÓDIGO / AGUARDANDO HOMOLOGAÇÃO E MERGE
+CONCLUÍDA EM CÓDIGO / AGUARDANDO MERGE
 
-**O que já está em código (B3 + Modelo Operacional — PR #46 final):**
-- Equipe: painel único **ADICIONAR PESSOA** (sem chooser) com seções **IDENTIFICAÇÃO** (NOME*, FOTO, E-MAIL, TELEFONE, CPF com máscaras `maskPhoneBR/maskCpf` e normalização `onlyDigits`) e **DADOS ADICIONAIS** minimizados; toggles **Tem acesso / Realiza atendimentos** (combinações livres); quando ACESSO expande **E-MAIL/PAPEL/PERMISSÕES + senha** (eye/autocomplete, hash `hashPassword`, nunca logada/retornada); quando ATENDIMENTO expande **FUNÇÃO/ESPECIALIDADE + REGISTRO CRMV default + UF + NÚMERO** (`CRMV-RJ nº 12345`, `BRAZILIAN_STATES`, CPF≠CRMV, não obriga para não-vet), **SERVIÇOS QUE REALIZA** searchable multiselect de `Service` reais + `+ Criar '<nome>'` inline (NOME*, GRUPO, DURAÇÃO, PREÇO opcional) já vinculado sem duplicar, **DISPONIBILIDADE** radio **Seguir clínica / Usar próprio** + CTA deep-link `/disponibilidade?b=&professionalId=`
-- Lista **Pessoas da clínica** com AÇÕES apenas **GERENCIAR** (mesmo drawer condicional) e **AGENDA** como texto clicável → `/disponibilidade?b=&professionalId=`; distinção **FUNÇÃO ≠ PAPEL** preservada
-- Serviços: **Categoria→Grupo** (UI apenas, sem migration), grupo opcional, **Ativo vs Pode ser agendado** com helper; `ServiceForm` com biblioteca sugestiva `src/lib/vet-service-catalog.ts` (ezyVet Booking Groups/CFMV 1475/2022) — preenche Nome/Grupo/Duração sem auto-criar; `TeamEditor`/`ServiceForm` com `WORKSPACE_SHEET_SIZES.clinical` (40-50% token, não hardcode 50vw)
-- Máscaras brasileiras testáveis `src/lib/masks.ts` (CPF/CNPJ/CEP/telefone/UF/CRMV, `maskCpf/maskCnpj/maskCep/maskPhoneBR/maskUf/formatCrmvDisplay/parseCrmvDisplay/isValidCnpj` etc., reuso `field-quality`/`contact-profile`)
+**O que já está em código (B3 + Modelo Operacional + P0.1/P0.2/P0.3 Fixes — PR #46):**
+- **P0.1 (Slots & Elegibilidade):** Todos os chamadores de `slotEligibleProfessionalIds` passam a equipe completa do tenant (`db.professionals.filter(p => p.businessId === businessId)`), sem pre-filtrar `active !== false`. A função helper encapsula a autoridade de elegibilidade e distingue corretamente `undefined` (legado solo real), `[]` (zero elegíveis), `[ids]` (elegíveis ativos).
+- **P0.2 (Proteção contra Privilege Escalation em `person.save`):** Validação server-side e atômica do conjunto de permissões efetivas do alvo (`permissionsFor(role, overrides)`) contra as permissões do ator. Atores não-OWNER são impedidos de atribuir capabilities ausentes do seu perfil ou de promover a papéis superiores (retorna 403 com zero escrita parcial no banco).
+- **P0.3 (Segurança Tenant-Safe em `deriveIsTargetOwner`):** Validação estrita por IDs e vínculos reais (`existingUserId === ownerId`, `member.userId === ownerId && member.businessId === input.businessId`, `professional.userId === ownerId && professional.businessId === input.businessId`). Heurística insegura por e-mail do cliente foi removida e vínculos cross-tenant são bloqueados.
+- **Equipe:** painel único **ADICIONAR PESSOA** com toggles **Tem acesso / Realiza atendimentos** (combinações livres); quando ACESSO expande **E-MAIL/PAPEL/PERMISSÕES + senha**; quando ATENDIMENTO expande **FUNÇÃO/ESPECIALIDADE + REGISTRO CRMV + UF + NÚMERO**, **SERVIÇOS QUE REALIZA** com criação inline de serviço, **DISPONIBILIDADE** radio **Seguir clínica / Usar próprio** + CTA deep-link.
+- **Serviços & Estrutura:** Categoria→Grupo, Ativo vs Pode ser agendado, `ServiceForm` com catálogo vet.
+- **Validação:** `npm run typecheck` 0 erros, `npm run build` OK, `npx vitest run` 198/198 arquivos passando (2719 testes), `git diff --check` 0 erros.
 - Produtos: fora da navegação Clinical OS quando `GODOUTOR_LEGACY_PAGES` OFF (guard em `WorkspaceNavigation.visible`, rota/API/dados preservados)
 - Disponibilidade preservada como domínio separado QUEM × QUANDO (copy clínica)
 - Configurações com DTO seguro `GET /api/businesses/[id]` (`BUSINESS_CONFIG_DTO_FIELDS`, nunca segredos)

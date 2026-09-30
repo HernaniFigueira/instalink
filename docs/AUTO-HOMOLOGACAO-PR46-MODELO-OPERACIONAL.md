@@ -104,6 +104,9 @@
 14. Biblioteca `vet-service-catalog.ts` pesquisável, não auto-cria ✅
 15. Máscaras `masks.ts` reutilizáveis/testáveis ✅
 16. Produtos fora Clinical OS quando flag OFF, deep link preservado ✅
+17. P0.1 Fix: `slotEligibleProfessionalIds` recebe todos os profissionais do tenant sem filtro prévio ✅
+18. P0.2 Fix: Proteção contra Privilege Escalation em `person.save` (validação de capacidades com 403 e 0 escrita parcial) ✅
+19. P0.3 Fix: `deriveIsTargetOwner` tenant-safe por IDs reais e sem e-mail do cliente ✅
 - Sem nova PR, sem merge, sem Workflow/Agenda2.0/F1 ✅
 
 ---
@@ -111,9 +114,8 @@
 ## Comandos
 
 ```bash
-npm ci
-npm run build   # ✓ Compiled successfully
-npm test        # 2627 passed / 4 failed (pre-existentes em main)
-git diff --check # 0
-git push origin arena/01a0eda6-instalink
+npm run typecheck # ✓ 0 erros
+npm run build     # ✓ Compiled successfully
+npx vitest run    # ✓ 198 test files passed / 2719 tests passed
+git diff --check  # ✓ 0
 ```

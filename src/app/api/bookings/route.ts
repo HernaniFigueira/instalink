@@ -108,8 +108,8 @@ export async function GET(req: NextRequest) {
       return NextResponse.json({ error: 'Você só pode consultar o seu profissional.' }, { status: 403 });
     }
     const requestedProfessionalId = scope || String(q.get('professionalId') || '');
-    const activeProsForService = db.professionals.filter((p) => p.businessId === businessId && p.active !== false);
-    const eligibleProfessionalIds = eligibleIdsForService(service as any, activeProsForService);
+    const allProsForService = db.professionals.filter((p) => p.businessId === businessId);
+    const eligibleProfessionalIds = eligibleIdsForService(service as any, allProsForService);
     if (requestedProfessionalId && !eligibleProfessionalIds.includes(requestedProfessionalId)) {
       return NextResponse.json({ error: 'Profissional indisponível para este serviço.' }, { status: 400 });
     }
@@ -135,7 +135,7 @@ export async function GET(req: NextRequest) {
       // A consulta administrativa pode restringir a coluna escolhida; sem
       // filtro a resposta continua sendo a união da equipe.
       professionalId: requestedProfessionalId,
-      eligibleProIds: slotEligibleProfessionalIds(service as any, activeProsForService),
+      eligibleProIds: slotEligibleProfessionalIds(service as any, allProsForService),
       leadMin: cfg.leadMin || 0,
       bufferMin: cfg.bufferMin || 0,
     };
@@ -357,14 +357,15 @@ export async function POST(req: NextRequest) {
     // devolve a lista de conflitos e NÃO grava nada. A tela mostra com quem
     // está batendo e só então reenvia com a confirmação.
     if (body.bookingKind === 'fit_in' && body.confirmFitIn !== true) {
+      const allPros = db.professionals.filter((p) => p.businessId === business.id);
       const conflicts = fitInConflictsFromDB({
         bookings: db.bookings.filter((b) => b.businessId === business.id),
         services: db.services.filter((x) => x.businessId === business.id),
-        professionals: db.professionals.filter((p) => p.businessId === business.id && p.active !== false).map((p) => ({ id: p.id, name: p.name })),
+        professionals: allPros.filter((p) => p.active !== false).map((p) => ({ id: p.id, name: p.name })),
       }, {
         date, time, durationMin: service.durationMin,
         professionalId: (guard?.ok ? guard.ctx.professionalScope : '') || String(body.professionalId || ''),
-        eligibleProIds: eligibleIdsForService(service as any, db.professionals.filter((p) => p.businessId === business.id && p.active !== false)),
+        eligibleProIds: slotEligibleProfessionalIds(service as any, allPros),
       });
       if (conflicts.length > 0) {
         return NextResponse.json({
@@ -507,7 +508,7 @@ export async function PATCH(req: NextRequest) {
           dateISO: date, weekday: weekdayOf(date),
           serviceId: freshService.id, durationMin: freshService.durationMin,
           professionalId: proId,
-          eligibleProIds: eligibleIdsForService(freshService as any, d.professionals.filter((p) => p.businessId === business.id)),
+          eligibleProIds: slotEligibleProfessionalIds(freshService as any, d.professionals.filter((p) => p.businessId === business.id)),
           nowHM: date === freshToday ? nowHM(new Date(), freshTz) : '',
           leadMin: freshBusiness.booking?.leadMin || 0,
           bufferMin: freshBusiness.booking?.bufferMin || 0,

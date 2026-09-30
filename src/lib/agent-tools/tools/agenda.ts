@@ -229,7 +229,7 @@ export const rescheduleBooking: ToolDef<{ bookingId: string; date: string; time:
       serviceId: target.serviceId,
       durationMin: service?.durationMin || 30,
       professionalId: target.professionalId || '',
-      eligibleProIds: service ? eligibleProfessionalIds(service as any, professionals as any) : [],
+      eligibleProIds: service ? slotEligibleProfessionalIds(service as any, professionals as any) : [],
       nowHM: '',
       leadMin: 0,
       bufferMin: business.booking?.bufferMin || 0,

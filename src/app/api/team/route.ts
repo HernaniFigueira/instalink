@@ -116,7 +116,7 @@ export async function POST(req: NextRequest) {
       // Pré-validação (fora da transação) para feedback rápido, mas a transação revalida com DB fresco
       const db0 = await readDB();
       try {
-        validatePersonInput(input, db0);
+        validatePersonInput(input, db0, ctx);
       } catch (e: any) {
         const status = e?.status || 400;
         return NextResponse.json({ error: e.message || 'Dados inválidos.' }, { status });

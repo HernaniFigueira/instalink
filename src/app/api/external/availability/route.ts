@@ -49,7 +49,7 @@ export async function GET(req: NextRequest) {
     serviceId: service.id,
     durationMin: service.durationMin,
     professionalId,
-    eligibleProIds: slotEligibleProfessionalIds(service as any, db.professionals.filter((p) => p.businessId === business.id && p.active !== false)),
+    eligibleProIds: slotEligibleProfessionalIds(service as any, db.professionals.filter((p) => p.businessId === business.id)),
     nowHM: date === today ? nowHM(new Date(), btz) : '',
     leadMin: business.booking?.leadMin || 0,
     bufferMin: business.booking?.bufferMin || 0,

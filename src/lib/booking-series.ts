@@ -2,7 +2,7 @@ import { createHash, randomUUID } from 'node:crypto';
 import type { DB, Booking } from './types';
 import { computeSlots, type SlotQuery } from './slots';
 import { createBookingTx, txError, type CreateBookingParams } from './booking-create';
-import { eligibleProfessionalIds, professionalServesService } from './booking';
+import { slotEligibleProfessionalIds, professionalServesService } from './booking';
 import { bookingMaxDate } from './booking-ops';
 import { MAX_SERIES_OCCURRENCES, type BookingOccurrence } from './booking-recurrence';
 import { effectiveTimezone, todayISO, nowHM, weekdayOf, isValidDateISO, isValidClockTime } from './tz';
@@ -48,7 +48,7 @@ export function previewSeries(d: DB, p: CreateBookingParams, input: unknown, sco
       exceptions: d.exceptions.filter((x) => x.businessId === business.id),
       bookings, services: d.services.filter((x) => x.businessId === business.id), professionals,
       dateISO: date, weekday: weekdayOf(date), serviceId: service.id, durationMin: service.durationMin,
-      professionalId, eligibleProIds: eligibleProfessionalIds(service as any, professionals),
+      professionalId, eligibleProIds: slotEligibleProfessionalIds(service as any, professionals),
       nowHM: date === today ? nowHM(new Date(), tz) : '',
       leadMin: business.booking.leadMin || 0, bufferMin: business.booking.bufferMin || 0,
     };

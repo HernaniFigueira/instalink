@@ -333,13 +333,17 @@ Header `Regras de reserva` mantido (teste `panel.test.ts:596`), descrição torn
 - **Preservado:** `/api/pages` compat, `Service.image/showPrice/featured` DB, `Product` legado, `Business` page fields, rotas públicas, `Professional`/`BusinessMember` distintos, `availability` herança
 - **Deferido:** criação atômica única pessoa+profissional+acesso (Workflow), Agenda Temporal 2.0 (drag, start/end, bloqueios, recursos sala), EventLog→Pendência→Strip (planejado), Estoque/Farmácia, Prescrição/Exames
 
-## Testes B3 (final validados)
+## Fechamento de Bloqueadores P0 (PR #46 Fixes — 2026-09-30)
 
-- `src/lib/__tests__/business-config-dto.test.ts` — 3 passed (whitelist, segredos nunca expostos, handler usa DTO)
-- `src/lib/__tests__/equipe-unified.test.ts` — 7 passed (owner sem pro, owner+pro mesma linha, member+pro, solo, admin, cenário completo + arquivo usa buildUnified/hideTrigger)
-- `src/lib/__tests__/godoutor-clinical-convergence.test.ts` — 17 passed
-- `panel + visual-convergence + a34-nav` — 122 passed
-- `npx vitest run` — 2623 passed / 5 failed (baseline: `a34-instagram` 3, `automation-audit-p4` 1, `pipeline` 1 — 11 novos testes B3 inclusos, total 2628)
+- **P0.1 (`slotEligibleProfessionalIds`):** Unificação da passagem da equipe inteira do tenant (`db.professionals.filter(p => p.businessId === businessId)`) em todos os 11 pontos de chamada do sistema. A helper `slotEligibleProfessionalIds` assume autoridade total de elegibilidade sem pré-filtragem por `active !== false`.
+- **P0.2 (Privilege Escalation Protection):** `validatePrivilegeEscalation` integrado no pipeline de pré-validação (`validatePersonInput`) e transacional (`personSaveTx`). Garante que nenhum ator não-OWNER possa atribuir papéis ou overrides com permissões efetivas superiores ao seu próprio perfil, retornando 403 sem mutações parciais.
+- **P0.3 (`deriveIsTargetOwner` Tenant Safety):** Remoção de heurística de e-mail e validação por IDs reais no banco de dados (`existingUserId === ownerId`, `member.userId === ownerId && member.businessId === input.businessId`, `professional.userId === ownerId && professional.businessId === input.businessId`).
+
+## Testes PR #46 P0 (finais validados)
+
+- `src/lib/__tests__/pr46-p0-fixes.test.ts` — 13 passed (unit + integration cobrindo P0.1, P0.2 e P0.3)
+- Suite completa `npx vitest run` — 198 test files passed / 2719 tests passed (0 falhas)
 - `npx tsc --noEmit` — 0 erros
 - `npm run build` — OK
 - `git diff --check` — 0
+

@@ -113,7 +113,7 @@ export async function PATCH(req: NextRequest) {
           dateISO: date, weekday: weekdayOf(date),
           serviceId: service.id, durationMin: service.durationMin,
           professionalId: '',
-          eligibleProIds: slotEligibleProfessionalIds(service as any, d.professionals.filter((p) => p.businessId === business.id && p.active !== false)),
+          eligibleProIds: slotEligibleProfessionalIds(service as any, d.professionals.filter((p) => p.businessId === business.id)),
           nowHM: date === today ? nowHM(new Date(), btz) : '',
           leadMin: cfg?.leadMin || 0,
           bufferMin: cfg?.bufferMin || 0,

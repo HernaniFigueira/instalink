@@ -579,6 +579,7 @@ export interface DrainOptions {
   /** Filtro por unidade (a API "testar/rodar agora" usa). */
   businessId?: string;
   nowISO?: string;
+  now?: string;
   limit?: number;
   budgetMs?: number;
   holder?: string;
@@ -591,7 +592,7 @@ export interface DrainOptions {
  */
 export async function drainAutomations(options: DrainOptions = {}): Promise<AutomationDrainSummary> {
   const started = Date.now();
-  const nowISO = options.nowISO || new Date().toISOString();
+  const nowISO = options.nowISO || (options as any).now || new Date().toISOString();
   const holder = options.holder || `auto_${randomUUID().slice(0, 12)}`;
   const limit = options.limit ?? envPositiveInt('AUTOMATION_BATCH_SIZE', AUTOMATION_BATCH_SIZE);
   const budgetMs = options.budgetMs ?? envPositiveInt('AUTOMATION_BUDGET_MS', AUTOMATION_BUDGET_MS);

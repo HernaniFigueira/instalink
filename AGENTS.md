@@ -30,14 +30,13 @@ Antes de propor ou implementar mudanças relevantes, leia:
 - Quando a missão permitir execução local, não limitar validação a typecheck + testes + leitura estática. Antes de concluir uma feature relevante, executar auto-homologação funcional local sempre que tecnicamente possível: subir aplicação local, criar/reutilizar tenant descartável, criar contas/personas de teste, fazer login real, navegar pelos fluxos alterados, testar happy path + erros previsíveis, observar console/network quando necessário, usar browser/render real quando disponível, nunca declarar homologação visual sem renderização real, nunca usar produção ou dados reais para testes destrutivos. Para missões envolvendo permissões: testar com múltiplos papéis reais. Para missões envolvendo UX: validar desktop/tablet prioritários. Não substituir testes automatizados; complementar.
 - Ao concluir uma fase relevante, atualize GODOUTOR-MASTER-PLAN.md para manter CONCLUÍDO / EM ANDAMENTO / PRÓXIMO / DEFERIDO coerentes e mova detalhes para GODOUTOR-HISTORY.md.
 
-## Estado atual (2026-09-29)
+## Estado atual (2026-09-30)
 
-**Clinical Convergence / Clinical Architecture Closure implementada na PR #46 — `arena/01a0eda6-instalink` · CONCLUÍDA EM CÓDIGO / AGUARDANDO HOMOLOGAÇÃO E MERGE.**
+**Clinical Convergence / PR #46 P0 Fixes (`arena/01a0eda6-instalink`) — CONCLUÍDAS EM CÓDIGO / AGUARDANDO MERGE.**
 
-- Equipe unificada (lista única sem duplicação owner, porta única `+ Adicionar pessoa`)
-- Disponibilidade separada QUEM × QUANDO (copy clínica)
-- Configurações com DTO seguro `GET /api/businesses/[id]` (nunca segredos)
-- Agenda classificada, Estrutura hub — ver Master Plan §1 e `docs/GODOUTOR-HISTORY.md`.
+- **P0.1 (Slots & Elegibilidade):** Todos os chamadores de `slotEligibleProfessionalIds` passam a equipe completa do tenant (`db.professionals.filter(p => p.businessId === businessId)`), deixando a filtragem de profissionais inativos/elegíveis para autoridade interna da função helper. Corrigidos fluxos em `agent-flow.ts`, `api/bookings`, `api/customer/bookings`, `agent-tools/tools/agenda.ts`, `api/external/availability`, `agenda/page.tsx`, `booking-create.ts` e `booking-series.ts`.
+- **P0.2 (Privilege Escalation Protection):** `person.save` valida server-side e de forma atômica o conjunto de permissões efetivas do alvo (`permissionsFor(role, overrides)`) contra as permissões do ator. Ator não-OWNER é impedido de atribuir capacidades que ele próprio não possui ou de promover a si mesmo/outros a papéis com capacidades superiores (retorna 403 sem mutação parcial).
+- **P0.3 (deriveIsTargetOwner Tenant Safety):** `deriveIsTargetOwner` valida exclusivamente vínculos de ID reais (`existingUserId === ownerId`, `member.userId === ownerId && member.businessId === input.businessId`, `professional.userId === ownerId && professional.businessId === input.businessId`), eliminando a heurística insegura por e-mail do cliente e impedindo privilégios de OWNER via cross-tenant.
 
 ## Próximas missões de código após #46
 
