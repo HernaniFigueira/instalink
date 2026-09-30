@@ -85,6 +85,7 @@ export default function EquipePage() {
   const [fSuggestedGroupName, setFSuggestedGroupName] = useState('');
   const [fNewSvcDur, setFNewSvcDur] = useState(45);
   const [fNewSvcPrice, setFNewSvcPrice] = useState('');
+  const [fPendingServices, setFPendingServices] = useState<Array<{tempId:string, name:string, groupId?:string, suggestedGroupName?:string, durationMin:number, price:string}>>([]);
   const [fDispMode, setFDispMode] = useState<'follow'|'own'>('follow');
   const [fShowMore, setFShowMore] = useState(false);
   const [fSaving, setFSaving] = useState(false);
@@ -122,6 +123,7 @@ export default function EquipePage() {
     setFSuggestedGroupName('');
     setFNewSvcDur(45);
     setFNewSvcPrice('');
+    setFPendingServices([]);
     setFDispMode('follow');
     setFShowMore(false);
     setFError('');
@@ -199,106 +201,45 @@ export default function EquipePage() {
     }
     if (fHasAccess && !fEmail.includes('@')) { setFError('Informe um E-MAIL válido para o acesso.'); return; }
     if (fHasAccess && fPassword && fPassword.length > 0 && fPassword.length < 6) { setFError('A senha precisa ter ao menos 6 caracteres.'); return; }
-    if (fHasClinical && !fFuncao.trim() && fConselho === 'CRMV') {
-      // Função não obrigatória, mas hint para veterinário
-    }
     setFSaving(true);
     try {
-      let professionalId = editEntry?.professional?.id || '';
-      // 1) Profissional
-      if (fHasClinical) {
-        const isNewPro = !professionalId;
-        const payload: Record<string, any> = {
-          name: fName.trim(),
-          role: fFuncao.trim(),
-          photo: fPhoto,
-          active: true,
-          followBusinessHours: isNewPro ? true : fDispMode === 'follow',
-          phone: phoneDigits,
-          cpf: cpfDigits,
-          email: fEmail.trim().toLowerCase(),
-          conselho: fConselho,
-          crmvUf: fUf,
-          crmvNumero: fCrmvNum,
-          serviceIds: fServiceIds,
-          serviceSelectionExplicit: isNewPro ? fServiceSelectionTouched : true,
-        };
-        if (professionalId) payload.id = professionalId;
-        const res = await apiSend<any>('/api/catalog', 'POST', { businessId, action: 'professional.save', ...payload }, { scope: 'action', area: 'Equipe' });
-        if (!res.ok) throw new Error(res.message || 'Não foi possível salvar profissional.');
-        professionalId = res.data?.professionalId || professionalId;
-        // Sincronização de serviços é atômica no servidor via Service.professionalIds (fonte única) — não é necessário loop no cliente
-        // Disponibilidade: se modo mudou, persiste via professional.hours (opcional)
-        if (editEntry?.professional) {
-          const currentlyFollow = followsBusinessHours(editEntry.professional as Professional, rules);
-          const wantFollow = fDispMode === 'follow';
-          if (currentlyFollow !== wantFollow) {
-            await apiSend('/api/catalog','POST',{ businessId, action:'professional.hours', id: professionalId, follow: wantFollow }, { scope:'action', area:'Equipe' });
-          }
-        }
-      } else if (editEntry?.professional && !fHasClinical) {
-        // Desativar atuação clínica quando desmarcado
-        await apiSend('/api/catalog','POST',{ businessId, action:'professional.save', id: professionalId, name: fName.trim(), role: fFuncao.trim(), photo: fPhoto, active: false }, { scope:'action', area:'Equipe' });
-      }
-      // 2) Acesso — com rollback para evitar órfão e persistência de dados identificáveis
-      const isNewProfessional = !editEntry?.professional?.id && fHasClinical;
-      const newProfessionalIdForRollback = isNewProfessional ? professionalId : '';
-      if (fHasAccess) {
-        if (editEntry && (editEntry.kind === 'member' || editEntry.kind === 'owner')) {
-          // edição: atualiza papel/permissões e também dados pessoais (verdade do formulário)
-          if (editEntry.kind === 'member') {
-            const m = editEntry.member as any;
-            // Calcular overrides coerentes: apenas enviar overrides que diferem do base do novo papel
-            const base = permissionsFor(fRole as MemberRole);
-            const overrides: Record<string, boolean> = {};
-            for (const pid of Object.keys(permissionsFor('ATENDENTE'))) {
-              // Usar fPermissions como overrides crus já, mas filtrar para não enviar redundantes
-              // Na verdade fPermissions já é overrides; vamos apenas limpar redundantes antes de enviar
-            }
-            // Limpar overrides redundantes: se override === base, não enviar
-            const cleanOverrides: Record<string, boolean> = {};
-            for (const [k,v] of Object.entries(fPermissions)) {
-              if (v !== base[k as PermissionId]) cleanOverrides[k] = v as boolean;
-            }
-            const patchPayload: Record<string, any> = { businessId, id: m.id, role: fRole, permissionOverrides: cleanOverrides };
-            if (fName.trim() && fName.trim() !== m.name) patchPayload.name = fName.trim();
-            if (fEmail.trim() && fEmail.trim().toLowerCase() !== (m.email||'').toLowerCase()) patchPayload.email = fEmail.trim().toLowerCase();
-            // Permitir limpar telefone/CPF: enviar "" quando campo vazio
-            patchPayload.phone = phoneDigits; // "" limpa, digits mantém
-            patchPayload.cpf = cpfDigits; // "" limpa, digits mantém
-            const pr = await apiSend('/api/team','PATCH', patchPayload, { scope:'action', area:'Equipe' });
-            if (!pr.ok) throw new Error(pr.message || 'Não foi possível atualizar acesso.');
-            if (professionalId && m.professionalId !== professionalId) {
-              await apiSend('/api/team','PATCH',{ businessId, id: m.id, professionalId }, { scope:'action', area:'Equipe' });
-            }
-          }
-        } else {
-          // criação de acesso novo — atômica com rollback de Professional órfão
-          try {
-            // permissionOverrides: envia mapa limpo, só difere da base; para novo membro usa fPermissions já como overrides
-            const postOverrides: Record<string, boolean> = {};
-            const baseForPost = permissionsFor(fRole as MemberRole);
-            for (const [k,v] of Object.entries(fPermissions)) { if (v !== baseForPost[k as PermissionId]) postOverrides[k] = v as boolean; }
-            const res = await apiSend('/api/team','POST',{ businessId, name: fName.trim(), email: fEmail.trim().toLowerCase(), password: fPassword, role: fRole, note: '', professionalId, phone: phoneDigits, cpf: cpfDigits, permissionOverrides: postOverrides }, { scope:'action', area:'Equipe' });
-            if (!res.ok) throw new Error(res.message || 'Não foi possível criar acesso.');
-          } catch (e:any) {
-            if (newProfessionalIdForRollback) {
-              try { await apiSend('/api/catalog','POST',{ businessId, action:'professional.delete', id: newProfessionalIdForRollback }, { scope:'action', area:'Equipe' }); } catch {}
-            }
-            throw e;
-          }
-        }
-      } else if (editEntry && editEntry.kind === 'member' && !fHasAccess) {
-        // Remoção de acesso agora é explícita via botão "Remover acesso" — não há toggle silencioso
-      }
-      // Fluxo pós-save para novo professional com intenção own
+      const isUpdate = !!editEntry;
+      const payload: any = {
+        businessId,
+        action: 'person.save',
+        mode: isUpdate ? 'update' : 'create',
+        isOwner: editEntry?.kind === 'owner',
+        existingMemberId: editEntry?.kind === 'member' ? editEntry.member.id : '',
+        existingProfessionalId: editEntry?.professional?.id || '',
+        existingUserId: editEntry?.kind === 'member' ? editEntry.member.userId : editEntry?.kind === 'owner' ? (data?.owner?.userId || '') : '',
+        name: fName.trim(),
+        email: fEmail.trim().toLowerCase(),
+        phone: phoneDigits,
+        cpf: cpfDigits,
+        photo: fPhoto,
+        hasAccess: fHasAccess,
+        hasClinical: fHasClinical,
+        role: fRole,
+        permissionOverrides: fPermissions,
+        password: fPassword,
+        funcao: fFuncao.trim(),
+        conselho: fConselho,
+        crmvUf: fUf,
+        crmvNumero: fCrmvNum,
+        serviceIds: fServiceIds,
+        serviceSelectionExplicit: fServiceSelectionTouched,
+        dispMode: fDispMode,
+        pendingServices: fPendingServices,
+      };
+      const res = await apiSend('/api/team','POST', payload, { scope: 'action', area: 'Equipe' });
+      if (!res.ok) throw new Error(res.message || 'Não foi possível salvar pessoa.');
+      const professionalId = res.data?.professionalId || editEntry?.professional?.id;
       const wasNewWithOwn = !editEntry && fHasClinical && fDispMode === 'own' && professionalId;
       if (wasNewWithOwn) {
         setFSuccessProfessionalId(professionalId);
         setMsg('Pessoa adicionada.');
         setTimeout(()=>setMsg(''),3000);
         await load();
-        // Manter drawer aberto para mostrar CTA Configurar disponibilidade com ID real
         setFSaving(false);
         return;
       }
@@ -821,6 +762,17 @@ export default function EquipePage() {
                       </div>
                     )}
                   </div>
+                  {fPendingServices.length>0 && (
+                    <div className="mt-2 space-y-1">
+                      <p className="text-[11px] font-semibold text-zinc-500 uppercase">Novos serviços (pendentes — serão criados ao salvar)</p>
+                      {fPendingServices.map(ps=> (
+                        <div key={ps.tempId} className="flex items-center gap-2 px-2 py-1.5 bg-amber-50 border border-amber-200 rounded text-sm">
+                          <span className="flex-1 truncate">{ps.name} · {ps.suggestedGroupName || cats.find(c=>c.id===ps.groupId)?.name || 'Sem grupo'} · {ps.durationMin}min {ps.price?`· R$ ${ps.price}`:''}</span>
+                          <button type="button" onClick={()=> setFPendingServices(prev=> prev.filter(x=>x.tempId!==ps.tempId))} className="text-xs font-semibold text-red-600 hover:bg-red-50 px-1.5 py-0.5 rounded">Remover</button>
+                        </div>
+                      ))}
+                    </div>
+                  )}
                   {/* sugestões biblioteca vet */}
                   {fServiceQuery && (()=> {
                     const sug = searchVetCatalog(fServiceQuery).slice(0,3);
@@ -851,40 +803,13 @@ export default function EquipePage() {
                       </div>
                       <div className="flex justify-end gap-2">
                         <Button variant="ghost" size="sm" onClick={()=> setFShowServiceCreate(false)}>Cancelar</Button>
-                        <Button variant="secondary" size="sm" onClick={async()=> {
+                        <Button variant="secondary" size="sm" onClick={()=> {
                           if (!fNewSvcName.trim()) return;
-                          let catId = fNewSvcGrupo || fSuggestedGroupName;
-                          const isRealId = catId && cats.some(c=> c.id === catId);
-                          if (catId && !isRealId) {
-                            const norm = catId.toLowerCase().trim();
-                            let existing = cats.find(c=> c.name.toLowerCase().trim() === norm && c.kind==='service');
-                            if (existing) {
-                              catId = existing.id;
-                            } else {
-                              // criar categoria via API canônica — usa categoryId retornado sem GET extra (fallback legado)
-                              const cr = await apiSend<any>('/api/catalog','POST',{ businessId, action:'category.save', kind:'service', name: catId.trim() }, { scope:'action', area:'Equipe' });
-                              if (cr.ok && cr.data?.categoryId) {
-                                catId = cr.data.categoryId;
-                              } else if (cr.ok) {
-                                const catRes = await apiGet<any>(`/api/catalog/get?businessId=${businessId}`, { scope:'area', area:'Equipe' });
-                                if (catRes.ok) {
-                                  const freshCats = (catRes.data?.categories||[]).filter((c:Category)=> c.kind==='service');
-                                  setCats(freshCats);
-                                  const created = freshCats.find((c:Category)=> c.name.toLowerCase().trim() === norm);
-                                  if (created) catId = created.id;
-                                }
-                              }
-                            }
-                          }
-                          const res = await apiSend<any>('/api/catalog','POST',{ businessId, action:'service.save', name: fNewSvcName.trim(), categoryId: catId || undefined, durationMin: fNewSvcDur, price: fNewSvcPrice ? parseMoneyToCents(fNewSvcPrice) : 0, professionalMode: 'selected', professionalIds: [] }, { scope:'action', area:'Equipe' });
-                          if (res.ok) {
-                            const newId = res.data?.serviceId || res.data?.id;
-                            if (newId) { setFServiceIds(prev=> [...prev, newId]); setFServiceSelectionTouched(true); }
-                            // atualiza lista local
-                            const catRes = await apiGet<any>(`/api/catalog/get?businessId=${businessId}`, { scope:'area', area:'Equipe' });
-                            if (catRes.ok) { setServices(catRes.data?.services||[]); setCats((catRes.data?.categories||[]).filter((c:Category)=> c.kind==='service')); }
-                            setFShowServiceCreate(false); setFNewSvcName(''); setFServiceQuery(''); setFSuggestedGroupName('');
-                          }
+                          const tempId = `pending-${Date.now()}-${Math.random().toString(36).slice(2,6)}`;
+                          setFPendingServices(prev=> [...prev, { tempId, name: fNewSvcName.trim(), groupId: fNewSvcGrupo || undefined, suggestedGroupName: fSuggestedGroupName || undefined, durationMin: fNewSvcDur, price: fNewSvcPrice }]);
+                          // Pendente já conta como selecionado — marca explicit
+                          setFServiceSelectionTouched(true);
+                          setFShowServiceCreate(false); setFNewSvcName(''); setFServiceQuery(''); setFSuggestedGroupName(''); setFNewSvcGrupo('');
                         }}>Criar e vincular</Button>
                       </div>
                     </div>

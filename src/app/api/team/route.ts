@@ -78,6 +78,53 @@ export async function POST(req: NextRequest) {
     if (!guard.ok) return guard.res;
     const { ctx } = guard;
 
+    // Person orchestration atômica — "Adicionar pessoa" / "Gerenciar pessoa"
+    if (body.action === 'person.save') {
+      const { validatePersonInput, personSaveTx } = await import('@/lib/person-orchestration');
+      // Normaliza input para o domínio (reutiliza validações canônicas)
+      const input: any = {
+        businessId,
+        mode: body.mode === 'update' ? 'update' : 'create',
+        existingMemberId: body.existingMemberId || body.memberId || '',
+        existingProfessionalId: body.existingProfessionalId || body.professionalId || '',
+        existingUserId: body.existingUserId || body.userId || '',
+        isOwner: !!body.isOwner,
+        name: body.name,
+        email: body.email,
+        phone: body.phone,
+        cpf: body.cpf,
+        photo: body.photo,
+        hasAccess: !!body.hasAccess,
+        hasClinical: !!body.hasClinical,
+        role: body.role,
+        permissionOverrides: body.permissionOverrides || body.permissions,
+        password: body.password,
+        funcao: body.funcao || body.roleClinico || body.role,
+        conselho: body.conselho,
+        crmvUf: body.crmvUf,
+        crmvNumero: body.crmvNumero,
+        serviceIds: body.serviceIds,
+        serviceSelectionExplicit: !!body.serviceSelectionExplicit,
+        dispMode: body.dispMode,
+        pendingServices: Array.isArray(body.pendingServices) ? body.pendingServices : [],
+      };
+      // Pré-validação (fora da transação) para feedback rápido, mas a transação revalida com DB fresco
+      const db0 = await readDB();
+      try {
+        validatePersonInput(input, db0);
+      } catch (e: any) {
+        const status = e?.status || 400;
+        return NextResponse.json({ error: e.message || 'Dados inválidos.' }, { status });
+      }
+      try {
+        const result = await updateDB((db) => personSaveTx(db as any, input, ctx as any));
+        return NextResponse.json({ ok: true, ...result });
+      } catch (e: any) {
+        const status = e?.status || 400;
+        return NextResponse.json({ error: e.message || 'Não foi possível salvar pessoa.' }, { status });
+      }
+    }
+
     const name = String(body.name || '').trim().slice(0, 80);
     const email = String(body.email || '').trim().toLowerCase().slice(0, 160);
     const password = String(body.password || '');
