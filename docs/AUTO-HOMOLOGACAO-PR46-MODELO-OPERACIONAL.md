@@ -111,11 +111,31 @@
 
 ---
 
+## Equipe UX Closure — homologação funcional local (2026-09-30)
+
+**Ambiente:** `npm run build` + `npm run start` com banco de arquivo descartável (`INSTALINK_DB_FILE=/tmp/...`, seed `demo@instalink.app`, tenant `clinicavitta`), login real por HTTP, `DATABASE_URL` desativada. Nada de produção/dados reais. Script descartável fora do repositório.
+
+**Limite:** o ambiente NÃO tem browser (nenhum binário do Playwright/Chromium) → **nenhuma validação visual/render em 1440/1366/1024 foi feita**. Comportamento de UI coberto apenas por testes jsdom (`equipe-ux.test.tsx`, `business-hours-focus.test.tsx`). Homologação visual permanece **pendente** para o responsável.
+
+| Caso | Verificações (todas OK) |
+| --- | --- |
+| MARIA / Recepção | criada como `SECRETARIA`; sem overrides (nenhum `ajuste`); tem Agenda/Clientes/Oportunidades/WhatsApp; NÃO tem Visão geral, Pedidos, Página, Assistente, Atendimento, Catálogo, Financeiro, Equipe, Config, Admin, Campanhas; persiste após login e reabertura; `/api/team` e `/api/overview` → 403; label `Recepção` |
+| OWNER | presente na lista; tentativa de rebaixar não cria Member nem altera papel; segue com acesso total |
+| ORLANDO / Profissional | criado com serviço sugerido; seguir → próprio salva sem `Membro não encontrado`; `followBusinessHours=false` persiste; próprio sem regras fica vazio (aviso + CTA na UI); regra configurada; voltar a seguir MANTÉM as 2 regras no banco; voltar ao próprio RESTAURA as 2; escopo da agenda `own`; sem config/página/pedidos/agente/admin |
+| SERVIÇO cardiologista | `Consulta cardiológica` criada 1× com duração editada (50, não os 40 sugeridos); Orlando a realiza; reabrir/salvar não duplica; duração persiste |
+| ERRO | CPF inválido → 400 “CPF inválido.”; e-mail inválido → 400; API 404 → “Não encontramos o acesso desta pessoa…” (sem Member/User/Professional); e-mail duplicado → “Esta pessoa já faz parte da equipe.” |
+
+**Resultado: 33/33 verificações.** O foco/scroll no bloco de erro é validado em jsdom (`scrollIntoView` + `document.activeElement`), não em browser.
+
+---
+
 ## Comandos
 
 ```bash
-npm run typecheck # ✓ 0 erros
-npm run build     # ✓ Compiled successfully
-npx vitest run    # ✓ 198 test files passed / 2719 tests passed
 git diff --check  # ✓ 0
+npm run build     # ✓ Compiled successfully
+npm run typecheck # ✓ 0 erros (rodar DEPOIS do build, nunca em paralelo)
+npx vitest run    # 2751 passed / 4 failed (2755) — 199/201 arquivos
+                  # 4 falhas = baseline pré-existente, não corrigida:
+                  #   3× a34-instagram (B9) + 1× automation-audit-p4 (poda)
 ```

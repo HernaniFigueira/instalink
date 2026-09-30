@@ -44,8 +44,8 @@ const req = (body: any, token: string) => new NextRequest('http://test/api/x', {
 const getTeam = (token: string) => new NextRequest(`http://test/api/team?businessId=${BIZ}`, {
   headers: { authorization: `Bearer ${token}` } as any,
 });
-const team = (body: any, token: string) => teamPOST(req({ businessId: BIZ, ...body }, token));
-const catalog = (body: any, token: string) => catalogPOST(req({ businessId: BIZ, ...body }, token));
+const team = (body: any, token: string): Promise<Response> => teamPOST(req({ businessId: BIZ, ...body }, token));
+const catalog = (body: any, token: string): Promise<Response> => catalogPOST(req({ businessId: BIZ, ...body }, token));
 
 const BASE_PERSON = {
   action: 'person.save', hasAccess: true, hasClinical: true, password: '123456',

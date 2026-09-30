@@ -144,6 +144,30 @@ Objetivo da missão final: produto clínico profissional sem expor `Member/Profe
 
 ---
 
+## Fase B3.2 — PR #46 Equipe UX Closure + Contrato de Agenda/Serviço (2026-09-30)
+
+**`P0 ESTRUTURAL CONCLUÍDO / EQUIPE UX CLOSURE + HOMOLOGAÇÃO EM ANDAMENTO / NÃO MERGEAR` — mesma PR #46, sem novo PR, sem merge.** Branch de trabalho `arena/01a0f3d3-instalink`.
+
+### Decisões e implementação
+- **Papéis como presets:** fluxo padrão = Administrador · Recepção (`SECRETARIA`) · Profissional; Proprietário como resumo `Proprietário · acesso total` (sem editor, não rebaixável); `ATENDENTE`/`VENDEDOR`/`VIEWER` em “Outros papéis / avançado” (enums e dados preservados). Preset da Recepção = Agenda, Clientes, Oportunidades, WhatsApp (antes incluía Visão geral e Pedidos). Preset do Profissional inalterado.
+- **Overrides:** `src/lib/equipe-access.ts` (puro) — `minimalOverrides`, `overridesForOpenMember`, `applyRolePreset`, `editorPermissions`, `presetSummary`, `humanizePersonError`. Trocar papel aplica preset limpo (confirmação só com personalização real); override igual ao preset deixa de ser `ajuste`; Member legado é normalizado ao abrir (`GET /api/team` devolve overrides mínimos). `person-orchestration` normaliza overrides e zera ao trocar de papel; segurança do servidor (P0.2/P0.3) intacta.
+- **Filtro de permissões:** com `GODOUTOR_LEGACY_PAGES` OFF, Página/Pedidos saem do editor; Assistente/Admin/Configuração só em “Capacidades avançadas” dentro de `Personalizar acesso` (recolhido).
+- **Disponibilidade:** seguir ≠ apagar. `professional.hours(follow)`, `availability.applyToAll` e `person.save` preservam regras próprias; próprio sem regra → `Horário próprio ainda não configurado` + `Configurar horários` (deep link com `professionalId`); `BusinessHoursPanel` recebe `focusProfessionalId` e abre o editor só de quem usa horário próprio, com `Começar copiando o horário da clínica` (sem gravar antes de salvar). Profissional novo nasce seguindo a clínica.
+- **Erros do drawer:** bloco `role=alert` com scrollIntoView + foco, `aria-invalid` no primeiro campo inválido, `humanizePersonError` (sem Member/User/Professional/IDs).
+- **Serviços:** busca com stem (`cardiologista` → `Consulta cardiológica`); sugestão inexistente abre confirmação com `Duração sugerida · N min` editável; manual exige duração (campo vazio); sugestões já existentes na clínica não são oferecidas (sem duplicar). `ServiceForm`: “Duração padrão para novos agendamentos”.
+- **Documentação de contrato (sem código):** duração padrão × histórico do Booking, slot × duração × buffer, recursos, referências externas, spike/ADR da Agenda 2.0, requisito de escopo de dados para Workflow + Permissões — ver Master Plan §2.1–§2.5.
+
+### Testes
+- Novos: `src/lib/__tests__/pr46-equipe-ux.test.ts` (19), `src/components/__tests__/equipe-ux.test.tsx` (12, jsdom), `src/components/__tests__/business-hours-focus.test.tsx` (4, jsdom). Atualizados por mudança intencional: m8-permissoes, workspace, page-architecture, godoutor-clinical-convergence, p0-integridade-real, visual-convergence, p0-person-atomic.
+- Suite completa: 2751 passed / 4 failed (baseline pré-existente: 3 Instagram + 1 automation audit; não corrigidos).
+- Homologação funcional HTTP real: 33/33 (ver `docs/AUTO-HOMOLOGACAO-PR46-MODELO-OPERACIONAL.md`). Sem browser → sem QA visual.
+
+### Preservado / Deferido
+- **Preservado:** enums de papel, PermissionIds, APIs, dados; nenhuma migração; P0.1–P0.3 e seus testes.
+- **Deferido (fila Master Plan §2):** Workflow + Permissões (inclui escopo de dados do Profissional em Clientes/Visão geral/Atendimento), Agenda Temporal 2.0 (duração estável por Booking, override Profissional × Serviço, recursos), demais fases.
+
+---
+
 ## Audits relacionados
 - `docs/GODOUTOR-CLINICAL-CONVERGENCE-AUDIT.md` — matriz completa 57 itens + decisões B1–B6 + B3-01–B3-10 + testes previstos
 - `docs/GODOUTOR-CLINICAL-OS-V1.md` — especificação de arquitetura clínica (EventLog, DecisionEngine, GenerativeAIProvider, banco, segurança)

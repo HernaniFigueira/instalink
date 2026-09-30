@@ -27,23 +27,30 @@ Não recomeçar o produto do zero. Não criar novo repositório por impulso. Nã
 ## 1. Estado atual
 
 **Implementação atual:**
-Clinical Architecture Closure & PR #46 P0 Blockers Fixes
-Branch: `arena/01a0eda6-instalink` · PR #46 — validar estado real no Git (`git log --oneline -5`, `gh pr view 46`)
+Clinical Architecture Closure · PR #46 — P0 Blockers Fixes + **Equipe UX Closure + Contrato de Agenda/Serviço**
+Branch de trabalho: `arena/01a0f3d3-instalink` · PR #46 — validar estado real no Git (`git log --oneline -5`, `gh pr view 46`)
 
-**Status:**
-CONCLUÍDA EM CÓDIGO / AGUARDANDO MERGE
+**Status #46:**
+`P0 ESTRUTURAL CONCLUÍDO / EQUIPE UX CLOSURE + HOMOLOGAÇÃO EM ANDAMENTO / NÃO MERGEAR`
 
-**O que já está em código (B3 + Modelo Operacional + P0.1/P0.2/P0.3 Fixes — PR #46):**
-- **P0.1 (Slots & Elegibilidade):** Todos os chamadores de `slotEligibleProfessionalIds` passam a equipe completa do tenant (`db.professionals.filter(p => p.businessId === businessId)`), sem pre-filtrar `active !== false`. A função helper encapsula a autoridade de elegibilidade e distingue corretamente `undefined` (legado solo real), `[]` (zero elegíveis), `[ids]` (elegíveis ativos).
-- **P0.2 (Proteção contra Privilege Escalation em `person.save`):** Validação server-side e atômica do conjunto de permissões efetivas do alvo (`permissionsFor(role, overrides)`) contra as permissões do ator. Atores não-OWNER são impedidos de atribuir capabilities ausentes do seu perfil ou de promover a papéis superiores (retorna 403 com zero escrita parcial no banco).
-- **P0.3 (Segurança Tenant-Safe em `deriveIsTargetOwner`):** Validação estrita por IDs e vínculos reais (`existingUserId === ownerId`, `member.userId === ownerId && member.businessId === input.businessId`, `professional.userId === ownerId && professional.businessId === input.businessId`). Heurística insegura por e-mail do cliente foi removida e vínculos cross-tenant são bloqueados.
-- **Equipe:** painel único **ADICIONAR PESSOA** com toggles **Tem acesso / Realiza atendimentos** (combinações livres); quando ACESSO expande **E-MAIL/PAPEL/PERMISSÕES + senha**; quando ATENDIMENTO expande **FUNÇÃO/ESPECIALIDADE + REGISTRO CRMV + UF + NÚMERO**, **SERVIÇOS QUE REALIZA** com criação inline de serviço, **DISPONIBILIDADE** radio **Seguir clínica / Usar próprio** + CTA deep-link.
-- **Serviços & Estrutura:** Categoria→Grupo, Ativo vs Pode ser agendado, `ServiceForm` com catálogo vet.
-- **Validação:** `npm run typecheck` 0 erros, `npm run build` OK, `npx vitest run` 198/198 arquivos passando (2719 testes), `git diff --check` 0 erros.
-- Produtos: fora da navegação Clinical OS quando `GODOUTOR_LEGACY_PAGES` OFF (guard em `WorkspaceNavigation.visible`, rota/API/dados preservados)
-- Disponibilidade preservada como domínio separado QUEM × QUANDO (copy clínica)
-- Configurações com DTO seguro `GET /api/businesses/[id]` (`BUSINESS_CONFIG_DTO_FIELDS`, nunca segredos)
-- Validação: `tsc --noEmit` 0 erros, `next build` OK, `vitest` 2627 passed / 4 failed (baseline 5 → pipeline data fix), `git diff --check` 0
+**O que já está em código (B3 + Modelo Operacional + P0.1/P0.2/P0.3 + Equipe UX Closure — PR #46):**
+- **P0.1 (Slots & Elegibilidade):** todos os chamadores de `slotEligibleProfessionalIds` passam a equipe completa do tenant, sem pre-filtrar `active !== false`. O helper encapsula a autoridade e distingue `undefined` (legado solo), `[]` (zero elegíveis) e `[ids]`.
+- **P0.2 (Privilege Escalation em `person.save`):** validação server-side e atômica das permissões efetivas do alvo (`permissionsFor(role, overrides)`) contra as do ator; 403 sem escrita parcial.
+- **P0.3 (`deriveIsTargetOwner`):** validação estrita por IDs/vínculos reais, sem heurística por e-mail e sem vínculo cross-tenant.
+- **Equipe UX Closure (esta etapa):**
+  - **Papéis como presets.** O fluxo padrão mostra Administrador, **Recepção** (enum interno `SECRETARIA`) e Profissional; Proprietário aparece só como resumo `Proprietário · acesso total` (sem editor, não rebaixável). `ATENDENTE`/`VENDEDOR`/`VIEWER` ficam em “Outros papéis / avançado” (enums e dados preservados).
+  - **Recepção** = Agenda, Clientes, Oportunidades, WhatsApp/Conversas. NÃO recebe por padrão: Visão geral, Pedidos, Catálogo, Página, Assistente, Campanhas, Equipe, Configuração, Financeiro, Admin, Atendimento clínico.
+  - **Profissional** = Visão geral (escopo próprio), agenda própria, Clientes, Atendimento; sem configuração/estrutura/página/pedidos/agente/admin. O preset NÃO foi ampliado; o escopo de dados do CRM segue pendente (ver Workflow + Permissões abaixo).
+  - **Overrides.** Trocar de papel aplica preset limpo (confirma se houver personalização real); override igual ao preset não é personalização; abrir um Member legado deriva overrides mínimos contra `permissionsFor(role)` (`src/lib/equipe-access.ts`). Chips `ajuste` só para diferença real. Segurança server-side intacta.
+  - **Personalizar acesso** recolhido por padrão; com `GODOUTOR_LEGACY_PAGES` OFF, Página/Pedidos saem do editor (IDs/APIs mantidos); Assistente/Admin/Configuração só em “Capacidades avançadas” dentro do modo de personalização.
+  - **Disponibilidade.** `Seguir horário da clínica` = `followBusinessHours=true`; `Usar horário próprio` = `false`. Alternar para seguir NUNCA apaga regras próprias; voltar a `próprio` restaura as regras antigas. Horário próprio sem regra mostra `Horário próprio ainda não configurado` + CTA `Configurar horários` → `/disponibilidade?b=<businessId>&professionalId=<professionalId>`; na tela o editor abre já com `Começar copiando o horário da clínica` (nada é gravado antes de salvar).
+  - **Erros do drawer.** Toda validação/erro de API aparece em bloco `role=alert` dentro do drawer, com scrollIntoView + foco no bloco (ou no 1º campo inválido); mensagens sem Member/User/Professional nem IDs (`humanizePersonError`).
+  - **Serviços que realiza.** Service pertence à clínica; o Profissional só declara o que realiza. Sugestão da biblioteca ainda inexistente abre confirmação rápida (Nome, Grupo, Duração, Preço opcional) com `Duração sugerida · N min` editável; serviço manual exige duração (campo vazio por padrão). Busca com tolerância a flexão (`cardiologista` → `Consulta cardiológica`). Duração nunca é apresentada como regra clínica/CFMV.
+- **Serviços & Estrutura:** Categoria→Grupo, Ativo vs Pode ser agendado, `ServiceForm` com biblioteca vet (duração padrão editável).
+- **Validação (HEAD desta etapa):** `tsc --noEmit` 0 erros (após `next build`), `npm run build` OK, `git diff --check` 0, `npx vitest run` **2751 passed / 4 failed** (2755 testes; 199/201 arquivos). As 4 falhas são a baseline pré-existente e NÃO foram tocadas: 3 em `a34-instagram.test.ts` (B9) + 1 em `automation-audit-p4.test.ts` (poda queued/running/waiting). Baseline antes desta etapa: 2716 passed / 4 failed. Homologação funcional HTTP real (servidor de produção local + tenant descartável): 33/33 verificações. **Sem browser disponível no ambiente → sem homologação visual (1440/1366/1024) declarada.**
+- Produtos: fora da navegação Clinical OS quando `GODOUTOR_LEGACY_PAGES` OFF (guard em `WorkspaceNavigation.visible`, rota/API/dados preservados).
+- Disponibilidade preservada como domínio separado QUEM × QUANDO.
+- Configurações com DTO seguro `GET /api/businesses/[id]` (`BUSINESS_CONFIG_DTO_FIELDS`, nunca segredos).
 
 **Detalhes históricos completos:** ver `docs/GODOUTOR-HISTORY.md` e `docs/GODOUTOR-CLINICAL-CONVERGENCE-AUDIT.md`.
 
@@ -64,11 +71,56 @@ CONCLUÍDA EM CÓDIGO / AGUARDANDO MERGE
 9. **Fiscal / integrações** — NFS-e, exportações, fechamento mensal, conciliação
 10. **Agentes + Jev + LLM + OAAS sobre os domínios estabilizados** — consolidação EventLog em OAAS, agentes clínicos/operacionais consumindo domínios estáveis (não antes)
 
-**Após #46, a próxima missão de código é Workflow + Permissões. Depois: Agenda Temporal 2.0 → Clinical Encounter F1.**
+**Após #46, a próxima missão de código é Workflow + Permissões → Agenda Temporal 2.0 → Clinical Encounter F1 → Cobertura/Modalidade → Prescrição + Exames + Document Engine → Estoque/Farmácia → Cirurgia/Internação → Conta + Financeiro → Fiscal → Agentes/Jev/LLM.** Nenhuma delas começa antes da homologação/merge autorizado de #46.
 
 **Notas de referência (não implementar nesta PR):**
 - **Agenda Temporal 2.0 — referências para decisão futura:** Google Calendar como referência **VISUAL/INTERACIONAL** (interação de grade, drag-selection, bloqueios). Para análise arquitetural comparar agenda própria vs bibliotecas: `fullcalendar/fullcalendar`, `schedule-x/schedule-x`, `bigcalendar/react-big-calendar` (GitHub). Decisão futura: evoluir implementação própria vs adotar biblioteca vs reutilizar padrões/algoritmos — sem instalar agora.
 - **Clinical Encounter F1 — biblioteca de anamnese:** evolução do motor atual de fichas (`AnamneseManager`) para biblioteca de modelos por especialidade, após pesquisa veterinária séria e revisão humana. Nesta PR o motor permanece como está; apenas copy/hub ajustados.
+
+
+### 2.1 Workflow + Permissões — requisito de ESCOPO DE DADOS (registrado, não implementado)
+
+O Profissional hoje tem escopo de dados por `professionalScope` (`access-core.ts`) em: Agenda/bookings, Visão geral (`/api/overview`), fila (`/api/queue`), busca (`/api/search`), Atendimento/encounters e leitura de catálogo. **Não** têm escopo por profissional: `Clientes`/contatos (`/api/contacts*` — a exportação completa só filtra os encontros clínicos por escopo; lista, exportação simples e importação não filtram por profissional), Pet/People 360, Oportunidades/tarefas e Conversas — quem tem a capability `clientes` enxerga o CRM inteiro do tenant. Por isso o preset do Profissional NÃO foi ampliado nesta etapa.
+
+Workflow + Permissões deve definir e aplicar no servidor:
+- **Profissional → própria agenda** (já parcial) e pacientes/tutores “sob cuidado” (vínculo por agendamento/atendimento);
+- **Visão geral, Clientes e Atendimento** com escopo por profissional (ou política por clínica);
+- exportação/importação de contatos como capability separada (hoje atrelada a `clientes`);
+- matriz papel × capability × escopo (tenant, clínica, profissional) com testes por papel real.
+
+### 2.2 Contrato de duração do Serviço (Agenda Temporal 2.0 — apenas documentação)
+
+- `Service.durationMin` é a duração **PADRÃO para novos agendamentos**. Não é a duração histórica de um Booking já criado.
+- Agenda 2.0 torna cada Booking estável com `startAt`/`endAt` próprios; editar `Service.durationMin` **não altera** Bookings existentes.
+- Override opcional futuro **Profissional × Serviço** (ex.: Consulta cardiológica 40 min; Dr. Orlando 50 min). **Não existe tabela/join para isso agora** e nada é criado nesta PR.
+- A biblioteca de serviços (`vet-service-catalog`) apenas **sugere** duração (`Duração sugerida · N min`); a clínica decide. Não é regra clínica nem CFMV.
+
+### 2.3 Intervalo de slot ≠ duração (Agenda Temporal 2.0)
+
+| Conceito | Campo atual | Significado |
+| --- | --- | --- |
+| Duração padrão | `Service.durationMin` | quanto dura o atendimento ao agendar |
+| Intervalo de início (snap) | `Availability.slotMin` | de quanto em quanto tempo um horário pode começar |
+| Folga atual | `BookingConfig.bufferMin` | intervalo entre atendimentos (hoje único, por clínica) |
+
+Agenda 2.0 deve avaliar **buffer antes/depois por serviço/profissional** sem confundir intervalo de início com duração.
+
+### 2.4 Recursos (roadmap, sem implementação)
+
+Um horário só é válido quando **todos** os recursos exigidos estão livres: **Profissional**, **Sala** e **Equipamento**. Hoje só o Profissional participa da disponibilidade; Sala/Equipamento entram em Agenda 2.0 (modelo normalizado, `business_id` obrigatório).
+
+### 2.5 Referências externas para Agenda 2.0 (pesquisa — sem copiar, sem instalar)
+
+| Referência | Uso | Observação |
+| --- | --- | --- |
+| ezyVet | ARQUITETURAL/VISUAL | Appointment Types com Default Length, Planning Guides, Provider Availability, salas/recursos |
+| Vetstoria | ARQUITETURAL | duração por tipo de consulta, override por clínico |
+| Cal.com | ARQUITETURAL | Event Types, availability schedules, intervalo de slot separado da duração |
+| FullCalendar | IMPLEMENTAÇÃO (a validar) | núcleo MIT (Standard); **Resource views são Premium** |
+| react-big-calendar | IMPLEMENTAÇÃO (spike) | MIT; recursos e drag-and-drop no núcleo; candidato ao spike |
+| Schedule-X | IMPLEMENTAÇÃO (a validar) | recursos Premium |
+
+**Agenda Temporal 2.0 começa por spike/ADR:** grade própria × `react-big-calendar` × FullCalendar, validando licença, manutenção, bundle, Design System, multi-tenant e acessibilidade **antes** de reutilizar qualquer código. Nada é instalado por esta PR.
 
 ---
 
@@ -164,7 +216,7 @@ Estas decisões não se discutem novamente sem PR própria e justificativa técn
 Fases concluídas viraram resumo curto. Detalhes de implementação movidos para histórico.
 
 - **Design System 2.0 — CONCLUÍDO (#43)** — mergeado 2026-09-29 (`85154c8`). Detalhes: arquétipos, Atendimento full-page, Cliente 360, temas, navegação.
-- **Clinical Convergence / Architecture Closure — CONCLUÍDO (#46)** — `arena/01a0eda6-instalink` · CONCLUÍDA EM CÓDIGO / AGUARDANDO HOMOLOGAÇÃO E MERGE. Unificação Equipe×Profissionais, Serviços clínico sem vitrine, Configurações cadastro centralizado, DTO seguro, porta única Equipe, Disponibilidade clínica, Estrutura hub, Agenda classificada. Validação: tsc 0, build OK, vitest 2623/5.
+- **Clinical Convergence / Architecture Closure (#46)** — `P0 ESTRUTURAL CONCLUÍDO / EQUIPE UX CLOSURE + HOMOLOGAÇÃO EM ANDAMENTO / NÃO MERGEAR`. Unificação Equipe×Profissionais, Serviços clínico sem vitrine, Configurações cadastro centralizado, DTO seguro, porta única Equipe, Disponibilidade clínica, Estrutura hub, Agenda classificada, P0.1–P0.3, papéis como presets (Recepção), horário próprio preservado, serviço sugerido com duração editável.
 
 **Detalhes:** ver `docs/GODOUTOR-HISTORY.md` (B2/B3 completos com Alterado/Testes) e `docs/GODOUTOR-CLINICAL-CONVERGENCE-AUDIT.md` (matriz 57 itens + decisões B1–B6, B3-01–B3-10).
 

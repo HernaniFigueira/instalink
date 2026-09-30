@@ -32,25 +32,29 @@ Antes de propor ou implementar mudanças relevantes, leia:
 
 ## Estado atual (2026-09-30)
 
-**Clinical Convergence / PR #46 P0 Fixes (`arena/01a0eda6-instalink`) — CONCLUÍDAS EM CÓDIGO / AGUARDANDO MERGE.**
+**PR #46 — `P0 ESTRUTURAL CONCLUÍDO / EQUIPE UX CLOSURE + HOMOLOGAÇÃO EM ANDAMENTO / NÃO MERGEAR`** (branch de trabalho `arena/01a0f3d3-instalink`). Não mergear sem autorização explícita e sem homologação visual real (não feita: sem browser no ambiente).
 
-- **P0.1 (Slots & Elegibilidade):** Todos os chamadores de `slotEligibleProfessionalIds` passam a equipe completa do tenant (`db.professionals.filter(p => p.businessId === businessId)`), deixando a filtragem de profissionais inativos/elegíveis para autoridade interna da função helper. Corrigidos fluxos em `agent-flow.ts`, `api/bookings`, `api/customer/bookings`, `agent-tools/tools/agenda.ts`, `api/external/availability`, `agenda/page.tsx`, `booking-create.ts` e `booking-series.ts`.
-- **P0.2 (Privilege Escalation Protection):** `person.save` valida server-side e de forma atômica o conjunto de permissões efetivas do alvo (`permissionsFor(role, overrides)`) contra as permissões do ator. Ator não-OWNER é impedido de atribuir capacidades que ele próprio não possui ou de promover a si mesmo/outros a papéis com capacidades superiores (retorna 403 sem mutação parcial).
-- **P0.3 (deriveIsTargetOwner Tenant Safety):** `deriveIsTargetOwner` valida exclusivamente vínculos de ID reais (`existingUserId === ownerId`, `member.userId === ownerId && member.businessId === input.businessId`, `professional.userId === ownerId && professional.businessId === input.businessId`), eliminando a heurística insegura por e-mail do cliente e impedindo privilégios de OWNER via cross-tenant.
+- **P0.1 (Slots & Elegibilidade):** todos os chamadores de `slotEligibleProfessionalIds` passam a equipe completa do tenant; o helper decide elegibilidade (`undefined` legado solo / `[]` / `[ids]`).
+- **P0.2 (Privilege Escalation):** `person.save` valida server-side e atomicamente as permissões efetivas do alvo contra as do ator (403 sem mutação parcial).
+- **P0.3 (`deriveIsTargetOwner`):** só vínculos reais por ID e tenant; sem heurística por e-mail.
+- **Equipe UX Closure:** papéis como presets (Administrador · **Recepção**=`SECRETARIA` · Profissional; legados `ATENDENTE`/`VENDEDOR`/`VIEWER` em “Outros papéis / avançado”); Proprietário não editável/rebaixável; overrides mínimos (`src/lib/equipe-access.ts`), troca de papel limpa; Personalizar acesso recolhido e sem Página/Pedidos com `GODOUTOR_LEGACY_PAGES` OFF.
+- **Regras que não devem regredir:** (1) seguir a clínica NUNCA apaga regras de horário próprias; (2) horário próprio sem regra não finge estar configurado; (3) erros do drawer de pessoa são humanos (sem Member/User/Professional/IDs) e recebem foco/scroll; (4) `Service.durationMin` é duração PADRÃO para novos agendamentos — a biblioteca apenas SUGERE, a clínica decide, e nunca é apresentada como regra clínica/CFMV.
+- **Pendente (não implementar sem missão):** escopo de DADOS do Profissional em Clientes/Visão geral/Atendimento (Workflow + Permissões) e contrato de Agenda 2.0 (Master Plan §2.1–§2.5).
 
 ## Próximas missões de código após #46
 
 **Fila oficial — autoridade no Master Plan §2:**
 
-1. **Workflow + Permissões** — próxima missão de código após merge de #46
-2. Agenda Temporal 2.0
+1. **Workflow + Permissões** — próxima missão de código após merge de #46 (inclui escopo de dados do Profissional)
+2. Agenda Temporal 2.0 (começa por spike/ADR: grade própria × react-big-calendar × FullCalendar)
 3. Clinical Encounter F1
-4. Prescrição + Exames + Document Engine
-5. Estoque/Farmácia
-6. Cirurgia + Internação
-7. Conta do Atendimento + Financeiro avançado
-8. Fiscal / integrações
-9. Agentes + Jev + LLM + OAAS sobre os domínios estabilizados
+4. Cobertura / Modalidade do Atendimento
+5. Prescrição + Exames + Document Engine
+6. Estoque/Farmácia
+7. Cirurgia + Internação
+8. Conta do Atendimento + Financeiro avançado
+9. Fiscal / integrações
+10. Agentes + Jev + LLM + OAAS sobre os domínios estabilizados
 
 Não iniciar nova fase sem homologação/merge de #46 e sem atualizar Estado atual no Master Plan.
 

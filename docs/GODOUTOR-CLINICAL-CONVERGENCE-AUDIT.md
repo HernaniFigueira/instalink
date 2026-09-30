@@ -339,11 +339,31 @@ Header `Regras de reserva` mantido (teste `panel.test.ts:596`), descrição torn
 - **P0.2 (Privilege Escalation Protection):** `validatePrivilegeEscalation` integrado no pipeline de pré-validação (`validatePersonInput`) e transacional (`personSaveTx`). Garante que nenhum ator não-OWNER possa atribuir papéis ou overrides com permissões efetivas superiores ao seu próprio perfil, retornando 403 sem mutações parciais.
 - **P0.3 (`deriveIsTargetOwner` Tenant Safety):** Remoção de heurística de e-mail e validação por IDs reais no banco de dados (`existingUserId === ownerId`, `member.userId === ownerId && member.businessId === input.businessId`, `professional.userId === ownerId && professional.businessId === input.businessId`).
 
-## Testes PR #46 P0 (finais validados)
+## Testes PR #46 P0 (validados em d629009)
 
 - `src/lib/__tests__/pr46-p0-fixes.test.ts` — 13 passed (unit + integration cobrindo P0.1, P0.2 e P0.3)
-- Suite completa `npx vitest run` — 198 test files passed / 2719 tests passed (0 falhas)
-- `npx tsc --noEmit` — 0 erros
-- `npm run build` — OK
-- `git diff --check` — 0
+- Suite completa em `d629009`: 2716 passed / 4 failed (baseline pré-existente: 3 Instagram + 1 automation audit)
+- `npx tsc --noEmit` — 0 erros · `npm run build` — OK · `git diff --check` — 0
 
+---
+
+## Equipe UX Closure (PR #46 — 2026-09-30)
+
+Itens da auditoria tratados nesta etapa (mesma PR; sem merge):
+
+| Item | Decisão | Estado |
+| --- | --- | --- |
+| Papéis como lista de permissões confusa | Papéis como presets (Administrador · Recepção · Profissional); Proprietário resumo fixo; legados em “Outros papéis / avançado” | ✅ código + testes |
+| Recepção herdava Visão geral/Pedidos | Preset = Agenda, Clientes, Oportunidades, WhatsApp | ✅ |
+| Overrides legados virando `ajuste` | Overrides mínimos vs `permissionsFor(role)`; troca de papel limpa; confirmação só com personalização real | ✅ |
+| Permissões sem sentido clínico (Página/Pedidos) | Ocultas do editor com `GODOUTOR_LEGACY_PAGES` OFF; avançadas só em modo personalizar | ✅ |
+| Seguir clínica apagava horário próprio | Preservação em `professional.hours`, `applyToAll`, `person.save`; aviso + CTA + deep link | ✅ |
+| `Membro não encontrado` / erros fora da vista | Mensagens humanas no drawer com scroll/foco | ✅ |
+| Serviço da biblioteca com duração fixa | `Duração sugerida · N min` editável; manual exige duração; sem duplicar | ✅ |
+| Escopo de dados do Profissional | **NÃO resolvido**: Clientes/Oportunidades/Conversas sem escopo por profissional → registrado para Workflow + Permissões (Master Plan §2.1) | ⏳ deferido |
+| Contrato de duração / slot / recursos / Agenda 2.0 | Documentado (Master Plan §2.2–§2.5); sem tabela/join/instalação | ⏳ deferido |
+
+### Testes desta etapa
+- `pr46-equipe-ux.test.ts` (19), `equipe-ux.test.tsx` (12), `business-hours-focus.test.tsx` (4).
+- Suite completa: 2751 passed / 4 failed (baseline: 3 Instagram + 1 automation audit; intocados). `tsc` 0 · `build` OK · `git diff --check` 0.
+- Homologação HTTP real 33/33; **sem browser disponível → sem homologação visual**.
