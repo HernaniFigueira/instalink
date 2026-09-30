@@ -438,4 +438,66 @@ describe('P0 person orchestration atômica', () => {
     expect(r2.slots.length).toBeGreaterThan(0);
     expect(r2.closedReason).toBeUndefined();
   });
+  it('Member + Professional existentes → edição bem-sucedida persiste sem duplicação', async () => {
+    // Regressão: getMembers() retornando [] fazia "existente" virar 404/duplicar. Ator = Owner (sem privilege escalation).
+    const rc = await teamPOST(authedTeam({
+      businessId: BIZ, action: 'person.save', mode: 'create',
+      name: 'Dra Edit', email: 'edit@biz.com', hasAccess: true, hasClinical: true, role: 'ATENDENTE', password: '123456',
+      funcao: 'Clínica Geral', crmvUf: 'SP', crmvNumero: '33333', serviceIds: [], pendingServices: [], dispMode: 'follow',
+    }, ownerToken));
+    expect(rc.status).toBe(200);
+    const created = await rc.json() as any;
+    const { professionalId, memberId, userId } = created;
+    expect(professionalId && memberId && userId).toBeTruthy();
+
+    const db0 = await readDB();
+    const countsBefore = {
+      users: db0.users.length,
+      members: db0.members.filter(m => m.businessId === BIZ).length,
+      pros: db0.professionals.filter(p => p.businessId === BIZ).length,
+    };
+    expect(db0.users.find(u => u.id === userId)).toBeTruthy();
+    const memBefore = db0.members.find(m => m.id === memberId)!;
+    const proBefore = db0.professionals.find(p => p.id === professionalId)!;
+    expect(memBefore.userId).toBe(userId);
+    expect((proBefore as any).userId).toBe(userId);
+    expect(memBefore.role).toBe('ATENDENTE');
+
+    const res = await teamPOST(authedTeam({
+      businessId: BIZ, action: 'person.save', mode: 'update',
+      existingMemberId: memberId, existingProfessionalId: professionalId, existingUserId: userId,
+      name: 'Dra Edit Renomeada', email: 'edit@biz.com', hasAccess: true, hasClinical: true,
+      role: 'ADMIN', permissionOverrides: { leads: true },
+      funcao: 'Dermatologia', crmvUf: 'SP', crmvNumero: '33333', serviceIds: [], pendingServices: [], dispMode: 'follow',
+    }, ownerToken));
+    expect(res.status).toBe(200);
+    const j = await res.json() as any;
+    expect(j.ok).toBe(true);
+    expect(j.memberId).toBe(memberId);
+    expect(j.professionalId).toBe(professionalId);
+    expect(j.userId).toBe(userId);
+
+    const db = await readDB();
+    // persistência
+    const user = db.users.find(u => u.id === userId)!;
+    const member = db.members.find(m => m.id === memberId)!;
+    const pro = db.professionals.find(p => p.id === professionalId)!;
+    expect(user.name).toBe('Dra Edit Renomeada');
+    expect(member.role).toBe('ADMIN');
+    expect((member.permissions as any).leads).toBe(true);
+    expect(pro.name).toBe('Dra Edit Renomeada');
+    expect(pro.role).toBe('Dermatologia');
+    // sem duplicação
+    expect(db.users.length).toBe(countsBefore.users);
+    expect(db.members.filter(m => m.businessId === BIZ).length).toBe(countsBefore.members);
+    expect(db.professionals.filter(p => p.businessId === BIZ).length).toBe(countsBefore.pros);
+    expect(db.users.filter(u => u.email === 'edit@biz.com').length).toBe(1);
+    expect(db.members.filter(m => m.userId === userId && m.businessId === BIZ).length).toBe(1);
+    expect(db.professionals.filter(p => (p as any).userId === userId && p.businessId === BIZ).length).toBe(1);
+    // vínculos preservados
+    expect(member.userId).toBe(userId);
+    expect((pro as any).userId).toBe(userId);
+    expect(member.businessId).toBe(BIZ);
+    expect(pro.businessId).toBe(BIZ);
+  });
 });

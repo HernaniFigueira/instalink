@@ -673,7 +673,7 @@ describe('P4 auditoria — persistência e poda (item 6)', () => {
     await updateDB((d) => {
       ingestLead(d, { businessId: 'b1', name: 'Com histórico cheio', phone: '11900003500', now: FIXED_NOW });
     });
-    await drainAutomations({ now: FIXED_NOW });
+    await drainAutomations({});
     const after = await readDB();
     expect(after.automationRuns.some((r) => r.businessId === 'b1' && r.status === 'completed')).toBe(true);
     expect(after.automationRuns.find((r) => r.id === 'live-waiting')!.status).toBe('waiting');
