@@ -37,7 +37,7 @@ import { Icon } from '@/components/icons';
 import { useSidebarPeek } from '@/lib/sidebar-peek';
 import { Drawer } from '@/components/ui';
 import { useRevalidateOnFocus } from './use-revalidate';
-import { loadOverview } from '@/lib/overview';
+import { loadOverview, navAllowsOverview } from '@/lib/overview';
 import { apiGet } from '@/lib/api-client';
 import { clinicTypeLabel } from '@/lib/clinic-presets';
 import { isLegacyPagesEnabled } from '@/lib/product';
@@ -86,8 +86,12 @@ export function WorkspaceNavigation({ nav, activePath, unit, units = [], multiUn
   // a aba volta ao foco. Completou 100% ⇒ o card SOME na hora (nada de
   // "88% pronta" com a página mostrando 8/8).
   const [setup, setSetup] = useState<{ pct: number; href: string } | null>(null);
+  // Sem `/dashboard` na navegação já calculada, o checklist não existe para
+  // este perfil: nenhuma chamada ao Overview (e o card nunca aparece).
+  const overviewAllowed = navAllowsOverview(nav);
   const loadSetup = useCallback((businessId: string) => {
     if (!businessId) return;
+    if (!overviewAllowed) { setSetup(null); return; }
     let on = true;
     loadOverview(businessId, 7, { scope: 'area', area: 'Visão geral' })
       .then((r) => {
@@ -104,7 +108,7 @@ export function WorkspaceNavigation({ nav, activePath, unit, units = [], multiUn
         setSetup(next && pending && pct < 100 ? { pct, href: next.href } : null);
       }).catch(() => { if (on) setSetup(null); });
     return () => { on = false; };
-  }, [legacyPagesEnabled]);
+  }, [legacyPagesEnabled, overviewAllowed]);
   useEffect(() => loadSetup(unit.id), [unit.id, loadSetup]);
   useEffect(() => {
     const refresh = () => loadSetup(unit.id);

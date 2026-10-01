@@ -1,0 +1,50 @@
+## maria
+/api/overview: 0 · /api/pipeline: 1
+Respostas >= 400: []
+Console error: [] · Erros JS: []
+  1× /api/auth/login
+  4× /api/auth/me
+  1× /api/bookings
+  1× /api/catalog/get
+  1× /api/conversations
+  1× /api/people360
+  1× /api/pipeline
+  1× /api/queue
+  4× /api/tasks
+  1× /api/whatsapp
+
+## orlando
+/api/overview: 4 · /api/pipeline: 0
+Respostas >= 400: []
+Console error: [] · Erros JS: []
+  1× /api/auth/login
+  3× /api/auth/me
+  4× /api/overview
+  4× /api/people360
+  2× /api/pets
+  2× /api/tasks
+
+## owner
+/api/overview: 3 · /api/pipeline: 1
+Respostas >= 400: []
+Console error: [] · Erros JS: []
+  1× /api/auth/login
+  3× /api/auth/me
+  3× /api/overview
+  1× /api/people360
+  1× /api/pets
+  1× /api/pipeline
+  1× /api/tasks
+
+## admin
+/api/overview: 3 · /api/pipeline: 1
+Respostas >= 400: []
+Console error: [] · Erros JS: []
+  1× /api/auth/login
+  4× /api/auth/me
+  3× /api/overview
+  1× /api/people360
+  1× /api/pets
+  1× /api/pipeline
+  1× /api/tasks
+

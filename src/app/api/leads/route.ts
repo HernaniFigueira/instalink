@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { readDB, updateDB } from '@/lib/db';
 import { requireBusiness } from '@/lib/access';
+import { canAccessLead } from '@/lib/data-scope';
 import { isFeatureEnabled } from '@/lib/features';
 import { customerFromRequest } from '@/lib/customer-auth';
 import { onlyDigits } from '@/lib/utils';
@@ -101,7 +102,8 @@ export async function GET(req: NextRequest) {
 
   // A1.2 · Bloco 2 (F3): o filtro compara pela etapa NORMALIZADA do lead —
   // entrada legada/inválida não deixa lead órfão nem vaza para outra etapa.
-  let all = db.leads.filter((l) => l.businessId === businessId);
+  // ESCOPO DE DADOS: quem atende só vê oportunidades de pessoas com vínculo real.
+  let all = db.leads.filter((l) => l.businessId === businessId && canAccessLead(db, guard.ctx, l));
   if (stage) {
     const target = resolveStageId(pipeline, stage).stageId;
     all = all.filter((l) => normalizeLeadStageId(pipeline, l) === target);
@@ -154,7 +156,7 @@ export async function PATCH(req: NextRequest) {
     if (!guard.ok) return guard.res;
     const db = guard.db;
     const current = db.leads.find((x) => x.id === id && x.businessId === businessId);
-    if (!current) return NextResponse.json({ error: 'Cliente não encontrado.' }, { status: 404 });
+    if (!current || !canAccessLead(db, guard.ctx, current)) return NextResponse.json({ error: 'Cliente não encontrado.' }, { status: 404 });
 
     const actor = {
       id: guard.ctx.user.id,

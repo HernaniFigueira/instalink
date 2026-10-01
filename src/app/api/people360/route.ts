@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { requireBusiness } from '@/lib/access';
+import { appointmentWorkflowState } from '@/lib/appointment-workflow';
+import { isProfessionalScoped, scopedDbView } from '@/lib/data-scope';
 import { contactNotes } from '@/lib/contacts';
 import { getBusinessPipeline, normalizeLeadStageId } from '@/lib/pipeline';
 import { taskDueLabel } from '@/lib/automation/tasks';
@@ -37,7 +39,12 @@ export async function GET(req: NextRequest) {
   const limit = 30;
   const guard = await requireBusiness(req, businessId, 'clientes');
   if (!guard.ok) return guard.res;
-  const db = guard.db;
+  // ESCOPO DE DADOS: quem atende recebe SÓ as pessoas com vínculo real e, de
+  // cada uma, só os agendamentos DELE. Pedidos/gasto, oportunidades e
+  // conversas são dado comercial da unidade — ficam fora do recorte clínico.
+  const db = isProfessionalScoped(guard.ctx)
+    ? { ...scopedDbView(guard.db, businessId, guard.ctx), leads: [], conversations: [], messages: [] }
+    : guard.db;
 
   interface P {
     key: string;
@@ -73,7 +80,7 @@ export async function GET(req: NextRequest) {
     bookings: Array<{
       id: string; customerName: string; date: string; time: string; status: string; serviceId: string;
       seriesId?: string; seriesIndex?: number; seriesCount?: number;
-      professionalId: string; rescheduleCount: number; previousId: string;
+      professionalId: string; rescheduleCount: number; previousId: string; workflowState: string;
     }>;
     leads: Array<{ id: string; origin: string; status: string; stageId: string; stageName: string; interest: string; action: string; createdAt: string; priority: string; assignedUserId: string; stageHistory: any[]; lastInteraction: string }>;
     conversations: Array<{ id: string; channel: string; status: string; at: string; preview: string; unread: number }>;
@@ -199,6 +206,15 @@ export async function GET(req: NextRequest) {
     if (!p.lastOrderAt || o.createdAt > p.lastOrderAt) p.lastOrderAt = o.createdAt;
     if (!p.lastSeen || o.createdAt > p.lastSeen) p.lastSeen = o.createdAt;
   }
+  // Etapa canônica por agendamento (mapas: uma passada, sem O(n×m)).
+  const encByBooking = new Map<string, (typeof db.encounters)[number]>();
+  for (const e of db.encounters || []) {
+    if (e.businessId === businessId && e.bookingId && !encByBooking.has(e.bookingId)) encByBooking.set(e.bookingId, e);
+  }
+  const queueByBooking = new Map<string, (typeof db.queue)[number]>();
+  for (const qe of db.queue || []) {
+    if (qe.businessId === businessId && qe.bookingId && (qe.status === 'waiting' || qe.status === 'called' || qe.status === 'in_service')) queueByBooking.set(qe.bookingId, qe);
+  }
   for (const b of bookings) {
     const p = get(b.customerId, b.customerPhone, b.customerName);
     if (!p) continue;
@@ -209,6 +225,7 @@ export async function GET(req: NextRequest) {
       id: b.id, customerName: b.customerName, date: b.date, time: b.time, status: b.status, serviceId: b.serviceId,
       seriesId: b.seriesId, seriesIndex: b.seriesIndex, seriesCount: b.seriesCount,
       professionalId: b.professionalId || '', rescheduleCount: b.rescheduleCount || 0, previousId: b.previousId || '',
+      workflowState: appointmentWorkflowState({ booking: b, encounter: encByBooking.get(b.id) || null, queue: queueByBooking.get(b.id) || null }),
     });
     const at = `${b.date}T${b.time}:00`;
     if (!p.lastSeen || at > p.lastSeen) p.lastSeen = at;

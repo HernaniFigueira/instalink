@@ -53,8 +53,12 @@ export interface AlertsSource {
   checklist?: Array<{ done: boolean; label: string; href: string }> | null;
 }
 
-/** Estado honesto da leitura: sem payload não há como afirmar "nada pendente". */
-export type AlertsStatus = 'loading' | 'ready' | 'unavailable';
+/**
+ * Estado honesto da leitura: sem payload não há como afirmar "nada pendente".
+ *  • `unavailable` = FALHA real (rede/5xx);
+ *  • `restricted`  = o perfil não tem Visão geral — não houve falha nem chamada.
+ */
+export type AlertsStatus = 'loading' | 'ready' | 'unavailable' | 'restricted';
 
 /** Grupo de notificações com rótulo canônico (ordem de leitura). */
 export interface AlertGroup {
@@ -179,6 +183,7 @@ export function buildWorkspaceAlerts(
 export function bellLabel(alerts: WorkspaceAlerts): string {
   if (alerts.status === 'loading') return 'Notificações: carregando';
   if (alerts.status === 'unavailable') return 'Notificações: indisponíveis';
+  if (alerts.status === 'restricted') return 'Notificações: resumo fora do seu acesso';
   if (alerts.total === 0) return 'Notificações: nenhuma pendência';
   // P1.14 — o badge vermelho é só das FALHAS; o rótulo explica a diferença.
   if (alerts.badgeCount > 0) {

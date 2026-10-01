@@ -21,34 +21,35 @@ import { useEffect, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { Icon } from '@/components/icons';
-import { StatusBadge, Button, buttonCls, type ButtonVariant } from '@/components/ui';
+import { StatusBadge, Button, buttonCls } from '@/components/ui';
 import { Pet360Sheet } from '@/components/dashboard/Pet360Sheet';
 import { usePanelPermissions } from '@/components/dashboard/usePanelPermissions';
 import { BOOKING_STATUS } from '@/lib/status';
 import { todayISO, nowHM, formatDateBR, humanDay } from '@/lib/tz';
 import { waLink, cn, money } from '@/lib/utils';
-import { adminBookingMaxDate, bookingActions, bookingDuration, needsClosure, rescheduleDecision, type ClosureAction } from '@/lib/booking-ops';
+import { adminBookingMaxDate, bookingDuration, needsClosure, rescheduleDecision } from '@/lib/booking-ops';
 import { SLOT_STATE_MESSAGE } from '@/lib/slot-states';
 import type { Booking } from '@/lib/types';
 import { WorkspaceSheet } from '@/components/dashboard/WorkspaceSheet';
 import { encounterWorkspaceHref } from '@/lib/encounter-workspace';
+import { workflowView, type WorkflowActionId } from '@/lib/appointment-workflow';
 import { useOverlayDismissGuard } from './OverlayDismissGuard';
 
 interface ServiceRef { id: string; name: string; durationMin: number; price?: number; questions?: string[] }
 interface ProRef { id: string; name: string }
 
-// Hierarquia de ação (tone da regra de negócio → variante do componente):
-// ok = sucesso · warn = atenção · danger = destrutivo · neutral = secundário.
-const TONE_TO_VARIANT: Record<ClosureAction['tone'], ButtonVariant> = {
-  ok: 'success',
-  warn: 'warning',
-  danger: 'danger',
-  neutral: 'secondary',
-};
-
 const ROW = 'flex items-baseline justify-between gap-3 py-2';
 const ROW_DT = 'text-xs font-medium text-zinc-500 shrink-0';
 const ROW_DD = 'text-sm text-zinc-900 text-right font-medium';
+
+/** Carimbo do histórico no fuso da UNIDADE (o servidor guarda UTC). */
+function historyStamp(at: string | undefined, timezone?: string): string {
+  const t = at ? new Date(at) : null;
+  if (!t || Number.isNaN(t.getTime())) return '';
+  const opts: Intl.DateTimeFormatOptions = { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit', hour12: false };
+  try { return t.toLocaleString('pt-BR', { ...opts, timeZone: timezone || undefined }).replace(',', ''); }
+  catch { return t.toLocaleString('pt-BR', opts).replace(',', ''); }
+}
 
 export function BookingDetailSheet({ booking, service, pro, businessId, timezone, onClose, onChanged }: {
   booking: Booking;
@@ -92,7 +93,17 @@ export function BookingDetailSheet({ booking, service, pro, businessId, timezone
   const today = serverToday || todayISO(new Date(), timezone || undefined);
   const late = needsClosure(booking, dur, today, nowHM(new Date(), timezone || undefined));
   const decision = rescheduleDecision(booking.status);
-  const actions = bookingActions(booking.status);
+  // Workflow: a tela desenha SÓ o que o servidor liberou para este papel e
+  // etapa (booking.workflow). Sem o campo (dado legado/teste), cai numa visão
+  // conservadora calculada com as permissões do painel — o servidor segue
+  // sendo a autoridade e recusa o que não for permitido.
+  const wf = booking.workflow
+    ? { ...booking.workflow, allowed: booking.workflow.allowed as WorkflowActionId[] }
+    : workflowView(
+      { booking, overdue: late },
+      { agenda: true, atendimento: !!permissions.atendimento },
+    );
+  const can = (id: WorkflowActionId) => wf.allowed.includes(id);
   const rescheduleDirty = rescheduling && (date !== booking.date || time !== '' || cancelSeries);
   const dismissReschedule = () => rescheduleDismiss.requestClose('close-button', { dirty: rescheduleDirty, saving: !!acting, context: 'edit' }, () => {
     setRescheduling(false); setConfirming(false); setCancelSeries(false); setDate(booking.date); setTime(''); setError('');
@@ -162,6 +173,11 @@ export function BookingDetailSheet({ booking, service, pro, businessId, timezone
     }
   }
 
+  /** Abre o registro do atendimento (iniciar/abrir/ver). O servidor revalida etapa e papel. */
+  function openCare() {
+    router.push(encounterWorkspaceHref({ businessId, bookingId: booking.id, returnTo: `${window.location.pathname}${window.location.search}` }));
+  }
+
   async function reschedule() {
     setError(''); setNotice('');
     setActing('reschedule');
@@ -221,7 +237,9 @@ export function BookingDetailSheet({ booking, service, pro, businessId, timezone
               <span className="text-xs font-semibold text-zinc-600 tabular-nums">{formatDateBR(booking.date)} · {booking.time}–{endHM}</span>
               <StatusBadge tone={def.tone}>{def.panel}</StatusBadge>
               {booking.bookingKind === 'fit_in' && <StatusBadge tone="amber">Encaixe</StatusBadge>}
-              {booking.checkedInAt && <StatusBadge tone="emerald">Chegou</StatusBadge>}
+              {(wf.state === 'arrived' || wf.state === 'in_care') && (
+                <StatusBadge tone={wf.state === 'in_care' ? 'blue' : 'emerald'}>{wf.label}</StatusBadge>
+              )}
             </div>
             <p className="font-semibold text-sm mt-1 leading-snug truncate">{service?.name || 'Serviço'}</p>
             <p className="text-xs text-zinc-500 mt-0.5">{humanDay(booking.date, today)} · {dur} min</p>
@@ -244,38 +262,73 @@ export function BookingDetailSheet({ booking, service, pro, businessId, timezone
           />
         )}
 
-          {/* ── Ações principais do atendimento (hierarquia, não cor de status) ── */}
+          {/* ── Ações do atendimento: etapa × papel (servidor decide) ── */}
           {!rescheduling && (
-            <div className="px-4 py-3 border-b border-zinc-100">
+            <div className="px-4 py-3 border-b border-zinc-100" data-workflow-state={wf.state}>
               <div className="flex flex-wrap gap-1.5">
-                {actions.map((a) => (
-                  <Button key={a.status} size="sm" variant={TONE_TO_VARIANT[a.tone]}
-                    onClick={() => act(a.status)} disabled={!!acting}>
-                    {acting === a.status ? 'Salvando…' : a.label}
-                  </Button>
-                ))}
-                <Button size="sm" variant="secondary" onClick={() => { setRescheduling(true); setError(''); }} disabled={!!acting}>
-                  <Icon n="calendar" size={13} /> Reagendar
-                </Button>
-                {/* A3.4 · Bloco 4 — chegada do cliente. Fica junto das ações
-                    porque é decisão do balcão, e é REVERSÍVEL (engano acontece). */}
-                {permissions.atendimento && (
-                  <Button size="sm" variant="secondary" onClick={() => router.push(encounterWorkspaceHref({ businessId, bookingId: booking.id, returnTo: `${window.location.pathname}${window.location.search}` }))} disabled={!!acting}>
-                    <Icon n="fileText" size={13} /> Atendimento
+                {can('check_in') && (
+                  <Button size="sm" variant="primary" onClick={() => checkIn(false)} disabled={!!acting}>
+                    <Icon n="check" size={13} /> {acting === 'checkin' ? 'Registrando…' : 'Registrar chegada'}
                   </Button>
                 )}
-                {booking.checkedInAt ? (
+                {can('start_care') && (
+                  <Button size="sm" variant="primary" onClick={openCare} disabled={!!acting}>
+                    <Icon n="fileText" size={13} /> Iniciar atendimento
+                  </Button>
+                )}
+                {can('open_care') && (
+                  <Button size="sm" variant="primary" onClick={openCare} disabled={!!acting}>
+                    <Icon n="fileText" size={13} /> Abrir atendimento
+                  </Button>
+                )}
+                {can('view_care') && (
+                  <Button size="sm" variant="secondary" onClick={openCare} disabled={!!acting}>
+                    <Icon n="fileText" size={13} /> Ver atendimento
+                  </Button>
+                )}
+                {can('confirm') && (
+                  <Button size="sm" variant="success" onClick={() => act('confirmed')} disabled={!!acting}>
+                    {acting === 'confirmed' ? 'Salvando…' : 'Confirmar'}
+                  </Button>
+                )}
+                {can('close_retro') && (
+                  <Button size="sm" variant="success" onClick={() => act('completed')} disabled={!!acting}
+                    title="Fechar o atendimento que já passou, sem registro clínico">
+                    {acting === 'completed' ? 'Salvando…' : 'Concluir'}
+                  </Button>
+                )}
+                {can('no_show') && (
+                  <Button size="sm" variant="warning" onClick={() => act('no_show')} disabled={!!acting}>
+                    {acting === 'no_show' ? 'Salvando…' : 'Não compareceu'}
+                  </Button>
+                )}
+                {can('reopen') && (
+                  <Button size="sm" variant="secondary"
+                    onClick={() => act(booking.status === 'no_show' ? 'confirmed' : 'pending')} disabled={!!acting}>
+                    {booking.status === 'no_show' ? 'Reativar' : 'Reabrir'}
+                  </Button>
+                )}
+                {can('reschedule') && (
+                  <Button size="sm" variant="secondary" onClick={() => { setRescheduling(true); setError(''); }} disabled={!!acting}>
+                    <Icon n="calendar" size={13} /> Reagendar
+                  </Button>
+                )}
+                {can('check_in_undo') && (
                   <Button size="sm" variant="ghost" onClick={() => checkIn(true)} disabled={!!acting}
                     title="Desfazer o check-in deste atendimento">
                     <Icon n="check" size={13} /> Chegou às {checkedInHM}
                   </Button>
-                ) : (
-                  <Button size="sm" variant="secondary" onClick={() => checkIn(false)} disabled={!!acting}>
-                    <Icon n="check" size={13} /> {acting === 'checkin' ? 'Registrando…' : 'Registrar chegada'}
+                )}
+                {can('cancel') && (
+                  <Button size="sm" variant="danger" onClick={() => act('cancelled')} disabled={!!acting}>
+                    {acting === 'cancelled' ? 'Salvando…' : 'Cancelar'}
                   </Button>
                 )}
               </div>
-              {booking.checkedInAt && (
+              {wf.allowed.length === 0 && (
+                <p className="text-[11px] text-[var(--text-muted)]">Nenhuma ação disponível para o seu perfil nesta etapa.</p>
+              )}
+              {booking.checkedInAt && wf.state === 'arrived' && (
                 <p className="text-[11px] text-[var(--text-muted)] mt-2">
                   Check-in registrado{booking.checkedInByName ? ` por ${booking.checkedInByName}` : ''} — o status do atendimento continua “{def.panel}”.
                 </p>
@@ -453,11 +506,17 @@ export function BookingDetailSheet({ booking, service, pro, businessId, timezone
                     <li key={i} className="relative pl-4">
                       <span aria-hidden="true" className={`absolute -left-[5px] top-1 w-2 h-2 rounded-full ${i === 0 ? 'bg-[var(--brand)]' : 'bg-[var(--border)]'}`} />
                       <p className="text-[11px] font-semibold text-zinc-500 tabular-nums">
-                        {formatDateBR((h.at || '').slice(0, 10))} {(h.at || '').slice(11, 16)}
+                        {historyStamp(h.at, timezone)}
                       </p>
                       <p className="text-xs text-zinc-700 mt-0.5">
-                        {h.from || 'criado'} → <strong>{h.to}</strong>
-                        {h.note ? ` · ${h.note}` : ''}
+                        {h.from === h.to && h.note ? (
+                          <>{h.note}</>
+                        ) : (
+                          <>
+                            {h.from ? (BOOKING_STATUS[h.from as keyof typeof BOOKING_STATUS]?.panel || h.from) : 'criado'} → <strong>{BOOKING_STATUS[h.to as keyof typeof BOOKING_STATUS]?.panel || h.to}</strong>
+                            {h.note ? ` · ${h.note}` : ''}
+                          </>
+                        )}
                       </p>
                       <p className="text-[11px] text-zinc-400 mt-0.5">
                         {h.by === 'customer' ? 'cliente' : h.by === 'owner' ? 'equipe' : h.by === 'master' ? 'suporte' : 'sistema'}

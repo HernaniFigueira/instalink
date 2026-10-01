@@ -39,7 +39,7 @@ import { cn } from '@/lib/utils';
 import { AccessDenied, PermissionNotice, useForbiddenNotice } from '@/components/dashboard/AccessNotice';
 import { usePanelPermissions } from '@/components/dashboard/usePanelPermissions';
 import { PeriodSelector } from '@/components/dashboard/PeriodSelector';
-import { loadOverview } from '@/lib/overview';
+import { canLoadOverview, loadOverview } from '@/lib/overview';
 import { firstName } from '@/lib/greeting';
 import { apiGet } from '@/lib/api-client';
 import { money } from '@/lib/utils';
@@ -213,8 +213,13 @@ export default function DashboardPage() {
     }).catch(() => { if (on) { setTaskSum(null); setOpenTasks(null); } });
     return () => { on = false; };
   }, [businessId]);
+  const overviewAllowed = canLoadOverview(permsReady, panelPerms);
   const load = useCallback(() => {
     if (!businessId) return;
+    // Permissões ainda carregando: espera (nenhuma chamada especulativa).
+    if (!permsReady) return;
+    // Sem Visão geral: o aviso amigável aparece SEM tocar no servidor.
+    if (!overviewAllowed) { setFailed(''); setDenied(true); return; }
     setFailed('');
     // §i — o MESMO payload já é pedido pelo shell (mini-card + sino): o loader
     // compartilhado divide a requisição em vez de repetir o trabalho de banco.
@@ -230,7 +235,7 @@ export default function DashboardPage() {
         setDenied(false);
         setData(res.data as Overview | null);
       });
-  }, [businessId, period, retry]);
+  }, [businessId, period, retry, permsReady, overviewAllowed]);
 
   useEffect(() => { load(); }, [load]);
 

@@ -24,6 +24,7 @@ import { NewBookingSheet } from '@/components/dashboard/NewBookingSheet';
 import { NewClientSheet } from '@/components/dashboard/NewClientSheet';
 import { ImportClientsSheet } from '@/components/dashboard/ImportClientsSheet';
 import { usePanelPermissions } from '@/components/dashboard/usePanelPermissions';
+import { useWorkspace } from '@/components/dashboard/WorkspaceContext';
 import { ClientProfileDrawer, type Person360 } from '@/components/dashboard/ClientProfileDrawer';
 import { effectiveHorizonDays } from '@/lib/booking-ops';
 import { buildClientListReturnQuery } from '@/lib/client-return';
@@ -97,6 +98,10 @@ export default function ClientesPage() {
   // genérica de Clientes não despeja a base sensível inteira.
   const { role } = usePanelPermissions();
   const canExportFull = ['OWNER', 'ADMIN', 'MASTER'].includes(String(role || '').toUpperCase());
+  // Workflow + Permissões: exportar/importar a base é capacidade própria e só
+  // vale com escopo da unidade (a mesma regra que o servidor aplica).
+  const workspace = useWorkspace();
+  const unitScope = !workspace.agendaScope || workspace.agendaScope === 'all';
   const [pendingClientOpen, setPendingClientOpen] = useState('');
   const [createdClientId, setCreatedClientId] = useState('');
   const [services, setServices] = useState<any[]>([]);
@@ -108,6 +113,8 @@ export default function ClientesPage() {
   // aparece para quem tem a permissão 'leads' (a mesma que /funil exige).
   const { permissions, ready: permsReady } = usePanelPermissions();
   const canFunil = permsReady && permissions.leads === true;
+  const canExportBase = permsReady && unitScope && permissions.clientes_exportar === true;
+  const canImportBase = permsReady && unitScope && permissions.clientes_importar === true;
   const [pipeline, setPipeline] = useState<BusinessPipeline | null>(null);
 
   /**
@@ -207,14 +214,25 @@ export default function ClientesPage() {
     setTotal(d.total || 0);
     setPages(d.pages || 1);
     setLoaded(true);
-    // Busca esteira para renderizar etapa real (stageId) e ações contextuais
-    try {
-      const pRes = await apiGet<{ pipeline?: BusinessPipeline }>(`/api/pipeline?businessId=${businessId}`, { scope: 'area', area: 'Clientes' });
-      if (pRes.ok && (pRes.data as any)?.pipeline) setPipeline((pRes.data as any).pipeline);
-    } catch { /* funil indisponível não derruba a lista */ }
   }, [businessId, search, page, filter, report]);
 
   useEffect(() => { load(); }, [load]);
+
+  // Esteira (etapa real + ações contextuais) só para quem tem `leads`: sem a
+  // permissão NÃO há chamada (o servidor exigiria `leads` e devolveria 403).
+  // Fica fora do `load` de propósito: assim a lista não é recarregada quando
+  // as permissões ficam prontas, e a esteira não é rebaixada a cada busca/página.
+  useEffect(() => {
+    if (!businessId || !canFunil) { setPipeline(null); return; }
+    let cancelled = false;
+    (async () => {
+      try {
+        const pRes = await apiGet<{ pipeline?: BusinessPipeline }>(`/api/pipeline?businessId=${businessId}`, { scope: 'area', area: 'Clientes' });
+        if (!cancelled && pRes.ok && (pRes.data as any)?.pipeline) setPipeline((pRes.data as any).pipeline);
+      } catch { /* funil indisponível não derruba a lista */ }
+    })();
+    return () => { cancelled = true; };
+  }, [businessId, canFunil]);
 
   // Depois do cadastro, a lista é recarregada pelo mesmo endpoint do Cliente
   // 360. Quando o contato aparece, abrimos sua ficha sem inventar uma pessoa
@@ -277,23 +295,29 @@ export default function ClientesPage() {
                 <Icon n="funnel" size={14} /> Oportunidades
               </Link>
             )}
-            <Button variant="secondary" onClick={() => setImportOpen(true)} title="Trazer a base de outro sistema (CSV)">
-              <Icon n="upload" size={15} /> Importar
-            </Button>
-            <Button variant="secondary" disabled={!!exporting} title="Baixar a base em CSV (reimportável)"
-              onClick={() => { void downloadExport('csv'); }}>
-              <Icon n="download" size={15} /> {exporting === 'csv' ? 'Gerando…' : 'Exportar'}
-            </Button>
-            {canExportFull && (
+            {canImportBase && (
+              <Button variant="secondary" onClick={() => setImportOpen(true)} title="Trazer a base de outro sistema (CSV)">
+                <Icon n="upload" size={15} /> Importar
+              </Button>
+            )}
+            {canExportBase && (
+              <Button variant="secondary" disabled={!!exporting} title="Baixar a base em CSV (reimportável)"
+                onClick={() => { void downloadExport('csv'); }}>
+                <Icon n="download" size={15} /> {exporting === 'csv' ? 'Gerando…' : 'Exportar'}
+              </Button>
+            )}
+            {canExportBase && canExportFull && (
               <Button variant="secondary" disabled={!!exporting}
                 title="Histórico completo em JSON (cadastro, perfil, agendamentos, conversas, tarefas)"
                 onClick={() => { void downloadExport('full'); }}>
                 <Icon n="download" size={15} /> {exporting === 'full' ? 'Gerando…' : 'Exportar tudo (JSON)'}
               </Button>
             )}
-            <Button variant="primary" onClick={() => setNewClientOpen(true)}>
-              <Icon n="plus" size={15} strokeWidth={2.6} /> Novo cliente
-            </Button>
+            {unitScope && (
+              <Button variant="primary" onClick={() => setNewClientOpen(true)}>
+                <Icon n="plus" size={15} strokeWidth={2.6} /> Novo cliente
+              </Button>
+            )}
           </>
         }
       />

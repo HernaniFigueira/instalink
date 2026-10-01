@@ -27,6 +27,8 @@ import {
   cleanEncounterFiles, isFollowUpMode, validateFollowUp,
 } from '@/lib/encounters';
 import { applyBookingStatusTx } from '@/lib/booking-status';
+import { assertCanStartCare, assertCanFinalizeCare } from '@/lib/appointment-workflow-tx';
+import { publishWorkflowEvent } from '@/lib/workflow-events';
 import { effectiveTimezone, nowHM, todayISO } from '@/lib/tz';
 import { onlyDigits } from '@/lib/utils';
 import { findContact } from '@/lib/contacts';
@@ -248,10 +250,18 @@ export async function POST(req: NextRequest) {
       if (row.queueId && encounterForQueue(d.encounters, businessId, row.queueId)) {
         throw err('Esta entrada da fila já tem registro de atendimento.', 409);
       }
+      // Workflow: só se inicia o atendimento de quem JÁ CHEGOU (arrived →
+      // in_care). A guarda roda dentro da transação, com o estado real.
+      if (row.bookingId) {
+        const bk = d.bookings.find((b) => b.id === row.bookingId && b.businessId === businessId);
+        if (bk) {
+          assertCanStartCare(d, businessId, bk);
+        }
+      }
       d.encounters.push(row);
       pushAudit(d, {
         action: 'encounter.created', businessId, actor: guard.ctx.user,
-        meta: { encounterId: row.id, bookingId: row.bookingId, queueId: row.queueId, professionalId: row.professionalId },
+        meta: { encounterId: row.id, bookingId: row.bookingId, queueId: row.queueId, professionalId: row.professionalId, workflow: 'arrived>in_care' },
       }, now);
       emitAutomationEvent(d, {
         event: 'encounter.started',
@@ -261,6 +271,11 @@ export async function POST(req: NextRequest) {
         customerId: row.customerId || undefined,
         data: { encounterId: row.id, professionalId: row.professionalId, serviceId: row.serviceId },
       });
+    });
+    void publishWorkflowEvent({
+      businessId, type: 'encounter.started', entityType: 'encounter', entityId: row.id,
+      actor: { id: guard.ctx.user.id, name: guard.ctx.user.name }, bookingId: row.bookingId || undefined,
+      from: row.bookingId ? 'arrived' : undefined, to: 'in_care', at: now,
     });
     return NextResponse.json({ ok: true, encounter: view(row, await readDB()) });
   } catch (e: any) {
@@ -308,7 +323,7 @@ export async function PATCH(req: NextRequest) {
       if (action === 'finalize') {
         const conflict = versionConflict(target, body.expectedVersion);
         if (conflict.conflict) throw err(conflict.message, 409);
-        if (target.status === 'finalized') throw err('Este registro já está finalizado.', 409);
+        assertCanFinalizeCare(target); // in_care → finalized
         const check = canFinalize(target);
         if (!check.ok) throw err(check.error, 400);
         target.status = 'finalized';
@@ -342,7 +357,7 @@ export async function PATCH(req: NextRequest) {
         }
         pushAudit(d, {
           action: 'encounter.finalized', businessId, actor: guard.ctx.user,
-          meta: { encounterId: target.id, bookingId: target.bookingId, version: target.version },
+          meta: { encounterId: target.id, bookingId: target.bookingId, version: target.version, workflow: 'in_care>finalized' },
         }, now);
         emitAutomationEvent(d, {
           event: 'encounter.completed',
@@ -420,6 +435,13 @@ export async function PATCH(req: NextRequest) {
       }, now);
       return target;
     });
+    if (action === 'finalize') {
+      void publishWorkflowEvent({
+        businessId, type: 'encounter.finalized', entityType: 'encounter', entityId: updated.id,
+        actor: { id: guard.ctx.user.id, name: guard.ctx.user.name }, bookingId: updated.bookingId || undefined,
+        from: 'in_care', to: 'finalized', at: now,
+      });
+    }
     return NextResponse.json({ ok: true, encounter: view(updated, await readDB()) });
   } catch (e: any) {
     const status = e?.status || 500;

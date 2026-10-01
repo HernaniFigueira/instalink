@@ -32,6 +32,14 @@ export const PERMISSIONS: PermissionDef[] = [
     id: 'atendimento', label: 'Atendimento',
     hint: 'Registro do atendimento: evolução, orientações dadas e histórico do serviço',
   },
+  {
+    id: 'clientes_exportar', label: 'Exportar clientes',
+    hint: 'Baixar a base inteira de clientes em arquivo (CSV)',
+  },
+  {
+    id: 'clientes_importar', label: 'Importar clientes',
+    hint: 'Trazer uma lista de clientes de um arquivo para a base',
+  },
 ];
 
 export const PERMISSION_IDS: PermissionId[] = PERMISSIONS.map((p) => p.id);

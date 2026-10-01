@@ -22,12 +22,16 @@ import { loadOverview } from '@/lib/overview';
 const REFRESH_MS = 120_000;
 
 /** Lê o resumo operacional real da unidade. Nenhuma contagem é fabricada. */
-export function useWorkspaceAlerts(businessId: string, unitQuery: string): WorkspaceAlerts {
+export function useWorkspaceAlerts(businessId: string, unitQuery: string, access: 'allowed' | 'pending' | 'denied' = 'allowed'): WorkspaceAlerts {
   const [source, setSource] = useState<AlertsSource | null>(null);
-  const [status, setStatus] = useState<'loading' | 'ready' | 'unavailable'>('loading');
+  const [status, setStatus] = useState<'loading' | 'ready' | 'unavailable' | 'restricted'>('loading');
 
   const load = useCallback(() => {
     if (!businessId) { setStatus('unavailable'); setSource(null); return; }
+    // Perfil sem Visão geral (ou permissões ainda carregando): ZERO chamadas.
+    // `denied` NÃO é falha: vira `restricted` (mensagem neutra); `unavailable`
+    // fica reservado para erro real de rede/5xx.
+    if (access !== 'allowed') { setSource(null); setStatus(access === 'denied' ? 'restricted' : 'loading'); return; }
     let cancelled = false;
     // Mesmo payload do shell/tela — o loader compartilhado divide a chamada em
     // vez de baixar o overview uma TERCEIRA vez por navegação.
@@ -46,7 +50,7 @@ export function useWorkspaceAlerts(businessId: string, unitQuery: string): Works
       })
       .catch(() => { if (!cancelled) { setSource(null); setStatus('unavailable'); } });
     return () => { cancelled = true; };
-  }, [businessId]);
+  }, [businessId, access]);
 
   useEffect(() => {
     setStatus('loading');
@@ -152,6 +156,12 @@ export function NotificationsBell({ alerts }: { alerts: WorkspaceAlerts }) {
           {alerts.status === 'unavailable' && (
             <p className="ws-popover__empty">
               Não foi possível carregar as pendências agora. Nada foi perdido — tente novamente em instantes.
+            </p>
+          )}
+
+          {alerts.status === 'restricted' && (
+            <p className="ws-popover__empty">
+              Este resumo de notificações não faz parte do seu acesso. Suas pendências continuam disponíveis na área Pendências.
             </p>
           )}
 

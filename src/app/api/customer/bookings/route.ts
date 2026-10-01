@@ -7,6 +7,7 @@ import { todayISO, nowHM, weekdayOf, addDaysISO, effectiveTimezone, isValidDateI
 import { computeSlots } from '@/lib/slots';
 import { eligibleProfessionalIds, slotEligibleProfessionalIds } from '@/lib/booking';
 import { applyBookingStatusTx } from '@/lib/booking-status';
+import { bookingWorkflowState } from '@/lib/appointment-workflow-tx';
 import { effectiveHorizonDays } from '@/lib/booking-ops';
 import { noteLeadReschedule } from '@/lib/pipeline';
 import type { DB } from '@/lib/types';
@@ -70,6 +71,11 @@ export async function PATCH(req: NextRequest) {
     if (!isFeatureEnabled(business, 'bookings')) {
       return NextResponse.json({ error: 'Este negócio não está com a agenda aberta no momento.' }, { status: 403 });
     }
+    // Workflow: quem já chegou (ou está sendo atendido) fala com a recepção —
+    // o cliente não cancela nem remarca por fora do fluxo do atendimento.
+    if (['arrived', 'in_care'].includes(bookingWorkflowState(db, business.id, booking))) {
+      return NextResponse.json({ error: 'Sua chegada já foi registrada. Fale com a recepção para qualquer alteração.' }, { status: 409 });
+    }
     const cfg = business.booking;
     // A2-B5 (F9): regras de prazo/cancelamento no FUSO DO NEGÓCIO.
     const btz = effectiveTimezone(business.businessTimezone);
@@ -100,6 +106,9 @@ export async function PATCH(req: NextRequest) {
         const target = d.bookings.find((x) => x.id === id);
         if (!target || !['pending', 'confirmed'].includes(target.status)) {
           throw err('Este agendamento não pode mais ser alterado.', 400);
+        }
+        if (['arrived', 'in_care'].includes(bookingWorkflowState(d, business.id, target))) {
+          throw err('Sua chegada já foi registrada. Fale com a recepção para qualquer alteração.', 409);
         }
         // Valida o novo slot IGNORANDO a própria reserva (troca, não soma).
         // O servidor re-atribui o profissional (cliente nunca escolhe).

@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { requireBusiness } from '@/lib/access';
+import { isProfessionalScoped, scopedDbView } from '@/lib/data-scope';
 import { scopeBookings } from '@/lib/access-core';
 import { buildPeople360IdentityIndex, people360Phone, type People360Identity } from '@/lib/people360-identity';
 import { entityMatches } from '@/lib/entity-search';
@@ -27,7 +28,10 @@ export async function GET(req: NextRequest) {
   // podem pagar (nem receber) o que não é delas.
   const guard = await requireBusiness(req, businessId);
   if (!guard.ok) return guard.res;
-  const { db, ctx } = guard;
+  const { ctx } = guard;
+  // ESCOPO DE DADOS (mesmo das rotas): quem atende só encontra pessoas, pets e
+  // conversas com vínculo real — `clientes=true` não abre a base inteira.
+  const db = isProfessionalScoped(ctx) ? scopedDbView(guard.db, businessId, ctx) : guard.db;
   const canClients = ctx.permissions.clientes === true;
   const canAgenda = ctx.permissions.agenda === true;
   const canWhats = ctx.permissions.whatsapp === true;

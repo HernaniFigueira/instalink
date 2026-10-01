@@ -20,6 +20,7 @@ import Link from 'next/link';
 import { Icon } from '@/components/icons';
 import { Drawer } from '@/components/ui';
 import { apiGet } from '@/lib/api-client';
+import { navAllowsOverview } from '@/lib/overview';
 import { isLegacyPagesEnabled } from '@/lib/product';
 import type { panelNavigation } from '@/lib/panel';
 
@@ -51,8 +52,11 @@ export function HelpCenter({ open, onClose, query, nav, businessId }: {
   const [checklist, setChecklist] = useState<ChecklistItem[]>([]);
   const legacyPagesEnabled = isLegacyPagesEnabled();
 
+  const overviewAllowed = navAllowsOverview(nav);
   useEffect(() => {
     if (!open || !businessId) return;
+    // Sem Visão geral na navegação já calculada: não há checklist a buscar.
+    if (!overviewAllowed) { setChecklist([]); return; }
     let on = true;
     apiGet<{ checklist?: ChecklistItem[] }>(`/api/overview?businessId=${businessId}&period=7`)
       .then((r) => {
@@ -62,7 +66,7 @@ export function HelpCenter({ open, onClose, query, nav, businessId }: {
       })
       .catch(() => { /* ajuda não pode quebrar a tela */ });
     return () => { on = false; };
-  }, [open, businessId, legacyPagesEnabled]);
+  }, [open, businessId, legacyPagesEnabled, overviewAllowed]);
 
   // Só aparece caminho que o usuário ALCANÇA (fonte: o catálogo autorizado).
   const allowed = useMemo(() => new Set(nav.allowed.map((r) => r.href)), [nav.allowed]);

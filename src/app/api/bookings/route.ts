@@ -8,7 +8,9 @@ import {
   bookingDuration, bookingMaxDate, effectiveManageLimit, needsClosure, rescheduleDecision,
   rescheduleForwardNote, rescheduleNote,
 } from '@/lib/booking-ops';
-import { applyBookingStatusTx } from '@/lib/booking-status';
+import { transitionAppointment, bookingWorkflowState, closeWorkflowTaskTx } from '@/lib/appointment-workflow-tx';
+import { publishWorkflowEvent } from '@/lib/workflow-events';
+import { workflowForBooking, workflowForBookings } from '@/lib/workflow-view';
 import { computeSlots, dayAvailability } from '@/lib/slots';
 import { bookingMode, eligibleProfessionalIds as eligibleIdsForService, slotEligibleProfessionalIds, serviceProfessionalMode } from '@/lib/booking';
 import { createBookingTx, resolveBookingIdentity } from '@/lib/booking-create';
@@ -21,8 +23,6 @@ import { upsertContact } from '@/lib/contacts';
 import { todayISO, nowHM, weekdayOf, addDaysISO, effectiveTimezone, isValidDateISO, isValidClockTime } from '@/lib/tz';
 import { onlyDigits } from '@/lib/utils';
 import { fitInConflictsFromDB, fitInWarning } from '@/lib/fit-in';
-import { isTerminal as isTerminalStatus } from '@/lib/booking-ops';
-import { pushAudit } from '@/lib/audit';
 import { rateLimit, ipFrom } from '@/lib/rate-limit';
 import type { BookingStatus, DB } from '@/lib/types';
 
@@ -85,9 +85,14 @@ export async function GET(req: NextRequest) {
           guard.db.pets.filter((p) => p.businessId === businessId && p.active !== false).map((p) => [p.id, p.name]),
         )
         : {};
-      const withPet = slice.map((b) => (
-        b.petId && petsById[b.petId] ? { ...b, petName: petsById[b.petId] } : b
-      ));
+      // Workflow: etapa canônica + ações válidas para ESTE papel/escopo
+      // (derivadas no servidor; a tela só desenha o que vem aqui).
+      const wf = workflowForBookings(guard.db, businessId, slice, guard.ctx);
+      const withPet = slice.map((b) => ({
+        ...b,
+        ...(b.petId && petsById[b.petId] ? { petName: petsById[b.petId] } : {}),
+        workflow: wf[b.id],
+      }));
       return NextResponse.json({
         bookings: withPet,
         total: all.length, page, limit,
@@ -410,47 +415,20 @@ export async function PATCH(req: NextRequest) {
       return NextResponse.json({ error: 'Você só pode alterar os seus próprios atendimentos.' }, { status: 403 });
     }
 
-    // ── A3.4 · Bloco 4 — CHECK-IN do cliente no balcão ──
-    // Não muda STATUS (chegar não é conclusão): grava o instante da chegada,
-    // quem registrou e uma linha no histórico do atendimento. Reversível
-    // (engano no balcão acontece) — sempre com auditoria.
+    // ── CHECK-IN do cliente no balcão (Workflow: Agendado ⇄ Chegou) ──
+    // Autoridade única: lib/appointment-workflow-tx. Não muda o STATUS do
+    // Booking (chegar não é conclusão); grava instante, autor, histórico e
+    // auditoria. Repetir é idempotente; etapa inválida é recusada com motivo.
     if (body.action === 'check-in' || body.action === 'check-in-undo') {
-      const undo = body.action === 'check-in-undo';
-      const nowIso = new Date().toISOString();
-      const updated = await updateDB((d: DB) => {
-        const target = d.bookings.find((x) => x.id === body.id && x.businessId === business.id);
-        if (!target) throw err('Agendamento não encontrado.', 404);
-        if (!canAccessBooking(guard.ctx, target)) throw err('Você só pode alterar os seus próprios atendimentos.', 403);
-        if (isTerminalStatus(target.status)) {
-          throw err('Atendimento encerrado não recebe check-in.', 400);
-        }
-        if (undo) {
-          if (!target.checkedInAt) throw err('Este atendimento não tem check-in registrado.', 400);
-          target.checkedInAt = undefined;
-          target.checkedInBy = undefined;
-          target.checkedInByName = undefined;
-          target.updatedAt = nowIso;
-          target.history.push({ at: nowIso, from: target.status, to: target.status, by: 'owner', note: 'Check-in desfeito no balcão' });
-          pushAudit(d, {
-            action: 'booking.checkin_undo', businessId: business.id,
-            actor: guard.ctx.user, meta: { bookingId: target.id, date: target.date, time: target.time },
-          }, nowIso);
-          return { checkedInAt: '', checkedInByName: '' };
-        }
-        if (!target.checkedInAt) {
-          target.checkedInAt = nowIso;
-          target.checkedInBy = guard.ctx.user.id;
-          target.checkedInByName = guard.ctx.user.name || guard.ctx.user.email || 'Equipe';
-          target.updatedAt = nowIso;
-          target.history.push({ at: nowIso, from: target.status, to: target.status, by: 'owner', note: `Check-in às ${nowHM(new Date(), effectiveTimezone(business.businessTimezone))}` });
-          pushAudit(d, {
-            action: 'booking.checkin', businessId: business.id,
-            actor: guard.ctx.user, meta: { bookingId: target.id, date: target.date, time: target.time },
-          }, nowIso);
-        }
-        return { checkedInAt: target.checkedInAt || '', checkedInByName: target.checkedInByName || '' };
+      const r = await updateDB((d: DB) => transitionAppointment(d, {
+        ctx: guard.ctx, businessId: business.id, bookingId: String(body.id || ''),
+        command: { kind: body.action === 'check-in' ? 'check_in' : 'check_in_undo' },
+      }));
+      void Promise.all(r.events.map(publishWorkflowEvent));
+      return NextResponse.json({
+        ok: true, checkedInAt: r.booking.checkedInAt || '', checkedInByName: r.booking.checkedInByName || '',
+        workflow: workflowForBooking(await readDB(), business.id, r.booking, guard.ctx),
       });
-      return NextResponse.json({ ok: true, ...updated });
     }
 
     if (body.action === 'cancel-series-future') {
@@ -489,6 +467,10 @@ export async function PATCH(req: NextRequest) {
         const target = d.bookings.find((x) => x.id === body.id && x.businessId === business.id);
         if (!target) throw err('Agendamento não encontrado.', 404);
         if (!canAccessBooking(guard.ctx, target)) throw err('Você só pode alterar os seus próprios atendimentos.', 403);
+        // Workflow: atendimento EM ANDAMENTO não é remarcado (finalize antes).
+        if (bookingWorkflowState(d, business.id, target) === 'in_care') {
+          throw err('Atendimento em andamento: finalize o atendimento antes de reagendar.', 409);
+        }
         // O próprio atendimento não bloqueia o novo horário; atendimentos
         // terminais recriados também não (ficam no histórico, não na grade).
         const freshBusiness = d.businesses.find((b) => b.id === business.id)!;
@@ -542,6 +524,8 @@ export async function PATCH(req: NextRequest) {
           });
           target.history.push({ at: now, from: target.status, to: target.status, by: 'owner', note: rescheduleForwardNote({ date, time }) });
           target.updatedAt = now;
+          // A falta/cancelamento já tem novo horário: a pendência "reagendar" fecha.
+          closeWorkflowTaskTx(d, business.id, target.id, now);
           if (target.leadId) {
             const lead = d.leads.find((l) => l.id === target.leadId && l.businessId === business.id);
             if (lead) lead.bookingId = newId;
@@ -572,6 +556,16 @@ export async function PATCH(req: NextRequest) {
         const fromTime = target.time;
         target.date = date;
         target.time = time;
+        // Novo horário = nova chegada: o check-in do horário antigo não vale.
+        // (Quem estava na fila por este agendamento deixa a fila.)
+        target.checkedInAt = undefined;
+        target.checkedInBy = undefined;
+        target.checkedInByName = undefined;
+        for (const q of d.queue || []) {
+          if (q.businessId === business.id && q.bookingId === target.id && (q.status === 'waiting' || q.status === 'called')) {
+            q.status = 'left'; q.endedAt = now; q.updatedAt = now;
+          }
+        }
         // Profissional do destino: o escolhido explicitamente vence. Sem
         // escolha, usa o profissional LIVRE retornado pela validação (em equipe
         // o horário pode estar livre só para outra pessoa). Manter o profissional
@@ -601,29 +595,28 @@ export async function PATCH(req: NextRequest) {
       return NextResponse.json({ ok: true, ...result, moved: decision.kind === 'move', reason: decision.reason });
     }
 
-    // ── Transição de status (fechamento operacional ou mudança normal) ──
-    // P4: a regra está na FUNÇÃO OFICIAL (lib/booking-status.ts), que a automação
-    // também usa — máquina de estados, histórico e mensagens do P3 num só lugar.
-    const to = body.status as BookingStatus;
+    // ── Transição de status (cancelar · faltou · concluir · confirmar · reabrir) ──
+    // Passa pelo WORKFLOW (etapa × papel × escopo) e, dentro dele, pela FUNÇÃO
+    // OFICIAL de status (lib/booking-status.ts, a mesma da automação).
+    const to = String(body.status || '') as BookingStatus;
+    if (!['pending', 'confirmed', 'completed', 'cancelled', 'no_show'].includes(to)) {
+      return NextResponse.json({ error: 'Status inválido.' }, { status: 400 });
+    }
     const applied = await updateDB((d) => {
-      const r = applyBookingStatusTx(d, {
-        businessId: business.id,
-        bookingId: String(body.id || ''),
-        to,
-        by: 'owner',
-        note: body.note ? String(body.note) : undefined,
+      const r = transitionAppointment(d, {
+        ctx: guard.ctx, businessId: business.id, bookingId: String(body.id || ''),
+        command: { kind: 'status', to }, note: body.note ? String(body.note) : undefined,
       });
-      if (r.ok) {
-        // A2-B3 (F6): lembretes vencidos nascem na ESCRITA (idempotente por
-        // agendamento) — o GET manage parou de ter efeito colateral.
-        try { enqueueDueReminders(d, business.id, todayISO(new Date(), effectiveTimezone(business.businessTimezone))); } catch { /* melhor-esforço */ }
-      }
+      // A2-B3 (F6): lembretes vencidos nascem na ESCRITA (idempotente por
+      // agendamento) — o GET manage parou de ter efeito colateral.
+      try { enqueueDueReminders(d, business.id, todayISO(new Date(), effectiveTimezone(business.businessTimezone))); } catch { /* melhor-esforço */ }
       return r;
     });
-    if (!applied.ok) {
-      return NextResponse.json({ error: applied.error || 'Não foi possível atualizar.' }, { status: applied.status_code || 422 });
-    }
-    return NextResponse.json({ ok: true, status: applied.status });
+    void Promise.all(applied.events.map(publishWorkflowEvent));
+    return NextResponse.json({
+      ok: true, status: applied.booking.status,
+      workflow: workflowForBooking(await readDB(), business.id, applied.booking, guard.ctx),
+    });
   } catch (e: any) {
     const status = e?.status || 500;
     if (status === 500) console.error('[bookings] PATCH falhou:', e);

@@ -38,6 +38,26 @@ export interface OverviewPayload {
   [key: string]: unknown;
 }
 
+/**
+ * REGRA ÚNICA: quem não tem acesso à Visão geral (`dashboard`) NÃO chama
+ * `/api/overview` — nem a tela, nem o mini-card da sidebar, nem o sino, nem a
+ * central de ajuda. A decisão é tomada ANTES da requisição (não se esconde o
+ * 403) e só depois que as permissões chegaram (`ready`), para não disparar uma
+ * chamada especulativa enquanto o contexto ainda carrega. É só economia e
+ * fluidez: a autorização de verdade continua em `requireBusiness` no servidor.
+ */
+export function canLoadOverview(
+  ready: boolean,
+  permissions: { dashboard?: boolean } | null | undefined,
+): boolean {
+  return ready === true && permissions?.dashboard === true;
+}
+
+/** Mesma regra a partir da navegação já calculada (`/dashboard` permitido). */
+export function navAllowsOverview(nav: { allowed: ReadonlyArray<{ href: string }> }): boolean {
+  return nav.allowed.some((i) => i.href === '/dashboard');
+}
+
 const inflight = new Map<string, Promise<ApiResult<OverviewPayload>>>();
 
 export function overviewUrl(businessId: string, period = 7): string {

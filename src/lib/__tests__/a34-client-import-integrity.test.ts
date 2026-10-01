@@ -408,10 +408,11 @@ describe('A3.4 · B7 (2ª volta) — saída completa (JSON) sem segredos', () =>
 
     const full = await exportFullGET(jsonReq(`/api/contacts/export-full?businessId=${BIZ}`, undefined, recToken, 'GET'));
     expect(full.status).toBe(403);
-    expect((await json(full)).error).toMatch(/administra a unidade/i);
-    // O CSV simples continua sendo do trabalho dela…
+    expect((await json(full)).error).toMatch(/administra a unidade|permiss/i);
+    // Workflow + Permissões: levar a base inteira (CSV também) é capacidade
+    // própria `clientes_exportar` — `clientes` sozinho não basta.
     const csv = await exportGET(jsonReq(`/api/contacts/export?businessId=${BIZ}`, undefined, recToken, 'GET'));
-    expect(csv.status).toBe(200);
+    expect(csv.status).toBe(403);
     // …e o arquivo completo NÃO tem a seção de atendimento para quem não tem
     // a permissão de atendimento (dado clínico).
     const db1 = await readDB();

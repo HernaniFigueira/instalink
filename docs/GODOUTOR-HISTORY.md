@@ -144,6 +144,20 @@ Objetivo da missão final: produto clínico profissional sem expor `Member/Profe
 
 ---
 
+## 2026-09-30 — Workflow + Permissões (CONCLUÍDO EM CÓDIGO / HOMOLOGADO / AGUARDANDO MERGE)
+
+Base `main` `4c51584` (#46 mergeada, em produção). Branch de sessão `arena/01a0f3d3-instalink`, commit de código `5327e0e`.
+
+- **Workflow:** etapa canônica derivada de Booking + Fila + Atendimento (`appointment-workflow.ts`), transição única transacional (`appointment-workflow-tx.ts`), eventos de domínio best-effort após o commit, auditoria `booking.status_changed`; sem nova máquina persistida; `Booking.workflow` é leitura derivada.
+- **Permissões:** matriz Proprietário/Administrador/Recepção/Profissional aplicada no servidor; capacidades `clientes_exportar`/`clientes_importar`.
+- **Escopo de dados do Profissional (P0):** `data-scope.ts` por relação real; aplicado a contatos, export/import, People 360, pets, busca, oportunidades, pendências, conversas, visão geral, fila e atendimento.
+- **UI:** detalhe do agendamento guiado por `booking.workflow.allowed` (Recepção nunca vê botão clínico), Clientes sem importar/exportar/novo cliente fora do escopo, drawer só inicia atendimento após a chegada.
+- **Pendência:** faltou abre uma tarefa `Reagendar falta de …` (reaproveita `tasks`), fechada ao reabrir/reagendar.
+- **Testes:** `workflow-permissoes.test.ts` (42). Suíte 2801 PASS / 4 baseline conhecidas. Homologação real em `docs/AUTO-HOMOLOGACAO-WORKFLOW-PERMISSOES.md`.
+- **Deferido:** Agenda Temporal 2.0 (PRÓXIMA PR), Clinical Encounter F1, Cadastro/Onboarding PF/PJ (§2.6).
+
+---
+
 ## 2026-09-30 — PR #46 concluída e homologada (fechamento documental)
 
 **`CONCLUÍDA E HOMOLOGADA / PRONTA PARA MERGE` — merge NÃO realizado.** HEAD de código homologado `f7df12a` (branch `arena/01a0f3d3-instalink`). Vercel SUCCESS; `npx vitest run` 2759 passed / 4 failed (baseline conhecida e intocada: 3× `a34-instagram`, 1× `automation-audit-p4`); build, typecheck e diff-check OK. Homologação real (build de produção, banco descartável, login real, Chromium headless): 1366 23/23, 1024 23/23, 390 (drawer de pessoa) 17/17, console limpo; fechamento incluiu label `Proprietário` via `roleLabel` e Drawer utilizável em 390px. Detalhes: `docs/AUTO-HOMOLOGACAO-PR46-MODELO-OPERACIONAL.md`.
@@ -186,7 +200,8 @@ Registrado sem implementação: **Cadastro/Onboarding — contrato de identidade
 ## Histórico de PRs
 - #43 — Design System 2.0 — mergeado
 - #45 — Clinical Convergence (ramo `arena/godoutor-clinical-convergence`) — CONCLUÍDA, referência histórica
-- #46 — Clinical Structure Consolidation + Architecture Closure (`arena/01a0eda6-instalink`) — CONCLUÍDA EM CÓDIGO / AGUARDANDO HOMOLOGAÇÃO E MERGE
+- #46 — Clinical Structure Consolidation + Architecture Closure — `MERGED / PRODUÇÃO / CONCLUÍDA` (`main` `4c51584`)
+- Workflow + Permissões (`arena/01a0f3d3-instalink`) — CONCLUÍDO EM CÓDIGO / HOMOLOGADO / AGUARDANDO MERGE
 
 
 ## 2026-09-29 — Homologação Clinical UX Closure — continuação (0410e49+)

@@ -12,7 +12,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { randomUUID } from 'node:crypto';
 import { readDB, updateDB } from '@/lib/db';
 import { requireBusiness } from '@/lib/access';
-import { NO_PROFESSIONAL_SCOPE } from '@/lib/access-core';
+import { NO_PROFESSIONAL_SCOPE, canAccessBooking } from '@/lib/access-core';
 import { pushAudit } from '@/lib/audit';
 import { upsertContact } from '@/lib/contacts';
 import {
@@ -100,6 +100,16 @@ export async function POST(req: NextRequest) {
     if (contactIdInput && !chosenContact) {
       return NextResponse.json({ error: 'Este cadastro não é desta unidade.' }, { status: 400 });
     }
+    // O vínculo com o agendamento só vale DENTRO da unidade e do escopo do
+    // profissional (o id vem do cliente — nunca é prova de nada).
+    const linkedBookingId = String(body.bookingId || '');
+    if (linkedBookingId) {
+      const linked = (guard.db.bookings || []).find((b) => b.id === linkedBookingId && b.businessId === businessId);
+      if (!linked) return NextResponse.json({ error: 'Agendamento não encontrado nesta unidade.' }, { status: 404 });
+      if (!canAccessBooking(guard.ctx, linked)) {
+        return NextResponse.json({ error: 'Você só pode alterar os seus próprios atendimentos.' }, { status: 403 });
+      }
+    }
     const askedProfessionalId = String(body.professionalId || '');
     if (askedProfessionalId && !(guard.db.professionals || []).some((p) => p.id === askedProfessionalId && p.businessId === businessId && p.active !== false)) {
       return NextResponse.json({ error: 'Profissional indisponível.' }, { status: 400 });
@@ -140,7 +150,7 @@ export async function POST(req: NextRequest) {
         contactId: contact?.id || '',
         serviceId: String(body.serviceId || ''),
         professionalId,
-        bookingId: String(body.bookingId || ''),
+        bookingId: linkedBookingId,
         note: String(body.note || '').slice(0, 200),
         status: 'waiting',
         date: todayISO(now, tz),

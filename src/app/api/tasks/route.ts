@@ -9,6 +9,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { readDB, updateDB } from '@/lib/db';
 import { requireBusiness } from '@/lib/access';
+import { canAccessBooking } from '@/lib/access-core';
+import { canAccessContact, canAccessLead, canAccessTask, isProfessionalScoped, scopedDbView } from '@/lib/data-scope';
 import { pushAudit } from '@/lib/audit';
 import {
   createTaskTx, openTasks, setTaskStatusTx, summarizeTasks, taskAssigneeOptions, taskDueLabel,
@@ -48,14 +50,17 @@ export async function GET(req: NextRequest) {
   const db = guard.db;
   const mineOnly = req.nextUrl.searchParams.get('mine') === '1';
   const today = todayISO();
-  const list = (db.tasks || []).filter((t) => t.businessId === businessId && (status === 'all' || t.status === status));
+  // ESCOPO DE DADOS: quem atende só vê pendências próprias ou ligadas aos seus
+  // agendamentos/atendimentos/clientes. Contadores saem da MESMA visão recortada.
+  const view0 = isProfessionalScoped(guard.ctx) ? scopedDbView(db, businessId, guard.ctx) : db;
+  const list = (view0.tasks || []).filter((t) => t.businessId === businessId && (status === 'all' || t.status === status));
   const scoped = mineOnly ? list.filter((t) => t.assignedUserId === guard.ctx.user.id) : list;
-  const items = (status === 'open' && !mineOnly ? openTasks(db, businessId, 100) : scoped.slice(-100).reverse())
+  const items = (status === 'open' && !mineOnly ? openTasks(view0, businessId, 100) : scoped.slice(-100).reverse())
     .map((t) => view(db, t));
   return NextResponse.json({
     ok: true,
     tasks: items,
-    summary: summarizeTasks(db, businessId, today, guard.ctx.user.id),
+    summary: summarizeTasks(view0, businessId, today, guard.ctx.user.id),
     // Responsáveis possíveis (mesma projeção do editor de automações). A tela
     // de Tarefas é porta própria: não pode depender de /api/automations (que
     // exige permissão de configuração) para conseguir atribuir uma tarefa.
@@ -70,6 +75,27 @@ export async function POST(req: NextRequest) {
     const guard = await requireBusiness(req, businessId, ['leads', 'agenda', 'clientes', 'config']);
     if (!guard.ok) return guard.res;
     const created = await updateDB((d) => {
+      // Vínculos só valem dentro do escopo de quem cria (o id não é prova).
+      if (isProfessionalScoped(guard.ctx)) {
+        const deny = () => Object.assign(new Error('Vínculo não encontrado.'), { status: 404 });
+        if (body.leadId) {
+          const l = d.leads.find((x) => x.id === String(body.leadId) && x.businessId === businessId);
+          if (!l || !canAccessLead(d, guard.ctx, l)) throw deny();
+        }
+        if (body.bookingId) {
+          const b = d.bookings.find((x) => x.id === String(body.bookingId) && x.businessId === businessId);
+          if (!b || !canAccessBooking(guard.ctx, b)) throw deny();
+        }
+        if (body.encounterId) {
+          const e = (d.encounters || []).find((x) => x.id === String(body.encounterId) && x.businessId === businessId);
+          if (!e || e.professionalId !== guard.ctx.professionalScope) throw deny();
+        }
+        const cid = String(body.customerId || body.contactId || '');
+        if (cid) {
+          const c = d.contacts.find((x) => (x.id === cid || x.customerId === cid) && x.businessId === businessId);
+          if (!c || !canAccessContact(d, guard.ctx, c)) throw deny();
+        }
+      }
       // O responsável precisa ser da equipe desta unidade (a mesma regra que a
       // automação já passa — sem caminho paralelo de validação).
       const assignee = String(body.assignedUserId || '');
@@ -128,7 +154,7 @@ export async function PATCH(req: NextRequest) {
     const updated = await updateDB((d) => {
       const taskId = String(body.id || '');
       const existing = (d.tasks || []).find((x: any) => x.id === taskId && x.businessId === businessId);
-      if (!existing) throw Object.assign(new Error('Tarefa não encontrada.'), { status: 404 });
+      if (!existing || !canAccessTask(d, guard.ctx, existing)) throw Object.assign(new Error('Tarefa não encontrada.'), { status: 404 });
       // Edição operacional: título, nota, prazo, responsável, vínculos
       let touched = false;
       if (body.title !== undefined) {

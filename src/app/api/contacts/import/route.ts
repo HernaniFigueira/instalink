@@ -23,6 +23,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { updateDB } from '@/lib/db';
 import { requireBusiness } from '@/lib/access';
+import { isProfessionalScoped } from '@/lib/data-scope';
 import { pushAudit } from '@/lib/audit';
 import { addContactNote, upsertContact } from '@/lib/contacts';
 import { normalizeContactProfile, profileOf } from '@/lib/contact-profile';
@@ -43,8 +44,13 @@ export async function POST(req: NextRequest) {
   try {
     const body = await req.json().catch(() => ({} as Record<string, any>));
     const businessId = String(body.businessId || '');
-    const guard = await requireBusiness(req, businessId, 'clientes');
+    // Trazer uma base inteira para dentro é capacidade própria (`clientes_importar`)
+    // e exige escopo da unidade — nunca um profissional recortado.
+    const guard = await requireBusiness(req, businessId, 'clientes_importar');
     if (!guard.ok) return guard.res;
+    if (isProfessionalScoped(guard.ctx)) {
+      return NextResponse.json({ error: 'A importação de clientes é de quem administra a unidade.' }, { status: 403 });
+    }
 
     const mode = String(body.mode || 'preview') === 'commit' ? 'commit' : 'preview';
     const existingMode = existingModeOf(body);
