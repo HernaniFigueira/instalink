@@ -44,7 +44,7 @@ import { usePanelPermissions } from '@/components/dashboard/usePanelPermissions'
 import { canReopenEncounter } from '@/lib/encounters';
 import { AccessDenied, AreaLoadError, PermissionNotice, useAreaLoad, useForbiddenNotice } from '@/components/dashboard/AccessNotice';
 import { useRevalidateOnFocus } from '@/components/dashboard/use-revalidate';
-import { bookingDuration, effectiveHorizonDays, needsClosure, rescheduleDecision } from '@/lib/booking-ops';
+import { bookingDurationOf, effectiveHorizonDays, needsClosure, rescheduleDecision } from '@/lib/booking-ops';
 import { queueSummary, waitLabel } from '@/lib/queue';
 import { apiGet, apiSend } from '@/lib/api-client';
 import { SLOT_STATE_MESSAGE, slotState } from '@/lib/slot-states';
@@ -602,11 +602,12 @@ export default function AgendaPage() {
   const serviceOf = useCallback((id: string) => services.find((s) => s.id === id), [services]);
   const serviceName = useCallback((id: string) => serviceOf(id)?.name || 'Serviço', [serviceOf]);
   const proName = useCallback((id: string) => pros.find((p) => p.id === id)?.name || '', [pros]);
-  const durationOf = useCallback((b: Booking) => bookingDuration(serviceOf(b.serviceId), 30), [serviceOf]);
+  // Agenda Temporal 2.0 (B1): altura/cartão usam a janela do PRÓPRIO Booking.
+  const durationOf = useCallback((b: Booking) => bookingDurationOf(b, serviceOf(b.serviceId), 30), [serviceOf]);
 
   const pendencies = useMemo(
     () => bookings
-      .filter((b) => needsClosure(b, bookingDuration(serviceOf(b.serviceId)), today, nowHM(new Date(), bizTz)))
+      .filter((b) => needsClosure(b, bookingDurationOf(b, serviceOf(b.serviceId)), today, nowHM(new Date(), bizTz)))
       .sort((a, b) => (a.date + a.time < b.date + b.time ? -1 : 1)),
     [bookings, serviceOf, today, bizTz],
   );
@@ -699,7 +700,7 @@ export default function AgendaPage() {
       const ranges: Array<{start:number;end:number}> = [];
       if(bookingCfg && c.date>=today && c.date<=addDaysISO(today,effectiveHorizonDays(bookingCfg)) && bookings.length<500) {
         for(const service of services.filter(s=>s.active!==false && s.bookable!==false)) {
-          const result=computeSlots({rules,exceptions,bookings,services,professionals:activePros.filter(p=>!specFilter||(p.role||'').trim()===specFilter),dateISO:c.date,weekday:weekdayOf(c.date),serviceId:service.id,durationMin:service.durationMin,professionalId:c.professionalId||proFilter,eligibleProIds:slotEligibleProfessionalIds(service as any, pros),nowHM:c.date===today?nowHM(new Date(),bizTz):'',leadMin:bookingCfg.leadMin,bufferMin:bookingCfg.bufferMin});
+          const result=computeSlots({rules,exceptions,bookings,services,professionals:activePros.filter(p=>!specFilter||(p.role||'').trim()===specFilter),dateISO:c.date,weekday:weekdayOf(c.date),serviceId:service.id,durationMin:service.durationMin,professionalId:c.professionalId||proFilter,eligibleProIds:slotEligibleProfessionalIds(service as any, pros),nowHM:c.date===today?nowHM(new Date(),bizTz):'',leadMin:bookingCfg.leadMin,bufferMin:bookingCfg.bufferMin,timeZone:bizTz});
           for(const time of result.slots) ranges.push({start:timeToMin(time),end:timeToMin(time)+service.durationMin});
         }
       }
@@ -950,7 +951,7 @@ export default function AgendaPage() {
     if (e.pointerType === 'mouse' && e.button !== 0) return;
     const booking = bookingsRef.current.get(id);
     if (!booking) return;
-    durationRef.current = bookingDuration(services.find((s) => s.id === booking.serviceId), 30);
+    durationRef.current = bookingDurationOf(booking, services.find((s) => s.id === booking.serviceId), 30);
     geometryRef.current = readGeometry();
     interactionRef.current = reduceInteraction(interactionRef.current, {
       type: 'down', id, at: { x: e.clientX, y: e.clientY },
@@ -1487,7 +1488,7 @@ export default function AgendaPage() {
                 .filter((b) => !statusFilter || b.status === statusFilter)
                 .filter((b) => !specFilter || proRoleOf(b.professionalId || '') === specFilter)
                 .filter((b) => !proFilter || b.professionalId === proFilter);
-              const pend = list.filter((b) => needsClosure(b, bookingDuration(serviceOf(b.serviceId)), today, nowHM(new Date(), bizTz))).length;
+              const pend = list.filter((b) => needsClosure(b, bookingDurationOf(b, serviceOf(b.serviceId)), today, nowHM(new Date(), bizTz))).length;
               const inMonth = d.slice(0, 7) === focus.slice(0, 7);
               return (
                 <button key={d} onClick={() => { setPresentation({data:d,view:'day'}); }} className={`bg-white p-1.5 min-h-[72px] text-left hover:bg-zinc-50 ${d === today ? 'ring-1 ring-inset ring-emerald-500 bg-emerald-50/40' : ''} ${!inMonth ? 'bg-zinc-50 text-zinc-400' : ''}`}>

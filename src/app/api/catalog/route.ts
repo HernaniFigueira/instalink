@@ -14,6 +14,7 @@ import { validateAvailabilityException } from '@/lib/hours';
 import { todayISO, effectiveTimezone } from '@/lib/tz';
 import { serviceProfessionalMode } from '@/lib/booking';
 import { serviceHasHistory, professionalHasHistory } from '@/lib/history';
+import { freezeLegacyWindowsForService } from '@/lib/booking-temporal';
 
 // API unificada de catálogo (produtos, opções, serviços, equipe, agenda).
 // Toda mutação passa pela camada central de autorização (identidade →
@@ -161,6 +162,23 @@ export async function POST(req: NextRequest) {
             : (existing ? existing.showPrice !== false : true);
           const data: any = { name: body.name.trim(), description: body.description || '', image: body.image || '', price: clampCents(Number(body.price) || 0), showPrice, durationMin: Math.max(5, Number(body.durationMin) || 30), professionalIds: proIds, categoryId: body.categoryId || '', active: body.active !== false, featured: !!body.featured, bookable: body.bookable !== false, questions: (Array.isArray(body.questions) ? body.questions : (existing?.questions || [])).map((x: any) => String(x || '').trim().slice(0, 120)).filter(Boolean).slice(0, 3) };
           if (professionalMode) data.professionalMode = professionalMode;
+          // ═══════════════════════════════════════════════════════════════
+          // AGENDA TEMPORAL 2.0 (B1) — CONGELAMENTO ANTES DE MUDAR A DURAÇÃO
+          // ═══════════════════════════════════════════════════════════════
+          // Agendamentos antigos nunca tiveram a duração armazenada. Antes de
+          // alterar `Service.durationMin`, a inferência dos agendamentos
+          // legados deste serviço é congelada com a duração VIGENTE — assim
+          // nem esta nem edições futuras movem a ocupação histórica. Sem
+          // backfill destrutivo: só Bookings sem janela canônica são tocados.
+          if (existing && Number(data.durationMin) !== Number(existing.durationMin)) {
+            const biz = db.businesses.find((b) => b.id === businessId);
+            freezeLegacyWindowsForService(db, {
+              businessId,
+              serviceId: existing.id,
+              durationMin: existing.durationMin,
+              timeZone: effectiveTimezone(biz?.businessTimezone),
+            });
+          }
           let serviceId: string;
           if (existing) { Object.assign(existing, data); serviceId = existing.id; }
           else { db.services.push({ id, businessId, ...data }); serviceId = id; }

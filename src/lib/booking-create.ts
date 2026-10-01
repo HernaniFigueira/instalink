@@ -18,6 +18,7 @@ import { eligibleProfessionalIds, slotEligibleProfessionalIds, professionalServe
 import { upsertContact } from './contacts';
 import { onlyDigits } from './utils';
 import { isValidDateISO, isValidClockTime, effectiveTimezone, weekdayOf, todayISO, nowHM } from './tz';
+import { bookingWindowFields, buildBookingWindow, type BookingWindow } from './booking-temporal';
 import { enqueueBookingAutomation, enqueueDueReminders } from './automations';
 import { bookingMaxDate } from './booking-ops';
 import { fitInConflictsFromDB, fitInPastError, fitInWarning } from './fit-in';
@@ -200,6 +201,24 @@ export function createBookingTx(d: DB, p: CreateBookingParams): {
     throw txError(p.bookingKind === 'fit_in' ? pastError : 'Este horário já passou. Escolha um horário a partir de agora.', 400);
   }
 
+  // ═══════════════════════════════════════════════════════════════
+  // AGENDA TEMPORAL 2.0 (B1) — JANELA CANÔNICA NA CRIAÇÃO
+  // ═══════════════════════════════════════════════════════════════
+  // A duração NUNCA vem do navegador: o servidor resolve o default do serviço
+  // e congela o snapshot junto do instante inicial/final e do fuso da clínica.
+  // Horário inexistente/ambíguo (DST gap/fold) é recusado — nunca reinterpretado.
+  let window: BookingWindow;
+  try {
+    window = buildBookingWindow({
+      date: p.date, time: p.time,
+      durationMin: service.durationMin,
+      timeZone: btz,
+    });
+  } catch (e: any) {
+    throw txError(e?.message || 'Horário inválido para o fuso da clínica.', 400);
+  }
+  const windowFields = bookingWindowFields(window, btz);
+
   const activePros = d.professionals.filter((x) => x.businessId === businessId && x.active !== false);
   const eligible = activePros.filter((x) => professionalServesService(service as any, x.id, activePros));
 
@@ -236,6 +255,7 @@ export function createBookingTx(d: DB, p: CreateBookingParams): {
     nowHM: p.date === today ? nowHM(nowDate, btz) : '',
     leadMin: cfg?.leadMin || 0,
     bufferMin: cfg?.bufferMin || 0,
+    timeZone: btz,
   });
   // ── A3.4 · Bloco 4: encaixe (fit_in) ────────────────────────────────
   // O encaixe NÃO cria um segundo caminho de agendamento: muda UMA regra
@@ -253,7 +273,7 @@ export function createBookingTx(d: DB, p: CreateBookingParams): {
       services: d.services.filter((s) => s.businessId === businessId),
       professionals: eligible.map((x) => ({ id: x.id, name: x.name })),
     }, {
-      date: p.date, time: p.time, durationMin: service.durationMin,
+      date: p.date, time: p.time, durationMin: window.durationMin,
       professionalId: ownerPro, eligibleProIds: slotEligibleProfessionalIds(service as any, d.professionals.filter((x) => x.businessId === businessId)),
     });
     if (conflicts.length > 0 && !p.fitInConfirmed) {
@@ -291,11 +311,12 @@ export function createBookingTx(d: DB, p: CreateBookingParams): {
     customerId: p.customer?.id || p.linkedContact?.customerId || '',
     serviceId: service.id,
     professionalId: finalPro,
-    date: p.date,
-    time: p.time,
     customerName: name,
     customerPhone: digits,
     status,
+    // Agenda Temporal 2.0 — startAt/endAt/durationMin/timeZone (+ projeção
+    // date/time) escritos ATOMICAMENTE no mesmo objeto.
+    ...windowFields,
     ...(fitIn ? { bookingKind: 'fit_in' as const } : {}),
     note: String(p.note || '').slice(0, 300),
     createdAt: now,
@@ -356,8 +377,8 @@ export function createBookingTx(d: DB, p: CreateBookingParams): {
     phone: digits,
     name,
     bookingId,
-    bookingDate: p.date,
-    bookingTime: p.time,
+    bookingDate: windowFields.date,
+    bookingTime: windowFields.time,
     actor: leadActor,
     now,
     origin: p.originRunId ? { runId: p.originRunId } : undefined,
@@ -397,7 +418,7 @@ export function createBookingTx(d: DB, p: CreateBookingParams): {
     booking: {
       id: bookingId,
       customerName: name, customerPhone: digits,
-      date: p.date, time: p.time, serviceName: service.name,
+      date: windowFields.date, time: windowFields.time, serviceName: service.name,
     },
     status,
   });

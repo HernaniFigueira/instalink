@@ -27,7 +27,7 @@ import { usePanelPermissions } from '@/components/dashboard/usePanelPermissions'
 import { BOOKING_STATUS } from '@/lib/status';
 import { todayISO, nowHM, formatDateBR, humanDay } from '@/lib/tz';
 import { waLink, cn, money } from '@/lib/utils';
-import { adminBookingMaxDate, bookingDuration, needsClosure, rescheduleDecision } from '@/lib/booking-ops';
+import { adminBookingMaxDate, bookingDurationOf, needsClosure, rescheduleDecision } from '@/lib/booking-ops';
 import { SLOT_STATE_MESSAGE } from '@/lib/slot-states';
 import type { Booking } from '@/lib/types';
 import { WorkspaceSheet } from '@/components/dashboard/WorkspaceSheet';
@@ -89,7 +89,9 @@ export function BookingDetailSheet({ booking, service, pro, businessId, timezone
   const historyRef = useRef<HTMLDivElement>(null);
 
   const def = BOOKING_STATUS[booking.status];
-  const dur = bookingDuration(service as any);
+  // Agenda Temporal 2.0 (B1): a duração exibida/avaliada é a do PRÓPRIO
+  // agendamento (snapshot congelado) — editar o serviço não muda este cartão.
+  const dur = bookingDurationOf(booking, service as any);
   const today = serverToday || todayISO(new Date(), timezone || undefined);
   const late = needsClosure(booking, dur, today, nowHM(new Date(), timezone || undefined));
   const decision = rescheduleDecision(booking.status);

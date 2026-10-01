@@ -12,6 +12,7 @@
 import type { Availability, AvailabilityException, Booking, Professional, Service } from './types';
 import { timeToMin, minToTime } from './utils';
 import { followsBusinessHours } from './schedule';
+import { bookingTimezone, resolveBookingWindow } from './booking-temporal';
 
 export interface SlotQuery {
   rules: Availability[];
@@ -28,6 +29,12 @@ export interface SlotQuery {
   nowHM: string; // HH:MM atual quando dateISO é hoje ('' = outro dia)
   leadMin: number; // antecedência mínima (min)
   bufferMin: number; // intervalo entre atendimentos (min)
+  /**
+   * Agenda Temporal 2.0 — fuso IANA da clínica, usado para projetar a janela
+   * canônica do Booking no dia civil. Ausente = default do produto (somente
+   * chamadas legadas sem negócio resolvido; a conversão continua determinística).
+   */
+  timeZone?: string;
 }
 
 export interface SlotResult {
@@ -135,11 +142,17 @@ export function computeSlots(q: SlotQuery): SlotResult {
     }
   }
 
-  // Ocupação por profissional (duração REAL de cada booking + buffer).
-  const durOf = (b: Booking): number => {
-    const s = q.services.find((x) => x.id === b.serviceId);
-    return Math.max(5, s?.durationMin || q.durationMin);
-  };
+  // ═══════════════════════════════════════════════════════════════
+  // OCUPAÇÃO — AGENDA TEMPORAL 2.0 (B1)
+  // ═══════════════════════════════════════════════════════════════
+  // Ordem de autoridade da duração de um agendamento EXISTENTE:
+  //   1. janela/snapshot do PRÓPRIO Booking (startAt/endAt/durationMin);
+  //   2. fallback legado explícito (duração atual do serviço), marcado como
+  //      inferência pelo resolvedor.
+  // Um Booking canônico NUNCA volta a consultar `Service.durationMin`: era
+  // exatamente esse acoplamento que fazia a ocupação histórica se mover quando
+  // o serviço era editado.
+  const tz = bookingTimezone(q.timeZone);
   const busy = new Map<string, Array<{ start: number; end: number }>>();
   const load = new Map<string, number>(); // carga no dia (p/ auto)
   const pushBusy = (pid: string, s: number, e: number) => {
@@ -148,9 +161,18 @@ export function computeSlots(q: SlotQuery): SlotResult {
     busy.set(pid, list);
   };
   for (const b of q.bookings) {
-    if (b.date !== q.dateISO || b.status === 'cancelled') continue;
-    const s = timeToMin(b.time);
-    const e = s + durOf(b) + Math.max(0, q.bufferMin);
+    if (b.status === 'cancelled') continue;
+    // Projeção civil no fuso da clínica: vem dos instantes canônicos quando
+    // existem; senão, da leitura `date`/`time` do legado.
+    const window = resolveBookingWindow(b, {
+      timeZone: tz,
+      serviceDurationMin: q.services.find((x) => x.id === b.serviceId)?.durationMin,
+      fallbackDurationMin: q.durationMin,
+    });
+    if (!window.local.date || window.local.date !== q.dateISO || !window.local.time) continue;
+    // Buffer fica FORA da duração do atendimento (a janela/cartão não muda).
+    const s = timeToMin(window.local.time);
+    const e = s + Math.max(5, window.durationMin) + Math.max(0, q.bufferMin);
     load.set(b.professionalId || '', (load.get(b.professionalId || '') || 0) + 1);
     if (soloMode || !b.professionalId) {
       // sem dono definido: bloqueia todos (seguro)

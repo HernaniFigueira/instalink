@@ -4,7 +4,8 @@ import { createBookingTx } from '../../booking-create';
 import { applyBookingStatusTx } from '../../booking-status';
 import { computeSlots } from '../../slots';
 import { eligibleProfessionalIds, slotEligibleProfessionalIds } from '../../booking';
-import { weekdayOf, todayISO } from '../../tz';
+import { weekdayOf, todayISO, effectiveTimezone } from '../../tz';
+import { applyBookingWindow, buildBookingWindow, type BookingWindow } from '../../booking-temporal';
 import { onlyDigits } from '../../utils';
 import { pushAudit } from '../../audit';
 
@@ -60,6 +61,7 @@ export const findAvailableSlots: ToolDef<{ date: string; serviceId: string; prof
       nowHM: input.date === today ? now.toTimeString().slice(0, 5) : '',
       leadMin: business.booking?.leadMin || 0,
       bufferMin: business.booking?.bufferMin || 0,
+      timeZone: effectiveTimezone(business.businessTimezone),
     });
     return {
       date: input.date,
@@ -233,14 +235,26 @@ export const rescheduleBooking: ToolDef<{ bookingId: string; date: string; time:
       nowHM: '',
       leadMin: 0,
       bufferMin: business.booking?.bufferMin || 0,
+      timeZone: effectiveTimezone(business.businessTimezone),
     });
     if (!slots.slots.includes(input.time)) {
       throw Object.assign(new Error('Horário indisponível para remarcação.'), { status: 409 });
     }
+    // Agenda Temporal 2.0 (B1): o agente remarca pelo MESMO contrato canônico
+    // (instantes + snapshot + fuso da clínica) — nunca por um caminho paralelo.
+    let window: BookingWindow;
+    try {
+      window = buildBookingWindow({
+        date: input.date, time: input.time,
+        durationMin: service?.durationMin || 30,
+        timeZone: effectiveTimezone(business.businessTimezone),
+      });
+    } catch (e: any) {
+      throw Object.assign(new Error(e?.message || 'Horário inválido para o fuso da clínica.'), { status: 400 });
+    }
     const now = ctx.now || new Date().toISOString();
     const from = { date: target.date, time: target.time };
-    target.date = input.date;
-    target.time = input.time;
+    applyBookingWindow(target, window, effectiveTimezone(business.businessTimezone));
     target.updatedAt = now;
     if (!Array.isArray(target.history)) target.history = [];
     target.history.push({

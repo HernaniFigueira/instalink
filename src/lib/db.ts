@@ -25,6 +25,8 @@ import { getPgPool, isPgConfigured } from './pg';
 import { runSyncMutation, type SyncMutation } from './db-transaction';
 import type { DB } from './types';
 import { defaultBookingConfig, isClinicType } from './types';
+// Agenda Temporal 2.0 (B1): validação de fuso IANA sem I/O (Intl).
+import { isValidTimezone } from './tz';
 import { backfillContacts } from './contacts';
 import { normalizeFeatures } from './features';
 import { sanitizeAppearance } from './appearance';
@@ -398,6 +400,38 @@ export function normalizeDB(raw: unknown): DB {
     if (!Array.isArray((bk as any).history)) (bk as any).history = [];
     if (typeof (bk as any).previousId !== 'string') (bk as any).previousId = '';
     if (typeof (bk as any).rescheduleCount !== 'number') (bk as any).rescheduleCount = 0;
+    // ═══════════════════════════════════════════════════════════════
+    // AGENDA TEMPORAL 2.0 (B1) — INVARIANTES DO CONTRATO TEMPORAL
+    // ═══════════════════════════════════════════════════════════════
+    // Determinístico e de leitura: NÃO infere janela aqui (este ponto não
+    // conhece o fuso da clínica nem a duração do serviço — inferir aqui seria
+    // não-determinístico e moveria o histórico). A inferência de legado vive em
+    // `lib/booking-temporal` e é CONGELADA nas escritas (mudança de serviço,
+    // transição de status, check-in, reagendamento).
+    //
+    // O que fazemos: coerência interna da janela, sem gerar ids/timestamps,
+    // sem depender do fuso do servidor e sem tocar em tenant/escopo.
+    const start = typeof (bk as any).startAt === 'string' ? Date.parse((bk as any).startAt) : NaN;
+    const end = typeof (bk as any).endAt === 'string' ? Date.parse((bk as any).endAt) : NaN;
+    const validWindow = Number.isFinite(start) && Number.isFinite(end) && end > start;
+    if (validWindow) {
+      // startAt/endAt são a autoridade: o snapshot de duração acompanha.
+      const minutes = Math.round((end - start) / 60000);
+      if ((bk as any).durationMin !== minutes) (bk as any).durationMin = minutes;
+      if (!isValidTimezone((bk as any).timeZone)) delete (bk as any).timeZone;
+      if ((bk as any).temporalSource !== 'native' && (bk as any).temporalSource !== 'legacy_inferred') {
+        (bk as any).temporalSource = 'native';
+      }
+    } else {
+      // Janela pela metade ou inválida não é verdade temporária: descartada
+      // (o registro continua legível por `date`/`time` + fallback explícito).
+      if ((bk as any).startAt !== undefined) delete (bk as any).startAt;
+      if ((bk as any).endAt !== undefined) delete (bk as any).endAt;
+      if ((bk as any).temporalSource !== 'legacy_inferred') delete (bk as any).temporalSource;
+    }
+    const dur = Number((bk as any).durationMin);
+    if (!Number.isFinite(dur) || dur <= 0) delete (bk as any).durationMin;
+    else (bk as any).durationMin = Math.round(dur);
   }
   for (const c of base.contacts) {
     // OBSERVAÇÕES: o campo legado `note` é preservado SEM alteração; o array

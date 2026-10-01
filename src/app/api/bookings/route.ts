@@ -5,7 +5,7 @@ import { canAccessBooking, requireBusiness, scopeBookings, scopeInfo } from '@/l
 import { customerFromRequest } from '@/lib/customer-auth';
 import { isFeatureEnabled, canBook as canBookModule } from '@/lib/features';
 import {
-  bookingDuration, bookingMaxDate, effectiveManageLimit, needsClosure, rescheduleDecision,
+  bookingDurationOf, bookingMaxDate, effectiveManageLimit, needsClosure, rescheduleDecision,
   rescheduleForwardNote, rescheduleNote,
 } from '@/lib/booking-ops';
 import { transitionAppointment, bookingWorkflowState, closeWorkflowTaskTx } from '@/lib/appointment-workflow-tx';
@@ -24,6 +24,7 @@ import { todayISO, nowHM, weekdayOf, addDaysISO, effectiveTimezone, isValidDateI
 import { onlyDigits } from '@/lib/utils';
 import { fitInConflictsFromDB, fitInWarning } from '@/lib/fit-in';
 import { rateLimit, ipFrom } from '@/lib/rate-limit';
+import { applyBookingWindow, bookingWindowFields, buildBookingWindow, freezeLegacyBookingWindow, type BookingWindow } from '@/lib/booking-temporal';
 import type { BookingStatus, DB } from '@/lib/types';
 
 function err(message: string, status: number): Error {
@@ -98,7 +99,7 @@ export async function GET(req: NextRequest) {
         total: all.length, page, limit,
         ...(capped ? { limitCapped: true, requestedLimit: requested } : {}),
         today,
-        needsClosure: slice.filter((b) => needsClosure(b, bookingDuration(servicesById[b.serviceId]), today, now)).map((b) => b.id),
+        needsClosure: slice.filter((b) => needsClosure(b, bookingDurationOf(b, servicesById[b.serviceId]), today, now)).map((b) => b.id),
         modules: { bookings: isFeatureEnabled(guard.ctx.business, 'bookings') },
         // Informação para a tela avisar (com honestidade) quando a agenda
         // está recortada. A regra já foi aplicada nos dados acima.
@@ -143,6 +144,7 @@ export async function GET(req: NextRequest) {
       eligibleProIds: slotEligibleProfessionalIds(service as any, allProsForService),
       leadMin: cfg.leadMin || 0,
       bufferMin: cfg.bufferMin || 0,
+      timeZone: btz,
     };
 
     const from = q.get('from') || '';
@@ -494,20 +496,35 @@ export async function PATCH(req: NextRequest) {
           nowHM: date === freshToday ? nowHM(new Date(), freshTz) : '',
           leadMin: freshBusiness.booking?.leadMin || 0,
           bufferMin: freshBusiness.booking?.bufferMin || 0,
+          timeZone: freshTz,
         });
         if (!r.slots.includes(time)) throw err('Este horário está ocupado. Escolha outro.', 409);
+        // Agenda Temporal 2.0 (B1): o novo horário nasce como NOVA janela
+        // canônica (instantes + snapshot + fuso), validada no fuso da clínica.
+        let rescheduleWindow: BookingWindow;
+        try {
+          rescheduleWindow = buildBookingWindow({
+            date, time, durationMin: freshService.durationMin, timeZone: freshTz,
+          });
+        } catch (e: any) {
+          throw err(e?.message || 'Horário inválido para o fuso da clínica.', 400);
+        }
         const now = new Date().toISOString();
         const note = rescheduleNote({ date: target.date, time: target.time }, { date, time });
 
         if (decision.kind === 'recreate') {
           // Estado terminal (concluído/faltou/cancelado): o registro antigo
           // PERMANECE como está e um NOVO atendimento futuro é criado.
+          // Agenda Temporal 2.0: o registro antigo mantém a janela histórica
+          // (legado sem instantes é congelado AGORA para não se mover depois
+          // quando o serviço for editado); o novo recebe a janela nova.
+          freezeLegacyBookingWindow(target, { timeZone: freshTz, serviceDurationMin: freshService.durationMin });
           const newId = randomUUID();
           d.bookings.push({
             id: newId, businessId: business.id, customerId: target.customerId || '',
             serviceId: target.serviceId,
             professionalId: proId || r.assign[time] || target.professionalId || '',
-            date, time,
+            ...bookingWindowFields(rescheduleWindow, freshTz),
             customerName: target.customerName, customerPhone: target.customerPhone,
             status: decision.nextStatus, note: target.note || '', answers: target.answers || [],
             createdAt: now, updatedAt: now,
@@ -552,10 +569,10 @@ export async function PATCH(req: NextRequest) {
         }
 
         // pending/confirmed: move o MESMO atendimento, mantendo o status.
+        // A janela canônica é reescrita atomicamente para o novo horário.
         const fromDate = target.date;
         const fromTime = target.time;
-        target.date = date;
-        target.time = time;
+        applyBookingWindow(target, rescheduleWindow, freshTz);
         // Novo horário = nova chegada: o check-in do horário antigo não vale.
         // (Quem estava na fila por este agendamento deixa a fila.)
         target.checkedInAt = undefined;

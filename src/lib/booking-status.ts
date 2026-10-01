@@ -20,6 +20,8 @@ import { BOOKING_FLOW, canTransition } from './status';
 import { enqueueBookingAutomation, onBookingCompleted } from './automations';
 import { emitAutomationEvent } from './automation/events';
 import { markLeadConverted } from './pipeline';
+import { freezeLegacyBookingWindow } from './booking-temporal';
+import { effectiveTimezone } from './tz';
 
 export interface ApplyBookingStatusParams {
   businessId: string;
@@ -87,6 +89,15 @@ export function applyBookingStatusTx(
   if (from === p.to) {
     return { ok: true, booking, from, status: booking.status };
   }
+
+  // Agenda Temporal 2.0 (B1): persistir um Booking legado congela a janela
+  // inferida UMA única vez (marcada `legacy_inferred`) — edições futuras de
+  // `Service.durationMin` não movem mais a ocupação histórica deste registro.
+  // Bookings já canônicos não são tocados.
+  freezeLegacyBookingWindow(booking, {
+    timeZone: effectiveTimezone(d.businesses.find((b) => b.id === p.businessId)?.businessTimezone),
+    serviceDurationMin: d.services.find((s) => s.id === booking.serviceId && s.businessId === p.businessId)?.durationMin,
+  });
 
   const note = String(p.note || '').trim().slice(0, 300);
   if (!Array.isArray(booking.history)) booking.history = [];
