@@ -4,8 +4,8 @@
 
 ## 1. Cenário reproduzível
 
-- **Base:** 5 profissionais, uma semana fixa, fuso `America/Sao_Paulo`, serviços de 20/30/40/55 minutos e estados pendente, confirmado, concluído, não compareceu e cancelado.
-- **Carga normal:** 7 eventos realistas; **benchmark principal:** 200; **stress:** 1000.
+- **Fixture visual:** 7 eventos em `America/Sao_Paulo` com Dr. Orlando, Dra. Ana e Dr. Carlos; serviços de 20/30/40/55/90 min e estados pendente, confirmado, concluído, não compareceu e cancelado. A vista Dia usa esses 3 profissionais.
+- **Cargas de benchmark:** 200 e 1000 eventos distribuídos por 5 profissionais em uma semana determinística; a fixture visual de 7 eventos continua fixa.
 - Os eventos gerados ficam em slots determinísticos sem sobreposição ativa por profissional. A âncora `booking-orlando-1000` (10:00–10:40) e o conflito de teste das 12:30 permanecem fixos em todas as cargas.
 - **Bibliotecas comparadas:** Grade atual, React Big Calendar 1.20.0, FullCalendar Standard 7.1.0 e Schedule-X Community `@schedule-x/calendar` 4.9.1 / React 4.1.0. Cada adapter é lazy-loaded; o início não pré-carrega as outras três bibliotecas.
 - **Gestos-alvo:** drag-select 10:00–10:40; mover o evento de 10:00 para 11:15 preservando 40 min; resize até 55 min, passo de 5; provocar conflito e conferir rollback com mensagem legível. No Schedule-X Community, drag-select/move/resize não são oferecidos pelo pacote livre e não são falsificados.
@@ -15,7 +15,7 @@ O comparator **Grade atual** é uma implementação isolada do padrão atual de 
 ### Roteiro manual — a executar em browser suportado
 
 1. Carregar uma vez cada candidato em viewport desktop; limpar cache entre a medida fria e a repetição aquecida. Registrar também o tempo de troca de adapter.
-2. Em 7 eventos, verificar Dia/Semana/Lista, evento customizado e toolbar externa. No RBC, medir recursos Profissional em Dia; na Semana filtrar um Profissional para não produzir 35 colunas. Marcar explicitamente as vistas não disponíveis em cada edição/licença.
+2. Em 7 eventos, verificar Dia/Semana/Lista, evento customizado e toolbar externa. No RBC, verificar Orlando/Ana/Carlos como recursos no Dia; na Semana filtrar um Profissional para evitar colunas excessivas. Marcar explicitamente as vistas não disponíveis em cada edição/licença.
 3. Em 200 eventos, repetir seleção, scroll vertical, move, resize e rerender após uma atualização. Fazer cinco repetições por candidato e registrar mediana e p95; não comparar um candidato frio com outro já aquecido.
 4. Em 1000 eventos, repetir scroll/rerender e os gestos-alvo. Usar o mesmo viewport, máquina, filtro, data e ordem; reiniciar a fixture antes de cada sequência.
 5. A 390 px, abrir cada candidato, confirmar Lista como vista inicial, toolbar utilizável e `document.documentElement.scrollWidth <= window.innerWidth`. Anotar qualquer rolagem horizontal local do calendário como decisão explícita, não como overflow global.
@@ -37,18 +37,18 @@ Comando: `npm run spike:agenda:build` (`vite build --config spikes/agenda-tempor
 
 | saída do build | JS bruto | JS gzip | CSS bruto | CSS gzip |
 | --- | ---: | ---: | ---: | ---: |
-| Base comum (aplicação/React/contrato) | 224.13 kB | 73.83 kB | 23.99 kB | 5.52 kB |
-| Grade atual — adapter sob demanda | 7.90 kB | 3.14 kB | incluído na base | incluído na base |
-| React Big Calendar — adapter + dependências | 313.17 kB | 90.68 kB | 12.07 kB | 2.65 kB |
+| Base comum (aplicação/React/contrato) | 224.37 kB | 73.89 kB | 23.99 kB | 5.52 kB |
+| Grade atual — adapter sob demanda | 7.93 kB | 3.14 kB | incluído na base | incluído na base |
+| React Big Calendar — adapter + dependências | 313.44 kB | 90.80 kB | 12.07 kB | 2.65 kB |
 | FullCalendar Standard — adapter + dependências | 274.87 kB | 75.00 kB | 16.61 kB | 3.75 kB |
-| Schedule-X Community — adapter + dependências | 238.44 kB | 70.87 kB | 27.92 kB | 5.12 kB |
+| Schedule-X Community — adapter + dependências | 238.45 kB | 70.87 kB | 27.92 kB | 5.12 kB |
 | Evento customizado compartilhado | 1.03 kB | 0.48 kB | — | — |
 
 O `index.html` gerado contém só o JS/CSS base; os chunks e estilos dos candidatos aparecem como imports dinâmicos do adapter selecionado. Portanto, a carga inicial do spike não soma os três calendários. A tabela continua dependente de árvore de imports/versões e não prevê o chunk final de produção.
 
 ### Geração das fixtures (não é render de calendário)
 
-`npm run spike:agenda:test` mede `benchmarkEvents()` em Node/Vitest e valida quantidade de eventos e cinco profissionais. Execução isolada registrada às 12:16:42: **200 eventos: 79.07 ms; 1000 eventos: 261.69 ms**. É apenas uma amostra da geração determinística no processo de testes; não inclui DOM, layout, paint, scroll ou interação e varia com a máquina.
+`npm run spike:agenda:test` mede `benchmarkEvents()` em Node/Vitest e valida quantidade de eventos e cinco profissionais. Reexecução isolada após os ajustes, às 12:49: **200 eventos: 93.36 ms; 1000 eventos: 251.57 ms**. É apenas uma amostra da geração determinística no processo de testes; não inclui DOM, layout, paint, scroll ou interação e varia com a máquina.
 
 ### Testes de contrato/UI
 
@@ -56,7 +56,7 @@ No momento do registro, os testes focados cobrem mapeamento Dia/Semana/Lista, se
 
 ## 3. Medições ainda não obtidas
 
-Não há resultados reais de render, scroll, drag/resize, jank, recálculo de layout, responsividade visual ou tempos de resposta em browser. Playwright não encontrou um browser instalado; o download do Chromium falhou por reset TLS e o Chromium temporário não inicializou por ausência de bibliotecas NSS/NSPR do sistema. Assim:
+Não há resultados reais de render, scroll, drag/resize, jank, recálculo de layout, responsividade visual ou tempos de resposta em browser. Playwright 1.63.0 não encontrou browser instalado. A tentativa atual de `npx playwright install chromium` falhou repetidamente com `ECONNRESET` antes do TLS; `apt-get update` também não conseguiu acessar `deb.debian.org`. Uma tentativa anterior com Chromium temporário não iniciou por ausência de `libnspr4.so`/NSS. Assim, não houve sessão de browser nesta homologação. Assim:
 
 - os campos `pendente` acima **não** devem receber estimativa a partir de Vitest, Vite ou bundle;
 - o indicador local `adapter + N eventos` só deve ser usado em browser para uma observação de handler até dois `requestAnimationFrame`s após o adapter resolver/montar; não é profiler nem métrica de frame contínuo;

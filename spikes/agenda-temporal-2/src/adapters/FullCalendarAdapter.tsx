@@ -13,7 +13,7 @@ import {
   resizeWindow,
   type AppointmentWindow,
 } from '../domain/temporal-contract';
-import { DEMO_TIME_ZONE, type SpikeEvent } from '../domain/fixtures';
+import type { SpikeEvent } from '../domain/fixtures';
 import { SpikeEventCard } from '../components/SpikeEventCard';
 import type { CalendarAdapterProps } from './types';
 
@@ -40,7 +40,7 @@ function calendarEvent(event: SpikeEvent) {
 }
 
 export default function FullCalendarAdapter(props: CalendarAdapterProps) {
-  const { events, view, focusDate, professionalFilter, onSelectEvent, onSelectRange, onMutation, onNotice } = props;
+  const { events, view, focusDate, timeZone, professionalFilter, onSelectEvent, onSelectRange, onMutation, onNotice } = props;
   const visibleEvents = useMemo(() => events
     .filter((event) => !professionalFilter || event.professionalId === professionalFilter)
     .map(calendarEvent), [events, professionalFilter]);
@@ -84,7 +84,7 @@ export default function FullCalendarAdapter(props: CalendarAdapterProps) {
           initialView={calendarView}
           key={calendarView}
           initialDate={`${focusDate}T12:00:00`}
-          timeZone={DEMO_TIME_ZONE}
+          timeZone={timeZone}
           locale={ptBrLocale}
           headerToolbar={false}
           height="auto"

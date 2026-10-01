@@ -1,6 +1,6 @@
 import { useMemo } from 'react';
-import { DateTime, Settings } from 'luxon';
-import { Calendar, luxonLocalizer, type EventProps } from 'react-big-calendar';
+import { DateTime } from 'luxon';
+import { Calendar, type EventProps } from 'react-big-calendar';
 import withDragAndDrop from 'react-big-calendar/lib/addons/dragAndDrop';
 import 'react-big-calendar/lib/css/react-big-calendar.css';
 import 'react-big-calendar/lib/addons/dragAndDrop/styles.css';
@@ -11,14 +11,11 @@ import {
   resizeWindow,
   type AppointmentWindow,
 } from '../domain/temporal-contract';
-import { DEMO_TIME_ZONE, eventResources, type SpikeEvent } from '../domain/fixtures';
+import { DAY_PROFESSIONALS, eventResources, PROFESSIONALS, type SpikeEvent } from '../domain/fixtures';
+import { createIanaLuxonLocalizer } from './rbcIanaLocalizer';
 import { SpikeEventCard } from '../components/SpikeEventCard';
 import type { CalendarAdapterProps } from './types';
 
-// RBC's documented timezone support uses Luxon's global default zone.
-// It is scoped to this isolated single-business spike; do not copy globally into a multi-tenant production app.
-Settings.defaultZone = DEMO_TIME_ZONE;
-const localizer = luxonLocalizer(DateTime, { firstDayOfWeek: 1 });
 const DnDCalendar = withDragAndDrop<CalendarEvent, { id: string; title: string }>(Calendar);
 
 interface CalendarEvent extends SpikeEvent {
@@ -38,8 +35,8 @@ function toCalendarEvent(event: SpikeEvent): CalendarEvent {
   };
 }
 
-function dateInBusinessZone(date: string, hour = 12): Date {
-  return DateTime.fromISO(`${date}T${String(hour).padStart(2, '0')}:00`, { zone: DEMO_TIME_ZONE }).toJSDate();
+function dateInBusinessZone(date: string, timeZone: string, hour = 12): Date {
+  return DateTime.fromISO(`${date}T${String(hour).padStart(2, '0')}:00`, { zone: timeZone }).toJSDate();
 }
 
 function asInstant(value: Date | string): string {
@@ -51,14 +48,18 @@ function CustomEvent({ event }: EventProps<CalendarEvent>) {
 }
 
 export default function ReactBigCalendarAdapter(props: CalendarAdapterProps) {
-  const { events, view, focusDate, professionalFilter, onSelectEvent, onSelectRange, onMutation, onNotice } = props;
+  const { events, view, focusDate, timeZone, professionalFilter, onSelectEvent, onSelectRange, onMutation, onNotice } = props;
+  const localizer = useMemo(() => createIanaLuxonLocalizer(timeZone), [timeZone]);
   const calendarEvents = useMemo(() => events.map(toCalendarEvent), [events]);
-  const resources = useMemo(() => eventResources().filter((resource) => !professionalFilter || resource.id === professionalFilter), [professionalFilter]);
+  const resources = useMemo(() => {
+    const candidates = professionalFilter ? PROFESSIONALS : DAY_PROFESSIONALS;
+    return eventResources(candidates).filter((resource) => !professionalFilter || resource.id === professionalFilter);
+  }, [professionalFilter]);
   const activeView = libraryView('rbc', view) as 'day' | 'week' | 'agenda';
-  const focusedDate = dateInBusinessZone(focusDate);
-  const min = dateInBusinessZone(focusDate, 5);
-  const max = dateInBusinessZone(focusDate, 23);
-  const scrollToTime = dateInBusinessZone(focusDate, 9);
+  const focusedDate = dateInBusinessZone(focusDate, timeZone);
+  const min = dateInBusinessZone(focusDate, timeZone, 5);
+  const max = dateInBusinessZone(focusDate, timeZone, 23);
+  const scrollToTime = dateInBusinessZone(focusDate, timeZone, 9);
 
   function requestChange(event: CalendarEvent, action: 'move' | 'resize', start: Date | string, end: Date | string, resourceId?: string | number) {
     if (resourceId && String(resourceId) !== event.professionalId) {
@@ -81,7 +82,7 @@ export default function ReactBigCalendarAdapter(props: CalendarAdapterProps) {
     <section className="sp-library-frame sp-library-frame--rbc" data-library="rbc" aria-label="React Big Calendar">
       <div className="sp-library-note">
         <span className="sp-license-tag sp-license-tag--mit">MIT</span>
-        <span>Day/Week/Agenda · cinco profissionais no recurso Dia · seleção, mover e resize nativos · passo 5 min.</span>
+        <span>Day/Week/Agenda · Orlando, Ana e Carlos no recurso Dia · seleção, mover e resize nativos · passo 5 min.</span>
       </div>
       <div className="sp-rbc-wrap">
         <DnDCalendar
@@ -89,7 +90,7 @@ export default function ReactBigCalendarAdapter(props: CalendarAdapterProps) {
           events={calendarEvents}
           date={focusedDate}
           view={activeView}
-          onNavigate={(date) => onNotice(`Data navegada pelo calendário: ${instantToLocalDateTime(date.toISOString(), DEMO_TIME_ZONE).date}`)}
+          onNavigate={(date) => onNotice(`Data navegada pelo calendário: ${instantToLocalDateTime(date.toISOString(), timeZone).date}`)}
           onView={() => { /* toolbar do produto fica fora da biblioteca */ }}
           views={['day', 'week', 'agenda']}
           toolbar={false}
@@ -122,11 +123,11 @@ export default function ReactBigCalendarAdapter(props: CalendarAdapterProps) {
           })}
           formats={{ timeGutterFormat: 'HH:mm', eventTimeRangeFormat: ({ start, end }, _culture, loc) => `${loc?.format(start, 'HH:mm') ?? ''}–${loc?.format(end, 'HH:mm') ?? ''}` }}
           culture="pt-BR"
-          getNow={() => dateInBusinessZone(focusDate, 12)}
+          getNow={() => dateInBusinessZone(focusDate, timeZone, 12)}
           messages={{ noEventsInRange: 'Nenhum atendimento neste período.', showMore: (count) => `+${count} atendimentos` }}
         />
       </div>
-      <p className="sp-grid-caption">Fuso do spike: {DEMO_TIME_ZONE}. O localizer usa a zona Luxon global documentada pelo RBC; testar troca de tenant/SSR antes de produção.</p>
+      <p className="sp-grid-caption">Fuso IANA explícito: {timeZone}. O localizer fecha sobre esta zona sem mutar Settings.defaultZone; ainda exige homologação em browser/SSR antes de produção.</p>
     </section>
   );
 }

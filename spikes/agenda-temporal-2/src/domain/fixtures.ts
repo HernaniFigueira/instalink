@@ -19,11 +19,15 @@ export const PROFESSIONALS = [
   { id: 'pro-rafael', name: 'Dr. Rafael', initials: 'DR', role: 'Diagnóstico' },
 ] as const;
 
+export type SpikeProfessional = (typeof PROFESSIONALS)[number];
+export const DAY_PROFESSIONALS: readonly SpikeProfessional[] = PROFESSIONALS.slice(0, 3);
+
 export const SERVICES = [
   { id: 'svc-consulta', name: 'Consulta clínica', durationMin: 40, color: '#2563eb' },
   { id: 'svc-retorno', name: 'Retorno', durationMin: 30, color: '#0f766e' },
   { id: 'svc-vacina', name: 'Vacina V8', durationMin: 20, color: '#7c3aed' },
   { id: 'svc-dermato', name: 'Procedimento dermatológico', durationMin: 55, color: '#c2410c' },
+  { id: 'svc-procedimento-90', name: 'Procedimento clínico', durationMin: 90, color: '#be123c' },
 ] as const;
 
 export interface SpikeEvent extends AppointmentWindow {
@@ -78,10 +82,10 @@ export function demoEvents(): SpikeEvent[] {
     event({ id: 'booking-orlando-1000', professionalId: 'pro-orlando', time: '10:00', durationMin: 40, customerName: 'Marina Costa · Luna', serviceId: 'svc-consulta', status: 'confirmed', note: 'Selecionar 10:00–10:40; mover e redimensionar.' }),
     event({ id: 'booking-orlando-conflict', professionalId: 'pro-orlando', time: '12:30', durationMin: 30, customerName: 'Pedro Lima · Bento', serviceId: 'svc-vacina', status: 'pending', note: 'Âncora de conflito do profissional.' }),
     event({ id: 'booking-ana-retorno', professionalId: 'pro-ana', time: '09:30', durationMin: 40, customerName: 'Luciana Alves · Mel', serviceId: 'svc-retorno', status: 'confirmed' }),
-    event({ id: 'booking-ana-dermato', professionalId: 'pro-ana', time: '11:00', durationMin: 55, customerName: 'Rafael Nunes · Thor', serviceId: 'svc-dermato', status: 'pending' }),
+    event({ id: 'booking-ana-dermato', professionalId: 'pro-ana', time: '11:00', durationMin: 55, customerName: 'Rafael Nunes · Thor', serviceId: 'svc-dermato', status: 'no_show' }),
     event({ id: 'booking-carlos-vacina', professionalId: 'pro-carlos', time: '10:30', durationMin: 30, customerName: 'Clara Reis · Nina', serviceId: 'svc-vacina', status: 'completed' }),
-    event({ id: 'booking-bianca-falta', professionalId: 'pro-bianca', time: '13:00', durationMin: 40, customerName: 'Paulo Mota · Max', serviceId: 'svc-consulta', status: 'no_show' }),
-    event({ id: 'booking-rafael-cancelado', professionalId: 'pro-rafael', time: '15:00', durationMin: 30, customerName: 'Helena Dias · Pingo', serviceId: 'svc-retorno', status: 'cancelled' }),
+    event({ id: 'booking-carlos-cancelado', professionalId: 'pro-carlos', time: '13:00', durationMin: 40, customerName: 'Paulo Mota · Max', serviceId: 'svc-consulta', status: 'cancelled' }),
+    event({ id: 'booking-carlos-procedimento-90', professionalId: 'pro-carlos', time: '15:00', durationMin: 90, customerName: 'Helena Dias · Pingo', serviceId: 'svc-procedimento-90', status: 'confirmed' }),
   ];
 }
 
@@ -158,8 +162,8 @@ function overlaps(a: Pick<AppointmentWindow, 'startAt' | 'endAt'>, b: Pick<Appoi
   return Date.parse(a.startAt) < Date.parse(b.endAt) && Date.parse(a.endAt) > Date.parse(b.startAt);
 }
 
-export function eventResources(): SpikeResource[] {
-  return PROFESSIONALS.map((pro) => ({ id: pro.id, title: pro.name }));
+export function eventResources(professionals: readonly SpikeProfessional[] = PROFESSIONALS): SpikeResource[] {
+  return professionals.map((pro) => ({ id: pro.id, title: pro.name }));
 }
 
 export function eventService(serviceId: string) {

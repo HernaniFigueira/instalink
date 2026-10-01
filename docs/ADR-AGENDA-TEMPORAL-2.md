@@ -1,13 +1,13 @@
 # ADR — Agenda Temporal 2.0
 
 - **Data:** 2026-10-01
-- **Status:** **ETAPA A DECIDIDA · SPIKE/ADR CONCLUÍDO / IMPLEMENTAÇÃO PENDENTE**
+- **Status:** **SPIKE/ADR IMPLEMENTADO · HOMOLOGAÇÃO REAL BLOQUEADA / SEM CANDIDATO APROVADO**
 - **Escopo:** auditoria do domínio, contrato, comparação executável, testes focalizados e benchmark; **nenhuma substituição integrada na agenda de produção**.
 - **Base auditada:** `main` e `origin/main` em `6064bb29333ee0cd4de69cc6e554eb4a3289f793`; sem drift no início desta etapa.
 
 ## Decisão
 
-Adotar uma arquitetura **domain-first e independente da biblioteca**, mantendo a grade atual em produção durante a Etapa A. Para uma futura migração interna controlada, o **React Big Calendar 1.20.0 (MIT)** fica como candidato preferencial, porque entrega Day/Week, seleção e drag/resize em passos de 5 minutos e agrupamento gratuito por recurso Profissional; não cobra licença Premium para esses recursos. A decisão de piloto fica **condicionada** a resolver e provar o fuso IANA sem estado global compartilhado, testar 390 px/teclado/recursos em browser real e confirmar as medições de interação do roteiro em [`spikes/agenda-temporal-2/BENCHMARK.md`](../spikes/agenda-temporal-2/BENCHMARK.md).
+Adotar uma arquitetura **domain-first e independente da biblioteca**, mantendo a grade atual em produção. O **React Big Calendar 1.20.0 (MIT)** continua apenas candidato condicional a piloto: entrega Day/Week, seleção e drag/resize em passos de 5 minutos e recurso Profissional sem licença Premium. O spike agora cria um localizer Luxon por instância com timezone IANA explícito, sem alterar `Settings.defaultZone`; testes Node comprovam São Paulo e Los Angeles no mesmo processo e rejeitam ausência/fuso inválido. Isso ainda **não aprova** piloto: o browser real não pôde ser instalado neste ambiente, então 1366/1024/390, gestos, concorrência visual, acessibilidade e performance permanecem sem homologação. Revalidar tudo no roteiro em [`spikes/agenda-temporal-2/BENCHMARK.md`](../spikes/agenda-temporal-2/BENCHMARK.md).
 
 Esta escolha define direção para uma próxima etapa, **não autoriza integração nesta**. O contrato e a autoridade de validação permanecem no domínio/API GoDoutor; cada biblioteca é somente uma camada de apresentação substituível. FullCalendar Standard continua alternativa caso suporte de fuso e qualidade do ecossistema pesem mais que recursos sem custo; sua Resource View é Premium e requer decisão comercial explícita. Não adquirir Schedule-X Premium nesta etapa.
 
@@ -80,7 +80,7 @@ O spike real está em [`spikes/agenda-temporal-2/`](../spikes/agenda-temporal-2/
 | Candidato | Versão e licença | Day/Week e gesto | Recursos/licença | Fuso e Design System | Resultado para esta decisão |
 | --- | --- | --- | --- | --- | --- |
 | Grade atual | Código interno, sem pacote novo | A página de produção é `src/app/(dashboard)/agenda/page.tsx`. O adapter isolado reproduz a geometria/seleção/drag e reutiliza helpers puros de `src/lib/agenda-drag.ts`; não é embed nem comparação pixel-a-pixel da página. Custo incremental menor. | O layout próprio pode ser moldado ao Profissional; Sala/Equipamento ainda dependem de domínio novo. | Controle total de CSS e experiência conhecida; cada affordance, acessibilidade e regressão continua sob manutenção nossa. | Referência/base de rollout. Não substituir sem provar que biblioteca reduz custo sem perder os fluxos atuais. |
-| **React Big Calendar** | `react-big-calendar@1.20.0`, **MIT** | Day/Week/Agenda; adapter real usa seleção, addon DnD, move e resize, `step=5`; toolbar externa e evento React customizado. | Recursos incluídos no core; spike exibe 5 profissionais como colunas em Dia, sem licença Premium. Semana usa filtro de profissional para evitar 35 colunas. Recursos combinados Sala/Equipamento ainda precisam de validação do domínio. | Localizer Luxon do adapter precisa de atenção: o spike fixa `Settings.defaultZone` para um único demo, um global inadequado para produção multi-tenant/SSR. CSS RBC deve ficar escopado e ajustado ao Design System. | **Preferido para piloto interno**, condicionado a localizer IANA por contexto sem estado global, teclado/mobile e validação visual real. |
+| **React Big Calendar** | `react-big-calendar@1.20.0`, **MIT** | Day/Week/Agenda; adapter usa seleção, addon DnD, move e resize, `step=5`; toolbar externa e evento React customizado. | Recursos incluídos no core; spike exibe Orlando, Ana e Carlos no Dia sem licença Premium. Semana usa filtro profissional para evitar colunas excessivas; as fixtures de benchmark preservam 5 profissionais. Recursos combinados Sala/Equipamento ainda exigem validação do domínio. | `createIanaLuxonLocalizer(timeZone)` injeta uma fachada Luxon por instância; teste com São Paulo e Los Angeles em paralelo confirma horários e não altera `Settings.defaultZone`. É evidência Node, não prova de comportamento do RBC em browser/SSR. CSS deve permanecer escopado e ajustado ao Design System. | **Candidato condicional, não aprovado para piloto**: pendem browser real, keyboard/touch, 390 px, densidade e performance. |
 | FullCalendar Standard | `@fullcalendar/react@7.1.0` + plugins **Standard/MIT** | TimeGrid Day/Week + List, interação de selecionar/arrastar/redimensionar e snap de 5 min no adapter Standard. Custom event e toolbar externa funcionam no spike. | **Não** tem Resource TimeGrid/Vertical Resource. Recurso como coluna exige Scheduler/Premium; a página consultada informa preço começando em US$ 480. Nenhum plugin Premium foi instalado. | API documenta zona nomeada e uso de Temporal; forte caminho para converter callbacks sem usar o fuso do browser. CSS próprio exige tokens/escopo. | Boa alternativa se timezone/manutenção superar recurso gratuito; adoção de Premium depende de custo/termos e decisão explícita, não entra por acidente. |
 | Schedule-X Community | `@schedule-x/calendar@4.9.1`, React `4.1.0`, pacote MIT | Day/Week/List e Temporal nativo; evento React customizado. O clique de célula pode sugerir 40 min, mas Community não demonstra drag-select. | Resource Scheduler, drag-to-create, drag/drop e resize são **Premium**; DnD/resize Premium documentados em 15/30/60 min, sem o snap requerido de 5 min. A página consultada lista €479/ano + VAT (2–3 devs) ou €999 + VAT lifetime, por produto. | Boa composição visual com custom components; CSS Community acrescenta tema e exige adaptação ao Design System. O peer `temporal-polyfill@0.3.2` conflita com o 1.0.1 usado no restante do spike, por isso ficou isolado em package/lock próprios. | Rejeitado como editor interno gratuito para este contrato; pode ser considerado read-only ou mediante nova decisão/licença, não simular recursos pagos. |
 
@@ -88,7 +88,7 @@ A página de pricing do FullCalendar declara Standard gratuito/MIT e Premium a p
 
 ### Bundle observado
 
-Build isolado Vite, adapters dinâmicos e tamanhos por saída estão detalhados no benchmark. Resumo: base JS 224.13 kB / 73.83 kB gzip; adapter + dependências carregados sob demanda: RBC 313.17 / 90.68 kB, FullCalendar 274.87 / 75.00 kB, Schedule-X 238.44 / 70.87 kB; a grade própria 7.90 / 3.14 kB (chunk de evento customizado compartilhado à parte). CSS de cada candidato é carregado com o adapter. Isso corrige o primeiro build do spike, que pré-carregava todas as bibliotecas; os chunks antigos não foram usados como comparação.
+Build isolado Vite, adapters dinâmicos e tamanhos por saída estão detalhados no benchmark. Rebuild pós-ajuste IANA: base JS 224.37 kB / 73.89 kB gzip; adapters + dependências sob demanda: RBC 313.44 / 90.80 kB, FullCalendar Standard 274.87 / 75.00 kB, Schedule-X Community 238.45 / 70.87 kB; grade própria 7.93 / 3.14 kB (chunk de evento customizado 1.03 / 0.48 kB compartilhado à parte). CSS segue em chunks por adapter. Isso corrige o primeiro build do spike, que pré-carregava todas as bibliotecas; estes tamanhos não medem render nem são critério isolado de adoção.
 
 Não foi possível medir paint/scroll/drag em browser nesta etapa. A ausência desses números não é preenchida com estimativa de Vitest ou bundle.
 
@@ -112,7 +112,7 @@ Não foi possível medir paint/scroll/drag em browser nesta etapa. A ausência d
 
 ## Riscos e gates de saída
 
-- **Timezone/RBC:** localizer global do spike não é aceitável para tenant concorrente nem SSR. Gate: prova de datas IANA/DST com contextos diferentes sem mutação global e callbacks convertidos para instantes canônicos.
+- **Timezone/RBC:** o antigo `Settings.defaultZone` global foi removido do spike; a fachada IANA por instância passou em testes Node para dois fusos e mantém conversões no domínio. Gate ainda aberto: provar os callbacks e a geometria do RBC em Chromium/browser real, inclusive DST, tenant simultâneo e SSR.
 - **Perda de histórico:** duração derivada hoje de `Service.durationMin` pode mudar retroativamente. Gate: snapshot confiável ou registro de inferência/revisão, nunca backfill cego.
 - **Disponibilidade incompleta:** só Profissional está no domínio atual. Gate: servidor verifica Profissional + Sala + Equipamento e buffers na mesma reserva antes de expor promessa pública.
 - **Race/oversubscription:** duas pessoas movem o mesmo evento ou ocupam o último intervalo. Gate: lock/version/idempotência server-side e testes concorrentes; UI isolada não basta.
@@ -121,13 +121,30 @@ Não foi possível medir paint/scroll/drag em browser nesta etapa. A ausência d
 - **Licença/custo/versão:** revalidar licença, versão e recursos Premium no momento da adoção. Não depender de README antigo nem de preço registrado neste ADR como cotação futura.
 - **Benchmark inconclusivo:** render/scroll/gestos não têm dados até o browser estar disponível; não usar tamanho gzip como proxy de responsividade.
 
+## Homologação real do spike — bloqueada por ambiente
+
+**Status: não realizada em browser; nenhum candidato está aprovado para piloto.** Não há screenshots anexados, e nenhum resultado abaixo é tratado como visual pass.
+
+- **Browser:** Playwright `1.63.0` está instalado, mas não havia Chromium/Chrome/Firefox no sistema nem browser na cache. `npx playwright install chromium` falhou repetidamente antes do handshake TLS (`ECONNRESET` para `cdn.playwright.dev`). Também tentei atualizar os pacotes Debian para instalar um browser do sistema; `deb.debian.org` não estava acessível. O preview Vite na porta `3101` respondeu HTTP 200, o que comprova apenas servidor/transformação, não renderização.
+- **Viewports/screenshots:** 1366×900, 1024 px e 390 px não foram abertos em browser; não existem screenshots legítimos de Dia, Semana, seleção, move, resize, conflito ou mobile. Não foram fabricadas imagens de evidência.
+- **Day/Week/interação:** as fixtures agora mostram Orlando, Ana e Carlos no Dia, incluindo serviço/procedimento de 90 min e rótulos de status; Week mantém overlaps visuais entre profissionais e fixtures de benchmark com 5 profissionais. Testes de domínio cobrem 10:00–10:40, move 10:00→11:15 preservando duração, resize 40→55 e snap 5. Um teste simula duas tentativas para o mesmo horário em ordem de ACK: a primeira é aceita pelo mock e a segunda é recusada por conflito. Isso não comprova concorrência transacional nem gesto/render real de qualquer adapter.
+- **Timezone:** as funções de domínio agora exigem timezone IANA explícito e rejeitam ausência/valor inválido, sem `process.env.TZ`, fuso do browser como autoridade ou fallback silencioso. Testes confirmam `America/Sao_Paulo` (10:00→13:00Z) e `America/New_York` (10:00→15:00Z), start/end e rejeição de DST gap/fold em Nova York. O localizer RBC por instância foi exercitado com `America/Sao_Paulo` e `America/Los_Angeles` simultaneamente; `Settings.defaultZone` permaneceu `Asia/Tokyo`. Isso é prova de contrato/fábrica em Node, não homologação RBC no DOM/browser.
+- **Mobile/acessibilidade:** o shell de teste escolhe Lista em viewport jsdom de 390 px, e o evento tem rótulo/estado textual; não foi possível verificar overflow global real, toque, resize touch, navegação de teclado, foco visível, contraste, Escape ou tab order. Permanecem gates abertos para todos os candidatos.
+- **Performance real:** 200 e 1000 eventos não foram carregados/renderizados em browser; scroll, troca de vista, jank, rerender, drag e resize estão **pendentes**, sem extrapolação. A última geração de fixture no Node/Vitest (12:49) registrou 200: **93,36 ms** e 1000: **251,57 ms**; isso não é performance de calendário.
+- **Limitações conhecidas, não substitutas de homologação:** Grade atual é adapter isolado, não a página de produção. FullCalendar Standard não tem Resource TimeGrid/Vertical Resource (Premium). Schedule-X Community não oferece drag-select/move/resize/Resource Scheduler sem Premium e o spike não os simula. RBC contém localizer IANA isolado e gestures no código, mas falta provar no browser fuso visual, keyboard/touch, CSS/overflow e estabilidade sob carga.
+
+A decisão permanece **domain-first; RBC é somente candidato condicional**. Não registrar `RBC aprovado para PILOTO INTERNO` antes de executar e anexar screenshots e medições reais em Chromium (e motor adicional, se disponível), nos três viewports e gates de gesto, mobile e acessibilidade. Estado atual não é “Agenda Temporal 2.0 concluída” nem “SPIKE/ADR homologado”.
+
 ## Testes e resultado da Etapa A
 
 - [`spikes/agenda-temporal-2/src/domain/temporal-contract.test.ts`](../spikes/agenda-temporal-2/src/domain/temporal-contract.test.ts): contrato independente, legado, fuso IANA/DST, snap, duração, views, status e autoridade do mock.
 - [`spikes/agenda-temporal-2/src/App.test.tsx`](../spikes/agenda-temporal-2/src/App.test.tsx): toolbar Dia/Semana/Lista, Lista inicial em 390 px e painel rápido 10:00–10:40.
 - [`spikes/agenda-temporal-2/src/domain/benchmark.test.ts`](../spikes/agenda-temporal-2/src/domain/benchmark.test.ts): fixtures 200/1000, cinco profissionais.
-- O servidor do spike aceita somente a demonstração em memória e rejeita conflito/estado obsoleto; não é fonte de disponibilidade real.
-- Browser real ainda pendente; o detalhe, interações CSS e overflow não foram homologados visualmente neste ambiente.
+- [`spikes/agenda-temporal-2/src/adapters/rbcIanaLocalizer.test.ts`](../spikes/agenda-temporal-2/src/adapters/rbcIanaLocalizer.test.ts): dois localizers IANA ativos no mesmo processo sem mutação de zona global.
+- Última execução focada: **18/18 aprovados** em quatro arquivos; isso não substitui gestos, layout ou acessibilidade em browser real.
+- Validação global: `npm run build`, `npm run typecheck` e `npm run spike:agenda:build` passaram. `npx vitest run`: **2845 aprovados e 4 falhas baseline** (3× `a34-instagram.test.ts`, 1× `automation-audit-p4.test.ts`), sem editar esses testes.
+- O servidor do spike aceita somente a demonstração em memória e rejeita conflito/estado obsoleto; o teste de dois moves usa ACK sequencial e não prova lock/concorrência transacional.
+- Browser real permanece indisponível; detalhe, interações CSS, overflow, screenshots e performance de render não foram homologados.
 
 ## Referências consultadas (2026-10-01)
 

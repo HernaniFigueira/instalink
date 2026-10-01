@@ -8,6 +8,7 @@ import {
   moveWindow,
   resizeToDuration,
   resizeWindow,
+  requireTimeZone,
   resolveWindow,
   selectWindow,
   snapInstant,
@@ -15,10 +16,12 @@ import {
 } from './temporal-contract';
 import {
   benchmarkEvents,
+  DAY_PROFESSIONALS,
   DEMO_TIME_ZONE,
   demoEvents,
   eventHasSlotConflicts,
   eventResources,
+  SERVICES,
 } from './fixtures';
 import { createDemoServerState, validateDemoMutation } from './server-mock';
 
@@ -66,10 +69,18 @@ describe('Agenda Temporal 2.0 — contrato independente dos adapters', () => {
     expect(instantToLocalDateTime(snapInstant(localDateTimeToInstant('2026-10-05', '10:03', DEMO_TIME_ZONE), DEMO_TIME_ZONE), DEMO_TIME_ZONE).time).toBe('10:05');
   });
 
-  it('interpreta e formata instantes no fuso IANA, não no fuso do browser', () => {
-    const instant = localDateTimeToInstant('2026-01-15', '10:00', 'America/New_York');
-    expect(instant).toBe('2026-01-15T15:00:00.000Z');
-    expect(instantToLocalDateTime(instant, 'America/New_York')).toEqual({ date: '2026-01-15', time: '10:00' });
+  it('exige timezone IANA explícito e mantém start/end coerentes em São Paulo e Nova York', () => {
+    expect(() => requireTimeZone(undefined)).toThrow('precisa ser informado explicitamente');
+    expect(() => requireTimeZone('Mars/Olympus_Mons')).toThrow('Fuso IANA inválido');
+
+    const saoPaulo = createWindow('2026-01-15', '10:00', 40, 'America/Sao_Paulo');
+    const newYork = createWindow('2026-01-15', '10:00', 40, 'America/New_York');
+    expect(saoPaulo.startAt).toBe('2026-01-15T13:00:00.000Z');
+    expect(saoPaulo.endAt).toBe('2026-01-15T13:40:00.000Z');
+    expect(newYork.startAt).toBe('2026-01-15T15:00:00.000Z');
+    expect(newYork.endAt).toBe('2026-01-15T15:40:00.000Z');
+    expect(instantToLocalDateTime(saoPaulo.startAt, 'America/Sao_Paulo')).toEqual({ date: '2026-01-15', time: '10:00' });
+    expect(instantToLocalDateTime(newYork.startAt, 'America/New_York')).toEqual({ date: '2026-01-15', time: '10:00' });
     expect(() => localDateTimeToInstant('2026-03-08', '02:30', 'America/New_York')).toThrow();
     expect(() => localDateTimeToInstant('2026-11-01', '01:30', 'America/New_York')).toThrow();
   });
@@ -100,9 +111,21 @@ describe('Agenda Temporal 2.0 — contrato independente dos adapters', () => {
     expect(viewForViewport(601, 'week')).toBe('week');
   });
 
-  it('fornece 5 recursos profissionais e cargas reprodutíveis de 200/1000 eventos sem conflito ativo', () => {
+  it('prepara Dia com Orlando/Ana/Carlos e procedimento de 90 min; mantém 5 profissionais no benchmark', () => {
+    const events = demoEvents();
+    expect(DAY_PROFESSIONALS.map((professional) => professional.name)).toEqual(['Dr. Orlando', 'Dra. Ana', 'Dr. Carlos']);
+    expect(eventResources(DAY_PROFESSIONALS)).toHaveLength(3);
+    expect(events).toHaveLength(7);
+    expect(new Set(events.map((event) => event.professionalId)).size).toBe(3);
+    expect(SERVICES.find((service) => service.durationMin === 90)?.name).toBe('Procedimento clínico');
+    const longProcedure = events.find((event) => event.id === 'booking-carlos-procedimento-90')!;
+    expect(longProcedure.durationMin).toBe(90);
+    expect(longProcedure.status).toBe('confirmed');
+    expect(new Set(eventResources().map((resource) => resource.id)).size).toBe(5);
+  });
+
+  it('mantém cargas reprodutíveis de 200/1000 eventos sem conflito ativo', () => {
     expect(eventResources()).toHaveLength(5);
-    expect(demoEvents()).toHaveLength(7);
     for (const count of [200, 1_000]) {
       const events = benchmarkEvents(count);
       expect(events).toHaveLength(count);
@@ -120,6 +143,25 @@ describe('Agenda Temporal 2.0 — contrato independente dos adapters', () => {
 });
 
 describe('Servidor efêmero de demonstração', () => {
+  it('serializa duas tentativas de move para o mesmo slot e mantém a regra de conflito no servidor', () => {
+    const state = createDemoServerState(7);
+    const first = state.events.find((event) => event.id === 'booking-orlando-1000')!;
+    const second = state.events.find((event) => event.id === 'booking-orlando-conflict')!;
+    const firstCurrent = { startAt: first.startAt, endAt: first.endAt, durationMin: first.durationMin, timeZone: first.timeZone };
+    const secondCurrent = { startAt: second.startAt, endAt: second.endAt, durationMin: second.durationMin, timeZone: second.timeZone };
+    const contestedStart = localDateTimeToInstant('2026-10-05', '11:15', DEMO_TIME_ZONE);
+    const firstMove = moveWindow(firstCurrent, contestedStart);
+    const secondMove = moveWindow(secondCurrent, contestedStart);
+
+    const accepted = validateDemoMutation({ action: 'move', eventId: first.id, current: firstCurrent, next: firstMove }, state);
+    expect(accepted.ok).toBe(true);
+    const rejected = validateDemoMutation({ action: 'move', eventId: second.id, current: secondCurrent, next: secondMove }, state);
+    expect(rejected.ok).toBe(false);
+    expect(rejected.message).toContain('já tem');
+    expect(state.events.find((event) => event.id === first.id)?.startAt).toBe(firstMove.startAt);
+    expect(state.events.find((event) => event.id === second.id)?.startAt).toBe(second.startAt);
+  });
+
   it('aceita move/resize depois de validar; conflito e estado obsoleto revertem sem mutar', () => {
     const state = createDemoServerState(7);
     const original = state.events.find((event) => event.id === 'booking-orlando-1000')!;

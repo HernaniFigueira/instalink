@@ -5,6 +5,8 @@ export interface CalendarAdapterProps {
   events: SpikeEvent[];
   view: CalendarView;
   focusDate: string;
+  /** Business IANA zone is passed explicitly; never read from browser/system state. */
+  timeZone: string;
   professionalFilter: string;
   pendingEventId: string;
   eventCount: number;

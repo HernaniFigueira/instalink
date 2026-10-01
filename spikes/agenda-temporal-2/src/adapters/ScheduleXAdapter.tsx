@@ -10,7 +10,7 @@ import { Temporal as ScheduleTemporal } from '@agenda-sx/temporal';
 import '@agenda-sx/temporal/global';
 import '@schedule-x/theme-default';
 import { libraryView } from '../domain/temporal-contract';
-import { DEMO_TIME_ZONE, type SpikeEvent } from '../domain/fixtures';
+import type { SpikeEvent } from '../domain/fixtures';
 import type { CalendarAdapterProps } from './types';
 
 const STATUS_COLORS = {
@@ -73,6 +73,7 @@ export default function ScheduleXAdapter(props: CalendarAdapterProps) {
     events,
     view,
     focusDate,
+    timeZone,
     professionalFilter,
     onSelectEvent,
     onSelectRange,
@@ -85,7 +86,7 @@ export default function ScheduleXAdapter(props: CalendarAdapterProps) {
   const calendarApp = useCalendarApp({
     defaultView: scheduleView,
     selectedDate: ScheduleTemporal.PlainDate.from(focusDate),
-    timezone: DEMO_TIME_ZONE,
+    timezone: timeZone,
     locale: 'pt-BR',
     firstDayOfWeek: 1,
     dayBoundaries: { start: '05:00', end: '23:00' },

@@ -10,7 +10,7 @@ import {
   type AppointmentWindow,
   type CalendarView,
 } from '../domain/temporal-contract';
-import { DEMO_TIME_ZONE, PROFESSIONALS, type SpikeEvent } from '../domain/fixtures';
+import { DAY_PROFESSIONALS, PROFESSIONALS, type SpikeEvent } from '../domain/fixtures';
 import { SpikeEventCard } from '../components/SpikeEventCard';
 import type { CalendarAdapterProps } from './types';
 
@@ -30,10 +30,10 @@ type PointerOrigin = {
   action: 'move' | 'resize';
 };
 
-function dateLabel(date: string): string {
+function dateLabel(date: string, timeZone: string): string {
   const [year, month, day] = date.split('-').map(Number);
   const local = new Date(Date.UTC(year!, month! - 1, day!, 12));
-  return new Intl.DateTimeFormat('pt-BR', { weekday: 'short', day: '2-digit', timeZone: DEMO_TIME_ZONE }).format(local);
+  return new Intl.DateTimeFormat('pt-BR', { weekday: 'short', day: '2-digit', timeZone }).format(local);
 }
 
 function addDays(date: string, amount: number): string {
@@ -51,11 +51,11 @@ function clockFromMinute(value: number, mode: 'floor' | 'ceil' | 'nearest'): str
   return `${String(Math.floor(snapped / 60)).padStart(2, '0')}:${String(snapped % 60).padStart(2, '0')}`;
 }
 
-function dayColumns(focusDate: string, view: CalendarView, professionalFilter: string): Column[] {
+function dayColumns(focusDate: string, view: CalendarView, professionalFilter: string, timeZone: string): Column[] {
   if (view === 'day') {
     const pros = professionalFilter
       ? PROFESSIONALS.filter((pro) => pro.id === professionalFilter)
-      : PROFESSIONALS;
+      : DAY_PROFESSIONALS;
     return pros.map((pro) => ({
       key: `${focusDate}:${pro.id}`,
       title: pro.name,
@@ -67,19 +67,19 @@ function dayColumns(focusDate: string, view: CalendarView, professionalFilter: s
   const start = view === 'week' ? focusDate : focusDate;
   return Array.from({ length: view === 'week' ? 7 : 1 }, (_, index) => {
     const date = view === 'week' ? addDays(start, index) : focusDate;
-    return { key: date, title: dateLabel(date), subtitle: date, date };
+    return { key: date, title: dateLabel(date, timeZone), subtitle: date, date };
   });
 }
 
 export default function ExistingGridAdapter(props: CalendarAdapterProps) {
-  const { events, view, focusDate, professionalFilter, pendingEventId, onSelectEvent, onSelectRange, onMutation, onNotice } = props;
+  const { events, view, focusDate, timeZone, professionalFilter, pendingEventId, onSelectEvent, onSelectRange, onMutation, onNotice } = props;
   const [pointerOrigin, setPointerOrigin] = useState<PointerOrigin | null>(null);
   const [pointerDelta, setPointerDelta] = useState(0);
   const [selectionOrigin, setSelectionOrigin] = useState<{ x: number; y: number; date: string; professionalId?: string; rectTop: number; pointerId: number } | null>(null);
   const [selectionEndY, setSelectionEndY] = useState<number | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
   const suppressClickRef = useRef(false);
-  const columns = useMemo(() => dayColumns(focusDate, view, professionalFilter), [focusDate, view, professionalFilter]);
+  const columns = useMemo(() => dayColumns(focusDate, view, professionalFilter, timeZone), [focusDate, view, professionalFilter, timeZone]);
   const visibleEvents = useMemo(() => events.filter((item) => {
     if (professionalFilter && item.professionalId !== professionalFilter) return false;
     const { date } = instantToLocalDateTime(item.startAt, item.timeZone);
@@ -167,8 +167,8 @@ export default function ExistingGridAdapter(props: CalendarAdapterProps) {
     const endTime = clockFromMinute(end, 'ceil');
     if (startTime === endTime) return;
     onSelectRange(
-      localDateTimeToInstant(origin.date, startTime, DEMO_TIME_ZONE),
-      localDateTimeToInstant(origin.date, endTime, DEMO_TIME_ZONE),
+      localDateTimeToInstant(origin.date, startTime, timeZone),
+      localDateTimeToInstant(origin.date, endTime, timeZone),
       origin.professionalId,
     );
   }

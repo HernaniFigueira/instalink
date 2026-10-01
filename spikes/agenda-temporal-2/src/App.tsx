@@ -287,6 +287,7 @@ export default function App() {
       events,
       view,
       focusDate,
+      timeZone: DEMO_TIME_ZONE,
       professionalFilter,
       pendingEventId,
       eventCount,

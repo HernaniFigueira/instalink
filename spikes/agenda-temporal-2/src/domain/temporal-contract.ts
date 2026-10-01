@@ -5,7 +5,6 @@ import { Temporal } from 'temporal-polyfill';
  * Nothing in the production agenda imports this module.
  */
 export const DEFAULT_SNAP_MIN = 5;
-export const DEFAULT_TIME_ZONE = 'America/Sao_Paulo';
 
 export type CalendarView = 'day' | 'week' | 'list';
 export type BookingStatus = 'pending' | 'confirmed' | 'cancelled' | 'completed' | 'no_show';
@@ -53,13 +52,13 @@ const STATUS_PRESENTATION: Record<BookingStatus, Omit<EventPresentation, 'servic
   no_show: { statusLabel: 'Não compareceu', tone: 'no-show' },
 };
 
-export function effectiveTimeZone(value?: string | null): string {
-  if (!value) return DEFAULT_TIME_ZONE;
+export function requireTimeZone(value: string | null | undefined): string {
+  if (!value?.trim()) throw new RangeError('O fuso IANA da unidade precisa ser informado explicitamente.');
   try {
     new Intl.DateTimeFormat('en-US', { timeZone: value });
     return value;
   } catch {
-    return DEFAULT_TIME_ZONE;
+    throw new RangeError(`Fuso IANA inválido: ${value}`);
   }
 }
 
@@ -89,14 +88,14 @@ export function minutesBetween(startAt: string, endAt: string): number {
  * Resolves a civil date/time in the business IANA zone. Ambiguous or nonexistent
  * wall-clock times (DST folds/gaps) reject instead of silently shifting.
  */
-export function localDateTimeToInstant(date: string, time: string, timeZone?: string | null): string {
-  const zone = effectiveTimeZone(timeZone);
+export function localDateTimeToInstant(date: string, time: string, timeZone: string): string {
+  const zone = requireTimeZone(timeZone);
   const local = Temporal.PlainDateTime.from(`${date}T${time}:00`);
   return isoInstant(local.toZonedDateTime(zone, { disambiguation: 'reject' }).toInstant());
 }
 
-export function instantToLocalDateTime(instant: string, timeZone?: string | null): { date: string; time: string } {
-  const zoned = Temporal.Instant.from(instant).toZonedDateTimeISO(effectiveTimeZone(timeZone));
+export function instantToLocalDateTime(instant: string, timeZone: string): { date: string; time: string } {
+  const zoned = Temporal.Instant.from(instant).toZonedDateTimeISO(requireTimeZone(timeZone));
   return {
     date: zoned.toPlainDate().toString(),
     time: zoned.toPlainTime().toString({ smallestUnit: 'minute' }),
@@ -107,10 +106,10 @@ export function createWindow(
   date: string,
   time: string,
   durationMin: number,
-  timeZone?: string | null,
+  timeZone: string,
 ): AppointmentWindow {
   const duration = checkedDuration(durationMin);
-  const zone = effectiveTimeZone(timeZone);
+  const zone = requireTimeZone(timeZone);
   const start = Temporal.Instant.from(localDateTimeToInstant(date, time, zone));
   const end = start.add({ minutes: duration });
   return { startAt: isoInstant(start), endAt: isoInstant(end), durationMin: duration, timeZone: zone };
@@ -123,9 +122,9 @@ export function createWindow(
  */
 export function resolveWindow(
   input: LegacyAppointmentWindow,
-  businessTimeZone?: string | null,
+  businessTimeZone: string,
 ): WindowResolution {
-  const zone = effectiveTimeZone(input.timeZone || businessTimeZone);
+  const zone = requireTimeZone(input.timeZone ?? businessTimeZone);
   if (input.startAt && input.endAt) {
     const duration = minutesBetween(input.startAt, input.endAt);
     if (input.durationMin !== undefined && checkedDuration(input.durationMin) !== duration) {
@@ -166,11 +165,11 @@ export function snapMinutes(value: number, stepMin = DEFAULT_SNAP_MIN, mode: 'fl
 /** Snap an instant using the business wall-clock minute, not the browser zone. */
 export function snapInstant(
   value: string,
-  timeZone?: string | null,
+  timeZone: string,
   stepMin = DEFAULT_SNAP_MIN,
   mode: 'floor' | 'ceil' | 'nearest' = 'nearest',
 ): string {
-  const zone = effectiveTimeZone(timeZone);
+  const zone = requireTimeZone(timeZone);
   const instant = Temporal.Instant.from(value);
   const local = instant.toZonedDateTimeISO(zone);
   const roundingMode = mode === 'floor' ? 'floor' : mode === 'ceil' ? 'ceil' : 'halfExpand';
@@ -181,10 +180,10 @@ export function snapInstant(
 export function selectWindow(
   startAt: string,
   endAt: string,
-  timeZone?: string | null,
+  timeZone: string,
   stepMin = DEFAULT_SNAP_MIN,
 ): AppointmentWindow {
-  const zone = effectiveTimeZone(timeZone);
+  const zone = requireTimeZone(timeZone);
   const start = snapInstant(startAt, zone, stepMin, 'floor');
   const end = snapInstant(endAt, zone, stepMin, 'ceil');
   const durationMin = minutesBetween(start, end);
@@ -200,7 +199,7 @@ export function moveWindow(
   const durationMin = minutesBetween(window.startAt, window.endAt);
   const startAt = snapInstant(targetStartAt, window.timeZone, stepMin, 'nearest');
   const endAt = isoInstant(Temporal.Instant.from(startAt).add({ minutes: durationMin }));
-  return { startAt, endAt, durationMin, timeZone: effectiveTimeZone(window.timeZone) };
+  return { startAt, endAt, durationMin, timeZone: requireTimeZone(window.timeZone) };
 }
 
 /** Resize changes only the end; duration rounds to the 5-minute snap, min 5. */
@@ -235,7 +234,7 @@ export function windowFromLocalMove(
   time: string,
   stepMin = DEFAULT_SNAP_MIN,
 ): AppointmentWindow {
-  const zone = effectiveTimeZone(window.timeZone);
+  const zone = requireTimeZone(window.timeZone);
   const [hour, minute] = time.split(':').map(Number);
   const snappedMinute = snapMinutes(hour * 60 + minute, stepMin, 'nearest');
   const snappedDate = snappedMinute >= 1_440 ? addCivilDays(date, Math.floor(snappedMinute / 1_440)) : date;
@@ -286,7 +285,7 @@ export function eventPresentation(input: {
 }
 
 export function assertCanonicalWindow(window: AppointmentWindow): AppointmentWindow {
-  const zone = effectiveTimeZone(window.timeZone);
+  const zone = requireTimeZone(window.timeZone);
   const durationMin = minutesBetween(window.startAt, window.endAt);
   if (checkedDuration(window.durationMin) !== durationMin) {
     throw new RangeError('durationMin precisa corresponder exatamente a endAt - startAt.');

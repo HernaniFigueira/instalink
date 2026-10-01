@@ -8,7 +8,6 @@ import {
 } from './temporal-contract.ts';
 import {
   benchmarkEvents,
-  DEMO_TIME_ZONE,
   demoEvents,
   PROFESSIONALS,
   type SpikeEvent,
@@ -50,8 +49,8 @@ function activeForConflict(event: SpikeEvent): boolean {
   return event.status === 'pending' || event.status === 'confirmed';
 }
 
-function isOnFiveMinuteGrid(value: string): boolean {
-  const { time } = instantToLocalDateTime(value, DEMO_TIME_ZONE);
+function isOnFiveMinuteGrid(value: string, timeZone: string): boolean {
+  const { time } = instantToLocalDateTime(value, timeZone);
   return Number(time.slice(3, 5)) % 5 === 0;
 }
 
@@ -82,13 +81,13 @@ export function validateDemoMutation(
   } catch {
     return { ok: false, message: 'O intervalo de horário é inválido. O cartão foi restaurado.' };
   }
-  if (current.timeZone !== DEMO_TIME_ZONE || next.timeZone !== DEMO_TIME_ZONE) {
+  if (current.timeZone !== original.timeZone || next.timeZone !== original.timeZone) {
     return { ok: false, message: 'O fuso da unidade mudou. Atualize a agenda antes de salvar.' };
   }
   if (current.startAt !== original.startAt || current.endAt !== original.endAt) {
     return { ok: false, message: 'Este agendamento mudou em outra ação. Atualize a agenda e tente novamente.' };
   }
-  if (!isOnFiveMinuteGrid(next.startAt) || !isOnFiveMinuteGrid(next.endAt)) {
+  if (!isOnFiveMinuteGrid(next.startAt, original.timeZone) || !isOnFiveMinuteGrid(next.endAt, original.timeZone)) {
     return { ok: false, message: 'Escolha um horário em passos de 5 minutos.' };
   }
 
