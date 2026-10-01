@@ -25,7 +25,8 @@ vi.mock('next/navigation', () => ({
 vi.mock('@/components/dashboard/WorkspaceContext', () => ({
   useWorkspace: () => ({ role: 'OWNER', agendaScope: 'all' }),
 }));
-vi.mock('@/lib/overview', () => ({ loadOverview: vi.fn() }));
+// Só `loadOverview` é simulado; a regra `canLoadOverview` é a REAL.
+vi.mock('@/lib/overview', async (importOriginal) => ({ ...(await importOriginal<typeof import('@/lib/overview')>()), loadOverview: vi.fn() }));
 vi.mock('@/lib/session-me', () => ({ loadMe: vi.fn() }));
 vi.mock('@/lib/api-client', () => ({ apiGet: vi.fn(), apiSend: vi.fn() }));
 vi.mock('@/components/dashboard/use-revalidate', () => ({ useRevalidateOnFocus: vi.fn() }));
@@ -68,7 +69,7 @@ describe('P0 — DashboardPage: mesmos hooks em TODOS os renders (loading → da
     // A permissão chega DEPOIS (async): primeiro render é permsReady=false.
     vi.mocked(loadMe).mockResolvedValue({
       ok: true,
-      data: { businesses: [{ id: 'biz-hooks', role: 'OWNER', permissions: { config: true } }] },
+      data: { businesses: [{ id: 'biz-hooks', role: 'OWNER', permissions: { config: true, dashboard: true } }] },
     } as any);
     vi.mocked(apiGet).mockResolvedValue({
       ok: false, status: 403, data: null, message: '', denied: null, flow: 'stay' as const, networkError: false,

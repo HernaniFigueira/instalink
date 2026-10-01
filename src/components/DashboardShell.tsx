@@ -23,6 +23,7 @@ import { WorkspaceNavigation } from '@/components/dashboard/WorkspaceNavigation'
 import { WorkspaceTopbar } from '@/components/dashboard/WorkspaceTopbar';
 import { HelpCenter } from '@/components/dashboard/HelpCenter';
 import { useWorkspaceAlerts } from '@/components/dashboard/NotificationsBell';
+import { canLoadOverview } from '@/lib/overview';
 import { buildNavSearchItems } from '@/lib/nav-search';
 import { roleLabel } from '@/lib/role-labels';
 import { switchUnitHref } from '@/lib/workspace-navigation';
@@ -194,7 +195,11 @@ export function DashboardShell({ children }: { children: React.ReactNode }) {
     ? params.get('b')!
     : businesses[0]?.id || '';
   const alertsBiz = activePath === '/organizacao' ? '' : provisionalBiz;
-  const alerts = useWorkspaceAlerts(alertsBiz, alertsBiz ? `?b=${alertsBiz}` : '');
+  // Sino: só lê o Overview quando a unidade ativa concede `dashboard` (e depois
+  // que as permissões chegaram) — quem não tem Visão geral não gera chamada.
+  const alertsPerms = businesses.find((b) => b.id === alertsBiz)?.permissions;
+  const alertsAccess: 'allowed' | 'pending' | 'denied' = !ready ? 'pending' : canLoadOverview(ready, alertsPerms) ? 'allowed' : 'denied';
+  const alerts = useWorkspaceAlerts(alertsBiz, alertsBiz ? `?b=${alertsBiz}` : '', alertsAccess);
 
   // ── Geometria do Workspace Sheet (Etapa B consome) ────────────────────────
   // O sheet NUNCA cobre sidebar/topbar. Em vez de calcular larguras no código

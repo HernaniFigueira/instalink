@@ -1,0 +1,55 @@
+## Maria (Recepção)
+Rotas visitadas: /agenda /clientes /tarefas /conversas /dashboard
+/api/overview: 0 requisição(ões)
+Respostas >= 400: []
+Console (error): []  Erros JS: []
+Requisições /api por rota:
+  1× /api/auth/login
+  7× /api/auth/me
+  1× /api/bookings
+  1× /api/catalog/get
+  1× /api/conversations
+  1× /api/people360
+  1× /api/pipeline
+  1× /api/queue
+  1× /api/tasks
+  1× /api/whatsapp
+
+## Dr. Orlando (Profissional)
+Rotas visitadas: /agenda /clientes /tarefas /conversas /dashboard
+/api/overview: 6 requisição(ões)
+Respostas >= 400: ["403 GET /api/pipeline?businessId=biz-clinicavitta"]
+Console (error): ["Failed to load resource: the server responded with a status of 403 (Forbidden)"]  Erros JS: []
+Requisições /api por rota:
+  1× /api/auth/login
+  6× /api/auth/me
+  1× /api/bookings
+  1× /api/catalog/get
+  1× /api/conversations
+  6× /api/overview
+  1× /api/people360
+  1× /api/pets
+  1× /api/pipeline
+  1× /api/queue
+  2× /api/tasks
+  1× /api/whatsapp
+
+## Owner
+Rotas visitadas: /agenda /clientes /tarefas /conversas /dashboard
+/api/overview: 6 requisição(ões)
+Respostas >= 400: []
+Console (error): []  Erros JS: []
+Requisições /api por rota:
+  1× /api/auth/login
+  7× /api/auth/me
+  1× /api/bookings
+  1× /api/catalog/get
+  1× /api/conversations
+  6× /api/overview
+  1× /api/people360
+  1× /api/pets
+  1× /api/pipeline
+  1× /api/queue
+  2× /api/tasks
+  1× /api/whatsapp
+

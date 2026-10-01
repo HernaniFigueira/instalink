@@ -64,7 +64,7 @@ Build de produção, banco descartável (seed + personas), login real em `/login
 - **C (Proprietário/Administrador):** as duas colunas da agenda, 3 tutores, Importar/Exportar visíveis, CSV e JSON 200.
 - **D (navegador, com recarga entre etapas):** Agendado → Chegou → Em atendimento → Finalizado; Faltou (Reativar/Reagendar depois), Cancelado (Reabrir/Reagendar), Reagendado (move para 01/10 09:00, status Agendado). Pendência "Reagendar falta de Tutor Alfa" em Pendências de Maria e Orlando ("1 para hoje").
 - **Viewports:** Agenda + detalhe a 1366 (fluxo completo), 1024 e 390 sem overflow horizontal.
-- **Console/rede:** 4xx esperados (403/404 das provas de bloqueio; 403 de `/api/overview` para quem não tem Visão geral, comportamento anterior e tratado pela tela); nenhum 5xx.
+- **Console/rede:** 4xx esperados (403/404 das provas de bloqueio); nenhum 5xx. O 403 de `/api/overview` da Recepção foi eliminado na correção do §7.
 
 Capturas em `docs/homologacao-workflow-screenshots/`: `01-agenda-agendado`, `02-checkin`, `03-em-atendimento`, `04-finalizado`, `05-maria-agenda`, `06-orlando-agenda-propria`, `07-orlando-bloqueado-outro-paciente`, `12-pendencias-maria`, além de `vp-1024-*` e `vp-390-*`.
 
@@ -73,3 +73,10 @@ Carimbo do histórico do agendamento agora no fuso da unidade (antes mostrava UT
 
 ## 6. Limites assumidos (fora do escopo)
 Agenda Temporal 2.0 (`startAt/endAt`, arrastar, recursos, buffers) e Clinical Encounter F1 não foram tocados; a Faixa Operacional da Agenda não foi alterada (a Pendência aparece em Pendências). Cadastro/Onboarding PF/PJ (Master Plan §2.6) segue só registrado.
+
+## 7. Correção: quem não tem Visão geral não chama `/api/overview`
+Regra única em `src/lib/overview.ts` (`canLoadOverview`, `navAllowsOverview`): a decisão vem das permissões/navegação já calculadas e é tomada **antes** da requisição, só com permissões prontas. Aplicada nos quatro consumidores do payload — `DashboardPage` (sem chamada enquanto carrega ou sem `dashboard`; aviso amigável sem tocar no servidor), mini-card de setup da `WorkspaceNavigation`, sino (`useWorkspaceAlerts`, via `DashboardShell`) e `HelpCenter` — e na página Página (checklist). Rules of Hooks preservada (nenhum hook condicional; teste ready false→true). Preset da Recepção inalterado (sem `dashboard`).
+
+Testes: `overview-access.test.tsx` (15; remover qualquer guard derruba o teste correspondente); fixture de `dashboard-hooks-regression` passou a refletir um perfil com `dashboard`. Homologação real (build de produção, login real): Maria — Agenda, Clientes, Pendências (criar), Conversas abrem com **0** requisições a `/api/overview`, sem 4xx/5xx e sem erro JS; Proprietário, Administrador e Orlando continuam carregando o Overview (Visão geral, sino, mini-card). Registro: `docs/homologacao-overview-screenshots/network.txt`.
+
+Observação fora do escopo: o Profissional sem `leads` ainda recebe 403 de `/api/pipeline` ao abrir Clientes (chamada incondicional da lista).

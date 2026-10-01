@@ -12,6 +12,8 @@ import type { Block, BlockType, Business, Page, Theme } from '@/lib/types';
 import { PageSkeleton, Tabs } from '@/components/ui';
 import { AccessDenied, useAreaLoad } from '@/components/dashboard/AccessNotice';
 import { apiGet, apiSend } from '@/lib/api-client';
+import { canLoadOverview } from '@/lib/overview';
+import { usePanelPermissions } from '@/components/dashboard/usePanelPermissions';
 import { Icon } from '@/components/icons';
 import { ClinicPreview } from '@/components/dashboard/ClinicPreview';
 import { WorkspaceSheet } from '@/components/dashboard/WorkspaceSheet';
@@ -56,15 +58,18 @@ export default function PaginaPage() {
   const [previewSheet, setPreviewSheet] = useState(false);
   // "Próximos passos" usa o MESMO checklist real do /api/overview (nada inventado).
   const [setup, setSetup] = useState<{ pct: number; checklist: Array<{ done: boolean; label: string; href: string }> } | null>(null);
+  const { permissions: panelPerms, ready: permsReady } = usePanelPermissions();
+  const overviewAllowed = canLoadOverview(permsReady, panelPerms);
   useEffect(() => {
-    if (!businessId) return;
+    // Sem Visão geral (ou permissões ainda carregando) não há checklist a ler.
+    if (!businessId || !overviewAllowed) return;
     let on = true;
     apiGet<{ pct?: number; checklist?: Array<{ done: boolean; label: string; href: string }> }>(
       `/api/overview?businessId=${businessId}&period=7`, { scope: 'area', area: 'Página' },
     ).then((r) => { if (on && r.ok) setSetup({ pct: r.data?.pct ?? 0, checklist: r.data?.checklist || [] }); })
       .catch(() => { if (on) setSetup(null); });
     return () => { on = false; };
-  }, [businessId]);
+  }, [businessId, overviewAllowed]);
   const [editing, setEditing] = useState<string | null>(null);
   const [msg, setMsg] = useState('');
   const [rvCounts, setRvCounts] = useState({ pending: 0, published: 0 });
