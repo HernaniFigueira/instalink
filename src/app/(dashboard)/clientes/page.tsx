@@ -214,14 +214,25 @@ export default function ClientesPage() {
     setTotal(d.total || 0);
     setPages(d.pages || 1);
     setLoaded(true);
-    // Busca esteira para renderizar etapa real (stageId) e ações contextuais
-    try {
-      const pRes = await apiGet<{ pipeline?: BusinessPipeline }>(`/api/pipeline?businessId=${businessId}`, { scope: 'area', area: 'Clientes' });
-      if (pRes.ok && (pRes.data as any)?.pipeline) setPipeline((pRes.data as any).pipeline);
-    } catch { /* funil indisponível não derruba a lista */ }
   }, [businessId, search, page, filter, report]);
 
   useEffect(() => { load(); }, [load]);
+
+  // Esteira (etapa real + ações contextuais) só para quem tem `leads`: sem a
+  // permissão NÃO há chamada (o servidor exigiria `leads` e devolveria 403).
+  // Fica fora do `load` de propósito: assim a lista não é recarregada quando
+  // as permissões ficam prontas, e a esteira não é rebaixada a cada busca/página.
+  useEffect(() => {
+    if (!businessId || !canFunil) { setPipeline(null); return; }
+    let cancelled = false;
+    (async () => {
+      try {
+        const pRes = await apiGet<{ pipeline?: BusinessPipeline }>(`/api/pipeline?businessId=${businessId}`, { scope: 'area', area: 'Clientes' });
+        if (!cancelled && pRes.ok && (pRes.data as any)?.pipeline) setPipeline((pRes.data as any).pipeline);
+      } catch { /* funil indisponível não derruba a lista */ }
+    })();
+    return () => { cancelled = true; };
+  }, [businessId, canFunil]);
 
   // Depois do cadastro, a lista é recarregada pelo mesmo endpoint do Cliente
   // 360. Quando o contato aparece, abrimos sua ficha sem inventar uma pessoa

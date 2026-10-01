@@ -7,12 +7,12 @@
 // de banco inútil e Network/console poluídos. A decisão agora é tomada ANTES
 // da requisição, com as permissões/navegação que o sistema já calcula.
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { act, cleanup, render, renderHook, waitFor } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, renderHook, screen, waitFor } from '@testing-library/react';
 import { permissionsFor } from '../permissions';
 import { panelNavigation } from '../panel';
 import { canLoadOverview, navAllowsOverview } from '../overview';
 import { WorkspaceNavigation } from '@/components/dashboard/WorkspaceNavigation';
-import { useWorkspaceAlerts } from '@/components/dashboard/NotificationsBell';
+import { NotificationsBell, useWorkspaceAlerts } from '@/components/dashboard/NotificationsBell';
 import { HelpCenter } from '@/components/dashboard/HelpCenter';
 
 const mocks = vi.hoisted(() => ({ biz: 'biz-1', perms: { permissions: {} as Record<string, boolean>, role: '', ready: true } }));
@@ -88,10 +88,69 @@ describe('Sino (useWorkspaceAlerts)', () => {
     const pending = renderHook(() => useWorkspaceAlerts('biz-1', '?b=biz-1', 'pending'));
     await act(async () => { await new Promise((r) => setTimeout(r, 30)); });
     expect(overviewCalls).toEqual([]);
-    expect(denied.result.current.status).toBe('unavailable');
+    // Sem acesso NÃO é falha: `restricted` (e `unavailable` só para erro real).
+    expect(denied.result.current.status).toBe('restricted');
     expect(pending.result.current.status).toBe('loading');
     const allowed = renderHook(() => useWorkspaceAlerts('biz-1', '?b=biz-1', 'allowed'));
     await waitFor(() => expect(allowed.result.current.status).toBe('ready'));
+    expect(overviewCalls).toHaveLength(1);
+  });
+});
+
+describe('Sino — acesso restrito ≠ erro', () => {
+  const RESTRICTED = 'Este resumo de notificações não faz parte do seu acesso. Suas pendências continuam disponíveis na área Pendências.';
+  const FAILURE = 'Não foi possível carregar as pendências agora.';
+  function Bell({ access }: { access: 'allowed' | 'pending' | 'denied' }) {
+    const alerts = useWorkspaceAlerts('biz-bell', '?b=biz-bell', access);
+    return <NotificationsBell alerts={alerts} />;
+  }
+  const openBell = () => fireEvent.click(document.querySelector('button.ws-topbar__icon-button') as HTMLElement);
+
+  it('Maria (sem dashboard): painel neutro, sem mensagem de falha e ZERO /api/overview', async () => {
+    render(<Bell access="denied" />);
+    await act(async () => { await new Promise((r) => setTimeout(r, 30)); });
+    openBell();
+    expect(await screen.findByText(RESTRICTED)).toBeTruthy();
+    expect(document.body.textContent).not.toContain(FAILURE);
+    expect(document.querySelector('button.ws-topbar__icon-button')?.getAttribute('aria-label')).toBe('Notificações: resumo fora do seu acesso');
+    expect(document.querySelector('.ws-bell__badge')).toBeNull();
+    expect(overviewCalls).toEqual([]);
+  });
+
+  it('erro real de rede no Overview continua `unavailable` (mensagem de falha)', async () => {
+    vi.stubGlobal('fetch', vi.fn(async (url: string) => {
+      if (String(url).includes('/api/overview')) overviewCalls.push(String(url));
+      throw new Error('network down');
+    }));
+    render(<Bell access="allowed" />);
+    await waitFor(() => expect(overviewCalls.length).toBeGreaterThan(0));
+    await act(async () => { await new Promise((r) => setTimeout(r, 30)); });
+    openBell();
+    expect(await screen.findByText(new RegExp(FAILURE))).toBeTruthy();
+    expect(document.body.textContent).not.toContain('não faz parte do seu acesso');
+  });
+
+  it('erro 5xx do servidor também é `unavailable`', async () => {
+    vi.stubGlobal('fetch', vi.fn(async (url: string) => {
+      if (String(url).includes('/api/overview')) overviewCalls.push(String(url));
+      return { ok: false, status: 500, json: async () => ({ error: 'boom' }) } as unknown as Response;
+    }));
+    const hook = renderHook(() => useWorkspaceAlerts('biz-5xx', '?b=biz-5xx', 'allowed'));
+    await waitFor(() => expect(hook.result.current.status).toBe('unavailable'));
+  });
+
+  it('pending → loading sem chamada; depois allowed lê e vira ready (sem restricted no meio)', async () => {
+    const seen: string[] = [];
+    const { rerender } = renderHook(({ a }: { a: 'allowed' | 'pending' | 'denied' }) => {
+      const r = useWorkspaceAlerts('biz-seq', '?b=biz-seq', a);
+      seen.push(r.status);
+      return r;
+    }, { initialProps: { a: 'pending' as 'allowed' | 'pending' | 'denied' } });
+    await act(async () => { await new Promise((r) => setTimeout(r, 20)); });
+    expect(overviewCalls).toEqual([]);
+    rerender({ a: 'allowed' });
+    await waitFor(() => expect(seen.at(-1)).toBe('ready'));
+    expect(seen).not.toContain('restricted');
     expect(overviewCalls).toHaveLength(1);
   });
 });
