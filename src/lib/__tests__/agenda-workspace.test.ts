@@ -17,7 +17,7 @@ describe('agenda - disponibilidade e slots', () => {
     const r = computeSlots({
       rules, exceptions: [], bookings: [], services: [svc], professionals: [pro],
       dateISO: '2026-09-14', weekday: 1, serviceId: 's1', durationMin: 30,
-      professionalId: '', eligibleProIds: [], nowHM: '', leadMin: 0, bufferMin: 0,
+      professionalId: '', eligibleProIds: ['p1'], nowHM: '', leadMin: 0, bufferMin: 0,
     });
     expect(r.slots.length).toBeGreaterThan(0);
     expect(r.closed).toBe(false);
@@ -30,7 +30,7 @@ describe('agenda - disponibilidade e slots', () => {
     const r = computeSlots({
       rules, exceptions: [], bookings: [], services: [svc], professionals: [pro],
       dateISO: '2026-09-13', weekday: 6, serviceId: 's1', durationMin: 30,
-      professionalId: '', eligibleProIds: [], nowHM: '', leadMin: 0, bufferMin: 0,
+      professionalId: '', eligibleProIds: ['p1'], nowHM: '', leadMin: 0, bufferMin: 0,
     });
     expect(r.slots).toEqual([]);
     // sem janelas no dia = não há grade; UI trata como vazio (sem horário)
@@ -42,7 +42,7 @@ describe('agenda - disponibilidade e slots', () => {
       rules, exceptions: [{ id: 'e1', businessId: 'b1', date: '2026-09-14', closed: true, start: '', end: '', note: 'Feriado' }],
       bookings: [], services: [svc], professionals: [pro],
       dateISO: '2026-09-14', weekday: 1, serviceId: 's1', durationMin: 30,
-      professionalId: '', eligibleProIds: [], nowHM: '', leadMin: 0, bufferMin: 0,
+      professionalId: '', eligibleProIds: ['p1'], nowHM: '', leadMin: 0, bufferMin: 0,
     });
     expect(r.slots).toEqual([]);
     expect(r.closed).toBe(true);
@@ -57,7 +57,7 @@ describe('agenda - disponibilidade e slots', () => {
     const r = computeSlots({
       rules, exceptions: [], bookings: [booking], services: [svc], professionals: [pro],
       dateISO: '2026-09-14', weekday: 1, serviceId: 's1', durationMin: 30,
-      professionalId: '', eligibleProIds: [], nowHM: '', leadMin: 0, bufferMin: 15,
+      professionalId: '', eligibleProIds: ['p1'], nowHM: '', leadMin: 0, bufferMin: 15,
     });
     // 09:00 ocupa até 09:45 com buffer, então 09:00 e 09:30 não devem estar livres
     expect(r.slots).not.toContain('09:00');
@@ -70,7 +70,7 @@ describe('agenda - disponibilidade e slots', () => {
     const r = computeSlots({
       rules, exceptions: [], bookings: [b1], services: [svc], professionals: [pro],
       dateISO: '2026-09-14', weekday: 1, serviceId: 's1', durationMin: 30,
-      professionalId: '', eligibleProIds: [], nowHM: '', leadMin: 0, bufferMin: 0,
+      professionalId: '', eligibleProIds: ['p1'], nowHM: '', leadMin: 0, bufferMin: 0,
     });
     expect(r.slots).not.toContain('10:00');
     expect(r.occupied).toContain('10:00');

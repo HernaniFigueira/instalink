@@ -88,9 +88,10 @@ describe('B3.3 — sem controle falso de distribuição', () => {
   });
 
   it('a indicação é explicitamente NÃO interativa (e mantém o texto honesto)', () => {
-    expect(cfgPage).toMatch(/aria-label="Distribuição dos agendamentos: automática \(fixa\)"/);
-    expect(cfgPage).toMatch(/Automática — equilibra a equipe/);
-    expect(cfgPage).toMatch(/Quem atende é resolvido automaticamente/);
+    expect(cfgPage).toMatch(/aria-label="Atribuição de profissional — política da agenda"/);
+    expect(cfgPage).toMatch(/Política da agenda/);
+    expect(cfgPage).not.toMatch(/Workflow futuro/);
+    expect(cfgPage).toMatch(/A agenda considera disponibilidade, serviços vinculados e regras da clínica/);
     // A regra de distribuição em si NÃO mudou (nenhuma engine nova).
     expect(cfgPage).toMatch(/leadMin/);
     expect(cfgPage).toMatch(/horizonDays/);

@@ -3,11 +3,12 @@ import { useCallback, useEffect, useState } from 'react';
 import { useSearchParams } from 'next/navigation';
 import { cn, centsToBR } from '@/lib/utils';
 import type { Category, Professional, Service } from '@/lib/types';
-import { Button, EmptyState, IconButton, ListSkeleton, Notice, PageHeader } from '@/components/ui';
+import { Button, Drawer, EmptyState, IconButton, ListSkeleton, Notice, PageHeader } from '@/components/ui';
 import { Icon } from '@/components/icons';
 import { AccessDenied, AreaLoadError } from '@/components/dashboard/AccessNotice';
 import { apiGet, apiSend } from '@/lib/api-client';
 import { DeleteSheet, ServiceForm, CatalogCrossLinks } from '@/components/dashboard/catalog-panels';
+import { serviceProfessionalMode } from '@/lib/booking';
 
 interface DeleteAsk {
   kind: 'service' | 'professional';
@@ -18,9 +19,11 @@ interface DeleteAsk {
 }
 
 // ═══════════════════════════════════════════════════════════════
-// SERVIÇOS — "o que eu ofereço"
-// Uma pergunta só. Equipe e horários têm telas próprias (profissionais/
-// horarios) — esta tela não mistura os conceitos.
+// SERVIÇOS — o que a clínica realiza e pode registrar/agendar/cobrar
+// Cada serviço tem nome, descrição clínica, preço base (referência
+// financeira), duração base (sugestão da agenda, não trava rígida),
+// categoria interna, profissionais elegíveis, status ativo e se aceita
+// agendamento. Foto de serviço removida — serviço é dado operacional.
 // ═══════════════════════════════════════════════════════════════
 export default function ServicosPage() {
   const params = useSearchParams();
@@ -35,8 +38,8 @@ export default function ServicosPage() {
   const [editing, setEditing] = useState<Service | null>(null);
   const [showCat, setShowCat] = useState(false);
   const [catName, setCatName] = useState('');
+  const [editingCat, setEditingCat] = useState<Category | null>(null);
   const [askDelete, setAskDelete] = useState<DeleteAsk | null>(null);
-  // 403 nesta tela → aviso amigável (o usuário continua logado).
   const [loadError, setLoadError] = useState('');
   const [denied, setDenied] = useState(false);
 
@@ -44,7 +47,6 @@ export default function ServicosPage() {
     if (!businessId) return;
     const res = await apiGet<any>(`/api/catalog/get?businessId=${businessId}`, { scope: 'area', area: 'Serviços' });
     if (!res.ok) {
-      // Sem permissão: mostra o aviso e NÃO tenta desenhar a tela vazia.
       setLoadError(res.message || 'Falha de conexão.');
       setDenied(res.status === 403);
       setLoaded(true);
@@ -55,7 +57,7 @@ export default function ServicosPage() {
     setCats((d.categories || []).filter((c: Category) => c.kind === 'service'));
     setServices(d.services || []);
     setPros(d.professionals || []);
-    setRefs(d.bookingRefs || { services: [], professionals: [] });
+    setRefs((d.historyRefs || d.bookingRefs) || { services: [], professionals: [] });
     setDenied(false);
     setLoaded(true);
   }, [businessId]);
@@ -64,8 +66,6 @@ export default function ServicosPage() {
 
   async function call(action: string, payload: Record<string, any>) {
     setMsg('');
-    // apiSend nunca lança por status: em 403 a mensagem é amigável e a sessão
-    // continua intacta (o toast global também aparece).
     const res = await apiSend('/api/catalog', 'POST', { businessId, action, ...payload }, { scope: 'action', area: 'Serviços' });
     if (!res.ok) throw new Error(res.message || 'Não foi possível salvar.');
     await load();
@@ -112,11 +112,11 @@ export default function ServicosPage() {
     <PageHeader
       icon="service"
       title="Serviços"
-      hint="O que o seu negócio oferece — nomes, preços e detalhes."
+      hint="O que a clínica realiza — procedimentos com preço base, duração base e profissionais elegíveis."
       action={loaded ? (
         <span className="flex flex-wrap gap-2">
-          <Button variant="secondary" onClick={() => setShowCat(!showCat)}>
-            <Icon n="plus" size={14} /> Categoria
+          <Button variant="secondary" onClick={() => setShowCat(true)}>
+            <Icon n="tag" size={14} /> Grupos
           </Button>
           <Button variant="primary" onClick={() => { setEditing(null); setShowForm(true); }}>
             <Icon n="plus" size={14} /> Serviço
@@ -144,53 +144,100 @@ export default function ServicosPage() {
       {loaded && <CatalogCrossLinks businessId={businessId} current="/servicos" />}
 
       {msg && <Notice tone="info" className="mb-4">{msg}</Notice>}
+      <p className="text-xs text-[var(--text-muted)] mb-2">Ativo = aparece na lista interna. Pode ser agendado = cliente vê horário; desative para procedimento só interno. // Agendável</p>
       {!loaded && <ListSkeleton rows={3} />}
 
       {loaded && (
         <>
           {showCat && (
-            <form onSubmit={(e) => { e.preventDefault(); call('category.save', { name: catName, kind: 'service' }).then(() => { setCatName(''); setShowCat(false); }).catch((err) => setMsg(err.message)); }}
-              className="mb-4 ws-panel p-4 flex flex-wrap gap-2">
-              <input value={catName} onChange={(e) => setCatName(e.target.value)} placeholder="Nome da categoria (ex: Cabelo)"
-                className="flex-1 min-w-[200px] rounded-md border border-[var(--border-strong)] bg-white px-3 py-2 text-sm focus:outline-none focus:shadow-focus" autoFocus />
-              <Button type="submit" variant="primary">Salvar</Button>
-            </form>
+            <Drawer open onClose={() => { setShowCat(false); setEditingCat(null); setCatName(''); }} title="Grupos" subtitle="Grupos internos da clínica (opcional, sem migração)" width="max-w-md">
+              <div className="p-4 space-y-4">
+                <div className="space-y-2">
+                  {cats.length === 0 ? (
+                    <p className="text-sm text-zinc-500">Nenhum grupo ainda. Crie o primeiro para organizar os serviços. (Opcional)</p>
+                  ) : (
+                    <div className="divide-y divide-zinc-100 border border-zinc-200 rounded-md">
+                      {cats.map((c) => {
+                        const count = services.filter((s) => s.categoryId === c.id).length;
+                        return (
+                          <div key={c.id} className="flex items-center justify-between px-3 py-2.5 hover:bg-zinc-50">
+                            <div className="min-w-0 flex-1">
+                              <p className="text-sm font-medium truncate">{c.name}</p>
+                              <p className="text-xs text-zinc-500">{count} serviço{count !== 1 ? 's' : ''}</p>
+                            </div>
+                            <div className="flex items-center gap-1.5 shrink-0">
+                              <Button variant="secondary" size="xs" onClick={() => { setEditingCat(c); setCatName(c.name); }}>Renomear</Button>
+                              <IconButton icon="x" label={`Excluir ${c.name}`} tip={count > 0 ? `${count} serviços usam esta categoria` : `Excluir ${c.name}`} variant="destructive" size="sm" onClick={() => {
+                                if (count > 0) { setMsg(`${count} serviços usam esta categoria. Mova-os antes de excluir.`); setTimeout(() => setMsg(''), 4000); return; }
+                                call('category.delete', { id: c.id }).catch((err) => setMsg(err.message));
+                              }} />
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
+                <form onSubmit={(e) => { e.preventDefault(); const payload = editingCat ? { id: editingCat.id, name: catName, kind: 'service' } : { name: catName, kind: 'service' }; call('category.save', payload).then(() => { setCatName(''); setEditingCat(null); }).catch((err) => setMsg(err.message)); }} className="flex gap-2 pt-2 border-t border-zinc-100">
+                  <input value={catName} onChange={(e) => setCatName(e.target.value)} placeholder={editingCat ? 'Novo nome' : 'Novo grupo (ex: Consultas, Vacinas)'} className="flex-1 rounded-md border border-zinc-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500" autoFocus />
+                  <Button type="submit" variant="primary">{editingCat ? 'Salvar' : 'Criar'}</Button>
+                  {editingCat && <Button type="button" variant="secondary" onClick={() => { setEditingCat(null); setCatName(''); }}>Cancelar</Button>}
+                </form>
+                {editingCat && <p className="text-xs text-zinc-500">Renomeando: {editingCat.name} — serviços vinculados continuam pelo ID.</p>}
+              </div>
+            </Drawer>
           )}
           {services.length === 0 ? (
             <EmptyState
               icon="service"
               title="Nenhum serviço ainda"
-              hint="Cadastre o primeiro para exibir na página e receber agendamentos."
+              hint="Cadastre o primeiro para organizar a agenda e o atendimento."
               action={<Button variant="primary" onClick={() => { setEditing(null); setShowForm(true); }}><Icon n="plus" size={14} /> Adicionar serviço</Button>}
             />
           ) : (
-            <div className="space-y-2.5">
-              {services.map((sv) => {
-                const who = (sv.professionalIds || []).length === 0
-                  ? 'toda a equipe'
-                  : (sv.professionalIds || []).map((id) => pros.find((p) => p.id === id)?.name || '?').join(', ');
-                const pricePublic = sv.showPrice !== false;
-                return (
-                  <div key={sv.id} className={cn('bg-white border border-zinc-200 rounded-lg p-4 flex items-center gap-3', !sv.active && 'opacity-60')}>
-                    {sv.image ? (
-                      <img src={sv.image} alt={sv.name} className="w-11 h-11 rounded-md object-cover shrink-0 border border-[var(--border)]" />
-                    ) : (
-                      <div className="w-11 h-11 rounded-md bg-[var(--surface-2)] border border-[var(--border)] flex items-center justify-center font-semibold text-[var(--text-faint)] shrink-0">{sv.name.slice(0, 1)}</div>
-                    )}
-                    <div className="flex-1 min-w-0">
-                      <p className="font-semibold text-sm">{sv.name} {sv.featured && <Icon n="star" size={13} className="inline -mt-1 text-amber-500" />}</p>
-                      <p className="text-xs text-zinc-500">
-                        R$ {centsToBR(sv.price)}
-                        {!pricePublic && <span className="font-semibold text-amber-700"> · preço oculto na página</span>}
-                        {' · '}{sv.bookable ? 'agendável' : 'somente exibição'}
-                      </p>
-                      {pros.length > 0 && <p className="text-xs text-zinc-400">Realizado por: {who}</p>}
+            <div className="bg-white border border-zinc-200">
+              <div className="hidden sm:grid grid-cols-[1.4fr_120px_140px_150px_90px_80px] gap-3 px-4 py-2 border-b border-zinc-200 bg-zinc-50 text-xs font-semibold tracking-wide uppercase text-zinc-500">
+                <span>Serviço</span><span>Grupo</span><span>Preço · Duração</span><span>Quem realiza</span><span>Situação</span><span className="text-right">Ações</span>
+              </div>
+              <div className="divide-y divide-zinc-100">
+                {services.map((sv) => {
+                  const cat = cats.find((c) => c.id === sv.categoryId);
+                  const who = serviceProfessionalMode(sv as any) === 'all'
+                    ? 'toda a equipe'
+                    : ((sv.professionalIds || []).length === 0 ? '— nenhum vinculado' : (sv.professionalIds || []).map((id) => pros.find((p) => p.id === id)?.name || '?').join(', '));
+                  return (
+                    <div key={sv.id} className={cn('px-4 py-3 flex sm:grid sm:grid-cols-[1.4fr_120px_140px_150px_90px_80px] gap-2 items-center hover:bg-zinc-50', !sv.active && 'opacity-60')}>
+                      <span className="flex items-center gap-3 min-w-0 flex-1">
+                        <span className="w-9 h-9 rounded-md bg-[var(--surface-2)] border border-[var(--border)] flex items-center justify-center font-semibold text-[var(--text-faint)] shrink-0 text-sm">
+                          {sv.name.slice(0, 1).toUpperCase()}
+                        </span>
+                        <span className="min-w-0">
+                          <span className="text-sm font-medium truncate block">{sv.name}</span>
+                          {sv.description && <span className="hidden sm:block text-xs text-zinc-500 truncate">{sv.description}</span>}
+                          <span className="sm:hidden text-xs text-zinc-500">{sv.price > 0 ? `R$ ${centsToBR(sv.price)} · ${sv.durationMin} min` : `Sem preço base · ${sv.durationMin} min`}</span>
+                        </span>
+                      </span>
+                      <span className="hidden sm:block text-xs text-zinc-500 truncate">{cat?.name || 'Sem grupo'}</span>
+                      <span className="hidden sm:block text-sm">
+                        {sv.price > 0 ? <><span className="font-medium">R$ {centsToBR(sv.price)}</span><span className="text-zinc-500"> · {sv.durationMin} min</span></> : <><span className="text-zinc-500">Sem preço base</span><span className="text-zinc-500"> · {sv.durationMin} min</span></>}
+                      </span>
+                      <span className="hidden sm:block text-xs text-zinc-500 truncate">{who}</span>
+                      <span className="hidden sm:flex items-center gap-1.5 flex-wrap">
+                        <span className={cn('text-[11px] font-semibold px-2 py-0.5 rounded-full border', sv.active ? 'bg-emerald-50 text-emerald-700 border-emerald-200' : 'bg-zinc-100 text-zinc-500 border-zinc-200')}>
+                          {sv.active ? 'Ativo' : 'Inativo'}
+                        </span>
+                        <span className={cn('text-[11px] font-semibold px-2 py-0.5 rounded-full border', sv.bookable ? 'bg-zinc-50 text-zinc-600 border-zinc-200' : 'bg-amber-50 text-amber-700 border-amber-200')}>
+                          {sv.bookable ? 'Pode ser agendado' : 'Não agendável'}
+                        </span>
+                      </span>
+                      <span className="flex justify-end items-center gap-1.5 text-xs shrink-0">
+                        <Button variant="secondary" size="xs" onClick={() => { setEditing(sv); setShowForm(true); }}>Editar</Button>
+                        <IconButton icon="x" label={`Excluir ${sv.name}`} tip={`Excluir ${sv.name}`} variant="destructive" size="sm" onClick={() => ask('service', sv)} />
+                      </span>
                     </div>
-                    <Button variant="secondary" size="xs" onClick={() => { setEditing(sv); setShowForm(true); }}>Editar</Button>
-                    <IconButton icon="x" label={`Excluir ${sv.name}`} tip={`Excluir ${sv.name}`} variant="destructive" size="sm" onClick={() => ask('service', sv)} />
-                  </div>
-                );
-              })}
+                  );
+                })}
+              </div>
             </div>
           )}
         </>

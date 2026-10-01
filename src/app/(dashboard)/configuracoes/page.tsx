@@ -1,40 +1,14 @@
 'use client';
 // ═══════════════════════════════════════════════════════════════
-// CONFIGURAÇÕES — área administrativa (Negócio · Agenda · Aparência)
+// CONFIGURAÇÕES — cadastro institucional e operacional da clínica
 // ═══════════════════════════════════════════════════════════════
-// Configurações não é uma segunda navegação: cada aba EDITA algo desta
-// empresa — nada de aba que só aponta para portas do menu.
+// Fonte institucional: dados da clínica, responsável técnico, endereço,
+// identidade visual e operação/agenda. Redes e página pública são
+// Informações da clínica e regras de agendamento. (legado: hint condicional quando GODOUTOR_LEGACY_PAGES desligado)
+// secundárias (compatibilidade). "Quando atende" vive em Disponibilidade;
+// "como reserva" (regras) vive na aba Agenda aqui. Nada de duplicar
+// navegação: Canais & Integrações mora em /canais.
 //
-// SEPARAÇÃO CLARA DE RESPONSABILIDADES (regra do produto):
-//   • Informações do negócio (nome, logo, contatos, endereço, descrição)
-//     → CONFIGURAÇÕES → Negócio. É a fonte de verdade; o bloco "Perfil" da
-//       página lê exatamente daqui.
-//   • Aparência e conteúdo da página pública (blocos, ordem, navegação,
-//     "Sobre", tema, vitrine, publicação) → EDITOR DA PÁGINA (/pagina).
-// Nada de duplicar: aqui não existe mais aba "Página" com menu/Sobre —
-// só um ponteiro para o editor, para quem procurar em Configurações.
-//
-// A1.2 · Bloco 1 — SEM NAVEGAÇÃO PARALELA: as abas "Canais" e "Integrações"
-// saíram daqui (eram a mesma tela em dois endereços). Canais, fontes e
-// integrações têm porta própria (/canais). Quem chegar por um link antigo
-// (?tab=canais | ?tab=integracoes) é levado para /canais com a unidade
-// preservada — nada de tela duplicada com conteúdo divergente.
-//
-// A1.2 · Bloco 2 — REGRAS DE RESERVA: "quando atende" permanece em
-// /disponibilidade; "como o cliente pode reservar" (antecedência, prazo de
-// cancelamento, horizonte da agenda, buffer, distribuição da equipe) é
-// configuração do negócio e mora aqui, na aba Agenda — EDITANDO os valores
-// (mesmo PATCH /api/businesses/:id de antes; nenhuma regra da engine de
-// agenda mudou). A aba "CRM" antiga saiu: só continha texto e links para
-// portas que já estão no menu (Clientes e Campanhas).
-//
-// Abas sincronizadas com a URL (?tab=): refresh preserva a aba, o botão
-// voltar funciona e o link direto (ex.: /configuracoes?tab=agenda) abre na
-// aba certa.
-//
-// Campos legados de venda (taxa de entrega, pedido mínimo, formas de
-// pagamento no checkout) saíram da experiência: continuam no banco e em
-// APIs antigas para dados já existentes, mas não são mais oferecidos aqui.
 import { useCallback, useEffect, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
@@ -42,43 +16,23 @@ import type { BookingConfig, Business } from '@/lib/types';
 import { defaultBookingConfig } from '@/lib/types';
 import { Button, PageHeader, PageSkeleton, Tabs } from '@/components/ui';
 import { Icon } from '@/components/icons';
-import { isLegacyPagesEnabled } from '@/lib/product';
 import { ImageUpload } from '@/components/dashboard/ImageUpload';
 import { AccessDenied, AreaLoadError, useAreaLoad } from '@/components/dashboard/AccessNotice';
 import { apiGet, apiSend } from '@/lib/api-client';
-import { NAV_ACCENTS, NAV_ACCENT_FAMILIES, contrastRatio, getNavAccent, setNavAccent, type NavAccentId } from '@/lib/nav-accent';
+import { isLegacyPagesEnabled } from '@/lib/product';
 
-type ConfigTab = 'negocio' | 'agenda' | 'aparencia';
+type ConfigTab = 'negocio' | 'agenda';
 
-/**
- * Abas REAIS de configuração desta empresa: cada uma EDITA algo aqui.
- *
- * Saiu daqui:
- *   • "Canais" e "Integrações" (Bloco 1) → porta própria /canais;
- *   • "CRM" (Bloco 2) → não configurava nada: texto + links para portas que
- *     já estão no menu (Clientes, Campanhas). Consentimento continua visível
- *     na ficha de cada cliente.
- * Voltou (Bloco 2):
- *   • "Agenda" → agora EDITA as regras de reserva (antes viviam dentro de
- *     Disponibilidade, misturadas com "quando atende").
- */
-/** Ícone de cada aba (A3.3): a aba é reconhecível sem ler o rótulo. */
 const CONFIG_TAB_ICON: Record<ConfigTab, string> = {
   negocio: 'store',
   agenda: 'calendar',
-  aparencia: 'sliders',
 };
 
 const CONFIG_TABS: Array<[ConfigTab, string]> = [
-  // GODOUTOR final: o vocabulário do produto é CLÍNICA (o mesmo da sidebar).
   ['negocio', 'Clínica'],
   ['agenda', 'Agenda'],
-  // Missão 6 — personalização do sistema (cor da navegação): preferência
-  // pessoal de interface, morando FORA da shell.
-  ['aparencia', 'Aparência'],
 ];
 
-/** Aba antiga → porta canônica (links antigos continuam chegando no lugar). */
 const LEGACY_TAB_REDIRECT: Record<string, string> = {
   canais: '/canais?tab=canais',
   integracoes: '/canais?tab=integracoes',
@@ -88,22 +42,22 @@ function tabFromParam(value: string | null): ConfigTab {
   return CONFIG_TABS.some(([id]) => id === value) ? (value as ConfigTab) : 'negocio';
 }
 
-// ── Regras de reserva (A1.2 · Bloco 2) ───────────────────────
-// "Como o cliente pode reservar?" — a mesma configuração (BookingConfig) que
-// antes era editada dentro de Disponibilidade. Engine intacta: os campos são
-// validados no servidor (PATCH /api/businesses/:id) e consumidos pela MESMA
-// lógica de slots/antecedência/horizonte — só o endereço da edição mudou.
+// ── Regras da agenda ───────────────────────
+// Classificação BookingConfig (auditoria 2026-09-29):
+// INTERNAL/SHARED: leadMin (antecedência mínima grade), bufferMin (intervalo entre atendimentos) — valem para agenda interna e pública (slots)
+// PUBLIC_BOOKING (legado): horizonDays (janela máxima de autoagendamento público), cancelUntilMin (limite de cancelamento pelo cliente) — só autoagendamento
+// teamMode legado: política de atribuição antes era “solo/choosable/auto” (vitrine), hoje “Política da agenda” neutra
 function BookingRules({ businessId, initial, onSaved }: {
   businessId: string;
   initial: BookingConfig;
   onSaved: () => void;
 }) {
+  const legacyPagesEnabled = isLegacyPagesEnabled();
   const [cfg, setCfg] = useState<BookingConfig>({ ...defaultBookingConfig(), ...initial });
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
   const [hasTeam, setHasTeam] = useState<boolean | null>(null);
 
-  // A distribuição da equipe só faz sentido quando existe equipe.
   useEffect(() => {
     let cancelled = false;
     apiGet<{ professionals?: Array<{ id: string }> }>(`/api/catalog/get?businessId=${businessId}`, { scope: 'action', area: 'Configurações' })
@@ -122,47 +76,46 @@ function BookingRules({ businessId, initial, onSaved }: {
 
   const num = 'w-full rounded-md border border-zinc-300 px-3 py-2 text-sm mt-1';
   return (
-    <section className="bg-white border border-zinc-200 p-4 space-y-3">
+    <section className="bg-white border border-zinc-200 p-5 space-y-3">
       <div>
-        <h3 className="font-semibold text-sm">Regras de reserva</h3>
+        <h3 className="font-semibold text-sm">{legacyPagesEnabled ? 'Regras de reserva' : 'Regras da agenda'}</h3>
         <p className="text-xs text-zinc-500 mt-0.5">
-          Como o cliente pode reservar: prazos e limites que valem para todos os agendamentos.
-          Quando a casa e cada profissional atendem se configura em{' '}
-          <Link href={`/disponibilidade?b=${businessId}`} className="font-medium underline underline-offset-2">Disponibilidade</Link>.
+          {legacyPagesEnabled ? (
+            <>Como o cliente pode reservar: prazos e limites do <strong>autoagendamento público</strong>. Para operação interna, antecedência e intervalo valem para todos; a equipe pode agendar até 5 anos.</>
+          ) : (
+            <>Como a agenda funciona: antecedência e intervalos da <strong>operação interna</strong>. Quando a clínica e cada profissional atendem se configura em{' '}
+              <Link href={`/disponibilidade?b=${businessId}`} className="font-medium underline underline-offset-2">Disponibilidade</Link>.</>
+          )}
+
         </p>
       </div>
       <div className="grid sm:grid-cols-2 gap-3.5">
         {hasTeam === true && (
           <div className="sm:col-span-2">
-            {/* A1.2 · Bloco 3 — SEM CONTROLE FALSO: a distribuição automática
-                é regra do produto (quem atende é resolvido pela engine, com
-                profissionais ativos, vínculo serviço → profissional, horários,
-                buffers e exceções). Não existe configuração alternativa
-                persistida/consumida, então não há <select> aqui — um controle
-                aparentemente editável que não salva nada criava expectativa
-                de funcionamento. A indicação abaixo é explicitamente NÃO
-                interativa. */}
-            <div className="rounded-md border border-zinc-200 bg-zinc-50 px-3 py-2.5" aria-label="Distribuição dos agendamentos: automática (fixa)">
-              <p className="text-xs font-semibold text-zinc-500">DISTRIBUIÇÃO DOS AGENDAMENTOS</p>
-              <p className="text-sm font-medium text-zinc-800 mt-1 inline-flex items-center gap-1.5">
-                <Icon n="lock" size={13} className="text-zinc-400" />
-                Automática — equilibra a equipe
+            <div className="rounded-md border border-zinc-200 bg-zinc-50 px-3 py-2.5" aria-label="Atribuição de profissional — política da agenda">
+              <p className="text-xs font-semibold text-zinc-500">ATRIBUIÇÃO DE PROFISSIONAL</p>
+              <p className="text-sm font-medium text-zinc-800 mt-1">
+                Política da agenda
               </p>
-              <span className="block text-[11px] text-zinc-500 mt-0.5">O cliente nunca escolhe o profissional — a regra é interna do negócio. Quem atende é resolvido automaticamente, respeitando profissionais ativos, vínculo serviço → profissional, horários, buffers e exceções.</span>
+              <span className="block text-[11px] text-zinc-500 mt-0.5">A agenda considera disponibilidade, serviços vinculados e regras da clínica para definir os profissionais disponíveis.</span>
             </div>
           </div>
         )}
         <label className="block"><span className="text-xs font-semibold text-zinc-500">ANTECEDÊNCIA MÍNIMA (MIN)</span>
           <input type="number" min={0} max={1440} value={cfg.leadMin} onChange={(e) => setCfg({ ...cfg, leadMin: Number(e.target.value) })} className={num} />
-          <span className="text-[11px] text-zinc-500">Ex: 30 = só reserva com 30 min de folga.</span></label>
-        <label className="block"><span className="text-xs font-semibold text-zinc-500">CANCELAR ATÉ (MIN ANTES)</span>
-          <input type="number" min={0} max={10080} value={cfg.cancelUntilMin} onChange={(e) => setCfg({ ...cfg, cancelUntilMin: Number(e.target.value) })} className={num} />
-          <span className="text-[11px] text-zinc-500">Depois disso, só falando com você.</span></label>
-        <label className="block"><span className="text-xs font-semibold text-zinc-500">{isLegacyPagesEnabled() ? 'AUTOAGENDAMENTO PÚBLICO (DIAS)' : 'JANELA DE AGENDAMENTO (DIAS)'}</span>
-          <input type="number" min={1} max={365} value={cfg.horizonDays} onChange={(e) => setCfg({ ...cfg, horizonDays: Number(e.target.value) })} className={num} />
-          <span className="text-[11px] text-zinc-500">{isLegacyPagesEnabled() ? 'Janela do cliente na página pública. A equipe pode agendar até 5 anos à frente.' : 'Antecedência disponível para novos agendamentos. A equipe pode agendar até 5 anos à frente.'}</span></label>
+          <span className="text-[11px] text-zinc-500">Ex: 30 = só reserva com 30 min de folga. Vale para agenda interna e pública (grade).</span></label>
         <label className="block"><span className="text-xs font-semibold text-zinc-500">INTERVALO ENTRE ATENDIMENTOS (MIN)</span>
-          <input type="number" min={0} max={240} value={cfg.bufferMin} onChange={(e) => setCfg({ ...cfg, bufferMin: Number(e.target.value) })} className={num} /></label>
+          <input type="number" min={0} max={240} value={cfg.bufferMin} onChange={(e) => setCfg({ ...cfg, bufferMin: Number(e.target.value) })} className={num} /> <span className="text-[11px] text-zinc-500">Buffer físico/temporal — vale para ambos (capacidade).</span></label>
+        {legacyPagesEnabled && (
+          <>
+            <label className="block"><span className="text-xs font-semibold text-zinc-500">CANCELAR ATÉ (MIN ANTES) — público</span>
+          <input type="number" min={0} max={10080} value={cfg.cancelUntilMin} onChange={(e) => setCfg({ ...cfg, cancelUntilMin: Number(e.target.value) })} className={num} />
+          <span className="text-[11px] text-zinc-500">Limite de cancelamento pelo cliente no autoagendamento. Equipe cancela sem limite interno.</span></label>
+            <label className="block"><span className="text-xs font-semibold text-zinc-500">JANELA DE AUTOAGENDAMENTO (DIAS) — público</span>
+          <input type="number" min={1} max={365} value={cfg.horizonDays} onChange={(e) => setCfg({ ...cfg, horizonDays: Number(e.target.value) })} className={num} />
+          <span className="text-[11px] text-zinc-500">Janela máxima que o cliente vê no autoagendamento. A equipe pode agendar até 5 anos à frente.</span></label>
+          </>
+        )}
       </div>
       {error && <p className="text-sm font-medium text-red-600">{error}</p>}
       <Button variant="primary" onClick={save} disabled={saving}>
@@ -173,112 +126,6 @@ function BookingRules({ businessId, initial, onSaved }: {
 }
 
 
-// ── Aparência do sistema (missão 6) ────────────────────────────
-// A cor da navegação é PREFERÊNCIA PESSOAL de interface (localStorage),
-// não identidade da empresa: o A3.3 continua valendo — a empresa é
-// identificada por logo/nome (white label), nunca pintando o painel com a
-// cor dela. Por isso o controle mora AQUI (Configurações → Aparência) e
-// nunca na shell. Presets SEGUROS com contraste AA pré-validado; a topbar
-// acompanha a cor escolhida (color-mix sobre --il-nav).
-function ShellAppearance() {
-  const legacyPagesEnabled = isLegacyPagesEnabled();
-  const [accent, setAccent] = useState<NavAccentId>('azul-clinico');
-  useEffect(() => { setAccent(getNavAccent()); }, []);
-  const selected = NAV_ACCENTS.find((x) => x.id === accent) || NAV_ACCENTS[0];
-  // Preview ao vivo (§6): sidebar + topbar suave + CTA principal (accent) +
-  // texto near-black — as 4 categorias do contrato de cor em miniatura.
-  const navVars = selected.vars;
-  const aa = contrastRatio(navVars['--il-nav-fg'], navVars['--il-nav']);
-  return (
-    <section className="bg-white border border-zinc-200 p-4 space-y-3" data-testid="shell-appearance">
-      <div>
-        <h3 className="font-semibold text-sm">Aparência do sistema</h3>
-        <p className="text-xs text-zinc-500 mt-0.5">
-          Tema da clínica: cor da barra lateral, da topo suave e dos CTAs principais.
-          O texto e as cores de erro/sucesso não mudam. É uma preferência pessoal deste navegador —
-          a identidade da clínica no painel continua sendo o logo e o nome.
-        </p>
-      </div>
-      <div role="group" aria-label="Cor da navegação" className="space-y-3">
-        {NAV_ACCENT_FAMILIES.map((fam) => (
-          <div key={fam.id} className="space-y-1.5">
-            <p className="text-[11px] font-semibold uppercase tracking-[0.08em] text-zinc-400">{fam.label}</p>
-            <div className="flex flex-wrap gap-2.5">
-              {NAV_ACCENTS.filter((a) => a.family === fam.id).map((a) => (
-                <button
-                  key={a.id}
-                  type="button"
-                  aria-pressed={accent === a.id}
-                  data-testid={`nav-accent-${a.id}`}
-                  onClick={() => { setAccent(a.id); setNavAccent(a.id); }}
-                  className="flex items-center gap-2 rounded-lg border px-3 py-2 text-sm font-semibold transition-colors"
-                  style={{
-                    borderColor: accent === a.id ? 'var(--brand)' : 'var(--border)',
-                    boxShadow: accent === a.id ? '0 0 0 1px var(--brand)' : 'none',
-                  }}
-                >
-                  <span
-                    aria-hidden="true"
-                    className="inline-block h-5 w-5 rounded-full border border-black/10"
-                    style={{ background: a.swatch }}
-                  />
-                  {a.label}
-                </button>
-              ))}
-            </div>
-          </div>
-        ))}
-      </div>
-      {/* preview ao vivo: sidebar + topo suave + CTA accent + texto near-black */}
-      <div
-        data-testid="nav-accent-preview"
-        className="flex h-28 overflow-hidden rounded-lg border border-zinc-200"
-        style={{ background: 'var(--bg)' }}
-      >
-        <div
-          className="w-28 p-2.5 flex flex-col gap-1.5"
-          style={{ background: navVars['--il-nav'] }}
-        >
-          <div className="h-3 w-14 rounded" style={{ background: navVars['--il-nav-fg'], opacity: 0.9 }} />
-          <div className="h-4 rounded" style={{ background: navVars['--il-nav-active'] }} />
-          <div className="mt-1 h-4 w-4/5 rounded" style={{ background: navVars['--il-nav-muted'] } as React.CSSProperties} />
-          <div className="h-4 w-3/5 rounded" style={{ background: navVars['--il-nav-muted'], opacity: 0.6 }} />
-        </div>
-        <div className="flex-1">
-          <div
-            className="h-8 border-b border-zinc-200"
-            style={{
-              background: `linear-gradient(90deg, ${navVars['--il-nav']}22, transparent)`,
-            }}
-          />
-          <div className="space-y-2 p-2.5">
-            <div className="flex items-center gap-2">
-              <div className="h-5 w-5 rounded" style={{ background: navVars['--accent-soft'], border: `1px solid ${navVars['--accent-border']}` }} />
-              {/* título sempre near-black (contrato A — o tema não muda texto) */}
-              <div className="h-3 w-2/5 rounded" style={{ background: 'var(--text)' }} />
-            </div>
-            <div className="h-3 w-3/5 rounded bg-zinc-200" />
-            <div className="flex items-center gap-1.5 pt-0.5">
-              {/* CTA principal segue o TEMA (contrato B) */}
-              <div
-                className="h-5 w-16 rounded"
-                style={{ background: navVars['--accent'], color: navVars['--accent-contrast'] }}
-              />
-              {/* secondary é neutro; semânticas nunca tingidas */}
-              <div className="h-5 w-12 rounded border border-zinc-300 bg-white" />
-            </div>
-          </div>
-        </div>
-      </div>
-      <p className="text-[11px] flex items-center gap-2 text-zinc-500">
-        <span className="inline-flex items-center rounded-full bg-emerald-50 border border-emerald-200 px-2 py-0.5 text-[10px] font-semibold text-emerald-800">
-          Contraste AA {aa.toFixed(1)}:1
-        </span>
-        {selected.label} · a escolha vale só para você neste navegador; as demais pessoas veem o padrão do produto.{legacyPagesEnabled ? ' A página pública não é afetada.' : ''}
-      </p>
-    </section>
-  );
-}
 export default function ConfigPage() {
   const legacyPagesEnabled = isLegacyPagesEnabled();
   const router = useRouter();
@@ -287,10 +134,6 @@ export default function ConfigPage() {
   const [biz, setBiz] = useState<Business | null>(null);
   const [msg, setMsg] = useState('');
   const [saving, setSaving] = useState(false);
-  // F3-I · saúde honesta da inteligência (sem termos técnicos na UI).
-  const [health, setHealth] = useState<Record<string, { state: string; reason: string }> | null>(null);
-  // Aba = URL: derivada do parâmetro a cada render, então refresh, botão
-  // voltar e deep-link funcionam sem estado paralelo.
   const tabParam = params.get('tab') || '';
   const tab = tabFromParam(tabParam);
 
@@ -299,34 +142,25 @@ export default function ConfigPage() {
     const qs = new URLSearchParams();
     qs.set('tab', next);
     if (businessId) qs.set('b', businessId);
-    // push (não replace): cada troca de aba entra no histórico — o botão
-    // voltar percorre as abas visitadas.
     router.push(`/configuracoes?${qs.toString()}`, { scroll: false });
   }
 
-  // Abas que viraram porta própria: leva o link antigo até /canais (com ?b=).
   useEffect(() => {
     if (!LEGACY_TAB_REDIRECT[tabParam]) return;
     const target = LEGACY_TAB_REDIRECT[tabParam];
-    // A unidade ativa segue junto (e o destino pode já trazer a própria aba).
     const sep = target.includes('?') ? '&' : '?';
     router.replace(businessId ? `${target}${sep}b=${businessId}` : target);
   }, [tabParam, businessId, router]);
 
-  // 403 → aviso amigável (sessão preservada), nunca skeleton infinito.
   const { denied, failed, report } = useAreaLoad('Configurações');
 
   const load = useCallback(async () => {
     if (!businessId) return;
-    const res = await apiGet<{ business: Business }>(`/api/pages?businessId=${businessId}`, { scope: 'area', area: 'Configurações' });
+    // Clinical OS: cadastro institucional carrega pelo domínio Business, não pelo domínio Page
+    const res = await apiGet<{ business: Business }>(`/api/businesses/${businessId}`, { scope: 'area', area: 'Configurações' });
     if (!report(res) || !res.data) return;
     setBiz(res.data.business);
-    // Saúde da inteligência: MESMO payload de /api/overview (nada inventado).
-    const ov = await apiGet<{ intelligenceHealth?: Record<string, { state: string; reason: string }> | null }>(
-      `/api/overview?businessId=${businessId}&period=7`,
-      { scope: 'area', area: 'Configurações' },
-    );
-    if (ov.ok) setHealth(ov.data?.intelligenceHealth || null);
+    // diagnóstico técnico removido da superfície clínica — não movido nesta fase (ver relatório)
   }, [businessId, report]);
   useEffect(() => { load(); }, [load]);
 
@@ -334,15 +168,26 @@ export default function ConfigPage() {
     if (!biz) return;
     setSaving(true); setMsg('');
     try {
-      // Sem nav/navCustom/about aqui: essa configuração vive no editor da
-      // página (fonte única). Enviar o que já está salvo também seria
-      // duplicar responsabilidade — os campos simplesmente não saem daqui.
       const res = await apiSend(`/api/businesses/${businessId}`, 'PATCH', {
-        name: biz.name, description: biz.description, logo: biz.logo, cover: biz.cover,
-        phone: biz.phone, whatsapp: biz.whatsapp, email: biz.email,
-        instagram: biz.instagram, tiktok: biz.tiktok, address: biz.address, mapsUrl: biz.mapsUrl,
-        // Redes adicionais (socials v2): URL completa, exibidas no perfil e
-        // disponíveis como itens de menu da página pública.
+        name: biz.name,
+        fantasyName: (biz as any).fantasyName || '',
+        document: (biz as any).document || '',
+        description: biz.description,
+        logo: biz.logo,
+        phone: biz.phone,
+        whatsapp: biz.whatsapp,
+        email: biz.email,
+        address: biz.address,
+        city: (biz as any).city || '',
+        state: (biz as any).state || '',
+        zip: (biz as any).zip || '',
+        mapsUrl: biz.mapsUrl,
+        responsibleName: (biz as any).responsibleName || '',
+        responsibleDocument: (biz as any).responsibleDocument || '',
+        responsibleRegistry: (biz as any).responsibleRegistry || '',
+        responsibleRole: (biz as any).responsibleRole || '',
+        instagram: biz.instagram,
+        tiktok: biz.tiktok,
         socials: {
           ...(biz.socials || {}),
           facebook: (biz.socials || {}).facebook || '',
@@ -352,17 +197,15 @@ export default function ConfigPage() {
         },
       }, { scope: 'action', area: 'Configurações' });
       if (!res.ok) throw new Error(res.message);
-      setMsg('Configurações salvas.');
+      setMsg('Cadastro da clínica salvo.');
     } catch (err: any) { setMsg(err.message); } finally { setSaving(false); setTimeout(() => setMsg(''), 3000); }
   }
-
-  // ── Identidade visual do DASHBOARD (P2) ──────────────────────
-  // Salva só a cor da navegação; a página pública não é tocada.
 
   if (denied) return <AccessDenied area="Configurações" />;
   if (failed) return <AreaLoadError area="Configurações" message={failed} onRetry={load} />;
   if (!biz) return <PageSkeleton />;
-  const set = (k: keyof Business, v: any) => setBiz({ ...biz, [k]: v });
+  const set = (k: keyof Business, v: any) => setBiz({ ...biz, [k]: v } as Business);
+  const setAny = (k: string, v: any) => setBiz({ ...biz, [k]: v } as any);
   const input = 'w-full rounded-md border border-[var(--border-strong)] px-3 py-2 text-sm shadow-xs focus:outline-none focus:shadow-focus focus:border-[var(--brand)]';
 
   return (
@@ -370,55 +213,11 @@ export default function ConfigPage() {
       <PageHeader
         icon="settings"
         title="Configurações"
-        hint={legacyPagesEnabled ? 'As informações do seu negócio e as regras de reserva. A página pública se constrói no editor de Página.' : 'Informações da clínica e regras de agendamento.'}
+        hint="Cadastro institucional e operacional da clínica."
       />
       {msg && <p role="status" className="mb-3 text-sm font-semibold bg-[var(--success-bg)] border border-[var(--success-border)] text-[var(--success-fg)] rounded-md px-3 py-2">{msg}</p>}
-
-      {/* F3-I · Saúde da inteligência — linguagem de secretária, sem código/
-          credencial. Diagnóstico técnico: RECOLHIDO por padrão (a página
-          começa pelos dados da clínica, não pelo raio-X do sistema). */}
-      {health && (
-        <details className="bg-white border border-zinc-200 rounded-lg mb-3">
-          <summary className="px-4 py-3 flex items-center gap-2 cursor-pointer select-none">
-            <Icon n="spark" size={14} />
-            <h3 className="text-sm font-semibold">Como está a inteligência</h3>
-            <span className="text-xs text-zinc-400 font-normal">(diagnóstico técnico)</span>
-          </summary>
-          <div className="px-4 pb-4" aria-label="Saúde da inteligência">
-          <ul className="space-y-1.5">
-            {([
-              ['whatsapp', 'WhatsApp'],
-              ['automation', 'Automações'],
-              ['messaging', 'Mensagens'],
-              ['inbox', 'Atendimento'],
-              ['aiProvider', 'Assistente'],
-            ] as const).map(([key, label]) => {
-              const b = health[key];
-              if (!b) return null;
-              const tone =
-                b.state === 'ok' ? 'bg-emerald-50 text-emerald-800 border-emerald-200'
-                : b.state === 'degraded' ? 'bg-amber-50 text-amber-800 border-amber-200'
-                : b.state === 'blocked' ? 'bg-zinc-100 text-zinc-700 border-zinc-200'
-                : 'bg-red-50 text-red-800 border-red-200';
-              const statusWord =
-                b.state === 'ok' ? 'OK'
-                : b.state === 'degraded' ? 'Parcial'
-                : b.state === 'blocked' ? 'Aguardando'
-                : 'Erro';
-              return (
-                <li key={key} className="flex flex-wrap items-center gap-2 text-sm">
-                  <span className="font-medium w-28 shrink-0">{label}</span>
-                  <span className={`inline-flex items-center rounded-full border px-2 py-0.5 text-[11px] font-semibold ${tone}`}>{statusWord}</span>
-                  <span className="text-xs text-zinc-500">{b.reason}</span>
-                </li>
-              );
-            })}
-          </ul>
-          </div>
-        </details>
-      )}
-
-      <div className="mb-4">
+      {/* Diagnóstico 'Como está a inteligência' movido para Canais — ver /canais */}
+<div className="mb-4">
         <Tabs
           items={CONFIG_TABS.map(([id, label]) => ({ id: id as ConfigTab, label, icon: CONFIG_TAB_ICON[id as ConfigTab] }))}
           value={tab}
@@ -427,79 +226,113 @@ export default function ConfigPage() {
         />
       </div>
 
-      <div className="space-y-3">
+      <div className="max-w-[60rem] mx-auto space-y-4">
         {tab === 'negocio' && (
           <>
-            <section className="bg-white border border-zinc-200 p-4 space-y-3">
+            {/* Dados da clínica */}
+            <section className="bg-white border border-zinc-200 p-5 space-y-4">
               <div>
                 <h3 className="font-semibold text-sm">Dados da clínica</h3>
-                <p className="text-xs text-zinc-500 mt-0.5">{legacyPagesEnabled ? 'Esta é a fonte de verdade do perfil: a página pública lê estes dados automaticamente.' : 'Dados de identificação e contato da clínica.'}</p>
+                <p className="text-xs text-zinc-500 mt-0.5">Identificação e contato institucional — fonte do cadastro e de documentos.</p>
               </div>
               <div className="grid sm:grid-cols-2 gap-3">
-                <label className="block"><span className="text-xs font-semibold tracking-wide uppercase text-zinc-500">Nome *</span><input value={biz.name} onChange={(e) => set('name', e.target.value)} className={input + ' mt-1'} /></label>
-                <label className="block"><span className="text-xs font-semibold tracking-wide uppercase text-zinc-500">E-mail</span><input value={biz.email} onChange={(e) => set('email', e.target.value)} className={input + ' mt-1'} /></label>
+                <label className="block sm:col-span-2"><span className="text-xs font-semibold tracking-wide uppercase text-zinc-500">Nome da clínica *</span><input value={biz.name} onChange={(e) => set('name', e.target.value)} className={input + ' mt-1'} placeholder="Clínica Veterinária Exemplo" /></label>
+                <label className="block"><span className="text-xs font-semibold tracking-wide uppercase text-zinc-500">Nome fantasia</span><input value={(biz as any).fantasyName || ''} onChange={(e) => setAny('fantasyName', e.target.value)} className={input + ' mt-1'} placeholder="Opcional" /></label>
+                <label className="block"><span className="text-xs font-semibold tracking-wide uppercase text-zinc-500">CNPJ / CPF</span><input value={(biz as any).document || ''} onChange={(e) => setAny('document', e.target.value)} className={input + ' mt-1'} placeholder="00.000.000/0000-00" /></label>
               </div>
-              <label className="block"><span className="text-xs font-semibold tracking-wide uppercase text-zinc-500">Descrição</span><textarea value={biz.description} onChange={(e) => set('description', e.target.value)} className={input + ' mt-1'} rows={2} placeholder="Ex: Consultas de estética avançada com hora marcada." /></label>
-              {/* HOMOLOGAÇÃO · P1 — Identidade da clínica = nome + logo.
-                  A CAPA da página pública mora SÓ em Página → Perfil. */}
+              <label className="block"><span className="text-xs font-semibold tracking-wide uppercase text-zinc-500">Descrição</span><textarea value={biz.description} onChange={(e) => set('description', e.target.value)} className={input + ' mt-1'} rows={2} placeholder="Ex: Clínica veterinária com atendimento 24h, consultas e cirurgia." /></label>
+              <div className="grid sm:grid-cols-2 gap-3">
+                <label className="block"><span className="text-xs font-semibold tracking-wide uppercase text-zinc-500">E-mail principal</span><input value={biz.email} onChange={(e) => set('email', e.target.value)} className={input + ' mt-1'} placeholder="contato@clinica.com.br" /></label>
+                <label className="block"><span className="text-xs font-semibold tracking-wide uppercase text-zinc-500">Telefone</span><input value={biz.phone} onChange={(e) => set('phone', e.target.value)} className={input + ' mt-1'} placeholder="(11) 3333-3333" /></label>
+                <label className="block sm:col-span-2"><span className="text-xs font-semibold tracking-wide uppercase text-zinc-500">WhatsApp *</span><input value={biz.whatsapp} onChange={(e) => set('whatsapp', e.target.value)} className={input + ' mt-1'} placeholder="(11) 99999-9999" /></label>
+              </div>
               <div className="space-y-2">
                 <ImageUpload label="LOGO DA CLÍNICA" value={biz.logo} onChange={(url) => set('logo', url)} businessId={businessId} circle />
-                {legacyPagesEnabled && <p className="text-[11px] text-zinc-500">A capa/hero da página pública é editada em Página → Perfil — não aqui.</p>}
+                <p className="text-[11px] text-zinc-500">
+                  Usado no painel, documentos e como identidade da clínica.
+                  {legacyPagesEnabled ? ' A capa da página pública, quando usada, é editada em Página → Perfil.' : ''}
+                </p>
               </div>
             </section>
 
-            <section className="bg-white border border-zinc-200 p-4 space-y-3">
-              <h3 className="font-semibold text-sm">Contato e redes</h3>
-              <div className="grid sm:grid-cols-2 gap-3">
-                <label className="block"><span className="text-xs font-semibold tracking-wide uppercase text-zinc-500">WhatsApp *</span><input value={biz.whatsapp} onChange={(e) => set('whatsapp', e.target.value)} className={input + ' mt-1'} placeholder="(11) 99999-9999" /></label>
-                <label className="block"><span className="text-xs font-semibold tracking-wide uppercase text-zinc-500">Telefone</span><input value={biz.phone} onChange={(e) => set('phone', e.target.value)} className={input + ' mt-1'} /></label>
-                <label className="block"><span className="text-xs font-semibold tracking-wide uppercase text-zinc-500">Instagram</span><input value={biz.instagram} onChange={(e) => set('instagram', e.target.value)} className={input + ' mt-1'} placeholder="@seuperfil" /></label>
-                <label className="block"><span className="text-xs font-semibold tracking-wide uppercase text-zinc-500">TikTok</span><input value={biz.tiktok} onChange={(e) => set('tiktok', e.target.value)} className={input + ' mt-1'} placeholder="@seuperfil" /></label>
-              </div>
-              <p className="text-[11px] text-zinc-500 -mt-1">{legacyPagesEnabled ? 'Instagram e TikTok aceitam @usuário — a página completa o link. As redes abaixo pedem o endereço completo.' : 'Instagram e TikTok aceitam @usuário; as demais redes pedem o endereço completo.'}</p>
-              <div className="grid sm:grid-cols-2 gap-3">
-                {([['facebook', 'Facebook', 'https://facebook.com/suanegocio'], ['youtube', 'YouTube', 'https://youtube.com/@seucanal'], ['linkedin', 'LinkedIn', 'https://linkedin.com/company/suanegocio'], ['site', 'Meu site', 'https://seusite.com.br']] as const).map(([key, label, ph]) => (
-                  <label key={key} className="block"><span className="text-xs font-semibold tracking-wide uppercase text-zinc-500">{label}</span>
-                    <input value={(biz.socials || {})[key] || ''} onChange={(e) => set('socials', { ...(biz.socials || {}), [key]: e.target.value })} className={input + ' mt-1'} placeholder={ph} /></label>
-                ))}
-              </div>
-              {legacyPagesEnabled && <p className="text-[11px] text-zinc-500">Cada rede preenchida aparece no perfil da página pública e pode entrar no menu (editor da Página → Navegação).</p>}
-            </section>
-
-            <section className="bg-white border border-zinc-200 p-4 space-y-3">
+            {/* Endereço */}
+            <section className="bg-white border border-zinc-200 p-5 space-y-3">
               <h3 className="font-semibold text-sm">Endereço</h3>
-              <label className="block"><span className="text-xs font-semibold tracking-wide uppercase text-zinc-500">Endereço</span><input value={biz.address} onChange={(e) => set('address', e.target.value)} className={input + ' mt-1'} placeholder="Rua, número, bairro, cidade" /></label>
-              <label className="block"><span className="text-xs font-semibold tracking-wide uppercase text-zinc-500">Link do mapa</span><input value={biz.mapsUrl} onChange={(e) => set('mapsUrl', e.target.value)} className={input + ' mt-1'} placeholder="Cole o link do Google Maps" />{legacyPagesEnabled && <span className="text-xs text-zinc-500">Com o link salvo, o bloco Localização da página mostra o mapa.</span>}</label>
+              <label className="block"><span className="text-xs font-semibold tracking-wide uppercase text-zinc-500">Endereço</span><input value={biz.address} onChange={(e) => set('address', e.target.value)} className={input + ' mt-1'} placeholder="Rua, número, bairro" /></label>
+              <div className="grid sm:grid-cols-3 gap-3">
+                <label className="block"><span className="text-xs font-semibold tracking-wide uppercase text-zinc-500">Cidade</span><input value={(biz as any).city || ''} onChange={(e) => setAny('city', e.target.value)} className={input + ' mt-1'} placeholder="São Paulo" /></label>
+                <label className="block"><span className="text-xs font-semibold tracking-wide uppercase text-zinc-500">Estado</span><input value={(biz as any).state || ''} onChange={(e) => setAny('state', e.target.value)} className={input + ' mt-1'} placeholder="SP" /></label>
+                <label className="block"><span className="text-xs font-semibold tracking-wide uppercase text-zinc-500">CEP</span><input value={(biz as any).zip || ''} onChange={(e) => setAny('zip', e.target.value)} className={input + ' mt-1'} placeholder="00000-000" /></label>
+              </div>
+              <label className="block"><span className="text-xs font-semibold tracking-wide uppercase text-zinc-500">Link do mapa (opcional)</span><input value={biz.mapsUrl} onChange={(e) => set('mapsUrl', e.target.value)} className={input + ' mt-1'} placeholder="Cole o link do Google Maps" /></label>
             </section>
 
-            {legacyPagesEnabled && <section className="bg-white border border-zinc-200 p-4">
-              <div className="flex items-center justify-between gap-3">
-                <div>
-                  <h3 className="font-semibold text-sm">Página pública</h3>
-                  <p className="text-xs text-zinc-500 mt-0.5">Blocos, ordem, navegação, “Sobre”, visual e publicação ficam no editor da Página — um só lugar.</p>
-                </div>
-                <Link href={`/pagina?b=${businessId}`} className="shrink-0"><Button variant="secondary" size="sm">Editar página pública</Button></Link>
+            {/* Responsável técnico */}
+            <section className="bg-white border border-zinc-200 p-5 space-y-3">
+              <div>
+                <h3 className="font-semibold text-sm">Responsável técnico</h3>
+                <p className="text-xs text-zinc-500 mt-0.5">Dados do responsável pela clínica — usado em documentos e identificação institucional.</p>
               </div>
+              <div className="grid sm:grid-cols-2 gap-3">
+                <label className="block"><span className="text-xs font-semibold tracking-wide uppercase text-zinc-500">Nome do responsável</span><input value={(biz as any).responsibleName || ''} onChange={(e) => setAny('responsibleName', e.target.value)} className={input + ' mt-1'} placeholder="Dra. Ana Silva" /></label>
+                <label className="block"><span className="text-xs font-semibold tracking-wide uppercase text-zinc-500">Função / cargo</span><input value={(biz as any).responsibleRole || ''} onChange={(e) => setAny('responsibleRole', e.target.value)} className={input + ' mt-1'} placeholder="Veterinária responsável" /></label>
+                <label className="block"><span className="text-xs font-semibold tracking-wide uppercase text-zinc-500">Documento (CPF/RG)</span><input value={(biz as any).responsibleDocument || ''} onChange={(e) => setAny('responsibleDocument', e.target.value)} className={input + ' mt-1'} placeholder="000.000.000-00" /></label>
+                <label className="block"><span className="text-xs font-semibold tracking-wide uppercase text-zinc-500">Registro profissional</span><input value={(biz as any).responsibleRegistry || ''} onChange={(e) => setAny('responsibleRegistry', e.target.value)} className={input + ' mt-1'} placeholder="CRMV 12345" /></label>
+              </div>
+            </section>
+
+            {legacyPagesEnabled && (
+            /* Redes e site — secundário (legado, oculto quando GODOUTOR_LEGACY_PAGES OFF) */
+            <details className="bg-white border border-zinc-200 rounded-lg">
+              <summary className="px-5 py-3 flex items-center gap-2 cursor-pointer select-none list-none">
+                <Icon n="external" size={14} />
+                <h3 className="text-sm font-semibold">Redes e site (opcional — secundário)</h3>
+                <span className="text-xs text-zinc-400 font-normal ml-auto">clique para expandir</span>
+              </summary>
+              <div className="px-5 pb-5 pt-2 space-y-3 border-t border-zinc-100">
+                <p className="text-xs text-zinc-500">Canais secundários. Não são protagonistas do cadastro institucional — a operação vive em Canais & Integrações.</p>
+                <div className="grid sm:grid-cols-2 gap-3">
+                  <label className="block"><span className="text-xs font-semibold tracking-wide uppercase text-zinc-500">Instagram</span><input value={biz.instagram} onChange={(e) => set('instagram', e.target.value)} className={input + ' mt-1'} placeholder="@seuperfil" /></label>
+                  <label className="block"><span className="text-xs font-semibold tracking-wide uppercase text-zinc-500">TikTok</span><input value={biz.tiktok} onChange={(e) => set('tiktok', e.target.value)} className={input + ' mt-1'} placeholder="@seuperfil" /></label>
+                  {([['facebook', 'Facebook', 'https://facebook.com/suaclinica'], ['youtube', 'YouTube', 'https://youtube.com/@seucanal'], ['linkedin', 'LinkedIn', 'https://linkedin.com/company/suaclinica'], ['site', 'Meu site', 'https://suaclinica.com.br']] as const).map(([key, label, ph]) => (
+                    <label key={key} className="block"><span className="text-xs font-semibold tracking-wide uppercase text-zinc-500">{label}</span>
+                      <input value={(biz.socials || {})[key] || ''} onChange={(e) => set('socials', { ...(biz.socials || {}), [key]: e.target.value })} className={input + ' mt-1'} placeholder={ph} /></label>
+                  ))}
+                </div>
+              </div>
+            </details>
+            )}
+
+            {/* Canais e integrações — ponte */}
+            <section className="bg-zinc-50 border border-zinc-200 p-4 flex items-center justify-between gap-3">
+              <div>
+                <h3 className="font-semibold text-sm">Canais e integrações</h3>
+                <p className="text-xs text-zinc-500 mt-0.5">WhatsApp, Instagram e integrações técnicas são configurados em local próprio.</p>
+              </div>
+              <Link href={`/canais?b=${businessId}`} className="shrink-0"><Button variant="secondary" size="sm">Abrir Canais</Button></Link>
+            </section>
+
+            {legacyPagesEnabled && <section className="bg-white border border-zinc-200 p-4 flex items-center justify-between gap-3">
+              <div>
+                <h3 className="font-semibold text-sm">Página pública</h3>
+                <p className="text-xs text-zinc-500 mt-0.5">Cadastro legado — editor e publicação da página/presença online.</p>
+              </div>
+              <Link href={`/pagina?b=${businessId}`} className="shrink-0"><Button variant="secondary" size="sm">Editar página pública</Button></Link>
             </section>}
 
-            <Button variant="primary" onClick={save} disabled={saving}>{saving ? 'Salvando…' : 'Salvar informações'}</Button>
+            <Button variant="primary" onClick={save} disabled={saving}>{saving ? 'Salvando…' : 'Salvar cadastro da clínica'}</Button>
           </>
         )}
 
-        {/* A1.2 · Bloco 2 — REGRAS DE RESERVA ("como o cliente pode reservar")
-            moram em Configurações. "Quando atende" permanece em
-            /disponibilidade. A engine de agenda NÃO foi tocada: mesma
-            BookingConfig, mesma validação no servidor, mesmos consumidores. */}
         {tab === 'agenda' && biz && (
           <BookingRules
             businessId={businessId}
             initial={biz.booking || defaultBookingConfig()}
-            onSaved={() => { setMsg('Regras de reserva salvas.'); setTimeout(() => setMsg(''), 3000); }}
+            onSaved={() => { setMsg(legacyPagesEnabled ? 'Regras de reserva salvas.' : 'Regras da agenda salvas.'); setTimeout(() => setMsg(''), 3000); }}
           />
         )}
 
-        {/* Missão 6 — personalização do sistema (preferência pessoal). */}
-        {tab === 'aparencia' && <ShellAppearance />}
+        {/* Aparência movida para Perfil — tema do navegador (preferência do usuário), não tenant */}
 
 
       </div>

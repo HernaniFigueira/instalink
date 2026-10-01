@@ -1,3 +1,5 @@
+import { serviceProfessionalMode } from './booking';
+
 /** Prefill only; availability and booking creation remain in their existing flows. */
 export function newBookingSeedFromAgendaCell(
   cell: { date: string; professionalId?: string | null },
@@ -16,22 +18,25 @@ export interface BookableServiceLike {
   active?: boolean;
   bookable?: boolean;
   professionalIds?: string[];
+  professionalMode?: 'all' | 'selected';
 }
 
 /**
- * Elegibilidade pelo VÍNCULO REAL do catálogo (`service.professionalIds`) —
+ * Elegibilidade pelo VÍNCULO REAL do catálogo (`service.professionalMode` + `professionalIds`) —
  * nunca por nome, cargo ou especialidade textual.
  *
- * Um serviço sem lista própria aceita qualquer profissional ativo (a mesma
- * régua de `eligiblePros` no NewBookingSheet e de `computeSlots` no servidor).
+ * Usa a mesma regra canônica de `lib/booking.ts`.
  */
 export function serviceAcceptsProfessional(
-  service: Pick<BookableServiceLike, 'professionalIds'> | undefined,
+  service: Pick<BookableServiceLike, 'professionalIds' | 'professionalMode'> | undefined,
   professionalId: string,
 ): boolean {
   if (!professionalId) return true;
-  const ids = service?.professionalIds;
-  if (!ids || ids.length === 0) return true;
+  if (!service) return true;
+  const mode = serviceProfessionalMode(service as any);
+  if (mode === 'all') return true;
+  const ids = (service as any).professionalIds || [];
+  if (!ids.length) return false; // selected + [] = ninguém
   return ids.includes(professionalId);
 }
 

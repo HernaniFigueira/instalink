@@ -101,6 +101,7 @@ export interface QueueAssignment {
 export function resolveQueueAssignment(input: {
   /** Profissionais exigidos pelo serviço (vazio = política atual: qualquer ativo). */
   serviceProfessionalIds?: string[];
+  serviceProfessionalMode?: 'all' | 'selected';
   /** Profissional ativo/elegível da unidade, para a lista vazia do serviço. */
   activeProfessionalIds?: string[];
   /** Quem já está na entrada da fila ('' = ainda sem dono). */
@@ -113,10 +114,12 @@ export function resolveQueueAssignment(input: {
   error?: string;
 }): QueueAssignment {
   const required = input.serviceProfessionalIds || [];
+  const mode = input.serviceProfessionalMode || (required.length ? 'selected' : 'all');
   const error = input.error || 'Este serviço não é atendido por este profissional.';
-  const covers = (id: string) => (required.length > 0
-    ? !!id && required.includes(id)
-    : !id || (input.activeProfessionalIds ? input.activeProfessionalIds.includes(id) : true));
+  const covers = (id: string) => {
+    if (mode === 'all') return !id || (input.activeProfessionalIds ? input.activeProfessionalIds.includes(id) : true);
+    return !!id && required.includes(id);
+  };
   const requested = input.requestedProfessionalId || '';
   // 1. Troca explícita: quem foi pedido precisa atender o serviço.
   if (requested && !covers(requested)) return { ok: false, error, professionalId: '' };

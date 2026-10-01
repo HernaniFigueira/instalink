@@ -64,7 +64,7 @@ function routeSource(rel: string): string {
  * combate é `<h1>` com classe ad-hoc convivendo com PageHeader, e isso não é
  * o caso aqui.
  */
-const OWN_HEADER_ROUTES = ['/dashboard', '/organizacao', '/agenda', '/conversas', '/pagina', '/atendimento'];
+const OWN_HEADER_ROUTES = ['/dashboard', '/organizacao', '/agenda', '/conversas', '/pagina', '/atendimento', '/profissionais']; // CLINICAL CONSOLIDATION: /profissionais é redirect para Equipe
 
 /** Componentes compartilhados do painel (tudo que as rotas importam daqui). */
 const COMPONENT_FILES = readdirSync(path.join(root, 'src/components/dashboard'))
@@ -192,12 +192,14 @@ describe('A3.3 — white label no painel autenticado', () => {
 
 describe('A3.3 — cor da EMPRESA não pinta o painel (missão 6: aparência pessoal sim)', () => {
   it('Configurações oferece "Aparência" como preferência PESSOAL — nunca navColor da empresa', () => {
-    // Reversão explícita do usuário (missão 6): a personalização de cor da
-    // sidebar VOLTOU, mas como preferência pessoal de interface (localStorage,
-    // NAV_ACCENTS) — não como identidade da empresa no banco (appearance.navColor).
+    // Homologação PR #46: Aparência movida de Configurações para Meu Perfil → Preferências (ShellAppearance, NAV_ACCENTS, localStorage)
+    // Configurações agora tem só Clínica + Agenda; a personalização continua como preferência pessoal, não navColor da empresa.
     const cfg = read('src/app/(dashboard)/configuracoes/page.tsx');
-    expect(cfg).toMatch(/\['aparencia', 'Aparência'\]/);
-    expect(cfg).toMatch(/NAV_ACCENTS/);
+    const perfil = read('src/app/(dashboard)/perfil/page.tsx');
+    expect(cfg).not.toMatch(/\['aparencia', 'Aparência'\]/);
+    expect(cfg).not.toMatch(/NAV_ACCENTS/);
+    expect(perfil).toMatch(/ShellAppearance/);
+    expect(perfil).toMatch(/Preferências/);
     expect(cfg).not.toMatch(/Identidade do painel/i);
     expect(cfg).not.toMatch(/NAV_PRESETS/);
     expect(cfg).not.toMatch(/navColor/);
@@ -296,10 +298,14 @@ describe('A3.3 — avatar único para pessoas', () => {
   });
 
   it('Profissionais, Equipe e Clientes importam o Avatar compartilhado', () => {
-    for (const rel of ['src/app/(dashboard)/profissionais/page.tsx', 'src/app/(dashboard)/clientes/page.tsx']) {
+    // CLINICAL CONSOLIDATION: /profissionais é redirect para Equipe — Avatar mora em Equipe/catalog-panels
+    for (const rel of ['src/app/(dashboard)/clientes/page.tsx']) {
       const usesAvatar = /Avatar/.test(read(rel)) || /TeamEditor/.test(read(rel));
       expect(usesAvatar, rel).toBe(true);
     }
+    // Profissionais redirect não renderiza UI própria; comprova que Equipe tem Avatar e que redirect existe
+    expect(read('src/app/(dashboard)/profissionais/page.tsx'), 'profissionais redirect').toMatch(/redirect.*equipe|\/equipe/);
+    // compat: Equipe continua com Avatar
     // TeamEditor (Profissionais) usa o mesmo componente — não o círculo manual.
     expect(read('src/components/dashboard/catalog-panels.tsx')).toMatch(/<Avatar/);
     expect(read('src/app/(dashboard)/equipe/page.tsx')).toMatch(/<Avatar/);
@@ -362,8 +368,8 @@ describe('A3.3 — seleção não é estado de sucesso', () => {
   it('papel selecionável do membro segue o contrato comum sem mudança de fluxo', () => {
     const equipe = read('src/app/(dashboard)/equipe/page.tsx');
     expect(equipe).toContain('className="il-option-choice il-option-choice--compact text-left"');
-    expect(equipe).toContain('aria-pressed={drawer.role === r.id}');
-    expect(equipe).toContain('saveMember(drawer, { role: r.id })');
+    expect(equipe).toContain('aria-pressed={fRole === r.id}');
+    expect(equipe).toContain('requestRoleChange(r.id)');
   });
 });
 

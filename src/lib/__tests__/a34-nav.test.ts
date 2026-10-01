@@ -117,7 +117,8 @@ describe('A3.4 · NAV — seções e ordem nova', () => {
     // GODOUTOR final: Pendências e Oportunidades voltaram à LINHA do menu
     // (permissão real). Continuam fora da linha (com atalho contextual real):
     // Execuções, Meu perfil e Recursos.
-    expect(nav.more.map((r) => r.href)).toEqual(['/atendimento', '/execucoes', '/perfil', '/recursos']);
+    // CLINICAL STRUCTURE CONSOLIDATION (B1): Profissionais unificado em Equipe - offMenu inclui /profissionais (redirect)
+    expect(nav.more.map((r) => r.href)).toEqual(['/atendimento', '/profissionais', '/execucoes', '/perfil', '/recursos']);
     // O atalho vive dentro de Automações (fonte: URLs diretas do painel).
     const automations = read('src/components/dashboard/AutomationsView.tsx');
     expect(automations).toMatch(/\/execucoes/);

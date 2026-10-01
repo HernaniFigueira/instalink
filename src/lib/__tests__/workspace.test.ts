@@ -9,15 +9,18 @@ describe('dashboard permissão independente', () => {
   it('dashboard existe no catálogo e pode ser ligada/desligada por papel', () => {
     const owner = permissionsFor('OWNER');
     expect(owner.dashboard).toBe(true);
+    // Recepção (SECRETARIA) não recebe Visão geral por padrão (preset PR #46)
     const secretaria = permissionsFor('SECRETARIA');
-    expect(secretaria.dashboard).toBe(true);
+    expect(secretaria.dashboard).toBe(false);
+    expect(permissionsFor('ATENDENTE').dashboard).toBe(true);
     const vendedor = permissionsFor('VENDEDOR');
     expect(vendedor.dashboard).toBe(true);
     const viewer = permissionsFor('VIEWER');
     expect(viewer.dashboard).toBe(false);
     // override desliga para secretaria
-    const without = permissionsFor('SECRETARIA', { dashboard: false });
+    const without = permissionsFor('ATENDENTE', { dashboard: false });
     expect(without.dashboard).toBe(false);
+    expect(permissionsFor('SECRETARIA', { dashboard: true }).dashboard).toBe(true);
     const withViewer = permissionsFor('VIEWER', { dashboard: true });
     expect(withViewer.dashboard).toBe(true);
     // owner nunca perde

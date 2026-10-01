@@ -55,8 +55,13 @@ export const ROLES: RoleDef[] = [
     permissions: PERMISSION_IDS.filter((p) => p !== 'admin'),
   },
   {
-    id: 'SECRETARIA', label: 'Secretária', hint: 'Agenda, clientes, leads e WhatsApp',
-    permissions: ['dashboard', 'agenda', 'clientes', 'leads', 'pedidos', 'whatsapp'],
+    // Preset de PRODUTO (PR #46 · Equipe UX closure): Recepção opera Agenda,
+    // Clientes, Oportunidades e WhatsApp/Conversas. NÃO recebe por padrão
+    // Visão geral, Pedidos, Catálogo, Página, Assistente, Campanhas, Equipe,
+    // Configuração, Financeiro, Administração nem Atendimento clínico. O ID
+    // interno permanece SECRETARIA (compatibilidade com dados existentes).
+    id: 'SECRETARIA', label: 'Recepção', hint: 'Agenda, clientes, oportunidades e conversas',
+    permissions: ['agenda', 'clientes', 'leads', 'whatsapp'],
   },
   {
     id: 'ATENDENTE', label: 'Atendente', hint: 'Agenda, clientes e WhatsApp',
@@ -76,7 +81,7 @@ export const ROLES: RoleDef[] = [
     // "somente a própria agenda" vem do vínculo User→Professional
     // (Professional.userId) e é aplicado no backend (lib/access-core.ts).
     id: 'PROFISSIONAL', label: 'Profissional',
-    hint: 'Vê a própria agenda e os clientes da unidade (sem configurações)',
+    hint: 'Própria agenda, clientes e atendimento clínico (sem configurações)',
     permissions: ['dashboard', 'agenda', 'clientes', 'atendimento'],
   },
 ];

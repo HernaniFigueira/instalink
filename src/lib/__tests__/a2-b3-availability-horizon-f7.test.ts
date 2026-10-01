@@ -51,7 +51,7 @@ function q(overrides: Partial<SlotQuery> = {}): SlotQuery {
     serviceId: 's1',
     durationMin: 30,
     professionalId: '',
-    eligibleProIds: [],
+    eligibleProIds: undefined,
     nowHM: '',
     leadMin: 0,
     bufferMin: 0,

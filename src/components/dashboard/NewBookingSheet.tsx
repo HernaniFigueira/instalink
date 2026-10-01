@@ -22,6 +22,7 @@ import { breedSuggestions, PET_SPECIES, PET_SPECIES_LABELS, validatePet } from '
 import { Drawer, Avatar, Badge, Button, Checkbox, Field, IconButton, Input, Notice, Select } from '@/components/ui';
 import { WORKSPACE_SHEET_SIZES } from '@/lib/workspace-sheet-sizes';
 import { uniqueEligibleServiceId } from '@/lib/agenda-cell-prefill';
+import { eligibleProfessionalIds, professionalServesService } from '@/lib/booking';
 import { NewClientForm } from '@/components/dashboard/NewClientSheet';
 
 interface Contact {
@@ -137,9 +138,7 @@ export function NewBookingSheet({ businessId, services, pros, timezone, initial,
   // servidor (`fitInPastError`, no fuso do negócio) — aqui ela AVISA antes.
   const fitInPast = fitInOpen ? fitInPastError(date, fitInTime, today, nowHM(new Date(), timezone || undefined)) : '';
   const service = bookable.find((s) => s.id === serviceId);
-  const eligiblePros = service?.professionalIds?.length
-    ? pros.filter((p) => p.active !== false && service.professionalIds.includes(p.id))
-    : pros.filter((p) => p.active !== false);
+  const eligiblePros = service ? pros.filter((p) => professionalServesService(service as any, p.id, pros)) : pros.filter((p) => p.active !== false);
 
   /**
    * Um profissional só continua selecionado se o serviço escolhido o aceitar.
@@ -149,10 +148,9 @@ export function NewBookingSheet({ businessId, services, pros, timezone, initial,
   const proCanPerform = useCallback((svcId: string, professionalId: string) => {
     if (!professionalId) return true;
     const svc = bookable.find((s) => s.id === svcId);
-    const ids = svc?.professionalIds;
-    if (!ids || ids.length === 0) return true;
-    return ids.includes(professionalId);
-  }, [bookable]);
+    if (!svc) return true;
+    return professionalServesService(svc as any, professionalId, pros);
+  }, [bookable, pros]);
 
   /**
    * Profissional EFETIVO da combinação: o pré-selecionado só vale enquanto o

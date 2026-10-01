@@ -119,7 +119,12 @@ export function WorkspaceNavigation({ nav, activePath, unit, units = [], multiUn
 
   // Destinos com `sidebar: false` não ocupam linha no menu (régua: frequência),
   // mas continuam acessíveis por URL/atalho contextual.
-  const visible = (items: NavItem[]) => items.filter((i) => i.sidebar !== false);
+  // Clinical OS §20 — /produtos e /pedidos saem da navegação quando GDP Legado OFF, mas seguem acessíveis por deep link.
+  const visible = (items: NavItem[]) => items.filter((i) => {
+    if (i.sidebar === false) return false;
+    if (!legacyPagesEnabled && (i.href === '/produtos' || i.href === '/pedidos')) return false;
+    return true;
+  });
 
   const activeArea = areaOfRoute(activePath, areas);
   // Um grupo SÓ tem acordeão se tiver LINHA para mostrar. Destinos com

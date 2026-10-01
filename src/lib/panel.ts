@@ -273,21 +273,22 @@ export const PANEL_ROUTES: PanelRouteDef[] = [
     description: 'Registro clínico vinculado a um agendamento ou à fila.',
   },
   {
-    // A3.4: entrou em Operação. Quem ATENDE ajusta quem atende no dia a dia —
-    // profissional e agenda são a mesma conversa, não catálogo de vitrine.
+    // CLINICAL STRUCTURE CONSOLIDATION (B1): Profissionais deixa de ser porta autônoma
+    // de mesmo peso — gestão unificada vive em /equipe (fonte única de pessoas).
+    // Rota preservada para compatibilidade: redireciona para /equipe (link antigo continua válido).
     href: '/profissionais', label: 'Profissionais', icon: 'idcard', section: 'operacao',
     pageType: 'hub',
-    modes: ['services', 'bookings'], permission: 'catalogo', area: 'profissionais',
-    description: 'Quem realiza os atendimentos, com quais serviços, acesso ao sistema e agenda própria.',
+    modes: ['services', 'bookings'], permission: 'catalogo', area: 'profissionais', sidebar: false,
+    description: 'Redireciona para Equipe — gestão unificada de pessoas (compatibilidade com links antigos).',
   },
   {
     // A3.4: entrou em Operação, junto de Agenda e Profissionais.
-    // Era "/horarios". "Disponibilidade" é o que a tela É: quando a casa e cada
+    // Era "/horarios". "Disponibilidade" é o que a tela É: quando a clínica e cada
     // profissional podem atender (janela semanal + dias especiais).
     href: '/disponibilidade', label: 'Disponibilidade', icon: 'clock', section: 'operacao',
     pageType: 'hub',
     modes: ['services', 'bookings'], permission: 'catalogo', area: 'disponibilidade',
-    description: 'Quando a casa e cada profissional podem atender, inclusive dias especiais.',
+    description: 'Quando a clínica e cada profissional podem atender, inclusive dias especiais.'
   },
   {
     // Era "/whatsapp". Renomeado porque a tela é o INBOX (operação diária); a

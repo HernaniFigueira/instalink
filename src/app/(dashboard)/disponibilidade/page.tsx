@@ -12,7 +12,7 @@ import { ExceptionsManager, CatalogCrossLinks } from '@/components/dashboard/cat
 // ═══════════════════════════════════════════════════════════════
 // DISPONIBILIDADE — "quando atende"
 // Era /horarios. O nome antigo descrevia O CAMPO (horário); o novo descreve
-// O QUE A TELA ENTREGA: quando a casa e cada profissional podem atender.
+// O QUE A TELA ENTREGA: quando a clínica e cada profissional podem atender.
 // Janela semanal (base), personalização por profissional (herança já
 // calculada pelo painel) e dias especiais. Reusa toda a lógica protegida —
 // esta tela só expõe o que já existe. Nenhuma fórmula de agenda mudou.
@@ -35,6 +35,7 @@ const TIMEZONE_OPTIONS = [
 export default function DisponibilidadePage() {
   const params = useSearchParams();
   const businessId = params.get('b') || '';
+  const focusProfessionalId = params.get('professionalId') || '';
   const [pros, setPros] = useState<Professional[]>([]);
   const [rules, setRules] = useState<Availability[]>([]);
   const [exceptions, setExceptions] = useState<AvailabilityException[]>([]);
@@ -80,7 +81,7 @@ export default function DisponibilidadePage() {
     <PageHeader
       icon="clock"
       title="Disponibilidade"
-      hint="Quando a casa e cada profissional podem atender — a base de tudo. Profissionais podem seguir a janela da casa ou ter a sua."
+      hint="Quando a clínica e cada profissional podem atender — base da agenda. Profissionais podem seguir o horário da clínica ou ter agenda própria."
     />
   );
 
@@ -106,10 +107,18 @@ export default function DisponibilidadePage() {
 
       {loaded && (
         <div className="space-y-4">
-          {/* Horário da empresa + herança/personalização por profissional. */}
+          {/* Horário da clínica + herança/personalização por profissional. */}
+          {focusProfessionalId && (() => {
+            const fp = pros.find((p) => p.id === focusProfessionalId);
+            return fp ? (
+              <Notice tone="info" className="mb-2">Mostrando disponibilidade de <strong>{fp.name}</strong> — <Link href={`/disponibilidade?b=${businessId}`} className="underline">ver todos</Link> · <Link href={`/equipe?b=${businessId}`} className="underline">voltar à Equipe</Link></Notice>
+            ) : null;
+          })()}
           <BusinessHoursPanel
+            key={`${businessId}-${focusProfessionalId}-${loaded ? 'ready' : 'loading'}`}
+            focusProfessionalId={focusProfessionalId}
             businessId={businessId}
-            professionals={pros.filter((p) => p.active !== false)}
+            professionals={(focusProfessionalId ? pros.filter((p) => p.id === focusProfessionalId) : pros).filter((p) => p.active !== false)}
             rules={rules}
             onChanged={() => { load(); }}
           />

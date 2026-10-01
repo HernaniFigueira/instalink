@@ -132,18 +132,19 @@ export default function EstruturaPage() {
       {header}
       <div className="grid gap-4 sm:grid-cols-2">
         {block({
-          icon: 'service', title: terms.servicePlural, question: 'O que sua clínica oferece',
+          icon: 'service', title: "Serviços", question: 'O que sua clínica oferece',
           metric: String(servicesActive), metricHint: servicesActive === 0 ? 'Nenhum serviço ativo ainda' : `de ${services.length} cadastrados`,
           tone: servicesActive ? 'brand' : 'neutral',
-          primary: `Adicionar ${terms.service.toLowerCase()}`, onPrimary: withB('/servicos'),
+          primary: "Adicionar serviço", onPrimary: withB('/servicos'),
           secondary: 'Ver lista', onSecondary: withB('/servicos'),
         })}
         {block({
-          icon: 'idcard', title: 'Profissionais', question: 'Quem realiza os atendimentos',
-          metric: String(prosActive), metricHint: prosActive === 0 ? 'Nenhum profissional ativo ainda' : `${prosWithAccess} com acesso ao sistema`,
+          icon: 'idcard', title: 'Equipe — Pessoas da clínica', question: 'Quem tem acesso e quem realiza atendimentos',
+          metric: prosActive === 0 && (members === null || membersActive === 0) ? '—' : `${prosActive} atendem · ${prosWithAccess} com acesso`,
+          metricHint: members === null ? 'Você não tem permissão para ver a equipe' : (prosActive === 0 ? 'Nenhum profissional ativo ainda — adicione em Equipe' : `${(members?.length || 0) + 1 + pros.filter(p => !p.userId).length} pessoas no total · ${membersActive} membros ativos`),
           tone: prosActive ? 'brand' : 'neutral',
-          primary: 'Adicionar profissional', onPrimary: withB('/profissionais'),
-          secondary: 'Ver lista', onSecondary: withB('/profissionais'),
+          primary: 'Gerenciar equipe', onPrimary: withB('/equipe'),
+          secondary: 'Ver lista', onSecondary: withB('/equipe'),
         })}
         {block({
           icon: 'clock', title: 'Horários', question: 'Quando a clínica e os profissionais atendem',
@@ -152,16 +153,23 @@ export default function EstruturaPage() {
           primary: 'Configurar horários', onPrimary: withB('/disponibilidade'),
           secondary: 'Ver exceções', onSecondary: withB('/disponibilidade'),
         })}
-        {block({
-          icon: 'shield', title: 'Acessos', question: 'Quem pode entrar no GoDoutor',
-          metric: members === null ? '—' : String(membersActive),
-          metricHint: members === null
-            ? 'Você não tem permissão para ver a equipe'
-            : (membersActive === 0 ? 'Somente você por enquanto' : `${prosWithAccess} profissional(is) com login`),
-          tone: members === null ? 'neutral' : (membersActive ? 'brand' : 'warning'),
-          primary: 'Gerenciar acessos', onPrimary: withB('/equipe'),
-          secondary: 'Ver equipe', onSecondary: withB('/equipe'),
-        })}
+        {(() => {
+          const cadastroFields = [
+            biz?.fantasyName, biz?.document, biz?.city, biz?.state, biz?.zip, (biz as any)?.responsibleName, biz?.whatsapp,
+          ];
+          const filled = cadastroFields.filter((v) => String(v || '').trim().length > 0).length;
+          const total = cadastroFields.length;
+          const completeness = `${filled}/${total} campos`;
+          const hint = filled === total ? 'Cadastro completo' : filled === 0 ? 'Preencha o cadastro institucional' : `${total - filled} campos pendentes`;
+          const tone = filled === total ? 'success' as const : filled === 0 ? 'warning' as const : 'brand' as const;
+          return block({
+            icon: 'buildings', title: 'Cadastro da clínica', question: 'Dados institucionais para operar',
+            metric: completeness, metricHint: hint,
+            tone,
+            primary: 'Completar cadastro', onPrimary: withB('/configuracoes'),
+            secondary: 'Ver cadastro', onSecondary: withB('/configuracoes'),
+          });
+        })()}
         {/* P4 — Fichas de anamnese: ação que abre o gerenciador (Workspace Sheet). */}
         <Card className="p-5 flex flex-col gap-4">
           <div className="flex items-start gap-3">
@@ -174,8 +182,8 @@ export default function EstruturaPage() {
             </div>
           </div>
           <div>
-            <p className="text-[15px] font-semibold text-[var(--text)] leading-snug">Motor único de formulários</p>
-            <p className="text-[12px] text-[var(--text-muted)] mt-1">Presets por tipo de clínica, campos editáveis. Não é diagnóstico médico.</p>
+            <p className="text-[15px] font-semibold text-[var(--text)] leading-snug">Modelos de anamnese</p>
+            <p className="text-[12px] text-[var(--text-muted)] mt-1">Crie e adapte fichas usadas durante os atendimentos.</p>
           </div>
           <div className="flex flex-wrap gap-2 mt-auto">
             <button type="button" onClick={() => setShowAnamnese(true)} className={buttonCls('primary', 'md')}>

@@ -14,7 +14,7 @@
 import { randomUUID } from 'node:crypto';
 import type { BookingStatus, Business, DB, Service } from './types';
 import { computeSlots } from './slots';
-import { resolveProfessional } from './booking';
+import { eligibleProfessionalIds, slotEligibleProfessionalIds, professionalServesService, resolveProfessional } from './booking';
 import { upsertContact } from './contacts';
 import { onlyDigits } from './utils';
 import { isValidDateISO, isValidClockTime, effectiveTimezone, weekdayOf, todayISO, nowHM } from './tz';
@@ -201,15 +201,22 @@ export function createBookingTx(d: DB, p: CreateBookingParams): {
   }
 
   const activePros = d.professionals.filter((x) => x.businessId === businessId && x.active !== false);
-  const eligible = (service.professionalIds || []).length > 0
-    ? activePros.filter((x) => (service.professionalIds || []).includes(x.id))
-    : activePros;
+  const eligible = activePros.filter((x) => professionalServesService(service as any, x.id, activePros));
 
   let ownerPro = '';
   if (isOwner) {
     ownerPro = String(p.professionalId || '');
     if (ownerPro && !eligible.some((x) => x.id === ownerPro)) {
       throw txError('Profissional indisponível para este serviço.', 400);
+    }
+  }
+
+  // P0 FECHAMENTO: serviço explícito sem profissional elegível não gera agendamento.
+  // Legacy solo (professionalMode indefinido + ids vazia + sem profissionais) preserva compatibilidade.
+  {
+    const slotIdsForCreate = slotEligibleProfessionalIds(service as any, d.professionals.filter((x) => x.businessId === businessId));
+    if (slotIdsForCreate !== undefined && slotIdsForCreate.length === 0) {
+      throw txError('Este serviço não tem profissional para atender. Vincule um profissional a este serviço.', 400);
     }
   }
 
@@ -225,7 +232,7 @@ export function createBookingTx(d: DB, p: CreateBookingParams): {
     serviceId: service.id,
     durationMin: service.durationMin,
     professionalId: isOwner ? ownerPro : '',
-    eligibleProIds: service.professionalIds || [],
+    eligibleProIds: slotEligibleProfessionalIds(service as any, d.professionals.filter((x) => x.businessId === businessId)),
     nowHM: p.date === today ? nowHM(nowDate, btz) : '',
     leadMin: cfg?.leadMin || 0,
     bufferMin: cfg?.bufferMin || 0,
@@ -247,7 +254,7 @@ export function createBookingTx(d: DB, p: CreateBookingParams): {
       professionals: eligible.map((x) => ({ id: x.id, name: x.name })),
     }, {
       date: p.date, time: p.time, durationMin: service.durationMin,
-      professionalId: ownerPro, eligibleProIds: service.professionalIds || [],
+      professionalId: ownerPro, eligibleProIds: slotEligibleProfessionalIds(service as any, d.professionals.filter((x) => x.businessId === businessId)),
     });
     if (conflicts.length > 0 && !p.fitInConfirmed) {
       throw Object.assign(txError(fitInWarning(conflicts), 409), { conflicts });

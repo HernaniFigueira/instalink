@@ -14,6 +14,7 @@
 // Este módulo é PURO (planeja; quem executa a escrita é a rota/API).
 import type { Business, DB, Service } from './types';
 import { computeSlots } from './slots';
+import { eligibleProfessionalIds, slotEligibleProfessionalIds } from './booking';
 import { isFeatureEnabled } from './features';
 import { priceVisible } from './pricing';
 import { addDaysISO, effectiveTimezone, isValidDateISO, nowHM, todayISO, weekdayOf, humanDay } from './tz';
@@ -172,7 +173,7 @@ function slotsFor(db: DB, business: Business, service: Service, date: string, to
     serviceId: service.id,
     durationMin: service.durationMin,
     professionalId: '',
-    eligibleProIds: service.professionalIds || [],
+    eligibleProIds: slotEligibleProfessionalIds(service as any, db.professionals.filter((p) => p.businessId === business.id) as any),
     // A2-B5 (F9): fuso do NEGÓCIO (nunca fixo, nunca o do navegador).
     nowHM: date === today ? nowHM(new Date(), effectiveTimezone(business.businessTimezone)) : '',
     leadMin: cfg?.leadMin || 0,

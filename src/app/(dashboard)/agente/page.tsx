@@ -102,7 +102,7 @@ export default function AgentePage() {
       <PageHeader
         icon="spark"
         title="Agente de atendimento"
-        hint={legacyPagesEnabled ? 'O assistente que responde na sua página usando os dados reais do negócio — sem inventar e sem mexer na sua agenda.' : 'O assistente que orienta clientes com dados reais do negócio — sem inventar e sem alterar sua agenda.'}
+        hint={legacyPagesEnabled ? 'O assistente que responde na sua página usando os dados reais do negócio — sem inventar e sem mexer na sua agenda.' : 'O assistente que orienta clientes com dados reais da clínica — sem inventar e sem alterar sua agenda.'}
         action={
         <span className="flex items-center gap-2">
           <span className={cn(
@@ -157,7 +157,7 @@ export default function AgentePage() {
             <label className="block"><span className="text-xs font-semibold text-[var(--text-muted)]">SAUDAÇÃO</span>
               <textarea value={agent.greeting} onChange={(e) => set('greeting', e.target.value)} rows={2} className={input + ' mt-1'}
                 placeholder="Olá! Sou o assistente virtual da {empresa}. Como posso ajudar?" />
-              <span className="text-[11px] text-[var(--text-muted)]">Use <code>{'{empresa}'}</code> para o nome do negócio aparecer automaticamente.</span></label>
+              <span className="text-[11px] text-[var(--text-muted)]">Use <code>{'{empresa}'}</code> para o nome da {legacyPagesEnabled ? 'empresa' : 'clínica'} aparecer automaticamente.</span></label>
             <div>
               <span className="text-xs font-semibold text-[var(--text-muted)]">PERSONALIDADE / TOM</span>
               <div className="flex flex-wrap gap-2 mt-1.5">

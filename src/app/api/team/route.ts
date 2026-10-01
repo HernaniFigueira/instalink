@@ -6,6 +6,9 @@ import { requireBusiness, PERMISSIONS, ROLES, isValidPermission, isValidRole, pe
 import { pushAudit } from '@/lib/audit';
 import type { BusinessMember, MemberRole, PermissionId } from '@/lib/types';
 import { professionalForUser } from '@/lib/access';
+import { isValidCpf } from '@/lib/contact-profile';
+import { onlyDigits } from '@/lib/utils';
+import { minimalOverrides } from '@/lib/equipe-access';
 
 // EQUIPE — logins internos da empresa (permissões por papel + individuais).
 // Regras de governança:
@@ -44,14 +47,20 @@ export async function GET(req: NextRequest) {
     me: { userId: ctx.user.id, role: ctx.role, isOwner: ctx.isOwner, permissions: ctx.permissions },
     owner: (() => {
       const o = db.users.find((u) => u.id === ctx.business.ownerId);
-      return o ? { userId: o.id, name: o.name, email: o.email, role: 'OWNER' as MemberRole } : null;
+      return o ? { userId: o.id, name: o.name, email: o.email, phone: (o as any).phone || '', cpf: (o as any).cpf || '', role: 'OWNER' as MemberRole } : null;
     })(),
     members: members.map((m) => {
       const u = users.get(m.userId);
       const linked = professionalForUser(db, businessId, m.userId);
+      // phone/cpf canônicos: User é fonte primária, Member como fallback compatível
+      const phone = (u as any)?.phone || (m as any)?.phone || '';
+      const cpf = (u as any)?.cpf || (m as any)?.cpf || '';
       return {
         id: m.id, userId: m.userId, name: u?.name || 'Usuário', email: u?.email || '',
         role: m.role, permissions: permissionsFor(m.role, m.permissions),
+        // Overrides MÍNIMOS: legado idêntico ao preset do papel não vira "ajuste".
+        permissionOverrides: { ...minimalOverrides(m.role, m.permissions || {}) },
+        phone, cpf,
         active: m.active !== false, note: m.note || '', createdAt: m.createdAt,
         lastLoginAt: u?.lastLoginAt || '',
         professionalId: linked?.id || '',
@@ -71,13 +80,72 @@ export async function POST(req: NextRequest) {
     if (!guard.ok) return guard.res;
     const { ctx } = guard;
 
+    // Person orchestration atômica — "Adicionar pessoa" / "Gerenciar pessoa"
+    if (body.action === 'person.save') {
+      const { validatePersonInput, personSaveTx } = await import('@/lib/person-orchestration');
+      // isOwner NUNCA confiado do cliente — derivado server-side dentro de personSaveTx via business.ownerId
+      const input: any = {
+        businessId,
+        mode: body.mode === 'update' ? 'update' : 'create',
+        existingMemberId: body.existingMemberId || body.memberId || '',
+        existingProfessionalId: body.existingProfessionalId || body.professionalId || '',
+        existingUserId: body.existingUserId || body.userId || '',
+        name: body.name,
+        email: body.email,
+        phone: body.phone,
+        cpf: body.cpf,
+        photo: body.photo,
+        hasAccess: !!body.hasAccess,
+        hasClinical: !!body.hasClinical,
+        role: body.role,
+        permissionOverrides: body.permissionOverrides || body.permissions,
+        password: body.password,
+        funcao: body.funcao || body.roleClinico || body.role,
+        conselho: body.conselho,
+        crmvUf: body.crmvUf,
+        crmvNumero: body.crmvNumero,
+        serviceIds: body.serviceIds,
+        serviceSelectionExplicit: !!body.serviceSelectionExplicit,
+        dispMode: body.dispMode,
+        pendingServices: Array.isArray(body.pendingServices) ? body.pendingServices : [],
+      };
+      // Boundary equipe/catalogo: mutação clínica exige catalogo além de equipe
+      // Só considera clínico se hasClinical true ou pendingServices ou desativação de professional
+      const isClinicalMutation = !!input.hasClinical || (Array.isArray(input.pendingServices) && input.pendingServices.length > 0) || (!!input.existingProfessionalId && !input.hasClinical);
+      if (isClinicalMutation && !ctx.permissions.catalogo && !ctx.isOwner) {
+        return NextResponse.json({ error: 'Sem permissão para alterar dados clínicos (catalogo).' }, { status: 403 });
+      }
+      // Pré-validação (fora da transação) para feedback rápido, mas a transação revalida com DB fresco
+      const db0 = await readDB();
+      try {
+        validatePersonInput(input, db0, ctx);
+      } catch (e: any) {
+        const status = e?.status || 400;
+        return NextResponse.json({ error: e.message || 'Dados inválidos.' }, { status });
+      }
+      try {
+        const result = await updateDB((db) => personSaveTx(db as any, input, ctx as any));
+        return NextResponse.json({ ok: true, ...result });
+      } catch (e: any) {
+        const status = e?.status || 400;
+        return NextResponse.json({ error: e.message || 'Não foi possível salvar pessoa.' }, { status });
+      }
+    }
+
     const name = String(body.name || '').trim().slice(0, 80);
     const email = String(body.email || '').trim().toLowerCase().slice(0, 160);
     const password = String(body.password || '');
+    // Clinical OS — telefone/CPF normalizados digits-only, opcionais
+    const onlyDigits = (v:any)=>String(v||'').replace(/\D/g,'');
+    const phone = onlyDigits(body.phone).slice(0,13);
+    const cpf = onlyDigits(body.cpf).slice(0,11);
+    if (phone && phone.length < 10) return NextResponse.json({ error: 'Telefone inválido.' }, { status: 400 });
+    if (cpf) {
+      if (cpf.length !== 11 || !isValidCpf(cpf)) return NextResponse.json({ error: 'CPF inválido.' }, { status: 400 });
+    }
     const role: MemberRole = isValidRole(body.role) ? body.role : 'ATENDENTE';
     if (!name) return NextResponse.json({ error: 'Informe o nome.' }, { status: 400 });
     if (!email.includes('@')) return NextResponse.json({ error: 'Informe um e-mail válido.' }, { status: 400 });
-    if (password.length < 6) return NextResponse.json({ error: 'A senha precisa de ao menos 6 caracteres.' }, { status: 400 });
     // Nunca aceitar role de plataforma via equipe da Organization.
     if (String(body.role || '').toLowerCase() === 'master' || body.platformRole === 'master') {
       return NextResponse.json({ error: 'Não é possível atribuir o papel Master por esta rota.' }, { status: 403 });
@@ -89,7 +157,13 @@ export async function POST(req: NextRequest) {
     // Vínculo opcional com um profissional da unidade (validado abaixo).
     const requestedProfessionalId = String(body.professionalId || '').trim();
     const overrides: Partial<Record<PermissionId, boolean>> = {};
-    if (body.permissions && typeof body.permissions === 'object') {
+    if (body.permissionOverrides !== undefined) {
+      if (body.permissionOverrides && typeof body.permissionOverrides === 'object' && !Array.isArray(body.permissionOverrides)) {
+        for (const [k, v] of Object.entries(body.permissionOverrides as Record<string, any>)) {
+          if (isValidPermission(k) && typeof v === 'boolean') overrides[k as PermissionId] = v;
+        }
+      }
+    } else if (body.permissions && typeof body.permissions === 'object') {
       for (const key of Object.keys(body.permissions)) {
         if (isValidPermission(key)) overrides[key] = body.permissions[key] === true;
       }
@@ -101,7 +175,11 @@ export async function POST(req: NextRequest) {
     if (db0.members.some((m) => m.businessId === businessId && db0.users.find((u) => u.id === m.userId)?.email === email)) {
       return NextResponse.json({ error: 'Esta pessoa já faz parte da equipe.' }, { status: 400 });
     }
-    const existingUser = db0.users.find((u) => u.email === email);
+    const existingUser = db0.users.find((u) => u.email.toLowerCase() === email.toLowerCase());
+    // Senha inicial: necessária somente se e-mail ainda não possui User
+    if (!existingUser) {
+      if (password.length < 6) return NextResponse.json({ error: 'Defina uma senha inicial com ao menos 6 caracteres para criar a conta.' }, { status: 400 });
+    }
     if (requestedProfessionalId) {
       const target = db0.professionals.find((p) => p.id === requestedProfessionalId && p.businessId === businessId);
       if (!target) return NextResponse.json({ error: 'Profissional não encontrado nesta unidade.' }, { status: 404 });
@@ -116,13 +194,20 @@ export async function POST(req: NextRequest) {
       if (!userId) {
         userId = randomUUID();
         // role de plataforma SEMPRE 'owner' — Owner/Admin NÃO promovem a master.
-        db.users.push({ id: userId, name, email, passwordHash: hashPassword(password), createdAt: now, role: 'owner', lastLoginAt: '' });
+        // Clinical OS: armazena telefone/CPF quando fornecidos (opcionais, sem log de senha)
+        const extra: Record<string,any> = {};
+        if (phone) extra.phone = phone;
+        if (cpf) extra.cpf = cpf;
+        db.users.push({ id: userId, name, email, passwordHash: hashPassword(password), createdAt: now, role: 'owner', lastLoginAt: '', ...extra });
       }
       const member: BusinessMember = {
         id: randomUUID(), businessId, userId, role, permissions: overrides,
         active: true, note: String(body.note || '').slice(0, 200),
         invitedBy: ctx.user.id, createdAt: now, updatedAt: now,
-      };
+        // Clinical OS extras (sem migração): phone/cpf armazenados como campos adicionais quando fornecidos
+        ...(phone ? { phone } as any : {}),
+        ...(cpf ? { cpf } as any : {}),
+      } as BusinessMember;
       db.members.push(member);
       if (requestedProfessionalId) {
         const pro = db.professionals.find((p) => p.id === requestedProfessionalId && p.businessId === businessId);
@@ -174,12 +259,92 @@ export async function PATCH(req: NextRequest) {
       }
     }
 
+    // Pre-validação síncrona (fora do updateDB) para e-mail/CPF/phone com leitura consistente
+    let normalizedEmail: string | undefined;
+    let normalizedPhone: string | undefined;
+    let normalizedCpf: string | undefined;
+    let normalizedName: string | undefined;
+    if (body.name !== undefined) {
+      const n = String(body.name || '').trim().slice(0, 80);
+      if (!n) return NextResponse.json({ error: 'Informe o nome.' }, { status: 400 });
+      normalizedName = n;
+    }
+    if (body.email !== undefined) {
+      const e = String(body.email || '').trim().toLowerCase().slice(0, 160);
+      if (!e.includes('@')) return NextResponse.json({ error: 'Informe um e-mail válido.' }, { status: 400 });
+      // impedir duplicado (outro user com mesmo e-mail já em member desta business ou em users)
+      const clashUser = db.users.find((u) => u.email.toLowerCase() === e && u.id !== member.userId);
+      if (clashUser) {
+        const clashMember = db.members.find((mm) => mm.businessId === businessId && mm.userId === clashUser.id);
+        // se já é membro desta unidade com e-mail diferente, bloquear
+        if (clashMember || db.users.some((u) => u.id !== member.userId && u.email.toLowerCase() === e)) {
+          // verificação simples: e-mail já usado por outro User (mesmo que não seja membro desta business, ainda é duplicado global)
+          return NextResponse.json({ error: 'E-mail já em uso.' }, { status: 400 });
+        }
+      }
+      // também verificar se outro member desta business já usa e-mail via User
+      const otherMemberWithEmail = db.members.find((mm) => mm.businessId === businessId && mm.userId !== member.userId && db.users.find((u) => u.id === mm.userId)?.email.toLowerCase() === e);
+      if (otherMemberWithEmail) return NextResponse.json({ error: 'E-mail já em uso nesta unidade.' }, { status: 400 });
+      normalizedEmail = e;
+    }
+    if (body.phone !== undefined) {
+      const p = onlyDigits(String(body.phone || '')).slice(0, 13);
+      // phone opcional, mas se informado deve ter pelo menos 10 dígitos (DDD+numero)
+      if (p && p.length < 10) return NextResponse.json({ error: 'Telefone inválido.' }, { status: 400 });
+      normalizedPhone = p;
+    }
+    if (body.cpf !== undefined) {
+      const raw = String(body.cpf || '').trim();
+      const digits = onlyDigits(raw).slice(0, 11);
+      if (digits) {
+        if (digits.length !== 11 || !isValidCpf(digits)) return NextResponse.json({ error: 'CPF inválido.' }, { status: 400 });
+        // CPF opcional, mas validar duplicidade não necessária (não é único global), apenas formato
+      }
+      normalizedCpf = digits;
+    }
+
+    if (body.permissionOverrides !== undefined) {
+      if (body.permissionOverrides !== null && (typeof body.permissionOverrides !== 'object' || Array.isArray(body.permissionOverrides))) {
+        return NextResponse.json({ error: 'Overrides inválidos.' }, { status: 400 });
+      }
+      if (body.permissionOverrides) {
+        for (const [k, v] of Object.entries(body.permissionOverrides as Record<string, any>)) {
+          if (!isValidPermission(k)) {
+            return NextResponse.json({ error: `Permissão inválida: ${k}` }, { status: 400 });
+          }
+          if (typeof v !== 'boolean') {
+            return NextResponse.json({ error: `Valor inválido para ${k}` }, { status: 400 });
+          }
+        }
+      }
+    }
+
     const updated = await updateDB((d) => {
       const m = d.members.find((x) => x.id === member.id)!;
+      const u = d.users.find((x) => x.id === m.userId);
+      if (normalizedName !== undefined && u) u.name = normalizedName;
+      if (normalizedEmail !== undefined && u) u.email = normalizedEmail;
+      if (normalizedPhone !== undefined) {
+        if (u) (u as any).phone = normalizedPhone;
+        (m as any).phone = normalizedPhone;
+      }
+      if (normalizedCpf !== undefined) {
+        if (u) (u as any).cpf = normalizedCpf;
+        (m as any).cpf = normalizedCpf;
+      }
       if (isValidRole(body.role) && body.role !== 'OWNER') m.role = body.role;
       if (typeof body.active === 'boolean') m.active = body.active;
       if (body.note !== undefined) m.note = String(body.note || '').slice(0, 200);
-      if (body.permissions && typeof body.permissions === 'object') {
+      if (body.permissionOverrides !== undefined) {
+        const next: Record<string, boolean> = {};
+        if (body.permissionOverrides) {
+          for (const [k, v] of Object.entries(body.permissionOverrides as Record<string, any>)) {
+            if (!isValidPermission(k)) continue;
+            if (typeof v === 'boolean') next[k] = v;
+          }
+        }
+        m.permissions = next;
+      } else if (body.permissions && typeof body.permissions === 'object') {
         const next = { ...(m.permissions || {}) };
         for (const key of Object.keys(body.permissions)) {
           if (isValidPermission(key)) next[key] = body.permissions[key] === true;
@@ -202,9 +367,10 @@ export async function PATCH(req: NextRequest) {
         });
       }
       m.updatedAt = new Date().toISOString();
+      if (u) (u as any).updatedAt = new Date().toISOString();
       pushAudit(d, {
         action: 'member.updated', actor: { ...ctx.user, role: ctx.role }, businessId,
-        supportSessionId: ctx.support?.id, meta: { memberId: m.id, role: m.role, active: m.active },
+        supportSessionId: ctx.support?.id, meta: { memberId: m.id, role: m.role, active: m.active, name: normalizedName, email: normalizedEmail, phone: normalizedPhone, cpf: normalizedCpf ? '***' : undefined },
       });
       return m;
     });

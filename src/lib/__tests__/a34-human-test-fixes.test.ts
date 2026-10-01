@@ -193,13 +193,13 @@ describe('A3.4 · FILA — serviço filtra o profissional', () => {
   });
 
   it('a tela só oferece quem atende o serviço (e pré-seleciona quando há um só)', () => {
-    expect(QUEUE).toMatch(/const requiredProIds = service\?\.professionalIds \|\| \[\];/);
-    expect(QUEUE).toMatch(/eligiblePros = requiredProIds\.length[\s\S]{0,90}professionals\.filter\(\(p\) => requiredProIds\.includes\(p\.id\)\)/);
+    expect(QUEUE).toMatch(/eligibleProfessionalIds/);
+    expect(QUEUE).toMatch(/eligiblePros = professionals\.filter/);
     // Trocar o serviço reavalia a lista e descarta quem deixou de ser elegível.
     expect(QUEUE).toMatch(/function chooseService\(id: string\)/);
-    expect(QUEUE).toMatch(/professionalId: req\.length === 1 && next\[0\]/);
+    expect(QUEUE).toMatch(/eligibleIds\.length === 1 && next\[0\]/);
     // A agenda entrega a régua do serviço junto com a lista.
-    expect(AGENDA).toMatch(/professionalIds: x\.professionalIds \|\| \[\]/);
+    expect(AGENDA).toMatch(/professionalMode/);
   });
 });
 

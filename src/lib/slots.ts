@@ -24,7 +24,7 @@ export interface SlotQuery {
   serviceId: string;
   durationMin: number;
   professionalId: string; // escolhido ('') = qualquer um
-  eligibleProIds: string[]; // vínculo do serviço ([] = todos)
+  eligibleProIds?: string[]; // vínculo do serviço: [] = ninguém, undefined = compat (todos), [ids] = final
   nowHM: string; // HH:MM atual quando dateISO é hoje ('' = outro dia)
   leadMin: number; // antecedência mínima (min)
   bufferMin: number; // intervalo entre atendimentos (min)
@@ -61,10 +61,17 @@ export function computeSlots(q: SlotQuery): SlotResult {
 
   const activePros = q.professionals.filter((p) => p.active !== false);
   const eligible = new Set(
-    q.eligibleProIds.length > 0
-      ? activePros.filter((p) => q.eligibleProIds.includes(p.id)).map((p) => p.id)
-      : activePros.map((p) => p.id),
+    q.eligibleProIds === undefined
+      ? activePros.map((p) => p.id)
+      : q.eligibleProIds.length > 0
+        ? activePros.filter((p) => q.eligibleProIds!.includes(p.id)).map((p) => p.id)
+        : [],
   );
+  // Autoridade única: eligibleProIds === [] → zero elegíveis → sem janelas, sempre.
+  // Fallback solo legado só quando eligibleProIds === undefined (decisão pertence a slotEligibleProfessionalIds).
+  if (q.eligibleProIds !== undefined && q.eligibleProIds.length === 0) {
+    return { slots: [], occupied: [], closed: true, closedReason: 'no_windows', assign: {}, byProfessional: {} };
+  }
   // Negócio sem equipe: opera como "profissional único" (id '').
   const soloMode = activePros.length === 0;
   if (q.professionalId && (soloMode || !eligible.has(q.professionalId))) {

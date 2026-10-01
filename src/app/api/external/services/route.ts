@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { requireApiKey } from '@/lib/api-keys';
 import { pushIntegrationLog } from '@/lib/integration-logs';
 import { updateDB } from '@/lib/db';
+import { serviceProfessionalMode } from '@/lib/booking';
 
 export async function GET(req: NextRequest) {
   const auth = await requireApiKey(req);
@@ -18,6 +19,7 @@ export async function GET(req: NextRequest) {
       price: s.price,
       bookable: s.bookable !== false,
       professionalIds: s.professionalIds || [],
+      professionalMode: serviceProfessionalMode(s as any),
     }));
 
   await updateDB((d) => {

@@ -1,14 +1,50 @@
-// Regra central de atribuição de profissional.
-// O cliente NUNCA escolhe; o servidor resolve. Política atual: "equilibrar
-// equipe" (menor carga no dia) — implementada pelo motor de slots (assign).
-// Arquitetado para futuros modos de distribuição plugarem aqui.
+// Atribuição de profissional — política interna da agenda.
+// O payload público nunca escolhe profissional (segurança: servidor resolve).
+// Política atual: menor carga no dia (slots/assign). Futuros modos de
+// distribuição (opcional por clínica/canal) plugam aqui. Não há promessa
+// de balanceamento automático universal na experiência clínica padrão.
 import type { Professional, Service } from './types';
 
-/** Profissionais ativos e elegíveis para o serviço ([] = todos). */
+export type ServiceProfessionalMode = 'all' | 'selected';
+
+/** Modo canônico: 'all' = todos os ativos; 'selected' = somente professionalIds. Backcompat: sem professionalMode, []→all, [ids]→selected */
+export function serviceProfessionalMode(service: Pick<Service, 'professionalMode' | 'professionalIds'> | null | undefined): ServiceProfessionalMode {
+  if (service?.professionalMode === 'all' || service?.professionalMode === 'selected') return service.professionalMode;
+  return (service?.professionalIds || []).length ? 'selected' : 'all';
+}
+
+/** Profissionais ativos e elegíveis para o serviço (usa professionalMode). */
 export function eligibleProfessionalIds(service: Service, professionals: Professional[]): string[] {
   const active = professionals.filter((p) => p.active !== false);
-  if (!(service.professionalIds || []).length) return active.map((p) => p.id);
-  return active.filter((p) => (service.professionalIds || []).includes(p.id)).map((p) => p.id);
+  const mode = serviceProfessionalMode(service);
+  if (mode === 'all') return active.map((p) => p.id);
+  const ids = service.professionalIds || [];
+  if (!ids.length) return [];
+  return active.filter((p) => ids.includes(p.id)).map((p) => p.id);
+}
+
+/**
+ * Helper canônico para disponibilidade/slots.
+ * Diferencia legacy solo (sem professionalMode e sem profissionais) de explicit.
+ * - legacy solo: service.professionalMode===undefined && service.professionalIds.length===0 && professionals.length===0 → undefined (permite fallback solo)
+ * - explicit all com zero ativos → [] (ninguém)
+ * - explicit selected [] → [] (ninguém)
+ * - all com ativos → [ids]
+ * - selected [A] → [A]
+ */
+export function slotEligibleProfessionalIds(service: Service | null | undefined, professionals: Professional[]): string[] | undefined {
+  const hasExplicitMode = service?.professionalMode === 'all' || service?.professionalMode === 'selected';
+  if (!hasExplicitMode) {
+    const ids = (service as any)?.professionalIds as string[] | undefined;
+    const isLegacyEmpty = !ids || ids.length === 0;
+    const noProfessionalRecords = !professionals || professionals.length === 0;
+    if (isLegacyEmpty && noProfessionalRecords) {
+      return undefined; // compatibilidade solo legada — só quando NENHUM registro Professional existe
+    }
+  }
+  // Para todos os demais casos, usa a regra canônica (inclui explicit all com 0 → [])
+  const list = service ? eligibleProfessionalIds(service as Service, professionals as Professional[]) : [];
+  return list;
 }
 
 /**
@@ -25,26 +61,25 @@ export function eligibleProfessionalIds(service: Service, professionals: Profess
  */
 export const PROFESSIONAL_NOT_ELIGIBLE_ERROR = 'Este serviço não é atendido por este profissional.';
 
-/** O serviço exige profissionais específicos? (lista vazia = toda a equipe). */
-export function serviceRequiresProfessional(service: Pick<Service, 'professionalIds'> | null | undefined): boolean {
-  return !!(service?.professionalIds || []).length;
+/** O serviço exige profissionais específicos? (all = não, selected = sim). */
+export function serviceRequiresProfessional(service: Pick<Service, 'professionalMode' | 'professionalIds'> | null | undefined): boolean {
+  return serviceProfessionalMode(service) === 'selected';
 }
 
 /**
- * O profissional atende ESTE serviço? Sem exigência declarada, qualquer
- * profissional ATIVO atende (a política atual do produto não muda). Com
- * exigência, só quem está na lista — e `` (ninguém) nunca "atende por omissão".
+ * O profissional atende ESTE serviço? all = qualquer ativo; selected = só lista
+ * (`` nunca atende). Usa a mesma regra de eligibleProfessionalIds.
  */
 export function professionalServesService(
-  service: Pick<Service, 'professionalIds'> | null | undefined,
+  service: Pick<Service, 'professionalMode' | 'professionalIds'> | null | undefined,
   professionalId: string,
   professionals: Professional[],
 ): boolean {
-  if (!serviceRequiresProfessional(service)) {
-    if (!professionalId) return false;
+  if (!professionalId) return false;
+  const mode = serviceProfessionalMode(service);
+  if (mode === 'all') {
     return professionals.some((p) => p.id === professionalId && p.active !== false);
   }
-  if (!professionalId) return false;
   return eligibleProfessionalIds(service as Service, professionals).includes(professionalId);
 }
 
