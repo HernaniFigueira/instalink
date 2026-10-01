@@ -1,0 +1,358 @@
+{
+  "date": "2026-10-01",
+  "method": "Headless Chromium 153.0.8010.0 with Puppeteer Core, real pointer drag/click events against local spike preview; São Paulo business timezone.",
+  "candidates": [
+    {
+      "candidate": "grid",
+      "selection": {
+        "q": {
+          "x": 572,
+          "y1": 199.296875,
+          "y2": 250.296875,
+          "debug": {
+            "lines": {
+              "x": 107,
+              "y": -191.703125,
+              "w": 930,
+              "h": 1404
+            }
+          }
+        },
+        "result": "Seg., 05 De Out.\n10:00–10:40\nDra. Bianca",
+        "escapeClosed": true
+      },
+      "move": {
+        "supported": true,
+        "q": {
+          "x": 572,
+          "y": 667.296875,
+          "target": 764.796875,
+          "rect": {
+            "x": 109,
+            "y": 641.296875,
+            "w": 926,
+            "h": 52
+          },
+          "delta": 97.5
+        },
+        "responseStatus": 200,
+        "request": {
+          "action": "move",
+          "eventId": "booking-orlando-1000",
+          "current": {
+            "startAt": "2026-10-05T13:00:00.000Z",
+            "endAt": "2026-10-05T13:40:00.000Z",
+            "durationMin": 40,
+            "timeZone": "America/Sao_Paulo"
+          },
+          "next": {
+            "startAt": "2026-10-05T14:15:00.000Z",
+            "endAt": "2026-10-05T14:55:00.000Z",
+            "durationMin": 40,
+            "timeZone": "America/Sao_Paulo"
+          },
+          "eventCount": 7
+        },
+        "notice": "✓ Horário validado no servidor de demonstração. DEMO",
+        "time": "11:15–11:55",
+        "resize": {
+          "q": {
+            "x": 572,
+            "y": 688.296875,
+            "target": 707.796875,
+            "delta": 19.5,
+            "handle": {
+              "x": 113,
+              "y": 684.296875,
+              "w": 918,
+              "h": 8
+            }
+          },
+          "responseStatus": 200,
+          "request": {
+            "action": "resize",
+            "eventId": "booking-orlando-1000",
+            "current": {
+              "startAt": "2026-10-05T13:00:00.000Z",
+              "endAt": "2026-10-05T13:40:00.000Z",
+              "durationMin": 40,
+              "timeZone": "America/Sao_Paulo"
+            },
+            "next": {
+              "startAt": "2026-10-05T13:00:00.000Z",
+              "endAt": "2026-10-05T13:55:00.000Z",
+              "durationMin": 55,
+              "timeZone": "America/Sao_Paulo",
+              "id": "booking-orlando-1000",
+              "businessId": "spike-clinica-orlando",
+              "professionalId": "pro-orlando",
+              "customerName": "Marina Costa · Luna",
+              "serviceId": "svc-consulta",
+              "serviceName": "Consulta clínica",
+              "status": "confirmed",
+              "note": "Selecionar 10:00–10:40; mover e redimensionar."
+            },
+            "eventCount": 7
+          },
+          "notice": "✓ Nova duração validada no servidor de demonstração. DEMO",
+          "time": "10:00–10:55"
+        }
+      },
+      "errors": [],
+      "responses": [
+        {
+          "status": 200,
+          "url": "http://127.0.0.1:3101/__agenda_temporal_spike/validate"
+        },
+        {
+          "status": 200,
+          "url": "http://127.0.0.1:3101/__agenda_temporal_spike/validate"
+        }
+      ]
+    },
+    {
+      "candidate": "rbc",
+      "selection": {
+        "q": {
+          "x": 559.9765625,
+          "y1": 232.796875,
+          "y2": 273.6302083333333,
+          "debug": {
+            "ten": {
+              "x": 59,
+              "y": 237.296875,
+              "w": 32.953125,
+              "h": 13
+            },
+            "next": {
+              "x": 59,
+              "y": 293.296875,
+              "w": 32.953125,
+              "h": 13
+            },
+            "column": {
+              "x": 91.953125,
+              "y": -42.703125,
+              "w": 936.046875,
+              "h": 1008
+            }
+          }
+        },
+        "result": "Seg., 05 De Out.\n10:00–10:40\nDra. Bianca",
+        "escapeClosed": true
+      },
+      "move": {
+        "supported": true,
+        "q": {
+          "x": 554.9765625,
+          "y": 708.9609375,
+          "target": 788.9609375,
+          "rect": {
+            "x": 91.953125,
+            "y": 690.296875,
+            "w": 926.046875,
+            "h": 37.328125
+          },
+          "delta": 80
+        },
+        "responseStatus": 200,
+        "request": {
+          "action": "move",
+          "eventId": "booking-orlando-1000",
+          "current": {
+            "startAt": "2026-10-05T13:00:00.000Z",
+            "endAt": "2026-10-05T13:40:00.000Z",
+            "durationMin": 40,
+            "timeZone": "America/Sao_Paulo"
+          },
+          "next": {
+            "startAt": "2026-10-05T14:15:00.000Z",
+            "endAt": "2026-10-05T14:55:00.000Z",
+            "durationMin": 40,
+            "timeZone": "America/Sao_Paulo"
+          },
+          "eventCount": 7
+        },
+        "notice": "✓ Horário validado no servidor de demonstração. DEMO",
+        "time": "11:15–11:55",
+        "resize": {
+          "q": {
+            "x": 554.9765625,
+            "y": 726.125,
+            "target": 744.125,
+            "delta": 18,
+            "handle": {
+              "x": 91.953125,
+              "y": 724.625,
+              "w": 926.046875,
+              "h": 3
+            }
+          },
+          "responseStatus": 200,
+          "request": {
+            "action": "resize",
+            "eventId": "booking-orlando-1000",
+            "current": {
+              "startAt": "2026-10-05T13:00:00.000Z",
+              "endAt": "2026-10-05T13:40:00.000Z",
+              "durationMin": 40,
+              "timeZone": "America/Sao_Paulo"
+            },
+            "next": {
+              "startAt": "2026-10-05T13:00:00.000Z",
+              "endAt": "2026-10-05T13:55:00.000Z",
+              "durationMin": 55,
+              "timeZone": "America/Sao_Paulo"
+            },
+            "eventCount": 7
+          },
+          "notice": "✓ Nova duração validada no servidor de demonstração. DEMO",
+          "time": "10:00–10:55"
+        }
+      },
+      "errors": [],
+      "responses": [
+        {
+          "status": 200,
+          "url": "http://127.0.0.1:3101/__agenda_temporal_spike/validate"
+        },
+        {
+          "status": 200,
+          "url": "http://127.0.0.1:3101/__agenda_temporal_spike/validate"
+        }
+      ]
+    },
+    {
+      "candidate": "fullcalendar",
+      "selection": {
+        "q": {
+          "x": 564.828125,
+          "y1": 365.296875,
+          "y2": 389.9635416666667,
+          "debug": {
+            "ten": {
+              "x": 100.65625,
+              "y": 364.296875,
+              "w": 928.34375,
+              "h": 20
+            },
+            "next": {
+              "x": 100.65625,
+              "y": 404.296875,
+              "w": 928.34375,
+              "h": 20
+            }
+          }
+        },
+        "result": "Seg., 05 De Out.\n10:00–10:40\nDra. Bianca",
+        "escapeClosed": true
+      },
+      "move": {
+        "supported": true,
+        "q": {
+          "x": 564.828125,
+          "y": 830.625,
+          "target": 880.625,
+          "rect": {
+            "x": 100.65625,
+            "y": 817.296875,
+            "w": 928.34375,
+            "h": 26.65625
+          },
+          "delta": 50
+        },
+        "responseStatus": 200,
+        "request": {
+          "action": "move",
+          "eventId": "booking-orlando-1000",
+          "current": {
+            "startAt": "2026-10-05T13:00:00.000Z",
+            "endAt": "2026-10-05T13:40:00.000Z",
+            "durationMin": 40,
+            "timeZone": "America/Sao_Paulo"
+          },
+          "next": {
+            "startAt": "2026-10-05T14:15:00.000Z",
+            "endAt": "2026-10-05T14:55:00.000Z",
+            "durationMin": 40,
+            "timeZone": "America/Sao_Paulo"
+          },
+          "eventCount": 7
+        },
+        "notice": "✓ Horário validado no servidor de demonstração. DEMO",
+        "time": "11:15–11:55",
+        "resize": {
+          "q": {
+            "x": 564.828125,
+            "y": 837.453125,
+            "target": 847.453125,
+            "delta": 10,
+            "handle": {
+              "x": 100.65625,
+              "y": 832.953125,
+              "w": 928.34375,
+              "h": 9
+            }
+          },
+          "responseStatus": 200,
+          "request": {
+            "action": "resize",
+            "eventId": "booking-orlando-1000",
+            "current": {
+              "startAt": "2026-10-05T13:00:00.000Z",
+              "endAt": "2026-10-05T13:40:00.000Z",
+              "durationMin": 40,
+              "timeZone": "America/Sao_Paulo"
+            },
+            "next": {
+              "startAt": "2026-10-05T13:00:00.000Z",
+              "endAt": "2026-10-05T13:55:00.000Z",
+              "durationMin": 55,
+              "timeZone": "America/Sao_Paulo"
+            },
+            "eventCount": 7
+          },
+          "notice": "✓ Nova duração validada no servidor de demonstração. DEMO",
+          "time": "10:00–10:55"
+        }
+      },
+      "errors": [],
+      "responses": [
+        {
+          "status": 200,
+          "url": "http://127.0.0.1:3101/__agenda_temporal_spike/validate"
+        },
+        {
+          "status": 200,
+          "url": "http://127.0.0.1:3101/__agenda_temporal_spike/validate"
+        }
+      ]
+    },
+    {
+      "candidate": "schedule-x",
+      "selection": {
+        "q": {
+          "x": 589.3441467285156,
+          "y1": 319.671875,
+          "y2": 319.671875,
+          "debug": {
+            "hour": {
+              "x": 134.84414672851562,
+              "y": 318.671875,
+              "w": 909,
+              "h": 22.21875
+            }
+          }
+        },
+        "result": "Seg., 05 De Out.\n10:00–10:40\nDra. Bianca",
+        "escapeClosed": true
+      },
+      "move": {
+        "supported": false,
+        "reason": "Schedule-X Community lacks drag/resize without Premium; no plugin simulated."
+      },
+      "errors": [],
+      "responses": []
+    }
+  ]
+}

@@ -1,0 +1,1282 @@
+{
+  "date": "2026-10-01",
+  "method": "Real headless Chromium via Puppeteer Core; local Vite dev preview; browser tasks via DOM events and PerformanceObserver longtask. Fixture generation is recorded separately from adapter paint.",
+  "browser": "HeadlessChrome/153.0.8010.0",
+  "packages": {
+    "puppeteerCore": "25.12.0",
+    "sparticuzChromium": "153.0.0"
+  },
+  "viewport": {
+    "width": 1366,
+    "height": 900
+  },
+  "candidates": [
+    {
+      "candidate": "grid",
+      "firstUsable": {
+        "fromDocumentStartMs": 251.6,
+        "nodeWallMs": 275,
+        "eventMarkers": 14,
+        "candidateSwitchMs": 0
+      },
+      "workloads": [
+        {
+          "eventCount": 200,
+          "render": {
+            "paintMs": 233.9,
+            "generationMs": 49.9,
+            "wallMs": 329.5,
+            "metrics": "Observação local | sem persistência |  | 233.9 ms · adapter grid com 200 eventos · geração 49.9 ms |  | Para scroll, seleção, drag e rerender, siga o roteiro de benchmark documentado.",
+            "visible": "200 eventos visíveis\n5 min snap visual\n40 min Consulta clínica padrão\nGrade de 05:00 a 23:00 · fuso da clínica",
+            "renderedEvents": 50
+          },
+          "dayToWeek": {
+            "wallMs": 1595,
+            "metric": "Observação local | sem persistência |  | 399.2 ms · adapter grid com 200 eventos |  | Para scroll, seleção, drag e rerender, siga o roteiro de benchmark documentado."
+          },
+          "weekToDay": {
+            "wallMs": 124.4,
+            "metric": "Observação local | sem persistência |  | 74.6 ms · adapter grid com 200 eventos |  | Para scroll, seleção, drag e rerender, siga o roteiro de benchmark documentado."
+          },
+          "scroll": {
+            "before": {
+              "top": 312,
+              "max": 780,
+              "rect": {
+                "x": 50,
+                "y": 70.296875,
+                "w": 987,
+                "h": 680
+              }
+            },
+            "after": {
+              "top": 432
+            },
+            "wallMs": 46.1,
+            "delta": 120
+          },
+          "filterMs": "Observação local\nsem persistência\n\n22.3 ms · adapter grid com 200 eventos\n\nPara scroll, seleção, drag e rerender, siga o roteiro de benchmark documentado.",
+          "move": {
+            "supported": true,
+            "action": "move",
+            "coords": {
+              "x": 572,
+              "y": 224.296875,
+              "targetY": 321.796875,
+              "hourPx": 78,
+              "deltaY": 97.5,
+              "event": {
+                "x": 109,
+                "y": 198.296875,
+                "w": 926,
+                "h": 52
+              }
+            },
+            "wallMs": 379.9,
+            "responseStatus": 200,
+            "result": {
+              "time": "11:15–11:55",
+              "notice": "✓ Horário validado no servidor de demonstração. DEMO",
+              "metric": "API mock · request/ack: 95.8 ms"
+            }
+          },
+          "resize": {
+            "supported": true,
+            "action": "resize",
+            "coords": {
+              "x": 572,
+              "y": 245.296875,
+              "targetY": 264.796875,
+              "hourPx": 78,
+              "deltaY": 19.5,
+              "handle": {
+                "x": 113,
+                "y": 241.296875,
+                "w": 918,
+                "h": 8
+              },
+              "event": {
+                "x": 109,
+                "y": 198.296875,
+                "w": 926,
+                "h": 52
+              }
+            },
+            "wallMs": 408.3,
+            "responseStatus": 200,
+            "result": {
+              "time": "10:00–10:55",
+              "notice": "✓ Nova duração validada no servidor de demonstração. DEMO",
+              "metric": "API mock · request/ack: 98.2 ms"
+            }
+          },
+          "validateRequestCount": 2,
+          "requests": [
+            {
+              "action": "move",
+              "current": {
+                "startAt": "2026-10-05T13:00:00.000Z",
+                "endAt": "2026-10-05T13:40:00.000Z",
+                "durationMin": 40,
+                "timeZone": "America/Sao_Paulo"
+              },
+              "next": {
+                "startAt": "2026-10-05T14:15:00.000Z",
+                "endAt": "2026-10-05T14:55:00.000Z",
+                "durationMin": 40,
+                "timeZone": "America/Sao_Paulo"
+              }
+            },
+            {
+              "action": "resize",
+              "current": {
+                "startAt": "2026-10-05T13:00:00.000Z",
+                "endAt": "2026-10-05T13:40:00.000Z",
+                "durationMin": 40,
+                "timeZone": "America/Sao_Paulo"
+              },
+              "next": {
+                "startAt": "2026-10-05T13:00:00.000Z",
+                "endAt": "2026-10-05T13:55:00.000Z",
+                "durationMin": 55,
+                "timeZone": "America/Sao_Paulo",
+                "id": "booking-orlando-1000",
+                "businessId": "spike-clinica-orlando",
+                "professionalId": "pro-orlando",
+                "customerName": "Marina Costa · Luna",
+                "serviceId": "svc-consulta",
+                "serviceName": "Consulta clínica",
+                "status": "confirmed",
+                "note": "Selecionar 10:00–10:40; mover e redimensionar."
+              }
+            }
+          ]
+        },
+        {
+          "eventCount": 1000,
+          "render": {
+            "paintMs": 667.1,
+            "generationMs": 273.2,
+            "wallMs": 1104.4,
+            "metrics": "Observação local | sem persistência |  | 667.1 ms · adapter grid com 1000 eventos · geração 273.2 ms |  | API mock · request/ack: 98.2 ms |  | Para scroll, seleção, drag e rerender, siga o roteiro de benchmark documentado.",
+            "visible": "1000 eventos visíveis\n5 min snap visual\n40 min Consulta clínica padrão\nGrade de 05:00 a 23:00 · fuso da clínica",
+            "renderedEvents": 186
+          },
+          "dayToWeek": {
+            "wallMs": 4267,
+            "metric": "Observação local | sem persistência |  | 2383.8 ms · adapter grid com 1000 eventos |  | API mock · request/ack: 98.2 ms |  | Para scroll, seleção, drag e rerender, siga o roteiro de benchmark documentado."
+          },
+          "weekToDay": {
+            "wallMs": 575.1,
+            "metric": "Observação local | sem persistência |  | 276.3 ms · adapter grid com 1000 eventos |  | API mock · request/ack: 98.2 ms |  | Para scroll, seleção, drag e rerender, siga o roteiro de benchmark documentado."
+          },
+          "scroll": {
+            "before": {
+              "top": 312,
+              "max": 780,
+              "rect": {
+                "x": 50,
+                "y": 70.296875,
+                "w": 987,
+                "h": 680
+              }
+            },
+            "after": {
+              "top": 432
+            },
+            "wallMs": 44,
+            "delta": 120
+          },
+          "filterMs": "Observação local\nsem persistência\n\n68.7 ms · adapter grid com 1000 eventos\n\nAPI mock · request/ack: 98.2 ms\n\nPara scroll, seleção, drag e rerender, siga o roteiro de benchmark documentado.",
+          "move": {
+            "supported": true,
+            "action": "move",
+            "coords": {
+              "x": 572,
+              "y": 224.296875,
+              "targetY": 321.796875,
+              "hourPx": 78,
+              "deltaY": 97.5,
+              "event": {
+                "x": 109,
+                "y": 198.296875,
+                "w": 926,
+                "h": 52
+              }
+            },
+            "wallMs": 521.8,
+            "responseStatus": 409,
+            "result": {
+              "time": "10:00–10:40",
+              "notice": "✓ Dr. Orlando já tem Consulta clínica nesse intervalo. O horário original foi restaurado. DEMO",
+              "metric": "API mock · request/ack: 133.1 ms"
+            }
+          },
+          "resize": {
+            "supported": true,
+            "action": "resize",
+            "coords": {
+              "x": 572,
+              "y": 245.296875,
+              "targetY": 264.796875,
+              "hourPx": 78,
+              "deltaY": 19.5,
+              "handle": {
+                "x": 113,
+                "y": 241.296875,
+                "w": 918,
+                "h": 8
+              },
+              "event": {
+                "x": 109,
+                "y": 198.296875,
+                "w": 926,
+                "h": 52
+              }
+            },
+            "wallMs": 612.5,
+            "responseStatus": 200,
+            "result": {
+              "time": "10:00–10:55",
+              "notice": "✓ Nova duração validada no servidor de demonstração. DEMO",
+              "metric": "API mock · request/ack: 193.2 ms"
+            }
+          },
+          "validateRequestCount": 2,
+          "requests": [
+            {
+              "action": "move",
+              "current": {
+                "startAt": "2026-10-05T13:00:00.000Z",
+                "endAt": "2026-10-05T13:40:00.000Z",
+                "durationMin": 40,
+                "timeZone": "America/Sao_Paulo"
+              },
+              "next": {
+                "startAt": "2026-10-05T14:15:00.000Z",
+                "endAt": "2026-10-05T14:55:00.000Z",
+                "durationMin": 40,
+                "timeZone": "America/Sao_Paulo"
+              }
+            },
+            {
+              "action": "resize",
+              "current": {
+                "startAt": "2026-10-05T13:00:00.000Z",
+                "endAt": "2026-10-05T13:40:00.000Z",
+                "durationMin": 40,
+                "timeZone": "America/Sao_Paulo"
+              },
+              "next": {
+                "startAt": "2026-10-05T13:00:00.000Z",
+                "endAt": "2026-10-05T13:55:00.000Z",
+                "durationMin": 55,
+                "timeZone": "America/Sao_Paulo",
+                "id": "booking-orlando-1000",
+                "businessId": "spike-clinica-orlando",
+                "professionalId": "pro-orlando",
+                "customerName": "Marina Costa · Luna",
+                "serviceId": "svc-consulta",
+                "serviceName": "Consulta clínica",
+                "status": "confirmed",
+                "note": "Selecionar 10:00–10:40; mover e redimensionar."
+              }
+            }
+          ]
+        }
+      ],
+      "errors": [],
+      "longTasks": {
+        "count": 20,
+        "maxDurationMs": 2335,
+        "entries": [
+          {
+            "duration": 153,
+            "startTime": 281.5
+          },
+          {
+            "duration": 391,
+            "startTime": 622.5999999996275
+          },
+          {
+            "duration": 307,
+            "startTime": 1891.9000000003725
+          },
+          {
+            "duration": 73,
+            "startTime": 2221.9000000003725
+          },
+          {
+            "duration": 59,
+            "startTime": 2970.2999999998137
+          },
+          {
+            "duration": 65,
+            "startTime": 3649.0999999996275
+          },
+          {
+            "duration": 927,
+            "startTime": 3768.5
+          },
+          {
+            "duration": 150,
+            "startTime": 4710.299999999814
+          },
+          {
+            "duration": 2335,
+            "startTime": 4880.799999999814
+          },
+          {
+            "duration": 1784,
+            "startTime": 7267.5
+          },
+          {
+            "duration": 277,
+            "startTime": 9390.400000000373
+          },
+          {
+            "duration": 145,
+            "startTime": 9673.599999999627
+          },
+          {
+            "duration": 63,
+            "startTime": 9959
+          },
+          {
+            "duration": 92,
+            "startTime": 10424.900000000373
+          },
+          {
+            "duration": 215,
+            "startTime": 10671.700000000186
+          },
+          {
+            "duration": 53,
+            "startTime": 11288.700000000186
+          },
+          {
+            "duration": 99,
+            "startTime": 11561.5
+          },
+          {
+            "duration": 76,
+            "startTime": 11755.799999999814
+          },
+          {
+            "duration": 420,
+            "startTime": 11900.799999999814
+          },
+          {
+            "duration": 166,
+            "startTime": 12337.099999999627
+          }
+        ]
+      },
+      "browserErrors": [],
+      "expectedApiConflicts": [
+        {
+          "status": 409,
+          "url": "http://127.0.0.1:3101/__agenda_temporal_spike/validate"
+        }
+      ]
+    },
+    {
+      "candidate": "rbc",
+      "firstUsable": {
+        "fromDocumentStartMs": 1677.6,
+        "nodeWallMs": 1691,
+        "eventMarkers": 7,
+        "candidateSwitchMs": 1477.1
+      },
+      "workloads": [
+        {
+          "eventCount": 200,
+          "render": {
+            "paintMs": 637.2,
+            "generationMs": 28.9,
+            "wallMs": 1041.3,
+            "metrics": "Observação local | sem persistência |  | 637.2 ms · adapter rbc com 200 eventos · geração 28.9 ms |  | Para scroll, seleção, drag e rerender, siga o roteiro de benchmark documentado.",
+            "visible": "200 eventos visíveis\n5 min snap visual\n40 min Consulta clínica padrão\nGrade de 05:00 a 23:00 · fuso da clínica",
+            "renderedEvents": 25
+          },
+          "dayToWeek": {
+            "wallMs": 3444.5,
+            "metric": "Observação local | sem persistência |  | 2381.5 ms · adapter rbc com 200 eventos |  | Para scroll, seleção, drag e rerender, siga o roteiro de benchmark documentado."
+          },
+          "weekToDay": {
+            "wallMs": 1223,
+            "metric": "Observação local | sem persistência |  | 955.6 ms · adapter rbc com 200 eventos |  | Para scroll, seleção, drag e rerender, siga o roteiro de benchmark documentado."
+          },
+          "scroll": {
+            "before": {
+              "top": 224,
+              "max": 411,
+              "rect": {
+                "x": 59,
+                "y": 169.296875,
+                "w": 969,
+                "h": 599
+              }
+            },
+            "after": {
+              "top": 344
+            },
+            "wallMs": 49.8,
+            "delta": 120
+          },
+          "filterMs": "Observação local\nsem persistência\n\n393.5 ms · adapter rbc com 200 eventos\n\nPara scroll, seleção, drag e rerender, siga o roteiro de benchmark documentado.",
+          "move": {
+            "supported": true,
+            "action": "move",
+            "coords": {
+              "x": 554.9765625,
+              "y": 245.9609375,
+              "targetY": 325.9609375,
+              "hourPx": 56,
+              "deltaY": 80,
+              "event": {
+                "x": 91.953125,
+                "y": 227.296875,
+                "w": 926.046875,
+                "h": 37.328125
+              }
+            },
+            "wallMs": 906.7,
+            "responseStatus": 200,
+            "result": {
+              "time": "11:15–11:55",
+              "notice": "✓ Horário validado no servidor de demonstração. DEMO",
+              "metric": "API mock · request/ack: 156.6 ms"
+            }
+          },
+          "resize": {
+            "supported": true,
+            "action": "resize",
+            "coords": {
+              "x": 554.9765625,
+              "y": 263.125,
+              "targetY": 281.125,
+              "hourPx": 56,
+              "deltaY": 18,
+              "handle": {
+                "x": 91.953125,
+                "y": 261.625,
+                "w": 926.046875,
+                "h": 3
+              },
+              "event": {
+                "x": 91.953125,
+                "y": 227.296875,
+                "w": 926.046875,
+                "h": 37.328125
+              }
+            },
+            "wallMs": 1133,
+            "responseStatus": 200,
+            "result": {
+              "time": "10:00–10:55",
+              "notice": "✓ Nova duração validada no servidor de demonstração. DEMO",
+              "metric": "API mock · request/ack: 305.4 ms"
+            }
+          },
+          "validateRequestCount": 2,
+          "requests": [
+            {
+              "action": "move",
+              "current": {
+                "startAt": "2026-10-05T13:00:00.000Z",
+                "endAt": "2026-10-05T13:40:00.000Z",
+                "durationMin": 40,
+                "timeZone": "America/Sao_Paulo"
+              },
+              "next": {
+                "startAt": "2026-10-05T14:15:00.000Z",
+                "endAt": "2026-10-05T14:55:00.000Z",
+                "durationMin": 40,
+                "timeZone": "America/Sao_Paulo"
+              }
+            },
+            {
+              "action": "resize",
+              "current": {
+                "startAt": "2026-10-05T13:00:00.000Z",
+                "endAt": "2026-10-05T13:40:00.000Z",
+                "durationMin": 40,
+                "timeZone": "America/Sao_Paulo"
+              },
+              "next": {
+                "startAt": "2026-10-05T13:00:00.000Z",
+                "endAt": "2026-10-05T13:55:00.000Z",
+                "durationMin": 55,
+                "timeZone": "America/Sao_Paulo"
+              }
+            }
+          ]
+        },
+        {
+          "eventCount": 1000,
+          "render": {
+            "paintMs": 1988.1,
+            "generationMs": 235.5,
+            "wallMs": 2761.3,
+            "metrics": "Observação local | sem persistência |  | 1988.1 ms · adapter rbc com 1000 eventos · geração 235.5 ms |  | API mock · request/ack: 305.4 ms |  | Para scroll, seleção, drag e rerender, siga o roteiro de benchmark documentado.",
+            "visible": "1000 eventos visíveis\n5 min snap visual\n40 min Consulta clínica padrão\nGrade de 05:00 a 23:00 · fuso da clínica",
+            "renderedEvents": 93
+          },
+          "dayToWeek": {
+            "wallMs": 11697.6,
+            "metric": "Observação local | sem persistência |  | 9209.0 ms · adapter rbc com 1000 eventos |  | API mock · request/ack: 305.4 ms |  | Para scroll, seleção, drag e rerender, siga o roteiro de benchmark documentado."
+          },
+          "weekToDay": {
+            "wallMs": 2287.2,
+            "metric": "Observação local | sem persistência |  | 1733.7 ms · adapter rbc com 1000 eventos |  | API mock · request/ack: 305.4 ms |  | Para scroll, seleção, drag e rerender, siga o roteiro de benchmark documentado."
+          },
+          "scroll": {
+            "before": {
+              "top": 224,
+              "max": 411,
+              "rect": {
+                "x": 59,
+                "y": 169.296875,
+                "w": 969,
+                "h": 599
+              }
+            },
+            "after": {
+              "top": 344
+            },
+            "wallMs": 37.7,
+            "delta": 120
+          },
+          "filterMs": "Observação local\nsem persistência\n\n1101.9 ms · adapter rbc com 1000 eventos\n\nAPI mock · request/ack: 305.4 ms\n\nPara scroll, seleção, drag e rerender, siga o roteiro de benchmark documentado.",
+          "move": {
+            "supported": true,
+            "action": "move",
+            "coords": {
+              "x": 554.9765625,
+              "y": 245.9609375,
+              "targetY": 325.9609375,
+              "hourPx": 56,
+              "deltaY": 80,
+              "event": {
+                "x": 91.953125,
+                "y": 227.296875,
+                "w": 926.046875,
+                "h": 37.328125
+              }
+            },
+            "wallMs": 2411.3,
+            "responseStatus": 409,
+            "result": {
+              "time": "10:00–10:40",
+              "notice": "✓ Dr. Orlando já tem Consulta clínica nesse intervalo. O horário original foi restaurado. DEMO",
+              "metric": "API mock · request/ack: 894.9 ms"
+            }
+          },
+          "resize": {
+            "supported": true,
+            "action": "resize",
+            "coords": {
+              "x": 554.9765625,
+              "y": 263.125,
+              "targetY": 281.125,
+              "hourPx": 56,
+              "deltaY": 18,
+              "handle": {
+                "x": 91.953125,
+                "y": 261.625,
+                "w": 926.046875,
+                "h": 3
+              },
+              "event": {
+                "x": 91.953125,
+                "y": 227.296875,
+                "w": 926.046875,
+                "h": 37.328125
+              }
+            },
+            "wallMs": 2380.7,
+            "responseStatus": 200,
+            "result": {
+              "time": "10:00–10:55",
+              "notice": "✓ Nova duração validada no servidor de demonstração. DEMO",
+              "metric": "API mock · request/ack: 900.3 ms"
+            }
+          },
+          "validateRequestCount": 2,
+          "requests": [
+            {
+              "action": "move",
+              "current": {
+                "startAt": "2026-10-05T13:00:00.000Z",
+                "endAt": "2026-10-05T13:40:00.000Z",
+                "durationMin": 40,
+                "timeZone": "America/Sao_Paulo"
+              },
+              "next": {
+                "startAt": "2026-10-05T14:25:00.000Z",
+                "endAt": "2026-10-05T15:05:00.000Z",
+                "durationMin": 40,
+                "timeZone": "America/Sao_Paulo"
+              }
+            },
+            {
+              "action": "resize",
+              "current": {
+                "startAt": "2026-10-05T13:00:00.000Z",
+                "endAt": "2026-10-05T13:40:00.000Z",
+                "durationMin": 40,
+                "timeZone": "America/Sao_Paulo"
+              },
+              "next": {
+                "startAt": "2026-10-05T13:00:00.000Z",
+                "endAt": "2026-10-05T13:55:00.000Z",
+                "durationMin": 55,
+                "timeZone": "America/Sao_Paulo"
+              }
+            }
+          ]
+        }
+      ],
+      "errors": [],
+      "longTasks": {
+        "count": 62,
+        "maxDurationMs": 5320,
+        "entries": [
+          {
+            "duration": 71,
+            "startTime": 569.0999999996275
+          },
+          {
+            "duration": 140,
+            "startTime": 654.7000000001863
+          },
+          {
+            "duration": 331,
+            "startTime": 814.5999999996275
+          },
+          {
+            "duration": 120,
+            "startTime": 1460.8999999994412
+          },
+          {
+            "duration": 376,
+            "startTime": 1881.3999999994412
+          },
+          {
+            "duration": 282,
+            "startTime": 2263.399999999441
+          },
+          {
+            "duration": 180,
+            "startTime": 2549.5
+          },
+          {
+            "duration": 973,
+            "startTime": 3020.5999999996275
+          },
+          {
+            "duration": 1399,
+            "startTime": 4006.5999999996275
+          },
+          {
+            "duration": 722,
+            "startTime": 5411.799999999814
+          },
+          {
+            "duration": 508,
+            "startTime": 6453.399999999441
+          },
+          {
+            "duration": 447,
+            "startTime": 6969.799999999814
+          },
+          {
+            "duration": 216,
+            "startTime": 7420.399999999441
+          },
+          {
+            "duration": 175,
+            "startTime": 7773.5
+          },
+          {
+            "duration": 214,
+            "startTime": 7951.899999999441
+          },
+          {
+            "duration": 130,
+            "startTime": 8169
+          },
+          {
+            "duration": 108,
+            "startTime": 8381.599999999627
+          },
+          {
+            "duration": 138,
+            "startTime": 8500.299999999814
+          },
+          {
+            "duration": 154,
+            "startTime": 8801.200000000186
+          },
+          {
+            "duration": 142,
+            "startTime": 8960.399999999441
+          }
+        ]
+      },
+      "browserErrors": [],
+      "expectedApiConflicts": [
+        {
+          "status": 409,
+          "url": "http://127.0.0.1:3101/__agenda_temporal_spike/validate"
+        }
+      ]
+    },
+    {
+      "candidate": "fullcalendar",
+      "firstUsable": {
+        "fromDocumentStartMs": 605.9,
+        "nodeWallMs": 623,
+        "eventMarkers": 14,
+        "candidateSwitchMs": 444.3
+      },
+      "workloads": [
+        {
+          "eventCount": 200,
+          "render": {
+            "paintMs": 208.1,
+            "generationMs": 46.9,
+            "wallMs": 1070.9,
+            "metrics": "Observação local | sem persistência |  | 208.1 ms · adapter fullcalendar com 200 eventos · geração 46.9 ms |  | Para scroll, seleção, drag e rerender, siga o roteiro de benchmark documentado.",
+            "visible": "200 eventos visíveis\n5 min snap visual\n40 min Consulta clínica padrão\nGrade de 05:00 a 23:00 · fuso da clínica",
+            "renderedEvents": 70
+          },
+          "dayToWeek": {
+            "wallMs": 558.2,
+            "metric": "Observação local | sem persistência |  | 384.5 ms · adapter fullcalendar com 200 eventos |  | Para scroll, seleção, drag e rerender, siga o roteiro de benchmark documentado."
+          },
+          "weekToDay": {
+            "wallMs": 159.5,
+            "metric": "Observação local | sem persistência |  | 79.8 ms · adapter fullcalendar com 200 eventos |  | Para scroll, seleção, drag e rerender, siga o roteiro de benchmark documentado."
+          },
+          "scroll": {
+            "before": {
+              "top": 0,
+              "max": 113,
+              "rect": {
+                "x": 50,
+                "y": 89.296875,
+                "w": 987,
+                "h": 680
+              }
+            },
+            "after": {
+              "top": 113
+            },
+            "wallMs": 46.1,
+            "delta": 113
+          },
+          "filterMs": "Observação local\nsem persistência\n\n62.0 ms · adapter fullcalendar com 200 eventos\n\nPara scroll, seleção, drag e rerender, siga o roteiro de benchmark documentado.",
+          "move": {
+            "supported": true,
+            "action": "move",
+            "coords": {
+              "x": 564.828125,
+              "y": 367.625,
+              "targetY": 417.625,
+              "hourPx": 40,
+              "deltaY": 50,
+              "event": {
+                "x": 100.65625,
+                "y": 354.296875,
+                "w": 928.34375,
+                "h": 26.65625
+              }
+            },
+            "wallMs": 441.4,
+            "responseStatus": 200,
+            "result": {
+              "time": "11:15–11:55",
+              "notice": "✓ Horário validado no servidor de demonstração. DEMO",
+              "metric": "API mock · request/ack: 97.9 ms"
+            }
+          },
+          "resize": {
+            "supported": true,
+            "action": "resize",
+            "coords": {
+              "x": 564.828125,
+              "y": 379.453125,
+              "targetY": 389.453125,
+              "hourPx": 40,
+              "deltaY": 10,
+              "handle": {
+                "x": 100.65625,
+                "y": 374.953125,
+                "w": 928.34375,
+                "h": 9
+              },
+              "event": {
+                "x": 100.65625,
+                "y": 354.296875,
+                "w": 928.34375,
+                "h": 26.65625
+              }
+            },
+            "wallMs": 477.1,
+            "responseStatus": 200,
+            "result": {
+              "time": "10:00–10:55",
+              "notice": "✓ Nova duração validada no servidor de demonstração. DEMO",
+              "metric": "API mock · request/ack: 96.1 ms"
+            }
+          },
+          "validateRequestCount": 2,
+          "requests": [
+            {
+              "action": "move",
+              "current": {
+                "startAt": "2026-10-05T13:00:00.000Z",
+                "endAt": "2026-10-05T13:40:00.000Z",
+                "durationMin": 40,
+                "timeZone": "America/Sao_Paulo"
+              },
+              "next": {
+                "startAt": "2026-10-05T14:15:00.000Z",
+                "endAt": "2026-10-05T14:55:00.000Z",
+                "durationMin": 40,
+                "timeZone": "America/Sao_Paulo"
+              }
+            },
+            {
+              "action": "resize",
+              "current": {
+                "startAt": "2026-10-05T13:00:00.000Z",
+                "endAt": "2026-10-05T13:40:00.000Z",
+                "durationMin": 40,
+                "timeZone": "America/Sao_Paulo"
+              },
+              "next": {
+                "startAt": "2026-10-05T13:00:00.000Z",
+                "endAt": "2026-10-05T13:55:00.000Z",
+                "durationMin": 55,
+                "timeZone": "America/Sao_Paulo"
+              }
+            }
+          ]
+        },
+        {
+          "eventCount": 1000,
+          "render": {
+            "paintMs": 359.7,
+            "generationMs": 173.8,
+            "wallMs": 773.9,
+            "metrics": "Observação local | sem persistência |  | 359.7 ms · adapter fullcalendar com 1000 eventos · geração 173.8 ms |  | API mock · request/ack: 96.1 ms |  | Para scroll, seleção, drag e rerender, siga o roteiro de benchmark documentado.",
+            "visible": "1000 eventos visíveis\n5 min snap visual\n40 min Consulta clínica padrão\nGrade de 05:00 a 23:00 · fuso da clínica",
+            "renderedEvents": 298
+          },
+          "dayToWeek": {
+            "wallMs": 2999.5,
+            "metric": "Observação local | sem persistência |  | 2097.5 ms · adapter fullcalendar com 1000 eventos |  | API mock · request/ack: 96.1 ms |  | Para scroll, seleção, drag e rerender, siga o roteiro de benchmark documentado."
+          },
+          "weekToDay": {
+            "wallMs": 583.6,
+            "metric": "Observação local | sem persistência |  | 369.7 ms · adapter fullcalendar com 1000 eventos |  | API mock · request/ack: 96.1 ms |  | Para scroll, seleção, drag e rerender, siga o roteiro de benchmark documentado."
+          },
+          "scroll": {
+            "before": {
+              "top": 0,
+              "max": 113,
+              "rect": {
+                "x": 50,
+                "y": 89.296875,
+                "w": 987,
+                "h": 680
+              }
+            },
+            "after": {
+              "top": 113
+            },
+            "wallMs": 76.3,
+            "delta": 113
+          },
+          "filterMs": "Observação local\nsem persistência\n\n99.7 ms · adapter fullcalendar com 1000 eventos\n\nAPI mock · request/ack: 96.1 ms\n\nPara scroll, seleção, drag e rerender, siga o roteiro de benchmark documentado.",
+          "move": {
+            "supported": true,
+            "action": "move",
+            "coords": {
+              "x": 564.828125,
+              "y": 367.625,
+              "targetY": 417.625,
+              "hourPx": 40,
+              "deltaY": 50,
+              "event": {
+                "x": 100.65625,
+                "y": 354.296875,
+                "w": 928.34375,
+                "h": 26.65625
+              }
+            },
+            "wallMs": 824.5,
+            "responseStatus": 409,
+            "result": {
+              "time": "10:00–10:40",
+              "notice": "✓ Dr. Orlando já tem Consulta clínica nesse intervalo. O horário original foi restaurado. DEMO",
+              "metric": "API mock · request/ack: 116.3 ms"
+            }
+          },
+          "resize": {
+            "supported": true,
+            "action": "resize",
+            "coords": {
+              "x": 564.828125,
+              "y": 379.453125,
+              "targetY": 389.453125,
+              "hourPx": 40,
+              "deltaY": 10,
+              "handle": {
+                "x": 100.65625,
+                "y": 374.953125,
+                "w": 928.34375,
+                "h": 9
+              },
+              "event": {
+                "x": 100.65625,
+                "y": 354.296875,
+                "w": 928.34375,
+                "h": 26.65625
+              }
+            },
+            "wallMs": 554.6,
+            "responseStatus": 200,
+            "result": {
+              "time": "10:00–10:55",
+              "notice": "✓ Nova duração validada no servidor de demonstração. DEMO",
+              "metric": "API mock · request/ack: 102.9 ms"
+            }
+          },
+          "validateRequestCount": 2,
+          "requests": [
+            {
+              "action": "move",
+              "current": {
+                "startAt": "2026-10-05T13:00:00.000Z",
+                "endAt": "2026-10-05T13:40:00.000Z",
+                "durationMin": 40,
+                "timeZone": "America/Sao_Paulo"
+              },
+              "next": {
+                "startAt": "2026-10-05T14:15:00.000Z",
+                "endAt": "2026-10-05T14:55:00.000Z",
+                "durationMin": 40,
+                "timeZone": "America/Sao_Paulo"
+              }
+            },
+            {
+              "action": "resize",
+              "current": {
+                "startAt": "2026-10-05T13:00:00.000Z",
+                "endAt": "2026-10-05T13:40:00.000Z",
+                "durationMin": 40,
+                "timeZone": "America/Sao_Paulo"
+              },
+              "next": {
+                "startAt": "2026-10-05T13:00:00.000Z",
+                "endAt": "2026-10-05T13:55:00.000Z",
+                "durationMin": 55,
+                "timeZone": "America/Sao_Paulo"
+              }
+            }
+          ]
+        }
+      ],
+      "errors": [],
+      "longTasks": {
+        "count": 32,
+        "maxDurationMs": 1151,
+        "entries": [
+          {
+            "duration": 59,
+            "startTime": 457.29999999981374
+          },
+          {
+            "duration": 162,
+            "startTime": 781.5999999996275
+          },
+          {
+            "duration": 188,
+            "startTime": 1811.2999999998137
+          },
+          {
+            "duration": 150,
+            "startTime": 2029.2000000001863
+          },
+          {
+            "duration": 143,
+            "startTime": 2205.399999999441
+          },
+          {
+            "duration": 73,
+            "startTime": 2374.5999999996275
+          },
+          {
+            "duration": 106,
+            "startTime": 3278.0999999996275
+          },
+          {
+            "duration": 50,
+            "startTime": 3859
+          },
+          {
+            "duration": 71,
+            "startTime": 4098.799999999814
+          },
+          {
+            "duration": 50,
+            "startTime": 4188.299999999814
+          },
+          {
+            "duration": 50,
+            "startTime": 4258.700000000186
+          },
+          {
+            "duration": 375,
+            "startTime": 4323.200000000186
+          },
+          {
+            "duration": 104,
+            "startTime": 4740.799999999814
+          },
+          {
+            "duration": 152,
+            "startTime": 4866.899999999441
+          },
+          {
+            "duration": 1151,
+            "startTime": 5411.700000000186
+          },
+          {
+            "duration": 204,
+            "startTime": 6563.799999999814
+          },
+          {
+            "duration": 687,
+            "startTime": 6768.399999999441
+          },
+          {
+            "duration": 97,
+            "startTime": 7455.799999999814
+          },
+          {
+            "duration": 665,
+            "startTime": 7554
+          },
+          {
+            "duration": 221,
+            "startTime": 8265.899999999441
+          }
+        ]
+      },
+      "browserErrors": [],
+      "expectedApiConflicts": [
+        {
+          "status": 409,
+          "url": "http://127.0.0.1:3101/__agenda_temporal_spike/validate"
+        }
+      ]
+    },
+    {
+      "candidate": "schedule-x",
+      "firstUsable": {
+        "fromDocumentStartMs": 423.2,
+        "nodeWallMs": 440,
+        "eventMarkers": 14,
+        "candidateSwitchMs": 297
+      },
+      "workloads": [
+        {
+          "eventCount": 200,
+          "render": {
+            "paintMs": 111.1,
+            "generationMs": 121.8,
+            "wallMs": 433.9,
+            "metrics": "Observação local | sem persistência |  | 111.1 ms · adapter schedule-x com 200 eventos · geração 121.8 ms |  | Para scroll, seleção, drag e rerender, siga o roteiro de benchmark documentado.",
+            "visible": "200 eventos visíveis\n5 min snap visual\n40 min Consulta clínica padrão\nGrade de 05:00 a 23:00 · fuso da clínica",
+            "renderedEvents": 70
+          },
+          "dayToWeek": {
+            "wallMs": 2213.1,
+            "metric": "Observação local | sem persistência |  | 97.2 ms · adapter schedule-x com 200 eventos |  | Para scroll, seleção, drag e rerender, siga o roteiro de benchmark documentado."
+          },
+          "weekToDay": {
+            "wallMs": 164.5,
+            "metric": "Observação local | sem persistência |  | 86.2 ms · adapter schedule-x com 200 eventos |  | Para scroll, seleção, drag e rerender, siga o roteiro de benchmark documentado."
+          },
+          "scroll": {
+            "before": {
+              "top": 396,
+              "max": 1100,
+              "rect": {
+                "x": 50,
+                "y": 89.296875,
+                "w": 987,
+                "h": 680
+              }
+            },
+            "after": {
+              "top": 516
+            },
+            "wallMs": 85.8,
+            "delta": 120
+          },
+          "move": {
+            "supported": false,
+            "reason": "Community drag/drop requires Premium plugin; no paid gesture was simulated."
+          },
+          "resize": {
+            "supported": false,
+            "reason": "Community resize requires Premium plugin; no paid gesture was simulated."
+          },
+          "validateRequestCount": 0
+        },
+        {
+          "eventCount": 1000,
+          "render": {
+            "paintMs": 215.3,
+            "generationMs": 182.4,
+            "wallMs": 1039.1,
+            "metrics": "Observação local | sem persistência |  | 215.3 ms · adapter schedule-x com 1000 eventos · geração 182.4 ms |  | Para scroll, seleção, drag e rerender, siga o roteiro de benchmark documentado.",
+            "visible": "1000 eventos visíveis\n5 min snap visual\n40 min Consulta clínica padrão\nGrade de 05:00 a 23:00 · fuso da clínica",
+            "renderedEvents": 298
+          },
+          "dayToWeek": {
+            "wallMs": 2188.4,
+            "metric": "Observação local | sem persistência |  | 177.7 ms · adapter schedule-x com 1000 eventos |  | Para scroll, seleção, drag e rerender, siga o roteiro de benchmark documentado."
+          },
+          "weekToDay": {
+            "wallMs": 657.3,
+            "metric": "Observação local | sem persistência |  | 261.8 ms · adapter schedule-x com 1000 eventos |  | Para scroll, seleção, drag e rerender, siga o roteiro de benchmark documentado."
+          },
+          "scroll": {
+            "before": {
+              "top": 396,
+              "max": 1100,
+              "rect": {
+                "x": 50,
+                "y": 89.296875,
+                "w": 987,
+                "h": 680
+              }
+            },
+            "after": {
+              "top": 516
+            },
+            "wallMs": 47.7,
+            "delta": 120
+          },
+          "move": {
+            "supported": false,
+            "reason": "Community drag/drop requires Premium plugin; no paid gesture was simulated."
+          },
+          "resize": {
+            "supported": false,
+            "reason": "Community resize requires Premium plugin; no paid gesture was simulated."
+          },
+          "validateRequestCount": 0
+        }
+      ],
+      "errors": [],
+      "longTasks": {
+        "count": 19,
+        "maxDurationMs": 703,
+        "entries": [
+          {
+            "duration": 78,
+            "startTime": 316.30000000074506
+          },
+          {
+            "duration": 220,
+            "startTime": 447.80000000074506
+          },
+          {
+            "duration": 91,
+            "startTime": 699.7000000001863
+          },
+          {
+            "duration": 86,
+            "startTime": 951.7000000001863
+          },
+          {
+            "duration": 159,
+            "startTime": 2848.300000000745
+          },
+          {
+            "duration": 51,
+            "startTime": 3016.4000000003725
+          },
+          {
+            "duration": 370,
+            "startTime": 3689.2000000001863
+          },
+          {
+            "duration": 306,
+            "startTime": 4102.100000000559
+          },
+          {
+            "duration": 89,
+            "startTime": 4436.5
+          },
+          {
+            "duration": 76,
+            "startTime": 4530.700000000186
+          },
+          {
+            "duration": 167,
+            "startTime": 4881.5
+          },
+          {
+            "duration": 703,
+            "startTime": 5070.800000000745
+          },
+          {
+            "duration": 53,
+            "startTime": 5774
+          },
+          {
+            "duration": 575,
+            "startTime": 5827.5
+          },
+          {
+            "duration": 540,
+            "startTime": 6403.100000000559
+          },
+          {
+            "duration": 162,
+            "startTime": 7045.100000000559
+          },
+          {
+            "duration": 96,
+            "startTime": 7208
+          },
+          {
+            "duration": 188,
+            "startTime": 7317.600000000559
+          },
+          {
+            "duration": 52,
+            "startTime": 7517.600000000559
+          }
+        ]
+      },
+      "browserErrors": [],
+      "expectedApiConflicts": []
+    }
+  ],
+  "caveats": [
+    "Única rodada diagnóstica por candidato/carga, em ordem grid → RBC → FullCalendar → Schedule-X; sem mediana/p95 nem CPU throttling.",
+    "Servidor local Vite em modo desenvolvimento, Node 22.22.3, Chromium headless; tempos não são SLO nem representação do build de produção.",
+    "paintMs é a métrica interna adapter-to-two-requestAnimationFrames; generationMs é medido separadamente e não está somado ao paint. wallMs inclui interação/espera da UI, e o servidor mock adiciona cerca de 90 ms antes de responder.",
+    "Em 1000 eventos, a tentativa de mover para 11:15 é rejeitada por conflito real no mock e o card retorna a 10:00; resize começa novamente com estado restaurado."
+  ]
+}

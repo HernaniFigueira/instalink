@@ -23,7 +23,11 @@
     "test:360:setup": "node tests/360/setup.mjs",
     "test:360:browser": "playwright test --config tests/360/playwright.config.ts",
     "test:agenda:setup": "node tests/agenda-viewport/setup.mjs",
-    "test:agenda:browser": "playwright test --config tests/agenda-viewport/playwright.config.ts"
+    "test:agenda:browser": "playwright test --config tests/agenda-viewport/playwright.config.ts",
+    "spike:agenda": "npm --prefix spikes/agenda-temporal-2 run dev",
+    "spike:agenda:build": "npm --prefix spikes/agenda-temporal-2 run build",
+    "spike:agenda:test": "npm --prefix spikes/agenda-temporal-2 run test",
+    "spike:agenda:typecheck": "npm --prefix spikes/agenda-temporal-2 run typecheck"
   },
   "dependencies": {
     "@vercel/blob": "^2.8.0",
