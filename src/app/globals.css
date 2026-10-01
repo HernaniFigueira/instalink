@@ -1109,6 +1109,10 @@ dialog.il-drawer .il-actionbar {
     bottom: 8px;
     left: 8px;
   }
+  /* Tokens de largura em vw (ex.: WORKSPACE_SHEET_SIZES.clinical = 46vw) deixam a
+     faixa com ~180px em celular. Abaixo de 768px a faixa ocupa a largura útil do
+     dialog (já com 8px de respiro): título legível, footer e campos cabem. */
+  dialog.il-drawer:not(.workspace-nav-drawer) .il-drawer__strip { max-width: none !important; }
 }
 @media (max-width: 1359px) {
   .il-drawer__strip[data-expanded='true'] { max-width: none !important; width: 100% !important; }

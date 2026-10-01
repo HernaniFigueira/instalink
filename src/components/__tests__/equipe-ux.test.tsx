@@ -256,3 +256,17 @@ describe('Equipe UX — serviço sugerido (render)', () => {
     expect(d.queryByText(/Duração sugerida · 40 min/)).toBeNull();
   });
 });
+
+describe('Equipe UX — rótulo do Proprietário (render)', () => {
+  it('a lista mostra "Proprietário" na coluna de papel — nunca o enum cru OWNER', async () => {
+    mockApi();
+    render(<EquipePage />);
+    const row = (await screen.findByText('Dono da Clínica')).closest('div.px-4') as HTMLElement;
+    expect(row.textContent).toContain('Proprietário');
+    expect(row.textContent).not.toMatch(/OWNER/);
+    expect(document.body.textContent).not.toMatch(/\bOWNER\b/);
+    // coluna FUNÇÃO / PAPEL (desktop)
+    const roleCell = [...row.querySelectorAll('span')].find((e) => e.className.includes('hidden sm:block') && e.textContent === 'Proprietário');
+    expect(roleCell).toBeTruthy();
+  });
+});

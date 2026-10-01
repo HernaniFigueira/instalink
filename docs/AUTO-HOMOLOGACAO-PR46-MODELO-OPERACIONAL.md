@@ -127,7 +127,23 @@
 
 **Achado corrigido na homologação visual:** os cards de papel (Administrador/Recepção/Profissional) saíam com rótulo e descrição lado a lado e texto espremido; agora empilhados, mantendo o contrato `il-option-choice`.
 
-**Observações NÃO corrigidas (fora do escopo):** a linha do Proprietário na lista mostra o enum cru `OWNER`; em 390px o drawer fica estreito (título truncado, botão “Salvar alterações” cortado).
+**Observações desta rodada — CORRIGIDAS na rodada de fechamento abaixo:** enum cru `OWNER` na lista e drawer estreito em 390px.
+
+---
+
+## Fechamento: label do Proprietário + Drawer em 390px (2026-09-30)
+
+**Correções:** (1) a lista da Equipe usa `roleLabel` de `src/lib/role-labels.ts` (fonte única; o mapa local da página foi removido) — Proprietário nunca aparece como `OWNER`; (2) `globals.css`, bloco `@media (max-width: 767px)` do Drawer: `dialog.il-drawer:not(.workspace-nav-drawer) .il-drawer__strip { max-width: none !important }`. O token `WORKSPACE_SHEET_SIZES.clinical` (`46vw`) deixava a faixa com ~180px no celular; tablet/desktop continuam com o token (`max-w-[min(46vw,760px)]`) e o menu de navegação mobile não foi tocado.
+
+**Ambiente:** idêntico ao anterior (build + `next start`, banco descartável, login real pela tela `/login`, Chromium headless). Fluxo: lista → abrir Maria → geometria do drawer (topo e rolado até o botão) → editar telefone → salvar → reabrir; em 1366/1024 também Orlando. Screenshots `r2-*` em `docs/homologacao-pr46-screenshots/`.
+
+| Viewport | Resultado | Pontos verificados |
+| --- | --- | --- |
+| 1366 | 23/23 | `Proprietário` na lista (sem `OWNER`); Maria e Orlando abrem; salvar edição simples sem “não encontrado”; reabrir = persistiu; botão Salvar inteiro e clicável; sem overflow; console limpo |
+| 1024 | 23/23 | idem (faixa do drawer continua ~471px; sem regressão) |
+| 390 | 17/17 | `Proprietário` na lista; título “Gerenciar pessoa” inteiro (faixa 374px); botão `Salvar alterações` inteiro e clicável no footer; Cancelar + Salvar sem sobreposição; campos 314–340px; zero overflow horizontal; salvar → fechar → reabrir persistiu; console/rede sem erro |
+
+**Nota:** em 390px o *subtítulo* do drawer (“Edite os dados desta pessoa — o mesmo painel cri…”) continua com reticências — é o comportamento padrão do Design System (`ws-sheet__sub`), o título está íntegro.
 
 ---
 
@@ -137,7 +153,7 @@
 git diff --check  # ✓ 0
 npm run build     # ✓ Compiled successfully
 npm run typecheck # ✓ 0 erros (rodar DEPOIS do build, nunca em paralelo)
-npx vitest run    # 2754 passed / 4 failed (2758) — 199/201 arquivos
+npx vitest run    # 2759 passed / 4 failed (2763) — 200/202 arquivos
                   # 4 falhas = baseline pré-existente, não corrigida:
                   #   3× a34-instagram (B9) + 1× automation-audit-p4 (poda)
 ```

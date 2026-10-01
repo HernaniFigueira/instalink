@@ -6,6 +6,7 @@ import { Icon } from '@/components/icons';
 import { Avatar, Badge, Button, buttonCls, Drawer, Notice, PageHeader, PageSkeleton, Select, Input, Field, Switch } from '@/components/ui';
 import { cn, onlyDigits, parseMoneyToCents } from '@/lib/utils';
 import { permissionsFor } from '@/lib/permissions';
+import { roleLabel } from '@/lib/role-labels';
 import type { Availability, Category, MemberRole, PermissionId, Professional, Service } from '@/lib/types';
 import { AccessDenied, AreaLoadError, useAreaLoad } from '@/components/dashboard/AccessNotice';
 import { apiGet, apiSend } from '@/lib/api-client';
@@ -453,7 +454,6 @@ export default function EquipePage() {
   if (failed) return <AreaLoadError area="Equipe" message={failed} onRetry={load} />;
   if (!data) return <PageSkeleton />;
   const q = `?b=${businessId}`;
-  const roleLabel = (r: string) => data.roles.find((x) => x.id === r)?.label || r;
 
   return (
     <>
@@ -494,7 +494,7 @@ export default function EquipePage() {
               {unified.map((entry) => {
                 if (entry.kind === 'owner') {
                   const op = entry.professional;
-                  const ownerRoleLabel = entry.professional ? (entry.professional.role || entry.role) : entry.role;
+                  const ownerRoleLabel = entry.professional ? (entry.professional.role || roleLabel(entry.role)) : roleLabel(entry.role);
                   return (
                     <div key="owner" className="px-4 py-3 flex sm:grid sm:grid-cols-[minmax(0,1.4fr)_120px_100px_130px_90px_170px] gap-2 items-center bg-zinc-50/50">
                       <div className="flex items-center gap-3 min-w-0 flex-1">
@@ -505,7 +505,7 @@ export default function EquipePage() {
                           {op && <p className="text-[11px] text-zinc-500 truncate sm:hidden">{op.role || 'Clínico Geral'} · {followsBusinessHours(op, rules) ? 'Segue a clínica' : 'Horário próprio'}</p>}
                         </div>
                       </div>
-                      <span className="hidden sm:block text-sm text-zinc-700 truncate">{op?.role || entry.role}</span>
+                      <span className="hidden sm:block text-sm text-zinc-700 truncate">{op?.role || roleLabel(entry.role)}</span>
                       <span className="hidden sm:block">{op ? (atende(op) ? <span className="text-xs font-medium bg-emerald-50 border border-emerald-200 text-emerald-800 px-2 py-0.5 rounded-full">Atende</span> : <span className="text-xs font-medium bg-zinc-100 border border-zinc-200 text-zinc-500 px-2 py-0.5 rounded-full">Não atende</span>) : <span className="text-xs text-zinc-500">—</span>}</span>
                       <span className="hidden sm:block text-xs">{op ? <Link href={`/disponibilidade?b=${businessId}&professionalId=${op.id}`} className="text-zinc-600 hover:text-zinc-900 underline">{agendaLabel(op)}</Link> : '—'}</span>
                       <span className="hidden sm:block"><span className="text-xs font-medium bg-emerald-50 border border-emerald-200 text-emerald-800 px-2 py-0.5 rounded-full">Ativo</span></span>
@@ -522,7 +522,7 @@ export default function EquipePage() {
                 if (entry.kind === 'member') {
                   const m = entry.member as Member;
                   const pro = entry.professional;
-                  const role = (() => data.roles.find((x) => x.id === m.role)?.label || m.role)();
+                  const role = roleLabel(m.role);
                   return (
                     <div key={m.id} className="px-4 py-3 flex sm:grid sm:grid-cols-[minmax(0,1.4fr)_120px_100px_130px_90px_170px] gap-2 items-center hover:bg-zinc-50">
                       <div className="flex items-center gap-3 min-w-0 flex-1">

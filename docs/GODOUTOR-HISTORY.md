@@ -159,7 +159,7 @@ Objetivo da missão final: produto clínico profissional sem expor `Member/Profe
 
 ### Testes
 - Novos: `src/lib/__tests__/pr46-equipe-ux.test.ts` (19), `src/components/__tests__/equipe-ux.test.tsx` (12, jsdom), `src/components/__tests__/business-hours-focus.test.tsx` (4, jsdom). Atualizados por mudança intencional: m8-permissoes, workspace, page-architecture, godoutor-clinical-convergence, p0-integridade-real, visual-convergence, p0-person-atomic.
-- Suite completa: 2754 passed / 4 failed (baseline pré-existente: 3 Instagram + 1 automation audit; não corrigidos). `pr46-equipe-ux.test.ts` agora com 22 testes (inclui criação direta `own`/`follow`).
+- Suite completa: 2759 passed / 4 failed (baseline pré-existente: 3 Instagram + 1 automation audit; não corrigidos). `pr46-equipe-ux.test.ts` agora com 22 testes (inclui criação direta `own`/`follow`).
 - Homologação em Chromium headless com login real: 47/47 em 1366 e em 1024; sanity 1440/390 (ver `docs/AUTO-HOMOLOGACAO-PR46-MODELO-OPERACIONAL.md`). Screenshots em `docs/homologacao-pr46-screenshots/`.
 
 ### Preservado / Deferido

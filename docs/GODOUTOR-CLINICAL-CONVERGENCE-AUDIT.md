@@ -366,9 +366,9 @@ Itens da auditoria tratados nesta etapa (mesma PR; sem merge):
 
 ### Testes desta etapa
 - `pr46-equipe-ux.test.ts` (22), `equipe-ux.test.tsx` (12), `business-hours-focus.test.tsx` (4).
-- Suite completa: 2754 passed / 4 failed (baseline: 3 Instagram + 1 automation audit; intocados). `tsc` 0 · `build` OK · `git diff --check` 0.
+- Suite completa: 2759 passed / 4 failed (baseline: 3 Instagram + 1 automation audit; intocados). `tsc` 0 · `build` OK · `git diff --check` 0.
 - Browser real (Chromium headless, login real): 47/47 em 1366 e em 1024; sanity 1440/390.
 
-### Observações da renderização real (NÃO corrigidas — fora do escopo desta etapa)
-- Lista da Equipe: a linha do Proprietário mostra o enum cru `OWNER` na coluna FUNÇÃO / PAPEL.
-- 390px: o drawer fica estreito (título truncado e botão “Salvar alterações” cortado). Desktop/tablet são a prioridade; mobile é só sanity.
+### Observações da renderização real — CORRIGIDAS
+- Lista da Equipe: o Proprietário aparecia como enum cru `OWNER`; agora `roleLabel` (`role-labels.ts`) → `Proprietário`.
+- 390px: o drawer ficava estreito (faixa de 46vw ≈ 180px); regra mobile em `globals.css` (<768px) — título, footer e botão Salvar íntegros, zero overflow. Teste: `pr46-drawer-mobile.test.ts`; browser 17/17 em 390, 23/23 em 1024 e 1366.
