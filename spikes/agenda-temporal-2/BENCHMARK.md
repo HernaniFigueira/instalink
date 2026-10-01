@@ -25,7 +25,7 @@ A criação/seleção de Schedule-X Community é uma sugestão do domínio por c
 
 ### Mobile e overflow
 
-Em 390×844 com `isMobile`/`hasTouch`, os quatro adapters abriram detalhe por toque, fecharam com Escape, aceitaram criação rápida de **05 out. 2026, 10:00–10:40, Dra. Bianca**, e avançaram um dia. O método é adapter-specific: Grade por toque na grade; RBC por seleção touch; FullCalendar Standard por toque na célula; Schedule-X por toque em horário e normalização do contrato para 40 min. Screenshot Dia adicional após scroll até o calendário: [`grid`](./qa/screenshots/390x844-day-grid-scrolled.png), [`RBC`](./qa/screenshots/390x844-day-rbc-scrolled.png), [`FullCalendar`](./qa/screenshots/390x844-day-fullcalendar-scrolled.png), [`Schedule-X`](./qa/screenshots/390x844-day-schedule-x-scrolled.png).
+Em 390×844 com `isMobile`/`hasTouch`, `page.touchscreen`/CDP emulou touch (não é dispositivo físico): os quatro adapters abriram detalhe por toque, fecharam com Escape, aceitaram criação rápida de **05 out. 2026, 10:00–10:40, Dra. Bianca**, e avançaram um dia. O método é adapter-specific: Grade por toque na grade; RBC por seleção touch; FullCalendar Standard por toque na célula; Schedule-X por toque em horário e normalização do contrato para 40 min. Screenshot Dia adicional após scroll até o calendário: [`grid`](./qa/screenshots/390x844-day-grid-scrolled.png), [`RBC`](./qa/screenshots/390x844-day-rbc-scrolled.png), [`FullCalendar`](./qa/screenshots/390x844-day-fullcalendar-scrolled.png), [`Schedule-X`](./qa/screenshots/390x844-day-schedule-x-scrolled.png).
 
 Não houve overflow horizontal **global**: `documentScrollWidth` permaneceu 390 px nas quatro capturas adicionais. Grade e RBC têm scroll horizontal interno para colunas de profissionais; nem todas ficam visíveis simultaneamente. Week não foi forçada em 390 px. A largura sem overflow não implica que toda informação cabe sem rolar.
 
@@ -86,7 +86,7 @@ O `tsconfig.json` root agora exclui `spikes/**`, os aliases para dependências e
 
 ## Vercel
 
-O deployment de preview anterior para o SHA `667d927` falhou. A antiga configuração TypeScript da raiz incluía os fontes do spike e apontava aliases para `spikes/agenda-temporal-2/schedule-x/node_modules`, que o install root do Vercel não instala. O sandbox não tinha credenciais Vercel para recuperar o log detalhado (`vercel inspect` retornou “No existing credentials”); o clean-room root build reproduzível agora passa sem nenhum `spikes/**/node_modules`, e o isolamento foi corrigido. **Antes de concluir esta tarefa, registrar aqui e no ADR o resultado do novo deployment Vercel do commit final; o status final precisa ser `SUCCESS`.**
+O preview Vercel anterior (SHA `667d927`, deployment `6784771304`; predecessor `bfa42d3`, deployment `6784428759`) estava `FAILURE`. Não havia credenciais Vercel no sandbox para recuperar logs (`npx vercel inspect … --logs` respondeu `No existing credentials`). A configuração antiga da raiz incluía os fontes do spike e aliases para `spikes/agenda-temporal-2/schedule-x/node_modules`, que o install root do Vercel não instala — uma causa provável e reproduzível da contaminação. Após excluir o spike do `tsconfig`/Vitest root, mover dependências e isolar scripts/configs, a instalação/build limpos do produto passaram sem `spikes/**/node_modules`. O deployment corretivo do commit `e01ead037ffb201edd7375b88c7b69a8cce1d79d` concluiu **`SUCCESS`** (`6788219508`, Preview: https://godoutor-merz28j3n-hernanicross-3509s-projects.vercel.app). A PR #48 continua draft; não houve merge.
 
 ## Artefatos e limites
 
