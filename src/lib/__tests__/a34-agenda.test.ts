@@ -61,7 +61,7 @@ describe('A3.4 · Bloco 3 — Agenda: navegação [◀][▶] e clique cria', () 
   it('o clique só sugere um horário — o motor de slots continua no servidor', () => {
     // A disponibilidade vem do servidor (URLs montadas por lib/agenda-drag);
     // a tela não recalcula slot nenhum.
-    expect(agenda).toContain('dragSlotUrls(');
+    expect(agenda).toContain('dragSlotUrl(');
     expect(agenda).not.toMatch(/function computeSlots/);
     expect(agenda).not.toMatch(/const slots\s*=\s*useMemo\(\(\) => \[/);
   });

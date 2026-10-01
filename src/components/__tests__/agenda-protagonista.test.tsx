@@ -313,7 +313,7 @@ describe('nenhuma regra de booking foi alterada', () => {
     expect(page).not.toMatch(/fetch\(['"`]\/api\/bookings['"`],\s*\{\s*method:\s*['"]POST['"]/);
     // Reagendar continua pela decisão canônica (move vs. recria) + servidor.
     expect(page).toContain('rescheduleDecision(');
-    expect(page).toContain('dragSlotUrls(');
+    expect(page).toContain('dragSlotUrl(');
     // O motor de slots continua sendo o do servidor; nada virou cálculo local.
     const create = read('src/lib/booking-create.ts');
     expect(create).toContain('Não é possível agendar no passado.');
