@@ -24,6 +24,8 @@ export interface SlotQuery {
   weekday: number;
   serviceId: string;
   durationMin: number;
+  /** Internal staff start cadence; public slots keep configured slotMin. */
+  startStepMin?: number;
   professionalId: string; // escolhido ('') = qualquer um
   eligibleProIds?: string[]; // vínculo do serviço: [] = ninguém, undefined = compat (todos), [ids] = final
   nowHM: string; // HH:MM atual quando dateISO é hoje ('' = outro dia)
@@ -103,7 +105,7 @@ export function computeSlots(q: SlotQuery): SlotResult {
     if (!(end > start)) continue;
     // Passo da grade: configurado no período ou, por padrão, a duração
     // do próprio serviço (45min → 09:00, 09:45, 10:30…).
-    const step = Math.max(10, r.slotMin || q.durationMin || 30);
+    const step = q.startStepMin === 5 ? 5 : Math.max(10, r.slotMin || q.durationMin || 30);
     if (q.professionalId) {
       // Escopo de UM profissional: herda o geral OU usa o próprio.
       if (follows(q.professionalId)) {

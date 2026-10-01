@@ -21,7 +21,7 @@ import { emitAutomationEvent } from '@/lib/automation/events';
 import { enqueueDueReminders } from '@/lib/automations';
 import { upsertContact } from '@/lib/contacts';
 import { todayISO, nowHM, weekdayOf, addDaysISO, effectiveTimezone, isValidDateISO, isValidClockTime } from '@/lib/tz';
-import { onlyDigits } from '@/lib/utils';
+import { onlyDigits, timeToMin } from '@/lib/utils';
 import { fitInConflictsFromDB, fitInWarning } from '@/lib/fit-in';
 import { rateLimit, ipFrom } from '@/lib/rate-limit';
 import { applyBookingWindow, bookingWindowFields, buildBookingWindow, freezeLegacyBookingWindow, type BookingWindow } from '@/lib/booking-temporal';
@@ -130,14 +130,21 @@ export async function GET(req: NextRequest) {
 
     // O cliente NUNCA escolhe profissional: a grade é sempre "qualquer
     // profissional elegível livre" (o motor resolve internamente).
+    // Only the authenticated staff gesture may request 5-minute starts.
+    // A booking ID selects its own frozen duration; never trust a duration in the URL.
+    const gestureBooking = slotGuard?.ok && q.get('gestureBookingId')
+      ? db.bookings.find((b) => b.id === q.get('gestureBookingId') && b.businessId === businessId && canAccessBooking(slotGuard.ctx, b))
+      : undefined;
+    if (q.get('gestureBookingId') && (!gestureBooking || gestureBooking.serviceId !== service.id)) return NextResponse.json({ error: 'Agendamento não encontrado.' }, { status: 404 });
     const base = {
+      ...(slotGuard?.ok && q.get('internalSnap') === '5' ? { startStepMin: 5 } : {}),
       rules: db.availability.filter((a) => a.businessId === businessId),
       exceptions: db.exceptions.filter((e) => e.businessId === businessId),
-      bookings: db.bookings.filter((b) => b.businessId === businessId),
+      bookings: db.bookings.filter((b) => b.businessId === businessId && b.id !== gestureBooking?.id),
       services: db.services.filter((s) => s.businessId === businessId),
       professionals: db.professionals.filter((p) => p.businessId === businessId),
       serviceId: service.id,
-      durationMin: service.durationMin,
+      durationMin: gestureBooking ? bookingDurationOf(gestureBooking, service) : service.durationMin,
       // A consulta administrativa pode restringir a coluna escolhida; sem
       // filtro a resposta continua sendo a união da equipe.
       professionalId: requestedProfessionalId,
@@ -221,6 +228,7 @@ export async function POST(req: NextRequest) {
       ownerMatches: !!guard?.ok,
     });
     const isOwner = actor === 'owner';
+    if (!isOwner && body.staffDurationMin !== undefined) return NextResponse.json({ error: 'Duração personalizada exige permissão de Agenda.' }, { status: 403 });
 
     let customer = null as Awaited<ReturnType<typeof customerFromRequest>>;
     if (!isOwner) {
@@ -316,6 +324,7 @@ export async function POST(req: NextRequest) {
       date,
       time,
       actor: isOwner ? 'owner' : 'customer',
+      ...(isOwner && body.staffDurationMin !== undefined ? { staffDurationMin: body.staffDurationMin } : {}),
       customer: {
         id: customer?.id || linkedContact?.customerId || '',
         name,
@@ -440,9 +449,16 @@ export async function PATCH(req: NextRequest) {
     }
 
     // ── Remarcação pelo dono ──
-    if (body.date && body.time) {
-      const date = String(body.date);
-      const time = String(body.time);
+    if ((body.date && body.time) || body.resizeEnd !== undefined) {
+      const resizing = body.resizeEnd !== undefined;
+      if (!resizing && (body.durationMin !== undefined || body.startAt !== undefined || body.endAt !== undefined)) {
+        return NextResponse.json({ error: 'Informe somente a nova data e horário.' }, { status: 400 });
+      }
+      const date = String(resizing ? current.date : body.date);
+      const time = String(resizing ? current.time : body.time);
+      if (resizing && (!isValidClockTime(String(body.resizeEnd)) || body.date || body.time || body.durationMin !== undefined || body.startAt || body.endAt || body.professionalId)) {
+        return NextResponse.json({ error: 'Informe somente o novo fim do atendimento.' }, { status: 400 });
+      }
       if (!isValidDateISO(date) || !isValidClockTime(time)) {
         return NextResponse.json({ error: 'Escolha data e horário.' }, { status: 400 });
       }
@@ -458,7 +474,7 @@ export async function PATCH(req: NextRequest) {
       if (guard.ctx.professionalScope && body.professionalId && body.professionalId !== guard.ctx.professionalScope) {
         return NextResponse.json({ error: 'Você só pode reagendar para o seu profissional.' }, { status: 403 });
       }
-      const proId = guard.ctx.professionalScope || String(body.professionalId || '');
+      const proId = guard.ctx.professionalScope || (resizing ? current.professionalId : String(body.professionalId || ''));
       const activePros = db.professionals.filter((p) => p.businessId === business.id && p.active !== false);
       const eligible = eligibleIdsForService(service as any, activePros).map(id => activePros.find(p=>p.id===id)!).filter(Boolean);
       if (proId && !eligible.some((p) => p.id === proId)) {
@@ -478,14 +494,22 @@ export async function PATCH(req: NextRequest) {
         const freshBusiness = d.businesses.find((b) => b.id === business.id)!;
         const freshService = d.services.find((s) => s.id === target.serviceId && s.businessId === business.id && s.active !== false);
         if (!freshService) throw err('Serviço indisponível.', 400);
+        if (resizing && target.professionalId !== proId) throw err('Profissional alterado. Recarregue a agenda.', 409);
         const freshTz = effectiveTimezone(freshBusiness.businessTimezone);
         const freshToday = todayISO(new Date(), freshTz);
         if (date < freshToday || date > bookingMaxDate(freshToday, freshBusiness.booking, true)) throw err('Data fora da agenda disponível.', 400);
         const decision = rescheduleDecision(target.status);
+        if (resizing && (decision.kind === 'recreate' || target.date !== date || target.time !== time)) {
+          throw err('Esse atendimento não pode ter a duração alterada.', 409);
+        }
+        const resizedDuration = resizing ? timeToMin(String(body.resizeEnd)) - timeToMin(target.time) : 0;
+        if (resizing && (resizedDuration < 5 || resizedDuration > 720 || resizedDuration % 5 !== 0)) {
+          throw err('Escolha um fim válido, em intervalos de 5 minutos.', 400);
+        }
         // Move preserva a duração do próprio Booking; somente recreate é um
         // NOVO Booking e usa o default atual do serviço. Também validar o
         // destino com essa duração para não aceitar um slot que não a comporta.
-        const destinationDuration = decision.kind === 'recreate'
+        const destinationDuration = resizing ? resizedDuration : decision.kind === 'recreate'
           ? freshService.durationMin
           : bookingDurationOf(target, freshService);
         const others = d.bookings.filter((b) => b.businessId === business.id && b.id !== body.id);
@@ -496,7 +520,7 @@ export async function PATCH(req: NextRequest) {
           services: d.services.filter((s) => s.businessId === business.id),
           professionals: d.professionals.filter((p) => p.businessId === business.id),
           dateISO: date, weekday: weekdayOf(date),
-          serviceId: freshService.id, durationMin: destinationDuration,
+          serviceId: freshService.id, durationMin: destinationDuration, startStepMin: 5,
           professionalId: proId,
           eligibleProIds: slotEligibleProfessionalIds(freshService as any, d.professionals.filter((p) => p.businessId === business.id)),
           nowHM: date === freshToday ? nowHM(new Date(), freshTz) : '',
@@ -516,7 +540,8 @@ export async function PATCH(req: NextRequest) {
           throw err(e?.message || 'Horário inválido para o fuso da clínica.', 400);
         }
         const now = new Date().toISOString();
-        const note = rescheduleNote({ date: target.date, time: target.time }, { date, time });
+        const note = resizing ? `Duração alterada: ${bookingDurationOf(target, freshService)} → ${destinationDuration} min`
+          : rescheduleNote({ date: target.date, time: target.time }, { date, time });
 
         if (decision.kind === 'recreate') {
           // Estado terminal (concluído/faltou/cancelado): o registro antigo
@@ -583,32 +608,34 @@ export async function PATCH(req: NextRequest) {
         // snapshot/fallback (não do default do serviço para Booking canônico).
         freezeLegacyBookingWindow(target, { timeZone: freshTz, serviceDurationMin: freshService.durationMin });
         applyBookingWindow(target, rescheduleWindow, freshTz);
-        // Novo horário = nova chegada: o check-in do horário antigo não vale.
-        // (Quem estava na fila por este agendamento deixa a fila.)
-        target.checkedInAt = undefined;
-        target.checkedInBy = undefined;
-        target.checkedInByName = undefined;
-        for (const q of d.queue || []) {
-          if (q.businessId === business.id && q.bookingId === target.id && (q.status === 'waiting' || q.status === 'called')) {
-            q.status = 'left'; q.endedAt = now; q.updatedAt = now;
+        // Um resize mantém a chegada/check-in; somente move muda a chegada.
+        if (!resizing) {
+          // Novo horário = nova chegada: o check-in do horário antigo não vale.
+          target.checkedInAt = undefined;
+          target.checkedInBy = undefined;
+          target.checkedInByName = undefined;
+          for (const q of d.queue || []) {
+            if (q.businessId === business.id && q.bookingId === target.id && (q.status === 'waiting' || q.status === 'called')) {
+              q.status = 'left'; q.endedAt = now; q.updatedAt = now;
+            }
           }
         }
         // Profissional do destino: o escolhido explicitamente vence. Sem
         // escolha, usa o profissional LIVRE retornado pela validação (em equipe
         // o horário pode estar livre só para outra pessoa). Manter o profissional
         // anterior quando ele está ocupado criaria um conflito silencioso.
-        target.professionalId = proId || r.assign[time] || target.professionalId || '';
+        target.professionalId = resizing ? target.professionalId : proId || r.assign[time] || target.professionalId || '';
         target.updatedAt = now;
         target.history.push({ at: now, from: target.status, to: decision.nextStatus, by: 'owner', note });
         if (target.status !== decision.nextStatus) target.status = decision.nextStatus;
         // A2-B3 (F7.2): a nota da esteira ("Agendado para …") acompanha a
         // remarcação — sem nota stale apontando para o dia antigo.
-        noteLeadReschedule(d, {
+        if (!resizing) noteLeadReschedule(d, {
           businessId: business.id, leadId: target.leadId,
           from: { date: fromDate, time: fromTime }, to: { date, time },
           by: 'owner', now,
         });
-        emitAutomationEvent(d, {
+        if (!resizing) emitAutomationEvent(d, {
           event: 'booking.rescheduled',
           businessId: business.id,
           at: now,
@@ -617,7 +644,7 @@ export async function PATCH(req: NextRequest) {
           customerId: target.customerId || undefined,
           data: { previousId: target.id, fromDate, fromTime, date, time, kind: 'move' },
         });
-        return { created: false, newId: target.id };
+        return { created: false, newId: target.id, resized: resizing };
       });
       return NextResponse.json({ ok: true, ...result, moved: decision.kind === 'move', reason: decision.reason });
     }

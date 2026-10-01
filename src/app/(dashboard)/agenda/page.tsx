@@ -51,7 +51,7 @@ import { SLOT_STATE_MESSAGE, slotState } from '@/lib/slot-states';
 import { newBookingSeedFromAgendaCell } from '@/lib/agenda-cell-prefill';
 import {
   IDLE_INTERACTION, blockHeight, blockTop, dragPreviewLabel, dragSlotUrls, dropConfirmQuestion,
-  emptyDragSlots, geometryFromRect, layoutBlocks, minuteFromOffsetY, planDrop, reduceInteraction, withOwnSlot,
+  emptyDragSlots, geometryFromRect, layoutBlocks, minuteFromOffsetY, snapGestureMinute, planDrop, reduceInteraction, withOwnSlot,
   type CellAvailability, type DragSlots, type DropColumn, type GridGeometry, type InteractionState,
   type Point,
 } from '@/lib/agenda-drag';
@@ -124,6 +124,7 @@ interface BlockVM {
   service: string;
   timeRange: string;
   statusLabel: string;
+  editable: boolean;
   cls: string;
   /** Profissional (linha discreta do cartão), ponto e ícone de estado. */
   pro: string;
@@ -173,7 +174,7 @@ interface HoverTarget {
 let lastGridPressAt = 0;
 
 // ── Coluna da grade (memoizada: o drag não re-renderiza a grade inteira) ──
-const GridColumn = memo(function GridColumn({ column, basisPct, variant, highlight, onPressStart, onPressMove, onPressEnd, onPressCancel, onBlockClick, onEmptyPress, gridHeight, hours, startMinute, endMinute }: {
+const GridColumn = memo(function GridColumn({ column, basisPct, variant, highlight, onPressStart, onPressMove, onPressEnd, onPressCancel, onBlockClick, onEmptyPress, onRangeSelect, onResize, gridHeight, hours, startMinute, endMinute }: {
   column: ColumnVM;
   basisPct: number;
   variant: 'day' | 'week';
@@ -185,11 +186,18 @@ const GridColumn = memo(function GridColumn({ column, basisPct, variant, highlig
   onBlockClick: (id: string) => void;
   /** A3.4: clique/toque em área vazia → criar agendamento naquele horário. */
   onEmptyPress: (columnKey: string, time: string) => void;
+  onRangeSelect: (columnKey: string, time: string, durationMin: number) => void;
+  onResize: (id: string, end: string) => void;
   gridHeight: number;
   hours: number;
   startMinute: number;
   endMinute: number;
 }) {
+  const selection = useRef<{ origin: number; y: number; originPx: number; moved: boolean } | null>(null);
+  const overlay = useRef<HTMLDivElement>(null);
+  const snapY = (e: React.PointerEvent<HTMLDivElement>) => Math.max(startMinute, Math.min(endMinute,
+    snapGestureMinute(startMinute + (e.clientY - e.currentTarget.getBoundingClientRect().top) / PX_PER_HOUR * 60),
+  ));
   return (
     // border-b = linha final da grade. As linhas internas param em
     // hours-1: NADA ultrapassa gridHeight (zero scroll fantasma).
@@ -202,6 +210,36 @@ const GridColumn = memo(function GridColumn({ column, basisPct, variant, highlig
       data-agenda-column={column.key}
       data-agenda-column-date={column.date}
       data-agenda-column-professional={column.professionalId || ''}
+      onPointerDown={(e) => {
+        if (e.pointerType !== 'mouse' || e.button !== 0 || (e.target as HTMLElement).closest('button')) return;
+        const origin = snapY(e);
+        selection.current = { origin, y: origin, originPx: e.clientY, moved: false };
+        e.currentTarget.setPointerCapture(e.pointerId);
+      }}
+      onPointerMove={(e) => {
+        if (!selection.current) return;
+        const y = snapY(e);
+        const active = selection.current;
+        if (Math.abs(e.clientY - active.originPx) > 6 || y !== active.origin) active.moved = true;
+        active.y = y;
+        if (overlay.current) {
+          overlay.current.style.display = active.moved ? 'block' : 'none';
+          overlay.current.style.top = `${(Math.min(active.origin, y) - startMinute) / 60 * PX_PER_HOUR}px`;
+          overlay.current.style.height = `${Math.max(5, Math.abs(y - active.origin)) / 60 * PX_PER_HOUR}px`;
+          overlay.current.textContent = `${minToTime(Math.min(active.origin, y))}–${minToTime(Math.max(active.origin, y))}`;
+        }
+      }}
+      onPointerUp={(e) => {
+        const active = selection.current;
+        selection.current = null;
+        if (overlay.current) overlay.current.style.display = 'none';
+        if (!active?.moved) return;
+        lastGridPressAt = Date.now();
+        const from = Math.min(active.origin, active.y);
+        const to = Math.max(active.origin, active.y);
+        if (to > from) onRangeSelect(column.key, minToTime(from), to - from);
+      }}
+      onPointerCancel={() => { selection.current = null; if (overlay.current) overlay.current.style.display = 'none'; }}
       onClick={(e) => {
         // Clique em área VAZIA = criar naquele horário. Cliques em atendimento
         // (button), no destaque de arraste e o clique que sobra de um drop são
@@ -213,6 +251,7 @@ const GridColumn = memo(function GridColumn({ column, basisPct, variant, highlig
         const minutes = minuteFromOffsetY(e.clientY - rect.top, { startMinute, endMinute, pxPerHour: PX_PER_HOUR }, CLICK_SNAP_MIN);
         onEmptyPress(column.key, minToTime(minutes));
       }}>
+      <div ref={overlay} aria-hidden="true" className="pointer-events-none absolute inset-x-1 z-30 hidden rounded-md border-2 border-[var(--brand)] bg-[var(--brand-softer)] text-xs font-semibold p-1" />
       {column.freeRanges.map((r,i)=><span key={i} aria-hidden="true" className="ag-free-range absolute inset-x-0 bg-white transition-colors" style={{top:(r.start-startMinute)/60*PX_PER_HOUR,height:(r.end-r.start)/60*PX_PER_HOUR}}/>)}
       {column.isToday && <span aria-hidden="true" className="absolute inset-0 bg-[var(--brand-softer)] pointer-events-none" />}
       {Array.from({ length: Math.max(0, hours - 1) }, (_, idx) => idx + 1).map((i) => (
@@ -295,6 +334,40 @@ const GridColumn = memo(function GridColumn({ column, basisPct, variant, highlig
               {b.fitIn && <span className={`px-1 rounded-sm ${FIT_IN_MARK_CLS}`}>ENCAIXE</span>}
             </span>
           )}
+          {b.editable && b.height >= 30 && (
+            <span aria-label={`Redimensionar ${b.name}`} title="Arraste para alterar duração"
+              className="absolute bottom-0 inset-x-0 h-3 cursor-ns-resize touch-none z-10 border-b-2 border-transparent hover:border-[var(--brand)]"
+              onPointerDown={(e) => {
+                e.stopPropagation(); e.preventDefault();
+                if (e.pointerType !== 'mouse' || e.button !== 0) return;
+                const handle = e.currentTarget;
+                const card = handle.closest('button') as HTMLElement;
+                const originY = e.clientY;
+                const originalHeight = card.offsetHeight;
+                handle.setPointerCapture(e.pointerId);
+                const onMove = (ev: PointerEvent) => {
+                  const proposed = Math.max(5, Math.round((originalHeight + ev.clientY - originY) / PX_PER_HOUR * 60 / 5) * 5);
+                  card.style.height = `${blockHeight(proposed, PX_PER_HOUR)}px`;
+                  handle.title = `${b.time}–${minToTime(timeToMin(b.time) + proposed)} · ${proposed} min`;
+                };
+                const onUp = (ev: PointerEvent) => {
+                  handle.removeEventListener('pointermove', onMove);
+                  handle.removeEventListener('pointerup', onUp);
+                  handle.removeEventListener('pointercancel', onCancel);
+                  card.style.height = '';
+                  if (ev.type === 'pointercancel') return;
+                  const proposed = Math.max(5, Math.round((originalHeight + ev.clientY - originY) / PX_PER_HOUR * 60 / 5) * 5);
+                  if (Math.abs(ev.clientY - originY) > 6) {
+                    lastGridPressAt = Date.now();
+                    onResize(b.id, minToTime(timeToMin(b.time) + proposed));
+                  }
+                };
+                const onCancel = (ev: PointerEvent) => onUp(ev);
+                handle.addEventListener('pointermove', onMove);
+                handle.addEventListener('pointerup', onUp);
+                handle.addEventListener('pointercancel', onCancel);
+              }} />
+          )}
           {b.checkedInAt && (
             <span title="Cliente já fez check-in" aria-hidden="true"
               className="absolute bottom-1 right-1 w-4 h-4 rounded-full text-[9px] font-semibold leading-4 text-center bg-[var(--success)] text-white">✓</span>
@@ -374,7 +447,7 @@ export default function AgendaPage() {
   const [loaded, setLoaded] = useState(false);
   const [detail, setDetail] = useState<Booking | null>(null);
   const [creating, setCreating] = useState<{
-    date: string; time: string; professionalId: string;
+    date: string; time: string; professionalId: string; selectedDurationMin?: number; quick?: boolean;
     /** A3.4 fix (revisão B5): "Encaixar na agenda" vem da FILA já preenchido. */
     contactId?: string; name?: string; phone?: string; serviceId?: string;
   } | null>(null);
@@ -420,6 +493,7 @@ export default function AgendaPage() {
   const [dragId, setDragId] = useState('');
   const [drag, setDrag] = useState<DragSlots>(emptyDragSlots);
   const [hover, setHover] = useState<HoverTarget | null>(null);
+  const [resizeAsk, setResizeAsk] = useState<{ booking: Booking; end: string } | null>(null);
   const [dropAsk, setDropAsk] = useState<{ booking: Booking; date: string; time: string; professionalId: string; columnLabel: string } | null>(null);
   const [dropError, setDropError] = useState('');
   const [saving, setSaving] = useState(false);
@@ -685,6 +759,7 @@ export default function AgendaPage() {
           service: serviceName(b.serviceId),
           timeRange: `${b.time}–${endHM}`,
           statusLabel,
+          editable: rescheduleDecision(b.status).kind === 'move',
           cls: BOOKING_BLOCK[b.status],
           pro: pro || '',
           dot: BOOKING_DOT[b.status],
@@ -830,7 +905,7 @@ export default function AgendaPage() {
     dragSlotsRef.current = initial;
     setDrag(initial);
     const own = { date: b.date, time: b.time, professionalId: b.professionalId || '' };
-    Promise.all(dragSlotUrls(businessId, b.serviceId, dates).map(async (url, i) => {
+    Promise.all(dragSlotUrls(businessId, b.serviceId, dates, b.id).map(async (url, i) => {
       try {
         const r = await fetch(url);
         if (!r.ok) return [dates[i], null] as const;
@@ -939,25 +1014,38 @@ export default function AgendaPage() {
 
   // ── Handlers de ponteiro (estáveis: as colunas memoizadas não remontam) ──
   /** A3.4: clique em horário vago abre o sheet JÁ naquele dia/horário/quem. */
+  const onRangeSelect = useCallback((columnKey: string, time: string, selectedDurationMin: number) => {
+    const col = columnsRef.current.find((c) => c.key === columnKey);
+    if (!col) return;
+    setDetail(null);
+    setCreating({ ...newBookingSeedFromAgendaCell(col, time), selectedDurationMin, quick: true });
+  }, []);
+
+  const onResize = useCallback((id: string, end: string) => {
+    const booking = bookingsRef.current.get(id);
+    if (!booking || rescheduleDecision(booking.status).kind === 'recreate') return;
+    setResizeAsk({ booking, end });
+  }, []);
+
   const onEmptyPress = useCallback((columnKey: string, time: string) => {
     const col = columnsRef.current.find((c) => c.key === columnKey);
     if (!col) return;
     setDetail(null);
-    setCreating(newBookingSeedFromAgendaCell(col, time));
+    setCreating({ ...newBookingSeedFromAgendaCell(col, time), quick: true });
   }, []);
 
   const onPressStart = useCallback((id: string, e: React.PointerEvent) => {
     lastGridPressAt = Date.now();
     if (e.pointerType === 'mouse' && e.button !== 0) return;
     const booking = bookingsRef.current.get(id);
-    if (!booking) return;
+    if (!booking || rescheduleDecision(booking.status).kind === 'recreate' || saving) return;
     durationRef.current = bookingDurationOf(booking, services.find((s) => s.id === booking.serviceId), 30);
     geometryRef.current = readGeometry();
     interactionRef.current = reduceInteraction(interactionRef.current, {
       type: 'down', id, at: { x: e.clientX, y: e.clientY },
     }).state;
     try { (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId); } catch { /* noop */ }
-  }, [readGeometry, services]);
+  }, [readGeometry, services, saving]);
 
   const onPressMove = useCallback((id: string, e: React.PointerEvent) => {
     const state = interactionRef.current;
@@ -1077,7 +1165,7 @@ export default function AgendaPage() {
     );
     setSaving(false);
     if (!res.ok) {
-      setDropError(res.message || 'Não foi possível reagendar.');
+      setDropError(res.status === 409 ? 'Esse horário acabou de ficar indisponível. Escolha outro horário.' : res.message || 'Não foi possível reagendar.');
       return;
     }
     const decision = rescheduleDecision(booking.status);
@@ -1591,6 +1679,8 @@ export default function AgendaPage() {
                       onPressCancel={onPressCancel}
                       onBlockClick={onBlockClick}
                       onEmptyPress={onEmptyPress}
+                      onRangeSelect={onRangeSelect}
+                      onResize={onResize}
                       startMinute={grid.start}
                       endMinute={grid.end}
                     />
@@ -1664,6 +1754,25 @@ export default function AgendaPage() {
         </div>
       </div>
 
+      {resizeAsk && <Drawer open title="Confirmar duração" onClose={() => !saving && setResizeAsk(null)} width="max-w-lg">
+        <div className="p-5 space-y-3">
+          <p className="font-semibold">{resizeAsk.booking.time}–{resizeAsk.end} · {timeToMin(resizeAsk.end) - timeToMin(resizeAsk.booking.time)} min</p>
+          <p className="text-sm">O serviço não será alterado. Somente este atendimento muda.</p>
+          {dropError && <p role="alert" className="text-red-600 text-sm">{dropError}</p>}
+          <div className="flex gap-2">
+            <Button disabled={saving} onClick={async () => {
+              if (saving) return;
+              setSaving(true); setDropError('');
+              const res = await apiSend('/api/bookings', 'PATCH', { businessId, id: resizeAsk.booking.id, resizeEnd: resizeAsk.end }, { scope: 'action', area: 'Agenda' });
+              setSaving(false);
+              if (!res.ok) { setDropError(res.status === 409 ? 'Esse horário acabou de ficar indisponível. Escolha outro fim.' : res.message); return; }
+              setResizeAsk(null); void load();
+            }}>{saving ? 'Salvando…' : 'Confirmar'}</Button>
+            <Button variant="secondary" disabled={saving} onClick={() => setResizeAsk(null)}>Cancelar</Button>
+          </div>
+        </div>
+      </Drawer>}
+
       {/* Confirmação explícita do drop — nada acontece em silêncio */}
       {dropAsk && (
         <Drawer open onClose={() => !saving && setDropAsk(null)} title="Confirmar reagendamento" width="max-w-lg">
@@ -1716,12 +1825,14 @@ export default function AgendaPage() {
           pros={pros}
           horizonDays={horizonDays}
           timezone={bizTz}
+          quick={creating.quick}
           initial={{
             name: creating.name || '', phone: creating.phone || '',
             contactId: creating.contactId, serviceId: creating.serviceId,
             date: creating.date || focus,
             time: creating.time,
             professionalId: creating.professionalId,
+            selectedDurationMin: creating.selectedDurationMin,
           }}
           onClose={() => setCreating(null)}
           onCreated={load}

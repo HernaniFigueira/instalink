@@ -34,7 +34,7 @@ interface Contact {
   lastInteraction: string;
 }
 
-export function NewBookingSheet({ businessId, services, pros, timezone, initial, onClose, onCreated }: {
+export function NewBookingSheet({ businessId, services, pros, timezone, initial, quick = false, onClose, onCreated }: {
   businessId: string;
   services: Service[];
   pros: Professional[];
@@ -42,11 +42,13 @@ export function NewBookingSheet({ businessId, services, pros, timezone, initial,
   horizonDays: number;
   /** A2-B5 (F9): fuso do negócio — "hoje" da lista de dias (opcional; ''/ausente = default). */
   timezone?: string;
+  /** Grade Dia/Semana: formulário compacto, mesmos campos e mesma operação canônica. */
+  quick?: boolean;
   /** Cliente já definido (ex.: aberto a partir do CRM) — pula a busca. */
   initial?: {
     contactId?: string; name: string; phone: string; email?: string;
     /** A3.4: agenda pré-preenchida ao clicar num horário vago da grade. */
-    date?: string; time?: string; professionalId?: string; serviceId?: string;
+    date?: string; time?: string; professionalId?: string; serviceId?: string; selectedDurationMin?: number;
   };
   onClose: () => void;
   onCreated: () => void;
@@ -80,6 +82,8 @@ export function NewBookingSheet({ businessId, services, pros, timezone, initial,
   const [date, setDate] = useState(initial?.date || '');
   const [time, setTime] = useState(initial?.time || '');
   const [note, setNote] = useState('');
+  const [staffDuration, setStaffDuration] = useState<number | ''>(initial?.selectedDurationMin || '');
+  const [advanced, setAdvanced] = useState(!quick);
   // FASE 2 · P6 — veterinária: pet do tutor selecionado (paciente da agenda).
   const [pets, setPets] = useState<Pet[]>([]);
   const [isVet, setIsVet] = useState(false);
@@ -121,9 +125,9 @@ export function NewBookingSheet({ businessId, services, pros, timezone, initial,
   const initialBookingSnapshot = useRef(JSON.stringify({
     query: '', contactId: initial?.contactId || '', name: initial?.name || '', phone: initial?.phone || '', email: initial?.email || '',
     serviceId: presetServiceId, proId: initial?.professionalId || '', date: initial?.date || '', time: initial?.time || '',
-    note: '', petId: '', fitInOpen: false, fitInTime: initial?.time || '', repeat: false, occurrences: [],
+    note: '', staffDuration: initial?.selectedDurationMin || '', petId: '', fitInOpen: false, fitInTime: initial?.time || '', repeat: false, occurrences: [],
   }));
-  const bookingSnapshot = JSON.stringify({ query, contactId, name, phone, email, serviceId, proId, date, time, note, petId, fitInOpen, fitInTime, repeat, occurrences });
+  const bookingSnapshot = JSON.stringify({ query, contactId, name, phone, email, serviceId, proId, date, time, note, staffDuration, petId, fitInOpen, fitInTime, repeat, occurrences });
   const bookingDirty = !created && bookingSnapshot !== initialBookingSnapshot.current;
   const wholeOverlayDirty = bookingDirty || clientPersistence.dirty;
   const overlayGuard = {
@@ -196,7 +200,7 @@ export function NewBookingSheet({ businessId, services, pros, timezone, initial,
     // profissional, ele permanece selecionado; se não existe, sai.
     const intended = intendedTime.current;
     const professionalQuery = activeProId ? `&professionalId=${encodeURIComponent(activeProId)}` : '';
-    fetch(`/api/bookings?mode=slots-admin&businessId=${businessId}&serviceId=${serviceId}&date=${date}${professionalQuery}`)
+    fetch(`/api/bookings?mode=slots-admin&internalSnap=5&businessId=${businessId}&serviceId=${serviceId}&date=${date}${professionalQuery}`)
       .then(async (r) => {
         const d = await r.json();
         if (mySeq !== slotSeq.current) return;
@@ -331,6 +335,7 @@ export function NewBookingSheet({ businessId, services, pros, timezone, initial,
     return {
       businessId, asOwner: true, customerName: name, customerPhone: phone, customerEmail: email,
       contactId: contactId || undefined, serviceId, professionalId: activeProId, date, time, note,
+      ...(staffDuration !== '' && !repeat ? { staffDurationMin: staffDuration } : {}),
       // FASE 2 · P6 — pet escolhido (o servidor revalida na unidade).
       ...(isVet && petId ? { petId } : {}),
       ...(repeat ? { series: { requestId: requestId.current, occurrences: rows } } : {}),
@@ -421,7 +426,7 @@ export function NewBookingSheet({ businessId, services, pros, timezone, initial,
       sideDismissGuard={{ ...clientPersistence, context: 'new-client' }}
       title="Novo agendamento"
       subtitle="Paciente → serviço → data e horário → confirmação"
-      width={WORKSPACE_SHEET_SIZES.standard}
+      width={quick && !advanced ? WORKSPACE_SHEET_SIZES.compact : WORKSPACE_SHEET_SIZES.standard}
       /* §19–25 — mesmo overlay: os dois painéis usam presets oficiais; em
          viewport estreita o cadastro ocupa a faixa sem comprimir agendamento. */
       side={registerOpen ? (
@@ -555,6 +560,12 @@ export function NewBookingSheet({ businessId, services, pros, timezone, initial,
             </Select>
           </Field>
 
+          <Field label="Duração deste atendimento (min)" hint={`Serviço sugere ${service?.durationMin || '—'} min; deixe vazio para usar o padrão`}>
+            <Input type="number" min="5" max="720" step="5" aria-label="Duração deste atendimento em minutos"
+              value={staffDuration} disabled={saving || reviewing || repeat}
+              onChange={(e) => setStaffDuration(e.target.value === '' ? '' : Number(e.target.value))} />
+          </Field>
+
           {service && eligiblePros.length > 1 && (
             <Field label="Profissional" hint="Opcional — em branco a agenda equilibra a equipe automaticamente">
               <Select value={activeProId} disabled={saving || reviewing} onChange={(e) => setProId(e.target.value)}>
@@ -586,7 +597,7 @@ export function NewBookingSheet({ businessId, services, pros, timezone, initial,
                       : 'Nenhum horário disponível.'}
                 </Notice>
               ) : (
-                <div className="flex flex-wrap gap-1.5">
+                <div className="flex flex-wrap gap-1.5 max-h-36 overflow-y-auto">
                   {slots.map((t) => (
                     <button key={t} type="button" disabled={saving || reviewing} onClick={() => setTime(t)}
                       aria-pressed={time === t}
@@ -602,7 +613,7 @@ export function NewBookingSheet({ businessId, services, pros, timezone, initial,
           {/* A3.4 · Bloco 4 — ENCAIXE. Fica DEPOIS da grade: primeiro o que
               está livre de verdade; o encaixe é a exceção, e o conflito é dito
               com nome e horário antes de qualquer coisa ser gravada. */}
-          {date && serviceId && !repeat && (
+          {advanced && date && serviceId && !repeat && (
             <div className="rounded-lg border border-[var(--border)] bg-[var(--surface-2)] px-3.5 py-3">
               {!fitInOpen ? (
                 <div className="flex flex-wrap items-center justify-between gap-2">
@@ -661,15 +672,16 @@ export function NewBookingSheet({ businessId, services, pros, timezone, initial,
             </div>
           )}
 
-          <Checkbox label="Repetir este agendamento" hint="Séries (semanal, quinzenal…) com conferência ocorrência por ocorrência."
-            checked={repeat} disabled={saving || reviewing} onChange={setRepeat} />
+          {quick && !advanced && <Button type="button" size="sm" variant="secondary" onClick={() => setAdvanced(true)}>Mais opções · encaixe, recorrência e observação</Button>}
+          {advanced && <Checkbox label="Repetir este agendamento" hint="Séries (semanal, quinzenal…) com conferência ocorrência por ocorrência."
+            checked={repeat} disabled={saving || reviewing} onChange={setRepeat} />}
           {repeat && <BookingRecurrence first={{ date, time, professionalId: activeProId }} rows={occurrences} preview={preview}
             pros={eligiblePros} min={today} max={maxDate} busy={saving || reviewing}
             onChange={changeOccurrences} onReview={review} onDisable={() => setRepeat(false)} />}
 
-          <Field label="Observação" hint="Opcional — fica no histórico do atendimento">
+          {advanced && <Field label="Observação" hint="Opcional — fica no histórico do atendimento">
             <Input value={note} onChange={(e) => setNote(e.target.value)} maxLength={300} placeholder="Ex: paciente solicitou um retorno" />
-          </Field>
+          </Field>}
 
           {service && date && (time || repeat) && <section aria-label="Revise o agendamento" className="rounded-lg bg-[var(--surface-3)] p-4 text-sm space-y-1">
             <h3 className="font-semibold">Confira antes de confirmar</h3><p>{name || 'Cadastro selecionado'} · {service.name}</p><p>{date.split('-').reverse().join('/')} às {time || 'Horários da recorrência'}</p><p className="text-xs text-[var(--text-muted)]">{eligiblePros.find(p => p.id === activeProId)?.name || 'Distribuição automática entre profissionais elegíveis'}{repeat ? ` · ${occurrences.length} ocorrências` : ''}</p>

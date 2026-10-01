@@ -120,6 +120,8 @@ export interface CreateBookingParams {
   date: string;
   time: string;
   actor: BookingActor;
+  /** Explicit staff-only duration override; server validates and freezes it. */
+  staffDurationMin?: number;
   /** Identidade do cliente (conta logada ou dados informados no chat). */
   customer: { id: string; name: string; phone: string; email?: string } | null;
   /** Contato do CRM escolhido no painel (dono) — nome/fone vêm dele. */
@@ -204,14 +206,19 @@ export function createBookingTx(d: DB, p: CreateBookingParams): {
   // ═══════════════════════════════════════════════════════════════
   // AGENDA TEMPORAL 2.0 (B1) — JANELA CANÔNICA NA CRIAÇÃO
   // ═══════════════════════════════════════════════════════════════
-  // A duração NUNCA vem do navegador: o servidor resolve o default do serviço
-  // e congela o snapshot junto do instante inicial/final e do fuso da clínica.
+  // O servidor resolve o default do serviço ou valida override explícito da
+  // equipe; payload público jamais escolhe duração. Congela a janela na criação.
   // Horário inexistente/ambíguo (DST gap/fold) é recusado — nunca reinterpretado.
+  const requestedDuration = p.staffDurationMin;
+  if (requestedDuration !== undefined && (!isOwner || !Number.isInteger(requestedDuration) || requestedDuration < 5 || requestedDuration > 720 || requestedDuration % 5 !== 0 || !!p.series)) {
+    throw txError('Duração inválida para este agendamento.', 400);
+  }
+  const duration = requestedDuration ?? service.durationMin;
   let window: BookingWindow;
   try {
     window = buildBookingWindow({
       date: p.date, time: p.time,
-      durationMin: service.durationMin,
+      durationMin: duration,
       timeZone: btz,
     });
   } catch (e: any) {
@@ -249,7 +256,8 @@ export function createBookingTx(d: DB, p: CreateBookingParams): {
     dateISO: p.date,
     weekday: weekdayOf(p.date),
     serviceId: service.id,
-    durationMin: service.durationMin,
+    durationMin: duration,
+    startStepMin: isOwner ? 5 : undefined,
     professionalId: isOwner ? ownerPro : '',
     eligibleProIds: slotEligibleProfessionalIds(service as any, d.professionals.filter((x) => x.businessId === businessId)),
     nowHM: p.date === today ? nowHM(nowDate, btz) : '',
