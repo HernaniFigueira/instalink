@@ -1,5 +1,21 @@
 # GoDoutor — Histórico
 
+## 2026-10-01 — Agenda Temporal 2.0 · Etapa B1 — Fundação Temporal do Booking
+
+> Branch `arena/01a0f827-instalink` (base `main` em `cfc6263`) — **sem merge**.
+> Nome do registro: **"Agenda Temporal 2.0 — Fundação Temporal B1"** (não é a Agenda 2.0 inteira).
+
+- **Domínio:** `Booking` ganhou `startAt`, `endAt`, `durationMin`, `timeZone` (IANA) e `temporalSource` (`native` | `legacy_inferred`), de forma **aditiva**. A autoridade temporal é `startAt + endAt`; `date`/`time` continuam existindo como **projeção compatível** do mesmo `businessTimezone`, gravadas na **mesma escrita atômica** — sem conversão por rota.
+- **Novo módulo puro** `src/lib/booking-temporal.ts` (Intl, zero dependência): janela canônica, conversão instante ↔ projeção local por IANA, recusa explícita de DST gap/fold com erro tipado, congelamento determinístico da inferência legada e resolução da duração.
+- **Todas as criações congelam a janela** no caminho único `createBookingTx` (agenda interna, página pública, cliente, agente, lead→booking, API externa, séries). O **servidor** resolve a duração; payload do navegador nunca é autoridade. Fuso vem do `businessTimezone` da clínica (nunca do navegador, nunca de `process.env.TZ`).
+- **Editar `Service.durationMin` não move histórico:** `normalizeDB` passou a impor invariantes de coerência temporal (determinístico, sem dependência de fuso do servidor, sem inferência na leitura) e as escritas que mudam duração/estado congelam a inferência legada **antes** da mudança.
+- **Ocupação/slots** usam a janela/snapshot do próprio Booking; a duração atual do serviço só entra no **fallback legado explícito**. `slotMin` continua sendo cadência de início (não duração) e o buffer permanece **fora** da duração do atendimento.
+- **Reagendamento** reescreve a janela atomicamente (move) ou cria um novo Booking com janela nova quando o estado é terminal, preservando a janela do registro antigo. Série: cada ocorrência com janela própria, mantendo `seriesId`/idempotência.
+- **Sem** biblioteca de calendário, **sem** troca da grade, **sem** redesenho visual, **sem** backfill remoto. Nenhum novo estado de workflow; APIs permanecem compatíveis.
+- **Validação:** `npm run build` OK · `npm run typecheck` 0 · `npx vitest run` **2862 passed / 4 failed** (baseline pré-existente e intocada: 3× `a34-instagram` + 1× `automation-audit-p4`) · suíte focada B1 35/35.
+- **Homologação real** (build de produção, banco descartável, `/login` real, Chromium real): **34/34 fluxos**, 0 falhas, 0 5xx, 0 erros de console — incluindo a prova-mãe **40 → 60 sem mover o histórico** e o **novo booking com 60**, persistência após recarga, cancelamento, reagendamento, série, legado congelado, slots reais (cadência, buffer e cancelado) e personas Proprietário/Recepção/Profissional em 1366/1024/390. Doc: `docs/AUTO-HOMOLOGACAO-AGENDA-TEMPORAL-B1.md`; screenshots: `docs/evidence/agenda-temporal-b1/`.
+- **Estado:** Agenda Temporal 2.0 permanece **EM ANDAMENTO**; **próxima etapa é B2** (recursos Sala/Equipamento, buffers before/after, separação definitiva snap × `slotMin`).
+
 ## 2026-09-30 — PR #46 Fechamento de Bloqueadores P0 (P0.1, P0.2, P0.3)
 
 > Fechamento dos bloqueadores P0 na branch `arena/01a0eda6-instalink` para homologação final da PR #46.
