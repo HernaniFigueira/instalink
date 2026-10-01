@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { requireBusiness } from '@/lib/access';
+import { canAccessLead, isProfessionalScoped } from '@/lib/data-scope';
 import { bookLead } from '@/lib/pipeline';
 import { updateDB } from '@/lib/db';
 import { pushAudit } from '@/lib/audit';
@@ -24,7 +25,7 @@ export async function POST(
     }
 
     const lead = db.leads.find((l) => l.id === params.id && l.businessId === businessId);
-    if (!lead) {
+    if (!lead || !canAccessLead(db, guard.ctx, lead)) {
       return NextResponse.json({ error: 'Lead não encontrado.' }, { status: 404 });
     }
 
@@ -44,7 +45,8 @@ export async function POST(
         leadId: lead.id,
         date: String(body.date || '').trim(),
         time: String(body.time || '').trim(),
-        professionalId: body.professionalId || undefined,
+        // Quem atende só agenda para si (o id do corpo não é prova de nada).
+        professionalId: (isProfessionalScoped(guard.ctx) ? guard.ctx.professionalScope : body.professionalId) || undefined,
         note: body.note,
         actor,
       });

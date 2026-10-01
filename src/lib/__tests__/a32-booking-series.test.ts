@@ -221,9 +221,9 @@ describe('A3.2 — série atômica, identidade e operações normais', () => {
     let d = await readDB(); expect(d.bookings[0].seriesId).toBe(before[0].seriesId); expect(d.bookings.slice(1)).toEqual(before.slice(1));
     expect((await PATCH(req('PATCH', { businessId: 'b1', id, date: '2032-01-01', time: '14:00' }))).status).toBe(400);
     expect((await PATCH(req('PATCH', { businessId: 'b1', id, date: '2026-09-17', time: '14:00' }))).status).toBe(400);
-    await PATCH(req('PATCH', { businessId: 'b1', id, status: 'completed' }));
+    await PATCH(req('PATCH', { businessId: 'b1', id, status: 'cancelled' }));
     expect((await PATCH(req('PATCH', { businessId: 'b1', id, date: '2028-01-01', time: '14:00' }))).status).toBe(200);
-    d = await readDB(); expect(d.bookings).toHaveLength(4); expect(d.bookings[3].seriesId).toBe(before[0].seriesId); expect(d.bookings[0].status).toBe('completed');
+    d = await readDB(); expect(d.bookings).toHaveLength(4); expect(d.bookings[3].seriesId).toBe(before[0].seriesId); expect(d.bookings[0].status).toBe('cancelled');
   });
   it('cancelar futuras preserva passadas e terminais, registra histórico, é idempotente', async () => {
     await POST(req('POST', series()));

@@ -20,7 +20,8 @@ describe('pós-homologação manual — atendimento, anamnese e proteção de tr
     expect(checkIn![0]).toContain('onChanged();');
     expect(checkIn![0]).toContain('setNotice(undo ?');
     expect(checkIn![0]).not.toContain('onClose()');
-    expect(bookingDetail).toContain('<StatusBadge tone="emerald">Chegou</StatusBadge>');
+    // O selo vem do rótulo CANÔNICO do workflow (Chegou / Em atendimento).
+    expect(bookingDetail).toContain("tone={wf.state === 'in_care' ? 'blue' : 'emerald'}>{wf.label}</StatusBadge>");
     expect(bookingDetail).toContain('Desfazer o check-in deste atendimento');
   });
 

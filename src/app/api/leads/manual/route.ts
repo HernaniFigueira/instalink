@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { updateDB } from '@/lib/db';
 import { requireBusiness } from '@/lib/access';
+import { isProfessionalScoped } from '@/lib/data-scope';
 import { pushAudit } from '@/lib/audit';
 import { ingestLead } from '@/lib/pipeline';
 import { enqueueWebhookTx, deliverWebhookIds } from '@/lib/webhooks';
@@ -26,6 +27,10 @@ export async function POST(req: NextRequest) {
     const businessId = String(body.businessId || '').trim();
     const guard = await requireBusiness(req, businessId, 'leads');
     if (!guard.ok) return guard.res;
+    // Criar oportunidade grava/atualiza o CRM da unidade: não é ato de quem tem escopo próprio.
+    if (isProfessionalScoped(guard.ctx)) {
+      return NextResponse.json({ error: 'Oportunidades novas são registradas pela recepção.' }, { status: 403 });
+    }
 
     const name = String(body.name || '').trim().slice(0, 80);
     const phone = String(body.phone || '').trim().slice(0, 25);

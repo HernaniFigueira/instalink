@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { requireBusiness, scopeInfo } from '@/lib/access';
 import { can } from '@/lib/access';
+import { isProfessionalScoped, scopedDbView } from '@/lib/data-scope';
 import { summarizeDay, pendingClosures } from '@/lib/booking-ops';
 import { integrationStatus } from '@/lib/whatsapp';
 import { enabledFeatureIds } from '@/lib/features';
@@ -43,7 +44,11 @@ export async function GET(req: NextRequest) {
   const period = parsePeriodParam(req.nextUrl.searchParams.get('period'));
   const guard = await requireBusiness(req, businessId, 'dashboard');
   if (!guard.ok) return guard.res;
-  const db = guard.db;
+  // ESCOPO DE DADOS (Workflow + Permissões): quem atende recebe TODOS os
+  // agregados (CRM, oportunidades, conversas, pendências, retornos, inteligência)
+  // calculados sobre a visão recortada — nunca sobre a unidade inteira. Eventos
+  // de página (visitas/cliques) são do negócio, sem dado pessoal, e ficam como estão.
+  const db = isProfessionalScoped(guard.ctx) ? scopedDbView(guard.db, guard.ctx.business.id, guard.ctx) : guard.db;
   const business = guard.ctx.business;
   // Financeiro só aparece para quem tem a permissão (e some do payload).
   const showMoney = can(guard.ctx, 'financeiro');

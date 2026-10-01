@@ -26,6 +26,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { updateDB } from '@/lib/db';
 import { requireBusiness } from '@/lib/access';
+import { isProfessionalScoped } from '@/lib/data-scope';
 import { pushAudit } from '@/lib/audit';
 import { effectiveTimezone, todayISO } from '@/lib/tz';
 import { encounterInScope, encountersForCustomer } from '@/lib/encounters';
@@ -45,8 +46,11 @@ const MAX_PART_SIZE = 5000;
 
 export async function GET(req: NextRequest) {
   const businessId = String(req.nextUrl.searchParams.get('businessId') || '');
-  const guard = await requireBusiness(req, businessId, 'clientes');
+  const guard = await requireBusiness(req, businessId, 'clientes_exportar');
   if (!guard.ok) return guard.res;
+  if (isProfessionalScoped(guard.ctx)) {
+    return NextResponse.json({ error: 'A saída completa da base é de quem administra a unidade.' }, { status: 403 });
+  }
 
   const role = String(guard.ctx.role || '');
   if (!FULL_EXPORT_ROLES.includes(role.toUpperCase())) {

@@ -3,6 +3,7 @@ import { randomUUID } from 'node:crypto';
 import { readDB, updateDB } from '@/lib/db';
 import { requireBusiness } from '@/lib/access';
 import { sanitizePet, validatePet, petsOfTutor } from '@/lib/pets';
+import { canAccessContact, canAccessPet, isProfessionalScoped, scopePets } from '@/lib/data-scope';
 import type { Pet } from '@/lib/types';
 
 // ═══════════════════════════════════════════════════════════════
@@ -20,7 +21,8 @@ export async function GET(req: NextRequest) {
   if (!guard.ok) return guard.res;
   const db = guard.db;
   const business = db.businesses.find((b) => b.id === businessId);
-  const all = db.pets.filter((p) => p.businessId === businessId && (!tutorId || p.tutorId === tutorId));
+  // ESCOPO DE DADOS: só os pets com vínculo real (agendamento/atendimento).
+  const all = scopePets(db, guard.ctx, db.pets.filter((p) => p.businessId === businessId && (!tutorId || p.tutorId === tutorId)));
   return NextResponse.json({
     vet: business?.clinicType === 'veterinaria',
     clinicType: business?.clinicType || 'geral',
@@ -35,6 +37,12 @@ export async function POST(req: NextRequest) {
     const guard = await requireBusiness(req, businessId, ['clientes', 'atendimento']);
     if (!guard.ok) return guard.res;
     const action = String(body.action || '');
+    const scoped = isProfessionalScoped(guard.ctx);
+    // Cadastrar/remover paciente é da recepção/gestão; quem atende só ajusta
+    // os pacientes que atende (nunca cria nem apaga).
+    if (scoped && action !== 'update') {
+      return NextResponse.json({ error: 'O cadastro de pacientes é feito pela recepção. Você ajusta os pacientes dos seus atendimentos.' }, { status: 403 });
+    }
 
     if (action === 'create' || action === 'update') {
       const tutorId = String(body.tutorId || '');
@@ -45,9 +53,12 @@ export async function POST(req: NextRequest) {
       const saved = await updateDB((db) => {
         const now = new Date().toISOString();
         const tutor = db.contacts.find((c) => c.id === tutorId && c.businessId === businessId);
-        if (!tutor) throw Object.assign(new Error('Tutor não encontrado nesta unidade.'), { status: 404 });
+        if (!tutor || !canAccessContact(db, guard.ctx, tutor)) throw Object.assign(new Error('Tutor não encontrado nesta unidade.'), { status: 404 });
         const id = String((body.pet && body.pet.id) || '');
         const existing = id ? db.pets.find((p) => p.id === id && p.businessId === businessId) : undefined;
+        if (scoped && (!existing || !canAccessPet(db, guard.ctx, existing))) {
+          throw Object.assign(new Error('Pet não encontrado.'), { status: 404 });
+        }
         if (existing) {
           const clean = sanitizePet({ id: existing.id, businessId, tutorId }, body.pet || {});
           Object.assign(existing, clean, { updatedAt: now });

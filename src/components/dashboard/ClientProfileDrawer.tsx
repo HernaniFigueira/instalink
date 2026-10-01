@@ -70,6 +70,8 @@ export interface Person360 {
     professional?: string; rescheduleCount?: number; previousId?: string;
     // FASE 2 · P2 — "Iniciar atendimento" precisa dos vínculos reais.
     serviceId?: string; professionalId?: string;
+    /** Etapa canônica do atendimento (scheduled|arrived|in_care|finalized|…). */
+    workflowState?: string;
   }>;
   leads: Array<{ id: string; origin: string; status: string; stageId: string; stageName: string; interest: string; action: string; createdAt: string; stageHistory?: any[]; priority?: string; assignedUserId?: string; lastInteraction?: string }>;
   conversations?: Array<{ id: string; channel: string; status: string; at: string; preview: string; unread: number }>;
@@ -529,9 +531,11 @@ export function ClientProfileDrawer({ person, businessId, pipeline, canFunil, on
           <Button variant="ghost" size="sm" onClick={() => { setTab('notes'); focusFieldSoon('client-note-draft'); }}>
             <Icon n="pencil" size={14} /> Registrar nota
           </Button>
-          {canEncounter && nextBooking && (
+          {/* Workflow: só quem JÁ CHEGOU (ou está em atendimento) abre o
+              registro; antes disso a chegada é registrada na Agenda. */}
+          {canEncounter && nextBooking && (nextBooking.workflowState === 'arrived' || nextBooking.workflowState === 'in_care') && (
             <Button variant="secondary" size="sm" onClick={() => openEncounter({ bookingId: nextBooking.id })}>
-              <Icon n="fileText" size={14} /> Iniciar atendimento
+              <Icon n="fileText" size={14} /> {nextBooking.workflowState === 'in_care' ? 'Abrir atendimento' : 'Iniciar atendimento'}
             </Button>
           )}
           <Button variant="ghost" size="sm" onClick={() => {

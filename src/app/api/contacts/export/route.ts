@@ -8,19 +8,25 @@
 //   ?marketing=1    só quem aceita receber promoções
 //   ?max=2000       teto de linhas (o CSV não vira despejo gigante por acidente)
 //
-// A permissão é a de Clientes; o foco é sempre a unidade autenticada — não
+// A permissão é a própria `clientes_exportar` (Proprietário/Administrador); o foco é sempre a unidade autenticada — não
 // existe exportação global por aqui (o console do master tem o seu caminho).
 import { NextRequest, NextResponse } from 'next/server';
 import { updateDB } from '@/lib/db';
 import { requireBusiness } from '@/lib/access';
+import { isProfessionalScoped } from '@/lib/data-scope';
 import { pushAudit } from '@/lib/audit';
 import { EXPORT_LIMIT, filterContactsForExport } from '@/lib/client-export';
 import { exportContactsCSV } from '@/lib/client-import';
 
 export async function GET(req: NextRequest) {
   const businessId = String(req.nextUrl.searchParams.get('businessId') || '');
-  const guard = await requireBusiness(req, businessId, 'clientes');
+  // Levar a base INTEIRA embora é capacidade própria (não vem de "clientes") e
+  // exige escopo da unidade: profissional recortado nunca exporta o CRM.
+  const guard = await requireBusiness(req, businessId, 'clientes_exportar');
   if (!guard.ok) return guard.res;
+  if (isProfessionalScoped(guard.ctx)) {
+    return NextResponse.json({ error: 'A exportação da base de clientes é de quem administra a unidade.' }, { status: 403 });
+  }
 
   const q = String(req.nextUrl.searchParams.get('q') || '');
   const marketingOnly = req.nextUrl.searchParams.get('marketing') === '1';

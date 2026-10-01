@@ -672,6 +672,12 @@ export interface Booking {
   /** Quem registrou o check-in (memberId) e o rótulo legível do autor. */
   checkedInBy?: string;
   checkedInByName?: string;
+  /**
+   * Workflow + Permissões — CAMPO DERIVADO de leitura (nunca persistido nem
+   * aceito na escrita): etapa canônica + ações válidas para o papel/escopo de
+   * QUEM LÊ, calculadas no servidor (lib/workflow-view). A tela só desenha isto.
+   */
+  workflow?: { state: 'scheduled' | 'arrived' | 'in_care' | 'finalized' | 'cancelled' | 'no_show'; label: string; allowed: string[] };
   /** P6 · veterinária — pet atendido ('' quando não se aplica). Aditivo. */
   petId?: string;
   /**
@@ -1577,7 +1583,12 @@ export type PermissionId =
   // A3.4 · Bloco 5 — registro do atendimento (evolução, orientações e
   // histórico do serviço prestado). Dado próprio: NÃO vem junto com
   // "clientes" e não é dado por padrão para quem só opera o balcão.
-  | 'atendimento';
+  | 'atendimento'
+  // Workflow + Permissões — saída/entrada da base INTEIRA de clientes. NÃO vêm
+  // junto com "clientes" (que só dá acesso individual conforme o escopo).
+  // Padrão: Proprietário e Administrador. Exigem também escopo da unidade
+  // (nunca um Profissional recortado), checado no servidor.
+  | 'clientes_exportar' | 'clientes_importar';
 
 export interface BusinessMember {
   id: ID;
@@ -2066,6 +2077,8 @@ export type AuditAction =
   | 'contact.identity_updated'
   // A3.4 · Bloco 4 — operação do dia (check-in e fila de espera)
   | 'booking.checkin' | 'booking.checkin_undo'
+  // Workflow + Permissões — mudança de etapa do atendimento (sem texto livre/clínico)
+  | 'booking.status_changed'
   | 'queue.created' | 'queue.updated' | 'queue.removed' | 'queue.booked'
   // A3.4 · Bloco 5 — registro do atendimento
   | 'encounter.created' | 'encounter.updated' | 'encounter.finalized'

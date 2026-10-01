@@ -8,6 +8,7 @@ import {
   pauseAi, resumeAi, setAgentState, agentStateLabel,
 } from '@/lib/inbox/assistant-ops';
 import { requireBusiness } from '@/lib/access';
+import { canAccessContact, canAccessConversation, isProfessionalScoped } from '@/lib/data-scope';
 import { resolveConversationContact, conversationRegistered } from '@/lib/conversation-identity';
 import { integrationStatus, serverCredentialsConfigured } from '@/lib/whatsapp';
 import { deliverWhatsappMessage } from '@/lib/whatsapp-cloud-api';
@@ -42,7 +43,9 @@ export async function GET(req: NextRequest) {
   const id = req.nextUrl.searchParams.get('id') || '';
   if (id) {
     const conv = db.conversations.find((c) => c.id === id && c.businessId === businessId);
-    if (!conv) return NextResponse.json({ error: 'Conversa não encontrada.' }, { status: 404 });
+    // ESCOPO DE DADOS: conversa fora do vínculo do profissional = 404 (nunca 403:
+    // não confirma que o id existe).
+    if (!conv || !canAccessConversation(db, ctx, conv)) return NextResponse.json({ error: 'Conversa não encontrada.' }, { status: 404 });
 
     const messages = db.messages
       .filter((m) => m.conversationId === conv.id)
@@ -116,7 +119,7 @@ export async function GET(req: NextRequest) {
   const status = req.nextUrl.searchParams.get('status') || '';
   const channel = req.nextUrl.searchParams.get('channel') || '';
   const conversations = db.conversations
-    .filter((c) => c.businessId === businessId && (!status || c.status === status) && (!channel || c.channel === channel))
+    .filter((c) => c.businessId === businessId && canAccessConversation(db, ctx, c) && (!status || c.status === status) && (!channel || c.channel === channel))
     .sort((a, b) => (a.lastMessageAt < b.lastMessageAt ? 1 : -1))
     .map((c: Conversation) => ({
       ...c,
@@ -171,6 +174,17 @@ export async function POST(req: NextRequest) {
     const conversationId = String(body.conversationId || '');
     const action = String(body.action || '');
 
+    // ESCOPO DE DADOS: toda ação (vincular, assumir, responder) exige que a
+    // conversa esteja no escopo de quem opera — por id, nunca por telefone solto.
+    if (isProfessionalScoped(ctx)) {
+      const target = conversationId
+        ? db.conversations.find((c) => c.id === conversationId && c.businessId === businessId)
+        : undefined;
+      if (!target || !canAccessConversation(db, ctx, target)) {
+        return NextResponse.json({ error: 'Conversa não encontrada.' }, { status: 404 });
+      }
+    }
+
     // ── LINK_CONTACT (§11–15 · cadastro rápido de "Contato novo") ──
     // Vínculo EXPLÍCITO conversa ↔ contato existente da MESMA unidade.
     // Usado pelo CTA "Cadastrar cliente" de Conversas depois que o cadastro
@@ -182,6 +196,7 @@ export async function POST(req: NextRequest) {
         const conv = d.conversations.find((c) => c.id === conversationId && c.businessId === businessId);
         const contact = d.contacts.find((c) => c.id === contactId && c.businessId === businessId);
         if (!conv || !contact) return null;
+        if (isProfessionalScoped(ctx) && !canAccessContact(d, ctx, contact)) return null;
         conv.contactId = contact.id;
         if (!conv.customerId && contact.customerId) conv.customerId = contact.customerId;
         return { conversation: conv, contact };

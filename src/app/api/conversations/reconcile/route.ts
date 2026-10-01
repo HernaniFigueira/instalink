@@ -8,6 +8,7 @@
 // nunca em leitura.
 import { NextRequest, NextResponse } from 'next/server';
 import { requireBusiness } from '@/lib/access';
+import { isProfessionalScoped } from '@/lib/data-scope';
 import { updateDB } from '@/lib/db';
 import { reconcileConversations, type ReconcileOutcome } from '@/lib/conversation-identity';
 
@@ -18,6 +19,10 @@ export async function POST(req: NextRequest) {
     // Quem opera a base de clientes/conversas pode reconciliar.
     const guard = await requireBusiness(req, businessId, ['whatsapp', 'clientes']);
     if (!guard.ok) return guard.res;
+    // Reconciliar vincula conversas da unidade inteira: é gestão, não escopo próprio.
+    if (isProfessionalScoped(guard.ctx)) {
+      return NextResponse.json({ error: 'Esta ação é de quem administra a unidade.' }, { status: 403 });
+    }
     const outcome = await updateDB((db) => reconcileConversations(db, businessId)) as ReconcileOutcome | null;
     return NextResponse.json({
       ok: true,

@@ -79,9 +79,9 @@ async function seed() {
   db.services.push({ id: 'svc-1', businessId: BIZ, name: 'Limpeza', durationMin: 60, price: 100, description: '', active: true, bookable: true, professionalIds: [], createdAt: NOW, updatedAt: NOW } as any);
   db.contacts.push({ id: 'ct-1', businessId: BIZ, name: 'Ana', phone: '11999990000', customerId: '', createdAt: NOW } as any);
   db.bookings.push(
-    { id: 'bk-1', businessId: BIZ, customerId: '', serviceId: 'svc-1', professionalId: 'pro-1', date: '2026-09-19', time: '09:00', customerName: 'Ana', customerPhone: '11999990000', status: 'confirmed', note: '', answers: [], createdAt: NOW, updatedAt: NOW, history: [] } as any,
-    { id: 'bk-2', businessId: BIZ, customerId: '', serviceId: 'svc-1', professionalId: 'pro-2', date: '2026-09-19', time: '11:00', customerName: 'Outra pessoa', customerPhone: '11988887777', status: 'confirmed', note: '', answers: [], createdAt: NOW, updatedAt: NOW, history: [] } as any,
-    { id: 'bk-outra', businessId: OTHER, customerId: '', serviceId: 'svc-1', professionalId: 'pro-1', date: '2026-09-19', time: '09:00', customerName: 'De outra unidade', customerPhone: '', status: 'confirmed', note: '', answers: [], createdAt: NOW, updatedAt: NOW, history: [] } as any,
+    { id: 'bk-1', businessId: BIZ, customerId: '', serviceId: 'svc-1', professionalId: 'pro-1', date: '2026-09-19', time: '09:00', customerName: 'Ana', customerPhone: '11999990000', status: 'confirmed', checkedInAt: NOW, note: '', answers: [], createdAt: NOW, updatedAt: NOW, history: [] } as any,
+    { id: 'bk-2', businessId: BIZ, customerId: '', serviceId: 'svc-1', professionalId: 'pro-2', date: '2026-09-19', time: '11:00', customerName: 'Outra pessoa', customerPhone: '11988887777', status: 'confirmed', checkedInAt: NOW, note: '', answers: [], createdAt: NOW, updatedAt: NOW, history: [] } as any,
+    { id: 'bk-outra', businessId: OTHER, customerId: '', serviceId: 'svc-1', professionalId: 'pro-1', date: '2026-09-19', time: '09:00', customerName: 'De outra unidade', customerPhone: '', status: 'confirmed', checkedInAt: NOW, note: '', answers: [], createdAt: NOW, updatedAt: NOW, history: [] } as any,
   );
   await writeDB(db);
 }
