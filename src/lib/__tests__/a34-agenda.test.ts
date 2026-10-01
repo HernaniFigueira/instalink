@@ -52,7 +52,7 @@ describe('A3.4 · Bloco 3 — Agenda: navegação [◀][▶] e clique cria', () 
   it('clicar num horário vago abre o agendamento com dia, hora e profissional', () => {
     expect(agenda).toContain('onEmptyPress');
     expect(agenda).toContain('minuteFromOffsetY(');
-    expect(agenda).toContain('setCreating(newBookingSeedFromAgendaCell(col, time))');
+    expect(agenda).toContain('setCreating({ ...newBookingSeedFromAgendaCell(col, time), quick: true })');
     // O clique que sobra de um arraste nunca cria agendamento.
     expect(agenda).toContain('lastGridPressAt');
     expect(agenda).toContain("el.closest('button')");
