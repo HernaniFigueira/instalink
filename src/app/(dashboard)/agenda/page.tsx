@@ -46,11 +46,12 @@ import { AccessDenied, AreaLoadError, PermissionNotice, useAreaLoad, useForbidde
 import { useRevalidateOnFocus } from '@/components/dashboard/use-revalidate';
 import { bookingDurationOf, effectiveHorizonDays, needsClosure, rescheduleDecision } from '@/lib/booking-ops';
 import { queueSummary, waitLabel } from '@/lib/queue';
-import { apiGet, apiSend } from '@/lib/api-client';
+import { apiGet, apiRequest, apiSend } from '@/lib/api-client';
+import { applyBookingTemporalPatch } from '@/lib/agenda-local-update';
 import { SLOT_STATE_MESSAGE, slotState } from '@/lib/slot-states';
 import { newBookingSeedFromAgendaCell } from '@/lib/agenda-cell-prefill';
 import {
-  IDLE_INTERACTION, blockHeight, blockTop, dragPreviewLabel, dragSlotUrls, dropConfirmQuestion,
+  IDLE_INTERACTION, blockHeight, blockTop, dragPreviewLabel, dragSlotUrl, dropConfirmQuestion,
   emptyDragSlots, geometryFromRect, layoutBlocks, minuteFromOffsetY, snapGestureMinute, planDrop, reduceInteraction, withOwnSlot,
   type CellAvailability, type DragSlots, type DropColumn, type GridGeometry, type InteractionState,
   type Point,
@@ -582,6 +583,14 @@ export default function AgendaPage() {
     void loadQueue();
   }, [businessId, range.from, range.to, report, reportFeature, loadQueue]);
 
+  const loadBookingsOnly = useCallback(async () => {
+    const result = await apiGet<{ bookings?: Booking[] }>(
+      `/api/bookings?businessId=${businessId}&mode=manage&from=${range.from}&to=${range.to}&limit=500`,
+      { scope: 'area', area: 'Agenda' },
+    );
+    if (result.ok) setBookings(result.data?.bookings || []);
+  }, [businessId, range.from, range.to]);
+
   useEffect(() => { load(); }, [load]);
 
   // Estado real da agenda (P2): quem atende vê a confirmação/chegada registrada
@@ -594,6 +603,12 @@ export default function AgendaPage() {
     // lista freca — NUNCA fecha o sheet por causa de autosave/reload.
     setDetail((d) => (d ? bookings.find((b) => b.id === d.id) || d : d));
   }, [bookings]);
+
+  const applyConfirmedTemporalPatch = useCallback((patch: Partial<Booking> & Pick<Booking, 'id'>, queueChanged: boolean) => {
+    // PATCH is the authority; the UI never moves a card before confirmation.
+    setBookings((rows) => applyBookingTemporalPatch(rows, patch, range));
+    if (queueChanged) void loadQueue();
+  }, [range, loadQueue]);
 
   const activePros = useMemo(() => pros.filter((p) => p.active !== false), [pros]);
   // A2-B3 (F5): enquanto o catálogo chega, o default do produto (60) vale;
@@ -905,17 +920,12 @@ export default function AgendaPage() {
     dragSlotsRef.current = initial;
     setDrag(initial);
     const own = { date: b.date, time: b.time, professionalId: b.professionalId || '' };
-    Promise.all(dragSlotUrls(businessId, b.serviceId, dates, b.id).map(async (url, i) => {
-      try {
-        const r = await fetch(url);
-        if (!r.ok) return [dates[i], null] as const;
-        const j = await r.json();
-        return [dates[i], j] as const;
-      } catch {
-        return [dates[i], null] as const;
-      }
-    })).then((entries) => {
+    fetch(dragSlotUrl(businessId, b.serviceId, dates, b.id))
+      .then(async (res) => res.ok ? (await res.json()).days as Record<string, { slots: string[]; byPro: Record<string, string[]>; eligibleProfessionalIds: string[] }> : null)
+      .catch(() => null)
+      .then((days) => {
       if (seq !== dragSeq.current) return;
+      const entries = dates.map((d) => [d, days?.[d] || null] as const);
       const failed = entries.filter(([, j]) => !j).length;
       const next: DragSlots = {
         loading: false,
@@ -1157,10 +1167,9 @@ export default function AgendaPage() {
     setDropError('');
     // O servidor revalida tudo (disponibilidade, profissional, conflito,
     // duração, buffer, horizonte) e aplica rescheduleDecision.
-    const res = await apiSend<{ ok?: boolean; created?: boolean; moved?: boolean; reason?: string }>(
+    const res = await apiRequest<{ ok?: boolean; created?: boolean; moved?: boolean; reason?: string; booking?: Partial<Booking> & Pick<Booking, 'id'>; queueChanged?: boolean }>(
       '/api/bookings',
-      'PATCH',
-      { businessId, id: booking.id, date, time, professionalId: professionalId || undefined },
+      { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ businessId, id: booking.id, date, time, professionalId: professionalId || undefined }) },
       { scope: 'action', area: 'Agenda' },
     );
     setSaving(false);
@@ -1177,7 +1186,12 @@ export default function AgendaPage() {
         : `Atendimento movido para ${formatDateBR(date)} às ${time}.`,
     });
     window.setTimeout(() => setFlash(null), 5000);
-    load();
+    if (res.data?.booking && res.data.booking.id === booking.id) {
+      applyConfirmedTemporalPatch(res.data.booking, !!res.data.queueChanged);
+    } else {
+      // Old server / explicit terminal recreation: refresh bookings only.
+      void loadBookingsOnly();
+    }
   }
 
   function move(dir: -1 | 1) {
@@ -1763,10 +1777,16 @@ export default function AgendaPage() {
             <Button disabled={saving} onClick={async () => {
               if (saving) return;
               setSaving(true); setDropError('');
-              const res = await apiSend('/api/bookings', 'PATCH', { businessId, id: resizeAsk.booking.id, resizeEnd: resizeAsk.end }, { scope: 'action', area: 'Agenda' });
+              const res = await apiRequest<{ booking?: Partial<Booking> & Pick<Booking, 'id'>; queueChanged?: boolean }>(
+                '/api/bookings',
+                { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ businessId, id: resizeAsk.booking.id, resizeEnd: resizeAsk.end }) },
+                { scope: 'action', area: 'Agenda' },
+              );
               setSaving(false);
               if (!res.ok) { setDropError(res.status === 409 ? 'Esse horário acabou de ficar indisponível. Escolha outro fim.' : res.message); return; }
-              setResizeAsk(null); void load();
+              setResizeAsk(null);
+              if (res.data?.booking && res.data.booking.id === resizeAsk.booking.id) applyConfirmedTemporalPatch(res.data.booking, !!res.data.queueChanged);
+              else void loadBookingsOnly();
             }}>{saving ? 'Salvando…' : 'Confirmar'}</Button>
             <Button variant="secondary" disabled={saving} onClick={() => setResizeAsk(null)}>Cancelar</Button>
           </div>

@@ -280,14 +280,9 @@ export function emptyDragSlots(): DragSlots {
   return { loading: false, error: '', slots: {}, byPro: {} };
 }
 
-/**
- * URLs buscadas no início do drag — UMA por dia visível. Nada aqui depende do
- * movimento do ponteiro (prova de "nenhum request por pixel").
- */
-export function dragSlotUrls(businessId: string, serviceId: string, dates: string[], gestureBookingId?: string): string[] {
-  return dates.map(
-    (d) => `/api/bookings?mode=slots-admin&businessId=${encodeURIComponent(businessId)}&serviceId=${encodeURIComponent(serviceId)}&date=${d}${gestureBookingId ? `&internalSnap=5&gestureBookingId=${encodeURIComponent(gestureBookingId)}` : ''}`,
-  );
+/** One bounded staff request per gesture (Day and Week). No network on pointermove. */
+export function dragSlotUrl(businessId: string, serviceId: string, dates: string[], gestureBookingId: string): string {
+  return `/api/bookings?mode=slots-admin&businessId=${encodeURIComponent(businessId)}&serviceId=${encodeURIComponent(serviceId)}&internalSnap=5&gestureBookingId=${encodeURIComponent(gestureBookingId)}&dates=${encodeURIComponent(dates.join(','))}`;
 }
 
 /**

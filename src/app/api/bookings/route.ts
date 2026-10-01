@@ -25,7 +25,7 @@ import { onlyDigits, timeToMin } from '@/lib/utils';
 import { fitInConflictsFromDB, fitInWarning } from '@/lib/fit-in';
 import { rateLimit, ipFrom } from '@/lib/rate-limit';
 import { applyBookingWindow, bookingWindowFields, buildBookingWindow, freezeLegacyBookingWindow, type BookingWindow } from '@/lib/booking-temporal';
-import type { BookingStatus, DB } from '@/lib/types';
+import type { Booking, BookingStatus, DB } from '@/lib/types';
 
 function err(message: string, status: number): Error {
   return Object.assign(new Error(message), { status });
@@ -108,7 +108,9 @@ export async function GET(req: NextRequest) {
     }
 
     const service = db.services.find((s) => s.id === q.get('serviceId') && s.businessId === businessId);
-    if (!service) return NextResponse.json({ slots: [] });
+    if (!service) return q.has('dates')
+      ? NextResponse.json({ error: 'Serviço indisponível.' }, { status: 404 })
+      : NextResponse.json({ slots: [] });
     const scope = slotGuard?.ok ? slotGuard.ctx.professionalScope : '';
     if (scope && q.get('professionalId') && q.get('professionalId') !== scope) {
       return NextResponse.json({ error: 'Você só pode consultar o seu profissional.' }, { status: 403 });
@@ -153,6 +155,29 @@ export async function GET(req: NextRequest) {
       bufferMin: cfg.bufferMin || 0,
       timeZone: btz,
     };
+
+    // B2.1: one authenticated, bounded request for the entire visible week.
+    // All computations reuse guard.db; public day maps/single-day slots keep
+    // their existing contract and cannot opt into the staff batch/snap.
+    if (q.has('dates')) {
+      if (!slotGuard?.ok || !gestureBooking || q.get('internalSnap') !== '5' || q.has('date') || q.has('from') || q.has('to')) {
+        return NextResponse.json({ error: 'Consulta de gesto indisponível.' }, { status: 400 });
+      }
+      const dates = (q.get('dates') || '').split(',');
+      if (dates.length < 1 || dates.length > 7 || new Set(dates).size !== dates.length || dates.some((iso) => !isValidDateISO(iso))) {
+        return NextResponse.json({ error: 'Informe de 1 a 7 datas válidas e distintas.' }, { status: 400 });
+      }
+      const days: Record<string, { slots: string[]; byPro: Record<string, string[]>; eligibleProfessionalIds: string[]; closed: boolean }> = {};
+      for (const iso of dates) {
+        if (iso < today || iso > maxDate) {
+          days[iso] = { slots: [], byPro: {}, eligibleProfessionalIds, closed: true };
+          continue;
+        }
+        const r = computeSlots({ ...base, dateISO: iso, weekday: weekdayOf(iso), nowHM: iso === today ? nowHM(new Date(), btz) : '' });
+        days[iso] = { slots: r.slots, byPro: r.byProfessional, eligibleProfessionalIds, closed: r.closed };
+      }
+      return NextResponse.json({ days });
+    }
 
     const from = q.get('from') || '';
     const to = q.get('to') || '';
@@ -609,6 +634,7 @@ export async function PATCH(req: NextRequest) {
         freezeLegacyBookingWindow(target, { timeZone: freshTz, serviceDurationMin: freshService.durationMin });
         applyBookingWindow(target, rescheduleWindow, freshTz);
         // Um resize mantém a chegada/check-in; somente move muda a chegada.
+        let queueChanged = false;
         if (!resizing) {
           // Novo horário = nova chegada: o check-in do horário antigo não vale.
           target.checkedInAt = undefined;
@@ -616,7 +642,7 @@ export async function PATCH(req: NextRequest) {
           target.checkedInByName = undefined;
           for (const q of d.queue || []) {
             if (q.businessId === business.id && q.bookingId === target.id && (q.status === 'waiting' || q.status === 'called')) {
-              q.status = 'left'; q.endedAt = now; q.updatedAt = now;
+              q.status = 'left'; q.endedAt = now; q.updatedAt = now; queueChanged = true;
             }
           }
         }
@@ -644,7 +670,19 @@ export async function PATCH(req: NextRequest) {
           customerId: target.customerId || undefined,
           data: { previousId: target.id, fromDate, fromTime, date, time, kind: 'move' },
         });
-        return { created: false, newId: target.id, resized: resizing };
+        // Minimal mutation echo for the Agenda's local state. The server owns
+        // all fields; no speculative client reconstruction or cross-tenant data.
+        const booking: Partial<Booking> & Pick<Booking, 'id'> = {
+          id: target.id, date: target.date, time: target.time,
+          startAt: target.startAt, endAt: target.endAt, durationMin: target.durationMin,
+          timeZone: target.timeZone, temporalSource: target.temporalSource,
+          professionalId: target.professionalId, status: target.status,
+          checkedInAt: target.checkedInAt, checkedInBy: target.checkedInBy,
+          checkedInByName: target.checkedInByName, updatedAt: target.updatedAt,
+          history: target.history,
+          workflow: workflowForBooking(d, business.id, target, guard.ctx),
+        };
+        return { created: false, newId: target.id, resized: resizing, booking, queueChanged };
       });
       return NextResponse.json({ ok: true, ...result, moved: decision.kind === 'move', reason: decision.reason });
     }
