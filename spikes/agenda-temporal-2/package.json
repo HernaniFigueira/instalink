@@ -1,0 +1,7 @@
+{
+  "name": "@instalink/agenda-temporal-2-spike",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Spike visual isolado, sem dependência de produção."
+}

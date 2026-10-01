@@ -1,0 +1,131 @@
+import { useMemo } from 'react';
+import FullCalendar from '@fullcalendar/react';
+import timeGridPlugin from '@fullcalendar/react/timegrid';
+import listPlugin from '@fullcalendar/react/list';
+import interactionPlugin from '@fullcalendar/react/interaction';
+import ptBrLocale from '@fullcalendar/react/locales/pt-br';
+import '@fullcalendar/react/skeleton.css';
+import '@fullcalendar/react/themes/classic/theme.css';
+import '@fullcalendar/react/themes/classic/palette.css';
+import {
+  libraryView,
+  moveWindow,
+  resizeWindow,
+  type AppointmentWindow,
+} from '../domain/temporal-contract';
+import { DEMO_TIME_ZONE, type SpikeEvent } from '../domain/fixtures';
+import { SpikeEventCard } from '../components/SpikeEventCard';
+import type { CalendarAdapterProps } from './types';
+
+const STATUS_COLOR: Record<SpikeEvent['status'], { background: string; border: string; text: string }> = {
+  pending: { background: '#fff7d6', border: '#c58a00', text: '#694700' },
+  confirmed: { background: '#dbeafe', border: '#2563eb', text: '#163b74' },
+  cancelled: { background: '#f1f5f9', border: '#64748b', text: '#334155' },
+  completed: { background: '#dcfce7', border: '#15803d', text: '#14532d' },
+  no_show: { background: '#fee2e2', border: '#b91c1c', text: '#7f1d1d' },
+};
+
+function calendarEvent(event: SpikeEvent) {
+  const colors = STATUS_COLOR[event.status];
+  return {
+    id: event.id,
+    title: `${event.customerName} · ${event.serviceName}`,
+    start: event.startAt,
+    end: event.endAt,
+    backgroundColor: colors.background,
+    borderColor: colors.border,
+    textColor: colors.text,
+    extendedProps: { raw: event, status: event.status, professionalId: event.professionalId },
+  };
+}
+
+export default function FullCalendarAdapter(props: CalendarAdapterProps) {
+  const { events, view, focusDate, professionalFilter, onSelectEvent, onSelectRange, onMutation, onNotice } = props;
+  const visibleEvents = useMemo(() => events
+    .filter((event) => !professionalFilter || event.professionalId === professionalFilter)
+    .map(calendarEvent), [events, professionalFilter]);
+  const calendarView = libraryView('fullcalendar', view);
+
+  function requestMove(info: { event: any; revert: () => void }) {
+    const original = info.event.extendedProps.raw as SpikeEvent;
+    info.revert(); // parent state only changes after the dev server accepts it
+    const current: AppointmentWindow = {
+      startAt: original.startAt,
+      endAt: original.endAt,
+      durationMin: original.durationMin,
+      timeZone: original.timeZone,
+    };
+    const next = moveWindow(current, info.event.start.toISOString());
+    void onMutation(original.id, 'move', next);
+  }
+
+  function requestResize(info: { event: any; revert: () => void }) {
+    const original = info.event.extendedProps.raw as SpikeEvent;
+    info.revert();
+    const current: AppointmentWindow = {
+      startAt: original.startAt,
+      endAt: original.endAt,
+      durationMin: original.durationMin,
+      timeZone: original.timeZone,
+    };
+    const next = resizeWindow(current, info.event.end.toISOString());
+    void onMutation(original.id, 'resize', next);
+  }
+
+  return (
+    <section className="sp-library-frame sp-library-frame--fullcalendar" data-library="fullcalendar" aria-label="FullCalendar Standard">
+      <div className="sp-library-note">
+        <span className="sp-license-tag sp-license-tag--mit">Standard · MIT</span>
+        <span>TimeGrid Day/Week + List · seleção, drag, resize e snap nativos de 5 min · sem Scheduler/Premium.</span>
+      </div>
+      <div className="sp-fullcalendar-wrap">
+        <FullCalendar
+          plugins={[timeGridPlugin, listPlugin, interactionPlugin]}
+          initialView={calendarView}
+          key={calendarView}
+          initialDate={`${focusDate}T12:00:00`}
+          timeZone={DEMO_TIME_ZONE}
+          locale={ptBrLocale}
+          headerToolbar={false}
+          height="auto"
+          expandRows={false}
+          nowIndicator
+          slotMinTime="05:00:00"
+          slotMaxTime="23:00:00"
+          slotDuration="00:05:00"
+          snapDuration="00:05:00"
+          selectable={view !== 'list'}
+          selectMirror
+          selectOverlap={false}
+          eventStartEditable
+          eventDurationEditable
+          eventResizableFromStart={false}
+          eventAllow={(_dropInfo, draggedEvent) => Boolean(draggedEvent && ['pending', 'confirmed'].includes(String(draggedEvent.extendedProps.status)))}
+          editable
+          events={visibleEvents}
+          eventContent={(info) => {
+            const event = info.event.extendedProps.raw as SpikeEvent;
+            return <SpikeEventCard event={event} compact={view === 'week'} />;
+          }}
+          eventClass={(arg) => `sp-fc-event sp-fc-event--${arg.event.extendedProps.status}`}
+          eventClick={(info) => { info.jsEvent.preventDefault(); onSelectEvent(info.event.id); }}
+          select={(info) => onSelectRange(info.start.toISOString(), info.end.toISOString(), professionalFilter || undefined)}
+          eventDrop={requestMove}
+          eventResize={requestResize}
+          datesSet={() => {
+            // The product toolbar owns navigation; FullCalendar remains a view adapter.
+          }}
+          eventDidMount={(info) => {
+            info.el.dataset.spikeEventId = info.event.id;
+            info.el.dataset.status = String(info.event.extendedProps.status || '');
+            info.el.setAttribute('aria-label', `${info.event.title} · ${String(info.event.extendedProps.status || '')}`);
+          }}
+          eventChange={() => { /* updates are acknowledged through the test API first */ }}
+          contentHeight={680}
+          progressiveEventRendering
+        />
+      </div>
+      <p className="sp-grid-caption">Standard não fornece visão multi-recurso. Resource Timeline/Vertical Resource pertence ao Scheduler Premium e não foi instalado.</p>
+    </section>
+  );
+}

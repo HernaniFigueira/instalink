@@ -1,6 +1,6 @@
 # GoDoutor — Master Plan, Roadmap e Handoff
 
-> Snapshot: 2026-09-30
+> Snapshot: 2026-10-01
 > Repositório: HernaniFigueira/instalink
 > Produto: GoDoutor / Clinical OS
 > Vertical inicial: clínica veterinária
@@ -26,13 +26,12 @@ Não recomeçar o produto do zero. Não criar novo repositório por impulso. Nã
 
 ## 1. Estado atual
 
-**Implementação atual:**
-Workflow + Permissões — `CONCLUÍDO EM CÓDIGO / HOMOLOGADO / AGUARDANDO MERGE`
-Branch de sessão: `arena/01a0f3d3-instalink` · base `main` `4c51584` · validar estado real no Git (`git log --oneline -5`, `gh pr list`)
+**Fase consolidada:**
+Workflow + Permissões — `CONCLUÍDO EM CÓDIGO / HOMOLOGADO / MERGED / PRODUÇÃO` (PR #46; merge confirmado no GitHub em 2026-10-01 UTC). `main` e `origin/main` foram auditados em `6064bb29333ee0cd4de69cc6e554eb4a3289f793`; conferir o Git novamente antes de outra missão.
 
-**Estado real:** etapa canônica do atendimento derivada de Booking + Fila + Atendimento (sem campo persistido), transições auditadas e idempotentes, matriz Proprietário/Administrador/Recepção/Profissional no servidor, escopo de DADOS do Profissional por relação real em Clientes, Pets, People 360, busca, Oportunidades, Pendências, Conversas, Visão geral e export/import (capacidades `clientes_exportar`/`clientes_importar`) · homologação real (login real, fluxo completo com recarga, 1366/1024/390) · testes 2801 PASS / 4 baseline conhecidas (3× `a34-instagram`, 1× `automation-audit-p4`, intocadas) · **merge NÃO realizado**. Detalhes: `docs/AUTO-HOMOLOGACAO-WORKFLOW-PERMISSOES.md`.
+**Estado real:** etapa canônica do atendimento derivada de Booking + Fila + Atendimento (sem campo persistido), transições auditadas e idempotentes, matriz Proprietário/Administrador/Recepção/Profissional no servidor, escopo de DADOS do Profissional por relação real em Clientes, Pets, People 360, busca, Oportunidades, Pendências, Conversas, Visão geral e export/import (capacidades `clientes_exportar`/`clientes_importar`) · homologação real (login real, fluxo completo com recarga, 1366/1024/390) · testes registrados: 2801 PASS / 4 baseline conhecidas (3× `a34-instagram`, 1× `automation-audit-p4`, intocadas). Detalhes: `docs/AUTO-HOMOLOGACAO-WORKFLOW-PERMISSOES.md`.
 
-**Status:** `Workflow + Permissões — CONCLUÍDO EM CÓDIGO / HOMOLOGADO / AGUARDANDO MERGE` · #46 `MERGED / PRODUÇÃO / CONCLUÍDA`.
+**Status atual do roadmap:** `Agenda Temporal 2.0 — SPIKE/ADR CONCLUÍDO / IMPLEMENTAÇÃO PENDENTE`. Etapa A concluiu auditoria, contrato, comparação isolada, testes e cenário de benchmark; não substituiu a agenda/API de produção. ADR: `docs/ADR-AGENDA-TEMPORAL-2.md`; spike: `spikes/agenda-temporal-2/`. A implementação definitiva é fase seguinte, após revisão/autorização explícita.
 
 **Entregue na #46 (mergeada em produção) — B3 + Modelo Operacional + P0.1/P0.2/P0.3 + Equipe UX Closure:**
 - **P0.1 (Slots & Elegibilidade):** todos os chamadores de `slotEligibleProfessionalIds` passam a equipe completa do tenant, sem pre-filtrar `active !== false`. O helper encapsula a autoridade e distingue `undefined` (legado solo), `[]` (zero elegíveis) e `[ids]`.
@@ -61,7 +60,7 @@ Branch de sessão: `arena/01a0f3d3-instalink` · base `main` `4c51584` · valida
 
 **Fila oficial — única fonte vigente.** Não duplicar esta sequência em outras partes do documento. Quando uma fase terminar: remover da fila ativa, atualizar Estado atual, registrar conclusão resumida no histórico/audit, próxima fase sobe para posição 1.
 
-1. **Agenda Temporal 2.0 (PRÓXIMA PR)** — start/end, duração, drag-selection, bloqueios, procedimento longo, snap 5min, buffers, recursos (sala/equipamento), política interna vs pública
+1. **Agenda Temporal 2.0 (ETAPA A CONCLUÍDA; IMPLEMENTAÇÃO PENDENTE)** — contrato `startAt/endAt`, duração congelada, drag-selection, bloqueios, procedimento longo, snap 5 min, buffers, recursos (profissional/sala/equipamento), política interna vs pública; revisar `docs/ADR-AGENDA-TEMPORAL-2.md` antes de autorizar implementação.
 2. **Clinical Encounter F1** — prontuário estruturado sobre Atendimento (queixa, anamnese, sinais, problemas/hipóteses/diagnósticos, achados, evolução, plano, procedimentos, retorno, assinatura, versionamento; autosave, rascunho, finalização bloqueia edição, reabertura auditada)
 3. **Cobertura / Modalidade do Atendimento** — Particular vs Convênio/Plano (futuro): cadastro de operadora/convênio e plano, vínculo Tutor/Pet, identificação do beneficiário, cobertura por serviço, elegibilidade/autorização, coparticipação, registro da modalidade no atendimento, pagador (tutor/convênio/ambos), preparação para repasse/faturamento/glosa — veterinária primeiro, sem SUS/TISS/medicina humana antecipada — posicionado após F1 e antes de fechar Conta/Financeiro
 4. **Prescrição + Exames + Document Engine** — medicamento/apresentação/dose/via/frequência, ordens/solicitações, template/versão/instância de documentos
@@ -71,10 +70,10 @@ Branch de sessão: `arena/01a0f3d3-instalink` · base `main` `4c51584` · valida
 8. **Fiscal / integrações** — NFS-e, exportações, fechamento mensal, conciliação
 9. **Agentes + Jev + LLM + OAAS sobre os domínios estabilizados** — consolidação EventLog em OAAS, agentes clínicos/operacionais consumindo domínios estáveis (não antes)
 
-**A próxima missão de código é Agenda Temporal 2.0 → Clinical Encounter F1 → Cobertura/Modalidade → Prescrição + Exames + Document Engine → Estoque/Farmácia → Cirurgia/Internação → Conta + Financeiro → Fiscal → Agentes/Jev/LLM.** Nenhuma delas começa antes do merge autorizado do Workflow + Permissões.
+**A próxima missão continua Agenda Temporal 2.0.** A Etapa A entregou o SPIKE/ADR, mas não a implementação de produção. Só iniciar a etapa definitiva após revisão e autorização explícita do ADR; Clinical Encounter F1 não começa antes de a fase da Agenda ser endereçada. O restante da fila segue: Clinical Encounter F1 → Cobertura/Modalidade → Prescrição + Exames + Document Engine → Estoque/Farmácia → Cirurgia/Internação → Conta + Financeiro → Fiscal → Agentes/Jev/LLM. Workflow + Permissões já está mergeado em produção.
 
 **Notas de referência (não implementar nesta PR):**
-- **Agenda Temporal 2.0 — referências para decisão futura:** Google Calendar como referência **VISUAL/INTERACIONAL** (interação de grade, drag-selection, bloqueios). Para análise arquitetural comparar agenda própria vs bibliotecas: `fullcalendar/fullcalendar`, `schedule-x/schedule-x`, `bigcalendar/react-big-calendar` (GitHub). Decisão futura: evoluir implementação própria vs adotar biblioteca vs reutilizar padrões/algoritmos — sem instalar agora.
+- **Agenda Temporal 2.0 — Etapa A concluída:** Google Calendar segue referência **VISUAL/INTERACIONAL**; grade própria, `react-big-calendar`, FullCalendar Standard e Schedule-X Community foram comparados em spike isolado. ADR registra React Big Calendar como candidato de piloto sob gates de fuso/mobile/acessibilidade, sem dependência de runtime e sem troca da agenda de produção. Detalhes: `docs/ADR-AGENDA-TEMPORAL-2.md` e `spikes/agenda-temporal-2/BENCHMARK.md`.
 - **Clinical Encounter F1 — biblioteca de anamnese:** evolução do motor atual de fichas (`AnamneseManager`) para biblioteca de modelos por especialidade, após pesquisa veterinária séria e revisão humana. Nesta PR o motor permanece como está; apenas copy/hub ajustados.
 
 
@@ -82,7 +81,7 @@ Branch de sessão: `arena/01a0f3d3-instalink` · base `main` `4c51584` · valida
 
 Implementado e homologado: o Profissional recortado enxerga apenas pacientes/tutores com vínculo real (Agendamento, Atendimento ou Fila próprios — nunca por nome/e-mail, sempre com tenant primeiro) em Agenda, Fila, Atendimento, Clientes, People 360, Pets, busca, Oportunidades, Pendências, Conversas e Visão geral; objeto alheio devolve 404/403 seguro. Exportar/importar a base são capacidades próprias (`clientes_exportar`, `clientes_importar`; Proprietário/Administrador por padrão) e exigem contexto sem recorte. A Recepção opera Clientes/Pets/Agenda/chegada/falta/cancelar/reagendar/Oportunidades/Conversas/Pendências, sem área clínica e sem exportar/importar. Matriz por rota: `docs/AUTO-HOMOLOGACAO-WORKFLOW-PERMISSOES.md`.
 
-### 2.2 Contrato de duração do Serviço (Agenda Temporal 2.0 — apenas documentação)
+### 2.2 Contrato de duração do Serviço (Agenda Temporal 2.0 — contrato registrado; sem integração à produção)
 
 - `Service.durationMin` é a duração **PADRÃO para novos agendamentos**. Não é a duração histórica de um Booking já criado.
 - Agenda 2.0 torna cada Booking estável com `startAt`/`endAt` próprios; editar `Service.durationMin` **não altera** Bookings existentes.
@@ -103,18 +102,18 @@ Agenda 2.0 deve avaliar **buffer antes/depois por serviço/profissional** sem co
 
 Um horário só é válido quando **todos** os recursos exigidos estão livres: **Profissional**, **Sala** e **Equipamento**. Hoje só o Profissional participa da disponibilidade; Sala/Equipamento entram em Agenda 2.0 (modelo normalizado, `business_id` obrigatório).
 
-### 2.5 Referências externas para Agenda 2.0 (pesquisa — sem copiar, sem instalar)
+### 2.5 Referências externas para Agenda 2.0 (Etapa A — pesquisa e spike isolado; sem dependência de runtime)
 
 | Referência | Uso | Observação |
 | --- | --- | --- |
 | ezyVet | ARQUITETURAL/VISUAL | Appointment Types com Default Length, Planning Guides, Provider Availability, salas/recursos |
 | Vetstoria | ARQUITETURAL | duração por tipo de consulta, override por clínico |
 | Cal.com | ARQUITETURAL | Event Types, availability schedules, intervalo de slot separado da duração |
-| FullCalendar | IMPLEMENTAÇÃO (a validar) | núcleo MIT (Standard); **Resource views são Premium** |
-| react-big-calendar | IMPLEMENTAÇÃO (spike) | MIT; recursos e drag-and-drop no núcleo; candidato ao spike |
-| Schedule-X | IMPLEMENTAÇÃO (a validar) | recursos Premium |
+| FullCalendar Standard | IMPLEMENTAÇÃO (comparado no spike) | `@fullcalendar/react` 7.1.0 Standard/MIT; Day/Week/List e interação no Standard; Resource TimeGrid/Vertical Resource exige Scheduler Premium |
+| react-big-calendar | IMPLEMENTAÇÃO (candidato preferencial de piloto) | `react-big-calendar` 1.20.0/MIT; recursos Profissional e DnD/resize no pacote livre; provar localizer IANA sem global antes de produção |
+| Schedule-X Community | IMPLEMENTAÇÃO (comparado no spike) | Community MIT; drag/drop, resize, drag-to-create e Resource Scheduler são Premium; DnD/resize não oferecem snap de 5 min |
 
-**Agenda Temporal 2.0 começa por spike/ADR:** grade própria × `react-big-calendar` × FullCalendar, validando licença, manutenção, bundle, Design System, multi-tenant e acessibilidade **antes** de reutilizar qualquer código. Nada é instalado por esta PR.
+**Agenda Temporal 2.0 — Etapa A concluída:** comparação executável da grade atual × React Big Calendar × FullCalendar Standard × Schedule-X Community, contrato, testes e benchmark estão em `spikes/agenda-temporal-2/` e `docs/ADR-AGENDA-TEMPORAL-2.md`. Pacotes de RBC/FullCalendar são somente `devDependencies` para o spike; Schedule-X tem package/lock próprios por conflito de peer. Nenhuma biblioteca ou módulo substituiu a agenda/API de produção. Performance de render/scroll em browser segue pendente e não é inferida pelo bundle.
 
 ### 2.6 Cadastro/Onboarding — contrato de identidade (registrado, sem implementação)
 

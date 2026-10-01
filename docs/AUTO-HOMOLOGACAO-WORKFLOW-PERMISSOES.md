@@ -1,7 +1,9 @@
 # Auto-homologação — Workflow + Permissões
 
-Branch de sessão `arena/01a0f3d3-instalink` · base `main` `4c51584` (merge da #46, em produção) · commit de código `5327e0e`.
-Estado: **CONCLUÍDO EM CÓDIGO / HOMOLOGADO / AGUARDANDO MERGE** (merge NÃO realizado).
+Registro histórico da homologação da etapa Workflow + Permissões · commit de código `5327e0e` · [PR #46](https://github.com/HernaniFigueira/instalink/pull/46), mergeado em `main` em 2026-10-01.
+Estado atual: **CONCLUÍDO EM CÓDIGO / HOMOLOGADO / MERGED / PRODUÇÃO**. `main`/`origin/main` auditados na etapa seguinte em `6064bb29333ee0cd4de69cc6e554eb4a3289f793`.
+
+Este documento preserva os resultados e limites da homologação daquela fase; o escopo histórico descrito abaixo não substitui o roadmap atual do Master Plan.
 
 ## 1. Etapa canônica (sem 4ª máquina persistida)
 

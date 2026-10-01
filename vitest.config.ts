@@ -4,5 +4,5 @@ import { defineConfig } from 'vitest/config';
 export default defineConfig({
   resolve: { alias: { '@': path.resolve(__dirname, 'src') } },
   oxc: { jsx: { runtime: 'automatic' } },
-  test: { environment: 'node', include: ['src/**/*.test.{ts,tsx}'] },
+  test: { environment: 'node', include: ['src/**/*.test.{ts,tsx}', 'spikes/agenda-temporal-2/**/*.test.{ts,tsx}'] },
 });

@@ -23,7 +23,10 @@
     "test:360:setup": "node tests/360/setup.mjs",
     "test:360:browser": "playwright test --config tests/360/playwright.config.ts",
     "test:agenda:setup": "node tests/agenda-viewport/setup.mjs",
-    "test:agenda:browser": "playwright test --config tests/agenda-viewport/playwright.config.ts"
+    "test:agenda:browser": "playwright test --config tests/agenda-viewport/playwright.config.ts",
+    "spike:agenda": "vite --config spikes/agenda-temporal-2/vite.config.ts",
+    "spike:agenda:build": "vite build --config spikes/agenda-temporal-2/vite.config.ts",
+    "spike:agenda:test": "vitest run spikes/agenda-temporal-2/src"
   },
   "dependencies": {
     "@vercel/blob": "^2.8.0",
@@ -35,19 +38,25 @@
     "react-dom": "18.3.1"
   },
   "devDependencies": {
+    "@fullcalendar/react": "7.1.0",
     "@playwright/test": "^1.63.0",
     "@testing-library/react": "^16.3.3",
     "@testing-library/user-event": "^14.6.7",
+    "@types/luxon": "^3.7.6",
     "@types/node": "^20.12.0",
     "@types/pg": "^8.23.1",
     "@types/qrcode": "^1.5.5",
     "@types/react": "^18.3.0",
+    "@types/react-big-calendar": "1.16.3",
     "@types/react-dom": "^18.3.0",
+    "@vitejs/plugin-react": "^6.1.1",
     "autoprefixer": "^10.4.19",
     "jsdom": "^26.1.0",
     "pdfjs-dist": "^6.3.289",
     "postcss": "^8.4.38",
+    "react-big-calendar": "1.20.0",
     "tailwindcss": "^3.4.10",
+    "temporal-polyfill": "1.0.1",
     "typescript": "^5.5.0",
     "vite": "^8.3.0",
     "vitest": "^4.1.11"

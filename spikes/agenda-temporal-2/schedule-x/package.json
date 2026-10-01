@@ -1,0 +1,16 @@
+{
+  "name": "@instalink/agenda-temporal-2-schedule-x-spike",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Isolated Schedule-X v4 community-license spike; not a production dependency.",
+  "devDependencies": {
+    "@schedule-x/calendar": "4.9.1",
+    "@schedule-x/calendar-controls": "4.0.0",
+    "@schedule-x/react": "4.1.0",
+    "@schedule-x/shared": "^4.9.1",
+    "@schedule-x/theme-default": "4.0.0",
+    "react": "18.3.1",
+    "react-dom": "18.3.1",
+    "temporal-polyfill": "0.3.2"
+  }
+}
