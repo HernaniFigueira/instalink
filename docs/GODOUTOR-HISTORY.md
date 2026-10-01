@@ -1,5 +1,15 @@
 # GoDoutor — Histórico
 
+## 2026-10-01 — Agenda Temporal 2.0 · Etapa B2 — Interações temporais na grade atual
+
+> PR #49 · branch `arena/01a0f827-instalink` · **sem merge**; Agenda 2.0 segue EM ANDAMENTO.
+
+- Grade própria Dia/Semana/Lista preservada. Drag-select e clique abrem o mesmo `NewBookingSheet` em modo compacto com duração escolhida no gesto (servidor valida override exclusivo da equipe; público não escolhe duração). Move preserva o snapshot do Booking, resize da borda inferior altera apenas `endAt/durationMin` do Booking; alternativa via detalhe no desktop/mobile. Snap interno 5 min separado de `slotMin` público.
+- `PATCH /api/bookings` revalida disponibilidade, conflito, buffer, elegibilidade, tenant, papel e escopo na escrita serializada. Conflito 409 conserva o cartão na origem com mensagem humana. Drag terminal bloqueado; reagendamento terminal explícito continua recriando Booking. Preview do drag faz 1 GET por dia visível somente após o limiar; não existe fetch por pixel nem polling novo.
+- Homologação LOCAL real (`next build/start`, banco fake descartável, `/login` Owner/Maria/Orlando, Chromium, 1366/1024/390): seleção/criação 10:00–10:40, move sem mudar duração, resize 11:15–12:10/55 min com F5, corrida simulada → 409/rollback, Maria move/resize/cria, Orlando 403 para Booking alheio. 0 respostas 5xx, 0 exceções JS. Em 200 eventos: 205 cartões; 1000: cap existente de 500 cartões, sem erro. Doc e screenshots: `docs/AUTO-HOMOLOGACAO-AGENDA-TEMPORAL-B2.md` e `docs/evidence/agenda-temporal-b2/`.
+- Testes B2 focados 11/11; suíte geral 2876 passed / 4 baseline conhecidas. Build, typecheck e diff-check OK. B3 (bloqueios, buffers before/after, Sala/Equipamento, fechamento) é etapa futura, **não implementada** aqui.
+
+
 ## 2026-10-01 — Agenda Temporal 2.0 · Etapa B1 — Fundação Temporal do Booking
 
 > Branch `arena/01a0f827-instalink` (base `main` em `cfc6263`) — **sem merge**.
