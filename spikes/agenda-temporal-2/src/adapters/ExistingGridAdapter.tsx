@@ -1,7 +1,8 @@
-import { useMemo, useRef, useState, type CSSProperties, type PointerEvent as ReactPointerEvent } from 'react';
+import { useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type PointerEvent as ReactPointerEvent } from 'react';
 import { blockHeight, exceedsDragThreshold, layoutBlocks } from '@/lib/agenda-drag';
 import { timeToMin } from '@/lib/utils';
 import {
+  eventPresentation,
   instantToLocalDateTime,
   localDateTimeToInstant,
   minutesBetween,
@@ -88,6 +89,16 @@ export default function ExistingGridAdapter(props: CalendarAdapterProps) {
       : date === focusDate;
   }), [events, focusDate, professionalFilter, view]);
 
+  useLayoutEffect(() => {
+    if (view === 'list') return;
+    const scroller = scrollRef.current;
+    if (scroller && scroller.scrollTop === 0) {
+      // Keep the same 05:00–23:00 business window, but open near the clinic's
+      // first appointments instead of showing four hours of an empty grid.
+      scroller.scrollTop = ((9 * 60 - START_MINUTE) / 60) * PX_PER_HOUR;
+    }
+  }, [view]);
+
   function columnsForEvent(item: SpikeEvent): number {
     const localDate = instantToLocalDateTime(item.startAt, item.timeZone).date;
     return columns.findIndex((column) => view === 'day'
@@ -111,6 +122,7 @@ export default function ExistingGridAdapter(props: CalendarAdapterProps) {
 
   function finishEventPointer(e: ReactPointerEvent<HTMLDivElement>) {
     if (!pointerOrigin || e.pointerId !== pointerOrigin.pointerId) return;
+    e.stopPropagation(); // the resize handle also sits inside the draggable event
     const moved = exceedsDragThreshold({ x: pointerOrigin.x, y: pointerOrigin.y }, { x: e.clientX, y: e.clientY }, DRAG_THRESHOLD);
     const origin = pointerOrigin;
     setPointerOrigin(null);
@@ -158,7 +170,20 @@ export default function ExistingGridAdapter(props: CalendarAdapterProps) {
     const origin = selectionOrigin;
     setSelectionOrigin(null);
     setSelectionEndY(null);
-    if (!exceedsDragThreshold({ x: origin.x, y: origin.y }, { x: e.clientX, y: e.clientY }, DRAG_THRESHOLD)) return;
+    if (!exceedsDragThreshold({ x: origin.x, y: origin.y }, { x: e.clientX, y: e.clientY }, DRAG_THRESHOLD)) {
+      // A tap is the mobile equivalent of a 40-minute quick-create suggestion;
+      // vertical drag remains available for pointer/desktop selection.
+      if (e.pointerType === 'touch') {
+        const startMinute = snapMinutes(minutesFromPointer(e.clientY, origin.rectTop), 5, 'floor');
+        const endMinute = Math.min(END_MINUTE, startMinute + 40);
+        if (endMinute - startMinute >= 5) {
+          const startAt = localDateTimeToInstant(origin.date, clockFromMinute(startMinute, 'floor'), timeZone);
+          const endAt = localDateTimeToInstant(origin.date, clockFromMinute(endMinute, 'floor'), timeZone);
+          onSelectRange(startAt, endAt, origin.professionalId);
+        }
+      }
+      return;
+    }
     const a = minutesFromPointer(origin.y, origin.rectTop);
     const b = minutesFromPointer(e.clientY, origin.rectTop);
     const start = Math.max(START_MINUTE, Math.min(a, b));
@@ -251,7 +276,7 @@ export default function ExistingGridAdapter(props: CalendarAdapterProps) {
                             style={style}
                             role="button"
                             tabIndex={0}
-                            aria-label={`${item.customerName}, ${item.serviceName}, ${item.status}`}
+                            aria-label={eventPresentation({ customerName: item.customerName, serviceName: item.serviceName, status: item.status }).ariaLabel}
                             data-spike-event-id={item.id}
                             onPointerDown={(e) => startEventPointer(item, 'move', e)}
                             onPointerMove={moveEventPointer}

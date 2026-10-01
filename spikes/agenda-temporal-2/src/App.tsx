@@ -131,6 +131,17 @@ export default function App() {
     return () => window.removeEventListener('resize', updateResponsiveView);
   }, []);
 
+  useEffect(() => {
+    if (!draft && !selectedEventId) return;
+    function closeDetailsOnEscape(event: KeyboardEvent) {
+      if (event.key !== 'Escape') return;
+      setDraft(null);
+      setSelectedEventId(null);
+    }
+    document.addEventListener('keydown', closeDetailsOnEscape);
+    return () => document.removeEventListener('keydown', closeDetailsOnEscape);
+  }, [draft, selectedEventId]);
+
   const finishAdapterPaint = useCallback(() => {
     const pending = renderStartRef.current;
     if (!pending) return;
@@ -406,7 +417,7 @@ export default function App() {
               </div>
             </section>
 
-            <aside className="sp-detail-pane" aria-label="Detalhes e métricas" data-testid="detail-pane">
+            <div className="sp-detail-pane" role="group" aria-label="Detalhes e métricas" data-testid="detail-pane">
               {draft && draftStart && draftEnd ? (
                 <div className="sp-detail-card sp-detail-card--draft">
                   <div className="sp-detail-card__heading">
@@ -471,7 +482,7 @@ export default function App() {
                 {lastServerMs !== null && <p>API mock · request/ack: <b>{lastServerMs.toFixed(1)} ms</b></p>}
                 <small>Para scroll, seleção, drag e rerender, siga o roteiro de benchmark documentado.</small>
               </div>
-            </aside>
+            </div>
           </div>
 
           <div className="sp-notice" role="status" aria-live="polite" data-testid="server-notice">
@@ -482,7 +493,7 @@ export default function App() {
         </section>
 
         <footer className="sp-footnote">
-          <span>Agenda Temporal 2.0 — SPIKE/ADR CONCLUÍDO / IMPLEMENTAÇÃO PENDENTE</span>
+          <span>Agenda Temporal 2.0 — SPIKE ISOLADO · SEM ADOÇÃO EM PRODUÇÃO</span>
           <span>Booking / API de produção intocados · {DEMO_TIME_ZONE}</span>
         </footer>
       </div>

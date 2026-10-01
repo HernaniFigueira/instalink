@@ -16,16 +16,9 @@
     "plugins": [{ "name": "next" }],
     "baseUrl": ".",
     "paths": {
-      "@/*": ["./src/*"],
-      "@schedule-x/calendar": ["spikes/agenda-temporal-2/schedule-x/node_modules/@schedule-x/calendar"],
-      "@schedule-x/react": ["spikes/agenda-temporal-2/schedule-x/node_modules/@schedule-x/react"],
-      "@schedule-x/shared": ["spikes/agenda-temporal-2/schedule-x/node_modules/@schedule-x/shared"],
-      "@schedule-x/theme-default": ["spikes/agenda-temporal-2/schedule-x/node_modules/@schedule-x/theme-default"],
-      "@agenda-sx/temporal": ["spikes/agenda-temporal-2/schedule-x/node_modules/temporal-polyfill"],
-      "@agenda-sx/temporal/*": ["spikes/agenda-temporal-2/schedule-x/node_modules/temporal-polyfill/*"]
-    },
-    "allowImportingTsExtensions": true
+      "@/*": ["./src/*"]
+    }
   },
   "include": ["next-env.d.ts", "**/*.ts", "**/*.tsx", ".next/types/**/*.ts"],
-  "exclude": ["node_modules"]
+  "exclude": ["node_modules", "spikes/**"]
 }

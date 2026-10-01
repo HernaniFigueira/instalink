@@ -73,7 +73,7 @@ Workflow + Permissões — `CONCLUÍDO EM CÓDIGO / HOMOLOGADO / MERGED / PRODU�
 **A próxima missão continua Agenda Temporal 2.0.** A Etapa A entregou o SPIKE/ADR, mas não a implementação de produção. Só iniciar a etapa definitiva após revisão e autorização explícita do ADR; Clinical Encounter F1 não começa antes de a fase da Agenda ser endereçada. O restante da fila segue: Clinical Encounter F1 → Cobertura/Modalidade → Prescrição + Exames + Document Engine → Estoque/Farmácia → Cirurgia/Internação → Conta + Financeiro → Fiscal → Agentes/Jev/LLM. Workflow + Permissões já está mergeado em produção.
 
 **Notas de referência (não implementar nesta PR):**
-- **Agenda Temporal 2.0 — Etapa A concluída:** Google Calendar segue referência **VISUAL/INTERACIONAL**; grade própria, `react-big-calendar`, FullCalendar Standard e Schedule-X Community foram comparados em spike isolado. ADR registra React Big Calendar como candidato de piloto sob gates de fuso/mobile/acessibilidade, sem dependência de runtime e sem troca da agenda de produção. Detalhes: `docs/ADR-AGENDA-TEMPORAL-2.md` e `spikes/agenda-temporal-2/BENCHMARK.md`.
+- **Agenda Temporal 2.0 — Etapa A / evidência revisada:** Google Calendar segue referência **VISUAL/INTERACIONAL**; grade própria, `react-big-calendar`, FullCalendar Standard e Schedule-X Community foram comparados em spike isolado, incluindo Chromium real. Decisão: `NENHUM CANDIDATO APROVADO`; RBC continua condicional, mas a troca Dia→Semana a 1000 eventos levou 11,7 s em Vite dev. Sem dependência de runtime, sem troca da agenda de produção. Detalhes: `docs/ADR-AGENDA-TEMPORAL-2.md` e `spikes/agenda-temporal-2/BENCHMARK.md`.
 - **Clinical Encounter F1 — biblioteca de anamnese:** evolução do motor atual de fichas (`AnamneseManager`) para biblioteca de modelos por especialidade, após pesquisa veterinária séria e revisão humana. Nesta PR o motor permanece como está; apenas copy/hub ajustados.
 
 
@@ -110,10 +110,10 @@ Um horário só é válido quando **todos** os recursos exigidos estão livres: 
 | Vetstoria | ARQUITETURAL | duração por tipo de consulta, override por clínico |
 | Cal.com | ARQUITETURAL | Event Types, availability schedules, intervalo de slot separado da duração |
 | FullCalendar Standard | IMPLEMENTAÇÃO (comparado no spike) | `@fullcalendar/react` 7.1.0 Standard/MIT; Day/Week/List e interação no Standard; Resource TimeGrid/Vertical Resource exige Scheduler Premium |
-| react-big-calendar | IMPLEMENTAÇÃO (candidato preferencial de piloto) | `react-big-calendar` 1.20.0/MIT; recursos Profissional e DnD/resize no pacote livre; provar localizer IANA sem global antes de produção |
+| react-big-calendar | IMPLEMENTAÇÃO (candidato condicional; **não aprovado para piloto**) | `react-big-calendar` 1.20.0/MIT; recursos Profissional e DnD/resize no pacote livre; IANA por instância testado; 1000 eventos: Dia→Semana 11,7 s/long task 5,32 s em Vite dev — otimizar e medir novamente antes de piloto |
 | Schedule-X Community | IMPLEMENTAÇÃO (comparado no spike) | Community MIT; drag/drop, resize, drag-to-create e Resource Scheduler são Premium; DnD/resize não oferecem snap de 5 min |
 
-**Agenda Temporal 2.0 — Etapa A concluída:** comparação executável da grade atual × React Big Calendar × FullCalendar Standard × Schedule-X Community, contrato, testes e benchmark estão em `spikes/agenda-temporal-2/` e `docs/ADR-AGENDA-TEMPORAL-2.md`. Pacotes de RBC/FullCalendar são somente `devDependencies` para o spike; Schedule-X tem package/lock próprios por conflito de peer. Nenhuma biblioteca ou módulo substituiu a agenda/API de produção. Performance de render/scroll em browser segue pendente e não é inferida pelo bundle.
+**Agenda Temporal 2.0 — spike comparativo isolado:** comparação da grade atual × React Big Calendar × FullCalendar Standard × Schedule-X Community, contrato, testes e evidências reais de Chromium estão em `spikes/agenda-temporal-2/` e `docs/ADR-AGENDA-TEMPORAL-2.md`. Estado de saída: `NENHUM CANDIDATO APROVADO`; performance de Vite dev foi medida, mas não representa build/SLO de produção e mostrou gargalo de RBC em 1000 eventos. Pacotes ficam fora do root de produção, Schedule-X tem package/lock próprios. Nenhuma biblioteca ou módulo substituiu agenda/API de produção.
 
 ### 2.6 Cadastro/Onboarding — contrato de identidade (registrado, sem implementação)
 

@@ -1,0 +1,2519 @@
+{
+  "captureDate": "2026-10-01",
+  "method": "Real headless Chromium via puppeteer-core; Chromium binary and QA-only dependencies installed under /tmp/qa, not the repository.",
+  "browser": "HeadlessChrome/153.0.8010.0",
+  "node": "v22.22.3",
+  "puppeteerCore": "25.12.0",
+  "sparticuzChromium": "153.0.0",
+  "viewports": [
+    {
+      "width": 1366,
+      "height": 900,
+      "inputMode": "desktop viewport"
+    },
+    {
+      "width": 1024,
+      "height": 900,
+      "inputMode": "desktop viewport"
+    },
+    {
+      "width": 390,
+      "height": 844,
+      "inputMode": "mobile viewport + hasTouch"
+    }
+  ],
+  "screenshotCount": 28,
+  "viewportMatrix": [
+    {
+      "candidate": "grid",
+      "view": "day",
+      "viewport": {
+        "width": 1366,
+        "height": 900
+      },
+      "bodyWidth": 1366,
+      "documentScrollWidth": 1366,
+      "documentHorizontalOverflow": false,
+      "windowScrollY": 0,
+      "rootRect": {
+        "x": 50,
+        "y": 513.3,
+        "width": 987,
+        "height": 714
+      },
+      "calendarWidth": 987,
+      "calendarScrollableWidth": 987,
+      "calendarClientWidth": 987,
+      "wrapScrollTop": 312,
+      "wrapRect": {
+        "x": 50,
+        "y": 513,
+        "width": 987,
+        "height": 680
+      },
+      "eventMarkers": 14,
+      "event10Rect": {
+        "x": 109,
+        "y": 641,
+        "width": 305,
+        "height": 52
+      },
+      "dateTitle": "segunda-feira, 5 de outubro de 2026",
+      "scrollables": [
+        {
+          "className": "sp-grid-scroll",
+          "clientWidth": 987,
+          "scrollWidth": 987,
+          "clientHeight": 680,
+          "scrollHeight": 1460,
+          "scrollTop": 312,
+          "scrollLeft": 0
+        },
+        {
+          "className": "sp-grid-layout",
+          "clientWidth": 987,
+          "scrollWidth": 987,
+          "clientHeight": 1454,
+          "scrollHeight": 1460,
+          "scrollTop": 0,
+          "scrollLeft": 0
+        },
+        {
+          "className": "sp-grid-time-gutter",
+          "clientWidth": 56,
+          "scrollWidth": 56,
+          "clientHeight": 1454,
+          "scrollHeight": 1460,
+          "scrollTop": 0,
+          "scrollLeft": 0
+        },
+        {
+          "className": "sp-grid-time-rail",
+          "clientWidth": 56,
+          "scrollWidth": 56,
+          "clientHeight": 1404,
+          "scrollHeight": 1410,
+          "scrollTop": 0,
+          "scrollLeft": 0
+        },
+        {
+          "className": "sp-event-card__person",
+          "clientWidth": 293,
+          "scrollWidth": 293,
+          "clientHeight": 9,
+          "scrollHeight": 12,
+          "scrollTop": 0,
+          "scrollLeft": 0
+        },
+        {
+          "className": "sp-event-card__status",
+          "clientWidth": 293,
+          "scrollWidth": 293,
+          "clientHeight": 9,
+          "scrollHeight": 12,
+          "scrollTop": 0,
+          "scrollLeft": 0
+        },
+        {
+          "className": "sp-event-card__person",
+          "clientWidth": 293,
+          "scrollWidth": 293,
+          "clientHeight": 9,
+          "scrollHeight": 12,
+          "scrollTop": 0,
+          "scrollLeft": 0
+        },
+        {
+          "className": "sp-event-card__status",
+          "clientWidth": 293,
+          "scrollWidth": 293,
+          "clientHeight": 9,
+          "scrollHeight": 12,
+          "scrollTop": 0,
+          "scrollLeft": 0
+        }
+      ],
+      "screenshot": "1366x900-day-grid.png",
+      "errors": []
+    },
+    {
+      "candidate": "grid",
+      "view": "week",
+      "viewport": {
+        "width": 1366,
+        "height": 900
+      },
+      "bodyWidth": 1366,
+      "documentScrollWidth": 1366,
+      "documentHorizontalOverflow": false,
+      "windowScrollY": 0,
+      "rootRect": {
+        "x": 50,
+        "y": 513.3,
+        "width": 987,
+        "height": 714
+      },
+      "calendarWidth": 987,
+      "calendarScrollableWidth": 1260,
+      "calendarClientWidth": 987,
+      "wrapScrollTop": 312,
+      "wrapRect": {
+        "x": 50,
+        "y": 513,
+        "width": 987,
+        "height": 680
+      },
+      "eventMarkers": 14,
+      "event10Rect": {
+        "x": 195,
+        "y": 641,
+        "width": 82,
+        "height": 52
+      },
+      "dateTitle": "05 de out. — 11 de out. de 2026",
+      "scrollables": [
+        {
+          "className": "sp-grid-scroll",
+          "clientWidth": 987,
+          "scrollWidth": 1260,
+          "clientHeight": 680,
+          "scrollHeight": 1460,
+          "scrollTop": 312,
+          "scrollLeft": 0
+        },
+        {
+          "className": "sp-grid-layout",
+          "clientWidth": 1260,
+          "scrollWidth": 1260,
+          "clientHeight": 1454,
+          "scrollHeight": 1460,
+          "scrollTop": 0,
+          "scrollLeft": 0
+        },
+        {
+          "className": "sp-grid-time-gutter",
+          "clientWidth": 56,
+          "scrollWidth": 56,
+          "clientHeight": 1454,
+          "scrollHeight": 1460,
+          "scrollTop": 0,
+          "scrollLeft": 0
+        },
+        {
+          "className": "sp-grid-time-rail",
+          "clientWidth": 56,
+          "scrollWidth": 56,
+          "clientHeight": 1404,
+          "scrollHeight": 1410,
+          "scrollTop": 0,
+          "scrollLeft": 0
+        },
+        {
+          "className": "sp-event-card__person",
+          "clientWidth": 70,
+          "scrollWidth": 85,
+          "clientHeight": 11,
+          "scrollHeight": 12,
+          "scrollTop": 0,
+          "scrollLeft": 0
+        },
+        {
+          "className": "sp-event-card__person",
+          "clientWidth": 70,
+          "scrollWidth": 89,
+          "clientHeight": 11,
+          "scrollHeight": 12,
+          "scrollTop": 0,
+          "scrollLeft": 0
+        },
+        {
+          "className": "sp-event-card__person",
+          "clientWidth": 70,
+          "scrollWidth": 73,
+          "clientHeight": 9,
+          "scrollHeight": 12,
+          "scrollTop": 0,
+          "scrollLeft": 0
+        },
+        {
+          "className": "sp-event-card__status",
+          "clientWidth": 70,
+          "scrollWidth": 70,
+          "clientHeight": 9,
+          "scrollHeight": 12,
+          "scrollTop": 0,
+          "scrollLeft": 0
+        }
+      ],
+      "screenshot": "1366x900-week-grid.png",
+      "errors": []
+    },
+    {
+      "candidate": "rbc",
+      "view": "day",
+      "viewport": {
+        "width": 1366,
+        "height": 900
+      },
+      "bodyWidth": 1366,
+      "documentScrollWidth": 1366,
+      "documentHorizontalOverflow": false,
+      "windowScrollY": 0,
+      "rootRect": {
+        "x": 50,
+        "y": 513.3,
+        "width": 987,
+        "height": 753
+      },
+      "calendarWidth": 987,
+      "calendarScrollableWidth": 987,
+      "calendarClientWidth": 987,
+      "wrapScrollTop": 0,
+      "wrapRect": {
+        "x": 50,
+        "y": 552,
+        "width": 987,
+        "height": 680
+      },
+      "eventMarkers": 7,
+      "event10Rect": {
+        "x": 92,
+        "y": 690,
+        "width": 302,
+        "height": 37
+      },
+      "dateTitle": "segunda-feira, 5 de outubro de 2026",
+      "scrollables": [
+        {
+          "className": "rbc-time-content",
+          "clientWidth": 969,
+          "scrollWidth": 969,
+          "clientHeight": 597,
+          "scrollHeight": 1008,
+          "scrollTop": 224,
+          "scrollLeft": 0
+        },
+        {
+          "className": "sp-event-card__person",
+          "clientWidth": 290,
+          "scrollWidth": 290,
+          "clientHeight": 9,
+          "scrollHeight": 12,
+          "scrollTop": 0,
+          "scrollLeft": 0
+        },
+        {
+          "className": "sp-event-card__status",
+          "clientWidth": 290,
+          "scrollWidth": 290,
+          "clientHeight": 9,
+          "scrollHeight": 12,
+          "scrollTop": 0,
+          "scrollLeft": 0
+        },
+        {
+          "className": "rbc-event sp-rbc-event sp-rbc-event--pending",
+          "clientWidth": 302,
+          "scrollWidth": 302,
+          "clientHeight": 28,
+          "scrollHeight": 36,
+          "scrollTop": 0,
+          "scrollLeft": 0
+        },
+        {
+          "className": "rbc-addons-dnd-resizable",
+          "clientWidth": 302,
+          "scrollWidth": 302,
+          "clientHeight": 28,
+          "scrollHeight": 36,
+          "scrollTop": 0,
+          "scrollLeft": 0
+        },
+        {
+          "className": "rbc-event-content",
+          "clientWidth": 302,
+          "scrollWidth": 302,
+          "clientHeight": 28,
+          "scrollHeight": 36,
+          "scrollTop": 0,
+          "scrollLeft": 0
+        },
+        {
+          "className": "sp-event-card__time",
+          "clientWidth": 290,
+          "scrollWidth": 290,
+          "clientHeight": 7,
+          "scrollHeight": 10,
+          "scrollTop": 0,
+          "scrollLeft": 0
+        },
+        {
+          "className": "sp-event-card__person",
+          "clientWidth": 290,
+          "scrollWidth": 290,
+          "clientHeight": 8,
+          "scrollHeight": 12,
+          "scrollTop": 0,
+          "scrollLeft": 0
+        }
+      ],
+      "screenshot": "1366x900-day-rbc.png",
+      "errors": []
+    },
+    {
+      "candidate": "rbc",
+      "view": "week",
+      "viewport": {
+        "width": 1366,
+        "height": 900
+      },
+      "bodyWidth": 1366,
+      "documentScrollWidth": 1366,
+      "documentHorizontalOverflow": false,
+      "windowScrollY": 0,
+      "rootRect": {
+        "x": 50,
+        "y": 513.3,
+        "width": 987,
+        "height": 753
+      },
+      "calendarWidth": 987,
+      "calendarScrollableWidth": 987,
+      "calendarClientWidth": 987,
+      "wrapScrollTop": 0,
+      "wrapRect": {
+        "x": 50,
+        "y": 552,
+        "width": 987,
+        "height": 680
+      },
+      "eventMarkers": 7,
+      "event10Rect": {
+        "x": 154,
+        "y": 689,
+        "width": 62,
+        "height": 37
+      },
+      "dateTitle": "05 de out. — 11 de out. de 2026",
+      "scrollables": [
+        {
+          "className": "rbc-row rbc-time-header-cell",
+          "clientWidth": 935,
+          "scrollWidth": 935,
+          "clientHeight": 26,
+          "scrollHeight": 38,
+          "scrollTop": 0,
+          "scrollLeft": 0
+        },
+        {
+          "className": "rbc-time-content",
+          "clientWidth": 969,
+          "scrollWidth": 969,
+          "clientHeight": 598,
+          "scrollHeight": 1008,
+          "scrollTop": 224,
+          "scrollLeft": 0
+        },
+        {
+          "className": "sp-event-card__person",
+          "clientWidth": 93,
+          "scrollWidth": 93,
+          "clientHeight": 9,
+          "scrollHeight": 12,
+          "scrollTop": 0,
+          "scrollLeft": 0
+        },
+        {
+          "className": "sp-event-card__status",
+          "clientWidth": 93,
+          "scrollWidth": 93,
+          "clientHeight": 9,
+          "scrollHeight": 12,
+          "scrollTop": 0,
+          "scrollLeft": 0
+        },
+        {
+          "className": "rbc-event sp-rbc-event sp-rbc-event--completed",
+          "clientWidth": 124,
+          "scrollWidth": 124,
+          "clientHeight": 28,
+          "scrollHeight": 36,
+          "scrollTop": 0,
+          "scrollLeft": 0
+        },
+        {
+          "className": "rbc-event-content",
+          "clientWidth": 124,
+          "scrollWidth": 124,
+          "clientHeight": 28,
+          "scrollHeight": 36,
+          "scrollTop": 0,
+          "scrollLeft": 0
+        },
+        {
+          "className": "sp-event-card__time",
+          "clientWidth": 112,
+          "scrollWidth": 112,
+          "clientHeight": 7,
+          "scrollHeight": 10,
+          "scrollTop": 0,
+          "scrollLeft": 0
+        },
+        {
+          "className": "sp-event-card__person",
+          "clientWidth": 112,
+          "scrollWidth": 112,
+          "clientHeight": 8,
+          "scrollHeight": 12,
+          "scrollTop": 0,
+          "scrollLeft": 0
+        }
+      ],
+      "screenshot": "1366x900-week-rbc.png",
+      "errors": []
+    },
+    {
+      "candidate": "fullcalendar",
+      "view": "day",
+      "viewport": {
+        "width": 1366,
+        "height": 900
+      },
+      "bodyWidth": 1366,
+      "documentScrollWidth": 1366,
+      "documentHorizontalOverflow": false,
+      "windowScrollY": 0,
+      "rootRect": {
+        "x": 50,
+        "y": 513.3,
+        "width": 987,
+        "height": 753
+      },
+      "calendarWidth": 987,
+      "calendarScrollableWidth": 987,
+      "calendarClientWidth": 987,
+      "wrapScrollTop": 0,
+      "wrapRect": {
+        "x": 50,
+        "y": 552,
+        "width": 987,
+        "height": 680
+      },
+      "eventMarkers": 14,
+      "event10Rect": {
+        "x": 565,
+        "y": 817,
+        "width": 464,
+        "height": 27
+      },
+      "dateTitle": "segunda-feira, 5 de outubro de 2026",
+      "scrollables": [
+        {
+          "className": "sp-fullcalendar-wrap",
+          "clientWidth": 987,
+          "scrollWidth": 987,
+          "clientHeight": 680,
+          "scrollHeight": 793,
+          "scrollTop": 0,
+          "scrollLeft": 0
+        },
+        {
+          "className": "sp-sr-only",
+          "clientWidth": 1,
+          "scrollWidth": 101,
+          "clientHeight": 1,
+          "scrollHeight": 19,
+          "scrollTop": 0,
+          "scrollLeft": 0
+        },
+        {
+          "className": "fc-Ew fc-Ih",
+          "clientWidth": 908,
+          "scrollWidth": 908,
+          "clientHeight": 27,
+          "scrollHeight": 34,
+          "scrollTop": 0,
+          "scrollLeft": 0
+        },
+        {
+          "className": "sp-fc-event sp-fc-event--confirmed fc-1Y fc-Ih fc-iz fc-ZR fc-cj fc-td",
+          "clientWidth": 908,
+          "scrollWidth": 908,
+          "clientHeight": 27,
+          "scrollHeight": 34,
+          "scrollTop": 0,
+          "scrollLeft": 0
+        },
+        {
+          "className": "fc-1Y fc-P0",
+          "clientWidth": 908,
+          "scrollWidth": 908,
+          "clientHeight": 27,
+          "scrollHeight": 34,
+          "scrollTop": 0,
+          "scrollLeft": 0
+        },
+        {
+          "className": "sp-event-card__time",
+          "clientWidth": 894,
+          "scrollWidth": 894,
+          "clientHeight": 4,
+          "scrollHeight": 12,
+          "scrollTop": 0,
+          "scrollLeft": 0
+        },
+        {
+          "className": "sp-event-card__person",
+          "clientWidth": 894,
+          "scrollWidth": 894,
+          "clientHeight": 4,
+          "scrollHeight": 13,
+          "scrollTop": 0,
+          "scrollLeft": 0
+        },
+        {
+          "className": "sp-event-card__service",
+          "clientWidth": 894,
+          "scrollWidth": 894,
+          "clientHeight": 4,
+          "scrollHeight": 12,
+          "scrollTop": 0,
+          "scrollLeft": 0
+        }
+      ],
+      "screenshot": "1366x900-day-fullcalendar.png",
+      "errors": []
+    },
+    {
+      "candidate": "fullcalendar",
+      "view": "week",
+      "viewport": {
+        "width": 1366,
+        "height": 900
+      },
+      "bodyWidth": 1366,
+      "documentScrollWidth": 1366,
+      "documentHorizontalOverflow": false,
+      "windowScrollY": 0,
+      "rootRect": {
+        "x": 50,
+        "y": 513.3,
+        "width": 987,
+        "height": 753
+      },
+      "calendarWidth": 987,
+      "calendarScrollableWidth": 987,
+      "calendarClientWidth": 987,
+      "wrapScrollTop": 0,
+      "wrapRect": {
+        "x": 50,
+        "y": 552,
+        "width": 987,
+        "height": 680
+      },
+      "eventMarkers": 14,
+      "event10Rect": {
+        "x": 300,
+        "y": 817,
+        "width": 66,
+        "height": 27
+      },
+      "dateTitle": "05 de out. — 11 de out. de 2026",
+      "scrollables": [
+        {
+          "className": "sp-fullcalendar-wrap",
+          "clientWidth": 987,
+          "scrollWidth": 987,
+          "clientHeight": 680,
+          "scrollHeight": 793,
+          "scrollTop": 0,
+          "scrollLeft": 0
+        },
+        {
+          "className": "sp-sr-only",
+          "clientWidth": 1,
+          "scrollWidth": 101,
+          "clientHeight": 1,
+          "scrollHeight": 19,
+          "scrollTop": 0,
+          "scrollLeft": 0
+        },
+        {
+          "className": "fc-Ew fc-Ih",
+          "clientWidth": 113,
+          "scrollWidth": 113,
+          "clientHeight": 27,
+          "scrollHeight": 34,
+          "scrollTop": 0,
+          "scrollLeft": 0
+        },
+        {
+          "className": "sp-fc-event sp-fc-event--confirmed fc-1Y fc-Ih fc-iz fc-ZR fc-cj fc-td",
+          "clientWidth": 113,
+          "scrollWidth": 113,
+          "clientHeight": 27,
+          "scrollHeight": 34,
+          "scrollTop": 0,
+          "scrollLeft": 0
+        },
+        {
+          "className": "fc-1Y fc-P0",
+          "clientWidth": 113,
+          "scrollWidth": 113,
+          "clientHeight": 27,
+          "scrollHeight": 34,
+          "scrollTop": 0,
+          "scrollLeft": 0
+        },
+        {
+          "className": "sp-event-card__time",
+          "clientWidth": 101,
+          "scrollWidth": 101,
+          "clientHeight": 7,
+          "scrollHeight": 10,
+          "scrollTop": 0,
+          "scrollLeft": 0
+        },
+        {
+          "className": "sp-event-card__person",
+          "clientWidth": 101,
+          "scrollWidth": 101,
+          "clientHeight": 8,
+          "scrollHeight": 12,
+          "scrollTop": 0,
+          "scrollLeft": 0
+        },
+        {
+          "className": "sp-event-card__status",
+          "clientWidth": 101,
+          "scrollWidth": 101,
+          "clientHeight": 8,
+          "scrollHeight": 12,
+          "scrollTop": 0,
+          "scrollLeft": 0
+        }
+      ],
+      "screenshot": "1366x900-week-fullcalendar.png",
+      "errors": []
+    },
+    {
+      "candidate": "schedule-x",
+      "view": "day",
+      "viewport": {
+        "width": 1366,
+        "height": 900
+      },
+      "bodyWidth": 1366,
+      "documentScrollWidth": 1366,
+      "documentHorizontalOverflow": false,
+      "windowScrollY": 0,
+      "rootRect": {
+        "x": 50,
+        "y": 513.3,
+        "width": 987,
+        "height": 753
+      },
+      "calendarWidth": 987,
+      "calendarScrollableWidth": 987,
+      "calendarClientWidth": 987,
+      "wrapScrollTop": 396,
+      "wrapRect": {
+        "x": 50,
+        "y": 552,
+        "width": 987,
+        "height": 680
+      },
+      "eventMarkers": 14,
+      "event10Rect": {
+        "x": 582,
+        "y": 772,
+        "width": 447,
+        "height": 59
+      },
+      "dateTitle": "segunda-feira, 5 de outubro de 2026",
+      "scrollables": [
+        {
+          "className": "sp-schedule-x-wrap",
+          "clientWidth": 987,
+          "scrollWidth": 987,
+          "clientHeight": 680,
+          "scrollHeight": 1780,
+          "scrollTop": 396,
+          "scrollLeft": 0
+        },
+        {
+          "className": "sx__calendar-header-content",
+          "clientWidth": 319,
+          "scrollWidth": 319,
+          "clientHeight": 45,
+          "scrollHeight": 51,
+          "scrollTop": 0,
+          "scrollLeft": 0
+        },
+        {
+          "className": "sx__button sx__today-button sx__ripple",
+          "clientWidth": 62,
+          "scrollWidth": 88,
+          "clientHeight": 43,
+          "scrollHeight": 78,
+          "scrollTop": 0,
+          "scrollLeft": 0
+        },
+        {
+          "className": "sx__forward-backward-navigation",
+          "clientWidth": 96,
+          "scrollWidth": 96,
+          "clientHeight": 45,
+          "scrollHeight": 51,
+          "scrollTop": 0,
+          "scrollLeft": 0
+        },
+        {
+          "className": "sx__button sx__chevron-wrapper sx__ripple",
+          "clientWidth": 48,
+          "scrollWidth": 81,
+          "clientHeight": 48,
+          "scrollHeight": 81,
+          "scrollTop": 0,
+          "scrollLeft": 0
+        },
+        {
+          "className": "sx__button sx__chevron-wrapper sx__ripple",
+          "clientWidth": 48,
+          "scrollWidth": 81,
+          "clientHeight": 48,
+          "scrollHeight": 81,
+          "scrollTop": 0,
+          "scrollLeft": 0
+        },
+        {
+          "className": "sx__view-selection ",
+          "clientWidth": 79,
+          "scrollWidth": 88,
+          "clientHeight": 45,
+          "scrollHeight": 45,
+          "scrollTop": 0,
+          "scrollLeft": 0
+        },
+        {
+          "className": "sx__view-selection-selected-item sx__ripple",
+          "clientWidth": 77,
+          "scrollWidth": 95,
+          "clientHeight": 43,
+          "scrollHeight": 78,
+          "scrollTop": 0,
+          "scrollLeft": 0
+        }
+      ],
+      "screenshot": "1366x900-day-schedule-x.png",
+      "errors": []
+    },
+    {
+      "candidate": "schedule-x",
+      "view": "week",
+      "viewport": {
+        "width": 1366,
+        "height": 900
+      },
+      "bodyWidth": 1366,
+      "documentScrollWidth": 1366,
+      "documentHorizontalOverflow": false,
+      "windowScrollY": 0,
+      "rootRect": {
+        "x": 50,
+        "y": 513.3,
+        "width": 987,
+        "height": 753
+      },
+      "calendarWidth": 987,
+      "calendarScrollableWidth": 987,
+      "calendarClientWidth": 987,
+      "wrapScrollTop": 396,
+      "wrapRect": {
+        "x": 50,
+        "y": 552,
+        "width": 987,
+        "height": 680
+      },
+      "eventMarkers": 14,
+      "event10Rect": {
+        "x": 200,
+        "y": 772,
+        "width": 63,
+        "height": 59
+      },
+      "dateTitle": "05 de out. — 11 de out. de 2026",
+      "scrollables": [
+        {
+          "className": "sp-schedule-x-wrap",
+          "clientWidth": 987,
+          "scrollWidth": 987,
+          "clientHeight": 680,
+          "scrollHeight": 1780,
+          "scrollTop": 396,
+          "scrollLeft": 0
+        },
+        {
+          "className": "sx__calendar-header-content",
+          "clientWidth": 319,
+          "scrollWidth": 319,
+          "clientHeight": 45,
+          "scrollHeight": 51,
+          "scrollTop": 0,
+          "scrollLeft": 0
+        },
+        {
+          "className": "sx__button sx__today-button sx__ripple",
+          "clientWidth": 62,
+          "scrollWidth": 80,
+          "clientHeight": 43,
+          "scrollHeight": 71,
+          "scrollTop": 0,
+          "scrollLeft": 0
+        },
+        {
+          "className": "sx__forward-backward-navigation",
+          "clientWidth": 96,
+          "scrollWidth": 96,
+          "clientHeight": 45,
+          "scrollHeight": 51,
+          "scrollTop": 0,
+          "scrollLeft": 0
+        },
+        {
+          "className": "sx__button sx__chevron-wrapper sx__ripple",
+          "clientWidth": 48,
+          "scrollWidth": 73,
+          "clientHeight": 48,
+          "scrollHeight": 73,
+          "scrollTop": 0,
+          "scrollLeft": 0
+        },
+        {
+          "className": "sx__button sx__chevron-wrapper sx__ripple",
+          "clientWidth": 48,
+          "scrollWidth": 73,
+          "clientHeight": 48,
+          "scrollHeight": 73,
+          "scrollTop": 0,
+          "scrollLeft": 0
+        },
+        {
+          "className": "sx__view-selection-selected-item sx__ripple",
+          "clientWidth": 109,
+          "scrollWidth": 109,
+          "clientHeight": 43,
+          "scrollHeight": 71,
+          "scrollTop": 0,
+          "scrollLeft": 0
+        },
+        {
+          "className": "",
+          "clientWidth": 52,
+          "scrollWidth": 89,
+          "clientHeight": 12,
+          "scrollHeight": 12,
+          "scrollTop": 0,
+          "scrollLeft": 0
+        }
+      ],
+      "screenshot": "1366x900-week-schedule-x.png",
+      "errors": []
+    },
+    {
+      "candidate": "grid",
+      "view": "day",
+      "viewport": {
+        "width": 1024,
+        "height": 900
+      },
+      "bodyWidth": 1024,
+      "documentScrollWidth": 1024,
+      "documentHorizontalOverflow": false,
+      "windowScrollY": 0,
+      "rootRect": {
+        "x": 35,
+        "y": 571.06,
+        "width": 708,
+        "height": 714
+      },
+      "calendarWidth": 708,
+      "calendarScrollableWidth": 708,
+      "calendarClientWidth": 708,
+      "wrapScrollTop": 312,
+      "wrapRect": {
+        "x": 35,
+        "y": 571,
+        "width": 708,
+        "height": 680
+      },
+      "eventMarkers": 14,
+      "event10Rect": {
+        "x": 94,
+        "y": 699,
+        "width": 212,
+        "height": 52
+      },
+      "dateTitle": "segunda-feira, 5 de outubro de 2026",
+      "scrollables": [
+        {
+          "className": "sp-grid-scroll",
+          "clientWidth": 708,
+          "scrollWidth": 708,
+          "clientHeight": 680,
+          "scrollHeight": 1460,
+          "scrollTop": 312,
+          "scrollLeft": 0
+        },
+        {
+          "className": "sp-grid-layout",
+          "clientWidth": 708,
+          "scrollWidth": 708,
+          "clientHeight": 1454,
+          "scrollHeight": 1460,
+          "scrollTop": 0,
+          "scrollLeft": 0
+        },
+        {
+          "className": "sp-grid-time-gutter",
+          "clientWidth": 56,
+          "scrollWidth": 56,
+          "clientHeight": 1454,
+          "scrollHeight": 1460,
+          "scrollTop": 0,
+          "scrollLeft": 0
+        },
+        {
+          "className": "sp-grid-time-rail",
+          "clientWidth": 56,
+          "scrollWidth": 56,
+          "clientHeight": 1404,
+          "scrollHeight": 1410,
+          "scrollTop": 0,
+          "scrollLeft": 0
+        },
+        {
+          "className": "sp-event-card__person",
+          "clientWidth": 200,
+          "scrollWidth": 200,
+          "clientHeight": 9,
+          "scrollHeight": 12,
+          "scrollTop": 0,
+          "scrollLeft": 0
+        },
+        {
+          "className": "sp-event-card__status",
+          "clientWidth": 200,
+          "scrollWidth": 200,
+          "clientHeight": 9,
+          "scrollHeight": 12,
+          "scrollTop": 0,
+          "scrollLeft": 0
+        },
+        {
+          "className": "sp-event-card__person",
+          "clientWidth": 200,
+          "scrollWidth": 200,
+          "clientHeight": 9,
+          "scrollHeight": 12,
+          "scrollTop": 0,
+          "scrollLeft": 0
+        },
+        {
+          "className": "sp-event-card__status",
+          "clientWidth": 200,
+          "scrollWidth": 200,
+          "clientHeight": 9,
+          "scrollHeight": 12,
+          "scrollTop": 0,
+          "scrollLeft": 0
+        }
+      ],
+      "screenshot": "1024x900-day-grid.png",
+      "errors": []
+    },
+    {
+      "candidate": "grid",
+      "view": "week",
+      "viewport": {
+        "width": 1024,
+        "height": 900
+      },
+      "bodyWidth": 1024,
+      "documentScrollWidth": 1024,
+      "documentHorizontalOverflow": false,
+      "windowScrollY": 0,
+      "rootRect": {
+        "x": 35,
+        "y": 571.06,
+        "width": 708,
+        "height": 714
+      },
+      "calendarWidth": 708,
+      "calendarScrollableWidth": 1260,
+      "calendarClientWidth": 708,
+      "wrapScrollTop": 312,
+      "wrapRect": {
+        "x": 35,
+        "y": 571,
+        "width": 708,
+        "height": 680
+      },
+      "eventMarkers": 14,
+      "event10Rect": {
+        "x": 180,
+        "y": 699,
+        "width": 82,
+        "height": 52
+      },
+      "dateTitle": "05 de out. — 11 de out. de 2026",
+      "scrollables": [
+        {
+          "className": "sp-grid-scroll",
+          "clientWidth": 708,
+          "scrollWidth": 1260,
+          "clientHeight": 680,
+          "scrollHeight": 1460,
+          "scrollTop": 312,
+          "scrollLeft": 0
+        },
+        {
+          "className": "sp-grid-layout",
+          "clientWidth": 1260,
+          "scrollWidth": 1260,
+          "clientHeight": 1454,
+          "scrollHeight": 1460,
+          "scrollTop": 0,
+          "scrollLeft": 0
+        },
+        {
+          "className": "sp-grid-time-gutter",
+          "clientWidth": 56,
+          "scrollWidth": 56,
+          "clientHeight": 1454,
+          "scrollHeight": 1460,
+          "scrollTop": 0,
+          "scrollLeft": 0
+        },
+        {
+          "className": "sp-grid-time-rail",
+          "clientWidth": 56,
+          "scrollWidth": 56,
+          "clientHeight": 1404,
+          "scrollHeight": 1410,
+          "scrollTop": 0,
+          "scrollLeft": 0
+        },
+        {
+          "className": "sp-event-card__person",
+          "clientWidth": 70,
+          "scrollWidth": 85,
+          "clientHeight": 11,
+          "scrollHeight": 12,
+          "scrollTop": 0,
+          "scrollLeft": 0
+        },
+        {
+          "className": "sp-event-card__person",
+          "clientWidth": 70,
+          "scrollWidth": 89,
+          "clientHeight": 11,
+          "scrollHeight": 12,
+          "scrollTop": 0,
+          "scrollLeft": 0
+        },
+        {
+          "className": "sp-event-card__person",
+          "clientWidth": 70,
+          "scrollWidth": 73,
+          "clientHeight": 9,
+          "scrollHeight": 12,
+          "scrollTop": 0,
+          "scrollLeft": 0
+        },
+        {
+          "className": "sp-event-card__status",
+          "clientWidth": 70,
+          "scrollWidth": 70,
+          "clientHeight": 9,
+          "scrollHeight": 12,
+          "scrollTop": 0,
+          "scrollLeft": 0
+        }
+      ],
+      "screenshot": "1024x900-week-grid.png",
+      "errors": []
+    },
+    {
+      "candidate": "rbc",
+      "view": "day",
+      "viewport": {
+        "width": 1024,
+        "height": 900
+      },
+      "bodyWidth": 1024,
+      "documentScrollWidth": 1024,
+      "documentHorizontalOverflow": false,
+      "windowScrollY": 0,
+      "rootRect": {
+        "x": 35,
+        "y": 571.06,
+        "width": 708,
+        "height": 768
+      },
+      "calendarWidth": 708,
+      "calendarScrollableWidth": 708,
+      "calendarClientWidth": 708,
+      "wrapScrollTop": 0,
+      "wrapRect": {
+        "x": 35,
+        "y": 610,
+        "width": 708,
+        "height": 680
+      },
+      "eventMarkers": 7,
+      "event10Rect": {
+        "x": 77,
+        "y": 748,
+        "width": 209,
+        "height": 37
+      },
+      "dateTitle": "segunda-feira, 5 de outubro de 2026",
+      "scrollables": [
+        {
+          "className": "rbc-time-content",
+          "clientWidth": 690,
+          "scrollWidth": 690,
+          "clientHeight": 597,
+          "scrollHeight": 1008,
+          "scrollTop": 224,
+          "scrollLeft": 0
+        },
+        {
+          "className": "sp-event-card__person",
+          "clientWidth": 197,
+          "scrollWidth": 197,
+          "clientHeight": 9,
+          "scrollHeight": 12,
+          "scrollTop": 0,
+          "scrollLeft": 0
+        },
+        {
+          "className": "sp-event-card__status",
+          "clientWidth": 197,
+          "scrollWidth": 197,
+          "clientHeight": 9,
+          "scrollHeight": 12,
+          "scrollTop": 0,
+          "scrollLeft": 0
+        },
+        {
+          "className": "rbc-event sp-rbc-event sp-rbc-event--pending",
+          "clientWidth": 209,
+          "scrollWidth": 209,
+          "clientHeight": 28,
+          "scrollHeight": 36,
+          "scrollTop": 0,
+          "scrollLeft": 0
+        },
+        {
+          "className": "rbc-addons-dnd-resizable",
+          "clientWidth": 209,
+          "scrollWidth": 209,
+          "clientHeight": 28,
+          "scrollHeight": 36,
+          "scrollTop": 0,
+          "scrollLeft": 0
+        },
+        {
+          "className": "rbc-event-content",
+          "clientWidth": 209,
+          "scrollWidth": 209,
+          "clientHeight": 28,
+          "scrollHeight": 36,
+          "scrollTop": 0,
+          "scrollLeft": 0
+        },
+        {
+          "className": "sp-event-card__time",
+          "clientWidth": 197,
+          "scrollWidth": 197,
+          "clientHeight": 7,
+          "scrollHeight": 10,
+          "scrollTop": 0,
+          "scrollLeft": 0
+        },
+        {
+          "className": "sp-event-card__person",
+          "clientWidth": 197,
+          "scrollWidth": 197,
+          "clientHeight": 8,
+          "scrollHeight": 12,
+          "scrollTop": 0,
+          "scrollLeft": 0
+        }
+      ],
+      "screenshot": "1024x900-day-rbc.png",
+      "errors": []
+    },
+    {
+      "candidate": "rbc",
+      "view": "week",
+      "viewport": {
+        "width": 1024,
+        "height": 900
+      },
+      "bodyWidth": 1024,
+      "documentScrollWidth": 1024,
+      "documentHorizontalOverflow": false,
+      "windowScrollY": 0,
+      "rootRect": {
+        "x": 35,
+        "y": 571.06,
+        "width": 708,
+        "height": 768
+      },
+      "calendarWidth": 708,
+      "calendarScrollableWidth": 708,
+      "calendarClientWidth": 708,
+      "wrapScrollTop": 0,
+      "wrapRect": {
+        "x": 35,
+        "y": 610,
+        "width": 708,
+        "height": 680
+      },
+      "eventMarkers": 7,
+      "event10Rect": {
+        "x": 119,
+        "y": 747,
+        "width": 42,
+        "height": 37
+      },
+      "dateTitle": "05 de out. — 11 de out. de 2026",
+      "scrollables": [
+        {
+          "className": "rbc-row rbc-time-header-cell",
+          "clientWidth": 656,
+          "scrollWidth": 656,
+          "clientHeight": 26,
+          "scrollHeight": 38,
+          "scrollTop": 0,
+          "scrollLeft": 0
+        },
+        {
+          "className": "rbc-time-content",
+          "clientWidth": 690,
+          "scrollWidth": 690,
+          "clientHeight": 598,
+          "scrollHeight": 1008,
+          "scrollTop": 224,
+          "scrollLeft": 0
+        },
+        {
+          "className": "sp-event-card__person",
+          "clientWidth": 59,
+          "scrollWidth": 85,
+          "clientHeight": 9,
+          "scrollHeight": 12,
+          "scrollTop": 0,
+          "scrollLeft": 0
+        },
+        {
+          "className": "sp-event-card__status",
+          "clientWidth": 59,
+          "scrollWidth": 59,
+          "clientHeight": 9,
+          "scrollHeight": 12,
+          "scrollTop": 0,
+          "scrollLeft": 0
+        },
+        {
+          "className": "rbc-event sp-rbc-event sp-rbc-event--completed",
+          "clientWidth": 84,
+          "scrollWidth": 84,
+          "clientHeight": 28,
+          "scrollHeight": 36,
+          "scrollTop": 0,
+          "scrollLeft": 0
+        },
+        {
+          "className": "rbc-event-content",
+          "clientWidth": 84,
+          "scrollWidth": 84,
+          "clientHeight": 28,
+          "scrollHeight": 36,
+          "scrollTop": 0,
+          "scrollLeft": 0
+        },
+        {
+          "className": "sp-event-card__time",
+          "clientWidth": 72,
+          "scrollWidth": 72,
+          "clientHeight": 7,
+          "scrollHeight": 10,
+          "scrollTop": 0,
+          "scrollLeft": 0
+        },
+        {
+          "className": "sp-event-card__person",
+          "clientWidth": 72,
+          "scrollWidth": 73,
+          "clientHeight": 8,
+          "scrollHeight": 12,
+          "scrollTop": 0,
+          "scrollLeft": 0
+        }
+      ],
+      "screenshot": "1024x900-week-rbc.png",
+      "errors": []
+    },
+    {
+      "candidate": "fullcalendar",
+      "view": "day",
+      "viewport": {
+        "width": 1024,
+        "height": 900
+      },
+      "bodyWidth": 1024,
+      "documentScrollWidth": 1024,
+      "documentHorizontalOverflow": false,
+      "windowScrollY": 0,
+      "rootRect": {
+        "x": 35,
+        "y": 571.06,
+        "width": 708,
+        "height": 753
+      },
+      "calendarWidth": 708,
+      "calendarScrollableWidth": 708,
+      "calendarClientWidth": 708,
+      "wrapScrollTop": 0,
+      "wrapRect": {
+        "x": 35,
+        "y": 610,
+        "width": 708,
+        "height": 680
+      },
+      "eventMarkers": 14,
+      "event10Rect": {
+        "x": 410,
+        "y": 875,
+        "width": 325,
+        "height": 27
+      },
+      "dateTitle": "segunda-feira, 5 de outubro de 2026",
+      "scrollables": [
+        {
+          "className": "sp-fullcalendar-wrap",
+          "clientWidth": 708,
+          "scrollWidth": 708,
+          "clientHeight": 680,
+          "scrollHeight": 793,
+          "scrollTop": 0,
+          "scrollLeft": 0
+        },
+        {
+          "className": "sp-sr-only",
+          "clientWidth": 1,
+          "scrollWidth": 101,
+          "clientHeight": 1,
+          "scrollHeight": 19,
+          "scrollTop": 0,
+          "scrollLeft": 0
+        },
+        {
+          "className": "fc-Ew fc-Ih",
+          "clientWidth": 629,
+          "scrollWidth": 629,
+          "clientHeight": 27,
+          "scrollHeight": 34,
+          "scrollTop": 0,
+          "scrollLeft": 0
+        },
+        {
+          "className": "sp-fc-event sp-fc-event--confirmed fc-1Y fc-Ih fc-iz fc-ZR fc-cj fc-td",
+          "clientWidth": 629,
+          "scrollWidth": 629,
+          "clientHeight": 27,
+          "scrollHeight": 34,
+          "scrollTop": 0,
+          "scrollLeft": 0
+        },
+        {
+          "className": "fc-1Y fc-P0",
+          "clientWidth": 629,
+          "scrollWidth": 629,
+          "clientHeight": 27,
+          "scrollHeight": 34,
+          "scrollTop": 0,
+          "scrollLeft": 0
+        },
+        {
+          "className": "sp-event-card__time",
+          "clientWidth": 615,
+          "scrollWidth": 615,
+          "clientHeight": 4,
+          "scrollHeight": 12,
+          "scrollTop": 0,
+          "scrollLeft": 0
+        },
+        {
+          "className": "sp-event-card__person",
+          "clientWidth": 615,
+          "scrollWidth": 615,
+          "clientHeight": 4,
+          "scrollHeight": 13,
+          "scrollTop": 0,
+          "scrollLeft": 0
+        },
+        {
+          "className": "sp-event-card__service",
+          "clientWidth": 615,
+          "scrollWidth": 615,
+          "clientHeight": 4,
+          "scrollHeight": 12,
+          "scrollTop": 0,
+          "scrollLeft": 0
+        }
+      ],
+      "screenshot": "1024x900-day-fullcalendar.png",
+      "errors": []
+    },
+    {
+      "candidate": "fullcalendar",
+      "view": "week",
+      "viewport": {
+        "width": 1024,
+        "height": 900
+      },
+      "bodyWidth": 1024,
+      "documentScrollWidth": 1024,
+      "documentHorizontalOverflow": false,
+      "windowScrollY": 0,
+      "rootRect": {
+        "x": 35,
+        "y": 571.06,
+        "width": 708,
+        "height": 753
+      },
+      "calendarWidth": 708,
+      "calendarScrollableWidth": 708,
+      "calendarClientWidth": 708,
+      "wrapScrollTop": 0,
+      "wrapRect": {
+        "x": 35,
+        "y": 610,
+        "width": 708,
+        "height": 680
+      },
+      "eventMarkers": 14,
+      "event10Rect": {
+        "x": 225,
+        "y": 875,
+        "width": 46,
+        "height": 27
+      },
+      "dateTitle": "05 de out. — 11 de out. de 2026",
+      "scrollables": [
+        {
+          "className": "sp-fullcalendar-wrap",
+          "clientWidth": 708,
+          "scrollWidth": 708,
+          "clientHeight": 680,
+          "scrollHeight": 793,
+          "scrollTop": 0,
+          "scrollLeft": 0
+        },
+        {
+          "className": "sp-sr-only",
+          "clientWidth": 1,
+          "scrollWidth": 101,
+          "clientHeight": 1,
+          "scrollHeight": 19,
+          "scrollTop": 0,
+          "scrollLeft": 0
+        },
+        {
+          "className": "fc-Ew fc-Ih",
+          "clientWidth": 73,
+          "scrollWidth": 73,
+          "clientHeight": 27,
+          "scrollHeight": 34,
+          "scrollTop": 0,
+          "scrollLeft": 0
+        },
+        {
+          "className": "sp-fc-event sp-fc-event--confirmed fc-1Y fc-Ih fc-iz fc-ZR fc-cj fc-td",
+          "clientWidth": 73,
+          "scrollWidth": 73,
+          "clientHeight": 27,
+          "scrollHeight": 34,
+          "scrollTop": 0,
+          "scrollLeft": 0
+        },
+        {
+          "className": "fc-1Y fc-P0",
+          "clientWidth": 73,
+          "scrollWidth": 73,
+          "clientHeight": 27,
+          "scrollHeight": 34,
+          "scrollTop": 0,
+          "scrollLeft": 0
+        },
+        {
+          "className": "sp-event-card__time",
+          "clientWidth": 61,
+          "scrollWidth": 61,
+          "clientHeight": 7,
+          "scrollHeight": 10,
+          "scrollTop": 0,
+          "scrollLeft": 0
+        },
+        {
+          "className": "sp-event-card__person",
+          "clientWidth": 61,
+          "scrollWidth": 85,
+          "clientHeight": 8,
+          "scrollHeight": 12,
+          "scrollTop": 0,
+          "scrollLeft": 0
+        },
+        {
+          "className": "sp-event-card__status",
+          "clientWidth": 61,
+          "scrollWidth": 61,
+          "clientHeight": 8,
+          "scrollHeight": 12,
+          "scrollTop": 0,
+          "scrollLeft": 0
+        }
+      ],
+      "screenshot": "1024x900-week-fullcalendar.png",
+      "errors": []
+    },
+    {
+      "candidate": "schedule-x",
+      "view": "day",
+      "viewport": {
+        "width": 1024,
+        "height": 900
+      },
+      "bodyWidth": 1024,
+      "documentScrollWidth": 1024,
+      "documentHorizontalOverflow": false,
+      "windowScrollY": 0,
+      "rootRect": {
+        "x": 35,
+        "y": 571.06,
+        "width": 708,
+        "height": 768
+      },
+      "calendarWidth": 708,
+      "calendarScrollableWidth": 708,
+      "calendarClientWidth": 708,
+      "wrapScrollTop": 396,
+      "wrapRect": {
+        "x": 35,
+        "y": 610,
+        "width": 708,
+        "height": 680
+      },
+      "eventMarkers": 14,
+      "event10Rect": {
+        "x": 436,
+        "y": 830,
+        "width": 307,
+        "height": 59
+      },
+      "dateTitle": "segunda-feira, 5 de outubro de 2026",
+      "scrollables": [
+        {
+          "className": "sp-schedule-x-wrap",
+          "clientWidth": 708,
+          "scrollWidth": 708,
+          "clientHeight": 680,
+          "scrollHeight": 1780,
+          "scrollTop": 396,
+          "scrollLeft": 0
+        },
+        {
+          "className": "sx__calendar",
+          "clientWidth": 690,
+          "scrollWidth": 699,
+          "clientHeight": 1762,
+          "scrollHeight": 1762,
+          "scrollTop": 0,
+          "scrollLeft": 0
+        },
+        {
+          "className": "sx__view-selection ",
+          "clientWidth": 79,
+          "scrollWidth": 88,
+          "clientHeight": 45,
+          "scrollHeight": 45,
+          "scrollTop": 0,
+          "scrollLeft": 0
+        },
+        {
+          "className": "sx__view-selection-selected-item sx__ripple",
+          "clientWidth": 77,
+          "scrollWidth": 80,
+          "clientHeight": 43,
+          "scrollHeight": 63,
+          "scrollTop": 0,
+          "scrollLeft": 0
+        },
+        {
+          "className": "",
+          "clientWidth": 604,
+          "scrollWidth": 604,
+          "clientHeight": 7,
+          "scrollHeight": 11,
+          "scrollTop": 0,
+          "scrollLeft": 0
+        },
+        {
+          "className": "",
+          "clientWidth": 604,
+          "scrollWidth": 604,
+          "clientHeight": 7,
+          "scrollHeight": 10,
+          "scrollTop": 0,
+          "scrollLeft": 0
+        },
+        {
+          "className": "",
+          "clientWidth": 604,
+          "scrollWidth": 604,
+          "clientHeight": 7,
+          "scrollHeight": 10,
+          "scrollTop": 0,
+          "scrollLeft": 0
+        },
+        {
+          "className": "",
+          "clientWidth": 604,
+          "scrollWidth": 604,
+          "clientHeight": 7,
+          "scrollHeight": 11,
+          "scrollTop": 0,
+          "scrollLeft": 0
+        }
+      ],
+      "screenshot": "1024x900-day-schedule-x.png",
+      "errors": []
+    },
+    {
+      "candidate": "schedule-x",
+      "view": "week",
+      "viewport": {
+        "width": 1024,
+        "height": 900
+      },
+      "bodyWidth": 1024,
+      "documentScrollWidth": 1024,
+      "documentHorizontalOverflow": false,
+      "windowScrollY": 0,
+      "rootRect": {
+        "x": 35,
+        "y": 571.06,
+        "width": 708,
+        "height": 768
+      },
+      "calendarWidth": 708,
+      "calendarScrollableWidth": 708,
+      "calendarClientWidth": 708,
+      "wrapScrollTop": 396,
+      "wrapRect": {
+        "x": 35,
+        "y": 610,
+        "width": 708,
+        "height": 680
+      },
+      "eventMarkers": 14,
+      "event10Rect": {
+        "x": 436,
+        "y": 830,
+        "width": 307,
+        "height": 59
+      },
+      "dateTitle": "05 de out. — 11 de out. de 2026",
+      "scrollables": [
+        {
+          "className": "sp-schedule-x-wrap",
+          "clientWidth": 708,
+          "scrollWidth": 708,
+          "clientHeight": 680,
+          "scrollHeight": 1780,
+          "scrollTop": 396,
+          "scrollLeft": 0
+        },
+        {
+          "className": "sx__calendar",
+          "clientWidth": 690,
+          "scrollWidth": 699,
+          "clientHeight": 1762,
+          "scrollHeight": 1762,
+          "scrollTop": 0,
+          "scrollLeft": 0
+        },
+        {
+          "className": "sx__view-selection ",
+          "clientWidth": 79,
+          "scrollWidth": 88,
+          "clientHeight": 45,
+          "scrollHeight": 45,
+          "scrollTop": 0,
+          "scrollLeft": 0
+        },
+        {
+          "className": "sx__view-selection-selected-item sx__ripple",
+          "clientWidth": 77,
+          "scrollWidth": 80,
+          "clientHeight": 43,
+          "scrollHeight": 63,
+          "scrollTop": 0,
+          "scrollLeft": 0
+        },
+        {
+          "className": "",
+          "clientWidth": 604,
+          "scrollWidth": 604,
+          "clientHeight": 7,
+          "scrollHeight": 11,
+          "scrollTop": 0,
+          "scrollLeft": 0
+        },
+        {
+          "className": "",
+          "clientWidth": 604,
+          "scrollWidth": 604,
+          "clientHeight": 7,
+          "scrollHeight": 10,
+          "scrollTop": 0,
+          "scrollLeft": 0
+        },
+        {
+          "className": "",
+          "clientWidth": 604,
+          "scrollWidth": 604,
+          "clientHeight": 7,
+          "scrollHeight": 10,
+          "scrollTop": 0,
+          "scrollLeft": 0
+        },
+        {
+          "className": "",
+          "clientWidth": 604,
+          "scrollWidth": 604,
+          "clientHeight": 7,
+          "scrollHeight": 11,
+          "scrollTop": 0,
+          "scrollLeft": 0
+        }
+      ],
+      "screenshot": "1024x900-week-schedule-x.png",
+      "errors": []
+    },
+    {
+      "candidate": "grid",
+      "view": "day",
+      "viewport": {
+        "width": 390,
+        "height": 844
+      },
+      "bodyWidth": 390,
+      "documentScrollWidth": 390,
+      "documentHorizontalOverflow": false,
+      "windowScrollY": 0,
+      "rootRect": {
+        "x": 20,
+        "y": 649.94,
+        "width": 350,
+        "height": 604
+      },
+      "calendarWidth": 350,
+      "calendarScrollableWidth": 572,
+      "calendarClientWidth": 350,
+      "wrapScrollTop": 312,
+      "wrapRect": {
+        "x": 20,
+        "y": 650,
+        "width": 350,
+        "height": 560
+      },
+      "eventMarkers": 14,
+      "event10Rect": {
+        "x": 67,
+        "y": 772,
+        "width": 171,
+        "height": 52
+      },
+      "dateTitle": "segunda-feira, 5 de outubro de 2026",
+      "scrollables": [
+        {
+          "className": "sp-grid-scroll",
+          "clientWidth": 350,
+          "scrollWidth": 572,
+          "clientHeight": 560,
+          "scrollHeight": 1452,
+          "scrollTop": 312,
+          "scrollLeft": 0
+        },
+        {
+          "className": "sp-grid-layout",
+          "clientWidth": 572,
+          "scrollWidth": 572,
+          "clientHeight": 1448,
+          "scrollHeight": 1452,
+          "scrollTop": 0,
+          "scrollLeft": 0
+        },
+        {
+          "className": "sp-grid-time-gutter",
+          "clientWidth": 44,
+          "scrollWidth": 44,
+          "clientHeight": 1448,
+          "scrollHeight": 1452,
+          "scrollTop": 0,
+          "scrollLeft": 0
+        },
+        {
+          "className": "sp-grid-time-rail",
+          "clientWidth": 44,
+          "scrollWidth": 44,
+          "clientHeight": 1404,
+          "scrollHeight": 1408,
+          "scrollTop": 0,
+          "scrollLeft": 0
+        },
+        {
+          "className": "sp-event-card__person",
+          "clientWidth": 159,
+          "scrollWidth": 159,
+          "clientHeight": 9,
+          "scrollHeight": 12,
+          "scrollTop": 0,
+          "scrollLeft": 0
+        },
+        {
+          "className": "sp-event-card__status",
+          "clientWidth": 159,
+          "scrollWidth": 159,
+          "clientHeight": 9,
+          "scrollHeight": 12,
+          "scrollTop": 0,
+          "scrollLeft": 0
+        },
+        {
+          "className": "sp-event-card__person",
+          "clientWidth": 159,
+          "scrollWidth": 159,
+          "clientHeight": 9,
+          "scrollHeight": 12,
+          "scrollTop": 0,
+          "scrollLeft": 0
+        },
+        {
+          "className": "sp-event-card__status",
+          "clientWidth": 159,
+          "scrollWidth": 159,
+          "clientHeight": 9,
+          "scrollHeight": 12,
+          "scrollTop": 0,
+          "scrollLeft": 0
+        }
+      ],
+      "screenshot": "390x844-day-grid.png",
+      "errors": []
+    },
+    {
+      "candidate": "grid",
+      "view": "list",
+      "viewport": {
+        "width": 390,
+        "height": 844
+      },
+      "bodyWidth": 390,
+      "documentScrollWidth": 390,
+      "documentHorizontalOverflow": false,
+      "windowScrollY": 0,
+      "rootRect": {
+        "x": 20,
+        "y": 649.94,
+        "width": 350,
+        "height": 560
+      },
+      "calendarWidth": 350,
+      "calendarScrollableWidth": 0,
+      "calendarClientWidth": 0,
+      "wrapScrollTop": 0,
+      "wrapRect": null,
+      "eventMarkers": 14,
+      "event10Rect": null,
+      "dateTitle": "segunda-feira, 5 de outubro de 2026",
+      "scrollables": [
+        {
+          "className": "sp-list-view",
+          "clientWidth": 350,
+          "scrollWidth": 350,
+          "clientHeight": 560,
+          "scrollHeight": 570,
+          "scrollTop": 0,
+          "scrollLeft": 0
+        }
+      ],
+      "screenshot": "390x844-list-grid.png",
+      "errors": []
+    },
+    {
+      "candidate": "rbc",
+      "view": "day",
+      "viewport": {
+        "width": 390,
+        "height": 844
+      },
+      "bodyWidth": 390,
+      "documentScrollWidth": 390,
+      "documentHorizontalOverflow": false,
+      "windowScrollY": 0,
+      "rootRect": {
+        "x": 20,
+        "y": 649.94,
+        "width": 350,
+        "height": 658.59
+      },
+      "calendarWidth": 350,
+      "calendarScrollableWidth": 536,
+      "calendarClientWidth": 350,
+      "wrapScrollTop": 0,
+      "wrapRect": {
+        "x": 20,
+        "y": 691,
+        "width": 350,
+        "height": 560
+      },
+      "eventMarkers": 7,
+      "event10Rect": {
+        "x": 62,
+        "y": 829,
+        "width": 152,
+        "height": 37
+      },
+      "dateTitle": "segunda-feira, 5 de outubro de 2026",
+      "scrollables": [
+        {
+          "className": "sp-rbc-wrap",
+          "clientWidth": 350,
+          "scrollWidth": 536,
+          "clientHeight": 560,
+          "scrollHeight": 560,
+          "scrollTop": 0,
+          "scrollLeft": 0
+        },
+        {
+          "className": "rbc-time-content",
+          "clientWidth": 518,
+          "scrollWidth": 518,
+          "clientHeight": 477,
+          "scrollHeight": 1008,
+          "scrollTop": 224,
+          "scrollLeft": 0
+        },
+        {
+          "className": "sp-event-card__person",
+          "clientWidth": 140,
+          "scrollWidth": 140,
+          "clientHeight": 9,
+          "scrollHeight": 12,
+          "scrollTop": 0,
+          "scrollLeft": 0
+        },
+        {
+          "className": "sp-event-card__status",
+          "clientWidth": 140,
+          "scrollWidth": 140,
+          "clientHeight": 9,
+          "scrollHeight": 12,
+          "scrollTop": 0,
+          "scrollLeft": 0
+        },
+        {
+          "className": "rbc-event sp-rbc-event sp-rbc-event--pending",
+          "clientWidth": 152,
+          "scrollWidth": 152,
+          "clientHeight": 28,
+          "scrollHeight": 36,
+          "scrollTop": 0,
+          "scrollLeft": 0
+        },
+        {
+          "className": "rbc-addons-dnd-resizable",
+          "clientWidth": 152,
+          "scrollWidth": 152,
+          "clientHeight": 28,
+          "scrollHeight": 36,
+          "scrollTop": 0,
+          "scrollLeft": 0
+        },
+        {
+          "className": "rbc-event-content",
+          "clientWidth": 152,
+          "scrollWidth": 152,
+          "clientHeight": 28,
+          "scrollHeight": 36,
+          "scrollTop": 0,
+          "scrollLeft": 0
+        },
+        {
+          "className": "sp-event-card__time",
+          "clientWidth": 140,
+          "scrollWidth": 140,
+          "clientHeight": 7,
+          "scrollHeight": 10,
+          "scrollTop": 0,
+          "scrollLeft": 0
+        }
+      ],
+      "screenshot": "390x844-day-rbc.png",
+      "errors": []
+    },
+    {
+      "candidate": "rbc",
+      "view": "list",
+      "viewport": {
+        "width": 390,
+        "height": 844
+      },
+      "bodyWidth": 390,
+      "documentScrollWidth": 390,
+      "documentHorizontalOverflow": false,
+      "windowScrollY": 0,
+      "rootRect": {
+        "x": 20,
+        "y": 649.94,
+        "width": 350,
+        "height": 658.59
+      },
+      "calendarWidth": 350,
+      "calendarScrollableWidth": 350,
+      "calendarClientWidth": 350,
+      "wrapScrollTop": 0,
+      "wrapRect": {
+        "x": 20,
+        "y": 691,
+        "width": 350,
+        "height": 560
+      },
+      "eventMarkers": 7,
+      "event10Rect": {
+        "x": 186,
+        "y": 798,
+        "width": 166,
+        "height": 45
+      },
+      "dateTitle": "segunda-feira, 5 de outubro de 2026",
+      "scrollables": [
+        {
+          "className": "sp-rbc-event sp-rbc-event--confirmed",
+          "clientWidth": 333,
+          "scrollWidth": 333,
+          "clientHeight": 63,
+          "scrollHeight": 439,
+          "scrollTop": 0,
+          "scrollLeft": 0
+        }
+      ],
+      "screenshot": "390x844-list-rbc.png",
+      "errors": []
+    },
+    {
+      "candidate": "fullcalendar",
+      "view": "day",
+      "viewport": {
+        "width": 390,
+        "height": 844
+      },
+      "bodyWidth": 390,
+      "documentScrollWidth": 390,
+      "documentHorizontalOverflow": false,
+      "windowScrollY": 0,
+      "rootRect": {
+        "x": 20,
+        "y": 649.94,
+        "width": 350,
+        "height": 645.09
+      },
+      "calendarWidth": 350,
+      "calendarScrollableWidth": 350,
+      "calendarClientWidth": 350,
+      "wrapScrollTop": 0,
+      "wrapRect": {
+        "x": 20,
+        "y": 691,
+        "width": 350,
+        "height": 560
+      },
+      "eventMarkers": 14,
+      "event10Rect": {
+        "x": 216,
+        "y": 956,
+        "width": 146,
+        "height": 27
+      },
+      "dateTitle": "segunda-feira, 5 de outubro de 2026",
+      "scrollables": [
+        {
+          "className": "sp-fullcalendar-wrap",
+          "clientWidth": 350,
+          "scrollWidth": 350,
+          "clientHeight": 560,
+          "scrollHeight": 793,
+          "scrollTop": 0,
+          "scrollLeft": 0
+        },
+        {
+          "className": "sp-sr-only",
+          "clientWidth": 1,
+          "scrollWidth": 101,
+          "clientHeight": 1,
+          "scrollHeight": 19,
+          "scrollTop": 0,
+          "scrollLeft": 0
+        },
+        {
+          "className": "fc-Ew fc-Ih",
+          "clientWidth": 271,
+          "scrollWidth": 271,
+          "clientHeight": 27,
+          "scrollHeight": 34,
+          "scrollTop": 0,
+          "scrollLeft": 0
+        },
+        {
+          "className": "sp-fc-event sp-fc-event--confirmed fc-1Y fc-Ih fc-iz fc-ZR fc-cj fc-td",
+          "clientWidth": 271,
+          "scrollWidth": 271,
+          "clientHeight": 27,
+          "scrollHeight": 34,
+          "scrollTop": 0,
+          "scrollLeft": 0
+        },
+        {
+          "className": "fc-1Y fc-P0",
+          "clientWidth": 271,
+          "scrollWidth": 271,
+          "clientHeight": 27,
+          "scrollHeight": 34,
+          "scrollTop": 0,
+          "scrollLeft": 0
+        },
+        {
+          "className": "sp-event-card__time",
+          "clientWidth": 257,
+          "scrollWidth": 257,
+          "clientHeight": 4,
+          "scrollHeight": 12,
+          "scrollTop": 0,
+          "scrollLeft": 0
+        },
+        {
+          "className": "sp-event-card__person",
+          "clientWidth": 257,
+          "scrollWidth": 257,
+          "clientHeight": 4,
+          "scrollHeight": 13,
+          "scrollTop": 0,
+          "scrollLeft": 0
+        },
+        {
+          "className": "sp-event-card__service",
+          "clientWidth": 257,
+          "scrollWidth": 257,
+          "clientHeight": 4,
+          "scrollHeight": 12,
+          "scrollTop": 0,
+          "scrollLeft": 0
+        }
+      ],
+      "screenshot": "390x844-day-fullcalendar.png",
+      "errors": []
+    },
+    {
+      "candidate": "fullcalendar",
+      "view": "list",
+      "viewport": {
+        "width": 390,
+        "height": 844
+      },
+      "bodyWidth": 390,
+      "documentScrollWidth": 390,
+      "documentHorizontalOverflow": false,
+      "windowScrollY": 0,
+      "rootRect": {
+        "x": 20,
+        "y": 649.94,
+        "width": 350,
+        "height": 569.84
+      },
+      "calendarWidth": 350,
+      "calendarScrollableWidth": 350,
+      "calendarClientWidth": 350,
+      "wrapScrollTop": 0,
+      "wrapRect": {
+        "x": 20,
+        "y": 691,
+        "width": 350,
+        "height": 485
+      },
+      "eventMarkers": 14,
+      "event10Rect": {
+        "x": 28,
+        "y": 782,
+        "width": 334,
+        "height": 64
+      },
+      "dateTitle": "segunda-feira, 5 de outubro de 2026",
+      "scrollables": [],
+      "screenshot": "390x844-list-fullcalendar.png",
+      "errors": []
+    },
+    {
+      "candidate": "schedule-x",
+      "view": "day",
+      "viewport": {
+        "width": 390,
+        "height": 844
+      },
+      "bodyWidth": 390,
+      "documentScrollWidth": 390,
+      "documentHorizontalOverflow": false,
+      "windowScrollY": 0,
+      "rootRect": {
+        "x": 20,
+        "y": 649.94,
+        "width": 350,
+        "height": 658.59
+      },
+      "calendarWidth": 350,
+      "calendarScrollableWidth": 350,
+      "calendarClientWidth": 350,
+      "wrapScrollTop": 418,
+      "wrapRect": {
+        "x": 20,
+        "y": 691,
+        "width": 350,
+        "height": 560
+      },
+      "eventMarkers": 14,
+      "event10Rect": {
+        "x": 233,
+        "y": 987,
+        "width": 128,
+        "height": 59
+      },
+      "dateTitle": "segunda-feira, 5 de outubro de 2026",
+      "scrollables": [
+        {
+          "className": "sp-schedule-x-wrap",
+          "clientWidth": 350,
+          "scrollWidth": 350,
+          "clientHeight": 560,
+          "scrollHeight": 1879,
+          "scrollTop": 418,
+          "scrollLeft": 0
+        },
+        {
+          "className": "sx__view-selection ",
+          "clientWidth": 79,
+          "scrollWidth": 88,
+          "clientHeight": 45,
+          "scrollHeight": 45,
+          "scrollTop": 0,
+          "scrollLeft": 0
+        },
+        {
+          "className": "sx__view-selection-selected-item sx__ripple",
+          "clientWidth": 77,
+          "scrollWidth": 91,
+          "clientHeight": 43,
+          "scrollHeight": 73,
+          "scrollTop": 0,
+          "scrollLeft": 0
+        },
+        {
+          "className": "",
+          "clientWidth": 246,
+          "scrollWidth": 246,
+          "clientHeight": 7,
+          "scrollHeight": 11,
+          "scrollTop": 0,
+          "scrollLeft": 0
+        },
+        {
+          "className": "",
+          "clientWidth": 246,
+          "scrollWidth": 246,
+          "clientHeight": 7,
+          "scrollHeight": 10,
+          "scrollTop": 0,
+          "scrollLeft": 0
+        },
+        {
+          "className": "",
+          "clientWidth": 246,
+          "scrollWidth": 246,
+          "clientHeight": 7,
+          "scrollHeight": 10,
+          "scrollTop": 0,
+          "scrollLeft": 0
+        },
+        {
+          "className": "",
+          "clientWidth": 246,
+          "scrollWidth": 246,
+          "clientHeight": 7,
+          "scrollHeight": 11,
+          "scrollTop": 0,
+          "scrollLeft": 0
+        },
+        {
+          "className": "",
+          "clientWidth": 246,
+          "scrollWidth": 246,
+          "clientHeight": 7,
+          "scrollHeight": 10,
+          "scrollTop": 0,
+          "scrollLeft": 0
+        }
+      ],
+      "screenshot": "390x844-day-schedule-x.png",
+      "errors": []
+    },
+    {
+      "candidate": "schedule-x",
+      "view": "list",
+      "viewport": {
+        "width": 390,
+        "height": 844
+      },
+      "bodyWidth": 390,
+      "documentScrollWidth": 390,
+      "documentHorizontalOverflow": false,
+      "windowScrollY": 715,
+      "rootRect": {
+        "x": 20,
+        "y": -65.06,
+        "width": 350,
+        "height": 658.59
+      },
+      "calendarWidth": 350,
+      "calendarScrollableWidth": 350,
+      "calendarClientWidth": 350,
+      "wrapScrollTop": 139,
+      "wrapRect": {
+        "x": 20,
+        "y": -24,
+        "width": 350,
+        "height": 560
+      },
+      "eventMarkers": 0,
+      "event10Rect": null,
+      "dateTitle": "segunda-feira, 5 de outubro de 2026",
+      "scrollables": [
+        {
+          "className": "sp-schedule-x-wrap",
+          "clientWidth": 350,
+          "scrollWidth": 350,
+          "clientHeight": 560,
+          "scrollHeight": 699,
+          "scrollTop": 139,
+          "scrollLeft": 0
+        },
+        {
+          "className": "sx__view-selection-selected-item sx__ripple",
+          "clientWidth": 86,
+          "scrollWidth": 101,
+          "clientHeight": 43,
+          "scrollHeight": 79,
+          "scrollTop": 0,
+          "scrollLeft": 0
+        }
+      ],
+      "screenshot": "390x844-list-schedule-x.png",
+      "errors": []
+    }
+  ],
+  "additionalMobileDayScreenshots": [
+    {
+      "candidate": "grid",
+      "file": "390x844-day-grid-scrolled.png",
+      "windowScrollY": 590,
+      "event10Y": 182,
+      "documentScrollWidth": 390
+    },
+    {
+      "candidate": "rbc",
+      "file": "390x844-day-rbc-scrolled.png",
+      "windowScrollY": 590,
+      "event10Y": 239,
+      "documentScrollWidth": 390
+    },
+    {
+      "candidate": "fullcalendar",
+      "file": "390x844-day-fullcalendar-scrolled.png",
+      "windowScrollY": 590,
+      "event10Y": 366,
+      "documentScrollWidth": 390
+    },
+    {
+      "candidate": "schedule-x",
+      "file": "390x844-day-schedule-x-scrolled.png",
+      "windowScrollY": 590,
+      "event10Y": 397,
+      "documentScrollWidth": 390
+    }
+  ],
+  "mobileTouchEvidence": {
+    "method": "Puppeteer Core page.touchscreen.tap / CDP Input.dispatchTouchEvent, viewport 390x844, isMobile+hasTouch, real headless Chromium",
+    "existingEventOpenAndEscape": [
+      "grid",
+      "rbc",
+      "fullcalendar",
+      "schedule-x"
+    ],
+    "createAt1000To1040": {
+      "grid": "tap on blank Day grid",
+      "rbc": "touch drag selection",
+      "fullcalendar": "tap date cell (Standard interaction)",
+      "scheduleX": "tap Community time cell; domain normalizes a 40-minute suggestion"
+    },
+    "createdDraft": "Seg., 05 De Out. · 10:00–10:40 · Dra. Bianca",
+    "escapeClosesDraft": true,
+    "globalNextDate": [
+      {
+        "candidate": "grid",
+        "before": "segunda-feira, 5 de outubro de 2026",
+        "after": "terça-feira, 6 de outubro de 2026"
+      },
+      {
+        "candidate": "rbc",
+        "before": "segunda-feira, 5 de outubro de 2026",
+        "after": "terça-feira, 6 de outubro de 2026"
+      },
+      {
+        "candidate": "fullcalendar",
+        "before": "segunda-feira, 5 de outubro de 2026",
+        "after": "terça-feira, 6 de outubro de 2026"
+      },
+      {
+        "candidate": "schedule-x",
+        "before": "segunda-feira, 5 de outubro de 2026",
+        "after": "terça-feira, 6 de outubro de 2026"
+      }
+    ],
+    "documentWidth390ForAll": true
+  },
+  "screenshotCountNote": "24 initial captures across four candidates and desktop Day/Week plus mobile Day/List; 4 additional scrolled Day screenshots at 390x844."
+}

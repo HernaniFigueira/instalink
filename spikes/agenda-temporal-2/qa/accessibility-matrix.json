@@ -1,0 +1,517 @@
+{
+  "date": "2026-10-01",
+  "method": "Axe-core WCAG 2 A/AA, WCAG 2.1 AA, best-practice plus manual DOM/CSS contrast, keyboard Tab/Shift+Tab/Enter/Space/Escape in headless Chromium via Puppeteer Core.",
+  "browser": "HeadlessChrome/153.0.8010.0",
+  "packages": {
+    "puppeteerCore": "25.12.0",
+    "sparticuzChromium": "153.0.0",
+    "axeCore": "4.10.3"
+  },
+  "rows": [
+    {
+      "candidate": "grid",
+      "viewport": "1366x900 Day",
+      "axe": {
+        "violations": [],
+        "passes": 36,
+        "incomplete": [
+          {
+            "id": "aria-prohibited-attr",
+            "nodes": 1,
+            "targets": [
+              [
+                ".sp-benchmark-strip"
+              ]
+            ]
+          },
+          {
+            "id": "color-contrast",
+            "nodes": 3,
+            "targets": [
+              [
+                ".sp-grid-time-rail > span:nth-child(19)"
+              ],
+              [
+                ".sp-empty-icon"
+              ],
+              [
+                ".sp-notice-check"
+              ]
+            ]
+          }
+        ],
+        "violationCount": 0
+      },
+      "colorContrast": {
+        "violations": [],
+        "incomplete": [
+          {
+            "id": "color-contrast",
+            "nodes": 3
+          }
+        ],
+        "violationCount": 0
+      },
+      "keyboard": {
+        "eventTabReachable": true,
+        "tabPressesToEvent": 14,
+        "shiftTabReturnsToPrevious": true,
+        "enterOpensDetail": true,
+        "spaceOpensDetail": true,
+        "escapeClosesDetails": true,
+        "escapeClosesAfterSpace": true,
+        "detailEscape": true,
+        "accessibleName": {
+          "ariaLabel": "Marina Costa · Luna · Consulta clínica · Confirmado",
+          "title": null,
+          "text": "10:00–10:40 Marina Costa · Luna Confirmado"
+        },
+        "focusOutline": "rgb(16, 16, 16) auto 1px",
+        "shiftTabPrevious": {
+          "tag": "SELECT",
+          "aria": "Carga de benchmark",
+          "text": "Demo · 7 eventos Benchmark · 200 semanais Stress · 1000 even"
+        }
+      },
+      "manualColorReview": {
+        "statuses": [
+          {
+            "status": "confirmed",
+            "statusText": "Confirmado",
+            "foreground": "rgb(23, 59, 115)",
+            "background": "rgb(234, 242, 255)",
+            "ratio": 9.76
+          },
+          {
+            "status": "pending",
+            "statusText": "Aguardando",
+            "foreground": "rgb(105, 71, 0)",
+            "background": "rgb(255, 244, 214)",
+            "ratio": 7.66
+          },
+          {
+            "status": "confirmed",
+            "statusText": "Confirmado",
+            "foreground": "rgb(23, 59, 115)",
+            "background": "rgb(234, 242, 255)",
+            "ratio": 9.76
+          },
+          {
+            "status": "no-show",
+            "statusText": "Não compareceu",
+            "foreground": "rgb(127, 29, 29)",
+            "background": "rgb(254, 226, 226)",
+            "ratio": 8.2
+          },
+          {
+            "status": "completed",
+            "statusText": "Concluído",
+            "foreground": "rgb(20, 83, 45)",
+            "background": "rgb(240, 253, 244)",
+            "ratio": 8.7
+          },
+          {
+            "status": "cancelled",
+            "statusText": "Cancelado",
+            "foreground": "rgb(51, 65, 85)",
+            "background": "rgb(241, 245, 249)",
+            "ratio": 9.45
+          },
+          {
+            "status": "confirmed",
+            "statusText": "Confirmado",
+            "foreground": "rgb(23, 59, 115)",
+            "background": "rgb(234, 242, 255)",
+            "ratio": 9.76
+          }
+        ],
+        "minEventTextContrast": 7.66,
+        "timeAxis": null
+      }
+    },
+    {
+      "candidate": "rbc",
+      "viewport": "1366x900 Day",
+      "axe": {
+        "violations": [],
+        "passes": 36,
+        "incomplete": [
+          {
+            "id": "aria-prohibited-attr",
+            "nodes": 1,
+            "targets": [
+              [
+                ".sp-benchmark-strip"
+              ]
+            ]
+          },
+          {
+            "id": "color-contrast",
+            "nodes": 2,
+            "targets": [
+              [
+                ".sp-empty-icon"
+              ],
+              [
+                ".sp-notice-check"
+              ]
+            ]
+          }
+        ],
+        "violationCount": 0
+      },
+      "colorContrast": {
+        "violations": [],
+        "incomplete": [
+          {
+            "id": "color-contrast",
+            "nodes": 2
+          }
+        ],
+        "violationCount": 0
+      },
+      "keyboard": {
+        "eventTabReachable": true,
+        "tabPressesToEvent": 14,
+        "shiftTabReturnsToPrevious": true,
+        "enterOpensDetail": true,
+        "spaceOpensDetail": true,
+        "escapeClosesDetails": true,
+        "escapeClosesAfterSpace": true,
+        "detailEscape": true,
+        "accessibleName": {
+          "ariaLabel": null,
+          "title": "10:00–10:40: Marina Costa · Luna · Consulta clínica · Confirmado",
+          "text": "10:00–10:40 Marina Costa · Luna Confirmado"
+        },
+        "focusOutline": "rgb(59, 153, 252) auto 5px",
+        "shiftTabPrevious": {
+          "tag": "SELECT",
+          "aria": "Carga de benchmark",
+          "text": "Demo · 7 eventos Benchmark · 200 semanais Stress · 1000 even"
+        }
+      },
+      "manualColorReview": {
+        "statuses": [
+          {
+            "status": "confirmed",
+            "statusText": "Confirmado",
+            "foreground": "rgb(23, 59, 115)",
+            "background": "rgb(234, 242, 255)",
+            "ratio": 9.76
+          },
+          {
+            "status": "pending",
+            "statusText": "Aguardando",
+            "foreground": "rgb(105, 71, 0)",
+            "background": "rgb(255, 244, 214)",
+            "ratio": 7.66
+          },
+          {
+            "status": "confirmed",
+            "statusText": "Confirmado",
+            "foreground": "rgb(23, 59, 115)",
+            "background": "rgb(234, 242, 255)",
+            "ratio": 9.76
+          },
+          {
+            "status": "no-show",
+            "statusText": "Não compareceu",
+            "foreground": "rgb(127, 29, 29)",
+            "background": "rgb(254, 226, 226)",
+            "ratio": 8.2
+          },
+          {
+            "status": "completed",
+            "statusText": "Concluído",
+            "foreground": "rgb(20, 83, 45)",
+            "background": "rgb(240, 253, 244)",
+            "ratio": 8.7
+          },
+          {
+            "status": "cancelled",
+            "statusText": "Cancelado",
+            "foreground": "rgb(51, 65, 85)",
+            "background": "rgb(241, 245, 249)",
+            "ratio": 9.45
+          },
+          {
+            "status": "confirmed",
+            "statusText": "Confirmado",
+            "foreground": "rgb(23, 59, 115)",
+            "background": "rgb(234, 242, 255)",
+            "ratio": 9.76
+          }
+        ],
+        "minEventTextContrast": 7.66,
+        "timeAxis": null
+      }
+    },
+    {
+      "candidate": "fullcalendar",
+      "viewport": "1366x900 Day",
+      "axe": {
+        "violations": [],
+        "passes": 39,
+        "incomplete": [
+          {
+            "id": "aria-prohibited-attr",
+            "nodes": 1,
+            "targets": [
+              [
+                ".sp-benchmark-strip"
+              ]
+            ]
+          },
+          {
+            "id": "color-contrast",
+            "nodes": 50,
+            "targets": [
+              [
+                ".fc-oX.fc-tp.fc-Ih > div"
+              ],
+              [
+                ".fc-LF > div"
+              ],
+              [
+                "div[data-event-id=\"booking-ana-retorno\"] > .sp-event-card__time"
+              ],
+              [
+                "div[data-event-id=\"booking-ana-retorno\"] > .sp-event-card__person"
+              ],
+              [
+                "div[data-event-id=\"booking-ana-retorno\"] > .sp-event-card__service"
+              ]
+            ]
+          }
+        ],
+        "violationCount": 0
+      },
+      "colorContrast": {
+        "violations": [],
+        "incomplete": [
+          {
+            "id": "color-contrast",
+            "nodes": 50
+          }
+        ],
+        "violationCount": 0
+      },
+      "keyboard": {
+        "eventTabReachable": true,
+        "tabPressesToEvent": 15,
+        "shiftTabReturnsToPrevious": true,
+        "enterOpensDetail": true,
+        "spaceOpensDetail": true,
+        "escapeClosesDetails": true,
+        "escapeClosesAfterSpace": true,
+        "detailEscape": true,
+        "accessibleName": {
+          "ariaLabel": "Marina Costa · Luna · Consulta clínica · Confirmado",
+          "title": null,
+          "text": "10:00–10:40 Marina Costa · Luna Consulta clínica Confirmado"
+        },
+        "focusOutline": "rgb(16, 16, 16) auto 1px",
+        "shiftTabPrevious": {
+          "tag": "DIV",
+          "aria": "Luciana Alves · Mel · Retorno · Confirmado",
+          "text": "09:30–10:10 Luciana Alves · Mel Retorno Confirmado"
+        }
+      },
+      "manualColorReview": {
+        "statuses": [
+          {
+            "status": "confirmed",
+            "statusText": "Confirmado",
+            "foreground": "rgb(23, 59, 115)",
+            "background": "rgb(234, 242, 255)",
+            "ratio": 9.76
+          },
+          {
+            "status": "confirmed",
+            "statusText": "Confirmado",
+            "foreground": "rgb(23, 59, 115)",
+            "background": "rgb(234, 242, 255)",
+            "ratio": 9.76
+          },
+          {
+            "status": "completed",
+            "statusText": "Concluído",
+            "foreground": "rgb(20, 83, 45)",
+            "background": "rgb(240, 253, 244)",
+            "ratio": 8.7
+          },
+          {
+            "status": "no-show",
+            "statusText": "Não compareceu",
+            "foreground": "rgb(127, 29, 29)",
+            "background": "rgb(254, 226, 226)",
+            "ratio": 8.2
+          },
+          {
+            "status": "pending",
+            "statusText": "Aguardando",
+            "foreground": "rgb(105, 71, 0)",
+            "background": "rgb(255, 244, 214)",
+            "ratio": 7.66
+          },
+          {
+            "status": "cancelled",
+            "statusText": "Cancelado",
+            "foreground": "rgb(51, 65, 85)",
+            "background": "rgb(241, 245, 249)",
+            "ratio": 9.45
+          },
+          {
+            "status": "confirmed",
+            "statusText": "Confirmado",
+            "foreground": "rgb(23, 59, 115)",
+            "background": "rgb(234, 242, 255)",
+            "ratio": 9.76
+          }
+        ],
+        "minEventTextContrast": 7.66,
+        "timeAxis": null
+      }
+    },
+    {
+      "candidate": "schedule-x",
+      "viewport": "1366x900 Day",
+      "axe": {
+        "violations": [],
+        "passes": 41,
+        "incomplete": [
+          {
+            "id": "aria-prohibited-attr",
+            "nodes": 3,
+            "targets": [
+              [
+                ".sp-benchmark-strip"
+              ],
+              [
+                ".sx__forward-backward-navigation"
+              ],
+              [
+                ".sx__time-grid-day"
+              ]
+            ]
+          },
+          {
+            "id": "color-contrast",
+            "nodes": 4,
+            "targets": [
+              [
+                "#scmnutuj53"
+              ],
+              [
+                "#sqlrdlzb8e"
+              ],
+              [
+                ".sp-empty-icon"
+              ],
+              [
+                ".sp-notice-check"
+              ]
+            ]
+          }
+        ],
+        "violationCount": 0
+      },
+      "colorContrast": {
+        "violations": [],
+        "incomplete": [
+          {
+            "id": "color-contrast",
+            "nodes": 4
+          }
+        ],
+        "violationCount": 0
+      },
+      "keyboard": {
+        "eventTabReachable": true,
+        "tabPressesToEvent": 21,
+        "shiftTabReturnsToPrevious": true,
+        "enterOpensDetail": true,
+        "spaceOpensDetail": true,
+        "escapeClosesDetails": true,
+        "escapeClosesAfterSpace": true,
+        "detailEscape": true,
+        "accessibleName": {
+          "ariaLabel": null,
+          "title": null,
+          "text": "10:00–10:40 Marina Costa · Luna Consulta clínica Confirmado"
+        },
+        "focusOutline": "rgb(16, 16, 16) auto 1px",
+        "shiftTabPrevious": {
+          "tag": "DIV",
+          "aria": null,
+          "text": "09:30–10:10 Luciana Alves · Mel Retorno Confirmado"
+        }
+      },
+      "manualColorReview": {
+        "statuses": [
+          {
+            "status": "confirmed",
+            "statusText": "Confirmado",
+            "foreground": "rgb(23, 59, 115)",
+            "background": "rgb(234, 242, 255)",
+            "ratio": 9.76
+          },
+          {
+            "status": "confirmed",
+            "statusText": "Confirmado",
+            "foreground": "rgb(23, 59, 115)",
+            "background": "rgb(234, 242, 255)",
+            "ratio": 9.76
+          },
+          {
+            "status": "completed",
+            "statusText": "Concluído",
+            "foreground": "rgb(20, 83, 45)",
+            "background": "rgb(240, 253, 244)",
+            "ratio": 8.7
+          },
+          {
+            "status": "no_show",
+            "statusText": "Não compareceu",
+            "foreground": "rgb(127, 29, 29)",
+            "background": "rgb(254, 226, 226)",
+            "ratio": 8.2
+          },
+          {
+            "status": "pending",
+            "statusText": "Aguardando",
+            "foreground": "rgb(105, 71, 0)",
+            "background": "rgb(255, 244, 214)",
+            "ratio": 7.66
+          },
+          {
+            "status": "cancelled",
+            "statusText": "Cancelado",
+            "foreground": "rgb(51, 65, 85)",
+            "background": "rgb(241, 245, 249)",
+            "ratio": 9.45
+          },
+          {
+            "status": "confirmed",
+            "statusText": "Confirmado",
+            "foreground": "rgb(23, 59, 115)",
+            "background": "rgb(234, 242, 255)",
+            "ratio": 9.76
+          }
+        ],
+        "minEventTextContrast": 7.66,
+        "timeAxis": {
+          "foreground": "rgb(91, 85, 97)",
+          "background": "rgb(255, 255, 255)",
+          "ratio": 7.2
+        }
+      }
+    }
+  ],
+  "notes": [
+    "Keyboard tab sequence reached each event control; Shift+Tab moved focus to the prior tabbable element. Enter/Space opened details; Escape closed details and quick-create draft.",
+    "Axe incomplete includes aria-prohibited-attr and color-contrast items (partially overlapped calendar text/decorative icons among the targets); they are not violations, but require manual review. No screen-reader test was run.",
+    "Status color is redundant to visible status text. Manually calculated event text contrast ranged from 7.66:1 to 9.76:1; Schedule-X hour label 7.20:1 after the spike override."
+  ]
+}

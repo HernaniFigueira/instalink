@@ -1,4 +1,4 @@
-import { useMemo } from 'react';
+import { useEffect, useMemo, useRef } from 'react';
 import FullCalendar from '@fullcalendar/react';
 import timeGridPlugin from '@fullcalendar/react/timegrid';
 import listPlugin from '@fullcalendar/react/list';
@@ -8,6 +8,7 @@ import '@fullcalendar/react/skeleton.css';
 import '@fullcalendar/react/themes/classic/theme.css';
 import '@fullcalendar/react/themes/classic/palette.css';
 import {
+  eventPresentation,
   libraryView,
   moveWindow,
   resizeWindow,
@@ -45,6 +46,30 @@ export default function FullCalendarAdapter(props: CalendarAdapterProps) {
     .filter((event) => !professionalFilter || event.professionalId === professionalFilter)
     .map(calendarEvent), [events, professionalFilter]);
   const calendarView = libraryView('fullcalendar', view);
+  const calendarWrapRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const wrapper = calendarWrapRef.current;
+    if (!wrapper) return;
+    const exposeAccessibleHeaders = () => {
+      wrapper.querySelectorAll('[role="columnheader"] [aria-hidden="true"]').forEach((label) => {
+        label.removeAttribute('aria-hidden');
+      });
+      wrapper.querySelectorAll('[role="rowheader"][aria-label="Timed"]').forEach((header) => {
+        header.setAttribute('aria-label', 'Horários do dia');
+        if (!header.textContent?.trim()) {
+          const label = document.createElement('span');
+          label.className = 'sp-sr-only';
+          label.textContent = 'Horários do dia';
+          header.append(label);
+        }
+      });
+    };
+    exposeAccessibleHeaders();
+    const observer = new MutationObserver(exposeAccessibleHeaders);
+    observer.observe(wrapper, { childList: true, subtree: true, attributes: true, attributeFilter: ['aria-label', 'aria-hidden'] });
+    return () => observer.disconnect();
+  }, [view, focusDate]);
 
   function requestMove(info: { event: any; revert: () => void }) {
     const original = info.event.extendedProps.raw as SpikeEvent;
@@ -78,7 +103,7 @@ export default function FullCalendarAdapter(props: CalendarAdapterProps) {
         <span className="sp-license-tag sp-license-tag--mit">Standard · MIT</span>
         <span>TimeGrid Day/Week + List · seleção, drag, resize e snap nativos de 5 min · sem Scheduler/Premium.</span>
       </div>
-      <div className="sp-fullcalendar-wrap">
+      <div className="sp-fullcalendar-wrap" ref={calendarWrapRef}>
         <FullCalendar
           plugins={[timeGridPlugin, listPlugin, interactionPlugin]}
           initialView={calendarView}
@@ -92,8 +117,9 @@ export default function FullCalendarAdapter(props: CalendarAdapterProps) {
           nowIndicator
           slotMinTime="05:00:00"
           slotMaxTime="23:00:00"
-          slotDuration="00:05:00"
+          slotDuration="00:30:00"
           snapDuration="00:05:00"
+          scrollTime="09:00:00"
           selectable={view !== 'list'}
           selectMirror
           selectOverlap={false}
@@ -104,11 +130,20 @@ export default function FullCalendarAdapter(props: CalendarAdapterProps) {
           editable
           events={visibleEvents}
           eventContent={(info) => {
-            const event = info.event.extendedProps.raw as SpikeEvent;
+            // FullCalendar also calls eventContent for its select-mirror draft;
+            // that transient object has no domain event and must not crash React.
+            const event = info.event.extendedProps.raw as SpikeEvent | undefined;
+            if (!event) return null;
             return <SpikeEventCard event={event} compact={view === 'week'} />;
           }}
           eventClass={(arg) => `sp-fc-event sp-fc-event--${arg.event.extendedProps.status}`}
+          columnEventAfterClass={() => 'sp-fc-resize-handle'}
           eventClick={(info) => { info.jsEvent.preventDefault(); onSelectEvent(info.event.id); }}
+          dateClick={(info) => {
+            const startAt = info.date.toISOString();
+            const endAt = new Date(Date.parse(startAt) + 40 * 60_000).toISOString();
+            onSelectRange(startAt, endAt, professionalFilter || undefined);
+          }}
           select={(info) => onSelectRange(info.start.toISOString(), info.end.toISOString(), professionalFilter || undefined)}
           eventDrop={requestMove}
           eventResize={requestResize}
@@ -116,9 +151,15 @@ export default function FullCalendarAdapter(props: CalendarAdapterProps) {
             // The product toolbar owns navigation; FullCalendar remains a view adapter.
           }}
           eventDidMount={(info) => {
-            info.el.dataset.spikeEventId = info.event.id;
-            info.el.dataset.status = String(info.event.extendedProps.status || '');
-            info.el.setAttribute('aria-label', `${info.event.title} · ${String(info.event.extendedProps.status || '')}`);
+            const event = info.event.extendedProps.raw as SpikeEvent | undefined;
+            if (!event) return; // selection-mirror, not a persisted demo booking
+            info.el.dataset.spikeEventId = event.id;
+            info.el.dataset.status = event.status;
+            info.el.setAttribute('aria-label', eventPresentation({
+              customerName: event.customerName,
+              serviceName: event.serviceName,
+              status: event.status,
+            }).ariaLabel);
           }}
           eventChange={() => { /* updates are acknowledged through the test API first */ }}
           contentHeight={680}

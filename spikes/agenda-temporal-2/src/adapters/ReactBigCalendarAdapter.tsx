@@ -1,7 +1,7 @@
-import { useMemo } from 'react';
+import { useEffect, useMemo, useRef, type KeyboardEvent as ReactKeyboardEvent } from 'react';
 import { DateTime } from 'luxon';
 import { Calendar, type EventProps } from 'react-big-calendar';
-import withDragAndDrop from 'react-big-calendar/lib/addons/dragAndDrop';
+import withDragAndDropImport from 'react-big-calendar/lib/addons/dragAndDrop';
 import 'react-big-calendar/lib/css/react-big-calendar.css';
 import 'react-big-calendar/lib/addons/dragAndDrop/styles.css';
 import {
@@ -11,27 +11,47 @@ import {
   resizeWindow,
   type AppointmentWindow,
 } from '../domain/temporal-contract';
-import { DAY_PROFESSIONALS, eventResources, PROFESSIONALS, type SpikeEvent } from '../domain/fixtures';
+import { DAY_PROFESSIONALS, PROFESSIONALS, type SpikeEvent } from '../domain/fixtures';
 import { createIanaLuxonLocalizer } from './rbcIanaLocalizer';
 import { SpikeEventCard } from '../components/SpikeEventCard';
-import type { CalendarAdapterProps } from './types';
+import { STATUS_TEXT, type CalendarAdapterProps } from './types';
 
-const DnDCalendar = withDragAndDrop<CalendarEvent, { id: string; title: string }>(Calendar);
+// The published addon is CommonJS with an `exports.default` property. Unwrap
+// that shape explicitly so both Vite's dev transform and production bundling
+// receive the factory function rather than a nested namespace object.
+const withDragAndDrop =
+  (withDragAndDropImport as unknown as { default?: typeof withDragAndDropImport }).default
+  ?? withDragAndDropImport;
+
+const DnDCalendar = withDragAndDrop<CalendarEvent, { id: number; title: string }>(Calendar);
 
 interface CalendarEvent extends SpikeEvent {
   title: string;
   start: Date;
   end: Date;
-  resourceId: string;
+  resourceId: number;
+}
+
+function rbcResourceId(professionalId: string): number {
+  const index = PROFESSIONALS.findIndex((professional) => professional.id === professionalId);
+  if (index < 0) throw new RangeError(`Profissional sem recurso RBC: ${professionalId}`);
+  return index + 1;
+}
+
+function professionalFromRbcResource(resourceId: string | number | undefined): string | undefined {
+  if (resourceId === undefined) return undefined;
+  return PROFESSIONALS.find((professional) => rbcResourceId(professional.id) === Number(resourceId))?.id;
 }
 
 function toCalendarEvent(event: SpikeEvent): CalendarEvent {
   return {
     ...event,
-    title: `${event.customerName} · ${event.serviceName}`,
+    title: `${event.customerName} · ${event.serviceName} · ${STATUS_TEXT[event.status]}`,
     start: new Date(event.startAt),
     end: new Date(event.endAt),
-    resourceId: event.professionalId,
+    // RBC's drag-and-drop EventWrapper declares its resource prop as number.
+    // Keep this adapter-local ordinal; domain identity stays the IANA-safe ID.
+    resourceId: rbcResourceId(event.professionalId),
   };
 }
 
@@ -52,19 +72,55 @@ export default function ReactBigCalendarAdapter(props: CalendarAdapterProps) {
   const localizer = useMemo(() => createIanaLuxonLocalizer(timeZone), [timeZone]);
   const calendarEvents = useMemo(() => events.map(toCalendarEvent), [events]);
   const resources = useMemo(() => {
-    const candidates = professionalFilter ? PROFESSIONALS : DAY_PROFESSIONALS;
-    return eventResources(candidates).filter((resource) => !professionalFilter || resource.id === professionalFilter);
+    const candidates = professionalFilter
+      ? PROFESSIONALS.filter((professional) => professional.id === professionalFilter)
+      : DAY_PROFESSIONALS;
+    return candidates.map((professional) => ({
+      id: rbcResourceId(professional.id),
+      title: professional.name,
+    }));
   }, [professionalFilter]);
   const activeView = libraryView('rbc', view) as 'day' | 'week' | 'agenda';
   const focusedDate = dateInBusinessZone(focusDate, timeZone);
   const min = dateInBusinessZone(focusDate, timeZone, 5);
   const max = dateInBusinessZone(focusDate, timeZone, 23);
   const scrollToTime = dateInBusinessZone(focusDate, timeZone, 9);
+  const calendarWrapRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const root = calendarWrapRef.current;
+    if (!root) return;
+    const hideEmptyAllDayRows = () => {
+      root.querySelectorAll('.rbc-allday-cell').forEach((cell) => {
+        if (cell.querySelector('.rbc-event')) cell.removeAttribute('aria-hidden');
+        else cell.setAttribute('aria-hidden', 'true');
+      });
+    };
+    hideEmptyAllDayRows();
+    const observer = new MutationObserver(hideEmptyAllDayRows);
+    observer.observe(root, { childList: true, subtree: true });
+    return () => observer.disconnect();
+  }, [activeView, calendarEvents]);
+
+  function handleCalendarKeyDown(event: ReactKeyboardEvent<HTMLDivElement>) {
+    if (event.key !== 'Enter' && event.key !== ' ') return;
+    const button = (event.target as HTMLElement).closest<HTMLElement>('.rbc-event[role="button"]');
+    if (!button || !event.currentTarget.contains(button)) return;
+    const eventElement = button.querySelector<HTMLElement>('[data-event-id], [data-spike-event-id]');
+    const eventId = eventElement?.dataset.eventId || eventElement?.dataset.spikeEventId;
+    if (!eventId) return;
+    event.preventDefault();
+    event.stopPropagation();
+    onSelectEvent(eventId);
+  }
 
   function requestChange(event: CalendarEvent, action: 'move' | 'resize', start: Date | string, end: Date | string, resourceId?: string | number) {
-    if (resourceId && String(resourceId) !== event.professionalId) {
-      onNotice('Trocar o profissional exige validar serviço, escopo e elegibilidade no servidor. Este spike mantém o vínculo atual.');
-      return;
+    if (resourceId !== undefined && resourceId !== null) {
+      const targetProfessional = PROFESSIONALS.find((professional) => rbcResourceId(professional.id) === Number(resourceId));
+      if (!targetProfessional || targetProfessional.id !== event.professionalId) {
+        onNotice('Trocar o profissional exige validar serviço, escopo e elegibilidade no servidor. Este spike mantém o vínculo atual.');
+        return;
+      }
     }
     const current: AppointmentWindow = {
       startAt: event.startAt,
@@ -84,7 +140,7 @@ export default function ReactBigCalendarAdapter(props: CalendarAdapterProps) {
         <span className="sp-license-tag sp-license-tag--mit">MIT</span>
         <span>Day/Week/Agenda · Orlando, Ana e Carlos no recurso Dia · seleção, mover e resize nativos · passo 5 min.</span>
       </div>
-      <div className="sp-rbc-wrap">
+      <div className="sp-rbc-wrap" ref={calendarWrapRef} onKeyDown={handleCalendarKeyDown}>
         <DnDCalendar
           localizer={localizer}
           events={calendarEvents}
@@ -100,7 +156,11 @@ export default function ReactBigCalendarAdapter(props: CalendarAdapterProps) {
           draggableAccessor={(event) => event.status === 'pending' || event.status === 'confirmed'}
           resizableAccessor={(event) => event.status === 'pending' || event.status === 'confirmed'}
           onSelectEvent={(event) => onSelectEvent(event.id)}
-          onSelectSlot={(slot) => onSelectRange(slot.start.toISOString(), slot.end.toISOString(), String(slot.resourceId || professionalFilter || ''))}
+          onSelectSlot={(slot) => onSelectRange(
+            slot.start.toISOString(),
+            slot.end.toISOString(),
+            professionalFromRbcResource(slot.resourceId) || professionalFilter || undefined,
+          )}
           onEventDrop={({ event, start, end, resourceId }) => requestChange(event, 'move', start, end, resourceId)}
           onEventResize={({ event, start, end }) => requestChange(event, 'resize', start, end)}
           step={5}
@@ -111,7 +171,7 @@ export default function ReactBigCalendarAdapter(props: CalendarAdapterProps) {
           resources={activeView === 'day' ? resources : undefined}
           resourceIdAccessor="id"
           resourceTitleAccessor="title"
-          resourceAccessor="professionalId"
+          resourceAccessor="resourceId"
           startAccessor="start"
           endAccessor="end"
           titleAccessor="title"

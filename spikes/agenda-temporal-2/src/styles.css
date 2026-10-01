@@ -159,7 +159,7 @@ button:focus-visible, select:focus-visible, input:focus-visible { outline: 3px s
 .sp-rbc-wrap .rbc-time-view, .sp-rbc-wrap .rbc-month-view { border-color: #e2e8f0; }
 .sp-rbc-wrap .rbc-header { min-height: 38px; padding: 7px 4px; border-color: #e2e8f0; color: #524c46; font-size: 10px; font-weight: 600; }
 .sp-rbc-wrap .rbc-time-header-content, .sp-rbc-wrap .rbc-time-content { border-color: #e2e8f0; }
-.sp-rbc-wrap .rbc-timeslot-group { min-height: 31px; border-color: #eef2f6; }
+.sp-rbc-wrap .rbc-timeslot-group { min-height: 56px; border-color: #eef2f6; }
 .sp-rbc-wrap .rbc-time-gutter .rbc-timeslot-group { color: #665f59; font-size: 9px; }
 .sp-rbc-wrap .rbc-day-slot .rbc-time-slot { border-top-color: #f1f5f9; }
 .sp-rbc-wrap .rbc-today { background: #f8fbff; }
@@ -185,6 +185,9 @@ button:focus-visible, select:focus-visible, input:focus-visible { outline: 3px s
 .sp-fullcalendar-wrap .fc .fc-timegrid-slot-label-cushion { color: #665f59; font-size: 9px; font-variant-numeric: tabular-nums; }
 .sp-fullcalendar-wrap .fc .fc-timegrid-slot { height: 9px; }
 .sp-fullcalendar-wrap .fc .fc-timegrid-event { border-radius: 6px; box-shadow: none; }
+.sp-fullcalendar-wrap .sp-fc-resize-handle { position: absolute; z-index: 3; right: 0; bottom: -3px; left: 0; height: 9px; cursor: s-resize; }
+.sp-fullcalendar-wrap .sp-fc-resize-handle::after { position: absolute; right: 0; bottom: 2px; left: 0; width: 22px; height: 2px; margin: auto; border-radius: 2px; background: currentColor; content: ''; opacity: 0; }
+.sp-fullcalendar-wrap .sp-fc-event:hover .sp-fc-resize-handle::after, .sp-fullcalendar-wrap .sp-fc-event:focus-visible .sp-fc-resize-handle::after { opacity: .75; }
 .sp-fullcalendar-wrap .fc .fc-event-main { padding: 2px; }
 .sp-fullcalendar-wrap .fc .fc-list-event-title, .sp-fullcalendar-wrap .fc .fc-list-event-time { font-size: 10px; }
 .sp-fullcalendar-wrap .fc .fc-list-day-cushion { background: #f8fafc; }
@@ -192,7 +195,8 @@ button:focus-visible, select:focus-visible, input:focus-visible { outline: 3px s
 
 /* Schedule-X Community */
 .sp-schedule-x-wrap { min-width: 0; max-height: 680px; min-height: 370px; overflow: auto; padding: 8px; }
-.sp-schedule-x-wrap .sx-react-calendar-wrapper { min-width: 0; min-height: 560px; --sx-color-primary: #2563eb; --sx-color-on-primary: #fff; --sx-color-surface: #fff; --sx-color-surface-container: #f8fafc; --sx-color-outline: #e2e8f0; --sx-color-on-surface: #1c1815; --sx-color-on-surface-variant: #524c46; font-family: inherit; }
+.sp-schedule-x-wrap .sx-react-calendar-wrapper { min-width: 0; min-height: 560px; --sx-color-primary: #2563eb; --sx-color-on-primary: #fff; --sx-color-surface: #fff; --sx-color-surface-container: #f8fafc; --sx-color-outline: #e2e8f0; --sx-color-neutral: #5b5561; --sx-color-neutral-variant: #5b5561; --sx-color-on-surface: #1c1815; --sx-color-on-surface-variant: #524c46; font-family: inherit; }
+.sp-schedule-x-wrap .sx__week-grid__hour-text { color: #5b5561; }
 .sp-schedule-x-wrap .sx__calendar { min-width: 620px; font-family: inherit; }
 .sx-spike-event { display: grid; gap: 2px; height: 100%; min-height: 28px; overflow: hidden; padding: 4px 5px; border-radius: 5px; color: #173b73; font-size: 9px; line-height: 1.2; }
 .sx-spike-event span { font-size: 8px; font-weight: 700; }
@@ -333,4 +337,13 @@ button:focus-visible, select:focus-visible, input:focus-visible { outline: 3px s
   .sp-notice-authority { padding-top: 2px; }
   .sp-footnote { flex-direction: column; gap: 4px; padding: 0 3px; font-size: 8px; }
   .sp-rbc-wrap .rbc-calendar, .sp-fullcalendar-wrap .fc, .sp-schedule-x-wrap .sx__calendar { min-width: 520px; }
+  .sp-rbc-wrap .rbc-calendar:has(.rbc-agenda-view), .sp-rbc-wrap .rbc-agenda-view, .sp-rbc-wrap .rbc-agenda-view table { width: 100%; min-width: 0; }
+  .sp-rbc-wrap .rbc-agenda-view table { table-layout: fixed; }
+  .sp-rbc-wrap .rbc-agenda-view th, .sp-rbc-wrap .rbc-agenda-view td { min-width: 0; overflow-wrap: anywhere; }
+  .sp-rbc-wrap .rbc-agenda-view .rbc-agenda-date-cell { width: 72px; }
+  .sp-rbc-wrap .rbc-agenda-view .rbc-agenda-time-cell { width: 76px; white-space: nowrap; }
+  .sp-rbc-wrap .rbc-agenda-view .rbc-agenda-event-cell, .sp-rbc-wrap .rbc-agenda-view .sp-event-card { min-width: 0; width: 100%; }
+  .sp-schedule-x-wrap .sx__calendar-wrapper.is-list-view, .sp-schedule-x-wrap .sx__calendar-wrapper.is-list-view .sx__calendar,
+  .sp-schedule-x-wrap .sx__calendar-wrapper.is-day-view, .sp-schedule-x-wrap .sx__calendar-wrapper.is-day-view .sx__calendar { width: 100%; min-width: 0; }
+  .sp-schedule-x-wrap .sx__list-event, .sp-schedule-x-wrap .sx__list-event-content, .sp-schedule-x-wrap .sx__list-event-title { max-width: 100%; min-width: 0; overflow-wrap: anywhere; white-space: normal; }
 }
