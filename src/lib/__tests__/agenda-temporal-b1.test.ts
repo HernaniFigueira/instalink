@@ -526,6 +526,85 @@ describe('B1 — reagendamento: janela nova sem sobrescrever o passado', () => {
     expect(moved.date).toBe('2026-09-25');
   });
 
+  const editConsultaTo60 = async () => {
+    const res = await catalogPOST(req('POST', {
+      businessId: BIZ, action: 'service.save', id: 's1', name: 'Consulta',
+      durationMin: 60, professionalMode: 'all', professionalIds: [],
+    }, token, '', '/api/catalog'));
+    expect(res.status).toBe(200);
+  };
+
+  it('move canônico preserva 40 após Service 60; segundo move e slots seguem 40', async () => {
+    const { bookingId } = await createOwnerBooking();
+    await editConsultaTo60();
+    for (const [time, startAt, endAt] of [
+      ['11:00', '2026-09-25T14:00:00.000Z', '2026-09-25T14:40:00.000Z'],
+      ['13:15', '2026-09-25T16:15:00.000Z', '2026-09-25T16:55:00.000Z'],
+    ]) {
+      // A segunda intenção usa cadência de 15 min; slotMin não é duração.
+      if (time === '13:15') await updateDB((d) => {
+        for (const rule of d.availability.filter((a) => a.businessId === BIZ)) rule.slotMin = 15;
+      });
+      const res = await bookingsPATCH(req('PATCH', { businessId: BIZ, id: bookingId, date: '2026-09-25', time }));
+      expect(res.status).toBe(200);
+      expect((await res.json()).created).toBe(false);
+      const moved = await bookingById(bookingId);
+      expect(moved.startAt).toBe(startAt);
+      expect(moved.endAt).toBe(endAt);
+      expect(moved.durationMin).toBe(40);
+    }
+    expect((await readDB()).bookings.filter((b) => b.id === bookingId)).toHaveLength(1);
+    // Consulta atual = 60, mas uma intenção curta a partir de 13:55 cabe:
+    // a ocupação histórica do Booking movido termina em 13:55, não 14:15.
+    const db = await readDB();
+    const slots = computeSlots({
+      rules: [{ id: 'short', businessId: BIZ, professionalId: '', serviceId: '', weekday: 5,
+        start: '13:15', end: '16:00', slotMin: 5 } as any],
+      exceptions: [], bookings: db.bookings, services: db.services,
+      professionals: db.professionals, dateISO: '2026-09-25', weekday: 5,
+      serviceId: 's1', durationMin: 10, professionalId: 'orlando',
+      eligibleProIds: ['orlando'], nowHM: '', leadMin: 0, bufferMin: 0, timeZone: SP,
+    });
+    expect(slots.slots).not.toContain('13:50');
+    expect(slots.slots).toContain('13:55');
+  });
+
+  it('legado congelado em 40 antes de Service 60 move mantendo 40', async () => {
+    await updateDB((d) => { d.bookings.push(legacyBooking()); });
+    await editConsultaTo60();
+    const before = await bookingById('legacy-1');
+    expect(before.temporalSource).toBe('legacy_inferred');
+    expect(before.durationMin).toBe(40);
+    const res = await bookingsPATCH(req('PATCH', { businessId: BIZ, id: 'legacy-1', date: '2026-09-25', time: '11:00' }));
+    expect(res.status).toBe(200);
+    expect((await res.json()).created).toBe(false);
+    const moved = await bookingById('legacy-1');
+    expect(moved.startAt).toBe('2026-09-25T14:00:00.000Z');
+    expect(moved.endAt).toBe('2026-09-25T14:40:00.000Z');
+    expect(moved.durationMin).toBe(40);
+  });
+
+  it('terminal 40 após Service 60 recria 60 e preserva janela antiga', async () => {
+    const { bookingId } = await createOwnerBooking();
+    await editConsultaTo60();
+    expect((await bookingsPATCH(req('PATCH', { businessId: BIZ, id: bookingId, status: 'cancelled' }))).status).toBe(200);
+    const before = await bookingById(bookingId);
+    const res = await bookingsPATCH(req('PATCH', { businessId: BIZ, id: bookingId, date: '2026-09-25', time: '11:00' }));
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body.created).toBe(true);
+    const old = await bookingById(bookingId);
+    expect(old.status).toBe('cancelled');
+    expect(old.startAt).toBe(before.startAt);
+    expect(old.endAt).toBe(before.endAt);
+    expect(old.durationMin).toBe(40);
+    const fresh = await bookingById(body.newId);
+    expect(fresh.previousId).toBe(bookingId);
+    expect(fresh.startAt).toBe('2026-09-25T14:00:00.000Z');
+    expect(fresh.endAt).toBe('2026-09-25T15:00:00.000Z');
+    expect(fresh.durationMin).toBe(60);
+  });
+
   it('estado terminal reagendado cria NOVO Booking; o antigo mantém a janela histórica', async () => {
     const created = await createOwnerBooking();
     await bookingsPATCH(req('PATCH', { businessId: BIZ, id: created.bookingId, status: 'cancelled' }));

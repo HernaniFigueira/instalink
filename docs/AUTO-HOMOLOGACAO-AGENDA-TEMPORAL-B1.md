@@ -79,7 +79,7 @@ Prova no nível de dados (`GET /api/bookings?mode=manage`), **com o Serviço já
 ## 4. §12/§13 — Séries e reagendamento
 
 - Série criada pela API real do navegador (3 ocorrências, `16:00`, dias +7/+14/+21): `http 200`, `count 3`; cada ocorrência nasceu com **janela própria** (`durationMin: 60`, `seriesIndex 1..3`, mesmo `seriesId`), e a grade mostra `16:00–17:00`.
-- **Reagendamento (move)** pela UI real: `10:00` do dia 03 → `09:00` do dia 04; a origem não mantém compromisso ativo e o destino aparece como **09:00–10:00** (janela nova, duração vigente).
+- **Reagendamento (move)** pela UI real na homologação inicial: `10:00` do dia 03 → `09:00` do dia 04; a origem não mantém compromisso ativo. **Correção de blocker posterior à homologação inicial:** o move do MESMO Booking deve preservar a duração congelada (40), não adotar a duração atual do serviço (60). Regressões e nova homologação real estão em `docs/AUTO-HOMOLOGACAO-AGENDA-TEMPORAL-B1-MOVE.md`.
 - **Cancelamento** pela UI real no detalhe do agendamento: status `cancelled` persistido e a **janela canônica preservada** no registro.
 
 ## 5. §15/§16 — Compatibilidade e isolamento

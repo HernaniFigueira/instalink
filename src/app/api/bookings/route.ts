@@ -482,6 +482,12 @@ export async function PATCH(req: NextRequest) {
         const freshToday = todayISO(new Date(), freshTz);
         if (date < freshToday || date > bookingMaxDate(freshToday, freshBusiness.booking, true)) throw err('Data fora da agenda disponível.', 400);
         const decision = rescheduleDecision(target.status);
+        // Move preserva a duração do próprio Booking; somente recreate é um
+        // NOVO Booking e usa o default atual do serviço. Também validar o
+        // destino com essa duração para não aceitar um slot que não a comporta.
+        const destinationDuration = decision.kind === 'recreate'
+          ? freshService.durationMin
+          : bookingDurationOf(target, freshService);
         const others = d.bookings.filter((b) => b.businessId === business.id && b.id !== body.id);
         const r = computeSlots({
           rules: d.availability.filter((a) => a.businessId === business.id),
@@ -490,7 +496,7 @@ export async function PATCH(req: NextRequest) {
           services: d.services.filter((s) => s.businessId === business.id),
           professionals: d.professionals.filter((p) => p.businessId === business.id),
           dateISO: date, weekday: weekdayOf(date),
-          serviceId: freshService.id, durationMin: freshService.durationMin,
+          serviceId: freshService.id, durationMin: destinationDuration,
           professionalId: proId,
           eligibleProIds: slotEligibleProfessionalIds(freshService as any, d.professionals.filter((p) => p.businessId === business.id)),
           nowHM: date === freshToday ? nowHM(new Date(), freshTz) : '',
@@ -504,7 +510,7 @@ export async function PATCH(req: NextRequest) {
         let rescheduleWindow: BookingWindow;
         try {
           rescheduleWindow = buildBookingWindow({
-            date, time, durationMin: freshService.durationMin, timeZone: freshTz,
+            date, time, durationMin: destinationDuration, timeZone: freshTz,
           });
         } catch (e: any) {
           throw err(e?.message || 'Horário inválido para o fuso da clínica.', 400);
@@ -572,6 +578,10 @@ export async function PATCH(req: NextRequest) {
         // A janela canônica é reescrita atomicamente para o novo horário.
         const fromDate = target.date;
         const fromTime = target.time;
+        // Se ainda é legado, congele a inferência ANTES de trocar a janela.
+        // A duração usada no destino foi resolvida a partir desse mesmo
+        // snapshot/fallback (não do default do serviço para Booking canônico).
+        freezeLegacyBookingWindow(target, { timeZone: freshTz, serviceDurationMin: freshService.durationMin });
         applyBookingWindow(target, rescheduleWindow, freshTz);
         // Novo horário = nova chegada: o check-in do horário antigo não vale.
         // (Quem estava na fila por este agendamento deixa a fila.)
