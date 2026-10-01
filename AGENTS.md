@@ -32,7 +32,7 @@ Antes de propor ou implementar mudanças relevantes, leia:
 
 ## Estado atual (2026-09-30)
 
-**PR #46 — `P0 ESTRUTURAL CONCLUÍDO / EQUIPE UX CLOSURE + HOMOLOGAÇÃO EM ANDAMENTO / NÃO MERGEAR`** (branch de trabalho `arena/01a0f3d3-instalink`). Não mergear sem autorização explícita. Homologação em Chromium headless (login real) feita em 1366/1024 + sanity 1440/390 — ver `docs/AUTO-HOMOLOGACAO-PR46-MODELO-OPERACIONAL.md`.
+**PR #46 — `CONCLUÍDA E HOMOLOGADA / PRONTA PARA MERGE`** (branch de trabalho `arena/01a0f3d3-instalink`). Não mergear sem autorização explícita. HEAD de código homologado `f7df12a`; Vercel SUCCESS; testes 2759 PASS / 4 baseline conhecidas. Homologação em Chromium headless (login real) em 1366/1024, drawer de pessoa também em 390, sanity 1440 — ver `docs/AUTO-HOMOLOGACAO-PR46-MODELO-OPERACIONAL.md`.
 
 - **P0.1 (Slots & Elegibilidade):** todos os chamadores de `slotEligibleProfessionalIds` passam a equipe completa do tenant; o helper decide elegibilidade (`undefined` legado solo / `[]` / `[ids]`).
 - **P0.2 (Privilege Escalation):** `person.save` valida server-side e atomicamente as permissões efetivas do alvo contra as do ator (403 sem mutação parcial).
@@ -56,7 +56,9 @@ Antes de propor ou implementar mudanças relevantes, leia:
 9. Fiscal / integrações
 10. Agentes + Jev + LLM + OAAS sobre os domínios estabilizados
 
-Não iniciar nova fase sem homologação/merge de #46 e sem atualizar Estado atual no Master Plan.
+Não iniciar nova fase sem merge de #46 (já homologada; merge só com autorização explícita) e sem atualizar Estado atual no Master Plan.
+
+**Registrado, sem implementar (não bloqueia a fila):** Cadastro/Onboarding — contrato de identidade (Master Plan §2.6): conta/login = PESSOA; primeiro usuário nasce Proprietário; clínica é entidade separada da conta; onboarding futuro aceita clínica/titular PF (CPF) ou PJ (CNPJ); e-mail de login ≠ e-mail institucional da clínica (podem ser iguais); não misturar Owner com Business/Clínica; Organização/Clínica/Unidade/Equipe são entidades/vínculos distintos.
 
 ## Referências externas / repositórios
 

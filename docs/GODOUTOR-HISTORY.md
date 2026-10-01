@@ -144,9 +144,17 @@ Objetivo da missão final: produto clínico profissional sem expor `Member/Profe
 
 ---
 
+## 2026-09-30 — PR #46 concluída e homologada (fechamento documental)
+
+**`CONCLUÍDA E HOMOLOGADA / PRONTA PARA MERGE` — merge NÃO realizado.** HEAD de código homologado `f7df12a` (branch `arena/01a0f3d3-instalink`). Vercel SUCCESS; `npx vitest run` 2759 passed / 4 failed (baseline conhecida e intocada: 3× `a34-instagram`, 1× `automation-audit-p4`); build, typecheck e diff-check OK. Homologação real (build de produção, banco descartável, login real, Chromium headless): 1366 23/23, 1024 23/23, 390 (drawer de pessoa) 17/17, console limpo; fechamento incluiu label `Proprietário` via `roleLabel` e Drawer utilizável em 390px. Detalhes: `docs/AUTO-HOMOLOGACAO-PR46-MODELO-OPERACIONAL.md`.
+
+Registrado sem implementação: **Cadastro/Onboarding — contrato de identidade** (Master Plan §2.6). Fila oficial confirmada: 1 Workflow + Permissões · 2 Agenda Temporal 2.0 · 3 Clinical Encounter F1 · 4 Cobertura/Modalidade · 5 Prescrição + Exames + Document Engine · 6 Estoque/Farmácia · 7 Cirurgia + Internação · 8 Conta do Atendimento + Financeiro avançado · 9 Fiscal/integrações · 10 Agentes + Jev + LLM.
+
+---
+
 ## Fase B3.2 — PR #46 Equipe UX Closure + Contrato de Agenda/Serviço (2026-09-30)
 
-**`P0 ESTRUTURAL CONCLUÍDO / EQUIPE UX CLOSURE + HOMOLOGAÇÃO EM ANDAMENTO / NÃO MERGEAR` — mesma PR #46, sem novo PR, sem merge.** Branch de trabalho `arena/01a0f3d3-instalink`.
+**`CONCLUÍDA E HOMOLOGADA / PRONTA PARA MERGE` — mesma PR #46, sem novo PR, sem merge.** Branch de trabalho `arena/01a0f3d3-instalink`.
 
 ### Decisões e implementação
 - **Papéis como presets:** fluxo padrão = Administrador · Recepção (`SECRETARIA`) · Profissional; Proprietário como resumo `Proprietário · acesso total` (sem editor, não rebaixável); `ATENDENTE`/`VENDEDOR`/`VIEWER` em “Outros papéis / avançado” (enums e dados preservados). Preset da Recepção = Agenda, Clientes, Oportunidades, WhatsApp (antes incluía Visão geral e Pedidos). Preset do Profissional inalterado.

@@ -30,8 +30,10 @@ Não recomeçar o produto do zero. Não criar novo repositório por impulso. Nã
 Clinical Architecture Closure · PR #46 — P0 Blockers Fixes + **Equipe UX Closure + Contrato de Agenda/Serviço**
 Branch de trabalho: `arena/01a0f3d3-instalink` · PR #46 — validar estado real no Git (`git log --oneline -5`, `gh pr view 46`)
 
+**Estado real da #46 (HEAD de código homologado: `f7df12a`):** P0 estrutural concluído · Equipe UX Closure concluído · homologação funcional real concluída (login real, persistência) · homologação visual concluída nos viewports testados (1366, 1024 e 390 no drawer de pessoa; 1440 sanity) · Vercel SUCCESS · testes 2759 PASS / 4 baseline conhecidas (3× `a34-instagram`, 1× `automation-audit-p4`, intocadas) · **merge ainda NÃO realizado** (depende de autorização explícita).
+
 **Status #46:**
-`P0 ESTRUTURAL CONCLUÍDO / EQUIPE UX CLOSURE + HOMOLOGAÇÃO EM ANDAMENTO / NÃO MERGEAR`
+`CONCLUÍDA E HOMOLOGADA / PRONTA PARA MERGE`
 
 **O que já está em código (B3 + Modelo Operacional + P0.1/P0.2/P0.3 + Equipe UX Closure — PR #46):**
 - **P0.1 (Slots & Elegibilidade):** todos os chamadores de `slotEligibleProfessionalIds` passam a equipe completa do tenant, sem pre-filtrar `active !== false`. O helper encapsula a autoridade e distingue `undefined` (legado solo), `[]` (zero elegíveis) e `[ids]`.
@@ -121,6 +123,16 @@ Um horário só é válido quando **todos** os recursos exigidos estão livres: 
 | Schedule-X | IMPLEMENTAÇÃO (a validar) | recursos Premium |
 
 **Agenda Temporal 2.0 começa por spike/ADR:** grade própria × `react-big-calendar` × FullCalendar, validando licença, manutenção, bundle, Design System, multi-tenant e acessibilidade **antes** de reutilizar qualquer código. Nada é instalado por esta PR.
+
+### 2.6 Cadastro/Onboarding — contrato de identidade (registrado, sem implementação)
+
+**Cadastro/Onboarding — contrato de identidade (REGISTRADO, NÃO implementado; não bloqueia Workflow + Permissões):**
+- Conta/login representa uma **PESSOA**. O primeiro usuário da clínica nasce como **Proprietário**.
+- **Clínica é entidade separada da conta.** Não misturar Owner (pessoa/papel) com Business/Clínica.
+- Onboarding futuro deve aceitar clínica/titular como **PF ou PJ**: PF → **CPF**; PJ → **CNPJ**.
+- **E-mail de login** e **e-mail institucional da clínica** são campos distintos e podem ser iguais.
+- Organização / Clínica / Unidade / Equipe permanecem **entidades/vínculos distintos**.
+- Nenhuma implementação nesta missão; entra na fila só por missão explícita.
 
 ---
 
@@ -216,7 +228,7 @@ Estas decisões não se discutem novamente sem PR própria e justificativa técn
 Fases concluídas viraram resumo curto. Detalhes de implementação movidos para histórico.
 
 - **Design System 2.0 — CONCLUÍDO (#43)** — mergeado 2026-09-29 (`85154c8`). Detalhes: arquétipos, Atendimento full-page, Cliente 360, temas, navegação.
-- **Clinical Convergence / Architecture Closure (#46)** — `P0 ESTRUTURAL CONCLUÍDO / EQUIPE UX CLOSURE + HOMOLOGAÇÃO EM ANDAMENTO / NÃO MERGEAR`. Unificação Equipe×Profissionais, Serviços clínico sem vitrine, Configurações cadastro centralizado, DTO seguro, porta única Equipe, Disponibilidade clínica, Estrutura hub, Agenda classificada, P0.1–P0.3, papéis como presets (Recepção), horário próprio preservado, serviço sugerido com duração editável.
+- **Clinical Convergence / Architecture Closure (#46)** — `CONCLUÍDA E HOMOLOGADA / PRONTA PARA MERGE`. Unificação Equipe×Profissionais, Serviços clínico sem vitrine, Configurações cadastro centralizado, DTO seguro, porta única Equipe, Disponibilidade clínica, Estrutura hub, Agenda classificada, P0.1–P0.3, papéis como presets (Recepção), horário próprio preservado, serviço sugerido com duração editável.
 
 **Detalhes:** ver `docs/GODOUTOR-HISTORY.md` (B2/B3 completos com Alterado/Testes) e `docs/GODOUTOR-CLINICAL-CONVERGENCE-AUDIT.md` (matriz 57 itens + decisões B1–B6, B3-01–B3-10).
 
