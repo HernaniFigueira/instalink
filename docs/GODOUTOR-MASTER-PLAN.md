@@ -27,22 +27,21 @@ Não recomeçar o produto do zero. Não criar novo repositório por impulso. Nã
 ## 1. Estado atual
 
 **Implementação atual:**
-Clinical Architecture Closure · PR #46 — P0 Blockers Fixes + **Equipe UX Closure + Contrato de Agenda/Serviço**
-Branch de trabalho: `arena/01a0f3d3-instalink` · PR #46 — validar estado real no Git (`git log --oneline -5`, `gh pr view 46`)
+Workflow + Permissões — `CONCLUÍDO EM CÓDIGO / HOMOLOGADO / AGUARDANDO MERGE`
+Branch de sessão: `arena/01a0f3d3-instalink` · base `main` `4c51584` · validar estado real no Git (`git log --oneline -5`, `gh pr list`)
 
-**Estado real da #46 (HEAD de código homologado: `f7df12a`):** P0 estrutural concluído · Equipe UX Closure concluído · homologação funcional real concluída (login real, persistência) · homologação visual concluída nos viewports testados (1366, 1024 e 390 no drawer de pessoa; 1440 sanity) · Vercel SUCCESS · testes 2759 PASS / 4 baseline conhecidas (3× `a34-instagram`, 1× `automation-audit-p4`, intocadas) · **merge ainda NÃO realizado** (depende de autorização explícita).
+**Estado real:** etapa canônica do atendimento derivada de Booking + Fila + Atendimento (sem campo persistido), transições auditadas e idempotentes, matriz Proprietário/Administrador/Recepção/Profissional no servidor, escopo de DADOS do Profissional por relação real em Clientes, Pets, People 360, busca, Oportunidades, Pendências, Conversas, Visão geral e export/import (capacidades `clientes_exportar`/`clientes_importar`) · homologação real (login real, fluxo completo com recarga, 1366/1024/390) · testes 2801 PASS / 4 baseline conhecidas (3× `a34-instagram`, 1× `automation-audit-p4`, intocadas) · **merge NÃO realizado**. Detalhes: `docs/AUTO-HOMOLOGACAO-WORKFLOW-PERMISSOES.md`.
 
-**Status #46:**
-`CONCLUÍDA E HOMOLOGADA / PRONTA PARA MERGE`
+**Status:** `Workflow + Permissões — CONCLUÍDO EM CÓDIGO / HOMOLOGADO / AGUARDANDO MERGE` · #46 `MERGED / PRODUÇÃO / CONCLUÍDA`.
 
-**O que já está em código (B3 + Modelo Operacional + P0.1/P0.2/P0.3 + Equipe UX Closure — PR #46):**
+**Entregue na #46 (mergeada em produção) — B3 + Modelo Operacional + P0.1/P0.2/P0.3 + Equipe UX Closure:**
 - **P0.1 (Slots & Elegibilidade):** todos os chamadores de `slotEligibleProfessionalIds` passam a equipe completa do tenant, sem pre-filtrar `active !== false`. O helper encapsula a autoridade e distingue `undefined` (legado solo), `[]` (zero elegíveis) e `[ids]`.
 - **P0.2 (Privilege Escalation em `person.save`):** validação server-side e atômica das permissões efetivas do alvo (`permissionsFor(role, overrides)`) contra as do ator; 403 sem escrita parcial.
 - **P0.3 (`deriveIsTargetOwner`):** validação estrita por IDs/vínculos reais, sem heurística por e-mail e sem vínculo cross-tenant.
 - **Equipe UX Closure (esta etapa):**
   - **Papéis como presets.** O fluxo padrão mostra Administrador, **Recepção** (enum interno `SECRETARIA`) e Profissional; Proprietário aparece só como resumo `Proprietário · acesso total` (sem editor, não rebaixável). `ATENDENTE`/`VENDEDOR`/`VIEWER` ficam em “Outros papéis / avançado” (enums e dados preservados).
   - **Recepção** = Agenda, Clientes, Oportunidades, WhatsApp/Conversas. NÃO recebe por padrão: Visão geral, Pedidos, Catálogo, Página, Assistente, Campanhas, Equipe, Configuração, Financeiro, Admin, Atendimento clínico.
-  - **Profissional** = Visão geral (escopo próprio), agenda própria, Clientes, Atendimento; sem configuração/estrutura/página/pedidos/agente/admin. O preset NÃO foi ampliado; o escopo de dados do CRM segue pendente (ver Workflow + Permissões abaixo).
+  - **Profissional** = Visão geral (escopo próprio), agenda própria, Clientes, Atendimento; sem configuração/estrutura/página/pedidos/agente/admin. O preset NÃO foi ampliado; o escopo de dados do CRM foi implementado na etapa Workflow + Permissões (§2.1).
   - **Overrides.** Trocar de papel aplica preset limpo (confirma se houver personalização real); override igual ao preset não é personalização; abrir um Member legado deriva overrides mínimos contra `permissionsFor(role)` (`src/lib/equipe-access.ts`). Chips `ajuste` só para diferença real. Segurança server-side intacta.
   - **Personalizar acesso** recolhido por padrão; com `GODOUTOR_LEGACY_PAGES` OFF, Página/Pedidos saem do editor (IDs/APIs mantidos); Assistente/Admin/Configuração só em “Capacidades avançadas” dentro do modo de personalização.
   - **Disponibilidade.** `Seguir horário da clínica` = `followBusinessHours=true`; `Usar horário próprio` = `false`. Alternar para seguir NUNCA apaga regras próprias; voltar a `próprio` restaura as regras antigas. `dispMode` vale também na criação: novo Professional com `Usar horário próprio` nasce com `followBusinessHours=false` e zero regras (sem slots próprios até configurar). Horário próprio sem regra mostra `Horário próprio ainda não configurado` + CTA `Configurar horários` → `/disponibilidade?b=<businessId>&professionalId=<professionalId>`; na tela o editor abre já com `Começar copiando o horário da clínica` (nada é gravado antes de salvar).
@@ -62,33 +61,26 @@ Branch de trabalho: `arena/01a0f3d3-instalink` · PR #46 — validar estado real
 
 **Fila oficial — única fonte vigente.** Não duplicar esta sequência em outras partes do documento. Quando uma fase terminar: remover da fila ativa, atualizar Estado atual, registrar conclusão resumida no histórico/audit, próxima fase sobe para posição 1.
 
-1. **Workflow + Permissões** — papéis, capabilities, máquina de estados do agendamento (scheduled→arrived→in_care→finalized), check-in/falta/cancelamento/reagendamento, finalização e Pendências (EventLog → Pendência → Agenda Operational Strip)
-2. **Agenda Temporal 2.0** — start/end, duração, drag-selection, bloqueios, procedimento longo, snap 5min, buffers, recursos (sala/equipamento), política interna vs pública
-3. **Clinical Encounter F1** — prontuário estruturado sobre Atendimento (queixa, anamnese, sinais, problemas/hipóteses/diagnósticos, achados, evolução, plano, procedimentos, retorno, assinatura, versionamento; autosave, rascunho, finalização bloqueia edição, reabertura auditada)
-4. **Cobertura / Modalidade do Atendimento** — Particular vs Convênio/Plano (futuro): cadastro de operadora/convênio e plano, vínculo Tutor/Pet, identificação do beneficiário, cobertura por serviço, elegibilidade/autorização, coparticipação, registro da modalidade no atendimento, pagador (tutor/convênio/ambos), preparação para repasse/faturamento/glosa — veterinária primeiro, sem SUS/TISS/medicina humana antecipada — posicionado após F1 e antes de fechar Conta/Financeiro
-5. **Prescrição + Exames + Document Engine** — medicamento/apresentação/dose/via/frequência, ordens/solicitações, template/versão/instância de documentos
-6. **Estoque / Farmácia** — item/lote/validade/fornecedor/custo/movimento, integração prescrição→administração→baixa→conta
-7. **Cirurgia + Internação** — indicação→orçamento→consentimento→checklist→cirurgia→recuperação→alta, leito/evolução/handoff
-8. **Conta do Atendimento + Financeiro avançado** — serviços/procedimentos/medicamentos/materiais → conta → pagamento/parcelas → contas a receber
-9. **Fiscal / integrações** — NFS-e, exportações, fechamento mensal, conciliação
-10. **Agentes + Jev + LLM + OAAS sobre os domínios estabilizados** — consolidação EventLog em OAAS, agentes clínicos/operacionais consumindo domínios estáveis (não antes)
+1. **Agenda Temporal 2.0 (PRÓXIMA PR)** — start/end, duração, drag-selection, bloqueios, procedimento longo, snap 5min, buffers, recursos (sala/equipamento), política interna vs pública
+2. **Clinical Encounter F1** — prontuário estruturado sobre Atendimento (queixa, anamnese, sinais, problemas/hipóteses/diagnósticos, achados, evolução, plano, procedimentos, retorno, assinatura, versionamento; autosave, rascunho, finalização bloqueia edição, reabertura auditada)
+3. **Cobertura / Modalidade do Atendimento** — Particular vs Convênio/Plano (futuro): cadastro de operadora/convênio e plano, vínculo Tutor/Pet, identificação do beneficiário, cobertura por serviço, elegibilidade/autorização, coparticipação, registro da modalidade no atendimento, pagador (tutor/convênio/ambos), preparação para repasse/faturamento/glosa — veterinária primeiro, sem SUS/TISS/medicina humana antecipada — posicionado após F1 e antes de fechar Conta/Financeiro
+4. **Prescrição + Exames + Document Engine** — medicamento/apresentação/dose/via/frequência, ordens/solicitações, template/versão/instância de documentos
+5. **Estoque / Farmácia** — item/lote/validade/fornecedor/custo/movimento, integração prescrição→administração→baixa→conta
+6. **Cirurgia + Internação** — indicação→orçamento→consentimento→checklist→cirurgia→recuperação→alta, leito/evolução/handoff
+7. **Conta do Atendimento + Financeiro avançado** — serviços/procedimentos/medicamentos/materiais → conta → pagamento/parcelas → contas a receber
+8. **Fiscal / integrações** — NFS-e, exportações, fechamento mensal, conciliação
+9. **Agentes + Jev + LLM + OAAS sobre os domínios estabilizados** — consolidação EventLog em OAAS, agentes clínicos/operacionais consumindo domínios estáveis (não antes)
 
-**Após #46, a próxima missão de código é Workflow + Permissões → Agenda Temporal 2.0 → Clinical Encounter F1 → Cobertura/Modalidade → Prescrição + Exames + Document Engine → Estoque/Farmácia → Cirurgia/Internação → Conta + Financeiro → Fiscal → Agentes/Jev/LLM.** Nenhuma delas começa antes da homologação/merge autorizado de #46.
+**A próxima missão de código é Agenda Temporal 2.0 → Clinical Encounter F1 → Cobertura/Modalidade → Prescrição + Exames + Document Engine → Estoque/Farmácia → Cirurgia/Internação → Conta + Financeiro → Fiscal → Agentes/Jev/LLM.** Nenhuma delas começa antes do merge autorizado do Workflow + Permissões.
 
 **Notas de referência (não implementar nesta PR):**
 - **Agenda Temporal 2.0 — referências para decisão futura:** Google Calendar como referência **VISUAL/INTERACIONAL** (interação de grade, drag-selection, bloqueios). Para análise arquitetural comparar agenda própria vs bibliotecas: `fullcalendar/fullcalendar`, `schedule-x/schedule-x`, `bigcalendar/react-big-calendar` (GitHub). Decisão futura: evoluir implementação própria vs adotar biblioteca vs reutilizar padrões/algoritmos — sem instalar agora.
 - **Clinical Encounter F1 — biblioteca de anamnese:** evolução do motor atual de fichas (`AnamneseManager`) para biblioteca de modelos por especialidade, após pesquisa veterinária séria e revisão humana. Nesta PR o motor permanece como está; apenas copy/hub ajustados.
 
 
-### 2.1 Workflow + Permissões — requisito de ESCOPO DE DADOS (registrado, não implementado)
+### 2.1 Workflow + Permissões — escopo de DADOS do Profissional (IMPLEMENTADO)
 
-O Profissional hoje tem escopo de dados por `professionalScope` (`access-core.ts`) em: Agenda/bookings, Visão geral (`/api/overview`), fila (`/api/queue`), busca (`/api/search`), Atendimento/encounters e leitura de catálogo. **Não** têm escopo por profissional: `Clientes`/contatos (`/api/contacts*` — a exportação completa só filtra os encontros clínicos por escopo; lista, exportação simples e importação não filtram por profissional), Pet/People 360, Oportunidades/tarefas e Conversas — quem tem a capability `clientes` enxerga o CRM inteiro do tenant. Por isso o preset do Profissional NÃO foi ampliado nesta etapa.
-
-Workflow + Permissões deve definir e aplicar no servidor:
-- **Profissional → própria agenda** (já parcial) e pacientes/tutores “sob cuidado” (vínculo por agendamento/atendimento);
-- **Visão geral, Clientes e Atendimento** com escopo por profissional (ou política por clínica);
-- exportação/importação de contatos como capability separada (hoje atrelada a `clientes`);
-- matriz papel × capability × escopo (tenant, clínica, profissional) com testes por papel real.
+Implementado e homologado: o Profissional recortado enxerga apenas pacientes/tutores com vínculo real (Agendamento, Atendimento ou Fila próprios — nunca por nome/e-mail, sempre com tenant primeiro) em Agenda, Fila, Atendimento, Clientes, People 360, Pets, busca, Oportunidades, Pendências, Conversas e Visão geral; objeto alheio devolve 404/403 seguro. Exportar/importar a base são capacidades próprias (`clientes_exportar`, `clientes_importar`; Proprietário/Administrador por padrão) e exigem contexto sem recorte. A Recepção opera Clientes/Pets/Agenda/chegada/falta/cancelar/reagendar/Oportunidades/Conversas/Pendências, sem área clínica e sem exportar/importar. Matriz por rota: `docs/AUTO-HOMOLOGACAO-WORKFLOW-PERMISSOES.md`.
 
 ### 2.2 Contrato de duração do Serviço (Agenda Temporal 2.0 — apenas documentação)
 
@@ -228,7 +220,8 @@ Estas decisões não se discutem novamente sem PR própria e justificativa técn
 Fases concluídas viraram resumo curto. Detalhes de implementação movidos para histórico.
 
 - **Design System 2.0 — CONCLUÍDO (#43)** — mergeado 2026-09-29 (`85154c8`). Detalhes: arquétipos, Atendimento full-page, Cliente 360, temas, navegação.
-- **Clinical Convergence / Architecture Closure (#46)** — `CONCLUÍDA E HOMOLOGADA / PRONTA PARA MERGE`. Unificação Equipe×Profissionais, Serviços clínico sem vitrine, Configurações cadastro centralizado, DTO seguro, porta única Equipe, Disponibilidade clínica, Estrutura hub, Agenda classificada, P0.1–P0.3, papéis como presets (Recepção), horário próprio preservado, serviço sugerido com duração editável.
+- **Workflow + Permissões** — `CONCLUÍDO EM CÓDIGO / HOMOLOGADO / AGUARDANDO MERGE`. Etapa canônica derivada, transições auditadas, matriz de papéis no servidor, escopo de dados do Profissional, capacidades de exportar/importar, Pendência de falta reaproveitando `tasks`.
+- **Clinical Convergence / Architecture Closure (#46)** — `MERGED / PRODUÇÃO / CONCLUÍDA`. Unificação Equipe×Profissionais, Serviços clínico sem vitrine, Configurações cadastro centralizado, DTO seguro, porta única Equipe, Disponibilidade clínica, Estrutura hub, Agenda classificada, P0.1–P0.3, papéis como presets (Recepção), horário próprio preservado, serviço sugerido com duração editável.
 
 **Detalhes:** ver `docs/GODOUTOR-HISTORY.md` (B2/B3 completos com Alterado/Testes) e `docs/GODOUTOR-CLINICAL-CONVERGENCE-AUDIT.md` (matriz 57 itens + decisões B1–B6, B3-01–B3-10).
 
