@@ -176,7 +176,7 @@ interface HoverTarget {
 let lastGridPressAt = 0;
 
 // ── Coluna da grade (memoizada: o drag não re-renderiza a grade inteira) ──
-const GridColumn = memo(function GridColumn({ column, basisPct, variant, highlight, onPressStart, onPressMove, onPressEnd, onPressCancel, onBlockClick, onEmptyPress, onRangeSelect, onResize, gridHeight, hours, startMinute, endMinute }: {
+const GridColumn = memo(function GridColumn({ column, basisPct, variant, highlight, onPressStart, onPressMove, onPressEnd, onPressCancel, onBlockClick, onEmptyPress, onRangeSelect, onResize, operationalBlocks, onOperationalBlock, gridHeight, hours, startMinute, endMinute }: {
   column: ColumnVM;
   basisPct: number;
   variant: 'day' | 'week';
@@ -190,6 +190,8 @@ const GridColumn = memo(function GridColumn({ column, basisPct, variant, highlig
   onEmptyPress: (columnKey: string, time: string) => void;
   onRangeSelect: (columnKey: string, time: string, durationMin: number) => void;
   onResize: (id: string, end: string) => void;
+  operationalBlocks: Array<{ block: ScheduleBlock; top: number; height: number; label: string }>;
+  onOperationalBlock: (block: ScheduleBlock) => void;
   gridHeight: number;
   hours: number;
   startMinute: number;
@@ -291,6 +293,10 @@ const GridColumn = memo(function GridColumn({ column, basisPct, variant, highlig
         </div>
       )}
 
+      {operationalBlocks.map(({ block, top, height, label }) => <button key={block.id} type="button"
+        aria-label={`Bloqueio operacional: ${label}`} title={label} onClick={() => onOperationalBlock(block)}
+        className="absolute z-10 left-1 right-1 max-w-[380px] border-2 border-dashed border-amber-700 bg-amber-100/90 text-amber-950 rounded-md px-2 py-1 text-left text-xs font-bold overflow-hidden"
+        style={{ top, height }}><span aria-hidden="true">■</span> BLOQUEIO · {label}</button>)}
       {column.blocks.map((b) => (
         <button
           key={b.id}
@@ -1768,6 +1774,20 @@ export default function AgendaPage() {
                       onEmptyPress={onEmptyPress}
                       onRangeSelect={onRangeSelect}
                       onResize={onResize}
+                      operationalBlocks={scheduleBlocks.filter(block => !block.resourceId && (!block.professionalId || block.professionalId === c.professionalId) && instantToLocalProjection(block.startAt, bizTz || 'America/Sao_Paulo').date === c.date).map(block => {
+                        const start = instantToLocalProjection(block.startAt, bizTz || 'America/Sao_Paulo');
+                        const end = instantToLocalProjection(block.endAt, bizTz || 'America/Sao_Paulo');
+                        const minute = timeToMin(start.time);
+                        return { block, top: (minute - grid.start) / 60 * PX_PER_HOUR,
+                          height: Math.max(18, (timeToMin(end.time) - minute) / 60 * PX_PER_HOUR),
+                          label: block.reason || block.note || 'Operacional' };
+                      })}
+                      onOperationalBlock={(block) => {
+                        const start = instantToLocalProjection(block.startAt, bizTz || 'America/Sao_Paulo');
+                        const end = instantToLocalProjection(block.endAt, bizTz || 'America/Sao_Paulo');
+                        openBlock({ date: start.date, time: start.time, professionalId: block.professionalId }, block);
+                        setBlockEnd(end.time);
+                      }}
                       startMinute={grid.start}
                       endMinute={grid.end}
                     />

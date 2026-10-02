@@ -1,5 +1,14 @@
 # GoDoutor — Histórico
 
+## 2026-10-02 — Agenda Temporal 2.0 · B3 e encerramento técnico local
+
+> PR #49 · branch `arena/01a0f827-instalink` · sem merge, produção não usada para QA. **Concluída em código/homologada localmente**, aguardando revisão.
+
+- Entidade `ScheduleBlock` separada de Booking e `AvailabilityException`, escopo clínica/profissional/recurso, CRUD autorizado, hard conflict inclusive encaixe. `ScheduleResource` multi-tenant sala/equipamento, alternativa única por requisito e atribuição estável, com snapshot no Booking.
+- Buffers efetivos Service→clínica→0, `bufferMin` legado depois; snapshots before/after e congelamento de dados sem snapshot antes de editar política. Move/resize revalidam capacidade e devolvem recurso final sem GET global. UI Agenda/Configurações/Serviços e detalhe responsive preservam Day/Week/List e clique B2; drag-select pode escolher Booking ou Block.
+- QA Chromium LOCAL (fixture descartável Owner/Maria/Orlando) 1366/1024/390; Week 1 GET batch, pointermove 0, move/resize 1 PATCH/0 GET, criar/excluir block 1 POST/0 GET; 200 e 500 cartões sem erro. Testes B1 38/38, B2 11/11, B2.1 7/7, B3 13/13, geral 2895 PASS/4 baseline conhecidas; build/typecheck/diff-check OK. Detalhes, limites e ressalva do stash: `docs/AUTO-HOMOLOGACAO-AGENDA-TEMPORAL-B3.md`.
+- P0 Infra single-read authenticated guard registrado para depois; NÃO implementado na #49. Nenhuma autorização de merge presumida.
+
 ## 2026-10-01 — Agenda Temporal 2.0 · Etapa B2 — Interações temporais na grade atual
 
 > PR #49 · branch `arena/01a0f827-instalink` · **sem merge**; Agenda 2.0 segue EM ANDAMENTO.
