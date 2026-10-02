@@ -2,7 +2,7 @@ import { randomBytes } from 'node:crypto';
 import { NextRequest, NextResponse } from 'next/server';
 import { requireUser } from '@/lib/access';
 import { readDB, updateDB } from '@/lib/db';
-import { COOKIE_NAME, getBearerToken, verifyPassword } from '@/lib/auth';
+import { COOKIE_NAME, getBearerToken, hasRequestCredentials, verifyPassword } from '@/lib/auth';
 import { pushAudit } from '@/lib/audit';
 import { rateLimit, ipFrom } from '@/lib/rate-limit';
 import { authorizationHash, deletionImpact, deletionTarget, type EntityKind } from '@/lib/entity-deletion';
@@ -25,10 +25,12 @@ function liveSession(db:DB,req:NextRequest,userId:string) {
   return candidates.map(id=>db.sessions.find(s=>s.id===id && s.userId===userId && Date.parse(s.expiresAt)>Date.now())).find(Boolean);
 }
 export async function GET(req:NextRequest) {
-  const auth=await requireUser(req);if(!auth.ok)return auth.res;
+  const snapshot=hasRequestCredentials(req)?await readDB():undefined;
+  const auth=await requireUser(req,snapshot);if(!auth.ok)return auth.res;
+  if(!snapshot)return reply({error:'Sessão expirada.'},401);
   const q=req.nextUrl.searchParams,kind=q.get('kind'),id=q.get('id')||'',org=q.get('organizationId')||'';
   if(!validKind(kind))return reply({error:'Tipo de alvo inválido.'},400);
-  try {const db=await readDB(),user=db.users.find(u=>u.id===auth.user.id);if(!user||!liveSession(db,req,user.id)||!deletionTarget(db,user,kind,id,org))return reply({error:'Você não pode excluir este alvo.'},403);
+  try {const db=snapshot,user=db.users.find(u=>u.id===auth.user.id);if(!user||!liveSession(db,req,user.id)||!deletionTarget(db,user,kind,id,org))return reply({error:'Você não pode excluir este alvo.'},403);
     return reply(deletionImpact(db,kind,id));
   }catch{return reply({error:'Não foi possível verificar as dependências.'},500);}
 }

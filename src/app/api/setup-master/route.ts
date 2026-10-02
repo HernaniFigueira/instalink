@@ -1,9 +1,10 @@
 import { randomUUID } from 'node:crypto';
 import { NextRequest, NextResponse } from 'next/server';
 import { requireUser } from '@/lib/access';
-import { hashPassword } from '@/lib/auth';
+import { hasRequestCredentials, hashPassword } from '@/lib/auth';
 import { pushAudit } from '@/lib/audit';
 import { readDB, updateDB } from '@/lib/db';
+import type { DB } from '@/lib/types';
 
 const PASSWORD_MIN_LENGTH = 8;
 const SETUP_LOCKED_STATUS = 410;
@@ -23,8 +24,8 @@ function lockedResponse() {
   );
 }
 
-async function authorizedSetupUser(req: NextRequest) {
-  const auth = await requireUser(req);
+async function authorizedSetupUser(req: NextRequest, snapshot?: DB) {
+  const auth = await requireUser(req, snapshot);
   if (!auth.ok) return auth;
   if (!isOwnerOrAdmin(auth.user.role)) {
     return {
@@ -37,9 +38,11 @@ async function authorizedSetupUser(req: NextRequest) {
 
 /** Informa se o bootstrap ainda está disponível, sem expor dados de usuários. */
 export async function GET(req: NextRequest) {
-  const auth = await authorizedSetupUser(req);
+  const snapshot = hasRequestCredentials(req) ? await readDB() : undefined;
+  const auth = await authorizedSetupUser(req, snapshot);
   if (!auth.ok) return auth.res;
-  const db = await readDB();
+  if (!snapshot) return NextResponse.json({ error: 'Não autenticado.' }, { status: 401 });
+  const db = snapshot;
   if (db.users.some((user) => user.role === 'master')) return lockedResponse();
   return NextResponse.json({ available: true });
 }

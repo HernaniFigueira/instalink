@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { randomUUID } from 'node:crypto';
 import { readDB, updateDB } from '@/lib/db';
 import { requireBusiness, requireUser } from '@/lib/access';
+import { hasRequestCredentials } from '@/lib/auth';
 import { pushAudit } from '@/lib/audit';
 
 // PERFIL DO USUÁRIO (lojista) — dados pessoais aditivos do User.
@@ -66,7 +67,8 @@ export async function PATCH(req: NextRequest) {
 // Cria (se preciso) um Professional vinculado a ESTE User na unidade.
 // User e Professional permanecem entidades separadas — só o vínculo userId.
 export async function POST(req: NextRequest) {
-  const auth = await requireUser(req);
+  const snapshot = hasRequestCredentials(req) ? await readDB() : undefined;
+  const auth = await requireUser(req, snapshot);
   if (!auth.ok) return auth.res;
   try {
     const body = await req.json();
@@ -74,7 +76,7 @@ export async function POST(req: NextRequest) {
     if (body.action !== 'link_as_professional') {
       return NextResponse.json({ error: 'Ação desconhecida.' }, { status: 400 });
     }
-    const guard = await requireBusiness(req, businessId, 'catalogo');
+    const guard = await requireBusiness(req, businessId, 'catalogo', snapshot);
     if (!guard.ok) return guard.res;
     const { db, ctx } = guard;
 
