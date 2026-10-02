@@ -14,6 +14,7 @@ import { validateAvailabilityException } from '@/lib/hours';
 import { todayISO, effectiveTimezone } from '@/lib/tz';
 import { serviceProfessionalMode } from '@/lib/booking';
 import { serviceHasHistory, professionalHasHistory } from '@/lib/history';
+import { freezeLegacyBuffers } from '@/lib/schedule-capacity';
 import { freezeLegacyWindowsForService } from '@/lib/booking-temporal';
 
 // API unificada de catálogo (produtos, opções, serviços, equipe, agenda).
@@ -170,6 +171,7 @@ export async function POST(req: NextRequest) {
           } else data.resourceRequirements = existing?.resourceRequirements || [];
           for (const key of ['bufferBeforeMin', 'bufferAfterMin'] as const) {
             if (body[key] === undefined) { data[key] = existing?.[key]; continue; }
+            if (body[key] === null) { data[key] = undefined; continue; }
             if (!Number.isInteger(body[key]) || body[key] < 0 || body[key] > 240) throw new Error('Buffer inválido (0–240 minutos).');
             data[key] = body[key];
           }
@@ -190,6 +192,10 @@ export async function POST(req: NextRequest) {
               durationMin: existing.durationMin,
               timeZone: effectiveTimezone(biz?.businessTimezone),
             });
+          }
+          if (existing && (data.bufferBeforeMin !== existing.bufferBeforeMin || data.bufferAfterMin !== existing.bufferAfterMin)) {
+            const biz = db.businesses.find(b => b.id === businessId);
+            freezeLegacyBuffers(db, businessId, biz?.booking || { bufferMin: 0 }, existing.id);
           }
           let serviceId: string;
           if (existing) { Object.assign(existing, data); serviceId = existing.id; }

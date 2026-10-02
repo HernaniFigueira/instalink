@@ -38,6 +38,8 @@ export interface SlotQuery {
   resources?: ScheduleResource[];
   businessId?: string;
   preferredResourceIds?: string[];
+  candidateBufferBeforeMin?: number;
+  candidateBufferAfterMin?: number;
   /**
    * Agenda Temporal 2.0 — fuso IANA da clínica, usado para projetar a janela
    * canônica do Booking no dia civil. Ausente = default do produto (somente
@@ -164,6 +166,8 @@ export function computeSlots(q: SlotQuery): SlotResult {
   // o serviço era editado.
   const tz = bookingTimezone(q.timeZone);
   const candidateBuffer = bufferPair(q.services.find(s => s.id === q.serviceId), q);
+  candidateBuffer.before = q.candidateBufferBeforeMin ?? candidateBuffer.before;
+  candidateBuffer.after = q.candidateBufferAfterMin ?? candidateBuffer.after;
   const resourceAssign: Record<string, Record<string, string[]>> = {};
   const businessId = q.businessId || q.services.find(s => s.id === q.serviceId)?.businessId || q.rules[0]?.businessId || "";
   const busy = new Map<string, Array<{ start: number; end: number }>>();
@@ -182,11 +186,14 @@ export function computeSlots(q: SlotQuery): SlotResult {
       serviceDurationMin: q.services.find((x) => x.id === b.serviceId)?.durationMin,
       fallbackDurationMin: q.durationMin,
     });
-    if (!window.local.date || window.local.date !== q.dateISO || !window.local.time) continue;
+    if (!window.local.date || !window.local.time) continue;
+    const dayOffset = Math.round((Date.parse(window.local.date + 'T00:00:00Z') - Date.parse(q.dateISO + 'T00:00:00Z')) / 86400000);
+    if (Math.abs(dayOffset) > 1) continue;
     // Buffer fica FORA da duração do atendimento (a janela/cartão não muda).
-    const s = timeToMin(window.local.time) - Math.max(0, b.bufferBeforeMin ?? q.bufferBeforeMin ?? 0);
-    const e = timeToMin(window.local.time) + Math.max(5, window.durationMin) + Math.max(0, b.bufferAfterMin ?? q.bufferAfterMin ?? q.bufferMin);
-    load.set(b.professionalId || '', (load.get(b.professionalId || '') || 0) + 1);
+    const previousBuffer = bufferPair(q.services.find(s => s.id === b.serviceId), q);
+    const s = dayOffset * 1440 + timeToMin(window.local.time) - Math.max(0, b.bufferBeforeMin ?? previousBuffer.before);
+    const e = dayOffset * 1440 + timeToMin(window.local.time) + Math.max(5, window.durationMin) + Math.max(0, b.bufferAfterMin ?? previousBuffer.after);
+    if (dayOffset === 0) load.set(b.professionalId || '', (load.get(b.professionalId || '') || 0) + 1);
     if (soloMode || !b.professionalId) {
       // sem dono definido: bloqueia todos (seguro)
       for (const pid of eligible) pushBusy(pid, s, e);

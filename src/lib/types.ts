@@ -593,7 +593,7 @@ export interface ScheduleResource {
 
 export interface ScheduleBlock {
   id: ID; businessId: ID; professionalId: string; resourceId: string;
-  startAt: string; endAt: string; note: string;
+  startAt: string; endAt: string; reason?: string; note: string;
 }
 
 export interface AvailabilityException {

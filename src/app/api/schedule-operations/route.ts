@@ -57,17 +57,17 @@ export async function POST(req: NextRequest) {
       if (existing && scope && (existing.professionalId !== scope || !!existing.resourceId)) throw Object.assign(new Error('Bloqueio fora do seu escopo.'), { status: 403 });
       if (body.action === 'block.delete') {
         d.scheduleBlocks = d.scheduleBlocks.filter(b => b !== existing);
-        return { ok: true };
+        return { ok: true, deletedId: existing?.id };
       }
       if (professionalId && !d.professionals.some(p => p.id === professionalId && p.businessId === businessId)) throw Object.assign(new Error('Profissional inválido.'), { status: 400 });
       if (resourceId && !d.scheduleResources.some(r => r.id === resourceId && r.businessId === businessId && r.active)) throw Object.assign(new Error('Recurso inválido.'), { status: 400 });
       const start = Date.parse(body.startAt), end = Date.parse(body.endAt);
       if (d.bookings.some(b => b.businessId === businessId && b.status !== 'cancelled' && b.startAt && b.endAt && overlaps(start, end, Date.parse(b.startAt) - (b.bufferBeforeMin || 0) * 60000, Date.parse(b.endAt) + (b.bufferAfterMin || 0) * 60000) && (!resourceId && (!professionalId || b.professionalId === professionalId) || !!resourceId && b.resourceIds?.includes(resourceId)))) throw Object.assign(new Error('Há atendimento neste intervalo.'), { status: 409 });
       if (blockConflict(d.scheduleBlocks.filter(b => b !== existing), businessId, professionalId, resourceId ? [resourceId] : [], start, end)) throw Object.assign(new Error('Já existe bloqueio neste intervalo.'), { status: 409 });
-      const data = { businessId, professionalId, resourceId, startAt: new Date(start).toISOString(), endAt: new Date(end).toISOString(), note: String(body.note || '').slice(0, 200) };
+      const data = { businessId, professionalId, resourceId, startAt: new Date(start).toISOString(), endAt: new Date(end).toISOString(), reason: String(body.reason || body.note || 'Bloqueio operacional').trim().slice(0, 100), note: String(body.note || '').slice(0, 200) };
       if (existing) Object.assign(existing, data);
       else d.scheduleBlocks.push({ id: randomUUID(), ...data });
-      return { ok: true };
+      return { ok: true, block: existing || d.scheduleBlocks[d.scheduleBlocks.length - 1] };
     }));
   } catch (e: any) { return error(e.message, e.status || 400); }
 }

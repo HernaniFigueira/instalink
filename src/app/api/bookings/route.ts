@@ -156,6 +156,8 @@ export async function GET(req: NextRequest) {
       bufferMin: cfg.bufferMin || 0, bufferBeforeMin: cfg.bufferBeforeMin, bufferAfterMin: cfg.bufferAfterMin,
       blocks: db.scheduleBlocks, resources: db.scheduleResources, businessId,
       preferredResourceIds: gestureBooking?.resourceIds,
+      candidateBufferBeforeMin: gestureBooking?.bufferBeforeMin,
+      candidateBufferAfterMin: gestureBooking?.bufferAfterMin,
       timeZone: btz,
     };
 
@@ -555,11 +557,17 @@ export async function PATCH(req: NextRequest) {
           leadMin: freshBusiness.booking?.leadMin || 0,
           bufferMin: freshBusiness.booking?.bufferMin || 0, bufferBeforeMin: freshBusiness.booking?.bufferBeforeMin, bufferAfterMin: freshBusiness.booking?.bufferAfterMin,
           blocks: d.scheduleBlocks, resources: d.scheduleResources, businessId: business.id, preferredResourceIds: target.resourceIds,
+          candidateBufferBeforeMin: decision.kind === 'recreate' ? undefined : target.bufferBeforeMin,
+          candidateBufferAfterMin: decision.kind === 'recreate' ? undefined : target.bufferAfterMin,
           timeZone: freshTz,
         });
         if (!r.slots.includes(time)) throw err('Este horário está ocupado. Escolha outro.', 409);
         const destinationPro = resizing ? target.professionalId : proId || r.assign[time] || target.professionalId || '';
         const pair = bufferPair(freshService, freshBusiness.booking);
+        if (decision.kind !== 'recreate') {
+          pair.before = target.bufferBeforeMin ?? pair.before;
+          pair.after = target.bufferAfterMin ?? pair.after;
+        }
         const destinationWindow = buildBookingWindow({ date, time, durationMin: destinationDuration, timeZone: freshTz });
         const occupationStart = Date.parse(destinationWindow.startAt) - pair.before * 60000;
         const occupationEnd = Date.parse(destinationWindow.endAt) + pair.after * 60000;
@@ -693,7 +701,7 @@ export async function PATCH(req: NextRequest) {
           id: target.id, date: target.date, time: target.time,
           startAt: target.startAt, endAt: target.endAt, durationMin: target.durationMin,
           timeZone: target.timeZone, temporalSource: target.temporalSource,
-          professionalId: target.professionalId, status: target.status,
+          professionalId: target.professionalId, resourceIds: target.resourceIds, bufferBeforeMin: target.bufferBeforeMin, bufferAfterMin: target.bufferAfterMin, status: target.status,
           checkedInAt: target.checkedInAt, checkedInBy: target.checkedInBy,
           checkedInByName: target.checkedInByName, updatedAt: target.updatedAt,
           history: target.history,

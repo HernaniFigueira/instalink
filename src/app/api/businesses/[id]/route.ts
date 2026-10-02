@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { freezeLegacyBuffers } from '@/lib/schedule-capacity';
 import { updateDB } from '@/lib/db';
 import { clampCents } from '@/lib/utils';
 import { requireBusiness } from '@/lib/access';
@@ -137,6 +138,9 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
             if (!Number.isInteger(nb[key]) || nb[key] < 0 || nb[key] > 240) throw new Error('Buffer inválido (0–240 minutos).');
             cur[key] = nb[key];
           }
+        }
+        if (cur.bufferMin !== b.booking?.bufferMin || cur.bufferBeforeMin !== b.booking?.bufferBeforeMin || cur.bufferAfterMin !== b.booking?.bufferAfterMin) {
+          freezeLegacyBuffers(d, b.id, b.booking || defaultBookingConfig());
         }
         b.booking = cur;
       }
