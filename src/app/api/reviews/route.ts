@@ -11,13 +11,12 @@ import { todayISO } from '@/lib/tz';
 export async function GET(req: NextRequest) {
   const q = req.nextUrl.searchParams;
   const businessId = q.get('businessId') || '';
-  const db = await readDB();
-  const business = db.businesses.find((b) => b.id === businessId);
-  if (!business) return NextResponse.json({ error: 'Negócio não encontrado.' }, { status: 404 });
 
   if (q.get('manage') === '1') {
     const guard = await requireBusiness(req, businessId, 'pagina');
     if (!guard.ok) return guard.res;
+    const { db, ctx } = guard;
+    const business = ctx.business;
     const reviews = (db.reviews || [])
       .filter((r) => r.businessId === businessId)
       .sort((a, b) => (a.createdAt < b.createdAt ? 1 : -1));
@@ -30,6 +29,12 @@ export async function GET(req: NextRequest) {
       google: { googleUrl: business.googleUrl || '', googlePlaceId: business.googlePlaceId || '', hasKey: !!(business.googleApiKey || '') },
     });
   }
+
+  // Public consumer path: this snapshot is for the public business and review
+  // data; the authenticated management path above reuses guard.db.
+  const db = await readDB();
+  const business = db.businesses.find((b) => b.id === businessId);
+  if (!business) return NextResponse.json({ error: 'Negócio não encontrado.' }, { status: 404 });
 
   if (q.get('mine') === '1') {
     const customer = await customerFromRequest(req);

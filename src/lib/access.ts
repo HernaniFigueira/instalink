@@ -8,8 +8,10 @@
 import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
 import { readDB } from './db';
-import { userFromRequest, getBearerToken, COOKIE_NAME } from './auth';
-import { getUserBySession } from './auth';
+import {
+  getBearerToken, getUserBySessionFromDB, hasRequestCredentials,
+  userFromRequest, userFromRequestFromDB, COOKIE_NAME,
+} from './auth';
 import { cookies } from 'next/headers';
 import type { DB, PermissionId, SupportSession, User } from './types';
 import {
@@ -34,25 +36,41 @@ export type { AccessContext } from './access-core';
 export const SUPPORT_COOKIE = 'il_support';
 const SUPPORT_MINUTES = 60;
 
+/** Pure SupportSession lookup. Never performs database I/O. */
+export function supportFromDB(
+  db: Pick<DB, 'supportSessions'>,
+  supportSessionId: string | undefined,
+  masterUserId?: string,
+): SupportSession | null {
+  if (!supportSessionId) return null;
+  const support = db.supportSessions.find((session) => session.id === supportSessionId);
+  if (!support || support.endedAt) return null;
+  if (new Date(support.expiresAt).getTime() < Date.now()) return null;
+  if (masterUserId && support.masterUserId !== masterUserId) return null;
+  return support;
+}
+
+/** Resolve the request's support cookie against an already-owned snapshot. */
+export function supportFromRequestFromDB(
+  req: NextRequest,
+  db: Pick<DB, 'supportSessions'>,
+  masterUserId?: string,
+): SupportSession | null {
+  return supportFromDB(db, req.cookies.get(SUPPORT_COOKIE)?.value, masterUserId);
+}
+
+/** Standalone wrapper retained for existing callers. */
 export async function supportFromRequest(req: NextRequest, masterUserId?: string): Promise<SupportSession | null> {
   const id = req.cookies.get(SUPPORT_COOKIE)?.value;
   if (!id) return null;
-  const support = await supportFromDb(id);
-  return support && (!masterUserId || support.masterUserId === masterUserId) ? support : null;
+  return supportFromDB(await readDB(), id, masterUserId);
 }
 
+/** Standalone Server Components wrapper retained for existing callers. */
 export async function supportFromCookies(): Promise<SupportSession | null> {
   const id = cookies().get(SUPPORT_COOKIE)?.value;
   if (!id) return null;
-  return supportFromDb(id);
-}
-
-async function supportFromDb(id: string): Promise<SupportSession | null> {
-  const db = await readDB();
-  const s = db.supportSessions.find((x) => x.id === id);
-  if (!s || s.endedAt) return null;
-  if (new Date(s.expiresAt).getTime() < Date.now()) return null;
-  return s;
+  return supportFromDB(await readDB(), id);
 }
 
 export function supportExpiry(from = new Date()): string {
@@ -70,10 +88,12 @@ const unauthorized = (message: string, status = 403) =>
   NextResponse.json({ error: message }, { status });
 
 /** Autentica o lojista (cookie ou Bearer). */
-export async function requireUser(req: NextRequest): Promise<
+export async function requireUser(req: NextRequest, snapshot?: DB): Promise<
   { ok: true; user: User } | { ok: false; res: NextResponse }
 > {
-  const user = await userFromRequest(req);
+  const user = snapshot
+    ? userFromRequestFromDB(req, snapshot)
+    : await userFromRequest(req);
   if (!user) return { ok: false, res: unauthorized('Não autenticado.', 401) };
   return { ok: true, user };
 }
@@ -89,13 +109,20 @@ export async function requireBusiness(
   // Usado, por exemplo, para LEITURA de catálogo, que serve tanto quem
   // administra o catálogo quanto quem usa a agenda/clientes.
   permission?: PermissionId | PermissionId[],
+  snapshot?: DB,
 ): Promise<Guarded> {
   if (!businessId) return { ok: false, res: unauthorized('Negócio não informado.', 400) };
-  const auth = await requireUser(req);
-  if (!auth.ok) return auth;
-  const db = await readDB();
-  const support = isMasterUser(auth.user) ? await supportFromRequest(req, auth.user.id) : null;
-  const ctx = resolveAccess(db, auth.user, businessId, support);
+  // No credential means there is no reason to fetch instalink_doc. When a
+  // request carries a token, auth, support, tenant, and permissions all resolve
+  // from this one request-local snapshot.
+  if (!snapshot && !hasRequestCredentials(req)) {
+    return { ok: false, res: unauthorized('Não autenticado.', 401) };
+  }
+  const db = snapshot || await readDB();
+  const user = userFromRequestFromDB(req, db);
+  if (!user) return { ok: false, res: unauthorized('Não autenticado.', 401) };
+  const support = isMasterUser(user) ? supportFromRequestFromDB(req, db, user.id) : null;
+  const ctx = resolveAccess(db, user, businessId, support);
   if (!ctx) return { ok: false, res: unauthorized('Você não tem acesso a este negócio.') };
   if (ctx.readOnly && req.method !== 'GET' && req.method !== 'HEAD') {
     return { ok: false, res: unauthorized('Modo suporte (visualização): alterações bloqueadas.', 403) };
@@ -113,11 +140,14 @@ export async function requireBusiness(
 export async function requireMaster(req: NextRequest): Promise<
   { ok: true; user: User; db: DB } | { ok: false; res: NextResponse }
 > {
-  const auth = await requireUser(req);
-  if (!auth.ok) return auth;
-  if (!isMasterUser(auth.user)) return { ok: false, res: unauthorized('Área restrita da plataforma.') };
+  if (!hasRequestCredentials(req)) {
+    return { ok: false, res: unauthorized('Não autenticado.', 401) };
+  }
   const db = await readDB();
-  return { ok: true, user: auth.user, db };
+  const user = userFromRequestFromDB(req, db);
+  if (!user) return { ok: false, res: unauthorized('Não autenticado.', 401) };
+  if (!isMasterUser(user)) return { ok: false, res: unauthorized('Área restrita da plataforma.') };
+  return { ok: true, user, db };
 }
 
 /**
@@ -125,11 +155,15 @@ export async function requireMaster(req: NextRequest): Promise<
  * recebem NextRequest). Reutiliza exatamente a mesma resolução de acesso.
  */
 export async function currentAccess(businessId: string): Promise<AccessContext | null> {
-  const sessionId = cookies().get(COOKIE_NAME)?.value;
-  const user = await getUserBySession(sessionId);
-  if (!user) return null;
+  const cookieStore = cookies();
+  const sessionId = cookieStore.get(COOKIE_NAME)?.value;
+  if (!sessionId) return null;
   const db = await readDB();
-  const support = isMasterUser(user) ? await supportFromCookies() : null;
+  const user = getUserBySessionFromDB(db, sessionId);
+  if (!user) return null;
+  const support = isMasterUser(user)
+    ? supportFromDB(db, cookieStore.get(SUPPORT_COOKIE)?.value, user.id)
+    : null;
   return resolveAccess(db, user, businessId, support);
 }
 

@@ -21,7 +21,7 @@ export async function GET(req: NextRequest) {
   const responsesFor = req.nextUrl.searchParams.get('responsesFor') || '';
   const guard = await requireBusiness(req, businessId, ['atendimento', 'config']);
   if (!guard.ok) return guard.res;
-  const db = await readDB();
+  const db = guard.db;
   const templates = db.anamneseTemplates.filter((t) => t.businessId === businessId);
   const out: Record<string, unknown> = { templates };
   if (responsesFor) {

@@ -2,7 +2,8 @@
 // Toda query é escopada por businessId + verificação de dono.
 import { redirect } from 'next/navigation';
 import { readDB } from './db';
-import { currentUser } from './auth';
+import { cookies } from 'next/headers';
+import { COOKIE_NAME, currentUser, getUserBySessionFromDB } from './auth';
 import type { Business, User } from './types';
 
 export async function requireUser(): Promise<User> {
@@ -13,8 +14,11 @@ export async function requireUser(): Promise<User> {
 
 /** Todos os negócios do usuário logado. */
 export async function myBusinesses(): Promise<Business[]> {
-  const user = await requireUser();
+  const sessionId = cookies().get(COOKIE_NAME)?.value;
+  if (!sessionId) redirect('/login');
   const db = await readDB();
+  const user = getUserBySessionFromDB(db, sessionId);
+  if (!user) redirect('/login');
   return db.businesses.filter((b) => b.ownerId === user.id);
 }
 

@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { readDB } from '@/lib/db';
+import { hasRequestCredentials } from '@/lib/auth';
 import { can, requireBusiness, requireUser, resolveAccess } from '@/lib/access';
 import { unitsForOrganization } from '@/lib/organization';
 import { isFeatureEnabled } from '@/lib/features';
@@ -35,7 +36,6 @@ export async function GET(req: NextRequest) {
     const q = req.nextUrl.searchParams;
     const businessId = q.get('businessId') || '';
     const organizationId = q.get('organizationId') || '';
-    const db = await readDB();
     const today = todayISO();
     const spec = resolvePeriodSpec({
       period: q.get('period'), from: q.get('from'), to: q.get('to'), today,
@@ -45,15 +45,19 @@ export async function GET(req: NextRequest) {
 
     // ── Visão consolidada da organização ──
     if (organizationId) {
-      const auth = await requireUser(req);
+      // Authenticate and resolve organization membership against the same
+      // request-local snapshot. Missing credentials do not cause a DB read.
+      const snapshot = hasRequestCredentials(req) ? await readDB() : undefined;
+      const auth = await requireUser(req, snapshot);
       if (!auth.ok) return auth.res;
+      if (!snapshot) return NextResponse.json({ error: 'Não autenticado.' }, { status: 401 });
       const { user } = auth;
-      const organization = db.organizations.find((o) => o.id === organizationId);
+      const organization = snapshot.organizations.find((o) => o.id === organizationId);
       // Unidades acessíveis da organização (organization.ts já filtra por
       // acesso real do usuário — nunca por parâmetro do cliente).
-      const accessible = unitsForOrganization(db, user, organizationId)
+      const accessible = unitsForOrganization(snapshot, user, organizationId)
         .filter((b) => {
-          const ctx = resolveAccess(db, user, b.id, null);
+          const ctx = resolveAccess(snapshot, user, b.id, null);
           return !!ctx && can(ctx, 'financeiro');
         });
       if (!organization || accessible.length === 0) {
@@ -71,10 +75,10 @@ export async function GET(req: NextRequest) {
           id: business.id,
           name: business.name,
           slug: business.slug,
-          results: collectResults(db, [unitOf(business)], window, previous),
+          results: collectResults(snapshot, [unitOf(business)], window, previous),
         })),
         consolidated: collectResults(
-          db, accessible.map(unitOf), window, previous, `em ${accessible.length} unidade(s)`,
+          snapshot, accessible.map(unitOf), window, previous, `em ${accessible.length} unidade(s)`,
         ),
       });
     }

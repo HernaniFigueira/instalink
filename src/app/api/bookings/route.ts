@@ -41,15 +41,17 @@ export async function GET(req: NextRequest) {
     const q = req.nextUrl.searchParams;
     const businessId = q.get('businessId') || '';
     const mode = q.get('mode');
-    const slotGuard = mode === 'slots-admin' ? await requireBusiness(req, businessId, 'agenda') : null;
-    if (slotGuard && !slotGuard.ok) return slotGuard.res;
-    const db = slotGuard?.ok ? slotGuard.db : await readDB();
+    const staffGuard = mode === 'slots-admin' || mode === 'manage'
+      ? await requireBusiness(req, businessId, 'agenda')
+      : null;
+    if (staffGuard && !staffGuard.ok) return staffGuard.res;
+    const db = staffGuard?.ok ? staffGuard.db : await readDB();
     const business = db.businesses.find((b) => b.id === businessId);
     if (!business) return NextResponse.json({ error: 'Negócio não encontrado.' }, { status: 404 });
 
     if (mode === 'manage') {
-      const guard = await requireBusiness(req, businessId, 'agenda');
-      if (!guard.ok) return guard.res;
+      // The mode was authorized above; reuse its snapshot for the response.
+      const guard = staffGuard!;
       // ESCOPO DO PROFISSIONAL (P2): quem atende e tem login vinculado vê
       // SOMENTE a própria agenda — filtro aplicado AQUI (dados), não na tela.
       const scope = guard.ctx.professionalScope;
@@ -112,7 +114,7 @@ export async function GET(req: NextRequest) {
     if (!service) return q.has('dates')
       ? NextResponse.json({ error: 'Serviço indisponível.' }, { status: 404 })
       : NextResponse.json({ slots: [] });
-    const scope = slotGuard?.ok ? slotGuard.ctx.professionalScope : '';
+    const scope = staffGuard?.ok ? staffGuard.ctx.professionalScope : '';
     if (scope && q.get('professionalId') && q.get('professionalId') !== scope) {
       return NextResponse.json({ error: 'Você só pode consultar o seu profissional.' }, { status: 403 });
     }
@@ -129,18 +131,18 @@ export async function GET(req: NextRequest) {
     const cfg = business.booking;
     const btz = effectiveTimezone(business.businessTimezone); // A2-B5 (F9)
     const today = todayISO(new Date(), btz);
-    const maxDate = bookingMaxDate(today, cfg, !!slotGuard?.ok);
+    const maxDate = bookingMaxDate(today, cfg, !!staffGuard?.ok);
 
     // O cliente NUNCA escolhe profissional: a grade é sempre "qualquer
     // profissional elegível livre" (o motor resolve internamente).
     // Only the authenticated staff gesture may request 5-minute starts.
     // A booking ID selects its own frozen duration; never trust a duration in the URL.
-    const gestureBooking = slotGuard?.ok && q.get('gestureBookingId')
-      ? db.bookings.find((b) => b.id === q.get('gestureBookingId') && b.businessId === businessId && canAccessBooking(slotGuard.ctx, b))
+    const gestureBooking = staffGuard?.ok && q.get('gestureBookingId')
+      ? db.bookings.find((b) => b.id === q.get('gestureBookingId') && b.businessId === businessId && canAccessBooking(staffGuard.ctx, b))
       : undefined;
     if (q.get('gestureBookingId') && (!gestureBooking || gestureBooking.serviceId !== service.id)) return NextResponse.json({ error: 'Agendamento não encontrado.' }, { status: 404 });
     const base = {
-      ...(slotGuard?.ok && q.get('internalSnap') === '5' ? { startStepMin: 5 } : {}),
+      ...(staffGuard?.ok && q.get('internalSnap') === '5' ? { startStepMin: 5 } : {}),
       rules: db.availability.filter((a) => a.businessId === businessId),
       exceptions: db.exceptions.filter((e) => e.businessId === businessId),
       bookings: db.bookings.filter((b) => b.businessId === businessId && b.id !== gestureBooking?.id),
@@ -165,7 +167,7 @@ export async function GET(req: NextRequest) {
     // All computations reuse guard.db; public day maps/single-day slots keep
     // their existing contract and cannot opt into the staff batch/snap.
     if (q.has('dates')) {
-      if (!slotGuard?.ok || !gestureBooking || q.get('internalSnap') !== '5' || q.has('date') || q.has('from') || q.has('to')) {
+      if (!staffGuard?.ok || !gestureBooking || q.get('internalSnap') !== '5' || q.has('date') || q.has('from') || q.has('to')) {
         return NextResponse.json({ error: 'Consulta de gesto indisponível.' }, { status: 400 });
       }
       const dates = (q.get('dates') || '').split(',');
@@ -237,7 +239,11 @@ export async function POST(req: NextRequest) {
   if (!rl.ok) return NextResponse.json({ error: 'Muitas tentativas. Aguarde um instante.' }, { status: 429 });
   try {
     const body = await req.json();
-    const db = await readDB();
+    const guard = body.asOwner === true
+      ? await requireBusiness(req, String(body.businessId || ''), 'agenda')
+      : null;
+    if (guard && !guard.ok) return guard.res;
+    const db = guard?.ok ? guard.db : await readDB();
     const business = db.businesses.find((b) => b.id === body.businessId);
     if (!business) return NextResponse.json({ error: 'Negócio não encontrado.' }, { status: 404 });
 
@@ -250,8 +256,6 @@ export async function POST(req: NextRequest) {
     // + autorização real (dono OU membro com permissão de agenda). Sessão de
     // lojista logado NUNCA transforma sozinha uma requisição pública em
     // operação interna.
-    const guard = body.asOwner === true ? await requireBusiness(req, business.id, 'agenda') : null;
-    if (guard && !guard.ok) return guard.res;
     const actor = bookingMode({
       asOwner: body.asOwner,
       ownerLogged: !!guard?.ok,
@@ -422,7 +426,7 @@ export async function POST(req: NextRequest) {
       }
     }
     if (body.series && body.preview === true) {
-      return NextResponse.json({ occurrences: previewSeries(await readDB(), params, body.series.occurrences, scope) });
+      return NextResponse.json({ occurrences: previewSeries(db, params, body.series.occurrences, scope) });
     }
     const result = await updateDB((d: DB) => body.series
       ? createSeriesTx(d, params, body.series.occurrences, body.series.requestId, scope)

@@ -1,13 +1,23 @@
 # GoDoutor — Histórico
 
+## 2026-10-02 — P0 Infra · single-read authenticated guard
+
+> Branch `arena/01a0feb4-instalink`, base `main` em `02389c44b6eeaf1bd164ce54834d6442da62c515`; PR desta entrega aguarda revisão. Produção não usada para QA; Clinical Encounter F1 não iniciado.
+
+- Criados resolvers DB-puros (`getUserBySessionFromDB`, `userFromRequestFromDB`, `supportFromDB`/`supportFromRequestFromDB`) e mantidos os wrappers públicos. `requireBusiness`, `requireMaster`, `currentAccess` e consumidores de suporte compartilham um único snapshot por operação; sem credencial, os caminhos cobertos retornam sem `readDB`.
+- Cookie continua prioritário; Bearer segue como fallback após cookie inválido/expirado no mesmo snapshot. Expiração de sessão, binding Master/suporte, tenant/membership, permissões, professionalScope e suporte somente leitura preservados. Sem cache global ou módulo; `updateDB()` e leituras de domínio/pós-mutação justificadas foram mantidos e classificados.
+- Teste novo: 14/14. Suíte focada incluindo o novo teste: 136/136 em 10 arquivos (122 regressões existentes + 14 P0). `npm run typecheck` e `npm run build` OK. Full Vitest: 2917 passou / 4 falhas, exatamente a baseline conhecida (3× `a34-instagram`, 1× `automation-audit-p4`). `git diff --check` verificado após a revisão final.
+- QA HTTP em build local e arquivo DB descartável, `DATABASE_URL` ausente: Owner, Maria/Recepção e Orlando/Profissional autenticaram pela rota real de login (3/3); `/api/auth/me` e Agenda retornaram papéis corretos; `professionalScope` de Orlando foi aplicado. A rodada visual Chromium ficou pendente: browser não instalado e downloads Playwright/Debian bloqueados por falha de rede. Detalhes e limitações em `docs/AUTO-HOMOLOGACAO-P0-SINGLE-READ-GUARD.md`.
+
 ## 2026-10-02 — Agenda Temporal 2.0 · B3 e encerramento técnico local
 
-> PR #49 · branch `arena/01a0f827-instalink` · sem merge, produção não usada para QA. **Código/QA local verdes; fechamento formal pendente de revisão do stash ausente**, aguardando revisão da PR.
+> PR #49 · branch `arena/01a0f827-instalink` · **mergeada em `main` às 22:01 UTC de 2026-10-02**. O QA descrito abaixo foi local, sem produção.
+
 
 - Entidade `ScheduleBlock` separada de Booking e `AvailabilityException`, escopo clínica/profissional/recurso, CRUD autorizado, hard conflict inclusive encaixe. `ScheduleResource` multi-tenant sala/equipamento, alternativa única por requisito e atribuição estável, com snapshot no Booking.
 - Buffers efetivos Service→clínica→0, `bufferMin` legado depois; snapshots before/after e congelamento de dados sem snapshot antes de editar política. Move/resize revalidam capacidade e devolvem recurso final sem GET global. UI Agenda/Configurações/Serviços e detalhe responsive preservam Day/Week/List e clique B2; drag-select pode escolher Booking ou Block.
 - QA Chromium LOCAL (fixture descartável Owner/Maria/Orlando) 1366/1024/390; Week 1 GET batch, pointermove 0, move/resize 1 PATCH/0 GET, criar/excluir block 1 POST/0 GET; 200 e 500 cartões sem erro. Testes B1 38/38, B2 11/11, B2.1 7/7, B3 15/15, geral 2897 PASS/4 baseline conhecidas; build/typecheck/diff-check OK. Detalhes, limites e ressalva do stash: `docs/AUTO-HOMOLOGACAO-AGENDA-TEMPORAL-B3.md`.
-- P0 Infra single-read authenticated guard registrado para depois; NÃO implementado na #49. Nenhuma autorização de merge presumida.
+- P0 Infra single-read authenticated guard não fazia parte da #49; foi entregue separadamente no registro acima, antes de Clinical Encounter F1.
 
 ## 2026-10-01 — Agenda Temporal 2.0 · Etapa B2 — Interações temporais na grade atual
 

@@ -5,7 +5,7 @@ import { randomUUID } from 'node:crypto';
 import { cookies } from 'next/headers';
 import type { NextResponse } from 'next/server';
 import { readDB, updateDB } from './db';
-import type { User } from './types';
+import type { DB, User } from './types';
 
 export const COOKIE_NAME = 'il_session';
 const SESSION_DAYS = 30;
@@ -46,13 +46,25 @@ export async function destroySession(sessionId: string): Promise<void> {
   });
 }
 
+export function getUserBySessionFromDB(
+  db: Pick<DB, 'sessions' | 'users'>,
+  sessionId: string | undefined,
+): User | null {
+  if (!sessionId) return null;
+  const session = db.sessions.find((s) => s.id === sessionId);
+  if (!session) return null;
+  // Keep the existing boundary: a session expires only when expiresAt is
+  // strictly before now (the persisted duration and token format are unchanged).
+  if (new Date(session.expiresAt).getTime() < Date.now()) return null;
+  return db.users.find((u) => u.id === session.userId) || null;
+}
+
+/** Standalone session lookup. Callers already holding a DB snapshot should use
+ * getUserBySessionFromDB to avoid an unrelated second read. */
 export async function getUserBySession(sessionId: string | undefined): Promise<User | null> {
   if (!sessionId) return null;
   const db = await readDB();
-  const session = db.sessions.find((s) => s.id === sessionId);
-  if (!session) return null;
-  if (new Date(session.expiresAt).getTime() < Date.now()) return null;
-  return db.users.find((u) => u.id === session.userId) || null;
+  return getUserBySessionFromDB(db, sessionId);
 }
 
 /** Extrai token "Authorization: Bearer <session>" (fallback sem-cookie). */
@@ -63,21 +75,42 @@ export function getBearerToken(req: { headers: { get(n: string): string | null }
   return token || undefined;
 }
 
-/**
- * Auth unificada para API routes: tenta cookie httpOnly primeiro e,
- * se ausente, o Bearer token (app funciona mesmo com cookies bloqueados).
- */
-export async function userFromRequest(req: {
+export interface UserRequest {
   cookies: { get(n: string): { value: string } | undefined };
   headers: { get(n: string): string | null };
-}): Promise<User | null> {
-  const viaCookie = await getUserBySession(req.cookies.get(COOKIE_NAME)?.value);
-  if (viaCookie) return viaCookie;
-  return getUserBySession(getBearerToken(req));
 }
 
-export async function currentUser(): Promise<User | null> {
+/** True when this request carries either supported app-session credential. */
+export function hasRequestCredentials(req: UserRequest): boolean {
+  return !!req.cookies.get(COOKIE_NAME)?.value || !!getBearerToken(req);
+}
+
+/**
+ * Pure request authentication against a caller-owned DB snapshot. Cookie
+ * precedence is preserved: a valid cookie wins, and only an invalid/missing
+ * cookie falls back to Bearer, using the same snapshot in either case.
+ */
+export function userFromRequestFromDB(req: UserRequest, db: Pick<DB, 'sessions' | 'users'>): User | null {
+  const viaCookie = getUserBySessionFromDB(db, req.cookies.get(COOKIE_NAME)?.value);
+  if (viaCookie) return viaCookie;
+  return getUserBySessionFromDB(db, getBearerToken(req));
+}
+
+/**
+ * Auth unificada para API routes: tenta cookie httpOnly primeiro e,
+ * se ausente/inválido, testa o Bearer token no MESMO snapshot. Requests sem
+ * credenciais não consultam o documento.
+ */
+export async function userFromRequest(req: UserRequest): Promise<User | null> {
+  if (!hasRequestCredentials(req)) return null;
+  const db = await readDB();
+  return userFromRequestFromDB(req, db);
+}
+
+export async function currentUser(snapshot?: Pick<DB, 'sessions' | 'users'>): Promise<User | null> {
   const sessionId = cookies().get(COOKIE_NAME)?.value;
+  if (!sessionId) return null;
+  if (snapshot) return getUserBySessionFromDB(snapshot, sessionId);
   return getUserBySession(sessionId);
 }
 

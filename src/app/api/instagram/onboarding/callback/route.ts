@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { readDB, updateDB } from '@/lib/db';
 import { requireUser } from '@/lib/access';
+import { hasRequestCredentials } from '@/lib/auth';
 import { resolveAccess } from '@/lib/access-core';
 import { pushAudit } from '@/lib/audit';
 import { instagramRedirectUri } from '@/lib/instagram';
@@ -63,13 +64,14 @@ export async function GET(req: NextRequest) {
   if (!decoded.ok) return backToPanel(req, 'error', '', decoded.reason);
 
   // 2. O usuário do estado continua com acesso à unidade?
-  const auth = await requireUser(req);
+  const snapshot = hasRequestCredentials(req) ? await readDB() : undefined;
+  const auth = await requireUser(req, snapshot);
   if (!auth.ok) return backToPanel(req, 'error', decoded.businessId, 'Sua sessão expirou — entre novamente e reconecte.');
+  if (!snapshot) return backToPanel(req, 'error', decoded.businessId, 'Sua sessão expirou — entre novamente e reconecte.');
   if (auth.user.id !== decoded.userId) {
     return backToPanel(req, 'error', decoded.businessId, 'Esta autorização foi iniciada por outro usuário.');
   }
-  const dbBefore = await readDB();
-  const access = resolveAccess(dbBefore, auth.user, decoded.businessId, null);
+  const access = resolveAccess(snapshot, auth.user, decoded.businessId, null);
   if (!access || access.readOnly || access.permissions?.whatsapp !== true) {
     await updateDB((db) => {
       pushAudit(db, {

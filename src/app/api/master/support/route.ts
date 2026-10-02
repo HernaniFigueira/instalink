@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { randomUUID } from 'node:crypto';
 import { updateDB } from '@/lib/db';
-import { SUPPORT_COOKIE, requireMaster, supportExpiry, supportFromRequest } from '@/lib/access';
+import { SUPPORT_COOKIE, requireMaster, supportExpiry, supportFromRequestFromDB } from '@/lib/access';
 import { pushAudit } from '@/lib/audit';
 import type { SupportMode } from '@/lib/types';
 
@@ -12,7 +12,7 @@ import type { SupportMode } from '@/lib/types';
 export async function GET(req: NextRequest) {
   const guard = await requireMaster(req);
   if (!guard.ok) return guard.res;
-  const session = await supportFromRequest(req, guard.user.id);
+  const session = supportFromRequestFromDB(req, guard.db, guard.user.id);
   return NextResponse.json({ support: session });
 }
 
@@ -65,7 +65,7 @@ export async function DELETE(req: NextRequest) {
   const guard = await requireMaster(req);
   if (!guard.ok) return guard.res;
   const { user } = guard;
-  const session = await supportFromRequest(req, guard.user.id);
+  const session = supportFromRequestFromDB(req, guard.db, guard.user.id);
   if (session) {
     await updateDB((d) => {
       const s = d.supportSessions.find((x) => x.id === session.id);

@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { randomUUID } from 'node:crypto';
 import { readDB, updateDB } from '@/lib/db';
-import { userFromRequest } from '@/lib/auth';
+import { hasRequestCredentials, userFromRequestFromDB } from '@/lib/auth';
 import { canManageOrganization, organizationsFor } from '@/lib/organization';
 import { pushAudit } from '@/lib/audit';
 import { slugify, isValidSlug } from '@/lib/utils';
@@ -25,7 +25,9 @@ export async function POST(req: NextRequest) {
   const rl = rateLimit(`biz:${ipFrom(req)}`, 10, 3600000);
   if (!rl.ok) return NextResponse.json({ error: 'Muitos negócios criados. Aguarde um pouco.' }, { status: 429 });
   try {
-    const user = await userFromRequest(req);
+    if (!hasRequestCredentials(req)) return NextResponse.json({ error: 'Não autenticado.' }, { status: 401 });
+    const db = await readDB();
+    const user = userFromRequestFromDB(req, db);
     if (!user) return NextResponse.json({ error: 'Não autenticado.' }, { status: 401 });
 
     const body = await req.json();
@@ -42,7 +44,6 @@ export async function POST(req: NextRequest) {
     // página de perfil (link na bio). O painel guia a ativação dos recursos.
     if (!isValidSlug(slug)) return NextResponse.json({ error: 'Esse endereço não é válido. Use ao menos 3 letras/números.' }, { status: 400 });
 
-    const db = await readDB();
     // Organização é resolvida e autorizada no servidor. Para contas legadas,
     // usa a organização normalizada do proprietário; jamais aceita org alheia.
     let organizationId = String(body.organizationId || '');

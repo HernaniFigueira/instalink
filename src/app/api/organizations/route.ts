@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { randomUUID } from 'node:crypto';
+import { hasRequestCredentials } from '@/lib/auth';
 import { requireUser } from '@/lib/access';
 import { readDB, updateDB } from '@/lib/db';
 import { organizationOverview } from '@/lib/organization-overview';
@@ -10,11 +11,13 @@ import { pushAudit } from '@/lib/audit';
 // Contexto consolidado. Só agrega unidades às quais o usuário já tem acesso;
 // organizationId enviado pelo cliente nunca amplia o escopo.
 export async function GET(req: NextRequest) {
-  const guard = await requireUser(req);
+  const snapshot = hasRequestCredentials(req) ? await readDB() : undefined;
+  const guard = await requireUser(req, snapshot);
   if (!guard.ok) return guard.res;
+  if (!snapshot) return NextResponse.json({ error: 'Não autenticado.' }, { status: 401 });
   const { user } = guard;
   try {
-    const db = await readDB();
+    const db = snapshot;
     const q=req.nextUrl.searchParams;
     const period=resolvePeriodSpec({period:q.get('period'),from:q.get('from'),to:q.get('to'),today:todayISO()});
     const organizations=organizationOverview(db,user,period);

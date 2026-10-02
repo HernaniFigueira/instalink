@@ -115,10 +115,10 @@ export async function POST(req: NextRequest) {
       if (isClinicalMutation && !ctx.permissions.catalogo && !ctx.isOwner) {
         return NextResponse.json({ error: 'Sem permissão para alterar dados clínicos (catalogo).' }, { status: 403 });
       }
-      // Pré-validação (fora da transação) para feedback rápido, mas a transação revalida com DB fresco
-      const db0 = await readDB();
+      // Pré-validação usa o snapshot do guard para feedback rápido; a escrita
+      // autoritativa continua revalidando dentro do updateDB transacional.
       try {
-        validatePersonInput(input, db0, ctx);
+        validatePersonInput(input, guard.db, ctx);
       } catch (e: any) {
         const status = e?.status || 400;
         return NextResponse.json({ error: e.message || 'Dados inválidos.' }, { status });

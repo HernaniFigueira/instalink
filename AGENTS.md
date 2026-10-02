@@ -22,6 +22,7 @@ Antes de propor ou implementar mudanças relevantes, leia:
 - Preserve o Design System e os arquétipos de página definidos no contrato de UI.
 - Audite antes de criar: reutilize domínios, serviços e fluxos existentes.
 - Não faça migração big-bang de instalink_doc.
+- **Regra de arquitetura DB/auth:** nunca use cache DB global/de módulo/singleton/TTL. Resolva identidade, suporte, tenant, membership, escopo profissional e permissões com um snapshot `DB` request-local; passe-o aos helpers puros `*FromDB` e reutilize `guard.db`. Sem credenciais, evite `readDB`. Não substitua `updateDB()` nem remova leituras de domínio/pós-mutação justificadas; classifique-as e reporte `readDB` separadamente de `updateDB`.
 - Novos domínios clínicos importantes devem nascer normalizados e multi-tenant.
 - Permissão precisa ser aplicada no servidor, não apenas na interface.
 - IA nunca acessa SQL cru, nunca ganha permissão pelo prompt e nunca assina decisão clínica autonomamente.
@@ -36,9 +37,9 @@ Antes de propor ou implementar mudanças relevantes, leia:
 
 **PR #46 — `MERGED / PRODUÇÃO / CONCLUÍDA`** (merge confirmado via GitHub; o `main` auditado agora aponta para `6064bb2`). Homologação: `docs/AUTO-HOMOLOGACAO-PR46-MODELO-OPERACIONAL.md`.
 
-**Agenda Temporal 2.0 — `CÓDIGO/QA LOCAL CONCLUÍDOS / FECHAMENTO FORMAL PENDENTE DE STASH E REVISÃO/MERGE` na PR #49 (sem merge).** Etapas A/ADR, B1, B2, B2.1 e B3 estão no mesmo grid Day/Week/List. B3 entregou `ScheduleBlock` próprio (hard conflict inclusive para fit-in), buffers before/after com snapshots e freeze legado antes de edição, salas/equipamentos multi-tenant, requisitos alternativos quantidade 1 e alocação determinística/revalidação serializada, UI operacional e QA real local Owner/Maria/Orlando em Chromium 1366/1024/390. Build, typecheck, diff-check verdes; full Vitest: 2897 PASS / somente quatro baselines conhecidas. `docs/AUTO-HOMOLOGACAO-AGENDA-TEMPORAL-B3.md` e `docs/AGENDA-TEMPORAL-2-FINAL.md`. Não declarar produção homologada. Clinical Encounter F1 continua depois de revisão da PR.
+**Agenda Temporal 2.0 — `MERGED EM MAIN` via PR #49 (2026-10-02 22:01 UTC).** Etapas A/ADR, B1, B2, B2.1 e B3 estão no mesmo grid Day/Week/List. B3 entregou `ScheduleBlock` próprio, buffers before/after com snapshots e freeze legado, salas/equipamentos multi-tenant e alocação determinística. QA anterior foi local em tenant descartável, Owner/Maria/Orlando, Chromium 1366/1024/390; **não usar isso como QA de produção**. Evidências: `docs/AUTO-HOMOLOGACAO-AGENDA-TEMPORAL-B3.md` e `docs/AGENDA-TEMPORAL-2-FINAL.md`.
 
-**P0 Infra pós-Agenda — registrado, NÃO implementado:** single-read authenticated guard / reduzir leitura duplicada do `instalink_doc` (auth + `requireBusiness`). Stash mencionado por sessão anterior não existia no Git materializado na retomada; ver ressalva no relatório B3.
+**P0 Infra — Single-read authenticated guard (implementado nesta branch; PR aguarda revisão).** Typecheck/build e testes automatizados passaram, com as quatro falhas baseline esperadas na suíte completa; smoke HTTP local em banco descartável e logins reais Owner/Maria/Orlando passou. Chromium/UI desta entrega ficou pendente porque o sandbox não conseguiu instalar o browser. Produção não usada. Relatório: `docs/AUTO-HOMOLOGACAO-P0-SINGLE-READ-GUARD.md`. Clinical Encounter F1 não iniciado e continua bloqueado até revisão/merge do P0 e autorização explícita.
 
 - **P0.1 (Slots & Elegibilidade):** todos os chamadores de `slotEligibleProfessionalIds` passam a equipe completa do tenant; o helper decide elegibilidade (`undefined` legado solo / `[]` / `[ids]`).
 - **P0.2 (Privilege Escalation):** `person.save` valida server-side e atomicamente as permissões efetivas do alvo contra as do ator (403 sem mutação parcial).
@@ -46,14 +47,14 @@ Antes de propor ou implementar mudanças relevantes, leia:
 - **Equipe UX Closure:** papéis como presets (Administrador · **Recepção**=`SECRETARIA` · Profissional; legados `ATENDENTE`/`VENDEDOR`/`VIEWER` em “Outros papéis / avançado”); Proprietário não editável/rebaixável; overrides mínimos (`src/lib/equipe-access.ts`), troca de papel limpa; Personalizar acesso recolhido e sem Página/Pedidos com `GODOUTOR_LEGACY_PAGES` OFF.
 - **Regras que não devem regredir:** (1) seguir a clínica NUNCA apaga regras de horário próprias; (2) horário próprio sem regra não finge estar configurado; (3) erros do drawer de pessoa são humanos (sem Member/User/Professional/IDs) e recebem foco/scroll; (4) `Service.durationMin` é duração PADRÃO para novos agendamentos — a biblioteca apenas SUGERE, a clínica decide, e nunca é apresentada como regra clínica/CFMV.
 - **Regras do Workflow que não devem regredir:** o servidor é a autoridade (botão escondido não substitui guard); Recepção não acessa a área clínica nem exporta/importa; Profissional só vê o que tem vínculo por Agendamento/Atendimento/Fila (nunca por nome/e-mail); não criar 4ª máquina de estados nem novo sistema de tarefas (Pendências = `tasks`).
-- **Agenda Temporal 2.0:** autoridade Booking `startAt/endAt`, duração congelada, projeção `date/time`; `Service.durationMin` é default só de novos; fuso IANA da clínica. Buffer legado `bufferMin` = *after*, novos snapshots before/after só mudam em nova criação (legado congela antes de edição). `ScheduleBlock` não é Booking nem AvailabilityException; recurso é tenant-owned e não pode ser duplicado no mesmo intervalo. B1/B2/B2.1/B3 com código/QA **local** verdes, PR #49 aberta sem merge; fechamento formal aguarda revisão do stash ausente no checkout.
+- **Agenda Temporal 2.0:** autoridade Booking `startAt/endAt`, duração congelada, projeção `date/time`; `Service.durationMin` é default só de novos; fuso IANA da clínica. Buffer legado `bufferMin` = *after*, novos snapshots before/after só mudam em nova criação (legado congela antes de edição). `ScheduleBlock` não é Booking nem AvailabilityException; recurso é tenant-owned e não pode ser duplicado no mesmo intervalo. B1/B2/B2.1/B3 foram mergeadas via PR #49; QA registrado é exclusivamente local, não produção.
 
 ## Próximas missões de código
 
 **Fila oficial — autoridade no Master Plan §2:**
 
-1. **Agenda Temporal 2.0** — etapas A+B1+B2+B2.1+B3 concluídas em código/homologadas localmente na PR #49; **aguardando revisão/merge**, não produção homologada.
-2. Clinical Encounter F1
+1. **P0 Infra — single-read authenticated guard** — implementado nesta branch; PR aguarda revisão. Build/typecheck/testes focados e smoke HTTP descartável passaram; Chromium/UI pendente por bloqueio de rede, produção não usada.
+2. Clinical Encounter F1 — deferido até revisão/merge do P0 e autorização explícita.
 3. Cobertura / Modalidade do Atendimento
 4. Prescrição + Exames + Document Engine
 5. Estoque/Farmácia
@@ -62,7 +63,7 @@ Antes de propor ou implementar mudanças relevantes, leia:
 8. Fiscal / integrações
 9. Agentes + Jev + LLM + OAAS sobre os domínios estabilizados
 
-Workflow + Permissões já está em produção. Agenda Temporal 2.0 aguarda revisão/merge da PR #49, sem QA em produção. Clinical Encounter F1 é a próxima fase **somente após revisão/autorização**; não antecipar.
+Workflow + Permissões já está em produção. Agenda Temporal 2.0 foi mergeada via PR #49 em 2026-10-02; QA registrado foi local, sem produção. Clinical Encounter F1 permanece bloqueado até revisão/merge do P0 e autorização explícita; não antecipar.
 
 **Registrado, sem implementar (não bloqueia a fila):** Cadastro/Onboarding — contrato de identidade (Master Plan §2.6): conta/login = PESSOA; primeiro usuário nasce Proprietário; clínica é entidade separada da conta; onboarding futuro aceita clínica/titular PF (CPF) ou PJ (CNPJ); e-mail de login ≠ e-mail institucional da clínica (podem ser iguais); não misturar Owner com Business/Clínica; Organização/Clínica/Unidade/Equipe são entidades/vínculos distintos.
 
