@@ -178,6 +178,8 @@ function slotsFor(db: DB, business: Business, service: Service, date: string, to
     nowHM: date === today ? nowHM(new Date(), effectiveTimezone(business.businessTimezone)) : '',
     leadMin: cfg?.leadMin || 0,
     bufferMin: cfg?.bufferMin || 0,
+      bufferBeforeMin: cfg?.bufferBeforeMin, bufferAfterMin: cfg?.bufferAfterMin,
+      blocks: db.scheduleBlocks, resources: db.scheduleResources, businessId: business.id,
     timeZone: effectiveTimezone(business.businessTimezone),
   });
   return { date, slots: r.slots, closed: r.closed || r.slots.length === 0 };

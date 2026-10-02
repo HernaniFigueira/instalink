@@ -61,6 +61,8 @@ export const findAvailableSlots: ToolDef<{ date: string; serviceId: string; prof
       nowHM: input.date === today ? now.toTimeString().slice(0, 5) : '',
       leadMin: business.booking?.leadMin || 0,
       bufferMin: business.booking?.bufferMin || 0,
+      bufferBeforeMin: business.booking?.bufferBeforeMin, bufferAfterMin: business.booking?.bufferAfterMin,
+      blocks: ctx.db.scheduleBlocks, resources: ctx.db.scheduleResources, businessId: business.id,
       timeZone: effectiveTimezone(business.businessTimezone),
     });
     return {
@@ -235,6 +237,8 @@ export const rescheduleBooking: ToolDef<{ bookingId: string; date: string; time:
       nowHM: '',
       leadMin: 0,
       bufferMin: business.booking?.bufferMin || 0,
+      bufferBeforeMin: business.booking?.bufferBeforeMin, bufferAfterMin: business.booking?.bufferAfterMin,
+      blocks: ctx.db.scheduleBlocks, resources: ctx.db.scheduleResources, businessId: business.id,
       timeZone: effectiveTimezone(business.businessTimezone),
     });
     if (!slots.slots.includes(input.time)) {

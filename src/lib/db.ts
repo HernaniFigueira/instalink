@@ -53,7 +53,7 @@ export function emptyDB(): DB {
     organizations: [], organizationMembers: [],
     businesses: [], pages: [], categories: [],
     products: [], options: [], optionValues: [], services: [],
-    professionals: [], availability: [], exceptions: [], orders: [],
+    professionals: [], availability: [], exceptions: [], scheduleBlocks: [], scheduleResources: [], orders: [],
     bookings: [], leads: [], contacts: [], reviews: [], events: [],
     // Estruturas novas (aditivas — documentos antigos ganham arrays vazios).
     members: [], agents: [], conversations: [], messages: [],
@@ -84,7 +84,7 @@ export function normalizeDB(raw: unknown): DB {
   // Arrays novos (members/agents/campaigns/audit/...): documento antigo pode
   // ter chaves ausentes ou inválidas — garantimos array em todos os casos.
   for (const key of [
-    'deletionAuthorizations', 'organizations', 'organizationMembers', 'members', 'agents', 'conversations',
+    'scheduleBlocks', 'scheduleResources', 'deletionAuthorizations', 'organizations', 'organizationMembers', 'members', 'agents', 'conversations',
     'messages', 'campaigns', 'campaignRecipients', 'audit', 'supportSessions',
     'pipelines', 'apiKeys', 'webhooks', 'webhookDeliveries', 'idempotencyKeys', 'integrationLogs',
     'automations', 'automationRuns', 'tasks', 'aiProposals',

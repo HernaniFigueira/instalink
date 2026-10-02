@@ -13,6 +13,7 @@
 // continua impossível (409 quando ocupado).
 import { randomUUID } from 'node:crypto';
 import type { BookingStatus, Business, DB, Service } from './types';
+import { bufferPair, assignResources, blockConflict } from './schedule-capacity';
 import { computeSlots } from './slots';
 import { eligibleProfessionalIds, slotEligibleProfessionalIds, professionalServesService, resolveProfessional } from './booking';
 import { upsertContact } from './contacts';
@@ -262,7 +263,8 @@ export function createBookingTx(d: DB, p: CreateBookingParams): {
     eligibleProIds: slotEligibleProfessionalIds(service as any, d.professionals.filter((x) => x.businessId === businessId)),
     nowHM: p.date === today ? nowHM(nowDate, btz) : '',
     leadMin: cfg?.leadMin || 0,
-    bufferMin: cfg?.bufferMin || 0,
+    bufferMin: cfg?.bufferMin || 0, bufferBeforeMin: cfg?.bufferBeforeMin, bufferAfterMin: cfg?.bufferAfterMin,
+    blocks: d.scheduleBlocks, resources: d.scheduleResources, businessId,
     timeZone: btz,
   });
   // ── A3.4 · Bloco 4: encaixe (fit_in) ────────────────────────────────
@@ -274,6 +276,10 @@ export function createBookingTx(d: DB, p: CreateBookingParams): {
   if (fitIn && !isOwner) throw txError('Encaixe é uma decisão da equipe.', 403);
   if (!fitIn && !r.slots.includes(p.time)) {
     throw txError('Este horário acabou de ser ocupado. Escolha outro.', 409);
+  }
+  const pair = bufferPair(service, cfg || { bufferMin: 0 });
+  if (fitIn && blockConflict(d.scheduleBlocks, businessId, ownerPro, [], Date.parse(window.startAt) - pair.before * 60000, Date.parse(window.endAt) + pair.after * 60000)) {
+    throw txError('Bloqueio operacional neste horário.', 409);
   }
   if (fitIn) {
     const conflicts = fitInConflictsFromDB({
@@ -310,6 +316,15 @@ export function createBookingTx(d: DB, p: CreateBookingParams): {
     allowRequested: isOwner,
   });
 
+  const assignedResources = assignResources({
+    requirements: service.resourceRequirements || [], resources: d.scheduleResources,
+    bookings: d.bookings, blocks: d.scheduleBlocks, businessId,
+    start: Date.parse(window.startAt) - pair.before * 60000,
+    end: Date.parse(window.endAt) + pair.after * 60000,
+  });
+  if (!assignedResources || blockConflict(d.scheduleBlocks, businessId, finalPro, assignedResources, Date.parse(window.startAt) - pair.before * 60000, Date.parse(window.endAt) + pair.after * 60000)) {
+    throw txError('Recurso ou horário bloqueado. Escolha outro.', 409);
+  }
   const status: BookingStatus = isOwner ? 'confirmed' : 'pending';
   const bookingId = randomUUID();
   d.bookings.push({
@@ -319,6 +334,7 @@ export function createBookingTx(d: DB, p: CreateBookingParams): {
     customerId: p.customer?.id || p.linkedContact?.customerId || '',
     serviceId: service.id,
     professionalId: finalPro,
+    bufferBeforeMin: pair.before, bufferAfterMin: pair.after, resourceIds: assignedResources,
     customerName: name,
     customerPhone: digits,
     status,

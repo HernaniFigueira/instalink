@@ -161,6 +161,18 @@ export async function POST(req: NextRequest) {
             ? body.showPrice
             : (existing ? existing.showPrice !== false : true);
           const data: any = { name: body.name.trim(), description: body.description || '', image: body.image || '', price: clampCents(Number(body.price) || 0), showPrice, durationMin: Math.max(5, Number(body.durationMin) || 30), professionalIds: proIds, categoryId: body.categoryId || '', active: body.active !== false, featured: !!body.featured, bookable: body.bookable !== false, questions: (Array.isArray(body.questions) ? body.questions : (existing?.questions || [])).map((x: any) => String(x || '').trim().slice(0, 120)).filter(Boolean).slice(0, 3) };
+          // B3: zero or one tenant-owned resource per alternative group.
+          if (body.resourceRequirements !== undefined) {
+            if (!Array.isArray(body.resourceRequirements) || body.resourceRequirements.length > 8 || body.resourceRequirements.some((g: unknown) => !Array.isArray(g) || g.length < 1 || g.length > 20 || g.some((x: unknown) => typeof x !== 'string' || !db.scheduleResources.some(r => r.id === x && r.businessId === businessId && r.active)))) {
+              throw new Error('Recursos inválidos: cada requisito deve listar recursos ativos desta clínica.');
+            }
+            data.resourceRequirements = body.resourceRequirements;
+          } else data.resourceRequirements = existing?.resourceRequirements || [];
+          for (const key of ['bufferBeforeMin', 'bufferAfterMin'] as const) {
+            if (body[key] === undefined) { data[key] = existing?.[key]; continue; }
+            if (!Number.isInteger(body[key]) || body[key] < 0 || body[key] > 240) throw new Error('Buffer inválido (0–240 minutos).');
+            data[key] = body[key];
+          }
           if (professionalMode) data.professionalMode = professionalMode;
           // ═══════════════════════════════════════════════════════════════
           // AGENDA TEMPORAL 2.0 (B1) — CONGELAMENTO ANTES DE MUDAR A DURAÇÃO

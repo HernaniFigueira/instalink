@@ -4,6 +4,7 @@ import { readDB, updateDB } from '@/lib/db';
 import { isFeatureEnabled } from '@/lib/features';
 import { onlyDigits, timeToMin } from '@/lib/utils';
 import { todayISO, nowHM, weekdayOf, addDaysISO, effectiveTimezone, isValidDateISO } from '@/lib/tz';
+import { bufferPair, assignResources, blockConflict } from '@/lib/schedule-capacity';
 import { computeSlots } from '@/lib/slots';
 import { eligibleProfessionalIds, slotEligibleProfessionalIds } from '@/lib/booking';
 import { applyBookingStatusTx } from '@/lib/booking-status';
@@ -130,10 +131,16 @@ export async function PATCH(req: NextRequest) {
           eligibleProIds: slotEligibleProfessionalIds(service as any, d.professionals.filter((p) => p.businessId === business.id)),
           nowHM: date === today ? nowHM(new Date(), btz) : '',
           leadMin: cfg?.leadMin || 0,
-          bufferMin: cfg?.bufferMin || 0,
+          bufferMin: cfg?.bufferMin || 0, bufferBeforeMin: cfg?.bufferBeforeMin, bufferAfterMin: cfg?.bufferAfterMin,
+          blocks: d.scheduleBlocks, resources: d.scheduleResources, businessId: business.id, preferredResourceIds: target.resourceIds,
           timeZone: btz,
         });
         if (!r.slots.includes(time)) throw err('Este horário acabou de ser ocupado. Escolha outro.', 409);
+        const pair = bufferPair(service, cfg || { bufferMin: 0 });
+        const assignment = r.resourceAssign?.[r.assign[time] || '']?.[time] || [];
+        if (blockConflict(d.scheduleBlocks, business.id, r.assign[time] || '', assignment,
+          Date.parse(buildBookingWindow({ date, time, durationMin: service.durationMin, timeZone: btz }).startAt) - pair.before * 60000,
+          Date.parse(buildBookingWindow({ date, time, durationMin: service.durationMin, timeZone: btz }).endAt) + pair.after * 60000)) throw err('Horário bloqueado.', 409);
         const finalPro = r.assign[time] || '';
         // Agenda Temporal 2.0 (B1): a remarcação do cliente também nasce como
         // janela canônica (instantes + snapshot + fuso da clínica).
@@ -148,6 +155,7 @@ export async function PATCH(req: NextRequest) {
         const fromTime = target.time;
         target.serviceId = service.id;
         target.professionalId = finalPro;
+        target.bufferBeforeMin = pair.before; target.bufferAfterMin = pair.after; target.resourceIds = assignment;
         applyBookingWindow(target, rescheduleWindow, btz);
         if (note !== undefined) target.note = String(note || '').slice(0, 300);
         if (answers !== undefined) target.answers = (Array.isArray(answers) ? answers : []).map((x: any) => String(x || '').trim().slice(0, 300)).slice(0, 3);

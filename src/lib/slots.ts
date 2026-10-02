@@ -9,10 +9,11 @@
 // professionalId = id). Nunca os dois — é isso que faz o horário geral valer
 // para toda a equipe sem duplicar configuração, e que garante que um horário
 // personalizado não seja alterado quando o geral muda.
-import type { Availability, AvailabilityException, Booking, Professional, Service } from './types';
+import type { Availability, AvailabilityException, Booking, Professional, Service, ScheduleBlock, ScheduleResource } from './types';
 import { timeToMin, minToTime } from './utils';
 import { followsBusinessHours } from './schedule';
-import { bookingTimezone, resolveBookingWindow } from './booking-temporal';
+import { bufferPair, assignResources, overlaps, blockConflict } from './schedule-capacity';
+import { bookingTimezone, resolveBookingWindow, buildBookingWindow } from './booking-temporal';
 
 export interface SlotQuery {
   rules: Availability[];
@@ -30,7 +31,13 @@ export interface SlotQuery {
   eligibleProIds?: string[]; // vínculo do serviço: [] = ninguém, undefined = compat (todos), [ids] = final
   nowHM: string; // HH:MM atual quando dateISO é hoje ('' = outro dia)
   leadMin: number; // antecedência mínima (min)
-  bufferMin: number; // intervalo entre atendimentos (min)
+  bufferMin: number; // legado: depois
+  bufferBeforeMin?: number;
+  bufferAfterMin?: number;
+  blocks?: ScheduleBlock[];
+  resources?: ScheduleResource[];
+  businessId?: string;
+  preferredResourceIds?: string[];
   /**
    * Agenda Temporal 2.0 — fuso IANA da clínica, usado para projetar a janela
    * canônica do Booking no dia civil. Ausente = default do produto (somente
@@ -58,6 +65,7 @@ export interface SlotResult {
   // Livres por profissional ('' em modo solo). Usado pelo drag-and-drop da
   // agenda para destacar a célula destino correta de cada coluna.
   byProfessional: Record<string, string[]>;
+  resourceAssign?: Record<string, Record<string, string[]>>;
 }
 
 interface Window { proId: string; start: number; end: number; step: number }
@@ -155,6 +163,9 @@ export function computeSlots(q: SlotQuery): SlotResult {
   // exatamente esse acoplamento que fazia a ocupação histórica se mover quando
   // o serviço era editado.
   const tz = bookingTimezone(q.timeZone);
+  const candidateBuffer = bufferPair(q.services.find(s => s.id === q.serviceId), q);
+  const resourceAssign: Record<string, Record<string, string[]>> = {};
+  const businessId = q.businessId || q.services.find(s => s.id === q.serviceId)?.businessId || q.rules[0]?.businessId || "";
   const busy = new Map<string, Array<{ start: number; end: number }>>();
   const load = new Map<string, number>(); // carga no dia (p/ auto)
   const pushBusy = (pid: string, s: number, e: number) => {
@@ -173,8 +184,8 @@ export function computeSlots(q: SlotQuery): SlotResult {
     });
     if (!window.local.date || window.local.date !== q.dateISO || !window.local.time) continue;
     // Buffer fica FORA da duração do atendimento (a janela/cartão não muda).
-    const s = timeToMin(window.local.time);
-    const e = s + Math.max(5, window.durationMin) + Math.max(0, q.bufferMin);
+    const s = timeToMin(window.local.time) - Math.max(0, b.bufferBeforeMin ?? q.bufferBeforeMin ?? 0);
+    const e = timeToMin(window.local.time) + Math.max(5, window.durationMin) + Math.max(0, b.bufferAfterMin ?? q.bufferAfterMin ?? q.bufferMin);
     load.set(b.professionalId || '', (load.get(b.professionalId || '') || 0) + 1);
     if (soloMode || !b.professionalId) {
       // sem dono definido: bloqueia todos (seguro)
@@ -206,9 +217,22 @@ export function computeSlots(q: SlotQuery): SlotResult {
       if (t < minStart) continue;
       pastOnly = false;
       candidates.add(minToTime(t));
-      const endT = t + q.durationMin + Math.max(0, q.bufferMin);
-      const clash = occ.some((o) => t < o.end && endT > o.start);
-      if (!clash) set.add(minToTime(t));
+      const startT = t - Math.max(0, candidateBuffer.before);
+      const endT = t + q.durationMin + Math.max(0, candidateBuffer.after);
+      // Blocks are UTC instants. Civil-to-instant conversion must respect the clinic timezone.
+      let instant;
+      try { instant = buildBookingWindow({ date: q.dateISO, time: minToTime(t), durationMin: q.durationMin, timeZone: tz }); } catch { continue; }
+      const from = Date.parse(instant.startAt) - candidateBuffer.before * 60000;
+      const until = Date.parse(instant.endAt) + candidateBuffer.after * 60000;
+      const scopeBlocks = (q.blocks || []).filter(b => b.businessId === businessId);
+      const globalOrProBlock = blockConflict(scopeBlocks, businessId, w.proId, [], from, until);
+      const requirements = q.services.find(s => s.id === q.serviceId)?.resourceRequirements || [];
+      const assignment = assignResources({ requirements, resources: q.resources || [], bookings: q.bookings, blocks: scopeBlocks, businessId, start: from, end: until, preferred: q.preferredResourceIds });
+      const clash = occ.some((o) => overlaps(startT, endT, o.start, o.end));
+      if (!clash && !globalOrProBlock && assignment) {
+        set.add(minToTime(t));
+        (resourceAssign[w.proId] ||= {})[minToTime(t)] = assignment;
+      }
     }
     freeByPro.set(w.proId, set);
   }
@@ -250,7 +274,7 @@ export function computeSlots(q: SlotQuery): SlotResult {
   }
 
   return {
-    slots, occupied,
+    slots, occupied, resourceAssign,
     closed: slots.length === 0,
     closedReason: slots.length === 0 ? 'none' : undefined,
     assign, byProfessional,

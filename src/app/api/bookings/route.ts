@@ -11,6 +11,7 @@ import {
 import { transitionAppointment, bookingWorkflowState, closeWorkflowTaskTx } from '@/lib/appointment-workflow-tx';
 import { publishWorkflowEvent } from '@/lib/workflow-events';
 import { workflowForBooking, workflowForBookings } from '@/lib/workflow-view';
+import { bufferPair, assignResources, blockConflict } from '@/lib/schedule-capacity';
 import { computeSlots, dayAvailability } from '@/lib/slots';
 import { bookingMode, eligibleProfessionalIds as eligibleIdsForService, slotEligibleProfessionalIds, serviceProfessionalMode } from '@/lib/booking';
 import { createBookingTx, resolveBookingIdentity } from '@/lib/booking-create';
@@ -152,7 +153,9 @@ export async function GET(req: NextRequest) {
       professionalId: requestedProfessionalId,
       eligibleProIds: slotEligibleProfessionalIds(service as any, allProsForService),
       leadMin: cfg.leadMin || 0,
-      bufferMin: cfg.bufferMin || 0,
+      bufferMin: cfg.bufferMin || 0, bufferBeforeMin: cfg.bufferBeforeMin, bufferAfterMin: cfg.bufferAfterMin,
+      blocks: db.scheduleBlocks, resources: db.scheduleResources, businessId,
+      preferredResourceIds: gestureBooking?.resourceIds,
       timeZone: btz,
     };
 
@@ -550,10 +553,22 @@ export async function PATCH(req: NextRequest) {
           eligibleProIds: slotEligibleProfessionalIds(freshService as any, d.professionals.filter((p) => p.businessId === business.id)),
           nowHM: date === freshToday ? nowHM(new Date(), freshTz) : '',
           leadMin: freshBusiness.booking?.leadMin || 0,
-          bufferMin: freshBusiness.booking?.bufferMin || 0,
+          bufferMin: freshBusiness.booking?.bufferMin || 0, bufferBeforeMin: freshBusiness.booking?.bufferBeforeMin, bufferAfterMin: freshBusiness.booking?.bufferAfterMin,
+          blocks: d.scheduleBlocks, resources: d.scheduleResources, businessId: business.id, preferredResourceIds: target.resourceIds,
           timeZone: freshTz,
         });
         if (!r.slots.includes(time)) throw err('Este horário está ocupado. Escolha outro.', 409);
+        const destinationPro = resizing ? target.professionalId : proId || r.assign[time] || target.professionalId || '';
+        const pair = bufferPair(freshService, freshBusiness.booking);
+        const destinationWindow = buildBookingWindow({ date, time, durationMin: destinationDuration, timeZone: freshTz });
+        const occupationStart = Date.parse(destinationWindow.startAt) - pair.before * 60000;
+        const occupationEnd = Date.parse(destinationWindow.endAt) + pair.after * 60000;
+        const resources = assignResources({
+          requirements: freshService.resourceRequirements || [], resources: d.scheduleResources,
+          bookings: others, blocks: d.scheduleBlocks, businessId: business.id,
+          start: occupationStart, end: occupationEnd, preferred: target.resourceIds,
+        });
+        if (!resources || blockConflict(d.scheduleBlocks, business.id, destinationPro, resources, occupationStart, occupationEnd)) throw err('Bloqueio ou recurso ocupado.', 409);
         // Agenda Temporal 2.0 (B1): o novo horário nasce como NOVA janela
         // canônica (instantes + snapshot + fuso), validada no fuso da clínica.
         let rescheduleWindow: BookingWindow;
@@ -579,7 +594,8 @@ export async function PATCH(req: NextRequest) {
           d.bookings.push({
             id: newId, businessId: business.id, customerId: target.customerId || '',
             serviceId: target.serviceId,
-            professionalId: proId || r.assign[time] || target.professionalId || '',
+            professionalId: destinationPro,
+            bufferBeforeMin: pair.before, bufferAfterMin: pair.after, resourceIds: resources,
             ...bookingWindowFields(rescheduleWindow, freshTz),
             customerName: target.customerName, customerPhone: target.customerPhone,
             status: decision.nextStatus, note: target.note || '', answers: target.answers || [],
@@ -633,6 +649,7 @@ export async function PATCH(req: NextRequest) {
         // snapshot/fallback (não do default do serviço para Booking canônico).
         freezeLegacyBookingWindow(target, { timeZone: freshTz, serviceDurationMin: freshService.durationMin });
         applyBookingWindow(target, rescheduleWindow, freshTz);
+        target.bufferBeforeMin = pair.before; target.bufferAfterMin = pair.after; target.resourceIds = resources;
         // Um resize mantém a chegada/check-in; somente move muda a chegada.
         let queueChanged = false;
         if (!resizing) {

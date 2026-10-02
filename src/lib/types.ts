@@ -149,7 +149,9 @@ export interface BookingConfig {
   leadMin: number; // antecedência mínima p/ reservar (minutos)
   cancelUntilMin: number; // consumidor pode cancelar até X min antes
   horizonDays: number; // janela máxima de agendamento (dias)
-  bufferMin: number; // intervalo entre atendimentos (minutos)
+  bufferMin: number; // legado: buffer APÓS, não antes
+  bufferBeforeMin?: number;
+  bufferAfterMin?: number;
 }
 
 export function defaultBookingConfig(): BookingConfig {
@@ -535,6 +537,10 @@ export interface Service {
   // (painel, agenda, CRM), mas NÃO aparece na página pública nem no assistente.
   showPrice?: boolean;
   durationMin: number; // interna: agenda/conflitos/buffer (nunca pública)
+  bufferBeforeMin?: number;
+  bufferAfterMin?: number;
+  /** Cada grupo exige exatamente UM recurso entre os IDs alternativos. */
+  resourceRequirements?: string[][];
   professionalIds: string[]; // when professionalMode='selected' = explicit list; when 'all' or legacy [] = all active
   /** Modo de elegibilidade: 'all' = todos os ativos; 'selected' = somente professionalIds. Legado sem campo = []→all, [ids]→selected */
   professionalMode?: 'all' | 'selected';
@@ -579,6 +585,15 @@ export interface Availability {
   start: string; // HH:MM
   end: string; // HH:MM
   slotMin: number;
+}
+
+export interface ScheduleResource {
+  id: ID; businessId: ID; name: string; kind: 'room' | 'equipment'; active: boolean;
+}
+
+export interface ScheduleBlock {
+  id: ID; businessId: ID; professionalId: string; resourceId: string;
+  startAt: string; endAt: string; note: string;
 }
 
 export interface AvailabilityException {
@@ -668,6 +683,9 @@ export interface Booking {
   startAt?: string; // RFC 3339 (UTC) — início autoritativo
   endAt?: string; // RFC 3339 (UTC) — fim autoritativo
   durationMin?: number; // snapshot congelado da duração (min)
+  bufferBeforeMin?: number;
+  bufferAfterMin?: number;
+  resourceIds?: string[]; // alocação congelada por requisito
   timeZone?: string; // IANA (ex.: America/Sao_Paulo)
   temporalSource?: BookingTemporalSource;
   /**
@@ -1071,6 +1089,8 @@ export interface DB {
   professionals: Professional[];
   availability: Availability[];
   exceptions: AvailabilityException[];
+  scheduleBlocks: ScheduleBlock[];
+  scheduleResources: ScheduleResource[];
   orders: Order[];
   bookings: Booking[];
   leads: Lead[];

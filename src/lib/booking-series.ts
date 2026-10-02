@@ -51,7 +51,8 @@ export function previewSeries(d: DB, p: CreateBookingParams, input: unknown, sco
       professionalId, eligibleProIds: slotEligibleProfessionalIds(service as any, professionals),
       nowHM: date === today ? nowHM(new Date(), tz) : '',
       leadMin: business.booking.leadMin || 0, bufferMin: business.booking.bufferMin || 0,
-      timeZone: tz,
+      timeZone: tz, blocks: d.scheduleBlocks, resources: d.scheduleResources, businessId: business.id,
+      bufferBeforeMin: business.booking.bufferBeforeMin, bufferAfterMin: business.booking.bufferAfterMin,
     };
     const r = computeSlots(query);
     if (!r.slots.includes(time)) {
