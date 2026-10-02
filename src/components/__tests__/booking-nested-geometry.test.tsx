@@ -134,13 +134,14 @@ describe('5 · composição aninhada usa o preset compartilhado 50/50', () => {
     expect(screen.getByRole('heading', { name: 'Cadastrar novo paciente' })).toBeTruthy();
   });
 
-  it('sozinho, o Novo agendamento usa o preset operacional compartilhado (nem esticado, nem estreito)', () => {
+  it('o formulário padrão preserva a largura; criação rápida usa o preset compacto', () => {
     const booking = read('src/components/dashboard/NewBookingSheet.tsx');
-    expect(booking).toContain('width={WORKSPACE_SHEET_SIZES.standard}');
+    expect(booking).toContain('width={quick && !advanced ? WORKSPACE_SHEET_SIZES.compact : WORKSPACE_SHEET_SIZES.standard}');
     expect(booking).not.toContain('width={WORKSPACE_SHEET_SIZES.wide}');
     // Preset existe na fonte única do Design System.
     const sizes = read('src/lib/workspace-sheet-sizes.ts');
     expect(sizes).toContain("standard: 'max-w-2xl'");
+    expect(sizes).toContain("compact: 'max-w-md'");
     expect(sizes).toContain("expanded: 'max-w-[1280px]'");
     expect(sizes).toContain('WORKSPACE_NESTED_PANEL');
   });

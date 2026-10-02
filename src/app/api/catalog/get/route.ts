@@ -36,6 +36,8 @@ export async function GET(req: NextRequest) {
     options: db.options.filter((o) => o.businessId === businessId),
     optionValues: db.optionValues.filter((v) => optIds.has(v.optionId)),
     services: db.services.filter((s) => s.businessId === businessId),
+    scheduleResources: db.scheduleResources.filter(r => r.businessId === businessId),
+    scheduleBlocks: db.scheduleBlocks.filter(b => b.businessId === businessId && (!scope || b.professionalId === scope)),
     professionals: scopeProfessionals(db.professionals.filter((p) => p.businessId === businessId), scope),
     availability: db.availability
       .filter((a) => a.businessId === businessId)

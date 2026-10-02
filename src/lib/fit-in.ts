@@ -11,7 +11,7 @@
 // Este módulo é PURO: recebe os agendamentos do dia e devolve os conflitos.
 // Ele não cria nada — quem cria é `createBookingTx` (caminho único).
 import type { Booking, Service } from './types';
-import { bookingDuration } from './booking-ops';
+import { bookingDurationOf } from './booking-ops';
 import { timeToMin } from './utils';
 
 /** Estados que ocupam a grade. Terminal (concluído/faltou/cancelado) não ocupa. */
@@ -105,8 +105,10 @@ export function fitInConflictsFromDB(
   },
   q: FitInQuery,
 ): FitInConflict[] {
+  // Agenda Temporal 2.0 (B1): a ocupação do agendamento existente usa a
+  // janela/snapshot DELE; `Service.durationMin` só entra no fallback legado.
   const durationOf = (b: Booking) =>
-    bookingDuration(input.services.find((s) => s.id === b.serviceId), 30);
+    bookingDurationOf(b, input.services.find((s) => s.id === b.serviceId), 30);
   const enriched: BookingWithDuration[] = input.bookings.map((b) => ({ ...b, durationMin: durationOf(b) }));
   return fitInConflicts(enriched, input.professionals, q);
 }

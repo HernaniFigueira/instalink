@@ -1,5 +1,6 @@
 'use client';
 import { computeSlots } from '@/lib/slots';
+import { buildBookingWindow, instantToLocalProjection } from '@/lib/booking-temporal';
 import { eligibleProfessionalIds, slotEligibleProfessionalIds } from '@/lib/booking';
 import { QueueDock } from '@/components/dashboard/QueueDock';
 // ═══════════════════════════════════════════════════════════════
@@ -29,7 +30,7 @@ import { useRouter, useSearchParams } from 'next/navigation';
 import { todayISO, addDaysISO, weekdayOf, formatDateBR, nowHM } from '@/lib/tz';
 import { nowLinePlacement } from '@/lib/agenda-nowline';
 import { WEEKDAYS, WEEKDAYS_LONG, timeToMin, minToTime, cn } from '@/lib/utils';
-import type { Availability, AvailabilityException, Booking, BookingConfig, BookingStatus, Professional, Service } from '@/lib/types';
+import type { Availability, AvailabilityException, Booking, BookingConfig, BookingStatus, Professional, Service, ScheduleBlock, ScheduleResource } from '@/lib/types';
 import { Avatar, Badge, Drawer, AgendaSkeleton, ListSkeleton, Button, IconButton, AttentionStrip, Segmented } from '@/components/ui';
 import { Icon } from '@/components/icons';
 import {
@@ -44,14 +45,15 @@ import { usePanelPermissions } from '@/components/dashboard/usePanelPermissions'
 import { canReopenEncounter } from '@/lib/encounters';
 import { AccessDenied, AreaLoadError, PermissionNotice, useAreaLoad, useForbiddenNotice } from '@/components/dashboard/AccessNotice';
 import { useRevalidateOnFocus } from '@/components/dashboard/use-revalidate';
-import { bookingDuration, effectiveHorizonDays, needsClosure, rescheduleDecision } from '@/lib/booking-ops';
+import { bookingDurationOf, effectiveHorizonDays, needsClosure, rescheduleDecision } from '@/lib/booking-ops';
 import { queueSummary, waitLabel } from '@/lib/queue';
-import { apiGet, apiSend } from '@/lib/api-client';
+import { apiGet, apiRequest, apiSend } from '@/lib/api-client';
+import { applyBookingTemporalPatch } from '@/lib/agenda-local-update';
 import { SLOT_STATE_MESSAGE, slotState } from '@/lib/slot-states';
 import { newBookingSeedFromAgendaCell } from '@/lib/agenda-cell-prefill';
 import {
-  IDLE_INTERACTION, blockHeight, blockTop, dragPreviewLabel, dragSlotUrls, dropConfirmQuestion,
-  emptyDragSlots, geometryFromRect, layoutBlocks, minuteFromOffsetY, planDrop, reduceInteraction, withOwnSlot,
+  IDLE_INTERACTION, blockHeight, blockTop, dragPreviewLabel, dragSlotUrl, dropConfirmQuestion,
+  emptyDragSlots, geometryFromRect, layoutBlocks, minuteFromOffsetY, snapGestureMinute, planDrop, reduceInteraction, withOwnSlot,
   type CellAvailability, type DragSlots, type DropColumn, type GridGeometry, type InteractionState,
   type Point,
 } from '@/lib/agenda-drag';
@@ -124,6 +126,7 @@ interface BlockVM {
   service: string;
   timeRange: string;
   statusLabel: string;
+  editable: boolean;
   cls: string;
   /** Profissional (linha discreta do cartão), ponto e ícone de estado. */
   pro: string;
@@ -173,7 +176,7 @@ interface HoverTarget {
 let lastGridPressAt = 0;
 
 // ── Coluna da grade (memoizada: o drag não re-renderiza a grade inteira) ──
-const GridColumn = memo(function GridColumn({ column, basisPct, variant, highlight, onPressStart, onPressMove, onPressEnd, onPressCancel, onBlockClick, onEmptyPress, gridHeight, hours, startMinute, endMinute }: {
+const GridColumn = memo(function GridColumn({ column, basisPct, variant, highlight, onPressStart, onPressMove, onPressEnd, onPressCancel, onBlockClick, onEmptyPress, onRangeSelect, onResize, operationalBlocks, onOperationalBlock, gridHeight, hours, startMinute, endMinute }: {
   column: ColumnVM;
   basisPct: number;
   variant: 'day' | 'week';
@@ -185,11 +188,20 @@ const GridColumn = memo(function GridColumn({ column, basisPct, variant, highlig
   onBlockClick: (id: string) => void;
   /** A3.4: clique/toque em área vazia → criar agendamento naquele horário. */
   onEmptyPress: (columnKey: string, time: string) => void;
+  onRangeSelect: (columnKey: string, time: string, durationMin: number) => void;
+  onResize: (id: string, end: string) => void;
+  operationalBlocks: Array<{ block: ScheduleBlock; top: number; height: number; label: string }>;
+  onOperationalBlock: (block: ScheduleBlock) => void;
   gridHeight: number;
   hours: number;
   startMinute: number;
   endMinute: number;
 }) {
+  const selection = useRef<{ origin: number; y: number; originPx: number; moved: boolean } | null>(null);
+  const overlay = useRef<HTMLDivElement>(null);
+  const snapY = (e: React.PointerEvent<HTMLDivElement>) => Math.max(startMinute, Math.min(endMinute,
+    snapGestureMinute(startMinute + (e.clientY - e.currentTarget.getBoundingClientRect().top) / PX_PER_HOUR * 60),
+  ));
   return (
     // border-b = linha final da grade. As linhas internas param em
     // hours-1: NADA ultrapassa gridHeight (zero scroll fantasma).
@@ -202,6 +214,36 @@ const GridColumn = memo(function GridColumn({ column, basisPct, variant, highlig
       data-agenda-column={column.key}
       data-agenda-column-date={column.date}
       data-agenda-column-professional={column.professionalId || ''}
+      onPointerDown={(e) => {
+        if (e.pointerType !== 'mouse' || e.button !== 0 || (e.target as HTMLElement).closest('button')) return;
+        const origin = snapY(e);
+        selection.current = { origin, y: origin, originPx: e.clientY, moved: false };
+        e.currentTarget.setPointerCapture(e.pointerId);
+      }}
+      onPointerMove={(e) => {
+        if (!selection.current) return;
+        const y = snapY(e);
+        const active = selection.current;
+        if (Math.abs(e.clientY - active.originPx) > 6 || y !== active.origin) active.moved = true;
+        active.y = y;
+        if (overlay.current) {
+          overlay.current.style.display = active.moved ? 'block' : 'none';
+          overlay.current.style.top = `${(Math.min(active.origin, y) - startMinute) / 60 * PX_PER_HOUR}px`;
+          overlay.current.style.height = `${Math.max(5, Math.abs(y - active.origin)) / 60 * PX_PER_HOUR}px`;
+          overlay.current.textContent = `${minToTime(Math.min(active.origin, y))}–${minToTime(Math.max(active.origin, y))}`;
+        }
+      }}
+      onPointerUp={(e) => {
+        const active = selection.current;
+        selection.current = null;
+        if (overlay.current) overlay.current.style.display = 'none';
+        if (!active?.moved) return;
+        lastGridPressAt = Date.now();
+        const from = Math.min(active.origin, active.y);
+        const to = Math.max(active.origin, active.y);
+        if (to > from) onRangeSelect(column.key, minToTime(from), to - from);
+      }}
+      onPointerCancel={() => { selection.current = null; if (overlay.current) overlay.current.style.display = 'none'; }}
       onClick={(e) => {
         // Clique em área VAZIA = criar naquele horário. Cliques em atendimento
         // (button), no destaque de arraste e o clique que sobra de um drop são
@@ -213,6 +255,7 @@ const GridColumn = memo(function GridColumn({ column, basisPct, variant, highlig
         const minutes = minuteFromOffsetY(e.clientY - rect.top, { startMinute, endMinute, pxPerHour: PX_PER_HOUR }, CLICK_SNAP_MIN);
         onEmptyPress(column.key, minToTime(minutes));
       }}>
+      <div ref={overlay} aria-hidden="true" className="pointer-events-none absolute inset-x-1 z-30 hidden rounded-md border-2 border-[var(--brand)] bg-[var(--brand-softer)] text-xs font-semibold p-1" />
       {column.freeRanges.map((r,i)=><span key={i} aria-hidden="true" className="ag-free-range absolute inset-x-0 bg-white transition-colors" style={{top:(r.start-startMinute)/60*PX_PER_HOUR,height:(r.end-r.start)/60*PX_PER_HOUR}}/>)}
       {column.isToday && <span aria-hidden="true" className="absolute inset-0 bg-[var(--brand-softer)] pointer-events-none" />}
       {Array.from({ length: Math.max(0, hours - 1) }, (_, idx) => idx + 1).map((i) => (
@@ -250,6 +293,10 @@ const GridColumn = memo(function GridColumn({ column, basisPct, variant, highlig
         </div>
       )}
 
+      {operationalBlocks.map(({ block, top, height, label }) => <button key={block.id} type="button"
+        aria-label={`Bloqueio operacional: ${label}`} title={label} onClick={() => onOperationalBlock(block)}
+        className="absolute z-10 left-1 right-1 max-w-[380px] border-2 border-dashed border-amber-700 bg-amber-100/90 text-amber-950 rounded-md px-2 py-1 text-left text-xs font-bold overflow-hidden"
+        style={{ top, height }}><span aria-hidden="true">■</span> BLOQUEIO · {label}</button>)}
       {column.blocks.map((b) => (
         <button
           key={b.id}
@@ -294,6 +341,40 @@ const GridColumn = memo(function GridColumn({ column, basisPct, variant, highlig
                   grade sabe que aquele horário foi uma decisão da equipe. */}
               {b.fitIn && <span className={`px-1 rounded-sm ${FIT_IN_MARK_CLS}`}>ENCAIXE</span>}
             </span>
+          )}
+          {b.editable && b.height >= 30 && (
+            <span aria-label={`Redimensionar ${b.name}`} title="Arraste para alterar duração"
+              className="absolute bottom-0 inset-x-0 h-3 cursor-ns-resize touch-none z-10 border-b-2 border-transparent hover:border-[var(--brand)]"
+              onPointerDown={(e) => {
+                e.stopPropagation(); e.preventDefault();
+                if (e.pointerType !== 'mouse' || e.button !== 0) return;
+                const handle = e.currentTarget;
+                const card = handle.closest('button') as HTMLElement;
+                const originY = e.clientY;
+                const originalHeight = card.offsetHeight;
+                handle.setPointerCapture(e.pointerId);
+                const onMove = (ev: PointerEvent) => {
+                  const proposed = Math.max(5, Math.round((originalHeight + ev.clientY - originY) / PX_PER_HOUR * 60 / 5) * 5);
+                  card.style.height = `${blockHeight(proposed, PX_PER_HOUR)}px`;
+                  handle.title = `${b.time}–${minToTime(timeToMin(b.time) + proposed)} · ${proposed} min`;
+                };
+                const onUp = (ev: PointerEvent) => {
+                  handle.removeEventListener('pointermove', onMove);
+                  handle.removeEventListener('pointerup', onUp);
+                  handle.removeEventListener('pointercancel', onCancel);
+                  card.style.height = '';
+                  if (ev.type === 'pointercancel') return;
+                  const proposed = Math.max(5, Math.round((originalHeight + ev.clientY - originY) / PX_PER_HOUR * 60 / 5) * 5);
+                  if (Math.abs(ev.clientY - originY) > 6) {
+                    lastGridPressAt = Date.now();
+                    onResize(b.id, minToTime(timeToMin(b.time) + proposed));
+                  }
+                };
+                const onCancel = (ev: PointerEvent) => onUp(ev);
+                handle.addEventListener('pointermove', onMove);
+                handle.addEventListener('pointerup', onUp);
+                handle.addEventListener('pointercancel', onCancel);
+              }} />
           )}
           {b.checkedInAt && (
             <span title="Cliente já fez check-in" aria-hidden="true"
@@ -371,10 +452,25 @@ export default function AgendaPage() {
   const [pros, setPros] = useState<Professional[]>([]);
   const [rules, setRules] = useState<Availability[]>([]);
   const [exceptions,setExceptions] = useState<AvailabilityException[]>([]);
+  const [scheduleBlocks, setScheduleBlocks] = useState<ScheduleBlock[]>([]);
+  const [scheduleResources, setScheduleResources] = useState<ScheduleResource[]>([]);
+  const [blockChoice, setBlockChoice] = useState<{ date: string; time: string; professionalId: string } | null>(null);
+  const [editingBlock, setEditingBlock] = useState<ScheduleBlock | null>(null);
+  const [blockForm, setBlockForm] = useState(false);
+  const [blockDate, setBlockDate] = useState('');
+  const [blockStart, setBlockStart] = useState('');
+  const [blockEnd, setBlockEnd] = useState('');
+  const [blockScope, setBlockScope] = useState<'business' | 'professional' | 'resource'>('professional');
+  const [blockPro, setBlockPro] = useState('');
+  const [blockResource, setBlockResource] = useState('');
+  const [blockNote, setBlockNote] = useState('');
+  const [blockReason, setBlockReason] = useState('');
+  const [blockError, setBlockError] = useState('');
+  const [blockBusy, setBlockBusy] = useState(false);
   const [loaded, setLoaded] = useState(false);
   const [detail, setDetail] = useState<Booking | null>(null);
   const [creating, setCreating] = useState<{
-    date: string; time: string; professionalId: string;
+    date: string; time: string; professionalId: string; selectedDurationMin?: number; quick?: boolean;
     /** A3.4 fix (revisão B5): "Encaixar na agenda" vem da FILA já preenchido. */
     contactId?: string; name?: string; phone?: string; serviceId?: string;
   } | null>(null);
@@ -420,6 +516,7 @@ export default function AgendaPage() {
   const [dragId, setDragId] = useState('');
   const [drag, setDrag] = useState<DragSlots>(emptyDragSlots);
   const [hover, setHover] = useState<HoverTarget | null>(null);
+  const [resizeAsk, setResizeAsk] = useState<{ booking: Booking; end: string } | null>(null);
   const [dropAsk, setDropAsk] = useState<{ booking: Booking; date: string; time: string; professionalId: string; columnLabel: string } | null>(null);
   const [dropError, setDropError] = useState('');
   const [saving, setSaving] = useState(false);
@@ -503,10 +600,20 @@ export default function AgendaPage() {
     setBizTz(d.business?.businessTimezone || '');
     setRules(d.availability || []);
     setExceptions(d.exceptions || []);
+    setScheduleBlocks(d.scheduleBlocks || []);
+    setScheduleResources(d.scheduleResources || []);
     setBookings(bk.data?.bookings || []);
     setLoaded(true);
     void loadQueue();
   }, [businessId, range.from, range.to, report, reportFeature, loadQueue]);
+
+  const loadBookingsOnly = useCallback(async () => {
+    const result = await apiGet<{ bookings?: Booking[] }>(
+      `/api/bookings?businessId=${businessId}&mode=manage&from=${range.from}&to=${range.to}&limit=500`,
+      { scope: 'area', area: 'Agenda' },
+    );
+    if (result.ok) setBookings(result.data?.bookings || []);
+  }, [businessId, range.from, range.to]);
 
   useEffect(() => { load(); }, [load]);
 
@@ -520,6 +627,12 @@ export default function AgendaPage() {
     // lista freca — NUNCA fecha o sheet por causa de autosave/reload.
     setDetail((d) => (d ? bookings.find((b) => b.id === d.id) || d : d));
   }, [bookings]);
+
+  const applyConfirmedTemporalPatch = useCallback((patch: Partial<Booking> & Pick<Booking, 'id'>, queueChanged: boolean) => {
+    // PATCH is the authority; the UI never moves a card before confirmation.
+    setBookings((rows) => applyBookingTemporalPatch(rows, patch, range));
+    if (queueChanged) void loadQueue();
+  }, [range, loadQueue]);
 
   const activePros = useMemo(() => pros.filter((p) => p.active !== false), [pros]);
   // A2-B3 (F5): enquanto o catálogo chega, o default do produto (60) vale;
@@ -602,11 +715,12 @@ export default function AgendaPage() {
   const serviceOf = useCallback((id: string) => services.find((s) => s.id === id), [services]);
   const serviceName = useCallback((id: string) => serviceOf(id)?.name || 'Serviço', [serviceOf]);
   const proName = useCallback((id: string) => pros.find((p) => p.id === id)?.name || '', [pros]);
-  const durationOf = useCallback((b: Booking) => bookingDuration(serviceOf(b.serviceId), 30), [serviceOf]);
+  // Agenda Temporal 2.0 (B1): altura/cartão usam a janela do PRÓPRIO Booking.
+  const durationOf = useCallback((b: Booking) => bookingDurationOf(b, serviceOf(b.serviceId), 30), [serviceOf]);
 
   const pendencies = useMemo(
     () => bookings
-      .filter((b) => needsClosure(b, bookingDuration(serviceOf(b.serviceId)), today, nowHM(new Date(), bizTz)))
+      .filter((b) => needsClosure(b, bookingDurationOf(b, serviceOf(b.serviceId)), today, nowHM(new Date(), bizTz)))
       .sort((a, b) => (a.date + a.time < b.date + b.time ? -1 : 1)),
     [bookings, serviceOf, today, bizTz],
   );
@@ -684,6 +798,7 @@ export default function AgendaPage() {
           service: serviceName(b.serviceId),
           timeRange: `${b.time}–${endHM}`,
           statusLabel,
+          editable: rescheduleDecision(b.status).kind === 'move',
           cls: BOOKING_BLOCK[b.status],
           pro: pro || '',
           dot: BOOKING_DOT[b.status],
@@ -699,7 +814,7 @@ export default function AgendaPage() {
       const ranges: Array<{start:number;end:number}> = [];
       if(bookingCfg && c.date>=today && c.date<=addDaysISO(today,effectiveHorizonDays(bookingCfg)) && bookings.length<500) {
         for(const service of services.filter(s=>s.active!==false && s.bookable!==false)) {
-          const result=computeSlots({rules,exceptions,bookings,services,professionals:activePros.filter(p=>!specFilter||(p.role||'').trim()===specFilter),dateISO:c.date,weekday:weekdayOf(c.date),serviceId:service.id,durationMin:service.durationMin,professionalId:c.professionalId||proFilter,eligibleProIds:slotEligibleProfessionalIds(service as any, pros),nowHM:c.date===today?nowHM(new Date(),bizTz):'',leadMin:bookingCfg.leadMin,bufferMin:bookingCfg.bufferMin});
+          const result=computeSlots({rules,exceptions,bookings,services,professionals:activePros.filter(p=>!specFilter||(p.role||'').trim()===specFilter),dateISO:c.date,weekday:weekdayOf(c.date),serviceId:service.id,durationMin:service.durationMin,professionalId:c.professionalId||proFilter,eligibleProIds:slotEligibleProfessionalIds(service as any, pros),nowHM:c.date===today?nowHM(new Date(),bizTz):'',leadMin:bookingCfg.leadMin,bufferMin:bookingCfg.bufferMin,bufferBeforeMin:bookingCfg.bufferBeforeMin,bufferAfterMin:bookingCfg.bufferAfterMin,blocks:scheduleBlocks,resources:scheduleResources,businessId,timeZone:bizTz});
           for(const time of result.slots) ranges.push({start:timeToMin(time),end:timeToMin(time)+service.durationMin});
         }
       }
@@ -707,7 +822,7 @@ export default function AgendaPage() {
       for(const r of ranges.sort((a,b)=>a.start-b.start)) {const last=freeRanges[freeRanges.length-1];if(last&&r.start<=last.end)last.end=Math.max(last.end,r.end);else freeRanges.push({...r});}
       return { ...c, isToday: c.date === today, blocks, freeRanges };
     });
-  }, [view, weekDays, activePros, focus, bookings, grid.start, durationOf, proName, serviceName, dragId, today, statusFilter, proFilter, specFilter, proRoleOf, bizTz, rules, exceptions, services, bookingCfg]);
+  }, [view, weekDays, activePros, focus, bookings, grid.start, durationOf, proName, serviceName, dragId, today, statusFilter, proFilter, specFilter, proRoleOf, bizTz, rules, exceptions, services, bookingCfg, scheduleBlocks, scheduleResources, businessId]);
 
   // Colunas usadas pelo cálculo de destino (mesma ordem da renderização).
   useEffect(() => {
@@ -829,17 +944,12 @@ export default function AgendaPage() {
     dragSlotsRef.current = initial;
     setDrag(initial);
     const own = { date: b.date, time: b.time, professionalId: b.professionalId || '' };
-    Promise.all(dragSlotUrls(businessId, b.serviceId, dates).map(async (url, i) => {
-      try {
-        const r = await fetch(url);
-        if (!r.ok) return [dates[i], null] as const;
-        const j = await r.json();
-        return [dates[i], j] as const;
-      } catch {
-        return [dates[i], null] as const;
-      }
-    })).then((entries) => {
+    fetch(dragSlotUrl(businessId, b.serviceId, dates, b.id))
+      .then(async (res) => res.ok ? (await res.json()).days as Record<string, { slots: string[]; byPro: Record<string, string[]>; eligibleProfessionalIds: string[] }> : null)
+      .catch(() => null)
+      .then((days) => {
       if (seq !== dragSeq.current) return;
+      const entries = dates.map((d) => [d, days?.[d] || null] as const);
       const failed = entries.filter(([, j]) => !j).length;
       const next: DragSlots = {
         loading: false,
@@ -938,25 +1048,71 @@ export default function AgendaPage() {
 
   // ── Handlers de ponteiro (estáveis: as colunas memoizadas não remontam) ──
   /** A3.4: clique em horário vago abre o sheet JÁ naquele dia/horário/quem. */
+  const onRangeSelect = useCallback((columnKey: string, time: string, selectedDurationMin: number) => {
+    const col = columnsRef.current.find((c) => c.key === columnKey);
+    if (!col) return;
+    setDetail(null);
+    setBlockChoice({ date: col.date, time, professionalId: col.professionalId });
+  }, []);
+
+  function openBlock(seed: { date: string; time: string; professionalId: string }, existing?: ScheduleBlock) {
+    setBlockChoice(null); setEditingBlock(existing || null);
+    setBlockDate(seed.date); setBlockStart(seed.time || '09:00');
+    setBlockEnd(seed.time ? minToTime(Math.min(1435, timeToMin(seed.time) + 60)) : '10:00');
+    setBlockScope(existing?.resourceId ? 'resource' : existing?.professionalId || seed.professionalId ? 'professional' : 'business');
+    setBlockPro(existing?.professionalId || seed.professionalId || ''); setBlockResource(existing?.resourceId || '');
+    setBlockReason(existing?.reason || ''); setBlockNote(existing?.note || ''); setBlockError(''); setBlockForm(true);
+  }
+  async function saveBlock(remove = false) {
+    if (blockBusy) return;
+    setBlockError('');
+    let startAt = '', endAt = '';
+    if (!remove) {
+      try {
+        const durationMin = timeToMin(blockEnd) - timeToMin(blockStart);
+        if (!blockDate || durationMin <= 0 || durationMin > 1440) throw new Error('Informe início e fim válidos.');
+        const w = buildBookingWindow({ date: blockDate, time: blockStart, durationMin, timeZone: bizTz });
+        startAt = w.startAt; endAt = w.endAt;
+      } catch { setBlockError('Informe início e fim válidos no fuso da clínica.'); return; }
+    }
+    setBlockBusy(true);
+    const res = await apiRequest<{ block?: ScheduleBlock; deletedId?: string }>('/api/schedule-operations', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({
+      action: remove ? 'block.delete' : 'block.save', businessId, id: editingBlock?.id,
+      professionalId: blockScope === 'professional' ? blockPro : '', resourceId: blockScope === 'resource' ? blockResource : '',
+      startAt, endAt, reason: blockReason, note: blockNote,
+    }) }, { scope: 'action', area: 'Agenda' });
+    setBlockBusy(false);
+    if (!res.ok) { setBlockError(res.message || 'Não foi possível salvar o bloqueio.'); return; }
+    if (remove) setScheduleBlocks(rows => rows.filter(row => row.id !== editingBlock?.id));
+    else if (res.data?.block) setScheduleBlocks(rows => [...rows.filter(row => row.id !== res.data!.block!.id), res.data!.block!]);
+    setBlockForm(false); setEditingBlock(null);
+  }
+
+  const onResize = useCallback((id: string, end: string) => {
+    const booking = bookingsRef.current.get(id);
+    if (!booking || rescheduleDecision(booking.status).kind === 'recreate') return;
+    setResizeAsk({ booking, end });
+  }, []);
+
   const onEmptyPress = useCallback((columnKey: string, time: string) => {
     const col = columnsRef.current.find((c) => c.key === columnKey);
     if (!col) return;
     setDetail(null);
-    setCreating(newBookingSeedFromAgendaCell(col, time));
+    setCreating({ ...newBookingSeedFromAgendaCell(col, time), quick: true });
   }, []);
 
   const onPressStart = useCallback((id: string, e: React.PointerEvent) => {
     lastGridPressAt = Date.now();
     if (e.pointerType === 'mouse' && e.button !== 0) return;
     const booking = bookingsRef.current.get(id);
-    if (!booking) return;
-    durationRef.current = bookingDuration(services.find((s) => s.id === booking.serviceId), 30);
+    if (!booking || rescheduleDecision(booking.status).kind === 'recreate' || saving) return;
+    durationRef.current = bookingDurationOf(booking, services.find((s) => s.id === booking.serviceId), 30);
     geometryRef.current = readGeometry();
     interactionRef.current = reduceInteraction(interactionRef.current, {
       type: 'down', id, at: { x: e.clientX, y: e.clientY },
     }).state;
     try { (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId); } catch { /* noop */ }
-  }, [readGeometry, services]);
+  }, [readGeometry, services, saving]);
 
   const onPressMove = useCallback((id: string, e: React.PointerEvent) => {
     const state = interactionRef.current;
@@ -1068,15 +1224,14 @@ export default function AgendaPage() {
     setDropError('');
     // O servidor revalida tudo (disponibilidade, profissional, conflito,
     // duração, buffer, horizonte) e aplica rescheduleDecision.
-    const res = await apiSend<{ ok?: boolean; created?: boolean; moved?: boolean; reason?: string }>(
+    const res = await apiRequest<{ ok?: boolean; created?: boolean; moved?: boolean; reason?: string; booking?: Partial<Booking> & Pick<Booking, 'id'>; queueChanged?: boolean }>(
       '/api/bookings',
-      'PATCH',
-      { businessId, id: booking.id, date, time, professionalId: professionalId || undefined },
+      { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ businessId, id: booking.id, date, time, professionalId: professionalId || undefined }) },
       { scope: 'action', area: 'Agenda' },
     );
     setSaving(false);
     if (!res.ok) {
-      setDropError(res.message || 'Não foi possível reagendar.');
+      setDropError(res.status === 409 ? 'Esse horário acabou de ficar indisponível. Escolha outro horário.' : res.message || 'Não foi possível reagendar.');
       return;
     }
     const decision = rescheduleDecision(booking.status);
@@ -1088,7 +1243,12 @@ export default function AgendaPage() {
         : `Atendimento movido para ${formatDateBR(date)} às ${time}.`,
     });
     window.setTimeout(() => setFlash(null), 5000);
-    load();
+    if (res.data?.booking && res.data.booking.id === booking.id) {
+      applyConfirmedTemporalPatch(res.data.booking, !!res.data.queueChanged);
+    } else {
+      // Old server / explicit terminal recreation: refresh bookings only.
+      void loadBookingsOnly();
+    }
   }
 
   function move(dir: -1 | 1) {
@@ -1415,6 +1575,7 @@ export default function AgendaPage() {
             />
             {/* CTA PRINCIPAL da Agenda segue o TEMA ativo (--accent, contrato
                 universal de cor) — o fluxo/sheet de criação é o mesmo. */}
+            <Button variant="secondary" size="sm" onClick={() => openBlock({ date: focus, time: '09:00', professionalId: proFilter || '' })}>Bloquear horário</Button>
             <Button variant="primary" size="sm" onClick={() => setCreating({ date: focus, time: '', professionalId: '' })}>
               <Icon n="calendarPlus" size={15} /> Novo agendamento
             </Button>
@@ -1464,6 +1625,27 @@ export default function AgendaPage() {
         )}
       </div>
 
+      {blockChoice && <div className="mb-3 border border-zinc-300 bg-white rounded-md p-3 flex flex-wrap items-center gap-2" role="dialog" aria-label="Ação no horário selecionado">
+        <span className="text-sm font-semibold">{formatDateBR(blockChoice.date)} · {blockChoice.time}</span>
+        <Button size="sm" variant="primary" onClick={() => { setCreating({ ...blockChoice, quick: true }); setBlockChoice(null); }}>Novo agendamento</Button>
+        <Button size="sm" variant="secondary" onClick={() => openBlock(blockChoice)}>Bloquear horário</Button>
+        <button type="button" className="text-xs underline" onClick={() => setBlockChoice(null)}>Cancelar</button>
+      </div>}
+      {scheduleBlocks.filter(block => {
+        const dates = view === 'week' ? weekDays : [focus];
+        return dates.some(date => block.startAt.slice(0, 10) === date || instantToLocalProjection(block.startAt, bizTz || 'America/Sao_Paulo').date === date);
+      }).length > 0 && <section className="mb-3 border border-dashed border-amber-500 rounded-md bg-amber-50 p-2" aria-label="Bloqueios operacionais">
+        <h2 className="text-xs font-bold uppercase">Bloqueios operacionais · não são atendimentos</h2>
+        <div className="flex flex-wrap gap-2 mt-1">{scheduleBlocks.filter(block => {
+          const date = instantToLocalProjection(block.startAt, bizTz || 'America/Sao_Paulo').date;
+          return (view === 'week' ? weekDays : [focus]).includes(date);
+        }).map(block => <button key={block.id} type="button" className="border-l-4 border-amber-700 bg-white px-3 py-2 text-left text-xs font-semibold" onClick={() => {
+          const date = instantToLocalProjection(block.startAt, bizTz || 'America/Sao_Paulo').date;
+          const time = instantToLocalProjection(block.startAt, bizTz || 'America/Sao_Paulo').time;
+          openBlock({ date, time, professionalId: block.professionalId }, block);
+          setBlockEnd(instantToLocalProjection(block.endAt, bizTz || 'America/Sao_Paulo').time);
+        }}>■ BLOQUEIO · {block.reason || block.note || 'Operacional'} · {block.professionalId ? proName(block.professionalId) : block.resourceId ? scheduleResources.find(r => r.id === block.resourceId)?.name : 'Clínica'}</button>)}</div>
+      </section>}
       {denied ? <AccessDenied area="Agenda" /> : failed ? <AreaLoadError area="Agenda" message={failed} onRetry={load}/> : !loaded ? <AgendaSkeleton /> : view === 'list' ? (
         <section className="ag-mode-scroll space-y-3" aria-label="Lista de atendimentos do dia">
           <p className="text-sm text-[var(--text-muted)]">{formatDateBR(focus)} · Toque para abrir o atendimento. Horários livres e intervalos estão na visualização Dia.</p>
@@ -1487,7 +1669,7 @@ export default function AgendaPage() {
                 .filter((b) => !statusFilter || b.status === statusFilter)
                 .filter((b) => !specFilter || proRoleOf(b.professionalId || '') === specFilter)
                 .filter((b) => !proFilter || b.professionalId === proFilter);
-              const pend = list.filter((b) => needsClosure(b, bookingDuration(serviceOf(b.serviceId)), today, nowHM(new Date(), bizTz))).length;
+              const pend = list.filter((b) => needsClosure(b, bookingDurationOf(b, serviceOf(b.serviceId)), today, nowHM(new Date(), bizTz))).length;
               const inMonth = d.slice(0, 7) === focus.slice(0, 7);
               return (
                 <button key={d} onClick={() => { setPresentation({data:d,view:'day'}); }} className={`bg-white p-1.5 min-h-[72px] text-left hover:bg-zinc-50 ${d === today ? 'ring-1 ring-inset ring-emerald-500 bg-emerald-50/40' : ''} ${!inMonth ? 'bg-zinc-50 text-zinc-400' : ''}`}>
@@ -1590,6 +1772,22 @@ export default function AgendaPage() {
                       onPressCancel={onPressCancel}
                       onBlockClick={onBlockClick}
                       onEmptyPress={onEmptyPress}
+                      onRangeSelect={onRangeSelect}
+                      onResize={onResize}
+                      operationalBlocks={scheduleBlocks.filter(block => !block.resourceId && (!block.professionalId || block.professionalId === c.professionalId) && instantToLocalProjection(block.startAt, bizTz || 'America/Sao_Paulo').date === c.date).map(block => {
+                        const start = instantToLocalProjection(block.startAt, bizTz || 'America/Sao_Paulo');
+                        const end = instantToLocalProjection(block.endAt, bizTz || 'America/Sao_Paulo');
+                        const minute = timeToMin(start.time);
+                        return { block, top: (minute - grid.start) / 60 * PX_PER_HOUR,
+                          height: Math.max(18, (timeToMin(end.time) - minute) / 60 * PX_PER_HOUR),
+                          label: block.reason || block.note || 'Operacional' };
+                      })}
+                      onOperationalBlock={(block) => {
+                        const start = instantToLocalProjection(block.startAt, bizTz || 'America/Sao_Paulo');
+                        const end = instantToLocalProjection(block.endAt, bizTz || 'America/Sao_Paulo');
+                        openBlock({ date: start.date, time: start.time, professionalId: block.professionalId }, block);
+                        setBlockEnd(end.time);
+                      }}
                       startMinute={grid.start}
                       endMinute={grid.end}
                     />
@@ -1663,6 +1861,31 @@ export default function AgendaPage() {
         </div>
       </div>
 
+      {resizeAsk && <Drawer open title="Confirmar duração" onClose={() => !saving && setResizeAsk(null)} width="max-w-lg">
+        <div className="p-5 space-y-3">
+          <p className="font-semibold">{resizeAsk.booking.time}–{resizeAsk.end} · {timeToMin(resizeAsk.end) - timeToMin(resizeAsk.booking.time)} min</p>
+          <p className="text-sm">O serviço não será alterado. Somente este atendimento muda.</p>
+          {dropError && <p role="alert" className="text-red-600 text-sm">{dropError}</p>}
+          <div className="flex gap-2">
+            <Button disabled={saving} onClick={async () => {
+              if (saving) return;
+              setSaving(true); setDropError('');
+              const res = await apiRequest<{ booking?: Partial<Booking> & Pick<Booking, 'id'>; queueChanged?: boolean }>(
+                '/api/bookings',
+                { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ businessId, id: resizeAsk.booking.id, resizeEnd: resizeAsk.end }) },
+                { scope: 'action', area: 'Agenda' },
+              );
+              setSaving(false);
+              if (!res.ok) { setDropError(res.status === 409 ? 'Esse horário acabou de ficar indisponível. Escolha outro fim.' : res.message); return; }
+              setResizeAsk(null);
+              if (res.data?.booking && res.data.booking.id === resizeAsk.booking.id) applyConfirmedTemporalPatch(res.data.booking, !!res.data.queueChanged);
+              else void loadBookingsOnly();
+            }}>{saving ? 'Salvando…' : 'Confirmar'}</Button>
+            <Button variant="secondary" disabled={saving} onClick={() => setResizeAsk(null)}>Cancelar</Button>
+          </div>
+        </div>
+      </Drawer>}
+
       {/* Confirmação explícita do drop — nada acontece em silêncio */}
       {dropAsk && (
         <Drawer open onClose={() => !saving && setDropAsk(null)} title="Confirmar reagendamento" width="max-w-lg">
@@ -1693,11 +1916,27 @@ export default function AgendaPage() {
         </Drawer>
       )}
 
+      {blockForm && <Drawer open onClose={() => setBlockForm(false)} title={editingBlock ? 'Editar bloqueio' : 'Bloquear horário'} width="max-w-md">
+        <div className="p-4 space-y-3">
+          <p className="text-xs">Intervalo operacional (não cria paciente nem atendimento).</p>
+          <label className="block text-xs">Data<input type="date" value={blockDate} onChange={e => setBlockDate(e.target.value)} className="w-full border rounded-md p-2" /></label>
+          <div className="flex gap-2"><label className="flex-1 text-xs">Início<input type="time" value={blockStart} onChange={e => setBlockStart(e.target.value)} className="w-full border rounded-md p-2" /></label><label className="flex-1 text-xs">Fim<input type="time" value={blockEnd} onChange={e => setBlockEnd(e.target.value)} className="w-full border rounded-md p-2" /></label></div>
+          <label className="block text-xs">Escopo<select value={blockScope} onChange={e => setBlockScope(e.target.value as typeof blockScope)} className="w-full border rounded-md p-2"><option value="business">Clínica</option><option value="professional">Profissional</option><option value="resource">Sala ou equipamento</option></select></label>
+          {blockScope === 'professional' && <label className="block text-xs">Profissional<select value={blockPro} onChange={e => setBlockPro(e.target.value)} className="w-full border rounded-md p-2"><option value="">Selecione</option>{pros.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}</select></label>}
+          {blockScope === 'resource' && <label className="block text-xs">Recurso<select value={blockResource} onChange={e => setBlockResource(e.target.value)} className="w-full border rounded-md p-2"><option value="">Selecione</option>{scheduleResources.map(r => <option key={r.id} value={r.id}>{r.name}</option>)}</select></label>}
+          <label className="block text-xs">Motivo<input value={blockReason} onChange={e => setBlockReason(e.target.value)} placeholder="Ex.: manutenção, reunião" className="w-full border rounded-md p-2" /></label>
+          <label className="block text-xs">Observação (opcional)<input value={blockNote} onChange={e => setBlockNote(e.target.value)} placeholder="Ex.: manutenção, reunião" className="w-full border rounded-md p-2" /></label>
+          {blockError && <p role="alert" className="text-red-700 text-sm">{blockError}</p>}
+          <div className="flex gap-2"><Button disabled={blockBusy} onClick={() => void saveBlock()}>{editingBlock ? 'Salvar alterações' : 'Criar bloqueio'}</Button>
+            {editingBlock && <Button variant="secondary" disabled={blockBusy} onClick={() => void saveBlock(true)}>Excluir bloqueio</Button>}</div>
+        </div>
+      </Drawer>}
       {detail && (
         <BookingDetailSheet
           booking={detail}
           timezone={bizTz}
           service={serviceOf(detail.serviceId)}
+          resources={scheduleResources}
           pro={detail.professionalId ? pros.find((p) => p.id === detail.professionalId) : undefined}
           businessId={businessId}
           onClose={() => setDetail(null)}
@@ -1715,12 +1954,14 @@ export default function AgendaPage() {
           pros={pros}
           horizonDays={horizonDays}
           timezone={bizTz}
+          quick={creating.quick}
           initial={{
             name: creating.name || '', phone: creating.phone || '',
             contactId: creating.contactId, serviceId: creating.serviceId,
             date: creating.date || focus,
             time: creating.time,
             professionalId: creating.professionalId,
+            selectedDurationMin: creating.selectedDurationMin,
           }}
           onClose={() => setCreating(null)}
           onCreated={load}

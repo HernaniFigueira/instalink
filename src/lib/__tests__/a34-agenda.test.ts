@@ -52,7 +52,10 @@ describe('A3.4 · Bloco 3 — Agenda: navegação [◀][▶] e clique cria', () 
   it('clicar num horário vago abre o agendamento com dia, hora e profissional', () => {
     expect(agenda).toContain('onEmptyPress');
     expect(agenda).toContain('minuteFromOffsetY(');
-    expect(agenda).toContain('setCreating(newBookingSeedFromAgendaCell(col, time))');
+    expect(agenda).toContain('setBlockChoice({ date: col.date, time, professionalId: col.professionalId })');
+    expect(agenda).toContain('setCreating({ ...newBookingSeedFromAgendaCell(col, time), quick: true })');
+    expect(agenda).toContain('Novo agendamento');
+    expect(agenda).toContain('Bloquear horário');
     // O clique que sobra de um arraste nunca cria agendamento.
     expect(agenda).toContain('lastGridPressAt');
     expect(agenda).toContain("el.closest('button')");
@@ -61,7 +64,7 @@ describe('A3.4 · Bloco 3 — Agenda: navegação [◀][▶] e clique cria', () 
   it('o clique só sugere um horário — o motor de slots continua no servidor', () => {
     // A disponibilidade vem do servidor (URLs montadas por lib/agenda-drag);
     // a tela não recalcula slot nenhum.
-    expect(agenda).toContain('dragSlotUrls(');
+    expect(agenda).toContain('dragSlotUrl(');
     expect(agenda).not.toMatch(/function computeSlots/);
     expect(agenda).not.toMatch(/const slots\s*=\s*useMemo\(\(\) => \[/);
   });

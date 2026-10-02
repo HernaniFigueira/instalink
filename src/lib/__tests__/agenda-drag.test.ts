@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   DRAG_THRESHOLD_PX, IDLE_INTERACTION, blockHeight, blockTop, cellAvailability, cellFromPoint,
-  clampMinuteToGrid, columnAt, dragPreviewLabel, dragSlotUrls, emptyDragSlots,
+  clampMinuteToGrid, columnAt, dragPreviewLabel, dragSlotUrl, emptyDragSlots,
   exceedsDragThreshold, geometryFromRect, gridSnapMinutes, layoutBlocks, minuteAt, minuteLabel,
   nearestSlot, planDrop, pointerDistance, reduceInteraction, runInteraction, shortDateBR,
   slotsForColumn, withOwnSlot, dropConfirmQuestion,
@@ -113,16 +113,13 @@ describe('agenda-drag — clique simples × arraste (threshold)', () => {
 });
 
 describe('agenda-drag — requests do arraste', () => {
-  it('UMA URL por dia visível (nunca por pixel nem por movimento)', () => {
-    const urls = dragSlotUrls('b1', 's1', ['2026-09-14', '2026-09-15']);
-    expect(urls).toHaveLength(2);
-    expect(urls[0]).toBe('/api/bookings?mode=slots-admin&businessId=b1&serviceId=s1&date=2026-09-14');
-  });
-
-  it('dia único (visão dia) = 1 request; semana = 7', () => {
-    expect(dragSlotUrls('b1', 's1', ['2026-09-14'])).toHaveLength(1);
+  it('Dia e Semana produzem UMA URL por gesto, sem requests por movimento', () => {
+    const one = dragSlotUrl('b1', 's1', ['2026-09-14'], 'bk1');
+    expect(one).toContain('dates=2026-09-14');
     const week = Array.from({ length: 7 }, (_, i) => `2026-09-${14 + i}`);
-    expect(dragSlotUrls('b1', 's1', week)).toHaveLength(7);
+    const url = dragSlotUrl('b1', 's1', week, 'bk1');
+    expect(url).toContain('gestureBookingId=bk1');
+    expect(new URL(url, 'http://localhost').searchParams.get('dates')?.split(',')).toEqual(week);
   });
 
   it('o atendimento arrastado não bloqueia a si mesmo', () => {

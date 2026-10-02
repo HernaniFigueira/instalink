@@ -16,7 +16,7 @@ describe('Agenda cell → NewBookingSheet prefill', () => {
   it('wires cell click through the seed into NewBookingSheet initial date and time', () => {
     const agenda = fs.readFileSync(path.join(root, 'src/app/(dashboard)/agenda/page.tsx'), 'utf8');
     const sheet = fs.readFileSync(path.join(root, 'src/components/dashboard/NewBookingSheet.tsx'), 'utf8');
-    expect(agenda).toContain('setCreating(newBookingSeedFromAgendaCell(col, time))');
+    expect(agenda).toContain('setCreating({ ...newBookingSeedFromAgendaCell(col, time), quick: true })');
     expect(agenda).toMatch(/initial=\{\{[\s\S]*?date: creating\.date[\s\S]*?time: creating\.time/);
     expect(sheet).toContain('const [date, setDate] = useState(initial?.date || \'\')');
     expect(sheet).toContain('const [time, setTime] = useState(initial?.time || \'\')');

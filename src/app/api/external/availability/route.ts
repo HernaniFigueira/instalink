@@ -53,6 +53,9 @@ export async function GET(req: NextRequest) {
     nowHM: date === today ? nowHM(new Date(), btz) : '',
     leadMin: business.booking?.leadMin || 0,
     bufferMin: business.booking?.bufferMin || 0,
+      bufferBeforeMin: business.booking?.bufferBeforeMin, bufferAfterMin: business.booking?.bufferAfterMin,
+      blocks: db.scheduleBlocks, resources: db.scheduleResources, businessId: business.id,
+    timeZone: btz,
   });
 
   await updateDB((d) => {

@@ -14,6 +14,8 @@ import { validateAvailabilityException } from '@/lib/hours';
 import { todayISO, effectiveTimezone } from '@/lib/tz';
 import { serviceProfessionalMode } from '@/lib/booking';
 import { serviceHasHistory, professionalHasHistory } from '@/lib/history';
+import { freezeLegacyBuffers } from '@/lib/schedule-capacity';
+import { freezeLegacyWindowsForService } from '@/lib/booking-temporal';
 
 // API unificada de catálogo (produtos, opções, serviços, equipe, agenda).
 // Toda mutação passa pela camada central de autorização (identidade →
@@ -160,7 +162,41 @@ export async function POST(req: NextRequest) {
             ? body.showPrice
             : (existing ? existing.showPrice !== false : true);
           const data: any = { name: body.name.trim(), description: body.description || '', image: body.image || '', price: clampCents(Number(body.price) || 0), showPrice, durationMin: Math.max(5, Number(body.durationMin) || 30), professionalIds: proIds, categoryId: body.categoryId || '', active: body.active !== false, featured: !!body.featured, bookable: body.bookable !== false, questions: (Array.isArray(body.questions) ? body.questions : (existing?.questions || [])).map((x: any) => String(x || '').trim().slice(0, 120)).filter(Boolean).slice(0, 3) };
+          // B3: zero or one tenant-owned resource per alternative group.
+          if (body.resourceRequirements !== undefined) {
+            if (!Array.isArray(body.resourceRequirements) || body.resourceRequirements.length > 8 || body.resourceRequirements.some((g: unknown) => !Array.isArray(g) || g.length < 1 || g.length > 20 || g.some((x: unknown) => typeof x !== 'string' || !db.scheduleResources.some(r => r.id === x && r.businessId === businessId && r.active)))) {
+              throw new Error('Recursos inválidos: cada requisito deve listar recursos ativos desta clínica.');
+            }
+            data.resourceRequirements = body.resourceRequirements;
+          } else data.resourceRequirements = existing?.resourceRequirements || [];
+          for (const key of ['bufferBeforeMin', 'bufferAfterMin'] as const) {
+            if (body[key] === undefined) { data[key] = existing?.[key]; continue; }
+            if (body[key] === null) { data[key] = undefined; continue; }
+            if (!Number.isInteger(body[key]) || body[key] < 0 || body[key] > 240) throw new Error('Buffer inválido (0–240 minutos).');
+            data[key] = body[key];
+          }
           if (professionalMode) data.professionalMode = professionalMode;
+          // ═══════════════════════════════════════════════════════════════
+          // AGENDA TEMPORAL 2.0 (B1) — CONGELAMENTO ANTES DE MUDAR A DURAÇÃO
+          // ═══════════════════════════════════════════════════════════════
+          // Agendamentos antigos nunca tiveram a duração armazenada. Antes de
+          // alterar `Service.durationMin`, a inferência dos agendamentos
+          // legados deste serviço é congelada com a duração VIGENTE — assim
+          // nem esta nem edições futuras movem a ocupação histórica. Sem
+          // backfill destrutivo: só Bookings sem janela canônica são tocados.
+          if (existing && Number(data.durationMin) !== Number(existing.durationMin)) {
+            const biz = db.businesses.find((b) => b.id === businessId);
+            freezeLegacyWindowsForService(db, {
+              businessId,
+              serviceId: existing.id,
+              durationMin: existing.durationMin,
+              timeZone: effectiveTimezone(biz?.businessTimezone),
+            });
+          }
+          if (existing && (data.bufferBeforeMin !== existing.bufferBeforeMin || data.bufferAfterMin !== existing.bufferAfterMin)) {
+            const biz = db.businesses.find(b => b.id === businessId);
+            freezeLegacyBuffers(db, businessId, biz?.booking || { bufferMin: 0 }, existing.id);
+          }
           let serviceId: string;
           if (existing) { Object.assign(existing, data); serviceId = existing.id; }
           else { db.services.push({ id, businessId, ...data }); serviceId = id; }

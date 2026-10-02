@@ -149,7 +149,9 @@ export interface BookingConfig {
   leadMin: number; // antecedência mínima p/ reservar (minutos)
   cancelUntilMin: number; // consumidor pode cancelar até X min antes
   horizonDays: number; // janela máxima de agendamento (dias)
-  bufferMin: number; // intervalo entre atendimentos (minutos)
+  bufferMin: number; // legado: buffer APÓS, não antes
+  bufferBeforeMin?: number;
+  bufferAfterMin?: number;
 }
 
 export function defaultBookingConfig(): BookingConfig {
@@ -535,6 +537,10 @@ export interface Service {
   // (painel, agenda, CRM), mas NÃO aparece na página pública nem no assistente.
   showPrice?: boolean;
   durationMin: number; // interna: agenda/conflitos/buffer (nunca pública)
+  bufferBeforeMin?: number;
+  bufferAfterMin?: number;
+  /** Cada grupo exige exatamente UM recurso entre os IDs alternativos. */
+  resourceRequirements?: string[][];
   professionalIds: string[]; // when professionalMode='selected' = explicit list; when 'all' or legacy [] = all active
   /** Modo de elegibilidade: 'all' = todos os ativos; 'selected' = somente professionalIds. Legado sem campo = []→all, [ids]→selected */
   professionalMode?: 'all' | 'selected';
@@ -579,6 +585,15 @@ export interface Availability {
   start: string; // HH:MM
   end: string; // HH:MM
   slotMin: number;
+}
+
+export interface ScheduleResource {
+  id: ID; businessId: ID; name: string; kind: 'room' | 'equipment'; active: boolean;
+}
+
+export interface ScheduleBlock {
+  id: ID; businessId: ID; professionalId: string; resourceId: string;
+  startAt: string; endAt: string; reason?: string; note: string;
 }
 
 export interface AvailabilityException {
@@ -634,6 +649,16 @@ export interface Order {
 
 export type BookingStatus = 'pending' | 'confirmed' | 'cancelled' | 'completed' | 'no_show';
 
+/**
+ * Agenda Temporal 2.0 — origem da janela temporal do agendamento:
+ *   `native`          capturada na criação, a partir da intenção local + fuso
+ *                     IANA da clínica (precisão real do momento);
+ *   `legacy_inferred` derivada de `date`/`time` + fuso + duração disponível do
+ *                     serviço (agendamento criado antes do contrato temporal).
+ *                     Nunca é apresentada como precisão histórica original.
+ */
+export type BookingTemporalSource = 'native' | 'legacy_inferred';
+
 export interface Booking {
   /** Série aditiva: cada ocorrência continua um Booking independente. */
   seriesId?: string;
@@ -646,8 +671,30 @@ export interface Booking {
   customerId: string; // '' = guest/legado
   serviceId: ID;
   professionalId: string;
-  date: string; // YYYY-MM-DD
-  time: string; // HH:MM
+  // ── Agenda Temporal 2.0 (B1) — JANELA TEMPORAL CANÔNICA ──────────────
+  // Autoridade do agendamento é `startAt`+`endAt` (instantes UTC). O
+  // `durationMin` é o snapshot CONGELADO da duração daquele atendimento —
+  // editar `Service.durationMin` depois NÃO altera este valor. `timeZone` é o
+  // fuso IANA usado para capturar a intenção local.
+  //
+  // `temporalSource`: 'native' quando capturada na criação; 'legacy_inferred'
+  // quando derivada de date/time + fuso + duração do serviço (agendamentos
+  // antigos). Todos os campos são ADITIVOS: dados legados seguem legíveis.
+  startAt?: string; // RFC 3339 (UTC) — início autoritativo
+  endAt?: string; // RFC 3339 (UTC) — fim autoritativo
+  durationMin?: number; // snapshot congelado da duração (min)
+  bufferBeforeMin?: number;
+  bufferAfterMin?: number;
+  resourceIds?: string[]; // alocação congelada por requisito
+  timeZone?: string; // IANA (ex.: America/Sao_Paulo)
+  temporalSource?: BookingTemporalSource;
+  /**
+   * COMPATIBILIDADE (transição): projeção civil da janela no fuso da clínica,
+   * escrita ATOMICAMENTE junto de startAt/endAt. Nunca é a autoridade da
+   * duração — consumidores antigos continuam lendo exatamente como antes.
+   */
+  date: string; // YYYY-MM-DD (projeção no fuso da clínica)
+  time: string; // HH:MM (projeção no fuso da clínica)
   customerName: string;
   customerPhone: string;
   status: BookingStatus;
@@ -1042,6 +1089,8 @@ export interface DB {
   professionals: Professional[];
   availability: Availability[];
   exceptions: AvailabilityException[];
+  scheduleBlocks: ScheduleBlock[];
+  scheduleResources: ScheduleResource[];
   orders: Order[];
   bookings: Booking[];
   leads: Lead[];

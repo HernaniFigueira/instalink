@@ -4,7 +4,7 @@
 import type { AccessContext } from './access-core';
 import { canAccessBooking } from './access-core';
 import { workflowView, type WorkflowView } from './appointment-workflow';
-import { bookingDuration, needsClosure } from './booking-ops';
+import { bookingDurationOf, needsClosure } from './booking-ops';
 import { effectiveTimezone, nowHM, todayISO } from './tz';
 import type { Booking, DB } from './types';
 
@@ -34,7 +34,7 @@ export function workflowForBookings(
     out[b.id] = workflowView(
       {
         booking: b, encounter: encByBooking.get(b.id) || null, queue: queueByBooking.get(b.id) || null,
-        overdue: needsClosure(b, bookingDuration(svc.get(b.serviceId)), today, hm),
+        overdue: needsClosure(b, bookingDurationOf(b, svc.get(b.serviceId)), today, hm),
       },
       // Fora do escopo do profissional nenhuma ação é oferecida.
       { agenda: mine && !!ctx.permissions.agenda, atendimento: mine && !!ctx.permissions.atendimento },

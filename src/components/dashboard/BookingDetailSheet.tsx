@@ -27,9 +27,9 @@ import { usePanelPermissions } from '@/components/dashboard/usePanelPermissions'
 import { BOOKING_STATUS } from '@/lib/status';
 import { todayISO, nowHM, formatDateBR, humanDay } from '@/lib/tz';
 import { waLink, cn, money } from '@/lib/utils';
-import { adminBookingMaxDate, bookingDuration, needsClosure, rescheduleDecision } from '@/lib/booking-ops';
+import { adminBookingMaxDate, bookingDurationOf, needsClosure, rescheduleDecision } from '@/lib/booking-ops';
 import { SLOT_STATE_MESSAGE } from '@/lib/slot-states';
-import type { Booking } from '@/lib/types';
+import type { Booking, ScheduleResource } from '@/lib/types';
 import { WorkspaceSheet } from '@/components/dashboard/WorkspaceSheet';
 import { encounterWorkspaceHref } from '@/lib/encounter-workspace';
 import { workflowView, type WorkflowActionId } from '@/lib/appointment-workflow';
@@ -51,10 +51,11 @@ function historyStamp(at: string | undefined, timezone?: string): string {
   catch { return t.toLocaleString('pt-BR', opts).replace(',', ''); }
 }
 
-export function BookingDetailSheet({ booking, service, pro, businessId, timezone, onClose, onChanged }: {
+export function BookingDetailSheet({ booking, service, pro, resources = [], businessId, timezone, onClose, onChanged }: {
   booking: Booking;
   service: ServiceRef | undefined;
   pro: ProRef | undefined;
+  resources?: ScheduleResource[];
   businessId: string;
   timezone?: string;
   /** Fechamento pedido pelo usuário (ESC/X) — nunca por autosave. */
@@ -74,6 +75,8 @@ export function BookingDetailSheet({ booking, service, pro, businessId, timezone
   const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
   const [rescheduling, setRescheduling] = useState(false);
+  const [resizeOpen, setResizeOpen] = useState(false);
+  const [resizeEnd, setResizeEnd] = useState('');
   const rescheduleDismiss = useOverlayDismissGuard();
   const [confirming, setConfirming] = useState(false);
   const [cancelSeries, setCancelSeries] = useState(false);
@@ -89,7 +92,9 @@ export function BookingDetailSheet({ booking, service, pro, businessId, timezone
   const historyRef = useRef<HTMLDivElement>(null);
 
   const def = BOOKING_STATUS[booking.status];
-  const dur = bookingDuration(service as any);
+  // Agenda Temporal 2.0 (B1): a duração exibida/avaliada é a do PRÓPRIO
+  // agendamento (snapshot congelado) — editar o serviço não muda este cartão.
+  const dur = bookingDurationOf(booking, service as any);
   const today = serverToday || todayISO(new Date(), timezone || undefined);
   const late = needsClosure(booking, dur, today, nowHM(new Date(), timezone || undefined));
   const decision = rescheduleDecision(booking.status);
@@ -204,6 +209,21 @@ export function BookingDetailSheet({ booking, service, pro, businessId, timezone
     } finally {
       setActing('');
     }
+  }
+
+  async function resizeBooking() {
+    if (acting) return;
+    setError(''); setActing('resize');
+    try {
+      const res = await fetch('/api/bookings', {
+        method: 'PATCH', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ businessId, id: booking.id, resizeEnd }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(res.status === 409 ? 'Esse horário acabou de ficar indisponível. Escolha outro fim.' : data.error || 'Não foi possível alterar a duração.');
+      setResizeOpen(false); onChanged(); onClose();
+    } catch (e: any) { setError(e.message); }
+    finally { setActing(''); }
   }
 
   const waMsg = `Olá, ${(booking.customerName || '').split(' ')[0]}! Sobre seu agendamento de ${service?.name || 'atendimento'} (${formatDateBR(booking.date)} às ${booking.time}):`;
@@ -373,6 +393,10 @@ export function BookingDetailSheet({ booking, service, pro, businessId, timezone
               <dt className={ROW_DT}>Profissional</dt>
               <dd className={ROW_DD}>{pro?.name || 'Automático'}</dd>
             </div>
+            {(booking.resourceIds || []).map(id => {
+              const resource = resources.find(r => r.id === id);
+              return resource ? <div key={id} className={ROW}><dt className={ROW_DT}>{resource.kind === 'room' ? 'Sala' : 'Equipamento'}</dt><dd className={ROW_DD}>{resource.name}</dd></div> : null;
+            })}
             <div className={ROW}>
               <dt className={ROW_DT}>Valor</dt>
               <dd className={ROW_DD}>{service?.price !== undefined ? money(service.price) : '—'}</dd>
@@ -430,6 +454,21 @@ export function BookingDetailSheet({ booking, service, pro, businessId, timezone
 
           {error && <p className="px-4 py-2 text-sm font-medium text-red-600 border-t border-zinc-100">{error}</p>}
           {notice && <p className="px-4 py-2 text-xs font-medium text-emerald-800 bg-emerald-50 border-t border-emerald-100">{notice}</p>}
+
+          {decision.kind === 'move' && !rescheduling && (
+            <div className="px-4 py-2 border-t border-zinc-100">
+              <Button size="sm" variant="secondary" onClick={() => { setResizeEnd(endHM); setResizeOpen(!resizeOpen); }}>
+                Alterar duração
+              </Button>
+              {resizeOpen && <div className="mt-2 flex flex-wrap items-end gap-2">
+                <label className="text-xs font-medium">Novo fim
+                  <input aria-label="Novo fim do atendimento" type="time" step="300" value={resizeEnd} onChange={(e) => setResizeEnd(e.target.value)}
+                    className="block mt-1 rounded-md border border-zinc-300 px-2 py-1.5 focus:shadow-focus" />
+                </label>
+                <Button size="sm" disabled={!!acting} onClick={resizeBooking}>{acting === 'resize' ? 'Salvando…' : 'Salvar duração'}</Button>
+              </div>}
+            </div>
+          )}
 
           {rescheduling && (
             <div className="px-4 py-3 border-t border-zinc-200 space-y-2.5">

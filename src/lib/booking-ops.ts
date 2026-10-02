@@ -15,6 +15,7 @@ import type { Booking, BookingStatus, Service } from './types';
 import { timeToMin } from './utils';
 import { addDaysISO } from './tz';
 import { addMonthsClamped } from './booking-recurrence';
+import { resolveBookingDurationMin } from './booking-temporal';
 
 export const TERMINAL_STATUSES: BookingStatus[] = ['completed', 'no_show', 'cancelled'];
 
@@ -22,9 +23,32 @@ export function isTerminal(status: BookingStatus): boolean {
   return TERMINAL_STATUSES.includes(status);
 }
 
+/**
+ * Duração PADRÃO do serviço (para NOVOS agendamentos e para o fallback legado
+ * explícito). Nunca use esta função para medir um agendamento existente — para
+ * isso existe `bookingDurationOf`, que respeita o snapshot congelado do Booking
+ * (Agenda Temporal 2.0: editar o serviço não move o histórico).
+ */
 export function bookingDuration(service: Service | undefined, fallback = 30): number {
   const d = Number(service?.durationMin);
   return Number.isFinite(d) && d > 0 ? d : fallback;
+}
+
+type TemporalBooking = Pick<Booking, 'durationMin' | 'startAt' | 'endAt' | 'date' | 'time' | 'timeZone'>;
+
+/**
+ * Duração de um agendamento JÁ EXISTENTE. Ordem de autoridade:
+ * janela/snapshot do Booking → serviço (SOMENTE quando não há snapshot).
+ */
+export function bookingDurationOf(
+  booking: TemporalBooking | null | undefined,
+  service?: Service | undefined,
+  fallback = 30,
+): number {
+  return resolveBookingDurationMin(booking, {
+    serviceDurationMin: service?.durationMin,
+    fallbackDurationMin: fallback,
+  });
 }
 
 // ═══════════════════════════════════════════════════════════════
@@ -97,7 +121,7 @@ export function pendingClosures(
   const get = (id: string): Service | undefined =>
     services instanceof Map ? services.get(id) : (services as Record<string, Service>)[id];
   return bookings
-    .filter((b) => needsClosure(b, bookingDuration(get(b.serviceId)), todayISO, nowHM))
+    .filter((b) => needsClosure(b, bookingDurationOf(b, get(b.serviceId)), todayISO, nowHM))
     .sort((a, b) => (a.date + a.time < b.date + b.time ? -1 : 1));
 }
 
@@ -131,7 +155,7 @@ export function summarizeDay(
     completed: count('completed'),
     noShow: count('no_show'),
     cancelled: count('cancelled'),
-    needsClosure: list.filter((b) => needsClosure(b, bookingDuration(get(b.serviceId)), todayISO, nowHM)).length,
+    needsClosure: list.filter((b) => needsClosure(b, bookingDurationOf(b, get(b.serviceId)), todayISO, nowHM)).length,
   };
 }
 

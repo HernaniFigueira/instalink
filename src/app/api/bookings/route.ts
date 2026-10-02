@@ -5,12 +5,13 @@ import { canAccessBooking, requireBusiness, scopeBookings, scopeInfo } from '@/l
 import { customerFromRequest } from '@/lib/customer-auth';
 import { isFeatureEnabled, canBook as canBookModule } from '@/lib/features';
 import {
-  bookingDuration, bookingMaxDate, effectiveManageLimit, needsClosure, rescheduleDecision,
+  bookingDurationOf, bookingMaxDate, effectiveManageLimit, needsClosure, rescheduleDecision,
   rescheduleForwardNote, rescheduleNote,
 } from '@/lib/booking-ops';
 import { transitionAppointment, bookingWorkflowState, closeWorkflowTaskTx } from '@/lib/appointment-workflow-tx';
 import { publishWorkflowEvent } from '@/lib/workflow-events';
 import { workflowForBooking, workflowForBookings } from '@/lib/workflow-view';
+import { bufferPair, assignResources, blockConflict } from '@/lib/schedule-capacity';
 import { computeSlots, dayAvailability } from '@/lib/slots';
 import { bookingMode, eligibleProfessionalIds as eligibleIdsForService, slotEligibleProfessionalIds, serviceProfessionalMode } from '@/lib/booking';
 import { createBookingTx, resolveBookingIdentity } from '@/lib/booking-create';
@@ -21,10 +22,11 @@ import { emitAutomationEvent } from '@/lib/automation/events';
 import { enqueueDueReminders } from '@/lib/automations';
 import { upsertContact } from '@/lib/contacts';
 import { todayISO, nowHM, weekdayOf, addDaysISO, effectiveTimezone, isValidDateISO, isValidClockTime } from '@/lib/tz';
-import { onlyDigits } from '@/lib/utils';
+import { onlyDigits, timeToMin } from '@/lib/utils';
 import { fitInConflictsFromDB, fitInWarning } from '@/lib/fit-in';
 import { rateLimit, ipFrom } from '@/lib/rate-limit';
-import type { BookingStatus, DB } from '@/lib/types';
+import { applyBookingWindow, bookingWindowFields, buildBookingWindow, freezeLegacyBookingWindow, type BookingWindow } from '@/lib/booking-temporal';
+import type { Booking, BookingStatus, DB } from '@/lib/types';
 
 function err(message: string, status: number): Error {
   return Object.assign(new Error(message), { status });
@@ -98,7 +100,7 @@ export async function GET(req: NextRequest) {
         total: all.length, page, limit,
         ...(capped ? { limitCapped: true, requestedLimit: requested } : {}),
         today,
-        needsClosure: slice.filter((b) => needsClosure(b, bookingDuration(servicesById[b.serviceId]), today, now)).map((b) => b.id),
+        needsClosure: slice.filter((b) => needsClosure(b, bookingDurationOf(b, servicesById[b.serviceId]), today, now)).map((b) => b.id),
         modules: { bookings: isFeatureEnabled(guard.ctx.business, 'bookings') },
         // Informação para a tela avisar (com honestidade) quando a agenda
         // está recortada. A regra já foi aplicada nos dados acima.
@@ -107,7 +109,9 @@ export async function GET(req: NextRequest) {
     }
 
     const service = db.services.find((s) => s.id === q.get('serviceId') && s.businessId === businessId);
-    if (!service) return NextResponse.json({ slots: [] });
+    if (!service) return q.has('dates')
+      ? NextResponse.json({ error: 'Serviço indisponível.' }, { status: 404 })
+      : NextResponse.json({ slots: [] });
     const scope = slotGuard?.ok ? slotGuard.ctx.professionalScope : '';
     if (scope && q.get('professionalId') && q.get('professionalId') !== scope) {
       return NextResponse.json({ error: 'Você só pode consultar o seu profissional.' }, { status: 403 });
@@ -129,21 +133,56 @@ export async function GET(req: NextRequest) {
 
     // O cliente NUNCA escolhe profissional: a grade é sempre "qualquer
     // profissional elegível livre" (o motor resolve internamente).
+    // Only the authenticated staff gesture may request 5-minute starts.
+    // A booking ID selects its own frozen duration; never trust a duration in the URL.
+    const gestureBooking = slotGuard?.ok && q.get('gestureBookingId')
+      ? db.bookings.find((b) => b.id === q.get('gestureBookingId') && b.businessId === businessId && canAccessBooking(slotGuard.ctx, b))
+      : undefined;
+    if (q.get('gestureBookingId') && (!gestureBooking || gestureBooking.serviceId !== service.id)) return NextResponse.json({ error: 'Agendamento não encontrado.' }, { status: 404 });
     const base = {
+      ...(slotGuard?.ok && q.get('internalSnap') === '5' ? { startStepMin: 5 } : {}),
       rules: db.availability.filter((a) => a.businessId === businessId),
       exceptions: db.exceptions.filter((e) => e.businessId === businessId),
-      bookings: db.bookings.filter((b) => b.businessId === businessId),
+      bookings: db.bookings.filter((b) => b.businessId === businessId && b.id !== gestureBooking?.id),
       services: db.services.filter((s) => s.businessId === businessId),
       professionals: db.professionals.filter((p) => p.businessId === businessId),
       serviceId: service.id,
-      durationMin: service.durationMin,
+      durationMin: gestureBooking ? bookingDurationOf(gestureBooking, service) : service.durationMin,
       // A consulta administrativa pode restringir a coluna escolhida; sem
       // filtro a resposta continua sendo a união da equipe.
       professionalId: requestedProfessionalId,
       eligibleProIds: slotEligibleProfessionalIds(service as any, allProsForService),
       leadMin: cfg.leadMin || 0,
-      bufferMin: cfg.bufferMin || 0,
+      bufferMin: cfg.bufferMin || 0, bufferBeforeMin: cfg.bufferBeforeMin, bufferAfterMin: cfg.bufferAfterMin,
+      blocks: db.scheduleBlocks, resources: db.scheduleResources, businessId,
+      preferredResourceIds: gestureBooking?.resourceIds,
+      candidateBufferBeforeMin: gestureBooking?.bufferBeforeMin,
+      candidateBufferAfterMin: gestureBooking?.bufferAfterMin,
+      timeZone: btz,
     };
+
+    // B2.1: one authenticated, bounded request for the entire visible week.
+    // All computations reuse guard.db; public day maps/single-day slots keep
+    // their existing contract and cannot opt into the staff batch/snap.
+    if (q.has('dates')) {
+      if (!slotGuard?.ok || !gestureBooking || q.get('internalSnap') !== '5' || q.has('date') || q.has('from') || q.has('to')) {
+        return NextResponse.json({ error: 'Consulta de gesto indisponível.' }, { status: 400 });
+      }
+      const dates = (q.get('dates') || '').split(',');
+      if (dates.length < 1 || dates.length > 7 || new Set(dates).size !== dates.length || dates.some((iso) => !isValidDateISO(iso))) {
+        return NextResponse.json({ error: 'Informe de 1 a 7 datas válidas e distintas.' }, { status: 400 });
+      }
+      const days: Record<string, { slots: string[]; byPro: Record<string, string[]>; eligibleProfessionalIds: string[]; closed: boolean }> = {};
+      for (const iso of dates) {
+        if (iso < today || iso > maxDate) {
+          days[iso] = { slots: [], byPro: {}, eligibleProfessionalIds, closed: true };
+          continue;
+        }
+        const r = computeSlots({ ...base, dateISO: iso, weekday: weekdayOf(iso), nowHM: iso === today ? nowHM(new Date(), btz) : '' });
+        days[iso] = { slots: r.slots, byPro: r.byProfessional, eligibleProfessionalIds, closed: r.closed };
+      }
+      return NextResponse.json({ days });
+    }
 
     const from = q.get('from') || '';
     const to = q.get('to') || '';
@@ -219,6 +258,7 @@ export async function POST(req: NextRequest) {
       ownerMatches: !!guard?.ok,
     });
     const isOwner = actor === 'owner';
+    if (!isOwner && body.staffDurationMin !== undefined) return NextResponse.json({ error: 'Duração personalizada exige permissão de Agenda.' }, { status: 403 });
 
     let customer = null as Awaited<ReturnType<typeof customerFromRequest>>;
     if (!isOwner) {
@@ -314,6 +354,7 @@ export async function POST(req: NextRequest) {
       date,
       time,
       actor: isOwner ? 'owner' : 'customer',
+      ...(isOwner && body.staffDurationMin !== undefined ? { staffDurationMin: body.staffDurationMin } : {}),
       customer: {
         id: customer?.id || linkedContact?.customerId || '',
         name,
@@ -438,9 +479,16 @@ export async function PATCH(req: NextRequest) {
     }
 
     // ── Remarcação pelo dono ──
-    if (body.date && body.time) {
-      const date = String(body.date);
-      const time = String(body.time);
+    if ((body.date && body.time) || body.resizeEnd !== undefined) {
+      const resizing = body.resizeEnd !== undefined;
+      if (!resizing && (body.durationMin !== undefined || body.startAt !== undefined || body.endAt !== undefined)) {
+        return NextResponse.json({ error: 'Informe somente a nova data e horário.' }, { status: 400 });
+      }
+      const date = String(resizing ? current.date : body.date);
+      const time = String(resizing ? current.time : body.time);
+      if (resizing && (!isValidClockTime(String(body.resizeEnd)) || body.date || body.time || body.durationMin !== undefined || body.startAt || body.endAt || body.professionalId)) {
+        return NextResponse.json({ error: 'Informe somente o novo fim do atendimento.' }, { status: 400 });
+      }
       if (!isValidDateISO(date) || !isValidClockTime(time)) {
         return NextResponse.json({ error: 'Escolha data e horário.' }, { status: 400 });
       }
@@ -456,7 +504,7 @@ export async function PATCH(req: NextRequest) {
       if (guard.ctx.professionalScope && body.professionalId && body.professionalId !== guard.ctx.professionalScope) {
         return NextResponse.json({ error: 'Você só pode reagendar para o seu profissional.' }, { status: 403 });
       }
-      const proId = guard.ctx.professionalScope || String(body.professionalId || '');
+      const proId = guard.ctx.professionalScope || (resizing ? current.professionalId : String(body.professionalId || ''));
       const activePros = db.professionals.filter((p) => p.businessId === business.id && p.active !== false);
       const eligible = eligibleIdsForService(service as any, activePros).map(id => activePros.find(p=>p.id===id)!).filter(Boolean);
       if (proId && !eligible.some((p) => p.id === proId)) {
@@ -476,10 +524,24 @@ export async function PATCH(req: NextRequest) {
         const freshBusiness = d.businesses.find((b) => b.id === business.id)!;
         const freshService = d.services.find((s) => s.id === target.serviceId && s.businessId === business.id && s.active !== false);
         if (!freshService) throw err('Serviço indisponível.', 400);
+        if (resizing && target.professionalId !== proId) throw err('Profissional alterado. Recarregue a agenda.', 409);
         const freshTz = effectiveTimezone(freshBusiness.businessTimezone);
         const freshToday = todayISO(new Date(), freshTz);
         if (date < freshToday || date > bookingMaxDate(freshToday, freshBusiness.booking, true)) throw err('Data fora da agenda disponível.', 400);
         const decision = rescheduleDecision(target.status);
+        if (resizing && (decision.kind === 'recreate' || target.date !== date || target.time !== time)) {
+          throw err('Esse atendimento não pode ter a duração alterada.', 409);
+        }
+        const resizedDuration = resizing ? timeToMin(String(body.resizeEnd)) - timeToMin(target.time) : 0;
+        if (resizing && (resizedDuration < 5 || resizedDuration > 720 || resizedDuration % 5 !== 0)) {
+          throw err('Escolha um fim válido, em intervalos de 5 minutos.', 400);
+        }
+        // Move preserva a duração do próprio Booking; somente recreate é um
+        // NOVO Booking e usa o default atual do serviço. Também validar o
+        // destino com essa duração para não aceitar um slot que não a comporta.
+        const destinationDuration = resizing ? resizedDuration : decision.kind === 'recreate'
+          ? freshService.durationMin
+          : bookingDurationOf(target, freshService);
         const others = d.bookings.filter((b) => b.businessId === business.id && b.id !== body.id);
         const r = computeSlots({
           rules: d.availability.filter((a) => a.businessId === business.id),
@@ -488,26 +550,62 @@ export async function PATCH(req: NextRequest) {
           services: d.services.filter((s) => s.businessId === business.id),
           professionals: d.professionals.filter((p) => p.businessId === business.id),
           dateISO: date, weekday: weekdayOf(date),
-          serviceId: freshService.id, durationMin: freshService.durationMin,
+          serviceId: freshService.id, durationMin: destinationDuration, startStepMin: 5,
           professionalId: proId,
           eligibleProIds: slotEligibleProfessionalIds(freshService as any, d.professionals.filter((p) => p.businessId === business.id)),
           nowHM: date === freshToday ? nowHM(new Date(), freshTz) : '',
           leadMin: freshBusiness.booking?.leadMin || 0,
-          bufferMin: freshBusiness.booking?.bufferMin || 0,
+          bufferMin: freshBusiness.booking?.bufferMin || 0, bufferBeforeMin: freshBusiness.booking?.bufferBeforeMin, bufferAfterMin: freshBusiness.booking?.bufferAfterMin,
+          blocks: d.scheduleBlocks, resources: d.scheduleResources, businessId: business.id, preferredResourceIds: target.resourceIds,
+          candidateBufferBeforeMin: decision.kind === 'recreate' ? undefined : target.bufferBeforeMin,
+          candidateBufferAfterMin: decision.kind === 'recreate' ? undefined : target.bufferAfterMin,
+          timeZone: freshTz,
         });
         if (!r.slots.includes(time)) throw err('Este horário está ocupado. Escolha outro.', 409);
+        const destinationPro = resizing ? target.professionalId : proId || r.assign[time] || target.professionalId || '';
+        const pair = bufferPair(freshService, freshBusiness.booking);
+        if (decision.kind !== 'recreate') {
+          pair.before = target.bufferBeforeMin ?? pair.before;
+          pair.after = target.bufferAfterMin ?? pair.after;
+        }
+        const destinationWindow = buildBookingWindow({ date, time, durationMin: destinationDuration, timeZone: freshTz });
+        const occupationStart = Date.parse(destinationWindow.startAt) - pair.before * 60000;
+        const occupationEnd = Date.parse(destinationWindow.endAt) + pair.after * 60000;
+        const resources = assignResources({
+          requirements: freshService.resourceRequirements || [], resources: d.scheduleResources,
+          services: d.services, bookingConfig: freshBusiness.booking,
+          bookings: others, blocks: d.scheduleBlocks, businessId: business.id,
+          start: occupationStart, end: occupationEnd, preferred: target.resourceIds,
+        });
+        if (!resources || blockConflict(d.scheduleBlocks, business.id, destinationPro, resources, occupationStart, occupationEnd)) throw err('Bloqueio ou recurso ocupado.', 409);
+        // Agenda Temporal 2.0 (B1): o novo horário nasce como NOVA janela
+        // canônica (instantes + snapshot + fuso), validada no fuso da clínica.
+        let rescheduleWindow: BookingWindow;
+        try {
+          rescheduleWindow = buildBookingWindow({
+            date, time, durationMin: destinationDuration, timeZone: freshTz,
+          });
+        } catch (e: any) {
+          throw err(e?.message || 'Horário inválido para o fuso da clínica.', 400);
+        }
         const now = new Date().toISOString();
-        const note = rescheduleNote({ date: target.date, time: target.time }, { date, time });
+        const note = resizing ? `Duração alterada: ${bookingDurationOf(target, freshService)} → ${destinationDuration} min`
+          : rescheduleNote({ date: target.date, time: target.time }, { date, time });
 
         if (decision.kind === 'recreate') {
           // Estado terminal (concluído/faltou/cancelado): o registro antigo
           // PERMANECE como está e um NOVO atendimento futuro é criado.
+          // Agenda Temporal 2.0: o registro antigo mantém a janela histórica
+          // (legado sem instantes é congelado AGORA para não se mover depois
+          // quando o serviço for editado); o novo recebe a janela nova.
+          freezeLegacyBookingWindow(target, { timeZone: freshTz, serviceDurationMin: freshService.durationMin });
           const newId = randomUUID();
           d.bookings.push({
             id: newId, businessId: business.id, customerId: target.customerId || '',
             serviceId: target.serviceId,
-            professionalId: proId || r.assign[time] || target.professionalId || '',
-            date, time,
+            professionalId: destinationPro,
+            bufferBeforeMin: pair.before, bufferAfterMin: pair.after, resourceIds: resources,
+            ...bookingWindowFields(rescheduleWindow, freshTz),
             customerName: target.customerName, customerPhone: target.customerPhone,
             status: decision.nextStatus, note: target.note || '', answers: target.answers || [],
             createdAt: now, updatedAt: now,
@@ -552,36 +650,44 @@ export async function PATCH(req: NextRequest) {
         }
 
         // pending/confirmed: move o MESMO atendimento, mantendo o status.
+        // A janela canônica é reescrita atomicamente para o novo horário.
         const fromDate = target.date;
         const fromTime = target.time;
-        target.date = date;
-        target.time = time;
-        // Novo horário = nova chegada: o check-in do horário antigo não vale.
-        // (Quem estava na fila por este agendamento deixa a fila.)
-        target.checkedInAt = undefined;
-        target.checkedInBy = undefined;
-        target.checkedInByName = undefined;
-        for (const q of d.queue || []) {
-          if (q.businessId === business.id && q.bookingId === target.id && (q.status === 'waiting' || q.status === 'called')) {
-            q.status = 'left'; q.endedAt = now; q.updatedAt = now;
+        // Se ainda é legado, congele a inferência ANTES de trocar a janela.
+        // A duração usada no destino foi resolvida a partir desse mesmo
+        // snapshot/fallback (não do default do serviço para Booking canônico).
+        freezeLegacyBookingWindow(target, { timeZone: freshTz, serviceDurationMin: freshService.durationMin });
+        applyBookingWindow(target, rescheduleWindow, freshTz);
+        target.bufferBeforeMin = pair.before; target.bufferAfterMin = pair.after; target.resourceIds = resources;
+        // Um resize mantém a chegada/check-in; somente move muda a chegada.
+        let queueChanged = false;
+        if (!resizing) {
+          // Novo horário = nova chegada: o check-in do horário antigo não vale.
+          target.checkedInAt = undefined;
+          target.checkedInBy = undefined;
+          target.checkedInByName = undefined;
+          for (const q of d.queue || []) {
+            if (q.businessId === business.id && q.bookingId === target.id && (q.status === 'waiting' || q.status === 'called')) {
+              q.status = 'left'; q.endedAt = now; q.updatedAt = now; queueChanged = true;
+            }
           }
         }
         // Profissional do destino: o escolhido explicitamente vence. Sem
         // escolha, usa o profissional LIVRE retornado pela validação (em equipe
         // o horário pode estar livre só para outra pessoa). Manter o profissional
         // anterior quando ele está ocupado criaria um conflito silencioso.
-        target.professionalId = proId || r.assign[time] || target.professionalId || '';
+        target.professionalId = resizing ? target.professionalId : proId || r.assign[time] || target.professionalId || '';
         target.updatedAt = now;
         target.history.push({ at: now, from: target.status, to: decision.nextStatus, by: 'owner', note });
         if (target.status !== decision.nextStatus) target.status = decision.nextStatus;
         // A2-B3 (F7.2): a nota da esteira ("Agendado para …") acompanha a
         // remarcação — sem nota stale apontando para o dia antigo.
-        noteLeadReschedule(d, {
+        if (!resizing) noteLeadReschedule(d, {
           businessId: business.id, leadId: target.leadId,
           from: { date: fromDate, time: fromTime }, to: { date, time },
           by: 'owner', now,
         });
-        emitAutomationEvent(d, {
+        if (!resizing) emitAutomationEvent(d, {
           event: 'booking.rescheduled',
           businessId: business.id,
           at: now,
@@ -590,7 +696,19 @@ export async function PATCH(req: NextRequest) {
           customerId: target.customerId || undefined,
           data: { previousId: target.id, fromDate, fromTime, date, time, kind: 'move' },
         });
-        return { created: false, newId: target.id };
+        // Minimal mutation echo for the Agenda's local state. The server owns
+        // all fields; no speculative client reconstruction or cross-tenant data.
+        const booking: Partial<Booking> & Pick<Booking, 'id'> = {
+          id: target.id, date: target.date, time: target.time,
+          startAt: target.startAt, endAt: target.endAt, durationMin: target.durationMin,
+          timeZone: target.timeZone, temporalSource: target.temporalSource,
+          professionalId: target.professionalId, resourceIds: target.resourceIds, bufferBeforeMin: target.bufferBeforeMin, bufferAfterMin: target.bufferAfterMin, status: target.status,
+          checkedInAt: target.checkedInAt, checkedInBy: target.checkedInBy,
+          checkedInByName: target.checkedInByName, updatedAt: target.updatedAt,
+          history: target.history,
+          workflow: workflowForBooking(d, business.id, target, guard.ctx),
+        };
+        return { created: false, newId: target.id, resized: resizing, booking, queueChanged };
       });
       return NextResponse.json({ ok: true, ...result, moved: decision.kind === 'move', reason: decision.reason });
     }

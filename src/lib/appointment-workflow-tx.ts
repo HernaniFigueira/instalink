@@ -14,12 +14,13 @@
 import type { AccessContext } from './access-core';
 import { canAccessBooking } from './access-core';
 import { applyBookingStatusTx } from './booking-status';
-import { bookingDuration, needsClosure } from './booking-ops';
+import { bookingDurationOf, needsClosure } from './booking-ops';
 import {
   appointmentWorkflowState, canWorkflowTransition, WORKFLOW_LABEL,
   type WorkflowState,
 } from './appointment-workflow';
 import { pushAudit } from './audit';
+import { freezeLegacyBookingWindow } from './booking-temporal';
 import { createTaskTx, setTaskStatusTx } from './automation/tasks';
 import { effectiveTimezone, nowHM, todayISO } from './tz';
 import type { Booking, BookingStatus, DB, Encounter, QueueEntry } from './types';
@@ -109,11 +110,19 @@ export function transitionAppointment(
     }, now);
   };
 
+  // Agenda Temporal 2.0 (B1): persistir um Booking legado (check-in/desfazer)
+  // congela a janela inferida uma única vez — o histórico não se move depois.
+  const freezeLegacy = () => freezeLegacyBookingWindow(booking, {
+    timeZone: tz,
+    serviceDurationMin: d.services.find((s) => s.id === booking.serviceId && s.businessId === businessId)?.durationMin,
+  });
+
   // ── CHECK-IN ────────────────────────────────────────────────
   if (p.command.kind === 'check_in') {
     if (from === 'arrived') return unchanged(); // idempotente
     if (from === 'in_care') throw werr('Este atendimento já está em andamento.', 409);
     if (from !== 'scheduled') throw werr('Atendimento encerrado não recebe check-in.', 400);
+    freezeLegacy();
     booking.checkedInAt = now;
     booking.checkedInBy = ctx.user.id;
     booking.checkedInByName = actorName;
@@ -135,6 +144,7 @@ export function transitionAppointment(
       if (from === 'cancelled' || from === 'no_show' || from === 'finalized') throw werr('Atendimento encerrado não recebe check-in.', 400);
       throw werr('Este atendimento não tem check-in registrado.', 400);
     }
+    freezeLegacy();
     booking.checkedInAt = undefined;
     booking.checkedInBy = undefined;
     booking.checkedInByName = undefined;
@@ -170,7 +180,7 @@ export function transitionAppointment(
     if (from === 'arrived') throw werr('O cliente já chegou: inicie o atendimento para finalizar.', 409);
     if (from === 'scheduled') {
       const svc = d.services.find((s) => s.id === booking.serviceId && s.businessId === businessId);
-      if (!needsClosure(booking, bookingDuration(svc), todayISO(new Date(now), tz), nowHM(new Date(now), tz))) {
+      if (!needsClosure(booking, bookingDurationOf(booking, svc), todayISO(new Date(now), tz), nowHM(new Date(now), tz))) {
         throw werr('O atendimento só pode ser concluído sem registro depois do horário marcado.', 409);
       }
     }

@@ -13,11 +13,13 @@
 // continua impossível (409 quando ocupado).
 import { randomUUID } from 'node:crypto';
 import type { BookingStatus, Business, DB, Service } from './types';
+import { bufferPair, assignResources, blockConflict } from './schedule-capacity';
 import { computeSlots } from './slots';
 import { eligibleProfessionalIds, slotEligibleProfessionalIds, professionalServesService, resolveProfessional } from './booking';
 import { upsertContact } from './contacts';
 import { onlyDigits } from './utils';
 import { isValidDateISO, isValidClockTime, effectiveTimezone, weekdayOf, todayISO, nowHM } from './tz';
+import { bookingWindowFields, buildBookingWindow, type BookingWindow } from './booking-temporal';
 import { enqueueBookingAutomation, enqueueDueReminders } from './automations';
 import { bookingMaxDate } from './booking-ops';
 import { fitInConflictsFromDB, fitInPastError, fitInWarning } from './fit-in';
@@ -119,6 +121,8 @@ export interface CreateBookingParams {
   date: string;
   time: string;
   actor: BookingActor;
+  /** Explicit staff-only duration override; server validates and freezes it. */
+  staffDurationMin?: number;
   /** Identidade do cliente (conta logada ou dados informados no chat). */
   customer: { id: string; name: string; phone: string; email?: string } | null;
   /** Contato do CRM escolhido no painel (dono) — nome/fone vêm dele. */
@@ -200,6 +204,29 @@ export function createBookingTx(d: DB, p: CreateBookingParams): {
     throw txError(p.bookingKind === 'fit_in' ? pastError : 'Este horário já passou. Escolha um horário a partir de agora.', 400);
   }
 
+  // ═══════════════════════════════════════════════════════════════
+  // AGENDA TEMPORAL 2.0 (B1) — JANELA CANÔNICA NA CRIAÇÃO
+  // ═══════════════════════════════════════════════════════════════
+  // O servidor resolve o default do serviço ou valida override explícito da
+  // equipe; payload público jamais escolhe duração. Congela a janela na criação.
+  // Horário inexistente/ambíguo (DST gap/fold) é recusado — nunca reinterpretado.
+  const requestedDuration = p.staffDurationMin;
+  if (requestedDuration !== undefined && (!isOwner || !Number.isInteger(requestedDuration) || requestedDuration < 5 || requestedDuration > 720 || requestedDuration % 5 !== 0 || !!p.series)) {
+    throw txError('Duração inválida para este agendamento.', 400);
+  }
+  const duration = requestedDuration ?? service.durationMin;
+  let window: BookingWindow;
+  try {
+    window = buildBookingWindow({
+      date: p.date, time: p.time,
+      durationMin: duration,
+      timeZone: btz,
+    });
+  } catch (e: any) {
+    throw txError(e?.message || 'Horário inválido para o fuso da clínica.', 400);
+  }
+  const windowFields = bookingWindowFields(window, btz);
+
   const activePros = d.professionals.filter((x) => x.businessId === businessId && x.active !== false);
   const eligible = activePros.filter((x) => professionalServesService(service as any, x.id, activePros));
 
@@ -230,12 +257,15 @@ export function createBookingTx(d: DB, p: CreateBookingParams): {
     dateISO: p.date,
     weekday: weekdayOf(p.date),
     serviceId: service.id,
-    durationMin: service.durationMin,
+    durationMin: duration,
+    startStepMin: isOwner ? 5 : undefined,
     professionalId: isOwner ? ownerPro : '',
     eligibleProIds: slotEligibleProfessionalIds(service as any, d.professionals.filter((x) => x.businessId === businessId)),
     nowHM: p.date === today ? nowHM(nowDate, btz) : '',
     leadMin: cfg?.leadMin || 0,
-    bufferMin: cfg?.bufferMin || 0,
+    bufferMin: cfg?.bufferMin || 0, bufferBeforeMin: cfg?.bufferBeforeMin, bufferAfterMin: cfg?.bufferAfterMin,
+    blocks: d.scheduleBlocks, resources: d.scheduleResources, businessId,
+    timeZone: btz,
   });
   // ── A3.4 · Bloco 4: encaixe (fit_in) ────────────────────────────────
   // O encaixe NÃO cria um segundo caminho de agendamento: muda UMA regra
@@ -247,13 +277,17 @@ export function createBookingTx(d: DB, p: CreateBookingParams): {
   if (!fitIn && !r.slots.includes(p.time)) {
     throw txError('Este horário acabou de ser ocupado. Escolha outro.', 409);
   }
+  const pair = bufferPair(service, cfg || { bufferMin: 0 });
+  if (fitIn && blockConflict(d.scheduleBlocks, businessId, ownerPro, [], Date.parse(window.startAt) - pair.before * 60000, Date.parse(window.endAt) + pair.after * 60000)) {
+    throw txError('Bloqueio operacional neste horário.', 409);
+  }
   if (fitIn) {
     const conflicts = fitInConflictsFromDB({
       bookings: d.bookings.filter((b) => b.businessId === businessId),
       services: d.services.filter((s) => s.businessId === businessId),
       professionals: eligible.map((x) => ({ id: x.id, name: x.name })),
     }, {
-      date: p.date, time: p.time, durationMin: service.durationMin,
+      date: p.date, time: p.time, durationMin: window.durationMin,
       professionalId: ownerPro, eligibleProIds: slotEligibleProfessionalIds(service as any, d.professionals.filter((x) => x.businessId === businessId)),
     });
     if (conflicts.length > 0 && !p.fitInConfirmed) {
@@ -282,6 +316,16 @@ export function createBookingTx(d: DB, p: CreateBookingParams): {
     allowRequested: isOwner,
   });
 
+  const assignedResources = assignResources({
+    requirements: service.resourceRequirements || [], resources: d.scheduleResources,
+    services: d.services, bookingConfig: cfg || { bufferMin: 0 },
+    bookings: d.bookings, blocks: d.scheduleBlocks, businessId,
+    start: Date.parse(window.startAt) - pair.before * 60000,
+    end: Date.parse(window.endAt) + pair.after * 60000,
+  });
+  if (!assignedResources || blockConflict(d.scheduleBlocks, businessId, finalPro, assignedResources, Date.parse(window.startAt) - pair.before * 60000, Date.parse(window.endAt) + pair.after * 60000)) {
+    throw txError('Recurso ou horário bloqueado. Escolha outro.', 409);
+  }
   const status: BookingStatus = isOwner ? 'confirmed' : 'pending';
   const bookingId = randomUUID();
   d.bookings.push({
@@ -291,11 +335,13 @@ export function createBookingTx(d: DB, p: CreateBookingParams): {
     customerId: p.customer?.id || p.linkedContact?.customerId || '',
     serviceId: service.id,
     professionalId: finalPro,
-    date: p.date,
-    time: p.time,
+    bufferBeforeMin: pair.before, bufferAfterMin: pair.after, resourceIds: assignedResources,
     customerName: name,
     customerPhone: digits,
     status,
+    // Agenda Temporal 2.0 — startAt/endAt/durationMin/timeZone (+ projeção
+    // date/time) escritos ATOMICAMENTE no mesmo objeto.
+    ...windowFields,
     ...(fitIn ? { bookingKind: 'fit_in' as const } : {}),
     note: String(p.note || '').slice(0, 300),
     createdAt: now,
@@ -356,8 +402,8 @@ export function createBookingTx(d: DB, p: CreateBookingParams): {
     phone: digits,
     name,
     bookingId,
-    bookingDate: p.date,
-    bookingTime: p.time,
+    bookingDate: windowFields.date,
+    bookingTime: windowFields.time,
     actor: leadActor,
     now,
     origin: p.originRunId ? { runId: p.originRunId } : undefined,
@@ -397,7 +443,7 @@ export function createBookingTx(d: DB, p: CreateBookingParams): {
     booking: {
       id: bookingId,
       customerName: name, customerPhone: digits,
-      date: p.date, time: p.time, serviceName: service.name,
+      date: windowFields.date, time: windowFields.time, serviceName: service.name,
     },
     status,
   });

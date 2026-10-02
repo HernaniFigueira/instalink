@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { freezeLegacyBuffers } from '@/lib/schedule-capacity';
 import { updateDB } from '@/lib/db';
 import { clampCents } from '@/lib/utils';
 import { requireBusiness } from '@/lib/access';
@@ -132,6 +133,15 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
         if (Number.isFinite(Number(nb.cancelUntilMin))) cur.cancelUntilMin = Math.max(0, Math.min(10080, Math.round(Number(nb.cancelUntilMin))));
         if (Number.isFinite(Number(nb.horizonDays))) cur.horizonDays = Math.max(1, Math.min(365, Math.round(Number(nb.horizonDays))));
         if (Number.isFinite(Number(nb.bufferMin))) cur.bufferMin = Math.max(0, Math.min(240, Math.round(Number(nb.bufferMin))));
+        for (const key of ['bufferBeforeMin', 'bufferAfterMin'] as const) {
+          if (nb[key] !== undefined) {
+            if (!Number.isInteger(nb[key]) || nb[key] < 0 || nb[key] > 240) throw new Error('Buffer inválido (0–240 minutos).');
+            cur[key] = nb[key];
+          }
+        }
+        if (cur.bufferMin !== b.booking?.bufferMin || cur.bufferBeforeMin !== b.booking?.bufferBeforeMin || cur.bufferAfterMin !== b.booking?.bufferAfterMin) {
+          freezeLegacyBuffers(d, b.id, b.booking || defaultBookingConfig());
+        }
         b.booking = cur;
       }
       // Módulos opcionais: aceita toggles explícitos (mesma verdade da área

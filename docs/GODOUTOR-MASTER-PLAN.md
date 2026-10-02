@@ -1,6 +1,6 @@
 # GoDoutor — Master Plan, Roadmap e Handoff
 
-> Snapshot: 2026-10-01
+> Snapshot: 2026-10-02
 > Repositório: HernaniFigueira/instalink
 > Produto: GoDoutor / Clinical OS
 > Vertical inicial: clínica veterinária
@@ -31,7 +31,11 @@ Workflow + Permissões — `CONCLUÍDO EM CÓDIGO / HOMOLOGADO / MERGED / PRODU�
 
 **Estado real:** etapa canônica do atendimento derivada de Booking + Fila + Atendimento (sem campo persistido), transições auditadas e idempotentes, matriz Proprietário/Administrador/Recepção/Profissional no servidor, escopo de DADOS do Profissional por relação real em Clientes, Pets, People 360, busca, Oportunidades, Pendências, Conversas, Visão geral e export/import (capacidades `clientes_exportar`/`clientes_importar`) · homologação real (login real, fluxo completo com recarga, 1366/1024/390) · testes registrados: 2801 PASS / 4 baseline conhecidas (3× `a34-instagram`, 1× `automation-audit-p4`, intocadas). Detalhes: `docs/AUTO-HOMOLOGACAO-WORKFLOW-PERMISSOES.md`.
 
-**Status atual do roadmap:** `Agenda Temporal 2.0 — SPIKE/ADR CONCLUÍDO / IMPLEMENTAÇÃO PENDENTE`. Etapa A concluiu auditoria, contrato, comparação isolada, testes e cenário de benchmark; não substituiu a agenda/API de produção. ADR: `docs/ADR-AGENDA-TEMPORAL-2.md`; spike: `spikes/agenda-temporal-2/`. A implementação definitiva é fase seguinte, após revisão/autorização explícita.
+**Status atual do roadmap:** `Agenda Temporal 2.0 — CÓDIGO/QA LOCAL VERDES / FECHAMENTO FORMAL PENDENTE DE REVISÃO DO STASH E MERGE DA PR #49`. A mesma grade Day/Week/List recebeu B1 (janela/histórico), B2 (gestos/resize), B2.1 (batch/local echo) e B3 (ScheduleBlock distinto de Booking/AvailabilityException, before/after snapshots e freeze legado, salas/equipamentos com alternativas quantidade 1). QA real local em tenant descartável Owner/Maria/Orlando, 390/1024/1366, 200/500, request budget e 409; **nenhum QA em produção**. Docs de evidência: `docs/AUTO-HOMOLOGACAO-AGENDA-TEMPORAL-B3.md` e `docs/AGENDA-TEMPORAL-2-FINAL.md`. Clinical Encounter F1 só após revisão/merge/autorização.
+
+**P0 Infra separado pós-Agenda (registrado, não implementado):** single-read authenticated guard / reduzir leitura duplicada do `instalink_doc`.
+
+**Registro anterior da B1:** `Agenda Temporal 2.0 — EM ANDAMENTO · ETAPA B1 (FUNDAÇÃO TEMPORAL) CONCLUÍDA EM CÓDIGO / HOMOLOGADA / AGUARDANDO MERGE`. Etapa A concluiu auditoria, contrato, comparação isolada, testes e cenário de benchmark (ADR: `docs/ADR-AGENDA-TEMPORAL-2.md`; spike: `spikes/agenda-temporal-2/`). A **Etapa B1** implementou a fundação temporal no domínio de produção — `Booking.startAt/endAt/durationMin/timeZone/temporalSource` aditivos, `date/time` preservados como projeção compatível na mesma escrita atômica, duração resolvida no servidor e congelada na criação, slots/ocupação pela janela do próprio Booking, inferência legada congelada **na escrita** (sem backfill remoto) e reagendamento como janela nova. Sem biblioteca de calendário, sem troca da grade, sem redesenho. Homologação real (build de produção + banco descartável + login real + Chromium 1366/1024/390): `docs/AUTO-HOMOLOGACAO-AGENDA-TEMPORAL-B1.md`. **Próxima etapa: B2** (recursos Sala/Equipamento, buffers before/after, separação definitiva snap × `slotMin`); Clinical Encounter F1 continua depois.
 
 **Entregue na #46 (mergeada em produção) — B3 + Modelo Operacional + P0.1/P0.2/P0.3 + Equipe UX Closure:**
 - **P0.1 (Slots & Elegibilidade):** todos os chamadores de `slotEligibleProfessionalIds` passam a equipe completa do tenant, sem pre-filtrar `active !== false`. O helper encapsula a autoridade e distingue `undefined` (legado solo), `[]` (zero elegíveis) e `[ids]`.
@@ -60,7 +64,7 @@ Workflow + Permissões — `CONCLUÍDO EM CÓDIGO / HOMOLOGADO / MERGED / PRODU�
 
 **Fila oficial — única fonte vigente.** Não duplicar esta sequência em outras partes do documento. Quando uma fase terminar: remover da fila ativa, atualizar Estado atual, registrar conclusão resumida no histórico/audit, próxima fase sobe para posição 1.
 
-1. **Agenda Temporal 2.0 (ETAPA A CONCLUÍDA; IMPLEMENTAÇÃO PENDENTE)** — contrato `startAt/endAt`, duração congelada, drag-selection, bloqueios, procedimento longo, snap 5 min, buffers, recursos (profissional/sala/equipamento), política interna vs pública; revisar `docs/ADR-AGENDA-TEMPORAL-2.md` antes de autorizar implementação.
+1. **Agenda Temporal 2.0 (CÓDIGO/QA LOCAL VERDES NA #49; FECHAMENTO FORMAL PENDENTE DE STASH/REVISÃO, SEM MERGE)** — A/ADR, B1, B2, B2.1 e B3. Manter snapshots temporais/buffer/recurso, hard blocks e disponibilidade transacional, e orçamento de rede (Week 1 GET batch, move/resize 1 PATCH). Revisar evidências B1/B2/B3 e a ressalva de stash no relatório B3 antes de merge. Não alegar QA de produção.
 2. **Clinical Encounter F1** — prontuário estruturado sobre Atendimento (queixa, anamnese, sinais, problemas/hipóteses/diagnósticos, achados, evolução, plano, procedimentos, retorno, assinatura, versionamento; autosave, rascunho, finalização bloqueia edição, reabertura auditada)
 3. **Cobertura / Modalidade do Atendimento** — Particular vs Convênio/Plano (futuro): cadastro de operadora/convênio e plano, vínculo Tutor/Pet, identificação do beneficiário, cobertura por serviço, elegibilidade/autorização, coparticipação, registro da modalidade no atendimento, pagador (tutor/convênio/ambos), preparação para repasse/faturamento/glosa — veterinária primeiro, sem SUS/TISS/medicina humana antecipada — posicionado após F1 e antes de fechar Conta/Financeiro
 4. **Prescrição + Exames + Document Engine** — medicamento/apresentação/dose/via/frequência, ordens/solicitações, template/versão/instância de documentos
@@ -70,7 +74,7 @@ Workflow + Permissões — `CONCLUÍDO EM CÓDIGO / HOMOLOGADO / MERGED / PRODU�
 8. **Fiscal / integrações** — NFS-e, exportações, fechamento mensal, conciliação
 9. **Agentes + Jev + LLM + OAAS sobre os domínios estabilizados** — consolidação EventLog em OAAS, agentes clínicos/operacionais consumindo domínios estáveis (não antes)
 
-**A próxima missão continua Agenda Temporal 2.0.** A Etapa A entregou o SPIKE/ADR, mas não a implementação de produção. Só iniciar a etapa definitiva após revisão e autorização explícita do ADR; Clinical Encounter F1 não começa antes de a fase da Agenda ser endereçada. O restante da fila segue: Clinical Encounter F1 → Cobertura/Modalidade → Prescrição + Exames + Document Engine → Estoque/Farmácia → Cirurgia/Internação → Conta + Financeiro → Fiscal → Agentes/Jev/LLM. Workflow + Permissões já está mergeado em produção.
+**Próximo passo:** revisar PR #49 da Agenda Temporal 2.0 e decidir merge separadamente. Depois, mediante autorização, Clinical Encounter F1; não antecipar. P0 Infra single-read guard é independente, pós-Agenda, não implementado nesta PR.
 
 **Notas de referência (não implementar nesta PR):**
 - **Agenda Temporal 2.0 — Etapa A / evidência revisada:** Google Calendar segue referência **VISUAL/INTERACIONAL**; grade própria, `react-big-calendar`, FullCalendar Standard e Schedule-X Community foram comparados em spike isolado, incluindo Chromium real. Decisão: `NENHUM CANDIDATO APROVADO`; RBC continua condicional, mas a troca Dia→Semana a 1000 eventos levou 11,7 s em Vite dev. Sem dependência de runtime, sem troca da agenda de produção. Detalhes: `docs/ADR-AGENDA-TEMPORAL-2.md` e `spikes/agenda-temporal-2/BENCHMARK.md`.
@@ -81,10 +85,10 @@ Workflow + Permissões — `CONCLUÍDO EM CÓDIGO / HOMOLOGADO / MERGED / PRODU�
 
 Implementado e homologado: o Profissional recortado enxerga apenas pacientes/tutores com vínculo real (Agendamento, Atendimento ou Fila próprios — nunca por nome/e-mail, sempre com tenant primeiro) em Agenda, Fila, Atendimento, Clientes, People 360, Pets, busca, Oportunidades, Pendências, Conversas e Visão geral; objeto alheio devolve 404/403 seguro. Exportar/importar a base são capacidades próprias (`clientes_exportar`, `clientes_importar`; Proprietário/Administrador por padrão) e exigem contexto sem recorte. A Recepção opera Clientes/Pets/Agenda/chegada/falta/cancelar/reagendar/Oportunidades/Conversas/Pendências, sem área clínica e sem exportar/importar. Matriz por rota: `docs/AUTO-HOMOLOGACAO-WORKFLOW-PERMISSOES.md`.
 
-### 2.2 Contrato de duração do Serviço (Agenda Temporal 2.0 — contrato registrado; sem integração à produção)
+### 2.2 Contrato de duração do Serviço (Agenda Temporal 2.0 — B1 IMPLEMENTADA em produção)
 
 - `Service.durationMin` é a duração **PADRÃO para novos agendamentos**. Não é a duração histórica de um Booking já criado.
-- Agenda 2.0 torna cada Booking estável com `startAt`/`endAt` próprios; editar `Service.durationMin` **não altera** Bookings existentes.
+- Agenda 2.0 torna cada Booking estável com `startAt`/`endAt` próprios; editar `Service.durationMin` **não altera** Bookings existentes. **Implementado na B1**: todo Booking novo nasce com janela congelada e `durationMin` próprio; ao editar o serviço, os Bookings legados daquele serviço são congelados **antes** da mudança, com `temporalSource: 'legacy_inferred'` (o valor original antigo é irrecuperável e nunca é falsificado).
 - Override opcional futuro **Profissional × Serviço** (ex.: Consulta cardiológica 40 min; Dr. Orlando 50 min). **Não existe tabela/join para isso agora** e nada é criado nesta PR.
 - A biblioteca de serviços (`vet-service-catalog`) apenas **sugere** duração (`Duração sugerida · N min`); a clínica decide. Não é regra clínica nem CFMV.
 

@@ -14,7 +14,7 @@ import { useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
 import { cn, parseMoneyToCents, centsToBR } from '@/lib/utils';
 import { apiSend } from '@/lib/api-client';
-import type { Availability, AvailabilityException, Category, Professional, Service } from '@/lib/types';
+import type { Availability, AvailabilityException, ScheduleResource, Category, Professional, Service } from '@/lib/types';
 import { Icon } from '@/components/icons';
 import { Avatar, Badge, Button, Drawer } from '@/components/ui';
 import { ImageUpload } from '@/components/dashboard/ImageUpload';
@@ -55,9 +55,10 @@ export function DeleteSheet({ name, kindLabel, blocked, onDeactivate, onConfirm,
 }
 
 // ── Formulário de serviço ──
-export function ServiceForm({ businessId, service, cats, pros, onClose, onSave }: {
+export function ServiceForm({ businessId, service, cats, pros, resources = [], onClose, onSave }: {
   businessId: string;
   service: Service | null;
+  resources?: ScheduleResource[];
   cats: Category[];
   pros: Professional[];
   onClose: () => void;
@@ -80,6 +81,9 @@ export function ServiceForm({ businessId, service, cats, pros, onClose, onSave }
   const [proIds, setProIds] = useState<string[]>(service?.professionalIds || []);
   const [active, setActive] = useState(service?.active !== false);
   const [bookable, setBookable] = useState(service?.bookable !== false);
+  const [before, setBefore] = useState(service?.bufferBeforeMin === undefined ? '' : String(service.bufferBeforeMin));
+  const [after, setAfter] = useState(service?.bufferAfterMin === undefined ? '' : String(service.bufferAfterMin));
+  const [resourceIds, setResourceIds] = useState(service?.resourceRequirements?.[0] || []);
   // questions removidas da UI clínica — preservadas no banco por compatibilidade (não enviadas daqui)
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
@@ -90,9 +94,9 @@ export function ServiceForm({ businessId, service, cats, pros, onClose, onSave }
     durationMin: service ? (service.durationMin || 0) : 0, categoryId: service?.categoryId || '',
     professionalMode: service ? serviceProfessionalMode(service as any) : 'all',
     proIds: service?.professionalIds || [], active: service?.active !== false,
-    bookable: service?.bookable !== false,
+    bookable: service?.bookable !== false, before: service?.bufferBeforeMin === undefined ? '' : String(service.bufferBeforeMin), after: service?.bufferAfterMin === undefined ? '' : String(service.bufferAfterMin), resourceIds: service?.resourceRequirements?.[0] || [],
   }));
-  const dirty = JSON.stringify({ name, description, price, durationMin, categoryId, suggestedGroupName, professionalMode, proIds, active, bookable }) !== initialSnapshot.current;
+  const dirty = JSON.stringify({ name, description, price, durationMin, categoryId, suggestedGroupName, professionalMode, proIds, active, bookable, before, after, resourceIds }) !== initialSnapshot.current;
   const sugList = name.trim().length >= 2 ? searchVetCatalog(name, 6) : [];
   const dismissState = {
     dirty, saving: loading, context: 'edit' as const,
@@ -107,7 +111,7 @@ export function ServiceForm({ businessId, service, cats, pros, onClose, onSave }
 
   return (
     <Drawer open onClose={() => { if (!loading) onClose(); }} dismissGuard={dismissState} title={service ? 'Editar serviço' : 'Novo serviço'} width="max-w-lg">
-      <form onSubmit={async (e) => { e.preventDefault(); setError(''); if (durationMin < 5) { setError('Informe a duração padrão do serviço (mínimo 5 minutos).'); return; } setLoading(true); try { let resolvedCategoryId: string | undefined = categoryId || undefined; if (!resolvedCategoryId && suggestedGroupName) { const r:any = await apiSend('/api/catalog','POST',{ businessId, action:'category.save', kind:'service', name: suggestedGroupName.trim() },{ scope:'action', area:'Serviços' }); if (r.ok && r.data?.categoryId) resolvedCategoryId = r.data.categoryId; } await onSave({ id: service?.id, name, description, image, price: parseMoneyToCents(price), durationMin, professionalMode, professionalIds: professionalMode === 'all' ? [] : proIds, categoryId: resolvedCategoryId, active, bookable }); } catch (err:any) { setError(err.message || 'Falha ao salvar.'); } finally { setLoading(false); } }}
+      <form onSubmit={async (e) => { e.preventDefault(); setError(''); if (durationMin < 5) { setError('Informe a duração padrão do serviço (mínimo 5 minutos).'); return; } setLoading(true); try { let resolvedCategoryId: string | undefined = categoryId || undefined; if (!resolvedCategoryId && suggestedGroupName) { const r:any = await apiSend('/api/catalog','POST',{ businessId, action:'category.save', kind:'service', name: suggestedGroupName.trim() },{ scope:'action', area:'Serviços' }); if (r.ok && r.data?.categoryId) resolvedCategoryId = r.data.categoryId; } await onSave({ id: service?.id, name, description, image, price: parseMoneyToCents(price), durationMin, professionalMode, professionalIds: professionalMode === 'all' ? [] : proIds, categoryId: resolvedCategoryId, active, bookable, bufferBeforeMin: before === '' ? null : Number(before), bufferAfterMin: after === '' ? null : Number(after), resourceRequirements: resourceIds.length ? [resourceIds] : [] }); } catch (err:any) { setError(err.message || 'Falha ao salvar.'); } finally { setLoading(false); } }}
         className="p-5 space-y-3.5">
         <div className="relative">
           <input aria-label="Nome do serviço" value={name} onChange={(e) => { setName(e.target.value); setShowSug(true); }} onFocus={()=>setShowSug(true)} onBlur={()=>setTimeout(()=>setShowSug(false),150)} className={input} placeholder="Nome * (ex: Consulta veterinária)" autoFocus />
@@ -141,6 +145,19 @@ export function ServiceForm({ businessId, service, cats, pros, onClose, onSave }
           </select>
           {suggestedGroupName && <p className="text-[11px] text-amber-700 mt-1">Grupo sugerido: {suggestedGroupName} — Será criado ao salvar</p>}
           <span className="text-[11px] text-zinc-500">Grupo interno da clínica (ex: Consultas, Vacinas, Cirurgias). Opcional — sem migração.</span></label>
+        <fieldset className="border border-zinc-200 rounded-md p-3 space-y-2">
+          <legend className="text-xs font-semibold">Capacidade do serviço</legend>
+          <p className="text-xs text-zinc-500">Deixe vazio para usar os buffers da clínica. Não altera agendamentos existentes.</p>
+          <div className="grid grid-cols-2 gap-2">
+            <label className="text-xs">Preparação antes (min)<input type="number" min={0} max={240} value={before} onChange={e => setBefore(e.target.value)} placeholder="Padrão da clínica" className={input} /></label>
+            <label className="text-xs">Tempo depois (min)<input type="number" min={0} max={240} value={after} onChange={e => setAfter(e.target.value)} placeholder="Padrão da clínica" className={input} /></label>
+          </div>
+          <p className="text-xs font-semibold">Recursos necessários (um dos selecionados; quantidade 1)</p>
+          {resources.filter(r => r.active || resourceIds.includes(r.id)).map(r => <label key={r.id} className="flex items-center gap-2 text-sm">
+            <input type="checkbox" checked={resourceIds.includes(r.id)} onChange={() => setResourceIds(ids => ids.includes(r.id) ? ids.filter(x => x !== r.id) : [...ids, r.id])} />{r.name} · {r.kind === 'room' ? 'Sala' : 'Equipamento'}
+          </label>)}
+          {resources.length === 0 && <p className="text-xs text-zinc-500">Cadastre salas ou equipamentos em Configurações → Agenda.</p>}
+        </fieldset>
         {/* Perguntas no agendamento removidas do cadastro básico de Serviço — ver GODOUTOR-MASTER-PLAN.md (futuro motor de intake). Questões legadas preservadas no banco/API. */}
         {pros.length > 0 && (
           <div>
