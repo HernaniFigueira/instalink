@@ -12,7 +12,7 @@
 import type { Availability, AvailabilityException, Booking, Professional, Service, ScheduleBlock, ScheduleResource } from './types';
 import { timeToMin, minToTime } from './utils';
 import { followsBusinessHours } from './schedule';
-import { bufferPair, assignResources, overlaps, blockConflict } from './schedule-capacity';
+import { bufferPair, bookingBufferPair, assignResources, overlaps, blockConflict } from './schedule-capacity';
 import { bookingTimezone, resolveBookingWindow, buildBookingWindow } from './booking-temporal';
 
 export interface SlotQuery {
@@ -190,9 +190,9 @@ export function computeSlots(q: SlotQuery): SlotResult {
     const dayOffset = Math.round((Date.parse(window.local.date + 'T00:00:00Z') - Date.parse(q.dateISO + 'T00:00:00Z')) / 86400000);
     if (Math.abs(dayOffset) > 1) continue;
     // Buffer fica FORA da duração do atendimento (a janela/cartão não muda).
-    const previousBuffer = bufferPair(q.services.find(s => s.id === b.serviceId), q);
-    const s = dayOffset * 1440 + timeToMin(window.local.time) - Math.max(0, b.bufferBeforeMin ?? previousBuffer.before);
-    const e = dayOffset * 1440 + timeToMin(window.local.time) + Math.max(5, window.durationMin) + Math.max(0, b.bufferAfterMin ?? previousBuffer.after);
+    const previousBuffer = bookingBufferPair(b, q.services.find(s => s.id === b.serviceId && s.businessId === businessId), q);
+    const s = dayOffset * 1440 + timeToMin(window.local.time) - Math.max(0, previousBuffer.before);
+    const e = dayOffset * 1440 + timeToMin(window.local.time) + Math.max(5, window.durationMin) + Math.max(0, previousBuffer.after);
     if (dayOffset === 0) load.set(b.professionalId || '', (load.get(b.professionalId || '') || 0) + 1);
     if (soloMode || !b.professionalId) {
       // sem dono definido: bloqueia todos (seguro)
@@ -234,7 +234,7 @@ export function computeSlots(q: SlotQuery): SlotResult {
       const scopeBlocks = (q.blocks || []).filter(b => b.businessId === businessId);
       const globalOrProBlock = blockConflict(scopeBlocks, businessId, w.proId, [], from, until);
       const requirements = q.services.find(s => s.id === q.serviceId)?.resourceRequirements || [];
-      const assignment = assignResources({ requirements, resources: q.resources || [], bookings: q.bookings, blocks: scopeBlocks, businessId, start: from, end: until, preferred: q.preferredResourceIds });
+      const assignment = assignResources({ requirements, resources: q.resources || [], bookings: q.bookings, services: q.services, bookingConfig: q, blocks: scopeBlocks, businessId, start: from, end: until, preferred: q.preferredResourceIds });
       const clash = occ.some((o) => overlaps(startT, endT, o.start, o.end));
       if (!clash && !globalOrProBlock && assignment) {
         set.add(minToTime(t));

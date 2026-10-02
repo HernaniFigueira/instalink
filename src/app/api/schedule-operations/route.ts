@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { randomUUID } from 'node:crypto';
 import { requireBusiness } from '@/lib/access';
 import { updateDB } from '@/lib/db';
-import { blockConflict, overlaps } from '@/lib/schedule-capacity';
+import { blockConflict, bookingOccupiedRange, overlaps } from '@/lib/schedule-capacity';
 
 /** Operational blocks and generic capacity, not patients or availability exceptions. */
 export async function GET(req: NextRequest) {
@@ -62,7 +62,13 @@ export async function POST(req: NextRequest) {
       if (professionalId && !d.professionals.some(p => p.id === professionalId && p.businessId === businessId)) throw Object.assign(new Error('Profissional inválido.'), { status: 400 });
       if (resourceId && !d.scheduleResources.some(r => r.id === resourceId && r.businessId === businessId && r.active)) throw Object.assign(new Error('Recurso inválido.'), { status: 400 });
       const start = Date.parse(body.startAt), end = Date.parse(body.endAt);
-      if (d.bookings.some(b => b.businessId === businessId && b.status !== 'cancelled' && b.startAt && b.endAt && overlaps(start, end, Date.parse(b.startAt) - (b.bufferBeforeMin || 0) * 60000, Date.parse(b.endAt) + (b.bufferAfterMin || 0) * 60000) && (!resourceId && (!professionalId || b.professionalId === professionalId) || !!resourceId && b.resourceIds?.includes(resourceId)))) throw Object.assign(new Error('Há atendimento neste intervalo.'), { status: 409 });
+      const bookingConfig = d.businesses.find(b => b.id === businessId)?.booking || { bufferMin: 0 };
+      if (d.bookings.some(b => {
+        if (b.businessId !== businessId || b.status === 'cancelled') return false;
+        if (resourceId ? !b.resourceIds?.includes(resourceId) : professionalId && b.professionalId !== professionalId) return false;
+        const range = bookingOccupiedRange(b, d.services.find(s => s.id === b.serviceId && s.businessId === businessId), bookingConfig);
+        return !!range && overlaps(start, end, range.start, range.end);
+      })) throw Object.assign(new Error('Há atendimento neste intervalo.'), { status: 409 });
       if (blockConflict(d.scheduleBlocks.filter(b => b !== existing), businessId, professionalId, resourceId ? [resourceId] : [], start, end)) throw Object.assign(new Error('Já existe bloqueio neste intervalo.'), { status: 409 });
       const data = { businessId, professionalId, resourceId, startAt: new Date(start).toISOString(), endAt: new Date(end).toISOString(), reason: String(body.reason || body.note || 'Bloqueio operacional').trim().slice(0, 100), note: String(body.note || '').slice(0, 200) };
       if (existing) Object.assign(existing, data);

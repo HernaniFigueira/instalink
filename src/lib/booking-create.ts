@@ -318,6 +318,7 @@ export function createBookingTx(d: DB, p: CreateBookingParams): {
 
   const assignedResources = assignResources({
     requirements: service.resourceRequirements || [], resources: d.scheduleResources,
+    services: d.services, bookingConfig: cfg || { bufferMin: 0 },
     bookings: d.bookings, blocks: d.scheduleBlocks, businessId,
     start: Date.parse(window.startAt) - pair.before * 60000,
     end: Date.parse(window.endAt) + pair.after * 60000,

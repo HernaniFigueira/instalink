@@ -573,6 +573,7 @@ export async function PATCH(req: NextRequest) {
         const occupationEnd = Date.parse(destinationWindow.endAt) + pair.after * 60000;
         const resources = assignResources({
           requirements: freshService.resourceRequirements || [], resources: d.scheduleResources,
+          services: d.services, bookingConfig: freshBusiness.booking,
           bookings: others, blocks: d.scheduleBlocks, businessId: business.id,
           start: occupationStart, end: occupationEnd, preferred: target.resourceIds,
         });

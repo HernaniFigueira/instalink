@@ -7,7 +7,7 @@ import { createSession } from '../auth';
 import { biz, service, user } from './helpers/automation-fixtures';
 import { createBookingTx } from '../booking-create';
 import { buildBookingWindow } from '../booking-temporal';
-import { GET as bookingsGET } from '@/app/api/bookings/route';
+import { GET as bookingsGET, PATCH as bookingsPATCH } from '@/app/api/bookings/route';
 import { POST as operationsPOST, GET as operationsGET } from '@/app/api/schedule-operations/route';
 import { PATCH as configPATCH } from '@/app/api/businesses/[id]/route';
 import { POST as catalogPOST } from '@/app/api/catalog/route';
@@ -126,6 +126,53 @@ describe('B3 — escrita tenant-scoped e freeze de buffers', () => {
     expect((await readDB()).bookings[0].resourceIds).toEqual(['r1']);
     expect((await post({ action: 'resource.delete', id: 'r1' })).status).toBe(409);
     expect((await post({ action: 'resource.save', id: 'foreign-room', name: 'Outra', kind: 'room' })).status).toBe(404);
+  });
+  it('E: resource/professional/business block rejects legacy after-buffer, accepts exact edge', async () => {
+    await updateDB(d => {
+      d.businesses[0].booking.bufferMin = 15;
+      d.businesses[0].booking.bufferBeforeMin = 0;
+      Object.assign(d.bookings.find(b => b.id === 'old')!, { resourceIds: ['r1'], endAt: '2026-10-05T13:40:00.000Z', durationMin: 40 });
+    });
+    const bad = { action: 'block.save', startAt: '2026-10-05T13:45:00Z', endAt: '2026-10-05T14:15:00Z' };
+    for (const scope of [{ resourceId: 'r1' }, { professionalId: 'p1' }, {}]) {
+      expect((await post({ ...bad, ...scope })).status).toBe(409);
+    }
+    expect((await post({ ...bad, resourceId: 'r1', startAt: '2026-10-05T13:55:00Z' })).status).toBe(200);
+  });
+  it('F: move of another professional into the legacy room buffer is 409; 10:55 edge succeeds', async () => {
+    await updateDB(d => {
+      d.businesses[0].booking.bufferMin = 15;
+      d.businesses[0].booking.bufferBeforeMin = 0;
+      Object.assign(d.bookings.find(b => b.id === 'old')!, { resourceIds: ['r1'], endAt: '2026-10-05T13:40:00.000Z', durationMin: 40 });
+      d.professionals.push({ id: 'p2', businessId, name: 'Ana', role: '', photo: '', active: true });
+      d.services.push(service('short', businessId, { durationMin: 5, resourceRequirements: [['r1']] }));
+      d.availability.push({ id: 'rule', businessId, serviceId: '', professionalId: '', weekday: 1, start: '09:00', end: '18:00', slotMin: 30 });
+      const w = buildBookingWindow({ date: '2026-10-05', time: '12:00', durationMin: 5, timeZone: 'America/Sao_Paulo' });
+      d.bookings.push({ ...d.bookings[0], id: 'moving', serviceId: 'short', professionalId: 'p2', resourceIds: ['r1'], date: '2026-10-05', time: '12:00', ...w, startAt: w.startAt, endAt: w.endAt, bufferBeforeMin: 0, bufferAfterMin: 15 });
+    });
+    const move = (time: string) => bookingsPATCH(req('PATCH', { businessId, id: 'moving', date: '2026-10-05', time, professionalId: 'p2' }, token, '/api/bookings'));
+    expect((await move('10:45')).status).toBe(409);
+    expect((await readDB()).bookings.find(b => b.id === 'moving')!.time).toBe('12:00');
+    expect((await move('10:55')).status).toBe(200);
+    expect((await readDB()).bookings.find(b => b.id === 'moving')!.resourceIds).toEqual(['r1']);
+  });
+  it('G: resize into the legacy room buffer is 409 without writing; exact 10:00 edge is free', async () => {
+    await updateDB(d => {
+      d.businesses[0].booking.bufferMin = 15;
+      d.businesses[0].booking.bufferBeforeMin = 0;
+      Object.assign(d.bookings.find(b => b.id === 'old')!, { resourceIds: ['r1'], endAt: '2026-10-05T13:40:00.000Z', durationMin: 40 });
+      d.professionals.push({ id: 'p2', businessId, name: 'Ana', role: '', photo: '', active: true });
+      d.services.push(service('short', businessId, { durationMin: 5, resourceRequirements: [['r1']] }));
+      d.availability.push({ id: 'rule', businessId, serviceId: '', professionalId: '', weekday: 1, start: '09:00', end: '18:00', slotMin: 30 });
+      const w = buildBookingWindow({ date: '2026-10-05', time: '09:00', durationMin: 5, timeZone: 'America/Sao_Paulo' });
+      d.bookings.push({ ...d.bookings[0], id: 'resizing', serviceId: 'short', professionalId: 'p2', resourceIds: ['r1'], date: '2026-10-05', time: '09:00', ...w, startAt: w.startAt, endAt: w.endAt, bufferBeforeMin: 0, bufferAfterMin: 0 });
+    });
+    const resize = (resizeEnd: string) => bookingsPATCH(req('PATCH', { businessId, id: 'resizing', resizeEnd }, token, '/api/bookings'));
+    expect((await resize('10:05')).status).toBe(409);
+    expect((await readDB()).bookings.find(b => b.id === 'resizing')!.durationMin).toBe(5);
+    const exact = await resize('10:00');
+    expect(exact.status).toBe(200);
+    expect((await readDB()).bookings.find(b => b.id === 'resizing')!.durationMin).toBe(60);
   });
   it('rejects foreign resources and blocks; history prevents deleting used rooms', async () => {
     const foreign = await post({ action: 'block.save', startAt, endAt, resourceId: 'foreign-room' });
