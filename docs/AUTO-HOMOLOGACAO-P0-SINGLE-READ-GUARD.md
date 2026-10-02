@@ -1,7 +1,7 @@
 # P0 Infra — single-read authenticated guard · auto-homologação
 
 > Data: 2026-10-02 (UTC) · branch `arena/01a0feb4-instalink` · base `main` (`02389c44b6eeaf1bd164ce54834d6442da62c515`).
-> Estado: implementação e gates automatizados concluídos; smoke HTTP local multi-persona aprovado. A etapa de Chromium/UI **não foi executada** porque não há browser instalado e os downloads foram bloqueados pela rede. PR desta entrega: a registrar após push. **Produção não foi usada para QA.**
+> Estado: implementação e gates automatizados concluídos; smoke HTTP local multi-persona aprovado. A etapa de Chromium/UI **não foi executada** porque não há browser instalado e os downloads foram bloqueados pela rede. PR #50: https://github.com/HernaniFigueira/instalink/pull/50 (**aberta; não mergeada**). **Produção não foi usada para QA.**
 
 ## Escopo e limites
 

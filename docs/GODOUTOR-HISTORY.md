@@ -2,7 +2,7 @@
 
 ## 2026-10-02 — P0 Infra · single-read authenticated guard
 
-> Branch `arena/01a0feb4-instalink`, base `main` em `02389c44b6eeaf1bd164ce54834d6442da62c515`; PR desta entrega aguarda revisão. Produção não usada para QA; Clinical Encounter F1 não iniciado.
+> Branch `arena/01a0feb4-instalink`, base `main` em `02389c44b6eeaf1bd164ce54834d6442da62c515`; PR #50 (https://github.com/HernaniFigueira/instalink/pull/50) aberta, aguardando revisão. Produção não usada para QA; Clinical Encounter F1 não iniciado.
 
 - Criados resolvers DB-puros (`getUserBySessionFromDB`, `userFromRequestFromDB`, `supportFromDB`/`supportFromRequestFromDB`) e mantidos os wrappers públicos. `requireBusiness`, `requireMaster`, `currentAccess` e consumidores de suporte compartilham um único snapshot por operação; sem credencial, os caminhos cobertos retornam sem `readDB`.
 - Cookie continua prioritário; Bearer segue como fallback após cookie inválido/expirado no mesmo snapshot. Expiração de sessão, binding Master/suporte, tenant/membership, permissões, professionalScope e suporte somente leitura preservados. Sem cache global ou módulo; `updateDB()` e leituras de domínio/pós-mutação justificadas foram mantidos e classificados.

@@ -39,7 +39,7 @@ Antes de propor ou implementar mudanças relevantes, leia:
 
 **Agenda Temporal 2.0 — `MERGED EM MAIN` via PR #49 (2026-10-02 22:01 UTC).** Etapas A/ADR, B1, B2, B2.1 e B3 estão no mesmo grid Day/Week/List. B3 entregou `ScheduleBlock` próprio, buffers before/after com snapshots e freeze legado, salas/equipamentos multi-tenant e alocação determinística. QA anterior foi local em tenant descartável, Owner/Maria/Orlando, Chromium 1366/1024/390; **não usar isso como QA de produção**. Evidências: `docs/AUTO-HOMOLOGACAO-AGENDA-TEMPORAL-B3.md` e `docs/AGENDA-TEMPORAL-2-FINAL.md`.
 
-**P0 Infra — Single-read authenticated guard (implementado nesta branch; PR aguarda revisão).** Typecheck/build e testes automatizados passaram, com as quatro falhas baseline esperadas na suíte completa; smoke HTTP local em banco descartável e logins reais Owner/Maria/Orlando passou. Chromium/UI desta entrega ficou pendente porque o sandbox não conseguiu instalar o browser. Produção não usada. Relatório: `docs/AUTO-HOMOLOGACAO-P0-SINGLE-READ-GUARD.md`. Clinical Encounter F1 não iniciado e continua bloqueado até revisão/merge do P0 e autorização explícita.
+**P0 Infra — Single-read authenticated guard (implementado nesta branch; PR #50 aguarda revisão).** Typecheck/build e testes automatizados passaram, com as quatro falhas baseline esperadas na suíte completa; smoke HTTP local em banco descartável e logins reais Owner/Maria/Orlando passou. Chromium/UI desta entrega ficou pendente porque o sandbox não conseguiu instalar o browser. Produção não usada. Relatório: `docs/AUTO-HOMOLOGACAO-P0-SINGLE-READ-GUARD.md`. Clinical Encounter F1 não iniciado e continua bloqueado até revisão/merge do P0 e autorização explícita.
 
 - **P0.1 (Slots & Elegibilidade):** todos os chamadores de `slotEligibleProfessionalIds` passam a equipe completa do tenant; o helper decide elegibilidade (`undefined` legado solo / `[]` / `[ids]`).
 - **P0.2 (Privilege Escalation):** `person.save` valida server-side e atomicamente as permissões efetivas do alvo contra as do ator (403 sem mutação parcial).
@@ -53,7 +53,7 @@ Antes de propor ou implementar mudanças relevantes, leia:
 
 **Fila oficial — autoridade no Master Plan §2:**
 
-1. **P0 Infra — single-read authenticated guard** — implementado nesta branch; PR aguarda revisão. Build/typecheck/testes focados e smoke HTTP descartável passaram; Chromium/UI pendente por bloqueio de rede, produção não usada.
+1. **P0 Infra — single-read authenticated guard** — implementado nesta branch; PR #50 aguarda revisão. Build/typecheck/testes focados e smoke HTTP descartável passaram; Chromium/UI pendente por bloqueio de rede, produção não usada.
 2. Clinical Encounter F1 — deferido até revisão/merge do P0 e autorização explícita.
 3. Cobertura / Modalidade do Atendimento
 4. Prescrição + Exames + Document Engine
