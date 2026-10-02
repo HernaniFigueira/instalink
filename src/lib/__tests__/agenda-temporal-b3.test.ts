@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { assignResources, blockConflict, bufferPair } from '../schedule-capacity';
+import { assignResources, blockConflict, bufferPair, freezeLegacyBuffers } from '../schedule-capacity';
 import { computeSlots } from '../slots';
 import type { Booking, ScheduleBlock, ScheduleResource, Service } from '../types';
 
@@ -17,6 +17,22 @@ describe('Agenda Temporal B3 — recursos, bloqueios e buffers', () => {
     expect(bufferPair(service, { bufferMin: 10, bufferBeforeMin: 5 })).toEqual({ before: 5, after: 10 });
     expect(bufferPair({ ...service, bufferAfterMin: 0 }, { bufferMin: 10 })).toEqual({ before: 0, after: 0 });
   });
+  it('freezes legacy buffers on the old policy before a clinic or service edit; new bookings use the new policy', () => {
+    const legacy = booking('old', 'room-a');
+    legacy.bufferBeforeMin = undefined; legacy.bufferAfterMin = undefined;
+    const native = booking('native', 'room-b');
+    native.bufferBeforeMin = 5; native.bufferAfterMin = 10;
+    const db = { bookings: [legacy, native], services: [service] };
+    expect(freezeLegacyBuffers(db, businessId, { bufferMin: 10, bufferBeforeMin: 0 })).toBe(1);
+    expect(legacy).toMatchObject({ bufferBeforeMin: 0, bufferAfterMin: 10 });
+    expect(freezeLegacyBuffers(db, businessId, { bufferMin: 30, bufferBeforeMin: 20 })).toBe(0);
+    expect(legacy).toMatchObject({ bufferBeforeMin: 0, bufferAfterMin: 10 });
+    expect(native).toMatchObject({ bufferBeforeMin: 5, bufferAfterMin: 10 });
+    expect(bufferPair(service, { bufferMin: 30, bufferBeforeMin: 20 })).toEqual({ before: 20, after: 30 });
+  });
+  it('backtracks overlapping alternative groups without assigning the same room twice', () => {
+    expect(assignResources({ requirements: [['room-a', 'room-b'], ['room-a']], resources, bookings: [], blocks: [], businessId, start: Date.parse(at(12)), end: Date.parse(at(13)) })).toEqual(['room-b', 'room-a']);
+  });
   it('assigns two simultaneous bookings to alternatives, rejects a third; prefers old room on move', () => {
     const base = { requirements: service.resourceRequirements!, resources, blocks: [], businessId, start: Date.parse(at(12)), end: Date.parse(at(13)) };
     expect(assignResources({ ...base, bookings: [] })).toEqual(['room-a']);
@@ -30,6 +46,24 @@ describe('Agenda Temporal B3 — recursos, bloqueios e buffers', () => {
     expect(blockConflict([block('p1')], businessId, 'p2', [], start, end)).toBe(false);
     expect(blockConflict([block('', 'room-a')], businessId, 'p2', ['room-a'], start, end)).toBe(true);
     expect(blockConflict([block('', 'room-a')], 'other', 'p2', ['room-a'], start, end)).toBe(false);
+  });
+  it('before/after effective interval rejects collisions, accepts exact boundaries, cancelled frees', () => {
+    const existing = { ...booking('p1', 'room-a'), serviceId: 's', date, time: '10:00',
+      startAt: '2026-10-05T13:00:00.000Z', endAt: '2026-10-05T13:40:00.000Z', durationMin: 40,
+      bufferBeforeMin: 10, bufferAfterMin: 15 } as Booking;
+    const base = {
+      rules: [{ id: 'rule', businessId, professionalId: '', serviceId: '', weekday: 1, start: '08:00', end: '12:00', slotMin: 5 }],
+      exceptions: [], bookings: [existing], services: [{ ...service, resourceRequirements: [], durationMin: 5 }],
+      professionals: [{ id: 'p1', businessId, name: 'Maria', role: '', photo: '', active: true, followBusinessHours: true }],
+      dateISO: date, weekday: 1, serviceId: 's', durationMin: 5, startStepMin: 5, professionalId: 'p1', eligibleProIds: ['p1'], nowHM: '', leadMin: 0, bufferMin: 0,
+      timeZone: 'America/Sao_Paulo', resources: [], businessId,
+    };
+    const q = computeSlots(base);
+    expect(q.slots).toContain('09:45'); // 09:45–09:50 meets before edge
+    expect(q.slots).not.toContain('09:50');
+    expect(q.slots).not.toContain('10:50');
+    expect(q.slots).toContain('10:55'); // after edge exact
+    expect(computeSlots({ ...base, bookings: [{ ...existing, status: 'cancelled' }] }).slots).toContain('10:00');
   });
   it('slot engine excludes a blocked professional and occupied alternative rooms', () => {
     const base = {
