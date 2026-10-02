@@ -1,5 +1,6 @@
 'use client';
 import { computeSlots } from '@/lib/slots';
+import { buildBookingWindow, instantToLocalProjection } from '@/lib/booking-temporal';
 import { eligibleProfessionalIds, slotEligibleProfessionalIds } from '@/lib/booking';
 import { QueueDock } from '@/components/dashboard/QueueDock';
 // ═══════════════════════════════════════════════════════════════
@@ -29,7 +30,7 @@ import { useRouter, useSearchParams } from 'next/navigation';
 import { todayISO, addDaysISO, weekdayOf, formatDateBR, nowHM } from '@/lib/tz';
 import { nowLinePlacement } from '@/lib/agenda-nowline';
 import { WEEKDAYS, WEEKDAYS_LONG, timeToMin, minToTime, cn } from '@/lib/utils';
-import type { Availability, AvailabilityException, Booking, BookingConfig, BookingStatus, Professional, Service } from '@/lib/types';
+import type { Availability, AvailabilityException, Booking, BookingConfig, BookingStatus, Professional, Service, ScheduleBlock, ScheduleResource } from '@/lib/types';
 import { Avatar, Badge, Drawer, AgendaSkeleton, ListSkeleton, Button, IconButton, AttentionStrip, Segmented } from '@/components/ui';
 import { Icon } from '@/components/icons';
 import {
@@ -445,6 +446,21 @@ export default function AgendaPage() {
   const [pros, setPros] = useState<Professional[]>([]);
   const [rules, setRules] = useState<Availability[]>([]);
   const [exceptions,setExceptions] = useState<AvailabilityException[]>([]);
+  const [scheduleBlocks, setScheduleBlocks] = useState<ScheduleBlock[]>([]);
+  const [scheduleResources, setScheduleResources] = useState<ScheduleResource[]>([]);
+  const [blockChoice, setBlockChoice] = useState<{ date: string; time: string; professionalId: string } | null>(null);
+  const [editingBlock, setEditingBlock] = useState<ScheduleBlock | null>(null);
+  const [blockForm, setBlockForm] = useState(false);
+  const [blockDate, setBlockDate] = useState('');
+  const [blockStart, setBlockStart] = useState('');
+  const [blockEnd, setBlockEnd] = useState('');
+  const [blockScope, setBlockScope] = useState<'business' | 'professional' | 'resource'>('professional');
+  const [blockPro, setBlockPro] = useState('');
+  const [blockResource, setBlockResource] = useState('');
+  const [blockNote, setBlockNote] = useState('');
+  const [blockReason, setBlockReason] = useState('');
+  const [blockError, setBlockError] = useState('');
+  const [blockBusy, setBlockBusy] = useState(false);
   const [loaded, setLoaded] = useState(false);
   const [detail, setDetail] = useState<Booking | null>(null);
   const [creating, setCreating] = useState<{
@@ -578,6 +594,8 @@ export default function AgendaPage() {
     setBizTz(d.business?.businessTimezone || '');
     setRules(d.availability || []);
     setExceptions(d.exceptions || []);
+    setScheduleBlocks(d.scheduleBlocks || []);
+    setScheduleResources(d.scheduleResources || []);
     setBookings(bk.data?.bookings || []);
     setLoaded(true);
     void loadQueue();
@@ -790,7 +808,7 @@ export default function AgendaPage() {
       const ranges: Array<{start:number;end:number}> = [];
       if(bookingCfg && c.date>=today && c.date<=addDaysISO(today,effectiveHorizonDays(bookingCfg)) && bookings.length<500) {
         for(const service of services.filter(s=>s.active!==false && s.bookable!==false)) {
-          const result=computeSlots({rules,exceptions,bookings,services,professionals:activePros.filter(p=>!specFilter||(p.role||'').trim()===specFilter),dateISO:c.date,weekday:weekdayOf(c.date),serviceId:service.id,durationMin:service.durationMin,professionalId:c.professionalId||proFilter,eligibleProIds:slotEligibleProfessionalIds(service as any, pros),nowHM:c.date===today?nowHM(new Date(),bizTz):'',leadMin:bookingCfg.leadMin,bufferMin:bookingCfg.bufferMin,timeZone:bizTz});
+          const result=computeSlots({rules,exceptions,bookings,services,professionals:activePros.filter(p=>!specFilter||(p.role||'').trim()===specFilter),dateISO:c.date,weekday:weekdayOf(c.date),serviceId:service.id,durationMin:service.durationMin,professionalId:c.professionalId||proFilter,eligibleProIds:slotEligibleProfessionalIds(service as any, pros),nowHM:c.date===today?nowHM(new Date(),bizTz):'',leadMin:bookingCfg.leadMin,bufferMin:bookingCfg.bufferMin,bufferBeforeMin:bookingCfg.bufferBeforeMin,bufferAfterMin:bookingCfg.bufferAfterMin,blocks:scheduleBlocks,resources:scheduleResources,businessId,timeZone:bizTz});
           for(const time of result.slots) ranges.push({start:timeToMin(time),end:timeToMin(time)+service.durationMin});
         }
       }
@@ -798,7 +816,7 @@ export default function AgendaPage() {
       for(const r of ranges.sort((a,b)=>a.start-b.start)) {const last=freeRanges[freeRanges.length-1];if(last&&r.start<=last.end)last.end=Math.max(last.end,r.end);else freeRanges.push({...r});}
       return { ...c, isToday: c.date === today, blocks, freeRanges };
     });
-  }, [view, weekDays, activePros, focus, bookings, grid.start, durationOf, proName, serviceName, dragId, today, statusFilter, proFilter, specFilter, proRoleOf, bizTz, rules, exceptions, services, bookingCfg]);
+  }, [view, weekDays, activePros, focus, bookings, grid.start, durationOf, proName, serviceName, dragId, today, statusFilter, proFilter, specFilter, proRoleOf, bizTz, rules, exceptions, services, bookingCfg, scheduleBlocks, scheduleResources, businessId]);
 
   // Colunas usadas pelo cálculo de destino (mesma ordem da renderização).
   useEffect(() => {
@@ -1028,8 +1046,41 @@ export default function AgendaPage() {
     const col = columnsRef.current.find((c) => c.key === columnKey);
     if (!col) return;
     setDetail(null);
-    setCreating({ ...newBookingSeedFromAgendaCell(col, time), selectedDurationMin, quick: true });
+    setBlockChoice({ date: col.date, time, professionalId: col.professionalId });
   }, []);
+
+  function openBlock(seed: { date: string; time: string; professionalId: string }, existing?: ScheduleBlock) {
+    setBlockChoice(null); setEditingBlock(existing || null);
+    setBlockDate(seed.date); setBlockStart(seed.time || '09:00');
+    setBlockEnd(seed.time ? minToTime(Math.min(1435, timeToMin(seed.time) + 60)) : '10:00');
+    setBlockScope(existing?.resourceId ? 'resource' : existing?.professionalId || seed.professionalId ? 'professional' : 'business');
+    setBlockPro(existing?.professionalId || seed.professionalId || ''); setBlockResource(existing?.resourceId || '');
+    setBlockReason(existing?.reason || ''); setBlockNote(existing?.note || ''); setBlockError(''); setBlockForm(true);
+  }
+  async function saveBlock(remove = false) {
+    if (blockBusy) return;
+    setBlockError('');
+    let startAt = '', endAt = '';
+    if (!remove) {
+      try {
+        const durationMin = timeToMin(blockEnd) - timeToMin(blockStart);
+        if (!blockDate || durationMin <= 0 || durationMin > 1440) throw new Error('Informe início e fim válidos.');
+        const w = buildBookingWindow({ date: blockDate, time: blockStart, durationMin, timeZone: bizTz });
+        startAt = w.startAt; endAt = w.endAt;
+      } catch { setBlockError('Informe início e fim válidos no fuso da clínica.'); return; }
+    }
+    setBlockBusy(true);
+    const res = await apiRequest<{ block?: ScheduleBlock; deletedId?: string }>('/api/schedule-operations', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({
+      action: remove ? 'block.delete' : 'block.save', businessId, id: editingBlock?.id,
+      professionalId: blockScope === 'professional' ? blockPro : '', resourceId: blockScope === 'resource' ? blockResource : '',
+      startAt, endAt, reason: blockReason, note: blockNote,
+    }) }, { scope: 'action', area: 'Agenda' });
+    setBlockBusy(false);
+    if (!res.ok) { setBlockError(res.message || 'Não foi possível salvar o bloqueio.'); return; }
+    if (remove) setScheduleBlocks(rows => rows.filter(row => row.id !== editingBlock?.id));
+    else if (res.data?.block) setScheduleBlocks(rows => [...rows.filter(row => row.id !== res.data!.block!.id), res.data!.block!]);
+    setBlockForm(false); setEditingBlock(null);
+  }
 
   const onResize = useCallback((id: string, end: string) => {
     const booking = bookingsRef.current.get(id);
@@ -1518,6 +1569,7 @@ export default function AgendaPage() {
             />
             {/* CTA PRINCIPAL da Agenda segue o TEMA ativo (--accent, contrato
                 universal de cor) — o fluxo/sheet de criação é o mesmo. */}
+            <Button variant="secondary" size="sm" onClick={() => openBlock({ date: focus, time: '09:00', professionalId: proFilter || '' })}>Bloquear horário</Button>
             <Button variant="primary" size="sm" onClick={() => setCreating({ date: focus, time: '', professionalId: '' })}>
               <Icon n="calendarPlus" size={15} /> Novo agendamento
             </Button>
@@ -1567,6 +1619,27 @@ export default function AgendaPage() {
         )}
       </div>
 
+      {blockChoice && <div className="mb-3 border border-zinc-300 bg-white rounded-md p-3 flex flex-wrap items-center gap-2" role="dialog" aria-label="Ação no horário selecionado">
+        <span className="text-sm font-semibold">{formatDateBR(blockChoice.date)} · {blockChoice.time}</span>
+        <Button size="sm" variant="primary" onClick={() => { setCreating({ ...blockChoice, quick: true }); setBlockChoice(null); }}>Novo agendamento</Button>
+        <Button size="sm" variant="secondary" onClick={() => openBlock(blockChoice)}>Bloquear horário</Button>
+        <button type="button" className="text-xs underline" onClick={() => setBlockChoice(null)}>Cancelar</button>
+      </div>}
+      {scheduleBlocks.filter(block => {
+        const dates = view === 'week' ? weekDays : [focus];
+        return dates.some(date => block.startAt.slice(0, 10) === date || instantToLocalProjection(block.startAt, bizTz || 'America/Sao_Paulo').date === date);
+      }).length > 0 && <section className="mb-3 border border-dashed border-amber-500 rounded-md bg-amber-50 p-2" aria-label="Bloqueios operacionais">
+        <h2 className="text-xs font-bold uppercase">Bloqueios operacionais · não são atendimentos</h2>
+        <div className="flex flex-wrap gap-2 mt-1">{scheduleBlocks.filter(block => {
+          const date = instantToLocalProjection(block.startAt, bizTz || 'America/Sao_Paulo').date;
+          return (view === 'week' ? weekDays : [focus]).includes(date);
+        }).map(block => <button key={block.id} type="button" className="border-l-4 border-amber-700 bg-white px-3 py-2 text-left text-xs font-semibold" onClick={() => {
+          const date = instantToLocalProjection(block.startAt, bizTz || 'America/Sao_Paulo').date;
+          const time = instantToLocalProjection(block.startAt, bizTz || 'America/Sao_Paulo').time;
+          openBlock({ date, time, professionalId: block.professionalId }, block);
+          setBlockEnd(instantToLocalProjection(block.endAt, bizTz || 'America/Sao_Paulo').time);
+        }}>■ BLOQUEIO · {block.reason || block.note || 'Operacional'} · {block.professionalId ? proName(block.professionalId) : block.resourceId ? scheduleResources.find(r => r.id === block.resourceId)?.name : 'Clínica'}</button>)}</div>
+      </section>}
       {denied ? <AccessDenied area="Agenda" /> : failed ? <AreaLoadError area="Agenda" message={failed} onRetry={load}/> : !loaded ? <AgendaSkeleton /> : view === 'list' ? (
         <section className="ag-mode-scroll space-y-3" aria-label="Lista de atendimentos do dia">
           <p className="text-sm text-[var(--text-muted)]">{formatDateBR(focus)} · Toque para abrir o atendimento. Horários livres e intervalos estão na visualização Dia.</p>
@@ -1823,11 +1896,27 @@ export default function AgendaPage() {
         </Drawer>
       )}
 
+      {blockForm && <Drawer open onClose={() => setBlockForm(false)} title={editingBlock ? 'Editar bloqueio' : 'Bloquear horário'} width="max-w-md">
+        <div className="p-4 space-y-3">
+          <p className="text-xs">Intervalo operacional (não cria paciente nem atendimento).</p>
+          <label className="block text-xs">Data<input type="date" value={blockDate} onChange={e => setBlockDate(e.target.value)} className="w-full border rounded-md p-2" /></label>
+          <div className="flex gap-2"><label className="flex-1 text-xs">Início<input type="time" value={blockStart} onChange={e => setBlockStart(e.target.value)} className="w-full border rounded-md p-2" /></label><label className="flex-1 text-xs">Fim<input type="time" value={blockEnd} onChange={e => setBlockEnd(e.target.value)} className="w-full border rounded-md p-2" /></label></div>
+          <label className="block text-xs">Escopo<select value={blockScope} onChange={e => setBlockScope(e.target.value as typeof blockScope)} className="w-full border rounded-md p-2"><option value="business">Clínica</option><option value="professional">Profissional</option><option value="resource">Sala ou equipamento</option></select></label>
+          {blockScope === 'professional' && <label className="block text-xs">Profissional<select value={blockPro} onChange={e => setBlockPro(e.target.value)} className="w-full border rounded-md p-2"><option value="">Selecione</option>{pros.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}</select></label>}
+          {blockScope === 'resource' && <label className="block text-xs">Recurso<select value={blockResource} onChange={e => setBlockResource(e.target.value)} className="w-full border rounded-md p-2"><option value="">Selecione</option>{scheduleResources.map(r => <option key={r.id} value={r.id}>{r.name}</option>)}</select></label>}
+          <label className="block text-xs">Motivo<input value={blockReason} onChange={e => setBlockReason(e.target.value)} placeholder="Ex.: manutenção, reunião" className="w-full border rounded-md p-2" /></label>
+          <label className="block text-xs">Observação (opcional)<input value={blockNote} onChange={e => setBlockNote(e.target.value)} placeholder="Ex.: manutenção, reunião" className="w-full border rounded-md p-2" /></label>
+          {blockError && <p role="alert" className="text-red-700 text-sm">{blockError}</p>}
+          <div className="flex gap-2"><Button disabled={blockBusy} onClick={() => void saveBlock()}>{editingBlock ? 'Salvar alterações' : 'Criar bloqueio'}</Button>
+            {editingBlock && <Button variant="secondary" disabled={blockBusy} onClick={() => void saveBlock(true)}>Excluir bloqueio</Button>}</div>
+        </div>
+      </Drawer>}
       {detail && (
         <BookingDetailSheet
           booking={detail}
           timezone={bizTz}
           service={serviceOf(detail.serviceId)}
+          resources={scheduleResources}
           pro={detail.professionalId ? pros.find((p) => p.id === detail.professionalId) : undefined}
           businessId={businessId}
           onClose={() => setDetail(null)}

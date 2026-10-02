@@ -29,7 +29,7 @@ import { todayISO, nowHM, formatDateBR, humanDay } from '@/lib/tz';
 import { waLink, cn, money } from '@/lib/utils';
 import { adminBookingMaxDate, bookingDurationOf, needsClosure, rescheduleDecision } from '@/lib/booking-ops';
 import { SLOT_STATE_MESSAGE } from '@/lib/slot-states';
-import type { Booking } from '@/lib/types';
+import type { Booking, ScheduleResource } from '@/lib/types';
 import { WorkspaceSheet } from '@/components/dashboard/WorkspaceSheet';
 import { encounterWorkspaceHref } from '@/lib/encounter-workspace';
 import { workflowView, type WorkflowActionId } from '@/lib/appointment-workflow';
@@ -51,10 +51,11 @@ function historyStamp(at: string | undefined, timezone?: string): string {
   catch { return t.toLocaleString('pt-BR', opts).replace(',', ''); }
 }
 
-export function BookingDetailSheet({ booking, service, pro, businessId, timezone, onClose, onChanged }: {
+export function BookingDetailSheet({ booking, service, pro, resources = [], businessId, timezone, onClose, onChanged }: {
   booking: Booking;
   service: ServiceRef | undefined;
   pro: ProRef | undefined;
+  resources?: ScheduleResource[];
   businessId: string;
   timezone?: string;
   /** Fechamento pedido pelo usuário (ESC/X) — nunca por autosave. */
@@ -392,6 +393,10 @@ export function BookingDetailSheet({ booking, service, pro, businessId, timezone
               <dt className={ROW_DT}>Profissional</dt>
               <dd className={ROW_DD}>{pro?.name || 'Automático'}</dd>
             </div>
+            {(booking.resourceIds || []).map(id => {
+              const resource = resources.find(r => r.id === id);
+              return resource ? <div key={id} className={ROW}><dt className={ROW_DT}>{resource.kind === 'room' ? 'Sala' : 'Equipamento'}</dt><dd className={ROW_DD}>{resource.name}</dd></div> : null;
+            })}
             <div className={ROW}>
               <dt className={ROW_DT}>Valor</dt>
               <dd className={ROW_DD}>{service?.price !== undefined ? money(service.price) : '—'}</dd>

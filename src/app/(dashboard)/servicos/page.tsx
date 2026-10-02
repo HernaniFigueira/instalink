@@ -2,7 +2,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { useSearchParams } from 'next/navigation';
 import { cn, centsToBR } from '@/lib/utils';
-import type { Category, Professional, Service } from '@/lib/types';
+import type { Category, Professional, ScheduleResource, Service } from '@/lib/types';
 import { Button, Drawer, EmptyState, IconButton, ListSkeleton, Notice, PageHeader } from '@/components/ui';
 import { Icon } from '@/components/icons';
 import { AccessDenied, AreaLoadError } from '@/components/dashboard/AccessNotice';
@@ -30,6 +30,7 @@ export default function ServicosPage() {
   const businessId = params.get('b') || '';
   const [cats, setCats] = useState<Category[]>([]);
   const [services, setServices] = useState<Service[]>([]);
+  const [resources, setResources] = useState<ScheduleResource[]>([]);
   const [pros, setPros] = useState<Professional[]>([]);
   const [refs, setRefs] = useState<{ services: string[]; professionals: string[] }>({ services: [], professionals: [] });
   const [loaded, setLoaded] = useState(false);
@@ -56,6 +57,7 @@ export default function ServicosPage() {
     const d = res.data || {};
     setCats((d.categories || []).filter((c: Category) => c.kind === 'service'));
     setServices(d.services || []);
+    setResources(d.scheduleResources || []);
     setPros(d.professionals || []);
     setRefs((d.historyRefs || d.bookingRefs) || { services: [], professionals: [] });
     setDenied(false);
@@ -244,7 +246,7 @@ export default function ServicosPage() {
       )}
 
       {showForm && (
-        <ServiceForm businessId={businessId} service={editing} cats={cats} pros={pros}
+        <ServiceForm businessId={businessId} service={editing} cats={cats} pros={pros} resources={resources}
           onClose={() => { setShowForm(false); setEditing(null); }}
           onSave={async (payload) => { await call('service.save', payload); setShowForm(false); setEditing(null); }} />
       )}
