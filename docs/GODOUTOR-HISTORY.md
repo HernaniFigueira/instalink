@@ -2,7 +2,7 @@
 
 ## 2026-10-02 — Agenda Temporal 2.0 · B3 e encerramento técnico local
 
-> PR #49 · branch `arena/01a0f827-instalink` · sem merge, produção não usada para QA. **Concluída em código/homologada localmente**, aguardando revisão.
+> PR #49 · branch `arena/01a0f827-instalink` · sem merge, produção não usada para QA. **Código/QA local verdes; fechamento formal pendente de revisão do stash ausente**, aguardando revisão da PR.
 
 - Entidade `ScheduleBlock` separada de Booking e `AvailabilityException`, escopo clínica/profissional/recurso, CRUD autorizado, hard conflict inclusive encaixe. `ScheduleResource` multi-tenant sala/equipamento, alternativa única por requisito e atribuição estável, com snapshot no Booking.
 - Buffers efetivos Service→clínica→0, `bufferMin` legado depois; snapshots before/after e congelamento de dados sem snapshot antes de editar política. Move/resize revalidam capacidade e devolvem recurso final sem GET global. UI Agenda/Configurações/Serviços e detalhe responsive preservam Day/Week/List e clique B2; drag-select pode escolher Booking ou Block.
