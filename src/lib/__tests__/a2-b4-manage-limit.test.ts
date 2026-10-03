@@ -40,7 +40,7 @@ function baseDB() {
   d.businesses.push(b);
   d.services.push(fixtureService('s1', 'b1', { durationMin: 30, professionalIds: [] }));
   d.users.push({
-    id: 'u1', businessId: 'b1', organizationId: b.organizationId || 'org-b1', email: 'demo@instalink.app',
+    id: 'u1', businessId: 'b1', organizationId: b.organizationId || 'org-b1', email: 'demo@godoutor.app',
     name: 'Demo', role: 'owner', active: true, permissions: {}, passwordHash: 'x', createdAt: FIXED_NOW,
   } as User);
   d.professionals.push({

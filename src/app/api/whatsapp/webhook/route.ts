@@ -237,7 +237,7 @@ export async function POST(req: NextRequest) {
               if (dbiz?.whatsappIntegration) dbiz.whatsappIntegration.lastWebhookAt = at;
               pushAudit(d, {
                 action: 'whatsapp.webhook_received',
-                actor: { id: 'system', email: 'webhook@instalink.app', role: 'system' },
+                actor: { id: 'system', email: 'webhook@godoutor.app', role: 'system' },
                 businessId: b.id,
                 meta: { messages: 0, statuses: 0, stage: 'parsed_empty' },
               });
@@ -555,7 +555,7 @@ export async function POST(req: NextRequest) {
 
         pushAudit(d, {
           action: 'whatsapp.webhook_received',
-          actor: { id: 'system', email: 'webhook@instalink.app', role: 'system' },
+          actor: { id: 'system', email: 'webhook@godoutor.app', role: 'system' },
           businessId,
           meta: { messages: batch.messages.length, statuses: batch.statuses.length },
         });

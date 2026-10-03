@@ -82,7 +82,7 @@ export function getInstagramCredentials(business: Business): InstagramCredential
 export function instagramKeyFingerprint(): string {
   const key = String(process.env.WHATSAPP_CREDENTIALS_KEY || '');
   if (!key) return '';
-  return createHmac('sha256', 'instalink-key-fingerprint').update(key).digest('hex').slice(0, 8);
+  return createHmac('sha256', 'godoutor-key-fingerprint').update(key).digest('hex').slice(0, 8);
 }
 
 export function encryptInstagramToken(token: string): string {
@@ -927,7 +927,7 @@ export type InstagramAuthorizationResult =
   | { ok: false; reason: 'business_not_found' | 'account_already_linked'; ownerBusinessId?: string };
 
 /** Ator das ações de sistema (webhook, cron) no histórico de auditoria. */
-export const INSTAGRAM_SYSTEM_ACTOR = { id: 'system', email: 'instagram@instalink.app', role: 'system' };
+export const INSTAGRAM_SYSTEM_ACTOR = { id: 'system', email: 'instagram@godoutor.app', role: 'system' };
 
 export function applyInstagramAuthorization(
   db: DB,
@@ -1271,7 +1271,7 @@ export async function ingestInstagramNotification(input: {
 
     pushAudit(db, {
       action: 'instagram.webhook_received',
-      actor: { id: 'system', email: 'webhook@instalink.app', role: 'system' },
+      actor: { id: 'system', email: 'webhook@godoutor.app', role: 'system' },
       businessId,
       meta: { kind: n.kind, conversationId: conv.id, leadId },
     });

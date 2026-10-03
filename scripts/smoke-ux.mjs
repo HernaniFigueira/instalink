@@ -48,7 +48,7 @@ console.log('\n— 401 × 403 (sessão preservada)');
 const noToken = await api('GET', `/api/overview?businessId=${B3}`);
 check('sem token → 401 (sessão inexistente)', noToken.status === 401, `(${noToken.status})`);
 
-const owner = await api('POST', '/api/auth/login', { email: 'demo@instalink.app', password: 'demo1234' });
+const owner = await api('POST', '/api/auth/login', { email: 'demo@godoutor.app', password: 'demo1234' });
 const ownerToken = owner.data.token || '';
 check('login do dono → token', !!ownerToken, `(${owner.status})`);
 

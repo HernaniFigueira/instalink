@@ -145,7 +145,7 @@ export default function AgendarFlow({ business, services, professionals, today, 
     if (!embed || typeof window === 'undefined' || window.parent === window) return;
     const post = () => {
       const h = rootRef.current?.scrollHeight || document.documentElement?.scrollHeight || 0;
-      if (h > 0) window.parent.postMessage({ type: 'instalink:height', height: h }, '*');
+      if (h > 0) window.parent.postMessage({ type: 'godoutor:height', height: h }, '*');
     };
     post();
     const ro = typeof ResizeObserver !== 'undefined' ? new ResizeObserver(post) : null;

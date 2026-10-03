@@ -3,7 +3,7 @@
 @tailwind utilities;
 
 /* ═══════════════════════════════════════════════════════════════
-   DESIGN SYSTEM INSTALINK — contrato do workspace GoDoutor v2
+   DESIGN SYSTEM GODOUTOR — contrato do workspace v2
    ═══════════════════════════════════════════════════════════════
    `.il-platform`/`.workspace-shell` são a fonte ativa do workspace autenticado.
    `:root` e `.il-page` conservam compatibilidade/public legacy; a ponte de

@@ -148,7 +148,7 @@ check('pedido criado com preço do servidor (3490)', order.status < 300 && (orde
 
 // ── Lojista (bloco 4+5) ──
 console.log('\n— painel do lojista');
-const login = await api('POST', '/api/auth/login', { email: 'demo@instalink.app', password: 'demo1234' });
+const login = await api('POST', '/api/auth/login', { email: 'demo@godoutor.app', password: 'demo1234' });
 const token = login.data.token || '';
 check('login demo → token', !!token, `(${login.status})`);
 const noAuth = await api('GET', `/api/overview?businessId=${B1}`);

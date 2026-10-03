@@ -63,10 +63,10 @@ const widget = await fetch(`${BASE}/widget/booking.js`);
 const widgetJs = await widget.text();
 check('GET /widget/booking.js 200 + JS', widget.status === 200 && (widget.headers.get('content-type') || '').includes('javascript'));
 check('widget aponta para /agendar (fluxo único, sem motor próprio)', widgetJs.includes('/agendar'));
-check('widget ajusta altura via postMessage (A2-B2)', widgetJs.includes('instalink:height'));
+check('widget ajusta altura via postMessage (A2-B2)', widgetJs.includes('godoutor:height'));
 
 // ── 3. Dono + catálogo ──
-const login = await api('POST', '/api/auth/login', { email: 'demo@instalink.app', password: 'demo1234' });
+const login = await api('POST', '/api/auth/login', { email: 'demo@godoutor.app', password: 'demo1234' });
 const ownerToken = login.data.token || '';
 check('login do dono (seed)', !!ownerToken);
 const cat = await api('GET', `/api/catalog/get?businessId=${bizSlug}`, null, ownerToken);

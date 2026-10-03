@@ -84,8 +84,8 @@ export function clearCustomerToken(): void {
 // 403 → usuário autenticado SEM permissão: NUNCA desloga, NUNCA limpa o
 //       token, NUNCA vai para /login. A tela mostra mensagem amigável.
 // Ver lib/http.ts (semântica) e lib/panel.ts (áreas/permissões).
-export const SESSION_EXPIRED_EVENT = 'instalink:session-expired';
-export const FORBIDDEN_EVENT = 'instalink:forbidden';
+export const SESSION_EXPIRED_EVENT = 'godoutor:session-expired';
+export const FORBIDDEN_EVENT = 'godoutor:forbidden';
 
 export interface ForbiddenDetail {
   /** Caminho da API que negou (para log/depuração; nunca exibido cru). */

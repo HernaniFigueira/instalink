@@ -205,7 +205,7 @@ beforeEach(async () => {
   db.users.push(
     { id: OWNER_A, name: 'Dra. Ana', email: 'ana@clinica.com', passwordHash: 'hash', createdAt: '2026-01-01', role: 'owner', lastLoginAt: '' },
     { id: OWNER_B, name: 'Dr. Bruno', email: 'bruno@clinica.com', passwordHash: 'hash', createdAt: '2026-01-01', role: 'owner', lastLoginAt: '' },
-    { id: MASTER_USER_ID, name: 'Master Admin', email: 'admin@instalink.app', passwordHash: 'hash', createdAt: '2026-01-01', role: 'master', lastLoginAt: '' },
+    { id: MASTER_USER_ID, name: 'Master Admin', email: 'admin@godoutor.app', passwordHash: 'hash', createdAt: '2026-01-01', role: 'master', lastLoginAt: '' },
   );
 
   const clinicA = createClinic(BIZ_A, OWNER_A, 'Clínica Odonto A');

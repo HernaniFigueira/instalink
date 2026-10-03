@@ -372,7 +372,7 @@ export function handoffToTeam(db: DB, input: HandoffInput): HandoffResult {
     action: 'conversation.handoff',
     actor: input.actor
       ? { id: input.actor.id, email: input.actor.email || '', role: input.actor.role || '' }
-      : { id: 'system', email: 'system@instalink.app', role: 'system' },
+      : { id: 'system', email: 'system@godoutor.app', role: 'system' },
     businessId: input.businessId,
     // Só dados operacionais — NUNCA campos de raciocínio/chain-of-thought.
     meta: {

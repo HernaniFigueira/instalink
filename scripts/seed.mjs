@@ -70,17 +70,17 @@ function blocksFor(cta, extra, target) {
 
 const db = {
   users: [
-    { id: 'user-demo', name: 'Demo GoDoutor', email: 'demo@instalink.app', passwordHash: hash('demo1234'), createdAt: now, role: 'owner', lastLoginAt: '' },
+    { id: 'user-demo', name: 'Demo GoDoutor', email: 'demo@godoutor.app', passwordHash: hash('demo1234'), createdAt: now, role: 'owner', lastLoginAt: '' },
     // Logins de EQUIPE (FASE 3): testam papéis/permissões de verdade.
-    { id: 'user-secretaria', name: 'Sofia (secretária)', email: 'secretaria@instalink.app', passwordHash: hash('demo1234'), createdAt: now, role: 'owner', lastLoginAt: '' },
-    { id: 'user-vendedor', name: 'Vitor (vendedor)', email: 'vendedor@instalink.app', passwordHash: hash('demo1234'), createdAt: now, role: 'owner', lastLoginAt: '' },
+    { id: 'user-secretaria', name: 'Sofia (secretária)', email: 'secretaria@godoutor.app', passwordHash: hash('demo1234'), createdAt: now, role: 'owner', lastLoginAt: '' },
+    { id: 'user-vendedor', name: 'Vitor (vendedor)', email: 'vendedor@godoutor.app', passwordHash: hash('demo1234'), createdAt: now, role: 'owner', lastLoginAt: '' },
     // PROFISSIONAL (quem ATENDE): vinculado ao profissional 'pro-orlando' via
     // `professionals.userId` — é esse vínculo que produz o escopo "own" da
     // agenda e a Visão geral "Meu dia". Sem ele não dá para verificar o papel.
-    { id: 'user-profissional', name: 'Orlando (dentista)', email: 'profissional@instalink.app', passwordHash: hash('demo1234'), createdAt: now, role: 'owner', lastLoginAt: '' },
+    { id: 'user-profissional', name: 'Orlando (dentista)', email: 'profissional@godoutor.app', passwordHash: hash('demo1234'), createdAt: now, role: 'owner', lastLoginAt: '' },
     // MASTER da PLATAFORMA: papel no banco (não é dono de nada; entra em
     // empresa só por sessão de suporte explícita e auditada).
-    { id: 'user-master', name: 'Suporte InstaLink', email: 'master@instalink.app', passwordHash: hash('master1234'), createdAt: now, role: 'master', lastLoginAt: '' },
+    { id: 'user-master', name: 'Suporte InstaLink', email: 'master@godoutor.app', passwordHash: hash('master1234'), createdAt: now, role: 'master', lastLoginAt: '' },
   ],
   sessions: [],
   businesses: [
@@ -315,10 +315,10 @@ if (process.env.DATABASE_URL) {
     [JSON.stringify(finalDb)],
   );
   await pool.end();
-  console.log(merged ? 'Seed MERGE OK (Postgres) — demos adicionados, existente preservado.' : 'Seed OK (Postgres) — demo@instalink.app / demo1234');
+  console.log(merged ? 'Seed MERGE OK (Postgres) — demos adicionados, existente preservado.' : 'Seed OK (Postgres) — demo@godoutor.app / demo1234');
 } else {
   fs.mkdirSync(path.dirname(FILE), { recursive: true });
   fs.writeFileSync(FILE, JSON.stringify(db));
-  console.log('Seed OK — demo@instalink.app / demo1234');
+  console.log('Seed OK — demo@godoutor.app / demo1234');
 }
 console.log('   /burgerhouse · /barbeariadojoao · /clinicavitta');
