@@ -245,6 +245,10 @@ describe('Clinical Convergence — GODOUTOR_LEGACY_PAGES OFF: limpeza da experi�
     const src = read('src/app/onboarding/page.tsx');
     expect(src).toMatch(/Crie sua clínica/);
     expect(src).toMatch(/Nome da clínica/);
-    expect(src).toMatch(/Como sua clínica atende/);
+    // CORREÇÃO FINAL: no OFF a pergunta de modo de venda NÃO EXISTE (nem com
+    // rótulo clínico) — a base é decisão do servidor. O fieldset só renderiza
+    // sob o gate da flag de compatibilidade.
+    expect(src).toMatch(/\{showsServiceModelQuestion\(legacyPagesEnabled\) && \(/);
+    expect(src).not.toMatch(/Como sua clínica atende/);
   });
 });

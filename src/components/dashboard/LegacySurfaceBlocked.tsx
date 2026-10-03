@@ -1,5 +1,4 @@
-import Link from 'next/link';
-import { EmptyState, PageHeader } from '@/components/ui';
+import { A, EmptyState, PageHeader } from '@/components/ui';
 import type { BlockedLegacySurface } from '@/lib/legacy-surfaces';
 
 /**
@@ -17,7 +16,7 @@ export function LegacySurfaceBlocked({ surface }: { surface: BlockedLegacySurfac
           icon="alert"
           title={surface.title}
           hint={surface.hint}
-          action={<Link href={surface.href}><button type="button" className="font-bold bg-zinc-900 text-white px-4 py-2 rounded-md text-sm hover:bg-zinc-700">{surface.hrefLabel}</button></Link>}
+          action={<A href={surface.href} variant="primary" className="text-sm">{surface.hrefLabel}</A>}
         />
       </div>
     </div>

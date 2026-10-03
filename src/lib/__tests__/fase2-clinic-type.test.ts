@@ -11,13 +11,17 @@ describe('FASE 2 · P5 — tipo de clínica no onboarding (preset)', () => {
   it('tela pergunta "Qual é o tipo da sua clínica?" com os 4 tipos + Outro', () => {
     const page = read('src/app/onboarding/page.tsx');
     expect(page).toContain('Qual é o tipo da sua clínica?');
+    // CORREÇÃO FINAL: as opções saíram da página para a função pura
+    // clinicTypeOptions(legacy) em lib/onboarding.ts — contrato clínico sem
+    // porta "não é clínica" no OFF (testado em convergence-final.test.ts).
+    const lib = read('src/lib/onboarding.ts');
     for (const id of ['medica', 'odontologica', 'veterinaria', 'estetica', 'geral']) {
-      expect(page, `opção ${id}`).toContain(`id: '${id}'`);
+      expect(lib, `opção ${id}`).toContain(`id: '${id}'`);
     }
     // um produto só — o texto deixa isso explícito (não são 4 aplicações).
     expect(page).toContain('o produto é o mesmo, só o preset muda');
-    // envia clinicType na criação
-    expect(page).toMatch(/clinicType,\s*\n?\s*\}\)/);
+    // envia clinicType na criação (via businessCreationPayload)
+    expect(page).toMatch(/businessCreationPayload\(\{[\s\S]{0,140}clinicType,[\s\S]{0,40}\}\)/);
   });
 
   it('POST /api/businesses aceita clinicType e semeia a anamnese do preset', () => {
