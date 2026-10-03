@@ -836,6 +836,14 @@ export default function AgendaPage() {
     }));
   }, [columns]);
 
+  // While editing a dragged interval, keep its actual column alongside the
+  // drawer. Other columns return unchanged on dismiss (no synthetic booking).
+  const rangeFocus = !!selectedRange && !!(creating || blockForm);
+  const displayedColumns = rangeFocus ? columns.filter(c => c.key === selectedRange?.columnKey) : columns;
+  useLayoutEffect(() => {
+    if (rangeFocus && scrollRef.current) scrollRef.current.scrollLeft = 0;
+  }, [rangeFocus]);
+
   const gridHeight = Math.max(460, Math.round((grid.span / 60) * PX_PER_HOUR));
   const dayWidth = GUTTER_W + columns.length * COL_MIN;
 
@@ -1694,7 +1702,7 @@ export default function AgendaPage() {
           </div>
         </div>
       ) : (
-        <div className="ag-mode-panel ag-grid-surface">
+        <div className="ag-mode-panel ag-grid-surface" data-range-focus={rangeFocus || undefined}>
           {/* AGENDA PROTAGONISTA — SCROLL INTERNO com dono único (Dia/Semana):
               o scroller é o ÚNICO dono da rolagem vertical — ele ocupa todo o
               resto do viewport (flex:1/min-height:0 na cadeia .ag-page) e rola
@@ -1708,7 +1716,7 @@ export default function AgendaPage() {
             className={`ag-mode-scroll overflow-auto ws-scroll ${isDragging ? 'select-none' : ''}`}
             style={railMaxH ? { maxHeight: railMaxH } : undefined}
           >
-            <div className="flex" style={{ minWidth: dayWidth }}>
+            <div className="flex" style={{ minWidth: rangeFocus ? 0 : dayWidth }}>
               {/* Gutter de horas (fixo na horizontal) */}
               <div className="sticky left-0 z-30 bg-white shrink-0 border-r border-zinc-200" style={{ width: GUTTER_W }}>
                 <div style={{ height: HEADER_H }} className="border-b border-zinc-200" />
@@ -1726,8 +1734,8 @@ export default function AgendaPage() {
               <div className="flex-1 min-w-0">
                 {/* Cabeçalho das colunas (fixo na vertical) */}
                 <div className="sticky top-0 z-20 flex bg-white border-b border-zinc-200">
-                  {columns.map((c) => (
-                    <div key={c.key} className="shrink-0 px-3 flex items-center gap-2 border-r border-zinc-100 last:border-r-0" style={{ minWidth: COL_MIN, width: `${100 / Math.max(1, columns.length)}%`, height: HEADER_H }}>
+                  {displayedColumns.map((c) => (
+                    <div key={c.key} className="shrink-0 px-3 flex items-center gap-2 border-r border-zinc-100 last:border-r-0" style={{ minWidth: rangeFocus ? 0 : COL_MIN, width: `${100 / Math.max(1, displayedColumns.length)}%`, height: HEADER_H }}>
                       {view === 'day' && (
                         c.isProfessional ? (
                           <Avatar name={c.label} src={c.photo} size={22} />
@@ -1752,7 +1760,7 @@ export default function AgendaPage() {
                     const place = nowLinePlacement({
                       view, focus, today, nowMin,
                       gridStart: grid.start, gridEnd: grid.end,
-                      columns, pxPerHour: PX_PER_HOUR,
+                      columns: displayedColumns, pxPerHour: PX_PER_HOUR,
                     });
                     if (!place) return null;
                     return (
@@ -1762,11 +1770,11 @@ export default function AgendaPage() {
                       </span>
                     );
                   })()}
-                  {columns.map((c, i) => (
+                  {displayedColumns.map((c, i) => (
                     <GridColumn
                       key={c.key}
                       column={c}
-                      basisPct={100 / Math.max(1, columns.length)}
+                      basisPct={100 / Math.max(1, displayedColumns.length)}
                       variant={view === 'week' ? 'week' : 'day'}
                       highlight={highlightFor(i)}
                       gridHeight={gridHeight}

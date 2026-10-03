@@ -313,7 +313,7 @@ export function ClientProfileDrawer({ person, businessId, pipeline, canFunil, on
         title: b.service,
         subtitle: [b.seriesId ? `Série · ${b.seriesIndex} de ${b.seriesCount}` : '', b.professional, (b.rescheduleCount || 0) > 0 ? `reagendado ${b.rescheduleCount}×` : ''].filter(Boolean).join(' · ') || 'Atendimento',
         badge: d.panel, tone: d.tone,
-        body: <Link href={`/agenda?b=${businessId}&data=${b.date}`} className="text-xs font-semibold text-[var(--brand-fg)] hover:underline inline-flex items-center gap-1">Ver na agenda <Icon n="chevR" size={10} /></Link>,
+        body: <Link href={`/agenda?b=${businessId}&data=${b.date}`} className={buttonCls('secondary', 'xs')}>Ver na agenda <Icon n="chevR" size={10} /></Link>,
       });
     }
     for (const c of person.conversations || []) {
@@ -327,8 +327,8 @@ export function ClientProfileDrawer({ person, businessId, pipeline, canFunil, on
         tone: 'blue',
         body: person.phone ? (
           <div className="flex flex-wrap gap-1.5">
-            <Link href={`/conversas?b=${businessId}&q=${phoneQ}`} className="il-chip">Abrir conversa</Link>
-            <a href={waLink(person.phone, `Olá, ${firstName}!`)} target="_blank" rel="noreferrer" className="il-chip">WhatsApp</a>
+            <Link href={`/conversas?b=${businessId}&q=${phoneQ}`} className={buttonCls('secondary', 'xs')}>Abrir conversa</Link>
+            <a href={waLink(person.phone, `Olá, ${firstName}!`)} target="_blank" rel="noreferrer" className={buttonCls('whatsapp', 'xs')}>WhatsApp</a>
           </div>
         ) : undefined,
       });
@@ -353,7 +353,7 @@ export function ClientProfileDrawer({ person, businessId, pipeline, canFunil, on
               <Button size="xs" variant="secondary" onClick={() => onNewBooking(person)}>Agendar atendimento</Button>
             )}
             {canLose && <Button size="xs" variant="ghost" onClick={() => setLead(l.id, lostId!)} disabled={saving}>Marcar perdido</Button>}
-            {canFunil && <Link href={`/funil?b=${businessId}#${l.id}`} className="il-chip">Ver oportunidade</Link>}
+            {canFunil && <Link href={`/funil?b=${businessId}#${l.id}`} className={buttonCls('secondary', 'xs')}>Ver oportunidade</Link>}
           </div>
         ),
       });
@@ -368,8 +368,8 @@ export function ClientProfileDrawer({ person, businessId, pipeline, canFunil, on
         tone: t.status === 'done' ? 'emerald' : t.status === 'cancelled' ? 'zinc' : 'amber',
         body: (
           <div className="flex flex-wrap gap-1.5">
-            {t.leadId && canFunil && <Link href={`/funil?b=${businessId}#${t.leadId}`} className="il-chip">Ver oportunidade</Link>}
-            {t.bookingId && <Link href={`/agenda?b=${businessId}`} className="il-chip">Ver agenda</Link>}
+            {t.leadId && canFunil && <Link href={`/funil?b=${businessId}#${t.leadId}`} className={buttonCls('secondary', 'xs')}>Ver oportunidade</Link>}
+            {t.bookingId && <Link href={`/agenda?b=${businessId}`} className={buttonCls('secondary', 'xs')}>Ver agenda</Link>}
           </div>
         ),
       });
@@ -596,7 +596,7 @@ export function ClientProfileDrawer({ person, businessId, pipeline, canFunil, on
               <p className="text-sm font-semibold text-[var(--text)] inline-flex items-center gap-1.5">
                 <Icon n="idcard" size={14} className="text-[var(--text-muted)]" /> Cadastro
               </p>
-              <Button size="xs" variant="ghost" onClick={() => setEditing(true)}>
+              <Button size="xs" variant="secondary" onClick={() => setEditing(true)}>
                 <Icon n="pencil" size={12} /> Editar
               </Button>
             </div>
@@ -872,7 +872,7 @@ export function ClientProfileDrawer({ person, businessId, pipeline, canFunil, on
                     <>
                       <p className="text-[15px] font-semibold text-[var(--text)] mt-1">{formatDateBR(nextBooking.date)}{nextBooking.time ? ` · ${nextBooking.time}` : ''}</p>
                       <p className="text-[12px] text-[var(--text-muted)]">{nextBooking.service}{nextBooking.professional ? ` · ${nextBooking.professional}` : ''}</p>
-                      <Link href={`/agenda?b=${businessId}&data=${nextBooking.date}`} className="text-[12px] font-semibold text-[var(--brand-fg)] hover:underline">Ver na agenda</Link>
+                      <Link href={`/agenda?b=${businessId}&data=${nextBooking.date}`} className={buttonCls('secondary', 'xs')}>Ver na agenda</Link>
                     </>
                   ) : <p className="text-[13px] text-[var(--text-muted)] mt-1">Nenhum futuro marcado.</p>}
                 </div>
@@ -882,7 +882,7 @@ export function ClientProfileDrawer({ person, businessId, pipeline, canFunil, on
                     <>
                       <p className="text-[15px] font-semibold text-[var(--text)] mt-1">{formatDateBR(lastEncounter.date)}{lastEncounter.time ? ` · ${lastEncounter.time}` : ''}</p>
                       <p className="text-[12px] text-[var(--text-muted)] line-clamp-2">{lastEncounter.evolution || lastEncounter.complaint || 'Sem descrição'}</p>
-                      <button type="button" className="text-[12px] font-semibold text-[var(--brand-fg)] hover:underline" onClick={() => openEncounter({ id: lastEncounter.id })}>Abrir registro</button>
+                      <button type="button" className={buttonCls('secondary', 'xs')} onClick={() => openEncounter({ id: lastEncounter.id })}>Abrir registro</button>
                     </>
                   ) : <p className="text-[13px] text-[var(--text-muted)] mt-1">Sem registro de atendimento.</p>}
                 </div>
@@ -905,7 +905,7 @@ export function ClientProfileDrawer({ person, businessId, pipeline, canFunil, on
                   ) : profile.adminNote ? (
                     <p className="text-[13px] text-[var(--text)] mt-1 line-clamp-3">{profile.adminNote}</p>
                   ) : <p className="text-[13px] text-[var(--text-muted)] mt-1">Nenhuma observação registrada.</p>}
-                  <button type="button" className="text-[12px] font-semibold text-[var(--brand-fg)] hover:underline mt-1" onClick={() => setTab('notes')}>Ver observações</button>
+                  <button type="button" className={buttonCls('secondary', 'xs')} onClick={() => setTab('notes')}>Ver observações</button>
                 </div>
                 {canFinance ? (
                   <div className="rounded-lg border border-[var(--border)] p-3">
@@ -916,7 +916,7 @@ export function ClientProfileDrawer({ person, businessId, pipeline, canFunil, on
                         <Kpi label="Em aberto" value={centsToBR(financePending)} tone={financePending > 0 ? 'warning' : 'default'} />
                       </div>
                     )}
-                    <button type="button" className="text-[12px] font-semibold text-[var(--brand-fg)] hover:underline mt-1" onClick={() => setTab('finance')}>Abrir financeiro</button>
+                    <button type="button" className={buttonCls('secondary', 'xs')} onClick={() => setTab('finance')}>Abrir financeiro</button>
                   </div>
                 ) : (
                   <div className="rounded-lg border border-[var(--border)] p-3">
@@ -945,7 +945,7 @@ export function ClientProfileDrawer({ person, businessId, pipeline, canFunil, on
                         <a href={f.url} target="_blank" rel="noreferrer" className="text-[13.5px] font-semibold text-[var(--text)] hover:underline truncate block">{f.name}</a>
                         <p className="text-[11.5px] text-[var(--text-muted)]">Atendimento de {formatDateBR(f.encounterDate)} · {Math.max(1, Math.round(f.size / 1024))} KB</p>
                       </div>
-                      <button type="button" className="il-chip" onClick={() => { const e = encounters.find((x) => x.id === f.encounterId); if (e) openEncounter({ id: e.id }); }}>Abrir atendimento</button>
+                      <button type="button" className={buttonCls('secondary', 'xs')} onClick={() => { const e = encounters.find((x) => x.id === f.encounterId); if (e) openEncounter({ id: e.id }); }}>Abrir atendimento</button>
                     </li>
                   ))}
                 </ul>
@@ -1028,7 +1028,7 @@ export function ClientProfileDrawer({ person, businessId, pipeline, canFunil, on
                           </p>
                         </div>
                         <StatusBadge tone={d.tone}>{d.panel}</StatusBadge>
-                        <Link href={`/agenda?b=${businessId}&data=${b.date}`} className="il-chip">Ver na agenda</Link>
+                        <Link href={`/agenda?b=${businessId}&data=${b.date}`} className={buttonCls('secondary', 'xs')}>Ver na agenda</Link>
                       </li>
                     );
                   })}
@@ -1067,7 +1067,7 @@ export function ClientProfileDrawer({ person, businessId, pipeline, canFunil, on
 
           {tab === 'leads' && (
             person.leads.length === 0
-              ? <Empty hint="Nenhuma oportunidade aberta para esta pessoa." action={canFunil ? <Link href={`/funil?b=${businessId}`} className="il-chip">Abrir oportunidades</Link> : undefined} />
+              ? <Empty hint="Nenhuma oportunidade aberta para esta pessoa." action={canFunil ? <Link href={`/funil?b=${businessId}`} className={buttonCls('secondary', 'xs')}>Abrir oportunidades</Link> : undefined} />
               : (
                 <ul className="divide-y divide-[var(--border-soft)]">
                   {person.leads.map((l) => {
@@ -1089,7 +1089,7 @@ export function ClientProfileDrawer({ person, businessId, pipeline, canFunil, on
                           {nextId === 'scheduled' && canFunil && (
                             <Button size="xs" variant="secondary" onClick={() => onNewBooking(person)}>Agendar atendimento</Button>
                           )}
-                          {canFunil && <Link href={`/funil?b=${businessId}#${l.id}`} className="il-chip">Ver oportunidade</Link>}
+                          {canFunil && <Link href={`/funil?b=${businessId}#${l.id}`} className={buttonCls('secondary', 'xs')}>Ver oportunidade</Link>}
                         </div>
                       </li>
                     );
@@ -1174,7 +1174,7 @@ export function ClientProfileDrawer({ person, businessId, pipeline, canFunil, on
                           </div>
                         ) : (
                           <button onClick={() => { setLegacyDraft(person.note || ''); setEditingLegacy(true); }}
-                            className="text-[11px] font-semibold text-[var(--brand-fg)] hover:underline mt-1">Editar registro anterior</button>
+                            className={buttonCls('secondary', 'xs')}>Editar registro anterior</button>
                         )
                       )}
                     </li>

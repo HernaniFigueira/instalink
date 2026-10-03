@@ -309,3 +309,7 @@ Ele organiza pessoas, pacientes, agenda, atendimento, prontuário, comunicação
 IA reduz trabalho repetitivo, classifica, organiza, comunica e auxilia decisões; não substitui responsabilidade clínica humana.
 
 Dados clínicos e decisões finais permanecem sob controle humano, permissionado e auditável.
+
+### PR53 — fechamento dos últimos gates (2026-10-03)
+
+Correções restritas à faixa visível com drawer, navegação dirty, copy ativa e secondary locais. Chromium cobre profissional vazio, vínculo canônico bidirecional, bloqueios de clínica/recurso e Azul/Verde. Matriz e auditoria: `PRE-F1-FINAL-STATUS.md` / `PRE-F1-CLOSING-AUDIT.md`. Liberação exige logs pós-commit e Vercel SUCCESS no SHA final; evidência pré-commit não basta. Produção, F1 e merge: não.

@@ -1,5 +1,6 @@
 'use client';
 import { useRef, useState } from 'react';
+import { buttonCls } from '@/components/ui';
 import { Icon } from '@/components/icons';
 
 // Upload reutilizável de imagem (Vercel Blob). Mantém compatibilidade com
@@ -56,17 +57,17 @@ export function ImageUpload({ label, value, onChange, businessId, circle = false
             onChange={(e) => { const f = e.target.files?.[0]; if (f) handleFile(f); e.target.value = ''; }} />
           <div className="flex flex-wrap gap-1.5">
             <button type="button" onClick={() => inputRef.current?.click()} disabled={uploading}
-              className="text-xs font-semibold bg-[var(--brand)] text-white px-3 py-2 rounded-lg shadow-brand hover:bg-[var(--brand-strong)] disabled:opacity-50">
+              className={buttonCls('secondary', 'sm')}>
               {uploading ? 'Enviando…' : value ? 'Alterar' : 'Adicionar imagem'}
             </button>
             {value && (
               <button type="button" onClick={() => { onChange(''); setUrlDraft(''); }}
-                className="text-xs font-semibold bg-zinc-100 text-zinc-700 px-3 py-2 rounded-lg hover:bg-red-50 hover:text-red-600">
+                className={buttonCls('destructive', 'sm')}>
                 Remover
               </button>
             )}
             <button type="button" onClick={() => setShowUrl((s) => !s)}
-              className="text-xs font-semibold bg-zinc-100 text-zinc-500 px-3 py-2 rounded-lg">
+              className={buttonCls('secondary', 'sm')}>
               Usar URL
             </button>
           </div>
@@ -76,7 +77,7 @@ export function ImageUpload({ label, value, onChange, businessId, circle = false
                 placeholder="https://… (para imagens já hospedadas)"
                 className="flex-1 min-w-0 rounded-lg border border-zinc-300 px-2.5 py-1.5 text-xs" />
               <button type="button" onClick={() => onChange(urlDraft.trim())}
-                className="text-xs font-semibold bg-[var(--brand)] text-white px-3 py-2 rounded-lg shadow-brand hover:bg-[var(--brand-strong)]">
+                className={buttonCls('secondary', 'sm')}>
                 Aplicar
               </button>
             </div>

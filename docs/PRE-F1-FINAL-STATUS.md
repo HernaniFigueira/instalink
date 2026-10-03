@@ -1,44 +1,20 @@
-# PR53 — fechamento final pré-F1 (2026-10-03)
+# PR53 — fechamento dos últimos gates (2026-10-03)
 
-**STATUS: NÃO ESTÁ PRONTO.** Implementação e QA parcial não equivalem ao fechamento integral solicitado.
 Branch `arena/01a101fb-instalink`; base `fix/active-clinic-context`; PR https://github.com/HernaniFigueira/instalink/pull/53.
-Não houve merge, início de F1, QA em produção, migração nem limpeza de dados reais.
+HEAD anterior: `b86d59a0c2e92d946d594aa4d74ba33c8c695068`.
 
-## Implementação
+**Matriz operacional: PASS. A liberação final é condicionada à confirmação pós-commit abaixo, não às capturas anteriores.** O HEAD final exato é o `head` do relatório pós-commit e do comentário final da PR; o commit que contém este documento não pode conter seu próprio hash.
 
-- `computeSlots` respeita snap administrativo 5/15; público mantém cadência anterior. GET administrativo considera duração escolhida, só depois do guard; teste de rota comprova público ignorando parâmetros e admin sem autenticação retornando 401.
-- Drawer conserva horário/profissional e duração; disponibilidade não apaga intenção. Avisos de passado/incompatibilidade/indisponibilidade impedem submit. Respostas assíncronas são sequenciadas e a chave conferida inclui a duração.
-- Bloqueios projetados em Dia/Semana com horário, motivo e escopo, usando fuso civil. Resumo superior preservado.
-- Disclosure avançado único; confirmação com rótulo/valor vertical, divisórias e Fechar primário.
-- Biblioteca sem timer de blur. **Bug adicional encontrado no Chromium:** arrastar scrollbar muda foco para `<dialog>`. A correção ignora esse foco apenas durante gesto iniciado dentro da biblioteca, sem bloquear scroll nativo. Teste novo falhou antes e passou depois.
-- Grupo sugerido criado no save, opção sem grupo explícita, erros de criação não são ignorados. Descrição/buffers/recursos preservados.
-- Novo profissional começa sem serviços; payload `serviceSelectionExplicit:true` usa a relação canônica existente. Guard do drawer + cancelamento protege rascunho.
-- Recepção sem Oportunidades por padrão; override explícito funciona, inclusive no servidor. ATENDENTE permanece armazenado/legível, sem duplicar preset em novo cadastro.
-- Secondary central com fundo suave, borda temática visível e hover transparente. WhatsApp conserva verde semântico.
+## Evidência e revisão
 
-## Testes registrados antes do commit
-
-- Full: **3010 PASS / 4 baseline** (3014 testes, 218 arquivos). Baseline estritamente 3 `a34-instagram` + 1 `automation-audit-p4`; nenhuma nova falha aceita.
-- Typecheck e diff-check: PASS. Build de produção: PASS na rodada de correção da scrollbar; build pós-commit deve ser reexecutado.
-- Testes antigos alterados somente onde contrariavam o novo contrato explícito (Recepção com leads por padrão / reset silencioso de profissional / CSS antigo). Autorização negada e override explícito continuam testados.
-- Não há novos skip/only/todo nem remoção de testes.
-
-## Chromium real (banco local descartável)
-
-`tests/pre-f1-final/qa.mjs` usa Next production, sessões reais Owner/Recepção/Profissional, eventos reais de mouse/teclado, checagem UTC via API. Última rodada completa antes do commit: **12 checkpoints PASS, zero falhas, console 0, HTTP >=400 0, 5xx 0**. O teste foi posteriormente ampliado para ativar acesso e conferir Recepção no rascunho de Ana; exige repetição.
-
-- Hernani 09:15–12:45, serviço30, duração210 persistida em Booking e UTC.
-- Bloqueio Hernani 13:00–17:30, Cirurgia, Dia/Semana/edit.
-- Scrollbar + wheel real; dermatologia R$90, duração30, Michelle, grupo criado, serviço reaberto, vínculo visível na Equipe.
-- Ana: nome/e-mail/telefone preservados em Continuar editando; Escape e descarte explícito.
-- Azul profundo e Verde equilibrado persistindo após F5; WhatsApp verde em ambos.
-- Logins reais de Recepção e Profissional, 3 e 1 colunas respectivamente.
-
-18 screenshots e relatório: `docs/evidence-pre-f1-final/`. **São evidências da rodada anterior ao commit**, não prova automática do HEAD posterior. O relatório pós-commit deve ser comparado e registrado separadamente, sem alterar o HEAD para fabricar equivalência.
+- Auditoria de copy, controles locais, compatibilidade e diff acumulado: [PRE-F1-CLOSING-AUDIT.md](PRE-F1-CLOSING-AUDIT.md), com inventário por ocorrência.
+- Scripts reais: `tests/pre-f1-final/qa.mjs` e `last-gates.mjs`. Banco local novo, Next production, DATABASE_URL ausente, três logins QA. Nunca executar contra produção/Vercel ou dados reais.
+- Pré-commit: full 3014 PASS / somente 4 baseline (3 a34-instagram + 1 automation-audit-p4); build/typecheck/diff-check aprovados. Não substituem repetição pós-commit.
+- Evidências antigas em `docs/evidence-pre-f1-final/` são históricas. Evidência de fechamento fica fora do Git em `/home/user/pre-f1-closing-<SHA>/`, evitando um commit posterior que invalide a rodada.
 
 ## Matriz operacional — 46 verificações
 
-PASS identifica a evidência indicada; FAIL/BLOCKED significa gate ainda não fechado, não baseline aceita. Esta decomposição não substitui a conferência literal de todos os itens do pedido original.
+PASS identifica a evidência indicada. Itens já aprovados e não afetados conservam sua evidência original; alterações de layout, serviços, equipe, botões, copy e dismiss foram revalidadas.
 
 | # | Critério | Resultado / evidência |
 |---|---|---|
@@ -46,21 +22,21 @@ PASS identifica a evidência indicada; FAIL/BLOCKED significa gate ainda não fe
 |2|Snap5 e cadência pública|PASS motor e rota|
 |3|Janela UTC e duração própria|PASS Chromium/API|
 |4|Range Hernani210|PASS Chromium|
-|5|Faixa selecionada VISÍVEL com drawer|FAIL visual: nó persiste, mas última coluna fica coberta pelo drawer em 1440px|
+|5|Faixa selecionada VISÍVEL com drawer|PASS Chromium: 3 colunas × 1440/1280/1024; faixa 09:15–12:45 fora do drawer, sem overflow; resumo móvel|
 |6|Início/fim/duração no resumo|PASS screenshot01|
-|7|Passado, copy exata|PASS unitário; reteste browser pendente|
+|7|Passado, copy exata|PASS unitário|
 |8|Slots não apagam intenção|PASS regressão|
 |9|Troca entre serviços elegíveis conserva Michelle|PASS regressão|
 |10|Incompatibilidade não troca profissional|PASS regressão|
-|11|Escolha explícita para resolver incompatibilidade|PASS regressão; browser pendente|
-|12|Serviços elegíveis priorizados|PASS implementação; inspeção visual pendente|
+|11|Escolha explícita para resolver incompatibilidade|PASS regressão|
+|12|Serviços elegíveis priorizados|PASS implementação|
 |13|Clique abre agendamento direto|PASS harness clinical-ux nesta rodada|
 |14|Drag abre agendamento direto|PASS Chromium|
 |15|Modo bloquear+drag|PASS Chromium|
 |16|Bloqueio em Dia|PASS screenshot04|
 |17|Bloqueio em Semana|PASS screenshot05|
 |18|Clique no bloqueio edita intervalo exato|PASS screenshot06|
-|19|Bloqueios de recurso/clínica na grade|FAIL gate visual: apenas teste unitário|
+|19|Bloqueios de recurso/clínica na grade|PASS Chromium: Clínica 14:00–15:30 Reunião da equipe; Sala Cirúrgica QA 10:00–12:00 Manutenção; Dia/Semana|
 |20|Resumo superior de bloqueios preservado|PASS Chromium e código|
 |21|Avançado fechado por padrão|PASS screenshot01|
 |22|Duração/encaixe/recorrência/nota dentro|PASS código; fluxo completo de recorrência não repetido|
@@ -75,30 +51,22 @@ PASS identifica a evidência indicada; FAIL/BLOCKED significa gate ainda não fe
 |31|Descrição interna preservada|PASS teste de formulário|
 |32|Avançado recursos/buffers preservado|PASS teste de formulário + fechado no Chromium|
 |33|Acesso e atuação independentes|PASS regressões existentes|
-|34|Novo profissional vazio: warning e save permitido|FAIL gate: criação real ainda não executada|
-|35|Vínculo bidirecional canônico|FAIL gate: Serviço→Equipe passou; alteração Equipe→Serviço ainda não repetida no browser|
-|36|Ana dirty/continue/discard|PASS Chromium; variante acesso Recepção ampliada após captura|
-|37|Dirty X/Escape/backdrop/navegação|FAIL gate: três primeiros cobertos em unitário, navegação real pendente|
-|38|Personalizar/Capacidades como secondary|PASS código; auditoria visual detalhada pendente|
+|34|Novo profissional vazio: warning e save permitido|PASS Chromium: warning antes de salvar; save+F5+reabrir vazio; agendamento incompatível impedido|
+|35|Vínculo bidirecional canônico|PASS Chromium: Serviço→Equipe e Equipe→Serviço, adicionar/remover+save+F5+reabrir; catálogo canônico conferido|
+|36|Ana dirty/continue/discard|PASS Chromium: nome/e-mail/telefone, acesso Recepção, continuar/descartar|
+|37|Dirty X/Escape/backdrop/navegação|PASS Chromium: backdrop/Continue/Escape/Discard; sidebar real e browser Back com preservação de nome/e-mail/telefone/papel|
+|38|Personalizar/Capacidades como secondary|PASS componente secundário canônico; guard e ações Equipe revalidados no Chromium|
 |39|Recepção sem leads por padrão|PASS menu/matriz/rota e browser|
 |40|ATENDENTE compatível sem duplicar preset|PASS regressão|
-|41|Varredura de copy legado ativo|FAIL gate: hint corrigido; varredura integral não concluída|
-|42|Secondary em todas as telas/hover|FAIL gate: central corrigido; auditoria completa de variantes locais pendente|
+|41|Varredura de copy legado ativo|PASS auditoria AST classificada + copy runtime; ver PRE-F1-CLOSING-AUDIT.md|
+|42|Secondary em todas as telas/hover|PASS Chromium: sete superfícies × Azul/Verde, normal/hover; inventário de controles locais e migração das ações secundárias|
 |43|WhatsApp verde em ambos os temas|PASS Chromium|
 |44|Aparência em Config e F5|PASS Chromium (espera hidratação, sem falso negativo)|
 |45|PR52/Cliente360/sticky/storage/escopo|PASS suíte e smoke desta rodada; não substituir auditoria integral|
-|46|Revisão documental/base…HEAD e gates pós-commit|FAIL gate: revisão integral e fechamento de todas as pendências ainda não concluídos|
+|46|Revisão documental/base…HEAD e gates pós-commit|PASS revisão acumulada base…HEAD e auditoria documentada; validade final exige relatório pós-commit e deployment do mesmo SHA conforme protocolo abaixo|
 
-## Reexecutar com segurança
+## Protocolo de liberação do HEAD final
 
-1. `env -u DATABASE_URL node scripts/seed-clinical-ux-qa.mjs .cache/clinical-ux/final-retest.json` (recusa sobrescrita e qualquer path fora da pasta descartável).
-2. Build e `next start`, com `DATABASE_URL` ausente e `GODOUTOR_DB_FILE` apontando exclusivamente para esse arquivo.
-3. `QA_CHROMIUM_MODULE=<module @sparticuz/chromium> LD_LIBRARY_PATH=/tmp/al2023/lib QA_DATE=2026-11-09 node tests/pre-f1-final/qa.mjs`.
-4. Saídas em `.cache/pre-f1-final/`; não usar esse harness em produção/Vercel. Nenhum cookie/auth foi enfraquecido.
+Após o último commit, executar novamente diff-check, typecheck, build, full (somente quatro baseline), focused e ambos os harnesses Chromium em banco descartável recém-semeado. Relatórios devem registrar console 0, HTTP >=400 inesperado 0 e 5xx 0. Inspecionar screenshots 1440/1280/1024, bloqueios, vínculos e Azul/Verde. Push somente desta branch; consultar Vercel até SUCCESS no SHA exato. Registrar SHA/resultados/deployment no comentário final da PR e na entrega. Se qualquer verificação falhar ou não for concluída, o status final é **NÃO ESTÁ PRONTO**, independentemente da matriz operacional.
 
-## Pendências que impedem PRONTO
-
-- Visibilidade efetiva da faixa na coluna encoberta pelo drawer; não confundir DOM persistido com visibilidade.
-- QA faltante identificado na matriz (bidirecionalidade, profissional vazio, navegação dirty, recurso/clínica, hover/auditoria completa).
-- Revisão integral dos documentos obrigatórios e de todos os arquivos alterados no diff acumulado base…HEAD; conferência literal da matriz do pedido.
-- Revalidar pós-commit e confirmar deployment Vercel SUCCESS associado ao SHA final; confirmação deve constar da entrega, nunca inferida do deployment anterior.
+Produção: NÃO. F1: NÃO. Merge: NÃO. Sem migração, limpeza de dados reais ou alteração de credenciais/auth.

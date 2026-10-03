@@ -19,7 +19,7 @@ export const PERMISSIONS: PermissionDef[] = [
   { id: 'clientes', label: 'Clientes', hint: 'CRM de clientes e histórico 360' },
   { id: 'leads', label: 'Oportunidades', hint: 'Oportunidades e contatos recebidos pelos canais da clínica.' },
   { id: 'pedidos', label: 'Pedidos', hint: 'Pedidos do catálogo e status' },
-  { id: 'catalogo', label: 'Catálogo', hint: 'Produtos, serviços, profissionais e horários' },
+  { id: 'catalogo', label: 'Catálogo', hint: 'Serviços, profissionais e horários da clínica' },
   { id: 'pagina', label: 'Página', hint: 'Editor da página, tema e avaliações' },
   { id: 'agente', label: 'Assistente', hint: 'Configurar o agente de atendimento' },
   { id: 'whatsapp', label: 'WhatsApp', hint: 'Conexão e conversas do WhatsApp' },

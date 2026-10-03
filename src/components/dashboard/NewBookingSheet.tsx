@@ -381,6 +381,7 @@ export function NewBookingSheet({ businessId, services, pros, timezone, initial,
   return (
     <Drawer
       open
+      dialogClassName={initial?.selectedDurationMin ? 'gd-booking-range-drawer' : undefined}
       onClose={() => { if (!saving && !reviewing) onClose(); }}
       dismissGuard={overlayGuard}
       sideDismissGuard={{ ...clientPersistence, context: 'new-client' }}

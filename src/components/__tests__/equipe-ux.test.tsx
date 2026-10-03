@@ -63,6 +63,7 @@ function mockApi(opts: { teamMembers?: any[]; pros?: any[]; rules?: any[]; servi
 
 beforeEach(() => {
   HTMLDialogElement.prototype.showModal = function () { this.setAttribute('open', ''); };
+  HTMLDialogElement.prototype.show = function () { this.setAttribute("open", ""); };
   HTMLDialogElement.prototype.close = function () { this.removeAttribute('open'); };
   ownRules = [];
   vi.mocked(apiSend).mockReset();

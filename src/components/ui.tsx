@@ -694,8 +694,10 @@ export function Notice({ tone = 'info', children, title, className }: { tone?: '
 // browser responsibilities, including nested dialogs. Kept in its DOM parent
 // (no portal) so platform/public CSS scopes are never copied or leaked.
 
-export function Drawer({ open, onClose, title, subtitle, children, footer, width = 'max-w-[720px]', side, sideTitle, sideSubtitle, sideWidth = 'max-w-[520px]', onSideClose, dismissGuard, sideDismissGuard, dialogClassName }: {
+export function Drawer({ open, onClose, title, subtitle, children, footer, width = 'max-w-[720px]', side, sideTitle, sideSubtitle, sideWidth = 'max-w-[520px]', onSideClose, dismissGuard, sideDismissGuard, dialogClassName, modal = true }: {
   open: boolean; onClose: () => void; title: string; subtitle?: string;
+  /** Nonmodal workspace editors leave navigation reachable; caller must guard exits. */
+  modal?: boolean;
   /** Optional root class for a single, explicitly scoped Drawer surface. */
   dialogClassName?: string;
   /** Dirty/saving contract. Omitted on read-only surfaces, which remain freely dismissible. */
@@ -736,7 +738,7 @@ export function Drawer({ open, onClose, title, subtitle, children, footer, width
     if (!open || !dialog) return;
     const previous = document.activeElement instanceof HTMLElement ? document.activeElement : null;
     lockBodyScroll(dialog);
-    dialog.showModal();
+    if (modal) dialog.showModal(); else dialog.show();
     // Start at the heading rather than scrolling to a distant form autofocus.
     titleRef.current?.focus({ preventScroll: true });
     return () => {
@@ -744,11 +746,11 @@ export function Drawer({ open, onClose, title, subtitle, children, footer, width
       unlockBodyScroll(dialog);
       if (previous?.isConnected) previous.focus({ preventScroll: true });
     };
-  }, [open]);
+  }, [open, modal]);
 
   if (!open) return null;
   return (
-    <dialog ref={dialogRef} className={cn("il-drawer fixed inset-0 z-50", dialogClassName)} aria-modal="true"
+    <dialog ref={dialogRef} className={cn("il-drawer fixed inset-0 z-50", dialogClassName)} aria-modal={modal || undefined}
       aria-labelledby={`${id}-title`} aria-describedby={subtitle ? `${id}-description` : undefined}
       data-expanded={expanded ? 'true' : undefined}
       onCancel={(event) => { event.preventDefault(); event.stopPropagation(); requestClose('escape'); }}
@@ -756,7 +758,7 @@ export function Drawer({ open, onClose, title, subtitle, children, footer, width
         // Native modal inertness prevents focus in the page, but some browsers
         // Tab from the final control into browser chrome. Wrap the boundaries
         // explicitly, querying current controls (async/disabled fields included).
-        wrapDialogFocus(event, event.currentTarget, titleRef.current);
+        if (modal) wrapDialogFocus(event, event.currentTarget, titleRef.current);
         // Do not let Escape also close an underlying legacy booking sheet.
         // An inner widget may preventDefault to consume Escape itself.
         if (event.key === 'Escape') {

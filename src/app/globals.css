@@ -663,7 +663,7 @@ input[type='color'] { @apply cursor-pointer; }
   /* Borda esquerda disponível para o Workspace Sheet. O shell sobrescreve em
      runtime com a posição real do conteúdo (sidebar recolhida + segunda coluna
      mudam esse valor) — o padrão 0 só vale antes da primeira medição. */
-  --sheet-left: 0px;
+  --sheet-left: inherit;
   --content-max: 960px;
 
   /* ── Altura de controle (mata a inconsistência de inputs/botões) ─ */
@@ -2655,8 +2655,8 @@ dialog.ws-sheet[data-minimized]::backdrop { background: transparent; }
 .overlay-confirm__copy p { margin: 5px 0 0; color: var(--text-muted); font-size: 12.5px; line-height: 1.5; }
 .overlay-confirm__actions { display: flex; justify-content: center; flex-wrap: wrap; gap: 8px; width: 100%; margin-top: 6px; }
 .overlay-confirm__action { min-height: 42px; padding: 0 15px; border-radius: var(--radius-sm); font-size: 12px; font-weight: 650; cursor: pointer; white-space: nowrap; }
-.overlay-confirm .il-control--secondary { border: 1px solid var(--border-strong); background: var(--surface); color: var(--text); }
-.overlay-confirm .il-control--secondary:hover { background: var(--surface-hover); }
+.overlay-confirm .il-control--secondary { border: 1px solid var(--brand); background: var(--brand-soft); color: var(--brand-fg); }
+.overlay-confirm .il-control--secondary:hover { background: transparent; }
 .overlay-confirm .il-control--destructive { border: 1px solid var(--danger); background: var(--danger); color: #fff; }
 .overlay-confirm .il-control--destructive:hover { border-color: var(--danger-strong); background: var(--danger-strong); }
 @media (max-width: 480px) {
@@ -3056,3 +3056,17 @@ dialog.ws-sheet[data-minimized]::backdrop { background: transparent; }
 
 /* Contexto persistente apenas nas telas profundas: voltar + ações locais. */
 .gd-context-header { position: sticky; top: var(--topbar-h); z-index: 30; padding: .75rem 0; background: var(--bg); border-bottom: 1px solid var(--border); }
+
+/* Agenda range context: the selected real column remains beside the editor.
+   No changes to temporal coordinates, persisted windows or public booking. */
+@media (min-width: 768px) {
+  .ag-mode-panel[data-range-focus] { margin-right: calc(min(46vw, 560px) + 14px); }
+  .ag-mode-panel[data-range-focus] [data-agenda-column] { min-width: 0 !important; }
+  dialog.gd-booking-range-drawer:not([data-expanded]) .il-drawer__strip {
+    width: min(46vw, 560px); max-width: min(46vw, 560px);
+  }
+}
+/* A team editor is a nonmodal workspace surface: sidebar links remain real
+   links, and useUnsavedChangesGuard pauses them before any draft is lost. */
+dialog.gd-team-editor { z-index: 50; }
+dialog.gd-team-editor > div > [aria-hidden='true'] { background: var(--overlay); }

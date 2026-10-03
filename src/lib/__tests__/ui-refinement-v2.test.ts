@@ -14,11 +14,12 @@ describe('2.0 refinement pass — lower action and surface competition', () => {
     expect(section).not.toMatch(/success-bg|warning-bg|ops-soft/);
   });
 
-  it('Clients row keeps one primary and one strong secondary; preview/WhatsApp are quiet', () => {
+  it('Clients row keeps one primary; preview and booking are explicit secondary actions', () => {
     const clients = read('src/app/(dashboard)/clientes/page.tsx');
     expect(clients).toMatch(/variant="primary" onClick=\{\(\) => openFullProfile\(p\.key\)\}/);
-    expect(clients).toMatch(/variant="ghost" onClick=\{\(\) => setOpenKey\(p\.key\)\}/);
+    expect(clients).toMatch(/variant="secondary" onClick=\{\(\) => setOpenKey\(p\.key\)\}/);
     expect(clients).toMatch(/variant="secondary" onClick=\{\(\) => openBooking\(p\)\}/);
+    expect(clients).toContain("buttonCls('whatsapp', 'xs')");
     expect(clients).not.toMatch(/Abrir WhatsApp[\s\S]{0,250}success-bg/);
   });
 

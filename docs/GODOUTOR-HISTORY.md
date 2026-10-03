@@ -305,3 +305,7 @@ permanente no AGENTS.md: nenhum `il-*` novo. Testes novos 29/29
 ## 2026-10-03 — PR53, fechamento final pré-F1 ainda aberto
 
 Correções incrementais e reprodução real do fechamento da biblioteca durante scrollbar nativa. Motor de slots respeita15, intenção não é apagada, Semana projeta bloqueios profissionais, Equipe recebe guard/seleção explícita, Recepção perde leads no preset (override preservado), secondary central tem borda temática. Full3010+4baseline; Chromium parcial e 18 capturas. **NÃO ESTÁ PRONTO**: matriz, limites da evidência e pendências em [PRE-F1-FINAL-STATUS.md](PRE-F1-FINAL-STATUS.md). Sem produção, migração, merge ou F1.
+
+### PR53 — fechamento dos últimos gates (2026-10-03)
+
+Correções restritas à faixa visível com drawer, navegação dirty, copy ativa e secondary locais. Chromium cobre profissional vazio, vínculo canônico bidirecional, bloqueios de clínica/recurso e Azul/Verde. Matriz e auditoria: `PRE-F1-FINAL-STATUS.md` / `PRE-F1-CLOSING-AUDIT.md`. Liberação exige logs pós-commit e Vercel SUCCESS no SHA final; evidência pré-commit não basta. Produção, F1 e merge: não.

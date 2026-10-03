@@ -2,7 +2,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useSearchParams } from 'next/navigation';
 import Link from 'next/link';
-import { useOverlayDismissGuard } from '@/components/dashboard/OverlayDismissGuard';
+import { useOverlayDismissGuard, useUnsavedChangesGuard } from '@/components/dashboard/OverlayDismissGuard';
 import { Icon } from '@/components/icons';
 import { Avatar, Badge, Button, buttonCls, Drawer, Notice, PageHeader, PageSkeleton, Select, Input, Field, Switch } from '@/components/ui';
 import { cn, onlyDigits, parseMoneyToCents } from '@/lib/utils';
@@ -132,6 +132,7 @@ export default function EquipePage() {
   }, [showAdd, personDraft]);
   const personGuard = { dirty: !fSuccessProfessionalId && draftBaseline.current !== null && draftBaseline.current !== personDraft, saving: fSaving, error: fError, context: 'edit' as const, title: 'Descartar alterações?' };
   const cancelGuard = useOverlayDismissGuard();
+  const navigationGuard = useUnsavedChangesGuard({ ...personGuard, dirty: showAdd && personGuard.dirty, saving: showAdd && personGuard.saving });
   const closePerson = () => { setShowAdd(false); resetAddForm(); };
 
   function resetAddForm() {
@@ -506,11 +507,11 @@ export default function EquipePage() {
                       <span className="hidden sm:block text-xs">{op ? <Link href={`/disponibilidade?b=${businessId}&professionalId=${op.id}`} className="text-zinc-600 hover:text-zinc-900 underline">{agendaLabel(op)}</Link> : '—'}</span>
                       <span className="hidden sm:block"><span className="text-xs font-medium bg-emerald-50 border border-emerald-200 text-emerald-800 px-2 py-0.5 rounded-full">Ativo</span></span>
                       <span className="hidden sm:block text-right flex items-center justify-end gap-1.5">
-                        <button onClick={() => openEdit(entry)} className="text-xs font-medium bg-white border border-zinc-200 px-2.5 py-1 rounded-md hover:bg-zinc-50">GERENCIAR</button>
+                        <button onClick={() => openEdit(entry)} className={buttonCls('secondary', 'xs')}>GERENCIAR</button>
                       </span>
                       {/* mobile */}
                       <div className="sm:hidden flex items-center gap-1.5 ml-auto">
-                        <button onClick={() => openEdit(entry)} className="text-xs font-medium bg-white border border-zinc-200 px-2.5 py-1 rounded-md hover:bg-zinc-50">Gerenciar</button>
+                        <button onClick={() => openEdit(entry)} className={buttonCls('secondary', 'xs')}>Gerenciar</button>
                       </div>
                     </div>
                   );
@@ -538,10 +539,10 @@ export default function EquipePage() {
                       <span className="hidden sm:block text-xs">{pro ? <Link href={`/disponibilidade?b=${businessId}&professionalId=${pro.id}`} className="text-zinc-600 hover:text-zinc-900 underline">{agendaLabel(pro)}</Link> : <span className="text-zinc-500">—</span>}</span>
                       <span className="hidden sm:block">{m.active ? <span className="text-xs font-medium bg-emerald-50 border border-emerald-200 text-emerald-800 px-2 py-0.5 rounded-full">Ativo</span> : <span className="text-xs font-medium bg-zinc-100 border border-zinc-200 text-zinc-500 px-2 py-0.5 rounded-full">Inativo</span>}</span>
                       <div className="hidden sm:flex items-center gap-1 justify-end shrink-0">
-                        <button onClick={() => openEdit(entry)} className="text-xs font-medium bg-white border border-zinc-200 px-2.5 py-1 rounded-md hover:bg-zinc-50">GERENCIAR</button>
+                        <button onClick={() => openEdit(entry)} className={buttonCls('secondary', 'xs')}>GERENCIAR</button>
                       </div>
                       <div className="sm:hidden flex items-center gap-1 ml-auto shrink-0">
-                        <button onClick={() => openEdit(entry)} className="text-xs font-medium bg-white border border-zinc-200 px-2.5 py-1 rounded-md hover:bg-zinc-50">Gerenciar</button>
+                        <button onClick={() => openEdit(entry)} className={buttonCls('secondary', 'xs')}>Gerenciar</button>
                       </div>
                     </div>
                   );
@@ -566,10 +567,10 @@ export default function EquipePage() {
                     <span className="hidden sm:block text-xs"><Link href={`/disponibilidade?b=${businessId}&professionalId=${p.id}`} className={cn('px-2 py-0.5 rounded-full border', followsBusinessHours(p, rules) ? 'bg-zinc-100 border-zinc-200 text-zinc-600' : 'bg-blue-50 border-blue-200 text-blue-700')}>{followsBusinessHours(p, rules) ? 'Segue a clínica' : 'Horário próprio'}</Link></span>
                     <span className="hidden sm:block"><span className="text-xs font-medium bg-white border border-zinc-200 text-zinc-500 px-2 py-0.5 rounded-full">Sem acesso</span></span>
                     <div className="hidden sm:flex items-center gap-1 justify-end shrink-0">
-                      <button onClick={() => openEdit(entry)} className="text-xs font-medium bg-white border border-zinc-200 px-2.5 py-1 rounded-md hover:bg-zinc-50">GERENCIAR</button>
+                      <button onClick={() => openEdit(entry)} className={buttonCls('secondary', 'xs')}>GERENCIAR</button>
                     </div>
                     <div className="sm:hidden flex items-center gap-1 ml-auto shrink-0">
-                      <button onClick={() => openEdit(entry)} className="text-xs font-medium bg-white border border-zinc-200 px-2.5 py-1 rounded-md hover:bg-zinc-50">Gerenciar</button>
+                      <button onClick={() => openEdit(entry)} className={buttonCls('secondary', 'xs')}>Gerenciar</button>
                     </div>
                   </div>
                 );
@@ -587,6 +588,8 @@ export default function EquipePage() {
       {showAdd && (
         <Drawer
           open={showAdd}
+          modal={false}
+          dialogClassName="gd-team-editor"
           onClose={closePerson}
           dismissGuard={personGuard}
           title={editEntry ? 'Gerenciar pessoa' : 'Adicionar pessoa'}
@@ -622,7 +625,7 @@ export default function EquipePage() {
                     <div className="flex justify-between"><span className="text-xs text-zinc-500">E-mail</span><span className="text-sm">{fEmail}</span></div>
                     <div className="flex justify-between"><span className="text-xs text-zinc-500">Telefone</span><span className="text-sm">{fPhone || '—'}</span></div>
                     <div className="flex justify-between"><span className="text-xs text-zinc-500">CPF</span><span className="text-sm">{fCpf || '—'}</span></div>
-                    <Link href={`/perfil?b=${businessId}`} className="inline-flex items-center gap-1 text-xs font-semibold text-[var(--accent)] hover:underline mt-1">Editar no meu perfil <Icon n="arrowRight" size={12} /></Link>
+                    <Link href={`/perfil?b=${businessId}`} className={buttonCls('secondary', 'sm')}>Editar no meu perfil <Icon n="arrowRight" size={12} /></Link>
                   </div>
 
                   <p className="text-[11px] text-zinc-400">Os campos são formatados automaticamente durante a digitação.</p>
@@ -881,7 +884,7 @@ export default function EquipePage() {
                     })}
                     {services.filter(s=> !fServiceQuery || s.name.toLowerCase().includes(fServiceQuery.toLowerCase())).length===0 && fServiceQuery && (
                       <div className="p-2">
-                        <button type="button" onClick={()=> { setFNewSvcName(fServiceQuery); setFShowServiceCreate(true); }} className="text-xs font-semibold text-[var(--accent)] hover:underline">{`+ Criar '${fServiceQuery}'`}</button>
+                        <button type="button" onClick={()=> { setFNewSvcName(fServiceQuery); setFShowServiceCreate(true); }} className={buttonCls('secondary', 'sm')}>{`+ Criar '${fServiceQuery}'`}</button>
                       </div>
                     )}
                   </div>
@@ -967,7 +970,7 @@ export default function EquipePage() {
                         return (
                           <div className="mt-2 rounded border border-amber-200 bg-amber-50 px-2 py-1.5" data-testid="own-hours-empty">
                             <p className="text-xs text-amber-800">Horário próprio ainda não configurado. Enquanto estiver vazio, esta pessoa não terá horários livres na agenda.</p>
-                            <Link href={deepLink} className="inline-flex items-center gap-1 mt-1 text-xs font-semibold text-[var(--accent)] hover:underline">
+                            <Link href={deepLink} className={buttonCls('secondary', 'sm')}>
                               Configurar horários <Icon n="arrowRight" size={12} />
                             </Link>
                           </div>
@@ -976,7 +979,7 @@ export default function EquipePage() {
                       return (
                         <div className="mt-2" data-testid="own-hours-configured">
                           <p className="text-xs text-zinc-500">Horário próprio configurado ({ownCount} {ownCount === 1 ? 'janela' : 'janelas'} por dia da semana).</p>
-                          <Link href={deepLink} className="inline-flex items-center gap-1 mt-1 text-xs font-semibold text-[var(--accent)] hover:underline">
+                          <Link href={deepLink} className={buttonCls('secondary', 'sm')}>
                             Configurar horários <Icon n="arrowRight" size={12} />
                           </Link>
                         </div>
@@ -985,7 +988,7 @@ export default function EquipePage() {
                     return (
                       <div className="mt-2">
                         {!isNew && ownCount > 0 && <p className="text-xs text-zinc-500" data-testid="own-hours-preserved">O horário próprio já configurado fica guardado e volta a valer se você escolher “Usar horário próprio”.</p>}
-                        {!isNew && <Link href={deepLink} className="inline-flex items-center gap-1 mt-1 text-xs font-semibold text-[var(--accent)] hover:underline">
+                        {!isNew && <Link href={deepLink} className={buttonCls('secondary', 'sm')}>
                           Configurar horários <Icon n="arrowRight" size={12} />
                         </Link>}
                       </div>
@@ -1020,6 +1023,7 @@ export default function EquipePage() {
           </div>
             )}
           {cancelGuard.dialog}
+          {navigationGuard.dialog}
         </Drawer>
       )}
 
