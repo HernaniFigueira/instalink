@@ -1,6 +1,11 @@
 // ═══════════════════════════════════════════════════════════════
 // PRIMEIRA CONFIGURAÇÃO — "Como sua empresa atende?"
 // ═══════════════════════════════════════════════════════════════
+// GODOUTOR_LEGACY_PAGES: este mapeamento SERVIÇOS/PRODUTOS/AMBOS é o ramo de
+// COMPATIBILIDADE do fluxo "universal" antigo. No Clinical OS (flag OFF) a
+// unidade nasce no padrão de atendimento e a pergunta comercial some da tela;
+// o módulo existe intacto para não quebrar chamadas/chamadores antigos.
+//
 // Uma pergunta curta, só para definir a BASE de módulos da empresa nova.
 // Não é o antigo onboarding complexo: depois da criação, tudo continua
 // ativável/desativável em Administração → Recursos. Nada é bloqueado.

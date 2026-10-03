@@ -1,10 +1,12 @@
 'use client';
 // ═══════════════════════════════════════════════════════════════
-// CRIAR NEGÓCIO — primeira configuração CURTA (sem wizard antigo).
-// Duas coisas apenas: o nome do negócio e "Como sua empresa atende?"
-// (Serviços e agendamento · Produtos · Serviços + produtos). A resposta só
-// define a BASE de módulos (lib/onboarding.ts) — depois da criação o
-// usuário liga/desliga tudo livremente em Administração → Recursos.
+// CRIAR CLÍNICA — primeira configuração CURTA (sem wizard antigo).
+// O caminho padrão pergunta o essencial da clínica (nome, tipo, WhatsApp).
+// NÃO se pergunta "tipo de negócio universal" nem "modo de venda": a base de
+// módulos nasce no padrão de atendimento; as perguntas comerciais antigas
+// (empresa/modos/vitrine) só aparecem com GODOUTOR_LEGACY_PAGES=1, como
+// compatibilidade de fluxo — ver lib/product.ts e o audit de convergência.
+// Depois da criação o usuário liga/desliga tudo livremente em Recursos.
 // Nada aqui bloqueia o restante do sistema.
 // ═══════════════════════════════════════════════════════════════
 import { useEffect, useState } from 'react';
@@ -27,7 +29,7 @@ const CLINIC_TYPE_OPTIONS: Array<{ id: ClinicType; label: string; hint: string }
   { id: 'geral', label: 'Outro tipo de negócio', hint: 'Não é clínica (salão, estúdio, consultório único…) — tudo funciona igual.' },
 ];
 
-const WHATSAPP_DRAFT_KEY = 'il-biz-draft';
+const WHATSAPP_DRAFT_KEY = 'gd-biz-draft';
 
 export default function CreateBusinessPage() {
   const router = useRouter();
@@ -41,8 +43,8 @@ export default function CreateBusinessPage() {
   const [loading, setLoading] = useState(false);
   const [checking, setChecking] = useState(true);
 
-  // Guarda de sessão: sem login volta para /login; quem já tem negócio
-  // (mais de um ou já criado) vai direto para o destino certo — nada de
+  // Guarda de sessão: sem login volta para /login; quem já tem clínica
+  // (mais de uma ou já criada) vai direto para o destino certo — nada de
   // wizard bloqueando quem só quer trabalhar.
   useEffect(() => {
     fetch('/api/auth/me')
@@ -141,14 +143,14 @@ export default function CreateBusinessPage() {
               <label className="block text-sm font-medium text-zinc-700 mb-1.5" htmlFor="biz">{legacyPagesEnabled ? 'Nome do negócio *' : 'Nome da clínica *'}</label>
               <input id="biz" autoFocus value={name} onChange={(e) => setName(e.target.value)} placeholder="Ex: Studio Bela Vida, Clínica Odonto Sorriso, Estúdio Pilates Fluxo"
                 className="w-full rounded-md border border-zinc-300 px-3.5 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500" />
-              {name.trim() && (
+              {name.trim() && legacyPagesEnabled && (
                 <p className="text-xs text-zinc-500 mt-1.5">
-                  Seu link: <strong>instalink.app/{slugify(name) || '…'}</strong>
+                  Seu link: <strong>/{slugify(name) || '…'}</strong> (endereço público da página)
                 </p>
               )}
             </div>
             <div>
-              <label className="block text-sm font-medium text-zinc-700 mb-1.5" htmlFor="wa">WhatsApp do negócio <span className="font-normal text-zinc-400">(opcional)</span></label>
+              <label className="block text-sm font-medium text-zinc-700 mb-1.5" htmlFor="wa">{legacyPagesEnabled ? 'WhatsApp do negócio' : 'WhatsApp da clínica'} <span className="font-normal text-zinc-400">(opcional)</span></label>
               <input id="wa" value={whatsapp} onChange={(e) => setWhatsapp(e.target.value)} placeholder="(11) 99999-9999" inputMode="tel"
                 className="w-full rounded-md border border-zinc-300 px-3.5 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500" />
             </div>
