@@ -799,12 +799,12 @@ export async function updateDB<T>(fn: SyncMutation<T>): Promise<T> {
         try {
           await client.query('BEGIN');
           // Inicialização concorrente segura; operações CAS também disputam esta linha.
-          await client.query('INSERT INTO instalink_doc (id, data) VALUES (1, $1) ON CONFLICT (id) DO NOTHING', [JSON.stringify(emptyDB())]);
-          const snapshot = await client.query('SELECT data FROM instalink_doc WHERE id = 1 FOR UPDATE');
+          await client.query(`INSERT INTO ${LEGACY_DOC_TABLE} (id, data) VALUES (1, $1) ON CONFLICT (id) DO NOTHING`, [JSON.stringify(emptyDB())]);
+          const snapshot = await client.query(`SELECT data FROM ${LEGACY_DOC_TABLE} WHERE id = 1 FOR UPDATE`);
           const db = normalizeDB(snapshot.rows[0].data);
           const result = runSyncMutation(fn, db);
           prune(db);
-          await client.query('UPDATE instalink_doc SET data = $1 WHERE id = 1', [JSON.stringify(db)]);
+          await client.query(`UPDATE ${LEGACY_DOC_TABLE} SET data = $1 WHERE id = 1`, [JSON.stringify(db)]);
           await client.query('COMMIT');
           if (hasDueAutomationWork(db)) maybeRunAutomations();
           return result;
