@@ -320,6 +320,12 @@ export interface SetupCheckInput {
   pageCustomized?: boolean;
   /** FASE 2 · P8 — WhatsApp oficial conectado (item OPCIONAL do checklist). */
   whatsappConnected?: boolean;
+  /**
+   * CORREÇÃO FINAL: corte de produto. false = Clinical OS (flag OFF) — o
+   * checklist NÃO menciona a Página (personalizar/publicar) e nenhum item
+   * comercial novo nasce. true (default p/ compat) preserva o fluxo antigo.
+   */
+  legacyPages?: boolean;
 }
 
 export interface SetupCheckItem {
@@ -365,13 +371,15 @@ export function setupChecklist(input: SetupCheckInput): SetupCheckItem[] {
   if (modules.products) {
     push({ id: 'products', done: counts.products > 0, label: 'Monte sua vitrine de produtos', href: '/produtos' });
   }
-  push({
-    id: 'personalize',
-    done: input.pageCustomized === true,
-    label: 'Personalize a página',
-    href: '/pagina',
-  });
-  push({ id: 'publish', done: !!business.published, label: 'Publique a página', href: '/pagina' });
+  if (input.legacyPages !== false) {
+    push({
+      id: 'personalize',
+      done: input.pageCustomized === true,
+      label: 'Personalize a página',
+      href: '/pagina',
+    });
+    push({ id: 'publish', done: !!business.published, label: 'Publique a página', href: '/pagina' });
+  }
   push({
     id: 'whatsapp',
     done: input.whatsappConnected === true,

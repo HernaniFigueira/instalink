@@ -49,6 +49,10 @@ export interface FeatureDef {
   extraBlocks?: BlockType[]; // blocos que TAMBÉM aparecem quando ele está ativo
   /** true = fora da experiência do produto; só resolvido p/ compatibilidade. */
   legacy?: boolean;
+  /** true = módulo do comércio "universal" (vitrine). Não é oferecido com
+   * GODOUTOR_LEGACY_PAGES desligada — o produto ativo é 100% clínico; os
+   * dados continuam RESOLVÍVEIS (isFeatureEnabled, páginas legadas ON). */
+  commerce?: boolean;
 }
 
 // ── Módulos da experiência atual (o que o painel oferece) ──────
@@ -71,6 +75,7 @@ export const FEATURES: FeatureDef[] = [
     blocks: ['products'],
     hint: 'Vitrine de produtos com CTA direto para o WhatsApp',
     disabledHint: 'A vitrine sai da página (os produtos continuam salvos).',
+    commerce: true,
   },
   {
     id: 'reviews', label: 'Avaliações', group: 'Conteúdo', icon: 'star',
@@ -143,6 +148,21 @@ export const ALL_FEATURES: FeatureDef[] = [...FEATURES, ...LEGACY_FEATURES];
 
 /** Ids que o painel/Recursos oferece (nunca os legados). */
 export const OFFERED_FEATURE_IDS: FeatureId[] = FEATURES.map((f) => f.id);
+
+/**
+ * Catálogo OFERECIDO conforme o corte de produto (CORREÇÃO FINAL): com
+ * GODOUTOR_LEGACY_PAGES OFF o único módulo de comércio que sobrava — Produtos
+ * (vitrine) — também sai da lista; nada comercial é ativável pelo Clinical OS.
+ * A resolução (isFeatureEnabled) NÃO muda: dados legados continuam válidos.
+ */
+export function offeredFeatures(legacyPagesEnabled: boolean): FeatureDef[] {
+  return legacyPagesEnabled ? FEATURES : FEATURES.filter((f) => f.commerce !== true);
+}
+
+/** O módulo é comercial (fora do produto ativo quando a flag está OFF)? */
+export function isCommerceFeature(id: FeatureId): boolean {
+  return featureDef(id)?.commerce === true;
+}
 
 export const FEATURE_IDS: FeatureId[] = ALL_FEATURES.map((f) => f.id);
 
@@ -228,8 +248,9 @@ export function featureState(
 /** Estado APENAS dos módulos oferecidos na experiência (o que Recursos lista). */
 export function offeredFeatureState(
   business: Pick<Business, 'modes' | 'features'>,
+  legacyPagesEnabled = true,
 ): Array<{ def: FeatureDef; enabled: boolean }> {
-  return FEATURES.map((def) => ({ def, enabled: isFeatureEnabled(business, def.id) }));
+  return offeredFeatures(legacyPagesEnabled).map((def) => ({ def, enabled: isFeatureEnabled(business, def.id) }));
 }
 
 /** Módulos ligados, na ordem canônica. */

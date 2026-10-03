@@ -7,6 +7,9 @@ import { humanDay } from '@/lib/tz';
 import { ORDER_STATUS, toneCls } from '@/lib/status';
 import { Button, FilterPill, ListSkeleton, Notice, PageHeader } from '@/components/ui';
 import { AccessDenied, useAreaLoad } from '@/components/dashboard/AccessNotice';
+import { isLegacyPagesEnabled } from '@/lib/product';
+import { blockedLegacySurface } from '@/lib/legacy-surfaces';
+import { LegacySurfaceBlocked } from '@/components/dashboard/LegacySurfaceBlocked';
 import { apiGet, apiSend } from '@/lib/api-client';
 import { Icon } from '@/components/icons';
 
@@ -16,6 +19,7 @@ const NEXT_LABEL: Record<string, string> = { new: 'Aceitar', accepted: 'Começar
 const LIMIT = 50;
 
 export default function PedidosPage() {
+  const legacyPagesEnabled = isLegacyPagesEnabled();
   const params = useSearchParams();
   const businessId = params.get('b') || '';
   const [orders, setOrders] = useState<Order[]>([]);
@@ -51,6 +55,11 @@ export default function PedidosPage() {
     if (!res.ok) { setError(res.message || 'Não foi possível atualizar.'); return; }
     load();
   }
+
+  // CORREÇÃO FINAL: Pedidos é superfície do fluxo comercial legado — com a
+  // flag OFF não abre tela operacional (estado legado; dados preservados).
+  const blocked = blockedLegacySurface('/pedidos', legacyPagesEnabled);
+  if (blocked) return <LegacySurfaceBlocked surface={blocked} />;
 
   const list = filter ? orders.filter((o) => o.status === filter) : orders;
   const payLabels: Record<string, string> = { pix: 'PIX', card: 'Cartão', cash: 'Dinheiro', on_delivery: 'Na entrega' };

@@ -2,6 +2,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { panelNavigation, panelRouteFor, PANEL_ROUTES } from '../panel';
+import { offeredFeatures } from '../features';
 import { isLegacyPagesEnabled } from '../product';
 import { workspaceAreas } from '../workspace-navigation';
 
@@ -31,7 +32,7 @@ describe('Clinical OS · superfícies operacionais da Página legada', () => {
     const navigation = read('src/components/dashboard/WorkspaceNavigation.tsx');
 
     expect(shell).toMatch(/legacyPagesEnabled\s*&&\s*<>\s*·\s*<a href=\{`\/\$\{business\.slug\}`\}/);
-    expect(shell).toMatch(/legacyPagesEnabled[\s\S]*?allowed: nav\.allowed\.filter\(\(route\) => route\.href !== '\/pagina'\)/);
+    expect(shell).toMatch(/allowed:\s*nav\.allowed\.filter\(\(route\) => !isHiddenLegacyNavRoute\(route\.href, legacyPagesEnabled\)\)/);
     expect(shell).toContain('buildNavSearchItems(operationalNav, q)');
     expect(dashboard).toMatch(/legacyPagesEnabled\s*&&\s*links\.pagina\s*===\s*true/);
     expect(dashboard).toContain("item.href.split('?')[0] !== '/pagina'");
@@ -58,14 +59,31 @@ describe('Clinical OS · superfícies operacionais da Página legada', () => {
     const catalogPanels = read('src/components/dashboard/catalog-panels.tsx');
 
     expect(resources).toMatch(/legacyPagesEnabled\s*\?\s*'Ligue e desligue o que existe no seu negócio\.[\s\S]*?\n\s*:\s*'Ligue e desligue recursos opcionais da unidade/);
-    expect(resources).toContain("hint: 'Cadastro legado de dados de apresentação; não controla estoque ou dispensação. A utilidade clínica será decidida separadamente.'");
-    expect(resources).toContain("'Ative para acessar o cadastro. Os dados preservados não controlam estoque ou dispensação.'");
     expect(resources).toMatch(/legacyPagesEnabled\s*&&\s*<li>[\s\S]*?Configuração da página/);
+
+    // CORREÇÃO FINAL: com a flag OFF o catálogo NÃO oferece o módulo comercial —
+    // a linha some da fonte (API), não só do texto. Nota de vitrine só no ramo ON.
+    expect(resources).toMatch(/legacyPagesEnabled && !row\.enabled && row\.id === 'products'/);
+    const features = read('src/lib/features.ts');
+    expect(features).toMatch(/commerce: true,/);
+    expect(features).toMatch(/offeredFeatures\(legacyPagesEnabled\)/);
+    expect(offeredFeatures(false).some((f) => f.id === 'products')).toBe(false);
+    expect(offeredFeatures(true).some((f) => f.id === 'products')).toBe(true);
+    const featuresApi = read('src/app/api/businesses/[id]/features/route.ts');
+    expect(featuresApi).toMatch(/offeredFeatureState\(guard\.ctx\.business, isLegacyPagesEnabled\(\)\)/);
+    expect(featuresApi).toMatch(/status: 410/);
+    // superfícies operacionais comerciais bloqueadas na tela (estado legado)
+    expect(read('src/app/(dashboard)/produtos/page.tsx')).toMatch(/blockedLegacySurface\('\/produtos', legacyPagesEnabled\)/);
+    expect(read('src/app/(dashboard)/pedidos/page.tsx')).toMatch(/blockedLegacySurface\('\/pedidos', legacyPagesEnabled\)/);
     expect(professionals).not.toContain('aparece na página pública');
     expect(dashboard).toContain("item.id === 'products' ? { ...item, label: 'Revise dados legados de produtos' }");
-    expect(onboarding).toContain("opt.id === 'produtos'");
-    expect(onboarding).toContain('Cadastro legado de produtos (sem estoque, vendas ou dispensação; uso clínico definido separadamente)');
-    expect(onboarding).toContain("legacyPagesEnabled ? 'Página pública pronta para publicar' : 'Painel pronto para uso'");
+    // CORREÇÃO FINAL: OFF não renderiza a pergunta comercial nem menciona
+    // vitrine no "Você começa com" — as listas vêm das funções puras de
+    // lib/onboarding.ts (contrato testado em convergence-final.test.ts).
+    expect(onboarding).toContain('businessCreationPayload(');
+    expect(onboarding).toContain('showsServiceModelQuestion(legacyPagesEnabled)');
+    expect(onboarding).toContain('startWithItems(legacyPagesEnabled, model)');
+    expect(onboarding).not.toMatch(/body: JSON\.stringify\(\{[\s\S]{0,120}?modes: modesForServiceModel/);
     // Clinical Structure Consolidation: Serviços vitrine (Mostrar preço) removido da UI clínica — nem mesmo gated (produtos ainda guarda). Ver godoutor-clinical-convergence.
     expect(catalogPanels).not.toContain('FOTO DO SERVIÇO');
     // Se por compatibilidade futura houver o label, deve estar gated

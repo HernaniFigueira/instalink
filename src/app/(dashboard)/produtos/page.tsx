@@ -22,6 +22,8 @@ import { useOverlayDismissGuard } from '@/components/dashboard/OverlayDismissGua
 import { AccessDenied, useAreaLoad } from '@/components/dashboard/AccessNotice';
 import { apiGet, apiSend } from '@/lib/api-client';
 import { isLegacyPagesEnabled } from '@/lib/product';
+import { blockedLegacySurface } from '@/lib/legacy-surfaces';
+import { LegacySurfaceBlocked } from '@/components/dashboard/LegacySurfaceBlocked';
 import { Icon } from '@/components/icons';
 import { ImageUpload } from '@/components/dashboard/ImageUpload';
 import { showcasePriceCents } from '@/lib/showcase';
@@ -78,6 +80,12 @@ export default function ProdutosPage() {
       active: !p.active, featured: p.featured,
     }).catch((e) => setMsg(e.message));
   }
+
+  // CORREÇÃO FINAL: com a flag OFF a vitrine NÃO abre tela operacional —
+  // estado legado honesto no lugar (nada apagado; as APIs seguem resolúveis
+  // para dados antigos e o ramo ON preserva a tela inteira).
+  const blocked = blockedLegacySurface('/produtos', legacyPagesEnabled);
+  if (blocked) return <LegacySurfaceBlocked surface={blocked} />;
 
   return (
     <>

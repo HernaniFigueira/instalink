@@ -58,10 +58,6 @@ function resourceCopy(row: FeatureRow, legacyPagesEnabled: boolean) {
       hint: 'Cadastro de serviços com preço e duração.',
       disabledHint: 'Os serviços cadastrados são preservados enquanto o recurso estiver desligado.',
     },
-    products: {
-      hint: 'Cadastro legado de dados de apresentação; não controla estoque ou dispensação. A utilidade clínica será decidida separadamente.',
-      disabledHint: 'O cadastro fica indisponível; os dados existentes permanecem preservados.',
-    },
     reviews: {
       hint: 'Avaliações e feedback associados à clínica.',
       disabledHint: 'As avaliações existentes permanecem preservadas.',
@@ -166,7 +162,7 @@ export default function RecursosPage() {
         <span className="mx-auto w-10 h-10 rounded-md bg-zinc-100 flex items-center justify-center text-zinc-400"><Icon n="store" size={20} /></span>
         <h2 className="font-semibold text-sm mt-3">{legacy ? 'Nenhuma empresa nesta conta ainda' : 'Nenhuma clínica nesta conta ainda'}</h2>
         <p className="text-sm text-zinc-500 mt-1 max-w-sm mx-auto">
-          {legacy ? 'Os recursos (agendamentos, serviços, produtos…) pertencem a uma empresa. Crie a sua para ativar o que você precisa.' : 'Os recursos (agendamentos, serviços, produtos…) pertencem a uma clínica. Crie a sua para ativar o que você precisa.'}
+          {legacy ? 'Os recursos (agendamentos, serviços, produtos…) pertencem a uma empresa. Crie a sua para ativar o que você precisa.' : 'Os recursos (agendamentos, serviços…) pertencem à sua clínica. Crie a sua para ativar o que você precisa.'}
         </p>
         <Link href="/onboarding" className="mt-4 inline-block"><Button variant="primary" size="sm">{legacy ? 'Criar meu negócio' : 'Criar minha clínica'}</Button></Link>
       </div>
@@ -282,13 +278,13 @@ export default function RecursosPage() {
                   {!row.enabled && (
                     <p className="text-[11px] text-[var(--warning-fg)] mt-2 leading-snug">{resourceCopy(row, legacyPagesEnabled).disabledHint}</p>
                   )}
-                  {/* Produtos desligado: o caminho para abrir o cadastro nunca
-                      some — a ativação é aqui em Recursos. */}
-                  {!row.enabled && row.id === 'products' && (
+                  {/* Produtos (ramo ON): o caminho para abrir o cadastro nunca
+                      some — a ativação é aqui em Recursos. No Clinical OS
+                      (OFF) a linha nem existe: o catálogo não oferece módulo
+                      comercial (CORREÇÃO FINAL da convergência). */}
+                  {legacyPagesEnabled && !row.enabled && row.id === 'products' && (
                     <p className="text-[11px] text-[var(--text-muted)] mt-2 leading-snug">
-                      {legacyPagesEnabled
-                        ? 'Ative para cadastrar e exibir a vitrine. Produtos salvos continuam guardados.'
-                        : 'Ative para acessar o cadastro. Os dados preservados não controlam estoque ou dispensação.'}
+                      Ative para cadastrar e exibir a vitrine. Produtos salvos continuam guardados.
                     </p>
                   )}
                 </div>

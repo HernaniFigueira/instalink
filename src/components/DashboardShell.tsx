@@ -25,6 +25,7 @@ import { HelpCenter } from '@/components/dashboard/HelpCenter';
 import { useWorkspaceAlerts } from '@/components/dashboard/NotificationsBell';
 import { canLoadOverview } from '@/lib/overview';
 import { buildNavSearchItems } from '@/lib/nav-search';
+import { isHiddenLegacyNavRoute } from '@/lib/legacy-surfaces';
 import { roleLabel } from '@/lib/role-labels';
 import { switchUnitHref } from '@/lib/workspace-navigation';
 import { isLegacyPagesEnabled } from '@/lib/product';
@@ -263,9 +264,10 @@ export function DashboardShell({ children }: { children: React.ReactNode }) {
   const panelCtx = { permissions, modes, features: features as Partial<Record<FeatureId, boolean>> };
   const nav = panelNavigation(panelCtx);
   if (!business.id) nav.allowed = organization?.canManage ? PANEL_ROUTES.filter(r=>r.href==='/organizacao') : [];
-  const operationalNav = legacyPagesEnabled
-    ? nav
-    : { ...nav, allowed: nav.allowed.filter((route) => route.href !== '/pagina') };
+  // CORREÇÃO FINAL: com a flag OFF saem da navegação/busca a Página E as
+  // superfícies operacionais comerciais (Produtos, Pedidos). Regra única em
+  // lib/legacy-surfaces.ts (isHiddenLegacyNavRoute); nada é apagado.
+  const operationalNav = { ...nav, allowed: nav.allowed.filter((route) => !isHiddenLegacyNavRoute(route.href, legacyPagesEnabled)) };
   const access = panelAccess(pathname, panelCtx);
   const q = business ? `?b=${business.id}` : '';
   // BUSCA DE NAVEGAÇÃO (ponto 2): a fonte é `nav.allowed` — o MESMO cálculo de

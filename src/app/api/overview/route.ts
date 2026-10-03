@@ -6,6 +6,7 @@ import { summarizeDay, pendingClosures } from '@/lib/booking-ops';
 import { integrationStatus } from '@/lib/whatsapp';
 import { enabledFeatureIds } from '@/lib/features';
 import { dashboardAttention, dashboardContext, dashboardLinks, pageIsCustomized, recentActivityLists, setupChecklist, setupProgress, type PageCustomizationInput } from '@/lib/dashboard';
+import { isLegacyPagesEnabled } from '@/lib/product';
 import { summarizeTasks } from '@/lib/automation/tasks';
 import { scopeBookings } from '@/lib/access-core';
 import type { PermissionId } from '@/lib/types';
@@ -325,6 +326,8 @@ export async function GET(req: NextRequest) {
     },
     pageCustomized,
     whatsappConnected: business.whatsappIntegration?.status === 'connected',
+    // Clinical OS (flag OFF): checklist sem itens da Página legada.
+    legacyPages: isLegacyPagesEnabled(),
   });
   const checklist = setupItems.map((c) => ({
     done: c.done, label: c.label, href: `${c.href}${q}`,

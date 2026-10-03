@@ -131,7 +131,7 @@ describe('4 · temas: catálogo clínico sem comércio; ids legados resolvíveis
 describe('5 · nav/busca: destinos legados fora do menu padrão (filtrados, nunca apagados)', () => {
   it('shell filtra /pagina do menu-busca quando a flag está OFF', () => {
     const shell = read('src/components/DashboardShell.tsx');
-    expect(shell).toContain("legacyPagesEnabled\n    ? nav\n    : { ...nav, allowed: nav.allowed.filter((route) => route.href !== '/pagina') }");
+    expect(shell).toContain('isHiddenLegacyNavRoute(route.href, legacyPagesEnabled)');
     // a busca lê do MESMO nav.allowed (nenhum destino extra).
     expect(shell).toMatch(/nav\.allowed/);
   });
