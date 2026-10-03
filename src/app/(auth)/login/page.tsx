@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { Icon } from '@/components/icons';
 import { saveToken } from '@/lib/client-auth';
 import { landingPathFor } from '@/lib/landing';
+import { readLastBusinessId, rememberLastBusinessId, resolveActiveBusinessId } from '@/lib/business-context';
 
 export default function LoginPage() {
   return (
@@ -47,25 +48,50 @@ function LoginForm() {
         throw new Error('Entramos na sua conta, mas não conseguimos manter a sessão neste navegador. Tente recarregar a página e entrar de novo.');
       }
       const meData = await me.json().catch(() => null);
-      // §P1.12 — LANDING POR PAPEL: recepção (Atendente/Secretaria) começa na
-      // Agenda, profissional no "Meu dia" (/dashboard recortado) e owner/admin
-      // na Visão geral. O catálogo de permissões (lib/panel.ts) é a autoridade:
-      // ninguém é levado a uma rota que o painel recusaria (403). O fallback
-      // /dashboard só vale para quem TEM a permissão.
-      const primary = meData?.businesses?.[0];
+      // §P1.12 + P0 contexto de clínica: a ordem do array NÃO decide tenant.
+      // ?b= válido vence; depois a última unidade escolhida; conta com uma única
+      // unidade entra direto. Se houver 2+ sem preferência válida, a escolha é
+      // explícita em /selecionar-clinica.
+      const businesses = Array.isArray(meData?.businesses) ? meData.businesses : [];
       const fallback =
         meData?.isMaster || data.isMaster || data.redirectTo === '/master'
           ? '/master'
           : data.redirectTo || '/dashboard';
-      const dest = primary
-        ? landingPathFor({
-            role: primary.role,
-            permissions: primary.permissions || {},
-            modes: primary.modes || [],
-            features: primary.features || {},
-          }) || fallback
-        : fallback;
-      router.push(dest);
+
+      if (fallback === '/master') {
+        router.push('/master');
+        router.refresh();
+        return;
+      }
+
+      const selectedId = resolveActiveBusinessId(
+        params.get('b'),
+        businesses,
+        readLastBusinessId(),
+      );
+
+      if (businesses.length > 1 && !selectedId) {
+        router.push('/selecionar-clinica');
+        router.refresh();
+        return;
+      }
+
+      const primary = businesses.find((b: { id?: string }) => b.id === selectedId);
+      if (primary) {
+        rememberLastBusinessId(primary.id);
+        const dest = landingPathFor({
+          role: primary.role,
+          permissions: primary.permissions || {},
+          modes: primary.modes || [],
+          features: primary.features || {},
+        }) || fallback;
+        const join = dest.includes('?') ? '&' : '?';
+        router.push(`${dest}${join}b=${encodeURIComponent(primary.id)}`);
+        router.refresh();
+        return;
+      }
+
+      router.push(fallback);
       router.refresh();
     } catch (err: any) {
       setError(err.message);
