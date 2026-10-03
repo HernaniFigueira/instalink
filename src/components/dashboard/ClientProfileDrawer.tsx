@@ -147,11 +147,10 @@ export function ClientProfileDrawer({ person, businessId, pipeline, canFunil, on
     name: person.name || '', phone: person.phone || '', email: person.email || '',
   });
   const [saving, setSaving] = useState(false);
-  const [notice, setNotice] = useState<{ tone: 'info' | 'success' | 'error' | 'warning'; text: string; password?: string } | null>(null);
+  const [notice, setNotice] = useState<{ tone: 'info' | 'success' | 'error' | 'warning'; text: string } | null>(null);
   const [noteDraft, setNoteDraft] = useState('');
   const [legacyDraft, setLegacyDraft] = useState(person.note || '');
   const [editingLegacy, setEditingLegacy] = useState(false);
-  const [accessSaving, setAccessSaving] = useState(false);
   const [tagDraft, setTagDraft] = useState('');
   const profile = profileOf(person.profile);
   const age = person.age ?? ageFromBirthDate(profile.birthDate);
@@ -249,11 +248,6 @@ export function ClientProfileDrawer({ person, businessId, pipeline, canFunil, on
     if (ok) setEditing(false);
   }
 
-  async function setConsent(value: boolean) {
-    if (!person.contactId) { setNotice({ tone: 'error', text: 'Este contato ainda não tem cadastro no CRM.' }); return; }
-    await patch({ marketingOptIn: value }, value ? 'Consentimento registrado: pode receber promoções.' : 'Consentimento removido: não entra em campanhas.');
-  }
-
   async function addNote() {
     const text = noteDraft.trim();
     if (!text || !person.contactId) return;
@@ -264,28 +258,6 @@ export function ClientProfileDrawer({ person, businessId, pipeline, canFunil, on
   async function saveLegacyNote() {
     const ok = await patch({ note: legacyDraft }, 'Registro anterior atualizado.');
     if (ok) setEditingLegacy(false);
-  }
-
-  async function createAccess() {
-    if (!person.contactId || (!person.phone && !person.email)) {
-      setNotice({ tone: 'error', text: 'Adicione um WhatsApp ou e-mail válido antes de criar o acesso.' });
-      return;
-    }
-    setAccessSaving(true);
-    setNotice(null);
-    const res = await apiSend<any>('/api/contacts', 'POST', {
-      businessId, name: person.name, phone: person.phone, email: person.email, createAccount: true, source: 'manual',
-    }, { scope: 'action', area: 'Clientes' });
-    setAccessSaving(false);
-    if (!res.ok) { setNotice({ tone: 'error', text: res.message || 'Não foi possível criar o acesso.' }); return; }
-    setNotice({
-      tone: 'success',
-      password: res.data?.temporaryPassword,
-      text: res.data?.temporaryPassword
-        ? 'Acesso criado. Mostre ou copie a senha agora — ela não aparece de novo.'
-        : 'Acesso ativo e identidade vinculada. Esta conta já tinha uma credencial.',
-    });
-    onChanged();
   }
 
   async function setLead(id: string, stageId: string) {
@@ -674,14 +646,7 @@ export function ClientProfileDrawer({ person, businessId, pipeline, canFunil, on
 
         {notice && (
           <div className="mt-3">
-            <Notice tone={notice.tone}>{notice.text}
-              {notice.password && (
-                <span className="mt-2 flex items-center gap-2">
-                  <code className="select-all rounded bg-white border border-[var(--success-border)] px-2 py-1 font-semibold tracking-wider text-[var(--text)]">{notice.password}</code>
-                  <Button size="xs" variant="secondary" onClick={() => navigator.clipboard?.writeText(notice.password || '')}>Copiar senha</Button>
-                </span>
-              )}
-            </Notice>
+            <Notice tone={notice.tone}>{notice.text}</Notice>
           </div>
         )}
 

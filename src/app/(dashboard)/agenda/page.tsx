@@ -257,7 +257,7 @@ const GridColumn = memo(function GridColumn({ column, basisPct, variant, highlig
         onEmptyPress(column.key, minToTime(minutes));
       }}>
       <div ref={overlay} aria-hidden="true" className="pointer-events-none absolute inset-x-1 z-30 hidden rounded-md border-2 border-[var(--brand)] bg-[var(--brand-softer)] text-xs font-semibold p-1" />
-      {selectedRange && <div data-testid="agenda-selected-range" aria-label={`Intervalo selecionado ${selectedRange.time}`} className="pointer-events-none absolute inset-x-1 z-30 rounded-md border-2 border-blue-500 bg-blue-100/60 text-blue-900 text-xs font-semibold p-1" style={{ top: (timeToMin(selectedRange.time) - startMinute) / 60 * PX_PER_HOUR, height: selectedRange.durationMin / 60 * PX_PER_HOUR }}>{selectedRange.time}–{minToTime(timeToMin(selectedRange.time) + selectedRange.durationMin)}</div>}
+      {selectedRange && <div data-testid="agenda-selected-range" aria-label={`Intervalo selecionado ${selectedRange.time}`} className="pointer-events-none absolute inset-x-1 z-30 rounded-md border-2 border-[var(--brand)] bg-[var(--brand-soft)] text-[var(--brand-fg)] text-xs font-semibold p-1" style={{ top: (timeToMin(selectedRange.time) - startMinute) / 60 * PX_PER_HOUR, height: selectedRange.durationMin / 60 * PX_PER_HOUR }}>{selectedRange.time}–{minToTime(timeToMin(selectedRange.time) + selectedRange.durationMin)}</div>}
       {column.freeRanges.map((r,i)=><span key={i} aria-hidden="true" className="ag-free-range absolute inset-x-0 bg-white transition-colors" style={{top:(r.start-startMinute)/60*PX_PER_HOUR,height:(r.end-r.start)/60*PX_PER_HOUR}}/>)}
       {column.isToday && <span aria-hidden="true" className="absolute inset-0 bg-[var(--brand-softer)] pointer-events-none" />}
       {Array.from({ length: Math.max(0, hours - 1) }, (_, idx) => idx + 1).map((i) => (
@@ -1634,7 +1634,7 @@ export default function AgendaPage() {
         )}
       </div>
 
-      {blockMode && <div role="status" className="mb-3 rounded-md bg-blue-50 text-blue-900 p-3 flex items-center justify-between text-sm">Selecione o intervalo que deseja bloquear<Button variant="ghost" size="sm" onClick={closeBlock}>Cancelar</Button></div>}
+      {blockMode && <div role="status" className="mb-3 rounded-md bg-[var(--brand-soft)] text-[var(--brand-fg)] p-3 flex items-center justify-between text-sm">Selecione o intervalo que deseja bloquear<Button variant="ghost" size="sm" onClick={closeBlock}>Cancelar</Button></div>}
       {scheduleBlocks.filter(block => {
         const dates = view === 'week' ? weekDays : [focus];
         return dates.some(date => block.startAt.slice(0, 10) === date || instantToLocalProjection(block.startAt, bizTz || 'America/Sao_Paulo').date === date);
