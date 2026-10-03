@@ -156,6 +156,9 @@ function BookingRules({ businessId, initial, onSaved }: {
 
 
 export default function ConfigPage() {
+  // endereço público legado — GODOUTOR_LEGACY_PAGES: o que ainda depende de
+  // página pública (capa, perfil da vitrine, Instagram de vitrine) só aparece
+  // com a flag ON; o núcleo clínico (agenda/regras/whatsapp) é sempre exibido.
   const legacyPagesEnabled = isLegacyPagesEnabled();
   const router = useRouter();
   const params = useSearchParams();

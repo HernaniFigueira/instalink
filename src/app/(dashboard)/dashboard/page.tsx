@@ -754,7 +754,9 @@ export default function DashboardPage() {
                   ))}
                 </div>
               )
-            ) : modules.orders ? (
+            // Pedidos só existem no RAMO DE COMPATIBILIDADE: módulo ligado E
+            // páginas legadas habilitadas — nunca no Clinical OS padrão.
+            ) : legacyPagesEnabled && modules.orders ? (
               recent.orders.length === 0 ? <p className="text-[12.5px] text-[var(--text-muted)] text-center py-6">Nenhum pedido ainda.</p> : (
                 <div className="space-y-1.5">
                   {recent.orders.slice(0, 5).map((o) => {
@@ -771,7 +773,7 @@ export default function DashboardPage() {
                 </div>
               )
             ) : (
-              <p className="text-[12.5px] text-[var(--text-muted)] text-center py-6">Sem agenda ou pedidos neste contexto.</p>
+              <p className="text-[12.5px] text-[var(--text-muted)] text-center py-6">{legacyPagesEnabled ? 'Sem agenda ou pedidos neste contexto.' : 'Sem atendimentos agendados neste contexto.'}</p>
             )}
           </div>
         </section>

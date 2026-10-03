@@ -6,7 +6,8 @@ import { BLOCK_DEFS } from '@/lib/templates';
 import { blockModuleGate } from '@/lib/features';
 import { NAV_ANCHORS, availableNavIds } from '@/lib/nav';
 import type { NavItemConfig, Professional, Service, Product } from '@/lib/types';
-import { THEME_PRESETS, clinicPresetId, matchingPreset, presetById } from '@/lib/themes';
+import { THEME_PRESETS, CLINIC_THEME_PRESETS, clinicPresetId, matchingPreset, presetById } from '@/lib/themes';
+import { isLegacyPagesEnabled } from '@/lib/product';
 import { cn } from '@/lib/utils';
 import type { Block, BlockType, Business, Page, Theme } from '@/lib/types';
 import { PageSkeleton, Tabs } from '@/components/ui';
@@ -1401,9 +1402,13 @@ function ThemePresetCards({ theme, presetId, niche, clinicType, onApply }: {
     estetica: 'estética', particular: 'profissional particular', geral: 'clínica',
   };
   const suggestedId = clinicType ? clinicPresetId(clinicType) : '';
+  // O catálogo visível segue a flag: no Clinical OS (OFF) só modelos
+  // clínicos; com compatibilidade ON a lista comercial volta a aparecer
+  // (dados antigos nunca perdem o preset salvo — presetById resolve todos).
+  const catalog = isLegacyPagesEnabled() ? THEME_PRESETS : CLINIC_THEME_PRESETS;
   const ordered = suggestedId
-    ? [...THEME_PRESETS].sort((a, b) => (a.id === suggestedId ? -1 : b.id === suggestedId ? 1 : 0))
-    : THEME_PRESETS;
+    ? [...catalog].sort((a, b) => (a.id === suggestedId ? -1 : b.id === suggestedId ? 1 : 0))
+    : catalog;
   return (
       <div className="bg-white border border-zinc-200 rounded-lg p-5">
         <div className="flex flex-wrap items-center justify-between gap-2 mb-1">

@@ -13,14 +13,15 @@
 //   • desativar não apaga configuração; reativar restaura o que já existia;
 //   • nenhum componente público decide sozinho que um recurso está ativo.
 //
-// POSICIONAMENTO (2026): o GoDoutor é uma plataforma de página, agendamento
-// e relacionamento para negócios de atendimento. O eixo do produto é
-// Serviços → Agenda → Cliente → Histórico → WhatsApp. Módulos da antiga fase
-// "universal" (pedidos, orçamentos) NÃO fazem mais parte da experiência: eles
-// continuam RESOLVÍVEIS aqui (dados legados não são apagados nem quebrados),
-// mas saem de FEATURES — ou seja, fora do catálogo oferecido no painel
-// (Recursos), no cadastro e na navegação. `LEGACY_FEATURES` é o depósito
-// isolado desses módulos.
+// POSICIONAMENTO (GODOUTOR Clinical OS): o GoDoutor é o sistema operacional
+// da clínica — o eixo do produto é Agendamento → Fila → Atendimento →
+// Paciente/Cliente → Retorno, com canais (WhatsApp/Instagram) e automações
+// por cima. Módulos da antiga fase "universal" (pedidos, orçamentos, vitrine)
+// NÃO fazem mais parte da experiência: continuam RESOLVÍVEIS aqui (dados
+// legados não são apagados nem quebrados), mas saem de FEATURES — ou seja,
+// fora do catálogo oferecido no painel (Recursos), no cadastro e na
+// navegação. `LEGACY_FEATURES` é o depósito isolado desses módulos, regido
+// pela flag GODOUTOR_LEGACY_PAGES.
 //
 // Este arquivo é PURO (sem I/O) para poder ser usado no cliente (painel) e
 // no servidor (página pública + APIs) sem duplicar regra.
