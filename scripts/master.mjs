@@ -4,7 +4,7 @@
 // ═══════════════════════════════════════════════════════════════
 //
 // A conta Master NÃO usa senha universal nem credencial hardcoded.
-// Ela usa o mesmo sistema de autenticação do InstaLink (e-mail +
+// Ela usa o mesmo sistema de autenticação do GoDoutor (e-mail +
 // senha com hash scrypt + sessão).
 //
 // COMO O PROPRIETÁRIO DEFINE AS PRÓPRIAS CREDENCIAIS
@@ -88,12 +88,12 @@ async function readDoc() {
           ssl: process.env.PGSSLMODE === 'disable' ? false : undefined,
         });
         await c.connect();
-        await c.query('update instalink_doc set doc = $1, updated_at = now() where id = 1', [doc]);
+        await c.query(`update ${'instalink_doc'} set data = $1, updated_at = now() where id = 1`, [doc]); // coluna é `data` (ver db.ts)
         await c.end();
       },
     };
   }
-  const file = path.join(process.cwd(), 'data', 'instalink.db.json');
+  const file = resolveLocalDbFile();
   if (!fs.existsSync(file)) {
     const empty = {
       users: [], sessions: [], customers: [], customerSessions: [],

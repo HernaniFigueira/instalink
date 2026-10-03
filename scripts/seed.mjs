@@ -4,7 +4,20 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { scryptSync, randomBytes, randomUUID } from 'node:crypto';
 
-const FILE = path.join(process.cwd(), 'data', 'instalink.db.json');
+// Resolve o banco local em arquivo com a mesma regra do runtime (src/lib/db.ts):
+// GODOUTOR_DB_FILE (canônico) → INSTALINK_DB_FILE (alias legado) →
+// data/godoutor.db.json (preservando data/instalink.db.json se só ele existir).
+function resolveLocalDbFile(cwd = process.cwd()) {
+  const explicit = process.env.GODOUTOR_DB_FILE || process.env.INSTALINK_DB_FILE;
+  if (explicit) return explicit;
+  const canonical = path.join(cwd, 'data', 'godoutor.db.json');
+  const legacy = path.join(cwd, 'data', 'instalink.db.json');
+  try {
+    if (!fs.existsSync(canonical) && fs.existsSync(legacy)) return legacy;
+  } catch { /* segue o canônico */ }
+  return canonical;
+}
+const FILE = resolveLocalDbFile();
 
 function hash(password) {
   const salt = randomBytes(16).toString('hex');

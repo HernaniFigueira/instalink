@@ -41,9 +41,39 @@ import {
   INTEGRATION_DUPLICATE_RETENTION_MS,
 } from './integrations/logs';
 
-// Caminho do banco local (modo arquivo). A variável INSTALINK_DB_FILE permite
-// apontar para um arquivo isolado (testes/dev paralelo) sem mudar o padrão.
-const FILE = process.env.INSTALINK_DB_FILE || path.join(process.cwd(), 'data', 'instalink.db.json');
+// Caminho do banco local (modo arquivo). GODOUTOR_DB_FILE é a variável
+// canônica; INSTALINK_DB_FILE (era InstaLink) continua lida como ALIAS de
+// compatibilidade para não quebrar ambientes de dev/QA antigos. Se nenhum env
+// for dado e existir apenas o arquivo legado data/instalink.db.json, ele é
+// PRESERVADO como destino (ninguém perde dados por renomeação); o padrão novo
+// é data/godoutor.db.json.
+export function resolveLocalDbFile(cwd = process.cwd()): string {
+  const explicit = process.env.GODOUTOR_DB_FILE || process.env.INSTALINK_DB_FILE;
+  if (explicit) return explicit;
+  const canonical = path.join(cwd, 'data', 'godoutor.db.json');
+  const legacy = path.join(cwd, 'data', 'instalink.db.json');
+  try {
+    if (!fs.existsSync(canonical) && fs.existsSync(legacy)) return legacy;
+  } catch { /* segue o canônico */ }
+  return canonical;
+}
+const FILE = resolveLocalDbFile();
+
+/**
+ * Tabela Postgres do documento único — NOME TÉCNICO CONGELADO por
+ * compatibilidade operacional (a tabela já existe em produção com esse nome;
+ * renomear é migração, e migração big-bang é proibida pelas regras do repo).
+ *
+ * PLANO P1 (onda própria, NÃO improvisar aqui):
+ *   1. CREATE TABLE godoutor_doc (LIKE instalink_doc INCLUDING ALL);
+ *   2. dual-write por uma janela + backfill `INSERT ... SELECT`;
+ *   3. leitura canônica em godoutor_doc com fallback instalink_doc;
+ *   4. `ALTER TABLE instalink_doc RENAME TO instalink_doc_deprecated` só após
+ *      drenagem, em janela de deploy, com verificação 1:1 antes.
+ * O nome só vive NESTA constante + no texto deste plano; nenhum código novo
+ * pode escrever o identificador à mão. Ver docs/GODOUTOR-CLINICAL-CONVERGENCE-AUDIT.md.
+ */
+export const LEGACY_DOC_TABLE = 'instalink_doc';
 
 export function emptyDB(): DB {
   return {
@@ -506,12 +536,12 @@ async function createDocTableOnce(): Promise<void> {
   if (!docReady) {
     docReady = (async () => {
       try {
-        await getPool().query('CREATE TABLE IF NOT EXISTS instalink_doc (id SMALLINT PRIMARY KEY, data JSONB NOT NULL)');
+        await getPool().query(`CREATE TABLE IF NOT EXISTS ${LEGACY_DOC_TABLE} (id SMALLINT PRIMARY KEY, data JSONB NOT NULL)`);
       } catch (err) {
         docReady = null; // nunca cachear garantia falha
         if (isPermissionDenied(err)) {
           throw new Error(
-            'instalink_doc não existe e o papel da conexão não tem CREATE no schema. ' +
+            `${LEGACY_DOC_TABLE} não existe e o papel da conexão não tem CREATE no schema. ` +
             'Provisione a tabela pela administração do banco/migração (o runtime não força DDL alheio).',
           );
         }
@@ -542,7 +572,7 @@ async function pgRead(): Promise<DB> {
   // FAIL-CLOSED: qualquer erro (timeout, TLS, conexão, resposta inválida)
   // propaga como exceção. emptyDB SOMENTE quando a linha não existe.
   return withDocGuarantee(async () => {
-    const res = await getPool().query('SELECT data FROM instalink_doc WHERE id = 1');
+    const res = await getPool().query(`SELECT data FROM ${LEGACY_DOC_TABLE} WHERE id = 1`);
     if (res.rows.length === 0) return emptyDB();
     return normalizeDB(res.rows[0].data);
   });
@@ -551,7 +581,7 @@ async function pgRead(): Promise<DB> {
 async function pgWrite(db: DB): Promise<void> {
   await withDocGuarantee(async () => {
     await getPool().query(
-      `INSERT INTO instalink_doc (id, data) VALUES (1, $1)
+      `INSERT INTO ${LEGACY_DOC_TABLE} (id, data) VALUES (1, $1)
        ON CONFLICT (id) DO UPDATE SET data = EXCLUDED.data`,
       [JSON.stringify(db)],
     );
@@ -573,7 +603,7 @@ async function pgWrite(db: DB): Promise<void> {
 // árbitro e o modo arquivo usa o mesmo mutex de `updateDB`.
 async function pgReadCas(): Promise<{ db: DB; hash: string | null }> {
   return withDocGuarantee(async () => {
-    const res = await getPool().query('SELECT data, md5(data::text) AS hash FROM instalink_doc WHERE id = 1');
+    const res = await getPool().query(`SELECT data, md5(data::text) AS hash FROM ${LEGACY_DOC_TABLE} WHERE id = 1`);
     if (res.rows.length === 0) return { db: emptyDB(), hash: null };
     return { db: normalizeDB(res.rows[0].data), hash: res.rows[0].hash as string };
   });
@@ -584,13 +614,13 @@ async function pgCasWrite(hash: string | null, db: DB): Promise<boolean> {
     if (hash === null) {
       // Primeira gravação: cria a linha apenas se ela ainda não existir.
       const ins = await getPool().query(
-        'INSERT INTO instalink_doc (id, data) VALUES (1, $1) ON CONFLICT (id) DO NOTHING',
+        `INSERT INTO ${LEGACY_DOC_TABLE} (id, data) VALUES (1, $1) ON CONFLICT (id) DO NOTHING`,
         [JSON.stringify(db)],
       );
       return ins.rowCount === 1;
     }
     const upd = await getPool().query(
-      'UPDATE instalink_doc SET data = $2 WHERE id = 1 AND md5(data::text) = $1',
+      `UPDATE ${LEGACY_DOC_TABLE} SET data = $2 WHERE id = 1 AND md5(data::text) = $1`,
       [hash, JSON.stringify(db)],
     );
     return upd.rowCount === 1;

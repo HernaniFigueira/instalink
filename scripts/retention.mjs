@@ -9,7 +9,20 @@ import fs from 'node:fs';
 import path from 'node:path';
 
 const APPLY = process.argv.includes('--apply');
-const FILE = path.join(process.cwd(), 'data', 'instalink.db.json');
+// Resolve o banco local em arquivo com a mesma regra do runtime (src/lib/db.ts):
+// GODOUTOR_DB_FILE (canônico) → INSTALINK_DB_FILE (alias legado) →
+// data/godoutor.db.json (preservando data/instalink.db.json se só ele existir).
+function resolveLocalDbFile(cwd = process.cwd()) {
+  const explicit = process.env.GODOUTOR_DB_FILE || process.env.INSTALINK_DB_FILE;
+  if (explicit) return explicit;
+  const canonical = path.join(cwd, 'data', 'godoutor.db.json');
+  const legacy = path.join(cwd, 'data', 'instalink.db.json');
+  try {
+    if (!fs.existsSync(canonical) && fs.existsSync(legacy)) return legacy;
+  } catch { /* segue o canônico */ }
+  return canonical;
+}
+const FILE = resolveLocalDbFile();
 const DAY = 86400000;
 const now = Date.now();
 const EVENT_CUTOFF = new Date(now - 180 * DAY).toISOString();
@@ -31,7 +44,7 @@ async function load() {
     };
   }
   if (!fs.existsSync(FILE)) {
-    console.log('Sem banco local (data/instalink.db.json) e sem DATABASE_URL — nada a fazer.');
+    console.log('Sem banco local (data/godoutor.db.json) e sem DATABASE_URL — nada a fazer.');
     process.exit(0);
   }
   return {
