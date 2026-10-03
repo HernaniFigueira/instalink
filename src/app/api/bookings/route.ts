@@ -141,6 +141,10 @@ export async function GET(req: NextRequest) {
       ? db.bookings.find((b) => b.id === q.get('gestureBookingId') && b.businessId === businessId && canAccessBooking(staffGuard.ctx, b))
       : undefined;
     if (q.get('gestureBookingId') && (!gestureBooking || gestureBooking.serviceId !== service.id)) return NextResponse.json({ error: 'Agendamento não encontrado.' }, { status: 404 });
+    // Staff-selected duration affects only administrative availability previews.
+    const requestedDuration = Number(q.get('staffDurationMin'));
+    const staffDuration = staffGuard?.ok && Number.isInteger(requestedDuration) && requestedDuration >= 5 && requestedDuration <= 720
+      ? requestedDuration : service.durationMin;
     const base = {
       ...(staffGuard?.ok && ['5', '15'].includes(q.get('internalSnap') || '') ? { startStepMin: Number(q.get('internalSnap')) } : {}),
       rules: db.availability.filter((a) => a.businessId === businessId),
@@ -149,7 +153,7 @@ export async function GET(req: NextRequest) {
       services: db.services.filter((s) => s.businessId === businessId),
       professionals: db.professionals.filter((p) => p.businessId === businessId),
       serviceId: service.id,
-      durationMin: gestureBooking ? bookingDurationOf(gestureBooking, service) : service.durationMin,
+      durationMin: gestureBooking ? bookingDurationOf(gestureBooking, service) : staffDuration,
       // A consulta administrativa pode restringir a coluna escolhida; sem
       // filtro a resposta continua sendo a união da equipe.
       professionalId: requestedProfessionalId,

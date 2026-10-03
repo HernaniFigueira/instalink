@@ -26,6 +26,8 @@ Não recomeçar o produto do zero. Não criar novo repositório por impulso. Nã
 
 ## 1. Estado atual
 
+**Fechamento final pré-F1, PR #53 (2026-10-03): EM ANDAMENTO / NÃO ESTÁ PRONTO.** Correções adicionais de snap, intenção, bloqueios Dia/Semana, scrollbar nativa, Equipe e Recepção implementadas; 3010 PASS + 4 baseline e Chromium local parcial. A homologação anterior abaixo NÃO encerra os novos gates. [Matriz e pendências](PRE-F1-FINAL-STATUS.md). F1 e merge continuam não autorizados.
+
 **Clinical UX Closure — pré-F1 (2026-10-03): IMPLEMENTADO / HOMOLOGADO LOCALMENTE / REVISÃO PENDENTE.** Stacked sobre PR #52 (`fix/active-clinic-context@0c426be`), na branch fixa de sessão `arena/01a101fb-instalink`. Agenda/range/bloqueio/snap manual 15, serviços clínicos com avançado recolhido, perfil/configurações, Cliente 360 e hierarquia de ações. Next production + DB descartável + Chromium + três logins reais; 2989 PASS / 4 baseline, build/typecheck OK. [Relatório](AUTO-HOMOLOGACAO-CLINICAL-UX-CLOSURE.md). **Esta closure e a revisão da base precedem Clinical Encounter F1; F1 não iniciado, merge não autorizado/executado.**
 
 **Fase consolidada:**

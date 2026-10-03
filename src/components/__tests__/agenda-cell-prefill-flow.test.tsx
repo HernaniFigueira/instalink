@@ -230,6 +230,8 @@ async function renderAgenda(search = `?b=${BUSINESS}&view=day&data=${DATE}`) {
 
 /** Clique REAL numa coordenada vertical conhecida da coluna. */
 async function clickEmptyCell(professionalId: string, time: string) {
+  // Respect the grid's post-drag click suppression between independently mounted test cases.
+  await new Promise(resolve => setTimeout(resolve, 510));
   const start = gridStartMinute();
   const col = gridColumn(`[data-agenda-column-professional="${professionalId}"]`);
   fireEvent.click(col, { clientX: 120, clientY: clientYFor(time) });
@@ -373,28 +375,32 @@ describe('4 · serviço só é pré-escolhido com EXATAMENTE UM elegível (sem v
 });
 
 // ═════════════════════════════════════════════════════════════════════════
-describe('3 · combinação inválida: limpa SÓ o valor inválido e mostra as opções válidas', () => {
-  it('serviço que a profissional NÃO realiza: ela sai e os horários válidos aparecem', async () => {
+describe('3 · combinação inválida: preserva intenção e exige decisão explícita', () => {
+  it('serviço incompatível: mantém Michelle, avisa, não consulta combinação inválida; usuário escolhe outro', async () => {
     await renderAgenda();
     await clickEmptyCell(MICHELLE, '11:00');
     // svc-cardio é só do Hernani.
     await userEvent.selectOptions(serviceSelect(), SVC_CARDIO);
 
-    await waitFor(() => expect(slotButton('11:00')).toBeTruthy());
-    // Nenhuma combinação inválida é consultada nem enviada.
+    expect(await screen.findByText(/Michelle não realiza este serviço/)).toBeTruthy();
+    expect(proSelect()!.value).toBe(MICHELLE);
     expect(slotsApi.calls.some((u) => u.includes(SVC_CARDIO) && u.includes(`professionalId=${MICHELLE}`))).toBe(false);
-    // O horário válido permanece; a data continua; nada foi criado.
+    expect(screen.getByTestId('booking-range-summary').textContent).toContain('Início: 11:00');
+    await userEvent.selectOptions(proSelect()!, HERNANI);
+    await waitFor(() => expect(slotButton('11:00')).toBeTruthy());
     expect(slotButton('11:00')!.getAttribute('aria-pressed')).toBe('true');
     expect(dateInput().value).toBe(DATE);
     expect(slotsApi.posts).toBe(0);
   });
 
-  it('horário indisponível é limpo (nunca reserva silenciosa) e as opções válidas aparecem', async () => {
+  it('horário indisponível permanece no resumo com motivo e opções válidas, nunca reserva silenciosa', async () => {
     slotsApi.slots = ['14:00', '14:30'];
     await renderAgenda();
     await clickEmptyCell(HERNANI, '10:00');
     await waitFor(() => expect(slotButton('14:00')).toBeTruthy());
     expect(slotButton('10:00')).toBeNull();
+    expect(screen.getByTestId('booking-range-summary').textContent).toContain('Início: 10:00');
+    expect(screen.getByText(/Este profissional não está disponível neste intervalo/)).toBeTruthy();
     expect(slotsApi.posts).toBe(0);
   });
 });
@@ -460,5 +466,23 @@ describe('Clinical UX Closure — range and block mode', () => {
     fireEvent.click(within(sheet()).getByRole('button', { name: 'Cancelar' }));
     await waitFor(() => expect(screen.queryByTestId('agenda-selected-range')).toBeNull());
     expect(screen.queryByText('Selecione o intervalo que deseja bloquear')).toBeNull();
+  });
+});
+
+describe('Final pré-F1 intent preservation', () => {
+  it('switching between two eligible services keeps Michelle and 11:00',async()=>{
+    await renderAgenda(); await clickEmptyCell(MICHELLE,'11:00');
+    await userEvent.selectOptions(serviceSelect(),SVC_ESTETICA);
+    await waitFor(()=>expect(slotButton('11:00')).toBeTruthy());
+    await userEvent.selectOptions(serviceSelect(),SVC_LIMPEZA);
+    await waitFor(()=>expect(slotsApi.calls.some(u=>u.includes(SVC_LIMPEZA)&&u.includes(MICHELLE))).toBe(true));
+    expect(proSelect()!.value).toBe(MICHELLE);
+    expect(slotButton('11:00')!.getAttribute('aria-pressed')).toBe('true');
+  });
+  it('past intent stays visible and explains the interval has passed',async()=>{
+    await renderAgenda(`?b=${BUSINESS}&view=day&data=2026-01-01`);await clickEmptyCell(HERNANI,'10:00');
+    expect(screen.getByText('Esse intervalo já passou. Escolha um horário futuro.')).toBeTruthy();
+    expect(screen.getByTestId('booking-range-summary').textContent).toContain('Início: 10:00');
+    expect(screen.queryByText('Escolha serviço, data e horário.')).toBeNull();
   });
 });

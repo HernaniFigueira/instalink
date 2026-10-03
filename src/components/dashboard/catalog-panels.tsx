@@ -89,6 +89,31 @@ export function ServiceForm({ businessId, service, cats, pros, resources = [], o
   const [loading, setLoading] = useState(false);
   const [showSug, setShowSug] = useState(false);
   const [suggestionIndex, setSuggestionIndex] = useState(-1);
+  const suggestionRoot = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (!showSug) return;
+    // Native scrollbar dragging can focus the enclosing <dialog>. That focus
+    // is not an outside interaction: preserve the popup for the whole gesture.
+    let pointerInside = false;
+    const outside = (event: PointerEvent) => {
+      pointerInside = !!suggestionRoot.current?.contains(event.target as Node);
+      if (!pointerInside) setShowSug(false);
+    };
+    const pointerEnd = () => { pointerInside = false; };
+    const focusOutside = (event: FocusEvent) => {
+      if (!pointerInside && !suggestionRoot.current?.contains(event.target as Node)) setShowSug(false);
+    };
+    document.addEventListener('pointerdown', outside);
+    document.addEventListener('focusin', focusOutside);
+    document.addEventListener('pointerup', pointerEnd);
+    document.addEventListener('pointercancel', pointerEnd);
+    return () => {
+      document.removeEventListener('pointerdown', outside);
+      document.removeEventListener('focusin', focusOutside);
+      document.removeEventListener('pointerup', pointerEnd);
+      document.removeEventListener('pointercancel', pointerEnd);
+    };
+  }, [showSug]);
   const initialSnapshot = useRef(JSON.stringify({
     name: service?.name || '', description: service?.description || '',
     price: service ? centsToBR(service.price) : '',
@@ -98,7 +123,7 @@ export function ServiceForm({ businessId, service, cats, pros, resources = [], o
     bookable: service?.bookable !== false, before: service?.bufferBeforeMin === undefined ? '' : String(service.bufferBeforeMin), after: service?.bufferAfterMin === undefined ? '' : String(service.bufferAfterMin), resourceIds: service?.resourceRequirements?.[0] || [],
   }));
   const dirty = JSON.stringify({ name, description, price, durationMin, categoryId, suggestedGroupName, professionalMode, proIds, active, bookable, before, after, resourceIds }) !== initialSnapshot.current;
-  const sugList = name.trim().length >= 2 ? searchVetCatalog(name, 12) : VET_CATALOG.slice(0, 12);
+  const sugList = name.trim().length >= 2 ? searchVetCatalog(name, 12) : VET_CATALOG;
   const dismissState = {
     dirty, saving: loading, context: 'edit' as const,
     title: service ? 'Descartar alterações do serviço?' : 'Descartar novo serviço?',
@@ -119,12 +144,12 @@ export function ServiceForm({ businessId, service, cats, pros, resources = [], o
 
   return (
     <Drawer open onClose={() => { if (!loading) onClose(); }} dismissGuard={dismissState} title={service ? 'Editar serviço' : 'Novo serviço'} width="max-w-lg">
-      <form onSubmit={async (e) => { e.preventDefault(); setError(''); if (durationMin < 5) { setError('Informe a duração padrão do serviço (mínimo 5 minutos).'); return; } setLoading(true); try { let resolvedCategoryId: string | undefined = categoryId || undefined; if (!resolvedCategoryId && suggestedGroupName) { const r:any = await apiSend('/api/catalog','POST',{ businessId, action:'category.save', kind:'service', name: suggestedGroupName.trim() },{ scope:'action', area:'Serviços' }); if (r.ok && r.data?.categoryId) resolvedCategoryId = r.data.categoryId; } await onSave({ id: service?.id, name, description, image, price: parseMoneyToCents(price), durationMin, professionalMode, professionalIds: professionalMode === 'all' ? [] : proIds, categoryId: resolvedCategoryId, active, bookable, bufferBeforeMin: before === '' ? null : Number(before), bufferAfterMin: after === '' ? null : Number(after), resourceRequirements: resourceIds.length ? [resourceIds] : [] }); } catch (err:any) { setError(err.message || 'Falha ao salvar.'); } finally { setLoading(false); } }}
+      <form onSubmit={async (e) => { e.preventDefault(); setError(''); if (durationMin < 5) { setError('Informe a duração padrão do serviço (mínimo 5 minutos).'); return; } setLoading(true); try { let resolvedCategoryId: string | undefined = categoryId || undefined; if (!resolvedCategoryId && suggestedGroupName) { const r:any = await apiSend('/api/catalog','POST',{ businessId, action:'category.save', kind:'service', name: suggestedGroupName.trim() },{ scope:'action', area:'Serviços' }); if (!r.ok || !r.data?.categoryId) throw new Error(r.message || 'Não foi possível criar o grupo sugerido.'); resolvedCategoryId = r.data.categoryId; } await onSave({ id: service?.id, name, description, image, price: parseMoneyToCents(price), durationMin, professionalMode, professionalIds: professionalMode === 'all' ? [] : proIds, categoryId: resolvedCategoryId, active, bookable, bufferBeforeMin: before === '' ? null : Number(before), bufferAfterMin: after === '' ? null : Number(after), resourceRequirements: resourceIds.length ? [resourceIds] : [] }); } catch (err:any) { setError(err.message || 'Falha ao salvar.'); } finally { setLoading(false); } }}
         className="p-5 space-y-3.5">
-        <div className="relative">
+        <div className="relative" ref={suggestionRoot} onKeyDown={e => { if (e.key === 'Escape' && showSug) { e.preventDefault(); e.stopPropagation(); setShowSug(false); } }}>
           <label className="block text-xs font-semibold mb-1" htmlFor="clinical-service-name">Serviço / procedimento</label>
           <p className="text-xs text-zinc-500 mb-2">Escolha na biblioteca veterinária ou digite livremente.</p>
-          <input id="clinical-service-name" role="combobox" aria-expanded={showSug && sugList.length > 0} aria-controls="clinical-service-suggestions" aria-activedescendant={showSug && suggestionIndex >= 0 ? `clinical-suggestion-${sugList[suggestionIndex]?.id}` : undefined} onKeyDown={e => { if (e.key === 'ArrowDown' || e.key === 'ArrowUp') { e.preventDefault(); setShowSug(true); setSuggestionIndex(i => Math.max(0, Math.min(sugList.length - 1, i + (e.key === 'ArrowDown' ? 1 : -1)))); } else if (e.key === 'Enter' && showSug && suggestionIndex >= 0 && sugList[suggestionIndex]) { e.preventDefault(); chooseSuggestion(sugList[suggestionIndex]); } else if (e.key === 'Escape' && showSug) { e.preventDefault(); e.stopPropagation(); setShowSug(false); } }} aria-autocomplete="list" autoComplete="off" aria-label="Serviço / procedimento" value={name} onChange={(e) => { setName(e.target.value); setShowSug(true); setSuggestionIndex(-1); }} onFocus={()=>setShowSug(true)} onBlur={()=>setTimeout(()=>setShowSug(false),150)} className={input} placeholder="Buscar procedimento ou digitar novo…" autoFocus />
+          <input id="clinical-service-name" role="combobox" aria-expanded={showSug && sugList.length > 0} aria-controls="clinical-service-suggestions" aria-activedescendant={showSug && suggestionIndex >= 0 ? `clinical-suggestion-${sugList[suggestionIndex]?.id}` : undefined} onKeyDown={e => { if (e.key === 'ArrowDown' || e.key === 'ArrowUp') { e.preventDefault(); setShowSug(true); setSuggestionIndex(i => Math.max(0, Math.min(sugList.length - 1, i + (e.key === 'ArrowDown' ? 1 : -1)))); } else if (e.key === 'Enter' && showSug && suggestionIndex >= 0 && sugList[suggestionIndex]) { e.preventDefault(); chooseSuggestion(sugList[suggestionIndex]); } else if (e.key === 'Escape' && showSug) { e.preventDefault(); e.stopPropagation(); setShowSug(false); } }} aria-autocomplete="list" autoComplete="off" aria-label="Serviço / procedimento" value={name} onChange={(e) => { setName(e.target.value); setShowSug(true); setSuggestionIndex(-1); }} onFocus={()=>setShowSug(true)}  className={input} placeholder="Buscar procedimento ou digitar novo…" autoFocus />
           {showSug && sugList.length > 0 && (
             <div id="clinical-service-suggestions" role="listbox" aria-label="Biblioteca veterinária" className="absolute z-10 mt-1 w-full bg-white border border-zinc-200 rounded-md shadow-lg max-h-48 overflow-auto">
               <p className="px-3 py-1 text-[11px] font-semibold tracking-wide uppercase text-zinc-500 border-b">Sugestões clínicas (biblioteca) — toque para preencher</p>
@@ -149,12 +174,13 @@ export function ServiceForm({ businessId, service, cats, pros, resources = [], o
             <span className="text-[11px] text-zinc-500">Duração padrão para novos agendamentos — não trava encaixe, ordem de chegada ou cirurgia longa.</span></label>
         </div>
         <label className="block"><span className="text-xs font-semibold text-zinc-500">GRUPO</span>
-          <select value={categoryId} onChange={(e) => { setCategoryId(e.target.value); setSuggestedGroupName(''); }} className={input + ' mt-1'}>
+          <select value={categoryId || (suggestedGroupName ? '__suggested' : '')} onChange={(e) => { setCategoryId(e.target.value === '__suggested' ? '' : e.target.value); if (e.target.value !== '__suggested') setSuggestedGroupName(''); }} className={input + ' mt-1'}>
             <option value="">Sem grupo (opcional)</option>
+            {suggestedGroupName && <option value="__suggested">{suggestedGroupName} (sugerido)</option>}
             {cats.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
           </select>
-          {suggestedGroupName && <p className="text-[11px] text-amber-700 mt-1">Grupo sugerido: {suggestedGroupName} — Será criado ao salvar</p>}
-          <span className="text-[11px] text-zinc-500">Grupo interno da clínica (ex: Consultas, Vacinas, Cirurgias). Opcional — sem migração.</span></label>
+          {suggestedGroupName && <p className="text-[11px] text-amber-700 mt-1">Grupo sugerido: {suggestedGroupName} — Será criado automaticamente ao salvar</p>}
+          <span className="text-[11px] text-zinc-500">Usado para organizar os serviços da clínica.</span></label>
 
         {/* Perguntas no agendamento removidas do cadastro básico de Serviço — ver GODOUTOR-MASTER-PLAN.md (futuro motor de intake). Questões legadas preservadas no banco/API. */}
         {pros.length > 0 && (
@@ -187,14 +213,14 @@ export function ServiceForm({ businessId, service, cats, pros, resources = [], o
           </div>
         )}
         <div className="flex flex-wrap gap-4">
-          <label className="flex items-center gap-2 text-sm font-medium"><input type="checkbox" checked={active} onChange={(e) => setActive(e.target.checked)} className="w-4 h-4 accent-emerald-600" /> Ativo na clínica</label>
-          <label className="flex flex-col gap-0.5 text-sm font-medium"><span className="flex items-center gap-2"><input type="checkbox" checked={bookable} onChange={(e) => setBookable(e.target.checked)} className="w-4 h-4 accent-emerald-600" /> Pode ser agendado</span><span className="text-[11px] font-normal text-zinc-500 ml-6">Ativo = disponível para uso na clínica. Pode ser agendado = pode gerar um compromisso próprio na agenda.</span></label>
+          <label className="flex items-center gap-2 text-sm font-medium"><input type="checkbox" checked={active} onChange={(e) => setActive(e.target.checked)} className="w-4 h-4 accent-emerald-600" /> Ativo na clínica<span className="text-[11px] font-normal text-zinc-500">Disponível para uso.</span></label>
+          <label className="flex flex-col gap-0.5 text-sm font-medium"><span className="flex items-center gap-2"><input type="checkbox" checked={bookable} onChange={(e) => setBookable(e.target.checked)} className="w-4 h-4 accent-emerald-600" /> Pode ser agendado</span><span className="text-[11px] font-normal text-zinc-500 ml-6">Aparece como opção para criar agendamentos.</span></label>
         </div>
-        <details className="rounded-md border border-zinc-200 p-3"><summary className="cursor-pointer text-sm font-semibold">Informações adicionais</summary>
+        <details className="rounded-md border border-zinc-200 p-3"><summary className="cursor-pointer text-sm font-semibold">Observação interna (opcional)</summary><p className="text-xs text-zinc-500 my-2">Informação interna para a equipe. Não é exibida ao paciente.</p>
         <textarea aria-label="Observação interna" value={description} onChange={(e) => setDescription(e.target.value)} className={input} rows={2} placeholder="Observação interna (opcional)" />
         </details>
         <details className="rounded-md border border-zinc-200 p-3"><summary className="cursor-pointer text-sm font-semibold">Agenda e recursos · avançado</summary>
-          <p className="text-xs text-zinc-500 my-2">Use quando o procedimento precisa reservar sala, equipamento ou tempo de preparação/limpeza.</p>
+          <p className="text-xs text-zinc-500 my-2">Use somente quando o procedimento precisa reservar sala, equipamento ou tempo de preparação/limpeza.</p>
         <fieldset className="border border-zinc-200 rounded-md p-3 space-y-2">
           <legend className="text-xs font-semibold">Preparação e recursos</legend>
           <p className="text-xs text-zinc-500">Deixe vazio para usar os buffers da clínica. Não altera agendamentos existentes.</p>

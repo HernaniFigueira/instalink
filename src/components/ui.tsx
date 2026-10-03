@@ -34,9 +34,9 @@ const BTN_VARIANT_CLS: Record<CanonicalButtonVariant, string> = {
   primary:
     'bg-[var(--accent)] text-[var(--accent-contrast)] border border-[var(--accent)] hover:bg-[var(--accent-hover)] hover:border-[var(--accent-hover)]',
   secondary:
-    'bg-[var(--brand-softer)] text-[var(--brand-fg)] border border-transparent hover:bg-[var(--brand-soft)]',
+    'bg-[var(--brand-soft)] text-[var(--brand-fg)] border border-[var(--brand)] hover:bg-transparent',
   whatsapp:
-    'bg-emerald-50 text-emerald-800 border border-emerald-100 hover:bg-emerald-100',
+    'bg-emerald-50 text-emerald-800 border border-emerald-300 hover:bg-transparent',
   ghost:
     'bg-transparent text-[var(--text-muted)] border border-transparent hover:bg-[var(--surface-3)] hover:text-[var(--text)]',
   destructive:

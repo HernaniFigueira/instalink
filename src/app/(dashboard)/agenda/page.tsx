@@ -1,4 +1,5 @@
 'use client';
+import { blockOnAgendaColumn } from '@/lib/agenda-blocks';
 import { computeSlots } from '@/lib/slots';
 import { bookingTimezone, buildBookingWindow, instantToLocalProjection } from '@/lib/booking-temporal';
 import { eligibleProfessionalIds, slotEligibleProfessionalIds } from '@/lib/booking';
@@ -191,7 +192,7 @@ const GridColumn = memo(function GridColumn({ column, basisPct, variant, highlig
   onRangeSelect: (columnKey: string, time: string, durationMin: number) => void;
   selectedRange: { time: string; durationMin: number } | null;
   onResize: (id: string, end: string) => void;
-  operationalBlocks: Array<{ block: ScheduleBlock; top: number; height: number; label: string }>;
+  operationalBlocks: Array<{ block: ScheduleBlock; top: number; height: number; label: string; timeLabel: string; scopeLabel: string }>;
   onOperationalBlock: (block: ScheduleBlock) => void;
   gridHeight: number;
   hours: number;
@@ -295,10 +296,10 @@ const GridColumn = memo(function GridColumn({ column, basisPct, variant, highlig
         </div>
       )}
 
-      {operationalBlocks.map(({ block, top, height, label }) => <button key={block.id} type="button"
-        aria-label={`Bloqueio operacional: ${label}`} title={label} onClick={() => onOperationalBlock(block)}
-        className="absolute z-10 left-1 right-1 max-w-[380px] border-2 border-dashed border-amber-700 bg-amber-100/90 text-amber-950 rounded-md px-2 py-1 text-left text-xs font-bold overflow-hidden"
-        style={{ top, height }}><span aria-hidden="true">■</span> BLOQUEIO · {label}</button>)}
+      {operationalBlocks.map(({ block, top, height, label, timeLabel, scopeLabel }) => <button key={block.id} type="button"
+        data-schedule-block={block.id} aria-label={`Bloqueio operacional: ${timeLabel} · ${label} · ${scopeLabel}`} title={`${timeLabel} · ${label} · ${scopeLabel}`} onClick={() => onOperationalBlock(block)}
+        className="absolute z-10 left-1 right-1 max-w-[380px] border border-dashed border-[var(--warning-border)] bg-[var(--warning-bg)] text-[var(--warning-fg)] rounded-md px-2 py-1 text-left text-xs font-bold overflow-hidden"
+        style={{ top, height }}><span className="block tabular-nums">{timeLabel}</span><span className="block">BLOQUEIO · {label}</span>{height > 50 && <span className="block font-medium">{scopeLabel}</span>}</button>)}
       {column.blocks.map((b) => (
         <button
           key={b.id}
@@ -1779,13 +1780,13 @@ export default function AgendaPage() {
                       onRangeSelect={onRangeSelect}
                       selectedRange={selectedRange?.columnKey === c.key ? selectedRange : null}
                       onResize={onResize}
-                      operationalBlocks={scheduleBlocks.filter(block => !block.resourceId && (!block.professionalId || block.professionalId === c.professionalId) && instantToLocalProjection(block.startAt, bizTz || 'America/Sao_Paulo').date === c.date).map(block => {
-                        const start = instantToLocalProjection(block.startAt, bizTz || 'America/Sao_Paulo');
-                        const end = instantToLocalProjection(block.endAt, bizTz || 'America/Sao_Paulo');
-                        const minute = timeToMin(start.time);
-                        return { block, top: (minute - grid.start) / 60 * PX_PER_HOUR,
-                          height: Math.max(18, (timeToMin(end.time) - minute) / 60 * PX_PER_HOUR),
-                          label: block.reason || block.note || 'Operacional' };
+                      operationalBlocks={scheduleBlocks.flatMap(block => {
+                        const window = blockOnAgendaColumn(block, c.date, c.professionalId, view === 'week' ? 'week' : 'day', bizTz);
+                        if (!window) return [];
+                        return [{ block, top: (window.from - grid.start) / 60 * PX_PER_HOUR,
+                          height: Math.max(18, (window.to - window.from) / 60 * PX_PER_HOUR), timeLabel: window.timeLabel,
+                          scopeLabel: block.professionalId ? proName(block.professionalId) : block.resourceId ? scheduleResources.find(r => r.id === block.resourceId)?.name || 'Recurso' : 'Clínica',
+                          label: block.reason || block.note || 'Operacional' }];
                       })}
                       onOperationalBlock={(block) => {
                         const start = instantToLocalProjection(block.startAt, bizTz || 'America/Sao_Paulo');

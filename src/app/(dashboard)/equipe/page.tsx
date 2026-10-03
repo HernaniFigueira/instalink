@@ -2,6 +2,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useSearchParams } from 'next/navigation';
 import Link from 'next/link';
+import { useOverlayDismissGuard } from '@/components/dashboard/OverlayDismissGuard';
 import { Icon } from '@/components/icons';
 import { Avatar, Badge, Button, buttonCls, Drawer, Notice, PageHeader, PageSkeleton, Select, Input, Field, Switch } from '@/components/ui';
 import { cn, onlyDigits, parseMoneyToCents } from '@/lib/utils';
@@ -99,7 +100,6 @@ export default function EquipePage() {
   const [fUf, setFUf] = useState('');
   const [fCrmvNum, setFCrmvNum] = useState('');
   const [fServiceIds, setFServiceIds] = useState<string[]>([]);
-  const [fServiceSelectionTouched, setFServiceSelectionTouched] = useState(false);
   const [fServiceQuery, setFServiceQuery] = useState('');
   const [fShowServiceCreate, setFShowServiceCreate] = useState(false);
   const [fNewSvcName, setFNewSvcName] = useState('');
@@ -124,6 +124,16 @@ export default function EquipePage() {
   const [cats, setCats] = useState<Category[]>([]);
 
 
+  const draftBaseline = useRef<string | null>(null);
+  const personDraft = JSON.stringify({ fName, fPhoto, fEmail, fPhone, fCpf, fHasAccess, fHasClinical, fRole, fPassword, fPermissions, fFuncao, fConselho, fUf, fCrmvNum, fServiceIds, fPendingServices, fDispMode, fNewSvcName, fNewSvcGrupo, fSuggestedGroupName, fNewSvcDur, fNewSvcPrice });
+  useEffect(() => {
+    if (!showAdd) draftBaseline.current = null;
+    else if (draftBaseline.current === null) draftBaseline.current = personDraft;
+  }, [showAdd, personDraft]);
+  const personGuard = { dirty: !fSuccessProfessionalId && draftBaseline.current !== null && draftBaseline.current !== personDraft, saving: fSaving, error: fError, context: 'edit' as const, title: 'Descartar alterações?' };
+  const cancelGuard = useOverlayDismissGuard();
+  const closePerson = () => { setShowAdd(false); resetAddForm(); };
+
   function resetAddForm() {
     setFName('');
     setFPhoto('');
@@ -142,10 +152,7 @@ export default function EquipePage() {
     setFConselho('CRMV');
     setFUf('');
     setFCrmvNum('');
-    // Novo profissional: pré-marca todos os Services mode=all (verdade do domínio)
-    const defaultIds = services.filter((s) => serviceProfessionalMode(s as any) === 'all').map((s) => s.id);
-    setFServiceIds(defaultIds);
-    setFServiceSelectionTouched(false);
+    setFServiceIds([]);
     setFServiceQuery('');
     setFShowServiceCreate(false);
     setFNewSvcName('');
@@ -206,7 +213,7 @@ export default function EquipePage() {
       return (s.professionalIds||[]).includes(pro.id);
     }).map(s=>s.id);
     setFServiceIds(pro ? sids : []);
-    setFServiceSelectionTouched(false);
+
     setFDispMode(pro && !followsBusinessHours(pro as Professional, rules) ? 'own' : 'follow');
     setFShowMore(false);
     setFError('');
@@ -273,7 +280,7 @@ export default function EquipePage() {
         crmvUf: fUf,
         crmvNumero: fCrmvNum,
         serviceIds: fServiceIds,
-        serviceSelectionExplicit: fServiceSelectionTouched,
+        serviceSelectionExplicit: true,
         dispMode: fDispMode,
         pendingServices: fPendingServices,
       };
@@ -338,17 +345,6 @@ export default function EquipePage() {
     }
   }, [businessId, report]);
   useEffect(() => { load(); }, [load]);
-
-  // Novo profissional: quando serviços carregam ou usuário ativa "Realiza atendimentos",
-  // pré-marca todos os Services mode=all (verdade do domínio) — só se o usuário ainda não tocou
-  useEffect(() => {
-    if (!showAdd || editEntry || fServiceSelectionTouched) return;
-    if (!fHasClinical) return;
-    const defaultIds = services.filter((s) => serviceProfessionalMode(s as any) === 'all').map((s) => s.id);
-    const cur = [...fServiceIds].sort().join(',');
-    const def = [...defaultIds].sort().join(',');
-    if (cur !== def) setFServiceIds(defaultIds);
-  }, [services, showAdd, editEntry, fHasClinical, fServiceSelectionTouched, fServiceIds]);
 
   // Deep-link: #/equipe?member=<id> abre o membro; ?professionalId=<id> abre ADICIONAR PESSOA já vinculado.
   useEffect(() => {
@@ -591,7 +587,8 @@ export default function EquipePage() {
       {showAdd && (
         <Drawer
           open={showAdd}
-          onClose={() => { setShowAdd(false); resetAddForm(); }}
+          onClose={closePerson}
+          dismissGuard={personGuard}
           title={editEntry ? 'Gerenciar pessoa' : 'Adicionar pessoa'}
           subtitle={editEntry ? 'Edite os dados desta pessoa — o mesmo painel cria e gerencia.' : 'Identificação + acesso (opcional) + atuação clínica (opcional).'}
           width={WORKSPACE_SHEET_SIZES.clinical}
@@ -804,8 +801,8 @@ export default function EquipePage() {
                         <p className="text-xs font-semibold tracking-wide uppercase text-zinc-500 mb-1">Acesso padrão do papel</p>
                         <p className="text-sm text-[var(--text)]">{summary.length ? summary.join(' · ') : 'Somente leitura do resumo'}</p>
                         <div className="mt-2 flex items-center gap-2">
-                          <button type="button" aria-expanded={fCustomize} aria-controls="personalizar-acesso" onClick={()=> setFCustomize((v)=> !v)} className="text-xs font-semibold text-[var(--accent)] hover:underline">
-                            {fCustomize ? 'Ocultar personalização' : 'Personalizar acesso'}
+                          <button type="button" aria-expanded={fCustomize} aria-controls="personalizar-acesso" onClick={()=> setFCustomize((v)=> !v)} className={buttonCls('secondary', 'sm')}>
+                            Personalizar acesso<Icon n={fCustomize ? 'chevD' : 'chevR'} size={14} className="ml-auto" />
                           </button>
                           {adjustments > 0 && <span className="text-[10px] font-semibold text-amber-700 bg-amber-50 border border-amber-200 px-1.5 py-0.5 rounded">{adjustments} {adjustments === 1 ? 'ajuste' : 'ajustes'}</span>}
                         </div>
@@ -815,8 +812,8 @@ export default function EquipePage() {
                           <p className="text-[11px] text-zinc-500">Ajustes individuais sobre o acesso padrão de {roleLabel(fRole)}. Marque ou desmarque só o que for realmente diferente; trocar de papel volta ao padrão.</p>
                           <div className="space-y-1.5">{eds.core.map((perm)=> renderPerm(perm as PermDef))}</div>
                           {eds.advanced.length > 0 && (
-                            <details open={eds.advanced.some((perm)=> typeof fPermissions[perm.id as PermissionId] === 'boolean')}>
-                              <summary className="text-xs font-semibold text-zinc-500 cursor-pointer select-none">Capacidades avançadas</summary>
+                            <details className="group" open={eds.advanced.some((perm)=> typeof fPermissions[perm.id as PermissionId] === 'boolean')}>
+                              <summary className={buttonCls('secondary', 'sm') + " list-none cursor-pointer [&::-webkit-details-marker]:hidden"}>Capacidades avançadas<Icon n="chevR" size={14} className="ml-auto group-open:rotate-90" /></summary>
                               <div className="space-y-1.5 mt-2">{eds.advanced.map((perm)=> renderPerm(perm as PermDef))}</div>
                             </details>
                           )}
@@ -866,7 +863,8 @@ export default function EquipePage() {
                   <p className="text-[11px] text-zinc-400 mt-1">CPF ≠ CRMV. Não exigimos CRMV para equipe não-veterinária.</p>
                 </div>
                 <div>
-                  <p className="text-xs font-semibold tracking-wide uppercase text-zinc-500 mb-2">Atendimentos e procedimentos habilitados</p><p className="text-xs text-zinc-500 mb-2">Define quais procedimentos podem ser agendados com este profissional.</p>
+                  <p className="text-xs font-semibold tracking-wide uppercase text-zinc-500 mb-2">Atendimentos e procedimentos habilitados</p>
+                  {fServiceIds.length === 0 && fPendingServices.length === 0 && <Notice tone="warning">Este profissional será criado sem procedimentos habilitados e não receberá agendamentos até que um serviço seja vinculado.</Notice>}<p className="text-xs text-zinc-500 mb-2">Define quais procedimentos podem ser agendados com este profissional.</p>
                   <div className="flex gap-2">
                     <Input value={fServiceQuery} onChange={(e)=> { setFServiceQuery(e.target.value); setFShowServiceCreate(false); }} placeholder="Buscar serviço (ex.: Consulta, Vacinação)" className="flex-1" />
                   </div>
@@ -875,7 +873,7 @@ export default function EquipePage() {
                       const checked = fServiceIds.includes(svc.id);
                       return (
                         <label key={svc.id} className="flex items-center gap-2 px-2 py-1.5 hover:bg-zinc-50 cursor-pointer">
-                          <input type="checkbox" checked={checked} onChange={(e)=> { setFServiceSelectionTouched(true); setFServiceIds((prev)=> e.target.checked ? [...prev, svc.id] : prev.filter(id=> id!==svc.id)); }} className="w-4 h-4 accent-zinc-900" />
+                          <input type="checkbox" checked={checked} onChange={(e)=> {  setFServiceIds((prev)=> e.target.checked ? [...prev, svc.id] : prev.filter(id=> id!==svc.id)); }} className="w-4 h-4 accent-zinc-900" />
                           <span className="text-sm flex-1">{svc.name}</span>
                           <span className="text-xs text-zinc-500">{cats.find(c=> c.id===svc.categoryId)?.name || ''}</span>
                         </label>
@@ -937,7 +935,7 @@ export default function EquipePage() {
                           const tempId = `pending-${Date.now()}-${Math.random().toString(36).slice(2,6)}`;
                           setFPendingServices(prev=> [...prev, { tempId, name: fNewSvcName.trim(), groupId: fNewSvcGrupo || undefined, suggestedGroupName: fSuggestedGroupName || undefined, durationMin: durNum, price: fNewSvcPrice }]);
                           // Pendente já conta como selecionado — marca explicit
-                          setFServiceSelectionTouched(true);
+
                           setFShowServiceCreate(false); setFNewSvcName(''); setFServiceQuery(''); setFSuggestedGroupName(''); setFNewSvcGrupo(''); setFNewSvcDur(''); setFNewSvcDurSuggested(0);
                         }}>Criar e vincular</Button>
                       </div>
@@ -1016,11 +1014,12 @@ export default function EquipePage() {
               </Drawer>
             )}
             <div className="flex items-center justify-between pt-2 border-t border-zinc-200">
-              <Button variant="ghost" size="sm" onClick={()=> { setShowAdd(false); resetAddForm(); }}>Cancelar</Button>
+              <Button variant="ghost" size="sm" onClick={() => cancelGuard.requestClose('close-button', personGuard, closePerson)}>Cancelar</Button>
               <Button variant="primary" size="sm" onClick={handleAddSave} disabled={fSaving}>{fSaving ? 'Salvando…' : editEntry ? 'Salvar alterações' : 'Adicionar pessoa'}</Button>
             </div>
           </div>
             )}
+          {cancelGuard.dialog}
         </Drawer>
       )}
 

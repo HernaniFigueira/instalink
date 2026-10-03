@@ -36,8 +36,8 @@ export interface RoleLike { id: MemberRole; label: string; hint: string }
 export function splitRolesForEditor<T extends RoleLike>(roles: T[], currentRole?: string): {
   primary: T[]; other: T[]; openOther: boolean;
 } {
-  const primary = PRIMARY_ROLE_IDS.map((id) => roles.find((r) => r.id === id)).filter(Boolean) as T[];
-  const other = LEGACY_ROLE_IDS.map((id) => roles.find((r) => r.id === id)).filter(Boolean) as T[];
+  const primary = PRIMARY_ROLE_IDS.filter(id => id !== 'SECRETARIA' || currentRole !== 'ATENDENTE').map((id) => roles.find((r) => r.id === id)).filter(Boolean) as T[];
+  const other = LEGACY_ROLE_IDS.filter(id => id !== 'ATENDENTE' || currentRole === 'ATENDENTE').map((id) => roles.find((r) => r.id === id)).filter(Boolean) as T[];
   return { primary, other, openOther: !!currentRole && isLegacyRole(currentRole) };
 }
 

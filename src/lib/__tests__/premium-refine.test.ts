@@ -65,7 +65,7 @@ describe('missão 4 · 1 — ação carvão com identidade preservada', () => {
     // DECRETO FINAL: o CTA principal acompanha o tema da clínica (--accent)
     expect(ui).toMatch(/primary:\s*\n?\s*'bg-\[var\(--accent\)\]/);
     expect(ui).toMatch(/primary:[^}]*text-\[var\(--accent-contrast\)\]/);
-    expect(ui).toMatch(/secondary:\s*\n?\s*'bg-\[var\(--brand-softer\)\] text-\[var\(--brand-fg\)\] border/);
+    expect(ui).toMatch(/secondary:\s*\n?\s*'bg-\[var\(--brand-soft\)\] text-\[var\(--brand-fg\)\] border/);
     expect(ui).toMatch(/destructive:\s*\n?\s*'bg-\[var\(--danger\)\]/); // destrutivo = vermelho mantido
   });
 });

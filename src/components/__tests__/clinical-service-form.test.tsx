@@ -35,3 +35,20 @@ describe('Clinical service form', () => {
     await waitFor(() => expect(save).toHaveBeenCalledWith(expect.objectContaining({description:'Texto legado',bufferBeforeMin:10,bufferAfterMin:15,resourceRequirements:[['room']]})));
   });
 });
+
+describe('Service suggestions pointer lifecycle',()=>{
+ it('blur + scrollbar/scroll inside list keeps suggestions; outside and Escape close',()=>{
+  render(<ServiceForm {...props} service={null} onSave={vi.fn()} />);
+  const input=screen.getByRole('combobox',{name:'Serviço / procedimento'});
+  fireEvent.focus(input);const list=screen.getByRole('listbox');
+  fireEvent.pointerDown(list);fireEvent.blur(input);
+  // Native Chromium moves focus to the enclosing dialog while dragging its child's scrollbar.
+  fireEvent.focusIn(document.querySelector('dialog')!);
+  fireEvent.scroll(list,{target:{scrollTop:160}});
+  expect(screen.getByRole('listbox')).toBe(list);
+  const last=screen.getAllByRole('option').filter(x=>x.tagName==='BUTTON').at(-1)!;fireEvent.click(last);
+  expect(screen.queryByRole('listbox')).toBeNull();expect((input as HTMLInputElement).value).not.toBe('');
+  fireEvent.focus(input);fireEvent.keyDown(input,{key:'Escape'});expect(screen.queryByRole('listbox')).toBeNull();
+  fireEvent.focus(input);fireEvent.pointerDown(document.body);expect(screen.queryByRole('listbox')).toBeNull();
+ });
+});

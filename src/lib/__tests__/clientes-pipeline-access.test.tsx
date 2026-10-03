@@ -70,8 +70,8 @@ describe('Clientes — /api/pipeline só com `leads`', () => {
   });
 
   it.each(['OWNER', 'ADMIN', 'SECRETARIA'] as const)('%s (com leads): pipeline continua carregando, uma vez', async (role) => {
-    expect(permissionsFor(role).leads).toBe(true);
-    mocks.perms = { permissions: permissionsFor(role) as any, role, ready: true };
+    expect(permissionsFor(role, { leads: true }).leads).toBe(true);
+    mocks.perms = { permissions: permissionsFor(role, { leads: true }) as any, role, ready: true };
     await mount();
     await waitFor(() => expect(count('/api/pipeline')).toBe(1));
     await settle();

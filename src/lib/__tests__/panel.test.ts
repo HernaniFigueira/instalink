@@ -336,10 +336,10 @@ describe('sidebar — projeção (permissão ∩ módulos, ordem do catálogo)',
     }
   });
 
-  it('SECRETARIA: vê Oportunidades (leads) e Pendências; administração segue fora', () => {
+  it('SECRETARIA: vê Pendências; Oportunidades e administração não vêm no preset', () => {
     const c = ctx({ permissions: permissionsFor('SECRETARIA'), features: { whatsapp: true } });
     const hrefs = panelNavigation(c).sidebar.map((r) => r.href);
-    expect(hrefs).toContain('/funil');
+    expect(hrefs).not.toContain('/funil');
     expect(hrefs).toContain('/tarefas');
     expect(hrefs).toContain('/agenda');
     expect(hrefs).toContain('/conversas');
