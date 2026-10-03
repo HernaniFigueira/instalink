@@ -199,6 +199,15 @@ e deep links continuam; agendamento público não muda em nada. Reativar é
 instantâneo (sem migração). Configurações futuras documentam os dados
 herdados (Instagram/TikTok/galeria) como legado da Página.
 
+**Status pós-onda 2 (Convergência Clínica, 2026-10-02):** com a flag OFF o
+catálogo de modelos da Página Pública mostra apenas os presets clínicos
+(`CLINIC_THEME_PRESETS`); os presets de comércio ficaram marcados `commerce`
+e saem também da navegação/busca ativa (`/pagina`, `/produtos`, `/pedidos`) e
+do painel do overview. Os dados antigos continuam resolvíveis por id —
+esconder nunca foi apagar. Cópia, onboarding, seed e presets padrão do
+produto falam só de clínica; a linguagem InstaLink/negócio sobrevive apenas
+nos ramos gatingados pela flag e em comentários de compatibilidade.
+
 ## 4. Estratégia de banco (P0)
 
 AS-IS: `instalink_doc` (JSONB, uma linha) + `tenant_current` + ficheiros de
