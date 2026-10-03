@@ -1,5 +1,32 @@
 # GoDoutor — Histórico
 
+## 2026-10-02 — Clinical Convergence · onda 2 (cleanup de resíduo InstaLink)
+
+> Branch de sessão `arena/01a0fede-instalink`, base `main` em `dbf7d680c51a39b289c856fdba1f0216fe3e5834` (merge da PR #50). PR aberta contra `main`; **merge NÃO executado** (aguarda autorização explícita). Produção não usada para QA; Clinical Encounter F1 não iniciado.
+
+- **Sessão/ambiente:** cookie canônico `godoutor_session` com fallback de leitura `il_session` (dual-read não-destrutivo; login purga o legado, logout limpa os dois); header de ação perigosa `x-godoutor-action` aceita o legado; banco local `GODOUTOR_DB_FILE` com alias `INSTALINK_DB_FILE` e preservação do arquivo legado; tabela `instalink_doc` confinada a `LEGACY_DOC_TABLE` com plano P1 de renome (sem migração destrutiva, sem big-bang).
+- **Produto clínico por padrão:** onboarding/API de criação perguntam só o essencial da clínica; `niche`/`modes`/`NEW_BUSINESS_DEFAULTS`/`defaultPresetId(niche)` reclassificados como payload de COMPATIBILIDADE (ramo comercial vivo só com `GODOUTOR_LEGACY_PAGES=1`); preset inicial OFF `clinica-geral`; rascunho `gd-biz-draft`. Busca do shell e overview filtram `/pagina|/produtos|/pedidos` com a flag OFF; catálogo de temas divide `commerce` (presets comerciais não somem dos dados — ficam irrepresentáveis na UI padrão e resolvíveis por id).
+- **Branding/voz:** copy pública e de canais converte "negócio/lojista/Instalink" para "clínica/GoDoutor" no caminho ativo (uploads `godoutor/`, User-Agent `GoDoutor-Webhook/1.0`, payload de teste de webhook clínico). Protocolos externos congelados com justificativa in situ: `X-Instalink-*`, `#instalink-booking`/`data-instalink-*`/`instalink:height`, `RESERVED_SLUGS`, `il_cust_session`/`il_support` (ondas próprias). Eventos internos do SPA renomeados (`godoutor:session-expired|forbidden`), atores de auditoria para `@godoutor.app`, tag de formato do export `godoutor.customers.full` (o import não lê o campo — verificado; pin a34 movido junto).
+- **Seed/harness:** demos = Vet Vida (veterinária), Odonto Feliz (odonto, equipe auto), Clínica Vitta (geral); `products`/`orders` viram LEGACY STORAGE vazio documentado; `e2e-merchant.mjs` → `e2e-legacy.mjs` (jornada de compatibilidade com payload legado explícito). Stale asserts encontrados pela auto-homologação foram corrigidos com o produto como autoridade (vínculo de equipe ocupado em main; conclusão sem registro só após o horário — regra da Agenda Temporal 2; "voltar a herdar" é comportamental, linhas próprias ficam em stash; sábado da próxima semana por fuso; template nasce desligado "nada dispara sem revisão").
+- **Testes:** novos pins de contrato em `clinical-convergence-wave2.test.ts` (13 casos: precedência de cookie, purge/logout, alias de env, preservação do legado, `instalink_doc` confinado, cópias/preset da API, catálogo clínico gated, seed sem varejo). Nenhum teste deletado; um pin de superfície legada estendido de propósito (filtro triplo da busca).
+- **Gates:** typecheck 0; build de produção OK; suíte completa **2930 PASS / 4 baseline intocadas** (3× `a34-instagram`, 1× `automation-audit-p4`); harness HTTP local com seed descartável: smoke 67/0 · smoke-ux 84/0 · smoke-agendar 25/0 · smoke-p3 15 fluxos · smoke-p4 18/18 · e2e-legacy 28/0. Personas login real: Owner/Maria(Recepção)/Orlando(Prof.)/Master com papéis e escopos corretos (403 amigável da Recepção na Visão geral = preset da PR #46, por design). `git diff --check` limpo. **Sem Chromium no sandbox — homologação visual NÃO executada (limitação declarada, não contornada com claims).**
+- **Portão de varredura:** produto ativo → 0 ocorrências conceituais (link na bio, negócio-como-metáfora, demos comerciais, vitrine no caminho padrão); o resto em `src/` é C (compat justificado com comentário no local) ou D (docs/testes históricos intocados). Matriz completa e vereditos por id técnico: `docs/GODOUTOR-CLINICAL-CONVERGENCE-AUDIT.md` (seção onda 2) e `docs/AUTO-HOMOLOGACAO-CLINICAL-CONVERGENCE.md`.
+
+- **Reexecução reconstruída (2026-10-02, pós-reset do sandbox que apagou os
+  commits originais não-pushados):** onda reaplicada do zero sobre `dbf7d68`
+  com push a cada bloco. Números do ciclo reconstruído: vitest completo
+  **2939 PASS** / 4 baseline reconfirmadas em worktree exato da base ·
+  `convergence-wave2.test.ts` 22/22 · harness 67/0, smoke-ux **88/0** (1
+  check a mais: criação da unidade de varejo efêmera pelo próprio smoke),
+  agendar 25/0, p3 15 fluxos, p4 18/18, e2e 28/0 · personas 4/4 (16/16
+  verificações com dual-read + purga + pós-logout 401 nos dois cookies) ·
+  typecheck/build limpos · rename do pacote (`godoutor`) e README clínico
+  incluídos. Duas correções extras encontradas no caminho: `master.mjs`
+  escrevia coluna errada no UPDATE Postgres do doc (`doc`→`data`, bug
+  pré-existente da base) e o `db.ts` tinha SQL cru do `instalink_doc` no
+  bootstrap (~800) que entrou de vez sob `LEGACY_DOC_TABLE`. Homologação
+  visual segue NÃO executada (sem Chromium) — declarada pendente.
+
 ## 2026-10-02 — P0 Infra · single-read authenticated guard
 
 > Branch `arena/01a0feb4-instalink`, base `main` em `02389c44b6eeaf1bd164ce54834d6442da62c515`; PR #50 (https://github.com/HernaniFigueira/instalink/pull/50) aberta, aguardando revisão. Produção não usada para QA; Clinical Encounter F1 não iniciado.
@@ -255,3 +282,16 @@ Registrado sem implementação: **Cadastro/Onboarding — contrato de identidade
 **Closure:** Equipe `Gerenciar pessoa` unificado (DADOS/ATUAÇÃO + ACESSO + DISPONIBILIDADE) com Drawer único, largura Ações 170px sem overflow; deep-link Disponibilidade preservado; `Redes e site` oculto com `GODOUTOR_LEGACY_PAGES OFF`; `Como está a inteligência` removido da superfície clínica (estado/fetch mortos removidos, não movido nesta fase); Aparência extraída para `ShellAppearance` em Meu Perfil → Preferências (navegador, não tenant); Perfil copy técnica removida (`User`/`Professional`/IDs/`/profissionais` → linguagem produto + link `/equipe`); Estrutura `Modelos de anamnese` / “Crie e adapte fichas...” (sem prometer biblioteca); Serviços preservam `questions` legado (omitido no payload), preço opcional, Categorias Drawer com bloqueio; Master Plan registra Google Calendar (VISUAL) e repos `fullcalendar/fullcalendar`, `schedule-x/schedule-x`, `bigcalendar/react-big-calendar` para Agenda 2.0 + biblioteca futura F1 sobre motor existente.
 
 **Validação:** (executado nesta missão — ver relatório) `typecheck` / `build` / `vitest` / `diff-check` + homologação visual 1440/1366/1024 (ou pendente se sem browser).
+
+## Adendum — Correção final da PR #51 (2026-10-03, mesma branch)
+
+Bloco de fechamento do produto ativo 100% clínico: onboarding OFF sem
+pergunta comercial nem `modes` (base canônica server-side), Products/Orders
+fora do catálogo ativável e das telas operacionais no OFF (estado legado,
+410 no PATCH), checklist sem itens de Página, branding de `package.json`/
+`.env.example`, e renome **com migração dual-read** de todos os identificadores
+ativos `il-*` (localStorage `il_token/il_cust/il-side-v2/il-cart-/il-setup-hidden-/il-biz-draft`,
+eventos internos `il:*` → `godoutor:*` com produtor+ouvinte juntos, flags
+`__il_*` → `__godoutor_*`). CSS `il-*` classificado (sem big-bang) e regra
+permanente no AGENTS.md: nenhum `il-*` novo. Testes novos 29/29
+(`convergence-final.test.ts`); suítes completas reexecutadas verdes (67/88/25/15/18/28 + personas 11/11 + vitest 2965/4-baseline). Corrige também bug latente do `scripts/master.mjs` (helper `resolveLocalDbFile` ausente desde a onda C2). Bloqueio final pós-correção (commit `afb6d8b`): **projeção operacional** do Dashboard/Overview — `dashboardModules/dashboardContext(business, legacyPagesEnabled)` mascaram products/orders/quote no OFF mesmo em unidade legada com os modes ativos; `/api/overview` deriva módulos/receita/painéis/totais/atividade/resultados/checklist da máscara (payload `modules` via `operationalEnabledFeatureIds`; `revenue` sem fallback de pedido); cliente sem relabel 'Revise dados legados' e atividade gated. Storage, `isFeatureEnabled` global e rota ON intactos. Testes: `legacy-commerce-off-overview.test.ts` 7/7 (fixture OFF+ON na rota real), vitest 2975/4-baseline, smoke-ux reescrito 96/0, smoke 67/0, agendar 25/0, e2e 28/0. Produção: **NÃO**. Merge: **NÃO** — PR #51 segue aberta para revisão humana; Clinical Encounter F1 continua bloqueado até autorização explícita.

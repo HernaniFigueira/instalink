@@ -13,14 +13,22 @@ export async function GET() {
   const script = `/**
  * GoDoutor Booking Widget (P3 · A2)
  * Uso simples em qualquer site:
- *   <div id="instalink-booking" data-business="slug-do-negocio"></div>
- *   <script src="https://instalink.app/widget/booking.js" async><\/script>
+ *   <div id="godoutor-booking" data-business="slug-da-clinica"></div>
+ *   <script src="https://SEU-DOMINIO/widget/booking.js" async><\/script>
+ *
+ * Compatibilidade: o id 'instalink-booking' e o atributo
+ * 'data-instalink-booking' (era InstaLink) continuam sendo RESOLVIDOS para os
+ * embeds já publicados por clínicas — snippet novo usa 'godoutor-booking'.
  */
 (function() {
   function init() {
-    var el = document.getElementById('instalink-booking') || document.querySelector('[data-instalink-booking]');
-    if (!el || el.dataset.instalinkLoaded) return;
-    el.dataset.instalinkLoaded = 'true';
+    var el = document.getElementById('godoutor-booking')
+      || document.querySelector('[data-godoutor-booking]')
+      // embeds antigos publicados com o id/atributo legado continuam vivos:
+      || document.getElementById('instalink-booking')
+      || document.querySelector('[data-instalink-booking]');
+    if (!el || el.dataset.gdLoaded || el.dataset.instalinkLoaded) return;
+    el.dataset.gdLoaded = 'true';
 
     var biz = el.getAttribute('data-business') || el.getAttribute('data-business-id') || '';
     var svc = el.getAttribute('data-service-id') || el.getAttribute('data-service') || '';
@@ -53,7 +61,7 @@ export async function GET() {
     window.addEventListener('message', function(event) {
       if (event.origin !== host) return;
       var data = event.data || {};
-      if (data.type !== 'instalink:height' || typeof data.height !== 'number') return;
+      if (data.type !== 'godoutor:height' || typeof data.height !== 'number') return;
       var h = Math.max(560, Math.min(4000, Math.ceil(data.height) + 24));
       iframe.style.height = h + 'px';
     });

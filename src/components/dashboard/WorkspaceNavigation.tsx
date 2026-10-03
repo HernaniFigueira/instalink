@@ -81,8 +81,8 @@ export function WorkspaceNavigation({ nav, activePath, unit, units = [], multiUn
   // completar 100% sai de cena (o rodapé fixo fica para Ajuda e suporte).
   //
   // §P1.4 — UMA fonte de verdade, SEM número velho: o card revalida quando
-  // qualquer escrita do painel conclui (`il:overview-refresh`, disparado pelo
-  // apiSend), quando módulos/permissões mudam (`il:business-refresh`) e quando
+  // qualquer escrita do painel conclui (`godoutor:overview-refresh`, disparado pelo
+  // apiSend), quando módulos/permissões mudam (`godoutor:business-refresh`) e quando
   // a aba volta ao foco. Completou 100% ⇒ o card SOME na hora (nada de
   // "88% pronta" com a página mostrando 8/8).
   const [setup, setSetup] = useState<{ pct: number; href: string } | null>(null);
@@ -112,11 +112,11 @@ export function WorkspaceNavigation({ nav, activePath, unit, units = [], multiUn
   useEffect(() => loadSetup(unit.id), [unit.id, loadSetup]);
   useEffect(() => {
     const refresh = () => loadSetup(unit.id);
-    window.addEventListener('il:overview-refresh', refresh);
-    window.addEventListener('il:business-refresh', refresh);
+    window.addEventListener('godoutor:overview-refresh', refresh);
+    window.addEventListener('godoutor:business-refresh', refresh);
     return () => {
-      window.removeEventListener('il:overview-refresh', refresh);
-      window.removeEventListener('il:business-refresh', refresh);
+      window.removeEventListener('godoutor:overview-refresh', refresh);
+      window.removeEventListener('godoutor:business-refresh', refresh);
     };
   }, [unit.id, loadSetup]);
   useRevalidateOnFocus(() => loadSetup(unit.id), 30_000);

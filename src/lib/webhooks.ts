@@ -247,7 +247,7 @@ export async function executeDeliveryAttempt(
         'X-Instalink-Delivery-Id': delivery.id,
         'X-Instalink-Event-Id': delivery.eventId,
         'X-Instalink-Attempt': String(attemptNum),
-        'User-Agent': 'InstaLink-Webhook/1.0',
+        'User-Agent': 'GoDoutor-Webhook/1.0',
       },
       body: payloadStr,
       signal: controller.signal,

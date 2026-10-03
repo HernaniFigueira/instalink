@@ -11,8 +11,40 @@
 
 import { activePanelPath } from './panel';
 
-const KEY = 'il_token'; // lojista (painel)
-const CUST_KEY = 'il_cust'; // consumidor (página pública)
+// Chaves localStorage COM ESTADO PERSISTENTE (renome COM MIGRAÇÃO — o usuário
+// nunca é deslogado nem perde nada): o nome canônico é lido primeiro; havendo
+// só o valor legado (il_token/il_cust, da era InstaLink), ELE É PROMOVIDO ao
+// nome novo e o legado removido. Exportado p/ teste (convergence-final).
+export const TOKEN_STORAGE_KEY = 'godoutor_token';
+export const TOKEN_STORAGE_KEY_LEGACY = 'il_token'; // só fallback de leitura
+export const CUSTOMER_STORAGE_KEY = 'godoutor_customer';
+export const CUSTOMER_STORAGE_KEY_LEGACY = 'il_cust'; // só fallback de leitura
+
+/** localStorage canônico com dual-read legado (promove e limpa na 1ª leitura). */
+function readStored(key: string, legacyKey: string): string | null {
+  try {
+    const v = localStorage.getItem(key);
+    if (v) return v;
+    const old = localStorage.getItem(legacyKey);
+    if (old) {
+      localStorage.setItem(key, old);
+      localStorage.removeItem(legacyKey);
+    }
+    return old;
+  } catch {
+    return null;
+  }
+}
+
+function writeStored(key: string, legacyKey: string, value: string | null): void {
+  try {
+    if (value) localStorage.setItem(key, value);
+    else localStorage.removeItem(key);
+    localStorage.removeItem(legacyKey);
+  } catch {
+    /* localStorage bloqueado: memória + cookie continuam valendo */
+  }
+}
 
 // Camada 1 — MEMÓRIA: funciona sempre dentro da aba, mesmo com cookies,
 // localStorage e third-party storage 100% bloqueados. Sobrevive a
@@ -23,60 +55,36 @@ let memoryCustToken: string | null = null;
 
 export function saveToken(token: string): void {
   if (token) memoryToken = token;
-  try {
-    if (token) localStorage.setItem(KEY, token);
-  } catch {
-    /* localStorage bloqueado: segue com memória + cookie */
-  }
+  writeStored(TOKEN_STORAGE_KEY, TOKEN_STORAGE_KEY_LEGACY, token || null);
 }
 
 export function getToken(): string | null {
   if (memoryToken) return memoryToken;
-  try {
-    const t = localStorage.getItem(KEY);
-    if (t) memoryToken = t;
-    return t;
-  } catch {
-    return null;
-  }
+  const t = readStored(TOKEN_STORAGE_KEY, TOKEN_STORAGE_KEY_LEGACY);
+  if (t) memoryToken = t;
+  return t;
 }
 
 export function clearToken(): void {
   memoryToken = null;
-  try {
-    localStorage.removeItem(KEY);
-  } catch {
-    /* noop */
-  }
+  writeStored(TOKEN_STORAGE_KEY, TOKEN_STORAGE_KEY_LEGACY, null);
 }
 
 export function saveCustomerToken(token: string): void {
   if (token) memoryCustToken = token;
-  try {
-    if (token) localStorage.setItem(CUST_KEY, token);
-  } catch {
-    /* localStorage bloqueado: segue com memória + cookie */
-  }
+  writeStored(CUSTOMER_STORAGE_KEY, CUSTOMER_STORAGE_KEY_LEGACY, token || null);
 }
 
 export function getCustomerToken(): string | null {
   if (memoryCustToken) return memoryCustToken;
-  try {
-    const t = localStorage.getItem(CUST_KEY);
-    if (t) memoryCustToken = t;
-    return t;
-  } catch {
-    return null;
-  }
+  const t = readStored(CUSTOMER_STORAGE_KEY, CUSTOMER_STORAGE_KEY_LEGACY);
+  if (t) memoryCustToken = t;
+  return t;
 }
 
 export function clearCustomerToken(): void {
   memoryCustToken = null;
-  try {
-    localStorage.removeItem(CUST_KEY);
-  } catch {
-    /* noop */
-  }
+  writeStored(CUSTOMER_STORAGE_KEY, CUSTOMER_STORAGE_KEY_LEGACY, null);
 }
 
 // ── Sessão × permissão (regra definitiva) ─────────────────────
@@ -84,8 +92,8 @@ export function clearCustomerToken(): void {
 // 403 → usuário autenticado SEM permissão: NUNCA desloga, NUNCA limpa o
 //       token, NUNCA vai para /login. A tela mostra mensagem amigável.
 // Ver lib/http.ts (semântica) e lib/panel.ts (áreas/permissões).
-export const SESSION_EXPIRED_EVENT = 'instalink:session-expired';
-export const FORBIDDEN_EVENT = 'instalink:forbidden';
+export const SESSION_EXPIRED_EVENT = 'godoutor:session-expired';
+export const FORBIDDEN_EVENT = 'godoutor:forbidden';
 
 export interface ForbiddenDetail {
   /** Caminho da API que negou (para log/depuração; nunca exibido cru). */
@@ -143,8 +151,8 @@ export function onForbidden(handler: (detail: ForbiddenDetail) => void): () => v
 export function startLoginFlow(reason: 'expired' | 'invalid' = 'expired'): void {
   if (typeof window === 'undefined') return;
   const w = window as unknown as Record<string, unknown>;
-  if (w.__il_session_redirect) return;
-  w.__il_session_redirect = true;
+  if (w.__godoutor_session_redirect) return;
+  w.__godoutor_session_redirect = true;
   try {
     window.dispatchEvent(new CustomEvent(SESSION_EXPIRED_EVENT, { detail: { reason } }));
   } catch {
@@ -184,8 +192,8 @@ function isSameOriginApi(input: string): boolean {
 export function installFetchWrapper(): void {
   if (typeof window === 'undefined') return;
   const w = window as unknown as Record<string, unknown>;
-  if (w.__il_fetch_wrapped) return;
-  w.__il_fetch_wrapped = true;
+  if (w.__godoutor_fetch_wrapped) return;
+  w.__godoutor_fetch_wrapped = true;
   const original = window.fetch.bind(window);
   window.fetch = (async (input: RequestInfo | URL, init: RequestInit = {}) => {
     const url = typeof input === 'string' ? input : input instanceof URL ? input.href : '';

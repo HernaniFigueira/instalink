@@ -67,8 +67,8 @@ describe('WorkspaceNavigation — mini-card de setup', () => {
   it('Recepção: zero chamadas a /api/overview e nenhum card de setup', async () => {
     const { container } = mount('SECRETARIA');
     await act(async () => { await new Promise((r) => setTimeout(r, 30)); });
-    window.dispatchEvent(new Event('il:overview-refresh'));
-    window.dispatchEvent(new Event('il:business-refresh'));
+    window.dispatchEvent(new Event('godoutor:overview-refresh'));
+    window.dispatchEvent(new Event('godoutor:business-refresh'));
     await act(async () => { await new Promise((r) => setTimeout(r, 30)); });
     expect(overviewCalls).toEqual([]);
     expect(container.textContent).not.toContain('Continuar configuração');

@@ -49,7 +49,7 @@ console.log(`\nSMOKE P3 ${BASE}\n`);
 // 1. Login no painel para obter token
 const loginRes = await req('/api/auth/login', {
   method: 'POST',
-  body: JSON.stringify({ email: 'demo@instalink.app', password: 'demo1234' }),
+  body: JSON.stringify({ email: 'demo@godoutor.app', password: 'demo1234' }),
 });
 assert.equal(loginRes.status, 200, 'Login demo deve funcionar');
 const token = loginRes.data.token;

@@ -13,14 +13,15 @@
 //   • desativar não apaga configuração; reativar restaura o que já existia;
 //   • nenhum componente público decide sozinho que um recurso está ativo.
 //
-// POSICIONAMENTO (2026): o GoDoutor é uma plataforma de página, agendamento
-// e relacionamento para negócios de atendimento. O eixo do produto é
-// Serviços → Agenda → Cliente → Histórico → WhatsApp. Módulos da antiga fase
-// "universal" (pedidos, orçamentos) NÃO fazem mais parte da experiência: eles
-// continuam RESOLVÍVEIS aqui (dados legados não são apagados nem quebrados),
-// mas saem de FEATURES — ou seja, fora do catálogo oferecido no painel
-// (Recursos), no cadastro e na navegação. `LEGACY_FEATURES` é o depósito
-// isolado desses módulos.
+// POSICIONAMENTO (GODOUTOR Clinical OS): o GoDoutor é o sistema operacional
+// da clínica — o eixo do produto é Agendamento → Fila → Atendimento →
+// Paciente/Cliente → Retorno, com canais (WhatsApp/Instagram) e automações
+// por cima. Módulos da antiga fase "universal" (pedidos, orçamentos, vitrine)
+// NÃO fazem mais parte da experiência: continuam RESOLVÍVEIS aqui (dados
+// legados não são apagados nem quebrados), mas saem de FEATURES — ou seja,
+// fora do catálogo oferecido no painel (Recursos), no cadastro e na
+// navegação. `LEGACY_FEATURES` é o depósito isolado desses módulos, regido
+// pela flag GODOUTOR_LEGACY_PAGES.
 //
 // Este arquivo é PURO (sem I/O) para poder ser usado no cliente (painel) e
 // no servidor (página pública + APIs) sem duplicar regra.
@@ -48,6 +49,10 @@ export interface FeatureDef {
   extraBlocks?: BlockType[]; // blocos que TAMBÉM aparecem quando ele está ativo
   /** true = fora da experiência do produto; só resolvido p/ compatibilidade. */
   legacy?: boolean;
+  /** true = módulo do comércio "universal" (vitrine). Não é oferecido com
+   * GODOUTOR_LEGACY_PAGES desligada — o produto ativo é 100% clínico; os
+   * dados continuam RESOLVÍVEIS (isFeatureEnabled, páginas legadas ON). */
+  commerce?: boolean;
 }
 
 // ── Módulos da experiência atual (o que o painel oferece) ──────
@@ -70,6 +75,7 @@ export const FEATURES: FeatureDef[] = [
     blocks: ['products'],
     hint: 'Vitrine de produtos com CTA direto para o WhatsApp',
     disabledHint: 'A vitrine sai da página (os produtos continuam salvos).',
+    commerce: true,
   },
   {
     id: 'reviews', label: 'Avaliações', group: 'Conteúdo', icon: 'star',
@@ -142,6 +148,21 @@ export const ALL_FEATURES: FeatureDef[] = [...FEATURES, ...LEGACY_FEATURES];
 
 /** Ids que o painel/Recursos oferece (nunca os legados). */
 export const OFFERED_FEATURE_IDS: FeatureId[] = FEATURES.map((f) => f.id);
+
+/**
+ * Catálogo OFERECIDO conforme o corte de produto (CORREÇÃO FINAL): com
+ * GODOUTOR_LEGACY_PAGES OFF o único módulo de comércio que sobrava — Produtos
+ * (vitrine) — também sai da lista; nada comercial é ativável pelo Clinical OS.
+ * A resolução (isFeatureEnabled) NÃO muda: dados legados continuam válidos.
+ */
+export function offeredFeatures(legacyPagesEnabled: boolean): FeatureDef[] {
+  return legacyPagesEnabled ? FEATURES : FEATURES.filter((f) => f.commerce !== true);
+}
+
+/** O módulo é comercial (fora do produto ativo quando a flag está OFF)? */
+export function isCommerceFeature(id: FeatureId): boolean {
+  return featureDef(id)?.commerce === true;
+}
 
 export const FEATURE_IDS: FeatureId[] = ALL_FEATURES.map((f) => f.id);
 
@@ -227,13 +248,30 @@ export function featureState(
 /** Estado APENAS dos módulos oferecidos na experiência (o que Recursos lista). */
 export function offeredFeatureState(
   business: Pick<Business, 'modes' | 'features'>,
+  legacyPagesEnabled = true,
 ): Array<{ def: FeatureDef; enabled: boolean }> {
-  return FEATURES.map((def) => ({ def, enabled: isFeatureEnabled(business, def.id) }));
+  return offeredFeatures(legacyPagesEnabled).map((def) => ({ def, enabled: isFeatureEnabled(business, def.id) }));
 }
 
 /** Módulos ligados, na ordem canônica. */
 export function enabledFeatureIds(business: Pick<Business, 'modes' | 'features'>): FeatureId[] {
   return FEATURE_IDS.filter((id) => isFeatureEnabled(business, id));
+}
+
+/**
+ * PROJEÇÃO OPERACIONAL do payload (Dashboard/overview `modules`) — não é
+ * verdade sobre o storage, é a oferta do Clinical OS: com a flag OFF, os
+ * módulos do comércio legado (products) e os puros de compatibilidade
+ * (orders, quote) saem da lista, MESMO ativos em dados antigos.
+ * O storage permanece intacto; `enabledFeatureIds` continua a leitura real.
+ */
+export function operationalEnabledFeatureIds(
+  business: Pick<Business, 'modes' | 'features'>,
+  legacyPagesEnabled: boolean,
+): FeatureId[] {
+  const ids = enabledFeatureIds(business);
+  if (legacyPagesEnabled) return ids;
+  return ids.filter((id) => !isCommerceFeature(id) && !isLegacyFeature(id));
 }
 
 /**

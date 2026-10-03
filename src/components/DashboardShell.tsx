@@ -25,6 +25,7 @@ import { HelpCenter } from '@/components/dashboard/HelpCenter';
 import { useWorkspaceAlerts } from '@/components/dashboard/NotificationsBell';
 import { canLoadOverview } from '@/lib/overview';
 import { buildNavSearchItems } from '@/lib/nav-search';
+import { isHiddenLegacyNavRoute } from '@/lib/legacy-surfaces';
 import { roleLabel } from '@/lib/role-labels';
 import { switchUnitHref } from '@/lib/workspace-navigation';
 import { isLegacyPagesEnabled } from '@/lib/product';
@@ -77,7 +78,13 @@ export function DashboardShell({ children }: { children: React.ReactNode }) {
   const [ready, setReady] = useState(false);
   const [contextError, setContextError] = useState(false);
   const [collapsed, setCollapsed] = useState(() => {
-    try { return localStorage.getItem('il-side-v2') === 'mini'; } catch { return false; }
+    // Renome com migração (bloco 5 da correção): chave canônica
+    // 'godoutor-side-v2'; a antiga 'il-side-v2' só é lida como fallback.
+    try {
+      const v = localStorage.getItem('godoutor-side-v2');
+      if (v !== null) return v === 'mini';
+      return localStorage.getItem('il-side-v2') === 'mini';
+    } catch { return false; }
   });
   /* Missão 6 — cor da navegação (Configurações → Aparência). */
   const [navAccent, setNavAccent] = useState<NavAccentId>(DEFAULT_ACCENT_ID);
@@ -160,15 +167,15 @@ export function DashboardShell({ children }: { children: React.ReactNode }) {
   // GUARDA DO CLIENTE negrear acesso a áreas recém-ativadas (ex.: ligar
   // "Produtos" e /produtos responder "você não tem acesso"). Recarregamos o
   // contexto ao navegar, quando o cache tem >5s, e quando a tela dispara
-  // `il:business-refresh` (toggle de módulo, mudança de equipe).
+  // `godoutor:business-refresh` (toggle de módulo, mudança de equipe).
   useEffect(() => {
     if (!ready) return;
     if (Date.now() - lastContextAt.current > 5000) loadContext();
   }, [ready, pathname, loadContext]);
   useEffect(() => {
     const fn = () => loadContext(true);
-    window.addEventListener('il:business-refresh', fn);
-    return () => window.removeEventListener('il:business-refresh', fn);
+    window.addEventListener('godoutor:business-refresh', fn);
+    return () => window.removeEventListener('godoutor:business-refresh', fn);
   }, [loadContext]);
 
   // Unidade ativa: só rotas que PRECISAM de unidade (o catálogo diz quais)
@@ -229,7 +236,7 @@ export function DashboardShell({ children }: { children: React.ReactNode }) {
   }
   function toggle() {
     setCollapsed((c) => {
-      try { localStorage.setItem('il-side-v2', c ? 'full' : 'mini'); } catch {}
+      try { localStorage.setItem('godoutor-side-v2', c ? 'full' : 'mini'); localStorage.removeItem('il-side-v2'); } catch {}
       return !c;
     });
   }
@@ -263,9 +270,10 @@ export function DashboardShell({ children }: { children: React.ReactNode }) {
   const panelCtx = { permissions, modes, features: features as Partial<Record<FeatureId, boolean>> };
   const nav = panelNavigation(panelCtx);
   if (!business.id) nav.allowed = organization?.canManage ? PANEL_ROUTES.filter(r=>r.href==='/organizacao') : [];
-  const operationalNav = legacyPagesEnabled
-    ? nav
-    : { ...nav, allowed: nav.allowed.filter((route) => route.href !== '/pagina') };
+  // CORREÇÃO FINAL: com a flag OFF saem da navegação/busca a Página E as
+  // superfícies operacionais comerciais (Produtos, Pedidos). Regra única em
+  // lib/legacy-surfaces.ts (isHiddenLegacyNavRoute); nada é apagado.
+  const operationalNav = { ...nav, allowed: nav.allowed.filter((route) => !isHiddenLegacyNavRoute(route.href, legacyPagesEnabled)) };
   const access = panelAccess(pathname, panelCtx);
   const q = business ? `?b=${business.id}` : '';
   // BUSCA DE NAVEGAÇÃO (ponto 2): a fonte é `nav.allowed` — o MESMO cálculo de

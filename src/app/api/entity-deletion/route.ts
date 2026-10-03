@@ -2,7 +2,7 @@ import { randomBytes } from 'node:crypto';
 import { NextRequest, NextResponse } from 'next/server';
 import { requireUser } from '@/lib/access';
 import { readDB, updateDB } from '@/lib/db';
-import { COOKIE_NAME, getBearerToken, hasRequestCredentials, verifyPassword } from '@/lib/auth';
+import { sessionCookieId, getBearerToken, hasRequestCredentials, verifyPassword } from '@/lib/auth';
 import { pushAudit } from '@/lib/audit';
 import { rateLimit, ipFrom } from '@/lib/rate-limit';
 import { authorizationHash, deletionImpact, deletionTarget, type EntityKind } from '@/lib/entity-deletion';
@@ -16,12 +16,14 @@ function safeMutation(req:NextRequest) {
     const protocol=(req.headers.get('x-forwarded-proto')||req.nextUrl.protocol.replace(':','')).split(',')[0].trim();
     return ['http','https'].includes(protocol) && origin.origin===`${protocol}://${req.headers.get('host')||req.nextUrl.host}`
       && (!req.headers.get('sec-fetch-site') || req.headers.get('sec-fetch-site')==='same-origin')
-      && req.headers.get('x-instalink-action')==='delete-empty-entity'
+      // Header canônico GO DOUTOR; o nome legado continua aceito até
+      // drenar clientes antigos do painel de admin (compat documentada).
+      && (req.headers.get('x-godoutor-action')??req.headers.get('x-instalink-action'))==='delete-empty-entity'
       && req.headers.get('content-type')?.split(';')[0]==='application/json';
   } catch{return false;}
 }
 function liveSession(db:DB,req:NextRequest,userId:string) {
-  const candidates=[req.cookies.get(COOKIE_NAME)?.value,getBearerToken(req)];
+  const candidates=[sessionCookieId(req.cookies),getBearerToken(req)];
   return candidates.map(id=>db.sessions.find(s=>s.id===id && s.userId===userId && Date.parse(s.expiresAt)>Date.now())).find(Boolean);
 }
 export async function GET(req:NextRequest) {

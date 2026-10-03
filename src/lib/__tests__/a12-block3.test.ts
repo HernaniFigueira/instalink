@@ -125,9 +125,9 @@ describe('B3.4 — navegação interna sem recarregar a aplicação', () => {
     expect(org).toContain('onChange={e=>changeOrganization(e.target.value)}');
     expect(org).toContain("q.set('organization',id);q.delete('b')");
     // A unidade nova precisa entrar no contexto do shell: o MESMO canal de
-    // revalidação usado em Recursos (il:business-refresh) é disparado antes
+    // revalidação usado em Recursos (godoutor:business-refresh) é disparado antes
     // do router.push — o `?b=` da unidade nova não cai no fallback.
-    expect(org).toMatch(/dispatchEvent\(new Event\('il:business-refresh'\)\)/);
+    expect(org).toMatch(/dispatchEvent\(new Event\('godoutor:business-refresh'\)\)/);
     expect(org).toMatch(/router\.push\(`\/dashboard\?b=\$\{res\.data\?\.businessId\}`\)/);
   });
 

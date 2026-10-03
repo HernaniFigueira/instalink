@@ -50,11 +50,11 @@ const nextDow = (dows) => {
 console.log(`\nSMOKE AGENDAR ${BASE} [${TAG}]`);
 
 // ── 1. Página /agendar (server render com o negócio certo) ──
-const bizSlug = 'biz-barbeariajoao'; // seed: serviços + agenda
+const bizSlug = 'biz-vidavet'; // seed: serviços + agenda
 const page = await fetch(`${BASE}/agendar?b=${bizSlug}`);
 const pageText = await page.text();
 check('GET /agendar?b=<slug> 200', page.status === 200);
-check('/agendar renderiza o negócio (server component)', pageText.includes('data-agendar-page="ok"') && pageText.includes('Barbearia'), '(sem data-agendar-page=ok)');
+check('/agendar renderiza o negócio (server component)', pageText.includes('data-agendar-page="ok"') && pageText.includes('VidaVet'), '(sem data-agendar-page=ok)');
 const missing = await fetch(`${BASE}/agendar?b=nao-existe-${TAG}`);
 check('GET /agendar negócio inexistente → tela de erro amigável', missing.status === 200 && (await missing.text()).includes('data-agendar-page="error"'));
 
@@ -63,10 +63,10 @@ const widget = await fetch(`${BASE}/widget/booking.js`);
 const widgetJs = await widget.text();
 check('GET /widget/booking.js 200 + JS', widget.status === 200 && (widget.headers.get('content-type') || '').includes('javascript'));
 check('widget aponta para /agendar (fluxo único, sem motor próprio)', widgetJs.includes('/agendar'));
-check('widget ajusta altura via postMessage (A2-B2)', widgetJs.includes('instalink:height'));
+check('widget ajusta altura via postMessage (A2-B2)', widgetJs.includes('godoutor:height'));
 
 // ── 3. Dono + catálogo ──
-const login = await api('POST', '/api/auth/login', { email: 'demo@instalink.app', password: 'demo1234' });
+const login = await api('POST', '/api/auth/login', { email: 'demo@godoutor.app', password: 'demo1234' });
 const ownerToken = login.data.token || '';
 check('login do dono (seed)', !!ownerToken);
 const cat = await api('GET', `/api/catalog/get?businessId=${bizSlug}`, null, ownerToken);
@@ -75,7 +75,7 @@ check('catálogo com serviço bookable', services.length > 0, `(${services.lengt
 const svc = services[0];
 
 // ── 4. Mapa de dias + slots ──
-const day = nextDow([1, 2, 3, 4, 5, 6]); // barbearia abre seg–sáb
+const day = nextDow([1, 2, 3, 4, 5, 6]); // veterinária abre seg–sáb
 const dayMap = await api('GET', `/api/bookings?businessId=${bizSlug}&serviceId=${svc.id}&from=${day}&to=${day}`);
 check('mapa de dias responde', dayMap.status === 200 && dayMap.data.days, `(${dayMap.status})`);
 const openDay = Object.entries(dayMap.data.days || {}).find(([, v]) => !v.closed)?.[0] || day;
@@ -167,7 +167,7 @@ for (let i = 0; i < 6; i++) {
 check('slot esgotado → 409 (revalidação na transação)', dupStatus === 409, `(${dupStatus})`);
 
 // ── 9. Tenant isolation ──
-const otherBiz = 'biz-clinicavitta';
+const otherBiz = 'biz-odontovitta';
 const otherCat = await api('GET', `/api/catalog/get?businessId=${otherBiz}`, null, ownerToken);
 const otherSvc = (otherCat.data.services || []).find((s) => s.active && s.bookable);
 const slots4 = await freshSlots();

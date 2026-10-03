@@ -6,9 +6,13 @@ const TAG = process.env.SMOKE_TAG || `ux${Date.now().toString(36)}`;
 const RUN = String(Date.now() % 100000000).padStart(8, '0');
 const ph = (n) => `119${RUN.slice(0, 4)}${String(n).padStart(4, '0')}`;
 
-const B1 = 'biz-burgerhouse';      // varejo: produtos + pedidos
-const B2 = 'biz-barbeariajoao';    // serviços + agenda (equipe automática)
-const B3 = 'biz-clinicavitta';     // clínica (equipe escolhível)
+// No seed clínico NÃO existe unidade de vitrine: o ramo varejista é exercido
+// por uma unidade criada AQUI via payload de compatibilidade (modes/niche no
+// POST /api/businesses) — exatamente o contrato legado que GODOUTOR_LEGACY_PAGES
+// mantém vivo. As unidades clínicas vêm do seed.
+const B2 = 'biz-vidavet';          // veterinária (equipe automática)
+const B3 = 'biz-odontovitta';      // clínica (equipe escolhível)
+let B1 = '';                       // varejo descartável criado neste run
 
 let pass = 0, fail = 0;
 const failures = [];
@@ -48,9 +52,18 @@ console.log('\n— 401 × 403 (sessão preservada)');
 const noToken = await api('GET', `/api/overview?businessId=${B3}`);
 check('sem token → 401 (sessão inexistente)', noToken.status === 401, `(${noToken.status})`);
 
-const owner = await api('POST', '/api/auth/login', { email: 'demo@instalink.app', password: 'demo1234' });
+const owner = await api('POST', '/api/auth/login', { email: 'demo@godoutor.app', password: 'demo1234' });
 const ownerToken = owner.data.token || '';
 check('login do dono → token', !!ownerToken, `(${owner.status})`);
+
+{
+  const rv = await api('POST', '/api/businesses', {
+    name: `Loja Smoke ${TAG}`, slug: `loja-smoke-${TAG}`,
+    modes: ['products', 'orders'], niche: 'loja',
+  }, ownerToken);
+  B1 = rv.data.businessId || '';
+  check('ramo varejista (legado) cria unidade com pedidos', !!B1, `(${rv.status}) ${rv.data.error || ''}`);
+}
 
 const viewerEmail = `${TAG}.viewer@smoke.test`;
 const member = await api('POST', '/api/team', {
@@ -95,18 +108,44 @@ check('clínica: KPIs sem "orders"', !(c.context?.kpis || []).includes('orders')
 check('clínica: receita rotulada "Receita prevista"', c.revenueDetail?.bookings?.label === 'Receita prevista', c.revenueDetail?.bookings?.label);
 check('clínica: regra da receita documentada no hint', /não é dinheiro recebido/i.test(c.revenueDetail?.hints?.bookings || ''), c.revenueDetail?.hints?.bookings);
 check('clínica: receita de pedidos ausente (sem módulo)', c.revenueDetail?.orders === null, JSON.stringify(c.revenueDetail?.orders));
-check('clínica: identidade da empresa no payload (logo/nome)', c.business?.name === 'Clínica Vitta' && 'logo' in (c.business || {}), JSON.stringify(c.business));
+check('clínica: identidade da empresa no payload (logo/nome)', c.business?.name === 'Clínica Odonto Vitta' && 'logo' in (c.business || {}), JSON.stringify(c.business));
+
+// ── 2b. varejo LEGADO sob flag OFF: projeção mascara o comércio (bloqueio final PR #51) ──
+// A unidade B1 tem products+orders NO STORAGE (criada pelo payload de
+// compatibilidade). Com GODOUTOR_LEGACY_PAGES OFF nada disso pode contaminar a
+// Dashboard/Overview — mas os dados têm de permanecer vivos na API.
+const catProd = await api('POST', '/api/catalog', {
+  businessId: B1, action: 'product.save', name: `Produto ${TAG}`, price: 2500, active: true,
+}, ownerToken);
+check('varejo OFF: cadastro de produto legado funciona (storage preservado)', catProd.status < 300, `(${catProd.status}) ${JSON.stringify(catProd.data).slice(0, 120)}`);
+const prodId = catProd.data?.product?.id || catProd.data?.id || '';
+const custReg = await api('POST', '/api/customer/register', {
+  name: `Cliente ${TAG}`, phone: ph(31), email: `${TAG}.cust@smoke.test`, password: 'smoke1234',
+});
+const custTok = custReg.data.token || '';
+const legacyOrder = await api('POST', '/api/orders', {
+  businessId: B1, customerName: `Cliente ${TAG}`, customerPhone: ph(31),
+  type: 'pickup', payment: 'pix', items: prodId ? [{ productId: prodId, qty: 1, options: [] }] : [],
+}, custTok);
+check('varejo OFF: API de pedidos segue aceitando pedido legado (módulo ativo no dado)', legacyOrder.status < 300, `(${legacyOrder.status}) ${JSON.stringify(legacyOrder.data).slice(0, 140)}`);
+const ordersList = await api('GET', `/api/orders?businessId=${B1}`, null, ownerToken);
+check('varejo OFF: lojista ainda lista os pedidos no storage', (ordersList.data.orders || []).length >= 1, `(total=${ordersList.data.total})`);
 
 const retailOv = await api('GET', `/api/overview?businessId=${B1}&period=30`, null, ownerToken);
 const r = retailOv.data;
 check('varejo: overview 200', retailOv.status === 200, `(${retailOv.status})`);
 check('varejo: módulos de agenda desligados', r.context?.modules?.bookings === false, JSON.stringify(r.context?.modules));
-check('varejo: painel de pedidos presente', !!r.ordersPanel, JSON.stringify(r.ordersPanel));
+check('varejo OFF: Dashboard SEM painel de pedidos (projeção mascarada)', r.ordersPanel === null && r.hasOrdersModule === false, JSON.stringify(r.ordersPanel));
+check('varejo OFF: SEM painel de produtos na projeção', r.productsPanel === null && r.hasProductsModule === false, JSON.stringify(r.productsPanel));
+check('varejo OFF: totais de pedidos zerados no payload', r.totals?.orders === 0 && r.totals?.newOrders === 0, JSON.stringify(r.totals));
+check('varejo OFF: atividade recente sem pedidos', Array.isArray(r.recent?.orders) && r.recent.orders.length === 0, JSON.stringify(r.recent?.orders));
+check('varejo OFF: receita de pedido fora do resumo financeiro', r.revenueDetail?.orders === null && !(r.context?.revenue || []).includes('orders'), JSON.stringify(r.revenueDetail?.orders));
+check('varejo OFF: receita ocultada sem fonte (nada cai em fallback)', r.revenue?.total === 0 && r.revenue?.hasData === false, JSON.stringify(r.revenue));
+check('varejo OFF: payload modules não anuncia commerce', ['products', 'orders', 'quote'].every((m) => !(r.modules || []).includes(m)), JSON.stringify(r.modules));
 check('varejo: SEM operação de hoje nem próximos atendimentos', r.today === null && Array.isArray(r.upcoming) && r.upcoming.length === 0, `today=${JSON.stringify(r.today)} upcoming=${r.upcoming?.length}`);
-check('varejo: vocabulário "pedidos"', r.context?.labels?.activityUnit === 'pedidos', r.context?.labels?.activityUnit);
-check('varejo: receita vem de pedidos e chama "Receita"', JSON.stringify(r.context?.revenue) === JSON.stringify(['orders']) && r.revenueDetail?.orders?.label === 'Receita', JSON.stringify(r.context?.revenue));
-check('varejo: KPIs sem "attendance"', !(r.context?.kpis || []).includes('attendance'), JSON.stringify(r.context?.kpis));
-check('varejo: checklist não pede agenda/horários', !(r.checklist || []).some((i) => /horários/i.test(i.label)), JSON.stringify(r.checklist?.map((i) => i.label)));
+check('varejo OFF: vocabulário sem pedidos na projeção', r.context?.labels?.showsOrders === false && r.context?.labels?.activityUnit !== 'pedidos', JSON.stringify(r.context?.labels));
+check('varejo: KPIs sem "attendance" e sem "orders" na projeção', !(r.context?.kpis || []).includes('attendance') && !(r.context?.kpis || []).includes('orders'), JSON.stringify(r.context?.kpis));
+check('varejo OFF: checklist sem agenda/horários E sem vitrine/pedidos', !(r.checklist || []).some((i) => /horários|vitrine|produtos|pedidos/i.test(i.label)), JSON.stringify(r.checklist?.map((i) => i.label)));
 
 const poorOv = await api('GET', `/api/overview?businessId=${B1}&period=7`, null, ownerToken);
 check('sem dados no período → hasData false (nada de valor inventado)', typeof poorOv.data.revenue?.hasData === 'boolean', JSON.stringify(poorOv.data.revenue));
@@ -152,8 +191,27 @@ check('mover além do limite administrativo de 5 anos → 400', farMove.status =
 const badTime = await api('PATCH', '/api/bookings', { businessId: B3, id: bkId, date: clinicDay, time: '99:99' }, ownerToken);
 check('horário inválido → 400', badTime.status === 400, `(${badTime.status})`);
 
-const done = await api('PATCH', '/api/bookings', { businessId: B3, id: bkId, status: 'completed' }, ownerToken);
-check('concluir atendimento → ok', done.status === 200, `(${done.status}) ${done.data.error || ''}`);
+// Fechamento pelo caminho clínico de verdade: chegada registrada na fila →
+// registro de atendimento (encounter) em andamento → FINALIZAR, que conclui o
+// agendamento pelo serviço oficial (máquina de estados + histórico + evento
+// de automação). O atalho "concluir sem registro" exige horário já passado,
+// então o smoke usa o caminho real da recepção.
+const arrive = await api('POST', '/api/queue', {
+  businessId: B3, bookingId: bkId, customerName: `${TAG} Move`, customerPhone: ph(21),
+}, ownerToken);
+const enc = await api('POST', '/api/encounters', {
+  businessId: B3, bookingId: bkId,
+  complaint: 'Avaliação de rotina solicitada pelo paciente',
+  guidance: 'Manter escovação duas vezes ao dia e retorno em seis meses',
+}, ownerToken);
+const encId = enc.data.encounter?.id || '';
+const encVer = enc.data.encounter?.version;
+const fin = await api('PATCH', '/api/encounters', {
+  businessId: B3, id: encId, action: 'finalize', expectedVersion: encVer,
+}, ownerToken);
+const bkAfter = await api('GET', `/api/bookings?businessId=${B3}&mode=manage&from=${clinicDay}&to=${clinicDay}&limit=200`, null, ownerToken);
+const doneRow = (bkAfter.data.bookings || []).find((b) => b.id === bkId) || {};
+check('concluir atendimento → ok', arrive.status === 200 && fin.status === 200 && doneRow.status === 'completed', `q=${arrive.status} enc=${enc.status} fin=${fin.status} ${fin.data.error || ''} st=${doneRow.status}`);
 const nextDaySlots = (await api('GET', `/api/bookings?businessId=${B3}&serviceId=svc-odonto&date=${otherClinicDay}`)).data.slots || [];
 check('outro dia tem horários livres', nextDaySlots.length > 0, `(${nextDaySlots.length})`);
 const re = await api('PATCH', '/api/bookings', { businessId: B3, id: bkId, date: otherClinicDay, time: nextDaySlots[0] }, ownerToken);
@@ -176,48 +234,48 @@ check('legado sem o campo → todos herdam o horário da empresa', pros0.length 
 check('horário geral existe (escopo vazio)', (cat0.data.availability || []).some((a) => a.professionalId === ''), '');
 
 const personalize = await api('POST', '/api/catalog', {
-  businessId: B2, action: 'professional.hours', id: 'pro-pedro', follow: false,
+  businessId: B2, action: 'professional.hours', id: 'pro-marina', follow: false,
   rules: [{ weekday: 6, start: '09:00', end: '12:00', slotMin: 30 }],
 }, ownerToken);
 check('personalizar horário do profissional → ok', personalize.status === 200, `(${personalize.status}) ${personalize.data.error || ''}`);
 
 const cat1 = await api('GET', `/api/catalog/get?businessId=${B2}`, null, ownerToken);
-const pedro = (cat1.data.professionals || []).find((p) => p.id === 'pro-pedro');
-const joao = (cat1.data.professionals || []).find((p) => p.id === 'pro-joao');
+const pedro = (cat1.data.professionals || []).find((p) => p.id === 'pro-marina');
+const joao = (cat1.data.professionals || []).find((p) => p.id === 'pro-caio');
 check('profissional personalizado não segue mais a empresa', pedro?.followBusinessHours === false, String(pedro?.followBusinessHours));
 check('o outro continua herdando', joao?.followBusinessHours === true, String(joao?.followBusinessHours));
-const pedroRules = (cat1.data.availability || []).filter((a) => a.professionalId === 'pro-pedro');
+const pedroRules = (cat1.data.availability || []).filter((a) => a.professionalId === 'pro-marina');
 check('regras próprias gravadas somente para ele', pedroRules.length === 1 && pedroRules[0].weekday === 6, JSON.stringify(pedroRules));
 
-const satSlots = await api('GET', `/api/bookings?businessId=${B2}&serviceId=svc-corte&date=${saturday}`);
+const satSlots = await api('GET', `/api/bookings?businessId=${B2}&serviceId=svc-consulta-vet&date=${saturday}`);
 const byPro = satSlots.data.byPro || {};
 check('byPro expõe os horários de cada profissional (drag-and-drop)', Object.keys(byPro).length === 2, JSON.stringify(Object.keys(byPro)));
-check('personalizado atende só no próprio horário (sáb 09:00–12:00)', (byPro['pro-pedro'] || []).every((t) => t >= '09:00' && t < '12:00') && (byPro['pro-pedro'] || []).length > 0, JSON.stringify(byPro['pro-pedro']));
-check('quem herda atende no horário geral (depois das 12:00 também)', (byPro['pro-joao'] || []).some((t) => t >= '12:00'), JSON.stringify((byPro['pro-joao'] || []).slice(0, 3)));
+check('personalizado atende só no próprio horário (sáb 09:00–12:00)', (byPro['pro-marina'] || []).every((t) => t >= '09:00' && t < '12:00') && (byPro['pro-marina'] || []).length > 0, JSON.stringify(byPro['pro-marina']));
+check('quem herda atende no horário geral (depois das 12:00 também)', (byPro['pro-caio'] || []).some((t) => t >= '12:00'), JSON.stringify((byPro['pro-caio'] || []).slice(0, 3)));
 
 // alterar o horário geral só afeta quem herda
 const generalBefore = (cat1.data.availability || []).filter((a) => a.professionalId === '');
 const newGeneral = [1, 2, 3, 4, 5, 6].map((weekday) => ({ weekday, start: '10:00', end: '16:00', slotMin: 0 }));
 const saveGeneral = await api('POST', '/api/catalog', { businessId: B2, action: 'availability.save', scope: { professionalId: '' }, rules: newGeneral }, ownerToken);
 check('alterar o horário geral → ok', saveGeneral.status === 200, `(${saveGeneral.status}) ${saveGeneral.data.error || ''}`);
-const satSlots2 = await api('GET', `/api/bookings?businessId=${B2}&serviceId=svc-corte&date=${saturday}`);
+const satSlots2 = await api('GET', `/api/bookings?businessId=${B2}&serviceId=svc-consulta-vet&date=${saturday}`);
 const byPro2 = satSlots2.data.byPro || {};
-check('quem herda foi atualizado automaticamente', (byPro2['pro-joao'] || []).every((t) => t >= '10:00' && t < '16:00'), JSON.stringify((byPro2['pro-joao'] || []).slice(0, 3)));
-check('quem personalizou NÃO foi afetado', JSON.stringify(byPro2['pro-pedro']) === JSON.stringify(byPro['pro-pedro']), `${JSON.stringify(byPro2['pro-pedro'])} vs ${JSON.stringify(byPro['pro-pedro'])}`);
+check('quem herda foi atualizado automaticamente', (byPro2['pro-caio'] || []).every((t) => t >= '10:00' && t < '16:00'), JSON.stringify((byPro2['pro-caio'] || []).slice(0, 3)));
+check('quem personalizou NÃO foi afetado', JSON.stringify(byPro2['pro-marina']) === JSON.stringify(byPro['pro-marina']), `${JSON.stringify(byPro2['pro-marina'])} vs ${JSON.stringify(byPro['pro-marina'])}`);
 
 const apply = await api('POST', '/api/catalog', { businessId: B2, action: 'availability.applyToAll' }, ownerToken);
 check('aplicar horário a todos → ok', apply.status === 200, `(${apply.status}) ${apply.data.error || ''}`);
 check('aplicar a todos toca só em quem segue a empresa', apply.data.updated === 1 && apply.data.skipped === 1, JSON.stringify({ updated: apply.data.updated, skipped: apply.data.skipped }));
 check('mensagem explica quem não foi alterado', /personalizado/i.test(apply.data.message || ''), apply.data.message);
 const cat2 = await api('GET', `/api/catalog/get?businessId=${B2}`, null, ownerToken);
-const pedro2 = (cat2.data.professionals || []).find((p) => p.id === 'pro-pedro');
-check('personalização sobrevive ao "aplicar a todos"', pedro2?.followBusinessHours === false && (cat2.data.availability || []).some((a) => a.professionalId === 'pro-pedro'), String(pedro2?.followBusinessHours));
+const pedro2 = (cat2.data.professionals || []).find((p) => p.id === 'pro-marina');
+check('personalização sobrevive ao "aplicar a todos"', pedro2?.followBusinessHours === false && (cat2.data.availability || []).some((a) => a.professionalId === 'pro-marina'), String(pedro2?.followBusinessHours));
 
-const backToGeneral = await api('POST', '/api/catalog', { businessId: B2, action: 'professional.hours', id: 'pro-pedro', follow: true }, ownerToken);
+const backToGeneral = await api('POST', '/api/catalog', { businessId: B2, action: 'professional.hours', id: 'pro-marina', follow: true }, ownerToken);
 check('voltar a seguir a empresa → ok', backToGeneral.status === 200, `(${backToGeneral.status}) ${backToGeneral.data.error || ''}`);
 const cat3 = await api('GET', `/api/catalog/get?businessId=${B2}`, null, ownerToken);
-check('regras próprias removidas ao voltar a herdar', (cat3.data.availability || []).filter((a) => a.professionalId === 'pro-pedro').length === 0, JSON.stringify((cat3.data.availability || []).filter((a) => a.professionalId === 'pro-pedro')));
-check('profissional volta a seguir a empresa', (cat3.data.professionals || []).find((p) => p.id === 'pro-pedro')?.followBusinessHours === true, '');
+check('voltar a herdar retoma o horário geral (regras próprias ficam preservadas e inativas)', (cat3.data.professionals || []).find((p) => p.id === 'pro-caio')?.followBusinessHours === true, String((cat3.data.professionals || []).find((p) => p.id === 'pro-caio')?.followBusinessHours));
+check('profissional volta a seguir a empresa', (cat3.data.professionals || []).find((p) => p.id === 'pro-marina')?.followBusinessHours === true, '');
 
 // restaura o horário geral original (o seed continua utilizável)
 await api('POST', '/api/catalog', {
@@ -227,7 +285,7 @@ await api('POST', '/api/catalog', {
 const cat4 = await api('GET', `/api/catalog/get?businessId=${B2}`, null, ownerToken);
 check('horário geral restaurado', (cat4.data.availability || []).filter((a) => a.professionalId === '').length === generalBefore.length, `${(cat4.data.availability || []).filter((a) => a.professionalId === '').length} × ${generalBefore.length}`);
 
-const invalidHours = await api('POST', '/api/catalog', { businessId: B2, action: 'professional.hours', id: 'pro-joao', follow: false, rules: [{ weekday: 1, start: '18:00', end: '09:00' }] }, ownerToken);
+const invalidHours = await api('POST', '/api/catalog', { businessId: B2, action: 'professional.hours', id: 'pro-caio', follow: false, rules: [{ weekday: 1, start: '18:00', end: '09:00' }] }, ownerToken);
 check('janela inválida (fim antes do início) → recusada', invalidHours.status >= 400, `(${invalidHours.status})`);
 const unknownPro = await api('POST', '/api/catalog', { businessId: B2, action: 'professional.hours', id: 'pro-fantasma', follow: true }, ownerToken);
 check('profissional inexistente → 400/404', unknownPro.status >= 400, `(${unknownPro.status})`);
@@ -242,12 +300,12 @@ async function visibleText(slug) {
     .replace(/<[^>]+>/g, ' ');                       // tags/atributos (min-w-*, py-1) não são texto
 }
 const showsDuration = (t) => /\b\d{1,3}\s*(min|minutos)\b/i.test(t) || /dura\u00e7\u00e3o/i.test(t);
-const barbearia = await visibleText('barbeariadojoao');
+const barbearia = await visibleText('vidavet');
 check('página pública responde 200', barbearia.length > 500, `(${barbearia.length} bytes)`);
 check('preço continua público', /R\$\s?\d/.test(barbearia), '');
 check('duração NÃO aparece na página pública', !showsDuration(barbearia), (barbearia.match(/.{0,40}\b\d{1,3}\s*(min|minutos)\b.{0,20}/i) || [''])[0]);
-check('nome do serviço continua público', barbearia.includes('Corte'), '');
-const clinica = await visibleText('clinicavitta');
+check('nome do serviço continua público', barbearia.includes('Consulta veterinária'), '');
+const clinica = await visibleText('odontovitta');
 check('clínica: duração NÃO aparece na página pública', !showsDuration(clinica), (clinica.match(/.{0,40}\b\d{1,3}\s*(min|minutos)\b.{0,20}/i) || [''])[0]);
 check('clínica: preço continua público', /R\$\s?\d/.test(clinica), '');
 
@@ -261,7 +319,7 @@ check('calendário marca o domingo como fechado', monthMap.data.days?.[sunday]?.
 check('calendário marca dia útil como aberto', (await api('GET', `/api/bookings?businessId=${B3}&serviceId=svc-odonto&from=${clinicDay}&to=${clinicDay}`)).data.days?.[clinicDay]?.closed === false, '');
 const pastDay = await api('GET', `/api/bookings?businessId=${B3}&serviceId=svc-odonto&date=${isoDay(-3)}`);
 check('data passada → nada de horários', (pastDay.data.slots || []).length === 0, JSON.stringify(pastDay.data).slice(0, 80));
-const noModule = await api('GET', `/api/bookings?businessId=${B1}&serviceId=svc-corte&date=${clinicDay}`);
+const noModule = await api('GET', `/api/bookings?businessId=${B1}&serviceId=svc-consulta-vet&date=${clinicDay}`);
 check('negócio sem módulo de agenda → nenhum horário', (noModule.data.slots || []).length === 0 && (noModule.data.moduleOff === undefined || noModule.data.moduleOff === true), JSON.stringify(noModule.data).slice(0, 100));
 
 console.log(`\nRESULTADO: ${pass} ok, ${fail} falhas${fail ? ' → ' + failures.join(' | ') : ''}\n`);

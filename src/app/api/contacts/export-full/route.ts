@@ -160,7 +160,7 @@ export async function GET(req: NextRequest) {
   });
 
   const payload = {
-    format: 'instalink.customers.full',
+    format: 'godoutor.customers.full',
     version: 1,
     generatedAt: new Date().toISOString(),
     business: {

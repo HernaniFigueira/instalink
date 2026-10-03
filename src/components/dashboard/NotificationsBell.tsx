@@ -58,16 +58,16 @@ export function useWorkspaceAlerts(businessId: string, unitQuery: string, access
     const timer = setInterval(load, REFRESH_MS);
     // Módulos/permissões/agenda mudam sem recarregar a página: o painel avisa.
     // §P1.4 — escrita concluída em qualquer tela também revalida na hora.
-    window.addEventListener('il:business-refresh', load);
-    window.addEventListener('il:overview-refresh', load);
+    window.addEventListener('godoutor:business-refresh', load);
+    window.addEventListener('godoutor:overview-refresh', load);
     // Revalida ao voltar para a aba (dado velho de madrugada não ajuda ninguém).
     const onVisible = () => { if (document.visibilityState === 'visible') load(); };
     document.addEventListener('visibilitychange', onVisible);
     return () => {
       cancel?.();
       clearInterval(timer);
-      window.removeEventListener('il:business-refresh', load);
-      window.removeEventListener('il:overview-refresh', load);
+      window.removeEventListener('godoutor:business-refresh', load);
+      window.removeEventListener('godoutor:overview-refresh', load);
       document.removeEventListener('visibilitychange', onVisible);
     };
   }, [load]);

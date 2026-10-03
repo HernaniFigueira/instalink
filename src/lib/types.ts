@@ -1,7 +1,8 @@
 // ═══════════════════════════════════════════════════════════════
-// instalink.app — Domínio universal (INSTA LINK ENGINE)
-// Nenhuma entidade aqui é específica de nicho. Nichos são apenas
-// configurações iniciais (templates) sobre este motor genérico.
+// GoDoutor Clinical OS — motor de operação da clínica.
+// Nenhuma entidade aqui é específica de nicho: nichos/tipos são apenas
+// configurações iniciais (templates) sobre este motor — nunca motores
+// paralelos por especialidade (regra da convergência, audit §8–9).
 // ═══════════════════════════════════════════════════════════════
 
 

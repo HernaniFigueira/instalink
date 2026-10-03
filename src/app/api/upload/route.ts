@@ -44,7 +44,10 @@ export async function POST(req: NextRequest) {
         { status: 503 },
       );
     }
-    const pathname = `instalink/${businessId}/${randomUUID()}.${EXT[type] || 'jpg'}`;
+    // Prefixo dos objetos de mídia no storage: 'godoutor/'. Chaves antigas
+    // ('instalink/…') seguem válidas porque o URL completo fica gravado no
+    // registro — renomear o prefixo só afeta uploads novos, nada quebra.
+    const pathname = `godoutor/${businessId}/${randomUUID()}.${EXT[type] || 'jpg'}`;
     const blob = await put(pathname, file, { access: 'public', contentType: type });
     return NextResponse.json({ ok: true, url: blob.url });
   } catch (e: any) {

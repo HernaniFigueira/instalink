@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { updateDB } from '@/lib/db';
 import { requireBusiness } from '@/lib/access';
-import { featureDef, isValidFeature, normalizeFeatures, offeredFeatureState, withActivationBlock } from '@/lib/features';
+import { featureDef, isCommerceFeature, isValidFeature, normalizeFeatures, offeredFeatureState, withActivationBlock } from '@/lib/features';
+import { isLegacyPagesEnabled } from '@/lib/product';
 import { businessIdFromRoute } from '@/lib/business-context';
 import { pushAudit } from '@/lib/audit';
 import type { OptionalFeatureId } from '@/lib/types';
@@ -23,8 +24,10 @@ export async function GET(req: NextRequest, { params }: { params: { id: string }
   const businessId = businessIdFromRoute(params, req);
   const guard = await requireBusiness(req, businessId);
   if (!guard.ok) return guard.res;
+  // CORREÇÃO FINAL: com a flag OFF o catálogo é o clínico — Produtos (vitrine)
+  // não aparece como módulo ativável. Os dados legados seguem intactos.
   return NextResponse.json({
-    features: offeredFeatureState(guard.ctx.business).map(({ def, enabled }) => ({
+    features: offeredFeatureState(guard.ctx.business, isLegacyPagesEnabled()).map(({ def, enabled }) => ({
       id: def.id, label: def.label, hint: def.hint, icon: def.icon, group: def.group,
       disabledHint: def.disabledHint, enabled,
     })),
@@ -44,6 +47,14 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
     if (!isValidFeature(feature)) return NextResponse.json({ error: 'Recurso desconhecido.' }, { status: 400 });
     const enabled = body.enabled !== false && body.enabled !== undefined ? !!body.enabled : false;
     const def = featureDef(feature)!;
+    // Ativar módulo comercial é do fluxo legado de páginas: com a flag OFF
+    // isso é recusado com estado claro (desativar continua sempre permitido —
+    // unidades antigas podem querer desligar o que já tinha).
+    if (!isLegacyPagesEnabled() && isCommerceFeature(feature) && enabled) {
+      return NextResponse.json({
+        error: 'Este é um módulo do fluxo legado de páginas (GODOUTOR_LEGACY_PAGES). Ele continua preservado nos dados, mas não pode ser ativado no Clinical OS.',
+      }, { status: 410 });
+    }
 
     const result = await updateDB((db) => {
       const b = db.businesses.find((x) => x.id === businessId);

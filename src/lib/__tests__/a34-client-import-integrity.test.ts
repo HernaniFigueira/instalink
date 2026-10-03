@@ -479,7 +479,7 @@ describe('A3.4 · B7 (2ª volta) — saída completa (JSON) sem segredos', () =>
     const text = await res.text();
     const payload = JSON.parse(text);
 
-    expect(payload.format).toBe('instalink.customers.full');
+    expect(payload.format).toBe('godoutor.customers.full');
     const ana = payload.contacts.find((c: any) => c.contactId === 'ct-phone');
     expect(ana.registration.phone).toBe('21988887777');
     expect(ana.bookings.map((b: any) => b.id)).toEqual(['bk-full']);

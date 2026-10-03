@@ -26,16 +26,27 @@ export interface DashboardModules {
   reviews: boolean;
 }
 
-/** Módulos efetivos que a Dashboard pode usar. */
+/**
+ * Módulos efetivos que a Dashboard pode usar — a FONTE ÚNICA do contexto
+ * operacional (painéis, KPIs, receita, vocabulário, atividade e checklist
+ * derivam daqui; nada decide nada no componente).
+ *
+ * MÁSCARA OPERACIONAL (bloqueio final da PR #51): com `legacyPagesEnabled`
+ * false — o Clinical OS padrão — os módulos do comércio legado (products,
+ * orders, quote) NUNCA entram na projeção, MESMO que a unidade tenha esses
+ * modes no storage. Não é mudança de dados nem de `isFeatureEnabled`:
+ * é projeção. `true` (ou omitido) preserva o ramo de compatibilidade.
+ */
 export function dashboardModules(
   business: Pick<Business, 'modes' | 'features'>,
+  legacyPagesEnabled = true,
 ): DashboardModules {
   return {
     bookings: isFeatureEnabled(business, 'bookings'),
     services: isFeatureEnabled(business, 'services'),
-    products: isFeatureEnabled(business, 'products'),
-    orders: isFeatureEnabled(business, 'orders'),
-    quote: isFeatureEnabled(business, 'quote'),
+    products: legacyPagesEnabled && isFeatureEnabled(business, 'products'),
+    orders: legacyPagesEnabled && isFeatureEnabled(business, 'orders'),
+    quote: legacyPagesEnabled && isFeatureEnabled(business, 'quote'),
     whatsapp: isFeatureEnabled(business, 'whatsapp'),
     agent: isFeatureEnabled(business, 'agent'),
     reviews: isFeatureEnabled(business, 'reviews'),
@@ -135,8 +146,9 @@ export interface DashboardContext {
 /** Contexto completo da Dashboard para um negócio. */
 export function dashboardContext(
   business: Pick<Business, 'modes' | 'features'>,
+  legacyPagesEnabled = true,
 ): DashboardContext {
-  const modules = dashboardModules(business);
+  const modules = dashboardModules(business, legacyPagesEnabled);
   const revenue = dashboardRevenueSources(modules);
   const showsOrders = modules.orders;
   const showsBookings = modules.bookings;
@@ -320,6 +332,12 @@ export interface SetupCheckInput {
   pageCustomized?: boolean;
   /** FASE 2 · P8 — WhatsApp oficial conectado (item OPCIONAL do checklist). */
   whatsappConnected?: boolean;
+  /**
+   * CORREÇÃO FINAL: corte de produto. false = Clinical OS (flag OFF) — o
+   * checklist NÃO menciona a Página (personalizar/publicar) e nenhum item
+   * comercial novo nasce. true (default p/ compat) preserva o fluxo antigo.
+   */
+  legacyPages?: boolean;
 }
 
 export interface SetupCheckItem {
@@ -362,16 +380,21 @@ export function setupChecklist(input: SetupCheckInput): SetupCheckItem[] {
     push({ id: 'team', done: counts.professionals > 0, label: 'Cadastre um profissional', href: '/profissionais' });
     push({ id: 'hours', done: counts.availability > 0, label: 'Configure os horários', href: '/disponibilidade' });
   }
-  if (modules.products) {
+  // CORREÇÃO FINAL (bloqueio): defesa dupla — o item comercial só existe com
+  // projeção ON E módulo ativo. Com legacyPages=false o item NUNCA aparece,
+  // mesmo que `modules.products` venha true por dado legado (chamador antigo).
+  if (input.legacyPages !== false && modules.products) {
     push({ id: 'products', done: counts.products > 0, label: 'Monte sua vitrine de produtos', href: '/produtos' });
   }
-  push({
-    id: 'personalize',
-    done: input.pageCustomized === true,
-    label: 'Personalize a página',
-    href: '/pagina',
-  });
-  push({ id: 'publish', done: !!business.published, label: 'Publique a página', href: '/pagina' });
+  if (input.legacyPages !== false) {
+    push({
+      id: 'personalize',
+      done: input.pageCustomized === true,
+      label: 'Personalize a página',
+      href: '/pagina',
+    });
+    push({ id: 'publish', done: !!business.published, label: 'Publique a página', href: '/pagina' });
+  }
   push({
     id: 'whatsapp',
     done: input.whatsappConnected === true,

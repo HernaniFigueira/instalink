@@ -1,18 +1,24 @@
 // Templates = apenas configurações iniciais. Nenhum código duplicado por nicho.
 //
-// POSICIONAMENTO: o GoDoutor nasceu como plataforma "universal"; hoje é
-// especializada em negócios de atendimento. Por isso:
-//   • o cadastro NÃO pergunta mais "o que você vende" — todo negócio novo
-//     nasce com o padrão de atendimento (Serviços + Agendamentos ligados,
-//     vitrine de produtos DESLIGADA, sem pedidos/orçamentos);
-//   • o nicho continua ARMAZENADO por compatibilidade (templates de tema),
-//     mas não escolhe arquitetura comercial nem cria caminhos paralelos.
+// POSICIONAMENTO (GODOUTOR Clinical OS): o produto foi "universal" um dia;
+// hoje é o sistema operacional da CLÍNICA. Este arquivo é RAMO DE
+// COMPATIBILIDADE: `NEW_BUSINESS_DEFAULTS`, `defaultBlocks(niche, modes)` e
+// `defaultPresetId(niche)` continuam existindo para dados, admin e e2es
+// antigos — NENHUM fluxo novo os ensina. A unidade clínica nasce no padrão de
+// atendimento (Serviços + Agendamentos ligados, vitrine/pedidos desligados);
+// o nicho continua ARMAZENADO (dados legados + templates de tema) mas não
+// escolhe arquitetura nem cria caminhos paralelos. Matriz: audit de
+// convergência, §compat.
 import type { Block, BlockType, BusinessMode, Niche, Theme } from './types';
 import { NICHE_PRESET, presetById } from './themes';
 import { uid } from './utils';
 import { defaultCtaTarget } from './cta';
 
-/** Padrão comercial de um negócio novo (fonte única usada pelo cadastro/API). */
+/**
+ * Padrão INICIAL de uma unidade nova — fonte única do RAMO DE COMPATIBILIDADE
+ * (flag GODOUTOR_LEGACY_PAGES ON / chamadores legados). O fluxo clínico padrão
+ * não deriva nada daqui que defina arquitetura comercial.
+ */
 export const NEW_BUSINESS_DEFAULTS: { niche: Niche; modes: BusinessMode[] } = {
   niche: 'servicos',
   modes: ['services', 'bookings'],

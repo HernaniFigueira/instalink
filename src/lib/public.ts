@@ -1,7 +1,7 @@
 import { toPublicBusiness } from './public-business';
 import { cookies } from 'next/headers';
 import { readDB } from './db';
-import { COOKIE_NAME, getUserBySessionFromDB } from './auth';
+import { sessionCookieId, getUserBySessionFromDB } from './auth';
 import type { Business, BusinessAgent, Category, DB, Page, Product, ProductOption, ProductOptionValue, Professional, PublicBusiness, Review, Service } from './types';
 import { agentFor, defaultAgent } from './agent';
 import { getBusinessOpenStatus, type OpenStatus } from './hours';
@@ -43,7 +43,7 @@ export async function getPublicData(slug: string): Promise<(PublicData & { notFo
   const page = db.pages.find((p) => p.businessId === business.id);
   if (!page) return null;
 
-  const user = getUserBySessionFromDB(db, cookies().get(COOKIE_NAME)?.value);
+  const user = getUserBySessionFromDB(db, sessionCookieId(cookies()));
   const isOwner = !!user && business.ownerId === user.id;
   if (!business.published && !isOwner) {
     return { business: emptyPublicBusiness(business), page, categories: [], products: [], options: [], optionValues: [], services: [], serviceCategories: [], professionals: [], reviews: [], isOwnerPreview: false, notPublished: true, agent: defaultAgent(business.id, business.name), openNow: null };

@@ -55,7 +55,7 @@ withFileBackend('db — migração P2 (identidade, vínculo e observações)', (
 
   beforeAll(async () => {
     originalCwd = process.cwd();
-    tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'instalink-p2-'));
+    tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'godoutor-p2-'));
     process.chdir(tmp);
     fs.mkdirSync(path.join(tmp, 'data'), { recursive: true });
     file = path.join(tmp, 'data', 'instalink.db.json');

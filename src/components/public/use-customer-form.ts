@@ -48,10 +48,10 @@ export function useCustomerForm(): CustomerForm {
     refresh();
     const off = onAuthOk(refresh);
     const changed = () => refresh();
-    window.addEventListener('il:auth-changed', changed);
+    window.addEventListener('godoutor:auth-changed', changed);
     return () => {
       off();
-      window.removeEventListener('il:auth-changed', changed);
+      window.removeEventListener('godoutor:auth-changed', changed);
     };
   }, [refresh]);
 

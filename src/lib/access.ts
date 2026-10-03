@@ -10,7 +10,7 @@ import type { NextRequest } from 'next/server';
 import { readDB } from './db';
 import {
   getBearerToken, getUserBySessionFromDB, hasRequestCredentials,
-  userFromRequest, userFromRequestFromDB, COOKIE_NAME,
+  userFromRequest, userFromRequestFromDB, sessionCookieId,
 } from './auth';
 import { cookies } from 'next/headers';
 import type { DB, PermissionId, SupportSession, User } from './types';
@@ -156,7 +156,7 @@ export async function requireMaster(req: NextRequest): Promise<
  */
 export async function currentAccess(businessId: string): Promise<AccessContext | null> {
   const cookieStore = cookies();
-  const sessionId = cookieStore.get(COOKIE_NAME)?.value;
+  const sessionId = sessionCookieId(cookieStore);
   if (!sessionId) return null;
   const db = await readDB();
   const user = getUserBySessionFromDB(db, sessionId);

@@ -80,13 +80,23 @@ export function CatalogIsland({ business, products, categories, options, values,
   const [cat, setCat] = useState<string>('');
   const [open, setOpen] = useState<Product | null>(null);
   const [cart, setCart] = useState<CartItem[]>(() => {
-    try { return JSON.parse(localStorage.getItem(`il-cart-${business.id}`) || '[]'); } catch { return []; }
+    // Renome com migração (bloco 5 da correção final): chave canônica
+    // `godoutor-cart-<id>`; a antiga `il-cart-<id>` (pedido legado) segue
+    // legível como fallback — carrinho nenhum se perde na virada.
+    try {
+      const raw = localStorage.getItem(`godoutor-cart-${business.id}`) ?? localStorage.getItem(`il-cart-${business.id}`);
+      return JSON.parse(raw || '[]');
+    } catch { return []; }
   });
   const [cartOpen, setCartOpen] = useState(false);
   const [checkout, setCheckout] = useState(false);
 
   useEffect(() => {
-    try { localStorage.setItem(`il-cart-${business.id}`, JSON.stringify(cart)); } catch { /* noop */ }
+    try {
+      const value = JSON.stringify(cart);
+      localStorage.setItem(`godoutor-cart-${business.id}`, value);
+      localStorage.removeItem(`il-cart-${business.id}`); // gravação canônica feita → legado sai
+    } catch { /* noop */ }
   }, [cart, business.id]);
 
   const filtered = useMemo(() => {

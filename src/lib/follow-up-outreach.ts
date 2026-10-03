@@ -617,7 +617,7 @@ export function scanBusinessOutreach(
 
       pushAudit(db, {
         action: 'followup.outreach_evaluated',
-        actor: { id: 'system', email: 'system@instalink.app', role: 'system' },
+        actor: { id: 'system', email: 'system@godoutor.app', role: 'system' },
         businessId: input.businessId,
         meta: {
           outreachId: row.id,

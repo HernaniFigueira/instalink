@@ -1,6 +1,10 @@
-// Modelos prontos de design — o lojista escolhe uma combinação fechada
-// (cores + tipografia + formato) e DEPOIS ajusta o que quiser.
-// Nada aqui é por nicho: qualquer negócio pode usar qualquer modelo.
+// Modelos prontos de APARÊNCIA — a clínica escolhe uma combinação fechada
+// (cores + tipografia + formato) e DEPOIS ajusta o que quiser. Nada aqui é
+// motor por nicho: todos os modelos são a mesma engine sobre os mesmos blocos
+// (regra dos audit §8–9 da convergência). Modelos marcados `commerce` são
+// RELÍQUIA DE VITRINE do fluxo universal antigo: continuam RESOLVÍVEIS por id
+// (páginas legadas salvaram `presetId`), mas NÃO aparecem no catálogo padrão do
+// Clinical OS — ver CLINIC_THEME_PRESETS e GODOUTOR_LEGACY_PAGES.
 import type { Niche, Theme } from './types';
 
 export interface ThemePreset {
@@ -14,11 +18,14 @@ export interface ThemePreset {
    * conjunto de componentes. Ausente = modelo geral (nicho).
    */
   clinicType?: 'medica' | 'odontologica' | 'veterinaria' | 'estetica' | 'particular' | 'geral';
+  /** Relíquia comercial (vitrine/delivery): fora do catálogo clínico padrão;
+   *  id continua resolvível para dados antigos. Não apaga nada. */
+  commerce?: boolean;
 }
 
 export const THEME_PRESETS: ThemePreset[] = [
   {
-    id: 'limao', name: 'Lima Elétrica', hint: 'Escuro, jovem e chamativo',
+    id: 'limao', name: 'Lima Elétrica', hint: 'Escuro, jovem e chamativo', commerce: true,
     theme: {
       primary: '#a3e635', secondary: '#2f7bff', background: '#120a0b',
       surface: '#201416', text: '#fafaf9', muted: '#a8a29e',
@@ -34,7 +41,7 @@ export const THEME_PRESETS: ThemePreset[] = [
     },
   },
   {
-    id: 'pordosol', name: 'Pôr do Sol', hint: 'Quente, ideal para delivery',
+    id: 'pordosol', name: 'Pôr do Sol', hint: 'Quente e acolhedor', commerce: true,
     theme: {
       primary: '#ea580c', secondary: '#fbbf24', background: '#fff7ed',
       surface: '#ffffff', text: '#431407', muted: '#9c6b4c',
@@ -50,7 +57,7 @@ export const THEME_PRESETS: ThemePreset[] = [
     },
   },
   {
-    id: 'noite', name: 'Noite Neon', hint: 'Premium, urbano, sofisticado',
+    id: 'noite', name: 'Noite Neon', hint: 'Premium, urbano, sofisticado', commerce: true,
     theme: {
       primary: '#8b5cf6', secondary: '#22d3ee', background: '#0b0b12',
       surface: '#16161f', text: '#f4f4f5', muted: '#8e8e9a',
@@ -66,7 +73,7 @@ export const THEME_PRESETS: ThemePreset[] = [
     },
   },
   {
-    id: 'cafe', name: 'Café & Craft', hint: 'Artesanal, aconchegante',
+    id: 'cafe', name: 'Café & Craft', hint: 'Artesanal, aconchegante', commerce: true,
     theme: {
       primary: '#92400e', secondary: '#d97706', background: '#f7f3ec',
       surface: '#fffdf8', text: '#292019', muted: '#8a7a68',
@@ -141,6 +148,14 @@ export const THEME_PRESETS: ThemePreset[] = [
   },
 ];
 
+/**
+ * Catálogo clínico padrão (flag OFF): exclui modelos de comércio. Os demais
+ * continuam em THEME_PRESETS para RESOLVER ids salvos por páginas legadas —
+ * remover da lista não apaga nem quebra dado algum. A ORDEM de THEME_PRESETS
+ * é congelada (o fallback de `presetById` é posicional).
+ */
+export const CLINIC_THEME_PRESETS: ThemePreset[] = THEME_PRESETS.filter((p) => !p.commerce);
+
 export function presetById(id: string | undefined): ThemePreset {
   return THEME_PRESETS.find((p) => p.id === id) || THEME_PRESETS[3];
 }
@@ -154,6 +169,12 @@ export function clinicPresetId(clinicType: string | undefined): string {
 }
 
 /** Modelo inicial sugerido por nicho (só o ponto de partida). */
+/**
+ * Modelo inicial sugerido por nicho — SOMENTE para o fluxo legado de página
+ * (compatibilidade). O onboarding clínico usa preset por TIPO DE CLÍNICA
+ * (`clinicPresetId`) ou `clinica-geral`; nichos comerciais não governam nada
+ * no Clinical OS.
+ */
 export const NICHE_PRESET: Record<Niche, string> = {
   alimentacao: 'pordosol',
   loja: 'noite',

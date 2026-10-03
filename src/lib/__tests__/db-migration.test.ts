@@ -37,7 +37,7 @@ withFileBackend('db — migração do followBusinessHours (dados legados)', () =
 
   beforeAll(async () => {
     originalCwd = process.cwd();
-    tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'instalink-db-'));
+    tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'godoutor-db-'));
     fs.mkdirSync(path.join(tmp, 'data'), { recursive: true });
     fs.writeFileSync(path.join(tmp, 'data', 'instalink.db.json'), JSON.stringify(LEGACY_DOC));
     // db.ts resolve o caminho do arquivo no import → cwd precisa estar apontado

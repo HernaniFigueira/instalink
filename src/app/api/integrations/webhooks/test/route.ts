@@ -38,9 +38,9 @@ export async function POST(req: NextRequest) {
       data: {
         lead: {
           id: 'lead-test-123',
-          name: 'Lead Teste InstaLink',
+          name: 'Lead Teste GoDoutor',
           phone: '11999999999',
-          email: 'teste@instalink.app',
+          email: 'teste@godoutor.app',
           origin: 'external_site',
           stageId: 'new',
         },
@@ -59,7 +59,7 @@ export async function POST(req: NextRequest) {
         'Content-Type': 'application/json',
         'X-Instalink-Signature': `t=${timestamp},v1=${signature}`,
         'X-Instalink-Timestamp': String(timestamp),
-        'User-Agent': 'InstaLink-Webhook-Test/1.0',
+        'User-Agent': 'GoDoutor-Webhook-Test/1.0',
       },
       body: testPayload,
       signal: controller.signal,

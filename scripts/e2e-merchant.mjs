@@ -141,7 +141,7 @@ check('cliente vê agendamento', (myB.data.bookings || []).length > 0);
 const ov = await api('GET', `/api/overview?businessId=${B}`, null, token);
 check('overview: receita PREVISTA dos atendimentos (sem pedido)', ov.status === 200 && (ov.data.revenueDetail?.sources || []).includes('bookings') && ov.data.revenueDetail?.orders === null, `(sources=${JSON.stringify(ov.data.revenueDetail?.sources)})`);
 check('dashboard: sem pedidos no payload', ov.data.totals?.orders === 0 && ov.data.ordersPanel === null);
-check('checklist "Comece por aqui" com progresso real', Array.isArray(ov.data.checklist) && ov.data.checklist.length > 0 && ov.data.checklist.some((c) => c.label === 'Cadastre seus serviços' && c.done === true), JSON.stringify((ov.data.checklist || []).map((c) => [c.label, c.done])));
+check('checklist "Comece por aqui" com progresso real', Array.isArray(ov.data.checklist) && ov.data.checklist.length > 0 && ov.data.checklist.some((c) => c.label === 'Cadastre o primeiro serviço' && c.done === true), JSON.stringify((ov.data.checklist || []).map((c) => [c.label, c.done])));
 const p360 = await api('GET', `/api/people360?businessId=${B}`, null, token);
 check('cliente 360 unificado', (p360.data.people || []).some((p) => p.bookings.length > 0 && p.bookings.some((b) => b.service === 'Corte Feminino')));
 const an = await api('GET', `/api/analytics?businessId=${B}&period=7`, null, token);

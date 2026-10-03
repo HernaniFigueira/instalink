@@ -182,7 +182,7 @@ export function BookingIsland({ business, services, professionals, title, initia
         if (res.status === 409) { setTime(''); setSlotsTry(n => n + 1); }
         throw new Error(data.error || 'Não foi possível reservar este horário.');
       }
-      window.dispatchEvent(new CustomEvent('il:bookings-changed', { detail: { businessId: business.id } }));
+      window.dispatchEvent(new CustomEvent('godoutor:bookings-changed', { detail: { businessId: business.id } }));
       setSavedStatus(data.status || 'pending');
       setDone(true);
     } catch (err: any) {
