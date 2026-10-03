@@ -22,6 +22,8 @@
 // (lib/panel.ts) — nunca de uma lista paralela de caminhos.
 import { routeRequiresBusiness } from './panel';
 
+export const LAST_BUSINESS_STORAGE_KEY = 'godoutor:last-business';
+
 /**
  * Id da empresa para uma rota /api/businesses/[id]/...
  * Prioridade: path param (a rota já diz QUAL empresa) → ?businessId= (compat).
@@ -43,16 +45,49 @@ export function businessIdInList(id: string, list: Array<{ id: string }>): boole
 }
 
 /**
- * Empresa ativa para o painel: o ?b= quando existe na lista; senão a
- * primeira (mesma regra do DashboardShell). '' quando não há empresa alguma.
+ * Resolve a unidade ativa SEM depender da ordem retornada pelo banco.
+ *
+ * Prioridade:
+ *   1. ?b= explícito e acessível;
+ *   2. última unidade lembrada e ainda acessível;
+ *   3. única unidade acessível da conta;
+ *   4. '' quando há ambiguidade (2+ unidades sem escolha válida).
+ *
+ * O caso 4 é intencional: o chamador deve abrir a seleção de clínica em vez
+ * de escolher silenciosamente `businesses[0]`.
  */
 export function resolveActiveBusinessId(
   requested: string | null | undefined,
   list: Array<{ id: string }>,
+  remembered?: string | null,
 ): string {
   const req = String(requested || '').trim();
   if (req && businessIdInList(req, list)) return req;
-  return list[0]?.id || '';
+  const last = String(remembered || '').trim();
+  if (last && businessIdInList(last, list)) return last;
+  return list.length === 1 ? list[0].id : '';
+}
+
+/** Lê a última clínica escolhida no navegador. Nunca concede acesso por si só. */
+export function readLastBusinessId(): string {
+  if (typeof window === 'undefined') return '';
+  try {
+    return String(window.localStorage.getItem(LAST_BUSINESS_STORAGE_KEY) || '').trim();
+  } catch {
+    return '';
+  }
+}
+
+/** Persiste somente o id já validado contra /api/auth/me pelo chamador. */
+export function rememberLastBusinessId(id: string): void {
+  if (typeof window === 'undefined') return;
+  try {
+    const value = String(id || '').trim();
+    if (value) window.localStorage.setItem(LAST_BUSINESS_STORAGE_KEY, value);
+    else window.localStorage.removeItem(LAST_BUSINESS_STORAGE_KEY);
+  } catch {
+    // armazenamento indisponível não pode impedir login/navegação
+  }
 }
 
 

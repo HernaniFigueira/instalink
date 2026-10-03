@@ -14,7 +14,7 @@ import {
 } from '@/lib/panel';
 import { isSessionExpired } from '@/lib/http';
 import type { BusinessMode, FeatureId, PermissionId } from '@/lib/types';
-import { requiresActiveBusiness } from '@/lib/business-context';
+import { readLastBusinessId, rememberLastBusinessId, requiresActiveBusiness, resolveActiveBusinessId } from '@/lib/business-context';
 import { mayLeaveEditor } from '@/components/dashboard/useUnsavedChanges';
 import { WorkspaceContext } from '@/components/dashboard/WorkspaceContext';
 import { ConversationsDock } from '@/components/dashboard/ConversationsDock';
@@ -77,6 +77,7 @@ export function DashboardShell({ children }: { children: React.ReactNode }) {
   const [support, setSupport] = useState<SupportInfo | null>(null);
   const [ready, setReady] = useState(false);
   const [contextError, setContextError] = useState(false);
+  const [rememberedBusinessId, setRememberedBusinessId] = useState('');
   const [collapsed, setCollapsed] = useState(() => {
     // Renome com migração (bloco 5 da correção): chave canônica
     // 'godoutor-side-v2'; a antiga 'il-side-v2' só é lida como fallback.
@@ -156,6 +157,10 @@ export function DashboardShell({ children }: { children: React.ReactNode }) {
   }, [router]);
 
   useEffect(() => {
+    setRememberedBusinessId(readLastBusinessId());
+  }, []);
+
+  useEffect(() => {
     // 401 (sessão inexistente/expirada/inválida) é o ÚNICO status que inicia
     // o fluxo de login; qualquer outro mantém o usuário dentro do painel.
     loadContext();
@@ -178,29 +183,41 @@ export function DashboardShell({ children }: { children: React.ReactNode }) {
     return () => window.removeEventListener('godoutor:business-refresh', fn);
   }, [loadContext]);
 
-  // Unidade ativa: só rotas que PRECISAM de unidade (o catálogo diz quais)
-  // recebem o `?b=`. Os demais parâmetros da URL são preservados — trocar de
-  // unidade ou chegar sem `?b=` nunca derruba `?tab=`, `?organization=`, etc.
+  // Unidade ativa: NUNCA depende de businesses[0].
+  // ?b= explícito → última unidade lembrada → única unidade. Com 2+ unidades
+  // sem escolha válida, abre o seletor em vez de assumir um tenant pela ordem
+  // do banco (causa raiz do login Andrioni → "Hamburguer Podrão").
   useEffect(() => {
     if (!ready || businesses.length === 0) return;
-    if (!requiresActiveBusiness(pathname)) return;
-    const b = params.get('b');
-    if (businesses.some((x) => x.id === b)) return;
-    const qs = new URLSearchParams(params.toString());
-    qs.set('b', businesses[0].id);
-    router.replace(`${pathname}?${qs.toString()}`);
-  }, [ready, businesses, params, pathname, router]);
+    const requested = params.get('b');
+    const resolved = resolveActiveBusinessId(requested, businesses, rememberedBusinessId);
+
+    if (resolved) {
+      if (rememberedBusinessId !== resolved) {
+        rememberLastBusinessId(resolved);
+        setRememberedBusinessId(resolved);
+      }
+      if (requiresActiveBusiness(pathname) && requested !== resolved) {
+        const qs = new URLSearchParams(params.toString());
+        qs.set('b', resolved);
+        router.replace(`${pathname}?${qs.toString()}`);
+      }
+      return;
+    }
+
+    if (requiresActiveBusiness(pathname) && businesses.length > 1) {
+      router.replace('/selecionar-clinica');
+    }
+  }, [ready, businesses, rememberedBusinessId, params, pathname, router]);
 
   const activePath = activePanelPath(pathname);
   const activeRoute = activePanelRoute(pathname);
 
   // ── Notificações reais (Etapa A) ────────────────────────────────────────
   // Hook declarado ANTES de qualquer early return (regra de hooks do React).
-  // O id vem do ?b= válido ou da primeira unidade; na visão de organização o
-  // painel some (não há unidade ativa para ler pendências).
-  const provisionalBiz = params.get('b') && businesses.some((b) => b.id === params.get('b'))
-    ? params.get('b')!
-    : businesses[0]?.id || '';
+  // O id vem do ?b= válido, da última unidade lembrada ou da única unidade.
+  // Em contexto ambíguo fica vazio até a escolha explícita.
+  const provisionalBiz = resolveActiveBusinessId(params.get('b'), businesses, rememberedBusinessId);
   const alertsBiz = activePath === '/organizacao' ? '' : provisionalBiz;
   // Sino: só lê o Overview quando a unidade ativa concede `dashboard` (e depois
   // que as permissões chegaram) — quem não tem Visão geral não gera chamada.
@@ -231,6 +248,8 @@ export function DashboardShell({ children }: { children: React.ReactNode }) {
     if (id === '__overview') { router.push(`/organizacao?organization=${business?.organizationId || ''}`); return; }
     if (id === '__add') { router.push(`/organizacao?organization=${business?.organizationId || ''}&add=1`); return; }
     // Em rota que não é de unidade (ex.: /organizacao) a troca leva ao painel.
+    rememberLastBusinessId(id);
+    setRememberedBusinessId(id);
     const target = routeRequiresBusiness(pathname) ? pathname : '/dashboard';
     router.push(switchUnitHref(target, new URLSearchParams(params.toString()), id));
   }
@@ -260,9 +279,26 @@ export function DashboardShell({ children }: { children: React.ReactNode }) {
     );
   }
 
-  const organization = organizations.find(o=>o.id === params.get('organization')) || organizations.find(o=>o.id === businesses.find(b=>b.id===params.get('b'))?.organizationId) || organizations[0];
+  const activeBusinessId = resolveActiveBusinessId(params.get('b'), businesses, rememberedBusinessId);
+  const organization = organizations.find(o=>o.id === params.get('organization')) || organizations.find(o=>o.id === businesses.find(b=>b.id===activeBusinessId)?.organizationId) || organizations[0];
   const legacyPagesEnabled = isLegacyPagesEnabled();
-  const business: Biz = (activePath === '/organizacao' ? businesses.find(b=>b.organizationId===organization?.id) : businesses.find(b=>b.id===params.get('b')) || businesses[0]) || {id:'',slug:'',name:organization?.name || 'Organização',organizationId:organization?.id,modes:[],features:{},published:false};
+  const selectedBusiness = businesses.find(b=>b.id===activeBusinessId);
+  const business: Biz = (activePath === '/organizacao'
+    ? businesses.find(b=>b.organizationId===organization?.id)
+    : selectedBusiness
+  ) || {id:'',slug:'',name:organization?.name || 'Organização',organizationId:organization?.id,modes:[],features:{},published:false};
+  if (requiresActiveBusiness(pathname) && businesses.length > 1 && !activeBusinessId) {
+    return (
+      <div className="min-h-screen lg:flex" aria-label="Selecionando clínica">
+        <div className="hidden lg:flex w-[248px] shrink-0 flex-col bg-white border-r border-[var(--border)] p-3 gap-2">
+          <div className="h-9 w-32 bg-zinc-100 animate-pulse mb-2" />
+          {Array.from({ length: 6 }).map((_, i) => <div key={i} className="h-7 bg-zinc-100 animate-pulse" />)}
+        </div>
+        <div className="flex-1 min-w-0"><div className="px-6 lg:px-8 py-6"><PageSkeleton /></div></div>
+      </div>
+    );
+  }
+
   const modes = business?.modes || [];
   const features = business?.features || {};
   const permissions: Partial<Record<PermissionId, boolean>> = business?.permissions || {};

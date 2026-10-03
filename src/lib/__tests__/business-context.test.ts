@@ -3,12 +3,8 @@ import {
   businessIdFromRoute, businessIdInList, resolveActiveBusinessId,
 } from '../business-context';
 
-// Contexto da empresa (auditoria §5): a URL da API diz QUAL empresa
-// (path param); ?businessId= é apenas compatibilidade; no cliente, o ?b=
-// nunca é fonte única — cai para a empresa ativa do /api/auth/me.
-
 describe('businessIdFromRoute — a rota manda, a query só complementa', () => {
-  it('usa o [id] do path (causa raiz do loop de Recursos corrigida)', () => {
+  it('usa o [id] do path', () => {
     expect(businessIdFromRoute({ id: 'biz-1' }, null)).toBe('biz-1');
   });
 
@@ -29,23 +25,32 @@ describe('businessIdFromRoute — a rota manda, a query só complementa', () => 
   });
 });
 
-describe('resolveActiveBusinessId — ?b= explícito, mas nunca frágil', () => {
+describe('resolveActiveBusinessId — contexto explícito, nunca pela ordem do banco', () => {
   const list = [{ id: 'biz-a' }, { id: 'biz-b' }];
 
   it('respeita o ?b= quando ele pertence à conta', () => {
-    expect(resolveActiveBusinessId('biz-b', list)).toBe('biz-b');
+    expect(resolveActiveBusinessId('biz-b', list, 'biz-a')).toBe('biz-b');
   });
 
-  it('cai para a empresa ativa (1ª) quando falta ?b=', () => {
-    expect(resolveActiveBusinessId(null, list)).toBe('biz-a');
-    expect(resolveActiveBusinessId('', list)).toBe('biz-a');
+  it('usa a última unidade válida quando falta ?b=', () => {
+    expect(resolveActiveBusinessId(null, list, 'biz-b')).toBe('biz-b');
+    expect(resolveActiveBusinessId('', list, 'biz-a')).toBe('biz-a');
   });
 
-  it('cai para a empresa ativa quando o ?b= não é da conta', () => {
-    expect(resolveActiveBusinessId('biz-de-outra-pessoa', list)).toBe('biz-a');
+  it('ignora preferência que não existe mais na lista acessível', () => {
+    expect(resolveActiveBusinessId(null, list, 'biz-antiga')).toBe('');
   });
 
-  it('vazio quando a conta não tem empresa (estado próprio na tela)', () => {
+  it('com uma única unidade entra direto sem exigir preferência', () => {
+    expect(resolveActiveBusinessId(null, [{ id: 'andrioni' }])).toBe('andrioni');
+  });
+
+  it('com múltiplas unidades e sem escolha não usa o primeiro item', () => {
+    expect(resolveActiveBusinessId(null, list)).toBe('');
+    expect(resolveActiveBusinessId('biz-invalida', list)).toBe('');
+  });
+
+  it('vazio quando a conta não tem empresa', () => {
     expect(resolveActiveBusinessId(null, [])).toBe('');
     expect(businessIdInList('x', [])).toBe(false);
   });
