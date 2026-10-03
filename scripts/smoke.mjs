@@ -6,9 +6,9 @@ const BASE = process.env.SMOKE_BASE || 'http://localhost:3000';
 const TAG = process.env.SMOKE_TAG || `smoke${Date.now().toString(36)}`;
 const RUN = String(Date.now() % 100000000).padStart(8, '0');
 const ph = (n) => `119${RUN.slice(0, 4)}${String(n).padStart(4, '0')}`; // 11 dígitos, único por run
-const B1 = 'biz-burgerhouse'; // produtos/pedidos
-const B2 = 'biz-barbeariajoao'; // serviços/agenda
-const B3 = 'biz-clinicavitta'; // clínica (cenários A–G)
+const B1 = 'biz-clinicageral'; // unidade clínica geral (contexto de APIs)
+const B2 = 'biz-vidavet'; // veterinária (atribuição automática; grade dupla)
+const B3 = 'biz-odontovitta'; // odontologia (cenários A–G: profissionais e escolha)
 
 let pass = 0, fail = 0;
 const failures = [];
@@ -38,8 +38,8 @@ console.log(`\nSMOKE ${BASE} [${TAG}]`);
 
 // ── Públicas ──
 console.log('\n— páginas públicas');
-let r = await fetch(BASE + '/burgerhouse');
-check('GET /burgerhouse 200', r.status === 200);
+let r = await fetch(BASE + '/clinicageral');
+check('GET /clinicageral 200', r.status === 200);
 r = await fetch(BASE + '/recuperar');
 check('GET /recuperar 200', r.status === 200);
 
@@ -60,39 +60,39 @@ const nextDow = (dows) => {
   return isoDay(1);
 };
 const past = isoDay(-30), tomorrow = nextDow([1, 2, 3, 4, 5, 6]), clinicDay = nextDow([1, 2, 3, 4, 5]);
-const pastRes = await api('GET', `/api/bookings?businessId=${B2}&serviceId=svc-corte&date=${past}`);
+const pastRes = await api('GET', `/api/bookings?businessId=${B2}&serviceId=svc-consulta-vet&date=${past}`);
 const pastSlots = pastRes.data.slots || [];
 check('data passada → zero slots', pastRes.status === 200 && pastSlots.length === 0, JSON.stringify(pastRes.data).slice(0, 120));
-let slots = await api('GET', `/api/bookings?businessId=${B2}&serviceId=svc-corte&professionalId=pro-pedro&date=${tomorrow}`);
+let slots = await api('GET', `/api/bookings?businessId=${B2}&serviceId=svc-consulta-vet&professionalId=pro-marina&date=${tomorrow}`);
 const free = slots.data.slots || [];
 check('amanhã tem slots livres', slots.status === 200 && free.length > 0, `(${free.length})`);
 const t1 = free[0], t2 = free[1] || free[0];
 
 let past1 = await api('POST', '/api/bookings', {
-  businessId: B2, serviceId: 'svc-corte', date: past, time: '10:00',
+  businessId: B2, serviceId: 'svc-consulta-vet', date: past, time: '10:00',
   customerName: `${TAG} Passado`, customerPhone: ph(1),
 });
 check('reserva no passado rejeitada (4xx)', past1.status >= 400 && past1.status < 500, `(${past1.status})`);
 
 const b1 = await api('POST', '/api/bookings', {
-  businessId: B2, serviceId: 'svc-corte', professionalId: 'pro-pedro', date: tomorrow, time: t1,
+  businessId: B2, serviceId: 'svc-consulta-vet', professionalId: 'pro-marina', date: tomorrow, time: t1,
   customerName: `${TAG} Guest`, customerPhone: ph(2),
 }, custToken);
 check('reserva criada', !!b1.data.bookingId, `(${b1.status}) ${JSON.stringify(b1.data).slice(0, 140)}`);
 const b1id = b1.data.bookingId || '';
 
-// svc-corte tem DOIS barbeiros elegíveis e o cliente nunca escolhe profissional:
-// o servidor atribui. Pedir "pro-pedro" duas vezes no mesmo horário não é
+// svc-consulta-vet tem DOIS barbeiros elegíveis e o cliente nunca escolhe profissional:
+// o servidor atribui. Pedir "pro-marina" duas vezes no mesmo horário não é
 // conflito — a segunda reserva vai para o outro barbeiro livre.
 const dbl = await api('POST', '/api/bookings', {
-  businessId: B2, serviceId: 'svc-corte', professionalId: 'pro-pedro', date: tomorrow, time: t1,
+  businessId: B2, serviceId: 'svc-consulta-vet', professionalId: 'pro-marina', date: tomorrow, time: t1,
   customerName: `${TAG} Duplo`, customerPhone: ph(3),
 }, custToken);
 check('mesmo horário, 2 profissionais livres → servidor atribui o outro', dbl.status < 300 && !!dbl.data.bookingId, `(${dbl.status}) pro=${dbl.data.professionalName}`);
-check('atribuição respeita o pedido quando o profissional está livre', dbl.data.professionalId === 'pro-pedro' || b1.data.professionalId === 'pro-pedro', `b1=${b1.data.professionalId} dbl=${dbl.data.professionalId}`);
+check('atribuição respeita o pedido quando o profissional está livre', dbl.data.professionalId === 'pro-marina' || b1.data.professionalId === 'pro-marina', `b1=${b1.data.professionalId} dbl=${dbl.data.professionalId}`);
 // Sem ninguém livre no horário, aí sim é conflito.
 const tri = await api('POST', '/api/bookings', {
-  businessId: B2, serviceId: 'svc-corte', date: tomorrow, time: t1,
+  businessId: B2, serviceId: 'svc-consulta-vet', date: tomorrow, time: t1,
   customerName: `${TAG} Triplo`, customerPhone: ph(31),
 }, custToken);
 check('sem profissional livre no horário → 409', tri.status === 409, `(${tri.status})`);
@@ -108,21 +108,21 @@ check('forgot consumidor ok sem enumeração', cf.data.ok === true, `(${cf.statu
 
 // orçamento guest (sem token)
 const quote = await api('POST', '/api/leads', {
-  businessId: B2, origin: 'orcamento', name: `${TAG} Orc`, phone: ph(6), interest: 'Quanto custa corte + barba?',
+  businessId: B2, origin: 'orcamento', name: `${TAG} Orc`, phone: ph(6), interest: 'Quanto custa consulta + vacinação?',
 });
-// A Barbearia do João não tem o módulo de orçamento: a captação inteira é o
-// módulo, então o lead público é recusado com mensagem amigável (403) — e o
-// lead NÃO é criado.
+// A VidaVet não tem o módulo de orçamento: a captação inteira é o módulo de
+// atendimento, então o lead público é recusado com mensagem amigável (403) —
+// e o lead NÃO é criado.
 check('orçamento em negócio sem o módulo → 403 amigável', quote.status === 403 && /orçamento/i.test(quote.data.error || ''), `(${quote.status}) ${quote.data.error || ''}`);
 
 // ── Reserva do consumidor + remarcação atômica ──
 console.log('\n— remarcação atômica');
-const bslots = await api('GET', `/api/bookings?businessId=${B2}&serviceId=svc-barba&professionalId=pro-pedro&date=${tomorrow}`);
+const bslots = await api('GET', `/api/bookings?businessId=${B2}&serviceId=svc-vacina&professionalId=pro-marina&date=${tomorrow}`);
 const bfree = bslots.data.slots || [];
 const u1 = bfree[0] || '';
 const u2 = bfree.find((t) => t !== t1 && t !== u1) || '';
 const bc = u1 ? await api('POST', '/api/bookings', {
-  businessId: B2, serviceId: 'svc-barba', professionalId: 'pro-pedro', date: tomorrow, time: u1,
+  businessId: B2, serviceId: 'svc-vacina', professionalId: 'pro-marina', date: tomorrow, time: u1,
   customerName: `${TAG} User`, customerPhone: ph(5),
 }, custToken) : { status: 0, data: {} };
 const bcid = bc.data.bookingId || '';
@@ -141,10 +141,10 @@ if (bcid && u2 && u2 !== u1) {
 console.log('\n— pedidos');
 const order = await api('POST', '/api/orders', {
   businessId: B1, customerName: `${TAG} Buyer`, customerPhone: ph(7),
-  type: 'pickup', payment: 'pix', items: [{ productId: 'prod-xbacon', qty: 1, unitPrice: 1, options: [{ optionId: 'opt-pao', valueIds: ['val-brioche'] }, { optionId: 'opt-adic', valueIds: ['val-bacon'] }] }],
+  type: 'pickup', payment: 'pix', items: [{ productId: 'prod-inexistente', qty: 1, unitPrice: 1, options: [] }],
 }, custToken);
-check('pedido criado com preço do servidor (3490)', order.status < 300 && (order.data.total === 3490 || order.data.order?.total === 3490),
-  `(${order.status}) total=${order.data.total ?? order.data.order?.total} ${JSON.stringify(order.data).slice(0, 120)}`);
+check('pedido em unidade clínica sem vitrine → recusado', order.status >= 400 && !order.data.orderId && !order.data.order,
+  `(${order.status}) ${JSON.stringify(order.data).slice(0, 120)}`);
 
 // ── Lojista (bloco 4+5) ──
 console.log('\n— painel do lojista');
@@ -155,8 +155,8 @@ const noAuth = await api('GET', `/api/overview?businessId=${B1}`);
 check('overview sem token → 401', noAuth.status === 401, `(${noAuth.status})`);
 const ov = await api('GET', `/api/overview?businessId=${B1}&period=7`, null, token);
 check('overview tem receita + upcoming', ov.status === 200 && !!ov.data.revenue && Array.isArray(ov.data.upcoming), `(${ov.status})`);
-const p360 = await api('GET', `/api/people360?businessId=${B1}&q=${TAG}`, null, token);
-check('people360 encontra comprador', p360.status === 200 && (p360.data.people || []).length > 0, `(${p360.status})`);
+const p360 = await api('GET', `/api/people360?businessId=${B3}&q=11955554444`, null, token);
+check('people360 encontra paciente da base', p360.status === 200 && (p360.data.people || []).length > 0, `(${p360.status})`);
 const an = await api('GET', `/api/analytics?businessId=${B1}&period=7`, null, token);
 check('analytics tem funis + dias', an.status === 200 && an.data.funnelOrders?.length === 5 && an.data.days?.length === 7, `(${an.status})`);
 if (b1id) {
@@ -176,22 +176,22 @@ console.log('\n— cenário A/B/E/F: clínica');
 const od = await api('GET', `/api/bookings?businessId=${B3}&serviceId=svc-odonto&date=${clinicDay}`);
 const odSlots = od.data.slots || [];
 check('A: odonto grade horária (60min)', odSlots.length > 0 && odSlots.every((t) => t.endsWith(':00')), JSON.stringify(odSlots.slice(0, 4)));
-const ca = await api('GET', `/api/bookings?businessId=${B3}&serviceId=svc-cardio&date=${clinicDay}`);
+const ca = await api('GET', `/api/bookings?businessId=${B3}&serviceId=svc-clareamento&date=${clinicDay}`);
 const caSlots = ca.data.slots || [];
-check('B: cardio grade 45min', caSlots.some((t) => t.endsWith(':45') || t.endsWith(':30')), JSON.stringify(caSlots.slice(0, 4)));
+check('B: clareamento grade 45min', caSlots.some((t) => t.endsWith(':45') || t.endsWith(':30')), JSON.stringify(caSlots.slice(0, 4)));
 const a1 = await api('POST', '/api/bookings', {
   businessId: B3, serviceId: 'svc-odonto', professionalId: 'pro-orlando', date: clinicDay, time: odSlots[0],
   customerName: `${TAG} Odonto`, customerPhone: ph(10),
 }, custToken);
 check('A: reserva odonto (Orlando) criada', !!a1.data.bookingId, `(${a1.status})`);
-const ca2 = await api('GET', `/api/bookings?businessId=${B3}&serviceId=svc-cardio&date=${clinicDay}`);
+const ca2 = await api('GET', `/api/bookings?businessId=${B3}&serviceId=svc-clareamento&date=${clinicDay}`);
 const tX = odSlots.find((t) => (ca2.data.slots || []).includes(t));
 if (a1.data.bookingId && tX) {
   const bJoao = await api('POST', '/api/bookings', {
-    businessId: B3, serviceId: 'svc-cardio', professionalId: 'pro-joao-cardio', date: clinicDay, time: tX,
-    customerName: `${TAG} Cardio`, customerPhone: ph(11),
+    businessId: B3, serviceId: 'svc-clareamento', professionalId: 'pro-renan', date: clinicDay, time: tX,
+    customerName: `${TAG} Clareamento`, customerPhone: ph(11),
   }, custToken);
-  check('B: mesmo horário, outra especialidade OK', !!bJoao.data.bookingId, `(${bJoao.status}) ${tX}`);
+  check('B: mesmo horário, outro profissional OK', !!bJoao.data.bookingId, `(${bJoao.status}) ${tX}`);
   const bDup = await api('POST', '/api/bookings', {
     businessId: B3, serviceId: 'svc-odonto', professionalId: 'pro-orlando', date: clinicDay, time: odSlots[0],
     customerName: `${TAG} Odonto2`, customerPhone: ph(12),
@@ -204,25 +204,25 @@ if (a1.data.bookingId && tX) {
 const od2 = await api('GET', `/api/bookings?businessId=${B3}&serviceId=svc-odonto&date=${clinicDay}`);
 check('E: ocupado visível em occupied (fora de slots)', (od2.data.occupied || []).includes(odSlots[0]) && !(od2.data.slots || []).includes(odSlots[0]), `occ=${JSON.stringify((od2.data.occupied || []).slice(0, 4))}`);
 // O cliente NUNCA escolhe profissional: a grade pública ignora o
-// professionalId informado e devolve a união dos elegíveis ATIVOS. A Dra. Ana
-// está inativa, então não pode aparecer nem receber atendimento.
-const anaSlots = await api('GET', `/api/bookings?businessId=${B3}&serviceId=svc-odonto&professionalId=pro-ana&date=${clinicDay}`);
+// professionalId informado e devolve a união dos elegíveis ATIVOS. A Dra.
+// Bianca está inativa, então não pode aparecer nem receber atendimento.
+const anaSlots = await api('GET', `/api/bookings?businessId=${B3}&serviceId=svc-odonto&professionalId=pro-bianca&date=${clinicDay}`);
 const anaAssign = Object.values(anaSlots.data.assign || {});
-check('F: inativa nunca é atribuída pela grade pública', !anaAssign.includes('pro-ana') && !Object.keys(anaSlots.data.byPro || {}).includes('pro-ana'), `assign=${JSON.stringify(anaAssign.slice(0, 3))}`);
+check('F: inativa nunca é atribuída pela grade pública', !anaAssign.includes('pro-bianca') && !Object.keys(anaSlots.data.byPro || {}).includes('pro-bianca'), `assign=${JSON.stringify(anaAssign.slice(0, 3))}`);
 const anaB = await api('POST', '/api/bookings', {
-  businessId: B3, serviceId: 'svc-odonto', professionalId: 'pro-ana', date: clinicDay, time: odSlots[1] || '11:00',
-  customerName: `${TAG} Ana`, customerPhone: ph(13),
+  businessId: B3, serviceId: 'svc-odonto', professionalId: 'pro-bianca', date: clinicDay, time: odSlots[1] || '11:00',
+  customerName: `${TAG} Bianca`, customerPhone: ph(13),
 }, custToken);
-check('F: pedir a inativa não entrega a reserva para ela', anaB.data.professionalId !== 'pro-ana' && anaB.data.professionalName !== 'Dra. Ana', `(${anaB.status}) pro=${anaB.data.professionalName}`);
-const pubHtml = await (await fetch(BASE + '/clinicavitta')).text();
-check('F: página pública sem Dra. Ana', !pubHtml.includes('Dra. Ana') && pubHtml.includes('Consulta Odontológica'));
+check('F: pedir a inativa não entrega a reserva para ela', anaB.data.professionalId !== 'pro-bianca' && anaB.data.professionalName !== 'Dra. Bianca', `(${anaB.status}) pro=${anaB.data.professionalName}`);
+const pubHtml = await (await fetch(BASE + '/odontovitta')).text();
+check('F: página pública sem Dra. Bianca', !pubHtml.includes('Dra. Bianca') && pubHtml.includes('Consulta Odontológica'));
 
-console.log('\n— cenário C: barbearia automática');
-const barSlots = await api('GET', `/api/bookings?businessId=${B2}&serviceId=svc-barba&date=${tomorrow}`);
+console.log('\n— cenário C: atribuição automática (veterinária)');
+const barSlots = await api('GET', `/api/bookings?businessId=${B2}&serviceId=svc-vacina&date=${tomorrow}`);
 const autoT = (barSlots.data.slots || [])[0] || '';
 if (autoT) {
   const auto = await api('POST', '/api/bookings', {
-    businessId: B2, serviceId: 'svc-barba', date: tomorrow, time: autoT,
+    businessId: B2, serviceId: 'svc-vacina', date: tomorrow, time: autoT,
     customerName: `${TAG} Auto`, customerPhone: ph(14),
   }, custToken);
   check('C: sem escolher pro, sistema atribui', !!auto.data.bookingId && !!auto.data.professionalName, `(${auto.status}) pro=${auto.data.professionalName}`);
@@ -232,15 +232,15 @@ if (autoT) {
 
 console.log('\n— cenário D: produto ≠ agendamento');
 const noBook = await api('POST', '/api/bookings', {
-  businessId: B1, serviceId: 'svc-corte', date: tomorrow, time: '10:00',
+  businessId: B1, serviceId: 'svc-odonto', date: tomorrow, time: '10:00',
   customerName: `${TAG} X`, customerPhone: ph(15),
 }, custToken);
-// Módulo de agendamento desligado: a reserva é recusada (403 com mensagem
-// amigável; 400 também vale) e NENHUM agendamento é criado.
-check('D: negócio sem agenda rejeita booking', (noBook.status === 400 || noBook.status === 403) && !noBook.data.bookingId, `(${noBook.status}) ${noBook.data.error || ''}`);
+// O serviço 'svc-odonto' é da Odonto Vitta; chamar pela Clínica Geral nunca
+// atravessa tenant: recusa (400/403/404) e NENHUM agendamento é criado.
+check('D: serviço de outra unidade não é reservável aqui', (noBook.status === 400 || noBook.status === 403 || noBook.status === 404) && !noBook.data.bookingId, `(${noBook.status}) ${noBook.data.error || ''}`);
 
 console.log('\n— cenário G: menu mobile');
-const gHtml = await (await fetch(BASE + '/barbeariadojoao')).text();
+const gHtml = await (await fetch(BASE + '/vidavet')).text();
 check('G: hambúrguer sem Início', gHtml.includes('aria-label="Menu"') && !gHtml.includes('>Início<'));
 
 // ═══════════════════════════════════════════════════════════════
@@ -307,21 +307,21 @@ const unlinkedAgenda = await api('GET', `/api/bookings?businessId=${B3}&mode=man
 check('profissional sem vínculo: agenda NÃO mostra a de todo mundo',
   (unlinkedAgenda.data.bookings || []).length === 0 && unlinkedAgenda.data.scope?.unlinked === true,
   `total=${unlinkedAgenda.data.total}`);
-const link = await api('PATCH', '/api/team', { businessId: B3, id: memberId, professionalId: 'pro-orlando' }, token);
+const link = await api('PATCH', '/api/team', { businessId: B3, id: memberId, professionalId: 'pro-renan' }, token);
 check('equipe: vincula o login a um profissional da unidade', link.status === 200, `(${link.status})`);
-const badLink = await api('PATCH', '/api/team', { businessId: B3, id: memberId, professionalId: 'pro-joao' }, token);
+const badLink = await api('PATCH', '/api/team', { businessId: B3, id: memberId, professionalId: 'pro-caio' }, token);
 check('equipe: recusa profissional de OUTRA unidade', badLink.status === 404, `(${badLink.status})`);
 const scopedAgenda = await api('GET', `/api/bookings?businessId=${B3}&mode=manage`, null, proToken);
 const allAgenda = await api('GET', `/api/bookings?businessId=${B3}&mode=manage`, null, token);
 check('profissional: vê SÓ a própria agenda (filtro no servidor)',
   scopedAgenda.status === 200
-  && (scopedAgenda.data.bookings || []).every((b) => b.professionalId === 'pro-orlando')
+  && (scopedAgenda.data.bookings || []).every((b) => b.professionalId === 'pro-renan')
   && (scopedAgenda.data.bookings || []).length < (allAgenda.data.bookings || []).length,
   `pro=${(scopedAgenda.data.bookings || []).length} dono=${(allAgenda.data.bookings || []).length}`);
 const wide = await api('GET', `/api/bookings?businessId=${B3}&mode=manage&limit=500&page=1&from=2000-01-01&to=2999-12-31`, null, proToken);
 check('profissional: params na URL não ampliam o escopo',
-  (wide.data.bookings || []).every((b) => b.professionalId === 'pro-orlando'), `total=${wide.data.total}`);
-const foreign = (allAgenda.data.bookings || []).find((b) => b.professionalId !== 'pro-orlando');
+  (wide.data.bookings || []).every((b) => b.professionalId === 'pro-renan'), `total=${wide.data.total}`);
+const foreign = (allAgenda.data.bookings || []).find((b) => b.professionalId !== 'pro-renan');
 if (foreign) {
   const steal = await api('PATCH', '/api/bookings', { businessId: B3, id: foreign.id, status: 'completed' }, proToken);
   check('profissional: NÃO altera atendimento de outro (403)', steal.status === 403, `(${steal.status})`);

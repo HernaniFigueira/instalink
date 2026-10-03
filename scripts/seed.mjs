@@ -1,4 +1,13 @@
-// Seed de DESENVOLVIMENTO — cria demo user + 2 negócios de exemplo.
+// Seed de DESENVOLVIMENTO/QA — GO DOUTOR Clinical OS.
+// Cria a conta demo + TRÊS UNIDADES CLÍNICAS (veterinária, odontológica,
+// geral) com equipe, agenda aberta de segunda a sábado, histórico de
+// atendimentos e base de clientes. É o banco que as suítes de smoke/e2e
+// (scripts/smoke*.mjs, e2e-merchant.mjs) esperam encontrar.
+//
+// PRODUTOS/PEDIDOS NASCEM VAZIOS DE PROPÓSITO: vitrine e pedidos são RAMO DE
+// COMPATIBILIDADE do antigo fluxo "universal" (GODOUTOR_LEGACY_PAGES); a demo
+// clínica não finge loja. Quem precisar do ramo comercial cria unidade com
+// modes/payload legado pela API (o smoke-ux faz exatamente isso).
 // Uso: npm run seed
 import fs from 'node:fs';
 import path from 'node:path';
@@ -30,15 +39,16 @@ const now = new Date().toISOString();
 // desempenho. Só status FINAIS (concluído/falta/cancelado): nada fica
 // pendente no passado.
 const dayAgo = (n) => new Date(Date.now() - n * 86400000).toISOString().slice(0, 10);
+const dayAhead = (n) => new Date(Date.now() + n * 86400000).toISOString().slice(0, 10);
 const tsAgo = (n) => new Date(Date.now() - n * 86400000).toISOString();
-const pastBooking = (id, businessId, serviceId, professionalId, days, time, status, name, phone) => ({
+const pastBooking = (id, businessId, serviceId, professionalId, days, time, status, name, phone, note = '') => ({
   id, businessId, customerId: '', serviceId, professionalId, date: dayAgo(days), time,
-  customerName: name, customerPhone: phone, status, note: '',
+  customerName: name, customerPhone: phone, status, note,
   createdAt: tsAgo(days + 5), updatedAt: tsAgo(days), history: [],
 });
-const B1 = 'biz-burgerhouse';
-const B2 = 'biz-barbeariajoao';
-const B3 = 'biz-clinicavitta';
+const VET = 'biz-vidavet';
+const ODONTO = 'biz-odontovitta';
+const GERAL = 'biz-clinicageral';
 
 function blocksFor(cta, extra, target) {
   const b = [];
@@ -48,17 +58,17 @@ function blocksFor(cta, extra, target) {
   add('cta', { label: cta, target });
   for (const e of extra) add(e[0], e[1] || {});
   add('testimonials', {
-    title: 'O que dizem por aí',
+    title: 'O que dizem os pacientes',
     items: [
-      { name: 'Maria S.', text: 'Melhor atendimento da região, virei cliente fiel!' },
-      { name: 'João P.', text: 'Rápido, fácil e de qualidade. Recomendo demais.' },
+      { name: 'Maria S.', text: 'Atendimento pontual e humano. Recomendo demais!' },
+      { name: 'João P.', text: 'Agendei pelo site em um minuto, sem telefonema.' },
     ],
   });
   add('faq', {
     title: 'Dúvidas frequentes',
     items: [
       { q: 'Quais as formas de pagamento?', a: 'PIX, cartão e dinheiro.' },
-      { q: 'Como falo com vocês?', a: 'Pelo botão de WhatsApp aqui da página. Respondemos rapidinho!' },
+      { q: 'Como falo com vocês?', a: 'Pelo WhatsApp aqui da página. Respondemos rapidinho!' },
     ],
   });
   add('location');
@@ -72,47 +82,51 @@ const db = {
   users: [
     { id: 'user-demo', name: 'Demo GoDoutor', email: 'demo@godoutor.app', passwordHash: hash('demo1234'), createdAt: now, role: 'owner', lastLoginAt: '' },
     // Logins de EQUIPE (FASE 3): testam papéis/permissões de verdade.
-    { id: 'user-secretaria', name: 'Sofia (secretária)', email: 'secretaria@godoutor.app', passwordHash: hash('demo1234'), createdAt: now, role: 'owner', lastLoginAt: '' },
-    { id: 'user-vendedor', name: 'Vitor (vendedor)', email: 'vendedor@godoutor.app', passwordHash: hash('demo1234'), createdAt: now, role: 'owner', lastLoginAt: '' },
+    { id: 'user-secretaria', name: 'Maria (secretária)', email: 'maria@godoutor.app', passwordHash: hash('demo1234'), createdAt: now, role: 'owner', lastLoginAt: '' },
+    { id: 'user-vendedor', name: 'Vitor (recepção)', email: 'vitor@godoutor.app', passwordHash: hash('demo1234'), createdAt: now, role: 'owner', lastLoginAt: '' },
     // PROFISSIONAL (quem ATENDE): vinculado ao profissional 'pro-orlando' via
     // `professionals.userId` — é esse vínculo que produz o escopo "own" da
     // agenda e a Visão geral "Meu dia". Sem ele não dá para verificar o papel.
     { id: 'user-profissional', name: 'Orlando (dentista)', email: 'profissional@godoutor.app', passwordHash: hash('demo1234'), createdAt: now, role: 'owner', lastLoginAt: '' },
+    // Segundo profissional com LOGIN (e2e do escopo "own"): o vínculo real do
+    // Dr. Caio vive na UNIDADE VET; a rota do e2e resolve o login pela
+    // business.members, não por hardcode de id.
+    { id: 'user-caio', name: 'Caio (veterinário)', email: 'pro-caio@godoutor.app', passwordHash: hash('demo1234'), createdAt: now, role: 'owner', lastLoginAt: '' },
     // MASTER da PLATAFORMA: papel no banco (não é dono de nada; entra em
-    // empresa só por sessão de suporte explícita e auditada).
-    { id: 'user-master', name: 'Suporte InstaLink', email: 'master@godoutor.app', passwordHash: hash('master1234'), createdAt: now, role: 'master', lastLoginAt: '' },
+    // unidade só por sessão de suporte explícita e auditada).
+    { id: 'user-master', name: 'Suporte GoDoutor', email: 'master@godoutor.app', passwordHash: hash('master1234'), createdAt: now, role: 'master', lastLoginAt: '' },
   ],
   sessions: [],
   businesses: [
     {
-      id: B1, ownerId: 'user-demo', name: 'Burger House', slug: 'burgerhouse',
-      description: 'Hambúrgueres artesanais feitos na brasa. Peça em 1 minuto!',
-      logo: '', cover: '', niche: 'alimentacao', modes: ['products', 'orders'],
-      phone: '', whatsapp: '11999999999', email: '', instagram: 'burgerhouse', tiktok: '',
-      address: 'Rua das Flores, 123 — Centro, São Paulo/SP', mapsUrl: 'https://maps.google.com/?q=Centro+Sao+Paulo',
-      hours: {}, paymentMethods: ['pix', 'card', 'cash'], pixKey: 'contato@burgerhouse.com',
-      deliveryFee: 500, minOrder: 0,
+      id: VET, ownerId: 'user-demo', name: 'VidaVet Clínica Veterinária', slug: 'vidavet',
+      description: 'Cuidado completo para quem latir, miar ou gorjear. Agende a consulta do seu pet.',
+      logo: '', cover: '', niche: 'pet', clinicType: 'veterinaria', modes: ['services', 'bookings'],
+      phone: '', whatsapp: '11999999999', email: 'contato@vidavet.com.br', instagram: 'vidavet', tiktok: '',
+      address: 'Rua dos Mascotes, 123 — Pinheiros, São Paulo/SP', mapsUrl: 'https://maps.google.com/?q=Pinheiros+Sao+Paulo',
+      hours: {}, paymentMethods: ['pix', 'card'], pixKey: '',
+      deliveryFee: 0, minOrder: 0,
       googleUrl: '', googlePlaceId: '', googleApiKey: '',
-      booking: { teamMode: 'solo', leadMin: 30, cancelUntilMin: 120, horizonDays: 60, bufferMin: 0 },
+      booking: { teamMode: 'auto', leadMin: 60, cancelUntilMin: 180, horizonDays: 60, bufferMin: 0 },
       published: true, createdAt: now, updatedAt: now,
     },
     {
-      id: B2, ownerId: 'user-demo', name: 'Barbearia do João', slug: 'barbeariadojoao',
-      description: 'Corte, barba e cuidado de verdade. Agende em segundos.',
-      logo: '', cover: '', niche: 'beleza', modes: ['services', 'bookings'],
-      phone: '', whatsapp: '11988888888', email: '', instagram: 'barbeariadojoao', tiktok: '',
+      id: ODONTO, ownerId: 'user-demo', name: 'Clínica Odonto Vitta', slug: 'odontovitta',
+      description: 'Odontologia completa com hora marcada. Sorria no seu tempo.',
+      logo: '', cover: '', niche: 'saude', clinicType: 'odontologica', modes: ['services', 'bookings'],
+      phone: '', whatsapp: '11988888888', email: '', instagram: 'odontovitta', tiktok: '',
       address: 'Av. Principal, 456 — Vila Nova, São Paulo/SP', mapsUrl: 'https://maps.google.com/?q=Vila+Nova+SP',
       hours: {}, paymentMethods: ['pix', 'card', 'cash'], pixKey: '',
       deliveryFee: 0, minOrder: 0,
       googleUrl: '', googlePlaceId: '', googleApiKey: '',
-      booking: { teamMode: 'auto', leadMin: 60, cancelUntilMin: 180, horizonDays: 30, bufferMin: 10 },
+      booking: { teamMode: 'choosable', leadMin: 60, cancelUntilMin: 180, horizonDays: 30, bufferMin: 0 },
       published: true, createdAt: now, updatedAt: now,
     },
     {
-      id: B3, ownerId: 'user-demo', name: 'Clínica Vitta', slug: 'clinicavitta',
-      description: 'Odonto e cardio com hora marcada. Escolha a especialidade.',
-      logo: '', cover: '', niche: 'saude', modes: ['services', 'bookings'],
-      phone: '', whatsapp: '11977778888', email: '', instagram: 'clinicavitta', tiktok: '',
+      id: GERAL, ownerId: 'user-demo', name: 'Clínica Geral Horizonte', slug: 'clinicageral',
+      description: 'Consultas e exames com equipe multidisciplinar. Escolha o profissional.',
+      logo: '', cover: '', niche: 'saude', clinicType: 'geral', modes: ['services', 'bookings'],
+      phone: '', whatsapp: '11977778888', email: '', instagram: 'clinicageral', tiktok: '',
       address: 'Rua Saúde, 789 — Moema, São Paulo/SP', mapsUrl: 'https://maps.google.com/?q=Moema+SP',
       hours: {}, paymentMethods: ['pix', 'card'], pixKey: '',
       deliveryFee: 0, minOrder: 0,
@@ -123,112 +137,102 @@ const db = {
   ],
   pages: [
     {
-      id: 'page-burger', businessId: B1,
-      theme: { primary: '#ea580c', secondary: '#fbbf24', background: '#fafaf9', surface: '#ffffff', text: '#1c1917', muted: '#78716c', radius: 16, font: 'inter', buttonStyle: 'solid' },
-      blocks: blocksFor('Pedir agora', [['products', { title: 'Cardápio' }]], 'products'),
+      id: 'page-vet', businessId: VET, presetId: 'clinica-veterinaria',
+      theme: { primary: '#16a34a', secondary: '#bbf7d0', background: '#f8fafc', surface: '#ffffff', text: '#0f172a', muted: '#64748b', radius: 14, font: 'inter', buttonStyle: 'solid' },
+      blocks: blocksFor('Agendar consulta', [['services', { title: 'Serviços' }], ['booking', { title: 'Agende a consulta do seu pet' }]], 'booking'),
       updatedAt: now,
     },
     {
-      id: 'page-barbearia', businessId: B2,
-      theme: { primary: '#111827', secondary: '#6b7280', background: '#fafaf9', surface: '#ffffff', text: '#1c1917', muted: '#78716c', radius: 14, font: 'inter', buttonStyle: 'solid' },
-      blocks: blocksFor('Agendar horário', [['services', { title: 'Serviços' }], ['booking', { title: 'Agende seu horário' }]], 'booking'),
+      id: 'page-odonto', businessId: ODONTO, presetId: 'clinica-odontologica',
+      theme: { primary: '#0891b2', secondary: '#a5f3fc', background: '#f8fafc', surface: '#ffffff', text: '#0f172a', muted: '#64748b', radius: 14, font: 'inter', buttonStyle: 'solid' },
+      blocks: blocksFor('Agendar horário', [['services', { title: 'Procedimentos' }], ['booking', { title: 'Agende sua consulta' }]], 'booking'),
       updatedAt: now,
     },
     {
-      id: 'page-clinica', businessId: B3,
+      id: 'page-geral', businessId: GERAL, presetId: 'clinica-geral',
       theme: { primary: '#0d9488', secondary: '#99f6e4', background: '#fafaf9', surface: '#ffffff', text: '#1c1917', muted: '#78716c', radius: 14, font: 'inter', buttonStyle: 'solid' },
       blocks: blocksFor('Agendar atendimento', [['services', { title: 'Especialidades' }], ['booking', { title: 'Agende sua consulta' }]], 'booking'),
       updatedAt: now,
     },
   ],
   categories: [
-    { id: 'cat-burgers', businessId: B1, kind: 'product', name: 'Hambúrgueres', order: 0, active: true },
-    { id: 'cat-combos', businessId: B1, kind: 'product', name: 'Combos', order: 1, active: true },
-    { id: 'cat-bebidas', businessId: B1, kind: 'product', name: 'Bebidas', order: 2, active: true },
-    { id: 'cat-cabelo', businessId: B2, kind: 'service', name: 'Cabelo & Barba', order: 0, active: true },
-    { id: 'cat-consulta', businessId: B3, kind: 'service', name: 'Consultas', order: 0, active: true },
+    { id: 'cat-vet', businessId: VET, kind: 'service', name: 'Consultas e vacinas', order: 0, active: true },
+    { id: 'cat-consulta', businessId: ODONTO, kind: 'service', name: 'Consultas', order: 0, active: true },
+    { id: 'cat-especialidades', businessId: GERAL, kind: 'service', name: 'Especialidades', order: 0, active: true },
   ],
-  products: [
-    { id: 'prod-xbacon', businessId: B1, categoryId: 'cat-burgers', name: 'X-Bacon', description: 'Pão, burger 180g, queijo, bacon crocante e molho da casa.', image: '', price: 2990, promoPrice: 0, active: true, featured: true, order: 0 },
-    { id: 'prod-xsalada', businessId: B1, categoryId: 'cat-burgers', name: 'X-Salada', description: 'Burger 180g, queijo, alface, tomate e maionese.', image: '', price: 2790, promoPrice: 0, active: true, featured: false, order: 1 },
-    { id: 'prod-duplo', businessId: B1, categoryId: 'cat-burgers', name: 'Duplo Smash', description: 'Dois smash 90g, queijo duplo e cebola caramelizada.', image: '', price: 3490, promoPrice: 2990, active: true, featured: true, order: 2 },
-    { id: 'prod-combo', businessId: B1, categoryId: 'cat-combos', name: 'Combo Casal', description: '2 X-Bacon + batata G + 2 refrigerantes.', image: '', price: 5990, promoPrice: 4990, active: true, featured: true, order: 3 },
-    { id: 'prod-refri', businessId: B1, categoryId: 'cat-bebidas', name: 'Refrigerante 350ml', description: 'Coca, Guaraná ou Pepsi.', image: '', price: 690, promoPrice: 0, active: true, featured: false, order: 4 },
-  ],
-  options: [
-    { id: 'opt-pao', businessId: B1, productId: 'prod-xbacon', name: 'Escolha o pão', required: true, multiple: false, min: 1, max: 1, order: 0 },
-    { id: 'opt-adic', businessId: B1, productId: 'prod-xbacon', name: 'Adicionais', required: false, multiple: true, min: 0, max: 0, order: 1 },
-    { id: 'opt-ponto', businessId: B1, productId: 'prod-duplo', name: 'Ponto da carne', required: true, multiple: false, min: 1, max: 1, order: 0 },
-  ],
-  optionValues: [
-    { id: 'val-trad', optionId: 'opt-pao', name: 'Tradicional', priceDelta: 0, active: true },
-    { id: 'val-brioche', optionId: 'opt-pao', name: 'Brioche', priceDelta: 0, active: true },
-    { id: 'val-bacon', optionId: 'opt-adic', name: 'Bacon', priceDelta: 500, active: true },
-    { id: 'val-queijo', optionId: 'opt-adic', name: 'Queijo', priceDelta: 400, active: true },
-    { id: 'val-ovo', optionId: 'opt-adic', name: 'Ovo', priceDelta: 300, active: true },
-    { id: 'val-mal', optionId: 'opt-ponto', name: 'Mal passado', priceDelta: 0, active: true },
-    { id: 'val-ao', optionId: 'opt-ponto', name: 'Ao ponto', priceDelta: 0, active: true },
-    { id: 'val-bem', optionId: 'opt-ponto', name: 'Bem passado', priceDelta: 0, active: true },
-  ],
+  // Vitrine/pedidos = RAMO DE COMPATIBILIDADE (GODOUTOR_LEGACY_PAGES). A demo
+  // clínica nasce SEM produtos e SEM pedidos — nada de "cardápio" de mentira.
+  products: [],
+  options: [],
+  optionValues: [],
+  orders: [],
   services: [
-    { id: 'svc-corte', businessId: B2, categoryId: 'cat-cabelo', name: 'Corte', description: 'Corte moderno com acabamento.', image: '', price: 4500, durationMin: 45, professionalIds: ['pro-joao', 'pro-pedro'], active: true, featured: true, bookable: true },
-    { id: 'svc-barba', businessId: B2, categoryId: 'cat-cabelo', name: 'Barba', description: 'Barba com toalha quente.', image: '', price: 3000, durationMin: 30, professionalIds: ['pro-pedro'], active: true, featured: false, bookable: true },
-    { id: 'svc-combo', businessId: B2, categoryId: 'cat-cabelo', name: 'Corte + Barba', description: 'O combo completo.', image: '', price: 6500, durationMin: 60, professionalIds: ['pro-joao'], active: true, featured: true, bookable: true },
-    { id: 'svc-odonto', businessId: B3, categoryId: 'cat-consulta', name: 'Consulta Odontológica', description: 'Avaliação completa com dentista.', image: '', price: 20000, durationMin: 60, professionalIds: ['pro-orlando'], active: true, featured: true, bookable: true, questions: ['Possui convênio odontológico? Qual?'] },
-    { id: 'svc-cardio', businessId: B3, categoryId: 'cat-consulta', name: 'Consulta Cardiológica', description: 'Check-up do coração.', image: '', price: 25000, durationMin: 45, professionalIds: ['pro-joao-cardio'], active: true, featured: true, bookable: true },
+    { id: 'svc-consulta-vet', businessId: VET, categoryId: 'cat-vet', name: 'Consulta veterinária', description: 'Avaliação completa do pet.', image: '', price: 18000, durationMin: 30, professionalIds: ['pro-caio', 'pro-marina'], active: true, featured: true, bookable: true, questions: ['Qual é o pet e a idade?'] },
+    { id: 'svc-vacina', businessId: VET, categoryId: 'cat-vet', name: 'Vacinação', description: 'Aplicação com registro no cartão.', image: '', price: 8000, durationMin: 15, professionalIds: ['pro-caio', 'pro-marina'], active: true, featured: false, bookable: true },
+    { id: 'svc-odonto', businessId: ODONTO, categoryId: 'cat-consulta', name: 'Consulta Odontológica', description: 'Avaliação completa com dentista.', image: '', price: 20000, durationMin: 60, professionalIds: ['pro-orlando', 'pro-bianca'], active: true, featured: true, bookable: true, questions: ['Possui convênio odontológico? Qual?'] },
+    { id: 'svc-clareamento', businessId: ODONTO, categoryId: 'cat-consulta', name: 'Clareamento', description: 'Clareamento a laser em consultório.', image: '', price: 35000, durationMin: 45, professionalIds: ['pro-renan'], active: true, featured: true, bookable: true },
+    { id: 'svc-consulta-geral', businessId: GERAL, categoryId: 'cat-especialidades', name: 'Consulta Clínica', description: 'Avaliação geral com clínico.', image: '', price: 15000, durationMin: 30, professionalIds: ['pro-rita', 'pro-sergio'], active: true, featured: true, bookable: true },
+    { id: 'svc-exame', businessId: GERAL, categoryId: 'cat-especialidades', name: 'Check-up / Exames', description: 'Painel laboratorial completo.', image: '', price: 25000, durationMin: 45, professionalIds: ['pro-sergio'], active: true, featured: false, bookable: true },
   ],
   professionals: [
-    { id: 'pro-orlando', businessId: B3, name: 'Dr. Orlando', role: 'Dentista', photo: '', active: true, userId: 'user-profissional' },
-    { id: 'pro-joao-cardio', businessId: B3, name: 'Dr. João', role: 'Cardiologista', photo: '', active: true },
-    { id: 'pro-ana', businessId: B3, name: 'Dra. Ana', role: 'Fisioterapeuta', photo: '', active: false },
-    { id: 'pro-joao', businessId: B2, name: 'João', role: 'Barbeiro master', photo: '', active: true },
-    { id: 'pro-pedro', businessId: B2, name: 'Pedro', role: 'Barbeiro', photo: '', active: true },
+    { id: 'pro-caio', businessId: VET, name: 'Dr. Caio', role: 'Médico veterinário', photo: '', active: true, userId: 'user-caio' },
+    { id: 'pro-marina', businessId: VET, name: 'Dra. Marina', role: 'Veterinária clínica', photo: '', active: true },
+    { id: 'pro-orlando', businessId: ODONTO, name: 'Dr. Orlando', role: 'Dentista', photo: '', active: true, userId: 'user-profissional' },
+    // INATIVA de propósito: a grade pública nunca a atribui (cenário F do smoke).
+    { id: 'pro-bianca', businessId: ODONTO, name: 'Dra. Bianca', role: 'Orodontista', photo: '', active: false },
+    { id: 'pro-rita', businessId: GERAL, name: 'Dra. Rita', role: 'Clínica geral', photo: '', active: true },
+    { id: 'pro-sergio', businessId: GERAL, name: 'Dr. Sérgio', role: 'Cardiologista', photo: '', active: true },
+    { id: 'pro-renan', businessId: ODONTO, name: 'Dr. Renan', role: 'Ortodontista', photo: '', active: true },
   ],
+  // Agenda SEGUNDA A SÁBADO em todas as unidades. Sábado aberto é de
+  // propósito: os e2es escolhem um "far saturday" (sábado a ≥8 dias) para
+  // ter slot garantido fora do expediente do dia de execução.
   availability: [
-    ...[1, 2, 3, 4, 5, 6].map((weekday) => ({ id: `av-${weekday}`, businessId: B2, professionalId: '', serviceId: '', weekday, start: '09:00', end: '18:00', slotMin: 0 })),
-    ...[1, 2, 3, 4, 5].flatMap((weekday) => [
-      { id: `avc-o-${weekday}`, businessId: B3, professionalId: 'pro-orlando', serviceId: '', weekday, start: '09:00', end: '18:00', slotMin: 0 },
-      { id: `avc-j-${weekday}`, businessId: B3, professionalId: 'pro-joao-cardio', serviceId: '', weekday, start: '09:00', end: '18:00', slotMin: 0 },
+    // VET: horário GERAL da empresa (seg–sáb) — os profissionais herdam. É o
+    // cenário que o smoke-ux exercita (personalizar/aplicar a todos/voltar a
+    // herdar parte da regra geral existir).
+    ...[1, 2, 3, 4, 5, 6].map((weekday) => ({ id: `avv-gen-${weekday}`, businessId: VET, professionalId: '', serviceId: '', weekday, start: '09:00', end: '18:00', slotMin: 0 })),
+    ...[1, 2, 3, 4, 5, 6].flatMap((weekday) => [
+      { id: `avo-o-${weekday}`, businessId: ODONTO, professionalId: 'pro-orlando', serviceId: '', weekday, start: '09:00', end: '18:00', slotMin: 0 },
+      { id: `avv-b-${weekday}`, businessId: ODONTO, professionalId: 'pro-bianca', serviceId: '', weekday, start: '09:00', end: '18:00', slotMin: 0 },
+      { id: `avo-r-${weekday}`, businessId: ODONTO, professionalId: 'pro-renan', serviceId: '', weekday, start: '09:00', end: '18:00', slotMin: 0 },
+      { id: `avg-r-${weekday}`, businessId: GERAL, professionalId: 'pro-rita', serviceId: '', weekday, start: '09:00', end: '18:00', slotMin: 0 },
+      { id: `avg-s-${weekday}`, businessId: GERAL, professionalId: 'pro-sergio', serviceId: '', weekday, start: '09:00', end: '18:00', slotMin: 0 },
     ]),
   ],
   exceptions: [],
-  orders: [
-    {
-      id: 'order-sample', businessId: B1, customerId: '', code: '#0001', customerName: 'Carlos M.', customerPhone: '11977777777',
-      customerAddress: 'Rua A, 100', type: 'delivery', payment: 'pix',
-      items: [{ productId: 'prod-xbacon', name: 'X-Bacon', qty: 2, unitPrice: 3490, total: 6980, optionsLabel: 'Brioche, Bacon', note: '' }],
-      subtotal: 6980, total: 6980, status: 'new', note: '', createdAt: now, updatedAt: now, history: [],
-    },
-  ],
   bookings: [
-    { id: 'book-sample', businessId: B2, customerId: '', serviceId: 'svc-corte', professionalId: 'pro-joao', date: new Date(Date.now() + 86400000).toISOString().slice(0, 10), time: '10:00', customerName: 'Rafael T.', customerPhone: '11966666666', status: 'pending', note: '', createdAt: now, updatedAt: now, history: [] },
-    { id: 'book-orlando', businessId: B3, customerId: '', serviceId: 'svc-odonto', professionalId: 'pro-orlando', date: new Date(Date.now() + 86400000).toISOString().slice(0, 10), time: '10:00', customerName: 'Marlene S.', customerPhone: '11955554444', status: 'confirmed', note: '', createdAt: now, updatedAt: now, history: [] },
-    // Histórico da clínica (dois profissionais, dois valores de serviço).
-    pastBooking('hist-b3-1', B3, 'svc-odonto', 'pro-orlando', 3, '09:00', 'completed', 'Marlene S.', '11955554444'),
-    pastBooking('hist-b3-2', B3, 'svc-odonto', 'pro-orlando', 10, '14:00', 'completed', 'Tiago P.', '11944445555'),
-    pastBooking('hist-b3-3', B3, 'svc-cardio', 'pro-joao-cardio', 6, '10:00', 'completed', 'Helena R.', '11933334444'),
-    pastBooking('hist-b3-4', B3, 'svc-cardio', 'pro-joao-cardio', 12, '11:00', 'no_show', 'Bruno L.', '11922223333'),
-    pastBooking('hist-b3-5', B3, 'svc-odonto', 'pro-orlando', 18, '15:00', 'cancelled', 'Cláudia M.', '11911112222'),
-    pastBooking('hist-b3-6', B3, 'svc-cardio', 'pro-joao-cardio', 24, '09:30', 'completed', 'Helena R.', '11933334444'),
-    // Histórico da barbearia.
-    pastBooking('hist-b2-1', B2, 'svc-corte', 'pro-joao', 4, '11:00', 'completed', 'Rafael T.', '11966666666'),
-    pastBooking('hist-b2-2', B2, 'svc-barba', 'pro-joao', 9, '16:00', 'completed', 'Diego S.', '11955556666'),
-    pastBooking('hist-b2-3', B2, 'svc-corte', 'pro-joao', 20, '10:00', 'no_show', 'Pedro A.', '11944447777'),
+    { id: 'book-caio', businessId: VET, customerId: '', serviceId: 'svc-consulta-vet', professionalId: 'pro-caio', date: dayAhead(1), time: '09:30', customerName: 'Rafael T.', customerPhone: '11966666666', status: 'pending', note: 'Tutor do Thor (pastor 4 anos)', createdAt: now, updatedAt: now, history: [] },
+    { id: 'book-orlando', businessId: ODONTO, customerId: '', serviceId: 'svc-odonto', professionalId: 'pro-orlando', date: dayAhead(1), time: '10:00', customerName: 'Marlene S.', customerPhone: '11955554444', status: 'confirmed', note: '', createdAt: now, updatedAt: now, history: [] },
+    { id: 'book-rita', businessId: GERAL, customerId: '', serviceId: 'svc-consulta-geral', professionalId: 'pro-rita', date: dayAhead(2), time: '14:00', customerName: 'Tiago P.', customerPhone: '11944445555', status: 'confirmed', note: '', createdAt: now, updatedAt: now, history: [] },
+    // Histórico das unidades (dois profissionais, dois valores de serviço).
+    pastBooking('hist-od-1', ODONTO, 'svc-odonto', 'pro-orlando', 3, '09:00', 'completed', 'Marlene S.', '11955554444'),
+    pastBooking('hist-od-2', ODONTO, 'svc-odonto', 'pro-orlando', 10, '14:00', 'completed', 'Tiago P.', '11944445555'),
+    pastBooking('hist-od-3', ODONTO, 'svc-clareamento', 'pro-orlando', 6, '10:00', 'completed', 'Helena R.', '11933334444'),
+    pastBooking('hist-od-4', ODONTO, 'svc-odonto', 'pro-orlando', 12, '11:00', 'no_show', 'Bruno L.', '11922223333'),
+    pastBooking('hist-od-5', ODONTO, 'svc-odonto', 'pro-orlando', 18, '15:00', 'cancelled', 'Cláudia M.', '11911112222'),
+    pastBooking('hist-od-6', ODONTO, 'svc-clareamento', 'pro-renan', 7, '15:00', 'completed', 'Marlene S.', '11955554444'),
+    pastBooking('hist-vt-1', VET, 'svc-consulta-vet', 'pro-caio', 4, '11:00', 'completed', 'Rafael T.', '11966666666'),
+    pastBooking('hist-vt-2', VET, 'svc-vacina', 'pro-caio', 9, '16:00', 'completed', 'Diego S.', '11955556666'),
+    pastBooking('hist-vt-3', VET, 'svc-consulta-vet', 'pro-marina', 20, '10:00', 'no_show', 'Pedro A.', '11944447777'),
+    pastBooking('hist-ge-1', GERAL, 'svc-exame', 'pro-sergio', 5, '09:30', 'completed', 'Helena R.', '11933334444', 'Paciente preferida da manhã — sempre remanejar com antecedência.'),
+    pastBooking('hist-ge-2', GERAL, 'svc-consulta-geral', 'pro-rita', 15, '13:00', 'completed', 'Bruno L.', '11922223333'),
   ],
   members: [
-    { id: 'mem-secretaria', businessId: B3, userId: 'user-secretaria', role: 'SECRETARIA', permissions: {}, active: true, note: 'Recepção da clínica', createdAt: now, updatedAt: now },
-    { id: 'mem-vendedor', businessId: B1, userId: 'user-vendedor', role: 'VENDEDOR', permissions: { agenda: false }, active: true, note: 'Balcão', createdAt: now, updatedAt: now },
-    { id: 'mem-profissional', businessId: B3, userId: 'user-profissional', role: 'PROFISSIONAL', permissions: { dashboard: true, agenda: true, clientes: true, whatsapp: true }, active: true, note: 'Atende na cadeira 1', createdAt: now, updatedAt: now },
+    { id: 'mem-secretaria', businessId: ODONTO, userId: 'user-secretaria', role: 'SECRETARIA', permissions: {}, active: true, note: 'Recepção da clínica', createdAt: now, updatedAt: now },
+    { id: 'mem-vendedor', businessId: VET, userId: 'user-vendedor', role: 'VENDEDOR', permissions: { agenda: false }, active: true, note: 'Balcão do pet shop interno', createdAt: now, updatedAt: now },
+    { id: 'mem-profissional', businessId: ODONTO, userId: 'user-profissional', role: 'PROFISSIONAL', permissions: { dashboard: true, agenda: true, clientes: true, whatsapp: true }, active: true, note: 'Atende na cadeira 1', createdAt: now, updatedAt: now },
+    { id: 'mem-caio', businessId: VET, userId: 'user-caio', role: 'PROFISSIONAL', permissions: { dashboard: true, agenda: true, clientes: true }, active: true, note: 'Clínica veterinária — agenda própria', createdAt: now, updatedAt: now },
   ],
   agents: [
     {
-      id: `agent-${B3}`, businessId: B3, name: 'Assistente Vita', enabled: true,
+      id: `agent-${ODONTO}`, businessId: ODONTO, name: 'Assistente Vitta', enabled: true,
       greeting: 'Olá! Sou o assistente virtual{empresa}. Posso ajudar com horários, serviços e valores.',
       tone: 'acolhedor', objectives: ['duvidas', 'servicos', 'orientar_agendamento', 'whatsapp'],
       instructions: 'Explique os tratamentos de forma simples, sem prometer resultados.',
       restrictions: 'Nunca criar, cancelar ou remarcar agendamento. Nunca citar valores que não estejam no cadastro.',
       handoffMessage: 'Vou te encaminhar para a nossa equipe no WhatsApp — eles ajudam você agora mesmo.',
-      knowledgeOverride: 'Estacionamento: temos convênio com o estacionamento ao lado.\nFormas de pagamento: PIX, cartão e dinheiro.',
+      knowledgeOverride: 'Convênios: atendemos Amil e Bradesco Dental.\nEstacionamento: convênio com o estacionamento ao lado.',
       channels: { site: true, whatsapp: false }, createdAt: now, updatedAt: now,
     },
   ],
@@ -239,30 +243,29 @@ const db = {
   audit: [],
   supportSessions: [],
   contacts: [
-    { id: 'ct-carlos', businessId: B1, customerId: '', name: 'Carlos M.', phone: '11977777777', email: '', createdAt: now, updatedAt: now, source: 'pedido', lastInteraction: now, marketingOptIn: true, note: 'Prefere retirada no balcão.' },
-    { id: 'ct-rafael', businessId: B2, customerId: '', name: 'Rafael T.', phone: '11966666666', email: '', createdAt: now, updatedAt: now, source: 'agendamento', lastInteraction: now, marketingOptIn: true, note: '' },
-    { id: 'ct-marlene', businessId: B3, customerId: '', name: 'Marlene S.', phone: '11955554444', email: 'marlene@exemplo.com', createdAt: now, updatedAt: now, source: 'agendamento', lastInteraction: now, marketingOptIn: false, note: 'Cliente do Dr. Orlando — prefere manhã.' },
+    { id: 'ct-rafael', businessId: VET, customerId: '', name: 'Rafael T.', phone: '11966666666', email: '', createdAt: now, updatedAt: now, source: 'agendamento', lastInteraction: now, marketingOptIn: true, note: 'Tutor do Thor — prefere o Dr. Caio.' },
+    { id: 'ct-marlene', businessId: ODONTO, customerId: '', name: 'Marlene S.', phone: '11955554444', email: 'marlene@exemplo.com', createdAt: now, updatedAt: now, source: 'agendamento', lastInteraction: now, marketingOptIn: false, note: 'Paciente do Dr. Orlando — prefere manhã.' },
     // Base com datas de cadastro no passado (novos clientes por período).
     ...[
-      ['ct-tiago', 'Tiago P.', '11944445555', 'tiago@exemplo.com', 10],
-      ['ct-helena', 'Helena R.', '11933334444', 'helena@exemplo.com', 6],
-      ['ct-claudia', 'Cláudia M.', '11911112222', '', 18],
-    ].map(([id, name, phone, email, days]) => ({
-      id, businessId: B3, customerId: '', name, phone, email,
+      ['ct-tiago', 'Tiago P.', '11944445555', 'tiago@exemplo.com', 10, ''],
+      ['ct-helena', 'Helena R.', '11933334444', 'helena@exemplo.com', 6, 'Sempre reagendável para o período da manhã.'],
+      ['ct-claudia', 'Cláudia M.', '11911112222', '', 18, ''],
+    ].map(([id, name, phone, email, days, note]) => ({
+      id, businessId: ODONTO, customerId: '', name, phone, email,
       createdAt: tsAgo(days), updatedAt: tsAgo(days), source: 'agendamento',
-      lastInteraction: tsAgo(days), marketingOptIn: false, note: '',
+      lastInteraction: tsAgo(days), marketingOptIn: false, note,
     })),
+    { id: 'ct-diego', businessId: VET, customerId: '', name: 'Diego S.', phone: '11955556666', email: '', createdAt: tsAgo(8), updatedAt: tsAgo(8), source: 'agendamento', lastInteraction: tsAgo(8), marketingOptIn: true, note: '' },
   ],
   leads: [
-    { id: 'lead-1', businessId: B1, customerId: '', name: 'Carlos M.', phone: '11977777777', email: '', instagram: '', origin: 'pedido', interest: 'X-Bacon', action: 'pedido', status: 'converted', createdAt: now, lastInteraction: now },
-    { id: 'lead-2', businessId: B2, customerId: '', name: 'Rafael T.', phone: '11966666666', email: '', instagram: '', origin: 'agendamento', interest: 'Corte', action: 'agendamento', status: 'converted', createdAt: now, lastInteraction: now },
+    { id: 'lead-1', businessId: ODONTO, customerId: '', name: 'Rafael T.', phone: '11966666666', email: '', instagram: '', origin: 'agendamento', interest: 'Consulta Odontológica', action: 'agendamento', status: 'converted', createdAt: now, lastInteraction: now },
     // Origens diferentes no passado (sem inventar origem: são as gravadas
     // pelo fluxo que gerou cada lead).
     ...[
-      ['lead-3', B3, 'Helena R.', '11933334444', 'instagram', 'Consulta Cardiológica', 'new', 5],
-      ['lead-4', B3, 'Tiago P.', '11944445555', 'whatsapp', 'Consulta Odontológica', 'converted', 9],
-      ['lead-5', B3, 'Cláudia M.', '11911112222', 'instagram', 'Consulta Odontológica', 'lost', 17],
-      ['lead-6', B2, 'Diego S.', '11955556666', 'whatsapp', 'Corte', 'converted', 8],
+      ['lead-3', VET, 'Helena R.', '11933334444', 'instagram', 'Consulta veterinária', 'new', 5],
+      ['lead-4', ODONTO, 'Tiago P.', '11944445555', 'whatsapp', 'Clareamento', 'converted', 9],
+      ['lead-5', ODONTO, 'Cláudia M.', '11911112222', 'instagram', 'Consulta Odontológica', 'lost', 17],
+      ['lead-6', VET, 'Diego S.', '11955556666', 'whatsapp', 'Vacinação', 'converted', 8],
     ].map(([id, businessId, name, phone, origin, interest, status, days]) => ({
       id, businessId, customerId: '', name, phone, email: '', instagram: '', origin,
       interest, action: 'agendamento', status, createdAt: tsAgo(days), lastInteraction: tsAgo(days),
@@ -271,14 +274,14 @@ const db = {
   events: [],
 };
 
-for (let i = 0; i < 42; i++) {
-  db.events.push({ id: randomUUID(), businessId: B1, type: 'page_view', path: '/burgerhouse', meta: {}, createdAt: new Date(Date.now() - Math.floor(Math.random() * 13) * 86400000).toISOString() });
+for (const slug of ['vidavet', 'odontovitta', 'clinicageral']) {
+  const businessId = { vidavet: VET, odontovitta: ODONTO, clinicageral: GERAL }[slug];
+  for (let i = 0; i < 14; i++) {
+    db.events.push({ id: randomUUID(), businessId, type: 'page_view', path: `/${slug}`, meta: {}, createdAt: new Date(Date.now() - Math.floor(Math.random() * 13) * 86400000).toISOString() });
+  }
 }
 for (let i = 0; i < 9; i++) {
-  db.events.push({ id: randomUUID(), businessId: B1, type: 'conversion', path: '/burgerhouse', meta: { kind: 'order' }, createdAt: new Date(Date.now() - Math.floor(Math.random() * 13) * 86400000).toISOString() });
-}
-for (let i = 0; i < 27; i++) {
-  db.events.push({ id: randomUUID(), businessId: B2, type: 'page_view', path: '/barbeariadojoao', meta: {}, createdAt: new Date(Date.now() - Math.floor(Math.random() * 13) * 86400000).toISOString() });
+  db.events.push({ id: randomUUID(), businessId: ODONTO, type: 'conversion', path: '/odontovitta', meta: { kind: 'booking' }, createdAt: new Date(Date.now() - Math.floor(Math.random() * 13) * 86400000).toISOString() });
 }
 
 // Destino: Postgres quando DATABASE_URL existe (Vercel/produção),
@@ -289,16 +292,19 @@ if (process.env.DATABASE_URL) {
     connectionString: process.env.DATABASE_URL,
     ssl: process.env.PGSSLMODE === 'disable' ? false : { rejectUnauthorized: false },
   });
+  // Tabela LEGADAMENTE nomeada `instalink_doc` — o nome é técnico e congelado
+  // (renomeação exige migração planejada; ver docs/GODOUTOR-CLINICAL-CONVERGENCE-AUDIT.md).
   await pool.query('CREATE TABLE IF NOT EXISTS instalink_doc (id SMALLINT PRIMARY KEY, data JSONB NOT NULL)');
   let finalDb = db;
   let merged = false;
   // SEED_MERGE=1: adiciona os demos SEM apagar o que já existe
-  // (contas, negócios e sessões atuais são preservados).
+  // (contas, unidades e sessões atuais são preservados).
   if (process.env.SEED_MERGE === '1') {
     const res = await pool.query('SELECT data FROM instalink_doc WHERE id = 1');
     const cur = res.rows[0]?.data;
     if (cur && typeof cur === 'object') {
-      const hadDemos = (cur.businesses || []).some((b) => b.slug === 'burgerhouse' || b.slug === 'barbeariadojoao');
+      const demoSlugs = new Set(['vidavet', 'odontovitta', 'clinicageral']);
+      const hadDemos = (cur.businesses || []).some((b) => demoSlugs.has(b.slug));
       finalDb = { ...cur };
       for (const key of Object.keys(db)) {
         if (!Array.isArray(db[key])) continue;
@@ -319,6 +325,6 @@ if (process.env.DATABASE_URL) {
 } else {
   fs.mkdirSync(path.dirname(FILE), { recursive: true });
   fs.writeFileSync(FILE, JSON.stringify(db));
-  console.log('Seed OK — demo@godoutor.app / demo1234');
+  console.log('Seed OK — demo@godoutor.app / demo1234 (maria@, vitor@, pro-caio@ e profissional@ usam demo1234)');
 }
-console.log('   /burgerhouse · /barbeariadojoao · /clinicavitta');
+console.log('   /vidavet · /odontovitta · /clinicageral');

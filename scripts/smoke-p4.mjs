@@ -82,7 +82,7 @@ const auth = { Authorization: `Bearer ${token}` };
 const me = await req('/api/auth/me', { headers: auth });
 assert.equal(me.status, 200);
 const units = me.data.businesses || [];
-const target = units.find((b) => b.id === 'biz-clinicavitta') || units.find((b) => (b.modes || []).includes('bookings')) || units[0];
+const target = units.find((b) => b.id === 'biz-odontovitta') || units.find((b) => (b.modes || []).includes('bookings')) || units[0];
 const other = units.find((b) => b.id !== target.id) || null;
 const B = target.id;
 assert.ok(B, 'empresa de teste');
@@ -98,10 +98,15 @@ const keyHeader = { Authorization: `Bearer ${apiKey}` };
 ok('API key de integração criada (o gatilho vem por ela)');
 
 // ── 2. a tela e a API ──
-const page = await fetch(`${BASE}/automacoes`, { headers: auth });
+// A página é server-side: ela lê a SESSÃO via cookie (Bearer só existe na
+// API). O smoke carrega o cookie de sessão e a unidade-alvo no ?b=.
+const page = await fetch(`${BASE}/automacoes?b=${B}`, {
+  headers: { Cookie: `godoutor_session=${token}` },
+});
 assert.equal(page.status, 200, 'GET /automacoes');
 const html = await page.text();
-assert.ok(html.includes('InstaLink'), 'página renderiza');
+// O heading é client-rendered; a casca SSR carrega a marca no <title>.
+assert.ok(/<title>[^<]*GoDoutor/i.test(html), 'página renderiza (título da marca)');
 ok('tela /automacoes responde');
 
 const list0 = await req(`/api/automations?businessId=${B}`, { headers: auth });
@@ -392,10 +397,17 @@ const tpl = await req('/api/automations', {
   method: 'POST', headers: auth, body: JSON.stringify({ businessId: B, templateId: 'lead_assign_owner' }),
 });
 assert.equal(tpl.status, 201, 'template aplicado');
+// O modelo interno vira automação DESLIGADA (o editor humano revisa antes):
+// ligar + empurrar o motor UMA vez é o caminho real da receita de teste.
+await req('/api/automations', {
+  method: 'POST', headers: auth,
+  body: JSON.stringify({ businessId: B, action: 'toggle', id: tpl.data.automation.id, active: true }),
+});
 const tplPhone = ph(16);
 await req('/api/external/leads', {
   method: 'POST', headers: keyHeader, body: JSON.stringify({ name: 'Do Template', phone: tplPhone, source: 'instagram' }),
 });
+await kick();
 await until('template atribuir responsável rodar', async () => {
   const l = await req(`/api/external/leads?businessId=${B}&search=${tplPhone}`, { headers: keyHeader });
   const lead = (l.data.leads || []).find((x) => x.phone === tplPhone);
