@@ -7,7 +7,15 @@ import type { NextResponse } from 'next/server';
 import { readDB, updateDB } from './db';
 import type { DB, User } from './types';
 
-export const COOKIE_NAME = 'il_session';
+// GODOUTOR Clinical OS — sessão canônica sob `godoutor_session`.
+//
+// `il_session` (era InstaLink) continua SENDO LIDO como fallback de
+// compatibilidade: usuários logados antes da renomeação jamais são
+// deslogados por estética. O login grava o canônico e PURGA o legado; o
+// logout limpa os dois. Remover o fallback só quando as sessões antigas
+// expirarem (30 dias) — é drenagem, não renomeação destrutiva.
+export const COOKIE_NAME = 'godoutor_session';
+export const LEGACY_COOKIE_NAME = 'il_session';
 const SESSION_DAYS = 30;
 export const SESSION_MAX_AGE = SESSION_DAYS * 24 * 3600;
 
@@ -80,9 +88,20 @@ export interface UserRequest {
   headers: { get(n: string): string | null };
 }
 
+type CookieStore = { get(n: string): { value: string } | undefined };
+
+/**
+ * Identificador de sessão lido do store de cookies. Precedência: cookie
+ * canônico (`godoutor_session`) vence; `il_session` legado é aceito apenas
+ * como fallback de leitura (compatibilidade temporária documentada).
+ */
+export function sessionCookieId(store: CookieStore): string | undefined {
+  return store.get(COOKIE_NAME)?.value || store.get(LEGACY_COOKIE_NAME)?.value || undefined;
+}
+
 /** True when this request carries either supported app-session credential. */
 export function hasRequestCredentials(req: UserRequest): boolean {
-  return !!req.cookies.get(COOKIE_NAME)?.value || !!getBearerToken(req);
+  return !!sessionCookieId(req.cookies) || !!getBearerToken(req);
 }
 
 /**
@@ -91,7 +110,7 @@ export function hasRequestCredentials(req: UserRequest): boolean {
  * cookie falls back to Bearer, using the same snapshot in either case.
  */
 export function userFromRequestFromDB(req: UserRequest, db: Pick<DB, 'sessions' | 'users'>): User | null {
-  const viaCookie = getUserBySessionFromDB(db, req.cookies.get(COOKIE_NAME)?.value);
+  const viaCookie = getUserBySessionFromDB(db, sessionCookieId(req.cookies));
   if (viaCookie) return viaCookie;
   return getUserBySessionFromDB(db, getBearerToken(req));
 }
@@ -108,7 +127,7 @@ export async function userFromRequest(req: UserRequest): Promise<User | null> {
 }
 
 export async function currentUser(snapshot?: Pick<DB, 'sessions' | 'users'>): Promise<User | null> {
-  const sessionId = cookies().get(COOKIE_NAME)?.value;
+  const sessionId = sessionCookieId(cookies());
   if (!sessionId) return null;
   if (snapshot) return getUserBySessionFromDB(snapshot, sessionId);
   return getUserBySession(sessionId);
@@ -138,8 +157,13 @@ export function sessionCookieAttrs() {
 
 export function setSessionOn(res: NextResponse, sessionId: string): void {
   res.cookies.set(COOKIE_NAME, sessionId, sessionCookieAttrs());
+  // Higienização: remove o cookie legado ainda válido no login para que a
+  // sessão migre para o nome canônico. A leitura do legado segue aceita até o
+  // próximo login — nenhum usuário é deslogado por esta mudança.
+  res.cookies.set(LEGACY_COOKIE_NAME, '', { ...sessionCookieAttrs(), maxAge: 0 });
 }
 
 export function clearSessionOn(res: NextResponse): void {
   res.cookies.set(COOKIE_NAME, '', { ...sessionCookieAttrs(), maxAge: 0 });
+  res.cookies.set(LEGACY_COOKIE_NAME, '', { ...sessionCookieAttrs(), maxAge: 0 });
 }

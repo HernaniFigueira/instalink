@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getBearerToken, COOKIE_NAME, hashPassword, verifyPassword } from '@/lib/auth';
+import { getBearerToken, sessionCookieId, hashPassword, verifyPassword } from '@/lib/auth';
 import { requireUser } from '@/lib/access';
 import { updateDB } from '@/lib/db';
 import { pushAudit } from '@/lib/audit';
@@ -27,7 +27,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: `A nova senha precisa de ao menos ${PASSWORD_MIN_LENGTH} caracteres.` }, { status: 400 });
     }
 
-    const currentSessionId = req.cookies.get(COOKIE_NAME)?.value || getBearerToken(req) || '';
+    const currentSessionId = sessionCookieId(req.cookies) || getBearerToken(req) || '';
     const result = await updateDB((db) => {
       const user = db.users.find((candidate) => candidate.id === auth.user.id);
       if (!user || !verifyPassword(currentPassword, user.passwordHash)) {

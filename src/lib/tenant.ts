@@ -3,7 +3,7 @@
 import { redirect } from 'next/navigation';
 import { readDB } from './db';
 import { cookies } from 'next/headers';
-import { COOKIE_NAME, currentUser, getUserBySessionFromDB } from './auth';
+import { sessionCookieId, currentUser, getUserBySessionFromDB } from './auth';
 import type { Business, User } from './types';
 
 export async function requireUser(): Promise<User> {
@@ -14,7 +14,7 @@ export async function requireUser(): Promise<User> {
 
 /** Todos os negócios do usuário logado. */
 export async function myBusinesses(): Promise<Business[]> {
-  const sessionId = cookies().get(COOKIE_NAME)?.value;
+  const sessionId = sessionCookieId(cookies());
   if (!sessionId) redirect('/login');
   const db = await readDB();
   const user = getUserBySessionFromDB(db, sessionId);
