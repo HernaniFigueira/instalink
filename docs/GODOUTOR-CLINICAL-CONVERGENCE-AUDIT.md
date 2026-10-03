@@ -440,3 +440,60 @@ COMPATIBILIDADE lido pela mesma flag (`GODOUTOR_LEGACY_PAGES`).
   legado 200 e 401 após logout em ambos os cookies.
 - Visual/browser: **NÃO executado** — sem Chromium instalável neste sandbox;
   declarado como pendência na homologação, não como aprovado.
+
+---
+
+## CORREÇÃO FINAL DA PR #51 — produto ativo 100% clínico (blocos 1–9)
+
+Escopo: onboarding sem pergunta comercial, Products/Orders fora do produto
+ativo, branding de pacote, renome com migração dos identificadores `il-*`
+ativos e regra de nomenclatura permanente. Nenhum dado apagado; nenhuma rota
+removida; `GODOUTOR_LEGACY_PAGES=1` preserva o ramo de compatibilidade.
+
+### O que mudou por superfície (flag OFF = padrão)
+
+| Superfície | Estado FINAL |
+| --- | --- |
+| Onboarding | Sem `SERVICE_MODEL_OPTIONS` (fieldset só sob o gate `showsServiceModelQuestion(legacy)`); POST **sem** `modes` — base `services + bookings` é default canônico do servidor (`NEW_BUSINESS_DEFAULTS`); 'geral' = "Clínica geral / outro tipo de clínica"; placeholder só clínico; rascunho `godoutor-biz-draft` (dual-read `il-biz-draft`). |
+| Recursos (`/recursos` + `/api/businesses/[id]/features`) | Produtos sai do catálogo OFERECIDO no OFF (`offeredFeatures(legacy)`; linha `commerce`), orders/quote já eram `LEGACY_FEATURES`; ativar comercial no OFF → **410** com estado claro (desativar sempre livre); PATCH clínico normal (200). |
+| `/produtos` · `/pedidos` | Não abrem tela operacional no OFF: `LegacySurfaceBlocked` ("Recurso legado indisponível", CTA /servicos · /agenda — nada de 404); ON reabre a tela inteira. |
+| Navegação/busca | `isHiddenLegacyNavRoute` esconde `/pagina` + `/produtos` + `/pedidos` do menu E da busca (mesma regra, shell único). |
+| Checklist | OFF sem 'Personalize/Publice a página'; item products só para unidade que JÁ tem o módulo (nunca para unidade nova); ON preserva o caminho antigo. |
+| Dashboard | Painéis/atividade de pedidos já eram `legacyPagesEnabled && modules.*`; consumo de Orders segue só para unidade com módulo ativo (dado legado), nunca para clínica nova. |
+| Armazenamento | Products/Category/Order permanecem **LEGACY STORAGE PASSIVO** (tabelas e APIs resolúveis; NÃO viraram Inventory/Medication; nenhuma migração remota). |
+| Branding | `package.json` description canônica; `.env.example` só GoDoutor na prosa ativa (INSTALINK_DB_FILE confinado à seção "Alias legado"); `scripts/master.mjs` 'Master GoDoutor' + helper `resolveLocalDbFile` (bug latente da onda C2 corrigido — só disparava sem DATABASE_URL). |
+
+### Renome de identificadores (auditoria do padrão `il[-_:]|__il_`)
+
+| Categoria | Itens | Decisão |
+| --- | --- | --- |
+| **A — corrigido agora (localStorage/persistente, dual-read com promoção)** | `il_token`→`godoutor_token`; `il_cust`→`godoutor_customer`; `il-side-v2`→`godoutor-side-v2`; `il-cart-<id>`→`godoutor-cart-<id>`; `il-setup-hidden-<id>`→`godoutor-setup-hidden-<id>`; `il-biz-draft`→`godoutor-biz-draft` | canônico vence na leitura; legado é promovido e removido na escrita; logout limpa os dois. |
+| **A — eventos internos do SPA (produtor+ouvinte na MESMA alteração)** | `il:overview-refresh`, `il:business-refresh`, `il:bookings-changed`, `il:reviews-changed`, `il:auth-changed`, `il:before-navigation` → `godoutor:*`; flags de `window` `__il_session_redirect`/`__il_fetch_wrapped` → `__godoutor_*` | renome total; zero literais `il:*` restantes em `src` (pino em convergence-final.test.ts). |
+| **LEGACY_COMPAT (congelado por protocolo — não renomeado)** | cookies `il_session` (dual-read concluído), `il_cust_session`, `il_support`; headers `X-Instalink-*`; `#instalink-booking`/`data-instalink-*`/`instalink:height`; `RESERVED_SLUGS` | ondas próprias documentadas; renome unilateral quebraria contrato externo. |
+| **LEGACY_STORAGE** | tabela `instalink_doc` (plano P1 em §armazenamento), alias `INSTALINK_DB_FILE`, arquivo `data/instalink.db.json` preservado como destino | drenagem planejada; nada renomeado à força. |
+| **CSS_NAMESPACE_LEGACY (classificado, sem big-bang)** | `il-platform`, `il-card`, `il-btn`, `--il-nav-*`, ~389 ocorrências em `globals.css` + classes utilitárias (`il-empty`, `il-skeleton`, `il-page`, `il-auth`…) | NÃO bloqueia Clinical Encounter F1; plano futuro opcional de batch `gd-*`; **regra permanente no AGENTS.md: nenhum identificador `il-*` novo**. |
+| **HISTORY_DOC** | `docs/RELATORIO-AUDITORIA-2026-09.md`, `docs/DESIGN-360-PLAN.md`, `docs/GODOUTOR-HISTORY.md`, fixtures de teste com `il-*` | documentos de história/fixtures — menções antigas permanecem como registro. |
+
+### Varredura final (padrão do briefing)
+
+- ACTIVE_PRODUCT (produto ativo nomeando InstaLink/link-na-bio, opção
+  comercial de nicho, Products/Orders ativáveis, nicho não-clínico): **0**.
+  (Contagem bruta do grep contém falsos positivos de `email:`/`fail-` para o
+  padrão `il[-_:]` — desconsiderados com fronteira `[^a-zA-Z0-9]`.)
+- Toda menção restante a "vitrine/produtos/pedidos" em `src` está em: ramo ON
+  (gated por `legacyPagesEnabled`), componentes públicos legados congelados,
+  APIs de dados resolúveis, comentários/headers de compat ou testes-pino.
+- `rg -n "InstaLink" package.json .env.example` → só a linha de alias legado
+  do `.env.example` (declarada) e zero no `package.json`.
+
+### Gates da correção final
+
+`git diff --check` limpo · `tsc --noEmit` limpo · `next build` limpo ·
+Vitest completo **2965+ pass / 4 fail (baseline pré-existente em
+a34-instagram×3 + automation-audit-p4×1, comprovada no worktree de
+`dbf7d68`)** · novos pinos: `convergence-final.test.ts` **29** ·
+reexecutados contra o servidor QA (flag OFF): `smoke` **67/0** ·
+`smoke-ux` **88/0** · `smoke-agendar` **25/0** · `smoke-p3` **15 fluxos** ·
+`smoke-p4` **18/18** · `e2e-merchant` **28/0** · sonda de personas **11/11**
+(dual-read `il_session` 200 → purge no login → 401 pós-logout nos dois
+cookies). Visual/browser: **NÃO executado** (sem Chromium no sandbox).

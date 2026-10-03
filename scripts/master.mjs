@@ -45,6 +45,22 @@ function hashPassword(password) {
   return `scrypt:${salt}:${hash}`;
 }
 
+// Resolve o banco local em arquivo com a MESMA regra do runtime (src/lib/db.ts
+// e scripts/seed.mjs): GODOUTOR_DB_FILE (canônico) → INSTALINK_DB_FILE (alias
+// legado) → data/godoutor.db.json (preservando data/instalink.db.json se só
+// ele existir). (Corrigido na onda de convergência: a chamada existia sem o
+// helper no arquivo — só disparava sem DATABASE_URL.)
+function resolveLocalDbFile(cwd = process.cwd()) {
+  const explicit = process.env.GODOUTOR_DB_FILE || process.env.INSTALINK_DB_FILE;
+  if (explicit) return explicit;
+  const canonical = path.join(cwd, 'data', 'godoutor.db.json');
+  const legacy = path.join(cwd, 'data', 'instalink.db.json');
+  try {
+    if (!fs.existsSync(canonical) && fs.existsSync(legacy)) return legacy;
+  } catch { /* segue o canônico */ }
+  return canonical;
+}
+
 function usage() {
   console.error(`Uso:
   # Promover usuário existente
@@ -155,7 +171,7 @@ if (listOnly) {
 if (bootstrap) {
   const email = String(process.env.MASTER_BOOTSTRAP_EMAIL || emailArg || '').trim().toLowerCase();
   const password = String(process.env.MASTER_BOOTSTRAP_PASSWORD || '');
-  const name = String(process.env.MASTER_BOOTSTRAP_NAME || '').trim() || email.split('@')[0] || 'Master InstaLink';
+  const name = String(process.env.MASTER_BOOTSTRAP_NAME || '').trim() || email.split('@')[0] || 'Master GoDoutor';
 
   if (!email.includes('@')) {
     console.error('Defina MASTER_BOOTSTRAP_EMAIL (ou passe o e-mail) com um endereço válido.');

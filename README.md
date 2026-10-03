@@ -43,7 +43,7 @@ Documentação completa: [`docs/MASTER.md`](docs/MASTER.md).
 
 | Variável | Padrão | Para que |
 | --- | --- | --- |
-| `GODOUTOR_LEGACY_PAGES` | OFF | Ramo de compatibilidade da era "universal" (página pública no menu-busca, vitrine, catálogos comerciais de tema, perguntas de nicho no cadastro). O produto clínico funciona 100% com ela OFF. |
+| `GODOUTOR_LEGACY_PAGES` | OFF | Ramo de compatibilidade da era "universal": página pública no menu-busca, vitrine/Produtos e Pedidos (telas + catálogo de Recursos), perguntas de nicho/modo de venda no cadastro, temas comerciais. No OFF nada disso é oferecido — mas nada é apagado: dados, APIs e deep links seguem válidos. O produto clínico funciona 100% com a flag OFF. |
 | `GODOUTOR_DB_FILE` | `data/godoutor.db.json` | Banco local em arquivo. `INSTALINK_DB_FILE` segue lida como **alias legado**; se só existir `data/instalink.db.json`, ele é preservado como destino (renomeação sem perda). |
 | `CRON_SECRET` | — | Protege os consumidores de fila/cron (automações P4, retenção). |
 | `ALLOW_PRIVATE_OUTBOUND_URLS=1` | OFF | Escape hatch dev/QA para webhooks apontando para IPs privados (recusados por padrão — SSRF guard). |

@@ -282,3 +282,16 @@ Registrado sem implementação: **Cadastro/Onboarding — contrato de identidade
 **Closure:** Equipe `Gerenciar pessoa` unificado (DADOS/ATUAÇÃO + ACESSO + DISPONIBILIDADE) com Drawer único, largura Ações 170px sem overflow; deep-link Disponibilidade preservado; `Redes e site` oculto com `GODOUTOR_LEGACY_PAGES OFF`; `Como está a inteligência` removido da superfície clínica (estado/fetch mortos removidos, não movido nesta fase); Aparência extraída para `ShellAppearance` em Meu Perfil → Preferências (navegador, não tenant); Perfil copy técnica removida (`User`/`Professional`/IDs/`/profissionais` → linguagem produto + link `/equipe`); Estrutura `Modelos de anamnese` / “Crie e adapte fichas...” (sem prometer biblioteca); Serviços preservam `questions` legado (omitido no payload), preço opcional, Categorias Drawer com bloqueio; Master Plan registra Google Calendar (VISUAL) e repos `fullcalendar/fullcalendar`, `schedule-x/schedule-x`, `bigcalendar/react-big-calendar` para Agenda 2.0 + biblioteca futura F1 sobre motor existente.
 
 **Validação:** (executado nesta missão — ver relatório) `typecheck` / `build` / `vitest` / `diff-check` + homologação visual 1440/1366/1024 (ou pendente se sem browser).
+
+## Adendum — Correção final da PR #51 (2026-10-03, mesma branch)
+
+Bloco de fechamento do produto ativo 100% clínico: onboarding OFF sem
+pergunta comercial nem `modes` (base canônica server-side), Products/Orders
+fora do catálogo ativável e das telas operacionais no OFF (estado legado,
+410 no PATCH), checklist sem itens de Página, branding de `package.json`/
+`.env.example`, e renome **com migração dual-read** de todos os identificadores
+ativos `il-*` (localStorage `il_token/il_cust/il-side-v2/il-cart-/il-setup-hidden-/il-biz-draft`,
+eventos internos `il:*` → `godoutor:*` com produtor+ouvinte juntos, flags
+`__il_*` → `__godoutor_*`). CSS `il-*` classificado (sem big-bang) e regra
+permanente no AGENTS.md: nenhum `il-*` novo. Testes novos 29/29
+(`convergence-final.test.ts`); suítes completas reexecutadas verdes (67/88/25/15/18/28 + personas 11/11 + vitest 2965/4-baseline). Corrige também bug latente do `scripts/master.mjs` (helper `resolveLocalDbFile` ausente desde a onda C2). Produção: **NÃO**. Merge: **NÃO** — PR #51 segue aberta para revisão humana; Clinical Encounter F1 continua bloqueado até autorização explícita.

@@ -65,3 +65,43 @@
 - Drenagem dos fallbacks (cookie/env/`x-instalink-action`/id do embed) fica
   para onda própria quando as sessões/ambientes antigos expirarem — é
   removível por design, não por urgência.
+
+---
+
+## Reexecução — CORREÇÃO FINAL da PR #51 (mesma branch)
+
+Método idêntico (build de produção, seed clínico tri-tenant, harness HTTP
+contra `localhost:3000` com a flag OFF, re-seed antes de cada suíte).
+
+| Suíte | Resultado |
+| --- | --- |
+| Vitest completo | 2965+ pass · 4 fail = baseline provada em worktree de `dbf7d68` (a34-instagram×3, automation-audit-p4×1) |
+| `convergence-final.test.ts` (novo, blocos A–D) | **29/29** |
+| `smoke.mjs` | **67 ok / 0** |
+| `smoke-ux.mjs` | **88 ok / 0** |
+| `smoke-agendar.mjs` | **25 ✓ / 0 ✗** |
+| `smoke-p3.mjs` | **15 fluxos** ok (+ consumidor de retry) |
+| `smoke-p4.mjs` | **18/18** |
+| `e2e-merchant.mjs` | **28 ok / 0** |
+| Sonda de personas (flag OFF) | **11/11** — Owner units=3 · Maria 403 por design · Profissional 200 · Master units=0; `godoutor_session` canônico, `il_session` purgado no login, dual-read 200, 401 pós-logout nos dois |
+| `tsc --noEmit` / `next build` / `git diff --check` | limpos |
+
+Evidências comportamentais da correção (unidade nova criada pela API **sem**
+payload comercial, flag OFF): checklist `Dados → serviço → profissional →
+horários → (opcional) WhatsApp`, **sem** Página e **sem** vitrine;
+`/api/businesses/[id]/features` oferece `bookings, services, reviews, faq,
+gallery, location, about, agent, whatsapp` (products/orders/quote **fora**);
+`PATCH {feature:'products'}` → **410** com explicação de legado preservado;
+`PATCH {feature:'reviews'}` → 200.
+
+Achado corrigido no caminho (honestidade de registro): `scripts/master.mjs`
+chamava `resolveLocalDbFile` sem o helper no arquivo (introduzido na onda C2;
+só disparava sem `DATABASE_URL`) — helper adicionado com a mesma regra de
+seed.mjs/db.ts e suíte revalidada; fallback de nome do bootstrap virou
+'Master GoDoutor'.
+
+Pendências assumidas (não bloqueiam): visual/browser **NÃO executado** (sem
+Chromium no sandbox); cookies de protocolo `il_session/il_cust_session/il_support`,
+tabela `instalink_doc`, alias `INSTALINK_DB_FILE` e namespace CSS `il-*`
+permanecem como LEGACY_COMPAT/LEGACY_STORAGE/CSS_NAMESPACE_LEGACY com plano
+próprio — ver matriz em `GODOUTOR-CLINICAL-CONVERGENCE-AUDIT.md`.
