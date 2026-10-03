@@ -133,7 +133,7 @@ export default function RecursosPage() {
       await load();
       // O shell do painel guarda módulos/permissões em memória; sem este
       // aviso, uma área recém-ativada ainda pareceria "sem acesso" até F5.
-      window.dispatchEvent(new Event('il:business-refresh'));
+      window.dispatchEvent(new Event('godoutor:business-refresh'));
       setToast({ kind: !row.enabled ? 'ok' : 'warn', text: res.data?.effect || (row.enabled ? 'Recurso ocultado.' : 'Recurso ativado.') });
       if (toastTimer.current) window.clearTimeout(toastTimer.current);
       toastTimer.current = window.setTimeout(() => setToast(null), 6000);

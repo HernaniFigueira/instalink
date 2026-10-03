@@ -31,9 +31,9 @@ export function useUnsavedChanges(dirty: boolean) {
     const browserNavigation = (window as Window & { navigation?: EventTarget }).navigation;
     browserNavigation?.addEventListener('navigate', historyNavigation);
     window.addEventListener('beforeunload', unload);
-    window.addEventListener('il:before-navigation', navigation);
+    window.addEventListener('godoutor:before-navigation', navigation);
     document.addEventListener('click', click, true);
-    return () => { clearTimeout(expiry); browserNavigation?.removeEventListener('navigate', historyNavigation); window.removeEventListener('beforeunload', unload); window.removeEventListener('il:before-navigation', navigation); document.removeEventListener('click', click, true); };
+    return () => { clearTimeout(expiry); browserNavigation?.removeEventListener('navigate', historyNavigation); window.removeEventListener('beforeunload', unload); window.removeEventListener('godoutor:before-navigation', navigation); document.removeEventListener('click', click, true); };
   }, [dirty]);
 }
-export function mayLeaveEditor() { return window.dispatchEvent(new Event('il:before-navigation', { cancelable: true })); }
+export function mayLeaveEditor() { return window.dispatchEvent(new Event('godoutor:before-navigation', { cancelable: true })); }

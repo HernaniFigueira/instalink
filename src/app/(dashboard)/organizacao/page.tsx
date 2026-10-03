@@ -40,7 +40,7 @@ export default function OrganizationPage() {
     e.preventDefault();if(!org||saving)return;setSaving(true);setSaveError('');
     const res=await apiSend<{businessId:string}>('/api/businesses','POST',{name,address,organizationId:org.id});setSaving(false);
     if(!res.ok){setSaveError(res.message);return;}
-    window.dispatchEvent(new Event('il:business-refresh'));router.push(`/dashboard?b=${res.data?.businessId}`);
+    window.dispatchEvent(new Event('godoutor:business-refresh'));router.push(`/dashboard?b=${res.data?.businessId}`);
   }
   if(error)return <AreaLoadError area="Organização" message={error} onRetry={load}/>;
   if(loading)return <p role="status">Carregando visão geral da organização…</p>;
@@ -68,6 +68,6 @@ export default function OrganizationPage() {
       </article>)}
     </section>
     {org.canDelete&&<section className="border border-[var(--danger-border)] rounded-lg p-4"><h2 className="font-semibold">Excluir organização</h2><p className="mb-3 text-sm">Somente quando não houver filiais ou dependências. Não exclui filiais em cascata.</p><Button variant="destructive" onClick={()=>setDeleting({kind:'organization',id:org.id,organizationId:org.id,name:org.name})}>Verificar exclusão da organização</Button></section>}
-    {deleting&&<DeleteEntityDialog target={deleting} onClose={()=>setDeleting(null)} onDeleted={()=>{const kind=deleting.kind;setDeleting(null);window.dispatchEvent(new Event('il:business-refresh'));if(kind==='organization')router.replace('/organizacao');else void load();}}/>}
+    {deleting&&<DeleteEntityDialog target={deleting} onClose={()=>setDeleting(null)} onDeleted={()=>{const kind=deleting.kind;setDeleting(null);window.dispatchEvent(new Event('godoutor:business-refresh'));if(kind==='organization')router.replace('/organizacao');else void load();}}/>}
   </div>;
 }

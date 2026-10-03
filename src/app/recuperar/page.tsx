@@ -78,7 +78,7 @@ function RecuperarForm() {
         router.refresh();
       } else {
         saveCustomerToken(data.token);
-        window.dispatchEvent(new CustomEvent('il:auth-changed'));
+        window.dispatchEvent(new CustomEvent('godoutor:auth-changed'));
         setDone(true);
       }
     } catch (err: any) {

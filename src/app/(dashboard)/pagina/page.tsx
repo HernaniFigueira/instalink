@@ -920,7 +920,7 @@ function BlockSettings({ block, businessId, business, onChange, onSave, onRefres
         { businessId, feature, enabled: true }, { scope: 'action', area: 'Página' });
       if (!res.ok) throw new Error(res.message || 'Não foi possível ativar.');
       // Atualiza o shell (menu/áreas) na hora e relê negócio+página — sem F5.
-      window.dispatchEvent(new Event('il:business-refresh'));
+      window.dispatchEvent(new Event('godoutor:business-refresh'));
       onRefresh?.();
     } catch (e: any) {
       setActivateError(e.message || 'Não foi possível ativar o módulo.');

@@ -110,14 +110,14 @@ describe('installFetchWrapper · 403 de carregamento nunca vira aviso', () => {
     __resetForbiddenDedupe();
     stop = onForbidden((d) => events.push(d));
     // jsdom não tem window.fetch wrapper instalado por padrão
-    delete (window as any).__il_fetch_wrapped;
+    delete (window as any).__godoutor_fetch_wrapped;
     // "dentro do painel" para o wrapper considerar o path
     window.history.replaceState({}, '', '/agenda');
   });
 
   afterEach(() => {
     stop();
-    delete (window as any).__il_fetch_wrapped;
+    delete (window as any).__godoutor_fetch_wrapped;
     vi.restoreAllMocks();
   });
 

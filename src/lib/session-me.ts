@@ -18,7 +18,7 @@
 //   • TTL de 5s — janela em que o contexto não mudou de verdade, então os três
 //     consumidores compartilham a MESMA resposta;
 //   • `fresh: true` — o sinal explícito de "isto mudou agora" (toggle de
-//     módulo/equipe em `il:business-refresh` e o botão Tentar novamente) fura o
+//     módulo/equipe em `godoutor:business-refresh` e o botão Tentar novamente) fura o
 //     TTL e busca de novo, como antes;
 //   • 401 nunca é cacheado: sessão inválida tem que voltar a bater no servidor;
 //   • requisições simultâneas dividem UMA chamada (coalescência em voo).

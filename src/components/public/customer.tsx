@@ -327,9 +327,9 @@ export function CustomerAccountSheet({ business }: { business: PublicBusiness })
     load();
     const changed = () => load();
     const bookingsChanged = (e: Event) => { if ((e as CustomEvent).detail?.businessId === business.id) load(); };
-    window.addEventListener('il:reviews-changed', changed);
-    window.addEventListener('il:bookings-changed', bookingsChanged);
-    return () => { window.removeEventListener('il:reviews-changed', changed); window.removeEventListener('il:bookings-changed', bookingsChanged); };
+    window.addEventListener('godoutor:reviews-changed', changed);
+    window.addEventListener('godoutor:bookings-changed', bookingsChanged);
+    return () => { window.removeEventListener('godoutor:reviews-changed', changed); window.removeEventListener('godoutor:bookings-changed', bookingsChanged); };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [business.id]);
 
@@ -364,7 +364,7 @@ export function CustomerAccountSheet({ business }: { business: PublicBusiness })
       /* sai localmente de qualquer forma */
     }
     clearCustomerToken();
-    window.dispatchEvent(new CustomEvent('il:auth-changed'));
+    window.dispatchEvent(new CustomEvent('godoutor:auth-changed'));
     closeSheet();
   }
 
@@ -626,7 +626,7 @@ export function ReviewSheet({ businessId, businessName, googleUrl, kind, refId }
       const data = await res.json();
       if (!res.ok) throw new Error(data.error);
       setDone(true);
-      window.dispatchEvent(new CustomEvent('il:reviews-changed'));
+      window.dispatchEvent(new CustomEvent('godoutor:reviews-changed'));
     } catch (err: any) {
       setError(err.message);
     } finally {
