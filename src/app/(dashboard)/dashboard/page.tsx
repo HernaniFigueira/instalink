@@ -158,11 +158,17 @@ export default function DashboardPage() {
     bySpecies: Array<{ key: string; label: string; count: number }>;
   } | null>(null);
   useEffect(() => {
-    try { setSetupHidden(localStorage.getItem(`il-setup-hidden-${businessId}`) === '1'); } catch { /* noop */ }
+    // Renome com migração (bloco 5 da correção final): chave canônica
+    // `godoutor-setup-hidden-<id>`; a antiga `il-setup-hidden-<id>` é lida
+    // como fallback — quem já ocultou o checklist continua com ele oculto.
+    try {
+      const v = localStorage.getItem(`godoutor-setup-hidden-${businessId}`) ?? localStorage.getItem(`il-setup-hidden-${businessId}`);
+      setSetupHidden(v === '1');
+    } catch { /* noop */ }
   }, [businessId]);
   function hideSetup() {
     setSetupHidden(true);
-    try { localStorage.setItem(`il-setup-hidden-${businessId}`, '1'); } catch { /* noop */ }
+    try { localStorage.setItem(`godoutor-setup-hidden-${businessId}`, '1'); localStorage.removeItem(`il-setup-hidden-${businessId}`); } catch { /* noop */ }
   }
   // FASE 2 · P8 — pular um item OBRIGATÓRIO não existe: só os `optional`
   // têm este botão, e a gravação é no servidor (reabrir o painel mantém).
