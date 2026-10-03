@@ -1,4 +1,5 @@
 'use client';
+import { FIT_IN_MARK_CLS } from '@/lib/status';
 // "+ Novo agendamento" — o fluxo COMEÇA pelo cliente:
 //   1. busca no CRM por nome ou WhatsApp (não cria cadastro duplicado);
 //   2. seleciona a pessoa → nome/WhatsApp/e-mail preenchidos e vinculados;
@@ -13,9 +14,8 @@ import { adminBookingMaxDate } from '@/lib/booking-ops';
 import { BookingRecurrence } from './BookingRecurrence';
 import type { BookingOccurrence } from '@/lib/booking-recurrence';
 import type { OccurrencePreview } from '@/lib/booking-series';
-import { onlyDigits } from '@/lib/utils';
+import { cn, minToTime, onlyDigits, timeToMin } from '@/lib/utils';
 import { isLegacyPagesEnabled } from '@/lib/product';
-import { cn } from '@/lib/utils';
 import type { Pet, Professional, Service } from '@/lib/types';
 import { apiGet, apiSend } from '@/lib/api-client';
 import { breedSuggestions, PET_SPECIES, PET_SPECIES_LABELS, validatePet } from '@/lib/pets';
@@ -200,7 +200,7 @@ export function NewBookingSheet({ businessId, services, pros, timezone, initial,
     // profissional, ele permanece selecionado; se não existe, sai.
     const intended = intendedTime.current;
     const professionalQuery = activeProId ? `&professionalId=${encodeURIComponent(activeProId)}` : '';
-    fetch(`/api/bookings?mode=slots-admin&internalSnap=5&businessId=${businessId}&serviceId=${serviceId}&date=${date}${professionalQuery}`)
+    fetch(`/api/bookings?mode=slots-admin&internalSnap=15&businessId=${businessId}&serviceId=${serviceId}&date=${date}${professionalQuery}`)
       .then(async (r) => {
         const d = await r.json();
         if (mySeq !== slotSeq.current) return;
@@ -452,7 +452,7 @@ export function NewBookingSheet({ businessId, services, pros, timezone, initial,
               <div className="rounded-xl border border-[var(--success-border)] bg-[var(--success-bg)] px-4 py-4">
                 <p className="text-base font-semibold text-[var(--success-fg)] flex items-center gap-2">
                   <Icon n="check" size={18} strokeWidth={3} /> {created.count ? `${created.count} atendimentos criados` : 'Agendamento criado'}
-                  {created.fitIn && <Badge tone="amber">Encaixe</Badge>}
+                  {created.fitIn && <span className={`rounded px-1.5 py-0.5 text-xs font-semibold ${FIT_IN_MARK_CLS}`}>Encaixe</span>}
                 </p>
                 {created.fitIn && (
                   <p className="text-xs text-[var(--success-fg)] mt-1">
@@ -473,7 +473,7 @@ export function NewBookingSheet({ businessId, services, pros, timezone, initial,
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
                 <Button type="button" variant="primary" onClick={onClose}>Fechar</Button>
                 <Button type="button" variant="secondary" onClick={() => { window.location.assign(`/agenda?b=${encodeURIComponent(businessId)}&data=${created.date}`); }}>Ver na agenda</Button>
-                <Button type="button" variant="secondary" onClick={() => { setCreated(null); setRepeat(false); setOccurrences([]); setPreview(null); requestId.current = ''; setServiceId(''); setDate(''); setTime(''); setNote(''); setError(''); }}>Novo agendamento</Button>
+                <Button type="button" variant="secondary" onClick={() => { setCreated(null); setStaffDuration(''); setRepeat(false); setOccurrences([]); setPreview(null); requestId.current = ''; setServiceId(''); setDate(''); setTime(''); setNote(''); setError(''); }}>Novo agendamento</Button>
               </div>
             </div>
           ) : (
@@ -495,7 +495,7 @@ export function NewBookingSheet({ businessId, services, pros, timezone, initial,
               </div>
             ) : (
               <>
-                <Input value={query} onChange={(e) => setQuery(e.target.value)} autoFocus
+                <Input type="search" name="godoutor-client-search" autoComplete="off" spellCheck={false} autoCorrect="off" autoCapitalize="none" value={query} onChange={(e) => setQuery(e.target.value)} autoFocus
                   placeholder="Buscar cliente por nome ou WhatsApp…" aria-label="Buscar cliente" />
                 <p className="text-xs text-[var(--text-muted)] mt-1.5">
                   Buscamos no CRM para não duplicar cadastro — {isLegacyPagesEnabled() ? 'o cliente pode já ter conta na sua página.' : 'o cliente pode já ter uma conta.'}
@@ -560,13 +560,16 @@ export function NewBookingSheet({ businessId, services, pros, timezone, initial,
             </Select>
           </Field>
 
+          <details><summary className="cursor-pointer text-sm text-[var(--brand)]">Alterar duração · opções avançadas</summary>
           <Field label="Duração deste atendimento (min)" hint={`Serviço sugere ${service?.durationMin || '—'} min; deixe vazio para usar o padrão`}>
             <Input type="number" min="5" max="720" step="5" aria-label="Duração deste atendimento em minutos"
               value={staffDuration} disabled={saving || reviewing || repeat}
               onChange={(e) => setStaffDuration(e.target.value === '' ? '' : Number(e.target.value))} />
           </Field>
+          </details>
+          {time && <p className="text-sm font-semibold" data-testid="booking-range-summary">Início: {time} · Fim: {minToTime(timeToMin(time) + (staffDuration || service?.durationMin || 30))} · Duração: {staffDuration || service?.durationMin || 30} min</p>}
 
-          {service && eligiblePros.length > 1 && (
+          {eligiblePros.length > 0 && (
             <Field label="Profissional" hint="Opcional — em branco a agenda equilibra a equipe automaticamente">
               <Select value={activeProId} disabled={saving || reviewing} onChange={(e) => setProId(e.target.value)}>
                 <option value="">Automático (equilibrar equipe)</option>

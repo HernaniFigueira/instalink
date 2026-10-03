@@ -866,7 +866,7 @@ export default function EquipePage() {
                   <p className="text-[11px] text-zinc-400 mt-1">CPF ≠ CRMV. Não exigimos CRMV para equipe não-veterinária.</p>
                 </div>
                 <div>
-                  <p className="text-xs font-semibold tracking-wide uppercase text-zinc-500 mb-2">Serviços que realiza</p>
+                  <p className="text-xs font-semibold tracking-wide uppercase text-zinc-500 mb-2">Atendimentos e procedimentos habilitados</p><p className="text-xs text-zinc-500 mb-2">Define quais procedimentos podem ser agendados com este profissional.</p>
                   <div className="flex gap-2">
                     <Input value={fServiceQuery} onChange={(e)=> { setFServiceQuery(e.target.value); setFShowServiceCreate(false); }} placeholder="Buscar serviço (ex.: Consulta, Vacinação)" className="flex-1" />
                   </div>

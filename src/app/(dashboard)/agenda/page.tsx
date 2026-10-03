@@ -1,6 +1,6 @@
 'use client';
 import { computeSlots } from '@/lib/slots';
-import { buildBookingWindow, instantToLocalProjection } from '@/lib/booking-temporal';
+import { bookingTimezone, buildBookingWindow, instantToLocalProjection } from '@/lib/booking-temporal';
 import { eligibleProfessionalIds, slotEligibleProfessionalIds } from '@/lib/booking';
 import { QueueDock } from '@/components/dashboard/QueueDock';
 // ═══════════════════════════════════════════════════════════════
@@ -70,7 +70,7 @@ const COL_MIN = 152;
 const HEADER_H = 48;
 // Passo do clique-em-área-vazia (o horário só é aceito se a grade real o
 // confirmar — caso contrário o sheet abre sem horário escolhido).
-const CLICK_SNAP_MIN = 5;
+const CLICK_SNAP_MIN = 15;
 /** Folga mínima entre o fim da grade e o fim da tela (não é a causa do
  *  scroll, só respiro visual — a página continua rolando normalmente). */
 const VIEWPORT_BOTTOM_PAD = 16;
@@ -176,7 +176,7 @@ interface HoverTarget {
 let lastGridPressAt = 0;
 
 // ── Coluna da grade (memoizada: o drag não re-renderiza a grade inteira) ──
-const GridColumn = memo(function GridColumn({ column, basisPct, variant, highlight, onPressStart, onPressMove, onPressEnd, onPressCancel, onBlockClick, onEmptyPress, onRangeSelect, onResize, operationalBlocks, onOperationalBlock, gridHeight, hours, startMinute, endMinute }: {
+const GridColumn = memo(function GridColumn({ column, basisPct, variant, highlight, onPressStart, onPressMove, onPressEnd, onPressCancel, onBlockClick, onEmptyPress, onRangeSelect, selectedRange, onResize, operationalBlocks, onOperationalBlock, gridHeight, hours, startMinute, endMinute }: {
   column: ColumnVM;
   basisPct: number;
   variant: 'day' | 'week';
@@ -189,6 +189,7 @@ const GridColumn = memo(function GridColumn({ column, basisPct, variant, highlig
   /** A3.4: clique/toque em área vazia → criar agendamento naquele horário. */
   onEmptyPress: (columnKey: string, time: string) => void;
   onRangeSelect: (columnKey: string, time: string, durationMin: number) => void;
+  selectedRange: { time: string; durationMin: number } | null;
   onResize: (id: string, end: string) => void;
   operationalBlocks: Array<{ block: ScheduleBlock; top: number; height: number; label: string }>;
   onOperationalBlock: (block: ScheduleBlock) => void;
@@ -256,6 +257,7 @@ const GridColumn = memo(function GridColumn({ column, basisPct, variant, highlig
         onEmptyPress(column.key, minToTime(minutes));
       }}>
       <div ref={overlay} aria-hidden="true" className="pointer-events-none absolute inset-x-1 z-30 hidden rounded-md border-2 border-[var(--brand)] bg-[var(--brand-softer)] text-xs font-semibold p-1" />
+      {selectedRange && <div data-testid="agenda-selected-range" aria-label={`Intervalo selecionado ${selectedRange.time}`} className="pointer-events-none absolute inset-x-1 z-30 rounded-md border-2 border-blue-500 bg-blue-100/60 text-blue-900 text-xs font-semibold p-1" style={{ top: (timeToMin(selectedRange.time) - startMinute) / 60 * PX_PER_HOUR, height: selectedRange.durationMin / 60 * PX_PER_HOUR }}>{selectedRange.time}–{minToTime(timeToMin(selectedRange.time) + selectedRange.durationMin)}</div>}
       {column.freeRanges.map((r,i)=><span key={i} aria-hidden="true" className="ag-free-range absolute inset-x-0 bg-white transition-colors" style={{top:(r.start-startMinute)/60*PX_PER_HOUR,height:(r.end-r.start)/60*PX_PER_HOUR}}/>)}
       {column.isToday && <span aria-hidden="true" className="absolute inset-0 bg-[var(--brand-softer)] pointer-events-none" />}
       {Array.from({ length: Math.max(0, hours - 1) }, (_, idx) => idx + 1).map((i) => (
@@ -335,7 +337,7 @@ const GridColumn = memo(function GridColumn({ column, basisPct, variant, highlig
           <span className="ag-event__name block text-[12.5px] font-semibold leading-tight truncate">{b.name}</span>
           {b.height > 62 && <span className="ag-event__secondary block text-[11px] leading-tight truncate opacity-75">{b.service}</span>}
           {b.height > 80 && b.pro && <span className="ag-event__secondary block text-[11px] leading-tight truncate opacity-70">{b.pro}</span>}
-          {b.height > 96 && (
+          {b.fitIn && (
             <span className="mt-0.5 flex items-center gap-1 text-[10px] font-semibold leading-tight">
               {/* A3.4 · Bloco 4: o encaixe é visível no cartão — quem olha a
                   grade sabe que aquele horário foi uma decisão da equipe. */}
@@ -454,7 +456,8 @@ export default function AgendaPage() {
   const [exceptions,setExceptions] = useState<AvailabilityException[]>([]);
   const [scheduleBlocks, setScheduleBlocks] = useState<ScheduleBlock[]>([]);
   const [scheduleResources, setScheduleResources] = useState<ScheduleResource[]>([]);
-  const [blockChoice, setBlockChoice] = useState<{ date: string; time: string; professionalId: string } | null>(null);
+  const [blockMode, setBlockMode] = useState(false);
+  const [selectedRange, setSelectedRange] = useState<{ columnKey: string; time: string; durationMin: number } | null>(null);
   const [editingBlock, setEditingBlock] = useState<ScheduleBlock | null>(null);
   const [blockForm, setBlockForm] = useState(false);
   const [blockDate, setBlockDate] = useState('');
@@ -543,7 +546,8 @@ export default function AgendaPage() {
   const { denied, failed, report, reportFeature } = useAreaLoad('Agenda');
 
   // A2-B5 (F9): '' enquanto carrega = default do produto (America/Sao_Paulo).
-  const [bizTz, setBizTz] = useState('');
+  const [rawBizTz, setBizTz] = useState('');
+  const bizTz = bookingTimezone(rawBizTz);
   // "hoje" e "agora" no FUSO DO NEGÓCIO (nunca o do navegador).
   const today = todayISO(new Date(), bizTz);
   const nowMin = timeToMin(nowHM(new Date(), bizTz));
@@ -1052,17 +1056,21 @@ export default function AgendaPage() {
     const col = columnsRef.current.find((c) => c.key === columnKey);
     if (!col) return;
     setDetail(null);
-    setBlockChoice({ date: col.date, time, professionalId: col.professionalId });
-  }, []);
+    const seed = { date: col.date, time, professionalId: col.professionalId, selectedDurationMin };
+    setSelectedRange({ columnKey, time, durationMin: selectedDurationMin });
+    if (blockMode) openBlock(seed);
+    else setCreating({ ...seed, quick: true });
+  }, [blockMode]);
 
-  function openBlock(seed: { date: string; time: string; professionalId: string }, existing?: ScheduleBlock) {
-    setBlockChoice(null); setEditingBlock(existing || null);
+  function openBlock(seed: { date: string; time: string; professionalId: string; selectedDurationMin?: number }, existing?: ScheduleBlock) {
+    setEditingBlock(existing || null);
     setBlockDate(seed.date); setBlockStart(seed.time || '09:00');
-    setBlockEnd(seed.time ? minToTime(Math.min(1435, timeToMin(seed.time) + 60)) : '10:00');
+    setBlockEnd(seed.time ? minToTime(Math.min(1439, timeToMin(seed.time) + (seed.selectedDurationMin ?? 60))) : '10:00');
     setBlockScope(existing?.resourceId ? 'resource' : existing?.professionalId || seed.professionalId ? 'professional' : 'business');
     setBlockPro(existing?.professionalId || seed.professionalId || ''); setBlockResource(existing?.resourceId || '');
     setBlockReason(existing?.reason || ''); setBlockNote(existing?.note || ''); setBlockError(''); setBlockForm(true);
   }
+  function closeBlock() { setBlockForm(false); setBlockMode(false); setSelectedRange(null); }
   async function saveBlock(remove = false) {
     if (blockBusy) return;
     setBlockError('');
@@ -1085,7 +1093,7 @@ export default function AgendaPage() {
     if (!res.ok) { setBlockError(res.message || 'Não foi possível salvar o bloqueio.'); return; }
     if (remove) setScheduleBlocks(rows => rows.filter(row => row.id !== editingBlock?.id));
     else if (res.data?.block) setScheduleBlocks(rows => [...rows.filter(row => row.id !== res.data!.block!.id), res.data!.block!]);
-    setBlockForm(false); setEditingBlock(null);
+    closeBlock(); setEditingBlock(null);
   }
 
   const onResize = useCallback((id: string, end: string) => {
@@ -1098,8 +1106,9 @@ export default function AgendaPage() {
     const col = columnsRef.current.find((c) => c.key === columnKey);
     if (!col) return;
     setDetail(null);
-    setCreating({ ...newBookingSeedFromAgendaCell(col, time), quick: true });
-  }, []);
+    if (blockMode) { setSelectedRange({ columnKey, time, durationMin: 60 }); openBlock(newBookingSeedFromAgendaCell(col, time)); }
+    else setCreating({ ...newBookingSeedFromAgendaCell(col, time), quick: true });
+  }, [blockMode]);
 
   const onPressStart = useCallback((id: string, e: React.PointerEvent) => {
     lastGridPressAt = Date.now();
@@ -1575,7 +1584,7 @@ export default function AgendaPage() {
             />
             {/* CTA PRINCIPAL da Agenda segue o TEMA ativo (--accent, contrato
                 universal de cor) — o fluxo/sheet de criação é o mesmo. */}
-            <Button variant="secondary" size="sm" onClick={() => openBlock({ date: focus, time: '09:00', professionalId: proFilter || '' })}>Bloquear horário</Button>
+            <Button variant="secondary" size="sm" aria-pressed={blockMode} onClick={() => { setBlockMode(!blockMode); setSelectedRange(null); if (view === 'list' || view === 'month') setView('day'); }}>Bloquear horário</Button>
             <Button variant="primary" size="sm" onClick={() => setCreating({ date: focus, time: '', professionalId: '' })}>
               <Icon n="calendarPlus" size={15} /> Novo agendamento
             </Button>
@@ -1625,12 +1634,7 @@ export default function AgendaPage() {
         )}
       </div>
 
-      {blockChoice && <div className="mb-3 border border-zinc-300 bg-white rounded-md p-3 flex flex-wrap items-center gap-2" role="dialog" aria-label="Ação no horário selecionado">
-        <span className="text-sm font-semibold">{formatDateBR(blockChoice.date)} · {blockChoice.time}</span>
-        <Button size="sm" variant="primary" onClick={() => { setCreating({ ...blockChoice, quick: true }); setBlockChoice(null); }}>Novo agendamento</Button>
-        <Button size="sm" variant="secondary" onClick={() => openBlock(blockChoice)}>Bloquear horário</Button>
-        <button type="button" className="text-xs underline" onClick={() => setBlockChoice(null)}>Cancelar</button>
-      </div>}
+      {blockMode && <div role="status" className="mb-3 rounded-md bg-blue-50 text-blue-900 p-3 flex items-center justify-between text-sm">Selecione o intervalo que deseja bloquear<Button variant="ghost" size="sm" onClick={closeBlock}>Cancelar</Button></div>}
       {scheduleBlocks.filter(block => {
         const dates = view === 'week' ? weekDays : [focus];
         return dates.some(date => block.startAt.slice(0, 10) === date || instantToLocalProjection(block.startAt, bizTz || 'America/Sao_Paulo').date === date);
@@ -1773,6 +1777,7 @@ export default function AgendaPage() {
                       onBlockClick={onBlockClick}
                       onEmptyPress={onEmptyPress}
                       onRangeSelect={onRangeSelect}
+                      selectedRange={selectedRange?.columnKey === c.key ? selectedRange : null}
                       onResize={onResize}
                       operationalBlocks={scheduleBlocks.filter(block => !block.resourceId && (!block.professionalId || block.professionalId === c.professionalId) && instantToLocalProjection(block.startAt, bizTz || 'America/Sao_Paulo').date === c.date).map(block => {
                         const start = instantToLocalProjection(block.startAt, bizTz || 'America/Sao_Paulo');
@@ -1916,7 +1921,7 @@ export default function AgendaPage() {
         </Drawer>
       )}
 
-      {blockForm && <Drawer open onClose={() => setBlockForm(false)} title={editingBlock ? 'Editar bloqueio' : 'Bloquear horário'} width="max-w-md">
+      {blockForm && <Drawer open onClose={() => !blockBusy && closeBlock()} title={editingBlock ? 'Editar bloqueio' : 'Bloquear horário'} width="max-w-md">
         <div className="p-4 space-y-3">
           <p className="text-xs">Intervalo operacional (não cria paciente nem atendimento).</p>
           <label className="block text-xs">Data<input type="date" value={blockDate} onChange={e => setBlockDate(e.target.value)} className="w-full border rounded-md p-2" /></label>
@@ -1924,10 +1929,10 @@ export default function AgendaPage() {
           <label className="block text-xs">Escopo<select value={blockScope} onChange={e => setBlockScope(e.target.value as typeof blockScope)} className="w-full border rounded-md p-2"><option value="business">Clínica</option><option value="professional">Profissional</option><option value="resource">Sala ou equipamento</option></select></label>
           {blockScope === 'professional' && <label className="block text-xs">Profissional<select value={blockPro} onChange={e => setBlockPro(e.target.value)} className="w-full border rounded-md p-2"><option value="">Selecione</option>{pros.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}</select></label>}
           {blockScope === 'resource' && <label className="block text-xs">Recurso<select value={blockResource} onChange={e => setBlockResource(e.target.value)} className="w-full border rounded-md p-2"><option value="">Selecione</option>{scheduleResources.map(r => <option key={r.id} value={r.id}>{r.name}</option>)}</select></label>}
-          <label className="block text-xs">Motivo<input value={blockReason} onChange={e => setBlockReason(e.target.value)} placeholder="Ex.: manutenção, reunião" className="w-full border rounded-md p-2" /></label>
+          <label className="block text-xs">Motivo (opcional)<input value={blockReason} onChange={e => setBlockReason(e.target.value)} placeholder="Ex.: manutenção, reunião" className="w-full border rounded-md p-2" /></label>
           <label className="block text-xs">Observação (opcional)<input value={blockNote} onChange={e => setBlockNote(e.target.value)} placeholder="Ex.: manutenção, reunião" className="w-full border rounded-md p-2" /></label>
           {blockError && <p role="alert" className="text-red-700 text-sm">{blockError}</p>}
-          <div className="flex gap-2"><Button disabled={blockBusy} onClick={() => void saveBlock()}>{editingBlock ? 'Salvar alterações' : 'Criar bloqueio'}</Button>
+          <div className="flex gap-2"><Button variant="secondary" disabled={blockBusy} onClick={closeBlock}>Cancelar</Button><Button disabled={blockBusy} onClick={() => void saveBlock()}>{editingBlock ? 'Salvar alterações' : 'Criar bloqueio'}</Button>
             {editingBlock && <Button variant="secondary" disabled={blockBusy} onClick={() => void saveBlock(true)}>Excluir bloqueio</Button>}</div>
         </div>
       </Drawer>}
@@ -1963,8 +1968,8 @@ export default function AgendaPage() {
             professionalId: creating.professionalId,
             selectedDurationMin: creating.selectedDurationMin,
           }}
-          onClose={() => setCreating(null)}
-          onCreated={load}
+          onClose={() => { setCreating(null); setSelectedRange(null); }}
+          onCreated={() => { setSelectedRange(null); void load(); }}
         />
       )}
     </div>

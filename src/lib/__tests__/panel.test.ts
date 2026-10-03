@@ -519,7 +519,7 @@ describe('contexto de unidade — a regra vem do catálogo', () => {
   it('o shell preserva os demais parâmetros ao injetar ?b=', () => {
     const shell = read('src/components/DashboardShell.tsx');
     expect(shell).toMatch(/new URLSearchParams\(params\.toString\(\)\)/);
-    expect(shell).toMatch(/qs\.set\('b', businesses\[0\]\.id\)/);
+    expect(shell).toMatch(/qs\.set\('b', resolved\)/);
   });
 });
 
@@ -573,13 +573,11 @@ describe('uma porta por conceito', () => {
     // GODOUTOR final: vocabulário de clínica (a palavra que o dono usa).
     expect(cfgPage).toMatch(/\['negocio', 'Clínica'\]/);
     expect(cfgPage).toMatch(/\['agenda', 'Agenda'\]/);
-    // Homologação PR #46 — Aparência movida de Configurações para Perfil (preferência pessoal do navegador, não tenant)
-    // Configurações agora tem só Clínica + Agenda; Aparência vive em Meu Perfil → Preferências (ShellAppearance)
-    expect(cfgPage).not.toMatch(/\['aparencia', 'Aparência'\]/);
+    expect(cfgPage).toMatch(/\['aparencia', 'Aparência'\]/);
     expect(cfgPage).not.toMatch(/NAV_ACCENTS/);
     const perfilPage = read('src/app/(dashboard)/perfil/page.tsx');
-    expect(perfilPage).toMatch(/ShellAppearance/);
-    expect(perfilPage).toMatch(/Preferências/);
+    expect(perfilPage).not.toMatch(/ShellAppearance/);
+    expect(cfgPage).toMatch(/ShellAppearance/);
     expect(cfgPage).not.toMatch(/NAV_PRESETS/);
     expect(cfgPage).not.toMatch(/Identidade do painel/i);
     expect(cfgPage).not.toMatch(/aparência do painel/i);

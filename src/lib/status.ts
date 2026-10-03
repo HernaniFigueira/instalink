@@ -172,8 +172,8 @@ export const ATTENTION_MARK_CLS = 'bg-[var(--attention-mark)] text-[var(--attent
 // A3.4 (teste humano): o encaixe tinha fundo âmbar POR CIMA do bloco verde do
 // status — dois fundos somados viram uma cor suja que não é nem o status nem o
 // alerta. Agora o encaixe é acento, não preenchimento:
-//   • selo ENCAIXE só com contorno tracejado e texto âmbar (fundo transparente);
+//   • selo ENCAIXE com tokens laranja próprios (fundo suave apenas no selo);
 //   • faixa fina no topo do bloco, dentro dos cantos arredondados.
 // O status continua sendo a BASE (fundo e borda esquerdos dele não mudam).
-export const FIT_IN_MARK_CLS = 'border border-dashed border-[var(--attention-mark)] text-[var(--attention-fg)]';
-export const FIT_IN_STRIPE_CLS = 'pointer-events-none absolute inset-x-1 top-0 h-[2px] rounded-pill bg-[var(--attention-mark)] opacity-80';
+export const FIT_IN_MARK_CLS = 'bg-[var(--fit-in-bg)] border border-dashed border-[var(--fit-in)] text-[var(--fit-in-fg)]';
+export const FIT_IN_STRIPE_CLS = 'pointer-events-none absolute inset-x-1 top-0 h-[2px] rounded-pill bg-[var(--fit-in)] opacity-80';

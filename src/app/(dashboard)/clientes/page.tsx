@@ -275,9 +275,6 @@ export default function ClientesPage() {
   const tabItems: TabItem<ListFilter>[] = [
     { id: 'all', label: 'Todos', icon: 'users' },
     { id: 'attended', label: 'Já atendidos', icon: 'calendar' },
-    { id: 'marketing', label: 'Aceitam promoções', icon: 'megaphone' },
-    { id: 'access', label: 'Com acesso', icon: 'lock' },
-    { id: 'noaccess', label: 'Sem acesso', icon: 'user' },
   ];
 
   return (
@@ -389,10 +386,7 @@ export default function ClientesPage() {
                               <span className="text-xs text-[var(--text-muted)] tabular-nums">{p.age} anos</span>
                             )}
                             {minor && <Badge tone="amber">Menor</Badge>}
-                            <Badge tone={p.accountStatus === 'active' ? 'green' : 'zinc'} icon={p.accountStatus === 'active' ? 'lock' : undefined}>
-                              {p.accountStatus === 'active' ? 'Acesso ativo' : 'Sem acesso'}
-                            </Badge>
-                            {p.marketingOptIn && <Badge tone="green" icon="megaphone">Aceita promoções</Badge>}
+
                           </span>
                           <span className="flex flex-wrap items-center gap-x-3 gap-y-0.5 mt-1 text-xs text-[var(--text-muted)]">
                             <span className="inline-flex items-center gap-1"><Icon n="phone" size={11} /> {p.phone ? formatPhoneBR(p.phone) : 'sem telefone'}</span>

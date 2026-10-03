@@ -65,7 +65,7 @@ describe('missão 4 · 1 — ação carvão com identidade preservada', () => {
     // DECRETO FINAL: o CTA principal acompanha o tema da clínica (--accent)
     expect(ui).toMatch(/primary:\s*\n?\s*'bg-\[var\(--accent\)\]/);
     expect(ui).toMatch(/primary:[^}]*text-\[var\(--accent-contrast\)\]/);
-    expect(ui).toMatch(/secondary:\s*\n?\s*'bg-\[var\(--surface\)\] text-\[var\(--text\)\] border/);
+    expect(ui).toMatch(/secondary:\s*\n?\s*'bg-\[var\(--brand-softer\)\] text-\[var\(--brand-fg\)\] border/);
     expect(ui).toMatch(/destructive:\s*\n?\s*'bg-\[var\(--danger\)\]/); // destrutivo = vermelho mantido
   });
 });
@@ -131,7 +131,7 @@ describe('missão 4 · 5 — pet sheet premium (visual; lógica intacta)', () =>
 
   it('checkbox premium e consentimento "Aceita receber promoções?"', () => {
     expect(css).toContain('.il-check {');
-    expect(newClient).toContain('Aceita receber promoções?');
+    expect(newClient).not.toContain('Aceita receber promoções?');
     expect(newClient).toContain('className="il-check');
     expect(newClient).not.toContain('accent-zinc-900');
   });

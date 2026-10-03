@@ -121,7 +121,7 @@ export default function ServicosPage() {
             <Icon n="tag" size={14} /> Grupos
           </Button>
           <Button variant="primary" onClick={() => { setEditing(null); setShowForm(true); }}>
-            <Icon n="plus" size={14} /> Serviço
+            <Icon n="plus" size={14} /> Novo serviço
           </Button>
         </span>
       ) : undefined}
@@ -146,7 +146,7 @@ export default function ServicosPage() {
       {loaded && <CatalogCrossLinks businessId={businessId} current="/servicos" />}
 
       {msg && <Notice tone="info" className="mb-4">{msg}</Notice>}
-      <p className="text-xs text-[var(--text-muted)] mb-2">Ativo = aparece na lista interna. Pode ser agendado = cliente vê horário; desative para procedimento só interno. // Agendável</p>
+      <p className="text-xs text-[var(--text-muted)] mb-2">Ativo = disponível para uso na clínica. Pode ser agendado = pode receber um horário na agenda.</p>
       {!loaded && <ListSkeleton rows={3} />}
 
       {loaded && (

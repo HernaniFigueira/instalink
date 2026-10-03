@@ -263,16 +263,16 @@ describe('1 · o clique entrega date + time + professionalId ao NewBookingSheet'
     expect(dateInput().value).toBe(DATE);
   });
 
-  it('o horário vem da posição vertical (snap de 5 min, medido na grade real)', async () => {
+  it('o horário vem da posição vertical (snap de 15 min, medido na grade real)', async () => {
     await renderAgenda();
     const start = gridStartMinute();
     const col = gridColumn(`[data-agenda-column-professional="${ORLANDO}"]`);
-    // 07 minutos após 10:00 → snap para 10:05.
+    // 07 minutos após 10:00 → snap para 10:00.
     const [h, m] = '10:00'.split(':').map(Number);
     const y = COL_RECT_TOP + (((h * 60 + m + 7) - start) / 60) * PX_PER_HOUR;
     fireEvent.click(col, { clientX: 120, clientY: y });
     await waitFor(() => expect(document.querySelector('dialog.il-drawer')).toBeTruthy(), { timeout: 5000 });
-    expect(seed().initial.time).toBe('10:05');
+    expect(seed().initial.time).toBe('10:00');
   });
 
   it('cada coluna entrega o SEU profissional', async () => {
@@ -416,5 +416,49 @@ describe('5 · Semana: coluna é dia — não inventa profissional', () => {
     expect(seed().initial.professionalId).toBe('');
     // Sem profissional, não há pré-seleção de serviço.
     expect(serviceSelect().value).toBe('');
+  });
+});
+
+// Clinical UX Closure: pointer range is authoritative, not a +60 suggestion.
+describe('Clinical UX Closure — range and block mode', () => {
+  function pointerRange(proId: string, start: string, end: string) {
+    const col = gridColumn(`[data-agenda-column-professional="${proId}"]`);
+    col.setPointerCapture = () => {};
+    const dispatch = (type: string, time: string) => {
+      const event = new MouseEvent(type, { bubbles: true, button: 0, clientX: 120, clientY: clientYFor(time) });
+      Object.defineProperty(event, 'pointerType', { value: 'mouse' });
+      Object.defineProperty(event, 'pointerId', { value: 1 });
+      fireEvent(col, event);
+    };
+    dispatch('pointerdown', start); dispatch('pointermove', end); dispatch('pointerup', end);
+  }
+
+  it('09:00–13:00 opens directly, carries 240, persists selection until close; duration advanced', async () => {
+    await renderAgenda();
+    pointerRange(ORLANDO, '09:00', '13:00');
+    await waitFor(() => expect(seed()?.initial.selectedDurationMin).toBe(240));
+    expect(seed().initial).toMatchObject({ time: '09:00', date: DATE, professionalId: ORLANDO });
+    expect(screen.getByTestId('booking-range-summary').textContent).toContain('Fim: 13:00 · Duração: 240 min');
+    expect(screen.getByTestId('agenda-selected-range').textContent).toBe('09:00–13:00');
+    const duration = within(sheet()).getByLabelText('Duração deste atendimento em minutos') as HTMLInputElement;
+    expect(duration.value).toBe('240');
+    expect(duration.closest('details')?.open).toBe(false);
+    expect(within(sheet()).getByRole('searchbox', { name: 'Buscar cliente' }).getAttribute('autocomplete')).toBe('off');
+    fireEvent.click(within(sheet()).getByRole('button', { name: 'Fechar' }));
+    await waitFor(() => expect(screen.queryByTestId('agenda-selected-range')).toBeNull());
+  });
+
+  it('block mode retains 09:00–13:00, professional and range; cancel exits mode', async () => {
+    await renderAgenda();
+    fireEvent.click(screen.getByRole('button', { name: 'Bloquear horário' }));
+    pointerRange(ORLANDO, '09:00', '13:00');
+    await screen.findByText('Intervalo operacional (não cria paciente nem atendimento).');
+    expect((screen.getByLabelText('Início') as HTMLInputElement).value).toBe('09:00');
+    expect((screen.getByLabelText('Fim') as HTMLInputElement).value).toBe('13:00');
+    expect((screen.getByLabelText('Profissional') as HTMLSelectElement).value).toBe(ORLANDO);
+    expect(screen.getByTestId('agenda-selected-range').textContent).toBe('09:00–13:00');
+    fireEvent.click(within(sheet()).getByRole('button', { name: 'Cancelar' }));
+    await waitFor(() => expect(screen.queryByTestId('agenda-selected-range')).toBeNull());
+    expect(screen.queryByText('Selecione o intervalo que deseja bloquear')).toBeNull();
   });
 });

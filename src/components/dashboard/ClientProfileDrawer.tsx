@@ -163,7 +163,7 @@ export function ClientProfileDrawer({ person, businessId, pipeline, canFunil, on
       // Ponto 9 — só atendimento concluído autoriza "Cliente atendido".
       attendedCount: countAttended(person.bookings),
       leadsCount: person.leads.length, profile,
-    })), [person, profile]);
+    })).filter(tag => !['acesso', 'marketing'].includes(tag.id)), [person, profile]);
 
   // O cadastro mudou em relação ao que veio do servidor? Serve para não mandar
   // PATCH à toa e para dizer com clareza "nada para salvar".
@@ -528,7 +528,7 @@ export function ClientProfileDrawer({ person, businessId, pipeline, canFunil, on
           {/* FASE 2 · P2 — ações rápidas: nota e iniciar atendimento (quando aplicável). */}
           {/* §17–18 — "Registrar nota" conduz ao campo: troca a aba, rola até o
               textarea e o foca com highlight sutil (sem modal novo). */}
-          <Button variant="ghost" size="sm" onClick={() => { setTab('notes'); focusFieldSoon('client-note-draft'); }}>
+          <Button variant="secondary" size="sm" onClick={() => { setTab('notes'); focusFieldSoon('client-note-draft'); }}>
             <Icon n="pencil" size={14} /> Registrar nota
           </Button>
           {/* Workflow: só quem JÁ CHEGOU (ou está em atendimento) abre o
@@ -538,7 +538,7 @@ export function ClientProfileDrawer({ person, businessId, pipeline, canFunil, on
               <Icon n="fileText" size={14} /> {nextBooking.workflowState === 'in_care' ? 'Abrir atendimento' : 'Iniciar atendimento'}
             </Button>
           )}
-          <Button variant="ghost" size="sm" onClick={() => {
+          <Button variant="secondary" size="sm" onClick={() => {
             const opening = !editing;
             if (editing) requestCloseEdit(); else setEditing(true);
             // §17–18 — ao abrir a edição: scroll suave + foco no primeiro
@@ -588,12 +588,7 @@ export function ClientProfileDrawer({ person, businessId, pipeline, canFunil, on
                 {tags.length === 0 && <Badge tone="zinc">Sem etiquetas</Badge>}
               </div>
             </div>
-            {/* Status de acesso — estado claro, nunca só cor. */}
-            <div className="client360-idcard__access shrink-0 text-right">
-              <Badge tone={person.accountStatus === 'active' ? 'green' : 'zinc'} icon={person.accountStatus === 'active' ? 'lock' : 'user'}>
-                {person.accountStatus === 'active' ? 'Acesso ativo' : 'Sem acesso'}
-              </Badge>
-            </div>
+
           </div>
 
           {/* Grade de dados — sempre legível, mesmo com campos vazios. */}
@@ -616,26 +611,7 @@ export function ClientProfileDrawer({ person, businessId, pipeline, canFunil, on
           <PetsSection businessId={businessId} tutorId={person.contactId} tutorName={person.name} onChanged={onChanged} onOpenPet={setPet360} />
         )}
 
-        {/* Acesso do cliente */}
-        <SubCard className="mt-3 p-3.5">
-          <div className="flex flex-wrap items-center justify-between gap-3">
-            <div className="min-w-0">
-              <p className="text-sm font-semibold text-[var(--text)] inline-flex items-center gap-1.5">
-                <Icon n="lock" size={14} className="text-[var(--text-muted)]" /> Conta do cliente
-              </p>
-              <p className="text-xs text-[var(--text-muted)] mt-0.5">
-                {person.accountStatus === 'active'
-                  ? `Acesso ativo${person.accountEmail ? ` · ${person.accountEmail}` : ''}${person.mustChangePassword ? ' · senha temporária ainda em uso' : ''}`
-                  : 'Opcional: com acesso, a pessoa vê os próprios agendamentos e faz remarcação sozinha.'}
-              </p>
-            </div>
-            {person.accountStatus === 'none' && (
-              <Button size="sm" variant="secondary" onClick={createAccess} disabled={accessSaving || !person.contactId}>
-                <Icon n="userCircle" size={14} /> {accessSaving ? 'Criando acesso…' : 'Criar acesso'}
-              </Button>
-            )}
-          </div>
-        </SubCard>
+
 
         {/* ═══ CADASTRO (visão de leitura) ═══
             Ponto 10: endereço, responsável e observação não podem existir só
@@ -694,23 +670,7 @@ export function ClientProfileDrawer({ person, businessId, pipeline, canFunil, on
           </SubCard>
         )}
 
-        {/* Consentimento de marketing — o que significa, sem jargão. */}
-        <SubCard className="mt-3 p-3.5 flex flex-wrap items-center justify-between gap-3">
-          <div className="min-w-0">
-            <p className="text-sm font-semibold text-[var(--text)]">Autoriza receber promoções</p>
-            <p className="text-xs text-[var(--text-muted)] mt-0.5">
-              {person.marketingOptIn
-                ? 'Pode entrar em campanhas de marketing.'
-                : 'Sem esta autorização a pessoa NÃO entra em campanha.'}
-            </p>
-          </div>
-          <div className="flex items-center gap-2.5">
-            <span className={cn('text-xs font-semibold', person.marketingOptIn ? 'text-[var(--success-fg)]' : 'text-[var(--text-muted)]')}>
-              {person.marketingOptIn ? 'Aceitou' : 'Não aceitou'}
-            </span>
-            <Switch checked={person.marketingOptIn} onChange={setConsent} label="Autoriza receber promoções" disabled={!person.contactId} />
-          </div>
-        </SubCard>
+
 
         {notice && (
           <div className="mt-3">
@@ -1291,7 +1251,7 @@ function ProfileShell({ variant, onClose, title, subtitle, backHref, footer, chi
   if (variant === 'page') {
     return (
       <div className="client-profile-page min-w-0 pb-6">
-        <header className="client-profile-page__toolbar flex flex-wrap items-center gap-x-3 gap-y-2 mb-3">
+        <header className="gd-context-header client-profile-page__toolbar flex flex-wrap items-center gap-x-3 gap-y-2 mb-3">
           <PageBackAction href={backHref} label="Voltar para clientes" />
           <div className="client-profile-page__actions ml-auto flex flex-wrap items-center gap-2">{footer}</div>
         </header>
@@ -1349,9 +1309,7 @@ function ClientQuickPreview({ person, tags }: {
             {person.customerSince ? ` · cliente desde ${person.customerSince.slice(0, 10).split('-').reverse().join('/')}` : ''}
           </p>
         </div>
-        <Badge tone={person.accountStatus === 'active' ? 'green' : 'zinc'}>
-          {person.accountStatus === 'active' ? 'Acesso ativo' : 'Sem acesso'}
-        </Badge>
+
       </div>
 
       <div className="flex flex-wrap gap-1.5">
@@ -1429,7 +1387,7 @@ function CopyChip({ value }: { value: string }) {
 
 function A2({ href, label, icon }: { href: string; label: string; icon: string }) {
   return (
-    <a href={href} target="_blank" rel="noreferrer" className={buttonCls('secondary', 'sm')}>
+    <a href={href} target="_blank" rel="noreferrer" className={buttonCls(icon === 'whatsapp' ? 'whatsapp' : 'secondary', 'sm')}>
       <Icon n={icon} size={14} /> {label}
     </a>
   );

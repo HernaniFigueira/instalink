@@ -19,18 +19,21 @@ import { Icon } from '@/components/icons';
 import { ImageUpload } from '@/components/dashboard/ImageUpload';
 import { AccessDenied, AreaLoadError, useAreaLoad } from '@/components/dashboard/AccessNotice';
 import { apiGet, apiSend } from '@/lib/api-client';
+import { ShellAppearance } from '@/components/dashboard/ShellAppearance';
 import { isLegacyPagesEnabled } from '@/lib/product';
 
-type ConfigTab = 'negocio' | 'agenda';
+type ConfigTab = 'negocio' | 'agenda' | 'aparencia';
 
 const CONFIG_TAB_ICON: Record<ConfigTab, string> = {
   negocio: 'store',
   agenda: 'calendar',
+  aparencia: 'spark',
 };
 
 const CONFIG_TABS: Array<[ConfigTab, string]> = [
   ['negocio', 'Clínica'],
   ['agenda', 'Agenda'],
+  ['aparencia', 'Aparência'],
 ];
 
 const LEGACY_TAB_REDIRECT: Record<string, string> = {
@@ -364,7 +367,7 @@ export default function ConfigPage() {
           />
         )}
 
-        {/* Aparência movida para Perfil — tema do navegador (preferência do usuário), não tenant */}
+        {tab === 'aparencia' && <ShellAppearance />}
 
 
       </div>

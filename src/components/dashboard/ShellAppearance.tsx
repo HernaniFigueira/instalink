@@ -66,7 +66,7 @@ export function ShellAppearance() {
           <div
             className="h-8 border-b border-zinc-200"
             style={{
-              background: `linear-gradient(90deg, ${navVars['--il-nav']}22, transparent)`,
+              background: `${navVars['--il-nav']}22`,
             }}
           />
           <div className="space-y-2 p-2.5">

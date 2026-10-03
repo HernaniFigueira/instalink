@@ -17,3 +17,5 @@ tsconfig.tsbuildinfo
 
 # Generated artifacts from the isolated agenda-viewport browser harness
 .cache/agenda-viewport-browser/
+
+.cache/clinical-ux/

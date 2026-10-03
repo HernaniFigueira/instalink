@@ -19,7 +19,7 @@ export type { HoursChipDay };
 // ═══════════════════════════════════════════════════════════════
 // Componentes existentes são a única fonte de apresentação operacional.
 // A cor primária vem do tema ativo; semânticas ficam reservadas a estados.
-export type CanonicalButtonVariant = 'primary' | 'secondary' | 'ghost' | 'destructive' | 'link' | 'success' | 'warning';
+export type CanonicalButtonVariant = 'primary' | 'secondary' | 'ghost' | 'destructive' | 'link' | 'success' | 'warning' | 'whatsapp';
 /** Aliases temporários mantidos para compatibilidade de chamadas existentes. */
 export type ButtonVariant = CanonicalButtonVariant | 'success' | 'warning' | 'danger' | 'soft' | 'quiet' | 'cta';
 
@@ -34,7 +34,9 @@ const BTN_VARIANT_CLS: Record<CanonicalButtonVariant, string> = {
   primary:
     'bg-[var(--accent)] text-[var(--accent-contrast)] border border-[var(--accent)] hover:bg-[var(--accent-hover)] hover:border-[var(--accent-hover)]',
   secondary:
-    'bg-[var(--surface)] text-[var(--text)] border border-[var(--border-strong)] hover:bg-[var(--surface-hover)]',
+    'bg-[var(--brand-softer)] text-[var(--brand-fg)] border border-transparent hover:bg-[var(--brand-soft)]',
+  whatsapp:
+    'bg-emerald-50 text-emerald-800 border border-emerald-100 hover:bg-emerald-100',
   ghost:
     'bg-transparent text-[var(--text-muted)] border border-transparent hover:bg-[var(--surface-3)] hover:text-[var(--text)]',
   destructive:

@@ -3050,3 +3050,9 @@ dialog.ws-sheet[data-minimized]::backdrop { background: transparent; }
   }
   .ag-event--day .ag-event__secondary { display: none; }
 }
+
+/* Encaixe é modalidade, não status: acento sem substituir a base. */
+:root { --fit-in: #ea580c; --fit-in-fg: #9a3412; --fit-in-bg: #fff7ed; }
+
+/* Contexto persistente apenas nas telas profundas: voltar + ações locais. */
+.gd-context-header { position: sticky; top: var(--topbar-h); z-index: 30; padding: .75rem 0; background: var(--bg); border-bottom: 1px solid var(--border); }

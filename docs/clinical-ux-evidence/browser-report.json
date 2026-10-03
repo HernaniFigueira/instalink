@@ -1,0 +1,25 @@
+{
+  "checks": [
+    "Login real owner.qa@godoutor.local",
+    "Clique abre direto com Orlando e 09:00",
+    "Range 240 + seleção persistente + duração recolhida",
+    "Fechar limpa seleção",
+    "Booking salvo: start/end UTC e staffDuration 240",
+    "Bloqueio range 09–13 salvo sem timezone vazio",
+    "Bloqueio persiste após F5",
+    "Biblioteca, grupo/duração sugeridos, avançado fechado e buffers disponíveis",
+    "Cliente sem acesso/marketing, WhatsApp verde, header sticky abaixo da topbar",
+    "Meu perfil sem aparência; salvar integrado ao formulário",
+    "Aparência nas configurações persiste em F5",
+    "Encaixe laranja sem substituir status verde",
+    "Login real recepcao.qa@godoutor.local",
+    "recepcao: escopo 3 colunas",
+    "recepcao: cliente vinculado acessível",
+    "Login real orlando.qa@godoutor.local",
+    "orlando: escopo 1 colunas",
+    "orlando: cliente vinculado acessível",
+    "Console 0; network >=400 0; 5xx 0"
+  ],
+  "console": [],
+  "network": []
+}

@@ -1,5 +1,10 @@
 # GoDoutor — Histórico
 
+## 2026-10-03 — Clinical UX Closure, antes de Clinical Encounter F1
+
+Closure UX stacked sobre PR #52 (`0c426be`), branch fixa `arena/01a101fb-instalink`, sem merge. Range autoritativo e persistente, clique direto, block mode, timezone canônico e snap manual 15; serviços clínicos progressivos; aparência em Configurações; remoção de acesso/marketing da UI Cliente 360 preservando storage; ações suaves/sticky e encaixe laranja sem alterar status. Next production local + seed veterinário descartável + logins Owner/Recepção/Profissional + Chromium real; 2989 testes PASS / 4 baseline, 365 focados PASS, build/typecheck/diff-check OK. F1 não iniciado; produção não usada. Evidências e reprodução: [AUTO-HOMOLOGACAO-CLINICAL-UX-CLOSURE.md](AUTO-HOMOLOGACAO-CLINICAL-UX-CLOSURE.md).
+
+
 ## 2026-10-02 — Clinical Convergence · onda 2 (cleanup de resíduo InstaLink)
 
 > Branch de sessão `arena/01a0fede-instalink`, base `main` em `dbf7d680c51a39b289c856fdba1f0216fe3e5834` (merge da PR #50). PR aberta contra `main`; **merge NÃO executado** (aguarda autorização explícita). Produção não usada para QA; Clinical Encounter F1 não iniciado.

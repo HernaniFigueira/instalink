@@ -119,7 +119,7 @@ describe('§19–25 · NewClientForm embedded (cadastro rápido no lado)', () =>
     // §21 — o rápido em veterinária NASCE com o pet rápido ligado
     expect(screen.getByText('Salvar tutor e pet')).toBeTruthy();
     expect(screen.getByText('Cancelar')).toBeTruthy();
-    expect(screen.getByText('Aceita receber promoções?')).toBeTruthy();
+    expect(screen.queryByText('Aceita receber promoções?')).toBeNull();
     // desliga o pet → vira cadastro só de tutor
     fireEvent.click(screen.getByLabelText('Adicionar pet'));
     expect(screen.getByText('Salvar cliente')).toBeTruthy();

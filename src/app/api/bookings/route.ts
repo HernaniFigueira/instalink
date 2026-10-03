@@ -142,7 +142,7 @@ export async function GET(req: NextRequest) {
       : undefined;
     if (q.get('gestureBookingId') && (!gestureBooking || gestureBooking.serviceId !== service.id)) return NextResponse.json({ error: 'Agendamento não encontrado.' }, { status: 404 });
     const base = {
-      ...(staffGuard?.ok && q.get('internalSnap') === '5' ? { startStepMin: 5 } : {}),
+      ...(staffGuard?.ok && ['5', '15'].includes(q.get('internalSnap') || '') ? { startStepMin: Number(q.get('internalSnap')) } : {}),
       rules: db.availability.filter((a) => a.businessId === businessId),
       exceptions: db.exceptions.filter((e) => e.businessId === businessId),
       bookings: db.bookings.filter((b) => b.businessId === businessId && b.id !== gestureBooking?.id),
@@ -167,7 +167,7 @@ export async function GET(req: NextRequest) {
     // All computations reuse guard.db; public day maps/single-day slots keep
     // their existing contract and cannot opt into the staff batch/snap.
     if (q.has('dates')) {
-      if (!staffGuard?.ok || !gestureBooking || q.get('internalSnap') !== '5' || q.has('date') || q.has('from') || q.has('to')) {
+      if (!staffGuard?.ok || !gestureBooking || !['5', '15'].includes(q.get('internalSnap') || '') || q.has('date') || q.has('from') || q.has('to')) {
         return NextResponse.json({ error: 'Consulta de gesto indisponível.' }, { status: 400 });
       }
       const dates = (q.get('dates') || '').split(',');
